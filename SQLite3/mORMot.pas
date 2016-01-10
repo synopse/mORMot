@@ -8682,7 +8682,7 @@ type
     fModel: TSQLModel;
     fTableIndex: integer;
     fFTSWithoutContentTableIndex: integer;
-    fFTSWithoutContentExpression: RawUTF8;
+    fFTSWithoutContentFields: RawUTF8;
     procedure SetKind(Value: TSQLRecordVirtualKind);
     function GetProp(const PropName: RawUTF8): TSQLPropInfo;
   public
@@ -8706,20 +8706,16 @@ type
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
     function SQLFromSelectWhere(const SelectFields, Where: RawUTF8): RawUTF8;
-    /// define if a FTS4 virtual table will not store its content
-    // - the virtual table will be created with content=""
-    // - the indexed text will be computed, using triggers, as an expression
-    // from the original, e.g. 'new.contentfield' or something more complex like
-    // ! 'new.title||'' ''||new.abstract||'' ''||new.content'
+    /// define if a FTS4 virtual table will not store its content, but would
+    // be defined as an "external content" FTS4 table
+    // - see https://www.sqlite.org/fts3.html#section_6_2_2
+    // - the virtual table will be created with content="ContentTableName",
+    // and all fields of the FTS4 table
+    // - by design, all fields of the FTS4 table should exist in the source
+    // ContentTable - otherwise an exception is raised
+    // - the indexed text will be assigne, using triggers
     // - note that FTS3 does not support this feature
-    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
-      const Expression: RawUTF8); overload;
-    // - the virtual table will be created with content=""
-    // - the indexed text will be computed, using triggers, as an expression
-    // from the original, using the supplied field names
-    // - note that FTS3 does not support this feature
-    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass;
-      const ContentTableFieldNames: array of RawUTF8); overload;
+    procedure FTS4WithoutContent(ContentTable: TSQLRecordClass);
 
     /// the table index of this TSQLRecord in the associated Model
     property TableIndex: Integer read fTableIndex;
@@ -28694,13 +28690,9 @@ begin
     with Props.Props.Fields do
     case Props.Kind of
     rFTS3, rFTS4: begin
-      if Props.fFTSWithoutContentExpression<>'' then
-        if Props.fFTSWithoutContentTableIndex<0 then
-          raise EModelException.CreateUTF8('Invalid %.FTSWithoutContentTableIndex',[self]) else
-          // see https://www.sqlite.org/fts3.html#section_6_2_2
-          result := result+'content="'+
-            aModel.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName+'",'+
-            Props.fFTSWithoutContentExpression+',';
+      if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then
+        result := result+'content="'+aModel.Tables[Props.fFTSWithoutContentTableIndex].
+          SQLTableName+'",';
       if Count=0 then
         raise EModelException.CreateUTF8(
           'Virtual FTS class % should have published properties',[self]);
@@ -28709,8 +28701,7 @@ begin
         if SQLFieldTypeStored<>sftUTF8Text then
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
-          if Props.fFTSWithoutContentExpression='' then
-            result := result+Name+',';
+          result := result+Name+',';
       if InheritsFrom(TSQLRecordFTS3Porter) or
          InheritsFrom(TSQLRecordFTS4Porter) then
         result := result+' tokenize=porter)' else
@@ -30014,6 +30005,7 @@ begin
   inherited Create;
   fModel := aModel;
   fTableIndex := aSource.fTableIndex;
+  fFTSWithoutContentFields := aSource.fFTSWithoutContentFields;
   fProps := aSource.fProps;
   fKind := aSource.Kind;
   SQL := aSource.SQL;
@@ -30066,29 +30058,22 @@ begin
     SQL.TableSimpleFields[true,false]);
 end;
 
-procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass;
-  const Expression: RawUTF8);
+procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass);
+var i: integer;
+    field: RawUTF8;
 begin
   if Kind<>rFTS4 then
-    raise EModelException.CreateFmt('% is not a FTS4 table',[Props.Table]);
+    raise EModelException.CreateUTF8('FTS4WithoutContent: % is not a FTS4 table',[Props.Table]);
   fFTSWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
-  fFTSWithoutContentExpression := Expression;
-end;
-
-procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordClass;
-  const ContentTableFieldNames: array of RawUTF8);
-var i: integer;
-    exp: RawUTF8;
-begin
-  with ContentTable.RecordProps do
-    for i := 0 to high(ContentTableFieldNames) do
-      if Fields.IndexByName(ContentTableFieldNames[i])<0 then
-        raise EModelException.CreateFmt('FTS4WithoutContent(%,"%") not a field',
-          [ContentTable,ContentTableFieldNames[i]]) else
-      if exp='' then
-        exp := 'new.'+ContentTableFieldNames[i] else
-        exp := exp+'||'' ''||new.'+ContentTableFieldNames[i];
-  FTS4WithoutContent(ContentTable,exp);
+  for i := 0 to Props.Fields.Count-1 do begin
+    field := Props.Fields.List[i].Name;
+    if ContentTable.RecordProps.Fields.IndexByName(field)<0 then
+      raise EModelException.CreateUTF8('FTS4WithoutContent: %.% is not a % field',
+        [Props.Table,field,ContentTable]);
+    fFTSWithoutContentFields := fFTSWithoutContentFields+',new.'+field;
+  end;
+  if fFTSWithoutContentFields='' then
+    raise EModelException.CreateUTF8('FTS4WithoutContent: % has no field',[Props.Table]);
 end;
 
 function TSQLModelRecordProperties.GetProp(const PropName: RawUTF8): TSQLPropInfo;
@@ -38096,7 +38081,7 @@ begin
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>Sender then // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>nil then
-        raise ECommunicationException.CreateFmt('%.BeginCurrentThread() twice',[self]) else
+        raise ECommunicationException.CreateUTF8('%.BeginCurrentThread() twice',[self]) else
         RunningThread := Sender;
   if fStaticVirtualTable<>nil then
     for i := 0 to high(fStaticVirtualTable) do
@@ -38138,7 +38123,7 @@ begin
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>nil then  // e.g. if length(TSQLHttpServer.fDBServers)>1
       if RunningThread<>Sender then
-        raise ECommunicationException.CreateFmt(
+        raise ECommunicationException.CreateUTF8(
           '%.EndCurrentThread(%) should match RunningThread=%',
           [self,Sender,RunningThread]) else
         RunningThread := nil;
@@ -44228,18 +44213,18 @@ end;
 class procedure TSQLRecordFTS4.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var Props: TSQLModelRecordProperties;
-    fts,main,ftsmainfield: RawUTF8;
+    main,fts,ftsfields: RawUTF8;
 begin
   inherited;
   if FieldName<>'' then
     exit;
   Props := Server.Model.Props[self];
-  if (Props=nil) or (Props.fFTSWithoutContentExpression='') or
+  if (Props=nil) or (Props.fFTSWithoutContentFields='') or
      not Server.IsInternalSQLite3Table(Props.fFTSWithoutContentTableIndex) then
     exit;
   fts := Props.Props.SQLTableName;
   main := Server.Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
-  ftsmainfield := Props.Props.MainFieldName(true);
+  ftsfields := Props.Props.SQLTableSimpleFieldsNoRowID;
   // see http://www.sqlite.org/fts3.html#*fts4content
   Server.ExecuteFmt('CREATE TRIGGER %_bu BEFORE UPDATE ON % '+
     'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
@@ -44248,11 +44233,11 @@ begin
     'BEGIN DELETE FROM % WHERE docid=old.rowid; END;',
     [main,main,fts]);
   Server.ExecuteFmt('CREATE TRIGGER %_au AFTER UPDATE ON % '+
-    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid,%); END;',
-    [main,main,fts,ftsmainfield,Props.fFTSWithoutContentExpression]);
+    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
+    [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
   Server.ExecuteFmt('CREATE TRIGGER %_ai AFTER INSERT ON % '+
-    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid,%); END;',
-    [main,main,fts,ftsmainfield,Props.fFTSWithoutContentExpression]);
+    'BEGIN INSERT INTO %(docid,%) VALUES(new.rowid%); END;',
+    [main,main,fts,ftsfields,Props.fFTSWithoutContentFields]);
 end;
 
 

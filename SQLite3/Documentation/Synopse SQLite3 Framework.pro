@@ -1894,7 +1894,7 @@ Let's say we want to protect any access to the variables a and b. Here's how to 
 !  inc(b);
 !finally
 !  // end of safe block
-!  LeaveCriticalSection(CriticalSection);
+!  LeaveCriticalSection(CS);
 !end;
 !// when the threads stop
 !DeleteCriticalSection(CS);
@@ -2030,33 +2030,67 @@ So, we may have written our class as such:
 !  // here fSafe.UnLock will be called when IUnknown is released
 !end;
 As you can see, the {\f1\fs20 Safe: TSynLocker} instance would be defined and handled at {\f1\fs20 TSynPersistentLocked} parent level.
+:   Injecting TAutoLocker instances
+Inheriting from a {\f1\fs20 TSynPersistentLocked} class (or one of its sibbling) only gives you access to a single {\f1\fs20 TSynLocker} per instance. If your class inherits from {\f1\fs20 TSynAutoCreateFields}, you may create one or several {\f1\fs20 TAutoLocker published} properties, which would be auto-created with the instance:
+!type
+!  TMyClass = class(TSynAutoCreateFields)
+!  protected
+!    fLock: TAutoLocker;
+!    fField: integer;
+!  public
+!    function FieldValue: integer;
+!  published
+!    property Lock: TAutoLocker read fLock;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.FieldValue: integer;
+!begin
+!  fLock.ProtectMethod;
+!  result := fField;
+!  inc(fField);
+!end;
+!
+!var c: TMyClass;
+!begin
+!  c := TMyClass.Create;
+!  Assert(c.FieldValue=0);
+!  Assert(c.FieldValue=1);
+!  c.Free;
+!end.
+In practice, {\f1\fs20 TSynAutoCreateFields} is a very powerful way of defining @*Value objects@, i.e. objects containing nested objects or even arrays of objects. You may use its ability to create the needed {\f1\fs20 TAutoLocker} instances in an automated way. But be aware that if you serialize such an instance into JSON, its nested {\f1\fs20 TAutoLocker} properties would be serialized as void properties - which may not be the expected result.
 :   Injecting IAutoLocker instances
-If your class inherits from {\f1\fs20 @*TInjectableObject@}, you may even define the following:
+If your class inherits from {\f1\fs20 @*TInjectableObject@}, you may define the following:
 !type
 !  TMyClass = class(TInjectableObject)
 !  private
 !    fLock: IAutoLocker;
+!    fField: integer;
 !  public
-!    function AnyMethod: integer;
+!    function FieldValue: integer;
 !  published
 !    property Lock: IAutoLocker read fLock write fLock;
 !  end;
 !
 !{ TMyClass }
 !
-!function TMyClass.AnyMethod: integer;
+!function TMyClass.FieldValue: integer;
 !begin
-!  result := Lock.Safe^.LockedInt64[0];
+!  Lock.ProtectMethod;
+!  result := fField;
+!  inc(fField);
 !end;
 !
 !var c: TMyClass;
 !begin
 !  c := TMyClass.CreateInjected([],[],[]);
-!  Assert(c.AnyMethod=0);
+!  Assert(c.FieldValue=0);
+!  Assert(c.FieldValue=1);
 !  c.Free;
 !end;
-Here we use dependency resolution - see @161@ - to let the {\f1\fs20 TMyClass.CreateInjected} constructor scan its {\f1\fs20 published} properties, and therefore search for a provider of {\f1\fs20 IAutoLocker}. Since {\f1\fs20 IAutoLocker} is globally registered to be resolved with {\f1\fs20 TAutoLocker}, our class would  initialize its {\f1\fs20 fLock} field with a new instance. Now we could use {\f1\fs20 Lock.Safe^} to access the associated {\f1\fs20 TSynLocker} critical section, as usual.
-Of course, this may be more complicated than manual {\f1\fs20 TSynLocker} handling, but if you are writing an interface-based service - see @63@, your class may inherit from {\f1\fs20 TInjectableObject} for its own dependency resolution, so this trick may be very convenient.
+Here we use dependency resolution - see @161@ - to let the {\f1\fs20 TMyClass.CreateInjected} constructor scan its {\f1\fs20 published} properties, and therefore search for a provider of {\f1\fs20 IAutoLocker}. Since {\f1\fs20 IAutoLocker} is globally registered to be resolved with {\f1\fs20 TAutoLocker}, our class would  initialize its {\f1\fs20 fLock} field with a new instance. Now we could use {\f1\fs20 Lock.ProtectMethod} to use the associated {\f1\fs20 TAutoLocker}'s {\f1\fs20 TSynLocker} critical section, as usual.
+Of course, this may sounds more complicated than manual {\f1\fs20 TSynLocker} handling, but if you are writing an interface-based service - see @63@, your class may already inherit from {\f1\fs20 TInjectableObject} for its own dependency resolution, so this trick may be very convenient.
 :   Safe locked storage in TSynLocker
 When we fixed the potential CPU cache-line issue, do you remember that we added a padding binary buffer to the {\f1\fs20 TSynLocker} definition? Since we do not want to waste resource, {\f1\fs20 TSynLocker} gives easy access to its internal data, and allow to directly handle those values. Since it is stored as 7 slots of {\f1\fs20 variant} values, you could store any kind of data, including complex {\f1\fs20 @*TDocVariant@} document or array.
 Our class may use this feature, and store its integer field value in the internal slot 0:
@@ -4450,20 +4484,34 @@ For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
 !
 !  TSQLArticleSearch = class(TSQLRecordFTS4Porter)
 !  private
-!    fText: RawUTF8;
+!    fContent: RawUTF8;
+!    fTitle: RawUTF8;
+!    fAbstract: RawUTF8;
 !  published
-!    property Text: RawUTF8 read fText write fText;
+!    property Title: RawUTF8 read fTitle write fTitle;
+!    property Abstract: RawUTF8 read fAbstract write fAbstract;
+!    property Content: RawUTF8 read fContent write fContent;
 !  end;
-And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an expression to compute the indexed text from the concatenation of the {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
+And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an "external content" FTS4 table to index the text from the selected {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
 !function CreateModel: TSQLModel;
 !begin
 !  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
 !    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
-!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-!!    TSQLArticle,['title','abstract','content']);
+!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle);
 !  ...
 The {\f1\fs20 TSQLModelRecordProperties.FTS4WithoutContent()} will in fact create the needed {\i SQLite3} triggers, to automatically populate the {\f1\fs20 ArticleSearch} Full Text indexes when the main {\f1\fs20 Article} row changes.
 Since this FTS4 feature is specific to {\i SQlite3}, and triggers do not work on virtual tables (by now), this method won't do anything if the {\f1\fs20 TSQLArticleSearch} or {\f1\fs20 TSQLArticle} are on an external database - see @27@. Both need to be stored in the main {\i SQLite3} DB.
+In the {\i 30 - MVC Server} sample, the search would be performed as such:
+!  if scop^.GetAsRawUTF8('match',match) and fHasFTS then begin
+!    if scop^.GetAsDouble('lastrank',rank) then
+!      whereClause := 'and rank<? ';
+!!    whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1.0,0.7,0.5) as rank '+
+!!      'from ArticleSearch where ArticleSearch match ? '+whereClause+
+!!      'order by rank desc limit 100) as r on (r.docid=Article.id)';
+!    articles := RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'',whereClause,[match,rank],
+!      'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
+In the above query expression, the {\f1\fs20 rank()} function is used over the detailed FTS4 search statistics returned by {\f1\fs20 matchinfo()}, using a 1.0 weight for any match in the {\f1\fs20 Title} column, 0.7 for the {\f1\fs20 Abstract} column, and 0.5 for {\f1\fs20 Content}. The matching articles content is then returned in an {\f1\fs20 articles:} {\f1\fs20 TDocVariant} array, ready to be rendered on the web page.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
@@ -12510,8 +12558,7 @@ Then the whole database model will be created in this function:
 !  TSQLArticle.AddFilterNotVoidText(['Title','Content']);
 !  TSQLComment.AddFilterNotVoidText(['Title','Content']);
 !  TSQLTag.AddFilterNotVoidText(['Ident']);
-!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-!    TSQLArticle,['title','abstract','content']);
+!  result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle);
 !end;
 As you can discover:
 - We used {\f1\fs20 class} inheritance to gather properties for similar tables;
