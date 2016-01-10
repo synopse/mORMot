@@ -19563,17 +19563,24 @@ begin
 end;
 
 function TSQLPropInfoRTTIInt64.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
+var res64: Int64;
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else
+    result := 1 else begin
     if fGetterIsFieldPropOffset<>0 then
-      result := PInt64(PtrUInt(Item1)+fGetterIsFieldPropOffset)^-
-          PInt64(PtrUInt(Item2)+fGetterIsFieldPropOffset)^ else
-      result := fPropInfo.GetInt64Prop(Item1)-fPropInfo.GetInt64Prop(Item2);
+      res64 := PInt64(PtrUInt(Item1)+fGetterIsFieldPropOffset)^-
+        PInt64(PtrUInt(Item2)+fGetterIsFieldPropOffset)^ else
+      res64 := fPropinfo.GetInt64Prop(Item1)-fPropinfo.GetInt64Prop(Item2);
+    if res64>0 then
+      result := 1 else
+    if res64<0 then
+      result := -1 else
+      result := 0;
+  end;
 end;
 
 function TSQLPropInfoRTTIInt64.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
