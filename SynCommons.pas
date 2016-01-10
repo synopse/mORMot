@@ -8721,6 +8721,8 @@ const
   /// which TJSONCustomParserRTTIType types are not simple types
   // - ptTimeLog is complex, since could be also TCreateTime or TModTime
   PT_COMPLEXTYPES = [ptArray, ptRecord, ptCustom, ptTimeLog];
+  /// could be used to compute the index in a pointer list from its position
+  POINTERSHR = {$ifdef CPU64}3{$else}2{$endif};
 
 
 

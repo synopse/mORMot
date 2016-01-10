@@ -25637,7 +25637,7 @@ begin
         {$endif}
         tkClass: begin
           Obj := P^.GetObjProp(Value);
-          if (Obj<>nil) and Obj.InheritsFrom(TPersistent) then
+          if (Obj<>nil) and ClassHasPublishedFields(PPointer(Obj)^) then
              WriteObject(Obj,SubCompName+ToUTF8(P^.Name)+'.',false);
         end;
         {$ifndef NOVARIANTS}
@@ -40279,7 +40279,7 @@ begin
     exit; // 'select count(*) from table' will be handled as static
   end;
   if fBasicUpperSQLSelect[false]='' then
-   exit;
+    exit;
   if IdemPChar(pointer(SQL),pointer(fBasicUpperSQLSelect[false])) then
     WithoutRowID := false else
     if IdemPChar(pointer(SQL),pointer(fBasicUpperSQLSelect[true])) then
@@ -40338,112 +40338,136 @@ end;
 function TSQLRestStorageInMemory.FindWhereEqual(WhereField: integer;
   const WhereValue: RawUTF8; OnFind: TFindWhereEqualEvent; Dest: pointer;
   FoundLimit,FoundOffset: integer; CaseInsensitive: boolean): PtrInt;
-var i, ndx: integer;
-    aValue: PtrInt;
-    aID: Int64;
+var i, ndx, i32: integer;
+    i64: Int64;
     err, currentRow: integer;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     Hash: TListFieldHash;
-    Offs: PtrInt;
+    offs: PtrUInt;
+    item: PPointer;
+
+  procedure FoundOne;
+  begin
+    if FoundOffset>0 then begin // omit first FoundOffset rows
+      inc(currentRow);
+      if currentRow>FoundOffset then
+        FoundOffset := 0 else
+        exit;
+    end;
+    if Assigned(OnFind) then
+      OnFind(Dest,TSQLRecord(item^),(PtrUInt(item)-PtrUInt(fValue.List)) shr POINTERSHR);
+    inc(result);
+  end;
+
 begin
   result := 0;
+  if fValue.Count=0 then
+    exit;
   if FoundLimit<=0 then
     FoundLimit := maxInt;
-  if Assigned(OnFind) then
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
-      aID := GetInt64(pointer(WhereValue),err);
-      if (err=0) and (aID>0) then begin
-        ndx := IDToIndex(aID); // use fast binary search
+      i64 := GetInt64(pointer(WhereValue),err);
+      if (err=0) and (i64>0) then begin
+        ndx := IDToIndex(i64); // use fast binary search
         if ndx>=0 then begin
-          OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
+          if Assigned(OnFind) then
+            OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
           inc(result);
         end;
       end;
     end;
+    exit;
   end else
-  if cardinal(WhereField)<=cardinal(fStoredClassRecordProps.Fields.Count) then begin
-    dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
-    P := fStoredClassRecordProps.Fields.List[WhereField];
-    // use fUniqueFields[] hash array for O(1) search if available
-    Hash := UniqueFieldHash(WhereField);
-    if Hash<>nil then
-      if FoundOffset>0 then // omit first FoundOffset rows, for ID unique field
-        exit else begin
-        P.SetValueVar(fSearchRec,WhereValue,false);
-        ndx := Hash.Find(fSearchRec);
-        if ndx>=0 then begin
+  if cardinal(WhereField)>cardinal(fStoredClassRecordProps.Fields.Count) then
+    exit;
+  dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
+  P := fStoredClassRecordProps.Fields.List[WhereField];
+  if not (P.SQLFieldType in COPIABLE_FIELDS) then
+    exit; // nothing to search (e.g. sftUnknown or sftMany)
+  // use fUniqueFields[] hash array for O(1) search if available
+  Hash := UniqueFieldHash(WhereField);
+  if Hash<>nil then begin
+    if FoundOffset<=0 then begin // omit first FoundOffset rows, for ID unique field
+      P.SetValueVar(fSearchRec,WhereValue,false);
+      ndx := Hash.Find(fSearchRec);
+      if ndx>=0 then begin
+        if Assigned(OnFind) then
           OnFind(Dest,fValue.List[ndx],ndx);
-          inc(result);
-        end;
-        exit;
+        inc(result);
       end;
-    // generic code below is as fast as possible, and works for all field types
-    currentRow := 0;
-    if not (P.SQLFieldType in COPIABLE_FIELDS) then
-      exit; // nothing to search (e.g. sftUnknown or sftMany)
-    if ((P.SQLFieldType in [sftBoolean,sftEnumerate,sftSet,sftID,sftRecord
-        {$ifdef CPU64},sftInteger]){$else}]){$endif}
-        and P.InheritsFrom(TSQLPropInfoRTTI))
-        {$ifndef CPU64}or (P.ClassType=TSQLPropInfoRTTIInt32){$endif} then begin
-      // stored as a PtrInt value -> optimized search
-      aValue := GetInteger(pointer(WhereValue),err);
-      if err<>0 then
-        exit;
-      nfo := TSQLPropInfoRTTI(P).PropInfo;
-      if {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
-         ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then
-        if nfo^.GetterIsField then begin
-          // optimized version for fast retrieval of signed Int32 field value
-          Offs := nfo^.GetProc{$ifndef FPC} and $00FFFFFF{$endif}; // see TPropInfo.GetterAddr
-          for i := 0 to fValue.Count-1 do
-            if PInteger(PtrInt(fValue.List[i])+Offs)^=aValue then begin
-              if FoundOffset>0 then begin // omit first FoundOffset rows
-                inc(currentRow);
-                if currentRow>FoundOffset then
-                  FoundOffset := 0 else
-                  continue;
-              end;
-              OnFind(Dest,TSQLRecord(fValue.List[i]),i);
-              inc(result);
-              if result>=FoundLimit then
-                exit;
-            end;
-          exit;
-        end;
-      // not an Int32, or there is a getter procedure -> use GetOrdProp()
-      for i := 0 to fValue.Count-1 do begin
-        if nfo^.GetOrdProp(TObject(fValue.List[i]))=aValue then begin
-          if FoundOffset>0 then begin
-            inc(currentRow);
-            if currentRow>=FoundOffset then
-              FoundOffset := 0 else
-              continue;
-          end;
-          OnFind(Dest,fValue.List[i],i);
-          inc(result);
+    end;
+    exit;
+  end;
+  // full scan optimized search for a specified value
+  currentRow := 0;
+  item := pointer(fValue.List);
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
+    // stored as an Integer 8, 16 or 32 bit value -> optimized search
+    i32 := GetInteger(pointer(WhereValue),err);
+    if err<>0 then
+      exit;
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
+    offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
+    if (offs<>0) and {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
+       ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then begin
+      // optimized version for fast retrieval of signed Integer field value
+      for i := 1 to fValue.Count do begin
+        if PInteger(PPtrUInt(item)^+offs)^=i32 then begin
+          FoundOne;
           if result>=FoundLimit then
             exit;
         end;
+        inc(item);
       end;
-      exit;
-    end;
-    // generic search of any value, using fast CompareValue() overridden method
-    P.SetValueVar(fSearchRec,WhereValue,false);
-    for i := 0 to fValue.Count-1 do  
-      if P.CompareValue(fValue.List[i],fSearchRec,CaseInsensitive)=0 then begin
-        if FoundOffset>0 then begin
-          inc(currentRow);
-          if currentRow>=FoundOffset then
-            FoundOffset := 0 else
-            continue;
-        end;
-        OnFind(Dest,fValue.List[i],i);
-        inc(result);
+    end else
+    // 8 or 16 bit value, or there is a getter procedure -> use GetOrdProp()
+    for i := 1 to fValue.Count do begin
+      if nfo^.GetOrdProp(item^)=i32 then begin
+        FoundOne;
         if result>=FoundLimit then
           exit;
       end;
+      inc(item);
+    end;
+  end else
+  if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
+    // stored as an Integer 64 bit value -> optimized search
+    i64 := GetInt64(pointer(WhereValue),err);
+    if err<>0 then
+      exit;
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
+    offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
+    if offs<>0 then begin
+      for i := 1 to fValue.Count do begin
+        if PInt64(PPtrUInt(item)^+offs)^=i64 then begin
+          FoundOne;
+          if result>=FoundLimit then
+            exit;
+        end;
+        inc(item);
+      end;
+    end else
+    for i := 1 to fValue.Count do begin
+      if nfo^.GetInt64Prop(item^)=i64 then begin
+        FoundOne;
+        if result>=FoundLimit then
+          exit;
+      end;
+      inc(item);
+    end;
+  end else begin
+    // generic search of any value, using fast CompareValue() overridden method
+    P.SetValueVar(fSearchRec,WhereValue,false);
+    for i := 1 to fValue.Count do begin
+      if P.CompareValue(item^,fSearchRec,CaseInsensitive)=0 then begin
+        FoundOne;
+        if result>=FoundLimit then
+          exit;
+      end;
+      inc(item);
+    end;
   end;
 end;
 
