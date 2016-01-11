@@ -66,6 +66,7 @@ uses
   Variants,
   {$endif}
   SynCommons,
+  SynDBDataSet, // for AddBcd()
   DB;
 
 
@@ -544,10 +545,12 @@ begin
           W.Add(AsInteger);
         ftLargeint:
           W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
-        ftFloat, ftCurrency:
+        ftFloat, ftCurrency: // TCurrencyField is sadly a TFloatField
           W.Add(AsFloat,TFloatField(Data.Fields[f]).Precision);
         ftBCD:
           W.AddCurr64(AsCurrency);
+        ftFMTBcd:
+          AddBcd(W,AsBCD);
         ftTimeStamp, ftDate, ftTime, ftDateTime: begin
           W.Add('"');
           W.AddDateTime(AsDateTime);
