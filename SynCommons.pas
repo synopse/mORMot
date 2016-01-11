@@ -2469,7 +2469,7 @@ function GetCardinalW(P: PWideChar): PtrUInt;
 
 /// get the 64 bits integer value stored in P^
 function GetInt64(P: PUTF8Char): Int64; overload;
-  {$ifdef CPU64}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// get the 64 bits integer value stored in P^
 procedure SetInt64(P: PUTF8Char; var result: Int64);
@@ -2479,6 +2479,7 @@ procedure SetInt64(P: PUTF8Char; var result: Int64);
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
+  {$ifdef CPU64}inline;{$endif}
 
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
@@ -23684,7 +23685,7 @@ procedure Int64ToUInt32(Values64: PInt64Array; Values32: PCardinalArray; Count: 
 var i: integer;
 begin
   for i := 0 to Count-1 do
-   Values32[i] := Values64[i];
+    Values32[i] := Values64[i];
 end;
 
 procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray);
@@ -24382,58 +24383,18 @@ begin // PtrInt is already int64 -> call previous version
 end;
 {$else}
 function GetInt64(P: PUTF8Char): Int64;
-var c: cardinal;
-    minus: boolean;
 begin
-  result := 0;
-  if P=nil then
-    exit;
-  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  if P^='-' then begin
-    minus := true;
-    repeat inc(P) until P^<>' ';
-  end else begin
-    minus := false;
-    if P^='+' then
-      repeat inc(P) until P^<>' ';
-  end;
-  c := byte(P^)-48;
-  if c>9 then
-    exit;
-  Int64Rec(result).Lo := c;
-  inc(P);
-  repeat
-    c := byte(P^)-48;
-    if c>9 then
-      break else
-      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
-    inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
-      repeat
-        c := byte(P^)-48;
-        if c>9 then
-          break else
-          result := result shl 3+result+result; // fast result := result*10
-        inc(result,c);
-        if result<0 then
-          exit; // overflow (>$7FFFFFFFFFFFFFFF)
-        inc(P);
-      until false;
-      break;
-    end;
-  until false;
-  if minus then
-    result := -result;
+  SetInt64(P,result);
 end;
 {$endif}
 
-function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
-{$ifdef ENHANCEDRTL}
-begin
-  val(PAnsiChar(P),result,err);
+{$ifdef CPU64}
+function GetInt64(P: PUTF8Char; var err: integer): Int64;
+begin // PtrInt is already int64 -> call previous version
+  result := GetInteger(P,err);
 end;
 {$else}
-{$ifdef PUREPASCAL}
+function GetInt64(P: PUTF8Char; var err: integer): Int64;
 var c: cardinal;
     minus: boolean;
 begin
@@ -24450,190 +24411,45 @@ begin
     if P^='+' then
       repeat inc(P) until P^<>' ';
   end;
-  Inc(err);
+  inc(err);
   c := byte(P^)-48;
   if c>9 then
     exit;
   Int64Rec(result).Lo := c;
   inc(P);
-  repeat
+  repeat         
     inc(err);
     if Byte(P^)=0 then begin
       err := 0; // conversion success without error
-      Break;
+      break;
     end;
     c := byte(P^)-48;
     if c>9 then
-      break else
-      {$ifdef CPU64}
-      result := result*10;
-      {$else}
-      result := result shl 3+result+result;
-      {$endif}
-    inc(result,c);
+      exit else
+      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
     inc(P);
+    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      repeat
+        inc(err);
+        if byte(P^)=0 then begin
+          err := 0; // conversion success without error
+          break;
+        end;
+        c := byte(P^)-48;
+        if c>9 then
+          break else
+          result := result shl 3+result+result; // fast result := result*10
+        inc(result,c);
+        if result<0 then
+          exit; // overflow (>$7FFFFFFFFFFFFFFF)
+        inc(P);
+      until false;
+      break;
+    end;
   until false;
   if minus then
     result := -result;
 end;
-{$else}
-asm // enhanced John O'Harrow code
-  test  eax,eax
-  jz    @@Null
-  push  ebx
-  push  esi
-  push  edi
-  push  edx                 {Save Code Address}
-  push  eax                 {Save String Pointer}
-  mov   esi,eax             {String Pointer}
-  xor   ebx,ebx             {Clear Valid Flag and Sign Flag}
-  xor   eax,eax             {Clear Result}
-  xor   edx,edx
-  jmp   @@TrimEntry
-@@Null:
-  mov   [edx],eax
-  inc   dword ptr [edx]               {Code = 1}
-  xor   edx,edx             {Result = 0}
-  ret
-@@Trim:                     {Strip Leading Spaces}
-  inc   esi
-@@TrimEntry:
-  movzx ecx,byte ptr [esi]
-  cmp   cl,' '
-  je    @@Trim
-  cmp   cl,'0'
-  jle   @@CheckFirstChar
-@@CheckAlpha:
-  test  cl,$87
-  jz    @@CheckX            {May be 'x' or 'X'}
-@@NumLoop:
-  sub   ecx,'0'
-  cmp   ecx,9
-  ja    @@NumDone           {Not '0'..'9'}
-  cmp   eax,MaxInt/10-9     {(MaxInt div 10)-9}
-  ja    @@LargeNum
-  lea   eax,[eax*4+eax]
-  lea   eax,[eax*2+ecx]     {Result = Result * 10 + Digit}
-  inc   esi
-  mov   bl,1                {Valid := True}
-  movzx ecx,byte ptr [esi]
-  jmp   @@NumLoop
-@@LargeNum:
-  mov   bh,cl               {Save Digit}
-  add   eax,eax
-  adc   edx,edx
-  mov   ecx,eax
-  mov   edi,edx             {edi:ecx = Result * 2}
-  shld  edx,eax,2
-  add   eax,eax
-  add   eax,eax             {edx:eax = Result * 8}
-  add   eax,ecx
-  adc   edx,edi             {Result = Result * 10}
-  movzx ecx,bh              {Restore Digit}
-  add   eax,ecx             {Add Digit to Result}
-  adc   edx,0
-  inc   esi
-  movzx ecx,byte ptr [esi]
-  sub   ecx,'0'
-  cmp   ecx,9
-  ja    @@NumDone           {Not '0'..'9'}
-  cmp   edx,$0ccccccc       {May be Out of Range?}
-  jb    @@LargeNum
-  ja    @@SetSign           {Out of Range}
-  cmp   eax,$cccccccc
-  jna   @@LargeNum          {Within Range}
-  jmp   @@SetSign
-@@NumDone:
-  cmp   edx,$80000000       {Check for Overflow}
-  jb    @@SetSign
-  jne   @@Overflow
-  test  eax,eax
-  jnz   @@Overflow
-  test  ebx,ebx             {Sign Flag}
-  js    @@Setsign           {Result is Valid (-MaxInt64-1)}
-@@Overflow:
-  dec   esi
-  mov   bl,0               {Valid := False}
-  jmp   @@SetSign
-@@CheckFirstChar:
-  cmp   cl,'-'
-  je    @@PlusMinus
-  cmp   cl,'+'
-  jne   @@SignSet
-@@PlusMinus:                {Starts with '+' or '-'}
-  mov   bl,'+'+1
-  sub   ebx,ecx             {Set Sign Flag: '+' -> +1, '-' -> -1}
-  inc   esi
-  mov   bl,0                {Valid := False}
-  movzx ecx,byte ptr [esi]           {Character after '+' or '-'}
-@@SignSet:
-  cmp   cl,'$'
-  je    @@Hex               {Hexadecimal}
-  cmp   cl,'0'
-  jne   @@CheckAlpha        {May start with 'x' or 'X'}
-  inc   esi
-  mov   bl,1                {Assume Valid = True}
-  movzx ecx,byte ptr [esi]           {Character after '0'}
-  jmp   @@CheckAlpha        {May start with '0x' or '0X'}
-@@CheckX:
-  mov   bh,cl
-  or    bh,$20              {'X' -> 'x'}
-  cmp   bh,'x'
-  jne   @@NumLoop
-@@Hex:
-  mov   bl,0                {Valid := False}
-@@HexLoop:
-  inc   esi
-  movzx ecx,byte ptr [esi]
-  cmp   cl,'a'
-  jb    @@CheckNum
-  sub   cl,'a'-'A'          {'a' > 'A'}
-@@CheckNum:
-  sub   cl,'0'
-  cmp   cl,9
-  jna   @@CheckHexRange     {'0'..'9'}
-  sub   cl,'A'-'0'
-  cmp   cl,5                {Valid Hex Character?}
-  ja    @@NotHex            {No: Invalid}
-  add   cl,10               {Yes: Adjust Digit}
-@@CheckHexRange:
-  cmp   edx,$10000000
-  jae   @@SetSign          {Overflow}
-  shld  edx,eax,4          {Result := Result * 16}
-  shl   eax,4
-  add   eax,ecx            {Add Digit}
-  adc   edx,0
-  mov   bl,1               {Valid := True}
-  jmp   @@HexLoop
-@@NotHex:
-  add   cl,'A'-'0'         {Restore Char-'0'}
-@@SetSign:
-  mov   ch,bl              {Save Valid Flag}
-  sar   ebx,31             {Set Each Bit to Top Bit (Sign Flag)}
-  xor   eax,ebx            {Negate Result if Necessary}
-  xor   edx,ebx
-  sub   eax,ebx
-  sbb   edx,ebx
-  dec   ch                  {0 if Valid,-1 if Invalid}
-  or    cl,ch               {If Invalid, Force CL = -1}
-  cmp   cl,-'0'
-  jne   @@Error             {Not Valid or Not End of String}
-  xor   esi,esi             {Code := 0}
-  pop   ebx                 {Dump String Pointer}
-@@Finished:
-  pop   ecx
-  mov   [ecx],esi           {Set Error Code}
-  pop   edi
-  pop   esi
-  pop   ebx
-  ret
-@@Error:
-  inc   esi
-  pop   ecx                 {String Pointer}
-  sub   esi,ecx
-  jmp   @@Finished
-end;
-{$endif}
 {$endif}
 
 function GetExtended(P: PUTF8Char): TSynExtended;
