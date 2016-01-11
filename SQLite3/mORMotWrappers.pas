@@ -712,7 +712,7 @@ begin
     info.name := typName;
   end;
   end;
-  if not VarIsEmptyOrNull(info) then
+  if not VarIsEmptyOrNull(info) then // null e.g. for a record without custom text definition
     list.AddItem(info);
 end;
 var siz: integer;

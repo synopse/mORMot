@@ -817,7 +817,7 @@ begin
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDelete then
         exit else
-        AddInt64(TInt64DynArray(fBatchIDs),fBatchIDsCount,ID) else begin
+        AddID(fBatchIDs,fBatchIDsCount,ID) else begin
       if Owner<>nil then begin // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
         Owner.FlushInternalDBCache;

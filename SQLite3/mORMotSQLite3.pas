@@ -825,7 +825,7 @@ begin
         inc(fBatchIDMax);
         result := fBatchIDMax;
       end;
-      AddInt64(TInt64DynArray(fBatchID),fBatchIDCount,result);
+      AddID(fBatchID,fBatchIDCount,result);
       AddRawUTF8(fBatchValues,fBatchValuesCount,SentData);
     end;
     exit;

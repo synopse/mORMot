@@ -1882,6 +1882,11 @@ function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
 
 {$endif NOVARIANTS}
 
+/// similar to AddInt64() function, but for a TIDDynArray
+// - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
+// with the Delphi Win64 compiler
+procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
+
 type
   /// the available options for TSQLRest.BatchStart() process
   // - boInsertOrIgnore will create 'INSERT OR IGNORE' statements instead of
@@ -30949,6 +30954,14 @@ begin
     fOnWrite(self,soInsert,PSQLRecordClass(Value)^,Value.IDValue,Value,FieldBits);
 end;
 
+procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
+begin
+  if ValuesCount=length(Values) then
+    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
+  Values[ValuesCount] := Value;
+  inc(ValuesCount);
+end;
+
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
   ID: TID): integer;
 begin
@@ -30957,8 +30970,7 @@ begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
-    fRest.Model.RecordReference(Table,ID));
+  AddID(fDeletedRecordRef,fDeletedCount,fRest.Model.RecordReference(Table,ID));
   fBatch.AddShort('"DELETE@'); // '[...,"DELETE@Table",ID,...]}'
   fBatch.AddString(Table.RecordProps.SQLTableName);
   fBatch.Add('"',',');
@@ -30978,8 +30990,7 @@ begin
     result := -1; // invalid parameters, or not opened BATCH sequence
     exit;
   end;
-  AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
-    RecordReference(fTableIndex,ID));
+  AddID(fDeletedRecordRef,fDeletedCount,RecordReference(fTableIndex,ID));
   fBatch.AddShort('"DELETE",'); // '{"Table":[...,"DELETE",ID,...]}'
   fBatch.Add(ID);
   fBatch.Add(',');
@@ -31051,8 +31062,7 @@ begin
      (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
     fRest.Cache.Notify(Value,soUpdate) else
     // may not contain all cached fields -> delete from cache
-    AddInt64(TInt64DynArray(fDeletedRecordRef),fDeletedCount,
-      RecordReference(tableIndex,ID));
+    AddID(fDeletedRecordRef,fDeletedCount,RecordReference(tableIndex,ID));
   result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
