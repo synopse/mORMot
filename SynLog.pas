@@ -90,6 +90,7 @@ unit SynLog;
   - declared TSynLog.LogInternal() methods as virtual - request [e47c64fb2c]
   - .NET/CLR external exceptions will now be logged with their C# type name
   - special 'SetThreadName' exception will now be ignored by TSynLog hook
+  - introducing TSynLog.Enter overload method, with FormatUTF8-like parameters
   - fixed ticket [19e567b8ca] about TSynLog issue in heavily concurrent mode:
     now a per-thread context will be stored, e.g. for Enter/Leave tracking
   - fixed ticket [a516b1a954] about ptOneFilePerThread log file rotation
@@ -670,6 +671,7 @@ type
     /// associated class instance to be displayed
     Instance: TObject;
     /// method name (or message) to be displayed
+    // - may be a RawUTF8 if MethodNameLocal=mnEnterOwnMethodName
     MethodName: PUTF8Char;
     /// internal reference count used at this recursion level by TSynLog._AddRef
     RefCount: integer;
@@ -678,7 +680,7 @@ type
     /// the time stamp at enter time
     EnterTimeStamp: Int64;
     /// if the method name is local, i.e. shall not be displayed at Leave()
-    MethodNameLocal: (mnAlways, mnEnter, mnLeave);
+    MethodNameLocal: (mnAlways, mnEnter, mnLeave, mnEnterOwnMethodName);
   end;
 
   /// thread-specific internal context used during logging
@@ -855,8 +857,24 @@ type
     //  $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
     //  $ 20110325 19325801 info   SQL=SELECT * FROM Table;
     //  $ 20110325 19325801  -    MyDBUnit.TMyDB(004E11F4).SQLExecute
+    // - note that due to a limitation (feature?) of the FPC compiler, you need
+    // to hold the returned value into a local ISynLog variable, as such:
+    // ! procedure TMyDB.SQLFlush;
+    // ! var Log: ISynLog;
+    // ! begin
+    // !   Log := TSynLogDB.Enter(self);
+    // !   // do some stuff
+    // ! end; // here Log will be released
+    // otherwise, the ISynLog instance would be released just after the Enter()
+    // call, so the timing won't match the method execution
     class function Enter(aInstance: TObject=nil; aMethodName: PUTF8Char=nil;
       aMethodNameLocal: boolean=false): ISynLog; overload;
+    /// handle method enter / auto-leave tracing, with some custom text
+    // - this overloaded method would not write the method name, but the supplied
+    // text content, after expanding the parameters like FormatUTF8()
+    // - it will append the corresponding sllLeave log entry when the method ends
+    class function Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+      aInstance: TObject=nil): ISynLog; overload;
     /// retrieve the current instance of this TSynLog class
     // - to be used for direct logging, without any Enter/Leave:
     // ! TSynLogDB.Add.Log(llError,'The % statement didn't work',[SQL]);
@@ -956,6 +974,9 @@ type
     // !   log.DisableRemoteLog(false);
     // ! end;
     procedure DisableRemoteLog(value: boolean);
+    /// the associated TSynLog class
+    function LogClass: TSynLogClass;
+      {$ifdef HASINLINE}inline;{$endif}
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
     property Writer: TTextWriter read fWriter;
@@ -2974,6 +2995,7 @@ end;
 {$endif}
 
 {$STACKFRAMES ON}
+
 class function TSynLog.Enter(aInstance: TObject; aMethodName: PUTF8Char;
   aMethodNameLocal: boolean): ISynLog;
 var aSynLog: TSynLog;
@@ -3039,6 +3061,40 @@ begin
   result := aSynLog;
 end;
 {$STACKFRAMES OFF}
+
+class function TSynLog.Enter(const TextFmt: RawUTF8; const TextArgs: array of const;
+  aInstance: TObject=nil): ISynLog;
+var aSynLog: TSynLog;
+begin
+  aSynLog := Family.SynLog;
+  with aSynLog do
+  if sllEnter in fFamily.fLevel then begin
+    LockAndGetThreadContext;
+    with fThreadContext^ do
+    try
+      if RecursionCount=RecursionCapacity then begin
+        inc(RecursionCapacity,4+RecursionCapacity shr 3);
+        SetLength(Recursion,RecursionCapacity);
+      end;
+      with Recursion[RecursionCount] do begin
+        Instance := aInstance;
+        MethodName := nil; // avoid GPF in RawUTF8(pointer(MethodName)) below
+        RawUTF8(pointer(MethodName)) := FormatUTF8(TextFmt,TextArgs);
+        MethodNameLocal := mnEnterOwnMethodName;
+        Caller := 0; // No stack trace needed here
+        RefCount := 0;
+      end;
+      inc(RecursionCount);
+    finally
+      {$ifndef NOEXCEPTIONINTERCEPT}
+      GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+      {$endif}
+      LeaveCriticalSection(GlobalThreadLock);
+    end;
+  end;
+  // copy to ISynLog interface -> will call TSynLog._AddRef
+  result := aSynLog;
+end;
 
 class function TSynLog.FamilyCreate: TSynLogFamily;
 var PVMT: pointer;
@@ -3182,6 +3238,13 @@ end;
 begin
   if (self<>nil) and (Level in fFamily.fLevel) then
     DoLog(LinesToLog);
+end;
+
+function TSynLog.LogClass: TSynLogClass;
+begin
+  if self=nil then
+    result := nil else
+    result := PPointer(self)^;
 end;
 
 procedure TSynLog.DisableRemoteLog(value: boolean);
@@ -3700,7 +3763,7 @@ end;
 
 procedure TSynLog.AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
 var MS: cardinal;
-begin // aLevel = sllEnter,sllLeave or sllNone 
+begin // aLevel = sllEnter,sllLeave or sllNone
   with fThreadContext^ do
   if cardinal(aIndex)<cardinal(RecursionCount) then
   with Recursion[aIndex] do begin
@@ -3710,8 +3773,14 @@ begin // aLevel = sllEnter,sllLeave or sllNone
       if MethodName<>nil then begin
         if MethodNameLocal<>mnLeave then begin
           fWriter.AddNoJSONEscape(MethodName);
-          if MethodNameLocal=mnEnter then
+          case MethodNameLocal of
+          mnEnter:
             MethodNameLocal := mnLeave;
+          mnEnterOwnMethodName: begin
+            MethodNameLocal := mnLeave;
+            RawUTF8(pointer(MethodName)) := ''; // release temp string
+          end;
+          end;
         end;
       end else
         TSynMapFile.Log(fWriter,Caller,false);
@@ -3728,7 +3797,7 @@ begin // aLevel = sllEnter,sllLeave or sllNone
         MS := ((fCurrentTimeStamp-EnterTimeStamp)*(1000*1000))div fFrequencyTimeStamp;
         fWriter.AddMicroSec(MS);
       end;
-      end;
+      end; // may be sllNone when called from LogHeaderLock()
     end;
   end;
   fWriter.AddEndOfLine(aLevel);

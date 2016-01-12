@@ -770,7 +770,7 @@ var SQL: RawUTF8;
 begin       
   {$ifdef WITHLOG}
   log := Owner.LogClass.Add;
-  log.Enter(self);
+  log.Enter('Create %',[aClass],self);
   {$else}
   log := nil;
   {$endif}

@@ -560,14 +560,14 @@ end;
 
 procedure TDDDDaemon.DoStart(Sender: TService);
 begin
-  SQLite3Log.Enter(self);
+  SQLite3Log.Enter('DoStart %',[fSettings.ServiceName],self);
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
 
 procedure TDDDDaemon.DoStop(Sender: TService);
 begin
-  SQLite3Log.Enter(self);
+  SQLite3Log.Enter('DoStop %',[fSettings.ServiceName],self);
   fDaemon := nil; // will stop the daemon
 end;
 
@@ -885,7 +885,7 @@ destructor TDDDSocketThread.Destroy;
 var timeOut: Int64;
 begin
   {$ifdef WITHLOG}
-  FLog.Enter(self);
+  FLog.Enter('Destroy %:%',[fHost,fPort],self);
   {$endif}
   Terminate;
   timeOut := GetTickCount64+10000;
@@ -900,7 +900,7 @@ procedure TDDDSocketThread.ExecuteConnect;
 var tix: Int64;
 begin
   {$ifdef WITHLOG}
-  FLog.Enter(self);
+  FLog.Enter('ExecuteConnect %:%',[fHost,fPort],self);
   {$endif}
   if fSocket<>nil then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil',[self]);
@@ -949,7 +949,7 @@ procedure TDDDSocketThread.ExecuteDisconnect;
 var info: RawUTF8;
 begin
   {$ifdef WITHLOG}
-  FLog.Enter(self);
+  FLog.Enter('ExecuteDisconnect %:%',[fHost,fPort],self);
   {$endif}
   try
     fSafe.Lock;

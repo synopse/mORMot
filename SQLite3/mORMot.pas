@@ -33849,11 +33849,11 @@ var url, header: RawUTF8;
 begin
   if self=nil then
     result := HTML_UNAVAILABLE else begin
-    {$ifdef WITHLOG}
-    Log := fLogClass.Enter(self,pointer(aMethodName),true);
-    {$endif}
     url := Model.getURICallBack(aMethodName,aTable,aID)+
       UrlEncode(aNameValueParameters);
+    {$ifdef WITHLOG}
+    Log := fLogClass.Enter('CallBackGet %',[url],self);
+    {$endif}
     result := URI(url,'GET',@aResponse,@header).Lo;
     if aResponseHead<>nil then
       aResponseHead^ := header;
@@ -34058,10 +34058,10 @@ var u: RawUTF8;
 begin
   if (self=nil) or (method<Low(NAME)) then
     result := HTML_UNAVAILABLE else begin
-    {$ifdef WITHLOG}
-    Log := fLogClass.Enter(self,pointer(aMethodName),true);
-    {$endif}
     u := Model.getURICallBack(aMethodName,aTable,aID);
+    {$ifdef WITHLOG}
+    Log := fLogClass.Enter('Callback %',[u],self);
+    {$endif}
     result := URI(u,NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
     InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
       sllServiceReturn);
@@ -34841,8 +34841,8 @@ begin
   if fSessions=nil then
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self,'Shutdown');
-  Log.Log(sllInfo,'CurrentRequestCount=%',[fStats.CurrentRequestCount],self);
+  Log := fLogClass.Enter('Shutdown CurrentRequestCount=% File=%',
+    [fStats.CurrentRequestCount,aStateFileName],self);
   {$endif}
   OnNotifyCallback := nil;
   fSessions.Safe.Lock;
@@ -35154,7 +35154,7 @@ var Writer: TSQLRestBatch;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter(self);
+  Log := fLogClass.Enter('RecordVersionSynchronizeSlave %',[Table],self);
 {$else}
 begin
 {$endif}
@@ -35208,19 +35208,19 @@ var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter(self);
+  Log := fLogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',[Table],self);
 {$else}
 begin
 {$endif}
   result := nil;
   if Master=nil then
-    raise EORMException.CreateUTF8('%.RecordVersionSynchronize(Master=nil)',[self]);
+    raise EORMException.CreateUTF8('%.RecordVersionSynchronizeSlaveToBatch(Master=nil)',[self]);
   TableIndex := Model.GetTableIndexExisting(Table);
   SourceTableIndex := Master.Model.GetTableIndexExisting(Table); // <>TableIndex?
   Props := Model.TableProps[TableIndex].Props;
   if Props.RecordVersionField=nil then
     raise EORMException.CreateUTF8(
-      '%.RecordVersionSynchronize(%) with no TRecordVersion field',[self,Table]);
+      '%.RecordVersionSynchronizeSlaveToBatch(%) with no TRecordVersion field',[self,Table]);
   fAcquireExecution[execORMWrite].Safe.Lock;
   try
     Where := '%>? order by %';
@@ -37466,8 +37466,7 @@ var Ctxt: TSQLRestServerURIContext;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter(self,pointer(FormatUTF8('URI(% % inlen=%)',
-    [Call.Method,Call.Url,length(Call.InBody)])),true);
+  Log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
 {$else}
 begin
 {$endif}
@@ -38439,8 +38438,7 @@ var HistBlob: TSQLRecordHistory;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter(self);
-  Log.Log(sllInfo,'TrackChangesFlush(%)',[aTableHistory],self);
+  Log := fLogClass.Enter('TrackChangesFlush(%)',[aTableHistory],self);
 {$else}
 begin
 {$endif}
@@ -38820,7 +38818,7 @@ var EndOfObject: AnsiChar;
 {$ifdef WITHLOG}
 var Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter(self);
+  Log := fLogClass.Enter('EngineBatchSend % inlen=%',[Table,length(Data)],self);
 {$else}
 begin
 {$endif}
@@ -39592,7 +39590,7 @@ var Card: cardinal;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self,nil,true);
+  Log := fLogClass.Enter(self);
   {$endif}
   Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
   EnterCriticalSection(fMutex);
@@ -43997,7 +43995,7 @@ var Msg: RawUTF8;
     {$endif}
 begin
   {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self,nil,true);
+  Log := fLogClass.Enter(self);
   {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
@@ -53254,9 +53252,11 @@ begin
     exit;
   if fClient=nil then
     fClient := fRest as TSQLRestClientURI;
+  if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
+    UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   {$ifdef WITHLOG}
-  if sllEnter in fRest.fLogFamily.Level then
-    Log := fRest.LogClass.Enter(Self,pointer(fInterfaceURI+'.'+aMethod),true);
+  Log := fRest.LogClass.Enter('InternalInvoke I%.% [%] %',
+    [fInterfaceURI,aMethod,clientDrivenID,aParams],self);
   {$endif}
   // compute URI according to current routing scheme
   if fForcedURI<>'' then
@@ -53264,8 +53264,6 @@ begin
     if fRest.Services.ExpectMangledURI then
       uri := fClient.Model.Root+'/'+fInterfaceMangledURI else
       uri := fClient.Model.Root+'/'+fInterfaceURI;
-  if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
-    UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
   if ParamsAsJSONObject and (clientDrivenID='') then begin
     ndx := fInterface.FindMethodIndex(aMethod);

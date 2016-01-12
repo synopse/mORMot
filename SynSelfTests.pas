@@ -2868,7 +2868,9 @@ begin
     l := GetInt64(pointer(s),err);
     Check((err=0)and(l=k));
     SetInt64(pointer(s),l);
-    Check(l=k);
+    s := s+'z';
+    l := GetInt64(pointer(s),err);
+    Check(err<>0);
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));

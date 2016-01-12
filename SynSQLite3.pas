@@ -3816,7 +3816,7 @@ var S: TSQLite3Statement;
 {$ifdef WITHLOG}
 var FPCLog: ISynLog;
 begin
-  FPCLog := fLog.Enter(self);
+  FPCLog := fLog.Enter('Destroy %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif}
@@ -4199,7 +4199,7 @@ function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
 {$ifdef WITHLOG}
 var Log: ISynLog;
 begin
-  Log := fLog.Enter(self);
+  Log := fLog.Enter('Backup % -> %',[fFileNameWithoutPath,BackupFileName],self);
 {$else}
 begin
 {$endif}
@@ -4321,7 +4321,7 @@ var utf8: RawUTF8;
 {$ifdef WITHLOG}
     FPCLog: ISynLog;
 begin
-  FPCLog := fLog.Enter(self);
+  FPCLog := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif}

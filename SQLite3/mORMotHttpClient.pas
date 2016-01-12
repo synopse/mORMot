@@ -461,7 +461,7 @@ var Head, Content, ContentType: RawUTF8;
     res: Int64Rec;
 begin
 {$ifdef WITHLOG}
-  fLogClass.Enter(self,nil,true);
+  fLogClass.Enter(self);
 {$endif}
   if InternalCheckOpen then begin
     Head := Call.InHead;

@@ -5775,7 +5775,7 @@ begin
     exit;
   end;
   if Database.Client.Log<>nil then
-    Database.Client.Log.Enter(self);
+    Database.Client.Log.Enter('Drop %',[Name],self);
   result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
   Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res],self);
   if result='' then
@@ -5791,7 +5791,7 @@ begin
   if (self=nil) or (Database=nil) then
     exit;
   if Database.Client.Log<>nil then
-    Database.Client.Log.Enter(self);
+    Database.Client.Log.Enter('EnsureIndex %',[Name],self);
   if DocVariantData(Keys)^.Kind<>dvObject then
     raise EMongoException.CreateUTF8('%[%].EnsureIndex(Keys?)',[self,FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber>=2060000;

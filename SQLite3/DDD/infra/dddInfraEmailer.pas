@@ -507,7 +507,6 @@ function TDDDEmailerDaemon.SendEmail(const aRecipients: TRawUTF8DynArray;
 var Email: TSQLRecordEmailer;
     msg: string;
 begin
-  Rest.LogClass.Enter(self);
 {  result := CheckRecipients(aRecipient);
   if result<>cqrsSuccess then
     exit; }
@@ -517,6 +516,7 @@ begin
     Email.Sender := aSender;
     Email.Subject := aSubject;
     Email.Headers := aHeaders;
+    Rest.LogClass.Enter('SendEmail %',[Email],self);
     Email.MessageCompressed := SynLZCompressToBytes(aBody);
     CqrsBeginMethod(qaNone,result);
     if not Email.FilterAndValidate(Rest,msg) then

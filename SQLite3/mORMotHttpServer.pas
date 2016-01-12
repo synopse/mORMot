@@ -538,9 +538,22 @@ var
   // - when a TSQLHttpServer is created from a TSQLHttpServerDefinition
   HttpServerFullWebSocketsLog: Boolean;
 
-  
+
+function ToText(opt: TSQLHttpServerOptions): PShortString; overload;
+function ToText(sec: TSQLHttpServerSecurity): PShortString; overload;
+
+
 implementation
 
+function ToText(opt: TSQLHttpServerOptions): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(opt));
+end;
+
+function ToText(sec: TSQLHttpServerSecurity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLHttpServerSecurity),ord(sec));
+end;
 
 { TSQLHttpServer }
 
@@ -632,7 +645,8 @@ begin
   if high(aServers)<0 then
     fLog := TSQLLog else
     fLog := aServers[0].LogClass;
-  fLog.Enter(self);
+  fLog.Enter('Create % (%) on port %',[ToText(aHttpServerKind)^,
+    ToText(aHttpServerSecurity)^,aPort],self);
   {$endif}
   inherited Create;
   SetAccessControlAllowOrigin(''); // deny CORS by default
