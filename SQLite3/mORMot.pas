@@ -18627,7 +18627,7 @@ begin
   SetLength(result,n);
   for i := 0 to n-1 do
     if IncludePropType then
-      result[i] := FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name]) else
+      FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name],result[i]) else
       result[i] := ToUTF8(props[i]^.Name);
 end;
 
@@ -29255,7 +29255,7 @@ begin
     end;
   if Props.fSQLFillPrepareMany<>'' then
     SQL := Props.fSQLFillPrepareMany else begin
-    SQL := FormatUTF8('select % from % where %',[aSQLFields,aSQLFrom,aSQLWhere]);
+    FormatUTF8('select % from % where %',[aSQLFields,aSQLFrom,aSQLWhere],SQL);
     Props.fSQLFillPrepareMany := SQL;
   end;
   // process aFormatSQLJoin,aParamsSQLJoin and aBoundsSQLJoin parameters
@@ -32398,7 +32398,7 @@ function TSQLRest.ExecuteFmt(const SQLFormat: RawUTF8;
   const Args: array of const): boolean;
 var SQL: RawUTF8;
 begin
-  SQL := FormatUTF8(SQLFormat,Args);
+  FormatUTF8(SQLFormat,Args,SQL);
   result := EngineExecute(SQL);
 end;
 
@@ -34249,7 +34249,7 @@ begin
   if (self=nil) or (aID<=0) or (BlobField=nil) then
     result := false else begin
     // PUT ModelRoot/TableName/TableID/BlobFieldName
-    url := FormatUTF8('%/%/%',[Model.URI[Model.Tables[TableModelIndex]],aID,BlobField^.Name]);
+    FormatUTF8('%/%/%',[Model.URI[Model.Tables[TableModelIndex]],aID,BlobField^.Name],url);
     result := URI(url,'PUT',nil,@Head,@BlobData).Lo=HTML_SUCCESS;
   end;
 end;
@@ -34261,9 +34261,9 @@ begin
   if TableModelIndex<0 then
     result := false else begin
     // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
-    url := FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
+    FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
       [Model.URI[Model.Tables[TableModelIndex]],
-       SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)]);
+       SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)],url);
     result := URI(url,'PUT').Lo=HTML_SUCCESS;
   end;
 end;
@@ -37198,7 +37198,7 @@ procedure TSQLRestServerURIContext.Error(E: Exception;
   const Format: RawUTF8; const Args: array of const; Status: integer);
 var msg,exc: RawUTF8;
 begin
-  msg := FormatUTF8(Format,Args);
+  FormatUTF8(Format,Args,msg);
   if E=nil then
     Error(msg,Status) else begin
     exc := ObjectToJSONDebug(E);
@@ -40617,7 +40617,7 @@ var MS: TRawByteStringStream;
     Stmt: TSynTableStatement;
 procedure SetCount(aCount: integer);
 begin
-  result := FormatUTF8('[{"Count(*)":%}]'#$A,[aCount]);
+  FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
   ResCount := 1;
 end;
 begin
@@ -42549,7 +42549,7 @@ begin
     result := SQLTableName else begin
     result := Rest.MainFieldValue(T,aID,true);
     if result='' then
-      result := FormatUTF8('% %',[SQLTableName,aID]) else
+      FormatUTF8('% %',[SQLTableName,aID],result) else
       result := FormatUTF8('% "%"',[SQLTableName,result]);
   end;
 end;

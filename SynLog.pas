@@ -3079,7 +3079,7 @@ begin
       with Recursion[RecursionCount] do begin
         Instance := aInstance;
         MethodName := nil; // avoid GPF in RawUTF8(pointer(MethodName)) below
-        RawUTF8(pointer(MethodName)) := FormatUTF8(TextFmt,TextArgs);
+        FormatUTF8(TextFmt,TextArgs,RawUTF8(pointer(MethodName)));
         MethodNameLocal := mnEnterOwnMethodName;
         Caller := 0; // No stack trace needed here
         RefCount := 0;
@@ -3328,7 +3328,7 @@ class procedure TSynLog.DebuggerNotify(Level: TSynLogInfo;
 var Msg: RawUTF8;
 begin
   if Format<>''then begin
-    Msg := FormatUTF8(Format,Args);
+    FormatUTF8(Format,Args,Msg);
     Add.LogInternal(Level,Msg,nil,maxInt);
     {$ifdef MSWINDOWS}
     OutputDebugStringA(pointer(CurrentAnsiConvert.UTF8ToAnsi(Msg)));

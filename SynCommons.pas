@@ -2021,6 +2021,11 @@ function StringToWinAnsi(const Text: string): WinAnsiString;
 // - any supplied TObject instance will be written as their class name
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8; overload;
 
+/// fast Format() function replacement, optimized for RawUTF8
+// - overloaded function, which avoid a temporary RawUTF8 string on stack
+procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
+  var result: RawUTF8); overload;
+
 /// fast Format() function replacement, handling % and ? parameters
 // - will include Args[] for every % in Format
 // - will inline Params[] for every ? in Format, handling special "inlined"
@@ -19743,6 +19748,12 @@ begin
 end;
 
 function FormatUTF8(const Format: RawUTF8; const Args: array of const): RawUTF8;
+begin
+  FormatUTF8(Format,Args,result);
+end;
+
+procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
+  var result: RawUTF8);
 // only supported token is %, with any const arguments
 var i, blocksN, L, argN: PtrInt;
     tmpStr: TRawUTF8DynArray;
@@ -19826,7 +19837,7 @@ begin
     exit; // e.g. _JsonFmt() will parse it in-place
   end;
   if high(Params)<0 then begin
-    result := FormatUTF8(Format,Args); // slightly faster overloaded function
+    FormatUTF8(Format,Args,result); // slightly faster overloaded function
     exit;
   end;
   if Format='%' then begin
@@ -20595,8 +20606,9 @@ begin
   end;
   OSVersion := Vers;
   with OSVersionInfo do
-    OSVersionText := FormatUTF8('Windows % SP% (%.%.%)',
-      [WINDOWS_NAME[Vers],wServicePackMajor,dwMajorVersion,dwMinorVersion,dwBuildNumber]);
+    FormatUTF8('Windows % SP% (%.%.%)',
+      [WINDOWS_NAME[Vers],wServicePackMajor,dwMajorVersion,dwMinorVersion,dwBuildNumber],
+      OSVersionText);
 end;
 
 {$else}
@@ -20610,7 +20622,7 @@ begin
   FPUname(SystemInfo.uts);
   {$endif}
   with SystemInfo.uts do
-    OSVersionText := FormatUTF8('%-% %',[sysname,release,version]);
+    FormatUTF8('%-% %',[sysname,release,version],OSVersionText);
 end;
 
 {$ifdef KYLIX3}
@@ -29541,8 +29553,8 @@ begin
       InstanceFileName := ProgramFileName;
     Version := TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease);
     GarbageCollector.Add(Version);
-    ProgramFullSpec := FormatUTF8('% % (%)',
-      [ProgramFileName,Version.Detailed,DateTimeToIso8601(Version.BuildDateTime,True,' ')]);
+    FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
+      DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
     ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
     i := length(ProgramName);
     while i>0 do
@@ -44804,7 +44816,7 @@ class function TSynMonitorMemory.FreeAsText: RawUTF8;
 begin
   with TSynMonitorMemory.Create do
   try
-    result := FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text]);
+    FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text],result);
   finally
     Free;
   end;
@@ -45023,7 +45035,7 @@ class function TSynMonitorDisk.FreeAsText: RawUTF8;
 begin
   with TSynMonitorDisk.Create do
   try
-    result := FormatUTF8('% % / %',[Name,FreeSize.Text,TotalSize.Text]);
+    FormatUTF8('% % / %',[Name,FreeSize.Text,TotalSize.Text],result);
   finally
     Free;
   end;
