@@ -1200,6 +1200,7 @@ uses
   SyncObjs,
 {$endif}
 {$ifdef MSWINDOWS}
+  PasZip,
 {$ifndef FPC}
 {$ifdef ISDELPHIXE2}
   VCL.Graphics,
@@ -7751,7 +7752,7 @@ end;
 {$ifndef LINUX} // TZipRead not defined yet (use low-level file mapping WinAPI)
 
 procedure TTestCompression.ZipFormat;
-var FN: TFileName;
+var FN,FN2: TFileName;
     ExeName: string;
     S: TRawByteStringStream;
 procedure Test(Z: TZipRead; aCount: integer);
@@ -7809,6 +7810,19 @@ begin
     Free;
   end;
 end;
+procedure TestPasZipRead(const FN: TFileName; Count: integer);
+var pasZR: PasZip.TZipRead;
+begin
+  pasZR := PasZip.TZipRead.Create(FN);
+  try
+    Check(pasZR.Count=Count);
+    Check(pasZR.NameToIndex('rep1\ONE.exe')=0);
+    Check(pasZR.UnZip(0)=data);
+  finally
+    pasZR.Free;
+  end;
+end;
+var pasZW: PasZip.TZipWrite;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
@@ -7830,6 +7844,23 @@ begin
     Free;
   end;
   Test(TZipRead.Create(FN),5);
+  TestPasZipRead(FN,5);
+  FN2 := ChangeFileExt(FN,'2.zip');
+  pasZW := PasZip.TZipWrite.Create(FN2);
+  try
+    pasZW.AddDeflated('rep1\one.exe',pointer(Data),length(Data));
+    Check(pasZW.Count=1);
+    pasZW.AddDeflated('rep2\ident.gz',M.Memory,M.Position);
+    Check(pasZW.Count=2);
+    pasZW.AddDeflated(ExeVersion.ProgramFileName);
+    Check(pasZW.Count=3,'direct zip file');
+    pasZW.AddStored('rep2\ident2.gz',M.Memory,M.Position);
+    Check(pasZW.Count=4);
+  finally
+    pasZW.Free;
+  end;
+  TestPasZipRead(FN2,4);
+  DeleteFile(FN2);
   DeleteFile(FN);
 end;
 

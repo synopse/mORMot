@@ -92,7 +92,7 @@ uses
   FastMM4 in '..\RTL7\FastMM4.pas',
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
-  {$endif}
+  {$endif FullDebugMode}
   SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
