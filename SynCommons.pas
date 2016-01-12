@@ -24353,14 +24353,14 @@ begin
     exit;
   Int64Rec(result).Lo := c;
   inc(P);
-  repeat
+  repeat // fast 32 bit loop
     c := byte(P^)-48;
     if c>9 then
       break else
       Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
     inc(P);
     if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
-      repeat
+      repeat // 64 bit loop
         c := byte(P^)-48;
         if c>9 then
           break;
@@ -24417,33 +24417,36 @@ begin
     exit;
   Int64Rec(result).Lo := c;
   inc(P);
-  repeat         
-    inc(err);
-    if Byte(P^)=0 then begin
-      err := 0; // conversion success without error
-      break;
-    end;
-    c := byte(P^)-48;
-    if c>9 then
-      exit else
+  repeat // fast 32 bit loop
+    c := byte(P^);
+    if c<>0 then begin
+      dec(c,48);
+      inc(err);
+      if c>9 then
+        exit;
       Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
-    inc(P);
-    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
-      repeat
-        inc(err);
-        if byte(P^)=0 then begin
-          err := 0; // conversion success without error
-          break;
-        end;
-        c := byte(P^)-48;
-        if c>9 then
-          break else
-          result := result shl 3+result+result; // fast result := result*10
-        inc(result,c);
-        if result<0 then
-          exit; // overflow (>$7FFFFFFFFFFFFFFF)
-        inc(P);
-      until false;
+      inc(P);
+      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+        repeat // 64 bit loop
+          c := byte(P^);
+          if c=0 then begin
+            err := 0; // conversion success without error
+            break;
+          end;
+          dec(c,48);
+          inc(err);
+          if c>9 then
+            exit else
+            result := result shl 3+result+result; // fast result := result*10
+          inc(result,c);
+          if result<0 then
+            exit; // overflow (>$7FFFFFFFFFFFFFFF)
+          inc(P);
+        until false;
+        break;
+      end;
+    end else begin
+      err := 0; // reached P^=#0 -> conversion success without error
       break;
     end;
   until false;
@@ -40539,7 +40542,7 @@ begin // 00.000.000
   B[7] := '.';
   inc(B);
   MS := Value3Digits(Value3Digits(MS,B+7),B+3);
-  if MS>100 then
+  if MS>99 then
     MS := 99;
   PWord(B)^:= TwoDigitLookupW[MS];
   inc(B,9);
