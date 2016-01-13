@@ -249,6 +249,7 @@
     {$define ISFPC27}
   {$endif}
   {$ifdef FPC_HAS_CPSTRING}
+    // see http://wiki.freepascal.org/FPC_Unicode_support
     {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
   {$endif}
   {$ifdef ISFPC27}

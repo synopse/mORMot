@@ -33480,12 +33480,8 @@ end;
 
 procedure SetVariantNull(var Value: variant);
 begin // slightly faster than Value := Null
-  with TVarData(Value) do
-    if VType and VTYPE_STATIC=0 then
-      PPtrUInt(@VType)^ := varNull else begin
-      VarClear(Value);
-      PPtrUInt(@VType)^ := varNull;
-    end;
+  VarClear(Value);
+  TVarData(Value).VType := varNull;
 end;
 
 {$endif LVCL}
