@@ -1142,6 +1142,7 @@ type
     procedure IntSubtractJSON(Ctxt: TOnInterfaceStubExecuteParamsJSON);
     {$ifndef NOVARIANTS}
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     {$endif}
     /// release used instances (e.g. http server) and memory
     procedure CleanUp; override;
@@ -2978,7 +2979,7 @@ begin
   FillChar(tmpA,SizeOf(tmpA),1);
   if CP=CP_UTF16 then
     exit;
-  L := C.Utf8ToAnsiBuffer(W,tmpA,sizeof(tmpA));
+  L := C.Utf8ToAnsiBuffer(RawByteString(W),tmpA,sizeof(tmpA));
   Check(L=StrLen(@tmpA));
   if L<sizeof(tmpA)-1 then
     Check(L=Length(W)) else
@@ -13307,6 +13308,11 @@ begin
   Ctxt['result'] := Ctxt['n1']-Ctxt['n2'];
   // with Ctxt do Output[0] := Input[0]-Input[1];
 end;
+
+procedure TTestServiceOrientedArchitecture.IntSubtractVariantVoid(
+  Ctxt: TOnInterfaceStubExecuteParamsVariant);
+begin
+end;
 {$endif}
 
 procedure TTestServiceOrientedArchitecture.MocksAndStubs;
@@ -13396,13 +13402,17 @@ begin
   Mock.Verify('GetUserByName',['toto'],'['+UJSON+']');
   UserRepository := nil; // will release TInterfaceMock and check Excepts*()
   SmsSender := nil;
+  {$ifndef NOVARIANTS}
   TInterfaceStub.Create(IID_ICalculator,I).
-    Returns('Subtract',[10,20],[3]).
-    {$ifndef NOVARIANTS}
-    Executes('Subtract',IntSubtractVariant,'toto').
-    {$endif}
-    Fails('Add','expected exception').
-    Raises('Add',[1,2],ESynException,'expected exception');
+     Executes('Subtract',IntSubtractVariantVoid,'titi');
+  check(I.Subtract(10,20)=0);
+  {$endif}
+  TInterfaceStub.Create(IID_ICalculator,I).Returns('Subtract',[10,20],[3]).
+     {$ifndef NOVARIANTS}
+     Executes('Subtract',IntSubtractVariant,'toto').
+     {$endif}
+     Fails('Add','expected exception').
+     Raises('Add',[1,2],ESynException,'expected exception');
   {$ifndef NOVARIANTS}
   for n := 1 to 10000 do
     CheckSame(I.Subtract(n*10.5,n*0.5),n*10);
