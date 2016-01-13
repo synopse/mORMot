@@ -13791,6 +13791,37 @@ type
     property TotalSize: TSynMonitorSize read GetTotal;
   end;
 
+  /// an abstract ancestor, for implementing a custom TInterfacedObject like class
+  // - by default, will do nothing: no instance would be retrieved by
+  // QueryInterface unless the VirtualQueryInterface protected method is
+  // overriden, and _AddRef/_Release methods would call VirtualAddRef and
+  // VirtualRelease pure abstract methods
+  // - using this class will leverage the signature difference between Delphi
+  // and FPC, among all supported platforms
+  // - the class includes a RefCount integer field
+  TSynInterfacedObject = class(TObject,IUnknown)
+  protected
+    fRefCount: integer;
+    // returns E_NOINTERFACE
+    function VirtualQueryInterface(const IID: TGUID; out Obj): HResult; virtual;
+    // always return 1 for a "non allocated" instance (0 triggers release)
+    function VirtualAddRef: Integer; virtual; abstract;
+    function VirtualRelease: Integer; virtual; abstract;
+    {$ifdef FPC}
+    function QueryInterface(
+      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+      out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+    {$else}
+    function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
+    function _AddRef: Integer; stdcall;
+    function _Release: Integer; stdcall;
+    {$endif}
+  public
+    /// the associated reference count
+    property RefCount: integer read fRefCount write fRefCount;
+  end;
 
 {$ifdef MSWINDOWS}
 {$ifndef DELPHI5OROLDER}
@@ -13805,21 +13836,11 @@ type
   // !end; // now FPU exception will be reset as with standard Delphi
   // - it will avoid any unexpected invalid floating point operation in Delphi
   // code, whereas it was in fact triggerred in some external library code
-  TSynFPUException = class(TObject,IUnknown)
+  TSynFPUException = class(TSynInterfacedObject)
   protected
     fExpected8087, fSaved8087: word;
-    fRefCount: integer;
-    {$ifdef FPC}
-    function QueryInterface(
-      {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
-      out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _AddRef: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    function _Release: longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-    {$else}
-    function QueryInterface(const IID: TGUID; out Obj): HResult; stdcall;
-    function _AddRef: Integer; stdcall;
-    function _Release: Integer; stdcall;
-    {$endif}
+    function VirtualAddRef: Integer; override;
+    function VirtualRelease: Integer; override;
   public
     /// internal constructor
     // - do not call this constructor directly, but rather use
@@ -45111,12 +45132,40 @@ begin
 end;
 
 
+{ TSynInterfacedObject }
+
+function TSynInterfacedObject._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualAddRef;
+end;
+
+function TSynInterfacedObject._Release: {$ifdef FPC}longint{$else}integer{$endif};
+begin
+  result := VirtualRelease;
+end;
+
+{$ifdef FPC}
+function TSynInterfacedObject.QueryInterface(
+  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
+  out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
+{$else}
+function TSynInterfacedObject.QueryInterface(const IID: TGUID; out Obj): HResult;
+{$endif}
+begin
+  result := VirtualQueryInterface(IID,Obj);
+end;
+
+function TSynInterfacedObject.VirtualQueryInterface(const IID: TGUID; out Obj): HResult;
+begin
+  result := E_NOINTERFACE;
+end;
+
 {$ifdef MSWINDOWS}
 {$ifndef DELPHI5OROLDER}
 
 { TSynFPUException }
 
-function TSynFPUException._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
+function TSynFPUException.VirtualAddRef: integer;
 begin
   if fRefCount=0 then begin
     fSaved8087 := Get8087CW;
@@ -45126,23 +45175,12 @@ begin
   result := 1; // should never be 0 (mark release of TSynFPUException instance)
 end;
 
-function TSynFPUException._Release: {$ifdef FPC}longint{$else}integer{$endif};
+function TSynFPUException.VirtualRelease: integer;
 begin
   dec(fRefCount);
   if fRefCount=0 then
     Set8087CW(fSaved8087);
   result := 1; // should never be 0 (mark release of TSynFPUException instance)
-end;
-
-{$ifdef FPC}
-function TSynFPUException.QueryInterface(
-  {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
-  out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
-{$else}
-function TSynFPUException.QueryInterface(const IID: TGUID; out Obj): HResult;
-{$endif}
-begin
-  Result := E_NOINTERFACE;
 end;
 
 threadvar
