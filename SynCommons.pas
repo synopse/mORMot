@@ -1249,6 +1249,11 @@ type
     /// convert any UTF-8 encoded String into Ansi Text
     // - internaly calls UTF8BufferToAnsi virtual method
     function UTF8ToAnsi(const UTF8: RawUTF8): RawByteString; virtual;
+    /// direct conversion of a UTF-8 encoded string into a WinAnsi buffer
+    // - will truncate the destination string to DestSize bytes (including the
+    // trailing #0), with a maximum handled size of 2048 bytes
+    // - returns the number of bytes stored in Dest^ (i.e. the position of #0)
+    function Utf8ToAnsiBuffer(const S: RawUTF8; Dest: PAnsiChar; DestSize: integer): integer;
     /// convert any Ansi Text (providing a From converted) into Ansi Text
     function AnsiToAnsi(From: TSynAnsiConvert; const Source: RawByteString): RawByteString; overload;
     /// convert any Ansi buffer (providing a From converted) into Ansi Text
@@ -14869,6 +14874,26 @@ end;
 function TSynAnsiConvert.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
 begin
   UTF8BufferToAnsi(pointer(UTF8),length(UTF8),result);
+end;
+
+function TSynAnsiConvert.Utf8ToAnsiBuffer(const S: RawUTF8;
+  Dest: PAnsiChar; DestSize: integer): integer;
+var tmp: array[0..2047] of AnsiChar;
+begin
+  if (DestSize<=0) or (Dest=nil) then begin
+    result := 0;
+    exit;
+  end;
+  result := length(s);
+  if result>0 then begin
+    if result>sizeof(tmp) then
+      result := sizeof(tmp);
+    result := UTF8BufferToAnsi(tmp,pointer(s),result)-tmp;
+    if result>=DestSize then
+      result := DestSize-1;
+    MoveFast(tmp,Dest^,result);
+  end;
+  Dest[result] := #0;
 end;
 
 function TSynAnsiConvert.UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString;

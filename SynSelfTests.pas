@@ -2969,10 +2969,21 @@ end;
 procedure TTestLowLevelCommon._UTF8;
 procedure Test(CP: cardinal; const W: WinAnsiString);
 var C: TSynAnsiConvert;
+    L: integer;
+    tmpA: array[0..127] of AnsiChar;
 begin
   C := TSynAnsiConvert.Engine(CP);
   Check(C.UTF8ToAnsi(C.AnsiToUTF8(W))=W);
   Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
+  FillChar(tmpA,SizeOf(tmpA),1);
+  if CP=CP_UTF16 then
+    exit;
+  L := C.Utf8ToAnsiBuffer(W,tmpA,sizeof(tmpA));
+  Check(L=StrLen(@tmpA));
+  if L<sizeof(tmpA)-1 then
+    Check(L=Length(W)) else
+    Check(L=sizeof(tmpA)-1);
+  Check(CompareMem(@tmpA,pointer(W),L));
 end;
 var i, CP, L: integer;
     W: WinAnsiString;
