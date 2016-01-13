@@ -5031,7 +5031,6 @@ type
     // the TSynLocker instance), otherwise you may encounter unexpected
     // behavior, like access violations or memory leaks
     procedure Init;
-      {$ifdef HASINLINE}inline;{$endif}
     /// finalize the mutex
     // - calling this method is mandatory (e.g. in the class constructor owning
     // the TSynLocker instance), otherwise you may encounter unexpected
