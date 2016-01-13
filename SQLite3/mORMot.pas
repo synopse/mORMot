@@ -10543,6 +10543,15 @@ type
     property Method: PServiceMethod read fMethod;
     /// a custom message, defined at TInterfaceStub.Executes() definition
     property EventParams: RawUTF8 read fEventParams;
+    /// outgoing values array encoded as JSON
+    // - every var, out parameter or the function result shall be encoded as
+    // a JSON array into this variable, in the same order than the stubbed
+    // method declaration
+    // - use Returns() method to create the JSON array directly, from an array
+    // of values
+    property Result: RawUTF8 read fResult;
+    /// low-level flag, set to TRUE if one of the Error() method was called
+    property Failed: boolean read fFailed;
   end;
 
 {$ifndef NOVARIANTS}
@@ -10559,7 +10568,7 @@ type
   protected
     fInput: TVariantDynArray;
     fOutput: TVariantDynArray;
-    procedure SetResult(var Result: RawUTF8);
+    procedure SetResultFromOutput;
   public
     /// constructor of one parameters marshalling instance
     constructor Create(aSender: TInterfaceStub; aMethod: PServiceMethod;
@@ -10591,6 +10600,9 @@ type
     // !    inc(i);
     // !    result := 42;
     // !  end;
+    // - consider using the safest Named[] property, to avoid parameters
+    // index matching issue
+    // - if an Output[]/Named[] item is not set, a default value would be used
     property Output[Index: Integer]: variant write SetOutput;
     /// access to input/output parameters when calling the method
     // - if the supplied name is incorrect, an EInterfaceStub will be raised
@@ -10609,7 +10621,9 @@ type
     // !    inc(i);
     // !    result := 42;
     // !  end;
-    // - using this default Named[] property is recommended
+    // - using this default Named[] property is recommended over the index-based
+    // Output[] property
+    // - if an Output[]/Named[] item is not set, a default value would be used
     property Named[const ParamName: RawUTF8]: variant read GetInNamed write SetOutNamed; default;
   end;
 {$endif NOVARIANTS}
@@ -10632,18 +10646,14 @@ type
     // !    inc(i);
     // !    result := 42;
     // !  end;
-    procedure Returns(const Values: array of const);
+    procedure Returns(const Values: array of const); overload;
+    /// a method to return a JSON array of values into Result
+    // - expected format is e.g. '[43,42]'
+    procedure Returns(const ValuesJsonArray: RawUTF8); overload;
     /// incoming parameters array encoded as JSON array without braces
     // - order follows the method const and var parameters
     // ! Stub.Add(10,20) -> Params = '10,20';
     property Params: RawUTF8 read fParams;
-    /// outgoing values array encoded as JSON
-    // - every var, out parameter or the function result shall be encoded as
-    // a JSON array into this variable, in the same order than the stubbed
-    // method declaration
-    // - use Returns() method to create the JSON array directly, from an array
-    // of values
-    property Result: RawUTF8 write fResult;
   end;
 
 {$ifndef NOVARIANTS}
@@ -49372,6 +49382,11 @@ begin
   JSONEncodeArrayOfConst(Values,false,fResult);
 end;
 
+procedure TOnInterfaceStubExecuteParamsJSON.Returns(const ValuesJsonArray: RawUTF8);
+begin
+  fResult := ValuesJsonArray;
+end;
+
 {$ifndef NOVARIANTS}
 
 constructor TOnInterfaceStubExecuteParamsVariant.Create(aSender: TInterfaceStub;
@@ -49445,26 +49460,35 @@ begin
   raise EInterfaceStub.Create(fSender,fMethod^,'unknown output parameter "%"',[aParamName]);
 end;
 
-procedure TOnInterfaceStubExecuteParamsVariant.SetResult(var Result: RawUTF8);
-var i: integer;
+procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
+var a,ndx: integer;
+    W: TJSONSerializer;
 begin
+  fResult := '';
   if fOutput=nil then
-    fResult := '' else
-    with TJSONSerializer.CreateOwnedStream do
-    try
-      Add('[');
-      for i := 0 to fMethod^.ArgsOutputValuesCount-1 do begin
-        if TVarData(fOutput[i]).VType=varEmpty then
-          raise EInterfaceStub.Create(fSender,fMethod^,'Output[%] not set',[i]);
-        AddVariant(fOutput[i],twJSONEscape);
-        Add(',');
+    exit;
+  W := TJSONSerializer.CreateOwnedStream;
+  try
+    W.Add('[');
+    ndx := 0;
+    for a := fMethod^.ArgsOutFirst to fMethod^.ArgsOutLast do
+    with fMethod^.Args[a] do
+    if ValueDirection<>smdConst then begin
+      if TVarData(fOutput[ndx]).VType=varEmpty then
+        AddDefaultJSON(W) else begin
+        W.AddVariant(fOutput[ndx],twJSONEscape);
+        W.Add(',');
       end;
-      CancelLastComma;
-      Add(']');
-      SetText(result);
-    finally
-      Free;
+      inc(ndx);
+      if cardinal(ndx)>=cardinal(fMethod^.ArgsOutputValuesCount) then
+        break;
     end;
+    W.CancelLastComma;
+    W.Add(']');
+    W.SetText(fResult);
+  finally
+    W.Free;
+  end;
 end;
 
 function TOnInterfaceStubExecuteParamsVariant.InputAsDocVariant(
@@ -49853,7 +49877,8 @@ function TInterfaceStub.Invoke(const aMethod: TServiceMethod;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 var ndx: cardinal;
     rule: integer;
-    ExecutesCtxt: TOnInterfaceStubExecuteParamsAbstract;
+    ExecutesCtxtJSON: TOnInterfaceStubExecuteParamsJSON;
+    ExecutesCtxtVariant: TOnInterfaceStubExecuteParamsVariant;
     Log: TInterfaceStubLog;
 begin
   ndx := aMethod.ExecutionMethodIndex-RESERVED_VTABLE_SLOTS;
@@ -49885,30 +49910,29 @@ begin
         inc(RulePassCount);
         case Kind of
         isExecutesJSON: begin
-          ExecutesCtxt := TOnInterfaceStubExecuteParamsJSON.Create(
+          ExecutesCtxtJSON := TOnInterfaceStubExecuteParamsJSON.Create(
             self,@aMethod,aParams,Values);
           try
-            TOnInterfaceStubExecuteJSON(Execute)
-              (TOnInterfaceStubExecuteParamsJSON(ExecutesCtxt));
-            result := not ExecutesCtxt.fFailed;
-            Log.CustomResults := ExecutesCtxt.fResult;
+            TOnInterfaceStubExecuteJSON(Execute)(ExecutesCtxtJSON);
+            result := not ExecutesCtxtJSON.Failed;
+            Log.CustomResults := ExecutesCtxtJSON.Result;
           finally
-            ExecutesCtxt.Free;
+            ExecutesCtxtJSON.Free;
           end;
         end;
         {$ifndef NOVARIANTS}
         isExecutesVariant: begin
-          ExecutesCtxt := TOnInterfaceStubExecuteParamsVariant.Create(
+          ExecutesCtxtVariant := TOnInterfaceStubExecuteParamsVariant.Create(
             self,@aMethod,aParams,Values);
           try
-            TOnInterfaceStubExecuteVariant(Execute)
-              (TOnInterfaceStubExecuteParamsVariant(ExecutesCtxt));
-            result := not ExecutesCtxt.fFailed;
-            if result then
-              TOnInterfaceStubExecuteParamsVariant(ExecutesCtxt).
-                SetResult(Log.CustomResults);
+            TOnInterfaceStubExecuteVariant(Execute)(ExecutesCtxtVariant);
+            result := not ExecutesCtxtVariant.Failed;
+            if result then begin
+              ExecutesCtxtVariant.SetResultFromOutput;
+              Log.CustomResults := ExecutesCtxtVariant.Result;
+            end;
           finally
-            ExecutesCtxt.Free;
+            ExecutesCtxtVariant.Free;
           end;
         end;
         {$endif}
