@@ -963,7 +963,7 @@ begin
   P := pointer(result);
 
   if startlen>0 then begin
-    Move(pointer(start)^,P^,startlen);
+    MoveFast(pointer(start)^,P^,startlen);
     inc(P,startlen);
   end;
 
@@ -984,12 +984,12 @@ begin
               else inc(j);
             end;
           end;
-          move(pointer(@Values[i][k])^,P^,j);
+          MoveFast(pointer(@Values[i][k])^,P^,j);
           inc(P,j);
           inc(k,j);
           case Values[i][k] of
             '"': begin
-              move(pointer(dQuoteRepl)^,P^,dQuoteRepllen);
+              MoveFast(pointer(dQuoteRepl)^,P^,dQuoteRepllen);
               inc(P,dQuoteRepllen);
               inc(k);
             end;
@@ -998,7 +998,7 @@ begin
         P^ := '"';
         inc(p);
       end else begin
-        move(pointer(Values[i])^,P^,L);
+        MoveFast(pointer(Values[i])^,P^,L);
         inc(P,L);
       end;
     end;
@@ -1006,14 +1006,14 @@ begin
     if i=high(Values) then
       Break;
     if seplen>0 then begin
-      Move(pointer(Sep)^,P^,seplen);
+      MoveFast(pointer(Sep)^,P^,seplen);
       inc(P,seplen);
     end;
     inc(i);
   until false;
 
   if finlen>0 then begin
-    Move(pointer(fin)^,P^,finlen);
+    MoveFast(pointer(fin)^,P^,finlen);
     inc(P,finlen);
   end;
   Assert(P-pointer(result)=len);

@@ -744,8 +744,7 @@ begin
   if fInitialJsonContent='' then
     exit;
   tmp := fInitialJsonContent;
-  UniqueString(AnsiString(tmp));
-  RemoveCommentsFromJSON(pointer(tmp));
+  RemoveCommentsFromJSON(UniqueRawUTF8(tmp));
   JSONToObject(fOwner,pointer(tmp),result);
   if not result then
     fInitialJsonContent := '';

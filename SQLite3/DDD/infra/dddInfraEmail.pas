@@ -316,7 +316,7 @@ end;
 
 procedure TDDDEmailValidationService.EmailValidate(
   Ctxt: TSQLRestServerURIContext);
-var code: RawByteString;
+var code: RawUTF8;
     logon,email,signature: RawUTF8;
     EmailValidation: TSQLRecordEmailValidation;
 begin

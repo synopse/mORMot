@@ -1567,7 +1567,7 @@ begin
     end;
     if (fProtocol<>nil) and (Frame.payload<>'') then
       fProtocol.AfterGetFrame(Frame);
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     if opcode=focText then
       SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
     {$endif}

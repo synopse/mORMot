@@ -1741,7 +1741,7 @@ var AI, AI2: TIntegerDynArray;
     AF: TFVs;
     AF2: TFV2s;
     i,j,k,Len, count,AIcount: integer;
-    U: RawUTF8;
+    U,U2: RawUTF8;
     P: PUTF8Char;
     PI: PIntegerArray;
     R: TRec;
@@ -2082,7 +2082,8 @@ begin
   Check(Hash32(U)={$ifdef CPU64}$9F98936D{$else}$54659D65{$endif});
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC,2);
-  Check(U='['+JSON_BASE64_MAGIC_UTF8+BinToBase64(ARP.SaveTo)+'"]');
+  U2 := RawUTF8('[')+JSON_BASE64_MAGIC_UTF8+RawUTF8(BinToBase64(ARP.SaveTo))+RawUTF8('"]');
+  Check(U=U2);
   ARP.Clear;
   Check(ARP.LoadFromJSON(pointer(U))<>nil);
   if not CheckFailed(ARP.Count=1001) then
@@ -2449,7 +2450,7 @@ end;
 procedure TTestLowLevelCommon.UrlEncoding;
 var i: integer;
     s: RawByteString;
-    name,value: RawUTF8;
+    name,value,utf: RawUTF8;
     P: PUTF8Char;
     GUID2: TGUID;
     U: TURI;
@@ -2500,12 +2501,12 @@ begin
     s := RandomString(i*5);
     Check(UrlDecode(UrlEncode(s))=s,string(s));
   end;
-  s := BinToBase64URI(@GUID,sizeof(GUID));
-  Check(s='00amyWGct0y_ze4lIsj2Mw');
-  Base64FromURI(s);
-  Check(Base64ToBinLength(pointer(s),length(s))=sizeof(GUID2));
+  utf := BinToBase64URI(@GUID,sizeof(GUID));
+  Check(utf='00amyWGct0y_ze4lIsj2Mw');
+  Base64FromURI(utf);
+  Check(Base64ToBinLength(pointer(utf),length(utf))=sizeof(GUID2));
   fillchar(GUID2,sizeof(GUID2),0);
-  SynCommons.Base64Decode(Pointer(s),@GUID2,SizeOf(GUID2));
+  SynCommons.Base64Decode(Pointer(utf),@GUID2,SizeOf(GUID2));
   Check(IsEqualGUID(GUID2,GUID));
   Check(U.From('toto.com'));
   Check(U.URI='http://toto.com/');
@@ -2971,11 +2972,32 @@ procedure TTestLowLevelCommon._UTF8;
 procedure Test(CP: cardinal; const W: WinAnsiString);
 var C: TSynAnsiConvert;
     L: integer;
+    A: RawByteString;
+    U: RawUTF8;
     tmpA: array[0..127] of AnsiChar;
 begin
   C := TSynAnsiConvert.Engine(CP);
-  Check(C.UTF8ToAnsi(C.AnsiToUTF8(W))=W);
+  Check(C.CodePage=CP);
+  U := C.AnsiToUTF8(W);
+  A := C.UTF8ToAnsi(U);
+  Check(length(W)=length(A));
+  if W='' then
+    exit;
+  {$ifdef HASCODEPAGE}
+  {$ifndef FPC}
+  Check(StringCodePage(W)=1252);
+  {$endif}
+  CP := StringCodePage(A);
+  Check(CP=C.CodePage);
+  {$endif}
+  {$ifdef FPC}
+  if CP=CP_UTF16 then
+    exit;
+  Check(CompareMem(pointer(W),pointer(A),length(W)));
+  {$else}
+  Check(A=W);
   Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
+  {$endif}
   FillChar(tmpA,SizeOf(tmpA),1);
   if CP=CP_UTF16 then
     exit;
@@ -2993,9 +3015,9 @@ var i, CP, L: integer;
     U, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     q: RawUTF8;
-{$endif}
+    {$endif}
     Unic: RawUnicode;
     WA: Boolean;
 begin
@@ -3040,6 +3062,8 @@ begin
     Test(CP_UTF16,W);
     W := WinAnsiString(RandomString(i*5));
     U := WinAnsiToUtf8(W);
+    Unic := Utf8DecodeToRawUnicode(U);
+    {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U)=W);
     Check(WinAnsiConvert.UTF8ToAnsi(WinAnsiConvert.AnsiToUTF8(W))=W);
     Check(WinAnsiConvert.RawUnicodeToAnsi(WinAnsiConvert.AnsiToRawUnicode(W))=W);
@@ -3047,10 +3071,10 @@ begin
       Check(CurrentAnsiConvert.UTF8ToAnsi(CurrentAnsiConvert.AnsiToUTF8(W))=W);
       Check(CurrentAnsiConvert.RawUnicodeToAnsi(CurrentAnsiConvert.AnsiToRawUnicode(W))=W);
     end;
-    Unic := Utf8DecodeToRawUnicode(U);
     res := RawUnicodeToUtf8(Unic);
     Check(res=U);
     Check(RawUnicodeToWinAnsi(Unic)=W);
+    {$endif FPC_HAS_CPSTRING}
     WS := UTF8ToWideString(U);
     Check(length(WS)=length(Unic)shr 1);
     if WS<>'' then
@@ -4867,6 +4891,7 @@ var J,U: RawUTF8;
     peop: TSQLRecordPeople;
     K,U2: RawUTF8;
     Valid: boolean;
+    RB: TSQLRawBlob;
 {$ifndef LVCL}
     Instance: TClassInstance;
     Coll, C2: TCollTst;
@@ -5522,9 +5547,13 @@ begin
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff=JSON_BASE64_MAGIC);
 {$ifndef DELPHI5OROLDER}
-    check(BlobToTSQLRawBlob(pointer(J))=U);
+    RB := BlobToTSQLRawBlob(pointer(J));
+    check(length(RB)=length(U)); // RB=U is buggy under FPC :(
+    check(CompareMem(pointer(RB),pointer(U),length(U)));
     Base64MagicToBlob(@J[4],K);
-    check(BlobToTSQLRawBlob(pointer(K))=U);
+    RB := BlobToTSQLRawBlob(pointer(K));
+    check(length(RB)=length(U)); // RB=U is buggy under FPC :(
+    check(CompareMem(pointer(RB),pointer(U),length(U)));
 {    J := TSQLRestServer.JSONEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JSONDecode(J)),err),r)); }
     {$ifndef NOVARIANTS}
@@ -7962,8 +7991,9 @@ end;
 
 procedure TTestCryptographicRoutines._Base64;
 const
-  Value64: RawByteString = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
-var tmp, b64: RawByteString;
+  Value64: RawUTF8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
+var tmp: RawByteString;
+    b64: RawUTF8;
     Value: WinAnsiString;
     i, L: Integer;
 begin

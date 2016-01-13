@@ -293,7 +293,7 @@ begin
               CLE.Text := U2S(P^.GetLongStrValue(Obj)) else
               CLE.Text := P^.GetGenericStringValue(Obj);
           end;
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         tkUString: begin
             CLE := TLabeledEdit.Create(Scroll);
             CLE.Text := P^.GetUnicodeStrValue(Obj);
@@ -450,7 +450,7 @@ begin // update the properties of the settings object from screen
         end;
       end else
       if C.InheritsFrom(TLabeledEdit) then
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         if P^.PropType^^.Kind=tkUString then
           P^.SetUnicodeStrValue(Obj,CLE.Text) else
         {$endif}

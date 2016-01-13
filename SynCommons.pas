@@ -941,16 +941,17 @@ type
   TVariantDynArray = array of variant;
 {$endif}
 
-/// RawUnicode is an Unicode String stored in an AnsiString
-// - faster than WideString, which are allocated in Global heap (for COM)
-// - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
-// - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
-// for WideChar count (that's why the definition of this type since Delphi 2009
-// is AnsiString(1200) and not UnicodeString)
-// - pointer(RawUnicode) is compatible with Win32 'Wide' API call
-// - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
-// - all conversion to/from AnsiString or RawUTF8 must be explicit
-  {$ifdef UNICODE}
+  /// RawUnicode is an Unicode String stored in an AnsiString
+  // - faster than WideString, which are allocated in Global heap (for COM)
+  // - an AnsiChar(#0) is added at the end, for having a true WideChar(#0) at ending
+  // - length(RawUnicode) returns memory bytes count: use (length(RawUnicode) shr 1)
+  // for WideChar count (that's why the definition of this type since Delphi 2009
+  // is AnsiString(1200) and not UnicodeString)
+  // - pointer(RawUnicode) is compatible with Win32 'Wide' API call
+  // - mimic Delphi 2009 UnicodeString, without the WideString or Ansi conversion overhead
+  // - all conversion to/from AnsiString or RawUTF8 must be explicit: the
+  // compiler is not able to make valid implicit conversion on CP_UTF16
+  {$ifdef HASCODEPAGE}
   RawUnicode = type AnsiString(CP_UTF16); // Codepage for an UnicodeString
   {$else}
   RawUnicode = type AnsiString;
@@ -962,7 +963,7 @@ type
   // is consistent and compatible with all versions of Delphi compiler
   // - mimic Delphi 2009 UTF8String, without the charset conversion overhead
   // - all conversion to/from AnsiString or RawUnicode must be explicit
-  {$ifdef UNICODE}
+  {$ifdef HASCODEPAGE}
   RawUTF8 = type AnsiString(CP_UTF8); // Codepage for an UTF8 string
   {$else}
   RawUTF8 = type AnsiString;
@@ -973,13 +974,18 @@ type
   // between Delphi 2009 compiler and previous versions: our implementation
   // is consistent and compatible with all versions of Delphi compiler
   // - all conversion to/from RawUTF8 or RawUnicode must be explicit
-  {$ifdef UNICODE}
-  WinAnsiString = type AnsiString(1252); // WinAnsi Codepage
+  {$ifdef HASCODEPAGE}
+  WinAnsiString = type AnsiString(CODEPAGE_US); // WinAnsi Codepage
   {$else}
   WinAnsiString = type AnsiString;
   {$endif}
 
-{$ifndef UNICODE}
+  {$ifdef HASCODEPAGE}
+  {$ifdef FPC}
+  // missing declaration
+  PRawByteString = ^RawByteString;
+  {$endif}
+  {$else}
   /// define RawByteString, as it does exist in Delphi 2009+
   // - to be used for byte storage into an AnsiString
   // - use this type if you don't want the Delphi compiler not to do any
@@ -988,7 +994,7 @@ type
   RawByteString = type AnsiString;
   /// pointer to a RawByteString
   PRawByteString = ^RawByteString;
-{$endif}
+  {$endif}
 
   /// RawJSON will indicate that this variable content would stay in raw JSON
   // - i.e. won't be serialized into values
@@ -1762,10 +1768,6 @@ function UTF8DecodeToUnicodeString(const S: RawUTF8): UnicodeString; overload; i
 // but is faster, since use no Win32 API call
 procedure UTF8DecodeToUnicodeString(P: PUTF8Char; L: integer; var result: UnicodeString); overload;
 
-{$endif HASVARUSTRING}
-
-{$ifdef UNICODE}
-
 /// convert a Delphi 2009+ Unicode string into a WinAnsi (code page 1252) string
 function UnicodeStringToWinAnsi(const S: string): WinAnsiString; inline;
 
@@ -1782,7 +1784,7 @@ function WinAnsiToUnicodeString(WinAnsi: PAnsiChar; WinAnsiLen: integer): Unicod
 // - this function is faster than default RTL, since use no Win32 API call
 function WinAnsiToUnicodeString(const WinAnsi: WinAnsiString): UnicodeString; inline; overload;
 
-{$endif UNICODE}
+{$endif HASVARUSTRING}
 
 /// convert any generic VCL Text into an UTF-8 encoded String
 // - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
@@ -1979,11 +1981,11 @@ procedure UTF8DecodeToString(P: PUTF8Char; L: integer; var result: string); over
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 function UTF8ToWideString(const Text: RawUTF8): WideString; overload;
-  {$ifdef UNICODE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 procedure UTF8ToWideString(const Text: RawUTF8; var result: WideString); overload;
-  {$ifdef UNICODE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any UTF-8 encoded String into a generic WideString Text
 procedure UTF8ToWideString(Text: PUTF8Char; Len: integer; var result: WideString); overload;
@@ -2174,13 +2176,13 @@ function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
-function Int64ToUtf8(Value: Int64): RawByteString; overload;
+function Int64ToUtf8(Value: Int64): RawUTF8; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
 // - without any slow UnicodeString=String->AnsiString conversion for Delphi 2009
 // - only useful if our Enhanced Runtime (or LVCL) library is not installed
-function Int32ToUtf8(Value: integer): RawByteString; overload;
+function Int32ToUtf8(Value: integer): RawUTF8; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
@@ -2196,17 +2198,17 @@ procedure Int64ToUtf8(Value: Int64; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// use our fast RawUTF8 version of IntToStr()
-function ToUTF8(Value: PtrInt): RawByteString; overload;
+function ToUTF8(Value: PtrInt): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 {$ifndef CPU64}
 /// use our fast RawUTF8 version of IntToStr()
-function ToUTF8(Value: Int64): RawByteString; overload;
+function ToUTF8(Value: Int64): RawUTF8; overload;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 {$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
-function UInt32ToUtf8(Value: cardinal): RawByteString; overload;
+function UInt32ToUtf8(Value: cardinal): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// optimized conversion of a cardinal into RawUTF8
@@ -5628,9 +5630,9 @@ function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
 
-/// save a record content into a Base-64 encoded RawByteString content
+/// save a record content into a Base-64 encoded UTF-8 text content
 // - will use RecordSave() format, with a left-sided binary CRC
-function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawByteString;
+function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=false): RawUTF8;
 
 /// compute the number of bytes needed to save a record content
 // using the RecordSave() function
@@ -9330,34 +9332,34 @@ function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
     {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
     // inline gives an error under release conditions with FPC
 
-/// fast conversion from binary data into Base64 encoded text
-function BinToBase64(const s: RawByteString): RawByteString; overload;
+/// fast conversion from binary data into Base64 encoded UTF-8 text
+function BinToBase64(const s: RawByteString): RawUTF8; overload;
 
-/// fast conversion from binary data into Base64 encoded text
-function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawByteString; overload;
+/// fast conversion from binary data into Base64 encoded UTF-8 text
+function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - will trim any right-sided '=' unsignificant characters, and replace
 // '+' or '/' by '_' or '-'
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 
 /// conversion from any Base64 encoded value into URI-compatible encoded text
 // - will trim any right-sided '=' unsignificant characters, and replace
 // '+' or '/' by '_' or '-'
-procedure Base64ToURI(var base64: RawByteString);
+procedure Base64ToURI(var base64: RawUTF8);
 
 /// conversion from URI-compatible encoded text into its original Base64 value
 // - will add any right-sided '=' unsignificant characters, and replace back
 // '_' or '-' by '+' or '/'
-procedure Base64FromURI(var base64: RawByteString);
+procedure Base64FromURI(var base64: RawUTF8);
 
-/// fast conversion from binary data into Base64 encoded text
+/// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64WithMagic(const s: RawByteString): RawByteString; overload;
+function BinToBase64WithMagic(const s: RawByteString): RawUTF8; overload;
 
-/// fast conversion from binary data into Base64 encoded text
+/// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawByteString; overload;
+function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 function Base64ToBin(const s: RawByteString): RawByteString; overload;
@@ -14864,7 +14866,7 @@ begin
       SetString(result,A,Utf8BufferToAnsi(A,Source,SourceChars)-A);
       FreeMem(A);
     end;
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
   end;
@@ -14907,7 +14909,7 @@ begin
       SetString(result,A,UnicodeBufferToAnsi(A,Source,SourceChars)-A);
       FreeMem(A);
     end;
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
   end;
@@ -14940,6 +14942,9 @@ begin
     result := UnicodeBufferToAnsi(U,From.AnsiBufferToUnicode(U,Source,SourceChars)-U);
     FreeMem(U);
   end;
+  {$ifdef HASCODEPAGE}
+  SetCodePage(result,fCodePage,false);
+  {$endif}
 end;
 
 
@@ -15350,11 +15355,17 @@ end;
 function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
 begin
   result := UTF8;
+  {$ifdef HASCODEPAGE}
+  SetCodePage(result,CP_UTF8,false);
+  {$endif}
 end;
 
 function TSynAnsiUTF8.AnsiToUTF8(const AnsiText: RawByteString): RawUTF8;
 begin
   result := AnsiText;
+  {$ifdef HASCODEPAGE}
+  SetCodePage(RawByteString(result),CP_UTF8,false);
+  {$endif}
 end;
 
 function TSynAnsiUTF8.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
@@ -15484,11 +15495,11 @@ begin
 end;
 
 procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8);
-{$ifdef UNICODE}var CodePage: Cardinal;{$endif}
+{$ifdef HASCODEPAGE}var CodePage: Cardinal;{$endif}
 begin
   if s='' then
     result := '' else begin
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     CodePage := StringCodePage(s);
     if (CodePage=CP_UTF8) or (CodePage=CP_RAWBYTESTRING) then
       result := s else
@@ -16165,9 +16176,7 @@ begin
     FreeMem(U);
   end;
 end;
-{$endif}
 
-{$ifdef UNICODE}
 function UnicodeStringToWinAnsi(const S: string): WinAnsiString;
 begin
   result := RawUnicodeToWinAnsi(pointer(S),length(S));
@@ -16189,7 +16198,7 @@ begin
   result := WinAnsiToUnicodeString(pointer(WinAnsi),length(WinAnsi));
 end;
 
-{$endif}
+{$endif HASVARUSTRING}
 
 {$ifdef UNICODE}
 function Ansi7ToString(const Text: RawByteString): string;
@@ -16402,7 +16411,7 @@ begin
       result := Res.Len;
       exit;
     end;
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     vtUnicodeString:
       RawUnicodeToUtf8(V.VPWideChar,length(UnicodeString(V.VUnicodeString)),tmpStr);
     {$endif}
@@ -16501,9 +16510,9 @@ begin
       SetRawUTF8(result,@VString^[1],ord(VString^[0]));
     vtAnsiString:
       result := RawUTF8(VAnsiString); // expect UTF-8 content
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     vtUnicodeString:
-      result := UnicodeStringToUtf8(string(VUnicodeString));
+      result := UnicodeStringToUtf8(UnicodeString(VUnicodeString));
     {$endif}
     vtWideString:
       RawUnicodeToUtf8(VWideString,length(WideString(VWideString)),result);
@@ -17980,7 +17989,7 @@ begin
   end;
   varString: begin
     wasString := true;
-  {$ifdef UNICODE}
+  {$ifdef HASCODEPAGE}
     AnyAnsiToUTF8(RawByteString(VString),result);
   {$else}
     result := RawUTF8(VString);
@@ -18003,7 +18012,7 @@ begin
     VariantToUTF8(PVariant(VPointer)^,result,wasString) else
   if VType=varByRef or varString then begin
     wasString := true;
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
       AnyAnsiToUTF8(PRawByteString(VString)^,result);
     {$else}
       result := PRawUTF8(VString)^;
@@ -18314,7 +18323,7 @@ end;
 
 {$define OWNI2S}
 
-function Int32ToUTF8(Value : integer): RawByteString; // 3x faster than SysUtils.IntToStr
+function Int32ToUTF8(Value : integer): RawUtf8; // 3x faster than SysUtils.IntToStr
 // from IntToStr32_JOH_IA32_6_a, adapted for Delphi 2009+
 asm // eax=Value, edx=@result
   push   ebx
@@ -18411,7 +18420,7 @@ asm // eax=Value, edx=@result
   mov    [ecx],al                {Save Final Digit}
 end;
 
-function Int64ToUTF8(Value: Int64): RawByteString;
+function Int64ToUTF8(Value: Int64): RawUtf8;
 // from IntToStr64_JOH_IA32_6_b, adapted for Delphi 2009+
 asm
   push   ebx
@@ -19648,7 +19657,7 @@ end;
 
 {$ifndef OWNI2S}
 
-function Int32ToUTF8(Value : integer): RawByteString; // faster than SysUtils.IntToStr
+function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -19656,7 +19665,7 @@ begin
   SetString(result,P,@tmp[15]-P);
 end;
 
-function Int64ToUtf8(Value: Int64): RawByteString; // faster than SysUtils.IntToStr
+function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -19667,7 +19676,7 @@ end;
 {$endif}
 
 {$ifndef CPU64} // already implemented by ToUTF8(Value: PtrInt) below
-function ToUTF8(Value: Int64): RawByteString;
+function ToUTF8(Value: Int64): RawUTF8;
 var tmp: array[0..23] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -19676,7 +19685,7 @@ begin
 end;
 {$endif}
 
-function ToUTF8(Value: PtrInt): RawByteString;
+function ToUTF8(Value: PtrInt): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -19684,7 +19693,7 @@ begin
   SetString(result,P,@tmp[15]-P);
 end;
 
-function UInt32ToUTF8(Value: Cardinal): RawByteString;
+function UInt32ToUTF8(Value: Cardinal): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
@@ -21799,7 +21808,7 @@ begin
   result := ((len+2)div 3)*4;
 end;
 
-function BinToBase64(const s: RawByteString): RawByteString;
+function BinToBase64(const s: RawByteString): RawUTF8;
 var len: integer;
 begin
   result := '';
@@ -21810,7 +21819,7 @@ begin
   Base64Encode(pointer(result),pointer(s),len);
 end;
 
-function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   result := '';
   if BinBytes=0 then
@@ -21819,7 +21828,7 @@ begin
   Base64Encode(pointer(result),Bin,BinBytes);
 end;
 
-procedure Base64ToURI(var base64: RawByteString);
+procedure Base64ToURI(var base64: RawUTF8);
 var P: PUTF8Char;
 begin
   {$ifdef FPC}
@@ -21841,7 +21850,7 @@ begin
     until false;
 end;
 
-procedure Base64FromURI(var base64: RawByteString);
+procedure Base64FromURI(var base64: RawUTF8);
 var P: PUTF8Char;
     len,i,append: integer;
 begin
@@ -21868,13 +21877,13 @@ begin
   end;
 end;
 
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawByteString;
+function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   result := BinToBase64(Bin,BinBytes);
   Base64ToURI(result);
 end;
 
-function BinToBase64WithMagic(const s: RawByteString): RawByteString;
+function BinToBase64WithMagic(const s: RawByteString): RawUTF8;
 var len: integer;
 begin
   result:='';
@@ -21886,7 +21895,7 @@ begin
   Base64Encode(PAnsiChar(pointer(result))+3,pointer(s),len);
 end;
 
-function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawByteString; overload;
+function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
 begin
   result:='';
   if DataLen<=0 then
@@ -23419,7 +23428,7 @@ end;
 {$endif}
 
 {$IFDEF PUREPASCAL}
-{$IFDEF UNICODE}
+{$IFDEF HASCODEPAGE}
 function Trim(const S: RawUTF8): RawUTF8;
 var I,L: Integer;
 begin
@@ -29159,7 +29168,7 @@ begin
     part.Content := copy(Body,i,j-i-2); // -2 to ignore latest #13#10
     if (part.ContentType='') or (PosEx('-8',part.ContentType)>0) then begin
       part.ContentType := TEXT_CONTENT_TYPE;
-      {$ifdef UNICODE}
+      {$ifdef HASCODEPAGE}
       SetCodePage(part.Content,CP_UTF8,false); // ensure raw field value is UTF-8
       {$endif}
     end else
@@ -30187,7 +30196,7 @@ begin
   if Len=0 then
     exit;
   SetString(Value,PAnsiChar(Source),Len);
-  {$ifdef UNICODE}
+  {$ifdef HASCODEPAGE}
   SetCodePage(Value,CodePage,false);
   {$endif}
   inc(Source,Len);
@@ -30306,7 +30315,7 @@ begin
         if PWideString(A)^=PWideString(B)^ then
           Diff := sizeof(pointer) else
           exit;
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         if PUnicodeString(A)^=PUnicodeString(B)^ then
           Diff := sizeof(pointer) else
@@ -30388,7 +30397,7 @@ begin
         if P^=0 then
           dec(result,sizeof(PtrUInt)-1) else
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length)-sizeof(PtrUInt));
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         if P^=0 then
           dec(result,sizeof(PtrUInt)-1) else
@@ -30461,12 +30470,12 @@ begin
       Dest := DynArray.SaveTo(Dest);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
     {$ifdef FPC}, tkLStringOld{$endif}: begin
       if PPtrUInt(R)^=0 then
         LenBytes := 0 else
         LenBytes := PStrRec(Pointer(PPtrUInt(R)^-STRRECSIZE))^.length;
-      {$ifdef UNICODE} // WideString has length in bytes, UnicodeString in WideChars
+      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
       if Kind=tkUString then
         LenBytes := LenBytes*2;
       {$endif}
@@ -30541,7 +30550,7 @@ begin
     RecordSave(Rec,pointer(result),TypeInfo);
 end;
 
-function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawByteString;
+function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
 var len: integer;
     data: RawByteString;
     dat: PAnsiChar;
@@ -30562,14 +30571,15 @@ end;
 function RecordLoadBase64(Source: PAnsiChar; Len: integer; var Rec;
   TypeInfo: pointer; UriCompatible: boolean): boolean;
 var data: RawByteString;
+    uri: RawUTF8;
 begin
   result := false;
   if Len<=6 then
     exit;
   if UriCompatible then begin
-    SetString(data,Source,Len);
-    Base64FromURI(data);
-    data := Base64ToBin(data);
+    SetString(uri,Source,Len);
+    Base64FromURI(uri);
+    data := Base64ToBin(uri);
   end else
     data := Base64ToBin(Source,Len);
   Len := length(data);
@@ -30668,22 +30678,22 @@ begin
       Source := DynArray.LoadFrom(Source);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
     {$ifdef FPC}, tkLStringOld{$endif}: begin
       LenBytes := FromVarUInt32(PByte(Source));
       case Kind of
         tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
           SetString(PRawByteString(R)^,Source,LenBytes);
-          {$ifdef UNICODE}
+          {$ifdef HASCODEPAGE}
           { Delphi 2009+: set Code page for this AnsiString }
           if LenBytes<>0 then
-            SetCodePage(PRawByteString(R)^,PWord(PtrUInt(Field.TypeInfo^)+
-              Field.TypeInfo^^.NameLen+2)^,false);
+            SetCodePage(PRawByteString(R)^,PWord(PtrUInt(Field.TypeInfo{$ifndef FPC}^{$endif})+
+              Field.TypeInfo{$ifndef FPC}^{$endif}^.NameLen+2)^,false);
           {$endif}
         end;
         tkWString:
           SetString(PWideString(R)^,PWideChar(Source),LenBytes shr 1);
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         tkUString:
           SetString(PString(R)^,PWideChar(Source),LenBytes shr 1);
         {$endif}
@@ -33613,11 +33623,11 @@ begin
       if Txt='' then
         exit;
     end;
-    {$ifdef UNICODE}
-    if (PByte(Txt)<>nil) and (PWord(PByte(Txt)-12)^=CP_RAWBYTESTRING) then
-      PWord(PByte(Txt)-12)^ := CP_UTF8; // force explicit UTF-8
-    {$endif}
     RawByteString(VAny) := Txt;
+    {$ifdef HASCODEPAGE}
+    if (Txt<>'') and  (StringCodePage(Txt)=CP_RAWBYTESTRING) then
+      SetCodePage(RawByteString(VAny),CP_UTF8,false); // force explicit UTF-8
+    {$endif}
   end;
 end;
 
@@ -33636,11 +33646,11 @@ begin
   if Txt<>'' then
   case ExpectedValueType of
     varString: begin
-      {$ifdef UNICODE}
-      if PWord(PByte(Txt)-12)^=CP_RAWBYTESTRING then
-        PWord(PByte(Txt)-12)^ := CP_UTF8; // force explicit UTF-8
-      {$endif}
       RawByteString(Value.VAny) := Txt;
+      {$ifdef HASCODEPAGE}
+      if (Txt<>'') and  (StringCodePage(Txt)=CP_RAWBYTESTRING) then
+        SetCodePage(RawByteString(Value.VAny),CP_UTF8,false); // force explicit UTF-8
+      {$endif}
     end;
     varOleStr:
       UTF8ToWideString(Txt,WideString(Value.VAny));
@@ -33974,7 +33984,7 @@ begin
       VAny := nil;
       RawByteString(VAny) := RawByteString(V.VAnsiString);
     end;
-    vtString, {$ifdef UNICODE}vtUnicodeString,{$endif}
+    vtString, {$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       VType := varString;
       VAny := nil; // avoid GPF on next line
@@ -37171,13 +37181,13 @@ begin
       inc(Dest,n);
     end else
     case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
     {$ifdef FPC}, tkLStringOld{$endif}: begin
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
           LenBytes := 0 else begin
           LenBytes := PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length;
-          {$ifdef UNICODE} // WideString length in bytes, UnicodeString in WideChars
+          {$ifdef HASVARUSTRING} // WideString length in bytes, UnicodeString in WideChars
           if PTypeKind(ElemType)^=tkUString then
             LenBytes := LenBytes*2;
           {$endif}
@@ -37261,7 +37271,7 @@ begin
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length));
         inc(P,sizeof(PtrUInt));
       end;
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     tkUString: // WideString has length in bytes, UnicodeString in WideChars
       for i := 1 to n do begin
         if PPtrUInt(P)^=0 then
@@ -37924,14 +37934,14 @@ begin
     inc(Source,n);
   end else
   case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef UNICODE}, tkUString{$endif}
+    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
     {$ifdef FPC}, tkLStringOld{$endif}:
     for i := 1 to n do begin
       LenBytes := FromVarUInt32(PByte(Source));
       case PTypeKind(ElemType)^ of
       tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
         SetString(PRawByteString(P)^,Source,LenBytes);
-        {$ifdef UNICODE}
+        {$ifdef HASCODEPAGE}
         { Delphi 2009+: set Code page for this AnsiString }
         if LenBytes<>0 then
           SetCodePage(PRawByteString(P)^,PWord(PtrUInt(ElemType)+
@@ -37940,7 +37950,7 @@ begin
       end;
       tkWString:
         SetString(PWideString(P)^,PWideChar(Source),LenBytes shr 1);
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         SetString(PString(P)^,PWideChar(Source),LenBytes shr 1);
       {$endif}
@@ -38307,7 +38317,7 @@ begin
       result := AnsiString(A)=AnsiString(B);
     tkWString:
       result := WideString(A)=WideString(B);
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     tkUString:
       result := UnicodeString(A)=UnicodeString(B);
     {$endif}
@@ -38363,7 +38373,7 @@ begin
     for i := 0 to n-1 do
       if WideString(A1^[i])<>WideString(A2^[i]) then
         exit;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   tkUString:
     for i := 0 to n-1 do
       if UnicodeString(A1^[i])<>UnicodeString(A2^[i]) then
@@ -38440,7 +38450,7 @@ begin
   tkWString:
     for result := 0 to max do
       if WideString(PPtrIntArray(P)^[result])=WideString(Elem) then exit;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   tkUString:
     for result := 0 to max do
       if UnicodeString(PPtrIntArray(P)^[result])=UnicodeString(Elem) then exit;
@@ -38769,7 +38779,7 @@ begin
         WideString(Elem) := '';
       tkInterface:
         IUnknown(Elem) := nil;
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         UnicodeString(Elem) := '';
       {$endif}
@@ -38805,7 +38815,7 @@ begin
         IUnknown(B) := IUnknown(A);
         exit;
       end;
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString: begin
         UnicodeString(B) := UnicodeString(A);
         exit;
@@ -38854,7 +38864,7 @@ begin
     case PTypeKind(ElemType)^ of
     tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
       SetString(RawByteString(Elem),Source+4,PInteger(Source)^);
-      {$ifdef UNICODE}
+      {$ifdef HASCODEPAGE}
       { Delphi 2009+: set Code page for this AnsiString }
       if PPtrUInt(@Elem)^<>0 then
         SetCodePage(RawByteString(Elem),PWord(PtrUInt(ElemType)+
@@ -38863,7 +38873,7 @@ begin
     end;
     tkWString: // WideString internal length is in bytes
       SetString(WideString(Elem),PWideChar(Source+4),PInteger(Source)^ shr 1);
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     tkUString:
       SetString(UnicodeString(Elem),PWideChar(Source+4),PInteger(Source)^);
     {$endif}
@@ -38884,7 +38894,7 @@ begin
       PRawByteString(pointer(ElemLoaded))^ := '';
     tkWString:
       PWideString(pointer(ElemLoaded))^ := '';
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     tkUString:
       PUnicodeString(pointer(ElemLoaded))^ := '';
     {$endif}
@@ -38914,7 +38924,7 @@ begin
           SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes+sizeof(integer));
           PInteger(result)^ := LenBytes;
         end;
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         if PPtrInt(@Elem)^=0 then
           SetString(result,PAnsiChar(@Elem),4) else begin
@@ -38922,7 +38932,6 @@ begin
           SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes*2+sizeof(integer));
           PInteger(result)^ := LenBytes;
         end;
-      end;
       {$endif}
       {$else FPC}
       tkLString, tkWString: // WideString internal length is in bytes
@@ -38930,7 +38939,7 @@ begin
           SetString(result,PAnsiChar(@Elem),4) else
           SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),
             PInteger(PPtrInt(@Elem)^-sizeof(integer))^+sizeof(integer));
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         if PPtrInt(@Elem)^=0 then
           SetString(result,PAnsiChar(@Elem),4) else
@@ -39221,9 +39230,7 @@ function HashUnicodeString(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
-      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif}*2);
+    result := Hasher(0,Pointer(Elem),length(UnicodeString(Elem))*2);
 end;
 
 function HashUnicodeStringI(const Elem; Hasher: THasher): cardinal;
@@ -39240,11 +39247,7 @@ function HashSynUnicode(const Elem; Hasher: THasher): cardinal;
 begin
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
-      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif}
-      {$ifdef UNICODE}*sizeof(WideChar){$endif});
-      // WideString internal size is in bytes, UnicodeString is in WideChars
+    result := Hasher(0,Pointer(Elem),length(SynUnicode(Elem))*2);
 end;
 
 function HashSynUnicodeI(const Elem; Hasher: THasher): cardinal;
@@ -39259,9 +39262,7 @@ function HashWideString(const Elem; Hasher: THasher): cardinal;
 begin // WideString internal size is in bytes, not WideChar
   if PtrUInt(Elem)=0 then
     result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(Elem)),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(Elem)-STRRECSIZE))^.length
-      {$else}PInteger(PtrUInt(Elem)-sizeof(integer))^{$endif});
+    result := Hasher(0,Pointer(Elem),Length(WideString(Elem))*2);
 end;
 
 function HashWideStringI(const Elem; Hasher: THasher): cardinal;
@@ -39274,11 +39275,11 @@ end;
 
 function HashPtrUInt(const Elem; Hasher: THasher): cardinal;
 begin
-{$ifdef CPU64}
+  {$ifdef CPU64}
   result := Hasher(0,@Elem,sizeof(PtrUInt));
-{$else}
+  {$else}
   result := (PtrUInt(Elem) shr 4)+1; // naive but optimal for TDynArrayHashed
-{$endif}
+  {$endif}
 end;
 
 function HashPointer(const Elem; Hasher: THasher): cardinal;
@@ -40910,7 +40911,7 @@ begin
   varString: begin
     if Escape=twJSONEscape then
       Add('"');
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     AddAnyAnsiString(RawByteString(VString),Escape);
     {$else}  // VString is expected to be a RawUTF8
     Add(VAny,length(RawUTF8(VAny)),Escape);
@@ -40931,7 +40932,7 @@ begin
   if VType=varByRef or varString then begin
     if Escape=twJSONEscape then
       Add('"');
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     AddAnyAnsiString(PRawByteString(VAny)^,Escape);
     {$else}  // VString is expected to be a RawUTF8
     Add(PPointer(VAny)^,length(PRawUTF8(VAny)^),Escape);
@@ -41843,7 +41844,7 @@ begin
     exit;
   end;
   if CodePage<0 then
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     CodePage := StringCodePage(s);
     {$else}
     CodePage := 0; // TSynAnsiConvert.Engine(0)=CurrentAnsiConvert
@@ -42088,16 +42089,16 @@ begin
   with V do
   case VType of
     vtPointer: AddShort('null');
-    vtString, vtAnsiString,{$ifdef UNICODE}vtUnicodeString,{$endif}
+    vtString, vtAnsiString,{$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       Add('"');
       case VType of
         vtString:     AddJSONEscape(@VString^[1],ord(VString^[0]));
         vtAnsiString: AddJSONEscape(pointer(RawUTF8(VAnsiString)));
-    {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         vtUnicodeString: AddJSONEscapeW(
-          pointer(string(VUnicodeString)),length(string(VUnicodeString)));
-    {$endif}
+          pointer(UnicodeString(VUnicodeString)),length(UnicodeString(VUnicodeString)));
+        {$endif}
         vtPChar:      AddJSONEscape(VPChar);
         vtChar:       AddJSONEscape(@VChar,1);
         vtWideChar:   AddJSONEscapeW(@VWideChar,1);
@@ -42149,7 +42150,7 @@ begin
   vtVariant:
     AddVariant(VVariant^,Escape);
   {$endif}
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   vtUnicodeString:
     if VUnicodeString<>nil then // convert to UTF-8
       AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
@@ -42553,8 +42554,12 @@ begin
     result := '' else
   if fStream.InheritsFrom(TRawByteStringStream) then
     with TRawByteStringStream(fStream) do
-    if fInitialStreamPosition=0 then
-      result := DataString else
+    if fInitialStreamPosition=0 then begin
+      {$ifdef HASCODEPAGE} // FPC expects this
+      SetCodePage(fDataString,CP_UTF8,false);
+      {$endif}
+      result := fDataString;
+    end else
       SetRawUTF8(result,PAnsiChar(pointer(DataString))+fInitialStreamPosition,Len) else
   if fStream.InheritsFrom(TCustomMemoryStream) then
     with TCustomMemoryStream(fStream) do

@@ -713,12 +713,12 @@ type
     /// internal Ansi->Unicode conversion, using the CodePage used in Create()
     // - caller must release the returned memory via FreeMem()
     function ToWideChar(const Ansi: PDFString; out DLen: Integer): PWideChar;
-{$ifdef USE_UNISCRIBE}
+    {$ifdef USE_UNISCRIBE}
     /// internal method using the Windows Uniscribe API
     // - return FALSE if PW was not appened to the PDF content, TRUE if OK
     function AddUnicodeHexTextUniScribe(PW: PWideChar; WinAnsiTTF: TPdfFontTrueType;
       NextLine: boolean; Canvas: TPdfCanvas): boolean;
-{$endif}
+    {$endif}
     /// internal method NOT using the Windows Uniscribe API
     procedure AddUnicodeHexTextNoUniScribe(PW: PWideChar; TTF: TPdfFontTrueType;
       NextLine: boolean; Canvas: TPdfCanvas);
@@ -1990,12 +1990,13 @@ type
     procedure SetTextMatrix(a, b, c, d, x, y: Single);           {  Tm  }
     /// Move to the start of the next line
     procedure MoveToNextLine;                                    {  T*  }
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     /// Show a text string
     // - text is expected to be Unicode encoded
     // - if NextLine is TRUE, moves to the next line and show a text string;
     // in this case, method as the same effect as MoveToNextLine; ShowText(s);
     procedure ShowText(const text: UnicodeString; NextLine: boolean=false); overload; inline; {  Tj  or ' }
+    {$endif}
     /// Show a text string
     // - text is expected to be Ansi-Encoded, in the current CharSet; if
     // some Unicode or MBCS conversion is necessary, it will be notified to the
@@ -2003,15 +2004,6 @@ type
     // - if NextLine is TRUE, moves to the next line and show a text string;
     // in this case, method as the same effect as MoveToNextLine; ShowText(s);
     procedure ShowText(const text: PDFString; NextLine: boolean=false); overload; {  Tj  or ' }
-{$else}
-    /// Show a text string
-    // - text is expected to be Ansi-Encoded, in the current CharSet; if
-    // some Unicode or MBCS conversion is necessary, it will be notified to the
-    // corresponding
-    // - if NextLine is TRUE, moves to the next line and show a text string;
-    // in this case, method as the same effect as MoveToNextLine; ShowText(s);
-    procedure ShowText(const text: PDFString; NextLine: boolean=false); overload; {  Tj  or ' }
-{$endif}
     /// Show an Unicode Text string
     // - if NextLine is TRUE, moves to the next line and show a text string;
     // in this case, method as the same effect as MoveToNextLine; ShowText(s);
@@ -6965,7 +6957,7 @@ begin
     FContents.Writer.Add('T*'#10);
 end;
 
-{$ifdef UNICODE}
+{$ifdef HASVARUSTRING}
 
 procedure TPdfCanvas.ShowText(const text: UnicodeString; NextLine: boolean);
 begin // direct call of the unicode text drawing method below

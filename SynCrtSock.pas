@@ -304,8 +304,12 @@ type
 {$else}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = WideString;
+  {$ifdef HASCODEPAGE} // FPC expects a CP, e.g. to compare to string constants
+  SockString = type AnsiString(CP_UTF8);
+  {$else}
   /// define a raw storage string type, used for data buffer management
   SockString = type AnsiString;
+  {$endif}
 {$endif}
 
 {$ifndef CONDITIONALEXPRESSIONS}
@@ -2129,11 +2133,11 @@ begin
   end;
 end;
 
-{$ifdef UNICODE}
+{$ifdef HASCODEPAGE}
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
 function Trim(const S: SockString): SockString;
-{$ifdef PUREPASCAL}
+{$ifdef FPC_OR_PUREPASCAL}
 var I, L: Integer;
 begin
   L := Length(S);
@@ -2186,8 +2190,8 @@ var Ch: AnsiChar; // this sub-call is shorter and faster than 1 plain proc
 begin
   repeat
     Ch := Source^;
-    if (Ch >= 'a') and (Ch <= 'z') then
-      dec(Ch, 32);
+    if (Ch>='a') and (Ch<='z') then
+      dec(Ch,32);
     Dest^ := Ch;
     dec(L);
     inc(Source);
@@ -2204,7 +2208,7 @@ begin
   Upper(pointer(S),pointer(result),L);
 end;
 
-{$endif}
+{$endif HASCODEPAGE}
 
 function GetCardinal(P: PAnsiChar): cardinal; overload;
 var c: cardinal;
@@ -2785,7 +2789,7 @@ var s,p: SockString;
 begin
   // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
   Create({$ifdef LINUX}500{$else}5000{$endif});
-  i := pos({$ifdef UNICODE}SockString{$endif}(':'),aPort);
+  i := pos({$ifdef HASCODEPAGE}SockString{$endif}(':'),aPort);
   if i=0 then begin
     s := '0.0.0.0';
     p := aPort;
@@ -2871,12 +2875,12 @@ begin
       SockSend(@VString^[1],pByte(VString)^);
     vtAnsiString:
       SockSend(VAnsiString,length(SockString(VAnsiString)));
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     vtUnicodeString: begin
       tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
       SockSend(@tmp[1],length(tmp));
     end;
-{$endif}
+    {$endif}
     vtPChar:
       SockSend(VPChar,StrLen(VPChar));
     vtChar:
@@ -3499,7 +3503,7 @@ begin
     repeat
       rec := trim(GetNextItem(P));
       if rec='' then continue;
-      if pos({$ifdef UNICODE}SockString{$endif}('<'),rec)=0 then
+      if pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
       ToList := ToList+rec+', ';

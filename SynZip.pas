@@ -242,7 +242,7 @@ function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
 
 
 type
-{$ifdef UNICODE}
+{$ifdef HASCODEPAGE}
   /// define a raw storage string type, used for data buffer management
   ZipString = type RawByteString;
 {$else}

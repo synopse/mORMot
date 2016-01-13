@@ -1707,7 +1707,7 @@ begin
       SetWideString(cx,WideString(V.VPointer));
     vtAnsiString:
       SetAnsiChar(cx,V.VPointer,length(RawByteString(V.VAnsiString)),
-{$ifndef UNICODE}     CP_UTF8);
+{$ifndef HASCODEPAGE} CP_UTF8);
 {$else}               StringCodePage(RawByteString(V.VAnsiString)));
     vtUnicodeString:
       SetSynUnicode(cx,UnicodeString(V.VPointer));

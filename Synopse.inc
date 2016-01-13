@@ -139,6 +139,7 @@
 {$ifdef UNICODE}
   {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
   {$define HASVARUSTRING}
+  {$define HASCODEPAGE}
   { due to a bug in Delphi 2009+, we need to fake inheritance of record,
     since TDynArrayHashed = object(TDynArray) fails to initialize
     http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
@@ -185,6 +186,7 @@
   {$MINENUMSIZE 1}
   {$PACKSET 1}
   {$PACKENUM 1}
+  {$CODEPAGE UTF8} // otherwise unexpected behavior occurs in most cases
 
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
@@ -236,6 +238,7 @@
   // exceptions interception code in FPC differs from Delphi
   {$define NOEXCEPTIONINTERCEPT}
 
+  // {$if FPC_FULLVERSION>20700} does not compile under Delphi 6-7 :(
   {$ifdef VER2_7}
     {$define ISFPC27}
   {$endif}
@@ -244,6 +247,9 @@
   {$endif}
   {$ifdef VER3_1}
     {$define ISFPC27}
+  {$endif}
+  {$ifdef FPC_HAS_CPSTRING}
+    {$define HASCODEPAGE} // UNICODE means {$mode delphiunicode}
   {$endif}
   {$ifdef ISFPC27}
     {$define ISFPC271}

@@ -3269,7 +3269,7 @@ begin
     vtCurrency: BSONWrite(name,value.VCurrency^);
     vtExtended: BSONWrite(name,value.VExtended^);
     vtVariant:  BSONWriteVariant(name,value.VVariant^);
-    vtString, vtAnsiString, {$ifdef UNICODE}vtUnicodeString,{$endif}
+    vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString: begin
       VarRecToUTF8(value,tmp);
       BSONWrite(name,tmp);

@@ -2413,7 +2413,7 @@ const
 {$endif}
   // maps long string types
   tkStringTypes =
-    [tkLString,tkWString{$ifdef UNICODE},tkUString{$endif}{$ifdef FPC},tkAString{$endif}];
+    [tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkAString{$endif}];
   // maps 1, 8, 16, 32 and 64 bit ordinal types
   tkOrdinalTypes =
     [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
@@ -2710,7 +2710,7 @@ type
     // - for non Unicode versions of Delphi, will recognize WinAnsiString as
     // CODEPAGE_US, RawUnicode as CP_UTF16, RawByteString as CP_RAWBYTESTRING,
     // AnsiString as 0, and any other type as RawUTF8
-    function AnsiStringCodePage: integer; {$ifdef UNICODE}inline;{$endif}
+    function AnsiStringCodePage: integer; {$ifdef HASCODEPAGE}inline;{$endif}
     /// get the TGUID of a given interface type information
     // - returns nil if this type is not an interface
     function InterfaceGUID: PGUID;
@@ -2795,12 +2795,12 @@ type
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetWideStrProp(Instance: TObject; const Value: WideString);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     function GetUnicodeStrProp(Instance: TObject): UnicodeString;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    {$endif}
+    {$endif HASVARUSTRING}
     function GetCurrencyProp(Instance: TObject): currency;
      {$ifdef USETYPEINFO}{$ifdef HASINLINE}inline;{$endif}{$endif}
     procedure SetCurrencyProp(Instance: TObject; const Value: Currency);
@@ -2944,14 +2944,14 @@ type
     // or an UnicodeString (for Delphi 2009+),and will return '' if it's
     // not the case
     function GetGenericStringValue(Instance: TObject): string;
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     /// low-level setter of the Unicode string property value of a given instance
     // - this method will check if the corresponding property is a Unicode String
     procedure SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
     /// low-level getter of the Unicode string property value of a given instance
     // - this method will check if the corresponding property is a Unicode String
     function GetUnicodeStrValue(Instance: TObject): UnicodeString;
-{$endif}
+    {$endif}
     /// low-level getter of a dynamic array wrapper
     // - this method will NOT check if the property is a dynamic array: caller
     // must have already checked that PropType^^.Kind=tkDynArray
@@ -3563,7 +3563,7 @@ type
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
 
-{$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   /// information about a UnicodeString published property
   TSQLPropInfoRTTIUnicode = class(TSQLPropInfoRTTI)
   protected
@@ -3583,7 +3583,7 @@ type
     function CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt; override;
     function GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal; override;
   end;
-{$endif}
+  {$endif HASVARUSTRING}
 
   /// information about a dynamic array published property
   TSQLPropInfoRTTIDynArray = class(TSQLPropInfoRTTI)
@@ -19252,7 +19252,7 @@ begin
             CP_UTF16: C := TSQLPropInfoRTTIRawUnicode;
             else C := TSQLPropInfoRTTIAnsi; // will use the right TSynAnsiConvert
           end;
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         tkUString:
           C := TSQLPropInfoRTTIUnicode;
         {$endif}
@@ -20561,7 +20561,7 @@ begin
 end;
 
 
-{$ifdef UNICODE}
+{$ifdef HASVARUSTRING}
 
 { TSQLPropInfoRTTIUnicode }
 
@@ -20674,7 +20674,7 @@ begin
   aValue.VText := Pointer(temp);
 end;
 
-{$endif UNICODE}
+{$endif HASVARUSTRING}
 
 
 { TObjArraySerializer}
@@ -25629,7 +25629,7 @@ begin
             Add('%%=%'#13,[SubCompName,P^.Name,V]);
         end;
         {$ifdef FPC}tkAString,{$endif} tkLString, tkWString
-        {$ifdef UNICODE},tkUString{$endif}: begin
+        {$ifdef HASVARUSTRING},tkUString{$endif}: begin
           P^.GetLongStrValue(Value,tmp);
           Add('%%=%'#13,[SubCompName,P^.Name,tmp]);
         end;
@@ -25836,9 +25836,9 @@ begin
       end;
     end;
   end;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   tkUString:
-    StringToUTF8(GetUnicodeStrProp(Instance),result);
+    result := UnicodeStringToUTF8(GetUnicodeStrProp(Instance));
   {$endif}
   tkWString: begin
     GetWideStrProp(Instance,tmpWS);
@@ -25866,10 +25866,10 @@ procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
       tmp := TSynAnsiConvert.Engine(cp).UTF8ToAnsi(Value);
     SetLongStrProp(Instance,tmp);
   end;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   procedure HandleUnicode(Instance: TObject; const Value: RawUTF8);
   begin
-    SetUnicodeStrProp(Instance,UTF8ToString(Value));
+    SetUnicodeStrProp(Instance,UTF8DecodeToUnicodeString(Value));
   end;
   {$endif}
   procedure HandleWideString(Instance: TObject; const Value: RawUTF8);
@@ -25889,7 +25889,7 @@ begin
     end else
       SetLongStrProp(Instance,'');
   end;
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   tkUString:
     HandleUnicode(Instance,Value);
   {$endif}
@@ -25920,7 +25920,8 @@ begin
   tkInt64{$ifdef FPC},tkQWord{$endif}:
     if VariantToInt64(Value,i64) then
       SetInt64Prop(Instance,i64);
-  {$ifdef UNICODE}tkUString,{$endif}tkLString,tkWString{$ifdef FPC},tkAString{$endif}:
+  {$ifdef HASVARUSTRING}tkUString,{$endif}
+  tkLString, tkWString {$ifdef FPC},tkAString{$endif}:
     if VariantToUTF8(Value,u) then
       SetLongStrValue(Instance,u);
   tkFloat:
@@ -25955,7 +25956,7 @@ begin
     SetInt64Prop(Instance,0);
   tkLString{$ifdef FPC},tkAString{$endif}:
     SetLongStrProp(Instance,'');
-  {$ifdef UNICODE}
+  {$ifdef HASVARUSTRING}
   tkUString:
     SetUnicodeStrProp(Instance,'');
   {$endif}
@@ -26001,10 +26002,10 @@ begin
         GetLongStrValue(Instance,tmp);
         result := UTF8ToString(tmp);
       end;
-{$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
-        result := GetUnicodeStrProp(Instance);
-{$endif}else result := '';
+        result := string(GetUnicodeStrProp(Instance));
+      {$endif}else result := '';
      end;
 end;
 
@@ -26014,28 +26015,28 @@ begin
     case PropType^.Kind of
       {$ifdef FPC}tkAString,{$endif}tkLString, tkWString:
          SetLongStrValue(Instance,StringToUtf8(Value));
-{$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
        tkUString:
-         SetUnicodeStrProp(Instance,Value);
-{$endif}end;
+         SetUnicodeStrProp(Instance,UnicodeString(Value));
+      {$endif}
+    end;
 end;
 
-{$ifdef UNICODE}
-
+{$ifdef HASVARUSTRING}
 function TPropInfo.GetUnicodeStrValue(Instance: TObject): UnicodeString;
 begin
   if (Instance<>nil) and (@self<>nil) and
-     (PropType^^.Kind=tkUString) then
+     (PropType^.Kind=tkUString) then
     result := GetUnicodeStrProp(Instance);
 end;
 
 procedure TPropInfo.SetUnicodeStrValue(Instance: TObject; const Value: UnicodeString);
 begin
   if (Instance<>nil) and (@self<>nil) and
-     (PropType^^.Kind=tkUString) then
+     (PropType^.Kind=tkUString) then
     SetUnicodeStrProp(Instance,Value);
 end;
-{$endif}
+{$endif HASVARUSTRING}
 
 procedure TPropInfo.SetOrdValue(Instance: TObject; Value: PtrInt);
 begin
@@ -26245,7 +26246,7 @@ str:  if kD in tkStringTypes then begin
         GetLongStrValue(Source,RawUTF8(Value));
         DestInfo.SetLongStrValue(Dest,RawUTF8(Value));
       end;
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     tkUString:
       if kD=tkUString then
         DestInfo.SetUnicodeStrProp(Dest,GetUnicodeStrProp(Source)) else
@@ -26456,17 +26457,17 @@ begin
   TypInfo.SetWideStrProp(Instance,@self,Value);
 end;
 
-{$ifdef UNICODE}
+{$ifdef HASVARUSTRING}
 function TPropInfo.GetUnicodeStrProp(Instance: TObject): UnicodeString;
 begin
-  Value := TypInfo.GetUnicodeStrProp(Instance,@self);
+  result := TypInfo.GetUnicodeStrProp(Instance,@self);
 end;
 
 procedure TPropInfo.SetUnicodeStrProp(Instance: TObject; const Value: UnicodeString);
 begin
   TypInfo.SetUnicodeStrProp(Instance,@self,Value);
 end;
-{$endif}
+{$endif HASVARUSTRING}
 
 function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
 begin
@@ -26752,7 +26753,7 @@ begin // caller must check that PropType^.Kind = tkWString
   end;
 end;
 
-{$ifdef UNICODE}
+{$ifdef HASVARUSTRING}
 function TPropInfo.GetUnicodeStrProp(Instance: TObject): UnicodeString;
 type
   TUStringGetProc = function: UnicodeString of object;
@@ -26801,7 +26802,7 @@ begin // caller must check that PropType^.Kind = tkUString
       TUStringIndexedSetProc(M)(Index, Value);
   end;
 end;
-{$endif}
+{$endif HASVARUSTRING}
 
 function TPropInfo.GetCurrencyProp(Instance: TObject): currency;
 type // function(Instance: TObject) trick does not work with CPU64 :(
@@ -27257,7 +27258,7 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         result := sftUTF8Text; // CP_UTF8,CP_UTF16 and any other to UTF-8 text
         exit; 
       end;
-    {$ifdef UNICODE}tkUString,{$endif} tkChar, tkWChar, tkWString: begin
+    {$ifdef HASVARUSTRING}tkUString,{$endif} tkChar, tkWChar, tkWString: begin
       result := sftUTF8Text;
       exit;
     end;
@@ -27335,7 +27336,7 @@ end;
 
 function TTypeInfo.AnsiStringCodePage: integer;
 begin
-  {$ifdef UNICODE}
+  {$ifdef HASCODEPAGE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
     if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
@@ -42749,11 +42750,11 @@ begin
         UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),
           Int32ToUtf8(V));
       end;
-      {$ifdef UNICODE}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
+      {$ifdef HASVARUSTRING}tkUString,{$endif} {$ifdef FPC}tkAString,{$endif}
       tkLString, tkWString: begin
         P^.GetLongStrValue(Value,tmp);
         UpdateIniEntry(IniContent,Section,SubCompName+ToUTF8(P^.Name),tmp);
-        end;
+      end;
       tkClass:
       if Section='' then begin // recursive call works only as plain object
         Obj := P^.GetObjProp(Value);
@@ -43601,7 +43602,7 @@ doProp: // normal property value
           P^.SetLongStrValue(Value,U);
         end else
           exit;
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
         if wasString or (j2oIgnoreStringType in Options) then
           P^.SetUnicodeStrProp(Value,
@@ -43740,7 +43741,7 @@ begin
         P^.SetLongStrValue(Value,U);
       tkWString:
          P^.SetWideStrProp(Value,UTF8ToWideString(U));
-      {$ifdef UNICODE}
+      {$ifdef HASVARUSTRING}
       tkUString:
          P^.SetUnicodeStrProp(Value,UTF8ToString(U));
       {$endif}
@@ -45629,7 +45630,7 @@ var P: PPropInfo;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
     WS: WideString;
-    {$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     US: UnicodeString;
     {$endif}
     tmp: RawByteString;
@@ -45844,7 +45845,7 @@ begin
           end else
             Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
         end;
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         tkUString: begin // write converted to UTF-8
           US := P^.GetUnicodeStrProp(Value);
           if (US<>'') or not (woDontStoreEmptyString in Options) then begin
@@ -48383,11 +48384,15 @@ begin
     if P=TypeInfo(AnsiString) then
       result := smvString else
       result := smvRawUTF8; // UTF-8 by default
+  {$ifdef HASVARUSTRING}
+  tkUString:
+    result := smvRawUTF8;
+  {$endif}
   {$else UNICODE}
       result := smvRawUTF8;
   tkUString:
     result := smvString;
-  {$endif}
+  {$endif UNICODE}
   tkWString:
     result := smvWideString;
   tkClass:

@@ -6392,16 +6392,24 @@ begin
         if c=JSON_SQLDATE_MAGIC then
           BindDateTime(i,Iso8601ToDateTimePUTF8Char(PUTF8Char(VAnsiString)+3,length(RawUTF8(VAnsiString))-3)) else
           // expect UTF-8 content only for AnsiString, i.e. RawUTF8 variables
+          {$ifdef HASCODEPAGE}
+          BindTextU(i,AnyAnsiToUTF8(RawByteString(VAnsiString)),IO);
+          {$else}
           BindTextU(i,RawUTF8(VAnsiString),IO);
+          {$endif}
       end;
     vtPChar:      BindTextP(i,PUTF8Char(VPChar),IO);
     vtChar:       BindTextU(i,RawUTF8(VChar),IO);
     vtWideChar:   BindTextU(i,RawUnicodeToUtf8(@VWideChar,1),IO);
     vtPWideChar:  BindTextU(i,RawUnicodeToUtf8(VPWideChar,StrLenW(VPWideChar)),IO);
     vtWideString: BindTextW(i,WideString(VWideString),IO);
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
+    {$ifdef UNICODE}
     vtUnicodeString: BindTextS(i,string(VUnicodeString),IO);
-{$endif}
+    {$else}
+    vtUnicodeString: BindTextU(i,UnicodeStringToUtf8(UnicodeString(VUnicodeString)),IO);
+    {$endif}
+    {$endif}
     vtBoolean:    Bind(i,integer(VBoolean),IO);
     vtInteger:    Bind(i,VInteger,IO);
     vtInt64:      Bind(i,VInt64^,IO);
@@ -6477,7 +6485,7 @@ begin
           // no conversion if was set via TQuery.AsBlob property e.g.
           BindBlob(Param,RawByteString(VAny),IO) else
         // direct bind of AnsiString as UTF-8 value
-        {$ifdef UNICODE}
+        {$ifdef HASCODEPAGE}
         BindTextU(Param,AnyAnsiToUTF8(RawByteString(VAny)),IO);
         {$else} // on older Delphi, we assume AnsiString = RawUTF8
         BindTextU(Param,RawUTF8(VAny),IO);
@@ -7218,9 +7226,9 @@ begin
           end else
             result := RawUTF8(VAny);
         end;
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         varUString: begin
-          L := length(string(VAny));
+          L := length(UnicodeString(VAny));
           if L>MaxCharCount then begin
             Truncated := true;
             L := MaxCharCount;
