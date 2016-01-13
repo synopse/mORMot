@@ -891,6 +891,7 @@ type
   PBoolean = ^Boolean;
   PComp = ^Comp;
   THandle = LongWord;
+  UInt64 = Int64;
   PVarData = ^TVarData;
   TVarData = packed record
     // mostly used for varNull, varInt64, varDouble, varString and varAny
@@ -4996,6 +4997,7 @@ type
   {$endif}
   private
     fSection: TRTLCriticalSection;
+    {$ifndef NOVARIANTS}
     function GetVariant(Index: integer): Variant;
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
@@ -5004,6 +5006,7 @@ type
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUTF8(Index: integer): RawUTF8;
     procedure SetUTF8(Index: integer; const Value: RawUTF8);
+    {$endif}
   public
     /// internal padding data, also used to store up to 7 variables
     // - this memory buffer will ensure no CPU cache line mixup occurs
@@ -5068,6 +5071,7 @@ type
     // !  ... // thread-safe code
     // !end; // LockFPC will release the lock for the method
     function ProtectMethod: IUnknown;
+    {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
     // LockedPointer and LockedUTF8 array properties
@@ -5110,6 +5114,7 @@ type
     // - returns the previous stored value, nil if the Index is out of range,
     // or does not store a pointer
     function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+    {$endif NOVARIANTS}
   end;
   PSynLocker = ^TSynLocker;
 
@@ -39924,6 +39929,8 @@ begin
   result := TAutoLock.Create(@self);
 end;
 
+{$ifndef NOVARIANTS}
+
 function TSynLocker.GetVariant(Index: integer): Variant;
 begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then // PaddingMaxUsedIndex may be -1
@@ -40095,6 +40102,8 @@ begin
     end else
     result := nil;
 end;
+
+{$endif NOVARIANTS}
 
 
 { TInterfacedObjectLocked }
@@ -41344,9 +41353,9 @@ end;
 procedure TTextWriter.AddPointer(P: PtrUInt);
   procedure Pointer4ToHex(B: PWordArray; P: PtrUInt);
   begin
-    B[3] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
-    B[2] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
-    B[1] := TwoDigitsHexWB[byte(P)]; P := P shr 8;
+    B[3] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
+    B[2] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
+    B[1] := TwoDigitsHexWB[ToByte(P)]; P := P shr 8;
     B[0] := TwoDigitsHexWB[P];
   end;
 begin

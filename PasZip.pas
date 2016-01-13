@@ -67,6 +67,9 @@ type
 {$else}
   RawByteZip = AnsiString;
 {$endif}
+{$ifdef DELPHI5OROLDER}
+  PCardinal = ^cardinal;
+{$endif}
 
 /// compress memory using the ZLib DEFLATE algorithm
 
@@ -4379,6 +4382,16 @@ begin
     end;
   end;
 end;
+
+{$ifdef DELPHI5OROLDER}
+function DirectoryExists(const Directory: string): boolean;
+var
+  Code: Integer;
+begin
+  Code := GetFileAttributes(pointer(Directory));
+  result := (Code <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+end;
+{$endif}
 
 function ForceDirectories(const Dir: TFileName): Boolean;
 begin
