@@ -2147,15 +2147,16 @@ procedure ResourceSynLZToRawByteString(const ResName: string;
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
 
+/// fast dedicated RawUTF8 version of Trim()
+// - implemented using x86 asm, if possible
+// - this Trim() is seldom used, but this RawUTF8 specific version is needed
+// e.g. by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
+function Trim(const S: RawUTF8): RawUTF8;
+
 {$define OWNNORMTOUPPER} { NormToUpper[] exists only in our enhanced RTL }
 
 {$ifndef PUREPASCAL}
 {$ifndef LVCL} { don't define these functions twice }
-
-{$ifndef FPC}  { these asm function use some low-level system.pas calls }
-/// use our fast asm RawUTF8 version of Trim()
-function Trim(const S: RawUTF8): RawUTF8;
-{$endif FPC}
 
 /// use our fast asm version of CompareMem()
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
@@ -2768,6 +2769,7 @@ function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// copy source into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be defined e.g. as
 // array[byte] of AnsiChar on the caller stack)
@@ -2775,6 +2777,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overlo
   {$ifdef HASINLINE}inline;{$endif}
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - will use SSE4.2 instructions on supported CPUs - and potentiall read up
 // to 15 bytes beyond the string: use UpperCopy255BufPas() for a safer memory read
 // - returns final dest pointer
@@ -2783,6 +2786,7 @@ function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar; overlo
 var UpperCopy255Buf: function(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - this version is written in optimized pascal
 // - you should not have to call this function, but rely on UpperCopy255Buf()
 // - returns final dest pointer
@@ -2794,6 +2798,7 @@ function UpperCopy255BufPas(dest: PAnsiChar; source: PUTF8Char; sourceLen: integ
 {$ifndef DELPHI5OROLDER}
 
 /// copy source^ into a 256 chars dest^ buffer with 7 bits upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - this version will use SSE4.2 instructions on supported CPUs - and potentiall
 // read up to 15 bytes beyond the string
 // - you should not have to call this function, but rely on UpperCopy255Buf()
@@ -2806,18 +2811,21 @@ function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: int
 {$endif}
 
 /// copy source into dest^ with WinAnsi 8 bits upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
 function UpperCopyWin255(dest: PWinAnsiChar; const source: RawUTF8): PWinAnsiChar;
 
 /// copy WideChar source into dest^ with upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
 function UpperCopy255W(dest: PAnsiChar; const source: SynUnicode): PAnsiChar; overload;
 
 /// copy WideChar source into dest^ with upper case conversion
+// - used internally for short keys match or case-insensitive hash
 // - returns final dest pointer
 // - will copy up to 255 AnsiChar (expect the dest buffer to be array[byte] of
 // AnsiChar)
@@ -2969,17 +2977,7 @@ function FindIniNameValueW(P: PWideChar; UpperName: PUTF8Char): string;
 // - if Section equals '', find the Name= value before any [Section]
 function FindIniEntryW(const Content: string; const Section, Name: RawUTF8): string;
 
-{$ifdef FPC}
-/// our fast RawUTF8 version of Trim(), for FPC only
-function Trim(const S: RawUTF8): RawUTF8;
-{$endif FPC}
-
 {$ifdef PUREPASCAL}
-
-/// our fast RawUTF8 version of Trim(), for Unicode only compiler
-// - this Trim() is seldom used, but this RawUTF8 specific version is needed
-// by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
-function Trim(const S: RawUTF8): RawUTF8;
 
 {$ifndef UNICODE}
 /// our fast RawUTF8 version of Pos(), for Unicode only compiler
@@ -2987,6 +2985,8 @@ function Trim(const S: RawUTF8): RawUTF8;
 // by Delphi 2009+, to avoid two unnecessary conversions into UnicodeString
 function Pos(const substr, str: RawUTF8): Integer; overload; inline;
 {$endif UNICODE}
+
+{$else}
 
 {$endif PUREPASCAL}
 
@@ -18704,7 +18704,7 @@ end;
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 asm     // eax=P1 edx=P2 ecx=Length
         cmp   eax,edx
-        je    @0                // P1=P2 
+        je    @0                // P1=P2
         sub   ecx,8
         jl    @small
         push  ebx
@@ -19671,6 +19671,21 @@ var tmp: array[0..23] of AnsiChar;
 begin
   P := StrInt64(@tmp[23],Value);
   SetString(result,P,@tmp[23]-P);
+end;
+
+function Trim(const S: RawUTF8): RawUTF8;
+var I,L: Integer;
+begin
+  L := Length(S);
+  I := 1;
+  while (I<=L) and (S[I]<=' ') do inc(I);
+  if I>L then
+    result := '' else
+  if (I=1) and (S[L]>' ') then
+    result := S else begin
+    while S[L]<=' ' do dec(L);
+    result := Copy(S,I,L-I+1);
+  end;
 end;
 
 {$endif}
@@ -23410,42 +23425,8 @@ begin
 end;
 {$endif}
 
-{$ifdef FPC}
-function Trim(const S: RawUTF8): RawUTF8; inline;
-var I,L: Integer;
-begin
-  L := Length(S);
-  I := 1;
-  while (I<=L) and (S[I]<=' ') do inc(I);
-  if I>L then
-    result := '' else
-  if (I=1) and (S[L]>' ') then
-    result := S else begin
-    while S[L]<=' ' do dec(L);
-    result := Copy(S,I,L-I+1);
-  end;
-end;
-{$endif}
-
 {$IFDEF PUREPASCAL}
-{$IFDEF HASCODEPAGE}
-function Trim(const S: RawUTF8): RawUTF8;
-var I,L: Integer;
-begin
-  L := Length(S);
-  I := 1;
-  while (I<=L) and (S[I]<=' ') do inc(I);
-  if I>L then
-    result := '' else
-  if (I=1) and (S[L]>' ') then
-    result := S else begin
-    while S[L]<=' ' do dec(L);
-    result := Copy(S,I,L-I+1);
-  end;
-end;
-
-{$ELSE}
-
+{$IFNDEF HASCODEPAGE}
 function Pos(const substr, str: RawUTF8): Integer; overload;
 begin // the RawByteString version is fast enough
   Result := PosEx(substr,str,1);
