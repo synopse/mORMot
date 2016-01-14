@@ -4588,7 +4588,8 @@ procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 
-/// returns true for SUCCESS, CREATED, NOTMODIFIED or TEMPORARYREDIRECT codes
+/// returns true for SUCCESS (200), CREATED (201), NOCONTENT (204),
+// NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -14925,6 +14926,7 @@ type
     fHandleAuthentication: boolean;
     fBypassORMAuthentication: TSQLURIMethods;
     fAfterCreation: boolean;
+    fHtml200WithNoBodyReturns204: boolean;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
     fSQLAuthGroupClass: TSQLAuthGroupClass;
@@ -14945,7 +14947,7 @@ type
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
     fSessionAuthentication: TSQLRestServerAuthenticationDynArray;
-{$ifdef MSWINDOWS}
+    {$ifdef MSWINDOWS}
     /// thread initialized by ExportServerNamedPipe() to response to client through a pipe
     fExportServerNamedPipeThread: TSQLRestServerNamedPipe;
     /// internal server window handle, initialized by ExportServerMessage() method
@@ -14954,7 +14956,7 @@ type
     // - use "string" type, i.e. UnicodeString for Delphi 2009+, in order
     // to call directly the correct FindWindow?()=FindWindow Win32 API
     fServerWindowName: string;
-{$endif}
+    {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
     fPublishedMethodBatchIndex: integer;
@@ -15761,6 +15763,13 @@ type
     // reflects exactly the layout of the SQL request - first line contains the
     // field names, then all next lines are the field content
     property NoAJAXJSON: boolean read fNoAJAXJSON write SetNoAJAXJSON;
+    /// if any HTML_SUCCESS (200) with no returned body should return a
+    // HTML_NOCONTENT (204)
+    // - some REST/AJAX clients may expect to return status code 204 as
+    // instead of 200 in case of a successful operation, but with no returned
+    // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework)
+    property Html200WithNoBodyReturns204: boolean
+      read fHtml200WithNoBodyReturns204 write fHtml200WithNoBodyReturns204;
     /// set to true if the server will handle per-user authentication and
     // access right management
     // - i.e. if the associated TSQLModel contains TSQLAuthUser and
@@ -22120,7 +22129,8 @@ end;
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
   case Code of
-  HTML_SUCCESS,HTML_CREATED,HTML_NOTMODIFIED,HTML_TEMPORARYREDIRECT:
+  HTML_SUCCESS, HTML_NOCONTENT, HTML_CREATED,
+  HTML_NOTMODIFIED, HTML_TEMPORARYREDIRECT:
     result := true;
   else
     result := false;
@@ -33245,7 +33255,7 @@ end;
 
 function TSQLRestClientURI.EngineExecute(const SQL: RawUTF8): boolean;
 begin
-  result := URI(Model.Root,'POST',nil,nil,@SQL).Lo=HTML_SUCCESS;
+  result := URI(Model.Root,'POST',nil,nil,@SQL).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.URIGet(Table: TSQLRecordClass; ID: TID;
@@ -33259,7 +33269,7 @@ function TSQLRestClientURI.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
 begin
   if (self=nil) or not Model.UnLock(Table,aID) then
     result := false else // was not locked by the client
-    result := URI(Model.getURIID(Table,aID),'UNLOCK').Lo=HTML_SUCCESS;
+    result := URI(Model.getURIID(Table,aID),'UNLOCK').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.ExecuteList(const Tables: array of TSQLRecordClass;
@@ -33290,7 +33300,7 @@ var aResp: RawUTF8;
 begin
   if (Self=nil) or (Model=nil) then // avoid GPF
     result := false else
-    result := CallBackGet('CacheFlush',[],aResp,aTable,aID)=HTML_SUCCESS;
+    result := CallBackGet('CacheFlush',[],aResp,aTable,aID) in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.ServerTimeStampSynchronize: boolean;
@@ -33314,7 +33324,7 @@ end;
 function TSQLRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
 begin
   result := URI(Model.getURICallBack('RemoteLog',nil,0),
-    'PUT',nil,nil,@aText).Lo=HTML_SUCCESS;
+    'PUT',nil,nil,@aText).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 
@@ -33827,8 +33837,8 @@ begin
   if result then
     // fTransactionActiveSession flag was not already set
     if aTable=nil then
-      result := URI(Model.Root,'BEGIN').Lo=HTML_SUCCESS else
-      result := URI(Model.URI[aTable],'BEGIN').Lo=HTML_SUCCESS;
+      result := URI(Model.Root,'BEGIN').Lo in [HTML_SUCCESS,HTML_NOCONTENT] else
+      result := URI(Model.URI[aTable],'BEGIN').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.TransactionBeginRetry(aTable: TSQLRecordClass;
@@ -33901,7 +33911,7 @@ begin
   fLastErrorCode := ErrorCode;
   if E=nil then begin
     fLastErrorException := nil;
-    if ErrorCode=HTML_SUCCESS then
+    if StatusCodeIsSuccess(ErrorCode) then
       fLastErrorMessage := '' else
       StatusCodeToErrorMsg(ErrorCode,fLastErrorMessage);
   end else begin
@@ -34018,12 +34028,12 @@ DoRetry:
       InternalLog('% % returned "408 Request Timeout" -> RETRY',[method,url],sllError);
       goto DoRetry;
     end;
-    if not (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) then begin
+    if not StatusCodeIsSuccess(Call.OutStatus) then begin
       StatusCodeToErrorMsg(Call.OutStatus,StatusMsg);
       if Call.OutBody='' then
         fLastErrorMessage := StatusMsg else
         fLastErrorMessage := Call.OutBody;
-      InternalLog('% % returned % % with message  %',
+      InternalLog('% % returned % (%) with message  %',
         [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],sllError);
     end;
     if (Call.OutStatus<>HTML_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
@@ -34200,7 +34210,7 @@ function TSQLRestClientURI.EngineDelete(TableModelIndex: integer; ID: TID): bool
 var url: RawUTF8;
 begin
   url := Model.getURIID(Model.Tables[TableModelIndex],ID);
-  result := URI(url,'DELETE').Lo=HTML_SUCCESS;
+  result := URI(url,'DELETE').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineDeleteWhere(TableModelIndex: Integer;
@@ -34208,7 +34218,7 @@ function TSQLRestClientURI.EngineDeleteWhere(TableModelIndex: Integer;
 var url: RawUTF8;
 begin  // ModelRoot/TableName?where=WhereClause to delete members
   url := Model.getURI(Model.Tables[TableModelIndex])+'?where='+UrlEncode(SQLWhere);
-  result := URI(url,'DELETE').Lo=HTML_SUCCESS;
+  result := URI(url,'DELETE').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineList(const SQL: RawUTF8;
@@ -34249,7 +34259,7 @@ function TSQLRestClientURI.EngineUpdate(TableModelIndex: integer; ID: TID;
 var url: RawUTF8;
 begin
   url := Model.getURIID(Model.Tables[TableModelIndex],ID);
-  result := URI(url,'PUT',nil,nil,@SentData).Lo=HTML_SUCCESS;
+  result := URI(url,'PUT',nil,nil,@SentData).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
@@ -34261,7 +34271,7 @@ begin
     result := false else begin
     // PUT ModelRoot/TableName/TableID/BlobFieldName
     FormatUTF8('%/%/%',[Model.URI[Model.Tables[TableModelIndex]],aID,BlobField^.Name],url);
-    result := URI(url,'PUT',nil,@Head,@BlobData).Lo=HTML_SUCCESS;
+    result := URI(url,'PUT',nil,@Head,@BlobData).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
   end;
 end;
 
@@ -34275,7 +34285,7 @@ begin
     FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
       [Model.URI[Model.Tables[TableModelIndex]],
        SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)],url);
-    result := URI(url,'PUT').Lo=HTML_SUCCESS;
+    result := URI(url,'PUT').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
   end;
 end;
 
@@ -36693,7 +36703,7 @@ begin
     Call.OutStatus := HTML_SUCCESS; // 200 OK
   end;
   end;
-  if Call.OutStatus in [HTML_SUCCESS,HTML_CREATED] then
+  if StatusCodeIsSuccess(Call.OutStatus) then
     Server.fStats.NotifyORM(Method);
 end;
 
@@ -37042,8 +37052,7 @@ procedure TSQLRestServerURIContext.Returns(const Result: RawUTF8;
   Handle304NotModified,HandleErrorAsRegularResult: boolean);
 var clientHash, serverHash: RawUTF8;
 begin
-  if HandleErrorAsRegularResult or
-     (Status in [HTML_SUCCESS,HTML_CREATED]) then begin
+  if HandleErrorAsRegularResult or StatusCodeIsSuccess(Status) then begin
     Call.OutStatus := Status;
     Call.OutBody := Result;
     if CustomHeader<>'' then
@@ -37536,7 +37545,9 @@ begin
         if (len>=25) and (Call.OutHead[15]='!') and
            IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
           inc(fStats.fOutcomingFiles);
-      end;
+      end else // Call.OutBody=''
+        if (Call.OutStatus=HTML_SUCCESS) and Html200WithNoBodyReturns204 then
+          Call.OutStatus := HTML_NOCONTENT;
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
       if Call.OutBody='' then // if no custom error message, compute it now as JSON
@@ -44024,7 +44035,7 @@ begin
   try
     fCurrentResponse := #0; // mark expect some response
     Call.OutStatus := SendMessage(fServerWindow,WM_COPYDATA,fClientWindow,PtrInt(@Data));
-    if not (Call.OutStatus in [HTML_SUCCESS,HTML_CREATED]) then begin
+    if not StatusCodeIsSuccess(Call.OutStatus) then begin
       fCurrentResponse := '';
       with Call do
         InternalLog('% % status=%',[Method,Url,OutStatus],sllError);
@@ -53301,7 +53312,7 @@ begin
   end;
   // call remote server
   status := fClient.URI(uri,'POST',@resp,@head,@sent).Lo;
-  if status<>HTML_SUCCESS then begin
+  if not StatusCodeIsSuccess(status) then begin
     if aErrorMsg<>nil then begin
       if resp='' then begin
         StatusCodeToErrorMsg(status,resp);
