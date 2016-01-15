@@ -18311,17 +18311,11 @@ end;
 {$endif}
 {$endif CPU64}
 
-{$ifndef ENHANCEDRTL} { our Enhanced Runtime (or LVCL) library contain fast asm versions }
-
-{ code below was extracted from our Enhanced Runtime (or LVCL) library
-   and increases the framework performance
-  - not compiled with FPC, since does call some low-level system.pas functions  }
-
 {$ifndef PUREPASCAL} { these functions are implemented in asm }
-{$ifndef LVCL} { don't define these functions twice }
-{$ifndef FPC}  { these asm function use some low-level system.pas calls }
+{$ifndef LVCL}       { don't define these functions twice }
+{$ifndef FPC}        { these asm function use some low-level system.pas calls }
 
-{$define OWNI2S}
+{$define DEFINED_INT32TOUTF8}
 
 function Int32ToUTF8(Value : integer): RawUtf8; // 3x faster than SysUtils.IntToStr
 // from IntToStr32_JOH_IA32_6_a, adapted for Delphi 2009+
@@ -18759,7 +18753,6 @@ end;
 
 {$endif LVCL}
 {$endif PUREPASCAL}
-{$endif ENHANCEDRTL}
 
 {$ifdef PUREPASCAL} // from Aleksandr Sharahov's PosEx_Sha_Pas_2()
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
@@ -19655,7 +19648,7 @@ begin
 end;
 
 
-{$ifndef OWNI2S}
+{$ifndef DEFINED_INT32TOUTF8}
 
 function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
@@ -52360,4 +52353,4 @@ finalization
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
-end.
+end.
