@@ -15469,7 +15469,7 @@ begin
     Dest[j] := AnsiChar((c and $3f)+$80);
     c := c shr 6;
   end;
-  Dest^ := AnsiChar(ToByte(c) or UTF8_FIRSTBYTE[result]);
+  Dest^ := AnsiChar(Byte(c) or UTF8_FIRSTBYTE[result]);
 end;
 
 function UCS4ToUTF8(ucs4: cardinal; Dest: PUTF8Char): integer;
@@ -15491,7 +15491,7 @@ begin
     Dest[j] := AnsiChar((ucs4 and $3f)+$80);
     ucs4 := ucs4 shr 6;
   end;
-  Dest^ := AnsiChar(ToByte(ucs4) or UTF8_FIRSTBYTE[result]);
+  Dest^ := AnsiChar(Byte(ucs4) or UTF8_FIRSTBYTE[result]);
 end;
 
 procedure AnyAnsiToUTF8(const s: RawByteString; var result: RawUTF8);
@@ -16042,7 +16042,7 @@ begin
         Dest[j] := AnsiChar((c and $3f)+$80);
         c := c shr 6;
       end;
-      Dest^ := AnsiChar(ToByte(c) or UTF8_FIRSTBYTE[i]);
+      Dest^ := AnsiChar(Byte(c) or UTF8_FIRSTBYTE[i]);
       inc(Dest,i);
       if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
     until false;
@@ -52353,4 +52353,4 @@ finalization
   if GlobalCriticalSectionInitialized then
     DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
-end.
+end.

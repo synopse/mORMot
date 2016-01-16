@@ -7724,7 +7724,7 @@ var i: integer;
 begin // slowest but always accurate version
   result := not aCRC32;
   for i := 1 to inLen do begin
-    result := crc32tab[byte(result xor pByte(inBuf)^)] xor (result shr 8);
+    result := crc32tab[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
     inc(PByte(inBuf));
   end;
   result := not result;

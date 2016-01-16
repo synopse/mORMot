@@ -2,6 +2,7 @@ program mORMotVCLTest;
 
 uses
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
+  // SynFastWideString,    // no real performance impact
   Forms,
   mORMotVCLUnit in 'mORMotVCLUnit.pas' {Form1};
 

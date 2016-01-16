@@ -4725,26 +4725,6 @@ begin
   raise ESynZipException.CreateFmt('Error %d during zip/deflate process',[Code]);
 end;
 
-(*function UpdateCrc32(acrc32: cardinal; inBuf: pointer; inLen: integer) : cardinal;
-{  zlib crc32 : 46.63 ms  ict4zip updatecrc32 : 128.94 ms -> no comment ! }
-type b=pByte;
-var i: integer;
-begin
-  result := aCRC32;
-  for i := 0 to (inLen shr 3)-1 do begin
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf));
-  end;
-  for i := 0 to (inLen and 7)-1 do begin
-    result := crc32tab[byte(result xor b(inBuf)^)] xor (result shr 8); inc(b(inBuf)); end;
-end;*)
-
 function CompressString(const data: ZipString; failIfGrow: boolean = false;
   CompressionLevel: integer=6) : ZipString;
 var i1 : integer;

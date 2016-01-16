@@ -4,7 +4,7 @@ unit SynFastWideString;
 
 interface
 
-{
+(*
     This file is part of Synopse Framework.
 
     Synopse Framework. Copyright (C) 2015 Arnaud Bouchez
@@ -72,6 +72,13 @@ interface
 
    Then the patch will be applied at runtime. Nothing to recompile!
 
+    program MyProgram;
+
+    uses
+      {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
+      SynFastWideString,     // will use FastMM4 prior to Delphi 2009
+      ...
+
   NOTE:
 
    Since we add a trailing 0 byte at the end of the buffer, we need the
@@ -103,7 +110,7 @@ interface
     YOU HAVE BEEN WARNED - USE AT YOUR OWN RISK !   :)
    -----------------------------------------------
 
-}
+*)
 
 /// this low-level helper can be used to free a WideString returned by COM/OLE
 // - WideString instances created with this unit can be safely sent to any
@@ -141,8 +148,16 @@ procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
 implementation
 
 {$ifdef UNICODE}
-// since Delphi 2009, use string=UnicodeString type, which features CopyOnWrite
-// -> do not patch anything
+  // since Delphi 2009, use string=UnicodeString type, which features CopyOnWrite
+  // -> do not patch anything
+  {$define NOOVERRIDE}
+{$endif}
+{$ifdef FPC}
+  // our low-level Delphi Win32 specific hack won't work with FPC 
+  {$define NOOVERRIDE}
+{$endif}
+
+{$ifdef NOOVERRIDE}
 
 procedure WideStringFree(var TrueBSTRWideStringVariable: WideString);
 begin
@@ -239,6 +254,6 @@ initialization
   PatchAPI(_SysReAllocStringLen,@SysReAllocStringLen);
   PatchAPI(_SysFreeString,@SysFreeString);
 
-{$endif UNICODE}
+{$endif NOOVERRIDE}
 
 end.
