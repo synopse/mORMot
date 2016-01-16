@@ -14377,7 +14377,7 @@ type
   // constructor in mORMotHttpServer.pas, and also in dddInfraSettings.pas
   TSQLHttpServerDefinition = class(TSynPersistentWithPassword)
   protected
-    FBindPort: AnsiString;
+    FBindPort: RawByteString;
     FAuthentication: TSQLHttpServerRestAuthentication;
     FEnableCORS: boolean;
     FThreadCount: byte;
@@ -14386,7 +14386,7 @@ type
   published
     /// defines the port to be used for REST publishing
     // - may include an optional IP address to bind, e.g. '127.0.0.1:8888'
-    property BindPort: AnsiString read FBindPort write FBindPort;
+    property BindPort: RawByteString read FBindPort write FBindPort;
     /// which authentication is expected to be published
     property Authentication: TSQLHttpServerRestAuthentication
       read FAuthentication write FAuthentication;

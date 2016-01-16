@@ -1639,7 +1639,7 @@ function ShortStringToAnsi7String(const source: shortstring): RawByteString;
 // - enough place must be available in dest
 // - a WideChar(#0) is added at the end (if something is written)
 // - returns the BYTE count written in dest, excluding the ending WideChar(#0)
-function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; sourceBytes: PtrInt=0): PtrInt; overload;
+function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt=0): PtrInt; overload;
 
 /// convert an UTF-8 encoded text into a WideChar array
 // - faster than System.UTF8ToUnicode
@@ -1649,7 +1649,7 @@ function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; sourceBytes: PtrInt=
 // - a WideChar(#0) is added at the end (if something is written)
 // - returns the BYTE COUNT (not WideChar count) written in dest, excluding the
 // ending WideChar(#0)
-function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; MaxDestChars, sourceBytes: PtrInt): PtrInt; overload;
+function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; MaxDestChars, sourceBytes: PtrInt): PtrInt; overload;
 
 /// calculate the UTF-16 Unicode characters count, UTF-8 encoded in source^
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
@@ -2728,7 +2728,7 @@ function IdemPCharU(p, up: PUTF8Char): boolean;
 /// returns true if the beginning of p^ is same as up^
 // - ignore case - up^ must be already Upper
 // - this version expects p^ to point to an Unicode char array
-function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
+function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 
 /// returns true if the file name extension contained in p^ is the same same as extup^
 // - ignore case - extup^ must be already Upper
@@ -14519,7 +14519,7 @@ begin
   if (SourceChars>0) and (ord(Source^)<128) then
   repeat
     dec(SourceChars);
-    Dest^ := WideChar(ord(Source^));
+    PWord(Dest)^ := ord(Source^); // much faster than dest^ := WideChar(c) for FPC
     inc(Source);
     inc(Dest);
   until (SourceChars=0) or (ord(Source^)>=128);
@@ -14789,7 +14789,7 @@ begin
       dec(SourceChars,2);
       inc(Source,2);
       c := c shr 8 or c;
-      pWord(Dest)^ := c;
+      PWord(Dest)^ := c; 
       inc(Dest,2);
     until SourceChars<2;
   if (SourceChars>0) and (ord(Source^)<128) then
@@ -14954,16 +14954,17 @@ function TSynAnsiFixedWidth.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal): PWideChar;
 var i: Integer;
 begin
+  // PWord*(Dest)[] is much faster than dest^ := WideChar(c) for FPC
   for i := 1 to SourceChars shr 2 do begin
-    Dest[0] := WideChar(fAnsiToWide[Ord(Source[0])]);
-    Dest[1] := WideChar(fAnsiToWide[Ord(Source[1])]);
-    Dest[2] := WideChar(fAnsiToWide[Ord(Source[2])]);
-    Dest[3] := WideChar(fAnsiToWide[Ord(Source[3])]);
+    PWordArray(Dest)[0] := fAnsiToWide[Ord(Source[0])];
+    PWordArray(Dest)[1] := fAnsiToWide[Ord(Source[1])];
+    PWordArray(Dest)[2] := fAnsiToWide[Ord(Source[2])];
+    PWordArray(Dest)[3] := fAnsiToWide[Ord(Source[3])];
     inc(Source,4);
     inc(Dest,4);
   end;
   for i := 1 to SourceChars and 3 do begin
-    Dest^ := WideChar(fAnsiToWide[Ord(Source^)]);
+    PWord(Dest)^ := fAnsiToWide[Ord(Source^)];
     inc(Dest);
     inc(Source);
   end;
@@ -15212,7 +15213,7 @@ begin
     dec(SourceChars,2);
     inc(Source,2);
     c := c shr 8 or c;
-    pWord(Dest)^ := c;
+    PWord(Dest)^ := c;
     inc(Dest,2);
   until SourceChars<2;
   // use internal lookup tables for fast process of remaining chars
@@ -15707,7 +15708,7 @@ end;
 function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; MaxDestChars, sourceBytes: PtrInt): PtrInt;
 // faster than System.Utf8ToUnicode()
 var c: cardinal;
-    begd: pWideChar;
+    begd: PWideChar;
     endSource: PUTF8Char;
     endDest: PWideChar;
     i,extra: integer;
@@ -15730,7 +15731,7 @@ begin
     c := byte(source^);
     inc(source);
     if c and $80=0 then begin
-      dest^ := WideChar(c);
+      PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
       inc(dest);
       if (source<endsource) and (dest<endDest) then
         continue else
@@ -15750,15 +15751,15 @@ begin
         break; // invalid input content
     end;
     if c<=$ffff then begin
-      dest^ := WideChar(c);
+      PWord(dest)^ := c;
       inc(dest);
       if (source<endsource) and (dest<endDest) then
         continue else
         break;
     end;
     dec(c,$10000); // store as UTF-16 surrogates
-    dest[0] := WideChar(c shr 10  +UTF16_HISURROGATE_MIN);
-    dest[1] := WideChar(c and $3FF+UTF16_LOSURROGATE_MIN);
+    PWordArray(dest)[0] := c shr 10  +UTF16_HISURROGATE_MIN;
+    PWordArray(dest)[1] := c and $3FF+UTF16_LOSURROGATE_MIN;
     inc(dest,2);
     if (source>=endsource) or (dest>=endDest) then
       break;
@@ -15769,10 +15770,10 @@ NoSource:
   dest^ := #0; // always append a WideChar(0) to the end of the buffer
 end;
 
-function UTF8ToWideChar(dest: pWideChar; source: PUTF8Char; sourceBytes: PtrInt=0): PtrInt;
+function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt=0): PtrInt;
 // faster than System.UTF8Decode()
 var c: cardinal;
-    begd: pWideChar;
+    begd: PWideChar;
     endSource: PUTF8Char;
     i,extra: integer;
 label Quit, NoSource;
@@ -15788,58 +15789,54 @@ begin
     sourceBytes := StrLen(source);
   end;
   begd := dest;
-  // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
-  endSource := source+sourceBytes-4;
-  if source<=endSource then
+  endSource := Source+SourceBytes;
   repeat
-    c := pCardinal(source)^;
-    if c and $80808080<>0 then
-      break; // break on first non ASCII quad
-    inc(source,4);
-    pCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
-    c := c shr 16;
-    pCardinal(dest+2)^ := (c shl 8 or c) and $00ff00ff;
-    inc(dest,4);
-  until source>endSource;
-  // generic loop, handling one UTF-8 code per iteration
-  inc(endSource,4);
-  if source<endSource then
-  repeat
-    c := byte(source^);
-    inc(source);
-    if c and $80=0 then begin
-      dest^ := WideChar(c);
-      inc(dest);
-      if source<endsource then
-        continue else
-        break;
-    end;
-    extra := UTF8_EXTRABYTES[c];
-    if (extra=0) or (Source+extra>endSource) then break;
-    for i := 1 to extra do begin
-      if byte(Source^) and $c0<>$80 then
-        goto Quit; // invalid input content
-      c := c shl 6+byte(Source^);
+    if (PCardinal(Source)^ and $80808080=0) and (Source+4<endSource) then begin
+      // handle 7 bit ASCII chars, by quad (Sha optimization)
+      c := PCardinal(Source)^;
+      inc(Source,4);
+      PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+      c := c shr 16;
+      PCardinal(dest+2)^ := (c shl 8 or c) and $00ff00ff;
+      inc(dest,4);
+    end else begin
+      // single char or variable length decoding
+      c := byte(Source^);
       inc(Source);
-    end;
-    with UTF8_EXTRA[extra] do begin
-      dec(c,offset);
-      if c<minimum then
-        break; // invalid input content
-    end;
-    if c<=$ffff then begin
-      dest^ := WideChar(c);
-      inc(dest);
-      if source<endsource then
-        continue else
+      if c and $80=0 then begin
+        PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
+        inc(dest);
+        if Source<endsource then
+          continue else
+          break;
+      end;
+      extra := UTF8_EXTRABYTES[c];
+      if (extra=0) or (Source+extra>endSource) then break;
+      for i := 1 to extra do begin
+        if byte(Source^) and $c0<>$80 then
+          goto Quit; // invalid input content
+        c := c shl 6+byte(Source^);
+        inc(Source);
+      end;
+      with UTF8_EXTRA[extra] do begin
+        dec(c,offset);
+        if c<minimum then
+          break; // invalid input content
+      end;
+      if c<=$ffff then begin
+        PWord(dest)^ := c;
+        inc(dest);
+        if Source<endsource then
+          continue else
+          break;
+      end;
+      dec(c,$10000); // store as UTF-16 surrogates
+      PWordArray(dest)[0] := c shr 10  +UTF16_HISURROGATE_MIN;
+      PWordArray(dest)[1] := c and $3FF+UTF16_LOSURROGATE_MIN;
+      inc(dest,2);
+      if Source>=endsource then
         break;
     end;
-    dec(c,$10000); // store as UTF-16 surrogates
-    dest[0] := WideChar(c shr 10  +UTF16_HISURROGATE_MIN);
-    dest[1] := WideChar(c and $3FF+UTF16_LOSURROGATE_MIN);
-    inc(dest,2);
-    if source>=endsource then
-      break;
   until false;
 Quit:
   result := PtrUInt(dest)-PtrUInt(begd); // dest-begd return char length
@@ -16003,7 +16000,7 @@ begin
           break; // break on first non ASCII pair
         inc(Source,2);
         c := c shr 8 or c;
-        pWord(Dest)^ := c;
+        PWord(Dest)^ := c;
         inc(Dest,2);
       until (Source>Tail) or (PtrInt(Dest)>=DestLen);
     // generic loop, handling one UCS4 char per iteration
@@ -20167,7 +20164,7 @@ begin
       inc(Str1);
       inc(Str2);
     until Str1^<>Str2^;
-    result := pWord(Str1)^-pWord(Str2)^;
+    result := PWord(Str1)^-PWord(Str2)^;
     exit;
   end else
   result := 1 else  // Str2=''
@@ -22573,7 +22570,7 @@ end;
 
 {$ifdef USENORMTOUPPER}
 {$ifdef PUREPASCAL}
-function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
+function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 begin
   result := false;
@@ -22588,7 +22585,7 @@ begin
   result := true;
 end;
 {$else}
-function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
+function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
@@ -22626,7 +22623,7 @@ asm
 end;
 {$endif}
 {$else}
-function IdemPCharW(p: pWideChar; up: PUTF8Char): boolean;
+function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 begin
   result := false;
@@ -27398,13 +27395,13 @@ begin
     P^ := '-';
     inc(P);
   end;
-  pWord(P)^ := TwoDigitLookupW[M];
+  PWord(P)^ := TwoDigitLookupW[M];
   inc(P,2);
   if Expanded then begin
     P^ := '-';
     inc(P);
   end;
-  pWord(P)^ := TwoDigitLookupW[D];
+  PWord(P)^ := TwoDigitLookupW[D];
 end;
 
 procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S: cardinal;
@@ -27415,19 +27412,19 @@ begin
     P^ := FirstChar;
     inc(P);
   end;
-  pWord(P)^ := TwoDigitLookupW[H];
+  PWord(P)^ := TwoDigitLookupW[H];
   inc(P,2);
   if Expanded then begin
     P^ := ':';
     inc(P);
   end;
-  pWord(P)^ := TwoDigitLookupW[M];
+  PWord(P)^ := TwoDigitLookupW[M];
   inc(P,2);
   if Expanded then begin
     P^ := ':';
     inc(P);
   end;
-  pWord(P)^ := TwoDigitLookupW[S];
+  PWord(P)^ := TwoDigitLookupW[S];
 end;
 
 procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean); overload;
@@ -28889,7 +28886,7 @@ begin
         if (DelphiName^[0]<=#10) or
          (pInteger(@DelphiName^[5])^ and $DFDFDFDF<> // fast case-insensitive compare
            ord('R')+ord('E')shl 8+ord('C')shl 16+ord('O')shl 24) or
-         (pWord(@DelphiName^[9])^ and $DFDF<>ord('R')+ord('D')shl 8) then
+         (PWord(@DelphiName^[9])^ and $DFDF<>ord('R')+ord('D')shl 8) then
         TrimLeft := 4 else
         TrimLeft := 10;
       ord('T')+ord('S')shl 8+ord('Y')shl 16+ord('N')shl 24:
@@ -40454,7 +40451,7 @@ procedure TTextWriter.AddCR;
 begin
   if BEnd-B<=1 then
     FlushToStream;
-  pWord(B+1)^ := 13+10 shl 8; // CR + LF
+  PWord(B+1)^ := 13+10 shl 8; // CR + LF
   inc(B,2);
 end;
 
@@ -40464,7 +40461,7 @@ begin
   if BEnd-B<=1 then
     FlushToStream;
   if fEndOfLineCRLF then begin
-    pWord(B+1)^ := 13+10 shl 8; // CR + LF
+    PWord(B+1)^ := 13+10 shl 8; // CR + LF
     inc(B,2);
   end else begin
     B[1] := #13; // CR
@@ -40492,7 +40489,7 @@ begin
     exit; // avoid buffer overflow
   if BEnd-B<=Integer(ntabs)+1 then
     FlushToStream;
-  pWord(B+1)^ := 13+10 shl 8; // CR + LF
+  PWord(B+1)^ := 13+10 shl 8; // CR + LF
   FillcharFast(B[3],ntabs,9); // indentation using tabs
   inc(B,ntabs+2);
 end;
@@ -41362,7 +41359,7 @@ begin
   inc(B);
   MoveFast(Text[1],B[0],ord(Text[0]));
   inc(B,ord(Text[0]));
-  pWord(B)^ := 13+10 shl 8; // CR + LF
+  PWord(B)^ := 13+10 shl 8; // CR + LF
   inc(B);
 end;
 
@@ -47081,7 +47078,7 @@ begin
     if byOne<>0 then begin
       case byOne of
       1: begin V^ := #1; inc(V); end; // B:1..253 = difference with previous
-      2: begin pWord(V)^ := $0101; inc(V,2); end; // B:1..253 = difference
+      2: begin PWord(V)^ := $0101; inc(V,2); end; // B:1..253 = difference
       else
       if byOne>255 then begin
         while byOne>65535 do begin
@@ -47090,7 +47087,7 @@ begin
         end;
         pInteger(V)^ := byOne shl 8+$fe; inc(V,3); // B:254 W:byOne
       end else begin
-        pWord(V)^ := byOne shl 8+$ff; inc(V,2); // B:255 B:byOne
+        PWord(V)^ := byOne shl 8+$ff; inc(V,2); // B:255 B:byOne
       end;
       end; // case byOne of
       if pCount=0 then break;
@@ -47592,12 +47589,12 @@ begin
   repeat
     case p^ of
       #0: begin // B:0 W:difference with previous
-        inc(i,pWord(p+1)^); inc(p,3);
+        inc(i,PWord(p+1)^); inc(p,3);
         V^ := i; inc(V);
         if PtrUInt(p)<PtrUInt(pEnd) then continue else break;
       end;
       #254: begin // B:254 W:byOne
-        for n := 1 to pWord(p+1)^ do begin
+        for n := 1 to PWord(p+1)^ do begin
           inc(i);
           V^ := i; inc(V);
         end;
