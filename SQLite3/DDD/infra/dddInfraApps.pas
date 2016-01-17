@@ -185,15 +185,19 @@ type
   TDDDRestHttpDaemon = class(TDDDRestDaemon)
   protected
     fHttpServer: TSQLHttpServer;
+    fServicesLogRest: TSQLRest;
     // initialize HTTP Server into fHttpServer
     // (fRest should have been set by the overriden method)
     procedure InternalStart; override;
-    // finalize HTTP Server
+    // finalize HTTP Server and SOA log database
     procedure InternalStop; override;
   public
     /// reference to the main HTTP server publishing this daemon Services
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
+    /// reference to the associated REST server storing the SOA log database
+    // - may be nil if the daemon did not implement 
+    property ServicesLogRest: TSQLRest read fServicesLogRest;
   end;
 
 
@@ -837,6 +841,7 @@ procedure TDDDRestHttpDaemon.InternalStop;
 begin
   try
     FreeAndNil(fHttpServer);
+    FreeAndNil(fServicesLogRest);
   finally
     inherited InternalStop; // FreeAndNil(fRest)
   end;

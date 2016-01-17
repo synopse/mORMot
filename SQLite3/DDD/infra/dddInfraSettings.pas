@@ -177,7 +177,7 @@ type
     procedure SetProperties(Instance: TObject); virtual;
   public
     /// initialize the settings, with a corresponding storage process
-    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;
+    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;  
     /// persist if needed, and finalize the settings
     destructor Destroy; override;
     /// to be called when the application starts, to initialize settings
@@ -387,15 +387,6 @@ type
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
   end;
 
-  /// parent class for storing a HTTP published service/daemon settings
-  TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
-  private
-    fHttp: TSQLHttpServerDefinition;
-  published
-    /// how the HTTP server should be defined 
-    property Http: TSQLHttpServerDefinition read fHttp;
-  end;
-
   /// a Factory event allowing to customize/mock a socket connection
   // - the supplied aOwner should be a TDDDSocketThread instance
   // - returns a IDDDSocket interface instance (e.g. a TDDDSynCrtSocket)
@@ -455,6 +446,22 @@ type
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aMainRestWithServices: TSQLRestServer;
       const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
+  end;
+
+  /// parent class for storing a HTTP published service/daemon settings
+  TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
+  private
+    fRest: TDDDRestSettings;
+    fHttp: TSQLHttpServerDefinition;
+    fServicesLog: TDDDServicesLogRestSettings;
+  published
+    /// how the main REST server is implemented
+    // - most probably using a TSQLRestServerDB, i.e. local SQLite3 storage
+    property Rest: TDDDRestSettings read fRest;
+    /// how the HTTP server should be defined
+    property Http: TSQLHttpServerDefinition read fHttp;
+    /// how the SOA calls would be logged into their own SQlite3 database
+    property ServicesLog: TDDDServicesLogRestSettings read fServicesLog;
   end;
 
   /// storage class for a remote MongoDB server direct access settings
