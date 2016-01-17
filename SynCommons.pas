@@ -50693,6 +50693,7 @@ procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
+    tmp: array[0..4095] of AnsiChar;
 begin
   if PLen=0 then
     exit;
@@ -50705,13 +50706,19 @@ begin
     PCardinal(R+5)^ := crc;
     MoveFast(P^,R[9],PLen);
   end else begin
-    SetString(result,nil,SynLZcompressdestlen(PLen)+9);
-    R := pointer(result);
+    len := SynLZcompressdestlen(PLen)+9;
+    if len>sizeof(tmp) then begin
+      SetString(result,nil,len);
+      R := pointer(result);
+    end else
+      R := @tmp;
     PCardinal(R)^ := crc;
     R[4] := SYNLZCOMPRESS_SYNLZ;
     len := SynLZcompress1(P,PLen,R+9);
     PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
-    SetLength(result,len+9);
+    if R=@tmp then
+      SetString(result,tmp,len+9) else
+      SetLength(result,len+9);
   end;
 end;
 
