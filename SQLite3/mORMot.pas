@@ -4315,6 +4315,10 @@ type
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
+    /// could be used as a short-cut to Safe.Lock
+    procedure Lock; {$ifdef HASINLINE}inline;{$endif}
+    /// could be used as a short-cut to Safe.UnLock
+    procedure Unlock; {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// abstract TInterfacedObject class, which will instantiate all its nested
@@ -4417,6 +4421,8 @@ type
     // - global or key-specific purge would be performed, if needed
     // - on success (true), output cache instance would be locked
     function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache): boolean; virtual;
+    /// you may call this method regularly to force a purge
+    procedure TryPurge;
     /// access to the associated logging instance
     procedure Log(const TextFmt: RawUTF8; const TextArgs: array of const;
       Level: TSynLogInfo = sllNone);
@@ -52181,6 +52187,45 @@ end;
 
 {$ifndef NOVARIANTS}
 
+procedure TServiceMethodArgument.AsVariant(var DestValue: variant; V: pointer;
+  Options: TDocVariantOptions);
+var tmp: RawUTF8;
+begin
+  case ValueType of // some direct conversion of simple types
+  smvBoolean:
+    DestValue := PBoolean(V)^;
+  smvEnum..smvInt64:
+  case SizeInStorage of
+    1: DestValue := PByte(V)^;
+    2: DestValue := PWord(V)^;
+    4: if ValueType=smvInteger then
+         DestValue := PInteger(V)^ else
+         DestValue := PCardinal(V)^;
+    8: DestValue := PInt64(V)^;
+  end;
+  smvDouble, smvDateTime:
+    DestValue := PDouble(V)^;
+  smvCurrency:
+    DestValue := PCurrency(V)^;
+  smvRawUTF8:
+    RawUTF8ToVariant(PRawUTF8(V)^,DestValue);
+  smvString: begin
+    StringToUTF8(PString(V)^,tmp);
+    RawUTF8ToVariant(tmp,DestValue);
+  end;
+  smvWideString: begin
+    RawUnicodeToUtf8(PPointer(V)^,length(PWideString(V)^),tmp);
+    RawUTF8ToVariant(tmp,DestValue);
+  end;
+  smvVariant:
+    DestValue := PVariant(V)^;
+  else begin // use generic AddJSON() method
+    AsJson(tmp,V);
+    VariantLoadJSON(DestValue,pointer(tmp),nil,@Options);
+  end;
+  end;
+end;
+
 procedure TServiceMethodArgument.FixValueAndAddToObject(const Value: variant;
   var DestDoc: TDocVariantData);
 var tempCopy: variant;
@@ -52402,6 +52447,18 @@ begin
   fSafe.Done;
 end;
 
+procedure TSynAutoCreateFieldsLocked.Lock;
+begin
+  if self<>nil then
+    fSafe.Lock;
+end;
+
+procedure TSynAutoCreateFieldsLocked.UnLock;
+begin
+  if self<>nil then
+    fSafe.UnLock;
+end;
+
 
 { TInterfacedObjectAutoCreateFields }
 
@@ -52545,6 +52602,17 @@ begin
   result := true;
 end;
 
+procedure TRawUTF8ObjectCacheList.TryPurge;
+begin
+  fSafe.Lock;
+  try
+    if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
+      DoPurge;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 procedure TRawUTF8ObjectCacheList.DoPurge;
 var
   tix: Int64;
@@ -52588,7 +52656,7 @@ begin
   fSafe.Lock;
   try
     if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
-      DoPurge;
+      DoPurge;  // inline TryPurge within the locked instance
     cache := TRawUTF8ObjectCache(GetObjectByName(Key));
     if cache = nil then begin
       if not IsKeyCorrect(Key) then begin
