@@ -163,7 +163,7 @@ type
 
   /// abstract class to implement a IAdministratedDaemon service via a TSQLRestServer
   // - as hosted by TDDDDaemon service/daemon application
-  TDDDRestDaemon = class(TDDDAdministratedRestDaemon)
+  TDDDRestDaemon = class(TDDDAdministratedRestDaemon, IAdministratedDaemon)
   protected
     fPreviousMonitorTix: Int64;
     function Settings: TDDDAdministratedDaemonHttpSettings;
@@ -174,6 +174,10 @@ type
     function InternalRetrieveState(var Status: variant): boolean; override;
     procedure InternalLogMonitoring; virtual;
   public
+    /// initialize the instance
+    constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
@@ -207,7 +211,7 @@ type
   /// exception raised by TDDDRestClientSettings classes
   EDDDRestClient = class(EDDDException);
 
-  /// advanced parameters for TDDDRestClientSettings definition 
+  /// advanced parameters for TDDDRestClientSettings definition
   TDDDRestClient = class(TSynPersistentWithPassword)
   protected
     fRoot: RawUTF8;
@@ -230,8 +234,8 @@ type
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
-    procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword:
-      RawUTF8; const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost');
+    procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword: RawUTF8;
+      const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost');
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -240,13 +244,12 @@ type
     // URI, which will be overriden with this TDDDRestSettings.Root property
     // - will also set the TSQLRest.LogFamily.Level from LogLevels value,
     function NewRestClientInstance(aRootSettings: TDDDAppSettingsAbstract;
-      aModel: TSQLModel=nil;
-      aOptions: TDDDNewRestInstanceOptions=[riOwnModel,riCreateVoidModelIfNone,
-        riHandleAuthentication,riRaiseExceptionIfNoRest]): TSQLRestClientURI;
+      aModel: TSQLModel = nil; aOptions: TDDDNewRestInstanceOptions = [riOwnModel,
+      riCreateVoidModelIfNone, riHandleAuthentication, riRaiseExceptionIfNoRest]): TSQLRestClientURI; virtual;
     /// you may assign this method to a TSQLRestClientURI.OnAuthentificationFailed
     // property, so that the client would automatically try to re-connect
-    function OnAuthentificationFailed(Retry: integer; var aUserName, aPassword:
-      string; out aPasswordHashed: boolean): boolean;
+    function OnAuthentificationFailed(Retry: integer; var aUserName, aPassword: string;
+      out aPasswordHashed: boolean): boolean;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
@@ -260,7 +263,14 @@ type
 
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
 function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
-   Model: TSQLModel=nil): TSQLHttpClientWebsockets;
+   Model: TSQLModel = nil): TSQLHttpClientWebsockets;
+
+{
+/// create a client safe asynchronous connection to a IAdministratedDaemon service
+// via a IAdministratedDaemonProxy service
+function AdministratedDaemonClientFromProxy(Definition: TDDDRestClientSettings;
+  const ProxyIPPort: RawUTF8; Model: TSQLModel = nil): IAdministratedDaemon;
+}
 
 /// create a WebSockets server instance, publishing a IAdministratedDaemon service
 function AdministratedDaemonServer(Settings: TDDDAdministratedDaemonSettings;
@@ -317,17 +327,17 @@ type
   // - used e.g. by TDDDSocketThread for its default network communication
   // - this class will also create two mutexes, one for DataIn/DataInPending,
   // another for DataOut thread-safe process
-  TDDDSynCrtSocket = class(TInterfacedObjectLocked,IDDDSocket)
+  TDDDSynCrtSocket = class(TInterfacedObjectLocked, IDDDSocket)
   protected
     fSocket: TCrtSocket;
     fOwner: TThread;
-    fHost,fPort: SockString;
+    fHost, fPort: SockString;
     fInternalBufferSize: integer;
     fOutput: TSynLocker; // input lock is TInterfacedObjectLocked.Safe
   public
     /// initialize the internal TCrtSocket instance
-    constructor Create(aOwner: TThread; const aHost,aPort: SockString;
-      aSocketTimeout,aInternalBufferSize: integer); reintroduce; virtual;
+    constructor Create(aOwner: TThread; const aHost, aPort: SockString;
+      aSocketTimeout, aInternalBufferSize: integer); reintroduce; virtual;
     /// finalize the internal TCrtSocket instance
     destructor Destroy; override;
     /// call TCrtSocket.OpenBind
@@ -352,22 +362,15 @@ type
   end;
 
   /// defines the potential mocked actions for TDDDMockedSocket.MockException()
-  TDDDMockedSocketException = (
-    msaConnectRaiseException,
-    msaDataInPendingTimeout,
-    msaDataInPendingFails,
-    msaDataInRaiseException,
-    msaDataOutRaiseException,
+  TDDDMockedSocketException = (msaConnectRaiseException, msaDataInPendingTimeout,
+    msaDataInPendingFails, msaDataInRaiseException, msaDataOutRaiseException,
     msaDataOutReturnsFalse);
 
   /// defines a set of mocked actions for TDDDMockedSocket.MockException()
   TDDDMockedSocketExceptions = set of TDDDMockedSocketException;
 
   /// defines the potential mocked actions for TDDDMockedSocket.MockLatency()
-  TDDDMockedSocketLatency = (
-    mslConnect,
-    mslDataIn,
-    mslDataOut);
+  TDDDMockedSocketLatency = (mslConnect, mslDataIn, mslDataOut);
 
   /// defines a set of mocked actions for TDDDMockedSocket.MockLatency()
   TDDDMockedSocketLatencies = set of TDDDMockedSocketLatency;
@@ -380,14 +383,14 @@ type
   // - you could fake input/output of TCP/IP packets by calling MockDataIn() and
   // MockDataOut() methods - incoming and outgoing packets would be merged in
   // the internal in-memory buffers, as with a regular Socket
-  // - you could fake exception, for any upcoming method call, via MockException() 
+  // - you could fake exception, for any upcoming method call, via MockException()
   // - you could emulate network latency, for any upcoming method call, via
-  // MockLatency() - to emulate remote/wireless access, or thread pool contention 
+  // MockLatency() - to emulate remote/wireless access, or thread pool contention
   // - this implementation is thread-safe, so multiple threads could access
   // the same IDDDSocket instance, and settings be changed in real time
-  TDDDMockedSocket = class(TInterfacedObjectLocked,IDDDSocket)
+  TDDDMockedSocket = class(TInterfacedObjectLocked, IDDDSocket)
   protected
-    fInput,fOutput: RawByteString;
+    fInput, fOutput: RawByteString;
     fExceptionActions: TDDDMockedSocketExceptions;
     fExceptionMessage: string;
     fExceptionClass: ExceptClass;
@@ -399,7 +402,7 @@ type
     procedure CheckLatency(Action: TDDDMockedSocketLatency);
     procedure CheckRaiseException(Action: TDDDMockedSocketException);
   public
-    /// initialize the mocked socket instance 
+    /// initialize the mocked socket instance
     constructor Create(aOwner: TThread); reintroduce; virtual; 
     /// add some bytes to the internal fake input storage
     // - would be made accessible to the DataInPending/DataIn methods
@@ -408,7 +411,7 @@ type
     procedure MockDataIn(const Content: RawByteString);
     /// return the bytes from the internal fake output storage
     // - as has be previously set by the DataOut() method
-    // - will gather all data from several DataOut() calls in a single buffer 
+    // - will gather all data from several DataOut() calls in a single buffer
     function MockDataOut: RawByteString;
     /// the specified methods would raise an exception
     // - only a single registration is memorized: once raised, any further
@@ -426,12 +429,11 @@ type
     // - you could reset any previous registered exception by calling
     // ! MockException([]);
     procedure MockException(NextActions: TDDDMockedSocketExceptions;
-      const ExceptionMessage: string=''; ExceptionClass: ExceptClass=nil);
+      const ExceptionMessage: string = ''; ExceptionClass: ExceptClass = nil);
     /// will let the specified methods to wait for a given number of milliseconds
     // - allow to emulate network latency, on purpose
     // - you may use ALL_DDDMOCKED_LATENCIES to slow down all possible actions
-    procedure MockLatency(NextActions: TDDDMockedSocketLatencies;
-      MilliSeconds: integer);
+    procedure MockLatency(NextActions: TDDDMockedSocketLatencies; MilliSeconds: integer);
   public 
     /// IDDDSocket method to connect to the host via the mocked socket
     // - won't raise any exception unless ConnectShouldCheckRaiseException is set
@@ -488,8 +490,8 @@ type
     procedure ExecuteDisconnect;
     procedure ExecuteDisconnectAfterError;
     procedure ExecuteSocket;
-    function TrySend(const aFrame: RawByteString;
-      ImmediateDisconnectAfterError: boolean=true): Boolean; virtual;
+    function TrySend(const aFrame: RawByteString; ImmediateDisconnectAfterError:
+      boolean = true): Boolean; virtual;
     // inherited classes could override those methods for process customization
     procedure InternalExecuteConnected; virtual;
     procedure InternalExecuteDisconnect; virtual;
@@ -515,38 +517,47 @@ type
     property Port: SockString read fPort;
   end;
 
-
 const
   /// map realistic exceptions steps for a mocked socket
   // - could be used to simulate a global socket connection drop
-  ALL_DDDMOCKED_EXCEPTIONS =
-    [msaConnectRaiseException,msaDataInPendingFails,
-     msaDataInRaiseException,msaDataOutReturnsFalse];
+  ALL_DDDMOCKED_EXCEPTIONS =[msaConnectRaiseException, msaDataInPendingFails,
+    msaDataInRaiseException, msaDataOutReturnsFalse];
 
   /// map realistic latencies steps for a mocked socket
   // - could be used to simulate a slow network
-  ALL_DDDMOCKED_LATENCIES =
-    [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
-
+  ALL_DDDMOCKED_LATENCIES =[Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
 
 var
   /// you could set a text to this global variable at runtime, so that
   // it would be displayed as copyright older name for the console
   GlobalCopyright: string = '';
-  
+
+function ToText(st: TDDDSocketThreadState): PShortString; overload;
+function ToText(exc: TDDDMockedSocketException): PShortString; overload;
+
 
 implementation
 
-
 { ----- Implements Service/Daemon Applications }
+
+function ToText(st: TDDDSocketThreadState): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDDDSocketThreadState),ord(st));
+end;
+
+function ToText(exc: TDDDMockedSocketException): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDDDMockedSocketException),ord(exc));
+end;
+
 
 { TDDDDaemon }
 
 constructor TDDDDaemon.Create(aSettings: TDDDAdministratedDaemonSettings);
 begin
   inherited Create;
-  if aSettings=nil then
-    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)',[self]);
+  if aSettings = nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(settings=nil)', [self]);
   fSettings := aSettings;
   fSettingsRef := aSettings;
 end;
@@ -597,182 +608,201 @@ begin
 end;
 
 type
-  TExecuteCommandLineCmd = (
-    cNone,cInstall,cUninstall,cStart,cStop,cState,cVersion,cVerbose,
-    cHelp,cConsole,cDaemon);
+  TExecuteCommandLineCmd = (cNone, cInstall, cUninstall, cStart, cStop, cState,
+    cVersion, cVerbose, cHelp, cConsole, cDaemon);
 
 procedure TDDDDaemon.ExecuteCommandLine;
-var name,param: RawUTF8;
-    cmd: TExecuteCommandLineCmd;
-    daemon: TDDDAdministratedDaemon;
+var
+  name, param: RawUTF8;
+  cmd: TExecuteCommandLineCmd;
+  daemon: TDDDAdministratedDaemon;
     {$ifdef MSWINDOWS}
-    service: TServiceSingle;
-    ctrl: TServiceController;
-    depend: string;
-    i: integer;
+  service: TServiceSingle;
+  ctrl: TServiceController;
+  depend: string;
+  i: integer;
     {$endif}
 {$I-} // no IO error for writeln() below
 
   function cmdText: RawUTF8;
   begin
-    result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd),cmd);
+    result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), cmd);
   end;
+
   procedure Show(Success: Boolean);
-  var msg: RawUTF8;
-      error: integer;
+  var
+    msg: RawUTF8;
+    error: integer;
   begin
     if Success then begin
       msg := 'Successfully executed';
       TextColor(ccWhite);
-    end else begin
+    end
+    else begin
       error := GetLastError;
       msg := FormatUTF8('Error % "%" occured with',
-        [error,StringToUTF8(SysErrorMessage(error))]);
+        [error, StringToUTF8(SysErrorMessage(error))]);
       TextColor(ccLightRed);
       ExitCode := 1; // notify error to caller batch
     end;
     msg := FormatUTF8('% "%" (%) on Service "%"',
-      [msg,param,cmdText,fSettings.ServiceName]);
-    AppendToTextFile(msg,ChangeFileExt(ExeVersion.ProgramFileName,'.txt'));
+      [msg, param, cmdText, fSettings.ServiceName]);
+    AppendToTextFile(msg, ChangeFileExt(ExeVersion.ProgramFileName, '.txt'));
     writeln(msg);
   end;
+
   procedure Syntax;
   begin
     writeln('Try with one of the switches:');
-    writeln(ExeVersion.ProgramName,' /console -c /verbose /daemon -d /help -h /version');
+    writeln(ExeVersion.ProgramName,
+      ' /console -c /verbose /daemon -d /help -h /version');
     {$ifdef MSWINDOWS}
-    writeln(ExeVersion.ProgramName,' /install /uninstall /start /stop /state');
+    writeln(ExeVersion.ProgramName, ' /install /uninstall /start /stop /state');
     {$endif}
   end;
 
 begin
   try
-    if fSettings.ServiceDisplayName='' then begin
+    if fSettings.ServiceDisplayName = '' then begin
       fDaemon := NewDaemon; // should initialize the default .settings
       fDaemon := nil;
     end;
     TextColor(ccLightGreen);
     name := StringToUTF8(fSettings.ServiceDisplayName);
-    if name='' then // perhaps the settings file is still void
+    if name = '' then // perhaps the settings file is still void
       name := ExeVersion.ProgramName;
-    if ExeVersion.Version.Version32<>0 then
-      name := FormatUTF8('% %',[name,ExeVersion.Version.Detailed]);
-    writeln(#10' ',name);
-    writeln(StringOfChar('-',length(name)+2));
+    if ExeVersion.Version.Version32 <> 0 then
+      name := FormatUTF8('% %', [name, ExeVersion.Version.Detailed]);
+    writeln(#10' ', name);
+    writeln(StringOfChar('-', length(name) + 2));
     TextColor(ccGreen);
-    if fSettings.Description<>'' then
+    if fSettings.Description <> '' then
       writeln(fSettings.Description);
-    if GlobalCopyright<>'' then
-      writeln('(c)',CurrentYear,' ',GlobalCopyright);
+    if GlobalCopyright <> '' then
+      writeln('(c)', CurrentYear, ' ', GlobalCopyright);
     writeln;
     TextColor(ccLightCyan);
     param := trim(StringToUTF8(paramstr(1)));
-    if (param='') or not(param[1] in ['/','-']) then
-      cmd := cNone else
+    if (param = '') or not (param[1] in ['/', '-']) then
+      cmd := cNone
+    else
       case param[2] of
-      'c','C': cmd := cConsole;
-      'd','D': cmd := cDaemon;
-      'h','H': cmd := cHelp;
-      else byte(cmd) := 1+IdemPCharArray(@param[2],[
-        'INST','UNINST','START','STOP','STAT','VERS','VERB']);
+        'c', 'C':
+          cmd := cConsole;
+        'd', 'D':
+          cmd := cDaemon;
+        'h', 'H':
+          cmd := cHelp;
+      else
+        byte(cmd) := 1 + IdemPCharArray(@param[2],
+          ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB']);
       end;
     case cmd of
-    cHelp:
-      Syntax;
-    cVersion: begin
-      if ExeVersion.Version.Version32<>0 then
-        writeln(ExeVersion.ProgramName,' Version ',ExeVersion.Version.Detailed);
-      TextColor(ccCyan);
-      writeln('Powered by Synopse mORMot '+SYNOPSE_FRAMEWORK_VERSION);
-    end;
-    cConsole,cDaemon,cVerbose: begin
-      writeln('Launched in ',cmdText,' mode'#10);
-      TextColor(ccLightGray);
-      case cmd of
-      cConsole:
-        SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE+[sllDDDInfo];
-      cVerbose:
-        SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
-      end;
-      daemon := NewDaemon;
-      try
-        fDaemon := daemon;
+      cHelp:
+        Syntax;
+      cVersion:
+        begin
+          if ExeVersion.Version.Version32 <> 0 then
+            writeln(ExeVersion.ProgramName, ' Version ', ExeVersion.Version.Detailed);
+          TextColor(ccCyan);
+          writeln('Powered by Synopse mORMot ' + SYNOPSE_FRAMEWORK_VERSION);
+        end;
+      cConsole, cDaemon, cVerbose:
+        begin
+          writeln('Launched in ', cmdText, ' mode'#10);
+          TextColor(ccLightGray);
+          case cmd of
+            cConsole:
+              SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE + [sllDDDInfo];
+            cVerbose:
+              SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
+          end;
+          daemon := NewDaemon;
+          try
+            fDaemon := daemon;
         {$ifdef WITHLOG}
-        if cmd=cDaemon then
-          if (daemon.AdministrationServer=nil) or
-             not ({$ifdef MSWINDOWS}
-                   daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or{$endif}
-                  (daemon.InheritsFrom(TDDDThreadDaemon) and
-                   (TDDDThreadDaemon(daemon).fAdministrationHTTPServer<>nil))) then
-            daemon.Log.Synlog.Log(sllWarning,'ExecuteCommandLine as Daemon '+
-              'without external admnistrator acccess',self);
+            if cmd = cDaemon then
+              if (daemon.AdministrationServer = nil) or not ({$ifdef MSWINDOWS}
+                daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or {$endif}
+                (daemon.InheritsFrom(TDDDThreadDaemon) and
+                 (TDDDThreadDaemon(daemon).fAdministrationHTTPServer <> nil))) then
+                daemon.Log.Synlog.Log(sllWarning, 'ExecuteCommandLine as Daemon ' +
+                  'without external admnistrator acccess', self);
         {$endif}
-        daemon.Execute(cmd=cDaemon);
-      finally
-        fDaemon := nil; // will stop the daemon
-      end;
-    end;
+            daemon.Execute(cmd = cDaemon);
+          finally
+            fDaemon := nil; // will stop the daemon
+          end;
+        end;
     else
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
       with fSettings do
-      if ServiceName='' then
-        if cmd=cNone then
-          Syntax else begin
-          TextColor(ccLightRed);
-          writeln('No ServiceName specified - please fix the setttings');
-        end else
-      case cmd of
-      cNone:
-        if param='' then begin // executed as a background service
-          service := TServiceSingle.Create(ServiceName,ServiceDisplayName);
-          try
-            service.OnStart := DoStart;
-            service.OnStop := DoStop;
-            service.OnShutdown := DoStop; // sometimes, is called without Stop
-            if ServicesRun then // blocking until service shutdown
-              Show(true) else
-              if GetLastError=1063 then
-                Syntax else
-                Show(false);
-          finally
-            service.Free;
-          end;
-        end else
-          Syntax;
-      cInstall: begin
-        if (ParamCount>=3) and SameText(ParamStr(2),'/depend') then begin
-          depend := ParamStr(3);
-          for i := 4 to ParamCount do
-            depend := depend+#0+ParamStr(i);
-        end;
-        Show(TServiceController.Install(ServiceName,ServiceDisplayName,
-          Description,ServiceAutoStart,'',depend)<>ssNotInstalled);
-      end;
-      else begin
-        ctrl := TServiceController.CreateOpenService('','',ServiceName);
-        try
+        if ServiceName = '' then
+          if cmd = cNone then
+            Syntax
+          else begin
+            TextColor(ccLightRed);
+            writeln('No ServiceName specified - please fix the setttings');
+          end
+        else
           case cmd of
-          cStart:
-            Show(ctrl.Start([]));
-          cStop:
-            Show(ctrl.Stop);
-          cUninstall: begin
-            ctrl.Stop;
-            Show(ctrl.Delete);
+            cNone:
+              if param = '' then begin // executed as a background service
+                service := TServiceSingle.Create(ServiceName, ServiceDisplayName);
+                try
+                  service.OnStart := DoStart;
+                  service.OnStop := DoStop;
+                  service.OnShutdown := DoStop; // sometimes, is called without Stop
+                  if ServicesRun then // blocking until service shutdown
+                    Show(true)
+                  else if GetLastError = 1063 then
+                    Syntax
+                  else
+                    Show(false);
+                finally
+                  service.Free;
+                end;
+              end
+              else
+                Syntax;
+            cInstall:
+              begin
+                if (ParamCount >= 3) and SameText(ParamStr(2), '/depend') then begin
+                  depend := ParamStr(3);
+                  for i := 4 to ParamCount do
+                    depend := depend + #0 + ParamStr(i);
+                end;
+                Show(TServiceController.Install(ServiceName, ServiceDisplayName,
+                  Description, ServiceAutoStart, '', depend) <> ssNotInstalled);
+              end;
+          else
+            begin
+              ctrl := TServiceController.CreateOpenService('', '', ServiceName);
+              try
+                case cmd of
+                  cStart:
+                    Show(ctrl.Start([]));
+                  cStop:
+                    Show(ctrl.Stop);
+                  cUninstall:
+                    begin
+                      ctrl.Stop;
+                      Show(ctrl.Delete);
+                    end;
+                  cState:
+                    writeln(ServiceName, ' State=', ServiceStateText(ctrl.State));
+                else
+                  Show(false);
+                end;
+              finally
+                ctrl.Free;
+              end;
+            end;
           end;
-          cState:
-            writeln(ServiceName,' State=',ServiceStateText(ctrl.State));
-          else Show(false);
-          end;
-        finally
-          ctrl.Free;
-        end;
-      end;
-      end;
     {$else}
       Syntax;
     {$endif MSWINDOWS}
-    end;       
+    end;
   except
     on E: Exception do
       ConsoleShowFatalException(E);
@@ -790,15 +820,24 @@ begin
   result := fAdministrationHTTPServer as TSQLHttpServer;
 end;
 
-function TDDDThreadDaemon.InternalRetrieveState(
-  var Status: variant): boolean;
+function TDDDThreadDaemon.InternalRetrieveState(var Status: variant): boolean;
 begin
-  Status := _ObjFast(['SystemMemory',TSynMonitorMemory.ToVariant]);
+  Status := _ObjFast(['SystemMemory', TSynMonitorMemory.ToVariant]);
   result := true;
 end;
 
 
 { TDDDRestDaemon }
+
+constructor TDDDRestDaemon.Create;
+begin
+  inherited Create;
+end;
+
+destructor TDDDRestDaemon.Destroy;
+begin
+  inherited Destroy;
+end;
 
 function TDDDRestDaemon.GetAdministrationHTTPServer: TSQLHttpServer;
 begin
@@ -806,23 +845,24 @@ begin
 end;
 
 procedure TDDDRestDaemon.InternalLogMonitoring;
-var status: variant;
+var
+  status: variant;
 begin
   {$ifdef WITHLOG}
-  if fLog<>nil then
+  if fLog <> nil then
     if (sllMonitoring in fLog.Level) and InternalRetrieveState(status) then
-      fLog.SynLog.Log(sllMonitoring,'%',[status],Self);
+      fLog.SynLog.Log(sllMonitoring, '%', [status], Self);
   {$endif}
 end;
 
-function TDDDRestDaemon.InternalRetrieveState(
-  var Status: variant): boolean;
+function TDDDRestDaemon.InternalRetrieveState(var Status: variant): boolean;
 begin
-  if fRest<>nil then begin
-    Status := _ObjFast(['Rest',fRest.FullStatsAsDocVariant,
-      'SystemMemory',TSynMonitorMemory.ToVariant]);
+  if fRest <> nil then begin
+    Status := _ObjFast(['Rest', fRest.FullStatsAsDocVariant,
+      'SystemMemory', TSynMonitorMemory.ToVariant]);
     result := true;
-  end else
+  end
+  else
     result := false;
 end;
 
@@ -831,12 +871,13 @@ begin
   result := TDDDAdministratedDaemonHttpSettings(fInternalSettings);
 end;
 
+
 { TDDDRestHttpDaemon }
 
 procedure TDDDRestHttpDaemon.InternalStart;
 begin
-  if Settings.Http.BindPort<>'' then
-    fHttpServer := TSQLHttpServer.Create(fRest,Settings.Http);
+  if Settings.Http.BindPort <> '' then
+    fHttpServer := TSQLHttpServer.Create(fRest, Settings.Http);
 end;
 
 procedure TDDDRestHttpDaemon.InternalStop;
@@ -856,104 +897,107 @@ end;
 
 function TDDDSocketThreadMonitoring.GetSocket: variant;
 begin
-  if (fOwner=nil) or (fOwner.fSocket=nil) then
-    SetVariantNull(result) else
-    ObjectToVariant(ObjectFromInterface(fOwner.fSocket),result);
+  if (fOwner = nil) or (fOwner.fSocket = nil) then
+    SetVariantNull(result)
+  else
+    ObjectToVariant(ObjectFromInterface(fOwner.fSocket), result);
 end;
 
 
 { TDDDSocketThread }
 
-constructor TDDDSocketThread.Create(
-  aSettings: TDDDSocketThreadSettings; aRest: TSQLRest;
-  aMonitoring: TDDDSocketThreadMonitoring);
+constructor TDDDSocketThread.Create(aSettings: TDDDSocketThreadSettings; aRest:
+  TSQLRest; aMonitoring: TDDDSocketThreadMonitoring);
 begin
-  if aSettings=nil then
-    raise EDDDInfraException.CreateUTF8('%.Create(Settings=nil)',[self]);
+  if aSettings = nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(aSettings=nil)', [self]);
   fSettings := aSettings;
-  if aMonitoring=nil then
-    raise EDDDInfraException.CreateUTF8('%.Create(aMonitoring=nil)',[self]);
+  if aMonitoring = nil then
+    raise EDDDInfraException.CreateUTF8('%.Create(aMonitoring=nil)', [self]);
   fMonitoring := aMonitoring;
   fMonitoring.fOwner := self;
-  if fSettings.Host='' then
+  if fSettings.Host = '' then
     fSettings.Host := '127.0.0.1';
   fHost := fSettings.Host;
-  if fSettings.Port=0 then
-    raise EDDDInfraException.CreateUTF8('%.Create(Port=0)',[self]);
+  if fSettings.Port = 0 then
+    raise EDDDInfraException.CreateUTF8('%.Create(Port=0)', [self]);
   fPort := UInt32ToUtf8(fSettings.Port);
   fExecuteSocketLoopPeriod := 300;
-  if fSettings.SocketTimeout<fExecuteSocketLoopPeriod then
+  if fSettings.SocketTimeout < fExecuteSocketLoopPeriod then
     fSettings.SocketTimeout := 2000;
   fPerformConnection := true;
-  inherited Create(aRest,true); // aOwnRest=true
+  inherited Create(aRest, true); // aOwnRest=true
 end;
 
 destructor TDDDSocketThread.Destroy;
-var timeOut: Int64;
+var
+  timeOut: Int64;
 begin
   {$ifdef WITHLOG}
   FLog.Enter('Destroy %:%',[fHost,fPort],self);
   {$endif}
   Terminate;
-  timeOut := GetTickCount64+10000;
+  timeOut := GetTickCount64 + 10000;
   repeat // wait until properly disconnected from remote TCP server
     Sleep(10);
-  until (FMonitoring.State=tpsDisconnected) or (GetTickCount64>timeOut);
+  until (FMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
   inherited Destroy;
   FreeAndNil(fMonitoring);
 end;
 
 procedure TDDDSocketThread.ExecuteConnect;
-var tix: Int64;
+var
+  tix: Int64;
 begin
   {$ifdef WITHLOG}
   FLog.Enter('ExecuteConnect %:%',[fHost,fPort],self);
   {$endif}
-  if fSocket<>nil then
-    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil',[self]);
-  if FMonitoring.State<>tpsDisconnected then
-    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',[self,ord(FMonitoring.State)]);
+  if fSocket <> nil then
+    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil', [self]);
+  if FMonitoring.State <> tpsDisconnected then
+    raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',
+      [self, ToText(FMonitoring.State)^]);
   fMonitoring.State := tpsConnecting;
-  {$ifdef WITHLOG}
-  FLog.Log(sllTrace,'ExecuteConnect: Connecting to %:%',[Host,Port],self);
-  {$endif}
   try
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
-      fSettings.OnIDDDSocketThreadCreate(self,fSocket) else
-      fSocket := TDDDSynCrtSocket.Create(self,fHost,fPort,fSettings.SocketTimeout,32768);
+      fSettings.OnIDDDSocketThreadCreate(self, fSocket)
+    else
+      fSocket := TDDDSynCrtSocket.Create(self, fHost, fPort, fSettings.SocketTimeout, 32768);
     fSocket.Connect;
     FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
     {$ifdef WITHLOG}
-    FLog.Log(sllTrace,'ExecuteConnect: Connected via Socket % - %',
-      [fSocket.Identifier,FMonitoring],self);
+    FLog.Log(sllTrace, 'ExecuteConnect: Connected via Socket % - %',
+      [fSocket.Identifier, FMonitoring], self);
     {$endif}
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
-      FLog.Log(sllTrace,'ExecuteConnect: Impossible to Connect to %:% (%) %',
-        [Host,Port,E.ClassType,FMonitoring],self);
+      FLog.Log(sllTrace, 'ExecuteConnect: Impossible to Connect to %:% (%) %',
+        [Host, Port, E.ClassType, FMonitoring], self);
       {$endif}
       fSocket := nil;
       FMonitoring.State := tpsDisconnected;
     end;
   end;
-  if (FMonitoring.State<>tpsConnected) and not Terminated then
-    if fSettings.ConnectionAttemptsInterval>0 then begin // on error, retry
-      tix := GetTickCount64+fSettings.ConnectionAttemptsInterval*1000;
+  if (FMonitoring.State <> tpsConnected) and not Terminated then
+    if fSettings.ConnectionAttemptsInterval > 0 then begin // on error, retry
+      tix := GetTickCount64 + fSettings.ConnectionAttemptsInterval * 1000;
       repeat
         sleep(50);
-      until Terminated or (GetTickCount64>tix);
+      until Terminated or (GetTickCount64 > tix);
       {$ifdef WITHLOG}
       if Terminated then
-        FLog.Log(sllTrace,'ExecuteConnect: thread terminated',self) else
-        FLog.Log(sllTrace,'ExecuteConnect: wait finished -> retry connect',self);
+        FLog.Log(sllTrace, 'ExecuteConnect: thread terminated', self)
+      else
+        FLog.Log(sllTrace, 'ExecuteConnect: wait finished -> retry connect', self);
       {$endif}
     end;
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnect;
-var info: RawUTF8;
+var
+  info: RawUTF8;
 begin
   {$ifdef WITHLOG}
   FLog.Enter('ExecuteDisconnect %:%',[fHost,fPort],self);
@@ -964,15 +1008,16 @@ begin
       fShouldDisconnect := false;
       FMonitoring.State := tpsDisconnected;
       try
-        if fSocket=nil then
-          info := '[Unknown]' else
+        if fSocket = nil then
+          info := '[Unknown]'
+        else
           info := fSocket.Identifier;
         InternalExecuteDisconnect;
       finally
         fSocket := nil;
       end;
       {$ifdef WITHLOG}
-      FLog.Log(sllTrace,'Socket % disconnected',[info],self);
+      FLog.Log(sllTrace, 'Socket % disconnected', [info], self);
       {$endif}
       InternalLogMonitoring;
     finally
@@ -981,7 +1026,7 @@ begin
   except
     {$ifdef WITHLOG}
     on E: Exception do
-      FLog.Log(sllTrace,'Socket disconnection error (%)',[E.ClassType],self);
+      FLog.Log(sllTrace, 'Socket disconnection error (%)', [E.ClassType], self);
     {$endif}
   end;
 end;
@@ -989,9 +1034,9 @@ end;
 procedure TDDDSocketThread.ExecuteDisconnectAfterError;
 begin
   {$ifdef WITHLOG}
-  if fSocket<>nil then
-    FLog.Log(sllError,'%.ExecuteDisconnectAfterError: Sock=% LastError=%',
-      [ClassType,fSocket.Identifier,fSocket.LastError],self);
+  if fSocket <> nil then
+    FLog.Log(sllError, '%.ExecuteDisconnectAfterError: Sock=% LastError=%',
+      [ClassType, fSocket.Identifier, fSocket.LastError], self);
   {$endif}
   ExecuteDisconnect;
   FSocketInputBuffer := '';
@@ -1000,22 +1045,23 @@ begin
 end;
 
 procedure TDDDSocketThread.ExecuteSocket;
-var pending, len: integer;
+var
+  pending, len: integer;
 begin
   pending := fSocket.DataInPending(fExecuteSocketLoopPeriod);
-  if Terminated or (pending=0) then
+  if Terminated or (pending = 0) then
     exit;
-  if pending<0 then begin
+  if pending < 0 then begin
     ExecuteDisconnectAfterError;
     exit;
   end;
   len := length(FSocketInputBuffer);
-  SetLength(FSocketInputBuffer,len+pending);
-  if fSocket.DataIn(@PByteArray(FSocketInputBuffer)[len],pending)<>pending then begin
+  SetLength(FSocketInputBuffer, len + pending);
+  if fSocket.DataIn(@PByteArray(FSocketInputBuffer)[len], pending) <> pending then begin
     ExecuteDisconnectAfterError;
     exit;
   end;
-  FMonitoring.AddSize(pending,0);
+  FMonitoring.AddSize(pending, 0);
   InternalExecuteSocket;
 end;
 
@@ -1024,21 +1070,23 @@ begin
   fPreviousMonitorTix := GetTickCount64;
   try
     repeat
-      if fMonitoring.State=tpsConnected then
-        ExecuteSocket else
-        if fPerformConnection then
-          ExecuteConnect else
-          sleep(200);
+      if fMonitoring.State = tpsConnected then
+        ExecuteSocket
+      else if fPerformConnection then
+        ExecuteConnect
+      else
+        sleep(200);
       if Terminated then
         break;
       try
-        if Elapsed(fPreviousMonitorTix,fSettings.MonitoringLogInterval) then
+        if Elapsed(fPreviousMonitorTix, fSettings.MonitoringLogInterval) then
           InternalLogMonitoring;
         InternalExecuteIdle;
       except
         {$ifdef WITHLOG}
         on E: Exception do
-          FLog.Log(sllWarning,'Skipped % exception in %.InternalExecuteIdle',[E,ClassType],self);
+          FLog.Log(sllWarning, 'Skipped % exception in %.InternalExecuteIdle',
+            [E, ClassType], self);
         {$endif}
       end;
     until Terminated;
@@ -1067,11 +1115,13 @@ begin
 end;
 
 procedure TDDDSocketThread.InternalLogMonitoring;
-var cached,flushed: integer;
+var
+  cached, flushed: integer;
 begin // CachedMemory method will also purge any outdated cached entries
   cached := fRest.CacheOrNil.CachedMemory(@flushed);
   {$ifdef WITHLOG}
-  FLog.Log(sllMonitoring,'% CachedMemory=% Flushed=%',[FMonitoring,cached,flushed],Self);
+  FLog.Log(sllMonitoring, '% CachedMemory=% Flushed=%',
+    [FMonitoring, cached, flushed], Self);
   {$endif}
   fPreviousMonitorTix := GetTickCount64;
 end;
@@ -1087,7 +1137,7 @@ begin
       AddNoJSONEscapeUTF8(TSQLRestServer(fRest).FullStatsAsJson);
     end;
     Add(',"Version":"%","DateTime":"%"}',
-      [ExeVersion.Version.Detailed,NowUTCToString(True,'T')]);
+      [ExeVersion.Version.Detailed, NowUTCToString(True, 'T')]);
     SetText(result);
   finally
     Free;
@@ -1096,39 +1146,41 @@ end;
 
 function TDDDSocketThread.TrySend(const aFrame: RawByteString;
   ImmediateDisconnectAfterError: boolean): Boolean;
-var tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
+var
+  tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
 begin
   fSafe.Lock;
-  result := (aFrame<>'') and (fSocket<>nil) and
-            (fMonitoring.State=tpsConnected) and not fShouldDisconnect;
+  result := (aFrame <> '') and (fSocket <> nil) and (fMonitoring.State =
+    tpsConnected) and not fShouldDisconnect;
   if result then
     tmpSock := fSocket;
   fSafe.UnLock;
   if not result then
     exit;
-  result := tmpSock.DataOut(pointer(aFrame),length(aFrame));
+  result := tmpSock.DataOut(pointer(aFrame), length(aFrame));
   if result then
-    FMonitoring.AddSize(0,length(aFrame)) else
-    if ImmediateDisconnectAfterError then
-      ExecuteDisconnectAfterError else begin
-      fSafe.Lock;
-      fShouldDisconnect := true; // notify for InternalExecuteIdle
-      fSafe.UnLock;
-    end;
+    FMonitoring.AddSize(0, length(aFrame))
+  else if ImmediateDisconnectAfterError then
+    ExecuteDisconnectAfterError
+  else begin
+    fSafe.Lock;
+    fShouldDisconnect := true; // notify for InternalExecuteIdle
+    fSafe.UnLock;
+  end;
 end;
 
 
 { TDDDSynCrtSocket }
 
-constructor TDDDSynCrtSocket.Create(aOwner: TThread; const aHost,aPort: SockString;
-  aSocketTimeout,aInternalBufferSize: integer);
+constructor TDDDSynCrtSocket.Create(aOwner: TThread; const aHost, aPort: SockString;
+  aSocketTimeout, aInternalBufferSize: integer);
 begin
   inherited Create;
   fOwner := aOwner;
   fHost := aHost;
   fPort := aPort;
   fSocket := TCrtSocket.Create(aSocketTimeout);
-  if aInternalBufferSize<512 then
+  if aInternalBufferSize < 512 then
     aInternalBufferSize := 512;
   fInternalBufferSize := aInternalBufferSize;
   fOutput.Init;
@@ -1143,15 +1195,15 @@ end;
 
 procedure TDDDSynCrtSocket.Connect;
 begin
-  fSocket.OpenBind(fHost,fPort,False);
-  fSocket.CreateSockIn(tlbsCRLF,fInternalBufferSize); // use SockIn safe buffer
+  fSocket.OpenBind(fHost, fPort, False);
+  fSocket.CreateSockIn(tlbsCRLF, fInternalBufferSize); // use SockIn safe buffer
 end;
 
 function TDDDSynCrtSocket.DataIn(Content: PAnsiChar; ContentLength: integer): integer;
 begin
   fSafe.Lock;
   try
-    result := fSocket.SockInRead(Content,ContentLength,false);
+    result := fSocket.SockInRead(Content, ContentLength, false);
   finally
     fSafe.UnLock;
   end;
@@ -1162,7 +1214,7 @@ begin
   fSafe.Lock;
   try
     result := fSocket.SockInPending(aTimeOut);
-  finally                            
+  finally
     fSafe.UnLock;
   end;
 end;
@@ -1171,7 +1223,7 @@ function TDDDSynCrtSocket.DataOut(Content: PAnsiChar; ContentLength: integer): b
 begin
   fOutput.Lock;
   try
-    result := fSocket.TrySndLow(Content,ContentLength);
+    result := fSocket.TrySndLow(Content, ContentLength);
   finally
     fOutput.UnLock;
   end;
@@ -1214,23 +1266,24 @@ begin
   try
     CheckRaiseException(msaDataInRaiseException);
     result := length(fInput);
-    if ContentLength<result then
+    if ContentLength < result then
       result := ContentLength;
-    if result<=0 then
+    if result <= 0 then
       exit;
-    MoveFast(pointer(fInput)^,Content^,result);
-    Delete(fInput,1,result);
+    MoveFast(pointer(fInput)^, Content^, result);
+    Delete(fInput, 1, result);
   finally
     fSafe.UnLock;
   end;
 end;
 
 function TDDDMockedSocket.DataInPending(aTimeOut: integer): integer;
-var forcedTimeout: boolean;
-    endTix: Int64;
+var
+  forcedTimeout: boolean;
+  endTix: Int64;
 begin
   forcedTimeout := false;
-  endTix := GetTickCount64+aTimeOut;
+  endTix := GetTickCount64 + aTimeOut;
   repeat
     fSafe.Lock;
     try
@@ -1246,22 +1299,24 @@ begin
           forcedTimeout := true;
         end;
       if forcedTimeout then
-        result := 0 else
+        result := 0
+      else
         result := length(fInput);
     finally
       fSafe.UnLock; // wait outside the instance lock
     end;
-    if (result<>0) or ((fOwner<>nil) and TSQLRestThread(fOwner).Terminated) or
-       (aTimeOut=0) then
+    if (result <> 0) or ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
+      or (aTimeOut = 0) then
       break;
     sleep(1); // emulate blocking process, just like a regular socket
-    if (fOwner<>nil) and TSQLRestThread(fOwner).Terminated then
-      break; 
-  until GetTickCount64>endTix; // warning: 10-16 ms resolution under Windows
+    if (fOwner <> nil) and TSQLRestThread(fOwner).Terminated then
+      break;
+  until GetTickCount64 > endTix; // warning: 10-16 ms resolution under Windows
 end;
 
 function TDDDMockedSocket.DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
-var previous: integer;
+var
+  previous: integer;
 begin
   CheckLatency(mslDataOut);
   fSafe.Lock;
@@ -1273,11 +1328,11 @@ begin
       exit;
     end;
     result := true;
-    if ContentLength<=0 then
+    if ContentLength <= 0 then
       exit;
     previous := length(fOutput);
-    SetLength(fOutput,previous+ContentLength);
-    MoveFast(Content^,PByteArray(fOutput)^[previous],ContentLength);
+    SetLength(fOutput, previous + ContentLength);
+    MoveFast(Content^, PByteArray(fOutput)^[previous], ContentLength);
   finally
     fSafe.UnLock;
   end;
@@ -1292,7 +1347,7 @@ function TDDDMockedSocket.LastError: RawUTF8;
 begin
   fSafe.Lock;
   try
-    StringToUTF8(fExceptionMessage,result);
+    StringToUTF8(fExceptionMessage, result);
     fExceptionMessage := '';
   finally
     fSafe.UnLock;
@@ -1303,7 +1358,7 @@ procedure TDDDMockedSocket.MockDataIn(const Content: RawByteString);
 begin
   fSafe.Lock;
   try
-    fInput := fInput+Content;
+    fInput := fInput + Content;
   finally
     fSafe.UnLock;
   end;
@@ -1338,16 +1393,15 @@ begin
   if not (Action in fExceptionActions) then
     exit;
   fExceptionActions := [];
-  if fExceptionMessage='' then
-    fExceptionMessage := Format('Mocked Exception for %s',
-      [GetEnumName(TypeInfo(TDDDMockedSocketExceptions),ord(Action))^]);
-  if fExceptionClass=nil then
+  if fExceptionMessage = '' then
+    fExceptionMessage := Format('Mocked Exception for %s', [ToText(Action)^]);
+  if fExceptionClass = nil then
     fExceptionClass := EDDDMockedSocket;
   raise fExceptionClass.Create(fExceptionMessage);
 end;
 
-procedure TDDDMockedSocket.MockLatency(
-  NextActions: TDDDMockedSocketLatencies; MilliSeconds: integer);
+procedure TDDDMockedSocket.MockLatency(NextActions: TDDDMockedSocketLatencies;
+  MilliSeconds: integer);
 begin
   fSafe.Lock;
   try
@@ -1359,17 +1413,20 @@ begin
 end;
 
 procedure TDDDMockedSocket.CheckLatency(Action: TDDDMockedSocketLatency);
-var waitMS: integer;
+var
+  waitMS: integer;
 begin
   fSafe.Lock;
   try
     if Action in fLatencyActions then
-      waitMS := fLatencyMS else
+      waitMS := fLatencyMS
+    else
       waitMS := 0;
   finally
     fSafe.UnLock; // wait outside the instance lock
   end;
-  while (waitMS>0) and not ((fOwner<>nil) and TSQLRestThread(fOwner).Terminated) do begin
+  while (waitMS > 0) and not ((fOwner <> nil) and TSQLRestThread(fOwner).Terminated)
+    do begin
     sleep(1); // do not use GetTickCount64 (poor resolution under Windows)
     dec(waitMS);
   end;
@@ -1395,65 +1452,69 @@ end;
 
 { TDDDRestClientSettings }
 
-function TDDDRestClientSettings.NewRestClientInstance(
-  aRootSettings: TDDDAppSettingsAbstract; aModel: TSQLModel;
-  aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
-var pass: RawUTF8;
+function TDDDRestClientSettings.NewRestClientInstance(aRootSettings:
+  TDDDAppSettingsAbstract; aModel: TSQLModel; aOptions:
+  TDDDNewRestInstanceOptions): TSQLRestClientURI;
+var
+  pass: RawUTF8;
 begin
-  if aModel=nil then
+  if aModel = nil then
     if riCreateVoidModelIfNone in aOptions then begin
-      aModel := TSQLModel.Create([],'');
-      include(aOptions,riOwnModel);
-    end else
-       raise EDDDRestClient.CreateUTF8('%.NewRestClientInstance(aModel=nil)',[self]);
-  if fClient.Root='' then // supplied TSQLModel.Root is the default root URI
-    fClient.Root := aModel.Root else
+      aModel := TSQLModel.Create([], '');
+      include(aOptions, riOwnModel);
+    end
+    else
+      raise EDDDRestClient.CreateUTF8('%.NewRestClientInstance(aModel=nil)', [self]);
+  if fClient.Root = '' then // supplied TSQLModel.Root is the default root URI
+    fClient.Root := aModel.Root
+  else
     aModel.Root := fClient.Root;
-  if fORM.Kind='' then
+  if fORM.Kind = '' then
     fORM.Kind := 'TSQLHttpClientWebsockets'; // assume we need HTTP + callbacks
-  if fORM.ServerName='' then
+  if fORM.ServerName = '' then
     fORM.ServerName := 'localhost';
   result := nil;
   try
     try
-      result := TSQLRest.CreateTryFrom(aModel,ORM, // will call SetUser()
+      result := TSQLRest.CreateTryFrom(aModel, ORM, // will call SetUser()
         riHandleAuthentication in aOptions) as TSQLRestClientURI;
-      if result=nil then
+      if result = nil then
         exit; // no match or wrong parameters
       pass := fClient.PasswordPlain;
-      if pass<>'' then
-        (result as TSQLHttpClientWebsockets).WebSocketsConnect(pass) else
-        if not result.ServerTimeStampSynchronize then
-          raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
-            [self,ORM.ServerName,aModel.Root]);
+      if pass <> '' then
+        (result as TSQLHttpClientWebsockets).WebSocketsConnect(pass)
+      else if not result.ServerTimeStampSynchronize then
+        raise EDDDRestClient.CreateUTF8('%.Create: HTTP access failure on %/%',
+          [self, ORM.ServerName, aModel.Root]);
       result.OnAuthentificationFailed := OnAuthentificationFailed;
     except
       FreeAndNil(result);
     end;
   finally
     if riOwnModel in aOptions then
-      if result=nil then // avoid memory leak
-        aModel.Free else
+      if result = nil then // avoid memory leak
+        aModel.Free
+      else
         aModel.Owner := result;
-    if (result=nil) and (riRaiseExceptionIfNoRest in aOptions) then
-      raise EDDDRestClient.CreateUTF8('Impossible to initialize % on %/%',
-        [fORM.Kind,fORM.ServerName,fClient.Root]);
+    if (result = nil) and (riRaiseExceptionIfNoRest in aOptions) then
+      raise EDDDRestClient.CreateUTF8('Impossible to initialize % on %/%', [fORM.Kind,
+        fORM.ServerName, fClient.Root]);
   end;
 end;
 
 function TDDDRestClientSettings.OnAuthentificationFailed(Retry: integer;
   var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean;
 begin
-  if (Retry=1) and (fORM.User<>'') then begin
+  if (Retry = 1) and (fORM.User <> '') then begin
     aUserName := UTF8ToString(fORM.User);
     aPassword := UTF8ToString(fORM.PasswordPlain);
     aPasswordHashed := true;
     result := true;
-  end else
+  end
+  else
     result := false;
 end;
 
-procedure TDDDRestClientSettings.SetDefaults(const Root,Port,WebSocketPassword,
 procedure TDDDRestClientSettings.SetDefaults(const Root, Port, WebSocketPassword,
   UserPassword, User, Server: RawUTF8);
 begin
@@ -1477,14 +1538,163 @@ begin
   end;
 end;
 
-function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
-  Model: TSQLModel): TSQLHttpClientWebsockets;
+function AdministratedDaemonClient(Definition: TDDDRestClientSettings; Model: TSQLModel): TSQLHttpClientWebsockets;
 begin
-  result := Definition.NewRestClientInstance(nil,Model) as TSQLHttpClientWebsockets;
+  result := Definition.NewRestClientInstance(nil, Model) as TSQLHttpClientWebsockets;
   try
-    result.ServiceDefine(IAdministratedDaemon,sicShared);
+    result.ServiceDefine(IAdministratedDaemon, sicShared);
   except
     result.Free;
+    raise;
+  end;
+end;
+
+
+{ TDDDAdministratedDaemonAsProxy }
+
+{ FIXME: Proxy feature not finished yet (but not needed any more) }
+
+type
+  TDDDAdministratedDaemonAsProxy = class(TCQRSService, IAdministratedDaemonAsProxy)
+  protected
+    fProxy: IAdministratedDaemon;
+    fProxyClient: TSQLHttpClientWebsockets;
+    /// IAdministratedDaemon methods
+    function RetrieveState(out Status: variant): TCQRSResult;
+    function Start: TCQRSResult;
+    function Stop(out Information: variant): TCQRSResult;
+    function Halt(out Information: variant): TCQRSResult;
+    function DatabaseList: TRawUTF8DynArray;
+    function DatabaseTables(const DatabaseName: RawUTF8): TRawUTF8DynArray;
+    function DatabaseExecute(const DatabaseName, SQL: RawUTF8): TServiceCustomAnswer;
+    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback:
+      ISynLogCallback; ReceiveExistingKB: cardinal);
+    procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
+    function StartProxy(const aDDDRestClientSettings: variant): TCQRSResult;
+  public
+    destructor Destroy; override;
+  end;
+
+procedure TDDDAdministratedDaemonAsProxy.CallbackReleased(const callback:
+  IInvokable; const interfaceName: RawUTF8);
+begin
+  fProxy.CallbackReleased(callback, interfaceName);
+end;
+
+function TDDDAdministratedDaemonAsProxy.DatabaseExecute(const DatabaseName, SQL:
+  RawUTF8): TServiceCustomAnswer;
+begin
+  result := fProxy.DatabaseExecute(DatabaseName, SQL);
+end;
+
+function TDDDAdministratedDaemonAsProxy.DatabaseList: TRawUTF8DynArray;
+begin
+  result := fProxy.DatabaseList;
+end;
+
+function TDDDAdministratedDaemonAsProxy.DatabaseTables(const DatabaseName:
+  RawUTF8): TRawUTF8DynArray;
+begin
+  result := fProxy.DatabaseTables(DatabaseName);
+end;
+
+destructor TDDDAdministratedDaemonAsProxy.Destroy;
+begin
+  fProxy := nil;
+  FreeAndNil(fProxyClient);
+  inherited Destroy;
+end;
+
+function TDDDAdministratedDaemonAsProxy.Halt(out Information: variant): TCQRSResult;
+begin
+  result := fProxy.Halt(Information);
+end;
+
+function TDDDAdministratedDaemonAsProxy.RetrieveState(out Status: variant): TCQRSResult;
+begin
+  result := fProxy.RetrieveState(Status);
+end;
+
+function TDDDAdministratedDaemonAsProxy.Start: TCQRSResult;
+begin
+  result := fProxy.Start;
+end;
+
+function TDDDAdministratedDaemonAsProxy.StartProxy(const aDDDRestClientSettings:
+  variant): TCQRSResult;
+var
+  def: TDDDRestClientSettings;
+  valid: boolean;
+begin
+  CqrsBeginMethod(qaNone, result);
+  if (fProxy <> nil) or (fProxyClient <> nil) then begin
+    CqrsSetResult(cqrsAlreadyExists);
+    exit;
+  end;
+  def := TDDDRestClientSettings.Create;
+  try
+    JSONToObject(def, pointer(VariantSaveJSON(aDDDRestClientSettings)), valid);
+    if not valid then begin
+      CqrsSetResultMsg(cqrsBadRequest, '%.StartProxy(%): invalid def', [self,
+        aDDDRestClientSettings]);
+      exit;
+    end;
+    try
+      fProxyClient := AdministratedDaemonClient(def);
+      if not fProxyClient.Services.Resolve(IAdministratedDaemon, fProxy) then
+        raise EDDDRestClient.CreateUTF8('%.StartProxy(%): IAdministratedDaemon not supported',
+          [self, aDDDRestClientSettings]);
+      CqrsSetResult(cqrsSuccess);
+    except
+      on E: Exception do begin
+        fProxy := nil;
+        FreeAndNil(fProxyClient);
+        CqrsSetResult(E);
+      end;
+    end;
+  finally
+    def.Free;
+  end;
+end;
+
+function TDDDAdministratedDaemonAsProxy.Stop(out Information: variant): TCQRSResult;
+begin
+  result := fProxy.Stop(Information);
+end;
+
+procedure TDDDAdministratedDaemonAsProxy.SubscribeLog(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
+begin
+  fProxy.SubscribeLog(Levels, Callback, ReceiveExistingKB);
+end;
+
+function AdministratedDaemonClientFromProxy(Definition: TDDDRestClientSettings;
+  const ProxyIPPort: RawUTF8; Model: TSQLModel = nil): IAdministratedDaemon;
+var
+  proxy: TDDDRestClientSettings;
+  client: TSQLHttpClientWebsockets;
+  temp: IAdministratedDaemonAsProxy;
+  res: TCQRSResult;
+begin
+  proxy := TDDDRestClientSettings.Create;
+  try
+    CopyObject(Definition, proxy); // share same connection credentials
+    proxy.ORM.ServerName := ProxyIPPort;
+    client := proxy.NewRestClientInstance(nil, Model) as TSQLHttpClientWebsockets;
+  finally
+    proxy.Free;
+  end;
+  try
+    client.ServiceDefine(IAdministratedDaemonAsProxy, sicClientDriven);
+    client.Services.Resolve(IAdministratedDaemonAsProxy, temp);
+    res := temp.StartProxy(_ObjFast(Definition));
+    if res <> cqrsSuccess then
+      raise EDDDRestClient.CreateUTF8(
+        'AdministratedDaemonClientFromProxy(%) was not able to proxy via %: %',
+        [Definition.ORM.ServerName, ProxyIPPort, ToText(res)^]);
+    result := temp;
+  except
+    client.Free;
     raise;
   end;
 end;
@@ -1492,18 +1702,19 @@ end;
 function AdministratedDaemonServer(Settings: TDDDAdministratedDaemonSettings;
   DaemonClass: TDDDAdministratedDaemonClass): TDDDAdministratedDaemon;
 begin
-  if DaemonClass=nil then
+  if DaemonClass = nil then
     raise EDDDInfraException.Create('AdministratedDaemonServer(DaemonClass=nil)');
-  if Settings=nil then
+  if Settings = nil then
     raise EDDDInfraException.Create('AdministratedDaemonServer(Settings=nil)');
   with Settings.RemoteAdmin do
-    result := DaemonClass.Create(AuthUserName,AuthHashedPassword,AuthRootURI,AuthNamedPipeName);
+    result := DaemonClass.Create(AuthUserName, AuthHashedPassword, AuthRootURI,
+      AuthNamedPipeName);
   result.InternalSettings := Settings;
-  result.Log.SynLog.Log(sllTrace,'%.Create(%)',[DaemonClass,Settings],result);
+  result.Log.SynLog.Log(sllTrace, '%.Create(%)', [DaemonClass, Settings], result);
   with Settings.RemoteAdmin do
-    if AuthHttp.BindPort<>'' then
-      result.AdministrationHTTPServer := TSQLHttpServer.Create(
-        result.AdministrationServer,AuthHttp);
+    if AuthHttp.BindPort <> '' then
+      result.AdministrationHTTPServer := TSQLHttpServer.Create(result.AdministrationServer,
+        AuthHttp);
 end;
 
 initialization
@@ -1512,4 +1723,6 @@ initialization
   ReportMemoryLeaksOnShutdown := True;
   {$endif}
   {$endif}
+
 end.
+
