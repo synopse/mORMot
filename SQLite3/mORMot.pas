@@ -9824,7 +9824,15 @@ type
     /// append the default JSON value corresponding to this argument
     // - includes a pending ','
     procedure AddDefaultJSON(WR: TTextWriter);
+    /// convert a value into its JSON representation
+    procedure AsJson(var DestValue: RawUTF8; V: pointer);
     {$ifndef NOVARIANTS}
+     /// convert a value into its variant representation
+    // - complex objects would be converted into a TDocVariant, after JSON
+    // serialization: variant conversion options may e.g. be retrieve from
+    // TInterfaceFactory.DocVariantOptions
+    procedure AsVariant(var DestValue: variant; V: pointer;
+      Options: TDocVariantOptions);
     /// normalize a value containing one input or output argument
     // - sets and enumerates would be translated to strings (also in embedded
     // objects and T*ObjArray)
@@ -11687,8 +11695,7 @@ type
       aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil): TServiceFactoryServer;
     /// you can define here an event to allow/deny execution of any method
     // of this service, at runtime
-    property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute
-      write fOnMethodExecute;
+    property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute write fOnMethodExecute;
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -36387,7 +36394,7 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
      (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
     if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[
        ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD)]) then
-      exit; // execution aborted by callback
+      exit; // execution aborted by OnMethodExecute() callback event
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
     xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
     if (xml='application/xml') or (xml='text/xml') then
@@ -52093,6 +52100,39 @@ begin
   if vIsString in ValueKindAsm then
     WR.Add('"',',') else
     WR.Add(',');
+end;
+
+procedure TServiceMethodArgument.AsJson(var DestValue: RawUTF8; V: pointer);
+var W: TTextWriter;
+begin
+  case ValueType of // some direct conversion of simple types
+  smvBoolean:
+    JSONBoolean(PBoolean(V)^,DestValue);
+  smvEnum..smvInt64:
+  case SizeInStorage of
+    1: UInt32ToUtf8(PByte(V)^,DestValue);
+    2: UInt32ToUtf8(PWord(V)^,DestValue);
+    4: if ValueType=smvInteger then
+         Int32ToUtf8(PInteger(V)^,DestValue) else
+         UInt32ToUtf8(PCardinal(V)^,DestValue);
+    8: Int64ToUtf8(PInt64(V)^,DestValue);
+  end;
+  smvDouble, smvDateTime:
+    ExtendedToStr(PDouble(V)^,DOUBLE_PRECISION,DestValue);
+  smvCurrency:
+    Curr64ToStr(PInt64(V)^,DestValue);
+  smvRawJSON:
+    DestValue := PRawUTF8(V)^;
+  else begin // use generic AddJSON() method
+    W := TJSONSerializer.CreateOwnedStream(512);
+    try
+      AddJSON(W,V,false);
+      W.SetText(DestValue);
+    finally
+      W.Free;
+    end;
+  end;
+  end;
 end;
 
 procedure TServiceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
