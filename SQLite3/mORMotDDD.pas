@@ -251,6 +251,17 @@ type
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
+  /// any service/daemon implementing this interface would be able to redirect
+  // all the administration process to another service/daemon
+  // - i.e. would work as a safe proxy service, over several networks
+  IAdministratedDaemonAsProxy = interface(IAdministratedDaemon)
+    ['{5B7A9086-3D96-48F2-8E27-C6624B2EB45A}']
+    /// allows to connect to another service/daemon IAdministratedDaemon
+    // - detailed connection definition would be supplied as a TDocVariantData
+    // object, serialized from dddInfraApp.pas TDDDRestClientSettings
+    function StartProxy(const aDDDRestClientSettings: variant): TCQRSResult;
+  end;
+
 
 
 { *********** Cross-Cutting Layer Implementation}
@@ -2067,7 +2078,7 @@ var i: integer;
     dummy: variant;
 begin
   {$ifdef WITHLOG}
-  Log := Rest.LogClass.Enter(self);
+  Log := Rest.LogClass.Enter('Start %',[fProcessClass],self);
   {$endif}
   if fProcessClass=nil then
     raise EDDDException.CreateUTF8('%.Start with no fProcessClass',[self]);
@@ -2095,7 +2106,7 @@ begin
   try
     if fProcess<>nil then begin
       {$ifdef WITHLOG}
-      Log := Rest.LogClass.Enter(self);
+      Log := Rest.LogClass.Enter('Stop %',[fProcessClass],self);
       {$endif}
       for i := 0 to high(fProcess) do
         fProcess[i].Terminate;
@@ -2528,5 +2539,6 @@ end;
 
 initialization
   TInterfaceFactory.RegisterInterfaces([
-    TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),TypeInfo(IAdministratedDaemon)]);
+    TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),
+    TypeInfo(IAdministratedDaemon),TypeInfo(IAdministratedDaemonAsProxy)]);
 end.
