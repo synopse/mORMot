@@ -4407,8 +4407,9 @@ type
     fNextPurgeTix: Int64;
     fOnKeyResolve: TOnKeyResolve;
     procedure DoPurge; virtual;
-    // returns TRUE by default: inherited classes may add custom check
-    function IsKeyCorrect(const Key: RawUTF8): boolean; virtual;
+    // returns fClass.Create by default: inherited classes may add custom check
+    // or return nil if Key is invalid
+    function NewObjectCache(const Key: RawUTF8): TRawUTF8ObjectCache; virtual;
   public
     /// initialize the cache-information for a given class
     // - inherited classes may reintroduce a new constructor, for ease of use 
@@ -4416,8 +4417,8 @@ type
       aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
       const aOnKeyResolve: TOnKeyResolve); reintroduce;
     /// fill TRawUTF8ObjectCache with the matching key information
-    // - an unknown key, but with successful IsKeyCorrect() call, will create
-    // and append a new fClass instance to the list
+    // - an unknown key, but with a successful NewObjectCache() call, will
+    // create and append a new fClass instance to the list
     // - global or key-specific purge would be performed, if needed
     // - on success (true), output cache instance would be locked
     function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache): boolean; virtual;
@@ -52597,9 +52598,9 @@ begin
   fLog.SynLog.Log(Level, TextFmt, TextArgs, self);
 end;
 
-function TRawUTF8ObjectCacheList.IsKeyCorrect(const Key: RawUTF8): boolean;
+function TRawUTF8ObjectCacheList.NewObjectCache(const Key: RawUTF8): TRawUTF8ObjectCache;
 begin
-  result := true;
+  result := fClass.Create(self, Key);
 end;
 
 procedure TRawUTF8ObjectCacheList.TryPurge;
@@ -52659,21 +52660,22 @@ begin
       DoPurge;  // inline TryPurge within the locked instance
     cache := TRawUTF8ObjectCache(GetObjectByName(Key));
     if cache = nil then begin
-      if not IsKeyCorrect(Key) then begin
-        Log('IsKeyCorrect(%)=false: no % created', [Key, fClass]);
+      cache := NewObjectCache(Key);
+      if cache = nil then begin
+        Log('GetLocked: Invalid key - NewObjectCache(%) returned no %', [Key, fClass]);
         exit;
       end;
-      cache := fClass.Create(self, Key);
       AddObjectIfNotExisting(Key, cache, @added);
       if added then
-        Log('Added %[%] - count=%', [fClass, Key, fCount])
+        Log('GetLocked: Added %[%] - count=%', [fClass, Key, fCount])
       else
         raise ESynException.CreateUTF8('%.GetLocked(%) new %', [self, Key, cache]);
     end
     else if cache.fTimeOutTix = 0 then
-      Log('Using blank %[%]', [fClass, Key])
+      Log('GetLocked: Using blank %[%]', [fClass, Key])
     else
-      Log('Using %[%] with timeout in % ms', [fClass, Key, cache.fTimeOutTix - GetTickCount64]);
+      Log('GetLocked: Using %[%] with timeout in % ms',
+        [fClass, Key, cache.fTimeOutTix - GetTickCount64]);
     cache.fSafe.Lock;
     result := true;
   finally
