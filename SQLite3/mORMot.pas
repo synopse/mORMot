@@ -4336,6 +4336,94 @@ type
     destructor Destroy; override;
   end;
 
+  /// used by TRawUTF8ObjectCacheList to manage a list of information cache
+  TRawUTF8ObjectCacheSettings = class(TSynPersistent)
+  protected
+    fTimeOutMS: integer;
+    fPurgePeriodMS: integer;
+  public
+    /// will set default values to settings
+    constructor Create; override;
+  published
+    /// period after which the cache information should be flushed
+    // - use -1 to disable time out; any big value would be limited to 10 minutes
+    // - default is 120000, i.e. 2 minutes
+    property TimeOutMS: integer read fTimeOutMS write fTimeOutMS;
+    // period after which TRawUTF8ObjectCacheList would search for expired entries
+    // - use -1 to disable purge (not adviced, since may break process)
+    // - default is 1000, i.e. 1 second
+    property PurgePeriodMS: integer read fPurgePeriodMS write fPurgePeriodMS;
+  end;
+
+  TRawUTF8ObjectCacheList = class;
+
+  /// maintain information cache for a given key
+  // - after a given period of time, the entry is not deleted, but InfoClear
+  // virtual method is called to release the associated data or services
+  // - inherit from this abstract class to store your own key-defined information
+  // or you own interface-based services
+  TRawUTF8ObjectCache = class(TSynAutoCreateFieldsLocked)
+  protected
+    fKey: RawUTF8; // inherited class could publish fKey with a custom name
+    fOwner: TRawUTF8ObjectCacheList;
+    fTimeoutMS: integer;
+    fTimeoutTix: Int64;
+    /// should be called by inherited classes when information or services are set
+    // - set fTimeoutTix according to fTimeoutMS, to enable timeout mechanism
+    procedure InfoSet; virtual;
+    /// called by Destroy and TRawUTF8ObjectCacheList.DoPurge
+    // - set fTimeoutTix := 0 (inherited should also release services interfaces)
+    procedure InfoClear; virtual;
+  public
+    /// initialize the information cache entry
+    // - should not be called directly, but by TRawUTF8ObjectCacheList.GetLocked
+    constructor Create(aOwner: TRawUTF8ObjectCacheList; const aKey: RawUTF8); reintroduce; virtual;
+    /// finalize the information cache entry
+    // - would also call the virtual InfoClear method
+    destructor Destroy; override;
+    /// Dependency Injection using fOwner.OnKeyResolve, for the current Key
+    function Resolve(const aInterface: TGUID; out Obj): boolean;
+    /// access to the associated storage list 
+    property Owner: TRawUTF8ObjectCacheList read fOwner;
+  end;
+  /// class-reference type (metaclass) of a TRawUTF8ObjectCache
+  // - used e.g. by TRawUTF8ObjectCacheClass.Create to generate the
+  // expected cache instances
+  TRawUTF8ObjectCacheClass = class of TRawUTF8ObjectCache;
+
+  /// manage a list of information cache, identified by a hashed key
+  // - you should better inherit from this class, to give a custom name and
+  // constructor, or alter the default behavior
+  TRawUTF8ObjectCacheList = class(TRawUTF8ListHashedLocked)
+  protected
+    fSettings: TRawUTF8ObjectCacheSettings;
+    fLog: TSynLogFamily;
+    fLogEvent: TSynLogInfo;
+    fClass: TRawUTF8ObjectCacheClass;
+    fNextPurgeTix: Int64;
+    fOnKeyResolve: TOnKeyResolve;
+    procedure DoPurge; virtual;
+    // returns TRUE by default: inherited classes may add custom check
+    function IsKeyCorrect(const Key: RawUTF8): boolean; virtual;
+  public
+    /// initialize the cache-information for a given class
+    // - inherited classes may reintroduce a new constructor, for ease of use 
+    constructor Create(aClass: TRawUTF8ObjectCacheClass;
+      aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
+      const aOnKeyResolve: TOnKeyResolve); reintroduce;
+    /// fill TRawUTF8ObjectCache with the matching key information
+    // - an unknown key, but with successful IsKeyCorrect() call, will create
+    // and append a new fClass instance to the list
+    // - global or key-specific purge would be performed, if needed
+    // - on success (true), output cache instance would be locked
+    function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache): boolean; virtual;
+    /// access to the associated logging instance
+    procedure Log(const TextFmt: RawUTF8; const TextArgs: array of const;
+      Level: TSynLogInfo = sllNone);
+    /// optional service locator for by-key Dependency Injection
+    property OnKeyResolve: TOnKeyResolve read fOnKeyResolve write fOnKeyResolve;
+  end;
+
   /// a generic value object able to handle any task / process statistic
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
@@ -52333,6 +52421,157 @@ begin
 end;
 
 {$endif LVCL}
+
+
+{ TRawUTF8ObjectCacheSettings }
+
+constructor TRawUTF8ObjectCacheSettings.Create;
+begin
+  inherited Create;
+  // release after 2 minutes of inactivity by default
+  fTimeOutMS := 2 * 60 * 1000;
+  // 1 second periodicity of purge is small enough to be painless
+  fPurgePeriodMS := 1000;
+end;
+
+
+{ TRawUTF8ObjectCache }
+
+constructor TRawUTF8ObjectCache.Create(aOwner: TRawUTF8ObjectCacheList;
+  const aKey: RawUTF8);
+begin
+  inherited Create;
+  fOwner := aOwner;
+  fKey := aKey;
+  fOwner.Log('%.Create(%)', [ClassType, fKey]);
+  fTimeoutMS := fOwner.fSettings.TimeOutMS;
+end;
+
+destructor TRawUTF8ObjectCache.Destroy;
+begin
+  fOwner.Log('%.Destroy %', [ClassType, fKey]);
+  InfoClear;
+  inherited Destroy;
+end;
+
+procedure TRawUTF8ObjectCache.InfoSet;
+begin // gives some gracious time
+  fTimeoutTix := GetTickCount64 + fTimeoutMS;
+end;
+
+procedure TRawUTF8ObjectCache.InfoClear;
+begin
+  fTimeoutTix := 0; // indicates no service is available
+end;
+
+function TRawUTF8ObjectCache.Resolve(const aInterface: TGUID; out Obj): boolean;
+begin
+  if Assigned(fOwner.OnKeyResolve) then
+    result := fOwner.OnKeyResolve(aInterface,fKey,Obj) else
+    result := false;
+end;
+
+
+{ TRawUTF8ObjectCacheList }
+
+constructor TRawUTF8ObjectCacheList.Create(aClass: TRawUTF8ObjectCacheClass;
+  aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
+  const aOnKeyResolve: TOnKeyResolve);
+begin
+  inherited Create(true);
+  fClass := aClass;
+  fSettings := aSettings;
+  if (fClass = nil) or (fClass = TRawUTF8ObjectCache) or (fSettings = nil) then
+    raise ESynException.CreateUTF8('%.Create(nil)', [self]);
+  if (fSettings.PurgePeriodMS > 0) and (fSettings.TimeOutMS > 0) then
+    fNextPurgeTix := GetTickCount64 + fSettings.PurgePeriodMS;
+  fLog := aLog;
+  fLogEvent := aLogEvent;
+  fOnKeyResolve := aOnKeyResolve;
+end;
+
+procedure TRawUTF8ObjectCacheList.Log(const TextFmt: RawUTF8; const TextArgs: array of const;
+  Level: TSynLogInfo);
+begin
+  if (self=nil) or (fLog=nil) then
+    exit;
+  if Level=sllNone then
+    Level := fLogEvent;
+  fLog.SynLog.Log(Level, TextFmt, TextArgs, self);
+end;
+
+function TRawUTF8ObjectCacheList.IsKeyCorrect(const Key: RawUTF8): boolean;
+begin
+  result := true;
+end;
+
+procedure TRawUTF8ObjectCacheList.DoPurge;
+var
+  tix: Int64;
+  i: integer;
+  purged: RawUTF8;
+  log: ISynLog;
+  cache: TRawUTF8ObjectCache;
+begin // called within fSafe.Lock
+  tix := GetTickCount64;
+  try
+    for i := 0 to fCount - 1 do begin
+      cache := TRawUTF8ObjectCache(fObjects[i]);
+      if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then
+        try // test again the timeout after acquiring the TRawUTF8ObjectCache lock
+          cache.Safe.Lock;
+          if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then begin
+            if log = nil then
+              log := fLog.SynLog.Enter(self);
+            cache.InfoClear; // would set fTimeoutTix := 0
+            purged := purged + ' ' + cache.fKey;
+          end;
+        finally
+          cache.Safe.UnLock;
+        end;
+    end;
+    if log <> nil then
+      log.Log(fLogEvent, '%.ReleaseServices:% - count=%', [fClass, purged, fCount], self);
+  finally
+    fNextPurgeTix := tix + fSettings.PurgePeriodMS;
+  end;
+end;
+
+function TRawUTF8ObjectCacheList.GetLocked(const Key: RawUTF8;
+  out cache: TRawUTF8ObjectCache): boolean;
+var
+  added: boolean;
+begin
+  result := false;
+  if Key = '' then
+    exit;
+  fSafe.Lock;
+  try
+    if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
+      DoPurge;
+    cache := TRawUTF8ObjectCache(GetObjectByName(Key));
+    if cache = nil then begin
+      if not IsKeyCorrect(Key) then begin
+        Log('IsKeyCorrect(%)=false: no % created', [Key, fClass]);
+        exit;
+      end;
+      cache := fClass.Create(self, Key);
+      AddObjectIfNotExisting(Key, cache, @added);
+      if added then
+        Log('Added %[%] - count=%', [fClass, Key, fCount])
+      else
+        raise ESynException.CreateUTF8('%.GetLocked(%) new %', [self, Key, cache]);
+    end
+    else if cache.fTimeOutTix = 0 then
+      Log('Using blank %[%]', [fClass, Key])
+    else
+      Log('Using %[%] with timeout in % ms', [fClass, Key, cache.fTimeOutTix - GetTickCount64]);
+    cache.fSafe.Lock;
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
 
 
 { TServiceMethod }
