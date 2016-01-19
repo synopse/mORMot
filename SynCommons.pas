@@ -14506,14 +14506,14 @@ begin
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   if SourceChars>=4 then
   repeat
-    c := pCardinal(Source)^;
+    c := PCardinal(Source)^;
     if c and $80808080<>0 then
       break; // break on first non ASCII quad
     dec(SourceChars,4);
     inc(Source,4);
-    pCardinal(Dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
+    PCardinal(Dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
     c := c shr 16;
-    pCardinal(Dest+2)^ := (c shl 8 or c) and $00ff00ff;
+    PCardinal(Dest+2)^ := (c shl 8 or c) and $00ff00ff;
     inc(Dest,4);
   until SourceChars<4;
   if (SourceChars>0) and (ord(Source^)<128) then
@@ -14570,10 +14570,10 @@ begin
   // first handle trailing 7 bit ASCII chars, by quad (Sha optimization)
   if SourceChars>=4 then
     repeat
-      c := pCardinal(Source)^;
+      c := PCardinal(Source)^;
       if c and $80808080<>0 then
         break; // break on first non ASCII quad
-      pCardinal(Dest)^ := c;
+      PCardinal(Dest)^ := c;
       dec(SourceChars,4);
       inc(Source,4);
       inc(Dest,4);
@@ -14997,11 +14997,11 @@ begin
     EndSourceBy4 := EndSource-4;
     if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then
     repeat
-By4:  c := pCardinal(Source)^;
+By4:  c := PCardinal(Source)^;
       if c and $80808080<>0 then
         goto By1; // break on first non ASCII quad
       inc(Source,4);
-      pCardinal(Dest)^ := c;
+      PCardinal(Dest)^ := c;
       inc(Dest,4);
     until Source>EndSourceBy4;
     // generic loop, handling one WideChar per iteration
@@ -15245,10 +15245,10 @@ begin
   endSourceBy4 := endSource-4;
   if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then
     repeat
-By4:  c := pCardinal(Source)^;
+By4:  c := PCardinal(Source)^;
       if c and $80808080<>0 then
         goto By1; // break on first non ASCII quad
-      pCardinal(Dest)^ := c;
+      PCardinal(Dest)^ := c;
       inc(Source,4);
       inc(Dest,4);
     until Source>endSourceBy4;
@@ -25037,7 +25037,7 @@ begin
     endSourceBy4 := endSource-4;
     if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then
     repeat
-  By4:c := pCardinal(Source)^;
+  By4:c := PCardinal(Source)^;
       if c and $80808080<>0 then
         goto By1; // break on first non ASCII quad
       inc(Source,4);
@@ -28880,11 +28880,11 @@ begin
   DelphiName := PPointer(PtrInt(C)+vmtClassName)^;
   TrimLeft := 0;
   if DelphiName^[0]>#4 then
-    case pInteger(@DelphiName^[1])^ and $DFDFDFDF of
+    case PInteger(@DelphiName^[1])^ and $DFDFDFDF of
       // fast case-insensitive compare
       ord('T')+ord('S')shl 8+ord('Q')shl 16+ord('L')shl 24:
         if (DelphiName^[0]<=#10) or
-         (pInteger(@DelphiName^[5])^ and $DFDFDFDF<> // fast case-insensitive compare
+         (PInteger(@DelphiName^[5])^ and $DFDFDFDF<> // fast case-insensitive compare
            ord('R')+ord('E')shl 8+ord('C')shl 16+ord('O')shl 24) or
          (PWord(@DelphiName^[9])^ and $DFDF<>ord('R')+ord('D')shl 8) then
         TrimLeft := 4 else
@@ -30803,7 +30803,7 @@ asm // faster version by AB
 @@loop: mov edx,[esi].TFieldInfo.TypeInfo
         mov eax,[esi].TFieldInfo.&Offset
         mov edx,[edx]
-        lea esi,esi+8
+        lea esi,[esi+8]
         movzx ecx,[edx].TTypeInfo.Kind
         lea eax,eax+ebx // eax=data to be initialized
         jmp dword ptr [@@Tab+ecx*4-tkLString*4]
@@ -31050,7 +31050,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         add edi,eax
         add eax,[ebx].TFieldInfo.&Offset
         dec ebp    // any other TFieldInfo?
-        lea ebx,[ebx+8] // next TFieldInfo
+        lea ebx,[ebx+8]
         jnz @next
         pop ecx // ecx= sizeof(record)
 @fullcopy:
@@ -40509,8 +40509,8 @@ begin
   if BEnd-B<=3 then
     FlushToStream;
   if cardinal(Value)>99 then
-    pCardinal(B+1)^ := $3030+ord(',')shl 16 else     // '00,' if overflow
-    pCardinal(B+1)^ := TwoDigitLookupW[Value]+ord(',')shl 16;
+    PCardinal(B+1)^ := $3030+ord(',')shl 16 else     // '00,' if overflow
+    PCardinal(B+1)^ := TwoDigitLookupW[Value]+ord(',')shl 16;
   inc(B,3);
 end;
 
@@ -40519,7 +40519,7 @@ begin
   if BEnd-B<=5 then
     FlushToStream;
   if cardinal(Value)>9999 then
-    pCardinal(B+1)^ := $30303030 else // '0000,' if overflow
+    PCardinal(B+1)^ := $30303030 else // '0000,' if overflow
     YearToPChar(Value,B+1);
   inc(B,5);
   B^ := ',';
@@ -40587,8 +40587,8 @@ begin
   if BEnd-B<=4 then
     FlushToStream;
   if cardinal(Value)>999 then
-    pCardinal(B+1)^ := $303030 else // '0000,' if overflow
-    pCardinal(B+1)^ := TwoDigitLookupW[Value div 10]+
+    PCardinal(B+1)^ := $303030 else // '0000,' if overflow
+    PCardinal(B+1)^ := TwoDigitLookupW[Value div 10]+
       ord(Value mod 10+48)shl 16;
   inc(B,4);
   B^ := ',';
@@ -47040,7 +47040,7 @@ begin
   inc(fTotalWritten,PtrUInt(fPos-Pos));
 end;
 
-function CleverStoreInteger(p: pInteger; V, VEnd: PAnsiChar; pCount: integer;
+function CleverStoreInteger(p: PInteger; V, VEnd: PAnsiChar; pCount: integer;
   var StoredCount: integer): PAnsiChar;
 // Clever = store Values[i+1]-Values[i] (with special diff=1 count)
 // format:  Integer: firstValue, then:
@@ -47056,7 +47056,7 @@ begin
     exit;
   end;
   i := p^;
-  pInteger(V)^ := p^;
+  PInteger(V)^ := p^;
   inc(V,4);
   dec(pCount);
   inc(p);
@@ -47082,10 +47082,10 @@ begin
       else
       if byOne>255 then begin
         while byOne>65535 do begin
-          pInteger(V)^ := $fffffe; inc(V,3); // store as many len=$ffff as necessary
+          PInteger(V)^ := $fffffe; inc(V,3); // store as many len=$ffff as necessary
           dec(byOne,$ffff);
         end;
-        pInteger(V)^ := byOne shl 8+$fe; inc(V,3); // B:254 W:byOne
+        PInteger(V)^ := byOne shl 8+$fe; inc(V,3); // B:254 W:byOne
       end else begin
         PWord(V)^ := byOne shl 8+$ff; inc(V,2); // B:255 B:byOne
       end;
@@ -47095,11 +47095,11 @@ begin
     end;
     if (d=0) or (d>253) then begin
       while cardinal(d)>65535 do begin
-        pInteger(V)^ := $ffff00; inc(V,3); // store as many len=$ffff as necessary
+        PInteger(V)^ := $ffff00; inc(V,3); // store as many len=$ffff as necessary
         dec(cardinal(d),$ffff);
       end;
       dec(pCount);
-      pInteger(V)^ := d shl 8; inc(V,3); // B:0 W:difference with previous
+      PInteger(V)^ := d shl 8; inc(V,3); // B:0 W:difference with previous
       if (V<VEnd) and (pCount>0) then continue else break;
     end else begin
       dec(pCount);
@@ -47578,12 +47578,12 @@ begin
     result := -(result shr 1);
 end;
 
-function CleverReadInteger(p, pEnd: PAnsiChar; V: pInteger): PtrUInt;
+function CleverReadInteger(p, pEnd: PAnsiChar; V: PInteger): PtrUInt;
 // Clever = decode Values[i+1]-Values[i] storage (with special diff=1 count)
 var i, n: PtrUInt;
 begin
   result := PtrUInt(V);
-  i := pInteger(p)^; inc(p,4); // Integer: firstValue
+  i := PInteger(p)^; inc(p,4); // Integer: firstValue
   V^ := i; inc(V);
   if PtrUInt(p)<PtrUInt(pEnd) then
   repeat

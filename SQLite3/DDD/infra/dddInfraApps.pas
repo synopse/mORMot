@@ -227,8 +227,6 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClient;
-    function OnAuthentificationFailed(Retry: integer;
-      var aUserName,aPassword: string; out aPasswordHashed: boolean): boolean;
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
@@ -245,6 +243,10 @@ type
       aModel: TSQLModel=nil;
       aOptions: TDDDNewRestInstanceOptions=[riOwnModel,riCreateVoidModelIfNone,
         riHandleAuthentication,riRaiseExceptionIfNoRest]): TSQLRestClientURI;
+    /// you may assign this method to a TSQLRestClientURI.OnAuthentificationFailed
+    // property, so that the client would automatically try to re-connect
+    function OnAuthentificationFailed(Retry: integer; var aUserName, aPassword:
+      string; out aPasswordHashed: boolean): boolean;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
@@ -841,9 +843,9 @@ procedure TDDDRestHttpDaemon.InternalStop;
 begin
   try
     FreeAndNil(fHttpServer);
-    FreeAndNil(fServicesLogRest);
   finally
     inherited InternalStop; // FreeAndNil(fRest)
+    FreeAndNil(fServicesLogRest);
   end;
 end;
 
