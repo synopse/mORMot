@@ -2734,7 +2734,7 @@ function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // - ignore case - extup^ must be already Upper
 // - chars are compared as WinAnsi (codepage 1252), not as UTF-8
 // - could be used e.g. like IdemFileExt(aFileName,'.JP');
-function IdemFileExt(p: PUTF8Char; extup: PAnsiChar): Boolean;
+function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar='.'): Boolean;
 
 /// internal function, used to retrieve a UCS4 char (>127) from UTF-8
 // - not to be called directly, but from inlined higher-level functions
@@ -7921,6 +7921,10 @@ type
     // - return TRUE if found, and set aEvent to the corresponding callback
     function GetEventByName(const aText: RawUTF8; out aEvent: TMethod): boolean;
   end;
+
+  /// event signature to locate a service for a given string key
+  // - used e.g. by TRawUTF8ObjectCacheList.OnKeyResolve property
+  TOnKeyResolve = function(const aInterface: TGUID; const Key: RawUTF8; out Obj): boolean of object;
 
 const
   /// convert identified field types into high-level ORM types
@@ -24809,13 +24813,13 @@ begin
   result := false;
 end;
 
-function IdemFileExt(p: PUTF8Char; extup: PAnsiChar): Boolean;
+function IdemFileExt(p: PUTF8Char; extup: PAnsiChar; sepChar: AnsiChar): Boolean;
 var ext: PUTF8Char;
 begin
   if (p<>nil) and (extup<>nil) then begin
     ext := nil;
     repeat
-      if p^='.' then
+      if p^=sepChar then
         ext := p; // get last '.' position from p into ext
       inc(p);
     until p^=#0;
