@@ -1086,7 +1086,7 @@ begin
     exit;
   if (contentType='') or
      IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
-    content := GetJSONItemAsRawJSON(P) else begin
+    GetJSONItemAsRawJSON(P,RawJSON(content)) else begin
     txt := GetJSONField(P,P);
     if IdemPChar(pointer(contentType),'TEXT/') then
       SetString(content,txt,StrLen(txt)) else

@@ -6224,6 +6224,7 @@ type
     // - will return ptCustom for any unknown type
     class function TypeInfoToSimpleRTTIType(Info: pointer; ItemSize: integer): TJSONCustomParserRTTIType;
     /// unserialize some JSON content into its binary internal representation
+    // - on error, returns false and P should point to the faulty text input
     function ReadOneLevel(var P: PUTF8Char; var Data: PByte;
       Options: TJSONCustomParserSerializationOptions): boolean; virtual;
     /// serialize a binary internal representation into JSON content
@@ -6265,6 +6266,7 @@ type
     /// abstract method to write the instance as JSON
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); virtual; abstract;
     /// abstract method to read the instance from JSON
+    // - should return nil on parsing error
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; virtual; abstract;
     /// release any memory used by the instance
     procedure FinalizeItem(Data: Pointer); virtual;
@@ -6296,7 +6298,7 @@ type
     destructor Destroy; override;
     /// method to write the instance as JSON
     procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
-    /// abstract method to read the instance from JSON
+    /// method to read the instance from JSON
     function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
     /// which kind of simple property this instance does refer to
     property KnownType: TJSONCustomParserCustomSimpleKnownType read fKnownType;
@@ -8551,7 +8553,7 @@ function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean=nil;
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
-function GetJSONItemAsRawJSON(var P: PUTF8Char; EndOfObject: PAnsiChar=nil): RawJSON;
+procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON; EndOfObject: PAnsiChar=nil);
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
@@ -32773,7 +32775,7 @@ var EndOfObject: AnsiChar;
   var DynArray: PByte;
       ArrayLen, ArrayCapacity, n: integer;
       wasString: boolean;
-      PropValue: PUTF8Char;
+      PropValue, ptr: PUTF8Char;
   label Error;
   begin
     result := false;
@@ -32822,17 +32824,21 @@ var EndOfObject: AnsiChar;
           end;
           if Prop.NestedProperty[0].PropertyName='' then begin
             // array of simple type
-            if not ProcessValue(Prop.NestedProperty[0],P,DynArray) or (P=nil) then
+            ptr := P;
+            if not ProcessValue(Prop.NestedProperty[0],ptr,DynArray) or (ptr=nil) then
               goto Error;
-          end else // array of record
-            if not Prop.ReadOneLevel(P,DynArray,Options) or (P=nil) then
-              goto Error else begin
-              P := GotoNextNotSpace(P);
-              EndOfObject := P^;
-              if not(P^ in [',',']']) then
-                goto Error;
-              inc(P);
-            end;
+            P := ptr;
+          end else begin
+            // array of record
+            ptr := P;
+            if not Prop.ReadOneLevel(ptr,DynArray,Options) or (ptr=nil) then
+              goto Error;
+            P := GotoNextNotSpace(ptr);
+            EndOfObject := P^;
+            if not(P^ in [',',']']) then
+              goto Error;
+            inc(P);
+          end;
           case EndOfObject of
           ',': continue;
           ']': begin
@@ -32856,28 +32862,34 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       if P^<>#0 then //if P^=',' then
         inc(P);
     end;
-    ptCustom:
-      P := TJSONCustomParserCustom(Prop).CustomReader(P,Data^,EndOfObject);
+    ptCustom: begin                                  
+      ptr := TJSONCustomParserCustom(Prop).CustomReader(P,Data^,EndOfObject);
+      if ptr=nil then
+        exit;
+      P := ptr;
+    end;
     {$ifndef NOVARIANTS}
     ptVariant:
       P := VariantLoadJSON(PVariant(Data)^,P,@EndOfObject,
         @JSON_OPTIONS[soCustomVariantCopiedByReference in Options]);
     {$endif}
     ptRawByteString: begin
-      PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
+      PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject);
       if PropValue=nil then // null -> Blob=''
         PRawByteString(Data)^ := '' else
         if not Base64MagicCheckAndDecode(PropValue,PRawByteString(Data)^) then
           exit;
+      P := ptr;
     end;
     ptRawJSON:
-      PRawJSON(Data)^ := GetJSONItemAsRawJSON(P,@EndOfObject);
+      GetJSONItemAsRawJSON(P,PRawJSON(Data)^,@EndOfObject);
     else begin
-      PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
+      PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject);
       if (PropValue<>nil) and // PropValue=nil for null
          (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
            ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
          exit;
+      P := ptr;
       case Prop.PropertyType of
       ptBoolean:   if (PropValue<>nil) and (PInteger(PropValue)^=TRUE_LOW) then
                      PBoolean(Data)^ := true else
@@ -32905,7 +32917,8 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
     result := true;
   end;
 var i,j: integer;
-    PropName: RawUTF8;
+    PropName: shortstring;
+    ptr: PUTF8Char;
     Values: array of PUTF8Char;
 begin
   result := false;
@@ -32931,10 +32944,12 @@ begin
     inc(P);
   end else
   for i := 0 to High(NestedProperty) do begin
-    PropName := RawUTF8(GetJSONPropName(P));
+    ptr := P;
+    GetJSONPropName(ptr,PropName);
     if PropName='' then
       exit;  // invalid JSON content
-    if IdemPropNameU(NestedProperty[i].PropertyName,PropName) then begin
+    P := ptr;
+    if IdemPropNameU(NestedProperty[i].PropertyName,@PropName[1],ord(PropName[0])) then begin
       // O(1) optimistic search
       if not ProcessValue(NestedProperty[i],P,Data) then
         exit;
@@ -32947,19 +32962,24 @@ begin
       SetLength(Values,length(NestedProperty)); // pessimistic check through all properties
       repeat
         for j := i to High(NestedProperty) do
-          if (Values[j]=nil) and IdemPropNameU(NestedProperty[j].PropertyName,PropName) then begin
+          if (Values[j]=nil) and
+             IdemPropNameU(NestedProperty[j].PropertyName,@PropName[1],ord(PropName[0])) then begin
             Values[j] := P;
             PropName := '';
             break;
           end;
         if (PropName<>'') and not(soReadIgnoreUnknownFields in Options) then
           exit; // unexpected property
-        P := GotoNextJSONItem(P,1,@EndOfObject);
+        ptr := GotoNextJSONItem(P,1,@EndOfObject);
+        if ptr=nil then
+          exit;
+        P := ptr;
         if EndOfObject='}' then
           break;
-        PropName := RawUTF8(GetJSONPropName(P)); // next name
+        GetJSONPropName(ptr,PropName); // next name
         if PropName='' then
           exit;  // invalid JSON content
+        P := ptr;
       until false;
       for j := i to high(NestedProperty) do
         if Values[j]=nil then // ignore missing properties
@@ -32971,9 +32991,10 @@ begin
     end;
   end;
   if (P<>nil) and (EndOfObject=',') and (soReadIgnoreUnknownFields in Options) then begin
-    P := GotoNextJSONObjectOrArray(P,'}');
-    if P=nil then
+    ptr := GotoNextJSONObjectOrArray(P,'}');
+    if ptr=nil then
       exit;
+    P := ptr;
   end else
     if EndOfObject<>'}' then
       exit;
@@ -43425,7 +43446,7 @@ next:
   result := P;
 end;
 
-function GetJSONItemAsRawJSON(var P: PUTF8Char; EndOfObject: PAnsiChar=nil): RawJSON;
+procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON; EndOfObject: PAnsiChar);
 var B: PUTF8Char;
 begin
   result := '';
@@ -43434,7 +43455,7 @@ begin
   if P=nil then
     exit;
   SetString(result,PAnsiChar(B),P-B);
-  P := GotoNextNotSpace(P);
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
   if EndOfObject<>nil then
     EndOfObject^ := P^;
   if P^<>#0 then //if P^=',' then

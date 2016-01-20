@@ -2227,6 +2227,10 @@ function ObjectToVariant(Value: TObject): variant; overload;
 // - just a wrapper around _JsonFast(ObjectToJSON())
 procedure ObjectToVariant(Value: TObject; out result: variant); overload;
 
+/// will serialize any TObject into a TDocVariant document
+// - just a wrapper around _JsonFast(ObjectToJSON())
+procedure ObjectToVariant(Value: TObject; out result: variant; Options: TTextWriterWriteObjectOptions); overload;
+
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
 // "Context":"..." text message
@@ -42965,9 +42969,14 @@ begin
 end;
 
 procedure ObjectToVariant(Value: TObject; out result: variant); overload;
+begin
+  ObjectToVariant(Value,result,[woDontStoreDefault]);
+end;
+
+procedure ObjectToVariant(Value: TObject; out result: variant; Options: TTextWriterWriteObjectOptions); overload;
 var json: RawUTF8;
 begin
-  json := ObjectToJSON(Value);
+  json := ObjectToJSON(Value,Options);
   PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
@@ -48238,7 +48247,7 @@ begin
         smvRawJSON:
           if (R<>nil) and (R^=']') then
             PRawUTF8(V)^ := '' else begin
-            PRawUTF8(V)^ := GetJSONItemAsRawJSON(R);
+            GetJSONItemAsRawJSON(R,PRawJSON(V)^);
             if R=nil then
               RaiseError('returned RawJSON',[]);
           end;
@@ -53143,7 +53152,7 @@ begin
             raise EInterfaceFactoryException.CreateUTF8(
               'Unhandled %(%: %) parameter',[URI,ParamName^,ArgTypeName^]);
         smvRawJSON:
-          fRawUTF8s[IndexVar] := GetJSONItemAsRawJSON(Par);
+          GetJSONItemAsRawJSON(Par,RawJSON(fRawUTF8s[IndexVar]));
         smvDynArray: begin
           Par := fDynArrays[IndexVar].Wrapper.LoadFromJSON(Par);
           IgnoreComma(Par);

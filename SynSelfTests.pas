@@ -5058,6 +5058,7 @@ end;
 procedure TestGit(Options: TJSONCustomParserSerializationOptions);
 var i: Integer;
     U: RawUTF8;
+    s: RawJSON;
     git,git2: TTestCustomJSONGitHubs;
     item,value: PUTF8Char;
 begin
@@ -5084,7 +5085,8 @@ begin
     Check(item<>nil);
     value := JsonObjectItem(item,'name');
     check(value<>nil);
-    check(trim(GetJSONItemAsRawJSON(value))='"'+name+'"');
+    GetJSONItemAsRawJSON(value,s);
+    check(trim(s)='"'+name+'"');
     check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
     check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
     check(JsonObjectByPath(item,'owner.name')='');
@@ -5099,7 +5101,8 @@ begin
     check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
       '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
     value := JsonObjectByPath(item,'owner');
-    check(JSONReformat(GetJSONItemAsRawJSON(value),jsonCompact)=FormatUTF8(
+    GetJSONItemAsRawJSON(value,s);
+    check(JSONReformat(s,jsonCompact)=FormatUTF8(
       '{"login":"%","id":%}',[owner.login,owner.id]));
   end;
   Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);

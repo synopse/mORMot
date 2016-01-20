@@ -3674,8 +3674,10 @@ end;
 {$else}
 
 procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+var j: RawJSON;
 begin // JsonGet() would return the raw JSON for Delphi 5
-  RawUTF8ToSQlite3Context(GetJSONItemAsRawJSON(json),Context,true);
+  GetJSONItemAsRawJSON(json,j);
+  RawUTF8ToSQlite3Context(j,Context,true);
 end;
 
 {$endif}
