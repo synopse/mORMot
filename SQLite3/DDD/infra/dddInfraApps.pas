@@ -1526,7 +1526,7 @@ begin
     else
       fORM.Kind := TSQLHttpClient.ClassName;
   if (Port <> '') and (fORM.ServerName = '') then begin
-    if Server<>'' then
+    if Server = '' then
       fORM.ServerName := 'http://localhost:' + Port else
       fORM.ServerName := 'http://' + Server + ':' + Port; 
     if fClient.WebSocketsPassword = '' then

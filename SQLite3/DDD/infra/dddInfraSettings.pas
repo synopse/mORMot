@@ -450,7 +450,7 @@ type
 
   /// parent class for storing a HTTP published service/daemon settings
   TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
-  private
+  protected
     fRest: TDDDRestSettings;
     fHttp: TSQLHttpServerDefinition;
     fServicesLog: TDDDServicesLogRestSettings;
