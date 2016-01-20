@@ -1453,8 +1453,7 @@ end;
 { TDDDRestClientSettings }
 
 function TDDDRestClientSettings.NewRestClientInstance(aRootSettings:
-  TDDDAppSettingsAbstract; aModel: TSQLModel; aOptions:
-  TDDDNewRestInstanceOptions): TSQLRestClientURI;
+  TDDDAppSettingsAbstract; aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions): TSQLRestClientURI;
 var
   pass: RawUTF8;
 begin
