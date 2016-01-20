@@ -860,7 +860,7 @@ type
   {$ifdef HASINLINE}
   QWord = UInt64;
   {$else}
-  QWord = Int64;
+  QWord = type Int64;
   {$endif}
 
   {$ifndef ISDELPHIXE2}
@@ -13589,9 +13589,19 @@ type
     /// low-level method to force values settings to allow thread safe timing
     // - by default, this timer is not thread safe: you can use this method to
     // set the timing values from manually computed performance counters
-    // - the caller should also use a mutex to prevent from race conditions
+    // - the caller should also use a mutex to prevent from race conditions:
+    // see e.g. TSynMonitor.FromExternalQueryPerformanceCounters implementation
+    // - returns the time elapsed, in micro seconds (i.e. LastTime value)
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
-    procedure FromExternalQueryPerformanceCounters(const CounterDiff: Int64);
+    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+    /// low-level method to force values settings to allow thread safe timing
+    // - by default, this timer is not thread safe: you can use this method to
+    // set the timing values from manually computed performance counters
+    // - the caller should also use a mutex to prevent from race conditions:
+    // see e.g. TSynMonitor.FromExternalMicroSeconds implementation
+    // - warning: Start, Stop, Pause and Resume methods are then disallowed
+    procedure FromExternalMicroSeconds(const MicroSeconds: QWord);
+      {$ifdef HASINLINE}inline;{$endif}
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -44668,19 +44678,22 @@ begin
   iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
 end;
 
-procedure TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: Int64);
+procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
+begin
+  iLastTime := MicroSeconds;
+  inc(iTime,MicroSeconds);
+end;
+
+function TPrecisionTimer.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
 begin // very close to ComputeTime
-  iLastTime := 0;
   if iFreq=0 then begin
     iTime := 0;
     QueryPerformanceFrequency(iFreq);
-    if iFreq=0 then
-      exit;
   end;
-  if CounterDiff<=0 then
-    exit;
-  iLastTime := (CounterDiff*QWord(1000*1000))div iFreq;
-  inc(iTime,iLastTime);
+  if iFreq=0 then
+    iLastTime := 0 else
+    FromExternalMicroSeconds((CounterDiff*QWord(1000*1000))div iFreq);
+  result := iLastTime;
 end;
 
 function TPrecisionTimer.Stop: RawUTF8;

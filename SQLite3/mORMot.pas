@@ -4484,7 +4484,13 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - will return the processing time, converted into micro seconds, ready
     // to be logged if needed
-    function FromExternalQueryPerformanceCounters(const CounterDiff: Int64): QWord;
+    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+    /// used to allow thread safe timing
+    // - by default, the internal TPrecisionTimer is not thread safe: you can
+    // use this method to update the timing from many threads
+    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
+    // methods are disallowed, and the global fTimer won't be used any more
+    procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
   published
@@ -5834,6 +5840,9 @@ type
     StaticKind: TSQLRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
     CustomErrorMsg: RawUTF8;
+    /// high-resolution timimg of the execution command, in micro-seconds
+    // - only set when TSQLRestServer.URI finished
+    MicroSecondsElapsed: QWord;
     {$ifdef WITHLOG}
     /// associated logging instance for the current thread on the server
     // - you can use it to log some process on the server side
@@ -14864,7 +14873,7 @@ type
     procedure NotifyORM(aMethod: TSQLURIMethod);
     /// update the per-table statistics
     procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
-       const CounterDiff: Int64);
+       const MicroSecondsElapsed: QWord);
   published
     /// when this monitoring instance (therefore the server) was created
     property StartDate: RawUTF8 read fStartDate;
@@ -22019,7 +22028,7 @@ begin
   fProcessing := false;
 end;
 
-function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: Int64): QWord;
+function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
 begin
   if not fMultiThreaded then begin
     fMultiThreaded := true;
@@ -22029,9 +22038,25 @@ begin
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
-    fProcessTimer.FromExternalQueryPerformanceCounters(CounterDiff);
+    result := fProcessTimer.FromExternalQueryPerformanceCounters(CounterDiff);
     FillFromProcessTimer;
-    result := fProcessTimer.LastTimeInMicroSec;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+begin
+  if not fMultiThreaded then begin
+    fMultiThreaded := true;
+    InitializeCriticalSection(fLock);
+  end;
+  EnterCriticalSection(fLock);
+  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+    fProcessTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
+    FillFromProcessTimer;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -36247,18 +36272,20 @@ end;
 
 procedure StatsAddSizeForCall(Stats: TSynMonitorInputOutput; const Call: TSQLRestURIParams);
 begin
-  Stats.AddSize(
+  Stats.AddSize( // rough estimation
     length(Call.Url)+length(Call.Method)+length(Call.InHead)+length(Call.InBody)+12,
     length(Call.OutHead)+length(Call.OutBody)+16);
 end;
 
-function StatsFromContext(Stats: TSynMonitorInputOutput;
-  const Call: TSQLRestURIParams; const CounterDiff: Int64): QWord;
+procedure StatsFromContext(Stats: TSynMonitorInputOutput;
+  const Call: TSQLRestURIParams; var Diff: Int64; DiffIsMicroSecs: boolean);
 begin
   StatsAddSizeForCall(Stats,Call);
   if not StatusCodeIsSuccess(Call.OutStatus) then
     Stats.ProcessErrorNumber(Call.OutStatus);
-  result := Stats.FromExternalQueryPerformanceCounters(CounterDiff);
+  if DiffIsMicroSecs then // avoid a division
+    Stats.FromExternalMicroSeconds(Diff) else
+    Diff := Stats.FromExternalQueryPerformanceCounters(Diff); // converted to us
 end;
 
 procedure TSQLRestServerURIContext.ExecuteSOAByMethod;
@@ -36277,7 +36304,7 @@ begin
     if Stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
       dec(timeEnd,timeStart);
-      StatsFromContext(Stats,Call^,timeEnd);
+      StatsFromContext(Stats,Call^,timeEnd,false);
       if (mlSessions in Server.StatLevels) and (fAuthSession<>nil) then begin
         if fAuthSession.Methods=nil then
           SetLength(fAuthSession.fMethods,length(Server.fPublishedMethod));
@@ -36286,7 +36313,7 @@ begin
           sessionstat := TSynMonitorInputOutput.Create;
           fAuthSession.fMethods[MethodIndex] := sessionstat;
         end;
-        StatsFromContext(sessionstat,Call^,timeEnd);
+        StatsFromContext(sessionstat,Call^,timeEnd,true);
       end;
     end;
   end;
@@ -37667,12 +37694,11 @@ begin
         '; Path=/'); // not Path=/ModelRoot, since would be case sensitive
   finally
     QueryPerformanceCounter(timeEnd);
-    dec(timeEnd,timeStart);
-    timeStart := fStats.FromExternalQueryPerformanceCounters(timeEnd);
+    Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
     {$ifdef WITHLOG}
     InternalLog('% % % %/% %-> % with outlen=% in % us',
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
-      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),timeStart],sllServer);
+      COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
         fLogFamily.SynLog.Log(sllServiceReturn,Call.OutBody,self,MAX_SIZE_RESPONSE_LOG);
@@ -37680,9 +37706,9 @@ begin
     if mlTables in StatLevels then
       case Ctxt.Command of
       execORMGet:
-        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.OutBody),false,timeEnd);
+        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.OutBody),false,Ctxt.MicroSecondsElapsed);
       execORMWrite:
-        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,timeEnd);
+        fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,Ctxt.MicroSecondsElapsed);
       end;
     InterlockedDecrement(fStats.fCurrentRequestCount);
     Ctxt.Free;
@@ -39839,7 +39865,7 @@ begin
 end;
 
 procedure TSQLRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
-  Write: boolean; const CounterDiff: Int64);
+  Write: boolean; const MicroSecondsElapsed: QWord);
 begin
   if TableIndex<0 then
     exit;
@@ -39849,7 +39875,7 @@ begin
   if fPerTable[Write,TableIndex]=nil then
     fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;
   with fPerTable[Write,TableIndex] do begin
-    FromExternalQueryPerformanceCounters(CounterDiff);
+    FromExternalMicroSeconds(MicroSecondsElapsed);
     AddSize(DataSize);
   end;
 end;
@@ -51757,7 +51783,7 @@ begin
     if stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
       dec(timeEnd,timeStart);
-      timeStart := StatsFromContext(stats,Ctxt.Call^,timeEnd);
+      StatsFromContext(stats,Ctxt.Call^,timeEnd,false);
       if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
         if Ctxt.fAuthSession.fInterfaces=nil then
           SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
@@ -51772,11 +51798,10 @@ begin
             stats := TSynMonitorInputOutput.Create;
             fInterfaces[ndx] := stats;
           end;
-          StatsFromContext(stats,Ctxt.Call^,timeEnd);
+          StatsFromContext(stats,Ctxt.Call^,timeEnd,true);
         end;
       end;
-    end else
-      timeStart := 0;
+    end;
     if exec<>nil then begin
       if Assigned(exec.OnExecute) then
         ProcessOnExecute;
