@@ -15125,6 +15125,8 @@ type
     function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
       out Kind: TSQLRestServerKind): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
+    function GetRemoteTable(TableIndex: Integer; out RestInstance;
+      RestInstanceExpectedType: TSQLRestClass): boolean;
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
@@ -35065,6 +35067,22 @@ begin
   end;
 end;
 
+function TSQLRestServer.GetRemoteTable(TableIndex: Integer; out RestInstance;
+  RestInstanceExpectedType: TSQLRestClass): boolean;
+var remote: TSQLRestStorageRemote;
+begin
+  result := false;
+  if (cardinal(TableIndex)>=cardinal(length(fStaticData))) or
+     (fStaticData[TableIndex]=nil) or
+     not fStaticData[TableIndex].InheritsFrom(TSQLRestStorageRemote) then
+    exit;
+  remote := TSQLRestStorageRemote(fStaticData[TableIndex]);
+  if not remote.RemoteRest.InheritsFrom(RestInstanceExpectedType) then
+    exit;
+  pointer(RestInstance) := remote.RemoteRest;
+  result := true;
+end;
+
 function TSQLRestServer.GetVirtualTable(aClass: TSQLRecordClass): TSQLRest;
 var i: integer;
 begin
@@ -52041,6 +52059,7 @@ function TServiceRecordVersion.Subscribe(const SQLTableName: RawUTF8;
   const revision: TRecordVersion; const callback: IServiceRecordVersionCallback): boolean;
 var server: TSQLRestServer;
     tableIndex: integer;
+    table: TSQLRecordClass;
 begin
   with PServiceRunningContext(@ServiceContext)^ do
    if Factory<>nil then begin
@@ -52048,8 +52067,9 @@ begin
      if server<>nil then begin
        tableIndex := server.Model.GetTableIndex(SQLTableName);
        if tableIndex>=0 then begin
-         result := server.RecordVersionSynchronizeSubscribeMaster(
-           server.Model.Tables[tableIndex],revision,callback);
+         table := server.Model.Tables[tableindex];
+         server.GetRemoteTable(tableIndex,server,TSQLRestServer);
+         result := server.RecordVersionSynchronizeSubscribeMaster(table,revision,callback);
          exit;
        end;
      end;
