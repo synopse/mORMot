@@ -45910,7 +45910,7 @@ begin
         if (not (woStoreStoredFalse in Options)) and
            (not P^.IsStored(Value)) then
           goto next; // ignore regular "stored false" attribute
-      Added := false;
+      Added := false;  // HR(P) would write field name and set Added := true
       Kind := P^.PropType^.Kind;
       case Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}: begin

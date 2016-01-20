@@ -634,7 +634,7 @@ begin
   SetString(result,nil,CharCount);
   P := pointer(Result);
   while CharCount>0 do begin
-    if CharCount>5 then begin
+    if CharCount>=5 then begin
       V := Random(maxInt); // fast: one random compute per 5 chars
       P[0] := AnsiChar(32+V mod 94); V := V div 94;
       P[1] := AnsiChar(32+V mod 94); V := V div 94;

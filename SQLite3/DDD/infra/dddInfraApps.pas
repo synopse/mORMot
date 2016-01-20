@@ -1707,14 +1707,13 @@ begin
   if Settings = nil then
     raise EDDDInfraException.Create('AdministratedDaemonServer(Settings=nil)');
   with Settings.RemoteAdmin do
-    result := DaemonClass.Create(AuthUserName, AuthHashedPassword, AuthRootURI,
-      AuthNamedPipeName);
+    result := DaemonClass.Create(AuthUserName, AuthHashedPassword, AuthRootURI, AuthNamedPipeName);
   result.InternalSettings := Settings;
   result.Log.SynLog.Log(sllTrace, '%.Create(%)', [DaemonClass, Settings], result);
   with Settings.RemoteAdmin do
     if AuthHttp.BindPort <> '' then
-      result.AdministrationHTTPServer := TSQLHttpServer.Create(result.AdministrationServer,
-        AuthHttp);
+      result.AdministrationHTTPServer := TSQLHttpServer.Create(
+        result.AdministrationServer, AuthHttp);
 end;
 
 initialization

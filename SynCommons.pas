@@ -15008,7 +15008,7 @@ begin
     Exit;
   end else
   if (Source<>nil) and (SourceChars>0) then begin
-    // first handle 7 bit ASCII WideChars, by quads (Sha optimization)
+    // handle 7 bit ASCII WideChars, by quads (Sha optimization)
     EndSource := Source+SourceChars;
     EndSourceBy4 := EndSource-4;
     if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then
@@ -15027,7 +15027,7 @@ By1:  c := byte(Source^); inc(Source);
       if c<=$7F then begin
         Dest^ := AnsiChar(c); // 0..127 don't need any translation
         Inc(Dest);
-        if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
+        if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
         if Source<endSource then continue else break;
       end
       else begin // no surrogate is expected in TSynAnsiFixedWidth charsets
@@ -15037,13 +15037,13 @@ By1:  c := byte(Source^); inc(Source);
           Dest[1] := AnsiChar($80 or ((c shr 6) and $3F));
           Dest[2] := AnsiChar($80 or (c and $3F));
           Inc(Dest,3);
-          if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4 else
+          if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
           if Source<EndSource then continue else break;
         end else begin
           Dest[0] := AnsiChar($C0 or (c shr 6));
           Dest[1] := AnsiChar($80 or (c and $3F));
           Inc(Dest,2);
-          if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
+          if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4;
           if Source<endSource then continue else break;
         end;
       end;
@@ -15276,7 +15276,7 @@ By1:  c := byte(Source^);
       if ord(c) and $80=0 then begin
         Dest^ := AnsiChar(c);
         inc(Dest);
-        if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
+        if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then goto By4;
         if Source<endSource then continue else break;
       end else begin
         extra := UTF8_EXTRABYTES[c];
@@ -15292,7 +15292,7 @@ By1:  c := byte(Source^);
           Dest^ := '?' else // '?' as in unknown fWideToAnsi[] items
           Dest^ := AnsiChar(fWideToAnsi[c]);
         inc(Dest);
-        if (PtrUInt(Source) and 3=0) and (Source<EndSourceBy4) then goto By4 else
+        if (PtrUInt(Source) and 3=0) and (Source<=endSourceBy4) then goto By4;
         if Source<endSource then continue else break;
       end;
     until false;
@@ -15790,9 +15790,9 @@ function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; sourceBytes: PtrInt=
 // faster than System.UTF8Decode()
 var c: cardinal;
     begd: PWideChar;
-    endSource: PUTF8Char;
-    i,extra: integer;
-label Quit, NoSource;
+    endSource, endSourceBy4: PUTF8Char;
+    i,extra: PtrInt;
+label Quit, NoSource, By1, By4;
 begin
   result := 0;
   if dest=nil then
@@ -15806,25 +15806,26 @@ begin
   end;
   begd := dest;
   endSource := Source+SourceBytes;
-  repeat
-    if (PCardinal(Source)^ and $80808080=0) and (Source+4<endSource) then begin
-      // handle 7 bit ASCII chars, by quad (Sha optimization)
-      c := PCardinal(Source)^;
+  endSourceBy4 := endSource-4;
+  if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then
+    repeat // handle 7 bit ASCII chars, by quad (Sha optimization)
+By4:  c := PCardinal(Source)^;
+      if c and $80808080<>0 then
+        goto By1; // break on first non ASCII quad
       inc(Source,4);
       PCardinal(dest)^ := (c shl 8 or (c and $FF)) and $00ff00ff;
       c := c shr 16;
       PCardinal(dest+2)^ := (c shl 8 or c) and $00ff00ff;
       inc(dest,4);
-    end else begin
-      // single char or variable length decoding
-      c := byte(Source^);
-      inc(Source);
+    until Source>EndSourceBy4;
+  if Source<endSource then
+    repeat
+By1:  c := byte(Source^); inc(Source);
       if c and $80=0 then begin
         PWord(dest)^ := c; // much faster than dest^ := WideChar(c) for FPC
         inc(dest);
-        if Source<endsource then
-          continue else
-          break;
+        if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
+        if Source<endSource then continue else break;
       end;
       extra := UTF8_EXTRABYTES[c];
       if (extra=0) or (Source+extra>endSource) then break;
@@ -15842,18 +15843,16 @@ begin
       if c<=$ffff then begin
         PWord(dest)^ := c;
         inc(dest);
-        if Source<endsource then
-          continue else
-          break;
+        if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
+        if Source<endSource then continue else break;
       end;
       dec(c,$10000); // store as UTF-16 surrogates
       PWordArray(dest)[0] := c shr 10  +UTF16_HISURROGATE_MIN;
       PWordArray(dest)[1] := c and $3FF+UTF16_LOSURROGATE_MIN;
       inc(dest,2);
-      if Source>=endsource then
-        break;
-    end;
-  until false;
+      if (PtrUInt(Source) and 3=0) and (Source<=EndSourceBy4) then goto By4;
+      if Source>=endSource then break;
+    until false;
 Quit:
   result := PtrUInt(dest)-PtrUInt(begd); // dest-begd return char length
 NoSource:
@@ -32361,6 +32360,8 @@ begin
     PropValue := GetJSONField(P,P,@wasString,@EndOfObject);
     if PropValue=nil then
       exit;
+    if P=nil then
+      P := @NULCHAR; // result=nil indicates error
     case fKnownType of
     ktGUID:
       if wasString and (TextToGUID(PropValue,@aValue)<>nil) then

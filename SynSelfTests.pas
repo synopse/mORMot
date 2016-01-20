@@ -2980,7 +2980,6 @@ begin
   Check(C.CodePage=CP);
   U := C.AnsiToUTF8(W);
   A := C.UTF8ToAnsi(U);
-  Check(length(W)=length(A));
   if W='' then
     exit;
   {$ifdef HASCODEPAGE}
@@ -2990,17 +2989,16 @@ begin
   CP := StringCodePage(A);
   Check(CP=C.CodePage);
   {$endif}
-  {$ifdef FPC}
   if CP=CP_UTF16 then
     exit;
+  Check(length(W)=length(A));
+  {$ifdef FPC}
   Check(CompareMem(pointer(W),pointer(A),length(W)));
   {$else}
   Check(A=W);
   Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
   {$endif}
   FillChar(tmpA,SizeOf(tmpA),1);
-  if CP=CP_UTF16 then
-    exit;
   L := C.Utf8ToAnsiBuffer(RawByteString(W),tmpA,sizeof(tmpA));
   Check(L=StrLen(@tmpA));
   if L<sizeof(tmpA)-1 then
