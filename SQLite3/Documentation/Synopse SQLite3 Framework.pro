@@ -7621,7 +7621,7 @@ The above commands will create one thread for all read operations ({\f1\fs20 exe
 ! aServer.AcquireExecutionMode[execORMGet] := amBackgroundORMSharedThread;
 ! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundORMSharedThread;
 For instance, this sounds mandatory when using @*Jet/MSAccess@ as external database, since its implementation seems not thread-safe: if you write in one thread, then read immedially in another thread, the Jet engine is not able to find the just written data from the 2nd thread. This is clearly a bug of the Jet engine - but setting {\f1\fs20 amBackgroundORMSharedThread} option to circumvent the issue.
-During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 ServiceContext threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
+During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 @*ServiceContext@ threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
 In practice, {\f1\fs20 execSOAByMethod} may benefit of a per-method locking, {\f1\fs20 execSOAByInterface} of using its own execution options - see @72@, and {\f1\fs20 execORMGet} to be let unlocked to allow concurrent reads of all connected clients.
 :  Proven behavior
 When we are talking about thread-safety, nothing compares to a dedicated stress test program. An average human brain (like ours) is not good enough to ensure proper design of such a complex process. So we have to prove the abilities of our little {\i mORMot}.
@@ -9960,17 +9960,23 @@ This interface is registered on the server side as such:
 ! Server.ServiceDefine(TServiceComplexNumber,[IComplexNumber],sicClientDriven);
 Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven @*garbage collector@ will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
 :107  Accessing low-level execution context
-When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
+:   Retrieve information from the global ServiceContext
+When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 @**ServiceContext@} can be accessed to retrieve the currently running context on the server side.
 You will have access to the following information, which could be useful for {\f1\fs20 sicPerSession, sicPerUser} and {\f1\fs20 sicPerGroup} instance life time modes:
 !  TServiceRunningContext = record
 !    /// the currently running service factory
 !    // - it can be used within server-side implementation to retrieve the
 !    // associated TSQLRestServer instance
+!    // - note that TServiceFactoryServer.Get() won't override this value, when
+!    // called within another service (i.e. if Factory is not nil)
 !    Factory: TServiceFactoryServer;
 !    /// the currently runnning context which launched the method
-!    // - make available e.g. current session or authentication parameters
-!    // (including e.g. user details via Factory.RestServer.SessionGetUser)
 !    // - low-level RESTful context is also available in its Call member
+!    // - Request.Server is the safe access point to the underlying TSQLRestServer,
+!    // unless the service is implemented via TInjectableObjectRest, so the
+!    // TInjectableObjectRest.Server property is preferred
+!    // - make available e.g. current session or authentication parameters
+!    // (including e.g. user details via Request.Server.SessionGetUser)
 !    Request: TSQLRestServerURIContext;
 !    /// the thread which launched the request
 !    // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
@@ -9981,6 +9987,16 @@ When used, a local copy or a {\f1\fs20 PServiceRunningContext} pointer should be
 If your code is compiled within some @*packages@, {\f1\fs20 threadvar} read won't work, due to a {\i Delphi} compiler/RTL restriction (bug?). In such case, you have to call the following {\f1\fs20 function} instead of directly access the {\f1\fs20 threadvar}:
 ! function CurrentServiceContext: TServiceRunningContext;
 Note that this global {\f1\fs20 threadvar} is reset to 0 outside an {\f1\fs20 interface}-based service method call. It would therefore be useless to read it from a method-based service, for instance.
+:185   Implement your service from TInjectableObjectRest
+An issue with the {\f1\fs20 @*ServiceContext@} threadvar is that the execution context won't be filled when a SOA method is executed outside a client/server context, e.g. if the {\f1\fs20 TSQLRestServer} instance did resolve itself its dependencies using {\f1\fs20 Services.Resolve()}.
+A safer (and slightly faster) alternative is to implement your service by inheriting from the {\f1\fs20 @**TInjectableObjectRest@} class.\line This {\f1\fs20 class} has its own {\f1\fs20 Resolve()} overloaded methods (inherited from {\f1\fs20 TInjectableObject}), but also two additional properties:
+!  TInjectableObjectRest = class(TInjectableObject)
+!  ...
+!  public
+!    property Factory: TServiceFactoryServer read fFactory;
+!    property Server: TSQLRestServer read fServer;
+!  end;
+Those properties would be injected by {\f1\fs20 TServiceFactoryServer.CreateInstance}, i.e. when the service implementation object would be instantiated on the server side. They would give direct and safe access to the underlying REST server, e.g. all its @*ORM@ methods.
 :  Using services on the Server side
 Once the service is registered on the server side, it is very easy to use it in your code.
 In a complex @17@, it is not a good practice to have services calling each other. Code decoupling is a key to maintainability here. But in some cases, you'll have to consume services on the server side, especially if your software architecture has several layers (like in a @54@): your application services could be decoupled, but the {\i @*Domain-Driven@} services (those implementing the business model) could be on another Client-Server level, with a dedicated protocol, and could have nested calls.
@@ -9990,13 +10006,13 @@ You have several methods to retrieve a {\f1\fs20 TServiceFactory} instance, eith
 That is, you may code:
 !var I: ICalculator;
 !begin
-!  if Server.Services['Calculator'].Get(I)) then
+!  if ServiceContext.Request.Server.Services['Calculator'].Get(I)) then
 !    result := I.Add(10,20);
 !end;
 or, for a more complex service:
 !var CN: IComplexNumber;
 !begin
-!  if not Server.Services.Resolve(IComplexNumber,CN) then
+!  if not ServiceContext.Request.Server.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -10011,7 +10027,12 @@ For newer generic-aware versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up, s
 !  if I<>nil then
 !    result := I.Add(10,20);
 !end;
-You can of course cache your {\f1\fs20 TServiceFactory} instance within a local field, if you wish.
+You can of course cache/store your {\f1\fs20 TServiceFactory} or {\f1\fs20 TSQLRest} instances within a local field, if you wish. Using {\f1\fs20 ServiceContext.Request.Server} is verbose and error-prone.\line But you may consider instead to @185@: the {\f1\fs20 @*TInjectableObjectRest@} class has already its buil-in {\f1\fs20 Resolve()} overloaded methods, and direct access to the underlying {\f1\fs20 Server: TSQLRestServer} instance. So you would be able to write directly both SOA and ORM code:
+!var I: ICalculator;
+!begin
+!  if Resolve(ICalculator,I) then
+!    Server.Add(TSQLRecordExecution,['Add',I.Add(10,20)]);
+!end;
 If the service has been defined as {\f1\fs20 sicPerThread}, the instance you will retrieve on the server side will also be specific to the running thread - in this case, caching the instance may be source of confusion, since there will be one dedicated instance per thread.
 \page
 : Client side

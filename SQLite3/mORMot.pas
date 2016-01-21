@@ -5500,6 +5500,9 @@ type
   // or SOA methods), use Request.Server and not Factory.Server, which may not
   // be available e.g. if you run the service from the server side (so no
   // factory is involved)
+  // - note that the safest (and slightly faster) access to the TSQLRestServer
+  // instance associated with a service is to inherit your implementation
+  // class from TInjectableObjectRest
   TServiceRunningContext = record
     /// the currently running service factory
     // - it can be used within server-side implementation to retrieve the
@@ -5508,10 +5511,12 @@ type
     // called within another service (i.e. if Factory is not nil)
     Factory: TServiceFactoryServer;
     /// the currently runnning context which launched the method
-    // - make available e.g. current session or authentication parameters
-    // (including e.g. user details via Factory.RestServer.SessionGetUser)
     // - low-level RESTful context is also available in its Call member
-    // - Request.Server is the safe access point to the underlying TSQLRestServer
+    // - Request.Server is the safe access point to the underlying TSQLRestServer,
+    // unless the service is implemented via TInjectableObjectRest, so the
+    // TInjectableObjectRest.Server property is preferred
+    // - make available e.g. current session or authentication parameters
+    // (including e.g. user details via Request.Server.SessionGetUser)
     Request: TSQLRestServerURIContext;
     /// the thread which launched the request
     // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
@@ -10388,6 +10393,31 @@ type
   /// class-reference type (metaclass) of a TInjectableObject type
   TInjectableObjectClass = class of TInjectableObject;
 
+  /// service implementation class, with direct access on the associated
+  // TServiceFactoryServer/TSQLRestServer instances
+  // - allow dependency injection aka SOLID DI/IoC by the framework using
+  // inherited TInjectableObject.Resolve() methods
+  // - allows direct access to the underlying ORM using its Server method
+  // - this class would allow Server instance access outside the scope of
+  // remote SOA execution, e.g. when a DI is performed on server side: it
+  // is therefore a better alternative to ServiceContext.Factory,
+  // ServiceContext.Factory.RestServer or ServiceContext.Request.Server
+  TInjectableObjectRest = class(TInjectableObject)
+  protected
+    fFactory: TServiceFactoryServer;
+    fServer: TSQLRestServer;
+  public
+    /// access to the associated interface factory
+    // - this property will be injected by TServiceFactoryServer.CreateInstance,
+    // so may be nil if the instance was created outside the SOA context
+    property Factory: TServiceFactoryServer read fFactory;
+    /// access ot the associated REST Server, e.g. to its ORM methods 
+    // - slightly faster than Factory.RestServer
+    // - this value will be injected by TServiceFactoryServer.CreateInstance,
+    // so may be nil if the instance was created outside the SOA context
+    property Server: TSQLRestServer read fServer;
+  end;
+
   /// used to set the published properties of a TInjectableAutoCreateFields
   // - TInjectableAutoCreateFields.Create will check any resolver able to
   // implement this interface, then run its SetProperties() method on it
@@ -11535,7 +11565,8 @@ type
     fStats: TSynMonitorInputOutputObjArray;
     fImplementationClass: TInterfacedClass;
     fImplementationClassKind: (ickBlank,
-      ickWithCustomCreate, ickInjectable, ickFromInjectedResolver, ickFake);
+      ickWithCustomCreate, ickInjectable, ickInjectableRest, 
+      ickFromInjectedResolver, ickFake);
     fImplementationClassInterfaceEntry: PInterfaceEntry;
     fSharedInterface: IInterface;
     fByPassAuthentication: boolean;
@@ -12197,7 +12228,7 @@ type
   // for master/slave replication
   // - as used by TSQLRestServer.RecordVersionSynchronizeMasterStart(), and
   // expected by TSQLRestServer.RecordVersionSynchronizeSlaveStart()
-  TServiceRecordVersion = class(TInterfacedObject,IServiceRecordVersion)
+  TServiceRecordVersion = class(TInjectableObjectRest,IServiceRecordVersion)
   public
     /// will register the supplied callback for the given table
     function Subscribe(const SQLTableName: RawUTF8; const revision: TRecordVersion;
@@ -15125,8 +15156,7 @@ type
     function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
       out Kind: TSQLRestServerKind): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
-    function GetRemoteTable(TableIndex: Integer; out RestInstance;
-      RestInstanceExpectedType: TSQLRestClass): boolean;
+    function GetRemoteTable(TableIndex: Integer): TSQLRest;
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
@@ -18395,11 +18425,15 @@ function URIRequest(url, method, SendData: PUTF8Char; Resp, Head: PPUTF8Char): I
 threadvar
   /// this thread-specific variable will be set with the currently running
   // service context (on the server side)
+  // - note that in case of direct server side execution of the service, this
+  // information won't be filled, so the safest (and slightly faster) access
+  // to the TSQLRestServer instance associated with a service is to inherit your
+  // implementation class from TInjectableObjectRest, and not use this threadvar
   // - is set by TServiceFactoryServer.ExecuteMethod() just before calling the
   // implementation method of a service, allowing to retrieve the current
   // execution context - Request member is set from a client/server execution:
   // Request.Server is the safe access point to the underlying TSQLRestServer,
-  // but the easiest is to use the CurrentServiceContextServer function  to
+  // in such context - also consider the CurrentServiceContextServer function to
   // retrieve directly the running TSQLRestServer (if any)
   // - its content is reset to zero out of the scope of a method execution
   // - when used, a local copy or a PServiceRunningContext pointer should better
@@ -18427,7 +18461,9 @@ function CurrentServiceContext: TServiceRunningContext;
 
 /// wrapper function to retrieve the current REST server instance from
 // the global ServiceContext threadvar value
-// - may return nil if ServiceContext.Request is nil
+// - may return nil if ServiceContext.Request is nil: in this case,
+// you should better implement your service by inheriting the implementation
+// class from TInjectableObjectRest
 function CurrentServiceContextServer: TSQLRestServer;
 
 
@@ -35067,20 +35103,13 @@ begin
   end;
 end;
 
-function TSQLRestServer.GetRemoteTable(TableIndex: Integer; out RestInstance;
-  RestInstanceExpectedType: TSQLRestClass): boolean;
-var remote: TSQLRestStorageRemote;
+function TSQLRestServer.GetRemoteTable(TableIndex: Integer): TSQLRest;
 begin
-  result := false;
   if (cardinal(TableIndex)>=cardinal(length(fStaticData))) or
      (fStaticData[TableIndex]=nil) or
      not fStaticData[TableIndex].InheritsFrom(TSQLRestStorageRemote) then
-    exit;
-  remote := TSQLRestStorageRemote(fStaticData[TableIndex]);
-  if not remote.RemoteRest.InheritsFrom(RestInstanceExpectedType) then
-    exit;
-  pointer(RestInstance) := remote.RemoteRest;
-  result := true;
+    result := nil else
+    result := TSQLRestStorageRemote(fStaticData[TableIndex]).RemoteRest;
 end;
 
 function TSQLRestServer.GetVirtualTable(aClass: TSQLRecordClass): TSQLRest;
@@ -35488,20 +35517,19 @@ end;
 
 function TSQLRestServer.RecordVersionSynchronizeMasterStart(
   ByPassAuthentication: boolean): boolean;
-var factory: TServiceFactory;
+var factory: TServiceFactoryServer;
 begin
   if Services<>nil then begin
-    factory := Services.Info(TypeInfo(IServiceRecordVersion));
+    factory := Services.Info(TypeInfo(IServiceRecordVersion)) as TServiceFactoryServer;
     if factory<>nil then begin
-      result := TServiceFactoryServer(factory).ByPassAuthentication=ByPassAuthentication;
+      result := factory.ByPassAuthentication=ByPassAuthentication;
       exit; // already registered with the same authentication parameter
     end;
   end;
-  factory := ServiceRegister(
-    TServiceRecordVersion,[TypeInfo(IServiceRecordVersion)],sicShared);
+  factory := ServiceRegister(TServiceRecordVersion,[TypeInfo(IServiceRecordVersion)],sicShared);
   if factory<>nil then begin
     if ByPassAuthentication then
-      TServiceFactoryServer(factory).ByPassAuthentication := true;
+      factory.ByPassAuthentication := ByPassAuthentication;
     result := true;
   end else
     result := false;
@@ -51334,6 +51362,8 @@ begin
   end else begin
     if aRestServer.Services.Implements(fInterface.fInterfaceTypeInfo) then
       fImplementationClassKind := ickFromInjectedResolver else
+    if fImplementationClass.InheritsFrom(TInjectableObjectRest) then
+      fImplementationClassKind := ickInjectableRest else
     if fImplementationClass.InheritsFrom(TInjectableObject) then
       fImplementationClassKind := ickInjectable else
     if fImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
@@ -51570,7 +51600,9 @@ end;
 
 function TServiceFactoryServer.RestServer: TSQLRestServer;
 begin
-  result := TSQLRestServer(Rest);
+  if self<>nil then
+    result := TSQLRestServer(fRest) else
+    result := nil;
 end;
 
 function TServiceFactoryServer.CreateInstance(AndIncreaseRefCount: boolean): TInterfacedObject;
@@ -51579,13 +51611,18 @@ begin
   case fImplementationClassKind of
   ickWithCustomCreate:
     result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
-  ickInjectable:
-    result := TInjectableObjectClass(fImplementationClass).CreateWithResolver(
-      Rest.Services,true);
+  ickInjectable, ickInjectableRest: begin
+    result := TInjectableObjectClass(fImplementationClass).
+       CreateWithResolver(Rest.Services,true);
+    if fImplementationClassKind=ickInjectableRest then begin
+      TInjectableObjectRest(result).fFactory := self;
+      TInjectableObjectRest(result).fServer := RestServer;
+    end;
+  end;
   ickFromInjectedResolver: begin
     dummyObj := nil;
-    if not TSQLRestServer(Rest).Services.TryResolveInternal(
-       fInterface.fInterfaceTypeInfo,dummyObj) then
+    if not TSQLRestServer(Rest).Services.
+       TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
       raise EInterfaceFactoryException.CreateUTF8(
         'ickFromInjectedResolver: TryResolveInternal(%)=false',
         [fInterface.fInterfaceTypeInfo^.Name]);
@@ -52055,23 +52092,22 @@ end;
 
 function TServiceRecordVersion.Subscribe(const SQLTableName: RawUTF8;
   const revision: TRecordVersion; const callback: IServiceRecordVersionCallback): boolean;
-var server: TSQLRestServer;
-    tableIndex: integer;
-    table: TSQLRecordClass;
+var tableIndex: integer;
+    tableRemote: TSQLRest;
+    tableServer: TSQLRestServer;
 begin
-  with PServiceRunningContext(@ServiceContext)^ do
-   if Factory<>nil then begin
-     server := Factory.RestServer;
-     if server<>nil then begin
-       tableIndex := server.Model.GetTableIndex(SQLTableName);
-       if tableIndex>=0 then begin
-         table := server.Model.Tables[tableindex];
-         server.GetRemoteTable(tableIndex,server,TSQLRestServer);
-         result := server.RecordVersionSynchronizeSubscribeMaster(table,revision,callback);
-         exit;
-       end;
+  if Server<>nil then begin
+     tableIndex := Server.Model.GetTableIndex(SQLTableName);
+     if tableIndex>=0 then begin
+       tableRemote := Server.GetRemoteTable(tableIndex);
+       if (tableRemote=nil) or not tableRemote.InheritsFrom(TSQLRestServer) then
+         tableServer := Server else
+         tableServer := TSQLRestServer(tableRemote);
+       result := tableServer.RecordVersionSynchronizeSubscribeMaster(
+         Server.Model.Tables[tableindex],revision,callback);
+       exit;
      end;
-   end;
+  end;
   result := false;
 end;
 
