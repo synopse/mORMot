@@ -12327,10 +12327,10 @@ type
   public
     /// initialize the instance able to apply callbacks for a given table on
     // a local slave REST server from a remote master REST server
-    // - the optional aOnNotify callback will be triggerred for each incoming
-    // notification, so could be used to track the object changes in real-time
+    // - the optional low-level aOnNotify callback will be triggerred for each
+    // incoming notification, to track the object changes in real-time
     constructor Create(aSlave: TSQLRestServer; aMaster: TSQLRestClientURI;
-      aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite); reintroduce;
+      aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite); reintroduce; overload;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
@@ -12343,7 +12343,7 @@ type
     // so that TSQLHttpClientWebsockets.CallbackRequest will call it
     // - it will create a temporary TSQLRestBatch for the whole "jumbo frame"
     procedure CurrentFrame(isLast: boolean); virtual;
-    /// this event handler will be triggerred by Added/Updated/Deleted methods
+    /// low-level event handler triggerred by Added/Updated/Deleted methods
     property OnNotify: TOnBatchWrite read fOnNotify write fOnNotify;
   end;
 
@@ -53464,8 +53464,7 @@ begin
   end;
 end;
 
-procedure TServiceRecordVersionCallback.Updated(
-  const ModifiedContent: RawJSON);
+procedure TServiceRecordVersionCallback.Updated(const ModifiedContent: RawJSON);
 var rec: TSQLRecord;
     fields: TSQLFieldBits;
 begin
