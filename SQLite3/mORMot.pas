@@ -50908,17 +50908,15 @@ begin
     if UID[j]<>nil then
       raise EServiceException.CreateUTF8('%.AddImplementation: % not found in %',
         [self,aInterfaces[j]^.Name,aImplementationClass]);
-  // create the shared instance (if any)
-  if (aInstanceCreation=sicShared) and (aSharedImplementation=nil) then
-    if aImplementationClass.InheritsFrom(TInterfacedObjectWithCustomCreate) then
-      aSharedImplementation := TInterfacedObjectWithCustomCreateClass(aImplementationClass).Create else
-      aSharedImplementation := aImplementationClass.Create;
   // register this implementation class
   for j := 0 to high(aInterfaces) do begin
     F := TServiceFactoryServer.Create(Rest as TSQLRestServer,aInterfaces[j],
       aInstanceCreation,aImplementationClass,aContractExpected,1800,aSharedImplementation);
-    if result=nil then
+    if result=nil then begin
       result := F; // returns the first registered interface
+      if (aInstanceCreation=sicShared) and (aSharedImplementation=nil) then
+        aSharedImplementation := F.fSharedInstance; // re-use existing instance
+    end;
     AddServiceInternal(F);
   end;
 end;
