@@ -771,6 +771,10 @@ type
     // - we define here this method for older versions of Delphi
     procedure Start;
     {$endif}
+    {$ifdef FPC}
+    /// under FPC, would call Terminate and WaitFor just with Delphi RTL
+    destructor Destroy; override;
+    {$endif}
   end;
   {$M-}
 
@@ -3875,6 +3879,17 @@ begin
   {$endif}
 end;
 
+{$ifdef FPC}
+destructor TSynThread.Destroy;
+begin
+  if not Terminated then begin
+    Terminate;
+    WaitFor;
+  end;
+  inherited Destroy;
+end;
+{$endif}
+
 {$ifndef LVCL}
 procedure TSynThread.DoTerminate;
 begin
@@ -3884,7 +3899,6 @@ begin
   end;
   inherited DoTerminate;
 end;
-
 {$endif}
 
 {$ifndef HASTTHREADSTART}

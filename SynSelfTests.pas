@@ -3000,7 +3000,7 @@ begin
   {$endif}
   FillChar(tmpA,SizeOf(tmpA),1);
   L := C.Utf8ToAnsiBuffer(RawByteString(W),tmpA,sizeof(tmpA));
-  Check(L=StrLen(@tmpA));
+  Check(L=SynCommons.StrLen(@tmpA));
   if L<sizeof(tmpA)-1 then
     Check(L=Length(W)) else
     Check(L=sizeof(tmpA)-1);
@@ -3020,9 +3020,9 @@ var i, CP, L: integer;
     WA: Boolean;
 begin
   res := 'one,two,three';
-  Check(StrLen(nil)=0);
+  Check(SynCommons.StrLen(nil)=0);
   for i := length(res)+1 downto 1 do
-    Check(StrLen(Pointer(@res[i]))=length(res)-i+1);
+    Check(SynCommons.StrLen(Pointer(@res[i]))=length(res)-i+1);
   Check(StrLenPas(nil)=0);
   for i := length(res)+1 downto 1 do
     Check(StrLenPas(Pointer(@res[i]))=length(res)-i+1);
@@ -4638,8 +4638,8 @@ begin // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detail
   V.Minor := GetInteger(Values[1]);
   V.Release := GetInteger(Values[2]);
   V.Build := GetInteger(Values[3]);
-  V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
-  V.Detailed := UTF8DecodeToString(Values[5],StrLen(Values[5]));
+  V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
+  V.Detailed := UTF8DecodeToString(Values[5],SynCommons.StrLen(Values[5]));
   aValid := true;
 end;
 
@@ -4662,7 +4662,7 @@ begin // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildD
     V.Minor := GetInteger(Values[1]);
     V.Release := GetInteger(Values[2]);
     V.Build := GetInteger(Values[3]);
-    V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
+    V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
     V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5]);
   end;
 end;
