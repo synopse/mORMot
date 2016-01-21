@@ -20685,9 +20685,11 @@ begin
   end;
   OSVersion := Vers;
   with OSVersionInfo do
-    FormatUTF8('Windows % SP% (%.%.%)',
-      [WINDOWS_NAME[Vers],wServicePackMajor,dwMajorVersion,dwMinorVersion,dwBuildNumber],
-      OSVersionText);
+    if wServicePackMajor=0 then
+      FormatUTF8('Windows % (%.%.%)',[WINDOWS_NAME[Vers],
+        dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText) else
+      FormatUTF8('Windows % SP% (%.%.%)',[WINDOWS_NAME[Vers],wServicePackMajor,
+        dwMajorVersion,dwMinorVersion,dwBuildNumber],OSVersionText);
 end;
 
 {$else}
@@ -23019,6 +23021,8 @@ var F: THandle;
     L: integer;
 begin
   result := false;
+  if FileName='' then
+    exit;
   F := FileCreate(FileName);
   if PtrInt(F)<0 then
     exit;
@@ -44987,7 +44991,7 @@ procedure RetrieveInfo;
 {$ifndef FPC}
 var Heap: TMemoryManagerState;
     sb: integer;
-    tot,res: Int64;
+    tot,res: QWord;
 {$endif}
 {$ifdef MSWINDOWS}
 var MemoryStatus: TMemoryStatusEx;
