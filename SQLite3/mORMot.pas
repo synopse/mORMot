@@ -12330,7 +12330,7 @@ type
     // - the optional low-level aOnNotify callback will be triggerred for each
     // incoming notification, to track the object changes in real-time
     constructor Create(aSlave: TSQLRestServer; aMaster: TSQLRestClientURI;
-      aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite); reintroduce; overload;
+      aTable: TSQLRecordClass; aOnNotify: TOnBatchWrite); reintroduce;
     /// finalize this callback instance
     destructor Destroy; override;
     /// this event will be raised on any Add on a versioned record
