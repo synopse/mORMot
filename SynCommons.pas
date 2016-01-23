@@ -52285,6 +52285,7 @@ begin
   {$else}
   GetLocaleFormatSettings($0409,SettingsUS);
   {$endif}
+  SettingsUS.DecimalSeparator := '.'; // value may have been overriden :(
 {$endif}
   for i := 0 to 255 do
     NormToUpperAnsi7Byte[i] := i;
