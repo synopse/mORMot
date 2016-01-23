@@ -16958,6 +16958,14 @@ type
   // reached a defined limit
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
+  /// called by TSQLRestClientURI.URI() when an error occurred
+  // - so that you may have a single entry point for all client-side issues
+  // - information would be available in Sender's LastErrorCode and
+  // LastErrorMessage properties
+  // - if the error comes from an Execption, it would be supplied as parameter
+  // - the REST context (if any) would be supplied within the Call parameter
+  TOnClientFailed = procedure(Sender: TSQLRestClientURI; E: Exception;
+    Call: PSQLRestURIParams) of object;
 
   /// store information about registered interface callbacks
   TSQLRestClientCallbackItem = record
@@ -17046,6 +17054,7 @@ type
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
+    fOnFailed: TOnClientFailed;
     fRemoteLogThread: TObject; // private TRemoteLogThread
     fFakeCallbacks: TSQLRestClientCallbacks;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -17061,7 +17070,8 @@ type
       aDefinition: TSynConnectionDefinition); override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
-    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST);
+    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST;
+      Call: PSQLRestURIParams=nil);
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
       var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
@@ -17534,6 +17544,9 @@ type
     // an HTML_FORBIDDEN "403 Forbidden" error code
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
+    /// this Event is called if URI() was not successfull
+    // - the callback would have all needed information
+    property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
     // - is called always, on each TSQLRestClientURI.SetUser call
     // - you can check the SessionUser property to retrieve the current
@@ -34111,7 +34124,8 @@ begin
     ClientSetUser(self,aUserName,aPassword,HASH[aHashedPassword]);
 end;
 
-procedure TSQLRestClientURI.SetLastException(E: Exception; ErrorCode: integer);
+procedure TSQLRestClientURI.SetLastException(E: Exception; ErrorCode: integer;
+  Call: PSQLRestURIParams);
 begin
   fLastErrorCode := ErrorCode;
   if E=nil then begin
@@ -34123,6 +34137,8 @@ begin
     fLastErrorException := PPointer(E)^;
     fLastErrorMessage := ObjectToJSONDebug(E);
   end;
+  if Assigned(fOnFailed) then
+    fOnFailed(self,E,Call);
 end;
 
 {$ifndef LVCL} // SyncObjs.TEvent not available in LVCL yet
@@ -34240,6 +34256,8 @@ DoRetry:
         fLastErrorMessage := Call.OutBody;
       InternalLog('% % returned % (%) with message  %',
         [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],sllError);
+      if Assigned(fOnFailed) then
+        fOnFailed(self,nil,@Call);
     end;
     if (Call.OutStatus<>HTML_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
       break;
@@ -34250,7 +34268,7 @@ DoRetry:
   except
     on E: Exception do begin
       Int64(result) := HTML_NOTIMPLEMENTED; // 501
-      SetLastException(E,HTML_NOTIMPLEMENTED);
+      SetLastException(E,HTML_NOTIMPLEMENTED,@Call);
       exit;
     end;
   end;
