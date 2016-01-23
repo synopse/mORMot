@@ -13907,6 +13907,15 @@ type
   TNotifyAuthenticationFailed = procedure(Sender: TSQLRestServer;
     Reason: TNotifyAuthenticationFailedReason; Session: TAuthSession;
     Ctxt: TSQLRestServerURIContext) of object;
+  /// callback raised before TSQLRestServer.URI execution
+  // - should return TRUE to execute the command, FALSE to cancel it
+  TNotifyBeforeURI = function(Ctxt: TSQLRestServerURIContext): boolean;
+  /// callback raised after TSQLRestServer.URI execution
+  TNotifyAfterURI = procedure(Ctxt: TSQLRestServerURIContext);
+  /// callback raised if TSQLRestServer.URI execution failed
+  // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
+  // content has already been set as expected by the client
+  TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean;
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
@@ -15292,7 +15301,32 @@ type
     // !end;
     // - consider using a TInjectableObjectClass implementation for pure IoC/DI
     OnServiceCreateInstance: TOnServiceCreateInstance;
+    /// event trigerred when URI() starts to process a request
+    // - the supplied Ctxt parameter would give access to the command about to
+    // be executed, e.g. Ctxt.Command=execSOAByInterface would identify a SOA
+    // service execution, with the corresponding Service and ServiceMethodIndex
+    // parameters as set by TSQLRestServerURIContext.URIDecodeSOAByInterface
+    // - should return TRUE if the method can be executed
+    // - should return FALSE if the method should not be executed, and set the
+    // corresponding error to the supplied context e.g.
+    // ! Ctxt.Error('Unauthorized method',HTML_NOTALLOWED);
+    // - since this callback would be executed during all TSQLRestServer.URI,
+    // it should better not make any slow process (like writing to a remote DB)
+    OnBeforeURI: TNotifyBeforeURI;
+    /// event trigerred when URI() finished to process a request
+    // - the supplied Ctxt parameter would give access to the command which has
+    // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
+    // - since this callback would be executed during all TSQLRestServer.URI,
+    // it should better not make any slow process (like writing to a remote DB)
+    OnAfterURI: TNotifyAfterURI;
+    /// event trigerred when URI() failed to process a request
+    // - if Ctxt.ExecuteCommand raised an execption, this callback would be
+    // run with all neeed information
+    // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
+    // content has already been set as expected by the client
+    OnErrorURI: TNotifyErrorURI;
     /// event trigerred when URI() is called, and at least 128 ms is elapsed
+    // - could be used to execute some additional process after a period of time
     OnIdle: TNotifyEvent;
     /// this property can be used to specify the URI parmeters to be used
     // for query paging
@@ -15654,6 +15688,8 @@ type
     // either "sort", "dir", "startIndex", "results", as expected by the YUI
     // DataSource Request Syntax for data pagination - see
     // http://developer.yahoo.com/yui/datatable/#data
+    // - execution of this method could be monitored via OnBeforeURI and OnAfterURI
+    // event handlers
     procedure URI(var Call: TSQLRestURIParams); virtual;
 
     /// create an index for the specific FieldName
@@ -37710,10 +37746,13 @@ begin
           Ctxt.Command := execORMGet else
           // write methods (mPOST, mPUT, mDELETE...)
           Ctxt.Command := execORMWrite;
-        Ctxt.ExecuteCommand;
+        if (not Assigned(OnBeforeURI)) or OnBeforeURI(Ctxt) then
+          Ctxt.ExecuteCommand;
       except
-        on E: Exception do // return 500 internal server error
-          Ctxt.Error(E,'',[],HTML_SERVERERROR);
+        on E: Exception do
+          if (not Assigned(OnErrorURI)) or OnErrorURI(Ctxt,E) then
+            // return 500 internal server error
+            Ctxt.Error(E,'',[],HTML_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -37761,6 +37800,11 @@ begin
         fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,Ctxt.MicroSecondsElapsed);
       end;
     InterlockedDecrement(fStats.fCurrentRequestCount);
+    if Assigned(OnAfterURI) then
+    try
+      OnAfterURI(Ctxt);
+    except
+    end;
     Ctxt.Free;
   end;
   if Assigned(OnIdle) then begin
