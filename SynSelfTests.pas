@@ -8321,10 +8321,13 @@ procedure TTestSynopsePDF._TPdfDocument;
 var MS: THeapMemoryStream;
     i,y: integer;
     embed: boolean;
+    expected: cardinal;
     WS: SynUnicode;
 const
   Hash: array[boolean] of Cardinal =
     (2336277040,1967009088);
+  Hash10: array[boolean] of Cardinal =
+    (2379006506,1967009088);
   Name: array[boolean] of PDFString =
     ('Arial','Helvetica');
 begin
@@ -8349,7 +8352,10 @@ begin
       end;
       SaveToStream(MS,FIXED_DATE);
       //MS.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
-      Check(Hash32(MS.Memory,MS.Position)=Hash[embed]);
+      if OSVersion<wTen then
+        expected := Hash[embed] else
+        expected := Hash10[embed];
+      Check(Hash32(MS.Memory,MS.Position)=expected);
       if not embed then begin
         if CharSet<>ANSI_CHARSET then
           break; // StandardFontsReplace will work only with ANSI code page
