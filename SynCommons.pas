@@ -13011,6 +13011,11 @@ type
     /// delete a value/item in this document, from its value
     // - return TRUE on success, FALSE if the supplied value does not exist
     function DeleteByValue(const aValue: Variant): boolean;
+    /// delete all values matching the first characters of a property name
+    // - returns the number of deleted items
+    // - returns 0 if the document is not a dvObject, or if no match was found
+    // - will use IdemPChar(), so search would be case-insensitive
+    function DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
     /// search a property match in this document, handled as array
     // - {aPropName:aPropValue} will be searched within the stored array,
     // and the corresponding item index will be returned, on match
@@ -35429,6 +35434,23 @@ end;
 function TDocVariantData.DeleteByValue(const aValue: Variant): boolean;
 begin
   result := Delete(SearchItemByValue(aValue));
+end;
+
+function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
+var ndx: integer;
+    upname: array[byte] of AnsiChar;
+begin
+  result := 0;
+  if aStartNameLen=0 then
+    aStartNameLen := StrLen(aStartName);
+  if (VCount=0) or (VKind<>dvObject) or (aStartNameLen=0) then
+    exit;
+  UpperCopy255Buf(upname,aStartName,aStartNameLen)^ := #0;
+  for ndx := Count-1 downto 0 do
+    if IdemPChar(pointer(Names[ndx]),upname) then begin
+      Delete(ndx);
+      inc(result);
+    end;
 end;
 
 function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
