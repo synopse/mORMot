@@ -82,8 +82,6 @@ program TestSQL3;
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
-{$R Vista.res} // includes manifest to identify Windows 10 OS
-
 uses
   {$ifdef KYLIX3}
   FastMM4,
@@ -171,6 +169,10 @@ uses
   SynSelfTests in '..\SynSelfTests.pas',
   mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}
+
+{$ifdef MSWINDOWS}
+{$R ..\Vista.res} // includes manifest to identify Windows 10 OS
+{$endif}
 
 begin
   {$ifdef ISDELPHI2007ANDUP}

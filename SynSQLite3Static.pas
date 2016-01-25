@@ -182,8 +182,6 @@ procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
 {$ifdef FPC}
 { **** latest FPC trunk expect those definitions to be part of the unit interface **** }
 
-{$I SynSQLite3Static.inc}
-
 function malloc(size: cardinal): Pointer; cdecl;
 procedure free(P: Pointer); cdecl;
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl;
@@ -194,17 +192,17 @@ function strlen(p: PAnsiChar): integer; cdecl;
 function strcmp(p1,p2: PAnsiChar): integer; cdecl;
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl;
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
-procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func); cdecl; { always cdecl }
+procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
 function localtime(t: PCardinal): pointer; cdecl;
 {$ifdef MSWINDOWS}
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
 procedure _endthreadex(ExitCode: DWORD); cdecl;
-function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 {$else}
-function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 {$endif}
 
 { **** you may safely ignore the above definitions, and should never use them **** }
@@ -371,9 +369,6 @@ end;
 
 {$ifndef FPC}
 
-// defined privately here for Delphi, but above in unit interface for latest FPC trunk
-{$I SynSQLite3Static.inc}
-
 {$ifdef MSWINDOWS}
 
 var __turbofloat: word; { not used, but must be present for linking }
@@ -492,6 +487,11 @@ begin
   result := 0;
 end;
 
+type
+  // qsort() is used if SQLITE_ENABLE_FTS3 is defined
+  // this function type is defined for calling termDataCmp() in sqlite3.c
+  qsort_compare_func = function(P1,P2: pointer): integer; cdecl; { always cdecl }
+
 procedure QuickSort4(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
 var I, J, P: Integer;
     PP, C: PAnsiChar;
@@ -565,14 +565,14 @@ begin
   until I>=R;
 end;
 
-procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func); cdecl; { always cdecl }
+procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
   {$ifdef FPC}{$ifdef CPU64}alias : 'qsort'{$else}alias : '_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
     if Width=sizeof(pointer) then
-      QuickSort4(baseP, 0, NElem-1, comparF) else
-      QuickSort(baseP, Width, 0, NElem-1, comparF);
+      QuickSort4(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
+      QuickSort(baseP, Width, 0, NElem-1, qsort_compare_func(comparF));
 end;
 
 var
@@ -819,6 +819,42 @@ type
 {$A4} // bcc32 default alignment is 4 bytes
 {$endif}
 {$endif}
+  {$ifdef MSWINDOWS}
+  TSQLFile = packed record // see struct winFile in sqlite3.c
+    pMethods: pointer;     // sqlite3.io_methods_ptr
+    pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
+    h: THandle;            // Handle for accessing the file
+    bulk1: cardinal;       // lockType+sharedLockByte are word-aligned
+    bulk2: cardinal;       // ctrlFlags (with DWORD alignment)
+    lastErrno: cardinal;   // The Windows errno from the last I/O error
+    // asm code generated from c is [esi+20] for lastErrNo -> OK
+    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
+    zPath: PAnsiChar;
+    szChunk, nFetchOut: integer;
+    hMap: THANDLE;
+    pMapRegion: PAnsiChar;
+    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
+  end;
+  {$else}
+  TSQLFile = record             // see struct unixFile in sqlite3.c
+    pMethods: pointer;          // sqlite3.io_methods_ptr
+    pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
+    unixInodeInfo: pointer;     // Info about locks on this inode
+    h: THandle;                 // Handle for accessing the file
+    eFileLock: cuchar;          // The type of lock held on this fd
+    ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
+    lastErrno: cint;            // The unix errno from the last I/O error
+    lockingContext : PAnsiChar; // Locking style specific state
+    UnixUnusedFd : pointer;     // unused
+    zPath: PAnsiChar;           // Name of the file
+    pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
+    szChunk: cint;
+    nFetchOut: cint;
+    mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
+    pMapRegion: PAnsiChar;
+  end;
+  {$endif}
+  PSQLFile = ^TSQLFile;
 
   // those structures are used to retrieve the Windows/Linux file handle
   TSQLPager = record            // see struct Pager in sqlite3.c
@@ -829,9 +865,9 @@ type
     dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
     nSubRec: cardinal;
     pInJournal: pointer;
-    fd: ^TSQLFile;   // File descriptor for database
-    jfd: ^TSQLFile;  // File descriptor for main journal
-    sjfd: ^TSQLFile; // File descriptor for sub-journal
+    fd: PSQLFile;   // File descriptor for database
+    jfd: PSQLFile;  // File descriptor for main journal
+    sjfd: PSQLFile; // File descriptor for sub-journal
   end;
   TSQLBtShared = record
     pPager: ^TSQLPager;
@@ -906,9 +942,9 @@ end;
 
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 {$ifdef MSWINDOWS}
-function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
 {$else}
-function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -927,6 +963,7 @@ function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integ
 var n, i: integer;
     EncryptTable: PByteArray;
     offset: Int64Rec absolute off;
+    F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
 label err;
@@ -995,9 +1032,9 @@ const
   SQLITE_IOERR_SHORT_READ = $020A;
 
 {$ifdef MSWINDOWS}
-function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer;
 {$else}
-function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -1014,6 +1051,7 @@ function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): intege
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
 var offset: Int64Rec absolute off;
+    F: PSQLFile absolute FP;
     nCopy: cardinal;
     i: integer;
 begin
