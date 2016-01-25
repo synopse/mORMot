@@ -238,7 +238,7 @@
   // exceptions interception code in FPC differs from Delphi
   {$define NOEXCEPTIONINTERCEPT}
 
-  // {$if FPC_FULLVERSION>20700} does not compile under Delphi 6-7 :(
+  // $if FPC_FULLVERSION>20700 breaks Delphi 6-7 and SynProject :(
   {$ifdef VER2_7}
     {$define ISFPC27}
   {$endif}

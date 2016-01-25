@@ -9939,6 +9939,8 @@ type
   // - since TTimeLogBits.Value is bit-oriented, you can't just add or substract
   // two TTimeLog values when doing date/time computation: use a TDateTime
   // temporary conversion in such case
+  // - TTimeLogBits.Value has a 38-bit precision, so features exact representation
+  // as JavaScript numbers (stored in a 52-bit mantissa)
   TTimeLogBits = {$ifndef UNICODE}object{$else}record{$endif}
     /// the bit-encoded value itself, which follows an abstract "year" of 16
     // months of 32 days of 32 hours of 64 minutes of 64 seconds

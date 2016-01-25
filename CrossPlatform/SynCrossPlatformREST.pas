@@ -67,6 +67,7 @@ interface
 uses
   SmartCL.System,
   System.Types,
+  ECMA.Json,
 {$else}
 uses
   SysUtils,
@@ -107,7 +108,10 @@ type
   // circumvent limited DWS / SMS syntax
   TPersistent = TObject;
   TObjectList = array of TObject;
+  // stored as binary, transmitted as Base64 (VariantToBlob=atob and BlobToVariant=btoa)
   TSQLRawBlob = variant;
+  // TTimeLogBits.Value has a 38-bit precision, so features exact representation
+  // as JavaScript numbers (stored in a 52-bit mantissa - maybe define Int52 type)
   TTimeLog = Int64;
   TModTime = TTimeLog;
   TCreateTime = TTimeLog;
@@ -236,6 +240,8 @@ type
   /// a set of published property Kind
   TSQLFieldKinds = set of TSQLFieldKind;
 
+  { TODO: TID should be a string since number is limited to 53-bit in JavaScript
+    -> define and use an explicit Int52 type for SMS }
   /// the TSQLRecord primary key is a 64 bit integer
   TID = {$ifndef ISDWS}type{$endif} Int64;
 
