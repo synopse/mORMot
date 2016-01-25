@@ -198,7 +198,7 @@ type
     wObject, wSQLRecord, wInterface, wRecordVersion);
   /// supported languages typesets
   TWrapperLanguage = (
-    lngDelphi, lngPascal, lngCS, lngJava);
+    lngDelphi, lngPascal, lngCS, lngJava, lngTypeScript);
 
 const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
@@ -217,6 +217,7 @@ const
   TYPES_SIZE: array[0..8] of TWrapperType = (
     winteger,wbyte,wword,winteger,winteger,wint64,wint64,wint64,wint64);
 
+  { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
   TYPES_LANG: array[TWrapperLanguage,TWrapperType] of RawUTF8 = (
    // lngDelphi
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
@@ -240,7 +241,13 @@ const
    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
-    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'));
+    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'),
+   // lngTypeScript
+   ('', 'boolean', '', '', 'number', 'number', 'number', 'number',
+    'number', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
+    'number', 'number', 'number', 'TDateTime', 'string','string', 'any',
+    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'any', '', '', '',
+    'TRecordVersion'));
 
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
@@ -748,7 +755,8 @@ begin
   result := _ObjFast([
     'typeWrapper',typeWrapper^,      'typeSource',typName,
     'typeDelphi',VarName(lngDelphi), 'typePascal',VarName(lngPascal),
-    'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
+    'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava),
+    'typeTS',VarName(lngTypeScript)]);
   if self=nil then
     exit; // no need to have full info if called e.g. from MVC
   if typInfo<>nil then
