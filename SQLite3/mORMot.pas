@@ -1909,6 +1909,10 @@ type
   /// define how TJSONObjectDecoder.Decode() will handle JSON string values
   TJSONObjectDecoderParams = (pInlined, pQuoted, pNonQuoted);
 
+  /// define how TJSONObjectDecoder.FieldTypeApproximation[] is identified
+  TJSONObjectDecoderFieldType = (
+    ftaNumber,ftaBoolean,ftaString,ftaDate,ftaNull,ftaBlob,ftaObject,ftaArray);
+
   /// JSON object decoding and SQL generation, in the context of ORM process
   // - this is the main process for marshalling JSON into SQL statements
   // - used e.g. by GetJSONObjectAsSQL() function or ExecuteFromJSON and
@@ -1920,8 +1924,7 @@ type
     FieldValues: array[0..MAX_SQLFIELDS-1] of RawUTF8;
     /// Decode() will set each field type approximation
     // - will recognize also JSON_BASE64_MAGIC/JSON_SQLDATE_MAGIC prefix
-    FieldTypeApproximation: array[0..MAX_SQLFIELDS-1] of
-      (ftaNumber,ftaBoolean,ftaString,ftaDate,ftaNull,ftaBlob,ftaObject,ftaArray);
+    FieldTypeApproximation: array[0..MAX_SQLFIELDS-1] of TJSONObjectDecoderFieldType;
     /// number of fields decoded in FieldNames[] and FieldValues[]
     FieldCount: integer;
     /// set to TRUE if parameters are to be :(...): inlined
@@ -1956,7 +1959,8 @@ type
     // - the caller should ensure that the supplied FieldValue will match
     // the quoting/inlining expectations of Decode(TJSONObjectDecoderParams) -
     // e.g. that string values are quoted if needed
-    procedure AddFieldValue(const FieldName,FieldValue: RawUTF8);
+    procedure AddFieldValue(const FieldName,FieldValue: RawUTF8;
+      FieldType: TJSONObjectDecoderFieldType);
     /// encode as a SQL-ready INSERT or UPDATE statement
     // - after a successfull call to Decode()
     // - escape SQL strings, according to the official SQLite3 documentation
@@ -3925,7 +3929,7 @@ type
     /// find an item in the list
     // - returns -1 if not found
     function IndexByName(aName: PUTF8Char): integer; overload;
-    /// find an item in the list, including RowID/ID
+    /// find an item by name in the list, including RowID/ID
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EORMException if not found in the internal list
     function IndexByNameOrExcept(const aName: RawUTF8): integer;
@@ -16496,6 +16500,9 @@ type
     function FindWhereEqual(const WhereFieldName, WhereValue: RawUTF8;
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
       CaseInsensitive: boolean=true): PtrInt; overload;
+    /// search the maximum value of a given column
+    // - would only handle integer kind of column
+    function FindMax(WhereField: integer; out max: Int64): boolean;
     /// execute a method on every TSQLRecord item
     // - the loop execution will be protected via StorageLock/StorageUnlock 
     procedure ForEach(WillModifyContent: boolean;
@@ -25396,14 +25403,15 @@ begin
   result := -1;
 end;
 
-procedure TJSONObjectDecoder.AddFieldValue(const FieldName,FieldValue: RawUTF8);
+procedure TJSONObjectDecoder.AddFieldValue(const FieldName,FieldValue: RawUTF8;
+  FieldType: TJSONObjectDecoderFieldType);
 begin
   if FieldCount=MAX_SQLFIELDS then
     raise EParsingException.CreateUTF8(
       'Too many fields for TJSONObjectDecoder.AddField(%)',[FieldName]);
   FieldNames[FieldCount] := FieldName;
   FieldValues[FieldCount] := FieldValue;
-  FieldTypeApproximation[FieldCount] := ftaNumber;
+  FieldTypeApproximation[FieldCount] := FieldType;
   inc(FieldCount);
 end;
 
@@ -31624,9 +31632,11 @@ function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8
   out Data: Int64): boolean;
 var Res: array[0..0] of RawUTF8;
     err: integer;
+    where: RawUTF8;
 begin
   result := false;
-  if MultiFieldValue(Table,[FieldName],Res,FormatUTF8(WhereClauseFmt,Args,Bounds)) then
+  where := FormatUTF8(WhereClauseFmt,Args,Bounds);
+  if MultiFieldValue(Table,[FieldName],Res,where) then
     if Res[0]<>'' then begin
       Data := GetInt64(pointer(Res[0]),err);
       if err=0 then
@@ -35388,7 +35398,7 @@ begin
     exit; // no TRecordVersion field to track
   if Decoder.FindFieldName(RecordVersionField.Name)<0 then
     // only compute new monotonic TRecordVersion if not already supplied by sender
-    Decoder.AddFieldValue(RecordVersionField.Name,Int64ToUtf8(RecordVersionCompute));
+    Decoder.AddFieldValue(RecordVersionField.Name,Int64ToUtf8(RecordVersionCompute),ftaNumber);
   if (fServices<>nil) then
     (fServices as TServiceContainerServer).RecordVersionNotifyAddUpdate(
       Occasion,TableIndex,Decoder);
@@ -40678,7 +40688,7 @@ begin
   currentRow := 0;
   item := pointer(fValue.List);
   if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
-    // stored as an Integer 8, 16 or 32 bit value -> optimized search
+    // optimized search for 8/16/32-bit Integer values 
     i32 := GetInteger(pointer(WhereValue),err);
     if err<>0 then
       exit;
@@ -40686,7 +40696,7 @@ begin
     offs := TSQLPropInfoRTTI(P).fGetterIsFieldPropOffset;
     if (offs<>0) and {$ifndef CPU64}(nfo^.PropType^.Kind=tkClass) or{$endif}
        ((nfo^.PropType^.Kind=tkInteger)and(nfo^.PropType^.OrdType=otSLong)) then begin
-      // optimized version for fast retrieval of signed Integer field value
+      // optimized version for fast retrieval of signed 32-bit Integer field value
       for i := 1 to fValue.Count do begin
         if PInteger(PPtrUInt(item)^+offs)^=i32 then begin
           FoundOne;
@@ -40696,7 +40706,7 @@ begin
         inc(item);
       end;
     end else
-    // 8 or 16 bit value, or there is a getter procedure -> use GetOrdProp()
+    // 8-bit or 16-bit value, or there is a getter procedure -> use GetOrdProp()
     for i := 1 to fValue.Count do begin
       if nfo^.GetOrdProp(item^)=i32 then begin
         FoundOne;
@@ -40707,7 +40717,7 @@ begin
     end;
   end else
   if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
-    // stored as an Integer 64 bit value -> optimized search
+    // stored as one 64-bit Integer value -> optimized search
     i64 := GetInt64(pointer(WhereValue),err);
     if err<>0 then
       exit;
@@ -40742,6 +40752,39 @@ begin
       end;
       inc(item);
     end;
+  end;
+end;
+
+function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): boolean;
+var list: PPointerList;
+    P: TSQLPropInfo;
+    nfo: PPropInfo;
+    i: integer;
+    v: Int64;
+begin
+  result := false;
+  max := low(Int64);
+  if fValue.Count=0 then
+    exit;
+  list := fValue.List;
+  if WhereField=SYNTABLESTATEMENTWHEREID then begin
+    max := TSQLRecord(list[fValue.Count-1]).IDValue; // should be ordered
+    result := true;
+    exit;
+  end;
+  if cardinal(WhereField)>cardinal(fStoredClassRecordProps.Fields.Count) then
+    exit;
+  dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
+  P := fStoredClassRecordProps.Fields.List[WhereField];
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32) or
+     P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
+    for i := 0 to fValue.Count-1 do begin
+      v := nfo.GetInt64Value(list[i]);
+      if v>max then
+        max := v;
+    end;
+    result := true;
   end;
 end;
 
@@ -40894,6 +40937,7 @@ function TSQLRestStorageInMemory.EngineList(const SQL: RawUTF8;
 var MS: TRawByteStringStream;
     ResCount: PtrInt;
     Stmt: TSynTableStatement;
+    max: Int64;
 procedure SetCount(aCount: integer);
 begin
   FormatUTF8('[{"Count(*)":%}]'#$A,[aCount],result);
@@ -40938,22 +40982,29 @@ begin
           end;
         end else
         if (length(Stmt.Select)<>1) or (Stmt.SelectFunctionCount<>1) or
-           not IdemPropNameU(Stmt.Select[0].FunctionName,'count') then
-          exit else // only handle count(*) function here
-        if ((Stmt.Limit<>0) or (Stmt.Offset<>0)) then
-          // unhandled "SELECT Count(*) [...] LIMIT ..."
+           ((Stmt.Limit>1) or (Stmt.Offset<>0)) then
+           // handle a single max() or count() function with no LIMIT nor OFFSET
           exit else
-        if Stmt.Where=nil then
-          // was "SELECT Count(*) FROM TableName;"
-          SetCount(TableRowCount(fStoredClass)) else begin
-          // was "SELECT Count(*) FROM TableName WHERE ..."
-          ResCount := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
-            DoNothingEvent,nil,0,0);
-          case Stmt.Where[0].Operator of
-          opEqualTo:    SetCount(ResCount);
-          opNotEqualTo: SetCount(TableRowCount(fStoredClass)-ResCount);
-          end;
-        end;
+          case Stmt.Select[0].FunctionKnown of
+           funcCountStar:
+            if Stmt.Where=nil then
+              // was "SELECT Count(*) FROM TableName;"
+              SetCount(TableRowCount(fStoredClass)) else begin
+              // was "SELECT Count(*) FROM TableName WHERE ..."
+              ResCount := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
+                DoNothingEvent,nil,0,0);
+              case Stmt.Where[0].Operator of
+              opEqualTo:    SetCount(ResCount);
+              opNotEqualTo: SetCount(TableRowCount(fStoredClass)-ResCount);
+              end;
+            end;
+            funcMax:
+              if (Stmt.Where=nil) and FindMax(Stmt.Select[0].Field,max) then begin
+                FormatUTF8('[{"Max()":%}]'#$A,[],result);
+                ResCount := 1;
+              end;
+            else exit;
+           end;
       finally
         Stmt.Free;
       end;
