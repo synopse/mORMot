@@ -5296,8 +5296,15 @@ type
     // - using O(n) calls of IdemPChar() function
     // - here aUpperName should be already uppercase, as expected by IdemPChar()
     function FindStart(const aUpperName: RawUTF8): integer;
-    /// search for a Name, and delete it in the List if it exists
+    /// search for a Value, return the index in List
+    // - using O(n) brute force algoritm with case-sensitive aValue search
+    function FindByValue(const aValue: RawUTF8): integer;
+    /// search for a Name, and delete its entry in the List if it exists
     function Delete(const aName: RawUTF8): boolean;
+    /// search for a Value, and delete its entry in the List if it exists
+    // - returns the number of deleted entries
+    // - you may search for more than one match, by setting a >1 Limit value
+    function DeleteByValue(const aValue: RawUTF8; Limit: integer=1): integer;
     /// search for a Name, return the associated Value as a UTF-8 string
     function Value(const aName: RawUTF8; const aDefaultValue: RawUTF8=''): RawUTF8;
     /// search for a Name, return the associated Value as integer
@@ -51334,6 +51341,14 @@ begin
   result := -1;
 end;
 
+function TSynNameValue.FindByValue(const aValue: RawUTF8): integer;
+begin
+  for result := 0 to Count-1 do
+    if List[result].Value=aValue then
+      exit;
+  result := -1;
+end;
+
 function TSynNameValue.Delete(const aName: RawUTF8): boolean;
 var ndx: integer;
 begin
@@ -51344,6 +51359,23 @@ begin
     result := true;
   end else
     result := false;
+end;
+
+function TSynNameValue.DeleteByValue(const aValue: RawUTF8; Limit: integer): integer;
+var ndx: integer;
+begin
+  result := 0;
+  if Limit<1 then
+    exit;
+  for ndx := Count-1 downto 0 do
+    if List[ndx].Value=aValue then begin
+      fDynArray.Delete(ndx);
+      inc(result);
+      if result>=Limit then
+        break;
+    end;
+  if result>0 then
+    fDynArray.ReHash;
 end;
 
 function TSynNameValue.Value(const aName: RawUTF8; const aDefaultValue: RawUTF8): RawUTF8;
