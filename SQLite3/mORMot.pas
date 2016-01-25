@@ -3929,6 +3929,11 @@ type
     // - will identify 'ID' / 'RowID' field name as -1
     // - raise an EORMException if not found in the internal list
     function IndexByNameOrExcept(const aName: RawUTF8): integer;
+    /// find one or several items by name in the list, including RowID/ID
+    // - will identify 'ID' / 'RowID' field name as -1
+    // - raise an EORMException if not found in the internal list
+    procedure IndexesByNamesOrExcept(const aNames: array of RawUTF8;
+      const aIndexes: array of PInteger);
     /// find an item in the list, searching by unflattened name
     // - for a flattened property, you may for instance call
     // IndexByNameUnflattenedOrExcept('Address.Country.Iso')
@@ -22044,6 +22049,18 @@ begin
       raise EORMException.CreateUTF8(
         '%.IndexByNameOrExcept(%): unkwnown field in %',[self,aName,fTable]);
   end;
+end;
+
+procedure TSQLPropInfoList.IndexesByNamesOrExcept(const aNames: array of RawUTF8;
+  const aIndexes: array of PInteger);
+var i: integer;
+begin
+  if high(aNames)<>high(aIndexes) then
+    raise EORMException.CreateUTF8('%.IndexesByNamesOrExcept(?)',[self]);
+  for i := 0 to high(aNames) do
+    if aIndexes[i]=nil then
+      raise EORMException.CreateUTF8('%.IndexesByNamesOrExcept(aIndexes[%]=nil)',[self,aNames[i]]) else
+      aIndexes[i]^ := IndexByNameOrExcept(aNames[i]);
 end;
 
 procedure TSQLPropInfoList.NamesToRawUTF8DynArray(var Names: TRawUTF8DynArray);
