@@ -49,6 +49,7 @@ unit SynRestVCL;
   - first public release, corresponding to Synopse mORMot Framework 1.18,
     which is an extraction from former SynDBVCL.pas unit.
   - Added that blob field updates they are made with AddJSONEscapeString.
+  - bug fix when updating accentuated string fields.
 
 }
 
@@ -641,7 +642,7 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
         lRec.RecordProps.Fields.Items[I].GetVariant(lRec, lVarValue);
         lRecBak.RecordProps.Fields.Items[I].GetVariant(lRecBak, lVarValueBak);
         if (lVarValue <> lVarValueBak) then
-          lJSON.Value[lRec.RecordProps.Fields.Items[I].Name] := lVarValue;
+          lJSON.AddOrUpdateValue(lRec.RecordProps.Fields.Items[I].Name, lVarValue);
       end;
       Result := lJSON.ToJSON;
     finally
@@ -682,7 +683,12 @@ function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TPar
             lFieldValues[I] := lFieldValues[I] + '=';
           AddFieldName(Trim(lFieldValues.Names[I]));
           if (aParams[I].DataType <> ftBlob) then
-            AddVariant(aParams[I].Value)
+          begin
+            if (TVarData(aParams[I].Value).VType = varString) then
+              AddVariant(StringToUTF8(aParams[I].Value))
+            else
+              AddVariant(aParams[I].Value);
+          end
           else
           begin
             Add('"');

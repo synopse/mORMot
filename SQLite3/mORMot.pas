@@ -40776,7 +40776,7 @@ begin
     exit;
   dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if P.InheritsFrom(TSQLPropInfoRTTIInt32)  then begin
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32) then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
       v := nfo.GetOrdProp(list[i]);
