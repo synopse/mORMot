@@ -688,10 +688,12 @@ begin
   if typInfo=nil then
     raise EWrapperContext.CreateUTF8('%.RegisterType(%): no RTTI',[typeWrapper^,typName]);
   case typ of
-  wEnum: info := _JsonFastFmt('{name:?,values:%}',
-          [typInfo^.EnumBaseType^.GetEnumNameAll(true)],[typName]);
-  wSet:  info := _JsonFastFmt('{name:?,values:%}',
-          [typInfo^.SetEnumType^.GetEnumNameAll(true)],[typName]);
+  wEnum: // full (untrimed) identifier: values[] may be trimmed at mustache level 
+    info := _JsonFastFmt('{name:?,values:%}',
+      [typInfo^.EnumBaseType^.GetEnumNameAllAsJSONArray(false)],[typName]);
+  wSet:  // full (untrimed) identifier: values[] may be trimmed at mustache level
+    info := _JsonFastFmt('{name:?,values:%}',
+      [typInfo^.SetEnumType^.GetEnumNameAllAsJSONArray(false)],[typName]);
   wRecord: begin
     parser := TTextWriter.RegisterCustomJSONSerializerFindParser(typInfo,true);
     if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then

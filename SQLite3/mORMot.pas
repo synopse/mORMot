@@ -2553,11 +2553,14 @@ type
     // - Value will be converted to the matching ordinal value (byte or word)
     function GetEnumName(const Value): PShortString;
        {$ifdef HASINLINE}inline;{$endif}
-    /// get all enumeration names as CSV or JSON array
-    function GetEnumNameAll(asJSONArray: boolean=false): RawUTF8; overload;
     /// retrieve all element names as a dynamic array of RawUTF8
     // - names could be optionally trimmed left from their initial lower chars
     procedure GetEnumNameAll(var result: TRawUTF8DynArray; TrimLeftLowerCase: boolean); overload;
+    /// retrieve all element names as CSV, with optional quotes
+    procedure GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8='';
+      quotedValues: boolean=false); overload;
+    /// get all enumeration names as a JSON array of strings
+    function GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean): RawUTF8;
     /// get the corresponding enumeration ordinal value, from its name
     // - if EnumName does start with lowercases 'a'..'z', they will be searched:
     // e.g. GetEnumNameValue('sllWarning') will find sllWarning item
@@ -27820,7 +27823,7 @@ begin
     for j := MinValue to MaxValue do begin
       if GetBit(Value,j) then begin
         W.Add('"');
-        W.AddTrimLeftLowerCase(PS);
+        W.AddShort(PS^);
         W.Add('"',SepChar);
       end;
       inc(PByte(PS),ord(PS^[0])+1); // next item
@@ -27841,7 +27844,7 @@ begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
       if GetBit(Value,j) then
-        arr.AddItem(RawUTF8ToVariant(TrimLeftLowerCaseShort(PS)));
+        arr.AddItem(PS^);
       inc(PByte(PS),ord(PS^[0])+1); // next item
     end;
   end;
@@ -27922,27 +27925,25 @@ begin
   end;
 end;
 
-function TEnumType.GetEnumNameAll(asJSONArray: boolean=false): RawUTF8;
+procedure TEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
+  quotedValues: boolean);
 var i: integer;
     V: PShortString;
 begin
   with TTextWriter.CreateOwnedStream(1024) do
   try
-    if asJSONArray then
-      Add('[');
+    AddString(Prefix);
     V := @NameList;
     for i := MinValue to MaxValue do begin
-      if asJSONArray then
+      if quotedValues then
         Add('"');
       AddShort(V^);
-      if asJSONArray then
+      if quotedValues then
         Add('"');
       Add(',');
       inc(PByte(V),length(V^)+1);
     end;
     CancelLastComma;
-    if asJSONArray then
-      Add(']');
     SetText(result);
   finally
     Free;
@@ -27962,6 +27963,30 @@ begin
       result[i] := TrimLeftLowerCaseShort(V) else
       result[i] := RawUTF8(V^);
     inc(PByte(V),length(V^)+1);
+  end;
+end;
+
+function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean): RawUTF8;
+var i: integer;
+    V: PShortString;
+begin
+  with TTextWriter.CreateOwnedStream(1024) do
+  try
+    Add('[');
+    V := @NameList;
+    for i := MinValue to MaxValue do begin
+      Add('"');
+      if TrimLeftLowerCase then
+        AddTrimLeftLowerCase(V) else
+        AddShort(V^);
+      Add('"',',');
+      inc(PByte(V),length(V^)+1);
+    end;
+    CancelLastComma;
+    Add(']');
+    SetText(result);
+  finally
+    Free;
   end;
 end;
 
@@ -46119,16 +46144,16 @@ begin
               tkEnumeration:
               with P^.PropType^.EnumBaseType^ do begin
                 Add('"');
-                AddTrimLeftLowerCase(GetEnumNameOrd(V));
+                AddShort(GetEnumNameOrd(V)^);
                 Add('"');
                 if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameTrimedAll(CustomComment,'',true);
+                  GetEnumNameAll(CustomComment,'',true);
               end;
               tkSet:
               with P^.PropType^.SetEnumType^ do begin
                 GetSetNameCSV(self,V,',',woHumanReadableFullSetsAsStar in Options);
                 if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameTrimedAll(CustomComment,'"*" or a set of ',true);
+                  GetEnumNameAll(CustomComment,'"*" or a set of ',true);
               end;
               else
                 Add(V);
@@ -46207,7 +46232,7 @@ begin
                 CustomComment := FormatUTF8('array of {%}',[
                   ClassFieldNamesAllPropsAsText(dynObjArray^.ItemClass,true)]);
               Add('[',']');
-            end else begin
+            end else begin // do not use AddDynArrayJSON to support HR
               inc(fHumanReadableLevel);
               Add('[');
               for c := 0 to dyn.Count-1 do begin
@@ -52473,7 +52498,7 @@ begin
   case ValueType of
   smvEnum:
     if VariantToInt64(Value,enum) then
-      RawUTF8ToVariant(PTypeInfo(ArgTypeInfo)^.EnumBaseType^.GetEnumNameTrimed(enum),Value);
+      Value := PTypeInfo(ArgTypeInfo)^.EnumBaseType^.GetEnumNameOrd(enum)^;
   smvSet:
     if VariantToInt64(Value,enum) then
       Value := PTypeInfo(ArgTypeInfo)^.SetEnumType^.GetSetNameAsDocVariant(enum);

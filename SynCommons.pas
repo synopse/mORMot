@@ -5482,7 +5482,7 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // - returns -1 if aValue was not found
 // - will search for the exact text and also trim the lowercase 'a'..'z' chars on
 // left side of the text if no exact match is found and AlsoTrimLowerCase is TRUE
-// - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
+// - see also RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
   AlsoTrimLowerCase: boolean=false): Integer;
 
@@ -7091,7 +7091,7 @@ type
     // - if FullSetsAsStar is TRUE, a tkSet value containing all its items
     // would be serialized as the ["*"] JSON array  
     procedure AddTypedJSON(aTypeInfo: pointer; const aValue;
-      EnumSetsAsText, FullSetsAsStar: boolean);
+      EnumSetsAsText, FullSetsAsStar: boolean); 
     /// serialize as JSON the given object
     // - this default implementation will write null, or only write the
     // class name and pointer if FullExpand is true - use TJSONSerializer.
@@ -32408,7 +32408,7 @@ begin
         result := P;
     ktEnumeration: begin
       if wasString then
-        i32 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue)) else
+        i32 := GetEnumNameValue(fCustomTypeInfo,PropValue,StrLen(PropValue),true) else
         i32 := GetCardinal(PropValue);
       if i32<0 then
         exit;
@@ -41064,7 +41064,7 @@ begin
     tkEnumeration:
       if EnumSetsAsText then begin
         Add('"');
-        AddTrimLeftLowerCase(GetEnumName(aTypeInfo,byte(aValue)));
+        AddShort(GetEnumName(aTypeInfo,byte(aValue))^);
         Add('"');
       end else
         AddU(byte(aValue));
@@ -41077,7 +41077,7 @@ begin
             for i := 0 to max do begin
               if GetBit(aValue,i) then begin
                 Add('"');
-                AddTrimLeftLowerCase(PS);
+                AddShort(PS^);
                 Add('"',',');
               end;
               inc(PByte(PS),ord(PS^[0])+1); // next short string

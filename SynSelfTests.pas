@@ -5626,7 +5626,7 @@ begin
     J := ObjectToJSON(O,[woStoreClassName]);
     Check(J='{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woHumanReadable]);
-    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "Idle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PTypeInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
     for E := low(E) to high(E) do begin
       O.fName := Int32ToUTF8(ord(E));
@@ -5641,8 +5641,8 @@ begin
       Check(O.Sets=O2.Sets);
       J := ObjectToJSON(O,[woHumanReadable]);
       U := FormatUTF8(
-        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["IDLE"',
-        [ord(E),UpperCaseU(GetEnumNameTrimed(E))]);
+        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
+        [ord(E),UpperCaseU(RawUTF8(GetEnumName(E)^))]);
       Check(IdemPChar(pointer(J),pointer(U)));
       JSONToObject(O2,pointer(J),valid);
       Check(Valid);
@@ -5654,10 +5654,10 @@ begin
     with PTypeInfo(TypeInfo(WordBool))^.EnumBaseType^ do
       Check(SizeInStorageAsEnum=2);
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // "Idle","Started","Finished","Destroying"'+
-      #$D#$A#9'"Sets": ["*"] // "*" or a set of "Idle","Started","Finished","Destroying"'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", // "flagIdle","flagStarted","flagFinished","flagDestroying"'+
+      #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted","flagFinished","flagDestroying"'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -6826,7 +6826,7 @@ begin
       if astext then
         case i of
         -1: Check(tmp='[]');
-        0:  Check(tmp='["None"]');
+        0:  Check(tmp='["sllNone"]');
         else if i=ord(high(TSynLogInfo)) then
             Check(tmp='["*"]');
         end else
