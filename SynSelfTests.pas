@@ -7865,6 +7865,7 @@ begin
   end;
 end;
 var pasZW: PasZip.TZipWrite;
+    i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
@@ -7904,6 +7905,22 @@ begin
   TestPasZipRead(FN2,4);
   DeleteFile(FN2);
   DeleteFile(FN);
+  FN2 := ExeVersion.ProgramFilePath+'ddd.zip';
+  with TZipWrite.Create(FN2) do
+  try
+    FN := ExeVersion.ProgramFilePath+'ddd';
+    if not DirectoryExists(FN) then
+      FN := ExeVersion.ProgramFilePath+'..\ddd';
+    if DirectoryExists(FN) then begin
+      AddFolder(FN,'*.pas');
+      Check(Count>10);
+      for i := 0 to Count-1 do
+        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)),'.pas'));
+    end;
+  finally
+    Free;
+  end;
+  DeleteFile(FN2);
 end;
 
 {$endif LINUX}

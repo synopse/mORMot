@@ -2002,11 +2002,12 @@ procedure UTF8ToSynUnicode(Text: PUTF8Char; Len: integer; var result: SynUnicode
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
 function Ansi7ToString(const Text: RawByteString): string; overload;
+  {$ifndef UNICODE}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
 function Ansi7ToString(Text: PWinAnsiChar; Len: integer): string; overload;
-  {$ifdef UNICODE}inline;{$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any Ansi 7 bit encoded String into a generic VCL Text
 // - the Text content must contain only 7 bit pure ASCII characters
