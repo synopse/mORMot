@@ -320,9 +320,10 @@ type
 
 {$ifdef MSWINDOWS}
 /// List all ODBC drivers installed
-// - aIncludeVersion: include the DLL driver version, if true the function is slower
-// - aDrivers: driver list container, if aIncludeVersion is true then the list
-// will be <driver name>=<dll version>
+// - aDrivers is the output driver list container, which should be either nil (to
+// create a new TStringList), or any existing TStrings instance (may be from VCL
+// - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
+// in aDrivers (somewhat slower)
 function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): boolean;
 {$endif MSWINDOWS}
 
@@ -1045,15 +1046,14 @@ function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: 
   // expand environment variables, i.e %windir%
   // adapted from http://delphidabbler.com/articles?article=6
   function ExpandEnvVars(const aStr: string): string;
-  var
-    BufSize: Integer; // size of expanded string
+  var size: Integer; 
   begin
     // Get required buffer size
-    BufSize := ExpandEnvironmentStrings(pointer(aStr),nil,0);
-    if BufSize>0 then begin
+    size := ExpandEnvironmentStrings(pointer(aStr),nil,0);
+    if size>0 then begin
       // Read expanded string into result string
-      SetLength(result, BufSize-1);
-      ExpandEnvironmentStrings(pointer(aStr),pointer(result),BufSize);
+      SetLength(result, size-1);
+      ExpandEnvironmentStrings(pointer(aStr),pointer(result),size);
     end else
       result := aStr; // return the original file name
   end;
@@ -1075,13 +1075,8 @@ begin
   with TRegistry.Create do
   try
     RootKey := HKEY_LOCAL_MACHINE;
-    {$ifdef CPU64}
-    result := OpenKey('Software\WOW6432Node\ODBC\ODBCINST.INI\ODBC Drivers', false) or
-              OpenKey('Software\WOW6432Node\ODBC\ODBCINST.INI', false);
-    {$else}
     result := OpenKey('Software\ODBC\ODBCINST.INI\ODBC Drivers', false) or
               OpenKey('Software\ODBC\ODBCINST.INI', false);
-    {$endif}
     if result then begin
       if not Assigned(aDrivers) then
         aDrivers := TStringList.Create;
@@ -1089,11 +1084,7 @@ begin
       if aIncludeVersion then
       for I := 0 to aDrivers.Count-1 do begin
         CloseKey;
-        {$ifdef CPU64}
-        result := OpenKey('Software\WOW6432Node\ODBC\ODBCINST.INI\' + aDrivers[I], false);
-        {$else}
         result := OpenKey('Software\ODBC\ODBCINST.INI\' + aDrivers[I], false);
-        {$endif}
         if result then begin
           // expand environment variable, i.e %windir%
           lDriver := ExpandEnvVars(ReadString('Driver'));
