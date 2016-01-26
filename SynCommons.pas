@@ -3500,6 +3500,15 @@ function ExcludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
 /// alias to IncludeTrailingBackslash() function
 function IncludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
 
+type
+  EOSError = class(Exception)
+  public
+    ErrorCode: DWORD;
+  end;
+
+/// raise an EOSError exception corresponding to the last error reported by Windows
+procedure RaiseLastOSError;
+
 {$endif DELPHI5OROLDER}
 
 /// extract file name, without its extension
@@ -23427,6 +23436,19 @@ begin
   result := IncludeTrailingBackslash(FileName);
 end;
 
+procedure RaiseLastOSError;
+var LastError: Integer;
+    Error: EOSError;
+begin
+  LastError := GetLastError;
+  if LastError <> 0 then
+    Error := EOSError.CreateFmt('System Error.  Code: %d.'#13#10'%s',
+      [LastError,SysErrorMessage(LastError)]) else
+    Error := EOSError.Create('A call to an OS function failed');
+  Error.ErrorCode := LastError;
+  raise Error;
+end;
+
 {$endif DELPHI5OROLDER}
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
@@ -29529,7 +29551,7 @@ var M,D: word;
     tmp: TFileName;
 {$endif}
 begin
-  Major := aMajor;
+  Major := aMajor; // some default values
   Minor := aMinor;
   Release := aRelease;
   {$ifdef MSWINDOWS}
