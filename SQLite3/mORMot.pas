@@ -16501,7 +16501,7 @@ type
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
       CaseInsensitive: boolean=true): PtrInt; overload;
     /// search the maximum value of a given column
-    // - would only handle integer kind of column
+    // - would only handle integer/Int64 kind of column
     function FindMax(WhereField: integer; out max: Int64): boolean;
     /// execute a method on every TSQLRecord item
     // - the loop execution will be protected via StorageLock/StorageUnlock 
@@ -40756,7 +40756,7 @@ begin
 end;
 
 function TSQLRestStorageInMemory.FindMax(WhereField: integer; out max: Int64): boolean;
-var list: PPointerList;
+var list: PPointerArray;
     P: TSQLPropInfo;
     nfo: PPropInfo;
     i: integer;
@@ -40766,7 +40766,7 @@ begin
   max := low(Int64);
   if fValue.Count=0 then
     exit;
-  list := fValue.List;
+  list := pointer(fValue.List);
   if WhereField=SYNTABLESTATEMENTWHEREID then begin
     max := TSQLRecord(list[fValue.Count-1]).IDValue; // should be ordered
     result := true;
@@ -40776,11 +40776,19 @@ begin
     exit;
   dec(WhereField); // WHERE WhereField=WhereValue (WhereField=RTTIfield+1)
   P := fStoredClassRecordProps.Fields.List[WhereField];
-  if P.InheritsFrom(TSQLPropInfoRTTIInt32) or
-     P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
+  if P.InheritsFrom(TSQLPropInfoRTTIInt32)  then begin
     nfo := TSQLPropInfoRTTI(P).PropInfo;
     for i := 0 to fValue.Count-1 do begin
-      v := nfo.GetInt64Value(list[i]);
+      v := nfo.GetOrdProp(list[i]);
+      if v>max then
+        max := v;
+    end;
+    result := true;
+  end
+  else if P.InheritsFrom(TSQLPropInfoRTTIInt64) then begin
+    nfo := TSQLPropInfoRTTI(P).PropInfo;
+    for i := 0 to fValue.Count-1 do begin
+      v := nfo.GetInt64Prop(list[i]);
       if v>max then
         max := v;
     end;
@@ -41000,7 +41008,7 @@ begin
             end;
             funcMax:
               if (Stmt.Where=nil) and FindMax(Stmt.Select[0].Field,max) then begin
-                FormatUTF8('[{"Max()":%}]'#$A,[],result);
+                FormatUTF8('[{"Max()":%}]'#$A,[max],result);
                 ResCount := 1;
               end;
             else exit;
