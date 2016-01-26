@@ -11726,7 +11726,7 @@ procedure JSONBoolean(value: boolean; var result: RawUTF8);
 
 const
   /// can be used e.g. in logs
-  BOOL_STR: array[boolean] of string[5] = ('false','true');
+  BOOL_STR: array[boolean] of string[7] = ('false','true');
 
   /// can be used to append to most English nouns to form a plural
   PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');

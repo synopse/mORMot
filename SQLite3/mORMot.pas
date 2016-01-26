@@ -16466,7 +16466,8 @@ type
     // - return the found TSQLRecord on success, nil if none did match
     // - warning: it returns a reference to one item of the unlocked internal
     // list, so you should NOT use this on a read/write table, but rather
-    // use the slightly slower but safer SearchCopy() method 
+    // use the slightly slower but safer SearchCopy() method or make explicit
+    // ! StorageLock ... try ... SearchInstance ... finally StorageUnlock end 
     function SearchInstance(const FieldName, FieldValue: RawUTF8): pointer;
     /// search for a field value, according to its SQL content representation
     // - return the found TSQLRecord index on success, -1 if none did match
@@ -19697,14 +19698,16 @@ end;
 
 procedure TSQLPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char;
   wasString: boolean);
-var i,err: integer;
+var i,err,len: integer;
 begin
   if Value=nil then
     i := 0 else begin
     i := GetInteger(Value,err);
     if err<>0 then begin // we allow a value stated as text
-      if fSQLFieldType=sftBoolean then
-        i := Ord(IdemPropNameU(Value,'TRUE') or IdemPropNameU(Value,'YES')) else
+      if fSQLFieldType=sftBoolean then begin
+        len := StrLen(Value);
+        i := Ord(IdemPropName('TRUE',Value,len) or IdemPropName('YES',Value,len));
+      end else
         i := fEnumType^.GetEnumNameValue(Value); // -> convert into integer
       if cardinal(i)>cardinal(fEnumType^.MaxValue) then
         i := 0;  // only set a valid text value
@@ -28414,7 +28417,7 @@ var i, f: integer;
     wasString: boolean;
     tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) or not InheritsFrom(aRecord.ClassType) then
+  if (self=nil) or (aRecord=nil) then
     exit;
   S := aRecord.RecordProps;
   if PSQLRecordClass(aRecord)^=PSQLRecordClass(Self)^ then begin
@@ -28429,13 +28432,11 @@ begin
     if D.Fields.List[SP.PropertyIndex].Name=SP.Name then // optimistic match
       f := SP.PropertyIndex else
       f := D.Fields.IndexByName(S.CopiableFields[i].Name);
-    if f>=0 then
-      if SP.ClassType=D.Fields.List[f].ClassType then
-        SP.CopyValue(aRecord,self) else begin
-        SP.GetValueVar(aRecord,False,tmp,@wasString);
-        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
-      end;
+    if f>=0 then begin
+      SP.GetValueVar(aRecord,False,tmp,@wasString);
+      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
     end;
+  end;
 end;
 
 procedure TSQLRecord.FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits);
@@ -28445,7 +28446,7 @@ var i, f: integer;
     wasString: boolean;
     tmp: RawUTF8;
 begin
-  if (self=nil) or (aRecord=nil) or not InheritsFrom(aRecord.ClassType) then
+  if (self=nil) or (aRecord=nil) then
     exit;
   S := aRecord.RecordProps;
   if PSQLRecordClass(aRecord)^=PSQLRecordClass(Self)^ then begin
@@ -28462,12 +28463,10 @@ begin
     if D.Fields.List[i].Name=SP.Name then // optimistic match
       f := i else
       f := D.Fields.IndexByName(SP.Name);
-    if f>=0 then
-      if SP.ClassType=D.Fields.List[f].ClassType then
-        SP.CopyValue(aRecord,self) else begin
-        SP.GetValueVar(aRecord,False,tmp,@wasString);
-        D.Fields.List[f].SetValueVar(Self,tmp,wasString);
-      end;
+    if f>=0 then begin
+      SP.GetValueVar(aRecord,False,tmp,@wasString);
+      D.Fields.List[f].SetValueVar(Self,tmp,wasString);
+    end;
   end;
 end;
 
@@ -41791,8 +41790,8 @@ begin
     result := nil;
 end;
 
-procedure TSQLRestStorageInMemory.DoInstanceEvent(
-  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+procedure TSQLRestStorageInMemory.DoInstanceEvent(aDest: pointer; aRec: TSQLRecord;
+  aIndex: integer);
 begin
   if aDest<>nil then
     PPointer(aDest)^ := aRec;
@@ -41804,8 +41803,8 @@ begin
     result := nil;
 end;
 
-procedure TSQLRestStorageInMemory.DoIndexEvent(
-  aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+procedure TSQLRestStorageInMemory.DoIndexEvent(aDest: pointer; aRec: TSQLRecord;
+  aIndex: integer);
 begin
   if aDest<>nil then
     PInteger(aDest)^ := aIndex;
@@ -46702,8 +46701,7 @@ begin
   end;
 end;
 
-function TSQLVirtualTableCursorJSON.Search(
-  const Prepared: TSQLVirtualTablePrepared): boolean;
+function TSQLVirtualTableCursorJSON.Search(const Prepared: TSQLVirtualTablePrepared): boolean;
 var Hash: TListFieldHash;
 begin
   result := inherited Search(Prepared); // mark EOF by default
