@@ -5999,6 +5999,8 @@ type
     /// identify if the request is about a Table containing nested objects or
     // arrays, which could be serialized as JSON objects or arrays, instead
     // of plain JSON string (as stored in the database)
+    // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
+    // in TSQLRestServer.Options
     property ClientWriteAsJsonNotAsString: boolean read GetWriteAsJsonNotAsString;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
@@ -15086,6 +15088,9 @@ type
   // this property in TSQLRestServer.Options, but always call explicitly
   // TSQLRestServer.NoAJAXJSON := true so that the SetNoAJAXJSON virtual
   // method should be called as expected (e.g. to flush TSQLRestServerDB cache)
+  // - rsoGetAsJsonNotAsString would always ORM GET returns true JSON instead
+  // of the JSON text stored in database fields, i.e. always forcing 
+  // TSQLRestServerURIContext.ClientWriteAsJsonNotAsString=true
   // - some REST/AJAX clients may expect to return status code 204 as
   // instead of 200 in case of a successful operation, but with no returned
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
@@ -15095,6 +15100,7 @@ type
   // rsoAddReturnsContent is set to return as JSON the last inserted record
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
+    rsoGetAsJsonNotAsString,
     rsoHtml200WithNoBodyReturns204,
     rsoAddReturnsContent);
   /// allow to customize the TSQLRestServer process via its Options property
@@ -37351,9 +37357,9 @@ end;
 
 function TSQLRestServerURIContext.GetWriteAsJsonNotAsString: boolean;
 begin
-  result := (GetClientKind=ckAjax) and
-     ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
-       TableRecordProps.Props.HasTypeFields<>[]);
+  result := ([sftObject,sftBlobDynArray{$ifndef NOVARIANTS},sftVariant{$endif}]*
+    TableRecordProps.Props.HasTypeFields<>[]) and
+    ((rsoGetAsJsonNotAsString in Server.Options) or (GetClientKind=ckAjax));
 end;
 
 function TSQLRestServerURIContext.GetResourceFileName: TFileName;
