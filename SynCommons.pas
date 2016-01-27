@@ -3857,6 +3857,14 @@ function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): Pt
 // - return -1 if Value was not found
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
 
+/// fast search of a pointer-sized unsigned integer position
+// in an pointer-sized integer array
+// - Count is the number of pointer-sized integer entries in P^
+// - returns true if P^=Value within Count entries
+// - returns false if Value was not found
+function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
+  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value
@@ -5403,9 +5411,8 @@ function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - if the object is already in the array (searching by address/reference,
 // not by content), return its current index in the dynamic array
-// - if the object does not appear in the array, add it at the end, and
-// return the index of the item in the dynamic array
-function ObjArrayAddOnce(var aObjArray; aItem: TObject): integer;
+// - if the object does not appear in the array, add it at the end
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
 
 /// wrapper to set the length of a T*ObjArray dynamic array storage
 // - could be used as an alternative to SetLength() when you do not
@@ -5417,7 +5424,8 @@ procedure ObjArraySetLength(var aObjArray; aLength: integer);
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - search is performed by address/reference, not by content
 // - returns -1 if the item is not found in the dynamic array
-function ObjArrayFind(var aObjArray; aItem: TObject): integer;
+function ObjArrayFind(const aObjArray; aItem: TObject): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -5450,18 +5458,20 @@ procedure ObjArrayObjArrayClear(var aObjArray);
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 procedure ObjArraysClear(const aObjArray: array of pointer);
 
-
-
 {$ifndef DELPHI5OROLDER}
 
 /// wrapper to add an item to a T*InterfaceArray dynamic array storage
 function InterfaceArrayAdd(var aInterfaceArray; const aItem: IUnknown): integer;
 
+/// wrapper to add once an item to a T*InterfaceArray dynamic array storage
+procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
+
 /// wrapper to search an item in a T*InterfaceArray dynamic array storage
 // - search is performed by address/reference, not by content
 // - return -1 if the item is not found in the dynamic array, or the index of
 // the matching entry otherwise
-function InterfaceArrayFind(var aInterfaceArray; const aItem: IUnknown): integer;
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to delete an item in a T*InterfaceArray dynamic array storage
 // - search is performed by address/reference, not by content
@@ -23970,6 +23980,21 @@ asm
 end;
 {$endif}
 
+function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
+{$ifdef PUREPASCAL}
+begin
+  {$ifdef CPU64}
+  result := Int64ScanExists(pointer(P),Count,Value);
+  {$else}
+  result := IntegerScanExists(pointer(P),Count,Value);
+  {$endif}
+end;
+{$else}
+asm
+  jmp IntegerScanExists;
+end;
+{$endif}
+
 function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrInt;
 {$ifdef PUREPASCAL}
 var i: PtrInt; // optimized code for speed
@@ -39727,11 +39752,11 @@ begin
   a[result] := aItem;
 end;
 
-function ObjArrayAddOnce(var aObjArray; aItem: TObject): integer;
+procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
 begin
-  result := ObjArrayFind(aObjArray,aItem);
-  if result<0 then
-    result := ObjArrayAdd(aObjArray,aItem);
+  if not PtrUIntScanExists(pointer(aObjArray),
+     length(TObjectDynArray(aObjArray)),PtrUInt(aItem)) then
+    ObjArrayAdd(aObjArray,aItem);
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
@@ -39739,12 +39764,10 @@ begin
   SetLength(TObjectDynArray(aObjArray),aLength);
 end;
 
-function ObjArrayFind(var aObjArray; aItem: TObject): integer;
+function ObjArrayFind(const aObjArray; aItem: TObject): integer;
 begin
-  for result := 0 to length(TObjectDynArray(aObjArray))-1 do
-    if TObjectDynArray(aObjArray)[result]=aItem then
-      exit;
-  result := -1;
+  result := PtrUIntScanIndex(pointer(aObjArray),
+    length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: integer);
@@ -39834,12 +39857,22 @@ begin
   a[result] := aItem;
 end;
 
-function InterfaceArrayFind(var aInterfaceArray; const aItem: IUnknown): integer;
+procedure InterfaceArrayAddOnce(var aInterfaceArray; const aItem: IUnknown);
+var a: TInterfaceDynArray absolute aInterfaceArray;
+    n: integer;
 begin
-  for result := 0 to length(TPointerDynArray(aInterfaceArray))-1 do
-    if TPointerDynArray(aInterfaceArray)[result]=Pointer(aItem) then
-      exit;
-  result := -1;
+  if PtrUIntScanExists(pointer(aInterfaceArray),
+     length(TInterfaceDynArray(aInterfaceArray)),PtrUInt(aItem)) then
+    exit;
+  n := length(a);
+  SetLength(a,n+1);
+  a[n] := aItem;
+end;
+
+function InterfaceArrayFind(const aInterfaceArray; const aItem: IUnknown): integer;
+begin
+  result := PtrUIntScanIndex(pointer(aInterfaceArray),
+    length(TInterfaceDynArray(aInterfaceArray)),PtrUInt(aItem));
 end;
 
 procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer);
