@@ -1167,6 +1167,7 @@ type
   protected
     fUseInternalMM: boolean;
     fVersionNumber: cardinal;
+    fVersionText: RawUTF8;
     function GetVersion: RawUTF8;
   public
     /// initialize the SQLite3 database code
@@ -1231,8 +1232,9 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    //  - currently returns '3.10.2', when used with our SynSQLite3Static unit
-    //  - if an external SQLite3 library is used, version may vary
+    // - currently returns '3.10.2', when used with our SynSQLite3Static unit
+    // - if an external SQLite3 library is used, version may vary
+    // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Returns English-language text that describes an error,
@@ -1998,9 +2000,13 @@ type
     // under multi-process activity
     // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
-    /// returns the current version number as a single decimal integer
+    /// returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
     property VersionNumber: cardinal read fVersionNumber;
+    /// returns the current version number as a text
+    // - equals e.g. '3.8.3.1'
+    // - use the Version property for the full information about this instance
+    property VersionText: RawUTF8 read fVersionText;
   published
     /// will return the class name and SQLite3 version number
     property Version: RawUTF8 read GetVersion;
@@ -5144,7 +5150,7 @@ begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
   CreateUTF8('Error % (%) using %',
-    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,sqlite3.libversion]);
+    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,sqlite3.VersionText]);
   if aDB=0 then
     Message := Message+' with aDB=nil' else begin
     Message := Format('%s - ''%s''',[Message,sqlite3.errmsg(aDB)]);
@@ -5449,6 +5455,7 @@ var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
     V := libversion;        // convert into e.g. 3008003001
+    fVersionText := RawUTF8(V);
     fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
       GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
       GetNextItemCardinal(V,'.');
@@ -5525,7 +5532,7 @@ const MM: array[boolean] of string[2] = ('ex','in');
 begin
   if self=nil then
     result := 'No TSQLite3Library available' else
-    result := FormatUTF8('% with %ternal MM',[libversion,MM[fUseInternalMM]]);
+    result := FormatUTF8('% with %ternal MM',[fVersionText,MM[fUseInternalMM]]);
 end;
 
 
@@ -5576,10 +5583,10 @@ begin
     fHandle := 0;
     raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
   end; // some APIs like config() key() or trace() may not be available
+  inherited Create; // set fVersionNumber/fVersionText
   {$ifdef WITHLOG}
-  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,libversion]);
+  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,Version]);
   {$endif}
-  inherited Create; // set fVersionNumber
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;

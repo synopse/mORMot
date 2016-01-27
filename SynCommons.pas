@@ -28303,7 +28303,7 @@ begin
   if PtrInt(F)<0 then begin
     F := FileCreate(aFileName);
     if PtrInt(F)<0 then
-      exit;
+      exit; // you may not have write access to this folder
   end;
    // append to end of file
   if FileSeek64(F,0,soFromEnd)>MAXLOGSIZE then begin

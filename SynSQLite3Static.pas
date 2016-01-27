@@ -96,6 +96,9 @@ uses
 
 implementation
 
+uses
+  SynCommons;
+
 
 procedure DoInitialization;
 begin
@@ -1220,7 +1223,12 @@ function sqlite3_profile(DB: TSQLite3DB; Callback: TSQLProfileCallback;
 
 { TSQLite3LibraryStatic }
 
+const
+  // error message if linked sqlite3.obj does not match this
+  EXPECTED_SQLITE3_VERSION = '3.10.2';
+  
 constructor TSQLite3LibraryStatic.Create;
+var error: RawUTF8;
 begin
   initialize           := @sqlite3_initialize;
   shutdown             := @sqlite3_shutdown;
@@ -1321,7 +1329,19 @@ begin
   fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$endif}
   sqlite3_initialize;
-  inherited Create; // set fVersionNumber
+  inherited Create; // set fVersionNumber/fVersionText
+  if fVersionText=EXPECTED_SQLITE3_VERSION then
+    exit;
+  FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
+    'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
+    'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
+    'from http://synopse.info/files/sqlite3obj.7z',
+    [ExeVersion.ProgramName,fVersionText],error);
+  LogToTextFile(error); // annoyning enough on all platforms
+  // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
+  {$ifdef MSWINDOWS} // PITA popup 
+  MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
+  {$endif}
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;
