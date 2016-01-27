@@ -676,8 +676,25 @@ type
     // query plan that gives the lowest estimate
     estimatedCost: Double;
     /// output: Estimated number of rows returned  (since 3.8.2)
+    // - may be set to an estimate of the number of rows returned by the
+    // proposed query plan. If this value is not explicitly set, the default
+    // estimate of 25 rows is used
     estimatedRows: Int64;
-    /// input: Mask of columns used by statement   (since 3.10)
+    /// output: Mask of SQLITE_INDEX_SCAN_* flags  (since 3.9.0)
+    // - may be set to SQLITE_INDEX_SCAN_UNIQUE to indicate that the virtual
+    // table will return only zero or one rows given the input constraints.
+    // Additional bits of the idxFlags field might be understood in later
+    // versions of SQLite
+    idxFlags: Integer;
+    /// input: Mask of columns used by statement   (since 3.10.0)
+    // - indicates which fields of the virtual table are actually used by the
+    // statement being prepared. If the lowest bit of colUsed is set, that means
+    // that the first column is used. The second lowest bit corresponds to the
+    // second column. And so forth. If the most significant bit of colUsed is
+    // set, that means that one or more columns other than the first 63 columns
+    // are used.
+    // - If column usage information is needed by the xFilter method, then the
+    // required bits must be encoded into either the idxNum or idxStr output fields
     colUsed: UInt64;
   end;
 

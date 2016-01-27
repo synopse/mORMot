@@ -2213,7 +2213,7 @@ begin
             SQLITE_INDEX_CONSTRAINT_LT:    Operation := soLessThan;
             SQLITE_INDEX_CONSTRAINT_GE:    Operation := soGreaterThanOrEqualTo;
             SQLITE_INDEX_CONSTRAINT_MATCH: Operation := soBeginWith;
-            else exit; // invalid parameter
+            else Column := VIRTUAL_TABLE_IGNORE_COLUMN; // unhandled operator
           end;
         end else
           Column := VIRTUAL_TABLE_IGNORE_COLUMN;
