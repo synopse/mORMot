@@ -6611,18 +6611,29 @@ type
 
   /// available global options for a TTextWriter instance
   // - TTextWriter.WriteObject() method behavior would be set via their own
-  // TTextWriterWriteObjectOptions, and won't be affected by those settings
-  // - by default, custom serializers defined via RegisterCustomJSONSerializer()
-  // would let AddRecordJSON() and AddDynArrayJSON() write enumerates and sets
-  // as integer numbers, unless twoEnumSetsAsTextInRecord is set
+  // TTextWriterWriteObjectOptions, and work in conjunction with those settings
+  // - twoStreamIsOwned would be set if the associated TStream is owned by
+  // the TTextWriter instance
   // - twoFlushToStreamNoAutoResize would forbid FlushToStream to resize the
   // internal memory buffer when it appears undersized - FlushFinal will set it
   // before calling a last FlushToStream
+  // - by default, custom serializers defined via RegisterCustomJSONSerializer()
+  // would let AddRecordJSON() and AddDynArrayJSON() write enumerates and sets
+  // as integer numbers, unless twoEnumSetsAsTextInRecord is set
+  // - when enumerates and sets are serialized as text into JSON, you may force
+  // the identifiers to be left-trimed for all their lowercase characters
+  // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option 
+  // would default to the global TTextWriter.SetDefaultEnumTrim setting
+  // - twoEndOfLineCRLF would reflect the TTextWriter.EndOfLineCRLF property
   TTextWriterOption = (
+    twoStreamIsOwned,
+    twoFlushToStreamNoAutoResize,
     twoEnumSetsAsTextInRecord,
-    twoFlushToStreamNoAutoResize);
+    twoTrimLeftEnumSets,
+    twoEndOfLineCRLF);
   /// options set for a TTextWriter instance
-  // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior
+  // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
+  // or set global process customization for a TTextWriter 
   TTextWriterOptions = set of TTextWriterOption;
 
   /// simple writer to a Stream, specialized for the TEXT format
@@ -6633,14 +6644,12 @@ type
     B, BEnd: PUTF8Char;
     fStream: TStream;
     fInitialStreamPosition: cardinal;
-    fStreamIsOwned: boolean;
-    fTotalFileSize: cardinal;
+    fTotalFileSize: cardinal;                               
     fCustomOptions: TTextWriterOptions;
     // internal temporary buffer
     fTempBufSize: Integer;
     fTempBuf: PUTF8Char;
     fHumanReadableLevel: integer;
-    fEndOfLineCRLF: boolean;
     fEchoBuf: RawUTF8;
     fEchoStart: integer;
     fEchos: array of TOnTextWriterEcho;
@@ -6651,6 +6660,9 @@ type
     function EchoFlush: integer;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
       const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
+    function GetEndOfLineCRLF: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
   public
     /// the data will be written to the specified Stream
     // - aStream may be nil: in this case, it MUST be set before using any
@@ -6674,6 +6686,16 @@ type
     // - but mORMot.pas will call it to use the TJSONSerializer instead, which
     // is able to serialize any class as JSON
     class procedure SetDefaultJSONClass(aClass: TTextWriterClass);
+    /// allow to override the default JSON serialization of enumerations and
+    // sets as text, which would write the whole identifier (e.g. 'sllError')
+    // - calling SetDefaultEnumTrim(true) would force the enumerations to
+    // be trimmed for any lower case char, e.g. sllError -> 'Error'
+    // - this is global to the current process, and should be use mainly for
+    // compatibility purposes for the whole process
+    // - you may change the default behavior by setting twoTrimLeftEnumSets
+    // in the TTextWriter.CustomOptions property of a given serializer
+    // - note that unserialization process would recognize both formats 
+    class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 
     /// retrieve the data as a string
     function Text: RawUTF8;
@@ -7269,7 +7291,8 @@ type
     // - by default (FALSE), it will append a CR (#13) char to the buffer
     // - you can set this property to TRUE, so that CR+LF (#13#10) chars will
     // be appended instead
-    property EndOfLineCRLF: boolean read fEndOfLineCRLF write fEndOfLineCRLF;
+    // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
+    property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
@@ -17629,7 +17652,7 @@ begin
     result := false;
 end;
 {$else}
-asm // eax=aTypeInfo edx=MaxValue ecx=Names
+asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
     test eax,eax
     jz @z
     cmp byte ptr [eax],tkEnumeration
@@ -25881,6 +25904,7 @@ end;
 
 var
   DefaultTextWriterJSONClass: TTextWriterClass = TTextWriter;
+  DefaultTextWriterTrimEnum: boolean;
 
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
@@ -40554,7 +40578,7 @@ var i: integer;
 begin
   if BEnd-B<=1 then
     FlushToStream;
-  if fEndOfLineCRLF then begin
+  if twoEndOfLineCRLF in fCustomOptions then begin
     PWord(B+1)^ := 13+10 shl 8; // CR + LF
     inc(B,2);
   end else begin
@@ -41065,7 +41089,10 @@ begin
     tkEnumeration:
       if EnumSetsAsText then begin
         Add('"');
-        AddShort(GetEnumName(aTypeInfo,byte(aValue))^);
+        PS := GetEnumName(aTypeInfo,byte(aValue));
+        if twoTrimLeftEnumSets in fCustomOptions then
+          AddTrimLeftLowerCase(PS) else
+          AddShort(PS^);
         Add('"');
       end else
         AddU(byte(aValue));
@@ -41078,7 +41105,9 @@ begin
             for i := 0 to max do begin
               if GetBit(aValue,i) then begin
                 Add('"');
-                AddShort(PS^);
+                if twoTrimLeftEnumSets in fCustomOptions then
+                  AddTrimLeftLowerCase(PS) else
+                  AddShort(PS^);
                 Add('"',',');
               end;
               inc(PByte(PS),ord(PS^[0])+1); // next short string
@@ -42519,12 +42548,14 @@ begin
   GetMem(fTempBuf,aBufSize);
   B := fTempBuf-1; // Add() methods will append at B+1
   BEnd := fTempBuf+fTempBufSize-2;
+  if DefaultTextWriterTrimEnum then
+    Include(fCustomOptions,twoTrimLeftEnumSets);
 end;
 
 constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
 begin
   Create(TRawByteStringStream.Create,aBufSize);
-  fStreamIsOwned := true;
+  Include(fCustomOptions,twoStreamIsOwned);
 end;
 
 constructor TTextWriter.CreateOwnedFileStream(const aFileName: TFileName;
@@ -42532,12 +42563,12 @@ constructor TTextWriter.CreateOwnedFileStream(const aFileName: TFileName;
 begin
   DeleteFile(aFileName);
   Create(TFileStream.Create(aFileName,fmCreate),aBufSize);
-  fStreamIsOwned := true;
+  Include(fCustomOptions,twoStreamIsOwned);
 end;
 
 destructor TTextWriter.Destroy;
 begin
-  if fStreamIsOwned then
+  if twoStreamIsOwned in fCustomOptions then
     fStream.Free;
   FreeMem(fTempBuf);
   fInternalJSONWriter.Free;
@@ -42549,11 +42580,18 @@ begin
   DefaultTextWriterJSONClass := aClass;
 end;
 
+class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
+begin
+  DefaultTextWriterTrimEnum := aShouldTrimEnumsAsText;
+end;
+
 procedure TTextWriter.SetStream(aStream: TStream);
 begin
   if fStream<>nil then
-    if fStreamIsOwned then
+    if twoStreamIsOwned in fCustomOptions then begin
       FreeAndNil(fStream);
+      Exclude(fCustomOptions,twoStreamIsOwned);
+    end;
   if aStream<>nil then begin
     fStream := aStream;
     fInitialStreamPosition := fStream.Seek(0,soFromCurrent);
@@ -42578,6 +42616,16 @@ begin
   end;
   B := fTempBuf-1;
 end;
+
+function TTextWriter.GetEndOfLineCRLF: boolean;
+begin
+  result := twoEndOfLineCRLF in fCustomOptions;
+end;
+
+procedure TTextWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
+begin
+  Include(fCustomOptions,twoEndOfLineCRLF);
+end;    
 
 function TTextWriter.GetLength: cardinal;
 begin

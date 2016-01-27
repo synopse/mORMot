@@ -27826,7 +27826,9 @@ begin
     for j := MinValue to MaxValue do begin
       if GetBit(Value,j) then begin
         W.Add('"');
-        W.AddShort(PS^);
+        if twoTrimLeftEnumSets in W.CustomOptions then
+          W.AddTrimLeftLowerCase(PS) else
+          W.AddShort(PS^);
         W.Add('"',SepChar);
       end;
       inc(PByte(PS),ord(PS^[0])+1); // next item
@@ -27940,7 +27942,9 @@ begin
     for i := MinValue to MaxValue do begin
       if quotedValues then
         Add('"');
-      AddShort(V^);
+      if twoTrimLeftEnumSets in CustomOptions then
+        AddTrimLeftLowerCase(V) else
+        AddShort(V^);
       if quotedValues then
         Add('"');
       Add(',');
@@ -45985,6 +45989,7 @@ var P: PPropInfo;
     UtfP: PPUtf8CharArray;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
+    PS: PShortString;
     WS: WideString;
     {$ifdef HASVARUSTRING}
     US: UnicodeString;
@@ -46143,7 +46148,10 @@ begin
               tkEnumeration:
               with P^.PropType^.EnumBaseType^ do begin
                 Add('"');
-                AddShort(GetEnumNameOrd(V)^);
+                PS := GetEnumNameOrd(V);
+                if twoTrimLeftEnumSets in CustomOptions then
+                  AddTrimLeftLowerCase(PS) else
+                  AddShort(PS^);
                 Add('"');
                 if woHumanReadableEnumSetAsComment in Options then
                   GetEnumNameAll(CustomComment,'',true);
