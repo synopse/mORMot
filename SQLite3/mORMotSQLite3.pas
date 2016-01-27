@@ -1376,7 +1376,8 @@ end;
 procedure TSQLRestServerDB.SetNoAJAXJSON(const Value: boolean);
 begin
   inherited;
-  if Value=NoAJAXJSON then exit;
+  if Value=NoAJAXJSON then
+     exit;
   fDB.Cache.Reset; // we changed the JSON format -> cache must be updated
 end;
 

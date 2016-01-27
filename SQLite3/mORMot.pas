@@ -15080,6 +15080,26 @@ type
   /// class-reference type (metaclass) of a REST server
   TSQLRestServerClass = class of TSQLRestServer;
 
+  /// some options for TSQLRestServer process
+  // - read-only rsoNoAJAXJSON indicates that JSON data is transmitted in "not
+  // expanded" format: you should NEVER change this option by including
+  // this property in TSQLRestServer.Options, but always call explicitly
+  // TSQLRestServer.NoAJAXJSON := true so that the SetNoAJAXJSON virtual
+  // method should be called as expected (e.g. to flush TSQLRestServerDB cache)
+  // - some REST/AJAX clients may expect to return status code 204 as
+  // instead of 200 in case of a successful operation, but with no returned
+  // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
+  // rsoHtml200WithNoBodyReturns204 so that any HTML_SUCCESS (200) with no
+  // returned body would return a HTML_NOCONTENT (204)
+  // - by default, Add() would return HTML_CREATED (201) with no body, unless
+  // rsoAddReturnsContent is set to return as JSON the last inserted record
+  TSQLRestServerOption = (
+    rsoNoAJAXJSON,
+    rsoHtml200WithNoBodyReturns204,
+    rsoAddReturnsContent);
+  /// allow to customize the TSQLRestServer process via its Options property
+  TSQLRestServerOptions = set of TSQLRestServerOption;
+
   /// a generic REpresentational State Transfer (REST) server
   // - descendent must implement the protected EngineList() Retrieve() Add()
   // Update() Delete() methods
@@ -15089,11 +15109,10 @@ type
   TSQLRestServer = class(TSQLRest)
   protected
     fVirtualTableDirect: boolean;
-    fNoAJAXJSON: boolean;
     fHandleAuthentication: boolean;
     fBypassORMAuthentication: TSQLURIMethods;
     fAfterCreation: boolean;
-    fHtml200WithNoBodyReturns204: boolean;
+    fOptions: TSQLRestServerOptions;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
     fSQLAuthGroupClass: TSQLAuthGroupClass;
@@ -15197,6 +15216,7 @@ type
     /// this method is overridden for setting the NoAJAXJSON field
     // of all associated TSQLRestStorage servers
     procedure SetNoAJAXJSON(const Value: boolean); virtual;
+    function GetNoAJAXJSON: boolean;
     /// add a new session to the internal session list
     // - do not use this method directly: this callback is to be used by
     // TSQLRestServerAuthentication* classes
@@ -15957,14 +15977,11 @@ type
     // - the "not expanded" layout, NoAJAXJSON property is set to TRUE,
     // reflects exactly the layout of the SQL request - first line contains the
     // field names, then all next lines are the field content
-    property NoAJAXJSON: boolean read fNoAJAXJSON write SetNoAJAXJSON;
-    /// if any HTML_SUCCESS (200) with no returned body should return a
-    // HTML_NOCONTENT (204)
-    // - some REST/AJAX clients may expect to return status code 204 as
-    // instead of 200 in case of a successful operation, but with no returned
-    // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework)
-    property Html200WithNoBodyReturns204: boolean
-      read fHtml200WithNoBodyReturns204 write fHtml200WithNoBodyReturns204;
+    // - is in fact stored in rsoNoAJAXJSON item in Options property
+    property NoAJAXJSON: boolean read GetNoAJAXJSON write SetNoAJAXJSON;
+    /// allow to customize how TSQLRestServer.URI process the requests
+    // - e.g. if HTML_SUCCESS with no body should be translated into HTML_NOCONTENT
+    property Options: TSQLRestServerOptions read fOptions write fOptions;
     /// set to true if the server will handle per-user authentication and
     // access right management
     // - i.e. if the associated TSQLModel contains TSQLAuthUser and
@@ -35308,9 +35325,16 @@ begin
     result := 'RowID';
 end;
 
+function TSQLRestServer.GetNoAJAXJSON: boolean;
+begin
+  result := (self<>nil) and (rsoNoAJAXJSON in fOptions);
+end;
+
 procedure TSQLRestServer.SetNoAJAXJSON(const Value: boolean);
 begin
-  fNoAJAXJSON := Value;
+  if Value then
+    include(fOptions,rsoNoAJAXJSON) else
+    exclude(fOptions,rsoNoAJAXJSON);
 end;
 
 function TSQLRestServer.InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
@@ -36888,7 +36912,11 @@ begin
       if TableID<>0 then begin
         Call.OutStatus := HTML_CREATED; // 201 Created
         Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
-        Server.fCache.Notify(TableIndex,TableID,Call.InBody,soInsert);
+        if rsoAddReturnsContent in Server.Options then begin
+          Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
+          Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soInsert);
+        end else
+          Server.fCache.Notify(TableIndex,TableID,Call.InBody,soInsert);
       end;
     end;
   mPUT: // PUT=UPDATE
@@ -37837,7 +37865,8 @@ begin
            IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
           inc(fStats.fOutcomingFiles);
       end else // Call.OutBody=''
-        if (Call.OutStatus=HTML_SUCCESS) and Html200WithNoBodyReturns204 then
+        if (Call.OutStatus=HTML_SUCCESS) and
+           (rsoHtml200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTML_NOCONTENT;
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
@@ -41010,7 +41039,7 @@ begin
           // save rows as JSON, with appropriate search according to Where.* arguments
           MS := TRawByteStringStream.Create;
           try
-            ForceAJAX := ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON;
+            ForceAJAX := ForceAJAX or not Owner.NoAJAXJSON;
             ResCount := GetJSONValues(MS,ForceAJAX,Stmt);
             result := MS.DataString;
           finally
