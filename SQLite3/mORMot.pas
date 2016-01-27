@@ -4713,10 +4713,16 @@ function StatusCodeIsSuccess(Code: integer): boolean;
 type
   /// the available HTTP methods transmitted between client and server
   // - some custom verbs are available in addition to standard REST commands
+  // - most of iana verbs are available
+  // see http://www.iana.org/assignments/http-methods/http-methods.xhtml
   // - for basic CRUD operations, we considered Create=mPOST, Read=mGET,
   // Update=mPUT and Delete=mDELETE
   TSQLURIMethod = (mNone, mGET, mPOST, mPUT, mDELETE, mHEAD,
-                   mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE);
+                   mBEGIN, mEND, mABORT, mLOCK, mUNLOCK, mSTATE,
+                   mOPTIONS, mPROPFIND, mPROPPATCH, mTRACE, mCOPY,
+                   mMKCOL, mMOVE, mPURGE, mREPORT, mMKACTIVITY,
+                   mMKCALENDAR,mCHECKOUT, mMERGE, mNOTIFY, mPATCH,
+                   mSEARCH, mCONNECT);
   /// set of available HTTP methods transmitted between client and server
   TSQLURIMethods = set of TSQLURIMethod;
 
@@ -22409,11 +22415,13 @@ begin
 end;
 
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
-const NAME: array[mGET..high(TSQLURIMethod)] of string[7] = ( // sorted by occurence
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
-var URIMethodUp: string[7];
+const NAME: array[mGET..high(TSQLURIMethod)] of string[11] = ( // sorted by occurence
+  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
+  'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
+  'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
+var URIMethodUp: string[11];
 begin
-  if Length(method)<7 then begin
+  if Length(method)<11 then begin
     URIMethodUp[0] := AnsiChar(UpperCopy(@URIMethodUp[1],method)-@URIMethodUp[1]);
     for result := low(NAME) to high(NAME) do
       if URIMethodUp=NAME[result] then
@@ -34372,7 +34380,9 @@ function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE');
+  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
+  'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
+  'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
 var u: RawUTF8;
 {$ifdef WITHLOG}
    Log: ISynLog; // for Enter auto-leave to work with FPC
