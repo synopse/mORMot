@@ -235,7 +235,8 @@ type
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
     procedure SetDefaults(const Root, Port, WebSocketPassword, UserPassword: RawUTF8;
-      const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost');
+      const User: RawUTF8 = 'User'; const Server: RawUTF8 = 'localhost';
+      ForceSetCredentials: boolean = false);
     /// is able to instantiate a Client REST instance for the stored definition
     // - Definition.Kind is expected to specify a TSQLRestClient class to be
     // instantiated, not a TSQLRestServer instance
@@ -1515,7 +1516,7 @@ begin
 end;
 
 procedure TDDDRestClientSettings.SetDefaults(const Root, Port, WebSocketPassword,
-  UserPassword, User, Server: RawUTF8);
+  UserPassword, User, Server: RawUTF8; ForceSetCredentials: boolean);
 begin
   if fClient.Root = '' then
     fClient.Root := Root;
@@ -1524,10 +1525,13 @@ begin
       fORM.Kind := 'TSQLHttpClientWebsockets'
     else
       fORM.Kind := TSQLHttpClient.ClassName;
-  if (Port <> '') and (fORM.ServerName = '') then begin
-    if Server = '' then
-      fORM.ServerName := 'http://localhost:' + Port else
-      fORM.ServerName := 'http://' + Server + ':' + Port; 
+  if ForceSetCredentials or (fORM.ServerName = '') then begin
+    if (fORM.ServerName = '') and (Port <> '') then
+      if Server = '' then
+        fORM.ServerName := 'http://localhost:' + Port else
+        if PosEx(':', Server) = 0 then
+          fORM.ServerName := 'http://' + Server + ':' + Port else
+          fORM.ServerName := Server;
     if fClient.WebSocketsPassword = '' then
       fClient.WebSocketsPassword := WebSocketPassword;
     if UserPassword <> '' then begin
