@@ -13929,13 +13929,13 @@ type
     Ctxt: TSQLRestServerURIContext) of object;
   /// callback raised before TSQLRestServer.URI execution
   // - should return TRUE to execute the command, FALSE to cancel it
-  TNotifyBeforeURI = function(Ctxt: TSQLRestServerURIContext): boolean;
+  TNotifyBeforeURI = function(Ctxt: TSQLRestServerURIContext): boolean of object;
   /// callback raised after TSQLRestServer.URI execution
-  TNotifyAfterURI = procedure(Ctxt: TSQLRestServerURIContext);
+  TNotifyAfterURI = procedure(Ctxt: TSQLRestServerURIContext) of object;
   /// callback raised if TSQLRestServer.URI execution failed
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
   // content has already been set as expected by the client
-  TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean;
+  TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean of object;
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
