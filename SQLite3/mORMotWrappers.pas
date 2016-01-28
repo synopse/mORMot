@@ -244,10 +244,11 @@ const
     'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'),
    // lngTypeScript
    ('', 'boolean', '', '', 'number', 'number', 'number', 'number',
-    'number', 'TID', 'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime',
-    'number', 'number', 'number', 'TDateTime', 'string','string', 'any',
-    'TSQLRawBlob', 'TGUID', 'TServiceCustomAnswer', '', '', 'any', '', '', '',
-    'TRecordVersion'));
+    'number', 'mORMot.TID', 'mORMot.TRecordReference', 'mORMot.TTimeLog',
+    'mORMot.TModTime', 'mORMot.TCreateTime', 'number', 'number', 'number',
+    'mORMot.TDateTime', 'string', 'string', 'any', 'mORMot.TSQLRawBlob',
+    'mORMot.TGUID', 'mORMot.THttpBody', '', '', 'any', '', '', '',
+    'mORMot.TRecordVersion'));
 
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
