@@ -16633,7 +16633,6 @@ type
     // one TSQLRestStorageRemote instance
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aRemoteRest: TSQLRest); reintroduce; virtual;
-  published
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;
@@ -35692,7 +35691,6 @@ var current,previous: TRecordVersion;
     service: IServiceRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
-    nfo: PTypeInfo;
 begin
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
@@ -35704,12 +35702,11 @@ begin
     exit;
   end;
   tableName := Model.TableProps[tableIndex].Props.SQLTableName;
-  nfo := TypeInfo(IServiceRecordVersion);
-  if not MasterRemoteAccess.Services.Resolve(nfo,service) then
-    if not MasterRemoteAccess.ServiceRegister([nfo],sicShared) then
-      exit else
-    if not MasterRemoteAccess.Services.Resolve(nfo,service) then
+  if MasterRemoteAccess.Services.Info(IServiceRecordVersion)=nil then
+    if not MasterRemoteAccess.ServiceRegister([TypeInfo(IServiceRecordVersion)],sicShared) then
       exit;
+  if not MasterRemoteAccess.Services.Resolve(IServiceRecordVersion,service) then
+    exit;
   current := 0;
   retry := 0;            
   repeat
