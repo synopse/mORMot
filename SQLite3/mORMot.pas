@@ -9896,12 +9896,15 @@ type
     /// convert a value into its JSON representation
     procedure AsJson(var DestValue: RawUTF8; V: pointer);
     {$ifndef NOVARIANTS}
-     /// convert a value into its variant representation
+    /// convert a value into its variant representation
     // - complex objects would be converted into a TDocVariant, after JSON
     // serialization: variant conversion options may e.g. be retrieve from
     // TInterfaceFactory.DocVariantOptions
     procedure AsVariant(var DestValue: variant; V: pointer;
       Options: TDocVariantOptions);
+    /// add a value into a TDocVariant object or array
+    // - Dest should already have set its Kind to either dvObject or dvArray
+    procedure AddAsVariant(var Dest: TDocVariantData; V: pointer);
     /// normalize a value containing one input or output argument
     // - sets and enumerates would be translated to strings (also in embedded
     // objects and T*ObjArray)
@@ -9924,7 +9927,7 @@ type
     optExecInPerInterfaceThread, optFreeInPerInterfaceThread
     {$ifndef LVCL},
     optExecInMainThread, optFreeInMainThread,
-    optVariantCopiedByReference
+    optVariantCopiedByReference, optInterceptInputOutput
     {$endif}
   );
 
@@ -9945,6 +9948,8 @@ type
   // whole service class - is not set by default, for performance reasons
   // - optExecInPerInterfaceThread and optFreeInPerInterfaceThread will allow
   // creation of a per-interface dedicated thread
+  // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
+  // events would have their Sender.Input/Output values defined
   TServiceMethodOptions = set of TServiceMethodOption;
 
   /// callback called by TServiceMethodExecute to process an interface
@@ -10049,7 +10054,7 @@ type
     function ArgsNames(Input: Boolean): TRawUTF8DynArray;
     {$ifndef NOVARIANTS}
     /// computes a TDocVariant containing the input or output arguments values
-    // - Values[] should contain the input/output raw values
+    // - Values[] should contain the input/output raw values as variant
     // - Kind would specify the expected returned document layout
     procedure ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
       out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
@@ -10059,6 +10064,11 @@ type
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     procedure ArgsAsDocVariantFix(var ArgsObject: TDocVariantData; Input: boolean);
+    /// computes a TDocVariant containing the input or output arguments values
+    // - Values[] should point to the input/output raw binary values, as stored
+    // in TServiceMethodExecute.Values during execution
+    procedure ArgsStackAsDocVariant(const Values: TPPointerDynArray;
+      out Dest: TDocVariantData; Input: Boolean);
     {$endif}
   end;
 
@@ -10173,21 +10183,27 @@ type
     fValues: TPPointerDynArray;
     fAlreadyExecuted: boolean;
     fTempTextWriter: TTextWriter;
+    fOnExecute: array of TServiceMethodExecuteEvent;
+    fBackgroundExecutionThread: TSynBackgroundThreadMethod;
+    fOnCallback: TServiceMethodExecuteCallback;
+    fOptions: TServiceMethodOptions;
+    fServiceCustomAnswerHead: RawUTF8;
+    fServiceCustomAnswerStatus: cardinal;
+    fLastException: Exception;
+    fInput: TDocVariantData;
+    fOutput: TDocVariantData;
     procedure BeforeExecute;
     procedure RawExecute(Instances: PPointerArray; InstancesLast: integer);
     procedure AfterExecute;
   public
-    BackgroundExecutionThread: TSynBackgroundThreadMethod;
-    OnCallback: TServiceMethodExecuteCallback;
-    OnExecute: TServiceMethodExecuteEvent;
-    Options: TServiceMethodOptions;
-    ServiceCustomAnswerHead: RawUTF8;
-    ServiceCustomAnswerStatus: cardinal;
-    LastException: Exception;
     /// initialize the execution instance
     constructor Create(aMethod: PServiceMethod);
     /// finalize the execution instance
     destructor Destroy; override;
+    /// allow to hook method execution
+    // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
+    // fields would contain the execution data context when Hook is called
+    procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
     /// execute the corresponding method of a given TInterfacedObject instance
     // - will retrieve a JSON array of parameters from Par
     // - will append a JSON array of results in Res, or set an Error message, or
@@ -10197,7 +10213,32 @@ type
     /// low-level direct access to the associated method information
     property Method: PServiceMethod read fMethod;
     /// low-level direct access to the current input/output parameter values
+    // - you should not need to access this, but rather set
+    // optInterceptInputOutput in Options, and read Input/Output content
     property Values: TPPointerDynArray read fValues;
+    // as copied from TServiceFactoryServer.Options
+    property Options: TServiceMethodOptions read fOptions write fOptions;
+    /// set from output TServiceCustomAnswer.Header result parameter
+    property ServiceCustomAnswerHead: RawUTF8
+      read fServiceCustomAnswerHead write fServiceCustomAnswerHead;
+    /// set from output TServiceCustomAnswer.Status result parameter
+    property ServiceCustomAnswerStatus: cardinal
+      read fServiceCustomAnswerStatus write fServiceCustomAnswerStatus;
+    /// set if optInterceptInputOutput is defined in TServiceFactoryServer.Options
+    // - contains a dvObject with input parameters as "argname":value pairs
+    // - this is a read-only property: you cannot change the input content
+    property Input: TDocVariantData read fInput;
+    /// set if optInterceptInputOutput is defined in TServiceFactoryServer.Options
+    // - this is a read-only property: you cannot change the output content
+    // - contains a dvObject with output parameters as "argname":value pairs
+    property Output: TDocVariantData read fOutput;
+    /// set if intercepted event Step is smsError
+    property LastException: Exception read fLastException;
+    /// reference to the background execution thread, if any
+    property BackgroundExecutionThread: TSynBackgroundThreadMethod
+      read fBackgroundExecutionThread;
+    /// points e.g. to TSQLRestServerURIContext.ExecuteCallback
+    property OnCallback: TServiceMethodExecuteCallback read fOnCallback;
     /// allow to use an instance-specific temporary TTextWriter
     function TempTextWriter: TTextWriter;
   end;
@@ -11621,6 +11662,7 @@ type
     fResultAsXMLObjectNameSpace: RawUTF8;
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
+    fOnExecute: array of TServiceMethodExecuteEvent;
     fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
@@ -11654,7 +11696,7 @@ type
     // sicClientDriven remote call - or just 0 in case of sicSingle or sicShared
     procedure ExecuteMethod(Ctxt: TSQLRestServerURIContext);
     /// called by ExecuteMethod to append input/output params to Sender.TempTextWriter
-    procedure OnExecuteMethod(Sender: TServiceMethodExecute;
+    procedure OnLogRestExecuteMethod(Sender: TServiceMethodExecute;
       Step: TServiceMethodExecuteEventStep);
     /// this method will create an implementation instance
     // - reference count will be set to one, in order to allow safe passing
@@ -11791,6 +11833,13 @@ type
     /// you can define here an event to allow/deny execution of any method
     // of this service, at runtime
     property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute write fOnMethodExecute;
+    /// allow to hook the methods execution
+    // - several events could be registered, and would be called directly
+    // before and after method execution
+    // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
+    // fields would contain the execution data context when Hook is called
+    // - see OnMethodExecute if you want to implement security features
+    procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
 
     /// retrieve an instance of this interface from the server side
     // - sicShared mode will retrieve the shared instance
@@ -52032,7 +52081,7 @@ begin
     IInterface(result)._AddRef; // allow passing self to sub-methods
 end;
 
-procedure TServiceFactoryServer.OnExecuteMethod(Sender: TServiceMethodExecute;
+procedure TServiceFactoryServer.OnLogRestExecuteMethod(Sender: TServiceMethodExecute;
   Step: TServiceMethodExecuteEventStep);
 var W: TTextWriter;
     a: integer;
@@ -52202,14 +52251,15 @@ begin
         EnterCriticalSection(fInstanceLock);
       exec := TServiceMethodExecute.Create(@fInterface.fMethods[Ctxt.ServiceMethodIndex]);
       try
-        exec.Options := fExecution[Ctxt.ServiceMethodIndex].Options;
+        exec.fOptions := fExecution[Ctxt.ServiceMethodIndex].Options;
         {$ifndef LVCL}
-        exec.BackgroundExecutionThread := fBackgroundThread;
+        exec.fBackgroundExecutionThread := fBackgroundThread;
         {$endif}
-        exec.OnCallback := Ctxt.ExecuteCallback;
-        with fExecution[Ctxt.ServiceMethodIndex] do
-        if LogRest<>nil then
-          exec.OnExecute := OnExecuteMethod;
+        exec.fOnCallback := Ctxt.ExecuteCallback;
+        if fOnExecute<>nil then
+          MultiEventMerge(exec.fOnExecute,fOnExecute);
+        if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
+          exec.AddInterceptor(OnLogRestExecuteMethod);
         if exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
           Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
           Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
@@ -52258,7 +52308,7 @@ begin
     end else
       timeEnd := 0;
     if exec<>nil then begin
-      if Assigned(exec.OnExecute) then
+      if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
         ProcessOnExecute;
       exec.Free;
     end;
@@ -52478,6 +52528,11 @@ begin
         SetEntry(fInterface.CheckMethodIndex(aMethod[i]),ndx);
   end;
   result := self;
+end;
+
+procedure TServiceFactoryServer.AddInterceptor(const Hook: TServiceMethodExecuteEvent);
+begin
+  MultiEventAdd(fOnExecute,TMethod(Hook));
 end;
 
 
@@ -52706,6 +52761,15 @@ begin
     VariantLoadJSON(DestValue,pointer(tmp),nil,@Options);
   end;
   end;
+end;
+
+procedure TServiceMethodArgument.AddAsVariant(var Dest: TDocVariantData; V: pointer);
+var tmp: variant;
+begin
+  AsVariant(tmp,V,Dest.Options);
+  if Dest.Kind=dvArray then
+    Dest.AddItem(tmp) else
+    Dest.AddValue(ShortStringToAnsi7String(ParamName^),tmp);
 end;
 
 procedure TServiceMethodArgument.FixValueAndAddToObject(const Value: variant;
@@ -53269,7 +53333,23 @@ begin
   end;
 end;
 
+
 {$ifndef NOVARIANTS}
+
+procedure TServiceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
+  out Dest: TDocVariantData; Input: Boolean);
+var a: integer;
+begin
+  if Input then begin
+    for a := ArgsInFirst to ArgsInLast do
+      if Args[a].ValueDirection in [smdConst,smdVar] then
+        Args[a].AddAsVariant(Dest,Values[a]);
+  end else begin
+    for a := ArgsOutFirst to ArgsOutLast do
+      if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then
+        Args[a].AddAsVariant(Dest,Values[a]);
+  end;
+end;
 
 procedure TServiceMethod.ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
   out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
@@ -53367,6 +53447,11 @@ begin
   inherited Destroy;
 end;
 
+procedure TServiceMethodExecute.AddInterceptor(const Hook: TServiceMethodExecuteEvent);
+begin
+  MultiEventAdd(fOnExecute,TMethod(Hook));
+end;
+
 procedure TServiceMethodExecute.BeforeExecute;
 var a: integer;
 begin
@@ -53396,6 +53481,10 @@ begin
         if fAlreadyExecuted then
           FillcharFast(fRecords[IndexVar],ArgTypeInfo^.RecordType^.Size,0);
       end;
+    if optInterceptInputOutput in Options then begin
+      Input.InitFast(ArgsInputValuesCount,dvObject);
+      Output.InitFast(ArgsOutputValuesCount,dvObject);
+    end;
   end;
   fAlreadyExecuted := true;
 end;
@@ -53403,7 +53492,7 @@ end;
 procedure TServiceMethodExecute.RawExecute(Instances: PPointerArray;
   InstancesLast: integer);
 var Value: pointer;
-    a,i: integer;
+    a,i,e: integer;
     call: TCallMethodArgs;
     Stack: array[0..MAX_EXECSTACK-1] of byte;
 begin
@@ -53441,10 +53530,14 @@ begin
     // execute the method
     for i := 0 to InstancesLast do begin
       // handle method execution interception
-      if Assigned(OnExecute) then
-      try
-        OnExecute(self,smsBefore);
-      except // ignore any exception during interception
+      if fOnExecute<>nil then begin
+        if (Input.Count=0) and (optInterceptInputOutput in Options) then
+          ArgsStackAsDocVariant(fValues,fInput,true);
+        for e := 0 to length(fOnExecute)-1 do
+        try
+          fOnExecute[e](self,smsBefore);
+        except // ignore any exception during interception
+        end;
       end;
       // prepare the low-level call context for the asm stub
       call.Regs[REG_FIRST] := PtrInt(Instances[i]);
@@ -53468,18 +53561,25 @@ begin
         if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
           PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
         // handle method execution interception
-        if Assigned(OnExecute) then
-        try
-          OnExecute(self,smsAfter);
-        except // ignore any exception during interception
+        if fOnExecute<>nil then begin
+          if (Output.Count=0) and (optInterceptInputOutput in Options) then
+            ArgsStackAsDocVariant(fValues,fOutput,false);
+          for e := 0 to length(fOnExecute)-1 do
+          try
+            fOnExecute[e](self,smsAfter);
+          except // ignore any exception during interception
+          end;
         end;
       except // also intercept any error during method execution
-        on E: Exception do begin
-          if Assigned(OnExecute) then
-          try
-            LastException := E;
-            OnExecute(self,smsError);
-          except // ignore any exception during interception
+        on Exc: Exception do begin
+          if fOnExecute<>nil then begin
+            fLastException := Exc;
+            for e := 0 to length(fOnExecute)-1 do
+            try
+              fOnExecute[e](self,smsError);
+            except // ignore any exception during interception
+            end;
+            fLastException := nil;
           end;
           raise; // caller expects the exception to be propagated
         end;
@@ -53652,11 +53752,11 @@ begin
       if ArgsResultIsServiceCustomAnswer then
         with PServiceCustomAnswer(fValues[ArgsResultIndex])^ do
         if Header<>'' then begin
-          ServiceCustomAnswerHead := Header;
+          fServiceCustomAnswerHead := Header;
           Res.ForceContent(Content);
           if Status=0 then // Values[]=@Records[] is filled with 0 by default
-            ServiceCustomAnswerStatus := HTML_SUCCESS else
-            ServiceCustomAnswerStatus := Status;
+            fServiceCustomAnswerStatus := HTML_SUCCESS else
+            fServiceCustomAnswerStatus := Status;
           Result := true;
           exit;
         end;

@@ -9966,7 +9966,12 @@ procedure MultiEventRemove(var EventList; Index: Integer); overload;
 // it as a dynamic array of events, you can use this wrapper to check if
 // a callback has already been registered to this list of events
 // - used internally by MultiEventAdd() and MultiEventRemove() functions
-function MultiEventFind(var EventList; const Event: TMethod): integer;
+function MultiEventFind(const EventList; const Event: TMethod): integer;
+
+/// low-level wrapper to add one of several callbacks from another list of events
+// - all events of the ToBeAddedList would be added to DestList
+// - the list is not checked for duplicates
+procedure MultiEventMerge(var DestList; const ToBeAddedList); 
 
 
 { ************ fast ISO-8601 types and conversion routines }
@@ -13076,9 +13081,10 @@ type
     // - returns FALSE if no match is found, TRUE if as deleted
     function DeleteByProp(const aPropName,aPropValue: RawUTF8;
       aCaseSensitive: boolean): boolean;
-    /// delete a value/item in this document, from its value
+    /// delete one or several value/item in this document, from its value
     // - return TRUE on success, FALSE if the supplied value does not exist
-    function DeleteByValue(const aValue: Variant): boolean;
+    // - if the value exists several times, all occurences would be removedS
+    function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): boolean;
     /// delete all values matching the first characters of a property name
     // - returns the number of deleted items
     // - returns 0 if the document is not a dvObject, or if no match was found
@@ -13094,7 +13100,9 @@ type
     // - aValue will be searched within the stored array
     // and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
-    function SearchItemByValue(const aValue: Variant): integer;
+    // - you could make several searches, using the StartIndex optional parameter
+    function SearchItemByValue(const aValue: Variant;
+      CaseInsensitive: boolean=false; StartIndex: integer=0): integer;
     /// sort the document object values by name
     // - do nothing if the document is not a dvObject
     // - will follow case-insensitive order (@StrIComp) by default, but you
@@ -35303,12 +35311,12 @@ begin
   result := -1;
 end;
 
-function TDocVariantData.SearchItemByValue(const aValue: Variant): integer;
+function TDocVariantData.SearchItemByValue(const aValue: Variant;
+  CaseInsensitive: boolean; StartIndex: integer): integer;
 begin
-  if VKind=dvArray then
-    for result := 0 to VCount-1 do
-      if VValue[result]=aValue then // rely on Variants.pas comparison
-        exit;
+  for result := StartIndex to VCount-1 do
+  if SortDynArrayVariantComp(TVarData(VValue[result]),TVarData(aValue),CaseInsensitive)=0 then
+      exit;
   result := -1;
 end;
 
@@ -35558,9 +35566,16 @@ begin
   result := Delete(SearchItemByProp(aPropName,aPropValue,aCaseSensitive));
 end;
 
-function TDocVariantData.DeleteByValue(const aValue: Variant): boolean;
+function TDocVariantData.DeleteByValue(const aValue: Variant;
+  CaseInsensitive: boolean=false): boolean;
+var ndx: integer;
 begin
-  result := Delete(SearchItemByValue(aValue));
+  result := false;
+  for ndx := VCount-1 downto 0 do
+  if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
+    Delete(ndx);
+    result := true;
+  end;
 end;
 
 function TDocVariantData.DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
@@ -52350,7 +52365,7 @@ end;
 
 { MultiEvent* functions }
 
-function MultiEventFind(var EventList; const Event: TMethod): integer;
+function MultiEventFind(const EventList; const Event: TMethod): integer;
 var Events: TMethodDynArray absolute EventList;
 begin
   if Event.Code<>nil then // callback assigned
@@ -52392,6 +52407,18 @@ begin
   end;
 end;
 
+procedure MultiEventMerge(var DestList; const ToBeAddedList);
+var Dest: TMethodDynArray absolute DestList;
+    New: TMethodDynArray absolute ToBeAddedList;
+    d,n: integer;
+begin
+  d := length(Dest);
+  n := length(New);
+  if n=0 then
+    exit;
+  SetLength(Dest,d+n);
+  MoveFast(New[0],Dest[d],n*sizeof(TMethod));
+end;
 
 var
   GarbageCollectorFreeAndNilList: TList;
