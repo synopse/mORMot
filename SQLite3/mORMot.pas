@@ -6902,6 +6902,12 @@ type
     // don't call CreateFrom(pointer(JSONRecord)) but CreateFrom(JSONRecord) which
     // makes a temporary copy of the JSONRecord text variable before parsing
     constructor CreateFrom(P: PUTF8Char); overload;
+    {$ifndef NOVARIANTS}
+    /// this constructor initializes the object as above, and fills its content
+    // from a supplied TDocVariant object document
+    // - is a wrapper around Create + FillFrom() methods
+    constructor CreateFrom(const aDocVariant: variant); overload;
+    {$endif}
 
     /// this constructor initializes the object as above, and prepares itself to
     // loop through a statement using a specified WHERE clause
@@ -7469,6 +7475,12 @@ type
     // - source object must be a parent or of the same class as the current record
     // - copy the fields, as specified by their bit index in the source record
     procedure FillFrom(aRecord: TSQLRecord; const aRecordFieldBits: TSQLFieldBits); overload;
+    {$ifndef NOVARIANTS}
+    /// fill all published properties of this object from a supplied TDocVariant
+    // object document
+    // - is a wrapper around VariantSaveJSON() + FillFrom() methods
+    procedure FillFrom(const aDocVariant: variant); overload;
+    {$endif}
     /// fill a published property value of this object from a UTF-8 encoded value
     // - see TPropInfo about proper Delphi / UTF-8 type mapping/conversion
     // - use this method to fill a BLOB property, i.e. a property defined with
@@ -28424,6 +28436,14 @@ begin
   FillFrom(P);
 end;
 
+{$ifndef NOVARIANTS}
+constructor TSQLRecord.CreateFrom(const aDocVariant: variant);
+begin
+  Create;
+  FillFrom(aDocVariant);
+end;
+{$endif}
+
 class procedure TSQLRecord.InitializeTable(Server: TSQLRestServer;
   const FieldName: RawUTF8; Options: TSQLInitializeTableOptions);
 var f: integer;
@@ -28604,6 +28624,17 @@ begin
     until P=nil;
   end;
 end;
+
+{$ifndef NOVARIANTS}
+procedure TSQLRecord.FillFrom(const aDocVariant: variant);
+var json: RawUTF8;
+begin
+  if _Safe(aDocVariant)^.Kind=dvObject then begin
+    VariantSaveJSON(aDocVariant,twJSONEscape, json);
+    FillFrom(pointer(json));
+  end;
+end;
+{$endif}
 
 procedure TSQLRecord.FillPrepare(Table: TSQLTable; aCheckTableName: TSQLCheckTableName);
 begin
@@ -29810,21 +29841,21 @@ end;
 function PropsCreate(aTable: TSQLRecordClass): TSQLRecordProperties;
 var PVMT: pointer;
 begin // private sub function makes the code faster in most case
-  if not aTable.InheritsFrom(TSQLRecord) then
-    // invalid call
-    result := nil else begin
-    // create the properties information from RTTI
-    result := TSQLRecordProperties.Create(aTable);
-    // store the TSQLRecordProperties instance into AutoTable unused VMT entry
-    PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
-    if PPointer(PVMT)^<>nil then
-      raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
-    PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
-    // register to the internal garbage collection (avoid memory leak)
-    GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
-    // overriden method may use RecordProps -> do it after the VMT is set
-    aTable.InternalDefineModel(result);
+  if not aTable.InheritsFrom(TSQLRecord) then begin
+    result := nil; // invalid call
+    exit;
   end;
+  // create the properties information from RTTI
+  result := TSQLRecordProperties.Create(aTable);
+  // store the TSQLRecordProperties instance into AutoTable unused VMT entry
+  PVMT := pointer(PtrInt(aTable)+vmtAutoTable);
+  if PPointer(PVMT)^<>nil then
+    raise ESynException.CreateUTF8('%.AutoTable VMT entry already set',[aTable]);
+  PatchCodePtrUInt(PVMT,PtrUInt(result),true); // LeaveUnprotected=true
+  // register to the internal garbage collection (avoid memory leak)
+  GarbageCollectorFreeAndNil(PVMT^,result); // set to nil at finalization
+  // overriden method may use RecordProps -> do it after the VMT is set
+  aTable.InternalDefineModel(result);
 end;
 
 // since "var class" are not available in Delphi 6-7, and is inherited by
@@ -53876,7 +53907,7 @@ begin // one at a time, since InternalInvoke() is the bottleneck
         '%.ProcessPendingNotification failed for %(%) [ID=%,pending=%] on %: %',
         [self,pending.Method,params,pending.IDValue,fPending,fClient.fClient,error]);
     end;
-    fClient.fClient.InternalLog('ProcessPendingNotification %(%) in % us [ID=%,pending=%]',
+    fClient.fClient.InternalLog('ProcessPendingNotification %(%) in % [ID=%,pending=%]',
       [pending.Method,params,timer.Stop,pending.IDValue,fPending],sllTrace);
     pending.Sent := TimeLogNowUTC;
     pending.MicroSec := timer.LastTimeInMicroSec;
