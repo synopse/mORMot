@@ -20946,8 +20946,12 @@ type
   PTObjArraySerializer = ^TObjArraySerializer;
 
 procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aValue);
+var options: TTextWriterWriteObjectOptions;
 begin
-  aWriter.WriteObject(TObject(aValue));
+  if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
+    options := [woDontStoreDefault, woEnumSetsAsText] else
+    options := [woDontStoreDefault];
+  aWriter.WriteObject(TObject(aValue), options);
 end;
 
 function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
