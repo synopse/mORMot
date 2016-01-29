@@ -15126,13 +15126,19 @@ type
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
   // rsoHtml200WithNoBodyReturns204 so that any HTML_SUCCESS (200) with no
   // returned body would return a HTML_NOCONTENT (204)
-  // - by default, Add() would return HTML_CREATED (201) with no body, unless
-  // rsoAddReturnsContent is set to return as JSON the last inserted record
+  // - by default, Add() or Update() would return HTML_CREATED (201) or
+  // HTML_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
+  // to return as JSON the last inserted/updated record
+  // - TModTime / TCreateTime fields are expected to be filled on client side,
+  // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
+  // would set the fields on the server side by calling the TSQLRecord
+  // ComputeFieldsBeforeWrite virtual method, before writing to the database
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
     rsoHtml200WithNoBodyReturns204,
-    rsoAddReturnsContent);
+    rsoAddUpdateReturnsContent,
+    rsoComputeFieldsBeforeWriteOnServerSide);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -37041,6 +37047,23 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.ExecuteORMWrite;
+  procedure ComputeInBodyFields(Occasion: TSQLEvent);
+  var Rec: TSQLRecord;
+      bits: TSQLFieldBits;
+  begin
+    Rec := Table.Create;
+    try
+      Rec.FillFrom(pointer(Call.InBody),@bits);
+      Rec.ComputeFieldsBeforeWrite(Server,Occasion);
+      with TableRecordProps.Props do
+        if Occasion=seAdd then
+          bits := bits+ModCreateTimeFieldsBits else
+          bits := bits+FieldBits[sftModTime];
+      Call.Inbody := Rec.GetJSONValues(true,Rec.IDValue<>0,bits);
+    finally
+      Rec.Free;
+    end;
+  end;
 var OK: boolean;
     Blob: PPropInfo;
     SQLSelect, SQLWhere, SQLSort, SQLDir: RawUTF8;
@@ -37069,11 +37092,14 @@ begin
     end else begin
       // ModelRoot/TableName with possible JSON SentData: create a new member
       // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_SQLTABLES-1]
+      if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
+        ComputeInBodyFields(seAdd);
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
         Call.OutStatus := HTML_CREATED; // 201 Created
         Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
-        if rsoAddReturnsContent in Server.Options then begin
+        if rsoAddUpdateReturnsContent in Server.Options then begin
+          Server.fCache.NotifyDeletion(TableIndex,TableID);
           Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
           Server.fCache.Notify(TableIndex,TableID,Call.OutBody,soInsert);
         end else
@@ -37092,9 +37118,14 @@ begin
             OK := TableEngine.EngineUpdateBlob(TableIndex,TableID,Blob,Call.InBody);
         end else begin
           // ModelRoot/TableName/TableID with JSON SentData: update a member
+          if rsoComputeFieldsBeforeWriteOnServerSide in Server.Options then
+            ComputeInBodyFields(seUpdate);
           OK := TableEngine.EngineUpdate(TableIndex,TableID,Call.InBody);
-          if OK then
-            Server.fCache.NotifyDeletion(TableIndex,TableID); // flush (no CreateTime in JSON)
+          if OK then begin // flush (no CreateTime in JSON)
+            Server.fCache.NotifyDeletion(TableIndex,TableID);
+            if rsoAddUpdateReturnsContent in Server.Options then
+              Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
+          end;
         end;
         if OK then
           Call.OutStatus := HTML_SUCCESS; // 200 OK
@@ -37110,9 +37141,11 @@ begin
         UrlDecodeValue(Parameters,'WHERE=',SQLWhere,@Parameters);
       until Parameters=nil;
       if (SQLSelect<>'') and (SQLDir<>'') and (SQLSort<>'') and (SQLWhere<>'') then
-        if TableEngine.EngineUpdateField(TableIndex,
-             SQLSelect,SQLDir,SQLSort,SQLWhere) then
+        if TableEngine.EngineUpdateField(TableIndex,SQLSelect,SQLDir,SQLSort,SQLWhere) then begin
+          if rsoAddUpdateReturnsContent in Server.Options then
+            Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
           Call.OutStatus := HTML_SUCCESS; // 200 OK
+        end;
     end;
   mDELETE:
     if TableID>0 then

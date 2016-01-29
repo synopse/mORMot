@@ -25585,7 +25585,7 @@ var S: PUTF8Char;
 begin
   if P=nil then
     Dest[0] := #0 else begin
-    P := GotoNextNotSpace(P); // trim left spaces
+    if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
     S := P;
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
