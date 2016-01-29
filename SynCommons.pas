@@ -3098,8 +3098,12 @@ procedure SQLAddWhereAnd(var where: RawUTF8; const condition: RawUTF8);
 
 /// return true if the parameter is void or begin with a 'SELECT' SQL statement
 // - used to avoid code injection and to check if the cache must be flushed
-// - 'VACUUM' statement also returns true, since doesn't change the data content
-function isSelect(P: PUTF8Char): boolean;
+// - VACUUM, PRAGMA, or EXPLAIN statements also return true, since they won't
+// change the data content
+// - WITH recursive statement expect no INSERT/UPDATE/DELETE pattern in the SQL
+// - if P^ is a SELECT and SelectClause is set to a variable, it would
+// contain the field names, from SELECT ...field names... FROM
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8=nil): boolean;
 
 /// return true if IdemPChar(source,searchUp), and go to the next line of source
 function IdemPCharAndGetNextLine(var source: PUTF8Char; searchUp: PAnsiChar): boolean;
@@ -3158,6 +3162,7 @@ procedure SetBitCSV(var Bits; BitsCount: integer; var P: PUTF8Char);
 function GetBitCSV(const Bits; BitsCount: integer): RawUTF8;
 
 /// return next CSV string from P, nil if no more
+// - output text would be trimmed from any left or right space
 procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar= ',');
 
 /// return next CSV string as unsigned integer from P, 0 if no more
@@ -19509,13 +19514,23 @@ begin
     result := ExternalDBSymbol;
 end;
 
-function isSelect(P: PUTF8Char): boolean;
+function isSelect(P: PUTF8Char; SelectClause: PRawUTF8): boolean;
+var from: PUTF8Char; 
 begin
   if P<>nil then begin
     P := SQLBegin(P);
-    result :=
-      ((IdemPChar(P,'SELECT') or IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and
-       (P[6] in [#0..' ',';'])) or IdemPChar(P,'EXPLAIN ') or
+    if IdemPChar(P,'SELECT ') then begin
+      if SelectClause<>nil then begin
+        inc(P,7);
+        from := StrPosI(' FROM ',P);
+        if from=nil then
+          SelectClause^ := '' else
+          SetString(SelectClause^,PAnsiChar(P),from-P);
+      end;
+      result := true;
+    end else
+    result := IdemPChar(P,'EXPLAIN ') or
+      ((IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and (P[6] in [#0..' ',';'])) or
       (((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';'])) and
         not (ContainsUTF8(P,'INSERT') or ContainsUTF8(P,'UPDATE') or
              ContainsUTF8(P,'DELETE')));
@@ -25566,16 +25581,20 @@ end;
 
 procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar= ',');
 var S: PUTF8Char;
+    len: integer;
 begin
   if P=nil then
     Dest[0] := #0 else begin
+    P := GotoNextNotSpace(P); // trim left spaces
     S := P;
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
-    SetString(Dest,P,S-P);
+    len := S-P;
+    while (P[len-1] in [#1..' ']) and (len>0) do dec(len); // trim right spaces
+    SetString(Dest,P,len);
     if S^<>#0 then
-     P := S+1 else
-     P := nil;
+      P := S+1 else
+      P := nil;
   end;
 end;
 

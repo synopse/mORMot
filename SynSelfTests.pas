@@ -7454,6 +7454,17 @@ begin
   Check(not isSelect(' delete from toto'));
   Check(not isSelect('with recursive cnt(x) as (values(1) union all '+
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi limit 10',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu order by a',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu',true)='');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi where id=2'))='titi');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi,tutu'))='titi,tutu');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi, tutu ,  tata where a=2'))='titi,tutu,tata');
   T := TSQLRecordTest.Create;
   M := TSQLModel.Create([TSQLRecordTest]);
   for i := 0 to InternalClassPropInfo(TSQLRecordTest,P)-1 do begin

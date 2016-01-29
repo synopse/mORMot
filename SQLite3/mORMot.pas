@@ -2106,6 +2106,8 @@ function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
   EnsureUniqueTableInFrom: boolean): RawUTF8;
 
+/// naive search of '... FROM Table1,Table2 ...' pattern in the supplied SQL
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
 
 /// guess the content type of an UTF-8 encoded field value, as used in TSQLTable.Get()
 // - if P if nil or 'null', return sftUnknown
@@ -2320,7 +2322,8 @@ function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - this overloaded version will make a private copy of the supplied JSON
-// content, to ensure the original buffer won't be modified during process
+// content, to ensure the original buffer won't be modified during process,
+// before calling safely JSONToObject()
 // - will return TRUE on success, or FALSE if the supplied JSON was invalid
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
@@ -5699,6 +5702,7 @@ type
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
+    procedure InternalSetTableFromTableIndex(Index: integer); virtual; 
     procedure InternalSetTableFromTableName(TableName: PUTF8Char); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
     /// event raised by ExecuteMethod() for interface parameters
@@ -9019,6 +9023,14 @@ type
     // - if EnsureUniqueTableInFrom is TRUE, it will check that only one Table
     // is in the FROM clause, otherwise it will return the first Table specified
     function GetTableIndexFromSQLSelect(const SQL: RawUTF8; EnsureUniqueTableInFrom: boolean): integer;
+    /// try to retrieve one or several table index from a SQL statement
+    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
+    // using GetTableNamesFromSQLSelect() function
+    function GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
+    /// try to retrieve one or several TSQLRecordClass from a SQL statement
+    // - naive search of '... FROM Table1,Table2' pattern in the supplied SQL,
+    // using GetTableNamesFromSQLSelect() function
+    function GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
     /// check if the supplied URI matches the model's Root property
     // - allows sub-domains, e.g. if Root='root/sub1', then '/root/sub1/toto' and
     // '/root/sub1?n=1' will match, whereas '/root/sub1nope/toto' won't
@@ -30738,12 +30750,75 @@ begin
   result := '';
 end;
 
+function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
+var i,j,k,n: integer;
+begin
+  result := nil;
+  n := 0;
+  i := PosI(' FROM ',SQL);
+  if i>0 then begin
+    inc(i,6);
+    repeat
+      while SQL[i] in [#1..' '] do inc(i);
+      j := 0;
+      while ord(SQL[i+j]) in IsIdentifier do inc(j);
+      if cardinal(j-1)>64 then begin
+        result := nil;
+        exit; // seems too big
+      end;
+      k := i+j;
+      while SQL[k] in [#1..' '] do inc(k);
+      SetLength(result,n+1);
+      SetString(result[n],PAnsiChar(PtrInt(SQL)+i-1),j);
+      inc(n);
+      if SQL[k]<>',' then
+        break;
+      i := k+1;
+    until false;
+  end;
+end;
+
 function TSQLModel.GetTableIndexFromSQLSelect(const SQL: RawUTF8;
   EnsureUniqueTableInFrom: boolean): integer;
 var TableName: RawUTF8;
 begin
   TableName := GetTableNameFromSQLSelect(SQL,EnsureUniqueTableInFrom);
   result := GetTableIndex(TableName);
+end;
+
+function TSQLModel.GetTableIndexesFromSQLSelect(const SQL: RawUTF8): TIntegerDynArray;
+var TableNames: TRawUTF8DynArray;
+    i,t,n,ndx: integer;
+begin
+  result := nil;
+  TableNames := GetTableNamesFromSQLSelect(SQL);
+  t := length(TableNames);
+  if t=0 then
+    exit;
+  SetLength(result,t);
+  n := 0;
+  for i := 0 to t-1 do begin
+    ndx := GetTableIndex(TableNames[i]);
+    if ndx<0 then
+      continue;
+    result[n] := ndx;
+    inc(n);
+  end;
+  if n<>t then
+    SetLength(result,n);
+end;
+
+function TSQLModel.GetTablesFromSQLSelect(const SQL: RawUTF8): TSQLRecordClassDynArray;
+var t: TIntegerDynArray;
+    n,i: integer;
+begin
+  t := GetTableIndexesFromSQLSelect(SQL);
+  n := length(t);
+  if n=0 then
+    exit;
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[n] := Tables[t[i]];
 end;
 
 function TSQLModel.GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
@@ -31649,7 +31724,6 @@ end;
 {$endif}
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON);
-var table: integer;
 begin
   if (SQL<>'') and (SQL[1]='#') then begin
     // pseudo SQL for a given TSQLRest[Server] instance
@@ -31663,12 +31737,8 @@ begin
     end;
     end;
   end else
-  if isSelect(pointer(SQL)) then begin
-    table := Model.GetTableIndexFromSQLSelect(SQL,true);
-    if table>=0 then
-      result := ExecuteJson([Model.Tables[table]],SQL) else
-      ExecuteJson([],SQL);
-  end else
+  if isSelect(pointer(SQL)) then
+    result := ExecuteJson(Model.GetTablesFromSQLSelect(SQL),SQL) else
     Execute(SQL);
 end;
 
@@ -36258,14 +36328,22 @@ end;
 procedure TSQLRestServerURIContext.InternalSetTableFromTableName(TableName: PUTF8Char);
 begin
   TableEngine := Server;
-  TableIndex := Server.Model.GetTableIndex(TableName);
-  if TableIndex>=0 then begin
-    Table := Server.Model.Tables[TableIndex];
-    TableRecordProps := Server.Model.TableProps[TableIndex];
-    Static := Server.GetStaticDataServerOrVirtualTable(TableIndex,StaticKind);
-    if Static<>nil then
-      TableEngine := Static;
-  end;
+  InternalSetTableFromTableIndex(Server.Model.GetTableIndex(TableName));
+  if TableIndex<0 then
+    exit;
+  Static := Server.GetStaticDataServerOrVirtualTable(TableIndex,StaticKind);
+  if Static<>nil then
+    TableEngine := Static;
+end;
+
+procedure TSQLRestServerURIContext.InternalSetTableFromTableIndex(Index: integer);
+begin
+  TableIndex := Index;
+  if TableIndex>=0 then
+    with Server.Model do begin
+      self.Table := Tables[TableIndex];
+      self.TableRecordProps := TableProps[TableIndex];
+    end;
 end;
 
 function TSQLRestServerURIContext.URIDecodeREST: boolean;
@@ -36701,12 +36779,37 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
 end;
 
 procedure TSQLRestServerURIContext.ExecuteORMGet;
+  procedure ConvertOutBodyAsPlainJSON(const FieldsCSV: RawUTF8);
+  var rec: TSQLRecord;
+      W: TJSONSerializer;
+      bits: TSQLFieldBits;
+      withid: boolean;
+  begin // force plain standard JSON output for AJAX clients
+    if (FieldsCSV='') or IsRowID(pointer(FieldsCSV)) or
+      not TableRecordProps.Props.FieldBitsFromCSV(FieldsCSV,bits,withid) then
+      exit; // ID is already OK, and we avoid min()/max() fields
+    rec := Table.CreateAndFillPrepare(Call.OutBody);
+    try
+      W := TableRecordProps.Props.CreateJSONWriter(
+        TRawByteStringStream.Create,true,FieldsCSV,0);
+      try
+        W.WriteAsJsonNotAsString := true; // will do the magic
+        rec.AppendFillAsJsonValues(W);
+        W.SetText(Call.OutBody);
+      finally
+        W.Stream.Free; // associated TRawByteStringStream instance
+        W.Free;
+      end;
+    finally
+      rec.Free;
+    end;
+  end;
 var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     SQLStartIndex, SQLResults, SQLTotalRowsCount: integer;
     NonStandardSQLSelectParameter, NonStandardSQLWhereParameter: boolean;
     SQLisSelect: boolean;
     ResultList: TSQLTableJSON;
-    W: TJSONSerializer;
+    TableIndexes: TIntegerDynArray;
     rec: TSQLRecord;
     P: PUTF8Char;
     i,j,L: integer;
@@ -36725,26 +36828,29 @@ begin
           // GET with a SQL statement sent as UTF-8 body (not 100% HTTP compatible)
           SQL := Call.InBody;
         if SQL<>'' then begin
-          SQLisSelect := isSelect(pointer(SQL));
+          SQLisSelect := isSelect(pointer(SQL),@SQLSelect);
           if SQLisSelect or
              (reSQL in Call.RestAccessRights^.AllowRemoteExecute) then begin
             Static := nil;
             if SQLisSelect then begin
-              TableIndex := Server.Model.GetTableIndexFromSQLSelect(SQL,false);
-              if TableIndex<0 then begin
-                // check for SELECT without table
+              TableIndexes := Server.Model.GetTableIndexesFromSQLSelect(SQL);
+              if TableIndexes=nil then begin
+                // check for SELECT without any known table
                 if not (reSQLSelectWithoutTable in
                    Call.RestAccessRights^.AllowRemoteExecute) then begin
                   Call.OutStatus := HTML_NOTALLOWED;
                   exit;
                 end;
-              end else
-                // check for SELECT with table
-                if not (TableIndex in Call.RestAccessRights^.GET) then begin
-                  Call.OutStatus := HTML_NOTALLOWED;
-                  exit;
-                end else
-                Static := Server.InternalAdaptSQL(TableIndex,SQL);
+              end else begin
+                // check for SELECT with one (or several JOINed) tables
+                for i := 0 to high(TableIndexes) do
+                  if not (TableIndexes[i] in Call.RestAccessRights^.GET) then begin
+                    Call.OutStatus := HTML_NOTALLOWED;
+                    exit;
+                  end;
+                // use the first static table (poorman's JOIN)
+                Static := Server.InternalAdaptSQL(TableIndexes[0],SQL);
+              end;
             end;
             if Static<>nil then  begin
               TableEngine := Static;
@@ -36753,9 +36859,14 @@ begin
               Call.OutBody := Server.MainEngineList(SQL,false,nil);
             // security note: only first statement is run by EngineList()
             if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
+              if (SQLSelect<>'') and (length(TableIndexes)=1) then begin
+                InternalSetTableFromTableIndex(TableIndexes[0]);
+                if ClientWriteAsJsonNotAsString then
+                  ConvertOutBodyAsPlainJSON(SQLSelect);
+              end;
               Call.OutStatus := HTML_SUCCESS;  // 200 OK
-              if not SQLisSelect then
-                Method := TSQLURIMethod(IdemPCharArray(pointer(SQL),
+              if not SQLisSelect then // accurate fStats.NotifyORM(Method) below
+                Method := TSQLURIMethod(IdemPCharArray(SQLBegin(pointer(SQL)),
                   ['INSERT','UPDATE','DELETE'])+2); // -1+2 -> mGET=1
             end;
           end;
@@ -36800,7 +36911,6 @@ begin
             end;
             if Call.OutBody<>'' then begin // if something was found
               if ClientWriteAsJsonNotAsString then begin
-                // force plain standard JSON output for AJAX clients
                 rec := Table.CreateFrom(Call.OutBody); // cached? -> make private
                 try // WriteAsJsonNotAsString=true in GetJSONValues() below
                   Call.OutBody := rec.GetJSONValues(true,true,soSelect,nil,true);
@@ -36870,25 +36980,8 @@ begin
           SQLFromSelectWhere(SQLSelect,trim(SQLWhere));
         Call.OutBody := Server.InternalListRawUTF8(TableIndex,SQL);
         if Call.OutBody<>'' then begin // got JSON list '[{...}]' ?
-          if (SQLSelect<>'RowID') and (PosEx('(',SQLSelect)=0) and
-             ClientWriteAsJsonNotAsString then begin
-            // force plain standard JSON output for AJAX clients
-            rec := Table.CreateAndFillPrepare(Call.OutBody);
-            try                                                   
-              with TableRecordProps.Props do
-                W := CreateJSONWriter(TRawByteStringStream.Create,true,SQLSelect,0);
-              try
-                W.WriteAsJsonNotAsString := true; // will do the magic
-                rec.AppendFillAsJsonValues(W);
-                W.SetText(Call.OutBody);
-              finally
-                W.Stream.Free; // associated TRawByteStringStream instance
-                W.Free;
-              end;
-            finally
-              rec.Free;
-            end;
-          end;
+          if ClientWriteAsJsonNotAsString then
+            ConvertOutBodyAsPlainJSON(SQLSelect);
           Call.OutStatus := HTML_SUCCESS;  // 200 OK
           if Server.URIPagingParameters.SendTotalRowsCountFmt<>'' then
             // insert "totalRows":% optional value to the JSON output
@@ -43407,14 +43500,11 @@ begin // at input, JSON^='{'
 end;
 
 procedure TJSONSerializerRegisteredClass.AddOnce(aItemClass: TClass);
-var i: integer;
 begin
   fSafe.Lock;
   try
-    for i := 0 to Count-1 do
-      if TClass(List[i])=aItemClass then
-        exit; // already registered
-    Add(aItemClass);
+    if not PtrUIntScanExists(pointer(List),Count,PtrUInt(aItemClass)) then
+      Add(aItemClass);
   finally
     fSafe.UnLock;
   end;
@@ -43705,12 +43795,14 @@ var P: PPropInfo;
     E: TSynExtended;
     V64: Int64;
     PropName: PUTF8Char;
+    PropNameLen: integer;
     PropValue: PUTF8Char;
     EndOfObject: AnsiChar;
     Kind: TTypeKind;
     wasString, NestedValid: boolean;
     IsObj: TJSONObject;
     IsObjCustomIndex: integer;
+    s: string;
     WS: WideString;
     U: RawUTF8;
     {$ifndef NOVARIANTS}
@@ -43851,7 +43943,8 @@ begin
             PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
             if (PropValue=nil) or not wasString then
               exit;
-            Str.Add(UTF8DecodeToString(PropValue,StrLen(PropValue)));
+            UTF8DecodeToString(PropValue,StrLen(PropValue),s);
+            Str.Add(s);
             case EndOfObject of
               ']': break;
               ',': continue;
@@ -43885,7 +43978,8 @@ begin
             PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
             if (PropValue=nil) or not wasString then
               exit;
-            utf.Add(PropValue);
+            SetString(U,PAnsiChar(PropValue),StrLen(PropValue));
+            utf.Add(U);
             case EndOfObject of
               ']': break;
               ',': if From=nil then exit else continue;
@@ -43925,9 +44019,10 @@ begin
     wasString := false;
     result := From;
     PropName := GetJSONPropName(From);  // get property name
-    if (From=nil) or (PropName='') then
+    PropNameLen := StrLen(PropName);
+    if (From=nil) or (PropNameLen=0) then
       exit; // invalid JSON content
-    if IdemPropName('ClassName',PropName,StrLen(PropName)) then begin
+    if IdemPropName('ClassName',PropName,PropNameLen) then begin
       // WriteObject() was called with woStoreClassName option -> handle it
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
       if (PropValue=nil) or (not wasString) or not (EndOfObject in ['}',',']) then
@@ -43942,7 +44037,7 @@ begin
       SetID(PropValue,TSQLRecord(Value).fID);
       continue;
     end;
-    P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,StrLen(PropName));
+    P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,PropNameLen);
     if P=nil then // unknown property
       if j2oIgnoreUnknownProperty in Options then begin
         From := GotoNextJSONItem(From,1,@EndOfObject);
@@ -45808,8 +45903,6 @@ begin
   P := pointer(aFieldsCSV);
   while P<>nil do begin
     GetNextItemShortString(P,FieldName);
-    while (FieldName[0]<>#0) and (FieldName[1]=' ') do
-      delete(FieldName,1,1);
     if IsRowIDShort(FieldName) then begin
       withID := true;
       continue;
@@ -48954,7 +49047,7 @@ begin
 end;
 
 class procedure TInterfaceFactory.AddToObjArray(var Obj: TInterfaceFactoryObjArray;
-   const aGUIDs: array of TGUID);
+  const aGUIDs: array of TGUID);
 var i: integer;
     fac: TInterfaceFactory;
 begin
