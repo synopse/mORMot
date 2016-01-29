@@ -28453,14 +28453,15 @@ var i, f: integer;
 begin
   if (self=nil) or (aRecord=nil) then
     exit;
-  S := aRecord.RecordProps;
-  if PSQLRecordClass(aRecord)^=PSQLRecordClass(Self)^ then begin
-    fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to high(S.CopiableFields) do
-      S.CopiableFields[f].CopyValue(aRecord,self);
+  D := RecordProps;
+  if InheritsFrom(PSQLRecordClass(aRecord)^) then begin
+    if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
+      fID := aRecord.fID; // same class -> ID values will match
+    for f := 0 to high(D.CopiableFields) do
+      D.CopiableFields[f].CopyValue(aRecord,self);
     exit;
   end;
-  D := RecordProps; // here we are on two diverse tables -> don't copy ID
+  S := aRecord.RecordProps; // two diverse tables -> don't copy ID
   for i := 0 to high(S.CopiableFields) do begin
     SP := S.CopiableFields[i];
     if D.Fields.List[SP.PropertyIndex].Name=SP.Name then // optimistic match
@@ -28482,15 +28483,16 @@ var i, f: integer;
 begin
   if (self=nil) or (aRecord=nil) then
     exit;
-  S := aRecord.RecordProps;
-  if PSQLRecordClass(aRecord)^=PSQLRecordClass(Self)^ then begin
-    fID := aRecord.fID; // same class -> ID values will match
-    for f := 0 to S.Fields.Count-1 do
+  D := RecordProps;
+  if InheritsFrom(PSQLRecordClass(aRecord)^) then begin
+    if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
+      fID := aRecord.fID; // same class -> ID values will match
+    for f := 0 to D.Fields.Count-1 do
       if f in aRecordFieldBits then
-        S.Fields.List[f].CopyValue(aRecord,self);
+        D.Fields.List[f].CopyValue(aRecord,self);
     exit;
   end;
-  D := RecordProps; // here we are on two diverse tables -> don't copy ID
+  S := aRecord.RecordProps; // two diverse tables -> don't copy ID
   for i := 0 to S.Fields.Count-1 do
   if i in aRecordFieldBits then begin
     SP := S.Fields.List[i];
