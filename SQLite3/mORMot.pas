@@ -18345,7 +18345,14 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
   var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
   options: TDocVariantOptions=JSON_OPTIONS_FAST);
-{$endif}
+
+/// read an object properties from a TDocVariant object document
+// - ObjectInstance must be an existing TObject instance
+// - will return TRUE on success, or FALSE if the supplied aDocVariant was
+// not a TDocVariant object
+function ObjectLoadVariant(var ObjectInstance; const aDocVariant: variant;
+  TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
+{$endif NOVARIANTS}
 
 const
   /// if a TSQLVirtualTablePreparedConstraint.Column is to be ignored
@@ -19351,6 +19358,17 @@ begin
     end;
     GetVariantFromJSON(Value,false,variant(result),@options);
   end;
+  end;
+end;
+
+function ObjectLoadVariant(var ObjectInstance; const aDocVariant: variant;
+  TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
+var tmp: RawUTF8;
+begin
+  if _Safe(aDocVariant)^.Kind<>dvObject then
+    result := false else begin
+    VariantSaveJSON(aDocVariant,twJSONEscape,tmp);
+    JSONToObject(ObjectInstance,pointer(tmp),result,TObjectListItemClass,Options);
   end;
 end;
 
