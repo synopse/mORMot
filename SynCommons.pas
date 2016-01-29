@@ -12686,6 +12686,12 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
       aOptions: TDocVariantOptions=[]; ItemsCopiedByReference: boolean=true);
+    /// initialize a variant instance to store document-based array content
+    // - array will be initialized from the supplied variable (which would be
+    // e.g. a T*ObjArray or a dynamic array), using RTTI
+    // - will use a temporary JSON serialization via SaveJSON()
+    procedure InitFromTypeInfo(const aValue; aTypeInfo: pointer;
+      aEnumSetsAsText: boolean; aOptions: TDocVariantOptions);
     /// initialize a variant instance to store some document-based object content
     // - object will be initialized with names and values supplied as dynamic arrays
     // - if aNames and aValues are [] or do have matching sizes, the variant
@@ -34890,6 +34896,14 @@ begin
     if not ItemsCopiedByReference then
       InitCopy(variant(self),aOptions);
   end;
+end;
+
+procedure TDocVariantData.InitFromTypeInfo(const aValue; aTypeInfo: pointer;
+  aEnumSetsAsText: boolean; aOptions: TDocVariantOptions);
+var tmp: RawUTF8;
+begin
+  SaveJSON(aValue,aTypeInfo,aEnumSetsAsText, tmp);
+  InitJSONInPlace(pointer(tmp),aOptions);
 end;
 
 procedure TDocVariantData.InitObjectFromVariants(const aNames: TRawUTF8DynArray;
