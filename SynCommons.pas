@@ -4011,6 +4011,11 @@ function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integ
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 
+/// quick helper to initialize a dynamic array of integer from some constants
+// - can be used e.g. as:
+// ! MyArray := TIntegerDynArrayFrom([1,2,3]);
+function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
+
 
 type
   /// used to store and retrieve Words in a sorted array
@@ -24307,6 +24312,14 @@ begin
     result := n;
   Values[result] := Value;
   inc(ValuesCount);
+end;
+
+function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    result[i] := Values[i];
 end;
 
 function GetInteger(P: PUTF8Char): PtrInt;
