@@ -51919,7 +51919,7 @@ var Inst: TServiceFactoryServerInstance;
   begin
     W := exec.TempTextWriter;
     W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
-      [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeStart]);
+      [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeEnd]);
     with fExecution[Ctxt.ServiceMethodIndex] do
     try
       LogRestBatch.Safe.Lock;
@@ -52074,7 +52074,8 @@ begin
           StatsFromContext(stats,Ctxt.Call^,timeEnd,true);
         end;
       end;
-    end;
+    end else
+      timeEnd := 0;
     if exec<>nil then begin
       if Assigned(exec.OnExecute) then
         ProcessOnExecute;
