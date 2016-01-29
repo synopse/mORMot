@@ -4795,6 +4795,8 @@ type
   TSQLRestStorageRemote = class;
   TSQLRestClientURI = class;
   TInterfaceFactory = class;
+  TSQLRestBatch = class;
+  TSQLRestBatchLocked = class;
 {$M-}
 
   /// class-reference type (metaclass) of TSQLRecord
@@ -5545,6 +5547,59 @@ type
     RunningThread: TThread;
   end;
 
+  /// possible service provider method options, e.g. about logging or execution
+  // - see TServiceMethodOptions for a description of each available option
+  TServiceMethodOption = (
+    optExecLockedPerInterface,
+    optExecInPerInterfaceThread, optFreeInPerInterfaceThread
+    {$ifndef LVCL},
+    optExecInMainThread, optFreeInMainThread,
+    optVariantCopiedByReference, optInterceptInputOutput
+    {$endif}
+  );
+
+  /// set of per-method execution options for an interface-based service provider
+  // - by default, mehthod executions are concurrent, for better server
+  // responsiveness; if you set optExecLockedPerInterface, all methods of
+  // a given interface will be executed with a critical section
+  // - optExecInMainThread will force the method to be called within
+  // a RunningThread.Synchronize() call - it can be used e.g. if your
+  // implementation rely heavily on COM servers - by default, service methods
+  // are called within the thread which received them, on multi-thread server
+  // instances (e.g. TSQLite3HttpServer or TSQLRestServerNamedPipeResponse),
+  // for better response time and CPU use (this is the technical reason why
+  // service implementation methods have to handle multi-threading safety
+  // carefully, e.g. by using TRTLCriticalSection mutex on purpose)
+  // - optFreeInMainThread will force the _Release/Destroy method to be run
+  // in the main thread: setting this option for any method will affect the
+  // whole service class - is not set by default, for performance reasons
+  // - optExecInPerInterfaceThread and optFreeInPerInterfaceThread will allow
+  // creation of a per-interface dedicated thread
+  // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
+  // events would have their Sender.Input/Output values defined
+  TServiceMethodOptions = set of TServiceMethodOption;
+
+  /// internal per-method list of execution context as hold in TServiceFactory
+  TServiceFactoryExecution = record
+    /// the list of denied TSQLAuthGroup ID(s)
+    // - used on server side within TSQLRestServerURIContext.ExecuteSOAByInterface
+    // - bit 0 for client TSQLAuthGroup.ID=1 and so on...
+    // - is therefore able to store IDs up to 256
+    // - void by default, i.e. no denial = all groups allowed for this method
+    Denied: set of 0..255;
+    /// execution options for this method (about thread safety or logging)
+    Options: TServiceMethodOptions;
+    /// where execution information should be written as TSQLRecordServiceLog
+    LogRest: TSQLRest;
+    /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
+    LogClassModelIndex: integer;
+    /// curent BATCH instance used to write on LogRest
+    // - points to a TServiceFactoryServer.fLogRestBatch[] instance
+    LogRestBatch: TSQLRestBatchLocked;
+  end;
+  /// points to the execution context of one method within TServiceFactory
+  PServiceFactoryExecution = ^TServiceFactoryExecution;
+
   /// all commands which may be executed by TSQLRestServer.URI() method
   // - execSOAByMethod for method-based services
   // - execSOAByInterface for interface-based services
@@ -5804,6 +5859,9 @@ type
     // - can be e.g. the client session ID for sicPerSession or the thread ID for
     // sicPerThread
     ServiceInstanceID: cardinal;
+    /// the current execution context of an interface-based service
+    // - maps to Service.fExecution[ServiceMethodIndex]
+    ServiceExecution: PServiceFactoryExecution;
     /// force the interface-based service methods to return a JSON object
     // - default behavior is to follow Service.ResultAsJSONObject property value
     // (which own default is to return a more convenient JSON array)
@@ -6440,8 +6498,6 @@ type
     // not trans-typed pointer(IDs)
     property JoinedFields: boolean read GetJoinedFields;
   end;
-
-  TSQLRestBatch = class;
 
   /// event signature triggered by TSQLRestBatch.OnWrite
   // - also used by TSQLRestServer.RecordVersionSynchronizeSlave*() methods
@@ -9920,38 +9976,6 @@ type
   /// describe a service provider method arguments
   TServiceMethodArgumentDynArray = array of TServiceMethodArgument;
 
-  /// possible service provider method options, e.g. about logging or execution
-  // - see TServiceMethodOptions for a description of each available option
-  TServiceMethodOption = (
-    optExecLockedPerInterface,
-    optExecInPerInterfaceThread, optFreeInPerInterfaceThread
-    {$ifndef LVCL},
-    optExecInMainThread, optFreeInMainThread,
-    optVariantCopiedByReference, optInterceptInputOutput
-    {$endif}
-  );
-
-  /// set of per-method execution options for an interface-based service provider
-  // - by default, mehthod executions are concurrent, for better server
-  // responsiveness; if you set optExecLockedPerInterface, all methods of
-  // a given interface will be executed with a critical section
-  // - optExecInMainThread will force the method to be called within
-  // a RunningThread.Synchronize() call - it can be used e.g. if your
-  // implementation rely heavily on COM servers - by default, service methods
-  // are called within the thread which received them, on multi-thread server
-  // instances (e.g. TSQLite3HttpServer or TSQLRestServerNamedPipeResponse),
-  // for better response time and CPU use (this is the technical reason why
-  // service implementation methods have to handle multi-threading safety
-  // carefully, e.g. by using TRTLCriticalSection mutex on purpose)
-  // - optFreeInMainThread will force the _Release/Destroy method to be run
-  // in the main thread: setting this option for any method will affect the
-  // whole service class - is not set by default, for performance reasons
-  // - optExecInPerInterfaceThread and optFreeInPerInterfaceThread will allow
-  // creation of a per-interface dedicated thread
-  // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
-  // events would have their Sender.Input/Output values defined
-  TServiceMethodOptions = set of TServiceMethodOption;
-
   /// callback called by TServiceMethodExecute to process an interface
   // callback parameter
   // - implementation should set the Obj local variable to an instance of
@@ -11489,23 +11513,7 @@ type
     fContractHash: RawUTF8;
     fContractExpected: RawUTF8;
     // per-method execution rights
-    fExecution: array of record
-      /// the list of denied TSQLAuthGroup ID(s)
-      // - used on server side within TSQLRestServerURIContext.ExecuteSOAByInterface
-      // - bit 0 for client TSQLAuthGroup.ID=1 and so on...
-      // - is therefore able to store IDs up to 256
-      // - void by default, i.e. no denial = all groups allowed for this method
-      Denied: set of 0..255;
-      /// execution options for this method (about thread safety or logging)
-      Options: TServiceMethodOptions;
-      /// where execution information should be written as TSQLRecordServiceLog
-      LogRest: TSQLRest;
-      /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
-      LogClassModelIndex: integer;
-      /// curent BATCH instance used to write on LogRest
-      // - points to a TServiceFactoryServer.fLogRestBatch[] instance
-      LogRestBatch: TSQLRestBatchLocked;
-    end;
+    fExecution: array of TServiceFactoryExecution;
     function GetInterfaceTypeInfo: PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetInterfaceIID: TGUID;
@@ -36710,6 +36718,12 @@ type
 const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_','_contract_','_signature_');
+  SERVICE_METHODINDEX_FREEINSTANCE = -1;
+
+function ToText(aValue: TServiceInstanceImplementation): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TServiceInstanceImplementation),ord(aValue));
+end;
 
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
@@ -36769,12 +36783,11 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     inc(Server.fStats.fServiceInterface);
     case ServiceMethodIndex of
     ord(imFree):
-      // "method":"_free_" to release sicClientDriven..sicPerGroup
-      if ServiceInstanceID<=0 then begin
-        Error('Expects an instance ID to be released');
+      if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then begin
+        Error('_free_ is not compatible with %',[ToText(Service.InstanceCreation)^]);
         exit;
-      end else
-        ServiceMethodIndex := -1; // notify ExecuteMethod() to release the instance
+      end else  // {"method":"_free_", "params":[], "id":1234}
+        ServiceMethodIndex := SERVICE_METHODINDEX_FREEINSTANCE;
     ord(imContract): begin
       // "method":"_contract_" to retrieve the implementation contract
       if (Call^.InBody<>'') and (Call^.InBody<>'[]') then
@@ -36790,11 +36803,17 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
         Error('Not allowed to publish signature');
       exit;
     end;
-    else // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
+    else begin // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
       dec(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
+      if cardinal(ServiceMethodIndex)>=Service.fInterface.fMethodsCount then begin
+        Error('Invalid ServiceMethodIndex');
+        exit;
+      end;
+      ServiceExecution := @Service.fExecution[ServiceMethodIndex];
     end;
-    if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceMethodIndex>=0) and
-       (SessionGroup-1 in Service.fExecution[ServiceMethodIndex].Denied) then begin
+    end;
+    if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceExecution<>nil) and
+       (SessionGroup-1 in ServiceExecution.Denied) then begin
       Error('Unauthorized method',HTML_NOTALLOWED);
       exit;
     end;
@@ -36806,7 +36825,7 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   {$ifdef WITHLOG}
   if sllServiceCall in Log.GenericFamily.Level then
     Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
-     ServiceMethodIndex),ServiceParameters],Server);
+      ServiceMethodIndex),ServiceParameters],Server);
   {$endif}
   if Assigned(Service.OnMethodExecute) and
      (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
@@ -38690,9 +38709,6 @@ begin
         TSQLRestStorage(fStaticVirtualTable[i]).BeginCurrentThread(Sender);
 end;
 
-const
-  INTERNALINSTANCERETRIEVE_FREEINSTANCE = -1;
-
 procedure TSQLRestServer.EndCurrentThread(Sender: TThread);
 var i: integer;
     CurrentThreadId: TThreadID;
@@ -38718,7 +38734,7 @@ begin
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
-        InternalInstanceRetrieve(Inst,INTERNALINSTANCERETRIEVE_FREEINSTANCE);
+        InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE);
   end;
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>nil then  // e.g. if length(TSQLHttpServer.fDBServers)>1
@@ -48972,11 +48988,6 @@ end;
 
 { TInterfaceFactory }
 
-function ToText(aValue: TServiceInstanceImplementation): RawUTF8;
-begin
-  result := GetEnumNameTrimed(TypeInfo(TServiceInstanceImplementation),aValue);
-end;
-
 function TypeInfoToMethodValueType(P: PTypeInfo): TServiceMethodValueType;
 var IsObjCustomIndex: integer;
 begin
@@ -51318,7 +51329,8 @@ begin
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
   fContract := FormatUTF8('{"contract":"%","implementation":"%","methods":%}',
-      [InterfaceURI,LowerCase(ToText(InstanceCreation)),fInterface.fContract]);
+      [InterfaceURI,LowerCase(TrimLeftLowerCaseShort(ToText(InstanceCreation))),
+       fInterface.fContract]);
   fContractHash := '"'+CardinalToHex(Hash32(fContract))+
     CardinalToHex(CRC32string(fContract))+'"'; // 2 hashes to avoid collision
   if aContractExpected<>'' then // override default contract
@@ -51398,7 +51410,7 @@ begin
   for i := 0 to Count-1 do
     with TServiceFactoryServer(Index(i)) do
     if InstanceCreation=sicPerSession then
-      InternalInstanceRetrieve(Inst,INTERNALINSTANCERETRIEVE_FREEINSTANCE);
+      InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE);
 end;
 
 destructor TServiceContainerServer.Destroy;
@@ -51485,6 +51497,7 @@ begin
         if fake.fService.fInterface.MethodIndexCallbackReleased>=0 then begin
           // emulate a call to CallbackReleased(callback,'ICallbackName')
           Ctxt.ServiceMethodIndex := fake.fService.fInterface.MethodIndexCallbackReleased;
+          Ctxt.ServiceExecution := @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
           Ctxt.Service := fake.fService;
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
@@ -51852,8 +51865,8 @@ procedure TServiceFactoryServer.SetTimeoutSecInt(value: cardinal);
 begin
   if (self=nil) or not (InstanceCreation in [
      sicClientDriven,sicPerSession,sicPerUser,sicPerGroup,sicPerThread]) then
-    raise EServiceException.CreateUTF8('%.SetTimeoutSecInt() with sic%',
-      [self,ToText(InstanceCreation)]);
+    raise EServiceException.CreateUTF8('%.SetTimeoutSecInt() with %',
+      [self,ToText(InstanceCreation)^]);
   fInstanceTimeOut := value*1000;
 end;
 
@@ -52018,7 +52031,7 @@ begin
       for i := 0 to fInstancesCount-1 do
         with fInstances[i] do
         if InstanceID=Inst.InstanceID then begin
-          if aMethodIndex=INTERNALINSTANCERETRIEVE_FREEINSTANCE then begin
+          if aMethodIndex=SERVICE_METHODINDEX_FREEINSTANCE then begin
             // aMethodIndex=-1 for {"method":"_free_", "params":[], "id":1234}
             SafeFreeInstance(self);
             result := true; // notify caller that successfully released instance
@@ -52140,17 +52153,17 @@ var Inst: TServiceFactoryServerInstance;
   begin
     if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
       method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
-    Ctxt.Error('% % for %%',[ToText(InstanceCreation),Msg,
+    Ctxt.Error('(%) % for %%',[ToText(InstanceCreation)^,Msg,
       fInterface.fInterfaceTypeInfo^.Name,method],Status);
   end;
-  procedure ProcessOnExecute;
+  procedure FinalizeLogRest;
   var W: TTextWriter;
       context: PServiceRunningContext;
   begin
     W := exec.TempTextWriter;
     W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
       [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeEnd]);
-    with fExecution[Ctxt.ServiceMethodIndex] do
+    with Ctxt.ServiceExecution^ do
     try
       LogRestBatch.Safe.Lock;
       LogRestBatch.RawAppend.AddNoJSONEscape(W);
@@ -52178,13 +52191,9 @@ begin
   Inst.Instance := nil;
   case InstanceCreation of
     sicSingle:
-      if cardinal(Ctxt.ServiceMethodIndex)>=fInterface.fMethodsCount then
-        exit else
-        Inst.Instance := CreateInstance(true);
+      Inst.Instance := CreateInstance(true);
     sicShared:
-      if cardinal(Ctxt.ServiceMethodIndex)>=fInterface.fMethodsCount then
-        exit else
-        Inst.Instance := fSharedInstance;
+      Inst.Instance := fSharedInstance;
     sicClientDriven, sicPerSession, sicPerUser, sicPerGroup, sicPerThread: begin
       case InstanceCreation of
       sicClientDriven:
@@ -52203,8 +52212,8 @@ begin
           end;
       end;
       if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex) then begin
-        Ctxt.Success;
-        exit; // {"method":"_free_", "params":[], "id":1234}
+        Ctxt.Success; // was SERVICE_METHODINDEX_FREEINSTANCE
+        exit;         // {"method":"_free_", "params":[], "id":1234}
       end;
     end;
   end;
@@ -52214,6 +52223,11 @@ begin
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
+  if (Ctxt.ServiceExecution=nil) or
+     (cardinal(Ctxt.ServiceMethodIndex)>=fInterface.fMethodsCount) then begin
+    Error('ServiceExecution=nil',HTML_SERVERERROR);
+    exit;
+  end;
   if mlInterfaces in TSQLRestServer(Rest).StatLevels then begin
     stats := fStats[Ctxt.ServiceMethodIndex];
     if stats=nil then begin
@@ -52229,7 +52243,7 @@ begin
       if Inst.Instance<>fSharedInstance then
         exit else
         instancePtr := @TInterfacedObjectFake(Inst.Instance).fVTable else begin
-      if Inst.Instance.ClassType=fImplementationClass then
+      if PPointer(Inst.Instance)^=fImplementationClass then
         entry := fImplementationClassInterfaceEntry else begin
         entry := Inst.Instance.GetInterfaceEntry(fInterface.fInterfaceIID);
         if entry=nil then
@@ -52237,7 +52251,7 @@ begin
       end;
       instancePtr := PAnsiChar(Inst.Instance)+entry^.IOffset;
     end;
-    if optExecInPerInterfaceThread in fExecution[Ctxt.ServiceMethodIndex].Options then
+    if optExecInPerInterfaceThread in Ctxt.ServiceExecution.Options then
       if fBackgroundThread=nil then
         fBackgroundThread := TSQLRestServer(Rest).CreateBackgroundThread(
           '% %',[self,fInterface.fInterfaceTypeInfo^.Name]);
@@ -52246,19 +52260,19 @@ begin
       Ctxt.fThreadServer^.Factory := self;
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
-      dolock := optExecLockedPerInterface in fExecution[Ctxt.ServiceMethodIndex].Options;
+      dolock := optExecLockedPerInterface in Ctxt.ServiceExecution.Options;
       if dolock then
         EnterCriticalSection(fInstanceLock);
       exec := TServiceMethodExecute.Create(@fInterface.fMethods[Ctxt.ServiceMethodIndex]);
       try
-        exec.fOptions := fExecution[Ctxt.ServiceMethodIndex].Options;
+        exec.fOptions := Ctxt.ServiceExecution.Options;
         {$ifndef LVCL}
         exec.fBackgroundExecutionThread := fBackgroundThread;
         {$endif}
         exec.fOnCallback := Ctxt.ExecuteCallback;
         if fOnExecute<>nil then
           MultiEventMerge(exec.fOnExecute,fOnExecute);
-        if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
+        if Ctxt.ServiceExecution.LogRest<>nil then
           exec.AddInterceptor(OnLogRestExecuteMethod);
         if exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
           Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
@@ -52308,8 +52322,8 @@ begin
     end else
       timeEnd := 0;
     if exec<>nil then begin
-      if fExecution[Ctxt.ServiceMethodIndex].LogRest<>nil then
-        ProcessOnExecute;
+      if Ctxt.ServiceExecution.LogRest<>nil then
+        FinalizeLogRest;
       exec.Free;
     end;
   end;

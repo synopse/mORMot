@@ -9968,7 +9968,7 @@ procedure MultiEventRemove(var EventList; Index: Integer); overload;
 // - used internally by MultiEventAdd() and MultiEventRemove() functions
 function MultiEventFind(const EventList; const Event: TMethod): integer;
 
-/// low-level wrapper to add one of several callbacks from another list of events
+/// low-level wrapper to add one or several callbacks from another list of events
 // - all events of the ToBeAddedList would be added to DestList
 // - the list is not checked for duplicates
 procedure MultiEventMerge(var DestList; const ToBeAddedList); 
@@ -13083,7 +13083,7 @@ type
       aCaseSensitive: boolean): boolean;
     /// delete one or several value/item in this document, from its value
     // - return TRUE on success, FALSE if the supplied value does not exist
-    // - if the value exists several times, all occurences would be removedS
+    // - if the value exists several times, all occurences would be removed
     function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): boolean;
     /// delete all values matching the first characters of a property name
     // - returns the number of deleted items
