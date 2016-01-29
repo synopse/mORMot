@@ -28496,7 +28496,7 @@ begin
   if (self=nil) or (aRecord=nil) then
     exit;
   D := RecordProps;
-  if InheritsFrom(PSQLRecordClass(aRecord)^) then begin
+  if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
     if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to high(D.CopiableFields) do
@@ -28526,7 +28526,7 @@ begin
   if (self=nil) or (aRecord=nil) then
     exit;
   D := RecordProps;
-  if InheritsFrom(PSQLRecordClass(aRecord)^) then begin
+  if PSQLRecordClass(aRecord)^.InheritsFrom(PSQLRecordClass(self)^) then begin
     if PSQLRecordClass(aRecord)^=PSQLRecordClass(self)^ then
       fID := aRecord.fID; // same class -> ID values will match
     for f := 0 to D.Fields.Count-1 do
