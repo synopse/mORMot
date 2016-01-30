@@ -3009,8 +3009,9 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level setter of the property value as its default
     // - this method will check the property type, e.g. setting '' for strings,
-    // and 0 for numbers, or running FreeAndNil() on any nested object
-    procedure SetDefaultValue(Instance: TObject);
+    // and 0 for numbers, or running FreeAndNil() on any nested object (unless
+    // FreeAndNilNestedObjects is false so that ClearObject() is used
+    procedure SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean=true);
     {$ifndef NOVARIANTS}
     /// low-level setter of the property value from a supplied variant
     procedure SetFromVariant(Instance: TObject; const Value: variant);
@@ -4396,6 +4397,7 @@ type
     procedure InfoSet; virtual;
     /// called by Destroy and TRawUTF8ObjectCacheList.DoPurge
     // - set fTimeoutTix := 0 (inherited should also release services interfaces)
+    // - protected by Safe.Lock from TRawUTF8ObjectCacheList.DoPurge
     procedure InfoClear; virtual;
   public
     /// initialize the information cache entry
@@ -26342,7 +26344,7 @@ begin
 end;
 {$endif NOVARIANTS}
 
-procedure TPropInfo.SetDefaultValue(Instance: TObject);
+procedure TPropInfo.SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean);
 var Item: TObject;
     addr: pointer;
 begin
@@ -26366,12 +26368,15 @@ begin
   tkVariant:
     SetVariantProp(Instance,variant(null_vardata));
   {$endif}
-  tkClass: begin // mimic FreeAndNil()
+  tkClass:
+  begin
     Item := GetObjProp(Instance);
-    if Item<>nil then begin
-      SetOrdProp(Instance,0); // set nil
-      Item.Free;
-    end;
+    if Item<>nil then
+      if FreeAndNilNestedObjects then begin
+        SetOrdProp(Instance,0); // mimic FreeAndNil()
+        Item.Free;
+      end else
+        ClearObject(Item,false);
   end;
   tkDynArray: begin
     addr := GetFieldAddr(Instance);
@@ -44455,11 +44460,7 @@ var P: PPropInfo;
 begin
   if Value<>nil then
   for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    if P^.PropType^.Kind=tkClass then
-      if FreeAndNilNestedObjects then
-        P^.SetDefaultValue(Value) else
-        ClearObject(P^.GetObjProp(Value),false) else
-      P^.SetDefaultValue(Value);
+    P^.SetDefaultValue(Value,FreeAndNilNestedObjects);
     {$ifdef HASINLINE}
     P := P^.Next;
     {$else}
