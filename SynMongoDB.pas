@@ -3655,16 +3655,6 @@ begin
 end;
 
 procedure TBSONObjectID.ComputeNew;
-  {$ifdef MSWINDOWS}
-  function ComputeMachineID: Cardinal;
-  var tmp: array[byte] of AnsiChar;
-  begin
-    result := GetEnvironmentVariableA('COMPUTERNAME',tmp,sizeof(tmp));
-    if result<1 then
-      result := GetCurrentProcessId else
-      result := kr32(0,@tmp,result);
-  end;
-  {$endif}
 var Tick, CurrentTime: cardinal;
 begin // this is a bit complex, but we have to avoid any collision
   with GlobalBSONObjectID do begin
@@ -3682,11 +3672,9 @@ begin // this is a bit complex, but we have to avoid any collision
       end;
     end;
     if ProcessID=0 then begin
-      {$ifdef MSWINDOWS}
-      PCardinal(@MachineID)^ := ComputeMachineID;
-      {$else}
-      PCardinal(@MachineID)^ := PtrUInt(MainThreadID); // temporary workaround
-      {$endif}
+      with ExeVersion do
+        PCardinal(@MachineID)^ := crc32c(crc32c(MainThreadID,
+          pointer(Host),length(Host)),pointer(User),length(User));
       ProcessID := PtrUInt(GetCurrentThreadId);
       FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
       Counter := FirstCounter;
@@ -4326,7 +4314,7 @@ begin
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
-  UniqueRawUTF8(JSON);
+  UniqueRawUTF8(JSON); // ensure Format is untouched if Args=[] 
   k := JSONBufferToBSONDocument(pointer(JSON),result);
   if kind<>nil then
     kind^ := k;
