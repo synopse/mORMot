@@ -1950,7 +1950,7 @@ type
     // - overloaded method expecting a RawUTF8 buffer, making a private copy
     // of the JSON content to avoid unexpected in-place modification, then
     // calling Decode(P: PUTF8Char) to perform the process
-    procedure Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
+    procedure Decode(const JSON: RawUTF8; const Fields: TRawUTF8DynArray;
       Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false); overload;
     /// can be used after Decode() to add a new field in FieldNames/FieldValues
     // - so that EncodeAsSQL() will include this field in the generated SQL
@@ -21189,22 +21189,24 @@ end;
 
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
-var tmp: RawByteString;
+var tmp: TSynTempBuffer;
     wrapper: TDynArray;
 begin
   GetDynArray(Instance,wrapper);
-  if fObjArray<>nil then begin
-    SetString(tmp,PAnsiChar(Value),StrLen(Value)); // make private copy
-    wrapper.LoadFromJSON(pointer(tmp));
+  if Value=nil then begin
+    wrapper.Clear;
     exit;
   end;
-  if Value=nil then
-    wrapper.Clear else
+  if fObjArray<>nil then begin
+    tmp.Init(Value);
+    wrapper.LoadFromJSON(tmp.buf);
+  end else
   if Base64MagicCheckAndDecode(Value,tmp) then
-    wrapper.LoadFrom(pointer(tmp)) else begin
-    SetString(tmp,PAnsiChar(Value),StrLen(Value)); // make private copy
-    wrapper.LoadFromJSON(pointer(tmp));
+    wrapper.LoadFrom(tmp.buf) else begin
+    tmp.Init(Value);
+    wrapper.LoadFromJSON(tmp.buf);
   end;
+  tmp.Done;
 end;
 
 function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
@@ -21598,24 +21600,18 @@ end;
 
 procedure TSQLPropInfoRTTIVariant.SetValuePtr(Instance: TObject; Value: PUTF8Char;
   ValueLen: integer; wasString: boolean);
-var tmp: pointer;
-    buf: array[0..4095] of AnsiChar; // avoid memory allocation in most cases
+var tmp: TSynTempBuffer;
     V: Variant;
 begin
   if ValueLen>0 then begin
-    inc(ValueLen);
-    if ValueLen<=sizeof(buf) then
-      tmp := @buf else
-      GetMem(tmp,ValueLen);
-    MoveFast(Value^,tmp^,ValueLen); // make private copy
+    tmp.Init(Value,ValueLen);
     try
       if fSQLFieldType=sftNullable then
-        GetVariantFromJSON(tmp,wasString,V,nil) else
-        GetVariantFromJSON(tmp,wasString,V,@DocVariantOptions);
+        GetVariantFromJSON(tmp.buf,wasString,V,nil) else
+        GetVariantFromJSON(tmp.buf,wasString,V,@DocVariantOptions);
       fPropInfo.SetVariantProp(Instance,V);
     finally
-      if tmp<>@buf then
-        FreeMem(tmp);
+      tmp.Done;
     end;
   end else begin
     TVarData(V).VType := varNull; // TEXT or NULL: see GetValueVar()
@@ -25389,16 +25385,20 @@ begin
   end;
 end;
 
-procedure TJSONObjectDecoder.Decode(JSON: RawUTF8; const Fields: TRawUTF8DynArray;
+procedure TJSONObjectDecoder.Decode(const JSON: RawUTF8; const Fields: TRawUTF8DynArray;
   Params: TJSONObjectDecoderParams; const RowID: TID=0; ReplaceRowIDWithID: Boolean=false);
-var P: PUTF8Char;
+var tmp: TSynTempBuffer;
+    P: PUTF8Char;
 begin
-  if JSON='' then
-    P := nil else begin
-    P := UniqueRawUTF8(JSON);
-    while P^ in [#1..' ','{','['] do inc(P);
+  tmp.Init(JSON);
+  try
+    P := tmp.buf;
+    if P<>nil then
+      while P^ in [#1..' ','{','['] do inc(P);
+    Decode(P,Fields,Params,RowID,ReplaceRowIDWithID);
+  finally
+    tmp.Done;
   end;
-  Decode(P,Fields,Params,RowID,ReplaceRowIDWithID);
 end;
 
 function TJSONObjectDecoder.SameFieldNames(const Fields: TRawUTF8DynArray): boolean;
@@ -28642,37 +28642,24 @@ end;
 
 procedure TSQLRecord.FillFrom(const JSONTable: RawUTF8; Row: integer);
 var Table: TSQLTableJSON;
-    PrivateCopy: RawUTF8;
+    tmp: TSynTempBuffer;
 begin
-  PrivateCopy := JSONTable;
-  Table := TSQLTableJSON.Create('',UniqueRawUTF8(PrivateCopy),length(PrivateCopy));
+  tmp.Init(JSONTable);
+  Table := TSQLTableJSON.Create('',tmp.buf,tmp.len);
   try
     FillFrom(Table,Row);
   finally
     Table.Free;
+    tmp.Done;
   end;
 end;
 
 procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBits);
-var tmp: pointer; // FillFrom() modifies the buffer memory: work on a copy
-    buf: array[0..1023] of AnsiChar; // avoid a heap allocation in most cases
-    P: PUTF8Char;
-    L: integer;
+var tmp: TSynTempBuffer; // work on a private copy
 begin
-  P := pointer(JSONRecord);
-  if P<>nil then begin
-    L := {$ifdef FPC}length(JSONRecord){$else}PInteger(P-4)^{$endif}+1; // +1 for last #0
-    if L<=sizeof(buf) then
-      tmp := @buf else
-      getmem(tmp,L);
-    try
-      MoveFast(P^,tmp^,L); // make a working copy of the JSON text (including #0)
-      FillFrom(tmp,FieldBits); // now we can safely call FillFrom()
-    finally
-      if tmp<>@buf then
-        Freemem(tmp);
-    end;
-  end;
+  tmp.Init(JSONRecord);
+  FillFrom(tmp.buf,FieldBits); // now we can safely call FillFrom()
+  tmp.Done;
 end;
 
 procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
@@ -28839,7 +28826,7 @@ procedure TSQLRecord.FillValue(PropName: PUTF8Char; Value: PUTF8Char;
 var field: TSQLPropInfo;
 begin
   if self<>nil then
-    if IsRowID(pointer(PropName)) then
+    if IsRowID(PropName) then
       SetID(Value,fID) else begin
       field := RecordProps.Fields.ByName(PropName);
       if field<>nil then begin
@@ -43861,22 +43848,14 @@ end;
 
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
-var buf: array[0..511] of AnsiChar;
-    tmp: PUTF8Char;
-    len: integer;
+var tmp: TSynTempBuffer;
 begin
-  result := false;
-  len := length(JSON);
-  if len=0 then
-    exit;
-  inc(len); // include trailing #0
-  if len>sizeof(buf) then
-    GetMem(tmp,len) else
-    tmp := @buf;
-  MoveFast(pointer(JSON)^,tmp^,len);
-  JSONToObject(ObjectInstance,tmp,result,nil,[]);
-  if tmp<>@buf then
-    Freemem(tmp);
+  tmp.Init(JSON);
+  if tmp.len=0 then
+    result := false else begin
+    JSONToObject(ObjectInstance,tmp.buf,result,nil,[]);
+    tmp.Done;
+  end;
 end;
 
 function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;

@@ -743,18 +743,19 @@ end;
 
 function TDDDAppSettingsStorageAbstract.SetOwner(
   aOwner: TDDDAppSettingsAbstract): boolean;
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
   if self=nil then
     exit;
   fOwner := aOwner;
   if fInitialJsonContent='' then
     exit;
-  tmp := fInitialJsonContent;
-  RemoveCommentsFromJSON(UniqueRawUTF8(tmp));
-  JSONToObject(fOwner,pointer(tmp),result);
+  tmp.Init(fInitialJsonContent);
+  RemoveCommentsFromJSON(tmp.buf);
+  JSONToObject(fOwner,tmp.buf,result);
   if not result then
     fInitialJsonContent := '';
+  tmp.Done;
 end;
 
 procedure TDDDAppSettingsStorageAbstract.Store(const aJSON: RawUTF8);

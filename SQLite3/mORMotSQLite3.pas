@@ -1854,9 +1854,10 @@ var ndx,f,r,prop,fieldCount,valuesCount,
     Fields, Values: TRawUTF8DynArray;
     ValuesNull: TByteDynArray;
     Types: TSQLDBFieldTypeDynArray;
-    SQL, privateCopy: RawUTF8;
+    SQL: RawUTF8;
     Props: TSQLRecordProperties;
     Decode: TJSONObjectDecoder;
+    tmp: TSynTempBuffer;
 begin
   if fBatchMethod<>mPOST then
     raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
@@ -1890,10 +1891,11 @@ begin
     repeat
       repeat
         // decode a row
-        if DecodeSaved then begin
+        if DecodeSaved then
+        try
           if UpdateEventNeeded then begin
-            privateCopy := fBatchValues[ndx];
-            P := UniqueRawUTF8(privateCopy);
+            tmp.Init(fBatchValues[ndx]);
+            P := tmp.buf;
           end else
             P := pointer(fBatchValues[ndx]);
           if P=nil then
@@ -1906,6 +1908,9 @@ begin
               soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
           inc(ndx);
           DecodeSaved := false;
+        finally
+          if UpdateEventNeeded then
+            tmp.Done;
         end;
         if Fields=nil then begin
           Decode.AssignFieldNamesTo(Fields);

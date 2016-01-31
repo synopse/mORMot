@@ -1400,6 +1400,36 @@ type
     function UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char; SourceChars: Cardinal): PAnsiChar; override;
   end;
 
+  /// implements a stack-based storage of some (UTF-8 or binary) text
+  // - could be used e.g. to make a temporary copy when JSON would be
+  // parsed in-place
+  // - call one of the Init() overloaded methods, then Done to release its memory
+  // - will avoid temporary memory allocation via the heap for up to 4KB of text
+  {$ifdef UNICODE}
+  TSynTempBuffer = record
+  {$else}
+  TSynTempBuffer = object
+  {$endif}
+  public
+    /// the text length, in bytes, excluding the trailing #0
+    len: integer;
+    /// where the text has been copied
+    // - equals nil if len=0
+    buf: pointer;
+    /// initialize a temporary copy of the supplied text supplied as RawByteString
+    procedure Init(const Source: RawByteString); overload;
+    /// initialize a temporary copy of the supplied text buffer, ending with #0
+    procedure Init(Source: PUTF8Char); overload;
+    /// initialize a temporary copy of the supplied text buffer
+    procedure Init(Source: pointer; SourceLen: integer); overload;
+    /// initialize a temporary copy of a given number of bytes
+    procedure Init(SourceLen: integer); overload;
+    /// finalize the temporary storage
+    procedure Done; {$ifdef HASINLINE}inline;{$endif}
+  private
+    tmp: array[0..4095] of AnsiChar;
+  end;
+
 
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
@@ -9438,6 +9468,9 @@ function Base64ToBin(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 /// fast conversion from Base64 encoded text into binary data
 procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
 
+/// fast conversion from Base64 encoded text into binary data
+procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); overload;
+
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC
 // '\uFFF0base64encodedbinary' content into binary
 // - input ParamValue shall have been checked to match the expected pattern
@@ -9453,6 +9486,11 @@ function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: RawByteString): b
 // JSON_BASE64_MAGIC pattern, decode and set Blob and return TRUE
 function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: Integer;
   var Blob: RawByteString): boolean; overload;
+
+/// check and decode '\uFFF0base64encodedbinary' content into binary
+// - this method will check the supplied value to match the expected
+// JSON_BASE64_MAGIC pattern, decode and set Blob and return TRUE
+function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): boolean; overload;
 
 /// check if the supplied text is a valid Base64 encoded stream
 function IsBase64(const s: RawByteString): boolean; overload;
@@ -14699,16 +14737,12 @@ end;
 procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
 var W: TTextWriter absolute DestTextWriter;
-    tmpU8: array[0..256*12] of AnsiChar; // avoid memory allocation in most cases
-    U8: PUTF8Char;
+    tmp: TSynTempBuffer;
 begin // rely on explicit conversion
-  if SourceChars>=SizeOf(tmpU8)div 3 then
-    Getmem(U8,SourceChars*3+1) else
-    U8 := @tmpU8;
-  SourceChars := AnsiBufferToUTF8(U8,Source,SourceChars)-U8;
-  W.Add(pointer(U8),SourceChars,Escape);
-  if U8<>@tmpU8 then
-    Freemem(U8);
+  tmp.Init(SourceChars*3+1);
+  SourceChars := AnsiBufferToUTF8(tmp.buf,Source,SourceChars)-tmp.buf;
+  W.Add(tmp.buf,SourceChars,Escape);
+  tmp.Done;
 end;
 
 function TSynAnsiConvert.AnsiToRawUnicode(const AnsiText: RawByteString): RawUnicode;
@@ -14770,30 +14804,29 @@ begin
   end;
 end;
 
-function TSynAnsiConvert.AnsiToUnicodeString(Source: PAnsiChar;
-  SourceChars: Cardinal): SynUnicode;
+function TSynAnsiConvert.AnsiToUnicodeString(Source: PAnsiChar; SourceChars: Cardinal): SynUnicode;
+var tmp: TSynTempBuffer;
+    U: PWideChar;
 begin
-  result := '';
-  if SourceChars<>0 then begin
-    SetLength(result,SourceChars);
-    SetLength(result,AnsiBufferToUnicode(pointer(result),Source,SourceChars)-pointer(result));
+  if SourceChars=0 then
+    result := '' else begin
+    tmp.Init(SourceChars*2); // max dest size in bytes 
+    U := AnsiBufferToUnicode(tmp.buf,Source,SourceChars);
+    SetString(result,PWideChar(tmp.buf),(PtrUInt(U)-PtrUInt(tmp.buf))shr 1);
+    tmp.Done;
   end;
 end;
 
 function TSynAnsiConvert.AnsiToUnicodeString(const Source: RawByteString): SynUnicode;
-{$ifndef MSWINDOWS}
-var P: PAnsiChar;
-{$endif}
+var tmp: TSynTempBuffer;
+    U: PWideChar;
 begin
-  result := '';
-  if Source<>'' then begin
-    SetLength(result,length(Source)*3);
-    {$ifdef MSWINDOWS}
-    SetLength(result,AnsiBufferToUnicode(pointer(result),pointer(Source),length(Source))-pointer(result));
-    {$else} // FPC/Linux workaround by ALF
-    P := @result;
-    SetLength(result,PAnsiChar(AnsiBufferToUnicode(PWideChar(result),PAnsiChar(Source),length(Source)))-P);
-    {$endif}
+  if Source='' then
+    result := '' else begin
+    tmp.Init(length(Source)*2); // max dest size in bytes 
+    U := AnsiBufferToUnicode(tmp.buf,pointer(Source),length(Source));
+    SetString(result,PWideChar(tmp.buf),(PtrUInt(U)-PtrUInt(tmp.buf))shr 1);
+    tmp.Done;
   end;
 end;
 
@@ -14803,16 +14836,13 @@ begin
 end;
 
 function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Cardinal): RawUTF8;
-var tmpU8: array[0..256*12] of AnsiChar;
-    U8: PUTF8Char;
+var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
-    result := '' else
-  if SourceChars<SizeOf(tmpU8)div 3 then
-    SetString(result,tmpU8,AnsiBufferToUTF8(tmpU8,Source,SourceChars)-tmpU8) else begin
-    Getmem(U8,SourceChars*3+1);
-    SetString(result,U8,AnsiBufferToUTF8(U8,Source,SourceChars)-U8);
-    FreeMem(U8);
+    result := '' else begin
+    tmp.Init(SourceChars*3+1);
+    SetString(result,PAnsiChar(tmp.buf),AnsiBufferToUTF8(tmp.buf,Source,SourceChars)-tmp.buf);
+    tmp.Done;
   end;
 end;
 
@@ -14952,17 +14982,13 @@ end;
 
 procedure TSynAnsiConvert.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
   var result: RawByteString);
-var tmpA: array[byte] of AnsiChar;
-    A: PAnsiChar;
+var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
-    if SourceChars<SizeOf(tmpA)shr fAnsiCharShift then
-      SetString(result,tmpA,Utf8BufferToAnsi(tmpA,Source,SourceChars)-tmpA) else begin
-      Getmem(A,(SourceChars+1) shl fAnsiCharShift);
-      SetString(result,A,Utf8BufferToAnsi(A,Source,SourceChars)-A);
-      FreeMem(A);
-    end;
+    tmp.Init((SourceChars+1) shl fAnsiCharShift);
+    SetString(result,PAnsiChar(tmp.buf),Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
+    tmp.done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
@@ -14976,7 +15002,7 @@ end;
 
 function TSynAnsiConvert.Utf8ToAnsiBuffer(const S: RawUTF8;
   Dest: PAnsiChar; DestSize: integer): integer;
-var tmp: array[0..2047] of AnsiChar;
+var tmp: array[0..2047] of AnsiChar; // truncated to 2KB as documented
 begin
   if (DestSize<=0) or (Dest=nil) then begin
     result := 0;
@@ -14995,17 +15021,13 @@ begin
 end;
 
 function TSynAnsiConvert.UnicodeBufferToAnsi(Source: PWideChar; SourceChars: Cardinal): RawByteString;
-var tmpA: array[byte] of AnsiChar;
-    A: PAnsiChar;
+var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
-    if SourceChars<SizeOf(tmpA)shr fAnsiCharShift then
-      SetString(result,tmpA,UnicodeBufferToAnsi(tmpA,Source,SourceChars)-tmpA) else begin
-      Getmem(A,(SourceChars+1) shl fAnsiCharShift);
-      SetString(result,A,UnicodeBufferToAnsi(A,Source,SourceChars)-A);
-      FreeMem(A);
-    end;
+    tmp.Init((SourceChars+1) shl fAnsiCharShift);
+    SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
+    tmp.done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
@@ -15514,6 +15536,61 @@ function TSynAnsiUTF16.UTF8BufferToAnsi(Dest: PAnsiChar; Source: PUTF8Char;
   SourceChars: Cardinal): PAnsiChar;
 begin
   result := Dest+UTF8ToWideChar(PWideChar(Dest),Source,SourceChars);
+end;
+
+
+{ TSynTempBuffer }
+
+procedure TSynTempBuffer.Init(const Source: RawByteString);
+begin
+  len := length(Source);
+  if len=0 then
+    buf := nil else begin
+    if len<sizeof(tmp) then
+      buf := @tmp else
+      GetMem(buf,len+1); // +1 to include trailing #0
+    MoveFast(pointer(Source)^,buf^,len+1); // +1 to include trailing #0
+  end;
+end;
+
+procedure TSynTempBuffer.Init(Source: PUTF8Char);
+begin
+  len := StrLen(Source);
+  if len=0 then
+    buf := nil else begin
+    if len<sizeof(tmp) then
+      buf := @tmp else
+      GetMem(buf,len+1); // +1 to include trailing #0
+    MoveFast(Source^,buf^,len+1);
+  end;
+end;
+
+procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
+begin
+  len := SourceLen;
+  if len=0 then
+    buf := nil else begin
+    if len<sizeof(tmp) then
+      buf := @tmp else
+      GetMem(buf,len+1); // +1 to include trailing #0
+    MoveFast(Source^,buf^,len+1);
+  end;
+end;
+
+procedure TSynTempBuffer.Init(SourceLen: integer);
+begin
+  len := SourceLen;
+  if len=0 then
+    buf := nil else
+    if len<sizeof(tmp) then
+      buf := @tmp else
+      GetMem(buf,len+1); // +1 to include trailing #0
+end;
+
+procedure TSynTempBuffer.Done;
+begin
+  if buf<>@tmp then
+    FreeMem(buf);
 end;
 
 
@@ -16148,24 +16225,14 @@ end;
 // see http://stackoverflow.com/a/7008095/458259 -> WideCharCount*3 below
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; var result: RawUTF8);
-var L,LW: integer;
-    U8: array[0..511] of AnsiChar;
+var tmp: TSynTempBuffer;
 begin
-  if (WideChar=nil) or (WideCharCount=0) then begin
-    result := '';
-    exit;
+  if (WideChar=nil) or (WideCharCount=0) then
+    result := '' else begin
+    tmp.Init(WideCharCount*3);
+    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount));
+    tmp.done;
   end;
-  LW := WideCharCount*3; // maximum resulting length
-  if LW<SizeOf(U8) then begin // faster computation without temporary heap allocation
-    SetRawUTF8(Result,@U8,RawUnicodeToUtf8(U8,sizeof(U8),WideChar,WideCharCount));
-    exit;
-  end;
-  FastNewRawUTF8(result,LW);
-  L := RawUnicodeToUtf8(pointer(result),LW+1,WideChar,WideCharCount);
-  if L<=0 then
-    result := '' else
-    if L<>LW then
-      SetLength(result,L);
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer): RawUTF8;
@@ -19603,6 +19670,21 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
   end;
 end;
 
+function Base64MagicCheckAndDecode(Value: PUTF8Char; var Blob: TSynTempBuffer): boolean;
+var ValueLen: integer;
+begin // '\uFFF0base64encodedbinary' checked and decode into binary
+  if (Value=nil) or (Value[0]=#0) or (Value[1]=#0) or (Value[2]=#0) or
+     (PCardinal(Value)^ and $ffffff<>JSON_BASE64_MAGIC) then
+    result := false else begin
+    ValueLen := StrLen(Value)-3;
+    if ValueLen>0 then begin
+      Base64ToBin(PAnsiChar(Value)+3,ValueLen,Blob);
+      result := true;
+    end else
+      result := false;
+  end;
+end;
+
 function Base64MagicCheckAndDecode(Value: PUTF8Char; ValueLen: integer;
   var Blob: RawByteString): boolean;
 begin // '\uFFF0base64encodedbinary' checked and decode into binary
@@ -22208,6 +22290,18 @@ begin
     Base64Decode(sp,pointer(result),len shr 2);
   end;
 end;
+
+procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); overload;
+var resultLen: PtrInt;
+begin
+  resultLen := Base64ToBinLength(sp,len);
+  if resultLen=0 then
+    result.Init(0) else begin
+    result.Init(resultLen);
+    Base64Decode(sp,result.buf,len shr 2);
+  end;
+end;
+
 
 function DateToSQL(Date: TDateTime): RawUTF8;
 begin
@@ -35054,25 +35148,16 @@ end;
 
 function TDocVariantData.InitJSON(const JSON: RawUTF8;
   aOptions: TDocVariantOptions): boolean;
-var tmp: pointer;
-    buf: array[0..4095] of AnsiChar; // avoid memory allocation in most cases
-    L: integer;
+var tmp: TSynTempBuffer;
 begin
-  L := length(JSON);
-  if L=0 then begin // avoid GPF
-    result := false;
-    exit;
-  end;
-  inc(L); // include ending #0
-  if L<=sizeof(buf) then
-    tmp := @buf else
-    GetMem(tmp,L);
-  MoveFast(Pointer(JSON)^,tmp^,L); // make private copy
-  try
-    result := InitJSONInPlace(tmp,aOptions)<>nil;
-  finally
-    if tmp<>@buf then
-      FreeMem(tmp);
+  if JSON='' then 
+    result := false else begin
+    tmp.Init(JSON);
+    try
+      result := InitJSONInPlace(tmp.buf,aOptions)<>nil;
+    finally
+      tmp.Done;
+    end;
   end;
 end;
 

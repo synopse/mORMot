@@ -8085,7 +8085,7 @@ begin
   SetLength(orig,MAX);
   SetLength(crypted,MAX+256);
   st := '1234essai';
-  pInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
+  PInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
   for noaesni := false to true do begin
     Timer[noaesni].Init;
     for k := 0 to 2 do begin
