@@ -2971,10 +2971,8 @@ end;
 procedure TTestLowLevelCommon._UTF8;
 procedure Test(CP: cardinal; const W: WinAnsiString);
 var C: TSynAnsiConvert;
-    L: integer;
     A: RawByteString;
     U: RawUTF8;
-    tmpA: array[0..127] of AnsiChar;
 begin
   C := TSynAnsiConvert.Engine(CP);
   Check(C.CodePage=CP);
@@ -2998,13 +2996,6 @@ begin
   Check(A=W);
   Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
   {$endif}
-  FillChar(tmpA,SizeOf(tmpA),1);
-  L := C.Utf8ToAnsiBuffer(RawByteString(W),tmpA,sizeof(tmpA));
-  Check(L=SynCommons.StrLen(@tmpA));
-  if L<sizeof(tmpA)-1 then
-    Check(L=Length(W)) else
-    Check(L=sizeof(tmpA)-1);
-  Check(CompareMem(@tmpA,pointer(W),L));
 end;
 var i, CP, L: integer;
     W: WinAnsiString;
@@ -3601,13 +3592,13 @@ begin
       rec.double := 3.141592654;
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
-        u := RandomUnicode(i*2);
-        rec.text := u;
-        check(rec.text=u);
-        rec.ansi := u;
-        check(rec.ansi=u);
+        a := RandomAnsi7(i*2);
+        rec.text := a;
+        check(rec.text=a,'rec.text');
+        rec.ansi := a;
+        check(rec.ansi=a,'rec.ansi');
       end;
-      check(rec.bool=true);
+      check(rec.bool=true,'rec.bool');
       check(rec.varint=100);
       check(rec.ID=1);
       CheckSame(rec.double,3.141592654);
@@ -3619,8 +3610,8 @@ begin
         CheckSame(rec.double,V);
       end;
       check(rec.bool=true);
-      check(rec.text=u);
-      check(rec.ansi=u);
+      check(rec.text=a);
+      check(rec.ansi=a);
       check(rec.ID=1);
     except
       on E: Exception do // variant error could raise exceptions
