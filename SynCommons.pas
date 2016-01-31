@@ -17830,7 +17830,7 @@ asm // eax=aTypeInfo edx=aIndex
     lea    eax,[eax+ecx+1]
     mov    cl,[eax]
     lea    eax,[eax+ecx+1]
-    jnz @4
+    jnz    @4
     pop    edx
     and    edx,3
     jnz    @s

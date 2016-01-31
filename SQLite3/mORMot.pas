@@ -27930,18 +27930,36 @@ begin
 end;
 {$else}
 asm // eax=PEnumType edx=Value
-    cmp edx,[eax].TEnumType.MaxValue
-    lea eax,[eax].TEnumType.NameList
-    ja @z
-    or edx,edx
-    jz @2
-    xor ecx,ecx
-@1: mov cl,[eax]
-    dec edx
-    lea eax,[eax+ecx+1]
-    jnz @1
-@2: ret
-@z: lea eax,NULL_SHORTSTRING
+    xor    ecx,ecx
+    cmp    edx,[eax].TEnumType.MaxValue
+    lea    eax,[eax].TEnumType.NameList
+    ja     @0
+    or     edx,edx
+    jz     @z
+    push   edx
+    shr    edx,2 // fast pipelined by-four scanning
+    jz     @1
+@4: dec    edx
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    mov    cl,[eax]
+    lea    eax,[eax+ecx+1]
+    jnz    @4
+    pop    edx
+    and    edx,3
+    jnz    @s
+@z: ret
+@1: pop    edx
+@s: mov    cl,[eax]
+    dec    edx
+    lea    eax,[eax+ecx+1] // next short string
+    jnz    @s
+    ret
+@0: lea    eax,NULL_SHORTSTRING
 end;
 {$endif}
 
@@ -52223,7 +52241,7 @@ begin
       if Inst.Instance<>fSharedInstance then
         exit else
         instancePtr := @TInterfacedObjectFake(Inst.Instance).fVTable else begin
-      if PPointer(Inst.Instance)^=fImplementationClass then
+      if PClass(Inst.Instance)^=fImplementationClass then
         entry := fImplementationClassInterfaceEntry else begin
         entry := Inst.Instance.GetInterfaceEntry(fInterface.fInterfaceIID);
         if entry=nil then
