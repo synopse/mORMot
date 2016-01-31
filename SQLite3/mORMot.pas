@@ -30873,7 +30873,7 @@ begin
     exit;
   SetLength(result,n);
   for i := 0 to n-1 do
-    result[n] := Tables[t[i]];
+    result[i] := Tables[t[i]];
 end;
 
 function TSQLModel.GetTable(const SQLTableName: RawUTF8): TSQLRecordClass;
