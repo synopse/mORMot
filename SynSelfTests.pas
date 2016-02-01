@@ -13377,7 +13377,7 @@ var I: ICalculator;
     UserRepository: IUserRepository;
     SmsSender: ISmsSender;
     U: TUser;
-    UJSON: RawUTF8;
+    log, UJSON: RawUTF8;
     HashGetUserByNameToto: cardinal;
     Stub: TInterfaceStub;
     Mock: TInterfaceMockSpy;
@@ -13385,7 +13385,8 @@ begin
   Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
     SetOptions([imoLogMethodCallsAndResults]);
   Check(I.Add(10,20)=0,'Default result');
-  Check(Stub.LogAsText='Add(10,20)=[0]');
+  log := Stub.LogAsText;
+  Check(log='Add(10,20)=[0]');
   I := nil;
   Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
     Returns('Add','30').

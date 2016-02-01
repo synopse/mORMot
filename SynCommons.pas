@@ -1422,7 +1422,7 @@ type
     procedure Init(Source: PUTF8Char); overload;
     /// initialize a temporary copy of the supplied text buffer
     procedure Init(Source: pointer; SourceLen: integer); overload;
-    /// initialize a temporary copy of a given number of bytes
+    /// initialize a new temporary buffer of a given number of bytes
     procedure Init(SourceLen: integer); overload;
     /// finalize the temporary storage
     procedure Done; {$ifdef HASINLINE}inline;{$endif}
@@ -2960,6 +2960,11 @@ procedure UpperCaseCopy(const Source: RawUTF8; var Dest: RawUTF8); overload;
 // will therefore by correct with true UTF-8 content
 function LowerCase(const S: RawUTF8): RawUTF8;
 
+/// fast conversion of the supplied text into lowercase
+// - this will only convert 'A'..'Z' into 'a'..'z' (no NormToLower use), and
+// will therefore by correct with true UTF-8 content
+procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
+
 /// accurate conversion of the supplied UTF-8 content into the corresponding
 // upper-case Unicode characters
 // - this version will use the Operating System API, and will therefore be
@@ -4134,13 +4139,19 @@ function ToVarString(const Value: RawUTF8; Dest: PByte): PByte;
 /// jump a value in variable-length text buffer
 function GotoNextVarString(Source: PByte): pointer; {$ifdef HASINLINE}inline;{$endif}
 
-/// retrieve a variable-length UTF-8 encoded text buffer
+/// retrieve a variable-length UTF-8 encoded text buffer in a newly allocation RawUTF8
 function FromVarString(var Source: PByte): RawUTF8; overload;
 
 /// retrieve a variable-length text buffer
 // - this overloaded function will set the supplied code page to the AnsiString
 procedure FromVarString(var Source: PByte; var Value: RawByteString;
   CodePage: integer); overload;
+
+/// retrieve a variable-length UTF-8 encoded text buffer in a temporary buffer
+// - caller should call Value.Done after use of the Value.buf memory
+// - this overloaded function would include a trailing #0, so Value.buf could
+// be parsed as a valid PUTF8Char buffer (e.g. containing JSON)
+procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer); overload;
 
 type
   /// kind of result returned by FromVarBlob() function
@@ -4528,7 +4539,7 @@ type
     // - this method will recognize T*ObjArray types, and will first free
     // any existing instance before unserializing, to avoid memory leak
     // - warning: the content of P^ will be modified during parsing: please
-    // make a local copy if it will be needed later
+    // make a local copy if it will be needed later (using e.g. TSynTempBufer)
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
@@ -8794,7 +8805,8 @@ procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8; out res
 
 /// convert a JSON array or document into a simple XML content
 // - just a wrapper around TTextWriter.AddJSONToXML, making a private copy
-// of the supplied JSON buffer (so that JSON content  would stay untouched)
+// of the supplied JSON buffer using TSynTempBuffer (so that JSON content
+// would stay untouched)
 // - the optional header is added at the beginning of the resulting string
 // - an optional name space content node could be added around the generated XML,
 // e.g. '<content>'
@@ -8877,9 +8889,7 @@ type
     fParameters: RawUTF8;
     /// children must override this method in order to parse the JSON-encoded
     // parameters, and store it in protected field values
-    // - the RawUTF8 param is not set as const, since it will probably be
-    // decoded via JSONDecode(), so a local copy is needed
-    procedure SetParameters(Value: RawUTF8); virtual;
+    procedure SetParameters(const Value: RawUTF8); virtual;
   public
     /// add the filter or validation process to a list, checking if not present
     // - if an instance with the same class type and parameters is already
@@ -8952,7 +8962,7 @@ type
     fAnyTLD: boolean;
   protected
     /// decode all published properties from their JSON representation
-    procedure SetParameters(Value: RawUTF8); override;
+    procedure SetParameters(const Value: RawUTF8); override;
   public
     /// perform the Email Address validation action to the specified value
     // - call IsValidEmail() function and check for the supplied TLD
@@ -9040,7 +9050,7 @@ type
     procedure SetErrorMsg(fPropsIndex, InvalidTextIndex, MainIndex: integer;
       var result: string);
     /// decode "MinLength", "MaxLength", and other parameters into fProps[]
-    procedure SetParameters(Value: RawUTF8); override;
+    procedure SetParameters(const Value: RawUTF8); override;
   public
     /// perform the text length validation action to the specified value
     function Process(aFieldIndex: integer; const Value: RawUTF8;
@@ -9119,7 +9129,7 @@ type
   TSynValidatePassWord = class(TSynValidateText)
   protected
     /// set password specific parameters
-    procedure SetParameters(Value: RawUTF8); override;
+    procedure SetParameters(const Value: RawUTF8); override;
   end;
 
   { C++Builder doesn't support array elements as properties (RSP-12595).
@@ -9199,7 +9209,7 @@ type
     fMaxLength: cardinal;
     fUTF8Length: boolean;
     /// decode the MaxLength: and UTF8Length: parameters
-    procedure SetParameters(Value: RawUTF8); override;
+    procedure SetParameters(const Value: RawUTF8); override;
   public
     /// perform the length truncation of the specified value
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
@@ -12493,7 +12503,7 @@ type
     // - in addition to the JSON RFC specification strict mode, this method will
     // handle some BSON-like extensions, e.g. unquoted field names
     // - a private copy of the incoming JSON buffer will be used, then
-    // it will call the TDocVariantData.InitJSON() method
+    // it will call the TDocVariantData.InitJSONInPlace() method
     // - to be used e.g. as:
     // ! var V: variant;
     // ! begin
@@ -12762,8 +12772,8 @@ type
       aOptions: TDocVariantOptions=[]);
     /// initialize a variant instance to store some document-based object content
     // from a supplied JSON array or JSON object content
-    // - warning: the incoming JSON buffer will be modified in-place: so you
-    // should make a private copy before running this method
+    // - warning: the incoming JSON buffer will be modified in-place: so you should
+    // make a private copy before running this method, e.g. using TSynTempBuffer
     // - this method is called e.g. by _JsonFmt() _JsonFastFmt() global functions
     // with a temporary JSON buffer content created from a set of parameters
     // - if you call Init*() methods in a row, ensure you call Clear in-between
@@ -14734,6 +14744,9 @@ begin
   result^ := #0;
 end;
 
+// UTF-8 is AT MOST 50% bigger than UTF-16 in bytes in range U+0800..U+FFFF
+// see http://stackoverflow.com/a/7008095/458259 -> WideCharCount*3 below
+
 procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
 var W: TTextWriter absolute DestTextWriter;
@@ -14988,7 +15001,7 @@ begin
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
     SetString(result,PAnsiChar(tmp.buf),Utf8BufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
-    tmp.done;
+    tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
@@ -15027,7 +15040,7 @@ begin
     result := '' else begin
     tmp.Init((SourceChars+1) shl fAnsiCharShift);
     SetString(result,PAnsiChar(tmp.buf),UnicodeBufferToAnsi(tmp.buf,Source,SourceChars)-tmp.buf);
-    tmp.done;
+    tmp.Done;
     {$ifdef HASCODEPAGE}
     SetCodePage(result,fCodePage,false);
     {$endif}
@@ -15590,7 +15603,8 @@ end;
 procedure TSynTempBuffer.Done;
 begin
   if buf<>@tmp then
-    FreeMem(buf);
+    if buf<>nil then
+      FreeMem(buf);
 end;
 
 
@@ -16221,9 +16235,6 @@ begin
   result := PtrInt(Dest)-result;
 end;
 
-// UTF-8 is AT MOST 50% bigger than UTF-16 in bytes in range U+0800..U+FFFF
-// see http://stackoverflow.com/a/7008095/458259 -> WideCharCount*3 below
-
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; var result: RawUTF8);
 var tmp: TSynTempBuffer;
 begin
@@ -16231,7 +16242,7 @@ begin
     result := '' else begin
     tmp.Init(WideCharCount*3);
     SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount));
-    tmp.done;
+    tmp.Done;
   end;
 end;
 
@@ -22422,6 +22433,15 @@ begin
   L := length(S);
   SetString(result,PAnsiChar(pointer(S)),L);
   for i := 0 to L-1 do
+    if PByteArray(result)[i] in [ord('A')..ord('Z')] then
+      inc(PByteArray(result)[i],32);
+end;
+
+procedure LowerCaseCopy(Text: PUTF8Char; Len: integer; var result: RawUTF8);
+var i: integer;
+begin
+  SetRawUTF8(result,PAnsiChar(Text),Len);
+  for i := 0 to Len-1 do
     if PByteArray(result)[i] in [ord('A')..ord('Z')] then
       inc(PByteArray(result)[i],32);
 end;
@@ -30405,6 +30425,15 @@ begin
   inc(Source,Len);
 end;
 
+procedure FromVarString(var Source: PByte; var Value: TSynTempBuffer);
+var len: integer;
+begin
+  len := FromVarUInt32(Source);
+  Value.Init(Source,len);
+  PByteArray(Value.buf)[len] := 0; // include trailing #0
+  inc(Source,len);
+end;
+
 procedure FromVarString(var Source: PByte; var Value: RawByteString; CodePage: integer);
 var Len: PtrUInt;
 begin
@@ -32428,10 +32457,14 @@ begin // code below must match TTextWriter.AddRecordJSON
 end;
 
 function RecordLoadJSON(var Rec; const JSON: RawUTF8; TypeInfo: pointer): boolean;
-var tmp: RawUTF8; // make private copy
+var tmp: TSynTempBuffer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON));
-  result := RecordLoadJSON(Rec,pointer(tmp),TypeInfo)<>nil;
+  tmp.Init(JSON);
+  try
+    result := RecordLoadJSON(Rec,tmp.buf,TypeInfo)<>nil;
+  finally
+    tmp.Done;
+  end;
 end;
 
 
@@ -34023,22 +34056,8 @@ end;
 
 function VariantLoad(var Value: variant; Source: PAnsiChar;
   CustomVariantOptions: PDocVariantOptions): PAnsiChar;
-  procedure ComplexType;
-  var JSON: PUTF8Char;
-      tmp: RawUTF8;
-  begin
-    try
-      tmp := FromVarString(PByte(Source));
-      JSON := pointer(tmp); // GetJSON*() does in-place unescape -> private copy
-      TVarData(Value).VType := varEmpty; // avoid GPF below
-      GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions);
-      result := Source;
-    except
-      on Exception do
-        Source := nil; // notify invalid/unhandled variant content
-    end;
-  end;
-var LenBytes: Cardinal;
+var JSON: PUTF8Char;
+    tmp: TSynTempBuffer; // GetJSON*() does in-place unescape -> private copy
 begin
   with TVarData(Value) do begin
     if VType and VTYPE_STATIC<>0 then
@@ -34064,22 +34083,35 @@ begin
     end;
     varString, varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}: begin
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
-      LenBytes := FromVarUInt32(PByte(Source));
+      tmp.Len := FromVarUInt32(PByte(Source));
       case VType of
       varString:
-        SetString(AnsiString(VAny),Source,LenBytes);
+        SetString(RawUTF8(VAny),Source,tmp.Len); // explicit RawUTF8
       varOleStr:
-        SetString(WideString(VAny),PWideChar(Source),LenBytes shr 1);
+        SetString(WideString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$ifdef HASVARUSTRING}
       varUString:
-        SetString(UnicodeString(VAny),PWideChar(Source),LenBytes shr 1);
+        SetString(UnicodeString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$endif}
       end;
-      inc(Source,LenBytes);
+      inc(Source,tmp.Len);
     end;
-    else // expected format for complex type is JSON (VType may differ)
-      if CustomVariantOptions<>nil then
-        ComplexType else
+    else
+      if CustomVariantOptions<>nil then begin
+        try // expected format for complex type is JSON (VType may differ)
+          FromVarString(PByte(Source),tmp);
+          try
+            JSON := tmp.buf;
+            VType := varEmpty; // avoid GPF below
+            GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions);
+          finally
+            tmp.Done;
+          end;
+        except
+          on Exception do
+            Source := nil; // notify invalid/unhandled variant content
+        end;
+      end else
         Source := nil; // notify unhandled type
     end;
   end;
@@ -34120,17 +34152,25 @@ end;
 
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
   TryCustomVariants: PDocVariantOptions);
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  VariantLoadJSON(Value,pointer(tmp),nil,TryCustomVariants);
+  tmp.Init(JSON);
+  try
+    VariantLoadJSON(Value,tmp.buf,nil,TryCustomVariants);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOptions): variant;
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  VariantLoadJSON(result,pointer(tmp),nil,TryCustomVariants);
+  tmp.Init(JSON);
+  try
+    VariantLoadJSON(result,tmp.buf,nil,TryCustomVariants);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function VariantSaveJSON(const Value: variant; Escape: TTextWriterKind): RawUTF8;
@@ -43947,10 +43987,14 @@ begin
 end;
 
 function JSONToXML(const JSON: RawUTF8; const Header,NameSpace: RawUTF8): RawUTF8;
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  JSONBufferToXML(pointer(tmp),Header,NameSpace,result);
+  tmp.Init(JSON);
+  try
+    JSONBufferToXML(tmp.buf,Header,NameSpace,result);
+  finally
+    tmp.Done;
+  end;
 end;
 
 procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
@@ -43967,20 +44011,20 @@ begin
 end;
 
 function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
-var tmp: RawUTF8;
-    n: Integer;
+var n: integer;
+    tmp: TSynTempBuffer;
 begin
-  n := length(JSON);
-  SetString(tmp,PAnsiChar(pointer(JSON)),n); // make local copy
-  if n<4096 then
+  tmp.Init(JSON);
+  if tmp.len<4096 then
     n := 4096 else // minimal rough estimation of the output buffer size
-    inc(n,n shr 4);
+    n := tmp.Len shr 2;
   with TTextWriter.CreateOwnedStream(n) do
   try
-    AddJSONReformat(pointer(tmp),Format,nil);
+    AddJSONReformat(tmp.buf,Format,nil);
     SetText(result);
   finally
     Free;
+    tmp.Done;
   end;
 end;
 
@@ -44010,10 +44054,14 @@ end;
 
 function JSONReformatToFile(const JSON: RawUTF8; const Dest: TFileName;
   Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON)); // make local copy
-  result := JSONBufferReformatToFile(pointer(tmp),Dest,Format);
+  tmp.Init(JSON);
+  try
+    result := JSONBufferReformatToFile(tmp.buf,Dest,Format);
+  finally
+    tmp.Done;
+  end;
 end;
 
 
@@ -44069,7 +44117,7 @@ begin
 end;
 
 procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: RawUTF8);
-var data: RawByteString;
+var tmp: RawByteString;
 begin
   if self=nil then
     exit;
@@ -44077,9 +44125,9 @@ begin
     fPassWord := '';
     exit;
   end;
-  SetString(data,PAnsiChar(Value),Length(Value)); // private copy
-  SymmetricEncrypt(GetKey,data);
-  fPassWord := BinToBase64(data);
+  SetString(tmp,PAnsiChar(Value),Length(Value)); // private copy
+  SymmetricEncrypt(GetKey,tmp);
+  fPassWord := BinToBase64(tmp);
 end;
 
 
@@ -44414,7 +44462,7 @@ begin
   Create(FormatUTF8(Format,Args,Params,true));
 end;
 
-procedure TSynFilterOrValidate.SetParameters(Value: RawUTF8);
+procedure TSynFilterOrValidate.SetParameters(const Value: RawUTF8);
 begin
   fParameters := Value;
 end;
@@ -44480,12 +44528,15 @@ end;
 
 { TSynFilterTruncate}
 
-procedure TSynFilterTruncate.SetParameters(Value: RawUTF8);
+procedure TSynFilterTruncate.SetParameters(const Value: RawUTF8);
 var V: TPUtf8CharDynArray;
+    tmp: TSynTempBuffer;
 begin
-  JSONDecode(Value,['MaxLength','UTF8Length'],V);
+  tmp.Init(Value);
+  JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
   fMaxLength := GetCardinalDef(V[0],0);
   fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
+  tmp.Done;
 end;
 
 procedure TSynFilterTruncate.Process(aFieldIndex: integer; var Value: RawUTF8);
@@ -44544,15 +44595,18 @@ begin
   result := false;
 end;
 
-procedure TSynValidateEmail.SetParameters(Value: RawUTF8);
+procedure TSynValidateEmail.SetParameters(const Value: RawUTF8);
 var V: TPUtf8CharDynArray;
+    tmp: TSynTempBuffer;
 begin
   inherited;
-  JSONDecode(Value,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
-  AllowedTLD := LowerCase(V[0]);
-  ForbiddenTLD := LowerCase(V[1]);
-  ForbiddenDomains  := LowerCase(V[2]);
+  tmp.Init(Value);
+  JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
+  LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
+  LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
+  LowerCaseCopy(V[2],StrLen(V[2]),fForbiddenDomains);
   AnyTLD := IdemPChar(V[3],'1') or IdemPChar(V[3],'TRUE');
+  tmp.Done;
 end;
 
 
@@ -44674,9 +44728,10 @@ begin
   end;
 end;
 
-procedure TSynValidateText.SetParameters(Value: RawUTF8);
+procedure TSynValidateText.SetParameters(const Value: RawUTF8);
 var V: TPUtf8CharDynArray;
     i: integer;
+    tmp: TSynTempBuffer;
 const DEFAULT: TSynValidateTextProps = (
   1,maxInt,0,0,0,0,0,0,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt);
 begin
@@ -44685,25 +44740,30 @@ begin
   inherited SetParameters(Value);
   if Value='' then
     exit;
-  JSONDecode(Value,['MinLength','MaxLength',
-    'MinAlphaCount','MinDigitCount','MinPunctCount',
-    'MinLowerCount','MinUpperCount','MinSpaceCount',
-    'MaxLeftTrimCount','MaxRightTrimCount',
-    'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
-    'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
-    'UTF8Length'],V);
-  if length(V)<>length(fProps)+1 then
-    exit;
-  for i := 0 to high(fProps) do
-    fProps[i] := GetCardinalDef(V[i],fProps[i]);
-  fUTF8Length := IdemPChar(V[length(fProps)],'1') or
-                 IdemPChar(V[length(fProps)],'TRUE');
+  tmp.Init(Value);
+  try
+    JSONDecode(tmp.buf,['MinLength','MaxLength',
+      'MinAlphaCount','MinDigitCount','MinPunctCount',
+      'MinLowerCount','MinUpperCount','MinSpaceCount',
+      'MaxLeftTrimCount','MaxRightTrimCount',
+      'MaxAlphaCount','MaxDigitCount','MaxPunctCount',
+      'MaxLowerCount','MaxUpperCount','MaxSpaceCount',
+      'UTF8Length'],V);
+    if length(V)<>length(fProps)+1 then
+      exit;
+    for i := 0 to high(fProps) do
+      fProps[i] := GetCardinalDef(V[i],fProps[i]);
+    fUTF8Length := IdemPChar(V[length(fProps)],'1') or
+                   IdemPChar(V[length(fProps)],'TRUE');
+  finally
+    tmp.Done;
+  end;
 end;
 
 
 { TSynValidatePassWord }
 
-procedure TSynValidatePassWord.SetParameters(Value: RawUTF8);
+procedure TSynValidatePassWord.SetParameters(const Value: RawUTF8);
 const DEFAULT: TSynValidateTextProps = (
   5,20,1,1,1,1,1,0,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,0);
 begin

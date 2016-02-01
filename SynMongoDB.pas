@@ -599,7 +599,7 @@ type
     procedure BSONWriteArrayOfInt64(const Integers: array of Int64);
     /// write some BSON document from a supplied (extended) JSON array or object
     // - warning: the incoming JSON buffer will be modified in-place: so you
-    // should make a private copy before running this method
+    // should make a private copy before running this method (see e.g. TSynTempBuffer)
     // - will handle only '{ ... }', '[ ... ]' or 'null' input, with the standard
     // strict JSON format, or BSON-like extensions, e.g. unquoted field names:
     // $ {id:10,doc:{name:"John",birthyear:1972}}
@@ -3096,7 +3096,8 @@ begin
   Write(@value,sizeof(value));
 end;
 
-procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
+procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8;
+  const RegEx,Options: RawByteString);
 begin
   BSONWrite(name,betRegEx); // cstring cstring
   Write(pointer(RegEx),length(RegEx));
@@ -3844,7 +3845,7 @@ begin
       VarClear(result);
     VType := VarType;
     VBlob := nil; // avoid GPF here below
-    VKind := JSONBufferToBSONDocument(json,RawByteString(VBlob));
+    VKind := JSONBufferToBSONDocument(json,TBSONDocument(VBlob));
   end;
 end;
 
@@ -4001,20 +4002,20 @@ end;
 
 procedure TBSONVariant.CastTo(var Dest: TVarData;
   const Source: TVarData; const AVarType: TVarType);
-var Tmp: RawUTF8;
+var tmp: RawUTF8;
     wasString: boolean;
 begin
   if AVarType=VarType then begin
-    VariantToUTF8(Variant(Source),Tmp,wasString);
+    VariantToUTF8(Variant(Source),tmp,wasString);
     if wasString then begin
       if Dest.VType and VTYPE_STATIC<>0 then
         VarClear(variant(Dest));
-      if TBSONVariantData(Dest).VObjectID.FromText(Tmp) then begin
+      if TBSONVariantData(Dest).VObjectID.FromText(tmp) then begin
         Dest.VType := VarType;
         TBSONVariantData(Dest).VKind := betObjectID;
         exit;
       end;
-      variant(Dest) := BSONVariant(Tmp); // convert from JSON text
+      variant(Dest) := BSONVariant(tmp); // convert from JSON text
       exit;
     end;
     RaiseCastError;
@@ -4028,9 +4029,9 @@ begin
         exit;
       end else begin
         if VKind=betObjectID then
-          VObjectID.ToText(Tmp) else
-          Tmp := VariantSaveMongoJSON(variant(Source),modMongoShell);
-        RawUTF8ToVariant(Tmp,Dest,AVarType); // convert to JSON text
+          VObjectID.ToText(tmp) else
+          tmp := VariantSaveMongoJSON(variant(Source),modMongoShell);
+        RawUTF8ToVariant(tmp,Dest,AVarType); // convert to JSON text
       end;
   end;
 end;
@@ -4298,7 +4299,7 @@ end;
 
 function BSON(const Format: RawUTF8; const Args,Params: array of const;
   kind: PBSONElementType): TBSONDocument;
-var JSON: RawUTF8;
+var JSON: RawUTF8; // since we use FormatUTF8(), TSynTempBuffer is useless here
     v: variant;
     k: TBSONElementType;
 begin
@@ -4321,13 +4322,17 @@ begin
 end;
 
 function BSON(const JSON: RawUTF8; kind: PBSONElementType): TBSONDocument;
-var tmp: RawUTF8; // make a private copy
+var tmp: TSynTempBuffer;
     k: TBSONElementType;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON));
-  k := JSONBufferToBSONDocument(pointer(tmp),result);
-  if kind<>nil then
-    kind^ := k;
+  tmp.Init(JSON);
+  try
+    k := JSONBufferToBSONDocument(tmp.buf,result);
+    if kind<>nil then
+      kind^ := k;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function BSONVariant(const NameValuePairs: array of const): variant;

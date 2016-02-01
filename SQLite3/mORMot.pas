@@ -17875,7 +17875,7 @@ type
   TSynValidateUniqueFields = class(TSynValidateRest)
   protected
     fFieldNames: TRawUTF8DynArray;
-    procedure SetParameters(Value: RawUTF8); override;
+    procedure SetParameters(const Value: RawUTF8); override;
   public
     /// perform the unique fields validation action to the specified value
     // - duplication value check will use ProcessRest and ProcessRec properties,
@@ -37968,34 +37968,39 @@ begin
 end;
 
 procedure TSQLRestRoutingJSON_RPC.ExecuteSOAByInterface;
-var method, JSON: RawUTF8;
+var method: RawUTF8;
     Values: TPUtf8CharDynArray;
     internal: TServiceInternalMethod;
+    tmp: TSynTempBuffer;
 begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
   if (Server.Services=nil) or (Service=nil) then
     raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
-  JSON := Call.InBody; // in-place parsing -> private copy
-  JSONDecode(JSON,['method','params','id'],Values,True);
-  if Values[0]=nil then // Method name required
-    exit;
-  SetString(method,Values[0],StrLen(Values[0]));
-  ServiceParameters := Values[1];
-  ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
-  ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
-  if ServiceMethodIndex>=0 then
-    inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD)) else begin
-    for internal := low(TServiceInternalMethod) to high(TServiceInternalMethod) do
-      if IdemPropNameU(method,SERVICE_PSEUDO_METHOD[internal]) then begin
-        ServiceMethodIndex := ord(internal);
-        break;
-      end;
-    if ServiceMethodIndex<0 then begin
-      Error('Unknown method');
+  tmp.Init(call.Inbody);
+  try
+    JSONDecode(tmp.buf,['method','params','id'],Values,True);
+    if Values[0]=nil then // Method name required
       exit;
+    SetString(method,Values[0],StrLen(Values[0]));
+    ServiceParameters := Values[1];
+    ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
+    ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
+    if ServiceMethodIndex>=0 then
+      inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD)) else begin
+      for internal := low(TServiceInternalMethod) to high(TServiceInternalMethod) do
+        if IdemPropNameU(method,SERVICE_PSEUDO_METHOD[internal]) then begin
+          ServiceMethodIndex := ord(internal);
+          break;
+        end;
+      if ServiceMethodIndex<0 then begin
+        Error('Unknown method');
+        exit;
+      end;
     end;
+    // now Service, ServiceParameters, ServiceMethodIndex are set
+    InternalExecuteSOAByInterface;
+  finally
+    tmp.Done; // release temp storage for Values[] = Service* fields
   end;
-  // now Service, ServiceParameters, ServiceMethodIndex are set
-  InternalExecuteSOAByInterface;
 end;
 
 class procedure TSQLRestRoutingJSON_RPC.ClientSideInvoke(var uri: RawUTF8;
@@ -46204,11 +46209,14 @@ end;
 
 { TSynValidateUniqueFields }
 
-procedure TSynValidateUniqueFields.SetParameters(Value: RawUTF8);
+procedure TSynValidateUniqueFields.SetParameters(const Value: RawUTF8);
 var V: TPUtf8CharDynArray;
+    tmp: TSynTempBuffer;
 begin
-  JSONDecode(Value,['FieldNames'],V,True);
-  CSVToRawUTF8DynArray(pointer(V[0]),fFieldNames);
+  tmp.Init(Value);
+  JSONDecode(tmp.buf,['FieldNames'],V,True);
+  CSVToRawUTF8DynArray(V[0],fFieldNames);
+  tmp.Done;
 end;
 
 function TSynValidateUniqueFields.Process(aFieldIndex: integer;
