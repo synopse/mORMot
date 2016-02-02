@@ -14336,6 +14336,11 @@ type
   // but compatible with TSQLRecord.ID: TID properties
   TSynUniqueIdentifier = type Int64;
 
+  /// 16 bit unique process identifier, used to compute TSynUniqueIdentifier
+  // - each TSynUniqueIdentifierGenerator instance is expected to have
+  // its own unique process identifier, stored as a 16 bit integer 1..65535 value
+  TSynUniqueIdentifierProcess = type word;
+
   {$A-}
   /// map 64 bit integer unique identifier internal memory structure
   // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
@@ -14356,7 +14361,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// 16 bit unique process identifier
     // - as specified to TSynUniqueIdentifierGenerator constructor
-    function ProcessID: word;
+    function ProcessID: TSynUniqueIdentifierProcess;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
@@ -14415,7 +14420,7 @@ type
     fLastTix: cardinal;
     fUnixCreateTime: cardinal;
     fLatestCounterOverflowUnixCreateTime: cardinal;
-    fIdentifier: word;
+    fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
     fLastCounter: cardinal;
     fCrypto: array[0..7] of cardinal;
@@ -14424,7 +14429,7 @@ type
     /// initialize the generator
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
-    constructor Create(aIdentifier: word; const aSharedObfuscationKey: RawUTF8=''); reintroduce;
+    constructor Create(aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8=''); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID
@@ -14445,7 +14450,7 @@ type
       out aIdentifier: TSynUniqueIdentifier): boolean; 
   published
     /// the process identifier, associated with this generator
-    property Identifier: word read fIdentifier;
+    property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
   end;
   
 
@@ -52002,7 +52007,7 @@ begin
   result := PWord(@Value)^ and $7fff;
 end;
 
-function TSynUniqueIdentifierBits.ProcessID: word;
+function TSynUniqueIdentifierBits.ProcessID: TSynUniqueIdentifierProcess;
 begin
   result := (PCardinal(@Value)^ shr 15) and $ffff;
 end;
@@ -52087,7 +52092,7 @@ begin
   ComputeNew(PSynUniqueIdentifierBits(@result)^);
 end;
 
-constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: word;
+constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: TSynUniqueIdentifierProcess;
   const aSharedObfuscationKey: RawUTF8);
 var i, len: integer;
     crc: cardinal;
