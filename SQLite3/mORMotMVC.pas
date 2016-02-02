@@ -463,7 +463,7 @@ type
   // ready to serve any file available in the Views\.static local folder
   // - registerORMTableAsExpressions will register Mustache Expression Helpers
   // for every TSQLRecord table of the Server data model
-  TMVCPublishOption = (publishMvcInfo, publishStatic,
+  TMVCPublishOption = (publishMvcInfo, publishStatic, 
     registerORMTableAsExpressions);
 
   /// which kind of optional content should be publish
@@ -1557,6 +1557,7 @@ constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
   aViews: TMVCViewsAbtract; aPublishOptions: TMVCPublishOptions);
 var m: integer;
+    method: RawUTF8;
 begin
   if aApplication=nil then
     raise EMVCException.CreateUTF8('%.Create(aApplication=nil)',[self]);
@@ -1576,9 +1577,12 @@ begin
   fPublishOptions := aPublishOptions;
   if aSubURI<>'' then
     fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
-    for m := 0 to fApplication.fFactory.MethodsCount-1 do
-      fRestServer.ServiceMethodRegister(
-        fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
+    for m := 0 to fApplication.fFactory.MethodsCount-1 do begin
+      method := fApplication.fFactory.Methods[m].URI;
+      if method[1]='_' then
+        delete(method,1,1); // e.g. IService._Start() -> /service/start
+      fRestServer.ServiceMethodRegister(method,RunOnRestServerRoot,true);
+    end;
     if publishMvcInfo in fPublishOptions then
       fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
     if publishStatic in fPublishOptions then
