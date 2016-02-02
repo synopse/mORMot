@@ -463,8 +463,10 @@ type
   // ready to serve any file available in the Views\.static local folder
   // - registerORMTableAsExpressions will register Mustache Expression Helpers
   // for every TSQLRecord table of the Server data model
-  TMVCPublishOption = (publishMvcInfo, publishStatic, 
-    registerORMTableAsExpressions);
+  // - by default, TSQLRestServer authentication would be by-passed for all
+  // MVC routes, unless bypassAuthentication option is undefined
+  TMVCPublishOption = (publishMvcInfo, publishStatic,
+    registerORMTableAsExpressions, bypassAuthentication);
 
   /// which kind of optional content should be publish
   TMVCPublishOptions = set of TMVCPublishOption;
@@ -1557,6 +1559,7 @@ constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
   aViews: TMVCViewsAbtract; aPublishOptions: TMVCPublishOptions);
 var m: integer;
+    bypass: boolean;
     method: RawUTF8;
 begin
   if aApplication=nil then
@@ -1575,18 +1578,19 @@ begin
     {$endif}
   inherited Create(aApplication,aViews);
   fPublishOptions := aPublishOptions;
+  bypass := bypassAuthentication in fPublishOptions;
   if aSubURI<>'' then
-    fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
+    fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,bypass) else begin
     for m := 0 to fApplication.fFactory.MethodsCount-1 do begin
       method := fApplication.fFactory.Methods[m].URI;
       if method[1]='_' then
         delete(method,1,1); // e.g. IService._Start() -> /service/start
-      fRestServer.ServiceMethodRegister(method,RunOnRestServerRoot,true);
+      fRestServer.ServiceMethodRegister(method,RunOnRestServerRoot,bypass);
     end;
     if publishMvcInfo in fPublishOptions then
-      fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
+      fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,bypass);
     if publishStatic in fPublishOptions then
-      fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,true);
+      fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,bypass);
   end;
   if (registerORMTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMVCViewsMustache) then
