@@ -13173,7 +13173,7 @@ type
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
-      const aCustomFieldsCSV: RawUTF8=''): RawJSON; overload;
+      const aCustomFieldsCSV: RawUTF8=''; aForceAJAX: boolean=false): RawJSON; overload;
     /// get a list of members from a SQL statement as RawJSON
     // - implements REST GET collection
     // - this overloaded version expect the SQLWhere clause to be already
@@ -13190,7 +13190,7 @@ type
     // types like dynamic array would be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-      const aCustomFieldsCSV: RawUTF8=''): RawJSON; overload;
+      const aCustomFieldsCSV: RawUTF8=''; aForceAJAX: boolean=false): RawJSON; overload;
     {$ifndef NOVARIANTS}
     /// get a list of all members from a SQL statement as a TDocVariant
     // - implements REST GET collection
@@ -32179,20 +32179,21 @@ begin
 end;
 
 function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
-  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8): RawJSON;
+  const BoundsSQLWhere: array of const; const aCustomFieldsCSV: RawUTF8;
+  aForceAJAX: boolean): RawJSON;
 begin
   result := RetrieveListJSON(Table,
-    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),aCustomFieldsCSV)
+    FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere),aCustomFieldsCSV,aForceAJAX)
 end;
 
 function TSQLRest.RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
-  const aCustomFieldsCSV: RawUTF8): RawJSON;
+  const aCustomFieldsCSV: RawUTF8; aForceAJAX: boolean): RawJSON;
 var sql: RawUTF8;
 begin
   sql := SQLComputeForSelect(Table,aCustomFieldsCSV,SQLWhere);
   if sql='' then
     result := '' else
-    result := EngineList(sql);
+    result := EngineList(sql,aForceAJAX);
 end;
 
 function TSQLRest.RetrieveListObjArray(var ObjArray; Table: TSQLRecordClass;
