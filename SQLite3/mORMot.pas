@@ -10655,6 +10655,8 @@ type
     // - will search for a match against Methods[].URI property
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will return -1 if the method is not known
+    // - if aMethodName does not have an exact method match, it would try with a
+    // trailing underscore, so that e.g. /service/start would match IService._Start()
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
@@ -49461,7 +49463,7 @@ end;
 
 function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUTF8): integer;
 begin
-  if self=nil then
+  if (self=nil) or (aMethodName='') then
     result := -1 else
   if fMethodsCount<10 then begin
     for result := 0 to fMethodsCount-1 do
@@ -49470,6 +49472,8 @@ begin
     result := -1;
   end else
     result := fMethod.FindHashed(aMethodName);
+  if (result<0) and (aMethodName[1]<>'_') then
+    result := FindMethodIndex('_'+aMethodName);
 end;
 
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
