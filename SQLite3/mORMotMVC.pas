@@ -561,6 +561,8 @@ type
     // if any TMVCRun instance is store here, will be freed by Destroy
     // but note that a single TMVCApplication logic may handle several TMVCRun
     fMainRunner: TMVCRun;
+    // will also identify e.g. 'default' as procedure _default()
+    function FindMethodIndex(const aMethodName: RawUTF8): integer; virtual;
     procedure SetSession(const Value: TMVCSessionAbstract);
     /// to be called when the data model did change to force content re-creation
     // - this default implementation will call fMainRunner.NotifyContentChanged
@@ -862,7 +864,7 @@ begin
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
         W.AddHtmlEscapeString(caption);
         HtmlTableStyle.BeforeValue(W);
-        utf8 := VariantToUTF8(Rec^.Values[i]);
+        VariantToUTF8(Rec^.Values[i],utf8);
         case Field.SQLFieldType of
         sftAnsiText,sftUTF8Text,sftInteger,sftFloat,sftCurrency:
           W.AddHtmlEscape(pointer(utf8));
@@ -1011,19 +1013,19 @@ end;
 class procedure TMVCViewsMustache.md5(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.MD5(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.MD5(ToUTF8(Value)),result);
 end;
 
 class procedure TMVCViewsMustache.sha1(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.SHA1(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.SHA1(ToUTF8(Value)),result);
 end;
 
 class procedure TMVCViewsMustache.sha256(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.SHA256(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.SHA256(ToUTF8(Value)),result);
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
@@ -1310,6 +1312,13 @@ begin
   fSession := Value;
 end;
 
+function TMVCApplication.FindMethodIndex(const aMethodName: RawUTF8): integer;
+begin
+  result := fFactory.FindMethodIndex(aMethodName);
+  if (result<0) and (aMethodName<>'') and (aMethodName[1]<>'_') then
+    result := fFactory.FindMethodIndex('_'+aMethodName);
+end;
+
 function TMVCApplication.GetViewInfo(MethodIndex: integer): variant;
 begin
   if MethodIndex>=0 then
@@ -1346,7 +1355,7 @@ begin
     'main',fApplication.GetViewInfo(fMethodIndex),
     'msg',StatusCodeToErrorMsg(ErrorCode),
     'errorCode',ErrorCode,ErrorName,ErrorValue]);
-  renderContext.originalErrorContext := JSONReformat(VariantToUTF8(renderContext));
+  renderContext.originalErrorContext := JSONReformat(ToUTF8(renderContext));
   Renders(renderContext,ErrorCode,true);
 end;
 
@@ -1396,7 +1405,7 @@ begin
               'main',fApplication.GetViewInfo(fMethodIndex));
             if fMethodIndex=fApplication.fFactoryErrorIndex then
               _ObjAddProps(['errorCode',action.ReturnedStatus,
-                'originalErrorContext',JSONReformat(VariantToUTF8(renderContext))],
+                'originalErrorContext',JSONReformat(ToUTF8(renderContext))],
                 renderContext);
             Renders(renderContext,action.ReturnedStatus,false);
             exit; // success
@@ -1406,7 +1415,7 @@ begin
             action := E.fAction;
         end; // lower level exceptions will be handled below
         fInput := action.RedirectToMethodParameters;
-        fMethodIndex := fApplication.fFactory.FindMethodIndex(action.RedirectToMethodName);
+        fMethodIndex := fApplication.FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus=0 then
           action.ReturnedStatus := HTML_SUCCESS else
         if (action.ReturnedStatus=HTML_TEMPORARYREDIRECT) or
@@ -1466,7 +1475,7 @@ end;
 procedure TMVCRendererJson.Renders(outContext: variant;
   status: cardinal; forcesError: boolean);
 begin
-  fOutput.Content := JSONReformat(VariantToUTF8(outContext));
+  fOutput.Content := JSONReformat(ToUTF8(outContext));
   fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;
@@ -1493,7 +1502,7 @@ end;
 
 procedure TMVCRun.NotifyContentChangedForMethod(const aMethodName: RawUTF8);
 begin
-  NotifyContentChangedForMethod(fApplication.fFactory.FindMethodIndex(aMethodName));
+  NotifyContentChangedForMethod(fApplication.FindMethodIndex(aMethodName));
 end;
 
 
@@ -1639,7 +1648,7 @@ begin
     renderer := rendererClass.Create(self);
     try
       if Ctxt.Method in [mGET,mPOST] then begin
-        methodIndex := fViews.fFactory.FindMethodIndex(rawMethodName);
+        methodIndex := fApplication.FindMethodIndex(rawMethodName);
         if methodIndex>=0 then begin
           inputContext := Ctxt.InputAsTDocVariant;
           if not VarIsEmpty(inputContext) then
