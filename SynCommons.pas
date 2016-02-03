@@ -3276,6 +3276,10 @@ function FindRawUTF8(const Values: TRawUTF8DynArray; ValuesCount: integer;
 function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
 
+/// return the index of Value in Values[], -1 if not found
+// - here name search would use fast IdemPropNameU() function
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
   NoDuplicates: boolean=false; CaseSensitive: boolean=true): boolean; overload;
@@ -22634,6 +22638,14 @@ begin
     for result := 0 to ValuesCount-1 do
       if Values[result]=Value then
         exit;
+  result := -1;
+end;
+
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+begin
+  for result := 0 to high(Names) do
+    if IdemPropNameU(Names[result],Name) then
+      exit;
   result := -1;
 end;
 
