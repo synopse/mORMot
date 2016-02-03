@@ -9758,6 +9758,15 @@ procedure AndMemory(Dest,Source: PByteArray; size: integer);
 /// returns TRUE if all bytes equal zero
 function IsZero(P: pointer; Length: integer): boolean; overload;
 
+/// returns TRUE if Value is nil or all supplied Values[] equal ''
+function IsZero(const Values: TRawUTF8DynArray): boolean; overload;
+
+/// returns TRUE if Value is nil or all supplied Values[] equal 0
+function IsZero(const Values: TIntegerDynArray): boolean; overload;
+
+/// returns TRUE if Value is nil or all supplied Values[] equal 0
+function IsZero(const Values: TInt64DynArray): boolean; overload;
+
 /// returns TRUE if no bit inside this TSQLFieldBits is set
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
@@ -9769,6 +9778,15 @@ function IsZero(const Fields: TSQLFieldBits): boolean; overload;
 // - will work also with any other value
 function IsEqual(const A,B: TSQLFieldBits): boolean;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// fill all entries of a supplied array of RawUTF8 with ''
+procedure FillZero(var Values: TRawUTF8DynArray); overload;
+
+/// fill all entries of a supplied array of 32-bit integers with 0
+procedure FillZero(var Values: TIntegerDynArray); overload;
+
+/// fill all entries of a supplied array of 64-bit integers with 0
+procedure FillZero(var Values: TInt64DynArray); overload;
 
 /// fast initialize a TSQLFieldBits with 0
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
@@ -26670,6 +26688,36 @@ begin
   result := true;
 end;
 
+function IsZero(const Values: TRawUTF8DynArray): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 0 to length(Values)-1 do
+    if Values[i]='' then
+      exit;
+  result := true;
+end;
+
+function IsZero(const Values: TIntegerDynArray): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 0 to length(Values)-1 do
+    if Values[i]=0 then
+      exit;
+  result := true;
+end;
+
+function IsZero(const Values: TInt64DynArray): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 0 to length(Values)-1 do
+    if Values[i]=0 then
+      exit;
+  result := true;
+end;
+
 {$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
 
 function IsZero(const Fields: TSQLFieldBits): boolean; overload;
@@ -26704,6 +26752,23 @@ begin
               (PInt64Array(@A)^[2]=PInt64Array(@B)^[2]) and
               (PInt64Array(@A)^[3]=PInt64Array(@B)^[3]) else
     result := CompareMem(@A,@B,sizeof(TSQLFieldBits))
+end;
+
+procedure FillZero(var Values: TRawUTF8DynArray);
+var i: integer;
+begin
+  for i := 0 to length(Values)-1 do
+    Values[i] := '';
+end;
+
+procedure FillZero(var Values: TIntegerDynArray);
+begin
+  FillCharFast(Values[0],length(Values)*SizeOf(integer),0);
+end;
+
+procedure FillZero(var Values: TInt64DynArray); overload;
+begin
+  FillCharFast(Values[0],length(Values)*SizeOf(Int64),0);
 end;
 
 procedure FillZero(var Fields: TSQLFieldBits);
