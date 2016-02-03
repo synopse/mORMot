@@ -2531,7 +2531,7 @@ type
     /// associated prepared statement, ready to be executed after binding
     Statement: TSQLRequest;
     /// used to monitor execution time
-    Timer: TPrecisionTimer;
+    Timer: TSynMonitor;
   end;
   /// used to store all prepared statement
   TSQLStatementCacheDynArray = array of TSQLStatementCache;
@@ -2559,7 +2559,7 @@ type
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
     function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil;
-      ExecutionTimer: PPPrecisionTimer=nil): PSQLRequest;
+      ExecutionTimer: PPPrecisionTimer=nil; ExecutionMonitor: PSynMonitor=nil): PSQLRequest;
     /// used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
     /// could be used e.g. for statistics
@@ -5336,7 +5336,7 @@ begin
 end;
 
 function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8;
-  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer): PSQLRequest;
+  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer; ExecutionMonitor: PSynMonitor): PSQLRequest;
 var added: boolean;
     ndx: integer;
 begin
@@ -5345,6 +5345,7 @@ begin
     if added then begin
       StatementSQL := GenericSQL;
       Statement.Prepare(DB,GenericSQL);
+      Timer := TSynMonitor.Create;
       if WasPrepared<>nil then
         WasPrepared^ := true;
     end else begin
@@ -5354,8 +5355,11 @@ begin
         WasPrepared^ := false;
     end;
     if ExecutionTimer<>nil then begin
-      Timer.Resume;
-      ExecutionTimer^ := @Timer;
+      Timer.ProcessStart;
+      Timer.ProcessDoTask;
+      ExecutionTimer^ := @Timer.InternalTimer;
+      if ExecutionMonitor<>nil then
+        ExecutionMonitor^ := Timer;
     end;
     result := @Statement;
   end;
@@ -5364,8 +5368,10 @@ end;
 procedure TSQLStatementCached.ReleaseAllDBStatements;
 var i: integer;
 begin
-  for i := 0 to Count-1 do
+  for i := 0 to Count-1 do begin
     Cache[i].Statement.Close; // close prepared statement
+    Cache[i].Timer.Free;
+  end;
   Caches.Clear;
   Caches.ReHash; // need to refresh all hashs
 end;
@@ -5373,8 +5379,8 @@ end;
 function StatementCacheTotalTimeCompare(const A,B): integer;
 var i64: Int64;
 begin
-  i64 := TSQLStatementCache(A).Timer.TimeInMicroSec-
-    TSQLStatementCache(B).Timer.TimeInMicroSec;
+  i64 := TSQLStatementCache(A).Timer.InternalTimer.TimeInMicroSec-
+    TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
   if i64<0 then
     result := -1 else
   if i64>0 then

@@ -339,6 +339,7 @@ type
     fStatement: PSQLRequest;
     fStaticStatement: TSQLRequest;
     fStatementTimer: PPrecisionTimer;
+    fStatementMonitor: TSynMonitor;
     fStaticStatementTimer: TPrecisionTimer;
     fStatementSQL: RawUTF8;
     fStatementGenericSQL: RawUTF8;
@@ -709,18 +710,20 @@ begin
     fStatementGenericSQL := '';
     fStatement := @fStaticStatement;
     fStatementTimer := @fStaticStatementTimer;
+    fStatementMonitor := nil;
     exit;
   end;
   if mlSQLite3 in StatLevels then
     timer := @fStatementTimer else
     timer := nil;
-  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer);
+  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer,@fStatementMonitor);
   if wasPrepared then
     InternalLog('prepared % % %',
       [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
   if timer=nil then begin
     fStaticStatementTimer.Start;
     fStatementTimer := @fStaticStatementTimer;
+    fStatementMonitor := nil;
   end;
 end;
 
@@ -759,12 +762,16 @@ procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg
 begin
   try
     if fStatementTimer<>nil then begin
-      fStatementTimer^.Pause;
-      fStatementTimer^.ComputeTime;
+      if fStatementMonitor<>nil then
+        fStatementMonitor.ProcessEnd else begin
+        fStatementTimer^.Pause;
+        fStatementTimer^.ComputeTime;
+      end;
       if E=nil then
         InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
         InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
+      fStatementMonitor := nil;
     end;
   finally
     if fStatement<>nil then begin
@@ -1215,36 +1222,23 @@ end;
 
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 var i: integer;
-    stat,last,average: TSynMonitorTime;
     ndx: TIntegerDynArray;
 begin
   inherited InternalStat(Ctxt,W);
   if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then begin
     W.CancelLastChar('}');
     W.AddShort(',"sqlite3":[');
-    stat := TSynMonitorTime.Create;
-    last := TSynMonitorTime.Create;
-    average := TSynMonitorTime.Create;
     DB.Lock;
     try
       fStatementCache.SortCacheByTotalTime(ndx);
       with fStatementCache do
       for i := 0 to Count-1 do
-      with Cache[ndx[i]] do begin
-        stat.MicroSec := Timer.TimeInMicroSec;
-        last.MicroSec := Timer.LastTimeInMicroSec;
-        if Timer.PauseCount=0 then // avoid division per zero
-          average.MicroSec := 0 else
-          average.MicroSec := Round(Timer.TimeInMicroSec/Timer.PauseCount);
-        W.AddJSONEscape(['SQL',StatementSQL,'TaskCount',Timer.PauseCount,
-          'TotalTime',stat,'AverageTime',average,'LastTime',last]);
-        W.Add(',');
-      end;
+        with Cache[ndx[i]] do begin
+          W.AddJSONEscape([StatementSQL,Timer]);
+          W.Add(',');
+        end;
     finally
       DB.UnLock;
-      average.Free;
-      last.Free;
-      stat.Free;
     end;
     W.CancelLastComma;
     W.Add(']','}');

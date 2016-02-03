@@ -58,7 +58,8 @@ uses
 
 type
   PSystemTime = ^TSystemTime;
-  /// System Time, as represented in FPC for PosIX
+  /// System Time, as represented in FPC for POSIX systems
+  // - Windows.TSystemTime do have a "w" prefix, e.g. wYear vs Year below
   TSystemTime = record
     Year: Word;
     Month: Word;

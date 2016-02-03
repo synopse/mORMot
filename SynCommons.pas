@@ -862,6 +862,8 @@ type
   {$else}
   QWord = type Int64;
   {$endif}
+  /// points to an unsigned Int64
+  PQWord = ^QWord;
 
   {$ifndef ISDELPHIXE2}
   /// used to store the handle of a system Thread
@@ -1175,7 +1177,7 @@ type
   PObject = ^TObject;
 
 
-{ ************ fast UTF-8 / Unicode / Ansi types and conversion routines }
+{ ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
 
 type
   /// kind of adding in a TTextWriter
@@ -4060,7 +4062,6 @@ function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
 // ! MyArray := TIntegerDynArrayFrom([1,2,3]);
 function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 
-
 type
   /// used to store and retrieve Words in a sorted array
   // - is defined either as an object either as a record, due to a bug
@@ -4171,7 +4172,7 @@ function FromVarBlob(Data: PByte): TValueResult; {$ifdef HASINLINE}inline;{$endi
 
 
 
-{ ************ low-level RTTI types and conversion routines }
+{ ************ low-level RTTI types and conversion routines ***************** }
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
@@ -6052,7 +6053,7 @@ var
   DynArrayIsObjArray: function(aDynArrayTypeInfo: Pointer): boolean;
 
 
-{ ****************** text buffer and JSON functions and classes ********* }
+{ ****************** text buffer and JSON functions and classes ************ }
 
 const
   /// maximum number of fields in a database Table
@@ -8865,7 +8866,7 @@ const
 
 
 
-{ ************ filtering and validation classes and functions }
+{ ************ filtering and validation classes and functions ************** }
 
 /// return TRUE if the supplied content is a valid email address
 // - follows RFC 822, to validate local-part@domain email format
@@ -9242,7 +9243,7 @@ type
   end;
 
 
-{ ************ some other common types and conversion routines }
+{ ************ some other common types and conversion routines ************** }
 
 type
   /// calling context of TSynLogExceptionToStr callbacks
@@ -10054,7 +10055,8 @@ function MultiEventFind(const EventList; const Event: TMethod): integer;
 procedure MultiEventMerge(var DestList; const ToBeAddedList); 
 
 
-{ ************ fast ISO-8601 types and conversion routines }
+
+{ ************ fast ISO-8601 types and conversion routines ***************** }
 
 type
   /// fast bit-encoded date and time value
@@ -10096,10 +10098,8 @@ type
     // - bits 22..25 = Month-1 (0..11)
     // - bits 26..38 = Year    (0..4095)
     Value: Int64;
-{$ifdef MSWINDOWS}
     /// extract the date and time content in Value into individual values
     procedure Expand(out Date: TSystemTime);
-{$endif}
     /// convert to Iso-8601 encoded text
     function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8; overload;
     /// convert to Iso-8601 encoded text
@@ -10130,6 +10130,8 @@ type
     procedure From(P: PUTF8Char; L: integer); overload;
     /// fill Value from Iso-8601 encoded text
     procedure From(const S: RawUTF8); overload;
+    /// fill Value from specified Date/Time individual fields
+    procedure From(const Time: TSystemTime); overload;
     /// fill Value from second-based c-encoded time (from Unix epoch 1/1/1970)
     procedure FromUnixTime(const UnixTime: Int64);
     /// fill Value from millisecond-based c-encoded time (from Unix epoch 1/1/1970)
@@ -11019,7 +11021,7 @@ procedure GlobalLock;
 procedure GlobalUnLock;
 
 
-{ ************ TSynTable generic types and classes }
+{ ************ TSynTable generic types and classes ************************** }
 
 {$define SORTCOMPAREMETHOD}
 { if defined, the field content comparison will use a method instead of fixed
@@ -13647,7 +13649,7 @@ function _CopyFast(const DocVariant: variant): variant;
 
 {$endif NOVARIANTS}
 
-{ ************ some console functions }
+{ ************ some console functions ************************************** }
 
 type
   /// available console colors (under Windows at least)
@@ -13702,9 +13704,59 @@ var
   StdOut: THandle;
 
 
-{ ******************* cross-cutting classes and functions ***** }
+{ ******************* process monitoring / statistics ********************** }
 
 type
+  /// the kind of value stored in TSynMonitor / TSynMonitorUsage
+  // - i.e. match TSynMonitorMicroSec, TSynMonitorOneMicroSec, TSynMonitorBytes,
+  // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
+  // TSynMonitorCount/TSynMonitorCount64 types as used to store statistic information
+  // - default "cumulative" values would sum each process values, e.g. total
+  // elapsed time for SOA execution, count or total I/O bytes
+  // - "immediate" (e.g. svOneBytes or smvBytesPerSec) values would be an evolving
+  // single value, e.g. an average value or current disk free size
+  TSynMonitorValue = (
+    smvUndefined, smvMicroSec, smvOneMicroSec,
+    smvBytes, smvOneBytes, smvBytesPerSec, smvCount, smvCount64);
+  /// value types as stored in TSynMonitor / TSynMonitorUsage
+  TSynMonitorValues = set of TSynMonitorValue;
+
+  /// would identify a cumulative time process information in micro seconds, during monitoring
+  // - "cumulative" time would add each process timing, e.g. for statistics about
+  // SOA computation of a given service
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorMicroSec = type QWord;
+
+  /// would identify an immediate time process information in micro seconds, during monitoring
+  // - "immediate" time won't accumulate, i.e. may store the duration of the
+  // latest execution of a SOA computation
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorOneMicroSec = type QWord;
+
+  /// would identify a process information as cumulative bytes count, during monitoring
+  // - "cumulative" size would add some byte for each process, e.g. input/output
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorBytes = type QWord;
+
+  /// would identify an immediate process information as bytes count, during monitoring
+  // - "immediate" size won't accumulate, i.e. may be e.g. computer free memory
+  // at a given time
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorOneBytes = type QWord;
+
+  /// would identify the process throughput, during monitoring
+  // - it indicates e.g. "immediate" bandwith usage
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorBytesPerSec = type QWord;
+
+  /// would identify a cumulative number of processes, during monitoring
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorCount = type cardinal;
+
+  /// would identify a cumulative number of processes, during monitoring
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorCount64 = type QWord;
+
   /// pointer to a high resolution timer object/record
   PPrecisionTimer = ^TPrecisionTimer;
 
@@ -13720,10 +13772,10 @@ type
     iStart,iStop,iResume,iLast: Int64;
     iFreq: Int64;
     /// contains the time elapsed in micro seconds between Start and Stop
-    iTime: QWord;
+    iTime: TSynMonitorMicroSec;
     /// contains the time elapsed in micro seconds between Resume and Pause
-    iLastTime: QWord;
-    fPauseCount: cardinal;
+    iLastTime: TSynMonitorMicroSec;
+    fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
     // - not necessary if created on the heap (e.g. as class member)
@@ -13781,16 +13833,17 @@ type
     function Time: RawUTF8;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: QWord read iTime write iTime;
+    property TimeInMicroSec: TSynMonitorMicroSec read iTime write iTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: RawUTF8;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property LastTimeInMicroSec: QWord read iLastTime write iLastTime;
-    /// how many times the Pause method was called
-    property PauseCount: cardinal read fPauseCount;
+    property LastTimeInMicroSec: TSynMonitorMicroSec read iLastTime write iLastTime;
+    /// how many times the Pause method was called, i.e. the number of tasks
+    // processeed
+    property PauseCount: TSynMonitorCount read fPauseCount;
   end;
 
   /// interface to a reference counted high resolution timer instance
@@ -13841,35 +13894,70 @@ type
 
   {$M+}
 
-  /// able to serialize any timing as raw micro-seconds number or text
+  /// able to serialize any cumulative timing as raw micro-seconds number or text
+  // - "cumulative" time would add each process value, e.g. SOA methods execution
   TSynMonitorTime = class
   protected
-    fMicroSeconds: QWord;
+    fMicroSeconds: TSynMonitorMicroSec;
     function GetAsText: RawUTF8;
   public
     /// compute a number per second, of the current value
-    function PerSecond(const aValue: QWord): QWord;
+    function PerSecond(const Count: QWord): QWord;
       {$ifdef HASINLINE}inline;{$endif}
   published
     /// micro seconds time elapsed, as raw number
-    property MicroSec: QWord read fMicroSeconds write fMicroSeconds;
+    property MicroSec: TSynMonitorMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
     property Text: RawUTF8 read GetAsText;
   end;
 
-  /// able to serialize any size as bytes number
+  /// able to serialize any immediate timing as raw micro-seconds number or text
+  // - "immediate" size won't accumulate, i.e. may be e.g. last process time
+  TSynMonitorOneTime = class
+  protected
+    fMicroSeconds: TSynMonitorOneMicroSec;
+    function GetAsText: RawUTF8;
+  public
+    /// compute a number per second, of the current value
+    function PerSecond(const Count: QWord): QWord;
+      {$ifdef HASINLINE}inline;{$endif}
+  published
+    /// micro seconds time elapsed, as raw number
+    property MicroSec: TSynMonitorOneMicroSec read fMicroSeconds write fMicroSeconds;
+    /// micro seconds time elapsed, as '... us-ns-ms-s' text
+    property Text: RawUTF8 read GetAsText;
+  end;
+
+  /// able to serialize any cumulative size as bytes number
+  // - "cumulative" time would add each process value, e.g. global IO
   TSynMonitorSize = class
   protected
-    fBytes: QWord;
+    fBytes: TSynMonitorBytes;
     function GetAsText: RawUTF8;
   published
     /// number of bytes, as raw number
-    property Bytes: QWord read fBytes write fBytes;
+    property Bytes: TSynMonitorBytes read fBytes write fBytes;
+    /// number of bytes, as '... B-KB-MB-GB' text
+    property Text: RawUTF8 read GetAsText;
+  end;
+
+  /// able to serialize any immediate size as bytes number
+  // - "immediate" size won't accumulate, i.e. may be e.g. computer free memory
+  // at a given time
+  TSynMonitorOneSize = class
+  protected
+    fBytes: TSynMonitorOneBytes;
+    function GetAsText: RawUTF8;
+  published
+    /// number of bytes, as raw number
+    property Bytes: TSynMonitorOneBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
     property Text: RawUTF8 read GetAsText;
   end;
 
   /// able to serialize any bandwith as bytes count per second
+  // - is usually associated with TSynMonitorOneSize properties,
+  // e.g. to monitor IO activity
   TSynMonitorThroughput = class
   protected
     fBytesPerSec: QWord;
@@ -13881,7 +13969,190 @@ type
     property Text: RawUTF8 read GetAsText;
   end;
 
+  /// a generic value object able to handle any task / process statistic
+  // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
+  // process is to be monitored
+  TSynMonitor = class(TSynPersistent)
+  protected
+    fProcessing: boolean;
+    fTaskCount: TSynMonitorCount64;
+    fInternalErrors: cardinal;
+    fLastInternalError: variant;
+    fTotalTime: TSynMonitorTime;
+    fLastTime: TSynMonitorOneTime;
+    fMinimalTime: TSynMonitorOneTime;
+    fAverageTime: TSynMonitorOneTime;
+    fMaximalTime: TSynMonitorOneTime;
+    fPerSec: QWord;
+    fLock: TRTLCriticalSection;
+    fTaskStatus: (taskNotStarted,taskStarted);
+    fMultiThreaded: boolean;
+    procedure FillPerSecProperties; virtual;
+    procedure FillFromProcessTimer; virtual;
+    procedure WriteDetailsTo(W: TTextWriter); virtual;
+  public
+    /// low-level high-precision timer instance
+    InternalTimer: TPrecisionTimer;
+    /// initialize the instance nested class properties
+    constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// create Count instances of this actual class in the supplied ObjArr[]
+    class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
+    /// should be called when the process starts, to resume the internal timer
+    procedure ProcessStart; virtual;
+    /// should be called each time a pending task is processed
+    // - will increase the TaskCount property
+    procedure ProcessDoTask; virtual;
+    /// should be called when an error occurred
+    // - typical use is with ObjectToVariantDebug(E,...) kind of information
+    procedure ProcessError(const info: variant); virtual;
+    /// should be called when an error occurred
+    // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
+    procedure ProcessErrorNumber(info: integer);
+    /// should be called when the process stops, to pause the internal timer
+    procedure ProcessEnd; virtual;
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); virtual;
+    /// returns a JSON content with all published properties information
+    function ComputeDetailsJSON: RawUTF8;
+    /// appends a JSON content with all published properties information
+    procedure ComputeDetailsTo(W: TTextWriter); virtual;
+    {$ifndef NOVARIANTS}
+    /// returns a TDocVariant with all published properties information
+    function ComputeDetails: variant;
+    {$endif}
+    /// used to allow thread safe timing
+    // - by default, the internal TPrecisionTimer is not thread safe: you can
+    // use this method to update the timing from many threads
+    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
+    // methods are disallowed, and the global fTimer won't be used any more
+    // - will return the processing time, converted into micro seconds, ready
+    // to be logged if needed
+    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+    /// used to allow thread safe timing
+    // - by default, the internal TPrecisionTimer is not thread safe: you can
+    // use this method to update the timing from many threads
+    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
+    // methods are disallowed, and the global fTimer won't be used any more
+    procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+  published
+    /// indicates if this thread is currently working on some process
+    property Processing: boolean read fProcessing write fProcessing;
+    /// how many times the task was performed
+    property TaskCount: TSynMonitorCount64 read fTaskCount write fTaskCount;
+    /// the whole time spend during all working process
+    property TotalTime: TSynMonitorTime read fTotalTime;
+    /// the time spend during the last task processing
+    property LastTime: TSynMonitorOneTime read fLastTime;
+    /// the lowest time spent during any working process
+    property MinimalTime: TSynMonitorOneTime read fMinimalTime;
+    /// the time spent in average during any working process
+    property AverageTime: TSynMonitorOneTime read fAverageTime;
+    /// the highest time spent during any working process
+    property MaximalTime: TSynMonitorOneTime read fMaximalTime;
+    /// average of how many tasks did occur per second
+    property PerSec: QWord read fPerSec;
+    /// how many errors did occur during the processing
+    property Errors: cardinal read fInternalErrors;
+    /// information about the last error which occured during the processing
+    property LastError: variant read fLastInternalError;
+  end;
+  /// references a TSynMonitor instance
+  PSynMonitor = ^TSynMonitor;
+
+  /// handle generic process statistic with a processing data size and bandwitdh
+  TSynMonitorWithSize = class(TSynMonitor)
+  protected
+    fSize: TSynMonitorSize;
+    fThroughput: TSynMonitorThroughput;
+    procedure FillPerSecProperties; override;
+  public
+    /// initialize the instance nested class properties
+    constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
+    {$ifndef CPU64}
+    /// increase the internal size counter
+    procedure AddSize(const Bytes: QWord); overload; {$ifdef HASINLINE}inline;{$endif}
+    {$endif}
+    /// increase the internal size counter
+    procedure AddSize(Bytes: PtrInt); overload; {$ifdef HASINLINE}inline;{$endif}
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); override;
+  published
+    /// how many data has been hanlded during all working process
+    property Size: TSynMonitorSize read fSize;
+    /// data processing bandwith, returned as B/KB/MB per second
+    property Throughput: TSynMonitorThroughput read fThroughput;
+  end;
+
+  /// handle generic process statistic with a incoming and outgoing processing
+  // data size and bandwitdh
+  TSynMonitorInputOutput = class(TSynMonitor)
+  protected
+    fInput: TSynMonitorSize;
+    fOutput: TSynMonitorSize;
+    fInputThroughput: TSynMonitorThroughput;
+    fOutputThroughput: TSynMonitorThroughput;
+    procedure FillPerSecProperties; override;
+  public
+    /// increase the internal size counters
+    procedure AddSize(const Incoming, Outgoing: QWord);
+    /// could be used to manage information average or sums
+    procedure Sum(another: TSynMonitor); override;
+  published
+    /// initialize the instance nested class properties
+    constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// how many data has been received
+    property Input: TSynMonitorSize read fInput;
+    /// how many data has been sent back
+    property Output: TSynMonitorSize read fOutput;
+    /// incoming data processing bandwith, returned as B/KB/MB per second
+    property InputThroughput: TSynMonitorThroughput read fInputThroughput;
+    /// outgoing data processing bandwith, returned as B/KB/MB per second
+    property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
+  end;
+
+  /// could monitor a standard Server
+  // - including Input/Output statistics and connected Clients count
+  TSynMonitorServer = class(TSynMonitorInputOutput)
+  protected
+    fCurrentRequestCount: TSynMonitorCount;
+    fClientsCurrent: TSynMonitorCount;
+    fClientsMax: cardinal;
+  public
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientConnect;
+    /// update ClientsCurrent and ClientsMax
+    procedure ClientDisconnect;
+    /// update ClientsCurrent to 0
+    procedure ClientDisconnectAll;
+  published
+    /// current count of connected clients
+    property ClientsCurrent: TSynMonitorCount read fClientsCurrent;
+    /// max count of connected clients
+    property ClientsMax: cardinal read fClientsMax;
+    /// how many concurrent requests are currently processed
+    // - e.g. increased via InterlockedIncrement() in TSQLRestServer.URI()
+    property CurrentRequestCount: TSynMonitorCount read fCurrentRequestCount;
+  end;
+
   {$M-}
+
+  /// a list of simple process statistics
+  TSynMonitorObjArray = array of TSynMonitor;
+
+  /// a list of data process statistics
+  TSynMonitorWithSizeObjArray = array of TSynMonitorWithSize;
+
+  /// a list of incoming/outgoing data process statistics
+  TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
+
+  /// class-reference type (metaclass) of a process statistic information
+  TSynMonitorClass = class of TSynMonitor;
 
   /// value object able to gather information about the current system memory
   TSynMonitorMemory = class(TSynPersistent)
@@ -13980,6 +14251,11 @@ type
     property TotalSize: TSynMonitorSize read GetTotal;
   end;
 
+
+
+{ ******************* cross-cutting classes and functions ***************** }
+
+type
   /// an abstract ancestor, for implementing a custom TInterfacedObject like class
   // - by default, will do nothing: no instance would be retrieved by
   // QueryInterface unless the VirtualQueryInterface protected method is
@@ -27983,9 +28259,9 @@ begin
   Value := Iso8601ToTimeLogPUTF8Char(P,L);
 end;
 
-{$ifdef MSWINDOWS}
 procedure TTimeLogBits.Expand(out Date: TSystemTime);
 begin
+{$ifdef MSWINDOWS}
   Date.wYear := (Value shr (6+6+5+5+4)) and 4095;
   Date.wMonth := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
   Date.wDay := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
@@ -27993,8 +28269,16 @@ begin
   Date.wHour := (Int64Rec(Value).Lo shr (6+6)) and 31;
   Date.wMinute := (Int64Rec(Value).Lo shr 6) and 63;
   Date.wSecond := Int64Rec(Value).Lo and 63;
-end;
+{$else}
+  Date.Year := (Value shr (6+6+5+5+4)) and 4095;
+  Date.Month := 1+(Int64Rec(Value).Lo shr (6+6+5+5)) and 15;
+  Date.Day := 1+(Int64Rec(Value).Lo shr (6+6+5)) and 31;
+  Date.DayOfWeek := 0;
+  Date.Hour := (Int64Rec(Value).Lo shr (6+6)) and 31;
+  Date.Minute := (Int64Rec(Value).Lo shr 6) and 63;
+  Date.Second := Int64Rec(Value).Lo and 63;
 {$endif}
+end;
 
 procedure TTimeLogBits.From(const S: RawUTF8);
 begin
@@ -28039,51 +28323,49 @@ begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
 
+procedure TTimeLogBits.From(const Time: TSystemTime);
+var V: cardinal;
+begin
+  {$ifdef MSWINDOWS}
+  V := Time.wHour+Time.wDay shl 5+Time.wMonth shl 10+
+    Time.wYear shl 14-(1 shl 5+1 shl 10);
+  Value := Time.wSecond+Time.wMinute shl 6+Int64(V) shl 12;
+  {$else}
+  V := Time.Hour+Time.Day shl 5+Time.Month shl 10+
+    Time.Year shl 14-(1 shl 5+1 shl 10);
+  Value := Time.Second+Time.Minute shl 6+Int64(V) shl 12;
+  {$endif}
+end;
+
 var
   UTCTimeCache: TTimeLog;
   UTCTimeTicks: cardinal;
 
 procedure TTimeLogBits.FromUTCTime;
 var Ticks: cardinal;
-{$ifdef MSWINDOWS}
     Now: TSystemTime;
-    V: cardinal;
-{$endif}
 begin
   Ticks := GetTickCount64 shr 8; // 256 ms resolution
   if Ticks=UTCTimeTicks then begin
     Value := UTCTimeCache;
     exit;
   end;
-{$ifdef MSWINDOWS}
-  UTCTimeTicks := Ticks;
+  {$ifdef MSWINDOWS}
   GetSystemTime(Now); // this API is fast enough for our purpose
-  V := Now.wHour+Now.wDay shl 5+Now.wMonth shl 10+
-    Now.wYear shl 14-(1 shl 5+1 shl 10);
-  Value := Now.wSecond+Now.wMinute shl 6+Int64(V) shl 12;
+  {$else}
+  GetNowUTCSystem(Now);
+  {$endif}
+  From(Now);
   UTCTimeCache := Value;
+  UTCTimeTicks := Ticks;
 end;
-{$else}
-  From(NowUTC);
-  UTCTimeCache := Value;
-end;
-{$endif}
 
 procedure TTimeLogBits.FromNow;
-{$ifdef MSWINDOWS}
 var Now: TSystemTime;
-    V: cardinal;
 begin
   GetLocalTime(Now); // this API is fast enough for our purpose
-  V := Now.wHour+Now.wDay shl 5+Now.wMonth shl 10+
-    Now.wYear shl 14-(1 shl 5+1 shl 10);
-  Value := Now.wSecond+Now.wMinute shl 6+Int64(V) shl 12;
+  From(Now);
 end;
-{$else}
-begin
-  From(Now); // other OS: lets SysUtils.pas get the current time
-end;
-{$endif}
 
 function TTimeLogBits.ToTime: TDateTime;
 begin
@@ -45139,6 +45421,8 @@ begin
 end;
 
 
+{ ******************* process monitoring / statistics ********************** }
+
 { TPrecisionTimer }
 
 function TPrecisionTimer.ByCount(Count: QWord): RawUTF8;
@@ -45309,11 +45593,26 @@ begin
   result := MicroSecToString(fMicroSeconds);
 end;
 
-function TSynMonitorTime.PerSecond(const aValue: QWord): QWord;
+function TSynMonitorTime.PerSecond(const Count: QWord): QWord;
 begin
   if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
     result := 0 else
-    result := (aValue*QWord(1000*1000)) div fMicroSeconds;
+    result := (Count*QWord(1000*1000)) div fMicroSeconds;
+end;
+
+
+{ TSynMonitorOneTime }
+
+function TSynMonitorOneTime.GetAsText: RawUTF8;
+begin
+  result := MicroSecToString(fMicroSeconds);
+end;
+
+function TSynMonitorOneTime.PerSecond(const Count: QWord): QWord;
+begin
+  if PInt64(@fMicroSeconds)^<=0 then // avoid negative or div per 0
+    result := 0 else
+    result := (Count*QWord(1000*1000)) div fMicroSeconds;
 end;
 
 
@@ -45324,11 +45623,321 @@ begin
   result := KB(fBytes);
 end;
 
+{ TSynMonitorOneSize }
+
+function TSynMonitorOneSize.GetAsText: RawUTF8;
+begin
+  result := KB(fBytes);
+end;
+
 { TSynMonitorThroughput }
 
 function TSynMonitorThroughput.GetAsText: RawUTF8;
 begin
   result := KB(fBytesPerSec)+'/s';
+end;
+
+
+{ TSynMonitor }
+
+constructor TSynMonitor.Create;
+begin
+  inherited Create;
+  fTotalTime := TSynMonitorTime.Create;
+  fLastTime := TSynMonitorOneTime.Create;
+  fMinimalTime := TSynMonitorOneTime.Create;
+  fAverageTime := TSynMonitorOneTime.Create;
+  fMaximalTime := TSynMonitorOneTime.Create;
+end;
+
+destructor TSynMonitor.Destroy;
+begin
+  if fMultiThreaded then
+    DeleteCriticalSection(fLock);
+  fMaximalTime.Free;
+  fAverageTime.Free;
+  fMinimalTime.Free;
+  fLastTime.Free;
+  fTotalTime.Free;
+  inherited Destroy;
+end;
+
+procedure TSynMonitor.ProcessStart;
+begin
+  if fProcessing then
+    raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
+  if fMultiThreaded then
+    raise ESynException.CreateUTF8('Multi-threaded %.ProcessStart',[self]);
+  InternalTimer.Resume;
+  fTaskStatus := taskNotStarted;
+  fProcessing := true;
+end;
+
+procedure TSynMonitor.ProcessDoTask;
+begin
+  inc(fTaskCount);
+  fTaskStatus := taskStarted;
+end;
+
+procedure TSynMonitor.ProcessEnd;
+begin
+  InternalTimer.Pause;
+  InternalTimer.ComputeTime;
+  FillFromProcessTimer;
+end;
+
+procedure TSynMonitor.FillFromProcessTimer;
+begin
+  fTotalTime.MicroSec := InternalTimer.TimeInMicroSec;
+  if fTaskStatus=taskStarted then begin
+    fLastTime.MicroSec := InternalTimer.LastTimeInMicroSec;
+    if (fMinimalTime.MicroSec=0) or
+       (InternalTimer.LastTimeInMicroSec<fMinimalTime.MicroSec) then
+      fMinimalTime.MicroSec := InternalTimer.LastTimeInMicroSec;
+    if InternalTimer.LastTimeInMicroSec>fMaximalTime.MicroSec then
+      fMaximalTime.MicroSec := InternalTimer.LastTimeInMicroSec;
+    fTaskStatus := taskNotStarted;
+  end;
+  FillPerSecProperties;
+  fProcessing := false;
+end;
+
+function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
+begin
+  if not fMultiThreaded then begin
+    fMultiThreaded := true;
+    InitializeCriticalSection(fLock);
+  end;
+  EnterCriticalSection(fLock);
+  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+    result := InternalTimer.FromExternalQueryPerformanceCounters(CounterDiff);
+    FillFromProcessTimer;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+begin
+  if not fMultiThreaded then begin
+    fMultiThreaded := true;
+    InitializeCriticalSection(fLock);
+  end;
+  EnterCriticalSection(fLock);
+  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+    InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
+    FillFromProcessTimer;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+class procedure TSynMonitor.InitializeObjArray(var ObjArr; Count: integer);
+var i: integer;
+begin
+  ObjArrayClear(ObjArr);
+  SetLength(TPointerDynArray(ObjArr),Count);
+  for i := 0 to Count-1 do
+    TPointerDynArray(ObjArr)[i] := Create;
+end;
+
+procedure TSynMonitor.ProcessError(const info: variant);
+begin
+  if fMultiThreaded then
+    EnterCriticalSection(fLock); // how knows? the safer the better
+  try
+    inc(fInternalErrors);
+    fLastInternalError := info;
+  finally
+    if fMultiThreaded then
+      LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.ProcessErrorNumber(info: integer);
+begin
+  ProcessError(info);
+end;
+
+procedure TSynMonitor.FillPerSecProperties;
+begin
+  if fTaskCount=0 then
+    exit; // avoid division per zero
+  fPerSec := fTotalTime.PerSecond(fTaskCount);
+  fAverageTime.MicroSec := Round(fTotalTime.MicroSec/fTaskCount);
+end;
+
+procedure TSynMonitor.Sum(another: TSynMonitor);
+begin
+  if another=nil then
+    exit;
+  if another.fMultiThreaded then
+    EnterCriticalSection(another.fLock); // thread safe access
+  fTotalTime.MicroSec := fTotalTime.MicroSec+another.fTotalTime.MicroSec;
+  if (fMinimalTime.MicroSec=0) or
+     (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
+    fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
+  if another.fMaximalTime.MicroSec>fMaximalTime.MicroSec then
+    fMaximalTime.MicroSec := another.fMaximalTime.MicroSec;
+  inc(fTaskCount,another.fTaskCount);
+  if another.Processing then
+    fProcessing := true; // if any thread is active, whole daemon is active
+  inc(fInternalErrors,another.Errors);
+  if another.fMultiThreaded then
+    LeaveCriticalSection(another.fLock);
+end;
+
+procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
+begin
+  W.WriteObject(self);
+end;
+
+procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
+begin
+  if fMultiThreaded then
+    EnterCriticalSection(fLock); // how knows? the safer the better
+  try
+    FillPerSecProperties; // may not have been calculated after Sum()
+    WriteDetailsTo(W);
+  finally
+    if fMultiThreaded then
+      LeaveCriticalSection(fLock);
+  end;
+end;
+
+function TSynMonitor.ComputeDetailsJSON: RawUTF8;
+var W: TTextWriter;
+begin
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  try
+    ComputeDetailsTo(W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+{$ifndef NOVARIANTS}
+function TSynMonitor.ComputeDetails: variant;
+begin
+  _Json(ComputeDetailsJSON,result,JSON_OPTIONS_FAST);
+end;
+{$endif}
+
+{ TSynMonitorWithSize}
+
+constructor TSynMonitorWithSize.Create;
+begin
+  inherited Create;
+  fSize := TSynMonitorSize.Create;
+  fThroughput := TSynMonitorThroughput.Create;
+end;
+
+destructor TSynMonitorWithSize.Destroy;
+begin
+  fThroughput.Free;
+  fSize.Free;
+  inherited Destroy;
+end;
+
+procedure TSynMonitorWithSize.FillPerSecProperties;
+begin
+  inherited;
+  fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
+end;
+
+{$ifndef CPU64}
+procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
+begin
+  fSize.Bytes := fSize.Bytes+Bytes;
+end;
+{$endif}
+
+procedure TSynMonitorWithSize.AddSize(Bytes: PtrInt);
+begin
+  fSize.Bytes := fSize.Bytes+Bytes;
+end;
+
+procedure TSynMonitorWithSize.Sum(another: TSynMonitor);
+begin
+  inherited;
+  if fMultiThreaded then
+    EnterCriticalSection(fLock);
+  if another.InheritsFrom(TSynMonitorWithSize) then
+    AddSize(TSynMonitorWithSize(another).Size.Bytes);
+  if fMultiThreaded then
+    LeaveCriticalSection(fLock);
+end;
+
+{ TSynMonitorInputOutput }
+
+constructor TSynMonitorInputOutput.Create;
+begin
+  inherited Create;
+  fInput := TSynMonitorSize.Create;
+  fOutput := TSynMonitorSize.Create;
+  fInputThroughput := TSynMonitorThroughput.Create;
+  fOutputThroughput := TSynMonitorThroughput.Create;
+end;
+
+destructor TSynMonitorInputOutput.Destroy;
+begin
+  fOutputThroughput.Free;
+  fOutput.Free;
+  fInputThroughput.Free;
+  fInput.Free;
+  inherited Destroy;
+end;
+
+procedure TSynMonitorInputOutput.FillPerSecProperties;
+begin
+  inherited;
+  fInputThroughput.BytesPerSec := fTotalTime.PerSecond(fInput.Bytes);
+  fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
+end;
+
+procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
+begin
+  if fMultiThreaded then
+    EnterCriticalSection(fLock);
+  fInput.Bytes := fInput.Bytes+Incoming;
+  fOutput.Bytes := fOutput.Bytes+Outgoing;
+  if fMultiThreaded then
+    LeaveCriticalSection(fLock);
+end;
+
+procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
+begin
+  inherited Sum(another);
+  if another.InheritsFrom(TSynMonitorInputOutput) then begin
+    fInput.Bytes := fInput.Bytes+TSynMonitorInputOutput(another).Input.Bytes;
+    fOutput.Bytes := fOutput.Bytes+TSynMonitorInputOutput(another).Output.Bytes;
+  end;
+end;
+
+
+{ TSynMonitorServer }
+
+procedure TSynMonitorServer.ClientConnect;
+begin
+  inc(fClientsCurrent);
+  if fClientsCurrent>fClientsMax then
+    fClientsMax := fClientsCurrent;
+end;
+
+procedure TSynMonitorServer.ClientDisconnect;
+begin
+  if fClientsCurrent>0 then
+    dec(fClientsCurrent);
+end;
+
+procedure TSynMonitorServer.ClientDisconnectAll;
+begin
+  fClientsCurrent := 0;
 end;
 
 
@@ -45611,8 +46220,8 @@ procedure TSynMonitorDisk.RetrieveDiskInfo;
       GetVolumeInformationA(pointer(dn),tmp,sizeof(tmp),nil,dummy,flags,nil,0);
       SetString(fVolumeName,PAnsiChar(@tmp),StrLen(@tmp));
     end;
-    GetDiskFreeSpaceExA(pointer(dn),fAvailableSize.fBytes,fTotalSize.fBytes,
-      fFreeSize.fBytes);
+    GetDiskFreeSpaceExA(pointer(dn),PQWord(@fAvailableSize.fBytes)^,
+      PQWord(@fTotalSize.fBytes)^,PQWord(@fFreeSize.fBytes)^);
   {$else}
   {$ifdef KYLIX3}
   var fs: TStatFs64;
@@ -45633,9 +46242,9 @@ procedure TSynMonitorDisk.RetrieveDiskInfo;
     if fName='' then
       fName := '.';
     fpStatFS(fName,fs);
-    fAvailableSize.fBytes := Int64(fs.bavail)*Int64(fs.bsize);
+    fAvailableSize.fBytes := QWord(fs.bavail)*QWord(fs.bsize);
     fFreeSize.fBytes := fAvailableSize.fBytes;
-    fTotalSize.fBytes := Int64(fs.blocks)*Int64(fs.bsize);
+    fTotalSize.fBytes := QWord(fs.blocks)*QWord(fs.bsize);
   {$endif}
   {$endif}
   end;
@@ -45648,6 +46257,9 @@ begin
   end;
 end;
 
+
+
+{ ******************* cross-cutting classes and functions ***************** }
 
 { TSynInterfacedObject }
 

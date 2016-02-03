@@ -4433,7 +4433,7 @@ type
     function NewObjectCache(const Key: RawUTF8): TRawUTF8ObjectCache; virtual;
   public
     /// initialize the cache-information for a given class
-    // - inherited classes may reintroduce a new constructor, for ease of use 
+    // - inherited classes may reintroduce a new constructor, for ease of use
     constructor Create(aClass: TRawUTF8ObjectCacheClass;
       aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
       const aOnKeyResolve: TOnKeyResolve); reintroduce;
@@ -4451,174 +4451,6 @@ type
     /// optional service locator for by-key Dependency Injection
     property OnKeyResolve: TOnKeyResolve read fOnKeyResolve write fOnKeyResolve;
   end;
-
-  /// a generic value object able to handle any task / process statistic
-  // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
-  // process is to be monitored
-  TSynMonitor = class(TSynAutoCreateFields)
-  protected
-    fProcessTimer: TPrecisionTimer;
-    fProcessing: boolean;
-    fTaskCount: QWord;
-    fInternalErrors: cardinal;
-    fLastInternalError: variant;
-    fTotalTime: TSynMonitorTime;
-    fLastTime: TSynMonitorTime;
-    fMinimalTime: TSynMonitorTime;
-    fAverageTime: TSynMonitorTime;
-    fMaximalTime: TSynMonitorTime;
-    fPerSec: QWord;
-    fLock: TRTLCriticalSection;
-    fTaskStatus: (taskNotStarted,taskStarted);
-    fMultiThreaded: boolean;
-    procedure FillPerSecProperties; virtual;
-    procedure FillFromProcessTimer; virtual;
-    procedure WriteDetailsTo(W: TTextWriter); virtual;
-  public
-    /// finalize the instance
-    destructor Destroy; override;
-    /// should be called when the process starts, to resume the internal timer
-    procedure ProcessStart; virtual;
-    /// should be called each time a pending task is processed
-    // - will increase the TaskCount property
-    procedure ProcessDoTask; virtual;
-    /// should be called when an error occurred
-    // - typical use is with ObjectToVariantDebug(E,...) kind of information
-    procedure ProcessError(const info: variant); virtual;
-    /// should be called when an error occurred
-    // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
-    procedure ProcessErrorNumber(info: integer);
-    /// should be called when the process stops, to pause the internal timer
-    procedure ProcessEnd; virtual;
-    /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); virtual;
-    /// returns a JSON content with all published properties information
-    function ComputeDetailsJSON: RawUTF8;
-    /// appends a JSON content with all published properties information
-    procedure ComputeDetailsTo(W: TTextWriter); virtual;
-    /// returns a TDocVariant with all published properties information
-    function ComputeDetails: variant;
-    /// used to allow thread safe timing
-    // - by default, the internal TPrecisionTimer is not thread safe: you can
-    // use this method to update the timing from many threads
-    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
-    // methods are disallowed, and the global fTimer won't be used any more
-    // - will return the processing time, converted into micro seconds, ready
-    // to be logged if needed
-    function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-    /// used to allow thread safe timing
-    // - by default, the internal TPrecisionTimer is not thread safe: you can
-    // use this method to update the timing from many threads
-    // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
-    // methods are disallowed, and the global fTimer won't be used any more
-    procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
-    /// create Count instances of this actual class in the supplied ObjArr[]
-    class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
-  published
-    /// indicates if this thread is currently working on some process
-    property Processing: boolean read fProcessing write fProcessing;
-    /// how many times the task was performed
-    property TaskCount: QWord read fTaskCount write fTaskCount;
-    /// the whole time spend during all working process
-    property TotalTime: TSynMonitorTime read fTotalTime;
-    /// the time spend during the last task processing
-    property LastTime: TSynMonitorTime read fLastTime;
-    /// the lowest time spent during any working process
-    property MinimalTime: TSynMonitorTime read fMinimalTime;
-    /// the time spent in average during any working process
-    property AverageTime: TSynMonitorTime read fAverageTime;
-    /// the highest time spent during any working process
-    property MaximalTime: TSynMonitorTime read fMaximalTime;
-    /// average of how many tasks did occur per second
-    property PerSec: QWord read fPerSec;
-    /// how many errors did occur during the processing
-    property Errors: cardinal read fInternalErrors;
-    /// information about the last error which occured during the processing
-    property LastError: variant read fLastInternalError;
-  end;
-
-  /// handle generic process statistic with a processing data size and bandwitdh
-  TSynMonitorWithSize = class(TSynMonitor)
-  protected
-    fSize: TSynMonitorSize;
-    fThroughput: TSynMonitorThroughput;
-    procedure FillPerSecProperties; override;
-  public
-    {$ifndef CPU64}
-    /// increase the internal size counter
-    procedure AddSize(const Bytes: QWord); overload; {$ifdef HASINLINE}inline;{$endif}
-    {$endif}
-    /// increase the internal size counter
-    procedure AddSize(Bytes: PtrInt); overload; {$ifdef HASINLINE}inline;{$endif}
-    /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); override;
-  published
-    /// how many data has been hanlded during all working process
-    property Size: TSynMonitorSize read fSize;
-    /// data processing bandwith, returned as B/KB/MB per second
-    property Throughput: TSynMonitorThroughput read fThroughput;
-  end;
-
-  /// handle generic process statistic with a incoming and outgoing processing
-  // data size and bandwitdh
-  TSynMonitorInputOutput = class(TSynMonitor)
-  protected
-    fInput: TSynMonitorSize;
-    fOutput: TSynMonitorSize;
-    fInputThroughput: TSynMonitorThroughput;
-    fOutputThroughput: TSynMonitorThroughput;
-    procedure FillPerSecProperties; override;
-  public
-    /// increase the internal size counters
-    procedure AddSize(const Incoming, Outgoing: QWord);
-    /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); override;
-  published
-    /// how many data has been received
-    property Input: TSynMonitorSize read fInput;
-    /// how many data has been sent back
-    property Output: TSynMonitorSize read fOutput;
-    /// incoming data processing bandwith, returned as B/KB/MB per second
-    property InputThroughput: TSynMonitorThroughput read fInputThroughput;
-    /// outgoing data processing bandwith, returned as B/KB/MB per second
-    property OutputThroughput: TSynMonitorThroughput read fOutputThroughput;
-  end;
-
-  /// could monitor a standard Server
-  // - including Input/Output statistics and connected Clients count
-  TSynMonitorServer = class(TSynMonitorInputOutput)
-  protected
-    fCurrentRequestCount: integer;
-    fClientsCurrent: integer;
-    fClientsMax: integer;
-  public
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientConnect;
-    /// update ClientsCurrent and ClientsMax
-    procedure ClientDisconnect;
-    /// update ClientsCurrent to 0
-    procedure ClientDisconnectAll;
-  published
-    /// current count of connected clients
-    property ClientsCurrent: integer read fClientsCurrent;
-    /// max count of connected clients
-    property ClientsMax: integer read fClientsMax;
-    /// how many concurrent requests are currently processed
-    // - e.g. in TSQLRestServer.URI()
-    property CurrentRequestCount: integer read fCurrentRequestCount;
-  end;
-
-  /// a list of simple process statistics
-  TSynMonitorObjArray = array of TSynMonitor;
-
-  /// a list of data process statistics
-  TSynMonitorWithSizeObjArray = array of TSynMonitorWithSize;
-
-  /// a list of incoming/outgoing data process statistics
-  TSynMonitorInputOutputObjArray = array of TSynMonitorInputOutput;
-
-  /// class-reference type (metaclass) of a process statistic information
-  TSynMonitorClass = class of TSynMonitor;
 
 const
   /// HTML Status Code for "Continue"
@@ -4747,6 +4579,156 @@ const
   SECURITY_DESCRIPTOR_MIN_LENGTH = 20;
 {$endif ISDELPHIXE}
 {$endif MSWINDOWS}
+
+
+{ ******************* process monitoring / statistics }
+
+type
+  /// the time period covered by TSynMonitorUsage process
+  TSynMonitorUsageGranularity = (
+    mugUndefined,
+    mugMinute,
+    mugHour,
+    mugDay,
+    mugMonth,
+    mugYear);
+
+  /// defines one or several time periods for TSynMonitorUsage process
+  TSynMonitorUsageGranularities = set of TSynMonitorUsageGranularity;
+
+  /// how the TSynMonitorUsage storage IDs are computed
+  // - stored e.g. in TSQLMonitorUsage.ID primary key
+  // - it follows a 23 bit pattern of hour (5 bit), day (5 bit), month (4 bit),
+  // year (9 bit - starting at 2016) so that it is monotonic over time
+  // - by default, will store mugHour granularity, but pseudo-hours of 29, 30 and
+  // 31 (see USAGE_ID_HOUR[]) would identify mugDay, mugMonth and mugYear ranges
+  TSynMonitorUsageID = object
+  public
+    /// the TID, as computed from time and granularity
+    Value: integer;
+    /// computes an ID corresponding to mugHour granularity of a given time
+    // - minutes and seconds would be ignored
+    // - mugHour granularity would store 0..59 information about each minute
+    procedure From(Y,M,D,H: integer); overload;
+    /// computes an ID corresponding to mugDay granularity of a given time
+    // - hours, minutes and seconds would be merged
+    // - mugDay granularity would store 0..23 information about each hour
+    // - a pseudo hour of 29 (i.e. USAGE_ID_HOUR[mugDay]) is used
+    procedure From(Y,M,D: integer); overload;
+    /// computes an ID corresponding to mugMonth granularity of a given time
+    // - days, hours, minutes and seconds would be merged
+    // - mugMonth granularity would store 0..31 information about each day
+    // - a pseudo hour of 30 (i.e. USAGE_ID_HOUR[mugMonth]) is used
+    procedure From(Y,M: integer); overload;
+    /// computes an ID corresponding to mugYear granularity of a given time
+    // - months, days, hours, minutes and seconds would be merged
+    // - mugYear granularity would store 0..11 information about each month
+    // - a pseudo hour of 31 (i.e. USAGE_ID_HOUR[mugYear]) is used
+    procedure From(Y: integer); overload;
+    /// computes an ID corresponding to a given time
+    // - will set the ID with mugHour granularity, i.e. the information about
+    // the given hour, stored as per minute 0..59 values
+    // - minutes and seconds in supplied TimeLog value would therefore be ignored
+    procedure FromTimeLog(const TimeLog: TTimeLog); 
+    /// computes an ID corresponding to the current UTC date/time
+    // - minutes and seconds would be ignored
+    procedure FromNowUTC;
+    /// returns the date/time
+    // - minutes and seconds would set to 0
+    function ToTimeLog: TTimeLog;
+    /// convert to Iso-8601 encoded text
+    function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
+    /// retrieve the resolution of the stored information
+    // - i.e. either mugHour, mugDay, mugMonth or mugYear, which would store
+    // a true 0..23 hour value (for mugHour), or 29/30/31 pseudo-hour (for
+    // mugDay/mugMonth/mugYear, i.e. USAGE_ID_HOUR[])
+    function Granularity: TSynMonitorUsageGranularity;
+    /// change the resolution of the stored information
+    procedure Truncate(gran: TSynMonitorUsageGranularity);
+    /// low-level read of a time field stored in this ID, per granularity
+    function GetTime(gran: TSynMonitorUsageGranularity): integer;
+    /// low-level modification of a time field stored in this ID, per granularity
+    procedure SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
+  end;
+
+  TSynMonitorUsageTrackProp = record
+    Info: PPropInfo;
+    Value: TSynMonitorValue;
+    Name: RawUTF8;
+    Values: array[mugHour..mugYear] of TInt64DynArray;
+    CumulativeOffset: Int64;
+    CumulativeLast: Int64;
+    CumulativeMin: TTimeLog;
+  end;
+  TSynMonitorUsageTrackPropDynArray = array of TSynMonitorUsageTrackProp;
+  TSynMonitorUsageTrack = record
+    Instance: TObject;
+    Name: RawUTF8;
+    Props: TSynMonitorUsageTrackPropDynArray;
+  end;
+  PSynMonitorUsageTrackProp = ^TSynMonitorUsageTrackProp;
+  PSynMonitorUsageTrack = ^TSynMonitorUsageTrack;
+
+  /// abstract class to track, compute and store TSynMonitor detailed statistics
+  // - you should inherit from this class to implement proper data persistence,
+  // e.g. using TSynMonitorUsageRest for ORM-based storage
+  TSynMonitorUsage = class(TSynPersistentLocked)
+  protected
+    fLog: TSynLogFamily;
+    fTracked: array of TSynMonitorUsageTrack;
+    fCustomWritePropGranularity: TSynMonitorUsageGranularity;
+    fLastInstance: TObject;
+    fLastTrack: PSynMonitorUsageTrack;
+    fPrevious: TTimeLogBits;
+    fComment: RawUTF8;
+    function TrackPropLock(Instance: TObject; Info: PPropInfo): PSynMonitorUsageTrackProp;
+    // those methods would be protected (e.g. in Modified) by fSave.Lock:
+    procedure SavePrevious(const Current: TTimeLog;
+      LastReset: TSynMonitorUsageGranularity); virtual;
+    procedure Save(var ID: TSynMonitorUsageID; Gran, LastReset: TSynMonitorUsageGranularity);
+    function Load(const ID: TSynMonitorUsageID): boolean;
+    // should be overriden with proper persistence storage:
+    function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; virtual; abstract;
+    function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; virtual; abstract;
+  public
+    /// finalize the statistics, saving any pending information
+    destructor Destroy; override;
+    /// track the values of one named object instance
+    // - would recognize TSynMonitorMicroSec, TSynMonitorBytes and
+    // TSynMonitorCount properties of any (nested) object
+    // - the instance would be stored in fTracked[].Instance: ensure it would
+    // stay available during the whole TSynMonitorUsage process
+    procedure Track(Instance: TObject; const Name: RawUTF8); overload; virtual;
+    /// track the values of the given object instances
+    // - would recognize TSynMonitorMicroSec, TSynMonitorBytes and
+    // TSynMonitorCount properties of any (nested) object
+    // - instances would be stored in fTracked[].Instance: ensure they would
+    // stay available during the whole TSynMonitorUsage process
+    procedure Track(const Instances: array of TObject; const Names: array of RawUTF8); overload;
+    /// to be called when tracked properties changed on a tracked class instance
+    procedure Modified(Instance: TObject); overload;
+    /// to be called when tracked properties changed on a tracked class instance
+    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8); overload; virtual;
+    /// some custom text, associated with the current stored state
+    // - would be persistented by Save() methods
+    property Comment: RawUTF8 read fComment write fComment;
+  end;
+
+const
+  USAGE_VALUE_LEN: array[mugHour..mugYear] of integer = (60,24,31,12);
+  USAGE_ID_SHIFT: array[mugHour..mugYear] of byte = (0,5,10,14);
+  USAGE_ID_BITS: array[mugHour..mugYear] of byte = (5,5,4,9);
+  USAGE_ID_MASK: array[mugHour..mugYear] of integer = (31,31,15,511);
+  USAGE_ID_MAX: array[mugHour..mugYear] of cardinal = (23,30,11,127);
+  USAGE_ID_HOUR: array[mugHour..mugYear] of integer = (0,29,30,31);
+  USAGE_ID_YEAROFFSET = 2016;
+
+  /// kind of "cumulative" TSynMonitorValue stored in TSynMonitor / TSynMonitorUsage
+  // - those properties would have their values reset for each granularity level 
+  SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvBytesPerSec];
+
+
+function ToText(gran: TSynMonitorUsageGranularity): PShortString; overload;
 
 
 { ************ main ORM / SOA classes and types }
@@ -15003,14 +14985,14 @@ type
     fServer: TSQLRestServer;
     fStartDate: RawUTF8;
     fCurrentThreadCount: integer;
-    fSuccess: QWord;
-    fOutcomingFiles: QWord;
-    fServiceMethod: QWord;
-    fServiceInterface: QWord;
-    fCreated: QWord;
-    fRead: QWord;
-    fUpdated: QWord;
-    fDeleted: QWord;
+    fSuccess: TSynMonitorCount64;
+    fOutcomingFiles: TSynMonitorCount64;
+    fServiceMethod: TSynMonitorCount64;
+    fServiceInterface: TSynMonitorCount64;
+    fCreated: TSynMonitorCount64;
+    fRead: TSynMonitorCount64;
+    fUpdated: TSynMonitorCount64;
+    fDeleted: TSynMonitorCount64;
     // [Write: boolean] per-table statistics
     fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
   public
@@ -15029,27 +15011,64 @@ type
     /// number of valid responses
     // - i.e. which returned status code 200/HTML_SUCCESS or 201/HTML_CREATED
     // - any invalid request will increase the TSynMonitor.Errors property
-    property Success: QWord read fSuccess;
+    property Success: TSynMonitorCount64 read fSuccess;
     /// count of the remote method-based service calls
-    property ServiceMethod: QWord read fServiceMethod;
+    property ServiceMethod: TSynMonitorCount64 read fServiceMethod;
     /// count of the remote interface-based service calls
-    property ServiceInterface: QWord read fServiceInterface;
+    property ServiceInterface: TSynMonitorCount64 read fServiceInterface;
     /// count of files transmitted directly (not part of Output size property)
     // - i.e. when the service uses STATICFILE_CONTENT_TYPE/HTTP_RESP_STATICFILE
     // as content type to let the HTTP server directly serve the file content
-    property OutcomingFiles: QWord read fOutcomingFiles;
+    property OutcomingFiles: TSynMonitorCount64 read fOutcomingFiles;
     /// number of current declared thread counts
     // - as registered by BeginCurrentThread/EndCurrentThread
     property CurrentThreadCount: integer read fCurrentThreadCount;
     /// how many Create / Add ORM operations did take place
-    property Created: QWord read fCreated;
+    property Created: TSynMonitorCount64 read fCreated;
     /// how many Read / Get ORM operations did take place
-    property Read: QWord read fRead;
+    property Read: TSynMonitorCount64 read fRead;
     /// how many Update ORM operations did take place
-    property Updated: QWord read fUpdated;
+    property Updated: TSynMonitorCount64 read fUpdated;
     /// how many Delete ORM operations did take place
-    property Deleted: QWord read fDeleted;
+    property Deleted: TSynMonitorCount64 read fDeleted;
   end;
+
+  /// ORM table used to store TSynMonitorUsage information
+  TSQLMonitorUsage = class(TSQLRecord)
+  protected
+    fGran: TSynMonitorUsageGranularity;
+    fValues: variant;
+    fComment: RawUTF8;
+  published
+    property Gran: TSynMonitorUsageGranularity read fGran write fGran;
+    property Values: variant read fValues write fValues;
+    property Comment: RawUTF8 read fComment write fComment;
+  end;
+  /// class-reference type (metaclass) of a TSQLMonitorUsage table
+  TSQLMonitorUsageClass = class of TSQLMonitorUsage;
+
+  /// would store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
+  TSynMonitorUsageRest = class(TSynMonitorUsage)
+  private
+  protected
+    fStorage: TSQLRest;
+    fStoredClass: TSQLMonitorUsageClass;
+    fStoredCache: array[mugHour..mugYear] of TSQLMonitorUsage;
+    function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; override;
+    function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; override;
+  public
+    /// initialize storage via ORM
+    // - if a TSynUniqueIdentifierGenerator is supplied, it would be used for
+    // actual persistence
+    // - would use TSQLMonitorUsage table, unless another one is specified
+    constructor Create(aStorage: TSQLRest; aStoredClass: TSQLMonitorUsageClass=nil); reintroduce; virtual;
+    /// finalize the process
+    destructor Destroy; override;
+  published
+    /// the actual ORM class used for persistence
+    property StoredClass: TSQLMonitorUsageClass read fStoredClass;
+  end;
+
 
   /// a specialized UTF-8 string type, used for TSQLRestServerURI storage
   // - URI format is 'address:port/root', but port or root are optional
@@ -22241,240 +22260,6 @@ begin
 end;
 
 
-{ TSynMonitor }
-
-destructor TSynMonitor.Destroy;
-begin
-  if fMultiThreaded then
-    DeleteCriticalSection(fLock);
-  inherited;
-end;
-
-procedure TSynMonitor.ProcessStart;
-begin
-  if fProcessing then
-    raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
-  if fMultiThreaded then
-    raise ESynException.CreateUTF8('Multi-threaded %.ProcessStart',[self]);
-  fProcessTimer.Resume;
-  fTaskStatus := taskNotStarted;
-  fProcessing := true;
-end;
-
-procedure TSynMonitor.ProcessDoTask;
-begin
-  inc(fTaskCount);
-  fTaskStatus := taskStarted;
-end;
-
-procedure TSynMonitor.ProcessEnd;
-begin
-  fProcessTimer.Pause;
-  fProcessTimer.ComputeTime;
-  FillFromProcessTimer;
-end;
-
-procedure TSynMonitor.FillFromProcessTimer;
-begin
-  fTotalTime.MicroSec := fProcessTimer.TimeInMicroSec;
-  if fTaskStatus=taskStarted then begin
-    fLastTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
-    if (fMinimalTime.MicroSec=0) or
-       (fProcessTimer.LastTimeInMicroSec<fMinimalTime.MicroSec) then
-      fMinimalTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
-    if fProcessTimer.LastTimeInMicroSec>fMaximalTime.MicroSec then
-      fMaximalTime.MicroSec := fProcessTimer.LastTimeInMicroSec;
-    fTaskStatus := taskNotStarted;
-  end;
-  FillPerSecProperties;
-  fProcessing := false;
-end;
-
-function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
-begin
-  if not fMultiThreaded then begin
-    fMultiThreaded := true;
-    InitializeCriticalSection(fLock);
-  end;
-  EnterCriticalSection(fLock);
-  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-    result := fProcessTimer.FromExternalQueryPerformanceCounters(CounterDiff);
-    FillFromProcessTimer;
-  finally
-    LeaveCriticalSection(fLock);
-  end;
-end;
-
-procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
-begin
-  if not fMultiThreaded then begin
-    fMultiThreaded := true;
-    InitializeCriticalSection(fLock);
-  end;
-  EnterCriticalSection(fLock);
-  try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
-    inc(fTaskCount);
-    fTaskStatus := taskStarted;
-    fProcessTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
-    FillFromProcessTimer;
-  finally
-    LeaveCriticalSection(fLock);
-  end;
-end;
-
-class procedure TSynMonitor.InitializeObjArray(var ObjArr; Count: integer);
-var i: integer;
-begin
-  ObjArrayClear(ObjArr);
-  SetLength(TPointerDynArray(ObjArr),Count);
-  for i := 0 to Count-1 do
-    TPointerDynArray(ObjArr)[i] := Create;
-end;
-
-procedure TSynMonitor.ProcessError(const info: variant);
-begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock); // how knows? the safer the better
-  try
-    inc(fInternalErrors);
-    fLastInternalError := info;
-  finally
-    if fMultiThreaded then
-      LeaveCriticalSection(fLock);
-  end;
-end;
-
-procedure TSynMonitor.ProcessErrorNumber(info: integer);
-begin
-  ProcessError(info);
-end;
-
-procedure TSynMonitor.FillPerSecProperties;
-begin
-  if fTaskCount=0 then
-    exit; // avoid division per zero
-  fPerSec := fTotalTime.PerSecond(fTaskCount);
-  fAverageTime.MicroSec := Round(fTotalTime.MicroSec/fTaskCount);
-end;
-
-procedure TSynMonitor.Sum(another: TSynMonitor);
-begin
-  if another=nil then
-    exit;
-  if another.fMultiThreaded then
-    EnterCriticalSection(another.fLock); // thread safe access
-  fTotalTime.MicroSec := fTotalTime.MicroSec+another.fTotalTime.MicroSec;
-  if (fMinimalTime.MicroSec=0) or
-     (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
-    fMinimalTime.MicroSec := another.fMinimalTime.MicroSec;
-  if another.fMaximalTime.MicroSec>fMaximalTime.MicroSec then
-    fMaximalTime.MicroSec := another.fMaximalTime.MicroSec;
-  inc(fTaskCount,another.fTaskCount);
-  if another.Processing then
-    fProcessing := true; // if any thread is active, whole daemon is active
-  inc(fInternalErrors,another.Errors);
-  if another.fMultiThreaded then
-    LeaveCriticalSection(another.fLock);
-end;
-
-procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
-begin
-  W.WriteObject(self);
-end;
-
-procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
-begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock); // how knows? the safer the better
-  try
-    FillPerSecProperties; // may not have been calculated after Sum()
-    WriteDetailsTo(W);
-  finally
-    if fMultiThreaded then
-      LeaveCriticalSection(fLock);
-  end;
-end;
-
-function TSynMonitor.ComputeDetailsJSON: RawUTF8;
-var W: TTextWriter;
-begin
-  W := TJSONSerializer.CreateOwnedStream;
-  try
-    ComputeDetailsTo(W);
-    W.SetText(result);
-  finally
-    W.Free;
-  end;
-end;
-
-function TSynMonitor.ComputeDetails: variant;
-begin
-  _Json(ComputeDetailsJSON,result,JSON_OPTIONS_FAST);
-end;
-
-
-{ TSynMonitorWithSize}
-
-procedure TSynMonitorWithSize.FillPerSecProperties;
-begin
-  inherited;
-  fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
-end;
-
-{$ifndef CPU64}
-procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
-begin
-  fSize.Bytes := fSize.Bytes+Bytes;
-end;
-{$endif}
-
-procedure TSynMonitorWithSize.AddSize(Bytes: PtrInt);
-begin
-  fSize.Bytes := fSize.Bytes+Bytes;
-end;
-
-procedure TSynMonitorWithSize.Sum(another: TSynMonitor);
-begin
-  inherited;
-  if fMultiThreaded then
-    EnterCriticalSection(fLock);
-  if another.InheritsFrom(TSynMonitorWithSize) then
-    AddSize(TSynMonitorWithSize(another).Size.Bytes);
-  if fMultiThreaded then
-    LeaveCriticalSection(fLock);
-end;
-
-{ TSynMonitorInputOutput }
-
-procedure TSynMonitorInputOutput.FillPerSecProperties;
-begin
-  inherited;
-  fInputThroughput.BytesPerSec := fTotalTime.PerSecond(fInput.Bytes);
-  fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
-end;
-
-procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
-begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock);
-  fInput.Bytes := fInput.Bytes+Incoming;
-  fOutput.Bytes := fOutput.Bytes+Outgoing;
-  if fMultiThreaded then
-    LeaveCriticalSection(fLock);
-end;
-
-procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
-begin
-  inherited Sum(another);
-  if another.InheritsFrom(TSynMonitorInputOutput) then begin
-    fInput.Bytes := fInput.Bytes+TSynMonitorInputOutput(another).Input.Bytes;
-    fOutput.Bytes := fOutput.Bytes+TSynMonitorInputOutput(another).Output.Bytes;
-  end;
-end;
-
-
 procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
 begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
   case Code of
@@ -22543,6 +22328,378 @@ begin
 end;
 
 
+
+{ ******************* process monitoring / statistics }
+
+{ TSynMonitorUsage }
+
+function ToText(gran: TSynMonitorUsageGranularity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSynMonitorUsageGranularity),ord(gran));
+end;
+
+function UsageValue(info: PPropInfo): TSynMonitorValue;
+var typ: pointer;
+begin
+  typ := info^.PropType{$ifndef FPC}^{$endif};
+  if typ=TypeInfo(TSynMonitorMicroSec) then
+    result := smvMicroSec else
+  if typ=TypeInfo(TSynMonitorOneMicroSec) then
+    result := smvOneMicroSec else
+  if typ=TypeInfo(TSynMonitorBytes) then
+    result := smvBytes else
+  if typ=TypeInfo(TSynMonitorOneBytes) then
+    result := smvOneBytes else
+  if typ=TypeInfo(TSynMonitorBytesPerSec) then
+    result := smvBytesPerSec else
+  if typ=TypeInfo(TSynMonitorCount) then
+    result := smvCount else
+  if typ=TypeInfo(TSynMonitorCount64) then
+    result := smvCount64 else
+    result := smvUndefined;
+end;
+
+procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
+
+  procedure ClassTrackProps(ClassType: TClass; var Props: TSynMonitorUsageTrackPropDynArray);
+  var i,n: integer;
+      nfo: PPropInfo;
+      v: TSynMonitorValue;
+      g: TSynMonitorUsageGranularity;
+      p: PSynMonitorUsageTrackProp;
+  begin
+    n := length(Props);
+    while ClassType<>nil do begin
+      for i := 1 to InternalClassPropInfo(ClassType,nfo) do begin
+        v := UsageValue(nfo);
+        if v<>smvUndefined then begin
+          SetLength(Props,n+1);
+          p := @Props[n];
+          p^.Info := nfo;
+          p^.Value := v;
+          p^.Name := ShortStringToAnsi7String(nfo^.Name);
+          for g := mugHour to mugYear do
+            SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
+          if v in SYNMONITORVALUE_CUMULATIVE then begin
+            p^.CumulativeLast := p^.CumulativeOffset;
+            p^.CumulativeOffset := nfo^.GetInt64Value(Instance);
+          end;
+          inc(n);
+        end;
+        nfo := nfo^.Next;
+      end;
+      ClassType := ClassType.ClassParent;
+    end;
+  end;
+
+var i,n: integer;
+    instanceName: RawUTF8;
+begin
+  if Instance=nil then
+    exit;
+  if Name='' then
+    instanceName := RawUTF8(Instance.ClassName) else
+    instanceName := Name;
+  fSafe.Lock;
+  try
+    n := length(fTracked);
+    for i := 0 to n-1 do
+      if fTracked[i].Instance=Instance then
+        exit else
+      if IdemPropNameU(fTracked[i].Name,instanceName) then
+        raise ESynException.CreateUTF8('%.Track("%") name already exists',[self,instanceName]);
+    SetLength(fTracked,n+1);
+    fTracked[n].Instance := Instance;
+    fTracked[n].Name := instanceName;
+    ClassTrackProps(Instance.ClassType,fTracked[n].Props);
+    if fTracked[n].Props=nil then
+      SetLength(fTracked,n); // nothing to track
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TSynMonitorUsage.Track(const Instances: array of TObject;
+  const Names: array of RawUTF8);
+var i: integer;
+begin
+  if high(Instances)<>high(Names) then
+    raise ESynException.CreateUTF8('%.Track wrong Instances[]/Names[]',[self]);
+  for i := 0 to high(Instances) do
+    Track(Instances[i],Names[i]);
+end;
+
+function TSynMonitorUsage.TrackPropLock(Instance: TObject;
+  Info: PPropInfo): PSynMonitorUsageTrackProp;
+var i,j: integer;
+begin
+  fSafe.Lock;
+  for i := 0 to length(fTracked)-1 do
+    if fTracked[i].Instance=Instance then
+    with fTracked[i] do begin
+      for j := 0 to length(Props)-1 do
+        if Props[j].Info=Info then begin
+          result := @Props[j];
+          exit; // returned found entry locked
+        end;
+      break;
+    end;
+  fSafe.UnLock;
+  result := nil;
+end;
+
+const
+  // maps TTimeLogbits mask
+  TL_SECONDS = pred(1 shl 6);
+  TL_MINUTES = pred(1 shl 12);
+  TL_HOURS = pred(1 shl 17);
+  TL_DAYS = pred(1 shl 22);
+  TL_MONTHS = pred(1 shl 26);
+
+procedure TSynMonitorUsage.Modified(Instance: TObject);
+begin
+  Modified(Instance,[]);
+end;
+
+procedure TSynMonitorUsage.Modified(Instance: TObject;
+  const PropNames: array of RawUTF8);
+var i,j,min: integer;
+    track: PSynMonitorUsageTrack;
+    minutes: TTimeLogBits;
+    v: Int64;
+begin
+  fSafe.Lock;
+  try
+    for i := 0 to length(fTracked)-1 do
+      if fTracked[i].Instance=Instance then begin
+        track := @fTracked[i];
+        minutes.FromUTCTime;
+        minutes.Value := minutes.Value and not TL_SECONDS;
+        if fPrevious.Value<>minutes.Value then
+          SavePrevious(minutes.Value,mugUndefined); 
+        min := minutes.Minute;
+        for j := 0 to length(track^.Props)-1 do
+          with track^.Props[j] do
+            if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
+              v := Info^.GetInt64Value(Instance);
+              if Value in SYNMONITORVALUE_CUMULATIVE then begin
+                if CumulativeMin<>minutes.Value then begin
+                  CumulativeMin := minutes.Value;
+                  CumulativeOffset := CumulativeLast;
+                end;
+                CumulativeLast := v;
+                dec(v,CumulativeOffset);
+              end;
+              Values[mugHour][min] := v;
+            end;
+        exit;
+      end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+destructor TSynMonitorUsage.Destroy;
+var time: TTimeLogBits;
+begin
+  time.FromUTCTime;
+  time.Value := time.Value and not TL_SECONDS;
+  SavePrevious(time.Value,mugMinute);
+  inherited Destroy;
+end;
+
+procedure TSynMonitorUsage.SavePrevious(const Current: TTimeLog;
+  LastReset: TSynMonitorUsageGranularity);
+var id: TSynMonitorUsageID;
+    prev: TTimeLog;
+    g: TSynMonitorUsageGranularity;
+begin
+  prev := fPrevious.Value;
+  if prev=0 then
+    exit; // nothing to save
+  id.FromTimeLog(prev);
+  if LastReset=mugUndefined then
+    if prev<>Current then
+      LastReset := mugMinute else
+    if prev and not TL_MINUTES<>Current and not TL_MINUTES then
+      LastReset := mugHour else
+    if prev and not TL_HOURS<>Current and not TL_HOURS then
+      LastReset := mugDay else
+    if prev and not TL_DAYS<>Current and not TL_DAYS then
+      LastReset := mugMonth else
+    if prev and not TL_MONTHS<>Current and not TL_MONTHS then
+      LastReset := mugYear;
+  Save(id,mugHour,LastReset);
+  for g := mugDay to mugYear do
+    if g>LastReset then
+      break else
+      Save(id,g,LastReset);
+  fPrevious.Value := Current;
+end;
+
+procedure TSynMonitorUsage.Save(var ID: TSynMonitorUsageID;
+  Gran,LastReset: TSynMonitorUsageGranularity);
+var t,n,p: Integer;
+    track: PSynMonitorUsageTrack;
+    inst,data,val: TDocVariantData;
+begin
+  ID.Truncate(Gran);
+  inst.InitFast(length(fTracked),dvObject);
+  for t := 0 to length(fTracked)-1 do begin
+    track := @fTracked[t];
+    n := length(track^.Props);
+    data.InitFast(n,dvObject);
+    for p := 0 to n-1 do
+    with track^.Props[p] do
+      if not IsZero(Values[gran]) then begin
+        val.InitArrayFrom(Values[gran],JSON_OPTIONS_FAST);
+        data.AddValue(Name,Variant(val));
+        val.Clear;
+        if gran<=LastReset then
+          if Value in SYNMONITORVALUE_CUMULATIVE then
+            FillZero(Values[gran]);
+      end;
+    inst.AddValue(track^.Name,variant(data));
+    data.Clear;
+  end;
+  inst.SortByName;
+  if not SaveDB(ID.Value,variant(inst),Gran) then
+    fLog.SynLog.Log(sllWarning,'%.Save(ID=%=%,%) failed',
+      [ClassType,ID.Value,ID.Text(true),ToText(Gran)^]);
+end;
+
+function TSynMonitorUsage.Load(const ID: TSynMonitorUsageID): boolean;
+var t,p,v: Integer;
+    track: PSynMonitorUsageTrack;
+    data: variant;
+    gran: TSynMonitorUsageGranularity;
+    val,int: PDocVariantData;
+begin
+  gran := ID.Granularity;
+  result := LoadDB(ID.Value,gran,data);
+  if result then
+    with _Safe(data)^ do begin
+      for t := 0 to length(fTracked)-1 do begin
+        track := @fTracked[t];
+        val := GetAsDocVariantSafe(track^.Name);
+        for p := 0 to length(track^.Props)-1 do
+        with track^.Props[p] do begin
+          FillZero(Values[gran]);
+          if val^.GetAsDocVariant(Name,int) and
+             (int^.Count>0) and (int^.Kind=dvArray) then begin
+            for v := 0 to length(Values[gran]) do
+              if v<int^.Count then
+                Values[gran][v] := VariantToInt64Def(int^.Values[v],0);
+          end;
+        end;
+      end;
+    end;
+end;
+
+
+{ TSynMonitorUsageID }
+
+procedure TSynMonitorUsageID.From(Y, M, D, H: integer);
+begin
+  Value := H+(D-1) shl USAGE_ID_SHIFT[mugDay]+
+    (M-1) shl USAGE_ID_SHIFT[mugMonth]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+end;
+
+procedure TSynMonitorUsageID.From(Y, M, D: integer);
+begin
+  Value := USAGE_ID_HOUR[mugDay]+(D-1) shl USAGE_ID_SHIFT[mugDay]+
+    (M-1) shl USAGE_ID_SHIFT[mugMonth]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+end;
+
+procedure TSynMonitorUsageID.From(Y, M: integer);
+begin
+  Value := USAGE_ID_HOUR[mugMonth]+(M-1) shl USAGE_ID_SHIFT[mugMonth]+
+    (Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+end;
+
+procedure TSynMonitorUsageID.From(Y: integer);
+begin
+  Value := USAGE_ID_HOUR[mugYear]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+end;
+
+procedure TSynMonitorUsageID.FromTimeLog(const TimeLog: TTimeLog);
+var bits: TTimeLogBits absolute TimeLog;
+begin
+  Value := bits.Hour+(bits.Day-1) shl USAGE_ID_SHIFT[mugDay]+
+    (bits.Month-1) shl USAGE_ID_SHIFT[mugMonth]+
+    (bits.Year-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+end;
+
+procedure TSynMonitorUsageID.FromNowUTC;
+var now: TTimeLogBits;
+begin
+  now.FromUTCTime;
+  From(now.Value);
+end;
+
+function TSynMonitorUsageID.GetTime(gran: TSynMonitorUsageGranularity): integer;
+begin
+  if not (gran in [low(USAGE_ID_SHIFT)..high(USAGE_ID_SHIFT)]) then
+    raise ERangeError.CreateFmt('GetValue(%s)',[ToText(gran)^]);
+  result := (Value shr USAGE_ID_SHIFT[gran]) and USAGE_ID_MASK[gran];
+  case gran of
+  mugYear:
+    inc(result,USAGE_ID_YEAROFFSET);
+  mugDay, mugMonth:
+    inc(result);
+  mugHour:
+    if result>23 then
+      result := 0; // stored fake USAGE_ID_HOUR[mugHour..mugYear] value
+  end;
+end;
+
+function TSynMonitorUsageID.Granularity: TSynMonitorUsageGranularity;
+var h: integer;
+begin
+  h := Value and USAGE_ID_MASK[mugHour];
+  for result := mugDay to mugYear do
+    if USAGE_ID_HOUR[result]=h then
+      exit; // found granularity marker
+  result := mugHour;
+end;
+
+procedure TSynMonitorUsageID.Truncate(gran: TSynMonitorUsageGranularity);
+begin
+  if gran>mugHour then
+    Value := Value and (not USAGE_ID_MASK[mugHour]) or USAGE_ID_HOUR[gran];
+end;
+
+procedure TSynMonitorUsageID.SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
+begin
+  case gran of
+  mugYear: dec(aValue,USAGE_ID_YEAROFFSET);
+  mugDay, mugMonth: dec(aValue);
+  mugHour: ;
+  else raise ERangeError.CreateFmt('SetValue(%s)',[ToText(gran)^]);
+  end;
+  if cardinal(aValue)>USAGE_ID_MAX[gran] then
+    raise ERangeError.CreateFmt('%s should be 0..%d',[ToText(gran)^,USAGE_ID_MAX[gran]]);
+  Value := (Value and (not (USAGE_ID_MASK[gran] shl USAGE_ID_SHIFT[gran])))
+     or (aValue shl USAGE_ID_SHIFT[gran]);
+end;
+
+function TSynMonitorUsageID.Text(Expanded: boolean;
+  FirstTimeChar: AnsiChar): RawUTF8;
+var bits: TTimeLogBits;
+begin
+  bits.Value := ToTimeLog;
+  result := bits.Text(Expanded,FirstTimeChar);
+end;
+
+function TSynMonitorUsageID.ToTimeLog: TTimeLog;
+begin
+  PTimeLogBits(@result)^.From(
+    GetTime(mugYear),GetTime(mugMonth),GetTime(mugDay),GetTime(mugHour),0,0);
+end;
+
+
+
+{ ************ main ORM / SOA classes and types }
 
 { TSQLTable }
 
@@ -38091,7 +38248,7 @@ begin
 begin
 {$endif}
   QueryPerformanceCounter(timeStart);
-  InterlockedIncrement(fStats.fCurrentRequestCount);
+  InterlockedIncrement(integer(fStats.fCurrentRequestCount));
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
   Ctxt := ServicesRouting.Create(self,Call);
@@ -38119,7 +38276,7 @@ begin
           not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
         if (rsoRedirectForbiddenToAuth in Options) and (Ctxt.ClientKind=ckAjax) then
           Ctxt.Redirect(Model.Root+'/auth') else
-        Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
+          Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then
@@ -38187,7 +38344,7 @@ begin
       execORMWrite:
         fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,Ctxt.MicroSecondsElapsed);
       end;
-    InterlockedDecrement(fStats.fCurrentRequestCount);
+    InterlockedDecrement(integer(fStats.fCurrentRequestCount));
     if Assigned(OnAfterURI) then
     try
       OnAfterURI(Ctxt);
@@ -40294,27 +40451,6 @@ end;
 {$endif MSWINDOWS}
 
 
-{ TSynMonitorServer }
-
-procedure TSynMonitorServer.ClientConnect;
-begin
-  inc(fClientsCurrent);
-  if fClientsCurrent>fClientsMax then
-    fClientsMax := fClientsCurrent;
-end;
-
-procedure TSynMonitorServer.ClientDisconnect;
-begin
-  if fClientsCurrent>0 then
-    dec(fClientsCurrent);
-end;
-
-procedure TSynMonitorServer.ClientDisconnectAll;
-begin
-  fClientsCurrent := 0;
-end;
-
-
 { TSQLRestServerMonitor }
 
 constructor TSQLRestServerMonitor.Create(aServer: TSQLRestServer);
@@ -40357,6 +40493,73 @@ begin
     FromExternalMicroSeconds(MicroSecondsElapsed);
     AddSize(DataSize);
   end;
+end;
+
+
+{ TSynMonitorUsageRest }
+
+constructor TSynMonitorUsageRest.Create(aStorage: TSQLRest;
+  aStoredClass: TSQLMonitorUsageClass);
+var g: TSynMonitorUsageGranularity;
+begin
+  if (aStorage=nil) or (aStoredClass=nil) then
+    raise ESynException.CreateUTF8('%.Create(nil)',[self]);
+  if aStoredClass=nil then
+    fStoredClass := TSQLMonitorUsage else
+    fStoredClass := aStoredClass;
+  fStorage := aStorage;
+  for g := low(fStoredCache) to high(fStoredCache) do
+    fStoredCache[g] := fStoredClass.Create;
+  fLog := fStorage.LogFamily;
+  inherited Create;
+end;
+
+destructor TSynMonitorUsageRest.Destroy;
+var g: TSynMonitorUsageGranularity;
+begin
+  for g := low(fStoredCache) to high(fStoredCache) do
+    fStoredCache[g].Free;
+  inherited Destroy;
+end;
+
+function TSynMonitorUsageRest.LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity;
+  out Track: variant): boolean;
+begin
+  if Gran<Low(fStoredCache) then
+    result := false else
+  if fStoredCache[Gran].IDValue=ID then
+    result := true else
+  if fStorage.Retrieve(ID,fStoredCache[Gran]) then begin // may use REST cache
+    Track := fStoredCache[Gran].Values;
+    if fStoredCache[Gran].Gran=mugHour then
+      fComment := fStoredCache[Gran].Comment;
+    result := true;
+  end else begin
+    fStoredCache[Gran].ClearProperties;
+    result := false;
+  end;
+end;
+
+function TSynMonitorUsageRest.SaveDB(ID: integer; const Track: variant;
+  Gran: TSynMonitorUsageGranularity): boolean;
+var update: boolean;
+begin
+  if (ID=0) or (Gran<Low(fStoredCache)) then begin
+    result := false;
+    exit;
+  end;
+  if fStoredCache[Gran].IDValue=ID then // already available
+    update := true else begin
+    update := fStorage.Retrieve(ID,fStoredCache[Gran]); // may use cache
+    fStoredCache[Gran].IDValue := ID;
+  end;
+  fStoredCache[Gran].Gran := Gran;
+  if Gran=mugHour then
+    fStoredCache[Gran].Comment := fComment;
+  fStoredCache[Gran].Values := Track;
+  if update then
+    result := fStorage.Update(fStoredCache[Gran]) else
+    result := fStorage.Add(fStoredCache[Gran],true,true)=ID;
 end;
 
 
@@ -47931,10 +48134,10 @@ begin
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and (Ctxt.ClientKind=ckAjax) then
             Ctxt.Redirect(fServer.Model.Root) else
-          with Session.User do
-          Ctxt.Returns(['result',Session.IDCardinal,'logonid',IDValue,
-            'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
+            with Session.User do
+            Ctxt.Returns(['result',Session.IDCardinal,'logonid',IDValue,
+              'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
+              'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
           exit; // success
         end;
       end else
@@ -54737,3 +54940,4 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+

@@ -964,10 +964,13 @@ type
   /// abstract class to monitor an administrable service/daemon
   // - including Input/Output statistics and connected Clients count
   // - including OS Memory information
-  TDDDAdministratedDaemonMonitor = class(TSynMonitorServer)
+  TDDDAdministratedDaemonMonitor = class(TSynAutoCreateFields)
   protected
+    fServer: TSynMonitorServer;
     function GetMemory: variant;
   published
+    /// information about the REST server process
+    property Server: TSynMonitorServer read fServer;
     /// information about the main System memory, as returned by the OS
     property SystemMemory: variant read GetMemory;
   end;

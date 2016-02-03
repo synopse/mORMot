@@ -1062,7 +1062,7 @@ begin
     ExecuteDisconnectAfterError;
     exit;
   end;
-  FMonitoring.AddSize(pending, 0);
+  FMonitoring.Server.AddSize(pending, 0);
   InternalExecuteSocket;
 end;
 
@@ -1160,7 +1160,7 @@ begin
     exit;
   result := tmpSock.DataOut(pointer(aFrame), length(aFrame));
   if result then
-    FMonitoring.AddSize(0, length(aFrame))
+    FMonitoring.Server.AddSize(0, length(aFrame))
   else if ImmediateDisconnectAfterError then
     ExecuteDisconnectAfterError
   else begin

@@ -366,6 +366,8 @@ type
 {$endif LVCL}
     /// test SELECT statement parsing
     procedure _TSynTableStatement;
+    /// test advanced statistics monitoring
+    procedure _TSynMonitorUsage;
 {$endif DELPHI5OROLDER}
 {$endif NOVARIANTS}
   end;
@@ -7094,6 +7096,43 @@ begin
   Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='max'));
   Check(Stmt.Limit=0);
   Stmt.Free;
+end;
+
+procedure TTestLowLevelTypes._TSynMonitorUsage;
+var id: TSynMonitorUsageID;
+    now,id2: TTimelog;
+    n: TTimeLogBits absolute now;
+    i: integer;
+    s,s2: RawUTF8;
+begin
+  id.Value := 0;
+  now := TimeLogNowUTC and not pred(1 shl 12); // truncate to hour resolution
+  id.FromTimeLog(now);
+  s := n.Text(true);
+  id2 := id.ToTimeLog;
+  s2 := id.Text(true);
+  Check(id2=now);
+  Check(s2=s);
+  for i := 1 to 200 do begin
+    n.From(n.ToDateTime+Random*50);
+    now := now and not pred(1 shl 12);
+    s := n.Text(true);
+    id.SetTime(mugYear,n.Year);
+    id.SetTime(mugMonth,n.Month);
+    id.SetTime(mugDay,n.Day);
+    id.SetTime(mugHour,n.Hour);
+    id2 := id.ToTimeLog;
+    s2 := id.Text(true);
+    Check(id2=now);
+    Check(s2=s);
+    Check(id.Granularity=mugHour);
+    id.From(n.Year,n.Month,n.Day);
+    Check(id.Granularity=mugDay);
+    id.From(n.Year,n.Month);
+    Check(id.Granularity=mugMonth);
+    id.From(n.Year);
+    Check(id.Granularity=mugYear);
+  end;
 end;
 
 
