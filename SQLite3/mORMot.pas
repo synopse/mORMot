@@ -46413,6 +46413,8 @@ begin
   end;
   repeat
     for i := 1 to InternalClassPropInfo(aClassType,P) do begin
+      if Assigned(OnWriteObject) and OnWriteObject(self,Value,P,Options) then
+        goto next else
       if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
         if IsRowIDShort(P^.Name) then
           goto next; // should not happen

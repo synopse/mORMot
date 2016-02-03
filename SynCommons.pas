@@ -6642,6 +6642,13 @@ type
   // TSynLog will continue logging, even if this event returned FALSE
   TOnTextWriterEcho = function(Sender: TTextWriter; Level: TSynLogInfo;
     const Text: RawUTF8): boolean of object;
+  /// callback used by TTextWriter.WriteObject to customize class instance
+  // serialization
+  // - should return TRUE if the supplied property has been written (including
+  // the property name and the ending ',' character), and doesn't need to be
+  // processed with the default RTTI-based serializer
+  TOnTextWriterObjectProp = function(Sender: TTextWriter; Value: TObject;
+    PropInfo: pointer; Options: TTextWriterWriteObjectOptions): boolean of object;    
 
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
@@ -6718,6 +6725,7 @@ type
     fEchoBuf: RawUTF8;
     fEchoStart: integer;
     fEchos: array of TOnTextWriterEcho;
+    fOnWriteObject: TOnTextWriterObjectProp;
     /// used by WriteObjectAsString/AddDynArrayJSONAsString methods
     fInternalJSONWriter: TTextWriter;
     function GetLength: cardinal;
@@ -7358,6 +7366,8 @@ type
     // be appended instead
     // - is just a wrapper around twoEndOfLineCRLF item in CustomOptions
     property EndOfLineCRLF: boolean read GetEndOfLineCRLF write SetEndOfLineCRLF;
+    /// allows to override default WriteObject property JSON serialization
+    property OnWriteObject: TOnTextWriterObjectProp read fOnWriteObject write fOnWriteObject;
     /// the internal TStream used for storage
     // - you should call the FlushFinal (or FlushToStream) methods before using
     // this TStream content, to flush all pending characters
