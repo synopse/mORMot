@@ -12781,6 +12781,12 @@ type
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitArrayFromVariants(const Items: TVariantDynArray;
       aOptions: TDocVariantOptions=[]; ItemsCopiedByReference: boolean=true);
+    /// initialize a variant instance to store some RawUTF8 array content
+    procedure InitArrayFrom(const Items: TRawUTF8DynArray; aOptions: TDocVariantOptions); overload;
+    /// initialize a variant instance to store some 32-bit integer array content
+    procedure InitArrayFrom(const Items: TIntegerDynArray; aOptions: TDocVariantOptions); overload;
+    /// initialize a variant instance to store some 64-bit integer array content
+    procedure InitArrayFrom(const Items: TInt64DynArray; aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store document-based array content
     // - array will be initialized from the supplied variable (which would be
     // e.g. a T*ObjArray or a dynamic array), using RTTI
@@ -35161,6 +35167,45 @@ begin
     VValue := Items; // fast by-reference copy of VValue[]
     if not ItemsCopiedByReference then
       InitCopy(variant(self),aOptions);
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFrom(const Items: TRawUTF8DynArray; aOptions: TDocVariantOptions);
+var ndx: integer;
+begin
+  if Items=nil then
+    VType := varNull else begin
+    Init(aOptions,dvArray);
+    VCount := length(Items);
+    SetLength(VValue,VCount);
+    for ndx := 0 to VCount-1 do
+      RawUTF8ToVariant(Items[ndx],VValue[ndx]);
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFrom(const Items: TIntegerDynArray; aOptions: TDocVariantOptions);
+var ndx: integer;
+begin
+  if Items=nil then
+    VType := varNull else begin
+    Init(aOptions,dvArray);
+    VCount := length(Items);
+    SetLength(VValue,VCount);
+    for ndx := 0 to VCount-1 do
+      VValue[ndx] := Items[ndx];
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFrom(const Items: TInt64DynArray; aOptions: TDocVariantOptions);
+var ndx: integer;
+begin
+  if Items=nil then
+    VType := varNull else begin
+    Init(aOptions,dvArray);
+    VCount := length(Items);
+    SetLength(VValue,VCount);
+    for ndx := 0 to VCount-1 do
+      VValue[ndx] := Items[ndx];
   end;
 end;
 
