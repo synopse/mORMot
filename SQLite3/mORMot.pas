@@ -15182,6 +15182,9 @@ type
   // - rsoGetAsJsonNotAsString would always ORM GET returns true JSON instead
   // of the JSON text stored in database fields, i.e. always forcing 
   // TSQLRestServerURIContext.ClientWriteAsJsonNotAsString=true
+  // - unauthenticated requests from browsers (i.e. not Delphi clients) may
+  // be redirected to the TSQLRestServer.Auth() method via rsoRedirectForbiddenToAuth
+  // (e.g. for TSQLRestServerAuthenticationHttpBasic popup)
   // - some REST/AJAX clients may expect to return status code 204 as
   // instead of 200 in case of a successful operation, but with no returned
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
@@ -15197,6 +15200,7 @@ type
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
+    rsoRedirectForbiddenToAuth,
     rsoHtml200WithNoBodyReturns204,
     rsoAddUpdateReturnsContent,
     rsoComputeFieldsBeforeWriteOnServerSide);
@@ -38113,6 +38117,8 @@ begin
         Ctxt.AuthenticationFailed(afInvalidSignature) else
       if (Ctxt.Service<>nil) and
           not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
+        if (rsoRedirectForbiddenToAuth in Options) and (Ctxt.ClientKind=ckAjax) then
+          Ctxt.Redirect(Model.Root+'/auth') else
         Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
@@ -47923,6 +47929,8 @@ begin
         if Session<>nil then begin
           // see TSQLRestServerAuthenticationHttpAbstract.ClientSessionSign()
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
+          if (rsoRedirectForbiddenToAuth in fServer.Options) and (Ctxt.ClientKind=ckAjax) then
+            Ctxt.Redirect(fServer.Model.Root) else
           with Session.User do
           Ctxt.Returns(['result',Session.IDCardinal,'logonid',IDValue,
             'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
