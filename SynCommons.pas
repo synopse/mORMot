@@ -3280,7 +3280,7 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
-function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer; 
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -13710,25 +13710,29 @@ var
 { ******************* process monitoring / statistics ********************** }
 
 type
-  /// the kind of value stored in TSynMonitor / TSynMonitorUsage
-  // - i.e. match TSynMonitorMicroSec, TSynMonitorOneMicroSec, TSynMonitorBytes,
+  /// the kind of value stored in a TSynMonitor / TSynMonitorUsage property
+  // - i.e. match TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec, TSynMonitorTotalBytes,
   // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
-  // TSynMonitorCount/TSynMonitorCount64 types as used to store statistic information
-  // - default "cumulative" values would sum each process values, e.g. total
-  // elapsed time for SOA execution, count or total I/O bytes
+  // TSynMonitorCount64 types as used to store statistic information
+  // - "cumulative" values would sum each process values, e.g. total elapsed
+  // time for SOA execution, task count or total I/O bytes
   // - "immediate" (e.g. svOneBytes or smvBytesPerSec) values would be an evolving
   // single value, e.g. an average value or current disk free size
-  TSynMonitorValue = (
+  // - use SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvBytesPerSec]
+  // constant to identify the kind of value
+  // - TSynMonitorUsage.Track() would use MonitorPropUsageValue() to guess
+  // the tracked properties type from class RTTI
+  TSynMonitorType = (
     smvUndefined, smvMicroSec, smvOneMicroSec,
     smvBytes, smvOneBytes, smvBytesPerSec, smvCount, smvCount64);
   /// value types as stored in TSynMonitor / TSynMonitorUsage
-  TSynMonitorValues = set of TSynMonitorValue;
+  TSynMonitorTypes = set of TSynMonitorType;
 
   /// would identify a cumulative time process information in micro seconds, during monitoring
   // - "cumulative" time would add each process timing, e.g. for statistics about
   // SOA computation of a given service
   // - any property defined with this type would be identified by TSynMonitorUsage
-  TSynMonitorMicroSec = type QWord;
+  TSynMonitorTotalMicroSec = type QWord;
 
   /// would identify an immediate time process information in micro seconds, during monitoring
   // - "immediate" time won't accumulate, i.e. may store the duration of the
@@ -13739,7 +13743,7 @@ type
   /// would identify a process information as cumulative bytes count, during monitoring
   // - "cumulative" size would add some byte for each process, e.g. input/output
   // - any property defined with this type would be identified by TSynMonitorUsage
-  TSynMonitorBytes = type QWord;
+  TSynMonitorTotalBytes = type QWord;
 
   /// would identify an immediate process information as bytes count, during monitoring
   // - "immediate" size won't accumulate, i.e. may be e.g. computer free memory
@@ -13775,9 +13779,9 @@ type
     iStart,iStop,iResume,iLast: Int64;
     iFreq: Int64;
     /// contains the time elapsed in micro seconds between Start and Stop
-    iTime: TSynMonitorMicroSec;
+    iTime: TSynMonitorTotalMicroSec;
     /// contains the time elapsed in micro seconds between Resume and Pause
-    iLastTime: TSynMonitorMicroSec;
+    iLastTime: TSynMonitorOneMicroSec;
     fPauseCount: TSynMonitorCount;
   public
     /// initialize the timer
@@ -13836,14 +13840,14 @@ type
     function Time: RawUTF8;
     /// time elapsed in micro seconds after counter stopped
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property TimeInMicroSec: TSynMonitorMicroSec read iTime write iTime;
+    property TimeInMicroSec: TSynMonitorTotalMicroSec read iTime write iTime;
     /// textual representation of last process timing after counter stopped
     // - with appened time resolution (us,ms,s)
     // - not to be used in normal code, but e.g. for custom performance analysis
     function LastTime: RawUTF8;
     /// timing in micro seconds of the last process
     // - not to be used in normal code, but e.g. for custom performance analysis
-    property LastTimeInMicroSec: TSynMonitorMicroSec read iLastTime write iLastTime;
+    property LastTimeInMicroSec: TSynMonitorOneMicroSec read iLastTime write iLastTime;
     /// how many times the Pause method was called, i.e. the number of tasks
     // processeed
     property PauseCount: TSynMonitorCount read fPauseCount;
@@ -13901,7 +13905,7 @@ type
   // - "cumulative" time would add each process value, e.g. SOA methods execution
   TSynMonitorTime = class
   protected
-    fMicroSeconds: TSynMonitorMicroSec;
+    fMicroSeconds: TSynMonitorTotalMicroSec;
     function GetAsText: RawUTF8;
   public
     /// compute a number per second, of the current value
@@ -13909,7 +13913,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
   published
     /// micro seconds time elapsed, as raw number
-    property MicroSec: TSynMonitorMicroSec read fMicroSeconds write fMicroSeconds;
+    property MicroSec: TSynMonitorTotalMicroSec read fMicroSeconds write fMicroSeconds;
     /// micro seconds time elapsed, as '... us-ns-ms-s' text
     property Text: RawUTF8 read GetAsText;
   end;
@@ -13935,11 +13939,11 @@ type
   // - "cumulative" time would add each process value, e.g. global IO
   TSynMonitorSize = class
   protected
-    fBytes: TSynMonitorBytes;
+    fBytes: TSynMonitorTotalBytes;
     function GetAsText: RawUTF8;
   published
     /// number of bytes, as raw number
-    property Bytes: TSynMonitorBytes read fBytes write fBytes;
+    property Bytes: TSynMonitorTotalBytes read fBytes write fBytes;
     /// number of bytes, as '... B-KB-MB-GB' text
     property Text: RawUTF8 read GetAsText;
   end;
@@ -13979,7 +13983,7 @@ type
   protected
     fProcessing: boolean;
     fTaskCount: TSynMonitorCount64;
-    fInternalErrors: cardinal;
+    fInternalErrors: TSynMonitorCount;
     fLastInternalError: variant;
     fTotalTime: TSynMonitorTime;
     fLastTime: TSynMonitorOneTime;
@@ -14057,7 +14061,7 @@ type
     /// average of how many tasks did occur per second
     property PerSec: QWord read fPerSec;
     /// how many errors did occur during the processing
-    property Errors: cardinal read fInternalErrors;
+    property Errors: TSynMonitorCount read fInternalErrors;
     /// information about the last error which occured during the processing
     property LastError: variant read fLastInternalError;
   end;
@@ -14084,7 +14088,7 @@ type
     /// could be used to manage information average or sums
     procedure Sum(another: TSynMonitor); override;
   published
-    /// how many data has been hanlded during all working process
+    /// how many total data has been hanlded during all working process
     property Size: TSynMonitorSize read fSize;
     /// data processing bandwith, returned as B/KB/MB per second
     property Throughput: TSynMonitorThroughput read fThroughput;
@@ -14160,30 +14164,30 @@ type
   /// value object able to gather information about the current system memory
   TSynMonitorMemory = class(TSynPersistent)
   protected
-    FAllocatedUsed: TSynMonitorSize;
-    FAllocatedReserved: TSynMonitorSize;
+    FAllocatedUsed: TSynMonitorOneSize;
+    FAllocatedReserved: TSynMonitorOneSize;
     FMemoryLoadPercent: integer;
-    FPhysicalMemoryFree: TSynMonitorSize;
-    FVirtualMemoryFree: TSynMonitorSize;
-    FPagingFileTotal: TSynMonitorSize;
-    FPhysicalMemoryTotal: TSynMonitorSize;
-    FVirtualMemoryTotal: TSynMonitorSize;
-    FPagingFileFree: TSynMonitorSize;
+    FPhysicalMemoryFree: TSynMonitorOneSize;
+    FVirtualMemoryFree: TSynMonitorOneSize;
+    FPagingFileTotal: TSynMonitorOneSize;
+    FPhysicalMemoryTotal: TSynMonitorOneSize;
+    FVirtualMemoryTotal: TSynMonitorOneSize;
+    FPagingFileFree: TSynMonitorOneSize;
     fLastMemoryInfoRetrievedTix: cardinal;
     procedure RetrieveMemoryInfo; virtual;
-    function GetAllocatedUsed: TSynMonitorSize;
-    function GetAllocatedReserved: TSynMonitorSize;
+    function GetAllocatedUsed: TSynMonitorOneSize;
+    function GetAllocatedReserved: TSynMonitorOneSize;
     function GetMemoryLoadPercent: integer;
-    function GetPagingFileFree: TSynMonitorSize;
-    function GetPagingFileTotal: TSynMonitorSize;
-    function GetPhysicalMemoryFree: TSynMonitorSize;
-    function GetPhysicalMemoryTotal: TSynMonitorSize;
-    function GetVirtualMemoryFree: TSynMonitorSize;
-    function GetVirtualMemoryTotal: TSynMonitorSize;
+    function GetPagingFileFree: TSynMonitorOneSize;
+    function GetPagingFileTotal: TSynMonitorOneSize;
+    function GetPhysicalMemoryFree: TSynMonitorOneSize;
+    function GetPhysicalMemoryTotal: TSynMonitorOneSize;
+    function GetVirtualMemoryFree: TSynMonitorOneSize;
+    function GetVirtualMemoryTotal: TSynMonitorOneSize;
   public
-    /// initialize the class, and its nested TSynMonitorSize instances
+    /// initialize the class, and its nested TSynMonitorOneSize instances
     constructor Create; override;
-    /// finalize the class, and its nested TSynMonitorSize instances
+    /// finalize the class, and its nested TSynMonitorOneSize instances
     destructor Destroy; override;
     /// some text corresponding to current 'free/total' memory information
     // - returns e.g. '10.3 GB / 15.6 GB'
@@ -14195,26 +14199,26 @@ type
     {$endif}
   published
     /// Total of allocated memory used by the program
-    property AllocatedUsed: TSynMonitorSize read GetAllocatedUsed;
+    property AllocatedUsed: TSynMonitorOneSize read GetAllocatedUsed;
     /// Total of allocated memory reserved by the program
-    property AllocatedReserved: TSynMonitorSize read GetAllocatedReserved;
+    property AllocatedReserved: TSynMonitorOneSize read GetAllocatedReserved;
     /// Percent of memory in use for the system
     property MemoryLoadPercent: integer read GetMemoryLoadPercent;
     /// Total of physical memory for the system
-    property PhysicalMemoryTotal: TSynMonitorSize read GetPhysicalMemoryTotal;
+    property PhysicalMemoryTotal: TSynMonitorOneSize read GetPhysicalMemoryTotal;
     /// Free of physical memory for the system
-    property PhysicalMemoryFree: TSynMonitorSize read GetPhysicalMemoryFree;
+    property PhysicalMemoryFree: TSynMonitorOneSize read GetPhysicalMemoryFree;
     /// Total of paging file for the system
-    property PagingFileTotal: TSynMonitorSize read GetPagingFileTotal;
+    property PagingFileTotal: TSynMonitorOneSize read GetPagingFileTotal;
     /// Free of paging file for the system
-    property PagingFileFree: TSynMonitorSize read GetPagingFileFree;
+    property PagingFileFree: TSynMonitorOneSize read GetPagingFileFree;
     {$ifdef MSWINDOWS}
     /// Total of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
-    property VirtualMemoryTotal: TSynMonitorSize read GetVirtualMemoryTotal;
+    property VirtualMemoryTotal: TSynMonitorOneSize read GetVirtualMemoryTotal;
     /// Free of virtual memory for the system
     // - property not defined under Linux, since not applying to this OS
-    property VirtualMemoryFree: TSynMonitorSize read GetVirtualMemoryFree;
+    property VirtualMemoryFree: TSynMonitorOneSize read GetVirtualMemoryFree;
     {$endif}
   end;
 
@@ -14223,19 +14227,19 @@ type
   protected
     fName: RawUTF8;
     fVolumeName: RawUTF8;
-    fAvailableSize: TSynMonitorSize;
-    fFreeSize: TSynMonitorSize;
-    fTotalSize: TSynMonitorSize;
+    fAvailableSize: TSynMonitorOneSize;
+    fFreeSize: TSynMonitorOneSize;
+    fTotalSize: TSynMonitorOneSize;
     fLastDiskInfoRetrievedTix: cardinal;
     procedure RetrieveDiskInfo; virtual;
     function GetName: RawUTF8;
-    function GetAvailable: TSynMonitorSize;
-    function GetFree: TSynMonitorSize;
-    function GetTotal: TSynMonitorSize;
+    function GetAvailable: TSynMonitorOneSize;
+    function GetFree: TSynMonitorOneSize;
+    function GetTotal: TSynMonitorOneSize;
   public
-    /// initialize the class, and its nested TSynMonitorSize instances
+    /// initialize the class, and its nested TSynMonitorOneSize instances
     constructor Create; override;
-    /// finalize the class, and its nested TSynMonitorSize instances
+    /// finalize the class, and its nested TSynMonitorOneSize instances
     destructor Destroy; override;
     /// some text corresponding to current 'free/total' disk information
     // - could return e.g. 'D: 64.4 GB / 213.4 GB'
@@ -14247,11 +14251,11 @@ type
     property VolumeName: RawUTF8 read fVolumeName write fVolumeName;
     /// space currently available on this disk for the current user
     // - may be less then FreeSize, if user quotas are specified
-    property AvailableSize: TSynMonitorSize read GetAvailable;
+    property AvailableSize: TSynMonitorOneSize read GetAvailable;
     /// free space currently available on this disk
-    property FreeSize: TSynMonitorSize read GetFree;
+    property FreeSize: TSynMonitorOneSize read GetFree;
     /// total space
-    property TotalSize: TSynMonitorSize read GetTotal;
+    property TotalSize: TSynMonitorOneSize read GetTotal;
   end;
 
 
@@ -14647,19 +14651,19 @@ type
   end;
 
 type
-  /// 64 bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
+  /// 64-bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
   // - mapped by TSynUniqueIdentifierBits memory structure
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TSQLRecord.ID: TID properties
   TSynUniqueIdentifier = type Int64;
 
-  /// 16 bit unique process identifier, used to compute TSynUniqueIdentifier
+  /// 16-bit unique process identifier, used to compute TSynUniqueIdentifier
   // - each TSynUniqueIdentifierGenerator instance is expected to have
   // its own unique process identifier, stored as a 16 bit integer 1..65535 value
   TSynUniqueIdentifierProcess = type word;
 
   {$A-}
-  /// map 64 bit integer unique identifier internal memory structure
+  /// map 64-bit integer unique identifier internal memory structure
   // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
   // TSynUniqueIdentifierGenerator
   // - bits 0..14 map a 15 bit increasing counter (collision-free)
@@ -14716,7 +14720,7 @@ type
   end;
   {$A+}
   
-  /// points to a 64 bit integer identifier, as computed by TSynUniqueIdentifierGenerator
+  /// points to a 64-bit integer identifier, as computed by TSynUniqueIdentifierGenerator
   // - may be used to access the identifier internals, from its stored
   // Int64 or TSynUniqueIdentifier value 
   PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
@@ -14777,8 +14781,8 @@ type
 function KB(bytes: Int64): RawUTF8;
 
 /// convert a micro seconds elapsed time into a human readable value
-// - append us, ms or s symbol
-// - for us and ms, add two fractional digits
+// - append 'us', 'ms' or 's' symbol
+// - for 'us' and 'ms', add two fractional digits
 function MicroSecToString(Micro: QWord): RawUTF8;
 
 /// convert an integer value into its textual representation with thousands marked
@@ -36127,22 +36131,7 @@ end;
 
 function TDocVariantData.GetValueIndex(const aName: RawUTF8): integer;
 begin
-  {$ifdef HASINLINE}
   result := GetValueIndex(Pointer(aName),Length(aName),dvoNameCaseSensitive in VOptions);
-  {$else}
-  if Kind<>dvArray then begin
-    if dvoNameCaseSensitive in VOptions then begin
-      for result := 0 to VCount-1 do
-        if VName[result]=aName then
-          exit;
-    end else
-      for result := 0 to VCount-1 do
-        if IdemPropNameU(VName[result],aName) then
-          exit;
-    result := -1;
-  end else
-    result := GetValueIndex(Pointer(aName),Length(aName),false);
-  {$endif}
 end;
 
 function TDocVariantData.GetValueOrRaiseException(const aName: RawUTF8): variant;
@@ -45913,14 +45902,14 @@ end;
 
 constructor TSynMonitorMemory.Create;
 begin
-  FAllocatedUsed := TSynMonitorSize.create;
-  FAllocatedReserved := TSynMonitorSize.create;
-  FPhysicalMemoryFree := TSynMonitorSize.Create;
-  FVirtualMemoryFree := TSynMonitorSize.Create;
-  FPagingFileTotal := TSynMonitorSize.Create;
-  FPhysicalMemoryTotal := TSynMonitorSize.Create;
-  FVirtualMemoryTotal := TSynMonitorSize.Create;
-  FPagingFileFree := TSynMonitorSize.Create;
+  FAllocatedUsed := TSynMonitorOneSize.create;
+  FAllocatedReserved := TSynMonitorOneSize.create;
+  FPhysicalMemoryFree := TSynMonitorOneSize.Create;
+  FVirtualMemoryFree := TSynMonitorOneSize.Create;
+  FPagingFileTotal := TSynMonitorOneSize.Create;
+  FPhysicalMemoryTotal := TSynMonitorOneSize.Create;
+  FVirtualMemoryTotal := TSynMonitorOneSize.Create;
+  FPagingFileFree := TSynMonitorOneSize.Create;
 end;
 
 destructor TSynMonitorMemory.Destroy;
@@ -45965,13 +45954,13 @@ begin
 end;
 {$endif}
 
-function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorSize;
+function TSynMonitorMemory.GetAllocatedUsed: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FAllocatedUsed;
 end;
 
-function TSynMonitorMemory.GetAllocatedReserved: TSynMonitorSize;
+function TSynMonitorMemory.GetAllocatedReserved: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FAllocatedReserved;
@@ -45983,37 +45972,37 @@ begin
   result := FMemoryLoadPercent;
 end;
 
-function TSynMonitorMemory.GetPagingFileFree: TSynMonitorSize;
+function TSynMonitorMemory.GetPagingFileFree: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FPagingFileFree;
 end;
 
-function TSynMonitorMemory.GetPagingFileTotal: TSynMonitorSize;
+function TSynMonitorMemory.GetPagingFileTotal: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FPagingFileTotal;
 end;
 
-function TSynMonitorMemory.GetPhysicalMemoryFree: TSynMonitorSize;
+function TSynMonitorMemory.GetPhysicalMemoryFree: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FPhysicalMemoryFree;
 end;
 
-function TSynMonitorMemory.GetPhysicalMemoryTotal: TSynMonitorSize;
+function TSynMonitorMemory.GetPhysicalMemoryTotal: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FPhysicalMemoryTotal;
 end;
 
-function TSynMonitorMemory.GetVirtualMemoryFree: TSynMonitorSize;
+function TSynMonitorMemory.GetVirtualMemoryFree: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FVirtualMemoryFree;
 end;
 
-function TSynMonitorMemory.GetVirtualMemoryTotal: TSynMonitorSize;
+function TSynMonitorMemory.GetVirtualMemoryTotal: TSynMonitorOneSize;
 begin
   RetrieveMemoryInfo;
   result := FVirtualMemoryTotal;
@@ -46118,9 +46107,9 @@ end;
 
 constructor TSynMonitorDisk.Create;
 begin
-  fAvailableSize := TSynMonitorSize.Create;
-  fFreeSize := TSynMonitorSize.Create;
-  fTotalSize := TSynMonitorSize.Create;
+  fAvailableSize := TSynMonitorOneSize.Create;
+  fFreeSize := TSynMonitorOneSize.Create;
+  fTotalSize := TSynMonitorOneSize.Create;
 end;
 
 destructor TSynMonitorDisk.Destroy;
@@ -46137,19 +46126,19 @@ begin
   result := fName;
 end;
 
-function TSynMonitorDisk.GetAvailable: TSynMonitorSize;
+function TSynMonitorDisk.GetAvailable: TSynMonitorOneSize;
 begin
   RetrieveDiskInfo;
   result := fAvailableSize;
 end;
 
-function TSynMonitorDisk.GetFree: TSynMonitorSize;
+function TSynMonitorDisk.GetFree: TSynMonitorOneSize;
 begin
   RetrieveDiskInfo;
   result := fFreeSize;
 end;
 
-function TSynMonitorDisk.GetTotal: TSynMonitorSize;
+function TSynMonitorDisk.GetTotal: TSynMonitorOneSize;
 begin
   RetrieveDiskInfo;
   result := fTotalSize;

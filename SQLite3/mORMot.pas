@@ -4584,7 +4584,8 @@ const
 { ******************* process monitoring / statistics }
 
 type
-  /// the time period covered by TSynMonitorUsage process
+  /// the time periods covered by TSynMonitorUsage process
+  // - defines the resolution of information computed and stored  
   TSynMonitorUsageGranularity = (
     mugUndefined,
     mugMinute,
@@ -4597,11 +4598,15 @@ type
   TSynMonitorUsageGranularities = set of TSynMonitorUsageGranularity;
 
   /// how the TSynMonitorUsage storage IDs are computed
-  // - stored e.g. in TSQLMonitorUsage.ID primary key
+  // - stored e.g. in TSQLMonitorUsage.ID primary key (after a shift)
   // - it follows a 23 bit pattern of hour (5 bit), day (5 bit), month (4 bit),
   // year (9 bit - starting at 2016) so that it is monotonic over time
-  // - by default, will store mugHour granularity, but pseudo-hours of 29, 30 and
-  // 31 (see USAGE_ID_HOUR[]) would identify mugDay, mugMonth and mugYear ranges
+  // - by default, will store the information using mugHour granularity (i.e.
+  // values for the 60 minutes in a record), and pseudo-hours of 29, 30 and 31
+  // (see USAGE_ID_HOURMARKER[]) would identify mugDay, mugMonth and mugYear
+  // consolidated statistics
+  // - it would therefore store up to 24*365+365+12+1 = 9138 records per year
+  // in the associated storage engine (so there is no actual need to purge it)
   TSynMonitorUsageID = object
   public
     /// the TID, as computed from time and granularity
@@ -4613,17 +4618,17 @@ type
     /// computes an ID corresponding to mugDay granularity of a given time
     // - hours, minutes and seconds would be merged
     // - mugDay granularity would store 0..23 information about each hour
-    // - a pseudo hour of 29 (i.e. USAGE_ID_HOUR[mugDay]) is used
+    // - a pseudo hour of 29 (i.e. USAGE_ID_HOURMARKER[mugDay]) is used
     procedure From(Y,M,D: integer); overload;
     /// computes an ID corresponding to mugMonth granularity of a given time
     // - days, hours, minutes and seconds would be merged
     // - mugMonth granularity would store 0..31 information about each day
-    // - a pseudo hour of 30 (i.e. USAGE_ID_HOUR[mugMonth]) is used
+    // - a pseudo hour of 30 (i.e. USAGE_ID_HOURMARKER[mugMonth]) is used
     procedure From(Y,M: integer); overload;
     /// computes an ID corresponding to mugYear granularity of a given time
     // - months, days, hours, minutes and seconds would be merged
     // - mugYear granularity would store 0..11 information about each month
-    // - a pseudo hour of 31 (i.e. USAGE_ID_HOUR[mugYear]) is used
+    // - a pseudo hour of 31 (i.e. USAGE_ID_HOURMARKER[mugYear]) is used
     procedure From(Y: integer); overload;
     /// computes an ID corresponding to a given time
     // - will set the ID with mugHour granularity, i.e. the information about
@@ -4640,20 +4645,22 @@ type
     function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
     /// retrieve the resolution of the stored information
     // - i.e. either mugHour, mugDay, mugMonth or mugYear, which would store
-    // a true 0..23 hour value (for mugHour), or 29/30/31 pseudo-hour (for
-    // mugDay/mugMonth/mugYear, i.e. USAGE_ID_HOUR[])
+    // a true 0..23 hour value (for mugHour), or 29/30/31 pseudo-hour (i.e.
+    // USAGE_ID_HOURMARKER[mugDay/mugMonth/mugYear])
     function Granularity: TSynMonitorUsageGranularity;
     /// change the resolution of the stored information
     procedure Truncate(gran: TSynMonitorUsageGranularity);
     /// low-level read of a time field stored in this ID, per granularity
     function GetTime(gran: TSynMonitorUsageGranularity): integer;
+      {$ifdef HASINLINE}inline;{$endif}
     /// low-level modification of a time field stored in this ID, per granularity
     procedure SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
   end;
 
   TSynMonitorUsageTrackProp = record
     Info: PPropInfo;
-    Value: TSynMonitorValue;
+    /// property type, as recognized by MonitorPropUsageValue()
+    Kind: TSynMonitorType;
     Name: RawUTF8;
     Values: array[mugHour..mugYear] of TInt64DynArray;
     CumulativeOffset: Int64;
@@ -4676,6 +4683,7 @@ type
   protected
     fLog: TSynLogFamily;
     fTracked: array of TSynMonitorUsageTrack;
+    fValues: array[mugHour..mugYear] of Variant;
     fCustomWritePropGranularity: TSynMonitorUsageGranularity;
     fLastInstance: TObject;
     fLastTrack: PSynMonitorUsageTrack;
@@ -4683,25 +4691,26 @@ type
     fComment: RawUTF8;
     function TrackPropLock(Instance: TObject; Info: PPropInfo): PSynMonitorUsageTrackProp;
     // those methods would be protected (e.g. in Modified) by fSave.Lock:
-    procedure SavePrevious(const Current: TTimeLog;
-      LastReset: TSynMonitorUsageGranularity); virtual;
-    procedure Save(var ID: TSynMonitorUsageID; Gran, LastReset: TSynMonitorUsageGranularity);
+    procedure SavePrevious(Scope: TSynMonitorUsageGranularity);
+    procedure Save(ID: TSynMonitorUsageID; Gran, Scope: TSynMonitorUsageGranularity);
     function Load(const ID: TSynMonitorUsageID): boolean;
     // should be overriden with proper persistence storage:
     function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; virtual; abstract;
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; virtual; abstract;
+    // may be overriden for testing purposes
+    procedure SetCurrentUTCTime(out minutes: TTimeLogBits); virtual;
   public
     /// finalize the statistics, saving any pending information
     destructor Destroy; override;
     /// track the values of one named object instance
-    // - would recognize TSynMonitorMicroSec, TSynMonitorBytes and
-    // TSynMonitorCount properties of any (nested) object
+    // - would recognize the TSynMonitor* properties as TSynMonitorType from
+    // RTTI, using MonitorPropUsageValue(), within any (nested) object
     // - the instance would be stored in fTracked[].Instance: ensure it would
     // stay available during the whole TSynMonitorUsage process
     procedure Track(Instance: TObject; const Name: RawUTF8); overload; virtual;
     /// track the values of the given object instances
-    // - would recognize TSynMonitorMicroSec, TSynMonitorBytes and
-    // TSynMonitorCount properties of any (nested) object
+    // - would recognize the TSynMonitor* properties as TSynMonitorType from
+    // RTTI, using MonitorPropUsageValue(), within any (nested) object
     // - instances would be stored in fTracked[].Instance: ensure they would
     // stay available during the whole TSynMonitorUsage process
     procedure Track(const Instances: array of TObject; const Names: array of RawUTF8); overload;
@@ -4720,15 +4729,24 @@ const
   USAGE_ID_BITS: array[mugHour..mugYear] of byte = (5,5,4,9);
   USAGE_ID_MASK: array[mugHour..mugYear] of integer = (31,31,15,511);
   USAGE_ID_MAX: array[mugHour..mugYear] of cardinal = (23,30,11,127);
-  USAGE_ID_HOUR: array[mugHour..mugYear] of integer = (0,29,30,31);
+  USAGE_ID_HOURMARKER: array[mugDay..mugYear] of integer = (29,30,31);
   USAGE_ID_YEAROFFSET = 2016;
 
-  /// kind of "cumulative" TSynMonitorValue stored in TSynMonitor / TSynMonitorUsage
-  // - those properties would have their values reset for each granularity level 
-  SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvBytesPerSec];
+  /// kind of "cumulative" TSynMonitorType stored in TSynMonitor / TSynMonitorUsage
+  // - those properties would have their values reset for each granularity level
+  // - would recognize TSynMonitorTotalMicroSec, TSynMonitorTotalBytes,
+  // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
+  // TSynMonitorCount64 types
+  SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvCount, smvCount64];
 
 
 function ToText(gran: TSynMonitorUsageGranularity): PShortString; overload;
+
+/// guess the kind of value stored in a TSynMonitor / TSynMonitorUsage property
+// - would recognize TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec,
+// TSynMonitorTotalBytes, TSynMonitorOneBytes, TSynMonitorBytesPerSec,
+// TSynMonitorCount and TSynMonitorCount64 types from supplied RTTI
+function MonitorPropUsageValue(info: PPropInfo): TSynMonitorType;
 
 
 { ************ main ORM / SOA classes and types }
@@ -15034,39 +15052,59 @@ type
   end;
 
   /// ORM table used to store TSynMonitorUsage information
+  // - the ID primary field is the TSynMonitorUsageID shifted by 16 bits
   TSQLMonitorUsage = class(TSQLRecord)
   protected
     fGran: TSynMonitorUsageGranularity;
+    fProcess: TSynUniqueIdentifierProcess;
     fValues: variant;
     fComment: RawUTF8;
+    function GetUsageID: integer;
+    procedure SetUsageID(Value: integer);
+  public
+    /// compute the corresponding TSynMonitorUsageID.Value
+    // - according to the stored Process field 
+    property UsageID: integer read GetUsageID write SetUsageID; 
   published
+    /// the granularity of the statistics of this entry
     property Gran: TSynMonitorUsageGranularity read fGran write fGran;
+    /// identify which application is monitored
+    property Process: TSynUniqueIdentifierProcess read fProcess write fProcess;
+    /// the actual statistics information, stored as a TDocVariant JSON object
     property Values: variant read fValues write fValues;
+    /// a custom text, whic may be used e.g. by support or developpers
     property Comment: RawUTF8 read fComment write fComment;
   end;
   /// class-reference type (metaclass) of a TSQLMonitorUsage table
   TSQLMonitorUsageClass = class of TSQLMonitorUsage;
 
   /// would store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
+  // - the TSQLRecord.ID would be the TSynMonitorUsageID shifted by 16 bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
   private
   protected
     fStorage: TSQLRest;
+    fProcessID: TSynUniqueIdentifierProcess;
     fStoredClass: TSQLMonitorUsageClass;
     fStoredCache: array[mugHour..mugYear] of TSQLMonitorUsage;
     function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; override;
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; override;
   public
     /// initialize storage via ORM
-    // - if a TSynUniqueIdentifierGenerator is supplied, it would be used for
-    // actual persistence
+    // - if a TSynUniqueIdentifierProcess is supplied, it would be used to
+    // identify the generating process by shifting TSynMonitorUsageID values
     // - would use TSQLMonitorUsage table, unless another one is specified
-    constructor Create(aStorage: TSQLRest; aStoredClass: TSQLMonitorUsageClass=nil); reintroduce; virtual;
+    constructor Create(aStorage: TSQLRest; aProcessID: TSynUniqueIdentifierProcess;
+      aStoredClass: TSQLMonitorUsageClass=nil); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
   published
     /// the actual ORM class used for persistence
     property StoredClass: TSQLMonitorUsageClass read fStoredClass;
+    /// how the information could be stored for several processes
+    // - e.g. when several SOA nodes gather monitoring information in a
+    // shared (MongoDB) database     
+    property ProcessID: TSynUniqueIdentifierProcess read fProcessID;
   end;
 
 
@@ -22338,15 +22376,15 @@ begin
   result := GetEnumName(TypeInfo(TSynMonitorUsageGranularity),ord(gran));
 end;
 
-function UsageValue(info: PPropInfo): TSynMonitorValue;
+function MonitorPropUsageValue(info: PPropInfo): TSynMonitorType;
 var typ: pointer;
 begin
   typ := info^.PropType{$ifndef FPC}^{$endif};
-  if typ=TypeInfo(TSynMonitorMicroSec) then
+  if typ=TypeInfo(TSynMonitorTotalMicroSec) then
     result := smvMicroSec else
   if typ=TypeInfo(TSynMonitorOneMicroSec) then
     result := smvOneMicroSec else
-  if typ=TypeInfo(TSynMonitorBytes) then
+  if typ=TypeInfo(TSynMonitorTotalBytes) then
     result := smvBytes else
   if typ=TypeInfo(TSynMonitorOneBytes) then
     result := smvOneBytes else
@@ -22364,31 +22402,35 @@ procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
   procedure ClassTrackProps(ClassType: TClass; var Props: TSynMonitorUsageTrackPropDynArray);
   var i,n: integer;
       nfo: PPropInfo;
-      v: TSynMonitorValue;
+      k: TSynMonitorType;
       g: TSynMonitorUsageGranularity;
       p: PSynMonitorUsageTrackProp;
+      parent: TClass;
   begin
     n := length(Props);
     while ClassType<>nil do begin
+      parent := ClassType.ClassParent;
       for i := 1 to InternalClassPropInfo(ClassType,nfo) do begin
-        v := UsageValue(nfo);
-        if v<>smvUndefined then begin
+        k := MonitorPropUsageValue(nfo);
+        if k<>smvUndefined then begin
           SetLength(Props,n+1);
           p := @Props[n];
           p^.Info := nfo;
-          p^.Value := v;
+          p^.Kind := k;
           p^.Name := ShortStringToAnsi7String(nfo^.Name);
+          if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
+            p^.Name := RawUTF8(parent.ClassName); // meaningful property name
           for g := mugHour to mugYear do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
-          if v in SYNMONITORVALUE_CUMULATIVE then begin
-            p^.CumulativeLast := p^.CumulativeOffset;
+          if k in SYNMONITORVALUE_CUMULATIVE then begin
             p^.CumulativeOffset := nfo^.GetInt64Value(Instance);
+            p^.CumulativeLast := p^.CumulativeOffset;
           end;
           inc(n);
         end;
         nfo := nfo^.Next;
       end;
-      ClassType := ClassType.ClassParent;
+      ClassType := parent;
     end;
   end;
 
@@ -22450,120 +22492,141 @@ end;
 
 const
   // maps TTimeLogbits mask
-  TL_SECONDS = pred(1 shl 6);
-  TL_MINUTES = pred(1 shl 12);
-  TL_HOURS = pred(1 shl 17);
-  TL_DAYS = pred(1 shl 22);
-  TL_MONTHS = pred(1 shl 26);
+  TL_MASK_SECONDS = pred(1 shl 6);
+  TL_MASK_MINUTES = pred(1 shl 12);
+  TL_MASK_HOURS = pred(1 shl 17);
+  TL_MASK_DAYS = pred(1 shl 22);
+  TL_MASK_MONTHS = pred(1 shl 26);
+  // truncates a TTimeLogbits value to a granularity
+  AS_MINUTES = not TL_MASK_SECONDS;
+  AS_HOURS = not TL_MASK_MINUTES;
+  AS_DAYS = not TL_MASK_HOURS;
+  AS_MONTHS = not TL_MASK_DAYS;
+  AS_YEARS = not TL_MASK_MONTHS;
 
 procedure TSynMonitorUsage.Modified(Instance: TObject);
 begin
   Modified(Instance,[]);
 end;
 
+procedure TSynMonitorUsage.SetCurrentUTCTime(out minutes: TTimeLogBits);
+begin
+  minutes.FromUTCTime;
+end;
+
 procedure TSynMonitorUsage.Modified(Instance: TObject;
   const PropNames: array of RawUTF8);
-var i,j,min: integer;
+var i,j,k,min: integer;
     track: PSynMonitorUsageTrack;
     minutes: TTimeLogBits;
     v: Int64;
+  function scope(var prev,current: Int64): TSynMonitorUsageGranularity;
+  begin
+    if prev and AS_YEARS<>current and AS_YEARS then
+      result := mugYear else
+    if prev and AS_MONTHS<>current and AS_MONTHS then
+      result := mugMonth else
+    if prev and AS_DAYS<>current and AS_DAYS then
+      result := mugDay else
+    if prev and AS_HOURS<>current and AS_HOURS then
+      result := mugHour else
+    if prev<>current then
+      result := mugMinute else
+      result := mugUndefined;
+  end;
 begin
   fSafe.Lock;
   try
     for i := 0 to length(fTracked)-1 do
-      if fTracked[i].Instance=Instance then begin
-        track := @fTracked[i];
-        minutes.FromUTCTime;
-        minutes.Value := minutes.Value and not TL_SECONDS;
-        if fPrevious.Value<>minutes.Value then
-          SavePrevious(minutes.Value,mugUndefined); 
-        min := minutes.Minute;
-        for j := 0 to length(track^.Props)-1 do
-          with track^.Props[j] do
-            if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
-              v := Info^.GetInt64Value(Instance);
-              if Value in SYNMONITORVALUE_CUMULATIVE then begin
-                if CumulativeMin<>minutes.Value then begin
-                  CumulativeMin := minutes.Value;
-                  CumulativeOffset := CumulativeLast;
-                end;
-                CumulativeLast := v;
-                dec(v,CumulativeOffset);
-              end;
-              Values[mugHour][min] := v;
-            end;
-        exit;
+    if fTracked[i].Instance=Instance then begin
+      track := @fTracked[i];
+      SetCurrentUTCTime(minutes);
+      minutes.Value := minutes.Value and AS_MINUTES;
+      if fPrevious.Value<>minutes.Value then begin
+        if fPrevious.Value<>0 then // something to save
+          SavePrevious(scope(fPrevious.Value,minutes.Value));
+        fPrevious.Value := minutes.Value;
       end;
+      min := minutes.Minute;
+      for j := 0 to length(track^.Props)-1 do
+        with track^.Props[j] do
+        if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
+          v := Info^.GetInt64Value(Instance);
+          if Kind in SYNMONITORVALUE_CUMULATIVE then begin
+            if CumulativeMin<>minutes.Value then begin
+              CumulativeMin := minutes.Value;
+              CumulativeOffset := CumulativeLast;
+            end;
+            CumulativeLast := v;
+            dec(v,CumulativeOffset);
+            Values[mugHour][min] := v;
+          end else
+            for k := min to 59 do // make instant values continous
+              Values[mugHour][min] := v;
+        end;
+      exit;
+    end;
   finally
     fSafe.UnLock;
   end;
 end;
 
 destructor TSynMonitorUsage.Destroy;
-var time: TTimeLogBits;
 begin
-  time.FromUTCTime;
-  time.Value := time.Value and not TL_SECONDS;
-  SavePrevious(time.Value,mugMinute);
+  SavePrevious(mugUndefined); // save pending values for all granularities
   inherited Destroy;
 end;
 
-procedure TSynMonitorUsage.SavePrevious(const Current: TTimeLog;
-  LastReset: TSynMonitorUsageGranularity);
-var id: TSynMonitorUsageID;
-    prev: TTimeLog;
-    g: TSynMonitorUsageGranularity;
+procedure TSynMonitorUsage.SavePrevious(Scope: TSynMonitorUsageGranularity);
+var g: TSynMonitorUsageGranularity;
+    id: TSynMonitorUsageID;
 begin
-  prev := fPrevious.Value;
-  if prev=0 then
-    exit; // nothing to save
-  id.FromTimeLog(prev);
-  if LastReset=mugUndefined then
-    if prev<>Current then
-      LastReset := mugMinute else
-    if prev and not TL_MINUTES<>Current and not TL_MINUTES then
-      LastReset := mugHour else
-    if prev and not TL_HOURS<>Current and not TL_HOURS then
-      LastReset := mugDay else
-    if prev and not TL_DAYS<>Current and not TL_DAYS then
-      LastReset := mugMonth else
-    if prev and not TL_MONTHS<>Current and not TL_MONTHS then
-      LastReset := mugYear;
-  Save(id,mugHour,LastReset);
+  id.FromTimeLog(fPrevious.Value);
+  Save(id,mugHour,Scope); // always save current minutes values
   for g := mugDay to mugYear do
-    if g>LastReset then
-      break else
-      Save(id,g,LastReset);
-  fPrevious.Value := Current;
+    if (Scope<>mugUndefined) and (g>Scope) then
+      break else // mugUndefined from Destroy
+      Save(id,g,Scope);
 end;
 
-procedure TSynMonitorUsage.Save(var ID: TSynMonitorUsageID;
-  Gran,LastReset: TSynMonitorUsageGranularity);
+procedure TSynMonitorUsage.Save(ID: TSynMonitorUsageID;
+  Gran,Scope: TSynMonitorUsageGranularity);
 var t,n,p: Integer;
     track: PSynMonitorUsageTrack;
-    inst,data,val: TDocVariantData;
+    data,val: TDocVariantData;
 begin
-  ID.Truncate(Gran);
-  inst.InitFast(length(fTracked),dvObject);
+  TDocVariant.IsOfTypeOrNewFast(fValues[Gran]);
   for t := 0 to length(fTracked)-1 do begin
     track := @fTracked[t];
     n := length(track^.Props);
     data.InitFast(n,dvObject);
     for p := 0 to n-1 do
     with track^.Props[p] do
-      if not IsZero(Values[gran]) then begin
-        val.InitArrayFrom(Values[gran],JSON_OPTIONS_FAST);
+      if not IsZero(Values[Gran]) then begin
+        // save non void values
+        val.InitArrayFrom(Values[Gran],JSON_OPTIONS_FAST);
         data.AddValue(Name,Variant(val));
         val.Clear;
-        if gran<=LastReset then
-          if Value in SYNMONITORVALUE_CUMULATIVE then
-            FillZero(Values[gran]);
+        // handle local cache
+        if Kind in SYNMONITORVALUE_CUMULATIVE then begin
+          if Gran<=Scope then // reset of cumulative values
+            FillZero(Values[Gran]);
+          if Scope<>mugUndefined then begin // this is not from Destroy
+            // FIXME: propagate cumulative values to higher granularities
+          end;
+        end else begin
+          if Gran<mugYear then // propagate instant values
+            // e.g. Values[mugDay][hour] := Values[mugHour][minute] (=v)
+            Values[succ(Gran)][ID.GetTime(Gran)] :=
+              Values[Gran][ID.GetTime(pred(Gran))];
+        end;
       end;
-    inst.AddValue(track^.Name,variant(data));
+    _Safe(fValues[Gran]).AddOrUpdateValue(track^.Name,variant(data));
     data.Clear;
   end;
-  inst.SortByName;
-  if not SaveDB(ID.Value,variant(inst),Gran) then
+  _Safe(fValues[Gran]).SortByName;
+  ID.Truncate(Gran);
+  if not SaveDB(ID.Value,fValues[Gran],Gran) then
     fLog.SynLog.Log(sllWarning,'%.Save(ID=%=%,%) failed',
       [ClassType,ID.Value,ID.Text(true),ToText(Gran)^]);
 end;
@@ -22571,14 +22634,13 @@ end;
 function TSynMonitorUsage.Load(const ID: TSynMonitorUsageID): boolean;
 var t,p,v: Integer;
     track: PSynMonitorUsageTrack;
-    data: variant;
     gran: TSynMonitorUsageGranularity;
     val,int: PDocVariantData;
 begin
   gran := ID.Granularity;
-  result := LoadDB(ID.Value,gran,data);
+  result := LoadDB(ID.Value,gran,fValues[gran]);
   if result then
-    with _Safe(data)^ do begin
+    with _Safe(fValues[gran])^ do begin
       for t := 0 to length(fTracked)-1 do begin
         track := @fTracked[t];
         val := GetAsDocVariantSafe(track^.Name);
@@ -22589,7 +22651,9 @@ begin
              (int^.Count>0) and (int^.Kind=dvArray) then begin
             for v := 0 to length(Values[gran]) do
               if v<int^.Count then
-                Values[gran][v] := VariantToInt64Def(int^.Values[v],0);
+                Values[gran][v] := VariantToInt64Def(int^.Values[v],0) else
+                fLog.SynLog.Log(sllWarning,'%.Load(ID=%=%) % failed v=%<count=%',
+                  [ClassType,ID.Value,ID.Text(true),ToText(Gran)^,v,int^.count]);
           end;
         end;
       end;
@@ -22607,19 +22671,19 @@ end;
 
 procedure TSynMonitorUsageID.From(Y, M, D: integer);
 begin
-  Value := USAGE_ID_HOUR[mugDay]+(D-1) shl USAGE_ID_SHIFT[mugDay]+
+  Value := USAGE_ID_HOURMARKER[mugDay]+(D-1) shl USAGE_ID_SHIFT[mugDay]+
     (M-1) shl USAGE_ID_SHIFT[mugMonth]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
 end;
 
 procedure TSynMonitorUsageID.From(Y, M: integer);
 begin
-  Value := USAGE_ID_HOUR[mugMonth]+(M-1) shl USAGE_ID_SHIFT[mugMonth]+
+  Value := USAGE_ID_HOURMARKER[mugMonth]+(M-1) shl USAGE_ID_SHIFT[mugMonth]+
     (Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
 end;
 
 procedure TSynMonitorUsageID.From(Y: integer);
 begin
-  Value := USAGE_ID_HOUR[mugYear]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
+  Value := USAGE_ID_HOURMARKER[mugYear]+(Y-USAGE_ID_YEAROFFSET)shl USAGE_ID_SHIFT[mugYear];
 end;
 
 procedure TSynMonitorUsageID.FromTimeLog(const TimeLog: TTimeLog);
@@ -22640,16 +22704,17 @@ end;
 function TSynMonitorUsageID.GetTime(gran: TSynMonitorUsageGranularity): integer;
 begin
   if not (gran in [low(USAGE_ID_SHIFT)..high(USAGE_ID_SHIFT)]) then
-    raise ERangeError.CreateFmt('GetValue(%s)',[ToText(gran)^]);
-  result := (Value shr USAGE_ID_SHIFT[gran]) and USAGE_ID_MASK[gran];
-  case gran of
-  mugYear:
-    inc(result,USAGE_ID_YEAROFFSET);
-  mugDay, mugMonth:
-    inc(result);
-  mugHour:
-    if result>23 then
-      result := 0; // stored fake USAGE_ID_HOUR[mugHour..mugYear] value
+    result := 0 else begin
+    result := (Value shr USAGE_ID_SHIFT[gran]) and USAGE_ID_MASK[gran];
+    case gran of
+    mugYear:
+      inc(result,USAGE_ID_YEAROFFSET);
+    mugDay, mugMonth:
+      inc(result);
+    mugHour:
+      if cardinal(result)>USAGE_ID_MAX[mugHour] then
+        result := 0; // stored fake USAGE_ID_HOURMARKER[mugDay..mugYear] value
+    end;
   end;
 end;
 
@@ -22657,16 +22722,19 @@ function TSynMonitorUsageID.Granularity: TSynMonitorUsageGranularity;
 var h: integer;
 begin
   h := Value and USAGE_ID_MASK[mugHour];
-  for result := mugDay to mugYear do
-    if USAGE_ID_HOUR[result]=h then
-      exit; // found granularity marker
-  result := mugHour;
+  if cardinal(h)>USAGE_ID_MAX[mugHour] then begin
+    for result := mugDay to mugYear do
+      if USAGE_ID_HOURMARKER[result]=h then
+        exit;
+    result := mugUndefined; // should not happen
+  end else
+    result := mugHour;
 end;
 
 procedure TSynMonitorUsageID.Truncate(gran: TSynMonitorUsageGranularity);
 begin
   if gran>mugHour then
-    Value := Value and (not USAGE_ID_MASK[mugHour]) or USAGE_ID_HOUR[gran];
+    Value := Value and (not USAGE_ID_MASK[mugHour]) or USAGE_ID_HOURMARKER[gran];
 end;
 
 procedure TSynMonitorUsageID.SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
@@ -40496,10 +40564,26 @@ begin
 end;
 
 
+
+{ TSQLMonitorUsage }
+
+const
+  SQLMONITORSHIFT = 16;
+
+function TSQLMonitorUsage.GetUsageID: integer;
+begin
+  result := fID shr SQLMONITORSHIFT;
+end;
+
+procedure TSQLMonitorUsage.SetUsageID(Value: integer);
+begin
+  fID := (Int64(Value) shl SQLMONITORSHIFT) or Int64(fProcess);
+end;
+
 { TSynMonitorUsageRest }
 
 constructor TSynMonitorUsageRest.Create(aStorage: TSQLRest;
-  aStoredClass: TSQLMonitorUsageClass);
+  aProcessID: TSynUniqueIdentifierProcess; aStoredClass: TSQLMonitorUsageClass);
 var g: TSynMonitorUsageGranularity;
 begin
   if (aStorage=nil) or (aStoredClass=nil) then
@@ -40510,6 +40594,7 @@ begin
   fStorage := aStorage;
   for g := low(fStoredCache) to high(fStoredCache) do
     fStoredCache[g] := fStoredClass.Create;
+  fProcessID := aProcessID;
   fLog := fStorage.LogFamily;
   inherited Create;
 end;
@@ -40524,18 +40609,27 @@ end;
 
 function TSynMonitorUsageRest.LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity;
   out Track: variant): boolean;
+var recid: TID;
+    rec: TSQLMonitorUsage;
 begin
-  if Gran<Low(fStoredCache) then
-    result := false else
-  if fStoredCache[Gran].IDValue=ID then
+  if (ID=0) or (Gran<Low(fStoredCache)) then begin
+    result := false;
+    exit;
+  end;
+  rec := fStoredCache[Gran];
+  recid := (Int64(ID) shl SQLMONITORSHIFT) or Int64(fProcessID);
+  if rec.IDValue=recid then
     result := true else
-  if fStorage.Retrieve(ID,fStoredCache[Gran]) then begin // may use REST cache
-    Track := fStoredCache[Gran].Values;
-    if fStoredCache[Gran].Gran=mugHour then
-      fComment := fStoredCache[Gran].Comment;
+  if fStorage.Retrieve(recid,rec) then begin // may use REST cache
+    Track := rec.Values;
+    if rec.Gran=mugHour then
+      fComment := rec.Comment;
+    if rec.Process<>fProcessID then
+      fLog.SynLog.Log(sllWarning,'%.LoadDB(%,%) received Process=%, expected %',
+        [ClassType,ID,ToText(Gran)^,rec.Process,fProcessID]);
     result := true;
   end else begin
-    fStoredCache[Gran].ClearProperties;
+    rec.ClearProperties;
     result := false;
   end;
 end;
@@ -40543,23 +40637,28 @@ end;
 function TSynMonitorUsageRest.SaveDB(ID: integer; const Track: variant;
   Gran: TSynMonitorUsageGranularity): boolean;
 var update: boolean;
+    recid: TID;
+    rec: TSQLMonitorUsage;
 begin
   if (ID=0) or (Gran<Low(fStoredCache)) then begin
     result := false;
     exit;
   end;
-  if fStoredCache[Gran].IDValue=ID then // already available
+  rec := fStoredCache[Gran];
+  recid := (Int64(ID) shl SQLMONITORSHIFT) or Int64(fProcessID);
+  if rec.IDValue=recid then // already available
     update := true else begin
-    update := fStorage.Retrieve(ID,fStoredCache[Gran]); // may use cache
-    fStoredCache[Gran].IDValue := ID;
+    update := fStorage.Retrieve(recid,rec); // may use REST cache
+    rec.IDValue := recid;
   end;
-  fStoredCache[Gran].Gran := Gran;
+  rec.Gran := Gran;
+  rec.Process := fProcessID;
   if Gran=mugHour then
-    fStoredCache[Gran].Comment := fComment;
-  fStoredCache[Gran].Values := Track;
+    rec.Comment := fComment;
+  rec.Values := Track;
   if update then
-    result := fStorage.Update(fStoredCache[Gran]) else
-    result := fStorage.Add(fStoredCache[Gran],true,true)=ID;
+    result := fStorage.Update(rec) else
+    result := fStorage.Add(rec,true,true)=recid;
 end;
 
 
