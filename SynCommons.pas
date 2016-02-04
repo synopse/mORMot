@@ -22916,9 +22916,12 @@ begin
 end;
 
 function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+var NameLen: integer;
 begin
+  NameLen := Length(Name);
   for result := 0 to high(Names) do
-    if IdemPropNameU(Names[result],Name) then
+    if (Length(Names[result])=NameLen) and
+       IdemPropNameUSameLen(pointer(Names[result]),pointer(Name),NameLen) then
       exit;
   result := -1;
 end;
