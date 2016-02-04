@@ -20960,74 +20960,31 @@ end;
 {$endif}
 
 function IdemPropName(const P1,P2: shortstring): boolean; overload;
-var i,j: integer;
 begin
-  result := false;
-  if P1[0]<>P2[0] then
-    exit;
-  j := 1;
-  for i := 1 to ord(P1[0]) shr 2 do
-    if (PCardinal(@P1[j])^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to ord(P1[0]) do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
-      exit;
-  result := true;
+  if P1[0]=P2[0] then
+    result := IdemPropNameUSameLen(@P1[1],@P2[1],ord(P2[0])) else
+    result := false;
 end;
 
 function IdemPropName(const P1: shortstring; P2: PUTF8Char; P2Len: integer): boolean; overload;
-var i,j: integer;
 begin
-  result := false;
-  if ord(P1[0])<>P2Len then
-    exit;
-  dec(P2);
-  j := 1;
-  for i := 1 to P2Len shr 2 do
-    if (PCardinal(@P1[j])^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to P2Len do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
-      exit;
-  result := true;
+  if ord(P1[0])=P2Len then
+    result := IdemPropNameUSameLen(@P1[1],P2,P2Len) else
+    result := false;
 end;
 
 function IdemPropName(P1,P2: PUTF8Char; P1Len,P2Len: integer): boolean; overload;
-var i,j: integer;
 begin
-  result := false;
-  if P1Len<>P2Len then
-    exit;
-  dec(P1);
-  dec(P2);
-  j := 1;
-  for i := 1 to P2Len shr 2 do
-    if (PCardinal(@P1[j])^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to P2Len do
-    if (ord(P1[i]) xor ord(P2[i])) and $df<>0 then
-      exit;
-  result := true;
+  if P1Len=P2Len then
+    result := IdemPropNameUSameLen(P1,P2,P2Len) else
+    result := false;
 end;
 
 function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolean;
-var i,j: integer;
 begin
-  result := false;
-  if length(P1)<>P2Len then
-    exit;
-  j := 0;
-  for i := 1 to P2Len shr 2 do
-    if (PCardinal(PtrInt(P1)+j)^ xor PCardinal(@P2[j])^) and $dfdfdfdf<>0 then
-      exit else
-      inc(j,4);
-  for i := j to P2Len-1 do
-    if (PByteArray(P1)^[i] xor ord(P2[i])) and $df<>0 then
-      exit;
-  result := true;
+  if length(P1)=P2Len then
+    result := IdemPropNameUSameLen(pointer(P1),P2,P2Len) else
+    result := false;
 end;
 
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean;
