@@ -12475,6 +12475,9 @@ type
     // !  ...
     class procedure NewFast(out aValue: variant); overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// ensure a variant is a TDocVariant instance
+    // - if aValue is not a TDocVariant, will create a new JSON_OPTIONS[true]
+    class procedure IsOfTypeOrNewFast(var aValue: variant);
     /// initialize several variant instances to store document-based content
     // - replace several calls to TDocVariantData.InitFast
     // - to be used e.g. as
@@ -37070,6 +37073,14 @@ end;
 
 class procedure TDocVariant.NewFast(out aValue: variant);
 begin
+  TDocVariantData(aValue).InitFast;
+end;
+
+class procedure TDocVariant.IsOfTypeOrNewFast(var aValue: variant);
+begin
+  if DocVariantType.IsOfType(aValue) then
+    exit;
+  VarClear(aValue);
   TDocVariantData(aValue).InitFast;
 end;
 
