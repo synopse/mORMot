@@ -4663,9 +4663,7 @@ type
     Kind: TSynMonitorType;
     Name: RawUTF8;
     Values: array[mugHour..mugYear] of TInt64DynArray;
-    CumulativeOffset: Int64;
     CumulativeLast: Int64;
-    CumulativeMin: TTimeLog;
   end;
   TSynMonitorUsageTrackPropDynArray = array of TSynMonitorUsageTrackProp;
   TSynMonitorUsageTrack = record
@@ -4693,7 +4691,8 @@ type
     // those methods would be protected (e.g. in Modified) by fSave.Lock:
     procedure SavePrevious(Scope: TSynMonitorUsageGranularity);
     procedure Save(ID: TSynMonitorUsageID; Gran, Scope: TSynMonitorUsageGranularity);
-    function Load(const ID: TSynMonitorUsageID): boolean;
+    function Load(const Time: TTimeLogBits): boolean;
+    procedure LoadTrack(var Track: TSynMonitorUsageTrack);
     // should be overriden with proper persistence storage:
     function SaveDB(ID: integer; const Track: variant; Gran: TSynMonitorUsageGranularity): boolean; virtual; abstract;
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; virtual; abstract;
@@ -22422,10 +22421,8 @@ procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
             p^.Name := RawUTF8(parent.ClassName); // meaningful property name
           for g := mugHour to mugYear do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
-          if k in SYNMONITORVALUE_CUMULATIVE then begin
-            p^.CumulativeOffset := nfo^.GetInt64Value(Instance);
-            p^.CumulativeLast := p^.CumulativeOffset;
-          end;
+          if k in SYNMONITORVALUE_CUMULATIVE then
+            p^.CumulativeLast := nfo^.GetInt64Value(Instance);
           inc(n);
         end;
         nfo := nfo^.Next;
@@ -22455,7 +22452,9 @@ begin
     fTracked[n].Name := instanceName;
     ClassTrackProps(Instance.ClassType,fTracked[n].Props);
     if fTracked[n].Props=nil then
-      SetLength(fTracked,n); // nothing to track
+      SetLength(fTracked,n) else // nothing to track
+      if fPrevious.Value<>0 then
+        LoadTrack(fTracked[n]);
   finally
     fSafe.UnLock;
   end;
@@ -22516,10 +22515,6 @@ end;
 
 procedure TSynMonitorUsage.Modified(Instance: TObject;
   const PropNames: array of RawUTF8);
-var i,j,k,min: integer;
-    track: PSynMonitorUsageTrack;
-    minutes: TTimeLogBits;
-    v: Int64;
   function scope(var prev,current: Int64): TSynMonitorUsageGranularity;
   begin
     if prev and AS_YEARS<>current and AS_YEARS then
@@ -22534,32 +22529,38 @@ var i,j,k,min: integer;
       result := mugMinute else
       result := mugUndefined;
   end;
+var i,j,k,min: integer;
+    track: PSynMonitorUsageTrack;
+    time: TTimeLogBits;
+    v,diff: Int64;
 begin
   fSafe.Lock;
   try
     for i := 0 to length(fTracked)-1 do
     if fTracked[i].Instance=Instance then begin
       track := @fTracked[i];
-      SetCurrentUTCTime(minutes);
-      minutes.Value := minutes.Value and AS_MINUTES;
-      if fPrevious.Value<>minutes.Value then begin
-        if fPrevious.Value<>0 then // something to save
-          SavePrevious(scope(fPrevious.Value,minutes.Value));
-        fPrevious.Value := minutes.Value;
+      SetCurrentUTCTime(time);
+      time.Value := time.Value and AS_MINUTES; // save every minute
+      if fPrevious.Value<>time.Value then begin
+        if fPrevious.Value=0 then // startup?
+          Load(time) else
+          SavePrevious(scope(fPrevious.Value,time.Value)); 
+        fPrevious.Value := time.Value;
       end;
-      min := minutes.Minute;
+      min := time.Minute;
       for j := 0 to length(track^.Props)-1 do
         with track^.Props[j] do
         if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
           v := Info^.GetInt64Value(Instance);
           if Kind in SYNMONITORVALUE_CUMULATIVE then begin
-            if CumulativeMin<>minutes.Value then begin
-              CumulativeMin := minutes.Value;
-              CumulativeOffset := CumulativeLast;
+            diff := v-CumulativeLast;
+            if diff<>0 then begin
+              CumulativeLast := v;
+              inc(Values[mugHour][min],diff);
+              inc(Values[mugDay][time.Hour],diff); // propagate
+              inc(Values[mugMonth][time.Day],diff);
+              inc(Values[mugYear][time.Month],diff);
             end;
-            CumulativeLast := v;
-            dec(v,CumulativeOffset);
-            Values[mugHour][min] := v;
           end else
             for k := min to 59 do // make instant values continous
               Values[mugHour][min] := v;
@@ -22611,9 +22612,6 @@ begin
         if Kind in SYNMONITORVALUE_CUMULATIVE then begin
           if Gran<=Scope then // reset of cumulative values
             FillZero(Values[Gran]);
-          if Scope<>mugUndefined then begin // this is not from Destroy
-            // FIXME: propagate cumulative values to higher granularities
-          end;
         end else begin
           if Gran<mugYear then // propagate instant values
             // e.g. Values[mugDay][hour] := Values[mugHour][minute] (=v)
@@ -22631,33 +22629,42 @@ begin
       [ClassType,ID.Value,ID.Text(true),ToText(Gran)^]);
 end;
 
-function TSynMonitorUsage.Load(const ID: TSynMonitorUsageID): boolean;
-var t,p,v: Integer;
-    track: PSynMonitorUsageTrack;
-    gran: TSynMonitorUsageGranularity;
+procedure TSynMonitorUsage.LoadTrack(var Track: TSynMonitorUsageTrack);
+var p,v: Integer;
+    g: TSynMonitorUsageGranularity;
     val,int: PDocVariantData;
-begin
-  gran := ID.Granularity;
-  result := LoadDB(ID.Value,gran,fValues[gran]);
-  if result then
-    with _Safe(fValues[gran])^ do begin
-      for t := 0 to length(fTracked)-1 do begin
-        track := @fTracked[t];
-        val := GetAsDocVariantSafe(track^.Name);
-        for p := 0 to length(track^.Props)-1 do
-        with track^.Props[p] do begin
-          FillZero(Values[gran]);
-          if val^.GetAsDocVariant(Name,int) and
-             (int^.Count>0) and (int^.Kind=dvArray) then begin
-            for v := 0 to length(Values[gran]) do
-              if v<int^.Count then
-                Values[gran][v] := VariantToInt64Def(int^.Values[v],0) else
-                fLog.SynLog.Log(sllWarning,'%.Load(ID=%=%) % failed v=%<count=%',
-                  [ClassType,ID.Value,ID.Text(true),ToText(Gran)^,v,int^.count]);
-          end;
+begin // fValues[] variants -> fTracked[].Props[].Values[]
+  for g := low(fValues) to high(fValues) do
+    with _Safe(fValues[g])^ do begin
+      val := GetAsDocVariantSafe(Track.Name);
+      if val<>nil then
+      for p := 0 to length(Track.Props)-1 do
+        with Track.Props[p] do
+        if val^.GetAsDocVariant(Name,int) and
+           (int^.Count>0) and (int^.Kind=dvArray) then begin
+          for v := 0 to length(Values[g]) do
+            if v<int^.Count then
+              Values[g][v] := VariantToInt64Def(int^.Values[v],0);
         end;
-      end;
     end;
+end;
+
+function TSynMonitorUsage.Load(const Time: TTimeLogBits): boolean;
+var g: TSynMonitorUsageGranularity;
+    id: TSynMonitorUsageID;
+    t: integer;
+begin
+  // load fValues[] variants
+  result := true;
+  id.FromTimeLog(Time.Value);
+  for g := low(fValues) to high(fValues) do begin
+    id.Truncate(g);
+    if not LoadDB(id.Value,g,fValues[g]) then
+      result := false;
+  end;
+  // fill fTracked[].Props[].Values[]
+  for t := 0 to length(fTracked)-1 do
+    LoadTrack(fTracked[t]);
 end;
 
 
