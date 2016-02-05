@@ -14652,6 +14652,8 @@ type
 
 type
   /// 64-bit integer unique identifier, as computed by TSynUniqueIdentifierGenerator
+  // - they are increasing over time (so are much easier to store/shard/balance
+  // than UUID/GUID), and contain generation time and a 16-bit process ID
   // - mapped by TSynUniqueIdentifierBits memory structure
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TSQLRecord.ID: TID properties
@@ -14666,27 +14668,27 @@ type
   /// map 64-bit integer unique identifier internal memory structure
   // - as stored in TSynUniqueIdentifier = Int64 values, and computed by
   // TSynUniqueIdentifierGenerator
-  // - bits 0..14 map a 15 bit increasing counter (collision-free)
-  // - bits 15..30 map a 16 bit process identifier
-  // - bits 31..63 map a 33 bit UTC time, encoded as seconds since Unix epoch
+  // - bits 0..14 map a 15-bit increasing counter (collision-free)
+  // - bits 15..30 map a 16-bit process identifier
+  // - bits 31..63 map a 33-bit UTC time, encoded as seconds since Unix epoch
   {$ifndef UNICODE}
   TSynUniqueIdentifierBits = object
   {$else}
   TSynUniqueIdentifierBits = record
   {$endif}
   public
-    /// the actual 64 bit storage value
+    /// the actual 64-bit storage value
     Value: TSynUniqueIdentifier;
-    /// 15 bit counter (0..32767), starting with a random value
+    /// 15-bit counter (0..32767), starting with a random value
     function Counter: word;
       {$ifdef HASINLINE}inline;{$endif}
-    /// 16 bit unique process identifier
+    /// 16-bit unique process identifier
     // - as specified to TSynUniqueIdentifierGenerator constructor
     function ProcessID: TSynUniqueIdentifierProcess;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
-    // - it uses in fact a 33 bit resolution, so is "Year 2038" bug-free
+    // - it uses in fact a 33-bit resolution, so is "Year 2038" bug-free
     function CreateTimeUnix: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
@@ -14729,13 +14731,14 @@ type
   // - has handled by TSynUniqueIdentifierGenerator.ToObfuscated/FromObfuscated
   TSynUniqueIdentifierObfuscated = type RawUTF8;
 
-  /// thread-safe 64 bit integer unique identifier computation
+  /// thread-safe 64-bit integer unique identifier computation
   // - may be used on client side for something similar to a MongoDB ObjectID,
   // but compatible with TSQLRecord.ID: TID properties
-  // - each identifier would contain a 16 bit process identifier, which is
+  // - each identifier would contain a 16-bit process identifier, which is
   // supplied by the application, and should be unique for this process at a
   // given time
-  // - identifiers may be obfuscated as cyphered and signed hexadecimal text
+  // - identifiers may be obfuscated as hexadecimal text, using both encryption
+  // and digital signature
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
     fLastTix: cardinal;
