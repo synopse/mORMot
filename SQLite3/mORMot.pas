@@ -16714,7 +16714,7 @@ type
     property Items[Index: integer]: TSQLRecord read GetItem; default;
     /// direct access to the memory of the internal fValues[] array
     // - Items[] is preferred, since it would check the index, but is slightly
-    // slower, e.g. in a loop
+    // slower, e.g. in a loop or after a IDToIndex() call
     // - warning: this method should be protected via StorageLock/StorageUnlock
     property ListPtr: PPointerArray read GetListPtr;
     /// read-only access to the ID of a TSQLRecord values
@@ -18735,6 +18735,17 @@ function CurrentServiceContext: TServiceRunningContext;
 // class from TInjectableObjectRest
 function CurrentServiceContextServer: TSQLRestServer;
 
+function ToText(ft: TSQLFieldType): PShortString; overload;
+function ToText(tk: TTypeKind): PShortString; overload;
+function ToText(e: TSQLEvent): PShortString; overload;
+function ToText(he: TSQLHistoryEvent): PShortString; overload;
+function ToText(o: TSQLOccasion): PShortString; overload;
+function ToText(dft: TSQLDBFieldType): PShortString; overload;
+function ToText(si: TServiceInstanceImplementation): PShortString; overload;
+function ToText(cmd: TSQLRestServerURIContextCommand): PShortString; overload;
+function ToText(op: TSQLQueryOperator): PShortString; overload;
+function ToText(V: TInterfaceMockSpyCheck): PShortString; overload;
+
 
 { ************ Logging classes and functions }
 
@@ -19237,7 +19248,7 @@ function TSQLPropInfo.GetSQLFieldTypeName: PShortString;
 begin
   if self=nil then
     result := @NULL_SHORTSTRING else
-    result := GetEnumName(TypeInfo(TSQLFieldType),ord(fSQLFieldType));
+    result := ToText(fSQLFieldType);
 end;
 
 function TSQLPropInfo.GetSQLFieldRTTITypeName: RawUTF8;
@@ -19392,7 +19403,7 @@ end;
 
 function TSQLPropInfo.SQLDBFieldTypeName: PShortString;
 begin
-  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(fSQLDBFieldType));
+  result := ToText(fSQLDBFieldType);
 end;
 
 procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
@@ -19711,9 +19722,7 @@ begin
   end else
     if pilRaiseEORMExceptionIfNotHandled in aOptions then
       raise EORMException.CreateUTF8('%.CreateFrom: Unhandled %/% type for property %',
-        [self,GetEnumName(TypeInfo(TSQLFieldType),ord(aSQLFieldType))^,
-         GetEnumName(TypeInfo(TTypeKind),ord(aType^.Kind))^,
-         aPropInfo^.Name]);
+        [self,ToText(aSQLFieldType)^,ToText(aType^.Kind)^,aPropInfo^.Name]);
 end;
 
 function TSQLPropInfoRTTI.GetSQLFieldRTTITypeName: RawUTF8;
@@ -22387,11 +22396,6 @@ end;
 { ******************* process monitoring / statistics }
 
 { TSynMonitorUsage }
-
-function ToText(gran: TSynMonitorUsageGranularity): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSynMonitorUsageGranularity),ord(gran));
-end;
 
 function MonitorPropUsageValue(info: PPropInfo): TSynMonitorType;
 var typ: pointer;
@@ -36821,8 +36825,7 @@ procedure TSQLRestServerURIContext.ExecuteCommand;
 procedure TimeOut;
 begin
   {$ifdef WITHLOG}
-  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,
-    GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))^,
+  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,ToText(Command)^,
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
   if Call<>nil then
@@ -36904,8 +36907,8 @@ begin
     {$endif}
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
-        Thread := Server.CreateBackgroundThread('% "%" %',[self,Server.Model.Root,
-          GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(Command))^]);
+        Thread := Server.CreateBackgroundThread('% "%" %',
+          [self,Server.Model.Root,ToText(Command)^]);
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
     end;
@@ -36991,11 +36994,6 @@ const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_','_contract_','_signature_');
   SERVICE_METHODINDEX_FREEINSTANCE = -1;
-
-function ToText(aValue: TServiceInstanceImplementation): PShortString; overload;
-begin
-  result := GetEnumName(TypeInfo(TServiceInstanceImplementation),ord(aValue));
-end;
 
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
@@ -39969,6 +39967,62 @@ begin
   if Request<>nil then
     result := Request.Server else
     result := nil;
+end;
+
+
+function ToText(gran: TSynMonitorUsageGranularity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSynMonitorUsageGranularity),ord(gran));
+end;
+
+function ToText(ft: TSQLFieldType): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLFieldType),ord(ft));
+end;
+
+function ToText(tk: TTypeKind): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TTypeKind),ord(tk));
+end;
+
+function ToText(e: TSQLEvent): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLEvent),ord(e));
+end;
+
+function ToText(he: TSQLHistoryEvent): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLHistoryEvent),ord(he));
+end;
+
+function ToText(o: TSQLOccasion): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLOccasion),ord(o));
+end;
+
+function ToText(dft: TSQLDBFieldType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(dft));
+end;
+
+function ToText(si: TServiceInstanceImplementation): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TServiceInstanceImplementation),ord(si));
+end;
+
+function ToText(cmd: TSQLRestServerURIContextCommand): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLRestServerURIContextCommand),ord(cmd));
+end;
+
+function ToText(op: TSQLQueryOperator): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLQueryOperator),ord(op));
+end;
+
+function ToText(V: TInterfaceMockSpyCheck): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck),ord(V));
 end;
 
 
@@ -50595,7 +50649,7 @@ end;
 begin
   InternalCheck(SQLQueryCompare(aOperator,aComputed,aCount),True,
    'ExpectsCount(''%'',%,%) failed: count=%',[fInterface.Methods[aMethodIndex].URI,
-    GetEnumName(TypeInfo(TSQLQueryOperator),ord(aOperator))^,aCount,aComputed]);
+    ToText(aOperator)^,aCount,aComputed]);
 end;
 
 procedure TInterfaceStub.InstanceDestroyed(aClientDrivenID: cardinal);
@@ -51131,11 +51185,6 @@ begin
   IntCheckCount(asmndx-RESERVED_VTABLE_SLOTS,c,aOperator,aCount);
 end;
 
-function IMSC2Text(V: TInterfaceMockSpyCheck): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck),ord(V));
-end;
-
 procedure TInterfaceMockSpy.Verify(const aTrace: RawUTF8;
   aScope: TInterfaceMockSpyCheck);
 const
@@ -51143,7 +51192,7 @@ const
     [wName], [wName, wParams], [wName, wParams, wResults]);
 begin
   InternalCheck(IntGetLogAsText(0,'',VERIFY_SCOPE[aScope],',')=aTrace,true,
-    'Verify(''%'',%) failed',[aTrace,IMSC2Text(aScope)^]);
+    'Verify(''%'',%) failed',[aTrace,ToText(aScope)^]);
 end;
 
 procedure TInterfaceMockSpy.Verify(const aMethodName, aParams, aTrace: RawUTF8);
@@ -51167,7 +51216,7 @@ begin
     raise EInterfaceStub.Create(self,fInterface.Methods[m],'Invalid scope for Verify()');
   InternalCheck(
     IntGetLogAsText(m+RESERVED_VTABLE_SLOTS,'',VERIFY_SCOPE[aScope],',')=aTrace,True,
-    'Verify(''%'',''%'',%) failed',[aMethodName,aTrace,IMSC2Text(aScope)^]);
+    'Verify(''%'',''%'',%) failed',[aMethodName,aTrace,ToText(aScope)^]);
 end;
 
 
