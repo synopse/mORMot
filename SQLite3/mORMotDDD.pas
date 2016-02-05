@@ -303,6 +303,8 @@ type
   // !   end;
   // - the methods are implemented as a simple state machine, following
   // the TCQRSQueryAction and TCQRSQueryState definitions
+  // - warning: by definition, fLastError* access is NOT thread-safe so the
+  // CqrsBeginMethod/CqrsSetResult feature should be used in a single context
   TCQRSService = class(TInjectableObject, ICQRSService)
   protected
     fLastErrorAddress: ^TCQRSResult;
@@ -310,12 +312,10 @@ type
     fLastErrorContext: variant;
     fAction: TCQRSQueryAction;
     fState: TCQRSQueryState;
-    fLocker: IAutoLocker;
     {$ifdef WITHLOG}
     fLog: TSynLogFamily;
     {$endif}
-    // will initialize fLocker if needed - to be used with finally fLocker.Leave
-    procedure fLockerEnter;
+    fSafe: TSynLocker;
     // method to be called at first for LastError process
     function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
@@ -339,6 +339,8 @@ type
   public
     /// initialize the instance
     constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
     {$ifdef WITHLOG}
     /// where logging should take place
     property Log: TSynLogFamily read fLog write fLog;
@@ -1011,16 +1013,10 @@ end;
 constructor TCQRSService.Create;
 begin
   inherited Create;
+  fSafe.Init;
   {$ifdef WITHLOG}
   fLog := SQLite3Log.Family; // may be overriden
   {$endif}
-end;
-
-procedure TCQRSService.fLockerEnter;
-begin
-  if not Assigned(fLocker) then
-    fLocker := TAutoLocker.Create;
-  fLocker.Enter;
 end;
 
 function TCQRSService.GetLastError: TCQRSResult;
@@ -1156,20 +1152,27 @@ begin
 end;
 
 
+destructor TCQRSService.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+
 { TCQRSServiceSubscribe }
 
 procedure TCQRSServiceSubscribe.CallbackReleased(const callback: IInvokable;
   const interfaceName: RawUTF8);
 var i: integer;
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
     fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=%',
       [ClassType,callback,interfaceName,ObjectFromInterface(callback)],Self);
     for i := 0 to high(fSubscriber) do // try to release on ALL subscribers
       fSubscriber[i].CallbackReleased(callback, interfaceName);
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 

@@ -55,6 +55,9 @@ unit dddInfraEmailer;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
+  Windows, // for fSafe.Lock/Unlock inlining
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,
@@ -589,7 +592,7 @@ begin
   {$WARN SYMBOL_DEPRECATED ON}
   if age<=0 then
     exit;
-  fLockerEnter;
+  fSafe.Lock;
   try
     if fCache=nil then
       fCache := TSynCache.Create(MemoryCacheSize);
@@ -603,31 +606,31 @@ begin
     end else
       result := true; // from cache
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
   aType := GetMimeContentType(pointer(aTemplate),length(aTemplate),filename);
 end;
 
 procedure TDDDTemplateFromFolder.SetFolder(const Value: TFileName);
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
     fFolder := Value;
     fCache.Reset;
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 
 procedure TDDDTemplateFromFolder.SetMemoryCacheSize(
   const Value: integer);
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
     fMemoryCacheSize := Value;
     FreeAndNil(fCache);
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 

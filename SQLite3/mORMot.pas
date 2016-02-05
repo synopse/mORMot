@@ -44830,34 +44830,46 @@ end;
 
 procedure SetDefaultValuesObject(Value: TObject);
 var P: PPropInfo;
+    c: TClass;
     i: integer;
 begin
-  if Value<>nil then
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    case P^.PropType^.Kind of
-      {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
-      if P^.Default<>longint($80000000) then
-        P^.SetOrdProp(Value,P^.Default);
-      tkClass:
-        SetDefaultValuesObject(P^.GetObjProp(Value));
+  if Value=nil then
+    exit;
+  c := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
+      case P^.PropType^.Kind of
+        {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
+        if P^.Default<>longint($80000000) then
+          P^.SetOrdProp(Value,P^.Default);
+        tkClass:
+          SetDefaultValuesObject(P^.GetObjProp(Value));
+      end;
+      P := P^.Next;
     end;
-    P := P^.Next;
-  end;
+    c := c.ClassParent;
+  until c=nil;
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
 var P: PPropInfo;
+    c: TClass;
     i: integer;
 begin
-  if Value<>nil then
-  for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-    P^.SetDefaultValue(Value,FreeAndNilNestedObjects);
-    {$ifdef HASINLINE}
-    P := P^.Next;
-    {$else}
-    with P^ do P := @Name[ord(Name[0])+1];
-    {$endif}
-  end;
+  if Value=nil then
+    exit;
+  c := Value.ClassType;
+  repeat
+    for i := 1 to InternalClassPropInfo(c,P) do begin
+      P^.SetDefaultValue(Value,FreeAndNilNestedObjects);
+      {$ifdef HASINLINE}
+      P := P^.Next;
+      {$else}
+      with P^ do P := @Name[ord(Name[0])+1];
+      {$endif}
+    end;
+    c := c.ClassParent;
+  until c=nil;
 end;
 
 
