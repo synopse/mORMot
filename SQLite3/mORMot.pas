@@ -2224,19 +2224,6 @@ procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 // also able to serialize plain Exception as a simple '{"Exception":"Message"}'
 function ObjectToJSONDebug(Value: TObject): RawUTF8;
 
-/// will serialize any TObject into a TDocVariant document
-// - just a wrapper around _JsonFast(ObjectToJSON())
-function ObjectToVariant(Value: TObject): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-/// will serialize any TObject into a TDocVariant document
-// - just a wrapper around _JsonFast(ObjectToJSON())
-procedure ObjectToVariant(Value: TObject; out result: variant); overload;
-
-/// will serialize any TObject into a TDocVariant document
-// - just a wrapper around _JsonFast(ObjectToJSON())
-procedure ObjectToVariant(Value: TObject; out result: variant; Options: TTextWriterWriteObjectOptions); overload;
-
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
 // "Context":"..." text message
@@ -36932,7 +36919,7 @@ begin
       exit;
     end;
   end;
-  ObjectToVariant(SettingsStorage,config);
+  ObjectToVariant(SettingsStorage,config,[woDontStoreDefault]);
   if URIBlobFieldName<>'' then
     config := TDocVariantData(config).GetValueByPath(URIBlobFieldName);
   ReturnsJson(config,HTML_SUCCESS,true,twJsonEscape,true);
@@ -43834,23 +43821,6 @@ begin
       [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]);
 end;
 
-function ObjectToVariant(Value: TObject): variant;
-begin
-  ObjectToVariant(Value,result);  
-end;
-
-procedure ObjectToVariant(Value: TObject; out result: variant); overload;
-begin
-  ObjectToVariant(Value,result,[woDontStoreDefault]);
-end;
-
-procedure ObjectToVariant(Value: TObject; out result: variant; Options: TTextWriterWriteObjectOptions); overload;
-var json: RawUTF8;
-begin
-  json := ObjectToJSON(Value,Options);
-  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
-end;
-
 function ObjectToVariantDebug(Value: TObject): variant;
 var json: RawUTF8;
 begin
@@ -43862,7 +43832,7 @@ end;
 procedure _ObjAddProps(Value: TObject; var Obj: variant);
 var v: variant;
 begin
-  ObjectToVariant(Value,v);
+  ObjectToVariant(Value,v,[woDontStoreDefault]);
   _ObjAddProps(v,Obj);
 end;
 

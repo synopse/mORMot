@@ -7572,12 +7572,26 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
 
 {$ifndef NOVARIANTS}
 /// will convert any TObject into a TDocVariant document instance
-// - just a wrapper around Dest := _JsonFast(ObjectToJSON(Value))
+// - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
 // - this would convert the TObject by representation, using only serializable
 // published properties: do not use this function to store temporary a class
 // instance, but e.g. to store an object values in a NoSQL database
+procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _JsonFast(ObjectToJSON(Value))
+function ObjectToVariant(Value: TObject): variant; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// will convert any TObject into a TDocVariant document instance
+// - a faster alternative to _Json(ObjectToJSON(Value),Options)
+// - note that the result variable should already be cleared: no VarClear()
+// is done by this function
 // - would be used e.g. by VarRecToVariant() function
-procedure ObjectToVariant(Value: TObject; var Dest: variant);
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions); overload;
+
 {$endif}
 
 type
@@ -12792,6 +12806,10 @@ type
     procedure InitArrayFrom(const Items: TIntegerDynArray; aOptions: TDocVariantOptions); overload;
     /// initialize a variant instance to store some 64-bit integer array content
     procedure InitArrayFrom(const Items: TInt64DynArray; aOptions: TDocVariantOptions); overload;
+    /// initialize a variant instance to store a T*ObjArray content
+    // - will call internally ObjectToVariant() to make the conversion
+    procedure InitArrayFromObjArray(const ObjArray; aOptions: TDocVariantOptions;
+      aWriterOptions: TTextWriterWriteObjectOptions=[woDontStoreDefault]);
     /// initialize a variant instance to store document-based array content
     // - array will be initialized from the supplied variable (which would be
     // e.g. a T*ObjArray or a dynamic array), using RTTI
@@ -34614,16 +34632,27 @@ begin
       VarRecToUTF8(V,RawUTF8(VAny));
     end;
     vtObject: // class instance will be serialized as a TDocVariant
-      ObjectToVariant(V.VObject,result);
+      ObjectToVariant(V.VObject,result,[woDontStoreDefault]);
     else raise ESynException.CreateUTF8('Unhandled TVarRec.VType=%',[V.VType]);
   end;
 end;
 
-procedure ObjectToVariant(Value: TObject; var Dest: variant);
+function ObjectToVariant(Value: TObject): variant;
+begin
+  VarClear(result);
+  ObjectToVariant(Value,result,[woDontStoreDefault]);  
+end;
+
+procedure ObjectToVariant(Value: TObject; out Dest: variant);
+begin
+  ObjectToVariant(Value,Dest,[woDontStoreDefault]);
+end;
+
+procedure ObjectToVariant(Value: TObject; var result: variant; Options: TTextWriterWriteObjectOptions);
 var json: RawUTF8;
 begin
-  json := ObjectToJSON(Value,[woDontStoreDefault]);
-  TDocVariantData(Dest).InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
+  json := ObjectToJSON(Value,Options);
+  PDocVariantData(@result)^.InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 
@@ -35419,6 +35448,21 @@ begin
     VValue := Items; // fast by-reference copy of VValue[]
     if not ItemsCopiedByReference then
       InitCopy(variant(self),aOptions);
+  end;
+end;
+
+procedure TDocVariantData.InitArrayFromObjArray(const ObjArray;
+  aOptions: TDocVariantOptions; aWriterOptions: TTextWriterWriteObjectOptions);
+var ndx: integer;
+    Items: TObjectDynArray absolute ObjArray;
+begin
+  if Items=nil then
+    VType := varNull else begin
+    Init(aOptions,dvArray);
+    VCount := length(Items);
+    SetLength(VValue,VCount);
+    for ndx := 0 to VCount-1 do
+      ObjectToVariant(Items[ndx],VValue[ndx],aWriterOptions);
   end;
 end;
 
