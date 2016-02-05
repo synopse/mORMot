@@ -22937,6 +22937,7 @@ begin
 end;
 
 function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+{$ifdef HASINLINE}
 var NameLen: integer;
 begin
   NameLen := Length(Name);
@@ -22946,6 +22947,14 @@ begin
       exit;
   result := -1;
 end;
+{$else}
+begin
+  for result := 0 to high(Names) do
+    if IdemPropNameU(Names[result],Name) then
+      exit;
+  result := -1;
+end;
+{$endif}
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
