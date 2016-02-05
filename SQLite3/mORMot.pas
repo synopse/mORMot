@@ -4386,7 +4386,7 @@ type
   TRawUTF8ObjectCacheList = class;
 
   /// maintain information cache for a given key
-  // - after a given period of time, the entry is not deleted, but InfoClear
+  // - after a given period of time, the entry is not deleted, but CacheClear
   // virtual method is called to release the associated data or services
   // - inherit from this abstract class to store your own key-defined information
   // or you own interface-based services
@@ -4398,17 +4398,18 @@ type
     fTimeoutTix: Int64;
     /// should be called by inherited classes when information or services are set
     // - set fTimeoutTix according to fTimeoutMS, to enable timeout mechanism
-    procedure InfoSet; virtual;
+    // - caller should do Safe.Lock to ensure thread-safety 
+    procedure CacheSet; virtual;
     /// called by Destroy and TRawUTF8ObjectCacheList.DoPurge
     // - set fTimeoutTix := 0 (inherited should also release services interfaces)
     // - protected by Safe.Lock from TRawUTF8ObjectCacheList.DoPurge
-    procedure InfoClear; virtual;
+    procedure CacheClear; virtual;
   public
     /// initialize the information cache entry
     // - should not be called directly, but by TRawUTF8ObjectCacheList.GetLocked
     constructor Create(aOwner: TRawUTF8ObjectCacheList; const aKey: RawUTF8); reintroduce; virtual;
     /// finalize the information cache entry
-    // - would also call the virtual InfoClear method
+    // - would also call the virtual CacheClear method
     destructor Destroy; override;
     /// Dependency Injection using fOwner.OnKeyResolve, for the current Key
     function Resolve(const aInterface: TGUID; out Obj): boolean;
@@ -4423,6 +4424,7 @@ type
   /// manage a list of information cache, identified by a hashed key
   // - you should better inherit from this class, to give a custom name and
   // constructor, or alter the default behavior
+  // - would maintain a list of TRawUTF8ObjectCache instances
   TRawUTF8ObjectCacheList = class(TRawUTF8ListHashedLocked)
   protected
     fSettings: TRawUTF8ObjectCacheSettings;
@@ -4447,8 +4449,15 @@ type
     // - global or key-specific purge would be performed, if needed
     // - on success (true), output cache instance would be locked
     function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache): boolean; virtual;
-    /// you may call this method regularly to force a purge
+    /// you may call this method regularly to check for a needed purge
+    // - if Settings.PurgePeriodMS is reached, each TRawUTF8ObjectCache instance
+    // would check for its TimeOutMS and call CacheClear if information is outdated
     procedure TryPurge;
+    /// this method will clear all associated information
+    // - a regular Clear would destroy all TRawUTF8ObjectCache instances,
+    // whereas this method would call CacheClear on each entry, so would
+    // be more thread-safe and efficient in pratice
+    procedure ForceCacheClear;
     /// access to the associated logging instance
     procedure Log(const TextFmt: RawUTF8; const TextArgs: array of const;
       Level: TSynLogInfo = sllNone);
@@ -19042,7 +19051,7 @@ begin
         {$ifdef HASINLINE}
         P := P^.Next;
         {$else}
-        P := @P^.Name[ord(P^.Name[0])+1];
+        with P^ do P := @Name[ord(Name[0])+1];
         {$endif}
       end;
     end;
@@ -19086,7 +19095,7 @@ begin
         {$ifdef HASINLINE}
         result := result^.Next;
         {$else}
-        result := @result^.Name[ord(result^.Name[0])+1];
+        with result^ do result := @Name[ord(Name[0])+1];
         {$endif}
     aClassType := aClassType.ClassParent;
   end;
@@ -44792,7 +44801,7 @@ begin
     {$ifdef HASINLINE}
     P := P^.Next;
     {$else}
-    P := @P^.Name[ord(P^.Name[0])+1];
+    with P^ do P := @Name[ord(Name[0])+1];
     {$endif}
   end;
 end;
@@ -46931,7 +46940,8 @@ begin
   if IncludeUnitName then begin
     info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
     if info<>nil then begin // avoid GPF if not RTTI for this class
-      AddShort(PClassType(AlignToPtr(@info^.Name[ord(info^.Name[0])+1]))^.UnitName);
+      with info^ do
+        AddShort(PClassType(AlignToPtr(@Name[ord(Name[0])+1]))^.UnitName);
       Add('.');
     end;
   end;
@@ -53445,16 +53455,16 @@ end;
 destructor TRawUTF8ObjectCache.Destroy;
 begin
   fOwner.Log('%.Destroy %', [ClassType, fKey]);
-  InfoClear;
+  CacheClear;
   inherited Destroy;
 end;
 
-procedure TRawUTF8ObjectCache.InfoSet;
+procedure TRawUTF8ObjectCache.CacheSet;
 begin // gives some gracious time
   fTimeoutTix := GetTickCount64 + fTimeoutMS;
 end;
 
-procedure TRawUTF8ObjectCache.InfoClear;
+procedure TRawUTF8ObjectCache.CacheClear;
 begin
   fTimeoutTix := 0; // indicates no service is available
 end;
@@ -53511,13 +53521,33 @@ begin
   end;
 end;
 
+procedure TRawUTF8ObjectCacheList.ForceCacheClear;
+var i: integer;
+    cache: TRawUTF8ObjectCache;
+begin
+  fSafe.Lock;
+  try
+    fLog.SynLog.Enter('ForceCacheClear of % entries',[fCount],self);
+    for i := 0 to fCount - 1 do begin
+      cache := TRawUTF8ObjectCache(fObjects[i]);
+      cache.fSafe.Lock;
+      try
+        cache.CacheClear;
+      finally
+        cache.fSafe.UnLock;
+      end;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 procedure TRawUTF8ObjectCacheList.DoPurge;
-var
-  tix: Int64;
-  i: integer;
-  purged: RawUTF8;
-  log: ISynLog;
-  cache: TRawUTF8ObjectCache;
+var tix: Int64;
+    i: integer;
+    purged: RawUTF8;
+    log: ISynLog;
+    cache: TRawUTF8ObjectCache;
 begin // called within fSafe.Lock
   tix := GetTickCount64;
   try
@@ -53529,7 +53559,7 @@ begin // called within fSafe.Lock
           if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then begin
             if log = nil then
               log := fLog.SynLog.Enter(self);
-            cache.InfoClear; // would set fTimeoutTix := 0
+            cache.CacheClear; // would set fTimeoutTix := 0
             purged := purged + ' ' + cache.fKey;
           end;
         finally
