@@ -4712,7 +4712,11 @@ type
     // warning: you shall call ReHash() after manual Add/Delete
     function Add(const Elem): integer;  inline;
     procedure Delete(aIndex: Integer);  inline;
-    function SaveTo: RawByteString;     inline;
+    function SaveTo: RawByteString; overload; inline;
+    function SaveTo(Dest: PAnsiChar): PAnsiChar; overload; inline;
+    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; inline;
+    function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
+    function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
     function Find(const Elem): integer; inline;
     property Capacity: integer read GetCapacity write SetCapacity;
@@ -4830,7 +4834,7 @@ type
     // please set the Capacity property
     // - warning: Elem must be of the same exact type than the dynamic array, and
     // must refer to a variable (you can't write FindHashedAndUpdate(i+10) e.g.)
-    function FindHashedAndUpdate(var Elem; AddIfNotExisting: boolean): integer;
+    function FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // delete it if matchs
     // - return the index deleted (0..Count-1), or -1 if Elem was not found
@@ -4838,7 +4842,7 @@ type
     // implementation
     // - warning: Elem must be of the same exact type than the dynamic array, and
     // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
-    function FindHashedAndDelete(var Elem): integer;
+    function FindHashedAndDelete(const Elem): integer;
     /// low-level search of an element from its pre-computed hash
     // - you should not use this method, but rather high-level FindHashed*()
     function HashFind(aHashCode: cardinal; const Elem): integer; overload;
@@ -7651,6 +7655,7 @@ type
     {$endif}
   end;
 
+
   /// abstract ancestor to manage a dynamic array of TObject
   // - do not use this abstract class directly, but rather the inherited
   // TObjectListHashed and TObjectListPropertyHashed
@@ -8062,6 +8067,148 @@ type
     // - return FALSE if not found
     // - return TRUE if found, and set aEvent to the corresponding callback
     function GetEventByName(const aText: RawUTF8; out aEvent: TMethod): boolean;
+  end;
+
+  TSynDictionaryInArray = (
+    iaFind, iaFindAndDelete, iaFindAndUpdate, iaFindAndAddIfNotExisting, iaAdd);
+
+  /// event called by TSynDictionary.ForEach methods to iterate over stored items
+  // - if the implementation method returns TRUE, will continue the loopp
+  // - if the implementation method returns FALSE, will stop values browsing
+  TSynDictionaryEvent = function(const aKey, aValue; aIndex,aCount: integer): boolean of object;
+
+  /// dictionary to store any values with an associated key
+  // - will maintain a dynamic array of values, associated with a hashed dynamic
+  // array for the keys, so that saving or retrieving values would be O(1)
+  // - all process would be protected by a TSynLocker, so would be thread-safe
+  // - TDynArray is a wrapper which do not store anything, whereas this class
+  // is able to store both keys and values, and provide convenient methods to
+  // access the stored data, including JSON serialization and binary storage
+  TSynDictionary = class(TSynPersistentLocked)
+  protected
+    fKeys: TDynArrayHashed;
+    fValues: TDynArray;
+    function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
+  public
+    /// initialize the dictionary storage, for a given dynamic array value
+    // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
+    // would store the keys within this TSynDictionary instance
+    // - aValueTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
+    // would store the values within this TSynDictionary instance
+    constructor Create(aKeyTypeInfo,aValueTypeInfo: pointer; aKeyCaseInsensitive: boolean); reintroduce; virtual;
+    /// finalize the storage
+    // - would release all internal stored values
+    destructor Destroy; override;
+    /// try to add a value associated with a primary key
+    // - returns the index of the inserted item, -1 if aKey is already existing
+    // - this method is thread-safe, since it would lock the instance
+    function Add(const aKey, aValue): integer;
+    /// store a value associated with a primary key
+    // - returns the index of the matching item
+    // - if aKey did not exist, a new entry is added
+    // - if aKey did exist, the existing entry is overriden with aValue
+    // - this method is thread-safe, since it would lock the instance
+    function AddOrUpdate(const aKey, aValue): integer;
+    /// clear the value associated via aKey
+    // - does not delete the entry, but reset its value
+    // - returns the index of the matching item, -1 if aKey was not found
+    // - this method is thread-safe, since it would lock the instance
+    function Clear(const aKey): integer;
+    /// delete a key/value association from its supplied aKey
+    // - this would delete the entry, i.e. matching key and value pair
+    // - returns the index of the deleted item, -1 if aKey was not found
+    // - this method is thread-safe, since it would lock the instance
+    function Delete(const aKey): integer;
+    /// search of a primary key within the internal hashed dictionary
+    // - returns the index of the matching item, -1 if aKey was not found
+    // - if you want to access the value, you should use fSafe.Lock/Unlock:
+    // consider using Exists or FindAndCopy thread-safe methods instead
+    function Find(const aKey): integer;
+    /// search of a stored value by its primary key, and return a local copy
+    // - so this method is thread-safe
+    // - returns TRUE if aKey was found, FALSE if no match exists
+    function FindAndCopy(const aKey; out aValue): boolean;
+    /// search for a primary key presence
+    // - returns TRUE if aKey was found, FALSE if no match exists
+    // - this method is thread-safe
+    function Exists(const aKey): boolean;
+    /// apply a specified event over all items stored in this dictionnary
+    // - would browse the list in the adding order
+    // - returns the number of times OnEach has been called
+    // - this method is thread-safe, since it would lock the instance
+    function ForEach(const OnEach: TSynDictionaryEvent): integer; overload;
+    /// apply a specified event over matching items stored in this dictionnary
+    // - would browse the list in the adding order, comparing each key and/or
+    // value item with the supplied comparison functions and aKey/aValue content
+    // - returns the number of times OnMatch has been called, i.e. how many times
+    // KeyCompare(aKey,Keys[#])=0 or ValueCompare(aValue,Values[#])=0
+    // - this method is thread-safe, since it would lock the instance
+    function ForEach(const OnMatch: TSynDictionaryEvent;
+      KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue): integer; overload;
+    /// search aArrayValue item in a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, then use TDynArray.Find
+    // to delete any aArrayValue match in the associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
+    // not found
+    // - this method is thread-safe, since it would lock the instance
+    function FindInArray(const aKey, aArrayValue): boolean;
+    /// add aArrayValue item within a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, then use TDynArray.Add
+    // to add aArrayValue to the associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
+    // - this method is thread-safe, since it would lock the instance
+    function AddInArray(const aKey, aArrayValue): boolean;
+    /// add once aArrayValue within a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, then use
+    // TDynArray.FindAndAddIfNotExisting to add once aArrayValue to the
+    // associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
+    // - this method is thread-safe, since it would lock the instance
+    function AddOnceInArray(const aKey, aArrayValue): boolean;
+    /// clear aArrayValue item of a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, then use TDynArray.FindAndDelete
+    // to delete any aArrayValue match in the associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
+    // not found
+    // - this method is thread-safe, since it would lock the instance
+    function DeleteInArray(const aKey, aArrayValue): boolean;
+    /// replace aArrayValue item of a dynamic-array value associated via aKey
+    // - expect the stored value to be a dynamic array itself
+    // - would search for aKey as primary key, then use TDynArray.FindAndUpdate
+    // to delete any aArrayValue match in the associated dynamic array
+    // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
+    // not found
+    // - this method is thread-safe, since it would lock the instance
+    function UpdateInArray(const aKey, aArrayValue): boolean;
+    /// serialize the content as a "key":value JSON object
+    procedure SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean=false); overload;
+    /// serialize the content as a "key":value JSON object
+    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
+    /// unserialize the content from "key":value JSON object
+    function LoadFromJSON(const JSON: RawUTF8): boolean; overload;
+    /// unserialize the content from "key":value JSON object
+    // - note that input JSON buffer is not modified in place
+    function LoadFromJSON(JSON: PUTF8Char): boolean; overload;
+    /// save the content as SynLZ-compressed raw binary data
+    // - warning: this format is tied to the values low-level RTTI, so if you
+    // change the value/key type definitions, LoadFromBinary() would fail
+    function SaveToBinary: RawByteString;
+    /// load the content from SynLZ-compressed raw binary data
+    // - as previously saved by SaveToBinary method
+    function LoadFromBinary(const binary: RawByteString): boolean;
+    /// returns how many items are currently stored in this dictionary
+    // - this method is thread-safe
+    function Count: integer;
+    /// direct access to the primary key identifiers
+    // - if you want to access the keys, you should use fSafe.Lock/Unlock
+    property Keys: TDynArrayHashed read fKeys;
+    /// direct access to the associated stored values
+    // - if you want to access the values, you should use fSafe.Lock/Unlock
+    property Values: TDynArray read fValues;
   end;
 
   /// event signature to locate a service for a given string key
@@ -39778,6 +39925,7 @@ const
   HASH_ONVOIDCOLISION = 1;
 
 {$ifdef UNDIRECTDYNARRAY}
+
 function TDynArrayHashed.Count: Integer;
 begin
   result := InternalDynArray.Count;
@@ -39847,7 +39995,28 @@ function TDynArrayHashed.Find(const Elem): integer;
 begin
   result := InternalDynArray.Find(Elem);
 end;
-{$endif}
+
+function TDynArrayHashed.SaveTo(Dest: PAnsiChar): PAnsiChar;
+begin
+  result := InternalDynArray.SaveTo(Dest);
+end;
+
+function TDynArrayHashed.SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
+begin
+  result := InternalDynArray.SaveToJSON(EnumSetsAsText);
+end;
+
+function TDynArrayHashed.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
+begin
+  result := InternalDynArray.LoadFromJSON(P,aEndOfObject);
+end;
+
+function TDynArrayHashed.SaveToLength: integer;
+begin
+  result := InternalDynArray.SaveToLength;
+end;
+
+{$endif UNDIRECTDYNARRAY}
 
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
@@ -39951,7 +40120,7 @@ begin
     result := -1;
 end;
 
-function TDynArrayHashed.FindHashedAndUpdate(var Elem; AddIfNotExisting: boolean): integer;
+function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
 var P: PAnsiChar;
     aHashCode: cardinal;
 begin
@@ -39981,7 +40150,7 @@ begin
     result := -1;
 end;
 
-function TDynArrayHashed.FindHashedAndDelete(var Elem): integer;
+function TDynArrayHashed.FindHashedAndDelete(const Elem): integer;
 begin
   if Assigned(fHashElement) then begin
     result := HashFind(fHashElement(Elem,fHasher),Elem);
@@ -47757,6 +47926,304 @@ begin
     result := true;
     aEvent := fEvents[i];
   end;
+end;
+
+
+
+{ TSynDictionary }
+
+const
+  DIC_KEYCOUNT = 0;
+  DIC_KEY = 1;
+  DIC_VALUECOUNT = 2;
+  DIC_VALUE = 3;
+  
+constructor TSynDictionary.Create(aKeyTypeInfo,aValueTypeInfo: pointer;
+  aKeyCaseInsensitive: boolean);
+begin
+  inherited Create;
+  fSafe.Padding[DIC_KEYCOUNT].VType := varInteger;
+  fSafe.Padding[DIC_KEY].VType := varUnknown;
+  fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;
+  fSafe.Padding[DIC_VALUE].VType := varUnknown;
+  fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
+    @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
+  fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
+    @fSafe.Padding[DIC_VALUECOUNT].VInteger);
+end;
+
+destructor TSynDictionary.Destroy;
+begin
+  fValues.Clear;
+  inherited Destroy;
+end;
+
+function TSynDictionary.Add(const aKey, aValue): integer;
+var added: boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fKeys.FindHashedForAdding(aKey,added);
+    if added then begin
+      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+        ElemCopy(aKey,ElemPtr(result)^); // fKey[result] := aKey;
+      if fValues.Add(aValue)<>result then
+        raise ESynException.CreateUTF8('%.Add fValues.Add',[self]);
+    end else
+      result := -1;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.AddOrUpdate(const aKey, aValue): integer;
+var added: boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fKeys.FindHashedForAdding(aKey,added);
+    if added then begin
+      with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+        ElemCopy(aKey,ElemPtr(result)^); // fKey[result] := aKey;
+      if fValues.Add(aValue)<>result then
+        raise ESynException.CreateUTF8('%.AddOrUpdate fValues.Add',[self]);
+    end else
+      fValues.ElemCopy(aValue,fValues.ElemPtr(result)^);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.Clear(const aKey): integer;
+begin
+  fSafe.Lock;
+  try
+    result := fKeys.FindHashed(aKey);
+    if result>=0 then
+      fValues.ElemClear(fValues.ElemPtr(result)^);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.Delete(const aKey): integer;
+begin
+  fSafe.Lock;
+  try
+    result := fKeys.FindHashedAndDelete(aKey);
+    if result>=0 then
+      fValues.Delete(result);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.InArray(const aKey, aArrayValue; aAction: TSynDictionaryInArray): Boolean;
+var nested: TDynArray;
+    ndx: integer;
+begin
+  result := false;
+  if (fValues.ElemType=nil) or (PTypeKind(fValues.ElemType)^<>tkDynArray) then
+    raise ESynException.CreateUTF8('%.Values: % items are not dynamic arrays',
+      [self,PShortString(@PTypeInfo(fValues.ArrayType)^.NameLen)^]);
+  fSafe.Lock;
+  try
+    ndx := fKeys.FindHashed(aKey);
+    if ndx<0 then
+      exit;
+    nested.Init(fValues.ElemType, fValues.ElemPtr(ndx)^);
+    case aAction of
+    iaFind:
+      result := nested.Find(aArrayValue)>=0;
+    iaFindAndDelete:
+      result := nested.FindAndDelete(aArrayValue)>=0;
+    iaFindAndUpdate:
+      result := nested.FindAndUpdate(aArrayValue)>=0;
+    iaFindAndAddIfNotExisting:
+      result := nested.FindAndAddIfNotExisting(aArrayValue)>=0;
+    iaAdd:
+      result := nested.Add(aArrayValue)>=0;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.FindInArray(const aKey, aArrayValue): boolean;
+begin
+  result := InArray(aKey,aArrayValue,iaFind);
+end;
+
+function TSynDictionary.DeleteInArray(const aKey, aArrayValue): boolean;
+begin
+  result := InArray(aKey,aArrayValue,iaFindAndDelete);
+end;
+
+function TSynDictionary.UpdateInArray(const aKey, aArrayValue): boolean;
+begin
+  result := InArray(aKey,aArrayValue,iaFindAndUpdate);
+end;
+
+function TSynDictionary.AddInArray(const aKey, aArrayValue): boolean;
+begin
+  result := InArray(aKey,aArrayValue,iaAdd);
+end;
+
+function TSynDictionary.AddOnceInArray(const aKey, aArrayValue): boolean;
+begin
+  result := InArray(aKey,aArrayValue,iaFindAndAddIfNotExisting);
+end;
+
+function TSynDictionary.Find(const aKey): integer;
+begin // caller is expected to call fSafe.Lock/Unlock
+  result := fKeys.FindHashed(aKey);
+end;
+
+function TSynDictionary.FindAndCopy(const aKey; out aValue): boolean;
+var ndx: integer;
+begin
+  fSafe.Lock;
+  try
+    ndx := fKeys.FindHashed(aKey);
+    if ndx>=0 then begin
+      fValues.ElemCopy(fValues.ElemPtr(ndx)^,aValue);
+      result := true;
+    end else
+      result := false;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.Exists(const aKey): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fKeys.FindHashed(aKey)>=0;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.ForEach(const OnEach: TSynDictionaryEvent): integer;
+var k,v: PAnsiChar;
+    i,n,ks,vs: integer;
+begin
+  fSafe.Lock;
+  try
+    result := 0;
+    n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
+    if (n=0) or not Assigned(OnEach) then
+      exit;
+    k := fKeys.fValue^;
+    ks := fKeys.ElemSize;
+    v := fValues.fValue^;
+    vs := fValues.ElemSize;
+    for i := 0 to n-1 do begin
+      inc(result);
+      if not OnEach(k^,v^,i,n) then
+        break;
+      inc(k,ks);
+      inc(v,vs);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.ForEach(const OnMatch: TSynDictionaryEvent;
+  KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue): integer;
+var k,v: PAnsiChar;
+    i,n,ks,vs: integer;
+begin
+  fSafe.Lock;
+  try
+    result := 0;
+    if (not Assigned(OnMatch)) or
+       (not Assigned(KeyCompare)) and (not Assigned(ValueCompare)) then
+      exit;
+    n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
+    k := fKeys.fValue^;
+    ks := fKeys.ElemSize;
+    v := fValues.fValue^;
+    vs := fValues.ElemSize;
+    for i := 0 to n-1 do begin
+      if (Assigned(KeyCompare) and (KeyCompare(k^,aKey)=0)) or
+         (Assigned(ValueCompare) and (ValueCompare(v^,aValue)=0)) then begin
+        inc(result);
+        if not OnMatch(k^,v^,i,n) then
+          break;
+      end;
+      inc(k,ks);
+      inc(v,vs);
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.Count: integer;
+begin
+  result := fSafe.LockedInt64[DIC_KEYCOUNT];
+end;
+
+procedure TSynDictionary.SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean);
+var k,v: RawUTF8;
+begin
+  k := fKeys.SaveToJSON(EnumSetsAsText);
+  v := fValues.SaveToJSON(EnumSetsAsText);
+  W.AddJSONArraysAsJSONObject(pointer(k),pointer(v));
+end;
+
+function TSynDictionary.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
+var W: TTextWriter;
+begin
+  W := TTextWriter.CreateOwnedStream;
+  try
+    SaveToJSON(W);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
+function TSynDictionary.LoadFromJSON(const JSON: RawUTF8): boolean;
+begin
+  result := LoadFromJSON(pointer(JSON));
+end;
+
+function TSynDictionary.LoadFromJSON(JSON: PUTF8Char): boolean;
+var k,v: RawUTF8;
+begin
+  result := false;
+  if JSONObjectAsJSONArrays(JSON,k,v) then
+    if fKeys.LoadFromJSON(pointer(k))<>nil then
+      if fValues.LoadFromJSON(pointer(v))<>nil then
+        if fKeys.Count=fValues.Count then
+          result := true;
+end;
+
+function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
+var P: PAnsiChar;
+begin
+  result := false;
+  P := pointer(SynLZDecompress(binary));
+  if P<>nil then
+    P := fKeys.LoadFrom(P);
+  if P<>nil then
+    P := fValues.LoadFrom(P);
+  if (P<>nil) and (fKeys.Count=fValues.Count) then
+    result := true;
+end;
+
+function TSynDictionary.SaveToBinary: RawByteString;
+var tmp: TSynTempBuffer;
+begin
+  tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
+  if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf<>tmp.len then
+    result := '' else
+    SynLZCompress(tmp.buf,tmp.len,result);
+  tmp.Done;
 end;
 
 
