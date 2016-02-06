@@ -2426,6 +2426,7 @@ type
   // - here ftDouble is renamed ftDoub to avoid confusion with TSQLDBFieldType
   TFloatType = (ftSingle, ftDoub, ftExtended, ftComp, ftCurr);
 
+  PTypeKind = ^TTypeKind;
   PTypeInfo = ^TTypeInfo;
   {$ifdef FPC}
   PPTypeInfo = PTypeInfo;

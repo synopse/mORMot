@@ -2714,6 +2714,9 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolea
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 // - this version expects P1 and P2 to be a PAnsiChar with an already checked
 // identical length, so may be used for a faster process, e.g. in a loop
+// - if P1 and P2 are RawUTF8, you should better call overloaded function
+// IdemPropNameU(const P1,P2: RawUTF8), which would be slightly faster by
+// using the length stored before the actual text buffer of each RawUTF8
 function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean; 
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -4412,7 +4415,7 @@ type
     // - if the array is not sorted, it will use slower iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
-    function FindAndDelete(var Elem; aIndex: PIntegerDynArray=nil;
+    function FindAndDelete(const Elem; aIndex: PIntegerDynArray=nil;
       aCompare: TDynArraySortCompare=nil): integer;
     /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
@@ -7090,7 +7093,7 @@ type
     // the integer mapped value will be transmitted, therefore wrongly)
     // - you can pass nil as parameter for a null JSON value
     procedure AddJSONEscape(const NameValuePairs: array of const); overload;
-{$ifndef NOVARIANTS}
+    {$ifndef NOVARIANTS}
     /// encode the supplied (extended) JSON content, with parameters,
     // as an UTF-8 valid JSON object content
     // - in addition to the JSON RFC specification strict mode, this method will
@@ -7111,7 +7114,14 @@ type
     // - will call internally _JSONFastFmt() to create a temporary TDocVariant
     // with all its features - so is slightly slower than other AddJSON* methods
     procedure AddJSON(const Format: RawUTF8; const Args,Params: array of const);
-{$endif}
+    {$endif}
+    /// append two JSON arrays of keys and values as one JSON object
+    // - i.e. makes the following transformation:
+    // $ [key1,key2...] + [value1,value2...] -> {key1:value1,key2,value2...}
+    // - this method won't allocate any memory during its process, nor
+    // modify the keys and values input buffers
+    // - is the reverse of the JSONObjectAsJSONArrays() function
+    procedure AddJSONArraysAsJSONObject(keys,values: PUTF8Char);
     /// append a dynamic array content as UTF-8 encoded JSON array
     // - expect a dynamic array TDynArray wrapper as incoming parameter
     // - TIntegerDynArray, TInt64DynArray, TCardinalDynArray, TDoubleDynArray,
@@ -8803,6 +8813,14 @@ function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
 // JSON objects or arrays
 // - incoming P^ should point to the first initial '{' char
 function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
+
+/// convert one JSON object into two JSON arrays of keys and values
+// - i.e. makes the following transformation:
+// $ {key1:value1,key2,value2...} -> [key1,key2...] + [value1,value2...]
+// - this function won't allocate any memory during its process, nor
+// modify the JSON input buffer
+// - is the reverse of the TTextWriter.AddJSONArraysAsJSONObject() method
+function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
 
 /// remove comments from a text buffer before passing it to JSON parser
 // - handle two types of comments: starting from // till end of line
@@ -38332,6 +38350,46 @@ begin
   end;
 end;
 
+function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
+var wk,wv: TTextWriter;
+    kb,ke,vb,ve: PUTF8Char;
+begin
+  result := false;
+  if (JSON=nil) or (JSON^<>'{') then
+    exit;
+  wk := TTextWriter.CreateOwnedStream(8192);
+  wv := TTextWriter.CreateOwnedStream(8192);
+  try
+    wk.Add('[');
+    wv.Add('[');
+    kb := JSON+1;
+    repeat
+      ke := GotoEndJSONItem(kb);
+      if (ke=nil) or (ke^<>':') then
+        exit; // invalid input content
+      vb := ke+1;
+      ve := GotoEndJSONItem(vb);
+      if (ve=nil) or not(ve^ in [',','}']) then
+        exit;
+      wk.AddNoJSONEscape(kb,ke-kb);
+      wk.Add(',');
+      wv.AddNoJSONEscape(vb,ve-vb);
+      wv.Add(',');
+      kb := ve+1;
+    until ve^='}';
+    wk.CancelLastComma;
+    wk.Add(']');
+    wk.SetText(keys);
+    wv.CancelLastComma;
+    wv.Add(']');
+    wv.SetText(values);
+    result := true;
+  finally
+    wv.Free;
+    wk.Free;
+  end;
+end;
+
 const
   PTRSIZ = sizeof(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
@@ -38786,7 +38844,7 @@ begin
     ElemCopy(PAnsiChar(fValue^)[cardinal(result)*ElemSize],Elem);
 end;
 
-function TDynArray.FindAndDelete(var Elem; aIndex: PIntegerDynArray=nil;
+function TDynArray.FindAndDelete(const Elem; aIndex: PIntegerDynArray=nil;
   aCompare: TDynArraySortCompare=nil): integer;
 begin
   result := FindIndex(Elem,aIndex,aCompare);
@@ -42908,6 +42966,34 @@ begin
 end;
 {$endif}
 
+procedure TTextWriter.AddJSONArraysAsJSONObject(keys,values: PUTF8Char);
+var k,v: PUTF8Char;
+begin
+  if (keys=nil) or (keys^<>'[') or (values=nil) or (values^<>'[') then begin
+    AddShort('null');
+    exit;
+  end;
+  inc(keys); // jump initial [
+  inc(values);
+  Add('{');
+  repeat
+    k := GotoEndJSONItem(keys);
+    v := GotoEndJSONItem(values);
+    if (k=nil) or (v=nil) then
+      break; // invalid JSON input
+    AddNoJSONEscape(k,k-keys);
+    Add(':');
+    AddNoJSONEscape(v,v-values);
+    Add(',');
+    if (k^<>',') or (v^<>',') then
+      break; // reached the end of the input JSON arrays
+    keys := k+1;
+    values := v+1;
+  until false;
+  CancelLastComma;
+  Add('}');
+end;
+
 procedure TTextWriter.AddJSONEscape(const NameValuePairs: array of const);
 var a: integer;
 procedure WriteValue;
@@ -42947,8 +43033,8 @@ begin
   a := 0;
   while a<high(NameValuePairs) do begin
     AddJSONEscape(NameValuePairs[a]);
-    Add(':');
     inc(a);
+    Add(':');
     WriteValue;
     inc(a);
   end;
