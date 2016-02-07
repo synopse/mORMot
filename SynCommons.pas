@@ -14262,12 +14262,8 @@ type
     constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
-    {$ifndef CPU64}
     /// increase the internal size counter
-    procedure AddSize(const Bytes: QWord); overload; {$ifdef HASINLINE}inline;{$endif}
-    {$endif}
-    /// increase the internal size counter
-    procedure AddSize(Bytes: PtrInt); overload; {$ifdef HASINLINE}inline;{$endif}
+    procedure AddSize(const Bytes: QWord); {$ifdef HASINLINE}inline;{$endif}
     /// could be used to manage information average or sums
     procedure Sum(another: TSynMonitor); override;
   published
@@ -43150,9 +43146,9 @@ begin
     v := GotoEndJSONItem(values);
     if (k=nil) or (v=nil) then
       break; // invalid JSON input
-    AddNoJSONEscape(k,k-keys);
+    AddNoJSONEscape(keys,k-keys);
     Add(':');
-    AddNoJSONEscape(v,v-values);
+    AddNoJSONEscape(values,v-values);
     Add(',');
     if (k^<>',') or (v^<>',') then
       break; // reached the end of the input JSON arrays
@@ -46110,9 +46106,9 @@ end;
 
 destructor TSynMonitorWithSize.Destroy;
 begin
+  inherited Destroy;
   fThroughput.Free;
   fSize.Free;
-  inherited Destroy;
 end;
 
 procedure TSynMonitorWithSize.FillPerSecProperties;
@@ -46121,14 +46117,7 @@ begin
   fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
 end;
 
-{$ifndef CPU64}
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
-begin
-  fSize.Bytes := fSize.Bytes+Bytes;
-end;
-{$endif}
-
-procedure TSynMonitorWithSize.AddSize(Bytes: PtrInt);
 begin
   fSize.Bytes := fSize.Bytes+Bytes;
 end;
