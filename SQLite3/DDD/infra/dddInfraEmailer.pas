@@ -147,9 +147,8 @@ type
   TDDDEmailerDaemonStats = class(TSynMonitorWithSize)
   protected
     fConnection: cardinal;
+    procedure LockedSum(another: TSynMonitor); override;
   public
-    /// manage additional information about the number of connections
-    procedure Sum(another: TSynMonitor); override;
     /// will increase the connection count
     procedure NewConnection;
   published
@@ -639,12 +638,17 @@ end;
 
 procedure TDDDEmailerDaemonStats.NewConnection;
 begin
-  inc(fConnection);
+  EnterCriticalSection(fLock);
+  try
+    inc(fConnection);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
-procedure TDDDEmailerDaemonStats.Sum(another: TSynMonitor);
+procedure TDDDEmailerDaemonStats.LockedSum(another: TSynMonitor);
 begin
-  inherited;
+  inherited LockedSum(another);
   if another.InheritsFrom(TDDDEmailerDaemonStats) then
     inc(fConnection,TDDDEmailerDaemonStats(another).Connection);
 end;
@@ -663,6 +667,9 @@ var Rest: TSQLRestServer;
     call: TSQLRestURIParams;
     start: Int64;
 begin
+  // generate test ORM file for DDD persistence 
+  TDDDRepositoryRestFactory.ComputeSQLRecord([
+    TDDDEmailerDaemonStats,TSQLRestServerMonitor]);
   // we test here up to the raw SMTP socket layer
   Rest := serverClass.CreateWithOwnModel([]);
   try
@@ -789,6 +796,4 @@ end;
 
 initialization
   TInterfaceFactory.RegisterInterfaces([TypeInfo(ISMTPServerConnection)]);
-  TDDDRepositoryRestFactory.ComputeSQLRecord([
-    TDDDEmailerDaemonStats,TSQLRestServerMonitor]);
 end.

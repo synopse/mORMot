@@ -771,8 +771,8 @@ begin
         InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
         InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
-      fStatementMonitor := nil;
     end;
+    fStatementMonitor := nil;
   finally
     if fStatement<>nil then begin
       if fStatement=@fStaticStatement then

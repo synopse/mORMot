@@ -1959,16 +1959,16 @@ begin
             if Terminated then
               exit;
             try
-              fMonitoring.ProcessStart;
               try
                 fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
                 try
+                  fMonitoring.ProcessStart;
                   if not ExecuteRetrievePendingAndSetProcessing then
                     break; // no more pending tasks
+                  fMonitoring.ProcessDoTask;
                 finally
                   fDaemon.fProcessLock.Leave;
                 end;
-                fMonitoring.ProcessDoTask;
                 // always set, even if Terminated
                 fMonitoring.AddSize(ExecuteProcessAndSetResult);
               finally
@@ -2038,7 +2038,7 @@ destructor TDDDMonitoredDaemon.Destroy;
 var dummy: variant;
 begin
   Stop(dummy);
-  inherited;
+  inherited Destroy;
 end;
 
 function TDDDMonitoredDaemon.GetStatus: variant;
@@ -2046,26 +2046,41 @@ var i,working: integer;
     stats: TSynMonitor;
     pool: TDocVariantData;
 begin
-  working := 0;
-  if fMonitoringClass=nil then
-    if fProcessMonitoringClass=nil then
-      stats := TSynMonitorWithSize.Create else
-      stats := fProcessMonitoringClass.Create else
-    stats := fMonitoringClass.Create;
+  {$ifdef WITHLOG}
+  Rest.LogClass.Enter('GetStatus',[],self);
+  {$endif}
+  VarClear(result);
+  fProcessLock.Enter;
   try
-    pool.InitArray([],JSON_OPTIONS[true]);
-    for i := 0 to High(fProcess) do
-    with fProcess[i] do begin
-      if fMonitoring.Processing then
-        inc(working);
-      pool.AddItem(fMonitoring.ComputeDetails);
-      stats.Sum(fMonitoring);
+    try
+      working := 0;
+      if fMonitoringClass=nil then
+        if fProcessMonitoringClass=nil then
+          stats := TSynMonitorWithSize.Create else
+          stats := fProcessMonitoringClass.Create else
+        stats := fMonitoringClass.Create;
+      try
+        pool.InitArray([],JSON_OPTIONS[true]);
+        for i := 0 to High(fProcess) do
+        with fProcess[i] do begin
+
+          if fMonitoring.Processing then
+            inc(working);
+          pool.AddItem(fMonitoring.ComputeDetails);
+          stats.Sum(fMonitoring);
+        end;
+        result := ObjectToVariantDebug(self);
+        _ObjAddProps(['working',working, 'stats',stats.ComputeDetails,
+          'threadstats',variant(pool)],result);
+      finally
+        stats.Free;
+      end;
+    except
+      on E: Exception do
+        result := ObjectToVariantDebug(E);
     end;
-    result := ObjectToVariantDebug(self);
-    _ObjAddProps(['working',working, 'stats',stats.ComputeDetails,
-      'threadstats',variant(pool)],result);
   finally
-    stats.Free;
+    fProcessLock.Leave;
   end;
 end;
 
@@ -2091,45 +2106,55 @@ begin
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
   {$ifdef WITHLOG}
-  Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount],self);
+  Log.Log(sllTrace,'Start %',[self],self);
   {$endif}
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
     fProcess[i] := fProcessClass.Create(self,i);
+  sleep(1); // some time to actually start the threads
 end;
 
 
 function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 var i: integer;
     allfinished: boolean;
-    {$ifdef WITHLOG}
-    Log: ISynLog;
-    {$endif}
 begin
-  fProcessTimer.Pause;
   CqrsBeginMethod(qaNone,result);
   try
     if fProcess<>nil then begin
+      fProcessTimer.Pause;
+      Information := GetStatus;
       {$ifdef WITHLOG}
-      Log := Rest.LogClass.Enter('Stop %',[fProcessClass],self);
+      Rest.LogClass.Enter('Stop % process %',[fProcessClass,Information],self);
       {$endif}
-      for i := 0 to high(fProcess) do
-        fProcess[i].Terminate;
+      fProcessLock.Enter;
+      try
+        for i := 0 to high(fProcess) do
+          fProcess[i].Terminate;
+      finally
+        fProcessLock.Leave;
+      end;
       repeat
         sleep(5);
         allfinished := true;
-        for i := 0 to high(fProcess) do
-          if fProcess[i].fMonitoring.Processing then begin
-            allfinished := false;
-            break;
-          end;
+        fProcessLock.Enter;
+        try
+          for i := 0 to high(fProcess) do
+            if fProcess[i].fMonitoring.Processing then begin
+              allfinished := false;
+              break;
+            end;
+        finally
+          fProcessLock.Leave;
+        end;
       until allfinished;
-      Information := GetStatus;
-      {$ifdef WITHLOG}
-      Log.Log(sllTrace,'Stopped %',[Information],self);
-      {$endif}
-      ObjArrayClear(fProcess);
+      fProcessLock.Enter;
+      try
+        ObjArrayClear(fProcess);
+      finally
+        fProcessLock.Leave;
+      end;
     end;
     CqrsSetResult(cqrsSuccess);
   except

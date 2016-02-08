@@ -15031,9 +15031,17 @@ type
     constructor Create(aServer: TSQLRestServer); reintroduce;
     /// finalize the instance
     destructor Destroy; override;
+    /// should be called when a task successfully ended
+    // - thread-safe method
+    procedure ProcessSuccess(IsOutcomingFile: boolean); virtual;
+    /// update and returns the CurrentThreadCount property
+    // - this method is thread-safe
+    function NotifyThreadCount(delta: integer): integer;
     /// update the Created/Read/Updated/Deleted properties
+    // - this method is thread-safe
     procedure NotifyORM(aMethod: TSQLURIMethod);
     /// update the per-table statistics
+    // - this method is thread-safe
     procedure NotifyORMTable(TableIndex, DataSize: integer; Write: boolean;
        const MicroSecondsElapsed: QWord);
   published
@@ -35645,7 +35653,7 @@ begin
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
   Log := fLogClass.Enter('Shutdown CurrentRequestCount=% File=%',
-    [fStats.CurrentRequestCount,aStateFileName],self);
+    [fStats.AddCurrentRequestCount(0),aStateFileName],self);
   {$endif}
   OnNotifyCallback := nil;
   fSessions.Safe.Lock;
@@ -35658,7 +35666,7 @@ begin
   end;
   repeat
     SleepHiRes(5);
-  until fStats.CurrentRequestCount=0;
+  until fStats.AddCurrentRequestCount(0)=0;
   if aStateFileName<>'' then
     SessionsSaveToFile(aStateFileName);
 end;
@@ -36992,7 +37000,11 @@ begin
       end;
     end;
   end;
-  inc(Server.fStats.fServiceMethod);
+  with Server.fStats do begin
+    EnterCriticalSection(fLock);
+    inc(fServiceMethod);
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 type
@@ -37058,7 +37070,11 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       Service.ResultAsJSONObjectWithoutResult;
     if ForceServiceResultAsXMLObjectNameSpace='' then
       ForceServiceResultAsXMLObjectNameSpace := Service.ResultAsXMLObjectNameSpace;
-    inc(Server.fStats.fServiceInterface);
+    with Server.fStats do begin
+      EnterCriticalSection(fLock);
+      inc(fServiceInterface);
+      LeaveCriticalSection(fLock);
+    end;
     case ServiceMethodIndex of
     ord(imFree):
       if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then begin
@@ -38355,6 +38371,7 @@ const COMMANDTEXT: array[TSQLRestServerURIContextCommand] of string[15] =
 var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
     elapsed, len: cardinal;
+    outcomingfile: boolean;
 {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -38363,7 +38380,7 @@ begin
 begin
 {$endif}
   QueryPerformanceCounter(timeStart);
-  InterlockedIncrement(integer(fStats.fCurrentRequestCount));
+  fStats.AddCurrentRequestCount(1);
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
   Ctxt := ServicesRouting.Create(self,Call);
@@ -38416,16 +38433,16 @@ begin
     end;
     // 4. returns expected result to the client and update Server statistics
     if StatusCodeIsSuccess(Call.OutStatus) then begin
-      inc(fStats.fSuccess);
+      outcomingfile := false;
       if Call.OutBody<>'' then begin
         len := length(Call.OutHead);
-        if (len>=25) and (Call.OutHead[15]='!') and
-           IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER) then
-          inc(fStats.fOutcomingFiles);
+        outcomingfile := (len>=25) and (Call.OutHead[15]='!') and
+          IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
       end else // Call.OutBody=''
         if (Call.OutStatus=HTML_SUCCESS) and
            (rsoHtml200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTML_NOCONTENT;
+      fStats.ProcessSuccess(outcomingfile);
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
       if Call.OutBody='' then // if no custom error message, compute it now as JSON
@@ -38459,7 +38476,7 @@ begin
       execORMWrite:
         fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,Ctxt.MicroSecondsElapsed);
       end;
-    InterlockedDecrement(integer(fStats.fCurrentRequestCount));
+    fStats.AddCurrentRequestCount(-1);
     if Assigned(OnAfterURI) then
     try
       OnAfterURI(Ctxt);
@@ -38511,18 +38528,23 @@ begin
   if withall or Ctxt.InputExists['withtables'] then begin
     W.CancelLastComma;
     W.AddShort(',"tables":[');
-    for i := 0 to fModel.TablesMax do begin
-      W.Add('{"%":[',[fModel.TableProps[i].Props.SQLTableName]);
-      for rw := False to True do
-        if (i<Length(Stats.fPerTable[rw])) and
-           (Stats.fPerTable[rw,i]<>nil) and
-           (Stats.fPerTable[rw,i].TaskCount<>0) then begin
-          W.AddShort(READWRITE[rw]);
-          Stats.fPerTable[rw,i].ComputeDetailsTo(W);
-          W.Add('}',',');
-        end;
-      W.CancelLastComma;
-      W.AddShort(']},');
+    Stats.Lock; // thread-safe Stats.fPerTable[] access
+    try
+      for i := 0 to fModel.TablesMax do begin
+        W.Add('{"%":[',[fModel.TableProps[i].Props.SQLTableName]);
+        for rw := False to True do
+          if (i<Length(Stats.fPerTable[rw])) and
+             (Stats.fPerTable[rw,i]<>nil) and
+             (Stats.fPerTable[rw,i].TaskCount<>0) then begin
+            W.AddShort(READWRITE[rw]);
+            Stats.fPerTable[rw,i].ComputeDetailsTo(W);
+            W.Add('}',',');
+          end;
+        W.CancelLastComma;
+        W.AddShort(']},');
+      end;
+    finally
+      Stats.UnLock;
     end;
     W.CancelLastComma;
     W.Add(']',',');
@@ -38772,7 +38794,7 @@ begin
       Ctxt.Log.Log(sllUserAuth,'Session aborted by OnSessionCreate() callback '+
          'for User.LogonName=% (connected from "%/%") - clients=%, sessions=%',
         [User.LogonName,Session.RemoteIP,Ctxt.Call^.LowLevelConnectionID,
-         fStats.ClientsCurrent,fSessions.Count],self);
+         fStats.GetClientsCurrent,fSessions.Count],self);
       {$endif}
       Ctxt.AuthenticationFailed(afSessionCreationAborted);
       User := nil;
@@ -38980,15 +39002,15 @@ begin
 end;
 
 procedure TSQLRestServer.BeginCurrentThread(Sender: TThread);
-var i: integer;
+var i, tc: integer;
     CurrentThreadId: TThreadID;
 begin
-  InterlockedIncrement(fStats.fCurrentThreadCount);
+  tc := fStats.NotifyThreadCount(1);
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   InternalLog('BeginCurrentThread(%) ThreadID=% ThreadCount=%',
-    [Sender.ClassType,pointer(CurrentThreadId),fStats.CurrentThreadCount],sllTrace);
+    [Sender.ClassType,pointer(CurrentThreadId),tc],sllTrace);
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
@@ -39006,16 +39028,16 @@ begin
 end;
 
 procedure TSQLRestServer.EndCurrentThread(Sender: TThread);
-var i: integer;
+var i, tc: integer;
     CurrentThreadId: TThreadID;
     Inst: TServiceFactoryServerInstance;
 begin
-  InterlockedDecrement(fStats.fCurrentThreadCount);
+  tc := fStats.NotifyThreadCount(-1);
   CurrentThreadId := GetCurrentThreadId;
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
-    [Sender.ClassType,pointer(CurrentThreadId),fStats.CurrentThreadCount],sllTrace);
+    [Sender.ClassType,pointer(CurrentThreadId),tc],sllTrace);
   if Sender.ThreadID<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
@@ -40640,13 +40662,30 @@ begin
   inherited;
 end;
 
+procedure TSQLRestServerMonitor.ProcessSuccess(IsOutcomingFile: boolean);
+begin
+  EnterCriticalSection(fLock);
+  try
+    inc(fSuccess);
+    if IsOutcomingFile then
+      inc(fOutcomingFiles);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
 procedure TSQLRestServerMonitor.NotifyORM(aMethod: TSQLURIMethod);
 begin
-  case aMethod of
-  mGET,mLOCK: inc(fRead);
-  mPOST:      inc(fCreated);
-  mPUT:       inc(fUpdated);
-  mDELETE:    inc(fDeleted);
+  EnterCriticalSection(fLock);
+  try
+    case aMethod of
+    mGET,mLOCK: inc(fRead);
+    mPOST:      inc(fCreated);
+    mPUT:       inc(fUpdated);
+    mDELETE:    inc(fDeleted);
+    end;
+  finally
+    LeaveCriticalSection(fLock);
   end;
 end;
 
@@ -40655,18 +40694,32 @@ procedure TSQLRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
 begin
   if TableIndex<0 then
     exit;
-  if TableIndex>=length(fPerTable[Write]) then
-    // tables may have been added after Create()
-    SetLength(fPerTable[Write],TableIndex+1);
-  if fPerTable[Write,TableIndex]=nil then
-    fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;
-  with fPerTable[Write,TableIndex] do begin
-    FromExternalMicroSeconds(MicroSecondsElapsed);
-    AddSize(DataSize);
+  EnterCriticalSection(fLock);
+  try
+    if TableIndex>=length(fPerTable[Write]) then
+      // tables may have been added after Create()
+      SetLength(fPerTable[Write],TableIndex+1);
+    if fPerTable[Write,TableIndex]=nil then
+      fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;
+    with fPerTable[Write,TableIndex] do begin
+      FromExternalMicroSeconds(MicroSecondsElapsed);
+      AddSize(DataSize);
+    end;
+  finally
+    LeaveCriticalSection(fLock);
   end;
 end;
 
-
+function TSQLRestServerMonitor.NotifyThreadCount(delta: integer): integer;
+begin
+  EnterCriticalSection(fLock);
+  try
+    inc(fCurrentThreadCount,delta);
+    result := fCurrentThreadCount;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
 
 { TSQLMonitorUsage }
 

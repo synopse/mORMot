@@ -857,7 +857,8 @@ type
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
-  {$ifdef HASINLINE}
+  // - and UInt64 is buggy as hell under Delphi 2007 when inlining functions
+  {$ifdef FPC_OR_UNICODE}
   QWord = UInt64;
   {$else}
   QWord = type Int64;
@@ -14012,7 +14013,7 @@ type
     // see e.g. TSynMonitor.FromExternalMicroSeconds implementation
     // - warning: Start, Stop, Pause and Resume methods are then disallowed
     procedure FromExternalMicroSeconds(const MicroSeconds: QWord);
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
     /// compute the per second count
     function PerSec(const Count: QWord): QWord;
     /// compute the time elapsed by count, with appened time resolution (us,ms,s)
@@ -14093,7 +14094,7 @@ type
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorTotalMicroSec read fMicroSeconds write fMicroSeconds;
@@ -14110,7 +14111,7 @@ type
   public
     /// compute a number per second, of the current value
     function PerSecond(const Count: QWord): QWord;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef FPC_OR_UNICODE}inline;{$endif} // Delphi 2007 is buggy as hell
   published
     /// micro seconds time elapsed, as raw number
     property MicroSec: TSynMonitorOneMicroSec read fMicroSeconds write fMicroSeconds;
@@ -14162,6 +14163,8 @@ type
   /// a generic value object able to handle any task / process statistic
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
+  // - this class is thread-safe for its methods, but you should call explicitly
+  // Lock/UnLock to access its individual properties 
   TSynMonitor = class(TSynPersistent)
   protected
     fProcessing: boolean;
@@ -14175,10 +14178,10 @@ type
     fMaximalTime: TSynMonitorOneTime;
     fPerSec: QWord;
     fTaskStatus: (taskNotStarted,taskStarted);
-    fMultiThreaded: boolean;
     fLock: TRTLCriticalSection;
-    procedure FillPerSecProperties; virtual;
-    procedure FillFromProcessTimer; virtual;
+    procedure LockedPerSecProperties; virtual;
+    procedure LockedFromProcessTimer; virtual;
+    procedure LockedSum(another: TSynMonitor); virtual;
     procedure WriteDetailsTo(W: TTextWriter); virtual;
   public
     /// low-level high-precision timer instance
@@ -14187,29 +14190,48 @@ type
     constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
+    /// lock the instance for exclusive access
+    // - needed only if you access directly the instance properties
+    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
+    /// release the instance for exclusive access
+    // - needed only if you access directly the instance properties
+    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
+    // - thread-safe method
     procedure ProcessStart; virtual;
     /// should be called each time a pending task is processed
     // - will increase the TaskCount property
+    // - thread-safe method
     procedure ProcessDoTask; virtual;
+    /// should be called when the process starts, and a task is processed
+    // - similar to ProcessStart + ProcessDoTask
+    // - thread-safe method
+    procedure ProcessStartTask; virtual;
     /// should be called when an error occurred
     // - typical use is with ObjectToVariantDebug(E,...) kind of information
+    // - thread-safe method
     procedure ProcessError(const info: variant); virtual;
     /// should be called when an error occurred
     // - typical use is with a HTTP status, e.g. as ProcessError(Call.OutStatus)
+    // - just a wraper around overloaded ProcessError(), so a thread-safe method
     procedure ProcessErrorNumber(info: integer);
     /// should be called when the process stops, to pause the internal timer
+    // - thread-safe method
     procedure ProcessEnd; virtual;
     /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); virtual;
+    // - thread-safe method calling LockedSum protected virtual method
+    procedure Sum(another: TSynMonitor);
     /// returns a JSON content with all published properties information
+    // - thread-safe method
     function ComputeDetailsJSON: RawUTF8;
     /// appends a JSON content with all published properties information
+    // - thread-safe method
     procedure ComputeDetailsTo(W: TTextWriter); virtual;
     {$ifndef NOVARIANTS}
     /// returns a TDocVariant with all published properties information
+    // - thread-safe method
     function ComputeDetails: variant;
     {$endif}
     /// used to allow thread safe timing
@@ -14219,12 +14241,14 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - will return the processing time, converted into micro seconds, ready
     // to be logged if needed
+    // - thread-safe method
     function FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
     /// used to allow thread safe timing
     // - by default, the internal TPrecisionTimer is not thread safe: you can
     // use this method to update the timing from many threads
     // - if you use this method, ProcessStart, ProcessDoTask and ProcessEnd
     // methods are disallowed, and the global fTimer won't be used any more
+    // - thread-safe method
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
   published
     /// indicates if this thread is currently working on some process
@@ -14256,16 +14280,16 @@ type
   protected
     fSize: TSynMonitorSize;
     fThroughput: TSynMonitorThroughput;
-    procedure FillPerSecProperties; override;
+    procedure LockedPerSecProperties; override;
+    procedure LockedSum(another: TSynMonitor); override;
   public
     /// initialize the instance nested class properties
     constructor Create; override;
     /// finalize the instance
     destructor Destroy; override;
     /// increase the internal size counter
-    procedure AddSize(const Bytes: QWord); {$ifdef HASINLINE}inline;{$endif}
-    /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); override;
+    // - thread-safe method
+    procedure AddSize(const Bytes: QWord);
   published
     /// how many total data has been hanlded during all working process
     property Size: TSynMonitorSize read fSize;
@@ -14281,12 +14305,12 @@ type
     fOutput: TSynMonitorSize;
     fInputThroughput: TSynMonitorThroughput;
     fOutputThroughput: TSynMonitorThroughput;
-    procedure FillPerSecProperties; override;
+    procedure LockedPerSecProperties; override;
+    procedure LockedSum(another: TSynMonitor); override;
   public
     /// increase the internal size counters
+    // - thread-safe method
     procedure AddSize(const Incoming, Outgoing: QWord);
-    /// could be used to manage information average or sums
-    procedure Sum(another: TSynMonitor); override;
   published
     /// initialize the instance nested class properties
     constructor Create; override;
@@ -14311,11 +14335,21 @@ type
     fClientsMax: cardinal;
   public
     /// update ClientsCurrent and ClientsMax
+    // - thread-safe method
     procedure ClientConnect;
     /// update ClientsCurrent and ClientsMax
+    // - thread-safe method
     procedure ClientDisconnect;
     /// update ClientsCurrent to 0
+    // - thread-safe method
     procedure ClientDisconnectAll;
+    /// retrieve the number of connected clients
+    // - thread-safe method
+    function GetClientsCurrent: TSynMonitorCount;
+    /// how many concurrent requests are currently processed
+    // - returns the updated number of requests
+    // - thread-safe method
+    function AddCurrentRequestCount(diff: integer): TSynMonitorCount;
   published
     /// current count of connected clients
     property ClientsCurrent: TSynMonitorCount read fClientsCurrent;
@@ -45915,45 +45949,83 @@ begin
   fMinimalTime := TSynMonitorOneTime.Create;
   fAverageTime := TSynMonitorOneTime.Create;
   fMaximalTime := TSynMonitorOneTime.Create;
+  InitializeCriticalSection(fLock);
 end;
 
 destructor TSynMonitor.Destroy;
 begin
-  if fMultiThreaded then
-    DeleteCriticalSection(fLock);
   fMaximalTime.Free;
   fAverageTime.Free;
   fMinimalTime.Free;
   fLastTime.Free;
   fTotalTime.Free;
+  DeleteCriticalSection(fLock);
   inherited Destroy;
+end;
+
+procedure TSynMonitor.Lock;
+begin
+  EnterCriticalSection(fLock);
+end;
+
+procedure TSynMonitor.UnLock;
+begin
+  LeaveCriticalSection(fLock);
 end;
 
 procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
     raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
-  if fMultiThreaded then
-    raise ESynException.CreateUTF8('Multi-threaded %.ProcessStart',[self]);
-  InternalTimer.Resume;
-  fTaskStatus := taskNotStarted;
-  fProcessing := true;
+  EnterCriticalSection(fLock);
+  try
+    InternalTimer.Resume;
+    fTaskStatus := taskNotStarted;
+    fProcessing := true;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynMonitor.ProcessDoTask;
 begin
-  inc(fTaskCount);
-  fTaskStatus := taskStarted;
+  EnterCriticalSection(fLock);
+  try
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.ProcessStartTask;
+begin
+  if fProcessing then
+    raise ESynException.CreateUTF8('Reentrant %.ProcessStart',[self]);
+  EnterCriticalSection(fLock);
+  try
+    InternalTimer.Resume;
+    fProcessing := true;
+    inc(fTaskCount);
+    fTaskStatus := taskStarted;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynMonitor.ProcessEnd;
 begin
-  InternalTimer.Pause;
-  InternalTimer.ComputeTime;
-  FillFromProcessTimer;
+  EnterCriticalSection(fLock);
+  try
+    InternalTimer.Pause;
+    InternalTimer.ComputeTime;
+    LockedFromProcessTimer;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
-procedure TSynMonitor.FillFromProcessTimer;
+procedure TSynMonitor.LockedFromProcessTimer;
 begin
   fTotalTime.MicroSec := InternalTimer.TimeInMicroSec;
   if fTaskStatus=taskStarted then begin
@@ -45965,22 +46037,18 @@ begin
       fMaximalTime.MicroSec := InternalTimer.LastTimeInMicroSec;
     fTaskStatus := taskNotStarted;
   end;
-  FillPerSecProperties;
+  LockedPerSecProperties;
   fProcessing := false;
 end;
 
 function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
 begin
-  if not fMultiThreaded then begin
-    fMultiThreaded := true;
-    InitializeCriticalSection(fLock);
-  end;
   EnterCriticalSection(fLock);
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     result := InternalTimer.FromExternalQueryPerformanceCounters(CounterDiff);
-    FillFromProcessTimer;
+    LockedFromProcessTimer;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -45988,16 +46056,12 @@ end;
 
 procedure TSynMonitor.FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
 begin
-  if not fMultiThreaded then begin
-    fMultiThreaded := true;
-    InitializeCriticalSection(fLock);
-  end;
   EnterCriticalSection(fLock);
   try // thread-safe ProcessStart+ProcessDoTask+ProcessEnd
     inc(fTaskCount);
     fTaskStatus := taskStarted;
     InternalTimer.FromExternalMicroSeconds(MicroSecondsElapsed);
-    FillFromProcessTimer;
+    LockedFromProcessTimer;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -46014,14 +46078,12 @@ end;
 
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock); // how knows? the safer the better
+  EnterCriticalSection(fLock);
   try
     inc(fInternalErrors);
     fLastInternalError := info;
   finally
-    if fMultiThreaded then
-      LeaveCriticalSection(fLock);
+    LeaveCriticalSection(fLock);
   end;
 end;
 
@@ -46030,7 +46092,7 @@ begin
   ProcessError(info);
 end;
 
-procedure TSynMonitor.FillPerSecProperties;
+procedure TSynMonitor.LockedPerSecProperties;
 begin
   if fTaskCount=0 then
     exit; // avoid division per zero
@@ -46040,10 +46102,20 @@ end;
 
 procedure TSynMonitor.Sum(another: TSynMonitor);
 begin
-  if another=nil then
+  if (self=nil) or (another=nil) then
     exit;
-  if another.fMultiThreaded then
-    EnterCriticalSection(another.fLock); // thread safe access
+  EnterCriticalSection(fLock);
+  EnterCriticalSection(another.fLock);
+  try
+    LockedSum(another);
+  finally
+    LeaveCriticalSection(another.fLock);
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+procedure TSynMonitor.LockedSum(another: TSynMonitor);
+begin
   fTotalTime.MicroSec := fTotalTime.MicroSec+another.fTotalTime.MicroSec;
   if (fMinimalTime.MicroSec=0) or
      (another.fMinimalTime.MicroSec<fMinimalTime.MicroSec) then
@@ -46054,25 +46126,26 @@ begin
   if another.Processing then
     fProcessing := true; // if any thread is active, whole daemon is active
   inc(fInternalErrors,another.Errors);
-  if another.fMultiThreaded then
-    LeaveCriticalSection(another.fLock);
 end;
 
 procedure TSynMonitor.WriteDetailsTo(W: TTextWriter);
 begin
-  W.WriteObject(self);
+  EnterCriticalSection(fLock);
+  try
+    W.WriteObject(self);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynMonitor.ComputeDetailsTo(W: TTextWriter);
 begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock); // how knows? the safer the better
+  EnterCriticalSection(fLock);
   try
-    FillPerSecProperties; // may not have been calculated after Sum()
+    LockedPerSecProperties; // may not have been calculated after Sum()
     WriteDetailsTo(W);
   finally
-    if fMultiThreaded then
-      LeaveCriticalSection(fLock);
+    LeaveCriticalSection(fLock);
   end;
 end;
 
@@ -46111,27 +46184,29 @@ begin
   fSize.Free;
 end;
 
-procedure TSynMonitorWithSize.FillPerSecProperties;
+procedure TSynMonitorWithSize.LockedPerSecProperties;
 begin
-  inherited;
+  inherited LockedPerSecProperties;
   fThroughput.BytesPerSec := fTotalTime.PerSecond(fSize.Bytes);
 end;
 
 procedure TSynMonitorWithSize.AddSize(const Bytes: QWord);
 begin
-  fSize.Bytes := fSize.Bytes+Bytes;
+  EnterCriticalSection(fLock);
+  try
+    fSize.Bytes := fSize.Bytes+Bytes;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
-procedure TSynMonitorWithSize.Sum(another: TSynMonitor);
+procedure TSynMonitorWithSize.LockedSum(another: TSynMonitor);
 begin
-  inherited;
-  if fMultiThreaded then
-    EnterCriticalSection(fLock);
+  inherited LockedSum(another);
   if another.InheritsFrom(TSynMonitorWithSize) then
     AddSize(TSynMonitorWithSize(another).Size.Bytes);
-  if fMultiThreaded then
-    LeaveCriticalSection(fLock);
 end;
+
 
 { TSynMonitorInputOutput }
 
@@ -46153,26 +46228,27 @@ begin
   inherited Destroy;
 end;
 
-procedure TSynMonitorInputOutput.FillPerSecProperties;
+procedure TSynMonitorInputOutput.LockedPerSecProperties;
 begin
-  inherited;
+  inherited LockedPerSecProperties;
   fInputThroughput.BytesPerSec := fTotalTime.PerSecond(fInput.Bytes);
   fOutputThroughput.BytesPerSec := fTotalTime.PerSecond(fOutput.Bytes);
 end;
 
 procedure TSynMonitorInputOutput.AddSize(const Incoming, Outgoing: QWord);
 begin
-  if fMultiThreaded then
-    EnterCriticalSection(fLock);
-  fInput.Bytes := fInput.Bytes+Incoming;
-  fOutput.Bytes := fOutput.Bytes+Outgoing;
-  if fMultiThreaded then
+  EnterCriticalSection(fLock);
+  try
+    fInput.Bytes := fInput.Bytes+Incoming;
+    fOutput.Bytes := fOutput.Bytes+Outgoing;
+  finally
     LeaveCriticalSection(fLock);
+  end;
 end;
 
-procedure TSynMonitorInputOutput.Sum(another: TSynMonitor);
+procedure TSynMonitorInputOutput.LockedSum(another: TSynMonitor);
 begin
-  inherited Sum(another);
+  inherited LockedSum(another);
   if another.InheritsFrom(TSynMonitorInputOutput) then begin
     fInput.Bytes := fInput.Bytes+TSynMonitorInputOutput(another).Input.Bytes;
     fOutput.Bytes := fOutput.Bytes+TSynMonitorInputOutput(another).Output.Bytes;
@@ -46184,22 +46260,57 @@ end;
 
 procedure TSynMonitorServer.ClientConnect;
 begin
-  inc(fClientsCurrent);
-  if fClientsCurrent>fClientsMax then
-    fClientsMax := fClientsCurrent;
+  EnterCriticalSection(fLock);
+  try
+    inc(fClientsCurrent);
+    if fClientsCurrent>fClientsMax then
+      fClientsMax := fClientsCurrent;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynMonitorServer.ClientDisconnect;
 begin
-  if fClientsCurrent>0 then
-    dec(fClientsCurrent);
+  EnterCriticalSection(fLock);
+  try
+    if fClientsCurrent>0 then
+      dec(fClientsCurrent);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
 procedure TSynMonitorServer.ClientDisconnectAll;
 begin
-  fClientsCurrent := 0;
+  EnterCriticalSection(fLock);
+  try
+    fClientsCurrent := 0;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
+function TSynMonitorServer.GetClientsCurrent: TSynMonitorCount;
+begin
+  EnterCriticalSection(fLock);
+  try
+    result := fClientsCurrent;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
+
+function TSynMonitorServer.AddCurrentRequestCount(diff: integer): TSynMonitorCount;
+begin
+  EnterCriticalSection(fLock);
+  try
+    inc(integer(fCurrentRequestCount),diff);
+    result := fCurrentRequestCount;
+  finally
+    LeaveCriticalSection(fLock);
+  end;
+end;
 
 { TSynMonitorMemory }
 

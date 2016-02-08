@@ -5355,8 +5355,7 @@ begin
         WasPrepared^ := false;
     end;
     if ExecutionTimer<>nil then begin
-      Timer.ProcessStart;
-      Timer.ProcessDoTask;
+      Timer.ProcessStartTask;
       ExecutionTimer^ := @Timer.InternalTimer;
       if ExecutionMonitor<>nil then
         ExecutionMonitor^ := Timer;
