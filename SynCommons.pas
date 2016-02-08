@@ -20143,7 +20143,7 @@ begin
 end;
 
 function isSelect(P: PUTF8Char; SelectClause: PRawUTF8): boolean;
-var from: PUTF8Char; 
+var from: PUTF8Char;
 begin
   if P<>nil then begin
     P := SQLBegin(P);
@@ -29945,7 +29945,10 @@ begin
   i := PosEx('boundary=',MimeType);
   if i=0 then
     exit;
-  boundary := '--'+trim(copy(MimeType,i+9,200));
+  boundary := trim(copy(MimeType,i+9,200));
+  if (boundary<>'') and (boundary[1]='"') then
+    boundary := copy(boundary,2,length(boundary)-2); // "boundary" -> boundary
+  boundary := '--'+boundary;
   endBoundary := boundary+'--'+#13#10;
   boundary := boundary+#13#10;
   i := PosEx(boundary,Body);
