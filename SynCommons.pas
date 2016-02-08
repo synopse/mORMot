@@ -14174,9 +14174,9 @@ type
     fAverageTime: TSynMonitorOneTime;
     fMaximalTime: TSynMonitorOneTime;
     fPerSec: QWord;
-    fLock: TRTLCriticalSection;
     fTaskStatus: (taskNotStarted,taskStarted);
     fMultiThreaded: boolean;
+    fLock: TRTLCriticalSection;
     procedure FillPerSecProperties; virtual;
     procedure FillFromProcessTimer; virtual;
     procedure WriteDetailsTo(W: TTextWriter); virtual;

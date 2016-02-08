@@ -18606,6 +18606,13 @@ const
 /// wrapper to search for a given TSQLRecord by ID in an array of TSQLRecord
 function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
 
+/// safe deletion of a T*InterfaceArray dynamic array item
+// - similar to InterfaceArrayDelete, but with a safe try .. except block
+// during the entry deletion (since the system may be unstable)
+// - will also log a warning with the Interface name (from aLogMsg) and aInstance
+procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
+  const aItemIndex: integer; aLog: TSynLogFamily; const aLogMsg: RawUTF8; aInstance: TObject);
+
 /// create a TRecordReference with the corresponding parameters
 function RecordReference(Model: TSQLModel; aTable: TSQLRecordClass; aID: TID): TRecordReference; overload;
 
@@ -55111,6 +55118,19 @@ begin
       exit;
     end;
   result := nil;
+end;
+
+procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
+  const aItemIndex: integer; aLog: TSynLogFamily; const aLogMsg: RawUTF8;
+  aInstance: TObject);
+begin
+  try
+    aLog.SynLog.Log(sllWarning,'InterfaceArrayDeleteAfterException %',[aLogMsg],aInstance);
+    InterfaceArrayDelete(aInterfaceArray,aItemIndex);
+  except
+    on E: Exception do
+      aLog.SynLog.Log(sllDebug,'Callback unstability at deletion: %',[E],aInstance);
+  end;
 end;
 
 
