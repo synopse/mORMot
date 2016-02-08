@@ -371,6 +371,12 @@
     {$if CompilerVersion >= 30.0}
       {$define ISDELPHI10}
     {$ifend}
+    {$if CompilerVersion >= 31.0}
+      {$define ISDELPHI101}
+    {$ifend}
+    {$if CompilerVersion >= 32.0}
+      {$define ISDELPHI102}
+    {$ifend}
   {$ELSE}
     // Delphi 5 or older
     {$define DELPHI6OROLDER}
