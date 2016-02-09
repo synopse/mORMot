@@ -7289,7 +7289,7 @@ type
       const aRTTIDefinition: RawUTF8): TJSONRecordAbstract; overload;
     /// define a custom serialization for several dynamic arrays or records
     // - the TypeInfo() and textual RTTI information will here be defined as
-    // ([TypeInfo(TType1),_TType1,Typeinfo(TType2),_TType2]) pairs
+    // ([TypeInfo(TType1),_TType1,TypeInfo(TType2),_TType2]) pairs
     // - a wrapper around the overloaded RegisterCustomJSONSerializerFromText()
     class procedure RegisterCustomJSONSerializerFromText(
       const aTypeInfoTextDefinitionPairs: array of const); overload;
@@ -29131,14 +29131,13 @@ function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
 {$ifdef CPU64}
 var a: array[0..1] of Int64 absolute guid1;
     b: array[0..1] of Int64 absolute guid2;
+begin
+  result := (a[0]=b[0]) and (a[1]=b[1]);
+end;
 {$else}
 var a: array[0..3] of integer absolute guid1;
     b: array[0..3] of integer absolute guid2;
-{$endif}
 begin // faster implementation than in SysUtils.pas
-{$ifdef CPU64}
-  result := (a[0]=b[0]) and (a[1]=b[1]);
-{$else}
   {$ifdef HASINLINE}
   result := (a[0]=b[0]) and (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
   {$else}
@@ -29146,8 +29145,8 @@ begin // faster implementation than in SysUtils.pas
     result := false else
     result := (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
   {$endif}
-{$endif}
 end;
+{$endif}
 
 function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
 begin

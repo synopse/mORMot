@@ -37154,9 +37154,12 @@ procedure TSQLRestServerURIContext.ExecuteORMGet;
       bits: TSQLFieldBits;
       withid: boolean;
   begin // force plain standard JSON output for AJAX clients
-    if (FieldsCSV='') or IsRowID(pointer(FieldsCSV)) or
+    if (FieldsCSV='') or
+      // handle ID single field only if ID_str is needed
+      (IsRowID(pointer(FieldsCSV)) and not (jwoID_str in Options)) or
+      // we won't handle min()/max() functions
       not TableRecordProps.Props.FieldBitsFromCSV(FieldsCSV,bits,withid) then
-      exit; // ID is already OK, and we avoid min()/max() fields
+      exit;
     rec := Table.CreateAndFillPrepare(Call.OutBody);
     try
       W := TableRecordProps.Props.CreateJSONWriter(
@@ -44901,8 +44904,8 @@ begin
     for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
       case P^.PropType^.Kind of
         {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
-        if P^.Default<>longint($80000000) then
-          P^.SetOrdProp(Value,P^.Default);
+          if P^.Default<>longint($80000000) then
+            P^.SetOrdProp(Value,P^.Default);
         tkClass:
           SetDefaultValuesObject(P^.GetObjProp(Value));
       end;
