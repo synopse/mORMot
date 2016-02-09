@@ -538,10 +538,12 @@ procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
   const SourceFileName: TFileName);
 var desc,typeName,interfaceName: RawUTF8;
     P,S: PUTF8Char;
+    withinCode: boolean;
 begin
   S := pointer(StringFromFile(SourceFileName));
   if S=nil then
     exit;
+  withinCode := false;
   repeat // rough parsing of the .pas unit file to extract /// description
     P := GetNextLineBegin(S,S);
     P := GotoNextNotSpace(P);
@@ -559,6 +561,14 @@ begin
         if (P[0]='/') and (P[1]='/') then begin
           if P[2]='/' then inc(P,3) else inc(P,2);
           P := GotoNextNotSpace(P);
+          if P^ in ['$','!'] then begin
+            if not withinCode then begin
+              withinCode := true;
+              desc := desc+#13#10#13#10'----'; // AsciiDoc source code block
+            end;
+            desc := desc+#13#10;
+            inc(P); 
+          end else
           if P^='-' then begin
             desc := desc+#13#10#13#10'- [*]'; // as expected by buggy AsciiDoc format
             inc(P);
@@ -568,6 +578,8 @@ begin
         end else
           break;
       until false;
+      if withinCode then
+        desc := desc+#13#10'----'; // code block should end the description
       typeName := GetNextItem(P,' ');
       if P=nil then
         exit;
