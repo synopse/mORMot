@@ -11985,6 +11985,7 @@ type
   TServiceFactoryClient = class(TServiceFactory)
   protected
     fForcedURI: RawUTF8;
+    fClient: TSQLRestClientURI;
     fParamsAsJSONObject: boolean;
     fResultAsJSONObject: boolean;
     fSendNotificationsThread: TThread;
@@ -32474,21 +32475,15 @@ begin
   n := length(FieldName);
   if (self<>nil) and (Table<>nil) and (n=length(FieldValue)) then
   with Table.RecordProps do begin
-    if (n=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then begin
-      SQL := 'SELECT COUNT(*) FROM '+SQLTableName;
-      if WhereClause<>'' then
-        SQL := SQL+' WHERE '+WhereClause;
-    end else begin
+    if (n=1) and IdemPChar(pointer(FieldName[0]),'COUNT(*)') then
+      SQL := 'SELECT COUNT(*) FROM '+SQLTableName+SQLFromWhere(WhereClause) else begin
       for i := 0 to high(FieldName) do
         if not IsFieldNameOrFunction(FieldName[i]) then
           exit else // prevent SQL error or security breach
           if SQL='' then
             SQL := 'SELECT '+FieldName[i] else
             SQL := SQL+','+FieldName[i];
-      SQL := SQL+' FROM '+SQLTableName;
-      if WhereClause<>'' then
-        SQL := SQL+' WHERE '+WhereClause;
-      SQL := SQL+' LIMIT 1';
+      SQL := SQL+' FROM '+SQLTableName+SQLFromWhere(WhereClause)+' LIMIT 1';
     end;
     T := ExecuteList([Table],SQL);
     if T<>nil then
@@ -32981,10 +32976,10 @@ end;
 procedure TSQLRest.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
   ForceID, DoNotAutoComputeFields, WithBlobs: boolean; var result: RawUTF8);
 begin
-    if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
-      Value.ComputeFieldsBeforeWrite(self,seAdd);
-    if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
-      ForceID := true;
+  if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+    Value.ComputeFieldsBeforeWrite(self,seAdd);
+  if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
+    ForceID := true;
   if (Model.fIDGenerator<>nil) and (Model.fIDGenerator[TableIndex]<>nil) then begin
     Value.fID := Model.fIDGenerator[TableIndex].ComputeNew;
     ForceID := true;
@@ -54768,7 +54763,7 @@ type
   public
     constructor Create(aClient: TServiceFactoryClient; aRemote: TSQLRestClientURI;
       aRetryPeriodSeconds: Integer);
-end;
+  end;
 
 constructor TServiceFactoryClientNotificationThread.Create(
   aClient: TServiceFactoryClient; aRemote: TSQLRestClientURI; aRetryPeriodSeconds: Integer);
@@ -54820,7 +54815,7 @@ begin // one at a time, since InternalInvoke() is the bottleneck
       if _Safe(pending.fOutput)^.GetAsInteger('errorcount',count) then
         inc(count) else
         count := 1;
-      VarClear(pending.fOutput);
+      VarClear(pending.fOutput);        
       TDocVariantData(pending.fOutput).InitObject(['errorcount',count,
         'lasterror',error,'lasttime',NowUTCToString(true,'T'),
         'lastelapsed',timer.Stop],JSON_OPTIONS_FAST_EXTENDED);
@@ -54896,7 +54891,7 @@ begin
     if fSendNotificationsThread<>nil then
       InterlockedIncrement(TServiceFactoryClientNotificationThread(
         fSendNotificationsThread).fPending);
-     result := true;
+    result := true;
   end else
     result := InternalInvoke(
       aMethod.URI,aParams,aResult,aErrorMsg,aClientDrivenID,aServiceCustomAnswer);

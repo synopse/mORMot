@@ -111,7 +111,7 @@ type
     constructor Create(aSettings: TDDDAdministratedDaemonSettings); virtual;
     /// finalize the service/daemon application, and release its resources
     destructor Destroy; override;
-    /// interprect the command line to run the application as expected
+    /// interpret the command line to run the application as expected
     // - under Windows, /install /uninstall /start /stop would control the
     // daemon as a Windows Service - you should run the program with
     // administrator rights to be able to change the Services settings
@@ -290,12 +290,12 @@ type
   /// the monitoring information of a TDDDSocketThread thread
   TDDDSocketThreadMonitoring = class(TDDDAdministratedDaemonMonitor)
   protected
-    FState: TDDDSocketThreadState;
+    fState: TDDDSocketThreadState;
     fOwner: TDDDSocketThread;
     function GetSocket: variant;
   published
     /// how this thread is currently connected to its associated TCP server
-    property State: TDDDSocketThreadState read FState write FState;
+    property State: TDDDSocketThreadState read fState write fState;
     /// information about the associated socket
     property Socket: variant read GetSocket;
   end;
