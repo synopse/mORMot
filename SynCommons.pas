@@ -53570,14 +53570,18 @@ type // used to compute a 24 hexadecimal chars obfuscated pseudo file name
 function TSynUniqueIdentifierGenerator.ToObfuscated(
   const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
 var bits: TSynUniqueIdentifierObfuscatedBits;
+    key: cardinal;
 begin
   result := '';
-  if (self=nil) or (aIdentifier=0) then
+  if aIdentifier=0 then
     exit;
   bits.id.Value := aIdentifier;
-  bits.crc := crc32c(bits.id.ProcessID,@bits.id,sizeof(bits.id))
-    xor FCrypto[bits.id.ProcessID and high(fCrypto)];
-  bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
+  if self=nil then
+    key := 0 else
+    key := fCrypto[bits.id.ProcessID and high(fCrypto)];
+  bits.crc := crc32c(bits.id.ProcessID,@bits.id,sizeof(bits.id)) xor key;
+  if self<>nil then
+    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
   result := BinToHex(@bits,SizeOf(bits));
 end;
 
@@ -53586,6 +53590,7 @@ function TSynUniqueIdentifierGenerator.FromObfuscated(
   out aIdentifier: TSynUniqueIdentifier): boolean;
 var bits: TSynUniqueIdentifierObfuscatedBits;
     len: integer;
+    key: cardinal;
 begin
   result := false;
   len := PosEx('.',aObfuscated);
@@ -53595,9 +53600,12 @@ begin
   if (len<>sizeof(bits)*2) or
      not SynCommons.HexToBin(pointer(aObfuscated),@bits,sizeof(bits)) then
     exit;
-  bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
-  if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id))
-     xor FCrypto[bits.id.ProcessID and high(fCrypto)]=bits.crc then begin
+  if self=nil then
+    key := 0 else begin
+    bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
+    key := fCrypto[bits.id.ProcessID and high(fCrypto)];
+  end;
+  if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id)) xor key=bits.crc then begin
     aIdentifier := bits.id.Value;
     result := true;
   end;
