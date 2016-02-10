@@ -14967,7 +14967,7 @@ type
     fCrypto: array[0..7] of cardinal;
     fSafe: TSynLocker;
   public
-    /// initialize the generator
+    /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
     constructor Create(aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8=''); reintroduce;
@@ -14979,6 +14979,9 @@ type
     /// return a new unique ID, type-casted to an Int64
     function ComputeNew: Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// return an unique ID matching this generator pattern, at a given timestamp
+    // - may be used e.g. to limit database queries on a particular time range 
+    procedure ComputeFromDateTime(aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
     /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
     function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
@@ -53521,6 +53524,12 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime;
+  out result: TSynUniqueIdentifierBits);
+begin
+  result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
 end;
 
 function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
