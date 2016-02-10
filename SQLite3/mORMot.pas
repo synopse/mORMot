@@ -9008,6 +9008,7 @@ type
     // reset to 0 or deleted (if CascadeDelete is true) by
     // TSQLRestServer.AfterDeleteForceCoherency
     fRecordReferences: array of TSQLModelRecordReference;
+    fIDGenerator: array of TSynUniqueIdentifierGenerator;
     procedure SetTableProps(aIndex: integer);
     function GetTableIndexSafe(aTable: TSQLRecordClass;
       RaiseExceptionIfNotExisting: boolean): integer;
@@ -9155,6 +9156,15 @@ type
     // - use e.g. as SetVariantFieldDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED)
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     {$endif}
+    /// force a given table to use a TSynUniqueIdentifierGenerator for its IDs
+    /// - would initialize a generator for the supplied table, using the
+    // given 16-bit process identifier
+    // - you can supply an obfuscation key, which should be shared for the
+    // whole system, so that you may use FromObfuscated/ToObfuscated methods
+    function SetIDGenerator(aTable: TSQLRecordClass;
+      aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8=''): TSynUniqueIdentifierGenerator;
+    /// returns the TSynUniqueIdentifierGenerator associated to a table, if any 
+    function GetIDGenerator(aTable: TSQLRecordClass): TSynUniqueIdentifierGenerator;
 
     /// assign an enumeration type to the possible actions to be performed
     // with this model
@@ -31379,6 +31389,27 @@ begin
       fTableProps[i].fProps.SetVariantFieldsDocVariantOptions(Options);
 end;
 {$endif}
+
+function TSQLModel.SetIDGenerator(aTable: TSQLRecordClass;
+  aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8): TSynUniqueIdentifierGenerator;
+var i: integer;
+begin
+  i := GetTableIndexExisting(aTable);
+  if i>=length(fIDGenerator) then
+    SetLength(fIDGenerator,fTablesMax+1);
+  result := TSynUniqueIdentifierGenerator.Create(aIdentifier,aSharedObfuscationKey);
+  fIDGenerator[i].Free;
+  fIDGenerator[i] := result;
+end;
+
+function TSQLModel.GetIDGenerator(aTable: TSQLRecordClass): TSynUniqueIdentifierGenerator;
+var i: cardinal;
+begin
+  i := GetTableIndexExisting(aTable);
+  if i<cardinal(length(fIDGenerator)) then
+    result := fIDGenerator[i] else
+    result := nil; 
+end;
 
 function TSQLModel.NewRecord(const SQLTableName: RawUTF8): TSQLRecord;
 var aClass: TSQLRecordClass;
