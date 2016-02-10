@@ -17822,6 +17822,35 @@ type
     destructor Destroy; override;
   end;
 
+  /// Rest client with redirection to another TSQLRest instance
+  TSQLRestClientRedirect = class(TSQLRestClientURI)
+  protected
+    fRedirectedServer: TSQLRestServer;
+    fRedirectedClient: TSQLRestClientURI;
+    /// method calling the associated RESTful instance
+    procedure InternalURI(var Call: TSQLRestURIParams); override;
+    /// overridden protected method which returns TRUE if redirection is enabled
+    function InternalCheckOpen: boolean; override;
+    /// this overridden protected method does nothing 
+    procedure InternalClose; override;
+  public
+    /// prepare the redirection, to be enabled later via RedirectTo()
+    // - the supplied aModel instance would be owned by this class
+    constructor Create(aModel: TSQLModel); overload; override;
+    /// would pass all client commands to the supplied TSQLRest instance
+    // - aRedirected is expected to be either a TSQLRestClientURI or
+    // a TSQLRestServer
+    // - will make a copy of the aRedirected.Model, and own it
+    constructor Create(aRedirected: TSQLRest); reintroduce; overload;
+    /// would pass all client commands to the supplied TSQLRestServer instance
+    // - aRedirected would be owned by this TSQLRestClientRedirect
+    constructor CreateOwned(aRedirected: TSQLRestServer); reintroduce;
+    /// allows to change redirection to a client on the fly
+    // - if aRest is nil, redirection would be disabled and any URI() call would
+    // return an HTML_GATEWAYTIMEOUT 504 error status
+    procedure RedirectTo(aRedirected: TSQLRest);
+  end;
+
   {$ifdef MSWINDOWS}
 
   /// Rest client with remote access to a server through Windows messages
@@ -40191,6 +40220,72 @@ end;
 
 procedure TSQLRestClientURIDll.InternalClose;
 begin
+end;
+
+
+{ TSQLRestClientRedirect }
+
+constructor TSQLRestClientRedirect.Create(aModel: TSQLModel);
+begin
+  inherited Create(aModel);
+  fModel.Owner := self;
+end;
+
+constructor TSQLRestClientRedirect.Create(aRedirected: TSQLRest);
+begin
+  if aRedirected=nil then
+    raise EORMException.CreateUTF8('%.Create(nil)',[self]);
+  Create(TSQLModel.Create(aRedirected.Model));
+  RedirectTo(aRedirected);
+end;
+
+constructor TSQLRestClientRedirect.CreateOwned(aRedirected: TSQLRestServer);
+begin
+  Create(aRedirected);
+  fPrivateGarbageCollector.Add(aRedirected);
+end;
+
+procedure TSQLRestClientRedirect.RedirectTo(aRedirected: TSQLRest);
+begin
+  EnterCriticalSection(fMutex);
+  try
+    fRedirectedClient := nil;
+    fRedirectedServer := nil;
+    if aRedirected=nil then
+      exit; // redirection disabled
+    if aRedirected.InheritsFrom(TSQLRestServer) then
+      fRedirectedServer := aRedirected as TSQLRestServer else
+    if aRedirected.InheritsFrom(TSQLRestClientURI) then
+      fRedirectedClient := aRedirected as TSQLRestClientURI else
+      raise EORMException.CreateUTF8('%.RedirectTo: % should be either % or %',
+        [self,aRedirected,TSQLRestServer,TSQLRestClientURI]);
+  finally
+    LeaveCriticalSection(fMutex);
+  end;
+end;
+
+function TSQLRestClientRedirect.InternalCheckOpen: boolean;
+begin
+  result := Assigned(fRedirectedServer) or Assigned(fRedirectedClient);
+end;
+
+procedure TSQLRestClientRedirect.InternalClose;
+begin
+end;
+
+procedure TSQLRestClientRedirect.InternalURI(var Call: TSQLRestURIParams);
+begin
+  EnterCriticalSection(fMutex);
+  try
+    if Assigned(fRedirectedServer) then
+      fRedirectedServer.URI(Call) else
+    if Assigned(fRedirectedClient) then
+      // hook to access InternalURI() protected method
+      TSQLRestClientRedirect(fRedirectedClient).InternalURI(Call) else
+      Call.OutStatus := HTML_GATEWAYTIMEOUT;
+  finally
+    LeaveCriticalSection(fMutex);
+  end;
 end;
 
 
