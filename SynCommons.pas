@@ -13344,6 +13344,10 @@ type
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
+    /// add one or several values from another document
+    // - supplied document should be of the same kind than the current one,
+    // otherwise nothing is added
+    procedure AddFrom(const aDocVariant: Variant);
     /// delete a value/item in this document, from its index
     // - return TRUE on success, FALSE if the supplied index is not correct
     function Delete(Index: integer): boolean; overload;
@@ -36018,6 +36022,22 @@ begin
   VarClear(VValue[result]);
   if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result])) then
     RawUTF8ToVariant(aValue,VValue[result]);
+end;
+
+procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
+var source: PDocVariantData;
+    ndx: integer;
+begin
+  source := _Safe(aDocVariant);
+  if source^.Count=0 then
+    exit; // nothing to add
+  if (VKind<>dvUndefined) and (VKind<>source^.VKind) then
+    exit; // types should match
+  if source^.VKind=dvArray then
+    for ndx := 0 to source^.Count-1 do
+      AddItem(source^.VValue[ndx]) else
+    for ndx := 0 to source^.Count-1 do
+      AddValue(source^.VName[ndx],source^.VValue[ndx]);
 end;
 
 function TDocVariantData.AddItem(const aValue: variant): integer;
