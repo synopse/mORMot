@@ -10113,6 +10113,13 @@ type
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     procedure ArgsAsDocVariantFix(var ArgsObject: TDocVariantData; Input: boolean);
+    /// convert a TDocVariant array containing the input or output arguments
+    // values in order, into an object with named parameters
+    // - here sets and enums would keep their current values, mainly numerical
+    // - if Input is TRUE, will handle const / var arguments
+    // - if Input is FALSE, will handle var / out / result arguments
+    procedure ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
+      var ArgsObject: TDocVariantData; Input: boolean);
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should point to the input/output raw binary values, as stored
     // in TServiceMethodExecute.Values during execution
@@ -12750,6 +12757,9 @@ type
     // overriding this method, in a reverse logic to overriden DefinitionTo()
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); virtual;
+    /// used by Add and AddWithBlobs() before EngineAdd()
+    procedure GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
+      ForceID, DoNotAutoComputeFields, WithBlobs: boolean; var result: RawUTF8);
    protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -31629,6 +31639,7 @@ begin
       end;
     end;
   end;
+  ObjArrayClear(fIDGenerator);
   inherited;
 end;
 
@@ -32926,9 +32937,26 @@ begin
     result := false;
 end;
 
-function TSQLRest.Add(Value: TSQLRecord; SendData: boolean;
-  ForceID,DoNotAutoComputeFields: boolean): TID;
-var JSONValues: RawUTF8;
+procedure TSQLRest.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
+  ForceID, DoNotAutoComputeFields, WithBlobs: boolean; var result: RawUTF8);
+begin
+    if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
+      Value.ComputeFieldsBeforeWrite(self,seAdd);
+    if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
+      ForceID := true;
+  if (Model.fIDGenerator<>nil) and (Model.fIDGenerator[TableIndex]<>nil) then begin
+    Value.fID := Model.fIDGenerator[TableIndex].ComputeNew;
+    ForceID := true;
+  end else
+    if Value.fID=0 then
+      ForceID := false;
+  if withBlobs then
+    result := Value.GetJSONValues(true,ForceID,Value.RecordProps.CopiableFieldsBits) else
+    result := Value.GetJSONValues(true,ForceID,soInsert);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; SendData,ForceID,DoNotAutoComputeFields: boolean): TID;
+var json: RawUTF8;
     TableIndex: integer;
 begin
   if Value=nil then begin
@@ -32936,22 +32964,15 @@ begin
     exit;
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  if SendData then begin
-    if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
-      Value.ComputeFieldsBeforeWrite(self,seAdd);
-    if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
-      ForceID := true;
-    if Value.fID=0 then
-      ForceID := false;
-    JSONValues := Value.GetJSONValues(true,ForceID,soInsert); // true=expanded
-  end else
-    JSONValues := '';
+  if SendData then
+    GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,false,json) else
+    json := '';
   // on success, returns the new ROWID value; on error, returns 0
-  result := EngineAdd(TableIndex,JSONValues); // will call static if necessary
+  result := EngineAdd(TableIndex,json); // will call static if necessary
   // on success, Value.ID is updated with the new ROWID
   Value.fID := result;
   if SendData and (result<>0) then
-    fCache.Notify(PSQLRecordClass(Value)^,result,JSONValues,soInsert);
+    fCache.Notify(PSQLRecordClass(Value)^,result,json,soInsert);
 end;
 
 function TSQLRest.Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
@@ -32976,18 +32997,16 @@ end;
 function TSQLRest.AddWithBlobs(Value: TSQLRecord;
   ForceID, DoNotAutoComputeFields: boolean): TID;
 var TableIndex: integer;
-    JSONValues: RawUTF8;
+    json: RawUTF8;
 begin
   if Value=nil then begin
     result := 0;
     exit;
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
-    Value.ComputeFieldsBeforeWrite(self,seAdd);
-  JSONValues := Value.GetJSONValues(true,ForceID,Value.RecordProps.CopiableFieldsBits);
+  GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,true,json);
   // on success, returns the new ROWID value; on error, returns 0
-  result := EngineAdd(TableIndex,JSONValues); // will call static if necessary
+  result := EngineAdd(TableIndex,json); // will call static if necessary
   // on success, Value.ID is updated with the new ROWID
   Value.fID := result;
   // here fCache.Notify is not called, since the JSONValues is verbose
@@ -53838,7 +53857,7 @@ begin
         Value := P;
         P := GotoEndJSONItem(P);
         if P^=',' then
-          inc(P);
+          inc(P); // include ending ','
         W.AddNoJsonEscape(Value,P-Value);
       end;
     W.CancelLastComma;
@@ -53903,6 +53922,35 @@ begin
     Dest.InitArrayFromVariants(Values,Options);
   else
     Dest.Init(Options);
+  end;
+end;
+
+procedure TServiceMethod.ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
+  var ArgsObject: TDocVariantData; Input: boolean);
+var a,n: integer;
+begin
+  if (ArgsParams.Count=0) or (ArgsParams.Kind<>dvArray) then
+    exit;
+  if ArgsObject.Kind=dvUndefined then
+    ArgsObject.Init(ArgsParams.Options);
+  ArgsObject.Capacity := ArgsObject.Count+ArgsParams.Count;
+  n := 0;
+  if Input then begin
+    if ArgsParams.Count=integer(ArgsInputValuesCount) then
+      for a := ArgsInFirst to ArgsInLast do
+        if Args[a].ValueDirection in [smdConst,smdVar] then begin
+          ArgsObject.AddValue(ShortStringToAnsi7String(Args[a].ParamName^),
+            ArgsParams.Values[n]);
+          inc(n);
+        end;
+  end else begin
+    if ArgsParams.Count=integer(ArgsOutputValuesCount) then
+      for a := ArgsOutFirst to ArgsOutLast do
+        if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
+          ArgsObject.AddValue(ShortStringToAnsi7String(Args[a].ParamName^),
+            ArgsParams.Values[n]);
+          inc(n);
+        end;
   end;
 end;
 
