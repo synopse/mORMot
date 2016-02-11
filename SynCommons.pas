@@ -14971,6 +14971,7 @@ type
     fLastCounter: cardinal;
     fCrypto: array[0..7] of cardinal;
     fSafe: TSynLocker;
+    function GetComputedCount: integer;
   public
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
@@ -14985,7 +14986,7 @@ type
     function ComputeNew: Int64; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// return an unique ID matching this generator pattern, at a given timestamp
-    // - may be used e.g. to limit database queries on a particular time range 
+    // - may be used e.g. to limit database queries on a particular time range
     procedure ComputeFromDateTime(aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
     /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
@@ -14996,10 +14997,12 @@ type
     // and a valid digital signature
     // - returns false if the supplied obfuscated text is invalid
     function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
-      out aIdentifier: TSynUniqueIdentifier): boolean; 
+      out aIdentifier: TSynUniqueIdentifier): boolean;
   published
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
+    /// how many times ComputeNew method has been called
+    property ComputedCount: integer read GetComputedCount;
   end;
   
 
@@ -53510,6 +53513,9 @@ end;
 
 { TSynUniqueIdentifierGenerator }
 
+const // fSafe.Padding[] slots
+  SYNUNIQUEGEN_COMPUTECOUNT = 0;
+  
 procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var tix, currentTime: cardinal;
@@ -53532,20 +53538,26 @@ begin
       inc(fLastCounter);
     result.Value := Int64(fLastCounter or fIdentifierShifted) or
                     (Int64(fUnixCreateTime) shl 31);
+    inc(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64);
   finally
     fSafe.UnLock;
   end;
+end;
+
+function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
+begin
+  ComputeNew(PSynUniqueIdentifierBits(@result)^);
+end;
+
+function TSynUniqueIdentifierGenerator.GetComputedCount: integer;
+begin
+  result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime;
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
   result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
-end;
-
-function TSynUniqueIdentifierGenerator.ComputeNew: Int64;
-begin
-  ComputeNew(PSynUniqueIdentifierBits(@result)^);
 end;
 
 constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: TSynUniqueIdentifierProcess;
@@ -53564,6 +53576,7 @@ begin
     fCrypto[i] := crc; // naive but good enough in practice
   end;
   fSafe.Init;
+  fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
 end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
