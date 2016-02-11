@@ -10194,6 +10194,14 @@ type
     /// this overriden method will create an index on the 'Sent' column
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
+    /// allows to convert the Input array into a proper single JSON Object
+    // - "ID": field would be included, and Method as "MethodName": field
+    function SaveInputAsObject(Service: TInterfaceFactory;
+      const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): variant; virtual;
+    /// run FillOne and SaveInputAsObject into a TDocVariant array of JSON Objects
+    // - "ID": field would be included, and Method as "MethodName": field
+    procedure SaveFillInputsAsObjects(Service: TInterfaceFactory; out Dest: TDocVariantData;
+      const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false);
   published
     /// when this notification has been sent
     // - equals 0 until it was actually notified
@@ -15559,16 +15567,16 @@ type
     // service execution, with the corresponding Service and ServiceMethodIndex
     // parameters as set by TSQLRestServerURIContext.URIDecodeSOAByInterface
     // - should return TRUE if the method can be executed
-    // - should return FALSE if the method should not be executed, and set the
-    // corresponding error to the supplied context e.g.
+    // - should return FALSE if the method should not be executed, and the
+    // callback should set the corresponding error to the supplied context e.g.
     // ! Ctxt.Error('Unauthorized method',HTML_NOTALLOWED);
-    // - since this callback would be executed during all TSQLRestServer.URI,
+    // - since this event would be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
     OnBeforeURI: TNotifyBeforeURI;
     /// event trigerred when URI() finished to process a request
     // - the supplied Ctxt parameter would give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
-    // - since this callback would be executed during all TSQLRestServer.URI,
+    // - since this event would be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
     OnAfterURI: TNotifyAfterURI;
     /// event trigerred when URI() failed to process a request
@@ -15579,6 +15587,8 @@ type
     OnErrorURI: TNotifyErrorURI;
     /// event trigerred when URI() is called, and at least 128 ms is elapsed
     // - could be used to execute some additional process after a period of time
+    // - note that if TSQLRestServer.URI is not called by any client, this
+    // callback won't be executed either 
     OnIdle: TNotifyEvent;
     /// this property can be used to specify the URI parmeters to be used
     // for query paging
@@ -17859,8 +17869,8 @@ type
     // - aRedirected would be owned by this TSQLRestClientRedirect
     constructor CreateOwned(aRedirected: TSQLRestServer); reintroduce;
     /// allows to change redirection to a client on the fly
-    // - if aRest is nil, redirection would be disabled and any URI() call would
-    // return an HTML_GATEWAYTIMEOUT 504 error status
+    // - if aRedirected is nil, redirection would be disabled and any URI() call
+    // would return an HTML_GATEWAYTIMEOUT 504 error status
     procedure RedirectTo(aRedirected: TSQLRest);
   end;
 
@@ -54492,6 +54502,29 @@ begin
   inherited;
   if (FieldName='') or (FieldName='Sent') then
     Server.CreateSQLMultiIndex(Self,['Sent'],false);
+end;
+
+function TSQLRecordServiceNotifications.SaveInputAsObject(Service: TInterfaceFactory;
+  const MethodName: RawUTF8; IDAsHexa: boolean): variant;
+var m: integer;
+    ids: RawUTF8;
+begin
+  if IDAsHexa then
+    Int64ToHex(fID,ids) else
+    Int64ToUtf8(fID,ids);
+  VarClear(result);
+  TDocVariantData(result).InitObject(['ID',ids,MethodName,Method],JSON_OPTIONS_FAST);
+  m := Service.FindMethodIndex(Method);
+  if m>=0 then
+    Service.Methods[m].ArgsAsDocVariantObject(_Safe(fInput)^,TDocVariantData(result),true);
+end;
+
+procedure TSQLRecordServiceNotifications.SaveFillInputsAsObjects(Service: TInterfaceFactory;
+  out Dest: TDocVariantData; const MethodName: RawUTF8; IDAsHexa: boolean);
+begin
+  Dest.InitFast(FillTable.RowCount,dvArray);
+  while FillOne do
+    Dest.AddItem(SaveInputAsObject(Service,MethodName,IDAsHexa));
 end;
 
 
