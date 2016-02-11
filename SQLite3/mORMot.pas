@@ -2426,6 +2426,7 @@ type
   // - here ftDouble is renamed ftDoub to avoid confusion with TSQLDBFieldType
   TFloatType = (ftSingle, ftDoub, ftExtended, ftComp, ftCurr);
 
+  TTypeKinds = set of TTypeKind;
   PTypeKind = ^TTypeKind;
   PTypeInfo = ^TTypeInfo;
   {$ifdef FPC}
@@ -2506,6 +2507,7 @@ type
     function ClassProp: PClassProp;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast and easy find if this class inherits from a specific class type
+    // - you should rather consider using TTypeInfo.InheritsFrom directly 
     function InheritsFrom(AClass: TClass): boolean;
     /// return the size (in bytes) of this class type information
     // - can be used to create class types at runtime
@@ -4129,6 +4131,12 @@ function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropIn
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstring): PPropInfo;
 
+/// retrieve a class Field property instance from a Property Name
+// - this version also search into parent properties
+// - returns TRUE and set PropInstance if a matching property was found
+function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+  out PropInstance): boolean; overload;
+
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
@@ -4137,6 +4145,12 @@ function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Ch
 /// retrieve a Field property RTTI information searching for a Property class type
 // - this special version also search into parent properties
 function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+
+/// retrieve a class Field property instance from a Property class type
+// - this version also search into parent properties
+// - returns TRUE and set PropInstance if a matching property was found
+function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
+  out PropInstance): boolean; overload;
 
 /// retrieve a class instance property value matching a class type
 // - if aSearchedInstance is aSearchedClassType, will return aSearchedInstance
@@ -4157,15 +4171,21 @@ function ClassHasPublishedFields(ClassType: TClass): boolean;
 function ClassHierarchyWithField(ClassType: TClass): TClassDynArray;
 
 /// retrieve the PPropInfo values of all published properties of a class
-function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
+// - you could select which property types should be included in the list
+function ClassFieldAllProps(ClassType: TClass;
+  Types: TTypeKinds=[low(TTypeKind)..high(TTypeKind)]): PPropInfoDynArray;
 
 /// retrieve the field names of all published properties of a class
 // - will optionally append the property type to the name, e.g 'Age: integer'
-function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean=false): TRawUTF8DynArray;
+// - you could select which property types should be included in the list
+function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean=false;
+  Types: TTypeKinds=[low(TTypeKind)..high(TTypeKind)]): TRawUTF8DynArray;
 
 /// retrieve the field names of all published properties of a class
 // - will optionally append the property type to the name, e.g 'Age: integer'
-function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false): RawUTF8;
+// - you could select which property types should be included in the list
+function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false;
+  Types: TTypeKinds=[low(TTypeKind)..high(TTypeKind)]): RawUTF8;
 
 /// retrieve an object's component from its property name and class
 // - useful to set User Interface component, e.g.
@@ -19136,10 +19156,10 @@ begin
   InternalAdd(ClassType,result);
 end;
 
-function ClassFieldAllProps(ClassType: TClass): PPropInfoDynArray;
+function ClassFieldAllProps(ClassType: TClass; Types: TTypeKinds): PPropInfoDynArray;
 var CP: PClassProp;
     P: PPropInfo;
-    i,n,n1: integer;
+    i,n: integer;
 begin
   n := 0;
   result := nil;
@@ -19148,12 +19168,13 @@ begin
     if CP=nil then
       break; // no RTTI information (e.g. reached TObject level)
     if CP^.PropCount>0 then begin
-      n1 := n;
-      inc(n,CP^.PropCount);
-      SetLength(result,n);
+      SetLength(result,n+CP^.PropCount);
       P := AlignToPtr(@CP^.PropList);
-      for i := n1 to n-1 do begin
-        result[i] := P;
+      for i := 1 to CP^.PropCount do begin
+        if P^.PropType^.Kind in Types then begin
+          result[n] := P;
+          inc(n);
+        end;
         {$ifdef HASINLINE}
         P := P^.Next;
         {$else}
@@ -19163,24 +19184,28 @@ begin
     end;
     ClassType := ClassType.ClassParent;
   end;
+  SetLength(result,n);
 end;
 
-function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean): TRawUTF8DynArray;
+function ClassFieldNamesAllProps(ClassType: TClass; IncludePropType: boolean;
+  Types: TTypeKinds): TRawUTF8DynArray;
 var props: PPropInfoDynArray;
     n,i: integer;
 begin
-  props := ClassFieldAllProps(ClassType);
+  props := ClassFieldAllProps(ClassType,Types);
   n := length(props);
   SetLength(result,n);
   for i := 0 to n-1 do
     if IncludePropType then
       FormatUTF8('%: %',[props[i]^.Name,props[i]^.PropType^.Name],result[i]) else
-      result[i] := ToUTF8(props[i]^.Name);
+      ShortStringToAnsi7String(props[i]^.Name,result[i]);
 end;
 
-function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean=false): RawUTF8;
+function ClassFieldNamesAllPropsAsText(ClassType: TClass; IncludePropType: boolean;
+  Types: TTypeKinds): RawUTF8;
 begin
-  result := RawUTF8ArrayToCSV(ClassFieldNamesAllProps(ClassType,true),', ');
+  result := RawUTF8ArrayToCSV(
+    ClassFieldNamesAllProps(ClassType,IncludePropType,Types),', ');
 end;
 
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
@@ -19243,6 +19268,34 @@ begin
   result := nil;
 end;
 
+function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
+  out PropInstance): boolean;
+var P: PPropInfo;
+begin
+  result := false;
+  if Instance=nil then
+    exit;
+  P := ClassFieldPropWithParents(Instance.ClassType,PropName);
+  if (P=nil) or (P^.PropType^.Kind<>tkClass) then
+    exit;
+  PtrInt(PropInstance) := P^.GetOrdValue(Instance);
+  result := true;
+end;
+
+function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
+  out PropInstance): boolean; overload;
+var P: PPropInfo;
+begin
+  result := false;
+  if Instance=nil then
+    exit;
+  P := ClassFieldPropWithParentsFromClassType(Instance.ClassType,PropClassType);
+  if (P=nil) or (P^.PropType^.Kind<>tkClass) then
+    exit;
+  PtrInt(PropInstance) := P^.GetOrdValue(Instance);
+  result := true;
+end;
+
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
   ComponentClass: TClass): pointer;
 var P: PPropInfo;
@@ -19252,7 +19305,7 @@ begin
     exit;
   P := ClassFieldPropWithParents(Obj.ClassType,ComponentName);
   if (P<>nil) and (P^.PropType^.Kind=tkClass) then
-    if P^.PropType^.ClassType^.ClassType.InheritsFrom(ComponentClass) then
+    if P^.PropType^.InheritsFrom(ComponentClass) then
       result := P^.GetObjProp(Obj);
 end;
 
@@ -22533,7 +22586,7 @@ procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
           p := @Props[n];
           p^.Info := nfo;
           p^.Kind := k;
-          p^.Name := ShortStringToAnsi7String(nfo^.Name);
+          ShortStringToAnsi7String(nfo^.Name,p^.Name);
           if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
             p^.Name := RawUTF8(parent.ClassName); // meaningful property name
           for g := mugHour to mugYear do
@@ -43038,9 +43091,9 @@ end;
 
 function TSQLRestStorage.GetStoredClassName: RawUTF8;
 begin
-  if self<>nil then
-    result := ShortStringToAnsi7String(PShortString(PPointer(PtrInt(fStoredClass)+vmtClassName)^)^) else
-    result := '';
+  if self=nil then
+    result := '' else
+    ShortStringToAnsi7String(PShortString(PPointer(PtrInt(fStoredClass)+vmtClassName)^)^,result);
 end;
 
 
@@ -53995,7 +54048,7 @@ begin
     n := 0;
     for a := ArgsInFirst to ArgsInLast do
       if Args[a].ValueDirection in [smdConst,smdVar] then begin
-        result[n] := ShortStringToAnsi7String(Args[a].ParamName^);
+        ShortStringToAnsi7String(Args[a].ParamName^,result[n]);
         inc(n);
       end;
   end else begin
@@ -54003,7 +54056,7 @@ begin
     n := 0;
     for a := ArgsOutFirst to ArgsOutLast do
       if Args[a].ValueDirection in [smdVar,smdOut,smdResult] then begin
-        result[n] := ShortStringToAnsi7String(Args[a].ParamName^);
+        ShortStringToAnsi7String(Args[a].ParamName^,result[n]);
         inc(n);
       end;
   end;

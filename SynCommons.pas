@@ -1663,7 +1663,12 @@ procedure UTF8ToShortString(var dest: shortstring; source: PUTF8Char);
 
 /// direct conversion of an ANSI-7 shortstring into an AnsiString
 // - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
-function ShortStringToAnsi7String(const source: shortstring): RawByteString;
+function ShortStringToAnsi7String(const source: shortstring): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// direct conversion of an ANSI-7 shortstring into an AnsiString
+// - can be used e.g. for names retrieved from RTTI to convert them into RawUTF8
+procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert an UTF-8 encoded text into a WideChar array
@@ -14988,6 +14993,9 @@ type
     /// return an unique ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
     procedure ComputeFromDateTime(aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
+    /// return an unique ID matching this generator pattern, at a given timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    procedure ComputeFromUnixTime(aUnixTime: Int64; out result: TSynUniqueIdentifierBits);
     /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
     function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
@@ -16396,6 +16404,11 @@ begin
 end;
 
 function ShortStringToAnsi7String(const source: shortstring): RawByteString;
+begin
+  SetString(result,PAnsiChar(@source[1]),ord(source[0]));
+end;
+
+procedure ShortStringToAnsi7String(const source: shortstring; var result: RawUTF8);
 begin
   SetString(result,PAnsiChar(@source[1]),ord(source[0]));
 end;
@@ -53558,6 +53571,12 @@ procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
   result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
+end;
+
+procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(aUnixTime: Int64;
+  out result: TSynUniqueIdentifierBits);
+begin // assume fLastCounter=0
+  result.Value := (aUnixTime shl 31) or fIdentifierShifted;
 end;
 
 constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: TSynUniqueIdentifierProcess;
