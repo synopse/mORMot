@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2015 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2016 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -137,7 +137,7 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
 This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi 10 Seattle}.
-On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64 bit compiler included in latest {\i Delphi} XE2 and up).
+On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64-bit compiler included in latest {\i Delphi} XE2 and up).
 For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
 \page
@@ -2199,8 +2199,8 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|INTEGER|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64 bit under {\i Win64}
-|{\f1\fs20 @*TID@}|INTEGER|64 bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
+|{\f1\fs20 @*TSQLRecord@}|INTEGER|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64-bit under {\i Win64}
+|{\f1\fs20 @*TID@}|INTEGER|64-bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
 |{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|INTEGER|able to join any row on any table of the model, by storing both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} class type in a {\f1\fs20 @*RecordRef@}-like {\f1\fs20 Int64} value, with automatic reset to 0 (for {\f1\fs20 TRecordReference}) or row deletion (for {\f1\fs20 TRecordReferenceToBeDeleted}) when the pointed record is deleted
 |{\f1\fs20 @*TPersistent@}|TEXT|@*JSON@ object ({\f1\fs20 ObjectToJSON})
@@ -2220,7 +2220,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TNullableTimeLog@}|INTEGER|{\i Nullable} @*TTimeLog@ value - see @177@
 |{\f1\fs20 @*TNullableUTF8Text@}|TEXT|{\i Nullable} Unicode text value - see @177@
 |{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
-|{\f1\fs20 @*TRecordVersion@}|INTEGER|64 bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
+|{\f1\fs20 @*TRecordVersion@}|INTEGER|64-bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
 |%
 \page
 :178  Property Attributes
@@ -2272,7 +2272,7 @@ In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exc
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
 :  Floating point and Currency fields
 For standard floating-point values, the framework natively handles the {\f1\fs20 @*double@} and {\f1\fs20 @**currency@} kind of variables.
-In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
+In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64-bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
 The {\f1\fs20 currency} type is the standard {\i Delphi} type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
 As stated by the official {\i Delphi} documentation:
 {\i {\f1\fs20 Currency} is a fixed-point data type that minimizes rounding errors in monetary calculations. On the Win32 platform, it is stored as a scaled 64-bit integer with the four least significant digits implicitly representing decimal places. When mixed with other real types in assignments and expressions, {\f1\fs20 Currency} values are automatically divided or multiplied by 10000.}
@@ -2289,7 +2289,7 @@ The ORM will automatically perform the following optimizations for {\f1\fs20 TSQ
 In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but emulated {\i at ORM level}.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
 :  TID fields
-{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
+{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32-bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32-bit value).
 You can define a published property as {\f1\fs20 TID} to store any value of our @*primary key@, i.e. up to 9,223,372,036,854,775,808. Note that in this case, there is no information about the joined table.
 As a consequence, the ORM will perform the following optimizations for {\f1\fs20 TID} fields:
 - An {\i index} will be created on the database, for the corresponding column;
@@ -2756,7 +2756,7 @@ then assigned it to the {\f1\fs20 MyFile} record on one of the following express
 ! MyFile.FirstOne := TSQLMyFileInfo(One.ID);
 ! MyFile.FirstOne := pointer(One.ID);
 !! MyFile.FirstOne := One.AsTSQLRecord;
-The first two statements, using a {\f1\fs20 class/pointer} type cast will work only in 32 bit (since ID is an integer). Using {\f1\fs20 TSQLRecord.@*AsTSQLRecord@} property will work on all platforms, including 64 bit, and is perhaps easier to deal with in your code.
+The first two statements, using a {\f1\fs20 class/pointer} type cast will work only in 32-bit (since ID is an integer). Using {\f1\fs20 TSQLRecord.@*AsTSQLRecord@} property will work on all platforms, including 64-bit, and is perhaps easier to deal with in your code.
 When accessing the detail objects, you should not access directly to {\f1\fs20 FirstOne} or {\f1\fs20 SecondOne} properties (there are not class instances, but integer IDs), then use instead the {\f1\fs20 TSQLRecord. Create(aClient: TSQLRest; aPublishedRecord: TSQLRecord: ForUpdate: boolean=false)} overloaded constructor, as such:
 !var One: TSQLMyFileInfo;
 !    MyFile: TSQLMyFile;
@@ -4051,15 +4051,15 @@ Numbers are expressed in rows/second (or objects/second). This benchmark was com
 Note that these tests are not about the relative speed of each database engine, but reflect the current status of the integration of several DB libraries within the {\i mORMot} database access.
 Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a standard SSD, including anti-virus and background applications:
 - Linked to a shared {\i @*Oracle@} 11.2.0.1 database over 100 Mb Ethernet;
-- {\i @*MS SQL@ Express 2008 R2} running locally in 64 bit mode;
-- {\i IBM @*DB2@ Express-C} edition 10.5 running locally in 64 bit mode;
-- {\i @*PostgreSQL@} 9.2.7 running locally in 64 bit mode;
-- {\i @*MySQL@} 5.6.16 running locally in 64 bit mode;
+- {\i @*MS SQL@ Express 2008 R2} running locally in 64-bit mode;
+- {\i IBM @*DB2@ Express-C} edition 10.5 running locally in 64-bit mode;
+- {\i @*PostgreSQL@} 9.2.7 running locally in 64-bit mode;
+- {\i @*MySQL@} 5.6.16 running locally in 64-bit mode;
 - {\i @*Firebird@} embedded in revision 2.5.2;
 - {\i @*NexusDB@} 3.11 in Free Embedded Version;
-- {\i MongoDB} 2.6 in 64 bit mode.
+- {\i MongoDB} 2.6 in 64-bit mode.
 So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i @*Linux@} configuration, you can expect even better numbers.
-Tests were compiled with the {\i Delphi} XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
+Tests were compiled with the {\i Delphi} XE4 32-bit mode target platform. Most of the tests do pass when compiled as a 64-bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
 From our tests, the UniDAC version we were using had huge stability issues when used with DB2: the tests did not pass, and the DB2 server just hang processing the queries, whereas there was no problem with other libraries. It may have been fixed since, but you won't find any "UniDAC DB2" results in the benchmark below in the meanwhile.
 :   Insertion speed
@@ -4255,7 +4255,7 @@ In order to use an external {\f1\fs20 sqlite3.dll} library, you have to set the 
 ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
 !! sqlite3 := TSQLite3LibraryDynamic.Create;
 Of course, {\f1\fs20 FreeAndNil(sqlite3)} is not mandatory, and should be necessary only to avoid any memory leak if another {\i SQLite3} engine instance was allocated (may be the case if {\f1\fs20 SynSQLite3Static} is referred somewhere in your project's units).
-Here are some benchmarks, compiled with {\i Delphi XE3}, run in a 32 bit project, using either the static {\f1\fs20 bcc}-compiled engine, or an external {\f1\fs20 sqlite3.dll}, compiled via {\f1\fs20 MinGW} or Visual C++.
+Here are some benchmarks, compiled with {\i Delphi XE3}, run in a 32-bit project, using either the static {\f1\fs20 bcc}-compiled engine, or an external {\f1\fs20 sqlite3.dll}, compiled via {\f1\fs20 MinGW} or Visual C++.
 :   Static bcc-compiled .obj
 First of all, our version included with {\f1\fs20 SynSQLite3Static.pas} unit, is to be benchmarked.
 \line {\i Writing speed}
@@ -4337,7 +4337,7 @@ See @http://sourceforge.net/projects/wxcode/files/Components/wxSQLite3 to downlo
 |{\b SQLite3 (ext mem)}|139567|254919|516208
 |%
 Under {\i Windows}, the {\i Visual C++} compiler gives very good results. It is a bit faster than the other two, despite a somewhat less efficient virtual table process.
-As a conclusion, our {\f1\fs20 SynSQLite3Static.pas} statically linked implementation sounds like the best overall approach for Windows 32 bit: best speed for virtual tables (which is the core of our ORM), and no {\i dll hell}. No library to deploy and copy, everything is embedded in the project executable, ready to run as expected. External {\f1\fs20 sqlite3.dll} will be used for cross-platform support, and when targeting @*64 bit@ Windows applications.
+As a conclusion, our {\f1\fs20 SynSQLite3Static.pas} statically linked implementation sounds like the best overall approach for Windows 32-bit: best speed for virtual tables (which is the core of our ORM), and no {\i dll hell}. No library to deploy and copy, everything is embedded in the project executable, ready to run as expected. External {\f1\fs20 sqlite3.dll} will be used for cross-platform support, and when targeting @*64-bit@ Windows applications.
 :14  Prepared statement
 In order to speed up the time spent in the {\i SQLite3} engine (it may be useful for high-end servers), the framework is able to natively handle @*prepared@ @*SQL@ statements.
 Starting with version 1.12 of the framework, we added an internal SQL statement @*cache@ in the database access, available for all SQL request. Previously, only the one-record SQL {\f1\fs20 SELECT * FROM ... WHERE RowID=...} was prepared (used e.g. for the {\f1\fs20 @*TSQLRest@. Retrieve} method).
@@ -5153,7 +5153,7 @@ The {\f1\fs20 @**SynDB@.pas} units have the following features:
 - Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007), since it uses internally @*UTF-8@ encoding;
 - Handle NULL or BLOB content for parameters and results, including stored procedures;
 - Avoid most memory copy or unnecessary allocation: we tried to access the data directly from the retrieved data buffer, just as given from {\i OleDB / ODBC} or the low-level database client (e.g. OCI for Oracle, or the {\i SQLite3} engine);
-- Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
+- Designed to achieve the best possible performance on 32-bit or @*64-bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
 - Could be safely used in a multi-threaded application/server (with dedicated thread-safe methods, usable even if the database client is not officially multi-thread);
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
 - Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
@@ -5174,8 +5174,8 @@ They are defined as such in {\f1\fs20 @*SynDB@.pas}:
 |%25%65
 |\b {\f1\fs20 TSQLDBFieldType}|Content\b0
 |{\f1\fs20 ftNull}|Maps the SQL {\f1\fs20 NULL} value
-|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64 bit resolution
-|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64 bit ({\f1\fs20 @*double@}) resolution
+|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64-bit resolution
+|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64-bit ({\f1\fs20 @*double@}) resolution
 |{\f1\fs20 ftCurrency}|Fixed {\i financial} type, with up to 4 fixed decimal digits ({\f1\fs20 @*currency@})
 |{\f1\fs20 ftDate}|Date and time, mapping the Delphi {\f1\fs20 TDateTime} type
 |{\f1\fs20 ftUTF8}|Unicode text, encoded as @*UTF-8@, with or without size limit
@@ -5571,7 +5571,7 @@ Here are the main features of this {\f1\fs20 SynDBOracle} unit:
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
 - {\i Natively Unicode} (uses internal @*UTF-8@ encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
-- Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32 bit for this current version);
+- Designed to work under {\i any version of Windows}, either in 32 or @*64-bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32-bit for this current version);
 - {\i @*Late-binding@} access to column names, using a new dedicated {\f1\fs20 Variant} type (similar to Ole Automation runtime properties);
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
@@ -6472,8 +6472,8 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|int32|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64 bit on {\i Win64}
-|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64 bit compatible, so can handle values up to 9,223,372,036,854,775,808
+|{\f1\fs20 @*TSQLRecord@}|int32|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64-bit on {\i Win64}
+|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64-bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
 |{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|int32/int64|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 @*RecordRef@}-like value - with proper synchronization when the record is deleted
 |{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
@@ -7509,7 +7509,7 @@ Here are some PROs and CONs of the available solutions, under {\i Windows}:
 |%
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
-Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
+Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64-bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a lock. See @25@.
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
@@ -8710,7 +8710,7 @@ In {\i Delphi}, we can declare an interface like so:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 It just sounds like a class definition, but, as you can see:
@@ -9673,7 +9673,7 @@ The service contract is to be defined as a plain {\i Delphi} {\f1\fs20 interface
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 This {\f1\fs20 ICalculator.Add} method will define one "{\i Add}" operation, under the "{\i ICalculator}" service (which will be named internally {\f1\fs20 'Calculator'} by convention). This operation will expect two numbers as input, and then return the sum of those numbers.
@@ -9718,9 +9718,9 @@ You can therefore define complex {\f1\fs20 interface} types, as such:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
-!    /// multiply two signed 64 bit integers
+!    /// multiply two signed 64-bit integers
 !    function Multiply(n1,n2: Int64): Int64;
 !    /// substract two floating-point values
 !    function Subtract(n1,n2: double): double;
@@ -11283,7 +11283,7 @@ One drawback of using this {\f1\fs20 TServiceFactoryServer.ResultAsXMLObject} pr
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 !!  ICalculatorXML = interface(ICalculator)
@@ -13430,7 +13430,7 @@ Here are the typical steps to be followed in order to create a new user session 
 - On success, Server will create a new in-memory session and return the session number and a private key to be used during the session (encoded as JSON result object);
 - On any further access to the Server, a {\f1\fs20 &session_signature=} parameter is added to the URL, and will be checked against the valid sessions in order to validate the request.
 {\i @**Query Authentication@} is handled at the Client side in {\f1\fs20 TSQLRestClientURI.SessionSign} method, by computing the {\f1\fs20 session_signature} parameter for a given URL, according to the {\f1\fs20 TSQLRestServerAuthentication} class used.
-In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32 bit cardinals:
+In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32-bit cardinals:
 - The @*Session@ ID (to retrieve the private key used for the signature);
 - A Client Time Stamp (in 256 ms resolution) which must be greater or equal than the previous time stamp received;
 - The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i crc32} hashing algorithm.
@@ -15040,7 +15040,7 @@ Follow these steps:
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
 - {\i Delphi} 6 up to {\i Delphi 10 Seattle} compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
-- Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
+- Server side on Windows 32-bit and @**64-bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
 - Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
@@ -15050,12 +15050,12 @@ If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
 The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and works pretty well. Official {\i @*Linux@} / {\i FPC} support is available for {\i mORMot} servers - thanks to Alfred! - but this platform is brand new to the framework, so less stable and not yet feature complete.
-:  32 bit sqlite3*.obj and 64 bit SQLite3 dll
+:  32-bit sqlite3*.obj and 64-bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native {\i Windows} @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
 For FPC, you can download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files would be statically linked to the executable.
 You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC - do not forget to enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in this case also.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
@@ -15189,9 +15189,9 @@ See @86@ for more information.
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
-|{\b Static 32 bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
-|{\b 64 bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
-|{\b 32 bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
+|{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
+|{\b 64-bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
+|{\b 32-bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
 |{\b for FPC only: static {\i SQLite3} .o files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
@@ -15313,11 +15313,11 @@ $ svn cleanup
 $ svn update
 - On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
 If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
-For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on {\i Linux}, please execute:
+For Ubuntu versions above 13.10, if you installed a 64-bit distribution, 32-bit executables may not be recognized by the system. In order to install the 32-bit libraries needed by {\i mORMot} 32-bit executables on {\i Linux}, please execute:
 $ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
-If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64 bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32 bit, as such:
+If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64-bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32-bit, as such:
 $ sudo apt-get install libcurl3:i386
-If it may be for any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
 $user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
 $   linux-gate.so.1 =>  (0xb774c000)
 $   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
@@ -15342,7 +15342,7 @@ We added {\i CrossKylix} support for several reasons:
 - Resulting executables, for {\i mORMot} purpose, are faster than FPC - timing based on the regression tests.
 - If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
 - There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code would be the same than Delphi and FPC.
-- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
+- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap, but sounds like if it may be ARC-enabled, so we may have to sadly skip its support, and focus on Kylix and FPC...
 Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for {\i Linux}, directly from your {\i Delphi} IDE. Then you need an actual {\i Linux} system to test it - please check the @142@.
 A minimal console application which would compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
 !program Test;
@@ -15358,12 +15358,12 @@ A minimal console application which would compile for both {\i Delphi} and {\i C
 !end.
 Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, you should never use the {\f1\fs20 Windows} unit in your server code, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}.
 We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your {\i Linux}.
-On a 32 bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
+On a 32-bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
 $ sudo apt-get install sqlite3
-For a 64 bit system, you need to download and install manually packages for both modes:
+For a 64-bit system, you need to download and install manually packages for both modes:
 $ sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 You could try to get the latest {\f1\fs20 .deb} from @https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0 \line If you want to dowwnload and install manually a {\f1\fs20 .deb} for {\f1\fs20 x86}, please install both {\i i386} and {\i amd64} revisions with the same exact version at once, otherwise {\f1\fs20 dpkg} would complain.
-If it may be of any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i CrossKylix} compiled executable:
+If it may be of any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i CrossKylix} compiled executable:
 $ user@server:~$ ldd Test
 $       linux-gate.so.1 =>  (0xf77be000)
 $       libz.so.1 => /usr/lib32/libz.so.1 (0xf779b000)
@@ -16036,7 +16036,7 @@ Here is the main computation code:
 !  result := (not result) shr 0;
 !end;
 This is a standard implementation pattern, except for three remarks:
-- We added {\f1\fs20 ... shr 0} in order to ensure that an {\f1\fs20 integer} variable will be maintained as an {\f1\fs20 UInt32} variable. Since {\i crc32} is a 32 bit hashing algorithm, we need to ensure that we'll only have positive values;
+- We added {\f1\fs20 ... shr 0} in order to ensure that an {\f1\fs20 integer} variable will be maintained as an {\f1\fs20 UInt32} variable. Since {\i crc32} is a 32-bit hashing algorithm, we need to ensure that we'll only have positive values;
 - No {\f1\fs20 byte} type is available here: so we'll explicitly call {\f1\fs20 ... and $ff} in order to truncate the {\f1\fs20 integer} value into its 8 bit content;
 - Since the {\f1\fs20 string} type is used for data manipulation, we use {\f1\fs20 ord(data[i])} to retrieve each {\f1\fs20 byte} (or {\f1\fs20 char}) of the supplied text.
 This implementation of the {\i crc32} algorithm expect a pre-computed table to be available. All {\i JavaScript} implementation of this algorithm (at least, all that I was able to found on Internet) use a fixed constant array. Since we are not afraid to write code any more in our AJAX application, and since it may help saving bandwidth and application size, we'll compute our own {\f1\fs20 crc32Tab[]} array content with the following code:
@@ -16152,13 +16152,13 @@ The {\f1\fs20 Finalize} method will compute the latest block, including the glob
 !  Buffer[Index]:= $80;
 !  for i := Index+1 to 63 do
 !    Buffer[i] := 0;
-!  // 2. Compress if more than 448 bits, (no room for 64 bit length)
+!  // 2. Compress if more than 448 bits, (no room for 64-bit length)
 !  if Index>=56 then begin
 !    Compress;
 !    for i := 0 to 59 do
 !      Buffer[i] := 0;
 !  end;
-!  // Write 64 bit Buffer length into the last bits of the last block
+!  // Write 64-bit Buffer length into the last bits of the last block
 !  // (in big endian format) and do a final compress
 !  Buffer[60] := (MLen and $ff000000)shr 24;
 !  Buffer[61] := (MLen and $ff0000)shr 16;
@@ -16219,7 +16219,7 @@ The main hash computation is performed in the {\f1\fs20 Compress} method, as suc
 A {\f1\fs20 K: TSHA256Buffer} constant table is used. Note the non standard definition of {\i DWS} for a {\f1\fs20 const array}: it will use {\f1\fs20 .. = ([...]);} instead of {\f1\fs20 .. = ();} as in classical {\i Object Pascal}.
 The hash is computed from an internal {\f1\fs20 W[]} array, which is filled with the binary representation of the supplied {\f1\fs20 Buffer[]} bytes. That is, {\f1\fs20 Buffer: array[0..63] of byte} is first un-serialized in {\f1\fs20 W: array[0..15] of cardinal}.
 Then the SHA-256 algorithm is performed in its most simple rolled version. An un-rolled version is not mandatory here, in our managed {\i JavaScript} runtime environment.
-The only non obvious part of the above code is the use of {\f1\fs20 ... shr 0} to enforce only positive 32 bit integers (aka {\f1\fs20 cardinal}) are used during the computation.
+The only non obvious part of the above code is the use of {\f1\fs20 ... shr 0} to enforce only positive 32-bit integers (aka {\f1\fs20 cardinal}) are used during the computation.
 
 To illustrate that, here is some interesting question published in our forum - see @http://synopse.info/forum/viewtopic.php?id=1011 - from a customer:
 {\i I have written a test server (using {\f1\fs20 TSQLRestServerDB}), which has a service that provides basic access to the database as follows:}
@@ -16490,7 +16490,7 @@ This code will create a string for each key/value in {\f1\fs20 Fields2[]} and {\
 :Implementation
 Some {\i Delphi} @*RTTI@ (Runtime Type Information) objects and classes are implemented in the @!TClassProp,TClassType,TEnumType,TTypeInfo,TSQLRecord.ClassProp,TSQLRecord.GetJSONValues,TPropInfo.GetValue,TPropInfo.SetValue,TSQLRecordProperties!Lib\SQLite3\mORMot.pas@ unit. The {\i Synopse mORMot Framework} uses this custom functions and objects in order to access to the {\i Delphi} @*RTTI@.
 The generic functions supplied by the standard {\f1\fs20 TypInfo.pas} unit where not found to be easy to use: there are some record types from one hand, which details the internal @*RTTI@ memory layout generated by the compiler, and there are some functions on the other hand. So the framework unified both RTTI memory layout and methods by defining some {\f1\fs20 object} types (i.e. not {\i Delphi} classes, but raw objects which can map directly the RTTI memory layout via a {\f1\fs20 pointer}) with some methods dedicated for RTTI handling and @*ORM@. These {\f1\fs20 object} types are {\f1\fs20 TClassProp, TClassType, TEnumType, TTypeInfo} and {\f1\fs20 TPropInfo}.
-Since this ORM is the core of the framework, the code of most of these objects has been tuned for performance: quit all of the methods have two versions in the framework, one in pure pascal code (easy to maintain and understand, and @*64 bit@ compatible), and one in optimized i386 assembler.
+Since this ORM is the core of the framework, the code of most of these objects has been tuned for performance: quit all of the methods have two versions in the framework, one in pure pascal code (easy to maintain and understand, and @*64-bit@ compatible), and one in optimized i386 assembler.
 As a result, ORM code based on RTTI is fairly easy to use. See for example who a database field index is retrieved for a {\f1\fs20 TSQLRecord} class:
 !function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
 !var P: PPropInfo;
@@ -16963,7 +16963,7 @@ As you can see, the returned variant content is computed with the following meth
 !  Val.VType := FIELDTYPE2VARTYPE[result];
 !  case result of
 !    ftInt64, ftDouble, ftCurrency, ftDate:
-!      Val.VInt64 := V^.Int64; // copy 64 bit content
+!      Val.VInt64 := V^.Int64; // copy 64-bit content
 !    ftUTF8: begin
 !      Val.VPointer := nil;
 !      if C^.ColumnValueInlined then
@@ -17287,7 +17287,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2015 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2016 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -17300,7 +17300,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1

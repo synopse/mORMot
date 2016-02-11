@@ -752,7 +752,8 @@ begin
     exit;
   tmp.Init(fInitialJsonContent);
   RemoveCommentsFromJSON(tmp.buf);
-  JSONToObject(fOwner,tmp.buf,result);
+  JSONToObject(fOwner,tmp.buf,result,nil,
+    [j2oIgnoreUnknownProperty,j2oIgnoreUnknownEnum,j2oHandleCustomVariants]);
   if not result then
     fInitialJsonContent := '';
   tmp.Done;

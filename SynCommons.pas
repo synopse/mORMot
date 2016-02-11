@@ -18508,6 +18508,7 @@ begin
           i := FindShortStringListTrimLowerCase(Names,MaxValue,Text,TextLen);
         if i>=0 then
           SetBit(result,i);
+        // unknown enum names (i=-1) would just be ignored
       until EndOfObject=']';
     end else
       result := GetCardinal(GetJSONField(P,P,nil,@EndOfObject));
