@@ -183,6 +183,7 @@ unit SynSQLite3;
     default in SynSQLite3Static), to let external SQlite3 library use the same
     memory manager than Delphi, for better performance and stability
   - added sqlite3.extended_errcode() function, used for exception message
+  - ensure ESQLite3Exception message would contain the SQL execution context
 
 }
 

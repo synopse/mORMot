@@ -10194,6 +10194,13 @@ type
     /// this overriden method will create an index on the 'Sent' column
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); override;
+    /// search for pending events since a supplied ID
+    // - returns FALSE if no notification was found
+    // - returns TRUE ad fill a TDocVariant array of JSON Objects, including
+    // "ID": field, and Method as "MethodName": field
+    class function LastEventsAsObjects(Rest: TSQLRest; LastKnownID: TID; Limit: integer;
+      Service: TInterfaceFactory; out Dest: TDocVariantData;
+      const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): boolean;
     /// allows to convert the Input array into a proper single JSON Object
     // - "ID": field would be included, and Method as "MethodName": field
     function SaveInputAsObject(Service: TInterfaceFactory;
@@ -54504,16 +54511,33 @@ begin
     Server.CreateSQLMultiIndex(Self,['Sent'],false);
 end;
 
+class function TSQLRecordServiceNotifications.LastEventsAsObjects(Rest: TSQLRest;
+  LastKnownID: TID; Limit: integer; Service: TInterfaceFactory; out Dest: TDocVariantData;
+  const MethodName: RawUTF8; IDAsHexa: boolean): boolean;
+var res: TSQLRecordServiceNotifications;
+begin
+  res := CreateAndFillPrepare(Rest,'ID > ? order by ID limit %',[Limit],
+    [LastKnownID],'ID,Method,Input');
+  try
+    if res.FillTable.RowCount > 0 then begin
+      res.SaveFillInputsAsObjects(Service,Dest,MethodName,IDAsHexa);
+      result := true;
+    end else
+      result := false;
+  finally
+    res.Free;
+  end;
+end;
+
 function TSQLRecordServiceNotifications.SaveInputAsObject(Service: TInterfaceFactory;
   const MethodName: RawUTF8; IDAsHexa: boolean): variant;
 var m: integer;
-    ids: RawUTF8;
 begin
-  if IDAsHexa then
-    Int64ToHex(fID,ids) else
-    Int64ToUtf8(fID,ids);
   VarClear(result);
-  TDocVariantData(result).InitObject(['ID',ids,MethodName,Method],JSON_OPTIONS_FAST);
+  with TDocVariantData(result) do
+    if IDAsHexa then
+      InitObject(['ID',Int64ToHex(fID),MethodName,Method],JSON_OPTIONS_FAST) else
+      InitObject(['ID',fID,MethodName,Method],JSON_OPTIONS_FAST);
   m := Service.FindMethodIndex(Method);
   if m>=0 then
     Service.Methods[m].ArgsAsDocVariantObject(_Safe(fInput)^,TDocVariantData(result),true);
