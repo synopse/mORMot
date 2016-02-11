@@ -58,6 +58,10 @@ uses
   {$ifdef MSWINDOWS}
   Windows, // for fSafe.Lock/Unlock inlining
   {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,
