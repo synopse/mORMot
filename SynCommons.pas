@@ -9623,7 +9623,11 @@ function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
-function Int64ToHex(aInt64: Int64): RawUTF8;
+function Int64ToHex(aInt64: Int64): RawUTF8; overload;
+
+/// fast conversion from a Int64 value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+procedure Int64ToHex(aInt64: Int64; var result: RawUTF8); overload;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -14932,6 +14936,7 @@ type
     {$endif}
     /// convert the identifier into a 16 chars hexadecimal string
     function ToHexa: RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier back from a 16 chars hexadecimal string
     // - returns TRUE if the supplied hexadecimal is on the expected format
     // - returns FALSE if the supplied text is invalid
@@ -23043,6 +23048,12 @@ begin
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;
+begin
+  FastNewRawUTF8(result,sizeof(Int64)*2);
+  BinToHexDisplay(@AInt64,pointer(Result),sizeof(Int64));
+end;
+
+procedure Int64ToHex(aInt64: Int64; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,sizeof(Int64)*2);
   BinToHexDisplay(@AInt64,pointer(Result),sizeof(Int64));
@@ -53488,12 +53499,12 @@ end;
 
 function TSynUniqueIdentifierBits.ToHexa: RawUTF8;
 begin
-  result := Int64ToHex(Value);
+  Int64ToHex(Value,result);
 end;
 
 function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUTF8): boolean;
 begin
-  result := HexDisplayToBin(pointer(Hexa),@Value,sizeof(Value));
+  result := (Length(hexa)=16) and HexDisplayToBin(pointer(hexa),@Value,sizeof(Value));
 end;
 
 
@@ -53528,7 +53539,7 @@ end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime;
   out result: TSynUniqueIdentifierBits);
-begin
+begin // assume fLastCounter=0
   result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
 end;
 
