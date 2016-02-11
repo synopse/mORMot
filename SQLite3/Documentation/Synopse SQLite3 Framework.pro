@@ -7322,7 +7322,7 @@ The following classes are available to implement a {\i Server} instance:
 In practice, in order to implement the business logic, you should better create a new {\f1\fs20 class}, inheriting from one of the above {\f1\fs20 TSQLRestServer} classes. Having your own inherited class does make sense, especially for implementing your own method-based services - see @49@, or {\f1\fs20 override} internal methods.
 The {\f1\fs20 @**TSQLRestServerDB@} class is the main kind of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
 If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
-If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
+If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.\line Another option may be to use {\f1\fs20 @*TSQLRestClientRedirect@} - see @186@ - which does something similar, but inheriting from {\f1\fs20 TSQLRestClientURI}.
 :  Storage classes
 In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 @*TSQLRestStorage@}:
 \graph StorageRESTClasses RESTful storage classes
@@ -7353,15 +7353,17 @@ rankdir=LR;
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
 \TSQLHttpClientCurl\TSQLHttpClientWinGeneric
 \TSQLHttpClientGeneric\TSQLRestClientURI
+\TSQLRestClientRedirect\TSQLRestClientURI
 \TSQLRestClientURI\TSQLRestClient
 \TSQLRestClient\TSQLRest
 \
 Of course, all those {\f1\fs20 TSQLRestClient*} classes expect a {\f1\fs20 TSQLRestServer} to be available, via the corresponding transmission protocol.
 \page
-: In-process/stand-alone application
-For a @*stand-alone@ application, create a {\f1\fs20 @*TSQLRestClientDB@}. This particular class will initialize an internal {\f1\fs20 @*TSQLRestServerDB@} instance, and you'll have full access to the {\i @*SQLite3@} database in the same process, with no speed penalty.
+:186 In-process/stand-alone application
+For a @*stand-alone@ application, create a {\f1\fs20 @**TSQLRestClientDB@}. This particular class will initialize an internal {\f1\fs20 @*TSQLRestServerDB@} instance, and you'll have full access to the {\i @*SQLite3@} database in the same process, with no speed penalty.
 Content will still be converted to and from JSON, but there will be no delay due to the transmission of the data. Having JSON at hand will enable internal cache - see @39@ - and allow to combine this in-process direct process with other transmission protocols (like named pipes or HTTP).
-You may also directly work with a {\f1\fs20 TSQLRestServerDB} instance, but you may loose some handy User-Interface features of the {\f1\fs20 TSQLRestClientURI} class.
+Another option may be to use {\f1\fs20 @**TSQLRestClientRedirect@}, which allows redirection from any {\f1\fs20 @*TSQLRest@} class, either inheriting from {\f1\fs20 @*TSQLRestClient@} or {\f1\fs20 @*TSQLRestServer@}. Any {\f1\fs20 TSQLRestClientURI.URI} request would be passed to the redirected {\f1\fs20 TSQLRest} instance, which may be local or remote. The {\f1\fs20 TSQLRestClientRedirect.RedirectTo} method allows to enable or disable the redirection at runtime (by setting {\f1\fs20 aRedirected=nil}), or change the redirected {\f1\fs20 TSQLRest} instance on the fly, without creating a new {\f1\fs20 TSQLRestClientRedirect} instance.
+You may also directly work with a {\f1\fs20 TSQLRestServerDB} instance, but you would miss some handy features of the {\f1\fs20 TSQLRestClientURI} class, like User-Interface interaction, or advanced ORM/SOA abilities, based on {\f1\fs20 TSQLRestServer.URI} process.
 : Local access via named pipes or Windows messages
 For a @*Client-Server@ local application, that is some executable running on the same physical machine, create a {\f1\fs20 TSQLRestServerDB} instance, then use the corresponding {\f1\fs20 ExportServer, ExportServerNamedPipe, ExportServerMessage} method to instantiate either a in-process, Named-Pipe or Windows Messages server.
 The Windows Messages layer has the lowest overhead and is the fastest transport layer available between several applications on the same computer. But it has the problem of being reserved to desktop applications (since Windows Vista), so you a Windows Messages server won't be accessible when run as a background service.
