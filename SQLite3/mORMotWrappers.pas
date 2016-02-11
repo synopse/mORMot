@@ -578,8 +578,10 @@ begin
         end else
           break;
       until false;
-      if withinCode then
+      if withinCode then begin
         desc := desc+#13#10'----'; // code block should end the description
+        withinCode := false;
+      end;
       typeName := GetNextItem(P,' ');
       if P=nil then
         exit;
