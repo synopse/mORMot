@@ -13934,6 +13934,10 @@ type
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
     destructor Destroy; override;
+    /// safe version of Sleep() which won't break the thread process
+    // - returns TRUE if the thread was Terminated
+    // - returns FALSE if successfully waited up to MS milliseconds
+    function SleepOrTerminated(MS: integer): boolean;
     /// read-only access to the associated REST instance
     property Rest: TSQLRest read FRest;
     /// TRUE if the associated REST instance would be owned by this thread
@@ -34001,6 +34005,27 @@ begin
   if fOwnRest then
     FreeAndNil(fRest);
   fSafe.Done;
+end;
+
+function TSQLRestThread.SleepOrTerminated(MS: integer): boolean;
+var endtix: Int64;
+begin
+  result := true; // notify Terminated
+  if Terminated then
+    exit;
+  if MS<32 then begin // smaller than GetTickCount resolution (under Windows)
+    sleep(MS);
+    if Terminated then
+      exit;
+  end else begin
+    endtix := GetTickCount64+MS;
+    repeat
+      sleep(10);
+      if Terminated then
+        exit;
+    until GetTickCount64>endtix;
+  end;
+  result := false; // normal delay expiration
 end;
 
 procedure TSQLRestThread.Execute;

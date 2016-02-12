@@ -947,8 +947,6 @@ begin
 end;
 
 procedure TDDDSocketThread.ExecuteConnect;
-var
-  tix: Int64;
 begin
   {$ifdef WITHLOG}
   FLog.Enter('ExecuteConnect %:%',[fHost,fPort],self);
@@ -982,18 +980,13 @@ begin
     end;
   end;
   if (FMonitoring.State <> tpsConnected) and not Terminated then
-    if fSettings.ConnectionAttemptsInterval > 0 then begin // on error, retry
-      tix := GetTickCount64 + fSettings.ConnectionAttemptsInterval * 1000;
-      repeat
-        sleep(50);
-      until Terminated or (GetTickCount64 > tix);
+    if fSettings.ConnectionAttemptsInterval > 0 then // on error, retry
+      if SleepOrTerminated(fSettings.ConnectionAttemptsInterval * 1000) then
       {$ifdef WITHLOG}
-      if Terminated then
         FLog.Log(sllTrace, 'ExecuteConnect: thread terminated', self)
       else
-        FLog.Log(sllTrace, 'ExecuteConnect: wait finished -> retry connect', self);
-      {$endif}
-    end;
+        FLog.Log(sllTrace, 'ExecuteConnect: wait finished -> retry connect', self)
+      {$endif};
 end;
 
 procedure TDDDSocketThread.ExecuteDisconnect;
@@ -1076,7 +1069,7 @@ begin
       else if fPerformConnection then
         ExecuteConnect
       else
-        sleep(200);
+        sleep(100);
       if Terminated then
         break;
       try

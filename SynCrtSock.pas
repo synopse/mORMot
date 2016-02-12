@@ -775,6 +775,10 @@ type
     /// under FPC, would call Terminate and WaitFor just with Delphi RTL
     destructor Destroy; override;
     {$endif}
+    /// safe version of Sleep() which won't break the thread process
+    // - returns TRUE if the thread was Terminated
+    // - returns FALSE if successfully waited up to MS milliseconds
+    function SleepOrTerminated(MS: cardinal): boolean;
   end;
   {$M-}
 
@@ -3877,6 +3881,30 @@ begin
   {$else}
   inherited Create(CreateSuspended);
   {$endif}
+end;
+
+function TSynThread.SleepOrTerminated(MS: cardinal): boolean;
+var endtix, tix, lasttix: cardinal;
+begin
+  result := true; // notify Terminated
+  if Terminated then
+    exit;
+  if MS<32 then begin // smaller than GetTickCount resolution (under Windows)
+    sleep(MS);
+    if Terminated then
+      exit;
+  end else begin
+    tix := GetTickCount;
+    endtix := tix+MS;
+    repeat
+      sleep(10);
+      if Terminated then
+        exit;
+      lasttix := tix; // handle GetTickCount 32-bit overflow
+      tix := GetTickCount;
+    until (tix>endtix) or (tix<lasttix);
+  end;
+  result := false; // normal delay expiration
 end;
 
 {$ifdef FPC}
