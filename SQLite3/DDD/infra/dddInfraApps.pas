@@ -1230,7 +1230,9 @@ end;
 
 function TDDDSynCrtSocket.LastError: RawUTF8;
 begin
-  result := StringToUTF8(SocketErrorMessage(fSocket.LastLowSocketError));
+  if fSocket.LastLowSocketError=0 then
+    result := '' else
+    StringToUTF8(SocketErrorMessage(fSocket.LastLowSocketError),result);
 end;
 
 

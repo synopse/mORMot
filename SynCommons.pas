@@ -711,6 +711,7 @@ unit SynCommons;
   - added TSynBackgroundThreadAbstract class for generic background process, and
     callback-driven TSynBackgroundThreadEvent / TSynBackgroundThreadProcedure /
     TSynBackgroundThreadMethod inherited classes
+  - new TSynParallelProcess for parallel processing of indexed information
   - added SetThreadName/SetCurrentThreadName functions for request [6acfd0a3d3]
   - added TSynFPUException class to allow per-method customization of the FPU
     exception mapping: to be used e.g. when mixing code between external
@@ -10074,14 +10075,21 @@ type
     procedure Execute; override;
     /// called by Execute method when fProcessParams<>nil and fEvent is notified
     procedure Process; virtual; abstract;
+    function OnIdleProcessNotify(start: Int64): integer;
     function GetPendingProcess: TSynBackgroundThreadProcessStep;
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
+    // returns  flagIdle if acquired, flagDestroying if terminated
+    function AcquireThread: TSynBackgroundThreadProcessStep;
+    procedure WaitForFinished(start: Int64);
   public
     /// initialize the thread
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
     // the background process to finish until RunAndWait() will return
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
-      const aThreadName: RawUTF8); reintroduce;
+      const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
+      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce; 
     /// release used resources
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
@@ -10113,12 +10121,6 @@ type
     // during process
     // - to be used e.g. to ensure no re-entrance from User Interface messages
     property OnIdleBackgroundThreadActive: Boolean read GetOnIdleBackgroundThreadActive;
-    /// optional callback event triggered in Execute before main process loop
-    // - could be assigned e.g. to TSQLRestServer.BeginCurrentThread
-    property OnBeforeExecute: TNotifyThreadEvent read fOnBeforeExecute write fOnBeforeExecute;
-    /// optional callback event triggered in Execute after main process loop
-    // - could be assigned e.g. to TSQLRestServer.EndCurrentThread
-    property OnAfterExecute: TNotifyThreadEvent read fOnAfterExecute write fOnAfterExecute;
     /// optional callback event triggered in Execute before each Process
     property OnBeforeProcess: TNotifyThreadEvent read fOnBeforeProcess write fOnBeforeProcess;
     /// optional callback event triggered in Execute after each Process
@@ -10152,7 +10154,7 @@ type
   /// allow background thread process of a variable TThreadMethod callback
   TSynBackgroundThreadMethod = class(TSynBackgroundThreadAbstract)
   protected
-    /// just call the TThreadMethod, as as supplied to RunAndWait()
+    /// just call the TThreadMethod, as supplied to RunAndWait()
     procedure Process; override;
   public
     /// run once the supplied TThreadMethod callback
@@ -10182,6 +10184,59 @@ type
     // - the OpaqueParam as specified to RunAndWait() will be supplied here
     property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
   end;
+
+  /// callback implementing some parallelized process for TSynParallelProcess
+  // - if 0<=IndexStart<=IndexStop, it should execute some process
+  TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
+
+  /// thread executing process for TSynParallelProcess
+  TSynParallelProcessThread = class(TSynBackgroundThreadAbstract)
+  protected
+    fMethod: TSynParallelProcessMethod;
+    fIndexStart, fIndexStop: integer;
+    procedure Start(Method: TSynParallelProcessMethod; IndexStart,IndexStop: integer); 
+    /// executes fMethod(fIndexStart,fIndexStop)
+    procedure Process; override;
+  public
+  end;
+
+  /// an exception which would be raised by TSynParallelProcess
+  ESynParallelProcess = class(ESynException);
+
+  /// allow parallel execution of an index-based process in a thread pool
+  // - will create its own thread pool, then execute any method by spliting the
+  // work into each thread
+  TSynParallelProcess = class(TSynPersistentLocked)
+  protected
+    fThreadName: RawUTF8;
+    fPool: array of TSynParallelProcessThread;
+    fThreadPoolCount: integer;
+    fParallelRunCount: integer;
+  public
+    /// initialize the thread pool
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // - up to 32 threads could be setup
+    // - if ThreadPoolCount is 0, no thread would be created, and process
+    // would take place in the current thread
+    constructor Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
+      OnBeforeExecute: TNotifyThreadEvent=nil; OnAfterExecute: TNotifyThreadEvent=nil); reintroduce; virtual;
+    /// finalize the thread pool
+    destructor Destroy; override;
+    /// run a method in parallel, and wait for the execution to finish
+    // - will split Method[0..MethodCount-1] execution over the threads
+    // - in case of any exception during process, an ESynParallelProcess
+    // exception would be raised by this method
+    procedure ParallelRunAndWait(Method: TSynParallelProcessMethod; MethodCount: integer);
+  published
+    /// how many threads have been activated  
+    property ParallelRunCount: integer read fParallelRunCount;
+    /// how many threads are currently in this instance thread pool
+    property ThreadPoolCount: integer read fThreadPoolCount;
+    /// some text identifier, used to distinguish each owned thread
+    property ThreadName: RawUTF8 read fThreadName;
+  end;
+  
 
 /// low-level wrapper to add a callback to a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -53708,14 +53763,16 @@ begin
 end;
 
 constructor TSynBackgroundThreadAbstract.Create(aOnIdle: TOnIdleSynBackgroundThread;
-  const aThreadName: RawUTF8);
+  const aThreadName: RawUTF8; OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fProcessEvent := TEvent.Create(nil,false,false,'');
   fCallerEvent := TEvent.Create(nil,false,false,'');
   fThreadName := aThreadName;
-  inherited Create(false{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
+  fOnBeforeExecute := OnBeforeExecute;
+  fOnAfterExecute := OnAfterExecute;
   InitializeCriticalSection(fPendingProcessLock);
+  inherited Create(false{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
 end;
 
 {$ifdef KYLIX3}
@@ -53879,12 +53936,23 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
-var start: Int64;
-    ThreadID: TThreadID;
-    E: Exception;
-    IsIdle: boolean;
-function OnIdleProcessNotify: integer;
+function TSynBackgroundThreadAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
+begin
+  EnterCriticalSection(fPendingProcessLock);
+  try
+    result := fPendingProcessFlag;
+    if result=flagDestroying then
+      exit;
+    if result=flagIdle then begin
+      fPendingProcessFlag := flagStarted; // atomic set "started" flag
+      fCallerThreadID := ThreadID;
+    end;
+  finally
+    LeaveCriticalSection(fPendingProcessLock);
+  end;
+end;
+
+function TSynBackgroundThreadAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
   result := GetTickCount64-start;
   if result<0 then
@@ -53892,6 +53960,40 @@ begin
   if Assigned(fOnIdle) then
     fOnIdle(self,result) ;
 end;
+
+procedure TSynBackgroundThreadAbstract.WaitForFinished(start: Int64);
+var E: Exception;
+begin
+  if (self=nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
+    exit; // nothing to wait for
+  try
+    {$ifdef MSWINDOWS} // do process the OnIdle only if UI
+    if Assigned(fOnIdle) then begin
+      while FixedWaitFor(fCallerEvent,100)<>wrSignaled do
+        OnIdleProcessNotify(start);
+    end else
+    {$endif}
+      FixedWaitForever(fCallerEvent);
+    if fPendingProcessFlag<>flagFinished then
+      ESynException.CreateUTF8('%.WaitForFinished: flagFinished?',[self]);
+    if fBackgroundException<>nil then begin
+      E := fBackgroundException;
+      fBackgroundException := nil;
+      raise E; // raise background exception in the calling scope
+    end;
+  finally
+    fParam := nil;
+    fCallerThreadID := 0;
+    FreeAndNil(fBackgroundException);
+    SetPendingProcess(flagIdle);
+    if Assigned(fOnIdle) then
+      fOnIdle(self,-1); // notify finished
+  end;
+end;
+
+function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
+var start: Int64;
+    ThreadID: TThreadID;
 begin
   result := false;
   ThreadID := GetCurrentThreadId;
@@ -53903,19 +54005,11 @@ begin
     fOnIdle(self,0); // notify started
   start := GetTickCount64;
   repeat
-    EnterCriticalSection(fPendingProcessLock);
-    try
-      if fPendingProcessFlag=flagDestroying then
-        exit;
-      IsIdle := fPendingProcessFlag=flagIdle;
-      if IsIdle then
-        fPendingProcessFlag := flagStarted; // atomic set "started" flag
-    finally
-      LeaveCriticalSection(fPendingProcessLock);
+    case AcquireThread of
+    flagDestroying: exit;
+    flagIdle: break; // we acquired the background thread
     end;
-    if IsIdle then
-      break;
-    case OnIdleProcessNotify of // Windows.GetTickCount64 res is 10-16 ms
+    case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
     0..20:    SleepHiRes(0);
     21..100:  SleepHiRes(1);
     101..900: SleepHiRes(5);
@@ -53923,33 +54017,10 @@ begin
     end;
   until false;
   // 2. process execution in the background thread
-  fBackgroundException := nil;
-  fCallerThreadID := ThreadID;
   fParam := OpaqueParam;
-  try
-    fProcessEvent.SetEvent; // notify background thread for Call pending process
-    {$ifdef MSWINDOWS} // do process the OnIdle only if UI
-    if Assigned(fOnIdle) then begin
-      while FixedWaitFor(fCallerEvent,100)<>wrSignaled do
-        OnIdleProcessNotify;
-    end else
-    {$endif}
-      FixedWaitForever(fCallerEvent);
-    assert(fPendingProcessFlag=flagFinished);
-    if fBackgroundException<>nil then begin
-      E := fBackgroundException;
-      fBackgroundException := nil;
-      raise E; // raise background exception in the calling scope
-    end;
-    result := true;
-  finally
-    fParam := nil;
-    fCallerThreadID := 0;
-    FreeAndNil(fBackgroundException);
-    SetPendingProcess(flagIdle);
-    if Assigned(fOnIdle) then
-      fOnIdle(self,-1); // notify finished
-  end;
+  fProcessEvent.SetEvent; // notify background thread for Call pending process
+  WaitForFinished(start);
+  result := true;
 end;
 
 function TSynBackgroundThreadAbstract.GetOnIdleBackgroundThreadActive: boolean;
@@ -54007,6 +54078,104 @@ begin
   if not Assigned(fOnProcess) then
     raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
   fOnProcess(fParam);
+end;
+
+
+{ TSynParallelProcessThread }
+
+procedure TSynParallelProcessThread.Process;
+begin
+  if not Assigned(fMethod) then
+    exit;
+  fMethod(fIndexStart,fIndexStop);
+  fMethod := nil;
+end;
+
+procedure TSynParallelProcessThread.Start(
+  Method: TSynParallelProcessMethod; IndexStart, IndexStop: integer);
+begin
+  fMethod := Method;
+  fIndexStart := IndexStart;
+  fIndexStop := IndexStop;
+  fProcessEvent.SetEvent; // notify execution
+end;
+
+
+{ TSynParallelProcess }
+
+constructor TSynParallelProcess.Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
+  OnBeforeExecute, OnAfterExecute: TNotifyThreadEvent);
+var i: integer;
+begin
+  inherited Create;
+  if ThreadPoolCount<0 then
+    raise ESynParallelProcess.CreateUTF8('%.Create(%,%)',[Self,ThreadPoolCount,ThreadName]);
+  if ThreadPoolCount>32 then
+    ThreadPoolCount := 32;
+  fThreadPoolCount := ThreadPoolCount;
+  fThreadName := ThreadName;
+  SetLength(fPool,fThreadPoolCount);
+  for i := 0 to fThreadPoolCount-1 do
+    fPool[i] := TSynParallelProcessThread.Create(nil,FormatUTF8('%#%/%',
+      [fThreadName,i+1,fThreadPoolCount]),OnBeforeExecute,OnAfterExecute);
+end;
+
+destructor TSynParallelProcess.Destroy;
+begin
+  ObjArrayClear(fPool);
+  inherited;
+end;
+
+procedure TSynParallelProcess.ParallelRunAndWait(Method: TSynParallelProcessMethod;
+  MethodCount: integer);
+var use,t,n,perthread: integer;
+    error: RawUTF8;
+begin
+  if (MethodCount<=0) or not Assigned(Method) then
+    exit;
+  if (self=nil) or (MethodCount=1) or (fThreadPoolCount=0) then begin
+    Method(0,0); // no need to use a background thread here
+    exit;
+  end;
+  use := MethodCount;
+  if use>fThreadPoolCount+1 then // +1 to include current thread
+    use := fThreadPoolCount+1;
+  try
+    // start secondary threads
+    perthread := MethodCount div use;
+    n := 0;
+    for t := 0 to use-2 do begin
+      repeat
+        case fPool[t].AcquireThread of
+        flagDestroying: // should not happen
+          raise ESynParallelProcess.CreateUTF8(
+            '%.ParallelRunAndWait [%] destroying',[self,fPool[t].fThreadName]);
+        flagIdle:
+          break; // acquired (should always be the case)
+        end;
+        Sleep(1);
+      until false;
+      fPool[t].Start(Method,n,n+perthread-1);
+      inc(n,perthread);
+      inc(fParallelRunCount);
+    end;
+    // run remaining items in the current thread
+    if n<MethodCount then begin
+      Method(n,MethodCount-1);
+      inc(fParallelRunCount);
+    end;
+  finally
+    // wait for the process to finish
+    for t := 0 to use-2 do
+    try
+      fPool[t].WaitForFinished(0);
+    except
+      on E: Exception do
+        error := FormatUTF8('% % on thread % [%]',[error,E,fPool[t].fThreadName,E.Message]);
+    end;
+    if error<>'' then
+      raise ESynParallelProcess.CreateUTF8('%.ParallelRunAndWait: %',[self,error]);
+  end;
 end;
 
 

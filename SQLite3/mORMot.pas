@@ -36611,11 +36611,11 @@ begin
      result := false;
 end;
 
-function TSQLRestServer.CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
+function TSQLRestServer.CreateBackgroundThread(const Format: RawUTF8;
+   const Args: array of const): TSynBackgroundThreadMethod;
 begin
-  result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args));
-  result.OnBeforeExecute := BeginCurrentThread;
-  result.OnAfterExecute := EndCurrentThread;
+  result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args),
+    BeginCurrentThread,EndCurrentThread);
 end;
 
 function TSQLRestServer.GetAuthenticationSchemesCount: integer;
