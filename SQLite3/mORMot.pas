@@ -4135,7 +4135,7 @@ function ClassFieldPropWithParents(aClassType: TClass; const PropName: shortstri
 // - this version also search into parent properties
 // - returns TRUE and set PropInstance if a matching property was found
 function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
-  out PropInstance): boolean; overload;
+  PropClassType: TClass; out PropInstance): boolean; overload;
 
 /// retrieve a Field property RTTI information from a Property Name
 // - this special version also search into parent properties (default is only current)
@@ -19220,8 +19220,8 @@ var i: integer;
 begin
   while aClassType<>nil do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if {$ifndef HASINLINE}(result^.Name[0]=PropName[0]) and{$endif}
-         IdemPropName(result^.Name,PropName) then
+      if (result^.Name[0]=PropName[0]) and
+         IdemPropNameUSameLen(@result^.Name[1],@PropName[1],ord(PropName[0])) then
         exit else
         {$ifdef HASINLINE}
         result := result^.Next;
@@ -19269,16 +19269,17 @@ begin
 end;
 
 function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
-  out PropInstance): boolean;
+  PropClassType: TClass; out PropInstance): boolean;
 var P: PPropInfo;
 begin
   result := false;
   if Instance=nil then
     exit;
   P := ClassFieldPropWithParents(Instance.ClassType,PropName);
-  if (P=nil) or (P^.PropType^.Kind<>tkClass) then
+  if (P=nil) or (P^.PropType^.Kind<>tkClass) or
+     not P^.PropType^.InheritsFrom(PropClassType) then
     exit;
-  PtrInt(PropInstance) := P^.GetOrdValue(Instance);
+  TObject(PropInstance) := P^.GetObjProp(Instance);
   result := true;
 end;
 
@@ -19290,9 +19291,9 @@ begin
   if Instance=nil then
     exit;
   P := ClassFieldPropWithParentsFromClassType(Instance.ClassType,PropClassType);
-  if (P=nil) or (P^.PropType^.Kind<>tkClass) then
+  if P=nil then
     exit;
-  PtrInt(PropInstance) := P^.GetOrdValue(Instance);
+  TObject(PropInstance) := P^.GetObjProp(Instance);
   result := true;
 end;
 
