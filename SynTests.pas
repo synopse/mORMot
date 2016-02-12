@@ -546,7 +546,7 @@ begin
   if msg<>'' then
     TSynLogTestLog.Add.Log(sllTrace,msg);
   {$endif}
-  Inc(fAssertions);
+  InterlockedIncrement(fAssertions);
   if not condition then
     TestFailed(msg);
 end;
@@ -561,7 +561,7 @@ begin
   if msg<>'' then
     TSynLogTestLog.Add.Log(sllTrace,msg);
   {$endif}
-  Inc(fAssertions);
+  InterlockedIncrement(fAssertions);
   if condition then
     result := false else begin
     TestFailed(msg);
@@ -734,7 +734,7 @@ begin
   TSynLogTestLog.DebuggerNotify(sllFail,'#% %',[fAssertions-fAssertionsBeforeRun,msg]);
   if Owner<>nil then // avoid GPF
     Owner.Failed(msg,self);
-  Inc(fAssertionsFailed);
+  InterlockedIncrement(fAssertionsFailed);
 end;
 
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
