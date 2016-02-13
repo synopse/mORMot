@@ -1776,6 +1776,20 @@ function HttpGet(const aURI: SockString): SockString; overload;
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
 
+type
+  /// may be used to store a connection to a SMTP server
+  // - see SendEmail() overloaded function
+  TSMTPConnection = record
+    /// the SMTP server IP or host name
+    Host: SockString;
+    /// the SMTP server port (25 by default)
+    Port: SockString;
+    /// the SMTP user login (if any)
+    User: SockString;
+    /// the SMTP user password (if any)
+    Pass: SockString;
+  end;
+
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7 bit ASCII, so you could use
@@ -1783,7 +1797,16 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
   const Headers: SockString=''; const User: SockString=''; const Pass: SockString='';
-  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean;
+  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+
+/// send an email using the SMTP protocol
+// - retry true on success
+// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// SendEmailSubject() to encode it as Unicode, if needed
+// - you can optionally set the encoding charset to be used for the Text body
+function SendEmail(const Server: TSMTPConnection;
+  const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
+  const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -3470,6 +3493,13 @@ begin
   end;
 end;
 
+function SendEmail(const Server: TSMTPConnection;
+  const From, CSVDest, Subject, Text, Headers, TextCharSet: SockString): boolean;
+begin
+  result := SendEmail(Server.Host, From, CSVDest, Subject, Text, Headers,
+    Server.User, Server.Pass, Server.Port, TextCharSet);
+end;
+
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
   User, Pass, Port, TextCharSet: SockString): boolean;
 var TCP: TCrtSocket;
@@ -3529,11 +3559,24 @@ begin
   end;
 end;
 
+function IsAnsi7(const s: string): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 1 to length(s) do
+    if ord(s[i])>126 then
+      exit;
+  result := true;
+end;
+
 function SendEmailSubject(const Text: string): SockString;
 var utf8: UTF8String;
 begin
-  utf8 := UTF8String(Text);
-  result := '=?UTF-8?B?'+Base64Encode(utf8);
+  if IsAnsi7(Text) then
+    result := SockString(Text) else begin
+    utf8 := UTF8String(Text);
+    result := '=?UTF-8?B?'+Base64Encode(utf8);
+  end;
 end;
 
 

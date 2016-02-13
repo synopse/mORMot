@@ -67,12 +67,12 @@ type
   public
     Admin: IAdministratedDaemon;
     Callback: ISynLogCallback;
-    OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo; const Text:
-      RawUTF8): boolean of object;
-    constructor Create(Owner: TComponent; const aAdmin: IAdministratedDaemon);
-      reintroduce;
-    constructor CreateCustom(Owner: TComponent; const aAdmin:
-      IAdministratedDaemon; const aEvents, aPattern: RawUTF8); virtual;
+    OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean of object;
+    constructor Create(Owner: TComponent; const aAdmin: IAdministratedDaemon); reintroduce;
+    constructor CreateCustom(Owner: TComponent; const aAdmin: IAdministratedDaemon;
+      const aEvents, aPattern: RawUTF8); virtual;
+    procedure LogFilter(F: TSynLogFilter);
     procedure Closing;
   end;
 
@@ -224,18 +224,20 @@ begin
   (Owner as TAdminControl).EndLog(self);
 end;
 
-procedure TLogFrame.pmFilterClick(Sender: Tobject);
+procedure TLogFrame.LogFilter(F: TSynLogFilter);
 var
-  F: TSynLogFilter;
   i: integer;
 begin
-  if not Sender.InheritsFrom(TMenuItem) then
-    exit;
-  F := TSynLogFilter(TMenuItem(Sender).Tag);
   for i := 0 to chklstEvents.Count - 1 do
-    chklstEvents.Checked[i] := TSynLogInfo(chklstEvents.Items.Objects[i]) in
-      LOG_FILTER[F];
+    chklstEvents.Checked[i] :=
+      TSynLogInfo(chklstEvents.Items.Objects[i]) in LOG_FILTER[F];
   chklstEventsClickCheck(nil);
+end;
+
+procedure TLogFrame.pmFilterClick(Sender: Tobject);
+begin
+  if Sender.InheritsFrom(TMenuItem) then
+    LogFilter(TSynLogFilter(TMenuItem(Sender).Tag));
 end;
 
 procedure TLogFrame.EventsCheckToEventsSet;
