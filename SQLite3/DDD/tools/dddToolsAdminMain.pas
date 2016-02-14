@@ -48,6 +48,7 @@ type
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
+    LastState: Variant;
     OnAfterExecute: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
@@ -152,7 +153,8 @@ var
 begin
   if fAdmin <> nil then begin
     exec := fAdmin.DatabaseExecute('', '#state');
-    result := _JsonFast(exec.Content);
+    LastState := _JsonFast(exec.Content);
+    result := LastState;
   end;
 end;
 
