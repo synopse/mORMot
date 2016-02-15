@@ -74,7 +74,7 @@ type
     constructor CreateCustom(Owner: TComponent; const aAdmin: IAdministratedDaemon;
       const aEvents, aPattern: RawUTF8); virtual;
     destructor Destroy; override;
-    procedure LogFilter(F: TSynLogFilter);
+    procedure LogFilter(F: TSynLogInfos);
     procedure Closing;
   end;
 
@@ -227,20 +227,19 @@ begin
   (Owner as TAdminControl).EndLog(self);
 end;
 
-procedure TLogFrame.LogFilter(F: TSynLogFilter);
+procedure TLogFrame.LogFilter(F: TSynLogInfos);
 var
   i: integer;
 begin
   for i := 0 to chklstEvents.Count - 1 do
-    chklstEvents.Checked[i] :=
-      TSynLogInfo(chklstEvents.Items.Objects[i]) in LOG_FILTER[F];
+    chklstEvents.Checked[i] := TSynLogInfo(chklstEvents.Items.Objects[i]) in F;
   chklstEventsClickCheck(nil);
 end;
 
 procedure TLogFrame.pmFilterClick(Sender: Tobject);
 begin
   if Sender.InheritsFrom(TMenuItem) then
-    LogFilter(TSynLogFilter(TMenuItem(Sender).Tag));
+    LogFilter(LOG_FILTER[TSynLogFilter(TMenuItem(Sender).Tag)]);
 end;
 
 procedure TLogFrame.EventsCheckToEventsSet;
@@ -569,7 +568,7 @@ begin
     if cardinal(selected) < cardinal(FLogSelectedCount) then
       drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
     drwgrdEvents.RowCount := FLogSelectedCount;
-  SetListItem(ndx);
+    SetListItem(ndx);
   finally
     FLogSafe.UnLock;
   end;

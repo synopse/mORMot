@@ -44,17 +44,20 @@ type
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
     fDlgSave: TSaveDialog;
+    procedure InternalGetState; virtual;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
     LastState: Variant;
+    LastStateTicks: Int64;
     OnAfterExecute: TNotifyEvent;
+    OnAfterGetState: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil): boolean; virtual;
     procedure Show; virtual;
-    function GetState: Variant; virtual;
+    procedure GetState;
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
     function AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
       TDBFrameClass): TDBFrame; virtual;
@@ -147,14 +150,27 @@ begin
   end;
 end;
 
-function TAdminControl.GetState: Variant;
+procedure TAdminControl.GetState;
+begin
+  if self = nil then
+    exit;
+  try
+    InternalGetState;
+    if Assigned(OnAfterGetState) then
+      OnAfterGetState(self);
+  except
+    VarClear(LastState);
+  end;
+end;
+
+procedure TAdminControl.InternalGetState;
 var
   exec: TServiceCustomAnswer;
 begin
   if fAdmin <> nil then begin
     exec := fAdmin.DatabaseExecute('', '#state');
     LastState := _JsonFast(exec.Content);
-    result := LastState;
+    LastStateTicks := GetTickCount64;
   end;
 end;
 
