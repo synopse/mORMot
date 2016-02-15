@@ -3518,7 +3518,7 @@ begin
   Expect(Answer)
 end;
 var P: PAnsiChar;
-    rec, ToList: SockString;
+    rec, ToList, head: SockString;
 begin
   result := false;
   P := pointer(CSVDest);
@@ -3537,20 +3537,23 @@ begin
     end else
       Exec('HELO '+Server,'25');
     writeln(TCP.SockOut^,'MAIL FROM:<',From,'>'); Expect('250');
-    ToList := 'To: ';
     repeat
       rec := trim(GetNextItem(P));
       if rec='' then continue;
       if pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
-      ToList := ToList+rec+', ';
+      if ToList='' then
+        ToList := #13#10'To: '+rec else
+        ToList := ToList+', '+rec;
     until P=nil;
     Exec('DATA','354');
-    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10,
+    head := trim(Headers);
+    if head<>'' then
+      head := head+#13#10;
+    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,
       ToList,#13#10'Content-Type: text/plain; charset=',TextCharSet,
-      #13#10'Content-Transfer-Encoding: 8bit'#13#10,
-      Headers,#13#10#13#10,Text);
+      #13#10'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
     Exec('.','25');
     writeln(TCP.SockOut^,'QUIT');
     result := true;
