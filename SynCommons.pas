@@ -13412,6 +13412,11 @@ type
     // - supplied document should be of the same kind than the current one,
     // otherwise nothing is added
     procedure AddFrom(const aDocVariant: Variant);
+    /// add one or several properties, specified by path, from another object
+    // - path are defined as a dotted name-space, e.g. 'doc.glossary.title'
+    // - matching values would be added as root values, with the path as name
+    // - instance and supplied aSource should be a dvObject
+    procedure AddByPath(const aSource: TDocVariantData; const aPaths: array of RawUTF8);
     /// delete a value/item in this document, from its index
     // - return TRUE on success, FALSE if the supplied index is not correct
     function Delete(Index: integer): boolean; overload;
@@ -36110,6 +36115,21 @@ begin
     RawUTF8ToVariant(aValue,VValue[result]);
 end;
 
+procedure TDocVariantData.AddByPath(const aSource: TDocVariantData; const aPaths: array of RawUTF8);
+var p,added: integer;
+    v: TVarData;
+begin
+  if (aSource.Count=0) or (aSource.VKind<>dvObject) or (VKind=dvArray) then
+    exit;
+  for p := 0 to High(aPaths) do begin
+    DocVariantType.Lookup(v,TVarData(aSource),pointer(aPaths[p]));
+    if v.VType<varNull then
+      continue; // path not found
+    added := InternalAdd(aPaths[p]);
+    PVarData(@VValue[added])^ := v;
+  end;
+end;
+
 procedure TDocVariantData.AddFrom(const aDocVariant: Variant);
 var source: PDocVariantData;
     ndx: integer;
@@ -53643,7 +53663,7 @@ begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
   len := length(aSharedObfuscationKey);
-  crc := crc32ctab[0,aIdentifier and 1023];
+  crc := crc32ctab[0,len and 1023];
   for i := 0 to high(fCrypto) do begin
     crc := crc32ctab[0,crc and 1023] xor
            kr32(i,pointer(aSharedObfuscationKey),len) xor
