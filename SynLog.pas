@@ -442,6 +442,7 @@ type
     fNoFile: boolean;
     {$ifdef MSWINDOWS}
     fAutoFlush: cardinal;
+    fNoEnvironmentVariable: boolean;
     {$endif}
     {$ifndef NOEXCEPTIONINTERCEPT}
     fHandleExceptions: boolean;
@@ -610,6 +611,9 @@ type
     // and will be responsible of flushing all pending log content every
     // period of time (e.g. every 10 seconds)
     property AutoFlushTimeOut: cardinal read fAutoFlush write SetAutoFlush;
+    /// force no environment variables to be written to the log file
+    // - may be usefull if they contain some sensitive information
+    property NoEnvironmentVariable: boolean read fNoEnvironmentVariable write fNoEnvironmentVariable;
     {$endif}
     /// force no log to be written to any file
     // - may be usefull in conjunction e.g. with EchoToConsole or any other
@@ -3435,18 +3439,20 @@ begin
     {$ifdef MSWINDOWS}
     NewLine;
     AddShort('Environment variables=');
-    Env := GetEnvironmentStringsA;
-    P := pointer(Env);
-    while P^<>#0 do begin
-      L := StrLen(P);
-      if (L>0) and (P^<>'=') then begin
-        AddNoJSONEscape(P,L);
-        Add(#9);
+    if not fFamily.fNoEnvironmentVariable then begin
+      Env := GetEnvironmentStringsA;
+      P := pointer(Env);
+      while P^<>#0 do begin
+        L := StrLen(P);
+        if (L>0) and (P^<>'=') then begin
+          AddNoJSONEscape(P,L);
+          Add(#9);
+        end;
+        inc(P,L+1);
       end;
-      inc(P,L+1);
+      FreeEnvironmentStringsA(Env);
+      CancelLastChar(#9);
     end;
-    FreeEnvironmentStringsA(Env);
-    CancelLastChar(#9);
     {$endif}
     NewLine;
     AddClassName(self.ClassType);
