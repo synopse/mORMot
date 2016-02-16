@@ -1102,8 +1102,8 @@ begin
     level := sllDDDInfo else
     level := sllDDDError;
   if level in fLog.Level then
-      fLog.SynLog.Log(level, '%.CqrsSetResult(%) state=% %',
-        [ClassType, ToText(fLastError)^, ToText(fState)^, fLastErrorContext], self);
+      fLog.SynLog.Log(level, 'CqrsSetResult(%) state=% %',
+        [ToText(fLastError)^, ToText(fState)^, fLastErrorContext], self);
   {$endif}
 end;
 
@@ -1167,8 +1167,8 @@ var i: integer;
 begin
   fSafe.Lock;
   try
-    fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=%',
-      [ClassType,callback,interfaceName,ObjectFromInterface(callback)],Self);
+    fLog.SynLog.Log(sllTrace,'CallbackReleased(%,"%") callback=%',
+      [callback,interfaceName,ObjectFromInterface(callback)],Self);
     for i := 0 to high(fSubscriber) do // try to release on ALL subscribers
       fSubscriber[i].CallbackReleased(callback, interfaceName);
   finally

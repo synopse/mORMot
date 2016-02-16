@@ -469,6 +469,7 @@ begin
         SetListItem(i, s);
         exit;
       end;
+    Application.ProcessMessages;
     // not found -> search from beginning
     for i := 0 to ndx - 1 do
       if FLog.LineContains(s, FLogSelected[i]) then begin

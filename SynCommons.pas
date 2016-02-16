@@ -29232,7 +29232,7 @@ end;
 {$else}
 var a: array[0..3] of integer absolute guid1;
     b: array[0..3] of integer absolute guid2;
-begin // faster implementation than in SysUtils.pas
+begin // slightly faster implementation than in SysUtils.pas
   {$ifdef HASINLINE}
   result := (a[0]=b[0]) and (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
   {$else}
