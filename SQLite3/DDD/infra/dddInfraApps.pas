@@ -174,10 +174,6 @@ type
     function InternalRetrieveState(var Status: variant): boolean; override;
     procedure InternalLogMonitoring; virtual;
   public
-    /// initialize the instance
-    constructor Create; override;
-    /// finalize the instance
-    destructor Destroy; override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
@@ -829,16 +825,6 @@ end;
 
 
 { TDDDRestDaemon }
-
-constructor TDDDRestDaemon.Create;
-begin
-  inherited Create;
-end;
-
-destructor TDDDRestDaemon.Destroy;
-begin
-  inherited Destroy;
-end;
 
 function TDDDRestDaemon.GetAdministrationHTTPServer: TSQLHttpServer;
 begin

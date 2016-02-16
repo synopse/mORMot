@@ -79,7 +79,8 @@ unit SynSQLite3Static;
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
-  - under Win64, expects an external sqlite3-64.dll file to be available
+  - under Win64, expects an external sqlite3-64.dll file to be available, which
+    may be downloaded from http://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
 
