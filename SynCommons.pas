@@ -29914,6 +29914,8 @@ begin
     $46464952: if Len>16 then // RIFF
       case PCardinalArray(Content)^[2] of
       $50424557: result := 'image/webp';
+      $20495641: if PCardinalArray(Content)^[3] = $5453494C then
+        result := 'video/x-msvideo'; // Windows Audio Video Interleave file
       end;
     $002A4949, $2A004D4D, $2B004D4D:
       result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
@@ -29927,6 +29929,22 @@ begin
             $10,$1F,$20,$22,$23,$28,$29: result := 'application/vnd.ms-excel';
           end;
       end;
+    $5367674F:
+      if Len>14 then //OggS
+        if (PCardinalArray(Content)^[1] = $00000200) and
+          (PCardinalArray(Content)^[2] = $00000000) and
+          (PWordArray(Content)^[6] = $0000) then
+          result := 'video/ogg';
+    $1C000000:
+      if Len > 12 then
+        if PCardinalArray(Content)^[1] = $70797466 then  // ftyp
+          case PCardinalArray(Content)^[2] of
+            $6D6F7369, // isom: ISO Base Media file (MPEG-4) v1
+            $3234706D: // mp42: MPEG-4 video/QuickTime file
+              result := 'video/mp4';
+            $35706733: // 3gp5: MPEG-4 video files
+              result := 'video/3gpp';
+          end;
     else
       case PCardinal(Content)^ and $00ffffff of
         $685A42: result := 'application/bzip2'; // 42 5A 68
