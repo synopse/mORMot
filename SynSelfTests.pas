@@ -3883,7 +3883,7 @@ end;
 
 procedure TTestLowLevelCommon.MimeTypes;
 const
-  MIMES: array[0..45] of TFileName = (
+  MIMES: array[0..49] of TFileName = (
    'png','image/png',
    'PNg','image/png',
    'gif','image/gif',
@@ -3906,13 +3906,16 @@ const
    'Json',JSON_CONTENT_TYPE,
    'webp','image/webp',
    'manifest','text/cache-manifest',
-   'appcache','text/cache-manifest');
+   'appcache','text/cache-manifest',
+   'h264','video/H264',
+   'ogg','video/ogg');
   BIN: array[0..1] of Cardinal = (
     $04034B50,$38464947);
   BIN_MIME: array[0..1] of RawUTF8 = (
     'application/zip','image/gif');
 var i: integer;
 begin
+  Check(GetMimeContentType(nil,0,'toto.h264')='video/H264');
   for i := 0 to high(MIMES)shr 1 do
     Check(GetMimeContentType(nil,0,'toto.'+MIMES[i*2])=StringToAnsi7(MIMES[i*2+1]),MIMES[i*2]);
   for i := 0 to high(BIN) do begin

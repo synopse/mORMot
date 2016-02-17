@@ -29914,12 +29914,12 @@ begin
     $46464952: if Len>16 then // RIFF
       case PCardinalArray(Content)^[2] of
       $50424557: result := 'image/webp';
-      $20495641: if PCardinalArray(Content)^[3] = $5453494C then
+      $20495641: if PCardinalArray(Content)^[3]=$5453494C then
         result := 'video/x-msvideo'; // Windows Audio Video Interleave file
       end;
     $002A4949, $2A004D4D, $2B004D4D:
       result := 'image/tiff'; // 49 49 2A 00 or 4D 4D 00 2A or 4D 4D 00 2B
-    $E011CFD0: // Microsoft Office applications D0 CF 11 E0 = DOCFILE
+    $E011CFD0: // Microsoft Office applications D0 CF 11 E0=DOCFILE
       if Len>600 then
       case PWordArray(Content)^[256] of // at offset 512
         $A5EC: result := 'application/msword'; // EC A5 C1 00
@@ -29930,14 +29930,14 @@ begin
           end;
       end;
     $5367674F:
-      if Len>14 then //OggS
-        if (PCardinalArray(Content)^[1] = $00000200) and
-          (PCardinalArray(Content)^[2] = $00000000) and
-          (PWordArray(Content)^[6] = $0000) then
+      if Len>14 then // OggS
+        if (PCardinalArray(Content)^[1]=$00000200) and
+           (PCardinalArray(Content)^[2]=$00000000) and
+           (PWordArray(Content)^[6]=$0000) then
           result := 'video/ogg';
     $1C000000:
-      if Len > 12 then
-        if PCardinalArray(Content)^[1] = $70797466 then  // ftyp
+      if Len>12 then
+        if PCardinalArray(Content)^[1]=$70797466 then  // ftyp
           case PCardinalArray(Content)^[2] of
             $6D6F7369, // isom: ISO Base Media file (MPEG-4) v1
             $3234706D: // mp42: MPEG-4 video/QuickTime file
@@ -29969,8 +29969,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     case PosEx(copy(result,2,4),
         'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff') of
-      // 63   68  72  76   81   86   91   96  100  105
+        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,m2p,mp3,h264') of
+      // 63   68  72  76   81   86   91   96  100  105  110 114 118 122 126 130 134
       1:  result := 'image/png';
       5:  result := 'image/gif';
       9:  result := 'image/tiff';
@@ -29989,6 +29989,11 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       76: result := 'image/webp';
       81,86: result := 'text/cache-manifest';
       100: result := JSON_CONTENT_TYPE_VAR;
+      110,114: result := 'video/ogg';  // RFC 5334
+      118: result := 'video/mp4';      // RFC 4337 6381
+      122,126: result := 'video/mp2';
+      130: result := 'audio/mpeg';     // RFC 3003
+      134: result := 'video/H264';     // RFC 6184
       else
         if result<>'' then
           result := 'application/'+copy(result,2,10);
