@@ -49619,12 +49619,14 @@ end;
 
 destructor TInterfacedObjectFakeServer.Destroy;
 begin
-  fServer.InternalLog('%(%:%).Destroy I%',
-    [ClassType,pointer(self),fClientDrivenID,fService.InterfaceURI],sllTrace);
-  if fServer.Services<>nil then
-    with (fServer.Services as TServiceContainerServer) do
-      if fFakeCallbacks<>nil then
-        FakeCallbackRemove(self);
+  if fServer<>nil then begin // may be called asynchronously AFTER server is down
+    fServer.InternalLog('%(%:%).Destroy I%',
+      [ClassType,pointer(self),fClientDrivenID,fService.InterfaceURI],sllTrace);
+    if fServer.Services<>nil then
+      with (fServer.Services as TServiceContainerServer) do
+        if fFakeCallbacks<>nil then
+          FakeCallbackRemove(self);
+  end;
   inherited Destroy;
 end;
 
@@ -49632,6 +49634,12 @@ function TInterfacedObjectFakeServer.CallbackInvoke(const aMethod: TServiceMetho
   const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
 begin // here aClientDrivenID^ = FakeCall ID
+  if fServer=nil then begin
+    if aErrorMsg<>nil then
+      aErrorMsg^ := 'Server was already shutdown';
+    result := true;
+    exit;
+  end;
   if not Assigned(fServer.OnNotifyCallback) then
     raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
       [fServer,aMethod.InterfaceDotMethodName]);
@@ -52135,9 +52143,14 @@ begin
 end;
 
 destructor TServiceContainerServer.Destroy;
+var i: integer;
 begin
   fRecordVersionCallback := nil;
-  FreeAndNil(fFakeCallbacks);
+  if fFakeCallbacks<>nil then begin
+    for i := 0 to fFakeCallbacks.Count-1 do // prevent GPF in Destroy
+      TInterfacedObjectFakeServer(fFakeCallbacks.List[i]).fServer := nil;
+    FreeAndNil(fFakeCallbacks); // do not own objects
+  end;
   inherited Destroy;
 end;
 
