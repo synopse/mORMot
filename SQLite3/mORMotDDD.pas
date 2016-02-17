@@ -6,7 +6,7 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -251,6 +251,17 @@ type
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
 
+  /// any service/daemon implementing this interface would be able to redirect
+  // all the administration process to another service/daemon
+  // - i.e. would work as a safe proxy service, over several networks
+  IAdministratedDaemonAsProxy = interface(IAdministratedDaemon)
+    ['{5B7A9086-3D96-48F2-8E27-C6624B2EB45A}']
+    /// allows to connect to another service/daemon IAdministratedDaemon
+    // - detailed connection definition would be supplied as a TDocVariantData
+    // object, serialized from dddInfraApp.pas TDDDRestClientSettings
+    function StartProxy(const aDDDRestClientSettings: variant): TCQRSResult;
+  end;
+
 
 
 { *********** Cross-Cutting Layer Implementation}
@@ -292,6 +303,8 @@ type
   // !   end;
   // - the methods are implemented as a simple state machine, following
   // the TCQRSQueryAction and TCQRSQueryState definitions
+  // - warning: by definition, fLastError* access is NOT thread-safe so the
+  // CqrsBeginMethod/CqrsSetResult feature should be used in a single context
   TCQRSService = class(TInjectableObject, ICQRSService)
   protected
     fLastErrorAddress: ^TCQRSResult;
@@ -299,12 +312,10 @@ type
     fLastErrorContext: variant;
     fAction: TCQRSQueryAction;
     fState: TCQRSQueryState;
-    fLocker: IAutoLocker;
     {$ifdef WITHLOG}
     fLog: TSynLogFamily;
     {$endif}
-    // will initialize fLocker if needed - to be used with finally fLocker.Leave
-    procedure fLockerEnter;
+    fSafe: TSynLocker;
     // method to be called at first for LastError process
     function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; virtual;
@@ -328,6 +339,8 @@ type
   public
     /// initialize the instance
     constructor Create; override;
+    /// finalize the instance
+    destructor Destroy; override;
     {$ifdef WITHLOG}
     /// where logging should take place
     property Log: TSynLogFamily read fLog write fLog;
@@ -953,10 +966,13 @@ type
   /// abstract class to monitor an administrable service/daemon
   // - including Input/Output statistics and connected Clients count
   // - including OS Memory information
-  TDDDAdministratedDaemonMonitor = class(TSynMonitorServer)
+  TDDDAdministratedDaemonMonitor = class(TSynAutoCreateFields)
   protected
+    fServer: TSynMonitorServer;
     function GetMemory: variant;
   published
+    /// information about the REST server process
+    property Server: TSynMonitorServer read fServer;
     /// information about the main System memory, as returned by the OS
     property SystemMemory: variant read GetMemory;
   end;
@@ -997,16 +1013,10 @@ end;
 constructor TCQRSService.Create;
 begin
   inherited Create;
+  fSafe.Init;
   {$ifdef WITHLOG}
   fLog := SQLite3Log.Family; // may be overriden
   {$endif}
-end;
-
-procedure TCQRSService.fLockerEnter;
-begin
-  if not Assigned(fLocker) then
-    fLocker := TAutoLocker.Create;
-  fLocker.Enter;
 end;
 
 function TCQRSService.GetLastError: TCQRSResult;
@@ -1092,8 +1102,8 @@ begin
     level := sllDDDInfo else
     level := sllDDDError;
   if level in fLog.Level then
-      fLog.SynLog.Log(level, '%.CqrsSetResult(%) state=% %',
-        [ClassType, ToText(fLastError)^, ToText(fState)^, fLastErrorContext], self);
+      fLog.SynLog.Log(level, 'CqrsSetResult(%) state=% %',
+        [ToText(fLastError)^, ToText(fState)^, fLastErrorContext], self);
   {$endif}
 end;
 
@@ -1142,20 +1152,27 @@ begin
 end;
 
 
+destructor TCQRSService.Destroy;
+begin
+  inherited Destroy;
+  fSafe.Done;
+end;
+
+
 { TCQRSServiceSubscribe }
 
 procedure TCQRSServiceSubscribe.CallbackReleased(const callback: IInvokable;
   const interfaceName: RawUTF8);
 var i: integer;
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
-    fLog.SynLog.Log(sllTrace,'%.CallbackReleased(%,"%") callback=%',
-      [ClassType,callback,interfaceName,ObjectFromInterface(callback)],Self);
+    fLog.SynLog.Log(sllTrace,'CallbackReleased(%,"%") callback=%',
+      [callback,interfaceName,ObjectFromInterface(callback)],Self);
     for i := 0 to high(fSubscriber) do // try to release on ALL subscribers
       fSubscriber[i].CallbackReleased(callback, interfaceName);
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -1942,16 +1959,16 @@ begin
             if Terminated then
               exit;
             try
-              fMonitoring.ProcessStart;
               try
                 fDaemon.fProcessLock.Enter; // atomic unqueue via pending.Status
                 try
+                  fMonitoring.ProcessStart;
                   if not ExecuteRetrievePendingAndSetProcessing then
                     break; // no more pending tasks
+                  fMonitoring.ProcessDoTask;
                 finally
                   fDaemon.fProcessLock.Leave;
                 end;
-                fMonitoring.ProcessDoTask;
                 // always set, even if Terminated
                 fMonitoring.AddSize(ExecuteProcessAndSetResult);
               finally
@@ -2021,7 +2038,7 @@ destructor TDDDMonitoredDaemon.Destroy;
 var dummy: variant;
 begin
   Stop(dummy);
-  inherited;
+  inherited Destroy;
 end;
 
 function TDDDMonitoredDaemon.GetStatus: variant;
@@ -2029,26 +2046,41 @@ var i,working: integer;
     stats: TSynMonitor;
     pool: TDocVariantData;
 begin
-  working := 0;
-  if fMonitoringClass=nil then
-    if fProcessMonitoringClass=nil then
-      stats := TSynMonitorWithSize.Create else
-      stats := fProcessMonitoringClass.Create else
-    stats := fMonitoringClass.Create;
+  {$ifdef WITHLOG}
+  Rest.LogClass.Enter('GetStatus',[],self);
+  {$endif}
+  VarClear(result);
+  fProcessLock.Enter;
   try
-    pool.InitArray([],JSON_OPTIONS[true]);
-    for i := 0 to High(fProcess) do
-    with fProcess[i] do begin
-      if fMonitoring.Processing then
-        inc(working);
-      pool.AddItem(fMonitoring.ComputeDetails);
-      stats.Sum(fMonitoring);
+    try
+      working := 0;
+      if fMonitoringClass=nil then
+        if fProcessMonitoringClass=nil then
+          stats := TSynMonitorWithSize.Create else
+          stats := fProcessMonitoringClass.Create else
+        stats := fMonitoringClass.Create;
+      try
+        pool.InitArray([],JSON_OPTIONS[true]);
+        for i := 0 to High(fProcess) do
+        with fProcess[i] do begin
+
+          if fMonitoring.Processing then
+            inc(working);
+          pool.AddItem(fMonitoring.ComputeDetails);
+          stats.Sum(fMonitoring);
+        end;
+        result := ObjectToVariantDebug(self);
+        _ObjAddProps(['working',working, 'stats',stats.ComputeDetails,
+          'threadstats',variant(pool)],result);
+      finally
+        stats.Free;
+      end;
+    except
+      on E: Exception do
+        result := ObjectToVariantDebug(E);
     end;
-    result := ObjectToVariantDebug(self);
-    _ObjAddProps(['working',working, 'stats',stats.ComputeDetails,
-      'threadstats',variant(pool)],result);
   finally
-    stats.Free;
+    fProcessLock.Leave;
   end;
 end;
 
@@ -2067,52 +2099,62 @@ var i: integer;
     dummy: variant;
 begin
   {$ifdef WITHLOG}
-  Log := Rest.LogClass.Enter(self);
+  Log := Rest.LogClass.Enter('Start %',[fProcessClass],self);
   {$endif}
   if fProcessClass=nil then
     raise EDDDException.CreateUTF8('%.Start with no fProcessClass',[self]);
   Stop(dummy); // ignore any error when stopping
   fProcessTimer.Resume;
   {$ifdef WITHLOG}
-  Log.Log(sllTrace,'%.Start with % processing threads',[self,fProcessThreadCount],self);
+  Log.Log(sllTrace,'Start %',[self],self);
   {$endif}
   CqrsBeginMethod(qaNone,result,cqrsSuccess);
   SetLength(fProcess,fProcessThreadCount);
   for i := 0 to fProcessThreadCount-1 do
     fProcess[i] := fProcessClass.Create(self,i);
+  sleep(1); // some time to actually start the threads
 end;
 
 
 function TDDDMonitoredDaemon.Stop(out Information: variant): TCQRSResult;
 var i: integer;
     allfinished: boolean;
-    {$ifdef WITHLOG}
-    Log: ISynLog;
-    {$endif}
 begin
-  fProcessTimer.Pause;
   CqrsBeginMethod(qaNone,result);
   try
     if fProcess<>nil then begin
+      fProcessTimer.Pause;
+      Information := GetStatus;
       {$ifdef WITHLOG}
-      Log := Rest.LogClass.Enter(self);
+      Rest.LogClass.Enter('Stop % process %',[fProcessClass,Information],self);
       {$endif}
-      for i := 0 to high(fProcess) do
-        fProcess[i].Terminate;
+      fProcessLock.Enter;
+      try
+        for i := 0 to high(fProcess) do
+          fProcess[i].Terminate;
+      finally
+        fProcessLock.Leave;
+      end;
       repeat
         sleep(5);
         allfinished := true;
-        for i := 0 to high(fProcess) do
-          if fProcess[i].fMonitoring.Processing then begin
-            allfinished := false;
-            break;
-          end;
+        fProcessLock.Enter;
+        try
+          for i := 0 to high(fProcess) do
+            if fProcess[i].fMonitoring.Processing then begin
+              allfinished := false;
+              break;
+            end;
+        finally
+          fProcessLock.Leave;
+        end;
       until allfinished;
-      Information := GetStatus;
-      {$ifdef WITHLOG}
-      Log.Log(sllTrace,'Stopped %',[Information],self);
-      {$endif}
-      ObjArrayClear(fProcess);
+      fProcessLock.Enter;
+      try
+        ObjArrayClear(fProcess);
+      finally
+        fProcessLock.Leave;
+      end;
     end;
     CqrsSetResult(cqrsSuccess);
   except
@@ -2528,5 +2570,6 @@ end;
 
 initialization
   TInterfaceFactory.RegisterInterfaces([
-    TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),TypeInfo(IAdministratedDaemon)]);
+    TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),
+    TypeInfo(IAdministratedDaemon),TypeInfo(IAdministratedDaemonAsProxy)]);
 end.

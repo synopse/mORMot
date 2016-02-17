@@ -6,7 +6,7 @@ unit SynSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -47,8 +47,8 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.9.2 database engine
-      *******************************
+       SQLite3 3.11.0 database engine
+      ********************************
 
      Brand new SQLite3 library to be used with Delphi
     - FLEXIBLE: in process, local or remote access (JSON RESTFUL HTTP server)
@@ -135,7 +135,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.9.2
+  - updated SQLite3 engine to latest version 3.11.0
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -183,6 +183,7 @@ unit SynSQLite3;
     default in SynSQLite3Static), to let external SQlite3 library use the same
     memory manager than Delphi, for better performance and stability
   - added sqlite3.extended_errcode() function, used for exception message
+  - ensure ESQLite3Exception message would contain the SQL execution context
 
 }
 
@@ -676,7 +677,26 @@ type
     // query plan that gives the lowest estimate
     estimatedCost: Double;
     /// output: Estimated number of rows returned  (since 3.8.2)
+    // - may be set to an estimate of the number of rows returned by the
+    // proposed query plan. If this value is not explicitly set, the default
+    // estimate of 25 rows is used
     estimatedRows: Int64;
+    /// output: Mask of SQLITE_INDEX_SCAN_* flags  (since 3.9.0)
+    // - may be set to SQLITE_INDEX_SCAN_UNIQUE to indicate that the virtual
+    // table will return only zero or one rows given the input constraints.
+    // Additional bits of the idxFlags field might be understood in later
+    // versions of SQLite
+    idxFlags: Integer;
+    /// input: Mask of columns used by statement   (since 3.10.0)
+    // - indicates which fields of the virtual table are actually used by the
+    // statement being prepared. If the lowest bit of colUsed is set, that means
+    // that the first column is used. The second lowest bit corresponds to the
+    // second column. And so forth. If the most significant bit of colUsed is
+    // set, that means that one or more columns other than the first 63 columns
+    // are used.
+    // - If column usage information is needed by the xFilter method, then the
+    // required bits must be encoded into either the idxNum or idxStr output fields
+    colUsed: UInt64;
   end;
 
   /// Virtual Table Instance Object
@@ -1165,6 +1185,7 @@ type
   protected
     fUseInternalMM: boolean;
     fVersionNumber: cardinal;
+    fVersionText: RawUTF8;
     function GetVersion: RawUTF8;
   public
     /// initialize the SQLite3 database code
@@ -1229,8 +1250,9 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    //  - currently returns '3.9.2', when used with our SynSQLite3Static unit
-    //  - if an external SQLite3 library is used, version may vary
+    // - currently returns '3.11.0', when used with our SynSQLite3Static unit
+    // - if an external SQLite3 library is used, version may vary
+    // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Returns English-language text that describes an error,
@@ -1996,9 +2018,13 @@ type
     // under multi-process activity
     // - this method should be called before sqlite3.initialize()
     procedure ForceToUseSharedMemoryManager;
-    /// returns the current version number as a single decimal integer
+    /// returns the current version number as a plain integer
     // - equals e.g. 3008003001 for '3.8.3.1'
     property VersionNumber: cardinal read fVersionNumber;
+    /// returns the current version number as a text
+    // - equals e.g. '3.8.3.1'
+    // - use the Version property for the full information about this instance
+    property VersionText: RawUTF8 read fVersionText;
   published
     /// will return the class name and SQLite3 version number
     property Version: RawUTF8 read GetVersion;
@@ -2086,6 +2112,9 @@ const
   SQLITE_INDEX_CONSTRAINT_LT    = 16;
   SQLITE_INDEX_CONSTRAINT_GE    = 32;
   SQLITE_INDEX_CONSTRAINT_MATCH = 64;
+  SQLITE_INDEX_CONSTRAINT_LIKE  = 65;
+  SQLITE_INDEX_CONSTRAINT_GLOB  = 66;
+  SQLITE_INDEX_CONSTRAINT_REGEXP = 67;
 
   SQLITE_DENY   = 1;
   SQLITE_IGNORE = 2;
@@ -2148,7 +2177,7 @@ type
     /// the DB which raised this exception
     DB: TSQLite3DB;
     /// create the exception, getting the message from DB
-    constructor Create(aDB: TSQLite3DB; aErrorCode: integer); reintroduce; overload;
+    constructor Create(aDB: TSQLite3DB; aErrorCode: integer; const aSQL: RawUTF8); reintroduce; overload;
   published
     /// the corresponding error code, e.g. 21 (for SQLITE_MISUSE)
     property ErrorCode: integer read fErrorCode;
@@ -2170,7 +2199,7 @@ function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 /// test the result state of a sqlite3.*() function
 // - raise a ESQLite3Exception if the result state is an error
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
-function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
+function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8=''): integer;
 
 var
   /// global access to linked SQLite3 library API calls
@@ -2503,7 +2532,7 @@ type
     /// associated prepared statement, ready to be executed after binding
     Statement: TSQLRequest;
     /// used to monitor execution time
-    Timer: TPrecisionTimer;
+    Timer: TSynMonitor;
   end;
   /// used to store all prepared statement
   TSQLStatementCacheDynArray = array of TSQLStatementCache;
@@ -2531,7 +2560,7 @@ type
     procedure Init(aDB: TSQLite3DB);
     /// add or retrieve a generic SQL (with ? parameters) statement from cache
     function Prepare(const GenericSQL: RawUTF8; WasPrepared: PBoolean=nil;
-      ExecutionTimer: PPPrecisionTimer=nil): PSQLRequest;
+      ExecutionTimer: PPPrecisionTimer=nil; ExecutionMonitor: PSynMonitor=nil): PSQLRequest;
     /// used internaly to release all prepared statements from Cache[]
     procedure ReleaseAllDBStatements;
     /// could be used e.g. for statistics
@@ -3669,8 +3698,10 @@ end;
 {$else}
 
 procedure JsonToSQlite3Context(json: PUTF8Char; Context: TSQLite3FunctionContext);
+var j: RawJSON;
 begin // JsonGet() would return the raw JSON for Delphi 5
-  RawUTF8ToSQlite3Context(GetJSONItemAsRawJSON(json),Context,true);
+  GetJSONItemAsRawJSON(json,j);
+  RawUTF8ToSQlite3Context(j,Context,true);
 end;
 
 {$endif}
@@ -3801,7 +3832,7 @@ begin
   fSQLFunctions := TObjectList.Create;
   result := DBOpen;
   if result<>SQLITE_OK then
-    raise ESQLite3Exception.Create(fDB,result);
+    raise ESQLite3Exception.Create(fDB,result,'DBOpen');
 end;
 
 destructor TSQLDataBase.Destroy;
@@ -3811,7 +3842,7 @@ var S: TSQLite3Statement;
 {$ifdef WITHLOG}
 var FPCLog: ISynLog;
 begin
-  FPCLog := fLog.Enter(self);
+  FPCLog := fLog.Enter('Destroy %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif}
@@ -4194,7 +4225,7 @@ function TSQLDataBase.Backup(const BackupFileName: TFileName): boolean;
 {$ifdef WITHLOG}
 var Log: ISynLog;
 begin
-  Log := fLog.Enter(self);
+  Log := fLog.Enter('Backup % -> %',[fFileNameWithoutPath,BackupFileName],self);
 {$else}
 begin
 {$endif}
@@ -4316,7 +4347,7 @@ var utf8: RawUTF8;
 {$ifdef WITHLOG}
     FPCLog: ISynLog;
 begin
-  FPCLog := fLog.Enter(self);
+  FPCLog := fLog.Enter('DBOpen %',[fFileNameWithoutPath],self);
 {$else}
 begin
 {$endif}
@@ -4575,12 +4606,12 @@ end;
 
 procedure TSQLRequest.Bind(Param: Integer; Value: Int64);
 begin
-  sqlite3_check(RequestDB,sqlite3.bind_int64(Request,Param,Value));
+  sqlite3_check(RequestDB,sqlite3.bind_int64(Request,Param,Value),'bind_int64');
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; Value: double);
 begin
-  sqlite3_check(RequestDB,sqlite3.bind_double(Request,Param,Value));
+  sqlite3_check(RequestDB,sqlite3.bind_double(Request,Param,Value),'bind_double');
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; const Value: RawUTF8);
@@ -4598,7 +4629,7 @@ begin
     RawByteString(tmp) := Value;
     // sqlite3InternalFreeRawByteString will decrease RefCount
     sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,tmp,length(Value),
-      sqlite3InternalFreeRawByteString));
+      sqlite3InternalFreeRawByteString),'bind_text');
   end;
 end;
 
@@ -4618,13 +4649,13 @@ begin
   {$else}
   len := CurrentAnsiConvert.AnsiBufferToUTF8(P,pointer(Value),len)-P;
   {$endif}
-  sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,P,len,@sqlite3InternalFree));
+  sqlite3_check(RequestDB,sqlite3.bind_text(Request,Param,P,len,@sqlite3InternalFree),'bind_text');
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; Data: pointer; Size: integer);
 begin
   sqlite3_check(RequestDB,sqlite3.bind_blob(Request,Param,Data,Size,
-    SQLITE_TRANSIENT)); // make private copy of the data
+    SQLITE_TRANSIENT),'bind_blob'); // make private copy of the data
 end;
 
 procedure TSQLRequest.BindBlob(Param: Integer; const Data: RawByteString);
@@ -4635,7 +4666,7 @@ begin
   RawByteString(tmp) := Data;
   // sqlite3InternalFreeRawByteString will decrease RefCount
   sqlite3_check(RequestDB,sqlite3.bind_blob(Request,Param,tmp,length(Data),
-    sqlite3InternalFreeRawByteString));
+    sqlite3InternalFreeRawByteString),'bind_blob');
 end;
 
 procedure TSQLRequest.Bind(Param: Integer; Data: TCustomMemoryStream);
@@ -4671,7 +4702,7 @@ end;
 procedure TSQLRequest.ExecuteAll;
 begin
   if RequestDB=0 then
-    raise ESQLite3Exception.Create(0,SQLITE_CANTOPEN);
+    raise ESQLite3Exception.Create(0,SQLITE_CANTOPEN,'ExecuteAll');
   try
     repeat
       repeat
@@ -4685,7 +4716,7 @@ end;
 procedure TSQLRequest.Execute;
 begin
   if RequestDB=0 then
-    raise ESQLite3Exception.Create(0,SQLITE_CANTOPEN);
+    raise ESQLite3Exception.Create(0,SQLITE_CANTOPEN,'Execute');
   try
     repeat
     until Step<>SQLITE_ROW; // Execute all steps of the first statement
@@ -4900,7 +4931,7 @@ var P: PUTF8Char;
 begin
   result := '';
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldA');
   P := sqlite3.column_text(Request,Col);
   L := SynCommons.StrLen(P); // faster than sqlite3.column_bytes(Request,Col)
   if L>0 then begin
@@ -4915,7 +4946,7 @@ function TSQLRequest.FieldBlob(Col: integer): RawByteString;
 var P: PAnsiChar;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldBlob');
   P := sqlite3.column_blob(Request,Col);
   SetString(result,P,sqlite3.column_bytes(Request,Col));
 end;
@@ -4928,14 +4959,14 @@ end;
 function TSQLRequest.FieldDouble(Col: integer): double;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldDouble');
   result := sqlite3.column_double(Request,Col);
 end;
 
 function TSQLRequest.FieldInt(Col: integer): Int64;
 begin // internaly, SQLite always uses Int64 -> pure Integer function is useless
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldInt');
   result := sqlite3.column_int64(Request,Col);
 end;
 
@@ -4943,7 +4974,7 @@ function TSQLRequest.FieldName(Col: integer): RawUTF8;
 var P: PUTF8Char;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldName');
   P := sqlite3.column_name(Request,Col);
   SetString(result,P,SynCommons.StrLen(P));
 end;
@@ -4951,7 +4982,7 @@ end;
 function TSQLRequest.FieldIndex(const aColumnName: RawUTF8): integer;
 begin
   if Request=0 then
-    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE);
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'FieldIndex');
   for result := 0 to FieldCount-1 do
     if StrIComp(pointer(aColumnName),sqlite3.column_name(Request,result))=0 then
       exit;
@@ -4961,14 +4992,14 @@ end;
 function TSQLRequest.FieldNull(Col: Integer): Boolean;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldNull');
   result := sqlite3.column_type(Request,Col)=SQLITE_NULL;
 end;
 
 function TSQLRequest.FieldType(Col: Integer): integer;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldType');
   result := sqlite3.column_type(Request,Col);
 end;
 
@@ -4976,7 +5007,7 @@ function TSQLRequest.FieldDeclaredType(Col: Integer): RawUTF8;
 var P: PUTF8Char;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_RANGE,'FieldDeclaredType');
   P := pointer(sqlite3.column_decltype(Request,Col));
   SetString(result,P,SynCommons.StrLen(P));
 end;
@@ -4985,7 +5016,7 @@ function TSQLRequest.FieldDeclaredTypeS(Col: Integer): String;
 var P: PUTF8Char;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_RANGE,'FieldDeclaredTypeS');
   P := pointer(sqlite3.column_decltype(Request,Col));
   result := UTF8DecodeToString(P,SynCommons.StrLen(P));
 end;
@@ -4994,7 +5025,7 @@ function TSQLRequest.FieldUTF8(Col: integer): RawUTF8;
 var P: PUTF8Char;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldUTF8');
   P := pointer(sqlite3.column_text(Request,Col));
   SetString(result,P,SynCommons.StrLen(P));
 end;
@@ -5003,14 +5034,14 @@ function TSQLRequest.FieldS(Col: integer): string;
 {$ifdef UNICODE}
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldS');
   result := sqlite3.column_text16(Request,Col);
 end;
 {$else}
 var P: PUTF8Char;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldS');
   P := pointer(sqlite3.column_text(Request,Col));
   CurrentAnsiConvert.UTF8BufferToAnsi(P,SynCommons.StrLen(P),RawByteString(result));
 end;
@@ -5019,7 +5050,7 @@ end;
 function TSQLRequest.FieldValue(Col: integer): TSQLite3Value;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldValue');
   result := sqlite3.column_value(Request,Col);
 end;
 
@@ -5027,7 +5058,7 @@ function TSQLRequest.FieldW(Col: integer): RawUnicode;
 var P: PWideChar;
 begin
   if cardinal(Col)>=cardinal(FieldCount) then
-    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE);
+    raise ESQLite3Exception.Create(RequestDB, SQLITE_RANGE,'FieldW');
   P := sqlite3.column_text16(Request,Col);
   SetString(result,PAnsiChar(pointer(P)),StrLenW(P)*2+1);
 end;
@@ -5037,12 +5068,12 @@ begin
   fDB := DB;
   fRequest := 0;
   if DB=0 then
-    raise ESQLite3Exception.Create(DB,SQLITE_CANTOPEN);
+    raise ESQLite3Exception.Create(DB,SQLITE_CANTOPEN,SQL);
   result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL)+1, fRequest, fNextSQL);
   while (result=SQLITE_OK) and (Request=0) do // comment or white-space
     result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
   fFieldCount := sqlite3.column_count(fRequest);
-  sqlite3_check(RequestDB,result);
+  sqlite3_check(RequestDB,result,SQL);
 end;
 
 function TSQLRequest.PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
@@ -5060,7 +5091,7 @@ begin
       // comment or white-space -> ignore
       result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
     fFieldCount := sqlite3.column_count(fRequest);
-    sqlite3_check(RequestDB,result);
+    sqlite3_check(RequestDB,result,'PrepareNext');
     if Request=0 then
       result := SQLITE_DONE; // nothing more to add
   end;
@@ -5076,14 +5107,14 @@ end;
 function TSQLRequest.Step: integer;
 begin
   if Request=0 then
-    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE);
-  result := sqlite3_check(RequestDB,sqlite3.step(Request));
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'Step');
+  result := sqlite3_check(RequestDB,sqlite3.step(Request),'Step');
 end;
 
 function TSQLRequest.GetReadOnly: Boolean;
 begin
   if Request=0 then
-    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE);
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'IsReadOnly');
   result := sqlite3.stmt_readonly(Request);
 end;
 
@@ -5091,7 +5122,7 @@ procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
 var i: integer;
 begin
   if Request=0 then
-    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE);
+    raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'FieldsToJSON');
   if WR.Expand then
     WR.Add('{');
   for i := 0 to FieldCount-1 do begin
@@ -5132,25 +5163,28 @@ end;
 
 { ESQLite3Exception }
 
-constructor ESQLite3Exception.Create(aDB: TSQLite3DB; aErrorCode: integer);
+constructor ESQLite3Exception.Create(aDB: TSQLite3DB; aErrorCode: integer;
+  const aSQL: RawUTF8);
+var msg: RawUTF8;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
-  CreateUTF8('Error % (%) using %',
-    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,sqlite3.libversion]);
+  msg := FormatUTF8('Error % (%) [%] using %',
+    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,aSQL,sqlite3.VersionText]);
   if aDB=0 then
-    Message := Message+' with aDB=nil' else begin
-    Message := Format('%s - ''%s''',[Message,sqlite3.errmsg(aDB)]);
+    msg := msg+' with aDB=nil' else begin
+    msg := FormatUTF8('% - %',[msg,sqlite3.errmsg(aDB)]);
     if Assigned(sqlite3.extended_errcode) then
-      Message := Format('%s extended_errcode=%d',[Message,sqlite3.extended_errcode(aDB)]);
+      msg := FormatUTF8('%, extended_errcode=%',[msg,sqlite3.extended_errcode(aDB)]);
   end;
   DB := aDB;
+  inherited Create(UTF8ToString(msg));
 end;
 
-function sqlite3_check(DB: TSQLite3DB; aResult: integer): integer;
+function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8): integer;
 begin
   if (DB=0) or (aResult in [SQLITE_ERROR..SQLITE_ROW-1]) then // possible error codes
-    raise ESQLite3Exception.Create(DB,aResult);
+    raise ESQLite3Exception.Create(DB,aResult,SQL);
   result := aResult;
 end;
 
@@ -5187,8 +5221,8 @@ constructor TSQLBlobStream.Create(aDB: TSQLite3DB; const DBName, TableName,
 begin
   fDB := aDB;
   fWritable := ReadWrite;
-  sqlite3_check(aDB,sqlite3.blob_open(aDB,pointer(DBName),pointer(TableName),pointer(ColumnName),
-    RowID,integer(ReadWrite),fBlob));
+  sqlite3_check(aDB,sqlite3.blob_open(aDB,pointer(DBName),pointer(TableName),
+    pointer(ColumnName),RowID,integer(ReadWrite),fBlob),'blob_open');
   fSize := sqlite3.blob_bytes(fBlob);
 end;
 
@@ -5306,7 +5340,7 @@ begin
 end;
 
 function TSQLStatementCached.Prepare(const GenericSQL: RawUTF8;
-  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer): PSQLRequest;
+  WasPrepared: PBoolean; ExecutionTimer: PPPrecisionTimer; ExecutionMonitor: PSynMonitor): PSQLRequest;
 var added: boolean;
     ndx: integer;
 begin
@@ -5315,6 +5349,7 @@ begin
     if added then begin
       StatementSQL := GenericSQL;
       Statement.Prepare(DB,GenericSQL);
+      Timer := TSynMonitor.Create;
       if WasPrepared<>nil then
         WasPrepared^ := true;
     end else begin
@@ -5324,8 +5359,10 @@ begin
         WasPrepared^ := false;
     end;
     if ExecutionTimer<>nil then begin
-      Timer.Resume;
-      ExecutionTimer^ := @Timer;
+      Timer.ProcessStartTask;
+      ExecutionTimer^ := @Timer.InternalTimer;
+      if ExecutionMonitor<>nil then
+        ExecutionMonitor^ := Timer;
     end;
     result := @Statement;
   end;
@@ -5334,8 +5371,10 @@ end;
 procedure TSQLStatementCached.ReleaseAllDBStatements;
 var i: integer;
 begin
-  for i := 0 to Count-1 do
+  for i := 0 to Count-1 do begin
     Cache[i].Statement.Close; // close prepared statement
+    Cache[i].Timer.Free;
+  end;
   Caches.Clear;
   Caches.ReHash; // need to refresh all hashs
 end;
@@ -5343,8 +5382,8 @@ end;
 function StatementCacheTotalTimeCompare(const A,B): integer;
 var i64: Int64;
 begin
-  i64 := TSQLStatementCache(A).Timer.TimeInMicroSec-
-    TSQLStatementCache(B).Timer.TimeInMicroSec;
+  i64 := TSQLStatementCache(A).Timer.InternalTimer.TimeInMicroSec-
+    TSQLStatementCache(B).Timer.InternalTimer.TimeInMicroSec;
   if i64<0 then
     result := -1 else
   if i64>0 then
@@ -5408,7 +5447,7 @@ begin
           NotifyProgressAndContinue(backupStepLocked);
         SQLITE_DONE:
           break;
-        else raise ESQLite3Exception.Create(fDestDB.DB,res);
+        else raise ESQLite3Exception.Create(fDestDB.DB,res,'Backup');
         end;
         if Terminated then
           raise ESQLite3Exception.Create('Backup process forced to terminate');
@@ -5442,6 +5481,7 @@ var V: PUTF8Char;
 begin
   if Assigned(libversion) then begin
     V := libversion;        // convert into e.g. 3008003001
+    fVersionText := RawUTF8(V);
     fVersionNumber := GetNextItemCardinal(V,'.')*1000000000+
       GetNextItemCardinal(V,'.')*1000000+GetNextItemCardinal(V,'.')*1000+
       GetNextItemCardinal(V,'.');
@@ -5518,7 +5558,7 @@ const MM: array[boolean] of string[2] = ('ex','in');
 begin
   if self=nil then
     result := 'No TSQLite3Library available' else
-    result := FormatUTF8('% with %ternal MM',[libversion,MM[fUseInternalMM]]);
+    result := FormatUTF8('% with %ternal MM',[fVersionText,MM[fUseInternalMM]]);
 end;
 
 
@@ -5569,10 +5609,10 @@ begin
     fHandle := 0;
     raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
   end; // some APIs like config() key() or trace() may not be available
+  inherited Create; // set fVersionNumber/fVersionText
   {$ifdef WITHLOG}
-  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,libversion]);
+  SynSQLite3Log.Add.Log(sllInfo,'Loaded external % version %',[LibraryName,Version]);
   {$endif}
-  inherited Create; // set fVersionNumber
 end;
 
 destructor TSQLite3LibraryDynamic.Destroy;

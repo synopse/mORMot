@@ -6,7 +6,7 @@ unit SynCrtSock;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrtSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -304,8 +304,12 @@ type
 {$else}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = WideString;
+  {$ifdef HASCODEPAGE} // FPC expects a CP, e.g. to compare to string constants
+  SockString = type AnsiString(CP_UTF8);
+  {$else}
   /// define a raw storage string type, used for data buffer management
   SockString = type AnsiString;
+  {$endif}
 {$endif}
 
 {$ifndef CONDITIONALEXPRESSIONS}
@@ -767,6 +771,14 @@ type
     // - we define here this method for older versions of Delphi
     procedure Start;
     {$endif}
+    {$ifdef FPC}
+    /// under FPC, would call Terminate and WaitFor just with Delphi RTL
+    destructor Destroy; override;
+    {$endif}
+    /// safe version of Sleep() which won't break the thread process
+    // - returns TRUE if the thread was Terminated
+    // - returns FALSE if successfully waited up to MS milliseconds
+    function SleepOrTerminated(MS: cardinal): boolean;
   end;
   {$M-}
 
@@ -1764,6 +1776,20 @@ function HttpGet(const aURI: SockString): SockString; overload;
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
 
+type
+  /// may be used to store a connection to a SMTP server
+  // - see SendEmail() overloaded function
+  TSMTPConnection = record
+    /// the SMTP server IP or host name
+    Host: SockString;
+    /// the SMTP server port (25 by default)
+    Port: SockString;
+    /// the SMTP user login (if any)
+    User: SockString;
+    /// the SMTP user password (if any)
+    Pass: SockString;
+  end;
+
 /// send an email using the SMTP protocol
 // - retry true on success
 // - the Subject is expected to be in plain 7 bit ASCII, so you could use
@@ -1771,7 +1797,16 @@ function HttpPost(const server, port: SockString; const url, Data, DataType: Soc
 // - you can optionally set the encoding charset to be used for the Text body
 function SendEmail(const Server, From, CSVDest, Subject, Text: SockString;
   const Headers: SockString=''; const User: SockString=''; const Pass: SockString='';
-  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean;
+  const Port: SockString='25'; const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
+
+/// send an email using the SMTP protocol
+// - retry true on success
+// - the Subject is expected to be in plain 7 bit ASCII, so you could use
+// SendEmailSubject() to encode it as Unicode, if needed
+// - you can optionally set the encoding charset to be used for the Text body
+function SendEmail(const Server: TSMTPConnection;
+  const From, CSVDest, Subject, Text: SockString; const Headers: SockString='';
+  const TextCharSet: SockString = 'ISO-8859-1'): boolean; overload;
 
 /// convert a supplied subject text into an Unicode encoding
 // - will convert the text into UTF-8 and append '=?UTF-8?B?'
@@ -2129,11 +2164,11 @@ begin
   end;
 end;
 
-{$ifdef UNICODE}
+{$ifdef HASCODEPAGE}
 // rewrite some functions to avoid unattempted ansi<->unicode conversion
 
 function Trim(const S: SockString): SockString;
-{$ifdef PUREPASCAL}
+{$ifdef FPC_OR_PUREPASCAL}
 var I, L: Integer;
 begin
   L := Length(S);
@@ -2186,8 +2221,8 @@ var Ch: AnsiChar; // this sub-call is shorter and faster than 1 plain proc
 begin
   repeat
     Ch := Source^;
-    if (Ch >= 'a') and (Ch <= 'z') then
-      dec(Ch, 32);
+    if (Ch>='a') and (Ch<='z') then
+      dec(Ch,32);
     Dest^ := Ch;
     dec(L);
     inc(Source);
@@ -2204,7 +2239,7 @@ begin
   Upper(pointer(S),pointer(result),L);
 end;
 
-{$endif}
+{$endif HASCODEPAGE}
 
 function GetCardinal(P: PAnsiChar): cardinal; overload;
 var c: cardinal;
@@ -2785,7 +2820,7 @@ var s,p: SockString;
 begin
   // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
   Create({$ifdef LINUX}500{$else}5000{$endif});
-  i := pos({$ifdef UNICODE}SockString{$endif}(':'),aPort);
+  i := pos({$ifdef HASCODEPAGE}SockString{$endif}(':'),aPort);
   if i=0 then begin
     s := '0.0.0.0';
     p := aPort;
@@ -2853,7 +2888,7 @@ begin
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
-    ReceiveTimeout := TimeOut;
+    ReceiveTimeout := TimeOut;           
     SendTimeout := TimeOut;
   end;
   TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
@@ -2871,12 +2906,12 @@ begin
       SockSend(@VString^[1],pByte(VString)^);
     vtAnsiString:
       SockSend(VAnsiString,length(SockString(VAnsiString)));
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
     vtUnicodeString: begin
       tmp := ShortString(UnicodeString(VUnicodeString)); // convert into ansi
       SockSend(@tmp[1],length(tmp));
     end;
-{$endif}
+    {$endif}
     vtPChar:
       SockSend(VPChar,StrLen(VPChar));
     vtChar:
@@ -3458,6 +3493,13 @@ begin
   end;
 end;
 
+function SendEmail(const Server: TSMTPConnection;
+  const From, CSVDest, Subject, Text, Headers, TextCharSet: SockString): boolean;
+begin
+  result := SendEmail(Server.Host, From, CSVDest, Subject, Text, Headers,
+    Server.User, Server.Pass, Server.Port, TextCharSet);
+end;
+
 function SendEmail(const Server, From, CSVDest, Subject, Text, Headers,
   User, Pass, Port, TextCharSet: SockString): boolean;
 var TCP: TCrtSocket;
@@ -3476,7 +3518,7 @@ begin
   Expect(Answer)
 end;
 var P: PAnsiChar;
-    rec, ToList: SockString;
+    rec, ToList, head: SockString;
 begin
   result := false;
   P := pointer(CSVDest);
@@ -3495,20 +3537,23 @@ begin
     end else
       Exec('HELO '+Server,'25');
     writeln(TCP.SockOut^,'MAIL FROM:<',From,'>'); Expect('250');
-    ToList := 'To: ';
     repeat
       rec := trim(GetNextItem(P));
       if rec='' then continue;
-      if pos({$ifdef UNICODE}SockString{$endif}('<'),rec)=0 then
+      if pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
       Exec('RCPT TO:'+rec,'25');
-      ToList := ToList+rec+', ';
+      if ToList='' then
+        ToList := #13#10'To: '+rec else
+        ToList := ToList+', '+rec;
     until P=nil;
     Exec('DATA','354');
-    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10,
+    head := trim(Headers);
+    if head<>'' then
+      head := head+#13#10;
+    writeln(TCP.SockOut^,'Subject: ',Subject,#13#10'From: ',From,
       ToList,#13#10'Content-Type: text/plain; charset=',TextCharSet,
-      #13#10'Content-Transfer-Encoding: 8bit'#13#10,
-      Headers,#13#10#13#10,Text);
+      #13#10'Content-Transfer-Encoding: 8bit'#13#10,head,#13#10,Text);
     Exec('.','25');
     writeln(TCP.SockOut^,'QUIT');
     result := true;
@@ -3517,11 +3562,24 @@ begin
   end;
 end;
 
+function IsAnsi7(const s: string): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 1 to length(s) do
+    if ord(s[i])>126 then
+      exit;
+  result := true;
+end;
+
 function SendEmailSubject(const Text: string): SockString;
 var utf8: UTF8String;
 begin
-  utf8 := UTF8String(Text);
-  result := '=?UTF-8?B?'+Base64Encode(utf8);
+  if IsAnsi7(Text) then
+    result := SockString(Text) else begin
+    utf8 := UTF8String(Text);
+    result := '=?UTF-8?B?'+Base64Encode(utf8);
+  end;
 end;
 
 
@@ -3871,6 +3929,41 @@ begin
   {$endif}
 end;
 
+function TSynThread.SleepOrTerminated(MS: cardinal): boolean;
+var endtix, tix, lasttix: cardinal;
+begin
+  result := true; // notify Terminated
+  if Terminated then
+    exit;
+  if MS<32 then begin // smaller than GetTickCount resolution (under Windows)
+    sleep(MS);
+    if Terminated then
+      exit;
+  end else begin
+    tix := GetTickCount;
+    endtix := tix+MS;
+    repeat
+      sleep(10);
+      if Terminated then
+        exit;
+      lasttix := tix; // handle GetTickCount 32-bit overflow
+      tix := GetTickCount;
+    until (tix>endtix) or (tix<lasttix);
+  end;
+  result := false; // normal delay expiration
+end;
+
+{$ifdef FPC}
+destructor TSynThread.Destroy;
+begin
+  if not Terminated then begin
+    Terminate;
+    WaitFor;
+  end;
+  inherited Destroy;
+end;
+{$endif}
+
 {$ifndef LVCL}
 procedure TSynThread.DoTerminate;
 begin
@@ -3880,7 +3973,6 @@ begin
   end;
   inherited DoTerminate;
 end;
-
 {$endif}
 
 {$ifndef HASTTHREADSTART}

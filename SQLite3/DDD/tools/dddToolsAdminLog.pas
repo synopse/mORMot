@@ -60,6 +60,7 @@ type
     FCallbackPattern: RawUTF8;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
+    FLogSafe: TSynLocker;
     procedure EventsCheckToEventsSet;
     procedure pmFilterClick(Sender: Tobject);
     procedure ReceivedOne(const Text: RawUTF8);
@@ -67,12 +68,13 @@ type
   public
     Admin: IAdministratedDaemon;
     Callback: ISynLogCallback;
-    OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo; const Text:
-      RawUTF8): boolean of object;
-    constructor Create(Owner: TComponent; const aAdmin: IAdministratedDaemon);
-      reintroduce;
-    constructor CreateCustom(Owner: TComponent; const aAdmin:
-      IAdministratedDaemon; const aEvents, aPattern: RawUTF8); virtual;
+    OnLogReceived: function(Sender: TLogFrame; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean of object;
+    constructor Create(Owner: TComponent; const aAdmin: IAdministratedDaemon); reintroduce;
+    constructor CreateCustom(Owner: TComponent; const aAdmin: IAdministratedDaemon;
+      const aEvents, aPattern: RawUTF8); virtual;
+    destructor Destroy; override;
+    procedure LogFilter(F: TSynLogInfos);
     procedure Closing;
   end;
 
@@ -157,6 +159,7 @@ var
   M: TMenuItem;
 begin
   inherited Create(Owner);
+  FLogSafe.Init;
   Admin := aAdmin;
   Name := 'LogFrame' + IntToStr(LogFrameCount);
   inc(LogFrameCount);
@@ -224,18 +227,19 @@ begin
   (Owner as TAdminControl).EndLog(self);
 end;
 
-procedure TLogFrame.pmFilterClick(Sender: Tobject);
+procedure TLogFrame.LogFilter(F: TSynLogInfos);
 var
-  F: TSynLogFilter;
   i: integer;
 begin
-  if not Sender.InheritsFrom(TMenuItem) then
-    exit;
-  F := TSynLogFilter(TMenuItem(Sender).Tag);
   for i := 0 to chklstEvents.Count - 1 do
-    chklstEvents.Checked[i] := TSynLogInfo(chklstEvents.Items.Objects[i]) in
-      LOG_FILTER[F];
+    chklstEvents.Checked[i] := TSynLogInfo(chklstEvents.Items.Objects[i]) in F;
   chklstEventsClickCheck(nil);
+end;
+
+procedure TLogFrame.pmFilterClick(Sender: Tobject);
+begin
+  if Sender.InheritsFrom(TMenuItem) then
+    LogFilter(LOG_FILTER[TSynLogFilter(TMenuItem(Sender).Tag)]);
 end;
 
 procedure TLogFrame.EventsCheckToEventsSet;
@@ -260,35 +264,40 @@ begin
   cb.Owner := Self;
   cb.Pattern := FCallbackPattern;
   Callback := cb;
+  FLogSafe.Lock;
   try
-    FLog := TSynLogFile.Create;
-    if Sender = self then
-      kb := 64 // from TLogFrame.CreateCustom
-    else
-      kb := StrToIntDef(edtExistingLogKB.Text, 0);
-    Admin.SubscribeLog(FEventsSet, Callback, kb);
-    chklstEvents.Top := lblExistingLogKB.Top;
-    for i := chklstEvents.Count - 1 downto 0 do
-      if not chklstEvents.Checked[i] then
-        chklstEvents.Items.Delete(i);
-    chklstEvents.Height := 8 + chklstEvents.Count * chklstEvents.ItemHeight;
-    btnStopLog.Top := chklstEvents.Top + chklstEvents.Height + 8;
-    btnStartLog.Hide;
-    btnStopLog.Show;
-    edtExistingLogKB.Hide;
-    lblExistingLogKB.Hide;
-    edtSearch.Show;
-    btnSearchNext.Show;
-    drwgrdEvents.DoubleBuffered := true;
-    drwgrdEvents.ColCount := 3;
-    drwgrdEvents.ColWidths[0] := 70;
-    drwgrdEvents.ColWidths[1] := 60;
-    drwgrdEvents.ColWidths[2] := 2000;
-    drwgrdEvents.Show;
-    tmrRefresh.Enabled := true;
-  except
-    Callback := nil;
-    FreeAndNil(FLog);
+    try
+      FLog := TSynLogFile.Create;
+      if Sender = self then
+        kb := 64 // from TLogFrame.CreateCustom
+      else
+        kb := StrToIntDef(edtExistingLogKB.Text, 0);
+      Admin.SubscribeLog(FEventsSet, Callback, kb);
+      chklstEvents.Top := lblExistingLogKB.Top;
+      for i := chklstEvents.Count - 1 downto 0 do
+        if not chklstEvents.Checked[i] then
+          chklstEvents.Items.Delete(i);
+      chklstEvents.Height := 8 + chklstEvents.Count * chklstEvents.ItemHeight;
+      btnStopLog.Top := chklstEvents.Top + chklstEvents.Height + 8;
+      btnStartLog.Hide;
+      btnStopLog.Show;
+      edtExistingLogKB.Hide;
+      lblExistingLogKB.Hide;
+      edtSearch.Show;
+      btnSearchNext.Show;
+      drwgrdEvents.DoubleBuffered := true;
+      drwgrdEvents.ColCount := 3;
+      drwgrdEvents.ColWidths[0] := 70;
+      drwgrdEvents.ColWidths[1] := 60;
+      drwgrdEvents.ColWidths[2] := 2000;
+      drwgrdEvents.Show;
+      tmrRefresh.Enabled := true;
+    except
+      Callback := nil;
+      FreeAndNil(FLog);
+    end;
+  finally
+    fLogSafe.UnLock;
   end;
 end;
 
@@ -297,48 +306,60 @@ var
   withoutThreads: boolean;
   P: PUTF8Char;
   line: RawUTF8;
-begin
-  if (FLog = nil) or (Text = '') then
-    exit;
-  P := pointer(Text);
-  repeat // handle multiple log rows in the incoming text
-    line := GetNextLine(P, P);
-    if length(line) < 24 then
-      continue;
-    withoutThreads := FLog.EventThread = nil;
-    FLog.AddInMemoryLine(line);
-    if FLog.Count = 0 then
-      continue;
-    if tmrRefresh.Tag = 0 then
-      if withoutThreads and (FLog.EventThread <> nil) then
-        tmrRefresh.Tag := 1
-      else
-        tmrRefresh.Tag := 2;
-    if FLog.EventLevel[FLog.Count - 1] in FEventsSet then
-      AddInteger(FlogSelected, FLogSelectedCount, FLog.Count - 1);
-  until P = nil;
+  index: integer;
+begin // warning: this method is called from WebSockets thread, not UI thread
+  FLogSafe.Lock;
+  try
+    if (FLog = nil) or (Text = '') then
+      exit;
+    P := pointer(Text);
+    repeat // handle multiple log rows in the incoming text
+      line := GetNextLine(P, P);
+      if length(line) < 24 then
+        continue;
+      withoutThreads := FLog.EventThread = nil;
+      FLog.AddInMemoryLine(line);
+      if FLog.Count = 0 then
+        continue;
+      if tmrRefresh.Tag = 0 then
+        if withoutThreads and (FLog.EventThread <> nil) then
+          tmrRefresh.Tag := 1
+        else
+          tmrRefresh.Tag := 2;
+      index := FLog.Count - 1;
+      if FLog.EventLevel[index] in FEventsSet then
+        AddInteger(FlogSelected, FLogSelectedCount, index);
+    until P = nil;
+  finally
+    FLogSafe.UnLock;
+  end;
 end;
 
 procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
 var
   moveToLast: boolean;
 begin
-  if (tmrRefresh.Tag = 0) or (fLog = nil) then
-    exit;
-  if tmrRefresh.Tag = 1 then begin
-    drwgrdEvents.ColCount := 4;
-    drwgrdEvents.ColWidths[2] := 30;
-    drwgrdEvents.ColWidths[3] := 2000;
-  end;
-  moveToLast := drwgrdEvents.Row = drwgrdEvents.RowCount - 1;
-  drwgrdEvents.RowCount := FLogSelectedCount;
-  if FLogSelectedCount > 0 then
-    if (drwgrdEvents.Tag = 0) or moveToLast then begin
-      drwgrdEvents.Row := FLogSelectedCount - 1;
-      drwgrdEvents.Tag := 1;
+  FLogSafe.Lock;
+  try
+    if (tmrRefresh.Tag = 0) or (fLog = nil) then
+      exit;
+    if tmrRefresh.Tag = 1 then begin
+      drwgrdEvents.ColCount := 4;
+      drwgrdEvents.ColWidths[2] := 30;
+      drwgrdEvents.ColWidths[3] := 2000;
     end;
-  drwgrdEvents.Invalidate;
-  tmrRefresh.Tag := 0;
+    moveToLast := drwgrdEvents.Row = drwgrdEvents.RowCount - 1;
+    drwgrdEvents.RowCount := FLogSelectedCount;
+    if FLogSelectedCount > 0 then
+      if (drwgrdEvents.Tag = 0) or moveToLast then begin
+        drwgrdEvents.Row := FLogSelectedCount - 1;
+        drwgrdEvents.Tag := 1;
+      end;
+    drwgrdEvents.Invalidate;
+    tmrRefresh.Tag := 0;
+  finally
+    FLogSafe.UnLock;
+  end;
 end;
 
 const
@@ -349,15 +370,15 @@ procedure TLogFrame.drwgrdEventsDrawCell(Sender: TObject; ACol, ARow: Integer;
 var
   txt: string;
   b: boolean;
-  Index: integer;
+  index: integer;
 
   procedure SetTxtFromEvent;
   var
     u: RawUTF8;
   begin
-    u := FLog.EventText[Index];
-    if length(u) > 400 then
-      Setlength(u, 400);
+    u := FLog.EventText[index];
+    if length(u) > 300 then
+      Setlength(u, 300);
     txt := UTF8ToString(StringReplaceAll(u, #9, '   '));
   end;
 
@@ -367,33 +388,39 @@ begin
       FillRect(Rect)
     else if FLog.EventLevel <> nil then begin
       Brush.Style := bsClear;
-      if cardinal(ARow) < cardinal(FLogSelectedCount) then begin
-        Index := FLogSelected[ARow];
-        b := (gdFocused in State) or (gdSelected in State);
-        if b then
-          Brush.Color := clBlack
-        else
-          Brush.Color := LOG_COLORS[b, FLog.EventLevel[Index]];
-        Font.Color := LOG_COLORS[not b, FLog.EventLevel[Index]];
-        case ACol of
-          0:
-            DateTimeToString(txt, TIME_FORMAT[FLog.Freq = 0], FLog.EventDateTime(Index));
-          1:
-            txt := FEventCaption[FLog.EventLevel[Index]];
-          2:
-            if FLog.EventThread <> nil then
-              txt := IntToString(cardinal(FLog.EventThread[Index]))
-            else
+      FLogSafe.Lock;
+      try
+        if cardinal(ARow) < cardinal(FLogSelectedCount) then begin
+          index := FLogSelected[ARow];
+          b := (gdFocused in State) or (gdSelected in State);
+          if b then
+            Brush.Color := clBlack
+          else
+            Brush.Color := LOG_COLORS[b, FLog.EventLevel[index]];
+          Font.Color := LOG_COLORS[not b, FLog.EventLevel[index]];
+          case ACol of
+            0:
+              DateTimeToString(txt, TIME_FORMAT[FLog.Freq = 0], FLog.EventDateTime(index));
+            1:
+              txt := FEventCaption[FLog.EventLevel[index]];
+            2:
+              if FLog.EventThread <> nil then
+                txt := IntToString(cardinal(FLog.EventThread[index]))
+              else
+                SetTxtFromEvent;
+            3:
               SetTxtFromEvent;
-          3:
-            SetTxtFromEvent;
+          end;
         end;
-        TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
-      end
-      else begin
+      finally
+        FLogSafe.UnLock;
+      end;
+      if txt = '' then begin
         Brush.Color := clLtGray;
         FillRect(Rect);
-      end;
+      end
+      else
+        TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
     end
     else
       TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.Strings[ARow]);
@@ -405,10 +432,15 @@ var
   s: string;
 begin
   i := drwgrdEvents.Row;
-  if cardinal(i) >= cardinal(FLogSelectedCount) then
-    s := ''
-  else
-    s := FLog.Strings[FLogSelected[i]];
+  FLogSafe.Lock;
+  try
+    if cardinal(i) >= cardinal(FLogSelectedCount) then
+      s := ''
+    else
+      s := FLog.Strings[FLogSelected[i]];
+  finally
+    FLogSafe.UnLock;
+  end;
   mmoBottom.Text := s;
 end;
 
@@ -427,6 +459,7 @@ begin
     FLastSearchSender := Sender;
     searchnext := 0;
   end;
+  FLogSafe.Lock;
   Screen.Cursor := crHourGlass;
   try
     ndx := drwgrdEvents.Row;
@@ -436,6 +469,7 @@ begin
         SetListItem(i, s);
         exit;
       end;
+    Application.ProcessMessages;
     // not found -> search from beginning
     for i := 0 to ndx - 1 do
       if FLog.LineContains(s, FLogSelected[i]) then begin
@@ -443,6 +477,7 @@ begin
         exit;
       end;
   finally
+    FLogSafe.UnLock;
     Screen.Cursor := crDefault;
   end;
 end;
@@ -476,9 +511,14 @@ end;
 procedure TLogFrame.Closing;
 begin
   Callback := nil;
-  FreeAndNil(fLog);
-  Finalize(FLogSelected);
-  FLogSelectedCount := 0;
+  FLogSafe.Lock;
+  try
+    FreeAndNil(fLog);
+    Finalize(FLogSelected);
+    FLogSelectedCount := 0;
+  finally
+    FLogSafe.UnLock;
+  end;
 end;
 
 procedure TLogFrame.chklstEventsDblClick(Sender: TObject);
@@ -492,18 +532,23 @@ begin
   if i < 0 then
     exit;
   E := TSynLogInfo(chklstEvents.Items.Objects[i]);
-  // search from next item
-  for i := drwgrdEvents.Row + 1 to FLogSelectedCount - 1 do
-    if FLog.EventLevel[FLogSelected[i]] = E then begin
-      SetListItem(i);
-      exit;
-    end;
-  // search from beginning
-  for i := 0 to drwgrdEvents.Row - 1 do
-    if FLog.EventLevel[FLogSelected[i]] = E then begin
-      SetListItem(i);
-      exit;
-    end;
+  FLogSafe.Lock;
+  try
+    // search from next item
+    for i := drwgrdEvents.Row + 1 to FLogSelectedCount - 1 do
+      if FLog.EventLevel[FLogSelected[i]] = E then begin
+        SetListItem(i);
+        exit;
+      end;
+    // search from beginning
+    for i := 0 to drwgrdEvents.Row - 1 do
+      if FLog.EventLevel[FLogSelected[i]] = E then begin
+        SetListItem(i);
+        exit;
+      end;
+  finally
+    FLogSafe.UnLock;
+  end;
 end;
 
 procedure TLogFrame.chklstEventsClickCheck(Sender: TObject);
@@ -514,15 +559,20 @@ begin
     exit;
   EventsCheckToEventsSet;
   selected := drwgrdEvents.Row;
-  if cardinal(selected) < cardinal(FLogSelectedCount) then
-    ndx := FLogSelected[selected]
-  else
-    ndx := -1;
-  FLogSelectedCount := FLog.EventSelect(FEventsSet, FLogSelected, @ndx);
-  if cardinal(selected) < cardinal(FLogSelectedCount) then
-    drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
-  drwgrdEvents.RowCount := FLogSelectedCount;
-  SetListItem(ndx);
+  FLogSafe.Lock;
+  try
+    if cardinal(selected) < cardinal(FLogSelectedCount) then
+      ndx := FLogSelected[selected]
+    else
+      ndx := -1;
+    FLogSelectedCount := FLog.EventSelect(FEventsSet, FLogSelected, @ndx);
+    if cardinal(selected) < cardinal(FLogSelectedCount) then
+      drwgrdEvents.Row := 0; // to avoid "Grid Out Of Range"
+    drwgrdEvents.RowCount := FLogSelectedCount;
+    SetListItem(ndx);
+  finally
+    FLogSafe.UnLock;
+  end;
   if drwgrdEvents.Visible then begin
     drwgrdEvents.Repaint;
     drwgrdEventsClick(nil);
@@ -553,6 +603,12 @@ begin
     mmoChat.Clear;
     Key := #0;
   end;
+end;
+
+destructor TLogFrame.Destroy;
+begin
+  FLogSafe.Done;
+  inherited;
 end;
 
 end.

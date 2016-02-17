@@ -6,7 +6,7 @@ unit SynDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -289,7 +289,13 @@ unit SynDB;
   - fixed misallocation of the parameter direction in GetProcedureParameters
   - enhancement parsing stored procedure name MS SQL Server (e.g. dbo.procname;1) in SQLSplitProcedureName
   - fixed typo SQL statement for getting Firebird stored procedure parameters in SQLGetParameter
-
+  - added GetProcedureNames and SQLGetProcedure for listing stored procedure names from current connection
+  - addes GetViewNames and SQLGetViewNames for listing view names from current connection
+  - bug fix getting stored procedure parameters on Firebird 3
+  - small refactoring in TSQLDBConnectionProperties.ExceptionIsAboutConnection
+  - added support for dInformix and dMSSQL in TSQLDBConnectionProperties.ExceptionIsAboutConnection
+  - added error codes in TSQLDBConnectionProperties.ExceptionIsAboutConnection for dOracle
+  - avoid GPI in TSQLDBConnection.GetLastErrorWasAboutConnection when fErrorMessage is empty
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -1137,6 +1143,8 @@ type
     /// will be called at the end of constructor
     // - this default implementation will do nothing
     procedure SetInternalProperties; virtual;
+    /// Assign schema name to owner from ForceSchemaName or UserID or Database name
+    procedure SetSchemaNameToOwner(out Owner: RawUTF8); virtual;
     /// SQL statement to get all field/column names for a specified Table
     // - used by GetFieldDefinitions public method
     // - should return a SQL "SELECT" statement with the field names as first
@@ -1161,12 +1169,26 @@ type
     // also be overridden in order to allow conversion from native column
     // type into the corresponding TSQLDBFieldType
     function SQLGetParameter(const aProcName: RawUTF8): RawUTF8; virtual;
+    /// SQL statement to get all stored procedure names for current connection
+    // - used by GetProcedureNames public method
+    // - should return a SQL "SELECT" statement with the procedure names as unique column
+    // - this default implementation just returns nothing
+    // - if this method is overridden, the ColumnTypeNativeToDB() method should
+    // also be overridden in order to allow conversion from native column
+    // type into the corresponding TSQLDBFieldType
+    function SQLGetProcedure: RawUTF8; virtual;
     /// SQL statement to get all table names
     // - used by GetTableNames public method
     // - should return a SQL "SELECT" statement with the table names as
     // first column (any other columns will be ignored)
     // - this default implementation just returns nothing
     function SQLGetTableNames: RawUTF8; virtual;
+    /// SQL statement to get all view names
+    // - used by GetViewNames public method
+    // - should return a SQL "SELECT" statement with the view names as
+    // first column (any other columns will be ignored)
+    // - this default implementation just returns nothing
+    function SQLGetViewNames: RawUTF8; virtual;
     /// should initialize fForeignKeys content with all foreign keys of this
     // database
     // - used by GetForeignKey method
@@ -1310,7 +1332,7 @@ type
     // - this method should return a prepared statement instance on success
     // - on error, returns nil and you can check Connnection.LastErrorMessage /
     // Connection.LastErrorException to retrieve correspnding error information
-    function NewThreadSafeStatementPrepared(SQLFormat: PUTF8Char;
+    function NewThreadSafeStatementPrepared(const SQLFormat: RawUTF8;
       const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
@@ -1319,7 +1341,8 @@ type
     function PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
-    function PrepareInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
+    function PrepareInlined(const SQLFormat: RawUTF8; const Args: array of const;
+      ExpectResults: Boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
     // the result rows corresponding to the supplied SELECT statement
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
@@ -1362,7 +1385,8 @@ type
     function ExecuteInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBRows; overload;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
-    function ExecuteInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBRows; overload;
+    function ExecuteInlined(const SQLFormat: RawUTF8; const Args: array of const;
+      ExpectResults: Boolean): ISQLDBRows; overload;
     /// handle a transaction process common to all associated connections
     // - could be used to share a single transaction among several connections,
     // or to run nested transactions even on DB engines which do not allow them
@@ -1479,6 +1503,8 @@ type
     /// check if the supplied text word is not a keyword for the current database engine
     // - just a wrapper around the overloaded class function
     function IsSQLKeyword(aWord: RawUTF8): boolean; overload;
+    /// retrieve a list of stored procedure names from current connection
+    procedure GetProcedureNames(out Procedures: TRawUTF8DynArray); virtual;
     /// retrieve procedure input/output parameter information
     // - aProcName: stored procedure name to retrieve parameter infomation.
     // - Parameters: parameter list info (name, datatype, direction, default)
@@ -1488,6 +1514,10 @@ type
     // - this default implementation will use protected SQLGetTableNames virtual
     // method to retrieve the table names
     procedure GetTableNames(out Tables: TRawUTF8DynArray); virtual;
+    /// get all view names
+    // - this default implementation will use protected SQLGetViewNames virtual
+    // method to retrieve the view names
+    procedure GetViewNames(out Views: TRawUTF8DynArray); virtual;
     /// retrieve a foreign key for a specified table and column
     // - first time it is called, it will retrieve all foreign keys from the
     // remote database using virtual protected GetForeignKeys method into
@@ -2036,7 +2066,7 @@ type
     // to retrieve the data rows
     // - should raise an Exception on any error
     // - this method will bind parameters, then call Excecute() virtual method
-    procedure Execute(SQLFormat: PUTF8Char; ExpectResults: Boolean;
+    procedure Execute(const SQLFormat: RawUTF8; ExpectResults: Boolean;
       const Args, Params: array of const); overload;
     /// execute a prepared SQL statement and return all rows content as a JSON string
     // - JSON data is retrieved with UTF-8 encoding
@@ -2605,7 +2635,7 @@ type
     /// constructor which will use FormatUTF8() instead of Format()
     // - if the first Args[0] is a TSQLDBStatement class instance, the current
     // SQL statement will be part of the exception message
-    constructor CreateUTF8(Format: PUTF8Char; const Args: array of const);
+    constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
   published
     /// associated TSQLDBStatement instance, if supplied as first parameter
     property Statement: TSQLDBStatement read fStatement;
@@ -4148,7 +4178,7 @@ end;
 
 function TSQLDBConnection.GetLastErrorWasAboutConnection: boolean;
 begin
-  result := (self<>nil) and (Properties<>nil) and
+  result := (self<>nil) and (Properties<>nil) and (fErrorMessage<>'') and
     Properties.ExceptionIsAboutConnection(fErrorException,fErrorMessage);
 end;
 
@@ -4678,7 +4708,8 @@ begin
   result := Query;
 end;
 
-function TSQLDBConnectionProperties.PrepareInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
+function TSQLDBConnectionProperties.PrepareInlined(const SQLFormat: RawUTF8;
+  const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
 begin
   result := PrepareInlined(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
@@ -4697,7 +4728,8 @@ begin
   result := Query;
 end;
 
-function TSQLDBConnectionProperties.ExecuteInlined(SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBRows;
+function TSQLDBConnectionProperties.ExecuteInlined(const SQLFormat: RawUTF8;
+  const Args: array of const; ExpectResults: Boolean): ISQLDBRows;
 begin
   result := ExecuteInlined(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
@@ -4748,7 +4780,7 @@ begin
 end;
 
 function TSQLDBConnectionProperties.NewThreadSafeStatementPrepared(
-  SQLFormat: PUTF8Char; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
+  const SQLFormat: RawUTF8; const Args: array of const; ExpectResults: Boolean): ISQLDBStatement;
 begin
   result := NewThreadSafeStatementPrepared(FormatUTF8(SQLFormat,Args),ExpectResults);
 end;
@@ -4825,6 +4857,17 @@ begin
   // nothing to do yet
 end;
 
+procedure TSQLDBConnectionProperties.SetSchemaNameToOwner(out Owner: RawUTF8);
+begin
+  if fForcedSchemaName='' then
+    case fDBMS of
+    dMySql:    Owner := DatabaseName;
+    dInformix: Owner := '';
+    else       Owner := UserID;
+    end
+  else Owner := fForcedSchemaName;
+end;
+
 function TSQLDBConnectionProperties.IsCachable(P: PUTF8Char): boolean;
 var NoWhere: Boolean;
 begin // cachable if with ? parameter or SELECT without WHERE clause
@@ -4852,13 +4895,11 @@ end;
 
 class function TSQLDBConnectionProperties.GetFieldDefinition(
   const Column: TSQLDBColumnDefine): RawUTF8;
-const EXE_FMT1: PUTF8Char = '% [%'; // for Delphi 5
-      EXE_FMT2: PUTF8Char = '% % % %]';
 begin
   with Column do begin
-    result := FormatUTF8(EXE_FMT1,[ColumnName,ColumnTypeNative]);
+    FormatUTF8('% [%',[ColumnName,ColumnTypeNative],result);
     if (ColumnLength<>0) or (Column.ColumnPrecision<>0) or (Column.ColumnScale<>0) then
-      result := FormatUTF8(EXE_FMT2,[result,ColumnLength,ColumnPrecision,ColumnScale]) else
+      result := FormatUTF8('% % % %]',[result,ColumnLength,ColumnPrecision,ColumnScale]) else
       result := result+']';
     if ColumnIndexed then
       result := result+' *';
@@ -4867,16 +4908,12 @@ end;
 
 class function TSQLDBConnectionProperties.GetFieldORMDefinition(
   const Column: TSQLDBColumnDefine): RawUTF8;
-const EXE_FMT1: PUTF8Char = 'property %: %';
-      EXE_FMT2: PUTF8Char = '% index %';
-      EXE_FMT3: PUTF8Char = '% read f% write f%;';
 begin // 'Name: RawUTF8 index 20 read fName write fName;';
   with Column do begin
-    result := FormatUTF8(EXE_FMT1,
-      [ColumnName,SQLDBFIELDTYPE_TO_DELPHITYPE[ColumnType]]);
+    FormatUTF8('property %: %',[ColumnName,SQLDBFIELDTYPE_TO_DELPHITYPE[ColumnType]],result);
     if (ColumnType=ftUTF8) and (ColumnLength>0) then
-      result := FormatUTF8(EXE_FMT2,[result,ColumnLength]);
-    result := FormatUTF8(EXE_FMT3,[result,ColumnName,ColumnName]);
+      result := FormatUTF8('% index %',[result,ColumnLength]);
+    result := FormatUTF8('% read f% write f%;',[result,ColumnName,ColumnName]);
   end;
 end;
 
@@ -5168,6 +5205,25 @@ begin
   SetLength(Indexes,n);
 end;
 
+procedure TSQLDBConnectionProperties.GetProcedureNames(out Procedures: TRawUTF8DynArray);
+var SQL: RawUTF8;
+    count: integer;
+begin
+  SQL := SQLGetProcedure;
+  if SQL<>'' then
+  try
+    with Execute(SQL,[]) do begin
+      count := 0;
+      while Step do
+        AddSortedRawUTF8(Procedures,count,trim(ColumnUTF8(0)));
+      SetLength(Procedures,count);
+    end;
+  except
+    on Exception do
+      SetLength(Procedures,0); // if the supplied SQL query is wrong, just ignore
+  end;
+end;
+
 procedure TSQLDBConnectionProperties.GetProcedureParameters(const aProcName: RawUTF8;
   out Parameters: TSQLDBProcColumnDefineDynArray);
 var SQL: RawUTF8;
@@ -5219,6 +5275,25 @@ begin
   end;
 end;
 
+procedure TSQLDBConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
+var SQL: RawUTF8;
+    count: integer;
+begin
+  SQL := SQLGetViewNames;
+  if SQL<>'' then
+  try
+    with Execute(SQL,[]) do begin
+      count := 0;
+      while Step do
+        AddSortedRawUTF8(Views,count,trim(ColumnUTF8(0)));
+      SetLength(Views,count);
+    end;
+  except
+    on Exception do
+      SetLength(Views,0); // if the supplied SQL query is wrong, just ignore
+  end;
+end;
+
 procedure TSQLDBConnectionProperties.SQLSplitTableName(const aTableName: RawUTF8;
   out Owner, Table: RawUTF8);
 begin
@@ -5244,17 +5319,6 @@ end;
 
 procedure TSQLDBConnectionProperties.SQLSplitProcedureName(
   const aProcName: RawUTF8; out Owner, Package, ProcName: RawUTF8);
-
-  procedure SetSchemaNameToOwner;
-  begin
-    if fForcedSchemaName='' then
-      case fDBMS of
-      dMySql: Owner := DatabaseName;
-      else    Owner := UserID;
-      end
-    else Owner := fForcedSchemaName;
-  end;
-
 var lOccur,i: Integer;
 begin
   lOccur := 0;
@@ -5263,7 +5327,7 @@ begin
       inc(lOccur);
   if lOccur=0 then begin
     ProcName := aProcName;
-    SetSchemaNameToOwner;
+    SetSchemaNameToOwner(Owner);
     Exit;
   end;
   case fDBMS of
@@ -5281,7 +5345,7 @@ begin
     Split(aProcName,'.',Owner,ProcName);
     if ProcName='' then begin
       ProcName := Owner;
-      SetSchemaNameToOwner;
+      SetSchemaNameToOwner(Owner);
     end
     else if fDBMS=dMSSQL then
       Split(ProcName, ';', ProcName); // discard ;1 when MSSQL stored procedure name is ProcName;1 
@@ -5298,7 +5362,7 @@ end;
 
 function TSQLDBConnectionProperties.SQLGetField(const aTableName: RawUTF8): RawUTF8;
 var Owner, Table: RawUTF8;
-    FMT: PUTF8Char;
+    FMT: RawUTF8;
 begin
   result := '';
   case DBMS of
@@ -5335,12 +5399,12 @@ begin
   else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
   SQLSplitTableName(aTableName,Owner,Table);
-  result := FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Table)]);
+  FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Table)],result);
 end;
 
 function TSQLDBConnectionProperties.SQLGetIndex(const aTableName: RawUTF8): RawUTF8;
 var Owner, Table: RawUTF8;
-    FMT: PUTF8Char;
+    FMT: RawUTF8;
 begin
   result := '';
   case DBMS of
@@ -5394,36 +5458,46 @@ begin
     Table := Owner;
     Owner := UserID;
   end;
-  result := FormatUTF8(FMT, [SynCommons.UpperCase(Table)]);
+  FormatUTF8(FMT,[SynCommons.UpperCase(Table)],result);
 end;
 
 function TSQLDBConnectionProperties.SQLGetParameter(const aProcName: RawUTF8): RawUTF8;
 var Owner, Package, Proc: RawUTF8;
-    FMT: PUTF8Char;
+    FMT: RawUTF8;
 begin
   result := '';
   SQLSplitProcedureName(aProcName,Owner,Package,Proc);
   case DBMS of
-  dOracle: FMT := PUTF8Char(
+  dOracle: FMT :=
     'select a.argument_name, a.data_type, a.char_length, a.data_precision, a.data_scale, a.in_out ' +
     'from   sys.all_arguments a ' +
     'where  a.owner like ''%''' +
     '  and  a.package_name like ''' + SynCommons.UpperCase(Package) + '''' +
     '  and  a.object_name like ''%''' +
-    ' order by position');
+    ' order by position';
   dMSSQL, dMySQL, dPostgreSQL: FMT :=
     'select PARAMETER_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, NUMERIC_PRECISION, NUMERIC_SCALE, PARAMETER_MODE ' +
     'from INFORMATION_SCHEMA.PARAMETERS ' +
     'where UPPER(SPECIFIC_SCHEMA) = ''%'' and UPPER(SPECIFIC_NAME) = ''%'''+
     ' order by ORDINAL_POSITION';
   dFirebird: begin
-    result :=
-      'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
-      ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
-      ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
-      'from rdb$procedure_parameters a, rdb$fields b ' +
-      'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' + SynCommons.UpperCase(aProcName) + ''' ' +
-      'order by a.rdb$parameter_number';
+    if (Package = '') then
+      result :=
+        'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
+        ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
+        ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
+        'from rdb$procedure_parameters a, rdb$fields b ' +
+        'where b.rdb$field_name = a.rdb$field_source and a.rdb$procedure_name = ''' + SynCommons.UpperCase(Proc) + ''' ' +
+        'order by a.rdb$parameter_number'
+    else
+      result :=
+        'select a.rdb$parameter_name, b.rdb$field_type || coalesce(b.rdb$field_sub_type, '''') as rdb$field_type,' +
+        ' b.rdb$field_length, b.rdb$field_precision, b.rdb$field_scale,' +
+        ' case a.rdb$parameter_type when 0 then ''IN'' else ''OUT'' end ' +
+        'from rdb$procedure_parameters a, rdb$fields b ' +
+        'where b.rdb$field_name = a.rdb$field_source and a.rdb$package_name = ''' + SynCommons.UpperCase(Package) + ''' ' +
+        '  and a.rdb$procedure_name = ''' + SynCommons.UpperCase(Proc) + ''' ' +
+        'order by a.rdb$parameter_number';
     exit;
   end;
   dNexusDB: begin // NOT TESTED !!!
@@ -5435,7 +5509,42 @@ begin
   end;
   else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
   end;
-  result := FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Proc)]);
+  FormatUTF8(FMT,[SynCommons.UpperCase(Owner),SynCommons.UpperCase(Proc)],result);
+end;
+
+function TSQLDBConnectionProperties.SQLGetProcedure: RawUTF8;
+var FMT,Owner: RawUTF8;
+begin
+  result := '';
+  case DBMS of
+  dOracle: FMT :=
+    'select' +
+    '  case P.OBJECT_TYPE' +
+    '  when ''PACKAGE'' then P.OBJECT_NAME || ''.'' || P.PROCEDURE_NAME' +
+    '  else P.OBJECT_NAME end NAME_ROUTINE ' +
+    'from SYS.ALL_PROCEDURES P ' +
+    'where P.OWNER = ''%'' and P.SUBPROGRAM_ID > 0 ' +
+    'order by NAME_ROUTINE';
+  dMSSQL, dMySQL, dPostgreSQL: FMT :=
+    'select R.SPECIFIC_NAME NAME_ROUTINE ' +
+    'from INFORMATION_SCHEMA.ROUTINES R ' +
+    'where UPPER(R.SPECIFIC_SCHEMA) = ''%'' '+
+    'order by NAME_ROUTINE';
+  dFirebird: FMT :=
+    'select P.RDB$PROCEDURE_NAME NAME_ROUTINE ' +
+    'from RDB$PROCEDURES P ' +
+    'where P.RDB$OWNER_NAME = ''%'' ' +
+    'order by NAME_ROUTINE';
+  dNexusDB: begin // NOT TESTED !!!
+    result := 'select P.PROCEDURE_NAME NAME_ROUTINE '+
+    'from #PROCEDURES P ' +
+    'order by NAME_ROUTINE';
+    exit;
+  end;
+  else exit; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+  end;
+  SetSchemaNameToOwner(Owner);
+  FormatUTF8(FMT,[SynCommons.UpperCase(Owner)],result);
 end;
 
 function TSQLDBConnectionProperties.SQLGetTableNames: RawUTF8;
@@ -5461,17 +5570,38 @@ begin
   end;
 end;
 
+function TSQLDBConnectionProperties.SQLGetViewNames: RawUTF8;
+begin
+  case DBMS of
+  dOracle: result := 'select owner||''.''||view_name name '+
+    'from sys.all_views order by owner, view_name';
+  dMSSQL:
+    result := 'select (TABLE_SCHEMA + ''.'' + TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.VIEWS order by name';
+  dMySQL:
+    result := 'select concact(TABLE_SCHEMA,''.'',TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.VIEWS order by name';
+  dPostgreSQL:
+    result := 'select (TABLE_SCHEMA||''.''||TABLE_NAME) as name '+
+      'from INFORMATION_SCHEMA.VIEWS order by name';
+  dSQLite: result := 'select name from sqlite_master where type=''view'' '+
+     'and name not like ''sqlite_%''';
+  dFirebird: result := 'select rdb$relation_name from rdb$relations '+
+    'where rdb$view_blr is not null and (rdb$system_flag is null or rdb$system_flag=0)';
+  dNexusDB: result := 'select view_name name from #views order by view_name'; // NOT TESTED !!!
+  else result := ''; // others (e.g. dDB2) will retrieve info from (ODBC) driver
+  end;
+end;
+
 function TSQLDBConnectionProperties.SQLCreateDatabase(const aDatabaseName: RawUTF8;
   aDefaultPageSize: integer): RawUTF8;
-const SQL_FMT1: PUTF8Char = // for Delphi 5
-      'create database ''%'' user ''sysdba'' password ''masterkey'''+
-      ' page_size % default character set utf8;';
 begin
   case DBMS of
   dFirebird: begin
     if (aDefaultPageSize<>8192) or (aDefaultPageSize<>16384) then
       aDefaultPageSize := 4096;
-    result := FormatUTF8(SQL_FMT1,[aDatabaseName,aDefaultPageSize]);
+    FormatUTF8('create database ''%'' user ''sysdba'' password ''masterkey'''+
+      ' page_size % default character set utf8;',[aDatabaseName,aDefaultPageSize],result);
   end;
   else result := '';
   end;
@@ -5644,7 +5774,7 @@ function TSQLDBConnectionProperties.SQLFieldCreate(const aField: TSQLDBColumnCre
   var aAddPrimaryKey: RawUTF8): RawUTF8;
 begin
   if (aField.DBType=ftUTF8) and (cardinal(aField.Width-1)<fSQLCreateFieldMax) then
-    result := FormatUTF8(fSQLCreateField[ftNull],[aField.Width]) else
+    FormatUTF8(fSQLCreateField[ftNull],[aField.Width],result) else
     result := fSQLCreateField[aField.DBType];
   if aField.NonNullable or aField.Unique or aField.PrimaryKey then
     result := result+' NOT NULL';
@@ -5663,16 +5793,14 @@ end;
 function TSQLDBConnectionProperties.SQLAddColumn(const aTableName: RawUTF8;
   const aField: TSQLDBColumnCreate): RawUTF8;
 var AddPrimaryKey: RawUTF8;
-const EXE_FMT: PUTF8Char = 'ALTER TABLE % ADD %'; // Delphi 5
 begin
-  result := FormatUTF8(EXE_FMT,[aTableName,SQLFieldCreate(aField,AddPrimaryKey)]);
+  FormatUTF8('ALTER TABLE % ADD %',[aTableName,SQLFieldCreate(aField,AddPrimaryKey)],result);
 end;
 
 function TSQLDBConnectionProperties.SQLAddIndex(const aTableName: RawUTF8;
   const aFieldNames: array of RawUTF8; aUnique, aDescending: boolean;
   const aIndexName: RawUTF8): RawUTF8;
-const CREATNDX: PUTF8Char = 'CREATE %INDEX %% ON %(%)'; // Delphi 5
-  CREATNDXIFNE: array[boolean] of RawUTF8 = ('','IF NOT EXISTS ');
+const CREATNDXIFNE: array[boolean] of RawUTF8 = ('','IF NOT EXISTS ');
 var IndexName,FieldsCSV, ColsDesc, Owner,Table: RawUTF8;
 begin
   result := '';
@@ -5703,7 +5831,7 @@ begin
     end;
   if ColsDesc='' then
     ColsDesc := RawUTF8ArrayToCSV(aFieldNames,',');
-  result := FormatUTF8(CREATNDX,
+  result := FormatUTF8('CREATE %INDEX %% ON %(%)',
     [result,CREATNDXIFNE[DBMS in DB_HANDLECREATEINDEXIFNOTEXISTS],
      IndexName,aTableName,ColsDesc]);
 end;
@@ -5761,12 +5889,33 @@ end;
 
 function TSQLDBConnectionProperties.ExceptionIsAboutConnection(
   aClass: ExceptClass; const aMessage: RawUTF8): boolean;
+
+  function PosErrorNumber(const aMessage: RawUTF8; const aSepChar: AnsiChar): PUTF8Char;
+  begin // search aSepChar followed by a number
+    result := pointer(aMessage);
+    repeat
+      result := SynCommons.PosChar(result,aSepChar);
+      if result=nil then
+        exit;
+      inc(result);
+    until result^ in ['0'..'9'];
+  end;
+
 begin // see more complete list in feature request [f024266c0839]
   case fDBMS of
   dOracle:
-    result := IdemPCharArray(PosChar(pointer(aMessage),'-'),
-      ['-00028','-01033','-02396','-03113','-03114','-03135',
-       '-12152','-12154','-12157','-12514','-12537','-12545','-12560','-12571'])>=0;
+    result := IdemPCharArray(PosErrorNumber(aMessage,'-'),
+      ['00028','01017','01033','01089','02396','03113','03114','03135',
+       '12152','12154','12157','12514','12520','12537','12545',
+       '12560','12571'])>=0;
+  dInformix: // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
+    result := IdemPCharArray(PosErrorNumber(aMessage,'-'),
+      ['329','761','902','908','930','931','951','11017',
+       '23101','23104','25567','25582','27002'])>=0;
+  dMSSQL: // error codes based on {SQL Server Native Client 11.0} tested with wrong data connection
+    // using general error codes because MS SQL SERVER has multiple error codes in the error message
+    result := IdemPCharArray(PosErrorNumber(aMessage,'['),
+      ['08001','08S01','08007','28000','42000'])>=0;
   else
     result := PosI(' CONNE',aMessage)>0;
   end;
@@ -6392,16 +6541,24 @@ begin
         if c=JSON_SQLDATE_MAGIC then
           BindDateTime(i,Iso8601ToDateTimePUTF8Char(PUTF8Char(VAnsiString)+3,length(RawUTF8(VAnsiString))-3)) else
           // expect UTF-8 content only for AnsiString, i.e. RawUTF8 variables
+          {$ifdef HASCODEPAGE}
+          BindTextU(i,AnyAnsiToUTF8(RawByteString(VAnsiString)),IO);
+          {$else}
           BindTextU(i,RawUTF8(VAnsiString),IO);
+          {$endif}
       end;
     vtPChar:      BindTextP(i,PUTF8Char(VPChar),IO);
     vtChar:       BindTextU(i,RawUTF8(VChar),IO);
     vtWideChar:   BindTextU(i,RawUnicodeToUtf8(@VWideChar,1),IO);
     vtPWideChar:  BindTextU(i,RawUnicodeToUtf8(VPWideChar,StrLenW(VPWideChar)),IO);
     vtWideString: BindTextW(i,WideString(VWideString),IO);
-{$ifdef UNICODE}
+    {$ifdef HASVARUSTRING}
+    {$ifdef UNICODE}
     vtUnicodeString: BindTextS(i,string(VUnicodeString),IO);
-{$endif}
+    {$else}
+    vtUnicodeString: BindTextU(i,UnicodeStringToUtf8(UnicodeString(VUnicodeString)),IO);
+    {$endif}
+    {$endif}
     vtBoolean:    Bind(i,integer(VBoolean),IO);
     vtInteger:    Bind(i,VInteger,IO);
     vtInt64:      Bind(i,VInt64^,IO);
@@ -6477,7 +6634,7 @@ begin
           // no conversion if was set via TQuery.AsBlob property e.g.
           BindBlob(Param,RawByteString(VAny),IO) else
         // direct bind of AnsiString as UTF-8 value
-        {$ifdef UNICODE}
+        {$ifdef HASCODEPAGE}
         BindTextU(Param,AnyAnsiToUTF8(RawByteString(VAny)),IO);
         {$else} // on older Delphi, we assume AnsiString = RawUTF8
         BindTextU(Param,RawUTF8(VAny),IO);
@@ -7012,7 +7169,7 @@ begin
   end;
 end;
 
-procedure TSQLDBStatement.Execute(SQLFormat: PUTF8Char;
+procedure TSQLDBStatement.Execute(const SQLFormat: RawUTF8;
   ExpectResults: Boolean; const Args, Params: array of const);
 begin
   Execute(FormatUTF8(SQLFormat,Args),ExpectResults,Params);
@@ -7218,9 +7375,9 @@ begin
           end else
             result := RawUTF8(VAny);
         end;
-        {$ifdef UNICODE}
+        {$ifdef HASVARUSTRING}
         varUString: begin
-          L := length(string(VAny));
+          L := length(UnicodeString(VAny));
           if L>MaxCharCount then begin
             Truncated := true;
             L := MaxCharCount;
@@ -8430,7 +8587,7 @@ end;
 
 { ESQLDBException }
 
-constructor ESQLDBException.CreateUTF8(Format: PUTF8Char; const Args: array of const);
+constructor ESQLDBException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
 var msg, sql: RawUTF8;
 begin
   msg := FormatUTF8(Format,Args);

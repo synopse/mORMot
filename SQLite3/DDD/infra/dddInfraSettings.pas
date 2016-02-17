@@ -6,7 +6,7 @@ unit dddInfraSettings;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraSettings;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -177,7 +177,7 @@ type
     procedure SetProperties(Instance: TObject); virtual;
   public
     /// initialize the settings, with a corresponding storage process
-    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;
+    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;  
     /// persist if needed, and finalize the settings
     destructor Destroy; override;
     /// to be called when the application starts, to initialize settings
@@ -387,15 +387,6 @@ type
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
   end;
 
-  /// parent class for storing a HTTP published service/daemon settings
-  TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
-  private
-    fHttp: TSQLHttpServerDefinition;
-  published
-    /// how the HTTP server should be defined 
-    property Http: TSQLHttpServerDefinition read fHttp;
-  end;
-
   /// a Factory event allowing to customize/mock a socket connection
   // - the supplied aOwner should be a TDDDSocketThread instance
   // - returns a IDDDSocket interface instance (e.g. a TDDDSynCrtSocket)
@@ -457,17 +448,32 @@ type
       const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
   end;
 
+  /// parent class for storing a HTTP published service/daemon settings
+  TDDDAdministratedDaemonHttpSettings = class(TDDDAdministratedDaemonSettings)
+  protected
+    fRest: TDDDRestSettings;
+    fHttp: TSQLHttpServerDefinition;
+    fServicesLog: TDDDServicesLogRestSettings;
+  published
+    /// how the main REST server is implemented
+    // - most probably using a TSQLRestServerDB, i.e. local SQLite3 storage
+    property Rest: TDDDRestSettings read fRest;
+    /// how the HTTP server should be defined
+    property Http: TSQLHttpServerDefinition read fHttp;
+    /// how the SOA calls would be logged into their own SQlite3 database
+    property ServicesLog: TDDDServicesLogRestSettings read fServicesLog;
+  end;
+
   /// storage class for a remote MongoDB server direct access settings
   TDDDMongoDBRestSettings = class(TDDDRestSettings)
   public
     /// set the default values for direct MongoDB server connection
-    // - if MongoServerAddress is '?', entry with default value would be saved
-    // in the settings, but NewRestInstance() would ignore it: once the
+    // - if MongoServerAddress is e.g. '?:27017', entry with default value would
+    // be saved in the settings, but NewRestInstance() would ignore it: once the
     // remote MongoDB server IP is known, you may just replace '?' to use it
-    // - if MongoServerPort is 0, would use MONGODB_DEFAULTPORT = 27017
     // - if MongoUser and MongoPassword are set, would call TMongoClient.OpenAuth()
-    procedure SetDefaults(const Root, MongoServerAddress: RawUTF8;
-      MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+    procedure SetDefaults(const Root, MongoServerAddress, MongoDatabase,
+      MongoUser, MongoPassword: RawUTF8);
   end;
   
 
@@ -602,11 +608,6 @@ begin
   try
     if fORM.Kind='' then
       exit;
-    {$ifndef LINUX}
-    if (fWrapperTemplateFolder='') and
-       DirectoryExists('d:\dev\lib\CrossPlatform\Templates') then
-      fWrapperTemplateFolder := 'd:/dev/lib/CrossPlatform/Templates';
-    {$endif}
     if (optEraseDBFileAtStartup in Options) and (fORM.ServerName<>'') then
       if (fORM.Kind='TSQLRestServerDB') or
          (fORM.Kind='TSQLRestServerFullMemory') then
@@ -742,19 +743,20 @@ end;
 
 function TDDDAppSettingsStorageAbstract.SetOwner(
   aOwner: TDDDAppSettingsAbstract): boolean;
-var tmp: RawUTF8;
+var tmp: TSynTempBuffer;
 begin
   if self=nil then
     exit;
   fOwner := aOwner;
   if fInitialJsonContent='' then
     exit;
-  tmp := fInitialJsonContent;
-  UniqueString(AnsiString(tmp));
-  RemoveCommentsFromJSON(pointer(tmp));
-  JSONToObject(fOwner,pointer(tmp),result);
+  tmp.Init(fInitialJsonContent);
+  RemoveCommentsFromJSON(tmp.buf);
+  JSONToObject(fOwner,tmp.buf,result,nil,
+    [j2oIgnoreUnknownProperty,j2oIgnoreUnknownEnum,j2oHandleCustomVariants]);
   if not result then
     fInitialJsonContent := '';
+  tmp.Done;
 end;
 
 procedure TDDDAppSettingsStorageAbstract.Store(const aJSON: RawUTF8);
@@ -794,16 +796,14 @@ end;
 
 { TDDDMongoDBRestSettings }
 
-procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress: RawUTF8;
-  MongoServerPort: integer; const MongoDatabase, MongoUser, MongoPassword: RawUTF8);
+procedure TDDDMongoDBRestSettings.SetDefaults(const Root, MongoServerAddress,
+  MongoDatabase, MongoUser, MongoPassword: RawUTF8);
 begin
   if fORM.Kind<>'' then
     exit;
   fRoot := Root;
   fORM.Kind := 'MongoDB';
-  if MongoServerPort=0 then
-    MongoServerPort := MONGODB_DEFAULTPORT;
-  fORM.ServerName := FormatUTF8('%:%',[MongoServerAddress,MongoServerPort]);
+  fORM.ServerName := MongoServerAddress;
   fORM.DatabaseName := MongoDatabase;
   fORM.User := MongoUser;
   fORM.PasswordPlain := MongoPassword;

@@ -6,7 +6,7 @@ unit mORMotWrappers;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotWrappers;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s) (for this unit and the .mustache templates):
@@ -198,7 +198,7 @@ type
     wObject, wSQLRecord, wInterface, wRecordVersion);
   /// supported languages typesets
   TWrapperLanguage = (
-    lngDelphi, lngPascal, lngCS, lngJava);
+    lngDelphi, lngPascal, lngCS, lngJava, lngTypeScript);
 
 const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
@@ -217,6 +217,7 @@ const
   TYPES_SIZE: array[0..8] of TWrapperType = (
     winteger,wbyte,wword,winteger,winteger,wint64,wint64,wint64,wint64);
 
+  { TODO: refactor TID and Int64 for JavaScript (integers truncated to 53-bit) }
   TYPES_LANG: array[TWrapperLanguage,TWrapperType] of RawUTF8 = (
    // lngDelphi
    ('', 'Boolean', '', '', 'Byte', 'Word', 'Integer', 'Cardinal',
@@ -240,7 +241,14 @@ const
    ('', 'boolean', '', '', 'byte', 'int', 'int', 'long', 'long', 'TID',
     'TRecordReference', 'TTimeLog', 'TModTime', 'TCreateTime', 'BigDecimal',
     'single', 'double', 'double', 'String', 'String', 'Object', 'byte[]',
-    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'));
+    'String', 'byte[]', '', '', 'Object', '', 'TID', '', 'TRecordVersion'),
+   // lngTypeScript
+   ('', 'boolean', '', '', 'number', 'number', 'number', 'number',
+    'number', 'mORMot.TID', 'mORMot.TRecordReference', 'mORMot.TTimeLog',
+    'mORMot.TModTime', 'mORMot.TCreateTime', 'number', 'number', 'number',
+    'mORMot.TDateTime', 'string', 'string', 'any', 'mORMot.TSQLRawBlob',
+    'mORMot.TGUID', 'mORMot.THttpBody', '', '', 'any', '', '', '',
+    'mORMot.TRecordVersion'));
 
   TYPES_ORM: array[TSQLFieldType] of TWrapperType =
     (wUnknown,        // sftUnknown
@@ -530,10 +538,12 @@ procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
   const SourceFileName: TFileName);
 var desc,typeName,interfaceName: RawUTF8;
     P,S: PUTF8Char;
+    withinCode: boolean;
 begin
   S := pointer(StringFromFile(SourceFileName));
   if S=nil then
     exit;
+  withinCode := false;
   repeat // rough parsing of the .pas unit file to extract /// description
     P := GetNextLineBegin(S,S);
     P := GotoNextNotSpace(P);
@@ -551,6 +561,14 @@ begin
         if (P[0]='/') and (P[1]='/') then begin
           if P[2]='/' then inc(P,3) else inc(P,2);
           P := GotoNextNotSpace(P);
+          if P^ in ['$','!'] then begin
+            if not withinCode then begin
+              withinCode := true;
+              desc := desc+#13#10#13#10'----'; // AsciiDoc source code block
+            end;
+            desc := desc+#13#10;
+            inc(P); 
+          end else
           if P^='-' then begin
             desc := desc+#13#10#13#10'- [*]'; // as expected by buggy AsciiDoc format
             inc(P);
@@ -560,6 +578,10 @@ begin
         end else
           break;
       until false;
+      if withinCode then begin
+        desc := desc+#13#10'----'; // code block should end the description
+        withinCode := false;
+      end;
       typeName := GetNextItem(P,' ');
       if P=nil then
         exit;
@@ -681,10 +703,12 @@ begin
   if typInfo=nil then
     raise EWrapperContext.CreateUTF8('%.RegisterType(%): no RTTI',[typeWrapper^,typName]);
   case typ of
-  wEnum: info := _JsonFastFmt('{name:?,values:%}',
-          [typInfo^.EnumBaseType^.GetEnumNameAll(true)],[typName]);
-  wSet:  info := _JsonFastFmt('{name:?,values:%}',
-          [typInfo^.SetEnumType^.GetEnumNameAll(true)],[typName]);
+  wEnum: // full (untrimed) identifier: values[] may be trimmed at mustache level 
+    info := _JsonFastFmt('{name:?,values:%}',
+      [typInfo^.EnumBaseType^.GetEnumNameAllAsJSONArray(false)],[typName]);
+  wSet:  // full (untrimed) identifier: values[] may be trimmed at mustache level
+    info := _JsonFastFmt('{name:?,values:%}',
+      [typInfo^.SetEnumType^.GetEnumNameAllAsJSONArray(false)],[typName]);
   wRecord: begin
     parser := TTextWriter.RegisterCustomJSONSerializerFindParser(typInfo,true);
     if (parser<>nil) and (parser.Root<>nil) and (parser.Root.CustomTypeName<>'') then
@@ -712,7 +736,8 @@ begin
     info.name := typName;
   end;
   end;
-  list.AddItem(info);
+  if not VarIsEmptyOrNull(info) then // null e.g. for a record without custom text definition
+    list.AddItem(info);
 end;
 var siz: integer;
     enum: PEnumType;
@@ -747,7 +772,8 @@ begin
   result := _ObjFast([
     'typeWrapper',typeWrapper^,      'typeSource',typName,
     'typeDelphi',VarName(lngDelphi), 'typePascal',VarName(lngPascal),
-    'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava)]);
+    'typeCS',VarName(lngCS),         'typeJava',VarName(lngJava),
+    'typeTS',VarName(lngTypeScript)]);
   if self=nil then
     exit; // no need to have full info if called e.g. from MVC
   if typInfo<>nil then
@@ -841,8 +867,10 @@ begin
   // compute the Model information as JSON
   result := _ObjFast(['time',NowToString, 'year',CurrentYear,
     'mORMotVersion',SYNOPSE_FRAMEWORK_VERSION,
-    'orm',variant(fORM),
-    'soa',fSOA]);
+    'exeVersion',ExeVersion.Version.Detailed,
+    'exeInfo',ExeVersion.ProgramFullSpec,
+    'orm',variant(fORM), 
+    'soa',fSOA]);      
   if fServer<>nil then
     _ObjAddProps(['root',fServer.Model.Root],result);
   if fHasAnyRecord then

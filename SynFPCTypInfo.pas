@@ -4,7 +4,7 @@ unit SynFPCTypInfo;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -23,7 +23,7 @@ unit SynFPCTypInfo;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -69,7 +69,7 @@ const
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 function AlignToPtr(p : pointer): pointer; inline;
-function GetFPCAlignPtr(P: pointer): pointer;
+function GetFPCAlignPtr(P: pointer): pointer; inline;
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
 type
   AlignToPtr = pointer;
@@ -144,21 +144,15 @@ end;
 
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
 begin
-  result := PTypeData(aligntoptr(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+  result := PTypeData(AlignToPtr(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetFPCAlignPtr(P: pointer): pointer;
-type
-  PLocalTypeInfo = ^TLocalTypeInfo;
-  TLocalTypeInfo = record
-    kind: TTypeKind;
-    NameLen: Byte;
-  end;
 begin
-  inc(PtrUInt(P),(PLocalTypeInfo(P)^.NameLen)-2);
-  result := PByte(AlignToPtr(P));
+  inc(PtrUInt(P),PByte(pointer(P)+1)^-2);
+  result := AlignToPtr(P);
 end;
 
 {$endif}

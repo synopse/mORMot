@@ -6,7 +6,7 @@ program TestSQL3;
 (*
     This file is part of Synopse mORMot database framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ program TestSQL3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -92,7 +92,7 @@ uses
   FastMM4 in '..\RTL7\FastMM4.pas',
   {$else}
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006
-  {$endif}
+  {$endif FullDebugMode}
   SysUtils,
   //SynFastWideString,   // no speed benefit for mORMot, but OleDB/Jet works!
   SynLZ in '..\SynLZ.pas',
@@ -169,6 +169,10 @@ uses
   SynSelfTests in '..\SynSelfTests.pas',
   mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}
+
+{$ifdef MSWINDOWS}
+{$R ..\Vista.res} // includes manifest to identify Windows 10 OS
+{$endif}
 
 begin
   {$ifdef ISDELPHI2007ANDUP}

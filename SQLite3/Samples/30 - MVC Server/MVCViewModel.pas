@@ -171,7 +171,7 @@ begin
     info.Title := 'mORMot BLOG';
     info.Language := 'en';
     info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
-    info.Copyright := '&copy;2015 <a href=http://synopse.info>Synopse Informatique</a>';
+    info.Copyright := '&copy;2016 <a href=http://synopse.info>Synopse Informatique</a>';
     info.About := TSynTestCase.RandomTextParagraph(30,'!');
     RestModel.Add(info,true);
   end;
@@ -284,7 +284,7 @@ begin
   if scop^.GetAsRawUTF8('match',match) and fHasFTS then begin
     if scop^.GetAsDouble('lastrank',rank) then
       whereClause := 'and rank<? ';
-    whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1) as rank '+
+    whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1.0,0.7,0.5) as rank '+
       'from ArticleSearch where ArticleSearch match ? '+whereClause+
       'order by rank desc'+ARTICLE_DEFAULT_LIMIT+')as r on (r.docid=Article.id)';
     articles := RestModel.RetrieveDocVariantArray(

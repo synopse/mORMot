@@ -6,7 +6,7 @@ unit mORMotSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -205,7 +205,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.9.2
+    - updated SQLite3 engine to latest version 3.11.0
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -339,6 +339,7 @@ type
     fStatement: PSQLRequest;
     fStaticStatement: TSQLRequest;
     fStatementTimer: PPrecisionTimer;
+    fStatementMonitor: TSynMonitor;
     fStaticStatementTimer: TPrecisionTimer;
     fStatementSQL: RawUTF8;
     fStatementGenericSQL: RawUTF8;
@@ -709,18 +710,20 @@ begin
     fStatementGenericSQL := '';
     fStatement := @fStaticStatement;
     fStatementTimer := @fStaticStatementTimer;
+    fStatementMonitor := nil;
     exit;
   end;
   if mlSQLite3 in StatLevels then
     timer := @fStatementTimer else
     timer := nil;
-  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer);
+  fStatement := fStatementCache.Prepare(fStatementGenericSQL,@wasPrepared,timer,@fStatementMonitor);
   if wasPrepared then
     InternalLog('prepared % % %',
       [fStaticStatementTimer.Stop,DB.FileNameWithoutPath,fStatementGenericSQL],sllDB);
   if timer=nil then begin
     fStaticStatementTimer.Start;
     fStatementTimer := @fStaticStatementTimer;
+    fStatementMonitor := nil;
   end;
 end;
 
@@ -759,13 +762,17 @@ procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg
 begin
   try
     if fStatementTimer<>nil then begin
-      fStatementTimer^.Pause;
-      fStatementTimer^.ComputeTime;
+      if fStatementMonitor<>nil then
+        fStatementMonitor.ProcessEnd else begin
+        fStatementTimer^.Pause;
+        fStatementTimer^.ComputeTime;
+      end;
       if E=nil then
         InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
         InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
     end;
+    fStatementMonitor := nil;
   finally
     if fStatement<>nil then begin
       if fStatement=@fStaticStatement then
@@ -825,7 +832,7 @@ begin
         inc(fBatchIDMax);
         result := fBatchIDMax;
       end;
-      AddInt64(TInt64DynArray(fBatchID),fBatchIDCount,result);
+      AddID(fBatchID,fBatchIDCount,result);
       AddRawUTF8(fBatchValues,fBatchValuesCount,SentData);
     end;
     exit;
@@ -1215,36 +1222,23 @@ end;
 
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 var i: integer;
-    stat,last,average: TSynMonitorTime;
     ndx: TIntegerDynArray;
 begin
   inherited InternalStat(Ctxt,W);
   if Ctxt.InputExists['withall'] or Ctxt.InputExists['withsqlite3'] then begin
     W.CancelLastChar('}');
     W.AddShort(',"sqlite3":[');
-    stat := TSynMonitorTime.Create;
-    last := TSynMonitorTime.Create;
-    average := TSynMonitorTime.Create;
     DB.Lock;
     try
       fStatementCache.SortCacheByTotalTime(ndx);
       with fStatementCache do
       for i := 0 to Count-1 do
-      with Cache[ndx[i]] do begin
-        stat.MicroSec := Timer.TimeInMicroSec;
-        last.MicroSec := Timer.LastTimeInMicroSec;
-        if Timer.PauseCount=0 then // avoid division per zero
-          average.MicroSec := 0 else
-          average.MicroSec := Round(Timer.TimeInMicroSec/Timer.PauseCount);
-        W.AddJSONEscape(['SQL',StatementSQL,'TaskCount',Timer.PauseCount,
-          'TotalTime',stat,'AverageTime',average,'LastTime',last]);
-        W.Add(',');
-      end;
+        with Cache[ndx[i]] do begin
+          W.AddJSONEscape([StatementSQL,Timer]);
+          W.Add(',');
+        end;
     finally
       DB.UnLock;
-      average.Free;
-      last.Free;
-      stat.Free;
     end;
     W.CancelLastComma;
     W.Add(']','}');
@@ -1376,7 +1370,8 @@ end;
 procedure TSQLRestServerDB.SetNoAJAXJSON(const Value: boolean);
 begin
   inherited;
-  if Value=NoAJAXJSON then exit;
+  if Value=NoAJAXJSON then
+     exit;
   fDB.Cache.Reset; // we changed the JSON format -> cache must be updated
 end;
 
@@ -1853,9 +1848,10 @@ var ndx,f,r,prop,fieldCount,valuesCount,
     Fields, Values: TRawUTF8DynArray;
     ValuesNull: TByteDynArray;
     Types: TSQLDBFieldTypeDynArray;
-    SQL, privateCopy: RawUTF8;
+    SQL: RawUTF8;
     Props: TSQLRecordProperties;
     Decode: TJSONObjectDecoder;
+    tmp: TSynTempBuffer;
 begin
   if fBatchMethod<>mPOST then
     raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
@@ -1889,10 +1885,11 @@ begin
     repeat
       repeat
         // decode a row
-        if DecodeSaved then begin
+        if DecodeSaved then
+        try
           if UpdateEventNeeded then begin
-            privateCopy := fBatchValues[ndx];
-            P := UniqueRawUTF8(privateCopy);
+            tmp.Init(fBatchValues[ndx]);
+            P := tmp.buf;
           end else
             P := pointer(fBatchValues[ndx]);
           if P=nil then
@@ -1905,6 +1902,9 @@ begin
               soInsert,fBatchTableIndex,Decode,Props.RecordVersionField);
           inc(ndx);
           DecodeSaved := false;
+        finally
+          if UpdateEventNeeded then
+            tmp.Done;
         end;
         if Fields=nil then begin
           Decode.AssignFieldNamesTo(Fields);
@@ -2213,7 +2213,7 @@ begin
             SQLITE_INDEX_CONSTRAINT_LT:    Operation := soLessThan;
             SQLITE_INDEX_CONSTRAINT_GE:    Operation := soGreaterThanOrEqualTo;
             SQLITE_INDEX_CONSTRAINT_MATCH: Operation := soBeginWith;
-            else exit; // invalid parameter
+            else Column := VIRTUAL_TABLE_IGNORE_COLUMN; // unhandled operator
           end;
         end else
           Column := VIRTUAL_TABLE_IGNORE_COLUMN;

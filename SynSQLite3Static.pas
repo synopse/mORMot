@@ -1,4 +1,4 @@
-/// SQLite3 3.9.2 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.11.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -6,7 +6,7 @@ unit SynSQLite3Static;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSQLite3Static;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -47,8 +47,8 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.9.2 engine
-   ****************************************
+    Statically linked SQLite3 3.11.0 engine
+   *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
   global variable with all statically linked .obj API entries.
@@ -74,12 +74,13 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.9.2
+  - updated SQLite3 engine to latest version 3.11.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
-  - under Win64, expects an external sqlite3-64.dll file to be available
+  - under Win64, expects an external sqlite3-64.dll file to be available, which
+    may be downloaded from http://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
 
@@ -95,6 +96,9 @@ uses
   SynSQLite3;
 
 implementation
+
+uses
+  SynCommons;
 
 
 procedure DoInitialization;
@@ -177,6 +181,37 @@ type
 procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
   const OldPassWord, NewPassword: RawUTF8);
 {$endif}
+
+
+{$ifdef FPC}
+{ **** latest FPC trunk expect those definitions to be part of the unit interface **** }
+
+function malloc(size: cardinal): Pointer; cdecl;
+procedure free(P: Pointer); cdecl;
+function realloc(P: Pointer; Size: Integer): Pointer; cdecl;
+function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl;
+procedure memmove(dest, source: pointer; count: Integer); cdecl;
+procedure memcpy(dest, source: Pointer; count: Integer); cdecl;
+function strlen(p: PAnsiChar): integer; cdecl;
+function strcmp(p1,p2: PAnsiChar): integer; cdecl;
+function memcmp(p1, p2: pByte; Size: integer): integer; cdecl;
+function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
+procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
+function localtime(t: PCardinal): pointer; cdecl;
+{$ifdef MSWINDOWS}
+function _beginthreadex(security: pointer; stksize: dword;
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
+procedure _endthreadex(ExitCode: DWORD); cdecl;
+function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$else}
+function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+{$endif}
+
+{ **** you may safely ignore the above definitions, and should never use them **** }
+{$endif}
+
 
 implementation
 
@@ -337,6 +372,7 @@ begin
 end;
 
 {$ifndef FPC}
+
 {$ifdef MSWINDOWS}
 
 var __turbofloat: word; { not used, but must be present for linking }
@@ -455,8 +491,9 @@ begin
   result := 0;
 end;
 
-// qsort() is used if SQLITE_ENABLE_FTS3 is defined
-type // this function type is defined for calling termDataCmp() in sqlite3.c
+type
+  // qsort() is used if SQLITE_ENABLE_FTS3 is defined
+  // this function type is defined for calling termDataCmp() in sqlite3.c
   qsort_compare_func = function(P1,P2: pointer): integer; cdecl; { always cdecl }
 
 procedure QuickSort4(base: PPointerArray; L, R: Integer; comparF: qsort_compare_func);
@@ -532,15 +569,14 @@ begin
   until I>=R;
 end;
 
-procedure qsort(baseP: pointer; NElem, Width: integer; comparF: qsort_compare_func);
-  cdecl; { always cdecl }
+procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
   {$ifdef FPC}{$ifdef CPU64}alias : 'qsort'{$else}alias : '_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
     if Width=sizeof(pointer) then
-      QuickSort4(baseP, 0, NElem-1, comparF) else
-      QuickSort(baseP, Width, 0, NElem-1, comparF);
+      QuickSort4(baseP, 0, NElem-1, qsort_compare_func(comparF)) else
+      QuickSort(baseP, Width, 0, NElem-1, qsort_compare_func(comparF));
 end;
 
 var
@@ -787,7 +823,6 @@ type
 {$A4} // bcc32 default alignment is 4 bytes
 {$endif}
 {$endif}
-
   {$ifdef MSWINDOWS}
   TSQLFile = packed record // see struct winFile in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
@@ -823,19 +858,22 @@ type
     pMapRegion: PAnsiChar;
   end;
   {$endif}
+  PSQLFile = ^TSQLFile;
 
   // those structures are used to retrieve the Windows/Linux file handle
   TSQLPager = record            // see struct Pager in sqlite3.c
     pVfs: pointer;
     exclusiveMode, journalMode, useJournal, noSync, fullSync,
+    extraSync, // new in 3.11.0
     ckptSyncFlags, walsyncFlags, syncFlags, tempFile, noLock, readOnly, memDb,
-    eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory: Byte;
+    eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory,
+    bUseFetch, hasHeldSharedLock: Byte;
     dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
     nSubRec: cardinal;
     pInJournal: pointer;
-    fd: ^TSQLFile;   // File descriptor for database
-    jfd: ^TSQLFile;  // File descriptor for main journal
-    sjfd: ^TSQLFile; // File descriptor for sub-journal
+    fd: PSQLFile;   // File descriptor for database
+    jfd: PSQLFile;  // File descriptor for main journal
+    sjfd: PSQLFile; // File descriptor for sub-journal
   end;
   TSQLBtShared = record
     pPager: ^TSQLPager;
@@ -910,9 +948,9 @@ end;
 
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 {$ifdef MSWINDOWS}
-function WinWrite(var F: TSQLFile; buf: PByte; buflen: cardinal; off: Int64): integer;
+function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
 {$else}
-function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -931,6 +969,7 @@ function unixWrite(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integ
 var n, i: integer;
     EncryptTable: PByteArray;
     offset: Int64Rec absolute off;
+    F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
 label err;
@@ -953,7 +992,7 @@ begin
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
+  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -999,9 +1038,9 @@ const
   SQLITE_IOERR_SHORT_READ = $020A;
 
 {$ifdef MSWINDOWS}
-function WinRead(var F: TSQLFile; buf: PByte; buflen: Cardinal; off: Int64): integer;
+function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer;
 {$else}
-function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): integer;
+function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
@@ -1018,6 +1057,7 @@ function unixRead(var F: TSQLFile; buf: PByte; buflen: cint; off: Int64): intege
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
 var offset: Int64Rec absolute off;
+    F: PSQLFile absolute FP;
     nCopy: cardinal;
     i: integer;
 begin
@@ -1039,7 +1079,7 @@ begin
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
   offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
-  if FileSeek64(F.h,Int64(offset),soFromBeginning)=-1 then begin
+  if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
       F.lastErrno := result;
@@ -1186,7 +1226,12 @@ function sqlite3_profile(DB: TSQLite3DB; Callback: TSQLProfileCallback;
 
 { TSQLite3LibraryStatic }
 
+const
+  // error message if linked sqlite3.obj does not match this
+  EXPECTED_SQLITE3_VERSION = '3.11.0';
+  
 constructor TSQLite3LibraryStatic.Create;
+var error: RawUTF8;
 begin
   initialize           := @sqlite3_initialize;
   shutdown             := @sqlite3_shutdown;
@@ -1287,7 +1332,19 @@ begin
   fUseInternalMM := true; // Delphi .obj are using FastMM4
   {$endif}
   sqlite3_initialize;
-  inherited Create; // set fVersionNumber
+  inherited Create; // set fVersionNumber/fVersionText
+  if fVersionText=EXPECTED_SQLITE3_VERSION then
+    exit;
+  FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
+    'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
+    'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
+    'from http://synopse.info/files/sqlite3obj.7z',
+    [ExeVersion.ProgramName,fVersionText],error);
+  LogToTextFile(error); // annoyning enough on all platforms
+  // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization
+  {$ifdef MSWINDOWS} // PITA popup 
+  MessageBoxA(0,pointer(error),' WARNING: deprecated SQLite3 engine',MB_OK or MB_ICONWARNING);
+  {$endif}
 end;
 
 destructor TSQLite3LibraryStatic.Destroy;

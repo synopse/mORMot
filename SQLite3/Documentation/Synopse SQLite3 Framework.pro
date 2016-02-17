@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2015 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2016 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -137,7 +137,7 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
 This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi 10 Seattle}.
-On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64 bit compiler included in latest {\i Delphi} XE2 and up).
+On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64-bit compiler included in latest {\i Delphi} XE2 and up).
 For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
 \page
@@ -1631,7 +1631,7 @@ You may also trans-type your {\f1\fs20 variant} instance into a {\f1\fs20 TDocVa
 !   for i := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[i],'=',Values[i]);    // direct access to the internal storage arrays
 By definition, trans-typing via a {\f1\fs20 TDocVariantData record} is slightly faster than using late-binding.
-But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 DocVariantType.IsOfType(aVariant)} or the {\f1\fs20 DocVariantData(aVariant)^} or {\f1\fs20 _Safe(aVariant)^} functions, which both will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
+But you must ensure that the {\f1\fs20 variant} instance is really a {\f1\fs20 TDocVariant} kind of data before transtyping e.g. by calling {\f1\fs20 _Safe(aVariant)^} function (or {\f1\fs20 DocVariantType.IsOfType(aVariant)} or {\f1\fs20 DocVariantData(aVariant)^}), which will work even for members returned as {\f1\fs20 varByRef} via late binding (e.g. {\f1\fs20 V2.doc}):
 ! with _Safe(V1)^ do                        // note ^ to de-reference into TDocVariantData
 !   for ndx := 0 to Count-1 do              // direct access to the Count: integer field
 !     writeln(Names[ndx],'=',Values[ndx]);  // direct access to the internal storage arrays
@@ -1718,7 +1718,7 @@ When using @*late-binding@, the object properties or array items are retrieved a
 !  assert(V='["root",{"name":"Jim"},3.1415]');
 !  V.Delete(1);                    // delete an item in the main array
 !  assert(V='["root",3.1415]');
-Of course, trans-typing into a {\f1\fs20 TDocVariantData record} is possible, and will be slightly faster than using late-binding. As usual, using {\f1\fs20 DocVariantData(aVariant)^} function is safer, especially when working on {\f1\fs20 varByRef} members returned via late-binding.
+Of course, trans-typing into a {\f1\fs20 TDocVariantData record} is possible, and will be slightly faster than using late-binding. As usual, using {\f1\fs20 _Safe(aVariant)^} function is safer, especially when working on {\f1\fs20 varByRef} members returned via late-binding.
 As with an {\i object} document, you can also allocate directly the {\f1\fs20 TDocVariantData} instance on stack, if you do not need any {\f1\fs20 variant}-oriented access to the array:
 !var Doc: TDocVariantData;
 ! ...
@@ -1875,6 +1875,259 @@ Similarly, you may use {\f1\fs20 TSynTimeZone.UtcToLocal} or {\f1\fs20 TSynTimeZ
 You would have to create the needed {\f1\fs20 .tz} compressed file under a Windows machine, then provide this file together with any {\i Linux} server executable, in its very same folder. On a @*Cloud@-like system, you may store this information in a centralized server, e.g. via a dedicated service - see @63@ - generated from a single reference {\i Windows} system via {\f1\fs20 TSynTimeZone.SaveToBuffer}, and later on use {\f1\fs20 TSynTimeZone.LoadFromBuffer} to decode it from all your cloud nodes. The main benefit is that the time information would stay consistent whatever system it runs on, as you may expect.
 Your User Interface could retrieve the IDs and ready to be displayed text from {\f1\fs20 TSynTimeZone.Ids} and {\f1\fs20 TSynTimeZone.Displays} properties, as plain {\f1\fs20 TStrings} instance, which index would follow the {\f1\fs20 TSynTimeZone.Zone[]} internal information.
 As a nice side effect, the {\f1\fs20 TSynTimeZone} binary internal storage has been found out to be very efficient, and much faster than a manual reading of the {\i Windows} registry. Complex local time calculation could be done on the server side, with no fear of breaking down your processing performances.
+:184  Safe locks for multi-thread applications
+:   Protect your resources
+Once your application is @*multi-thread@ed, concurrent data access should be protected. Otherwise, a "@*race condition@" issue may appear: for instance, if two threads modify a variable at the same time (e.g. decrease a counter), values may become incoherent and unsafe to use. The most known symptom is the "@*deadlock@", by which the whole application appears to be blocked and unresponsive. On a server system, which is expected to run 24/7 with no maintenance, such an issue is to be avoided.
+In Delphi, protection of a resource (which may be an object, or any variable) is usually done via {\i @**Critical Section@s}. A {\i critical section} is an object used to make sure, that some part of the code is executed only by one thread at a time. A {\i critical section} needs to be created/initialized before it can be used and be released when it is not needed anymore. Then, some code is protected using {\i Enter/Leave} methods, which would {\i lock} its execution: in practice, only a single thread would own the {\i critical section}, so only a single thread would be able to execute this code section, and other threads would wait until the lock is released. For best performance, the protected sections should be as small as possible - otherwise the benefit of using threads may be voided, since any other thread would wait for the thread owning the {\i critical section} to release the lock.
+:   Fixing TRTLCriticalSection
+In practice, you may use a {\f1\fs20 TCriticalSection} class, or the lower-level {\f1\fs20 TRTLCriticalSection} record, which is perhaps to be preferred, since it would use less memory, and could easily be included as a (protected) field to any {\f1\fs20 class} definition.
+Let's say we want to protect any access to the variables a and b. Here's how to do it with the critical sections approach:
+!var CS: TRTLCriticalSection;
+!    a, b: integer;
+!// set before the threads start
+!InitializeCriticalSection(CS);
+!// in each TThread.Execute:
+!EnterCriticalSection(CS);
+!try // protect the lock via a try ... finally block
+!  // from now on, you can safely make changes to the variables
+!  inc(a);
+!  inc(b);
+!finally
+!  // end of safe block
+!  LeaveCriticalSection(CS);
+!end;
+!// when the threads stop
+!DeleteCriticalSection(CS);
+In newest versions of Delphi, you may use a {\f1\fs20 @*TMonitor@} class, which would let the lock be owned by any Delphi {\f1\fs20 TObject}. Before XE5, there was some performance issue, and even now, this Java-inspired feature may not be the best approach, since it is tied to a single object, and is not compatible with older versions of Delphi (or FPC).
+Eric Grange reported some years ago - see @https://www.delphitools.info/2011/11/30/fixing-tcriticalsection - that {\f1\fs20 TRTLCriticalSection} (along with {\f1\fs20 TMonitor}) suffers from a severe design flaw in which entering/leaving different {\i critical sections} can end up serializing your threads, and the whole can even end up performing worse than if your threads had been serialized. This is because it's a small, dynamically allocated object, so several {\f1\fs20 TRTLCriticalSection} memory can end up in the same CPU cache line, and when that happens, you'll have cache conflicts aplenty between the cores running the threads.
+The fix proposed by Eric is dead simple:
+!type
+!   TFixedCriticalSection = class(TCriticalSection)
+!   private
+!     FDummy: array [0..95] of Byte;
+!   end;
+:   Introducing TSynLocker
+Since we wanted to use a {\f1\fs20 TRTLCriticalSection} record instead of a {\f1\fs20 TCriticalSection} class instance, we defined a {\f1\fs20 @**TSynLocker@} record in {\f1\fs20 SynCommons.pas}:
+!  TSynLocker = record
+!  private
+!    fSection: TRTLCriticalSection;
+!  public
+!    Padding: array[0..6] of TVarData;
+!    procedure Init;
+!    procedure Done;
+!    procedure Lock;
+!    procedure UnLock;
+!  end;
+As you can see, the {\f1\fs20 Padding[]} array would ensure that the CPU cache-line issue won't affect our object.
+{\f1\fs20 TSynLocker} use is close to {\f1\fs20 TRTLCriticalSection}, with some method-oriented behavior:
+!var safe: TSynLocker;
+!    a, b: integer;
+!// set before the threads start
+!safe.Init;
+!// in each TThread.Execute:
+!safe.Lock
+!try // protect the lock via a try ... finally block
+!  // from now on, you can safely make changes to the variables
+!  inc(a);
+!  inc(b);
+!finally
+!  // end of safe block
+!  safe.Unlock;
+!end;
+!// when the threads stop
+!safe.Done;
+If your purpose is to protect a method execution, you may use the {\f1\fs20 TSynLocker.ProtectMethod} function or explicit {\f1\fs20 Lock/Unlock}, as such:
+!type
+!  TMyClass = class
+!  protected
+!    fSafe: TSynLocker;
+!    fField: integer;
+!  public
+!    constructor Create;
+!    destructor Destroy; override;
+!    procedure UseLockUnlock;
+!    procedure UseProtectMethod;
+!  end;
+!
+!{ TMyClass }
+!
+!constructor TMyClass.Create;
+!begin
+!!  fSafe.Init; // we need to initialize the lock
+!end;
+!
+!destructor TMyClass.Destroy;
+!begin
+!!  fSafe.Done; // finalize the lock
+!  inherited;
+!end;
+!
+!procedure TMyClass.UseLockUnlock;
+!begin
+!!  fSafe.Lock;
+!  try
+!    // now we can safely access any protected field from multiple threads
+!    inc(fField);
+!  finally
+!!    fSafe.UnLock;
+!  end;
+!end;
+!
+!procedure TMyClass.UseProtectMethod;
+!begin
+!!  fSafe.ProtectMethod; // calls fSafe.Lock and return IUnknown local instance
+!  // now we can safely access any protected field from multiple threads
+!  inc(fField);
+!  // here fSafe.UnLock will be called when IUnknown is released
+!end;
+:   Inheriting from T*Locked
+For your own classes definition, you may inherit from some classes providing a {\f1\fs20 TSynLocker} instance, as defined in {\f1\fs20 SynCommons.pas}:
+!  TSynPersistentLocked = class(TSynPersistent)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TInterfacedObjectLocked = class(TInterfacedObjectWithCustomCreate)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TObjectListLocked = class(TObjectList)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+!  TRawUTF8ListHashedLocked = class(TRawUTF8ListHashed)
+!  ...
+!    property Safe: TSynLocker read fSafe;
+!  end;
+All those classes will initialize and finalize their owned {\f1\fs20 Safe} instance, in their {\f1\fs20 constructor/destructor}.
+So, we may have written our class as such:
+!type
+!  TMyClass = class(TSynPersistentLocked)
+!  protected
+!    fField: integer;
+!  public
+!    procedure UseLockUnlock;
+!    procedure UseProtectMethod;
+!  end;
+!
+!{ TMyClass }
+!
+!procedure TMyClass.UseLockUnlock;
+!begin
+!  fSafe.Lock;
+!  try
+!    // now we can safely access any protected field from multiple threads
+!    inc(fField);
+!  finally
+!    fSafe.UnLock;
+!  end;
+!end;
+!
+!procedure TMyClass.UseProtectMethod;
+!begin
+!  fSafe.ProtectMethod; // calls fSafe.Lock and return IUnknown local instance
+!  // now we can safely access any protected field from multiple threads
+!  inc(fField);
+!  // here fSafe.UnLock will be called when IUnknown is released
+!end;
+As you can see, the {\f1\fs20 Safe: TSynLocker} instance would be defined and handled at {\f1\fs20 TSynPersistentLocked} parent level.
+:   Injecting TAutoLocker instances
+Inheriting from a {\f1\fs20 TSynPersistentLocked} class (or one of its sibbling) only gives you access to a single {\f1\fs20 TSynLocker} per instance. If your class inherits from {\f1\fs20 TSynAutoCreateFields}, you may create one or several {\f1\fs20 TAutoLocker published} properties, which would be auto-created with the instance:
+!type
+!  TMyClass = class(TSynAutoCreateFields)
+!  protected
+!    fLock: TAutoLocker;
+!    fField: integer;
+!  public
+!    function FieldValue: integer;
+!  published
+!    property Lock: TAutoLocker read fLock;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.FieldValue: integer;
+!begin
+!  fLock.ProtectMethod;
+!  result := fField;
+!  inc(fField);
+!end;
+!
+!var c: TMyClass;
+!begin
+!  c := TMyClass.Create;
+!  Assert(c.FieldValue=0);
+!  Assert(c.FieldValue=1);
+!  c.Free;
+!end.
+In practice, {\f1\fs20 TSynAutoCreateFields} is a very powerful way of defining @*Value objects@, i.e. objects containing nested objects or even arrays of objects. You may use its ability to create the needed {\f1\fs20 TAutoLocker} instances in an automated way. But be aware that if you serialize such an instance into JSON, its nested {\f1\fs20 TAutoLocker} properties would be serialized as void properties - which may not be the expected result.
+:   Injecting IAutoLocker instances
+If your class inherits from {\f1\fs20 @*TInjectableObject@}, you may define the following:
+!type
+!  TMyClass = class(TInjectableObject)
+!  private
+!    fLock: IAutoLocker;
+!    fField: integer;
+!  public
+!    function FieldValue: integer;
+!  published
+!    property Lock: IAutoLocker read fLock write fLock;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.FieldValue: integer;
+!begin
+!  Lock.ProtectMethod;
+!  result := fField;
+!  inc(fField);
+!end;
+!
+!var c: TMyClass;
+!begin
+!  c := TMyClass.CreateInjected([],[],[]);
+!  Assert(c.FieldValue=0);
+!  Assert(c.FieldValue=1);
+!  c.Free;
+!end;
+Here we use dependency resolution - see @161@ - to let the {\f1\fs20 TMyClass.CreateInjected} constructor scan its {\f1\fs20 published} properties, and therefore search for a provider of {\f1\fs20 IAutoLocker}. Since {\f1\fs20 IAutoLocker} is globally registered to be resolved with {\f1\fs20 TAutoLocker}, our class would  initialize its {\f1\fs20 fLock} field with a new instance. Now we could use {\f1\fs20 Lock.ProtectMethod} to use the associated {\f1\fs20 TAutoLocker}'s {\f1\fs20 TSynLocker} critical section, as usual.
+Of course, this may sounds more complicated than manual {\f1\fs20 TSynLocker} handling, but if you are writing an interface-based service - see @63@, your class may already inherit from {\f1\fs20 TInjectableObject} for its own dependency resolution, so this trick may be very convenient.
+:   Safe locked storage in TSynLocker
+When we fixed the potential CPU cache-line issue, do you remember that we added a padding binary buffer to the {\f1\fs20 TSynLocker} definition? Since we do not want to waste resource, {\f1\fs20 TSynLocker} gives easy access to its internal data, and allow to directly handle those values. Since it is stored as 7 slots of {\f1\fs20 variant} values, you could store any kind of data, including complex {\f1\fs20 @*TDocVariant@} document or array.
+Our class may use this feature, and store its integer field value in the internal slot 0:
+!type
+!  TMyClass = class(TSynPersistentLocked)
+!  public
+!    procedure UseInternalIncrement;
+!    function FieldValue: integer;
+!  end;
+!
+!{ TMyClass }
+!
+!function TMyClass.FieldValue: integer;
+!begin // value read would also be protected by the mutex
+!  result := fSafe.LockedInt64[0];
+!end;
+!
+!procedure TMyClass.UseInternalIncrement;
+!begin // this dedicated method would ensure an atomic increase
+!  fSafe.LockedInt64Increment(0,1);
+!end;
+Please note that we used the {\f1\fs20 TSynLocker.LockedInt64Increment()} method, since the following would not be safe:
+!procedure TMyClass.UseInternalIncrement;
+!begin
+!  fSafe.LockedInt64[0] := fSafe.LockedInt64[0]+1;
+!end;
+In the above line, two locks are acquired (one per {\f1\fs20 LockedInt64} property call), so another thread may modify the value in-between, and the increment may not be as accurate as expected.
+{\f1\fs20 TSynLocker} offers some dedicated properties and methods to handle this safe storage. Those expect an {\f1\fs20 Index} value, from {\f1\fs20 0..6} range:
+!    property Locked[Index: integer]: Variant read GetVariant write SetVariant;
+!    property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+!    property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
+!    property LockedUTF8[Index: integer]: RawUTF8 read GetUTF8 write SetUTF8;
+!    function LockedInt64Increment(Index: integer; const Increment: Int64): Int64;
+!    function LockedExchange(Index: integer; const Value: variant): variant;
+!    function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+You may store a {\f1\fs20 pointer} or a reference to a {\f1\fs20 TObject} instance, if necessary.
+Having such a tool-set of thread-safe methods does make sense, in the context of our framework, which offers multi-thread server abilities - see @25@.
 \page
 :3Object-Relational Mapping
 %cartoon02.png
@@ -1946,8 +2199,8 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|INTEGER|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64 bit under {\i Win64}
-|{\f1\fs20 @*TID@}|INTEGER|64 bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
+|{\f1\fs20 @*TSQLRecord@}|INTEGER|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64-bit under {\i Win64}
+|{\f1\fs20 @*TID@}|INTEGER|64-bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
 |{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|INTEGER|able to join any row on any table of the model, by storing both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} class type in a {\f1\fs20 @*RecordRef@}-like {\f1\fs20 Int64} value, with automatic reset to 0 (for {\f1\fs20 TRecordReference}) or row deletion (for {\f1\fs20 TRecordReferenceToBeDeleted}) when the pointed record is deleted
 |{\f1\fs20 @*TPersistent@}|TEXT|@*JSON@ object ({\f1\fs20 ObjectToJSON})
@@ -1967,7 +2220,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*TNullableTimeLog@}|INTEGER|{\i Nullable} @*TTimeLog@ value - see @177@
 |{\f1\fs20 @*TNullableUTF8Text@}|TEXT|{\i Nullable} Unicode text value - see @177@
 |{\f1\fs20 record}|TEXT|JSON string or object, directly handled since {\i Delphi} XE5, or as defined in code by overriding {\f1\fs20 TSQLRecord.} {\f1\fs20 InternalRegisterCustomProperties} for prior versions
-|{\f1\fs20 @*TRecordVersion@}|INTEGER|64 bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
+|{\f1\fs20 @*TRecordVersion@}|INTEGER|64-bit revision number, which will be monotonically updated each time the object is modified, to allow remote synchronization - see @147@
 |%
 \page
 :178  Property Attributes
@@ -2019,7 +2272,7 @@ In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exc
 {\i Enumeration sets} should be mapped as INTEGER, with {\f1\fs20 byte/word/integer} type, according to the number of elements in the set: for instance, {\f1\fs20 byte(aSetValue)} for up to 8 elements, {\f1\fs20 word(aSetValue)} for up to 16 elements, and {\f1\fs20 integer(aSetValue)} for up to 32 elements in the set.
 :  Floating point and Currency fields
 For standard floating-point values, the framework natively handles the {\f1\fs20 @*double@} and {\f1\fs20 @**currency@} kind of variables.
-In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64 bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
+In fact, {\f1\fs20 double} is the native type handled by most database providers - it is also native to the SSE set of opcodes of newer CPUs (as handled by {\i Delphi} XE 2 in @*64-bit@ mode). Lack of {\f1\fs20 extended} should not be problematic (if it is mandatory, a dedicated set of mathematical classes should be preferred to a database), and could be implemented with the expected precision via a TEXT field (or a BLOB mapped by a @*dynamic array@).
 The {\f1\fs20 currency} type is the standard {\i Delphi} type to be used when storing and handling monetary values, native to the x87 FPU - when it comes to money, a dedicated type is worth the cost in a "rich man's world". It will avoid any rounding problems, assuming exact 4 decimals precision. It is able to safely store numbers in the range -922337203685477.5808 .. 922337203685477.5807. Should be enough for your pocket change.
 As stated by the official {\i Delphi} documentation:
 {\i {\f1\fs20 Currency} is a fixed-point data type that minimizes rounding errors in monetary calculations. On the Win32 platform, it is stored as a scaled 64-bit integer with the four least significant digits implicitly representing decimal places. When mixed with other real types in assignments and expressions, {\f1\fs20 Currency} values are automatically divided or multiplied by 10000.}
@@ -2036,7 +2289,7 @@ The ORM will automatically perform the following optimizations for {\f1\fs20 TSQ
 In fact, the ORM won't define a {\f1\fs20 ON DELETE SET DEFAULT} foreign key via SQL: this feature won't be implemented at RDBMS level, but emulated {\i at ORM level}.
 See @70@ for more details about how to work with {\f1\fs20 @*TSQLRecord@} published properties.
 :  TID fields
-{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32 bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32 bit value).
+{\f1\fs20 @*TSQLRecord@} published properties do match a class instance pointer, so are 32-bit (at least for {\i Win32/Linux32} executables). Since the {\f1\fs20 TSQLRecord.ID} field is declared as {\f1\fs20 @*TID@ = Int64}, we may loose information if the stored {\f1\fs20 ID} is greater than 2,147,483,647 (i.e. a signed 32-bit value).
 You can define a published property as {\f1\fs20 TID} to store any value of our @*primary key@, i.e. up to 9,223,372,036,854,775,808. Note that in this case, there is no information about the joined table.
 As a consequence, the ORM will perform the following optimizations for {\f1\fs20 TID} fields:
 - An {\i index} will be created on the database, for the corresponding column;
@@ -2503,7 +2756,7 @@ then assigned it to the {\f1\fs20 MyFile} record on one of the following express
 ! MyFile.FirstOne := TSQLMyFileInfo(One.ID);
 ! MyFile.FirstOne := pointer(One.ID);
 !! MyFile.FirstOne := One.AsTSQLRecord;
-The first two statements, using a {\f1\fs20 class/pointer} type cast will work only in 32 bit (since ID is an integer). Using {\f1\fs20 TSQLRecord.@*AsTSQLRecord@} property will work on all platforms, including 64 bit, and is perhaps easier to deal with in your code.
+The first two statements, using a {\f1\fs20 class/pointer} type cast will work only in 32-bit (since ID is an integer). Using {\f1\fs20 TSQLRecord.@*AsTSQLRecord@} property will work on all platforms, including 64-bit, and is perhaps easier to deal with in your code.
 When accessing the detail objects, you should not access directly to {\f1\fs20 FirstOne} or {\f1\fs20 SecondOne} properties (there are not class instances, but integer IDs), then use instead the {\f1\fs20 TSQLRecord. Create(aClient: TSQLRest; aPublishedRecord: TSQLRecord: ForUpdate: boolean=false)} overloaded constructor, as such:
 !var One: TSQLMyFileInfo;
 !    MyFile: TSQLMyFile;
@@ -3798,15 +4051,15 @@ Numbers are expressed in rows/second (or objects/second). This benchmark was com
 Note that these tests are not about the relative speed of each database engine, but reflect the current status of the integration of several DB libraries within the {\i mORMot} database access.
 Benchmark was run on a {\i Core i7} notebook, running {\i Windows 7}, with a standard SSD, including anti-virus and background applications:
 - Linked to a shared {\i @*Oracle@} 11.2.0.1 database over 100 Mb Ethernet;
-- {\i @*MS SQL@ Express 2008 R2} running locally in 64 bit mode;
-- {\i IBM @*DB2@ Express-C} edition 10.5 running locally in 64 bit mode;
-- {\i @*PostgreSQL@} 9.2.7 running locally in 64 bit mode;
-- {\i @*MySQL@} 5.6.16 running locally in 64 bit mode;
+- {\i @*MS SQL@ Express 2008 R2} running locally in 64-bit mode;
+- {\i IBM @*DB2@ Express-C} edition 10.5 running locally in 64-bit mode;
+- {\i @*PostgreSQL@} 9.2.7 running locally in 64-bit mode;
+- {\i @*MySQL@} 5.6.16 running locally in 64-bit mode;
 - {\i @*Firebird@} embedded in revision 2.5.2;
 - {\i @*NexusDB@} 3.11 in Free Embedded Version;
-- {\i MongoDB} 2.6 in 64 bit mode.
+- {\i MongoDB} 2.6 in 64-bit mode.
 So it was a development environment, very similar to low-cost production site, not dedicated to give best performance. During the process, CPU was noticeable used only for {\i SQLite3} in-memory and {\i TObjectList} - most of the time, the bottleneck is not the CPU, but the storage or network. As a result, rates and timing may vary depending on network and server load, but you get results similar to what could be expected on customer side, with an average hardware configuration. When using high-head servers and storage, running on a tuned {\i @*Linux@} configuration, you can expect even better numbers.
-Tests were compiled with the {\i Delphi} XE4 32 bit mode target platform. Most of the tests do pass when compiled as a 64 bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
+Tests were compiled with the {\i Delphi} XE4 32-bit mode target platform. Most of the tests do pass when compiled as a 64-bit executable, with the exception of some providers (like Jet), not available on this platform. Speed results are almost the same, only slightly slower; so we won't show them here.
 You can compile the "{\f1\fs20 15 - External DB performance}" supplied sample code, and run the very same benchmark on your own configuration. Feedback is welcome!
 From our tests, the UniDAC version we were using had huge stability issues when used with DB2: the tests did not pass, and the DB2 server just hang processing the queries, whereas there was no problem with other libraries. It may have been fixed since, but you won't find any "UniDAC DB2" results in the benchmark below in the meanwhile.
 :   Insertion speed
@@ -4002,7 +4255,7 @@ In order to use an external {\f1\fs20 sqlite3.dll} library, you have to set the 
 ! FreeAndNil(sqlite3); // release any previous instance (e.g. static)
 !! sqlite3 := TSQLite3LibraryDynamic.Create;
 Of course, {\f1\fs20 FreeAndNil(sqlite3)} is not mandatory, and should be necessary only to avoid any memory leak if another {\i SQLite3} engine instance was allocated (may be the case if {\f1\fs20 SynSQLite3Static} is referred somewhere in your project's units).
-Here are some benchmarks, compiled with {\i Delphi XE3}, run in a 32 bit project, using either the static {\f1\fs20 bcc}-compiled engine, or an external {\f1\fs20 sqlite3.dll}, compiled via {\f1\fs20 MinGW} or Visual C++.
+Here are some benchmarks, compiled with {\i Delphi XE3}, run in a 32-bit project, using either the static {\f1\fs20 bcc}-compiled engine, or an external {\f1\fs20 sqlite3.dll}, compiled via {\f1\fs20 MinGW} or Visual C++.
 :   Static bcc-compiled .obj
 First of all, our version included with {\f1\fs20 SynSQLite3Static.pas} unit, is to be benchmarked.
 \line {\i Writing speed}
@@ -4084,7 +4337,7 @@ See @http://sourceforge.net/projects/wxcode/files/Components/wxSQLite3 to downlo
 |{\b SQLite3 (ext mem)}|139567|254919|516208
 |%
 Under {\i Windows}, the {\i Visual C++} compiler gives very good results. It is a bit faster than the other two, despite a somewhat less efficient virtual table process.
-As a conclusion, our {\f1\fs20 SynSQLite3Static.pas} statically linked implementation sounds like the best overall approach for Windows 32 bit: best speed for virtual tables (which is the core of our ORM), and no {\i dll hell}. No library to deploy and copy, everything is embedded in the project executable, ready to run as expected. External {\f1\fs20 sqlite3.dll} will be used for cross-platform support, and when targeting @*64 bit@ Windows applications.
+As a conclusion, our {\f1\fs20 SynSQLite3Static.pas} statically linked implementation sounds like the best overall approach for Windows 32-bit: best speed for virtual tables (which is the core of our ORM), and no {\i dll hell}. No library to deploy and copy, everything is embedded in the project executable, ready to run as expected. External {\f1\fs20 sqlite3.dll} will be used for cross-platform support, and when targeting @*64-bit@ Windows applications.
 :14  Prepared statement
 In order to speed up the time spent in the {\i SQLite3} engine (it may be useful for high-end servers), the framework is able to natively handle @*prepared@ @*SQL@ statements.
 Starting with version 1.12 of the framework, we added an internal SQL statement @*cache@ in the database access, available for all SQL request. Previously, only the one-record SQL {\f1\fs20 SELECT * FROM ... WHERE RowID=...} was prepared (used e.g. for the {\f1\fs20 @*TSQLRest@. Retrieve} method).
@@ -4231,20 +4484,34 @@ For instance, in sample "{\i 30 - MVC Server}", we define those two tables:
 !
 !  TSQLArticleSearch = class(TSQLRecordFTS4Porter)
 !  private
-!    fText: RawUTF8;
+!    fContent: RawUTF8;
+!    fTitle: RawUTF8;
+!    fAbstract: RawUTF8;
 !  published
-!    property Text: RawUTF8 read fText write fText;
+!    property Title: RawUTF8 read fTitle write fTitle;
+!    property Abstract: RawUTF8 read fAbstract write fAbstract;
+!    property Content: RawUTF8 read fContent write fContent;
 !  end;
-And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an expression to compute the indexed text from the concatenation of the {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
+And we initialized the database model to let all data be stored only in {\f1\fs20 TSQLArticle}, not in {\f1\fs20 TSQLArticleSearch}, using an "external content" FTS4 table to index the text from the selected {\f1\fs20 Title}, {\f1\fs20 Abstract} and {\f1\fs20 Content} fields of {\f1\fs20 TSQLArticle}:
 !function CreateModel: TSQLModel;
 !begin
 !  result := TSQLModel.Create([TSQLBlogInfo,TSQLAuthor,
 !    TSQLTag,TSQLArticle,TSQLComment,TSQLArticleSearch],'blog');
-!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-!!    TSQLArticle,['title','abstract','content']);
+!!  result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle);
 !  ...
 The {\f1\fs20 TSQLModelRecordProperties.FTS4WithoutContent()} will in fact create the needed {\i SQLite3} triggers, to automatically populate the {\f1\fs20 ArticleSearch} Full Text indexes when the main {\f1\fs20 Article} row changes.
 Since this FTS4 feature is specific to {\i SQlite3}, and triggers do not work on virtual tables (by now), this method won't do anything if the {\f1\fs20 TSQLArticleSearch} or {\f1\fs20 TSQLArticle} are on an external database - see @27@. Both need to be stored in the main {\i SQLite3} DB.
+In the {\i 30 - MVC Server} sample, the search would be performed as such:
+!  if scop^.GetAsRawUTF8('match',match) and fHasFTS then begin
+!    if scop^.GetAsDouble('lastrank',rank) then
+!      whereClause := 'and rank<? ';
+!!    whereClause := 'join (select docid,rank(matchinfo(ArticleSearch),1.0,0.7,0.5) as rank '+
+!!      'from ArticleSearch where ArticleSearch match ? '+whereClause+
+!!      'order by rank desc limit 100) as r on (r.docid=Article.id)';
+!    articles := RestModel.RetrieveDocVariantArray(
+!      TSQLArticle,'',whereClause,[match,rank],
+!      'id,title,tags,author,authorname,createdat,abstract,contenthtml,rank');
+In the above query expression, the {\f1\fs20 rank()} function is used over the detailed FTS4 search statistics returned by {\f1\fs20 matchinfo()}, using a 1.0 weight for any match in the {\f1\fs20 Title} column, 0.7 for the {\f1\fs20 Abstract} column, and 0.5 for {\f1\fs20 Content}. The matching articles content is then returned in an {\f1\fs20 articles:} {\f1\fs20 TDocVariant} array, ready to be rendered on the web page.
 :  Column collations
 In any database, there is a need to define how column data is to be compared. It is needed for proper search and ordering of the data. This is the purpose of so-called {\i @**collation@s}.
 By default, when {\i SQLite} compares two strings, it uses a collating sequence or collating function (two words for the same thing) to determine which string is greater or if the two strings are equal. {\i SQLite} has three built-in collating functions: BINARY, NOCASE, and RTRIM:
@@ -4886,7 +5153,7 @@ The {\f1\fs20 @**SynDB@.pas} units have the following features:
 - Unicode, even with pre-Unicode version of {\i Delphi} (like {\i Delphi} 7 or 2007), since it uses internally @*UTF-8@ encoding;
 - Handle NULL or BLOB content for parameters and results, including stored procedures;
 - Avoid most memory copy or unnecessary allocation: we tried to access the data directly from the retrieved data buffer, just as given from {\i OleDB / ODBC} or the low-level database client (e.g. OCI for Oracle, or the {\i SQLite3} engine);
-- Designed to achieve the best possible performance on 32 bit or @*64 bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
+- Designed to achieve the best possible performance on 32-bit or @*64-bit@ Windows: most time is spent in the database provider (OleDB, ODBC, OCI, {\i SQLite3}) - the code layer added to the database client is very thin and optimized;
 - Could be safely used in a multi-threaded application/server (with dedicated thread-safe methods, usable even if the database client is not officially multi-thread);
 - Allow parameter bindings of @*prepared@ requests, with fast access to any parameter or column name (thanks to {\f1\fs20 @*TDynArrayHashed@});
 - Column values accessible with most {\i Delphi} types, including {\f1\fs20 Variant} or generic {\f1\fs20 string / @*WideString@};
@@ -4907,8 +5174,8 @@ They are defined as such in {\f1\fs20 @*SynDB@.pas}:
 |%25%65
 |\b {\f1\fs20 TSQLDBFieldType}|Content\b0
 |{\f1\fs20 ftNull}|Maps the SQL {\f1\fs20 NULL} value
-|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64 bit resolution
-|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64 bit ({\f1\fs20 @*double@}) resolution
+|{\f1\fs20 ftInt64}|Any {\i integer} value, with 64-bit resolution
+|{\f1\fs20 ftDouble}|Any {\i floating-point} value, with 64-bit ({\f1\fs20 @*double@}) resolution
 |{\f1\fs20 ftCurrency}|Fixed {\i financial} type, with up to 4 fixed decimal digits ({\f1\fs20 @*currency@})
 |{\f1\fs20 ftDate}|Date and time, mapping the Delphi {\f1\fs20 TDateTime} type
 |{\f1\fs20 ftUTF8}|Unicode text, encoded as @*UTF-8@, with or without size limit
@@ -5065,6 +5332,39 @@ Then any sub-code is able to execute any SQL request, with optional bound parame
 In this procedure, no {\f1\fs20 TSQLDBStatement} is defined, and there is no need to add a {\f1\fs20 try ... finally Query.Free; end;} block.
 In fact, the {\f1\fs20 MyConnProps.Execute} method returns a {\f1\fs20 TSQLDBStatement} instance as a {\f1\fs20 ISQLDBRows}, which methods can be used to loop for each result row, and retrieve individual column values. In the code above, {\f1\fs20 I['FirstName']} will in fact call the {\f1\fs20 I.Column[]} default property, which will return the column value as a {\f1\fs20 variant}. You have other dedicated methods, like {\f1\fs20 ColumnUTF8} or {\f1\fs20 ColumnInt}, able to retrieve directly the expected data.
 Note that all bound parameters will appear within the SQL statement, when @*log@ged using our {\f1\fs20 TSynLog} classes - see @73@.
+:  Using properly the ISQLDBRows interface
+You may have noticed in the previous code sample, that we used a {\f1\fs20 UseProps()} sub-procedure. This was made on purpose.
+We may have written our little test as such:
+!var Props: TSQLDBConnectionProperties;
+!!    I: ISQLDBRows;
+! ...
+!  Props := TOleDBMSSQLConnectionProperties.Create('.\\SQLEXPRESS','AdventureWorks2008R2','','');
+!  try
+!!    I := Props.Execute('select * from Sales.Customer where AccountNumber like ?',['AW000001%']);
+!!    while I.Step do
+!!      assert(Copy(I['AccountNumber'],1,8)='AW000001');
+!  finally
+!    Props.Free;
+!  end;
+!end;
+In fact, you should {\b not} use this pattern. This code would lead to an unexpected {\i access violation} at runtime.
+Behind the scene, as would be detailed @46@, the compiler is generating some hidden code to finalize the {\f1\fs20 I: ISQLDBRows} local variable, as such:
+! ...
+!  finally
+!    Props.Free;
+!  end;
+!!  I := nil; // this is generated by the compiler, just before the final "end;"
+!end;
+So {\f1\fs20 ISQLDBRows} is released {\i after} the {\f1\fs20 Props} instance, and an access violation occurs.
+The correct way to write is either to use a sub-function (which would release the local {\f1\fs20 ISQLDBRows} when the function leaves), or explicitely release the interface variable:
+!    while I.Step do
+!      assert(Copy(I['AccountNumber'],1,8)='AW000001');
+!  finally
+!!    I := nil; // release local variable
+!    Props.Free;
+!  end;
+Of course, most of the time you would initialize your {\f1\fs20 TSQLDBConnectionProperties} globally for your process, then release it when it ends. Each request would take place in its own sub-method, so would be released before the main {\f1\fs20 TSQLDBConnectionProperties} instance if freed.
+Last but not least, it is worth writing that you should {\i not} create a {\f1\fs20 TSQLDBConnectionProperties} instance each time you need to access the database, since you would probably lose most of the {\f1\fs20 SynDB} features, like a per-thread connection pool, or statement cache.
 :136  Late-binding
 We implemented @*late-binding@ access of column values, via a custom variant time. It uses the internal mechanism used for {\i Ole Automation}, here to access column content as if column names where native object properties.
 The resulting {\i Delphi} code to write is just clear and obvious:
@@ -5271,7 +5571,7 @@ Here are the main features of this {\f1\fs20 SynDBOracle} unit:
 - Able to work with the {\i Oracle Instant Client} for {\i No Setup} applications (installation via file/folder copy);
 - {\i Natively Unicode} (uses internal @*UTF-8@ encoding), for all version of {\i Delphi}, with special handling of each database char-set;
 - Tried to achieve {\i best performance available} from every version of the Oracle client;
-- Designed to work under {\i any version of Windows}, either in 32 or @*64 bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32 bit for this current version);
+- Designed to work under {\i any version of Windows}, either in 32 or @*64-bit@ architecture (but the OCI library must be installed in the same version than the compiled {\i Delphi} application, i.e. only 32-bit for this current version);
 - {\i @*Late-binding@} access to column names, using a new dedicated {\f1\fs20 Variant} type (similar to Ole Automation runtime properties);
 - Connections are {\i multi-thread ready} with low memory and CPU resource overhead;
 - Can use connection strings like {\f1\fs20 '//host[:port]/[service_name]'}, avoiding use of the {\f1\fs20 TNSNAME.ORA} file;
@@ -5832,7 +6132,7 @@ The following {\i NoSQL} engines can be accessed from {\i mORMot}'s {\i Object D
 |{\i @*MongoDB@}|#1 NoSQL database engine
 |%
 We can in fact consider our {\f1\fs20 @**TSQLRestStorageInMemory@} instance, and its {\f1\fs20 TObjectList} storage, as a {\i NoSQL} very fast in-memory engine, written in pure Delphi. See @57@ for details about this feature.
-{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2014, {\i MongoDB} is in 5th place of the most popular types of database management systems, and first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
+{\i @**MongoDB@} (from "humongous") is a cross-platform document-oriented database system, and certainly the best known @*NoSQL@ database.\line According to @http://db-engines.com in December 2015, {\i MongoDB} is at 4th place of the most popular types of database management systems, and at first place for NoSQL database management systems.\line Our {\i mORMot} gives premium access to this database, featuring full @82@ abilities to the framework.
 Integration is made at two levels:
 - Direct low-level access to the {\i MongoDB} server, in the {\f1\fs20 SynMongoDB.pas} unit;
 - Close integration with our ORM (which becomes {\i defacto} an @*ODM@), in the {\f1\fs20 mORMotMongoDB.pas} unit.
@@ -5877,6 +6177,13 @@ Note that for this low-level command, we used a {\f1\fs20 TDocVariant}, and its 
 In fact, if you put your mouse over the {\f1\fs20 res} variable during debugging, you will see the following JSON content:
 µ{"system":{"currentTime":"2014-05-06T15:24:25","hostname":"Acer","cpuAddrSize":64,"memSizeMB":3934,"numCores":4,"cpuArch":"x86_64","numaEnabled":false},"os":{"type":"Windows","name":"Microsoft Windows 7","version":"6.1 SP1 (build 7601)"},"extra":{"pageSize":4096},"ok":1}
 And we simply access to the server time by writing {\f1\fs20 res.system.currentTime}.
+Here connection was made anonymously. It would work only if the {\f1\fs20 mongod} instance is running on the same computer. Safe remote connection, including user authentication, could be made via the {\f1\fs20 TMongoClient.OpenAuth()} method: it supports the latest {\f1\fs20 SCRAM-SHA-1} challenge-response mechanism (supported since {\i MongoDB} 3.x), or the deprecated {\f1\fs20 MONGODB-CR} (for older versions).
+!    ...
+!  Client := TMongoClient.Create('localhost',27017);
+!  try
+!    DB := Client.OpenAuth('mydb','mongouser','mongopwd');
+!    ...
+For safety reasons, never let a {\i MongoDB} server be remotely accessible without proper authentication, as stated by @http://docs.mongodb.org/manual/administration/security-access-control The {\f1\fs20 TMongoDatabase.CreateUser()}, {\f1\fs20 CreateUserForThisDatabase()} and {\f1\fs20 DropUser()} methods allow to easily manage credentials from your applications.
 :  Adding some documents to the collection
 We will now explain how to add documents to a given collection.
 We assume that we have a {\f1\fs20 DB: TMongoDatabase} instance available. Then we will create the documents with a {\f1\fs20 TDocVariant} instance, which will be filled via late-binding, and via a {\f1\fs20 doc.Clear} pseudo-method used to flush any previous property value:
@@ -6165,8 +6472,8 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 @*TSQLRecord@}|int32|32 bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64 bit on {\i Win64}
-|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64 bit compatible, so can handle values up to 9,223,372,036,854,775,808
+|{\f1\fs20 @*TSQLRecord@}|int32|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64-bit on {\i Win64}
+|{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64-bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
 |{\f1\fs20 @*TRecordReference@}\line {\f1\fs20 @*TRecordReferenceToBeDeleted@}|int32/int64|store both {\f1\fs20 ID} and {\f1\fs20 TSQLRecord} type in a {\f1\fs20 @*RecordRef@}-like value - with proper synchronization when the record is deleted
 |{\f1\fs20 @*TPersistent@}|object|@*BSON@ object (from {\f1\fs20 ObjectToJSON})
@@ -7015,7 +7322,7 @@ The following classes are available to implement a {\i Server} instance:
 In practice, in order to implement the business logic, you should better create a new {\f1\fs20 class}, inheriting from one of the above {\f1\fs20 TSQLRestServer} classes. Having your own inherited class does make sense, especially for implementing your own method-based services - see @49@, or {\f1\fs20 override} internal methods.
 The {\f1\fs20 @**TSQLRestServerDB@} class is the main kind of Server of the framework. It will host a {\i @*SQLite3@} engine, as its core @42@.
 If your purpose is not to have a full {\i SQLite3} engine available, you may create your server from a {\f1\fs20 @*TSQLRestServerFullMemory@} class instead of {\f1\fs20 TSQLRestServerDB}: this will implement a fast in-memory engine (using {\f1\fs20 TSQLRestStorageInMemory} instances), with basic CRUD features (for ORM), and persistence on disk as JSON or optimized binary files - this kind of server is enough to handle authentication, and host @*service@s in a stand-alone way.
-If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.
+If your services need to have access to a remote ORM server, it may use a {\f1\fs20 @*TSQLRestServerRemoteDB@} class instead: this server will use an internal {\f1\fs20 TSQLRestClient} instance to handle all ORM operations - it can be used e.g. to host some services on a stand-alone server, with all ORM and data access retrieved from another server: it will allow to easily implement a proxy architecture (for instance, as a DMZ for publishing services, but letting ORM process stay out of scope). See @75@ for some hosting scenarios.\line Another option may be to use {\f1\fs20 @*TSQLRestClientRedirect@} - see @186@ - which does something similar, but inheriting from {\f1\fs20 TSQLRestClientURI}.
 :  Storage classes
 In the {\i mORMot} units, you may also find those classes also inheriting from {\f1\fs20 @*TSQLRestStorage@}:
 \graph StorageRESTClasses RESTful storage classes
@@ -7046,15 +7353,17 @@ rankdir=LR;
 \TSQLHttpClientWinSock\TSQLHttpClientGeneric
 \TSQLHttpClientCurl\TSQLHttpClientWinGeneric
 \TSQLHttpClientGeneric\TSQLRestClientURI
+\TSQLRestClientRedirect\TSQLRestClientURI
 \TSQLRestClientURI\TSQLRestClient
 \TSQLRestClient\TSQLRest
 \
 Of course, all those {\f1\fs20 TSQLRestClient*} classes expect a {\f1\fs20 TSQLRestServer} to be available, via the corresponding transmission protocol.
 \page
-: In-process/stand-alone application
-For a @*stand-alone@ application, create a {\f1\fs20 @*TSQLRestClientDB@}. This particular class will initialize an internal {\f1\fs20 @*TSQLRestServerDB@} instance, and you'll have full access to the {\i @*SQLite3@} database in the same process, with no speed penalty.
+:186 In-process/stand-alone application
+For a @*stand-alone@ application, create a {\f1\fs20 @**TSQLRestClientDB@}. This particular class will initialize an internal {\f1\fs20 @*TSQLRestServerDB@} instance, and you'll have full access to the {\i @*SQLite3@} database in the same process, with no speed penalty.
 Content will still be converted to and from JSON, but there will be no delay due to the transmission of the data. Having JSON at hand will enable internal cache - see @39@ - and allow to combine this in-process direct process with other transmission protocols (like named pipes or HTTP).
-You may also directly work with a {\f1\fs20 TSQLRestServerDB} instance, but you may loose some handy User-Interface features of the {\f1\fs20 TSQLRestClientURI} class.
+Another option may be to use {\f1\fs20 @**TSQLRestClientRedirect@}, which allows redirection from any {\f1\fs20 @*TSQLRest@} class, either inheriting from {\f1\fs20 @*TSQLRestClient@} or {\f1\fs20 @*TSQLRestServer@}. Any {\f1\fs20 TSQLRestClientURI.URI} request would be passed to the redirected {\f1\fs20 TSQLRest} instance, which may be local or remote. The {\f1\fs20 TSQLRestClientRedirect.RedirectTo} method allows to enable or disable the redirection at runtime (by setting {\f1\fs20 aRedirected=nil}), or change the redirected {\f1\fs20 TSQLRest} instance on the fly, without creating a new {\f1\fs20 TSQLRestClientRedirect} instance.
+You may also directly work with a {\f1\fs20 TSQLRestServerDB} instance, but you would miss some handy features of the {\f1\fs20 TSQLRestClientURI} class, like User-Interface interaction, or advanced ORM/SOA abilities, based on {\f1\fs20 TSQLRestServer.URI} process.
 : Local access via named pipes or Windows messages
 For a @*Client-Server@ local application, that is some executable running on the same physical machine, create a {\f1\fs20 TSQLRestServerDB} instance, then use the corresponding {\f1\fs20 ExportServer, ExportServerNamedPipe, ExportServerMessage} method to instantiate either a in-process, Named-Pipe or Windows Messages server.
 The Windows Messages layer has the lowest overhead and is the fastest transport layer available between several applications on the same computer. But it has the problem of being reserved to desktop applications (since Windows Vista), so you a Windows Messages server won't be accessible when run as a background service.
@@ -7200,7 +7509,7 @@ Here are some PROs and CONs of the available solutions, under {\i Windows}:
 |%
 As stated above, there is still a potential performance issue to use the direct {\f1\fs20 TSQLHttpClientWinSock} class over a network. It has been reported on our forum, and root cause was not identified yet.
 Therefore, the {\f1\fs20 TSQLHttpClient} class maps by default to the {\f1\fs20 TSQLHttpClientWinHTTP} class. This is the recommended usage from a {\i Delphi} client application.
-Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64 bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
+Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings with Internet Explorer, it can import the current IE settings.  The {\i WinHTTP} proxy configuration is set by either {\f1\fs20 proxycfg.exe} on Windows XP and Windows Server 2003 or earlier, or {\f1\fs20 netsh.exe} on Windows Vista and Windows Server 2008 or later; for instance, you can run "{\f1\fs20 proxycfg -u}" or "{\f1\fs20 netsh winhttp import proxy source=ie}" to use the current user's proxy settings for Internet Explorer. Under @*64-bit@ Vista/Seven, to configure applications using the 32 bit {\i WinHttp} settings, call {\f1\fs20 netsh} or {\f1\fs20 proxycfg} bits from {\f1\fs20 %SystemRoot%\\SysWOW64} folder explicitly.
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a lock. See @25@.
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
@@ -7277,20 +7586,20 @@ Therefore, for truly safe communication between {\i mORMot} nodes, you may consi
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
 As a result, on the Server side, our framework was designed to be @**thread-safe@.
 On typical production use, the {\i mORMot} HTTP server - see @6@ - will run on its own optimized thread pool, then call the {\f1\fs20 TSQLRestServer.URI} method. This method is therefore expected to be thread-safe, e.g. from the {\f1\fs20 TSQLHttpServer. Request} method. Thanks to the @*REST@ful approach of our framework, this method is the only one which is expected to be thread-safe, since it is the single entry point of the whole server. This @*KISS@ design ensure better test coverage.
-On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex (critical section), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
+On the Client side, all {\f1\fs20 TSQLRestClientURI} classes are protected by a global mutex ({\i @**Critical Section@s}), so are thread-safe. As a result, a single {\f1\fs20 TSQLHttpClient} instance can be shared among several threads, even if you may also use one client per thread, as is done with sample 21 - see below, for better responsiveness.
 :  Thread safe design
 We will now focus on the server side, which is the main strategic point (and potential bottleneck or point of failure) of any {\i Client-Server} architecture.
 In order to achieve this thread-safety without sacrificing performance, the following rules were applied in {\f1\fs20 TSQLRestServer.URI}:
 - Most of this method's logic is to process the URI and parameters of the incoming request (in {\f1\fs20 TSQLRestServerURIContext.URIDecode*} methods), so is thread-safe by design (e.g. {\f1\fs20 Model} and {\f1\fs20 RecordProps} access do not change during process);
 - At @*REST@ful / @*CRUD@ level, {\f1\fs20 Add/Update/Delete/TransactionBegin/Commit/Rollback} methods are locked by default (with a 2 seconds timeout), and {\f1\fs20 Retrieve*} methods are not;
-- {\f1\fs20 TSQLRestStorage} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestStorageInMemory@} uses a per-Table Critical Section;
+- {\f1\fs20 TSQLRestStorage} main methods ({\f1\fs20 EngineList, EngineRetrieve, EngineAdd, EngineUpdate, EngineDelete, EngineRetrieveBlob, EngineUpdateBlob}) are thread-safe: e.g. {\f1\fs20 @*TSQLRestStorageInMemory@} uses a per-Table {\i Critical Section};
 - {\f1\fs20 TSQLRestServerCallBack} method-based services - i.e. @*published method@s of the inherited {\f1\fs20 TSQLRestServer} class as stated @49@ - must be implemented to be thread-safe by default;
 - {\f1\fs20 Interface}-based services - see @63@ - have several execution modes, including thread safe automated options (see {\f1\fs20 TServiceMethodOption}) or manual thread safety expectation, for better scaling - see @72@;
 - A protected {\f1\fs20 fSessionCriticalSection} is used to protect shared {\f1\fs20 fSession[]} access between clients;
 - The {\i @*SQLite3@} engine access is protected at SQL/JSON @*cache@ level, via {\f1\fs20 DB.LockJSON()} calls in {\f1\fs20 @*TSQLRestServerDB@} methods;
 - Remote external tables - see @27@ - use thread-safe connections and statements when accessing the databases via SQL;
 - Access to {\f1\fs20 fStats} was not made thread-safe, since this data is indicative only: a {\i mutex} was not used to protect this resource.
-We tried to make the internal Critical Sections as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
+We tried to make the internal {\i Critical Sections} as short as possible, or relative to a table only (e.g. for {\f1\fs20 TSQLRestStorageInMemory}).
 At {\i SQLite3} engine level, there is some kind of "giant lock", so all {\f1\fs20 TSQLDatabase} requests process will be queued. This induces only a slight performance penalty - see @59@ - since the internal SQL/JSON cache implementation needs such a global lock, and since most of the {\i SQLite3} resource use will consist in disk access, which gains to be queued. It also allows to use the {\i SQLite3} engine in {\f1\fs20 lmExclusive} locking mode if needed - see @60@ - with both benefits of high performance and multi-thread friendliness.
 From the Client-side, the REST core of the framework is expected to be Client-safe by design, therefore perfectly thread-safe: it is one benefit of the @*stateless@ architecture.
 :  Advanced threading settings
@@ -7314,7 +7623,7 @@ The above commands will create one thread for all read operations ({\f1\fs20 exe
 ! aServer.AcquireExecutionMode[execORMGet] := amBackgroundORMSharedThread;
 ! aServer.AcquireExecutionMode[execORMWrite] := amBackgroundORMSharedThread;
 For instance, this sounds mandatory when using @*Jet/MSAccess@ as external database, since its implementation seems not thread-safe: if you write in one thread, then read immedially in another thread, the Jet engine is not able to find the just written data from the 2nd thread. This is clearly a bug of the Jet engine - but setting {\f1\fs20 amBackgroundORMSharedThread} option to circumvent the issue.
-During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 ServiceContext threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
+During any @*ORM@ or @*SOA@ process, you can access the current execution context from the {\f1\fs20 @*ServiceContext@ threadvar} variable, as stated @107@. For instance, you can retrieve the current logged user, or its session ID.
 In practice, {\f1\fs20 execSOAByMethod} may benefit of a per-method locking, {\f1\fs20 execSOAByInterface} of using its own execution options - see @72@, and {\f1\fs20 execORMGet} to be let unlocked to allow concurrent reads of all connected clients.
 :  Proven behavior
 When we are talking about thread-safety, nothing compares to a dedicated stress test program. An average human brain (like ours) is not good enough to ensure proper design of such a complex process. So we have to prove the abilities of our little {\i mORMot}.
@@ -8241,7 +8550,7 @@ will let our server method return the following JSON object:
 $ {"Result":7.32}
 That is, a perfectly AJAX-friendly request.
 Note that all parameters are expected to be plain case-insensitive {\f1\fs20 'A'..'Z','0'..'9'} characters.
-An {\i important point} is to remember that the implementation of the callback method {\b must be thread-safe} - as stated by @25@. In fact, the {\f1\fs20 TSQLRestServer.URI} method expects such callbacks to handle the thread-safety on their side. It's perhaps some more work to handle a critical section in the implementation, but, in practice, it's the best way to achieve performance and scalability: the resource locking can be made at the tiniest code level.
+An {\i important point} is to remember that the implementation of the callback method {\b must be thread-safe} - as stated by @25@ and @184@. In fact, the {\f1\fs20 TSQLRestServer.URI} method expects such callbacks to handle the thread-safety on their side. It's perhaps some more work to handle a {\i critical section} in the implementation, but, in practice, it's the best way to achieve performance and scalability: the resource locking can be made at the tiniest code level.
 \page
 : Defining the client
 The client-side is implemented by calling some dedicated methods, and providing the service name ({\f1\fs20 'sum'}) and its associated parameters:
@@ -8401,7 +8710,7 @@ In {\i Delphi}, we can declare an interface like so:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 It just sounds like a class definition, but, as you can see:
@@ -9364,7 +9673,7 @@ The service contract is to be defined as a plain {\i Delphi} {\f1\fs20 interface
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 This {\f1\fs20 ICalculator.Add} method will define one "{\i Add}" operation, under the "{\i ICalculator}" service (which will be named internally {\f1\fs20 'Calculator'} by convention). This operation will expect two numbers as input, and then return the sum of those numbers.
@@ -9409,9 +9718,9 @@ You can therefore define complex {\f1\fs20 interface} types, as such:
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
-!    /// multiply two signed 64 bit integers
+!    /// multiply two signed 64-bit integers
 !    function Multiply(n1,n2: Int64): Int64;
 !    /// substract two floating-point values
 !    function Subtract(n1,n2: double): double;
@@ -9653,17 +9962,23 @@ This interface is registered on the server side as such:
 ! Server.ServiceDefine(TServiceComplexNumber,[IComplexNumber],sicClientDriven);
 Using the {\f1\fs20 sicClientDriven} mode, also the client side will be able to have its own life time handled as expected. That is, both {\f1\fs20 fReal} and {\f1\fs20 fImaginary} field will remain allocated on the server side as long as needed. A time-out driven @*garbage collector@ will delete any un-closed pending session, therefore release resources allocted in {\f1\fs20 sicClientDriven} mode, even in case of a broken connection.
 :107  Accessing low-level execution context
-When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 ServiceContext} can be accessed to retrieve the currently running context on the server side.
+:   Retrieve information from the global ServiceContext
+When any {\f1\fs20 interface}-based service is executed, a global {\f1\fs20 threadvar} named {\f1\fs20 @**ServiceContext@} can be accessed to retrieve the currently running context on the server side.
 You will have access to the following information, which could be useful for {\f1\fs20 sicPerSession, sicPerUser} and {\f1\fs20 sicPerGroup} instance life time modes:
 !  TServiceRunningContext = record
 !    /// the currently running service factory
 !    // - it can be used within server-side implementation to retrieve the
 !    // associated TSQLRestServer instance
+!    // - note that TServiceFactoryServer.Get() won't override this value, when
+!    // called within another service (i.e. if Factory is not nil)
 !    Factory: TServiceFactoryServer;
 !    /// the currently runnning context which launched the method
-!    // - make available e.g. current session or authentication parameters
-!    // (including e.g. user details via Factory.RestServer.SessionGetUser)
 !    // - low-level RESTful context is also available in its Call member
+!    // - Request.Server is the safe access point to the underlying TSQLRestServer,
+!    // unless the service is implemented via TInjectableObjectRest, so the
+!    // TInjectableObjectRest.Server property is preferred
+!    // - make available e.g. current session or authentication parameters
+!    // (including e.g. user details via Request.Server.SessionGetUser)
 !    Request: TSQLRestServerURIContext;
 !    /// the thread which launched the request
 !    // - is set by TSQLRestServer.BeginCurrentThread from multi-thread server
@@ -9674,6 +9989,16 @@ When used, a local copy or a {\f1\fs20 PServiceRunningContext} pointer should be
 If your code is compiled within some @*packages@, {\f1\fs20 threadvar} read won't work, due to a {\i Delphi} compiler/RTL restriction (bug?). In such case, you have to call the following {\f1\fs20 function} instead of directly access the {\f1\fs20 threadvar}:
 ! function CurrentServiceContext: TServiceRunningContext;
 Note that this global {\f1\fs20 threadvar} is reset to 0 outside an {\f1\fs20 interface}-based service method call. It would therefore be useless to read it from a method-based service, for instance.
+:185   Implement your service from TInjectableObjectRest
+An issue with the {\f1\fs20 @*ServiceContext@} threadvar is that the execution context won't be filled when a SOA method is executed outside a client/server context, e.g. if the {\f1\fs20 TSQLRestServer} instance did resolve itself its dependencies using {\f1\fs20 Services.Resolve()}.
+A safer (and slightly faster) alternative is to implement your service by inheriting from the {\f1\fs20 @**TInjectableObjectRest@} class.\line This {\f1\fs20 class} has its own {\f1\fs20 Resolve()} overloaded methods (inherited from {\f1\fs20 TInjectableObject}), but also two additional properties:
+!  TInjectableObjectRest = class(TInjectableObject)
+!  ...
+!  public
+!    property Factory: TServiceFactoryServer read fFactory;
+!    property Server: TSQLRestServer read fServer;
+!  end;
+Those properties would be injected by {\f1\fs20 TServiceFactoryServer.CreateInstance}, i.e. when the service implementation object would be instantiated on the server side. They would give direct and safe access to the underlying REST server, e.g. all its @*ORM@ methods.
 :  Using services on the Server side
 Once the service is registered on the server side, it is very easy to use it in your code.
 In a complex @17@, it is not a good practice to have services calling each other. Code decoupling is a key to maintainability here. But in some cases, you'll have to consume services on the server side, especially if your software architecture has several layers (like in a @54@): your application services could be decoupled, but the {\i @*Domain-Driven@} services (those implementing the business model) could be on another Client-Server level, with a dedicated protocol, and could have nested calls.
@@ -9683,13 +10008,13 @@ You have several methods to retrieve a {\f1\fs20 TServiceFactory} instance, eith
 That is, you may code:
 !var I: ICalculator;
 !begin
-!  if Server.Services['Calculator'].Get(I)) then
+!  if ServiceContext.Request.Server.Services['Calculator'].Get(I)) then
 !    result := I.Add(10,20);
 !end;
 or, for a more complex service:
 !var CN: IComplexNumber;
 !begin
-!  if not Server.Services.Resolve(IComplexNumber,CN) then
+!  if not ServiceContext.Request.Server.Services.Resolve(IComplexNumber,CN) then
 !    exit; // IComplexNumber interface not found
 !  CN.Real := 0.01;
 !  CN.Imaginary := 3.1415;
@@ -9704,7 +10029,12 @@ For newer generic-aware versions of {\i Delphi} (i.e. {\i Delphi} 2010 and up, s
 !  if I<>nil then
 !    result := I.Add(10,20);
 !end;
-You can of course cache your {\f1\fs20 TServiceFactory} instance within a local field, if you wish.
+You can of course cache/store your {\f1\fs20 TServiceFactory} or {\f1\fs20 TSQLRest} instances within a local field, if you wish. Using {\f1\fs20 ServiceContext.Request.Server} is verbose and error-prone.\line But you may consider instead to @185@: the {\f1\fs20 @*TInjectableObjectRest@} class has already its buil-in {\f1\fs20 Resolve()} overloaded methods, and direct access to the underlying {\f1\fs20 Server: TSQLRestServer} instance. So you would be able to write directly both SOA and ORM code:
+!var I: ICalculator;
+!begin
+!  if Resolve(ICalculator,I) then
+!    Server.Add(TSQLRecordExecution,['Add',I.Add(10,20)]);
+!end;
 If the service has been defined as {\f1\fs20 sicPerThread}, the instance you will retrieve on the server side will also be specific to the running thread - in this case, caching the instance may be source of confusion, since there will be one dedicated instance per thread.
 \page
 : Client side
@@ -10556,7 +10886,7 @@ But if you need a special process to take place during the class instance initia
 But from the @*SOA@ point of view, it could make sense to use a dedicated method with proper parameters to initialize your instance, e.g. in you are in {\f1\fs20 sicClientDriven} execution mode. See in @74@ some sample code implementing a {\f1\fs20 IRemoteSQL} service, with a dedicated {\f1\fs20 Connect()} method to be called before all other methods to initialize a {\f1\fs20 sicClientDriven} instance.
 :72  Server-side execution options (threading)
 When a service is registered on the server side, some options can be defined in order to specify its execution details, using the {\f1\fs20 TServiceFactoryServer.SetOptions()} method.
-By default, service methods are called within the thread which received them. That is, when hosted by @*multi-thread@ed server instances (e.g. {\f1\fs20 TSQLite3HttpServer} or {\f1\fs20 TSQLRestServerNamedPipeResponse}), the method context can be re-entrant - unless it has been defined with {\f1\fs20 sicSingle} or {\f1\fs20 sicPerThread} instance lifetime modes. It allows better response time and CPU use, but drawback is that the method implementation shall be thread-safe. This is the technical reason why service implementation methods have to handle multi-threading safety carefully, e.g. by using {\f1\fs20 TRTLCriticalSection} mutex on purpose.
+By default, service methods are called within the thread which received them. That is, when hosted by @*multi-thread@ed server instances (e.g. {\f1\fs20 TSQLite3HttpServer} or {\f1\fs20 TSQLRestServerNamedPipeResponse}), the method context can be re-entrant - unless it has been defined with {\f1\fs20 sicSingle} or {\f1\fs20 sicPerThread} instance lifetime modes. It allows better response time and CPU use, but drawback is that the method implementation shall be thread-safe. This is the technical reason why service implementation methods have to handle multi-threading safety carefully, e.g. by using @184@ on purpose.
 The following execution options are available:
 |%35%65
 |\b TServiceMethodOptions|Description\b0
@@ -10953,7 +11283,7 @@ One drawback of using this {\f1\fs20 TServiceFactoryServer.ResultAsXMLObject} pr
 !type
 !  ICalculator = interface(IInvokable)
 !    ['{9A60C8ED-CEB2-4E09-87D4-4A16F496E5FE}']
-!    /// add two signed 32 bit integers
+!    /// add two signed 32-bit integers
 !    function Add(n1,n2: integer): integer;
 !  end;
 !!  ICalculatorXML = interface(ICalculator)
@@ -12284,8 +12614,7 @@ Then the whole database model will be created in this function:
 !  TSQLArticle.AddFilterNotVoidText(['Title','Content']);
 !  TSQLComment.AddFilterNotVoidText(['Title','Content']);
 !  TSQLTag.AddFilterNotVoidText(['Ident']);
-!  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-!    TSQLArticle,['title','abstract','content']);
+!  result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle);
 !end;
 As you can discover:
 - We used {\f1\fs20 class} inheritance to gather properties for similar tables;
@@ -13101,7 +13430,7 @@ Here are the typical steps to be followed in order to create a new user session 
 - On success, Server will create a new in-memory session and return the session number and a private key to be used during the session (encoded as JSON result object);
 - On any further access to the Server, a {\f1\fs20 &session_signature=} parameter is added to the URL, and will be checked against the valid sessions in order to validate the request.
 {\i @**Query Authentication@} is handled at the Client side in {\f1\fs20 TSQLRestClientURI.SessionSign} method, by computing the {\f1\fs20 session_signature} parameter for a given URL, according to the {\f1\fs20 TSQLRestServerAuthentication} class used.
-In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32 bit cardinals:
+In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32-bit cardinals:
 - The @*Session@ ID (to retrieve the private key used for the signature);
 - A Client Time Stamp (in 256 ms resolution) which must be greater or equal than the previous time stamp received;
 - The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i crc32} hashing algorithm.
@@ -14711,7 +15040,7 @@ Follow these steps:
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
 - {\i Delphi} 6 up to {\i Delphi 10 Seattle} compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
-- Server side on Windows 32 bit and @**64 bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
+- Server side on Windows 32-bit and @**64-bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
 - Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
 - @69@ clients on any supported platforms;
@@ -14721,12 +15050,12 @@ If you want to compile {\i mORMot} unit into @*packages@, to avoid an obfuscated
 Note that the framework is expected to create only Windows server applications yet.\line But @86@ are available, using either {\i @*FireMonkey@} (FMX) library for User Interface generation, {\i @*FreePascal@ Compiler} (FPC) / {\i @*Lazarus@} support, or other tools more neutral, using @*JavaScript@ and @*AJAX@ via {\i @*Smart Mobile Studio@} - or both. The framework source code implementation and design tried to be as cross-platform as possible, since the beginning.
 For HTML5 and Mobile clients, our main platform is {\i Smart Mobile Studio}, which is a great combination of ease of use, a powerful {\i SmartPascal} dialect, small applications (much smaller than FMX), with potential packaging as native iOS or {\i Android} applications (via {\i @*PhoneGap@}).
 The latest versions of the {\i FreePascal Compiler} together with its great {\i Lazarus} IDE, are now very stable and easy to work with. I've tried for instance the {\i CodeTyphon} release (which is not the stable branch, but the latest version of both FPC and {\i Lazarus}) - see @http://www.pilotlogic.com - and found it to be impressive. This is amazing to build the whole set of compilers and IDE, with a lot of components, for several platforms (this is a cross-platform project), just from the sources. I like {\i Lazarus} stability and speed much more than {\i Delphi} (did you ever tried to browse and debug {\i included} {\f1\fs20 $I ...} files in the {\i Delphi} IDE? with Lazarus, it is painless), even if the compiler is slower than {\i Delphi}'s, and if the debugger is less integrated and even more unstable than {\i Delphi}'s under Windows (yes, it is possible!). At least, it works, and works pretty well. Official {\i @*Linux@} / {\i FPC} support is available for {\i mORMot} servers - thanks to Alfred! - but this platform is brand new to the framework, so less stable and not yet feature complete.
-:  32 bit sqlite3*.obj and 64 bit SQLite3 dll
+:  32-bit sqlite3*.obj and 64-bit SQLite3 dll
 In order to maintain the source code repository in a decent size, we excluded the {\f1\fs20 sqlite3*.obj} storage in it, but provide the full source code of the {\i @*SQlite3@} engine in the corresponding {\f1\fs20 sqlite3.c} file, ready to be compiled with all conditional defined as expected by {\f1\fs20 SynSQlite3Static.pas}.
 Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are available as a separated download, from @http://synopse.info/files/sqlite3obj.7z
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
-For native {\i Windows} @*64 bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
+For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
 For FPC, you can download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files would be statically linked to the executable.
 You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC - do not forget to enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in this case also.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
@@ -14860,9 +15189,9 @@ See @86@ for more information.
 Download and uncompress the framework archives, including all sub-folders, into a local directory of your computer (for instance, {\f1\fs20 D:\\Dev\\Lib}).
 |%70
 |{\b Snapshot of the latest source code repository}\line\tab @http://synopse.info/files/mORMotNightlyBuild.zip \line\tab into {\f1\fs20 D:\\Dev\\Lib\\} (including all sub-folders)
-|{\b Static 32 bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
-|{\b 64 bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
-|{\b 32 bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
+|{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
+|{\b 64-bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
+|{\b 32-bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
 |{\b for FPC only: static {\i SQLite3} .o files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
@@ -14984,11 +15313,11 @@ $ svn cleanup
 $ svn update
 - On success, you can create a launcher pointing to {\f1\fs20 development/lazarus/startlazarus}.
 If you followed the above steps, you should now have at least a Lazarus IDE v1.3 and the corresponding FPC 3.1.1 compiler. It is amazing seeing the whole compiler + IDE being compiled from the official sources, for free, and in a few minutes.
-For Ubuntu versions above 13.10, if you installed a 64 bit distribution, 32 bit executables may not be recognized by the system. In order to install the 32 bit libraries needed by {\i mORMot} 32 bit executables on {\i Linux}, please execute:
+For Ubuntu versions above 13.10, if you installed a 64-bit distribution, 32-bit executables may not be recognized by the system. In order to install the 32-bit libraries needed by {\i mORMot} 32-bit executables on {\i Linux}, please execute:
 $ sudo apt-get install lib32z1 lib32ncurses5 lib32bz2-1.0
-If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64 bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32 bit, as such:
+If you want {\f1\fs20 SynCrtSock.pas} to be able to handle {\f1\fs20 https://} on a 64-bit system - e.g. if you want to run the {\f1\fs20 TestSQL3} regression tests which download some {\f1\fs20 json} reference file over {\f1\fs20 https} - you would need also to install {\f1\fs20 @*libcurl@} (and {\f1\fs20 OpenSSL}) in 32-bit, as such:
 $ sudo apt-get install libcurl3:i386
-If it may be for any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
+If it may be for any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i FPC 3.1} compiled executable:
 $user@xubuntu:~/lib/SQLite3/fpc/i386-linux$ ldd TestSQL3
 $   linux-gate.so.1 =>  (0xb774c000)
 $   libpthread.so.0 => /lib/i386-linux-gnu/libpthread.so.0 (0xb7718000)
@@ -15013,7 +15342,7 @@ We added {\i CrossKylix} support for several reasons:
 - Resulting executables, for {\i mORMot} purpose, are faster than FPC - timing based on the regression tests.
 - If the code works with Delphi 7, it will certainly work with {\i Kylix} (since it shares the same compiler and RTL), whereas FPC is compatible, but not the same. In particular, it does not suffer from limited RTTI or other FPC limitations. So it sounds safer to be used on production than FPC, even today.
 - There is not a lot of {\f1\fs20 IFDEF}, but in {\f1\fs20 SynCommons.pas}. Then there is a {\f1\fs20 SynKylix.pas} unit for several functions. User code would be the same than Delphi and FPC.
-- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap: so we can guess/hope that this one will be closer to {\i Kylix} than FPC... as such, supporting {\i Kylix} in 2015 sounds more like a "back to the future" project...
+- There is a {\i Linux} compiler in the official {\i Embarcadero} product roadmap, but sounds like if it may be ARC-enabled, so we may have to sadly skip its support, and focus on Kylix and FPC...
 Once you have installed {\i CrossKylix}, and set up its search path to the same as Delphi - see @113@, you should be able to compile your project for {\i Linux}, directly from your {\i Delphi} IDE. Then you need an actual {\i Linux} system to test it - please check the @142@.
 A minimal console application which would compile for both {\i Delphi} and {\i CrossKylix}, running all our regression tests, may be:
 !program Test;
@@ -15029,12 +15358,12 @@ A minimal console application which would compile for both {\i Delphi} and {\i C
 !end.
 Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, you should never use the {\f1\fs20 Windows} unit in your server code, but rely on the cross-platform classes and functions as defined in {\f1\fs20 SysUtils.pas}, {\f1\fs20 Classes.pas} and {\f1\fs20 SynCommons.pas}.
 We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your {\i Linux}.
-On a 32 bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
+On a 32-bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
 $ sudo apt-get install sqlite3
-For a 64 bit system, you need to download and install manually packages for both modes:
+For a 64-bit system, you need to download and install manually packages for both modes:
 $ sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 You could try to get the latest {\f1\fs20 .deb} from @https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0 \line If you want to dowwnload and install manually a {\f1\fs20 .deb} for {\f1\fs20 x86}, please install both {\i i386} and {\i amd64} revisions with the same exact version at once, otherwise {\f1\fs20 dpkg} would complain.
-If it may be of any help, here are the static dependencies listed on a running 64 bit Ubuntu system, on a {\i CrossKylix} compiled executable:
+If it may be of any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i CrossKylix} compiled executable:
 $ user@server:~$ ldd Test
 $       linux-gate.so.1 =>  (0xf77be000)
 $       libz.so.1 => /usr/lib32/libz.so.1 (0xf779b000)
@@ -15707,7 +16036,7 @@ Here is the main computation code:
 !  result := (not result) shr 0;
 !end;
 This is a standard implementation pattern, except for three remarks:
-- We added {\f1\fs20 ... shr 0} in order to ensure that an {\f1\fs20 integer} variable will be maintained as an {\f1\fs20 UInt32} variable. Since {\i crc32} is a 32 bit hashing algorithm, we need to ensure that we'll only have positive values;
+- We added {\f1\fs20 ... shr 0} in order to ensure that an {\f1\fs20 integer} variable will be maintained as an {\f1\fs20 UInt32} variable. Since {\i crc32} is a 32-bit hashing algorithm, we need to ensure that we'll only have positive values;
 - No {\f1\fs20 byte} type is available here: so we'll explicitly call {\f1\fs20 ... and $ff} in order to truncate the {\f1\fs20 integer} value into its 8 bit content;
 - Since the {\f1\fs20 string} type is used for data manipulation, we use {\f1\fs20 ord(data[i])} to retrieve each {\f1\fs20 byte} (or {\f1\fs20 char}) of the supplied text.
 This implementation of the {\i crc32} algorithm expect a pre-computed table to be available. All {\i JavaScript} implementation of this algorithm (at least, all that I was able to found on Internet) use a fixed constant array. Since we are not afraid to write code any more in our AJAX application, and since it may help saving bandwidth and application size, we'll compute our own {\f1\fs20 crc32Tab[]} array content with the following code:
@@ -15823,13 +16152,13 @@ The {\f1\fs20 Finalize} method will compute the latest block, including the glob
 !  Buffer[Index]:= $80;
 !  for i := Index+1 to 63 do
 !    Buffer[i] := 0;
-!  // 2. Compress if more than 448 bits, (no room for 64 bit length)
+!  // 2. Compress if more than 448 bits, (no room for 64-bit length)
 !  if Index>=56 then begin
 !    Compress;
 !    for i := 0 to 59 do
 !      Buffer[i] := 0;
 !  end;
-!  // Write 64 bit Buffer length into the last bits of the last block
+!  // Write 64-bit Buffer length into the last bits of the last block
 !  // (in big endian format) and do a final compress
 !  Buffer[60] := (MLen and $ff000000)shr 24;
 !  Buffer[61] := (MLen and $ff0000)shr 16;
@@ -15890,7 +16219,7 @@ The main hash computation is performed in the {\f1\fs20 Compress} method, as suc
 A {\f1\fs20 K: TSHA256Buffer} constant table is used. Note the non standard definition of {\i DWS} for a {\f1\fs20 const array}: it will use {\f1\fs20 .. = ([...]);} instead of {\f1\fs20 .. = ();} as in classical {\i Object Pascal}.
 The hash is computed from an internal {\f1\fs20 W[]} array, which is filled with the binary representation of the supplied {\f1\fs20 Buffer[]} bytes. That is, {\f1\fs20 Buffer: array[0..63] of byte} is first un-serialized in {\f1\fs20 W: array[0..15] of cardinal}.
 Then the SHA-256 algorithm is performed in its most simple rolled version. An un-rolled version is not mandatory here, in our managed {\i JavaScript} runtime environment.
-The only non obvious part of the above code is the use of {\f1\fs20 ... shr 0} to enforce only positive 32 bit integers (aka {\f1\fs20 cardinal}) are used during the computation.
+The only non obvious part of the above code is the use of {\f1\fs20 ... shr 0} to enforce only positive 32-bit integers (aka {\f1\fs20 cardinal}) are used during the computation.
 
 To illustrate that, here is some interesting question published in our forum - see @http://synopse.info/forum/viewtopic.php?id=1011 - from a customer:
 {\i I have written a test server (using {\f1\fs20 TSQLRestServerDB}), which has a service that provides basic access to the database as follows:}
@@ -16161,7 +16490,7 @@ This code will create a string for each key/value in {\f1\fs20 Fields2[]} and {\
 :Implementation
 Some {\i Delphi} @*RTTI@ (Runtime Type Information) objects and classes are implemented in the @!TClassProp,TClassType,TEnumType,TTypeInfo,TSQLRecord.ClassProp,TSQLRecord.GetJSONValues,TPropInfo.GetValue,TPropInfo.SetValue,TSQLRecordProperties!Lib\SQLite3\mORMot.pas@ unit. The {\i Synopse mORMot Framework} uses this custom functions and objects in order to access to the {\i Delphi} @*RTTI@.
 The generic functions supplied by the standard {\f1\fs20 TypInfo.pas} unit where not found to be easy to use: there are some record types from one hand, which details the internal @*RTTI@ memory layout generated by the compiler, and there are some functions on the other hand. So the framework unified both RTTI memory layout and methods by defining some {\f1\fs20 object} types (i.e. not {\i Delphi} classes, but raw objects which can map directly the RTTI memory layout via a {\f1\fs20 pointer}) with some methods dedicated for RTTI handling and @*ORM@. These {\f1\fs20 object} types are {\f1\fs20 TClassProp, TClassType, TEnumType, TTypeInfo} and {\f1\fs20 TPropInfo}.
-Since this ORM is the core of the framework, the code of most of these objects has been tuned for performance: quit all of the methods have two versions in the framework, one in pure pascal code (easy to maintain and understand, and @*64 bit@ compatible), and one in optimized i386 assembler.
+Since this ORM is the core of the framework, the code of most of these objects has been tuned for performance: quit all of the methods have two versions in the framework, one in pure pascal code (easy to maintain and understand, and @*64-bit@ compatible), and one in optimized i386 assembler.
 As a result, ORM code based on RTTI is fairly easy to use. See for example who a database field index is retrieved for a {\f1\fs20 TSQLRecord} class:
 !function ClassFieldIndex(ClassType: TClass; const PropName: shortstring): integer;
 !var P: PPropInfo;
@@ -16634,7 +16963,7 @@ As you can see, the returned variant content is computed with the following meth
 !  Val.VType := FIELDTYPE2VARTYPE[result];
 !  case result of
 !    ftInt64, ftDouble, ftCurrency, ftDate:
-!      Val.VInt64 := V^.Int64; // copy 64 bit content
+!      Val.VInt64 := V^.Int64; // copy 64-bit content
 !    ftUTF8: begin
 !      Val.VPointer := nil;
 !      if C^.ColumnValueInlined then
@@ -16958,7 +17287,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2015 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2016 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -16971,7 +17300,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1

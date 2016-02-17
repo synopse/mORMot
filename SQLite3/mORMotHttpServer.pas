@@ -6,7 +6,7 @@ unit mORMotHttpServer;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotHttpServer;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -538,9 +538,22 @@ var
   // - when a TSQLHttpServer is created from a TSQLHttpServerDefinition
   HttpServerFullWebSocketsLog: Boolean;
 
-  
+
+function ToText(opt: TSQLHttpServerOptions): PShortString; overload;
+function ToText(sec: TSQLHttpServerSecurity): PShortString; overload;
+
+
 implementation
 
+function ToText(opt: TSQLHttpServerOptions): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(opt));
+end;
+
+function ToText(sec: TSQLHttpServerSecurity): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLHttpServerSecurity),ord(sec));
+end;
 
 { TSQLHttpServer }
 
@@ -632,7 +645,8 @@ begin
   if high(aServers)<0 then
     fLog := TSQLLog else
     fLog := aServers[0].LogClass;
-  fLog.Enter(self);
+  fLog.Enter('Create % (%) on port %',[ToText(aHttpServerKind)^,
+    ToText(aHttpServerSecurity)^,aPort],self);
   {$endif}
   inherited Create;
   SetAccessControlAllowOrigin(''); // deny CORS by default

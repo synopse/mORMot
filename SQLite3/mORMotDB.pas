@@ -6,7 +6,7 @@ unit mORMotDB;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -770,7 +770,7 @@ var SQL: RawUTF8;
 begin       
   {$ifdef WITHLOG}
   log := Owner.LogClass.Add;
-  log.Enter(self);
+  log.Enter('Create %',[aClass],self);
   {$else}
   log := nil;
   {$endif}
@@ -1082,13 +1082,14 @@ procedure TSQLRestStorageExternal.InternalBatchStop;
 var i,j,n,max,BatchBegin,BatchEnd,ValuesMax: integer;
     Query: ISQLDBStatement;
     NotifySQLEvent: TSQLEvent;
-    SQL,privateCopy: RawUTF8;
+    SQL: RawUTF8;
     P: PUTF8Char;
     Fields, ExternalFields: TRawUTF8DynArray;
     Types: TSQLDBFieldTypeArray;
     Values: TRawUTF8DynArrayDynArray;
     Occasion: TSQLOccasion;
     Decode: TJSONObjectDecoder;
+    tmp: TSynTempBuffer;
 begin
   if fBatchMethod=mNone then
     raise EORMException.CreateUTF8('%.InternalBatchStop(%).BatchMethod=mNone',
@@ -1111,39 +1112,43 @@ begin
         assert(fBatchIDs<>nil);
         BatchEnd := fBatchCount-1;
         for i := BatchBegin to BatchEnd do begin
-          privateCopy := fBatchValues[i];
-          P := UniqueRawUTF8(privateCopy);
-          while P^ in [#1..' ','{','['] do inc(P);
-          if fBatchMethod=mPost then
-            Occasion := soInsert else
-            Occasion := soUpdate;
-          case Occasion of
-          soInsert: // mPost=INSERT with the supplied fields and computed ID
-            Decode.Decode(P,nil,pQuoted,fBatchIDs[i],true);
-          soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
-            Decode.Decode(P,nil,pQuoted,0,true);
+          tmp.Init(fBatchValues[i]);
+          try
+            P := tmp.buf;
+            while P^ in [#1..' ','{','['] do inc(P);
+            if fBatchMethod=mPost then
+              Occasion := soInsert else
+              Occasion := soUpdate;
+            case Occasion of
+            soInsert: // mPost=INSERT with the supplied fields and computed ID
+              Decode.Decode(P,nil,pQuoted,fBatchIDs[i],true);
+            soUpdate: // mPut=UPDATE with the supplied fields and ID set appart
+              Decode.Decode(P,nil,pQuoted,0,true);
+            end;
+            RecordVersionFieldHandle(Occasion,Decode);
+            if Fields=nil then begin
+              Decode.AssignFieldNamesTo(Fields);
+              SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
+              SetLength(Values,Decode.FieldCount);
+              ValuesMax := fBatchCount-BatchBegin;
+              if ValuesMax>max then
+                ValuesMax := max;
+              for j := 0 to Decode.FieldCount-1 do
+                SetLength(Values[j],ValuesMax);
+            end else
+              if not Decode.SameFieldNames(Fields) then
+                break; // this item would break the SQL statement
+            n := i-BatchBegin;
+            for j := 0 to high(Fields) do
+              Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
+            if Occasion=soUpdate then // ?=ID parameter
+              Values[length(Fields),n] := Int64ToUtf8(fBatchIDs[i]); // D2007 fails with var
+            BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
+            if n+1>=max then
+              break; // do not send too much items at once, for better speed
+          finally
+            tmp.Done;
           end;
-          RecordVersionFieldHandle(Occasion,Decode);
-          if Fields=nil then begin
-            Decode.AssignFieldNamesTo(Fields);
-            SQL := JSONDecodedPrepareToSQL(Decode,ExternalFields,Types,Occasion,[]);
-            SetLength(Values,Decode.FieldCount);
-            ValuesMax := fBatchCount-BatchBegin;
-            if ValuesMax>max then
-              ValuesMax := max;
-            for j := 0 to Decode.FieldCount-1 do
-              SetLength(Values[j],ValuesMax);
-          end else
-            if not Decode.SameFieldNames(Fields) then
-              break; // this item would break the SQL statement
-          n := i-BatchBegin;
-          for j := 0 to high(Fields) do
-            Values[j,n] := Decode.FieldValues[j]; // regroup by parameter
-          if Occasion=soUpdate then // ?=ID parameter
-            Values[length(Fields),n] := Int64ToUtf8(fBatchIDs[i]); // D2007 fails with var
-          BatchEnd := i; // mark fBatchValues[i] has to be copied in Values[]
-          if n+1>=max then
-            break; // do not send too much items at once, for better speed
         end;
       end;
       mDelete: begin

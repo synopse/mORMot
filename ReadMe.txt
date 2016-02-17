@@ -27,7 +27,7 @@ Contributors
   Eric Grange
   Esmond
   Esteban Martin (EMartin)
-  EvaF
+  Eva Freimann (EVaF)
   Goran Despalatovic (gigo)
   Joe (jokusoft)
   Jordi Tudela

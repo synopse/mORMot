@@ -9,7 +9,7 @@ unit SynGdiPlus;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -28,7 +28,7 @@ unit SynGdiPlus;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -652,11 +652,12 @@ procedure SaveAs(Graphic: TPersistent; const FileName: TFileName;
 // - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
 // picture biggest side won't exceed this pixel number
 procedure SaveAsRawByteString(Graphic: TPersistent;
-  out DataRawByteString; Format: TGDIPPictureType; CompressionQuality: integer=80;
+  out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
+  Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0);
 
 /// helper to load a specified graphic from GIF/PNG/JPG/TIFF format content
-function LoadFromRawByteString(const Picture: {$ifdef UNICODE}RawByteString{$else}AnsiString{$endif}): TBitmap;
+function LoadFromRawByteString(const Picture: {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif}): TBitmap;
 
 /// helper function to create a bitmap from any GIF/PNG/JPG/TIFF/EMF/WMF file
 // - if file extension if .EMF, the file is drawn with a special antialiased
@@ -1596,12 +1597,13 @@ begin
   end;
 end;
 
-{$ifndef UNICODE}
+{$ifndef HASCODEPAGE}
 type RawByteString = AnsiString;
 {$endif}
 
 procedure SaveAsRawByteString(Graphic: TPersistent;
-  out DataRawByteString; Format: TGDIPPictureType; CompressionQuality: integer=80;
+  out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
+  Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
 var Stream: TMemoryStream;
 begin
@@ -1615,7 +1617,7 @@ begin
   end;
 end;
 
-function LoadFromRawByteString(const Picture: {$ifdef UNICODE}RawByteString{$else}AnsiString{$endif}): TBitmap;
+function LoadFromRawByteString(const Picture: RawByteString): TBitmap;
 var ST: TStringStream;
 begin
   Result := nil;

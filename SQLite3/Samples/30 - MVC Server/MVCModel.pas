@@ -122,9 +122,13 @@ type
 
   TSQLArticleSearch = class(TSQLRecordFTS4Porter)
   private
-    fText: RawUTF8;
+    fContent: RawUTF8;
+    fTitle: RawUTF8;
+    fAbstract: RawUTF8;
   published
-    property Text: RawUTF8 read fText write fText;
+    property Title: RawUTF8 read fTitle write fTitle;
+    property Abstract: RawUTF8 read fAbstract write fAbstract;
+    property Content: RawUTF8 read fContent write fContent;
   end;
 
   TSQLComment = class(TSQLContent)
@@ -166,8 +170,7 @@ begin
   TSQLArticle.AddFilterNotVoidText(['Title','Content']);
   TSQLComment.AddFilterNotVoidText(['Title','Content']);
   TSQLTag.AddFilterNotVoidText(['Ident']);
-  result.Props[TSQLArticleSearch].FTS4WithoutContent(
-    TSQLArticle,['title','abstract','content']);
+  result.Props[TSQLArticleSearch].FTS4WithoutContent(TSQLArticle);
 end;
 
 

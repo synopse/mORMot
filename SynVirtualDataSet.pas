@@ -6,7 +6,7 @@ unit SynVirtualDataSet;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynVirtualDataSet;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -66,6 +66,7 @@ uses
   Variants,
   {$endif}
   SynCommons,
+  SynDBDataSet, // for AddBcd()
   DB;
 
 
@@ -544,10 +545,12 @@ begin
           W.Add(AsInteger);
         ftLargeint:
           W.Add(TLargeintField(Data.Fields[f]).AsLargeInt);
-        ftFloat, ftCurrency:
+        ftFloat, ftCurrency: // TCurrencyField is sadly a TFloatField
           W.Add(AsFloat,TFloatField(Data.Fields[f]).Precision);
         ftBCD:
           W.AddCurr64(AsCurrency);
+        ftFMTBcd:
+          AddBcd(W,AsBCD);
         ftTimeStamp, ftDate, ftTime, ftDateTime: begin
           W.Add('"');
           W.AddDateTime(AsDateTime);

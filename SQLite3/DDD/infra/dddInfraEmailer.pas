@@ -6,7 +6,7 @@ unit dddInfraEmailer;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit dddInfraEmailer;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -55,6 +55,13 @@ unit dddInfraEmailer;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
+  Windows, // for fSafe.Lock/Unlock inlining
+  {$endif}
+  {$ifdef KYLIX3}
+  Types,
+  LibC,
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,
@@ -144,9 +151,8 @@ type
   TDDDEmailerDaemonStats = class(TSynMonitorWithSize)
   protected
     fConnection: cardinal;
+    procedure LockedSum(another: TSynMonitor); override;
   public
-    /// manage additional information about the number of connections
-    procedure Sum(another: TSynMonitor); override;
     /// will increase the connection count
     procedure NewConnection;
   published
@@ -507,7 +513,6 @@ function TDDDEmailerDaemon.SendEmail(const aRecipients: TRawUTF8DynArray;
 var Email: TSQLRecordEmailer;
     msg: string;
 begin
-  Rest.LogClass.Enter(self);
 {  result := CheckRecipients(aRecipient);
   if result<>cqrsSuccess then
     exit; }
@@ -517,6 +522,7 @@ begin
     Email.Sender := aSender;
     Email.Subject := aSubject;
     Email.Headers := aHeaders;
+    Rest.LogClass.Enter('SendEmail %',[Email],self);
     Email.MessageCompressed := SynLZCompressToBytes(aBody);
     CqrsBeginMethod(qaNone,result);
     if not Email.FilterAndValidate(Rest,msg) then
@@ -589,7 +595,7 @@ begin
   {$WARN SYMBOL_DEPRECATED ON}
   if age<=0 then
     exit;
-  fLockerEnter;
+  fSafe.Lock;
   try
     if fCache=nil then
       fCache := TSynCache.Create(MemoryCacheSize);
@@ -603,31 +609,31 @@ begin
     end else
       result := true; // from cache
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
   aType := GetMimeContentType(pointer(aTemplate),length(aTemplate),filename);
 end;
 
 procedure TDDDTemplateFromFolder.SetFolder(const Value: TFileName);
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
     fFolder := Value;
     fCache.Reset;
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 
 procedure TDDDTemplateFromFolder.SetMemoryCacheSize(
   const Value: integer);
 begin
-  fLockerEnter;
+  fSafe.Lock;
   try
     fMemoryCacheSize := Value;
     FreeAndNil(fCache);
   finally
-    fLocker.Leave;
+    fSafe.UnLock;
   end;
 end;
 
@@ -636,12 +642,17 @@ end;
 
 procedure TDDDEmailerDaemonStats.NewConnection;
 begin
-  inc(fConnection);
+  EnterCriticalSection(fLock);
+  try
+    inc(fConnection);
+  finally
+    LeaveCriticalSection(fLock);
+  end;
 end;
 
-procedure TDDDEmailerDaemonStats.Sum(another: TSynMonitor);
+procedure TDDDEmailerDaemonStats.LockedSum(another: TSynMonitor);
 begin
-  inherited;
+  inherited LockedSum(another);
   if another.InheritsFrom(TDDDEmailerDaemonStats) then
     inc(fConnection,TDDDEmailerDaemonStats(another).Connection);
 end;
@@ -660,6 +671,9 @@ var Rest: TSQLRestServer;
     call: TSQLRestURIParams;
     start: Int64;
 begin
+  // generate test ORM file for DDD persistence 
+  TDDDRepositoryRestFactory.ComputeSQLRecord([
+    TDDDEmailerDaemonStats,TSQLRestServerMonitor]);
   // we test here up to the raw SMTP socket layer
   Rest := serverClass.CreateWithOwnModel([]);
   try
@@ -786,6 +800,4 @@ end;
 
 initialization
   TInterfaceFactory.RegisterInterfaces([TypeInfo(ISMTPServerConnection)]);
-  TDDDRepositoryRestFactory.ComputeSQLRecord([
-    TDDDEmailerDaemonStats,TSQLRestServerMonitor]);
 end.

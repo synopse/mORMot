@@ -6,7 +6,7 @@ unit SynBidirSock;
 {
     This file is part of the Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynBidirSock;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1086,7 +1086,7 @@ begin
     exit;
   if (contentType='') or
      IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
-    content := GetJSONItemAsRawJSON(P) else begin
+    GetJSONItemAsRawJSON(P,RawJSON(content)) else begin
     txt := GetJSONField(P,P);
     if IdemPChar(pointer(contentType),'TEXT/') then
       SetString(content,txt,StrLen(txt)) else
@@ -1567,7 +1567,7 @@ begin
     end;
     if (fProtocol<>nil) and (Frame.payload<>'') then
       fProtocol.AfterGetFrame(Frame);
-    {$ifdef UNICODE}
+    {$ifdef HASCODEPAGE}
     if opcode=focText then
       SetCodePage(Frame.payload,CP_UTF8,false); // identify text value as UTF-8
     {$endif}

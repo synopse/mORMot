@@ -6,7 +6,7 @@ unit mORMotHttpClient;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,10 +25,11 @@ unit mORMotHttpClient;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Eva Freimann (EVaF)
   - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
@@ -108,6 +109,8 @@ unit mORMotHttpClient;
        a global mutex, as other TSQLRestClientURI implementations already did)
      - fixed TSQLHttpClientGeneric.InternalURI() method to raise an explicit
        exception on connection error (as expected by TSQLRestClientURI.URI)
+     - ensure TSQLHttpClientGeneric.InternalURI would not erase any custom
+       header supplied by the method, when Content-Type appears (thanks EVaF)
      - TSQLHttpClient* classes will now handle properly reconnection in case
        of connection break via overridden InternalCheckOpen/InternalClose methods
      - introducing TSQLHttpClientGeneric.Compression property to set the handled
@@ -454,31 +457,30 @@ implementation
 
 procedure TSQLHttpClientGeneric.InternalURI(var Call: TSQLRestURIParams);
 var Head, Content, ContentType: RawUTF8;
-    P: PUTF8Char;
+    P, PBeg: PUTF8Char;
     res: Int64Rec;
 begin
 {$ifdef WITHLOG}
-  fLogClass.Enter(self,nil,true);
+  fLogClass.Enter(self);
 {$endif}
-  Head := Call.InHead;
-  Content := Call.InBody;
   if InternalCheckOpen then begin
-    if Head<>'' then begin
-      P := pointer(Head);
-      if IdemPChar(P,'CONTENT-TYPE:') then begin
-        inc(P,14);
-        if Content<>'' then begin
-          ContentType := GetMimeContentType(pointer(Content),Length(Content));
-          if ContentType='application/octet-stream' then
-            ContentType := '';
-        end;
-        if ContentType='' then
-          ContentType := GetNextLine(P,P);
-        Head := ''; // header is processed -> no need to send Content-Type twice
+    Head := Call.InHead;
+    Content := Call.InBody;
+    ContentType := JSON_CONTENT_TYPE_VAR; // consider JSON by default
+    P := pointer(Head);
+    while P<>nil do begin
+      PBeg := GetNextLineBegin(P,P);
+      if IdemPChar(PBeg,'CONTENT-TYPE:') then begin
+        ContentType := GetNextLine(PBeg+14,P); // retrieve customized type
+        if P=nil then // last entry in header
+          SetLength(Head,PBeg-pointer(Head)) else
+          system.delete(Head,PBeg-pointer(Head)+1,P-PBeg);
+        Head := trim(Head);
+        break;
       end;
     end;
-    if ContentType='' then
-      ContentType := JSON_CONTENT_TYPE_VAR;
+    if Content<>'' then // always favor content type from binary
+      ContentType := GetMimeContentTypeFromBuffer(pointer(Content),Length(Content),ContentType);
     EnterCriticalSection(fMutex);
     try
       res := InternalRequest(Call.Url,Call.Method,Head,Content,ContentType);

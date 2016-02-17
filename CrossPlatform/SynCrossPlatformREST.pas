@@ -6,7 +6,7 @@ unit SynCrossPlatformREST;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformREST;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -67,6 +67,7 @@ interface
 uses
   SmartCL.System,
   System.Types,
+  ECMA.Json,
 {$else}
 uses
   SysUtils,
@@ -107,8 +108,11 @@ type
   // circumvent limited DWS / SMS syntax
   TPersistent = TObject;
   TObjectList = array of TObject;
+  // stored as binary, transmitted as Base64 (VariantToBlob=atob and BlobToVariant=btoa)
   TSQLRawBlob = variant;
-  TTimeLog = Int64;
+  // TTimeLogBits.Value has a 38-bit precision, so features exact representation
+  // as JavaScript numbers (stored in a 52-bit mantissa)
+  TTimeLog = Int53;
   TModTime = TTimeLog;
   TCreateTime = TTimeLog;
   TGUID = string;
@@ -236,6 +240,8 @@ type
   /// a set of published property Kind
   TSQLFieldKinds = set of TSQLFieldKind;
 
+  { TODO: TID should be a string since number is limited to 53-bit in JavaScript
+    -> define and use an explicit Int52 type for SMS }
   /// the TSQLRecord primary key is a 64 bit integer
   TID = {$ifndef ISDWS}type{$endif} Int64;
 

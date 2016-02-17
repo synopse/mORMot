@@ -44,17 +44,20 @@ type
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
     fDlgSave: TSaveDialog;
+    procedure InternalGetState; virtual;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
     Version: Variant;
+    LastState: Variant;
+    LastStateTicks: Int64;
     OnAfterExecute: TNotifyEvent;
+    OnAfterGetState: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil):
-      boolean; virtual;
+    function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil): boolean; virtual;
     procedure Show; virtual;
-    function GetState: Variant; virtual;
+    procedure GetState;
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
     function AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
       TDBFrameClass): TDBFrame; virtual;
@@ -65,8 +68,8 @@ type
     function CurrentDBFrame: TDBFrame;
     function FindDBFrame(const aDatabaseName: RawUTF8): TDBFrame;
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState); virtual;
-    procedure SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName: string =
-      ''; DB: TDBFrame = nil);
+    procedure SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName: string = '';
+      DB: TDBFrame = nil);
     property Client: TSQLHttpClientWebsockets read fClient;
     property Page: TSynPager read fPage;
     property LogFrame: TLogFrame read fLogFrame;
@@ -112,14 +115,12 @@ end;
 var
   AdminControlConnecting: TForm; // only one Open() attempt at once
 
-function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel):
-  boolean;
+function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel): boolean;
 var
   exec: TServiceCustomAnswer;
 begin
   result := false;
-  if Assigned(fAdmin) or (Definition.Orm.User = '') or Assigned(AdminControlConnecting)
-    then
+  if Assigned(fAdmin) or (Definition.Orm.User = '') or Assigned(AdminControlConnecting) then
     exit;
   try
     AdminControlConnecting := CreateTempForm('Connecting to ' + string(Definition.ORM.ServerName));
@@ -138,7 +139,8 @@ begin
       result := true;
     finally
       FreeAndNil(AdminControlConnecting);
-      fClient.OnIdle := nil; // back to default blocking behavior (safer UI)
+      if fClient <> nil then
+        fClient.OnIdle := nil; // back to default blocking behavior (safer UI)
     end;
   except
     on E: Exception do begin
@@ -148,13 +150,27 @@ begin
   end;
 end;
 
-function TAdminControl.GetState: Variant;
+procedure TAdminControl.GetState;
+begin
+  if self = nil then
+    exit;
+  try
+    InternalGetState;
+    if Assigned(OnAfterGetState) then
+      OnAfterGetState(self);
+  except
+    VarClear(LastState);
+  end;
+end;
+
+procedure TAdminControl.InternalGetState;
 var
   exec: TServiceCustomAnswer;
 begin
   if fAdmin <> nil then begin
     exec := fAdmin.DatabaseExecute('', '#state');
-    result := _JsonFast(exec.Content);
+    LastState := _JsonFast(exec.Content);
+    LastStateTicks := GetTickCount64;
   end;
 end;
 

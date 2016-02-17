@@ -6,7 +6,7 @@ unit SynTests;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -546,7 +546,7 @@ begin
   if msg<>'' then
     TSynLogTestLog.Add.Log(sllTrace,msg);
   {$endif}
-  Inc(fAssertions);
+  InterlockedIncrement(fAssertions);
   if not condition then
     TestFailed(msg);
 end;
@@ -561,7 +561,7 @@ begin
   if msg<>'' then
     TSynLogTestLog.Add.Log(sllTrace,msg);
   {$endif}
-  Inc(fAssertions);
+  InterlockedIncrement(fAssertions);
   if condition then
     result := false else begin
     TestFailed(msg);
@@ -634,7 +634,7 @@ begin
   SetString(result,nil,CharCount);
   P := pointer(Result);
   while CharCount>0 do begin
-    if CharCount>5 then begin
+    if CharCount>=5 then begin
       V := Random(maxInt); // fast: one random compute per 5 chars
       P[0] := AnsiChar(32+V mod 94); V := V div 94;
       P[1] := AnsiChar(32+V mod 94); V := V div 94;
@@ -734,7 +734,7 @@ begin
   TSynLogTestLog.DebuggerNotify(sllFail,'#% %',[fAssertions-fAssertionsBeforeRun,msg]);
   if Owner<>nil then // avoid GPF
     Owner.Failed(msg,self);
-  Inc(fAssertionsFailed);
+  InterlockedIncrement(fAssertionsFailed);
 end;
 
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;

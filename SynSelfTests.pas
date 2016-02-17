@@ -6,7 +6,7 @@ unit SynSelfTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynSelfTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -366,6 +366,8 @@ type
 {$endif LVCL}
     /// test SELECT statement parsing
     procedure _TSynTableStatement;
+    /// test advanced statistics monitoring
+    procedure _TSynMonitorUsage;
 {$endif DELPHI5OROLDER}
 {$endif NOVARIANTS}
   end;
@@ -1142,6 +1144,7 @@ type
     procedure IntSubtractJSON(Ctxt: TOnInterfaceStubExecuteParamsJSON);
     {$ifndef NOVARIANTS}
     procedure IntSubtractVariant(Ctxt: TOnInterfaceStubExecuteParamsVariant);
+    procedure IntSubtractVariantVoid(Ctxt: TOnInterfaceStubExecuteParamsVariant);
     {$endif}
     /// release used instances (e.g. http server) and memory
     procedure CleanUp; override;
@@ -1200,6 +1203,7 @@ uses
   SyncObjs,
 {$endif}
 {$ifdef MSWINDOWS}
+  PasZip,
 {$ifndef FPC}
 {$ifdef ISDELPHIXE2}
   VCL.Graphics,
@@ -1739,7 +1743,7 @@ var AI, AI2: TIntegerDynArray;
     AF: TFVs;
     AF2: TFV2s;
     i,j,k,Len, count,AIcount: integer;
-    U: RawUTF8;
+    U,U2: RawUTF8;
     P: PUTF8Char;
     PI: PIntegerArray;
     R: TRec;
@@ -2080,7 +2084,8 @@ begin
   Check(Hash32(U)={$ifdef CPU64}$9F98936D{$else}$54659D65{$endif});
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC,2);
-  Check(U='['+JSON_BASE64_MAGIC_UTF8+BinToBase64(ARP.SaveTo)+'"]');
+  U2 := RawUTF8('[')+JSON_BASE64_MAGIC_UTF8+RawUTF8(BinToBase64(ARP.SaveTo))+RawUTF8('"]');
+  Check(U=U2);
   ARP.Clear;
   Check(ARP.LoadFromJSON(pointer(U))<>nil);
   if not CheckFailed(ARP.Count=1001) then
@@ -2447,7 +2452,7 @@ end;
 procedure TTestLowLevelCommon.UrlEncoding;
 var i: integer;
     s: RawByteString;
-    name,value: RawUTF8;
+    name,value,utf: RawUTF8;
     P: PUTF8Char;
     GUID2: TGUID;
     U: TURI;
@@ -2498,12 +2503,12 @@ begin
     s := RandomString(i*5);
     Check(UrlDecode(UrlEncode(s))=s,string(s));
   end;
-  s := BinToBase64URI(@GUID,sizeof(GUID));
-  Check(s='00amyWGct0y_ze4lIsj2Mw');
-  Base64FromURI(s);
-  Check(Base64ToBinLength(pointer(s),length(s))=sizeof(GUID2));
+  utf := BinToBase64URI(@GUID,sizeof(GUID));
+  Check(utf='00amyWGct0y_ze4lIsj2Mw');
+  Base64FromURI(utf);
+  Check(Base64ToBinLength(pointer(utf),length(utf))=sizeof(GUID2));
   fillchar(GUID2,sizeof(GUID2),0);
-  SynCommons.Base64Decode(Pointer(s),@GUID2,SizeOf(GUID2));
+  SynCommons.Base64Decode(Pointer(utf),@GUID2,SizeOf(GUID2));
   Check(IsEqualGUID(GUID2,GUID));
   Check(U.From('toto.com'));
   Check(U.URI='http://toto.com/');
@@ -2729,6 +2734,8 @@ begin
   Int64ToUtf8(-9223372036854775808,s);
   Check(s='-9223372036854775808');
   {$endif}
+  Check(Int64ToUTF8(2119852951849248647)='2119852951849248647');
+  Check(FormatUTF8(' % ',[2119852951849248647])=' 2119852951849248647 ');
   {$ifndef DELPHI5OROLDER}
   d := GetExtended('1234');
   CheckSame(d,1234);
@@ -2866,7 +2873,9 @@ begin
     l := GetInt64(pointer(s),err);
     Check((err=0)and(l=k));
     SetInt64(pointer(s),l);
-    Check(l=k);
+    s := s+'z';
+    l := GetInt64(pointer(s),err);
+    Check(err<>0);
     str(j,a);
     Check(SysUtils.IntToStr(j)=string(a));
     Check(format('%d',[j])=string(a));
@@ -2964,10 +2973,31 @@ end;
 procedure TTestLowLevelCommon._UTF8;
 procedure Test(CP: cardinal; const W: WinAnsiString);
 var C: TSynAnsiConvert;
+    A: RawByteString;
+    U: RawUTF8;
 begin
   C := TSynAnsiConvert.Engine(CP);
-  Check(C.UTF8ToAnsi(C.AnsiToUTF8(W))=W);
+  Check(C.CodePage=CP);
+  U := C.AnsiToUTF8(W);
+  A := C.UTF8ToAnsi(U);
+  if W='' then
+    exit;
+  {$ifdef HASCODEPAGE}
+  {$ifndef FPC}
+  Check(StringCodePage(W)=1252);
+  {$endif}
+  CP := StringCodePage(A);
+  Check(CP=C.CodePage);
+  {$endif}
+  if CP=CP_UTF16 then
+    exit;
+  Check(length(W)=length(A));
+  {$ifdef FPC}
+  Check(CompareMem(pointer(W),pointer(A),length(W)));
+  {$else}
+  Check(A=W);
   Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
+  {$endif}
 end;
 var i, CP, L: integer;
     W: WinAnsiString;
@@ -2976,16 +3006,16 @@ var i, CP, L: integer;
     U, res, Up,Up2: RawUTF8;
     arr: TRawUTF8DynArray;
     PB: PByte;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     q: RawUTF8;
-{$endif}
+    {$endif}
     Unic: RawUnicode;
     WA: Boolean;
 begin
   res := 'one,two,three';
-  Check(StrLen(nil)=0);
+  Check(SynCommons.StrLen(nil)=0);
   for i := length(res)+1 downto 1 do
-    Check(StrLen(Pointer(@res[i]))=length(res)-i+1);
+    Check(SynCommons.StrLen(Pointer(@res[i]))=length(res)-i+1);
   Check(StrLenPas(nil)=0);
   for i := length(res)+1 downto 1 do
     Check(StrLenPas(Pointer(@res[i]))=length(res)-i+1);
@@ -3023,6 +3053,8 @@ begin
     Test(CP_UTF16,W);
     W := WinAnsiString(RandomString(i*5));
     U := WinAnsiToUtf8(W);
+    Unic := Utf8DecodeToRawUnicode(U);
+    {$ifndef FPC_HAS_CPSTRING} // buggy FPC
     Check(Utf8ToWinAnsi(U)=W);
     Check(WinAnsiConvert.UTF8ToAnsi(WinAnsiConvert.AnsiToUTF8(W))=W);
     Check(WinAnsiConvert.RawUnicodeToAnsi(WinAnsiConvert.AnsiToRawUnicode(W))=W);
@@ -3030,10 +3062,10 @@ begin
       Check(CurrentAnsiConvert.UTF8ToAnsi(CurrentAnsiConvert.AnsiToUTF8(W))=W);
       Check(CurrentAnsiConvert.RawUnicodeToAnsi(CurrentAnsiConvert.AnsiToRawUnicode(W))=W);
     end;
-    Unic := Utf8DecodeToRawUnicode(U);
     res := RawUnicodeToUtf8(Unic);
     Check(res=U);
     Check(RawUnicodeToWinAnsi(Unic)=W);
+    {$endif FPC_HAS_CPSTRING}
     WS := UTF8ToWideString(U);
     Check(length(WS)=length(Unic)shr 1);
     if WS<>'' then
@@ -3170,6 +3202,13 @@ begin
   Check(UpperCaseUnicode('abcdefABCD')='ABCDEFABCD');
   Check(LowerCaseUnicode('abcdefABCD')='abcdefabcd');
   {$endif}
+  Check(StringReplaceAll('abcabcabc','toto','toto')='abcabcabc');
+  Check(StringReplaceAll('abcabcabc','toto','titi')='abcabcabc');
+  Check(StringReplaceAll('abcabcabc','ab','AB')='ABcABcABc');
+  Check(StringReplaceAll('abcabcabc','bc','')='aaa');
+  Check(StringReplaceAll('abcabcabc','bc','B')='aBaBaB');
+  Check(StringReplaceAll('abcabcabc','bc','bcd')='abcdabcdabcd');
+  Check(StringReplaceAll('abcabcabc','c','C')='abCabCabC');
 end;
 
 procedure TTestLowLevelCommon.Iso8601DateAndTime;
@@ -3555,13 +3594,13 @@ begin
       rec.double := 3.141592654;
       CheckSame(rec.double,3.141592654);
       for i := 1 to 100 do begin
-        u := RandomUnicode(i*2);
-        rec.text := u;
-        check(rec.text=u);
-        rec.ansi := u;
-        check(rec.ansi=u);
+        a := RandomAnsi7(i*2);
+        rec.text := a;
+        check(rec.text=a,'rec.text');
+        rec.ansi := a;
+        check(rec.ansi=a,'rec.ansi');
       end;
-      check(rec.bool=true);
+      check(rec.bool=true,'rec.bool');
       check(rec.varint=100);
       check(rec.ID=1);
       CheckSame(rec.double,3.141592654);
@@ -3573,8 +3612,8 @@ begin
         CheckSame(rec.double,V);
       end;
       check(rec.bool=true);
-      check(rec.text=u);
-      check(rec.ansi=u);
+      check(rec.text=a);
+      check(rec.ansi=a);
       check(rec.ID=1);
     except
       on E: Exception do // variant error could raise exceptions
@@ -3868,10 +3907,18 @@ const
    'webp','image/webp',
    'manifest','text/cache-manifest',
    'appcache','text/cache-manifest');
+  BIN: array[0..1] of Cardinal = (
+    $04034B50,$38464947);
+  BIN_MIME: array[0..1] of RawUTF8 = (
+    'application/zip','image/gif');
 var i: integer;
 begin
   for i := 0 to high(MIMES)shr 1 do
     Check(GetMimeContentType(nil,0,'toto.'+MIMES[i*2])=StringToAnsi7(MIMES[i*2+1]),MIMES[i*2]);
+  for i := 0 to high(BIN) do begin
+    Check(GetMimeContentType(@BIN[i],34,'')=BIN_MIME[i]);
+    Check(GetMimeContentTypeFromBuffer(@BIN[i],34,'')=BIN_MIME[i]);
+  end;
 end;
 
 procedure TTestLowLevelCommon._TSynLogFile;
@@ -3949,6 +3996,55 @@ begin
     obj.Free;
   end;
 end;
+
+procedure TTestLowLevelCommon._TSynUniqueIdentifier;
+const JAN2015_UNIX = 1420070400;
+var gen: TSynUniqueIdentifierGenerator;
+    i1,i2: TSynUniqueIdentifierBits;
+    i3: TSynUniqueIdentifier;
+    i: integer;
+    {$ifndef NOVARIANTS}json,{$endif} obfusc: RawUTF8;
+begin
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    for i := 1 to 100000 do begin
+      gen.ComputeNew(i1);
+      gen.ComputeNew(i2);
+      check(i1.ProcessID=10);
+      check(i2.ProcessID=10);
+      check(i1.CreateTimeUnix>JAN2015_UNIX);
+      check(i1.CreateTimeUnix<=i2.CreateTimeUnix);
+      check(i1.Value<i2.Value);
+      {$ifndef NOVARIANTS}
+      check(not i1.Equal(i2));
+      i2.From(i1.Value);
+      check(i1.Equal(i2));
+      json := VariantSaveJSON(i1.AsVariant);
+      check(VariantSaveJSON(i2.AsVariant)=json);
+      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
+        [DateTimeToIso8601Text(i1.CreateDateTime),i1.ProcessID,i1.Counter,i1.Value]));
+      {$endif}
+      obfusc := gen.ToObfuscated(i1.Value);
+      check(gen.FromObfuscated(obfusc,i3));
+      check(i1.Value=i3);
+      check(Length(obfusc)=24);
+      inc(obfusc[12]);
+      check(not gen.FromObfuscated(obfusc,i3));
+      dec(obfusc[12]);
+    end;
+  finally
+    gen.Free;
+  end;
+  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
+  try
+    i3 := 0;
+    check(gen.FromObfuscated(obfusc,i3),'SharedObfuscationKey');
+    check(i1.Value=i3);
+  finally
+    gen.Free;
+  end;
+end;
+
 
 {$ifndef DELPHI5OROLDER}
 
@@ -4098,51 +4194,6 @@ begin
     CheckItem(a[i],a[i].fID);
   for i := 1 to da.Count-1 do
     Check(a[i-1].FirstName<a[i].FirstName);
-end;
-
-procedure TTestLowLevelCommon._TSynUniqueIdentifier;
-var gen: TSynUniqueIdentifierGenerator;
-    i1,i2: TSynUniqueIdentifierBits;
-    i3: TSynUniqueIdentifier;
-    i: integer;
-    json: RawUTF8;
-begin
-  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
-  try
-    for i := 1 to 100000 do begin
-      gen.ComputeNew(i1);
-      gen.ComputeNew(i2);
-      check(i1.ProcessID=10);
-      check(i2.ProcessID=10);
-      check(i1.UnixCreateTime<=i2.UnixCreateTime);
-      i2.Counter := i1.Counter+1;
-      check(i1.AsInt64<i2.AsInt64);
-      check(not i1.Equal(i2));
-      i2.From(i1.AsInt64);
-      check(i1.Equal(i2));
-      json := VariantSaveJSON(i1.AsVariant);
-      check(VariantSaveJSON(i2.AsVariant)=json);
-      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%}',
-        [DateTimeToIso8601Text(i1.CreateUTCDateTime),i1.ProcessID,i1.Counter]));
-      json := gen.ToObfuscated(i1.AsInt64);
-      check(gen.FromObfuscated(json,i3));
-      check(i1.Equal(i3));
-      check(Length(json)=24);
-      inc(json[12]);
-      check(not gen.FromObfuscated(json,i3));
-      dec(json[12]);
-    end;
-  finally
-    gen.Free;
-  end;
-  gen := TSynUniqueIdentifierGenerator.Create(10,'toto');
-  try
-    i3 := 0;
-    check(gen.FromObfuscated(json,i3),'SharedObfuscationKey');
-    check(i1.Equal(i3));
-  finally
-    gen.Free;
-  end;
 end;
 
 
@@ -4580,8 +4631,8 @@ begin // '{"Major":1,"Minor":2001,"Release":3001,"Build":4001,"Main":"1","Detail
   V.Minor := GetInteger(Values[1]);
   V.Release := GetInteger(Values[2]);
   V.Build := GetInteger(Values[3]);
-  V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
-  V.Detailed := UTF8DecodeToString(Values[5],StrLen(Values[5]));
+  V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
+  V.Detailed := UTF8DecodeToString(Values[5],SynCommons.StrLen(Values[5]));
   aValid := true;
 end;
 
@@ -4604,7 +4655,7 @@ begin // '{"Major":2,"Minor":2002,"Release":3002,"Build":4002,"Main":"2","BuildD
     V.Minor := GetInteger(Values[1]);
     V.Release := GetInteger(Values[2]);
     V.Build := GetInteger(Values[3]);
-    V.Main := UTF8DecodeToString(Values[4],StrLen(Values[4]));
+    V.Main := UTF8DecodeToString(Values[4],SynCommons.StrLen(Values[4]));
     V.BuildDateTime := Iso8601ToDateTimePUTF8Char(Values[5]);
   end;
 end;
@@ -4831,6 +4882,7 @@ var J,U: RawUTF8;
     peop: TSQLRecordPeople;
     K,U2: RawUTF8;
     Valid: boolean;
+    RB: TSQLRawBlob;
 {$ifndef LVCL}
     Instance: TClassInstance;
     Coll, C2: TCollTst;
@@ -4997,6 +5049,7 @@ end;
 procedure TestGit(Options: TJSONCustomParserSerializationOptions);
 var i: Integer;
     U: RawUTF8;
+    s: RawJSON;
     git,git2: TTestCustomJSONGitHubs;
     item,value: PUTF8Char;
 begin
@@ -5023,7 +5076,8 @@ begin
     Check(item<>nil);
     value := JsonObjectItem(item,'name');
     check(value<>nil);
-    check(trim(GetJSONItemAsRawJSON(value))='"'+name+'"');
+    GetJSONItemAsRawJSON(value,s);
+    check(trim(s)='"'+name+'"');
     check(GetInteger(JsonObjectByPath(item,'owner.id'))=owner.id);
     check(GetInteger(JsonObjectByPath(item,'owner.i*'))=owner.id);
     check(JsonObjectByPath(item,'owner.name')='');
@@ -5038,7 +5092,8 @@ begin
     check(JsonObjectsByPath(item,'owner.*')=FormatUTF8(
       '{"owner.login":"%","owner.id":%}',[owner.login,owner.id]));
     value := JsonObjectByPath(item,'owner');
-    check(JSONReformat(GetJSONItemAsRawJSON(value),jsonCompact)=FormatUTF8(
+    GetJSONItemAsRawJSON(value,s);
+    check(JSONReformat(s,jsonCompact)=FormatUTF8(
       '{"login":"%","id":%}',[owner.login,owner.id]));
   end;
   Check(DynArrayLoadJSON(git2,pointer(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
@@ -5486,9 +5541,13 @@ begin
     J := BinToBase64WithMagic(U);
     check(PInteger(J)^ and $00ffffff=JSON_BASE64_MAGIC);
 {$ifndef DELPHI5OROLDER}
-    check(BlobToTSQLRawBlob(pointer(J))=U);
+    RB := BlobToTSQLRawBlob(pointer(J));
+    check(length(RB)=length(U)); // RB=U is buggy under FPC :(
+    check(CompareMem(pointer(RB),pointer(U),length(U)));
     Base64MagicToBlob(@J[4],K);
-    check(BlobToTSQLRawBlob(pointer(K))=U);
+    RB := BlobToTSQLRawBlob(pointer(K));
+    check(length(RB)=length(U)); // RB=U is buggy under FPC :(
+    check(CompareMem(pointer(RB),pointer(U),length(U)));
 {    J := TSQLRestServer.JSONEncodeResult([r]);
     Check(SameValue(GetExtended(pointer(JSONDecode(J)),err),r)); }
     {$ifndef NOVARIANTS}
@@ -5560,7 +5619,7 @@ begin
     J := ObjectToJSON(O,[woStoreClassName]);
     Check(J='{"ClassName":"TPersistentToJSON","Name":"","Enum":0,"Sets":0}');
     J := ObjectToJSON(O,[woHumanReadable]);
-    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "Idle",'#$D#$A#9'"Sets": []'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "",'#$D#$A#9'"Enum": "flagIdle",'#$D#$A#9'"Sets": []'#$D#$A'}');
     with PTypeInfo(TypeInfo(TSynBackgroundThreadProcessStep))^.EnumBaseType^ do
     for E := low(E) to high(E) do begin
       O.fName := Int32ToUTF8(ord(E));
@@ -5575,8 +5634,8 @@ begin
       Check(O.Sets=O2.Sets);
       J := ObjectToJSON(O,[woHumanReadable]);
       U := FormatUTF8(
-        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["IDLE"',
-        [ord(E),UpperCaseU(GetEnumNameTrimed(E))]);
+        '{'#$D#$A#9'"NAME": "%",'#$D#$A#9'"ENUM": "%",'#$D#$A#9'"SETS": ["FLAGIDLE"',
+        [ord(E),UpperCaseU(RawUTF8(GetEnumName(E)^))]);
       Check(IdemPChar(pointer(J),pointer(U)));
       JSONToObject(O2,pointer(J),valid);
       Check(Valid);
@@ -5588,10 +5647,10 @@ begin
     with PTypeInfo(TypeInfo(WordBool))^.EnumBaseType^ do
       Check(SizeInStorageAsEnum=2);
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying",'#$D#$A#9'"Sets": ["*"]'#$D#$A'}');
     J := ObjectToJSON(O,[woHumanReadable,woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
-    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "Destroying", // Idle,Started,Finished,Destroying'+
-      #$D#$A#9'"Sets": ["*"] // "*" or a set of Idle,Started,Finished,Destroying'#$D#$A'}');
+    Check(J='{'#$D#$A#9'"Name": "3",'#$D#$A#9'"Enum": "flagDestroying", // "flagIdle","flagStarted","flagFinished","flagDestroying"'+
+      #$D#$A#9'"Sets": ["*"] // "*" or a set of "flagIdle","flagStarted","flagFinished","flagDestroying"'#$D#$A'}');
     O2.fName := '';
     O2.fEnum := low(E);
     O2.fSets := [];
@@ -6728,16 +6787,17 @@ end;
 
 {$endif LVCL}
 
-type
-  TOrdTypeSet = set of TOrdType;
-
 procedure TTestLowLevelTypes.RTTI;
 var i: Integer;
     tmp: RawUTF8;
     auto: TPersistentAutoCreateFieldsTest;
+    s: TSynLogInfos;
+    astext: boolean;
+    P: PUTF8Char;
+    eoo: AnsiChar;
 begin
-  with PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType^ do
-    for i := 0 to integer(high(TOrdType)) do begin
+  with PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType^ do
+    for i := 0 to integer(high(TSynLogInfo)) do begin
 {$ifdef VERBOSE}writeln(i,' ',GetEnumName(i)^, ' ',GetEnumNameTrimed(i));{$endif}
      tmp := GetEnumNameTrimed(i);
      Check(GetEnumNameValue(GetEnumName(i)^)=i);
@@ -6745,12 +6805,33 @@ begin
      Check(GetEnumNameTrimedValue(pointer(tmp))=i);
      Check(GetEnumNameValue(tmp)=i);
      Check(GetEnumNameValue(pointer(tmp))=i);
-     Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TOrdType),i)^)=i);
+     Check(GetEnumNameValue(SynCommons.GetEnumName(TypeInfo(TSynLogInfo),i)^)=i);
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TSynLogInfo),pointer(tmp),length(tmp),true)=i);
      tmp := GetEnumName(i)^;
-     Check(SynCommons.GetEnumNameValue(TypeInfo(TOrdType),pointer(tmp),length(tmp))=i);
+     Check(SynCommons.GetEnumNameValue(TypeInfo(TSynLogInfo),pointer(tmp),length(tmp))=i);
   end;
-  Check(PTypeInfo(TypeInfo(TOrdTypeSet))^.SetEnumType=
-    PTypeInfo(TypeInfo(TOrdType))^.EnumBaseType);
+  for astext := false to true do begin
+    integer(s) := 0;
+    for i := -1 to ord(high(TSynLogInfo)) do begin
+      if i>=0 then
+        SetBit(s,i);
+      tmp := SaveJSON(s,TypeInfo(TSynLogInfos),astext);
+      if astext then
+        case i of
+        -1: Check(tmp='[]');
+        0:  Check(tmp='["sllNone"]');
+        else if i=ord(high(TSynLogInfo)) then
+            Check(tmp='["*"]');
+        end else
+        Check(GetCardinal(pointer(tmp))=cardinal(s));
+      P := pointer(tmp);
+      Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
+      if astext then
+        Check(eoo=']');
+    end;
+  end;
+  Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
+    PTypeInfo(TypeInfo(TSynLogInfo))^.EnumBaseType);
   with PTypeInfo(TypeInfo(TSQLRecordTest))^ do begin
     Check(InheritsFrom(TSQLRecordTest));
     Check(InheritsFrom(TSQLRecord));
@@ -7015,6 +7096,43 @@ begin
   Check((length(Stmt.Select)=1) and (Stmt.Select[0].FunctionName='max'));
   Check(Stmt.Limit=0);
   Stmt.Free;
+end;
+
+procedure TTestLowLevelTypes._TSynMonitorUsage;
+var id: TSynMonitorUsageID;
+    now,id2: TTimelog;
+    n: TTimeLogBits absolute now;
+    i: integer;
+    s,s2: RawUTF8;
+begin
+  id.Value := 0;
+  now := TimeLogNowUTC and not pred(1 shl 12); // truncate to hour resolution
+  id.FromTimeLog(now);
+  s := n.Text(true);
+  id2 := id.ToTimeLog;
+  s2 := id.Text(true);
+  Check(id2=now);
+  Check(s2=s);
+  for i := 1 to 200 do begin
+    n.From(n.ToDateTime+Random*50);
+    now := now and not pred(1 shl 12);
+    s := n.Text(true);
+    id.SetTime(mugYear,n.Year);
+    id.SetTime(mugMonth,n.Month);
+    id.SetTime(mugDay,n.Day);
+    id.SetTime(mugHour,n.Hour);
+    id2 := id.ToTimeLog;
+    s2 := id.Text(true);
+    Check(id2=now);
+    Check(s2=s);
+    Check(id.Granularity=mugHour);
+    id.From(n.Year,n.Month,n.Day);
+    Check(id.Granularity=mugDay);
+    id.From(n.Year,n.Month);
+    Check(id.Granularity=mugMonth);
+    id.From(n.Year);
+    Check(id.Granularity=mugYear);
+  end;
 end;
 
 
@@ -7366,6 +7484,17 @@ begin
   Check(not isSelect(' delete from toto'));
   Check(not isSelect('with recursive cnt(x) as (values(1) union all '+
     'select x+1 from cnt where x<1000000) insert into toto select x from cnt'));
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi limit 10',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu order by a',false)='titi');
+  Check(GetTableNameFromSQLSelect('select a,b  from  titi,tutu',true)='');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi where id=2'))='titi');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi,tutu'))='titi,tutu');
+  Check(RawUTF8ArrayToCSV(GetTableNamesFromSQLSelect(
+    'select a,b  from  titi, tutu ,  tata where a=2'))='titi,tutu,tata');
   T := TSQLRecordTest.Create;
   M := TSQLModel.Create([TSQLRecordTest]);
   for i := 0 to InternalClassPropInfo(TSQLRecordTest,P)-1 do begin
@@ -7637,7 +7766,7 @@ var i: integer;
 begin // slowest but always accurate version
   result := not aCRC32;
   for i := 1 to inLen do begin
-    result := crc32tab[byte(result xor pByte(inBuf)^)] xor (result shr 8);
+    result := crc32tab[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
     inc(PByte(inBuf));
   end;
   result := not result;
@@ -7706,7 +7835,7 @@ end;
 {$ifndef LINUX} // TZipRead not defined yet (use low-level file mapping WinAPI)
 
 procedure TTestCompression.ZipFormat;
-var FN: TFileName;
+var FN,FN2: TFileName;
     ExeName: string;
     S: TRawByteStringStream;
 procedure Test(Z: TZipRead; aCount: integer);
@@ -7764,6 +7893,20 @@ begin
     Free;
   end;
 end;
+procedure TestPasZipRead(const FN: TFileName; Count: integer);
+var pasZR: PasZip.TZipRead;
+begin
+  pasZR := PasZip.TZipRead.Create(FN);
+  try
+    Check(pasZR.Count=Count);
+    Check(pasZR.NameToIndex('rep1\ONE.exe')=0);
+    Check(pasZR.UnZip(0)=data);
+  finally
+    pasZR.Free;
+  end;
+end;
+var pasZW: PasZip.TZipWrite;
+    i: integer;
 begin
   ExeName := ExtractFileName(ExeVersion.ProgramFileName);
   FN := ChangeFileExt(ExeVersion.ProgramFileName,'.zip');
@@ -7785,7 +7928,40 @@ begin
     Free;
   end;
   Test(TZipRead.Create(FN),5);
+  TestPasZipRead(FN,5);
+  FN2 := ChangeFileExt(FN,'2.zip');
+  pasZW := PasZip.TZipWrite.Create(FN2);
+  try
+    pasZW.AddDeflated('rep1\one.exe',pointer(Data),length(Data));
+    Check(pasZW.Count=1);
+    pasZW.AddDeflated('rep2\ident.gz',M.Memory,M.Position);
+    Check(pasZW.Count=2);
+    pasZW.AddDeflated(ExeVersion.ProgramFileName);
+    Check(pasZW.Count=3,'direct zip file');
+    pasZW.AddStored('rep2\ident2.gz',M.Memory,M.Position);
+    Check(pasZW.Count=4);
+  finally
+    pasZW.Free;
+  end;
+  TestPasZipRead(FN2,4);
+  DeleteFile(FN2);
   DeleteFile(FN);
+  FN2 := ExeVersion.ProgramFilePath+'ddd.zip';
+  with TZipWrite.Create(FN2) do
+  try
+    FN := ExeVersion.ProgramFilePath+'ddd';
+    if not DirectoryExists(FN) then
+      FN := ExeVersion.ProgramFilePath+'..\ddd';
+    if DirectoryExists(FN) then begin
+      AddFolder(FN,'*.pas');
+      Check(Count>10);
+      for i := 0 to Count-1 do
+        Check(SameText(ExtractFileExt(Ansi7ToString(Entry[i].intName)),'.pas'));
+    end;
+  finally
+    Free;
+  end;
+  DeleteFile(FN2);
 end;
 
 {$endif LINUX}
@@ -7874,8 +8050,9 @@ end;
 
 procedure TTestCryptographicRoutines._Base64;
 const
-  Value64: RawByteString = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
-var tmp, b64: RawByteString;
+  Value64: RawUTF8 = 'SGVsbG8gL2Mn6XRhaXQg5+Ar';
+var tmp: RawByteString;
+    b64: RawUTF8;
     Value: WinAnsiString;
     i, L: Integer;
 begin
@@ -7938,7 +8115,7 @@ begin
   SetLength(orig,MAX);
   SetLength(crypted,MAX+256);
   st := '1234essai';
-  pInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
+  PInteger(UniqueRawUTF8(RawUTF8(st)))^ := Random(MaxInt);
   for noaesni := false to true do begin
     Timer[noaesni].Init;
     for k := 0 to 2 do begin
@@ -8202,10 +8379,13 @@ procedure TTestSynopsePDF._TPdfDocument;
 var MS: THeapMemoryStream;
     i,y: integer;
     embed: boolean;
+    expected: cardinal;
     WS: SynUnicode;
 const
   Hash: array[boolean] of Cardinal =
     (2336277040,1967009088);
+  Hash10: array[boolean] of Cardinal =
+    (2379006506,1967009088);
   Name: array[boolean] of PDFString =
     ('Arial','Helvetica');
 begin
@@ -8230,7 +8410,10 @@ begin
       end;
       SaveToStream(MS,FIXED_DATE);
       //MS.SaveToFile(ChangeFileExt(ExeVersion.ProgramFileName,'.pdf'));
-      Check(Hash32(MS.Memory,MS.Position)=Hash[embed]);
+      if OSVersion<wTen then
+        expected := Hash[embed] else
+        expected := Hash10[embed];
+      Check(Hash32(MS.Memory,MS.Position)=expected);
       if not embed then begin
         if CharSet<>ANSI_CHARSET then
           break; // StandardFontsReplace will work only with ANSI code page
@@ -13220,6 +13403,11 @@ begin
   Ctxt['result'] := Ctxt['n1']-Ctxt['n2'];
   // with Ctxt do Output[0] := Input[0]-Input[1];
 end;
+
+procedure TTestServiceOrientedArchitecture.IntSubtractVariantVoid(
+  Ctxt: TOnInterfaceStubExecuteParamsVariant);
+begin
+end;
 {$endif}
 
 procedure TTestServiceOrientedArchitecture.MocksAndStubs;
@@ -13228,7 +13416,7 @@ var I: ICalculator;
     UserRepository: IUserRepository;
     SmsSender: ISmsSender;
     U: TUser;
-    UJSON: RawUTF8;
+    log, UJSON: RawUTF8;
     HashGetUserByNameToto: cardinal;
     Stub: TInterfaceStub;
     Mock: TInterfaceMockSpy;
@@ -13236,7 +13424,8 @@ begin
   Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
     SetOptions([imoLogMethodCallsAndResults]);
   Check(I.Add(10,20)=0,'Default result');
-  Check(Stub.LogAsText='Add(10,20)=[0]');
+  log := Stub.LogAsText;
+  Check(log='Add(10,20)=[0]');
   I := nil;
   Stub := TInterfaceStub.Create(TypeInfo(ICalculator),I).
     Returns('Add','30').
@@ -13309,13 +13498,17 @@ begin
   Mock.Verify('GetUserByName',['toto'],'['+UJSON+']');
   UserRepository := nil; // will release TInterfaceMock and check Excepts*()
   SmsSender := nil;
+  {$ifndef NOVARIANTS}
   TInterfaceStub.Create(IID_ICalculator,I).
-    Returns('Subtract',[10,20],[3]).
-    {$ifndef NOVARIANTS}
-    Executes('Subtract',IntSubtractVariant,'toto').
-    {$endif}
-    Fails('Add','expected exception').
-    Raises('Add',[1,2],ESynException,'expected exception');
+     Executes('Subtract',IntSubtractVariantVoid,'titi');
+  check(I.Subtract(10,20)=0);
+  {$endif}
+  TInterfaceStub.Create(IID_ICalculator,I).Returns('Subtract',[10,20],[3]).
+     {$ifndef NOVARIANTS}
+     Executes('Subtract',IntSubtractVariant,'toto').
+     {$endif}
+     Fails('Add','expected exception').
+     Raises('Add',[1,2],ESynException,'expected exception');
   {$ifndef NOVARIANTS}
   for n := 1 to 10000 do
     CheckSame(I.Subtract(n*10.5,n*0.5),n*10);

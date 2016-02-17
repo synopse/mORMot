@@ -6,7 +6,7 @@ unit SynDBOracle;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBOracle;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -138,6 +138,8 @@ unit SynDBOracle;
     shared with SynDB and mORMot units (includes methods refactoring)
   - fixed column descriptor memory leak in case UseCache=true
   - add ability to use the Secure External Password Store for Credentials
+  - add ability to ignore ORA-01453 during TSQLDBOracleConnection.StartTransaction
+    by adding TSQLDBOracleConnectionProperties.IgnoreORA01453OnStartTransaction
 
 }
 
@@ -210,6 +212,7 @@ type
     fOnPasswordExpired: TOnPasswordExpired;
     fUseWallet: boolean;
     fLogSQLWithoutValues: boolean;
+    fIgnoreORA01453OnStartTransaction: boolean;
     function GetClientVersion: RawUTF8;
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
@@ -268,6 +271,14 @@ type
     property UseWallet: boolean read fUseWallet write fUseWallet;
     /// by default, will log values within sllSQL unless this propert is TRUE
     property LogSQLWithoutValues: boolean read fLogSQLWithoutValues write fLogSQLWithoutValues;
+    /// When we execute a SELECT statement across a database link, a transaction lock is placed
+    // on the undo segments (transaction is implicity started).
+    // Setting this options to true allow to ignore ORA-01453 during
+    // TSQLDBOracleConnection.StartTransaction call.
+    // - see Oracle documentation
+    // http://docs.oracle.com/cd/B28359_01/server.111/b28310/ds_appdev002.htm
+    property IgnoreORA01453OnStartTransaction: boolean
+      read fIgnoreORA01453OnStartTransaction write fIgnoreORA01453OnStartTransaction;
   end;
 
   /// implements a direct connection to the native Oracle Client Interface (OCI)
@@ -2077,16 +2088,31 @@ begin
 end;
 
 procedure TSQLDBOracleConnection.StartTransaction;
+var Log: ISynLog;
 begin
+  Log := SynDBLog.Enter(self);
   if TransactionCount>0 then
     raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction: nested '+
-      'transactions are supported by the Oracle driver',[self]);
-  inherited StartTransaction;
-  if fTrans=nil then
-    raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction call',[self]);
-  // Oracle creates implicit transactions, and we'll handle AutoCommit in
-  // TSQLDBOracleStatement.ExecutePrepared if TransactionCount=0
-  OCI.Check(self,nil,OCI.TransStart(fContext,fError,0,OCI_DEFAULT),fError);
+      'transactions are not supported by the Oracle driver',[self]);
+  try
+    inherited StartTransaction;
+    if fTrans=nil then
+      raise ESQLDBOracle.CreateUTF8('Invalid %.StartTransaction call',[self]);
+    // Oracle creates implicit transactions, and we'll handle AutoCommit in
+    // TSQLDBOracleStatement.ExecutePrepared if TransactionCount=0
+    OCI.Check(self,nil,OCI.TransStart(fContext,fError,0,OCI_DEFAULT),fError);
+  except
+    on E: Exception do begin
+      if (Properties as TSQLDBOracleConnectionProperties).IgnoreORA01453OnStartTransaction and
+        (Pos('ORA-01453', E.Message ) > 0) then begin
+       Log.Log(sllWarning, 'It seems that we use DBLink, and Oracle implicitly started transaction. ORA-01453 ignored');
+      end else begin
+        if fTransactionCount > 0 then
+          dec(fTransactionCount);
+        raise;
+      end;
+    end;
+  end;
 end;
 
 procedure TSQLDBOracleConnection.STRToUTF8(P: PAnsiChar; var result: RawUTF8;

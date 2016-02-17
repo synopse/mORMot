@@ -5,10 +5,10 @@ unit SynSM;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    Scripting support for mORMot Copyright (C) 2015 Pavel Mashlyakovsky
+    Scripting support for mORMot Copyright (C) 2016 Pavel Mashlyakovsky
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -29,7 +29,7 @@ unit SynSM;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -1707,7 +1707,7 @@ begin
       SetWideString(cx,WideString(V.VPointer));
     vtAnsiString:
       SetAnsiChar(cx,V.VPointer,length(RawByteString(V.VAnsiString)),
-{$ifndef UNICODE}     CP_UTF8);
+{$ifndef HASCODEPAGE} CP_UTF8);
 {$else}               StringCodePage(RawByteString(V.VAnsiString)));
     vtUnicodeString:
       SetSynUnicode(cx,UnicodeString(V.VPointer));

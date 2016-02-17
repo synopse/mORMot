@@ -6,7 +6,7 @@ unit SynMongoDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -599,7 +599,7 @@ type
     procedure BSONWriteArrayOfInt64(const Integers: array of Int64);
     /// write some BSON document from a supplied (extended) JSON array or object
     // - warning: the incoming JSON buffer will be modified in-place: so you
-    // should make a private copy before running this method
+    // should make a private copy before running this method (see e.g. TSynTempBuffer)
     // - will handle only '{ ... }', '[ ... ]' or 'null' input, with the standard
     // strict JSON format, or BSON-like extensions, e.g. unquoted field names:
     // $ {id:10,doc:{name:"John",birthyear:1972}}
@@ -1727,8 +1727,7 @@ type
     fServerBuildInfo: variant;
     fServerBuildInfoNumber: cardinal;
     fLatestReadConnectionIndex: integer;
-    function GetServerBuildInfo: variant;
-    function GetServerBuildInfoNumber: cardinal;
+    procedure AfterOpen; virtual; 
     function GetOneReadConnection: TMongoConnection;
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
@@ -1774,7 +1773,7 @@ type
     // - this property is cached, so request is sent only once
     // - you may easier use ServerBuildInfoNumber to check for available
     // features at runtime
-    property ServerBuildInfo: variant read GetServerBuildInfo;
+    property ServerBuildInfo: variant read fServerBuildInfo;
     /// access to a given MongoDB database
     // - try to open it via a non-authenticated connection it if not already:
     // will raise an exception on error, or will return an instance
@@ -1796,7 +1795,7 @@ type
     // ! 3000300 for MongoDB 3.0.3
     // - this property is cached, so can be used to check for available
     // features at runtime
-    property ServerBuildInfoNumber: cardinal read GetServerBuildInfoNumber;
+    property ServerBuildInfoNumber: cardinal read fServerBuildInfoNumber;
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
     // - default is rpPrimary, i.e. reading from the main primary instance
@@ -2240,6 +2239,9 @@ type
     function Drop: RawUTF8;
 
     /// calculate the number of documents in the collection
+    // - be aware that this method may be somewhat slow for huge collections,
+    // since a full scan of an index is to be performed: if your purpose is
+    // to ensure that a collection contains items, use rather IsEmpty method
     function Count: Int64;
     /// calculate the number of documents in the collection that match
     // a specific query
@@ -2257,6 +2259,9 @@ type
     // to skip before counting
     function FindCount(Criteria: PUTF8Char; const Args,Params: array of const;
       MaxNumberToReturn: integer=0; NumberToSkip: Integer=0): Int64; overload;
+    /// returns TRUE if the collection has no document, FALSE otherwise 
+    // - is much faster than Count, especially for huge collections
+    function IsEmpty: boolean;
     /// calculate aggregate values using the MongoDB aggregation framework
     // and return the result as a TDocVariant instance
     // - the Aggregation Framework was designed to be more efficient than the
@@ -3091,7 +3096,8 @@ begin
   Write(@value,sizeof(value));
 end;
 
-procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8; const RegEx,Options: RawByteString);
+procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8;
+  const RegEx,Options: RawByteString);
 begin
   BSONWrite(name,betRegEx); // cstring cstring
   Write(pointer(RegEx),length(RegEx));
@@ -3264,7 +3270,7 @@ begin
     vtCurrency: BSONWrite(name,value.VCurrency^);
     vtExtended: BSONWrite(name,value.VExtended^);
     vtVariant:  BSONWriteVariant(name,value.VVariant^);
-    vtString, vtAnsiString, {$ifdef UNICODE}vtUnicodeString,{$endif}
+    vtString, vtAnsiString, {$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString: begin
       VarRecToUTF8(value,tmp);
       BSONWrite(name,tmp);
@@ -3650,16 +3656,6 @@ begin
 end;
 
 procedure TBSONObjectID.ComputeNew;
-  {$ifdef MSWINDOWS}
-  function ComputeMachineID: Cardinal;
-  var tmp: array[byte] of AnsiChar;
-  begin
-    result := GetEnvironmentVariableA('COMPUTERNAME',tmp,sizeof(tmp));
-    if result<1 then
-      result := GetCurrentProcessId else
-      result := kr32(0,@tmp,result);
-  end;
-  {$endif}
 var Tick, CurrentTime: cardinal;
 begin // this is a bit complex, but we have to avoid any collision
   with GlobalBSONObjectID do begin
@@ -3677,11 +3673,9 @@ begin // this is a bit complex, but we have to avoid any collision
       end;
     end;
     if ProcessID=0 then begin
-      {$ifdef MSWINDOWS}
-      PCardinal(@MachineID)^ := ComputeMachineID;
-      {$else}
-      PCardinal(@MachineID)^ := PtrUInt(MainThreadID); // temporary workaround
-      {$endif}
+      with ExeVersion do
+        PCardinal(@MachineID)^ := crc32c(crc32c(MainThreadID,
+          pointer(Host),length(Host)),pointer(User),length(User));
       ProcessID := PtrUInt(GetCurrentThreadId);
       FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
       Counter := FirstCounter;
@@ -3851,7 +3845,7 @@ begin
       VarClear(result);
     VType := VarType;
     VBlob := nil; // avoid GPF here below
-    VKind := JSONBufferToBSONDocument(json,RawByteString(VBlob));
+    VKind := JSONBufferToBSONDocument(json,TBSONDocument(VBlob));
   end;
 end;
 
@@ -4008,20 +4002,20 @@ end;
 
 procedure TBSONVariant.CastTo(var Dest: TVarData;
   const Source: TVarData; const AVarType: TVarType);
-var Tmp: RawUTF8;
+var tmp: RawUTF8;
     wasString: boolean;
 begin
   if AVarType=VarType then begin
-    VariantToUTF8(Variant(Source),Tmp,wasString);
+    VariantToUTF8(Variant(Source),tmp,wasString);
     if wasString then begin
       if Dest.VType and VTYPE_STATIC<>0 then
         VarClear(variant(Dest));
-      if TBSONVariantData(Dest).VObjectID.FromText(Tmp) then begin
+      if TBSONVariantData(Dest).VObjectID.FromText(tmp) then begin
         Dest.VType := VarType;
         TBSONVariantData(Dest).VKind := betObjectID;
         exit;
       end;
-      variant(Dest) := BSONVariant(Tmp); // convert from JSON text
+      variant(Dest) := BSONVariant(tmp); // convert from JSON text
       exit;
     end;
     RaiseCastError;
@@ -4035,9 +4029,9 @@ begin
         exit;
       end else begin
         if VKind=betObjectID then
-          VObjectID.ToText(Tmp) else
-          Tmp := VariantSaveMongoJSON(variant(Source),modMongoShell);
-        RawUTF8ToVariant(Tmp,Dest,AVarType); // convert to JSON text
+          VObjectID.ToText(tmp) else
+          tmp := VariantSaveMongoJSON(variant(Source),modMongoShell);
+        RawUTF8ToVariant(tmp,Dest,AVarType); // convert to JSON text
       end;
   end;
 end;
@@ -4305,7 +4299,7 @@ end;
 
 function BSON(const Format: RawUTF8; const Args,Params: array of const;
   kind: PBSONElementType): TBSONDocument;
-var JSON: RawUTF8;
+var JSON: RawUTF8; // since we use FormatUTF8(), TSynTempBuffer is useless here
     v: variant;
     k: TBSONElementType;
 begin
@@ -4321,20 +4315,24 @@ begin
     end;
   end;
   JSON := FormatUTF8(Format,Args,Params,true);
-  UniqueRawUTF8(JSON);
+  UniqueRawUTF8(JSON); // ensure Format is untouched if Args=[] 
   k := JSONBufferToBSONDocument(pointer(JSON),result);
   if kind<>nil then
     kind^ := k;
 end;
 
 function BSON(const JSON: RawUTF8; kind: PBSONElementType): TBSONDocument;
-var tmp: RawUTF8; // make a private copy
+var tmp: TSynTempBuffer;
     k: TBSONElementType;
 begin
-  SetString(tmp,PAnsiChar(pointer(JSON)),length(JSON));
-  k := JSONBufferToBSONDocument(pointer(tmp),result);
-  if kind<>nil then
-    kind^ := k;
+  tmp.Init(JSON);
+  try
+    k := JSONBufferToBSONDocument(tmp.buf,result);
+    if kind<>nil then
+      kind^ := k;
+  finally
+    tmp.Done;
+  end;
 end;
 
 function BSONVariant(const NameValuePairs: array of const): variant;
@@ -4461,7 +4459,7 @@ begin
   W.AddShort('collection:"');
   W.AddJSONEscape(pointer(fFullCollectionName));
   W.AddShort('",opCode:');
-  W.AddTypedJSON(TypeInfo(TMongoOperation),fRequestOpCode);
+  W.AddTypedJSON(TypeInfo(TMongoOperation),fRequestOpCode,true,false);
   W.AddShort(',requestID:');
   W.AddU(fRequestID);
   if fResponseTo<>0 then begin
@@ -5429,8 +5427,10 @@ begin
     result := nil else begin
     result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
     if result=nil then begin // not already opened -> try now from primary host
-      if not fConnections[0].Opened then
+      if not fConnections[0].Opened then begin
         fConnections[0].Open;
+        AfterOpen;
+      end;
       result := TMongoDatabase.Create(Self,DatabaseName);
       fDatabases.AddObject(DatabaseName,result);
     end;
@@ -5471,6 +5471,7 @@ begin
     if not fConnections[0].Opened then
     try
       fConnections[0].Open;
+      AfterOpen; // need ServerBuildInfoNumber just below
       digest := PasswordDigest(UserName,Password);
       if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin // MONGODB-CR
         // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
@@ -5545,28 +5546,15 @@ begin
   end;
 end;
 
-function TMongoClient.GetServerBuildInfo: variant;
+procedure TMongoClient.AfterOpen;
 begin
-  if TVarData(fServerBuildInfo).VType=varEmpty then
-     fConnections[0].RunCommand('admin','buildinfo',fServerBuildInfo);
-  result := fServerBuildInfo;
-end;
-
-function TMongoClient.GetServerBuildInfoNumber: cardinal;
-  procedure ComputeIt;
-  begin
-    with _Safe(GetServerBuildInfo)^.A['versionArray']^ do
+  if VarIsEmptyOrNull(fServerBuildInfo) then begin
+    fConnections[0].RunCommand('admin','buildinfo',fServerBuildInfo);
+    with _Safe(fServerBuildInfo)^.A['versionArray']^ do
       if Count=4 then
         fServerBuildInfoNumber := // e.g. 2040900 for MongoDB 2.4.9
           integer(Values[0])*1000000+integer(Values[1])*10000+
           integer(Values[2])*100+integer(Values[3]);
-  end;
-begin
-  if self=nil then
-    result := 0 else begin
-    if fServerBuildInfoNumber=0 then
-      ComputeIt;
-    result := fServerBuildInfoNumber;
   end;
 end;
 
@@ -5780,7 +5768,7 @@ begin
     exit;
   end;
   if Database.Client.Log<>nil then
-    Database.Client.Log.Enter(self);
+    Database.Client.Log.Enter('Drop %',[Name],self);
   result := fDatabase.RunCommand(BSONVariant('{drop:?}',[],[Name]),res);
   Database.Client.Log.Log(sllTrace,'Drop("%")->%',[Name,res],self);
   if result='' then
@@ -5796,7 +5784,7 @@ begin
   if (self=nil) or (Database=nil) then
     exit;
   if Database.Client.Log<>nil then
-    Database.Client.Log.Enter(self);
+    Database.Client.Log.Enter('EnsureIndex %',[Name],self);
   if DocVariantData(Keys)^.Kind<>dvObject then
     raise EMongoException.CreateUTF8('%[%].EnsureIndex(Keys?)',[self,FullCollectionName]);
   useCommand := fDatabase.Client.ServerBuildInfoNumber>=2060000;
@@ -5876,6 +5864,13 @@ begin
     cmd := FormatUTF8('%,skip:%',[cmd,NumberToSkip]);
   fDatabase.RunCommand(BSONVariant(cmd+'}'),res);
   result := _Safe(res)^.GetValueOrDefault('n',0);
+end;
+
+function TMongoCollection.IsEmpty: boolean;
+var res: variant;
+begin // much faster than Count>0 for huge collections
+  res := FindDoc(BSONVariant('{$query:{}}'),BSONVariant(['_id',1]));
+  result := VarIsEmptyOrNull(res);
 end;
 
 function TMongoCollection.FindBSON(const Criteria, Projection: Variant;

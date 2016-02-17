@@ -6,7 +6,7 @@ unit SynDBODBC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynDBODBC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -72,13 +72,16 @@ unit SynDBODBC;
   - now TODBCConnection.Connect() will recognize the DBMS from its driver name
   - added NexusDB, Firebird, SQlite3 and DB2 support
   - added Informix support - by EMartin
+  - added GetProcedureNames for listing stored procedure names from current connection
+  - addes GetViewNames and SQLGetViewNames for listing view names from current connection
+  - added ODBCInstalledDriversList for listing installed ODBC drivers (Windows only)
+  - overrided GetDatabaseNameSafe over ODBC connection string
 
   TODO:
   - implement array binding of parameters
     http://msdn.microsoft.com/en-us/library/windows/desktop/ms709287
   - implement row-wise binding when all columns are inlined
     http://msdn.microsoft.com/en-us/library/windows/desktop/ms711730
-
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -113,6 +116,8 @@ type
   protected
     fDriverDoesNotHandleUnicode: Boolean;
     fSQLDriverConnectPrompt: Boolean;
+    /// this overridden method will hide de DATABASE/PWD fields in ODBC connection string
+    function GetDatabaseNameSafe: RawUTF8; override;
     /// this overridden method will retrieve the kind of DBMS from the main connection
     function GetDBMS: TSQLDBDefinition; override;
   public
@@ -159,6 +164,10 @@ type
     // - will retrieve the corresponding metadata from ODBC library if SQL
     // direct access was not defined
     procedure GetTableNames(out Tables: TRawUTF8DynArray); override;
+    /// get all view names
+    // - will retrieve the corresponding metadata from ODBC library if SQL
+    // direct access was not defined
+    procedure GetViewNames(out Views: TRawUTF8DynArray); override;
     /// retrieve the column/field layout of a specified table
     // - will also check if the columns are indexed
     // - will retrieve the corresponding metadata from ODBC library if SQL
@@ -167,7 +176,11 @@ type
     /// initialize fForeignKeys content with all foreign keys of this DB
     // - used by GetForeignKey method
     procedure GetForeignKeys; override;
+    /// retrieve a list of stored procedure names from current connection
+    procedure GetProcedureNames(out Procedures: TRawUTF8DynArray); override;
     /// retrieve procedure input/output parameter information
+    // - aProcName: stored procedure name to retrieve parameter infomation.
+    // - Parameters: parameter list info (name, datatype, direction, default)
     procedure GetProcedureParameters(const aProcName: RawUTF8; out Parameters: TSQLDBProcColumnDefineDynArray); override;
     /// if full connection string may prompt the user for additional information
     // - property used only with SQLDriverConnect() API (i.e. when aServerName
@@ -305,9 +318,21 @@ type
     function UpdateCount: integer; override;
   end;
 
+{$ifdef MSWINDOWS}
+/// List all ODBC drivers installed
+// - aDrivers is the output driver list container, which should be either nil (to
+// create a new TStringList), or any existing TStrings instance (may be from VCL
+// - aIncludeVersion: include the DLL driver version as <driver name>=<dll version>
+// in aDrivers (somewhat slower)
+function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): boolean;
+{$endif MSWINDOWS}
 
 implementation
 
+{$ifdef MSWINDOWS}
+uses
+  Registry;
+{$endif MSWINDOWS}
 
 { -------------- ODBC library interfaces, constants and types }
 
@@ -967,6 +992,11 @@ type
       ProcName: PWideChar;   NameLength3: SqlSmallint;
       ColumnName: PWideChar;  NameLength4: SqlSmallint): SqlReturn;
       {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
+    SQLProcedures: function(StatementHandle: SqlHStmt;
+      CatalogName: PWideChar; NameLength1: SqlSmallint;
+      SchemaName: PWideChar;  NameLength2: SqlSmallint;
+      ProcName: PWideChar;   NameLength3: SqlSmallint): SqlReturn;
+      {$ifdef MSWINDOWS} stdcall {$else} cdecl {$endif};
   public
     /// load the ODBC library
     // - and retrieve all SQL*() addresses for ODBC_ENTRIES[] items
@@ -988,7 +1018,7 @@ type
   end;
 
 const
-  ODBC_ENTRIES: array[0..65] of PChar =
+  ODBC_ENTRIES: array[0..66] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
      'SQLColAttribute','SQLColAttributeW','SQLColumns','SQLColumnsW',
@@ -1005,10 +1035,70 @@ const
      'SQLGetInfo','SQLGetInfoW','SQLSetStmtAttr','SQLSetStmtAttrW','SQLSetEnvAttr',
      'SQLSetConnectAttr','SQLSetConnectAttrW','SQLTables','SQLTablesW',
      'SQLForeignKeys','SQLForeignKeysW','SQLDriverConnect','SQLDriverConnectW',
-     'SQLProcedureColumnsA','SQLProcedureColumnsW');
+     'SQLProcedureColumnsA','SQLProcedureColumnsW','SQLProcedures');
 
 var
-  ODBC: TODBCLib = nil;
+  ODBC: TODBCLib = nil;    
+
+{$ifdef MSWINDOWS}
+function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: TStrings): Boolean;
+
+  // expand environment variables, i.e %windir%
+  // adapted from http://delphidabbler.com/articles?article=6
+  function ExpandEnvVars(const aStr: string): string;
+  var size: Integer; 
+  begin
+    // Get required buffer size
+    size := ExpandEnvironmentStrings(pointer(aStr),nil,0);
+    if size>0 then begin
+      // Read expanded string into result string
+      SetLength(result, size-1);
+      ExpandEnvironmentStrings(pointer(aStr),pointer(result),size);
+    end else
+      result := aStr; // return the original file name
+  end;
+
+  function GetFullFileVersion(const aFileName: TFileName): string;
+  begin
+    with TFileVersion.Create(aFileName,0,0,0) do
+    try // five digits by section for easy version number comparison as string
+      result := Format('%0.5d.%0.5d.%0.5d.%0.5d',[Major,Minor,Release,Build]);
+    finally
+      Free;
+    end;
+  end;
+
+var
+  I: Integer;
+  lDriver: string;
+begin
+  with TRegistry.Create do
+  try
+    RootKey := HKEY_LOCAL_MACHINE;
+    result := OpenKey('Software\ODBC\ODBCINST.INI\ODBC Drivers', false) or
+              OpenKey('Software\ODBC\ODBCINST.INI', false);
+    if result then begin
+      if not Assigned(aDrivers) then
+        aDrivers := TStringList.Create;
+      GetValueNames(aDrivers);
+      if aIncludeVersion then
+      for I := 0 to aDrivers.Count-1 do begin
+        CloseKey;
+        result := OpenKey('Software\ODBC\ODBCINST.INI\' + aDrivers[I], false);
+        if result then begin
+          // expand environment variable, i.e %windir%
+          lDriver := ExpandEnvVars(ReadString('Driver'));
+          aDrivers[I] := aDrivers[I] + '=' + GetFullFileVersion(lDriver);
+        end;
+      end;
+    end;
+  finally
+    Free;
+  end;
+end;
+{$else}
+// TODO: ODBCInstalledDriversList for Linux
+{$endif MSWINDOWS}
 
 
 { TODBCConnection }
@@ -1183,11 +1273,17 @@ end;
 
 procedure TODBCStatement.DeallocStatement;
 begin
-  if fStatement<>nil then begin
-    ODBC.Check(nil,self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
-      (fConnection as TODBCConnection).fDbc);
-    fStatement := Nil;
-  end;
+  if fStatement<>nil then
+    // avoid Informix exception and log exception race condition
+    try
+      try
+        ODBC.Check(nil,self,ODBC.FreeHandle(SQL_HANDLE_STMT,fStatement),SQL_HANDLE_DBC,
+          (fConnection as TODBCConnection).fDbc);
+      except
+      end;
+    finally
+      fStatement := Nil;
+    end;
 end;
 
 function ODBCColumnToFieldType(DataType, ColumnPrecision, ColumnScale: integer): TSQLDBFieldType;
@@ -1931,6 +2027,37 @@ begin
   end;
 end;
 
+procedure TODBCConnectionProperties.GetViewNames(out Views: TRawUTF8DynArray);
+var n: integer;
+    schema, tablename: RawUTF8;
+begin
+  inherited; // first try from SQL, if any (faster)
+  if Views<>nil then
+    exit; // already retrieved directly from engine
+  try
+    with TODBCStatement.Create(MainConnection) do
+    try
+      AllocStatement;
+      ODBC.Check(Connection,nil,ODBC.TablesA(fStatement,nil,0,nil,0,nil,0,'VIEW',SQL_NTS),SQL_HANDLE_STMT,fStatement);
+      BindColumns;
+      n := 0;
+      while Step do begin
+        schema := Trim(ColumnUTF8(1));
+        tablename := Trim(ColumnUTF8(2));
+        if schema<>'' then
+          tablename := schema+'.'+tablename;
+        AddSortedRawUTF8(Views,n,tablename);
+      end;
+      SetLength(Views,n);
+    finally
+      Free; // TODBCStatement release
+    end;
+  except
+    on Exception do
+      SetLength(Views,0);
+  end;
+end;
+
 procedure TODBCConnectionProperties.GetForeignKeys;
 begin
   try
@@ -1950,6 +2077,39 @@ begin
     end;
   except
     on Exception do ; // just ignore errors here
+  end;
+end;
+
+procedure TODBCConnectionProperties.GetProcedureNames(out Procedures: TRawUTF8DynArray);
+var Schema: RawUTF8;
+    n: integer;
+    status: SqlReturn;
+    Stmt: TODBCStatement;
+begin
+  inherited; // first try from SQL, if any (faster)
+  if Procedures<>nil then
+    exit; // already retrieved directly from engine
+  SetSchemaNameToOwner(Schema);
+  Schema := SynCommons.UpperCase(Schema);
+  try
+    // get procedure list
+    Stmt := TODBCStatement.Create(MainConnection);
+    try
+      Stmt.AllocStatement;
+      status := ODBC.SQLProcedures(Stmt.fStatement,nil,0,pointer(Schema),SQL_NTS,nil,0);
+      ODBC.Check(Stmt.Connection,nil,status,SQL_HANDLE_STMT,Stmt.fStatement);
+      Stmt.BindColumns;
+      n := 0;
+      while Stmt.Step do begin
+        AddSortedRawUTF8(Procedures,n,Trim(Stmt.ColumnUTF8(2))); // PROCEDURE_NAME column
+      end;
+      SetLength(Procedures,n);
+    finally
+      Stmt.Free; // TODBCStatement release
+    end;
+  except
+    on Exception do
+      Procedures := nil;
   end;
 end;
 
@@ -2018,6 +2178,14 @@ begin
     on Exception do
       Parameters := nil;
   end;
+end;
+
+function TODBCConnectionProperties.GetDatabaseNameSafe: RawUTF8;
+var
+  lPWD: RawUTF8;
+begin
+  lPWD := FindIniNameValue(pointer(StringReplaceAll(fDatabaseName,';',sLineBreak)), 'PWD=');
+  result := StringReplaceAll(fDatabaseName,lPWD,'***');
 end;
 
 function TODBCConnectionProperties.GetDBMS: TSQLDBDefinition;

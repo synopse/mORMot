@@ -70,6 +70,7 @@ type
     Tables: TStringList;
     AssociatedModel: TSQLModel;
     AssociatedTables: TSQLRecordClassDynArray;
+    AssociatedServices: TInterfaceFactoryObjArray;
     TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
@@ -169,8 +170,8 @@ begin
     mmoResult.OnGetLineAttr := nil
   else
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-  mmoResult.TopRow := 0;
   mmoResult.Text := UTF8ToString(StringReplaceTabs(JSON, '    '));
+  mmoResult.SetCaret(0, 0);
   fJson := '';
 end;
 
@@ -290,7 +291,7 @@ begin
       tables := AssociatedModel.Tables
     else
       tables := AssociatedTables;
-    table := TSQLTableJSON.CreateFromTables(tables, '', pointer(fJson), length(fJson));
+    table := TSQLTableJSON.CreateFromTables(tables, fSQL, pointer(fJson), length(fJson));
     Grid := TSQLTableToGrid.Create(drwgrdResult, table, nil);
     Grid.SetAlignedByType(sftCurrency, alRight);
     Grid.SetFieldFixedWidth(100);
@@ -336,9 +337,24 @@ begin
 end;
 
 procedure TDBFrame.GridToVariant(var result: variant);
+var
+  methodName: RawUTF8;
+  s, m: integer;
 begin
   Grid.Table.ToDocVariant(fmmoResultRow, result, JSON_OPTIONS_NAMEVALUE[true],
     true, true, true);
+  if AssociatedServices <> nil then
+    with _Safe(result)^ do
+      if GetAsRawUTF8('Method', methodName) then
+        for s := 0 to high(AssociatedServices) do begin
+          m := AssociatedServices[s].FindFullMethodIndex(methodName, true);
+          if m >= 0 then
+            with AssociatedServices[s].Methods[m] do begin
+              ArgsAsDocVariantFix(GetAsDocVariantSafe('Input')^, true);
+              ArgsAsDocVariantFix(GetAsDocVariantSafe('Output')^, false);
+              break;
+            end;
+        end;
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);

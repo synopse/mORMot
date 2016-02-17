@@ -6,7 +6,7 @@ unit mORMotMongoDB;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -481,7 +481,9 @@ end;
 function TSQLRestStorageMongoDB.TableHasRows(
   Table: TSQLRecordClass): boolean;
 begin
-  result := TableRowCount(Table)>0;
+  if (fCollection=nil) or (Table<>fStoredClass) then
+    result := false else
+    result := not fCollection.IsEmpty;
 end;
 
 function TSQLRestStorageMongoDB.TableRowCount(
@@ -815,7 +817,7 @@ begin
     if fBatchMethod<>mNone then
       if fBatchMethod<>mDelete then
         exit else
-        AddInt64(TInt64DynArray(fBatchIDs),fBatchIDsCount,ID) else begin
+        AddID(fBatchIDs,fBatchIDsCount,ID) else begin
       if Owner<>nil then begin // notify BEFORE deletion
         Owner.InternalUpdateEvent(seDelete,TableModelIndex,ID,'',nil);
         Owner.FlushInternalDBCache;

@@ -6,7 +6,7 @@ unit SynCrossPlatformSpecific;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit SynCrossPlatformSpecific;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -51,7 +51,7 @@ unit SynCrossPlatformSpecific;
   - first public release, corresponding to mORMot Framework 1.18
   - each operating system will have its own API calls in this single unit
   - would compile with Delphi for any platform (including NextGen for mobiles),
-    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.1.1
+    with FPC 2.7 or Kylix, and with SmartMobileStudio 2.2
 
 }
 
@@ -65,24 +65,24 @@ unit SynCrossPlatformSpecific;
     {$ifdef FPC}
       {$define USESYNCRT}       // sounds to be the best choice under Windows
       {.$define USEFCL}         // for debugging the FCL within Lazarus
-    {$else FPC}
+    {$else}
       {$define USESYNCRT}       // sounds to be the best choice under Windows
       {.$define USEINDY}        // for debugging Indy within Delphi
       {.$define USEHTTPCLIENT}  // for debugging XE8+ HttpClient within Delphi
-    {$endif FPC}
+    {$endif}
     {$define USECRITICALSECTION}
-  {$else MSWINDOWS}
+  {$else}
     {$ifdef FPC}
       {$define USEFCL}
       {$define USECRITICALSECTION}
-    {$else FPC}
+    {$else}
       {$ifdef ISDELPHIXE8}     // use new XE8+ System.Net.HttpClient
         {$ifdef ANDROID}
           {$define USEHTTPCLIENT}
-        {$else ANDROID}
+        {$else}
           {$define USEINDY} // HttpClient has still issues with https under iOS
         {$endif ANDROID}
-      {$else ISDELPHIXE8}
+      {$else}
         {$define USEINDY}
       {$endif ISDELPHIXE8}
     {$endif FPC}
@@ -95,8 +95,9 @@ interface
 uses
   SmartCL.System,
   System.Types,
+  ECMA.Date,
   System.Date,
-  w3c.date;
+  ECMA.Json;
 {$else}
 uses
   {$ifdef MSWINDOWS}
@@ -118,6 +119,8 @@ type
   byte = integer;
   word = integer;
   cardinal = integer;
+  // warning: JavaScript truncates integer to its mantissa resolution + sign!
+  Int53 = integer;
   Int64 = integer;
   currency = float;
   TPersistent = TObject;

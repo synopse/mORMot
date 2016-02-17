@@ -6,7 +6,7 @@ unit mORMotMVC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2015 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -25,7 +25,7 @@ unit mORMotMVC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2015
+  Portions created by the Initial Developer are Copyright (C) 2016
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -463,8 +463,10 @@ type
   // ready to serve any file available in the Views\.static local folder
   // - registerORMTableAsExpressions will register Mustache Expression Helpers
   // for every TSQLRecord table of the Server data model
+  // - by default, TSQLRestServer authentication would be by-passed for all
+  // MVC routes, unless bypassAuthentication option is undefined
   TMVCPublishOption = (publishMvcInfo, publishStatic,
-    registerORMTableAsExpressions);
+    registerORMTableAsExpressions, bypassAuthentication);
 
   /// which kind of optional content should be publish
   TMVCPublishOptions = set of TMVCPublishOption;
@@ -862,7 +864,7 @@ begin
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
         W.AddHtmlEscapeString(caption);
         HtmlTableStyle.BeforeValue(W);
-        utf8 := VariantToUTF8(Rec^.Values[i]);
+        VariantToUTF8(Rec^.Values[i],utf8);
         case Field.SQLFieldType of
         sftAnsiText,sftUTF8Text,sftInteger,sftFloat,sftCurrency:
           W.AddHtmlEscape(pointer(utf8));
@@ -1011,19 +1013,19 @@ end;
 class procedure TMVCViewsMustache.md5(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.MD5(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.MD5(ToUTF8(Value)),result);
 end;
 
 class procedure TMVCViewsMustache.sha1(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.SHA1(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.SHA1(ToUTF8(Value)),result);
 end;
 
 class procedure TMVCViewsMustache.sha256(const Value: variant;
   out result: variant);
 begin
-  RawUTF8ToVariant(SynCrypto.SHA256(VariantToUTF8(Value)),result);
+  RawUTF8ToVariant(SynCrypto.SHA256(ToUTF8(Value)),result);
 end;
 
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
@@ -1346,7 +1348,7 @@ begin
     'main',fApplication.GetViewInfo(fMethodIndex),
     'msg',StatusCodeToErrorMsg(ErrorCode),
     'errorCode',ErrorCode,ErrorName,ErrorValue]);
-  renderContext.originalErrorContext := JSONReformat(VariantToUTF8(renderContext));
+  renderContext.originalErrorContext := JSONReformat(ToUTF8(renderContext));
   Renders(renderContext,ErrorCode,true);
 end;
 
@@ -1396,7 +1398,7 @@ begin
               'main',fApplication.GetViewInfo(fMethodIndex));
             if fMethodIndex=fApplication.fFactoryErrorIndex then
               _ObjAddProps(['errorCode',action.ReturnedStatus,
-                'originalErrorContext',JSONReformat(VariantToUTF8(renderContext))],
+                'originalErrorContext',JSONReformat(ToUTF8(renderContext))],
                 renderContext);
             Renders(renderContext,action.ReturnedStatus,false);
             exit; // success
@@ -1466,7 +1468,7 @@ end;
 procedure TMVCRendererJson.Renders(outContext: variant;
   status: cardinal; forcesError: boolean);
 begin
-  fOutput.Content := JSONReformat(VariantToUTF8(outContext));
+  fOutput.Content := JSONReformat(ToUTF8(outContext));
   fOutput.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   fOutput.Status := status;
 end;
@@ -1557,6 +1559,8 @@ constructor TMVCRunOnRestServer.Create(aApplication: TMVCApplication;
   aRestServer: TSQLRestServer; const aSubURI: RawUTF8;
   aViews: TMVCViewsAbtract; aPublishOptions: TMVCPublishOptions);
 var m: integer;
+    bypass: boolean;
+    method: RawUTF8;
 begin
   if aApplication=nil then
     raise EMVCException.CreateUTF8('%.Create(aApplication=nil)',[self]);
@@ -1574,15 +1578,19 @@ begin
     {$endif}
   inherited Create(aApplication,aViews);
   fPublishOptions := aPublishOptions;
+  bypass := bypassAuthentication in fPublishOptions;
   if aSubURI<>'' then
-    fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,true) else begin
-    for m := 0 to fApplication.fFactory.MethodsCount-1 do
-      fRestServer.ServiceMethodRegister(
-        fApplication.fFactory.Methods[m].URI,RunOnRestServerRoot,true);
+    fRestServer.ServiceMethodRegister(aSubURI,RunOnRestServerSub,bypass) else begin
+    for m := 0 to fApplication.fFactory.MethodsCount-1 do begin
+      method := fApplication.fFactory.Methods[m].URI;
+      if method[1]='_' then
+        delete(method,1,1); // e.g. IService._Start() -> /service/start
+      fRestServer.ServiceMethodRegister(method,RunOnRestServerRoot,bypass);
+    end;
     if publishMvcInfo in fPublishOptions then
-      fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,true);
+      fRestServer.ServiceMethodRegister(MVCINFO_URI,RunOnRestServerRoot,bypass);
     if publishStatic in fPublishOptions then
-      fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,true);
+      fRestServer.ServiceMethodRegister(STATIC_URI,RunOnRestServerRoot,bypass);
   end;
   if (registerORMTableAsExpressions in fPublishOptions) and
      aViews.InheritsFrom(TMVCViewsMustache) then
@@ -1639,7 +1647,7 @@ begin
     renderer := rendererClass.Create(self);
     try
       if Ctxt.Method in [mGET,mPOST] then begin
-        methodIndex := fViews.fFactory.FindMethodIndex(rawMethodName);
+        methodIndex := fApplication.fFactory.FindMethodIndex(rawMethodName);
         if methodIndex>=0 then begin
           inputContext := Ctxt.InputAsTDocVariant;
           if not VarIsEmpty(inputContext) then
