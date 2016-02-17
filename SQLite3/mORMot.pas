@@ -21308,7 +21308,8 @@ function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
 begin
   if TObject(aValue)=nil then
     TObject(aValue) := Instance.CreateNew;
-  result := JSONToObject(aValue,P,aValid);
+  result := JSONToObject(aValue,P,aValid,nil,[j2oHandleCustomVariants,
+    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty]);
 end;
 
 function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
