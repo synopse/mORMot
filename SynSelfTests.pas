@@ -5494,7 +5494,7 @@ begin
   Check(J='{"name":"John","field":{"$regex":"acme.*corp","$options":"i"}}');
   // the below only works if unit SynMongoDB is included in the uses list of the project
   // for virtual function TryJSONToVariant
-  Check(J=JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John']));
+  Check(JSONEncode('{name:?,field:/%/i}',['acme.*corp'],['John'])=J);
 {$endif}
 {$ifndef DELPHI5OROLDER}
   peop := TSQLRecordPeople.Create;

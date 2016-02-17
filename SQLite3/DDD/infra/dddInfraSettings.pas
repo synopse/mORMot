@@ -521,8 +521,7 @@ end;
 function TDDDAppSettingsAbstract.AsJson: RawUTF8;
 begin
   result := ObjectToJSON(Self,[woHumanReadable,woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment,
-    woVariantAsNonExtendedJson]);
+    woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
 end;
 
 constructor TDDDAppSettingsAbstract.Create(

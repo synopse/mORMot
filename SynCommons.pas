@@ -6636,9 +6636,6 @@ type
   // field will be serialized as "***" to prevent security issues (e.g. in log)
   // - by default, TObjectList will set the woStoreClassName for its nested
   // objects, unless woObjectListWontStoreClassName is defined
-  // - any variant published property would be stored with their own
-  // serialization option, unless woVariantAsNonExtendedJson is set to force
-  // strict JSON content
   // - void strings would be serialized as "", unless woDontStoreEmptyString
   // is defined so that such properties would not be written
   TTextWriterWriteObjectOption = (
@@ -6647,8 +6644,7 @@ type
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix,
     woSQLRawBlobAsBase64, woHideSynPersistentPassword,
-    woObjectListWontStoreClassName, woVariantAsNonExtendedJson,
-    woDontStoreEmptyString);
+    woObjectListWontStoreClassName, woDontStoreEmptyString);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -6707,6 +6703,9 @@ type
   // - by default, custom serializers defined via RegisterCustomJSONSerializer()
   // would let AddRecordJSON() and AddDynArrayJSON() write enumerates and sets
   // as integer numbers, unless twoEnumSetsAsTextInRecord is set
+  // - variants and nested objects would be serialized with their default
+  // JSON serialization options, unless twoForceJSONExtended or
+  // twoForceJSONStandard is defined
   // - when enumerates and sets are serialized as text into JSON, you may force
   // the identifiers to be left-trimed for all their lowercase characters
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option 
@@ -6716,6 +6715,8 @@ type
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
     twoEnumSetsAsTextInRecord,
+    twoForceJSONExtended,
+    twoForceJSONStandard,
     twoTrimLeftEnumSets,
     twoEndOfLineCRLF);
   /// options set for a TTextWriter instance
@@ -6930,7 +6931,10 @@ type
     /// append after trim first lowercase chars ('otDone' will add 'Done' e.g.)
     procedure AddTrimLeftLowerCase(Text: PShortString);
     /// append a ShortString property name, as '"PropName":'
-    // - PropName content should not need to be JSON escaped (e.g. no " within)
+    // - PropName content should not need to be JSON escaped (e.g. no " within,
+    // and only ASCII 7-bit characters)
+    // - if twoForceJSONExtended is defined in CustomOptions, it would append
+    // 'PropName:' without the double quotes
     procedure AddPropName(const PropName: ShortString);
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
@@ -7188,13 +7192,11 @@ type
     /// append a variant content as number or string
     // - default Escape=twJSONEscape will create valid JSON content, which
     // can be converted back to a variant value using VariantLoadJSON()
-    // - would store the variant with its default JSON serialization, unless
-    // ForcedSerializeAsNonExtendedJson is TRUE so that any extended JSON format
-    // would be replaced by standard/strict JSON
+    // - default JSON serialization options would apply, unless
+    // twoForceJSONExtended or twoForceJSONStandard is defined
     // - note that before Delphi 2009, any varString value is expected to be
     // a RawUTF8 instance - which does make sense in the mORMot context
-    procedure AddVariant(const Value: variant; Escape: TTextWriterKind=twJSONEscape;
-      ForcedSerializeAsNonExtendedJson: boolean=false);
+    procedure AddVariant(const Value: variant; Escape: TTextWriterKind=twJSONEscape);
     {$endif}
     /// append a void record content as UTF-8 encoded JSON or custom serialization
     // - this method will first create a void record (i.e. filled with #0 bytes)
@@ -7410,8 +7412,6 @@ type
     fExpand: boolean;
     /// used to store output format for TSQLRecord.GetJSONValues()
     fWithID: boolean;
-    /// if expanded output format should write the column names without quotes
-    fUnquotedExpandedColumnNames: boolean;
     /// used to store field for TSQLRecord.GetJSONValues()
     fFields: TSQLFieldIndexDynArray;
     /// if not Expanded format, contains the Stream position of the first
@@ -7457,14 +7457,6 @@ type
     property Expand: boolean read fExpand write fExpand;
     /// is set to TRUE if the ID field must be appended to the resulting JSON
     property WithID: boolean read fWithID;
-    /// if expanded output format should write the column names without quotes
-    // - this property is ignored if EXPAND=FALSE
-    // - by default, Expand=TRUE would output "col1":...,"col2"... standard
-    // JSON content
-    // - set UnquotedExpandedColumnNames=TRUE to force the non standard
-    // (but shorter) extended JSON layout col1:...,col2:... for EXPAND=true
-    property UnquotedExpandedColumnNames: boolean read fUnquotedExpandedColumnNames
-      write fUnquotedExpandedColumnNames;
     /// Read-Only access to the field bits set for each column to be stored
     property Fields: TSQLFieldIndexDynArray read fFields;
     /// if not Expanded format, contains the Stream position of the first
@@ -7573,7 +7565,7 @@ type
 /// - serialize as JSON the published integer, Int64, floating point values,
 // TDateTime (stored as ISO 8601 text), string, variant and enumerate
 // (e.g. boolean) properties of the object (and its parents)
-// - won't handle shortstring properties
+// - would set twoForceJSONStandard to force standard (non-extended) JSON
 // - the enumerates properties are stored with their integer index value
 // - will write also the properties published in the parent classes
 // - nested properties are serialized as nested JSON objects
@@ -12243,12 +12235,7 @@ type
     function TryJSONToVariant(var JSON: PUTF8Char; var Value: variant;
       EndOfObject: PUTF8Char): boolean; virtual;
     /// customization of variant into JSON serialization
-    // - this default implementation will raise an ESynException
-    // - would store the variant with its default JSON serialization, unless
-    // ForcedSerializeAsNonExtendedJson is TRUE so that any extended JSON format
-    // would be replaced by standard/strict JSON
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
-      ForcedSerializeAsNonExtendedJson: boolean); overload; virtual;
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); overload; virtual;
     /// retrieve the field/column value
     // - this method will call protected IntGet abstract method
     function GetProperty(var Dest: TVarData; const V: TVarData;
@@ -12829,8 +12816,7 @@ type
       var result: variant);
 
     // this implementation will write the content as JSON object or array
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
-      ForcedSerializeAsNonExtendedJson: boolean); override;
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
     /// will check if the value is an array, and return the number of items
     // - if the document is an array, will return the items count (0 meaning
     // void array)
@@ -26711,6 +26697,7 @@ begin
     result := 'null' else
     with DefaultTextWriterJSONClass.CreateOwnedStream do
     try
+      include(fCustomOptions,twoForceJSONStandard);
       WriteObject(Value,Options);
       SetText(result);
     finally
@@ -35148,7 +35135,7 @@ begin
 end;
 
 procedure TSynInvokeableVariantType.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
+  Escape: TTextWriterKind);
 begin
   raise ESynException.CreateUTF8('%.ToJSON: unimplemented variant type',[self]);
 end;
@@ -37283,43 +37270,50 @@ begin
 end;
 
 procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
+  Escape: TTextWriterKind);
 var ndx: integer;
+    backup: TTextWriterOptions;
+    checkExtendedPropName: boolean;
 begin
   with TDocVariantData(Value) do
   if VType=DocVariantVType then
-  case VKind of
-    dvUndefined:
-      W.AddShort('null');
-    dvObject: begin
-      W.Add('{');
-      if not (dvoSerializeAsExtendedJson in VOptions) then
-        ForcedSerializeAsNonExtendedJson := true;
-      for ndx := 0 to VCount-1 do begin
-        if (not ForcedSerializeAsNonExtendedJson) and
-           JsonPropNameValid(pointer(VName[ndx])) then begin
-          W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
-        end else begin
-          W.Add('"');
-          W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
-          W.Add('"');
+  if VKind=dvUndefined then
+      W.AddShort('null') else begin
+      backup := W.fCustomOptions;
+      if [twoForceJSONExtended,twoForceJSONStandard]*backup=[] then
+        if dvoSerializeAsExtendedJson in VOptions then
+          include(W.fCustomOptions,twoForceJSONExtended) else
+          include(W.fCustomOptions,twoForceJSONStandard);
+      case VKind of
+      dvObject: begin
+        checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
+        W.Add('{');
+        for ndx := 0 to VCount-1 do begin
+          if checkExtendedPropName and JsonPropNameValid(pointer(VName[ndx])) then begin
+            W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+          end else begin
+            W.Add('"');
+            W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+            W.Add('"');
+          end;
+          W.Add(':');
+          W.AddVariant(VValue[ndx],twJSONEscape);
+          W.Add(',');
         end;
-        W.Add(':');
-        W.AddVariant(VValue[ndx],twJSONEscape,ForcedSerializeAsNonExtendedJson);
-        W.Add(',');
+        W.CancelLastComma;
+        W.Add('}');
       end;
-      W.CancelLastComma;
-      W.Add('}');
-    end;
-    dvArray: begin
-      W.Add('[');
-      for ndx := 0 to VCount-1 do begin
-        W.AddVariant(VValue[ndx],twJSONEscape,ForcedSerializeAsNonExtendedJson);
-        W.Add(',');
+      dvArray: begin
+        W.Add('[');
+        for ndx := 0 to VCount-1 do begin
+          W.AddVariant(VValue[ndx],twJSONEscape);
+          W.Add(',');
+        end;
+        W.CancelLastComma;
+        W.Add(']');
       end;
-      W.CancelLastComma;
-      W.Add(']');
     end;
+    W.fCustomOptions := backup;
   end else
     raise ESynException.CreateUTF8('Unexpected variant type %',[VType]);
 end;
@@ -42033,8 +42027,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind;
-  ForcedSerializeAsNonExtendedJson: boolean);
+procedure TTextWriter.AddVariant(const Value: variant; Escape: TTextWriterKind);
 var CustomVariantType: TCustomVariantType;
 begin
   with TVarData(Value) do
@@ -42054,7 +42047,7 @@ begin
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
   varBoolean:  Add(VBoolean);
-  varVariant:  AddVariant(PVariant(VPointer)^,Escape,ForcedSerializeAsNonExtendedJson);
+  varVariant:  AddVariant(PVariant(VPointer)^,Escape);
   varString: begin
     if Escape=twJSONEscape then
       Add('"');
@@ -42075,7 +42068,7 @@ begin
   end;
   else
   if VType=varVariant or varByRef then
-    AddVariant(PVariant(VPointer)^,Escape,ForcedSerializeAsNonExtendedJson) else
+    AddVariant(PVariant(VPointer)^,Escape) else
   if VType=varByRef or varString then begin
     if Escape=twJSONEscape then
       Add('"');
@@ -42097,8 +42090,7 @@ begin
   end else
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
-    TSynInvokeableVariantType(CustomVariantType).ToJson(
-      self,Value,Escape,ForcedSerializeAsNonExtendedJson) else
+    TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
     raise ESynException.CreateUTF8('%.AddVariant(VType=%)',[self,VType]);
   end;
 end;
@@ -43423,11 +43415,17 @@ begin
     exit;
   if BEnd-B<=ord(PropName[0])+3 then
     FlushToStream;
-  B[1] := '"';
-  MoveFast(PropName[1],B[2],ord(PropName[0]));
-  inc(B,ord(PropName[0])+2);
-  PWord(B)^ := ord('"')+ord(':')shl 8;
-  inc(B);
+  if twoForceJSONExtended in CustomOptions then begin
+    MoveFast(PropName[1],B[1],ord(PropName[0]));
+    inc(B,ord(PropName[0])+1);
+    B^ := ':';
+  end else begin
+    B[1] := '"';
+    MoveFast(PropName[1],B[2],ord(PropName[0]));
+    inc(B,ord(PropName[0])+2);
+    PWord(B)^ := ord('"')+ord(':')shl 8;
+    inc(B);
+  end;
 end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUTF8);
@@ -43891,7 +43889,7 @@ procedure TJSONWriter.AddColumns(aKnownRowsCount: integer);
 var i: integer;
 begin
   if fExpand then begin
-    if fUnquotedExpandedColumnNames then
+    if twoForceJSONExtended in CustomOptions then
       for i := 0 to High(ColNames) do
         ColNames[i] := ColNames[i]+':' else
       for i := 0 to High(ColNames) do

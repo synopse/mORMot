@@ -3997,7 +3997,7 @@ type
   /// several options to customize how TSQLRecord would be serialized
   // - e.g. if properties storing JSON should be serialized as an object, and not
   // escaped as a string (which is the default, matching ORM column storage)
-  // - or if an additional "ID_str":"12345" field should be added to the standard
+  // - if an additional "ID_str":"12345" field should be added to the standard
   // "ID":12345 field, which may exceed 53-bit integer precision of JavsCript
   TJSONSerializerSQLRecordOption = (
     jwoAsJsonNotAsString, jwoID_str);
@@ -8376,8 +8376,7 @@ type
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
   public
     /// customization of variant into JSON serialization
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
-      ForcedSerializeAsNonExtendedJson: boolean); override;
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
     /// handle type conversion to string
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
     /// handle type conversion to string
@@ -9981,10 +9980,7 @@ type
     procedure SerializeToContract(WR: TTextWriter);
     /// append the JSON value corresponding to this argument
     // - includes a pending ','
-    // - any TDocVariant with dvoSerializeAsExtendedJson option would be
-    // serialized as strict JSON if ForcedSerializeAsNonExtendedJson is TRUE
-    procedure AddJSON(WR: TTextWriter; V: pointer;
-      ForcedSerializeAsNonExtendedJson: boolean);
+    procedure AddJSON(WR: TTextWriter; V: pointer);
     /// append the value corresponding to this argument as within a JSON string
     // - will escape any JSON string character, and include a pending ','
     procedure AddJSONEscaped(WR: TTextWriter; V: pointer);
@@ -10273,7 +10269,7 @@ type
     end;
     fValues: TPPointerDynArray;
     fAlreadyExecuted: boolean;
-    fTempTextWriter: TTextWriter;
+    fTempTextWriter: TJSONSerializer;
     fOnExecute: array of TServiceMethodExecuteEvent;
     fBackgroundExecutionThread: TSynBackgroundThreadMethod;
     fOnCallback: TServiceMethodExecuteCallback;
@@ -10331,7 +10327,7 @@ type
     /// points e.g. to TSQLRestServerURIContext.ExecuteCallback
     property OnCallback: TServiceMethodExecuteCallback read fOnCallback;
     /// allow to use an instance-specific temporary TTextWriter
-    function TempTextWriter: TTextWriter;
+    function TempTextWriter: TJSONSerializer;
   end;
 
   /// a record type to be used as result for a function method for custom content
@@ -10794,18 +10790,27 @@ type
   end;
 
   {$endif HASINTERFACERTTI}
-
+  
   {$M+}
+  /// how TInterfacedObjectFromFactory would perform its execution
+  // - by default, fInvoke() would receive standard JSON content, unless
+  // ifoJsonAsExtended is set, and extended JSON is used
+  TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended);
+  /// defines how TInterfacedObjectFromFactory would perform its execution
+  TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
+
   /// abstract class handling a generic interface implementation class
   TInterfacedObjectFromFactory = class(TInterfacedObject)
   protected
     fFactory: TInterfaceFactory;
+    fOptions: TInterfacedObjectFromFactoryOptions;
     fInvoke: TOnFakeInstanceInvoke;
     fNotifyDestroy: TOnFakeInstanceDestroy;
     fClientDrivenID: Cardinal;
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory;
+      aOptions: TInterfacedObjectFromFactoryOptions;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
     /// release the remote server instance (in sicClientDriven mode);
     destructor Destroy; override;
@@ -12164,6 +12169,10 @@ type
     constructor Create(aRest: TSQLRest);
     /// release all registered services
     destructor Destroy; override;
+    /// release all services of a TSQLRest instance before shutdown
+    // - would allow to properly release any pending callbacks
+    // - TSQLRest.Services.Release would call FreeAndNil(fServices)
+    procedure Release;
     /// return the number of registered service interfaces
     function Count: integer;
     /// method called on the client side to register a service via its interface(s)
@@ -21764,10 +21773,14 @@ end;
 procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
   W: TJSONSerializer);
 var value: Variant;
+    backup: TTextWriterOptions;
 begin
   fPropInfo.GetVariantProp(Instance,value);
-  W.AddVariant(value,twJSONEscape,jwoAsJsonNotAsString in W.fSQLRecordOptions);
-  // even sftNullable should escape strings
+  backup := W.CustomOptions;
+  if jwoAsJsonNotAsString in W.fSQLRecordOptions then
+    W.CustomOptions := backup+[twoForceJSONStandard]-[twoForceJSONExtended];
+  W.AddVariant(value,twJSONEscape); // even sftNullable should escape strings
+  W.CustomOptions := backup;
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetValueVar(Instance: TObject;
@@ -25584,7 +25597,7 @@ begin
 end;
 
 procedure TSQLTableRowVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
+  Escape: TTextWriterKind);
 var r: integer;
     tmp: variant; // write row via a TDocVariant
 begin
@@ -25592,7 +25605,7 @@ begin
   if r<0 then
     r := TSQLTableRowVariantData(Value).VTable.fStepRow;
   TSQLTableRowVariantData(Value).VTable.ToDocVariant(r,tmp);
-  W.AddVariant(tmp,Escape,ForcedSerializeAsNonExtendedJson);
+  W.AddVariant(tmp,Escape);
 end;
 
 {$endif NOVARIANTS}
@@ -31801,7 +31814,7 @@ begin
   end;
   fOptions := Options;
   if boExtendedJSON in Options then
-    fBatch.UnquotedExpandedColumnNames := true;
+    include(fBatch.fCustomOptions,twoForceJSONExtended);
   Options := Options-[boExtendedJSON,boPostNoSimpleFields]; // client-side only
   if byte(Options)<>0 then begin
     fBatch.AddShort('"options",');
@@ -37348,6 +37361,7 @@ procedure TSQLRestServerURIContext.ExecuteORMGet;
       W := TableRecordProps.Props.CreateJSONWriter(
         TRawByteStringStream.Create,true,FieldsCSV,0);
       try
+        include(W.fCustomOptions,twoForceJSONStandard); // force regular JSON
         W.SQLRecordOptions := Options; // will do the magic
         rec.AppendFillAsJsonValues(W);
         W.SetText(Call.OutBody);
@@ -37371,6 +37385,9 @@ var SQLSelect, SQLWhere, SQLWhereCount, SQLSort, SQLDir, SQL: RawUTF8;
     i,j,L: integer;
     Blob: PPropInfo;
 begin
+  {$ifdef KYLIX3}
+  TableIndexes := nil; // make Kylix happy
+  {$endif}
   case Method of
   mLOCK,mGET: begin
     if Table=nil then begin
@@ -38087,12 +38104,14 @@ end;
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;
 var agent: RawUTF8;
 begin
-  if fClientKind=ckUnknown then begin
-    agent := GetUserAgent; // ='' e.g. for WebSockets remote access
-    if (agent='') or (PosEx('mORMot',agent)>0) then
-      fClientKind := ckFramework else
-      fClientKind := ckAjax;
-  end;
+  if fClientKind=ckUnknown then
+    if Call.InHead='' then // e.g. for WebSockets remote access
+      fClientKind := ckAjax else begin
+      agent := GetUserAgent;
+      if (agent='') or (PosEx('mORMot',agent)>0) then
+        fClientKind := ckFramework else
+        fClientKind := ckAjax;
+    end;
   result := fClientKind;
 end;
 
@@ -46975,7 +46994,7 @@ var Added: boolean;
     end;
     if P=nil then
       exit;
-    AddPropName(P^.Name);
+    AddPropName(P^.Name); // would handle twoForceJSONExtended in CustomOptions
     if woHumanReadable in Options then
       Add(' ');
     Added := true;
@@ -47094,14 +47113,15 @@ begin
   inc(fHumanReadableLevel);
   if woStoreClassName in Options then begin // optional "ClassName":"TObjectClass"
     HR;
-    AddShort('"ClassName":"');
+    AddPropName('ClassName');
+    Add('"');
     AddShort(PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^);
     Add('"',',');
   end;
   if IsObj in [oSQLRecord,oSQLMany] then begin
     // manual handling of TSQLRecord.ID property serialization
     HR;
-    AddShort('"ID":');
+    AddPropName('ID');
     if woHumanReadable in Options then
       Add(' ');
     Add(TSQLRecord(Value).fID);
@@ -47109,14 +47129,16 @@ begin
   end else begin
     if woStorePointer in Options then begin // "Address":"0431298a" field
       HR;
-      AddShort('"Address":"');
+      AddPropName('Address');
+      Add('"');
       AddPointer(PtrUInt(Value));
       Add('"',',');
     end;
     case IsObj of
     oException: begin
       HR;
-      AddShort('"Message":"');
+      AddPropName('Message');
+      Add('"');
       AddJSONEscapeString(Exception(Value).Message);
       Add('"',',');
     end;
@@ -47274,7 +47296,7 @@ begin
         tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
           HR(P);
           P^.GetVariantProp(Value,VVariant);
-          AddVariant(VVariant,twJSONEscape,woVariantAsNonExtendedJson in Options);
+          AddVariant(VVariant,twJSONEscape);
         end;
         {$endif}
         tkClass: begin
@@ -48925,6 +48947,12 @@ begin
   inherited;
 end;
 
+procedure TServiceContainer.Release;
+begin
+  if (self<>nil) and (fRest<>nil) and (fRest.fServices=self) then
+    FreeAndNil(fRest.fServices);
+end;
+
 function TServiceContainer.AddServiceInternal(aService: TServiceFactory): integer;
 var MethodIndex: integer;
   procedure AddOne(const aInterfaceDotMethodName: RawUTF8);
@@ -49236,6 +49264,7 @@ type
   public
     /// create an instance, using the specified interface
     constructor Create(aFactory: TInterfaceFactory;
+      aOptions: TInterfacedObjectFromFactoryOptions;
       aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
     /// retrieve one local instance of this interface
     procedure Get(out Obj);
@@ -49279,13 +49308,11 @@ type
 
 
 constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
-  aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+  aOptions: TInterfacedObjectFromFactoryOptions; aInvoke: TOnFakeInstanceInvoke;
+  aNotifyDestroy: TOnFakeInstanceDestroy);
 begin
-  inherited Create(aFactory,aInvoke,aNotifyDestroy);
-  fFactory := aFactory;
+  inherited Create(aFactory,aOptions,aInvoke,aNotifyDestroy);
   fVTable := aFactory.GetMethodsVirtualTable;
-  fInvoke := aInvoke;
-  fNotifyDestroy := aNotifyDestroy;
 end;
 
 function TInterfacedObjectFake.SelfFromInterface: TInterfacedObjectFake;
@@ -49371,6 +49398,9 @@ begin
   Params := TJSONSerializer.CreateOwnedStream;
   try
     // create the parameters
+    if ifoJsonAsExtended in fOptions then
+      include(Params.fCustomOptions,twoForceJSONExtended) else
+      include(Params.fCustomOptions,twoForceJSONStandard); // e.g. for AJAX
     FillcharFast(I64s,method^.ArgsUsedCount[smvv64]*sizeof(Int64),0);
     for arg := 1 to high(method^.Args) do
     with method^.Args[arg] do
@@ -49417,7 +49447,7 @@ begin
           Params.AddDynArrayJSON(DynArrays[IndexVar]);
           Params.Add(',');
         end;
-        else AddJSON(Params,V,true);
+        else AddJSON(Params,V);
         end;
     end;
     Params.CancelLastComma;
@@ -49447,8 +49477,8 @@ begin
     if arg>0 then
     repeat
       if resultAsJSONObject then begin
-        Val := GetJSONField(R,R,@wasString);
-        if (Val=nil) or (not wasString) then
+        Val := GetJSONPropName(R);
+        if Val=nil then
           break; // end of JSON object
         ValLen := StrLen(Val);
         if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
@@ -49495,7 +49525,7 @@ begin
               RaiseError('missing or invalid value: '+
               'parameters shall follow method var/out/result order',[]);
           if (ValueType=smvBoolean) and (PInteger(Val)^=TRUE_LOW) then
-            Val := '1';
+            Val := '1'; // handle also BOOL with SizeInStorage=2
           case ValueType of
           smvBoolean, smvEnum, smvSet, smvCardinal:
             case SizeInStorage of
@@ -49587,9 +49617,13 @@ end;
 
 constructor TInterfacedObjectFakeClient.Create(aClient: TServiceFactoryClient;
   aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+var opt: TInterfacedObjectFromFactoryOptions;
 begin
   fClient := aClient;
-  inherited Create(aClient.fInterface,aInvoke,aNotifyDestroy);
+  if (fClient.fClient<>nil) and (fClient.fClient.fSessionID<>0) then
+    opt := [ifoJsonAsExtended] else
+    opt := [];
+  inherited Create(aClient.fInterface,opt,aInvoke,aNotifyDestroy);
 end;
 
 procedure TInterfacedObjectFakeClient.InterfaceWrite(W: TJSONSerializer;
@@ -49609,12 +49643,16 @@ end;
 
 constructor TInterfacedObjectFakeServer.Create(aRequest: TSQLRestServerURIContext;
   aFactory: TInterfaceFactory; aFakeID: Integer);
+var opt: TInterfacedObjectFromFactoryOptions;
 begin
+  if aRequest.ClientKind=ckFramework then
+    opt := [ifoJsonAsExtended] else
+    opt := [];
   fServer := aRequest.Server;
   fService := aRequest.Service;
   fLowLevelConnectionID := aRequest.Call^.LowLevelConnectionID;
   fClientDrivenID := aFakeID;
-  inherited Create(aFactory,CallbackInvoke,nil);
+  inherited Create(aFactory,opt,CallbackInvoke,nil);
   Get(fFakeInterface);
 end;
 
@@ -49693,10 +49731,12 @@ end;
 { TInterfacedObjectFromFactory }
 
 constructor TInterfacedObjectFromFactory.Create(aFactory: TInterfaceFactory;
-  aInvoke: TOnFakeInstanceInvoke; aNotifyDestroy: TOnFakeInstanceDestroy);
+  aOptions: TInterfacedObjectFromFactoryOptions; aInvoke: TOnFakeInstanceInvoke;
+  aNotifyDestroy: TOnFakeInstanceDestroy);
 begin
   inherited Create;
   fFactory := aFactory;
+  fOptions := aOptions;
   fInvoke := aInvoke;
   fNotifyDestroy := aNotifyDestroy;
 end;
@@ -50911,7 +50951,7 @@ end;
 procedure TInterfaceStub.InternalGetInstance(out aStubbedInterface);
 var fake: TInterfacedObjectFake;
 begin
-  fake := TInterfacedObjectFake.Create(fInterface,Invoke,InstanceDestroyed);
+  fake := TInterfacedObjectFake.Create(fInterface,[ifoJsonAsExtended],Invoke,InstanceDestroyed);
   pointer(aStubbedInterface) := @fake.fVTable;
   fake._AddRef;
   fLastInterfacedObjectFake := fake;
@@ -52847,7 +52887,7 @@ begin
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
           W.Add(':');
-          AddJSON(W,Sender.Values[a],false);
+          AddJSON(W,Sender.Values[a]);
         end;
       W.CancelLastComma;
     end;
@@ -52858,7 +52898,7 @@ begin
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
           W.AddShort(ParamName^);
           W.Add(':');
-          AddJSON(W,Sender.Values[a],false);
+          AddJSON(W,Sender.Values[a]);
         end;
       W.CancelLastComma;
     end;
@@ -52874,7 +52914,7 @@ end;
 
 procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
 var Inst: TServiceFactoryServerInstance;
-    WR: TTextWriter;
+    WR: TJSONSerializer;
     entry: PInterfaceEntry;
     instancePtr: pointer;
     dolock: boolean;
@@ -52993,6 +53033,9 @@ begin
     WR := TJSONSerializer.CreateOwnedStream;
     try
       Ctxt.fThreadServer^.Factory := self;
+      if (Ctxt.Call.InHead='') or (Ctxt.ClientKind=ckFramework) then
+        include(WR.fCustomOptions,twoForceJSONExtended) else
+        include(WR.fCustomOptions,twoForceJSONStandard); // AJAX
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
       dolock := optExecLockedPerInterface in Ctxt.ServiceExecution.Options;
@@ -53352,10 +53395,7 @@ begin
   WR.AddShort('"},');
 end;
 
-procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer;
-  ForcedSerializeAsNonExtendedJson: boolean);
-const OPT: array[boolean] of TTextWriterWriteObjectOptions = (
-  [woStoreStoredFalse],[woStoreStoredFalse,woVariantAsNonExtendedJson]);
+procedure TServiceMethodArgument.AddJSON(WR: TTextWriter; V: pointer);
 begin
   if vIsString in ValueKindAsm then
     WR.Add('"');
@@ -53381,12 +53421,12 @@ begin
                  {$endif}
   smvRawByteString: WR.WrBase64(PPointer(V)^,length(PRawBytestring(V)^),false);
   smvWideString: WR.AddJSONEscapeW(PPointer(V)^);
-  smvObject:     WR.WriteObject(PPointer(V)^,OPT[ForcedSerializeAsNonExtendedJson]);
+  smvObject:     WR.WriteObject(PPointer(V)^);
   smvInterface:  WR.AddShort('null'); // or written by InterfaceWrite()
   smvRecord:     WR.AddRecordJSON(V^,ArgTypeInfo);
   smvDynArray:   WR.AddDynArrayJSON(ArgTypeInfo,V^);
   {$ifndef NOVARIANTS}
-  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape,ForcedSerializeAsNonExtendedJson);
+  smvVariant:    WR.AddVariant(PVariant(V)^,twJSONEscape);
   {$endif}
   end;
   if vIsString in ValueKindAsm then
@@ -53418,7 +53458,7 @@ begin
   else begin // use generic AddJSON() method
     W := TJSONSerializer.CreateOwnedStream(512);
     try
-      AddJSON(W,V,false);
+      AddJSON(W,V);
       W.SetText(DestValue);
     finally
       W.Free;
@@ -53431,9 +53471,9 @@ procedure TServiceMethodArgument.AddJSONEscaped(WR: TTextWriter; V: pointer);
 var W: TTextWriter;
 begin
   if ValueType in [smvBoolean..smvCurrency,smvInterface] then // no need to escape those
-    AddJSON(WR,V,false) else begin
+    AddJSON(WR,V) else begin
     W := WR.InternalJSONWriter;
-    AddJSON(W,V,false);
+    AddJSON(W,V);
     WR.AddJSONEscape(W);
   end;
 end;
@@ -54386,10 +54426,12 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.TempTextWriter: TTextWriter;
+function TServiceMethodExecute.TempTextWriter: TJSONSerializer;
 begin
-  if fTempTextWriter=nil then
+  if fTempTextWriter=nil then begin
     fTempTextWriter := TJSONSerializer.CreateOwnedStream;
+    include(fTempTextWriter.fCustomOptions,twoForceJSONExtended); // shorter
+  end;
   result := fTempTextWriter;
 end;
 
@@ -54564,7 +54606,7 @@ begin
       if ValueDirection in [smdVar,smdOut,smdResult] then begin
         if ResAsJSONObject then
           Res.AddPropName(ParamName^);
-        AddJSON(Res,fValues[a],true);
+        AddJSON(Res,fValues[a]);
       end;
       Res.CancelLastComma;
     end;

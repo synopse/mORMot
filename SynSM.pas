@@ -893,8 +893,7 @@ type
     /// initialize a variant instance to store a new JavaScript object
     class procedure New(engine: TSMEngine; out aValue: variant); overload;
     // this implementation will let SpiderMonkey write directly the JSON content
-    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind;
-     ForcedSerializeAsNonExtendedJson: boolean); override;
+    procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
     /// handle type conversion
     // - any TSMVariant will be converted to '<<JavaScript TSMVariant>>' text
     procedure Cast(var Dest: TVarData; const Source: TVarData); override;
@@ -2459,7 +2458,7 @@ begin
 end;
 
 procedure TSMVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind; ForcedSerializeAsNonExtendedJson: boolean);
+  Escape: TTextWriterKind);
 var val: jsval;
 begin
   with TSMVariantData(Value) do
