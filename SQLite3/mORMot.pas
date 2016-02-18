@@ -25302,7 +25302,7 @@ begin
     for i := 0 to EnumType^.MaxValue do begin
       EnumValue := TrimLeftLowerCaseShort(P);
       GetCaptionFromPCharLen(pointer(EnumValue),s);
-      EnumValue := StringToUTF8(s);
+      StringToUTF8(s,EnumValue);
       if ((Lang<>sndxNone) and SoundEx.UTF8(pointer(EnumValue))) or
          ((Lang=sndxNone) and FindUTF8(pointer(EnumValue),Search)) then
         include(EnumValues,i);
@@ -30599,7 +30599,7 @@ var msg: string;
 begin
   if FilterAndValidate(aRest,msg,aFields,aValidator) then
     result := '' else
-    result := StringToUTF8(msg);
+    StringToUTF8(msg,result);
 end;
 
 function TSQLRecord.DynArray(const DynArrayFieldName: RawUTF8): TDynArray;

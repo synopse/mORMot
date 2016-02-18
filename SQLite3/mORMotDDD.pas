@@ -621,7 +621,7 @@ type
     fBatchAutomaticTransactionPerRow: cardinal;
     fBatchOptions: TSQLRestBatchOptions;
     fBatchResults: TIDDynArray;
-    procedure ORMEnsureBatchExists;
+    procedure ORMEnsureBatchExists; virtual;
     // this default implementation will check the status vs command,
     // call DDD's + ORM's FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
@@ -1694,7 +1694,7 @@ begin
     result := 0 else
     if fCurrentORMInstance.FillTable<>nil then
       result := fCurrentORMInstance.FillTable.RowCount else
-      if fCurrentORMInstance.ID=0 then
+      if fCurrentORMInstance.IDValue=0 then
         result := 0 else
         result := 1;
 end;
@@ -1753,6 +1753,7 @@ constructor TDDDRepositoryRestCommand.Create(
 begin
   inherited Create(aFactory);
   fBatchAutomaticTransactionPerRow := 1000; // for better performance
+  fBatchOptions := [boExtendedJSON];
 end;
 
 destructor TDDDRepositoryRestCommand.Destroy;
@@ -1787,18 +1788,14 @@ end;
 
 function TDDDRepositoryRestCommand.ORMAdd(aAggregate: TObject): TCQRSResult;
 begin
-  if CqrsBeginMethod(qaCommandDirect,result) then begin
-    Factory.AggregateToTable(aAggregate,0,fCurrentORMInstance);
+  if CqrsBeginMethod(qaCommandDirect,result) then
     ORMPrepareForCommit(soInsert,aAggregate);
-  end;
 end;
 
 function TDDDRepositoryRestCommand.ORMUpdate(aAggregate: TObject): TCQRSResult;
 begin
-  if CqrsBeginMethod(qaCommandOnSelect,result) then begin
-    Factory.AggregateToTable(aAggregate,fCurrentORMInstance.ID,fCurrentORMInstance);
+  if CqrsBeginMethod(qaCommandOnSelect,result) then
     ORMPrepareForCommit(soUpdate,aAggregate);
-  end;
 end;
 
 procedure TDDDRepositoryRestCommand.ORMEnsureBatchExists;
@@ -1827,7 +1824,7 @@ begin
     exit;
   end;
   soUpdate,soDelete:
-    if (fState<qsQuery) or (fCurrentORMInstance.ID=0) then begin
+    if (fState<qsQuery) or (fCurrentORMInstance.IDValue=0) then begin
       CqrsSetResult(cqrsNoPriorQuery);
       exit;
     end;
@@ -1840,6 +1837,7 @@ begin
         exit;
       end;
     end;
+    Factory.AggregateToTable(aAggregate,fCurrentORMInstance.IDValue,fCurrentORMInstance);
     msg := fCurrentORMInstance.FilterAndValidate(
       Factory.Rest,[0..MAX_SQLFIELDS-1],@validator);
     if msg<>'' then begin
@@ -1852,7 +1850,7 @@ begin
   case aCommand of
   soInsert: ndx := fBatch.Add(fCurrentORMInstance,true);
   soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
-  soDelete: ndx := fBatch.Delete(fCurrentORMInstance.ID);
+  soDelete: ndx := fBatch.Delete(fCurrentORMInstance.IDValue);
   end;
   CqrsSetResultSuccessIf(ndx>=0);
 end;
