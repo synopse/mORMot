@@ -1806,19 +1806,20 @@ end;
 
 procedure LogEscape(const s: RawUTF8; var result: RawUTF8);
 var i,L: integer;
+const MAXLEN = 200;
 begin
-  with TTextWriter.CreateOwnedStream(600) do
+  with TTextWriter.CreateOwnedStream(MAXLEN*3) do
   try
     L := length(s);
-    if L>200 then
-      L := 200;
+    if L>MAXLEN then
+      L := MAXLEN;
     for i := 1 to L do
       if s[i] in [' '..#126] then
         Add(s[i]) else begin
         Add('$');
         AddByteToHex(ord(s[i]));
       end;
-    if L=200 then
+    if L=MAXLEN then
       AddShort('...');
     SetText(result);
   finally
