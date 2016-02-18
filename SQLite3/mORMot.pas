@@ -26148,7 +26148,7 @@ begin
     GetRowCountNotExpanded(P); // returns RowCount=-1 if P^ is invalid
 end;
 
-function StartWithID(P: PUTF8Char; out ID: TID): boolean;
+function StartWithQuotedID(P: PUTF8Char; out ID: TID): boolean;
 begin
   if PCardinal(P)^ and $ffffdfdf=
       ord('I')+ord('D')shl 8+ord('"')shl 16+ord(':')shl 24 then begin
@@ -26168,12 +26168,32 @@ begin
   result := false;
 end;
 
+function StartWithID(P: PUTF8Char; out ID: TID): boolean;
+begin
+  if PCardinal(P)^ and $ffdfdf=
+      ord('I')+ord('D')shl 8+ord(':')shl 16 then begin
+    SetID(P+3,ID);
+    result := true;
+    exit;
+  end else
+  if (PCardinalArray(P)^[0] and $dfdfdfdf=
+       ord('R')+ord('O')shl 8+ord('W')shl 16+ord('I')shl 24) and
+     (PCardinalArray(P)^[1] and $ffdf=ord('D')+ord(':')shl 8) then begin
+    SetID(P+6,ID);
+    result := true;
+    exit;
+  end;
+  ID := 0;
+  result := false;
+end;
+
 function JSONGetID(P: PUTF8Char; out ID: TID): Boolean;
 begin
   if (P<>nil) and
-     NextNotSpaceCharIs(P,'{') and
-     NextNotSpaceCharIs(P,'"') then
-    result := StartWithID(P,ID) else begin
+     NextNotSpaceCharIs(P,'{') then
+     if NextNotSpaceCharIs(P,'"') then
+       result := StartWithQuotedID(P,ID) else
+       result := StartWithID(P,ID) else begin
     ID := 0;
     result := false;
   end;
@@ -40186,7 +40206,7 @@ begin
     if Sent^<>'}' then
       raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%): Missing }',[self,Table]);
   end;
-  // if we reach here, process was OK
+  // if we reached here, process was OK
   SetLength(Results,Count);
   result := HTML_SUCCESS;
 end;

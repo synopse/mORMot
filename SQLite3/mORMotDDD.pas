@@ -625,6 +625,8 @@ type
     // this default implementation will check the status vs command,
     // call DDD's + ORM's FilterAndValidate, then add to the internal BATCH
     // - you should override it, if you need a specific behavior
+    // - if aAggregate is nil, fCurrentORMInstance field values would be used
+    // - if aAggregate is set, its fields would be set to fCurrentORMInstance
     procedure ORMPrepareForCommit(aCommand: TSQLOccasion;
       aAggregate: TObject); virtual;
     /// minimal implementation using AggregateToTable() conversion
@@ -1836,8 +1838,8 @@ begin
         SetValidationError(cqrsDDDValidationFailed);
         exit;
       end;
+      Factory.AggregateToTable(aAggregate,fCurrentORMInstance.IDValue,fCurrentORMInstance);
     end;
-    Factory.AggregateToTable(aAggregate,fCurrentORMInstance.IDValue,fCurrentORMInstance);
     msg := fCurrentORMInstance.FilterAndValidate(
       Factory.Rest,[0..MAX_SQLFIELDS-1],@validator);
     if msg<>'' then begin
