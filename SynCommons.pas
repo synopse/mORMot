@@ -4345,6 +4345,7 @@ type
     /// delete the whole dynamic array content
     // - this method will recognize T*ObjArray types and free all instances
     procedure Clear;
+      {$ifdef HASINLINE}inline;{$endif}
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
@@ -39589,7 +39590,7 @@ begin
   fValue := @aValue;
   fTypeInfo := aTypeInfo;
   if PTypeKind(aTypeInfo)^<>tkDynArray then // inlined GetTypeInfo()
-    raise ESynException.CreateUTF8('Not a dynamic array: %',
+    raise ESynException.CreateUTF8('TDynArray.Init(%): not a dynamic array',
       [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   aTypeInfo := GetFPCAlignPtr(aTypeInfo);
@@ -39622,7 +39623,8 @@ begin
   Init(aTypeInfo,aValue,aCountPointer);
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   if @Comp=nil then
-    raise ESynException.CreateUTF8('TDynArray.InitSpecific wrong aKind=%',[ord(aKind)]);
+    raise ESynException.CreateUTF8('TDynArray.InitSpecific(%) wrong aKind=%',
+      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ord(aKind)]);
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];

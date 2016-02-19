@@ -26793,7 +26793,10 @@ end;
 
 procedure TPropInfo.SetDefaultValue(Instance: TObject; FreeAndNilNestedObjects: boolean);
 var Item: TObject;
+    da: TDynArray;
+    {$ifdef PUBLISHRECORD}
     addr: pointer;
+    {$endif}
 begin
   if (Instance<>nil) and (@self<>nil) then
   case PropType^.Kind of
@@ -26826,11 +26829,8 @@ begin
         ClearObject(Item,false);
   end;
   tkDynArray: begin
-    addr := GetFieldAddr(Instance);
-    if PPointer(addr)^<>nil then
-      if ObjArraySerializers.Find(PropType{$ifndef FPC}^{$endif})<>nil then
-        ObjArrayClear(addr^) else
-        DynArrayClear(addr,PropType{$ifndef FPC}^{$endif});
+    GetDynArray(Instance,da);
+    da.Count := 0; // will handle also any T*ObjArray
   end;
   {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
@@ -45181,7 +45181,7 @@ begin
 end;
 
 procedure SetDefaultValuesObject(Value: TObject);
-var P: PPropInfo;
+var p: PPropInfo;
     c: TClass;
     i: integer;
 begin
@@ -45189,22 +45189,22 @@ begin
     exit;
   c := Value.ClassType;
   repeat
-    for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
-      case P^.PropType^.Kind of
+    for i := 1 to InternalClassPropInfo(Value.ClassType,p) do begin
+      case p^.PropType^.Kind of
         {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger:
-          if P^.Default<>longint($80000000) then
-            P^.SetOrdProp(Value,P^.Default);
+          if p^.Default<>longint($80000000) then
+            p^.SetOrdProp(Value,p^.Default);
         tkClass:
-          SetDefaultValuesObject(P^.GetObjProp(Value));
+          SetDefaultValuesObject(p^.GetObjProp(Value));
       end;
-      P := P^.Next;
+      p := p^.Next;
     end;
     c := c.ClassParent;
   until c=nil;
 end;
 
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
-var P: PPropInfo;
+var p: PPropInfo;
     c: TClass;
     i: integer;
 begin
@@ -45212,12 +45212,12 @@ begin
     exit;
   c := Value.ClassType;
   repeat
-    for i := 1 to InternalClassPropInfo(c,P) do begin
-      P^.SetDefaultValue(Value,FreeAndNilNestedObjects);
+    for i := 1 to InternalClassPropInfo(c,p) do begin
+      p^.SetDefaultValue(Value,FreeAndNilNestedObjects);
       {$ifdef HASINLINE}
-      P := P^.Next;
+      p := p^.Next;
       {$else}
-      with P^ do P := @Name[ord(Name[0])+1];
+      with p^ do p := @Name[ord(Name[0])+1];
       {$endif}
     end;
     c := c.ClassParent;
