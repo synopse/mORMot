@@ -2441,6 +2441,7 @@ begin // get OleDB specific error information
     end;
   if s<>'' then
     fOleDBErrorMessage :=  fOleDBErrorMessage+s;
+  StringToUTF8(fOleDBErrorMessage, fErrorMessage);
   // raise exception
   if aStmt=nil then
     E := EOleDBException.Create(fOleDBErrorMessage) else

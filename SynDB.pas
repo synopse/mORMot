@@ -5905,7 +5905,7 @@ begin // see more complete list in feature request [f024266c0839]
   case fDBMS of
   dOracle:
     result := IdemPCharArray(PosErrorNumber(aMessage,'-'),
-      ['00028','01017','01033','01089','02396','03113','03114','03135',
+      ['00028','01012','01017','01033','01089','02396','03113','03114','03135',
        '12152','12154','12157','12514','12520','12537','12545',
        '12560','12571'])>=0;
   dInformix: // error codes based on {IBM INFORMIX ODBC DRIVER} tested with wrong data connection
