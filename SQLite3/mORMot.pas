@@ -16852,6 +16852,10 @@ type
     property Count: integer read GetCount;
   end;
 
+  /// a dynamic array of TSQLRestStorageInMemory instances
+  // - used e.g. by TSQLRestServerFullMemory
+  TSQLRestStorageInMemoryDynArray = array of TSQLRestStorageInMemory;
+
   /// REST storage with direct access to a memory database, to be used as
   // an external SQLite3 Virtual table
   // - this is the kind of in-memory table expected by TSQLVirtualTableJSON,
@@ -16909,9 +16913,102 @@ type
     property RemoteRest: TSQLRest read fRemoteRest;
   end;
 
-  /// a dynamic array of TSQLRestStorageInMemory instances
-  // - used e.g. by TSQLRestServerFullMemory
-  TSQLRestStorageInMemoryDynArray = array of TSQLRestStorageInMemory;
+  /// defines how TSQLRestStorageShard would handle its partioned process
+  TSQLRestStorageShardOption = (ssoNoUpdate, ssoNoUpdateButLastShard,
+    ssoNoDelete, ssoNoDeleteButLastShard, ssoNoBatch,
+    ssoNoList, ssoNoExecute, ssoNoUpdateField, ssoNoConsolidateAtDestroy);
+  /// how TSQLRestStorageShard would handle its partioned process
+  TSQLRestStorageShardOptions = set of TSQLRestStorageShardOption;
+
+  /// abstract REST storage with redirection to several REST instances, implementing
+  // range ID partitioning for horizontal scaling
+  // - such database shards would allow to scale with typical BigData storage
+  // - this storage would add items on a server, initializing a new server
+  // when the ID reached a defined range
+  // - it would maintain a list of previous storages, then redirect reading and
+  // updates to the server managing this ID (if possible - older shards may
+  // be deleted/ignored to release resources)
+  // - inherited class should override InitShards/InitNewShard to customize the
+  // kind of TSQLRest instances to be used for each shard (which may be local
+  // or remote, a SQLite3 engine or an external SQL/NoSQL database)
+  // - see inherited TSQLRestStorageShardDB as defined in mORMotSQLite3.pas
+  TSQLRestStorageShard = class(TSQLRestStorage)
+  protected
+    fShardRange: TID;
+    fLastID: TID;
+    fOptions: TSQLRestStorageShardOptions;
+    fShards: array of TSQLRest;
+    fShardLast: cardinal;
+    fShardLastID: TID;
+    fShardNextID: TID;
+    fShardTableIndex: TIntegerDynArray;
+    fShardBatch: array of TSQLRestBatch;
+    // would set Shards[],fShardLast,fShardLastID, nil if not available any more
+    procedure InitShards; virtual; abstract;
+    // should always return non nil shard to contain new added IDs
+    function InitNewShard: TSQLRest; virtual; abstract;
+    procedure InternalAddNewShard;
+    function InternalShardBatch(ShardIndex: integer): TSQLRestBatch;
+    // overriden methods which would handle all ORM process
+    function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
+    function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
+    function EngineExecute(const aSQL: RawUTF8): boolean; override;
+    function EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; override;
+    function EngineUpdate(TableModelIndex: integer; ID: TID; const SentData: RawUTF8): boolean; override;
+    function EngineDelete(TableModelIndex: integer; ID: TID): boolean; override;
+    function EngineDeleteWhere(TableModelIndex: integer; const SQLWhere: RawUTF8;
+      const IDs: TIDDynArray): boolean; override;
+    function EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
+      BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateBlob(TableModelIndex: integer; aID: TID;
+      BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
+    function EngineUpdateField(TableModelIndex: integer;
+      const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
+    function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
+      const FieldName: RawUTF8; Increment: Int64): boolean; override;
+    function InternalBatchStart(Method: TSQLURIMethod;
+      BatchOptions: TSQLRestBatchOptions): boolean; override;
+    procedure InternalBatchStop; override;
+  public
+    /// initialize the table storage redirection for sharding
+    // - you should not have to use this constructor, but e.g.
+    // TSQLRestStorageShardDB.Create on a main TSQLRestServer.StaticDataAdd()
+    // - the supplied aShardRange should be < 1000 - and once set, you should NOT
+    // change this value on an existing shard, unless process would be broken
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
+      aShardRange: TID; aOptions: TSQLRestStorageShardOptions); reintroduce; virtual;
+    /// finalize the table storage, including Shards[] instances
+    destructor Destroy; override;
+    /// you may call this method sometimes to consolidate the sharded data
+    // - may e.g. merge/compact shards, depending on scaling expectations
+    // - also called by Destroy - do nothing by default
+    procedure ConsolidateShards; virtual;
+    /// retrieve the ORM shard instance corresponding to an ID
+    // - may return false if the correspondig shard is not available any more
+    // - may return true, and a TSQLRestHookClient or a TSQLRestHookServer instance
+    // with its associated index in TSQLRest.Model.Tables[]
+    function ShardFromID(aID: TID; out aShardTableIndex: integer;
+      out aShard: TSQLRest; aOccasion: TSQLOccasion=soSelect;
+      aShardIndex: PInteger=nil): boolean; virtual;
+    /// get the row count of a specified table
+    function TableRowCount(Table: TSQLRecordClass): Int64; override;
+    /// check if there is some data rows in a specified table
+    function TableHasRows(Table: TSQLRecordClass): boolean; override;
+  published
+    /// how much IDs should store each ORM shard instance
+    // - once set, you should NEVER change this value on an existing shard,
+    // otherwise the whole ID partition would fail
+    // - each shard would hold [ShardIndex*ShardRange..(ShardIndex+1)*ShardRange-1] IDs
+    property ShardRange: TID read fShardRange;
+    /// defines how this instance would handle its sharding process
+    // - by default, update/delete operations or per ID retrieval would take
+    // place on all shards, whereas EngineList and EngineExecute would only run
+    // only on the latest shard (to save resources)
+    property Options: TSQLRestStorageShardOptions read fOptions write fOptions;
+  end;
+
+  /// class metadata of a Sharding storage engine
+  TSQLRestStorageShardClass = class of TSQLRestStorageShard;
 
   /// a REST server using only in-memory tables
   // - this server will use TSQLRestStorageInMemory instances to handle
@@ -43052,6 +43149,392 @@ function TSQLRestStorageRemote.EngineUpdateFieldIncrement(TableModelIndex: integ
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 begin
    result := fRemoteRest.EngineUpdateFieldIncrement(fRemoteTableIndex,ID,FieldName,Increment);
+end;
+
+
+{ TSQLRestStorageShard }
+
+const MIN_SHARD = 1000;
+
+constructor TSQLRestStorageShard.Create(aClass: TSQLRecordClass;
+  aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions);
+var i,n: integer;
+begin
+  if aShardRange<MIN_SHARD then
+    raise EORMException.CreateUTF8('%.Create(%,aShardRange=%<%) does not make sense',
+      [self,aClass,aShardRange,MIN_SHARD]);
+  inherited Create(aClass,aServer);
+  fShardRange := aShardRange;
+  fShardLast := cardinal(-1);
+  fOptions := aOptions;
+  InitShards; // set fShards[], fShardLast and fShardLastID
+  n := length(fShards);
+  fShardNextID := n*fShardRange+1;
+  SetLength(fShardTableIndex,n);
+  for i := 0 to fShardLast do
+    if fShards[i]=nil then
+      fShardTableIndex[i] := -1 else
+      fShardTableIndex[i] := fShards[i].Model.GetTableIndexExisting(aClass);
+end;
+
+destructor TSQLRestStorageShard.Destroy;
+var i,j: integer;
+    rest: TSQLRest;
+begin
+  try
+    if not (ssoNoConsolidateAtDestroy in fOptions) then
+      ConsolidateShards;
+  finally
+    inherited Destroy;
+    for i := 0 to high(fShards) do begin 
+      rest := fShards[i];
+      if rest=nil then
+        continue;
+      rest.Free;
+      for j := i+1 to high(fShards) do
+        if fShards[j]=rest then
+          fShards[j] := nil; // same instance re-used in fShards[]
+    end;
+  end;
+end;
+
+procedure TSQLRestStorageShard.ConsolidateShards;
+begin // do nothing by default
+end;
+
+procedure TSQLRestStorageShard.InternalAddNewShard;
+var rest: TSQLRest;
+begin
+  {$ifdef WITHLOG}
+  fLogClass.Enter('%.InternalAddNewShard: #% for %',[fShardLast+1,fStoredClass],self);
+  {$endif}
+  rest := InitNewShard;
+  if rest=nil then
+    raise EORMException.CreateUTF8('%.InitNewShard(%) =nil',[self,fStoredClass]);
+  inc(fShardNextID,fShardRange);
+  SetLength(fShardTableIndex,fShardLast+1);
+  fShardTableIndex[fShardLast] := rest.Model.GetTableIndexExisting(fStoredClass);
+end;
+
+function TSQLRestStorageShard.ShardFromID(aID: TID; out aShardTableIndex: integer;
+  out aShard: TSQLRest; aOccasion: TSQLOccasion; aShardIndex: PInteger): boolean;
+var ndx: cardinal;
+begin
+  result := false;
+  if aID<=0 then
+    exit;
+  case aOccasion of
+    soUpdate:
+      if ssoNoUpdate in fOptions then
+        exit;
+    soDelete:
+      if ssoNoDelete in fOptions then
+        exit;
+  end;
+  EnterCriticalSection(fStorageCriticalSection);
+  try
+    ndx := (aID-1) div fShardRange;
+    if (ndx<=fShardLast) and (fShards[ndx]<>nil) then begin
+      case aOccasion of
+        soUpdate:
+          if (ssoNoUpdateButLastShard in fOptions) and (ndx<>fShardLast) then
+            exit;
+        soDelete:
+          if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
+            exit;
+      end;
+      aShard := fShards[ndx];
+      aShardTableIndex := fShardTableIndex[ndx];
+      if aShardIndex<>nil then
+        aShardIndex^ := ndx;
+      result := true;
+    end;
+  finally
+    LeaveCriticalSection(fStorageCriticalSection);
+  end;
+end;
+
+function TSQLRestStorageShard.EngineAdd(TableModelIndex: integer;
+  const SentData: RawUTF8): TID;
+var data: RawUTF8;
+    i: Integer;
+begin
+  if JSONGetID(pointer(SentData),result) then
+    raise EORMException.CreateUTF8('%.EngineAdd(%) unexpected ID in %',
+      [self,fStoredClass,SentData]);
+  StorageLock(true);
+  try
+    inc(fShardLastID);
+    if fShardLastID>=fShardNextID then begin
+      InternalAddNewShard;
+      if fShardLastID>=fShardNextID then
+        raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
+    end;
+    i := PosEx('{',SentData);
+    if i=0 then
+      raise EORMException.CreateUTF8('%.EngineAdd(%) with void data',[self,fStoredClass]);
+    result := fShardLastID;
+    data := SentData;
+    insert(FormatUTF8('ID:%,',[fShardLastID]),data,i+1);
+    if fShardBatch<>nil then
+      InternalShardBatch(fShardLast).RawAdd(data) else begin
+      if fShards[fShardLast].EngineAdd(fShardTableIndex[fShardLast],data)<>fShardLastID then begin
+        InternalLog('EngineAdd(%) error adding ID=%',[fStoredClass,fShardLastID],sllError);
+        result := 0;
+      end;
+    end;
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineDelete(TableModelIndex: integer;
+  ID: TID): boolean;
+var tableIndex,shardIndex: integer;
+    rest: TSQLRest;
+begin
+  StorageLock(true);
+  try
+    if not ShardFromID(ID,tableIndex,rest,soDelete,@shardIndex) then
+      result := false else
+      if fShardBatch<>nil then
+        result := InternalShardBatch(shardIndex).Delete(ID)>=0 else
+        result := rest.EngineDelete(tableIndex,ID);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineDeleteWhere(TableModelIndex: integer;
+  const SQLWhere: RawUTF8; const IDs: TIDDynArray): boolean;
+var i: integer;
+    ndx: cardinal;
+    id: array of TInt64DynArray; // IDs split per shard
+    sql: RawUTF8;
+begin
+  result := false;
+  if (IDs=nil) or (ssoNoDelete in fOptions) then
+    exit;
+  StorageLock(true);
+  try
+    SetLength(id,fShardLast+1);
+    for i := 0 to high(IDs) do begin
+      ndx := (IDs[i]-1) div fShardRange;
+      if (ndx>=fShardLast) or (fShards[ndx]=nil) then
+        continue;
+      if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
+        continue;
+      AddInt64(id[ndx],IDs[i]);
+    end;
+    result := true;
+    for i := 0 to high(id) do
+      if id[i]<>nil then begin
+        sql := Int64DynArrayToCSV(id[i],length(id[i]),'ID in (',')');
+        if not fShards[i].EngineDeleteWhere(fShardTableIndex[i],sql,TIDDynArray(id[i])) then
+          result := false;
+      end;
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineExecute(const aSQL: RawUTF8): boolean;
+begin
+  StorageLock(false);
+  try
+    if (integer(fShardLast)>=0) and not (ssoNoExecute in fOptions) then
+      result := fShards[fShardLast].EngineExecute(aSQL) else
+      result := false;
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.TableHasRows(Table: TSQLRecordClass): boolean;
+begin
+  result := fShards<>nil;
+end;
+
+function TSQLRestStorageShard.TableRowCount(Table: TSQLRecordClass): Int64;
+var i: integer;
+begin
+  result := 0;
+  InternalLog('TableRowCount(%) may take a while',[fStoredClass],sllWarning);
+  for i := 0 to high(fShards) do
+    if fShards[i]<>nil then
+      inc(result,fShards[i].TableRowCount(fStoredClass));
+end;
+
+function TSQLRestStorageShard.EngineList(const SQL: RawUTF8;
+  ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
+var ResCount: PtrInt;
+begin
+  result := ''; // indicates error occurred
+  StorageLock(false);
+  try
+    ResCount := 0;
+    if IdemPropNameU(fBasicSQLCount,SQL) then begin
+      FormatUTF8('[{"Count(*)":%}]'#$A,[TableRowCount(fStoredClass)],result);
+      ResCount := 1;
+    end else
+    if IdemPropNameU(fBasicSQLHasRows[false],SQL) or
+       IdemPropNameU(fBasicSQLHasRows[true],SQL) then
+      if fShards<>nil then begin // return one row with fake ID=1
+        result := '[{"RowID":1}]'#$A;
+        ResCount := 1;
+      end else
+        result := '{"fieldCount":1,"values":["RowID"]}'#$A else begin
+        if (integer(fShardLast)>=0) and not (ssoNoList in fOptions) then
+          result := fShards[fShardLast].EngineList(SQL,ForceAJAX,@ResCount);
+    end;
+    if ReturnedRowCount<>nil then
+      ReturnedRowCount^ := ResCount;
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineRetrieve(TableModelIndex: integer;
+  ID: TID): RawUTF8;
+var tableIndex: integer;
+    rest: TSQLRest;
+begin
+  StorageLock(false);
+  try
+    if not ShardFromID(ID,tableIndex,rest) then
+      result := '' else
+      result := rest.EngineRetrieve(tableIndex,ID);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineRetrieveBlob(TableModelIndex: integer;
+  aID: TID; BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
+var tableIndex: integer;
+    rest: TSQLRest;
+begin
+  StorageLock(false);
+  try
+    if not ShardFromID(aID,tableIndex,rest) then
+      result := false else
+      result := rest.EngineRetrieveBlob(tableIndex,aID,BlobField,BlobData);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineUpdate(TableModelIndex: integer;
+  ID: TID; const SentData: RawUTF8): boolean;
+var tableIndex,shardIndex: integer;
+    rest: TSQLRest;
+begin
+  StorageLock(true);
+  try
+    if not ShardFromID(ID,tableIndex,rest,soUpdate,@shardIndex) then
+      result := false else
+      if fShardBatch<>nil then begin
+        InternalShardBatch(shardIndex).RawUpdate(SentData,ID);
+        result := true;
+      end else
+        result := rest.EngineUpdate(tableIndex,ID,SentData);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineUpdateBlob(TableModelIndex: integer;
+  aID: TID; BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
+var tableIndex: integer;
+    rest: TSQLRest;
+begin
+  result := false;
+  StorageLock(true);
+  try
+    if ShardFromID(aID,tableIndex,rest,soUpdate) then
+      result := rest.EngineUpdateBlob(tableIndex,aID,BlobField,BlobData);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineUpdateField(TableModelIndex: integer;
+  const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
+begin
+  result := false;
+  StorageLock(true);
+  try
+    if not ((ssoNoUpdate in fOptions) or (ssoNoUpdateField in fOptions)) then
+      result := fShards[fShardLast].EngineUpdateField(fShardTableIndex[fShardLast],
+        SetFieldName,SetValue,WhereFieldName,WhereValue);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.EngineUpdateFieldIncrement(
+  TableModelIndex: integer; ID: TID; const FieldName: RawUTF8;
+  Increment: Int64): boolean;
+var tableIndex: integer;
+    rest: TSQLRest;
+begin
+  result := false;
+  StorageLock(true);
+  try
+    if ShardFromID(ID,tableIndex,rest,soUpdate) then
+      result := rest.EngineUpdateFieldIncrement(tableIndex,ID,FieldName,Increment);
+  finally
+    StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.InternalBatchStart(Method: TSQLURIMethod;
+  BatchOptions: TSQLRestBatchOptions): boolean;
+begin
+  result := false;
+  if ssoNoBatch in fOptions then
+    exit;
+  StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
+  try
+    if fShardBatch<>nil then
+      raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
+    SetLength(fShardBatch,fShardLast+1);
+    result := true;
+  finally
+    if not result then // release lock on error
+      StorageUnLock;
+  end;
+end;
+
+function TSQLRestStorageShard.InternalShardBatch(ShardIndex: integer): TSQLRestBatch;
+begin
+  if cardinal(ShardIndex)>fShardLast then
+    raise EORMException.CreateUTF8('%.InternalShardBatch(%)',[self,ShardIndex]);
+  if fShardBatch=nil then
+    raise EORMException.CreateUTF8('%.InternalBatchStart should have been called',[self]);
+  if ShardIndex>=length(fShardBatch) then
+    SetLength(fShardBatch,ShardIndex+1); // InitNewShard just called
+  if fShardBatch[ShardIndex]=nil then
+    if fShards[ShardIndex]<>nil then
+      fShardBatch[ShardIndex] := TSQLRestBatch.Create(
+        fShards[ShardIndex],fStoredClass,10000,[boExtendedJSON]) else
+      raise EORMException.CreateUTF8('%.InternalShardBatch fShards[%]=nil',[self,ShardIndex]);
+  result := fShardBatch[ShardIndex];
+end;
+
+procedure TSQLRestStorageShard.InternalBatchStop;
+var i: integer;
+begin
+  try
+    for i := 0 to high(fShardBatch) do
+      if fShardBatch[i]<>nil then
+        if fShards[i].BatchSend(fShardBatch[i])<>HTML_SUCCESS then
+          InternalLog('%.InternalBatchStop(%): %.BatchSend failed for shard #%',
+            [ClassType,fStoredClass,fShards[i].ClassType,i],sllWarning);
+  finally
+    ObjArrayClear(fShardBatch);
+    StorageUnLock;
+  end;
 end;
 
 
