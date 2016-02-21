@@ -659,6 +659,41 @@ type
     destructor Destroy; override;
   end;
 
+
+  /// REST storage sharded over several SQlite3 instances
+  // - numerotated '*0000.dbs' SQLite3 files would contain the sharded data
+  // - here *.dbs is used as extension, to avoid any confusion with regular
+  // SQLite3 database files (*.db or *.db3)
+  // - when the server is off (e.g. on periodic version upgrade), you may safely
+  // delete/archive some oldest *.dbs files, for easy and immediate purge of
+  // your database content: such process would be much faster and cleaner than
+  // regular "DELETE FROM TABLE WHERE ID < ?" + "VACUUM" commands
+  TSQLRestStorageShardDB = class(TSQLRestStorageShard)
+  protected
+    fShardRootFileName: TFileName;
+    fSynchronous: TSQLSynchronousMode;
+    procedure InitShards; override;
+    function InitNewShard: TSQLRest; override;
+    function DBFileName(ShardIndex: Integer): TFileName;
+  public
+    /// initialize the table storage redirection for sharding over SQLite3 DB
+    // - if no aShardRootFileName is set, the executable folder and stored class
+    // table name would be used
+    // - typical use may be:
+    // ! Server.StaticDataAdd(TSQLRestStorageShardDB.Create(TSQLRecordSharded,Server,500000))
+    constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
+      aShardRange: TID; aOptions: TSQLRestStorageShardOptions=[];
+      const aShardRootFileName: TFileName=''; aSynchronous: TSQLSynchronousMode=smOff); reintroduce; virtual;
+  published
+    /// associated file name for the SQLite3 database files
+    // - contains the folder, and root file name for the storage
+    // - each shard would end with its 4 digits index: actual file name would
+    // append '0000.dbs' to this ShardRootFileName
+    property ShardRootFileName: TFileName read fShardRootFileName;
+  end;
+
+
+
 /// initialize a Virtual Table Module for a specified database
 // - to be used for low-level access to a virtual module, e.g. with
 // TSQLVirtualTableLog
@@ -2537,6 +2572,71 @@ begin
     end;
   inherited;
 end;
+
+
+{ TSQLRestStorageShardDB }
+
+constructor TSQLRestStorageShardDB.Create(aClass: TSQLRecordClass;
+  aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
+  const aShardRootFileName: TFileName; aSynchronous: TSQLSynchronousMode);
+begin
+  fShardRootFileName := aShardRootFileName;
+  fSynchronous := aSynchronous;
+  inherited Create(aClass,aServer,aShardRange,aOptions);
+end;
+
+function TSQLRestStorageShardDB.DBFileName(ShardIndex: Integer): TFileName;
+begin
+  result := Format('%s%.4d.dbs',[fShardRootFileName,ShardIndex]);
+end;
+
+function TSQLRestStorageShardDB.InitNewShard: TSQLRest;
+var db: TSQLRestServerDB;
+    model: TSQLModel;
+begin
+  inc(fShardLast);
+  model := TSQLModel.Create([fStoredClass],FormatUTF8('shard%',[fShardLast]));
+  db := TSQLRestServerDB.Create(model,DBFileName(fShardLast));
+  model.Owner := db;
+  db.DB.LockingMode := lmExclusive;
+  db.DB.Synchronous := fSynchronous;
+  db.CreateMissingTables;
+  result := db;
+  SetLength(fShards,fShardLast+1);
+  fShards[fShardLast] := result;
+end;
+
+procedure TSQLRestStorageShardDB.InitShards;
+var f,i,num: integer;
+    db: TFindFilesDynArray;
+begin
+  if fShardRootFileName='' then
+    fShardRootFileName := ExeVersion.ProgramFilePath+UTF8ToString(fStoredClass.SQLTableName);
+  db := FindFiles(ExtractFilePath(fShardRootFileName),
+    ExtractFileName(fShardRootFileName)+'*.dbs','',true); // sorted = true
+  if db=nil then
+    exit; // no existing data
+  for f := 0 to high(db) do begin
+    i := Pos('.dbs',db[f].Name);
+    if (i<=4) or not TryStrToInt(Copy(db[f].Name,i-4,4),num) then begin
+      InternalLog('InitShards(%)?',[db[f].Name],sllWarning);
+      continue;
+    end;
+    if not SameText(DBFileName(num),db[f].Name) then
+      raise EORMException.CreateUTF8('%.InitShards(%)',[self,db[f].Name]);
+    fShardLast := num-1; // 'folder\root005.db3' -> fShardLast := 4
+    InitNewShard;
+  end;
+  if Integer(fShardLast)<0 then begin
+    InternalLog('InitShards?',sllWarning);
+    exit;
+  end;
+  fShardLastID := fShards[fShardLast].TableMaxID(fStoredClass);
+  if fShardLastID<0 then
+    fShardLastID := 0; // no data yet
+end;
+
+
 
 
 function RegisterVirtualTableModule(aModule: TSQLVirtualTableClass; aDatabase: TSQLDataBase): TSQLVirtualTableModule;

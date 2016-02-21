@@ -254,6 +254,40 @@ type
     // but it won't make any difference)
     class function Sum(aClient: TSQLRestClientURI; a, b: double; Method2: boolean): double;
   end;
+
+ TSQLRecordTest = class(TSQLRecord)
+ private
+    fTest: RawUTF8;
+    fValfloat: double;
+    fValWord: word;
+    fNext: TSQLRecordTest;
+    fInt: int64;
+    fValDate: TDateTime;
+    fData: TSQLRawBlob;
+    fAnsi: WinAnsiString;
+    fUnicode: RawUnicode;
+    {$ifndef NOVARIANTS}
+    fVariant: variant;
+    {$endif}
+    procedure SetInt(const Value: int64);
+ public
+   procedure FillWith(i: Integer);
+   procedure CheckWith(test: TSynTestCase; i: Integer; offset: integer=0;
+     checkblob: boolean=true);
+ published
+   property Int: int64 read fInt write SetInt default 12;
+   property Test: RawUTF8 read fTest write fTest;
+   property Unicode: RawUnicode read fUnicode write fUnicode;
+   property Ansi: WinAnsiString read fAnsi  write fAnsi;
+   property ValFloat: double read fValfloat write fValFloat;
+   property ValWord: word read fValWord write fValWord;
+   property ValDate: tdatetime read fValDate write fValDate;
+   property Next: TSQLRecordTest read fNext write fNext;
+   property Data: TSQLRawBlob read fData write fData;
+   {$ifndef NOVARIANTS}
+   property ValVariant: variant read fVariant write fVariant;
+   {$endif}
+ end;
 {$endif}
 
 type
@@ -542,9 +576,15 @@ type
   // - this class will also test the TSQLRestStorage class, and its
   // 100% Delphi simple database engine
   TTestMemoryBased = class(TTestSQLite3Engine)
+  protected
+    function CreateShardDB: TSQLRestServer;
   published
-    /// check RTREE virtual tables
+    /// validate RTREE virtual tables
     procedure _RTree;
+    /// validate TSQLRestStorageShardDB add operation, with or without batch
+    procedure ShardWrite;
+    /// validate TSQLRestStorageShardDB reading among all sharded databases
+    procedure ShardRead;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -4200,43 +4240,46 @@ begin
 end;
 
 
-{ TTestLowLevelTypes }
-
-type
- TSQLRecordTest = class(TSQLRecord)
- private
-    fTest: RawUTF8;
-    fValfloat: double;
-    fValWord: word;
-    fNext: TSQLRecordTest;
-    fInt: int64;
-    fValDate: TDateTime;
-    fData: TSQLRawBlob;
-    fAnsi: WinAnsiString;
-    fUnicode: RawUnicode;
-    {$ifndef NOVARIANTS}
-    fVariant: variant;
-    {$endif}
-    procedure SetInt(const Value: int64);
- public
- published
-   property Int: int64 read fInt write SetInt default 12;
-   property Test: RawUTF8 read fTest write fTest;
-   property Unicode: RawUnicode read fUnicode write fUnicode;
-   property Ansi: WinAnsiString read fAnsi  write fAnsi;
-   property ValFloat: double read fValfloat write fValFloat;
-   property ValWord: word read fValWord write fValWord;
-   property ValDate: tdatetime read fValDate write fValDate;
-   property Next: TSQLRecordTest read fNext write fNext;
-   property Data: TSQLRawBlob read fData write fData;
-   {$ifndef NOVARIANTS}
-   property ValVariant: variant read fVariant write fVariant;
-   {$endif}
- end;
+{ TSQLRecordTest }
 
 procedure TSQLRecordTest.SetInt(const Value: int64);
 begin
   fInt := Value;
+end;
+
+procedure TSQLRecordTest.FillWith(i: Integer);
+begin
+  Int := i;
+  Test := Int32ToUtf8(i);
+  Ansi := WinAnsiString(Test);
+  Unicode := WinAnsiToRawUnicode(Ansi);
+  ValFloat := i*2.5;
+  ValWord := i;
+  ValDate := i+30000;
+  Data := Test;
+{$ifndef NOVARIANTS}
+  ValVariant := _ObjFast(['id',i]);
+{$endif}
+end;
+
+procedure TSQLRecordTest.CheckWith(test: TSynTestCase; i: Integer; offset: integer;
+  checkblob: boolean);
+begin
+  test.Check(i<>0);
+  test.Check(ID=i);
+  test.Check(Int=i);
+  test.Check(self.Test=Int32ToUtf8(i));
+  test.Check(Ansi=WinAnsiString(self.Test));
+  test.Check(Unicode=WinAnsiToRawUnicode(Ansi));
+  test.Check(ValFloat=i*2.5);
+  test.Check(ValWord=i+offset);
+  test.Check(ValDate=i+30000);
+  if checkblob then
+    test.Check(Data=self.Test);
+{$ifndef NOVARIANTS}
+  test.Check(DocVariantType.IsOfType(ValVariant));
+  test.Check(VariantSaveJson(ValVariant)='{"id":'+self.Test+'}');
+{$endif}
 end;
 
 
@@ -4256,8 +4299,9 @@ begin
 end;
 
 
-{$ifndef NOVARIANTS}
+{ TTestLowLevelTypes }
 
+{$ifndef NOVARIANTS}
 
 procedure TTestLowLevelTypes.Variants;
 var v: Variant;
@@ -7186,37 +7230,6 @@ var Model: TSQLModel;
     IDs: TIDDynArray;
     i,j: integer;
     dummy: RawUTF8;
-procedure FillRWith(i: Integer);
-begin
-  R.Int := i;
-  R.Test := Int32ToUtf8(i);
-  R.Ansi := WinAnsiString(R.Test);
-  R.Unicode := WinAnsiToRawUnicode(R.Ansi);
-  R.ValFloat := i*2.5;
-  R.ValWord := i;
-  R.ValDate := i+30000;
-  R.Data := R.Test;
-{$ifndef NOVARIANTS}
-  R.ValVariant := _ObjFast(['id',i]);
-{$endif}
-end;
-procedure CheckRWith(i: Integer; offset: integer=0);
-begin
-  Check(i<>0);
-  Check(R.ID=i);
-  Check(R.Int=i);
-  Check(R.Test=Int32ToUtf8(i));
-  Check(R.Ansi=WinAnsiString(R.Test));
-  Check(R.Unicode=WinAnsiToRawUnicode(R.Ansi));
-  Check(R.ValFloat=i*2.5);
-  Check(R.ValWord=i+offset);
-  Check(R.ValDate=i+30000);
-  Check(R.Data=R.Test);
-{$ifndef NOVARIANTS}
-  Check(DocVariantType.IsOfType(R.ValVariant));
-  Check(VariantSaveJson(R.ValVariant)='{"id":'+R.Test+'}');
-{$endif}
-end;
 {$ifndef NOVARIANTS}
 procedure CheckVariantWith(V: Variant; i: Integer; offset: integer=0);
 begin
@@ -7263,13 +7276,13 @@ begin
         R := TSQLRecordTest.Create;
         try
           for i := 1 to 99 do begin
-            FillRWith(i);
+            R.FillWith(i);
             Check(Client.Add(R,true)=i);
           end;
           Client.Commit;
           Check(Client.BatchStart(TSQLRecordTest,1000));
           for i := 100 to 9999 do begin
-            FillRWith(i);
+            R.FillWith(i);
             Check(Client.BatchAdd(R,true,false,ALL_FIELDS)=i-100);
           end;
           Check(Client.BatchSend(IDs)=HTML_SUCCESS);
@@ -7278,7 +7291,7 @@ begin
           Check(Client.CallBackPut('Flush','',dummy)=HTML_SUCCESS);
           Check(FileExists('fullmem.data'));
           Check(Client.Retrieve(200,R));
-          CheckRWith(200);
+          R.CheckWith(self,200);
         finally
           R.Free;
         end;
@@ -7309,17 +7322,17 @@ begin
           i := 0;
           while R.FillOne do begin
             inc(i);
-            CheckRWith(i);
+            R.CheckWith(self,i);
           end;
           Check(i=9999);
           for i := 1 to 9999 do begin
             Check(R.FillRow(i));
-            CheckRWith(i);
+            R.CheckWith(self,i);
           end;
           for i := 1 to 19999 do begin
             j := Random(9999)+1;
             Check(R.FillRow(j));
-            CheckRWith(j);
+            R.CheckWith(self,j);
           end;
         finally
           R.Free;
@@ -7330,10 +7343,10 @@ begin
           try
             Check(List.Count=9999);
             for R in List do
-              CheckRWith(R.ID);
+              R.CheckWith(self,R.IDValue);
             for i := 0 to List.Count-1 do begin
               R := List[i];
-              CheckRWith(i+1);
+              R.CheckWith(self,i+1);
             end;
           finally
             List.Free;
@@ -7361,14 +7374,14 @@ begin
           'update one field of a given record');
         R := TSQLRecordTest.Create(Client,100);
         try
-          CheckRWith(100,10);
+          R.CheckWith(self,100,10);
         finally
           R.Free;
         end;
         Check(Client.UpdateField(TSQLRecordTest,100,'ValWord',[100]));
         R := TSQLRecordTest.Create(Client,100);
         try
-          CheckRWith(100);
+          R.CheckWith(self,100);
         finally
           R.Free;
         end;
@@ -7376,11 +7389,11 @@ begin
           'update one field of a given record');
         R := TSQLRecordTest.Create(Client,110);
         try
-          CheckRWith(110,10);
+          R.CheckWith(self,110,10);
           Batch := TSQLRestBatch.Create(Server,TSQLRecordTest,30);
           try
             for i := 10000 to 10099 do begin
-              FillRWith(i);
+              R.FillWith(i);
               Check(Batch.Add(R,true,false,ALL_FIELDS)=i-10000);
             end;
             Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
@@ -7397,11 +7410,11 @@ begin
           while R.FillOne do begin
             inc(i);
             if i=110 then
-              CheckRWith(i,10) else
-              CheckRWith(i);
+              R.CheckWith(self,i,10) else
+              R.CheckWith(self,i);
             {$ifdef NOVARIANTS} // FillPrepare([200,300]) below not available
             if (i=200) or (i=300) then begin
-              FillRWith(R.ID+10);
+              R.FillWith(R.ID+10);
               Check(Client.Update(R,'ValWord,ValDate'),'update only 2 fields');
             end;
             {$endif}
@@ -7417,7 +7430,7 @@ begin
           while R.FillOne do begin
             inc(i);
             Check(R.ID>=200);
-            FillRWith(R.ID+10);
+            R.FillWith(R.ID+10);
             Check(Client.Update(R,'ValWord,ValDate'),'update only 2 fields');
           end;
           Check(i=2);
@@ -7431,7 +7444,7 @@ begin
           while R.FillOne do begin
             inc(i);
             if i=110 then
-              CheckRWith(i,10) else
+              R.CheckWith(self,i,10) else
             if (i=200) or (i=300) then begin
               Check(R.Int=i);
               Check(R.Test=Int32ToUtf8(i));
@@ -7439,7 +7452,7 @@ begin
               Check(R.ValWord=i+10);
               Check(R.ValDate=i+30010);
             end else
-              CheckRWith(i);
+              R.CheckWith(self,i);
           end;
           Check(i=10099);
         finally
@@ -9167,6 +9180,72 @@ begin
     Model.Free;
   end;
 end;
+
+const SHARD_MAX = 10000;
+      SHARD_RANGE = 1000;
+
+function TTestMemoryBased.CreateShardDB: TSQLRestServer;
+begin
+  result := TSQLRestServer.CreateWithOwnModel([TSQLRecordTest],false,'shardtest');
+  Check(result.StaticDataAdd(TSQLRestStorageShardDB.Create(TSQLRecordTest,result,SHARD_RANGE,[])));
+end;
+
+procedure TTestMemoryBased.ShardWrite;
+var R: TSQLRecordTest;
+    i: integer;
+    db: TSQLRestServer;
+    b: TSQLRestBatch;
+begin
+  DirectoryDelete(ExeVersion.ProgramFilePath,'test0*.dbs',True);
+  db := CreateShardDB;
+  try
+    R := TSQLRecordTest.Create;
+    try
+      for i := 1 to 50 do begin
+        R.FillWith(i);
+        Check(db.AddWithBlobs(R)=i);
+        R.CheckWith(self,i);
+      end;
+      b := TSQLRestBatch.Create(db,TSQLRecordTest,SHARD_RANGE div 3,[boExtendedJSON]);
+      try
+        for i := 51 to SHARD_MAX do begin
+          R.FillWith(i);
+          Check(b.Add(R,true,false,ALL_FIELDS)=i-51);
+        end;
+        Check(db.BatchSend(b)=HTML_SUCCESS);
+      finally
+        b.Free;
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    db.Free;
+  end;
+end;
+
+procedure TTestMemoryBased.ShardRead;
+var R: TSQLRecordTest;
+    i: integer;
+    db: TSQLRestServer;
+begin
+  db := CreateShardDB;
+  try
+    R := TSQLRecordTest.Create;
+    try
+      for i := 1 to SHARD_MAX do begin
+        Check(db.Retrieve(i,R));
+        Check(db.RetrieveBlobFields(R));
+        R.CheckWith(self,i,0);
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    db.Free;
+  end;
+end;
+
 
 
 { TTestClientServerAccess }
