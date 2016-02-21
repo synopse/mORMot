@@ -12996,6 +12996,10 @@ type
     // which is much faster than testing if "SELECT count(*)" equals 0 - see
     // @http://stackoverflow.com/questions/8988915
     function TableHasRows(Table: TSQLRecordClass): boolean; virtual;
+    /// search for the last inserted ID in a specified table
+    // - returns -1 on error
+    // - will execute by default "SELECT max(rowid) FROM TableName"
+    function TableMaxID(Table: TSQLRecordClass): TID; virtual;
     /// check if a given ID do exist for a given table
     function MemberExists(Table: TSQLRecordClass; ID: TID): boolean;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
@@ -31920,7 +31924,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   fBatch.AddShort('"PUT",{ID:');
   fBatch.Add(ID);
   fBatch.Add(',');
-  fBatch.AddStringCopy(SentData,2,maxInt);
+  fBatch.AddStringCopy(SentData,2,maxInt shr 2);
   fBatch.Add(',');
   inc(fBatchCount);
   inc(fUpdateCount);
@@ -33383,8 +33387,7 @@ var T: TSQLTableJSON;
 begin
   if (self=nil) or (Table=nil) then
     T := nil else
-    T := ExecuteList([Table],
-      'SELECT Count(*) FROM '+Table.RecordProps.SQLTableName);
+    T := ExecuteList([Table],'SELECT Count(*) FROM '+Table.RecordProps.SQLTableName);
   if T<>nil then
   try
     Result := T.GetAsInt64(1,0);
@@ -33399,8 +33402,7 @@ var T: TSQLTableJSON;
 begin
   if (self=nil) or (Table=nil) then
     T := nil else
-    T := ExecuteList([Table],
-      'SELECT RowID FROM '+Table.RecordProps.SQLTableName+' LIMIT 1');
+    T := ExecuteList([Table],'SELECT RowID FROM '+Table.RecordProps.SQLTableName+' LIMIT 1');
   if T<>nil then
   try
     Result := T.fRowCount>0;
@@ -33408,6 +33410,21 @@ begin
     T.Free;
   end else
     Result := false;
+end;
+
+function TSQLRest.TableMaxID(Table: TSQLRecordClass): TID;
+var T: TSQLTableJSON;
+begin
+  if (self=nil) or (Table=nil) then
+    T := nil else
+    T := ExecuteList([Table],'SELECT max(RowID) FROM '+Table.RecordProps.SQLTableName);
+  if T<>nil then
+  try
+    Result := T.GetAsInt64(1,0);
+  finally
+    T.Free;
+  end else
+    Result := -1;
 end;
 
 function TSQLRest.ExecuteList(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): TSQLTableJSON;

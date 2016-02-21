@@ -553,6 +553,10 @@ type
     // create a new TSQLRecord type)
     procedure CreateMissingTables(user_version: cardinal=0;
       Options: TSQLInitializeTableOptions=[]); override;
+    /// search for the last inserted ID in a table
+    // - will execute not default select max(rowid) from Table, but faster
+    // $ select rowid from Table order by rowid desc limit 1
+    function TableMaxID(Table: TSQLRecordClass): TID; override;
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -799,6 +803,14 @@ begin
   end;
 end;
 
+function TSQLRestServerDB.TableMaxID(Table: TSQLRecordClass): TID;
+var SQL: RawUTF8;
+begin
+  SQL := 'select rowid from '+Table.SQLTableName+' order by rowid desc limit 1';
+  if not InternalExecute(SQL,true,PInt64(@result)) then
+    result := 0;
+end;
+
 function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer;
   const SentData: RawUTF8): TID;
 var Props: TSQLRecordProperties;
@@ -823,11 +835,9 @@ begin
           fBatchIDMax := result;
       end else begin
         if fBatchIDMax=0 then begin
-          SQL := 'select max(rowid) from '+SQL;
-          if not InternalExecute(SQL,true,PInt64(@fBatchIDMax)) then begin
-            fBatchIDMax := -1; // will force error for whole BATCH block
-            exit;
-          end;
+          fBatchIDMax := TableMaxID(Props.Table);
+          if fBatchIDMax<0 then
+            exit; // will force error for whole BATCH block
         end;
         inc(fBatchIDMax);
         result := fBatchIDMax;
