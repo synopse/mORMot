@@ -48454,7 +48454,11 @@ end;
 
 function TSynDictionary.Count: integer;
 begin
+  {$ifdef NOVARIANTS}
+  result := fSafe.Padding[DIC_KEYCOUNT].VInteger;
+  {$else}
   result := fSafe.LockedInt64[DIC_KEYCOUNT];
+  {$endif}
 end;
 
 procedure TSynDictionary.SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean);
@@ -53701,7 +53705,11 @@ end;
 
 function TSynUniqueIdentifierGenerator.GetComputedCount: integer;
 begin
+  {$ifdef NOVARIANTS}
+  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInteger;
+  {$else}
   result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
+  {$endif}
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime;
@@ -53732,7 +53740,11 @@ begin
     fCrypto[i] := crc; // naive but good enough in practice
   end;
   fSafe.Init;
+  {$ifdef NOVARIANTS}
+  variant(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT]) := 0;
+  {$else}
   fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
+  {$endif}
 end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;

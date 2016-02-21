@@ -211,7 +211,10 @@ type // Delphi 5 doesn't have those base types defined :(
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of Integer;
 const
+  PathDelim  = '\';
   soCurrent = soFromCurrent;
+
+function IncludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
 {$endif}
 
 /// in-memory ZLib DEFLATE compression
@@ -782,6 +785,13 @@ uses
   SynKylix;
   {$endif}
 {$endif Linux}
+
+{$ifdef DELPHI5OROLDER}
+function IncludeTrailingPathDelimiter(const FileName: TFileName): TFileName;
+begin
+  result := IncludeTrailingBackslash(FileName);
+end;
+{$endif}
 
 const
   // those constants have +1 to avoid finding it in the exe
