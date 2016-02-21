@@ -3534,7 +3534,7 @@ type
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
 function FindFiles(const Directory,Mask: TFileName;
-  const IgnoreFileName: TFileName=''): TFindFilesDynArray;
+  const IgnoreFileName: TFileName=''; SortByName: boolean=false): TFindFilesDynArray;
 
 {$ifdef DELPHI5OROLDER}
 
@@ -24131,10 +24131,12 @@ begin
   {$endif}
 end;
 
-function FindFiles(const Directory,Mask,IgnoreFileName: TFileName): TFindFilesDynArray;
+function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
+  SortByName: boolean): TFindFilesDynArray;
 var F: TSearchRec;
     n: integer;
     Dir: TFileName;
+    da: TDynArray;
 begin
   result := nil;
   n := 0;
@@ -24156,6 +24158,10 @@ begin
       {$endif}
     until FindNext(F)<>0;
     FindClose(F);
+    if SortByName then begin
+      da.Init(TypeInfo(TFindFilesDynArray),result);
+      da.Sort(SortDynArrayStringI);
+    end;
   end;
 end;
 
