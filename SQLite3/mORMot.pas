@@ -6660,9 +6660,15 @@ type
     // no TSQLRecordClass shall have been set at BatchStart() call
     function Delete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// allow to append some JSON content to the internal raw buffer
-    // - could be used to eumulate Add/Update/Delete
+    // - could be used to emulate Add/Update/Delete
     // - FullRow=TRUE would increment the global Count
     function RawAppend(FullRow: boolean=true): TTextWriter;
+    /// allow to append some JSON content to the internal raw buffer for a POST
+    // - could be used to emulate Add() with an already pre-computed JSON object
+    procedure RawAdd(const SentData: RawUTF8);
+    /// allow to append some JSON content to the internal raw buffer for a PUT
+    // - could be used to emulate Update() with an already pre-computed JSON object
+    procedure RawUpdate(const SentData: RawUTF8; ID: TID);
     /// close a BATCH sequence started by Start method
     // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
     // - will also notify the TSQLRest.Cache for all deleted IDs
@@ -12719,6 +12725,9 @@ type
   /// a dynamic array of TSQLRest instances
   TSQLRestDynArray = array of TSQLRest;
 
+  /// a dynamic array of TSQLRest instances, owniing the instances
+  TSQLRestObjArray = array of TSQLRest;
+
   /// used to store the execution parameters for a TSQLRest instance
   TSQLRestAcquireExecution = class(TSynPersistentLocked)
   public
@@ -12978,8 +12987,8 @@ type
     property PrivateGarbageCollector: TObjectList read fPrivateGarbageCollector;
   public
     /// get the row count of a specified table
-    // - return -1 on error
-    // - return the row count of the table on success
+    // - returns -1 on error
+    // - returns the row count of the table on success
     // - calls internaly the "SELECT Count(*) FROM TableName;" SQL statement
     function TableRowCount(Table: TSQLRecordClass): Int64; virtual;
     /// check if there is some data rows in a specified table
@@ -31888,6 +31897,33 @@ begin
   if FullRow then
     inc(fBatchCount);
   result := fBatch;
+end;
+
+procedure TSQLRestBatch.RawAdd(const SentData: RawUTF8);
+begin // '{"Table":[...,"POST",{object},...]}'
+  if (fBatch=nil) or (fTable=nil) then
+    raise EORMException.CreateUTF8('%.RawAdd %',[self,SentData]);
+  fBatch.AddShort('"POST",');
+  fBatch.AddString(SentData);
+  fBatch.Add(',');
+  inc(fBatchCount);
+  inc(fAddCount);
+end;
+
+procedure TSQLRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID);
+var sentID: TID;
+begin // '{"Table":[...,"PUT",{object},...]}'
+  if (fBatch=nil) or (fTable=nil) then
+    raise EORMException.CreateUTF8('%.RawUpdate % %',[self,ID,SentData]);
+  if JSONGetID(pointer(SentData),sentID) and (sentID<>ID) then
+    raise EORMException.CreateUTF8('%.RawUpdate ID=% <> %',[self,ID,SentData]);
+  fBatch.AddShort('"PUT",{ID:');
+  fBatch.Add(ID);
+  fBatch.Add(',');
+  fBatch.AddStringCopy(SentData,2,maxInt);
+  fBatch.Add(',');
+  inc(fBatchCount);
+  inc(fUpdateCount);
 end;
 
 function TSQLRestBatch.Add(Value: TSQLRecord; SendData,ForceID: boolean;
