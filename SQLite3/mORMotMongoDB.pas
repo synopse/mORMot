@@ -293,7 +293,15 @@ function TSQLRestMongoDBCreate(aModel: TSQLModel;
   aOptions: TStaticMongoDBRegisterOptions; aMongoDBIdentifier: word=0): TSQLRest; overload;
 
 
+function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString; overload;
+
 implementation
+
+function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(eac));
+end;
+
 
 function StaticMongoDBRegister(aClass: TSQLRecordClass; aServer: TSQLRestServer;
   aMongoDatabase: TMongoDatabase; aMongoCollectionName: RawUTF8;
@@ -501,11 +509,6 @@ begin
   fEngineAddCompute := eacSynUniqueIdentifier;
 end;
 
-function ToText(eac: TSQLRestStorageMongoDBEngineAddComputeID): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TSQLRestStorageMongoDBEngineAddComputeID),ord(eac));
-end;
-
 function TSQLRestStorageMongoDB.EngineNextID: TID;
 
   procedure ComputeMax_ID;
@@ -563,7 +566,7 @@ begin
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: invalid JSON context',[self]);
   if not (Occasion in [soInsert,soUpdate]) then
     raise EORMMongoDBException.CreateUTF8('Unexpected %.DocFromJSON(Occasion=%)',
-      [self,GetEnumName(TypeInfo(TSQLOccasion),ord(Occasion))^]);
+      [self,ToText(Occasion)^]);
   MissingID := true;
   for i := doc.Count-1 downto 0 do // downwards for doc.Delete(i) below
     if IsRowID(pointer(doc.Names[i])) then begin
@@ -1052,9 +1055,8 @@ begin
     with Stmt.Where[w] do begin
       FieldName := extFieldName(Field-1);
       if not B.BSONWriteQueryOperator(FieldName,NotClause,Operator,ValueVariant) then begin
-        InternalLog('%.EngineList: operator % not supported for field "%" in [%]',[
-          ClassType,GetEnumName(TypeInfo(TSynTableStatementOperator),ord(Operator))^,
-          FieldName,SQL],sllError);
+        InternalLog('%.EngineList: operator % not supported for field "%" in [%]',
+          [ClassType,ToText(Operator)^,FieldName,SQL],sllError);
         exit;
       end;
     end;
@@ -1358,7 +1360,7 @@ begin
     end;
     else
       raise EORMException.CreateUTF8('%.InternalBatchStop(%) with BatchMethod=%',
-        [self,StoredClass,ord(fBatchMethod)]);
+        [self,StoredClass,ToText(fBatchMethod)^]);
     end;
   finally
     FreeAndNil(fBatchWriter);

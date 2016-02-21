@@ -1841,7 +1841,7 @@ begin
         raise ESQLDBException.CreateUTF8('%.ExecuteFromJSON(%,soUpdate,UpdatedID=%)',
           [self,StoredClass,UpdatedID]);
     else raise ESQLDBException.CreateUTF8('%.ExecuteFromJSON(%,Occasion=%)?',
-           [self,StoredClass,ord(Occasion)]);
+           [self,StoredClass,ToText(Occasion)^]);
     end;
     // decode fields
     Decoder.Decode(SentData,nil,pNonQuoted,InsertedID,true);
@@ -1943,7 +1943,7 @@ begin
     constraint := @Prepared.Where[i];
     {$ifdef SQLVIRTUALLOGS}
     log := FormatUTF8('% [column=% oper=%]',
-      [log,constraint^.Column,ord(constraint^.Operation)]);
+      [log,constraint^.Column,ToText(constraint^.Operation)^]);
     {$endif}
     if constraint^.Operation>high(SQL_OPER_WITH_PARAM) then
       exit; // invalid specified operator -> abort search

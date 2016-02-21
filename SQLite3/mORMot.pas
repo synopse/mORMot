@@ -18886,7 +18886,9 @@ function ToText(si: TServiceInstanceImplementation): PShortString; overload;
 function ToText(cmd: TSQLRestServerURIContextCommand): PShortString; overload;
 function ToText(op: TSQLQueryOperator): PShortString; overload;
 function ToText(V: TInterfaceMockSpyCheck): PShortString; overload;
-
+function ToText(m: TSQLURIMethod): PShortString; overload;
+function ToText(o: TSynTableStatementOperator): PShortString; overload;
+function ToText(t: TSQLVirtualTableTransaction): PShortString; overload;
 
 { ************ Logging classes and functions }
 
@@ -39978,7 +39980,8 @@ var EndOfObject: AnsiChar;
     URIMethod, RunningBatchURIMethod: TSQLURIMethod;
     RunningBatchRest, RunningRest: TSQLRest;
     Sent, Method, MethodTable: PUTF8Char;
-    AutomaticTransactionPerRow, RowCountForCurrentTransaction: cardinal;
+    AutomaticTransactionPerRow: cardinal;
+    RowCountForCurrentTransaction: cardinal;
     RunTableTransactions: array of TSQLRest;
     RunMainTransaction: boolean;
     ID: TID;
@@ -40332,6 +40335,22 @@ function ToText(V: TInterfaceMockSpyCheck): PShortString;
 begin
   result := GetEnumName(TypeInfo(TInterfaceMockSpyCheck),ord(V));
 end;
+
+function ToText(m: TSQLURIMethod): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLURIMethod),ord(m));
+end;
+
+function ToText(o: TSynTableStatementOperator): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSynTableStatementOperator),ord(o));
+end;
+
+function ToText(t: TSQLVirtualTableTransaction): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLVirtualTableTransaction),ord(t));
+end;
+
 
 
 { TSQLRestClientURIDll }
@@ -42096,8 +42115,6 @@ end;
 begin
   result := '';
   ResCount := 0;
-  if self=nil then
-    exit;
   StorageLock(false);
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
@@ -42138,9 +42155,9 @@ begin
           case Stmt.Select[0].FunctionKnown of
            funcCountStar:
             if Stmt.Where=nil then
-              // was "SELECT Count(*) FROM TableName;"
+              // was e.g. "SELECT Count(*) FROM TableName;"
               SetCount(TableRowCount(fStoredClass)) else begin
-              // was "SELECT Count(*) FROM TableName WHERE ..."
+              // was e.g. "SELECT Count(*) FROM TableName WHERE ..."
               ResCount := FindWhereEqual(Stmt.Where[0].Field,Stmt.Where[0].Value,
                 DoNothingEvent,nil,0,0);
               case Stmt.Where[0].Operator of

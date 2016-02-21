@@ -1865,7 +1865,7 @@ var ndx,f,r,prop,fieldCount,valuesCount,
 begin
   if fBatchMethod<>mPOST then
     raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
-      [self,ord(fBatchMethod)]);
+      [self,ToText(fBatchMethod)^]);
   try
     if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
       exit; // nothing to add
@@ -2415,8 +2415,7 @@ function InternalTrans(pVTab: TSQLite3VTab; aState: TSQLVirtualTableTransaction;
 begin
   if TSQLVirtualTable(pvTab.pInstance).Transaction(aState,aSavePoint) then
     result := SQLITE_OK else begin
-    Notify('Transaction(%,%)',
-      [GetEnumName(TypeInfo(TSQLVirtualTableTransaction),ord(aState))^,aSavePoint]);
+    Notify('Transaction(%,%)',[ToText(aState)^,aSavePoint]);
     result := SQLITE_ERROR;
   end;
 end;
