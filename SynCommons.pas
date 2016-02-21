@@ -4028,7 +4028,10 @@ function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
 
 /// add a 64 bit integer value at the end of a dynamic array of integers
-procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64);
+procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+procedure AddInt64(var Values: TInt64DynArray; Value: Int64); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// delete any integer in Values[]
@@ -9788,6 +9791,14 @@ function ExtractInlineParameters(const SQL: RawUTF8;
 /// add the 4 digits of integer Y to P^
 procedure YearToPChar(Y: Word; P: PUTF8Char);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+
+/// creates a 3 digits string from a 0..999 value
+function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// creates a 4 digits string from a 0..9999 value
+function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
@@ -23142,6 +23153,19 @@ asm
 end;
 {$endif}
 
+function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
+begin
+  SetString(result,nil,3);
+  PWordArray(result)[0] := TwoDigitLookupW[Value div 100];
+  PByteArray(result)[2] := (Value mod 100)+48;
+end;
+
+function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
+begin
+  SetString(result,nil,4);
+  YearToPChar(Value,pointer(result));
+end;
+
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var AbsA,AbsB: double;
 begin // faster than the Math unit version
@@ -24501,6 +24525,14 @@ begin
   inc(ValuesCount);
 end;
 
+procedure AddInt64(var Values: TInt64DynArray; Value: Int64);
+var n: integer;
+begin
+  n := length(Values);
+  SetLength(Values,n+1);
+  Values[n] := Value;
+end;
+
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt);
 var n: PtrInt;
 begin
@@ -25398,10 +25430,10 @@ begin
   repeat
     while not odd(Y) do begin
       Y := Y shr 1;
-      LBase := LBase*LBase
+      LBase := LBase*LBase;
     end;
     dec(Y);
-    result := result*LBase
+    result := result*LBase;
   until Y=0;
   if Exponent<0 then
     result := 1.0/result;
