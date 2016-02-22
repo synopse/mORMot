@@ -585,6 +585,8 @@ type
     procedure ShardWrite;
     /// validate TSQLRestStorageShardDB reading among all sharded databases
     procedure ShardRead;
+    /// validate TSQLRestStorageShardDB reading after deletion of several shards
+    procedure ShardReadAfterPurge;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -9246,6 +9248,31 @@ begin
   end;
 end;
 
+procedure TTestMemoryBased.ShardReadAfterPurge;
+var R: TSQLRecordTest;
+    i: integer;
+    db: TSQLRestServer;
+begin
+  Check(DeleteFile(ExeVersion.ProgramFilePath+'test0000.dbs'));
+  Check(DeleteFile(ExeVersion.ProgramFilePath+'test0001.dbs'));
+  db := CreateShardDB;
+  try
+    R := TSQLRecordTest.Create;
+    try
+      for i := 1 to SHARD_RANGE*2 do
+        Check(not db.Retrieve(i,R));
+      for i := SHARD_RANGE*2+1 to SHARD_MAX do begin
+        Check(db.Retrieve(i,R));
+        Check(db.RetrieveBlobFields(R));
+        R.CheckWith(self,i,0);
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    db.Free;
+  end;
+end;
 
 
 { TTestClientServerAccess }
