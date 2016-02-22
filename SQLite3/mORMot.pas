@@ -16983,6 +16983,11 @@ type
     // - may e.g. merge/compact shards, depending on scaling expectations
     // - also called by Destroy - do nothing by default
     procedure ConsolidateShards; virtual;
+    /// remove a shard database from the current set
+    // - it would allow e.g. to delete a *.dbs file at runtime, without
+    // restarting the server
+    // - this default implementation would free and nil fShard[aShardIndex]
+    procedure RemoveShard(aShardIndex: integer); virtual;
     /// retrieve the ORM shard instance corresponding to an ID
     // - may return false if the correspondig shard is not available any more
     // - may return true, and a TSQLRestHookClient or a TSQLRestHookServer instance
@@ -43186,7 +43191,7 @@ begin
       ConsolidateShards;
   finally
     inherited Destroy;
-    for i := 0 to high(fShards) do begin 
+    for i := 0 to high(fShards) do begin
       rest := fShards[i];
       if rest=nil then
         continue;
@@ -43200,6 +43205,18 @@ end;
 
 procedure TSQLRestStorageShard.ConsolidateShards;
 begin // do nothing by default
+end;
+
+
+procedure TSQLRestStorageShard.RemoveShard(aShardIndex: integer);
+begin
+  StorageLock(true);
+  try
+    if (fShards<>nil) and (cardinal(aShardIndex)<=fShardLast) then
+      FreeAndNil(fShards[aShardIndex]);
+  finally
+    StorageUnLock;
+  end;
 end;
 
 procedure TSQLRestStorageShard.InternalAddNewShard;
@@ -43270,16 +43287,17 @@ begin
       if fShardLastID>=fShardNextID then
         raise EORMException.CreateUTF8('%.EngineAdd(%) fShardNextID',[self,fStoredClass]);
     end;
+    result := fShardLastID;
     i := PosEx('{',SentData);
     if i=0 then
-      raise EORMException.CreateUTF8('%.EngineAdd(%) with void data',[self,fStoredClass]);
-    result := fShardLastID;
-    data := SentData;
-    insert(FormatUTF8('ID:%,',[fShardLastID]),data,i+1);
+      data := FormatUTF8('{ID:%}',[result]) else begin
+      data := SentData;
+      insert(FormatUTF8('ID:%,',[result]),data,i+1);
+    end;
     if fShardBatch<>nil then
       InternalShardBatch(fShardLast).RawAdd(data) else begin
-      if fShards[fShardLast].EngineAdd(fShardTableIndex[fShardLast],data)<>fShardLastID then begin
-        InternalLog('EngineAdd(%) error adding ID=%',[fStoredClass,fShardLastID],sllError);
+      if fShards[fShardLast].EngineAdd(fShardTableIndex[fShardLast],data)<>result then begin
+        InternalLog('EngineAdd(%) error adding ID=%',[fStoredClass,result],sllError);
         result := 0;
       end;
     end;
