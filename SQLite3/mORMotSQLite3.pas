@@ -674,7 +674,7 @@ type
     fSynchronous: TSQLSynchronousMode;
     procedure InitShards; override;
     function InitNewShard: TSQLRest; override;
-    function DBFileName(ShardIndex: Integer): TFileName;
+    function DBFileName(ShardIndex: Integer): TFileName; virtual;
   public
     /// initialize the table storage redirection for sharding over SQLite3 DB
     // - if no aShardRootFileName is set, the executable folder and stored class
@@ -2609,11 +2609,18 @@ end;
 procedure TSQLRestStorageShardDB.InitShards;
 var f,i,num: integer;
     db: TFindFilesDynArray;
+    mask: TFileName;
 begin
   if fShardRootFileName='' then
     fShardRootFileName := ExeVersion.ProgramFilePath+UTF8ToString(fStoredClass.SQLTableName);
-  db := FindFiles(ExtractFilePath(fShardRootFileName),
-    ExtractFileName(fShardRootFileName)+'*.dbs','',true); // sorted = true
+  mask := DBFileName(0);
+  i := Pos('0000',mask);
+  if i>0 then begin
+    system.Delete(mask,i,3);
+    mask[i] := '*';
+  end else
+    mask := fShardRootFileName+'*.dbs';
+  db := FindFiles(ExtractFilePath(mask),ExtractFileName(mask),'',true); // sorted = true
   if db=nil then
     exit; // no existing data
   for f := 0 to high(db) do begin
