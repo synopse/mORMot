@@ -4275,7 +4275,7 @@ type
       aCompare: TDynArraySortCompare): integer;
     function GetArrayTypeName: RawUTF8;
     function GetIsObjArray: boolean; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetIsObjArray(aValue: boolean);
+    procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
     /// faster than System.DynArraySetLength() function + handle T*ObjArray

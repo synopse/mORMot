@@ -2282,8 +2282,9 @@ type
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - the data inside From^ is modified in-place (unescaped and transformed):
-// don't call JSONToObject(pointer(JSONRawUTF8)) but makes a temporary copy of
-// the JSON text buffer before calling this function, if want to reuse it later
+// calling JSONToObject(pointer(JSONRawUTF8)) would change the JSONRawUTF8
+// variable content, which may not be what you expect - consider using the
+// ObjectLoadJSON() function instead
 // - handle Integer, Int64, enumerate (including boolean), set, floating point,
 // TDateTime, TCollection, TStrings, TRawUTF8List, variant, and string properties
 // (excluding ShortString, but including WideString and UnicodeString under
@@ -2309,13 +2310,13 @@ function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - this overloaded version will make a private copy of the supplied JSON
-// content, to ensure the original buffer won't be modified during process,
-// before calling safely JSONToObject()
+// content (via TSynTempBuffer), to ensure the original buffer won't be modified
+// during process, before calling safely JSONToObject()
 // - will return TRUE on success, or FALSE if the supplied JSON was invalid
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
 
-/// create a new object instance, as saved by ObjectToJSON(..woStoreClassName]);
+/// create a new object instance, as saved by ObjectToJSON(...,[...,woStoreClassName,...]);
 // - JSON input should be either 'null', either '{"ClassName":"TMyClass",...}'
 // - woStoreClassName option shall have been used at ObjectToJSON() call
 // - and the corresponding class shall have been previously registered by
@@ -3600,7 +3601,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     function GetDynArrayElemType: PTypeInfo;
     /// will create TDynArray.SaveTo by default, or JSON if is T*ObjArray
-    procedure Serialize(Instance: TObject; var data: RawByteString); virtual;
+    procedure Serialize(Instance: TObject; var data: RawByteString; ExtendedJson: boolean); virtual;
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
     /// initialize the internal fields
@@ -21451,6 +21452,8 @@ constructor TSQLPropInfoRTTIDynArray.Create(aPropInfo: PPropInfo;
 begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
+  if fGetterIsFieldPropOffset=0 then
+    raise EORMException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
@@ -21460,17 +21463,26 @@ end;
 
 procedure TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
-  fPropInfo^.GetDynArray(Instance,result);
+  result.Init(fPropType,pointer(PtrUInt(Instance)+fGetterIsFieldPropOffset)^);
   result.IsObjArray := fObjArray<>nil; // no need to search
 end;
 
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
-  var data: RawByteString);
+  var data: RawByteString; ExtendedJson: boolean);
+var da: TDynArray;
 begin
-  with GetDynArray(Instance) do
-    if fObjArray<>nil then
-      data := SaveToJSON else
-      data := SaveTo;
+  GetDynArray(Instance,da);
+  if fObjArray<>nil then
+    with TJSONSerializer.CreateOwnedStream(8192) do
+    try
+      if ExtendedJson then
+        include(fCustomOptions,twoForceJSONExtended); // smaller content
+      AddDynArrayJSON(da);
+      SetText(RawUTF8(data));
+    finally
+      Free;
+    end else
+    data := da.SaveTo;
 end;
 
 procedure TSQLPropInfoRTTIDynArray.CopySameClassProp(Source: TObject;
@@ -21488,7 +21500,7 @@ end;
 procedure TSQLPropInfoRTTIDynArray.GetBinary(Instance: TObject; W: TFileBufferWriter);
 var Value: RawByteString;
 begin
-  Serialize(Instance,Value);
+  Serialize(Instance,Value,true);
   if fObjArray<>nil then
     W.Write(Value) else
     W.WriteBinary(Value);
@@ -21497,14 +21509,14 @@ end;
 function TSQLPropInfoRTTIDynArray.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var tmp: RawByteString;
 begin
-  Serialize(Instance,tmp);
+  Serialize(Instance,tmp,true);
   result := crc32c(0,pointer(tmp),length(tmp));
 end;
 
 procedure TSQLPropInfoRTTIDynArray.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 begin
-  Serialize(Instance,RawByteString(result));
+  Serialize(Instance,RawByteString(result),false);
   if fObjArray=nil then
     BinaryToText(result,ToSQL,wasSQLString);
 end;
@@ -21514,8 +21526,9 @@ end;
 procedure TSQLPropInfoRTTIDynArray.GetVariant(Instance: TObject; var Dest: Variant);
 var json: RawUTF8;
 begin
+  VarClear(Dest);
   json := GetDynArray(Instance).SaveToJSON;
-  _Json(JSON,Dest,JSON_OPTIONS_FAST);
+  TDocVariantData(Dest).InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetVariant(Instance: TObject; const Source: Variant);
@@ -21532,50 +21545,53 @@ begin // do nothing: should already be normalized
 end;
 
 function TSQLPropInfoRTTIDynArray.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
+var da1,da2: TDynArray;
 begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
-    result := 1 else
-  if GetDynArray(Item1).Equals(GetDynArray(Item2)) then
-    result := 0 else
-    result := PtrInt(Item1)-PtrInt(Item2); // pseudo comparison
+    result := 1 else begin
+    GetDynArray(Item1,da1);
+    GetDynArray(Item2,da2);
+    if da1.Equals(da2) then
+      result := 0 else
+      result := PtrInt(Item1)-PtrInt(Item2); // pseudo comparison
+  end;
 end;
 
 function TSQLPropInfoRTTIDynArray.SetBinary(Instance: TObject; P: PAnsiChar): PAnsiChar;
-var tmp: RawByteString; // LoadFromJSON() may change the input buffer
+var tmp: TSynTempBuffer; // LoadFromJSON() may change the input buffer
+    da: TDynArray;
 begin
-  with GetDynArray(Instance) do
+  GetDynArray(Instance,da);
   if fObjArray<>nil then begin
-    tmp := FromVarString(PByte(P));
-    LoadFromJSON(pointer(tmp));
+    FromVarString(PByte(P),tmp);
+    da.LoadFromJSON(tmp.buf);
+    tmp.Done;
     result := P;
   end else
-    result := LoadFrom(P);
+    result := da.LoadFrom(P);
 end;
 
 procedure TSQLPropInfoRTTIDynArray.SetValue(Instance: TObject;
   Value: PUTF8Char; wasString: boolean);
 var tmp: TSynTempBuffer;
-    wrapper: TDynArray;
+    da: TDynArray;
 begin
-  GetDynArray(Instance,wrapper);
-  if Value=nil then begin
-    wrapper.Clear;
-    exit;
-  end;
-  if fObjArray<>nil then begin
-    tmp.Init(Value);
-    wrapper.LoadFromJSON(tmp.buf);
-  end else
-  if Base64MagicCheckAndDecode(Value,tmp) then
-    wrapper.LoadFrom(tmp.buf) else begin
-    tmp.Init(Value);
-    wrapper.LoadFromJSON(tmp.buf);
-  end;
-  tmp.Done;
+  GetDynArray(Instance,da);
+  if Value=nil then
+    da.Clear else
+    try
+      if (fObjArray=nil) and Base64MagicCheckAndDecode(Value,tmp) then
+        da.LoadFrom(tmp.buf) else begin
+        tmp.Init(Value);
+        da.LoadFromJSON(tmp.buf);
+      end;
+    finally
+      tmp.Done;
+    end;
 end;
 
 function TSQLPropInfoRTTIDynArray.SetFieldSQLVar(Instance: TObject;
@@ -21594,7 +21610,7 @@ begin
     W.AddDynArrayJSON(fPropType,GetFieldAddr(Instance)^) else
     if fObjArray<>nil then
       W.AddDynArrayJSONAsString(fPropType,GetFieldAddr(Instance)^) else begin
-      Serialize(Instance,tmp);
+      Serialize(Instance,tmp,false);
       W.WrBase64(pointer(tmp),Length(tmp),true); // withMagic=true -> add ""
     end;
 end;
@@ -21602,12 +21618,12 @@ end;
 procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
-  Serialize(Instance,temp);
+  Serialize(Instance,temp,false);
   if fObjArray<>nil then begin
-    aValue.VType := ftUTF8;
+    aValue.VType := ftUTF8; // JSON
     aValue.VText := pointer(temp);
   end else begin
-    aValue.VType := ftBlob;
+    aValue.VType := ftBlob; // binary
     aValue.VBlob := pointer(temp);
     aValue.VBlobLen := length(temp);
   end;
@@ -29240,8 +29256,11 @@ procedure TSQLRecord.FillFrom(const JSONRecord: RawUTF8; FieldBits: PSQLFieldBit
 var tmp: TSynTempBuffer; // work on a private copy
 begin
   tmp.Init(JSONRecord);
-  FillFrom(tmp.buf,FieldBits); // now we can safely call FillFrom()
-  tmp.Done;
+  try
+    FillFrom(tmp.buf,FieldBits); // now we can safely call FillFrom()
+  finally
+    tmp.Done;
+  end;
 end;
 
 procedure TSQLRecord.FillFrom(P: PUTF8Char; FieldBits: PSQLFieldBits);
@@ -45185,12 +45204,14 @@ function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
 var tmp: TSynTempBuffer;
 begin
+  result := false;
   tmp.Init(JSON);
-  if tmp.len=0 then
-    result := false else begin
-    JSONToObject(ObjectInstance,tmp.buf,result,TObjectListItemClass,Options);
-    tmp.Done;
-  end;
+  if tmp.len<>0 then
+    try
+      JSONToObject(ObjectInstance,tmp.buf,result,TObjectListItemClass,Options);
+    finally
+      tmp.Done;
+    end;
 end;
 
 function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
@@ -47538,9 +47559,12 @@ var V: TPUtf8CharDynArray;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(Value);
-  JSONDecode(tmp.buf,['FieldNames'],V,True);
-  CSVToRawUTF8DynArray(V[0],fFieldNames);
-  tmp.Done;
+  try
+    JSONDecode(tmp.buf,['FieldNames'],V,True);
+    CSVToRawUTF8DynArray(V[0],fFieldNames);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TSynValidateUniqueFields.Process(aFieldIndex: integer;
