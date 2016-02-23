@@ -8217,6 +8217,8 @@ type
   /// event signature to locate a service for a given string key
   // - used e.g. by TRawUTF8ObjectCacheList.OnKeyResolve property
   TOnKeyResolve = function(const aInterface: TGUID; const Key: RawUTF8; out Obj): boolean of object;
+  /// event signature to notify a given string key
+  TOnKeyNotify = procedure(Sender: TObject; const Key: RawUTF8) of object;
 
 const
   /// convert identified field types into high-level ORM types

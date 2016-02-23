@@ -3633,7 +3633,7 @@ type
     // - equals nil if this dynamic array was not previously registered via
     // TJSONSerializer.RegisterObjArrayForJSON()
     // - note that if the field is a T*ObjArray, you could create a new item
-    // by calling ObjArrayClassInstance^.CreateNew
+    // by calling ObjArray^.CreateNew
     // - T*ObjArray database column will be stored as text
     property ObjArray: PClassInstance read fObjArray;
   end;
@@ -19490,7 +19490,7 @@ begin
     exit;
   SetLength(obj,arr.Count);
   for i := 0 to arr.Count-1 do begin
-    obj[i] := objClass.CreateNew;
+    obj[i] := objClass^.CreateNew;
     DocVariantToObject(_Safe(arr.Values[i])^,obj[i]);
   end;
 end;
@@ -53254,11 +53254,11 @@ var i: integer;
 begin
   try
     for i := 0 to High(fLogRestBatch) do begin
-      with fLogRestBatch[i] do
-      if Count>0 then begin
+      with fLogRestBatch[i] do begin
         Safe.Lock;
         try
-          Rest.BatchSend(fLogRestBatch[i]);
+          if Count>0 then
+            Rest.BatchSend(fLogRestBatch[i]);
         finally
           Safe.Unlock;
         end;
