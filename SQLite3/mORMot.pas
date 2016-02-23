@@ -45188,7 +45188,7 @@ begin
   tmp.Init(JSON);
   if tmp.len=0 then
     result := false else begin
-    JSONToObject(ObjectInstance,tmp.buf,result,nil,[]);
+    JSONToObject(ObjectInstance,tmp.buf,result,TObjectListItemClass,Options);
     tmp.Done;
   end;
 end;
