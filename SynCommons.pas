@@ -5107,7 +5107,7 @@ type
     procedure SetUTF8(Index: integer; const Value: RawUTF8);
     {$endif}
   public
-    /// internal padding data, also used to store up to 7 variables
+    /// internal padding data, also used to store up to 7 variant values
     // - this memory buffer will ensure no CPU cache line mixup occurs
     // - you should not use this field directly, but rather the Locked[],
     // LockedInt64[], LockedUTF8[] or LockedPointer[] methods

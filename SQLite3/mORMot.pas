@@ -12479,11 +12479,13 @@ type
   TBlockingCallbackEvent = (evNone,evWaiting,evTimeout,evRaised);
 
   /// asynchrounous callback to emulate a synchronous/blocking process
+  // - once created, process would block via a WaitFor call, which would be
+  // released when CallbackFinished() is called by the process background thread
   TBlockingCallback = class(TInterfacedCallback)
   protected
-    fEvent: TBlockingCallbackEvent;
     fTimeOutMs: integer;
     fEventNotifier: TEvent;
+    fEvent: TBlockingCallbackEvent;
   public
     /// initialize the callback instance
     // - specify a time out millliseconds period after which blocking execution
@@ -12495,7 +12497,8 @@ type
     /// finalize the callback instance
     destructor Destroy; override;
     /// called to wait for the callback to be processed, or trigger timeout
-    procedure WaitFor;
+    // - would block until CallbackFinished() is called by the processing thread
+    procedure WaitFor; virtual;
     /// should be called by the callback when the process is finished
     // - the caller would then let its WaitFor method return
     // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
@@ -12504,9 +12507,16 @@ type
     // of the supplied REST instance
     procedure CallbackFinished(aRestForLog: TSQLRest;
       aServerUnregister: boolean=false);
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingCallback instance, after
+    // a successfull CallbackFinished/WaitFor process
+    // - will check that the status is not currently evWaiting and return FALSE
+    // - returns TRUE in success (i.e. status was not evWaiting)
+    function Reset: boolean; virtual;
   published
     /// the current state of process
-    property Event: TBlockingCallbackEvent read fEvent write fEvent;
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingCallbackEvent read fEvent;
   end;
 
   /// this class implements a callback interface, able to write all remote ORM
@@ -55399,6 +55409,18 @@ begin
   try
     if fEvent<>evRaised then
       fEvent := evTimeout;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TBlockingCallback.Reset: boolean;
+begin
+  fSafe.Lock;
+  try
+    result := fEvent<>evWaiting;
+    if result then
+      fEvent := evNone;
   finally
     Safe.UnLock;
   end;
