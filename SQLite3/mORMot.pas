@@ -6104,6 +6104,8 @@ type
     // - will idenfity ClientKind=ckAjax, or check for rsoGetAsJsonNotAsString
     // in TSQLRestServer.Options
     function ClientSQLRecordOptions: TJSONSerializerSQLRecordOptions;
+    /// true if called from TSQLRestServer.AdministrationExecute
+    function IsRemoteAdministrationExecute: boolean;
     /// compute the file name corresponding to the URI
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
     property ResourceFileName: TFileName read GetResourceFileName;
@@ -37175,11 +37177,14 @@ begin
     MethodIndex := -1;
 end;
 
+var // as set by TSQLRestServer.AdministrationExecute()
+  BYPASS_ACCESS_RIGHTS: TSQLAccessRights;
+
 function TSQLRestServerURIContext.Authenticate: boolean;
 var aSession: TAuthSession;
     i: integer;
 begin
-  if Server.HandleAuthentication then begin
+  if Server.HandleAuthentication and not IsRemoteAdministrationExecute then begin
     Session := CONST_AUTHENTICATION_SESSION_NOT_STARTED;
     result := false;
     Server.fSessions.Safe.Lock;
@@ -38321,6 +38326,11 @@ begin
   result := fClientKind;
 end;
 
+function TSQLRestServerURIContext.IsRemoteAdministrationExecute: boolean;
+begin
+  result := (self<>nil) and (call.RestAccessRights=@BYPASS_ACCESS_RIGHTS);
+end;
+
 function TSQLRestServerURIContext.ClientSQLRecordOptions: TJSONSerializerSQLRecordOptions;
 begin
   result := [];
@@ -39064,7 +39074,8 @@ var isAjax: boolean;
   procedure PrepareCall;
   begin
     call.Init;
-    call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
+    BYPASS_ACCESS_RIGHTS := SUPERVISOR_ACCESS_RIGHTS;
+    call.RestAccessRights := @BYPASS_ACCESS_RIGHTS;
     call.Url := Model.Root;
   end;
 
