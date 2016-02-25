@@ -699,10 +699,13 @@ begin
         Syntax;
       cVersion:
         begin
+          writeln(' ', ExeVersion.ProgramFileName,
+            #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
+            #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
           if ExeVersion.Version.Version32 <> 0 then
-            writeln(ExeVersion.ProgramName, ' Version ', ExeVersion.Version.Detailed);
+            writeln(' Version: ', ExeVersion.Version.Detailed);
           TextColor(ccCyan);
-          writeln('Powered by Synopse mORMot ' + SYNOPSE_FRAMEWORK_VERSION);
+          writeln(#10'Powered by Synopse mORMot ' + SYNOPSE_FRAMEWORK_VERSION);
         end;
       cConsole, cDaemon, cVerbose:
         begin
