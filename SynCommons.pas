@@ -2574,7 +2574,9 @@ function UrlEncode(Text: PUTF8Char): RawUTF8; overload;
 /// encode supplied parameters to be compatible with URI encoding
 // - parameters must be supplied two by two, as Name,Value pairs, e.g.
 // ! url := UrlEncode(['select','*','where','ID=12','offset',23,'object',aObject]);
-// - parameters can be either textual, integer or extended, or any TObject
+// - parameters names should be plain ASCII-7 RFC compatible identifiers
+// (0..9a..zA..Z_.~), otherwise their values are skipped
+// - parameters values can be either textual, integer or extended, or any TObject
 // - TObject serialization into UTF-8 will be processed by the ObjectToJSON()
 // function
 function UrlEncode(const NameValuePairs: array of const): RawUTF8; overload;
@@ -13191,6 +13193,10 @@ type
     // !  // here s='["one",2,3]') since ? would be escaped by Params[] parameters
     function ToArrayOfConst: TTVarRecDynArray; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// save an object document as an URI-encoded list of parameters
+    // - object field names should be plain ASCII-7 RFC compatible identifiers
+    // (0..9a..zA..Z_.~), otherwise their values are skipped
+    function ToUrlEncode(const UriRoot: RawUTF8): RawUTF8;
 
     /// find an item index in this document from its name
     // - search will follow dvoNameCaseSensitive option of this document
@@ -18029,7 +18035,7 @@ type
     // - exist only since Delphi/FPC 2009
     elemSize: Word;
   {$endif UNICODE}
-    /// string reference count (basic garbage memory mechanism)
+    /// COW string reference count (basic garbage memory mechanism)
     refCnt: Longint;
     /// length in characters
     // - size in bytes = length*elemSize
@@ -37061,6 +37067,13 @@ end;
 function TDocVariantData.ToArrayOfConst: TTVarRecDynArray;
 begin
   ToArrayOfConst(result);
+end;
+
+function TDocVariantData.ToUrlEncode(const UriRoot: RawUTF8): RawUTF8;
+var json: RawUTF8;
+begin
+  VariantSaveJSON(variant(self),twJSONEscape,json);
+  result := UrlEncodeJsonObject(UriRoot,Pointer(json),[]);
 end;
 
 function TDocVariantData.GetOrAddValueIndex(const aName: RawUTF8): integer;
