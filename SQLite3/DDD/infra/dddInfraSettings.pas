@@ -222,7 +222,8 @@ type
   /// some options to be used for TDDDRestSettings
   TDDDRestSettingsOption =
     (optEraseDBFileAtStartup,
-     optSQlite3FileSafeSlowMode);
+     optSQlite3FileSafeSlowMode,
+     optSQlite3FileSafeNonExclusive);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -625,7 +626,9 @@ begin
           WrapperSourceFolderFixed);
       if result.InheritsFrom(TSQLRestServerDB) then
         with TSQLRestServerDB(result).DB do begin // tune internal SQlite3 engine
-          LockingMode := lmExclusive;
+          if optSQlite3FileSafeNonExclusive in Options then
+            LockingMode := lmNormal else
+            LockingMode := lmExclusive;
           if optSQlite3FileSafeSlowMode in Options then
             Synchronous := smNormal else
             Synchronous := smOff;
