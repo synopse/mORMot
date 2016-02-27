@@ -3503,6 +3503,12 @@ function FileAgeToDateTime(const FileName: TFileName): TDateTime;
 // - under Windows, will use GetFileAttributesEx fast API
 function FileSize(const FileName: TFileName): Int64;
 
+/// get a file date and time, from a FindFirst/FindNext search
+// - the returned timestamp is in local time, not UTC
+// - this method would use the F.TimeStamp field available since Delphi XE2
+function SearchRecToDateTime(const F: TSearchRec): TDateTime;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// delete the content of a specified directory
 // - only one level of file is deleted within the folder: no recursive deletion
 // is processed by this function
@@ -3510,6 +3516,14 @@ function FileSize(const FileName: TFileName): Int64;
 // but just the files found in it
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
   DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
+
+/// delete the files older than a given age in a specified directory
+// - for instance, to delete all files older than one day:
+// ! DirectoryDeleteOlderFiles(FolderName, 1);
+// - only one level of file is deleted within the folder: no recursive deletion
+// is processed by this function, unless Recursive is TRUE
+function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
+   const Mask: TFileName='*.*'; Recursive: Boolean=false): Boolean;
 
 /// creates a directory if not already existing
 // - returns the full expanded directory name, including trailing backslash
@@ -24115,6 +24129,15 @@ begin
 end;
 {$endif}
 
+function SearchRecToDateTime(const F: TSearchRec): TDateTime;
+begin
+  {$ifdef ISDELPHIXE2}
+  result := F.TimeStamp;
+  {$else}
+  result := FileDateToDateTime(F.Time);
+  {$endif}
+end;
+
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
   DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
 var F: TSearchRec;
@@ -24143,6 +24166,37 @@ begin
     result := false;
 end;
 
+function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
+   const Mask: TFileName; Recursive: Boolean): Boolean;
+var F: TSearchRec;
+    Dir: TFileName;
+    old: TDateTime;
+begin
+  result := true;
+  if (Directory='') or not DirectoryExists(Directory) then
+    exit;
+  Dir := IncludeTrailingPathDelimiter(Directory);
+  if FindFirst(Dir+Mask,faAnyFile,F)=0 then begin
+    old := Now - TimePeriod;
+    repeat
+      if F.Name[1]<>'.' then
+        if Recursive and (F.Attr and faDirectory<>0) then
+          DirectoryDeleteOlderFiles(Dir+F.Name,TimePeriod,Mask,true) else
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+        {$endif}
+        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) then
+          if SearchRecToDateTime(F) < old then
+            if not DeleteFile(Dir+F.Name) then
+              result := false;
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED ON}
+        {$endif}
+    until FindNext(F)<>0;
+    FindClose(F);
+  end;
+end;
+
 procedure TFindFiles.FromSearchRec(const Directory: TFileName; const F: TSearchRec);
 begin
   Name := Directory+F.Name;
@@ -24156,11 +24210,7 @@ begin
   Size := F.Size;
   {$endif}
   Attr := F.Attr;
-  {$ifdef ISDELPHIXE2}
-  TimeStamp := F.TimeStamp;
-  {$else}
-  TimeStamp := FileDateToDateTime(F.Time);
-  {$endif}
+  TimeStamp := SearchRecToDateTime(F);
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
