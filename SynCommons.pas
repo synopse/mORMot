@@ -10070,6 +10070,34 @@ type
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
   {$endif}
 
+  /// abstract TThread with its own execution content
+  // - you should not use this class directly, but use either
+  // TSynBackgroundThreadMethodAbstract / TSynBackgroundThreadEvent /
+  // TSynBackgroundThreadMethod and provide a much more convenient callback
+  TSynBackgroundThreadAbstract = class(TThread)
+  protected
+    fPendingProcessLock: TRTLCriticalSection;
+    fProcessEvent: TEvent;
+    fOnBeforeExecute: TNotifyThreadEvent;
+    fOnAfterExecute: TNotifyThreadEvent;
+    fThreadName: RawUTF8;
+    fExecuteFinished: boolean;
+    /// where the main process takes place
+    procedure Execute; override;
+    procedure ExecuteLoop; virtual; abstract;
+  public
+    /// initialize the thread
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
+      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce;
+    /// release used resources
+    destructor Destroy; override;
+    /// access to the low-level associated event used to notify task execution
+    // to the background thread
+    property ProcessEvent: TEvent read fProcessEvent;
+  end;
+
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
   // while the UI will be still responsive by running OnIdle event in loop: see
@@ -10077,32 +10105,26 @@ type
   // - you should not use this class directly, but inherit from it and override
   // the Process method, or use either TSynBackgroundThreadEvent /
   // TSynBackgroundThreadMethod and provide a much more convenient callback
-  TSynBackgroundThreadAbstract = class(TThread)
+  TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
-    fPendingProcessLock: TRTLCriticalSection;
     fPendingProcessFlag: TSynBackgroundThreadProcessStep;
-    fProcessEvent: TEvent;
     fCallerEvent: TEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
     fBackgroundException: Exception;
     fOnIdle: TOnIdleSynBackgroundThread;
-    fOnBeforeExecute: TNotifyThreadEvent;
-    fOnAfterExecute: TNotifyThreadEvent;
     fOnBeforeProcess: TNotifyThreadEvent;
     fOnAfterProcess: TNotifyThreadEvent;
-    fThreadName: RawUTF8;
-    function GetOnIdleBackgroundThreadActive: boolean;
-    /// where the main process takes place
-    procedure Execute; override;
-    /// called by Execute method when fProcessParams<>nil and fEvent is notified
-    procedure Process; virtual; abstract;
+    procedure ExecuteLoop; override;
     function OnIdleProcessNotify(start: Int64): integer;
+    function GetOnIdleBackgroundThreadActive: boolean;
     function GetPendingProcess: TSynBackgroundThreadProcessStep;
     procedure SetPendingProcess(State: TSynBackgroundThreadProcessStep);
     // returns  flagIdle if acquired, flagDestroying if terminated
     function AcquireThread: TSynBackgroundThreadProcessStep;
     procedure WaitForFinished(start: Int64);
+    /// called by Execute method when fProcessParams<>nil and fEvent is notified
+    procedure Process; virtual; abstract;
   public
     /// initialize the thread
     // - if aOnIdle is not set (i.e. equals nil), it will simply wait for
@@ -10111,8 +10133,8 @@ type
     // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(aOnIdle: TOnIdleSynBackgroundThread;
       const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
-      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce; 
-    /// release used resources
+      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce;
+    /// finalize the thread
     destructor Destroy; override;
     /// launch Process abstract method asynchronously in the background thread
     // - wait until process is finished, calling OnIdle() callback in
@@ -10156,7 +10178,7 @@ type
     ProcessOpaqueParam: pointer) of object;
 
   /// allow background thread process of a method callback
-  TSynBackgroundThreadEvent = class(TSynBackgroundThreadAbstract)
+  TSynBackgroundThreadEvent = class(TSynBackgroundThreadMethodAbstract)
   protected
     fOnProcess: TOnProcessSynBackgroundThread;
     /// just call the OnProcess handler
@@ -10174,7 +10196,7 @@ type
   end;
 
   /// allow background thread process of a variable TThreadMethod callback
-  TSynBackgroundThreadMethod = class(TSynBackgroundThreadAbstract)
+  TSynBackgroundThreadMethod = class(TSynBackgroundThreadMethodAbstract)
   protected
     /// just call the TThreadMethod, as supplied to RunAndWait()
     procedure Process; override;
@@ -10190,7 +10212,7 @@ type
   TOnProcessSynBackgroundThreadProc = procedure(ProcessOpaqueParam: pointer);
 
   /// allow background thread process of a procedure callback
-  TSynBackgroundThreadProcedure = class(TSynBackgroundThreadAbstract)
+  TSynBackgroundThreadProcedure = class(TSynBackgroundThreadMethodAbstract)
   protected
     fOnProcess: TOnProcessSynBackgroundThreadProc;
     /// just call the OnProcess handler
@@ -10207,12 +10229,49 @@ type
     property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
   end;
 
+  TSynBackgroundThreadProcess = class;
+
+  /// event callback executed periodically by TSynBackgroundThreadProcess
+  // - Event is wrTimeout after the OnProcessMS waiting period 
+  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
+  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
+    Event: TWaitResult) of object;
+
+  /// TThread able to run a method at a given periodic pace
+  TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
+  protected
+    fOnProcess: TOnSynBackgroundThreadProcess;
+    fOnException: TNotifyEvent; 
+    fOnProcessMS: cardinal;
+    procedure ExecuteLoop; override;
+  public
+    /// initialize the thread for a periodic task processing
+    // - aOnProcess would be called when ProcessEvent.SetEvent is called or
+    // aOnProcessMS milliseconds period was elapse since last process
+    // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aThreadName: RawUTF8;
+      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+      aOnBeforeExecute: TNotifyThreadEvent=nil;
+      aOnAfterExecute: TNotifyThreadEvent=nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// access to the implementation event of the periodic task
+    property OnProcess: TOnSynBackgroundThreadProcess read fOnProcess;
+    /// access to the delay, in milliseconds, of the periodic task processing
+    property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
+    /// event callback executed when OnProcess did raise an exception
+    // - supplied Sender parameter is the raised Exception instance
+    property OnException: TNotifyEvent read fOnException write fOnException;
+  end;
+
   /// callback implementing some parallelized process for TSynParallelProcess
   // - if 0<=IndexStart<=IndexStop, it should execute some process
   TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
 
   /// thread executing process for TSynParallelProcess
-  TSynParallelProcessThread = class(TSynBackgroundThreadAbstract)
+  TSynParallelProcessThread = class(TSynBackgroundThreadMethodAbstract)
   protected
     fMethod: TSynParallelProcessMethod;
     fIndexStart, fIndexStop: integer;
@@ -53920,12 +53979,10 @@ begin
   {$endif}
 end;
 
-constructor TSynBackgroundThreadAbstract.Create(aOnIdle: TOnIdleSynBackgroundThread;
-  const aThreadName: RawUTF8; OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
+constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
+  OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
 begin
-  fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fProcessEvent := TEvent.Create(nil,false,false,'');
-  fCallerEvent := TEvent.Create(nil,false,false,'');
   fThreadName := aThreadName;
   fOnBeforeExecute := OnBeforeExecute;
   fOnAfterExecute := OnAfterExecute;
@@ -54022,79 +54079,123 @@ end;
 
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
-  SetPendingProcess(flagDestroying);
-  fProcessEvent.SetEvent;  // notify terminated
-  FixedWaitForever(fCallerEvent);
   FreeAndNil(fProcessEvent);
-  FreeAndNil(fCallerEvent);
   DeleteCriticalSection(fPendingProcessLock);
   inherited Destroy;
 end;
 
-function TSynBackgroundThreadAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
+procedure TSynBackgroundThreadAbstract.Execute;
+begin
+  try
+    if fThreadName='' then
+      SetCurrentThreadName('%(%)',[self,pointer(self)]) else
+      SetCurrentThreadName('%',[fThreadName]);
+    if Assigned(fOnBeforeExecute) then
+      fOnBeforeExecute(self);
+    try
+      while not Terminated do
+        ExecuteLoop;
+    finally
+      if Assigned(fOnAfterExecute) then
+        fOnAfterExecute(self);
+    end;
+  finally
+    fExecuteFinished := true;
+  end;
+end;
+
+
+{ TSynBackgroundThreadMethodAbstract }
+
+constructor TSynBackgroundThreadMethodAbstract.Create(aOnIdle: TOnIdleSynBackgroundThread;
+  const aThreadName: RawUTF8; OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
+begin
+  fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
+  fCallerEvent := TEvent.Create(nil,false,false,'');
+  inherited Create(aThreadName,OnBeforeExecute,OnAfterExecute);
+end;
+
+destructor TSynBackgroundThreadMethodAbstract.Destroy;
+begin
+  SetPendingProcess(flagDestroying);
+  fProcessEvent.SetEvent;  // notify terminated
+  FixedWaitForever(fCallerEvent);
+  FreeAndNil(fCallerEvent);
+  inherited Destroy;
+end;
+
+function TSynBackgroundThreadMethodAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
 begin
   EnterCriticalSection(fPendingProcessLock);
   result := fPendingProcessFlag;
   LeaveCriticalSection(fPendingProcessLock);
 end;
 
-procedure TSynBackgroundThreadAbstract.SetPendingProcess(State: TSynBackgroundThreadProcessStep);
+procedure TSynBackgroundThreadMethodAbstract.SetPendingProcess(State: TSynBackgroundThreadProcessStep);
 begin
   EnterCriticalSection(fPendingProcessLock);
   fPendingProcessFlag := State;
   LeaveCriticalSection(fPendingProcessLock);
 end;
 
-procedure TSynBackgroundThreadAbstract.Execute;
+procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
 begin
-  if fThreadName='' then
-    SetCurrentThreadName('%(%)',[self,pointer(self)]) else
-    SetCurrentThreadName('%',[fThreadName]);
-  if Assigned(fOnBeforeExecute) then
-    fOnBeforeExecute(self);
-  try
-    while not Terminated do
-      case FixedWaitFor(fProcessEvent,INFINITE) of
-        wrSignaled:
-          case GetPendingProcess of
-          flagDestroying: begin
-            fCallerEvent.SetEvent;
-            break;
-          end;
-          flagStarted:
-          try
-            fBackgroundException := nil;
-            try
-              if Assigned(fOnBeforeProcess) then
-                fOnBeforeProcess(self);
-              try
-                Process;
-              finally
-                if Assigned(fOnAfterProcess) then
-                  fOnAfterProcess(self);
-              end;
-            except
-              {$ifdef DELPHI5OROLDER}
-              on E: Exception do
-                fBackgroundException := ESynException.CreateUTF8(
-                  'Redirected %: "%"',[E,E.Message]);
-              {$else}
-              fBackgroundException := AcquireExceptionObject;
-              {$endif}
-            end;
-          finally
-            SetPendingProcess(flagFinished);
-            fCallerEvent.SetEvent;
-          end;
-         end;
+  case FixedWaitFor(fProcessEvent,INFINITE) of 
+    wrSignaled:
+      case GetPendingProcess of
+      flagDestroying: begin
+        fCallerEvent.SetEvent; // abort caller thread process
+        Terminate; // forces Execute loop ending
+        exit;
       end;
-  finally
-    if Assigned(fOnAfterExecute) then
-      fOnAfterExecute(self);
+      flagStarted:
+      if not Terminated then
+      try
+        fBackgroundException := nil;
+        try
+          if Assigned(fOnBeforeProcess) then
+            fOnBeforeProcess(self);
+          try
+            Process;
+          finally
+            if Assigned(fOnAfterProcess) then
+              fOnAfterProcess(self);
+          end;
+        except
+          {$ifdef DELPHI5OROLDER}
+          on E: Exception do
+            fBackgroundException := ESynException.CreateUTF8(
+              'Redirected %: "%"',[E,E.Message]);
+          {$else}
+          fBackgroundException := AcquireExceptionObject;
+          {$endif}
+        end;
+      finally
+        SetPendingProcess(flagFinished);
+        fCallerEvent.SetEvent;
+      end;
+     end;
   end;
 end;
 
-function TSynBackgroundThreadAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
+
+{ TSynBackgroundThreadEvent }
+
+constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
+  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+begin
+  inherited Create(aOnIdle,aThreadName);
+  fOnProcess := aOnProcess;
+end;
+
+procedure TSynBackgroundThreadEvent.Process;
+begin
+  if not Assigned(fOnProcess) then
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
+  fOnProcess(self,fParam);
+end;
+
+function TSynBackgroundThreadMethodAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
 begin
   EnterCriticalSection(fPendingProcessLock);
   try
@@ -54110,7 +54211,7 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadAbstract.OnIdleProcessNotify(start: Int64): integer;
+function TSynBackgroundThreadMethodAbstract.OnIdleProcessNotify(start: Int64): integer;
 begin
   result := GetTickCount64-start;
   if result<0 then
@@ -54119,7 +54220,7 @@ begin
     fOnIdle(self,result) ;
 end;
 
-procedure TSynBackgroundThreadAbstract.WaitForFinished(start: Int64);
+procedure TSynBackgroundThreadMethodAbstract.WaitForFinished(start: Int64);
 var E: Exception;
 begin
   if (self=nil) or not (fPendingProcessFlag in [flagStarted, flagFinished]) then
@@ -54149,7 +54250,7 @@ begin
   end;
 end;
 
-function TSynBackgroundThreadAbstract.RunAndWait(OpaqueParam: pointer): boolean;
+function TSynBackgroundThreadMethodAbstract.RunAndWait(OpaqueParam: pointer): boolean;
 var start: Int64;
     ThreadID: TThreadID;
 begin
@@ -54181,26 +54282,9 @@ begin
   result := true;
 end;
 
-function TSynBackgroundThreadAbstract.GetOnIdleBackgroundThreadActive: boolean;
+function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
 begin
   result := (self<>nil) and Assigned(fOnIdle) and (GetPendingProcess<>flagIdle);
-end;
-
-
-{ TSynBackgroundThreadEvent }
-
-constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
-begin
-  inherited Create(aOnIdle,aThreadName);
-  fOnProcess := aOnProcess;
-end;
-
-procedure TSynBackgroundThreadEvent.Process;
-begin
-  if not Assigned(fOnProcess) then
-    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
-  fOnProcess(self,fParam);
 end;
 
 
@@ -54256,6 +54340,46 @@ begin
   fIndexStart := IndexStart;
   fIndexStop := IndexStop;
   fProcessEvent.SetEvent; // notify execution
+end;
+
+{ TSynBackgroundThreadProcess }
+
+constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent);
+begin
+  if not Assigned(aOnProcess) then
+    raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
+  fOnProcess := aOnProcess;
+  fOnProcessMS := aOnProcessMS;
+  if fOnProcessMS=0 then
+    fOnProcessMS := INFINITE; // wait until ProcessEvent.SetEvent or Terminated
+  inherited Create(aThreadName,aOnBeforeExecute,aOnAfterExecute);
+end;
+
+destructor TSynBackgroundThreadProcess.Destroy;
+begin
+  if not fExecuteFinished then begin
+    Terminate;
+    fProcessEvent.SetEvent;  // notify terminated
+    while not fExecuteFinished do
+      Sleep(1);
+  end;
+  inherited Destroy;
+end;
+
+procedure TSynBackgroundThreadProcess.ExecuteLoop;
+var wait: TWaitResult;
+begin
+  wait := FixedWaitFor(fProcessEvent,fOnProcessMS);
+  if not Terminated and (wait in [wrSignaled,wrTimeout]) then
+    try
+      fOnProcess(self,wait);
+    except
+      on E: Exception do
+        if Assigned(fOnException) then
+          fOnException(E);
+    end;
 end;
 
 
