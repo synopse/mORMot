@@ -13810,6 +13810,21 @@ type
     // - this abstract method will call fLogClass.Add.NotifyThreadEnded
     // but TSQLRestServer.EndCurrentThread would do the main process
     procedure EndCurrentThread(Sender: TThread); virtual;
+    /// allows to safely execute a processing method in a background thread
+    // - returns a TSynBackgroundThreadMethod instance, ready to execute any
+    // background task via its RunAndWait() method
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadMethod(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
+    /// allows to safely execute a process at a given pace
+    // - returns a TSynBackgroundThreadProcess instance, ready to execute the
+    // supplied aOnProcess event in a loop, as aOnProcessMS periodic task
+    // - will properly call BeginCurrentThread/EndCurrentThread methods
+    // - you should supply some runtime information to name the thread, for
+    // proper debugging
+    function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadProcess;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -15464,7 +15479,6 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); reintroduce; virtual;
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
-    function CreateBackgroundThread(const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadMethod;
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
     function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
@@ -32445,6 +32459,25 @@ begin
 end;
 {$endif}
 
+function TSQLRest.NewBackgroundThreadMethod(const Format: RawUTF8;
+   const Args: array of const): TSynBackgroundThreadMethod;
+begin
+  result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args),
+    BeginCurrentThread,EndCurrentThread);
+end;
+
+function TSQLRest.NewBackgroundThreadprocess(
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+  const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadProcess;
+var name: RawUTF8;
+begin
+  FormatUTF8(Format,Args,name);
+  if self=nil then
+    result := TSynBackgroundThreadProcess.Create(name,aOnProcess,aOnProcessMS) else
+    result := TSynBackgroundThreadProcess.Create(name,aOnProcess,aOnProcessMS,
+      BeginCurrentThread,EndCurrentThread);
+end;
+
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON);
 begin
   if (SQL<>'') and (SQL[1]='#') then begin
@@ -36833,13 +36866,6 @@ begin
      result := false;
 end;
 
-function TSQLRestServer.CreateBackgroundThread(const Format: RawUTF8;
-   const Args: array of const): TSynBackgroundThreadMethod;
-begin
-  result := TSynBackgroundThreadMethod.Create(nil,FormatUTF8(Format,Args),
-    BeginCurrentThread,EndCurrentThread);
-end;
-
 function TSQLRestServer.GetAuthenticationSchemesCount: integer;
 begin
   result := length(fSessionAuthentication);
@@ -37330,7 +37356,7 @@ begin
     {$endif}
     amBackgroundThread,amBackgroundORMSharedThread: begin
       if Thread=nil then
-        Thread := Server.CreateBackgroundThread('% "%" %',
+        Thread := Server.NewBackgroundThreadMethod('% "%" %',
           [self,Server.Model.Root,ToText(Command)^]);
       BackgroundExecuteThreadMethod(Method,Thread);
     end;
@@ -53664,7 +53690,7 @@ begin
     end;
     if optExecInPerInterfaceThread in Ctxt.ServiceExecution.Options then
       if fBackgroundThread=nil then
-        fBackgroundThread := TSQLRestServer(Rest).CreateBackgroundThread(
+        fBackgroundThread := Rest.NewBackgroundThreadMethod(
           '% %',[self,fInterface.fInterfaceTypeInfo^.Name]);
     WR := TJSONSerializer.CreateOwnedStream;
     try
