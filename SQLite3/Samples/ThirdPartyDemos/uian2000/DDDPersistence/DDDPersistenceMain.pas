@@ -172,6 +172,13 @@ class procedure TInfraRepoEntityFactory.RegressionTests(test: TSynTestCase);
           Check(cqrsSuccess = cmd.GetNext(entity));
           Check(iText = entity.Caption);        
         end;
+
+        Check(cqrsSuccess = cmd.SelectAllByCaption('1'));
+        Check(1 = cmd.GetCount);
+        Check(cqrsSuccess = cmd.GetNext(entity));
+        entity.Caption := 'hello';
+        Check(cqrsSuccess = cmd.Update(entity));
+        Check(cqrsSuccess = cmd.Commit);
       finally
         entity.Free;
       end;
