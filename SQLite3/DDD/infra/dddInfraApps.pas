@@ -121,7 +121,9 @@ type
     // daemon, using a published IAdministratedDaemon service
     // - /version would show the current revision information of the application
     // - no command line argument will run the program as a Service dispatcher
-    // under Windows (as a regular service), or display the syntax
+    // under Windows (as a regular service), or display the syntax - or would
+    // run the service in /verbose mode if ForceRun is TRUE (may be useful e.g.
+    // to debug an associated .dll using this daemon as host application)
     // - any invalid switch, or no switch under Linux, will display the syntax
     // - this method will output any error or information to the console
     // - as a result, a project .dpr could look like the following:
@@ -133,7 +135,7 @@ type
     //!    Free;
     //!  end;
     //!end.
-    procedure ExecuteCommandLine;
+    procedure ExecuteCommandLine(ForceRun: boolean=false);
     /// start the daemon, until the instance is released
     procedure Execute;
     /// read-only access to the underlying daemon instance
@@ -608,7 +610,7 @@ type
   TExecuteCommandLineCmd = (cNone, cInstall, cUninstall, cStart, cStop, cState,
     cVersion, cVerbose, cHelp, cConsole, cDaemon);
 
-procedure TDDDDaemon.ExecuteCommandLine;
+procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
   name, param: RawUTF8;
   cmd: TExecuteCommandLineCmd;
@@ -679,7 +681,9 @@ begin
       writeln('(c)', CurrentYear, ' ', GlobalCopyright);
     writeln;
     TextColor(ccLightCyan);
-    param := trim(StringToUTF8(paramstr(1)));
+    if ForceRun then
+      param := '/verbose' else
+      param := trim(StringToUTF8(paramstr(1)));
     if (param = '') or not (param[1] in ['/', '-']) then
       cmd := cNone
     else
