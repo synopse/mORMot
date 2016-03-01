@@ -24290,7 +24290,8 @@ begin
       if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
          (F.Name[1]<>'.') and ((IgnoreFileName='') or
           (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-        SetLength(result,n+1);
+        if n=length(result) then
+          SetLength(result,n+n shr 3+8);
         result[n].FromSearchRec(Dir,F);
         inc(n);
       end;
@@ -24299,7 +24300,10 @@ begin
       {$endif}
     until FindNext(F)<>0;
     FindClose(F);
-    if SortByName then begin
+    if n=0 then
+      exit;
+    SetLength(result,n);
+    if SortByName and (n>1) then begin
       da.Init(TypeInfo(TFindFilesDynArray),result);
       da.Sort(SortDynArrayStringI);
     end;
