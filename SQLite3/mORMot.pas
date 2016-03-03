@@ -52602,7 +52602,8 @@ begin
   n := length(aInterfaces);
   if (n=0) or (n<>length(aObjs)) then
     raise EServiceException.CreateUTF8('%.Resolve([?,?])',[self]);
-  for i := 0 to n-1 do begin
+  for i := 0 to n-1 do
+  if PPointer(aObjs[i])^=nil then begin
     info := TInterfaceFactory.GUID2TypeInfo(aInterfaces[i]);
     if not Resolve(info,aObjs[i]^) then
       if aRaiseExceptionIfNotFound then
