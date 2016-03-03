@@ -282,8 +282,13 @@ implementation
 
 { TSMTPServer }
 
-constructor TSMTPServer.Create(
-  aImplementation: TInterfacedObjectClass;
+function TSMTPServer.CreateInstance: TInterfacedObject;
+begin
+  result := TSMTPServerSocketConnectionAbstractClass(fImplementation.ItemClass).
+    Create(self);
+end;
+
+constructor TSMTPServer.Create(aImplementation: TInterfacedObjectClass;
   const aAddress: RawUTF8; aPort: cardinal; const aLogin, aPassword: RawUTF8);
 begin
   inherited Create(TypeInfo(ISMTPServerConnection),aImplementation);
@@ -343,11 +348,6 @@ begin
     Exec(BinToBase64(fOwner.Password),'235');
   end else
     Exec('HELO '+fOwner.Address,'25');
-end;
-
-function TSMTPServer.CreateInstance: TInterfacedObject;
-begin
-  result := TSMTPServerSocketConnectionAbstractClass(fImplementationClass).Create(self);
 end;
 
 procedure TSMTPServerSocketConnection.Expect(const Answer: RawByteString);

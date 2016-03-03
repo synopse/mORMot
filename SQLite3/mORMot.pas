@@ -10387,10 +10387,11 @@ type
     fInterfaceAncestors: PTypeInfoDynArray;
     fInterfaceAncestorsImplementationEntry: TPointerDynArray;
     fImplementationEntry: PInterfaceEntry;
-    fImplementationClass: TInterfacedObjectClass;
-    fImplementationClassIsCustomCreate: boolean;
+    fImplementation: TClassInstance;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
     function Implements(aInterface: PTypeInfo): boolean; override;
+    function GetImplementationName: string;
+    // main IoC/DI virtual method - call fImplementation.CreateNew by default
     function CreateInstance: TInterfacedObject; virtual;
   public
     /// this overriden constructor will check and store the supplied class
@@ -10401,6 +10402,9 @@ type
     constructor Create(const aInterface: TGUID; aImplementation: TInterfacedObjectClass); overload;
     /// you can use this method to resolve the interface as a new instance
     function GetOneInstance(out Obj): boolean;
+  published
+    /// the class name which will implement each repository instance
+    property ImplementationClass: string read GetImplementationName;
   end;
 
   TInterfaceStub = class;
@@ -10414,7 +10418,7 @@ type
   /// used to store a list of TInterfaceStub instances
   TInterfaceStubObjArray = array of TInterfaceStub;
 
-  /// abstract factory class targetting a any kind of interface
+  /// abstract factory class targetting any kind of interface
   // - you can inherit from this class to customize dependency injection (DI/IoC),
   // defining the resolution via InjectStub/InjectResolver/InjectInstance methods,
   // and doing the instance resolution using the overloaded Resolve*() methods
@@ -10493,14 +10497,18 @@ type
     function Resolve(const aGUID: TGUID; out Obj): boolean; overload;
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TypeInfo,@Instance pairs
-    // - raise an EServiceException if any interface can't be resolved
-    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer);
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure ResolveByPair(const aInterfaceObjPairs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean=true);
     /// can be used to perform several DI/IoC for a given set of interfaces
     // - here interfaces and instances are provided as TGUID and @Instance
     // - you shall have registered the interface TGUID by a previous call to
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(ICalculator),...])
-    // - raise an EServiceException if any interface can't be resolved
-    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer); overload;
+    // - raise an EServiceException if any interface can't be resolved, unless
+    // aRaiseExceptionIfNotFound is set to FALSE
+    procedure Resolve(const aInterfaces: array of TGUID; const aObjs: array of pointer;
+      aRaiseExceptionIfNotFound: boolean=true); overload;
     /// release all used instances
     // - including all TInterfaceStub instances as specified to Inject(aStubsByGUID)
     // - will call _Release on all TInterfacedObject dependencies
@@ -12441,15 +12449,19 @@ type
   // remotely call the server to make the actual process
   TServiceContainerClient = class(TServiceContainer)
   protected
+    fDisableAutoRegisterAsClientDriven: boolean;
   public
     /// retrieve a service provider from its type information
     // - this overridden method will register the interface, if was not yet made
     // - in this case, the interface will be registered with sicClientDriven
-    // implementation method
+    // implementation method, unless DisableAutoRegisterAsClientDriven is TRUE
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; override;
     /// notify the other side that the given Callback event interface is released
     // - this overriden implementation will check the private fFakeCallbacks list
     function CallBackUnRegister(const Callback: IInvokable): boolean; override;
+    /// allow to disable the automatic registration as sicClientDriven in Info()
+    property DisableAutoRegisterAsClientDriven: boolean
+      read fDisableAutoRegisterAsClientDriven write fDisableAutoRegisterAsClientDriven;
   end;
 
   /// TInterfacedObject class which would notify a REST server when it is released
@@ -52271,9 +52283,7 @@ begin
       [self,aImplementation,fInterfaceTypeInfo^.Name]);
   aInterface^.InterfaceAncestors(fInterfaceAncestors,aImplementation,
     fInterfaceAncestorsImplementationEntry);
-  fImplementationClass := aImplementation;
-  fImplementationClassIsCustomCreate :=
-    aImplementation.InheritsFrom(TInterfacedObjectWithCustomCreate);
+  fImplementation.Init(aImplementation);
 end;
 
 constructor TInterfaceResolverForSingleInterface.Create(const aInterface: TGUID;
@@ -52284,9 +52294,14 @@ end;
 
 function TInterfaceResolverForSingleInterface.CreateInstance: TInterfacedObject;
 begin
-  if not fImplementationClassIsCustomCreate then
-    result := fImplementationClass.Create else
-    result := TInterfacedObjectWithCustomCreateClass(fImplementationClass).Create;
+  result := TInterfacedObject(fImplementation.CreateNew);
+end;
+
+function TInterfaceResolverForSingleInterface.GetImplementationName: string;
+begin
+  if self=nil then
+    result := '' else
+    result := string(fImplementation.ItemClass.ClassName);
 end;
 
 function TInterfaceResolverForSingleInterface.GetOneInstance(out Obj): boolean;
@@ -52566,7 +52581,7 @@ begin
 end;
 
 procedure TInterfaceResolverInjected.ResolveByPair(
-  const aInterfaceObjPairs: array of pointer);
+  const aInterfaceObjPairs: array of pointer; aRaiseExceptionIfNotFound: boolean);
 var n,i: integer;
 begin
   n := length(aInterfaceObjPairs);
@@ -52574,12 +52589,13 @@ begin
     raise EServiceException.CreateUTF8('%.Resolve([odd])',[self]);
   for i := 0 to (n shr 1)-1 do
     if not Resolve(aInterfaceObjPairs[i*2],aInterfaceObjPairs[i*2+1]^) then
-      raise EServiceException.CreateUTF8('%.ResolveByPair(%) unsatisfied',
-        [self,PTypeInfo(aInterfaceObjPairs[i*2])^.Name]);
+      if aRaiseExceptionIfNotFound then
+        raise EServiceException.CreateUTF8('%.ResolveByPair(%) unsatisfied',
+          [self,PTypeInfo(aInterfaceObjPairs[i*2])^.Name]);
 end;
 
 procedure TInterfaceResolverInjected.Resolve(const aInterfaces: array of TGUID;
-  const aObjs: array of pointer);
+  const aObjs: array of pointer; aRaiseExceptionIfNotFound: boolean);
 var n,i: integer;
     info: PTypeInfo;
 begin
@@ -52589,7 +52605,8 @@ begin
   for i := 0 to n-1 do begin
     info := TInterfaceFactory.GUID2TypeInfo(aInterfaces[i]);
     if not Resolve(info,aObjs[i]^) then
-      raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,info^.Name]);
+      if aRaiseExceptionIfNotFound then
+        raise EServiceException.CreateUTF8('%.Resolve(%) unsatisfied',[self,info^.Name]);
   end;
 end;
 
@@ -55354,7 +55371,7 @@ end;
 function TServiceContainerClient.Info(aTypeInfo: PTypeInfo): TServiceFactory;
 begin
   result := inherited Info(aTypeInfo);
-  if result=nil then
+  if (result=nil) and (not fDisableAutoRegisterAsClientDriven) then
     result := AddInterface(aTypeInfo,sicClientDriven);
 end;
 

@@ -425,10 +425,9 @@ type
   protected
     fOwner: TDDDRepositoryRestManager;
     fInterface: TInterfaceFactory;
-    fImplementation: TDDDRepositoryRestClass;
     fRest: TSQLRest;
-    fAggregate: TClassInstance;
     fTable: TSQLRecordClass;
+    fAggregate: TClassInstance;
     fAggregateRTTI: TSQLPropInfoList;
     // stored in fGarbageCollector, following fAggregateProp[]
     fGarbageCollector: TObjectDynArray;
@@ -437,11 +436,11 @@ type
     // TSQLPropInfoList correspondance, as filled by ComputeMapping:
     fAggregateToTable: TSQLPropInfoObjArray;
     fAggregateProp: TSQLPropInfoRTTIObjArray;
+    fAggregateID: TSQLPropInfoRTTI;
     // store custom field mapping between TSQLRecord and Aggregate
     fPropsMapping: TSQLRecordPropertiesMapping;
     fPropsMappingVersion: cardinal;
     procedure ComputeMapping;
-    function GetImplementationName: string;
     function GetAggregateName: string;
     function GetTableName: string;
     // override those methods to customize the data marshalling
@@ -451,6 +450,7 @@ type
     procedure TablePropToAggregate(
       aRecord: TSQLRecord; aRecordProp: TSQLPropInfo;
       aAggregate: TObject; aAggregateProp: TSQLPropInfo); virtual;
+    // main IoC/DI method, returning a TDDDRepositoryRest instance
     function CreateInstance: TInterfacedObject; override;
   public
     /// will compute the ORM TSQLRecord* source code type definitions
@@ -561,8 +561,6 @@ type
     property Repository: TInterfaceFactory read fInterface;
     /// the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
-    /// the class name which will implement each repository instance
-    property ImplementationClass: string read GetImplementationName;
     /// the DDD's Entity class name handled by this factory
     property AggregateClass: string read GetAggregateName;
     /// the ORM's TSQLRecord class name used for actual storage
@@ -581,6 +579,10 @@ type
     // one-by-one retrieval in local ORM: TSQLRecord
     function ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
+    function ORMSelectID(const ID: TID; RetrieveRecord: boolean=true;
+       ForcedBadRequest: boolean=false): TCQRSResult; overload;
+    function ORMSelectID(const ID: RawUTF8; RetrieveRecord: boolean=true;
+       ForcedBadRequest: boolean=false): TCQRSResult; overload;
     function ORMGetAggregate(aAggregate: TObject): TCQRSResult;
     // list retrieval - using cursor-like access via ORM.FillOne
     function ORMSelectAll(ORMWhereClauseFmt: PUTF8Char;
@@ -601,8 +603,13 @@ type
     // - this is a generic operation which would work for any class
     // - if you do not need this method, just do not declare it in I*Command
     function GetCount: integer; virtual;
+    /// returns the associated TSQLRest instance used in the associated factory
+    // - this method is able to extract it from a I*Query/I*Command instance,
+    // if it is implemented by a TDDDRepositoryRestQuery class
+    // - returns nil if the supplied Service is not recognized
+    class function GetRest(const Service: ICQRSService): TSQLRest;
   published
-    /// access to the associated rfactory
+    /// access to the associated factory
     property Factory: TDDDRepositoryRestFactory read fFactory;
     /// access to the current state of the underlying mapped TSQLRecord
     // - is nil if no query was run yet
@@ -1207,22 +1214,22 @@ begin
      'RegisterInterfaces()',[self,GUIDToShort(aInterface)]);
   inherited Create(fInterface.InterfaceTypeInfo,aImplementation);
   fOwner := aOwner;
-  fImplementation := aImplementation;
   fRest := aRest;
-  fAggregate.Init(aAggregate);
   fTable := aTable;
-  if (aAggregate=nil) or (fRest=nil) or (fTable=nil) or (fImplementation=nil) then
+  if (aAggregate=nil) or (fRest=nil) or (fTable=nil) then
     raise EDDDRepository.CreateUTF8(self,'Invalid %.Create(nil)',[self]);
-  fPropsMapping.Init(aTable,RawUTF8(Aggregate.ClassName),aRest,false);
+  fAggregate.Init(aAggregate);
+  fPropsMapping.Init(aTable,RawUTF8(aAggregate.ClassName),aRest,false);
   fPropsMapping.MapFields(['ID','####']); // no ID/RowID for our aggregates
   fPropsMapping.MapFields(TableAggregatePairs);
-  fAggregateRTTI := TSQLPropInfoList.Create(Aggregate,
+  fAggregateRTTI := TSQLPropInfoList.Create(aAggregate,
     [pilAllowIDFields,pilSubClassesFlattening,pilIgnoreIfGetter]);
   SetLength(fAggregateToTable,fAggregateRTTI.Count);
   SetLength(fAggregateProp,fAggregateRTTI.Count);
   ComputeMapping;
   {$ifdef WITHLOG}
-  Rest.LogClass.Add.Log(sllDDDInfo,'Started %',[self],self);
+  Rest.LogClass.Add.Log(sllDDDInfo,'Started % implementing % for % over %',
+    [self,fInterface.InterfaceName,aAggregate,fTable],self);
   {$endif}
 end;
 
@@ -1343,11 +1350,11 @@ procedure TDDDRepositoryRestFactory.ComputeMapping;
     conversion to/from TDocVariant appears to be a bottleneck. }
   begin
     if agg.SQLDBFieldType=rec.SQLDBFieldType then
-      exit; // very same type at DB level -> OK 
+      exit; // very same type at DB level -> OK
     if (agg.SQLFieldType=sftBlobDynArray) and
        ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) and
        (rec.SQLFieldType in [sftVariant,sftUTF8Text]) then
-      exit; // we allow T*ObjArray <-> JSON/TEXT <-> variant/RawUTF8 marshalling
+      exit; // allow T*ObjArray <-> JSON/TEXT <-> variant/RawUTF8 marshalling
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
       Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName^,
@@ -1356,15 +1363,25 @@ procedure TDDDRepositoryRestFactory.ComputeMapping;
 
 var i,ndx: integer;
     ORMProps: TSQLPropInfoObjArray;
+    agg: TSQLPropInfoRTTI;
 begin
+  fAggregateID := nil;
   ORMProps := fTable.RecordProps.Fields.List;
   for i := 0 to fAggregateRTTI.Count-1 do begin
-    fAggregateProp[i] := fAggregateRTTI.List[i] as TSQLPropInfoRTTI;
-    ndx := fPropsMapping.ExternalToInternalIndex(fAggregateProp[i].Name);
-    if ndx<0 then // ID/RowID or TSynPersistent property not defined in TSQLRecord
+    agg := fAggregateRTTI.List[i] as TSQLPropInfoRTTI;
+    fAggregateProp[i] := agg;
+    ndx := fPropsMapping.ExternalToInternalIndex(agg.Name);
+    if ndx=-1 then // ID/RowID mapped with an existing String/Hexa field
+      if agg.SQLDBFieldType in [ftInt64,ftUTF8] then begin
+        fAggregateID := agg;
+        fAggregateToTable[i] := nil;
+      end else
+        raise EDDDRepository.CreateUTF8(self,'% types error: %.%:%=% and %.RowID',
+          [self,Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName^,fTable]) else
+    if ndx<0 then // e.g. TSynPersistent property flattened in TSQLRecord
       fAggregateToTable[i] := nil else begin
       fAggregateToTable[i] := ORMProps[ndx];
-      EnsureCompatible(fAggregateProp[i],fAggregateToTable[i]);
+      EnsureCompatible(agg,fAggregateToTable[i]);
     end;
   end;
   fPropsMappingVersion := fPropsMapping.MappingVersion;
@@ -1373,27 +1390,62 @@ end;
 procedure TDDDRepositoryRestFactory.AggregatePropToTable(
   aAggregate: TObject; aAggregateProp: TSQLPropInfo;
   aRecord: TSQLRecord; aRecordProp: TSQLPropInfo);
+
+  procedure ProcessID;
+  var v: RawUTF8;
+      id: TID;
+  begin
+    fAggregateID.GetValueVar(aAggregate,false,v,nil);
+    case fAggregateID.SQLDBFieldType of
+    ftInt64:
+      SetID(pointer(v),id);
+    ftUTF8:
+      if not HexDisplayToBin(pointer(v),@id,sizeof(id)) then
+        id := 0;
+    end;
+    aRecord.IDValue := id;
+  end;
+
 begin
-  if aRecordProp<>nil then
-    aAggregateProp.CopyProp(aAggregate,aRecordProp,aRecord);
+  if fAggregateID=aAggregateProp then
+    ProcessID else
+    if aRecordProp<>nil then
+      aAggregateProp.CopyProp(aAggregate,aRecordProp,aRecord);
 end;
 
 procedure TDDDRepositoryRestFactory.TablePropToAggregate(
   aRecord: TSQLRecord; aRecordProp: TSQLPropInfo; aAggregate: TObject;
   aAggregateProp: TSQLPropInfo);
+
+  procedure ProcessID;
+  var v: RawUTF8;
+  begin
+    case fAggregateID.SQLDBFieldType of
+    ftInt64: begin
+      Int64ToUtf8(aRecord.IDValue,v);
+      fAggregateID.SetValue(aAggregate,pointer(v),false);
+    end;
+    ftUTF8: begin
+      Int64ToHex(aRecord.IDValue,v);
+      fAggregateID.SetValue(aAggregate,pointer(v),true);
+    end;
+    end;
+  end;
+
 begin
-  if aRecordProp=nil then
-    aAggregateProp.SetValue(aAggregate,nil,false) else
-    aRecordProp.CopyProp(aRecord,aAggregateProp,aAggregate);
+  if fAggregateID=aAggregateProp then
+    ProcessID else
+    if aRecordProp=nil then
+      aAggregateProp.SetValue(aAggregate,nil,false) else
+      aRecordProp.CopyProp(aRecord,aAggregateProp,aAggregate);
 end;
 
 function TDDDRepositoryRestFactory.CreateInstance: TInterfacedObject;
 begin
-  result := fImplementation.Create(self);
+  result := TDDDRepositoryRestClass(fImplementation.ItemClass).Create(self);
 end;
 
-procedure TDDDRepositoryRestFactory.AggregateClear(
-  aAggregate: TObject);
+procedure TDDDRepositoryRestFactory.AggregateClear(aAggregate: TObject);
 var i: integer;
 begin
   if aAggregate<>nil then
@@ -1466,7 +1518,7 @@ begin
   aDest.ClearProperties;
   aDest.IDValue := aID;
   if aAggregate<>nil then
-    for i := 0 to high(fAggregateProp) do
+    for i := 0 to length(fAggregateProp)-1 do
       AggregatePropToTable(aAggregate,fAggregateProp[i],aDest,fAggregateToTable[i]);
 end;
 
@@ -1480,15 +1532,8 @@ begin
     raise EDDDRepository.CreateUTF8(self,'%.AggregateFromTable(%=nil)',[self,Aggregate]);
   if aSource=nil then
     AggregateClear(aAggregate) else
-    for i := 0 to high(fAggregateProp) do
+    for i := 0 to length(fAggregateProp)-1 do
       TablePropToAggregate(aSource,fAggregateToTable[i],aAggregate,fAggregateProp[i]);
-end;
-
-function TDDDRepositoryRestFactory.GetImplementationName: string;
-begin
-  if (self=nil) or (fImplementation=nil) then
-    result := '' else
-    result := fImplementation.ClassName;
 end;
 
 function TDDDRepositoryRestFactory.GetAggregateName: string;
@@ -1541,10 +1586,9 @@ var f,i: integer;
     msg: string;
     str: boolean;
 begin
-  if (aAggregate=nil) or (aAggregate.ClassType<>Aggregate) then
-    raise EDDDRepository.CreateUTF8(self,
-      '%.AggregateFilterAndValidate(%) expected a % instance',
-      [self,aAggregate,Aggregate]);
+  if (aAggregate=nil) or not aAggregate.ClassType.InheritsFrom(Aggregate) then
+    raise EDDDRepository.CreateUTF8(self,'%.AggregateFilterAndValidate(%) '+
+      'expects a % instance',[self,aAggregate,Aggregate]);
   // first process all filters
   SetLength(Value,fAggregateRTTI.Count);
   for f := 0 to high(fFilter) do
@@ -1644,6 +1688,15 @@ begin
   inherited;
 end;
 
+class function TDDDRepositoryRestQuery.GetRest(const Service: ICQRSService): TSQLRest;
+var instance: TObject;
+begin
+  instance := ObjectFromInterface(Service);
+  if (instance=nil) or not instance.InheritsFrom(TDDDRepositoryRestQuery) then
+    result := nil else
+    result := TDDDRepositoryRestQuery(instance).fFactory.fRest;
+end;
+
 function TDDDRepositoryRestQuery.CqrsBeginMethod(aAction: TCQRSQueryAction;
   var aResult: TCQRSResult; aError: TCQRSResult): boolean;
 begin
@@ -1660,6 +1713,26 @@ begin
     CqrsSetResult(cqrsBadRequest) else
     CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ORMWhereClauseFmt,[],Bounds,
       fCurrentORMInstance),cqrsNotFound);
+end;
+
+function TDDDRepositoryRestQuery.ORMSelectID(const ID: TID;
+  RetrieveRecord, ForcedBadRequest: boolean): TCQRSResult;
+begin
+  CqrsBeginMethod(qaSelect,result);
+  if ForcedBadRequest or (ID=0) then
+    CqrsSetResult(cqrsBadRequest) else
+  if RetrieveRecord then
+    CqrsSetResultSuccessIf(Factory.Rest.Retrieve(ID,fCurrentORMInstance),cqrsNotFound)
+  else begin
+    fCurrentORMInstance.IDValue := ID;
+    CqrsSetResult(cqrsSuccess);
+  end
+end;
+
+function TDDDRepositoryRestQuery.ORMSelectID(const ID: RawUTF8;
+  RetrieveRecord, ForcedBadRequest: boolean): TCQRSResult;
+begin
+  result := ORMSelectID(HexDisplayToInt64(ID));
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectAll(
@@ -1748,6 +1821,7 @@ begin
 end;
 
 
+
 { TDDDRepositoryRestCommand }
 
 constructor TDDDRepositoryRestCommand.Create(
@@ -1812,13 +1886,15 @@ procedure TDDDRepositoryRestCommand.ORMPrepareForCommit(
 var msg: RawUTF8;
     validator: TSynValidate;
     ndx: integer;
-procedure SetValidationError(default: TCQRSResult);
-begin
-  if (validator<>nil) and
-     (validator.ClassType=TSynValidateUniqueField) then
-    CqrsSetResultMsg(cqrsAlreadyExists,msg) else
-    CqrsSetResultMsg(default,msg);
-end;
+
+  procedure SetValidationError(default: TCQRSResult);
+  begin
+    if (validator<>nil) and
+       (validator.ClassType=TSynValidateUniqueField) then
+      CqrsSetResultMsg(cqrsAlreadyExists,msg) else
+      CqrsSetResultMsg(default,msg);
+  end;
+
 begin
   case aCommand of
   soSelect: begin
@@ -1850,7 +1926,7 @@ begin
   ORMEnsureBatchExists;
   ndx := -1;
   case aCommand of
-  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true);
+  soInsert: ndx := fBatch.Add(fCurrentORMInstance,true,fFactory.fAggregateID<>nil );
   soUpdate: ndx := fBatch.Update(fCurrentORMInstance);
   soDelete: ndx := fBatch.Delete(fCurrentORMInstance.IDValue);
   end;
