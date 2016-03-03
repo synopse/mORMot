@@ -7614,8 +7614,7 @@ procedure ObjectToVariant(Value: TObject; out Dest: variant); overload;
 
 /// will convert any TObject into a TDocVariant document instance
 // - a faster alternative to _JsonFast(ObjectToJSON(Value))
-function ObjectToVariant(Value: TObject): variant; overload;
-  {$ifdef HASINLINE}inline;{$endif}
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean=false): variant; overload;
 
 /// will convert any TObject into a TDocVariant document instance
 // - a faster alternative to _Json(ObjectToJSON(Value),Options)
@@ -9639,23 +9638,39 @@ procedure PointerToHex(aPointer: Pointer; var result: RawUTF8); overload;
 
 /// fast conversion from a Cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
+// - reverse function of HexDisplayToCardinal()
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
+// - reverse function of HexDisplayToInt64()
 function Int64ToHex(aInt64: Int64): RawUTF8; overload;
 
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
+// - reverse function of HexDisplayToInt64()
 procedure Int64ToHex(aInt64: Int64; var result: RawUTF8); overload;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
 
 /// fast conversion from hexa chars into a cardinal
+// - reverse function of CardinalToHex()
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
     {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
     // inline gives an error under release conditions with FPC
+
+/// fast conversion from hexa chars into a cardinal
+// - reverse function of Int64ToHex()
+function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload;
+    {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    // inline gives an error under release conditions with FPC
+
+/// fast conversion from hexa chars into a cardinal
+// - reverse function of Int64ToHex()
+// - returns 0 if the supplied text buffer is not a valid 16-char hexadecimal
+function HexDisplayToInt64(const Hex: RawByteString): Int64; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 function BinToBase64(const s: RawByteString): RawUTF8; overload;
@@ -22493,6 +22508,17 @@ begin
   result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
 end;
 
+function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean;
+begin
+  result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
+end;
+
+function HexDisplayToInt64(const Hex: RawByteString): Int64;
+begin
+  if not HexDisplayToBin(pointer(Hex),@result,sizeof(result)) then
+    result := 0;
+end;
+
 function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean;
 var I: Integer;
     B,C: byte;
@@ -35108,10 +35134,12 @@ begin
   end;
 end;
 
-function ObjectToVariant(Value: TObject): variant;
+function ObjectToVariant(Value: TObject; EnumSetsAsText: boolean): variant;
+const OPTIONS: array[boolean] of TTextWriterWriteObjectOptions = (
+     [woDontStoreDefault],[woDontStoreDefault,woEnumSetsAsText]);
 begin
   VarClear(result);
-  ObjectToVariant(Value,result,[woDontStoreDefault]);  
+  ObjectToVariant(Value,result,OPTIONS[EnumSetsAsText]);
 end;
 
 procedure ObjectToVariant(Value: TObject; out Dest: variant);
@@ -35119,7 +35147,8 @@ begin
   ObjectToVariant(Value,Dest,[woDontStoreDefault]);
 end;
 
-procedure ObjectToVariant(Value: TObject; var result: variant; Options: TTextWriterWriteObjectOptions);
+procedure ObjectToVariant(Value: TObject; var result: variant;
+  Options: TTextWriterWriteObjectOptions);
 var json: RawUTF8;
 begin
   json := ObjectToJSON(Value,Options);
