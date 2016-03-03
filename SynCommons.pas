@@ -13228,7 +13228,7 @@ type
     // layout of this instance (i.e. Kind property value)
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around VariantSaveJSON()
-    function ToJSON: RawUTF8;
+    function ToJSON(const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
     /// save a document as an array of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
@@ -37125,9 +37125,18 @@ begin
   SetVariantByValue(aValue,VValue[result]);
 end;
 
-function TDocVariantData.ToJSON: RawUTF8;
+function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8): RawUTF8;
+var W: TTextWriter;
 begin
-  VariantSaveJSON(variant(self),twJSONEscape,result);
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  try
+    W.AddString(Prefix);
+    DocVariantType.ToJSON(W,variant(self),twJSONEscape);
+    W.AddString(Suffix);
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
 end;
 
 procedure TDocVariantData.ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
@@ -37472,7 +37481,8 @@ var ndx: integer;
     checkExtendedPropName: boolean;
 begin
   with TDocVariantData(Value) do
-  if VType=DocVariantVType then
+  if integer(VType)>varNull then
+  if integer(VType)=DocVariantVType then
   if VKind=dvUndefined then
       W.AddShort('null') else begin
       backup := W.fCustomOptions;
@@ -37511,7 +37521,8 @@ begin
     end;
     W.fCustomOptions := backup;
   end else
-    raise ESynException.CreateUTF8('Unexpected variant type %',[VType]);
+    raise ESynException.CreateUTF8('Unexpected variant type %',[VType]) else
+    W.AddShort('null');
 end;
 
 procedure TDocVariant.Clear(var V: TVarData);
