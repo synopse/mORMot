@@ -1732,7 +1732,7 @@ end;
 function TDDDRepositoryRestQuery.ORMSelectID(const ID: RawUTF8;
   RetrieveRecord, ForcedBadRequest: boolean): TCQRSResult;
 begin
-  result := ORMSelectID(HexDisplayToInt64(ID));
+  result := ORMSelectID(HexDisplayToInt64(ID),RetrieveRecord,ForcedBadRequest);
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectAll(
