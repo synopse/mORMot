@@ -9833,6 +9833,26 @@ function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
+  // - such result type would avoid a string allocation on heap
+  Short4 = string[4];
+
+/// creates a 4 digits short string from a 0..9999 value
+// - using Short4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt4DigitsToShort(Value: Cardinal): Short4;
+
+/// creates a 3 digits short string from a 0..999 value
+// - using Short4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt3DigitsToShort(Value: Cardinal): Short4;
+
+/// creates a 2 digits short string from a 0..99 value
+// - using Short4 as returned string would avoid a string allocation on heap
+// - could be used e.g. as parameter to FormatUTF8()
+function UInt2DigitsToShort(Value: byte): Short4;
+
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
 // - the precision is calculated from the A and B value range
@@ -23272,6 +23292,27 @@ begin
   SetString(result,nil,4);
   YearToPChar(Value,pointer(result));
 end;
+
+function UInt4DigitsToShort(Value: Cardinal): Short4;
+begin
+  result[0] := #4;
+  YearToPChar(Value,@result[1]);
+end;
+
+function UInt3DigitsToShort(Value: Cardinal): Short4;
+begin
+  YearToPChar(Value,@result[0]);
+  result[0] := #3; // override first digit
+end;
+
+function UInt2DigitsToShort(Value: byte): Short4;
+begin
+  result[0] := #2;
+  if Value>99 then
+    Value := 99;
+  PWord(@result[1])^ := TwoDigitLookupW[Value];
+end;
+
 
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var AbsA,AbsB: double;
