@@ -10076,8 +10076,10 @@ procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8; const Args: array of const);
 
 type
+  {$M+}
   TSynBackgroundThreadAbstract = class;
   TSynBackgroundThreadEvent = class;
+  {$M-}
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
   // during remote blocking process in a background thread
@@ -10091,13 +10093,6 @@ type
   // - see TLoginForm.OnIdleProcess and OnIdleProcessForm in mORMotUILogin.pas
   TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
     ElapsedMS: Integer) of object;
-
-  /// state machine status of the TSynBackgroundThreadAbstract process
-  TSynBackgroundThreadProcessStep = (
-    flagIdle, flagStarted, flagFinished, flagDestroying);
-
-  /// state machine statuses of the TSynBackgroundThreadAbstract process
-  TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
 
   {$ifndef LVCL}
   /// event prototype used e.g. by TSynBackgroundThreadAbstract callbacks
@@ -10131,7 +10126,16 @@ type
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     property ProcessEvent: TEvent read fProcessEvent;
+    /// defined as public since may be used to terminate the processing methods
+    property Terminated;
   end;
+
+  /// state machine status of the TSynBackgroundThreadAbstract process
+  TSynBackgroundThreadProcessStep = (
+    flagIdle, flagStarted, flagFinished, flagDestroying);
+
+  /// state machine statuses of the TSynBackgroundThreadAbstract process
+  TSynBackgroundThreadProcessSteps = set of TSynBackgroundThreadProcessStep;
 
   /// abstract TThread able to run a method in its own execution content
   // - typical use is a background thread for processing data or remote access,
@@ -10262,43 +10266,6 @@ type
     // - triggered by RunAndWait() method - which will wait until finished
     // - the OpaqueParam as specified to RunAndWait() will be supplied here
     property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
-  end;
-
-  TSynBackgroundThreadProcess = class;
-
-  /// event callback executed periodically by TSynBackgroundThreadProcess
-  // - Event is wrTimeout after the OnProcessMS waiting period 
-  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
-  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
-    Event: TWaitResult) of object;
-
-  /// TThread able to run a method at a given periodic pace
-  TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
-  protected
-    fOnProcess: TOnSynBackgroundThreadProcess;
-    fOnException: TNotifyEvent; 
-    fOnProcessMS: cardinal;
-    procedure ExecuteLoop; override;
-  public
-    /// initialize the thread for a periodic task processing
-    // - aOnProcess would be called when ProcessEvent.SetEvent is called or
-    // aOnProcessMS milliseconds period was elapse since last process
-    // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
-    // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
-    constructor Create(const aThreadName: RawUTF8;
-      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-      aOnBeforeExecute: TNotifyThreadEvent=nil;
-      aOnAfterExecute: TNotifyThreadEvent=nil); reintroduce; virtual;
-    /// finalize the thread
-    destructor Destroy; override;
-    /// access to the implementation event of the periodic task
-    property OnProcess: TOnSynBackgroundThreadProcess read fOnProcess;
-    /// access to the delay, in milliseconds, of the periodic task processing
-    property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
-    /// event callback executed when OnProcess did raise an exception
-    // - supplied Sender parameter is the raised Exception instance
-    property OnException: TNotifyEvent read fOnException write fOnException;
   end;
 
   /// callback implementing some parallelized process for TSynParallelProcess
@@ -14855,7 +14822,7 @@ type
     // !end; // LockFPC will release the lock for the method
     function ProtectMethod: IUnknown;
     /// gives an access to the internal low-level TSynLocker instance used 
-    function Safe: PSynLocker; 
+    function Safe: PSynLocker;
   end;
 
   /// reference counted block code critical section
@@ -14984,6 +14951,50 @@ type
 {$endif}
 {$endif}
 
+type
+  TSynBackgroundThreadProcess = class;
+
+  /// event callback executed periodically by TSynBackgroundThreadProcess
+  // - Event is wrTimeout after the OnProcessMS waiting period 
+  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
+  TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
+    Event: TWaitResult) of object;
+
+  /// TThread able to run a method at a given periodic pace
+  TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
+  protected
+    fOnProcess: TOnSynBackgroundThreadProcess;
+    fOnException: TNotifyEvent; 
+    fOnProcessMS: cardinal;
+    fStats: TSynMonitor;
+    procedure ExecuteLoop; override;
+  public
+    /// initialize the thread for a periodic task processing
+    // - aOnProcess would be called when ProcessEvent.SetEvent is called or
+    // aOnProcessMS milliseconds period was elapse since last process
+    // - if aOnProcessMS is 0, will wait until ProcessEvent.SetEvent is called
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aThreadName: RawUTF8;
+      aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
+      aOnBeforeExecute: TNotifyThreadEvent=nil;
+      aOnAfterExecute: TNotifyThreadEvent=nil;
+      aStats: TSynMonitorClass = nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// access to the implementation event of the periodic task
+    property OnProcess: TOnSynBackgroundThreadProcess read fOnProcess;
+    /// event callback executed when OnProcess did raise an exception
+    // - supplied Sender parameter is the raised Exception instance
+    property OnException: TNotifyEvent read fOnException write fOnException;
+  published
+    /// access to the delay, in milliseconds, of the periodic task processing
+    property OnProcessMS: cardinal read fOnProcessMS write fOnProcessMS;
+    /// processing statistics
+    property Stats: TSynMonitor read fStats;
+  end;
+
+type
   /// class-reference type (metaclass) of an authentication class
   TSynAuthenticationClass = class of TSynAuthenticationAbstract;
 
@@ -54453,10 +54464,13 @@ end;
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
   aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent);
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
 begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
+  if aStats<>nil then
+    fStats := aStats.Create else
+    fStats := TSynMonitor.Create;
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
   if fOnProcessMS=0 then
@@ -54473,6 +54487,7 @@ begin
       Sleep(1);
   end;
   inherited Destroy;
+  fStats.Free;
 end;
 
 procedure TSynBackgroundThreadProcess.ExecuteLoop;
@@ -54481,11 +54496,18 @@ begin
   wait := FixedWaitFor(fProcessEvent,fOnProcessMS);
   if not Terminated and (wait in [wrSignaled,wrTimeout]) then
     try
-      fOnProcess(self,wait);
+      fStats.ProcessStartTask;
+      try
+        fOnProcess(self,wait);
+      finally
+        fStats.ProcessEnd;
+      end;
     except
-      on E: Exception do
+      on E: Exception do begin
+        fStats.ProcessError(ObjectToVariant(E));
         if Assigned(fOnException) then
           fOnException(E);
+      end;
     end;
 end;
 

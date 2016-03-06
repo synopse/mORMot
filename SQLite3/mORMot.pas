@@ -13836,7 +13836,8 @@ type
     // - you should supply some runtime information to name the thread, for
     // proper debugging
     function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
-      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadProcess;
+      aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
+      aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -32480,14 +32481,16 @@ end;
 
 function TSQLRest.NewBackgroundThreadprocess(
   aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  const Format: RawUTF8; const Args: array of const): TSynBackgroundThreadProcess;
+  const Format: RawUTF8; const Args: array of const;
+  aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
 var name: RawUTF8;
 begin
   FormatUTF8(Format,Args,name);
   if self=nil then
-    result := TSynBackgroundThreadProcess.Create(name,aOnProcess,aOnProcessMS) else
     result := TSynBackgroundThreadProcess.Create(name,aOnProcess,aOnProcessMS,
-      BeginCurrentThread,EndCurrentThread);
+     nil,nil,aStats) else
+    result := TSynBackgroundThreadProcess.Create(name,aOnProcess,aOnProcessMS,
+      BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON);
