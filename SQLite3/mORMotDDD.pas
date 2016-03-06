@@ -142,6 +142,8 @@ type
   // - cqrsNoMatch will notify that a command did not have any match
   // - cqrsNotImplemented may be returned when there is no code yet for a method
   // - cqrsUnspecifiedError will be used for any other kind of error
+  // - cqrsBusy is returned if the command could not be executed, since it is
+  // currently processing a request
   TCQRSResult =
     (cqrsSuccess, cqrsSuccessWithMoreData,
      cqrsUnspecifiedError, cqrsBadRequest, cqrsNotFound,
@@ -149,7 +151,7 @@ type
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand,
-     cqrsNoMatch, cqrsNotImplemented);
+     cqrsNoMatch, cqrsNotImplemented, cqrsBusy);
 
   /// generic interface, to be used for CQRS I*Query and I*Command types definition
   // - TCQRSService class will allow to easily implement LastError* members
@@ -1159,7 +1161,6 @@ procedure TCQRSService.CqrsSetResultMsg(Error: TCQRSResult;
 begin
   CqrsSetResultMsg(Error,FormatUTF8(ErrorMsgFmt,ErrorMsgArgs));
 end;
-
 
 destructor TCQRSService.Destroy;
 begin
