@@ -30327,8 +30327,8 @@ begin
       if IdemPCharAndGetNextItem(P,
          'CONTENT-DISPOSITION: FORM-DATA; NAME="',part.Name,'"') then
         IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else
-      if IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) or
-         IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',part.Encoding) then;
+      if not IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) then
+         IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',part.Encoding);
       GetNextLineBegin(P,P);
       if P=nil then
         exit;
