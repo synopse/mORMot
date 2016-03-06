@@ -38459,9 +38459,11 @@ begin
     if Error404Redirect<>'' then
       Redirect(Error404Redirect) else
       Error('',HTML_NOTFOUND) else begin
+    if Call.OutHead<>'' then
+      Call.OutHead := Call.OutHead+#13#10;
     if ContentType<>'' then
-      Call.OutHead := HEADER_CONTENT_TYPE+ContentType else
-      Call.OutHead := GetMimeContentTypeHeader('',FileName);
+      Call.OutHead := Call.OutHead+HEADER_CONTENT_TYPE+ContentType else
+      Call.OutHead := Call.OutHead+GetMimeContentTypeHeader('',FileName);
     Call.OutStatus := HTML_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
