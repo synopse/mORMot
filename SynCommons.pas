@@ -10740,6 +10740,11 @@ function NowToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): Raw
 // ready to be displayed
 function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): RawUTF8;
 
+/// convert some date/time to the ISO 8601 text layout, including milliseconds
+// - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
+function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean=true;
+  FirstTimeChar: AnsiChar = ' '; UTC: boolean=true): RawUTF8;
+
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
@@ -29045,6 +29050,23 @@ var I: TTimeLogBits;
 begin
   I.FromUTCTime;
   result := I.Text(Expanded,FirstTimeChar);
+end;
+
+function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
+  FirstTimeChar: AnsiChar; UTC: boolean): RawUTF8;
+const FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%:%:%:%.%%');
+      Z: array[boolean] of RawUTF8 = ('', 'Z');
+var HH,MM,SS,MS,Y,M,D: word;
+begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
+  if DateTime=0 then begin
+    result := '';
+    exit;
+  end;
+  DecodeDate(DateTime,Y,M,D);
+  DecodeTime(DateTime,HH,MM,SS,MS);
+  FormatUTF8(FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
+    UInt2DigitsToShort(D),FirstTimeChar,UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
+    UInt2DigitsToShort(SS),UInt3DigitsToShort(MS),Z[UTC]], result);
 end;
 
 function TimeToString: RawUTF8;
