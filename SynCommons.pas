@@ -3515,7 +3515,7 @@ function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 // - if DeleteOnlyFilesNotDirectory is TRUE, it won't remove the folder itself,
 // but just the files found in it
 function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
-  DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
+  DeleteOnlyFilesNotDirectory: Boolean=false; DeletedCount: PInteger=nil): Boolean;
 
 /// delete the files older than a given age in a specified directory
 // - for instance, to delete all files older than one day:
@@ -24280,32 +24280,37 @@ begin
   {$endif}
 end;
 
-function DirectoryDelete(const Directory: TFileName; const Mask: TFileName='*.*';
-  DeleteOnlyFilesNotDirectory: Boolean=false): Boolean;
+function DirectoryDelete(const Directory: TFileName; const Mask: TFileName;
+  DeleteOnlyFilesNotDirectory: Boolean; DeletedCount: PInteger): Boolean;
 var F: TSearchRec;
     Dir: TFileName;
+    n: integer;
 begin
+  n := 0;
   result := true;
-  if not DirectoryExists(Directory) then
-    exit;
-  Dir := IncludeTrailingPathDelimiter(Directory);
-  if FindFirst(Dir+Mask,faAnyFile-faDirectory,F)=0 then begin
-    repeat
-      {$ifndef DELPHI5OROLDER}
-      {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-      {$endif}
-      if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-         (F.Name[1]<>'.') then
-        if not DeleteFile(Dir+F.Name) then
-          result := false;
-      {$ifndef DELPHI5OROLDER}
-      {$WARN SYMBOL_DEPRECATED ON}
-      {$endif}
-    until FindNext(F)<>0;
-    FindClose(F);
+  if DirectoryExists(Directory) then begin
+    Dir := IncludeTrailingPathDelimiter(Directory);
+    if FindFirst(Dir+Mask,faAnyFile-faDirectory,F)=0 then begin
+      repeat
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+        {$endif}
+        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
+           (F.Name[1]<>'.') then
+          if DeleteFile(Dir+F.Name) then
+            inc(n) else
+            result := false;
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED ON}
+        {$endif}
+      until FindNext(F)<>0;
+      FindClose(F);
+    end;
+    if (not DeleteOnlyFilesNotDirectory) and (not RemoveDir(Dir)) then
+      result := false;
   end;
-  if (not DeleteOnlyFilesNotDirectory) and (not RemoveDir(Dir)) then
-    result := false;
+  if DeletedCount<>nil then
+    DeletedCount^ := n;
 end;
 
 function DirectoryDeleteOlderFiles(const Directory: TFileName; TimePeriod: TDateTime;
@@ -33160,8 +33165,9 @@ begin
         exit;
       end else
       for result := 0 to fParsersCount-1 do
-        if (fParser[result].DynArrayTypeInfo=aDynArrayTypeInfo) or
-           (fParser[result].RecordTypeInfo=aRecordTypeInfo) then begin
+        with fParser[result] do
+        if (DynArrayTypeInfo=aDynArrayTypeInfo) or
+           (RecordTypeInfo=aRecordTypeInfo) then begin
           fLastDynArrayIndex := result;
           fLastRecordIndex := result;
           exit;
