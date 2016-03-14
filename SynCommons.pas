@@ -15165,6 +15165,7 @@ type
     fIdentifierShifted: cardinal;
     fLastCounter: cardinal;
     fCrypto: array[0..7] of cardinal;
+    fCryptoCRC: cardinal;
     fSafe: TSynLocker;
     function GetComputedCount: integer;
   public
@@ -53981,11 +53982,14 @@ begin
   fIdentifierShifted := aIdentifier shl 15;
   len := length(aSharedObfuscationKey);
   crc := crc32ctab[0,len and 1023];
-  for i := 0 to high(fCrypto) do begin
-    crc := crc32ctab[0,crc and 1023] xor
-           kr32(i,pointer(aSharedObfuscationKey),len) xor
-           crc32c(i,pointer(aSharedObfuscationKey),len);
-    fCrypto[i] := crc; // naive but good enough in practice
+  for i := 0 to high(fCrypto)+1 do begin
+    crc := crc32ctab[0,crc and 1023] xor crc32ctab[3,i] xor 
+           kr32(crc,pointer(aSharedObfuscationKey),len) xor
+           crc32c(crc,pointer(aSharedObfuscationKey),len) xor
+           fnv32(crc,pointer(aSharedObfuscationKey),len);
+    if i<=high(fCrypto) then
+      fCrypto[i] := crc else // naive but good enough in practice
+      fCryptoCRC := crc;
   end;
   fSafe.Init;
   {$ifdef NOVARIANTS}
@@ -54018,7 +54022,7 @@ begin
   bits.id.Value := aIdentifier;
   if self=nil then
     key := 0 else
-    key := fCrypto[bits.id.ProcessID and high(fCrypto)];
+    key := crc32ctab[0,bits.id.ProcessID and 1023] xor fCryptoCRC;
   bits.crc := crc32c(bits.id.ProcessID,@bits.id,sizeof(bits.id)) xor key;
   if self<>nil then
     bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
@@ -54043,7 +54047,7 @@ begin
   if self=nil then
     key := 0 else begin
     bits.id.Value := bits.id.Value xor PInt64(@fCrypto[high(fCrypto)-1])^;
-    key := fCrypto[bits.id.ProcessID and high(fCrypto)];
+    key := crc32ctab[0,bits.id.ProcessID and 1023] xor fCryptoCRC;
   end;
   if crc32c(bits.id.ProcessID,@bits.id,SizeOf(bits.id)) xor key=bits.crc then begin
     aIdentifier := bits.id.Value;
