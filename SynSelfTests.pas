@@ -6762,6 +6762,11 @@ begin
   DoChange(V2);
   Check(VariantSaveJSON(V1)=s);
   Check(Hash32(VariantSaveJSON(V2))=$92FEB37B);
+  s := _Safe(V1.Seasons)^.ToNonExpandedJSON;
+  Check(s='{"fieldCount":3,"rowCount":2,"values":["Name","Url","Competitions",'+
+    '"2011/2012","2011-2012",[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2"'+
+    ',"Url":"ligue-2"}],"2010/2011","2010-2011",[{"Name":"Ligue1","Url":"ligue-1"}'+
+    ',{"Name":"Ligue2","Url":"ligue-2"}]]}');
   V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
   Check(V.result='{"data":{"1000":"D1", "1001":"D2"}}');
   Check(V.result.data.Exists('1000'));

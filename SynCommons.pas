@@ -2696,6 +2696,11 @@ function PropNameValid(P: PUTF8Char): boolean;
 function JsonPropNameValid(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns TRUE if the given text buffers would be escaped when written as JSON
+// - e.g. if contains " or \ characters, as defined by
+// http://www.ietf.org/rfc/rfc4627.txt 
+function NeedsJsonEscape(const Text: RawUTF8): boolean;
+
 /// case unsensitive test of P1 and P2 content
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
 function IdemPropName(const P1,P2: shortstring): boolean; overload;
@@ -13221,6 +13226,14 @@ type
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around VariantSaveJSON()
     function ToJSON(const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+    /// save an array of objects as UTF-8 encoded non expanded layout JSON
+    // - returned content would be a JSON object in mORMot's TSQLTable non
+    // expanded format, with reduced JSON size, i.e.
+    // $ {"fieldCount":3,"values":["ID","FirstName","LastName",...']}
+    // - will write '' if Kind is dvUndefined or dvObject
+    // - will raise an exception if the array document is not an array of
+    // objects with identical field names 
+    function ToNonExpandedJSON: RawUTF8;
     /// save a document as an array of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a
     // EDocVariant exception
@@ -37220,6 +37233,57 @@ begin
   end;
 end;
 
+function TDocVariantData.ToNonExpandedJSON: RawUTF8;
+var fields: TRawUTF8DynArray;
+    fieldsCount: integer;
+    W: TTextWriter;
+    r,f: integer;
+    row: PDocVariantData;
+begin
+  if VKind<>dvArray then begin
+    result := '';
+    exit;
+  end;
+  if VCount=0 then begin
+    result := '[]';
+    exit;
+  end;
+  with _Safe(VValue[0])^ do
+    if VKind=dvObject then begin
+      fields := VName;
+      fieldsCount := VCount;
+    end else
+      fieldsCount := 0;
+  if fieldsCount=0 then
+    raise EDocVariant.Create('ToNonExpandedJSON: Value[0] is not an object');
+  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  try
+    W.Add('{"fieldCount":%,"rowCount":%,"values":[',[fieldsCount,VCount]);
+    for f := 0 to fieldsCount-1 do begin
+      W.Add('"');
+      W.AddJSONEscape(pointer(fields[f]));
+      W.Add('"',',');
+    end;
+    for r := 0 to VCount-1 do begin
+      row := _Safe(VValue[r]);
+      if (r>0) and ((row^.VKind<>dvObject) or (row^.VCount<>fieldsCount)) then
+        raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not object',[r]);
+      for f := 0 to fieldsCount-1 do
+        if (r>0) and not IdemPropNameU(row^.VName[f],fields[f]) then
+          raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] field=% expected=%',
+            [r,row^.VName[f],fields[f]]) else begin
+          W.AddVariant(row^.VValue[f],twJSONEscape);
+          W.Add(',');
+        end;
+    end;
+    W.CancelLastComma;
+    W.Add(']','}');
+    W.SetText(result);
+  finally
+    W.Free;
+  end;
+end;
+
 procedure TDocVariantData.ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
 var ndx: integer;
     wasString: boolean;
@@ -37247,7 +37311,7 @@ begin
 end;
 
 procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
-  const NameValueSep, ItemSep: RawUTF8; Escape: TTextWriterKind);
+  const NameValueSep, ItemSep: RawUTF8; escape: TTextWriterKind);
 var ndx: integer;
 begin
   case VKind of
@@ -37263,7 +37327,7 @@ begin
     repeat
       AddString(VName[ndx]);
       AddString(NameValueSep);
-      AddVariant(VValue[ndx],Escape);
+      AddVariant(VValue[ndx],escape);
       inc(ndx);
       if ndx=VCount then
         break;
@@ -37276,9 +37340,9 @@ begin
 end;
 
 function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
-  const ItemSep: RawUTF8=#13#10; Escape: TTextWriterKind=twJSONEscape): RawUTF8;
+  const ItemSep: RawUTF8=#13#10; escape: TTextWriterKind=twJSONEscape): RawUTF8;
 begin
-  ToTextPairsVar(result,NameValueSep,ItemSep,Escape);
+  ToTextPairsVar(result,NameValueSep,ItemSep,escape);
 end;
 
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
@@ -37556,7 +37620,7 @@ begin
 end;
 
 procedure TDocVariant.ToJSON(W: TTextWriter; const Value: variant;
-  Escape: TTextWriterKind);
+  escape: TTextWriterKind);
 var ndx: integer;
     backup: TTextWriterOptions;
     checkExtendedPropName: boolean;
@@ -43325,6 +43389,16 @@ end;
 
 const // see http://www.ietf.org/rfc/rfc4627.txt
   JSON_ESCAPE: set of byte = [0..31,ord('\'),ord('"')];
+
+function NeedsJsonEscape(const Text: RawUTF8): boolean;
+var i: integer;
+begin
+  result := true;
+  for i := 1 to length(Text) do
+    if byte(Text[i]) in JSON_ESCAPE then
+      exit;
+  result := false;
+end;
 
 procedure TTextWriter.InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
   const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
