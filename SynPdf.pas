@@ -1590,7 +1590,7 @@ type
     // the native resolution of the bitmap - in this case, the resulting
     // PDF file content will be bigger in size (e.g. use this for printing)
     // - 60 is the prefered way e.g. for publishing PDF over the internet
-    // - 80/90 is a good ration if you want to have a nice PDF to see on screen
+    // - 80/90 is a good ratio if you want to have a nice PDF to see on screen
     // - of course, this doesn't affect vectorial (i.e. emf) pictures
     property ForceJPEGCompression: integer read fForceJPEGCompression write fForceJPEGCompression;
     /// this property can force all canvas bitmaps to be stored directly
