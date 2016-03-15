@@ -51498,12 +51498,18 @@ constructor TOnInterfaceStubExecuteParamsVariant.Create(aSender: TInterfaceStub;
   aMethod: PServiceMethod; const aParams, aEventParams: RawUTF8);
 var i: integer;
     P: PUTF8Char;
+    tmp: TSynTempBuffer;
 begin
   inherited;
   SetLength(fInput,fMethod^.ArgsInputValuesCount);
-  P := pointer(aParams);
-  for i := 0 to fMethod^.ArgsInputValuesCount-1 do
-    P := VariantLoadJSON(fInput[i],P,nil,@aSender.fInterface.DocVariantOptions);
+  tmp.Init(aParams);
+  try
+    P := tmp.buf;
+    for i := 0 to fMethod^.ArgsInputValuesCount-1 do
+      P := VariantLoadJSON(fInput[i],P,nil,@aSender.fInterface.DocVariantOptions);
+  finally
+    tmp.Done;
+  end;
   SetLength(fOutput,fMethod^.ArgsOutputValuesCount);
 end;
 
