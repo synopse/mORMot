@@ -54458,9 +54458,7 @@ begin
   EnterCriticalSection(fPendingProcessLock);
   try
     result := fPendingProcessFlag;
-    if result=flagDestroying then
-      exit;
-    if result=flagIdle then begin
+    if result=flagIdle then begin // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
       fCallerThreadID := ThreadID;
     end;
@@ -54486,7 +54484,7 @@ begin
   try
     {$ifdef MSWINDOWS} // do process the OnIdle only if UI
     if Assigned(fOnIdle) then begin
-      while FixedWaitFor(fCallerEvent,100)<>wrSignaled do
+      while FixedWaitFor(fCallerEvent,100)=wrTimeout do
         OnIdleProcessNotify(start);
     end else
     {$endif}
@@ -54523,8 +54521,10 @@ begin
   start := GetTickCount64;
   repeat
     case AcquireThread of
-    flagDestroying: exit;
-    flagIdle: break; // we acquired the background thread
+    flagDestroying, flagFinished:
+      exit;
+    flagIdle:
+      break; // we acquired the background thread
     end;
     case OnIdleProcessNotify(start) of // Windows.GetTickCount64 res is 10-16 ms
     0..20:    SleepHiRes(0);
