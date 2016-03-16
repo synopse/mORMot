@@ -2673,6 +2673,7 @@ type
     fDB: TSQLite3DB;
     fFileName: TFileName;
     fFileNameWithoutPath: TFileName;
+    fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
     fPassword: RawUTF8;
     fTransactionActive: boolean;
@@ -2767,6 +2768,8 @@ type
     // - you can specify some optional flags for sqlite3.open_v2() as
     // SQLITE_OPEN_READONLY or SQLITE_OPEN_READWRITE instead of supplied default
     // value (which corresponds to the sqlite3.open() behavior)
+    // - by default, 10000 pages are used to cache data in memory (using around
+    // 40 MB of RAM), but you may specify another value for performance tuning
     // - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive compare,
     // which is used also in the SQLite3UI unit for coherency and efficiency)
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
@@ -2776,7 +2779,8 @@ type
     // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
+      aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE;
+      aDefaultCacheSize: integer=10000);
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -3803,8 +3807,8 @@ begin // JsonSet(VariantField,'PropName','abc') to set a value
 end;
 {$endif}
 
-constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-  aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE);
+constructor TSQLDataBase.Create(const aFileName: TFileName; const aPassword: RawUTF8;
+  aOpenV2Flags, aDefaultCacheSize: integer);
 var result: integer;
 begin
   if sqlite3=nil then
@@ -3817,7 +3821,10 @@ begin
   {$endif}
   if SysUtils.Trim(aFileName)='' then
     raise ESQLite3Exception.CreateUTF8('%.Create('''')',[self]);
-  fOpenV2Flags := aOpenV2Flags;
+  if aOpenV2Flags=0 then
+    fOpenV2Flags := SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE else
+    fOpenV2Flags := aOpenV2Flags;
+  fFileDefaultCacheSize := aDefaultCacheSize;
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
     raise ESQLite3Exception.CreateUTF8(
@@ -4386,7 +4393,7 @@ begin
     if fPassword='' then
       PageSize := 4096 else
       PageSize := 1024; // our encryption scheme expect a page size of 1024
-    CacheSize := 10000; // ensure we use some generous amount of RAM (40 MB)
+    CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
