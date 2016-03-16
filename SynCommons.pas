@@ -54521,7 +54521,7 @@ begin
   start := GetTickCount64;
   repeat
     case AcquireThread of
-    flagDestroying, flagFinished:
+    flagDestroying:
       exit;
     flagIdle:
       break; // we acquired the background thread
