@@ -513,7 +513,7 @@ type
     // - any needed TSQLVirtualTable class should have been already registered
     // via the RegisterVirtualTableModule() method
     constructor Create(aModel: TSQLModel; aDB: TSQLDataBase;
-      aHandleUserAuthentication: boolean=false); reintroduce; overload; virtual;
+      aHandleUserAuthentication: boolean=false; aOwnDB: boolean=false); reintroduce; overload; virtual;
     /// initialize a REST server with a database, by specifying its filename
     // - TSQLRestServerDB will initialize a owned TSQLDataBase, and free it on Destroy
     // - if specified, the password will be used to cypher this file on disk
@@ -672,6 +672,8 @@ type
   protected
     fShardRootFileName: TFileName;
     fSynchronous: TSQLSynchronousMode;
+    fInitShardsIsLast: boolean;
+    fCacheSizePrevious, fCacheSizeLast: integer;
     procedure InitShards; override;
     function InitNewShard: TSQLRest; override;
     function DBFileName(ShardIndex: Integer): TFileName; virtual;
@@ -681,9 +683,12 @@ type
     // table name would be used
     // - typical use may be:
     // ! Server.StaticDataAdd(TSQLRestStorageShardDB.Create(TSQLRecordSharded,Server,500000))
+    // - you may define some low-level tuning of SQLite3 process via aSynchronous
+    // / aCacheSizePrevious / aCacheSizeLast parameters
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aShardRange: TID; aOptions: TSQLRestStorageShardOptions=[];
-      const aShardRootFileName: TFileName=''; aSynchronous: TSQLSynchronousMode=smOff); reintroduce; virtual;
+      const aShardRootFileName: TFileName=''; aSynchronous: TSQLSynchronousMode=smOff;
+      aCacheSizePrevious: integer=1000; aCacheSizeLast: integer=10000); reintroduce; virtual;
   published
     /// associated file name for the SQLite3 database files
     // - contains the folder, and root file name for the storage
@@ -920,11 +925,13 @@ begin
 end;
 
 constructor TSQLRestServerDB.Create(aModel: TSQLModel; aDB: TSQLDataBase;
-  aHandleUserAuthentication: boolean);
+  aHandleUserAuthentication, aOwnDB: boolean);
 begin
   fStatementCache.Init(aDB.DB);
   aDB.UseCache := true; // we better use caching in this JSON oriented use
   fDB := aDB;
+  if aOwnDB then
+    fOwnedDB := fDB;
   if fDB.InternalState=nil then begin // should be done once
     InternalState := 1;
     fDB.InternalState := @InternalState; // to update TSQLRestServerDB.InternalState
@@ -2578,10 +2585,13 @@ end;
 
 constructor TSQLRestStorageShardDB.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
-  const aShardRootFileName: TFileName; aSynchronous: TSQLSynchronousMode);
+  const aShardRootFileName: TFileName; aSynchronous: TSQLSynchronousMode;
+  aCacheSizePrevious, aCacheSizeLast: Integer);
 begin
   fShardRootFileName := aShardRootFileName;
   fSynchronous := aSynchronous;
+  fCacheSizePrevious := aCacheSizePrevious;
+  fCacheSizeLast := aCacheSizeLast;
   inherited Create(aClass,aServer,aShardRange,aOptions);
 end;
 
@@ -2592,14 +2602,20 @@ end;
 
 function TSQLRestStorageShardDB.InitNewShard: TSQLRest;
 var db: TSQLRestServerDB;
+    cachesize: integer;
+    sql: TSQLDataBase;
     model: TSQLModel;
 begin
   inc(fShardLast);
   model := TSQLModel.Create([fStoredClass],FormatUTF8('shard%',[fShardLast]));
-  db := TSQLRestServerDB.Create(model,DBFileName(fShardLast));
+  if fInitShardsIsLast then // last .dbs uses 40MB cache, previous 4MB only
+    cachesize := fCacheSizeLast else
+    cachesize := fCacheSizePrevious;
+  sql := TSQLDatabase.Create(DBFileName(fShardLast),'',0,cachesize);
+  sql.LockingMode := lmExclusive;
+  sql.Synchronous := fSynchronous;
+  db := TSQLRestServerDB.Create(model,sql,false,true);
   model.Owner := db;
-  db.DB.LockingMode := lmExclusive;
-  db.DB.Synchronous := fSynchronous;
   db.CreateMissingTables;
   result := db;
   SetLength(fShards,fShardLast+1);
@@ -2631,13 +2647,16 @@ begin
     end;
     if not SameText(DBFileName(num),db[f].Name) then
       raise EORMException.CreateUTF8('%.InitShards(%)',[self,db[f].Name]);
-    fShardLast := num-1; // 'folder\root005.db3' -> fShardLast := 4
-    InitNewShard;
+    if f = high(db) then
+      fInitShardsIsLast := true;
+    fShardLast := num-1; // 'folder\root0005.dbs' -> fShardLast := 4
+    InitNewShard;        // now fShardLast=5, fShards[5] contains root005.dbs
   end;
   if Integer(fShardLast)<0 then begin
     InternalLog('InitShards?',sllWarning);
     exit;
   end;
+  fInitShardsIsLast := true; // any newly appended .dbs would use 40MB of cache
   fShardLastID := fShards[fShardLast].TableMaxID(fStoredClass);
   if fShardLastID<0 then
     fShardLastID := 0; // no data yet
