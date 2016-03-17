@@ -13810,17 +13810,17 @@ function _Obj(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
 
 /// add some property values to a document-based object content
-// - if the Obj is a TDocVariant object, will add the Name/Value pairs
-// - if the Obj is not a TDocVariant, will create a new fast document,
-// initialized with the Name/Value pairs
+// - if Obj is a TDocVariant object, will add the Name/Value pairs
+// - if Obj is not a TDocVariant, will create a new fast document,
+// initialized with supplied the Name/Value pairs
 // - this function will also ensure that ensure Obj is not stored by reference,
 // but as a true TDocVariantData
 procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant); overload;
 
 /// add the property values of a document to a document-based object content
-// - if the Document and Obj are a TDocVariant object, then all Document's
-// properties will be added at the root level of Obj
-// - if Document or Obj are not a TDocVariant object, will do nothing
+// - if Document is not a TDocVariant object, will do nothing
+// - if Obj is a TDocVariant object, will add Document fields to its content
+// - if Obj is not a TDocVariant object, Document will be copied to Obj
 procedure _ObjAddProps(const Document: variant; var Obj: variant); overload;
 
 /// initialize a variant instance to store some document-based array content
@@ -37944,37 +37944,30 @@ begin
 end;
 
 procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant);
+var o: PDocVariantData;
 begin
-  // ensure Obj is not by reference
-  while TVarData(Obj).VType=varByRef or varVariant do
-    TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
-  // add name,value pairs
-  if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>word(DocVariantVType)) or
-     (TDocVariantData(Obj).Kind<>dvObject) then begin
-    // Obj is not a valid TDocVariant object -> create new
+  o := _Safe(Obj);
+  if o^.VKind<>dvObject then begin
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
       VarClear(Obj);
     TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
-  end else
-    // add name,value pairs to the TDocVariant object
-    TDocVariantData(Obj).AddNameValuesToObject(NameValuePairs);
+  end else begin
+    TVarData(Obj) := PVarData(o)^; // ensure not stored by reference
+    o^.AddNameValuesToObject(NameValuePairs);
+  end;
 end;
 
 procedure _ObjAddProps(const Document: variant; var Obj: variant);
 var ndx: integer;
+    d,o: PDocVariantData;
 begin
-  while TVarData(Obj).VType=varByRef or varVariant do
-    TVarData(Obj) := PVarData(TVarData(Obj).VPointer)^;
-  if (DocVariantType=nil) or
-     (TVarData(Obj).VType<>word(DocVariantVType)) or
-     (TDocVariantData(Obj).Kind<>dvObject) or
-     (TVarData(Document).VType<>DocVariantVType) or
-     (TDocVariantData(Document).Kind<>dvObject) then
-    exit; // nothing to do
-  with TDocVariantData(Document) do
-    for ndx := 0 to VCount-1 do
-      TDocVariantData(Obj).AddValue(VName[ndx],VValue[ndx]);
+  d := _Safe(Document);
+  o := _Safe(Obj);
+  if d.VKind=dvObject then
+    if o.Kind<>dvObject then
+      Obj := Document else
+      for ndx := 0 to d^.VCount-1 do
+        o^.AddOrUpdateValue(d^.VName[ndx],d^.VValue[ndx]);
 end;
 
 function _ObjFast(const NameValuePairs: array of const): variant;
@@ -54398,7 +54391,7 @@ end;
 
 procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
 begin
-  case FixedWaitFor(fProcessEvent,INFINITE) of 
+  case FixedWaitFor(fProcessEvent,INFINITE) of
     wrSignaled:
       case GetPendingProcess of
       flagDestroying: begin
@@ -54536,7 +54529,7 @@ begin
   // 2. process execution in the background thread
   fParam := OpaqueParam;
   fProcessEvent.SetEvent; // notify background thread for Call pending process
-  WaitForFinished(start);
+  WaitForFinished(start); // wait for flagFinished, then set flagIdle
   result := true;
 end;
 
