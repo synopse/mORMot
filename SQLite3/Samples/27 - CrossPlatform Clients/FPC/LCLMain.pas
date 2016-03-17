@@ -58,7 +58,7 @@ begin
   TJSONVariantData(doc)['name'] := 'John';
   json := doc;
   assert(json='{"test":1234,"name":"John","zero":0,"name2":3.1415926}');
-  FN := 'people.json';
+  FN := 'People.json';
   for level := 1 to 4 do
     if FileExists(FN) then
       break else
