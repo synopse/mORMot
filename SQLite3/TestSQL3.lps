@@ -95,8 +95,6 @@
           </Parsing>
           <CodeGeneration>
             <SmartLinkUnit Value="True"/>
-            <TargetCPU Value="i386"/>
-            <TargetOS Value="linux"/>
             <Optimizations>
               <OptimizationLevel Value="2"/>
             </Optimizations>
