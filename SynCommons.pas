@@ -14926,12 +14926,29 @@ type
     // - could be used as such, for implementing a thread-safe cache:
     // ! if not cache.AddExistingPropOrLock('Articles',Scope) then
     // !   cache.AddNewPropAndUnlock('Articles',GetArticlesFromDB,Scope);
+    // here GetArticlesFromDB would occur inside the main lock
     function AddExistingPropOrLock(const Name: RawUTF8; var Obj: variant): boolean;
     /// add a property value to the given TDocVariant document object and
     // to the internal stored document, then release a previous lock
     // - call of this method should have been precedeed by AddExistingPropOrLock()
     // returning false, i.e. be executed on a locked instance
     procedure AddNewPropAndUnlock(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
+    // - returns FALSE if Name is not existing in the stored document
+    // - this method would use a lock during the Name lookup, but would always
+    // release the lock, even if returning FALSE (see AddExistingPropOrLock)
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    // - this method would not expect the resource to be locked when called,
+    // as with AddNewPropAndUnlock
+    // - will use the internal lock for thread-safety
+    // - if the Name is already existing, would update/change the existing value
+    // - could be used as such, for implementing a thread-safe cache:
+    // ! if not cache.AddExistingProp('Articles',Scope) then
+    // !   cache.AddNewProp('Articles',GetArticlesFromDB,Scope);
+    // here GetArticlesFromDB would occur outside the main lock
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
     /// delete all stored properties
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
@@ -14979,6 +14996,18 @@ type
     /// add a property value to the given TDocVariant document object and
     // to the internal stored document
     procedure AddNewPropAndUnlock(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// add an existing property value to the given TDocVariant document object
+    // - returns TRUE and add the Name/Value pair to Obj if Name is existing
+    // - returns FALSE if Name is not existing in the stored document
+    // - this method would use a lock during the Name lookup, but would always
+    // release the lock, even if returning FALSE (see AddExistingPropOrLock)
+    function AddExistingProp(const Name: RawUTF8; var Obj: variant): boolean;
+    /// add a property value to the given TDocVariant document object
+    // - this method would not expect the resource to be locked when called,
+    // as with AddNewPropAndUnlock
+    // - will use the internal lock for thread-safety
+    // - if the Name is already existing, would update/change the existing value
+    procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
     /// delete all stored properties
     procedure Clear;
     /// save the stored value as UTF-8 encoded JSON Object
@@ -47428,6 +47457,35 @@ procedure TLockedDocVariant.AddNewPropAndUnlock(const Name: RawUTF8;
   const Value: variant;
   var Obj: variant);
 begin
+  try
+    SetValue(Name,Value);
+    _ObjAddProps([Name,Value],Obj);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.AddExistingProp(const Name: RawUTF8;
+  var Obj: variant): boolean;
+var i: integer;
+begin
+  result := true;
+  fLock.Enter;
+  try
+    i := fValue.GetValueIndex(Name);
+    if i<0 then
+      result := false else
+      _ObjAddProps([Name,fValue.Values[i]],Obj);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddNewProp(const Name: RawUTF8;
+  const Value: variant;
+  var Obj: variant);
+begin
+  fLock.Enter;
   try
     SetValue(Name,Value);
     _ObjAddProps([Name,Value],Obj);

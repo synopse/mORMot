@@ -247,12 +247,12 @@ begin
   result := inherited GetViewInfo(MethodIndex);
   _ObjAddProps(['blog',fBlogMainInfo,
     'session',CurrentSession.CheckAndRetrieveInfo(TypeInfo(TCookieData))],result);
-  if not fDefaultData.AddExistingPropOrLock('archives',result) then
-    fDefaultData.AddNewPropAndUnlock('archives',RestModel.RetrieveDocVariantArray(
+  if not fDefaultData.AddExistingProp('archives',result) then
+    fDefaultData.AddNewProp('archives',RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','group by PublishedMonth order by PublishedMonth desc limit 100',[],
       'distinct(PublishedMonth),max(RowID)+1 as FirstID'),result);
-  if not fDefaultData.AddExistingPropOrLock('tags',result) then
-    fDefaultData.AddNewPropAndUnlock('tags',fTagsLookup.GetAsDocVariantArray,result);
+  if not fDefaultData.AddExistingProp('tags',result) then
+    fDefaultData.AddNewProp('tags',fTagsLookup.GetAsDocVariantArray,result);
 end;
 
 procedure TBlogApplication.FlushAnyCache;
@@ -306,8 +306,8 @@ begin
   end;
   SetVariantNull(Scope);
   if (lastID=0) and (tag=0) then begin // use simple cache if no parameters
-    if not fDefaultData.AddExistingPropOrLock('Articles',Scope) then
-      fDefaultData.AddNewPropAndUnlock('Articles',RestModel.RetrieveDocVariantArray(
+    if not fDefaultData.AddExistingProp('Articles',Scope) then
+      fDefaultData.AddNewProp('Articles',RestModel.RetrieveDocVariantArray(
         TSQLArticle,'',ARTICLE_DEFAULT_ORDER,[],
         ARTICLE_FIELDS,nil,@fDefaultLastID),Scope);
     lastID := fDefaultLastID;
@@ -315,10 +315,8 @@ begin
     scope := _ObjFast(['Articles',RestModel.RetrieveDocVariantArray(
         TSQLArticle,'',whereClause+ARTICLE_DEFAULT_ORDER,[lastID,tag],
         ARTICLE_FIELDS,nil,@lastID)]);
-  if lastID>1 then begin
-    _ObjAddProps(['lastID',lastID],Scope);
-    _ObjAddProps(['tag',tag],Scope); // should be there for a valid Scope object 
-  end;
+  if lastID>1 then
+    _ObjAddProps(['lastID',lastID, 'tag',tag],Scope);
 end;
 
 procedure TBlogApplication.ArticleView(ID: TID;
