@@ -6,7 +6,7 @@ uses
   Windows,
   Classes,
   SysUtils,
-  WinSvc,
+  //WinSvc,
   SynCommons,
   SynLog,
   mORMot,
@@ -14,7 +14,7 @@ uses
 
 /// if we will run the service with administrator rights
 // - otherwise, ensure you registered the URI /root:8080
-{$R VistaAdm.res}
+{$R ..\..\..\VistaAdm.res}
 
 const
   HTTPSERVICE_NAME = 'mORMotHttpServerService';

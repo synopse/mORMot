@@ -6,7 +6,7 @@ uses
   Windows,
   Classes,
   SysUtils,
-  WinSvc,
+  //WinSvc,
   SynCommons,
   SynLog,
   mORMotService,
@@ -16,9 +16,10 @@ uses
   SampleData in '..\01 - In Memory ORM\SampleData.pas';
 
 
+
 /// if we will run the service with administrator rights
 // - otherwise, ensure you registered the URI /root:8080
-{$R VistaAdm.res}
+{$R ..\..\..\VistaAdm.res}
 
 type
   /// class implementing the background Service
@@ -60,10 +61,10 @@ begin
   TSQLLog.Family.Level := LOG_VERBOSE;
   TSQLLog.Family.PerThreadLog := ptIdentifiedInOnFile;
   TSQLLog.Enter(self);
-  OnStart := DoStart;
-  OnStop := DoStop;
-  OnResume := DoStart; // trivial Pause/Resume actions
-  OnPause := DoStop;
+  OnStart := {$ifdef FPC}@{$endif}DoStart;
+  OnStop := {$ifdef FPC}@{$endif}DoStop;
+  OnResume := {$ifdef FPC}@{$endif}DoStart; // trivial Pause/Resume actions
+  OnPause := {$ifdef FPC}@{$endif}DoStop;
 end;
 
 constructor TSQLite3HttpService.CreateAsConsole;
