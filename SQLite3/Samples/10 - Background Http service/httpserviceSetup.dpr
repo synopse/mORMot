@@ -6,7 +6,6 @@ uses
   Windows,
   Classes,
   SysUtils,
-  //WinSvc,
   SynCommons,
   SynLog,
   mORMot,

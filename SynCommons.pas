@@ -5590,7 +5590,11 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // left side of the text if no exact match is found and AlsoTrimLowerCase is TRUE
 // - see also RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
-  AlsoTrimLowerCase: boolean=false): Integer;
+  AlsoTrimLowerCase: boolean=false): Integer; overload;
+
+/// helper to retrieve the index of an enumerate item from its text
+function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
+  AlsoTrimLowerCase: boolean=false): Integer; overload;
 
 /// helper to retrieve the bit mapped integer value of a set from its JSON text
 // - if supplied P^ is a JSON integer number, will read it directly
@@ -13314,7 +13318,8 @@ type
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
     // - will use IdemPChar(), so search would be case-insensitive 
-    function GetValuesByStartName(const aStartName: RawUTF8): variant;
+    function GetValuesByStartName(const aStartName: RawUTF8;
+      TrimLeftStartName: boolean=false): variant;
     /// returns a JSON object containing all properties matching the
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
@@ -18732,6 +18737,13 @@ begin
       result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen);
   end else
     result := -1;
+end;
+
+function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
+  AlsoTrimLowerCase: boolean=false): Integer;
+begin
+  result := GetEnumNameValue(aTypeInfo, pointer(aValue), length(aValue),
+    AlsoTrimLowerCase);
 end;
 
 function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
@@ -37160,9 +37172,11 @@ begin
   end;
 end;
 
-function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8): variant;
+function TDocVariantData.GetValuesByStartName(const aStartName: RawUTF8;
+  TrimLeftStartName: boolean): variant;
 var Up: array[byte] of AnsiChar;
     ndx: integer;
+    name: RawUTF8;
 begin
   if aStartName='' then begin
     result := Variant(self);
@@ -37175,8 +37189,12 @@ begin
   TDocVariant.NewFast(result);
   UpperCopy255(Up,aStartName)^ := #0;
   for ndx := 0 to VCount-1 do
-    if IdemPChar(Pointer(VName[ndx]),Up) then
-      TDocVariantData(result).AddValue(VName[ndx],VValue[ndx]);
+    if IdemPChar(Pointer(VName[ndx]),Up) then begin
+      name := VName[ndx];
+      if TrimLeftStartName then
+        system.delete(name, 1, length(aStartName));
+      TDocVariantData(result).AddValue(name,VValue[ndx]);
+    end;
 end;
 
 procedure TDocVariantData.SetValueOrRaiseException(Index: integer; const NewValue: variant);
