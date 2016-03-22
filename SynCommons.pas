@@ -38463,6 +38463,7 @@ end;
 procedure TDynArray.Delete(aIndex: Integer);
 var n, len: integer;
     P: PAnsiChar;
+    zerolast: boolean;
 begin
   if fValue=nil then
     exit; // avoid GPF if void
@@ -38471,14 +38472,19 @@ begin
     exit; // out of range
   dec(n);
   P := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
-  if ElemType<>nil then
-    _Finalize(P,ElemType) else
-    if GetIsObjArray then
+  if ElemType<>nil then begin
+    _Finalize(P,ElemType);
+    zerolast := true;
+  end else
+    if GetIsObjArray then begin
       FreeAndNil(PObject(P)^);
+      zerolast := true;
+    end else
+    zerolast := false;
   if n>aIndex then begin
     len := cardinal(n-aIndex)*ElemSize;
     MoveFast(P[ElemSize],P[0],len);
-    if ElemType<>nil then // avoid GPF
+    if zerolast then // avoid GPF
       FillcharFast(P[len],ElemSize,0);
   end;
   SetCount(n);
