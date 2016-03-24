@@ -10255,7 +10255,7 @@ type
   TServiceMethodExecute = class;
 
   /// the current step of a TServiceMethodExecute.OnExecute call
-  TServiceMethodExecuteEventStep = (smsBefore, smsAfter, smsError);
+  TServiceMethodExecuteEventStep = (smsUndefined, smsBefore, smsAfter, smsError);
 
   /// the TServiceMethodExecute.OnExecute signature
   TServiceMethodExecuteEvent = procedure(Sender: TServiceMethodExecute;
@@ -10288,6 +10288,7 @@ type
     fLastException: Exception;
     fInput: TDocVariantData;
     fOutput: TDocVariantData;
+    fCurrentStep: TServiceMethodExecuteEventStep;
     procedure BeforeExecute;
     procedure RawExecute(Instances: PPointerArray; InstancesLast: integer);
     procedure AfterExecute;
@@ -10312,8 +10313,11 @@ type
     // - you should not need to access this, but rather set
     // optInterceptInputOutput in Options, and read Input/Output content
     property Values: TPPointerDynArray read fValues;
-    // as copied from TServiceFactoryServer.Options
+    /// associated settings, as copied from TServiceFactoryServer.Options
     property Options: TServiceMethodOptions read fOptions write fOptions;
+    /// the current state of the execution
+    property CurrentStep: TServiceMethodExecuteEventStep
+      read fCurrentStep write fCurrentStep;
     /// set from output TServiceCustomAnswer.Header result parameter
     property ServiceCustomAnswerHead: RawUTF8
       read fServiceCustomAnswerHead write fServiceCustomAnswerHead;
@@ -53627,6 +53631,12 @@ var Inst: TServiceFactoryServerInstance;
       context: PServiceRunningContext;
   begin
     W := exec.TempTextWriter;
+    if exec.CurrentStep<smsBefore then begin
+      W.CancelAll;
+      W.Add('"POST",{Method:"%",Input:{',[exec.Method^.InterfaceDotMethodName]);
+    end;
+    if exec.CurrentStep<smsAfter then
+      W.AddShort('},Output:{Failed:"Probably due to wrong input"');
     W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
       [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeEnd]);
     with Ctxt.ServiceExecution^ do
@@ -55059,6 +55069,7 @@ begin
     // execute the method
     for i := 0 to InstancesLast do begin
       // handle method execution interception
+      fCurrentStep := smsBefore;
       if fOnExecute<>nil then begin
         if (Input.Count=0) and (optInterceptInputOutput in Options) then
           ArgsStackAsDocVariant(fValues,fInput,true);
@@ -55090,6 +55101,7 @@ begin
         if (ArgsResultIndex>=0) and (Args[ArgsResultIndex].ValueVar=smvv64) then
           PInt64Rec(fValues[ArgsResultIndex])^ := call.res64;
         // handle method execution interception
+        fCurrentStep := smsAfter;
         if fOnExecute<>nil then begin
           if (Output.Count=0) and (optInterceptInputOutput in Options) then
             ArgsStackAsDocVariant(fValues,fOutput,false);
@@ -55102,6 +55114,7 @@ begin
       except // also intercept any error during method execution
         on Exc: Exception do begin
           if fOnExecute<>nil then begin
+            fCurrentStep := smsError;
             fLastException := Exc;
             for e := 0 to length(fOnExecute)-1 do
             try
