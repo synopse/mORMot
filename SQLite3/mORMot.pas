@@ -55232,7 +55232,9 @@ begin
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
-          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,[j2oHandleCustomVariants]);
+          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,
+            [j2oIgnoreUnknownProperty,j2oIgnoreStringType,
+             j2oIgnoreUnknownEnum,j2oHandleCustomVariants]);
           if not valid then
             exit;
           IgnoreComma(Par);
