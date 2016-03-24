@@ -5189,6 +5189,13 @@ type
     // !  LockFPC := Safe.ProtectMethod;
     // !  ... // thread-safe code
     // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with Safe.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
     function ProtectMethod: IUnknown;
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
@@ -14838,6 +14845,13 @@ type
     // !  LockFPC := fSharedAutoLocker.ProtectMethod;
     // !  ... // thread-safe code
     // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
     function ProtectMethod: IUnknown;
     /// gives an access to the internal low-level TSynLocker instance used 
     function Safe: PSynLocker;
@@ -14868,12 +14882,19 @@ type
     // !end; // local hidden IUnknown will release the lock for the method
     // - warning: under FPC, you should assign its result to a local variable -
     // see bug http://bugs.freepascal.org/view.php?id=26602
-    // !var LockFPC: IUnknown;;
+    // !var LockFPC: IUnknown;
     // !begin
     // !  ... // unsafe code
     // !  LockFPC := fSharedAutoLocker.ProtectMethod;
     // !  ... // thread-safe code
     // !end; // LockFPC will release the lock for the method
+    // or
+    // !begin
+    // !  ... // unsafe code
+    // !  with fSharedAutoLocker.ProtectMethod do begin
+    // !    ... // thread-safe code
+    // !  end; // local hidden IUnknown will release the lock for the method
+    // !end;
     function ProtectMethod: IUnknown;
     /// enter the mutex
     // - any call to Enter should be ended with a call to Leave, and
@@ -14898,7 +14919,8 @@ type
 {$ifndef NOVARIANTS}
   /// ref-counted interface for thread-safe access to a TDocVariant document
   // - is implemented e.g. by TLockedDocVariant, for IoC/DI resolution
-  // - fast and safe storage of any JSON-like object, as property/value pairs
+  // - fast and safe storage of any JSON-like object, as property/value pairs,
+  // or a JSON-like array, as values
   ILockedDocVariant = interface
     ['{CADC2C20-3F5D-4539-9D23-275E833A86F3}']
     function GetValue(const Name: RawUTF8): Variant;
@@ -14954,13 +14976,19 @@ type
     // !   cache.AddNewProp('Articles',GetArticlesFromDB,Scope);
     // here GetArticlesFromDB would occur outside the main lock
     procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// append a value to the internal TDocVariant document array
+    // - you should not use this method in conjunction with other document-based
+    // alternatives, like Exists/AddExistingPropOrLock or AddExistingProp
+    procedure AddItem(const Value: variant);
+    /// makes a thread-safe copy of the internal TDocVariant document object or array
+    function Copy: variant;
     /// delete all stored properties
     procedure Clear;
     /// save the stored values as UTF-8 encoded JSON Object
     function ToJSON(HumanReadable: boolean=false): RawUTF8;
     /// the document fields would be safely accessed via this property
     // - this is the main entry point of this storage
-    // - would raise an EDocVariant exception if Name does not exist
+    // - would raise an EDocVariant exception if Name does not exist at reading
     // - implementation class would make a thread-safe copy of the variant value
     property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
   end;
@@ -15013,6 +15041,10 @@ type
     // - will use the internal lock for thread-safety
     // - if the Name is already existing, would update/change the existing value
     procedure AddNewProp(const Name: RawUTF8; const Value: variant; var Obj: variant);
+    /// append a value to the internal TDocVariant document array
+    procedure AddItem(const Value: variant);
+    /// makes a thread-safe copy of the internal TDocVariant document object or array
+    function Copy: variant;
     /// delete all stored properties
     procedure Clear;
     /// save the stored value as UTF-8 encoded JSON Object
@@ -47535,6 +47567,27 @@ begin
   fLock.Enter;
   try
     fValue.AddOrUpdateValue(Name,Value);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+procedure TLockedDocVariant.AddItem(const Value: variant);
+begin
+  fLock.Enter;
+  try
+    fValue.AddItem(Value);
+  finally
+    fLock.Leave;
+  end;
+end;
+
+function TLockedDocVariant.Copy: variant;
+begin
+  VarClear(result);
+  fLock.Enter;
+  try
+    TDocVariantData(result).InitCopy(variant(fValue),JSON_OPTIONS_FAST);
   finally
     fLock.Leave;
   end;
