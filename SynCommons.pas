@@ -3538,7 +3538,7 @@ function EnsureDirectoryExists(const Directory: TFileName;
 type
   /// file found result item, as returned by FindFiles()
   TFindFiles = {$ifndef UNICODE}object{$else}record{$endif}
-    /// the matching file name
+    /// the matching file name, including its folder name
     Name: TFileName;
     /// the matching file attributes
     Attr: Integer;
@@ -5598,6 +5598,11 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // - see also RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer;
   AlsoTrimLowerCase: boolean=false): Integer; overload;
+
+/// retrieve the index of an enumerate item from its left-trimmed text
+// - will trim the lowercase 'a'..'z' chars on left side of the supplied aValue text
+// - returns -1 if aValue was not found
+function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
 
 /// helper to retrieve the index of an enumerate item from its text
 function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
@@ -18768,6 +18773,15 @@ begin
     if (result<0) and AlsoTrimLowerCase then
       result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen);
   end else
+    result := -1;
+end;
+
+function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: integer): integer;
+var List: PShortString;
+    MaxValue: integer;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,List) then
+    result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen) else
     result := -1;
 end;
 
