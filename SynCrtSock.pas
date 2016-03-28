@@ -2545,11 +2545,11 @@ begin
 end;
 {$endif}
 
+{$ifndef NOXPOWEREDNAME}
 const
-  {$ifndef NOXPOWEREDNAME}
   XPOWEREDNAME = 'X-Powered-By';
-  {$endif}
-  XPOWEREDVALUE = XPOWEREDPROGRAM+' http://synopse.info';
+  XPOWEREDVALUE = XPOWEREDPROGRAM + ' http://synopse.info';
+{$endif}
 
 { TURI }
 
@@ -5991,8 +5991,8 @@ var Req: PHTTP_REQUEST;
       if E<>nil then
         Msg := Msg+string(E.ClassName)+' Exception raised:<br>';
       Resp^.SetContent(DataChunkInMemory,UTF8String(Msg)+HtmlEncode(
-        {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(ErrorMsg))+
-        '</p><p><small>'+XPOWEREDVALUE,
+        {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(ErrorMsg))
+        {$ifndef NOXPOWEREDNAME}+'</p><p><small>'+XPOWEREDVALUE{$endif},
         'text/html; charset=utf-8');
       Http.SendHttpResponse(fReqQueue,
         Req^.RequestId,0,Resp^,nil,bytesSent,nil,0,nil,fLogData);
