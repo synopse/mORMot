@@ -10788,9 +10788,13 @@ type
     change_time_dlt: TTimeZoneValue;
   end;
   PTimeZoneInfo = ^TTimeZoneInfo;
+
+  /// text identifier of a Time Zone, following Microsoft Windows naming 
+  TTimeZoneID = type RawUTF8;
+
   /// used to store Time Zone information for a single area in TSynTimeZone
   TTimeZoneData = {$ifdef ISDELPHI2006ANDUP}record{$else}object{$endif}
-    id: RawUTF8;
+    id: TTimeZoneID;
     display: RawUTF8;
     tzi: TTimeZoneInfo;
     dyn: array of packed record
@@ -10813,7 +10817,7 @@ type
   protected
     fZone: TTimeZoneDataDynArray;
     fZones: TDynArrayHashed;
-    fLastZone: RawUTF8;
+    fLastZone: TTimeZoneID;
     fLastIndex: integer;
     fIds: TStringList;
     fDisplays: TStringList;
@@ -10860,20 +10864,20 @@ type
     /// write then time zone information into a compressed memory buffer
     function SaveToBuffer: RawByteString;
     /// retrieve the time bias (in minutes) for a given date/time on a TzId
-    function GetBiasForDateTime(const Value: TDateTime; const TzId: RawUTF8;
+    function GetBiasForDateTime(const Value: TDateTime; const TzId: TTimeZoneID;
       out Bias: integer; out HaveDaylight: boolean): boolean;
     /// retrieve the display text corresponding to a TzId
     // - returns '' if the supplied TzId is not recognized
-    function GetDisplay(const TzId: RawUTF8): RawUTF8;
+    function GetDisplay(const TzId: TTimeZoneID): RawUTF8;
     /// compute the UTC date/time corrected for a given TzId
-    function UtcToLocal(const UtcDateTime: TDateTime; const TzId: RawUTF8): TDateTime;
+    function UtcToLocal(const UtcDateTime: TDateTime; const TzId: TTimeZoneID): TDateTime;
     /// compute the current date/time corrected for a given TzId
-    function NowToLocal(const TzId: RawUTF8): TDateTime;
+    function NowToLocal(const TzId: TTimeZoneID): TDateTime;
     /// compute the UTC date/time for a given local TzId value
     // - by definition, a local time may correspond to two UTC times, during the
     // time biais period, so the returned value is informative only, and any
     // stored value should be following UTC
-    function LocalToUtc(const LocalDateTime: TDateTime; const TzID: RawUTF8): TDateTime;
+    function LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
     /// direct access to the low-level time zone information
     property Zone: TTimeZoneDataDynArray read fZone;
     /// direct access to the wrapper over the time zone information array
@@ -29416,7 +29420,7 @@ begin
       FillcharFast(item.tzi,SizeOf(item.tzi),0);
       if Reg.OpenKeyReadOnly(REGKEY+Keys[i]) then
       try
-        StringToUTF8(Keys[i],item.id);
+        StringToUTF8(Keys[i],RawUTF8(item.id));
         StringToUTF8(Reg.ReadString('Display'),item.Display);
         Reg.ReadBinaryData('TZI', item.tzi, SizeOf(item.tzi));
       finally
@@ -29451,7 +29455,7 @@ end;
 {$endif LVCL}
 {$endif MSWINDOWS}
 
-function TSynTimeZone.GetDisplay(const TzId: RawUTF8): RawUTF8;
+function TSynTimeZone.GetDisplay(const TzId: TTimeZoneID): RawUTF8;
 var ndx: integer;
 begin
   if self=nil then
@@ -29463,7 +29467,7 @@ begin
 end;
 
 function TSynTimeZone.GetBiasForDateTime(const Value: TDateTime;
-  const TzId: RawUTF8; out Bias: integer; out HaveDaylight: boolean): boolean;
+  const TzId: TTimeZoneID; out Bias: integer; out HaveDaylight: boolean): boolean;
 var ndx: integer;
     y,m,d: word;
     tzi: PTimeZoneInfo;
@@ -29504,7 +29508,7 @@ begin
 end;
 
 function TSynTimeZone.UtcToLocal(const UtcDateTime: TDateTime;
-  const TzId: RawUTF8): TDateTime;
+  const TzId: TTimeZoneID): TDateTime;
 var Bias: integer;
     HaveDaylight: boolean;
 begin
@@ -29515,12 +29519,12 @@ begin
   end;
 end;
 
-function TSynTimeZone.NowToLocal(const TzId: RawUTF8): TDateTime;
+function TSynTimeZone.NowToLocal(const TzId: TTimeZoneID): TDateTime;
 begin
   result := UtcToLocal(NowUtc,TzId);
 end;
 
-function TSynTimeZone.LocalToUtc(const LocalDateTime: TDateTime; const TzID: RawUTF8): TDateTime;
+function TSynTimeZone.LocalToUtc(const LocalDateTime: TDateTime; const TzID: TTimeZoneID): TDateTime;
 var Bias: integer;
     HaveDaylight: boolean;
 begin

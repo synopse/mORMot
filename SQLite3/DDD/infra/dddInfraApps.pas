@@ -519,12 +519,12 @@ type
 const
   /// map realistic exceptions steps for a mocked socket
   // - could be used to simulate a global socket connection drop
-  ALL_DDDMOCKED_EXCEPTIONS =[msaConnectRaiseException, msaDataInPendingFails,
+  ALL_DDDMOCKED_EXCEPTIONS = [msaConnectRaiseException, msaDataInPendingFails,
     msaDataInRaiseException, msaDataOutReturnsFalse];
 
   /// map realistic latencies steps for a mocked socket
   // - could be used to simulate a slow network
-  ALL_DDDMOCKED_LATENCIES =[Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
+  ALL_DDDMOCKED_LATENCIES = [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
 
 var
   /// you could set a text to this global variable at runtime, so that
