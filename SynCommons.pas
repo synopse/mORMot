@@ -9647,7 +9647,10 @@ function BinToHex(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 // enough space for at least BinBytes*2 chars
 // - using this function with Bin^ as an integer value will encode it
 // in big-endian order (most-signignifican byte first): use it for display
-procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
+procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
+
+/// fast conversion from binary data into hexa chars, ready to be displayed
+function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -23377,34 +23380,40 @@ begin
   end;
 end;
 
+function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+begin
+  FastNewRawUTF8(result,BinBytes*2);
+  BinToHexDisplay(Bin,pointer(result),BinBytes);
+end;
+
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,sizeof(Pointer)*2);
-  BinToHexDisplay(aPointer,pointer(Result),sizeof(Pointer));
+  BinToHexDisplay(aPointer,pointer(result),sizeof(Pointer));
 end;
 
 function PointerToHex(aPointer: Pointer): RawUTF8;
 begin
   FastNewRawUTF8(result,sizeof(Pointer)*2);
-  BinToHexDisplay(aPointer,pointer(Result),sizeof(Pointer));
+  BinToHexDisplay(aPointer,pointer(result),sizeof(Pointer));
 end;
 
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
   FastNewRawUTF8(result,sizeof(Cardinal)*2);
-  BinToHexDisplay(@aCardinal,pointer(Result),sizeof(Cardinal));
+  BinToHexDisplay(@aCardinal,pointer(result),sizeof(Cardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;
 begin
   FastNewRawUTF8(result,sizeof(Int64)*2);
-  BinToHexDisplay(@AInt64,pointer(Result),sizeof(Int64));
+  BinToHexDisplay(@AInt64,pointer(result),sizeof(Int64));
 end;
 
 procedure Int64ToHex(aInt64: Int64; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,sizeof(Int64)*2);
-  BinToHexDisplay(@AInt64,pointer(Result),sizeof(Int64));
+  BinToHexDisplay(@AInt64,pointer(result),sizeof(Int64));
 end;
 
 procedure YearToPChar(Y: Word; P: PUTF8Char);
