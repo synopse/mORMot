@@ -3349,7 +3349,7 @@ begin
     check(tz.Zone=nil);
     fillchar(d,sizeof(d),0);
     for i := 0 to 40 do begin
-      UInt32ToUTF8(i,d.id);
+      UInt32ToUTF8(i,RawUTF8(d.id));
       d.display := 'displayed '+d.id;
       d.tzi.Bias := i;
       check(tz.Zones.Add(d)=i,'add some zones');
@@ -3360,7 +3360,7 @@ begin
       check(tz.Zone<>nil);
       check(tz.Zones.Count=41);
       for i := 0 to 40 do begin
-        UInt32ToUTF8(i,d.id);
+        UInt32ToUTF8(i,RawUTF8(d.id));
         check(tz.GetDisplay(d.id)='displayed '+d.id);
         hdl := true;
         check(tz.GetBiasForDateTime(dt,d.id,bias,hdl));
