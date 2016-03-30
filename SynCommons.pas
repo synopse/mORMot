@@ -18157,25 +18157,23 @@ begin
 end;
 {$endif}
 
-procedure Exchg(P1,P2: PAnsiChar; count: cardinal);
+procedure Exchg(P1,P2: PAnsiChar; count: PtrInt);
 {$ifdef PUREPASCAL}
-var i: Integer;
-    c: PtrInt;
+var i, c: PtrInt;
     u: AnsiChar;
 begin
-  for i := 1 to count div sizeof(c) do begin
+  for i := 1 to count shr POINTERSHR do begin
     c := PPtrInt(P1)^;
     PPtrInt(P1)^ := PPtrInt(P2)^;
     PPtrInt(P2)^ := c;
     inc(P1,SizeOf(c));
     inc(P2,SizeOf(c));
   end;
-  if count and pred(sizeof(c))<>0 then
-    for i := 0 to (count and pred(sizeof(c)))-1 do begin
-      u := P1[i];
-      P1[i] := P2[i];
-      P2[i] := u;
-    end;
+  for i := 0 to (count and pred(sizeof(c)))-1 do begin
+    u := P1[i];
+    P1[i] := P2[i];
+    P2[i] := u;
+  end;
 end;
 {$else}
 asm // eax=P1, edx=P2, ecx=count
@@ -18633,7 +18631,7 @@ begin
 end;
 
 function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;    
+  out Names: PShortString): boolean;
 {$ifdef HASINLINE} inline;
 var info: PTypeInfo;
 begin
@@ -18716,7 +18714,7 @@ asm // eax=aTypeInfo edx=aIndex
     or     edx,edx
     jz     @z
     push   edx
-    shr    edx,2 // fast pipelined by-four scanning 
+    shr    edx,2 // fast pipelined by-four scanning
     jz     @1
 @4: dec    edx
     mov    cl,[eax]
