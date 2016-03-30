@@ -15256,6 +15256,11 @@ type
     // - returns TRUE if the supplied hexadecimal is on the expected format
     // - returns FALSE if the supplied text is invalid
     function FromHexa(const hexa: RawUTF8): boolean;
+    /// fill this unique identifier with a fake value corresponding to a given
+    // timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
+    procedure FromDateTime(aDateTime: TDateTime);
   end;
   {$A+}
   
@@ -54196,6 +54201,11 @@ end;
 function TSynUniqueIdentifierBits.FromHexa(const hexa: RawUTF8): boolean;
 begin
   result := (Length(hexa)=16) and HexDisplayToBin(pointer(hexa),@Value,sizeof(Value));
+end;
+
+procedure TSynUniqueIdentifierBits.FromDateTime(aDateTime: TDateTime);
+begin
+  Value := DateTimeToUnixTime(aDateTime) shl 31;
 end;
 
 
