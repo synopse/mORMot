@@ -908,7 +908,7 @@ type
     /// IAdministratedDaemon command to subscribe to a set of events for
     // real-time remote monitoring of the specified log events
     procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
-      ReceiveExistingKB: cardinal);
+      ReceiveExistingKB: cardinal); virtual;
     /// IAdministratedDaemon command called when a callback is released on the client side
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
     /// run the daemon, until it is halted

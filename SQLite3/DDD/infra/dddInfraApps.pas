@@ -158,6 +158,13 @@ type
     function GetAdministrationHTTPServer: TSQLHttpServer;
       {$ifdef HASINLINE}inline;{$endif}
   public
+    /// IAdministratedDaemon command to subscribe to a set of events for
+    // real-time remote monitoring of the specified log events
+    // - this overriden method would disallow remote logs if low-level frames
+    // logging is set (i.e. HttpClientFullWebSocketsLog / HttpServerFullWebSocketsLog)
+    // to avoid an unexpected race condition
+    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
+      ReceiveExistingKB: cardinal); override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
@@ -176,6 +183,13 @@ type
     function InternalRetrieveState(var Status: variant): boolean; override;
     procedure InternalLogMonitoring; virtual;
   public
+    /// IAdministratedDaemon command to subscribe to a set of events for
+    // real-time remote monitoring of the specified log events
+    // - this overriden method would disallow remote logs if low-level frames
+    // logging is set (i.e. HttpClientFullWebSocketsLog / HttpServerFullWebSocketsLog)
+    // to avoid an unexpected race condition
+    procedure SubscribeLog(const Levels: TSynLogInfos; const Callback: ISynLogCallback;
+      ReceiveExistingKB: cardinal); override;
     /// reference to the HTTP server publishing IAdministratedDaemon service
     // - may equal nil if TDDDAdministratedDaemonSettingsFile.AuthHttp.BindPort=''
     property AdministrationHTTPServer: TSQLHttpServer read GetAdministrationHTTPServer;
@@ -830,6 +844,28 @@ begin
   result := true;
 end;
 
+function CanSubscribeLog(const Callback: ISynLogCallback): Boolean;
+begin
+  result := false;
+  if Assigned(Callback) then
+    if HttpClientFullWebSocketsLog or HttpServerFullWebSocketsLog then begin
+      Callback.Log(sllError, FormatUTF8(
+        '%00%  SubscribeLog is not allowed when low-level WebSockets ' +
+        'frame logging is enabled (otherwise a race condition happens)',
+        [NowToString(False), LOG_LEVEL_TEXT[sllError]]));
+      exit;
+    end
+    else
+      result := true;
+end;
+
+procedure TDDDThreadDaemon.SubscribeLog(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
+begin
+  if CanSubscribeLog(Callback) then
+    inherited SubscribeLog(Levels, Callback, ReceiveExistingKB);
+end;
+
 
 { TDDDRestDaemon }
 
@@ -863,6 +899,13 @@ end;
 function TDDDRestDaemon.Settings: TDDDAdministratedDaemonHttpSettings;
 begin
   result := TDDDAdministratedDaemonHttpSettings(fInternalSettings);
+end;
+
+procedure TDDDRestDaemon.SubscribeLog(const Levels: TSynLogInfos;
+  const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
+begin
+  if CanSubscribeLog(Callback) then
+    inherited SubscribeLog(Levels, Callback, ReceiveExistingKB);
 end;
 
 
