@@ -10736,6 +10736,13 @@ function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar = ' '; UTC: boolean=true): RawUTF8;
 
+/// convert some date/time to the "HTTP-date" format as defined by RFC 7231
+// - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
+// "Date", "Expires" or "Last-Modified" HTTP header
+// - if you care about timezones Value must be converted to UTC first
+// using TSynTimeZone.LocalToUtc
+function DateTimeToHTTPDate(DateTime: TDateTime): RawUTF8;
+
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
@@ -29229,6 +29236,29 @@ begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   FormatUTF8(FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
     UInt2DigitsToShort(D),FirstTimeChar,UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
     UInt2DigitsToShort(SS),UInt3DigitsToShort(MS),Z[UTC]], result);
+end;
+
+const
+  HTML_WEEK_DAYS: array[1..7] of RawUTF8 =
+    ('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); {do not localize}
+  HTML_MONTH_NAMES: array[1..12] of RawUTF8 =
+    ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'); {do not localize}
+
+function DateTimeToHTTPDate(DateTime: TDateTime): RawUTF8;
+var HH,MM,SS,MS,Y,M,D: word;
+  day2dig: rawUTF8;
+  aGMTValue: TDateTime;
+begin
+  if DateTime=0 then begin
+    result := '';
+    exit;
+  end;
+  DecodeDate(DateTime,Y,M,D);
+  DecodeTime(DateTime,HH,MM,SS,MS);
+  FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(DateTime)],
+    UInt2DigitsToShort(D), HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
+    UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
+    UInt2DigitsToShort(SS)], result);
 end;
 
 function TimeToString: RawUTF8;
