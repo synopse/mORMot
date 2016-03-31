@@ -8051,9 +8051,9 @@ begin
     Check(CompareMem(pointer(dec1),pointer(s),length(s)));
     {$endif}
   end;
-  SetLength(dec1,0); // force filled with 0
   SetLength(dec1,length(t));
-  for j := 0 to length(t) do begin
+  for j := 0 to length(t)-1 do begin
+    FillCharFast(pointer(dec1)^,length(t),0);
     Check(SynLZdecompress1partial(pointer(comp2),complen2,Pointer(dec1),j)=j);
     Check(CompareMem(pointer(dec1),pointer(t),j));
   end;
