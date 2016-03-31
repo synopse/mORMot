@@ -769,12 +769,16 @@ function TSQLHttpClientWebsockets.WebSocketsConnect(
   const aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX,
   aWebSocketsCompression: boolean): RawUTF8;
 begin
-  if HttpClientFullWebSocketsLog then
-    WebSockets.Settings.SetFullLog;
-  result := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
-  if result='' then
-    if not ServerTimeStampSynchronize then
-      result := 'ServerTimeStampSynchronize';
+  if WebSockets = nil then
+    result := 'WebSockets=nil'
+  else begin
+    if HttpClientFullWebSocketsLog then
+      WebSockets.Settings.SetFullLog;
+    result := WebSocketsUpgrade(aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
+    if result='' then
+      if not ServerTimeStampSynchronize then
+        result := 'ServerTimeStampSynchronize';
+  end;
   if result<>'' then
     raise ECommunicationException.CreateUTF8('%.WebSocketsConnect failed on %:%/% -> %',
       [self,Server,Port,Model.Root,result]);
