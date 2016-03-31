@@ -8272,9 +8272,7 @@ end;
 
 procedure TPdfOutlineRoot.Save;
 begin
-  if Opened then
-    Data.AddItem('Count', FCount) else
-    Data.AddItem('Count', FCount);
+  Data.AddItem('Count', FCount);
   if FFirst<>nil then begin
     Data.AddItem('First', FFirst.Data);
     FFirst.Save;
