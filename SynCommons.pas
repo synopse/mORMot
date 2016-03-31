@@ -10741,7 +10741,7 @@ function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean=true;
 // "Date", "Expires" or "Last-Modified" HTTP header
 // - if you care about timezones Value must be converted to UTC first
 // using TSynTimeZone.LocalToUtc
-function DateTimeToHTTPDate(DateTime: TDateTime): RawUTF8;
+function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
 
 /// retrieve the current Time (whithout Date), in the ISO 8601 layout
 // - useful for direct on screen logging e.g.
@@ -29239,23 +29239,21 @@ begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
 end;
 
 const
-  HTML_WEEK_DAYS: array[1..7] of RawUTF8 =
-    ('Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'); {do not localize}
-  HTML_MONTH_NAMES: array[1..12] of RawUTF8 =
-    ('Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'); {do not localize}
+  HTML_WEEK_DAYS: array[1..7] of string[3] =
+    ('Sun','Mon','Tue','Wed','Thu','Fri','Sat'); {do not localize}
+  HTML_MONTH_NAMES: array[1..12] of string[3] =
+    ('Jan','Feb','Mar','Apr','May','Jun', 'Jul','Aug','Sep','Oct','Nov','Dec'); {do not localize}
 
-function DateTimeToHTTPDate(DateTime: TDateTime): RawUTF8;
+function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
 var HH,MM,SS,MS,Y,M,D: word;
-  day2dig: rawUTF8;
-  aGMTValue: TDateTime;
 begin
-  if DateTime=0 then begin
+  if UTCDateTime=0 then begin
     result := '';
     exit;
   end;
-  DecodeDate(DateTime,Y,M,D);
-  DecodeTime(DateTime,HH,MM,SS,MS);
-  FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(DateTime)],
+  DecodeDate(UTCDateTime,Y,M,D);
+  DecodeTime(UTCDateTime,HH,MM,SS,MS);
+  FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
     UInt2DigitsToShort(D), HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
     UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
     UInt2DigitsToShort(SS)], result);
@@ -54837,7 +54835,7 @@ begin
       end;
     except
       on E: Exception do begin
-        fStats.ProcessError(ObjectToVariant(E));
+        fStats.ProcessError({$ifdef NOVARIANTS}E.ClassName{$else}ObjectToVariant(E){$endif});
         if Assigned(fOnException) then
           fOnException(E);
       end;
