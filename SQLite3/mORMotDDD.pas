@@ -547,6 +547,8 @@ type
     procedure AggregateToTable(aAggregate: TObject; aID: TID; aDest: TSQLRecord);
     /// convert a ORM TSQLRecord instance into a DDD Aggregate
     procedure AggregateFromTable(aSource: TSQLRecord; aAggregate: TObject);
+    /// convert ORM TSQLRecord.FillPrepare instances into a DDD Aggregate ObjArray
+    procedure AggregatesFromTableFill(aSource: TSQLRecord; var aAggregateObjArray);
     /// the home repository owning this factory
     property Owner: TDDDRepositoryRestManager read fOwner;
     /// the DDD's Entity class handled by this factory
@@ -1537,6 +1539,23 @@ begin
       TablePropToAggregate(aSource,fAggregateToTable[i],aAggregate,fAggregateProp[i]);
 end;
 
+procedure TDDDRepositoryRestFactory.AggregatesFromTableFill(
+  aSource: TSQLRecord; var aAggregateObjArray);
+var res: TObjectDynArray absolute aAggregateObjArray;
+    i: integer;
+begin
+  SetLength(res, aSource.FillTable.RowCount);
+  i := 0;
+  if aSource.FillRewind then
+    while aSource.FillOne do begin
+      res[i] := fAggregate.CreateNew;
+      AggregateFromTable(aSource,res[i]);
+      inc(i);
+    end;
+  if i <> length(res) then
+    ObjArrayClear(res);
+end;
+
 function TDDDRepositoryRestFactory.GetAggregateName: string;
 begin
   if (self=nil) or (Aggregate=nil) then
@@ -1624,6 +1643,7 @@ begin
     end;
   result := ''; // if we reached here, there was no error
 end;
+
 
 
 { TDDDRepositoryRestManager }
@@ -1798,26 +1818,15 @@ end;
 
 function TDDDRepositoryRestQuery.ORMGetAllAggregates(
   var aAggregateObjArray): TCQRSResult;
-var res: TObjectDynArray absolute aAggregateObjArray;
-    i: integer;
 begin
   if CqrsBeginMethod(qaGet,result) then
   if (fCurrentORMInstance.FillTable=nil) or
      (fCurrentORMInstance.FillTable.RowCount=0) then
     CqrsSetResult(cqrsSuccess) else begin
-    SetLength(res,fCurrentORMInstance.FillTable.RowCount);
-    i := 0;
-    if fCurrentORMInstance.FillRewind then
-    while fCurrentORMInstance.FillOne do begin
-      res[i] := Factory.fAggregate.CreateNew;
-      Factory.AggregateFromTable(fCurrentORMInstance,res[i]);
-      inc(i);
-    end;
-    if i=length(res) then
-      CqrsSetResult(cqrsSuccess) else begin
-      ObjArrayClear(res);
-      CqrsSetResult(cqrsNoMoreData);
-    end;
+    Factory.AggregatesFromTableFill(fCurrentORMInstance,aAggregateObjArray);
+    if Pointer(aAggregateObjArray)=nil then
+      CqrsSetResult(cqrsNoMoreData) else
+      CqrsSetResult(cqrsSuccess);
   end;
 end;
 
