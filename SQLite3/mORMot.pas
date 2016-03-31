@@ -23007,7 +23007,7 @@ begin // fValues[] variants -> fTracked[].Props[].Values[]
         with Track.Props[p] do
         if val^.GetAsDocVariant(Name,int) and
            (int^.Count>0) and (int^.Kind=dvArray) then begin
-          for v := 0 to length(Values[g]) do
+          for v := 0 to length(Values[g])-1 do
             if v<int^.Count then
               Values[g][v] := VariantToInt64Def(int^.Values[v],0);
         end;
