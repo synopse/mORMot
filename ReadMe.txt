@@ -30,6 +30,7 @@ Contributors
   Eva Freimann (EVaF)
   Goran Despalatovic (gigo)
   Joe (jokusoft)
+  Johan Bontes
   Jordi Tudela
   Leon Oosthuizen
   Maciej Izak (hnb)
