@@ -34,6 +34,7 @@ type
     Connection: TExpConnectionType;
     Page: TSynPager;
     PageNew: TSynPage;
+    TempFileName: TFileName;
     procedure PageChange(Sender: TObject);
     procedure PageDblClick(Sender: TObject);
   public
@@ -59,6 +60,7 @@ resourcestring
   sSelectOrCreateAConnection = 'Select a connection to be used, or\n'+
     'click on "New connection" to create one.';
   sPleaseWaitN = 'Connecting to %s...';
+  sPleaseWaitSynLz = 'Decompressing %s...';
   sUpdateConnection = 'Update connection settings';
   sPassPromptN = 'Please enter password for %s@%s:';
 
@@ -77,6 +79,8 @@ procedure TDbExplorerMain.FormDestroy(Sender: TObject);
 begin
   Tables.Free;
   Props.Free;
+  if TempFileName<>'' then
+    DeleteFile(TempFileName);
 end;
 
 function Crypt(const s: RawUTF8): RawUTF8;
@@ -171,8 +175,9 @@ var Btns: TCommonButtons;
     Task: TTaskDialog;
     C: TSQLConnection;
     CmdLine: TExpConnectionType;
-    FN, msg: string;
+    FN, msg, FN2: string;
     i, res: Integer;
+    tmp: array[0..MAX_PATH] of char;
 begin
   Conns := nil;
   DefaultFont.Name := 'Tahoma';
@@ -187,10 +192,28 @@ begin
   MainCaption := Caption;
   if (ParamCount=1) and FileExists(paramstr(1)) then begin
     FN := paramstr(1);
+    CmdLine := ctOracleDirectOCI;
     if IsJetFile(FN) then
       CmdLine := ctJet_mdbOLEDB else
     if IsSQLite3File(FN) then
-      CmdLine := ctSqlite3 else begin
+      CmdLine := ctSqlite3 else
+    if TSQLDataBase.IsBackupSynLZFile(FN) then begin
+      FN2 := ExtractFileName(FN);
+      SetString(TempFileName, tmp, GetTempPath(SizeOf(tmp), tmp));
+      TempFileName := TempFileName+FN2+'.db';
+      DeleteFile(TempFileName);
+      with CreateTempForm(format(sPleaseWaitSynLz,[FN2]),nil,True) do
+      try
+        if TSQLDatabase.BackupUnSynLZ(FN, TempFileName) then begin
+          CmdLine := ctSqlite3;
+          FN := TempFileName;
+        end;
+      finally
+        Screen.Cursor := crDefault;
+        Free;
+      end;
+    end;
+    if CmdLine=ctOracleDirectOCI then begin
       ShowMessage(FN+'?',True);
       exit;
     end;
