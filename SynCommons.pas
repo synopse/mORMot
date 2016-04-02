@@ -15426,6 +15426,10 @@ function FileSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 // file format
 function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
+/// returns TRUE if the supplied file name is a SynLZ compressed file,
+// matching the Magic number as supplied to FileSynLZ() function
+function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -53139,6 +53143,28 @@ begin
         D.Free;
       end;
       result := FileSetDateFrom(Dest,S.Handle);
+    finally
+      S.Free;
+    end;
+  except
+    on Exception do
+      result := false;
+  end;
+end;
+
+function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+var S: TFileStream;
+    Head: TSynLZHead;
+begin
+  result := false;
+  if FileExists(Name) then
+  try
+    S := TFileStream.Create(Name,fmOpenRead or fmShareDenyNone);
+    try
+      if S.Read(Head,sizeof(Head))=Sizeof(Head) then
+        if Head.Magic=Magic then
+          if Head.CompressedSize+SizeOf(Head)=S.Size then
+            result := true;
     finally
       S.Free;
     end;
