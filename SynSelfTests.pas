@@ -8672,10 +8672,6 @@ var
 
 function TTestSQLite3Engine.OnBackupProgress(Sender: TSQLDatabaseBackupThread): Boolean;
 begin
-  {$ifdef WITHLOG}
-  if Sender.Step in backupFinished then
-    SQLite3Log.Add.Log(sllDB,'Background backup finished in '+BackupTimer.Stop);
-  {$endif}
   BackupProgressStep := Sender.Step;
   result := true;
 end;
@@ -11002,6 +10998,7 @@ var V,V2: TSQLRecordPeople;
     Data: TSQLRawBlob;
     DataS: THeapMemoryStream;
     a,b: double;
+    BackupFN: TFileName;
 procedure checks(Leonard: boolean; Client: TSQLRestClient; const msg: string);
 var ID: integer;
 begin
@@ -11573,9 +11570,10 @@ begin
       end;
 {$endif}
       // test backup API
-      deleteFile('backupbackground.db3');
+      BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
+      deleteFile(BackupFN);
       BackupTimer.Start;
-      Check(Client.DB.BackupBackground('backupbackground.db3',1024,0,OnBackupProgress));
+      Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true));
       // test per-one and batch requests
       if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
         Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
