@@ -44976,16 +44976,17 @@ begin
 end;
 
 function TJSONSerializerRegisteredClass.Find(JSON: PUTF8Char; AndRegisterClass: boolean): TClass;
-var ClassNameValue: PUTF8Char;
+var token: shortstring;
+    ClassNameValue: PUTF8Char;
     ClassNameLen: integer;
 begin // at input, JSON^='{'
   result := nil;
   if self=nil then
     exit;
-  JSON := JSONRetrieveStringField(JSON+1,ClassNameValue,ClassNameLen,true);
-  if (JSON=nil) or not IdemPropName('ClassName',ClassNameValue,ClassNameLen) then
+  inc(JSON);
+  GetJSONPropName(JSON,token);
+  if (JSON=nil) or not IdemPropName('ClassName',token) then
     exit; // we expect woStoreClassName option to have been used
-  repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if JSONRetrieveStringField(JSON,ClassNameValue,ClassNameLen,false)=nil then
     exit; //invalid JSON string value
   fSafe.Lock;
