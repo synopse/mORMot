@@ -1842,12 +1842,12 @@ begin
     3: begin
       split(SQL,' ',cmd,fn);
       if fn='' then
-        fn := FormatUTF8('% %',[NowToString(false),DB.FileNameWithoutPath]);
+        FormatUTF8('% %',[NowToString(false),ChangeFileExt(DB.FileNameWithoutPath,'.dbsynlz')],fn);
       if (fn<>' ') and (PosEx('..',fn)=0) then begin
         bfn := UTF8ToString(fn);
         if ExtractFilePath(bfn)='' then // put in local data folder is not set
           bfn := ExtractFilePath(DB.FileName)+bfn;
-        if DB.BackupBackground(bfn,4*1024,1,nil) then // 4*1024*4096=16MB step
+        if DB.BackupBackground(bfn,4*1024,1,nil,true) then // 4*1024*4096=16MB step
           result := JsonEncode(['started',bfn]) else
           result := '"Backup failed to start"';
       end;
