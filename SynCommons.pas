@@ -16988,7 +16988,7 @@ end;
 
 function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
 begin
-  if length(text)<maxUTF8 then begin
+  if cardinal(length(text))<maxUTF8 then begin
     result := false;
     exit; // nothing to truncate
   end;
