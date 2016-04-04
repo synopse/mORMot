@@ -16987,15 +16987,13 @@ begin
 end;
 
 function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
-var L: cardinal;
 begin
-  L := length(text);
-  if L<maxUTF8 then begin
+  if length(text)<maxUTF8 then begin
     result := false;
     exit; // nothing to truncate
   end;
-  while (L>0) and (ord(Text[L]) and $c0=$80) do dec(L);
-  SetLength(text,L);
+  while (maxUTF8>0) and (ord(Text[maxUTF8]) and $c0=$80) do dec(maxUTF8);
+  SetLength(text,maxUTF8);
   result := true;
 end;
 
