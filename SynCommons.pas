@@ -32692,54 +32692,74 @@ asm
               .align 16
               movzx r8,r8b           //There's no need to optimize for count <= 3
               mov rax,$0101010101010101
-              mov r9d,edx
+              mov r11d,edx
               imul rax,r8            //fill rax with value.
-              cmp edx,32
-              jl @Below32
+              cmp rdx,63             //fix: allow fills > 4GB
+              jg  @Above32
+@Below32:     and  r11d,not(3)
+              lea   r10,[rip + @SmallFill + (15*4)]
+              jz @SizeIs3
+              sub   r10,r11
+              jmp   r10
+              db $66,$90
+@SmallFill:   rep mov [rcx+56], eax
+              rep mov [rcx+52], eax
+              rep mov [rcx+48], eax
+              rep mov [rcx+44], eax
+              rep mov [rcx+40], eax
+              rep mov [rcx+36], eax
+              rep mov [rcx+32], eax
+              rep mov [rcx+28], eax
+              rep mov [rcx+24], eax
+              rep mov [rcx+20], eax
+              rep mov [rcx+16], eax
+              rep mov [rcx+12], eax
+              rep mov [rcx+08], eax
+              rep mov [rcx+04], eax
+              mov [rcx],eax
+@Fallthough:  mov [rcx+rdx-4],eax  //unaligned write to fix up tail
+              rep ret
+@SizeIs3:     lea edx,[edx*2+edx]           //r9 <= 3  r9*4
+              add r10,$1B                   //reuse rip (saves 4 bytes)
+              sub r10,rdx
+              jmp r10
+@do3:         mov [rcx+2],al
+@do2:         mov [rcx+1],al
+@do1:         mov [rcx],al
+              ret
+@do0:         rep ret
 @Above32:     mov r11,rcx
               mov r8b,7              //code shrink to help alignment.
               lea r9,[rcx+rdx]       //r9=end of array
-              and r11,r8             //and 7 See if dest is aligned
-              jz @tail
-@NotAligned:  mov [rcx],rax          //unaligned write
-              xor rcx,r11            //align dest
-              lea rdx,[rdx+r11-8]
+              sub rdx,8
+              mov [rcx],rax
               add rcx,8
-@tail:        test r9,r8             //and 7 is tail aligned?
-              jz @alignOK
-@tailwrite:   mov [r9-8],rax         //no, we need to do a tail write
-              and r9,r8              //and 7
-              sub rdx,r9             //dec(count, tailcount)
+              and r11,r8             //and 7 See if dest is aligned
+              add rdx,r11
+              mov [r9-8],rax         //do a tail write to align.
+@tail:        and r9,r8              //and 7 is tail aligned?
+@tailwrite:   sub rdx,r9             //dec(count, tailcount)
 @alignOK:     mov r10,rdx
-              mov r8b,64             //code shrink to help alignment.
+              xor rcx,r11            //align dest
+              shr r10,6
               and edx,(32+16+8)      //count the partial iterations of the loop
+              mov r8b,64             //code shrink to help alignment.
               mov r9,rdx
               jz @Initloop64
-@partialloop: shr r9,1              //every instruction is 4 bytes
-              lea r11,[rip +@partial+(4*7)] //start at the end of the loop
-              sub r11,r9            //step back as needed
+@partialloop: lea r11,[rip + @partial +(4*7)] //start at the end of the loop
+              shr r9,1               //every instruction is 4 bytes
+              sub r11,r9             //step back as needed
               add rcx,rdx            //add the partial loop count to dest
-              test r10,r10           //do we need to do more loops?
+              test r10,r10           //do we need to do more loops after partial?
+              stc                    //CF=1: we're in a partial loop
               jmp r11                //do a partial loop
-              rep nop                //nop2
-@Initloop64:  shr r10,6              //any work left?
-              jz @done               //no, return
-              mov rdx,r10
+
+@Initloop64:  mov rdx,r10
               shr r10,(19-6)         //use non-temporal move for > 512kb
               jnz @InitFillHuge
 @Doloop64:    add rcx,r8
               dec edx
               mov [rcx-64+00H],rax
-              mov [rcx-64+08H],rax
-              mov [rcx-64+10H],rax
-              mov [rcx-64+18H],rax
-              mov [rcx-64+20H],rax
-              mov [rcx-64+28H],rax
-              mov [rcx-64+30H],rax
-              mov [rcx-64+38H],rax
-              jnz @DoLoop64
-@done:        rep ret
-              db $66,$66,$0f,$1f,$44,$00,$00 //nop7
 @partial:     mov [rcx-64+08H],rax
               mov [rcx-64+10H],rax
               mov [rcx-64+18H],rax
@@ -32747,10 +32767,12 @@ asm
               mov [rcx-64+28H],rax
               mov [rcx-64+30H],rax
               mov [rcx-64+38H],rax
-              jnz @Initloop64        //are we done with all loops?
-              rep ret
+              jnbe @DoLoop64         //repeat while not(partial) and not(done)
+              jnz @InitLoop64        //(re)start the loop if not done
+@done:        rep ret                //rep ret saves 25! cycles.
+              db $66,$90             //nop
 @InitFillHuge:
-@FillHuge:    add rcx,r8
+@FillHuge:    add rcx,r8             // movdqnt is the same speed, but more hassle
               dec rdx
               db $48,$0F,$C3,$41,$C0 // movnti  [rcx-64+00H],rax
               db $48,$0F,$C3,$41,$C8 // movnti  [rcx-64+08H],rax
@@ -32762,32 +32784,6 @@ asm
               db $48,$0F,$C3,$41,$F8 // movnti  [rcx-64+38H],rax
               jnz @FillHuge
 @donefillhuge:mfence
-              ret
-@Below32:     and  r9d,not(3)
-              jz @SizeIs3
-@FillTail:    lea   r10,[rip +@SmallFill+ (7*4)]
-              sub   r10,r9
-              sub   edx,4
-              jmp   r10
-@SmallFill:   rep mov [rcx+24], eax
-              rep mov [rcx+20], eax
-              rep mov [rcx+16], eax
-              rep mov [rcx+12], eax
-              rep mov [rcx+08], eax
-              rep mov [rcx+04], eax
-              mov [rcx],eax
-@Fallthough:  mov [rcx+rdx],eax  //unaligned write to fix up tail
-              ret
-@SizeIs3:     shl edx,2           //r9 <= 3  r9*4
-              lea r10,[rip +@do3+ (4*3)]
-              sub r10,rdx
-              jmp r10
-@do3:         rep mov [rcx+2],al
-@do2:         mov [rcx],ax
-              ret
-@do1:         mov [rcx],al
-              rep ret
-@do0:         rep ret
 end;
 
 function StrLenSSE2(S: pointer): PtrInt;
