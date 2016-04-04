@@ -3969,6 +3969,10 @@ procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
 procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
   var Dest: TIntegerDynArray);
 
+/// copy an integer array, then sort it, low values first
+procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
+  var Dest: TInt64DynArray);
+
 /// fast binary search of an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
@@ -4049,20 +4053,24 @@ procedure AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
 function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
 
-/// add a 64 bit integer value at the end of a dynamic array of integers
+/// add a 64-bit integer value at the end of a dynamic array of integers
 procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// add a 64-bit integer value at the end of a dynamic array of integers
 procedure AddInt64(var Values: TInt64DynArray; Value: Int64); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// delete any integer in Values[]
+/// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt); overload;
 
-/// delete any integer in Values[]
+/// delete any 32-bit integer in Values[]
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
 
-/// find the maximum integer in Values[]
+/// delete any 64-bit integer in Values[]
+procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
+
+/// find the maximum 32-bit integer in Values[]
 function MaxInteger(const Values: TIntegerDynArray; ValuesCount: integer;
   MaxStart: integer=-1): Integer;
 
@@ -4082,12 +4090,12 @@ procedure CSVToIntegerDynArray(CSV: PUTF8Char; var Result: TIntegerDynArray);
 /// add the strings in the specified CSV text into a dynamic array of integer
 procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray);
 
-/// return the corresponding CSV text from a dynamic array of integer
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
 
-/// return the corresponding CSV text from a dynamic array of 64 bit integers
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
   const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
@@ -4095,7 +4103,14 @@ function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
 // ! MyArray := TIntegerDynArrayFrom([1,2,3]);
-function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
+function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray; 
+
+/// quick helper to initialize a dynamic array of integer from 64-bit integers
+// - would raise a ESynException if any Value[] can not fit into 32-bit, unless
+// raiseExceptionOnOverflow is FALSE and the returned array slot is filled
+// with maxInt/minInt
+function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
+  raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
 
 type
   /// used to store and retrieve Words in a sorted array
@@ -24910,6 +24925,18 @@ begin
   SetLength(Values,n);
 end;
 
+procedure DeleteInt64(var Values: TInt64DynArray; Index: PtrInt); overload;
+var n: PtrInt;
+begin
+  n := Length(Values);
+  if PtrUInt(Index)>=PtrUInt(n) then
+    exit; // wrong Index
+  dec(n);
+  if n>Index then
+    MoveFast(Values[Index+1],Values[Index],(n-Index)*sizeof(Int64));
+  SetLength(Values,n);
+end;
+
 procedure DeleteInteger(var Values: TIntegerDynArray; var ValuesCount: Integer; Index: PtrInt); overload;
 var n: PtrInt;
 begin
@@ -25348,6 +25375,15 @@ begin
   QuickSortInteger(pointer(Dest),0,ValuesCount-1);
 end;
 
+procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
+  var Dest: TInt64DynArray);
+begin
+  if ValuesCount>length(Dest) then
+    SetLength(Dest,ValuesCount);
+  MoveFast(Values^[0],Dest[0],ValuesCount*sizeof(Int64));
+  QuickSortInt64(pointer(Dest),0,ValuesCount-1);
+end;
+
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt;
 var L: PtrInt;
     cmp: integer;
@@ -25460,6 +25496,26 @@ var i: integer;
 begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
+    result[i] := Values[i];
+end;
+
+function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
+  raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
+var i: integer;
+const MinInt = -MaxInt-1;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
+    if Values[i]>MaxInt then
+      if raiseExceptionOnOverflow then
+        raise ESynException.CreateUTF8('TIntegerDynArrayFrom64: Values[%]=%>%',
+          [i,Values[i],MaxInt]) else
+        result[i] := MaxInt else
+    if Values[i]<MinInt then
+      if raiseExceptionOnOverflow then
+        raise ESynException.CreateUTF8('TIntegerDynArrayFrom64: Values[%]=%<%',
+          [i,Values[i],MinInt]) else
+        result[i] := MinInt else
     result[i] := Values[i];
 end;
 
