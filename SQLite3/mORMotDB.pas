@@ -83,7 +83,7 @@ unit mORMotDB;
   - huge performance boost when inserting individual data rows, by maintaining
     the IDs in memory instead of executing "select max(id)" - added new property
     EngineAddUseSelectMaxID to unset this optimization, and alternate
-    OnEngineAddComputeID and EngineAddIgnoreID properties for [201348a0af6]
+    OnEngineAddComputeID and EngineAddForcedID properties for [201348a0af6]
   - new function VirtualTableExternalRegisterAll(), to register all tables
     of a mORMot model to be handled via a specified database
   - TSQLRestStorageExternal.AdaptSQLForEngineList() will now use the generic
@@ -190,7 +190,7 @@ type
     fEngineAddUseSelectMaxID: Boolean;
     fEngineLockedMaxID: TID;
     fOnEngineAddComputeID: TOnEngineAddComputeID;
-    fEngineAddIgnoreID: boolean;
+    fEngineAddForcedID: TID;
     /// external column layout as retrieved by fProperties
     // - used internaly to guess e.g. if the column is indexed
     // - fFieldsExternal[] contains the external table info, and the internal
@@ -381,9 +381,14 @@ type
     /// disable internal ID generation for INSERT
     // - by default, a new ID will be set (either with 'select max(ID)' or via
     // the OnEngineLockedNextID event)
-    // - define this property to TRUE so that no ID would be computed or set:
-    // in this case, the ID is expected to be supplied
-    property EngineAddIgnoreID: boolean read fEngineAddIgnoreID write fEngineAddIgnoreID;
+    // - if the client supplies a forced ID within its JSON content, it would
+    // be used for adding
+    // - define this property to a non 0 value if no such ID is exepected to be
+    // supplied, but a fixed "fake ID" is returned by the Add() method; at
+    // external DB level, no such ID field would be computed nor set at INSERT -
+    // this feature may be useful when working with a legacy database - of course
+    // any ID-based ORM method would probably fail to work 
+    property EngineAddForcedID: TID read fEngineAddForcedID write fEngineAddForcedID;
     /// define an alternate method of compute the ID for INSERT
     // - by default, a new ID will be with 'select max(ID)', and an internal
     // counter (unless EngineAddUseSelectMaxID is true)
@@ -1040,8 +1045,8 @@ function TSQLRestStorageExternal.EngineLockedNextID: TID;
 
 var handled: boolean;
 begin
-  if (self=nil) or fEngineAddIgnoreID then begin
-    result := 0;
+  if fEngineAddForcedID<>0 then begin
+    result := fEngineAddForcedID;
     exit;
   end;
   if Assigned(fOnEngineAddComputeID) then begin
@@ -1253,7 +1258,8 @@ begin
     result := ExecuteFromJSON(SentData,soInsert,0);
     // UpdatedID=0 -> insert with EngineLockedNextID
     if (result>0) and (Owner<>nil) then begin
-      Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
+      if EngineAddForcedID=0 then // only worth it if result is a true ID
+        Owner.InternalUpdateEvent(seAdd,TableModelIndex,result,SentData,nil);
       Owner.FlushInternalDBCache;
     end;
   end;
