@@ -4112,6 +4112,9 @@ function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
   raiseExceptionOnOverflow: boolean=true): TIntegerDynArray;
 
+/// quick helper to initialize a dynamic array of 64-bit integers from 32-bit values
+function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
+
 type
   /// used to store and retrieve Words in a sorted array
   // - is defined either as an object either as a record, due to a bug
@@ -25516,6 +25519,14 @@ begin
         raise ESynException.CreateUTF8('TIntegerDynArrayFrom64: Values[%]=%<%',
           [i,Values[i],MinInt]) else
         result[i] := MinInt else
+    result[i] := Values[i];
+end;
+
+function TInt64DynArrayFrom(const Values: TIntegerDynArray): TInt64DynArray;
+var i: integer;
+begin
+  SetLength(result,length(Values));
+  for i := 0 to high(Values) do
     result[i] := Values[i];
 end;
 
