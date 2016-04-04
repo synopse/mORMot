@@ -5587,11 +5587,12 @@ type
   // - see TServiceMethodOptions for a description of each available option
   TServiceMethodOption = (
     optExecLockedPerInterface,
-    optExecInPerInterfaceThread, optFreeInPerInterfaceThread
-    {$ifndef LVCL},
+    optExecInPerInterfaceThread, optFreeInPerInterfaceThread,
+    {$ifndef LVCL}
     optExecInMainThread, optFreeInMainThread,
-    optVariantCopiedByReference, optInterceptInputOutput
+    optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
+    optNoLogInput, optNoLogOutput
   );
 
   /// set of per-method execution options for an interface-based service provider
@@ -5613,6 +5614,10 @@ type
   // creation of a per-interface dedicated thread
   // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
   // events would have their Sender.Input/Output values defined
+  // - if optNoLogInput/optNoLogOutput is set, TSynLog and ServiceLog() database
+  // won't log any parameter values at input/output - this may be useful for
+  // regulatory/safety purposes, e.g. to ensure that no sensitive information
+  // (like a credit card number or a password), is logged during process
   TServiceMethodOptions = set of TServiceMethodOption;
 
   /// internal per-method list of execution context as hold in TServiceFactory
@@ -12085,6 +12090,11 @@ type
     // default setting, for security reasons) - this function is always available
     // on TServiceFactoryServer side
     function RetrieveSignature: RawUTF8; override;
+    /// define execution options for a given set of methods
+    // - methods names should be specified as an array (e.g. ['Add','Multiply'])
+    // - if no method name is given (i.e. []), option will be set for all methods
+    // - only supports optNoLogInput and optNoLogOutput on the client side
+    procedure SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions);
     /// persist all service calls into a database instead of calling the client 
     // - expect a REST instance, which would store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
@@ -37567,16 +37577,19 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     Service.ExecuteMethod(self);
   end;
 var xml: RawUTF8;
+    m: integer;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
+  m := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
   {$ifdef WITHLOG}
   if sllServiceCall in Log.GenericFamily.Level then
-    Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
-      ServiceMethodIndex),ServiceParameters],Server);
+    if (m>=0) and (optNoLogInput in Service.fExecution[m].Options) then
+      Log.Log(sllServiceCall,'%{optNoLogInput}',[Service.InterfaceFactory.Methods[m].
+        InterfaceDotMethodName],Server) else
+      Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
+        ServiceMethodIndex),ServiceParameters],Server);
   {$endif}
-  if Assigned(Service.OnMethodExecute) and
-     (ServiceMethodIndex>Length(SERVICE_PSEUDO_METHOD)) then
-    if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[
-       ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD)]) then
+  if Assigned(Service.OnMethodExecute) and (m>=0) then
+    if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[m]) then
       exit; // execution aborted by OnMethodExecute() callback event
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
     xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
@@ -38934,8 +38947,9 @@ begin
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
       COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
-      if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
-        fLogFamily.SynLog.Log(sllServiceReturn,Call.OutBody,self,MAX_SIZE_RESPONSE_LOG);
+      if (Ctxt.ServiceExecution=nil) or not(optNoLogOutput in Ctxt.ServiceExecution^.Options) then
+        if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
+          fLogFamily.SynLog.Log(sllServiceReturn,Call.OutBody,self,MAX_SIZE_RESPONSE_LOG);
     {$endif}
     if mlTables in StatLevels then
       case Ctxt.Command of
@@ -53578,7 +53592,9 @@ begin
       W.AddShort('"POST",{Method:"');
       W.AddString(InterfaceDotMethodName);
       W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
-      for a := ArgsInFirst to ArgsInLast do
+      if optNoLogInput in Sender.fOptions then
+        W.AddShort('optNoLogInput: true') else
+        for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
@@ -53589,7 +53605,9 @@ begin
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
-      for a := ArgsOutFirst to ArgsOutLast do
+      if optNoLogOutput in Sender.fOptions then
+        W.AddShort('optNoLogOutput: true') else
+        for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
           W.AddShort(ParamName^);
@@ -53617,7 +53635,7 @@ var Inst: TServiceFactoryServerInstance;
     exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
-    ndx: integer;
+    m: integer;
 
   procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
   var method: RawUTF8;
@@ -53785,16 +53803,16 @@ begin
       if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
         if Ctxt.fAuthSession.fInterfaces=nil then
           SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
-        ndx := Ctxt.fServiceListInterfaceMethodIndex;
-        if ndx<0 then
-          ndx := Rest.Services.fListInterfaceMethods.FindHashed(
+        m := Ctxt.fServiceListInterfaceMethodIndex;
+        if m<0 then
+          m := Rest.Services.fListInterfaceMethods.FindHashed(
             fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
-        if ndx>=0 then
+        if m>=0 then
         with Ctxt.fAuthSession do begin
-          stats := fInterfaces[ndx];
+          stats := fInterfaces[m];
           if stats=nil then begin
             stats := TSynMonitorInputOutput.Create;
-            fInterfaces[ndx] := stats;
+            fInterfaces[m] := stats;
           end;
           StatsFromContext(stats,Ctxt.Call^,timeEnd,true);
         end;
@@ -55814,9 +55832,10 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
   aClient: TSQLRestClientURI): boolean;
 var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
-    status,ndx: integer;
+   status,m: integer;
     {$ifdef WITHLOG}
     Log: ISynLog; // for Enter auto-leave to work with FPC
+    p: RawUTF8;
     {$endif}
 begin
   result := false;
@@ -55828,9 +55847,13 @@ begin
     aClient := fClient;
   if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
+  m := fInterface.FindMethodIndex(aMethod);
   {$ifdef WITHLOG}
-  Log := fRest.LogClass.Enter('InternalInvoke I%.% [%] %',
-    [fInterfaceURI,aMethod,clientDrivenID,aParams],self);
+  if (m<0) or not (optNoLogInput in fExecution[m].Options) then
+    p := aParams else
+    p := 'optNoLogInput';
+  Log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
+    [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
   // compute URI according to current routing scheme
   if fForcedURI<>'' then
@@ -55839,11 +55862,9 @@ begin
       uri := aClient.Model.Root+'/'+fInterfaceMangledURI else
       uri := aClient.Model.Root+'/'+fInterfaceURI;
   fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
-  if ParamsAsJSONObject and (clientDrivenID='') then begin
-    ndx := fInterface.FindMethodIndex(aMethod);
-    if ndx>=0 then  // ParamsAsJSONObject won't apply to _signature_ e.g.
-      sent := fInterface.Methods[ndx].ArgsArrayToObject(Pointer(sent),true);
-  end;
+  if ParamsAsJSONObject and (clientDrivenID='') then
+    if m>=0 then  // ParamsAsJSONObject won't apply to _signature_ e.g.
+      sent := fInterface.Methods[m].ArgsArrayToObject(Pointer(sent),true);
   // call remote server
   status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
   if not StatusCodeIsSuccess(status) then begin
@@ -55868,6 +55889,7 @@ begin
   // decode result
   if aServiceCustomAnswer=nil then begin // decode JSON object
     {$ifdef WITHLOG}
+    if (m<0) or not (optNoLogOutput in fExecution[m].Options) then
     with fRest.fLogFamily do
       if (sllServiceReturn in Level) and (resp<>'') then
         SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
@@ -56041,6 +56063,22 @@ begin
     if SendNotificationsPending=0 then
       exit;
   until GetTickCount64>timeOut;
+end;
+
+procedure TServiceFactoryClient.SetOptions(const aMethod: array of RawUTF8;
+  aOptions: TServiceMethodOptions);
+var o: TServiceMethodOption;
+    m,i: integer;
+begin
+  for o := low(o) to high(o) do
+    if (o in aOptions) and not (o in [optNoLogInput,optNoLogOutput]) then
+      raise EServiceException.CreateUTF8('%.SetOptions(%) not supported',
+        [self,GetEnumName(TypeInfo(TServiceMethodOption),ord(o))^]);
+  if high(aMethod)<0 then
+    for i := 0 to fInterface.fMethodsCount-1 do
+      fExecution[i].Options := aOptions else
+    for m := 0 to high(aMethod) do
+      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Options := aOptions;
 end;
 
 
