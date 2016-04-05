@@ -1850,7 +1850,9 @@ begin
            [self,StoredClass,ToText(Occasion)^]);
     end;
     // decode fields
-    Decoder.Decode(SentData,nil,pNonQuoted,InsertedID,true);
+    if (fEngineAddForcedID<>0) and (InsertedID=fEngineAddForcedID) then
+      Decoder.Decode(SentData,nil,pNonQuoted,0,true) else
+      Decoder.Decode(SentData,nil,pNonQuoted,InsertedID,true);
     if (Decoder.FieldCount=0) and (Occasion=soUpdate) then begin
       result := UpdatedID; // SentData='' -> no column to update
       exit;
