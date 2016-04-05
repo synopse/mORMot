@@ -49122,7 +49122,7 @@ var W: TTextWriter;
 begin
   W := TTextWriter.CreateOwnedStream;
   try
-    SaveToJSON(W);
+    SaveToJSON(W,EnumSetsAsText);
     W.SetText(result);
   finally
     W.Free;
