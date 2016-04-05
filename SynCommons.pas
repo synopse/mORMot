@@ -36204,6 +36204,7 @@ end;
 
 procedure TDocVariantData.AddNameValuesToObject(const NameValuePairs: array of const);
 var n,arg: integer;
+    tmp: variant;
 begin
   n := length(NameValuePairs) shr 1;
   if (n=0) or (VKind=dvArray) then
@@ -36213,7 +36214,11 @@ begin
   SetLength(VName,VCount+n);
   for arg := 0 to n-1 do begin
     VarRecToUTF8(NameValuePairs[arg*2],VName[arg+VCount]);
-    VarRecToVariant(NameValuePairs[arg*2+1],VValue[arg+VCount]);
+    if dvoValueCopiedByReference in VOptions then
+      VarRecToVariant(NameValuePairs[arg*2+1],VValue[arg+VCount]) else begin
+      VarRecToVariant(NameValuePairs[arg*2+1],tmp);
+      SetVariantByValue(tmp,VValue[arg+VCount]);
+    end;
   end;
   inc(VCount,n);
 end;
@@ -36247,13 +36252,19 @@ end;
 procedure TDocVariantData.InitArray(const Items: array of const;
   aOptions: TDocVariantOptions=[]);
 var arg: integer;
+    tmp: variant;
 begin
   Init(aOptions,dvArray);
   if high(Items)>=0 then begin
     VCount := length(Items);
     SetLength(VValue,VCount);
-    for arg := 0 to high(Items) do
-      VarRecToVariant(Items[arg],VValue[arg]);
+    if dvoValueCopiedByReference in aOptions then
+      for arg := 0 to high(Items) do
+        VarRecToVariant(Items[arg],VValue[arg]) else
+      for arg := 0 to high(Items) do begin
+        VarRecToVariant(Items[arg],tmp);
+        SetVariantByValue(tmp,VValue[arg]);
+      end;
   end;
 end;
 

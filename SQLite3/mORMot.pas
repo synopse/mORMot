@@ -36521,8 +36521,9 @@ begin
       Where := FormatUTF8('% limit %',[Where,MaxRowLimit]);
     ListUpdated := Master.MultiFieldValues(Table,'*',Where,
       [Props.RecordVersionField.Name,Props.RecordVersionField.Name],[RecordVersion]);
+    if ListUpdated=nil then
+      exit; // DB error
     ListDeleted := nil;
-    if ListUpdated<>nil then
     try
       DeletedMinID := Int64(SourceTableIndex) shl SQLRECORDVERSION_DELETEID_SHIFT;
       Where := 'ID>? and ID<? order by ID';
