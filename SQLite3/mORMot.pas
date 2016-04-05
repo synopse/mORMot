@@ -12862,9 +12862,13 @@ type
     // overriding this method, in a reverse logic to overriden DefinitionTo()
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); virtual;
-    /// used by Add and AddWithBlobs() before EngineAdd()
+    /// used by Add() and AddWithBlobs() before EngineAdd()
     procedure GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
-      ForceID, DoNotAutoComputeFields, WithBlobs: boolean; var result: RawUTF8);
+      ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
+      CustomFields: PSQLFieldBits; var result: RawUTF8);
+    /// used by all overloaded Add() methods
+    function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
+      ForceID, DoNotAutoComputeFields: boolean): TID; virtual; 
    protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -13473,13 +13477,30 @@ type
     // access to the separated pivot table
     // - this method will call EngineAdd() to perform the request
     function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      DoNotAutoComputeFields: boolean=false): TID; overload; virtual;
+      DoNotAutoComputeFields: boolean=false): TID; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// create a new member, including selected fields
+    // - implements REST POST collection
+    // - if ForceID is true, client sends the Value.ID field to use this ID for
+    // adding the record (instead of a database-generated ID)
+    // - this method will call EngineAdd() to perform the request
+    function Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+      ForceID: boolean=false; DoNotAutoComputeFields: boolean=false): TID; overload;
+    /// create a new member, including selected fields
+    // - implements REST POST collection
+    // - if ForceID is true, client sends the Value.ID field to use this ID for
+    // adding the record (instead of a database-generated ID)
+    // - this method will call EngineAdd() to perform the request
+    function Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+      ForceID: boolean=false; DoNotAutoComputeFields: boolean=false): TID; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// create a new member, including its BLOB fields
     // - implements REST POST collection
     // - this method would create a JSON representation of the document
     // including the BLOB fields as Base64 encoded text, so would be less
     // efficient than a dual Add() + UpdateBlobFields() methods if the
     // binary content has a non trivial size
+    // - this method will call EngineAdd() to perform the request
     function AddWithBlobs(Value: TSQLRecord; ForceID: boolean=false;
       DoNotAutoComputeFields: boolean=false): TID; virtual;
     /// create a new member, from a supplied list of field values
@@ -13530,7 +13551,7 @@ type
       const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
     // - implements REST POST if Value.ID=0 or ForceID is set, or a REST PUT
-    // collection on Value.ID
+    // collection to update the record pointed by a Value.ID<>0 
     // - will return the created or updated ID
     function AddOrUpdate(Value: TSQLRecord; ForceID: boolean=false): TID;
     /// update one field/column value a given member
@@ -17279,7 +17300,6 @@ type
     function BeforeUpdateEvent(Value: TSQLRecord): Boolean; virtual;
     /// overridden method which will call ClientRetrieve()
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
-  public
     /// create a new member
     // - implements REST POST collection
     // - URI is 'ModelRoot/TableName' with POST method
@@ -17292,8 +17312,9 @@ type
     // - on success, Value.ID is updated with the new ROWID
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
     // - this overridden method will send BLOB fields, if ForceBlobTransfert is set
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
-      DoNotAutoComputeFields: boolean=false): TID; override;
+    function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
+      ForceID, DoNotAutoComputeFields: boolean): TID; override; 
+  public
     /// update a member
     // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
@@ -33320,7 +33341,9 @@ begin
 end;
 
 procedure TSQLRest.GetJSONValuesForAdd(TableIndex: integer; Value: TSQLRecord;
-  ForceID, DoNotAutoComputeFields, WithBlobs: boolean; var result: RawUTF8);
+  ForceID, DoNotAutoComputeFields, WithBlobs: boolean;
+  CustomFields: PSQLFieldBits; var result: RawUTF8);
+var fields: TSQLFieldBits;
 begin
   if not DoNotAutoComputeFields then // update TModTime/TCreateTime fields
     Value.ComputeFieldsBeforeWrite(self,seAdd);
@@ -33332,12 +33355,20 @@ begin
   end else
     if Value.fID=0 then
       ForceID := false;
-  if withBlobs then
-    result := Value.GetJSONValues(true,ForceID,Value.RecordProps.CopiableFieldsBits) else
-    result := Value.GetJSONValues(true,ForceID,soInsert);
+  if CustomFields <> nil then
+    if DoNotAutoComputeFields then
+      fields := CustomFields^ else
+      fields := CustomFields^+Value.RecordProps.ModCreateTimeFieldsBits else
+    if withBlobs then
+      fields := Value.RecordProps.CopiableFieldsBits else
+      fields := Value.RecordProps.SimpleFieldsBits[soInsert];
+  if (not ForceID) and IsZero(fields) then
+    result := '' else
+    result := Value.GetJSONValues(true,ForceID,fields);
 end;
 
-function TSQLRest.Add(Value: TSQLRecord; SendData,ForceID,DoNotAutoComputeFields: boolean): TID;
+function TSQLRest.InternalAdd(Value: TSQLRecord; SendData: boolean;
+  CustomFields: PSQLFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
 var json: RawUTF8;
     TableIndex: integer;
 begin
@@ -33347,7 +33378,7 @@ begin
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
   if SendData then
-    GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,false,json) else
+    GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,false,CustomFields,json) else
     json := '';
   // on success, returns the new ROWID value; on error, returns 0
   result := EngineAdd(TableIndex,json); // will call static if necessary
@@ -33355,6 +33386,28 @@ begin
   Value.fID := result;
   if SendData and (result<>0) then
     fCache.Notify(PSQLRecordClass(Value)^,result,json,soInsert);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; SendData,ForceID,DoNotAutoComputeFields: boolean): TID;
+begin
+  result := InternalAdd(Value,SendData,nil,ForceID,DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
+  ForceID, DoNotAutoComputeFields: boolean): TID;
+var f: TSQLFieldBits;
+begin
+  with Value.RecordProps do
+    if CustomCSVFields='*' then // FieldBitsFromCSV('*') would use [soSelect]
+      f := SimpleFieldsBits[soInsert] else
+      f := FieldBitsFromCSV(CustomCSVFields);
+  result := InternalAdd(Value,true,@f,ForceID,DoNotAutoComputeFields);
+end;
+
+function TSQLRest.Add(Value: TSQLRecord; const CustomFields: TSQLFieldBits;
+  ForceID, DoNotAutoComputeFields: boolean): TID;
+begin
+  result := InternalAdd(Value,true,@CustomFields,ForceID,DoNotAutoComputeFields);
 end;
 
 function TSQLRest.Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
@@ -33386,7 +33439,7 @@ begin
     exit;
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,true,json);
+  GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,true,nil,json);
   // on success, returns the new ROWID value; on error, returns 0
   result := EngineAdd(TableIndex,json); // will call static if necessary
   // on success, Value.ID is updated with the new ROWID
@@ -44305,10 +44358,10 @@ begin
   fForceBlobTransfert[i] := aValue;
 end;
 
-function TSQLRestClient.Add(Value: TSQLRecord; SendData: boolean;
-  ForceID,DoNotAutoComputeFields: boolean): TID;
+function TSQLRestClient.InternalAdd(Value: TSQLRecord; SendData: boolean;
+  CustomFields: PSQLFieldBits; ForceID, DoNotAutoComputeFields: boolean): TID;
 begin
-  result := inherited Add(Value,SendData,ForceID,DoNotAutoComputeFields);
+  result := inherited InternalAdd(Value,SendData,CustomFields,ForceID,DoNotAutoComputeFields);
   if (result>0) and (fForceBlobTransfert<>nil) and
      fForceBlobTransfert[fModel.GetTableIndexExisting(PSQLRecordClass(Value)^)] then
      UpdateBlobFields(Value);
