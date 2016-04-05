@@ -32553,204 +32553,211 @@ end;
     it fetch the corresponding cache line from memory into the cache hierarchy.
     By-passing the cache should enhance move() speed of big memory blocks. }
 
-procedure MoveSSE2;
+procedure MoveSSE2; // Johan Bontes refactored revision
 asm // rcx=Source, rdx=Dest, r8=Count
-     .noframe
-     mov rax,r8
-     sub rcx,rdx
-     je @11
-     jnc @03
-     add rax,rcx
-     jc @17
-@03: cmp r8,8
-     jl @09
-     test dl,07H
-     jz @06
-     test dl,01H
-     jz @04
-     mov al,[rcx+rdx]
-     dec r8
-     mov [rdx],al
-     add rdx,1
-@04: test dl,02H
-     jz @05
-     mov ax,[rcx+rdx]
-     sub r8,2
-     mov [rdx],ax
-     add rdx,2
-@05: test dl,04H
-     jz @06
-     mov eax,[rcx+rdx]
-     sub r8,4
-     mov [rdx],eax
-     add rdx,4
-@06: mov r9,r8
-     shr r9,5
-     jnz @12
-@07: mov r9,r8
-     shr r9,3
-     jz @09
-     nop
-@08: dec r9
-     mov rax,[rcx+rdx]
-     mov [rdx],rax
-     lea rdx,rdx+8
-     jnz @08
-     and r8,07H
-@09: test r8,r8
-     jle @11
-     db 66H,66H,66H,90H
-@10: dec r8
-     mov al,[rcx+rdx]
-     mov [rdx],al
-     lea rdx,rdx+1
-     jnz @10
-@11: ret
-@12: cmp r9,8192
-     jc @13
-     cmp rcx,4096
-     jnc @14
-@13: dec r9
-     lea rdx,rdx+32
-     mov rax,[rcx+rdx-20H]
-     mov r10,[rcx+rdx-18H]
-     mov [rdx-20H],rax
-     mov [rdx-18H],r10
-     mov rax,[rcx+rdx-10H]
-     mov r10,[rcx+rdx-8H]
-     mov [rdx-10H],rax
-     mov [rdx-8H],r10
-     jnz @13
-     and r8,1FH
-     jmp @07
-@14: mov eax,32
-     db 66H,66H,66H,90H,66H,66H,66H,90H
-@15: prefetchnta [rcx+rdx]
-     prefetchnta [rcx+rdx+40H]
-     add rdx,128
-     dec eax
-     jnz @15
-     sub rdx,4096
-     mov eax,64
-@16: add rdx,64
-     mov r9,[rcx+rdx-40H]
-     mov r10,[rcx+rdx-38H]
-     db $4C,$0F,$C3,$4A,$C0 // movnti [rdx-40H],r9
-     db $4C,$0F,$C3,$52,$C8 // movnti [rdx-38H],r10
-     mov r9,[rcx+rdx-30H]
-     mov r10,[rcx+rdx-28H]
-     db $4C,$0F,$C3,$4A,$D0 // movnti [rdx-30H],r9
-     db $4C,$0F,$C3,$52,$D8 // movnti [rdx-28H],r10
-     dec eax
-     mov r9,[rcx+rdx-20H]
-     mov r10,[rcx+rdx-18H]
-     db $4C,$0F,$C3,$4A,$E0 // movnti [rdx-20H],r9
-     db $4C,$0F,$C3,$52,$E8 // movnti [rdx-18H],r10
-     mov r9,[rcx+rdx-10H]
-     mov r10,[rcx+rdx-8H]
-     db $4C,$0F,$C3,$4A,$F0 // movnti [rdx-10H],r9
-     db $4C,$0F,$C3,$52,$F8 // movnti [rdx-8H],r10
-     jnz @16
-     sub r8,4096
-     cmp r8,4096
-     jnc @14
-     mfence
-     jmp @06
-@17: add rdx,r8
-     cmp r8,8
-     jl @23
-     test dl,07H
-     jz @20
-     test dl,01H
-     jz @18
-     dec rdx
-     mov al,[rcx+rdx]
-     dec r8
-     mov [rdx],al
-@18: test dl,02H
-     jz @19
-     sub rdx,2
-     mov ax,[rcx+rdx]
-     sub r8,2
-     mov [rdx],ax
-@19: test dl,04H
-     jz @20
-     sub rdx,4
-     mov eax,[rcx+rdx]
-     sub r8,4
-     mov [rdx],eax
-@20: mov r9,r8
-     shr r9,5
-     jnz @26
-@21: mov r9,r8
-     shr r9,3
-     jz @23
-@22: sub rdx,8
-     mov rax,[rcx+rdx]
-     dec r9
-     mov [rdx],rax
-     jnz @22
-     and r8,07H
-@23: test r8,r8
-     jle @25
-     db 66H,66H,66H,90H,66H,66H,66H,90H
-     db 66H,66H,66H,90H,90H
-@24: dec rdx
-     mov al,[rcx+rdx]
-     dec r8
-     mov  [rdx],al
-     jnz @24
-@25: ret
-@26: cmp r9,8192
-     jc @27
-     cmp rcx,-4096
-     jc @28
-@27: sub rdx,32
-     mov rax,[rcx+rdx+18H]
-     mov r10,[rcx+rdx+10H]
-     mov [rdx+18H],rax
-     mov [rdx+10H],r10
-     dec r9
-     mov rax,[rcx+rdx+8H]
-     mov r10,[rcx+rdx]
-     mov [rdx+8H],rax
-     mov [rdx],r10
-     jnz @27
-     and r8,1FH
-     jmp @21
-@28: mov eax,32
-     db 66H,66H,66H,90H,66H,66H,90H
-@29: sub rdx,128
-     prefetchnta [rcx+rdx]
-     prefetchnta [rcx+rdx+40H]
-     dec eax
-     jnz @29
-     add rdx,4096
-     mov eax,64
-@30: sub rdx,64
-     sub r8,4096
-     mov r9,[rcx+rdx+38H]
-     mov r10,[rcx+rdx+30H]
-     db $4C,$0F,$C3,$4A,$38 // movnti [rdx+38H],r9
-     db $4C,$0F,$C3,$52,$30 // movnti [rdx+30H],r10
-     mov r9,[rcx+rdx+28H]
-     mov r10,[rcx+rdx+20H]
-     db $4C,$0F,$C3,$4A,$28 // movnti [rdx+28H],r9
-     db $4C,$0F,$C3,$52,$20 // movnti [rdx+20H],r10
-     dec eax
-     mov r9,[rcx+rdx+18H]
-     mov r10,[rcx+rdx+10H]
-     db $4C,$0F,$C3,$4A,$18 // movnti [rdx+18H],r9
-     db $4C,$0F,$C3,$52,$10 // movnti [rdx+10H],r10
-     mov r9,[rcx+rdx+8H]
-     mov r10,[rcx+rdx]
-     db $4C,$0F,$C3,$4A,$08 // movnti [rdx+8H],r9
-     db $4C,$0F,$C3,$12     // movnti [rdx],r10
-     jnz @30
-     cmp r8,4096
-     jnc @28
-     mfence
-     jmp @20
+               .noframe
+               .align 16
+               sub rcx,rdx
+               push rbx                 //allow better alignment of loops (saves a cycle).
+               mov rax,r8
+               mov r11d,128             //code shink in prefetch loop
+               je @done
+               jnc @MoveForwards
+               add rax,rcx
+               jc @MoveBackwards
+@MoveForwards: cmp r8,8
+               jl @Below8
+               test dl,07H
+               jz @IsAbove32
+               test dl,01H
+               jz @TryMoveWord
+               mov al,[rcx+rdx]
+               dec r8
+               mov [rdx],al
+               dec rdx
+@TryMoveWord:  test dl,02H
+               jz @TryMoveDWord
+               mov ax,[rcx+rdx]
+               sub r8,2
+               mov [rdx],ax
+               add rdx,2
+@TryMoveDWord: test dl,04H
+               jz @IsAbove32
+               mov eax,[rcx+rdx]
+               sub r8,4
+               mov [rdx],eax
+               add rdx,4
+@IsAbove32:    mov rbx,r8
+               shr rbx,5
+               jnz @Above32
+@IsBelow8:     mov rax,r8
+               shr eax,3
+               jz @Below8
+@Loop8:        dec eax
+               mov rbx,[rcx+rdx]
+               mov [rdx],rbx
+               lea rdx,[rdx+8]
+               jnz @Loop8
+               and r8d,7
+@Below8:       test r8,r8
+               jle @done
+@MovePerByte:  dec r8
+               mov al,[rcx+rdx]
+               mov [rdx],al
+               lea rdx,[rdx+1]
+               jnz @MovePerByte
+@done:         pop rbx
+               ret
+               nop
+@Above32:      cmp rbx,8192
+               jc @Below8192
+               mov eax,32
+               cmp rcx,4096
+               jnc @Prefetch_4K
+@Below8192:
+@loop8192:     dec ebx
+               mov rax,[rcx+rdx]
+               mov r11,[rcx+rdx+08H]
+               mov [rdx],rax
+               mov [rdx+08H],r11
+               mov rax,[rcx+rdx+10H]
+               mov r11,[rcx+rdx+18H]
+               mov [rdx+10H],rax
+               mov [rdx+18H],r11
+               lea rdx,rdx+32
+               jnz @Loop8192
+               and r8d,1FH
+               jmp @IsBelow8
+@Prefetch_4K:  //assert eax=32
+@PrefetchLoop: prefetchnta [rcx+rdx]
+               prefetchnta [rcx+rdx+40H]
+               add rdx,r11
+               dec eax
+               jnz @PrefetchLoop
+               sub rdx,4096
+               mov eax,64
+               db $0F,$1F,$40,$00                           //nop4
+@Loop64:       mov rbx,[rcx+rdx]
+               mov r10,[rcx+rdx+08H]
+               db $48,$0F,$C3,$1A     // movnti [rdx],rbx
+               db $4C,$0F,$C3,$52,$08 // movnti [rdx+08H],r10
+               mov rbx,[rcx+rdx+10H]
+               mov r10,[rcx+rdx+18H]
+               dec eax
+               db $48,$0F,$C3,$5A,$10 // movnti [rdx+10H],rbx
+               db $4C,$0F,$C3,$52,$18 // movnti [rdx+18],r10
+               mov rbx,[rcx+rdx+20H]
+               mov r10,[rcx+rdx+28H]
+               db $48,$0F,$C3,$5A,$20 // movnti [rdx+20H],rbx
+               db $4C,$0F,$C3,$52,$28 // movnti [rdx+28H],r10
+               mov rbx,[rcx+rdx+30H]
+               mov r10,[rcx+rdx+38H]
+               db $48,$0F,$C3,$5A,$30 // movnti [rdx+30H],rbx
+               db $4C,$0F,$C3,$52,$38 // movnti [rdx+38H],r10
+               lea rdx,rdx+64
+               jnz @Loop64
+               cmp r8,(4096*2)
+               lea r8,r8-4096
+               mov eax,32
+               jnc @Prefetch_4K
+               mfence
+               jmp @IsAbove32
+
+@MoveBackwards:add rdx,r8
+               cmp r8,8
+               jl @IsEmpty
+               test dl,07H
+               jz @IsAbove32_2
+               test dl,01H
+               jz @TryMoveWord2
+               dec rdx
+               mov al,[rcx+rdx]
+               dec r8
+               mov [rdx],al
+@TryMoveWord2: test dl,02H
+               jz @TryMoveDWord2
+               sub rdx,2
+               mov ax,[rcx+rdx]
+               sub r8,2
+               mov [rdx],ax
+@TryMoveDWord2:test dl,04H
+               jz @IsAbove32_2
+               sub rdx,4
+               mov eax,[rcx+rdx]
+               sub r8,4
+               rep mov [rdx],eax
+@IsAbove32_2:  rep mov rbx,r8
+               shr rbx,5
+               jnz @Below8K
+@IsBelow8_2:   rep mov rbx,r8
+               shr rbx,3
+               jz @IsEmpty
+@Loop8_2:      sub rdx,8
+               mov rax,[rcx+rdx]
+               dec rbx
+               mov [rdx],rax
+               jnz @Loop8_2
+               and r8d,07H
+@IsEmpty:      test r8,r8
+               jle @Return
+@MovePerByte2: dec rdx
+               mov al,[rcx+rdx]
+               dec r8
+               mov  [rdx],al
+               jnz @MovePerByte2
+@Return:       pop rbx
+               ret
+@Below8K:      cmp rbx,8192
+               jc @Loop32
+               cmp rcx,-4096
+               jc @Prefetch_4K2
+@Loop32:       sub rdx,32
+               dec ebx
+               mov rax,[rcx+rdx+18H]
+               mov r10,[rcx+rdx+10H]
+               mov [rdx+18H],rax
+               mov [rdx+10H],r10
+               mov rax,[rcx+rdx+8H]
+               mov r10,[rcx+rdx]
+               mov [rdx+8H],rax
+               mov [rdx],r10
+               jnz @Loop32
+               and r8d,1FH
+               jmp @IsBelow8_2
+@Prefetch_4K2: rep mov eax,32
+@PrefetchLoop2:sub rdx,r11
+               prefetchnta [rcx+rdx]
+               prefetchnta [rcx+rdx+40H]
+               dec eax
+               jnz @PrefetchLoop2
+               add rdx,4096
+               mov eax,64              //eax is always zero at this point.
+               db $66,$0F,$1F,$00
+@Loop64_2:     sub rdx,64
+               dec eax
+               mov rbx,[rcx+rdx+38H]
+               mov r10,[rcx+rdx+30H]
+               db $48,$0F,$C3,$5A,$38 // movnti [rdx+38H],rbx
+               db $4C,$0F,$C3,$52,$30 // movnti [rdx+30H],r10
+               mov rbx,[rcx+rdx+28H]
+               mov r10,[rcx+rdx+20H]
+               db $48,$0F,$C3,$5A,$28 // movnti [rdx+28H],rbx
+               db $4C,$0F,$C3,$52,$20 // movnti [rdx+20H],r10
+
+               mov rbx,[rcx+rdx+18H]
+               mov r10,[rcx+rdx+10H]
+               db $48,$0F,$C3,$5A,$18 // movnti [rdx+18H],rbx
+               db $4C,$0F,$C3,$52,$10 // movnti [rdx+10H],r10
+               mov rbx,[rcx+rdx+8H]
+               mov r10,[rcx+rdx]
+               db $48,$0F,$C3,$5A,$08 // movnti [rdx+8H],rbx
+               db $4C,$0F,$C3,$12     // movnti [rdx],r10
+               jnz @Loop64_2
+               cmp r8,(4096*2)
+               lea r8,r8-4096
+               jnc @Prefetch_4K2
+               mfence
+               jmp @IsAbove32_2
 end;
 
 procedure FillCharSSE2; // Johan Bontes refactored revision
@@ -33217,7 +33224,7 @@ begin
   {$ifdef CPU64}
   StrLen := @StrLenSSE2;
   FillcharFast := @FillCharSSE2;
-  MoveFast := @MoveSSE2;
+  //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
   {$else}
   {$ifdef PUREPASCAL}
   Pointer(@FillCharFast) := SystemFillCharAddress;
