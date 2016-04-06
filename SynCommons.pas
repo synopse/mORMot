@@ -11085,6 +11085,9 @@ type
     function Version32: integer;
     /// build date and time of this exe file, as plain text
     function BuildDateTimeString: string;
+    /// returns the version information of a specified exe file as text
+    // - includes Detailed and BuildDateTime
+    class function GetVersionInfo(const aFileName: TFileName): RawUTF8;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -31010,6 +31013,16 @@ end;
 function TFileVersion.BuildDateTimeString: string;
 begin
   DateTimeToIso8601StringVar(fBuildDateTime,' ',result);
+end;
+
+class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
+begin
+  with Create(aFileName,0,0,0) do
+  try
+    FormatUTF8('% % %',[ExtractFileName(aFileName),Detailed,BuildDateTimeString],result);
+  finally
+    Free;
+  end;
 end;
 
 procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
