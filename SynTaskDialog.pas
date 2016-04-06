@@ -75,7 +75,7 @@ interface
 
 {$I Synopse.inc}
 
-{$IFDEF CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+{$IFNDEF DELPHI5OROLDER}  // Delphi 6 or newer
   {$ifndef VER140} // Delphi 6
     {$define WITHUXTHEME} // Themes unit exists till Delphi 7
   {$endif}

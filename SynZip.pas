@@ -1171,7 +1171,7 @@ var lhr: PLastHeader;
     H: PFileHeader;
     lfhr: PLocalFileHeader;
     i,j: integer;
-    {$ifdef CONDITIONALEXPRESSIONS}
+    {$ifndef DELPHI5OROLDER}
     tmp: UTF8String;
     {$else}
     tmp: ZipString;
@@ -1216,7 +1216,7 @@ begin
       for j := 0 to infoLocal^.nameLen-1 do
         if storedName[j]='/' then // normalize path delimiter
           PAnsiChar(Pointer(tmp))[j] := '\';
-      {$ifdef CONDITIONALEXPRESSIONS}
+      {$ifndef DELPHI5OROLDER}
       // Delphi 5 doesn't have UTF8Decode/UTF8Encode functions -> make 7 bit version
       if infoLocal^.GetUTF8FileName then
         // decode UTF-8 file name into native string/TFileName type
@@ -1392,7 +1392,7 @@ begin
     raise ESynZipException.CreateFmt('Error decompressing %s',[Entry[aIndex].zipName]);
 end;
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
 /// DirectoryExists returns a boolean value that indicates whether the
 //  specified directory exists (and is actually a directory)
 function DirectoryExists(const Directory: string): boolean;
@@ -1468,10 +1468,10 @@ end;
 function TZipRead.UnZipAll(DestDir: TFileName): integer;
 begin
   if DestDir<>'' then
-    {$ifdef CONDITIONALEXPRESSIONS}
-    DestDir := IncludeTrailingPathDelimiter(DestDir);
-    {$else}
+    {$ifdef DELPHI5OROLDER}
     DestDir := IncludeTrailingBackslash(DestDir);
+    {$else}
+    DestDir := IncludeTrailingPathDelimiter(DestDir);
     {$endif}
   for result := 0 to Count-1 do
     if not UnZip(result,DestDir) then

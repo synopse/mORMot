@@ -8174,7 +8174,7 @@ begin
 end;
 
 {$ifdef MSWINDOWS} // same conditions as in SynCrtSock.pas
-  {$ifdef CONDITIONALEXPRESSIONS}
+  {$ifndef DELPHI5OROLDER}
     // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
     {$define USE_PROV_RSA_AES}
   {$endif}

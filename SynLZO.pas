@@ -504,9 +504,7 @@ asm
         dec     esi
         cmp     eax, 33
         jg      @@1772
-{$ifdef CONDITIONALEXPRESSIONS}
-        lea     esi,esi*4
-{$else} shl     esi,2      {$endif}
+        lea     esi,[esi*4]
         sub     eax, 2
         mov     edx, [ebp-8H]
         or      eax, 20H
@@ -557,10 +555,7 @@ asm
 @@1777: mov     edx, [ebp-8H]
         mov     [edx], al
         inc     dword ptr [ebp-8H]
-@@1778:
-{$ifdef CONDITIONALEXPRESSIONS}
-        lea     esi,esi*4
-{$else} shl     esi,2      {$endif}
+@@1778: lea     esi,[esi*4]
         mov     eax, [ebp-8H]
         add     dword ptr [ebp-8H], 2
         mov     word ptr [eax], si
@@ -584,9 +579,7 @@ asm
         lea     eax, [ebx-1]
         shl     esi, 8
         sub     eax, ecx
-{$ifdef CONDITIONALEXPRESSIONS}
-        lea     edx,edx*4
-{$else} shl     edx,2      {$endif}
+        lea     edx,[edx*4]
         shl     eax, 5
         or      eax, edx
         mov     edx, [ebp-8H]
@@ -624,9 +617,7 @@ asm
         mov     edx, [ebp-8H]
         mov     [edx], al
         inc     dword ptr [ebp-8H]
-{$ifdef CONDITIONALEXPRESSIONS}
-        lea     esi,esi*4
-{$else} shl     esi,2      {$endif}
+        lea     esi,[esi*4]
         mov     eax, [ebp-8H]
         mov     word ptr [eax], si
         add     dword ptr [ebp-8H], 2

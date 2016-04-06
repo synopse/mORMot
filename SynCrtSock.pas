@@ -235,13 +235,14 @@ uses
   {$endif}
 {$else MSWINDOWS}
   {$undef USEWININET}
-  {$ifdef CONDITIONALEXPRESSIONS}
-  Types,
-  {$endif}
   {$ifdef FPC}
   Sockets,
   SynFPCSock,
   SynFPCLinux,
+  {$else}
+  {$ifndef DELPHI5OROLDER}
+  Types,
+  {$endif}
   {$endif}
   {$ifdef KYLIX3}
   LibC,
@@ -314,7 +315,7 @@ type
   /// points to a raw storage string instance, used for data buffer management
   PSockString = ^SockString;
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
   // not defined in Delphi 5 or older
   PPointer = ^Pointer;
   TTextLineBreakStyle = (tlbsLF, tlbsCRLF);
@@ -2316,7 +2317,7 @@ begin
   end;
 end;
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
 function Utf8ToAnsi(const UTF8: SockString): SockString;
 begin
   result := UTF8; // no conversion
@@ -3065,6 +3066,17 @@ end;
 const
   SOCKMINBUFSIZE = 1024; // big enough for headers (content will be read directly)
 
+{$ifdef FPC}
+procedure SetLineBreakStyle(var T: Text; Style: TTextLineBreakStyle);
+begin
+  case Style Of
+    tlbsLF: TextRec(T).LineEnd := #10;
+    tlbsCRLF: TextRec(T).LineEnd := #13#10;
+    tlbsCR: TextRec(T).LineEnd := #13;
+  end;
+end;
+{$endif FPC}
+
 procedure TCrtSocket.CreateSockIn(LineBreak: TTextLineBreakStyle;
   InputBufferSize: Integer);
 begin
@@ -3081,9 +3093,9 @@ begin
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
   end;
-{$ifdef CONDITIONALEXPRESSIONS}
+  {$ifndef DELPHI5OROLDER}
   SetLineBreakStyle(SockIn^,LineBreak); // http does break lines with #13#10
-{$endif}
+  {$endif}
   Reset(SockIn^);
 end;
 
@@ -3102,9 +3114,9 @@ begin
     BufPtr := pointer(PAnsiChar(SockIn)+sizeof(TTextRec)); // ignore Buffer[] (Delphi 2009+)
     OpenFunc := @OpenSock;
   end;
-{$ifdef CONDITIONALEXPRESSIONS}
+  {$ifndef DELPHI5OROLDER}
   SetLineBreakStyle(SockOut^,tlbsCRLF); // force e.g. for Linux platforms
-{$endif}
+  {$endif}
   Rewrite(SockOut^);
 end;
 
@@ -4667,7 +4679,7 @@ type
     reqTe,
     reqTranslate,
     reqUserAgent
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef DELPHI5OROLDER}
    );
 const // Delphi 5 does not support values overlapping for enums
   respAcceptRanges = THttpHeader(20);
