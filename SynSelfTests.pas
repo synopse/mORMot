@@ -367,6 +367,8 @@ type
     procedure _TSynLogFile;
     /// client side geniune 64 bit identifiers generation
     procedure _TSynUniqueIdentifier;
+    /// test the TSynDictionary class
+    procedure _TSynDictionary;
   end;
 
   /// this test case will test most low-level functions, classes and types
@@ -4087,6 +4089,67 @@ begin
     check(i1.Value=i3);
   finally
     gen.Free;
+  end;
+end;
+
+procedure TTestLowLevelCommon._TSynDictionary;
+type tvalue = {$ifdef NOVARIANTS}integer{$else}variant{$endif};
+     tvalues = {$ifdef NOVARIANTS}TIntegerDynArray{$else}TVariantDynArray{$endif};
+const MAX = 10000;
+var dict: TSynDictionary;
+  procedure Test;
+  var k: RawUTF8;
+      v: tvalue;
+      i: integer;
+  begin
+    for i := 1 to MAX do begin
+      Int32ToUTF8(i,k);
+      v := 0;
+      check(dict.Exists(k));
+      check(dict.FindAndCopy(k, v));
+      check(v=i);
+    end;
+  end;
+var v: tvalue;
+    s, k: RawUTF8;
+    i: integer;
+    exists: boolean;
+begin
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  try
+    for i := 1 to MAX do begin
+      Int32ToUTF8(i,k);
+      v := i;
+      dict.Add(k,v);
+    end;
+    Test;
+    s := dict.SaveToJSON;
+    dict.Free;
+    dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+    check(dict.LoadFromJSON(s,false));
+    Test;
+    s := dict.SaveToBinary;
+    dict.Free;
+    dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+    check(dict.LoadFromBinary(s));
+    Test;
+    for i := MAX downto 1 do
+    if i and 127=0 then begin
+      Int32ToUTF8(i,k);
+      check(dict.Delete(k)=i-1);
+    end;
+    for i := 1 to MAX do begin
+      exists := (i and 127)<>0;
+      Int32ToUTF8(i,k);
+      check(dict.Exists(k)=exists);
+      if exists then begin
+        v := 0;
+        check(dict.FindAndCopy(k, v));
+        check(v=i);
+      end;
+    end;
+  finally
+    dict.Free;
   end;
 end;
 

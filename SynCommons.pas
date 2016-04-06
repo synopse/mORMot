@@ -4760,6 +4760,7 @@ type
     function ElemType: Pointer;         inline;
     function KnownType: TDynArrayKind;  inline;
     procedure Clear;                    inline;
+    procedure ElemCopy(const A; var B); inline;
     // warning: you shall call ReHash() after manual Add/Delete
     function Add(const Elem): integer;  inline;
     procedure Delete(aIndex: Integer);  inline;
@@ -4837,7 +4838,7 @@ type
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
-    function FindHashedAndFill(var Elem): integer;
+    function FindHashedAndFill(var ElemToFill): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // add a void entry to the array if was not found
     // - this method will use hashing for fast retrieval
@@ -8153,7 +8154,10 @@ type
     // would store the keys within this TSynDictionary instance
     // - aValueTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
     // would store the values within this TSynDictionary instance
-    constructor Create(aKeyTypeInfo,aValueTypeInfo: pointer; aKeyCaseInsensitive: boolean); reintroduce; virtual;
+    // - by default, string keys would be searched following exact case, unless
+    // aKeyCaseInsensitive is TRUE
+    constructor Create(aKeyTypeInfo,aValueTypeInfo: pointer;
+      aKeyCaseInsensitive: boolean=false); reintroduce; virtual;
     /// finalize the storage
     // - would release all internal stored values
     destructor Destroy; override;
@@ -8247,10 +8251,15 @@ type
     /// serialize the content as a "key":value JSON object
     function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
     /// unserialize the content from "key":value JSON object
-    function LoadFromJSON(const JSON: RawUTF8): boolean; overload;
+    // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
+    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
+    function LoadFromJSON(const JSON: RawUTF8; EnsureNoKeyCollision: boolean=false): boolean; overload;
     /// unserialize the content from "key":value JSON object
-    // - note that input JSON buffer is not modified in place
-    function LoadFromJSON(JSON: PUTF8Char): boolean; overload;
+    // - note that input JSON buffer is not modified in place: no need to create
+    // a temporary copy if the buffer is about to be re-used
+    // - if the JSON input may not be correct (i.e. if not coming from SaveToJSON),
+    // you may set EnsureNoKeyCollision=TRUE for a slow but safe keys validation
+    function LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean=false): boolean; overload;
     /// save the content as SynLZ-compressed raw binary data
     // - warning: this format is tied to the values low-level RTTI, so if you
     // change the value/key type definitions, LoadFromBinary() would fail
@@ -40738,6 +40747,11 @@ begin
   result := InternalDynArray.ElemType;
 end;
 
+procedure TDynArrayHashed.ElemCopy(const A; var B);
+begin
+  InternalDynArray.ElemCopy(A,B);
+end;
+
 function TDynArrayHashed.KnownType: TDynArrayKind;
 begin
   result := InternalDynArray.KnownType;
@@ -40880,26 +40894,19 @@ begin
       raise ESynException.CreateUTF8(ExceptionMsg,ExceptionArgs);
 end;
 
-function TDynArrayHashed.FindHashedAndFill(var Elem): integer;
-var P: PAnsiChar;
+function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
   if Assigned(fHashElement) then begin
-    result := HashFind(fHashElement(Elem,fHasher),Elem);
+    result := HashFind(fHashElement(ElemToFill,fHasher),ElemToFill);
     if result<0 then
-      result := -1 else begin
-      // copy from dynamic array found entry into Elem = Fill
-      P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
-      if ElemType=nil then
-        MoveFast(P^,Elem,ElemSize) else
-        CopyArray(@Elem,P,ElemType,1);
-    end;
+      result := -1 else
+      ElemCopy((PAnsiChar(fValue^)+cardinal(result)*ElemSize)^,ElemToFill);
   end else
     result := -1;
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
-var P: PAnsiChar;
-    aHashCode: cardinal;
+var aHashCode: cardinal;
 begin
   if Assigned(fHashElement) then begin
     aHashCode := fHashElement(Elem,fHasher);
@@ -40910,18 +40917,12 @@ begin
       if AddIfNotExisting then begin
         // not existing -> add as new element
         HashAdd(Elem,aHashCode,result); // ReHash only if necessary
-        P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
-        if ElemType=nil then
-          MoveFast(Elem,P^,ElemSize) else
-          CopyArray(P,@Elem,ElemType,1);
+        ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^);
       end else
         result := -1 else begin
       // copy from Elem into dynamic array found entry = Update
-      P := PAnsiChar(fValue^)+cardinal(result)*ElemSize;
-      if ElemType=nil then
-        MoveFast(Elem,P^,ElemSize) else
-        CopyArray(P,@Elem,ElemType,1);
-      ReHash;
+      ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^);
+      ReHash; // whole hash table should be re-created for next search
     end;
   end else
     result := -1;
@@ -40934,7 +40935,7 @@ begin
     if result<0 then
       result := -1 else begin
       Delete(result);
-      ReHash;
+      ReHash; // whole hash table should be re-created for next search
     end;
   end else
     result := -1;
@@ -49129,12 +49130,13 @@ begin
   end;
 end;
 
-function TSynDictionary.LoadFromJSON(const JSON: RawUTF8): boolean;
+function TSynDictionary.LoadFromJSON(const JSON: RawUTF8;
+  EnsureNoKeyCollision: boolean): boolean;
 begin
-  result := LoadFromJSON(pointer(JSON));
+  result := LoadFromJSON(pointer(JSON),EnsureNoKeyCollision);
 end;
 
-function TSynDictionary.LoadFromJSON(JSON: PUTF8Char): boolean;
+function TSynDictionary.LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: boolean): boolean;
 var k,v: RawUTF8;
 begin
   result := false;
@@ -49142,7 +49144,13 @@ begin
     if fKeys.LoadFromJSON(pointer(k))<>nil then
       if fValues.LoadFromJSON(pointer(v))<>nil then
         if fKeys.Count=fValues.Count then
-          result := true;
+          if EnsureNoKeyCollision then
+            // fKeys.Rehash is not enough, since input JSON may be invalid
+            result := fKeys.IsHashElementWithoutCollision<0 else begin
+            // optimistic approach
+            fKeys.Rehash;
+            result := true;
+          end;
 end;
 
 function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
@@ -49154,8 +49162,10 @@ begin
     P := fKeys.LoadFrom(P);
   if P<>nil then
     P := fValues.LoadFrom(P);
-  if (P<>nil) and (fKeys.Count=fValues.Count) then
+  if (P<>nil) and (fKeys.Count=fValues.Count) then begin
+    fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
     result := true;
+  end;
 end;
 
 function TSynDictionary.SaveToBinary: RawByteString;
