@@ -127,9 +127,9 @@ type
     // - if not set, will search for 'html,json,css'
     CSVExtensions: TFileName;
     /// defines if the view files should be checked for modification
-    // - default 0 would be slightly faster, since content would never be checked
     // - any value would automatically update the rendering template, if the file
-    // changed after a given number of seconds
+    // changed after a given number of seconds - default is 5 seconds
+    // - setting 0 would be slightly faster, since content would never be checked
     FileTimestampMonitorAfterSeconds: cardinal;
     /// file extension (e.g. '.html') to be used to create void templates
     // - default '' will create no void template file in the given Folder
@@ -595,7 +595,9 @@ type
     // - and release any associated CurrentSession, Views, and fMainRunner
     destructor Destroy; override;
 
-    /// read-only access to the associated mORMot REST data Model
+    /// read-only access to the associated mORMot REST instance implementing the
+    // MVC data Model of the application
+    // - is a TSQLRestServer instance e.g. for TMVCRunOnRestServer
     property RestModel: TSQLRest read fRestModel;
     /// read-only access to the associated factory for IMVCApplication interface
     property Factory: TInterfaceFactory read fFactory;
@@ -775,6 +777,7 @@ constructor TMVCViewsMustache.Create(aInterface: PTypeInfo;
 var params: TMVCViewsMustacheParameters;
 begin
   fillchar(params,sizeof(params),0);
+  params.FileTimestampMonitorAfterSeconds := 5;
   params.ExtensionForNotExistingTemplate := aExtensionForNotExistingTemplate;
   params.Helpers := TSynMustache.HelpersGetStandardList;
   Create(aInterface,params,aLogClass);
@@ -1031,14 +1034,12 @@ end;
 function TMVCViewsMustache.GetRenderer(methodIndex: integer;
   out aContentType: RawUTF8): TSynMustache;
 var age: TDateTime;
-    auto: IUnknown; // mandatory only for FPC
 begin
   if cardinal(methodIndex)>=fFactory.MethodsCount then
     raise EMVCException.CreateUTF8('%.Render(methodIndex=%)',[self,methodIndex]);
-  with fViews[methodIndex] do begin
+  with fViews[methodIndex], Locker.ProtectMethod do begin
     if MethodName='' then
       raise EMVCException.CreateUTF8('%.Render(''%''): not a View',[self,MethodName]);
-    auto := Locker.ProtectMethod;
     if (Mustache=nil) and (FileName='') then
       raise EMVCException.CreateUTF8('%.Render(''%''): Missing Template in ''%''',
         [self,MethodName,SearchPattern]);
@@ -1513,18 +1514,18 @@ function TMVCRunWithViews.SetCache(const aMethodName: RawUTF8;
   aPolicy: TMVCRendererCachePolicy; aTimeOutSeconds: cardinal): TMVCRunWithViews;
 const MAX_CACHE_TIMEOUT = 60*15; // 15 minutes
 var aMethodIndex: integer;
-    auto: IUnknown; // mandatory only for FPC
 begin
-  auto := fCacheLocker.ProtectMethod;
-  aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
-  if fCache=nil then
-    SetLength(fCache,fApplication.fFactory.MethodsCount);
-  with fCache[aMethodIndex] do begin
-    Policy := aPolicy;
-    if aTimeOutSeconds-1>=MAX_CACHE_TIMEOUT then
-      TimeOutSeconds := MAX_CACHE_TIMEOUT else
-      TimeOutSeconds := aTimeOutSeconds;
-    NotifyContentChangedForMethod(aMethodIndex);
+  with fCacheLocker.ProtectMethod do begin
+    aMethodIndex := fApplication.fFactory.CheckMethodIndex(aMethodName);
+    if fCache=nil then
+      SetLength(fCache,fApplication.fFactory.MethodsCount);
+    with fCache[aMethodIndex] do begin
+      Policy := aPolicy;
+      if aTimeOutSeconds-1>=MAX_CACHE_TIMEOUT then
+        TimeOutSeconds := MAX_CACHE_TIMEOUT else
+        TimeOutSeconds := aTimeOutSeconds;
+      NotifyContentChangedForMethod(aMethodIndex);
+    end;
   end;
   result := self;
 end;
@@ -1536,10 +1537,9 @@ begin
 end;
 
 procedure TMVCRunWithViews.NotifyContentChangedForMethod(aMethodIndex: integer);
-var auto: IUnknown; // mandatory only for FPC
 begin
   inherited;
-  auto := fCacheLocker.ProtectMethod;
+  with fCacheLocker.ProtectMethod do
   if cardinal(aMethodIndex)<cardinal(Length(fCache)) then
   with fCache[aMethodIndex] do
     case Policy of
@@ -1568,13 +1568,13 @@ begin
     fRestServer := aApplication.RestModel as TSQLRestServer else
     fRestServer := aRestServer;
   if aViews=nil then
-    aViews := TMVCViewsMustache.Create(
-      aApplication.fFactory.InterfaceTypeInfo,
     {$ifdef WITHLOG}
-        fRestServer.LogClass,'.html') else
+    aViews := TMVCViewsMustache.Create(aApplication.fFactory.InterfaceTypeInfo,
+      fRestServer.LogClass,'.html') else
     aViews.fLogClass := fRestServer.LogClass;
     {$else}
-        TSQLLog,'.html');
+    aViews := TMVCViewsMustache.Create(aApplication.fFactory.InterfaceTypeInfo,
+      TSQLLog,'.html');
     {$endif}
   inherited Create(aApplication,aViews);
   fPublishOptions := aPublishOptions;
