@@ -43,6 +43,7 @@ Contributors
   Michael (EgonHugeist)
   MilesYou
   Mingda
+  Nzsolt
   Ondrej (reddwarf)
   Pavel (mpv)
   Pierre le Riche

@@ -48920,6 +48920,7 @@ end;
 
 destructor TSynDictionary.Destroy;
 begin
+  fKeys.Clear;
   fValues.Clear;
   inherited Destroy;
 end;

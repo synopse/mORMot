@@ -42,6 +42,7 @@ unit SynPdf;
    Marsh
    MChaos
    Mehrdad Momeni (nosa)
+   Nzsolt
    Ondrej (reddwarf)
    Pierre le Riche
    Sinisa (sinisav)
