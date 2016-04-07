@@ -4102,6 +4102,7 @@ var dict: TSynDictionary;
       v: tvalue;
       i: integer;
   begin
+    check(dict.Count=MAX);
     for i := 1 to MAX do begin
       Int32ToUTF8(i,k);
       v := 0;
@@ -4124,13 +4125,18 @@ begin
     end;
     Test;
     s := dict.SaveToJSON;
-    dict.Free;
-    dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+    check(dict.Exists(k));
+    dict.DeleteAll;
+    check(dict.Count=0);
+    check(not dict.Exists(k));
     check(dict.LoadFromJSON(s,false));
     Test;
     s := dict.SaveToBinary;
+  finally
     dict.Free;
-    dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  end;
+  dict := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray), TypeInfo(tvalues));
+  try
     check(dict.LoadFromBinary(s));
     Test;
     for i := MAX downto 1 do

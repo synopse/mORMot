@@ -8180,6 +8180,8 @@ type
     // - returns the index of the matching item, -1 if aKey was not found
     // - this method is thread-safe, since it would lock the instance
     function Clear(const aKey): integer;
+    /// delete all key/value stored in the current instance
+    procedure DeleteAll;
     /// delete a key/value association from its supplied aKey
     // - this would delete the entry, i.e. matching key and value pair
     // - returns the index of the deleted item, -1 if aKey was not found
@@ -48912,10 +48914,18 @@ begin
   fSafe.Padding[DIC_KEY].VType := varUnknown;
   fSafe.Padding[DIC_VALUECOUNT].VType := varInteger;
   fSafe.Padding[DIC_VALUE].VType := varUnknown;
+  fSafe.PaddingMaxUsedIndex := DIC_VALUE;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
     @fSafe.Padding[DIC_VALUECOUNT].VInteger);
+end;
+
+procedure TSynDictionary.DeleteAll;
+begin
+  fKeys.Clear;
+  fKeys.ReHash; // mandatory to avoid GPF
+  fValues.Clear;
 end;
 
 destructor TSynDictionary.Destroy;
