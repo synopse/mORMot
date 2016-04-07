@@ -21510,7 +21510,7 @@ begin
   if TObject(aValue)=nil then
     TObject(aValue) := Instance.CreateNew;
   result := JSONToObject(aValue,P,aValid,nil,[j2oHandleCustomVariants,
-    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty]);
+    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty,j2oIgnoreStringType]);
 end;
 
 function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
