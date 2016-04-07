@@ -18274,6 +18274,25 @@ type
   end;
 
 
+  /// reference counted block code critical section to be used in debugg mode
+  // - race condition are difficult to track: you could use this TAutoLockerDebug
+  // instead of plain TAutoLocker class, to log some information at each
+  // Enter/Leave process, and fix blocking issues
+  TAutoLockerDebug = class(TAutoLocker)
+  protected
+    fRest: TSQLRest;
+    fIdentifier: RawUTF8;
+    fCounter: integer;
+  public
+    /// initialize the mutex, which would log its Enter/Leave process
+    // - an associated TSQLRest instance could be specified as logging target
+    constructor Create(aRest: TSQLRest; const aIdentifier: RawUTF8); reintroduce;
+    /// enter the mutex
+    procedure Enter; override;
+    /// leave the mutex
+    procedure Leave; override;
+  end;
+
   /// a WHERE constraint as set by the TSQLVirtualTable.Prepare() method
   TSQLVirtualTablePreparedConstraint = packed record
     /// Column on left-hand side of constraint
@@ -54581,6 +54600,32 @@ destructor TInterfacedObjectAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
+end;
+
+
+{ TAutoLockerDebug }
+
+constructor TAutoLockerDebug.Create(aRest: TSQLRest; const aIdentifier: RawUTF8);
+begin
+  inherited Create;
+  fRest := aRest;
+  fIdentifier := aIdentifier;
+end;
+
+procedure TAutoLockerDebug.Enter;
+begin
+  if fRest<>nil then
+    fRest.InternalLog('Lock % %',[fIdentifier,fCounter],sllTrace);
+  inherited Enter;
+  inc(fCounter);
+end;
+
+procedure TAutoLockerDebug.Leave;
+begin
+  dec(fCounter);
+  if fRest<>nil then
+    fRest.InternalLog('Unlock % %',[fIdentifier,fCounter],sllTrace);
+  inherited Leave;
 end;
 
 

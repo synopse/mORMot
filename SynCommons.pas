@@ -14962,9 +14962,9 @@ type
     // !    fSharedAutoLocker.Leave;
     // !  end;
     // !end;
-    procedure Enter;
+    procedure Enter; virtual;
     /// leave the mutex
-    procedure Leave;
+    procedure Leave; virtual;
     /// access to the locking methods of this instance
     function Safe: PSynLocker;
   end;
