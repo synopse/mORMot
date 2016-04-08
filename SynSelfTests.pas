@@ -474,6 +474,8 @@ type
     procedure _Base64;
     /// CompressShaAes() using SHA-256 / AES-256-CTR algorithm over SynLZ
     procedure _CompressShaAes;
+    /// AES-based pseudorandom number generator
+    procedure _TAESPNRG;
   end;
 
 {$ifdef MSWINDOWS}
@@ -8455,6 +8457,36 @@ begin
     Include(CpuFeatures,cfSSE41);
   end
   {$endif}
+end;
+
+procedure TTestCryptographicRoutines._TAESPNRG;
+var b1,b2: TAESBlock;
+    a1,a2: TAESPRNG;
+    s1,s2: RawByteString;
+    i: integer;
+begin // it is hard to validate randomness - we just test the feature set
+  TAESPRNG.Main.FillRandom(b1);
+  TAESPRNG.Main.FillRandom(b2);
+  Check(not CompareMem(@b1,@b2,sizeof(b1)));
+  a1 := TAESPRNG.Create;
+  a2 := TAESPRNG.Create;
+  try
+    a1.FillRandom(b1);
+    a2.FillRandom(b2);
+    Check(not CompareMem(@b1,@b2,sizeof(b1)));
+    Check(a1.FillRandom(0)='');
+    for i := 1 to 1000 do begin
+      s1 := a1.FillRandom(i);
+      s2 := a2.FillRandom(i);
+      check(length(s1)=i);
+      check(length(s2)=i);
+      if i>8 then
+        check(s1<>s2);
+    end;
+  finally
+    a1.Free;
+    a2.Free;
+  end;
 end;
 
 

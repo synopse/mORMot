@@ -5700,6 +5700,8 @@ function GUIDToString(const guid: TGUID): string;
 
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
+// - consider using instead the much safer TAESPRNG.Main.FillRandom() method
+// from the SynCrypto unit
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 
 /// compute a random GUID value

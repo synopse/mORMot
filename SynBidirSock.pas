@@ -2173,7 +2173,7 @@ begin
         aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsCompression);
     try
       RequestSendHeader(aWebSocketsURI,'GET');
-      FillRandom(key);
+      TAESPRNG.Main.FillRandom(key);
       bin1 := BinToBase64(@key,sizeof(key));
       SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10+
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ',bin1,#13#10+

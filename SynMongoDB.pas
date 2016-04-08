@@ -5489,7 +5489,7 @@ begin
       end else begin // SCRAM-SHA-1
         // https://tools.ietf.org/html/rfc5802#section-5
         user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
-        SynCrypto.FillRandom(rnd);
+        TAESPRNG.Main.FillRandom(rnd);
         nonce := BinToBase64(@rnd,sizeof(rnd));
         first := FormatUTF8('n=%,r=%',[user,nonce]);
         BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
