@@ -842,8 +842,10 @@ begin
         frame := List[i];
         List[i].payload := '';
         dec(Count);
-        if i<Count then
+        if i<Count then begin
           MoveFast(List[i+1],List[i],(Count-i)*sizeof(List[i]));
+          pointer(List[Count].payload) := nil;
+        end;
         exit;
       end;
   finally
