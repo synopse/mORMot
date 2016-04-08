@@ -470,9 +470,9 @@ type
   TAESAbstractSyn = class(TAESAbstract)
   protected
     fIn, fOut: PAESBlock;
+    fCV: TAESBlock;
     AES: TAES;
     fCount: Cardinal;
-    fCV: TAESBlock;
     procedure EncryptInit;
     procedure DecryptInit;
     procedure EncryptTrailer;
@@ -6622,6 +6622,7 @@ begin
     AES.Encrypt(fCV,tmp);
     inc(fCV[7]);
     if fCV[7]=0 then begin
+      inc(fCV[6]);
       j := 6;
       repeat
         if fCV[j]<>0 then
