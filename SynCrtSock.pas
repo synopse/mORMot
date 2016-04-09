@@ -785,9 +785,9 @@ type
   end;
   {$M-}
 
-{$ifdef USETHREADPOOL}
+  {$ifdef USETHREADPOOL}
   TSynThreadPoolTHttpServer = class;
-{$endif}
+  {$endif}
 
   /// HTTP response Thread as used by THttpServer Socket API based class
   // - Execute procedure get the request and calculate the answer
@@ -824,7 +824,11 @@ type
 
   THttpServerRespClass = class of THttpServerResp;
 
-{$ifdef USETHREADPOOL}
+  /// an event handler for implementing a socked-based Thread Pool
+  // - matches TSynThreadPoolTHttpServer.Push method signature
+  TOnThreadPoolSocketPush = function(aClientSock: TSocket): boolean of object; 
+
+{$ifdef USETHREADPOOL} { currently only available under Windows } 
 
   TSynThreadPool = class;
 
@@ -876,6 +880,7 @@ type
     // - up to 64 threads can be associated to a Thread Pool
     constructor Create(Server: THttpServer; NumberOfThreads: Integer=32); reintroduce;
     /// add an incoming HTTP request to the Thread Pool
+    // - matches TOnThreadPoolSocketPush event handler signature
     function Push(aClientSock: TSocket): Boolean;
   end;
 
@@ -1362,11 +1367,11 @@ type
   protected
     /// used to protect Process() call
     fProcessCS: TRTLCriticalSection;
-    {$ifdef USETHREADPOOL}
-    /// the associated Thread Pool
-    fThreadPool: TSynThreadPoolTHttpServer;
+    fThreadPoolPush: TOnThreadPoolSocketPush;
     fThreadPoolContentionCount: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
+    {$ifdef USETHREADPOOL}
+    fThreadPool: TSynThreadPoolTHttpServer;
     {$endif}
     fInternalHttpServerRespList: TList;
     fServerConnectionCount: cardinal;
@@ -1425,7 +1430,6 @@ type
     // most AntiVirus programs, and increase security - but you won't be able
     // to use an Internet Browser nor AJAX application for remote access any more
     property TCPPrefix: SockString read fTCPPrefix write fTCPPrefix;
-    {$ifdef USETHREADPOOL}
     /// number of times there was no availibility in the internal thread pool
     // to handle an incoming request
     // - this won't make any error, but just delay for 20 ms and try again
@@ -1433,7 +1437,6 @@ type
     /// number of times there an incoming request is rejected due to overload
     // - this is an error after 30 seconds of not any process availability
     property ThreadPoolContentionAbortCount: cardinal read fThreadPoolContentionAbortCount;
-    {$endif}
   end;
 {$M-}
 
@@ -3697,18 +3700,19 @@ end;
 
 constructor THttpServer.Create(const aPort: SockString
   {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
-var aSock: TCrtSocket;
 begin
-  fThreadRespClass := THttpServerResp;
   InitializeCriticalSection(fProcessCS);
-  aSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
-  fSock := aSock;
+  fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
   ServerKeepAliveTimeOut := 3000; // HTTP.1/1 KeepAlive is 3 seconds by default
   fInternalHttpServerRespList := TList.Create;
-{$ifdef USETHREADPOOL}
-  if ServerThreadPoolCount>0 then
+  if fThreadRespClass=nil then
+    fThreadRespClass := THttpServerResp;
+  {$ifdef USETHREADPOOL}
+  if ServerThreadPoolCount>0 then begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
-{$endif}
+    fThreadPoolPush := fThreadPool.Push;
+  end;
+  {$endif}
   inherited Create(false);
 end;
 
@@ -3738,14 +3742,15 @@ begin
     FreeAndNil(fInternalHttpServerRespList);
   end;
   LeaveCriticalSection(fProcessCS);
-{$ifdef USETHREADPOOL}
+  fThreadPoolPush := nil;
+  {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
-{$endif}
-{$ifdef LINUX}
-{$ifdef FPC}
+  {$endif}
+  {$ifdef LINUX}
+  {$ifdef FPC}
   KillThread(ThreadID);  // manualy do it here
-{$endif}
-{$endif}
+  {$endif}
+  {$endif}
   FreeAndNil(fSock);
   inherited Destroy;     // direct Thread abort, no wait till ended
   DeleteCriticalSection(fProcessCS);
@@ -3762,9 +3767,7 @@ var ClientSock: TSocket;
 {$ifdef MONOTHREAD}
     ClientCrtSock: THttpServerSocket;
 {$endif}
-{$ifdef USETHREADPOOL}
     i: integer;
-{$endif}
 label abort;
 begin
   // main server process loop
@@ -3784,7 +3787,7 @@ abort:  Shutdown(ClientSock,1);
         break; // don't accept input if server is down
       end;
       OnConnect;
-{$ifdef MONOTHREAD}
+      {$ifdef MONOTHREAD}
       ClientCrtSock := THttpServerSocket.Create(self);
       try
         ClientCrtSock.InitRequest(ClientSock);
@@ -3796,23 +3799,24 @@ abort:  Shutdown(ClientSock,1);
       finally
         ClientCrtSock.Free;
       end;
-{$else}
-{$ifdef USETHREADPOOL}
-      if fThreadPool<>nil then begin
-        if not fThreadPool.Push(ClientSock) then begin
+      {$else}
+      if Assigned(fThreadPoolPush) then begin
+        if not fThreadPoolPush(ClientSock) then begin
           for i := 1 to 1500 do begin
             inc(fThreadPoolContentionCount);
-            SleepHiRes(20); // wait a little until a thread gets free
-            if fThreadPool.Push(ClientSock) then
-              Break;
+            SleepHiRes(20); // wait a little until a thread is available
+            if Terminated then
+              break;
+            if fThreadPoolPush(ClientSock) then
+              exit; // the thread pool acquired the client sock
           end;
           inc(fThreadPoolContentionAbortCount);
-          goto Abort; // 1500*20 = 30 seconds timeout
+          goto abort; // 1500*20 = 30 seconds timeout
         end
       end else
-{$endif}// default implementation creates one thread for each incoming socket
+        // default implementation creates one thread for each incoming socket
         fThreadRespClass.Create(ClientSock, self);
-{$endif}
+      {$endif MONOTHREAD}
       end;
   except
     on Exception do
@@ -4101,7 +4105,6 @@ begin
         fServerSock.InitRequest(aSock); // now fClientSock is in fServerSock
         if fServer<>nil then
           HandleRequestsProcess;
-        //write('*');
       end else begin
         // call from TSynThreadPoolTHttpServer -> handle first request
         if not fServerSock.fBodyRetrieved then
