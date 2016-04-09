@@ -6622,14 +6622,13 @@ begin
     AES.Encrypt(fCV,tmp);
     inc(fCV[7]);
     if fCV[7]=0 then begin
-      inc(fCV[6]);
       j := 6;
       repeat
-        if fCV[j]<>0 then
+        inc(fCV[j]);
+        if (fCV[j]<>0) or (j=0) then
           break;
         dec(j);
-        inc(fCV[j]);
-      until j=0;
+      until false;
     end;
     XorBlock16(pointer(fIn),pointer(fOut),pointer(@tmp));
     inc(fIn);

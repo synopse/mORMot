@@ -8464,7 +8464,7 @@ var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
     s1,s2: RawByteString;
     i: integer;
-begin // it is hard to validate randomness - we just test the feature set
+begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
   Check(not CompareMem(@b1,@b2,sizeof(b1)));
@@ -8475,13 +8475,15 @@ begin // it is hard to validate randomness - we just test the feature set
     a2.FillRandom(b2);
     Check(not CompareMem(@b1,@b2,sizeof(b1)));
     Check(a1.FillRandom(0)='');
-    for i := 1 to 1000 do begin
+    for i := 1 to 2000 do begin
       s1 := a1.FillRandom(i);
       s2 := a2.FillRandom(i);
       check(length(s1)=i);
       check(length(s2)=i);
-      if i>8 then
+      if i>4 then
         check(s1<>s2);
+      // compress the output to validate (somehow) its randomness
+      check(length(SynLZCompress(s1))>length(s1),'random does not compress');
     end;
   finally
     a1.Free;
