@@ -302,6 +302,7 @@ type
     procedure SetDBServerAccessRight(Index: integer; Value: PSQLAccessRights);
     procedure SetDBServer(aIndex: integer; aServer: TSQLRestServer;
       aSecurity: TSQLHttpServerSecurity; aRestAccessRights: PSQLAccessRights);
+    function GetDBServerNames: RawUTF8;
     function HttpApiAddUri(const aRoot,aDomainName: RawByteString;
       aSecurity: TSQLHttpServerSecurity; aRegisterURI,aRaiseExceptionOnError: boolean): RawUTF8;
     function NotifyCallback(aSender: TSQLRestServer;
@@ -572,12 +573,14 @@ begin
          (fDBServers[i].Security=aHttpServerSecurity) then
         exit; // register only once per URI Root address and per protocol
     {$ifndef ONLYUSEHTTPSOCKET}
-    if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
-       fHttpServerKind=useHttpApiRegisteringURI,false)<>'' then
-      exit;
+    if fHttpServerKind in [useHttpApi,useHttpApiRegisteringURI] then
+      if HttpApiAddUri(aServer.Model.Root,fDomainName,aHttpServerSecurity,
+         fHttpServerKind=useHttpApiRegisteringURI,false)<>'' then
+        exit;
     {$endif}
     SetLength(fDBServers,n+1);
     SetDBServer(n,aServer,aHttpServerSecurity,aRestAccessRights);
+    fHttpServer.ProcessName := GetDBServerNames;
     result := true;
   finally
     fLog.Add.Log(sllHttp,'%.AddServer(%,Root=%,Port=%,Public=%:%)=%',
@@ -683,7 +686,8 @@ begin
   if aHttpServerKind in [useHttpApi,useHttpApiRegisteringURI] then
   try
     // first try to use fastest http.sys
-    fHttpServer := THttpApiServer.Create(false,aQueueName);
+    fHttpServer := THttpApiServer.Create(false,
+      aQueueName,HttpThreadStart,HttpThreadTerminate,GetDBServerNames);
     for i := 0 to high(aServers) do
       HttpApiAddUri(aServers[i].Model.Root,fDomainName,aHttpServerSecurity,
         fHttpServerKind=useHttpApiRegisteringURI,true);
@@ -702,16 +706,16 @@ begin
   if fHttpServer=nil then begin
     // http.sys failed -> create one instance of our pure Delphi server
     if aHttpServerKind=useBidirSocket then
-      fHttpServer := TWebSocketServerRest.Create(fPort) else
+      fHttpServer := TWebSocketServerRest.Create(
+        fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
       fHttpServer := THttpServer.Create(
-        fPort{$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
+        fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames
+        {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
   end;
-  fHttpServer.OnHttpThreadStart := HttpThreadStart;
   fHttpServer.OnRequest := Request;
-  fHttpServer.OnHttpThreadTerminate := HttpThreadTerminate;
   if aHttpServerSecurity=secSynShaAes then
     fHttpServer.RegisterCompress(CompressShaAes,0); // CompressMinSize=0
 {$ifdef COMPRESSSYNLZ} // SynLZ registered first, since will be prefered
@@ -771,6 +775,14 @@ end;
 function TSQLHttpServer.GetDBServerCount: integer;
 begin
   result := length(fDBServers);
+end;
+
+function TSQLHttpServer.GetDBServerNames: RawUTF8;
+var i: integer;
+begin
+  result := '';
+  for i := 0 to high(fDBServers) do
+    result := result+fDBServers[i].Server.Model.Root+' ';
 end;
 
 procedure TSQLHttpServer.SetDBServerAccessRight(Index: integer;
@@ -957,7 +969,7 @@ var i: integer;
 begin
   if self=nil then
     exit;
-  SetCurrentThreadName('% worker',[self]);
+  SetCurrentThreadName('% %/%%',[self,fPort,GetDBServerNames,Sender]);
   for i := 0 to high(fDBServers) do
     fDBServers[i].Server.BeginCurrentThread(Sender);
 end;

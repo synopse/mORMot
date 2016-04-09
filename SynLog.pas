@@ -2493,7 +2493,7 @@ var
 procedure AutoFlushProc(P: pointer); stdcall;  // TThread not needed here
 var i: integer;
 begin
-  SetCurrentThreadName('TSynLog AutoFlush',[]);
+  SetThreadNameDefault(GetCurrentThreadID,'TSynLog AutoFlush');
   repeat
     for i := 1 to 10 do begin // check every second for pending data
       SleepHiRes(100);

@@ -10133,7 +10133,15 @@ procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const
 /// name a thread so that it would be easily identified in the IDE debugger
 // - you can force this function to do nothing by setting the NOSETTHREADNAME
 // conditional, if you have issues with this feature when debugging your app
-procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8; const Args: array of const);
+procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
+  const Args: array of const);
+
+/// could be used to override SetThreadNameInternal()
+procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
+
+var
+  /// is overriden e.g. by mORMot.pas to log the thread name
+  SetThreadNameInternal: procedure(ThreadID: TThreadID; const Name: RawUTF8) = SetThreadNameDefault;
 
 type
   {$M+}
@@ -54545,17 +54553,24 @@ end;
 
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
   const Args: array of const);
-var name: RawByteString;
-{$ifndef ISDELPHIXE2}
-{$ifdef MSWINDOWS}
+var name: RawUTF8;
+begin
+  FormatUTF8(Format,Args,name);
+  SetThreadNameInternal(ThreadID,name);
+end;
+
+procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
+var s: RawByteString;
+    {$ifndef ISDELPHIXE2}
+    {$ifdef MSWINDOWS}
     info: record
       FType: LongWord;     // must be 0x1000
       FName: PAnsiChar;    // pointer to name (in user address space)
       FThreadID: LongWord; // thread ID (-1 indicates caller thread)
       FFlags: LongWord;    // reserved for future use, must be zero
     end;
-{$endif}
-{$endif}
+    {$endif}
+    {$endif}
 begin
   {$ifdef FPC}
   exit;
@@ -54567,13 +54582,13 @@ begin
   if not IsDebuggerPresent then
     exit;
   {$endif}
-  name := CurrentAnsiConvert.UTF8ToAnsi(FormatUTF8(Format,Args));
+  s := CurrentAnsiConvert.UTF8ToAnsi(Name);
   {$ifdef ISDELPHIXE2}
-  TThread.NameThreadForDebugging(name,ThreadID);
+  TThread.NameThreadForDebugging(s,ThreadID);
   {$else}
   {$ifdef MSWINDOWS}
   info.FType := $1000;
-  info.FName := pointer(name);
+  info.FName := pointer(s);
   info.FThreadID := ThreadID;
   info.FFlags := 0;
   try

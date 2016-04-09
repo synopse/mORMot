@@ -511,7 +511,8 @@ constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
 begin
   inherited;
-  fServer := THttpServer.Create(aPort{$ifdef USETHREADPOOL},fThreadPoolCount{$endif});
+  fServer := THttpServer.Create(aPort,nil,nil,FormatUTF8('DBRemote %',[aDatabaseName])
+    {$ifdef USETHREADPOOL},fThreadPoolCount{$endif});
   fServer.OnRequest := Process;
 end;
 

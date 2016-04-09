@@ -699,6 +699,7 @@ type
   THttpClientSocket = class(THttpSocket)
   protected
     fUserAgent: SockString;
+    fProcessName: SockString;
     procedure RequestSendHeader(const url, method: SockString); virtual;
   public
     /// common initialization of all constructors
@@ -730,6 +731,8 @@ type
     // friendly welcome by most servers :(
     // - you can specify a custom value here
     property UserAgent: SockString read fUserAgent write fUserAgent;
+    /// the associated process name
+    property ProcessName: SockString read fProcessName write fProcessName;
   end;
 
   /// class-reference type (metaclass) of a HTTP client socket access
@@ -996,6 +999,7 @@ type
     fCompressAcceptEncoding: SockString;
     fOnHttpThreadStart: TNotifyThreadEvent;
     fServerName: SockString;
+    fProcessName: SockString;
     fCurrentConnectionID: integer;
     fCanNotifyCallback: boolean;
     procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
@@ -1005,7 +1009,8 @@ type
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: Boolean); override;
+    constructor Create(CreateSuspended: Boolean; OnStart,OnStop: TNotifyThreadEvent;
+      const ProcessName: SockString); reintroduce;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -1073,6 +1078,8 @@ type
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log
     property ServerName: SockString read fServerName write SetServerName;
+    /// the associated process name
+    property ProcessName: SockString read fProcessName write fProcessName;
   end;
 
   {$ifdef MSWINDOWS}
@@ -1178,7 +1185,9 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode=''); reintroduce;
+    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode='';
+      OnStart: TNotifyThreadEvent=nil; OnStop: TNotifyThreadEvent=nil;
+      const ProcessName: SockString=''); reintroduce;
     /// release all associated memory and handles
     destructor Destroy; override;
     /// will clone this thread into multiple other threads
@@ -1401,8 +1410,9 @@ type
     // incoming connections (default is 32, which may be sufficient for most
     // cases, maximum is 64) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
-    constructor Create(const aPort: SockString
-      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
+    constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
+      const ProcessName: SockString {$ifdef USETHREADPOOL};
+        ServerThreadPoolCount: integer=32{$endif});
       reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
@@ -3643,10 +3653,13 @@ end;
 
 { THttpServerGeneric }
 
-constructor THttpServerGeneric.Create(CreateSuspended: Boolean);
+constructor THttpServerGeneric.Create(CreateSuspended: Boolean;
+  OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 begin
-  SetServerName('mORMot/'+SYNOPSE_FRAMEWORK_VERSION+
-    {$ifdef MSWINDOWS}' (Windows)'{$else}' (Linux)'{$endif});
+  fProcessName := ProcessName;
+  SetServerName('Synopse mORMot ('+{$ifdef MSWINDOWS}'Windows)'{$else}'Linux)'{$endif});
+  fOnHttpThreadStart := OnStart;
+  SetOnTerminate(OnStop);
   inherited Create(CreateSuspended);
 end;
 
@@ -3698,8 +3711,8 @@ end;
 
 { THttpServer }
 
-constructor THttpServer.Create(const aPort: SockString
-  {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=32{$endif});
+constructor THttpServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
+  const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
@@ -3713,7 +3726,7 @@ begin
     fThreadPoolPush := fThreadPool.Push;
   end;
   {$endif}
-  inherited Create(false);
+  inherited Create(false,OnStart,OnStop,ProcessName);
 end;
 
 function THttpServer.GetAPIVersion: string;
@@ -3770,6 +3783,8 @@ var ClientSock: TSocket;
     i: integer;
 label abort;
 begin
+  // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
+  NotifyThreadStart(self);
   // main server process loop
   if Sock.Sock>0 then
   try
@@ -4096,6 +4111,7 @@ procedure THttpServerResp.Execute;
 var aSock: TSocket;
     i: integer;
 begin
+  fServer.NotifyThreadStart(self);
   try
     try
       if fClientSock<>0 then begin
@@ -4115,7 +4131,6 @@ begin
       end;
     finally
       try
-        assert(fServer<>nil);
         if fServer<>nil then
         try
           EnterCriticalSection(fServer.fProcessCS);
@@ -4560,7 +4575,8 @@ var Context: pointer;
     Key: PtrUInt;
     Overlapped: POverlapped;
 begin
-  if fOwner<>nil then
+  if fOwner=nil then
+    exit;
   while GetQueuedCompletionStatus(fOwner.FRequestQueue,Context,Key,OverLapped,INFINITE) do
   try
     if OverLapped=SHUTDOWN_FLAG then
@@ -5853,11 +5869,12 @@ begin
       THttpApiServer(Clones[i]).OnHttpThreadTerminate := Event;
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: Boolean; QueueName: SynUnicode);
+constructor THttpApiServer.Create(CreateSuspended: Boolean; QueueName: SynUnicode;
+  OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 var bindInfo: HTTP_BINDING_INFO;
 begin
   SetLength(fLogDataStorage,sizeof(HTTP_LOG_FIELDS_DATA)); // should be done 1st
-  inherited Create(true);
+  inherited Create(true,OnStart,OnStop,ProcessName);
   HttpApiInitialize; // will raise an exception in case of failure
   EHttpApiServer.RaiseOnError(hInitialize,
     Http.Initialize(Http.Version,HTTP_INITIALIZE_SERVER));
@@ -5885,7 +5902,7 @@ end;
 constructor THttpApiServer.CreateClone(From: THttpApiServer);
 begin
   SetLength(fLogDataStorage,sizeof(HTTP_LOG_FIELDS_DATA));
-  inherited Create(false);
+  inherited Create(false,From.fOnHttpThreadStart,From.fOnTerminate,From.ProcessName);
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
@@ -5896,8 +5913,6 @@ begin
     fLogData := pointer(fLogDataStorage);
   SetServerName(From.fServerName);
   fLoggingServiceName := From.fLoggingServiceName;
-  OnHttpThreadStart := From.OnHttpThreadStart;
-  OnHttpThreadTerminate := From.OnHttpThreadTerminate;
 end;
 
 destructor THttpApiServer.Destroy;

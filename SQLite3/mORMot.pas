@@ -34389,10 +34389,10 @@ begin
   {$ifdef WITHLOG}
   fLog := FRest.LogClass.Add;
   {$endif}
+  SetCurrentThreadName('% "%"',[self,fRest.Model.Root]);
   FRest.BeginCurrentThread(self);
   try
     try
-      SetCurrentThreadName('%',[self]);
       InternalExecute;
     except
       on E: Exception do
@@ -56434,7 +56434,9 @@ procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
   aInstance: TObject);
 begin
   try
+    {$ifdef WITHLOG}
     aLog.SynLog.Log(sllWarning,'InterfaceArrayDeleteAfterException %',[aLogMsg],aInstance);
+    {$endif}
     InterfaceArrayDelete(aInterfaceArray,aItemIndex);
   except
     on E: Exception do
@@ -56442,6 +56444,14 @@ begin
   end;
 end;
 
+
+procedure SetThreadNameWithLog(ThreadID: TThreadID; const Name: RawUTF8);
+begin
+  {$ifdef WITHLOG}
+  TSQLLog.Add.Log(sllInfo,'SetThreadName %=%',[ThreadID,Name]);
+  {$endif}
+  SetThreadNameDefault(ThreadID,Name);
+end;
 
 initialization
   pointer(@SQLFieldTypeComp[sftAnsiText]) := @AnsiIComp;
@@ -56454,7 +56464,8 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
-  SetCurrentThreadName('Main thread',[]);
+  SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
+  SetThreadNameInternal := SetThreadNameWithLog;
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);

@@ -8483,7 +8483,8 @@ begin
       if i>4 then
         check(s1<>s2);
       // compress the output to validate (somehow) its randomness
-      check(length(SynLZCompress(s1))>length(s1),'random does not compress');
+      check(length(SynLZCompress(s1))>i,'random should not compress');
+      check(length(SynLZCompress(s2))>i,'random should not compress');
     end;
   finally
     a1.Free;
@@ -14401,8 +14402,8 @@ end;
 
 procedure TTestBidirectionalRemoteConnection.CleanUp;
 begin
-  FreeAndNil(fServer);
   FreeAndNil(fHttpServer);
+  FreeAndNil(fServer);
 end;
 
 

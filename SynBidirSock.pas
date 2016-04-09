@@ -449,6 +449,7 @@ type
   TWebSocketProcess = class(TSynPersistentLocked)
   protected
     fSocket: TCrtSocket;
+    fProcessName: RawUTF8;
     fIncoming: TWebSocketFrameList;
     fOutgoing: TWebSocketFrameList;
     fOwnerThread: TSynThread;
@@ -481,7 +482,8 @@ type
     // - other parameters should reflect the client or server expectations
     constructor Create(aSocket: TCrtSocket; aProtocol: TWebSocketProtocol;
       aOwnerConnection: Int64; aOwnerThread: TSynThread;
-      const aSettings: TWebSocketProcessSettings); reintroduce; virtual;
+      const aSettings: TWebSocketProcessSettings;
+      const aProcessName: RawUTF8); reintroduce; virtual;
     /// finalize the context
     // - will release the TWebSocketProtocol associated instance
     destructor Destroy; override;
@@ -506,6 +508,8 @@ type
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
     // - could be nil if the connection is in standard HTTP/1.1 mode
     property Protocol: TWebSocketProtocol read fProtocol;
+    /// the associated process name
+    property ProcessName: RawUTF8 read fProcessName write fProcessName;
     /// how many invalid heartbeat frames have been sent
     // -  a non 0 value indicates a connection problem
     property InvalidPingSendCount: cardinal read fInvalidPingSendCount;
@@ -577,8 +581,8 @@ type
     // useless until you execute Protocols.Add()
     // - in the current implementation, the ServerThreadPoolCount parameter will
     // be ignored by this class, and one thread will be maintained per client
-    constructor Create(const aPort: SockString
-      {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=0{$endif}); override;
+    constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
+      const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=0{$endif}); override;
     /// close the server
     destructor Destroy; override;
     /// access to the protocol list handled by this server
@@ -608,8 +612,8 @@ type
     // use AES-CFB 256 bits encryption
     // - if aWebSocketsAJAX is TRUE, it will also register TWebSocketProtocolJSON
     // so that AJAX applications would be able to connect to this server
-    constructor Create(const aPort: SockString;
-      const aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
+    constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
+      const aProcessName, aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false); reintroduce; overload;
     /// defines the WebSockets protocols to be used for this Server
     // - i.e. 'synopsebinary' and optionally 'synopsejson' modes
@@ -654,7 +658,8 @@ type
     function ComputeContext(out RequestProcess: TOnHttpServerRequest): THttpServerRequest; override;
   public
     /// initialize the client process for a given THttpClientWebSockets
-    constructor Create(aSender: THttpClientWebSockets; aProtocol: TWebSocketProtocol); reintroduce; virtual;
+    constructor Create(aSender: THttpClientWebSockets; aProtocol: TWebSocketProtocol;
+      const aProcessName: RawUTF8); reintroduce; virtual;
     /// finalize the process
     destructor Destroy; override;
   end;
@@ -1430,11 +1435,11 @@ end;
 { TWebSocketProcess }
 
 constructor TWebSocketProcess.Create(aSocket: TCrtSocket;
-  aProtocol: TWebSocketProtocol;
-  aOwnerConnection: Int64; aOwnerThread: TSynThread;
-  const aSettings: TWebSocketProcessSettings);
+  aProtocol: TWebSocketProtocol; aOwnerConnection: Int64; aOwnerThread: TSynThread;
+  const aSettings: TWebSocketProcessSettings; const aProcessName: RawUTF8);
 begin
   inherited Create;
+  fProcessName := aProcessName;
   fSocket := aSocket;
   fProtocol := aProtocol;
   fOwnerConnection := aOwnerConnection;
@@ -1675,7 +1680,7 @@ function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
 var request,answer: TWebSocketFrame;
     start,max: Int64;
 begin
-  WebSocketLog.Add.Log(sllDebug,'%.NotifyCallback(%,%)',[ClassType,aRequest.URL,
+  WebSocketLog.Add.Log(sllDebug,'NotifyCallback(%,%)',[aRequest.URL,
      GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^],self);
   result := STATUS_NOTFOUND;
   if (fProtocol=nil) or
@@ -1722,7 +1727,7 @@ begin
   fOutgoing.Safe.Lock;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
-      WebSocketLog.Add.Log(sllError,'%.ProcessLoop SendFrames',[ClassType],self);
+      WebSocketLog.Add.Log(sllError,'ProcessLoop SendFrames',self);
   finally
     fOutgoing.Safe.UnLock;
   end;
@@ -1844,12 +1849,12 @@ begin
     try
       if (frame.opcode=focText) and
          (logTextFrameContent in fSettings.LogDetails) then
-        log.Log(aEvent,'%.% type=% focText %',[self.ClassType,aMethodName,
+        log.Log(aEvent,'% type=% focText %',[aMethodName,
           Protocol.FrameType(frame),frame.PayLoad],self) else begin
         if logBinaryFrameContent in fSettings.LogDetails then
           LogEscape(frame.PayLoad,content);
-        log.Log(aEvent,'%.% type=% % len=% %',[self.ClassType,aMethodName,
-          Protocol.FrameType(frame),OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
+        log.Log(aEvent,'% type=% % len=% %',[aMethodName,Protocol.FrameType(frame),
+          OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
       end;
     finally
       log.DisableRemoteLog(false);
@@ -1862,8 +1867,8 @@ end;
 
 { TWebSocketServer }
 
-constructor TWebSocketServer.Create(const aPort: SockString
-  {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
+constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
+  const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
 begin
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
@@ -1871,7 +1876,7 @@ begin
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
-  inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
+  inherited Create(aPort,OnStart,OnStop,ProcessName{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -1905,7 +1910,7 @@ begin
   if prot=nil then
     exit;
   Context.fProcess := TWebSocketProcessServer.Create(
-    ClientSock,prot,Context.ConnectionID,Context,fSettings);
+    ClientSock,prot,Context.ConnectionID,Context,fSettings,fProcessName);
   Context.fProcess.fServerResp := Context;
   key := ClientSock.HeaderValue('Sec-WebSocket-Key');
   if Base64ToBinLength(pointer(key),length(key))<>16 then
@@ -1996,9 +2001,10 @@ end;
 { TWebSocketServerRest }
 
 constructor TWebSocketServerRest.Create(const aPort: SockString;
-  const aWebSocketsURI,aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
+  OnStart,OnStop: TNotifyThreadEvent; const aProcessName,
+  aWebSocketsURI, aWebSocketsEncryptionKey: RawUTF8; aWebSocketsAJAX: boolean);
 begin
-  Create(aPort);
+  Create(aPort,OnStart,OnStop,aProcessName);
   WebSocketsEnable(aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsAJAX);
 end;
 
@@ -2020,8 +2026,8 @@ var connection: TWebSocketServerResp;
 begin
   if Ctxt=nil then
     connection := nil else begin
-    WebSocketLog.Add.Log(sllTrace,'%.Callback(%) on socket=%',
-      [ClassType,Ctxt.URL,Ctxt.ConnectionID],self);
+    WebSocketLog.Add.Log(sllTrace,'Callback(%) on socket=%',
+      [Ctxt.URL,Ctxt.ConnectionID],self);
     connection := IsActiveWebSocket(Ctxt.ConnectionID);
   end;
   if connection<>nil then begin
@@ -2031,7 +2037,7 @@ begin
       mode := wscBlockWithAnswer;
     result := connection.NotifyCallback(Ctxt,mode);
   end else begin
-    WebSocketLog.Add.Log(sllError,'%.Callback on inactive socket',[ClassType],self);
+    WebSocketLog.Add.Log(sllError,'Callback() on inactive socket',self);
     result := STATUS_NOTFOUND;
   end;
 end;
@@ -2199,7 +2205,7 @@ begin
         exit;
       // if we reached here, connection is successfully upgraded to WebSockets
       result := ''; // no error message = success
-      fProcess := TWebSocketProcessClient.Create(self,protocol);
+      fProcess := TWebSocketProcessClient.Create(self,protocol,fProcessName);
       protocol := nil; // protocol will be owned by fProcess now
     finally
       protocol.Free;
@@ -2216,10 +2222,10 @@ end;
 { TWebSocketProcessClient }
 
 constructor TWebSocketProcessClient.Create(aSender: THttpClientWebSockets;
-  aProtocol: TWebSocketProtocol);
+  aProtocol: TWebSocketProtocol; const aProcessName: RawUTF8);
 begin
   fMaskSentFrames := 128;
-  inherited Create(aSender,aProtocol,0,nil,aSender.fSettings);
+  inherited Create(aSender,aProtocol,0,nil,aSender.fSettings,aProcessName);
   // initialize the thread after everything is set (Execute may be instant)
   fClientThread := TWebSocketProcessClientThread.Create(self);
 end;
@@ -2246,6 +2252,11 @@ end;
 
 { TWebSocketProcessClientThread }
 
+function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(st));
+end;
+
 constructor TWebSocketProcessClientThread.Create(
   aProcess: TWebSocketProcessClient);
 begin
@@ -2256,15 +2267,14 @@ end;
 
 procedure TWebSocketProcessClientThread.Execute;
 begin
-  SetCurrentThreadName('% %',[self,fProcess.Protocol.Name]);
+  SetCurrentThreadName('% % %',[self,fProcess.fProcessName,fProcess.Protocol.Name]);
   fThreadState := sRun;
   if not Terminated then
     fProcess.ProcessLoop;
   if (fProcess<>nil) and (fProcess.fState=wpsClose) then
     fThreadState := sClosed else
     fThreadState := sFinished;
-  WebSocketLog.Add.Log(sllDebug,'%.Execute finished: ThreadState=%',[ClassType,
-    GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(fThreadState))^],self);
+  WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
 end;
 
 

@@ -609,6 +609,8 @@ begin
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
       fSocket := fSocketClass.Open(fServer,fPort,cslTCP,fConnectTimeout);
+      if fModel<>nil then
+        fSocket.ProcessName := FormatUTF8('%/%',[fPort,fModel.Root]);
       if fSendTimeout>0 then
         fSocket.SendTimeout := fSendTimeout;
       if fReceiveTimeout>0 then
