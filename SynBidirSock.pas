@@ -1865,13 +1865,13 @@ end;
 constructor TWebSocketServer.Create(const aPort: SockString
   {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
 begin
-  inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
   fProtocols := TWebSocketProtocolList.Create;
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
+  inherited Create(aPort{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -1939,9 +1939,8 @@ end;
 procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: integer; ConnectionThread: TSynThread);
 begin
-  if ClientSock.ConnectionUpgrade and
-     ClientSock.KeepAliveClient and
-     IdemPropName(ClientSock.Method,'GET') and
+  if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
+     IdemPropName('GET',pointer(ClientSock.Method),length(ClientSock.Method)) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then
     WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread)) else
     inherited Process(ClientSock,ConnectionID,ConnectionThread);
