@@ -174,9 +174,12 @@ object MainLogView: TMainLogView
       Top = 72
       Width = 118
       Height = 105
+      Hint = 'Selection of Events - right click for shortcuts'
       OnClickCheck = EventsListClickCheck
       ItemHeight = 13
+      ParentShowHint = False
       PopupMenu = FilterMenu
+      ShowHint = True
       Style = lbOwnerDrawFixed
       TabOrder = 3
       OnDblClick = EventsListDblClick
@@ -243,6 +246,8 @@ object MainLogView: TMainLogView
       Width = 118
       Height = 89
       Caption = ' Methods profiler '
+      ParentShowHint = False
+      ShowHint = False
       TabOrder = 4
       OnClick = ProfileGroupClick
     end
@@ -250,12 +255,12 @@ object MainLogView: TMainLogView
       Left = 16
       Top = 336
       Width = 118
-      Height = 81
+      Height = 97
       Caption = ' Threads '
       TabOrder = 8
       object BtnThreadNext: TButton
         Left = 8
-        Top = 16
+        Top = 13
         Width = 97
         Height = 25
         Caption = 'Goto next thread'
@@ -264,12 +269,51 @@ object MainLogView: TMainLogView
       end
       object BtnThreadShow: TButton
         Left = 8
-        Top = 45
+        Top = 39
         Width = 97
         Height = 25
         Caption = 'View threads'
         TabOrder = 1
         OnClick = BtnThreadShowClick
+      end
+      object btnThread0: TButton
+        Left = 8
+        Top = 66
+        Width = 25
+        Height = 25
+        Hint = 'Select No Thread'
+        Caption = '0'
+        Enabled = False
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 2
+        OnClick = BtnThreadClick
+      end
+      object btnThread1: TButton
+        Left = 40
+        Top = 66
+        Width = 25
+        Height = 25
+        Hint = 'Select Only This Thread'
+        Caption = '1'
+        Enabled = False
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 3
+        OnClick = BtnThreadClick
+      end
+      object btnThreadAll: TButton
+        Left = 72
+        Top = 66
+        Width = 33
+        Height = 25
+        Hint = 'Select All Threads'
+        Caption = 'All'
+        Enabled = False
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 4
+        OnClick = BtnThreadClick
       end
     end
     object BtnSearchPrevious: TButton
@@ -382,18 +426,52 @@ object MainLogView: TMainLogView
     OnClick = ProfileListClick
     OnDrawCell = ProfileListDrawCell
   end
-  object ThreadListBox: TCheckListBox
+  object PanelThread: TPanel
     Left = 653
     Top = 0
     Width = 148
     Height = 545
-    OnClickCheck = ThreadListBoxClick
     Align = alLeft
-    ItemHeight = 13
-    PopupMenu = ThreadListMenu
     TabOrder = 4
     Visible = False
-    OnDblClick = ThreadListBoxDblClick
+    object ThreadListBox: TCheckListBox
+      Left = 1
+      Top = 1
+      Width = 146
+      Height = 503
+      OnClickCheck = ThreadListBoxClickCheck
+      Align = alClient
+      ItemHeight = 13
+      TabOrder = 0
+      OnClick = ThreadListBoxClick
+      OnDblClick = ThreadListBoxDblClick
+    end
+    object pnlThreadBottom: TPanel
+      Left = 1
+      Top = 504
+      Width = 146
+      Height = 40
+      Align = alBottom
+      TabOrder = 1
+      DesignSize = (
+        146
+        40)
+      object lblThreadName: TLabel
+        Left = 3
+        Top = 3
+        Width = 141
+        Height = 33
+        Anchors = [akLeft, akTop, akRight, akBottom]
+        AutoSize = False
+        Font.Charset = DEFAULT_CHARSET
+        Font.Color = clWindowText
+        Font.Height = -11
+        Font.Name = 'Tahoma'
+        Font.Style = []
+        ParentFont = False
+        WordWrap = True
+      end
+    end
   end
   object PanelBrowse: TPanel
     Left = 0
@@ -449,22 +527,6 @@ object MainLogView: TMainLogView
     Left = 344
     Top = 72
   end
-  object ThreadListMenu: TPopupMenu
-    Left = 544
-    Top = 112
-    object ThreadListMenuAll: TMenuItem
-      Caption = 'Select All'
-      OnClick = ThreadListMenuClick
-    end
-    object ThreadListMenuNone: TMenuItem
-      Caption = 'Select None'
-      OnClick = ThreadListMenuClick
-    end
-    object ThreadListMenuThis: TMenuItem
-      Caption = 'Select Only This'
-      OnClick = ThreadListMenuThisClick
-    end
-  end
   object ListMenu: TPopupMenu
     Left = 816
     Top = 120
@@ -477,8 +539,8 @@ object MainLogView: TMainLogView
     Enabled = False
     Interval = 200
     OnTimer = tmrRefreshTimer
-    Left = 241
-    Top = 424
+    Left = 345
+    Top = 336
   end
   object dlgSaveList: TSaveDialog
     DefaultExt = '.log'

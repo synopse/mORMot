@@ -118,23 +118,6 @@ begin
     Owner.OnLogReceived(Owner, Level, Text);
 end;
 
-const
-  LOG_COLORS: array[Boolean, TSynLogInfo] of TColor = (
-   (clWhite, $DCC0C0, $DCDCDC, clSilver, $8080C0, $8080FF, $C0DCC0, $DCDCC0,
-    //  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
-    $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
-    //  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-    $4040FF, $B08080, $B0B080, $8080DC, $80DC80, $DC8080, $DCFF00, $DCD000,
-    //  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-    $DCDC80, $DC80DC, $DCDCDC,
-    //  sllServiceCall, sllServiceReturn, sllUserAuth,
-    $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD, clSilver),
-    //  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo
-   (clBlack, clBlack, clBlack, clBlack, clBlack, clWhite, clBlack, clBlack, clWhite,
-    clWhite, clWhite, clBlack, clBlack, clWhite, clWhite, clBlack, clWhite,
-    clBlack, clBlack, clBlack, clBlack, clBlack, clBlack, clBlack, clBlack,
-    clBlack, clBlack, clBlack, clBlack, clWhite, clBlack, clBlack));
-
 procedure TLogFrame.chklstEventsDrawItem(Control: TWinControl; Index: Integer;
   Rect: TRect; State: TOwnerDrawState);
 var
@@ -144,8 +127,8 @@ begin
     exit;
   E := TSynLogInfo(chklstEvents.Items.Objects[Index]);
   with chklstEvents.Canvas do begin
-    Brush.Color := LOG_COLORS[false, E];
-    Font.Color := LOG_COLORS[true, E];
+    Brush.Color := LOG_LEVEL_COLORS[false, E];
+    Font.Color := LOG_LEVEL_COLORS[true, E];
     TextRect(Rect, Rect.Left + 4, Rect.Top, FEventCaption[E]);
   end;
 end;
@@ -384,46 +367,46 @@ var
 
 begin
   with drwgrdEvents.Canvas do
-    if FLog = nil then
-      FillRect(Rect)
-    else if FLog.EventLevel <> nil then begin
-      Brush.Style := bsClear;
-      FLogSafe.Lock;
-      try
-        if cardinal(ARow) < cardinal(FLogSelectedCount) then begin
-          index := FLogSelected[ARow];
-          b := (gdFocused in State) or (gdSelected in State);
-          if b then
-            Brush.Color := clBlack
+  if FLog = nil then
+    FillRect(Rect)
+  else if FLog.EventLevel <> nil then begin
+    Brush.Style := bsClear;
+    FLogSafe.Lock;
+    try
+      if cardinal(ARow) < cardinal(FLogSelectedCount) then begin
+        index := FLogSelected[ARow];
+        b := (gdFocused in State) or (gdSelected in State);
+        if b then
+          Brush.Color := clBlack
+        else
+          Brush.Color := LOG_LEVEL_COLORS[b, FLog.EventLevel[index]];
+        Font.Color := LOG_LEVEL_COLORS[not b, FLog.EventLevel[index]];
+        case ACol of
+        0:
+          DateTimeToString(txt, TIME_FORMAT[FLog.Freq = 0], FLog.EventDateTime(index));
+        1:
+          txt := FEventCaption[FLog.EventLevel[index]];
+        2:
+          if FLog.EventThread <> nil then
+            txt := IntToString(cardinal(FLog.EventThread[index]))
           else
-            Brush.Color := LOG_COLORS[b, FLog.EventLevel[index]];
-          Font.Color := LOG_COLORS[not b, FLog.EventLevel[index]];
-          case ACol of
-            0:
-              DateTimeToString(txt, TIME_FORMAT[FLog.Freq = 0], FLog.EventDateTime(index));
-            1:
-              txt := FEventCaption[FLog.EventLevel[index]];
-            2:
-              if FLog.EventThread <> nil then
-                txt := IntToString(cardinal(FLog.EventThread[index]))
-              else
-                SetTxtFromEvent;
-            3:
-              SetTxtFromEvent;
-          end;
+            SetTxtFromEvent;
+        3:
+          SetTxtFromEvent;
         end;
-      finally
-        FLogSafe.UnLock;
       end;
-      if txt = '' then begin
-        Brush.Color := clLtGray;
-        FillRect(Rect);
-      end
-      else
-        TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
+    finally
+      FLogSafe.UnLock;
+    end;
+    if txt = '' then begin
+      Brush.Color := clLtGray;
+      FillRect(Rect);
     end
     else
-      TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.Strings[ARow]);
+      TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
+  end
+  else
+    TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.Strings[ARow]);
 end;
 
 procedure TLogFrame.drwgrdEventsClick(Sender: TObject);

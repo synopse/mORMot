@@ -1030,9 +1030,12 @@ type
     /// map the events occurring in the .log file content
     fLevels: TSynLogInfoDynArray;
     fThreads: TWordDynArray;
-    fThreadsRows: TCardinalDynArray;
+    fThreadInfo: array of record
+      Rows: cardinal;
+      SetThreadName: TPUTF8CharDynArray;
+    end;
+    fThreadInfoMax: cardinal;
     fThreadsCount: integer;
-    fThreadsRowsCount: cardinal;
     fThreadMax: cardinal;
     fLineLevelOffset: cardinal;
     fLineTextOffset: cardinal;
@@ -1099,6 +1102,13 @@ type
     /// add a new line to the already parsed content
     // - overriden method which would identify the freq=%,%,% pseudo-header
     procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
+    /// returns the name of a given thread, according to the position in the log
+    function ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
+    /// returns the name of all threads, according to the position in the log
+    // - result[0] stores the name of ThreadID = 1
+    function ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
+    /// returns the number of occurences of a given thread
+    function ThreadRows(ThreadID: integer): cardinal;
     /// retrieve the level of an event
     // - is calculated by Create() constructor
     // - EventLevel[] array index is from 0 to Count-1
@@ -1116,8 +1126,6 @@ type
     property EventThread: TWordDynArray read fThreads;
     /// the number of threads
     property ThreadsCount: cardinal read fThreadMax;
-    /// the number of occurences of each thread ID
-    property ThreadsRows: TCardinalDynArray read fThreadsRows;
     /// profiled methods information
     // - is calculated by Create() constructor
     // - will contain the sllEnter index, with the associated elapsed time
@@ -1203,6 +1211,26 @@ const
     ' call  ', ' ret   ', ' auth  ',
     ' cust1 ', ' cust2 ', ' cust3 ', ' cust4 ', ' rotat ', ' dddER ', ' dddIN ',
     ' mon   ');
+
+  /// RGB colors corresponding to each logging level
+  // - matches the TColor values, as used by the VCL
+  LOG_LEVEL_COLORS: array[Boolean,TSynLogInfo] of integer = (
+    ($FFFFFF,$DCC0C0,$DCDCDC,$C0C0C0,$8080C0,$8080FF,$C0DCC0,$DCDCC0,
+{  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave, }
+     $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
+{  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,           }
+     $4040FF, $B08080, $B0B080, $8080DC, $80DC80, $DC8080, $DCFF00, $DCD000,
+{  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,     }
+     $DCDC80, $DC80DC, $DCDCDC,
+{  sllServiceCall, sllServiceReturn, sllUserAuth,                                  }
+     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD, $C0C0C0),
+{  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo }
+    ($000000,$000000,$000000,$000000,$000000,$FFFFFF,$000000,$000000,
+     $FFFFFF,$FFFFFF,$FFFFFF,$000000,$000000,
+     $FFFFFF,$FFFFFF,$000000,$FFFFFF,$000000,$000000,$000000,$000000,
+     $000000,$000000,$000000,
+     $000000,$000000,$000000,$000000,$000000,$FFFFFF,$000000,$000000));
+
 
   /// how TLogFilter map TSynLogInfo events
   LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
@@ -2493,7 +2521,7 @@ var
 procedure AutoFlushProc(P: pointer); stdcall;  // TThread not needed here
 var i: integer;
 begin
-  SetThreadNameDefault(GetCurrentThreadID,'TSynLog AutoFlush');
+  SetThreadNameDefault(GetCurrentThreadID,'SynLog AutoFlushProc');
   repeat
     for i := 1 to 10 do begin // check every second for pending data
       SleepHiRes(100);
@@ -4141,8 +4169,10 @@ begin
     CleanLevels(self);
     if Length(fLevels)-fCount>16384 then begin // size down only if worth it
       SetLength(fLevels,fCount);
-      if fThreads<>nil then
+      if fThreads<>nil then begin
         SetLength(fThreads,fCount);
+        SetLength(fThreadInfo,fThreadMax+1);
+      end;
     end;
     // 4. compute customer-side profiling
     SetLength(fLogProcNatural,fLogProcNaturalCount);
@@ -4319,7 +4349,7 @@ procedure TSynLogFile.ProcessOneLine(LineBeg, LineEnd: PUTF8Char);
       end;
     end;
   end;
-var V: cardinal;
+var thread,n: cardinal;
     MS: integer;
     L: TSynLogInfo;
 begin
@@ -4352,26 +4382,32 @@ begin
       fThreadsCount := fLinesMax;
       SetLength(fThreads,fLinesMax);
     end;
-    V := Chars3ToInt18(LineBeg+fLineLevelOffset-5);
-    fThreads[fCount-1] := V;
-    if V>fThreadMax then begin
-      fThreadMax := V;
-      if V>=fThreadsRowsCount then begin
-        fThreadsRowsCount := V+256;
-        SetLength(fThreadsRows,fThreadsRowsCount);
+    thread := Chars3ToInt18(LineBeg+fLineLevelOffset-5);
+    fThreads[fCount-1] := thread;
+    if thread>fThreadMax then begin
+      fThreadMax := thread;
+      if thread>=fThreadInfoMax then begin
+        fThreadInfoMax := thread+256;
+        SetLength(fThreadInfo,fThreadInfoMax);
       end;
     end;
-    inc(fThreadsRows[V]);
-  end else V := 0;
-
+    inc(fThreadInfo[thread].Rows);
+    if (L=sllInfo) and IdemPChar(LineBeg+fLineLevelOffset+5,'SETTHREADNAME') then
+      with fThreadInfo[thread] do begin
+        n := length(SetThreadName);
+        SetLength(SetThreadName,n+1);
+        SetThreadName[n] := LineBeg;
+      end;
+  end else
+    thread := 0;
   fLevels[fCount-1] := L; // need exact match of level text
   include(fLevelUsed,L);
   case L of
   sllEnter: begin
-    if Cardinal(fLogProcStackCount[V])>=Cardinal(length(fLogProcStack[V])) then
-      SetLength(fLogProcStack[V],length(fLogProcStack[V])+256);
-    fLogProcStack[V][fLogProcStackCount[V]] := fLogProcNaturalCount;
-    inc(fLogProcStackCount[V]);
+    if Cardinal(fLogProcStackCount[thread])>=Cardinal(length(fLogProcStack[thread])) then
+      SetLength(fLogProcStack[thread],length(fLogProcStack[thread])+256);
+    fLogProcStack[thread][fLogProcStackCount[thread]] := fLogProcNaturalCount;
+    inc(fLogProcStackCount[thread]);
     if Cardinal(fLogProcNaturalCount)>=Cardinal(length(fLogProcNatural)) then
       SetLength(fLogProcNatural,length(fLogProcNatural)+32768);
     // fLogProcNatural[].Index will be set in TSynLogFile.LoadFromMap
@@ -4379,14 +4415,58 @@ begin
   end;
   sllLeave:
   if (LineEnd-LineBeg>10) and (LineEnd[-4]='.') and (LineEnd[-8]='.') and
-     (fLogProcStackCount[V]>0) then begin // 00.020.006
+     (fLogProcStackCount[thread]>0) then begin // 00.020.006
     MS := DecodeMicroSec(PByte(LineEnd-10));
     if MS>=0 then begin
-      dec(fLogProcStackCount[V]);
-      fLogProcNatural[fLogProcStack[V][fLogProcStackCount[V]]].Time := MS;
+      dec(fLogProcStackCount[thread]);
+      fLogProcNatural[fLogProcStack[thread][fLogProcStackCount[thread]]].Time := MS;
     end;
   end;
   end;
+end;
+
+function TSynLogFile.ThreadRows(ThreadID: integer): cardinal;
+begin
+  if fThreadInfo<>nil then
+    result := fThreadInfo[ThreadID].Rows else
+    result := 0;
+end;
+
+function TSynLogFile.ThreadName(ThreadID, CurrentLogIndex: integer): RawUTF8;
+var i: integer;
+    found: pointer;
+begin
+  if ThreadID=1 then
+    result := 'Main Thread' else begin
+    result := '';
+    if cardinal(ThreadID)<=fThreadMax then
+      with fThreadInfo[ThreadID] do
+      if SetThreadName<>nil then begin
+        found := SetThreadName[0];
+        if cardinal(CurrentLogIndex)<cardinal(fCount) then
+        for i := length(SetThreadName)-1 downto 1 do
+          if PtrUInt(fLines[CurrentLogIndex])>=PtrUInt(SetThreadName[i]) then begin
+            found := SetThreadName[i];
+            break;
+          end;
+        SetString(result,PAnsiChar(found),GetLineSize(found,fMapEnd));
+        delete(result,1,PosEx('=',result,40));
+      end;
+    if result='' then
+      result := 'Thread';
+  end;
+  if cardinal(ThreadID)<=fThreadMax then
+    result := FormatUTF8('% % (% rows)',[ThreadID,result,fThreadInfo[ThreadID].Rows]);
+end;
+
+function TSynLogFile.ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
+var i: integer;
+begin
+  SetLength(result,fThreadMax);
+  if fThreadInfo=nil then
+    exit;
+  for i := 1 to fThreadMax do
+    result[i-1] := ThreadName(i,CurrentLogIndex);   
 end;
 
 function TSynLogFile.GetEventText(index: integer): RawUTF8;

@@ -26,6 +26,7 @@ type
 
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
+    PanelThread: TPanel;
     BtnBrowse: TButton;
     EventsList: TCheckListBox;
     FilterMenu: TPopupMenu;
@@ -47,9 +48,6 @@ type
     ThreadListBox: TCheckListBox;
     Splitter1: TSplitter;
     BtnThreadShow: TButton;
-    ThreadListMenu: TPopupMenu;
-    ThreadListMenuAll: TMenuItem;
-    ThreadListMenuNone: TMenuItem;
     PanelBrowse: TPanel;
     {$ifndef FPC}
     Drive: TDriveComboBox;
@@ -69,7 +67,11 @@ type
     btnListClear: TButton;
     btnListSave: TButton;
     dlgSaveList: TSaveDialog;
-    ThreadListMenuThis: TMenuItem;
+    pnlThreadBottom: TPanel;
+    lblThreadName: TLabel;
+    btnThread0: TButton;
+    btnThread1: TButton;
+    btnThreadAll: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -98,8 +100,8 @@ type
     procedure BtnThreadNextClick(Sender: TObject);
     procedure BtnThreadShowClick(Sender: TObject);
     procedure ThreadListBoxDblClick(Sender: TObject);
-    procedure ThreadListMenuClick(Sender: TObject);
-    procedure ThreadListBoxClick(Sender: TObject);
+    procedure BtnThreadClick(Sender: TObject);
+    procedure ThreadListBoxClickCheck(Sender: TObject);
     procedure BtnBrowseClick(Sender: TObject);
     procedure FilesClick(Sender: TObject);
     procedure ListMenuCopyClick(Sender: TObject);
@@ -108,7 +110,7 @@ type
     procedure tmrRefreshTimer(Sender: TObject);
     procedure btnListClearClick(Sender: TObject);
     procedure btnListSaveClick(Sender: TObject);
-    procedure ThreadListMenuThisClick(Sender: TObject);
+    procedure ThreadListBoxClick(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -118,14 +120,17 @@ type
     FLogUncompressed: TMemoryStream;
     FEventCaption: array[TSynLogInfo] of string;
     FThreadSelected: TByteDynArray;
+    FThreadNames: TRawUTF8DynArray;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
     FRemoteLogService: TSQLHTTPRemoteLogServer; // from mORMotHTTPServer
     FEventsRemoteViewSet: TSynLogInfos;
+    FPanelThreadVisible: boolean;
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
     procedure BtnFilterMenu(Sender: TObject);
     procedure ThreadListCheckRefresh;
+    procedure ThreadListNameRefresh(Index: integer);
     procedure ReceivedOne(const Text: RawUTF8);
   public
     destructor Destroy; override;
@@ -148,7 +153,7 @@ implementation
 {$ifdef FPC}
 uses
   Themes,
-  LCLType;
+  LCLType, SynCommons;
 {$endif}
 
 resourcestring
@@ -164,25 +169,9 @@ resourcestring
   sNoFile = 'No File';
   sRemoteLog = 'Remote Log';
   sUnknown = 'Unknown';
-
-const
-  LOG_COLORS: array[Boolean,TSynLogInfo] of TColor = (
-    (clWhite,$DCC0C0,$DCDCDC,clSilver,$8080C0,$8080FF,$C0DCC0,$DCDCC0,
-//  sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError, sllEnter, sllLeave,
-     $C0C0F0, $C080FF, $C080F0, $C080C0, $C080C0,
-//  sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
-     $4040FF, $B08080, $B0B080, $8080DC, $80DC80, $DC8080, $DCFF00, $DCD000,
-//  sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
-     $DCDC80, $DC80DC, $DCDCDC,
-//  sllServiceCall, sllServiceReturn, sllUserAuth,
-     $D0D0D0, $D0D0DC, $D0D0C0, $D0D0E0, $20E0D0, $8080FF, $DCCDCD, clSilver),
-//  sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun, sllDDDError,sllDDDInfo
-    (clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack,
-     clWhite,clWhite,clWhite,clBlack,clBlack,
-     clWhite,clWhite,clBlack,clWhite,clBlack,clBlack,clBlack,clBlack,
-     clBlack,clBlack,clBlack,
-     clBlack,clBlack,clBlack,clBlack,clBlack,clWhite,clBlack,clBlack));
-
+  sWindowsStats = 'Windows %s (service pack %d)';
+  sTimeInfo = '%d lines - time elapsed: %s';
+  
 { TMainLogView }
 
 procedure TMainLogView.SetLogFileName(const Value: TFileName);
@@ -256,18 +245,15 @@ begin
   if ThreadGroup.Visible then begin
     SetLength(FThreadSelected,(FLog.ThreadsCount shr 3)+1);
     fillchar(FThreadSelected[0],Length(FThreadSelected),255);
+    FThreadNames := FLog.ThreadNames(-1);
     ThreadGroup.Top := BtnStats.Top+32;
-    with ThreadListBox.Items do begin
-      BeginUpdate;
-      try
-        for i := 1 to FLog.ThreadsCount do begin
-          Add(Format('Thread %d (%d rows)',[i,FLog.ThreadsRows[i]]));
-          ThreadListBox.Checked[i-1] := true;
-        end;
-      finally
-        EndUpdate;
-      end;
+    ThreadListBox.Items.BeginUpdate;
+    ThreadListBox.Items.Clear;
+    for i := 0 to FLog.ThreadsCount-1 do begin
+      ThreadListBox.Items.Add(UTF8ToString(FThreadNames[i]));
+      ThreadListBox.Checked[i] := true;
     end;
+    ThreadListBox.Items.EndUpdate;
   end;
   ProfileGroup.ItemIndex := 0;
   MergedProfile.Checked := false;
@@ -331,6 +317,7 @@ end;
 procedure TMainLogView.FormShow(Sender: TObject);
 var CmdLine: TFileName;
 begin
+  PanelThread.Width := 300;
   if ParamCount>0 then begin
     CmdLine := ParamStr(1);
     if SysUtils.DirectoryExists(CmdLine) then begin
@@ -383,8 +370,8 @@ begin
   E := TSynLogInfo(EventsList.Items.Objects[Index]);
   inherited;
   with EventsList do begin
-    Canvas.Brush.Color := LOG_COLORS[false,E];
-    Canvas.Font.Color  := LOG_COLORS[true,E];
+    Canvas.Brush.Color := LOG_LEVEL_COLORS[false,E];
+    Canvas.Font.Color  := LOG_LEVEL_COLORS[true,E];
     {$ifdef FPC}
     Canvas.FillRect(Rect);
     BRect.Left := Rect.Left + 1;
@@ -497,8 +484,8 @@ begin
         b := (gdFocused in State) or (gdSelected in State);
         if b then
           Brush.Color := clBlack else
-          Brush.Color := LOG_COLORS[b,FLog.EventLevel[Index]];
-        Font.Color  := LOG_COLORS[not b,FLog.EventLevel[Index]];
+          Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
+        Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
         case ACol of
         0: DateTimeToString(txt,TIME_FORMAT[FLog.Freq=0],FLog.EventDateTime(Index));
         1: txt := FEventCaption[FLog.EventLevel[Index]];
@@ -537,8 +524,8 @@ begin
       if cardinal(Index)<cardinal(FLogSelectedCount) then begin
         Index := FLogSelected[Index];
         b := (odFocused in State) or (odSelected in State);
-        Brush.Color := LOG_COLORS[b,FLog.EventLevel[Index]];
-        Font.Color  := LOG_COLORS[not b,FLog.EventLevel[Index]];
+        Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
+        Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
         FillRect(Rect);
         s := FLog.Lines[Index];
         if Length(s)>400 then
@@ -704,20 +691,28 @@ begin
 end;
 
 procedure TMainLogView.ListClick(Sender: TObject);
-var i: integer;
+var i,ndx: integer;
     Selection: TGridRect;
     elapsed: TDateTime;
     s,tim: string;
 begin
   i := List.Row;
-  if cardinal(i)>=cardinal(FLogSelectedCount) then
+  if cardinal(i)<cardinal(FLogSelectedCount) then begin
+    i := FLogSelected[i];
+    s := FLog.Strings[i];
+    if FPanelThreadVisible and (FLog.EventThread<>nil) then begin
+      ThreadListNameRefresh(i);    
+      ndx := FLog.EventThread[i]-1;
+      if ndx<>ThreadListBox.ItemIndex then begin
+        btnThread1.Caption := IntToStr(ndx+1);
+        ThreadListBox.ItemIndex := ndx;
+        ThreadListBoxClick(nil);
+      end;
+    end;
+  end else
     if FLog<>nil then
       s := FLog.Strings[i] else
-      s := '' else begin
-    s := FLog.Strings[FLogSelected[i]];
-    if FLog.EventThread<>nil then
-      ThreadListBox.ItemIndex := FLog.EventThread[FLogSelected[i]]-1;
-  end;
+      s := '';
   Selection := List.Selection;
   if Selection.Bottom>Selection.Top then begin
     elapsed := FLog.EventDateTime(Selection.Bottom)-FLog.EventDateTime(Selection.Top);
@@ -730,13 +725,13 @@ begin
       DateTimeToString(tim,TIME_FORMAT[false],elapsed);
       s := tim+'.'+s;
     end;
-    s := IntToStr(Selection.Bottom-Selection.Top+1)+' lines - time elapsed: '+s;
+    s := format(sTimeInfo,[Selection.Bottom-Selection.Top+1,s]);
   end;
   MemoBottom.Text := s;
 end;
 
 procedure TMainLogView.ListDblClick(Sender: TObject);
-var i, Level: integer;
+var i, j, Level: integer;
     currentThreadID: Word;
 begin
   i := List.Row;
@@ -746,42 +741,44 @@ begin
       currentThreadID := FLog.EventThread[FLogSelected[i]] else
       currentThreadID := 0;
     case FLog.EventLevel[FLogSelected[i]] of
-      sllEnter: // retrieve corresponding Leave event
-        repeat
-          inc(i);
-          if i>=FLogSelectedCount then
-            exit;
-          case FLog.EventLevel[FLogSelected[i]] of
-          sllEnter:
-            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
-              inc(Level);
-          sllLeave:
-            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
-              if Level=0 then begin
-                SetListItem(i);
-                exit;
-              end else
-                dec(Level);
-          end;
-        until false;
-      sllLeave: // retrieve corresponding Enter event
-        repeat
-          dec(i);
-          if i<0 then
-            exit;
-          case FLog.EventLevel[FLogSelected[i]] of
-          sllLeave:
-            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
-              inc(Level);
-          sllEnter:
-            if (currentThreadID=0) or (FLog.EventThread[FLogSelected[i]]=currentThreadID) then
-              if Level=0 then begin
-                SetListItem(i);
-                exit;
-              end else
-                dec(Level);
-          end;
-        until false;
+    sllEnter: // retrieve corresponding Leave event
+      repeat
+        inc(i);
+        if i>=FLogSelectedCount then
+          exit;
+        j := FLogSelected[i];
+        case FLog.EventLevel[j] of
+        sllEnter:
+          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
+            inc(Level);
+        sllLeave:
+          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
+            if Level=0 then begin
+              SetListItem(i);
+              exit;
+            end else
+              dec(Level);
+        end;
+      until false;
+    sllLeave: // retrieve corresponding Enter event
+      repeat
+        dec(i);
+        if i<0 then
+          exit;
+        j := FLogSelected[i];
+        case FLog.EventLevel[j] of
+        sllLeave:
+          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
+            inc(Level);
+        sllEnter:
+          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
+            if Level=0 then begin
+              SetListItem(i);
+              exit;
+            end else
+              dec(Level);
+        end;
+      until false;
     end;
   end;
 end;
@@ -825,12 +822,18 @@ end;
 
 procedure TMainLogView.BtnThreadShowClick(Sender: TObject);
 begin
-  ThreadListBox.Visible := not ThreadListBox.Visible;
-  Splitter3.Visible := ThreadListBox.Visible;
-  if ThreadListBox.Visible then begin
-    ThreadListBox.Left := ProfileList.Left+ProfileList.Width;
-    Splitter3.Left := ThreadListBox.Left+ThreadListBox.Width;
-  end;
+  FPanelThreadVisible := not FPanelThreadVisible;
+  PanelThread.Visible := FPanelThreadVisible;
+  Splitter3.Visible := FPanelThreadVisible;
+  if FPanelThreadVisible then begin
+    PanelThread.Left := ProfileList.Left+ProfileList.Width;
+    Splitter3.Left := PanelThread.Left+PanelThread.Width;
+    ListClick(nil);
+  end else
+    btnThread1.Caption := '1';
+  btnThread0.Enabled := FPanelThreadVisible;
+  btnThread1.Enabled := FPanelThreadVisible;
+  btnThreadAll.Enabled := FPanelThreadVisible;
 end;
 
 procedure TMainLogView.BtnStatsClick(Sender: TObject);
@@ -863,7 +866,7 @@ begin
           s := ' / '+UTF8ToString(InstanceName);
         if OS=wUnknown then
           win := UTF8ToString(DetailedOS) else
-          win := format('Windows %s (service pack %d)',[WINDOWS_NAME[OS],ServicePack]);
+          win := format(sWindowsStats,[WINDOWS_NAME[OS],ServicePack]);
         s := format(sStats,
           [FileName,Ansi7ToString(KB(Map.Size)),
            UTF8ToString(ExecutableName),s,Ansi7ToString(ExecutableVersion),
@@ -1010,24 +1013,21 @@ begin
 {$WARNINGS ON}
 end;
 
-procedure TMainLogView.ThreadListMenuClick(Sender: TObject);
+procedure TMainLogView.BtnThreadClick(Sender: TObject);
+var b: byte;
+    i: integer;
 begin
-  fillchar(FThreadSelected[0],Length(FThreadSelected),byte((Sender=ThreadListMenuAll))*255);
+  if Sender=BtnThreadAll then
+    b := 255 else
+    b := 0;
+  fillchar(FThreadSelected[0],Length(FThreadSelected),b);
+  if Sender=BtnThread1 then begin
+    i := ThreadListBox.ItemIndex;
+    if i>=0 then
+      SetBit(FThreadSelected[0],i);
+  end;
   ThreadListCheckRefresh;
   EventsListClickCheck(nil);
-end;
-
-procedure TMainLogView.ThreadListMenuThisClick(Sender: TObject);
-var
-  i: integer;
-begin
-  i := ThreadListBox.ItemIndex;
-  if i>=0 then begin
-    fillchar(FThreadSelected[0],Length(FThreadSelected),byte(0));
-    SetBit(FThreadSelected[0],i);
-    ThreadListCheckRefresh;
-    EventsListClickCheck(nil);
-  end;
 end;
 
 procedure TMainLogView.ThreadListCheckRefresh;
@@ -1037,7 +1037,7 @@ begin
     ThreadListBox.Checked[i] := GetBit(FThreadSelected[0],i);
 end;
 
-procedure TMainLogView.ThreadListBoxClick(Sender: TObject);
+procedure TMainLogView.ThreadListBoxClickCheck(Sender: TObject);
 var i: integer;
 begin
   i := ThreadListBox.ItemIndex;
@@ -1046,6 +1046,29 @@ begin
       SetBit(FThreadSelected[0],i) else
       UnSetBit(FThreadSelected[0],i);
     EventsListClickCheck(nil);
+  end;
+end;
+
+procedure TMainLogView.ThreadListNameRefresh(Index: integer);
+var names: TRawUTF8DynArray;
+    i: integer;
+begin
+  names := FLog.ThreadNames(Index);
+  if names=nil then
+    exit;
+  for i := 0 to FLog.ThreadsCount-1 do
+    if names[i]<>FThreadNames[i] then
+      ThreadListBox.Items[i] := UTF8ToString(names[i]);
+  FThreadNames := names;
+end;
+
+procedure TMainLogView.ThreadListBoxClick(Sender: TObject);
+var i: integer;
+begin
+  i := ThreadListBox.ItemIndex;
+  if i>=0 then begin
+    lblThreadName.Caption := UTF8ToString(FThreadNames[i]);
+    btnThread1.Caption := IntToStr(i+1);
   end;
 end;
 
@@ -1214,5 +1237,6 @@ begin
     FileSynLZ('temp~.log',dlgSaveList.FileName,LOG_MAGIC) else
     RenameFile('temp~.log',dlgSaveList.FileName);
 end;
+
 
 end.
