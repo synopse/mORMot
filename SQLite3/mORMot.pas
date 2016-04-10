@@ -28215,15 +28215,15 @@ function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
 var CT: PClassType;
 begin
   CT := ClassType;
-  while CT<>nil do begin
+  repeat
     if CT^.ClassType={$ifndef FPC}pointer{$endif}(AClass) then begin
       result := true;
       exit;
     end;
-    if CT^.ParentInfo=nil then
+    if CT^.ParentInfo = nil then
       break else
       CT := CT^.ParentInfo^.ClassType;
-  end;
+  until CT = nil;
   result := false;
 end;
 {$else}
@@ -28233,12 +28233,12 @@ asm // eax=PClassType edx=AClass
    cmp edx,[eax].TClassType.ClassType
    jz @2
    mov eax,[eax].TClassType.ParentInfo
-   or eax,eax
+   test eax,eax
    jz @3 // no parent
    mov eax,[eax] // get parent type info
    jmp @1
-@2:mov al,1
-@3:
+@3:rep ret
+@2:mov eax,1
 end;
 {$endif}
 
