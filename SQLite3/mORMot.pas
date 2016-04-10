@@ -24741,10 +24741,10 @@ type
     procedure QuickSort(L, R: Integer);
     /// compare value at index I with pivot value
     // - sort by ID if values are identical
-    function CompI: integer;
+    function CompI: integer; {$ifdef HASINLINE}inline;{$endif}
     /// compare value at index J with pivot value
     // - sort by ID if values are identical
-    function CompJ: integer;
+    function CompJ: integer; {$ifdef HASINLINE}inline;{$endif}
     /// set the pivot value
     procedure SetPP(aPP: PPUTF8Char; aP: PtrInt);
   end;
