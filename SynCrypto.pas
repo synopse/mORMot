@@ -1409,8 +1409,12 @@ end;
 {$ifdef CPU64}
 
 procedure bswap256(s,d: PIntegerArray);
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm // rcx=s, rdx=d
   .noframe
+{$endif}
   mov eax,[rcx]; mov r8d,[rcx+4]; mov r9d,[rcx+8]; mov r10d,[rcx+12]
   bswap eax;     bswap r8d;       bswap r9d;       bswap r10d
   mov [rdx],eax; mov [rdx+4],r8d; mov [rdx+8],r9d; mov [rdx+12],r10d
@@ -1420,8 +1424,12 @@ asm // rcx=s, rdx=d
 end;
 
 procedure bswap160(s,d: PIntegerArray);
+{$ifdef FPC}nostackframe; assembler;
 asm
+{$else}
+asm // rcx=s, rdx=d
   .noframe
+{$endif}
   mov eax,[rcx]; mov r8d,[rcx+4]; mov r9d,[rcx+8]; mov r10d,[rcx+12];
   bswap eax;     bswap r8d;       bswap r9d;       bswap r10d;
   mov [rdx],eax; mov [rdx+4],r8d; mov [rdx+8],r9d; mov [rdx+12],r10d;
@@ -1939,8 +1947,12 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
 end;
 
 procedure AesNiDecrypt(const ctxt: TAESContext; const source: TAESBlock; var dest: TAESBlock);
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
+{$endif}
   movdqu xmm7,[rdx]
   mov dl,[rcx].TAESContext.Rounds
   cmp dl,10
@@ -7284,6 +7296,7 @@ end;
 destructor TAESPRNG.Destroy;
 begin
   inherited Destroy;
+  FillCharFast(fAES,sizeof(fAES),0); // avoid the TAES values clear in the heap
   DeleteCriticalSection(fLock);
 end;
 
@@ -7294,7 +7307,12 @@ function CreateGuid(out guid: TGUID): HResult; stdcall;
 
 class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
 var time: Int64;
-    time32: array[0..3] of byte absolute time; // use only LSB (MSB may likely be 0)
+    systemtime: TDateTime;
+    threads: array[0..2] of cardinal;
+    version: RawByteString;
+    sha: TSHA256;
+    entropy: array[0..1] of TSHA256Digest;
+    paranoid: cardinal;
     p: PByteArray;
     i: integer;
     fromOS: boolean;
@@ -7306,8 +7324,10 @@ var time: Int64;
     prov: HCRYPTPROV;
     {$endif}
 begin
+  QueryPerformanceCounter(time);
   SetLength(result,Len);
   p := pointer(result);
+  // retrieve entropy from OS
   fromOS := false;
   {$ifdef LINUX} // Kylix's or FPC's CreateGUID() may be poor
   dev := FileOpen('/dev/urandom',fmOpenRead);
@@ -7344,24 +7364,50 @@ begin
       dec(i,SizeOf(g));
     until false;
   end;
-  QueryPerformanceCounter(time); // always add some minimal entropy
-  for i := 0 to Len-1 do
-    p^[i] := p^[i] xor Xor32Byte[(p^[i] shl 5) xor time32[i and 3]];
+  // always add some minimal entropy - it won't hurt
+  sha.Init;
+  sha.Update(@time,sizeof(time));
+  sha.Update(@entropy,sizeof(entropy));  // bytes on CPU stack
+  systemtime := NowUTC;
+  sha.Update(@systemtime,sizeof(systemtime));
+  systemtime := Random;
+  sha.Update(@systemtime,sizeof(systemtime));
+  version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
+  sha.Update(pointer(version),length(version)); // exe and host/user info
+  threads[0] := HInstance;
+  threads[1] := GetCurrentThreadId;
+  threads[2] := MainThreadID;
+  sha.Update(@threads,sizeof(threads));
+  sha.Final(entropy[1]);
+  sha.Update(@time,sizeof(time));
+  sha.Update(@entropy,sizeof(entropy));
+  CreateGUID(g); // not random, but genuine
+  sha.Update(@g,sizeof(g));
+  SleepHiRes(0); // force non deterministic time shift
+  QueryPerformanceCounter(time);
+  sha.Update(@time,sizeof(time)); // include GetEntropy() execution time
+  sha.Final(entropy[0]);
+  for i := 0 to Len-1 do begin
+    paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
+    p^[i] := p^[i] xor Xor32Byte[(p^[i] shl 5) xor paranoid] xor paranoid;
+  end;
 end;
 
 procedure TAESPRNG.Seed;
 const PASSLEN = 256;
-      SALTLEN = 32;
+      SALTLEN = 16;
 var key: TSHA256Digest;
     pass, salt: RawByteString;
 begin
   pass := GetEntropy(PASSLEN+SALTLEN); // get all entropy in one call
   salt := copy(pass,PASSLEN+1,SALTLEN);
   SetLength(pass,PASSLEN);
-  PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
   EnterCriticalSection(fLock);
+  PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
   fAES.EncryptInit(key,256);
-  move(pointer(salt)^,fCTR,sizeof(fCTR));
+  FillCharFast(key,sizeof(key),0); // avoid the key appear in clear in the stack
+  assert(SALTLEN>=sizeof(fCTR));
+  MoveFast(pointer(salt)^,fCTR,sizeof(fCTR));
   fCTR[0] := fCTR[0] xor fTotalBytes;
   fAES.Encrypt(TAESBlock(fCTR),TAESBlock(fCTR));
   fBytesSinceSeed := 0;

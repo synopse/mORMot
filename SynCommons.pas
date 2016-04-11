@@ -11292,11 +11292,9 @@ function InterlockedDecrement(var I: Integer): Integer;
 
 {$endif FPC}
 
-var
-  /// global information about the current executable and computer
-  // - this structure is initialized in this unit's initialization block below
-  // - you can call SetExecutableVersion() with a custom version, if needed
-  ExeVersion: record
+type
+  /// stores some global information about the current executable and computer
+  TExeVersion = record
     /// the main executable name, without any path nor extension
     // - e.g. 'Test' for 'c:\pathto\Test.exe'
     ProgramName: RawUTF8;
@@ -11320,6 +11318,12 @@ var
     /// the current computer user name
     User: RawUTF8;
   end;
+  
+var
+  /// global information about the current executable and computer
+  // - this structure is initialized in this unit's initialization block below
+  // - you can call SetExecutableVersion() with a custom version, if needed
+  ExeVersion: TExeVersion;
 
 /// initialize ExeVersion global variable, supplying a custom version number
 // - by default, the version numbers will be retrieved at startup from the
