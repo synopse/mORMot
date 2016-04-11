@@ -293,7 +293,7 @@ uses
 
 const
   /// hide all AES Context complex code
-  AESContextSize = 275 {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
+  AESContextSize = 276 {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
   /// hide all SHA Context complex code
   SHAContextSize = 108;
   /// standard AES block size (in bytes) during cypher/uncypher
@@ -327,8 +327,6 @@ type
     function DoPadlockInit(const Key; KeySize: cardinal): boolean;
 {$endif}
   public
-    /// true if the context was initialized
-    Initialized: boolean;
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
@@ -346,7 +344,8 @@ type
     procedure Decrypt(const BI: TAESBlock; var BO: TAESBlock); overload;
 
     /// Finalize AES contexts for both cypher and uncypher
-    // - only used with Padlock
+    // - would fill the TAES instance with zeros, for safety
+    // - is only mandatoy when padlock is used
     procedure Done;
 
     /// generic initialization method for AES contexts
@@ -364,6 +363,8 @@ type
     // - call either Encrypt() either Decrypt() method
     procedure DoBlocksThread(var bIn, bOut: PAESBlock; Count: integer; doEncrypt: boolean);
 {$endif}
+    /// TRUE if the context was initialized via EncryptInit/DecryptInit
+    function Initialized: boolean;
     /// return TRUE if the AES-NI instruction sets are available on this CPU
     function UsesAESNI: boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
@@ -391,6 +392,9 @@ type
     constructor CreateFromSha256(const aKey: RawUTF8); virtual;
     /// compute a class instance similar to this one
     function Clone: TAESAbstract; virtual;
+    /// release the used instance memory and resources
+    // - also fill the secret fKey buffer with zeros, for safety
+    destructor Destroy; override;
 
     /// perform the AES cypher in the corresponding mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); virtual; abstract;
@@ -479,10 +483,9 @@ type
     procedure EncryptTrailer;
     procedure DecryptTrailer;
   public
-    {$ifdef USEPADLOCK}
-    // used for Padlock only
+    /// release the used instance memory and resources
+    // - also fill the TAES instance with zeros, for safety
     destructor Destroy; override;
-    {$endif}
     /// perform the AES cypher in the corresponding mode
     // - this abstract method will set CV from AES.Context, and fIn/fOut
     // from BufIn/BufOut
@@ -588,7 +591,7 @@ type
       aiKeyAlg: cardinal;
       dwKeyLength: cardinal;
     end;
-    fKeyHeaderKey: TAESKey;
+    fKeyHeaderKey: TAESKey; // should be just after fKeyHeader record 
     fKeyCryptoAPI: pointer;
     fInternalMode: cardinal;
     procedure InternalSetMode; virtual; abstract;
@@ -1295,6 +1298,7 @@ type
     {$ifdef USEPADLOCK}
     ViaCtx: pointer; // padlock_*() context
     {$endif}
+    Initialized: boolean;
     AesNi: boolean;  // if the CPU supports AES-NI new asm instructions
     Rounds: byte;    // Number of rounds
     KeyBits: byte;   // Number of bits in key
@@ -1523,6 +1527,7 @@ var MD5: TMD5;
 begin
   MD5.Full(pointer(s),Length(s),D);
   result := MD5DigestToString(D);
+  FillcharFast(D,sizeof(D),0);
 end;
 
 function SHA1(const s: RawByteString): RawUTF8;
@@ -1531,6 +1536,7 @@ var SHA: TSHA1;
 begin
   SHA.Full(pointer(s),length(s),Digest);
   result := SHA1DigestToString(Digest);
+  FillcharFast(Digest,sizeof(Digest),0);
 end;
 
 procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
@@ -1584,6 +1590,7 @@ var SHA: TSHA256;
 begin
   SHA.Full(pointer(s),length(s),Digest);
   result := SHA256DigestToString(Digest);
+  FillcharFast(Digest,sizeof(Digest),0);
 end;
 
 function SHA256(Data: pointer; Len: integer): RawUTF8;
@@ -1592,6 +1599,7 @@ var SHA: TSHA256;
 begin
   SHA.Full(Data,Len,Digest);
   result := SHA256DigestToString(Digest);
+  FillcharFast(Digest,sizeof(Digest),0);
 end;
 
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
@@ -2698,21 +2706,21 @@ var Nk: integer;
     ctx: TAESContext absolute Context;
 begin
   result := true;
-  Initialized := true;
-{$ifdef USEPADLOCK}
+  ctx.Initialized := true;
+  {$ifdef USEPADLOCK}
   if DoPadlockInit(Key,KeySize) then
     exit; // Init OK
-{$endif}
+  {$endif}
   with ctx do begin
     // Clear only the necessary context data at init. IV and buf
     // remain uninitialized, other fields are initialized below.
-{$ifdef USEPADLOCK}
+    {$ifdef USEPADLOCK}
     ctx.ViaCtx := nil;
-{$endif}
+    {$endif}
   end;
   if (KeySize<>128) and (KeySize<>192) and (KeySize<>256) then begin
     result := false;
-    Initialized := false;
+    ctx.Initialized := false;
     exit;
   end;
   Nk := KeySize div 32;
@@ -3442,30 +3450,32 @@ begin
   DoBlocks(pIn,pOut,pIn,pOut,Count,doEncrypt);
 end;
 
+function TAES.Initialized: boolean;
+begin
+  result := TAESContext(Context).Initialized;
+end;
+
 function TAES.UsesAESNI: boolean;
 begin
-  {$ifdef USEAESNI}
-  result := TAESContext(Context).AesNi;
+  {$ifdef CPUINTEL}
+  result := cfAESNI in CpuFeatures;
   {$else}
-  result := False;
+  result := false;
   {$endif}
 end;
 
-{$ifdef USEPADLOCK}
 procedure TAES.Done;
 var ctx: TAESContext absolute Context;
 begin
+  {$ifdef USEPADLOCK}
   if initialized and padlock_available and (ctx.ViaCtx<>nil) then begin
     padlock_aes_close(ctx.ViaCtx);
     initialized := false;
     ctx.ViaCtx := nil;
   end;
+  {$endif USEPADLOCK}
+  FillCharFast(ctx,sizeof(ctx),0); // always erase key in memory after use
 end;
-{$else}
-procedure TAES.Done;
-begin
-end;
-{$endif USEPADLOCK}
 
 {$ifdef USETHREADSFORBIGAESBLOCKS}
 type
@@ -4781,7 +4791,7 @@ begin
   Compress;
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
-  // Clear Data
+  // Clear Data and internally stored Digest
   Init;
 end;
 
@@ -4895,9 +4905,7 @@ begin
   n := cardinal(Len) mod AESBlockSize;
   MoveFast(pIn^,pOut^,n); // pIn=pOut is tested in move()
   XorOffset(pointer(pOut),Len-n,n);
-{$ifdef USEPADLOCK}
-  Crypt.Done; // use for Padlock support
-{$endif}
+  Crypt.Done;
 end;
 
 const TmpSize = 65536;
@@ -5143,9 +5151,7 @@ begin
         Crypt.Decrypt(Last);
         Write(@Last,LastLen);
       end;
-      {$ifdef USEPADLOCK}
-      Crypt.Done; // used for Padlock only
-      {$endif}
+      Crypt.Done;
     end;
   finally
     if Tmp<>nil then
@@ -5165,9 +5171,7 @@ begin
     result := false else begin
     Crypt.Decrypt(PAESBlock(buff)^,TAESBlock(Head));
     result := Head.Calc(Key,KeySize)=Head.HeaderCheck;
-    {$ifdef USEPADLOCK}
-    Crypt.Done; // for Padlock support
-    {$endif}
+    Crypt.Done;
   end;
 end;
 
@@ -5194,6 +5198,7 @@ var Digest: TSHA256Digest;
 begin
   SHA256Weak(Password,Digest);
   AES(Digest,sizeof(Digest)*8,bIn,bOut,Len,Encrypt);
+  FillcharFast(Digest,sizeof(Digest),0);
 end;
 
 function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString;
@@ -5380,9 +5385,7 @@ end;
 destructor TAESWriteStream.Destroy;
 begin
   Finish;
-  {$ifdef USEPADLOCK}
-  AES.Done; // useful for padlock only
-  {$endif}
+  AES.Done;
   inherited;
 end;
 
@@ -6604,6 +6607,12 @@ begin
   Create(Digest,256);
 end;
 
+destructor TAESAbstract.Destroy;
+begin
+  inherited Destroy;
+  FillCharFast(fKey,sizeof(fKey),0);
+end;
+
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
 begin
@@ -6714,13 +6723,11 @@ end;
 
 { TAESAbstractSyn }
 
-{$ifdef USEPADLOCK}
 destructor TAESAbstractSyn.Destroy;
 begin
   inherited Destroy;
-  AES.Done; // used for Padlock only
+  AES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
 end;
-{$endif USEPADLOCK}
 
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
@@ -7203,6 +7210,7 @@ destructor TAESAbstract_API.Destroy;
 begin
   if fKeyCryptoAPI<>nil then
     CryptoAPI.DestroyKey(fKeyCryptoAPI);
+  FillCharFast(fKeyHeaderKey,sizeof(fKeyHeaderKey),0);
   inherited;
 end;
 
@@ -7296,7 +7304,7 @@ end;
 destructor TAESPRNG.Destroy;
 begin
   inherited Destroy;
-  FillCharFast(fAES,sizeof(fAES),0); // avoid the TAES values clear in the heap
+  fAES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
   DeleteCriticalSection(fLock);
 end;
 
@@ -7405,7 +7413,7 @@ begin
   EnterCriticalSection(fLock);
   PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
   fAES.EncryptInit(key,256);
-  FillCharFast(key,sizeof(key),0); // avoid the key appear in clear in the stack
+  FillCharFast(key,sizeof(key),0); // avoid the key appear in clear on stack
   assert(SALTLEN>=sizeof(fCTR));
   MoveFast(pointer(salt)^,fCTR,sizeof(fCTR));
   fCTR[0] := fCTR[0] xor fTotalBytes;
