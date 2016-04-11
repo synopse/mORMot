@@ -72,6 +72,8 @@ type
     btnThread0: TButton;
     btnThread1: TButton;
     btnThreadAll: TButton;
+    btnThreadDown: TButton;
+    btnThreadUp: TButton;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -792,11 +794,27 @@ begin
      (cardinal(i)>=cardinal(FLogSelectedCount)) then
     exit;
   ID := FLog.EventThread[FLogSelected[i]];
-  repeat
-    inc(i);
-    if i=FLogSelectedCount then
-      exit;
-  until FLog.EventThread[FLogSelected[i]]<>ID;
+  if Sender=BtnThreadNext then begin
+    repeat
+      inc(i);
+      if i=FLogSelectedCount then
+        exit;
+    until FLog.EventThread[FLogSelected[i]]<>ID;
+  end else
+  if Sender=BtnThreadUp then begin
+    repeat
+      dec(i);
+      if i<0 then
+        exit;
+    until FLog.EventThread[FLogSelected[i]]=ID;
+  end else
+  if Sender=BtnThreadDown then begin
+    repeat
+      inc(i);
+      if i=FLogSelectedCount then
+        exit;
+    until FLog.EventThread[FLogSelected[i]]=ID;
+  end;
   SetListItem(i);
 end;
 

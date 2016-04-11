@@ -1,6 +1,6 @@
 object MainLogView: TMainLogView
-  Left = 199
-  Top = 166
+  Left = 359
+  Top = 232
   Width = 860
   Height = 639
   Caption = ' Synopse LogView  %s -'
@@ -261,9 +261,12 @@ object MainLogView: TMainLogView
       object BtnThreadNext: TButton
         Left = 8
         Top = 13
-        Width = 97
+        Width = 33
         Height = 25
-        Caption = 'Goto next thread'
+        Hint = 'Goto Next Thread'
+        Caption = 'Next'
+        ParentShowHint = False
+        ShowHint = True
         TabOrder = 0
         OnClick = BtnThreadNextClick
       end
@@ -314,6 +317,30 @@ object MainLogView: TMainLogView
         ShowHint = True
         TabOrder = 4
         OnClick = BtnThreadClick
+      end
+      object btnThreadDown: TButton
+        Left = 56
+        Top = 13
+        Width = 25
+        Height = 25
+        Hint = 'Goto Next  Row'
+        Caption = 'v'
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 5
+        OnClick = BtnThreadNextClick
+      end
+      object btnThreadUp: TButton
+        Left = 80
+        Top = 13
+        Width = 25
+        Height = 25
+        Hint = 'Goto Previous Row'
+        Caption = '^'
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 6
+        OnClick = BtnThreadNextClick
       end
     end
     object BtnSearchPrevious: TButton
