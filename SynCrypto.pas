@@ -1895,7 +1895,12 @@ end;
 {$endif}
 {$ifdef CPU64}
 procedure AesNiEncrypt(const ctxt; const source: TAESBlock; var dest: TAESBlock);
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm // input: rcx=TAESContext, rdx=source, r8=dest
+  .noframe
+{$endif}
   movdqu xmm7,[rdx]
   mov dl,[rcx].TAESContext.Rounds
   movdqu xmm0,[rcx+16*0]
@@ -1905,52 +1910,44 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   movdqu xmm4,[rcx+16*4]
   movdqu xmm5,[rcx+16*5]
   movdqu xmm6,[rcx+16*6]
+  movdqu xmm8,[rcx+16*7]
+  movdqu xmm9,[rcx+16*8]
+  movdqu xmm10,[rcx+16*9]
+  movdqu xmm11,[rcx+16*10]
   pxor xmm7,xmm0
   cmp dl,10
   aesenc xmm7,xmm1
   aesenc xmm7,xmm2
   aesenc xmm7,xmm3
   aesenc xmm7,xmm4
-  movdqu xmm0,[rcx+16*7]
-  movdqu xmm1,[rcx+16*8]
-  movdqu xmm2,[rcx+16*9]
-  movdqu xmm3,[rcx+16*10]
+  aesenc xmm7,xmm5
+  aesenc xmm7,xmm6
+  aesenc xmm7,xmm8
+  aesenc xmm7,xmm9
+  aesenc xmm7,xmm10
   je @128
   cmp dl,12
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  movdqu xmm4,[rcx+16*11]
-  movdqu xmm5,[rcx+16*12]
+  movdqu xmm12,[rcx+16*11]
+  movdqu xmm13,[rcx+16*12]
   je @192
 @256:
-  movdqu xmm6,[rcx+16*13]
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  movdqu xmm1,[rcx+16*14]
-  aesenc xmm7,xmm2
-  aesenc xmm7,xmm3
-  aesenc xmm7,xmm4
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  aesenclast xmm7,xmm1
+  movdqu xmm14,[rcx+16*13]
+  movdqu xmm15,[rcx+16*14]
+  aesenc xmm7,xmm11
+  aesenc xmm7,xmm12
+  aesenc xmm7,xmm13
+  aesenc xmm7,xmm14
+  aesenclast xmm7,xmm15
   movdqu [r8],xmm7
   ret
 @128:
-  aesenc xmm7,xmm5
-  aesenc xmm7,xmm6
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  aesenc xmm7,xmm2
-  aesenclast xmm7,xmm3
+  aesenclast xmm7,xmm11
   movdqu [r8],xmm7
   ret
 @192:
-  aesenc xmm7,xmm0
-  aesenc xmm7,xmm1
-  aesenc xmm7,xmm2
-  aesenc xmm7,xmm3
-  aesenc xmm7,xmm4
-  aesenclast xmm7,xmm5
+  aesenc xmm7,xmm11
+  aesenc xmm7,xmm12
+  aesenclast xmm7,xmm13
   movdqu [r8],xmm7
 end;
 
@@ -1975,6 +1972,14 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   movdqu xmm4,[rcx+16*10]
   movdqu xmm5,[rcx+16*9]
   movdqu xmm6,[rcx+16*8]
+  movdqu xmm8,[rcx+16*7]
+  movdqu xmm9,[rcx+16*6]
+  movdqu xmm10,[rcx+16*5]
+  movdqu xmm11,[rcx+16*4]
+  movdqu xmm12,[rcx+16*3]
+  movdqu xmm13,[rcx+16*2]
+  movdqu xmm14,[rcx+16*1]
+  movdqu xmm15,[rcx+16*0]
   pxor xmm7,xmm0
   aesdec xmm7,xmm1
   aesdec xmm7,xmm2
@@ -1982,22 +1987,14 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesdec xmm7,xmm4
   aesdec xmm7,xmm5
   aesdec xmm7,xmm6
-  movdqu xmm0,[rcx+16*7]
-  movdqu xmm1,[rcx+16*6]
-  movdqu xmm2,[rcx+16*5]
-  movdqu xmm3,[rcx+16*4]
-  movdqu xmm4,[rcx+16*3]
-  movdqu xmm5,[rcx+16*2]
-  movdqu xmm6,[rcx+16*1]
-  aesdec xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdec xmm7,xmm5
-  aesdec xmm7,xmm6
-  movdqu xmm0,[rcx+16*0]
-  aesdeclast xmm7,xmm0
+  aesdec xmm7,xmm8
+  aesdec xmm7,xmm9
+  aesdec xmm7,xmm10
+  aesdec xmm7,xmm11
+  aesdec xmm7,xmm12
+  aesdec xmm7,xmm13
+  aesdec xmm7,xmm14
+  aesdeclast xmm7,xmm15
   movdqu [r8],xmm7
   ret
 @192:
@@ -2008,6 +2005,12 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   movdqu xmm4,[rcx+16*8]
   movdqu xmm5,[rcx+16*7]
   movdqu xmm6,[rcx+16*6]
+  movdqu xmm8,[rcx+16*5]
+  movdqu xmm9,[rcx+16*4]
+  movdqu xmm10,[rcx+16*3]
+  movdqu xmm11,[rcx+16*2]
+  movdqu xmm12,[rcx+16*1]
+  movdqu xmm13,[rcx+16*0]
   pxor xmm7,xmm0
   aesdec xmm7,xmm1
   aesdec xmm7,xmm2
@@ -2015,18 +2018,12 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   aesdec xmm7,xmm4
   aesdec xmm7,xmm5
   aesdec xmm7,xmm6
-  movdqu xmm0,[rcx+16*5]
-  movdqu xmm1,[rcx+16*4]
-  movdqu xmm2,[rcx+16*3]
-  movdqu xmm3,[rcx+16*2]
-  movdqu xmm4,[rcx+16*1]
-  movdqu xmm5,[rcx+16*0]
-  aesdec xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdec xmm7,xmm3
-  aesdec xmm7,xmm4
-  aesdeclast xmm7,xmm5
+  aesdec xmm7,xmm8
+  aesdec xmm7,xmm9
+  aesdec xmm7,xmm10
+  aesdec xmm7,xmm11
+  aesdec xmm7,xmm12
+  aesdeclast xmm7,xmm13
   movdqu [r8],xmm7
   ret
 @128:
@@ -2037,21 +2034,21 @@ asm // input: rcx=TAESContext, rdx=source, r8=dest
   movdqu xmm4,[rcx+16*6]
   movdqu xmm5,[rcx+16*5]
   movdqu xmm6,[rcx+16*4]
+  movdqu xmm8,[rcx+16*3]
+  movdqu xmm9,[rcx+16*2]
+  movdqu xmm10,[rcx+16*1]
+  movdqu xmm11,[rcx+16*0]
   pxor xmm7,xmm0
   aesdec xmm7,xmm1
   aesdec xmm7,xmm2
   aesdec xmm7,xmm3
   aesdec xmm7,xmm4
-  movdqu xmm0,[rcx+16*3]
-  movdqu xmm1,[rcx+16*2]
-  movdqu xmm2,[rcx+16*1]
-  movdqu xmm3,[rcx+16*0]
   aesdec xmm7,xmm5
   aesdec xmm7,xmm6
-  aesdec xmm7,xmm0
-  aesdec xmm7,xmm1
-  aesdec xmm7,xmm2
-  aesdeclast xmm7,xmm3
+  aesdec xmm7,xmm8
+  aesdec xmm7,xmm9
+  aesdec xmm7,xmm10
+  aesdeclast xmm7,xmm11
   movdqu [r8],xmm7
 end;
 {$endif CPU64}
