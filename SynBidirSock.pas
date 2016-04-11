@@ -2104,6 +2104,11 @@ end;
 
 { -------------- WebSockets Client classes for bidirectional remote access }
 
+function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(st));
+end;
+
 { THttpClientWebSockets }
 
 constructor THttpClientWebSockets.Create(aTimeOut: cardinal);
@@ -2251,11 +2256,6 @@ end;
 
 
 { TWebSocketProcessClientThread }
-
-function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
-begin
-  result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(st));
-end;
 
 constructor TWebSocketProcessClientThread.Create(
   aProcess: TWebSocketProcessClient);

@@ -17533,7 +17533,7 @@ type
     fSessionVersion: RawUTF8;
     fSessionData: RawByteString;
     /// used to make the internal client-side process reintrant
-    fMutex: TRTLCriticalSection;
+    fSafe: IAutoLocker;
     fRemoteLogClass: TSynLog;
     fRemoteLogOwnedByFamily: boolean;
     fServicePublishOwnInterfaces: RawUTF8;
@@ -35051,7 +35051,11 @@ begin
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
   fPrivateGarbageCollector.Add(fFakeCallbacks);
-  InitializeCriticalSection(fMutex);
+  {$ifdef USELOCKERDEBUG}
+  fSafe := TAutoLockerDebug.Create(self,aModel.Root); // more verbose
+  {$else}
+  fSafe := TAutoLocker.Create;
+  {$endif}
 end;
 
 destructor TSQLRestClientURI.Destroy;
@@ -35097,7 +35101,6 @@ begin
       {$endif}
     finally
       InternalClose;
-      DeleteCriticalSection(fMutex);
     end;
   end;
 end;
@@ -40738,7 +40741,7 @@ end;
 
 procedure TSQLRestClientRedirect.RedirectTo(aRedirected: TSQLRest);
 begin
-  EnterCriticalSection(fMutex);
+  fSafe.Enter;
   try
     fRedirectedClient := nil;
     fRedirectedServer := nil;
@@ -40751,7 +40754,7 @@ begin
       raise EORMException.CreateUTF8('%.RedirectTo: % should be either % or %',
         [self,aRedirected,TSQLRestServer,TSQLRestClientURI]);
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
 end;
 
@@ -40766,7 +40769,7 @@ end;
 
 procedure TSQLRestClientRedirect.InternalURI(var Call: TSQLRestURIParams);
 begin
-  EnterCriticalSection(fMutex);
+  fSafe.Enter;
   try
     if Assigned(fRedirectedServer) then
       fRedirectedServer.URI(Call) else
@@ -40775,7 +40778,7 @@ begin
       TSQLRestClientRedirect(fRedirectedClient).InternalURI(Call) else
       Call.OutStatus := HTML_GATEWAYTIMEOUT;
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
 end;
 
@@ -41211,7 +41214,7 @@ begin
   Log := fLogClass.Enter(self);
   {$endif}
   Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
-  EnterCriticalSection(fMutex);
+  fSafe.Enter;
   try
     if InternalCheckOpen then
     try
@@ -41274,7 +41277,7 @@ begin
        end;
      end;
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
   with Call do
     InternalLog('% % status=% state=%',[method,url,OutStatus,OutInternalState],sllClient);
@@ -46174,7 +46177,7 @@ begin
   Data.dwData := fClientWindow;
   Data.cbData := length(Msg);
   Data.lpData := pointer(Msg);
-  EnterCriticalSection(fMutex);
+  fSafe.Enter;
   try
     fCurrentResponse := #0; // mark expect some response
     Call.OutStatus := SendMessage(fServerWindow,WM_COPYDATA,fClientWindow,PtrInt(@Data));
@@ -46222,7 +46225,7 @@ begin
       end;
     end;
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
   with Call do
     InternalLog('% % status=% state=%',[Method,Url,OutStatus,OutInternalState],sllClient);
@@ -46241,7 +46244,7 @@ end;
 
 function TSQLRestClientURIMessage.InternalCheckOpen: boolean;
 begin
-  EnterCriticalSection(fMutex);
+  fSafe.Enter;
   try
     if fServerWindow<>0 then begin
       result := true;
@@ -46250,7 +46253,7 @@ begin
     fServerWindow := FindWindow(pointer(fServerWindowName),nil);
     result := fServerWindow<>0;
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
 end;
 
@@ -54617,15 +54620,21 @@ begin
   if fRest<>nil then
     fRest.InternalLog('Lock % %',[fIdentifier,fCounter],sllTrace);
   inherited Enter;
+  if fRest<>nil then
+    fRest.InternalLog('Locked % %',[fIdentifier,fCounter],sllTrace);
   inc(fCounter);
 end;
 
 procedure TAutoLockerDebug.Leave;
+var n: integer;
 begin
   dec(fCounter);
+  n := fCounter;
   if fRest<>nil then
-    fRest.InternalLog('Unlock % %',[fIdentifier,fCounter],sllTrace);
+    fRest.InternalLog('Unlock % %',[fIdentifier,n],sllTrace);
   inherited Leave;
+  if fRest<>nil then
+    fRest.InternalLog('Unlocked % %',[fIdentifier,n],sllTrace);
 end;
 
 

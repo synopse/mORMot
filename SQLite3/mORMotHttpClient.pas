@@ -481,16 +481,16 @@ begin
     end;
     if Content<>'' then // always favor content type from binary
       ContentType := GetMimeContentTypeFromBuffer(pointer(Content),Length(Content),ContentType);
-    EnterCriticalSection(fMutex);
+    fSafe.Enter;
     try
       res := InternalRequest(Call.Url,Call.Method,Head,Content,ContentType);
-      Call.OutStatus := res.Lo;
-      Call.OutInternalState := res.Hi;
-      Call.OutHead := Head;
-      Call.OutBody := Content;
     finally
-      LeaveCriticalSection(fMutex);
+      fSafe.Leave;
     end;
+    Call.OutStatus := res.Lo;
+    Call.OutInternalState := res.Hi;
+    Call.OutHead := Head;
+    Call.OutBody := Content;
   end else
     Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
 {$ifdef WITHLOG}
@@ -599,12 +599,12 @@ end;
 
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
 begin
-  if fSocket<>nil then begin
-    result := true; // already connected
-    exit;
-  end;
-  EnterCriticalSection(fMutex);
+  result := true;
+  if fSocket<>nil then
+    exit; // already connected
+  fSafe.Enter;
   try
+    if fSocket=nil then
     try
       if fSocketClass=nil then
         fSocketClass := THttpClientSocket;
@@ -628,15 +628,12 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP gzip compression
         fSocket.RegisterCompress(CompressGZip);
-      result := true;
     except
-      on Exception do begin
-        FreeAndNil(fSocket);
-        result := false;
-      end;
+      FreeAndNil(fSocket);
+      result := false;
     end;
   finally
-    LeaveCriticalSection(fMutex);
+    fSafe.Leave;
   end;
 end;
 
@@ -652,6 +649,10 @@ end;
 function TSQLHttpClientWinSock.InternalRequest(const url, method: RawUTF8;
   var Header, Data, DataType: RawUTF8): Int64Rec;
 begin
+  {$ifdef WITHLOG}
+  fLogFamily.SynLog.Log(sllTrace,'InternalRequest % calling %(%).Request',
+     [method,fSocket.ClassType,pointer(fSocket)],self);
+  {$endif}
   result.Lo := fSocket.Request(url,method,KeepAliveMS,Header,Data,DataType,false);
   result.Hi := GetCardinal(pointer(fSocket.HeaderValue('Server-InternalState')));
   Header := fSocket.HeaderGetText;
@@ -663,17 +664,26 @@ end;
 
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
-  if fSocket<>nil then begin
-    result := true; // already connected
-    exit;
+  result := true;
+  if fSocket<>nil then
+    exit; // already connected
+  fSafe.Enter;
+  try
+    if fSocket=nil then
+    try
+      if fSocketClass=nil then
+        fSocketClass := THttpClientWebSockets;
+      result := inherited InternalCheckOpen;
+      if result then
+        with fWebSocketParams do
+        if AutoUpgrade then
+          result := WebSocketsUpgrade(Key,Ajax,Compression)='';
+    except
+      result := false;
+    end;
+  finally
+    fSafe.Leave;
   end;
-  if fSocketClass=nil then
-    fSocketClass := THttpClientWebSockets;
-  result := inherited InternalCheckOpen;
-  if result then
-    with fWebSocketParams do
-    if AutoUpgrade then
-      result := WebSocketsUpgrade(Key,Ajax,Compression)='';
 end;
 
 function TSQLHttpClientWebsockets.FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -810,10 +820,12 @@ end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
-  if fRequest=nil then
+  result := true;
+  if fRequest<>nil then
+    exit; // already connected
+  fSafe.Enter;
   try
-    result := false;
-    EnterCriticalSection(fMutex);
+    if fRequest=nil then
     try
       InternalSetClass;
       if fRequestClass=nil then
@@ -831,15 +843,13 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
         fRequest.RegisterCompress(CompressGZip);
-      result := true;
     except
-      on Exception do
-        FreeAndNil(fRequest);
+      FreeAndNil(fRequest);
+      result := false;
     end;
   finally
-    LeaveCriticalSection(fMutex);
-  end else
-    result := true; // already connected
+    fSafe.Leave;
+  end;
 end;
 
 procedure TSQLHttpClientRequest.InternalClose;
