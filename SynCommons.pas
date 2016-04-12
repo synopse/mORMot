@@ -14927,13 +14927,15 @@ type
     function Safe: PSynLocker;
   end;
 
-  /// reference counted block code critical section
-  // - you can use one instance of this to protect multi-thread execution
+  /// reference-counted block code critical section
+  // - you can use one instance of this to protect multi-threaded execution
   // - the main class may initialize a IAutoLocker property in Create, then call
   // IAutoLocker.ProtectMethod in any method to make its execution thread safe
   // - this class inherits from TInterfacedObjectWithCustomCreate so you
   // could define one published property of a mORMot.pas' TInjectableObject
   // as IAutoLocker so that this class may be automatically injected
+  // - you may use the inherited TAutoLockerDebug class, as defined in SynLog.pas,
+  // to debug unexpected race conditions due to such critical sections
   TAutoLocker = class(TInterfacedObjectWithCustomCreate,IAutoLocker)
   {$endif DELPHI5OROLDER}
   protected
@@ -47594,12 +47596,12 @@ end;
 
 procedure TAutoLocker.Enter;
 begin
-  fSafe.Lock;
+  EnterCriticalSection(fSafe.fSection);
 end;
 
 procedure TAutoLocker.Leave;
 begin
-  fSafe.UnLock;
+  LeaveCriticalSection(fSafe.fSection);
 end;
 
 function TAutoLocker.Safe: PSynLocker;

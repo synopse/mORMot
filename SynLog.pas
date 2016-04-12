@@ -1002,10 +1002,19 @@ type
     property GenericFamily: TSynLogFamily read fFamily;
   end;
 
-  /// reference-counted block code critical section with mutex logging 
+  /// reference-counted block code critical section with context logging 
   // - race conditions are difficult to track: you could use this TAutoLockerDebug
   // instead of plain TAutoLocker class, to log some information at each
   // Enter/Leave process, and track unexpected blocking issues
+  // - see also the global USELOCKERDEBUG conditional, defined in Synopse.inc,
+  // which may be used to enable verbose logging at compile time:
+  // ! fSafe: IAutoLocker;
+  // ! ...
+  // ! {$ifdef USELOCKERDEBUG}
+  // ! fSafe := TAutoLockerDebug.Create(fLogClass,aModel.Root); // more verbose
+  // ! {$else}
+  // ! fSafe := TAutoLocker.Create;
+  // ! {$endif}
   TAutoLockerDebug = class(TAutoLocker)
   protected
     fLog: TSynLogClass;
@@ -1013,6 +1022,8 @@ type
     fCounter: integer;
   public
     /// initialize the mutex, which would log its Enter/Leave process
+    // - the supplied identifier should be a short text, able to specify the
+    // lock execution context, e.g. the resource which is actually protected
     // - an associated TSQLLog instance should be specified as logging target
     constructor Create(aLog: TSynLogClass; const aIdentifier: RawUTF8); reintroduce;
     /// enter the mutex

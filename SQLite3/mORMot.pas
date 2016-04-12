@@ -14005,6 +14005,7 @@ type
 
   {$M+}
   /// a simple TThread for doing some process within the context of a REST instance
+  // - thread is created suspended: Start should be called explicitly
   // - also define a Start method for compatibility with older versions of Delphi
   // - inherited classes should override InternalExecute abstract method
   TSQLRestThread = class(TThread)
@@ -14019,11 +14020,15 @@ type
     procedure InternalExecute; virtual; abstract;
   public
     /// initialize the thread
+    // - thread is always in suspended state by default: after initialization
+    // of the TSQLRestThread instance, caller should call the Start method,
+    // or a reintroduced constructor may call Start after inherited Create()
     // - if aOwnRest is TRUE, the supplied REST instance would be
     // owned by this thread
     constructor Create(aRest: TSQLRest; aOwnRest: boolean);
     {$ifndef HASTTHREADSTART}
-    /// method to be called when the thread was created as suspended
+    /// method to be called to start the thread
+    // - TSQLRestThread instance is created as suspended by default
     // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
     // do not implement this pause/resume feature
     // - we define here this method for older versions of Delphi
@@ -14066,17 +14071,17 @@ type
 
 {$ifdef MSWINDOWS}
   /// Server thread accepting connections from named pipes
-  TSQLRestServerNamedPipe = class(TThread)
+  TSQLRestServerNamedPipe = class(TSQLRestThread)
   private
   protected
     fServer: TSQLRestServer;
     fChild: TList;
     fChildCount: integer;
     fPipeName: TFileName;
-    procedure Execute; override;
+    procedure InternalExecute; override;
   public
     /// create the server thread
-    constructor Create(aServer: TSQLRestServer; const PipeName: TFileName);
+    constructor Create(aServer: TSQLRestServer; const PipeName: TFileName); reintroduce;
     /// release all associated memory, and wait for all
     // TSQLRestServerNamedPipeResponse children to be terminated
     destructor Destroy; override;
@@ -14085,22 +14090,18 @@ type
   end;
 
   /// Server child thread dealing with a connection through a named pipe
-  TSQLRestServerNamedPipeResponse = class(TThread)
+  TSQLRestServerNamedPipeResponse = class(TSQLRestThread)
   private
   protected
     fServer: TSQLRestServer;
     fPipe: cardinal;
     fMasterThread: TSQLRestServerNamedPipe;
     fMasterThreadChildIndex: Integer;
-    procedure Execute; override;
-    {$ifndef LVCL}
-    // will release any thread-specific resource (e.g. external DB connection)
-    procedure DoTerminate; override;
-    {$endif}
+    procedure InternalExecute; override;
   public
     /// create the child connection thread
     constructor Create(aServer: TSQLRestServer; aMasterThread: TSQLRestServerNamedPipe;
-      aPipe: cardinal);
+      aPipe: cardinal); reintroduce;
     /// release all associated memory, and decrement fMasterThread.fChildCount
     destructor Destroy; override;
   end;
@@ -34373,7 +34374,7 @@ begin
   {$ifdef WITHLOG}
   fLog := FRest.LogClass.Add;
   {$endif}
-  SetCurrentThreadName('% "%"',[self,fRest.Model.Root]);
+  SetCurrentThreadName('% %',[self,fRest.Model.Root]);
   FRest.BeginCurrentThread(self);
   try
     try
@@ -34381,7 +34382,7 @@ begin
     except
       on E: Exception do
         {$ifdef WITHLOG}
-        fLog.Add.Log(sllError,'Unhandled % exception in %.Execute -> abort',[E,ClassType],self);
+        fLog.Add.Log(sllError,'Unhandled % in %.Execute -> abort',[E,ClassType],self);
         {$endif}
     end;
   finally
@@ -34775,13 +34776,12 @@ end;
 {$else}
 
 type
-  TRemoteLogThread = class(TThread)
+  TRemoteLogThread = class(TSQLRestThread)
   protected
     fClient: TSQLRestClientURI;
     fPendingRows: RawUTF8;
-    fLock: TRTLCriticalSection;
     fNotifier: TEvent;
-    procedure Execute; override;
+    procedure InternalExecute; override;
   public
     constructor Create(aClient: TSQLRestClientURI); reintroduce;
     destructor Destroy; override;
@@ -34790,10 +34790,10 @@ type
 
 constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
 begin
-  InitializeCriticalSection(fLock);
   fNotifier := TEvent.Create(nil,false,false,'');
   fClient := aClient;
-  inherited Create(false);
+  inherited Create(aClient,false);
+  Start;
 end;
 
 destructor TRemoteLogThread.Destroy;
@@ -34807,45 +34807,45 @@ begin
         break;
     end;
   end;
-  fClient := nil; // will notify Execute that the process is finished
+  Terminate; // will notify Execute that the process is finished
   fNotifier.SetEvent;
   SleepHiRes(50); // wait for Execute to finish
   fNotifier.Free;
-  DeleteCriticalSection(fLock);
   inherited;
 end;
 
 procedure TRemoteLogThread.AddRow(const aText: RawUTF8);
 begin
-  EnterCriticalSection(fLock);
-  if fPendingRows='' then
-    fPendingRows := aText else
-    fPendingRows := fPendingRows+#13#10+aText;
-  LeaveCriticalSection(fLock);
+  fSafe.Lock;
+  try
+    if fPendingRows='' then
+      fPendingRows := aText else
+      fPendingRows := fPendingRows+#13#10+aText;
+  finally
+    fSafe.UnLock;
+  end;
   fNotifier.SetEvent;
 end;
 
-procedure TRemoteLogThread.Execute;
+procedure TRemoteLogThread.InternalExecute;
 var aText: RawUTF8;
-    i: integer;
 begin
-  SetCurrentThreadName('% "%"',[Self,fClient.Model.Root]);
-  while (fClient<>nil) and not Terminated do
+  while not Terminated do
     if FixedWaitFor(fNotifier,INFINITE)=wrSignaled then begin
-      if Terminated or (fClient=nil) then
+      if Terminated then
         break;
-      EnterCriticalSection(fLock);
-      aText := fPendingRows;
-      fPendingRows := '';
-      LeaveCriticalSection(fLock);
-      if aText<>'' then
+      fSafe.Lock;
+      try
+        aText := fPendingRows;
+        fPendingRows := '';
+      finally
+        fSafe.UnLock;
+      end;
+      if (aText<>'') and not Terminated then
       try
         while not fClient.InternalRemoteLogSend(aText) do
-          for i := 1 to 1000 do begin // retry after 2 seconds delay
-            SleepHiRes(10); // 10<50 as in Destroy
-            if Terminated or (fClient=nil) then
-              exit;
-          end;
+          if SleepOrTerminated(2000) then // retry after 2 seconds delay
+            exit;
       except
         on E: Exception do
           if (fClient<>nil) and not Terminated then
@@ -40906,8 +40906,8 @@ begin
   fServer := aServer;
   fPipeName := PipeName;
   fChild := TList.Create;
-  inherited Create(false);
-//  writeln('TSQLRestServerNamedPipe ',PipeName,' ThreadID=',ThreadID);
+  inherited Create(aServer,false);
+  Start;
 end;
 
 destructor TSQLRestServerNamedPipe.Destroy;
@@ -40926,7 +40926,7 @@ begin
   inherited;
 end;
 
-procedure TSQLRestServerNamedPipe.Execute;
+procedure TSQLRestServerNamedPipe.InternalExecute;
 {$ifdef FPC}
 const PIPE_UNLIMITED_INSTANCES = 255;
 {$endif}
@@ -40938,7 +40938,6 @@ var aPipe: cardinal;
     {$endif}
 begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
   //writeln('TSQLRestServerNamedPipe=',integer(TSQLRestServerNamedPipe),'.Execute');
-  SetCurrentThreadName('% "%"',[Self,fServer.Model.Root]);
   {$ifndef NOSECURITYFORNAMEDPIPECLIENTS}
   InitializeSecurity(fPipeSecurityAttributes,fPipeSecurityDescriptor);
   {$endif}
@@ -40988,15 +40987,9 @@ begin
   FOnTerminate := fServer.EndCurrentThread;
 {$endif}
   FreeOnTerminate := true;
-  inherited Create(false);
+  inherited Create(fServer,false);
+  Start;
 end;
-
-{$ifndef LVCL}
-procedure TSQLRestServerNamedPipeResponse.DoTerminate;
-begin
-  fServer.EndCurrentThread(self); // will release any thread-specific resource
-end;
-{$endif}
 
 destructor TSQLRestServerNamedPipeResponse.Destroy;
 begin
@@ -41008,7 +41001,7 @@ begin
   inherited;
 end;
 
-procedure TSQLRestServerNamedPipeResponse.Execute;
+procedure TSQLRestServerNamedPipeResponse.InternalExecute;
 var call: TSQLRestURIParams;
     Code: integer;
     Ticks64, Sleeper64, ClientTimeOut64: Int64;
@@ -41017,9 +41010,7 @@ var call: TSQLRestURIParams;
 begin
   if (fPipe=0) or (fPipe=INVALID_HANDLE_VALUE) or (fServer=nil) then
     exit;
-  SetCurrentThreadName('% "%" %',[Self,fServer.Model.Root,fPipe]);
   Header := 'RemoteIP: 127.0.0.1';
-  fServer.BeginCurrentThread(self);
   call.Init;
   call.LowLevelConnectionID := fPipe;
   Ticks64 := 0;
@@ -55740,18 +55731,18 @@ begin
 end;
 
 type
-  TServiceFactoryClientNotificationThread = class(TThread)
+  TServiceFactoryClientNotificationThread = class(TSQLRestThread)
   protected
     fClient: TServiceFactoryClient;
     fRemote: TSQLRestClientURI;
     fRetryPeriodSeconds: Integer;
     fPending: integer;
-    procedure Execute; override;
+    procedure InternalExecute; override;
     procedure ProcessPendingNotification;
     function GetPendingCountFromDB: Int64;
   public
     constructor Create(aClient: TServiceFactoryClient; aRemote: TSQLRestClientURI;
-      aRetryPeriodSeconds: Integer);
+      aRetryPeriodSeconds: Integer); reintroduce;
   end;
 
 constructor TServiceFactoryClientNotificationThread.Create(
@@ -55768,7 +55759,8 @@ begin
     fRemote := fClient.fClient else
     fRemote := aRemote;
   fPending := GetPendingCountFromDB;
-  inherited Create(false);
+  inherited Create(fClient.fClient,false);
+  Start;
 end;
 
 function TServiceFactoryClientNotificationThread.GetPendingCountFromDB: Int64;
@@ -55824,15 +55816,7 @@ begin // one at a time, since InternalInvoke() is the bottleneck
   end;
 end;
 
-procedure TServiceFactoryClientNotificationThread.Execute;
-  procedure WaitForSeconds(Sec: integer);
-  var i: integer;
-  begin
-    for i := 1 to Sec*100 do
-      if Terminated then
-        exit else
-        SleepHiRes(10);
-  end;
+procedure TServiceFactoryClientNotificationThread.InternalExecute;
 var delay: integer;
 begin
   delay := 50;
@@ -55842,13 +55826,12 @@ begin
       ProcessPendingNotification;
       delay := 0;
       if Terminated then
-        break;
+        exit;
     except
-      on E: Exception do
-        WaitForSeconds(fRetryPeriodSeconds);
+      SleepOrTerminated(fRetryPeriodSeconds*1000); // wait before retry
     end;
     if Terminated then
-      break;
+      exit;
     if delay<50 then
       inc(delay);
     SleepHiRes(delay);
