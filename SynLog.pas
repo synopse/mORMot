@@ -400,7 +400,7 @@ type
   TSynLogStackTraceUse = (stManualAndAPI,stOnlyAPI,stOnlyManual);
 
   /// how file existing shall be handled during logging
-  TSynLogExistsAction = (acOverwrite, acAppend, acAppendWithHeader);
+  TSynLogExistsAction = (acOverwrite, acAppend);
 
   /// regroup several logs under an unique family name
   // - you should usualy use one family per application or per architectural
@@ -1000,6 +1000,25 @@ type
     property FileSize: Int64 read GetFileSize;
     /// the associated logging family
     property GenericFamily: TSynLogFamily read fFamily;
+  end;
+
+  /// reference-counted block code critical section with mutex logging 
+  // - race conditions are difficult to track: you could use this TAutoLockerDebug
+  // instead of plain TAutoLocker class, to log some information at each
+  // Enter/Leave process, and track unexpected blocking issues
+  TAutoLockerDebug = class(TAutoLocker)
+  protected
+    fLog: TSynLogClass;
+    fIdentifier: RawUTF8;
+    fCounter: integer;
+  public
+    /// initialize the mutex, which would log its Enter/Leave process
+    // - an associated TSQLLog instance should be specified as logging target
+    constructor Create(aLog: TSynLogClass; const aIdentifier: RawUTF8); reintroduce;
+    /// enter the mutex
+    procedure Enter; override;
+    /// leave the mutex
+    procedure Leave; override;
   end;
 
   /// used by TSynLogFile to refer to a method profiling in a .log file
@@ -3998,6 +4017,34 @@ begin
   {$endif MSWINDOWS}
 end;
 {$endif WITH_MAPPED_EXCEPTIONS}
+
+
+{ TAutoLockerDebug }
+
+constructor TAutoLockerDebug.Create(aLog: TSynLogClass; const aIdentifier: RawUTF8);
+begin
+  inherited Create;
+  fLog := aLog;
+  fIdentifier := aIdentifier;
+end;
+
+procedure TAutoLockerDebug.Enter;
+begin
+  fLog.Add.Log(sllTrace,'Lock % %',[fIdentifier,fCounter]);
+  inherited Enter;
+  fLog.Add.Log(sllTrace,'Locked % %',[fIdentifier,fCounter]);
+  inc(fCounter);
+end;
+
+procedure TAutoLockerDebug.Leave;
+var n: integer;
+begin
+  dec(fCounter);
+  n := fCounter;
+  fLog.Add.Log(sllTrace,'Unlock % %',[fIdentifier,n]);
+  inherited Leave;
+  fLog.Add.Log(sllTrace,'Unlocked % %',[fIdentifier,n]);
+end;
 
 
 { TSynLogFile }
