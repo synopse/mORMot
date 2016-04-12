@@ -14005,7 +14005,6 @@ type
 
   {$M+}
   /// a simple TThread for doing some process within the context of a REST instance
-  // - thread is created suspended: Start should be called explicitly
   // - also define a Start method for compatibility with older versions of Delphi
   // - inherited classes should override InternalExecute abstract method
   TSQLRestThread = class(TThread)
@@ -14020,18 +14019,14 @@ type
     procedure InternalExecute; virtual; abstract;
   public
     /// initialize the thread
-    // - thread is always in suspended state by default: after initialization
-    // of the TSQLRestThread instance, caller should call the Start method,
-    // or a reintroduced constructor may call Start after inherited Create()
     // - if aOwnRest is TRUE, the supplied REST instance would be
     // owned by this thread
-    constructor Create(aRest: TSQLRest; aOwnRest: boolean);
+    constructor Create(aRest: TSQLRest; aOwnRest, aCreateSuspended: boolean);
     {$ifndef HASTTHREADSTART}
     /// method to be called to start the thread
-    // - TSQLRestThread instance is created as suspended by default
     // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
-    // do not implement this pause/resume feature
-    // - we define here this method for older versions of Delphi
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
     procedure Start;
     {$endif}
     /// finalize the thread
@@ -34330,14 +34325,14 @@ end;
 { TSQLRestThread }
 
 constructor TSQLRestThread.Create(aRest: TSQLRest;
-  aOwnRest: boolean);
+  aOwnRest, aCreateSuspended: boolean);
 begin
   if aRest=nil then
     raise EORMException.CreateUTF8('%.Create(aRest=nil)',[self]);
   fSafe.Init;
   fRest := aRest;
   fOwnRest := aOwnRest;
-  inherited Create(True);
+  inherited Create(aCreateSuspended);
 end;
 
 destructor TSQLRestThread.Destroy;
@@ -34792,8 +34787,7 @@ constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
 begin
   fNotifier := TEvent.Create(nil,false,false,'');
   fClient := aClient;
-  inherited Create(aClient,false);
-  Start;
+  inherited Create(aClient,false,false);
 end;
 
 destructor TRemoteLogThread.Destroy;
@@ -40906,8 +40900,7 @@ begin
   fServer := aServer;
   fPipeName := PipeName;
   fChild := TList.Create;
-  inherited Create(aServer,false);
-  Start;
+  inherited Create(aServer,false,false);
 end;
 
 destructor TSQLRestServerNamedPipe.Destroy;
@@ -40987,8 +40980,7 @@ begin
   FOnTerminate := fServer.EndCurrentThread;
 {$endif}
   FreeOnTerminate := true;
-  inherited Create(fServer,false);
-  Start;
+  inherited Create(fServer,false,false);
 end;
 
 destructor TSQLRestServerNamedPipeResponse.Destroy;
@@ -55759,8 +55751,7 @@ begin
     fRemote := fClient.fClient else
     fRemote := aRemote;
   fPending := GetPendingCountFromDB;
-  inherited Create(fClient.fClient,false);
-  Start;
+  inherited Create(fClient.fClient,false,false);
 end;
 
 function TServiceFactoryClientNotificationThread.GetPendingCountFromDB: Int64;
