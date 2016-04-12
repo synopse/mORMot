@@ -82,7 +82,6 @@ type
     fAutoFlush: integer;
     fStackTraceViaAPI: boolean;
     fLowLevelWebSocketsFrames: boolean;
-    fPerThread: TSynLogPerThreadMode;
     fDestinationPath: TFileName;
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
@@ -117,10 +116,6 @@ type
     // period of time (e.g. every 10 seconds)
     // - this parameter is effective only under Windows by now
     property AutoFlushTimeOut: integer read fAutoFlush write fAutoFlush;
-    /// the logged information about threads
-    // - the default value is ptIdentifiedInOnFile, since it sounds more
-    // reasonable to a multi-threaded server instance
-    property PerThread: TSynLogPerThreadMode read fPerThread write fPerThread;
     /// by default (false), logging will use manual stack trace browsing
     // - if you experiment unexpected EAccessViolation, try to set this setting
     // to TRUE so that the RtlCaptureStackBackTrace() API would be used instead
@@ -488,7 +483,7 @@ begin
     Level := Log.Levels-[sllNone]; // '*' would include sllNone
     if Log.ConsoleLevels<>[] then
       EchoToConsole := Log.ConsoleLevels-[sllNone];
-    PerThreadLog := Log.PerThread;
+    PerThreadLog := ptIdentifiedInOnFile;
     if Log.DestinationPath<>'' then
      DestinationPath := Log.DestinationPath;
     RotateFileCount := Log.RotateFileCount;
@@ -496,7 +491,7 @@ begin
     RotateFileDailyAtHour := Log.RotateFileDailyAtHour;
     if Log.RotateFileCount<=0 then
       HighResolutionTimeStamp := true;
-    FileExistsAction := acAppend;
+    FileExistsAction := acAppend; // default rotation mode
     if Log.StackTraceViaAPI then
       StackTraceUse := stOnlyAPI;
     {$ifdef MSWINDOWS}
@@ -549,7 +544,6 @@ constructor TDDDLogSettings.Create;
 begin
   inherited Create;
   fLevels := [low(TSynLogInfo)..high(TSynLogInfo)]; // "Levels":"*" by default
-  fPerThread := ptIdentifiedInOnFile;
   fRotateFileAtHour := -1;
   fRotateFileCount := 20;
   fRotateFileSize := 128*1024; // 128 MB per rotation log by default
