@@ -89,6 +89,10 @@ uses
   SynCrtSock,
   SynCrypto;
 
+{$ifdef USELOCKERDEBUG}
+  {.$define WSLOCKERDEBUGLIST}
+  {.$define WSLOCKERDEBUGPROCESS}
+{$endif}
 
 type
   /// Exception raised from this unit
@@ -376,12 +380,16 @@ type
     wscBlockWithAnswer, wscBlockWithoutAnswer, wscNonBlockWithoutAnswer);
 
   /// used to manage a thread-safe list of WebSockets frames
-  TWebSocketFrameList = class(TSynPersistentLocked)
+  TWebSocketFrameList = class(TSynPersistent)
   public
     /// low-level access to the WebSocket frames list
     List: TWebSocketFrameDynArray;
     /// current number of WebSocket frames in the list
     Count: integer;
+    /// the mutex associated with this resource 
+    Safe: IAutoLocker;
+    /// initialize the list
+    constructor Create(const identifier: RawUTF8); reintroduce;
     /// add a WebSocket frame in the list
     procedure Push(const frame: TWebSocketFrame);
     /// retrieve a WebSocket frame from the list, oldest first
@@ -461,7 +469,7 @@ type
     fSettings: TWebSocketProcessSettings;
     fInvalidPingSendCount: cardinal;
     fProcessCount: integer;
-    fSafeIn, fSafeOut: TSynLocker;
+    fSafeIn, fSafeOut: IAutoLocker;
     /// low level WebSockets framing protocol
     function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
     function SendFrame(var Frame: TWebSocketFrame): boolean;
@@ -640,7 +648,7 @@ type
 
 
 /// used to return the text corresponding to a specified WebSockets frame data
-function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
+function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
 
 
 { -------------- WebSockets Client classes for bidirectional remote access }
@@ -738,18 +746,27 @@ implementation
 
 { -------------- WebSockets shared classes for bidirectional remote access }
 
+function ToText(opcode: TWebSocketFrameOpCode): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode));
+end;
+
+function ToText(block: TWebSocketProcessNotifyCallback): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(block));
+end;
+
+function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),ord(st));
+end;
+
 
 type
   TThreadHook = class(TThread);
 
 const
   STATUS_WEBSOCKETCLOSED = 0;
-
-function OpcodeText(opcode: TWebSocketFrameOpCode): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TWebSocketFrameOpCode),ord(opcode));
-end;
-
 procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
 const SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var SHA: TSHA1;
@@ -832,6 +849,16 @@ end;
 
 { TWebSocketFrameList }
 
+constructor TWebSocketFrameList.Create(const identifier: RawUTF8);
+begin
+  inherited Create;
+  {$ifdef WSLOCKERDEBUGLIST}
+  Safe := TAutoLockerDebug.Create(WebSocketLog,identifier); // more verbose
+  {$else}
+  Safe := TAutoLocker.Create;
+  {$endif}
+end;
+
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol; const head: RawUTF8;
   out frame: TWebSocketFrame): boolean;
 var i: integer;
@@ -839,7 +866,7 @@ begin
   result := false;
   if (self=nil) or (Count=0) or (head='') or (protocol=nil) then
     exit;
-  Safe.Lock;
+  Safe.Enter;
   try
     for i := 0 to Count-1 do
       if protocol.FrameIs(List[i],head) then begin
@@ -854,7 +881,7 @@ begin
         exit;
       end;
   finally
-    Safe.UnLock;
+    Safe.Leave;
   end;
 end;
 
@@ -862,14 +889,14 @@ procedure TWebSocketFrameList.Push(const frame: TWebSocketFrame);
 begin
   if self=nil then
     exit;
-  Safe.Lock;
+  Safe.Enter;
   try
     if Count>=length(List) then
       SetLength(List,Count+Count shr 3+8);
     List[Count] := frame;
     inc(Count);
   finally
-    Safe.UnLock;
+    Safe.Leave;
   end;
 end;
 
@@ -1445,16 +1472,23 @@ begin
   fOwnerConnection := aOwnerConnection;
   fOwnerThread := aOwnerThread;
   fSettings := aSettings;
-  fIncoming := TWebSocketFrameList.Create;
-  fOutgoing := TWebSocketFrameList.Create;
-  fSafeIn.Init;
-  fSafeOut.Init;
+  fIncoming := TWebSocketFrameList.Create('ws in list');
+  fOutgoing := TWebSocketFrameList.Create('ws out list');
+  {$ifdef WSLOCKERDEBUGPROCESS}
+  fSafeIn := TAutoLockerDebug.Create(WebSocketLog,'ws in process');
+  fSafeOut := TAutoLockerDebug.Create(WebSocketLog,'ws out process');
+  {$else}
+  fSafeIn := TAutoLocker.Create;
+  fSafeOut := TAutoLocker.Create;
+  {$endif}
 end;
 
 destructor TWebSocketProcess.Destroy;
 var frame: TWebSocketFrame;
+    timeout: Int64;
+    log: ISynLog;
 begin
-  WebSocketLog.Enter(self);
+  log := WebSocketLog.Enter(self);
   if (fState<>wpsClose) and (fInvalidPingSendCount=0) then
   try
     InterlockedIncrement(fProcessCount);
@@ -1468,13 +1502,17 @@ begin
     InterlockedDecrement(fProcessCount);
   end else
     fState := wpsDestroy;
-  while fProcessCount>0 do
-    SleepHiRes(2);
+  if fProcessCount>0 then begin
+    if log<>nil then
+      log.Log(sllDebug,'fProcessCount=%',[fProcessCount],self);
+    timeOut := GetTickCount64+5000;
+    repeat
+      SleepHiRes(2);
+    until (fProcessCount=0) or (GetTickCount64>timeOut);
+  end;
   fProtocol.Free;
   fOutgoing.Free;
   fIncoming.Free;
-  fSafeIn.Done;
-  fSafeOut.Done;
   inherited Destroy;
 end;
 
@@ -1549,7 +1587,7 @@ var data: RawByteString;
     pending: integer;
 begin
   result := false;
-  fSafeIn.Lock;
+  fSafeIn.Enter;
   try
     pending := fSocket.SockInPending(TimeOut);
     if pending<0 then
@@ -1568,7 +1606,7 @@ begin
         if IgnoreExceptions then
           exit else
           raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
-            [self,OpcodeText(opcode)^,OpcodeText(Frame.opcode)^]);
+            [self,ToText(opcode)^,ToText(Frame.opcode)^]);
       GetData(data);
       Frame.payload := Frame.payload+data;
     end;
@@ -1582,7 +1620,7 @@ begin
     SetLastPingTicks;
     result := true;
   finally
-    fSafeIn.UnLock;
+    fSafeIn.Leave;
   end;
 end;
 
@@ -1610,7 +1648,7 @@ function TWebSocketProcess.SendFrame(
 var hdr: TFrameHeader;
     len: cardinal;
 begin
-  fSafeOut.Lock;
+  fSafeOut.Enter;
   try
     Log(frame,'SendFrame',sllTrace,true);
     try
@@ -1650,7 +1688,7 @@ begin
       result := false;
     end;
   finally
-    fSafeOut.UnLock;
+    fSafeOut.Leave;
   end;
 end;
 
@@ -1678,14 +1716,15 @@ end;
 function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
   aMode: TWebSocketProcessNotifyCallback): cardinal;
 var request,answer: TWebSocketFrame;
+    i: integer;
     start,max: Int64;
+    log: ISynLog;
 begin
-  WebSocketLog.Add.Log(sllDebug,'NotifyCallback(%,%)',[aRequest.URL,
-     GetEnumName(TypeInfo(TWebSocketProcessNotifyCallback),ord(aMode))^],self);
   result := STATUS_NOTFOUND;
-  if (fProtocol=nil) or
+  if (fProtocol=nil) or (aRequest=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
+  log := WebSocketLog.Enter('NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request);
   if aMode=wscNonBlockWithoutAnswer then begin
@@ -1694,8 +1733,10 @@ begin
     result := STATUS_SUCCESS;
     exit;
   end;
-  InterlockedIncrement(fProcessCount);
+  i := InterlockedIncrement(fProcessCount);
   try
+    if i>2 then
+      log.Log(sllWarning,'NotifyCallback with fProcessCount=%',[i],self);
     if not SendFrame(request) then
       exit;
     if aMode=wscBlockWithoutAnswer then begin
@@ -1712,7 +1753,7 @@ begin
         exit;
       end else
       if GetTickCount64>max then begin
-        Log(request,'NotifyCallback TIMEOUT',sllWarning);
+        self.Log(request,'NotifyCallback TIMEOUT',sllWarning);
         exit;
       end else
         HiResDelay(start);
@@ -1724,12 +1765,12 @@ end;
 
 procedure TWebSocketProcess.SendPendingOutgoingFrames;
 begin
-  fOutgoing.Safe.Lock;
+  fOutgoing.Safe.Enter;
   try
     if not fProtocol.SendFrames(self,fOutgoing.List,fOutgoing.Count) then
-      WebSocketLog.Add.Log(sllError,'ProcessLoop SendFrames',self);
+      WebSocketLog.Add.Log(sllError,'SendPendingOutgoingFrames: SendFrames failed',self);
   finally
-    fOutgoing.Safe.UnLock;
+    fOutgoing.Safe.Leave;
   end;
 end;
 
@@ -1854,7 +1895,7 @@ begin
         if logBinaryFrameContent in fSettings.LogDetails then
           LogEscape(frame.PayLoad,content);
         log.Log(aEvent,'% type=% % len=% %',[aMethodName,Protocol.FrameType(frame),
-          OpcodeText(frame.opcode)^,length(frame.PayLoad),content],self);
+          ToText(frame.opcode)^,length(frame.PayLoad),content],self);
       end;
     finally
       log.DisableRemoteLog(false);
@@ -2103,11 +2144,6 @@ end;
 
 
 { -------------- WebSockets Client classes for bidirectional remote access }
-
-function ToText(st: TWebSocketProcessClientThreadState): PShortString; overload;
-begin
-  result := GetEnumName(TypeInfo(TWebSocketProcessClientThreadState),Ord(st));
-end;
 
 { THttpClientWebSockets }
 
