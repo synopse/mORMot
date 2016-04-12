@@ -4795,7 +4795,8 @@ begin
         page := PDF.AddPage;
         if BackgroundImage<>nil then
           PDF.Canvas.DrawXObject(0,0,page.PageWidth,page.PageHeight,'BackgroundImage');
-        PDF.Canvas.RenderMetaFile(GetMetaFileForPage(i),Screen.PixelsPerInch/fPrinterPxPerInch.x);
+        PDF.Canvas.RenderMetaFile(GetMetaFileForPage(i),
+          Screen.PixelsPerInch/fPrinterPxPerInch.x,Screen.PixelsPerInch/fPrinterPxPerInch.y);
         PDF.SaveToStreamDirectPageFlush;
       end;
       PDF.SaveToStreamDirectEnd;

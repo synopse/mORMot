@@ -2104,7 +2104,7 @@ type
     // - KerningHScaleBottom/KerningHScaleTop are limits below which and over
     // which Font Kerning is transformed into PDF Horizontal Scaling commands
     // - TextClipping can be set to fix some issues e.g. when using Wine
-    procedure RenderMetaFile(MF: TMetaFile; ScaleX: Single=1.0; ScaleY: Single=1.0;
+    procedure RenderMetaFile(MF: TMetaFile; ScaleX: Single=1.0; ScaleY: Single=0.0;
       XOff: single=0.0; YOff: single=0.0;
       TextPositioning: TPdfCanvasRenderMetaFileTextPositioning=tpSetTextJustification;
       KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0;
@@ -9322,6 +9322,8 @@ begin
   R.Top := 0;
   R.Right := MF.Width;
   R.Bottom := MF.Height;
+  if ScaleY=0 then
+    ScaleY := ScaleX; // if ScaleY is ommited -> assume symetric coordinates
   E := TPdfEnum.Create(self);
   try
     FOffsetXDef := XOff;
