@@ -89,9 +89,11 @@ uses
   SynCrtSock,
   SynCrypto;
 
-{$ifdef USELOCKERDEBUG}
-  {.$define WSLOCKERDEBUGLIST}
-  {.$define WSLOCKERDEBUGPROCESS}
+{$ifndef DELPHI5OROLDER}
+  {$ifdef USELOCKERDEBUG}
+    {.$define WSLOCKERDEBUGLIST}
+    {.$define WSLOCKERDEBUGPROCESS}
+  {$endif}
 {$endif}
 
 type
@@ -386,10 +388,17 @@ type
     List: TWebSocketFrameDynArray;
     /// current number of WebSocket frames in the list
     Count: integer;
-    /// the mutex associated with this resource 
+    /// the mutex associated with this resource
+    {$ifdef DELPHI5OROLDER}
+    Safe: TAutoLocker;
+    {$else}
     Safe: IAutoLocker;
+    {$endif}
     /// initialize the list
     constructor Create(const identifier: RawUTF8); reintroduce;
+    {$ifdef DELPHI5OROLDER}
+    destructor Destroy; override;
+    {$endif}
     /// add a WebSocket frame in the list
     procedure Push(const frame: TWebSocketFrame);
     /// retrieve a WebSocket frame from the list, oldest first
@@ -469,7 +478,11 @@ type
     fSettings: TWebSocketProcessSettings;
     fInvalidPingSendCount: cardinal;
     fProcessCount: integer;
+    {$ifdef DELPHI5OROLDER}
+    fSafeIn, fSafeOut: TAutoLocker;
+    {$else}
     fSafeIn, fSafeOut: IAutoLocker;
+    {$endif}
     /// low level WebSockets framing protocol
     function GetFrame(out Frame: TWebSocketFrame; TimeOut: cardinal; IgnoreExceptions: boolean): boolean;
     function SendFrame(var Frame: TWebSocketFrame): boolean;
@@ -858,6 +871,14 @@ begin
   Safe := TAutoLocker.Create;
   {$endif}
 end;
+
+{$ifdef DELPHI5OROLDER}
+destructor TWebSocketFrameList.Destroy;
+begin
+  inherited;
+  Safe.Free;
+end;
+{$endif}
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol; const head: RawUTF8;
   out frame: TWebSocketFrame): boolean;
@@ -1513,6 +1534,10 @@ begin
   fProtocol.Free;
   fOutgoing.Free;
   fIncoming.Free;
+  {$ifdef DELPHI5OROLDER}
+  fSafeIn.Free;
+  fSafeOut.Free;
+  {$endif}
   inherited Destroy;
 end;
 
