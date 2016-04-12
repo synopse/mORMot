@@ -2528,8 +2528,12 @@ asm // eax=KeySize edx=pk
 end;
 {$endif CPU32}
 {$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm
   .noframe
+{$endif}
   mov rax,rcx
   movdqu xmm1,[rdx]
   movdqu xmm5,dqword ptr [@shuffle_mask]
@@ -2793,8 +2797,12 @@ end;
 {$endif CPU32}
 {$ifdef CPU64}
 procedure MakeDecrKeyAesNi(Rounds: integer; RK: Pointer);
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm // rcx=Rounds rdx=RK
   .noframe
+{$endif}
   mov rax,rcx
   sub eax,9
   movdqu xmm0,[rdx+$10]
@@ -2827,7 +2835,7 @@ asm // rcx=Rounds rdx=RK
   aesimc xmm0,xmm0
   movdqu [rdx],xmm0
   dec eax
-  lea rdx,rdx+16
+  lea rdx,[rdx+16]
   jnz @loop
 end;
 {$endif CPU64}
@@ -3628,7 +3636,7 @@ asm // W=rcx Buf=rdx
      mov eax,[rdx+40]; mov ebx,[rdx+44]; bswap eax; bswap ebx; mov [rsi+40],eax; mov [rsi+44],ebx
      mov eax,[rdx+48]; mov ebx,[rdx+52]; bswap eax; bswap ebx; mov [rsi+48],eax; mov [rsi+52],ebx
      mov eax,[rdx+56]; mov ebx,[rdx+60]; bswap eax; bswap ebx; mov [rsi+56],eax; mov [rsi+60],ebx
-     lea rsi,rsi+64
+     lea rsi,[rsi+64]
      // part2: W[i]:= LRot_1(W[i-3] xor W[i-8] xor W[i-14] xor W[i-16]);
      mov   ecx,48
 @@2: mov   eax,[rsi-2*4]    // W[i-2]
