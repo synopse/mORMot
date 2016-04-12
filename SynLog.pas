@@ -964,6 +964,10 @@ type
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
     procedure Log(Level: TSynLogInfo); overload;
+    /// allows to identify the current thread with a
+    // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
+    // - entry would also be replicated at the begining of any rotated log file
+    procedure LogThreadName(const Name: RawUTF8);
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited by
@@ -3296,16 +3300,28 @@ procedure TSynLog.LogLines(Level: TSynLogInfo; LinesToLog: PUTF8Char; aInstance:
 procedure DoLog(LinesToLog: PUTF8Char);
 var s: RawUTF8;
 begin
-  while LinesToLog<>nil do begin
+  repeat
     s := trim(GetNextLine(LinesToLog,LinesToLog));
     if s<>'' then
       if (IgnoreWhenStartWith=nil) or not IdemPChar(pointer(s),IgnoreWhenStartWith) then
         LogInternal(Level,s,aInstance,maxInt);
-  end;
+  until LinesToLog=nil;
 end;
 begin
-  if (self<>nil) and (Level in fFamily.fLevel) then
+  if (self<>nil) and (Level in fFamily.fLevel) and (LinesToLog<>nil) then
     DoLog(LinesToLog);
+end;
+
+procedure TSynLog.LogThreadName(const Name: RawUTF8);
+begin
+  if (self<>nil) and (sllInfo in fFamily.fLevel) then
+    if LogHeaderLock(sllInfo,false) then // inlined LogInternal
+    try
+      fWriter.Add('SetThreadName %=%',[fThreadID,Name],twOnSameLine);
+      fThreadContext^.ThreadName := Name;
+    finally
+      LogTrailerUnLock(sllInfo);
+    end;
 end;
 
 function TSynLog.LogClass: TSynLogClass;
@@ -3633,6 +3649,16 @@ begin
   end;
   CreateLogWriter;
   LogFileHeader;
+  if fFamily.fPerThreadLog=ptIdentifiedInOnFile then
+    for i := 0 to fThreadContextCount-1 do
+    with fThreadContexts[i] do
+      if (ID<>0) and (ThreadName<>'') then begin // see TSynLog.LogThreadName
+        LogCurrentTime;
+        fWriter.AddInt18ToChars3(i+1);
+        fWriter.AddShort(LOG_LEVEL_TEXT[sllInfo]);
+        fWriter.Add('SetThreadName %=%',[ID,ThreadName],twOnSameLine);
+        fWriter.AddEndOfLine(sllInfo);
+      end;
 end;
 
 procedure TSynLog.LogTrailerUnLock(Level: TSynLogInfo);
@@ -4417,8 +4443,8 @@ begin
       end;
     end;
     inc(fThreadInfo[thread].Rows);
-    if (L=sllInfo) and IdemPChar(LineBeg+fLineLevelOffset+5,'SETTHREADNAME') then
-      with fThreadInfo[thread] do begin
+    if (L=sllInfo) and IdemPChar(LineBeg+fLineLevelOffset+5,'SETTHREADNAME ') then
+      with fThreadInfo[thread] do begin // see TSynLog.LogThreadName
         n := length(SetThreadName);
         SetLength(SetThreadName,n+1);
         SetThreadName[n] := LineBeg;
