@@ -699,6 +699,8 @@ type
     RecursionCapacity: integer;
     /// used by TSynLog.Enter methods to handle recursivity calls tracing
     Recursion: array of TSynLogThreadRecursion;
+    /// the associated thread name
+    ThreadName: RawUTF8;
   end;
   // pointer to thread-specific context information
   PSynLogThreadContext = ^TSynLogThreadContext;
@@ -734,7 +736,7 @@ type
     fFileName: TFileName;
     fFileRotationSize: cardinal;
     fFileRotationNextHour: Int64;
-    fThreadHash: TWordDynArray; // 64 KB buffer
+    fThreadHash: TWordDynArray; // 8 KB buffer
     fThreadIndexReleased: TWordDynArray;
     fThreadIndexReleasedCount: integer;
     fThreadContexts: array of TSynLogThreadContext;
@@ -777,6 +779,7 @@ type
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
     procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
     procedure GetThreadContextInternal;
+    procedure ThreadContextRehash;
     function Instance: TSynLog;
     function ConsoleEcho(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; virtual;
@@ -1766,7 +1769,7 @@ begin
       Len := StreamSynLZComputeLen(MS.Memory,Len,MAGIC_MAB);
       // append mab content to exe
       MS.Size := Len+LenMAB;
-      move(MAB.Memory^,PAnsiChar(MS.Memory)[Len],LenMAB);
+      MoveFast(MAB.Memory^,PAnsiChar(MS.Memory)[Len],LenMAB);
       MS.SaveToFile(aExeName);
     finally
       MAB.Free;
@@ -2771,16 +2774,16 @@ end;
 { TSynLog }
 
 const
-  MAXLOGTHREADBITS = 14;
+  // would handle up to 4096 threads, using 8 KB of RAM for the hash table
+  MAXLOGTHREADBITS = 12;
   // maximum of thread IDs which can exist for a process
   // - shall be a power of 2 (used for internal TSynLog.fThreadHash)
   // - with the default 1MB stack size, max is around 2000 threads for Win32
-  // - thread IDs are recycled when released, and you always should use a thread
-  // pool (like we do for all our mORMot servers, including http.sys based)
+  // - thread IDs are recycled when released via TSynLog.NotifyThreadEnded
   MAXLOGTHREAD = 1 shl MAXLOGTHREADBITS;
 
 procedure TSynLog.GetThreadContextInternal;
-begin
+begin // should match TSynLog.ThreadContextRehash
   fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
     xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
   fThreadIndex := fThreadHash[fThreadLastHash];
@@ -2810,6 +2813,28 @@ begin
   fThreadContext^.ID := fThreadID;
 end;
 
+procedure TSynLog.ThreadContextRehash;
+var i, id, hash: integer;
+begin // should match TSynLog.GetThreadContextInternal
+  FillcharFast(fThreadHash[0],MAXLOGTHREAD*sizeof(fThreadHash[0]),0);
+  for i := 0 to fThreadContextCount-1 do begin
+    id := fThreadContexts[i].ID;
+    if id=0 then
+      continue; // empty slot
+    hash := PtrUInt(id xor (id shr MAXLOGTHREADBITS)
+      xor (id shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
+    repeat
+      if fThreadHash[hash]=0 then
+        break;
+      // hash collision (no need to check the ID here)
+      if hash=MAXLOGTHREAD-1 then
+        hash := 0 else
+        inc(hash);
+    until false;
+    fThreadHash[hash] := i+1;
+  end;
+end;
+
 procedure TSynLog.LockAndGetThreadContext;
 var ID: TThreadID;
 begin
@@ -2831,9 +2856,9 @@ begin
     exit; // nothing to release
   LockAndGetThreadContext;
   try
-    fThreadHash[fThreadLastHash] := 0; // so that slot would be re-used
     Finalize(fThreadContext^);
-    fillchar(fThreadContext^,SizeOf(fThreadContext^),0);
+    FillcharFast(fThreadContext^,SizeOf(fThreadContext^),0);
+    ThreadContextRehash; // fThreadHash[fThreadLastHash] := 0 is not enough
     if fThreadIndexReleasedCount>=length(fThreadIndexReleased) then
       SetLength(fThreadIndexReleased,fThreadIndexReleasedCount+128);
     fThreadIndexReleased[fThreadIndexReleasedCount] := fThreadIndex;
@@ -2955,7 +2980,7 @@ begin
   assert(RtlCaptureStackBackTraceRetrieved=btOK);
   {$endif}
   {$endif}
-  SetLength(fThreadHash,MAXLOGTHREAD); // 64 KB buffer
+  SetLength(fThreadHash,MAXLOGTHREAD); // 8 KB buffer
   SetLength(fThreadContexts,128);
 end;
 
