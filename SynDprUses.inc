@@ -4,7 +4,9 @@
   cthreads, // if you use threads: always needed for servers
   cwstring, // optional WideString manager, but won't hurt
   {$else}
-  cmem,  // default FPC's heap manager is very RAM hungry (one heap per thread)
+    {$ifopt D-} // at the moment, debug mode with cmem causes trouble
+    cmem, // default FPC's heap manager is very RAM hungry (one heap per thread)
+    {$endif}
   //FastMM4,  // need the latest version, e.g. from lib\kylix sub folder
   {$endif}
 {$else}  // enable FastMM4 on older versions of Delphi
