@@ -894,6 +894,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// retrieve the family of this TSynLog class type
     class function Family: TSynLogFamily; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
     class function Void: TSynLogClass;
@@ -3086,8 +3087,15 @@ end;
 
 class function TSynLog.Add: TSynLog;
 {$ifdef HASINLINE}
+var f: TSynLogFamily;
 begin
-  result := Family.SynLog;
+  if Self<>nil then begin // inlined TSynLog.Family (Add is already inlined)
+    f := PPointer(PtrInt(Self)+vmtAutoTable)^;
+    if f=nil then
+     result := FamilyCreate.SynLog else
+     result := f.SynLog;
+  end else
+    result := nil;
 end;
 {$else}
 asm
@@ -3114,10 +3122,9 @@ begin
     aSynLog := FamilyCreate.SynLog else
     aSynLog := aFamily.SynLog;
   // recursively store parameters
-  with aSynLog do
-  if sllEnter in fFamily.fLevel then begin
-    LockAndGetThreadContext;
-    with fThreadContext^ do
+  if sllEnter in aSynLog.fFamily.fLevel then begin
+    aSynLog.LockAndGetThreadContext;
+    with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
         inc(RecursionCapacity,4+RecursionCapacity shr 3);
@@ -3154,7 +3161,7 @@ begin
       inc(RecursionCount);
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
-      GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+      GlobalCurrentHandleExceptionSynLog := aSynLog.fThreadHandleExceptionBackup;
       {$endif}
       LeaveCriticalSection(GlobalThreadLock);
     end;
@@ -3169,11 +3176,9 @@ class function TSynLog.Enter(const TextFmt: RawUTF8; const TextArgs: array of co
 var aSynLog: TSynLog;
 begin
   aSynLog := Family.SynLog;
-  if aSynLog<>nil then
-  with aSynLog do
-  if sllEnter in fFamily.fLevel then begin
-    LockAndGetThreadContext;
-    with fThreadContext^ do
+  if (aSynLog<>nil) and (sllEnter in aSynLog.fFamily.fLevel) then begin
+    aSynLog.LockAndGetThreadContext;
+    with aSynLog.fThreadContext^ do
     try
       if RecursionCount=RecursionCapacity then begin
         inc(RecursionCapacity,4+RecursionCapacity shr 3);
@@ -3190,7 +3195,7 @@ begin
       inc(RecursionCount);
     finally
       {$ifndef NOEXCEPTIONINTERCEPT}
-      GlobalCurrentHandleExceptionSynLog := fThreadHandleExceptionBackup;
+      GlobalCurrentHandleExceptionSynLog := aSynLog.fThreadHandleExceptionBackup;
       {$endif}
       LeaveCriticalSection(GlobalThreadLock);
     end;
@@ -3217,7 +3222,7 @@ begin // private sub function makes the code faster in most case
   end;
 end;
 
-{$ifdef PUREPASCAL}
+{$ifdef HASINLINE}
 class function TSynLog.Family: TSynLogFamily;
 begin
   if Self<>nil then begin
