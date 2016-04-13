@@ -232,7 +232,8 @@ type
     function CheckAndRetrieve(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil): integer; virtual; abstract;
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data
-    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual; abstract;
+    // - will call CheckAndRetrieve() then RecordSaveJSON() and _JsonFast()
+    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual; 
     /// clear the session
     procedure Finalize; virtual; abstract;
   end;
@@ -265,9 +266,6 @@ type
     /// retrieve the session ID from the current cookie
     // - can optionally retrieve the record Data parameter stored in the cookie
     function CheckAndRetrieve(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil): integer; override;
-    /// retrieve the session information as a JSON object from the current cookie
-    // - returned as a TDocVariant, including any associated record Data
-    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; override;
     /// clear the session
     procedure Finalize; override;
   end;
@@ -1094,6 +1092,29 @@ begin
   inherited;
 end;
 
+function TMVCSessionAbstract.CheckAndRetrieveInfo(
+  PRecordDataTypeInfo: pointer): variant;
+var rec: TByteDynArray; // to store locally any kind of record
+    recJSON: RawUTF8;
+    sessionID: integer;
+begin
+  SetLength(rec,RecordTypeInfoSize(PRecordDataTypeInfo));
+  try
+    SetVariantNull(result);
+    sessionID := CheckAndRetrieve(pointer(rec),PRecordDataTypeInfo);
+    if sessionID=0 then
+      exit;
+    if rec<>nil then begin
+      recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
+      result := _JsonFast(recJSON);
+    end;
+    _ObjAddProps(['id',sessionID],result);
+  finally
+    if rec<>nil then // manual finalization of managed fields
+      RecordClear(pointer(rec)^,PRecordDataTypeInfo);
+  end;
+end;
+
 
 { TMVCSessionWithCookies }
 
@@ -1135,29 +1156,6 @@ begin
         result := sessionID else
         result := 0 else
     result := 0;
-end;
-
-function TMVCSessionWithCookies.CheckAndRetrieveInfo(
-  PRecordDataTypeInfo: pointer): variant;
-var rec: TByteDynArray; // to store locally any kind of record
-    recJSON: RawUTF8;
-    sessionID: integer;
-begin
-  SetLength(rec,RecordTypeInfoSize(PRecordDataTypeInfo));
-  try
-    SetVariantNull(result);
-    sessionID := CheckAndRetrieve(pointer(rec),PRecordDataTypeInfo);
-    if sessionID=0 then
-      exit;
-    if rec<>nil then begin
-      recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
-      result := _JsonFast(recJSON);
-    end;
-    _ObjAddProps(['id',sessionID],result);
-  finally
-    if rec<>nil then // manual finalization of managed fields
-      RecordClear(pointer(rec)^,PRecordDataTypeInfo);
-  end;
 end;
 
 function TMVCSessionWithCookies.Initialize(
