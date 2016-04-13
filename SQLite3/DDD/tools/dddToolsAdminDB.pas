@@ -54,8 +54,8 @@ type
     fSQLLogFile: TFileName;
     function ExecSQL(const SQL: RawUTF8): RawUTF8;
     procedure SetResult(const JSON: RawUTF8); virtual;
-    function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer; var Text:
-      string): boolean;
+    function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
+      var Text: string): boolean;
     procedure LogClick(Sender: TObject);
     procedure LogDblClick(Sender: TObject);
     procedure LogSearch(Sender: TObject);
@@ -69,7 +69,6 @@ type
     Admin: IAdministratedDaemon;
     Tables: TStringList;
     AssociatedModel: TSQLModel;
-    AssociatedTables: TSQLRecordClassDynArray;
     AssociatedServices: TInterfaceFactoryObjArray;
     TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
@@ -172,6 +171,7 @@ begin
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
   mmoResult.Text := UTF8ToString(StringReplaceTabs(JSON, '    '));
   mmoResult.SetCaret(0, 0);
+  mmoResult.TopRow := 0;
   fJson := '';
 end;
 
@@ -283,14 +283,14 @@ begin
   else begin
     GridLastTableName := GetTableNameFromSQLSelect(fSQL, false);
     mmoResult.Text := '';
+    mmoResult.SetCaret(0, 0);
+    mmoResult.TopRow := 0;
     mmoResult.Align := alBottom;
     mmoResult.WordWrap := true;
     mmoResult.ScrollBars := ssVertical;
     mmoResult.Height := 100;
     if AssociatedModel <> nil then
-      tables := AssociatedModel.Tables
-    else
-      tables := AssociatedTables;
+      tables := AssociatedModel.Tables;
     table := TSQLTableJSON.CreateFromTables(tables, fSQL, pointer(fJson), length(fJson));
     Grid := TSQLTableToGrid.Create(drwgrdResult, table, nil);
     Grid.SetAlignedByType(sftCurrency, alRight);
@@ -302,16 +302,16 @@ begin
     drwgrdResult.Options := drwgrdResult.Options - [goRowSelect];
     drwgrdResult.Show;
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-    mmoResult.Text := Format(#13#10' Returned %d row(s), for %s in %s', [table.RowCount,
-      KB(Length(fJson)), execTime]);
+    mmoResult.Text := Format(#13#10' Returned %d row(s), as %s in %s',
+      [table.RowCount, KB(Length(fJson)), execTime]);
   end;
   if Sender <> nil then begin
     mmoSQL.SelStart := SelStart;
     mmoSQL.SelLength := SelLength;
     mmoSQL.SetFocus;
   end;
-  if ((fJson <> '') or ((fSQL[1] = '#') and (PosEx(' ', fSQL) > 0))) and (fSQL
-    <> fPreviousSQL) then begin
+  if ((fJson <> '') or ((fSQL[1] = '#') and (PosEx(' ', fSQL) > 0))) and
+     (fSQL <> fPreviousSQL) then begin
     AppendToTextFile(fSQL, fSQLLogFile);
     fPreviousSQL := fSQL;
   end;
@@ -325,8 +325,8 @@ begin
   inherited;
 end;
 
-function TDBFrame.OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer; var
-  Text: string): boolean;
+function TDBFrame.OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
+  var Text: string): boolean;
 begin
   if Sender.FieldType(FieldIndex) in [sftBoolean] then
     result := false
@@ -370,6 +370,8 @@ begin
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
     JSONBufferReformat(pointer(VariantToUTF8(row)), json, jsonUnquotedPropNameCompact);
     mmoResult.Text := UTF8ToString(json);
+    mmoResult.SetCaret(0, 0);
+    mmoResult.TopRow := 0;
   end;
 end;
 
