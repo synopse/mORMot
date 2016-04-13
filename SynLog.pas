@@ -3169,6 +3169,7 @@ class function TSynLog.Enter(const TextFmt: RawUTF8; const TextArgs: array of co
 var aSynLog: TSynLog;
 begin
   aSynLog := Family.SynLog;
+  if aSynLog<>nil then
   with aSynLog do
   if sllEnter in fFamily.fLevel then begin
     LockAndGetThreadContext;

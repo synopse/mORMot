@@ -1749,7 +1749,8 @@ begin
   if (fProtocol=nil) or (aRequest=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
-  log := WebSocketLog.Enter('NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
+  if WebSocketLog<>nil then
+    log := WebSocketLog.Enter('NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request);
   if aMode=wscNonBlockWithoutAnswer then begin
@@ -1760,7 +1761,7 @@ begin
   end;
   i := InterlockedIncrement(fProcessCount);
   try
-    if i>2 then
+    if (i>2) and (log<>nil) then
       log.Log(sllWarning,'NotifyCallback with fProcessCount=%',[i],self);
     if not SendFrame(request) then
       exit;
