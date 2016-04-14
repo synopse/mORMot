@@ -34436,7 +34436,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       PropValue := GetJSONField(P,ptr,@wasString,@EndOfObject);
       if (PropValue<>nil) and // PropValue=nil for null
          (wasString<>(Prop.PropertyType in [ptRawUTF8,ptString,
-           ptSynUnicode,ptDateTime,ptTimeLog,ptGUID,ptWideString])) then
+           ptSynUnicode,ptDateTime,ptGUID,ptWideString])) then
          exit;
       P := ptr;
       case Prop.PropertyType of
@@ -34448,14 +34448,13 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
       ptDouble:    PDouble(Data)^ := GetExtended(PropValue);
       ptExtended:  PExtended(Data)^ := GetExtended(PropValue);
-      ptInt64,ptID:SetInt64(PropValue,PInt64(Data)^);
+      ptInt64,ptID,ptTimeLog: SetInt64(PropValue,PInt64(Data)^);
       ptInteger:   PInteger(Data)^ := GetInteger(PropValue);
       ptSingle:    PSingle(Data)^ := GetExtended(PropValue);
       ptRawUTF8:   PRawUTF8(Data)^ := PropValue;
       ptString:    UTF8DecodeToString(PropValue,StrLen(PropValue),PString(Data)^);
       ptSynUnicode:UTF8ToSynUnicode(PropValue,StrLen(PropValue),PSynUnicode(Data)^);
       ptDateTime:  Iso8601ToDateTimePUTF8CharVar(PropValue,0,PDateTime(Data)^);
-      ptTimeLog:   PInt64(Data)^ := Iso8601ToTimeLogPUTF8Char(PropValue,0);
       ptWideString:UTF8ToWideString(PropValue,StrLen(PropValue),PWideString(Data)^);
       ptWord:      PWord(Data)^ := GetCardinal(PropValue);
       ptGUID:      TextToGUID(PropValue,pointer(Data));
@@ -34572,7 +34571,8 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
     ptDouble:    aWriter.AddDouble(unaligned(PDouble(Value)^));
     ptExtended:  aWriter.Add(PExtended(Value)^,EXTENDED_PRECISION);
-    ptInt64,ptID:aWriter.Add(PInt64(Value)^);
+    ptInt64,ptID,ptTimeLog:
+                 aWriter.Add(PInt64(Value)^);
     ptInteger:   aWriter.Add(PInteger(Value)^);
     ptSingle:    aWriter.AddSingle(PSingle(Value)^);
     ptWord:      aWriter.AddU(PWord(Value)^);
@@ -34582,7 +34582,7 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     ptRawByteString:
       aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
     ptRawJSON, ptRawUTF8, ptString, ptSynUnicode,
-    ptDateTime, ptTimeLog, ptGUID, ptWideString: begin
+    ptDateTime, ptGUID, ptWideString: begin
       aWriter.Add('"');
       case Prop.PropertyType of
       ptRawJSON:       aWriter.AddNoJSONEscape(PPointer(Value)^,length(PRawJSON(Value)^));
@@ -34591,7 +34591,6 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
       ptSynUnicode,
       ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
       ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^));
-      ptTimeLog:       aWriter.AddTimeLog(PInt64(Value));
       ptGUID:          aWriter.Add(PGUID(Value)^);
       end;
       aWriter.Add('"');
