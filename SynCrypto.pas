@@ -5099,7 +5099,7 @@ begin
         Write(Tmp,n);
         dec(LastLen,n);
       end;
-    end else begin // no we do AES encryption:
+    end else begin // now we do AES encryption:
       // 1. Header process
       if Encrypt then begin
         // encrypt data

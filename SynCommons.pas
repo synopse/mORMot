@@ -1174,7 +1174,7 @@ type
   /// class-reference type (metaclass) of a TStream
   TStreamClass = class of TStream;
 
-  /// class-reference type (metaclass) of a TInterfacedObject 
+  /// class-reference type (metaclass) of a TInterfacedObject
   TInterfacedObjectClass = class of TInterfacedObject;
 
   PObject = ^TObject;
@@ -10144,11 +10144,13 @@ var
   /// is overriden e.g. by mORMot.pas to log the thread name
   SetThreadNameInternal: procedure(ThreadID: TThreadID; const Name: RawUTF8) = SetThreadNameDefault;
 
+  
+{$ifndef LVCL} // LVCL does not implement TEvent
+
 type
   {$M+}
   TSynBackgroundThreadAbstract = class;
   TSynBackgroundThreadEvent = class;
-  TBlockingProcess = class;
   {$M-}
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
@@ -10164,11 +10166,9 @@ type
   TOnIdleSynBackgroundThread = procedure(Sender: TSynBackgroundThreadAbstract;
     ElapsedMS: Integer) of object;
 
-  {$ifndef LVCL}
   /// event prototype used e.g. by TSynBackgroundThreadAbstract callbacks
   // - a similar signature is defined in SynCrtSock and LVCL.Classes
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
-  {$endif}
 
   /// abstract TThread with its own execution content
   // - you should not use this class directly, but use either
@@ -10390,44 +10390,8 @@ type
     property ThreadName: RawUTF8 read fThreadName;
   end;
 
-  /// the current state of a TBlockingProcess instance
-  TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
+{$endif LVCL} // LVCL does not implement TEvent
 
-  /// a semaphore used to wait for some process to be finished
-  // - used e.g. by TBlockingCallback in mORMot.pas 
-  // - once created, process would block via a WaitFor call, which would be
-  // released when NotifyFinished is called by the process background thread
-  TBlockingProcess = class(TEvent)
-  protected
-    fTimeOutMs: integer;
-    fEvent: TBlockingEvent;
-    fSafe: PSynLocker;
-  public
-    /// initialize the semaphore instance
-    // - specify a time out millliseconds period after which blocking execution
-    // should be handled as failure (if 0 is set, default 3000 would be used)
-    // - an associated mutex shall be supplied
-    constructor Create(aTimeOutMs: integer; const aSafe: TSynLocker); reintroduce; virtual;
-    /// called to wait for NotifyFinished() to be called, or trigger timeout
-    // - returns the final state of the process, i.e. evRaised or evTimeOut 
-    function WaitFor: TBlockingEvent; virtual;
-    /// should be called by the background process when it is finished
-    // - the caller would then let its WaitFor method return
-    // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
-    function NotifyFinished: boolean; virtual;
-    /// just a wrapper to reset the internal Event state to evNone
-    // - may be used to re-use the same TBlockingProcess instance, after
-    // a successfull WaitFor/NotifyFinished process
-    // - returns TRUE on success (i.e. status was not evWaiting)
-    // - if there is a WaitFor currently in progress, returns FALSE
-    function Reset: boolean; virtual;
-  published
-    /// the current state of process
-    // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingEvent read fEvent;
-    /// the time out period, in ms, as defined at constructor level
-    property TimeOutMs: integer read fTimeOutMS;
-  end;
 
 /// low-level wrapper to add a callback to a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -15025,6 +14989,106 @@ type
     procedure Leave; virtual;
     /// access to the locking methods of this instance
     function Safe: PSynLocker;
+  end;
+
+  /// the current state of a TBlockingProcess instance
+  TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
+
+  /// used to identify each TBlockingProcessPool call
+  // - allow to match a given TBlockingProcess semaphore
+  TBlockingProcessPoolCall = type integer;
+
+  {$M+}
+  /// a semaphore used to wait for some process to be finished
+  // - used e.g. by TBlockingCallback in mORMot.pas
+  // - once created, process would block via a WaitFor call, which would be
+  // released when NotifyFinished is called by the process background thread
+  TBlockingProcess = class(TEvent)
+  protected
+    fTimeOutMs: integer;
+    fEvent: TBlockingEvent;
+    fSafe: PSynLocker;
+    fOwnedSafe: TAutoLocker;
+    fCall: TBlockingProcessPoolCall;
+    procedure ResetCall; virtual;
+  public
+    /// initialize the semaphore instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - an associated mutex shall be supplied
+    constructor Create(aTimeOutMs: integer; const aSafe: TSynLocker); reintroduce; overload; virtual;
+    /// initialize the semaphore instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - an associated mutex would be created and owned by this instance
+    constructor Create(aTimeOutMs: integer); reintroduce; overload; virtual;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// called to wait for NotifyFinished() to be called, or trigger timeout
+    // - returns the final state of the process, i.e. evRaised or evTimeOut 
+    function WaitFor: TBlockingEvent; reintroduce; virtual;
+    /// should be called by the background process when it is finished
+    // - the caller would then let its WaitFor method return
+    // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
+    // - if the instance is already locked (e.g. when retrieved from
+    // TBlockingProcessPool.FromCallLocked), you may set alreadyLocked=TRUE
+    function NotifyFinished(alreadyLocked: boolean=false): boolean; virtual;
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingProcess instance, after
+    // a successfull WaitFor/NotifyFinished process
+    // - returns TRUE on success (i.e. status was not evWaiting), setting
+    // the current state to evNone, and the Tag property to 0
+    // - if there is a WaitFor currently in progress, returns FALSE
+    function Reset: boolean; virtual;
+    /// just a wrapper around fSafe^.Lock
+    procedure Lock;
+    /// just a wrapper around fSafe^.Unlock
+    procedure Unlock;
+    /// an unique identifier, when owned by a TBlockingProcessPool
+    // - Reset would restore this field to its 0 default value
+    property Call: TBlockingProcessPoolCall read fCall;
+  published
+    /// the current state of process
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingEvent read fEvent;
+    /// the time out period, in ms, as defined at constructor level
+    property TimeOutMs: integer read fTimeOutMS;
+  end;
+  {$M-}
+
+  /// class-reference type (metaclass) of a TBlockingProcess
+  TBlockingProcessClass = class of TBlockingProcess;
+
+  /// manage a pool of TBlockingProcess instances
+  // - each call will be identified via a TBlockingProcessPoolCall unique value
+  // - to be used to emulate e.g. blocking execution from an asynchronous
+  // event-driven DDD process
+  // - it would also allow to re-use TEvent system resources
+  TBlockingProcessPool = class(TSynPersistent)
+  protected
+    fClass: TBlockingProcessClass;
+    fPool: TObjectListLocked;
+    fCallCounter: TBlockingProcessPoolCall; // to match TBlockingProcess.Tag
+  public
+    /// initialize the pool, for a given implementation class
+    constructor Create(aClass: TBlockingProcessClass=nil); reintroduce;
+    /// finalize the pool
+    // - would also force all pending WaitFor to trigger a evTimeOut
+    destructor Destroy; override;
+    /// book a TBlockingProcess from the internal pool
+    // - returns nil on error (e.g. the instance is destroying)
+    // - or returns the blocking process instance corresponding to this call;
+    // its Call property would identify the call for the asynchronous callback,
+    // then after WaitFor, the Reset method should be run to release the mutex
+    // for the pool
+    function NewProcess(aTimeOutMs: integer): TBlockingProcess; virtual;
+    /// retrieve a TBlockingProcess from its call identifier
+    // - may be used e.g. from the callback of the asynchronous process
+    // to set some additional parameters to the inherited TBlockingProcess,
+    // then call NotifyFinished to release the caller WaitFor
+    // - if leavelocked is TRUE, the returned instance would be locked: caller
+    // should execute result.Unlock or NotifyFinished(true) after use
+    function FromCall(call: TBlockingProcessPoolCall; locked: boolean=false): TBlockingProcess; virtual;
   end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
@@ -55147,6 +55211,18 @@ begin
   fSafe := @aSafe;
 end;
 
+constructor TBlockingProcess.Create(aTimeOutMs: integer);
+begin
+  fOwnedSafe := TAutoLocker.Create;
+  Create(aTimeOutMS,fOwnedSafe.fSafe);
+end;
+
+destructor TBlockingProcess.Destroy;
+begin
+  fOwnedSafe.Free;
+  inherited Destroy;
+end;
+
 function TBlockingProcess.WaitFor: TBlockingEvent;
 begin
   fSafe^.Lock;
@@ -55169,14 +55245,14 @@ begin
   end;
 end;
 
-function TBlockingProcess.NotifyFinished: boolean;
+function TBlockingProcess.NotifyFinished(alreadyLocked: boolean): boolean;
 begin
-  fSafe^.Lock;
+  result := false;
+  if not alreadyLocked then
+    fSafe^.Lock;
   try
-    if fEvent in [evRaised,evTimeOut] then begin
-      result := false;
+    if fEvent in [evRaised,evTimeOut] then
       exit; // ignore if already notified
-    end;
     fEvent := evRaised;
     SetEvent; // notify caller to unlock "WaitFor" method
     result := true;
@@ -55185,15 +55261,119 @@ begin
   end;
 end;
 
+procedure TBlockingProcess.ResetCall;
+begin // override to reset associated params
+  fCall := 0;
+end;
+
 function TBlockingProcess.Reset: boolean;
 begin
   fSafe^.Lock;
   try
     result := fEvent<>evWaiting;
-    if result then
+    if result then begin
       fEvent := evNone;
+      ResetCall; // would set fCall := 0
+    end;
   finally
     fSafe^.UnLock;
+  end;
+end;
+
+procedure TBlockingProcess.Lock;
+begin
+  fSafe^.Lock;
+end;
+
+procedure TBlockingProcess.Unlock;
+begin
+  fSafe^.Unlock;
+end;
+
+
+{ TBlockingProcessPool }
+
+constructor TBlockingProcessPool.Create(aClass: TBlockingProcessClass);
+begin
+  inherited Create;
+  if aClass=nil then
+    fClass := TBlockingProcess else
+    fClass := aClass;
+  fPool := TObjectListLocked.Create(true);
+end;
+
+const
+  CALL_DESTROYING = -1;
+
+destructor TBlockingProcessPool.Destroy;
+var i: integer;
+    someWaiting: boolean;
+begin
+  fCallCounter := CALL_DESTROYING;
+  someWaiting := false;
+  for i := 0 to fPool.Count-1 do
+    with TBlockingProcess(fPool.List[i]) do
+    if Event=evWaiting then begin
+      SetEvent; // release WaitFor (with evTimeOut)
+      someWaiting := true;
+    end;
+  if someWaiting then
+    sleep(10); // propagate the pending evTimeOut to the WaitFor threads  
+  fPool.Free;
+  inherited;
+end;
+
+function TBlockingProcessPool.NewProcess(aTimeOutMs: integer): TBlockingProcess;
+var i: integer;
+    p: ^TBlockingProcess;
+begin
+  result := nil;
+  if fCallCounter=CALL_DESTROYING then
+    exit;
+  if aTimeOutMs<=0 then
+    aTimeOutMs := 3000; // never wait for ever
+  fPool.Safe.Lock;
+  try
+    p := pointer(fPool.List);
+    for i := 1 to fPool.Count do
+      if p^.Call=0 then begin
+        result := p^; // found a non-used entry
+        result.fTimeOutMs := aTimeOutMS;
+        break;
+      end else
+        inc(p);
+    if result=nil then begin
+      result := fClass.Create(aTimeOutMS);
+      fPool.Add(result);
+    end;
+    inc(fCallCounter); // 1,2,3,...
+    result.fCall := fCallCounter;
+  finally
+    fPool.Safe.UnLock;
+  end;
+end;
+
+function TBlockingProcessPool.FromCall(call: TBlockingProcessPoolCall;
+  locked: boolean): TBlockingProcess;
+var i: integer;
+    p: ^TBlockingProcess;
+begin
+  result := nil;
+  if (fCallCounter=CALL_DESTROYING) or (call<=0) then
+    exit;
+  fPool.Safe.Lock;
+  try
+    p := pointer(fPool.List);
+    for i := 1 to fPool.Count do
+      if p^.Call=call then begin
+        result := p^;
+        if locked then
+          result.Lock;
+        exit;
+      end else
+        inc(p);
+  finally
+    fPool.Safe.UnLock;
   end;
 end;
 
