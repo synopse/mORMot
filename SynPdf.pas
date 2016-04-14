@@ -2979,7 +2979,7 @@ type
     fNeutralOverride,
     fNumericOverride,
     fLegacyBidiClass,
-    scr0, scr1, scr2, scr3, scr4, scr5, scr6, scr7);
+    fScr0, fScr1, fScr2, fScr3, fScr4, fScr5, fScr6, fScr7);
 
   TScriptControlAttr_set = set of TScriptControlAttr_enum;
 
@@ -4857,11 +4857,11 @@ begin
       if FFont.FTrueTypeFontsIndex=0 then
         TTF := nil else // mark we don't have an Unicode font, i.e. a TTF
         TTF := TPdfFontTrueType(FFont);
-{$ifdef USE_UNISCRIBE}
+    {$ifdef USE_UNISCRIBE}
     // use the Windows Uniscribe API if required
     if not Canvas.fDoc.UseUniScribe or (TTF=nil) or
        not AddUnicodeHexTextUniScribe(PW,TTF.WinAnsiFont,NextLine,Canvas) then
-{$endif}
+    {$endif}
       // fastest version, without Ordering and/or Shaping of the text
       AddUnicodeHexTextNoUniScribe(PW,TTF,NextLine,Canvas);
   end;
@@ -4873,7 +4873,9 @@ function TPdfWrite.AddGlyphs(Glyphs: PWord; GlyphsCount: integer;
 var TTF: TPdfFontTrueType;
     first: boolean;
     glyph: integer;
+    {$ifdef USE_UNISCRIBE}
     AVisAttrs: PScriptVisAttr;
+    {$endif}
 begin
   if (Glyphs<>nil) and (GlyphsCount>0) then begin
     with Canvas.FPage do
@@ -4885,10 +4887,14 @@ begin
         TTF.CreateAssociatedUnicodeFont;
       Canvas.SetPDFFont(TTF.UnicodeFont,Canvas.FPage.FontSize);
       first := true;
+      {$ifdef USE_UNISCRIBE}
       AVisAttrs := AVisAttrsPtr;
+      {$endif}
       while GlyphsCount>0 do begin
+        {$ifdef USE_UNISCRIBE}
         if (AVisAttrs=nil) or
-           not(AVisAttrs^.fFlags*[fDiacritic,fZeroWidth]=[fZeroWidth]) then begin
+           not(AVisAttrs^.fFlags*[fDiacritic,fZeroWidth]=[fZeroWidth]) then
+        {$endif} begin
           glyph := TTF.WinAnsiFont.GetAndMarkGlyphAsUsed(Glyphs^);
           // this font shall by definition contain all needed glyphs
           // -> no Font Fallback is to be implemented here
@@ -4900,8 +4906,10 @@ begin
         end;
         inc(Glyphs);
         dec(GlyphsCount);
+        {$ifdef USE_UNISCRIBE}
         if AVisAttrs<>nil then
           inc(AVisAttrs);
+        {$endif}
       end;
       if not first then
         Add('> Tj'#10);

@@ -9405,6 +9405,7 @@ type
 
   { C++Builder doesn't support array elements as properties (RSP-12595).
     For now, simply exclude the relevant classes from C++Builder. }
+  {$NODEFINE TSynValidateTextProps}
   {$NODEFINE TSynValidateText }
   {$NODEFINE TSynValidatePassWord }
 
