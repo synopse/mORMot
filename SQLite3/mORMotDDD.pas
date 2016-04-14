@@ -141,9 +141,10 @@ type
   // - cqrsNoPriorCommand for a I*Command.Commit with no prior Add/Update/Delete
   // - cqrsNoMatch will notify that a command did not have any match
   // - cqrsNotImplemented may be returned when there is no code yet for a method
-  // - cqrsUnspecifiedError will be used for any other kind of error
   // - cqrsBusy is returned if the command could not be executed, since it is
   // currently processing a request
+  // - cqrsTimeout indicates that the method didn't succeed in the expected time
+  // - otherwise, cqrsUnspecifiedError will be used for any other kind of error
   TCQRSResult =
     (cqrsSuccess, cqrsSuccessWithMoreData,
      cqrsUnspecifiedError, cqrsBadRequest, cqrsNotFound,
@@ -151,7 +152,8 @@ type
      cqrsInternalError, cqrsDDDValidationFailed,
      cqrsInvalidContent, cqrsAlreadyExists,
      cqrsNoPriorQuery, cqrsNoPriorCommand,
-     cqrsNoMatch, cqrsNotImplemented, cqrsBusy);
+     cqrsNoMatch, cqrsNotImplemented,
+     cqrsBusy, cqrsTimeout);
 
   /// generic interface, to be used for CQRS I*Query and I*Command types definition
   // - TCQRSService class will allow to easily implement LastError* members
