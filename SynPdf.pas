@@ -39,6 +39,7 @@ unit SynPdf;
    Florian Grummel
    Harald Simon
    Josh Kelley (joshkel)
+   LoukaO  
    Marsh
    MChaos
    Mehrdad Momeni (nosa)
@@ -10262,8 +10263,10 @@ begin
         end;
     end else
       Canvas.fNewPath := False;
-    if (font.align and TA_UPDATECP)=TA_UPDATECP then
-      Position := Posi;
+    if (font.align and TA_UPDATECP)=TA_UPDATECP then begin
+      Position.X := Posi.X+Trunc(wW);
+      Position.Y := Posi.Y;
+    end;
   end;
 end;
 
