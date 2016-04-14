@@ -12503,17 +12503,13 @@ type
     property RestInterface: TGUID read fInterface write fInterface;
   end;
 
-  /// the current state of a TBlockingCallback instance
-  TBlockingCallbackEvent = (evNone,evWaiting,evTimeout,evRaised);
-
   /// asynchrounous callback to emulate a synchronous/blocking process
   // - once created, process would block via a WaitFor call, which would be
   // released when CallbackFinished() is called by the process background thread
   TBlockingCallback = class(TInterfacedCallback)
   protected
-    fTimeOutMs: integer;
-    fEventNotifier: TEvent;
-    fEvent: TBlockingCallbackEvent;
+    fProcess: TBlockingProcess;
+    function GetEvent: TBlockingEvent;
   public
     /// initialize the callback instance
     // - specify a time out millliseconds period after which blocking execution
@@ -12526,7 +12522,8 @@ type
     destructor Destroy; override;
     /// called to wait for the callback to be processed, or trigger timeout
     // - would block until CallbackFinished() is called by the processing thread
-    procedure WaitFor; virtual;
+    // - returns the final state of the process, i.e. beRaised or beTimeOut
+    function WaitFor: TBlockingEvent; virtual;
     /// should be called by the callback when the process is finished
     // - the caller would then let its WaitFor method return
     // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
@@ -12534,17 +12531,20 @@ type
     // - would optionally log all published properties values to the log class
     // of the supplied REST instance
     procedure CallbackFinished(aRestForLog: TSQLRest;
-      aServerUnregister: boolean=false);
+      aServerUnregister: boolean=false); virtual;
     /// just a wrapper to reset the internal Event state to evNone
     // - may be used to re-use the same TBlockingCallback instance, after
-    // a successfull CallbackFinished/WaitFor process
-    // - will check that the status is not currently evWaiting and return FALSE
-    // - returns TRUE in success (i.e. status was not evWaiting)
+    // a successfull WaitFor/CallbackFinished process
+    // - returns TRUE on success (i.e. status was not beWaiting)
+    // - if there is a WaitFor currently in progress, returns FALSE
     function Reset: boolean; virtual;
+    /// the associated blocking process instance
+    property Process: TBlockingProcess read fProcess;
   published
     /// the current state of process
+    // - just a wrapper around Process.Event
     // - use Reset method to re-use this instance after a WaitFor process
-    property Event: TBlockingCallbackEvent read fEvent;
+    property Event: TBlockingEvent read GetEvent;
   end;
 
   /// this class implements a callback interface, able to write all remote ORM
@@ -55505,68 +55505,41 @@ constructor TBlockingCallback.Create(aTimeOutMs: integer;
    aRest: TSQLRest; const aGUID: TGUID);
 begin
   inherited Create(aRest,aGUID);
-  fEventNotifier := TEvent.Create(nil,false,false,'');
-  if aTimeOutMs=0 then
-    fTimeOutMs := 3000 else // some minimal timeout is mandatory
-    fTimeOutMs := aTimeOutMs;
+  fProcess := TBlockingProcess.Create(aTimeOutMs,fSafe);
 end;
 
 destructor TBlockingCallback.Destroy;
 begin
-  FreeAndNil(fEventNotifier);
+  FreeAndNil(fProcess);
   inherited Destroy;
 end;
 
 procedure TBlockingCallback.CallbackFinished(aRestForLog: TSQLRest;
   aServerUnregister: boolean);
 begin
-  fSafe.Lock;
-  try
-    if fEvent in [evRaised,evTimeout] then
-      exit; // ignore if already notified
-    fEvent := evRaised;
+  if fProcess.NotifyFinished then begin
     {$ifdef WITHLOG}
     if aRestForLog<>nil then
       aRestForLog.LogClass.Add.Log(sllTrace,self);
     {$endif}
-    fEventNotifier.SetEvent; // notify caller to unlock "WaitFor" method
     if aServerUnregister then
       CallbackRestUnregister;
-  finally
-    Safe.UnLock;
   end;
 end;
 
-procedure TBlockingCallback.WaitFor;
+function TBlockingCallback.WaitFor: TBlockingEvent;
 begin
-  fSafe.Lock;
-  try
-    if fEvent in [evRaised,evTimeOut] then
-      exit;
-    fEvent := evWaiting;
-  finally
-    Safe.UnLock;
-  end;
-  FixedWaitFor(fEventNotifier,fTimeOutMs);
-  fSafe.Lock;
-  try
-    if fEvent<>evRaised then
-      fEvent := evTimeout;
-  finally
-    Safe.UnLock;
-  end;
+  result := fProcess.WaitFor;
 end;
 
 function TBlockingCallback.Reset: boolean;
 begin
-  fSafe.Lock;
-  try
-    result := fEvent<>evWaiting;
-    if result then
-      fEvent := evNone;
-  finally
-    Safe.UnLock;
-  end;
+  result := fProcess.Reset;
+end;
+
+function TBlockingCallback.GetEvent: TBlockingEvent;
+begin
+  result := fProcess.Event;
 end;
 
 

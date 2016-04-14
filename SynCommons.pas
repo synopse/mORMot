@@ -10148,6 +10148,7 @@ type
   {$M+}
   TSynBackgroundThreadAbstract = class;
   TSynBackgroundThreadEvent = class;
+  TBlockingProcess = class;
   {$M-}
 
   /// idle method called by TSynBackgroundThreadAbstract in the caller thread
@@ -10388,7 +10389,45 @@ type
     /// some text identifier, used to distinguish each owned thread
     property ThreadName: RawUTF8 read fThreadName;
   end;
-  
+
+  /// the current state of a TBlockingProcess instance
+  TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
+
+  /// a semaphore used to wait for some process to be finished
+  // - used e.g. by TBlockingCallback in mORMot.pas 
+  // - once created, process would block via a WaitFor call, which would be
+  // released when NotifyFinished is called by the process background thread
+  TBlockingProcess = class(TEvent)
+  protected
+    fTimeOutMs: integer;
+    fEvent: TBlockingEvent;
+    fSafe: PSynLocker;
+  public
+    /// initialize the semaphore instance
+    // - specify a time out millliseconds period after which blocking execution
+    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // - an associated mutex shall be supplied
+    constructor Create(aTimeOutMs: integer; const aSafe: TSynLocker); reintroduce; virtual;
+    /// called to wait for NotifyFinished() to be called, or trigger timeout
+    // - returns the final state of the process, i.e. evRaised or evTimeOut 
+    function WaitFor: TBlockingEvent; virtual;
+    /// should be called by the background process when it is finished
+    // - the caller would then let its WaitFor method return
+    // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
+    function NotifyFinished: boolean; virtual;
+    /// just a wrapper to reset the internal Event state to evNone
+    // - may be used to re-use the same TBlockingProcess instance, after
+    // a successfull WaitFor/NotifyFinished process
+    // - returns TRUE on success (i.e. status was not evWaiting)
+    // - if there is a WaitFor currently in progress, returns FALSE
+    function Reset: boolean; virtual;
+  published
+    /// the current state of process
+    // - use Reset method to re-use this instance after a WaitFor process
+    property Event: TBlockingEvent read fEvent;
+    /// the time out period, in ms, as defined at constructor level
+    property TimeOutMs: integer read fTimeOutMS;
+  end;
 
 /// low-level wrapper to add a callback to a dynamic list of events
 // - by default, you can assign only one callback to an Event: but by storing
@@ -55094,6 +55133,68 @@ begin
     end;
     if error<>'' then
       raise ESynParallelProcess.CreateUTF8('%.ParallelRunAndWait: %',[self,error]);
+  end;
+end;
+
+
+{ TBlockingProcess }
+
+constructor TBlockingProcess.Create(aTimeOutMs: integer; const aSafe: TSynLocker);
+begin
+  inherited Create(nil,false,false,'');
+  if aTimeOutMs<=0 then
+    fTimeOutMs := 3000 else // never wait for ever
+    fTimeOutMs := aTimeOutMs;
+  fSafe := @aSafe;
+end;
+
+function TBlockingProcess.WaitFor: TBlockingEvent;
+begin
+  fSafe^.Lock;
+  try
+    result := fEvent;
+    if fEvent in [evRaised,evTimeOut] then
+      exit;
+    fEvent := evWaiting;
+  finally
+    fSafe^.UnLock;
+  end;
+  FixedWaitFor(self,fTimeOutMs);
+  fSafe^.Lock;
+  try
+    if fEvent<>evRaised then
+      fEvent := evTimeOut;
+    result := fEvent;
+  finally
+    fSafe^.UnLock;
+  end;
+end;
+
+function TBlockingProcess.NotifyFinished: boolean;
+begin
+  fSafe^.Lock;
+  try
+    if fEvent in [evRaised,evTimeOut] then begin
+      result := false;
+      exit; // ignore if already notified
+    end;
+    fEvent := evRaised;
+    SetEvent; // notify caller to unlock "WaitFor" method
+    result := true;
+  finally
+    fSafe^.UnLock;
+  end;
+end;
+
+function TBlockingProcess.Reset: boolean;
+begin
+  fSafe^.Lock;
+  try
+    result := fEvent<>evWaiting;
+    if result then
+      fEvent := evNone;
+  finally
+    fSafe^.UnLock;
   end;
 end;
 
