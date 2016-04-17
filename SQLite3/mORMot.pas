@@ -10112,6 +10112,10 @@ type
     // QueryInterface, _AddRef, and _Release are always defined by default
     // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
     ExecutionMethodIndex: integer;
+    /// TRUE if the method is inherited from another parent interface
+    IsInherited: boolean;
+    /// is 0 for the root interface, 1..n for all inherited interfaces
+    HierarchyLevel: integer;
     /// retrieve an argument index in Args[] from its name
     // - search is case insensitive
     // - if Input is TRUE, will search within const / var arguments
@@ -10688,6 +10692,7 @@ type
     fInterfaceTypeInfo: PTypeInfo;
     fInterfaceIID: TGUID;
     fMethodsCount: cardinal;
+    fAddMethodsLevel: integer;
     fMethods: TServiceMethodDynArray;
     fMethod: TDynArrayHashed;
     // contains e.g. [{"method":"Add","arguments":[...]},{"method":"...}]
@@ -50745,6 +50750,7 @@ begin
     InterfaceDotMethodName := fInterfaceName+'.'+URI;
     if InterfaceDotMethodName[1] in ['I','i'] then
       delete(InterfaceDotMethodName,1,1); // as in TServiceFactory.Create
+    IsInherited := HierarchyLevel<>fAddMethodsLevel;
     ExecutionMethodIndex := m+RESERVED_VTABLE_SLOTS;
     ArgsInFirst := -1;
     ArgsInLast := -2;
@@ -51203,8 +51209,10 @@ begin
   if PI^.IntfParent<>nil then
     Ancestor := PI^.IntfParent{$ifndef FPC}^{$endif} else
     Ancestor := nil;
-  if Ancestor<>nil then
+  if Ancestor<>nil then begin
     AddMethodsFromTypeInfo(Ancestor);
+    inc(fAddMethodsLevel);
+  end;
   // retrieve methods for this interface level
   {$ifdef FPC}
   if PI^.IntfUnit='System' then
@@ -51229,6 +51237,7 @@ begin
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
+      HierarchyLevel := fAddMethodsLevel;
       {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
       inc(PB,ord(PS^[0])+1);
       inc(PB); // skip Version field (always 3)
