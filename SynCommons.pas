@@ -13310,7 +13310,8 @@ type
     // layout of this instance (i.e. Kind property value)
     // - will write  'null'  if Kind is dvUndefined
     // - implemented as just a wrapper around VariantSaveJSON()
-    function ToJSON(const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+    function ToJSON(const Prefix: RawUTF8=''; const Suffix: RawUTF8='';
+      Format: TTextWriterJSONFormat=jsonCompact): RawUTF8;
     /// save an array of objects as UTF-8 encoded non expanded layout JSON
     // - returned content would be a JSON object in mORMot's TSQLTable non
     // expanded format, with reduced JSON size, i.e.
@@ -14994,10 +14995,6 @@ type
   /// the current state of a TBlockingProcess instance
   TBlockingEvent = (evNone,evWaiting,evTimeOut,evRaised);
 
-  /// used to identify each TBlockingProcessPool call
-  // - allow to match a given TBlockingProcess semaphore
-  TBlockingProcessPoolCall = type integer;
-
   {$M+}
   /// a semaphore used to wait for some process to be finished
   // - used e.g. by TBlockingCallback in mORMot.pas
@@ -15009,8 +15006,7 @@ type
     fEvent: TBlockingEvent;
     fSafe: PSynLocker;
     fOwnedSafe: TAutoLocker;
-    fCall: TBlockingProcessPoolCall;
-    procedure ResetCall; virtual;
+    procedure ResetInternal; virtual; // override to reset associated params
   public
     /// initialize the semaphore instance
     // - specify a time out millliseconds period after which blocking execution
@@ -15026,7 +15022,10 @@ type
     destructor Destroy; override;
     /// called to wait for NotifyFinished() to be called, or trigger timeout
     // - returns the final state of the process, i.e. evRaised or evTimeOut 
-    function WaitFor: TBlockingEvent; reintroduce; virtual;
+    function WaitFor: TBlockingEvent; reintroduce; overload; virtual;
+    /// called to wait for NotifyFinished() to be called, or trigger timeout
+    // - returns the final state of the process, i.e. evRaised or evTimeOut
+    function WaitFor(TimeOutMS: integer): TBlockingEvent; reintroduce; overload;
     /// should be called by the background process when it is finished
     // - the caller would then let its WaitFor method return
     // - returns TRUE on success (i.e. status was not evRaised or evTimeout)
@@ -15044,9 +15043,6 @@ type
     procedure Lock;
     /// just a wrapper around fSafe^.Unlock
     procedure Unlock;
-    /// an unique identifier, when owned by a TBlockingProcessPool
-    // - Reset would restore this field to its 0 default value
-    property Call: TBlockingProcessPoolCall read fCall;
   published
     /// the current state of process
     // - use Reset method to re-use this instance after a WaitFor process
@@ -15056,22 +15052,38 @@ type
   end;
   {$M-}
 
-  /// class-reference type (metaclass) of a TBlockingProcess
-  TBlockingProcessClass = class of TBlockingProcess;
+  /// used to identify each TBlockingProcessPool call
+  // - allow to match a given TBlockingProcessPoolItem semaphore
+  TBlockingProcessPoolCall = type integer;
 
-  /// manage a pool of TBlockingProcess instances
+  /// a semaphore used in the TBlockingProcessPool
+  // - such semaphore have a Call field to identify each execution
+  TBlockingProcessPoolItem = class(TBlockingProcess)
+  protected
+    fCall: TBlockingProcessPoolCall;
+    procedure ResetInternal; override;
+  public
+    /// an unique identifier, when owned by a TBlockingProcessPool
+    // - Reset would restore this field to its 0 default value
+    property Call: TBlockingProcessPoolCall read fCall;
+  end;
+
+  /// class-reference type (metaclass) of a TBlockingProcess
+  TBlockingProcessPoolItemClass = class of TBlockingProcessPoolItem;
+
+  /// manage a pool of TBlockingProcessPoolItem instances
   // - each call will be identified via a TBlockingProcessPoolCall unique value
   // - to be used to emulate e.g. blocking execution from an asynchronous
   // event-driven DDD process
   // - it would also allow to re-use TEvent system resources
   TBlockingProcessPool = class(TSynPersistent)
   protected
-    fClass: TBlockingProcessClass;
+    fClass: TBlockingProcessPoolItemClass;
     fPool: TObjectListLocked;
     fCallCounter: TBlockingProcessPoolCall; // to match TBlockingProcess.Tag
   public
     /// initialize the pool, for a given implementation class
-    constructor Create(aClass: TBlockingProcessClass=nil); reintroduce;
+    constructor Create(aClass: TBlockingProcessPoolItemClass=nil); reintroduce;
     /// finalize the pool
     // - would also force all pending WaitFor to trigger a evTimeOut
     destructor Destroy; override;
@@ -15081,14 +15093,15 @@ type
     // its Call property would identify the call for the asynchronous callback,
     // then after WaitFor, the Reset method should be run to release the mutex
     // for the pool
-    function NewProcess(aTimeOutMs: integer): TBlockingProcess; virtual;
+    function NewProcess(aTimeOutMs: integer): TBlockingProcessPoolItem; virtual;
     /// retrieve a TBlockingProcess from its call identifier
     // - may be used e.g. from the callback of the asynchronous process
     // to set some additional parameters to the inherited TBlockingProcess,
     // then call NotifyFinished to release the caller WaitFor
     // - if leavelocked is TRUE, the returned instance would be locked: caller
     // should execute result.Unlock or NotifyFinished(true) after use
-    function FromCall(call: TBlockingProcessPoolCall; locked: boolean=false): TBlockingProcess; virtual;
+    function FromCall(call: TBlockingProcessPoolCall;
+      locked: boolean=false): TBlockingProcessPoolItem; virtual;
   end;
 
 {$ifndef DELPHI5OROLDER} // internal error C3517 under Delphi 5 :(
@@ -20240,7 +20253,7 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
         break;
       AddInteger(pos,posCount,j);
     until false;
-    SetString(result,nil,Length(S)-oldlen*PosCount+newlen*PosCount);
+    SetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
     last := 1;
     src := pointer(s);
     dst := pointer(result);
@@ -37625,8 +37638,10 @@ begin
   SetVariantByValue(aValue,VValue[result]);
 end;
 
-function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8): RawUTF8;
+function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8;
+  Format: TTextWriterJSONFormat): RawUTF8;
 var W: TTextWriter;
+    tmp: RawUTF8;
 begin
   W := DefaultTextWriterJSONClass.CreateOwnedStream;
   try
@@ -37637,6 +37652,10 @@ begin
   finally
     W.Free;
   end;
+  if Format=jsonCompact then
+    exit;
+  JSONBufferReformat(pointer(result),tmp,Format);
+  result := tmp;
 end;
 
 function TDocVariantData.ToNonExpandedJSON: RawUTF8;
@@ -55245,6 +55264,15 @@ begin
   end;
 end;
 
+function TBlockingProcess.WaitFor(TimeOutMS: integer): TBlockingEvent;
+begin
+  if TimeOutMS <= 0 then
+    fTimeOutMs := 3000 // never wait for ever
+  else
+    fTimeOutMs := TimeOutMS;
+  result := WaitFor;
+end;
+
 function TBlockingProcess.NotifyFinished(alreadyLocked: boolean): boolean;
 begin
   result := false;
@@ -55261,9 +55289,9 @@ begin
   end;
 end;
 
-procedure TBlockingProcess.ResetCall;
-begin // override to reset associated params
-  fCall := 0;
+procedure TBlockingProcess.ResetInternal;
+begin
+  fEvent := evNone;
 end;
 
 function TBlockingProcess.Reset: boolean;
@@ -55271,10 +55299,8 @@ begin
   fSafe^.Lock;
   try
     result := fEvent<>evWaiting;
-    if result then begin
-      fEvent := evNone;
-      ResetCall; // would set fCall := 0
-    end;
+    if result then
+      ResetInternal;
   finally
     fSafe^.UnLock;
   end;
@@ -55291,13 +55317,22 @@ begin
 end;
 
 
+{ TBlockingProcessPoolItem }
+
+procedure TBlockingProcessPoolItem.ResetInternal;
+begin
+  inherited ResetInternal; // set fEvent := evNone
+  fCall := 0;
+end;
+
+
 { TBlockingProcessPool }
 
-constructor TBlockingProcessPool.Create(aClass: TBlockingProcessClass);
+constructor TBlockingProcessPool.Create(aClass: TBlockingProcessPoolItemClass);
 begin
   inherited Create;
   if aClass=nil then
-    fClass := TBlockingProcess else
+    fClass := TBlockingProcessPoolItem else
     fClass := aClass;
   fPool := TObjectListLocked.Create(true);
 end;
@@ -55312,7 +55347,7 @@ begin
   fCallCounter := CALL_DESTROYING;
   someWaiting := false;
   for i := 0 to fPool.Count-1 do
-    with TBlockingProcess(fPool.List[i]) do
+    with TBlockingProcessPoolItem(fPool.List[i]) do
     if Event=evWaiting then begin
       SetEvent; // release WaitFor (with evTimeOut)
       someWaiting := true;
@@ -55323,9 +55358,9 @@ begin
   inherited;
 end;
 
-function TBlockingProcessPool.NewProcess(aTimeOutMs: integer): TBlockingProcess;
+function TBlockingProcessPool.NewProcess(aTimeOutMs: integer): TBlockingProcessPoolItem;
 var i: integer;
-    p: ^TBlockingProcess;
+    p: ^TBlockingProcessPoolItem;
 begin
   result := nil;
   if fCallCounter=CALL_DESTROYING then
@@ -55354,9 +55389,9 @@ begin
 end;
 
 function TBlockingProcessPool.FromCall(call: TBlockingProcessPoolCall;
-  locked: boolean): TBlockingProcess;
+  locked: boolean): TBlockingProcessPoolItem;
 var i: integer;
-    p: ^TBlockingProcess;
+    p: ^TBlockingProcessPoolItem;
 begin
   result := nil;
   if (fCallCounter=CALL_DESTROYING) or (call<=0) then
