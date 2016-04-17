@@ -288,6 +288,8 @@ type
     class procedure PowerOfTwo(const Value: variant; out result: variant);
     class procedure Equals_(const Value: variant; out result: variant);
     class procedure If_(const Value: variant; out result: variant);
+    class procedure NewGUID(const Value: variant; out result: variant);
+    class procedure ExtractFileName(const Value: variant; out result: variant);
   public
     /// parse a {{mustache}} template, and returns the corresponding
     // TSynMustache instance
@@ -921,10 +923,10 @@ begin
     HelperAdd(HelpersStandardList,
       ['DateTimeToText','DateToText','DateFmt','TimeLogToText','JSONQuote','JSONQuoteURI',
        'ToJSON','WikiToHtml','BlobToBase64','EnumTrim','EnumTrimRight','PowerOfTwo',
-       'Equals','If'],
+       'Equals','If','NewGUID','ExtractFileName'],
       [DateTimeToText,DateToText,DateFmt,TimeLogToText,JSONQuote,JSONQuoteURI,
        ToJSON,WikiToHtml,BlobToBase64,EnumTrim,EnumTrimRight,PowerOfTwo,
-       Equals_,If_]);
+       Equals_,If_,NewGUID,ExtractFileName]);
   result := HelpersStandardList;
 end;
 
@@ -1081,6 +1083,19 @@ begin // {{#if .<>""}} or {{#if .,"=",123}}
         end;
       end;
     end;
+end;
+
+class procedure TSynMustache.NewGUID(const Value: variant; out result: variant);
+var g: TGUID;
+begin
+  CreateGUID(g);
+  RawUTF8ToVariant(GUIDToRawUTF8(g),result);
+end;
+
+class procedure TSynMustache.ExtractFileName(const Value: variant;
+  out result: variant);
+begin
+  result := SysUtils.ExtractFileName(Value);
 end;
 
 

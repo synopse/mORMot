@@ -127,8 +127,9 @@
 // thread name: to be defined if you have issues when debugging your application
 
 {.$define USELOCKERDEBUG}
-// by default, some ISynLog would use TAutoLocker, unless this conditional is
-// defined to use more verbose TAutoLockerDebug (for race condition detection)
+// by default, some IAutoLocker instances would use TAutoLocker, unless this 
+// conditional is defined to use more verbose TAutoLockerDebug
+// (may be used for race condition debugging, in multi-threaded apps)
 
 {.$define OLDTEXTWRITERFORMAT}
 // force TTextWriter.Add(Format) to handle the alternate $ % tags
