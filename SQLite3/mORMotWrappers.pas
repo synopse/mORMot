@@ -88,11 +88,15 @@ function ContextFromMethods(int: TInterfaceFactory): variant;
 // - aFileName will be transmitted as {{filename}}, e.g. 'mORMotClient'
 // - you should also specify the HTTP port e.g. 888
 // - the template content could be retrieved from a file via StringFromFile()
+// - you may optionally retrieve a copy of the data context as TDocVariant 
 // - this function may be used to generate the client at build time, directly
 // from a just built server, in an automated manner
+// - you may specify custom helpers (e.g. via TSynMustache.HelpersGetStandardList)
+// and retrieve the generated data context after generation (if aContext is
+// a TDocVariant object, its fields would be added to the rendering context)
 function WrapperFromModel(aServer: TSQLRestServer;
-  const aMustacheTemplate, aFileName: RawUTF8;
-  aPort: integer): RawUTF8;
+  const aMustacheTemplate, aFileName: RawUTF8; aPort: integer;
+  aHelpers: TSynMustacheHelpers=nil; aContext: PVariant=nil): RawUTF8;
 
 /// you can call this procedure within a method-based service allow
 // code-generation of an ORM and SOA client from a web browser
@@ -166,6 +170,32 @@ const
   // - would be used e.g. by TWrapperContext.Create to inject the available
   // text description from any matching resource
   WRAPPER_RESOURCENAME = 'WrappersDescription';
+
+/// this function would generate a pascal unit defining asynchronous
+// (non-blocking) types from a DDD's blocking dual-phase Select/Command service
+// - you should specify the services to be converted, as an array - note that
+// due to how RTTI is stored by the compiler, all "pure input" parameters should
+// be defined explicitly as "const", otherwise the generated class won't match
+// - optionally, the TCQRSServiceClass implementing the first Select() phase of
+// the blocking service may be specified in queries array; a set of unit names
+// in which those TCQRSServiceClass are defined may be specified
+// - a Mustache template content should be provided - e.g. asynch.pas.mustache
+// as published in SQLite3\DDD\dom folder of the source code repository   
+// - FileName would contain the resulting unit filename (without the .pas)
+// - ProjectName would be written in the main unit comment
+// - CallType should be the type used at Domain level to identify each
+// asynchronous call - this type should be an integer, or a function may be
+// supplied as CallFunction (matching VariantToInteger signature)
+// - the first phase of the service should have set Key: KeyType, which would be
+// used to create a single shared asynchronous service instance for all keys
+// - ExceptionType may be customize, mainly to use a Domain-specific class
+// - blocking execution may reach some timeout waiting for the asynchronous
+// acknowledgement: a default delay (in ms) is to be supplied, and some custom
+// delays may be specified as trios, e.g. ['IMyInterface', 'Method', 10000, ...] 
+function GenerateAsynchServices(const services: array of TGUID;
+  const queries: array of TClass; const units: array of const;
+  Template, FileName, ProjectName, CallType, CallFunction, Key, KeyType,
+  ExceptionType: RawUTF8; DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
 
 
 implementation
@@ -508,7 +538,7 @@ const
   VERB_DELPHI: array[boolean] of string[9] = ('procedure','function');
 begin
   with meth do begin
-    result := _ObjFast(['methodName',URI,'methodIndex',ExecutionMethodIndex,
+    result := _ObjFast(['methodName',URI, 'methodIndex',ExecutionMethodIndex,
       'verb',VERB_DELPHI[ArgsResultIndex>=0],
       'args',ContextArgsFromMethod(meth),
       'argsOutputCount',ArgsOutputValuesCount]);
@@ -516,10 +546,15 @@ begin
       result.methodDescription := fDescriptions.GetValueOrNull(InterfaceDotMethodName);
     if ArgsInFirst>=0 then
       result.hasInParams := true;
-    if ArgsOutFirst>=0 then
+    if ArgsOutFirst>=0 then begin
       result.hasOutParams := true;
+      if ArgsOutNotResultLast>0 then
+        result.hasOutNotResultParams := true;
+    end;
     if ArgsResultIsServiceCustomAnswer then
       result.resultIsServiceCustomAnswer := true;
+    if IsInherited then
+      result.isInherited := true;
   end;
 end;
 
@@ -760,9 +795,9 @@ begin
     end;
   end;
   if typName='' then begin
-    typName := TYPES_LANG[lngDelphi,typ];
-    if (typName='') and (typInfo<>nil) then
-      TypeInfoToName(typInfo,typName);
+    if typInfo<>nil then
+      TypeInfoToName(typInfo,typName) else
+      typName := TYPES_LANG[lngDelphi,typ];
   end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then
     typ := wGUID else
@@ -1029,8 +1064,9 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   Ctxt.Returns(result,HTML_SUCCESS,head);
 end;
 
-function WrapperFromModel(aServer: TSQLRestServer;
-  const aMustacheTemplate, aFileName: RawUTF8; aPort: integer): RawUTF8;
+function WrapperFromModel(aServer: TSQLRestServer; const aMustacheTemplate,
+  aFileName: RawUTF8; aPort: integer; aHelpers: TSynMustacheHelpers;
+  aContext: PVariant): RawUTF8;
 var context: variant;
 begin
   context := ContextFromModel(aServer); // no context.uri nor context.host here
@@ -1038,7 +1074,11 @@ begin
     aPort := 80;
   context.port := aPort;
   context.filename := aFileName;
-  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,nil,nil,true);
+  if aContext<>nil then begin
+    _Safe(context).AddFrom(aContext^);
+    aContext^ := context;
+  end;
+  result := TSynMustache.Parse(aMustacheTemplate).Render(context,nil,aHelpers,nil,true);
 end;
 
 
@@ -1137,6 +1177,73 @@ begin
   ctxt.fileName := GetFileNameWithoutExt(ExtractFileName(DestFileName));
   FileFromString(TSynMustache.Parse(AnyTextFileToRawUTF8(TemplateName,true)).
     Render(ctxt,nil,nil,nil,true),DestFileName);
+end;
+
+function GenerateAsynchServices(const services: array of TGUID;
+  const queries: array of TClass; const units: array of const; Template, FileName,
+  ProjectName, CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8;
+  DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
+var
+  server: TSQLRestServerFullMemory;
+  stub: IInvokable;
+  context: variant;
+  service, method: PDocVariantData;
+  pas, intf, meth: RawUTF8;
+  delay: Int64;
+  i: integer;
+begin
+  result := '';
+  if high(services) < 0 then
+    exit;
+  if FileName = '' then
+    FileName := 'ServicesAsynch';
+  if CallType = '' then
+    CallType := 'TBlockingProcessPoolCall';
+  if ExceptionType = '' then
+    ExceptionType := 'EServiceException';
+  server := TSQLRestServerFullMemory.CreateWithOwnModel([]);
+  try
+    for i := 0 to high(services) do
+      server.ServiceDefine(TInterfaceStub.Create(services[i], stub).
+        LastInterfacedObjectFake, [services[i]]);
+    context := ContextFromModel(server);
+    _Safe(context)^.AddNameValuesToObject(['filename', FileName,
+      'projectname', ProjectName, 'exeName', ExeVersion.ProgramName,
+      'User', ExeVersion.User, 'calltype', CallType, 'callfunction', CallFunction,
+      'exception', ExceptionType, 'defaultdelay', DefaultDelay]);
+    if high(units) >= 0 then
+      _Safe(context.units)^.AddItems(units);
+    if Key <> '' then
+      _Safe(context)^.AddNameValuesToObject(['asynchkey', Key, 'asynchkeytype', KeyType]);
+    for i := 0 to high(services) do
+      if i < length(queries) then begin
+        intf := ToUTF8(TInterfaceFactory.GUID2TypeInfo(services[i])^.Name);
+        if _Safe(context.soa.services)^.GetDocVariantByProp(
+           'interfaceName', intf, false, service) then
+          service^.AddValue('query', queries[i].ClassName)
+        else
+          raise EWrapperContext.CreateUTF8('CustomDelays: unknown %', [intf]);
+      end;
+    i := 0;
+    while i + 2 <= high(CustomDelays) do begin
+      if VarRecToUTF8IsString(CustomDelays[i], intf) and
+         VarRecToUTF8IsString(CustomDelays[i + 1], meth) and
+         VarRecToInt64(CustomDelays[i + 2], delay) then
+        if _Safe(context.soa.services)^.GetDocVariantByProp(
+            'interfaceName',intf, false, service) and
+           service^.GetAsDocVariantSafe('methods')^.GetDocVariantByProp(
+            'methodName', meth, false, method) then
+          method^.I['asynchdelay'] := delay
+        else
+          raise EWrapperContext.CreateUTF8('CustomDelays: unknown %.%', [intf, meth]);
+      inc(i, 3);
+    end;
+    pas := TSynMustache.Parse(Template).Render(context, nil, TSynMustache.HelpersGetStandardList);
+    result := StringReplaceAll(pas, '()', '');
+//FileFromString(_Safe(context)^.ToJSON('','',jsonUnquotedPropName),FileName+'.json');
+  finally
+    server.Free;
+  end;
 end;
 
 
