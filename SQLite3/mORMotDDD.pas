@@ -360,7 +360,7 @@ type
     property State: TCQRSQueryState read fState;
   end;
 
-  /// a CQRS Service, which maintain an internal list of "Subscribers"
+  /// a CQRS Service, which maintains an internal list of "Subscribers"
   // - allow to notify in cascade when a callback is released
   TCQRSServiceSubscribe = class(TCQRSService)
   protected
@@ -368,6 +368,31 @@ type
     // will call all fSubscriber[].CallbackReleased() methods
     procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
   end;
+
+  /// a CQRS Service, ready to implement a set of synchronous (blocking) commands
+  // over an asynchronous (non-blocking) service
+  // - you may use this class e.g. at API level, over a blocking REST server, 
+  // and communicate with the Domain event-driven services via asynchronous calls 
+  TCQRSServiceSynch = class(TCQRSService)
+  protected
+    fSharedCallbackRef: IUnknown;
+    function BeginMethods(var aResult: TCQRSResult): boolean; virtual;
+  public
+    constructor Create(const sharedcallback: IUnknown); reintroduce;
+  end;
+
+  /// used to acknowledge asynchronous CQRS Service calls
+  // - e.g. to implement TCQRSServiceSynch
+  TCQRSServiceAsynchAck = class(TInterfacedObject)
+  protected
+    fLog: TSynLogClass;
+    fCalls: TBlockingProcessPool;
+  public
+    destructor Destroy; override;
+  end;
+
+  /// class-reference type (metaclass) of TCQRSService
+  TCQRSServiceClass = class of TCQRSService;
 
 /// returns the text equivalency of a CQRS state enumeration
 function ToText(res: TCQRSQueryState): PShortString; overload;
@@ -1188,6 +1213,34 @@ begin
   finally
     fSafe.UnLock;
   end;
+end;
+
+
+{ TCQRSServiceSynch }
+
+constructor TCQRSServiceSynch.Create(const sharedcallback: IInterface);
+begin
+  inherited Create;
+  fSharedCallbackRef := sharedcallback;
+end;
+
+function TCQRSServiceSynch.BeginMethods(var aResult: TCQRSResult): boolean;
+begin
+  result := false;
+  if CqrsBeginMethod(qaCommandOnSelect, aResult) then
+    if fSharedCallbackRef = nil then
+      CqrsSetResultMsg(cqrsInternalError, 'fSharedCallback=nil')
+    else
+      result := true;
+end;
+
+
+{ TCQRSServiceAsynchAck }
+
+destructor TCQRSServiceAsynchAck.Destroy;
+begin
+  fCalls.Free; // would force evTimeOut if some WaitFor are still pending
+  inherited Destroy;
 end;
 
 
