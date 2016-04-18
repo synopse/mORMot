@@ -20333,7 +20333,7 @@ end;
 asm // faster version by AB - eax=Str dl=Chr
     test eax,eax
     jz @z
-@1: mov cx,[eax]
+@1: mov ecx,[eax]
     cmp cl,dl
     jz @z
     lea eax,[eax+1]
@@ -26367,32 +26367,36 @@ asm
     jz @e // P=nil -> false
     test edx,edx
     push ebx
-    push esi
     jz @t // up=nil -> true
-    mov esi,offset NormToUpperAnsi7
-    xor ebx,ebx
-    xor ecx,ecx
-@1: mov cx,[edx] // cl=up^[0] ch=up^[1]
-    mov bl,[eax] // bl=p^[0]
+    mov ecx,[edx] // cl=up^[0]
     test cl,cl
-    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^[0]]
-    jz @t // up^[0]=#0 -> OK
-    cmp bl,cl
-    mov bl,[eax+1] // bl=p^[1]
-    jne @f
-    test ch,ch
-    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^[1]]
-    jz @t // up^[1]=#0 -> OK
-    cmp bl,ch
-    lea edx,[edx+2]
-    lea eax,[eax+2]
-    je @1
-@f: pop esi // NormToUpperAnsi7[p^]<>up^ -> FALSE
-    pop ebx
+    movzx ebx,byte ptr [eax] // bl=p^[0]
+    jz @t
+    cmp cl,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+    jz @n
+    pop ebx // quick return in case of first invalid char
 @e: xor eax,eax
     ret
-@t: pop esi // up^=#0 -> TRUE
-    pop ebx
+@n: lea eax,[eax+1]
+    lea edx,[edx+1]
+    shr ecx,8 // cl=up^[1], ch=up^[2]
+@1: mov bl,[eax] // bl=p^[0]
+    test cl,cl
+    jz @t // up^[0]=#0 -> OK
+    cmp cl,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+    mov bl,[eax+1] // bl=p^[1]
+    lea edx,[edx+2]
+    lea eax,[eax+2]
+    jne @f
+    test ch,ch
+    jz @t // up^[1]=#0 -> OK
+    cmp ch,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
+    mov ecx,[edx] // cl=up^[0] ch=up^[1]
+    je @1
+@f: pop ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
+    xor eax,eax
+    ret
+@t: pop ebx // up^=#0 -> TRUE
     mov al,1
 end;
 {$endif}
