@@ -30719,8 +30719,8 @@ end;
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 begin
   result := ExistsIniNameValue(Headers,HEADER_CONTENT_TYPE_UPPER,
-    [JSON_CONTENT_TYPE_UPPER,'TEXT/','APPLICATION/XML',
-     'APPLICATION/X-JAVASCRIPT','IMAGE/SVG+XML']);
+    [JSON_CONTENT_TYPE_UPPER,'TEXT/','APPLICATION/XML','APPLICATION/JAVASCRIPT',
+     'APPLICATION/X-JAVASCRIPT','APPLICATION/JSON','IMAGE/SVG+XML']);
 end;
 
 function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;

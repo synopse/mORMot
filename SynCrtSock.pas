@@ -2534,20 +2534,23 @@ function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
   var Handled: THttpSocketCompressRecDynArray; const OutContentType: SockString;
   var OutContent: SockString): SockString;
 var i, OutContentLen: integer;
-    OutContentIsText: boolean;
+    compressible: boolean;
     OutContentTypeP: PAnsiChar absolute OutContentType;
 begin
   if (integer(Accepted)<>0) and (OutContentType<>'') and (Handled<>nil) then begin
     OutContentLen := length(OutContent);
-    OutContentIsText := IdemPChar(OutContentTypeP,'TEXT/') or
-                      ((IdemPChar(OutContentTypeP,'APPLICATION/') and
-                                (IdemPChar(OutContentTypeP+12,'JSON') or
-                                 IdemPChar(OutContentTypeP+12,'XML'))));
+    if IdemPChar(OutContentTypeP,'TEXT/') then
+      compressible := true else
+    if IdemPChar(OutContentTypeP,'IMAGE/') then
+      compressible := IdemPCharArray(OutContentTypeP+6,['SVG','X-ICO'])>=0 else
+    if IdemPChar(OutContentTypeP,'APPLICATION/') then 
+      compressible := IdemPCharArray(OutContentTypeP+12,['JSON','XML','JAVASCRIPT'])>=0 else
+      compressible := false;
     for i := 0 to high(Handled) do
     if i in Accepted then
     with Handled[i] do
     if (CompressMinSize=0) or // 0 here means "always" (e.g. for encryption)
-       (OutContentIsText and (OutContentLen>=CompressMinSize)) then begin
+       (compressible and (OutContentLen>=CompressMinSize)) then begin
       // compression of the OutContent + update header
       result := Func(OutContent,true);
       exit; // first in fCompress[] is prefered
