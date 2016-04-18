@@ -1009,7 +1009,7 @@ type
 
   /// where the LIMIT clause should be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
-  TSQLDBDefinitionLimitPosition = (posNone, posWhere, posSelect, posAfter);
+  TSQLDBDefinitionLimitPosition = (posNone, posWhere, posSelect, posAfter, posOuter);
 
   /// defines the LIMIT clause to be inserted for a given SQL syntax
   // - used by TSQLDBDefinitionLimitClause and SQLLimitClause() method
@@ -1532,7 +1532,7 @@ type
     // statement to a syntax matching the underlying DBMS
     // - e.g. TSQLRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TSQLRestServer.URI by-pass virtual table mechanism
-    function SQLLimitClause: TSQLDBDefinitionLimitClause; virtual;
+    function SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSQLDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUTF8Char): boolean; virtual;
@@ -6260,7 +6260,7 @@ begin
   result := StringReplaceAll(fDatabaseName,PassWord,'***');
 end;
 
-function TSQLDBConnectionProperties.SQLLimitClause: TSQLDBDefinitionLimitClause;
+function TSQLDBConnectionProperties.SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause;
 begin
   result := DB_SQLLIMITCLAUSE[DBMS];
 end;
