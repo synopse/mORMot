@@ -3331,21 +3331,20 @@ function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
 var W1,W2: WideString;
 {$endif}
 begin
-  if s1Len<=0 then begin // see WladiD note above
-    S1 := nil;
-    s1Len := 0;
+  if s1Len<=0 then
+    if s2Len<=0 then
+      result := 0 else
+      result := -1 else
+  if s2Len<=0 then
+    result := 1 else begin
+    {$ifdef MSWINDOWS}
+    result := CompareStringW(GetThreadLocale,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
+    {$else} // cross-platform but slower version using two temporary WideString
+    SetString(W1,PWideChar(S1),s1len shr 1);
+    SetString(W2,PWideChar(S2),s2len shr 1);
+    result := WideCompareStr(W1,W2); // use OS string comparison API
+    {$endif}
   end;
-  if s2Len<=0 then begin
-    S2 := nil;
-    s2Len := 0;
-  end;
-  {$ifdef MSWINDOWS}
-  result := CompareStringW(GetThreadLocale,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
-  {$else} // cross-platform but slower version using two temporary WideString
-  SetString(W1,PWideChar(S1),s1len shr 1);
-  SetString(W2,PWideChar(S2),s2len shr 1);
-  result := WideCompareStr(W1,W2); // use OS string comparison API
-  {$endif}
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
@@ -3354,52 +3353,54 @@ function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
 var W1,W2: WideString;
 {$endif}
 begin
-  if s1Len<=0 then begin // see WladiD note above
-    S1 := nil;
-    s1Len := 0;
+  if s1Len<=0 then
+    if s2Len<=0 then
+      result := 0 else
+      result := -1 else
+  if s2Len<=0 then
+    result := 1 else begin
+    {$ifdef MSWINDOWS}
+    result := CompareStringW(GetThreadLocale,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
+    {$else} // cross-platform but slower version using two temporary WideString
+    SetString(W1,PWideChar(S1),s1len shr 1);
+    SetString(W2,PWideChar(S2),s2len shr 1);
+    result := WideCompareText(W1,W2); // use OS string comparison API
+    {$endif}
   end;
-  if s2Len<=0 then begin
-    S2 := nil;
-    s2Len := 0;
-  end;
-  {$ifdef MSWINDOWS}
-  result := CompareStringW(GetThreadLocale,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
-  {$else} // cross-platform but slower version using two temporary WideString
-  SetString(W1,PWideChar(S1),s1len shr 1);
-  SetString(W2,PWideChar(S2),s2len shr 1);
-  result := WideCompareText(W1,W2); // use OS string comparison API
-  {$endif}
 end;
 
 function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  if (s1Len=0) and (s2Len=0) then // see WladiD note above
-    result := 0 else
-    result := UTF8ILComp(s1,s2,s1Len,s2Len); // properly handles individual s?Len=0
+  if s1Len<=0 then
+    if s2Len<=0 then
+      result := 0 else
+      result := -1 else
+  if s2Len<=0 then
+    result := 1 else
+    result := UTF8ILComp(s1,s2,s1Len,s2Len);
 end;
 
 function Utf8SQLDateTime(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 var V1,V2: Int64; // faster than Iso8601ToDateTimePChar: uses integer math
 begin
-  if s1Len=0 then // see WladiD note above
+  if s1Len<=0 then // see WladiD note above
     s1 := nil;
-  if s2Len=0 then
+  if s2Len<=0 then
     s2 := nil;
-  if s1=s2 then begin
-    result := 0;
-    exit;
+  if s1=s2 then
+    result := 0 else begin
+    V1 := Iso8601ToTimeLogPUTF8Char(s1,s1Len);
+    V2 := Iso8601ToTimeLogPUTF8Char(s2,s2Len);
+    if (V1=0) or (V2=0) then // any invalid date -> compare as UTF-8 strings
+      result := UTF8ILComp(s1,s2,s1Len,s2Len) else
+      if V1<V2 then
+        result := -1 else
+        if V1=V2 then
+          result := 0 else
+          result := +1;
   end;
-  V1 := Iso8601ToTimeLogPUTF8Char(s1,s1Len);
-  V2 := Iso8601ToTimeLogPUTF8Char(s2,s2Len);
-  if (V1=0) or (V2=0) then // any invalid date -> compare as UTF-8 strings
-    result := UTF8ILComp(s1,s2,s1Len,s2Len) else
-    if V1<V2 then
-      result := -1 else
-      if V1=V2 then
-        result := 0 else
-        result := +1;
 end;
 
 const
