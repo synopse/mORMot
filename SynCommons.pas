@@ -49061,9 +49061,14 @@ end;
 
 procedure TSynDictionary.DeleteAll;
 begin
-  fKeys.Clear;
-  fKeys.ReHash; // mandatory to avoid GPF
-  fValues.Clear;
+  fSafe.Lock;
+  try
+    fKeys.Clear;
+    fKeys.ReHash; // mandatory to avoid GPF
+    fValues.Clear;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 destructor TSynDictionary.Destroy;
@@ -49289,8 +49294,13 @@ end;
 procedure TSynDictionary.SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean);
 var k,v: RawUTF8;
 begin
-  k := fKeys.SaveToJSON(EnumSetsAsText);
-  v := fValues.SaveToJSON(EnumSetsAsText);
+  fSafe.Lock;
+  try
+    k := fKeys.SaveToJSON(EnumSetsAsText);
+    v := fValues.SaveToJSON(EnumSetsAsText);
+  finally
+    fSafe.UnLock;
+  end;
   W.AddJSONArraysAsJSONObject(pointer(k),pointer(v));
 end;
 
@@ -49316,7 +49326,10 @@ function TSynDictionary.LoadFromJSON(JSON: PUTF8Char; EnsureNoKeyCollision: bool
 var k,v: RawUTF8;
 begin
   result := false;
-  if JSONObjectAsJSONArrays(JSON,k,v) then
+  if not JSONObjectAsJSONArrays(JSON,k,v) then
+    exit;
+  fSafe.Lock;
+  try
     if fKeys.LoadFromJSON(pointer(k))<>nil then
       if fValues.LoadFromJSON(pointer(v))<>nil then
         if fKeys.Count=fValues.Count then
@@ -49327,6 +49340,9 @@ begin
             fKeys.Rehash;
             result := true;
           end;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TSynDictionary.LoadFromBinary(const binary: RawByteString): boolean;
@@ -49334,24 +49350,35 @@ var P: PAnsiChar;
 begin
   result := false;
   P := pointer(SynLZDecompress(binary));
-  if P<>nil then
+  if P=nil then
+    exit;
+  fSafe.Lock;
+  try
     P := fKeys.LoadFrom(P);
-  if P<>nil then
-    P := fValues.LoadFrom(P);
-  if (P<>nil) and (fKeys.Count=fValues.Count) then begin
-    fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
-    result := true;
+    if P<>nil then
+      P := fValues.LoadFrom(P);
+    if (P<>nil) and (fKeys.Count=fValues.Count) then begin
+      fKeys.ReHash; // optimistic: input from safe TSynDictionary.SaveToBinary
+      result := true;
+    end;
+  finally
+    fSafe.UnLock;
   end;
 end;
 
 function TSynDictionary.SaveToBinary: RawByteString;
 var tmp: TSynTempBuffer;
 begin
-  tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
-  if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf<>tmp.len then
-    result := '' else
-    SynLZCompress(tmp.buf,tmp.len,result);
-  tmp.Done;
+  fSafe.Lock;
+  try
+    tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
+    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf<>tmp.len then
+      result := '' else
+      SynLZCompress(tmp.buf,tmp.len,result);
+    tmp.Done;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
