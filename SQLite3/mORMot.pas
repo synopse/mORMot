@@ -28598,13 +28598,13 @@ asm // eax=PEnumType edx=Value
     shr    edx,2 // fast pipelined by-four scanning
     jz     @1
 @4: dec    edx
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
     jnz    @4
     pop    edx
@@ -28612,7 +28612,7 @@ asm // eax=PEnumType edx=Value
     jnz    @s
 @z: ret
 @1: pop    edx
-@s: mov    cl,[eax]
+@s: movzx  ecx,byte ptr [eax]
     dec    edx
     lea    eax,[eax+ecx+1] // next short string
     jnz    @s

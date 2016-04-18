@@ -18836,7 +18836,7 @@ asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
     movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
     mov eax,[eax+ecx+TTypeInfo.EnumBaseType]
     mov eax,[eax]
-    mov cl,[eax+TTypeInfo.NameLen]
+    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
     add eax,ecx
     mov ecx,[eax+TTypeInfo.MaxValue]
     mov [edx],ecx
@@ -18886,7 +18886,7 @@ asm // eax=aTypeInfo edx=aIndex
     movzx  ecx,byte ptr [eax+TTypeInfo.NameLen]
     mov    eax,[eax+ecx+TTypeInfo.EnumBaseType]
     mov    eax,[eax]
-    mov    cl,[eax+TTypeInfo.NameLen]
+    movzx  ecx,byte ptr [eax+TTypeInfo.NameLen]
     cmp    edx,[eax+ecx+TTypeInfo.MaxValue]
     ja     @0
     lea    eax,[eax+ecx+TTypeInfo.NameList]
@@ -18896,21 +18896,21 @@ asm // eax=aTypeInfo edx=aIndex
     shr    edx,2 // fast pipelined by-four scanning
     jz     @1
 @4: dec    edx
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
-    mov    cl,[eax]
+    movzx  ecx,byte ptr [eax]
     lea    eax,[eax+ecx+1]
     jnz    @4
     pop    edx
     and    edx,3
     jnz    @s
 @z: ret
-@1: pop    edx
-@s: mov    cl,[eax]
+@1: pop    edx 
+@s: movzx  ecx,byte ptr [eax]
     dec    edx
     lea    eax,[eax+ecx+1] // next short string
     jnz    @s
@@ -20319,15 +20319,22 @@ end;
 function PosChar(Str: PUTF8Char; Chr: AnsiChar): PUTF8Char;
 {$ifdef PUREPASCAL}
 begin
-  Result := Str;
-  if Result<>nil then
-    while Result^<>Chr do begin
-      if Result^=#0 then begin
-        Result := nil;
-        Exit;
-      end;
-      Inc(Result);
-    end;
+  result := nil;
+  if Str<>nil then begin
+    repeat
+      if Str^=#0 then
+        exit else
+      if Str^=Chr then
+        break;
+      inc(Str);
+      if Str^=#0 then
+        exit else
+      if Str^=Chr then
+        break;
+      inc(Str);
+    until false;
+    result := Str;
+  end;
 end;
 {$else}
 asm // faster version by AB - eax=Str dl=Chr
@@ -26349,13 +26356,13 @@ begin
   result := false;
   if p=nil then
     exit;
-  if up<>nil then
-    while up^<>#0 do begin
+  if (up<>nil) and (up^<>#0) then
+    repeat
       if up^<>NormToUpperAnsi7[p^] then
         exit;
       inc(up);
       inc(p);
-    end;
+    until up^=#0;
   result := true;
 end;
 {$else}
@@ -26373,11 +26380,8 @@ asm
     movzx ebx,byte ptr [eax] // bl=p^[0]
     jz @t
     cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
-    jz @n
-    pop ebx // quick return in case of first invalid char
-@e: xor eax,eax
-    ret
-@n: lea eax,[eax+1]
+    jnz @f // quick return in case of first invalid char
+    lea eax,[eax+1]
     lea edx,[edx+1]
     shr ecx,8 // cl=up^[1], ch=up^[2]
 @1: mov bl,[eax] // bl=p^[0]
@@ -26385,8 +26389,8 @@ asm
     jz @t // up^[0]=#0 -> OK
     cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
     mov bl,[eax+1] // bl=p^[1]
-    lea edx,[edx+2]
     lea eax,[eax+2]
+    lea edx,[edx+2]
     jne @f
     test ch,ch
     jz @t // up^[1]=#0 -> OK
@@ -26394,7 +26398,7 @@ asm
     mov ecx,[edx] // cl=up^[0] ch=up^[1]
     je @1
 @f: pop ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
-    xor eax,eax
+@e: xor eax,eax
     ret
 @t: pop ebx // up^=#0 -> TRUE
     mov al,1
