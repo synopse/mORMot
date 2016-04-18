@@ -738,7 +738,7 @@ unit mORMot;
       record published properties (since Delphi XE5) - see ticket [b653e5f4ca]
     - TSQLRestRoutingREST will now recognize several URI schemes:
       /root/Calculator.Add + body, /root/Calculator.Add?+%5B+1%2C2+%5D,
-      or even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
+      even root/Calculator.Add?n1=1&n2=2 - and /root/Calculator/Add as a
       valid alternative to default /root/Calculator.Add, if needed
     - new TServiceMethodExecute class replacing TServiceMethod.InternalExecute:
       allows incoming parameters to be encoded as a JSON object, in
@@ -19274,7 +19274,7 @@ begin // code is a bit abstract, but compiles very well
 {$else}
 asm // this code is the fastest possible
   mov eax,[eax+vmtTypeInfo]
-  or eax,eax; jz @z // avoid GPF if no RTTI available for this class
+  test eax,eax; jz @z // avoid GPF if no RTTI available for this class
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
   movzx edx,byte ptr [eax].TClassType.UnitName
@@ -28548,14 +28548,14 @@ asm // eax=PClassType edx=AClass
     cmp [eax].TClassType.ClassType,edx
     jz @3
 @2: mov eax,[eax].TClassType.ParentInfo
-    or eax,eax
+    test eax,eax
     jz @0
 @1: mov eax,[eax]
     movzx ecx,byte ptr [eax].TTypeInfo.Name
     lea eax,[eax+ecx].TTypeInfo.Name[1]
     cmp edx,[eax].TClassType.ClassType
     jnz @2
-@3: mov al,1
+@3: mov eax,1
 @0:
 end;
 {$endif}
@@ -28592,7 +28592,7 @@ asm // eax=PEnumType edx=Value
     cmp    edx,[eax].TEnumType.MaxValue
     lea    eax,[eax].TEnumType.NameList
     ja     @0
-    or     edx,edx
+    test   edx,edx
     jz     @z
     push   edx
     shr    edx,2 // fast pipelined by-four scanning
@@ -30036,7 +30036,7 @@ end;
 {$else}
 function TSQLRecord.RecordClass: TSQLRecordClass;
 asm
-  or eax,eax; jz @z
+  test eax,eax; jz @z
   mov eax,[eax]
 @z:
 end;
@@ -30052,11 +30052,11 @@ end;
 {$else}
 function TSQLRecord.ClassProp: PClassProp;
 asm
-  or eax,eax; jz @z // avoid GPF
+  test eax,eax; jz @z // avoid GPF
   mov eax,[eax] // get ClassType of this TSQLRecord instance
-  or eax,eax; jz @z // avoid GPF
+  test eax,eax; jz @z // avoid GPF
   mov eax,[eax+vmtTypeInfo]
-  or eax,eax; jz @z // avoid GPF
+  test eax,eax; jz @z // avoid GPF
   movzx edx,byte ptr [eax].TTypeInfo.Name
   lea eax,[eax+edx].TTypeInfo.Name[1]
   movzx edx,byte ptr [eax].TClassType.UnitName
@@ -30647,10 +30647,10 @@ end;
 {$else}
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 asm
-  or eax,eax
+  test eax,eax
   jz @null
   mov edx,[eax+vmtAutoTable]
-  or edx,edx
+  test edx,edx
   jz PropsCreate
   mov eax,edx
 @null:

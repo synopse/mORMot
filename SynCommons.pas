@@ -18639,7 +18639,7 @@ asm // eax=@Dest text=edx len=ecx
 {$else}
     ja System.@LStrFromPCharLen
 {$endif}
-    or ecx,ecx // len=0
+    test ecx,ecx // len=0
 {$ifdef UNICODE}
     jz @3
 {$else}
@@ -18879,7 +18879,7 @@ begin
 end;
 {$else}
 asm // eax=aTypeInfo edx=aIndex
-    or     eax,eax
+    test   eax,eax
     jz     @0
     cmp    byte ptr [eax],tkEnumeration
     jnz    @0
@@ -18890,7 +18890,7 @@ asm // eax=aTypeInfo edx=aIndex
     cmp    edx,[eax+ecx+TTypeInfo.MaxValue]
     ja     @0
     lea    eax,[eax+ecx+TTypeInfo.NameList]
-    or     edx,edx
+    test   edx,edx
     jz     @z
     push   edx
     shr    edx,2 // fast pipelined by-four scanning
@@ -20331,15 +20331,20 @@ begin
 end;
 {$else}
 asm // faster version by AB - eax=Str dl=Chr
-    or eax,eax
+    test eax,eax
     jz @z
-@1: mov cl,[eax]
+@1: mov cx,[eax]
     cmp cl,dl
     jz @z
-    inc eax
-    or cl,cl
+    lea eax,[eax+1]
+    test cl,cl
+    jz @e
+    cmp ch,dl
+    jz @z
+    lea eax,[eax+1]
+    test ch,ch
     jnz @1
-    xor eax,eax
+@e: xor eax,eax
 @z:
 end;
 {$endif}
@@ -22419,7 +22424,7 @@ asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
 @0: push ebx // compare the first character (faster quicksort)
     movzx ebx,byte ptr [eax] // ebx=S1[1]
     movzx ecx,byte ptr [edx] // ecx=S2[1]
-    or ebx,ebx
+    test ebx,ebx
     jz @z
     cmp ebx,ecx
     je @s
@@ -22443,7 +22448,7 @@ asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
     inc edx
     mov bl,[eax] // ebx=S1[i]
     mov cl,[edx] // ecx=S2[i]
-    or ebx,ebx
+    test ebx,ebx
     je @z        // end of S1
     cmp ebx,ecx
     je @s
@@ -23279,7 +23284,7 @@ asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
      push edi
      push ebp
      push eax
-     or ecx,ecx
+     test ecx,ecx
      mov ebp,edx
      mov edi,dword ptr [ConvertBase64ToBin]
      mov [esp],ecx
@@ -23869,7 +23874,7 @@ end;
 asm // eax=source edx=search
     push eax       // save source var
     mov eax,[eax]  // eax=source
-    or eax,eax
+    test eax,eax
     jz @z
     push ebx
     mov ebx,edx    // save search
@@ -23935,9 +23940,9 @@ function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-  or eax,eax
+  test eax,eax
   jz @e // P=nil -> false
-  or edx,edx
+  test edx,edx
   push ebx
   push esi
   jz @z // up=nil -> true
@@ -23947,7 +23952,7 @@ asm
 @1:
   mov bx,[eax] // bl=p^
   mov cl,[edx] // cl=up^
-  or bh,bh     // p^ > #255 -> FALSE
+  test bh,bh     // p^ > #255 -> FALSE
   jnz @n
   test cl,cl
   mov bl,[ebx+esi] // bl=NormToUpper[p^]
@@ -24007,7 +24012,7 @@ end;
 asm // eax=source edx=search
     push eax       // save source var
     mov eax,[eax]  // eax=source
-    or eax,eax
+    test eax,eax
     jz @z
     push ebx
     mov ebx,edx    // save search
@@ -24956,7 +24961,7 @@ begin // very optimized code
 end;
 {$else}
 asm // eax=P, edx=Count, Value=ecx
-       or eax,eax
+       test eax,eax
        jz @ok0 // avoid GPF
        cmp edx,8
        jb @s2
@@ -25313,7 +25318,7 @@ end;
 asm
     push eax
     call IntegerScan
-    or eax,eax
+    test eax,eax
     pop edx
     jnz @e
     dec eax // returns -1
@@ -25373,7 +25378,7 @@ end;
 asm
     push eax
     call IntegerScan
-    or eax,eax
+    test eax,eax
     pop edx
     jnz @e
     dec eax // returns -1
@@ -26358,31 +26363,37 @@ function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-    or eax,eax
+    test eax,eax
     jz @e // P=nil -> false
-    or edx,edx
+    test edx,edx
     push ebx
     push esi
-    jz @z // up=nil -> true
+    jz @t // up=nil -> true
     mov esi,offset NormToUpperAnsi7
     xor ebx,ebx
     xor ecx,ecx
-@1: mov cl,[edx] // cl=up^
-    mov bl,[eax] // bl=p^
+@1: mov cx,[edx] // cl=up^[0] ch=up^[1]
+    mov bl,[eax] // bl=p^[0]
     test cl,cl
-    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^]
-    jz @z // up^=#0 -> OK
-    lea edx,[edx+1] // = inc edx without changing flags
+    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^[0]]
+    jz @t // up^[0]=#0 -> OK
     cmp bl,cl
-    lea eax,[eax+1]
+    mov bl,[eax+1] // bl=p^[1]
+    jne @f
+    test ch,ch
+    mov bl,[ebx+esi] // bl=NormToUpperAnsi7[p^[1]]
+    jz @t // up^[1]=#0 -> OK
+    cmp bl,ch
+    lea edx,[edx+2]
+    lea eax,[eax+2]
     je @1
-    pop esi
+@f: pop esi // NormToUpperAnsi7[p^]<>up^ -> FALSE
     pop ebx
-    xor eax,eax
-@e: ret
-@z: mov al,1 // up^=#0 -> OK
-    pop esi
+@e: xor eax,eax
+    ret
+@t: pop esi // up^=#0 -> TRUE
     pop ebx
+    mov al,1
 end;
 {$endif}
 
@@ -26456,7 +26467,7 @@ const
 
 function UpperCopy255BufSSE42(dest: PAnsiChar; source: PUTF8Char; sourceLen: integer): PAnsiChar;
 asm // eax=dest edx=source ecx=sourceLen
-       or      ecx,ecx
+       test    ecx,ecx
        jz      @z
        cmp     ecx,16
        movdqu  xmm1,dqword ptr [@az]
@@ -26647,14 +26658,14 @@ end;
 {$else}
 function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 asm // eax=dest source=edx
-    or edx,edx
+    test edx,edx
     jz @z
     push esi
     mov esi,offset NormToUpperAnsi7
     xor ecx,ecx
 @1: mov cl,[edx]
     inc edx
-    or cl,cl
+    test cl,cl
     mov cl,[esi+ecx]
     jz @2
     mov [eax],cl
@@ -26682,7 +26693,7 @@ asm // eax=dest source=edx
     push ebx
     movzx ebx,byte ptr [edx] // ebx = length(source)
     xor ecx,ecx
-    or ebx,ebx
+    test ebx,ebx
     mov esi,offset NormToUpperAnsi7
     jz @2 // source=''
     inc edx
@@ -26790,7 +26801,7 @@ end;
 asm // eax=source edx=searchUp
     push eax       // save source var
     mov eax,[eax]  // eax=source
-    or eax,eax
+    test eax,eax
     jz @z
     push eax
     call IdemPChar
@@ -28205,7 +28216,7 @@ end;
 {$else}
 asm
     xor ecx,ecx
-@1: or edx,edx
+@1: test edx,edx
     jz @n
     dec edx
     bt [eax],edx
@@ -28292,7 +28303,7 @@ begin
 end;
 {$else}
 asm // eax=crc, edx=buf, ecx=len
-    or ecx,ecx
+    test ecx,ecx
     push edi
     push esi
     push ebx
@@ -28326,7 +28337,7 @@ asm // eax=crc, edx=buf, ecx=len
     lea eax,[eax+ebx]
     lea ecx,[ecx-4]
     jae @8
-    or ecx,ecx
+    test ecx,ecx
     jz @z
 @s: mov esi,eax
 @1: shl eax,5
@@ -29140,7 +29151,7 @@ end;
 {$else}
 asm
     xor ecx,ecx  // ContainsNoTime=nil
-    or eax,eax   // if s='' -> p=nil -> will return 0, whatever L value is
+    test eax,eax   // if s='' -> p=nil -> will return 0, whatever L value is
     jz Iso8601ToTimeLogPUTF8Char
     mov edx,[eax-4] // edx=L
 @1: jmp Iso8601ToTimeLogPUTF8Char
@@ -30338,9 +30349,9 @@ begin
 end;
 {$else}
 asm // eax=V
-    xor cl,cl
+    xor ecx,ecx
     push edx // save result RawUTF8
-    or eax,eax
+    test eax,eax
     jz @2 // avoid GPF
     lea edx,eax+1
     mov cl,[eax]
@@ -32438,7 +32449,7 @@ asm // faster version by AB
         mov edx,[edx]
         lea esi,[esi+8]
         movzx ecx,[edx].TTypeInfo.Kind
-        lea eax,eax+ebx // eax=data to be initialized
+        lea eax,[eax+ebx] // eax=data to be initialized
         jmp dword ptr [@@Tab+ecx*4-tkLString*4]
 @@Tab:  dd @@ptr, @@ptr, @@variant, @@array, @@array, @@ptr, @@ptr, @@ptr, @@ptr
 @@ptr:  dec edi
@@ -32521,7 +32532,7 @@ asm // faster version by AB (direct call to finalization procedures)
         mov edx,[edx]
         lea esi,[esi+8]
         movzx ecx,[edx].TTypeInfo.Kind
-        lea eax,eax+ebx // eax=data to be initialized
+        lea eax,[eax+ebx] // eax=data to be initialized
         sub cl,tkLString
         {$ifdef UNICODE}
         cmp cl,tkUString-tkLString+1
@@ -33323,7 +33334,7 @@ end;
 
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        or       eax,eax
+        test     eax,eax
         mov      ecx,eax             // copy pointer
         jz       @null               // returns 0 if S=nil
         push     eax                 // save start address
@@ -33356,7 +33367,7 @@ end;
 
 function StrLenSSE42(S: pointer): PtrInt;
 asm // warning: may read up to 15 bytes beyond the string itself
-        or        eax,eax
+        test      eax,eax
         mov       edx,eax             // copy pointer
         jz        @null               // returns 0 if S=nil
         xor       eax,eax
