@@ -26372,7 +26372,7 @@ asm
     test cl,cl
     movzx ebx,byte ptr [eax] // bl=p^[0]
     jz @t
-    cmp cl,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+    cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
     jz @n
     pop ebx // quick return in case of first invalid char
 @e: xor eax,eax
@@ -26383,14 +26383,14 @@ asm
 @1: mov bl,[eax] // bl=p^[0]
     test cl,cl
     jz @t // up^[0]=#0 -> OK
-    cmp cl,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+    cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
     mov bl,[eax+1] // bl=p^[1]
     lea edx,[edx+2]
     lea eax,[eax+2]
     jne @f
     test ch,ch
     jz @t // up^[1]=#0 -> OK
-    cmp ch,[ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
+    cmp ch,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
     mov ecx,[edx] // cl=up^[0] ch=up^[1]
     je @1
 @f: pop ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
