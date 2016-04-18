@@ -45203,10 +45203,8 @@ begin
   if (aItem=nil) or (aDynArray^.DynArrayItemSize<>sizeof(TObject)) then
     raise EModelException.CreateUTF8(
       'Invalid %.RegisterObjArrayForJSON(TypeInfo(%),%)',[self,aDynArray^.Name,aItem]);
-  if ObjArraySerializers=nil then begin
-    ObjArraySerializers := TPointerClassHash.Create;
-    GarbageCollector.Add(ObjArraySerializers);
-  end;
+  if ObjArraySerializers=nil then
+    GarbageCollectorFreeAndNil(ObjArraySerializers,TPointerClassHash.Create);
   serializer := pointer(ObjArraySerializers.TryAdd(aDynArray));
   if serializer=nil then
     exit; // avoid duplicate

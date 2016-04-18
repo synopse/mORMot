@@ -774,10 +774,8 @@ begin
   fDName := aDisplayName;
   if aDisplayName = '' then
     fDName := aServiceName;
-  if Services=nil then begin
-    Services := TList.Create;
-    GarbageCollector.Add(Services);
-  end;
+  if Services=nil then
+    GarbageCollectorFreeAndNil(Services,TList.Create);
   Services.Add(self);
   fServiceType := SERVICE_WIN32_OWN_PROCESS or SERVICE_INTERACTIVE_PROCESS;
   fStartType   := SERVICE_AUTO_START;

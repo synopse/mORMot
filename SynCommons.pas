@@ -11400,6 +11400,7 @@ var
   // - to be used, e.g. as:
   // !  Version := TFileVersion.Create(InstanceFileName,DefaultVersion32);
   // !  GarbageCollector.Add(Version);
+  // - see also GarbageCollectorFreeAndNil() as an alternative
   GarbageCollector: TObjectList;
 
   /// set to TRUE when the global "Garbage collector" are beeing freed
@@ -29630,10 +29631,8 @@ var
 
 class function TSynTimeZone.Default: TSynTimeZone;
 begin
-  if SharedSynTimeZone=nil then begin
-    SharedSynTimeZone := TSynTimeZone.CreateDefault;
-    GarbageCollector.Add(SharedSynTimeZone);
-  end;
+  if SharedSynTimeZone=nil then
+    GarbageCollectorFreeAndNil(SharedSynTimeZone,TSynTimeZone.CreateDefault);
   result := SharedSynTimeZone;
 end;
 
@@ -31224,8 +31223,8 @@ begin
     if IsLibrary then
       InstanceFileName := GetModuleName(HInstance) else
       InstanceFileName := ProgramFileName;
-    Version := TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease);
-    GarbageCollector.Add(Version);
+    GarbageCollectorFreeAndNil(Version,
+      TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease));
     FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
     ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
@@ -34806,10 +34805,8 @@ class function TJSONRecordTextDefinition.FromCache(aTypeInfo: pointer;
 var i: integer;
     added: boolean;
 begin
-  if JSONCustomParserCache=nil then begin
-    JSONCustomParserCache := TRawUTF8ListHashed.Create(True);
-    GarbageCollector.Add(JSONCustomParserCache);
-  end;
+  if JSONCustomParserCache=nil then
+    GarbageCollectorFreeAndNil(JSONCustomParserCache,TRawUTF8ListHashed.Create(True));
   i := JSONCustomParserCache.AddObjectIfNotExisting(aDefinition,nil,@added);
   if not added then begin
     result := TJSONRecordTextDefinition(JSONCustomParserCache.fObjects[i]);
