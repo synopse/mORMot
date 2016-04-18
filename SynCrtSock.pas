@@ -2088,24 +2088,25 @@ function IdemPChar(p, up: pAnsiChar): boolean;
 var c: AnsiChar;
 begin
   result := false;
-  if (p=nil) or (up=nil) then
+  if p=nil then
     exit;
-  while up^<>#0 do begin
-    c := p^;
-    if up^<>c then
-      if c in ['a'..'z'] then begin
-        dec(c,32);
-        if up^<>c then
-          exit;
-      end else exit;
-    inc(up);
-    inc(p);
-  end;
+  if (up<>nil) and (up^<>#0) then
+    repeat
+      c := p^;
+      if up^<>c then
+        if c in ['a'..'z'] then begin
+          dec(c,32);
+          if up^<>c then
+            exit;
+        end else exit;
+      inc(up);
+      inc(p);
+    until up^=#0;
   result := true;
 end;
 
 function IdemPCharArray(p: PAnsiChar; const upArray: array of PAnsiChar): integer;
-var W: word;
+var w: word;
 begin
   if p<>nil then begin
     w := ord(p[0])+ord(p[1])shl 8;
@@ -2170,11 +2171,12 @@ begin
   end;
 end;
 
-function GetHeaderValue(const headers: SockString; upname: PAnsiChar): SockString;
+function GetHeaderValue(var headers: SockString; const upname: SockString;
+  deleteInHeaders: boolean): SockString;
 var i,j,k: integer;
-begin      
+begin
   result := '';
-  if (headers='') or (upname=nil) then
+  if (headers='') or (upname='') then
     exit;
   i := 1;
   repeat
@@ -2184,10 +2186,18 @@ begin
         k := j;
         break;
       end;
-    if IdemPChar(@headers[i],upname) then begin
+    if IdemPChar(@headers[i],pointer(upname)) then begin
+      j := i;
       inc(i,length(upname));
       while headers[i]=' ' do inc(i);
       result := copy(headers,i,k-i);
+      if deleteInHeaders then begin
+        while true do
+          if (headers[k]=#0) or (headers[k]>=' ') then
+            break else
+            inc(k);
+        delete(headers,j,k-j);
+      end;
       exit;
     end;
     i := k;
@@ -3914,7 +3924,7 @@ begin
         try
           SetString(Context.fOutContent,nil,FileToSend.Size);
           FileToSend.Read(Pointer(Context.fOutContent)^,length(Context.fOutContent));
-          Context.OutContentType := GetHeaderValue(Context.OutCustomHeaders,'CONTENT-TYPE:');
+          Context.OutContentType := GetHeaderValue(Context.fOutCustomHeaders,'CONTENT-TYPE:',true);
        finally
           FileToSend.Free;
         end;
