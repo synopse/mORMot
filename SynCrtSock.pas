@@ -2170,6 +2170,34 @@ begin
   end;
 end;
 
+function GetHeaderValue(const headers: SockString; upname: PAnsiChar): SockString;
+var i,j,k: integer;
+begin      
+  result := '';
+  if (headers='') or (upname=nil) then
+    exit;
+  i := 1;
+  repeat
+    k := length(headers)+1;
+    for j := i to k-1 do
+      if headers[j]<' ' then begin
+        k := j;
+        break;
+      end;
+    if IdemPChar(@headers[i],upname) then begin
+      inc(i,length(upname));
+      while headers[i]=' ' do inc(i);
+      result := copy(headers,i,k-i);
+      exit;
+    end;
+    i := k;
+    while headers[i]<' ' do
+      if headers[i]=#0 then
+        exit else
+        inc(i);
+  until false;
+end;
+
 function PosChar(Str: PAnsiChar; Chr: AnsiChar): PAnsiChar;
 begin
   result := Str;
@@ -3855,7 +3883,7 @@ var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
     s: SockString;
-    ErrorMsg: string;
+    staticfn, ErrorMsg: string;
     FileToSend: TFileStream;
 begin
   if (ClientSock=nil) or (ClientSock.Headers=nil) then
@@ -3881,13 +3909,12 @@ begin
     // handle case of direct sending of static file (as with http.sys)
     if (Context.OutContent<>'') and (Context.OutContentType=HTTP_RESP_STATICFILE) then
       try
-        FileToSend := TFileStream.Create(
-          {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent),
-          fmOpenRead or fmShareDenyNone);
+        staticfn := {$ifdef UNICODE}UTF8ToUnicodeString{$else}Utf8ToAnsi{$endif}(Context.OutContent);
+        FileToSend := TFileStream.Create(staticfn,fmOpenRead or fmShareDenyNone);
         try
           SetString(Context.fOutContent,nil,FileToSend.Size);
           FileToSend.Read(Pointer(Context.fOutContent)^,length(Context.fOutContent));
-          Context.OutContentType := ''; // 'Content-type: ...' in OutCustomHeader
+          Context.OutContentType := GetHeaderValue(Context.OutCustomHeaders,'CONTENT-TYPE:');
        finally
           FileToSend.Free;
         end;
