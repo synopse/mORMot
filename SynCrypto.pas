@@ -743,7 +743,7 @@ type
   end;
 
   PSHA256Digest = ^TSHA256Digest;
-  /// 256 bits memory block for SHA256 hash digest storage
+  /// 256 bits (32 bytes) memory block for SHA256 hash digest storage
   TSHA256Digest = packed array[0..31] of byte;
 
   PSHA256 = ^TSHA256;
@@ -7320,11 +7320,11 @@ function CreateGuid(out guid: TGUID): HResult; stdcall;
 
 class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
 var time: Int64;
-    systemtime: TDateTime;
+    ext: TSynExtended;
     threads: array[0..2] of cardinal;
     version: RawByteString;
     sha: TSHA256;
-    entropy: array[0..1] of TSHA256Digest;
+    entropy: array[0..1] of TSHA256Digest; // 64 bytes
     paranoid: cardinal;
     p: PByteArray;
     i: integer;
@@ -7381,10 +7381,10 @@ begin
   sha.Init;
   sha.Update(@time,sizeof(time));
   sha.Update(@entropy,sizeof(entropy));  // bytes on CPU stack
-  systemtime := NowUTC;
-  sha.Update(@systemtime,sizeof(systemtime));
-  systemtime := Random;
-  sha.Update(@systemtime,sizeof(systemtime));
+  ext := NowUTC;
+  sha.Update(@ext,sizeof(ext));
+  ext := Random;
+  sha.Update(@ext,sizeof(ext));
   version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
   sha.Update(pointer(version),length(version)); // exe and host/user info
   threads[0] := HInstance;
@@ -7394,8 +7394,15 @@ begin
   sha.Final(entropy[1]);
   sha.Update(@time,sizeof(time));
   sha.Update(@entropy,sizeof(entropy));
-  CreateGUID(g); // not random, but genuine
-  sha.Update(@g,sizeof(g));
+  for i := 1 to 5 do begin
+    CreateGUID(g); // not random, but genuine
+    sha.Update(@g,sizeof(g));
+  end;
+  sha.Update(@SystemInfo,sizeof(SystemInfo));
+  sha.Update(pointer(OSVersionText),Length(OSVersionText));
+  {$ifdef CPUINTEL}
+  sha.Update(@CpuFeatures,sizeof(CpuFeatures));
+  {$endif}
   SleepHiRes(0); // force non deterministic time shift
   QueryPerformanceCounter(time);
   sha.Update(@time,sizeof(time)); // include GetEntropy() execution time
