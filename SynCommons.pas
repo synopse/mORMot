@@ -15049,7 +15049,7 @@ type
     // - may be used to re-use the same TBlockingProcess instance, after
     // a successfull WaitFor/NotifyFinished process
     // - returns TRUE on success (i.e. status was not evWaiting), setting
-    // the current state to evNone, and the Tag property to 0
+    // the current state to evNone, and the Call property to 0
     // - if there is a WaitFor currently in progress, returns FALSE
     function Reset: boolean; virtual;
     /// just a wrapper around fSafe^.Lock
@@ -15075,7 +15075,7 @@ type
   protected
     fCall: TBlockingProcessPoolCall;
     procedure ResetInternal; override;
-  public
+  published
     /// an unique identifier, when owned by a TBlockingProcessPool
     // - Reset would restore this field to its 0 default value
     property Call: TBlockingProcessPoolCall read fCall;
@@ -15093,7 +15093,7 @@ type
   protected
     fClass: TBlockingProcessPoolItemClass;
     fPool: TObjectListLocked;
-    fCallCounter: TBlockingProcessPoolCall; // to match TBlockingProcess.Tag
+    fCallCounter: TBlockingProcessPoolCall; // set TBlockingProcessPoolItem.Call
   public
     /// initialize the pool, for a given implementation class
     constructor Create(aClass: TBlockingProcessPoolItemClass=nil); reintroduce;
@@ -15424,7 +15424,8 @@ type
     {$ifndef NOVARIANTS}
     /// convert this identifier as an explicit TDocVariant JSON object
     // - returns e.g.
-    // ! {"Created":"2015-12-15T20:15:05","Identifier":10,"Counter":3391}
+    // ! {"Created":"2016-04-19T15:27:58","Identifier":1,"Counter":1,
+    // ! "Value":3137644716930138113,"Hex":"2B8B273F00008001"}
     function AsVariant: variant;
     {$endif NOVARIANTS}
     /// extract the UTC generation timestamp from the identifier as TDateTime
@@ -30385,11 +30386,11 @@ asm // eax=V
     sub ch,'a'
     sub ch,'z'-'a'
     ja @2 // not a lower char -> create a result string starting at edx
-    inc edx
     dec cl
+    lea edx,[edx+1]
     jnz @1
     mov cl,[eax]
-    lea edx,eax+1  // no UpperCase -> retrieve full text (result := V^)
+    lea edx,[eax+1]  // no UpperCase -> retrieve full text (result := V^)
 @2: pop eax
     movzx ecx,cl
 {$ifdef UNICODE}
@@ -54557,7 +54558,8 @@ end;
 function TSynUniqueIdentifierBits.AsVariant: variant;
 begin
   result := _ObjFast(['Created',DateTimeToIso8601Text(CreateDateTime),
-    'Identifier',ProcessID,'Counter',Counter,'Value',Value]);
+    'Identifier',ProcessID,'Counter',Counter,'Value',Value,
+    'Hex',Int64ToHex(Value)]);
 end;
 {$endif NOVARIANTS}
 
