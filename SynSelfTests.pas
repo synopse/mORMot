@@ -4094,8 +4094,8 @@ begin
       check(i1.Equal(i2));
       json := VariantSaveJSON(i1.AsVariant);
       check(VariantSaveJSON(i2.AsVariant)=json);
-      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%}',
-        [DateTimeToIso8601Text(i1.CreateDateTime),i1.ProcessID,i1.Counter,i1.Value]));
+      check(json=FormatUTF8('{"Created":"%","Identifier":%,"Counter":%,"Value":%,"Hex":"%"}',
+        [DateTimeToIso8601Text(i1.CreateDateTime),i1.ProcessID,i1.Counter,i1.Value,Int64ToHex(i1.Value)]));
       {$endif}
       obfusc := gen.ToObfuscated(i1.Value);
       check(gen.FromObfuscated(obfusc,i3));

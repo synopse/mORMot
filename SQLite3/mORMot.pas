@@ -23551,7 +23551,7 @@ begin
     exit; // out of range
   if not Assigned(fFieldType) then
     InitFieldTypes;
-  V := @fResults[row*fFieldCount+field];
+  V := fResults[row*fFieldCount+field];
   with fFieldType[field] do
     if expandHugeIDAsUniqueIdentifier and (field=fFieldIndexID) then begin
       SetInt64(V,PInt64(@id)^);
