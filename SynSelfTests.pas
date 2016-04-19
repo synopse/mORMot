@@ -1792,6 +1792,7 @@ var AI, AI2: TIntegerDynArray;
     U,U2: RawUTF8;
     P: PUTF8Char;
     PI: PIntegerArray;
+    AB: TBooleanDynArray;
     R: TRec;
     F, F1: TFV;
     F2: TFV2;
@@ -1867,6 +1868,29 @@ begin
 end;
 begin
   W := TTextWriter.CreateOwnedStream;
+  // validate TBooleanDynArray
+  dyn1.Init(TypeInfo(TBooleanDynArray),AB);
+  SetLength(AB,4);
+  for i := 0 to 3 do
+    AB[i] := i and 1=1;
+  test := dyn1.SaveToJSON;
+  check(test='[false,true,false,true]');
+  Check(AB<>nil);
+  dyn1.Clear;
+  Check(AB=nil);
+  Check(dyn1.Count=0);
+  Check(dyn1.LoadFromJSON(pointer(test))<>nil);
+  Check(length(AB)=4);
+  Check(dyn1.Count=4);
+  for i := 0 to 3 do
+    Check(AB[i]=(i and 1=1));
+  Test := dyn1.SaveTo;
+  dyn1.Clear;
+  Check(AB=nil);
+  Check(dyn1.LoadFrom(pointer(test))<>nil);
+  Check(dyn1.Count=4);
+  for i := 0 to 3 do
+    Check(AB[i]=(i and 1=1));
   // validate TIntegerDynArray
   Test64K;
   AIP.Init(TypeInfo(TIntegerDynArray),AI);

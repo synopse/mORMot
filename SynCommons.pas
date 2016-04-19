@@ -1122,9 +1122,14 @@ type
   PObjectListDynArray = ^TObjectListDynArray;
   TFileNameDynArray = array of TFileName;
   PFileNameDynArray = ^TFileNameDynArray;
+  TBooleanDynArray = array of boolean;
+  PBooleanDynArray = ^TBooleanDynArray;
 
   PByteArray = ^TByteArray;
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
+
+  PBooleanArray = ^TBooleanArray;
+  TBooleanArray = array[0..MaxInt-1] of Boolean; 
 
   TWordArray  = array[0..MaxInt div SizeOf(word)-1] of word;
   PWordArray = ^TWordArray;
@@ -2525,6 +2530,10 @@ function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
 
 /// get the unsigned 32 bits integer value stored as Unicode string in P^
 function GetCardinalW(P: PWideChar): PtrUInt;
+
+/// get a boolean value stored as true/false text in P^
+// - would also recognize any non 0 integer as true
+function GetBoolean(P: PUTF8Char): boolean;
 
 /// get the 64 bits integer value stored in P^
 function GetInt64(P: PUTF8Char): Int64; overload;
@@ -4235,7 +4244,7 @@ type
   /// function prototype to be used for TDynArray Sort and Find method
   // - common functions exist for base types: see e.g. SortDynArrayByte,
   // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
-  // SordDynArraySingle, SortDynArrayInt64,
+  // SordDynArraySingle, SortDynArrayInt64, SortDynArrayBoolean,
   // SortDynArrayDouble, SortDynArrayAnsiString, SortDynArrayAnsiStringI,
   // SortDynArrayUnicodeString, SortDynArrayUnicodeStringI,
   // SortDynArrayString, SortDynArrayStringI
@@ -4250,6 +4259,7 @@ type
   /// internal enumeration used to specify some standard Delphi arrays
   // - will be used e.g. to match JSON serialization or TDynArray search
   // (see TDynArray and TDynArrayHash InitSpecific method)
+  // - djBoolean would generate an array of JSON boolean values
   // - djByte .. djTimeLog match numerical JSON values
   // - djDateTime .. djSynUnicode match textual JSON values
   // - djVariant will match standard variant JSON serialization (including
@@ -4261,7 +4271,7 @@ type
   // - is used also by TDynArray.InitSpecific() to define the main field type
   TDynArrayKind = (
     djNone,
-    djByte, djWord, djInteger, djCardinal, djSingle,
+    djBoolean, djByte, djWord, djInteger, djCardinal, djSingle,
     djInt64, djDouble, djCurrency,
     djTimeLog, djDateTime, djRawUTF8, djWinAnsi, djString, djRawByteString,
     djWideString, djSynUnicode, djInterface,
@@ -4587,7 +4597,7 @@ type
     function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
-    // handling TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
+    // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
     // TDoubleDynArray, TCurrencyDynArray, TWordDynArray, TByteDynArray,
     // TRawUTF8DynArray, TWinAnsiDynArray, TRawByteStringDynArray,
     // TStringDynArray, TWideStringDynArray, TSynUnicodeDynArray,
@@ -4678,7 +4688,7 @@ type
     property Capacity: integer read GetCapacity write SetCapacity;
     /// the compare function to be used for Sort and Find methods
     // - by default, no comparison function is set
-    // - common functions exist for base types: e.g. SortDynArrayByte,
+    // - common functions exist for base types: e.g. SortDynArrayByte, SortDynArrayBoolean,
     // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     // SortDynArrayInt64, SortDynArrayDouble, SortDynArrayAnsiString,
     // SortDynArrayAnsiStringI, SortDynArrayString, SortDynArrayStringI,
@@ -5911,6 +5921,8 @@ function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): Ra
 // - this low-level function is used e.g. by mORMotWrappers unit
 function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer=nil): RawUTF8;
 
+/// compare two "array of boolean" elements
+function SortDynArrayBoolean(const A,B): integer;
 
 /// compare two "array of byte" elements
 function SortDynArrayByte(const A,B): integer;
@@ -6043,16 +6055,16 @@ var
   // standard array type
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_SORTFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArraySortCompare = (
-    (nil, SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger,
-    SortDynArrayCardinal, SortDynArraySingle,
+    (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
+    SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
     SortDynArrayAnsiString, SortDynArrayUnicodeString,
     SortDynArrayUnicodeString, SortDynArrayPointer,
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
-    (nil, SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger,
-    SortDynArrayCardinal, SortDynArraySingle,
+    (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
+    SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
     SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
@@ -6064,14 +6076,14 @@ var
   // standard array type
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_HASHFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArrayHashOne = (
-    (nil, HashByte, HashWord, HashInteger,
+    (nil, HashByte, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
     HashAnsiString, HashWideString, HashSynUnicode, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
-    (nil, HashByte, HashWord, HashInteger,
+    (nil, HashByte, HashByte, HashWord, HashInteger,
     HashCardinal, HashCardinal, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
@@ -14016,7 +14028,7 @@ function _ObjFast(aObject: TObject;
 // ! _Array(Items,JSON_OPTIONS[true]);
 // - so all created objects and arrays will be handled by reference, for best
 // speed - but you should better write on the resulting variant tree with caution
-function _ArrFast(const Items: array of const): variant;
+function _ArrFast(const Items: array of const): variant; overload;
 
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content
@@ -25804,6 +25816,13 @@ begin
     result := Default;
 end;
 
+function GetBoolean(P: PUTF8Char): boolean;
+begin
+  if (P<>nil) and (PInteger(P)^=TRUE_LOW) then
+    result := true else
+    result := GetInteger(P)<>0;
+end;
+
 function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
 var c: PtrUInt;
 begin
@@ -34535,9 +34554,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
          exit;
       P := ptr;
       case Prop.PropertyType of
-      ptBoolean:   if (PropValue<>nil) and (PInteger(PropValue)^=TRUE_LOW) then
-                     PBoolean(Data)^ := true else
-                     PBoolean(Data)^ := GetInteger(PropValue)<>0;
+      ptBoolean:   PBoolean(Data)^ := GetBoolean(PropValue);
       ptByte:      PByte(Data)^ := GetCardinal(PropValue);
       ptCardinal:  PCardinal(Data)^ := GetCardinal(PropValue);
       ptCurrency:  PInt64(Data)^ := StrToCurr64(PropValue);
@@ -38534,10 +38551,10 @@ end;
 function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer): RawUTF8;
 var DynArray: TDynArray;
     VoidArray: pointer;
-const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = (
-    '','byte','word','integer','cardinal','single','Int64','double','currency',
-    'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','RawByteString',
-    'WideString','SynUnicode','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
+const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = ('',
+  'boolean','byte','word','integer','cardinal','single','Int64','double','currency',
+  'TTimeLog','TDateTime','RawUTF8','WinAnsiString','string','RawByteString',
+  'WideString','SynUnicode','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -38547,6 +38564,15 @@ begin
   if DynArray.ElemType<>nil then
     TypeInfoToName(ElemTypeInfo,result) else
     result := KNOWNTYPE_ITEMNAME[DynArray.ToKnownType];
+end;
+
+function SortDynArrayBoolean(const A,B): integer;
+begin
+  if boolean(A)=boolean(B) then
+    result := 0 else
+  if boolean(A) then
+    result := 1 else
+    result := -1;
 end;
 
 function SortDynArrayByte(const A,B): integer;
@@ -39508,7 +39534,7 @@ end;
 const
   PTRSIZ = sizeof(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1,1, 2, 4,4,4, 8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}sizeof(Variant),{$endif} 0);
 
 function TDynArray.GetArrayTypeName: RawUTF8;
@@ -39525,6 +39551,8 @@ begin
     exit;
   end;
   case ElemSize of
+  1: if fTypeInfo=TypeInfo(TBooleanDynArray) then
+       fKnownType := djBoolean;
   4: if fTypeInfo=TypeInfo(TCardinalDynArray) then
        fKnownType := djCardinal else
      if fTypeInfo=TypeInfo(TSingleDynArray) then
@@ -39703,6 +39731,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         if (Val=nil) or (wasString<>expectedString) then
           exit;
         case T of
+        djBoolean:  PBooleanArray(fValue^)^[i] := GetBoolean(Val); 
         djByte:     PByteArray(fValue^)^[i] := GetCardinal(Val);
         djWord:     PWordArray(fValue^)^[i] := GetCardinal(Val);
         djInteger:  PIntegerArray(fValue^)^[i] := GetInteger(Val);
@@ -43241,6 +43270,7 @@ begin // code below must match TDynArray.LoadFromJSON
   else // numerical JSON
     for i := 0 to n do begin
       case T of
+      djBoolean:  Add(PBooleanArray(P)^[i]);
       djByte:     AddU(PByteArray(P)^[i]);
       djWord:     AddU(PWordArray(P)^[i]);
       djInteger:  Add(PIntegerArray(P)^[i]);
