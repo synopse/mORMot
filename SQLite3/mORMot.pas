@@ -7941,10 +7941,17 @@ type
     // - don't perform any conversion, but create a CSV from raw PUTF8Char data
     function GetRowValues(Field: integer; Sep: AnsiChar=','): RawUTF8; overload;
     {$ifndef NOVARIANTS}
+    /// retrieve a field value in a variant
+    // - returns null if the row/field is incorrect
+    // - expand* methods would allow to return human-friendly representations 
+    procedure GetAsVariant(row,field: integer; out value: variant;
+      expandTimeLogAsText,expandEnumsAsText,expandHugeIDAsUniqueIdentifier: boolean;
+      options: TDocVariantOptions=JSON_OPTIONS_FAST);
     /// retrieve a row value as a variant, ready to be accessed via late-binding
     // - Row parameter numbering starts from 1 to RowCount
     // - this method will return a TDocVariant containing a copy of all
     // field values of this row, uncoupled to the TSQLTable instance life time
+    // - expand* methods would allow to return human-friendly representations 
     procedure ToDocVariant(Row: integer; out doc: variant;
       options: TDocVariantOptions=JSON_OPTIONS_FAST;
       expandTimeLogAsText: boolean=false; expandEnumsAsText: boolean=false;
@@ -13383,6 +13390,19 @@ type
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
       const CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
       LastRecordID: PID=nil): variant; overload;
+    /// get all values of a SQL statement on a single column as a TDocVariant array
+    // - implements REST GET collection on a single field
+    // - for better server speed, the WHERE clause should use bound parameters
+    // identified as '?' in the FormatSQLWhere statement, which is expected to
+    // follow the order of values supplied in BoundsSQLWhere open array - use
+    // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
+    // double, currency, RawUTF8 values to be bound to the request as parameters
+    // - the data will be converted to variants and TDocVariant following the
+    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // as a true array of values (in contrast to the RetrieveListJSON method)
+    function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+      const FieldName, FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const): variant;
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - the data will be converted to a TDocVariant variant following the
@@ -23517,46 +23537,58 @@ end;
 var
   SQLTableRowVariantType: TCustomVariantType = nil;
 
-procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
-  options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
-  expandHugeIDAsUniqueIdentifier: boolean);
+procedure TSQLTable.GetAsVariant(row,field: integer; out value: variant;
+  expandTimeLogAsText,expandEnumsAsText,expandHugeIDAsUniqueIdentifier: boolean;
+  options: TDocVariantOptions);
 const JAN2015_UNIX = 1420070400;
-var Values: TVariantDynArray;
-    V: PPUtf8CharArray;
-    f,enum,err: integer;
-    t: TTimeLogBits;
+var t: TTimeLogBits;
     id: TSynUniqueIdentifierBits;
+    V: PUtf8Char;
+    enum,err: integer;
 begin
-  if (self=nil) or (Row<1) or (Row>fRowCount) then
+  if (self=nil) or (row<1) or (row>fRowCount) or
+     (cardinal(field)>=cardinal(fFieldCount)) then
     exit; // out of range
-  if length(fFieldNames)<>fFieldCount then
-    InitFieldNames;
   if not Assigned(fFieldType) then
     InitFieldTypes;
-  SetLength(Values,fFieldCount);
-  V := @fResults[Row*FieldCount];
-  for f := 0 to fFieldCount-1 do
-  with fFieldType[f] do
-    if expandHugeIDAsUniqueIdentifier and (f=fFieldIndexID) then begin
-      SetInt64(V[f],PInt64(@id)^);
+  V := @fResults[row*fFieldCount+field];
+  with fFieldType[field] do
+    if expandHugeIDAsUniqueIdentifier and (field=fFieldIndexID) then begin
+      SetInt64(V,PInt64(@id)^);
       if id.CreateTimeUnix>JAN2015_UNIX then
-        Values[f] := id.AsVariant else
-        Values[f] := id.Value;
+        value := id.AsVariant else
+        value := id.Value;
     end else begin
     if expandEnumsAsText and (ContentType=sftEnumerate) then begin
-      enum := GetInteger(V[f],err);
+      enum := GetInteger(V,err);
       if (err=0) and (ContentTypeInfo<>nil) then begin
-        Values[f] := PEnumType(ContentTypeInfo)^.GetEnumNameOrd(enum)^;
-        continue;
+        value := PEnumType(ContentTypeInfo)^.GetEnumNameOrd(enum)^;
+        exit;
       end;
     end else
     if expandTimeLogAsText and (ContentType in [sftTimeLog,sftModTime,sftCreateTime]) then begin
-      SetInt64(V[f],t.Value);
-      Values[f] := _ObjFast(['Time',t.Text(true),'Value',PInt64(@t)^]);
-      continue;
+      SetInt64(V,t.Value);
+      value := _ObjFast(['Time',t.Text(true),'Value',PInt64(@t)^]);
+      exit;
     end;
-    ValueVarToVariant(V[f],ContentType,TVarData(Values[f]),true,ContentTypeInfo,options);
+    ValueVarToVariant(V,ContentType,TVarData(value),true,ContentTypeInfo,options);
   end;
+end;
+
+procedure TSQLTable.ToDocVariant(Row: integer; out doc: variant;
+  options: TDocVariantOptions; expandTimeLogAsText,expandEnumsAsText,
+  expandHugeIDAsUniqueIdentifier: boolean);
+var Values: TVariantDynArray;
+    f: integer;
+begin
+  if (self=nil) or (Row<1) or (Row>fRowCount) then
+    exit; // out of range
+  SetLength(Values,fFieldCount);
+  for f := 0 to fFieldCount-1 do
+    GetAsVariant(Row,f,Values[f],expandTimeLogAsText,expandEnumsAsText,
+      expandHugeIDAsUniqueIdentifier,options);
+  if length(fFieldNames)<>fFieldCount then
+    InitFieldNames;
   TDocVariantData(doc).InitObjectFromVariants(fFieldNames,Values,options);
 end;
 
@@ -32983,6 +33015,28 @@ begin
   if ObjectName<>'' then
     result := _ObjFast([ObjectName,res]) else
     result := res;
+end;
+
+function TSQLRest.RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
+  const FieldName, FormatSQLWhere: RawUTF8;
+  const BoundsSQLWhere: array of const): variant;
+var T: TSQLTable;
+    row: Integer;
+    res: TDocVariantData absolute result;
+begin
+  VarClear(result);
+  if (self<>nil) and (Table<>nil) then begin
+    T := MultiFieldValues(Table,FieldName,FormatSQLWhere,BoundsSQLWhere);
+    if T<>nil then
+    try
+      res.InitFast(T.RowCount,dvArray);
+      res.SetCount(T.RowCount); 
+      for row := 1 to T.RowCount do
+        T.GetAsVariant(row,0,res.Values[row-1],false,false,false,JSON_OPTIONS_FAST);
+    finally
+      T.Free;
+    end;
+  end;
 end;
 
 function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
