@@ -194,8 +194,9 @@ const
 // delays may be specified as trios, e.g. ['IMyInterface', 'Method', 10000, ...] 
 function GenerateAsynchServices(const services: array of TGUID;
   const queries: array of TClass; const units: array of const;
-  Template, FileName, ProjectName, CallType, CallFunction, Key, KeyType,
-  ExceptionType: RawUTF8; DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
+  const additionalcontext: array of const; Template, FileName, ProjectName,
+  CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8;
+  DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
 
 
 implementation
@@ -1180,8 +1181,9 @@ begin
 end;
 
 function GenerateAsynchServices(const services: array of TGUID;
-  const queries: array of TClass; const units: array of const; Template, FileName,
-  ProjectName, CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8;
+  const queries: array of TClass; const units: array of const;
+  const additionalcontext: array of const; Template, FileName, ProjectName,
+  CallType, CallFunction, Key, KeyType, ExceptionType: RawUTF8; 
   DefaultDelay: integer; const CustomDelays: array of const): RawUTF8;
 var
   server: TSQLRestServerFullMemory;
@@ -1215,6 +1217,7 @@ begin
       _Safe(context.units)^.AddItems(units);
     if Key <> '' then
       _Safe(context)^.AddNameValuesToObject(['asynchkey', Key, 'asynchkeytype', KeyType]);
+    _Safe(context)^.AddNameValuesToObject(additionalcontext);
     for i := 0 to high(services) do
       if i < length(queries) then begin
         intf := ToUTF8(TInterfaceFactory.GUID2TypeInfo(services[i])^.Name);
@@ -1239,7 +1242,7 @@ begin
       inc(i, 3);
     end;
     pas := TSynMustache.Parse(Template).Render(context, nil, TSynMustache.HelpersGetStandardList);
-    result := StringReplaceAll(pas, '()', '');
+    result := StringReplaceAll(StringReplaceAll(pas, '();', ';'), '():', ':');
 //FileFromString(_Safe(context)^.ToJSON('','',jsonUnquotedPropName),FileName+'.json');
   finally
     server.Free;
