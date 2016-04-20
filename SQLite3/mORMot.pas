@@ -5016,9 +5016,6 @@ type
 
   TSQLPropInfoRTTIManyObjArray = array of TSQLPropInfoRTTIMany;
 
-  /// class-refrence type (metaclass) for a TSynFilter or a TSynValidate
-  TSynFilterOrValidateClass = class of TSynFilterOrValidate;
-
   /// the kind of SQlite3 (virtual) table
   // - TSQLRecordFTS3 will be associated with vFTS3, TSQLRecordFTS4 with vFTS4,
   // TSQLRecordRTree with vRTree, any native SQlite3 table as vSQLite3, and
@@ -5249,14 +5246,15 @@ type
     function SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
       var EndOfObject: AnsiChar; ExtendedJSON: boolean): RawUTF8;
 
-    /// register a custom filter or validation rule to the class for a specified
-    // field
+    /// register a custom filter (transformation) or validation rule to
+    // the TSQMRecord class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
     // - will return FALSE in case of an invalid field index
     function AddFilterOrValidate(aFieldIndex: integer;
       aFilter: TSynFilterOrValidate): boolean; overload;
-    /// register a custom filter or Validate to the class for a specified field
+    /// register a custom filter (transformation) or validatation to the
+    // TSQLRecord class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
     // - will raise an EModelException if the field name does not exist
@@ -6789,7 +6787,8 @@ type
     // - is just a wrapper around RecordProps.SQLTableName
     class function SQLTableName: RawUTF8;
       {$ifdef HASINLINE}inline;{$endif}
-    /// register a custom filter or Validate to the class for a specified field
+    /// register a custom filter (transformation) or validate to the
+    // TSQLRecord class for a specified field
     // - this will be used by TSQLRecord.Filter and TSQLRecord.Validate
     // methods (in default implementation)
     // - will raise an EModelException on failure
@@ -6867,16 +6866,16 @@ type
     class procedure InitializeTable(Server: TSQLRestServer; const FieldName: RawUTF8;
       Options: TSQLInitializeTableOptions); virtual;
 
-    /// filter the specified fields values of the current TSQLRecord instance
+    /// filter/transform the specified fields values of the TSQLRecord instance
     // - by default, this will perform all TSynFilter as registered by
     // [RecordProps.]AddFilterOrValidate()
-    // - inherited classes may add some custom filtering here, if it's not needed
-    // nor mandatory to create a new TSynFilter class type: in this case, the
-    // function has to return TRUE if the filtering took place, and FALSE if
-    // any default registered TSynFilter must be processed
+    // - inherited classes may add some custom filtering/transformation here, if
+    // it's not needed nor mandatory to create a new TSynFilter class type: in
+    // this case, the function has to return TRUE if the filtering took place,
+    // and FALSE if any default registered TSynFilter must be processed
     // - the default aFields parameter will process all fields
     function Filter(const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1]): boolean; overload; virtual;
-    ///  filter the specified fields values of the current TSQLRecord instance
+    ///  filter/transform the specified fields values of the TSQLRecord instance
     // - this version will call the overloaded Filter() method above
     // - return TRUE if all field names were correct and processed, FALSE otherwise
     function Filter(const aFields: array of RawUTF8): boolean; overload;
@@ -6902,7 +6901,7 @@ type
     // - if aInvalidFieldIndex is set, it will contain the first invalid field index
     function Validate(aRest: TSQLRest; const aFields: array of RawUTF8;
       aInvalidFieldIndex: PInteger=nil; aValidator: PSynValidate=nil): string; overload;
-    /// filter then validate the specified fields values of the current TSQLRecord
+    /// filter (transform) then validate the specified fields values of the TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
     // and display the faulty field name at the beginning of the error message
     // - returns true if all field names were correct and processed, or false
@@ -6910,7 +6909,7 @@ type
     function FilterAndValidate(aRest: TSQLRest; out aErrorMessage: string;
       const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       aValidator: PSynValidate=nil): boolean; overload;
-    /// filter then validate the specified fields values of the current TSQLRecord
+    /// filter (transform) then validate the specified fields values of the TSQLRecord
     // - this version will call the overloaded Filter() and Validate() methods
     // and return '' on validation success, or an error message with the faulty
     // field names at the beginning

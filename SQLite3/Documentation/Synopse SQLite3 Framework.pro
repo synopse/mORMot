@@ -3358,14 +3358,14 @@ So you may use code like this:
 :56  Filtering and Validating
 According to the n-Tier architecture - see @7@ - data @**filtering@ and @**validation@ should be implemented in the business logic, not in the User Interface.
 If you were used to develop RAD database application using {\i Delphi}, you may have to change a bit your habits here. Data filtering and validation should be implemented not in the User Interface, but in pure {\i Delphi} code.
-In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering and validation. They all will be children of any of those both classes:
+In order to make this easy, a dedicated set of classes are available in the {\f1\fs20 SynCommons.pas} unit, and allow to define both filtering (transformation) and validation. They all will be children of any of those both classes:
 \graph HierTSynFilter Filtering and Validation classes hierarchy
 \TSynValidate\TSynFilterOrValidate
 \TSynFilter\TSynFilterOrValidate
 \
-{\f1\fs20 @*TSQLRecord@} field content validation is handled in the new {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes.
-{\f1\fs20 TSQLRecord} field content filtering is handled in the new {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes.
-Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, to be used for most common usage:
+{\f1\fs20 @*TSQLRecord@} field content {\i filtering} is handled in the {\f1\fs20 TSQLRecord. Filter} virtual method, or via some {\f1\fs20 TSQLFilter} classes. They would {\i transform} the object fields following some rules, e.g. forcing uppercase/lowercase, or triming text spaces.
+{\f1\fs20 TSQLRecord} field content {\i validation} is handled in the {\f1\fs20 TSQLRecord. Validate} virtual method, or via some {\f1\fs20 TSQLValidate} classes. Here the object fields would be checked against a set of rules, and report any invalid content.
+Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and {\f1\fs20 mORMot.pas} units, covering most common usage:
 \graph HierTSynFilters Default filters and Validation classes hierarchy
 \TSynValidatePassWord\TSynValidateText
 \TSynValidateNonVoidText\TSynValidate
@@ -3389,7 +3389,7 @@ Some "standard" classes are already defined in the {\f1\fs20 SynCommons.pas} and
 rankdir=LR;
 \
 You have powerful validation classes for IP Address, Email (with TLD+domain name), simple {\i regex} pattern, textual validation, strong password validation...
-Note that some database-related filtering are existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
+Note that some database-related validation is existing, like {\f1\fs20 TSynValidateUniqueField} which inherits from {\f1\fs20 TSynValidateRest}.
 Of course, the {\f1\fs20 mORMotUIEdit} unit handles {\f1\fs20 @*TSQLRecord@} automated filtering (using {\f1\fs20 TSQLFilter} classes) and validation (via the {\f1\fs20 TSQLValidate} classes).
 The field validation process is run in {\f1\fs20 TSQLRecord. Validate} and not in {\f1\fs20 mORMotUIEdit} itself (to have a better multi-tier architecture).
 To initialize it, you can add some filters/validators to your {\f1\fs20 @*TSQLModel@} creation function:
@@ -3419,7 +3419,7 @@ If you want to perform some text field length validation or filter at ORM level,
 !  result := TSQLModel.Create([TSQLMyRecord1,TSQLMyRecord2]);
 !  result.SetMaxLengthValidatorForAllTextFields(true); // "index n" is in UTF-8 bytes
 !end;
-In order to perform the filtering of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
+In order to perform the filtering (transformation) of some content, you'll have to call the {\f1\fs20 aRecord.Filter()} method, and {\f1\fs20 aRecord.Validate()} to test for valid content.
 For instance, this is how {\f1\fs20 mORMotUIEdit.pas} unit filters and validates the user interface input:
 !procedure TRecordEditForm.BtnSaveClick(Sender: TObject);
 ! (...)

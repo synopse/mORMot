@@ -9164,8 +9164,8 @@ type
   TSynFilterOrValidateObjArray = array of TSynFilterOrValidate;
   TSynFilterOrValidateObjArrayArray = array of TSynFilterOrValidateObjArray;
 
-  /// will define a filter or a validation process to be applied to
-  // a database Record content (typicaly a TSQLRecord)
+  /// will define a filter (transformation) or a validation process to be
+  // applied to a database Record content (typicaly a TSQLRecord)
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynFilterOrValidate = class
   protected
@@ -9181,7 +9181,7 @@ type
     function AddOnce(var aObjArray: TSynFilterOrValidateObjArray;
       aFreeIfAlreadyThere: boolean=true): TSynFilterOrValidate;
   public
-    /// initialize the filter or validation instance
+    /// initialize the filter (transformation) or validation instance
     // - most of the time, optional parameters may be specified as JSON,
     // possibly with the extended MongoDB syntax
     constructor Create(const aParameters: RawUTF8=''); overload; virtual;
@@ -9421,24 +9421,29 @@ type
   {$NODEFINE TSynValidateText }
   {$NODEFINE TSynValidatePassWord }
 
-  /// will define a filter to be applied to a Record field content (typicaly
-  // a TSQLRecord)
+  /// will define a transformation to be applied to a Record field content
+  // (typicaly a TSQLRecord)
+  // - here "filter" means that content would be transformed according to a
+  // set of defined rules
   // - a typical usage is to convert to lower or upper case, or
   // trim any time or date value in a TDateTime field
   // - the optional associated parameters are to be supplied JSON-encoded
   TSynFilter = class(TSynFilterOrValidate)
   protected
   public
-    /// perform the filtering action to the specified value
+    /// perform the transformation to the specified value
     // - the value is converted into UTF-8 text, as expected by
     // TPropInfo.GetValue / TPropInfo.SetValue e.g.
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); virtual; abstract;
   end;
 
-  /// class-reference type (metaclass) of a record filter
+  /// class-refrence type (metaclass) for a TSynFilter or a TSynValidate
+  TSynFilterOrValidateClass = class of TSynFilterOrValidate;
+
+  /// class-reference type (metaclass) of a record filter (transformation)
   TSynFilterClass = class of TSynFilter;
 
-  /// a custom filter which will convert the value into Upper Case characters
+  /// convert the value into ASCII Upper Case characters
   // - UpperCase conversion is made for ASCII-7 only, i.e. 'a'..'z' characters
   // - this version expects no parameter
   TSynFilterUpperCase = class(TSynFilter)
@@ -9447,7 +9452,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
   end;
 
-  /// a custom filter which will convert the value into Upper Case characters
+  /// convert the value into WinAnsi Upper Case characters
   // - UpperCase conversion is made for all latin characters in the WinAnsi
   // code page only, e.g. 'e' acute will be converted to 'E'
   // - this version expects no parameter
@@ -9457,7 +9462,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
   end;
 
-  /// a custom filter which will convert the value into Lower Case characters
+  /// convert the value into ASCII Lower Case characters
   // - LowerCase conversion is made for ASCII-7 only, i.e. 'A'..'Z' characters
   // - this version expects no parameter
   TSynFilterLowerCase = class(TSynFilter)
@@ -9466,7 +9471,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
   end;
 
-  /// a custom filter which will convert the value into Lower Case characters
+  /// convert the value into WinAnsi Lower Case characters
   // - LowerCase conversion is made for all latin characters in the WinAnsi
   // code page only, e.g. 'E' acute will be converted to 'e'
   // - this version expects no parameter
@@ -9476,8 +9481,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
   end;
 
-  /// a custom filter which will trim any space character left or right to
-  // the value
+  /// trim any space character left or right to the value
   // - this versions expect no parameter
   TSynFilterTrim = class(TSynFilter)
   public
@@ -9485,7 +9489,7 @@ type
     procedure Process(aFieldIndex: integer; var Value: RawUTF8); override;
   end;
 
-  /// a custom filter which will truncate a text above a given maximum length
+  /// truncate a text above a given maximum length
   // - expects optional JSON parameters of the allowed text length range as
   // $ '{MaxLength":10}
   TSynFilterTruncate = class(TSynFilter)
