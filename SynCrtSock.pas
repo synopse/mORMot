@@ -390,10 +390,13 @@ type
     fTimeOut: cardinal;
     fBytesIn: Int64;
     fBytesOut: Int64;
+    fSocketLayer: TCrtSocketLayer;
     fSockInEof: boolean;
-    /// updated by every SockSend() call
+    // updated by every SockSend() call
     fSndBuf: SockString;
     fSndBufLen: integer;
+    // updated during UDP connection, accessed via PeerAddress/PeerPort
+    fPeerAddr: TSockAddr;
     /// close and shutdown the connection (called from Destroy)
     procedure Close;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer);
@@ -502,6 +505,10 @@ type
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: SockString);
+    /// remote IP address of the last packet received, set only for SocketLayer=slUDP
+    function PeerAddress: SockString;
+    /// remote IP port of the last packet received, set only for SocketLayer=slUDP
+    function PeerPort: integer;
     /// set the TCP_NODELAY option for the connection
     // - default 1 (true) will disable the Nagle buffering algorithm; it should
     // only be set for applications that send frequent small bursts of information
@@ -527,11 +534,13 @@ type
     /// after CreateSockOut, use Writeln(SockOut^S,s) to send a line to the opened socket
     property SockOut: PTextFile read fSockOut;
   published
-    /// initialized after Open() with socket
+    /// low-level socket handle, initialized after Open() with socket
     property Sock: TSocket read fSock;
-    /// initialized after Open() with Server name
+    /// low-level socket type, initialized after Open() with socket
+    property SocketLayer: TCrtSocketLayer read fSocketLayer;
+    /// IP address, initialized after Open() with Server name
     property Server: SockString read fServer;
-    /// initialized after Open() with port number
+    /// IP port, initialized after Open() with port number
     property Port: SockString read fPort;
     /// if higher than 0, read loop will wait for incoming data till
     // TimeOut milliseconds (default value is 10000) - used also in SockSend()
@@ -2819,6 +2828,11 @@ function InputSock(var F: TTextRec): Integer;
 // -> very optimized use for readln() in HTTP stream
 var Size: integer;
     Sock: TCRTSocket;
+    {$ifdef MSWINDOWS}
+    iSize: integer;
+    {$else}
+    sin: TVarSin;
+    {$endif}
 begin
   F.BufEnd := 0;
   F.BufPos := 0;
@@ -2832,8 +2846,21 @@ begin
       Size := F.BufSize;
   end else
     Size := F.BufSize;
-  Size := Recv(Sock.Sock, F.BufPtr, Size, 0
-    {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif}{$endif});
+  case Sock.SocketLayer of
+  cslTCP:
+    Size := Recv(Sock.Sock, F.BufPtr, Size, 0
+      {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},Sock.TimeOut{$endif}{$endif});
+  else begin
+    {$ifdef MSWINDOWS}
+    iSize := SizeOf(TSockAddr);
+    Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, @Sock.fPeerAddr, @iSize);
+    {$else}
+    Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, sin);
+    Sock.fPeerAddr.sin_port := Sin.sin_port;
+    Sock.fPeerAddr.sin_addr := Sin.sin_addr;
+    {$endif}
+  end;
+  end;
   // Recv() may return Size=0 if no data is pending, but no TCP/IP error
   if Size>=0 then begin
     F.BufEnd := Size;
@@ -2935,6 +2962,7 @@ procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
 const BINDTXT: array[boolean] of string = ('open','bind');
 begin
+  fSocketLayer := aLayer;
   if aSock<0 then begin
     if aPort='' then
       fPort := '80' else // default port is 80 (HTTP)
@@ -2950,8 +2978,10 @@ begin
     ReceiveTimeout := TimeOut;           
     SendTimeout := TimeOut;
   end;
-  TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
-  KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
+  if aLayer = cslTCP then begin
+    TCPNoDelay := 1; // disable Nagle algorithm since we use our own buffers
+    KeepAlive := 1; // enable TCP keepalive (even if we rely on transport layer)
+  end;
 end;
 
 procedure TCrtSocket.SockSend(const Values: array of const);
@@ -3311,6 +3341,24 @@ function TCrtSocket.SockConnected: boolean;
 var Sin: TVarSin;
 begin
   result := GetPeerName(Sock,Sin)=0;
+end;
+
+procedure IP4Text(addr: TInAddr; var result: SockString);
+var b: array[0..3] of byte absolute addr;
+begin
+  if cardinal(addr)=0 then
+    result := '' else
+    result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
+end;
+
+function TCrtSocket.PeerAddress: SockString;
+begin
+  IP4Text(fPeerAddr.sin_addr,result);
+end;
+
+function TCrtSocket.PeerPort: integer;
+begin
+  result := fPeerAddr.sin_port;
 end;
 
 {$ifdef MSWINDOWS}
@@ -4406,22 +4454,10 @@ begin
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
-{$ifdef DELPHI5OROLDER} // missing Bytes[] member
-type
-  LongRec = packed record
-    case Integer of
-      0: (Lo, Hi: Word);
-      1: (Words: array [0..1] of Word);
-      2: (Bytes: array [0..3] of Byte);
-  end;
-{$endif}
-
 procedure GetSinIPFromCache(const Sin: TVarSin; var result: SockString);
 begin
   if Sin.sin_family=AF_INET then
-    with LongRec(Sin.sin_addr) do
-      result := SockString(Format(
-        '%d.%d.%d.%d',[Bytes[0],Bytes[1],Bytes[2],Bytes[3]])) else begin
+    IP4Text(Sin.sin_addr,result) else begin
     result := GetSinIP(Sin); // AF_INET6 may be optimized in a future revision
     if result='::1' then
       result := '127.0.0.1'; // IP6 localhost benefits of matching IP4
