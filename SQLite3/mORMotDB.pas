@@ -899,8 +899,8 @@ begin
   try
     if (Stmt.SQLStatement='') or // parsing failed
       not IdemPropNameU(Stmt.TableName,fStoredClassRecordProps.SQLTableName) then begin
-      InternalLog('%.AdaptSQLForEngineList: statement too complex [%]',
-        [ClassType,SQL],sllWarning);
+      InternalLog('%.AdaptSQLForEngineList: statement too complex -> '+
+        'would use SQLite3 virtual engine [%]',[ClassType,SQL],sllWarning);
       exit;
     end;
     if Stmt.Offset<>0 then begin

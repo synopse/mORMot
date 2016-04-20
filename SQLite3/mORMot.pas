@@ -5119,6 +5119,12 @@ type
     /// set all bits corresponding to the supplied CSV field names
     // - returns the matching fields set
     function FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLFieldBits; overload;
+    /// set all simple bits corresponding to the simple fields, excluding some
+    // - could be a convenient alternative to FieldBitsFromCSV() if only some
+    // fields are to be excluded
+    // - returns the matching fields set
+    function FieldBitsFromExcludingCSV(const aFieldsCSV: RawUTF8;
+      aOccasion: TSQLOccasion=soSelect): TSQLFieldBits;
     /// set all bits corresponding to the supplied BLOB field type information
     // - returns TRUE on success, FALSE if blob field is not recognized
     function FieldBitsFromBlobField(aBlobField: PPropInfo;
@@ -47548,6 +47554,15 @@ function TSQLRecordProperties.FieldBitsFromCSV(const aFieldsCSV: RawUTF8): TSQLF
 begin
   if not FieldBitsFromCSV(aFieldsCSV,Result) then
     FillZero(result);
+end;
+
+function TSQLRecordProperties.FieldBitsFromExcludingCSV(
+  const aFieldsCSV: RawUTF8; aOccasion: TSQLOccasion): TSQLFieldBits;
+var excluded: TSQLFieldBits;
+begin
+  result := SimpleFieldsBits[aOccasion];
+  if FieldBitsFromCSV(aFieldsCSV,excluded) then
+    result := result-excluded;
 end;
 
 function TSQLRecordProperties.FieldBitsFromRawUTF8(const aFields: array of RawUTF8;

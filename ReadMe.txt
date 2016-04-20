@@ -57,6 +57,7 @@ Contributors
   Uian2000
   Vaclav
   Vadim Orel
+  Willo vd Merwe
   Win2014
   Wloochacz
   Wolfgang Ehrhardt
