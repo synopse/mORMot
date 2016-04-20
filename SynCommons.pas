@@ -3075,6 +3075,11 @@ procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUp
 // - if ToUpperCase is TRUE, then LeftStr and result will be made uppercase
 function Split(const Str, SepStr: RawUTF8; var LeftStr: RawUTF8; ToUpperCase: boolean=false): RawUTF8; overload;
 
+/// returns the left part of a RawUTF8 string, according to SepStr separator
+// - if SepStr is found, returns Str first chars until (and exluding) SepStr
+// - if SepStr is not found, returns Str
+function Split(const Str, SepStr: RawUTF8; StartPos: integer=1): RawUTF8; overload;
+
 /// split a RawUTF8 string into several strings, according to SepStr separator
 // - this overloaded function will fill a DestPtr[] array of PRawUTF8
 // - if any DestPtr[]=nil, the item will be skipped
@@ -20200,6 +20205,17 @@ asm  // eax=SubStr, edx=S, ecx=Offset
   lea     eax,[edx+ecx+1]
 end;
 {$endif PUREPASCAL}
+
+function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
+var i: integer;
+begin
+  i := PosEx(SepStr,Str,StartPos);
+  if i>0 then
+    result := Copy(Str,StartPos,i-StartPos) else
+    if StartPos=1 then
+      result := Str else
+      result := Copy(Str,StartPos,maxInt);
+end;
 
 procedure Split(const Str, SepStr: RawUTF8; var LeftStr, RightStr: RawUTF8; ToUpperCase: boolean);
 var i: integer;

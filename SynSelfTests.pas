@@ -3083,6 +3083,10 @@ var i, CP, L: integer;
     WA: Boolean;
 begin
   res := 'one,two,three';
+  Check(split(res,',')='one');
+  Check(split(res,'*')=res);
+  Check(split(res,',',5)='two');
+  Check(split(res,'*',6)='wo,three');
   Check(SynCommons.StrLen(nil)=0);
   for i := length(res)+1 downto 1 do
     Check(SynCommons.StrLen(Pointer(@res[i]))=length(res)-i+1);
