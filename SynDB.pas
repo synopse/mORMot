@@ -29,6 +29,7 @@ unit SynDB;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Adam Siwon (asiwon)
   - Alexander (volax)
   - Alfred Glaenzer (alf)
   - delphinium
@@ -1532,7 +1533,7 @@ type
     // statement to a syntax matching the underlying DBMS
     // - e.g. TSQLRestStorageExternal.AdaptSQLForEngineList() calls this
     // to let TSQLRestServer.URI by-pass virtual table mechanism
-    function SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; virtual;
+    function SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; virtual;
     /// determine if the SQL statement can be cached
     // - used by TSQLDBConnection.NewStatementPrepared() for handling cache
     function IsCachable(P: PUTF8Char): boolean; virtual;
@@ -6260,7 +6261,7 @@ begin
   result := StringReplaceAll(fDatabaseName,PassWord,'***');
 end;
 
-function TSQLDBConnectionProperties.SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause;
+function TSQLDBConnectionProperties.SQLLimitClause(AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause;
 begin
   result := DB_SQLLIMITCLAUSE[DBMS];
 end;

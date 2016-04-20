@@ -917,9 +917,8 @@ begin
         exit;
       end;
       if  limit.Position = posOuter then
-        limitSQL := FormatUTF8(limit.InsertFmt,['%', Stmt.Limit])
-      else
-        limitSQL := FormatUTF8(limit.InsertFmt,[Stmt.Limit]);
+        FormatUTF8(limit.InsertFmt,['%', Stmt.Limit],limitSQL) else
+        FormatUTF8(limit.InsertFmt,[Stmt.Limit],limitSQL);
     end;
     extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
     W := TTextWriter.CreateOwnedStream(1024);
@@ -1023,8 +1022,8 @@ begin
       if limit.Position=posAfter then
         W.AddString(limitSQL);
       W.SetText(SQL);
-      if limit.Position = posOuter then
-        SQL := FormatUTF8(limitSQL, [SQL]);
+      if limit.Position=posOuter then
+        SQL := FormatUTF8(limitSQL,[SQL]);
       result := true;
     finally
       W.Free;
