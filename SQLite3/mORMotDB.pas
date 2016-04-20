@@ -910,13 +910,16 @@ begin
     end;
     if Stmt.Limit=0 then
       limit.Position := posNone else begin
-      limit := fProperties.SQLLimitClause;
+      limit := fProperties.SQLLimitClause(Stmt);
       if limit.Position=posNone then begin
         InternalLog('%.AdaptSQLForEngineList: unknown "%" LIMIT syntax for [%]',
           [ClassType,ToText(fProperties.DBMS)^,SQL],sllWarning);
         exit;
       end;
-      limitSQL := FormatUTF8(limit.InsertFmt,[Stmt.Limit]);
+      if  limit.Position = posOuter then
+        limitSQL := FormatUTF8(limit.InsertFmt,['%', Stmt.Limit])
+      else
+        limitSQL := FormatUTF8(limit.InsertFmt,[Stmt.Limit]);
     end;
     extFieldName := fStoredClassProps.ExternalDB.FieldNameByIndex;
     W := TTextWriter.CreateOwnedStream(1024);
@@ -1020,6 +1023,8 @@ begin
       if limit.Position=posAfter then
         W.AddString(limitSQL);
       W.SetText(SQL);
+      if limit.Position = posOuter then
+        SQL := FormatUTF8(limitSQL, [SQL]);
       result := true;
     finally
       W.Free;

@@ -237,6 +237,7 @@ type
     // - e.g. ExtractTnsName('1.2.3.4:1521/dbname') returns 'dbname'
     class function ExtractTnsName(const aServerName: RawUTF8): RawUTF8;
     procedure PasswordChanged(const ANewPassword: RawUTF8);
+    function SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause; override;
   published
     /// returns the Client version e.g. 'oci.dll rev. 11.2.0.1'
     property ClientVersion: RawUTF8 read GetClientVersion;
@@ -1865,6 +1866,17 @@ begin
   SynDBLog.Add.Log(sllDB, 'Password to database account was changed.');
   if Assigned(FOnPasswordChanged) then
     FOnPasswordChanged(Self);
+end;
+
+function TSQLDBOracleConnectionProperties.SQLLimitClause(const AStmt: TSynTableStatement): TSQLDBDefinitionLimitClause;
+begin
+  if AStmt.OrderByField <> nil then
+  begin
+    Result.Position := posOuter;
+    Result.InsertFmt := 'select * from (%) where rownum <=%';
+  end
+  else
+    Result := inherited SQLLimitClause(AStmt);
 end;
 
 { TSQLDBOracleConnection }
