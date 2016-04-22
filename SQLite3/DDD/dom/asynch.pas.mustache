@@ -58,9 +58,30 @@ uses
 { -------- asynchronous version of {{interfaceName}} }
 
 type
+{{<methoddelay}}{{#asynchdelay}}{{.}}{{/asynchdelay}}{{^asynchdelay}}{{defaultdelay}}{{/asynchdelay}}{{/methoddelay}}
+  /// settings associated to {{interfaceName}}Asynch timeouts
+  T{{uri}}Delays = class(TSynPersistent)
+  protected
+    {{#methods}}
+    {{^isInherited}}
+    f{{methodName}}: integer;
+    {{/isInherited}}
+    {{/methods}}
+  public
+    /// would set all delays to their default values
+    constructor Create; override;
+  published
+    {{#methods}}
+    {{^isInherited}}
+    /// default delay for {{interfaceName}}Asynch.{{methodName}} is {{>methoddelay}} ms
+    property {{methodName}}: integer read f{{methodName}} write f{{methodName}};
+    {{/isInherited}}
+    {{/methods}}
+  end;
+
   /// the {{interfaceName}}Asynch progress callback definition
-  // - a single callback, after subscription via Subscribe, would receive the
-  // acknowledgements of all {{interfaceName}}Asynch methods
+  // - a single callback, after subscription via Subscribe{{uri}}(),
+  // would receive the acknowledgements of all {{interfaceName}}Asynch methods
   // - some commands may take a lot of time, so this asynchronous mechanism
   // would increase the system reactivity
   // - naming is following the {{interfaceName}} method names
@@ -89,11 +110,14 @@ type
   // the {{interfaceName}}Asynch call to the corresponding {{interfaceName}}
 {{/asynchkey}}  // - call: {{calltype}} is an opaque value, which would identify the command
   // when it is acknowledged by {{interfaceName}}AsynchAck
-  {{interfaceName}}Asynch = interface(ICQRSService)
+  {{interfaceName}}Asynch = interface(IInvokable)
     ['{{newguid .}}']
     /// this method is expected to be called once at the beginning of the
     // process, to receive all asynchronous acknowledgements of the other methods
-    function Subscribe(const OnAck: {{interfaceName}}AsynchAck): TCQRSResult;
+    // - it would return the default delays for the associated timeouts, as
+    // defined on the server side
+    function Subscribe{{uri}}(const OnAck: {{interfaceName}}AsynchAck;
+      out Delays: T{{uri}}Delays): TCQRSResult;
     // all methods below map {{interfaceName}} methods, and their input parameters
     {{#methods}}
     {{^isInherited}}
@@ -101,27 +125,6 @@ type
     {{/isInherited}}
     {{/methods}}
   end;
-{{<methoddelay}}{{#asynchdelay}}{{.}}{{/asynchdelay}}{{^asynchdelay}}{{defaultdelay}}{{/asynchdelay}}{{/methoddelay}}
-  /// settings associated to {{interfaceName}}Asynch timeouts
-  T{{uri}}Delays = class(TSynPersistent)
-  protected
-    {{#methods}}
-    {{^isInherited}}
-    f{{methodName}}: integer;
-    {{/isInherited}}
-    {{/methods}}
-  public
-    /// would set all delays to their default values
-    constructor Create; override;
-  published
-    {{#methods}}
-    {{^isInherited}}
-    /// default delay for {{interfaceName}}Asynch.{{methodName}} is {{>methoddelay}} ms
-    property {{methodName}}: integer read f{{methodName}} write f{{methodName}};
-    {{/isInherited}}
-    {{/methods}}
-  end;
-
   /// waiting semaphore associated to {{interfaceName}}Asynch
   // - used internally by T{{uri}}AsynchAck
   T{{uri}}AsynchCall = class(TBlockingProcessPoolItem)
@@ -196,6 +199,7 @@ type
   protected
     fLog: TSynLogClass;
     fDelays: T{{uri}}Delays;
+    fDelaysOwned: boolean;
     fAsynch: {{interfaceName}}Asynch;
     fSharedCallback: T{{uri}}AsynchAck;
     procedure WaitFor(call: T{{uri}}AsynchCall;{{#asynchkey}} const {{.}}: {{asynchkeytype}};{{/asynchkey}}
@@ -203,9 +207,13 @@ type
   public
     /// initialize the blocking instance
     // - would allocate an internal T{{uri}}AsynchAck callback, and
-    // execute {{interfaceName}}Asynch.Subscribe()
-    constructor Create(aDelays: T{{uri}}Delays;
-      const aAsynch: {{interfaceName}}Asynch; aLog: TSynLogClass = nil); reintroduce;
+    // execute {{interfaceName}}Asynch.Subscribe{{uri}}()
+    // - you may specify custom delays, to overload values supplied by the server
+    // during Subscribe{{uri}}()
+    constructor Create(const aAsynch: {{interfaceName}}Asynch;
+      aDelays: T{{uri}}Delays = nil; aLog: TSynLogClass = nil); reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
     /// access to the asynchronous methods
     property Asynch: {{interfaceName}}Asynch read fAsynch;
     /// associated time out values, in ms
@@ -359,7 +367,7 @@ var
   process: T{{uri}}AsynchCall;
 begin
   if Notify(call, ack, res, process) then
-    process.NotifyFinished(true);
+    process.NotifyFinished(true); // notify caller to unlock "WaitFor" method
 end;
 
 function T{{uri}}AsynchAck.NewAsynchCall: T{{uri}}AsynchCall;
@@ -394,24 +402,41 @@ end;
 
 { T{{uri}}Synch }
 
-constructor T{{uri}}Synch.Create(aDelays: T{{uri}}Delays;
-  const aAsynch: {{interfaceName}}Asynch; aLog: TSynLogClass);
+constructor T{{uri}}Synch.Create(const aAsynch: {{interfaceName}}Asynch;
+  aDelays: T{{uri}}Delays; aLog: TSynLogClass);
 var
   res: TCQRSResult;
+  outdelays: T{{uri}}Delays;
 begin
-  if aDelays = nil then
-    raise {{exception}}.CreateUTF8('%.Create(aDelays=nil)', [self]);
   if aAsynch = nil then
     raise {{exception}}.CreateUTF8('%.Create(aAsynch=nil)', [self]);
-  fDelays := aDelays;
   fAsynch := aAsynch;
   fLog := aLog;
   fSharedCallback := T{{uri}}AsynchAck.Create(fLog);
   inherited Create(fSharedCallback);
-  res := fAsynch.Subscribe(fSharedCallback);
-  if res <> cqrsSuccess then
-    raise EDomPanel.CreateUTF8('%.Create: {{interfaceName}}Asynch.Subscribe=%',
-      [self, ToText(res)^]);
+  outdelays := T{{uri}}Delays.Create;
+  try
+    res := fAsynch.Subscribe{{uri}}(fSharedCallback, outdelays);
+    if res <> cqrsSuccess then
+      raise EDomPanel.CreateUTF8('%.Create: {{interfaceName}}Asynch.Subscribe=%',
+        [self, ToText(res)^]);
+    if aDelays <> nil then
+      fDelays := aDelays // force custom delays
+    else begin
+      fDelays := outdelays;
+      fDelaysOwned := true;
+      outdelays := nil; 
+    end;
+  finally
+    outdelays.Free;
+  end;
+end;
+
+destructor T{{uri}}Synch.Destroy;
+begin
+  if fDelaysOwned then
+    fDelays.Free;
+  inherited Destroy;
 end;
 
 procedure T{{uri}}Synch.WaitFor(call: T{{uri}}AsynchCall;
@@ -436,12 +461,8 @@ begin
     fLog.Add.Log(sllTrace, msg, self);
   if asynch <> cqrsSuccess then
     CqrsSetResultMsg(asynch, '%: input parameters?', [msg])
-  else if call.WaitFor(delay) = evTimeOut then begin
-    msg := FormatUTF8('% timeout after %ms', [msg, delay]);
-    if fLog <> nil then
-      fLog.Add.Log(sllWarning, msg, self);
-    CqrsSetResultMsg(cqrsTimeout, msg);
-  end
+  else if call.WaitFor(delay) = evTimeOut then
+    CqrsSetResultMsg(cqrsTimeout, '% timeout after %ms', [msg, delay])
   else
     CqrsSetResult(call.Params.res);
 end;
