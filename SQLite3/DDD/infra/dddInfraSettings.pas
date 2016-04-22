@@ -432,7 +432,7 @@ type
     /// compute a stand-alone REST instance for interface-based services logging
     // - by default, will create a local SQLite3 file for storage
     // - all services of aMainRestWithServices would log their calling information
-    // into a dedicated table
+    // into a dedicated table, but the methods defined in aExcludedMethodNamesCSV
     // - the first supplied item of aLogClass array would be used for the
     // service logging; any additional item would be part of the model of the
     // returned REST instance, but may be used later on (e.g. to handle
@@ -441,7 +441,8 @@ type
     // - if aLogClass=[], TSQLRecordServiceLog would be used as a class
     function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
       aMainRestWithServices: TSQLRestServer;
-      const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest; reintroduce;
+      const aLogClass: array of TSQLRecordServiceLogClass;
+      const aExcludedMethodNamesCSV: RawUTF8=''): TSQLRest; reintroduce;
   end;
 
   /// parent class for storing a HTTP published service/daemon settings
@@ -702,7 +703,8 @@ end;
 
 function TDDDServicesLogRestSettings.NewRestInstance(
   aRootSettings: TDDDAppSettingsAbstract; aMainRestWithServices: TSQLRestServer;
-  const aLogClass: array of TSQLRecordServiceLogClass): TSQLRest;
+  const aLogClass: array of TSQLRecordServiceLogClass;
+  const aExcludedMethodNamesCSV: RawUTF8): TSQLRest;
 var classes: TSQLRecordClassDynArray;
     i: integer;
 begin
@@ -722,7 +724,7 @@ begin
     TSQLRestServerDB(result).DB.UseCache := false;
   // set the first supplied class type to log services
   (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
-    SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]));
+    SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]),aExcludedMethodNamesCSV);
 end;
 
 

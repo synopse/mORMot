@@ -10776,6 +10776,10 @@ type
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will raise an EInterfaceFactoryException if the method is not known
     function CheckMethodIndex(aMethodName: PUTF8Char): integer; overload;
+    /// returns the method name from its method index
+    // - the method index should start at 0 for _free_/_contract_/_signature_
+    // pseudo-methods, and start at index 3 for real Methods[]
+    function GetMethodName(MethodIndex: integer): RawUTF8;
     /// returns the full 'Interface.MethodName' text, from a method index
     // - the method index should start at 0 for _free_/_contract_/_signature_
     // pseudo-methods, and start at index 3 for real Methods[]
@@ -12192,6 +12196,8 @@ type
   /// used to store all methods in a global list of interface-based services
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
+  TServiceContainerInterfaceMethodBits = set of 0..255;
+
   /// a global services provider class
   // - used to maintain a list of interfaces implementation
   // - inherits from TInterfaceResolverInjected and its Resolve() methods,
@@ -12207,6 +12213,9 @@ type
     fListInterfaceMethods: TDynArrayHashed;
     fExpectMangledURI: boolean;
     procedure SetExpectMangledURI(aValue: Boolean);
+    procedure SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
+      IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
+    function GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
     procedure CheckInterface(const aInterfaces: array of PTypeInfo);
     function AddServiceInternal(aService: TServiceFactory): integer;
     function TryResolve(aInterface: PTypeInfo; out Obj): boolean; override;
@@ -12439,7 +12448,10 @@ type
     // writing if aLogRest is nil
     // - will write to a (inherited) TSQLRecordServiceLog table, as available in
     // TSQLRest's model, unless a dedicated table is specified as aLogClass
-    procedure SetServiceLog(aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil);
+    // - you could specify a CSV list of method names to be excluded from logging
+    // (containing e.g. a password or a credit card number)  
+    procedure SetServiceLog(aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil;
+      const aExcludedMethodNamesCSV: RawUTF8='');
     /// defines if the "method":"_signature_" or /root/Interface._signature
     // pseudo method is available to retrieve the whole interface signature,
     // encoded as a JSON object
@@ -27293,7 +27305,7 @@ begin
     tkEnumeration, tkInteger, tkSet, tkChar, tkWChar:
 int:  if DestInfo=@Self then
         SetOrdProp(Dest,GetOrdProp(Source)) else
-dst:  if kD in tkOrdinalTypes then
+dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
         DestInfo^.SetInt64Value(Dest,GetInt64Value(Source));
     tkClass: begin
       ft := PropType^.ClassSQLFieldType;
@@ -34730,6 +34742,14 @@ begin
 end;
 {$endif MSWINDOWS}
 
+type
+  TServiceInternalMethod = (imFree, imContract, imSignature);
+
+const
+  SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
+    '_free_','_contract_','_signature_');
+  SERVICE_PSEUDO_METHOD_COUNT = 3;
+
 procedure TSQLRestClientURI.InternalNotificationMethodExecute(
   var Ctxt: TSQLRestURIParams);
 var url,root,interfmethod,interf,id,method,frames: RawUTF8;
@@ -34779,7 +34799,7 @@ begin
   callback.ID := GetInteger(pointer(id));
   if callback.ID<=0 then
     exit;
-  if interfmethod='_free_' then begin
+  if interfmethod=SERVICE_PSEUDO_METHOD[imFree] then begin
     if fFakeCallbacks.FindAndRelease(callback.ID) then
       Ctxt.OutStatus := HTML_SUCCESS;
     exit;
@@ -37587,12 +37607,7 @@ begin
   end;
 end;
 
-type
-  TServiceInternalMethod = (imFree, imContract, imSignature);
-
 const
-  SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
-    '_free_','_contract_','_signature_');
   SERVICE_METHODINDEX_FREEINSTANCE = -1;
 
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
@@ -37678,7 +37693,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       exit;
     end;
     else begin // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
-      dec(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
+      dec(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
       if cardinal(ServiceMethodIndex)>=Service.fInterface.fMethodsCount then begin
         Error('Invalid ServiceMethodIndex');
         exit;
@@ -37697,7 +37712,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
 var xml: RawUTF8;
     m: integer;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
-  m := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
+  m := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
   {$ifdef WITHLOG}
   if sllServiceCall in Log.GenericFamily.Level then
     if (m>=0) and (optNoLogInput in Service.fExecution[m].Options) then
@@ -38767,7 +38782,7 @@ begin
           ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
           if ServiceMethodIndex<0 then
             Service := nil else begin
-            inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD));
+            inc(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
             fServiceListInterfaceMethodIndex := -1;
             ServiceInstanceID := GetInteger(pointer(clientdrivenid));
           end;
@@ -38799,7 +38814,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
         FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
         if fInput<>nil then begin
-          meth := ServiceMethodIndex-length(SERVICE_PSEUDO_METHOD);
+          meth := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
           if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
             WR := TJSONSerializer.CreateOwnedStream;
             try // convert URI parameters into the expected ordered JSON array
@@ -38879,7 +38894,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
     ServiceInstanceID := GetCardinal(Values[2]); // retrieve "id":ClientDrivenID
     ServiceMethodIndex := Service.fInterface.FindMethodIndex(method);
     if ServiceMethodIndex>=0 then
-      inc(ServiceMethodIndex,length(SERVICE_PSEUDO_METHOD)) else begin
+      inc(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT) else begin
       for internal := low(TServiceInternalMethod) to high(TServiceInternalMethod) do
         if IdemPropNameU(method,SERVICE_PSEUDO_METHOD[internal]) then begin
           ServiceMethodIndex := ord(internal);
@@ -49831,6 +49846,40 @@ begin
     AddServiceInternal(Fac[f]);
 end;
 
+procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
+  IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
+var i: integer;
+    method: RawUTF8;
+    methodonly: boolean;
+begin
+  FillcharFast(bits,sizeof(bits),0);
+  while MethodNamesCSV<>nil do begin
+    method := GetNextItem(MethodNamesCSV);
+    methodonly := PosEx('.',method)=0;
+    for i := 0 to high(fListInterfaceMethod) do
+    with fListInterfaceMethod[i] do
+      if InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then begin
+        if IncludePseudoMethods then
+          include(bits,i);
+      end else
+      if methodonly then begin
+        if IdemPropNameU(method,InterfaceService.fInterface.
+           fMethods[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT].URI) then
+          include(bits,i);
+      end else
+      if IdemPropNameU(method,fListInterfaceMethod[i].InterfaceDotMethodName) then
+        include(bits,i);
+  end;
+end;
+
+function TServiceContainer.GetMethodName(ListInterfaceMethodIndex: integer): RawUTF8;
+begin
+  if cardinal(ListInterfaceMethodIndex)>=cardinal(length(fListInterfaceMethod)) then
+    result := '' else
+    with fListInterfaceMethod[ListInterfaceMethodIndex] do
+      result := InterfaceService.fInterface.GetMethodName(InterfaceMethodIndex);
+end;
+
 function TServiceContainer.GetService(const aURI: RawUTF8): TServiceFactory;
 var i: Integer;
 begin
@@ -51080,20 +51129,28 @@ begin
   result := CheckMethodIndex(RawUTF8(aMethodName));
 end;
 
+function TInterfaceFactory.GetMethodName(MethodIndex: integer): RawUTF8;
+begin
+  if (MethodIndex<0) or (self=nil) then
+    result := '' else
+  if MethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
+    result := SERVICE_PSEUDO_METHOD[TServiceInternalMethod(MethodIndex)] else begin
+    dec(MethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
+    if cardinal(MethodIndex)<fMethodsCount then
+      result := fMethods[MethodIndex].URI else
+      result := '';
+  end;
+end;
+
 function TInterfaceFactory.GetFullMethodName(aMethodIndex: integer): RawUTF8;
 begin
   if self=nil then
-    result := '' else
-    if aMethodIndex<0 then
+    result := '' else begin
+    result := GetMethodName(aMethodIndex);
+    if result = '' then
       result := fInterfaceName else
-      if aMethodIndex<length(SERVICE_PSEUDO_METHOD) then
-        result := fInterfaceName+'.'+
-          SERVICE_PSEUDO_METHOD[TServiceInternalMethod(aMethodIndex)] else begin
-        dec(aMethodIndex,length(SERVICE_PSEUDO_METHOD));
-        if aMethodIndex<integer(fMethodsCount) then
-          result := fMethods[aMethodIndex].InterfaceDotMethodName else
-          result := fInterfaceName;
-      end;
+      result := fInterfaceName+'.'+result;
+  end;
 end;
 
 { low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
@@ -53063,7 +53120,8 @@ begin
   if connectionID<>0 then begin
     server := fRest as TSQLRestServer;
     if Assigned(server.OnNotifyCallback) then
-      server.OnNotifyCallback(server,'_free_','',connectionID,callbackID,nil,nil);
+      server.OnNotifyCallback(server,SERVICE_PSEUDO_METHOD[imFree],'',
+        connectionID,callbackID,nil,nil);
   end;
 end;
 
@@ -53218,12 +53276,26 @@ begin
 end;
 
 procedure TServiceContainerServer.SetServiceLog(aLogRest: TSQLRest;
-  aLogClass: TSQLRecordServiceLogClass);
-var i: integer;
+  aLogClass: TSQLRecordServiceLogClass; const aExcludedMethodNamesCSV: RawUTF8);
+var i,n: integer;
+    fact: TServiceFactory;
+    excluded: TServiceContainerInterfaceMethodBits;
+    methods: TRawUTF8DynArray;
 begin
-  for i := 0 to fListInterfaceMethods.Count-1 do
-    TServiceFactoryServer(fListInterfaceMethod[i].InterfaceService).
-      SetServiceLog([],aLogRest,aLogClass);
+  SetInterfaceMethodBits(pointer(aExcludedMethodNamesCSV),true,excluded);
+  n := fListInterfaceMethods.Count;
+  i := 0;
+  while i<n do begin
+    fact := fListInterfaceMethod[i].InterfaceService;
+    methods := nil;
+    repeat
+      if (aExcludedMethodNamesCSV<>'') and not (i in excluded) then
+        AddRawUTF8(methods,GetMethodName(i));
+      inc(i);
+    until (i>=n) or (fListInterfaceMethod[i].InterfaceService<>fact);
+    if (aExcludedMethodNamesCSV='') or (methods<>nil) then
+      TServiceFactoryServer(fact).SetServiceLog(methods,aLogRest,aLogClass);
+  end;
 end;
 
 
