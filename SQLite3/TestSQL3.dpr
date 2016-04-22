@@ -64,7 +64,7 @@ program TestSQL3;
   Version 1.18
   - renamed SQLite3*.pas units to mORMot*.pas
   - included Windows 64 bit regression tests (and potential FullDebugMode)
-  - all tests passed with Delphi XE3 up to XE8 for Win32 and Win64 platforms
+  - all tests passed with Delphi XE3 up to 10.1 Berlin for Win32 and Win64 platforms
 
 
   this application has EnableMemoryLeakReporting conditional defined in its

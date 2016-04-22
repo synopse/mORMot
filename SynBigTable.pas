@@ -209,7 +209,7 @@ unit SynBigTable;
     - new sbtBeforeWrite step available (e.g. to safely update indexes)
 
   Version 1.18
-  - unit fixed and tested with Delphi XE2..XE8 64-bit compiler
+  - unit fixed and tested with Delphi XE2..10.1 Berlin 64-bit compiler
   - added TSynBigTable.FileSizeOnDisk property for [e4a1e76a32ab]
   - fixed ticket [b9320499ae] about TBigTableRecord saving updated tables with
     indexed fields
