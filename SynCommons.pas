@@ -13421,6 +13421,10 @@ type
     /// find an item in this document, and returns its value
     // - return null if aName is not found, or if the instance is not a TDocVariant
     function GetValueOrNull(const aName: RawUTF8): variant;
+    /// find an item in this document, and returns its value
+    // - return a cleared variant if aName is not found, or if the instance is
+    // not a TDocVariant
+    function GetValueOrEmpty(const aName: RawUTF8): variant;
     /// returns a TDocVariant object containing all properties matching the
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
@@ -37318,6 +37322,18 @@ begin
     if ndx>=0 then
       result := VValue[ndx] else
       SetVariantNull(result);
+  end;
+end;
+
+function TDocVariantData.GetValueOrEmpty(const aName: RawUTF8): variant;
+var ndx: integer;
+begin
+  VarClear(result);
+  if (DocVariantType<>nil) and (VType=DocVariantVType) and
+     (Kind=dvObject) then begin
+    ndx := GetValueIndex(aName);
+    if ndx>=0 then
+      result := VValue[ndx];
   end;
 end;
 
