@@ -3301,6 +3301,9 @@ function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
 // ! MyArray := TRawUTF8DynArrayFrom(['a','b','c']);
 function TRawUTF8DynArrayFrom(const Values: array of RawUTF8): TRawUTF8DynArray;
 
+/// append one or several values to a local "array of const" variable
+procedure AddArrayOfConst(var Dest: TTVarRecDynArray; const Values: array of const);
+
 /// return the index of Value in Values[], -1 if not found
 function FindRawUTF8(const Values: TRawUTF8DynArray; const Value: RawUTF8;
   CaseSensitive: boolean=true): integer; overload;
@@ -27377,6 +27380,15 @@ begin
   SetLength(result,length(Values));
   for i := 0 to high(Values) do
     result[i] := Values[i];
+end;
+
+procedure AddArrayOfConst(var Dest: TTVarRecDynArray; const Values: array of const);
+var i,n: Integer;
+begin
+  n := length(Dest);
+  SetLength(Dest,n+length(Values));
+  for i := 0 to high(Values) do
+    Dest[i+n] := Values[i];
 end;
 
 var
