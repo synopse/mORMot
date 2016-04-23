@@ -10689,6 +10689,9 @@ type
   // than the client life time just finished)
   TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
 
+  /// may be used to store the Methods[] indexes of a TInterfaceFactory
+  TInterfaceFactoryMethodBits = set of 0..255;
+
   /// a dynamic array of TInterfaceFactory instances
   TInterfaceFactoryObjArray = array of TInterfaceFactory;
 
@@ -10780,6 +10783,11 @@ type
     // - the method index should start at 0 for _free_/_contract_/_signature_
     // pseudo-methods, and start at index 3 for real Methods[]
     function GetMethodName(MethodIndex: integer): RawUTF8;
+    /// set the Methods[] indexes bit from some methods names
+    // - won't find the default AddRef/Release/QueryInterface methods
+    // - will raise an EInterfaceFactoryException if the method is not known
+    procedure CheckMethodIndexes(const aMethodName: array of RawUTF8; aSetAllIfNone: boolean;
+      out aBits: TInterfaceFactoryMethodBits);
     /// returns the full 'Interface.MethodName' text, from a method index
     // - the method index should start at 0 for _free_/_contract_/_signature_
     // pseudo-methods, and start at index 3 for real Methods[]
@@ -11795,6 +11803,8 @@ type
     fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
     /// union of all fExecution[].Options
     fAnyOptions: TServiceMethodOptions;
+    procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
+      aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
@@ -12449,7 +12459,8 @@ type
     // - will write to a (inherited) TSQLRecordServiceLog table, as available in
     // TSQLRest's model, unless a dedicated table is specified as aLogClass
     // - you could specify a CSV list of method names to be excluded from logging
-    // (containing e.g. a password or a credit card number)  
+    // (containing e.g. a password or a credit card number), containing either
+    // the interface name (as 'ICalculator.Add'), or not (as 'Add')
     procedure SetServiceLog(aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass=nil;
       const aExcludedMethodNamesCSV: RawUTF8='');
     /// defines if the "method":"_signature_" or /root/Interface._signature
@@ -34748,7 +34759,7 @@ type
 const
   SERVICE_PSEUDO_METHOD: array[TServiceInternalMethod] of RawUTF8 = (
     '_free_','_contract_','_signature_');
-  SERVICE_PSEUDO_METHOD_COUNT = 3;
+  SERVICE_PSEUDO_METHOD_COUNT = Length(SERVICE_PSEUDO_METHOD);
 
 procedure TSQLRestClientURI.InternalNotificationMethodExecute(
   var Ctxt: TSQLRestURIParams);
@@ -49850,25 +49861,26 @@ procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
   IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
 var i: integer;
     method: RawUTF8;
-    methodonly: boolean;
 begin
   FillcharFast(bits,sizeof(bits),0);
+  if IncludePseudoMethods then
+    for i := 0 to high(fListInterfaceMethod) do
+      if fListInterfaceMethod[i].InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
+        include(bits,i);
   while MethodNamesCSV<>nil do begin
     method := GetNextItem(MethodNamesCSV);
-    methodonly := PosEx('.',method)=0;
-    for i := 0 to high(fListInterfaceMethod) do
-    with fListInterfaceMethod[i] do
-      if InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then begin
-        if IncludePseudoMethods then
-          include(bits,i);
-      end else
-      if methodonly then begin
-        if IdemPropNameU(method,InterfaceService.fInterface.
+    if PosEx('.',method)=0 then begin
+      for i := 0 to high(fListInterfaceMethod) do
+      with fListInterfaceMethod[i] do
+        if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
+           IdemPropNameU(method,InterfaceService.fInterface.
            fMethods[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT].URI) then
           include(bits,i);
-      end else
-      if IdemPropNameU(method,fListInterfaceMethod[i].InterfaceDotMethodName) then
+    end else begin
+      i := fListInterfaceMethods.FindHashed(method);
+      if i>=0 then
         include(bits,i);
+    end;
   end;
 end;
 
@@ -51127,6 +51139,19 @@ end;
 function TInterfaceFactory.CheckMethodIndex(aMethodName: PUTF8Char): integer;
 begin
   result := CheckMethodIndex(RawUTF8(aMethodName));
+end;
+
+procedure TInterfaceFactory.CheckMethodIndexes(const aMethodName: array of RawUTF8;
+  aSetAllIfNone: boolean; out aBits: TInterfaceFactoryMethodBits);
+var i: integer;
+begin
+  if aSetAllIfNone and (high(aMethodName)<0) then begin
+    FillCharFast(aBits,sizeof(aBits),255);
+    exit;
+  end;
+  FillCharFast(aBits,sizeof(aBits),0);
+  for i := 0 to high(aMethodName) do
+    include(aBits,CheckMethodIndex(aMethodName[i]));
 end;
 
 function TInterfaceFactory.GetMethodName(MethodIndex: integer): RawUTF8;
@@ -53280,21 +53305,31 @@ procedure TServiceContainerServer.SetServiceLog(aLogRest: TSQLRest;
 var i,n: integer;
     fact: TServiceFactory;
     excluded: TServiceContainerInterfaceMethodBits;
-    methods: TRawUTF8DynArray;
+    methods: TInterfaceFactoryMethodBits;
+    somemethods: boolean;
 begin
   SetInterfaceMethodBits(pointer(aExcludedMethodNamesCSV),true,excluded);
+  somemethods := aExcludedMethodNamesCSV<>'';
+  if not somemethods then
+    FillcharFast(methods,sizeof(methods),255);
   n := fListInterfaceMethods.Count;
   i := 0;
   while i<n do begin
     fact := fListInterfaceMethod[i].InterfaceService;
-    methods := nil;
+    if somemethods then begin
+      FillcharFast(methods,sizeof(methods),0);
+      somemethods := false;
+    end;
     repeat
-      if (aExcludedMethodNamesCSV<>'') and not (i in excluded) then
-        AddRawUTF8(methods,GetMethodName(i));
+      if (aExcludedMethodNamesCSV<>'') and not (i in excluded) then begin
+        include(methods,fListInterfaceMethod[i].
+          InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT);
+        somemethods := true;
+      end;
       inc(i);
     until (i>=n) or (fListInterfaceMethod[i].InterfaceService<>fact);
-    if (aExcludedMethodNamesCSV='') or (methods<>nil) then
-      TServiceFactoryServer(fact).SetServiceLog(methods,aLogRest,aLogClass);
+    if (aExcludedMethodNamesCSV='') or somemethods then
+      TServiceFactoryServer(fact).SetServiceLogByIndex(methods,aLogRest,aLogClass);
   end;
 end;
 
@@ -54188,6 +54223,18 @@ end;
 
 function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
   aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass): TServiceFactoryServer;
+var bits: TInterfaceFactoryMethodBits;
+begin
+  if self<>nil then begin
+    fInterface.CheckMethodIndexes(aMethod,true,bits);
+    SetServiceLogByIndex(bits,aLogRest,aLogClass);
+  end;
+  result := self;
+end;
+
+procedure TServiceFactoryServer.SetServiceLogByIndex(
+  const aMethods: TInterfaceFactoryMethodBits; aLogRest: TSQLRest;
+  aLogClass: TSQLRecordServiceLogClass);
   procedure SetEntry(i,ndx: integer);
   var j: integer;
   begin
@@ -54212,24 +54259,19 @@ function TServiceFactoryServer.SetServiceLog(const aMethod: array of RawUTF8;
   end;
 var i,ndx: integer;
 begin
-  if self<>nil then begin
-    if aLogRest=nil then
-      ndx := -1 else
-      with aLogRest.Model do
-        if aLogClass=nil then begin
-          ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog);
-          if ndx<0 then
-            raise EModelException.CreateUTF8('%.SetServiceLog: Missing '+
-              'TSQLRecordServiceLog class in %.Model',[self,aLogRest]);
-        end else
-          ndx := GetTableIndexExisting(aLogClass);
-    if high(aMethod)<0 then
-      for i := 0 to fInterface.fMethodsCount-1 do
-        SetEntry(i,ndx) else
-      for i := 0 to high(aMethod) do
-        SetEntry(fInterface.CheckMethodIndex(aMethod[i]),ndx);
-  end;
-  result := self;
+  if aLogRest=nil then
+    ndx := -1 else
+    with aLogRest.Model do
+      if aLogClass=nil then begin
+        ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog);
+        if ndx<0 then
+          raise EModelException.CreateUTF8('%.SetServiceLog: Missing '+
+            'TSQLRecordServiceLog class in %.Model',[self,aLogRest]);
+      end else
+        ndx := GetTableIndexExisting(aLogClass);
+  for i := 0 to fInterface.fMethodsCount-1 do
+    if i in aMethods then
+      SetEntry(i,ndx);
 end;
 
 procedure TServiceFactoryServer.AddInterceptor(const Hook: TServiceMethodExecuteEvent);
