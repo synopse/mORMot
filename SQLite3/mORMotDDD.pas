@@ -1227,7 +1227,7 @@ end;
 function TCQRSServiceSynch.BeginMethods(var aResult: TCQRSResult): boolean;
 begin
   result := false;
-  if CqrsBeginMethod(qaCommandOnSelect, aResult) then
+  if CqrsBeginMethod(qaCommandDirect, aResult) then
     if fSharedCallbackRef = nil then
       CqrsSetResultMsg(cqrsInternalError, 'fSharedCallback=nil')
     else
