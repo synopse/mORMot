@@ -10076,58 +10076,58 @@ type
     // - as used by TServiceContainerInterfaceMethod.InterfaceDotMethodName
     // - match the URI fullpath name, e.g. 'Calculator.Add'
     InterfaceDotMethodName: RawUTF8;
+    /// method index in the original (non emulated) interface
+    // - our custom methods start at index 3 (RESERVED_VTABLE_SLOTS), since
+    // QueryInterface, _AddRef, and _Release are always defined by default
+    // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
+    ExecutionMethodIndex: byte;
+    /// TRUE if the method is inherited from another parent interface
+    IsInherited: boolean;
+    /// is 0 for the root interface, 1..n for all inherited interfaces
+    HierarchyLevel: byte;
     /// describe expected method arguments
     // - Args[0] always is smvSelf
     // - if method is a function, an additional smdResult argument is appended
     Args: TServiceMethodArgumentDynArray;
     /// the index of the result pseudo-argument in Args[]
     // - is -1 if the method is defined as a (not a function)
-    ArgsResultIndex: integer;
+    ArgsResultIndex: shortint;
     /// the index of the first const / var argument in Args[]
-    ArgsInFirst: integer;
+    ArgsInFirst: shortint;
     /// the index of the last const / var argument in Args[]
-    ArgsInLast: integer;
+    ArgsInLast: shortint;
     /// the index of the first var / out / result argument in Args[]
-    ArgsOutFirst: integer;
+    ArgsOutFirst: shortint;
     /// the index of the last var / out / result argument in Args[]
-    ArgsOutLast: integer;
+    ArgsOutLast: shortint;
     /// the index of the last argument in Args[], excepting result
-    ArgsNotResultLast: integer;
+    ArgsNotResultLast: shortint;
     /// the index of the last var / out argument in Args[]
-    ArgsOutNotResultLast: integer;
+    ArgsOutNotResultLast: shortint;
     /// the number of const / var parameters in Args[]
     // - i.e. the number of elements in the input JSON array
-    ArgsInputValuesCount: cardinal;
+    ArgsInputValuesCount: byte;
     /// the number of var / out parameters +  in Args[]
     // - i.e. the number of elements in the output JSON array or object
-    ArgsOutputValuesCount: cardinal;
+    ArgsOutputValuesCount: byte;
     /// true if the result is a TServiceCustomAnswer record
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
-    /// needed CPU stack size (in bytes) for all arguments
-    // - under x64, does not include the backup space for the four registers
-    ArgsSizeInStack: cardinal;
-    /// contains all used kind of arguments
-    ArgsUsed: TServiceMethodValueTypes;
-    /// contains the count of variables for all used kind of arguments
-    ArgsUsedCount: array[TServiceMethodValueVar] of integer;
     /// the index of the first argument expecting manual stack initialization
     // - set if there is any smvObject,smvDynArray,smvRecord,smvInterface or
     // smvVariant
-    ArgsManagedFirst: integer;
+    ArgsManagedFirst: shortint;
     /// the index of the last argument expecting manual stack initialization
     // - set if there is any smvObject,smvDynArray,smvRecord, smvInterface or
     // smvVariant
-    ArgsManagedLast: integer;
-    /// method index in the original (non emulated) interface
-    // - our custom methods start at index 3 (RESERVED_VTABLE_SLOTS), since
-    // QueryInterface, _AddRef, and _Release are always defined by default
-    // - so it maps TServiceFactory.Interface.Methods[ExecutionMethodIndex-3]
-    ExecutionMethodIndex: integer;
-    /// TRUE if the method is inherited from another parent interface
-    IsInherited: boolean;
-    /// is 0 for the root interface, 1..n for all inherited interfaces
-    HierarchyLevel: integer;
+    ArgsManagedLast: shortint;
+    /// contains all used kind of arguments
+    ArgsUsed: TServiceMethodValueTypes;
+    /// contains the count of variables for all used kind of arguments
+    ArgsUsedCount: array[TServiceMethodValueVar] of byte;
+    /// needed CPU stack size (in bytes) for all arguments
+    // - under x64, does not include the backup space for the four registers
+    ArgsSizeInStack: cardinal;
     /// retrieve an argument index in Args[] from its name
     // - search is case insensitive
     // - if Input is TRUE, will search within const / var arguments
@@ -12206,6 +12206,7 @@ type
   /// used to store all methods in a global list of interface-based services
   TServiceContainerInterfaceMethods = array of TServiceContainerInterfaceMethod;
 
+  /// used in TServiceContainer to identify fListInterfaceMethod[] entries
   TServiceContainerInterfaceMethodBits = set of 0..255;
 
   /// a global services provider class
@@ -49859,18 +49860,21 @@ end;
 
 procedure TServiceContainer.SetInterfaceMethodBits(MethodNamesCSV: PUTF8Char;
   IncludePseudoMethods: boolean; out bits: TServiceContainerInterfaceMethodBits);
-var i: integer;
+var i,n: integer;
     method: RawUTF8;
 begin
   FillcharFast(bits,sizeof(bits),0);
+  n := fListInterfaceMethods.Count;
+  if n>sizeof(bits) shl 3 then
+    raise EServiceException.CreateUTF8('%.SetInterfaceMethodBits: n=%',[self,n]);
   if IncludePseudoMethods then
-    for i := 0 to high(fListInterfaceMethod) do
+    for i := 0 to n-1 do
       if fListInterfaceMethod[i].InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
         include(bits,i);
   while MethodNamesCSV<>nil do begin
     method := GetNextItem(MethodNamesCSV);
     if PosEx('.',method)=0 then begin
-      for i := 0 to high(fListInterfaceMethod) do
+      for i := 0 to n-1 do
       with fListInterfaceMethod[i] do
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
            IdemPropNameU(method,InterfaceService.fInterface.
@@ -53308,9 +53312,9 @@ var i,n: integer;
     methods: TInterfaceFactoryMethodBits;
     somemethods: boolean;
 begin
-  SetInterfaceMethodBits(pointer(aExcludedMethodNamesCSV),true,excluded);
   somemethods := aExcludedMethodNamesCSV<>'';
-  if not somemethods then
+  if somemethods then
+    SetInterfaceMethodBits(pointer(aExcludedMethodNamesCSV),true,excluded) else
     FillcharFast(methods,sizeof(methods),255);
   n := fListInterfaceMethods.Count;
   i := 0;
