@@ -32409,6 +32409,7 @@ end;
 constructor TSQLRest.Create(aModel: TSQLModel);
 var cmd: TSQLRestServerURIContextCommand;
 begin
+  inherited Create;
   fPrivateGarbageCollector := TObjectList.Create;
   fModel := aModel;
   for cmd := Low(cmd) to high(cmd) do
@@ -36160,12 +36161,12 @@ begin
   for t := 0 to fTrackChangesHistoryTableIndexCount-1 do
     fTrackChangesHistoryTableIndex[t] := -1;
   fAssociatedServices := TServicesPublishedInterfacesList.Create(0);
-  // abstract MVC initalization
+  // abstract REST initalization
   inherited Create(aModel);
   fAfterCreation := true;
   fStats := TSQLRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  fSessionCounter := GetTickCount; // force almost-random session ID
+  fSessionCounter := GetTickCount64*PtrInt(self); // pseudo-random session ID
   if fSessionCounter>cardinal(maxInt) then
     dec(fSessionCounter,maxInt);
   // retrieve published methods
@@ -49864,7 +49865,7 @@ var i,n: integer;
     method: RawUTF8;
 begin
   FillcharFast(bits,sizeof(bits),0);
-  n := fListInterfaceMethods.Count;
+  n := length(fListInterfaceMethod);
   if n>sizeof(bits) shl 3 then
     raise EServiceException.CreateUTF8('%.SetInterfaceMethodBits: n=%',[self,n]);
   if IncludePseudoMethods then
@@ -49875,13 +49876,13 @@ begin
     method := GetNextItem(MethodNamesCSV);
     if PosEx('.',method)=0 then begin
       for i := 0 to n-1 do
-      with fListInterfaceMethod[i] do
+      with fListInterfaceMethod[i] do // O(n) search is fast enough here
         if (InterfaceMethodIndex>=SERVICE_PSEUDO_METHOD_COUNT) and
            IdemPropNameU(method,InterfaceService.fInterface.
-           fMethods[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT].URI) then
+            fMethods[InterfaceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT].URI) then
           include(bits,i);
     end else begin
-      i := fListInterfaceMethods.FindHashed(method);
+      i := fListInterfaceMethods.FindHashed(method); // O(1) search
       if i>=0 then
         include(bits,i);
     end;

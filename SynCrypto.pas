@@ -7377,7 +7377,7 @@ begin
       dec(i,SizeOf(g));
     until false;
   end;
-  // always add some minimal entropy - it won't hurt
+  // always xor some minimal entropy - it won't hurt
   sha.Init;
   sha.Update(@time,sizeof(time));
   sha.Update(@entropy,sizeof(entropy));  // bytes on CPU stack
@@ -7409,7 +7409,7 @@ begin
   sha.Final(entropy[0]);
   for i := 0 to Len-1 do begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
-    p^[i] := p^[i] xor Xor32Byte[(p^[i] shl 5) xor paranoid] xor paranoid;
+    p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
 end;
 
