@@ -664,9 +664,9 @@ type
     fBytesSinceSeed: integer;
     fSeedAfterBytes: integer;
     fAES: TAES;
-    fLock: TRTLCriticalSection;
     fSeedPBKDF2Rounds: integer;
     fTotalBytes: Int64;
+    fLock: TRTLCriticalSection;
     procedure IncrementCTR; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the internal secret key, using Operating System entropy
@@ -7452,7 +7452,11 @@ begin
   if fBytesSinceSeed>fSeedAfterBytes then
     Seed;
   EnterCriticalSection(fLock);
-  fAES.Encrypt(TAESBlock(fCTR),Block);
+  {$ifdef USEAESNI64}
+  if TAESContext(fAES.Context).AesNi then
+    AesNiEncrypt(fAES.Context,TAESBlock(fCTR),Block) else
+  {$endif USEAESNI64}
+    fAES.Encrypt(TAESBlock(fCTR),Block);
   IncrementCTR;
   inc(fBytesSinceSeed,SizeOf(Block));
   inc(fTotalBytes,SizeOf(Block));
@@ -7470,7 +7474,11 @@ begin
     Seed;
   EnterCriticalSection(fLock);
   for i := 1 to Len shr 4 do begin
-    fAES.Encrypt(TAESBlock(fCTR),buf^);
+    {$ifdef USEAESNI64}
+    if TAESContext(fAES.Context).AesNi then
+      AesNiEncrypt(fAES.Context,TAESBlock(fCTR),buf^) else
+    {$endif USEAESNI64}
+      fAES.Encrypt(TAESBlock(fCTR),buf^);
     IncrementCTR;
     inc(buf);
   end;

@@ -4238,6 +4238,9 @@ function GetEnumCaption(aTypeInfo: PTypeInfo; const aIndex): string;
 // retrieve the enumeration display text
 function GetEnumNameTrimed(aTypeInfo: PTypeInfo; const aIndex): RawUTF8;
 
+/// get all included values of an enumeration set, as CSV names
+function GetSetNameCSV(aTypeInfo: PTypeInfo; const aValue): RawUTF8;
+
 var
   /// a shared list of T*ObjArray registered serializers
   // - you should not access this variable, but via inline methods
@@ -19580,6 +19583,13 @@ begin
   if (aTypeInfo=nil) or (aTypeInfo^.Kind<>tkEnumeration) then
     result := '' else
     result := aTypeInfo^.EnumBaseType^.GetEnumNameTrimed(aIndex);
+end;
+
+function GetSetNameCSV(aTypeInfo: PTypeInfo; const aValue): RawUTF8;
+begin
+  if (aTypeInfo=nil) or (aTypeInfo^.Kind<>tkSet) then
+    result := '' else
+    result := aTypeInfo^.SetEnumType^.GetSetNameCSV(integer(aValue));
 end;
 
 function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
