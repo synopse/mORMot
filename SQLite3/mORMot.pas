@@ -2354,7 +2354,7 @@ type
   TClassInstanceItemCreate = (
     cicUnknown,cicTSQLRecord,cicTObjectList,cicTPersistentWithCustomCreate,
     cicTSynPersistent,cicTInterfacedCollection,cicTInterfacedObjectWithCustomCreate,
-    cicTCollection,cicTComponent,cicTObject);
+    cicTCollection,cicTCollectionItem,cicTComponent,cicTObject);
 
   /// store information about a class, able to easily create new instances
   // - using this temporary storage would speed up the creation process
@@ -46059,6 +46059,7 @@ begin
   {$ifndef LVCL}
     if C<>TInterfacedCollection then
     if C<>TCollection then
+    if C<>TCollectionItem then
   {$endif}
   {$ifdef FPC}
     if C.ClassParent<>nil then begin
@@ -46076,7 +46077,10 @@ begin
       ItemCreate := cicTObject;
       exit;
     end else
-  {$ifndef LVCL} begin // plain TCollection shall have been registered
+  {$ifndef LVCL} begin
+      ItemCreate := cicTCollectionItem;
+      exit;
+    end else begin // plain TCollection shall have been registered
       CollectionItemClass := JSONSerializerRegisteredCollection.Find(TCollectionClass(ItemClass));
       if CollectionItemClass<>nil then begin
         ItemCreate := cicTCollection;
@@ -46150,6 +46154,10 @@ begin
     end;
     cicTCollection: begin
       result := TCollectionClass(ItemClass).Create(CollectionItemClass);
+      exit;
+    end;
+    cicTCollectionItem: begin
+      result := TCollectionItemClass(ItemClass).Create(nil);
       exit;
     end;
     {$endif}
