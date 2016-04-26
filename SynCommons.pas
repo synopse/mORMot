@@ -15504,7 +15504,8 @@ type
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
-    constructor Create(aIdentifier: TSynUniqueIdentifierProcess; const aSharedObfuscationKey: RawUTF8=''); reintroduce;
+    constructor Create(aIdentifier: TSynUniqueIdentifierProcess;
+      const aSharedObfuscationKey: RawUTF8=''); reintroduce;
     /// finalize the generator structure
     destructor Destroy; override;
     /// return a new unique ID

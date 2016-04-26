@@ -21562,8 +21562,8 @@ procedure TObjArraySerializer.CustomWriter(const aWriter: TTextWriter; const aVa
 var options: TTextWriterWriteObjectOptions;
 begin
   if twoEnumSetsAsTextInRecord in aWriter.CustomOptions then
-    options := [woDontStoreDefault, woEnumSetsAsText] else
-    options := [woDontStoreDefault];
+    options := [woDontStoreDefault,woSQLRawBlobAsBase64,woEnumSetsAsText] else
+    options := [woDontStoreDefault,woSQLRawBlobAsBase64];
   aWriter.WriteObject(TObject(aValue), options);
 end;
 
