@@ -2193,7 +2193,7 @@ begin
     exit;
   for i := 0 to high(fTracked) do
     if HasProp('Text') then
-      Prop^.SetGenericStringValue(fTracked[i], VariantToString(v^))
+      Prop^.SetGenericStringValue(fTracked[i], SynCommons.VariantToString(v^))
     else if HasProp('Checked') then
       Prop^.SetOrdValue(fTracked[i], ord(boolean(v^)));
 end;
