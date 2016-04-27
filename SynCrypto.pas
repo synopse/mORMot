@@ -397,8 +397,10 @@ type
     destructor Destroy; override;
 
     /// perform the AES cypher in the corresponding mode
+    // - when used in block chaining mode, you should have set the IV property
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); virtual; abstract;
     /// perform the AES un-cypher in the corresponding mode
+    // - when used in block chaining mode, you should have set the IV property
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); virtual; abstract;
 
     /// encrypt a memory buffer using a PKCS7 padding pattern
@@ -487,11 +489,11 @@ type
     // - also fill the TAES instance with zeros, for safety
     destructor Destroy; override;
     /// perform the AES cypher in the corresponding mode
-    // - this abstract method will set CV from AES.Context, and fIn/fOut
+    // - this abstract method will set CV from fIV property, and fIn/fOut
     // from BufIn/BufOut
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the corresponding mode
-    // - this abstract method will set CV from AES.Context, and fIn/fOut
+    // - this abstract method will set CV from fIV property, and fIn/fOut
     // from BufIn/BufOut
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// read-only access to the internal CV block, which may be have just been

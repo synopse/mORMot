@@ -123,7 +123,7 @@ function ClientSSPIAuth(var aSecContext: TSecContext;
 // - aPassword is the user clear text password
 // - aOutData contains data that must be sent to server
 // - if function returns True, client must send aOutData to server
-// and call function again width data, returned from servsr
+// and call function again width data, returned from server
 function ClientSSPIAuthWithPassword(var aSecContext: TSecContext;
     const aInData: RawByteString; const aUserName: RawUTF8;
     const aPassword: RawUTF8; out aOutData: RawByteString): Boolean;
@@ -138,7 +138,7 @@ function ServerSSPIAuth(var aSecContext: TSecContext;
     const aInData: RawByteString; out aOutData: RawByteString): Boolean;
 
 /// Server-side function that returns authenticated user name
-// - aSecContext must be received from previos success call to ServerSSPIAuth
+// - aSecContext must be received from previous successful call to ServerSSPIAuth
 // - aUserName contains authenticated user name
 procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF8);
 
