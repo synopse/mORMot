@@ -13659,6 +13659,18 @@ type
     function UpdateField(Table: TSQLRecordClass;
       const WhereFieldName: RawUTF8; const WhereFieldValue: variant;
       const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
+    /// update one field in one or several members, depending on a set of IDs
+    // - return true on success
+    // - note that this method won't update the TModTime properties: you should
+    // rather use a classic Retrieve()/FillPrepare() followed by Update(), but
+    // it would be much slower, even over a BATCH
+    // - will be executed as a regular SQL statement:
+    // $ UPDATE table SET fieldname=fieldvalue WHERE RowID IN (...)
+    // - warning: this method would call directly EngineExecute(), and would
+    // work just fine with SQLite3, but some other DB engines may not allow
+    // a huge number of items within the IN(...) clause
+    function UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
+      const FieldName: RawUTF8; const FieldValue: variant): boolean; overload; virtual;
     {$endif NOVARIANTS}
     /// increments one integer field value
     // - if available, this method will use atomic value modification, e.g.
@@ -14377,6 +14389,7 @@ type
     /// the User Name, as may be displayed or printed
     property DisplayName: RawUTF8 index 50 read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
+    // - you may use TSQLAuthUser.ComputeHashedPassword() to compute it
     property PasswordHashHexa: RawUTF8 index 64 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
     // - access rights are managed by group
@@ -33423,6 +33436,18 @@ begin
   TableIndex := Model.GetTableIndexExisting(Table);
   result := EngineUpdateField(TableIndex,FieldName,SetValue,WhereFieldName,WhereValue);
 end;
+
+function TSQLRest.UpdateField(Table: TSQLRecordClass;
+  const IDs: array of Int64; const FieldName: RawUTF8; const FieldValue: variant): boolean;
+var csv: RawUTF8;
+    SetValue: RawUTF8;
+begin
+  VariantToInlineValue(FieldValue,SetValue);
+  csv := Int64DynArrayToCSV(IDs,length(IDs));
+  result := ExecuteFmt('update % set %=:(%): where rowid in (%)',
+    [Table.SQLTableName,FieldName,SetValue,csv]);
+end;
+
 {$endif NOVARIANTS}
 
 function TSQLRest.UpdateFieldIncrement(Table: TSQLRecordClass; ID: TID;
