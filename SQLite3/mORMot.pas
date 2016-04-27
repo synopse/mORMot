@@ -18980,7 +18980,10 @@ const
     [mlTables,mlMethods,mlInterfaces,mlSQLite3];
 
 /// wrapper to search for a given TSQLRecord by ID in an array of TSQLRecord
-function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
+function ObjArraySearch(const aSQLRecordObjArray; aID: TID): TSQLRecord;
+
+/// wrapper to return all TID values of an array of TSQLRecord
+procedure ObjArrayRecordIDs(const aSQLRecordObjArray; out result: TInt64DynArray);
 
 /// safe deletion of a T*InterfaceArray dynamic array item
 // - similar to InterfaceArrayDelete, but with a safe try .. except block
@@ -33419,6 +33422,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
 function TSQLRest.UpdateField(Table: TSQLRecordClass; ID: TID;
   const FieldName: RawUTF8; const FieldValue: Variant): boolean;
 begin
@@ -56562,7 +56566,7 @@ begin
 end;
 {$endif}
 
-function ObjArraySearch(var aSQLRecordObjArray; aID: TID): TSQLRecord;
+function ObjArraySearch(const aSQLRecordObjArray; aID: TID): TSQLRecord;
 var i: integer;
     a: TSQLRecordObjArray absolute aSQLRecordObjArray;
 begin
@@ -56572,6 +56576,17 @@ begin
       exit;
     end;
   result := nil;
+end;
+
+procedure ObjArrayRecordIDs(const aSQLRecordObjArray; out result: TInt64DynArray);
+var
+  i, n: integer;
+  a: TSQLRecordObjArray absolute aSQLRecordObjArray;
+begin
+  n := length(a);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := a[i].IDValue;
 end;
 
 procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
