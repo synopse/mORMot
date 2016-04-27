@@ -199,6 +199,7 @@ begin
     result := SelectByName(fChallengeLogonName);
   if result<>cqrsSuccess then
     exit;
+  CqrsBeginMethod(qaNone, result);
   if DoHash(fChallengeLogonName+':'+fChallengeNonce+':'+
      (fCurrentORMInstance as TSQLRecordUserAuth).HashedPassword)=aChallengedPassword then begin
     fLogged := true;
