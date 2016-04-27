@@ -502,6 +502,31 @@ type
     property AdditionalHint: string read FAdditionalHint write FAdditionalHint;
   end;
 
+  /// allow to track and load/save UI components as JSON
+  // - may be used to persist TEdit / TCheckBox / TComboBox values on a form
+  // when the application leaves 
+  TUIComponentsPersist = class
+  protected
+    fTracked: array of TComponent;
+    fFileName: TFileName;
+    fLoadedJson: RawUTF8;
+    function GetFileName: TFileName;
+  public
+    /// would track .Text and .Checked properties only
+    procedure TrackControls(const ctrls: array of TComponent);
+    /// fill all tracked controls properties from the supplied JSON object
+    procedure LoadFromVariant(const aDoc: variant);
+    /// save all tracked controls properties as a JSON object
+    function SaveToVariant: variant;
+    /// fill all tracked controls properties from a local JSON file
+    procedure LoadFromFile;
+    /// save all tracked controls properties as JSON in a local file
+    procedure SaveToFile;
+    /// the local JSON file used for persistence
+    // - is set to 'executablename.default' if none is specified   
+    property FileName: TFileName read GetFileName write fFileName;
+  end;
+
 
 /// register the TSynIntegerLabeledEdit component in the IDE toolbar
 // - not necessary for the mORMot framework to run: since all User Interface
@@ -2127,6 +2152,96 @@ begin
       Dest.Cells[C,R] := s;
     end;
 end;
+
+
+
+
+{ TUIComponentsPersist }
+
+function TUIComponentsPersist.GetFileName: TFileName;
+begin
+  if fFileName = '' then
+    fFileName := ChangeFileExt(ExeVersion.ProgramFileName, '.default');
+  result := fFileName;
+end;
+
+procedure TUIComponentsPersist.LoadFromFile;
+begin
+  fLoadedJson := StringFromFile(FileName);
+  LoadFromVariant(_JsonFast(fLoadedJson));
+end;
+
+procedure TUIComponentsPersist.LoadFromVariant(const aDoc: variant);
+var
+  i: integer;
+  prop: PPropInfo;
+  doc: PDocVariantData;
+  v: PVariant;
+
+  function HasProp(const PropName: ShortString): boolean;
+  begin
+    result := false;
+    if not doc^.GetAsPVariant(ToUTF8(fTracked[i].Name), v) then
+      exit;
+    prop := ClassFieldPropWithParents(fTracked[i].ClassType, PropName);
+    result := prop <> nil;
+  end;
+
+begin
+  doc := _Safe(aDoc);
+  if doc^.Count = 0 then
+    exit;
+  for i := 0 to high(fTracked) do
+    if HasProp('Text') then
+      Prop^.SetGenericStringValue(fTracked[i], VariantToString(v^))
+    else if HasProp('Checked') then
+      Prop^.SetOrdValue(fTracked[i], ord(boolean(v^)));
+end;
+
+procedure TUIComponentsPersist.SaveToFile;
+var
+  json: RawUTF8;
+begin
+  json := _Safe(SaveToVariant)^.ToJSON('', '', jsonHumanReadable);
+  if json <> fLoadedJson then begin
+    FileFromString(json, FileName);
+    fLoadedJson := json;
+  end;
+end;
+
+function TUIComponentsPersist.SaveToVariant: variant;
+var
+  i: integer;
+  prop: PPropInfo;
+  doc: TDocVariantData;
+  name: RawUTF8;
+
+  function HasProp(const PropName: ShortString): boolean;
+  begin
+    prop := ClassFieldPropWithParents(fTracked[i].ClassType, PropName);
+    result := prop <> nil;
+    if result then
+      name := ToUTF8(fTracked[i].Name);
+  end;
+
+begin
+  doc.InitFast;
+  for i := 0 to high(fTracked) do
+    if HasProp('Text') then
+      doc.AddValue(name, ToUTF8(Prop^.GetGenericStringValue(fTracked[i])))
+    else if HasProp('Checked') then
+      doc.AddValue(name, boolean(Prop^.GetOrdValue(fTracked[i])));
+  result := variant(doc);
+end;
+
+procedure TUIComponentsPersist.TrackControls(const ctrls: array of TComponent);
+var
+  i: integer;
+begin
+  for i := 0 to high(ctrls) do
+    ObjArrayAddOnce(fTracked, ctrls[i]);
+end;
+
 
 procedure Register;
 begin

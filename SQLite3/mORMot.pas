@@ -28500,7 +28500,7 @@ begin
     result := CP_SQLRAWBLOB else
   if @self=TypeInfo(RawByteString) then
     result := CP_RAWBYTESTRING else
-  if @self=TypeInfo(AnsiString) then
+  if (@self=TypeInfo(AnsiString)) or IdemPropName(Name,'TCaption') then
     result := 0 else
   {$endif}
     result := CP_UTF8; // default is UTF-8
