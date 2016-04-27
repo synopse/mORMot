@@ -29471,6 +29471,8 @@ begin
     if Expanded then
       result := 9 else
       result := 7;
+    if FirstTimeChar=#0 then
+      dec(result);
   end else begin
     // convert time and date
     DateToIso8601PChar(Dest,Expanded,
@@ -29487,6 +29489,8 @@ begin
     if Expanded then
       result := 15+4 else
       result := 15;
+    if FirstTimeChar=#0 then
+      dec(result);
   end;
 end;
 
