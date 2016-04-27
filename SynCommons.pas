@@ -23688,8 +23688,8 @@ end;
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
 begin
   SetString(result,nil,3);
-  PWordArray(result)[0] := TwoDigitLookupW[Value div 100];
-  PByteArray(result)[2] := (Value mod 100)+48;
+  PWordArray(result)[0] := TwoDigitLookupW[Value div 10];
+  PByteArray(result)[2] := (Value mod 10)+48;
 end;
 
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;

@@ -2781,6 +2781,9 @@ begin
   Check(IntToThousandString(-10000)='-10,000');
   Check(IntToThousandString(-100000)='-100,000');
   Check(IntToThousandString(-1000000)='-1,000,000');
+  check(UInt3DigitsToUTF8(1)='001');
+  check(UInt3DigitsToUTF8(12)='012');
+  check(UInt3DigitsToUTF8(123)='123');
   Check(KB(1024)='1024 B');
   Check(KB(16384)='16 KB');
   Check(KB(3*1024*1024-800*1024)='2.2 MB');
