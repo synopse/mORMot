@@ -11289,6 +11289,10 @@ function GetTickCount64: Int64;
 function FileOpenSequentialRead(const FileName: string): Integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns a TFileStream optimized for one pass file reading
+// - will use FileOpenSequentialRead(), i.e. FILE_FLAG_SEQUENTIAL_SCAN
+function FileStreamSequentialRead(const FileName: string): TFileStream;
+
 /// check if the current timestamp, in ms, matched a given period
 // - will compare the current GetTickCount64 to the supplied PreviousTix
 // - returns TRUE if the Internal ms period was not elapsed
@@ -22052,6 +22056,15 @@ begin
   {$else}
   result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
   {$endif MSWINDOWS}
+end;
+
+function FileStreamSequentialRead(const FileName: string): TFileStream;
+begin
+  {$ifdef DELPHI5ORFPC}
+  result := TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
+  {$else}
+  result := TFileStream.Create(FileOpenSequentialRead(FileName));
+  {$endif}
 end;
 
 function Elapsed(var PreviousTix: Int64; Interval: Integer): Boolean;
