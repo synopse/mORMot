@@ -24522,12 +24522,16 @@ begin
 end;
 
 function StreamToRawByteString(aStream: TStream): RawByteString;
-var current,size: Int64;
+var current, size: Int64;
 begin
   result := '';
   if aStream=nil then
     exit;
   current := aStream.Position;
+  if (current=0) and aStream.InheritsFrom(TRawByteStringStream) then begin
+    result := TRawByteStringStream(aStream).DataString; // fast COW
+    exit;
+  end;
   size := aStream.Size-current;
   if (size=0) or (size>maxInt) then
     exit;
@@ -24536,7 +24540,7 @@ begin
   aStream.Position := current;
 end;
 
-function RawByteStringToStream(Const aString: RawByteString): TStream;
+function RawByteStringToStream(const aString: RawByteString): TStream;
 begin
   result := TRawByteStringStream.Create(aString);
 end;
@@ -53399,10 +53403,10 @@ end;
 
 function StreamSynLZ(Source: TCustomMemoryStream; Dest: TStream; Magic: cardinal): integer;
 var DataLen: integer;
-    S: pointer;
-    P: pointer;
+    S,D: pointer;
     Head: TSynLZHead;
     Trailer: TSynLZTrailer;
+    tmp: TSynTempBuffer;
 begin
   if Dest=nil then begin
     result := 0;
@@ -53415,22 +53419,29 @@ begin
     S := nil;
     DataLen := 0;
   end;
-  Getmem(P,SynLZcompressdestlen(DataLen));
+  tmp.Init(SynLZcompressdestlen(DataLen));
   try
     Head.Magic := Magic;
     Head.UnCompressedSize := DataLen;
     Head.HashUncompressed := Hash32(S,DataLen);
-    result := SynLZcompress1(S,DataLen,P);
+    result := SynLZcompress1(S,DataLen,tmp.buf);
+    if result>tmp.len then
+      raise ESynException.Create('StreamLZ: SynLZ compression overflow');
+    if result>DataLen then begin
+      result := DataLen; // compression not worth it
+      D := S;
+    end else
+      D := tmp.buf;
     Head.CompressedSize := result;
-    Head.HashCompressed := Hash32(P,result);
+    Head.HashCompressed := Hash32(D,result);
     Dest.Write(Head,sizeof(Head));
-    Dest.Write(P^,Head.CompressedSize);
+    Dest.Write(D^,Head.CompressedSize);
     Trailer.HeaderRelativeOffset := result+(sizeof(Head)+sizeof(Trailer));
     Trailer.Magic := Magic;
     Dest.Write(Trailer,sizeof(Trailer));
     result := Head.CompressedSize+(sizeof(Head)+sizeof(Trailer));
   finally
-    Freemem(P);
+    tmp.Done;
   end;
 end;
 
@@ -53459,11 +53470,7 @@ begin
   result := false;
   if FileExists(Source) then
   try
-    {$ifdef DELPHI5ORFPC}
-    S := TFileStream.Create(Source,fmOpenRead or fmShareDenyNone);
-    {$else}
-    S := TFileStream.Create(FileOpenSequentialRead(Source));
-    {$endif}
+    S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
       D := TFileStream.Create(Dest,fmCreate);
@@ -53510,11 +53517,7 @@ begin
   result := false;
   if FileExists(Source) then
   try
-    {$ifdef DELPHI5ORFPC}
-    S := TFileStream.Create(Source,fmOpenRead or fmShareDenyNone);
-    {$else}
-    S := TFileStream.Create(FileOpenSequentialRead(Source));
-    {$endif}
+    S := FileStreamSequentialRead(Source);
     try
       DeleteFile(Dest);
       D := TFileStream.Create(Dest,fmCreate);
@@ -53647,7 +53650,7 @@ begin
       // trailer not available in old .synlz layout, or in FileSynLZ multiblocks
       Source.Position := sourcePosition else
       sourceSize := 0; // should be monoblock
-    // Source will now point after all data
+    // Source stream will now point after all data
     if (SynLZdecompressdestlen(S)<>Head.UnCompressedSize) or
        (Hash32(S,Head.CompressedSize)<>Head.HashCompressed) then
       exit;
@@ -53663,9 +53666,12 @@ begin
     result.Size := resultSize+Head.UnCompressedSize;
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
+    if (Head.CompressedSize=Head.UnCompressedSize) and
+       (Head.HashCompressed=Head.HashUncompressed) then // was stored
+      MoveFast(S^,D^,Head.CompressedSize) else
     if {$ifdef DELPHI5OROLDER}SynLZDecompress1asm // circumvent Internal Error C11715
        {$else}SynLZdecompress1{$endif}(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
-      FreeAndNil(result) else 
+      FreeAndNil(result) else
     if Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed then
       FreeAndNil(result);
   until (result=nil) or (sourcePosition>=sourceSize);
@@ -53685,7 +53691,7 @@ procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
-    tmp: array[0..4095] of AnsiChar;
+    tmp: array[0..4095] of AnsiChar;  // resize Result instead of TSynTempBuffer 
 begin
   if PLen=0 then
     exit;
@@ -53705,12 +53711,18 @@ begin
     end else
       R := @tmp;
     PCardinal(R)^ := crc;
-    R[4] := SYNLZCOMPRESS_SYNLZ;
     len := SynLZcompress1(P,PLen,R+9);
-    PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    if len>PLen then begin // store if compression not worth it
+      R[4] := SYNLZCOMPRESS_STORED;
+      PCardinal(R+5)^ := crc;
+      MoveFast(P^,R[9],PLen);
+    end else begin
+      R[4] := SYNLZCOMPRESS_SYNLZ;
+      PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    end;
     if R=@tmp then
       SetString(result,tmp,len+9) else
-      SetLength(result,len+9);
+      SetLength(result,len+9); // resize in-place may not move any data
   end;
 end;
 
@@ -53764,9 +53776,15 @@ begin
     SetLength(result,SynLZcompressdestlen(PLen)+9);
     R := pointer(result);
     PCardinal(R)^ := crc;
-    R[4] := SYNLZCOMPRESS_SYNLZ;
     len := SynLZcompress1(P,PLen,R+9);
-    PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    if len>PLen then begin // store if compression not worth it
+      R[4] := SYNLZCOMPRESS_STORED;
+      PCardinal(R+5)^ := crc;
+      MoveFast(P^,R[9],PLen);
+    end else begin
+      R[4] := SYNLZCOMPRESS_SYNLZ;
+      PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
+    end;
     SetLength(result,len+9);
   end;
 end;

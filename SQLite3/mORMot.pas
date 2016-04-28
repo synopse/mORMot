@@ -16813,7 +16813,7 @@ type
     // - the resource name is expected to be the TSQLRecord class name,
     // with a resource type of 10
     // - uses the same compressed format as the overloaded stream/file method
-    procedure LoadFromResource;
+    procedure LoadFromResource(ResourceName: string='');
     /// save the values into a binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage: e.g. a 27 KB
@@ -17249,6 +17249,8 @@ type
     /// load the content from the specified file name
     // - do nothing if file name was not assigned
     procedure LoadFromFile; virtual;
+    /// load the content from the supplied resource
+    procedure LoadFromStream(aStream: TStream); virtual;
     /// write any modification into file
     // - do nothing if file name was not assigned
     procedure UpdateToFile; virtual;
@@ -42677,7 +42679,7 @@ begin
 end;
 
 const
-  TSQLRestStorageINMEMORY_MAGIC = $A5ABA5A5;
+  TSQLRESTSTORAGEINMEMORY_MAGIC = $A5ABA5A5;
 
 function TSQLRestStorageInMemory.LoadFromBinary(Stream: TStream): boolean;
 var R: TFileBufferReader;
@@ -42691,7 +42693,7 @@ begin
   result := false;
   if self=nil then
     exit;
-  MS := StreamUnSynLZ(Stream,TSQLRestStorageINMEMORY_MAGIC);
+  MS := StreamUnSynLZ(Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
   if MS<>nil then
   with fStoredClassRecordProps do
   try
@@ -42749,10 +42751,12 @@ begin
   end;
 end;
 
-procedure TSQLRestStorageInMemory.LoadFromResource;
+procedure TSQLRestStorageInMemory.LoadFromResource(ResourceName: string);
 var S: TStream;
 begin
-  S := TResourceStream.Create(HInstance,fStoredClass.ClassName,pointer(10));
+  if ResourceName = '' then
+    ResourceName := fStoredClass.ClassName;
+  S := TResourceStream.Create(HInstance,ResourceName,pointer(10));
   try
     if not LoadFromBinary(S) then
       raise EORMException.CreateUTF8('%.LoadFromResource with invalid % content',
@@ -42816,7 +42820,7 @@ begin
           for i := 0 to Count-1 do
             GetBinary(TSQLRecord(List[i]),W);
       W.Flush;
-      result := StreamSynLZ(MS,Stream,TSQLRestStorageINMEMORY_MAGIC);
+      result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
     finally
       W.Free;
       MS.Free;
@@ -44110,29 +44114,22 @@ begin
     TSQLRestStorageInMemory(fStaticData[t]).DropValues;
 end;
 
-procedure TSQLRestServerFullMemory.LoadFromFile;
+procedure TSQLRestServerFullMemory.LoadFromStream(aStream: TStream);
 var JSON: RawUTF8;
     P, TableName, Data: PUTF8Char;
     t: integer;
-    S: TFileStream;
     wasString: boolean;
 begin
-  if (self=nil) or (fFileName='') or not FileExists(fFileName) then
+  if aStream=nil then
     exit;
-  DropDatabase;
   if fBinaryFile then begin
-    S := TFileStream.Create(FileName,fmOpenRead or fmShareDenyNone);
-    try
-      if ReadStringFromStream(S)=RawUTF8(ClassName)+'00' then
+      if ReadStringFromStream(aStream)=RawUTF8(ClassName)+'00' then
       repeat
-        t := Model.GetTableIndex(ReadStringFromStream(S));
+        t := Model.GetTableIndex(ReadStringFromStream(aStream));
       until (t<0) or
-        not TSQLRestStorageInMemory(fStaticData[t]).LoadFromBinary(S);
-    finally
-      S.Free;
-    end;
+        not TSQLRestStorageInMemory(fStaticData[t]).LoadFromBinary(aStream);
   end else begin // [{"AuthUser":[{....},{...}]},{"AuthGroup":[{...},{...}]}]
-    JSON := AnyTextFileToRawUTF8(fFileName,true);
+    JSON := StreamToRawByteString(aStream); // assume UTF-8 content
     if JSON='' then
       exit;
     P := pointer(JSON);
@@ -44153,6 +44150,20 @@ begin
         break else
         TSQLRestStorageInMemory(fStaticData[t]).LoadFromJSON(Data,P-Data);
     until false;
+  end;
+end;
+
+procedure TSQLRestServerFullMemory.LoadFromFile;
+var S: TFileStream;
+begin
+  if (fFileName='') or not FileExists(fFileName) then
+    exit;
+  DropDatabase;
+  S := FileStreamSequentialRead(FileName);
+  try
+    LoadFromStream(S);
+  finally
+    S.Free;
   end;
 end;
 
