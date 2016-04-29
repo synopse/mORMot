@@ -53716,6 +53716,7 @@ begin
       R[4] := SYNLZCOMPRESS_STORED;
       PCardinal(R+5)^ := crc;
       MoveFast(P^,R[9],PLen);
+      len := PLen;
     end else begin
       R[4] := SYNLZCOMPRESS_SYNLZ;
       PCardinal(R+5)^ := crc32c(0,pointer(R+9),len);
