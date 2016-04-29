@@ -42689,6 +42689,7 @@ var R: TFileBufferReader;
     P: PAnsiChar;
     aRecord: TSQLRecord;
     lastID,newID: TID;
+    s: RawUTF8;
 begin
   result := false;
   if self=nil then
@@ -42699,8 +42700,11 @@ begin
   try
     // check header: expect same exact RTTI
     R.OpenFrom(MS.Memory,MS.Size);
-    if (R.ReadRawUTF8<>RawUTF8(ClassName)) or
-       not CheckBinaryHeader(R) then
+    R.Read(s);
+    if (s<>'') and  // new fixed format
+       not IdemPropNameU(s,'TSQLRecordProperties') then // old buggy format
+      exit;
+    if not CheckBinaryHeader(R) then
       exit;
     // read IDs
     fModified := false;
@@ -42785,7 +42789,7 @@ begin
     with fStoredClassRecordProps do
     try
       // primitive magic and fields signature for file type identification
-      W.Write(RawUTF8(ClassName));
+      W.Write1(0); // ClassName='TSQLRecordProperties' in old buggy format
       SaveBinaryHeader(W);
       // write IDs
       hasInt64ID := false;

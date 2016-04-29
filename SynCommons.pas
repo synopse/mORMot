@@ -50536,9 +50536,9 @@ begin
       c := ReadByte;
       inc(n,7);
       if c<=$7f then break;
-      result := result or ((c and $7f) shl n);
+      result := result or (QWord(c and $7f) shl n);
     until false;
-    result := result or (c shl n);
+    result := result or (QWord(c) shl n);
   end;
 end;
 
@@ -53605,6 +53605,7 @@ var S,D: PAnsiChar;
     Head: TSynLZHead;
     Trailer: TSynLZTrailer;
     buf: RawByteString;
+    stored: boolean;
 begin
   result := nil;
   if Source=nil then
@@ -53651,8 +53652,12 @@ begin
       Source.Position := sourcePosition else
       sourceSize := 0; // should be monoblock
     // Source stream will now point after all data
-    if (SynLZdecompressdestlen(S)<>Head.UnCompressedSize) or
-       (Hash32(S,Head.CompressedSize)<>Head.HashCompressed) then
+    stored := (Head.CompressedSize=Head.UnCompressedSize) and
+              (Head.HashCompressed=Head.HashUncompressed);
+    if not stored then
+      if SynLZdecompressdestlen(S)<>Head.UnCompressedSize then
+        exit;
+    if Hash32(S,Head.CompressedSize)<>Head.HashCompressed then
       exit;
     if result=nil then
       result := THeapMemoryStream.Create else begin
@@ -53666,8 +53671,7 @@ begin
     result.Size := resultSize+Head.UnCompressedSize;
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
-    if (Head.CompressedSize=Head.UnCompressedSize) and
-       (Head.HashCompressed=Head.HashUncompressed) then // was stored
+    if stored then 
       MoveFast(S^,D^,Head.CompressedSize) else
     if {$ifdef DELPHI5OROLDER}SynLZDecompress1asm // circumvent Internal Error C11715
        {$else}SynLZdecompress1{$endif}(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
