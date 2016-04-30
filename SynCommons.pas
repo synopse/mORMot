@@ -38671,10 +38671,12 @@ begin
 end;
 
 function SortDynArrayInt64(const A,B): integer;
+var tmp: Int64;
 begin
-  if Int64(A)<Int64(B) then
+  tmp := Int64(A)-Int64(B);
+  if tmp<0 then
     result := -1 else
-  if Int64(A)>Int64(B) then
+  if tmp>0 then
     result := 1 else
     result := 0;
 end;
