@@ -41866,8 +41866,14 @@ begin
 end;
 
 function TSQLRecordCompare(Item1,Item2: Pointer): integer;
+var tmp: Int64;
 begin // we assume Item1<>nil and Item2<>nil in fValue[]
-  result := TSQLRecord(Item1).fID-TSQLRecord(Item2).fID;
+  tmp := TSQLRecord(Item1).fID-TSQLRecord(Item2).fID;
+  if tmp<0 then
+    result := -1 else
+  if tmp>0 then
+    result := 1 else
+    result := 0;
 end;
 
 function TSQLRestStorageInMemory.AddOne(Rec: TSQLRecord; ForceID: boolean;
