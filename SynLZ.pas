@@ -238,15 +238,15 @@ var
     
 {$else}
 
-/// optimized asm version of the 1st compression algorithm
+/// optimized x86 asm version of the 1st compression algorithm
 function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-/// optimized asm version of the 1st compression algorithm
+/// optimized x86 asm version of the 1st compression algorithm
 function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
-/// fastest available SynLZ compression (using 1st algorithm)
+/// fastest available SynLZ compression (using x86 asm on 1st algorithm)
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
-/// fastest available SynLZ decompression (using 1st algorithm)
+/// fastest available SynLZ decompression (using x86 asm on 1st algorithm)
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$endif PUREPASCAL}
 

@@ -8136,8 +8136,6 @@ begin
     Check(@SynLZCompress1=@SynLZcompress1pas);
     Check(@SynLZDecompress1=@SynLZdecompress1pas);
     {$else}
-    Check(@SynLZCompress1=@SynLZcompress1asm);
-    Check(@SynLZDecompress1=@SynLZdecompress1asm);
     SetLength(comp1,SynLZcompressdestlen(length(s)));
     complen1 := SynLZcompress1asm(Pointer(s),length(s),pointer(comp1));
     Check(complen1<length(comp1));
