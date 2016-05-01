@@ -23238,38 +23238,21 @@ end;
 
 var
   /// a conversion table from Base64 text into binary data
-  // - used by Base64ToBin function
-  ConvertBase64ToBin: array of shortint;
-
-procedure InitConvertBase64ToBin;
-var i: integer;
-begin
-  SetLength(ConvertBase64ToBin,256);
-  FillcharFast(ConvertBase64ToBin[0],256,255); // invalid value set to -1
-  for i := 0 to high(b64) do
-    ConvertBase64ToBin[ord(b64[i])] := i;
-  ConvertBase64ToBin[ord('=')] := -2; // special value for '='
-end;
-
-type
-  TConvertBase64ToBinTable = array[AnsiChar] of shortint;
+  // - used by Base64ToBin/IsBase64 functions
+  ConvertBase64ToBin: array[AnsiChar] of shortint;
 
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
 var i: PtrInt;
-    Table: ^TConvertBase64ToBinTable;
 begin
   result := false;
-  if ConvertBase64ToBin=nil then
-    InitConvertBase64ToBin;
   if (len=0) or (len and 3<>0) then
     exit;
-  Table := pointer(ConvertBase64ToBin);
   for i := 0 to len-5 do
-    if Table[sp[i]]<0 then
+    if ConvertBase64ToBin[sp[i]]<0 then
       exit;
   inc(sp,len-4);
-  if (Table[sp[0]]=-1) or // -2 = '=' is allowed here
-     (Table[sp[1]]=-1) or (Table[sp[2]]=-1) or (Table[sp[3]]=-1) then
+  if (ConvertBase64ToBin[sp[0]]=-1) or // -2 = '=' is allowed here
+     (ConvertBase64ToBin[sp[1]]=-1) or (ConvertBase64ToBin[sp[2]]=-1) or (ConvertBase64ToBin[sp[3]]=-1) then
       exit;
   result := true; // layout seems correct
 end;
@@ -23280,16 +23263,13 @@ begin
 end;
 
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
-var Table: ^TConvertBase64ToBinTable absolute ConvertBase64ToBin;
 begin
   if (len=0) or (len and 3<>0) then begin
     result := 0;
     exit;
   end;
-  if ConvertBase64ToBin=nil then
-    InitConvertBase64ToBin;
-  if Table[sp[len-2]]>=0 then
-    if Table[sp[len-1]]>=0 then
+  if ConvertBase64ToBin[sp[len-2]]>=0 then
+    if ConvertBase64ToBin[sp[len-1]]>=0 then
       result := 0 else
       result := 1 else
       result := 2;
@@ -23300,20 +23280,18 @@ procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
 {$ifdef PUREPASCAL}
 var i: PtrInt;
     c, ch: PtrInt;
-    Table: ^TConvertBase64ToBinTable;
 begin
-  Table := pointer(ConvertBase64ToBin);
   for i := 1 to len do begin
-    c := Table[sp[0]];
+    c := ConvertBase64ToBin[sp[0]];
     if c>=0 then begin
       c := c shl 6;
-      ch := Table[sp[1]];
+      ch := ConvertBase64ToBin[sp[1]];
       if ch>=0 then begin
         c := (c or ch) shl 6;
-        ch := Table[sp[2]];
+        ch := ConvertBase64ToBin[sp[2]];
         if ch>=0 then begin
           c := (c or ch) shl 6;
-          ch := Table[sp[3]];
+          ch := ConvertBase64ToBin[sp[3]];
           if ch>=0 then begin
             c := c or ch;
             rp[2] := AnsiChar(c);
@@ -23348,13 +23326,11 @@ asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
      push eax
      test ecx,ecx
      mov ebp,edx
-     mov edi,dword ptr [ConvertBase64ToBin]
+     lea edi,[ConvertBase64ToBin]
      mov [esp],ecx
      jz @4
-     xor edx,edx
-     xor ebx,ebx
-@0:  mov dl,[eax]
-     mov bl,[eax+$01]
+@0:  movzx edx,byte ptr [eax]
+     movzx ebx,byte ptr [eax+$01]
      movsx ecx,byte ptr [edi+edx]
      movsx esi,byte ptr [edi+ebx]
      test ecx,ecx
@@ -23363,8 +23339,8 @@ asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
      test esi,esi
      jl @1
      or ecx,esi
-     mov dl,[eax+$02]
-     mov bl,[eax+$03]
+     movzx edx,byte ptr [eax+$02]
+     movzx ebx,byte ptr [eax+$03]
      shl ecx,$06
      movsx esi,byte ptr [edi+edx]
      movsx edx,byte ptr [edi+ebx]
@@ -55779,6 +55755,10 @@ begin
     TwoDigitsHex[i][1] := HexChars[i shr 4];
     TwoDigitsHex[i][2] := HexChars[i and $f];
   end;
+  FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
+  for i := 0 to high(b64) do
+    ConvertBase64ToBin[b64[i]] := i;
+  ConvertBase64ToBin['='] := -2; // special value for '='
   // initialize our internaly used TSynAnsiConvert engines
   TSynAnsiConvert.Engine(0);
   // initialize tables for crc32cfast() and SymmetricEncrypt/FillRandom
