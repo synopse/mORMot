@@ -1014,6 +1014,13 @@ const
   SHA256DIGESTSTRLEN = sizeof(TSHA256Digest)*2;
   MD5DIGESTSTRLEN = sizeof(TMD5Digest)*2;
 
+type
+  Short32 = string[32];
+
+/// compute the hexadecial representation of an AES 16-byte block
+// - returns a stack-allocated short string
+function AESBlockToShortString(const block: TAESBlock): short32;
+
 /// compute the hexadecimal representation of a SHA1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 
@@ -6182,13 +6189,13 @@ end;
 function TMD5.Final: TMD5Digest;
 begin
   Finalize;
-  MoveFast(buf,result,sizeof(result));
+  result := TMD5Digest(buf);
 end;
 
 procedure TMD5.Final(out result: TMD5Digest);
 begin
   Finalize;
-  MoveFast(buf,result,sizeof(result));
+  result := TMD5Digest(buf);
 end;
 
 procedure TMD5.Finalize;
@@ -6298,6 +6305,12 @@ begin
 end;
 
 const Digits: array[0..15] of AnsiChar = '0123456789abcdef';
+
+function AESBlockToShortString(const block: TAESBlock): short32;
+begin
+  result[0] := #32;
+  SynCommons.BinToHex(@block,@result[1],16);
+end;
 
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 var P: PAnsiChar;
