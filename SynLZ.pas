@@ -216,7 +216,7 @@ function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integ
 
 /// 1st compression algorithm uses hashing with a 32bits control word
 // - this is the fastest pure pascal implementation
-function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
 /// 1st compression algorithm uses hashing with a 32bits control word
 // - this overload function is slower, but will allow to uncompress only the start
@@ -224,13 +224,30 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): Int
 // - it will also check for dst buffer overflow, so will be more secure than
 // other functions, which expect the content to be verified (e.g. via CRC)
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
-  maxDst: Integer): Integer;
+  maxDst: integer): integer;
 
-{$ifndef PUREPASCAL}
+{$ifdef PUREPASCAL}
+var
+  /// fastest available SynLZ compression (using 1st algorithm)
+  SynLZCompress1: function(
+    src: PAnsiChar; size: integer; dst: PAnsiChar): integer = SynLZcompress1pas;
+
+  /// fastest available SynLZ decompression (using 1st algorithm)
+  SynLZDecompress1: function(
+    src: PAnsiChar; size: integer; dst: PAnsiChar): integer = SynLZDecompress1pas;
+    
+{$else}
+
 /// optimized asm version of the 1st compression algorithm
 function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 /// optimized asm version of the 1st compression algorithm
-function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+
+/// fastest available SynLZ compression (using 1st algorithm)
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+
+/// fastest available SynLZ decompression (using 1st algorithm)
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 {$endif PUREPASCAL}
 
 /// 2nd compression algorithm optimizing pattern copy
@@ -238,17 +255,7 @@ function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): Int
 function SynLZcompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 /// 2nd compression algorithm optimizing pattern copy
 // - this algorithm is a bit smaller, but slower, so the 1st method is preferred
-function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
-
-var
-  /// fastest available SynLZ compression (using 1st algorithm)
-  SynLZCompress1: function(src: PAnsiChar; size: integer; dst: PAnsiChar): integer
-     = {$ifdef PUREPASCAL}SynLZcompress1pas{$else}SynLZcompress1asm{$endif};
-
-  /// fastest available SynLZ decompression (using 1st algorithm)
-  SynLZDecompress1: function(src: PAnsiChar; size: integer; dst: PAnsiChar): integer
-     = {$ifdef PUREPASCAL}SynLZDecompress1pas{$else}SynLZDecompress1asm{$endif};
-
+function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 
 implementation
 
@@ -267,10 +274,11 @@ type
 type // Delphi 5 doesn't have those base types defined :(
   PByte = ^Byte;
   PWord = ^Word;
-  PInteger = ^Integer;
+  PInteger = ^integer;
   PCardinal = ^Cardinal;
-  IntegerArray  = array[0..$effffff] of Integer;
+  IntegerArray  = array[0..$effffff] of integer;
   PIntegerArray = ^IntegerArray;
+
 {$endif}
 
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
@@ -283,6 +291,12 @@ begin
 end;
 
 {$ifndef PUREPASCAL}
+// using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+asm
+  jmp SynLzCompress1Asm
+end;
+
 function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 asm
         push    ebp
@@ -562,7 +576,7 @@ const
   bitlut: array[0..15] of integer =
     (4, 0, 1, 0, 2, 0, 1, 0, 3, 0, 1, 0, 2, 0, 1, 0);
 
-function SynLZdecompress1b(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+function SynLZdecompress1b(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 // this routine was trying to improve speed, but was slower
 var last_hashed: PAnsiChar; // initial src and dst value
     src_end: PAnsiChar;
@@ -652,7 +666,13 @@ nextCW:
 end;
 
 {$ifndef PUREPASCAL}
-function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+// using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+asm
+  jmp SynLZDecompress1asm
+end;
+
+function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 asm
         push    ebp
         push    ebx
@@ -771,7 +791,7 @@ asm
 end;
 {$endif PUREPASCAL}
 
-function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var last_hashed: PAnsiChar; // initial src and dst value
     src_end: PAnsiChar;
     {$ifdef CPU64}
@@ -850,7 +870,7 @@ nextCW:
   until false;
 end;
 
-function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar; maxDst: Integer): Integer;
+function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar; maxDst: integer): integer;
 var last_hashed: PAnsiChar; // initial src and dst value
     src_end,dst_End: PAnsiChar;
     CWbit: integer;
@@ -1090,7 +1110,7 @@ dotdiff:v := tdiff;
   result := dst-dst_beg;
 end;
 
-function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): Integer;
+function SynLZdecompress2(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var {$ifopt C+}dst_beg,{$endif} last_hashed: PAnsiChar; // initial src and dst value
     src_end: PAnsiChar;
     CWbit: integer;

@@ -53392,8 +53392,7 @@ begin
       exit;
     len := SynLZdecompressdestlen(P+8);
     SetLength(result,len);
-    if (len<>0) and
-        ((SynLZdecompress1(P+8,DataLen-8,pointer(result))<>len) or
+    if (len<>0) and  ((SynLZDecompress1(P+8,DataLen-8,pointer(result))<>len) or
        (Hash32(pointer(result),len)<>PCardinal(P)^)) then begin
       result := '';
       exit;
@@ -53542,8 +53541,7 @@ begin
           if (Hash32(pointer(src),Head.CompressedSize)<>Head.HashCompressed) or
              (SynLZdecompressdestlen(pointer(src))<>Head.UnCompressedSize) then
             exit;
-          if (SynLZdecompress1(pointer(src),Head.CompressedSize,pointer(dst))
-               <>Head.UnCompressedSize) or
+          if (SynLZDecompress1(pointer(src),Head.CompressedSize,pointer(dst))<>Head.UnCompressedSize) or
              (Hash32(pointer(dst),Head.UnCompressedSize)<>Head.HashUncompressed) then
             exit;
           if D.Write(pointer(dst)^,Head.UncompressedSize)<>Head.UncompressedSize then
@@ -53673,10 +53671,9 @@ begin
     result.Size := resultSize+Head.UnCompressedSize;
     D := PAnsiChar(result.Memory)+resultSize;
     inc(resultSize,Head.UnCompressedSize);
-    if stored then 
+    if stored then
       MoveFast(S^,D^,Head.CompressedSize) else
-    if {$ifdef DELPHI5OROLDER}SynLZDecompress1asm // circumvent Internal Error C11715
-       {$else}SynLZdecompress1{$endif}(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
+    if SynLZDecompress1(S,Head.CompressedSize,D)<>Head.UnCompressedSize then
       FreeAndNil(result) else
     if Hash32(D,Head.UnCompressedSize)<>Head.HashUncompressed then
       FreeAndNil(result);
@@ -53751,7 +53748,7 @@ begin
     len := SynLZdecompressdestlen(P+9);
     SetLength(result,len);
     if (len<>0) and
-       ((SynLZdecompress1(P+9,PLen-9,pointer(result))<>len) or
+       ((SynLZDecompress1(P+9,PLen-9,pointer(result))<>len) or
        (crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
       result := '';
   end;
