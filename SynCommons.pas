@@ -45643,7 +45643,22 @@ Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
         inc(P);
       until not (ord(P^) in IsJsonIdentifier);
       while P^ in [#1..' '] do inc(P);
-      if P^<>':' then exit;
+      if P^='(' then begin // handle e.g. "born":isodate("1969-12-31")
+        inc(P);
+        while P^ in [#1..' '] do inc(P);
+        if P^='"' then begin
+         P := GotoEndOfJSONString(P);
+         if P^<>'"' then
+          exit;
+        end;
+        inc(P);
+        while P^ in [#1..' '] do inc(P);
+        if P^<>')' then
+          exit;
+        inc(P);
+       end
+       else
+       if P^<>':' then exit;
     end;
     end;
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
