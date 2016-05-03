@@ -2421,13 +2421,15 @@ var k: TDocVariantKind;
     i,n,cap: integer;
     items: array[0..63] of TBSONElement;
 begin // very fast optimized code
-  if not (Kind in [betDoc,betArray]) then
-    VarCastError;
-  if (BSON=nil) or (BSON^=byte(betEOF)) then
+  if BSON=nil then
     TVarData(Doc).VType := varNull else begin
-    if Kind=betDoc then
-      k := dvObject else
+    case Kind of
+    betDoc:
+      k := dvObject;
+    betArray:
       k := dvArray;
+    else exit; // leave Doc=varEmpty
+    end;
     Doc.Init(OPTIONS[Option],k);
     cap := 0;
     repeat // will handle up to 64 TBSONElement per loop (via items[])
