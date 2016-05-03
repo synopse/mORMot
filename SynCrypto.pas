@@ -7525,8 +7525,12 @@ var
 
 class function TAESPRNG.Main: TAESPRNG;
 begin
-  if FillRandomAES=nil then
-    GarbageCollectorFreeAndNil(FillRandomAES, TAESPRNG.Create);
+  if FillRandomAES=nil then begin
+    GlobalLock;
+    if FillRandomAES=nil then
+      GarbageCollectorFreeAndNil(FillRandomAES, TAESPRNG.Create);
+    GlobalUnLock;
+  end;
   result := FillRandomAES;
 end;
 

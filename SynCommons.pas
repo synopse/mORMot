@@ -29892,7 +29892,6 @@ begin
 end;
 
 
-
 procedure AppendToTextFile(aLine: RawUTF8; const aFileName: TFileName);
 var F: THandle;
     Old: TFileName;
@@ -55659,21 +55658,15 @@ end;
 
 var
   GlobalCriticalSection: TRTLCriticalSection;
-  GlobalCriticalSectionInitialized: boolean;
 
 procedure GlobalLock;
 begin
-  if not GlobalCriticalSectionInitialized then begin
-    InitializeCriticalSection(GlobalCriticalSection);
-    GlobalCriticalSectionInitialized := true;
-  end;
   EnterCriticalSection(GlobalCriticalSection);
 end;
 
 procedure GlobalUnLock;
 begin
-  if GlobalCriticalSectionInitialized then
-    LeaveCriticalSection(GlobalCriticalSection);
+  LeaveCriticalSection(GlobalCriticalSection);
 end;
 
 {$ifdef CPUINTEL}
@@ -55805,6 +55798,7 @@ initialization
   // initialization of global variables
   GarbageCollectorFreeAndNilList := TList.Create;
   GarbageCollectorFreeAndNil(GarbageCollector,TObjectList.Create);
+  InitializeCriticalSection(GlobalCriticalSection);
   {$ifdef CPUINTEL}
   TestIntelCpuFeatures;
   {$endif}
@@ -55839,7 +55833,6 @@ initialization
 
 finalization
   GarbageCollectorFree;
-  if GlobalCriticalSectionInitialized then
-    DeleteCriticalSection(GlobalCriticalSection);
+  DeleteCriticalSection(GlobalCriticalSection);
   //writeln('TDynArrayHashedCollisionCount=',TDynArrayHashedCollisionCount); readln;
 end.
