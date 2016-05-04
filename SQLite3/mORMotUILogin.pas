@@ -29,6 +29,8 @@ unit mORMotUILogin;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - igors233
+
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -85,7 +87,7 @@ interface
 
 uses
   Windows, Messages, SysUtils, Classes, Graphics, Consts,
-  Controls, Forms, StdCtrls, ExtCtrls, Buttons,
+  Controls, Forms, StdCtrls, ExtCtrls, Buttons, PsAPI,
 {$ifdef USETMSPACK}
   AdvGlowButton, TaskDialog, TaskDialogEx, AdvToolBarStylers, AdvToolBar,
 {$endif USETMSPACK}
@@ -233,13 +235,13 @@ resourcestring
   sOnIdleProcessFormMessage = 'Please wait...';
 
 
-{{ ensure that the program is launched once
-   - the main project .dpr source file must contain:
-  !begin
-  !  Application.Initialize;
-  !  EnsureSingleInstance; // program is launched once
-  !  Application.CreateForm(TMainForm, MainForm);
-  ! .... }
+/// ensure that the program is launched once
+// - the main project .dpr source file must contain:
+// !begin
+// !  Application.Initialize;
+// !  EnsureSingleInstance; // program is launched once
+// !  Application.CreateForm(TMainForm, MainForm);
+// ! ....
 procedure EnsureSingleInstance;
 
 type
@@ -666,37 +668,60 @@ end;
 
 procedure EnsureSingleInstance;
 var Wnd: HWnd;
-    WndClass, WndText: array[byte] of char;
+    ToFindClass, WndClass, AppFileName: string;
+    tmp: array[byte] of char;
+
+  function FileNameFromWndMatch: boolean;
+  var ProcessID: DWORD;
+      hProc: THandle;
+      tmp: array[0..MAX_PATH] of char;
+  begin
+    GetWindowThreadProcessId(Wnd, @ProcessId);
+    hProc := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, false, ProcessId);
+    if hProc <> 0 then begin
+      if GetModuleFileNameEx(hProc, 0, tmp, MAX_PATH) = 0 then
+        tmp[0] := #0;
+      CloseHandle(hProc);
+      result := ExtractFileName(string(tmp)) = AppFileName;
+    end else
+      result := false;
+  end;
+
 begin
-  if Application=nil then
+  if Application = nil then
     exit;
-  { Try and create a semaphore. If we succeed, then check }
-  { if the semaphore was already present. If it was }
-  { then a previous instance is floating around. }
-  { Note the OS will free the returned semaphore handle }
-  { when the app shuts so we can forget about it }
-  if (CreateSemaphore(nil, 0, 1,
-        pointer(ExtractFileName(Application.ExeName))) <> 0) and
-     (GetLastError = Error_Already_Exists) then  begin
-    Wnd := GetWindow(Application.Handle, gw_HWndFirst);
+  { Try and create a semaphore. If we succeed, then check if the semaphore was
+    already present. If it was then a previous instance is floating around.
+    Note the OS will free the returned semaphore handle when the app shuts
+    so we can forget about it }
+  AppFileName := ExtractFileName(ExeVersion.ProgramFileName);
+  if (CreateSemaphore(nil, 0, 1, Pointer(AppFileName)) <> 0) and
+     (GetLastError = ERROR_ALREADY_EXISTS) then begin
+    if GetClassName(Application.Handle, tmp, high(tmp)) = 0 then
+      exit;
+    ToFindClass := tmp;
+    Wnd := GetWindow(Application.Handle, GW_HWNDFIRST);
     while Wnd <> 0 do begin
       { Look for the other TApplication window out there }
       if Wnd <> Application.Handle then begin
-        { Check it's definitely got the same class and caption }
-        GetClassName(Wnd, WndClass, Pred(SizeOf(WndClass)));
-        GetWindowText(Wnd, WndText, Succ(Length(Application.Title)));
-        if (WndClass = string(Application.ClassName)) and
-           (WndText = Application.Title) then begin
-          { This technique is used by the VCL: post }
-          { a message then bring the window to the }
-          { top, before the message gets processed }
-          PostMessage(Wnd, wm_SysCommand, sc_Restore, 0);
+        { Check if got the same class and filename }
+        if GetClassName(Wnd, tmp, high(tmp)) = 0 then
+          tmp[0] := #0;
+        WndClass := tmp;
+        if (ToFindClass = WndClass) and FileNameFromWndMatch then begin
+          { This technique is used by the VCL: post a message then bring the
+            window to the top, before the message gets processed }
+          PostMessage(Wnd, WM_SYSCOMMAND, SC_RESTORE, 0);
           SetForegroundWindow(Wnd);
-          Halt;
+          break;
         end
       end;
-      Wnd := GetWindow(Wnd, gw_HWndNext)
-    end
+      Wnd := GetWindow(Wnd, GW_HWNDNEXT);
+    end;
+    AppFileName := ''; // avoid memory leak due to Halt brutal execution
+    WndClass := '';
+    ToFindClass := '';
+    Halt; // Stop this new instance
   end
 end;
 
@@ -891,7 +916,6 @@ end;
 
 {$endif USETMSPACK}
 
-
 procedure TLoginForm.FormShow(Sender: TObject);
 begin
   if (Edit<>nil) and Edit.Enabled and (EditText='') then
@@ -949,7 +973,6 @@ initialization
   Gdip.RegisterPictures; // will initialize the Gdip library if necessary
   Application.OnException := TLoginForm.HandleApplicationException;
 
-finalization
 end.
 
 
