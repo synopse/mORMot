@@ -1073,6 +1073,7 @@ begin
   {$endif}
 end;
 
+
 { TSynTestsLogged }
 
 function TSynTestsLogged.BeforeRun(const TestName: RawUTF8): IUnknown;

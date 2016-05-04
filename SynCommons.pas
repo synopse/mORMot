@@ -55336,6 +55336,8 @@ begin
   try
     // start secondary threads
     perthread := MethodCount div use;
+    if perthread=0 then
+      use := 1;
     n := 0;
     for t := 0 to use-2 do begin
       repeat
