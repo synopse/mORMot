@@ -5,7 +5,7 @@ unit SynMemoEx;
 {
     This file is part of Synopse extended TMemo
 
-    Synopse Synopse SynLZ Compression. Copyright (C) 2016 Arnaud Bouchez
+    Synopse SynMemoEx. Copyright (C) 2016 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -20,7 +20,7 @@ unit SynMemoEx;
   WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License
   for the specific language governing rights and limitations under the License.
 
-  The Original Code is Synopse SynLZ Compression.
+  The Original Code is Synopse SynMemoEx.
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
@@ -28,6 +28,7 @@ unit SynMemoEx;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
   the GNU Lesser General Public License Version 2.1 or later (the "LGPL"),
@@ -93,10 +94,15 @@ uses
   ExtCtrls, StdCtrls, ClipBrd, Menus {$ifdef UNICODE}, UITypes{$endif};
 
 const
-  RAEditorCompletionChars: set of AnsiChar = [#8, '_', '0'..'9', 'A'..'Z', 'a'..'z'];
-  Separators: set of AnsiChar = [#00, ' ', '-', #13, #10, '.', ',', '/', '\', ':', '+', '%', '*', '(', ')', ';', '=', '{', '}', '[', ']', '{', '}', '|', '!', '@'];
+  RAEditorCompletionChars: set of AnsiChar =
+    [#8, '_', '0'..'9', 'A'..'Z', 'a'..'z'];
+  Separators: set of AnsiChar =
+    [#0, ' ', '-', #13, #10, '.', ',', '/', '\', ':', '+', '%', '*', '(', ')',
+    ';', '=', '{', '}', '[', ']', '{', '}', '|', '!', '@'];
   GutterRightMargin = 2;
+
   WM_EDITCOMMAND = WM_USER + $101;
+
   RA_EX_STYLE_DEFAULT = 0;
   RA_CASE_CONVERT_UPPER = 0;
   RA_CASE_CONVERT_LOWER = 1;
@@ -142,7 +148,6 @@ type
   end;
 
   PLineAttr = ^TLineAttr;
-
   TLineAttr = packed record
     FC, BC: TColor;
     case integer of
@@ -165,51 +170,33 @@ type
   end;
 
   TLineAttrs = array of TLineAttr;
-
   TSelAttrs = array of boolean;
 
   TOnGetLineAttr = procedure(Sender: TObject; const Line: string; index: integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs) of object;
-
   TOnChangeStatus = TNotifyEvent;
-
   TOnChangeClipboardState = procedure(Sender: TObject; const CanPaste: boolean) of object;
-
   TOnWordClick = procedure(Sender: TObject; const Clicked: TWordUnderCursor) of object;
-
   TOnMouseOver = procedure(Sender: TObject; WordStyle: word; var _Cursor: TCursor) of object;
-
   TOnBreakLine = procedure(Sender: TObject; const Original: string; var _New: string) of object;
-
   TOnConcatLine = procedure(Sender: TObject; const Original: string; var _New: string) of object;
-
   TOnTextInsert = procedure(Sender: TObject; var Text: string) of object;
-
   TOnCaseConversion = function(Sender: TObject; Conversion: byte; const Text: string): string of object;
-
   TOnInsertBlock = function(Sender: TObject; var Text: string): boolean of object;
-
   TOnSaveBlock = procedure(Sender: TObject; const Text: string) of object;
-
   TOnInsertMacro = function(Sender: TObject; MacroID: integer): string of object;
-
   TOnBlockOperation = function(Sender: TObject; MacroID: integer; const Text: string): string of object;
-
   TOnSetCaretPos = procedure(Sender: TObject; CaretX, CaretY: integer) of object;
-
   TOnClipboardPaste = function(Sender: TObject): boolean of object;
-
   {$IFDEF MEMOEX_COMPLETION}
   TOnPreprocessCompletion = function(Sender: TObject; const ID, Text: string): string of object;
   {$ENDIF}
 
   PAutoChangeWord = ^TAutoChangeWord;
-
   TAutoChangeWord = record
     OldWord, NewWord: string;
   end;
 
   PParagraph = ^TParagraph;
-
   TParagraph = record
     FPreCount, FCount: integer; // length(FString) = FStrings[0..FCount-1]
     FStrings: array of string;
@@ -284,9 +271,7 @@ type
     X, Y: integer;
     Valid: boolean;
   end;
-
   TBookMarkNum = 0..9;
-
   TBookMarks = array[TBookMarkNum] of TBookMark;
 
   TEditorClient = class
@@ -384,6 +369,7 @@ type
 
   TTabStop = (tsTabStop, tsAutoIndent);
 
+  
   {*** TCustomMemoEx }
 
   TCustomMemoEx = class(TCustomControl)
@@ -404,7 +390,6 @@ type
     {$IFDEF MEMOEX_COMPLETION}
     FCompletion: TCompletion;
     {$ENDIF MEMOEX_COMPLETION}
-
     { internal - Columns and rows attributes }
     FCols, FRows: integer;
     FLeftCol, FTopRow: integer;
@@ -413,7 +398,6 @@ type
     FCaretX, FCaretY: integer;
     FVisibleColCount: integer;
     FVisibleRowCount: integer;
-
     { internal - other flags and attributes }
     FAllRepaint: boolean;
     FCellRect: TCellRect;
@@ -423,7 +407,6 @@ type
     WaitSecondKey: Boolean;
     Key1: Word;
     Shift1: TShiftState;
-
     { internal - selection attributes }
     FSelected: boolean;
     FSelBlock: boolean;
@@ -431,15 +414,12 @@ type
     FUpdateSelBegX, FUpdateSelEndX, FUpdateSelBegY, FUpdateSelEndY: integer;
     FSelStartX, FSelStartY: integer;
     FclSelectBC, FclSelectFC: TColor;
-
     { mouse support }
     timerScroll: TTimer;
     MouseMoveY, MouseMoveXX, MouseMoveYY: integer;
-
     { internal }
     FTabPos: array of boolean;
     FTabStops: string;
-
     { internal - primary for TIReader support }
     FEditBuffer: string;
     FPEditBuffer: PChar;
@@ -448,7 +428,6 @@ type
     { FMacro - buffer of TEditCommand, each command represents by two chars }
     FMacro: TMacro;
     FDefMacro: TMacro;
-
     { visual attributes - properties }
     FBorderStyle: TBorderStyle;
     FGutterColor: TColor;
@@ -466,13 +445,11 @@ type
     FCursorBeyondEOL: Boolean;
     { FInclusive - Inclusive mode }
     FInclusive: Boolean;
-
     { non-visual attributes - properties }
     FInsertMode: boolean;
     FReadOnly: boolean;
     FModified: boolean;
     FRecording: boolean;
-
     { Events }
     FOnGetLineAttr: TOnGetLineAttr;
     FOnChange: TNotifyEvent;
@@ -494,7 +471,6 @@ type
     FOnInsertMacro: TOnInsertMacro;
     FOnBlockOperation: TOnBlockOperation;
     FOnSetCaretPos: TOnSetCaretPos;
-
     {$IFDEF MEMOEX_COMPLETION}
     FOnCompletionIdentifer: TOnCompletion;
     FOnCompletionTemplate: TOnCompletion;
@@ -514,16 +490,15 @@ type
     mouse_down, mouse_dragged, double_clicked: boolean;
     FWordUnderCursor: TWordUnderCursor;
     FClipPasteRtfBackSlashConvert: boolean;
-{$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
+    {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
     FClip: string; // AB
     FClipProtect: boolean;
-{$endif}
+    {$endif}
     FOnClipboardPaste: TOnClipboardPaste; // AB
     procedure SetMax_X(const Value: integer);
     procedure UpdateEditorSize(const FullUpdate: boolean = true; const RepaintGutter: boolean = true);
     procedure RedrawFrom(YFrom: integer);
     function RepaintParagraph(LineIndex: integer): integer;
-
     {$IFDEF MEMOEX_COMPLETION}
     procedure DoCompletionIdentifer(var Cancel: boolean);
     procedure DoCompletionTemplate(var Cancel: boolean);
@@ -535,8 +510,7 @@ type
     function GetTabStop(const X, Y: integer; const What: TTabStop; const Next: Boolean): integer;
     function GetBackStop(const X, Y: integer): integer;
     procedure TextAllChangedInternal(const Unselect: Boolean);
-
-    { property }
+    { properties }
     procedure SetGutterWidth(AWidth: integer);
     procedure SetGutterColor(AColor: TColor);
     procedure SetFont(Value: TFont);
@@ -581,7 +555,6 @@ type
     procedure Scroll(const Vert: boolean; const ScrollPos: integer);
     procedure PaintLine(const Line: integer; ColBeg, ColEnd: integer);
     procedure KeyDown(var Key: Word; Shift: TShiftState); override;
-
     {$IFDEF MEMOEX_EDITOR}
     procedure KeyPress(var Key: Char); override;
     procedure InsertChar(const Key: Char);
@@ -603,14 +576,12 @@ type
     function PosFromMouse(const X, Y: integer): integer;
     procedure SetLockText(const Text: string);
 //    function ExpandTabs(const S: string): string;
-
     {$IFDEF MEMOEX_UNDO}
     procedure CantUndo;
     {$ENDIF MEMOEX_UNDO}
     procedure SetCaretInternal(X, Y: integer);
     procedure ValidateEditBuffer;
     procedure SetXY(X, Y: integer);
-
     {$IFDEF MEMOEX_EDITOR}
     procedure ChangeBookMark(const BookMark: TBookMarkNum; const Valid: boolean);
     procedure InsertText(const Text: string);
@@ -620,7 +591,6 @@ type
     procedure PlayMacro(const AMacro: TMacro);
     function YinBounds(AY: integer): boolean;
     function DoChangeCase(const st: string; Conversion: byte): string;
-
     { triggers for descendants }
     procedure Changed; dynamic;
     procedure TextAllChanged; dynamic;
@@ -671,12 +641,11 @@ type
     function GetText(Position: longint; Buffer: PChar; Count: longint): longint;
     function IsUndoEmpty: boolean;
     procedure MouseWheelScroll(Delta: integer);
-
-{$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
+    {$ifdef CLIPBOARDPROTECT} // ClipProtect will trunc clipboard to 2KB
     property ClipProtect: boolean read FClipProtect write FClipProtect; // AB
-{$endif}
-    property ClipPasteRtfBackSlashConvert:boolean // AB: rtf
- read FClipPasteRtfBackSlashConvert write FClipPasteRtfBackSlashConvert;
+    {$endif}
+    property ClipPasteRtfBackSlashConvert: boolean // AB: rtf
+      read FClipPasteRtfBackSlashConvert write FClipPasteRtfBackSlashConvert;
     property LeftCol: integer read FLeftCol;
     property TopRow: integer read FTopRow write SetTopRow;
     property VisibleColCount: integer read FVisibleColCount;
@@ -716,7 +685,7 @@ type
     property RightMargin: integer read FRightMargin write SetRightMargin default 80;
     property RightMarginColor: TColor read FRightMarginColor write SetRightMarginColor default clBtnFace;
     property InsertMode: boolean index 0 read FInsertMode write SetMode default true;
-    property readonly: boolean index 1 read FReadOnly write SetMode default false;
+    property ReadOnly: boolean index 1 read FReadOnly write SetMode default false;
     property DoubleClickLine: boolean read FDoubleClickLine write FDoubleClickLine default false;
     {$IFDEF MEMOEX_COMPLETION}
     property Completion: TCompletion read FCompletion write FCompletion;
@@ -774,7 +743,9 @@ type
 
   TMemoEx = class(TCustomMemoEx)
   public
-    class procedure JSONLineAttr(Sender: TObject; const Line: string; index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
+    /// a JSON syntax highlighter
+    class procedure JSONLineAttr(Sender: TObject; const Line: string;
+      index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
   published
     property TabOrder;
     property BorderStyle;
@@ -786,7 +757,7 @@ type
     property RightMargin;
     property RightMarginColor;
     property InsertMode;
-    property readonly;
+    property ReadOnly;
     property DoubleClickLine;
     {$IFDEF MEMOEX_COMPLETION}
     property Completion;
@@ -842,7 +813,6 @@ type
     property OnCompletionMeasureItem;
     property OnPreprocessCompletion;
     {$ENDIF MEMOEX_COMPLETION}
-
     { TCustomControl }
     property align;
     property Enabled;
@@ -953,7 +923,6 @@ const
   ecCharLast = $FF;
   ecCommandFirst = $100;
   ecUser = $8000; { use this for descendants }
-
   {Cursor}
   ecLeft = ecCommandFirst + 1;
   ecUp = ecLeft + 1;
@@ -1114,6 +1083,7 @@ procedure Register;
 function Max(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
 
 function Min(x, y: integer): integer; {$ifdef HASINLINE}inline;{$endif}
+
 
 implementation
 
@@ -1708,29 +1678,40 @@ begin
   end;
 end;
 
-function StringDynArrayGetSize(V: PIntegerArray; FCount: integer): integer;
+type
+  {$ifdef CPU64}
+  PPtrInt = ^Int64;
+  {$else}
+  PPtrInt = ^integer;
+  {$endif}
+
+function StringDynArrayGetSize(V: PPtrInt; n: integer): integer;
 // Siz := StringDynArrayGetSize(pointer(FStrings),FCount);
 var
   i: integer;
 begin
   result := 0;
-  for i := 0 to FCount - 1 do
-    if V^[i] <> 0 then // very fast inc(Result, length(FStrings[i-1])
-      inc(result, PInteger(V^[i] - 4)^);
+  for i := 1 to n do begin
+    if V^ <> 0 then // very fast inc(Result, length(FStrings[i-1])
+      inc(result, PInteger(V^ - 4)^);
+    inc(V);
+  end;
 end;
 
-function StringDynArrayToPChar(V: PIntegerArray; FCount: integer; P: PChar): PChar;
+function StringDynArrayToPChar(V: PPtrInt; n: integer; P: PChar): PChar;
 // StringDynArrayToPChar(pointer(FStrings),FCount,pointer(Result))
 var
   i, Size: integer;
 begin
-  for i := 0 to FCount - 1 do
-    if V^[i] <> 0 then
+  for i := 1 to n do begin
+    if V^ <> 0 then
     begin
-      size := PInteger(V^[i] - 4)^;
-      move(pointer(V^[i])^, P^, size * SizeOf(char));
+      size := PInteger(V^ - 4)^;
+      move(pointer(V^)^, P^, size * SizeOf(char));
       inc(P, size);
     end;
+    inc(V);
+  end;
   result := P;
 end;
 
@@ -7310,7 +7291,8 @@ end;
 
 { TMemoEx }
 
-class procedure TMemoEx.JSONLineAttr(Sender: TObject; const Line: string; index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
+class procedure TMemoEx.JSONLineAttr(Sender: TObject; const Line: string;
+  index: Integer; const SelAttrs: TSelAttrs; var Attrs: TLineAttrs);
 var
   i, c: integer;
   FC: TColor;
@@ -7320,63 +7302,57 @@ begin
   if Line <> '' then
     repeat
       case Line[i + 1] of
-        #0:
-          break;
-        '{', '}':
-          begin
-            Attrs[i].FC := clGreen;
-            Attrs[i].Style := [fsBold];
-            inc(i);
-          end;
-        '[', ']':
-          begin
-            Attrs[i].FC := clNavy;
-            Attrs[i].Style := [fsBold];
-            inc(i);
-          end;
-        '"':
-          begin
-            repeat
-              Attrs[i].FC := clOlive;
-              inc(i);
-              if Line[i + 1] = #0 then
-                exit;
-            until (Line[i + 1] = '"') and (Line[i] <> '\');
+      #0:
+        break;
+      '[', ']':
+        begin
+          Attrs[i].FC := clNavy;
+          Attrs[i].Style := [fsBold];
+          inc(i);
+        end;
+      '"':
+        begin
+          repeat
             Attrs[i].FC := clOlive;
             inc(i);
-          end;
-        '-', '0'..'9':
-          begin
+            if Line[i + 1] = #0 then
+              exit;
+          until (Line[i + 1] = '"') and (Line[i] <> '\');
+          Attrs[i].FC := clOlive;
+          inc(i);
+        end;
+      '-', '0'..'9':
+        begin
+          repeat
+            Attrs[i].FC := clNavy;
+            inc(i);
+          until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
+            not (AnsiChar(Line[i + 1]) in ['0'..'9', 'e', 'E', '+', '-']);
+        end;
+      '_', 'a'..'z', 'A'..'Z', '$':
+        begin
+          // see SynCommons.IsJsonIdentifierFirstChar
+          {$ifdef UNICODE}
+          c := ord(Line[i + 1]) + ord(Line[i + 2]) shl 8 + ord(Line[i + 3]) shl 16 + ord(Line[i + 4]) shl 24;
+          {$else}
+          c := PInteger(PAnsiChar(pointer(Line)) + i)^;
+          {$endif}
+          if (c = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24) or
+             (c = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) or
+             (c = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24) then
             repeat
               Attrs[i].FC := clNavy;
+              Attrs[i].Style := [fsBold];
               inc(i);
             until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
-              not (AnsiChar(Line[i + 1]) in ['0'..'9', 'e', 'E', '+', '-']);
-          end;
-        '_', 'a'..'z', 'A'..'Z', '$':
-          begin
-            // see SynCommons.IsJsonIdentifierFirstChar
-            {$ifdef UNICODE}
-            c := ord(Line[i + 1]) + ord(Line[i + 2]) shl 8 + ord(Line[i + 3]) shl 16 + ord(Line[i + 4]) shl 24;
-            {$else}
-            c := PInteger(PAnsiChar(pointer(Line)) + i)^;
-            {$endif}
-            if (c = ord('n') + ord('u') shl 8 + ord('l') shl 16 + ord('l') shl 24) or
-               (c = ord('f') + ord('a') shl 8 + ord('l') shl 16 + ord('s') shl 24) or
-               (c = ord('t') + ord('r') shl 8 + ord('u') shl 16 + ord('e') shl 24) then
-              repeat
-                Attrs[i].FC := clNavy;
-                Attrs[i].Style := [fsBold];
-                inc(i);
-              until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
-                not (AnsiChar(Line[i + 1]) in ['a'..'z'])
-            else
-              repeat
-                Attrs[i].FC := clMaroon;
-                inc(i);
-              until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
-                not (AnsiChar(Line[i + 1]) in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']);
-          end;
+              not (AnsiChar(Line[i + 1]) in ['a'..'z'])
+          else
+            repeat
+              Attrs[i].FC := clMaroon;
+              inc(i);
+            until {$ifdef UNICODE} (Line[i + 1] > #127) or {$endif}
+              not (AnsiChar(Line[i + 1]) in ['_', '0'..'9', 'a'..'z', 'A'..'Z', '.', '[', ']']);
+        end;
       else
         begin
           Attrs[i].FC := FC;

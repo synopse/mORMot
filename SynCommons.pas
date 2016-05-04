@@ -11167,7 +11167,7 @@ function GetFileVersion(const FileName: TFileName): cardinal;
 
 {$endif}
 
-/// returns a JSON object containing deailed information about the computer
+/// returns a JSON object containing basic information about the computer
 // - including Host, User, CPU, OS, freemem, freedisk...
 function SystemInfoJson: RawUTF8;
 

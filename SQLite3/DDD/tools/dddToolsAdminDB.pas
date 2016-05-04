@@ -62,7 +62,7 @@ type
     procedure GridToVariant(var result: variant); virtual;
   public
     DatabaseName: RawUTF8;
-    mmoResult: TMemoEx;
+    mmoResult: TMemoEx; // initialized by code from SynMemoEx.pas
     Grid: TSQLTableToGrid;
     GridLastTableName: RawUTF8;
     Client: TSQLHttpClientWebsockets;
@@ -110,7 +110,7 @@ begin
   mmoResult.Align := alClient;
   mmoResult.Font.Height := -11;
   mmoResult.Font.Name := 'Consolas';
-  mmoResult.readonly := True;
+  mmoResult.ReadOnly := true;
   mmoResult.ScrollBars := ssVertical;
   mmoResult.Text := '';
   mmoResult.RightMargin := 130;
