@@ -203,7 +203,7 @@ type
     fAsynch: {{interfaceName}}Asynch;
     fSharedCallback: T{{uri}}AsynchAck;
     procedure WaitFor(call: T{{uri}}AsynchCall;{{#asynchkey}} const {{.}}: {{asynchkeytype}};{{/asynchkey}}
-      delay: integer; ack: T{{uri}}Ack; asynch: TCQRSResult);
+      delay: integer; ack: T{{uri}}Ack; var result: TCQRSResult);
   public
     /// initialize the blocking instance
     // - would allocate an internal T{{uri}}AsynchAck callback, and
@@ -441,7 +441,7 @@ end;
 
 procedure T{{uri}}Synch.WaitFor(call: T{{uri}}AsynchCall;
   {{#asynchkey}}const {{.}}: {{asynchkeytype}}; {{/asynchkey}}delay: integer; ack: T{{uri}}Ack;
-  asynch: TCQRSResult);
+  var result: TCQRSResult);
 var
   msg: RawUTF8;
 begin
@@ -453,18 +453,19 @@ begin
     call.Params.ack := ack;
     call.Params.methodname := ToMethodName(ack);
     FormatUTF8('WaitFor: Asynch.{{>callfmt}}',
-      [call.Params.methodname, call.Call, {{#asynchkey}}{{.}}, {{/asynchkey}}ToText(asynch)^], msg);
+      [call.Params.methodname, call.Call, {{#asynchkey}}{{.}}, {{/asynchkey}}ToText(result)^], msg);
   finally
     call.Unlock;
   end;
-  if fLog <> nil then
-    fLog.Add.Log(sllTrace, msg, self);
-  if asynch <> cqrsSuccess then
-    CqrsSetResultMsg(asynch, '%: input parameters?', [msg])
-  else if call.WaitFor(delay) = evTimeOut then
-    CqrsSetResultMsg(cqrsTimeout, '% timeout after %ms', [msg, delay])
+  fLog.Add.Log(sllTrace, msg, self);
+  if result <> cqrsSuccess then
+    fLog.Add.Log(sllDDDError, '%: input parameters?', [msg])
+  else if call.WaitFor(delay) = evTimeOut then begin
+    fLog.Add.Log(sllDDDInfo, '% timeout after %ms', [msg, delay]);
+    result := cqrsTimeout;
+  end
   else
-    CqrsSetResult(call.Params.res);
+    result := call.Params.res;
 end;
 
 // {{interfaceName}}Synch blocking methods
@@ -479,7 +480,6 @@ begin
   if fLog <> nil then
     log := fLog.Enter('{{methodName}}({{#asynchkey}}{{.}}=%{{/asynchkey}}{{#args}}{{#dirInput}}, {{argName}}=%{{/dirInput}}{{/args}})',
       [{{#asynchkey}}{{.}}{{/asynchkey}}{{#args}}{{#dirInput}},{{>argvalue}}{{/dirInput}}{{/args}}], self);
-  if BeginMethods(result) then
   try
     call := fSharedCallback.NewAsynchCall;
     try
@@ -490,8 +490,8 @@ begin
       call.Reset;
     end;
   except
-    on E: Exception do
-      CqrsSetResult(E);
+    on Exception do
+      result := cqrsInternalError;
   end;
   if log <> nil then
     log.Log(sllDebug, '{{methodName}}{{#asynchkey}}(%){{/asynchkey}} returned %{{#args}}{{#dirOutput}}{{^dirResult}} {{argName}}=%{{/dirResult}}{{/dirOutput}}{{/args}}',

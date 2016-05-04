@@ -372,11 +372,12 @@ type
   /// a CQRS Service, ready to implement a set of synchronous (blocking) commands
   // over an asynchronous (non-blocking) service
   // - you may use this class e.g. at API level, over a blocking REST server, 
-  // and communicate with the Domain event-driven services via asynchronous calls 
-  TCQRSServiceSynch = class(TCQRSService)
+  // and communicate with the Domain event-driven services via asynchronous calls
+  // - this class won't inherit from TCQRSService, since it would be called
+  // from multiple threads at once, so all CQRSSetResult() methods would fail 
+  TCQRSServiceSynch = class(TInterfacedObject)
   protected
     fSharedCallbackRef: IUnknown;
-    function BeginMethods(var aResult: TCQRSResult): boolean; virtual;
   public
     constructor Create(const sharedcallback: IUnknown); reintroduce;
   end;
@@ -1221,17 +1222,9 @@ end;
 constructor TCQRSServiceSynch.Create(const sharedcallback: IInterface);
 begin
   inherited Create;
+  if sharedcallback = nil then
+    raise EDDDException.CreateUTF8('%.Create(nil)', [self]);
   fSharedCallbackRef := sharedcallback;
-end;
-
-function TCQRSServiceSynch.BeginMethods(var aResult: TCQRSResult): boolean;
-begin
-  result := false;
-  if CqrsBeginMethod(qaCommandDirect, aResult) then
-    if fSharedCallbackRef = nil then
-      CqrsSetResultMsg(cqrsInternalError, 'fSharedCallback=nil')
-    else
-      result := true;
 end;
 
 
