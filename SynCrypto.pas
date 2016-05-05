@@ -1019,7 +1019,11 @@ type
 
 /// compute the hexadecial representation of an AES 16-byte block
 // - returns a stack-allocated short string
-function AESBlockToShortString(const block: TAESBlock): short32;
+function AESBlockToShortString(const block: TAESBlock): short32; overload;
+
+/// compute the hexadecial representation of an AES 16-byte block
+// - fill a stack-allocated short string
+procedure AESBlockToShortString(const block: TAESBlock; out result: short32); overload;
 
 /// compute the hexadecimal representation of a SHA1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
@@ -6307,6 +6311,11 @@ end;
 const Digits: array[0..15] of AnsiChar = '0123456789abcdef';
 
 function AESBlockToShortString(const block: TAESBlock): short32;
+begin
+  AESBlockToShortString(block,result);
+end;
+
+procedure AESBlockToShortString(const block: TAESBlock; out result: short32);
 begin
   result[0] := #32;
   SynCommons.BinToHex(@block,@result[1],16);
