@@ -1663,9 +1663,9 @@ begin
       if MabCreate then
         SaveToFile(MabFile); // if just created from .map -> create .mab file
       U := 'SynLog';
-      fUnitSynLogIndex := fUnits.Find(U);
+      fUnitSynLogIndex := fUnits.FindHashed(U);
       U := 'System';
-      fUnitSystemIndex := fUnits.Find(U);
+      fUnitSystemIndex := fUnits.FindHashed(U);
       fHasDebugInfo := true;
     end else
       fMapFile := '';

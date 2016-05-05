@@ -4792,7 +4792,6 @@ type
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char; inline;
     function SaveToLength: integer; inline;
     function LoadFrom(Source: PAnsiChar): PAnsiChar;  inline;
-    function Find(const Elem): integer; inline;
     property Capacity: integer read GetCapacity write SetCapacity;
   private
   {$else UNDIRECTDYNARRAY}
@@ -4805,6 +4804,7 @@ type
     fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
     fHashCountTrigger: integer;
+    fHashFindCount: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     fHashFindCollisions: cardinal;
     {$endif}
@@ -4925,6 +4925,15 @@ type
     // - warning: Elem must be of the same exact type than the dynamic array, and
     // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
     function FindHashedAndDelete(const Elem): integer;
+    /// will search for an element value inside the dynamic array without hashing
+    // - is used internally when Count < HashCountTrigger
+    // - is preferred to Find(), since EventCompare would be used if defined
+    // - Elem should be of the same exact type than the dynamic array, or at
+    // least matchs the fields used by both the hash function and Equals method:
+    // e.g. if the searched/hashed field in a record is a string as first field,
+    // you may use a string variable as Elem: other fields will be ignored
+    // - returns -1 if not found, or the index in the dynamic array if found
+    function Scan(const Elem): integer;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: Integer]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
@@ -4932,6 +4941,11 @@ type
     property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
     property HashElement: TDynArrayHashOne read fHashElement;
+    /// after how many items the hashing take place
+    // - for smallest arrays, O(n) seach if faster than O(1) hashing, since
+    // maintaining the fHashs[] lookup has some CPU and memory costs
+    // - equals 32 by default 
+    property HashCountTrigger: integer read fHashCountTrigger write fHashCountTrigger;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// access to the internal collision of HashFind()
     // - it won't depend only on the HashElement(), but also on the internal
@@ -41045,11 +41059,6 @@ begin
   result := InternalDynArray.LoadFrom(Source);
 end;
 
-function TDynArrayHashed.Find(const Elem): integer;
-begin
-  result := InternalDynArray.Find(Elem);
-end;
-
 function TDynArrayHashed.SaveTo(Dest: PAnsiChar): PAnsiChar;
 begin
   result := InternalDynArray.SaveTo(Dest);
@@ -41072,14 +41081,39 @@ end;
 
 {$endif UNDIRECTDYNARRAY}
 
+function TDynArrayHashed.Scan(const Elem): integer;
+var P: PAnsiChar;
+begin
+  P := fValue^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
+  if Assigned(fEventCompare) then begin
+    for result := 0 to Count-1 do
+      if fEventCompare(P^,Elem)=0 then
+        exit else
+        inc(P,ElemSize);
+  end else
+    for result := 0 to Count-1 do
+      if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then
+        exit else
+        inc(P,ElemSize);
+  result := -1;
+end;
+
 function TDynArrayHashed.FindHashed(const Elem): integer;
 begin
   if (fHashs<>nil) and Assigned(fHashElement) then begin
     result := HashFind(fHashElement(Elem,fHasher),Elem);
     if result<0 then
       result := -1; // for coherency with most methods
-  end else
-    result := Find(Elem); // Count<fHashCountTrigger
+  end else begin
+    result := Scan(Elem); // Count<fHashCountTrigger
+    if (result>=0) and (fHashCountTrigger>0) then begin
+      inc(fHashFindCount);
+      if fHashFindCount>=fHashCountTrigger then begin
+        fHashCountTrigger := 0; // FindHashed() should use O(1) hash
+        ReHash;
+      end;
+    end;
+  end;
 end;
 
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
@@ -41107,7 +41141,7 @@ var n: integer;
 begin
   n := Count;
   if n<fHashCountTrigger then begin
-    result := Find(Elem);
+    result := Scan(Elem);
     if result<0 then begin
       SetCount(n+1); // like HashAdd(): reserve space for added item
       result := n;
@@ -41174,7 +41208,7 @@ end;
 function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
   if fHashs=nil then // Count<fHashCountTrigger
-    result := Find(ElemToFill) else
+    result := Scan(ElemToFill) else
     if Assigned(fHashElement) then begin
       result := HashFind(fHashElement(ElemToFill,fHasher),ElemToFill);
       if result<0 then
@@ -41190,7 +41224,7 @@ var aHashCode: cardinal;
 label h;
 begin
   if fHashs=nil then begin // Count<fHashCountTrigger
-    result := Find(Elem);
+    result := Scan(Elem);
     if result<0 then
       if AddIfNotExisting then
         if Count<fHashCountTrigger then
@@ -41225,7 +41259,7 @@ end;
 function TDynArrayHashed.FindHashedAndDelete(const Elem): integer;
 begin
   if fHashs=nil then begin // Count<fHashCountTrigger
-    result := Find(Elem);
+    result := Scan(Elem);
     if result>=0 then
       Delete(result);
   end else
@@ -41411,15 +41445,29 @@ begin
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
   fHashs := nil;
-  fHashCountTrigger := 48;
+  fHashFindCount := 0;
+  fHashCountTrigger := 32;
 end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
 
 function TDynArrayHashed.HashFind(aHashCode: cardinal): integer;
 var first,last: integer;
+    h: cardinal;
+    P: PAnsiChar;
 begin
   if fHashs=nil then begin // Count=0 or Count<fHashCountTrigger
+    if Assigned(fHashElement) then begin
+      P := fValue^;
+      for result := 0 to Count-1 do begin
+        h := fHashElement(P^,fHasher);
+        if h=HASH_VOID then
+          h := HASH_ONVOIDCOLISION;
+        if h=aHashCode then
+          exit else
+          inc(P,ElemSize);
+      end;
+    end;
     result := -1;
     exit;
   end;
@@ -41452,19 +41500,12 @@ function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
 var first,last: integer;
     P: PAnsiChar;
 begin
-  if aHashCode=HASH_VOID then
-    aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
   if fHashs=nil then begin // e.g. Count<fHashCountTrigger
-    if Assigned(fHashElement) then begin
-      P := fValue^;
-      for result := 0 to Count-1 do
-        if fHashElement(P^,fHasher)=aHashCode then
-          exit else
-          inc(P,ElemSize);
-    end;
-    result := -1;
+    result := Scan(Elem);
     exit;
   end;
+  if aHashCode=HASH_VOID then
+    aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
   result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
   last := fHashsCount;
   first := result;
@@ -48195,7 +48236,7 @@ begin
         Capacity := 0;   // force free all fNameValue.List[] key/value pairs
         Capacity := 200; // then reserve some space for future cached entries
       end;
-    fNameValue.fDynArray.ReHash; // will force reset all hash content
+    fNameValue.fDynArray.fHashs := nil; // will force reset all hash content
     result := true; // mark something was flushed
   end;
   fFindLastAddedIndex := -1;
@@ -48719,7 +48760,7 @@ begin
   inherited Create;
   fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
-  fHash.fHashCountTrigger := 0;
+  fHash.fHashCountTrigger := 0; // has dedicated inherited process of small lists 
 end;
 
 destructor TObjectListHashedAbstract.Destroy;
@@ -48759,10 +48800,8 @@ begin
   wasAdded := false;
   if self<>nil then
     if fHashed then begin
-      if not fHashValid then begin
-        fHash.ReHash;
-        fHashValid := true;
-      end;
+      if not fHashValid then
+        fHashValid := fHash.ReHash;
       result := fHash.FindHashedForAdding(aObject,wasAdded);
       if wasAdded then
         fList[result] := aObject;

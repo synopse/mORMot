@@ -1693,7 +1693,7 @@ begin
   CheckSame(City.Longitude,27.58);
   Check(ACities.FindHashedAndDelete(City)=0);
   Check(City.Name='Iasi');
-  Check(ACities.Find(City)<0);
+  Check(ACities.Scan(City)<0);
   Check(ACities.FindHashed(City)<0);
   City.Name := 'Buenos Aires';
   City.Country := 'Argentina';
