@@ -4804,12 +4804,20 @@ type
     fHashs: TSynHashDynArray;
     fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
+    fHashCountTrigger: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     fHashFindCollisions: cardinal;
     {$endif}
     procedure HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
+    /// low-level search of an element from its pre-computed hash
+    // - you should NOT use this method, but rather high-level FindHashed*()
+    function HashFind(aHashCode: cardinal; const Elem): integer; overload;
+    /// low-level search of an element from its pre-computed hash
+    // - this overloaded method will return the first matching item: use the
+    // HashFind(...; const Elem) method to avoid any HashElement collision issue
+    // - you should NOT use this method, but rather high-level FindHashed*()
+    function HashFind(aHashCode: cardinal): integer; overload;
     function GetHashFromIndex(aIndex: Integer): Cardinal;
-    procedure HashInit;
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -4841,7 +4849,7 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    procedure ReHash(aHasher: TOnDynArrayHashOne=nil);
+    function ReHash(aHasher: TOnDynArrayHashOne=nil): boolean;
     /// low-level function which would inspect the internal fHashs[] array for
     // any collision
     // - is a brute force search within fHashs[].Hash values, which may be handy
@@ -4917,13 +4925,6 @@ type
     // - warning: Elem must be of the same exact type than the dynamic array, and
     // must refer to a variable (you can't write FindHashedAndDelete(i+10) e.g.)
     function FindHashedAndDelete(const Elem): integer;
-    /// low-level search of an element from its pre-computed hash
-    // - you should not use this method, but rather high-level FindHashed*()
-    function HashFind(aHashCode: cardinal; const Elem): integer; overload;
-    /// low-level search of an element from its pre-computed hash
-    // - this overloaded method will return the first matching item: use the
-    // HashFind(...; const Elem) method to avoid any HashElement collision issue
-    function HashFind(aHashCode: cardinal): integer; overload;
     /// retrieve the hash value of a given item, from its index
     property Hash[aIndex: Integer]: Cardinal read GetHashFromIndex;
     /// alternative event-oriented Compare function to be used for Sort and Find
@@ -8081,6 +8082,8 @@ type
     // into the TRawUTF8ListHashed
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
+    /// search in the low-level internal hashing table
+    function HashFind(aHashCode: cardinal): integer; {$ifdef HASINLINE}inline;{$endif}
     /// access to the low-level internal hashing table
     property Hash: TDynArrayHashed read fHash;
   end;
@@ -41076,7 +41079,7 @@ begin
     if result<0 then
       result := -1; // for coherency with most methods
   end else
-    result := -1;
+    result := Find(Elem); // Count<fHashCountTrigger
 end;
 
 procedure TDynArrayHashed.HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
@@ -41100,7 +41103,21 @@ end;
 
 function TDynArrayHashed.FindHashedForAdding(const Elem; out wasAdded: boolean;
   aHashCode: cardinal): integer;
+var n: integer;
 begin
+  n := Count;
+  if n<fHashCountTrigger then begin
+    result := Find(Elem);
+    if result<0 then begin
+      SetCount(n+1); // like HashAdd(): reserve space for added item
+      result := n;
+      wasadded := true;
+    end else
+      wasadded := false;
+    exit;
+  end;
+  if fHashs=nil then
+    ReHash; // compute hash of all previously added fHashCountTrigger items
   if aHashCode=0 then
     if Assigned(fHashElement) then
       aHashCode := fHashElement(Elem,fHasher);
@@ -41156,19 +41173,36 @@ end;
 
 function TDynArrayHashed.FindHashedAndFill(var ElemToFill): integer;
 begin
-  if Assigned(fHashElement) then begin
-    result := HashFind(fHashElement(ElemToFill,fHasher),ElemToFill);
-    if result<0 then
-      result := -1 else
-      ElemCopy((PAnsiChar(fValue^)+cardinal(result)*ElemSize)^,ElemToFill);
-  end else
-    result := -1;
+  if fHashs=nil then // Count<fHashCountTrigger
+    result := Find(ElemToFill) else
+    if Assigned(fHashElement) then begin
+      result := HashFind(fHashElement(ElemToFill,fHasher),ElemToFill);
+      if result<0 then
+        result := -1;
+    end else
+      result := -1;
+  if result>=0 then
+    ElemCopy((PAnsiChar(fValue^)+cardinal(result)*ElemSize)^,ElemToFill);
 end;
 
 function TDynArrayHashed.FindHashedAndUpdate(const Elem; AddIfNotExisting: boolean): integer;
 var aHashCode: cardinal;
+label h;
 begin
-  if Assigned(fHashElement) then begin
+  if fHashs=nil then begin // Count<fHashCountTrigger
+    result := Find(Elem);
+    if result<0 then
+      if AddIfNotExisting then
+        if Count<fHashCountTrigger then
+          result := Add(Elem) else begin
+          ReHash; // compute hash of all previously added fHashCountTrigger items
+          goto h;
+        end else
+        result := -1 else
+      ElemCopy(Elem,(PAnsiChar(fValue^)+cardinal(result)*ElemSize)^); // update
+    exit;
+  end;
+h:if Assigned(fHashElement) then begin
     aHashCode := fHashElement(Elem,fHasher);
     if aHashCode=HASH_VOID then
       aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
@@ -41190,6 +41224,11 @@ end;
 
 function TDynArrayHashed.FindHashedAndDelete(const Elem): integer;
 begin
+  if fHashs=nil then begin // Count<fHashCountTrigger
+    result := Find(Elem);
+    if result>=0 then
+      Delete(result);
+  end else
   if Assigned(fHashElement) then begin
     result := HashFind(fHashElement(Elem,fHasher),Elem);
     if result<0 then
@@ -41372,18 +41411,7 @@ begin
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
   fHashs := nil;
-end;
-
-procedure TDynArrayHashed.HashInit;
-var cap: integer;
-begin
-  // find nearest power of two for new fHashs[] size
-  cap := Capacity*2; // Capacity sounds better than Count
-  fHashsCount := 256;
-  while fHashsCount<cap do
-    fHashsCount := fHashsCount shl 1;
-  fHashs := nil; // any previous hash is invalid
-  SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
+  fHashCountTrigger := 48;
 end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
@@ -41391,8 +41419,10 @@ end;
 function TDynArrayHashed.HashFind(aHashCode: cardinal): integer;
 var first,last: integer;
 begin
-  if fHashs=nil then
-    HashInit;
+  if fHashs=nil then begin // Count=0 or Count<fHashCountTrigger
+    result := -1;
+    exit;
+  end;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
   result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
@@ -41422,10 +41452,19 @@ function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
 var first,last: integer;
     P: PAnsiChar;
 begin
-  if fHashs=nil then
-    HashInit;
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
+  if fHashs=nil then begin // e.g. Count<fHashCountTrigger
+    if Assigned(fHashElement) then begin
+      P := fValue^;
+      for result := 0 to Count-1 do
+        if fHashElement(P^,fHasher)=aHashCode then
+          exit else
+          inc(P,ElemSize);
+    end;
+    result := -1;
+    exit;
+  end;
   result := (aHashCode-1) and (fHashsCount-1); // fHashs[] has a power of 2 length
   last := fHashsCount;
   first := result;
@@ -41477,6 +41516,7 @@ begin
   if (cardinal(aIndex)>=cardinal(Count)) or not Assigned(fHashElement) then
     result := 0 else begin
     // it's faster to rehash than to loop in fHashs[].Index values
+    // and it will also work with Count<fHashCountTrigger
     P := PAnsiChar(fValue^)+cardinal(aIndex)*ElemSize;
     result := fHashElement(P^,fHasher);
     if result=HASH_VOID then
@@ -41503,17 +41543,25 @@ begin
   result := -1;
 end;
 
-procedure TDynArrayHashed.ReHash(aHasher: TOnDynArrayHashOne=nil);
-var i, n, ndx: integer;
+function TDynArrayHashed.ReHash(aHasher: TOnDynArrayHashOne=nil): boolean;
+var i, n, cap, ndx: integer;
     P: PAnsiChar;
     aHashCode: cardinal;
 begin
-  HashInit;
+  result := false;
+  fHashs := nil;
   n := Count;
-  if n<=0 then
-    exit; // avoid GPF after TDynArray.Clear call (Count=0)
+  if (n=0) or (n<fHashCountTrigger) then
+    exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if (not Assigned(aHasher)) and (not Assigned(fHashElement)) then
     exit;
+  // find nearest power of two for new fHashs[] size
+  cap := Capacity*2; // Capacity sounds better than Count
+  fHashsCount := 256;
+  while fHashsCount<cap do
+    fHashsCount := fHashsCount shl 1;
+  SetLength(fHashs,fHashsCount); // fill all fHashs[]=HASH_VOID=0
+  // fill fHashs[] from all existing items
   P := fValue^;
   for i := 0 to n-1 do begin
     if Assigned(aHasher) then
@@ -41530,6 +41578,7 @@ begin
       end;
     inc(P,ElemSize);
   end;
+  result := true;
 end;
 
 
@@ -48670,6 +48719,7 @@ begin
   inherited Create;
   fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
+  fHash.fHashCountTrigger := 0;
 end;
 
 destructor TObjectListHashedAbstract.Destroy;
@@ -49008,6 +49058,11 @@ begin
   end;
   if wasAdded<>nil then
     wasAdded^ := added;
+end;
+
+function TRawUTF8ListHashed.HashFind(aHashCode: cardinal): integer;
+begin
+  result := fHash.HashFind(aHashCode);
 end;
 
 

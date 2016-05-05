@@ -49921,6 +49921,7 @@ begin
   for f := 0 to fList.Count-1 do
     Fac[f] := fList.Objects[f] as TServiceFactory;
   fList.Clear;
+  fListInterfaceMethod := nil;
   fListInterfaceMethods.InitSpecific(TypeInfo(TServiceContainerInterfaceMethods),
     fListInterfaceMethod,djRawUTF8,nil,not aValue);
   for f := 0 to High(Fac) do
