@@ -3306,7 +3306,8 @@ begin
   Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');
   Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
-  Check(Iso8601ToTimeLog(s)<>0);
+  I.From(D);
+  Check(Iso8601ToTimeLog(s)=I.Value);
   I.From(s);
   t := I.Text(Expanded);
   if t<>s then // we allow error on time = 00:00:00 -> I.Text = just date
@@ -3329,6 +3330,7 @@ end;
 var i: integer;
     D: TDateTime;
     tmp: RawUTF8;
+    b: TTimeLogBits;
 begin
   // this will test typically from year 1905 to 2065
   D := Now/20+Random*20; // some starting random date/time
@@ -3337,6 +3339,12 @@ begin
     Test(D, false);
     D := D+Random*57; // go further a little bit: change date/time
   end;
+  b.Value := Iso8601ToTimeLog('20150504');
+  Check(b.Year=2015);
+  Check(b.Month=5);
+  Check(b.Day=4);
+  tmp := b.Text(false);
+  Check(tmp='20150504');
   IntervalTextToDateTimeVar('+0 06:03:20',D);
   CheckSame(D,0.252314,1e-5);
   D := IntervalTextToDateTime('+1 06:03:20');
