@@ -49073,10 +49073,8 @@ end;
 
 function TRawUTF8ListHashed.IndexOf(const aText: RawUTF8): PtrInt;
 begin
-  if fChanged then begin
-    fHash.ReHash; // rough, but working implementation
-    fChanged := false;
-  end;
+  if fChanged then
+    fChanged := not fHash.ReHash; // rough, but working implementation
   result := fHash.FindHashed(aText);
 end;
 
@@ -49084,10 +49082,8 @@ function TRawUTF8ListHashed.AddObjectIfNotExisting(
   const aText: RawUTF8; aObject: TObject; wasAdded: PBoolean): PtrInt;
 var added: boolean;
 begin
-  if fChanged then begin
-    fHash.ReHash; // rough, but working implementation
-    fChanged := false;
-  end;
+  if fChanged then
+    fChanged := not fHash.ReHash; // rough, but working implementation
   result := fHash.FindHashedForAdding(aText,added);
   if added then begin
     fList[result] := aText;

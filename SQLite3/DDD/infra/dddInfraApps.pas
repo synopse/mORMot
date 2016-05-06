@@ -212,7 +212,7 @@ type
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
     /// reference to the associated REST server storing the SOA log database
-    // - may be nil if the daemon did not implement 
+    // - may be nil if the daemon did not implement this feature 
     property ServicesLogRest: TSQLRest read fServicesLogRest;
   end;
 
@@ -629,12 +629,12 @@ var
   name, param: RawUTF8;
   cmd: TExecuteCommandLineCmd;
   daemon: TDDDAdministratedDaemon;
-    {$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   service: TServiceSingle;
   ctrl: TServiceController;
   depend: string;
   i: integer;
-    {$endif}
+  {$endif}
 {$I-} // no IO error for writeln() below
 
   function cmdText: RawUTF8;
@@ -660,8 +660,9 @@ var
     end;
     msg := FormatUTF8('% "%" (%) on Service "%"',
       [msg, param, cmdText, fSettings.ServiceName]);
-    AppendToTextFile(msg, ChangeFileExt(ExeVersion.ProgramFileName, '.txt'));
     writeln(msg);
+    AppendToTextFile(ExeVersion.User + ' ' +msg,
+      ChangeFileExt(ExeVersion.ProgramFileName, '.txt'));
   end;
 
   procedure Syntax;
@@ -738,7 +739,7 @@ begin
           daemon := NewDaemon;
           try
             fDaemon := daemon;
-        {$ifdef WITHLOG}
+            {$ifdef WITHLOG}
             if cmd = cDaemon then
               if (daemon.AdministrationServer = nil) or not ({$ifdef MSWINDOWS}
                 daemon.AdministrationServer.ExportedAsMessageOrNamedPipe or {$endif}
@@ -746,7 +747,7 @@ begin
                  (TDDDThreadDaemon(daemon).fAdministrationHTTPServer <> nil))) then
                 daemon.Log.Synlog.Log(sllWarning, 'ExecuteCommandLine as Daemon ' +
                   'without external admnistrator acccess', self);
-        {$endif}
+            {$endif}
             daemon.Execute(cmd = cDaemon);
           finally
             fDaemon := nil; // will stop the daemon
@@ -1756,6 +1757,5 @@ initialization
   ReportMemoryLeaksOnShutdown := True;
   {$endif}
   {$endif}
-
 end.
 
