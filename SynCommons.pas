@@ -48199,7 +48199,7 @@ end;
 constructor TSynCache.Create(aMaxCacheRamUsed: cardinal=16384*1024; aCaseSensitive: boolean=false);
 begin
   fNameValue.Init(aCaseSensitive);
-  fNameValue.fDynArray.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}Capacity := 200; // some space for future cached entries
+  fNameValue.fDynArray.Capacity := 200; // some space for future cached entries
   fMaxCacheRamUsed := aMaxCacheRamUsed;
   fFindLastAddedIndex := -1;
 end;
