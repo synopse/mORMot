@@ -14,7 +14,6 @@ uses
   Dialogs,
   SynCrtSock,
   mORMot,
-  WinSvc,
   mORMotService;
 
 const

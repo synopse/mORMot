@@ -90,7 +90,7 @@ uses
   SynCommons,
   SynLog;
 
-{ *** some minimal Windows API types and constants, missing for FPC }
+{ *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
 
 const
   CM_SERVICE_CONTROL_CODE = WM_USER+1000;
@@ -175,6 +175,37 @@ type
     lpServiceName: PChar;
     lpServiceProc: TFarProc;
   end;
+
+function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenSCManager'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
+  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
+function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
+  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
+  name 'StartService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
+  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: DWORD;
+  lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
+  lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
+  name 'CreateService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
+  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
+  name 'OpenService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
+function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
+function QueryServiceStatus(hService: SC_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function ControlService(hService: SC_HANDLE; dwControl: DWORD;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
+  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
+function RegisterServiceCtrlHandler(lpServiceName: PChar;
+  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
+  name 'RegisterServiceCtrlHandler'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
+function StartServiceCtrlDispatcher(
+  var lpServiceStartTable: TServiceTableEntry): BOOL; stdcall; external advapi32
+  name 'StartServiceCtrlDispatcher'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
 
 
 { *** high level classes to define and manage Windows Services }
@@ -488,37 +519,6 @@ function ServiceStateText(State: TServiceState): string;
 
 implementation
 
-function OpenSCManager(lpMachineName, lpDatabaseName: PChar;
-  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
-  name 'OpenSCManager'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-function ChangeServiceConfig2(hService: SC_HANDLE; dwsInfoLevel: DWORD;
-  lpInfo: Pointer): BOOL; stdcall; external advapi32 name 'ChangeServiceConfig2W';
-function StartService(hService: SC_HANDLE; dwNumServiceArgs: DWORD;
-  lpServiceArgVectors: Pointer): BOOL; stdcall; external advapi32
-  name 'StartService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-function CreateService(hSCManager: SC_HANDLE; lpServiceName, lpDisplayName: PChar;
-  dwDesiredAccess, dwServiceType, dwStartType, dwErrorControl: DWORD;
-  lpBinaryPathName, lpLoadOrderGroup: PChar; lpdwTagId: LPDWORD; lpDependencies,
-  lpServiceStartName, lpPassword: PChar): SC_HANDLE; stdcall; external advapi32
-  name 'CreateService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-function OpenService(hSCManager: SC_HANDLE; lpServiceName: PChar;
-  dwDesiredAccess: DWORD): SC_HANDLE; stdcall; external advapi32
-  name 'OpenService'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-function DeleteService(hService: SC_HANDLE): BOOL; stdcall; external advapi32;
-function CloseServiceHandle(hSCObject: SC_HANDLE): BOOL; stdcall; external advapi32;
-function QueryServiceStatus(hService: SC_HANDLE;
-  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
-function ControlService(hService: SC_HANDLE; dwControl: DWORD;
-  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
-function SetServiceStatus(hServiceStatus: SERVICE_STATUS_HANDLE;
-  var lpServiceStatus: TServiceStatus): BOOL; stdcall; external advapi32;
-function RegisterServiceCtrlHandler(lpServiceName: PChar;
-  lpHandlerProc: TFarProc): SERVICE_STATUS_HANDLE; stdcall; external advapi32
-  name 'RegisterServiceCtrlHandler'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-function StartServiceCtrlDispatcher(
-  var lpServiceStartTable: TServiceTableEntry): BOOL; stdcall; external advapi32
-  name 'StartServiceCtrlDispatcher'+{$ifdef UNICODE}'W'{$else}'A'{$endif};
-
 
 { TServiceController }
 
@@ -613,7 +613,7 @@ end;
 function TServiceController.GetState: TServiceState;
 begin
   if (self=nil) or (FSCHandle=0) or (FHandle=0) then
-    result := ssErrorRetrievingState else
+    result := ssNotInstalled else
     result := CurrentStateToServiceState(Status.dwCurrentState);
   ServiceLog.Add.Log(sllTrace,FName,TypeInfo(TServiceState),result);
 end;
@@ -737,7 +737,7 @@ function FindServiceIndex(const Name: String): integer;
 begin
   if Services<>nil then
   for result := 0 to Services.Count-1 do
-    if TService(Services[result]).ServiceName=Name then
+    if TService(Services.List[result]).ServiceName=Name then
       exit;
   result := -1;
 end;
