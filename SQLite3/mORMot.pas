@@ -14376,18 +14376,26 @@ type
     /// static function allowing to compute a hashed password
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
-    // - you may specify your own hashing salt in aHashSalt, to increase
-    // security on storage side (reducing brute force attack via dictionaries)
+    // - you may specify your own values in aHashSalt/aHashRound, to enable
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it would increase
+    // security on storage side (reducing brute force attack via rainbow tables)
     class function ComputeHashedPassword(const aPasswordPlain: RawUTF8;
-      const aHashSalt: RawUTF8=''): RawUTF8; virtual;
+      const aHashSalt: RawUTF8=''; aHashRound: integer=20000): RawUTF8; virtual;
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
     property PasswordPlain: RawUTF8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
-    // - use this method if you want to customize the hash salt value, which
-    // would enhance security on storage side
-    procedure SetPassword(const aPasswordPlain, aHashSalt: RawUTF8);
+    // - use this method to specify aHashSalt/aHashRound values, enabling
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it would increase
+    // security on storage side (reducing brute force attack via rainbow tables)
+    // - you may use an application specific fixed salt, and/or append the
+    // user LogonName to make the challenge unique for each TSQLAuthUser
+    // - the default aHashRound=20000 is slow but secure - since the hashing
+    // process is expected to be done on client side, you may specify your
+    // own higher/slower value, depending on the security level you expect
+    procedure SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+      aHashRound: integer=20000);
   published
     /// the User identification Name, as entered at log-in
     // - the same identifier can be used only once (this column is marked as
@@ -14397,7 +14405,7 @@ type
     /// the User Name, as may be displayed or printed
     property DisplayName: RawUTF8 index 50 read fDisplayName write fDisplayName;
     /// the hexa encoded associated SHA-256 hash of the password
-    // - you may use TSQLAuthUser.ComputeHashedPassword() to compute it
+    // - see TSQLAuthUser.ComputeHashedPassword() or SetPassword() methods
     // - store the SHA-256 32 bytes as 64 hexa chars
     property PasswordHashHexa: RawUTF8 index 64 read fPasswordHashHexa write fPasswordHashHexa;
     /// the associated access rights of this user
@@ -14613,16 +14621,16 @@ type
     // a custom authentication class
     // - if saoUserByLogonOrID is defined in the server Options, aUserName may
     // be a TSQLAuthUser.ID and not a TSQLAuthUser.LogonName
-    // - if passClear is used, you may specify your own hashing salt in aHashSalt,
-    // to be used instead of default 'salt' text, and increase security on
-    // storage side (reducing brute force attack via pre-computed dictionaries)
+    // - if passClear is used, you may specify aHashSalt and aHashRound,
+    // to enable PBKDF2_HMAC_SHA256() use instead of plain SHA256(), and increase
+    // security on storage side (reducing brute force attack via rainbow tables)
     // - will call the ModelRoot/Auth service, i.e. call TSQLRestServer.Auth()
     // published method to create a session for this user
     // - returns true on success
     class function ClientSetUser(Sender: TSQLRestClientURI;
       const aUserName, aPassword: RawUTF8;
       aPasswordKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear;
-      const aHashSalt: RawUTF8=''): boolean; virtual;
+      const aHashSalt: RawUTF8=''; aHashRound: integer=20000): boolean; virtual;
     /// class method to be called on client side to sign an URI
     // - used by TSQLRestClientURI.URI()
     // - shall match the method as expected by RetrieveSession() virtual method
@@ -14787,7 +14795,7 @@ type
     // - returns true on success
     class function ClientSetUser(Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
       aPasswordKind: TSQLRestServerAuthenticationClientSetUserPassword=passClear;
-      const aHashSalt: RawUTF8=''): boolean; override;
+      const aHashSalt: RawUTF8=''; aHashRound: integer=20000): boolean; override;
     /// class method to be used on client side to force the HTTP header for
     // the corresponding HTTP authentication, without creating any remote session
     // - call virtual protected method ComputeAuthenticateHeader()
@@ -49088,12 +49096,16 @@ end;
 { TSQLAuthUser }
 
 class function TSQLAuthUser.ComputeHashedPassword(
-  const aPasswordPlain, aHashSalt: RawUTF8): RawUTF8;
+  const aPasswordPlain, aHashSalt: RawUTF8; aHashRound: integer): RawUTF8;
 const TSQLAUTHUSER_SALT = 'salt';
+var dig: TSHA256Digest;
 begin
   if aHashSalt='' then
-    result := SHA256(TSQLAUTHUSER_SALT+aPasswordPlain) else
-    result := SHA256(aHashSalt+aPasswordPlain);
+    result := SHA256(TSQLAUTHUSER_SALT+aPasswordPlain) else begin
+    PBKDF2_HMAC_SHA256(aPasswordPlain,aHashSalt,aHashRound,dig);
+    result := SHA256DigestToString(dig);
+    FillcharFast(dig,sizeof(dig),0);
+  end;
 end;
 
 procedure TSQLAuthUser.SetPasswordPlain(const Value: RawUTF8);
@@ -49102,10 +49114,11 @@ begin
     PasswordHashHexa := ComputeHashedPassword(Value);
 end;
 
-procedure TSQLAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8);
+procedure TSQLAuthUser.SetPassword(const aPasswordPlain, aHashSalt: RawUTF8;
+  aHashRound: integer);
 begin
   if self<>nil then
-    PasswordHashHexa := ComputeHashedPassword(aPasswordPlain,aHashSalt);
+    PasswordHashHexa := ComputeHashedPassword(aPasswordPlain,aHashSalt,aHashRound);
 end;
 
 function TSQLAuthUser.CanUserLog(Ctxt: TSQLRestServerURIContext): boolean;
@@ -49225,7 +49238,7 @@ end;
 
 class function TSQLRestServerAuthentication.ClientSetUser(Sender: TSQLRestClientURI;
   const aUserName, aPassword: RawUTF8; aPasswordKind: TSQLRestServerAuthenticationClientSetUserPassword;
-  const aHashSalt: RawUTF8): boolean;
+  const aHashSalt: RawUTF8; aHashRound: integer): boolean;
 var U: TSQLAuthUser;
     key: RawUTF8;
 begin
@@ -49241,8 +49254,8 @@ begin
       if aPasswordKind<>passClear then
         U.PasswordHashHexa := aPassword else
         if aHashSalt='' then
-        U.PasswordPlain := aPassword else // compute SHA256('salt'+aPassword);
-        U.SetPassword(aPassword, aHashSalt);
+          U.PasswordPlain := aPassword else // compute SHA256('salt'+aPassword)
+          U.SetPassword(aPassword,aHashSalt,aHashRound);
       key := ClientComputeSessionKey(Sender,U);
       result := Sender.SessionCreate(self,U,key);
     finally
@@ -49464,7 +49477,7 @@ end;
 class function TSQLRestServerAuthenticationHttpAbstract.ClientSetUser(
   Sender: TSQLRestClientURI; const aUserName, aPassword: RawUTF8;
   aPasswordKind: TSQLRestServerAuthenticationClientSetUserPassword;
-  const aHashSalt: RawUTF8): boolean;
+  const aHashSalt: RawUTF8; aHashRound: integer): boolean;
 var res: RawUTF8;
     U: TSQLAuthUser;
 begin
