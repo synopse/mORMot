@@ -24672,7 +24672,7 @@ end;
 
 function SearchRecToDateTime(const F: TSearchRec): TDateTime;
 begin
-  {$ifdef ISDELPHIXE2}
+  {$ifdef ISDELPHIXE}
   result := F.TimeStamp;
   {$else}
   result := FileDateToDateTime(F.Time);
