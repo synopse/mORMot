@@ -36654,12 +36654,12 @@ begin
     if n>0 then begin
       SetLength(VValue,n);
       repeat
+        if VCount>=n then
+          exit; // unexpected array size means invalid JSON
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
         if JSON=nil then
           exit;
         inc(VCount);
-        if VCount>n then
-          raise EDocVariant.Create('Unexpected array size');
       until EndOfObject=']';
     end else
       if JSON^=']' then // n=0
@@ -36676,6 +36676,8 @@ begin
       SetLength(VValue,n);
       SetLength(VName,n);
       repeat
+        if VCount>=n then
+          exit; // unexpected object size means invalid JSON 
         // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
         Name := GetJSONPropName(JSON);
         if Name=nil then
@@ -36685,8 +36687,6 @@ begin
         if JSON=nil then
           exit;
         inc(VCount);
-        if VCount>n then
-          raise EDocVariant.Create('Unexpected object size');
       until EndOfObject='}';
     end else
       if JSON^='}' then // n=0
