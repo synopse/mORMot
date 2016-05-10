@@ -50,6 +50,7 @@ unit SynRestVCL;
     which is an extraction from former SynDBVCL.pas unit.
   - Added that blob field updates they are made with AddJSONEscapeString.
   - bug fix when updating accentuated string fields.
+  - bug fix with datetime fields
 
 }
 
@@ -220,7 +221,7 @@ const
      DB.ftLargeInt,          // sftRecord = TRecordReference
      DB.ftLargeInt,          // sftBoolean
      DB.ftFloat,             // sftFloat
-     DB.ftDate,              // sftDateTime
+     DB.ftDateTime,          // sftDateTime
      DB.ftLargeInt,          // sftTimeLog
      DB.ftCurrency,          // sftCurrency
      DB.ftString,            // sftObject
