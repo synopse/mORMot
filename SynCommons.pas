@@ -3558,6 +3558,7 @@ function EnsureDirectoryExists(const Directory: TFileName;
   RaiseExceptionOnCreationFailure: boolean=false): TFileName;
 
 type
+  {$A-}
   /// file found result item, as returned by FindFiles()
   TFindFiles = {$ifndef UNICODE}object{$else}record{$endif}
     /// the matching file name, including its folder name
@@ -3571,13 +3572,16 @@ type
     /// fill the item properties from a FindFirst/FindNext's TSearchRec
     procedure FromSearchRec(const Directory: TFileName; const F: TSearchRec);
   end;
+  {$A+}
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
 
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
+// - you may specify several masks in Mask, e.g. as '*.htm;*.html'
 function FindFiles(const Directory,Mask: TFileName;
-  const IgnoreFileName: TFileName=''; SortByName: boolean=false): TFindFilesDynArray;
+  const IgnoreFileName: TFileName=''; SortByName: boolean=false;
+  IncludesDir: boolean=true): TFindFilesDynArray;
 
 {$ifdef DELPHI5OROLDER}
 
@@ -24760,40 +24764,55 @@ begin
 end;
 
 function FindFiles(const Directory,Mask,IgnoreFileName: TFileName;
-  SortByName: boolean): TFindFilesDynArray;
+  SortByName, IncludesDir: boolean): TFindFilesDynArray;
 var F: TSearchRec;
     n: integer;
     Dir: TFileName;
     da: TDynArray;
+    masks: TRawUTF8DynArray;
+    masked: TFindFilesDynArray;
 begin
   result := nil;
   n := 0;
-  Dir := IncludeTrailingPathDelimiter(Directory);
-  if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
-    repeat
-      {$ifndef DELPHI5OROLDER}
-      {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
-      {$endif}
-      if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
-         (F.Name[1]<>'.') and ((IgnoreFileName='') or
-          (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
-        if n=length(result) then
-          SetLength(result,n+n shr 3+8);
-        result[n].FromSearchRec(Dir,F);
-        inc(n);
-      end;
-      {$ifndef DELPHI5OROLDER}
-      {$WARN SYMBOL_DEPRECATED ON}
-      {$endif}
-    until FindNext(F)<>0;
-    FindClose(F);
-    if n=0 then
-      exit;
-    SetLength(result,n);
-    if SortByName and (n>1) then begin
-      da.Init(TypeInfo(TFindFilesDynArray),result);
-      da.Sort(SortDynArrayStringI);
+  da.Init(TypeInfo(TFindFilesDynArray),result);
+  if Pos(';',Mask)>0 then
+    CSVToRawUTF8DynArray(pointer(StringToUTF8(Mask)),masks,';');
+  if masks<>nil then begin
+    if SortByName then
+      QuickSortRawUTF8(masks,length(masks),nil,@StrIComp);
+    for n := 0 to high(masks) do begin
+      masked := FindFiles(Directory,UTF8ToString(masks[n]),
+        IgnoreFileName,SortByName,IncludesDir);
+      da.AddArray(masked);
     end;
+  end else begin
+    Dir := IncludeTrailingPathDelimiter(Directory);
+    if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
+      repeat
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED OFF} // for faVolumeID
+        {$endif}
+        if (F.Attr and (faDirectory+faVolumeID+faSysFile+faHidden)=0) and
+           (F.Name[1]<>'.') and ((IgnoreFileName='') or
+            (AnsiCompareFileName(F.Name,IgnoreFileName)<>0)) then begin
+          if n=length(result) then
+            SetLength(result,n+n shr 3+8);
+          if IncludesDir then
+            result[n].FromSearchRec(Dir,F) else
+            result[n].FromSearchRec('',F);
+          inc(n);
+        end;
+        {$ifndef DELPHI5OROLDER}
+        {$WARN SYMBOL_DEPRECATED ON}
+        {$endif}
+      until FindNext(F)<>0;
+      FindClose(F);
+      if n=0 then
+        exit;
+      SetLength(result,n);
+    end;
+    if SortByName and (n>0) then
+      da.Sort(SortDynArrayStringI);
   end;
 end;
 
@@ -42874,7 +42893,6 @@ class procedure TTextWriter.UnRegisterCustomJSONSerializer(aTypeInfo: pointer);
 begin
   GlobalJSONCustomParsers.RegisterCallbacks(aTypeInfo,nil,nil);
 end;
-
 class function TTextWriter.RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
   const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
 begin
@@ -55536,6 +55554,7 @@ end;
 
 procedure TBlockingProcess.ResetInternal;
 begin
+  ResetEvent;
   fEvent := evNone;
 end;
 
@@ -55911,6 +55930,8 @@ initialization
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0);
+  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TFindFilesDynArray),
+    'Name string Attr Integer Size Int64 TimeStamp TDateTime');
   // some type definition assertions
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);
