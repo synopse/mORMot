@@ -961,16 +961,17 @@ function TSQLRestStorageMongoDB.GetJSONValues(const Res: TBSONDocument;
 var col, colCount, colFound: integer;
     row: TBSONIterator;
     item: array of TBSONElement;
-function itemFind(const aName: RawUTF8): integer;
-begin
-  if aName<>'' then
-    for result := 0 to colCount-1 do
-      with item[result] do
-        if IdemPropNameU(aName,Name,NameLen) then
+  function itemFind(const aName: RawUTF8): integer;
+  var len: integer;
+  begin
+    len := length(aName);
+    if len<>0 then
+      for result := 0 to colCount-1 do
+        with item[result] do
+        if (len=NameLen) and (IdemPropNameUSameLen(pointer(aName),Name,len)) then
           exit;
-  raise EORMMongoDBException.CreateUTF8(
-    '%.GetJSONValues(%): field "%" not found in row',[self,StoredClass,aName]);
-end;
+    result := -1;
+  end;
 begin
   result := 0; // number of data rows in JSON output
   if W.Expand then
@@ -991,10 +992,6 @@ begin
       while (row.Item.Data.DocList^<>byte(betEof)) and (col<colCount) and
             item[col].FromNext(row.Item.Data.DocList) do
         inc(col);
-      if col<>colCount then
-        raise EORMMongoDBException.CreateUTF8(
-          '%.GetJSONValues(%): missing column - count=% expected:%',
-          [self,StoredClass,col,colCount]);
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
         W.Add('{');
@@ -1004,8 +1001,10 @@ begin
         with item[col] do // BSON document may not follow expected field order
           if IdemPropNameU(extFieldNames[col],Name,NameLen) then
             colFound := col else // optimistic O(1) match
-            colFound := itemFind(extFieldNames[col]); // handle border cases
-        item[colFound].AddMongoJSON(W,modNoMongo);
+            colFound := itemFind(extFieldNames[col]); // O(n) search
+        if colfound<0 then // this field may not exist (e.g. in an old record)
+          W.AddShort('null') else
+          item[colFound].AddMongoJSON(W,modNoMongo);
         W.Add(',');
       end;
       W.CancelLastComma;
