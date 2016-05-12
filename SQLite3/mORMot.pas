@@ -4423,6 +4423,7 @@ type
     fTimeoutTix: Int64;
     /// should be called by inherited classes when information or services are set
     // - set fTimeoutTix according to fTimeoutMS, to enable timeout mechanism
+    // - could be used when the content is refreshed, to increase the entry TTL
     // - caller should do Safe.Lock to ensure thread-safety 
     procedure CacheSet; virtual;
     /// called by Destroy and TRawUTF8ObjectCacheList.DoPurge
@@ -4470,10 +4471,12 @@ type
       const aOnKeyResolve: TOnKeyResolve); reintroduce;
     /// fill TRawUTF8ObjectCache with the matching key information
     // - an unknown key, but with a successful NewObjectCache() call, will
-    // create and append a new fClass instance to the list
+    // create and append a new fClass instance to the list (if onlyexisting
+    // is left to its default FALSE)
     // - global or key-specific purge would be performed, if needed
     // - on success (true), output cache instance would be locked
-    function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache): boolean; virtual;
+    function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache;
+      onlyexisting: boolean=false): boolean; virtual;
     /// you may call this method regularly to check for a needed purge
     // - if Settings.PurgePeriodMS is reached, each TRawUTF8ObjectCache instance
     // would check for its TimeOutMS and call CacheClear if information is outdated
@@ -13995,7 +13998,8 @@ type
 
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
     // - this default implementation will handle #time #model #rest commands
-    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); virtual;
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+      var result: TServiceCustomAnswer); virtual;
     /// access to the interface-based services list
     // - may be nil if no service interface has been registered yet: so be
     // aware that the following line may trigger an access violation if
@@ -16231,7 +16235,8 @@ type
     property ServiceMethodStat[const aMethod: RawUTF8]: TSynMonitorInputOutput
       read GetServiceMethodStat;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
-    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); override;
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+      var result: TServiceCustomAnswer); override;
     /// compute a JSON description of all available services, and its public URI
     // - the JSON object matches the TServicesPublishedInterfaces record type
     // - used by TSQLRestClientURI.ServicePublishOwnInterfaces to register all
@@ -18908,6 +18913,11 @@ procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
 function ObjectLoadVariant(var ObjectInstance; const aDocVariant: variant;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): boolean;
 {$endif NOVARIANTS}
+
+/// may be used by DatabaseExecute/AdministrationExecute methods to serve
+// a folder content for remote administration
+procedure AdministrationExecuteGetFiles(const Folder, Mask: TFileName; const Param: RawUTF8;
+  var Answer: TServiceCustomAnswer);
 
 const
   /// if a TSQLVirtualTablePreparedConstraint.Column is to be ignored
@@ -32644,22 +32654,23 @@ begin
       BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
-procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON);
+procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+  var result: TServiceCustomAnswer);
 begin
   if (SQL<>'') and (SQL[1]='#') then begin
     // pseudo SQL for a given TSQLRest[Server] instance
     case IdemPCharArray(@SQL[2],['TIME','MODEL','REST','HELP']) of
-    0: result := Int64ToUtf8(ServerTimeStamp);
-    1: result := ObjectToJSON(Model);
-    2: result := ObjectToJSON(self);
-    3: begin
-      result[length(result)] := '|';
-      result := result+'#time|#model|#rest"';
+    0: result.Content := Int64ToUtf8(ServerTimeStamp);
+    1: result.Content := ObjectToJSON(Model);
+    2: result.Content := ObjectToJSON(self);
+    else begin
+      result.Content[length(result.Content)] := '|';
+      result.Content := result.Content+'#time|#model|#rest"';
     end;
     end;
   end else
   if isSelect(pointer(SQL)) then
-    result := ExecuteJson(Model.GetTablesFromSQLSelect(SQL),SQL) else
+    result.Content := ExecuteJson(Model.GetTablesFromSQLSelect(SQL),SQL) else
     Execute(SQL);
 end;
 
@@ -35920,6 +35931,27 @@ begin
     Head^ := StringToPCharCopy(call.OutHead);
   if Resp<>nil then
     Resp^ := StringToPCharCopy(call.OutBody);
+end;
+
+procedure AdministrationExecuteGetFiles(const Folder, Mask: TFileName; const Param: RawUTF8;
+  var Answer: TServiceCustomAnswer);
+var files: TFindFilesDynArray;
+    fn: TFileName;
+    fs: Int64;
+begin
+  if Param<>'*' then begin
+    fn := Folder+UTF8ToString(Param);
+    fs := FileSize(fn);
+    if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
+      Answer.Content := StringFromFile(fn);
+      if Answer.Content<>'' then begin
+        Answer.Header := BINARY_CONTENT_TYPE_HEADER+#13#10'FileName: '+Param;
+        exit;
+      end;
+    end;
+  end;
+  files := FindFiles(Folder,Mask,'',True,False);
+  Answer.Content := DynArraySaveJSON(files,TypeInfo(TFindFilesDynArray));
 end;
 
 function ReadString(Handle: cardinal): RawUTF8;
@@ -39334,7 +39366,7 @@ begin
 end;
 
 procedure TSQLRestServer.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
-  var result: RawJSON);
+  var result: TServiceCustomAnswer);
 var isAjax: boolean;
     name,interf,method: RawUTF8;
     obj: TObject;
@@ -39358,7 +39390,7 @@ begin
       P := @SQL[2];
       case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
         'GET','POST','WRAPPER','HELP']) of
-      0: result := ServicesPublishedInterfaces;
+      0: result.Content := ServicesPublishedInterfaces;
       1: begin
         name := copy(SQL,8,length(SQL)-8);
         obj := ServiceMethodStat[name];
@@ -39370,30 +39402,30 @@ begin
             obj := nil;
         end;
         if obj<>nil then
-          result := ObjectToJSON(obj);
+          result.Content := ObjectToJSON(obj);
       end;
-      2: result := FullStatsAsJson;
-      3: result := Services.AsJson;
-      4: result := SessionsAsJson;
+      2: result.Content := FullStatsAsJson;
+      3: result.Content := Services.AsJson;
+      4: result.Content := SessionsAsJson;
       5,6: begin
         PrepareCall;
         call.Method := GetNextItem(P,' '); // GET or POST
         if P<>nil then
           call.Url := call.Url+'/'+RawUTF8(P);
         URI(call);
-        result := call.OutBody;
+        result.Content := call.OutBody;
       end;
       7: begin
         PrepareCall;
         call.Method := 'GET';
         call.Url := call.Url+'/wrapper/context';
         URI(call);
-        result := call.OutBody;
+        result.Content := call.OutBody;
       end;
       8: begin
         inherited;
-        result[length(result)] := '|';
-        result := result+'#interfaces|#wrapper|#stats|#stats(method)|'+
+        result.Content[length(result.Content)] := '|';
+        result.Content := result.Content+'#interfaces|#wrapper|#stats|#stats(method)|'+
           '#stats(interface.method)|#services|#sessions|#get url|#post url"';
       end;
       else inherited AdministrationExecute(DatabaseName,SQL,result);
@@ -54951,7 +54983,7 @@ begin
 end;
 
 procedure TRawUTF8ObjectCache.CacheSet;
-begin // gives some gracious time
+begin // gives some addition TTL time
   fTimeoutTix := GetTickCount64 + fTimeoutMS;
 end;
 
@@ -55065,7 +55097,7 @@ begin // called within fSafe.Lock
 end;
 
 function TRawUTF8ObjectCacheList.GetLocked(const Key: RawUTF8;
-  out cache: TRawUTF8ObjectCache): boolean;
+  out cache: TRawUTF8ObjectCache; onlyexisting: boolean): boolean;
 var
   added: boolean;
 begin
@@ -55078,6 +55110,10 @@ begin
       DoPurge;  // inline TryPurge within the locked instance
     cache := TRawUTF8ObjectCache(GetObjectByName(Key));
     if cache = nil then begin
+      if onlyexisting then begin
+        Log('GetLocked(%): onlyexisting=true -> no new %', [Key, fClass]);
+        exit;
+      end;
       cache := NewObjectCache(Key);
       if cache = nil then begin
         Log('GetLocked: Invalid key - NewObjectCache(%) returned no %', [Key, fClass]);

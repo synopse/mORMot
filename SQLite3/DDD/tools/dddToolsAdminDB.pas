@@ -73,6 +73,7 @@ type
     TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
+    SavePrefix: TFileName;
     OnAfterExecute: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     procedure EnableChkTables(const aCaption: string);
@@ -200,7 +201,7 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
 
 var
   res, ctyp, execTime: RawUTF8;
-  mmo, cmd: string;
+  mmo, cmd, fn, local: string;
   SelStart, SelLength, i: integer;
   table: TSQLTable;
   tables: TSQLRecordClassDynArray;
@@ -240,8 +241,27 @@ begin
         exec := Admin.DatabaseExecute(DatabaseName, fSQL);
         execTime := timer.Stop;
         ctyp := FindIniNameValue(pointer(exec.Header), HEADER_CONTENT_TYPE_UPPER);
-        if ctyp = '' then
+        if (ctyp = '') or IdemPChar(pointer(ctyp), JSON_CONTENT_TYPE_UPPER) then
           fJson := exec.Content
+        else
+        if IdemPropNameU(ctyp, BINARY_CONTENT_TYPE) then begin
+          fn := trim(FindIniNameValue(pointer(exec.Header), 'FILENAME:'));
+          if (fn <> '') and (exec.Content <> '') then
+            with TSaveDialog.Create(self) do
+            try
+              Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist, ofEnableSizing];
+              InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
+              FileName := SavePrefix + UTF8ToString(fn);
+              if Execute then begin
+                local := FileName;
+                FileFromString(exec.Content, local);
+              end;
+            finally
+              Free;
+            end;
+          fJson := JSONEncode(['file', fn, 'size', length(exec.Content),
+            'type', ctyp, 'localfile', local]);
+        end
         else
           fJson := '';
       except

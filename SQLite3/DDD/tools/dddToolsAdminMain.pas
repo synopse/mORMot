@@ -51,6 +51,7 @@ type
     Version: Variant;
     LastState: Variant;
     LastStateTicks: Int64;
+    SavePrefix: TFileName;
     OnAfterExecute: TNotifyEvent;
     OnAfterGetState: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
@@ -344,6 +345,7 @@ begin
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
   result.OnAfterExecute := OnAfterExecute;
+  result.SavePrefix := SavePrefix;
   fDBFrame[n] := result;
   page.Tag := n + 1; // Tag>0 -> index in fDBFrame[Tag-1] -> used in FormKeyDown
 end;
@@ -406,8 +408,8 @@ begin
   result := nil;
 end;
 
-procedure TAdminControl.SaveOrExport(Fmt: TAdminSaveOrExport; const ContextName:
-  string; DB: TDBFrame);
+procedure TAdminControl.SaveOrExport(Fmt: TAdminSaveOrExport;
+  const ContextName: string; DB: TDBFrame);
 var
   grid: TSQLTable;
   row: integer;
@@ -421,8 +423,8 @@ begin
   if (grid = nil) or (grid.RowCount = 0) then
     exit;
   if Fmt = expSaveGrid then begin
-    fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s', [ContextName, db.GridLastTableName,
-      NowToString(false)]));
+    fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s',
+      [ContextName, db.GridLastTableName, NowToString(false)]));
     if not fDlgSave.Execute then
       exit;
     case fDlgSave.FilterIndex of

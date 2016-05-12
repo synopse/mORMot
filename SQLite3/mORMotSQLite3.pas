@@ -476,7 +476,8 @@ type
     //   shuting down the server, replace the file, then relaunch the server instead
     function RestoreGZ(const BackupFileName: TFileName): boolean;
     /// used e.g. by IAdministratedDaemon to implement "pseudo-SQL" commands
-    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8; var result: RawJSON); override;
+    procedure AdministrationExecute(const DatabaseName,SQL: RawUTF8;
+      var result: TServiceCustomAnswer); override;
 
     /// initialize the associated DB connection
     // - called by Create and on Backup/Restore just after DB.DBOpen
@@ -1814,7 +1815,7 @@ end;
 {$endif}
 
 procedure TSQLRestServerDB.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
-  var result: RawJSON);
+  var result: TServiceCustomAnswer);
 var new,cmd,fn: RawUTF8;
     bfn: TFileName;
     i: integer;
@@ -1824,20 +1825,25 @@ begin
     case IdemPCharArray(@SQL[2],['VERSION','HELP','DB','BACKUP']) of
     0: new := FormatUTF8('"sqlite3":?}',[],[sqlite3.Version],true);
     1: begin
-      result[length(result)] := '|';
-      result := result+'#db|#backup localfilename"';
+      result.Content[length(result.Content)] := '|';
+      result.Content := result.Content+'#db [*/filename]|#backup [filename]"';
     end;
     2: begin
-      result := ObjectToJSON(DB,[woFullExpand]);
-      if fStaticData<>nil then begin
-        for i := 0 to high(fStaticData) do
-          if fStaticData[i]<>nil then
-            new := new+ObjectToJSON(fStaticData[i],[woFullExpand])+',';
-        if new<>'' then begin
-          new[length(new)] := ']';
-          new := '"StaticTables":['+new+'}';
+      split(SQL,' ',cmd,fn);
+      if fn='' then begin
+        result.Content := ObjectToJSON(DB,[woFullExpand]);
+        if fStaticData<>nil then begin
+          for i := 0 to high(fStaticData) do
+            if fStaticData[i]<>nil then
+              new := new+ObjectToJSON(fStaticData[i],[woFullExpand])+',';
+          if new<>'' then begin
+            new[length(new)] := ']';
+            new := '"StaticTables":['+new+'}';
+          end;
         end;
-      end;
+      end else
+        AdministrationExecuteGetFiles(ExtractFilePath(DB.FileName),
+          '*.db;*.db3;*.dbsynlz',fn,result);
     end;
     3: begin
       split(SQL,' ',cmd,fn);
@@ -1848,17 +1854,17 @@ begin
         if ExtractFilePath(bfn)='' then // put in local data folder is not set
           bfn := ExtractFilePath(DB.FileName)+bfn;
         if DB.BackupBackground(bfn,4*1024,1,nil,true) then // 4*1024*4096=16MB step
-          result := JsonEncode(['started',bfn]) else
-          result := '"Backup failed to start"';
+          result.Content := JsonEncode(['started',bfn]) else
+          result.Content := '"Backup failed to start"';
       end;
     end;
     else exit;
     end;
     if new<>'' then begin
-      if result='' then
-        result := '{' else
-        result[length(result)] := ',';
-      result := result+new;
+      if result.Content='' then
+        result.Content := '{' else
+        result.Content[length(result.Content)] := ',';
+      result.Content := result.Content+new;
     end;
   end;
 end;

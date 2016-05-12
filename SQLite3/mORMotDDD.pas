@@ -2536,9 +2536,12 @@ begin
       'CHAT','STARTDAEMON','STOPDAEMON','RESTARTDAEMON','HELP']);
        // 'HELP' should be the last one on the list
     case cmd of
-    0: if InternalRetrieveState(status) then
-         result.Content := VariantSaveJSON(status) else
-         result.Content := '"Daemon seems stopped"';
+    0: begin
+      if InternalRetrieveState(status) then
+        result.Content := VariantSaveJSON(status) else
+        result.Content := '"Daemon seems stopped"';
+      exit;
+    end;
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
           Split(copy(SQL,11,maxInt),'=',name,value);
@@ -2549,11 +2552,15 @@ begin
           end;
         end;
         result.Content := ObjectToJSON(fInternalSettings);
+        exit;
       end;
-    2: result.Content := JSONEncode(['daemon',DaemonName,
-         'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
-         'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
-         'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
+    2: begin
+      result.Content := JSONEncode(['daemon',DaemonName,
+        'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
+        'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
+        'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
+      exit;
+    end;
     3: begin
       {$ifdef MSWINDOWS_INCLUDESENV}
       P := pointer(GetEnvironmentStringsA);
@@ -2572,15 +2579,26 @@ begin
       exit;
     end;
     {$ifdef WITHLOG}
-    4: result.Content := ObjectToJSON(fLog.SynLog,[woEnumSetsAsText]);
-    5: fLog.SynLog.Log(sllMonitoring,'[CHAT] % %',
+    4: begin
+      split(SQL,' ',name,value);
+      if value='' then
+        result.Content := ObjectToJSON(fLog.SynLog,[woEnumSetsAsText]) else
+        AdministrationExecuteGetFiles(fLog.DestinationPath,'*.log;*.synlz',value,result);
+      exit;
+    end;
+    5: begin
+      fLog.SynLog.Log(sllMonitoring,'[CHAT] % %',
          [ServiceContext.Request.InHeader['remoteip'],copy(SQL,7,maxInt)]);
+      exit;
+    end;
     {$endif}
     6,7,8: begin // 6=start/7=stop/8=restart
       if cmd=6 then
         res := cqrsSuccess else
         res := Stop(status);
       if res=cqrsSuccess then begin
+        if cmd=8 then
+          Sleep(200); // leave some time between stop and start
         if cmd<>7 then
           res := Start;
         if res=cqrsSuccess then
@@ -2593,13 +2611,13 @@ begin
     end;
     else
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings|#settings full.path=value|#version|#computer|#log|#startdaemon'+
-        '|#stopdaemon|#restartdaemon|#help"';
+        '|#state|#settings|#settings full.path=value|#version|#computer|#log [*/filename]|'+
+        '#startdaemon|#stopdaemon|#restartdaemon|#help"';
     end;
   end;
   rest := PublishedORM(DatabaseName);
   if rest<>nil then
-    rest.AdministrationExecute(DatabaseName,SQL,RawJSON(result.Content));
+    rest.AdministrationExecute(DatabaseName,SQL,result);
 end;
 
 function TDDDAdministratedDaemon.DatabaseList: TRawUTF8DynArray;
