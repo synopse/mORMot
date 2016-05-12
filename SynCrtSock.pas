@@ -641,7 +641,8 @@ type
     /// add an header entry, returning the just entered entry index in Headers[]
     function HeaderAdd(const aValue: SockString): integer;
     /// set all Header values at once, from CRLF delimited text
-    procedure HeaderSetText(const aText: SockString);
+    procedure HeaderSetText(const aText: SockString;
+      const aForcedContentType: SockString='');
     /// get all Header values at once, as CRLF delimited text
     function HeaderGetText: SockString; virtual;
     /// HeaderValue('Content-Type')='text/html', e.g.
@@ -4374,7 +4375,7 @@ begin
   Headers[result] := aValue;
 end;
 
-procedure THttpSocket.HeaderSetText(const aText: SockString);
+procedure THttpSocket.HeaderSetText(const aText, aForcedContentType: SockString);
 var P, PDeb: PAnsiChar;
     n: integer;
 begin
@@ -4393,6 +4394,10 @@ begin
       while (P^=#13) or (P^=#10) do inc(P);
     until P^=#0;
   SetLength(Headers,n);
+  if (aForcedContentType='') or (HeaderValue('Content-Type')<>'') then
+    exit;
+  SetLength(Headers,n+1);
+  Headers[n] := 'Content-Type: '+aForcedContentType;
 end;
 
 function THttpSocket.HeaderGetText: SockString;
