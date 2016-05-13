@@ -958,20 +958,22 @@ end;
 
 function TSQLRestStorageMongoDB.GetJSONValues(const Res: TBSONDocument;
   const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
-var col, colCount, colFound: integer;
-    row: TBSONIterator;
-    item: array of TBSONElement;
-  function itemFind(const aName: RawUTF8): integer;
+  function itemFind(item: PBSONElement; itemcount: integer; const aName: RawUTF8): integer;
   var len: integer;
   begin
     len := length(aName);
     if len<>0 then
-      for result := 0 to colCount-1 do
-        with item[result] do
-        if (len=NameLen) and (IdemPropNameUSameLen(pointer(aName),Name,len)) then
-          exit;
+      for result := 0 to itemcount-1 do
+      if (item^.NameLen=len) and
+         IdemPropNameUSameLen(pointer(aName),item^.Name,len) then
+        exit else
+        inc(PByte(item),SizeOf(item^));
     result := -1;
   end;
+var col, colCount, colFound: integer;
+    row: TBSONIterator;
+    item: array of TBSONElement;
+    itemcount, itemsize: integer;
 begin
   result := 0; // number of data rows in JSON output
   if W.Expand then
@@ -982,27 +984,36 @@ begin
       raise EORMMongoDBException.CreateUTF8(
         '%.GetJSONValues(%): column count concern %<>%',
         [self,StoredClass,colCount,length(W.ColNames)]);
-    SetLength(item,colCount);
+    itemsize := colCount;
+    SetLength(item,itemsize);
     while row.Next do begin
       // retrieve all values of this BSON document into item[]
       if row.Item.Kind<>betDoc then
         raise EORMMongoDBException.CreateUTF8('%.GetJSONValues(%): invalid row kind=%',
           [self,StoredClass,ord(row.Item.Kind)]);
-      col := 0;
-      while (row.Item.Data.DocList^<>byte(betEof)) and (col<colCount) and
-            item[col].FromNext(row.Item.Data.DocList) do
-        inc(col);
+      itemcount := 0;
+      while item[itemcount].FromNext(row.Item.Data.DocList) do begin
+        inc(itemcount);
+        if itemcount>itemsize then begin
+          inc(itemsize);
+          Setlength(item,itemsize); // a field was deleted from TSQLRecord
+        end;
+      end;
+      for col := itemcount to colcount-1 do
+        item[col].Kind := betNull; // void any missing field (e.g. older schema) 
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
         W.Add('{');
       for col := 0 to colCount-1 do begin
         if W.Expand then
           W.AddString(W.ColNames[col]);
-        with item[col] do // BSON document may not follow expected field order
+        with item[col] do
           if IdemPropNameU(extFieldNames[col],Name,NameLen) then
-            colFound := col else // optimistic O(1) match
-            colFound := itemFind(extFieldNames[col]); // O(n) search
-        if colfound<0 then // this field may not exist (e.g. in an old record)
+            // optimistic O(1) if BSON document follows expected field order
+            colFound := col else
+            // O(n) search if fields are in another order, or missing
+            colFound := itemFind(pointer(item),itemcount,extFieldNames[col]);
+        if colfound<0 then // this field may not exist (e.g. older schema)
           W.AddShort('null') else
           item[colFound].AddMongoJSON(W,modNoMongo);
         W.Add(',');

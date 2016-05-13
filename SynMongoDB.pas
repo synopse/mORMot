@@ -468,6 +468,7 @@ type
     // - will raise an EBSONException if element is not correct
     procedure AddMongoJSON(W: TTextWriter; Mode: TMongoJSONMode=modMongoStrict); overload;
   end;
+  PBSONElement = ^TBSONElement;
 
   /// data structure used for iterating over a BSON binary buffer
   // - is just a wrapper around a PByte value, to be used with a TBSONDocument
