@@ -4625,6 +4625,12 @@ begin
   Check(mustache.SectionMaxCount=0);
   html := mustache.RenderJSON('{name:?,value:?}',[],['Chris',10000],nil,nil,MustacheTranslate);
   Check(html='Bonjour Chris'#$D#$A'Vous venez de gagner 10000 dollars!');
+  mustache := TSynMustache.Parse('1+3={{tval}} - is it 4?{{#if tval=4}} yes!{{/if}}');
+  html := mustache.RenderJSON('{tval:4}',nil,TSynMustache.HelpersGetStandardList);
+  check(html='1+3=4 - is it 4? yes!');
+  html := mustache.RenderJSON('{tval:5}',nil,TSynMustache.HelpersGetStandardList);
+  check(html='1+3=5 - is it 4?');
+
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A+
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A+

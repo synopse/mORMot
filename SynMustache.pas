@@ -1168,7 +1168,7 @@ function TSynMustacheContextVariant.GetValueCopyFromContext(
   const ValueName: RawUTF8): variant;
 var tmp: TVarData;
 begin
-  if (ValueName='') or (ValueName[1] in ['1'..'9','"','{','[']) or
+  if (ValueName='') or (ValueName[1] in ['0'..'9','"','{','[']) or
      (ValueName='true') or (ValueName='false') or (ValueName='null') then
     VariantLoadJSON(result,pointer(ValueName),nil,@JSON_OPTIONS[true]) else begin
     GetValueFromContext(ValueName,tmp);
@@ -1218,7 +1218,7 @@ var i,helper: Integer;
           if nam[k] in ['=','>'] then
             inc(k);
           valArr.InitArray([GetValueCopyFromContext(Copy(nam,1,j-1)),
-            Copy(nam,j,k-j),GetValueCopyFromContext(Copy(nam,k+1,maxInt))],JSON_OPTIONS[true]);
+            Copy(nam,j,k-j),GetValueCopyFromContext(Copy(nam,k,maxInt))],JSON_OPTIONS[true]);
           valFree := true;
           break;
         end;
