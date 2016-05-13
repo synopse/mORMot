@@ -1765,14 +1765,15 @@ type
 
     /// retrieve extended server version and build information, as text
     // - will create a string from ServerBuildInfo object, e.g. as
+    // $ 'MongoDB 3.2.0 mozjs mmapv1,wiredTiger'
     function ServerBuildInfoText: RawUTF8;
     /// retrieve the server version and build information
     // - return the content as a TDocVariant document, e.g.
     // ! ServerBuildInfo.version = '2.4.9'
     // ! ServerBuildInfo.versionArray = [2,4,9,0]
     // - this property is cached, so request is sent only once
-    // - you may easier use ServerBuildInfoNumber to check for available
-    // features at runtime
+    // - you may rather use ServerBuildInfoNumber to check for available
+    // features at runtime, for easy comparison of the server version
     property ServerBuildInfo: variant read fServerBuildInfo;
     /// access to a given MongoDB database
     // - try to open it via a non-authenticated connection it if not already:
@@ -5366,7 +5367,7 @@ begin
   with _Safe(ServerBuildInfo)^ do
     if Count=0 then
       result := '' else begin
-      result := FormatUTF8('MongoDB % %',[U['version'],U['javascriptEngine']]);
+      FormatUTF8('MongoDB % %',[U['version'],U['javascriptEngine']],result);
       with A['storageEngines']^ do begin
         // "storageEngines":["devnull","ephemeralForTest","mmapv1","wiredTiger"]
         DeleteByValue('devnull');
@@ -5474,7 +5475,8 @@ begin
       fConnections[0].Open;
       AfterOpen; // need ServerBuildInfoNumber just below
       digest := PasswordDigest(UserName,Password);
-      if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin // MONGODB-CR
+      if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin
+        // MONGODB-CR
         // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
         bson := BSONVariant(['getnonce',1]);
         err := fConnections[0].RunCommand(DatabaseName,bson,res);
@@ -5489,12 +5491,13 @@ begin
         if err<>'' then
           raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
             [self,DatabaseName,err,res]);
-      end else begin // SCRAM-SHA-1
+      end else begin
+        // SCRAM-SHA-1
         // https://tools.ietf.org/html/rfc5802#section-5
         user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
         TAESPRNG.Main.FillRandom(rnd);
         nonce := BinToBase64(@rnd,sizeof(rnd));
-        first := FormatUTF8('n=%,r=%',[user,nonce]);
+        FormatUTF8('n=%,r=%',[user,nonce],first);
         BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
         err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
           'saslStart',1,'mechanism','SCRAM-SHA-1','payload',bson,'autoAuthorize',1]),res);
@@ -5596,12 +5599,15 @@ constructor TMongoDatabase.Create(aClient: TMongoClient;
   const aDatabaseName: RawUTF8);
 var colls: TBSONIterator;
     full,db,coll: RawUTF8;
+    resp,batch: variant;
+    ndx: Integer;
 begin
   fClient := aClient;
   fName := aDatabaseName;
   fCollections := TRawUTF8ListHashed.Create(true);
-  if colls.Init(Client.Connections[0].GetBSONAndFree(
-     TMongoRequestQuery.Create(aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
+  if fClient.ServerBuildInfoNumber<3000000 then begin
+    if colls.Init(Client.Connections[0].GetBSONAndFree(TMongoRequestQuery.Create(
+      aDatabaseName+'.system.namespaces',null,'name',maxInt))) then
     // e.g. [ {name:"test.system.indexes"}, {name:"test.test"} ]
     while colls.Next do begin
       full := colls.item.DocItemToRawUTF8('name');
@@ -5614,6 +5620,14 @@ begin
         fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
       end;
     end;
+  end else begin
+    RunCommand('listCollections',resp);
+    if _Safe(resp)^.GetValueByPath('cursor.firstBatch',batch) then
+      with _Safe(batch)^ do
+      for ndx := 0 to Count-1 do
+        if _Safe(Values[ndx]).GetAsRawUTF8('name',coll) then
+          fCollections.AddObject(coll,TMongoCollection.Create(self,coll));
+  end;
 end;
 
 destructor TMongoDatabase.Destroy;
