@@ -187,6 +187,8 @@ type
     // textual values, and 'stored false' properties would be included
     // - returns the new JSON content corresponding to the updated settings
     function AsJson: RawUTF8; virtual;
+    /// access to the associated settings storage
+    property Storage: TDDDAppSettingsStorageAbstract read fStorage;
   published
     /// some text which will be used to describe this application
     property Description: string read FDescription write FDescription;

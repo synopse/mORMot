@@ -605,11 +605,12 @@ end;
 
 function TDDDDaemon.NewDaemon: TDDDAdministratedDaemon;
 begin
-  if Assigned(fSettings) and fSettings.Log.LowLevelWebSocketsFrames then begin
-    WebSocketLog := SQLite3Log;
-    HttpServerFullWebSocketsLog := true;
-    HttpClientFullWebSocketsLog := true;
-  end;
+  if Assigned(fSettings) then 
+    if fSettings.Log.LowLevelWebSocketsFrames then begin
+      WebSocketLog := SQLite3Log;
+      HttpServerFullWebSocketsLog := true;
+      HttpClientFullWebSocketsLog := true;
+    end;
   result := nil;
 end;
 
@@ -1744,6 +1745,9 @@ begin
   with Settings.RemoteAdmin do
     result := DaemonClass.Create(AuthUserName, AuthHashedPassword, AuthRootURI, AuthNamedPipeName);
   result.InternalSettings := Settings;
+  if Settings.Storage is TDDDAppSettingsStorageFile then
+    result.InternalSettingsFolder := ExtractFilePath(
+      TDDDAppSettingsStorageFile(Settings.Storage).SettingsJsonFileName);
   result.Log.SynLog.Log(sllTrace, '%.Create(%)', [DaemonClass, Settings], result);
   with Settings.RemoteAdmin do
     if AuthHttp.BindPort <> '' then

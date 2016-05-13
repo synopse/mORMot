@@ -878,6 +878,7 @@ type
     fRemoteLog: TSynLogCallbacks;
     fInternalDatabases: TSQLRestDynArray;
     fInternalSettings: TObject;
+    fInternalSettingsFolder: TFileName;
     fAdministrationServer: TSQLRestServer;
     fAdministrationServerOwned: boolean;
     fAdministrationHTTPServer: TObject;
@@ -961,6 +962,9 @@ type
     /// access to the associated internal settings
     // - is defined as an opaque TObject instance, to avoid unneeded dependencies
     property InternalSettings: TObject read fInternalSettings write SetInternalSettings;
+    /// access to the associated internal settings storage folder
+    property InternalSettingsFolder: TFileName
+      read fInternalSettingsFolder write fInternalSettingsFolder;
     /// reference to the WebSockets/HTTP server publishing AdministrationServer
     // - is defined as an opaque TObject instance, to avoid unneeded dependencies
     property AdministrationHTTPServer: TObject
@@ -2532,9 +2536,8 @@ begin
   if SQL='' then
     exit;
   if SQL[1]='#' then begin
-    cmd := IdemPCharArray(@SQL[2],['STATE','SETTING','VERSION','COMPUTER','LOG',
+    cmd := IdemPCharArray(@SQL[2],['STATE','SETTINGS','VERSION','COMPUTER','LOG',
       'CHAT','STARTDAEMON','STOPDAEMON','RESTARTDAEMON','HELP']);
-       // 'HELP' should be the last one on the list
     case cmd of
     0: begin
       if InternalRetrieveState(status) then
@@ -2544,23 +2547,30 @@ begin
     end;
     1: if fInternalSettings<>nil then begin
         if SQL[10]=' ' then begin
-          Split(copy(SQL,11,maxInt),'=',name,value);
-          if (name<>'') and (value<>'') then begin
-            VariantLoadJSON(status,pointer(value));
-            doc.InitObjectFromPath(name,status);
-            JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
+          name := copy(SQL,11,maxInt);
+          if PosEx('=',name)>0 then begin
+            Split(name,'=',name,value);
+            if (name<>'') and (value<>'') then begin
+              VariantLoadJSON(status,pointer(value));
+              doc.InitObjectFromPath(name,status);
+              JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
+            end;
+          end else 
+          if fInternalSettingsFolder<>'' then begin
+            AdministrationExecuteGetFiles(fInternalSettingsFolder,
+              '*.config;*.settings',name,result);
+            exit;
           end;
         end;
-        result.Content := ObjectToJSON(fInternalSettings);
+        result.Content := ObjectToJSON(fInternalSettings,[woEnumSetsAsText]);
         exit;
       end;
-    2: begin
+    2:
       result.Content := JSONEncode(['daemon',DaemonName,
         'exe',ExeVersion.ProgramFileName,'version',ExeVersion.Version.Detailed,
         'buildTime',DateTimeToIso8601(ExeVersion.Version.BuildDateTime,true),
         'framework',SYNOPSE_FRAMEWORK_FULLVERSION,'compiler',GetDelphiCompilerVersion]);
-      exit;
-    end;
+      // no exit: #version handled e.g. in TSQLRestServerDB.AdministrationExecute
     3: begin
       {$ifdef MSWINDOWS_INCLUDESENV}
       P := pointer(GetEnvironmentStringsA);
@@ -2609,9 +2619,9 @@ begin
          result.Content := JSONEncode(['errorStop',ToText(res)^]);
        exit;
     end;
-    else
+    9:
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings|#settings full.path=value|#version|#computer|#log [*/filename]|'+
+        '|#state|#settings [full.path=value/*/filename]|#version|#computer|#log [*/filename]|'+
         '#startdaemon|#stopdaemon|#restartdaemon|#help"';
     end;
   end;

@@ -32663,7 +32663,7 @@ begin
     0: result.Content := Int64ToUtf8(ServerTimeStamp);
     1: result.Content := ObjectToJSON(Model);
     2: result.Content := ObjectToJSON(self);
-    else begin
+    3: begin
       result.Content[length(result.Content)] := '|';
       result.Content := result.Content+'#time|#model|#rest"';
     end;
@@ -35940,7 +35940,7 @@ var files: TFindFilesDynArray;
     fs: Int64;
 begin
   if Param<>'*' then begin
-    fn := Folder+UTF8ToString(Param);
+    fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
       Answer.Content := StringFromFile(fn);
