@@ -35939,7 +35939,7 @@ var files: TFindFilesDynArray;
     fn: TFileName;
     fs: Int64;
 begin
-  if Param<>'*' then begin
+  if (Param<>'*') and (PosEx(':',Param)=0) and (PosEx(PathDelim,Param)=0) then begin
     fn := IncludeTrailingPathDelimiter(Folder)+UTF8ToString(Param);
     fs := FileSize(fn);
     if (fs>0) and (fs<256 shl 20) then begin // download up to 256 MB
