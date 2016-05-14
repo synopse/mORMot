@@ -8506,7 +8506,7 @@ procedure TTestCryptographicRoutines._TAESPNRG;
 var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
     s1,s2,split: RawByteString;
-    i,j: integer;
+    i,stripes: integer;
 begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
@@ -8535,8 +8535,9 @@ begin
   end;
   s1 := TAESPRNG.Main.FillRandom(100);
   for i := 1 to length(s1) do
-    for j := 1 to 10 do begin
-      split := TAESPRNG.Main.AFSplit(pointer(s1)^,i,j);
+    for stripes := 0 to 10 do begin
+      split := TAESPRNG.Main.AFSplit(pointer(s1)^,i,stripes);
+      check(length(split)=i*(stripes+1));
       check(TAESPRNG.AFUnsplit(split,pointer(s2)^,i));
       check(CompareMem(pointer(s1),pointer(s2),i));
     end;

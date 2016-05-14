@@ -7560,16 +7560,18 @@ begin
   result := FillRandomAES;
 end;
 
-procedure _afdiffusesha256(buf,rnd: pointer; size: integer);
+procedure _afdiffusesha256(buf,rnd: pointer; size: cardinal);
 var sha: TSHA256;
     dig: TSHA256Digest;
-    last,i: integer;
+    last, iv: cardinal;
+    i: integer;
 begin
   XorMemory(buf,rnd,size);
   sha.Init;
   last := size div SizeOf(dig);
   for i := 0 to last-1 do begin
-    sha.Update(@i,SizeOf(i));
+    iv := bswap32(i); // host byte order independent hash IV (as in TKS1/LUKS)
+    sha.Update(@iv,SizeOf(iv));
     sha.Update(buf,SizeOf(dig));
     sha.Final(PSHA256Digest(buf)^);
     inc(PByte(buf),SizeOf(dig));
@@ -7577,14 +7579,15 @@ begin
   dec(size,last*SizeOf(dig));
   if size=0 then
     exit;
-  sha.Update(@last,SizeOf(last));
+  iv := bswap32(last);
+  sha.Update(@iv,SizeOf(iv));
   sha.Update(buf,size);
   sha.Final(dig);
   move(dig,buf^,size);
 end;
  
 function TAESPRNG.AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
-var P: pointer;
+var dst: pointer;
     tmp: TByteDynArray;
     i: integer;
 begin
@@ -7593,35 +7596,34 @@ begin
     SetLength(result,BufferBytes*(StripesCount+1));
   if result='' then
     exit;
-  P := pointer(result);
+  dst := pointer(result);
   SetLength(tmp,BufferBytes);
   for i := 1 to StripesCount do begin
-    FillRandom(P,BufferBytes);
-    _afdiffusesha256(pointer(tmp),P,BufferBytes);
-    inc(PByte(P),BufferBytes);
+    FillRandom(dst,BufferBytes);
+    _afdiffusesha256(pointer(tmp),dst,BufferBytes);
+    inc(PByte(dst),BufferBytes);
   end;
-  move(Buffer,P^,BufferBytes);
-  XorMemory(P,pointer(tmp),BufferBytes);
+  XorBlockN(@Buffer,dst,pointer(tmp),BufferBytes); // B[i] := A[i] xor C[i];
 end;
 
 class function TAESPRNG.AFUnsplit(const Split: RawByteString;
   out Buffer; BufferBytes: integer): boolean;
-var len,i: integer;
-    P: pointer;
+var len: cardinal;
+    i: integer;
+    src: pointer;
     tmp: TByteDynArray;
 begin
   len := length(Split);
-  result := (len<>0) and (len mod BufferBytes=0);
+  result := (len<>0) and (len mod cardinal(BufferBytes)=0);
   if not result then
     exit;
-  P := pointer(Split);
+  src := pointer(Split);
   SetLength(tmp,BufferBytes);
-  for i := 2 to len div BufferBytes do begin
-    _afdiffusesha256(pointer(tmp),P,BufferBytes);
-    inc(PByte(P),BufferBytes);
+  for i := 2 to len div cardinal(BufferBytes) do begin
+    _afdiffusesha256(pointer(tmp),src,BufferBytes);
+    inc(PByte(src),BufferBytes);
   end;
-  move(P^,Buffer,BufferBytes);
-  XorMemory(@Buffer,pointer(tmp),BufferBytes);
+  XorBlockN(src,@Buffer,pointer(tmp),BufferBytes);
 end;
 
 
