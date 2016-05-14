@@ -15521,10 +15521,10 @@ type
     fIdentifier: TSynUniqueIdentifierProcess;
     fIdentifierShifted: cardinal;
     fLastCounter: cardinal;
-    fCrypto: array[0..7] of cardinal;
+    fCrypto: array[0..7] of cardinal; // only fCrypto[6..7] are used in practice
     fCryptoCRC: cardinal;
     fSafe: TSynLocker;
-    function GetComputedCount: integer;
+    function GetComputedCount: Int64;
   public
     /// initialize the generator for the given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
@@ -15549,7 +15549,8 @@ type
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
     function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
     /// retrieve a TSynUniqueIdentifier from 24 chars cyphered hexadecimal text
-    // - any file extension (e.g. '.jpeg') woul dbe first
+    // - any file extension (e.g. '.jpeg') would be first deleted from the
+    // supplied obfuscated text
     // - returns true if the supplied obfuscated text has the expected layout
     // and a valid digital signature
     // - returns false if the supplied obfuscated text is invalid
@@ -15559,7 +15560,7 @@ type
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
     /// how many times ComputeNew method has been called
-    property ComputedCount: integer read GetComputedCount;
+    property ComputedCount: Int64 read GetComputedCount;
   end;
   
 
@@ -42120,7 +42121,8 @@ begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
-      result := VariantToInt64Def(variant(Padding[index]),0);
+      if not VariantToInt64(variant(Padding[index]),result) then
+        result := 0;
     finally
       LeaveCriticalSection(fSection);
     end else
@@ -42207,11 +42209,10 @@ begin
   if cardinal(Index)<=high(Padding) then
     try
       EnterCriticalSection(fSection);
+      result := 0;
       if Index<=PaddingMaxUsedIndex then
-        result := VariantToInt64Def(variant(Padding[index]),0) else begin
+        VariantToInt64(variant(Padding[index]),result) else
         PaddingMaxUsedIndex := Index;
-        result := 0;
-      end;
       variant(Padding[Index]) := Int64(result+Increment);
     finally
       LeaveCriticalSection(fSection);
@@ -54796,7 +54797,7 @@ procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var tix, currentTime: cardinal;
 begin
-  tix := GetTickCount64 shr 8;
+  tix := GetTickCount64 shr 8; // retrieve time every 256 ms
   fSafe.Lock;
   try
     if tix<>fLastTix then begin
@@ -54825,10 +54826,12 @@ begin
   ComputeNew(PSynUniqueIdentifierBits(@result)^);
 end;
 
-function TSynUniqueIdentifierGenerator.GetComputedCount: integer;
+function TSynUniqueIdentifierGenerator.GetComputedCount: Int64;
 begin
   {$ifdef NOVARIANTS}
-  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInteger;
+  fSafe.Lock;
+  result := fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT].VInt64;
+  fSafe.Unlock;
   {$else}
   result := fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT];
   {$endif}
@@ -54853,23 +54856,28 @@ var i, len: integer;
 begin
   fIdentifier := aIdentifier;
   fIdentifierShifted := aIdentifier shl 15;
-  len := length(aSharedObfuscationKey);
-  crc := crc32ctab[0,len and 1023];
-  for i := 0 to high(fCrypto)+1 do begin
-    crc := crc32ctab[0,crc and 1023] xor crc32ctab[3,i] xor 
-           kr32(crc,pointer(aSharedObfuscationKey),len) xor
-           crc32c(crc,pointer(aSharedObfuscationKey),len) xor
-           fnv32(crc,pointer(aSharedObfuscationKey),len);
-    if i<=high(fCrypto) then
-      fCrypto[i] := crc else // naive but good enough in practice
-      fCryptoCRC := crc;
-  end;
   fSafe.Init;
   {$ifdef NOVARIANTS}
   variant(fSafe.Padding[SYNUNIQUEGEN_COMPUTECOUNT]) := 0;
   {$else}
   fSafe.LockedInt64[SYNUNIQUEGEN_COMPUTECOUNT] := 0;
   {$endif}
+  // compute obfuscation key using hash diffusion of the supplied text
+  len := length(aSharedObfuscationKey);
+  crc := crc32ctab[0,len and 1023];
+  for i := 0 to high(fCrypto)+1 do begin
+    crc := crc32ctab[0,crc and 1023] xor crc32ctab[3,i] xor
+           kr32(crc,pointer(aSharedObfuscationKey),len) xor
+           crc32c(crc,pointer(aSharedObfuscationKey),len) xor
+           fnv32(crc,pointer(aSharedObfuscationKey),len);
+    if i<=high(fCrypto) then
+      fCrypto[i] := crc else
+      fCryptoCRC := crc;
+  end;
+  // due to the weakness of the hash algorithms used, this approach is a bit
+  // naive and would be broken easily with brute force - but point here is to
+  // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
+  // not implement strong security, so it sounds good enough for our purpose 
 end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
