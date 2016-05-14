@@ -4810,23 +4810,22 @@ procedure TSHA256.Final(out Digest: TSHA256Digest);
 // finalize SHA256 calculation, clear context
 var Data: TSHAContext absolute Context;
 begin
-  // Message padding
-  // 1. append bit '1' after Buffer
+  // append bit '1' after Buffer
   Data.Buffer[Data.Index]:= $80;
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
-  // 2. Compress if more than 448 bits, (no room for 64 bit length
+  // compress if more than 448 bits (no space for 64 bit length storage)
   if Data.Index>=56 then begin
     Compress;
     FillcharFast(Data.Buffer,56,0);
   end;
-  // Write 64 bit Buffer length into the last bits of the last block
+  // write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
   PInteger(@Data.Buffer[56])^ := bswap32(Int64Rec(Data.MLen).Hi);
   PInteger(@Data.Buffer[60])^ := bswap32(Int64Rec(Data.MLen).Lo);
   Compress;
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
-  // Clear Data and internally stored Digest
+  // clear Data and internally stored Digest
   Init;
 end;
 

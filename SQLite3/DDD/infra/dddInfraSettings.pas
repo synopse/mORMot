@@ -396,6 +396,7 @@ type
   protected
     fHost: RawUTF8;
     fPort: integer;
+    fSocketLoopPeriod: integer;
     fSocketTimeout: integer;
     fConnectionAttemptsInterval: Integer;
     fAutoReconnectAfterSocketError: boolean;
@@ -414,7 +415,12 @@ type
     property Host: RawUTF8 read FHost write FHost;
     /// the associated TCP server port
     property Port: integer read FPort write FPort;
+    /// how many millisecond the main socket reading loop should wait
+    // for pending data, before calling TDDDSocketThread.InternalExecuteIdle 
+    // - default is 100 ms
+    property SocketLoopPeriod: integer read fSocketLoopPeriod write fSocketLoopPeriod;
     /// the time out period, in milliseconds, for socket access
+    // - default is 2000 ms, i.e. 2 seconds
     property SocketTimeout: integer read FSocketTimeout write FSocketTimeout;
     /// the time, in seconds, between any reconnection attempt
     // - default value is 5 - i.e. five seconds
@@ -696,8 +702,9 @@ end;
 constructor TDDDSocketThreadSettings.Create;
 begin
   inherited Create;
-  FConnectionAttemptsInterval := 5;
-  FMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
+  fSocketLoopPeriod := 100;
+  fConnectionAttemptsInterval := 5;
+  fMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
 end;
 
 

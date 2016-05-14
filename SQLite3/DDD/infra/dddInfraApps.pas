@@ -496,7 +496,6 @@ type
     fPerformConnection: boolean;
     fHost, fPort: SockString;
     fSocketInputBuffer: RawByteString;
-    fExecuteSocketLoopPeriod: integer;
     fShouldDisconnect: boolean;
     procedure InternalExecute; override;
     procedure ExecuteConnect;
@@ -961,8 +960,9 @@ begin
   if fSettings.Port = 0 then
     raise EDDDInfraException.CreateUTF8('%.Create(Port=0)', [self]);
   fPort := UInt32ToUtf8(fSettings.Port);
-  fExecuteSocketLoopPeriod := 300;
-  if fSettings.SocketTimeout < fExecuteSocketLoopPeriod then
+  if fSettings.SocketLoopPeriod < 10 then
+    fSettings.SocketLoopPeriod := 10;
+  if fSettings.SocketTimeout < fSettings.SocketLoopPeriod then
     fSettings.SocketTimeout := 2000;
   fPerformConnection := true;
   inherited Create(aRest, true, true); // aOwnRest=true
@@ -1080,7 +1080,7 @@ procedure TDDDSocketThread.ExecuteSocket;
 var
   pending, len: integer;
 begin
-  pending := fSocket.DataInPending(fExecuteSocketLoopPeriod);
+  pending := fSocket.DataInPending(fSettings.SocketLoopPeriod);
   if Terminated or (pending = 0) then
     exit;
   if pending < 0 then begin
