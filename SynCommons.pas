@@ -39453,6 +39453,7 @@ begin
         GetJSONPropName(P,name);
         if (name[0]=#0) or (name[0]>#200) then
           break;
+        if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
         if PropNameLen=0 then begin
           name[ord(name[0])+1] := #0; // make ASCIIZ
           if IdemPChar(@name[1],PropNameUpper) then begin
