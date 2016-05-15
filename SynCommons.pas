@@ -33142,8 +33142,8 @@ end;
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         .NOFRAME
+        test     rcx,rcx
         mov      rax,rcx             // get pointer to string from rcx
-        or       rax,rax
         mov      r8,rcx              // copy pointer
         jz       @null               // returns 0 if S=nil
         // rax = s,ecx = 32 bits of s
@@ -33172,6 +33172,28 @@ asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         add      rax,rdx             // add byte index
 @null:
 end;
+
+const
+  EQUAL_EACH = 8;   // see https://msdn.microsoft.com/en-us/library/bb531463
+  NEGATIVE_POLARITY = 16;
+
+{$ifdef HASAESNI}
+function StrLenSSE42(S: pointer): PtrInt;
+asm // rcx=S
+        .NOFRAME
+        test      rcx,rcx
+        mov       rdx,rcx
+        mov       rax,-16
+        jz        @null
+        pxor      xmm0,xmm0
+@L:     add       rax,16   // add before comparison flag
+        pcmpistri xmm0,[rdx+rax],EQUAL_EACH
+        jnz       @L
+        add       rax,rcx
+        ret
+@null:  xor       rax,rax
+end;
+{$endif}
 
 {$else CPU64}
 
@@ -33501,7 +33523,11 @@ begin
   MoveFast := @MoveX87;
   {$else}
   {$ifdef CPU64}
-  StrLen := @StrLenSSE2;
+  {$ifdef HASAESNI}
+    if cfSSE42 in CpuFeatures then
+      StrLen := @StrLenSSE42 else
+  {$endif}
+      StrLen := @StrLenSSE2;
   FillcharFast := @FillCharSSE2;
   //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
   {$else}
