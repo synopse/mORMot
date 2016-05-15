@@ -45629,6 +45629,8 @@ procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON; EndOfObjec
 var B: PUTF8Char;
 begin
   result := '';
+  if P=nil then
+    exit;
   B := P;
   P := GotoEndJSONItem(B);
   if P=nil then
