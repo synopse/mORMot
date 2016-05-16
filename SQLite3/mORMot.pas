@@ -2508,7 +2508,7 @@ type
     function ClassProp: PClassProp;
       {$ifdef HASINLINE}inline;{$endif}
     /// fast and easy find if this class inherits from a specific class type
-    // - you should rather consider using TTypeInfo.InheritsFrom directly 
+    // - you should rather consider using TTypeInfo.InheritsFrom directly
     function InheritsFrom(AClass: TClass): boolean;
     /// return the size (in bytes) of this class type information
     // - can be used to create class types at runtime
@@ -2528,6 +2528,21 @@ type
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
+    { this seemingly extraneous inner record is here for alignment purposes, so
+    that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
+    {$ifdef FPC_ENUMHASINNER}
+    inner:
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_ENUMHASINNER}
+    record
+    {$endif}
+    {$ifdef FPC_ENUMHASINNER}
+      iMinValue: Longint;
+      iMaxValue: Longint;
+      iBaseType: PPTypeInfo;
+    end;
+    {$else}
     /// first value of enumeration type, typicaly 0
     MinValue: Longint;
     /// same as ord(high(type)): not the enumeration count, but the highest index
@@ -2537,8 +2552,14 @@ type
     // method PTypeInfo(typeinfo(TEnumType))^.EnumBaseType before calling
     // any of the methods below
     BaseType: PPTypeInfo;
+    {$endif FPC_ENUMHASINNER}
     /// a concatenation of shortstrings, containing the enumeration names
     NameList: string[255];
+    {$ifdef FPC_ENUMHASINNER}
+    function MinValue: Longint; inline;
+    function MaxValue: Longint; inline;
+    function BaseType: PPTypeInfo; inline;
+    {$endif FPC_ENUMHASINNER}
     /// get the corresponding enumeration name
     // - return the first one if Value is invalid (>MaxValue)
     function GetEnumNameOrd(Value: Integer): PShortString;
@@ -2641,7 +2662,11 @@ type
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
     TypeInfo: PPTypeInfo;
+    {$ifdef FPC}
+    Offset: SizeInt;
+    {$else}
     Offset: Cardinal;
+    {$endif FPC}
   end;
   TRecordType =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -3076,10 +3101,15 @@ type
     Flags: TParamFlags;
     /// the parameter type information
     ParamType: PPTypeInfo;
+    {$ifdef FPC}
+    ParReg: byte;
+    Offset: longint;
+    {$else}
     /// parameter offset
     // - 0 for EAX, 1 for EDX, 2 for ECX
     // - any value >= 8 for stack-based parameter
     Offset: Word;
+    {$endif}
     /// parameter name
     Name: ShortString;
     /// get the next parameter information
@@ -3117,7 +3147,7 @@ type
   end;
 
 {$ifdef FPC}
-{$PACKRECORDS 8}
+{$PACKRECORDS DEFAULT}
 {$else}
 {$A+} { default aligned data }
 {$endif}
@@ -9980,9 +10010,8 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
     // cleared with ObjArrClear() and not TDynArray.Clear
-    // - vIsInXMM is used under 64 bit ABI, for floating point constant arguments
-    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray
-      {$ifdef CPU64}, vIsInXMM{$endif});
+    // - vIsInFPR is used for floating point constant arguments
+    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray, vIsInFPR);
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -19336,7 +19365,7 @@ function TMethodInfo.ReturnInfo: PReturnInfo;
 begin // see http://hallvards.blogspot.fr/2006/09/extended-class-rtti.html
   if @self<>nil then begin
     {$ifdef FPC}
-    result := pointer(PtrUInt(@self)+sizeof(TMethodInfo));
+    result := pointer(PtrUInt(@Addr)+sizeof(Pointer));
     {$else}
     result := @Name[ord(Name[0])+1];
     if PtrUInt(result)-PtrUInt(@self)=Len then
@@ -25419,13 +25448,15 @@ begin
   if P=nil then
     exit; // no a true enumerate field
   // 1. count of every possible enumerated value into EnumCounts[]
-  SetLength(EnumCounts,P^.MaxValue+1); // EnumCounts[] := 0
+  SetLength(EnumCounts,P^.MaxValue+1);
   U := @fResults[FieldCount+F]; // start reading after first Row (= Field Names)
   for R := 1 to fRowCount do begin
     n := GetInteger(U^);
-    if n<=P^.MaxValue then // update count of every enumerated value
+    if n<=P^.MaxValue then
+      // update count of every enumerated value
       inc(EnumCounts[n]) else
-      inc(EnumCounts[0]); // GetCaption(invalid index) displays first one
+      // GetCaption(invalid index) displays first one
+      inc(EnumCounts[0]);
     inc(U,FieldCount); // points to next row
   end;
   // 2. update aResult[F] with displayed caption text length
@@ -28544,14 +28575,14 @@ function TTypeInfo.InterfaceGUID: PGUID;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfGuid;
+    result := AlignToPtr(@PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfGuid);
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    result := @PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfUnit;
+    result := AlignToPtr(@PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfUnit);
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
@@ -28684,6 +28715,23 @@ end;
 
 { TEnumType }
 
+{$ifdef FPC_ENUMHASINNER}
+function TEnumType.MinValue: Longint;
+begin
+  result := inner.iMinValue;
+end;
+
+function TEnumType.MaxValue: Longint;
+begin
+  result := inner.iMaxValue;
+end;
+
+function TEnumType.BaseType: PPTypeInfo;
+begin
+  result := inner.iBaseType;
+end;
+{$endif FPC_ENUMHASINNER}
+
 function TEnumType.GetEnumName(const Value): PShortString;
 var Ordinal: integer;
 begin
@@ -28710,7 +28758,11 @@ end;
 {$else}
 asm // eax=PEnumType edx=Value
     xor    ecx,ecx
+    {$ifdef FPC_ENUMHASINNER}
+    cmp    edx,[eax].TEnumType.inner.iMaxValue
+    {$else}
     cmp    edx,[eax].TEnumType.MaxValue
+    {$endif}
     lea    eax,[eax].TEnumType.NameList
     ja     @0
     test   edx,edx
@@ -28761,7 +28813,8 @@ var j: integer;
     PS: PShortString;
 begin
   W.Add('[');
-  if FullSetsAsStar and (MaxValue<32) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and (MaxValue<32) and
+     GetAllBits(Value,MaxValue+1) then
     W.AddShort('"*"') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
@@ -28785,7 +28838,8 @@ var j: integer;
     arr: TDocVariantData;
 begin
   arr.InitFast;
-  if FullSetsAsStar and (MaxValue<32) and GetAllBits(Value,MaxValue+1) then
+  if FullSetsAsStar and (MaxValue<32) and
+     GetAllBits(Value,MaxValue+1) then
     arr.AddItem('*') else begin
     PS := @NameList;
     for j := MinValue to MaxValue do begin
@@ -28801,9 +28855,11 @@ function TEnumType.GetEnumNameValue(Value: PUTF8Char; ValueLen: integer;
   AlsoTrimLowerCase: boolean): Integer;
 begin
   if (Value<>nil) and (ValueLen>0) then begin
-    result := FindShortStringListExact(@NameList,MaxValue,Value,ValueLen);
+    result := FindShortStringListExact(@NameList,
+      MaxValue,Value,ValueLen);
     if (result<0) and AlsoTrimLowerCase then
-      result := FindShortStringListTrimLowerCase(@NameList,MaxValue,Value,ValueLen);
+      result := FindShortStringListTrimLowerCase(@NameList,
+        MaxValue,Value,ValueLen);
   end else
     result := -1;
 end;
@@ -35428,7 +35484,7 @@ function TSQLRestClientURI.FakeCallbackRegister(Sender: TServiceFactoryClient;
 begin
   raise EServiceException.CreateUTF8('% does not support interface parameters '+
     'for %.%(%: %): consider using another kind of client',
-    [self,Sender.fInterface.fInterfaceTypeInfo^.Name,Method.URI,
+    [self,Sender.fInterface.fInterfaceName,Method.URI,
      ParamInfo.ParamName^,ParamInfo.ArgTypeName^]);
 end;
 
@@ -36884,6 +36940,8 @@ var current,previous: TRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
 begin
+  //alfchange
+  callback:=nil;
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
     exit;
@@ -41128,7 +41186,7 @@ begin // see http://msdn.microsoft.com/en-us/library/aa365588(v=VS.85).aspx
       PIPE_TYPE_BYTE or PIPE_READMODE_BYTE or PIPE_WAIT,
       PIPE_UNLIMITED_INSTANCES, 0, 0, 0,
       {$ifdef NOSECURITYFORNAMEDPIPECLIENTS}nil{$else}@fPipeSecurityAttributes{$endif});
-    if aPipe=INVALID_HANDLE_VALUE then
+    if aPipe=cardinal(INVALID_HANDLE_VALUE) then
       break;
     while not Terminated do
       if PeekNamedPipe(aPipe,nil,0,nil,@Available,nil) then
@@ -41187,7 +41245,7 @@ var call: TSQLRestURIParams;
     Header: RawUTF8;
     Available: cardinal;
 begin
-  if (fPipe=0) or (fPipe=INVALID_HANDLE_VALUE) or (fServer=nil) then
+  if (fPipe=0) or (fPipe=Cardinal(INVALID_HANDLE_VALUE)) or (fServer=nil) then
     exit;
   Header := 'RemoteIP: 127.0.0.1';
   call.Init;
@@ -46354,7 +46412,7 @@ begin
   SetString(Msg,PAnsiChar(@MAGIC_SYN),4);
   Msg := Msg+Call.Url+#1+Call.Method+#1+Call.InHead+#1+Call.InBody;
   Data.dwData := fClientWindow;
-  Data.cbData := length(Msg);
+  Data.cbData := length(Msg)*SizeOf(Msg[1]);
   Data.lpData := pointer(Msg);
   fSafe.Enter;
   try
@@ -50430,13 +50488,13 @@ begin
       end;
       {$ifdef LINUX}
       {$else} // see https://msdn.microsoft.com/en-us/library/zthk2dkh.aspx
-      REGRDX: if vIsInXMM in ValueKindAsm then
+      REGRDX: if vIsInFPR in ValueKindAsm then
                 V := @aCall.XMM1 else
                 V := @aCall.RDX;
-      REGR8:  if vIsInXMM in ValueKindAsm then
+      REGR8:  if vIsInFPR in ValueKindAsm then
                 V := @aCall.XMM2 else
                 V := @aCall.R8;
-      REGR9:  if vIsInXMM in ValueKindAsm then
+      REGR9:  if vIsInFPR in ValueKindAsm then
                 V := @aCall.XMM3 else
                 V := @aCall.R9;
       {$endif}
@@ -51000,7 +51058,7 @@ begin
   fDocVariantOptions := JSON_OPTIONS_FAST;
   {$endif}
   fInterfaceTypeInfo := aInterface;
-  fInterfaceIID := PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid;
+  fInterfaceIID := aInterface^.InterfaceGUID^;
   if IsNullGUID(fInterfaceIID) then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create: % has no GUID',[self,aInterface^.Name]);
@@ -51135,7 +51193,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       {$ifdef CPU64}
       smvDouble,smvDateTime:
         if (reg<=REG_LAST) and not (vPassedByReference in ValueKindAsm) then
-          Include(ValueKindAsm,vIsInXMM);
+          Include(ValueKindAsm,vIsInFPR);
       {$endif}
       end;
       case ValueType of
@@ -52742,8 +52800,10 @@ begin
     raise EInterfaceResolverException.CreateUTF8(
       '%.RegisterGlobal(%): % is not an interface',
       [self,aInterface^.Name,aInterface^.Name]);
-  result := aImplementationClass.GetInterfaceEntry(
-    PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
+  //alfchange
+  //result := aImplementationClass.GetInterfaceEntry(
+  //  PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
+  result := aImplementationClass.GetInterfaceEntry(aInterface^.InterfaceGUID^);
   if result=nil then
     raise EInterfaceResolverException.CreateUTF8(
       '%.RegisterGlobal(): % does not implement %',
@@ -53134,18 +53194,18 @@ begin
     case ValueType of
     smvNone, smvObject, smvInterface:
       raise EServiceException.CreateUTF8('%.Create: %.% unexpected result type %',
-        [self,fInterface.fInterfaceTypeInfo^.Name,URI,ArgTypeName^]);
+        [self,fInterface.fInterfaceName,URI,ArgTypeName^]);
     smvRecord:
       if ArgTypeInfo=System.TypeInfo(TServiceCustomAnswer) then
         if InstanceCreation=sicClientDriven then
           raise EServiceException.CreateUTF8('%.Create: %.% '+
             'sicClientDriven mode not allowed with TServiceCustomAnswer result',
-            [self,fInterface.fInterfaceTypeInfo^.Name,URI]) else begin
+            [self,fInterface.fInterfaceName,URI]) else begin
         for j := ArgsOutFirst to ArgsOutLast do
           if Args[j].ValueDirection in [smdVar,smdOut] then
             raise EServiceException.CreateUTF8('%.Create: %.% '+
               'var/out parameter "%" not allowed with TServiceCustomAnswer result',
-              [self,fInterface.fInterfaceTypeInfo^.Name,URI,Args[j].ParamName^]);
+              [self,fInterface.fInterfaceName,URI,Args[j].ParamName^]);
         ArgsResultIsServiceCustomAnswer := true;
       end;
     end;
@@ -53187,7 +53247,8 @@ begin
   CheckInterface(aInterfaces);
   SetLength(UID,length(aInterfaces));
   for j := 0 to high(aInterfaces) do
-    UID[j] := @PInterfaceTypeData(aInterfaces[j]^.ClassType)^.IntfGuid;
+    UID[j] := pointer(aInterfaces[j]^.InterfaceGUID);
+    //UID[j] := @PInterfaceTypeData(aInterfaces[j]^.ClassType)^.IntfGuid;
   // check that all interfaces are implemented by this class
   if (aSharedImplementation<>nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then begin
@@ -53933,7 +53994,7 @@ begin
        TryResolveInternal(fInterface.fInterfaceTypeInfo,dummyObj) then
       raise EInterfaceFactoryException.CreateUTF8(
         'ickFromInjectedResolver: TryResolveInternal(%)=false',
-        [fInterface.fInterfaceTypeInfo^.Name]);
+        [fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
     if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal() 
       AndIncreaseRefCount := false else
@@ -54012,7 +54073,7 @@ var Inst: TServiceFactoryServerInstance;
     if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
       method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
     Ctxt.Error('(%) % for %%',[ToText(InstanceCreation)^,Msg,
-      fInterface.fInterfaceTypeInfo^.Name,method],Status);
+      fInterface.fInterfaceName,method],Status);
   end;
   procedure FinalizeLogRest;
   var W: TTextWriter;
@@ -54118,7 +54179,7 @@ begin
     if optExecInPerInterfaceThread in Ctxt.ServiceExecution.Options then
       if fBackgroundThread=nil then
         fBackgroundThread := Rest.NewBackgroundThreadMethod(
-          '% %',[self,fInterface.fInterfaceTypeInfo^.Name]);
+          '% %',[self,fInterface.fInterfaceName]);
     WR := TJSONSerializer.CreateOwnedStream;
     try
       Ctxt.fThreadServer^.Factory := self;
@@ -55582,6 +55643,8 @@ var a,a1: integer;
     EndOfObject: AnsiChar;
     ParObjValues: TPUTF8CharDynArray;
 begin
+  //alfchange
+  ParObjValues:=nil;
   result := false;
   if high(Instances)<0 then
     exit;
@@ -55717,6 +55780,7 @@ begin
     end;
     Result := true;
   finally
+    Finalize(ParObjValues);
     AfterExecute;
   end;
 end;
