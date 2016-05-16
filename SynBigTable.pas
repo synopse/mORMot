@@ -2926,14 +2926,15 @@ function TSynBigTableRecord.Add(const aData: RawByteString; ForcedID: integer;
   PhysicalIndex: PInteger; OldPhysicalIndex: integer): integer;
 var ndx: integer;
     aTemp: RawByteString;
+    p: pointer;
 begin
   if CheckConstraints(aData,OldPhysicalIndex) then begin
     Result := inherited Add(aData,ForcedID,@ndx,OldPhysicalIndex);
     if Result<>0 then begin
       if PhysicalIndex<>nil then
         PhysicalIndex^ := ndx;
-      Table.FieldIndexModify(OldPhysicalIndex,ndx,
-          GetPointerFromIndex(OldPhysicalIndex,aTemp),pointer(aData));
+      p := GetPointerFromIndex(OldPhysicalIndex,aTemp);
+      Table.FieldIndexModify(OldPhysicalIndex,ndx,p,pointer(aData));
     end;
   end else
     Result := 0;
@@ -3031,8 +3032,10 @@ end;
 procedure TSynBigTableRecord.RecordGet(aID: integer; var result: TSynTableData);
 var Temp: RawByteString;
     RecordBufLen: integer;
+    p: pointer;
 begin
-  result.Init(Table,aID,GetPointer(aID,Temp,@RecordBufLen),RecordBufLen);
+  p := GetPointer(aID,Temp,@RecordBufLen);
+  result.Init(Table,aID,p,RecordBufLen);
 end;
 
 function TSynBigTableRecord.RecordUpdate(const aRecord: TSynTableData): boolean;
@@ -3899,4 +3902,4 @@ end;
 {$endif}
 
 end.
-
+

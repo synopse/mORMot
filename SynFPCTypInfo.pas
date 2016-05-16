@@ -151,8 +151,7 @@ end;
 
 function GetFPCAlignPtr(P: pointer): pointer;
 begin
-  inc(PtrUInt(P),PByte(pointer(P)+1)^-2);
-  result := AlignToPtr(P);
+  result := AlignToPtr(P-SizeOf(Pointer)+2+PByte(P)[1]);
 end;
 
 {$endif}

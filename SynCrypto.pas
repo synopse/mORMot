@@ -31,6 +31,7 @@ unit SynCrypto;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - EvaF
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Johan Bontes
@@ -1449,6 +1450,10 @@ asm
 asm // rcx=s, rdx=d
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   mov eax,[rcx]; mov r8d,[rcx+4]; mov r9d,[rcx+8]; mov r10d,[rcx+12]
   bswap eax;     bswap r8d;       bswap r9d;       bswap r10d
   mov [rdx],eax; mov [rdx+4],r8d; mov [rdx+8],r9d; mov [rdx+12],r10d
@@ -1464,6 +1469,10 @@ asm
 asm // rcx=s, rdx=d
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   mov eax,[rcx]; mov r8d,[rcx+4]; mov r9d,[rcx+8]; mov r10d,[rcx+12];
   bswap eax;     bswap r8d;       bswap r9d;       bswap r10d;
   mov [rdx],eax; mov [rdx+4],r8d; mov [rdx+8],r9d; mov [rdx+12],r10d;
@@ -1472,7 +1481,7 @@ end;
 
 {$endif CPU64}
 
-{$else}
+{$else not CPUINTEL}
 
 procedure bswap256(s,d: PIntegerArray);
 begin
@@ -1765,6 +1774,7 @@ end;
     {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
   {$endif CPUINTEL}
 {$endif}
+
 {$ifdef AES_PASCAL}
   {$define AESPASCAL_OR_CPU64}
 {$endif}
@@ -1922,7 +1932,7 @@ asm // input: eax=TAESContext, xmm7=data; output: eax=TAESContext, xmm7=data
   db $66,$0F,$38,$DD,$FD
   {$endif}
 end;
-{$endif}
+{$endif CPU32}
 {$ifdef CPU64}
 procedure AesNiEncrypt(const ctxt; const source: TAESBlock; var dest: TAESBlock);
 {$ifdef FPC}nostackframe; assembler;
@@ -1931,6 +1941,11 @@ asm
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov r8,rdx
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   movdqu xmm7,[rdx]
   mov dl,[rcx].TAESContext.Rounds
   movdqu xmm0,[rcx+16*0]
@@ -1988,6 +2003,11 @@ asm
 asm // input: rcx=TAESContext, rdx=source, r8=dest
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov r8,rdx
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   movdqu xmm7,[rdx]
   mov dl,[rcx].TAESContext.Rounds
   cmp dl,10
@@ -2564,9 +2584,13 @@ asm
 asm
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   mov rax,rcx
   movdqu xmm1,[rdx]
-  movdqu xmm5,dqword ptr [@shuffle_mask]
+  movdqu xmm5,dqword ptr [rip+@shuffle_mask]
   cmp al,128
   je @128
   cmp al,192
@@ -2833,6 +2857,10 @@ asm
 asm // rcx=Rounds rdx=RK
   .noframe
 {$endif}
+  {$ifndef win64}
+  mov rdx,rsi
+  mov rcx,rdi
+  {$endif win64}
   mov rax,rcx
   sub eax,9
   movdqu xmm0,[rdx+$10]
@@ -3603,7 +3631,7 @@ begin
       xor ((W[i-15]shr 18)or(W[i-15]shl 14))xor(W[i-15]shr 3))+W[i-16];
 end;
 {$else}
-{$ifdef CPU32}
+{$ifdef CPUX86}
 asm // W=eax Buf=edx
      push  esi
      push  edi
@@ -3649,9 +3677,18 @@ asm // W=eax Buf=edx
      pop   edi
      pop   esi
 end;
-{$endif CPU32}
-{$ifdef CPU64}
+{$endif CPUX86}
+{$ifdef CPUX64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
 asm // W=rcx Buf=rdx
+  .noframe
+{$endif}
+     {$ifndef win64}
+     mov   rdx,rsi
+     mov   rcx,rdi
+     {$endif win64}
      mov   rax,rcx
      push  rsi
      push  rdi
@@ -3697,8 +3734,8 @@ asm // W=rcx Buf=rdx
      pop   rdi
      pop   rsi
 end;
-{$endif CPU64}
-{$endif}
+{$endif CPUX64}
+{$endif AES_PASCAL}
 
 const
   K256: array[0..63] of cardinal = (
@@ -3714,7 +3751,7 @@ const
    $5b9cca4f, $682e6ff3, $748f82ee, $78a5636f, $84c87814, $8cc70208,
    $90befffa, $a4506ceb, $bef9a3f7, $c67178f2);
 
-{$ifdef CPU64}
+{$ifdef CPUX64}
 // optimized unrolled version from Intel's sha256_sse4.asm
 //  Original code is released as Copyright (c) 2012, Intel Corporation
 var
@@ -3722,11 +3759,11 @@ var
 
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
-    ($0405060700010203,$0C0D0E0F08090A0B);
+    (qword($0405060700010203),qword($0C0D0E0F08090A0B));
   _SHUF_00BA: array[0..1] of QWord =
-    ($B0A090803020100, $FFFFFFFFFFFFFFFF);
+    (qword($0B0A090803020100),qword($FFFFFFFFFFFFFFFF));
   _SHUF_DC00: array[0..1] of QWord =
-    ($FFFFFFFFFFFFFFFF,$B0A090803020100);
+    (qword($FFFFFFFFFFFFFFFF),qword($B0A090803020100));
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
@@ -3738,9 +3775,9 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 {$endif FPC}
         push    rbx
         {$ifdef LINUX}
-        mov rcx,rdi
-        mov r8,rdx
-        mov rdx,rsi
+        mov     r8,rdx
+        mov     rcx,rdi
+        mov     rdx,rsi
         {$else}
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
@@ -3771,10 +3808,10 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         mov     r9d,[rdx+14H]
         mov     r10d,[rdx+18H]
         mov     r11d,[rdx+1CH]
-        movdqu  xmm12,[PSHUFFLE_BYTE_FLIP_MASK]
-        movdqu  xmm10,[_SHUF_00BA]
-        movdqu  xmm11,[_SHUF_DC00]
-@loop0: mov     rbp,[K256Aligned]
+        movdqu  xmm12,[rip+PSHUFFLE_BYTE_FLIP_MASK]
+        movdqu  xmm10,[rip+_SHUF_00BA]
+        movdqu  xmm11,[rip+_SHUF_DC00]
+@loop0: mov     rbp,[rip+K256Aligned]
         movdqu  xmm4,[rcx]
         pshufb  xmm4,xmm12
         movdqu  xmm5,[rcx+10H]
@@ -4679,7 +4716,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
         {$endif}
         pop     rbx
 end;
-{$endif CPU64}
+{$endif CPUX64}
 
 procedure TSHA256.Compress;
 // Actual hashing function
@@ -4690,7 +4727,7 @@ var H: TSHAHash;
     t1, t2: cardinal;
     {$endif}
 begin
-  {$ifdef CPU64}
+  {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
     if K256Aligned='' then
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
@@ -4699,7 +4736,7 @@ begin
       exit;
     end; // if K256Aligned[] is not properly aligned -> fallback to pascal
   end;
-  {$endif CPU64}
+  {$endif CPUX64}
 
   // Calculate "expanded message blocks"
   Sha256ExpandMessageBlocks(@W,@TSHAContext(Context).Buffer);

@@ -221,21 +221,29 @@
 
   {$ifdef CPU64}
     {$define PUREPASCAL}
+    {$ifdef CPUX64}
     {$define CPUINTEL}
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
+    {$endif CPUX64}
   {$else}
     {$ifdef CPUARM}
     {$define PUREPASCAL}
-    {$else}
+    {$endif CPUARM}
+    {$ifdef CPUX86}
     {$ASMMODE INTEL} // as Delphi expects, and I use to write
     {$define CPUINTEL}
-    {$endif}
+    {$endif CPUX86}
   {$endif CPU64}
 
   // FPC has its own RTTI layout only since late 3.x
   // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
   {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated trunk conditional
+    {$ifdef CPUINTEL}
     {$define HASINTERFACERTTI}
+  {$endif}
+    {$ifdef CPUARM}
+      {$define HASINTERFACERTTI}
+    {$endif}
   {$endif}
 
   {$define FPC_OR_PUREPASCAL}
@@ -266,6 +274,7 @@
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
   {$endif}
+  {$define FPC_ENUMHASINNER}
 
 {$else FPC}
 
@@ -280,6 +289,7 @@
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
     {$undef CPU64}
+    {$define CPUX86} // for compatibility with older versions of Delphi
   {$endif CPUX64}
 
   // defines if exceptions shall not be intercepted
@@ -300,7 +310,7 @@
       Kylix1/2 are unsupported
       {$ifend}
     {$else}
-      {$ifdef VER140} 
+      {$ifdef VER140}
         {$define ISDELPHI6ANDUP} // Delphi 6 or newer
         {$define DELPHI6OROLDER}
         {$define NOVARCOPYPROC}
@@ -318,7 +328,7 @@
     {$ifend}
     {$if CompilerVersion >= 18}
       {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
-      {$define HASNEWFILEAGE} 
+      {$define HASNEWFILEAGE}
       {$define HASINLINE}
       {$define HASREGION}
       {$define HASFASTMM4}

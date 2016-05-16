@@ -8492,7 +8492,7 @@ begin
     padlock_available := true;
   end;
   {$endif}
-  {$ifdef CPU64}
+  {$ifdef CPUX64}
   if cfSSE41 in CpuFeatures then begin
     fRunConsole := fRunConsole+' using SSE4 instruction set';
     Exclude(CpuFeatures,cfSSE41);
@@ -12522,7 +12522,13 @@ end;
 procedure TTestServiceOrientedArchitecture.Test(const Inst: TTestServiceInstances;
   Iterations: Cardinal=700);
 procedure TestCalculator(const I: ICalculator);
-var t,i1,i2,i3: integer;
+var
+    {$ifdef CPU64}
+    i1,i2: int64;
+    {$else}
+    i1,i2: integer;
+    {$endif}
+    t,i3: integer;
     c: cardinal;
     cu: currency;
     n1,n2,s1,s2: double;

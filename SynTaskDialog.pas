@@ -85,7 +85,10 @@ interface
 {$ENDIF}
 
 uses
-  Windows, CommCtrl, Classes, SysUtils, Consts, Messages,
+  Windows, CommCtrl, Classes, SysUtils, Messages,
+  {$ifndef FPC}
+  Consts,
+  {$endif}
   Menus,
   {$ifdef USETMSPACK}
   AdvGlowButton, AdvMenus, TaskDialog, TaskDialogEx,

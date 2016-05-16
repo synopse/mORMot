@@ -306,8 +306,8 @@ type
 {$else}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = WideString;
-  {$ifdef HASCODEPAGE} // FPC expects a CP, e.g. to compare to string constants
-  SockString = type AnsiString(CP_UTF8);
+  {$ifdef HASCODEPAGE} // FPC may expect a CP, e.g. to compare two string constants
+  SockString = type RawByteString;
   {$else}
   /// define a raw storage string type, used for data buffer management
   SockString = type AnsiString;
@@ -7707,12 +7707,14 @@ var res: TCurlResult;
     P: PAnsiChar;
     s: SockString;
     i: integer;
+    rc: longint; // needed on Linux x86-64
 begin
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
   if res<>crOK then
     result := STATUS_NOTFOUND else begin
-    curl.easy_getinfo(fHandle,ciResponseCode,result);
+    curl.easy_getinfo(fHandle,ciResponseCode,rc);
+    result := rc;
     Header := Trim(fOut.Header);
     if IdemPChar(pointer(Header),'HTTP/') then begin
       i := 6;

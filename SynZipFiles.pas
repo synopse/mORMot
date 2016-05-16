@@ -183,6 +183,8 @@ type
     procedure Finish;
     function FlushBufferOut: integer;
     function InFlateDeflate: boolean; // return true if error
+    function GetSizeIn: cardinal;
+    function GetSizeOut: cardinal;
   public
     constructor Create(outStream: TStream; CompressionLevel: Integer;
       Algorithm: integer=0);
@@ -193,8 +195,8 @@ type
     function Write(const Buffer; Count: Longint): Longint; override;
     function WriteOnce(const Buffer; Count: Longint): Longint;
     function Seek(Offset: Longint; Origin: Word): Longint; override;
-    property SizeIn: cardinal read FStrm.total_in;
-    property SizeOut: cardinal read FStrm.total_out;
+    property SizeIn: cardinal read GetSizeIn;
+    property SizeOut: cardinal read GetSizeOut;
     property CRC: cardinal read fCRC;
   end;
 
@@ -1011,6 +1013,16 @@ begin
   end;
 end;
 
+function TZipCompressor.GetSizeIn: cardinal;
+begin
+  result := FStrm.total_in;
+end;
+
+function TZipCompressor.GetSizeOut: cardinal;
+begin
+  result := FStrm.total_out;
+end;
+
 function TZipCompressor.InFlateDeflate: boolean;
 begin
   Result := Check(deflate(FStrm, Z_NO_FLUSH), [Z_OK])<>Z_OK;
@@ -1155,7 +1167,7 @@ destructor TGzWriter.Destroy;
 begin
   Finish;
   outFile.Write(CRC,4);
-  outFile.Write(SizeIn,4);
+  outFile.Write(FStrm.total_in,4);
   if outFileToBeFree then
     FreeAndNil(outFile);
   inherited;
