@@ -1946,6 +1946,11 @@ function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 
+/// convert any date/time Variant into a TDateTime value
+// - would handle varDate kind of variant, or use a string conversion and
+// ISO-8601 parsing if possible
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+
 /// convert any numerical Variant into a fixed decimals floating point value
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 
@@ -19143,6 +19148,36 @@ begin
     if SetVariantUnRefSimpleValue(V,tmp) then
       result := VariantToDouble(variant(tmp),Value) else
       result := false;
+  end;
+end;
+
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+var tmp: RawUTF8;
+    vd: TVarData;
+begin
+  with TVarData(V) do
+  if VType=varVariant or varByRef then
+    result := VariantToDateTime(PVariant(VPointer)^,Value) else
+  case VType of
+  varDouble,varDate: begin
+    Value := VDouble;
+    result := true;
+  end;
+  varSingle: begin
+    Value := VSingle;
+    result := true;
+  end;
+  varCurrency: begin
+    Value := VCurrency;
+    result := true;
+  end else
+    if SetVariantUnRefSimpleValue(V,vd) then
+      result := VariantToDateTime(variant(vd),Value) else
+    if VariantToUTF8(V,tmp) then begin
+      Iso8601ToDateTimePUTF8CharVar(pointer(tmp),length(tmp),Value);
+      result := Value<>0;
+    end else
+    result := false;
   end;
 end;
 
