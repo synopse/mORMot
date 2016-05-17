@@ -939,9 +939,10 @@ end;
 
 class procedure TSynMustache.DateTimeToText(const Value: variant; out result: variant);
 var Time: TTimeLogBits;
+    dt: TDateTime;
 begin
-  if TVarData(Value).VType=varDate then begin
-    Time.From(TVarData(Value).VDate,false);
+  if VariantToDateTime(Value,dt) then begin
+    Time.From(dt,false);
     result := Time.i18nText;
   end else
     SetVariantNull(result);
@@ -949,19 +950,21 @@ end;
 
 class procedure TSynMustache.DateToText(const Value: variant; out result: variant);
 var Time: TTimeLogBits;
+    dt: TDateTime;
 begin
-  if TVarData(Value).VType=varDate then begin
-    Time.From(TVarData(Value).VDate,true);
+  if VariantToDateTime(Value,dt) then begin
+    Time.From(dt,true);
     result := Time.i18nText;
   end else
     SetVariantNull(result);
 end;
 
 class procedure TSynMustache.DateFmt(const Value: variant; out result: variant);
+var dt: TDateTime;
 begin // {{DateFmt DateValue,"dd/mm/yyy"}}
   with _Safe(Value)^ do
-    if (Kind=dvArray) and (Count=2) and (TVarData(Values[0]).VType=varDate) then
-      result := FormatDateTime(Values[1],TVarData(Values[0]).VDate) else
+    if (Kind=dvArray) and (Count=2) and VariantToDateTime(Values[0],dt) then
+      result := FormatDateTime(Values[1],dt) else
       SetVariantNull(result);
 end;
 
