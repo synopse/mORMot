@@ -19172,12 +19172,11 @@ begin
     result := true;
   end else
     if SetVariantUnRefSimpleValue(V,vd) then
-      result := VariantToDateTime(variant(vd),Value) else
-    if VariantToUTF8(V,tmp) then begin
+      result := VariantToDateTime(variant(vd),Value) else begin
+      VariantToUTF8(V,tmp);
       Iso8601ToDateTimePUTF8CharVar(pointer(tmp),length(tmp),Value);
       result := Value<>0;
-    end else
-    result := false;
+    end;
   end;
 end;
 
