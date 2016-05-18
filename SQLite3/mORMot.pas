@@ -39589,13 +39589,13 @@ begin
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
 end;
 
-function Nonce(Previous: boolean): RawUTF8;
+function ServerNonce(Previous: boolean): RawUTF8;
 var Ticks: cardinal;
 begin
   Ticks := GetTickCount64 div (1000*60*5); // valid for 5*60*1000 ms = 5 minutes
   if Previous then
     dec(Ticks);
-  result := SHA256(@Ticks,sizeof(Ticks));
+  result := SHA256(@Ticks,sizeof(Ticks)); // naive but sufficient nonce
 end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
@@ -46571,7 +46571,8 @@ var tmp: RawUTF8;
 begin
   result := false;
   i := PosEx(RawUTF8('/'),fSignature,1);
-  if i=0 then exit;
+  if i=0 then
+    exit;
   tmp := TTimeLogBits(fSignatureTime).Text(false)+RawUTF8(ClassName)+copy(fSignature,1,i-1);
   SHA.Init;
   SHA.Update(pointer(tmp),length(tmp));
@@ -49502,7 +49503,7 @@ end;
 
 class procedure TSQLRestServerAuthenticationSignedURI.ClientSessionSign(
   Sender: TSQLRestClientURI; var Call: TSQLRestURIParams);
-var Nonce, blankURI: RawUTF8;
+var nonce, blankURI: RawUTF8;
 begin
   if (Sender=nil) or (Sender.fSessionID=0) or (Sender.fSessionUser=nil) then
     exit;
@@ -49512,9 +49513,9 @@ begin
     Call.url := Call.Url+'&session_signature=';
   with Sender do begin
     fSessionLastTick64 := GetTickCount64;
-    Nonce := CardinalToHex(fSessionLastTick64 shr 8); // 256 ms resolution
-    Call.url := Call.url+fSessionIDHexa8+Nonce+CardinalToHex(
-      crc32(crc32(fSessionPrivateKey,Pointer(Nonce),length(Nonce)),
+    nonce := CardinalToHex(fSessionLastTick64 shr 8); // 256 ms resolution
+    Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHex(
+      crc32(crc32(fSessionPrivateKey,Pointer(nonce),length(nonce)),
       Pointer(blankURI),length(blankURI)));
   end;
 end;
@@ -49533,7 +49534,7 @@ begin
   aUserName := Ctxt.InputUTF8OrVoid['UserName'];
   aPassWord := Ctxt.InputUTF8OrVoid['Password'];
   aClientNonce := Ctxt.InputUTF8OrVoid['ClientNonce'];
-  if (aUserName<>'') and (aClientNonce<>'') then begin
+  if (aUserName<>'') and (length(aClientNonce)>32) then begin
     // GET ModelRoot/auth?UserName=...&PassWord=...&ClientNonce=... -> handshaking
     User := GetUser(Ctxt,aUserName);
     if User<>nil then
@@ -49549,7 +49550,7 @@ begin
   end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-      Ctxt.Results([Nonce(false)]) else
+      Ctxt.Results([ServerNonce(false)]) else
       // parameters does not match any expected layout -> try next authentication
       result := false;
 end;
@@ -49559,14 +49560,15 @@ function TSQLRestServerAuthenticationDefault.CheckPassword(Ctxt: TSQLRestServerU
 var aSalt: RawUTF8;
 begin
   aSalt := aClientNonce+User.LogonName+User.PasswordHashHexa;
-  result := (aPassWord=SHA256(fServer.Model.Root+Nonce(false)+aSalt)) or
-            // if current nonce failed, tries with previous 5 minutes nonce
-            (aPassWord=SHA256(fServer.Model.Root+Nonce(true)+aSalt));
+  result := (aPassWord=SHA256(fServer.Model.Root+ServerNonce(false)+aSalt)) or
+            // if current nonce failed, tries with previous 5 minutes' nonce
+            (aPassWord=SHA256(fServer.Model.Root+ServerNonce(true)+aSalt));
 end;
 
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var aServerNonce, aClientNonce: RawUTF8;
+    random: TSHA256Digest;
 begin
   result := '';
   if User.LogonName='' then
@@ -49574,7 +49576,8 @@ begin
   aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
   if aServerNonce='' then
     exit;
-  aClientNonce := Nonce(false);
+  TAESPRNG.Main.FillRandom(@random,SizeOf(random));
+  aClientNonce := SHA256DigestToString(random);
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);

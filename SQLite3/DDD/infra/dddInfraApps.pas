@@ -944,8 +944,8 @@ end;
 
 { TDDDSocketThread }
 
-constructor TDDDSocketThread.Create(aSettings: TDDDSocketThreadSettings; aRest:
-  TSQLRest; aMonitoring: TDDDSocketThreadMonitoring);
+constructor TDDDSocketThread.Create(aSettings: TDDDSocketThreadSettings;
+  aRest: TSQLRest; aMonitoring: TDDDSocketThreadMonitoring);
 begin
   if aSettings = nil then
     raise EDDDInfraException.CreateUTF8('%.Create(aSettings=nil)', [self]);
