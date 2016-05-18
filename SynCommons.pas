@@ -23707,11 +23707,29 @@ begin
   BinToHexDisplay(@AInt64,pointer(result),sizeof(Int64));
 end;
 
+type TWordRec = packed record YDiv100, YMod100: byte; end;
+
+{$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
+function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result.YDiv100 := Y div 100;
+  result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
+end;
+{$else}
+function Div100(Y: word): TWordRec;
+asm
+  mov cl,100
+  div cl // ah=remainder=Y mod 100, al=quotient=Year div 100
+end;
+{$endif}
+
 procedure YearToPChar(Y: Word; P: PUTF8Char);
 {$ifdef PUREPASCAL}
 begin
-  PWordArray(P)[0] := TwoDigitLookupW[Y div 100];
-  PWordArray(P)[1] := TwoDigitLookupW[Y mod 100];
+  with Div100(Y) do begin
+    PWordArray(P)[0] := TwoDigitLookupW[YDiv100];
+    PWordArray(P)[1] := TwoDigitLookupW[YMod100];
+  end;
 end;
 {$else}
 asm
@@ -28798,22 +28816,6 @@ function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
   result := CardinalToHex(crc32c(0,pointer(str),length(str)));
 end;
-
-type TWordRec = packed record YDiv100, YMod100: byte; end;
-
-{$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
-function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
-begin
-  result.YDiv100 := Y div 100;
-  result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
-end;
-{$else}
-function Div100(Y: word): TWordRec;
-asm
-  mov cl,100
-  div cl // ah=remainder=Y mod 100, al=quotient=Year div 100
-end;
-{$endif}
 
 function UnixTimeToDateTime(const UnixTime: Int64): TDateTime;
 begin

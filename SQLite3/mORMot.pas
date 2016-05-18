@@ -4759,7 +4759,7 @@ type
     fPrevious: TTimeLogBits;
     fComment: RawUTF8;
     function TrackPropLock(Instance: TObject; Info: PPropInfo): PSynMonitorUsageTrackProp;
-    // those methods would be protected (e.g. in Modified) by fSave.Lock:
+    // those methods would be protected (e.g. in Modified) by fSafe.Lock:
     procedure SavePrevious(Scope: TSynMonitorUsageGranularity);
     procedure Save(ID: TSynMonitorUsageID; Gran, Scope: TSynMonitorUsageGranularity);
     function Load(const Time: TTimeLogBits): boolean;
@@ -4777,7 +4777,7 @@ type
     // RTTI, using MonitorPropUsageValue(), within any (nested) object
     // - the instance would be stored in fTracked[].Instance: ensure it would
     // stay available during the whole TSynMonitorUsage process
-    procedure Track(Instance: TObject; const Name: RawUTF8); overload; virtual;
+    function Track(Instance: TObject; const Name: RawUTF8): integer; overload; virtual;
     /// track the values of the given object instances
     // - would recognize the TSynMonitor* properties as TSynMonitorType from
     // RTTI, using MonitorPropUsageValue(), within any (nested) object
@@ -4787,7 +4787,8 @@ type
     /// to be called when tracked properties changed on a tracked class instance
     procedure Modified(Instance: TObject); overload;
     /// to be called when tracked properties changed on a tracked class instance
-    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8); overload; virtual;
+    procedure Modified(Instance: TObject; const PropNames: array of RawUTF8;
+      const AddNameIfNotTracked: RawUTF8=''); overload; virtual;
     /// some custom text, associated with the current stored state
     // - would be persistented by Save() methods
     property Comment: RawUTF8 read fComment write fComment;
@@ -5836,9 +5837,11 @@ type
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
     procedure ServiceResultEnd(WR: TTextWriter; ID: TID); virtual;
-    procedure InternalSetTableFromTableIndex(Index: integer); virtual; 
+    procedure InternalSetTableFromTableIndex(Index: integer); virtual;
     procedure InternalSetTableFromTableName(TableName: PUTF8Char); virtual;
     procedure InternalExecuteSOAByInterface; virtual;
+    procedure StatsFromContext(Stats: TSynMonitorInputOutput;
+      var Diff: Int64; DiffIsMicroSecs: boolean);
     /// event raised by ExecuteMethod() for interface parameters
     // - match TServiceMethodInternalExecuteCallback signature
     procedure ExecuteCallback(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo;
@@ -15370,7 +15373,7 @@ type
   protected
     fGran: TSynMonitorUsageGranularity;
     fProcess: TSynUniqueIdentifierProcess;
-    fValues: variant;
+    fInfo: variant;
     fComment: RawUTF8;
     function GetUsageID: integer;
     procedure SetUsageID(Value: integer);
@@ -15384,8 +15387,8 @@ type
     /// identify which application is monitored
     property Process: TSynUniqueIdentifierProcess read fProcess write fProcess;
     /// the actual statistics information, stored as a TDocVariant JSON object
-    property Values: variant read fValues write fValues;
-    /// a custom text, whic may be used e.g. by support or developpers
+    property Info: variant read fInfo write fInfo;
+    /// a custom text, which may be used e.g. by support or developpers
     property Comment: RawUTF8 read fComment write fComment;
   end;
   /// class-reference type (metaclass) of a TSQLMonitorUsage table
@@ -15629,6 +15632,7 @@ type
     fAssociatedServices: TServicesPublishedInterfacesList;
     fStats: TSQLRestServerMonitor;
     fStatLevels: TSQLRestServerMonitorLevels;
+    fStatUsage: TSynMonitorUsage;
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
@@ -15649,6 +15653,7 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); reintroduce; virtual;
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
+    procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
     function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
@@ -16485,6 +16490,9 @@ type
     // - you can add mlSessions to maintain per-session statistics: this would
     // lead into a slightly higher memory consumption, for each session
     property StatLevels: TSQLRestServerMonitorLevels read fStatLevels write fStatLevels;
+    /// could be set to track statistic from Stats information
+    // - it may be e.g. a TSynMonitorUsageRest instance for REST storage
+    property StatUsage: TSynMonitorUsage read fStatUsage write SetStatUsage;
     /// this property can be left to its TRUE default value, to handle any
     // TSQLVirtualTableJSON static tables (module JSON or BINARY) with direct
     // calls to the storage instance
@@ -22935,7 +22943,7 @@ begin
     result := smvUndefined;
 end;
 
-procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
+function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer;
 
   procedure ClassTrackProps(ClassType: TClass; var Props: TSynMonitorUsageTrackPropDynArray);
   var i,n: integer;
@@ -22973,8 +22981,9 @@ procedure TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8);
 var i,n: integer;
     instanceName: RawUTF8;
 begin
+  result := -1;
   if Instance=nil then
-    exit;
+    exit; // nothing to track
   if Name='' then
     instanceName := RawUTF8(Instance.ClassName) else
     instanceName := Name;
@@ -22991,9 +23000,12 @@ begin
     fTracked[n].Name := instanceName;
     ClassTrackProps(Instance.ClassType,fTracked[n].Props);
     if fTracked[n].Props=nil then
-      SetLength(fTracked,n) else // nothing to track
+      // nothing to track
+      SetLength(fTracked,n) else begin
+      result := n; // returns the index of the added item
       if fPrevious.Value<>0 then
         LoadTrack(fTracked[n]);
+    end;
   finally
     fSafe.UnLock;
   end;
@@ -23003,6 +23015,8 @@ procedure TSynMonitorUsage.Track(const Instances: array of TObject;
   const Names: array of RawUTF8);
 var i: integer;
 begin
+  if self=nil then
+    exit;
   if high(Instances)<>high(Names) then
     raise ESynException.CreateUTF8('%.Track wrong Instances[]/Names[]',[self]);
   for i := 0 to high(Instances) do
@@ -23044,7 +23058,8 @@ const
 
 procedure TSynMonitorUsage.Modified(Instance: TObject);
 begin
-  Modified(Instance,[]);
+  if self<>nil then
+    Modified(Instance,[],'');
 end;
 
 procedure TSynMonitorUsage.SetCurrentUTCTime(out minutes: TTimeLogBits);
@@ -23053,57 +23068,66 @@ begin
 end;
 
 procedure TSynMonitorUsage.Modified(Instance: TObject;
-  const PropNames: array of RawUTF8);
-  function scope(var prev,current: Int64): TSynMonitorUsageGranularity;
+  const PropNames: array of RawUTF8; const AddNameIfNotTracked: RawUTF8);
+  procedure save(const track: TSynMonitorUsageTrack);
+    function scope(var prev,current: Int64): TSynMonitorUsageGranularity;
+    begin
+      if prev and AS_YEARS<>current and AS_YEARS then
+        result := mugYear else
+      if prev and AS_MONTHS<>current and AS_MONTHS then
+        result := mugMonth else
+      if prev and AS_DAYS<>current and AS_DAYS then
+        result := mugDay else
+      if prev and AS_HOURS<>current and AS_HOURS then
+        result := mugHour else
+      if prev<>current then
+        result := mugMinute else
+        result := mugUndefined;
+    end;
+  var j,k,min: integer;
+      time: TTimeLogBits;
+      v,diff: Int64;
   begin
-    if prev and AS_YEARS<>current and AS_YEARS then
-      result := mugYear else
-    if prev and AS_MONTHS<>current and AS_MONTHS then
-      result := mugMonth else
-    if prev and AS_DAYS<>current and AS_DAYS then
-      result := mugDay else
-    if prev and AS_HOURS<>current and AS_HOURS then
-      result := mugHour else
-    if prev<>current then
-      result := mugMinute else
-      result := mugUndefined;
+    SetCurrentUTCTime(time);
+    time.Value := time.Value and AS_MINUTES; // save every minute
+    if fPrevious.Value<>time.Value then begin
+      if fPrevious.Value=0 then // startup?
+        Load(time) else
+        SavePrevious(scope(fPrevious.Value,time.Value));
+      fPrevious.Value := time.Value;
+    end;
+    min := time.Minute;
+    for j := 0 to length(track.Props)-1 do
+      with track.Props[j] do
+      if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
+        v := Info^.GetInt64Value(Instance);
+        if Kind in SYNMONITORVALUE_CUMULATIVE then begin
+          diff := v-CumulativeLast;
+          if diff<>0 then begin
+            CumulativeLast := v;
+            inc(Values[mugHour][min],diff);
+            inc(Values[mugDay][time.Hour],diff); // propagate
+            inc(Values[mugMonth][time.Day],diff);
+            inc(Values[mugYear][time.Month],diff);
+          end;
+        end else
+          for k := min to 59 do // make instant values continous
+            Values[mugHour][min] := v;
+      end;
   end;
-var i,j,k,min: integer;
-    track: PSynMonitorUsageTrack;
-    time: TTimeLogBits;
-    v,diff: Int64;
+var i: integer;
 begin
   fSafe.Lock;
   try
     for i := 0 to length(fTracked)-1 do
     if fTracked[i].Instance=Instance then begin
-      track := @fTracked[i];
-      SetCurrentUTCTime(time);
-      time.Value := time.Value and AS_MINUTES; // save every minute
-      if fPrevious.Value<>time.Value then begin
-        if fPrevious.Value=0 then // startup?
-          Load(time) else
-          SavePrevious(scope(fPrevious.Value,time.Value)); 
-        fPrevious.Value := time.Value;
-      end;
-      min := time.Minute;
-      for j := 0 to length(track^.Props)-1 do
-        with track^.Props[j] do
-        if (high(PropNames)<0) or (FindPropName(PropNames,Name)>=0) then begin
-          v := Info^.GetInt64Value(Instance);
-          if Kind in SYNMONITORVALUE_CUMULATIVE then begin
-            diff := v-CumulativeLast;
-            if diff<>0 then begin
-              CumulativeLast := v;
-              inc(Values[mugHour][min],diff);
-              inc(Values[mugDay][time.Hour],diff); // propagate
-              inc(Values[mugMonth][time.Day],diff);
-              inc(Values[mugYear][time.Month],diff);
-            end;
-          end else
-            for k := min to 59 do // make instant values continous
-              Values[mugHour][min] := v;
-        end;
+      save(fTracked[i]);
+      exit;
+    end;
+    if AddNameIfNotTracked<>'' then begin
+      i := Track(Instance,AddNameIfNotTracked);
+      if i>=0 then
+        save(fTracked[i]);
       exit;
     end;
   finally
@@ -37727,10 +37751,10 @@ begin
     length(Call.OutHead)+length(Call.OutBody)+16);
 end;
 
-procedure StatsFromContext(Stats: TSynMonitorInputOutput;
-  const Call: TSQLRestURIParams; var Diff: Int64; DiffIsMicroSecs: boolean);
+procedure TSQLRestServerURIContext.StatsFromContext(Stats: TSynMonitorInputOutput;
+  var Diff: Int64; DiffIsMicroSecs: boolean);
 begin
-  StatsAddSizeForCall(Stats,Call);
+  StatsAddSizeForCall(Stats,Call^);
   if not StatusCodeIsSuccess(Call.OutStatus) then
     Stats.ProcessErrorNumber(Call.OutStatus);
   if DiffIsMicroSecs then // avoid a division
@@ -37754,7 +37778,9 @@ begin
     if Stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
       dec(timeEnd,timeStart);
-      StatsFromContext(Stats,Call^,timeEnd,false);
+      StatsFromContext(Stats,timeEnd,false);
+      if Server.StatUsage<>nil then
+        Server.StatUsage.Modified(Stats,[],Name);
       if (mlSessions in Server.StatLevels) and (fAuthSession<>nil) then begin
         if fAuthSession.Methods=nil then
           SetLength(fAuthSession.fMethods,length(Server.fPublishedMethod));
@@ -37763,7 +37789,8 @@ begin
           sessionstat := TSynMonitorInputOutput.Create;
           fAuthSession.fMethods[MethodIndex] := sessionstat;
         end;
-        StatsFromContext(sessionstat,Call^,timeEnd,true);
+        StatsFromContext(sessionstat,timeEnd,true);
+        // mlSessions stats are not yet tracked in Server.StatUsage
       end;
     end;
   end;
@@ -39261,6 +39288,7 @@ begin
         fStats.NotifyORMTable(Ctxt.TableIndex,length(Call.InBody),true,Ctxt.MicroSecondsElapsed);
       end;
     fStats.AddCurrentRequestCount(-1);
+    fStatUsage.Modified(fStats);
     if Assigned(OnAfterURI) then
     try
       OnAfterURI(Ctxt);
@@ -39424,6 +39452,21 @@ begin
   finally
     W.Free;
   end;
+end;
+
+procedure TSQLRestServer.SetStatUsage(usage: TSynMonitorUsage);
+begin
+  if fStatUsage=usage then
+    exit;
+  if usage=nil then begin
+    // e.g. from TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats
+    FreeAndNil(fStatUsage);
+    exit;
+  end;
+  if fStatUsage<>nil then
+    raise EModelException.CreateUTF8('%.StatUsage should be set once', [self]);
+  fStatUsage := usage;
+  fStatUsage.Track(fStats,'rest');
 end;
 
 procedure TSQLRestServer.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
@@ -41550,6 +41593,8 @@ end;
 
 procedure TSQLRestServerMonitor.NotifyORMTable(TableIndex, DataSize: integer;
   Write: boolean; const MicroSecondsElapsed: QWord);
+const RW: array[boolean] of RawUTF8 = ('.read','.write');
+var st: TSynMonitorWithSize;
 begin
   if TableIndex<0 then
     exit;
@@ -41558,12 +41603,17 @@ begin
     if TableIndex>=length(fPerTable[Write]) then
       // tables may have been added after Create()
       SetLength(fPerTable[Write],TableIndex+1);
-    if fPerTable[Write,TableIndex]=nil then
+    if fPerTable[Write,TableIndex]=nil then begin
       fPerTable[Write,TableIndex] := TSynMonitorWithSize.Create;
-    with fPerTable[Write,TableIndex] do begin
-      FromExternalMicroSeconds(MicroSecondsElapsed);
-      AddSize(DataSize);
+      if (fServer<>nil) and (fServer.fStatUsage<>nil) then
+        fServer.fStatUsage.Track(fPerTable[Write,TableIndex],
+          fServer.Model.TableProps[TableIndex].Props.SQLTableName+RW[Write]);
     end;
+    st := fPerTable[Write,TableIndex];
+    st.FromExternalMicroSeconds(MicroSecondsElapsed);
+    st.AddSize(DataSize);
+    if (fServer<>nil) and (fServer.fStatUsage<>nil) then
+      fServer.fStatUsage.Modified(st);
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -41603,7 +41653,7 @@ constructor TSynMonitorUsageRest.Create(aStorage: TSQLRest;
   aProcessID: TSynUniqueIdentifierProcess; aStoredClass: TSQLMonitorUsageClass);
 var g: TSynMonitorUsageGranularity;
 begin
-  if (aStorage=nil) or (aStoredClass=nil) then
+  if aStorage=nil then
     raise ESynException.CreateUTF8('%.Create(nil)',[self]);
   if aStoredClass=nil then
     fStoredClass := TSQLMonitorUsage else
@@ -41619,9 +41669,9 @@ end;
 destructor TSynMonitorUsageRest.Destroy;
 var g: TSynMonitorUsageGranularity;
 begin
+  inherited Destroy; // would save pending changes
   for g := low(fStoredCache) to high(fStoredCache) do
     fStoredCache[g].Free;
-  inherited Destroy;
 end;
 
 function TSynMonitorUsageRest.LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity;
@@ -41638,7 +41688,7 @@ begin
   if rec.IDValue=recid then
     result := true else
   if fStorage.Retrieve(recid,rec) then begin // may use REST cache
-    Track := rec.Values;
+    Track := rec.Info;
     if rec.Gran=mugHour then
       fComment := rec.Comment;
     if rec.Process<>fProcessID then
@@ -41672,7 +41722,7 @@ begin
   rec.Process := fProcessID;
   if Gran=mugHour then
     rec.Comment := fComment;
-  rec.Values := Track;
+  rec.Info := Track;
   if update then
     result := fStorage.Update(rec) else
     result := fStorage.Add(rec,true,true)=recid;
@@ -54074,13 +54124,18 @@ var Inst: TServiceFactoryServerInstance;
     stats: TSynMonitorInputOutput;
     m: integer;
 
-  procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
+  function GetInterfaceMethodName: RawUTF8;
   var method: RawUTF8;
   begin
     if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
-      method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI;
-    Ctxt.Error('(%) % for %%',[ToText(InstanceCreation)^,Msg,
-      fInterface.fInterfaceName,method],Status);
+      method := '.'+fInterface.fMethods[Ctxt.ServiceMethodIndex].URI else
+      method := '.?';
+    result := fInterface.fInterfaceName+method;
+  end;
+  procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
+  begin
+    Ctxt.Error('(%) % for %',[ToText(InstanceCreation)^,Msg,
+      GetInterfaceMethodName],Status);
   end;
   procedure FinalizeLogRest;
   var W: TTextWriter;
@@ -54236,7 +54291,9 @@ begin
     if stats<>nil then begin
       QueryPerformanceCounter(timeEnd);
       dec(timeEnd,timeStart);
-      StatsFromContext(stats,Ctxt.Call^,timeEnd,false);
+      Ctxt.StatsFromContext(stats,timeEnd,false);
+      if Ctxt.Server.StatUsage<>nil then
+        Ctxt.Server.StatUsage.Modified(stats,[],GetInterfaceMethodName);
       if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
         if Ctxt.fAuthSession.fInterfaces=nil then
           SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
@@ -54251,7 +54308,8 @@ begin
             stats := TSynMonitorInputOutput.Create;
             fInterfaces[m] := stats;
           end;
-          StatsFromContext(stats,Ctxt.Call^,timeEnd,true);
+          Ctxt.StatsFromContext(stats,timeEnd,true);
+          // mlSessions stats are not yet tracked in Server.StatUsage
         end;
       end;
     end else
