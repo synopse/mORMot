@@ -14508,6 +14508,7 @@ type
     procedure LockedFromProcessTimer; virtual;
     procedure LockedSum(another: TSynMonitor); virtual;
     procedure WriteDetailsTo(W: TTextWriter); virtual;
+    procedure Changed; virtual;
   public
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
@@ -47181,6 +47182,10 @@ begin
   LeaveCriticalSection(fLock);
 end;
 
+procedure TSynMonitor.Changed;
+begin // do nothing by default - overriden classes may track modified changes
+end;
+
 procedure TSynMonitor.ProcessStart;
 begin
   if fProcessing then
@@ -47201,6 +47206,7 @@ begin
   try
     inc(fTaskCount);
     fTaskStatus := taskStarted;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -47216,6 +47222,7 @@ begin
     fProcessing := true;
     inc(fTaskCount);
     fTaskStatus := taskStarted;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -47247,6 +47254,7 @@ begin
   end;
   LockedPerSecProperties;
   fProcessing := false;
+  Changed;
 end;
 
 function TSynMonitor.FromExternalQueryPerformanceCounters(const CounterDiff: QWord): QWord;
@@ -47290,6 +47298,7 @@ begin
   try
     inc(fInternalErrors);
     fLastInternalError := info;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -47375,6 +47384,7 @@ begin
   _Json(ComputeDetailsJSON,result,JSON_OPTIONS_FAST);
 end;
 {$endif}
+
 
 { TSynMonitorWithSize}
 
@@ -47473,6 +47483,7 @@ begin
     inc(fClientsCurrent);
     if fClientsCurrent>fClientsMax then
       fClientsMax := fClientsCurrent;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -47484,6 +47495,7 @@ begin
   try
     if fClientsCurrent>0 then
       dec(fClientsCurrent);
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -47494,10 +47506,10 @@ begin
   EnterCriticalSection(fLock);
   try
     fClientsCurrent := 0;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
-end;
 end;
 
 function TSynMonitorServer.GetClientsCurrent: TSynMonitorOneCount;

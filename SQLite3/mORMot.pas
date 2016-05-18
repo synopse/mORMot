@@ -15317,6 +15317,7 @@ type
     fDeleted: TSynMonitorCount64;
     // [Write: boolean] per-table statistics
     fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
+    // no overriden Changed: TSQLRestServer.URI would do it in finally block
   public
     /// initialize the instance
     constructor Create(aServer: TSQLRestServer); reintroduce;
@@ -37769,6 +37770,7 @@ begin
   with Server.fStats do begin
     EnterCriticalSection(fLock);
     inc(fServiceMethod);
+    Changed;
     LeaveCriticalSection(fLock);
   end;
 end;
@@ -37834,6 +37836,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     with Server.fStats do begin
       EnterCriticalSection(fLock);
       inc(fServiceInterface);
+      Changed;
       LeaveCriticalSection(fLock);
     end;
     case ServiceMethodIndex of
@@ -41523,6 +41526,7 @@ begin
     inc(fSuccess);
     if IsOutcomingFile then
       inc(fOutcomingFiles);
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -41538,6 +41542,7 @@ begin
     mPUT:       inc(fUpdated);
     mDELETE:    inc(fDeleted);
     end;
+    Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
@@ -41570,6 +41575,8 @@ begin
   try
     inc(fCurrentThreadCount,delta);
     result := fCurrentThreadCount;
+    if delta<>0 then
+      Changed;
   finally
     LeaveCriticalSection(fLock);
   end;
