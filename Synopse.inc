@@ -195,6 +195,7 @@
 
   {$undef ENHANCEDRTL}    // there is no version of our Enhanced RTL for FPC
   {$undef DOPATCHTRTL}
+  {$define DELPHI5ORFPC}
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
@@ -202,7 +203,7 @@
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define FPC_OR_UNICODE}
-  {$define DELPHI5ORFPC}
+  {$define FPC_ENUMHASINNER}
 
   {$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -274,7 +275,6 @@
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
   {$endif}
-  {$define FPC_ENUMHASINNER}
 
 {$else FPC}
 

@@ -2443,11 +2443,11 @@ var FillcharFast: procedure(var Dest; count: PtrInt; Value: byte) = System.FillC
 {$else}
 
 /// our fast version of StrLen(), to be used with PUTF8Char/PAnsiChar
-// - this version will use fast SSE2 instructions (if available), on both Win32
-// and Win64 platforms: please note that in this case, it may read up to 15 bytes
-// before or beyond the string; this is rarely a problem but it can in principle
-// generate a protection violation (e.g. when used over mapped files) - in this
-// case, you can use the slightly slower StrLenPas() function instead
+// - this version will use fast SSE2/SSE4.2 instructions (if available), on both
+// Win32 and Win64 platforms: please note that in this case, it may read up to
+// 15 bytes before or beyond the string; this is rarely a problem but it can in
+// principle generate a protection violation (e.g. when used over mapped files):
+// you can use the slightly slower StrLenPas() function instead with such input
 var StrLen: function(S: pointer): PtrInt = StrLenPas;
 
 /// our fast version of FillChar()
@@ -14213,20 +14213,21 @@ var
 
 type
   /// the kind of value stored in a TSynMonitor / TSynMonitorUsage property
-  // - i.e. match TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec, TSynMonitorTotalBytes,
-  // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
-  // TSynMonitorCount64 types as used to store statistic information
+  // - i.e. match TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec,
+  // TSynMonitorOneCount, TSynMonitorOneBytes, TSynMonitorBytesPerSec,
+  // TSynMonitorTotalBytes, TSynMonitorCount and TSynMonitorCount64 types as
+  // used to store statistic information
   // - "cumulative" values would sum each process values, e.g. total elapsed
   // time for SOA execution, task count or total I/O bytes
   // - "immediate" (e.g. svOneBytes or smvBytesPerSec) values would be an evolving
   // single value, e.g. an average value or current disk free size
-  // - use SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvBytesPerSec]
+  // - use SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvCount,smvCount64]
   // constant to identify the kind of value
   // - TSynMonitorUsage.Track() would use MonitorPropUsageValue() to guess
   // the tracked properties type from class RTTI
   TSynMonitorType = (
-    smvUndefined, smvMicroSec, smvOneMicroSec,
-    smvBytes, smvOneBytes, smvBytesPerSec, smvCount, smvCount64);
+    smvUndefined, smvOneMicroSec, smvOneBytes, smvOneCount, smvBytesPerSec, 
+    smvMicroSec, smvBytes, smvCount, smvCount64);
   /// value types as stored in TSynMonitor / TSynMonitorUsage
   TSynMonitorTypes = set of TSynMonitorType;
 
@@ -14235,6 +14236,12 @@ type
   // SOA computation of a given service
   // - any property defined with this type would be identified by TSynMonitorUsage
   TSynMonitorTotalMicroSec = type QWord;
+
+  /// would identify an immediate time count information, during monitoring
+  // - "immediate" counts won't accumulate, e.g. may store the current number
+  // of thread used by a process
+  // - any property defined with this type would be identified by TSynMonitorUsage
+  TSynMonitorOneCount = type cardinal;
 
   /// would identify an immediate time process information in micro seconds, during monitoring
   // - "immediate" time won't accumulate, i.e. may store the duration of the
@@ -14648,9 +14655,9 @@ type
   // - including Input/Output statistics and connected Clients count
   TSynMonitorServer = class(TSynMonitorInputOutput)
   protected
-    fCurrentRequestCount: TSynMonitorCount;
-    fClientsCurrent: TSynMonitorCount;
-    fClientsMax: cardinal;
+    fCurrentRequestCount: integer;
+    fClientsCurrent: TSynMonitorOneCount;
+    fClientsMax: TSynMonitorOneCount;
   public
     /// update ClientsCurrent and ClientsMax
     // - thread-safe method
@@ -14663,19 +14670,19 @@ type
     procedure ClientDisconnectAll;
     /// retrieve the number of connected clients
     // - thread-safe method
-    function GetClientsCurrent: TSynMonitorCount;
+    function GetClientsCurrent: TSynMonitorOneCount;
     /// how many concurrent requests are currently processed
     // - returns the updated number of requests
     // - thread-safe method
-    function AddCurrentRequestCount(diff: integer): TSynMonitorCount;
+    function AddCurrentRequestCount(diff: integer): integer;
   published
     /// current count of connected clients
-    property ClientsCurrent: TSynMonitorCount read fClientsCurrent;
+    property ClientsCurrent: TSynMonitorOneCount read fClientsCurrent;
     /// max count of connected clients
-    property ClientsMax: cardinal read fClientsMax;
+    property ClientsMax: TSynMonitorOneCount read fClientsMax;
     /// how many concurrent requests are currently processed
-    // - e.g. increased via InterlockedIncrement() in TSQLRestServer.URI()
-    property CurrentRequestCount: TSynMonitorCount read fCurrentRequestCount;
+    // - modified via AddCurrentRequestCount() in TSQLRestServer.URI()
+    property CurrentRequestCount: integer read fCurrentRequestCount;
   end;
 
   {$M-}
@@ -47491,8 +47498,9 @@ begin
     LeaveCriticalSection(fLock);
   end;
 end;
+end;
 
-function TSynMonitorServer.GetClientsCurrent: TSynMonitorCount;
+function TSynMonitorServer.GetClientsCurrent: TSynMonitorOneCount;
 begin
   EnterCriticalSection(fLock);
   try
@@ -47502,11 +47510,11 @@ begin
   end;
 end;
 
-function TSynMonitorServer.AddCurrentRequestCount(diff: integer): TSynMonitorCount;
+function TSynMonitorServer.AddCurrentRequestCount(diff: integer): integer;
 begin
   EnterCriticalSection(fLock);
   try
-    inc(integer(fCurrentRequestCount),diff);
+    inc(fCurrentRequestCount,diff);
     result := fCurrentRequestCount;
   finally
     LeaveCriticalSection(fLock);

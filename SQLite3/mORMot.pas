@@ -15306,7 +15306,7 @@ type
   protected
     fServer: TSQLRestServer;
     fStartDate: RawUTF8;
-    fCurrentThreadCount: integer;
+    fCurrentThreadCount: TSynMonitorOneCount;
     fSuccess: TSynMonitorCount64;
     fOutcomingFiles: TSynMonitorCount64;
     fServiceMethod: TSynMonitorCount64;
@@ -15352,7 +15352,7 @@ type
     property OutcomingFiles: TSynMonitorCount64 read fOutcomingFiles;
     /// number of current declared thread counts
     // - as registered by BeginCurrentThread/EndCurrentThread
-    property CurrentThreadCount: integer read fCurrentThreadCount;
+    property CurrentThreadCount: TSynMonitorOneCount read fCurrentThreadCount;
     /// how many Create / Add ORM operations did take place
     property Created: TSynMonitorCount64 read fCreated;
     /// how many Read / Get ORM operations did take place
