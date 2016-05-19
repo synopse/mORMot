@@ -1768,6 +1768,12 @@ type
     fOut: record
       Header, Encoding, AcceptEncoding, Data: SockString;
     end;
+    fSSL: record
+      CertFile: SockString;
+      CACertFile: SockString;
+      KeyName: SockString;
+      PassPhrase: SockString;
+    end;
     procedure InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD); override;
     procedure InternalCreateRequest(const method, aURL: SockString); override;
     procedure InternalSendRequest(const aData: SockString); override;
@@ -1778,6 +1784,10 @@ type
   public
     /// release the connection
     destructor Destroy; override;
+    /// set the client SSL certification details
+    // - used e.g. as
+    // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
+    procedure UseClientCertificate(const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
   end;
 
 {$endif USELIBCURL}
@@ -7635,15 +7645,38 @@ begin
   inherited;
 end;
 
+procedure TCurlHTTP.UseClientCertificate(
+  const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
+begin
+  fSSL.CertFile := aCertFile;
+  fSSL.CACertFile := aCACertFile;
+  fSSL.KeyName := aKeyName;
+  fSSL.PassPhrase := aPassPhrase;
+end;
+
 procedure TCurlHTTP.InternalCreateRequest(const method, aURL: SockString);
+const CERT_PEM: SockString = 'PEM';
 var url: SockString;
 begin
   url := fRootURL+aURL;
   curl.easy_setopt(fHandle,coURL,pointer(url));
-  if fHttps and IgnoreSSLCertificateErrors then begin
-    curl.easy_setopt(fHandle,coSSLVerifyPeer,0);
-    curl.easy_setopt(fHandle,coSSLVerifyHost,0);
-  end;
+  if fHttps then
+    if IgnoreSSLCertificateErrors then begin
+      curl.easy_setopt(fHandle,coSSLVerifyPeer,0);
+      curl.easy_setopt(fHandle,coSSLVerifyHost,0);
+    end else begin
+      // see https://curl.haxx.se/libcurl/c/simplessl.html
+      if fSSL.CertFile<>'' then begin
+        curl.easy_setopt(fHandle,coSSLCertType,pointer(CERT_PEM));
+        curl.easy_setopt(fHandle,coSSLCert,pointer(fSSL.CertFile));
+        if fSSL.PassPhrase<>'' then
+          curl.easy_setopt(fHandle,coSSLCertPasswd,pointer(fSSL.PassPhrase));
+        curl.easy_setopt(fHandle,coSSLKeyType,nil);
+        curl.easy_setopt(fHandle,coSSLKey,pointer(fSSL.KeyName));
+        curl.easy_setopt(fHandle,coCAInfo,pointer(fSSL.CACertFile));
+        curl.easy_setopt(fHandle,coSSLVerifyPeer,1);
+      end;
+    end;
   curl.easy_setopt(fHandle,coUserAgent,pointer(fUserAgent));
   fIn.Method := UpperCase(method);
   fIn.Headers := nil;

@@ -49568,7 +49568,7 @@ end;
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var aServerNonce, aClientNonce: RawUTF8;
-    random: TSHA256Digest;
+    rnd: TSHA256Digest;
 begin
   result := '';
   if User.LogonName='' then
@@ -49576,8 +49576,8 @@ begin
   aServerNonce := Sender.CallBackGetResult('Auth',['UserName',User.LogonName]);
   if aServerNonce='' then
     exit;
-  TAESPRNG.Main.FillRandom(@random,SizeOf(random));
-  aClientNonce := SHA256DigestToString(random);
+  TAESPRNG.Main.FillRandom(@rnd,SizeOf(rnd));
+  aClientNonce := SHA256DigestToString(rnd);
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);
