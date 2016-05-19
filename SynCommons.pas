@@ -14489,9 +14489,10 @@ type
   // - base class shared e.g. for ORM, SOA or DDD, when a repeatable data
   // process is to be monitored
   // - this class is thread-safe for its methods, but you should call explicitly
-  // Lock/UnLock to access its individual properties 
+  // Lock/UnLock to access its individual properties
   TSynMonitor = class(TSynPersistent)
   protected
+    fName: RawUTF8;
     fProcessing: boolean;
     fTaskCount: TSynMonitorCount64;
     fInternalErrors: TSynMonitorCount;
@@ -14513,7 +14514,11 @@ type
     /// low-level high-precision timer instance
     InternalTimer: TPrecisionTimer;
     /// initialize the instance nested class properties
-    constructor Create; override;
+    // - you can specify identifier associated to this monitored resource
+    // which would be used for TSynMonitorUsage persistence
+    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    /// initialize the instance nested class properties
+    constructor Create; overload; override;
     /// finalize the instance
     destructor Destroy; override;
     /// lock the instance for exclusive access
@@ -14576,6 +14581,9 @@ type
     // methods are disallowed, and the global fTimer won't be used any more
     // - thread-safe method
     procedure FromExternalMicroSeconds(const MicroSecondsElapsed: QWord);
+    /// an identifier associated to this monitored resource
+    // - is used e.g. for TSynMonitorUsage persistence/tracking
+    property Name: RawUTF8 read fName write fName;
   published
     /// indicates if this thread is currently working on some process
     property Processing: boolean read fProcessing write fProcessing;
@@ -28036,7 +28044,7 @@ var i: integer;
 begin
   result := false;
   for i := 0 to length(Values)-1 do
-    if Values[i]='' then
+    if Values[i]<>'' then
       exit;
   result := true;
 end;
@@ -28046,7 +28054,7 @@ var i: integer;
 begin
   result := false;
   for i := 0 to length(Values)-1 do
-    if Values[i]=0 then
+    if Values[i]<>0 then
       exit;
   result := true;
 end;
@@ -28056,7 +28064,7 @@ var i: integer;
 begin
   result := false;
   for i := 0 to length(Values)-1 do
-    if Values[i]=0 then
+    if Values[i]<>0 then
       exit;
   result := true;
 end;
@@ -47163,6 +47171,12 @@ begin
   InitializeCriticalSection(fLock);
 end;
 
+constructor TSynMonitor.Create(const aName: RawUTF8);
+begin
+  Create;
+  fName := aName;
+end;
+
 destructor TSynMonitor.Destroy;
 begin
   fMaximalTime.Free;
@@ -55443,8 +55457,8 @@ begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
   if aStats<>nil then
-    fStats := aStats.Create else
-    fStats := TSynMonitor.Create;
+    fStats := aStats.Create(aThreadName) else
+    fStats := TSynMonitor.Create(aThreadName);
   fOnProcess := aOnProcess;
   fOnProcessMS := aOnProcessMS;
   if fOnProcessMS=0 then

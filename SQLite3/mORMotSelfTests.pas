@@ -59,6 +59,7 @@ unit mORMotSelfTests;
   - renamed SQLite3SelfTests.pas to mORMotSelfTests.pas
   - added TInterfaceStub and TInterfaceMock classes testing
   - added multi-thread stress tests over all handled communication protocols
+  - included WebSockets and DDD dedicated testing
 
 }
 

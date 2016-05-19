@@ -2072,8 +2072,9 @@ constructor TDDDMonitoredDaemonProcess.Create(aDaemon: TDDDMonitoredDaemon;
 begin
   fDaemon := aDaemon;
   if fDaemon.fProcessMonitoringClass=nil then
-    fMonitoring := TSynMonitorWithSize.Create else
-    fMonitoring := fDaemon.fProcessMonitoringClass.Create as TSynMonitorWithSize;
+    fMonitoring := TSynMonitorWithSize.Create(aDaemon.Rest.Model.Root) else
+    fMonitoring := fDaemon.fProcessMonitoringClass.Create(aDaemon.Rest.Model.Root)
+      as TSynMonitorWithSize;
   fProcessIdleDelay := fDaemon.ProcessIdleDelay;
   fIndex := aIndexInDaemon;
   inherited Create(False);

@@ -2504,6 +2504,8 @@ const
     {$endif MSWINDOWS}
     + '; Synopse mORMot '+ SYNOPSE_FRAMEWORK_VERSION+' ';
 begin
+  // note: some part of mORMot.pas would identify 'mORMot' pattern in the
+  // agent header to enable advanced behavior e.g. about JSON transmission
   result := DEFAULT_AGENT+SockString(Instance.ClassName)+')';
 end;
 

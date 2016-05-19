@@ -979,7 +979,7 @@ begin
   timeOut := GetTickCount64 + 10000;
   repeat // wait until properly disconnected from remote TCP server
     Sleep(10);
-  until (FMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
+  until (fMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
   inherited Destroy;
   FreeAndNil(fMonitoring);
 end;
@@ -991,9 +991,9 @@ begin
   {$endif}
   if fSocket <> nil then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: fSocket<>nil', [self]);
-  if FMonitoring.State <> tpsDisconnected then
+  if fMonitoring.State <> tpsDisconnected then
     raise EDDDInfraException.CreateUTF8('%.ExecuteConnect: State=%',
-      [self, ToText(FMonitoring.State)^]);
+      [self, ToText(fMonitoring.State)^]);
   fMonitoring.State := tpsConnecting;
   try
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
@@ -1001,23 +1001,23 @@ begin
     else
       fSocket := TDDDSynCrtSocket.Create(self, fHost, fPort, fSettings.SocketTimeout, 32768);
     fSocket.Connect;
-    FMonitoring.State := tpsConnected; // to be done ASAP to allow sending
+    fMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;
     {$ifdef WITHLOG}
     FLog.Log(sllTrace, 'ExecuteConnect: Connected via Socket % - %',
-      [fSocket.Identifier, FMonitoring], self);
+      [fSocket.Identifier, fMonitoring], self);
     {$endif}
   except
     on E: Exception do begin
       {$ifdef WITHLOG}
       FLog.Log(sllTrace, 'ExecuteConnect: Impossible to Connect to %:% (%) %',
-        [Host, Port, E.ClassType, FMonitoring], self);
+        [Host, Port, E.ClassType, fMonitoring], self);
       {$endif}
       fSocket := nil;
-      FMonitoring.State := tpsDisconnected;
+      fMonitoring.State := tpsDisconnected;
     end;
   end;
-  if (FMonitoring.State <> tpsConnected) and not Terminated then
+  if (fMonitoring.State <> tpsConnected) and not Terminated then
     if fSettings.ConnectionAttemptsInterval > 0 then // on error, retry
       if SleepOrTerminated(fSettings.ConnectionAttemptsInterval * 1000) then
       {$ifdef WITHLOG}
@@ -1182,8 +1182,8 @@ var
   tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
 begin
   fSafe.Lock;
-  result := (aFrame <> '') and (fSocket <> nil) and (fMonitoring.State =
-    tpsConnected) and not fShouldDisconnect;
+  result := (aFrame <> '') and (fSocket <> nil) and
+    (fMonitoring.State = tpsConnected) and not fShouldDisconnect;
   if result then
     tmpSock := fSocket;
   fSafe.UnLock;
@@ -1191,7 +1191,7 @@ begin
     exit;
   result := tmpSock.DataOut(pointer(aFrame), length(aFrame));
   if result then
-    FMonitoring.Server.AddSize(0, length(aFrame))
+    fMonitoring.Server.AddSize(0, length(aFrame))
   else if ImmediateDisconnectAfterError then
     ExecuteDisconnectAfterError
   else begin
