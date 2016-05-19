@@ -1895,6 +1895,11 @@ procedure VariantToUTF8(const V: Variant; var result: RawUTF8;
 // - custom variant types will be stored as JSON
 function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 
+/// convert any date/time Variant into a TDateTime value
+// - would handle varDate kind of variant, or use a string conversion and
+// ISO-8601 parsing if possible
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+
 /// fast comparison of a Variant and UTF-8 encoded String
 // - slightly faster than plain V=Str, which computes a temporary variant
 function VariantEquals(const V: Variant; const Str: RawUTF8): boolean; overload;
@@ -1945,11 +1950,6 @@ function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
 
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
-
-/// convert any date/time Variant into a TDateTime value
-// - would handle varDate kind of variant, or use a string conversion and
-// ISO-8601 parsing if possible
-function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
 /// convert any numerical Variant into a fixed decimals floating point value
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
@@ -19159,35 +19159,6 @@ begin
   end;
 end;
 
-function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
-var tmp: RawUTF8;
-    vd: TVarData;
-begin
-  with TVarData(V) do
-  if VType=varVariant or varByRef then
-    result := VariantToDateTime(PVariant(VPointer)^,Value) else
-  case VType of
-  varDouble,varDate: begin
-    Value := VDouble;
-    result := true;
-  end;
-  varSingle: begin
-    Value := VSingle;
-    result := true;
-  end;
-  varCurrency: begin
-    Value := VCurrency;
-    result := true;
-  end else
-    if SetVariantUnRefSimpleValue(V,vd) then
-      result := VariantToDateTime(variant(vd),Value) else begin
-      VariantToUTF8(V,tmp);
-      Iso8601ToDateTimePUTF8CharVar(pointer(tmp),length(tmp),Value);
-      result := Value<>0;
-    end;
-  end;
-end;
-
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 var tmp: TVarData;
 begin
@@ -19277,6 +19248,35 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
+var tmp: RawUTF8;
+    vd: TVarData;
+begin
+  with TVarData(V) do
+  if VType=varVariant or varByRef then
+    result := VariantToDateTime(PVariant(VPointer)^,Value) else
+  case VType of
+  varDouble,varDate: begin
+    Value := VDouble;
+    result := true;
+  end;
+  varSingle: begin
+    Value := VSingle;
+    result := true;
+  end;
+  varCurrency: begin
+    Value := VCurrency;
+    result := true;
+  end else
+    if SetVariantUnRefSimpleValue(V,vd) then
+      result := VariantToDateTime(variant(vd),Value) else begin
+      VariantToUTF8(V,tmp);
+      Iso8601ToDateTimePUTF8CharVar(pointer(tmp),length(tmp),Value);
+      result := Value<>0;
+    end;
+  end;
+end;
 
 procedure VariantToInlineValue(const V: Variant; var result: RawUTF8);
 var wasString: boolean;
