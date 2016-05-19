@@ -301,19 +301,19 @@ type
 {$ifdef UNICODE}
   /// define the fastest Unicode string type of the compiler
   SynUnicode = UnicodeString;
-  /// define a raw storage string type, used for data buffer management
+  /// define a raw 8-bit storage string type, used for data buffer management
   SockString = type RawByteString;
 {$else}
-  /// define the fastest Unicode string type of the compiler
+  /// define the fastest 16-bit Unicode string type of the compiler
   SynUnicode = WideString;
   {$ifdef HASCODEPAGE} // FPC may expect a CP, e.g. to compare two string constants
   SockString = type RawByteString;
   {$else}
-  /// define a raw storage string type, used for data buffer management
+  /// define a 8-bit raw storage string type, used for data buffer management
   SockString = type AnsiString;
   {$endif}
 {$endif}
-  /// points to a raw storage string instance, used for data buffer management
+  /// points to a 8-bit raw storage variable, used for data buffer management
   PSockString = ^SockString;
 
 {$ifdef DELPHI5OROLDER}
@@ -2492,8 +2492,17 @@ end;
 
 function DefaultUserAgent(Instance: TObject): SockString;
 const
-  DEFAULT_AGENT = 'Mozilla/4.0 (compatible; MSIE 5.5; Windows; Synopse mORMot '+
-    SYNOPSE_FRAMEWORK_VERSION+' ';
+  DEFAULT_AGENT = 'Mozilla/5.0 (' +
+    {$ifdef MSWINDOWS}
+      'Windows'
+    {$else}
+      {$ifdef LINUX}
+        'Linux'
+      {$else}
+        'Posix'
+      {$endif LINUX}
+    {$endif MSWINDOWS}
+    + '; Synopse mORMot '+ SYNOPSE_FRAMEWORK_VERSION+' ';
 begin
   result := DEFAULT_AGENT+SockString(Instance.ClassName)+')';
 end;
