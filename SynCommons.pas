@@ -23718,7 +23718,7 @@ end;
 type TWordRec = packed record YDiv100, YMod100: byte; end;
 
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
-function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
+function Div100(Y: word): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
   result.YDiv100 := Y div 100;
   result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
@@ -23733,11 +23733,11 @@ end;
 
 procedure YearToPChar(Y: Word; P: PUTF8Char);
 {$ifdef PUREPASCAL}
+var d100: word;
 begin
-  with Div100(Y) do begin
-    PWordArray(P)[0] := TwoDigitLookupW[YDiv100];
-    PWordArray(P)[1] := TwoDigitLookupW[YMod100];
-  end;
+  d100 := Y div 100;
+  PWordArray(P)[0] := TwoDigitLookupW[d100];
+  PWordArray(P)[1] := TwoDigitLookupW[Y-(d100*100)];
 end;
 {$else}
 asm

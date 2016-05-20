@@ -965,7 +965,7 @@ begin
   if fSettings.SocketTimeout < fSettings.SocketLoopPeriod then
     fSettings.SocketTimeout := 2000;
   fPerformConnection := true;
-  inherited Create(aRest, true, true); // aOwnRest=true
+  inherited Create(aRest, true, true); // aOwnRest=true, aCreateSuspended=true
 end;
 
 destructor TDDDSocketThread.Destroy;
