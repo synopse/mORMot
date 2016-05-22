@@ -9933,7 +9933,7 @@ function ExtractInlineParameters(const SQL: RawUTF8;
 
 
 /// add the 4 digits of integer Y to P^
-procedure YearToPChar(Y: Word; P: PUTF8Char);
+procedure YearToPChar(Y: cardinal; P: PUTF8Char);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// creates a 3 digits string from a 0..999 value
@@ -23731,9 +23731,9 @@ asm
 end;
 {$endif}
 
-procedure YearToPChar(Y: Word; P: PUTF8Char);
+procedure YearToPChar(Y: cardinal; P: PUTF8Char);
 {$ifdef PUREPASCAL}
-var d100: word;
+var d100: cardinal;
 begin
   d100 := Y div 100;
   PWordArray(P)[0] := TwoDigitLookupW[d100];

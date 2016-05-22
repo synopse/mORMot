@@ -1654,19 +1654,54 @@ type
   THttpRequestClass = class of THttpRequest;
 
 {$ifdef USEWININET}
+  TWinHttpAPI = class;
+
+  /// event callback to track download progress, e.g. in the UI
+  // - used in TWinHttpAPI.OnProgress property
+  // - CurrentSize is the current total number of downloaded bytes
+  // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
+  TWinHttpProgress = procedure(Sender: TWinHttpAPI;
+    CurrentSize, ContentLength: DWORD);
+  /// event callback to process the download by chunks, not in memory
+  // - used in TWinHttpAPI.OnDownload property
+  // - CurrentSize is the current total number of downloaded bytes
+  // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
+  // - ChunkSize is the size of the latest downloaded chunk, available in
+  // the untyped ChunkData memory buffer
+  // - implementation should return TRUE to continue the download, or FALSE
+  // to abort the download process
+  TWinHttpDownload = function(Sender: TWinHttpAPI;
+    CurrentSize, ContentLength, ChunkSize: DWORD; const ChunkData): boolean;
+
   /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
   // - both APIs have a common logic, which is encapsulated by this parent class
   // - this abstract class defined some abstract methods which will be
   // implemented by TWinINet or TWinHttp with the proper API calls
   TWinHttpAPI = class(THttpRequest)
   protected
+    fOnProgress: TWinHttpProgress;
+    fOnDownload: TWinHttpDownload;
+    fOnDownloadChunkSize: cardinal;
     /// used for internal connection
     fSession, fConnection, fRequest: HINTERNET;
     function InternalGetInfo(Info: DWORD): SockString; virtual; abstract;
     function InternalGetInfo32(Info: DWORD): DWORD; virtual; abstract;
     function InternalReadData(var Data: SockString; Read: integer): cardinal; virtual; abstract;
-    function InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-      Data: SockString): integer; override;
+    function InternalRetrieveAnswer(
+      var Header, Encoding, AcceptEncoding, Data: SockString): integer; override;
+  public
+    /// download would call this method to notify progress
+    property OnProgress: TWinHttpProgress read fOnProgress write fOnProgress;
+    /// download would call this method instead of filling Data: SockString value
+    // - may be used e.g. when downloading huge content, and saving directly
+    // the incoming data on disk or database
+    // - if this property is set, raw TCP/IP incoming data would be supplied:
+    // compression and encoding won't be handled by the class
+    property OnDownload: TWinHttpDownload read fOnDownload write fOnDownload;
+    /// how many bytes should be retrieved for each OnDownload event chunk
+    // - if default 0 value is left, would use 65536, i.e. 64KB
+    property OnDownloadChunkSize: cardinal
+      read fOnDownloadChunkSize write fOnDownloadChunkSize;
   end;
 
   /// a class to handle HTTP/1.1 request using the WinINet API
@@ -6878,9 +6913,10 @@ const
   // while reading an HTTP response, read it in blocks of this size. 8K for now
   HTTP_RESP_BLOCK_SIZE = 8*1024;
 
-function TWinHttpAPI.InternalRetrieveAnswer(var Header, Encoding, AcceptEncoding,
-  Data: SockString): integer;
+function TWinHttpAPI.InternalRetrieveAnswer(
+  var Header, Encoding, AcceptEncoding, Data: SockString): integer;
 var Bytes, ContentLength, Read: DWORD;
+    tmp: SockString;
 begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
     result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
     Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
@@ -6889,15 +6925,35 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
     // retrieve received content (if any)
     Read := 0;
     ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
+    if Assigned(fOnDownload) then begin
+      // download per-chunk using calback event
+      Bytes := fOnDownloadChunkSize;
+      if Bytes<=0 then
+        Bytes := 65536; // 64KB seems fair enough by default
+      SetLength(tmp,Bytes);
+      repeat
+        Bytes := InternalReadData(tmp,0);
+        if Bytes=0 then
+          break;
+        inc(Read,Bytes);
+        if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
+          break; // returned false = aborted 
+        if Assigned(fOnProgress) then
+          fOnProgress(self,Read,ContentLength);
+      until false;
+    end else
     if ContentLength<>0 then begin
+      // optimized version reading "Content-Length: xxx" bytes
       SetLength(Data,ContentLength);
       repeat
         Bytes := InternalReadData(Data,Read);
         if Bytes=0 then begin
           SetLength(Data,Read); // truncated content
           break;
-        end else
-          inc(Read,Bytes);
+        end;
+        inc(Read,Bytes);
+        if Assigned(fOnProgress) then
+          fOnProgress(self,Read,ContentLength);
       until Read=ContentLength;
     end else begin
       // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
@@ -6907,6 +6963,8 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
         if Bytes=0 then
           break;
         inc(Read,Bytes);
+        if Assigned(fOnProgress) then
+          fOnProgress(self,Read,ContentLength);
       until false;
       SetLength(Data,Read);
     end;
@@ -7579,7 +7637,7 @@ begin
     {$endif}
     if curl.Module=0 then
       raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}
-        +': try sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
+        +': try e.g. sudo apt-get install libcurl3:i386'{$endif},[LIBCURL_DLL]);
     P := @@curl.global_init;
     for api := low(NAMES) to high(NAMES) do begin
       P^ := GetProcAddress(curl.Module,{$ifndef FPC}PChar{$endif}('curl_'+NAMES[api]));
