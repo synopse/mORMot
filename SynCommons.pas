@@ -1440,6 +1440,47 @@ type
     tmp: array[0..4095] of AnsiChar;
   end;
 
+  /// implements a stack-based writable storage of binary content
+  // - memory allocation is performed via a TSynTempBuffer
+  {$ifdef UNICODE}
+  TSynTempWriter = record
+  {$else}
+  TSynTempWriter = object
+  {$endif}
+  private
+    tmp: TSynTempBuffer;
+  public
+    /// the current writable position in tmp.buf
+    pos: PAnsiChar;
+    /// initialize a new temporary buffer of a given number of bytes
+    // - if maxsize is left to its 0 default value, the default stack-allocated
+    // memory size is used, i.e. 4 KB
+    procedure Init(maxsize: integer=0);
+    /// finalize the temporary storage
+    procedure Done;
+    /// append some binary to the internal buffer
+    // - would raise an ESynException in case of potential overflow
+    procedure wr(const val; len: integer);
+    /// append some shortstring as binary to the internal buffer
+    procedure wrss(const str: shortstring);
+    /// append some 8-bit value as binary to the internal buffer
+    procedure wrb(b: byte);
+    /// append some 16-bit value as binary to the internal buffer
+    procedure wrw(w: word);
+    /// append some 32-bit value as binary to the internal buffer
+    procedure wrint(int: integer);
+    /// append some 32-bit/64-bit pointer value as binary to the internal buffer
+    procedure wrptr(ptr: pointer);
+    /// append some 32-bit/64-bit integer as binary to the internal buffer
+    procedure wrptrint(int: PtrInt);
+    /// append some fixed-value bytes as binary to the internal buffer
+    // - returns a pointer to the first byte of the added memory chunk
+    function wrfillchar(count: integer; value: byte): PAnsiChar;
+    /// returns the current offset position in the internal buffer
+    function Position: integer;
+    /// returns the buffer as a RawByteString instance
+    function AsBinary: RawByteString;
+  end;
 
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
@@ -16745,6 +16786,79 @@ begin
   if buf<>@tmp then
     if buf<>nil then
       FreeMem(buf);
+end;
+
+
+{ TSynTempWriter }
+
+procedure TSynTempWriter.Init(maxsize: integer);
+begin
+  if maxsize<=0 then
+    maxsize := sizeof(tmp.tmp)-1; // -1 for trailing #0
+  tmp.Init(maxsize);
+  pos := tmp.buf;
+end;
+
+procedure TSynTempWriter.Done;
+begin
+  tmp.Done;
+end;
+
+function TSynTempWriter.AsBinary: RawByteString;
+begin
+  SetString(result,PAnsiChar(tmp.buf),pos-tmp.buf);
+end;
+
+function TSynTempWriter.Position: integer;
+begin
+  result := pos-tmp.buf;
+end;
+
+procedure TSynTempWriter.wr(const val; len: integer);
+begin
+  if pos-tmp.buf+len>tmp.len then
+     raise ESynException.CreateUTF8('TSynTempWriter(%) overflow',[tmp.len]);
+  MoveFast(val,pos^,len);
+  inc(pos,len);
+end;
+
+procedure TSynTempWriter.wrb(b: byte);
+begin
+  wr(b,1);
+end;
+
+procedure TSynTempWriter.wrint(int: integer);
+begin
+  wr(int,4);
+end;
+
+procedure TSynTempWriter.wrptrint(int: PtrInt);
+begin
+  wr(int,sizeof(int));
+end;
+
+procedure TSynTempWriter.wrptr(ptr: pointer);
+begin
+  wr(ptr,sizeof(ptr));
+end;
+
+procedure TSynTempWriter.wrss(const str: shortstring);
+begin
+  wr(str,ord(str[0])+1);
+end;
+
+procedure TSynTempWriter.wrw(w: word);
+begin
+  wr(w,2);
+end;
+
+function TSynTempWriter.wrfillchar(count: integer; value: byte): PAnsiChar;
+begin
+  if pos-tmp.buf+count>tmp.len then
+     raise ESynException.CreateUTF8('TSynTempWriter(%) overflow',[tmp.len]);
+  FillCharFast(pos^,count,value);
+  result := pos;
+  inc(pos,count);
 end;
 
 
