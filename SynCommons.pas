@@ -2795,7 +2795,7 @@ function IdemPropNameU(const P1: RawUTF8; P2: PUTF8Char; P2Len: integer): boolea
 // - if P1 and P2 are RawUTF8, you should better call overloaded function
 // IdemPropNameU(const P1,P2: RawUTF8), which would be slightly faster by
 // using the length stored before the actual text buffer of each RawUTF8
-function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean; 
+function IdemPropNameUSameLen(P1,P2: PUTF8Char; P1P2Len: integer): boolean;
   {$ifdef PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// case unsensitive test of P1 and P2 content
@@ -18577,6 +18577,25 @@ const
    tkRecordTypes = [tkObject,tkRecord];
    tkRecordTypeOrSet = [tkObject,tkRecord];
 
+type
+  TDelphiTypeKind = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
+    dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
+    dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
+    dkUString, dkClassRef, dkPointer, dkProcedure);
+
+const
+  FPCTODELPHI: array[TTypeKind] of TDelphiTypeKind = (
+    dkUnknown,dkInteger,dkChar,dkEnumeration,dkFloat,
+    dkSet,dkMethod,dkString,dkLString,dkLString,
+    dkWString,dkVariant,dkArray,dkRecord,dkInterface,
+    dkClass,dkRecord,dkWChar,dkEnumeration,dkInt64,dkInt64,
+    dkDynArray,dkInterface,dkProcedure,dkUString,dkWChar,dkPointer);
+  DELPHITOFPC: array[TDelphiTypeKind] of TTypeKind = (
+    tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
+    tkSString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
+    tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
+    tkUString, tkProcVar, tkProcVar, tkProcVar);
+
 {$else}
 
 type
@@ -18706,6 +18725,9 @@ type
     kind: TTypeKind;
     NameLen: byte;
     case TTypeKind of
+    tkUnknown: (
+      NameFirst: AnsiChar;
+    );
     tkDynArray: (
       {$ifdef FPC}
       elSize: SizeUInt;
@@ -18783,12 +18805,389 @@ type
     tkFloat: (
       FloatType: TFloatType;
     );
+    tkClass: (
+      ClassType: PAnsiChar; // TClass;
+      ParentInfo: PTypeInfoStored;
+      PropCount: SmallInt;
+      UnitNameLen: byte;
+    );
   end;
+  TPropInfo = packed record
+    PropType: PTypeInfoStored;
+    GetProc: PtrInt;
+    SetProc: PtrInt;
+    StoredProc: PtrInt;
+    Index: Integer;
+    Default: Longint;
+    NameIndex: SmallInt;
+    {$ifdef FPC}
+    PropProcs : Byte;
+    {$endif}
+    NameLen: byte;
+  end;
+  PPropInfo = ^TPropInfo;
 
 const
   /// codePage offset = string header size
   // - used to calc the beginning of memory allocation of a string
   STRRECSIZE = SizeOf(TStrRec);
+
+function ToText(k: TTypeKind): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TTypeKind),ord(k));
+end;
+
+type
+  TTypeInfoSaved = type TRawByteStringDynArray;
+
+function TypeInfoFind(const rttitypes: TTypeInfoSaved;
+  const typename: RawUTF8): pointer;
+var i,len: integer;
+begin
+  len := length(typename);
+  if len<>0 then begin
+    for i := 0 to length(rttitypes)-1 do
+      with PTypeInfo(rttitypes[i])^ do
+      if (NameLen=len) and
+         IdemPropNameUSameLen(@NameFirst,pointer(typename),len) then begin
+        result := @kind;
+        exit;
+      end;
+  end;
+  result := nil;
+end;
+
+function TypeInfoFindIndex(const rttitypes: TTypeInfoSaved;
+  info: pointer): integer;
+var len: integer;
+begin
+  if info<>nil then begin
+    len := PTypeInfo(info)^.NameLen+2; // compare Kind+Name
+    for result := 0 to length(rttitypes)-1 do
+      if CompareMem(pointer(rttitypes[result]),info,len) then
+        exit;
+  end;
+  result := -1;
+end;
+
+var
+  KnownTypeInfo: array of PTypeInfo;
+
+/// add some TypeInfo() RTTI for TypeInfoSave/TypeInfoLoad function
+// - warning: calling this after TypeInfoLoad() would trigger GPF
+procedure TypeInfoSaveRegisterKnown(const Types: array of pointer);
+var i,n: integer;
+begin
+  n := length(KnownTypeInfo);
+  SetLength(KnownTypeInfo,n+length(Types));
+  for i := 0 to high(Types) do
+    KnownTypeInfo[n+i] := Types[i];
+end;
+
+function FindKnownTypeInfoIndex(typeinfo: pointer): integer;
+  function Search(KindNameLen: word; Name: PUTF8Char; NameLen: integer): integer;
+  begin // compare Kind+NameLen, then case-insensitive Name
+    for result := 0 to length(KnownTypeInfo)-1 do
+      with PTypeInfo(KnownTypeInfo[result])^ do
+      if (PWord(kind)^=KindNameLen) and
+         IdemPropNameUSameLen(@NameFirst,Name,NameLen) then
+        exit;
+    result := -1;
+  end;
+begin
+  if typeinfo=nil then
+    result := -1 else
+    with PTypeInfo(typeinfo)^ do
+      result := Search(PWord(@kind)^,@NameFirst,NameLen);
+end;
+
+/// binary external storage of low-level RTTI
+// - add the RTTI to rttitypes[] in a stand-alone way (i.e. with no pointer)
+// - return the index of the type in rttitypes[]
+function TypeInfoSave(var rttitypes: TTypeInfoSaved;
+  info: pointer): integer;
+var k: TTypeKind;
+    i,offs: integer;
+    n: PAnsiChar;
+    np: ^TPropInfo absolute n;
+    rtti: PTypeInfo;
+    tmp: TSynTempWriter;
+  procedure wrtype(nested: PTypeInfoStored);
+  var nfo: PTypeInfo;
+      known: integer;
+  begin
+    {$ifdef FPC}
+    nfo := nested;
+    {$else}
+    if nested=nil then
+      nfo := nil else
+      nfo := nested^;
+    {$endif}
+    if nfo=nil then
+      tmp.wrw(0) else
+    if nfo=info then
+      tmp.wrw(result+2) else begin
+      known := FindKnownTypeInfoIndex(nfo);
+      if known<0 then
+        tmp.wrw(TypeInfoSave(rttitypes,nfo)+2) else begin
+        tmp.wrw(1); // would be recognized by name
+        with PTypeInfo(nfo)^ do
+          tmp.wr(kind,NameLen+2); // match FindKnownTypeInfoIndex() 
+      end;
+    end;
+  end;
+begin
+  result := TypeInfoFindIndex(rttitypes,info);
+  if (result>=0) or (info=nil) then
+    exit;
+  result := length(rttitypes);
+  tmp.Init; // no need of tmp.Done since maxsize=0 will use the stack
+  rtti := info;
+  k := rtti^.Kind;
+  {$ifdef FPC} // storage binary layout is Delphi's
+  i := ord(FPCTODELPHI[k]);
+  tmp.wr(i,1);
+  {$else}
+  tmp.wr(k,sizeof(k));
+  {$endif}
+  tmp.wr(rtti^.NameLen,rtti^.NameLen+1);
+  inc(PByte(rtti),rtti^.NameLen);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  rtti := align(rtti);
+  {$endif}
+  with rtti^ do
+  case k of
+  tkChar, tkWChar, tkLString, tkWString, tkVariant, tkInt64
+  {$ifdef UNICODE}, tkUString{$endif}:
+    ; // no additional RTTI needed for those types
+  tkDynArray: begin
+    tmp.wrint(elSize);
+    wrtype(elType);
+    wrtype(elType2);
+  end;
+  tkEnumeration:
+  {$ifdef FPC_ENUMHASINNER}with inner do{$endif} begin
+    tmp.wr(EnumType,sizeof(EnumType));
+    if MinValue<>0 then
+      raise ESynException.CreateUTF8('TypeInfoSave MinValue=%',[MinValue]);
+    tmp.wrw(MaxValue);
+    wrtype(EnumBaseType);
+    n := @NameList;
+    for i := MinValue to MaxValue do
+      inc(n,ord(n^)+1); // next short string (no align() needed on FPC)
+    i := n-@NameList;
+    tmp.wrw(i);
+    tmp.wr(NameList,i);
+  end;
+  tkSet: begin
+    tmp.wr(SetType,sizeof(SetType));
+    wrtype(SetBaseType);
+  end;
+  tkInteger:
+    tmp.wr(IntegerType,sizeof(IntegerType));
+  tkFloat:
+    tmp.wr(FloatType,sizeof(FloatType));
+  tkClass: begin
+    wrtype(ParentInfo);
+    tmp.wrint(PropCount);
+    tmp.wr(UnitNameLen,UnitNameLen+1);
+    n := @UnitNameLen;
+    inc(n,UnitNameLen+1);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    n := align(n);
+    {$endif}
+    for i := 1 to PropCount do begin
+      wrtype(np^.PropType);
+      offs := np^.GetProc;
+      {$ifndef FPC}
+      if offs and {$ifdef CPU64}$ff00000000000000{$else}$ff000000{$endif}<>0 then
+        raise ESynException.CreateUTF8('TypeInfoSave no getter for %',
+          [PShortString(np^.NameLen)^]);
+      {$endif}
+      tmp.wrint(offs);
+      tmp.wrb(np^.StoredProc);
+      tmp.wrint(np^.Index);
+      tmp.wrint(np^.Default);
+      tmp.wrw(np^.NameIndex);
+      tmp.wr(np^.NameLen,np^.NameLen+1);
+      n := PAnsiChar(@np^.NameLen)+np^.NameLen+1;
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      n := align(n);
+      {$endif}
+    end;
+  end;
+  else
+    raise ESynException.CreateUTF8('TypeInfoSave(%) unsupported',[ToText(k)^]);
+  end;
+  SetLength(rttitypes,result+1);
+  rttitypes[result] := tmp.AsBinary;
+end;
+
+procedure TypeInfoLoad(var rttitypes: TTypeInfoSaved);
+var rtti: PTypeInfo;
+    tmp: TSynTempWriter;
+    i,t,j,pcount: integer;
+    offs: PtrUInt;
+    stored: boolean; 
+    k: TTypeKind;
+    n: PAnsiChar;
+    types: array of array of packed record
+      offs: word;
+      typindex: word;
+    end;
+    p1: pointer;
+  function nint: integer;
+  begin
+    result := PInteger(n)^;
+    inc(n,4);
+  end;
+  function nw: integer;
+  begin
+    result := PWord(n)^;
+    inc(n,2);
+  end;
+  function nb: integer;
+  begin
+    result := PByte(n)^;
+    inc(n);
+  end;
+  procedure wrss;
+  var len: integer;
+  begin
+    len := PByte(n)^+1;
+    tmp.wr(n^,len); // copy whole shortstring at once
+    inc(n,len);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    n := align(n);
+    {$endif}
+  end;
+  function wrtype: pointer;
+  var index,off,ti: integer;
+  begin
+    result := tmp.pos;
+    index := nw;
+    if index=1 then begin
+      ti := FindKnownTypeInfoIndex(n);
+      if ti<0 then
+        raise ESynException.CreateUTF8('TypeInfoLoad index=1 %?',
+          [PShortString(@PTypeInfo(n)^.NameLen)^]);
+      inc(n,PTypeInfo(n)^.NameLen+2);
+      {$ifdef FPC} // follow PTypeInfoStored pattern
+      tmp.wrptr(pointer(KnownTypeInfo[ti]));
+      {$else}
+      // warning: any future TypeInfoSaveRegisterKnown() would trigger GPF
+      tmp.wrptr(@pointer(KnownTypeInfo[ti]));
+      {$endif}
+      exit;
+    end;
+    off := tmp.Position;
+    tmp.wrptr(nil);
+    if index=0 then
+      exit;
+    SetLength(types[i],t+1);
+    with types[i,t] do begin
+      offs := off;
+      typindex := index-2;
+    end;
+    inc(t);
+  end;
+begin
+  SetLength(types,Length(rttitypes));
+  for i := 0 to Length(rttitypes)-1 do begin
+    t := 0;
+    tmp.Init;
+    rtti := pointer(rttitypes[i]);
+    {$ifdef FPC}
+    k := DELPHITOFPC[TDelphiTypeKind(rtti^.Kind)];
+    if (k=tkEnumeration) and
+       IdemPropName(PShortString(rtti^.NameLen)^,'boolean') then
+      k := tkBool;
+    {$else}
+    k := rtti^.Kind;
+    {$endif}
+    tmp.wr(k,sizeof(k));
+    n := @rtti^.NameLen; // n^ points to variable buffer -> use nb/nw/nint
+    wrss; // copy Name
+    case k of
+    tkChar, tkWChar, tkLString, tkWString, tkVariant, tkInt64
+    {$ifdef UNICODE}, tkUString{$endif}
+    {$ifdef FPC}, tkBool{$endif}:
+      ; // no additional RTTI needed for those types
+    tkDynArray: begin // elSize,elType,elType2
+      {$ifdef FPC}
+      tmp.wrptrint(nint);
+      p1 := wrtype;
+      tmp.wrint(0);
+      Exchg(p1,wrtype,sizeof(pointer)); // invert elType <-> elType2
+      {$else}
+      tmp.wrint(nint);
+      wrtype;
+      tmp.wrint(0);
+      wrtype;
+      {$endif}
+    end;
+    tkEnumeration: begin
+      tmp.wrb(nb);
+      tmp.wrint(0); // MinValue
+      tmp.wrint(nint);
+      wrtype;
+      j := nw;
+      tmp.wr(n^,j); // NameList
+    end;
+    tkInteger, tkFloat:
+      tmp.wrb(nb);
+    tkSet: begin
+      tmp.wrb(nb);
+      wrtype;
+    end;
+    tkClass: begin
+      p1 := tmp.wrfillchar(sizeof(pointer),0);
+      wrtype;
+      pcount := nw;
+      tmp.wrw(pcount);
+      wrss; // copy UnitName
+      for j := 1 to pcount do begin
+        wrtype;             // PropType
+        offs := nint;       // GetProc=SetProc=fieldaddr
+        {$ifndef FPC}
+        offs := offs or {$ifdef CPU64}$ff00000000000000{$else}$ff000000{$endif};
+        {$endif}
+        tmp.wrptrint(offs);
+        tmp.wrptrint(offs);
+        stored := nb<>0;
+        if stored then
+          tmp.wrptrint(-1) else
+          tmp.wrptrint(0);
+        tmp.wrint(nint);    // Index
+        tmp.wrint(nint);    // Default
+        tmp.wrw(nw);        // NameIndex
+        {$ifdef FPC} // PropProcs: GetProc=SetProc=ptField
+        if stored then
+          tmp.wrb(ptconst shl 4) else
+          tmp.wrb(0);
+        {$endif}
+        wrss; // copy Name
+      end;
+      // FIX: compute TClass at p1^
+      PPointer(p1)^ := nil;
+    end;
+    else
+      raise ESynException.CreateUTF8('TypeInfoLoad(%) unsupported',[ToText(k)^]);
+    end;
+    rttitypes[i] := tmp.AsBinary; // replace with true RTTI
+  end;
+  // fix all internal pointers
+  for i := 0 to Length(rttitypes)-1 do begin
+    n := pointer(rttitypes[i]);
+    for t := 0 to length(types[i])-1 do
+    with types[i,t] do
+      {$ifdef FPC} // follow PTypeInfoStored pattern
+      PPointer(n+offs)^ := pointer(rttitypes[typindex]);
+      {$else}
+      PPointer(n+offs)^ := @pointer(rttitypes[typindex]);
+      {$endif}
+  end;
+end;
 
 procedure SetRawUTF8(var Dest: RawUTF8; text: pointer; len: integer);
 {$ifdef FPC}inline;
@@ -34193,7 +34592,7 @@ begin
     end;
     end;
     raise ESynException.CreateUTF8('%.Create("%") unsupported type: % (%)',
-      [self,fCustomTypeName,GetEnumName(TypeInfo(TTypeKind),ord(kind))^,ord(kind)]);
+      [self,fCustomTypeName,ToText(kind)^,ord(kind)]);
   end;
 end;
 
@@ -56168,6 +56567,11 @@ initialization
   Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));
   {$warnings ON}
   Assert(sizeof(TSynUniqueIdentifierBits)=sizeof(TSynUniqueIdentifier));
+{  TypeInfoSaveRegisterKnown([
+    TypeInfo(boolean),TypeInfo(byte),TypeInfo(word),TypeInfo(cardinal),TypeInfo(Int64),
+    TypeInfo(single),TypeInfo(double),TypeInfo(currency),TypeInfo(extended),TypeInfo(TDateTime),
+    TypeInfo(RawByteString),TypeInfo(RawJSON),TypeInfo(RawUTF8),TypeInfo(string),
+    TypeInfo(SynUnicode),TypeInfo(WideString)]); }
 
 finalization
   GarbageCollectorFree;
