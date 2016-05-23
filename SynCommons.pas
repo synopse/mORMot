@@ -2427,6 +2427,10 @@ function StrUInt64(P: PAnsiChar; const val: QWord): PAnsiChar;
 // - faster than SetString(tmp,Buffer,BufferLen); Text := Text+tmp;
 procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
 
+/// fast add one character to a RawUTF8 string
+// - faster than Text := Text + ch;
+procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+
 /// fast add some characters to a RawUTF8 string
 // - faster than Text := Text+RawUTF8(Buffers[0])+RawUTF8(Buffers[0])+...
 procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF8Char);
@@ -20659,6 +20663,14 @@ begin
     until p^=#0;
   end;
   result := 0;
+end;
+
+procedure AppendCharToRawUTF8(var Text: RawUTF8; Ch: AnsiChar);
+var L: integer;
+begin
+  L := length(Text);
+  SetLength(Text,L+1);
+  PByteArray(Text)[L] := ord(Ch);
 end;
 
 procedure AppendBufferToRawUTF8(var Text: RawUTF8; Buffer: pointer; BufferLen: PtrInt);
