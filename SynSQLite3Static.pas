@@ -83,6 +83,7 @@ unit SynSQLite3Static;
     may be downloaded from http://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
+  - added sqlite3.db_config() support
 
 }
 
@@ -1215,6 +1216,7 @@ function sqlite3_backup_remaining(Backup: TSQLite3Backup): integer; {$ifndef SQL
 function sqlite3_backup_pagecount(Backup: TSQLite3Backup): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 {$ifndef DELPHI5OROLDER}
 function sqlite3_config(operation: integer): integer; cdecl varargs; external;
+function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
 {$endif}
 {$ifdef INCLUDE_TRACE}
 function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
@@ -1323,6 +1325,7 @@ begin
   backup_pagecount     := @sqlite3_backup_pagecount;
   {$ifndef DELPHI5OROLDER}
   config               := @sqlite3_config;
+  db_config            := @sqlite3_db_config;
   {$endif}
 
   // sqlite3.obj is compiled with SQLITE_OMIT_AUTOINIT defined

@@ -160,7 +160,7 @@ begin
   TSynLogTestLog := TSQLLog; // share the same log file with whole mORMot
   {$endif}
   WebSocketLog := TSQLLog; // enable low-level WebSockets frames logging
-  if false then // "if not false then" will create around 830 MB of log file
+  if false then // "if not false then" will create around 1.2 GB of log file
   with TSQLLog.Family do begin
     Level := LOG_VERBOSE;
     //DestinationPath := ExeVersion.ProgramFilePath+'logs'; folder should exist
@@ -177,7 +177,8 @@ begin
       SaveToFile(paramstr(1)); // DestPath on command line -> export to file
       Writeln(Ident,#13#10#13#10' Running tests... please wait');
     end;
-    Run;
+    if not Run then
+      ExitCode := 1;
     if ParamCount<>0 then
       exit; // direct exit if an external file was generated
   finally

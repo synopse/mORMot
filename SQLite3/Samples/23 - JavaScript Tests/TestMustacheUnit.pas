@@ -61,6 +61,7 @@ var Template, Context, Result: RawUTF8;
     {$ifndef CPU64} // SpiderMonkey library is not available yet in 64 bit
     person: RawUTF8;
     partial: variant;
+    nn: Variant;
     {$endif}
 begin
   Template := StringToUTF8(mmoTemplate.Lines.Text);
@@ -85,9 +86,15 @@ begin
         SetLength(person,i-1);
       partial := _ObjFast(['person',person]);
     end;
+    fEngine.Global.testMustache(Template, data, partial, 1); //compile template
     Timer.Start;
-    for i := 1 to n do
-      result := VariantToUTF8(fEngine.Global.Mustache.render(Template, data, partial));
+    nn := n;
+    result := VariantToUTF8(fEngine.Global.testMustache(Template, data, partial, nn));
+    // test below slow because of 2 things:
+//  1) marsalling argumnets between Delphi & JS
+//  2) we measure "prepare" time 
+//    for i := 1 to n do
+//      result := VariantToUTF8(fEngine.Global.Mustache.render(Template, data, partial));
   end else
   {$endif}
     exit;
@@ -108,6 +115,16 @@ begin
   btnExecSpiderMonkey.Hide;
 end;
 {$else}
+const
+  testMustacheFunc =
+    'function testMustache(template, data, partial, iterCount){ ' +
+    '  var result = ""; ' +
+    '  for(var i=0; i<iterCount; i++){ ' +
+    '    result = Mustache.render(template, data, partial) ' +
+    '  }' +
+    ' return result; ' +
+    '}'#10'1;';
+
 var mustacheFN: TFileName;
     mSource: SynUnicode;
     mustache: RawByteString;
@@ -128,6 +145,7 @@ begin
     mSource := SynUnicode(mustache);
   end;
   fEngine.Evaluate(mSource,'mustache.js');
+  fEngine.Evaluate(testMustacheFunc,'testMustacheFunc.js');
 end;
 {$endif}
 

@@ -346,6 +346,7 @@ del /q %bin%\exe\*.map %bin%\exe\*.drc
 echo.
 echo Running automated tests for mORMot
 %bin%\exe\TestSQL3 "%DelphiVersion% "
+@if errorlevel 1 echo "Some test fails. See "%bin%\%DelphiVersion% Synopse mORMot Framework Automated tests.txt" for details"
 
 :NoDCCCompiler
 cd %mORMot%

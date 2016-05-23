@@ -184,6 +184,8 @@ unit SynSQLite3;
     memory manager than Delphi, for better performance and stability
   - added sqlite3.extended_errcode() function, used for exception message
   - ensure ESQLite3Exception message would contain the SQL execution context
+  - added EnableCustomTokenizer to allow register a non-build-in FTS tokenizers
+    for SQLite3 >= 3.11
 
 }
 
@@ -497,6 +499,12 @@ const
   SQLITE_CONFIG_SQLLOG = 21;
   SQLITE_CONFIG_MMAP_SIZE = 22;
   SQLITE_CONFIG_WIN32_HEAPSIZE = 23;
+
+  SQLITE_DBCONFIG_LOOKASIDE = 1001;
+  SQLITE_DBCONFIG_ENABLE_FKEY = 1002;
+  SQLITE_DBCONFIG_ENABLE_TRIGGER = 1003;
+  SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER = 1004;
+  SQLITE_DBCONFIG_ENABLE_LOAD_EXTENSION = 1005;
 
 type
   /// type for a custom destructor for the text or BLOB content
@@ -2011,6 +2019,10 @@ type
     config: function(operation: integer): integer;
       {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
 
+    /// used to make global configuration changes to current database connection
+    db_config: function(DestDB: TSQLite3DB; operation: integer): integer;
+      {$ifndef DELPHI5OROLDER} cdecl varargs; {$endif}
+
     /// initialize the internal version numbers
     constructor Create; virtual;
     /// will change the SQLite3 configuration to use Delphi/FPC memory manager
@@ -2760,6 +2772,9 @@ type
     // - returns the SQLITE_* status code, as retrieved from sqlite3.close(fDB)
     // so that it should be SQLITE_OK on success
     function DBClose: integer;
+    /// for SQLite >= 3.11 - enable registation of a custom tokenizer
+    // - see details at http://sqlite.org/fts3.html#f3tknzr
+    function EnableCustomTokenizer: integer;
   public
     /// open a SQLite3 database file
     // - open an existing database file or create a new one if no file exists
@@ -4398,6 +4413,23 @@ begin
     BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
   fDB := 0;
+end;
+
+function TSQLDataBase.EnableCustomTokenizer: integer;
+{$ifdef WITHLOG}
+var FPCLog: ISynLog;
+{$endif}
+begin
+  result := SQLITE_OK;
+  if (self=nil) or (fDB=0) then
+    exit;
+  {$ifdef WITHLOG}
+  FPCLog := fLog.Enter;
+  FPCLog.Log(sllDB,'Enable custom tokenizer for "%"',[FileName],self);
+  {$endif}
+  if (sqlite3=nil) or not Assigned(sqlite3.db_config) then
+    raise ESQLite3Exception.CreateUTF8('%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
+  result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
 end;
 
 function TSQLDataBase.DBOpen: integer;
