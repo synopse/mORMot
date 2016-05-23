@@ -48247,8 +48247,9 @@ begin
           V := P^.GetOrdProp(Value);
           if (V<>P^.Default) or not (woDontStoreDefault in Options) then begin
             HR(P);
-            if {$ifdef FPC}(Kind=tkBool){$else}
-               (Kind=tkEnumeration) and (P^.PropType^=TypeInfo(boolean)){$endif} then
+            if {$ifdef FPC}(Kind=tkBool) or{$endif}
+               ((Kind=tkEnumeration) and
+                (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(boolean))) then
               Add(boolean(V)) else
               if (woFullExpand in Options) or (woHumanReadable in Options) or
                  (woEnumSetsAsText in Options) or
