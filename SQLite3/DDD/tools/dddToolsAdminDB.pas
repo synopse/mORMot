@@ -245,13 +245,13 @@ begin
           fJson := exec.Content
         else
         if IdemPropNameU(ctyp, BINARY_CONTENT_TYPE) then begin
-          fn := trim(FindIniNameValue(pointer(exec.Header), 'FILENAME:'));
+          fn := UTF8ToString(trim(FindIniNameValue(pointer(exec.Header), 'FILENAME:')));
           if (fn <> '') and (exec.Content <> '') then
             with TSaveDialog.Create(self) do
             try
               Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist, ofEnableSizing];
               InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
-              FileName := SavePrefix + UTF8ToString(fn);
+              FileName := SavePrefix + fn;
               if Execute then begin
                 local := FileName;
                 FileFromString(exec.Content, local);
