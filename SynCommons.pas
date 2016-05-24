@@ -47832,12 +47832,13 @@ begin
   for i := 0 to Count-1 do
     TPointerDynArray(ObjArr)[i] := Create;
 end;
-
+                       
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
   EnterCriticalSection(fLock);
   try
-    inc(fInternalErrors);
+    if not VarIsEmptyOrNull(info) then
+      inc(fInternalErrors);
     fLastInternalError := info;
     Changed;
   finally
