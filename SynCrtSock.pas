@@ -1661,7 +1661,7 @@ type
   // - CurrentSize is the current total number of downloaded bytes
   // - ContentLength is retrieved from HTTP headers, but may be 0 if not set
   TWinHttpProgress = procedure(Sender: TWinHttpAPI;
-    CurrentSize, ContentLength: DWORD);
+    CurrentSize, ContentLength: DWORD) of object;
   /// event callback to process the download by chunks, not in memory
   // - used in TWinHttpAPI.OnDownload property
   // - CurrentSize is the current total number of downloaded bytes
@@ -1671,7 +1671,7 @@ type
   // - implementation should return TRUE to continue the download, or FALSE
   // to abort the download process
   TWinHttpDownload = function(Sender: TWinHttpAPI;
-    CurrentSize, ContentLength, ChunkSize: DWORD; const ChunkData): boolean;
+    CurrentSize, ContentLength, ChunkSize: DWORD; const ChunkData): boolean of object;
 
   /// a class to handle HTTP/1.1 request using either WinINet or WinHTTP API
   // - both APIs have a common logic, which is encapsulated by this parent class
