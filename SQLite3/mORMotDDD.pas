@@ -1015,6 +1015,8 @@ type
   protected
     fServer: TSynMonitorServer;
     function GetMemory: variant;
+  public
+    procedure ProcessException(E: Exception); virtual;
   published
     /// information about the REST server process
     property Server: TSynMonitorServer read fServer;
@@ -2729,6 +2731,11 @@ end;
 function TDDDAdministratedDaemonMonitor.GetMemory: variant;
 begin
   result := TSynMonitorMemory.ToVariant;
+end;
+
+procedure TDDDAdministratedDaemonMonitor.ProcessException(E: Exception);
+begin
+  Server.ProcessError(ObjectToVariantDebug(E));
 end;
 
 initialization

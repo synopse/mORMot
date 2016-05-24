@@ -405,6 +405,8 @@ type
   public
     /// used to set the default values
     constructor Create; override;
+    /// set Host and Port values from a 'ip:port' or 'ip' text
+    function SetHostPort(const IpPort: RawByteString; defaultPort: integer): boolean;
     /// you could set here a factory method to mock the socket connection
     // - this property is public, but not published, since it should not be
     // serialized on the settings file, but overloaded at runtime
@@ -424,6 +426,7 @@ type
     property SocketTimeout: integer read FSocketTimeout write FSocketTimeout;
     /// the time, in seconds, between any reconnection attempt
     // - default value is 5 - i.e. five seconds
+    // - if you set -1 as value, thread would end without any retrial
     property ConnectionAttemptsInterval: Integer
       read fConnectionAttemptsInterval write fConnectionAttemptsInterval;
     /// if TRUE, any communication error would try to reconnect the socket
@@ -705,6 +708,18 @@ begin
   fSocketLoopPeriod := 100;
   fConnectionAttemptsInterval := 5;
   fMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
+end;
+
+function TDDDSocketThreadSettings.SetHostPort(
+  const IpPort: RawByteString; defaultPort: integer): boolean;
+var p: RawUTF8;
+begin
+  Split(IpPort,':',fHost,p);
+  result := false;
+  if trim(fHost) = '' then
+    exit;
+  fPort := GetIntegerDef(pointer(p), defaultPort);
+  result := fPort > 0;
 end;
 
 

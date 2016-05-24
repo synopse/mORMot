@@ -1009,6 +1009,7 @@ begin
     {$endif}
   except
     on E: Exception do begin
+      fMonitoring.ProcessException(E);
       {$ifdef WITHLOG}
       FLog.Log(sllTrace, 'ExecuteConnect: Impossible to Connect to %:% (%) %',
         [Host, Port, E.ClassType, fMonitoring], self);
@@ -1018,7 +1019,9 @@ begin
     end;
   end;
   if (fMonitoring.State <> tpsConnected) and not Terminated then
-    if fSettings.ConnectionAttemptsInterval > 0 then // on error, retry
+    if fSettings.ConnectionAttemptsInterval < 0 then
+      Terminate
+    else if fSettings.ConnectionAttemptsInterval > 0 then // on error, retry
       if SleepOrTerminated(fSettings.ConnectionAttemptsInterval * 1000) then
       {$ifdef WITHLOG}
         FLog.Log(sllTrace, 'ExecuteConnect: thread terminated', self)
@@ -1038,7 +1041,7 @@ begin
     fSafe.Lock;
     try
       fShouldDisconnect := false;
-      FMonitoring.State := tpsDisconnected;
+      fMonitoring.State := tpsDisconnected;
       try
         if fSocket = nil then
           info := '[Unknown]'
@@ -1056,10 +1059,12 @@ begin
       fSafe.UnLock;
     end;
   except
-    {$ifdef WITHLOG}
-    on E: Exception do
+    on E: Exception do begin
+      fMonitoring.ProcessException(E);
+      {$ifdef WITHLOG}
       FLog.Log(sllTrace, 'Socket disconnection error (%)', [E.ClassType], self);
-    {$endif}
+      {$endif}
+    end;
   end;
 end;
 
@@ -1115,11 +1120,13 @@ begin
           InternalLogMonitoring;
         InternalExecuteIdle;
       except
-        {$ifdef WITHLOG}
-        on E: Exception do
+        on E: Exception do begin
+          fMonitoring.ProcessException(E);
+          {$ifdef WITHLOG}
           FLog.Log(sllWarning, 'Skipped % exception in %.InternalExecuteIdle',
             [E, ClassType], self);
-        {$endif}
+          {$endif}
+        end;
       end;
     until Terminated;
   finally
