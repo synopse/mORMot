@@ -1742,6 +1742,13 @@ function UTF8ToWideChar(dest: PWideChar; source: PUTF8Char; MaxDestChars, source
 // - faster than System.UTF8ToUnicode with dest=nil
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
 
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding
+function IsValidUTF8(source: PUTF8Char): Boolean;
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
+// control characters
+function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean;
+
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
@@ -17292,6 +17299,51 @@ Quit:
   result := PtrUInt(dest)-PtrUInt(begd); // dest-begd return char length
 NoSource:
   dest^ := #0; // always append a WideChar(0) to the end of the buffer
+end;
+
+function IsValidUTF8(source: PUTF8Char): Boolean;
+var extra, i: integer;
+    c: cardinal;
+begin
+  result := false;
+  if source<>nil then
+  repeat
+    c := byte(source^);
+    inc(source);
+    if c=0 then break else
+    if c and $80<>0 then begin
+      extra := UTF8_EXTRABYTES[c];
+      if extra=0 then exit else // invalid leading byte
+      for i := 1 to extra do // inc(source,extra) is faster but not safe
+        if byte(source^) and $c0<>$80 then
+          exit else
+          inc(source); // check valid UTF-8 content
+    end;
+  until false;
+  result := true;
+end;
+
+function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean;
+var extra, i: integer;
+    c: cardinal;
+begin
+  result := false;
+  if source<>nil then
+  repeat
+    c := byte(source^);
+    inc(source);
+    if c=0 then break else
+    if c<32 then exit else // disallow #1..#31 control char
+    if c and $80<>0 then begin
+      extra := UTF8_EXTRABYTES[c];
+      if extra=0 then exit else // invalid leading byte
+      for i := 1 to extra do // inc(source,extra) is faster but not safe
+        if byte(source^) and $c0<>$80 then
+          exit else
+          inc(source); // check valid UTF-8 content
+    end;
+  until false;
+  result := true;
 end;
 
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;

@@ -407,6 +407,8 @@ type
     constructor Create; override;
     /// set Host and Port values from a 'ip:port' or 'ip' text
     function SetHostPort(const IpPort: RawByteString; defaultPort: integer): boolean;
+    /// retrieve Host and Port values as a single 'ip:port' text
+    function GetHostPort: RawUTF8;
     /// you could set here a factory method to mock the socket connection
     // - this property is public, but not published, since it should not be
     // serialized on the settings file, but overloaded at runtime
@@ -708,6 +710,11 @@ begin
   fSocketLoopPeriod := 100;
   fConnectionAttemptsInterval := 5;
   fMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
+end;
+
+function TDDDSocketThreadSettings.GetHostPort: RawUTF8;
+begin
+  FormatUTF8('%:%', [fHost, fPort], result);
 end;
 
 function TDDDSocketThreadSettings.SetHostPort(
