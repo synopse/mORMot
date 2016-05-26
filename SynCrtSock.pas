@@ -2718,7 +2718,7 @@ end;
 function TURI.URI: SockString;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
-  if (Port='80') or (Port='0') or (Port='') then
+  if (Port='80') or (Port='443') or (Port='0') or (Port='') then
     result := Prefix[Https]+Server+'/'+Address else
     result := Prefix[Https]+Server+':'+Port+'/'+Address;
 end;
