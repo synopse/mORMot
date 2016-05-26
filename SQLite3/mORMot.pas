@@ -49378,8 +49378,10 @@ var resp: RawUTF8;
 begin
   if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTML_SUCCESS) or
      (JSONDecode(pointer(resp),['result','data','server','version',
-       'logonid','logonname','logondisplay','logongroup'],values)=nil) then
-    result := '' else begin
+       'logonid','logonname','logondisplay','logongroup'],values)=nil) then begin
+    Sender.fSessionData := '';
+    result := '';
+  end else begin
     SetString(result,values[0],StrLen(values[0]));
     Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
     Sender.fSessionServer := values[2];
@@ -49914,12 +49916,9 @@ begin
         break; // 2nd pass
       // 1st call will return data, 2nd call SessionKey
       result := ClientGetSessionKey(Sender,User,['UserName','','data',BinToBase64(OutData)]);
-      if result='' then
-        exit;
-      if Sender.fSessionData='' then
-        break;
-    until false;
-    result := SecDecrypt(SecCtx,Base64ToBin(result));
+    until Sender.fSessionData='';
+    if result<>'' then
+      result := SecDecrypt(SecCtx,Base64ToBin(result));
   finally
     FreeSecContext(SecCtx);
   end;
