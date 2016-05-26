@@ -1524,6 +1524,7 @@ type
     fCompressAcceptEncoding: SockString;
     /// set index of protocol in fCompress[], from ACCEPT-ENCODING: header
     fCompressHeader: THttpSocketCompressSet;
+    fTag: PtrInt;
     class function InternalREST(const url,method,data,header: SockString;
       aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString=nil): SockString;
     // inherited class should override those abstract methods
@@ -1629,6 +1630,8 @@ type
     // - will be replicated by IgnoreSSLCertificateErrors and Auth* properties
     property ExtendedOptions: THttpRequestExtendedOptions
       read fExtendedOptions write fExtendedOptions;
+    /// some internal field, which may be used by end-user code
+    property Tag: PtrInt read fTag write fTag;
   published
     /// the remote server host name, as stated specified to the class constructor
     property Server: SockString read fServer;
@@ -1822,7 +1825,8 @@ type
     /// set the client SSL certification details
     // - used e.g. as
     // ! UseClientCertificate('testcert.pem','cacert.pem','testkey.pem','pass');
-    procedure UseClientCertificate(const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
+    procedure UseClientCertificate(
+      const aCertFile, aCACertFile, aKeyName, aPassPhrase: SockString);
   end;
 
 {$endif USELIBCURL}
@@ -7257,7 +7261,7 @@ end;
 procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
     Callback: WINHTTP_STATUS_CALLBACK;
-    CallbackRes: Integer absolute Callback; // for FPC compatibility
+    CallbackRes: PtrInt absolute Callback; // for FPC compatibility
 begin
   if fProxyName='' then
     OpenType := WINHTTP_ACCESS_TYPE_DEFAULT_PROXY else
