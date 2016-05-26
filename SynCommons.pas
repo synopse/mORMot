@@ -8618,7 +8618,9 @@ type
     constructor Create(aStream: TStream; BufLen: integer=65536); overload;
     /// initialize the buffer, and specify a file to use for writing
     // - use an internal buffer of the specified size
-    constructor Create(const aFileName: TFileName; BufLen: integer=65536); overload;
+    // - would replace any existing file by default, unless Append is TRUE
+    constructor Create(const aFileName: TFileName; BufLen: integer=65536;
+      Append: boolean=false); overload;
     /// initialize the buffer, using an internal TStream instance
     // - parameter could be e.g. THeapMemoryStream or TRawByteStringStream
     // - use Flush then TMemoryStream(Stream) to retrieve its content, or
@@ -50454,9 +50456,16 @@ begin
   fInternalStream := true;
 end;
 
-constructor TFileBufferWriter.Create(const aFileName: TFileName; BufLen: integer);
+constructor TFileBufferWriter.Create(const aFileName: TFileName; BufLen: integer;
+  Append: boolean);
+var s: TStream;
 begin
-  Create(TFileStream.Create(aFileName,fmCreate),BufLen);
+  if Append and FileExists(aFileName) then begin
+    s := TFileStream.Create(aFileName,fmOpenWrite);
+    s.Seek(0,soFromEnd);
+  end else
+    s := TFileStream.Create(aFileName,fmCreate);
+  Create(s,BufLen);
   fInternalStream := true;
 end;
 
