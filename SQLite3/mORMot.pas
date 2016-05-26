@@ -2279,6 +2279,14 @@ type
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
+const
+  /// some open-minded options for JSONToObject() parsing
+  // - won't block JSON unserialization due to some minor class type definitions
+  // - used e.g. by TObjArraySerializer.CustomReader and
+  // TServiceMethodExecute.ExecuteJson methods
+  JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,
+    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty,j2oIgnoreStringType];
+
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - the data inside From^ is modified in-place (unescaped and transformed):
@@ -21659,8 +21667,7 @@ function TObjArraySerializer.CustomReader(P: PUTF8Char; var aValue;
 begin
   if TObject(aValue)=nil then
     TObject(aValue) := Instance.CreateNew;
-  result := JSONToObject(aValue,P,aValid,nil,[j2oHandleCustomVariants,
-    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty,j2oIgnoreStringType]);
+  result := JSONToObject(aValue,P,aValid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
 end;
 
 function InternalIsObjArray(aDynArrayTypeInfo: pointer): boolean;
@@ -37731,7 +37738,7 @@ begin
     if URIBlobFieldName='' then
       exit;
     value.InitObjectFromPath(URIBlobFieldName,Input['value']);
-    JsonToObject(SettingsStorage,pointer(value.ToJSON),valid,nil,[j2oIgnoreStringType]);
+    JsonToObject(SettingsStorage,pointer(value.ToJSON),valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
     if not valid then begin
       Error('Invalid input [%] - expected %',[variant(value),
         ClassFieldNamesAllPropsAsText(SettingsStorage.ClassType,true)]);
@@ -55763,9 +55770,7 @@ begin
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
-          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,
-            [j2oIgnoreUnknownProperty,j2oIgnoreStringType,
-             j2oIgnoreUnknownEnum,j2oHandleCustomVariants]);
+          Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
           if not valid then
             exit;
           IgnoreComma(Par);
