@@ -303,8 +303,12 @@ type
   TDDDSocketThreadMonitoring = class(TDDDAdministratedDaemonMonitor)
   protected
     fState: TDDDSocketThreadState;
-    fOwner: TDDDSocketThread;
+    fOwner: TObject;
     function GetSocket: variant;
+  public
+    /// may be a TDDDSocketThread instance, or not (to maintain a global state
+    // over several threads)
+    property Owner: TObject read fOwner write fOwner;
   published
     /// how this thread is currently connected to its associated TCP server
     property State: TDDDSocketThreadState read fState write fState;
@@ -935,10 +939,11 @@ end;
 
 function TDDDSocketThreadMonitoring.GetSocket: variant;
 begin
-  if (fOwner = nil) or (fOwner.fSocket = nil) then
+  if (fOwner = nil) or (not fOwner.InheritsFrom(TDDDSocketThread)) or
+     (TDDDSocketThread(fOwner).fSocket = nil) then
     SetVariantNull(result)
   else
-    ObjectToVariant(ObjectFromInterface(fOwner.fSocket), result);
+    ObjectToVariant(ObjectFromInterface(TDDDSocketThread(fOwner).fSocket), result);
 end;
 
 
@@ -953,7 +958,8 @@ begin
   if aMonitoring = nil then
     raise EDDDInfraException.CreateUTF8('%.Create(aMonitoring=nil)', [self]);
   fMonitoring := aMonitoring;
-  fMonitoring.fOwner := self;
+  if fMonitoring.fOwner=nil then
+    fMonitoring.fOwner := self;
   if fSettings.Host = '' then
     fSettings.Host := '127.0.0.1';
   fHost := fSettings.Host;
@@ -981,7 +987,8 @@ begin
     Sleep(10);
   until (fMonitoring.State = tpsDisconnected) or (GetTickCount64 > timeOut);
   inherited Destroy;
-  FreeAndNil(fMonitoring);
+  if fMonitoring.fOwner=self then
+    FreeAndNil(fMonitoring);
 end;
 
 procedure TDDDSocketThread.ExecuteConnect;

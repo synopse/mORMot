@@ -1282,6 +1282,9 @@ const
   // created by TSynLogFamily.EventArchiveSynLZ
   LOG_MAGIC = $ABA51051;
 
+  /// may be used to log as Debug or Error event, depending on an Error: boolean
+  LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (sllDebug, sllError);
+
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogInfo): RawUTF8; overload;
