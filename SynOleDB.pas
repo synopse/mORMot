@@ -1926,7 +1926,7 @@ begin
               // sent as DBTYPE_BYREF mapping directly RawByteString VBlob content
               B^.dwPart := DBPART_VALUE or DBPART_LENGTH or DBPART_STATUS;
               B^.obValue := PAnsiChar(@P^.VBlob)-pointer(fParams);
-              B^.cbMaxLen := sizeof(Pointer);
+              B^.cbMaxLen := length(P^.VBlob);
               P^.VInt64 := length(P^.VBlob); // store length in unused VInt64 property
               B^.obLength := PAnsiChar(@P^.VInt64)-pointer(fParams);
             end;
