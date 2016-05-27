@@ -2772,9 +2772,11 @@ type
     // - returns the SQLITE_* status code, as retrieved from sqlite3.close(fDB)
     // so that it should be SQLITE_OK on success
     function DBClose: integer;
+    {$ifndef DELPHI5OROLDER}
     /// for SQLite >= 3.11 - enable registation of a custom tokenizer
     // - see details at http://sqlite.org/fts3.html#f3tknzr
     function EnableCustomTokenizer: integer;
+    {$endif}
   public
     /// open a SQLite3 database file
     // - open an existing database file or create a new one if no file exists
@@ -4415,6 +4417,7 @@ begin
   fDB := 0;
 end;
 
+{$ifndef DELPHI5OROLDER}
 function TSQLDataBase.EnableCustomTokenizer: integer;
 {$ifdef WITHLOG}
 var FPCLog: ISynLog;
@@ -4431,6 +4434,7 @@ begin
     raise ESQLite3Exception.CreateUTF8('%.EnableCustomTokenizer called with no sqlite3 engine',[self]);
   result := sqlite3.db_config(fDB, SQLITE_DBCONFIG_ENABLE_FTS3_TOKENIZER, 1);
 end;
+{$endif}
 
 function TSQLDataBase.DBOpen: integer;
 var utf8: RawUTF8;
