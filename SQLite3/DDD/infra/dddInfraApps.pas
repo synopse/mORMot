@@ -99,6 +99,8 @@ type
     /// this abstract method should be overriden to return a new service/daemon
     // instance, using the (inherited) fSettings as parameters
     function NewDaemon: TDDDAdministratedDaemon; virtual;
+    /// returns some text to be supplied to the console for /help
+    function CustomHelp: string; virtual;
     {$ifdef MSWINDOWS} // to support Windows Services
     procedure DoStart(Sender: TService);
     procedure DoStop(Sender: TService);
@@ -672,11 +674,12 @@ var
   procedure Syntax;
   begin
     writeln('Try with one of the switches:');
-    writeln(ExeVersion.ProgramName,
+    writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
       ' /console -c /verbose /daemon -d /help -h /version');
     {$ifdef MSWINDOWS}
     writeln(ExeVersion.ProgramName, ' /install /uninstall /start /stop /state');
     {$endif}
+    writeln(CustomHelp);
   end;
 
 begin
@@ -834,6 +837,11 @@ begin
   ioresult;
 end;
 {$I+}
+
+function TDDDDaemon.CustomHelp: string;
+begin
+  result := '';
+end;
 
 
 { TDDDThreadDaemon }
