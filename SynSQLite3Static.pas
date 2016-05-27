@@ -778,11 +778,7 @@ begin
   F := FileOpen(FileName,fmOpenReadWrite);
   if F=INVALID_HANDLE_VALUE then
     exit;
-  {$ifdef MSWINDOWS}
   Size.Lo := GetFileSize(F,@Size.Hi);
-  {$else}
-  Int64(Size) := GetLargeFileSize(FileName);
-  {$endif}
   if (Size.Lo<=1024) and (Size.Hi=0) then begin
     FileClose(F); // file is to small to be modified
     exit;

@@ -1465,6 +1465,7 @@ type
   // - ready to be supplied e.g. to a THttpRequest sub-class
   // - used e.g. by class function THttpRequest.Get()
   TURI = {$ifdef UNICODE}record{$else}object{$endif}
+  public
     /// if the server is accessible via http:// or https://
     Https: boolean;
     /// the server name
@@ -2718,7 +2719,7 @@ end;
 function TURI.URI: SockString;
 const Prefix: array[boolean] of SockString = ('http://','https://');
 begin
-  if (Port='80') or (Port='443') or (Port='0') or (Port='') then
+  if (Port='') or (Port='0') or (Port=DEFAULT_PORT[Https]) then
     result := Prefix[Https]+Server+'/'+Address else
     result := Prefix[Https]+Server+':'+Port+'/'+Address;
 end;
@@ -7817,8 +7818,10 @@ var res: TCurlResult;
 begin
   curl.easy_setopt(fHandle,coHTTPHeader,fIn.Headers);
   res := curl.easy_perform(fHandle);
-  if res<>crOK then
-    result := STATUS_NOTFOUND else begin
+  if res<>crOK then begin
+    result := STATUS_NOTFOUND;
+    Data := SockString(format('libcurl easy_perform=%d', [ord(res)]));
+  end else begin
     curl.easy_getinfo(fHandle,ciResponseCode,rc);
     result := rc;
     Header := Trim(fOut.Header);

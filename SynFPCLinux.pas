@@ -130,9 +130,6 @@ function GetNowUTC: TDateTime;
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
-/// a wrapper around stat() to retrieve a file size
-function GetLargeFileSize(const aFile: string): int64;
-
 var
   /// will contain the current Linux kernel revision, as one integer
   // - e.g. $030d02 for 3.13.2, or $020620 for 2.6.32
@@ -350,20 +347,11 @@ end;
 function GetFileSize(hFile: cInt; lpFileSizeHigh: PDWORD): DWORD;
 var FileInfo: TStat;
 begin
-  if fpFstat(hFile,FileInfo)=0 then begin
-    result := Int64Rec(FileInfo.st_Size).Lo;
-    if lpFileSizeHigh<>nil then
-      lpFileSizeHigh^ := Int64Rec(FileInfo.st_Size).Hi;
-  end else
-    result := 0;
-end;
-
-function GetLargeFileSize(const aFile: string): int64;
-var FileInfo: TStat;
-begin
-  if fpStat(aFile,FileInfo)=0 then
-    result := FileInfo.st_size else
-    result := 0;
+  if fpFstat(hFile,FileInfo)<>0 then
+    FileInfo.st_Size := 0; // returns 0 on error
+  result := Int64Rec(FileInfo.st_Size).Lo;
+  if lpFileSizeHigh<>nil then
+    lpFileSizeHigh^ := Int64Rec(FileInfo.st_Size).Hi;
 end;
 
 procedure SleepHiRes(ms: cardinal);
@@ -403,4 +391,4 @@ initialization
   GetKernelRevision;
 {$endif DARWIN}
 {$endif Linux}
-end.
+end.

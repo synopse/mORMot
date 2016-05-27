@@ -25246,8 +25246,15 @@ begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
     result := 0;
 end;
 {$else}
+var f: THandle;
+    res: Int64Rec absolute result;
 begin
-  result := GetLargeFileSize(FileName);
+  result := 0;
+  f := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
+  if PtrInt(f)>0 then begin
+    res.Lo := GetFileSize(f,@res.Hi); // from SynKylix/SynFPCLinux
+    FileClose(f);
+  end;
 end;
 {$endif}
 

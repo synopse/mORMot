@@ -116,9 +116,6 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 /// a wrapper around stat() to retrieve a file size
 function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
 
-/// a wrapper around stat() to retrieve a file size
-function GetLargeFileSize(const aFile: AnsiString): int64;
-
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
@@ -223,14 +220,6 @@ begin // fstat64() returns error EBADF depending on open flags -> use lseek64
   result := Int64Rec(size).Lo;
   if lpFileSizeHigh<>nil then
     lpFileSizeHigh^ := Int64Rec(size).Hi;
-end;
-
-function GetLargeFileSize(const aFile: AnsiString): int64;
-var FileInfo: TStatBuf64;
-begin
-  if stat64(pointer(aFile),FileInfo)=0 then
-    result := FileInfo.st_size else
-    result := 0;
 end;
 
 const
