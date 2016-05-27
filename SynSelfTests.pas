@@ -4419,6 +4419,8 @@ procedure TTestLowLevelTypes.Variants;
 var v: Variant;
     vd: TVarData absolute v;
     t: pointer;
+    ni: TNullableInteger;
+    nt: TNullableUTF8Text;
 begin
   t := nil; // makes the compiler happy
   ValueVarToVariant(nil,sftBoolean,TVarData(v),false,t);
@@ -4503,6 +4505,20 @@ begin
   Check(VariantToDateTime('1982/10/30',vd.VDate));
   CheckSame(vd.VDate,30254);
   Check(not VariantToDateTime('201a',vd.VDate));
+  ni := NullableIntegerNull;
+  Check(NullableIntegerIsEmptyOrNull(ni));
+  ni := NullableInteger(10);
+  Check(not NullableIntegerIsEmptyOrNull(ni));
+  Check(NullableIntegerToValue(ni) = 10);
+  nt := NullableUTF8TextNull;
+  Check(NullableUTF8TextIsEmptyOrNull(nt));
+  nt := NullableUTF8Text('toto');
+  Check(not NullableUTF8TextIsEmptyOrNull(nt));
+  Check(NullableUTF8TextToValue(nt) = 'toto');
+  {$ifndef FPC} // FPC does not allow to mix variant derivated types
+  Check(ni = 10);
+  Check(nt = 'toto');
+  {$endif}
 end;
 
 type
@@ -5163,8 +5179,8 @@ var V,F: TFileVersion;
     i: integer;
     Valid: boolean;
 begin
-  V := TFileVersion.Create('',0,0,0);
-  F := TFileVersion.Create('',0,0,0);
+  V := TFileVersion.Create('',0,0,0,0);
+  F := TFileVersion.Create('',0,0,0,0);
   try
     for i := 1 to 1000 do begin
       if Full then begin

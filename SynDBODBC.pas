@@ -1060,7 +1060,7 @@ function ODBCInstalledDriversList(const aIncludeVersion: Boolean; out aDrivers: 
 
   function GetFullFileVersion(const aFileName: TFileName): string;
   begin
-    with TFileVersion.Create(aFileName,0,0,0) do
+    with TFileVersion.Create(aFileName,0,0,0,0) do
     try // five digits by section for easy version number comparison as string
       result := Format('%0.5d.%0.5d.%0.5d.%0.5d',[Major,Minor,Release,Build]);
     finally

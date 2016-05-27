@@ -2390,7 +2390,7 @@ You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
 :177  TNullable* fields for NULL storage
-In {\i Delphi}, nullable types do not exist, as they do for instance in C#, via the {\f1\fs20 int?} kind of definition.\line But at SQL and @*JSON@ levels, the @*NULL@ value does exist and are expected to be handled as expected by our ORM.
+In {\i Delphi}, nullable types do not exist, as they do for instance in C#, via the {\f1\fs20 int?} kind of definition.\line But at SQL and @*JSON@ levels, the @*NULL@ value does exist and are expected to be available from our ORM.
 In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).\line It is worth noting that NULL handling is not consistent among all existing database engines, e.g. when you are comparing NULL with non NULL values... so we recommend using it with case in any database statements, or only with proper (unit) testing, when you switch from one database engine to another.
 By default, in the {\i mORMot} ORM/SQL code, NULL will appear only in case of a BLOB storage with a size of {\f1\fs20 0} bytes. Otherwise, you should not see it as a value, in most used types - see @26@.
 Null-oriented value types have been implemented in our framework, since the object pascal language does not allow defining a nullable type (yet). We choose to store those values as {\f1\fs20 variant}, with a set of {\f1\fs20 @**TNullable@*} dedicated types, as defined in {\f1\fs20 mORMot.pas}:
@@ -2434,9 +2434,10 @@ You could use the following wrapper functions to create a {\f1\fs20 TNullable*} 
 !function NullableDateTime(const Value: TDateTime): TNullableDateTime;
 !function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
 !function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
-Some corresponding functions are able to return the expected {\f1\fs20 null} value for each kind, with strong typing (to be used for @*FPC@ compatibility, which does not allow direct assignment to a {\f1\fs20 TNullable* = type variant} property):
-!function NullableIntegerNull: TNullableInteger;
-!function NullableIntegerBoolean: TNullableBoolean;
+Some corresponding constants do match the expected {\f1\fs20 null} value for each kind, with strong typing (to be used for @*FPC@ compatibility, which does not allow direct assignment of a plain {\f1\fs20 null: variant} to a {\f1\fs20 TNullable* = type variant} property):
+!var
+!  NullableIntegerNull: TNullableInteger absolute NullVarData;
+!  NullableBooleanNull: TNullableBoolean absolute NullVarData;
 !...
 You could check for a {\f1\fs20 TNullable*} value to contain null, using the following functions:
 !function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
