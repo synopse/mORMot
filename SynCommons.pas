@@ -11203,7 +11203,7 @@ type
     // - you should not have to use this constructor, but rather access the
     // ExeVersion global variable
     constructor Create(const aFileName: TFileName;
-      aMajor,aMinor,aRelease: integer);
+      aMajor,aMinor,aRelease,aBuild: integer);
     /// retrieve the version as a 32 bits integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
@@ -11441,7 +11441,11 @@ var
 // - by default, the version numbers will be retrieved at startup from the
 // executable itself (if it was included at build time)
 // - but you can use this function to set any custom version numbers
-procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
+procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload;
+
+/// initialize ExeVersion global variable, supplying the version as text
+// - e.g. SetExecutableVersion('7.1.2.512');
+procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
 
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
@@ -25244,7 +25248,7 @@ begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
     PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
   end else
     result := 0;
-end;
+end;          
 {$else}
 var f: THandle;
     res: Int64Rec absolute result;
@@ -31833,7 +31837,7 @@ const
 { TFileVersion }
 
 constructor TFileVersion.Create(const aFileName: TFileName;
-  aMajor,aMinor,aRelease: integer);
+  aMajor,aMinor,aRelease,aBuild: integer);
 var M,D: word;
 {$ifdef MSWINDOWS}
     Size, Size2: DWord;
@@ -31847,6 +31851,7 @@ begin
   Major := aMajor; // some default values
   Minor := aMinor;
   Release := aRelease;
+  Build := aBuild;
   {$ifdef MSWINDOWS}
   if aFileName<>'' then begin
     // GetFileVersionInfo modifies the filename parameter data while parsing.
@@ -31900,7 +31905,7 @@ end;
 
 class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
 begin
-  with Create(aFileName,0,0,0) do
+  with Create(aFileName,0,0,0,0) do
   try
     FormatUTF8('% % %',[ExtractFileName(aFileName),Detailed,BuildDateTimeString],result);
   finally
@@ -31908,12 +31913,22 @@ begin
   end;
 end;
 
-procedure SetExecutableVersion(aMajor,aMinor,aRelease: integer);
+procedure SetExecutableVersion(const aVersionText: RawUTF8);
+var P: PUTF8Char;
+    i: integer;
+    ver: array[0..3] of integer;
+begin
+  P := pointer(aVersionText);
+  for i := 0 to 3 do
+    ver[i] := GetNextItemCardinal(P,'.');
+  SetExecutableVersion(ver[0],ver[1],ver[2],ver[3]);
+end;
+
+procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer);
 var setVersion,i: integer;
 {$ifdef MSWINDOWS}
     Tmp: array[byte] of WideChar;
     TmpSize: cardinal;
-{$else}
 {$endif}
 begin
   setVersion := aMajor shl 16+aMinor shl 8+aRelease;
@@ -31940,7 +31955,7 @@ begin
       InstanceFileName := GetModuleName(HInstance) else
       InstanceFileName := ProgramFileName;
     GarbageCollectorFreeAndNil(Version,
-      TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease));
+      TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease,aBuild));
     FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
     ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
@@ -56622,7 +56637,7 @@ initialization
   {$endif FPC}
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
-  SetExecutableVersion(0,0,0);
+  SetExecutableVersion(0,0,0,0);
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TFindFilesDynArray),
     'Name string Attr Integer Size Int64 TimeStamp TDateTime');
   // some type definition assertions
