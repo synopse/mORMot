@@ -2390,8 +2390,8 @@ You can change this default behavior, by setting:
 - Either {\f1\fs20 TSQLRestClientURI.@**ForceBlobTransfert@: boolean} property, to force the transfert of all BLOBs of all the tables of the data model - this is what is done e.g. for the {\i SynFile} main demo - see later in this document;
 - Or via {\f1\fs20 TSQLRestClientURI.TSQLRestClientURI.ForceBlobTransfertTable[]} property, for a specified table of the model.
 :177  TNullable* fields for NULL storage
-In {\i Delphi}, nullable types do not exist, as they do for instance in C#, via the {\f1\fs20 int?} kind of definition.\line But at SQL and @*JSON@ levels, the @*NULL@ value does exist and are expected to be available from our ORM.
-In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).\line It is worth noting that NULL handling is not consistent among all existing database engines, e.g. when you are comparing NULL with non NULL values... so we recommend using it with case in any database statements, or only with proper (unit) testing, when you switch from one database engine to another.
+In {\i Delphi}, nullable types do not exist, as they do for instance in C#, via the {\f1\fs20 int?} kind of definition.\line But at SQL and @*JSON@ levels, the @*NULL@ values do exist and are expected to be available from our ORM.
+In {\i @*SQLite3@} itself, NULL is handled as stated in @http://www.sqlite.org/lang_expr.html (see e.g. {\f1\fs20 IS} and {\f1\fs20 IS NOT} operators).\line It is worth noting that NULL handling is not consistent among all existing database engines, e.g. when you are comparing NULL with non NULL values... so we recommend using it with care in any database statements, or only with proper (unit) testing, when you switch from one database engine to another.
 By default, in the {\i mORMot} ORM/SQL code, NULL will appear only in case of a BLOB storage with a size of {\f1\fs20 0} bytes. Otherwise, you should not see it as a value, in most used types - see @26@.
 Null-oriented value types have been implemented in our framework, since the object pascal language does not allow defining a nullable type (yet). We choose to store those values as {\f1\fs20 variant}, with a set of {\f1\fs20 @**TNullable@*} dedicated types, as defined in {\f1\fs20 mORMot.pas}:
 !type
@@ -2450,6 +2450,7 @@ Or retrieve a Delphi non-nullable value in one step, using the corresponding wra
 !function NullableIntegerToValue(const V: TNullableInteger): Int64;
 !function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
 !...
+Those {\f1\fs20 Nullable*ToValue()} functions are mandatory for use under FPC, which does not allow mixing plain {\f1\fs20 variant} values and specialized {\f1\fs20 TNullable* = type variant} values.
 Thanks to those types, and their corresponding wrapper functions, you have at hand everything needed to safely store some nullable values into your application database, with proper handling on Delphi side.
 :164 Working with Objects
 To access a particular record, the following code can be used to handle @*CRUD@ statements ({\i Create Retrieve Update Delete} actions are implemented via {\i Add/Update/Delete/Retrieve} methods), following the @*REST@ful pattern - see @9@, and using the {\f1\fs20 ID} @*primary key@ as resource identifier:

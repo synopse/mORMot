@@ -10072,20 +10072,32 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
-{$ifdef CPUINTEL}
-var
-  /// the available CPU features, as recognized at program startup
-  CpuFeatures: set of
+type
+  /// the potential features, retrieved from an Intel CPU
+  // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
+  TIntelCpuFeature =
    ( { in EDX }
    cfFPU, cfVME, cfDE, cfPSE, cfTSC, cfMSR, cfPAE, cfMCE,
    cfCX8, cfAPIC, cf_d10, cfSEP, cfMTRR, cfPGE, cfMCA, cfCMOV,
    cfPAT, cfPSE36, cfPSN, cfCLFSH, cf_d20, cfDS, cfACPI, cfMMX,
-   cfFXSR, cfSSE, cfSSE2, cfSS, cfHT, cfTM, cfIA_64, cfPBE,
+   cfFXSR, cfSSE, cfSSE2, cfSS, cfHTT, cfTM, cfIA64, cfPBE,
    { in ECX }
-   cfSSE3, cf_c1, cf_c2, cfMON, cfDS_CPL, cf_c5, cf_c6, cfEIST,
-   cfTM2, cfSSSE3, cfCID, cfSSE5, cf_c12, cfCX16, cfxTPR, cf_c15,
-   cf_c16, cf_c17, cf_c18, cfSSE41, cfSSE42, cf_c21, cf_c22, cfPOPCNT,
-   cf_c24, cfAESNI, cf_c26, cf_c27, cfAVX, cf_c29, cf_c30, cf_HYP);
+   cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
+   cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
+   cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
+   cf_TSC, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP);
+
+  /// all features, as retrieved from an Intel CPU
+  TIntelCpuFeatures = set of TIntelCpuFeature;
+
+/// convert Intel CPU features as plain CSV text
+function ToText(const aIntelCPUFeatures: TIntelCpuFeatures;
+  const Sep: RawUTF8=','): RawUTF8; overload;
+
+{$ifdef CPUINTEL}
+var
+  /// the available CPU features, as recognized at program startup
+  CpuFeatures: TIntelCpuFeatures;
 
 /// compute CRC32C checksum on the supplied buffer using SSE 4.2
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
@@ -31717,6 +31729,22 @@ begin
   end;
 end;
 
+function ToText(const aIntelCPUFeatures: TIntelCpuFeatures; const Sep: RawUTF8): RawUTF8;
+var f: TIntelCpuFeature;
+    List: PShortString;
+    MaxValue: integer;
+begin
+  result := '';
+  if GetEnumInfo(TypeInfo(TIntelCpuFeature),MaxValue,List) then
+    for f := low(f) to high(f) do begin
+      if (f in aIntelCPUFeatures) and (List^[3]<>'_') then begin
+        if result<>'' then
+          result := result+Sep;
+        result := result+copy(List^,3,10);
+      end;
+      inc(PByte(List),ord(List^[0])+1); // next short string
+    end;
+end;
 
 function SystemInfoJson: RawUTF8;
 begin
@@ -31724,8 +31752,7 @@ begin
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
-      'hyperthread',cfHT in CpuFeatures,'sse2',cfSSE2 in CpuFeatures,
-      'sse42',cfSSE42 in CpuFeatures,'aesni',cfAESNI in CpuFeatures,
+      'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
       {$endif}{$endif}
       'cpucount',
       {$ifdef MSWINDOWS}
