@@ -1081,6 +1081,7 @@ type
     /// as extracted from the .log header
     fExeName, fExeVersion, fHost, fUser, fCPU, fOSDetailed, fInstanceName: RawUTF8;
     fExeDate: TDateTime;
+    fIntelCPU: TIntelCpuFeatures;
     {$ifdef MSWINDOWS}
     fOS: TWindowsVersion;
     fOSServicePack: integer;
@@ -1180,6 +1181,11 @@ type
     property Freq: Int64 read fFreq;
     /// custom headers, to be searched as .ini content
     property Headers: RawUTF8 read fHeaders;
+    /// the available CPU features, as recognized at program startup
+    // - is extracted from the last part of the CPU property text
+    // - you could use the overloaded ToText() function to show it in an
+    // human-friendly way
+    property IntelCPU: TIntelCpuFeatures read fIntelCPU;
   published
     /// the associated executable name (with path)
     // - returns e.g. 'C:\Dev\lib\SQLite3\exe\TestSQL3.exe'
@@ -3521,6 +3527,9 @@ begin
       AddShort(' CPU=');  Add(dwNumberOfProcessors); Add('*');
       Add(wProcessorArchitecture); Add('-'); Add(wProcessorLevel); Add('-');
       Add(wProcessorRevision);
+      {$ifdef CPUINTEL}
+      Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
+      {$endif}
       AddShort(' OS='); Add(ord(OSVersion)); Add('.'); Add(wServicePackMajor);
       Add('='); Add(dwMajorVersion); Add('.'); Add(dwMinorVersion); Add('.');
       Add(dwBuildNumber);
@@ -3531,6 +3540,9 @@ begin
     Add(SystemInfo.nprocs);
     {$ifdef KYLIX3}
     Add('/'); Add(LibC.get_nprocs_conf);
+    {$endif}
+    {$ifdef CPUINTEL}
+    Add(':'); AddBinToHex(@CpuFeatures,SizeOf(CpuFeatures));
     {$endif}
     AddShort(' OS=');
     AddNoJSONEscape(@SystemInfo.uts.sysname); Add('-');
@@ -4208,7 +4220,7 @@ procedure TSynLogFile.LoadFromMap(AverageLineLength: integer=32);
     Log.fCount := aCount;
     assert(pCount=Log.fLogProcNaturalCount);
   end;
-var aWow64: RawUTF8;
+var aWow64, feat: RawUTF8;
     i, j, Level: integer;
     TSEnter, TSLeave: Int64;
     OK: boolean;
@@ -4252,6 +4264,8 @@ begin
        not GetOne(' OS=',fCPU)    or not GetOne(' WOW64=',fOsDetailed) or
        not GetOne(' FREQ=',aWow64) then
       exit;
+    Split(fCPU,':',fCpu,feat);
+    SynCommons.HexToBin(pointer(feat),@fIntelCPU,SizeOf(fIntelCPU));
     {$ifdef MSWINDOWS}
     fWow64 := aWow64='1';
     {$endif}
