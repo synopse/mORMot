@@ -7395,6 +7395,38 @@ function CreateGuid(out guid: TGUID): HResult; stdcall;
   external 'ole32.dll' name 'CoCreateGuid';
 {$endif}
 
+{$ifdef CPUINTEL}
+/// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
+function RdRand32: cardinal;
+{$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm
+  .noframe
+{$endif FPC}
+{$endif CPU64}
+{$ifdef CPU32}
+asm
+{$endif}
+  // rdrand eax: same opcodes for x86 and x64
+  db $0f,$c7,$f0
+  // returns in eax, ignore carry flag (eax=0 won't hurt)
+end;
+
+// https://software.intel.com/en-us/articles/intel-digital-random-number-generator-drng-software-implementation-guide
+procedure AddEntropyFromCPU(var sha: TSHA256);
+var i, val: cardinal;
+begin
+  sha.Update(@CpuFeatures,sizeof(CpuFeatures));
+  if cfRAND in CpuFeatures then
+    for i := 1 to 20 do begin
+      val := RdRand32;
+      sha.Update(@val,sizeof(val));
+    end;
+end;
+{$endif}
+
 class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
 var time: Int64;
     ext: TSynExtended;
@@ -7458,6 +7490,9 @@ begin
   sha.Init;
   sha.Update(@time,sizeof(time));
   sha.Update(@entropy,sizeof(entropy));  // bytes on CPU stack
+  {$ifdef CPUINTEL}
+  AddEntropyFromCPU(sha);
+  {$endif}
   ext := NowUTC;
   sha.Update(@ext,sizeof(ext));
   ext := Random;
@@ -7471,15 +7506,15 @@ begin
   sha.Final(entropy[1]);
   sha.Update(@time,sizeof(time));
   sha.Update(@entropy,sizeof(entropy));
+  {$ifdef CPUINTEL}
+  AddEntropyFromCPU(sha);
+  {$endif}
   for i := 1 to 5 do begin
     CreateGUID(g); // not random, but genuine
     sha.Update(@g,sizeof(g));
   end;
   sha.Update(@SystemInfo,sizeof(SystemInfo));
   sha.Update(pointer(OSVersionText),Length(OSVersionText));
-  {$ifdef CPUINTEL}
-  sha.Update(@CpuFeatures,sizeof(CpuFeatures));
-  {$endif}
   SleepHiRes(0); // force non deterministic time shift
   QueryPerformanceCounter(time);
   sha.Update(@time,sizeof(time)); // include GetEntropy() execution time
@@ -7488,6 +7523,11 @@ begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+    for i := 0 to (Len shr 2)-1 do
+      PCardinalArray(p)^[i] := PCardinalArray(p)^[i] xor RdRand32;
+  {$endif}
 end;
 
 procedure TAESPRNG.Seed;
@@ -7502,7 +7542,8 @@ begin
   EnterCriticalSection(fLock);
   PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
   fAES.EncryptInit(key,256);
-  FillCharFast(key,sizeof(key),0); // avoid the key appear in clear on stack
+  FillcharFast(key,sizeof(key),0); // avoid the key appear in clear on stack
+  FillcharFast(pointer(pass)^,length(pass),0); // remove entropy from heap
   assert(SALTLEN>=sizeof(fCTR));
   MoveFast(pointer(salt)^,fCTR,sizeof(fCTR));
   fCTR[0] := fCTR[0] xor fTotalBytes;
