@@ -6,11 +6,17 @@ uses
   SynTaskDialog,
   mORMot,
   mORMotUILogin,
-  Forms;
+  Forms
+  {$ifdef FPC}
+  ,Interfaces
+  {$endif}
+  ;
 
+{$ifndef FPC}
 {$R *.res}
 
 {$R Vista.res} // to enable XP/Vista/Seven theming
+{$endif}
 
 var
   MainCounter: integer;

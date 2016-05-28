@@ -595,14 +595,18 @@ end;
 
 procedure TDDDDaemon.DoStart(Sender: TService);
 begin
+  {$ifdef WITHLOG}
   SQLite3Log.Enter('DoStart %',[fSettings.ServiceName],self);
+  {$endif}
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
 
 procedure TDDDDaemon.DoStop(Sender: TService);
 begin
+  {$ifdef WITHLOG}
   SQLite3Log.Enter('DoStop %',[fSettings.ServiceName],self);
+  {$endif}
   fDaemon := nil; // will stop the daemon
 end;
 
@@ -612,7 +616,9 @@ function TDDDDaemon.NewDaemon: TDDDAdministratedDaemon;
 begin
   if Assigned(fSettings) then 
     if fSettings.Log.LowLevelWebSocketsFrames then begin
+      {$ifdef WITHLOG}
       WebSocketLog := SQLite3Log;
+      {$endif}
       HttpServerFullWebSocketsLog := true;
       HttpClientFullWebSocketsLog := true;
     end;
@@ -621,7 +627,9 @@ end;
 
 procedure TDDDDaemon.Execute;
 begin
+  {$ifdef WITHLOG}
   SQLite3Log.Enter(self);
+  {$endif}
   fDaemon := NewDaemon;
   fDaemon.Start;
 end;
@@ -737,12 +745,14 @@ begin
         begin
           writeln('Launched in ', cmdText, ' mode'#10);
           TextColor(ccLightGray);
+          {$ifdef WITHLOG}
           case cmd of
             cConsole:
               SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE + [sllDDDInfo];
             cVerbose:
               SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
           end;
+          {$endif}
           daemon := NewDaemon;
           try
             fDaemon := daemon;
@@ -1770,7 +1780,9 @@ begin
   if Settings.Storage is TDDDAppSettingsStorageFile then
     result.InternalSettingsFolder := ExtractFilePath(
       TDDDAppSettingsStorageFile(Settings.Storage).SettingsJsonFileName);
+  {$ifdef WITHLOG}
   result.Log.SynLog.Log(sllTrace, '%.Create(%)', [DaemonClass, Settings], result);
+  {$endif}
   with Settings.RemoteAdmin do
     if AuthHttp.BindPort <> '' then
       result.AdministrationHTTPServer := TSQLHttpServer.Create(

@@ -34,7 +34,9 @@ implementation
 
 {$R *.dfm}
 
+{$ifndef FPC}
 {$R Vista.res}
+{$endif FPC}
 
 procedure TForm1.btnCancelClick(Sender: TObject);
 begin

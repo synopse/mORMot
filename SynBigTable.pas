@@ -1920,6 +1920,7 @@ var i,j, n, aID, index: integer;
     stop: array[deleted..alias] of cardinal;
     GetID: PInteger absolute Opaque;
     Physical: PIterateGetDynArrayIntegerOpaque absolute Opaque;
+    p: pointer; // alf: to circumvent FPC issues
 label CallBack;
 begin
   if self=nil then
@@ -2020,10 +2021,11 @@ begin
                 exit; // forced iteration break
             end else begin
               index := IDToIndex(fAliasReal[next[updated]],false);
-              if index>=0 then
-CallBack:       if not aCallBack(self,Opaque,aID,index,
-                   GetPointerFromIndex(index,aTempData,@DataLen),DataLen) then
+              if index>=0 then begin
+CallBack:       p := GetPointerFromIndex(index,aTempData,PInteger(@DataLen));
+                if not aCallBack(self,Opaque,aID,index,p,DataLen) then
                   exit; // forced iteration break
+              end;
               end;
             end;
           inc(next[stopper]); // find next fDeleted[] or fAlias*[]
@@ -2033,9 +2035,11 @@ CallBack:       if not aCallBack(self,Opaque,aID,index,
           if not aCallBack(self,Opaque,aID,0,nil,0) then
             exit; // forced iteration break
         end else
-        if not aCallBack(self,Opaque,aID,i,
-           GetPointerFromIndex(i,aTempData,@DataLen),DataLen) then
-          exit; // forced iteration break
+        begin
+          p := GetPointerFromIndex(i,aTempData,PInteger(@DataLen));
+          if not aCallBack(self,Opaque,aID,i,p,DataLen) then
+            exit; // forced iteration break
+      end;
       end;
       end; // case Order of
     end;

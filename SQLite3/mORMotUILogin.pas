@@ -86,8 +86,11 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Consts,
-  Controls, Forms, StdCtrls, ExtCtrls, Buttons, PsAPI,
+  Windows, PsAPI, Messages, SysUtils, Classes, Graphics,
+  {$ifndef FPC}
+  Consts,
+  {$endif}
+  Controls, Forms, StdCtrls, ExtCtrls, Buttons,
 {$ifdef USETMSPACK}
   AdvGlowButton, TaskDialog, TaskDialogEx, AdvToolBarStylers, AdvToolBar,
 {$endif USETMSPACK}

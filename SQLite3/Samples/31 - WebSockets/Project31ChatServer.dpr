@@ -1,6 +1,8 @@
 /// simple SOA server using callbacks for a chat room
 program Project31ChatServer;
 
+{$APPTYPE CONSOLE}
+
 uses
   {$I SynDprUses.inc} // use FastMM4 on older versions of Delphi
   SysUtils,
@@ -11,8 +13,6 @@ uses
   SynBidirSock,
   mORMotHttpServer,
   Project31ChatCallbackInterface in 'Project31ChatCallbackInterface.pas';
-
-{$APPTYPE CONSOLE}
 
 type
   TChatService = class(TInterfacedObject,IChatService)
@@ -92,4 +92,4 @@ begin
     on E: Exception do
       ConsoleShowFatalException(E);
   end;
-end.
+end.

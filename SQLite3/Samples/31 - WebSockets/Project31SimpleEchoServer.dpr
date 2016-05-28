@@ -40,7 +40,7 @@ procedure Run;
 var Server: TWebSocketServer;
     protocol: TWebSocketProtocolEcho;
 begin
-  Server := TWebSocketServer.Create('8888');
+  Server := TWebSocketServer.Create('8888',nil,nil,'test');
   try
     protocol := TWebSocketProtocolEcho.Create('meow','');
     protocol.OnIncomingFrame := protocol.EchoFrame;

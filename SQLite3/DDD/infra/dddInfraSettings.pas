@@ -493,6 +493,7 @@ implementation
 
 procedure TDDDAppSettingsAbstract.Initialize(const aDescription: string);
 begin
+  {$ifdef WITHLOG}
   with SQLite3Log.Family do begin
     Level := Log.Levels-[sllNone]; // '*' would include sllNone
     if Log.ConsoleLevels<>[] then
@@ -512,6 +513,7 @@ begin
     AutoFlushTimeOut := Log.AutoFlushTimeOut;
     {$endif}
   end;
+  {$endif}
   if fDescription='' then
     fDescription := aDescription;
 end;

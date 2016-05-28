@@ -11214,8 +11214,8 @@ type
     // the executable resources (on compilation time)
     // - you should not have to use this constructor, but rather access the
     // ExeVersion global variable
-    constructor Create(const aFileName: TFileName;
-      aMajor,aMinor,aRelease,aBuild: integer);
+    constructor Create(const aFileName: TFileName; aMajor: integer=0;
+      aMinor: integer=0; aRelease: integer=0; aBuild: integer=0);
     /// retrieve the version as a 32 bits integer with Major.Minor.Release
     // - following Major shl 16+Minor shl 8+Release bit pattern
     function Version32: integer;
@@ -17926,10 +17926,14 @@ begin
       exit;
     end;
     vtChar: begin
+      {$ifdef FPC} // alf: to circumvent FPC issues
+      RawUnicodeToUtf8(@V.VChar,1,tmpStr);
+      {$else}
       Res.Text := @V.VChar;
       Res.Len := 1;
       result := 1;
       exit;
+      {$endif}
     end;
     vtPWideChar:
       RawUnicodeToUtf8(V.VPWideChar,StrLenW(V.VPWideChar),tmpStr);
@@ -18422,7 +18426,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
 end;
 {$else}
 {$ifdef PUREPASCAL}
-var c100: cardinal;
+var c100: PtrUInt;
 begin // this code is faster than the Borland's original str() or IntToStr()
   repeat
     if val<10 then begin
@@ -19023,7 +19027,7 @@ begin
   tmp.wr(rtti^.NameLen,rtti^.NameLen+1);
   inc(PByte(rtti),rtti^.NameLen);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  rtti := align(rtti);
+  rtti := align(rtti,sizeof(rtti));
   {$endif}
   with rtti^ do
   case k of
@@ -19064,7 +19068,7 @@ begin
     n := @UnitNameLen;
     inc(n,UnitNameLen+1);
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    n := align(n);
+    n := align(n,sizeof(n));
     {$endif}
     for i := 1 to PropCount do begin
       wrtype(np^.PropType);
@@ -19082,7 +19086,7 @@ begin
       tmp.wr(np^.NameLen,np^.NameLen+1);
       n := PAnsiChar(@np^.NameLen)+np^.NameLen+1;
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      n := align(n);
+      n := align(n,sizeof(n));
       {$endif}
     end;
   end;
@@ -19128,7 +19132,7 @@ var rtti: PTypeInfo;
     tmp.wr(n^,len); // copy whole shortstring at once
     inc(n,len);
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    n := align(n);
+    n := align(n,sizeof(n));
     {$endif}
   end;
   function wrtype: pointer;
@@ -21917,6 +21921,9 @@ begin
   A := 0;
   P := 0;
   F := pointer(Format);
+  {$ifdef FPC}
+  try // alf: to circumvent FPC issues
+  {$endif}
   while F^<>#0 do begin
     if F^<>'%' then begin
       FDeb := F;
@@ -21998,6 +22005,11 @@ Txt:  len := F-FDeb;
       inc(F,2);
     end;
   end;
+  {$ifdef FPC}
+  finally
+    finalize(tmp);
+  end;
+  {$endif}
 end;
 
 function RawByteStringArrayConcat(const Values: array of RawByteString): RawByteString;
@@ -31740,7 +31752,7 @@ begin
       if (f in aIntelCPUFeatures) and (List^[3]<>'_') then begin
         if result<>'' then
           result := result+Sep;
-        result := result+copy(List^,3,10);
+        result := result+RawUTF8(copy(List^,3,10));
       end;
       inc(PByte(List),ord(List^[0])+1); // next short string
     end;

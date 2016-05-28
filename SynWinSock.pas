@@ -103,17 +103,22 @@ type
   u_long = Longint;
   pu_long = ^u_long;
   pu_short = ^u_short;
-  {$ifdef UNICODE}
-  TSocket = NativeInt;
+  {$ifdef FPC}
+  TSocket = PtrInt;
   {$else}
-  TSocket = integer;
+    {$ifdef UNICODE}
+    TSocket = NativeInt;
+    {$else}
+    TSocket = integer;
+    {$endif UNICODE}
   {$endif}
+
 
 const
   {$IFDEF WINSOCK1}
-    DLLStackName: PChar = 'wsock32.dll';
+  DLLStackName: PChar = 'wsock32.dll';
   {$ELSE}
-    DLLStackName: PChar = 'ws2_32.dll';
+  DLLStackName: PChar = 'ws2_32.dll';
   {$ENDIF}
   DLLwship6: PChar = 'wship6.dll';
 
@@ -128,6 +133,7 @@ const
 
 const
   FD_SETSIZE     =   64;
+
 type
   PFDSet = ^TFDSet;
   TFDSet = record

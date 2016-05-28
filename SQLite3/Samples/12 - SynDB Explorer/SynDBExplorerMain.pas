@@ -8,8 +8,11 @@ interface
 
 uses
   Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Grids, ExtCtrls, StdCtrls, Consts,
+  Grids, ExtCtrls, StdCtrls,
+  {$ifndef FPC}
+  Consts,
   {$ifdef HASINLINE}XPMan, Contnrs,{$endif}
+  {$endif}
   {$ifdef ISDELPHIXE}
   SynSQLite3RegEx, // use direct PCRE library as available since Delphi XE
   {$endif}

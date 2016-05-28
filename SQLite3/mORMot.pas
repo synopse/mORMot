@@ -5921,7 +5921,7 @@ type
     /// the instance ID for interface-based services instance
     // - can be e.g. the client session ID for sicPerSession or the thread ID for
     // sicPerThread
-    ServiceInstanceID: cardinal;
+    ServiceInstanceID: PtrUInt;
     /// the current execution context of an interface-based service
     // - maps to Service.fExecution[ServiceMethodIndex]
     ServiceExecution: PServiceFactoryExecution;
@@ -10001,10 +10001,18 @@ type
     InStackOffset: integer;
     /// used to specify if the argument is passed as register
     // - contains 0 if parameter is not a register
-    // - contains 1 for EAX, 2 for EDX and 3 for ECX registers (for x86)
-    // - contains 1 for RCX/XMM0L, 2 for RDX/XMM1L, 3 for R8/XMM2L, and
-    // 4 for R9/XMM3L, with a backing store on the stack (for Win64)
+    // - contains 1 for EAX, 2 for EDX and 3 for ECX registers for x86
+    // - contains 1 for RCX, 2 for RDX, 3 for R8, and
+    // 4 for R9, with a backing store on the stack for x64
+    // - contains 1 for R0, 2 R1 ... 4 for R3, with a backing store on the stack for arm
+    // - contains 1 for X0, 2 X1 ... 8 for X7, with a backing store on the stack for aarch64
     RegisterIdent: integer;
+    /// used to specify if a floating-point argument is passed as register
+    // - contains 0 for x86 (since the x87 FPU stack is used instead)
+    // - contains 1 for XMM0, 2 for XMM1 ... 4 for XMM3 for x64
+    // - contains 1 for D0, 2 D1 ... 8 for D7 for armhf
+    // - contains 1 for V0, 2 V1 ... 8 for V7 for aarch64
+    FPRegisterIdent: integer;
     /// size (in bytes) of this argument on the stack
     SizeInStack: integer;
     /// size (in bytes) of this smvv64 ordinal value
@@ -10330,7 +10338,7 @@ type
     fOutput: TDocVariantData;
     fCurrentStep: TServiceMethodExecuteEventStep;
     procedure BeforeExecute;
-    procedure RawExecute(Instances: PPointerArray; InstancesLast: integer);
+    procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer);
     procedure AfterExecute;
   public
     /// initialize the execution instance
@@ -10345,7 +10353,7 @@ type
     // - will retrieve a JSON array of parameters from Par
     // - will append a JSON array of results in Res, or set an Error message, or
     // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
-    function ExecuteJson(Instances: array of pointer; Par: PUTF8Char;
+    function ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
     /// low-level direct access to the associated method information
     property Method: PServiceMethod read fMethod;
@@ -10739,6 +10747,9 @@ type
     fFakeStub: PByteArray;
     fMethodIndexCallbackReleased: Integer;
     fMethodIndexCurrentFrameCallback: Integer;
+    {$ifdef CPUAARCH64} 
+    fDetectX0ResultMagic: cardinal; // alf: temporary hack for AARCH64
+    {$endif}
     procedure AddMethodsFromTypeInfo(aInterface: PTypeInfo); virtual; abstract;
     function GetMethodsVirtualTable: pointer;
   public
@@ -11758,7 +11769,7 @@ type
   public
     /// the internal Instance ID, as remotely sent in "id":1
     // - is set to 0 when an entry in the array is free
-    InstanceID: Cardinal;
+    InstanceID: PtrUInt;
     /// GetTickCount64() time stamp corresponding to the last access of
     // this instance
     LastAccess64: Int64;
@@ -23405,6 +23416,10 @@ begin
   FillcharFast(Bits,(fRowCount shr 3)+1,0);
   for i := 0 to nSet-1 do
     SetBit(Bits,i); // slow but accurate
+  {$ifdef FPC}
+  Finalize(oldIDColumn); // alf: to circumvent FPC issues
+  Finalize(oldResults);
+  {$endif}
 end;
 
 function TSQLTable.IDColumnHide: boolean;
@@ -28179,6 +28194,10 @@ type
   TIntfFlag = (ifHasGuid,ifDispInterface,ifDispatch{$ifdef FPC},ifHasStrGUID{$endif});
   TIntfFlags = set of TIntfFlag;
 
+  {$ifdef FPC}
+  {$PACKRECORDS C}
+  {$endif}
+
   PInterfaceTypeData = ^TInterfaceTypeData;
   TInterfaceTypeData =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
@@ -28198,6 +28217,10 @@ type
     RawIntfUnit: ShortString;
     IIDStr: ShortString;
   end;
+  {$endif}
+
+  {$ifdef FPC}
+  {$PACKRECORDS DEFAULT}
   {$endif}
 
 
@@ -28469,13 +28492,31 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
 end;
 
 function TTypeInfo.FloatType: TFloatType;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td: PTypeData;
+{$endif}
 begin
-  result := TFloatType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  td := GetTypeData(@Self);
+  result := TFloatType(PByte(td)^);
+  {$else}
+  result := TFloatType(PByte(@Name[ord(Name[0])+1])^);
+  {$endif}
 end;
 
 function TTypeInfo.OrdType: TOrdType;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td: PTypeData;
+{$endif}
 begin
-  result := TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  td := GetTypeData(@Self);
+  result := TOrdType(PByte(td)^);
+  {$else}
+  result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
+  {$endif}
 end;
 
 function TTypeInfo.SetEnumType: PEnumType;
@@ -28484,7 +28525,7 @@ var p: pointer;
 begin
   if (@self=nil) or (Kind<>tkSet) then
     result := nil else begin
-    p := AlignToPtr(@Name[ord(Name[0])+1]);
+    p := pointer(GetTypeData(@Self));
     inc(p,sizeof(TOrdType));
     p := AlignToPtr(p);
     result := PPTypeInfo(PPointer(p)^)^.EnumBaseType;
@@ -28513,12 +28554,23 @@ begin
 end;
 
 function TTypeInfo.AnsiStringCodePage: integer;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td: PTypeData;
+{$endif}
 begin
   {$ifdef HASCODEPAGE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
     if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
-      result := PWord(AlignToPtr(@Name[ord(Name[0])+1]))^ else // from RTTI
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    begin
+      td := GetTypeData(@Self);
+      result := PWORD(td)^;
+    end else
+    {$else}
+      result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
+    {$endif}
   {$else}
   if @self=TypeInfo(RawUTF8) then
     result := CP_UTF8 else
@@ -28537,27 +28589,59 @@ begin
 end;
 
 function TTypeInfo.InterfaceGUID: PGUID;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td:PTypeData;
+{$endif}
 begin
-  if (@self=nil) or (Kind<>tkInterface) then
-    result := nil else
-    result := AlignToPtr(@PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfGuid);
+  if (@self=nil) or (Kind<>tkInterface) then result := nil else
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  begin
+    td := GetTypeData(@Self);
+    result := @td^.GUID;
+  end;
+  {$else}
+    result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfGuid;
+  {$endif}
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td: PTypeData;
+{$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    result := AlignToPtr(@PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^.IntfUnit);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    begin
+      td := GetTypeData(@Self);
+      result := @td^.IntfUnit;
+    end;
+    {$else}
+      result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfUnit;
+    {$endif}
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+var
+  td: PTypeData;
+{$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    with PInterfaceTypeData(AlignToPtr(@Name[ord(Name[0])+1]))^ do
+    begin
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      td := GetTypeData(@Self);
+      with td^ do
+      {$else}
+      with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
+      {$endif}
       if IntfParent=nil then
         result := nil else
-        result := IntfParent{$ifndef FPC}^{$endif};
+          result := mORMot.PTypeInfo(IntfParent{$ifndef FPC}^{$endif});
+    end;
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -28571,14 +28655,22 @@ begin
   if (@self=nil) or (Kind<>tkInterface) then
     exit;
   n := 0;
-  typ := AlignToPtr(@Name[ord(Name[0])+1]);
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  typ := PInterfaceTypeData(GetTypeData(@Self));
+  {$else}
+  typ := @Name[ord(Name[0])+1];
+  {$endif}
   repeat
     if typ^.IntfParent=nil then
       exit;
     nfo := typ^.IntfParent{$ifndef FPC}^{$endif};
     if nfo=TypeInfo(IInterface) then
       exit;
-    typ := AlignToPtr(@nfo^.Name[ord(nfo^.Name[0])+1]);
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    typ := PInterfaceTypeData(GetTypeData(@nfo));
+    {$else}
+    typ := @nfo^.Name[ord(nfo^.Name[0])+1];
+    {$endif}
     if ifHasGuid in typ^.IntfFlags then begin
       if OnlyImplementedBy<>nil then begin
         entry := OnlyImplementedBy.GetInterfaceEntry(typ^.IntfGuid);
@@ -30464,6 +30556,9 @@ begin
   Objects[0] := self;
   ObjectsClass[0] := PSQLRecordClass(self)^;
   SetLength(fFill.fTableMapRecordManyInstances,n);  // fFill.UnMap will release memory
+  aSQLWhere := '';  // alf: to circumvent FPC issues
+  aSQLFields := '';
+  aSQLFrom := '';
   for f := 0 to n-1 do begin
     M := TSQLRecordMany(Props.ManyFields[f].GetInstance(self));
     if M=nil then
@@ -30905,6 +31000,7 @@ begin
   if (self=nil) or IsZero(aFields) then
     // avoid GPF and handle case if no field was selected
     exit;
+  Value := '';  // alf: to circumvent FPC issues
   with RecordProps do
   if Filters<>nil then
   for f := 0 to Fields.Count-1 do
@@ -36093,8 +36189,21 @@ begin
   Res.Magic := MAGIC_SYN;
   Res.Status := call.OutStatus;
   Res.InternalState := call.OutInternalState;
+  {$ifdef FPC} // alf: to circumvent FPC issues
+  ResStr := '';
+  SetLength(ResStr,sizeof(Res)+Length(call.OutHead)+1+Length(call.OutBody));
+  P := pointer(ResStr);
+  System.Move(Pointer(@Res)^,P^,sizeof(Res));
+  Inc(P,sizeof(Res));
+  System.Move(pointer(call.OutHead)^,P^,Length(call.OutHead));
+  Inc(P,Length(call.OutHead));
+  PByte(P)^ := 1;
+  Inc(P);
+  System.Move(pointer(call.OutBody)^,P^,Length(call.OutBody));
+  {$else}
   SetString(ResStr,PAnsiChar(@Res),sizeof(Res));
   ResStr := ResStr+call.OutHead+#1+call.OutBody;
+  {$endif FPC}
   Data.dwData := fServerWindow;
   Data.cbData := length(ResStr);
   Data.lpData := pointer(ResStr);
@@ -41601,7 +41710,9 @@ begin
   for g := low(fStoredCache) to high(fStoredCache) do
     fStoredCache[g] := fStoredClass.Create;
   fProcessID := aProcessID;
+  {$ifdef WITHLOG}
   fLog := fStorage.LogFamily;
+  {$endif}
   inherited Create;
 end;
 
@@ -43256,6 +43367,7 @@ begin
   // search indexes, then apply updates
   Where := TList.Create;
   StorageLock(true);
+  SetValueJson := ''; // alf: to circumvent FPC issues
   try
     // find matching Where[]
     if FindWhereEqual(WhereFieldIndex,WhereValueString,AddIntegerDynArrayEvent,Where,0,0)=0 then
@@ -46592,7 +46704,7 @@ function TSQLRecordInterfaced.QueryInterface(const IID: TGUID; out Obj): HResult
 begin
   if GetInterface(IID,Obj) then
     result := 0 else
-    result := E_NOINTERFACE;
+    result := {$ifdef FPC}longint{$endif}(E_NOINTERFACE);
 end;
 
 function TSQLRecordInterfaced._AddRef: {$ifdef FPC}longint{$else}integer{$endif};
@@ -47975,6 +48087,7 @@ var where: RawUTF8;
     i: integer;
     aID: TID;
 begin
+  where := ''; // alf: to circumvent FPC issues
   if (fProcessRest=nil) or (fProcessRec=nil) or (fFieldNames=nil) then
     result := true else begin
     for i := 0 to high(fFieldNames) do begin
@@ -50211,10 +50324,18 @@ const
 // see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 
 {$ifdef CPU64}
-const
   // maximum stack size at method execution must match .PARAMS 64 (minus 4 regs)
   MAX_EXECSTACK = 60*8;
+{$else}
+  // maximum stack size at method execution
+  {$ifdef CPUARM}
+  MAX_EXECSTACK = 60*4;
+  {$else}
+  MAX_EXECSTACK = 1024;
+  {$endif}
+{$endif CPU64}
 
+{$ifdef CPUX64}
   {$ifdef LINUX}
   REGRDI = 1;
   REGRSI = 2;
@@ -50222,15 +50343,15 @@ const
   REGRCX = 4;
   REGR8 = 5;
   REGR9 = 6;
+  PARAMREG_FIRST = REGRDI;
   {$else}
   REGRCX = 1;
   REGRDX = 2;
   REGR8 = 3;
   REGR9 = 4;
+  PARAMREG_FIRST = REGRCX;
   {$endif}
-  REG_FIRST = 1;
-  REG_LAST = REGR9;
-
+  PARAMREG_LAST = REGR9;
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
@@ -50240,29 +50361,71 @@ const
   REGXMM5 = 6;
   REGXMM6 = 7;
   REGXMM7 = 8;
-  REG_XMMCOUNT = REGXMM7;
+  FPREG_LAST = REGXMM7;
   {$else}
-  REG_XMMCOUNT = 0;
+  FPREG_LAST = REGXMM3;
   {$endif}
+  FPREG_FIRST = REGXMM0;
+{$endif CPUX64}
 
-  // x64 calling convention under Linux: rax,rsi,rdi,rcx,rdx,r8,r9 + xmm0..xmm7
-  // see http://www.yankeerino.com/windowsx64callingconvention.bhs
-
-{$else}
-
-  // maximum stack size at method execution
-  MAX_EXECSTACK = 1024;
-
+{$ifdef CPUX86}
   REGEAX = 1;
   REGEDX = 2;
   REGECX = 3;
-  REG_FIRST = REGEAX;
-  REG_LAST = REGECX;
-  REG_XMMCOUNT = 0;
+  PARAMREG_FIRST = REGEAX;
+  PARAMREG_LAST = REGECX;
+  FPREG_FIRST = 0;
+  FPREG_LAST = 0;
+{$endif CPUX86}
 
-{$endif CPU64}
+{$ifdef UNIX}
+{$ifdef CPUARM}
+  // 32-bit param register
+  REGR0 = 1;
+  REGR1 = 2;
+  REGR2 = 3;
+  REGR3 = 4;
+  // 64-bit fp register
+  REGD0 = 1;
+  REGD1 = 2;
+  REGD2 = 3;
+  REGD3 = 4;
+  REGD4 = 5;
+  REGD5 = 6;
+  REGD6 = 7;
+  REGD7 = 8;
+  PARAMREG_FIRST = REGR0;
+  PARAMREG_LAST = REGR3;
+  FPREG_FIRST = REGD0;
+  FPREG_LAST = REGD7;
+{$endif CPUARM}
+
+{$ifdef CPUAARCH64}
+  REGX0 = 1;
+  REGX1 = 2;
+  REGX2 = 3;
+  REGX3 = 4;
+  REGX4 = 5;
+  REGX5 = 6;
+  REGX6 = 7;
+  REGX7 = 8;
+  REGD0 = 1; // REGV0
+  REGD1 = 2; // REGV1
+  REGD2 = 3; // REGV2
+  REGD3 = 4; // REGV3
+  REGD4 = 5; // REGV4
+  REGD5 = 6; // REGV5
+  REGD6 = 7; // REGV6
+  REGD7 = 8; // REGV7
+  PARAMREG_FIRST = REGX0;
+  PARAMREG_LAST = REGX7;
+  FPREG_FIRST = REGD0;
+  FPREG_LAST = REGD7;
+{$endif CPUAARCH64}
+{$endif UNIX}
 
   PTRSIZ = sizeof(Pointer);
+  PTRSHR = {$ifdef CPU64}3{$else}2{$endif};
 
   STACKOFFSET_NONE = -1;
 
@@ -50274,7 +50437,7 @@ const
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
-  // always aligned to 8 bytes boundaries for x64
+  // always aligned to 8 bytes boundaries for 64 bit
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
@@ -50295,23 +50458,29 @@ const
 type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
   TFakeCallStack = packed record
-    {$ifdef CPU64}
-    {$ifdef LINUX}
-    XMM0, XMM1, XMM2, XMM3, XMM4, XMM5, XMM6, XMM7: double;
-    {$else}
-    XMM1, XMM2, XMM3: double;
-    {$endif}
-    MethodIndex: PtrUInt;
-    Frame, Ret: pointer;
-    {$ifdef LINUX}
-    RDI, RSI, RDX, RCX, R8, R9: pointer;
-    {$else}
-    RCX, RDX, R8, R9: pointer;
-    {$endif}
-    {$else}
+    {$ifdef CPUX86}
     EDX, ECX, MethodIndex, EBP, Ret: Cardinal;
+    {$else}
+    {$ifdef Linux}
+    ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
     {$endif}
-    Stack: array[word] of byte;
+    FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of double;
+    MethodIndex: PtrUInt;
+    Frame: pointer;
+    Ret: pointer;
+    {$ifndef Linux}
+    ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
+    {$endif}
+    {$endif}
+    {$ifdef CPUARM}
+    // alf: on ARM, there is more on the stack than you would expect
+    DummyStack: packed array[0..9] of pointer;
+    {$endif}
+    {$ifdef CPUAARCH64}
+    // alf: on AArch64, there is more on the stack than you would expect
+    DummyStack: pointer;
+    {$endif}
+    Stack: packed array[word] of byte;
   end;
 
   /// instances of this class will emulate a given interface
@@ -50321,6 +50490,14 @@ type
     fVTable: PPointerArray;
     function FakeCall(var aCall: TFakeCallStack): Int64;
     {$ifdef FPC}
+    {$ifdef CPUARM}
+    // on ARM, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
+    procedure ArmFakeStub;
+    {$endif}
+    {$ifdef CPUAARCH64}
+    // on Aarch64, the FakeStub needs to be here, otherwise the FakeCall cannot be found by the FakeStub
+    procedure AArch64FakeStub;
+    {$endif}
     function FakeQueryInterface(
       {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID;
       out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};
@@ -50395,9 +50572,11 @@ begin
   result := pointer(PtrInt(self)-PtrInt(@TInterfacedObjectFake(nil).fVTable));
 end;
 {$else}
+{$ifdef CPUINTEL}
 asm
   sub eax,TInterfacedObjectFake.fVTable
 end;
+{$endif CPUINTEL}
 {$endif}
 
 function TInterfacedObjectFake.Fake_AddRef: {$ifdef FPC}longint{$else}integer{$endif};
@@ -50425,7 +50604,7 @@ begin
   end else
   if GetInterface(IID,Obj) then
     result := NOERROR else
-    result := E_NOINTERFACE;
+    result := {$ifdef FPC}longint{$endif}(E_NOINTERFACE);
 end;
 
 procedure TInterfacedObjectFake.Get(out Obj);
@@ -50443,11 +50622,6 @@ begin
 end;
 
 function TInterfacedObjectFake.FakeCall(var aCall: TFakeCallStack): Int64;
-{$ifdef CPUARM}
-begin
-  raise EInterfaceFactoryException.Create('You encountered an ALF! ARM not yet supported');
-end;
-{$else}
 var method: ^TServiceMethod;
 procedure RaiseError(const Format: RawUTF8; const Args: array of const);
 var msg: RawUTF8;
@@ -50479,33 +50653,33 @@ begin
     for arg := 1 to high(method^.Args) do
     with method^.Args[arg] do
     if ValueType>smvSelf then begin
-      case RegisterIdent of
-      {$ifdef CPU64}
-      REG_FIRST: begin
-        RaiseError('unexpected self',[]);
-        V := nil; // make compiler happy
-      end;
-      {$ifdef LINUX}
-      {$else} // see https://msdn.microsoft.com/en-us/library/zthk2dkh.aspx
-      REGRDX: if vIsInFPR in ValueKindAsm then
-                V := @aCall.XMM1 else
-                V := @aCall.RDX;
-      REGR8:  if vIsInFPR in ValueKindAsm then
-                V := @aCall.XMM2 else
-                V := @aCall.R8;
-      REGR9:  if vIsInFPR in ValueKindAsm then
-                V := @aCall.XMM3 else
-                V := @aCall.R9;
+      V := nil;
+      {$ifndef CPUX86} // x64, arm, aarch64
+      if (vIsInFPR in ValueKindAsm) and (FPRegisterIdent>0) then
+        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*(FPRegisterIdent-1)));
+      if (v=nil) and (RegisterIdent>0) then
+        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+Sizeof(pointer)*(RegisterIdent-1)));
       {$endif}
-      {$else}
-      REGEAX: begin V := nil; RaiseError('unexpected self',[]); end;
+      {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
+      if RegisterIdent=PARAMREG_FIRST then
+         RaiseError('unexpected self',[]);
+      {$endif}
+      {$ifdef CPUX86}
+      case RegisterIdent of
+        REGEAX: RaiseError('unexpected self',[]);
       REGEDX: V := @aCall.EDX;
       REGECX: V := @aCall.ECX;
+      else
       {$endif}
-      else if SizeInStack>0 then
-        V := @aCall.Stack[InStackOffset] else
-        V := @I64s[IndexVar]; // for results in CPU
+
+      if V=nil then begin
+        if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
+          V := @aCall.Stack[InStackOffset] else 
+          V := @I64s[IndexVar]; // for results in CPU
       end;
+      {$ifdef CPUX86}
+      end;
+      {$endif}
       if vPassedByReference in ValueKindAsm then
         V := PPointer(V)^;
       case ValueType of
@@ -50658,7 +50832,17 @@ begin
   // WELCOME ABOARD: you just landed in TInterfacedObjectFake.FakeCall() !
   // if your debugger reached here, you are executing a "fake" interface
   // forged to call a remote SOA server or mock/stub an interface
+
   self := SelfFromInterface;
+  {$ifdef CPUAARCH64}
+  // alf: on aarch64, the self is sometimes only available in x1, when we have a result pointer !
+  // try to detect this ... although not very elegant, but I do not yet know how else to do this
+  if (fFactory=nil) or (fFactory.fDetectX0ResultMagic<>$AAAAAAAA) then begin
+    // aha, we have a reference result, placed in X0, so self is in X1 !!
+    self := aCall.ParamRegs[REGX1];
+    self := SelfFromInterface;
+  end;
+  {$endif}
   if aCall.MethodIndex>=fFactory.fMethodsCount then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.FakeCall(%.%) failed: out of range method %>=%',
@@ -50670,15 +50854,22 @@ begin
   resultType := smvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
+  {$ifdef CPUINTEL}
   {$ifdef CPU64}
-  smvDouble,smvDateTime: aCall.XMM1 := PDouble(@result)^;
+  smvDouble,smvDateTime: aCall.FPRegs[REGXMM0] := PDouble(@result)^;
   {$else}
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
   {$endif}
+  {$endif CPUINTEL}
+  {$ifdef CPUARM}
+  smvDouble,smvDateTime: aCall.FPRegs[REGD0] := PDouble(@result)^;
+  {$endif CPUARM}
+  {$ifdef CPUAARCH64}
+  smvDouble,smvDateTime: aCall.FPRegs[REGD0] := PDouble(@result)^;
+  {$endif CPUARM}
   end;
 end;
-{$endif CPUARM}
 
 procedure TInterfacedObjectFake.InterfaceWrite(W: TJSONSerializer;
   const aMethod: TServiceMethod; const aParamInfo: TServiceMethodArgument;
@@ -51038,14 +51229,28 @@ end;
 
 constructor TInterfaceFactory.Create(aInterface: PTypeInfo);
 var m,a,reg: integer;
+    {$ifdef Linux}
+    fpreg: integer;
+    {$endif}
     WR: TTextWriter;
     C: TClass;
     ErrorMsg: RawUTF8;
-{$ifdef CPU64}
+    {$ifdef CPUARM}
+    resultIsREGR1: boolean;
+    {$endif}
+    {$ifdef CPUAARCH64}
+    resultIsREGX0: boolean;
+    {$endif}
+    {$ifdef CPUX64}
+    {$ifdef Linux}
+    resultIsRSI: boolean;
+    {$else}
     resultIsRDX: boolean;
-{$else}
+    {$endif}
+    {$endif}
+    {$ifdef CPUX86}
     offs: integer;
-{$endif}
+   {$endif}
 label error;
 begin
   if aInterface=nil then
@@ -51055,6 +51260,9 @@ begin
       '%.Create(%): % is not an interface',[self,aInterface^.Name,aInterface^.Name]);
   {$ifndef NOVARIANTS}
   fDocVariantOptions := JSON_OPTIONS_FAST;
+  {$endif}
+  {$ifdef CPUAARCH64}
+  fDetectX0ResultMagic := $AAAAAAAA; // alf: see comment above
   {$endif}
   fInterfaceTypeInfo := aInterface;
   fInterfaceIID := aInterface^.InterfaceGUID^;
@@ -51167,13 +51375,32 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
   for m := 0 to fMethodsCount-1 do
   with fMethods[m] do begin
     // prepare stack and register layout
-    reg := REG_FIRST;
-    {$ifdef CPU64}
-    resultIsRDX := (ArgsResultIndex>=0) and
-      (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
+    reg := PARAMREG_FIRST;
+    {$ifdef Linux}
+    fpreg := FPREG_FIRST;
     {$endif}
+    {$ifdef CPUX64}
+      {$ifdef Linux}
+      resultIsRSI := (ArgsResultIndex>=0) and
+        (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
+      {$else}
+      resultIsRDX := (ArgsResultIndex>=0) and
+        (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
+    {$endif}
+    {$endif CPUX64}
+    {$ifdef CPUARM}
+    resultIsREGR1 := (ArgsResultIndex>=0) and
+      (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
+    {$endif CPUARM}
+    {$ifdef CPUAARCH64}
+    resultIsREGX0 := (ArgsResultIndex>=0) and
+      (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
+    // alf: self is now in REGX1 -  not sure if correct
+    {$endif CPUARM}
     for a := 0 to high(Args) do
     with Args[a] do begin
+      RegisterIdent := 0;
+      FPRegisterIdent := 0;
       ValueVar := CONST_ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
@@ -51189,10 +51416,10 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       smvDynArray:
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
           Include(ValueKindAsm,vIsObjArray);
-      {$ifdef CPU64}
+      {$ifndef CPUX86}
       smvDouble,smvDateTime:
-        if (reg<=REG_LAST) and not (vPassedByReference in ValueKindAsm) then
-          Include(ValueKindAsm,vIsInFPR);
+           if (reg<=FPREG_LAST) and not (vPassedByReference in ValueKindAsm) then
+             Include(ValueKindAsm,vIsInFPR);
       {$endif}
       end;
       case ValueType of
@@ -51223,38 +51450,107 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       if ValueDirection=smdResult then begin
         if not(ValueType in CONST_ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
-        {$ifdef CPU64} // Delphi always put the result pointer as RDX in x64
+        {$ifdef CPUX64}
         InStackOffset := STACKOFFSET_NONE;
-        RegisterIdent := REGRDX;
+        {$ifdef Linux}
+        RegisterIdent := REGRSI; // the result pointer is in rsi
+        {$else}
+        RegisterIdent := REGRDX; // the result pointer is in rdx
+        {$endif}
+        continue;
+        {$endif}
+        {$ifdef CPUARM}
+        InStackOffset := STACKOFFSET_NONE;
+        RegisterIdent := REGR1; // the result pointer is in r1
+        continue;
+        {$endif}
+        {$ifdef CPUAARCH64} 
+        // alf: FPC uses x0 to hold result pointer and self is stored in x1
+        // -> very different from all other calling methods (fixme?)
+        InStackOffset := STACKOFFSET_NONE;
+        RegisterIdent := REGX0; // the result pointer is in x1
         continue;
         {$endif}
       end;
-      {$ifndef CPU64}
+      {$ifdef CPU32}
       if ValueDirection=smdConst then
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ;
-      if (reg>REG_LAST) or (SizeInStack<>PTRSIZ)
-        // TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
+      if (reg>PARAMREG_LAST) or (SizeInStack<>PTRSIZ)
+        // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
         {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack,SizeInStack);
       end else begin
         InStackOffset := STACKOFFSET_NONE;
-        {$ifdef CPU64}
-        if resultIsRDX and (reg=REGRDX) then
-          inc(reg); // RDX is reserved by Delphi for function result pointer
+        {$ifdef CPUX64}
+        {$ifdef Linux}
+          if resultIsRSI and (reg=REGRSI) then
+            inc(reg); // RSI is reserved for function result pointer
+        {$else}
+          if resultIsRDX and (reg=REGRDX) then
+            inc(reg); // RDX is reserved for function result pointer
+        {$endif Linux}
+        {$endif CPUX64}
+        {$ifdef CPUARM}
+        if resultIsREGR1 and (reg=REGR1) then
+          inc(reg); // REGR1 is reserved for function result pointer
         {$endif}
-        RegisterIdent := reg;
+        {$ifdef CPUAARCH64}
+        if resultIsREGX0 and (reg=REGX0) then
+        begin
+          inc(reg); // REGX0 is reserved for function result pointer
+          // alf: not sure if this is needed (fixme?)
+          inc(reg); // REGX1 is reserved for self
+        end;
+        {$endif}
+        if vIsInFPR in ValueKindAsm then begin
+          {$ifdef Linux}
+          FPRegisterIdent := fpreg;
+          inc(fpreg);
+          {$else}
+          FPRegisterIdent := reg;
+        {$endif}
+        end
+        else begin
+          {$ifdef CPUARM}
+          // on ARM, ordinals>PTRSIZ are also placed in the normal registers
+          // but they must be aligned on a even boundary
+          if (SizeInStack>PTRSIZ) and ((reg and 1)=0) then
+            inc(reg);
+          // check if we are still able, after this increment, to put the parameter in the registers
+          if (((PARAMREG_LAST-reg+1)*PTRSIZ)<SizeInStack) then begin
+            // no space, put it on stack
+            InStackOffset := ArgsSizeInStack;
+            inc(ArgsSizeInStack,SizeInStack);
+            // all other parameters following the current one, must also be placed on stack
+            reg := PARAMREG_LAST+1;
+            continue;
+          end;
+          {$endif}
+          RegisterIdent := reg;
+          {$ifdef Linux}
+          inc(reg);
+          {$ifdef CPUARM}
+          // on ARM, ordinals>PTRSIZ are also placed in the normal registers
+          // so we need double the registers
+          if (SizeInStack>PTRSIZ) then
+             inc(reg,(SizeInStack shr PTRSHR)-1);
+          {$endif}
+          {$endif}
+        end;
+        {$ifndef Linux}
         inc(reg);
+        {$endif}
       end;
     end;
     if ArgsSizeInStack>MAX_EXECSTACK then
       raise EInterfaceFactoryException.CreateUTF8(
         '%.Create: Stack size % > % for %.% method',
         [self,ArgsSizeInStack,MAX_EXECSTACK,fInterfaceTypeInfo^.Name,URI]);
-    {$ifndef CPU64}
+    {$ifdef CPUX86}
     // pascal/register convention are passed left-to-right -> reverse order
     offs := ArgsSizeInStack;
     for a := 0 to high(Args) do
@@ -51379,50 +51675,262 @@ begin
   end;
 end;
 
-{ low-level ASM for TInterfaceFactory.GetMethodsVirtualTable }
-
-{$ifdef CPU64}
-procedure x64FakeStub; {$ifdef FPC} assembler; {$endif}
-{$ifdef LINUX}
-var smetndx, sxmm7, sxmm6, sxmm5, sxmm4, sxmm3, sxmm2, sxmm1, sxmm0: pointer;
-{$else}
-var smetndx, sxmm3, sxmm2, sxmm1: pointer;
-{$endif}
-asm // mov ax,{MethodIndex}; jmp x64FakeStub
-  {$ifdef FPC}
-  {$else}
-  .params 2 // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
-  {$endif}
-  and rax,$ffff
-  {$ifdef LINUX}
-  movsd sxmm0,xmm0
-  movsd sxmm4,xmm4
-  movsd sxmm5,xmm5
-  movsd sxmm6,xmm6
-  movsd sxmm7,xmm7
-  {$endif}
-  movsd sxmm1,xmm1
-  movsd sxmm2,xmm2
-  movsd sxmm3,xmm3
-  mov smetndx,rax
-  {$ifdef LINUX}
-  // TODO: check RDI, RSI, RDX, RCX, R8, R9 on [rbp+...]
-  lea rsi,sxmm1 // TFakeCallStack address as 2nd parameter
-  {$else}
-  mov [rbp+$50],rcx
-  mov [rbp+$58],rdx
-  mov [rbp+$60],r8
-  mov [rbp+$68],r9
-  lea rdx,sxmm1 // TFakeCallStack address as 2nd parameter
-  {$endif}
-  call TInterfacedObjectFake.FakeCall
-  // FakeCall should set Int64 result in method result, and float in aCall.XMM1
-  movsd xmm0,sxmm1
+{ low-level ASM for TInterfaceFactory.GetMethodsVirtualTable
+  - all ARM, AARCH64 and Linux64 code below was provided by ALF! Thanks! :)  }
+{$ifdef FPC}
+{$ifdef CPUARM}
+procedure TInterfacedObjectFake.ArmFakeStub;
+var smetndx: pointer;
+    sd7, sd6, sd5, sd4, sd3, sd2, sd1, sd0: double;
+    sr3,sr2,sr1,sr0: pointer;
+asm
+  // get method index
+  str  v1,smetndx
+  // store registers
+  vstr d0,sd0
+  vstr d1,sd1
+  vstr d2,sd2
+  vstr d3,sd3
+  vstr d4,sd4
+  vstr d5,sd5
+  vstr d6,sd6
+  vstr d7,sd7
+  str r0,sr0
+  str r1,sr1
+  str r2,sr2
+  str r3,sr3
+  // TFakeCallStack address as 2nd parameter
+  // there is no lea equivalent instruction for ARM (AFAIK), so this is calculated by hand (by looking at assembler)
+  sub r1, fp, #128
+  // branch to the FakeCall function
+  bl FakeCall
+  // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
+  vstr d0,sd0
 end;
 {$endif}
+{$ifdef CPUAARCH64}
+procedure TInterfacedObjectFake.AArch64FakeStub;
+var sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
+    sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
+    smetndx:pointer;
+asm
+  // get method index
+  str  x9,smetndx
+  // store registers
+  str d0,sd0
+  str d1,sd1
+  str d2,sd2
+  str d3,sd3
+  str d4,sd4
+  str d5,sd5
+  str d6,sd6
+  str d7,sd7
+  str x0,sx0
+  str x1,sx1
+  str x2,sx2
+  str x3,sx3
+  str x4,sx4
+  str x5,sx5
+  str x6,sx6
+  str x7,sx7
+  // TFakeCallStack address as 2nd parameter
+  // sx0 is at the stack pointer !
+  // local variables are stored in reverse on the stack
+  add x1, sp, #0
+  // branch to the FakeCall function
+  bl FakeCall
+  // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["sd0"]
+  str d0,sd0
+end;
+{$endif}
+{$endif}
+
+{$ifdef CPUX64}
+procedure x64FakeStub;
+var
+  smetndx,
+  {$ifdef Linux}
+  sxmm7, sxmm6, sxmm5, sxmm4,
+  {$endif}
+  sxmm3, sxmm2, sxmm1, sxmm0: pointer;
+  {$ifdef Linux}
+  sr9, sr8, srcx, srdx, srsi, srdi: pointer;
+  {$endif}
+asm // mov ax,{MethodIndex}; jmp x64FakeStub
+  {$ifndef FPC}
+  // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
+  // So, make space for two variables (+shadow space)
+  // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
+  .params 2
+  {$endif}
+  and rax,$ffff
+  movlpd sxmm0,xmm0
+  movlpd sxmm1,xmm1
+  movlpd sxmm2,xmm2
+  movlpd sxmm3,xmm3
+  {$ifdef LINUX}
+  movlpd sxmm4,xmm4
+  movlpd sxmm5,xmm5
+  movlpd sxmm6,xmm6
+  movlpd sxmm7,xmm7
+  mov sr9,r9
+  mov sr8,r8
+  mov srcx,rcx
+  mov srdx,rdx
+  mov srsi,rsi
+  mov srdi,rdi
+  {$endif LINUX}
+  mov smetndx,rax
+  {$ifdef LINUX}
+  lea rsi, srdi // TFakeCallStack address as 2nd parameter
+  {$else}
+  {$ifndef FPC}
+  mov [rbp+$60],rcx
+  mov [rbp+$68],rdx
+  mov [rbp+$70],r8
+  mov [rbp+$78],r9
+  {$else}
+  mov [rbp+$10],rcx
+  mov [rbp+$18],rdx
+  mov [rbp+$20],r8
+  mov [rbp+$28],r9
+  {$endif FPC}
+  lea rdx, sxmm0 // TFakeCallStack address as 2nd parameter
+  {$endif LINUX}
+  call TInterfacedObjectFake.FakeCall
+  // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["XMM0"]
+  movlpd xmm0,sxmm0
+end;
+{$endif CPUX64}
 
 const
   STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
+
+{$ifdef FPC} // alf: multi platforms support
+{$ifdef MSWINDOWS}
+function AddrAllocMem(const Size, flProtect: DWORD): Pointer;
+type
+  PMEMORY_BASIC_INFORMATION64 = ^_MEMORY_BASIC_INFORMATION64;
+  _MEMORY_BASIC_INFORMATION64 = record
+     BaseAddress: ULONGLONG;
+     AllocationBase: ULONGLONG;
+     AllocationProtect: DWORD;
+     __alignment1: DWORD;
+     RegionSize: ULONGLONG;
+     State: DWORD;
+     Protect: DWORD;
+     Type_: DWORD;
+     __alignment2: DWORD;
+  end;
+var
+  mbiold: TMemoryBasicInformation;
+  {$ifdef CPUX64}
+  mbi: _MEMORY_BASIC_INFORMATION64 absolute mbiold;
+  {$else}
+  mbi: TMemoryBasicInformation;
+  {$endif}
+  Info: TSystemInfo;
+  P, Q: UInt64;
+  PP: Pointer;
+  error: DWORD;
+  Addr: UInt64;
+begin
+  {$ifdef CPUX64}
+  Addr := UInt64(@x64FakeStub);
+  {$else}
+  Addr := 0;
+  {$endif}
+  result := nil;
+  if Addr = 0 then begin
+    result := VirtualAlloc(nil,Size,MEM_COMMIT,flProtect);
+    exit;
+  end;
+  P := UInt64(Addr);
+  Q := UInt64(Addr);
+  GetSystemInfo(Info);
+  // Interval = [2GB ..P.. 2GB] = 4GB
+  if Int64(P - (High(DWORD) div 2)) < 0 then
+    P := 1 else
+    P := UInt64(P - (High(DWORD) div 2)); // -2GB .
+  if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) then
+    Q := High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) else
+    Q := Q + (High(DWORD) div 2); // + 2GB
+
+  while P < Q do begin
+    PP := Pointer(P);
+    if VirtualQuery(PP, mbiold, sizeof(_MEMORY_BASIC_INFORMATION64)) = 0 then
+      break;
+    if (mbi.State and MEM_FREE = MEM_FREE) and (UInt64(mbi.RegionSize) > Size) then
+      // this memory block is usable
+      if (UInt64(mbi.RegionSize) >= Info.dwAllocationGranularity) then begin
+        { The RegionSize must be greater than the dwAllocationGranularity  }
+        { The address (PP) must be multiple of the allocation granularity (dwAllocationGranularity) . }
+        PP := Pointer(Info.dwAllocationGranularity *
+          (UInt64(PP) div Info.dwAllocationGranularity) +
+          Info.dwAllocationGranularity);
+        // if PP is multiple of dwAllocationGranularity then alloc memory
+        // if PP is not multiple of dwAllocationGranularity, VirtualAlloc will fail
+        if UInt64(PP) mod Info.dwAllocationGranularity=0 then
+          result := VirtualAlloc(PP, Size, MEM_COMMIT or MEM_RESERVE, flProtect);
+        if result <> nil then
+          exit;
+      end;
+    P := UInt64(mbi.BaseAddress) + UInt64(mbi.RegionSize); // Next region
+  end;
+end;
+{$else}
+function AddrAllocMem(const Size, flProtect: DWORD): Pointer;
+var P, Q: UInt64;
+    PP: Pointer;
+    Addr: UInt64;
+begin
+  Addr := 0;
+  {$ifdef CPUX64}
+  Addr := UInt64(@x64FakeStub);
+  {$endif}
+  {$ifdef CPUARM}
+  Addr := UInt64(@TInterfacedObjectFake.ArmFakeStub);
+  {$endif}
+  {$ifdef CPUAARCH64}
+  Addr := UInt64(@TInterfacedObjectFake.AArch64FakeStub);
+  {$endif}
+  Result := nil;
+  if Addr = 0 then begin
+    Result := fpmmap(nil,STUB_SIZE,flProtect,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
+    Exit;
+  end;
+  P := UInt64(Addr);
+  Q := UInt64(Addr);
+  { Interval = [2GB ..P.. 2GB] = 4GB }
+  if Int64(P - (High(DWORD) div 2)) < 0 then
+    P := 1 else
+    P := UInt64(P - (High(DWORD) div 2)); // -2GB .
+  if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) then
+    Q := High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) else
+    Q := Q + (High(DWORD) div 2); // + 2GB
+  P := P AND $FFFFFFFFFFFF0000; //AND QWORD(-(STUB_SIZE-1));
+  Q := Q AND $FFFFFFFFFFFF0000;
+  while P < Q do begin
+    P := P + (STUB_SIZE);
+    PP := Pointer(P);
+    Result := fpmmap(PP,STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
+    if (Result <> MAP_FAILED) then begin
+      {$ifdef CPUARM}
+      // are we close enough for a relative jump (24 bit signed)?
+      if ((PtrUInt(Result)-Addr)<DWORD($7FFFFF)) or (Addr-(PtrUInt(Result))<DWORD($7FFFFF)) then 
+        exit else 
+        fpmunmap(Result,STUB_SIZE);
+      {$else}
+      // are we close enough for a relative jump (32 bit signed)?
+      if ((PtrUInt(Result)-Addr)<Int64($7FFFFFFF)) or (Addr-(PtrUInt(Result))<Int64($7FFFFFFF)) then 
+        exit else 
+        fpmunmap(Result,STUB_SIZE);
+      {$endif}
+    end;
+  end;
+end;
+{$endif}
+{$endif}
 
 type
   // internal memory buffer created with PAGE_EXECUTE_READWRITE flags
@@ -51443,11 +51951,19 @@ var
 constructor TFakeStubBuffer.Create;
 begin
   {$ifdef MSWINDOWS}
+  {$ifdef FPC}
+  // alf: this is necessary, because a plain call to VirtualAlloc with FPC reserves a piece of memory too far away for a relative jump (on x64)
+  fStub := AddrAllocMem(STUB_SIZE,PAGE_EXECUTE_READWRITE);
+  {$else FPC}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
+  {$endif FPC}
+  {$else MSWINDOWS}
+  {$ifdef KYLIX3}
+  fStub := mmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
   {$else}
-  fStub := {$ifdef KYLIX3}mmap{$else}fpmmap{$endif}(
-    nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
+  fStub := AddrAllocMem(STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC);
   {$endif}
+  {$endif MSWINDOWS}
 end;
 
 destructor TFakeStubBuffer.Destroy;
@@ -51455,7 +51971,11 @@ begin
   {$ifdef MSWINDOWS}
   VirtualFree(fStub,0,MEM_RELEASE);
   {$else}
-  {$ifdef KYLIX3}munmap{$else}fpmunmap{$endif}(fStub,0);
+  {$ifdef KYLIX3}
+  munmap(fStub,STUB_SIZE);
+  {$else}
+  fpmunmap(fStub,STUB_SIZE);
+  {$endif}
   {$endif}
   inherited;
 end;
@@ -51477,7 +51997,7 @@ begin
 end;
 
 function TInterfaceFactory.GetMethodsVirtualTable: pointer;
-var i: integer;
+var i, tmp: cardinal;
     P: PCardinal;
 begin
   if fFakeVTable=nil then begin
@@ -51488,16 +52008,52 @@ begin
         fFakeVTable[0] := @TInterfacedObjectFake.FakeQueryInterface;
         fFakeVTable[1] := @TInterfacedObjectFake.Fake_AddRef;
         fFakeVTable[2] := @TInterfacedObjectFake.Fake_Release;
-        fFakeStub := TFakeStubBuffer.Reserve(fMethodsCount*{$ifdef CPU64}12{$else}24{$endif});
+        if fMethodsCount=0 then begin
+          result := pointer(fFakeVTable);
+          exit;
+        end;
+        tmp := {$ifdef CPUX86}fMethodsCount*24{$endif}
+             {$ifdef CPUX64}fMethodsCount*12{$endif}
+             {$ifdef CPUARM}fMethodsCount*12{$endif}
+             {$ifdef CPUAARCH64}($120 shr 2)+fMethodsCount*28{$endif};
+        fFakeStub := TFakeStubBuffer.Reserve(tmp);
+        PtrUInt(fFakeStub) := PtrUInt(fFakeStub){$ifdef CPUAARCH64} + $120{$endif};
         P := pointer(fFakeStub);
         for i := 0 to fMethodsCount-1 do begin
           fFakeVTable[i+RESERVED_VTABLE_SLOTS] := P;
-          {$ifdef CPU64}
-          P^ := $b866+(i shl 16); inc(P);          // mov ax,{MethodIndex}
-          PByte(P)^ := $e9; inc(PByte(P));         // jmp x64FakeStub
+          {$ifdef CPUX64}
+          P^ := $b866+(i shl 16); inc(P);  // mov (r)ax,{MethodIndex}
+          PByte(P)^ := $e9; inc(PByte(P)); // jmp x64FakeStub
           P^ := PtrUInt(@x64FakeStub)-PtrUInt(P)-4; inc(P);
           P^ := $909090;
-          {$else}
+          inc(PByte(P),3);
+          {$endif CPUX64}
+          {$ifdef CPUARM}
+          P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
+          tmp := ((PtrUInt(@TInterfacedObjectFake.ArmFakeStub)-PtrUInt(P)) shr 2)-2;
+          P^ := ($ea shl 24) + (tmp and $00FFFFFF); // branch ArmFakeStub (24bit relative, word aligned)
+          inc(P);
+          P^ := $e320f000; inc(P);
+          {$endif CPUARM}
+          {$ifdef CPUAARCH64}
+          // store method index in register x9
+          // $09 = r9 ... loop to $1F -> number shifted * $20
+          P^ := ($d280 shl 16)+(i shl 5)+$09; inc(P);  // mov x9 ,{MethodIndex}
+          // we are using a register branch here
+          // fill register x10 with address
+          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 0) AND $FFFF;
+          P^ := ($d280 shl 16)+(tmp shl 5)+$0A; inc(P);
+          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 16) AND $FFFF;
+          P^ := ($f2a0 shl 16)+(tmp shl 5)+$0A; inc(P);
+          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 32) AND $FFFF;
+          P^ := ($f2c0 shl 16)+(tmp shl 5)+$0A; inc(P);
+          tmp := (PtrUInt(@TInterfacedObjectFake.AArch64FakeStub) shr 48) AND $FFFF;
+          P^ := ($f2e0 shl 16)+(tmp shl 5)+$0A; inc(P);
+          // branch to address in x10 register
+          P^ := ($d61f0140); inc(P);
+          P^ := $d503201f; inc(P);
+          {$endif CPUAARCH64}
+          {$ifdef CPUX86}
           P^ := $68ec8b55; inc(P);                 // push ebp; mov ebp,esp
           P^ := i; inc(P);                         // push {MethodIndex}
           P^ := $e2895251; inc(P);                 // push ecx; push edx; mov edx,esp
@@ -51505,8 +52061,8 @@ begin
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall)-PtrUInt(P)-4; inc(P);
           P^ := $c25dec89; inc(P);                 // mov esp,ebp; pop ebp
           P^ := fMethods[i].ArgsSizeInStack or $900000;  // ret {StackSize}; nop
-          {$endif}
           inc(PByte(P),3);
+          {$endif CPUX86}
         end;
       end;
     finally
@@ -51581,6 +52137,7 @@ begin
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
   inc(PW);
+  p := aligntoptr(p);
   for m := fMethodsCount to fMethodsCount+n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
@@ -51590,10 +52147,10 @@ begin
       {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
       inc(PB,ord(PS^[0])+1);
       inc(PB); // skip Version field (always 3)
-      {$ifndef CPUARM}
+      {$ifdef CPUINTEL}
       if PCallingConvention(P)^<>ccRegister then
          RaiseError('method shall use register calling convention',[]);
-      {$endif}
+      {$endif CPUINTEL}
       inc(PB,sizeOf(TCallingConvention));
       P := AlignToPtr(P);// new Alignment
       aResultType := PTypeInfo(ppointer(P)^);
@@ -53542,91 +54099,250 @@ end;
 
 type
   PCallMethodArgs = ^TCallMethodArgs;
+  {$ifdef FPC}
+    {$PACKRECORDS 16}
+  {$endif}
   TCallMethodArgs = record
-    StackSize, StackAddr, method: PtrInt;
-    Regs: array[REG_FIRST..REG_LAST+REG_XMMCOUNT] of PtrInt;
+    StackSize: integer;
+    StackAddr, method: PtrInt;
+    ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of PtrInt;
+    {$ifndef CPUX86}
+    FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of Double;
+    {$endif}
     res64: Int64Rec;
     resKind: TServiceMethodValueType;
   end;
-
+  {$ifdef FPC}
+    {$PACKRECORDS DEFAULT}
+  {$endif}
 procedure CallMethod(var Args: TCallMethodArgs);
 {$ifdef CPUARM}
-begin
-  raise EInterfaceFactoryException.Create('FPC+ARM not supported yet');
-end;
-{$else}
-{$ifdef CPU64}
-{$ifdef FPC}
-var r12sav: pointer;
+assembler; nostackframe;
+label stack_loop,load_regs,asmcall_end,float_result;
 asm
-    mov r12sav,r12
+   //name  r#(normally, darwin can differ)
+   //a1    0           argument 1 / integer result / scratch register
+   //a2    1           argument 2 / scratch register
+   //a3    2           argument 3 / scratch register
+   //a4    3           argument 4 / scratch register
+   //v1    4           register variable
+   //v2    5           register variable
+   //v3    6           register variable
+   //v4    7           register variable
+   //v5    8           register variable
+   //sb    9           static base / register variable
+   //sl    10          stack limit / stack chunk handle / reg. variable
+   //fp    11          frame pointer
+   //ip    12          scratch register / new-sb in inter-link-unit calls
+   //sp    13          lower end of current stack frame
+   //lr    14          link address / scratch register
+   //pc    15          program counter
+
+   // greatly inspired by pascalscript
+   //prolog
+   mov	 ip, sp // sp is the stack pointer ; ip is the Intra-Procedure-call scratch register
+   stmfd sp!, {v1, v2, sb, sl, fp, ip, lr, pc}
+   sub	 fp, ip, #4
+   // make space on stack
+   sub	 sp,sp,#MAX_EXECSTACK
+   mov   v1,Args
+   // copy (push) stack content (if any)
+   ldr   a1, [v1,#TCallMethodArgs.StackSize]
+   // if there is no stack content, do nothing
+   cmp	 a1, #0
+   beq	 load_regs
+   // point a2 to bottom of stack.
+   mov	 a2, sp
+   // load a3 with CallMethod stack address
+   ldr	 a3, [v1,#TCallMethodArgs.StackAddr]
+stack_loop:
+   // copy a3 to a4 and increment a3 (a3 = StackAddr)
+   ldmia a3!, {a4}
+   // copy a4 to a2 and increment a2 (a2 = StackPointer)
+   stmia a2!, {a4}
+   // decrement stacksize counter, with update of flags for loop
+   subs	 a1, a1, #4
+   bne	 stack_loop
+load_regs:
+   ldr r0,[v1,#TCallMethodArgs.ParamRegs+REGR0*4-4]
+   ldr r1,[v1,#TCallMethodArgs.ParamRegs+REGR1*4-4]
+   ldr r2,[v1,#TCallMethodArgs.ParamRegs+REGR2*4-4]
+   ldr r3,[v1,#TCallMethodArgs.ParamRegs+REGR3*4-4]
+   vldr d0,[v1,#TCallMethodArgs.FPRegs+REGD0*8-8]
+   vldr d1,[v1,#TCallMethodArgs.FPRegs+REGD1*8-8]
+   vldr d2,[v1,#TCallMethodArgs.FPRegs+REGD2*8-8]
+   vldr d3,[v1,#TCallMethodArgs.FPRegs+REGD3*8-8]
+   vldr d4,[v1,#TCallMethodArgs.FPRegs+REGD4*8-8]
+   vldr d5,[v1,#TCallMethodArgs.FPRegs+REGD5*8-8]
+   vldr d6,[v1,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   vldr d7,[v1,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   ldr v2, [v1,#TCallMethodArgs.method]
+   blx v2
+   str   a1,[v1,#TCallMethodArgs.res64.Lo]
+   str   a2,[v1,#TCallMethodArgs.res64.Hi]
+   ldr   a1,[v1,#TCallMethodArgs.resKind]
+   cmp   a1,smvDouble
+   beq   float_result
+   cmp   a1,smvDateTime
+   beq   float_result
+   cmp   a1,smvCurrency
+   bne   asmcall_end
+   // store double result in res64
+float_result:
+   vstr   d0,[v1,#TCallMethodArgs.res64]
+asmcall_end:
+   // epilog
+   ldmea fp, {v1, v2, sb, sl, fp, sp, pc}        ;
+   // ldmfd sp!,{v1, v2, sb, sl, fp, ip, lr, pc} // pop non volatile registers ftom stack
+end;
+{$endif CPUARM}
+{$ifdef CPUAARCH64}
+assembler; nostackframe;
+label stack_loop,load_regs,asmcall_end,float_result;
+asm
+   // inspired by pascal script
+   // fp       x29
+   // lr       x30
+   // sp       sp
+   stp	fp,lr,[sp, #-16]!
+   stp	x19,x20,[sp, #-16]!
+   mov	fp,sp
+   // make space on stack
+   sub	sp,sp,#MAX_EXECSTACK
+   mov  x19,Args
+   ldr  x20, [x19,#TCallMethodArgs.method]
+   // prepare to copy (push) stack content (if any)
+   ldr  x2, [x19,#TCallMethodArgs.StackSize]
+   // if there is no stack content, do nothing
+   cmp	x2, #0
+   b.eq	load_regs
+   // point x3 to bottom of stack.
+   mov	x3, sp
+   // load x4 with CallMethod stack address
+   ldr	x4, [x19,#TCallMethodArgs.StackAddr]
+stack_loop:
+  // load x5 and x6 with stack contents
+   ldr x5, [x4]
+   ldr x6, [x4,#8]
+   //store contents at "real" stack and decrement address counter
+   stp	x5,x6,[x3],#16
+   // decrement stacksize counter, with update of flags for loop
+   subs	x2, x2, #16
+   b.ne stack_loop
+load_regs:
+   ldr x0,[x19,#TCallMethodArgs.ParamRegs+REGX0*8-8]
+   ldr x1,[x19,#TCallMethodArgs.ParamRegs+REGX1*8-8]
+   ldr x2,[x19,#TCallMethodArgs.ParamRegs+REGX2*8-8]
+   ldr x3,[x19,#TCallMethodArgs.ParamRegs+REGX3*8-8]
+   ldr x4,[x19,#TCallMethodArgs.ParamRegs+REGX4*8-8]
+   ldr x5,[x19,#TCallMethodArgs.ParamRegs+REGX5*8-8]
+   ldr x6,[x19,#TCallMethodArgs.ParamRegs+REGX6*8-8]
+   ldr x7,[x19,#TCallMethodArgs.ParamRegs+REGX7*8-8]
+   ldr d0,[x19,#TCallMethodArgs.FPRegs+REGD0*8-8]
+   ldr d1,[x19,#TCallMethodArgs.FPRegs+REGD1*8-8]
+   ldr d2,[x19,#TCallMethodArgs.FPRegs+REGD2*8-8]
+   ldr d3,[x19,#TCallMethodArgs.FPRegs+REGD3*8-8]
+   ldr d4,[x19,#TCallMethodArgs.FPRegs+REGD4*8-8]
+   ldr d5,[x19,#TCallMethodArgs.FPRegs+REGD5*8-8]
+   ldr d6,[x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   ldr d7,[x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   // call TCallMethodArgs.method
+   blr x20
+   // store normal result
+   str  x0,[x19,#TCallMethodArgs.res64]
+   ldr  x20,[x19,#TCallMethodArgs.resKind]
+   cmp  x20,smvDouble
+   b.eq float_result
+   cmp  x20,smvDateTime
+   b.eq float_result
+   cmp  x20,smvCurrency
+   b.ne asmcall_end
+   // store double result in res64
+float_result:
+   str  d0,[x19,#TCallMethodArgs.res64]
+asmcall_end:
+   // give back space on stack (add sp,sp,#MAX_EXECSTACK)
+   mov	sp,fp
+   ldp	x19,x20,[sp], #16
+   ldp	fp,lr,[sp], #16
+   ret
+end;
+{$endif CPUAARCH64}
+{$ifdef CPUX64}
+assembler;{$IFDEF FPC}nostackframe;{$ENDIF}
+asm
+    {$IFNDEF FPC}.noframe{$ENDIF}
+    push rbp
+    push r12
+    mov rbp,rsp
+    // simulate .params 60 ... size for 60 parameters
+    lea rsp,[rsp-MAX_EXECSTACK]
+    // align stack
+    and rsp,-16
+    // get Args
     mov r12,Args
-    // copy stack content (if any)
-    mov RDI,[r12].TCallMethodArgs.StackAddr
-    lea RSI,[rsp+$20]
-    mov RDX, [r12].TCallMethodArgs.StackSize
-    call Move
-    // call method
+    // copy (push) stack content (if any)
+    mov ecx, [r12].TCallMethodArgs.StackSize
+    mov rdx, [r12].TCallMethodArgs.StackAddr
+    jmp @checkstack
+@addstack:
+    {$IFDEF FPC}
+    push qword ptr [rdx]
+    {$ELSE}
+    push [rdx]
+    {$ENDIF}
+    dec ecx
+    sub rdx,8
+@checkstack:
+    or ecx, ecx
+    jnz @addstack
+    // fill registers
     {$ifdef LINUX}
     // Linux/BSD System V AMD64 ABI
-    mov RDI,[r12+TCallMethodArgs.Regs+REGRDI*8-8]
-    mov RSI,[r12+TCallMethodArgs.Regs+REGRSI*8-8]
-    mov RDX, [r12+TCallMethodArgs.Regs+REGRDX *8-8]
-    mov RCX, [r12+TCallMethodArgs.Regs+REGRCX *8-8]
-    mov R8,[r12+TCallMethodArgs.Regs+REGR8*8-8]
-    mov R9,[r12+TCallMethodArgs.Regs+REGR9*8-8]
-    movsd xmm0,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM0*8-8]
-    movsd xmm1,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM1*8-8]
-    movsd xmm2,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM2*8-8]
-    movsd xmm3,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM3*8-8]
-    movsd xmm4,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM4*8-8]
-    movsd xmm5,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM5*8-8]
-    movsd xmm6,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM6*8-8]
-    movsd xmm7,[r12+TCallMethodArgs.Regs+REG_LAST*8+REGXMM7*8-8]
+    mov RDI,[r12+TCallMethodArgs.ParamRegs+REGRDI*8-8]
+    mov RSI,[r12+TCallMethodArgs.ParamRegs+REGRSI*8-8]
+    mov RDX, [r12+TCallMethodArgs.ParamRegs+REGRDX *8-8]
+    mov RCX, [r12+TCallMethodArgs.ParamRegs+REGRCX *8-8]
+    mov R8,[r12+TCallMethodArgs.ParamRegs+REGR8*8-8]
+    mov R9,[r12+TCallMethodArgs.ParamRegs+REGR9*8-8]
+    movlpd xmm0,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movlpd xmm1,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movlpd xmm2,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movlpd xmm3,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    movlpd xmm4,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
+    movlpd xmm5,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
+    movlpd xmm6,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
+    movlpd xmm7,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
     {$else}
     // Win64 ABI
-    mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
-    mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]
-    mov r8, [r12+TCallMethodArgs.Regs+REGR8 *8-8]
-    mov r9, [r12+TCallMethodArgs.Regs+REGR9 *8-8]
-    movsd xmm0,[r12+TCallMethodArgs.Regs+REGXMM0*8-8]
-    movsd xmm1,[r12+TCallMethodArgs.Regs+REGXMM1*8-8]
-    movsd xmm2,[r12+TCallMethodArgs.Regs+REGXMM2*8-8]
-    movsd xmm3,[r12+TCallMethodArgs.Regs+REGXMM3*8-8]
+    mov rcx,[r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
+    mov rdx,[r12+TCallMethodArgs.ParamRegs+REGRDX*8-8]
+    mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8 *8-8]
+    mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9 *8-8]
+    {$ifdef FPC}
+    movlpd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movlpd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movlpd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movlpd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    {$else}
+    movsd xmm0,[r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movsd xmm1,[r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movsd xmm2,[r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movsd xmm3,[r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    {$endif FPC}
+    {$endif LINUX}
+    // alf: adjust for shadow-space (fixme?)
+    // caller must ensure that there is space on the stack for the API
+    // to store the parameters (RCX,RDX,R8 and R9)
+    {$ifndef Linux}
+    sub rsp, $20
     {$endif}
-    call [r12].TCallMethodArgs.method
-    // retrieve result
-    mov [r12].TCallMethodArgs.res64,rax
-    mov cl,[r12].TCallMethodArgs.resKind
-    cmp cl,smvDouble
-    je @d
-    cmp cl,smvDateTime
-    je @d
-    cmp cl,smvCurrency
-    jne @e
-@d: movsd [r12].TCallMethodArgs.res64,xmm0
-@e: mov r12,r12sav
-end;
-{$else}
-asm
-    .params 64    // size for 64 parameters
-    .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
-    mov r12,Args
-    // copy stack content (if any)
-    mov rcx,[r12].TCallMethodArgs.StackAddr
-    lea rdx,[rsp+$20]
-    mov r8, [r12].TCallMethodArgs.StackSize
-    call qword ptr [MoveFast]
     // call method
-    mov rcx,[r12+TCallMethodArgs.Regs+REGRCX*8-8]
-    mov rdx,[r12+TCallMethodArgs.Regs+REGRDX*8-8]
-    mov r8, [r12+TCallMethodArgs.Regs+REGR8 *8-8]
-    mov r9, [r12+TCallMethodArgs.Regs+REGR9 *8-8]
-    movsd xmm0,[r12+TCallMethodArgs.Regs+REGXMM0*8-8]
-    movsd xmm1,[r12+TCallMethodArgs.Regs+REGXMM1*8-8]
-    movsd xmm2,[r12+TCallMethodArgs.Regs+REGXMM2*8-8]
-    movsd xmm3,[r12+TCallMethodArgs.Regs+REGXMM3*8-8]
     call [r12].TCallMethodArgs.method
+    // undo the damage (shadow-space) done earlier
+    {$ifndef Linux}
+    add rsp, $20
+    {$endif}
     // retrieve result
     mov [r12].TCallMethodArgs.res64,rax
     mov cl,[r12].TCallMethodArgs.resKind
@@ -53636,11 +54352,14 @@ asm
     je @d
     cmp cl,smvCurrency
     jne @e
-@d: movsd [r12].TCallMethodArgs.res64,xmm0
-@e:
+@d: movlpd qword ptr [r12].TCallMethodArgs.res64, xmm0
+@e: mov rsp,rbp
+    pop r12
+    pop rbp
 end;
-{$endif}
-{$else}
+{$endif CPUX64}
+
+{$ifdef CPUX86}
 asm
     push esi
     push ebp
@@ -53658,9 +54377,9 @@ asm
     dec eax
     jnz @n
     // call method
-@z: mov eax,[esi+TCallMethodArgs.Regs+REGEAX*4-4]
-    mov edx,[esi+TCallMethodArgs.Regs+REGEDX*4-4]
-    mov ecx,[esi+TCallMethodArgs.Regs+REGECX*4-4]
+@z: mov eax,[esi+TCallMethodArgs.ParamRegs+REGEAX*4-4]
+    mov edx,[esi+TCallMethodArgs.ParamRegs+REGEDX*4-4]
+    mov ecx,[esi+TCallMethodArgs.ParamRegs+REGECX*4-4]
     call [esi].TCallMethodArgs.method
     // retrieve result
     mov cl,[esi].TCallMethodArgs.resKind
@@ -53680,8 +54399,7 @@ asm
     pop ebp
     pop esi
 end;
-{$endif CPU64}
-{$endif CPUARM}
+{$endif CPUX86}
 
 procedure BackgroundExecuteProc(Call: pointer);
 var synch: PBackgroundLauncher absolute Call;
@@ -55496,17 +56214,39 @@ begin
   fAlreadyExecuted := true;
 end;
 
-procedure TServiceMethodExecute.RawExecute(Instances: PPointerArray;
+procedure TServiceMethodExecute.RawExecute(const Instances: PPointerArray;
   InstancesLast: integer);
 var Value: pointer;
     a,i,e: integer;
     call: TCallMethodArgs;
-    Stack: array[0..MAX_EXECSTACK-1] of byte;
+    Stack: packed array[0..MAX_EXECSTACK-1] of byte;
 begin
+  FillcharFast(call,SizeOf(call),0);
   with fMethod^ do begin
-    // create the stack content
-    call.StackAddr := PtrInt(@Stack);
+    // create the stack and register content
+    {$ifdef CPUX86}
+    call.StackAddr := PtrInt(@Stack[0]);
     call.StackSize := ArgsSizeInStack;
+    {$else}
+    {$ifdef CPUINTEL}
+    call.StackSize := ArgsSizeInStack shr 3;
+    // ensure stack aligned on 16 bytes (paranoid)
+    if call.StackSize and 1 <> 0 then
+      inc(call.StackSize);
+    // stack is filled reversed (RTL)
+    call.StackAddr := PtrInt(@Stack[call.StackSize*8-8]);
+    {$else}
+    // stack is filled normally (LTR)
+    call.StackAddr := PtrInt(@Stack[0]);
+    call.StackSize := ArgsSizeInStack;
+    {$ifdef CPUAARCH64}
+    // mandatory on aarch64: make stack aligned on 16 bytes
+    // ab@alf: shouldn't it be "and 1", just for x64 above ?
+    if call.StackSize and 15 <> 0 then
+      inc(call.StackSize,16-(call.StackSize and 15));
+    {$endif}
+    {$endif CPUINTEL}
+    {$endif CPUX86}
     for a := 1 to high(Args) do
     with Args[a] do begin
       case ValueVar of
@@ -55524,15 +56264,38 @@ begin
       end;
       fValues[a] := Value;
       if (ValueDirection<>smdConst) or
-         (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then
-        // pass by reference
-        if RegisterIdent=0 then
-          MoveFast(Value,Stack[InStackOffset],SizeInStack) else
-          call.Regs[RegisterIdent] := PtrInt(Value) else
-        // pass by value
-        if RegisterIdent=0 then
-          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else
-          call.Regs[RegisterIdent] := PPtrInt(Value)^;
+         (ValueType in [smvRecord{$ifndef NOVARIANTS},smvVariant{$endif}]) then begin
+          // pass by reference
+          if (RegisterIdent=0) and (FPRegisterIdent=0) and (SizeInStack>0) then
+          MoveFast(Value,Stack[InStackOffset],SizeInStack) else begin
+            if RegisterIdent>0 then
+              call.ParamRegs[RegisterIdent] := PtrInt(Value);
+            if FPRegisterIdent>0 then
+              raise EInterfaceFactoryException.CreateUTF8('Unexpected % FPReg=%',
+                [ParamName^,FPRegisterIdent]); // should never happen
+          end;
+        end
+        else begin
+          // pass by value
+          if (RegisterIdent=0) AND (FPRegisterIdent=0) AND (SizeInStack>0) then
+          MoveFast(Value^,Stack[InStackOffset],SizeInStack) else begin
+            if (RegisterIdent>0) then begin
+              call.ParamRegs[RegisterIdent] := PPtrInt(Value)^;
+              {$ifdef CPUARM}
+              // for e.g. INT64 on 32 bit ARM systems; these are also passed in the normal registers
+              if SizeInStack>PTRSIZ then
+                call.ParamRegs[RegisterIdent+1] := PPtrInt(Value+PTRSIZ)^;
+              {$endif}
+            end;
+            {$ifndef CPUX86}
+            if FPRegisterIdent>0 then
+              call.FPRegs[FPRegisterIdent] := PDouble(Value)^;
+            {$endif}
+            if (RegisterIdent>0) and (FPRegisterIdent>0) then
+              raise EInterfaceFactoryException.CreateUTF8('Unexpected % reg=% FP=%',
+                [ParamName^,RegisterIdent,FPRegisterIdent]); // should never happen
+          end;
+        end;
     end;
     // execute the method
     for i := 0 to InstancesLast do begin
@@ -55548,7 +56311,17 @@ begin
         end;
       end;
       // prepare the low-level call context for the asm stub
-      call.Regs[REG_FIRST] := PtrInt(Instances[i]);
+      {$ifndef CPUAARCH64}
+      call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]);
+      {$else}
+      // alf note for FPC on Linux aarch64:
+      // the above is not true for aarch64, when a function result is a pointer 
+      // the function result pointer is placed in REGX0 and self in REGX1
+      // thus, in that case: call.ParamRegs[REGX1] := PtrInt(Instances[i]);
+       if call.ParamRegs[PARAMREG_FIRST]=0 then
+          call.ParamRegs[PARAMREG_FIRST] := PtrInt(Instances[i]) else
+          call.ParamRegs[REGX1] := PtrInt(Instances[i]);
+      {$endif}
       call.method := PPtrIntArray(PPointer(Instances[i])^)^[ExecutionMethodIndex];
       if ArgsResultIndex>=0 then
         call.resKind := Args[ArgsResultIndex].ValueType else
@@ -55641,7 +56414,7 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.ExecuteJson(Instances: array of pointer; Par: PUTF8Char;
+function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
   Res: TTextWriter; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
     wasString, valid: boolean;

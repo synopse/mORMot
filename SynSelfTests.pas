@@ -1125,7 +1125,7 @@ type
   // - to test threading implementation pattern
   ITestPerThread = interface(IInvokable)
     ['{202B6C9F-FCCB-488D-A425-5472554FD9B1}']
-    function GetContextServiceInstanceID: cardinal;
+    function GetContextServiceInstanceID: PtrUInt;
     function GetThreadIDAtCreation: TThreadID;
     function GetCurrentThreadID: TThreadID;
     function GetCurrentRunningThreadID: TThreadID;
@@ -6183,7 +6183,7 @@ begin
 
   discogsJson := StringFromFile(discogsFileName);
   if discogsJson='' then begin
-    discogsJson := HttpGet('http://api.discogs.com/artists/45/releases?page=1&per_page=100');
+    discogsJson := HttpGet('https://api.discogs.com/artists/45/releases?page=1&per_page=100');
     FileFromString(discogsJson,discogsFileName);
   end;
   zendframeworkJson := StringFromFile(zendframeworkFileName);
@@ -10545,7 +10545,7 @@ begin
   end;
 end;
 var Server: TSQLDBServerAbstract;
-const ADDR='localhost:'+HTTP_DEFAULTPORT;
+const ADDR='127.0.0.1:'+HTTP_DEFAULTPORT;
 begin
   Props := TSQLDBSQLite3ConnectionProperties.Create('test.db3','','','');
   try
@@ -12269,7 +12269,7 @@ type
     fThreadIDAtCreation: TThreadID;
   public
     constructor Create; override;
-    function GetContextServiceInstanceID: cardinal;
+    function GetContextServiceInstanceID: PtrUInt;
     function GetThreadIDAtCreation: TThreadID;
     function GetCurrentThreadID: TThreadID;
     function GetCurrentRunningThreadID: TThreadID;
@@ -12515,7 +12515,7 @@ begin
   result := fThreadIDAtCreation;
 end;
 
-function TServicePerThread.GetContextServiceInstanceID: cardinal;
+function TServicePerThread.GetContextServiceInstanceID: PtrUInt;
 begin
   with PServiceRunningContext(@ServiceContext)^ do
     if Request=nil then
@@ -12563,6 +12563,7 @@ var
     Rec1: TVirtualTableModuleProperties;
     Rec2, RecRes: TSQLRestCacheEntryValue;
     s: RawUTF8;
+    r: string;
 begin
   Setlength(Ints,2);
   CSVToRawUTF8DynArray('one,two,three',Strs1);
@@ -12584,7 +12585,8 @@ begin
     cu := i1*0.01;
     I.ToText(cu,s);
     Check(s=Curr64ToStr(PInt64(@cu)^));
-    Check(I.ToTextFunc(n1)=DoubleToString(n1));
+    r := DoubleToString(n1);
+    Check(I.ToTextFunc(n1)=r);
     o := [tfoIndex,tfoCaseInsensitive];
     i3 := i1;
     c := cardinal(i2);
@@ -12648,6 +12650,7 @@ var s: RawUTF8;
     Item: TCollTest;
     List,Copy: TCollTestsI;
     j: integer;
+    x,y: PtrUInt; // alf: to help debugging
 {$endif}
 {$ifndef NOVARIANTS}
     V1,V2,V3: variant;
@@ -12657,13 +12660,16 @@ var s: RawUTF8;
 {$endif}
 begin
   Check(Inst.I.Add(1,2)=3);
-  Check(Inst.I.Multiply(2,3)=6);
+  Check(Inst.I.Multiply($1111333344445555,$2222666677778888)=$e26accccbf257d28);
   CheckSame(Inst.I.Subtract(23,20),3);
   Inst.I.ToText(3.14,s);
   Check(s='3.14');
   Check(Inst.I.ToTextFunc(777)='777');
-  if GlobalInterfaceTestMode<>itmHttp then
-    Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
+  x := Inst.CT.GetCurrentThreadID;
+  if GlobalInterfaceTestMode<>itmHttp then begin
+    y := Inst.CT.GetThreadIDAtCreation;
+    Check(x=y);
+  end;
   case GlobalInterfaceTestMode of
   itmMainThread:
     Check(Inst.CC.GetCurrentThreadID=MainThreadID);
@@ -12783,19 +12789,21 @@ begin
   Check(Inst.CU.GetContextSessionID=Inst.ExpectedSessionID);
   Check(Inst.CG.GetContextSessionGroup=Inst.ExpectedGroupID);
   Check(Inst.CS.GetContextSessionUser=Inst.ExpectedUserID);
+  x := Inst.CT.GetCurrentThreadID;
+  y := Inst.CT.GetThreadIDAtCreation;
   case GlobalInterfaceTestMode of
   itmDirect: begin
-    Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
+    Check(x=y);
     Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
     Check(Inst.CT.GetContextServiceInstanceID=0);
   end;
   itmClient, itmPerInterfaceThread: begin
-    Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
+    Check(x=y);
     Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmLocked, itmMainThread: begin
-    Check(Inst.CT.GetCurrentThreadID=Inst.CT.GetThreadIDAtCreation);
+    Check(x=y);
     Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)<>0);
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
@@ -14664,7 +14672,7 @@ var
 const
   MAX = 1000;
 begin
-  HttpClient := TDDDThreadsHttpClient.Create('localhost', HTTP_DEFAULTPORT);
+  HttpClient := TDDDThreadsHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT);
   try
     Check(HttpClient.SetUser('Admin', 'synopse'));
     test := TDDDTest.Create;
@@ -14756,7 +14764,7 @@ begin
   fRequestCount := aRequestCount;
   fId := aId;
   fIsError := false;
-  fHttpClient := TDDDThreadsHttpClient.Create('localhost', HTTP_DEFAULTPORT);
+  fHttpClient := TDDDThreadsHttpClient.Create('127.0.0.1', HTTP_DEFAULTPORT);
   fHttpClient.SetUser('Admin', 'synopse');
 end;
 

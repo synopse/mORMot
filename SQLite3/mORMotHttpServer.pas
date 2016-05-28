@@ -1056,7 +1056,7 @@ const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticat
   // adDefault, adHttpBasic, adWeak, adSSPI
   TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
   TSQLRestServerAuthenticationNone,
-  {$ifdef WINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
+  {$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
 var a: TSQLHttpServerRestAuthentication;
     kind: TSQLHttpServerOptions;
     thrdCnt: integer;
@@ -1065,7 +1065,7 @@ begin
   if aDefinition=nil then
     raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
   if aDefinition.WebSocketPassword='' then
-    kind := {$ifdef MSWINDOWS}useHttpApiRegisteringURI{$else}useHttpSocket{$endif} else
+    kind := HTTP_DEFAULT_MODE else
     kind := useBidirSocket;
   if aDefinition.ThreadCount=0 then
     thrdCnt := 32 else

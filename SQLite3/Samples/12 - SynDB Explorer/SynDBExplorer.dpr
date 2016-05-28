@@ -45,6 +45,9 @@ program SynDBExplorer;
 uses
   {$I SynDprUses.inc}
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   SynDBExplorerMain in 'SynDBExplorerMain.pas' {DbExplorerMain},
   SynDBExplorerClasses in 'SynDBExplorerClasses.pas',
   SynDBExplorerFrame in 'SynDBExplorerFrame.pas' {DBExplorerFrame: TFrame},

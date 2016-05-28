@@ -218,10 +218,18 @@ type
   // - Ctrl + click on a cell to display its full unicode content
   TSQLTableToGrid = class(TComponent)
   private
+    {$ifdef FPC}
+    fOnSelectCell: TOnSelectCellEvent;
+    {$else}
     fOnSelectCell: TSelectCellEvent;
+    {$endif}
     fOnRightClickCell: TRightClickCellEvent;
     fClient: TSQLRestClientURI;
+    {$ifdef FPC}
+    fOnDrawCellBackground: TOnDrawCell;
+    {$else}
     fOnDrawCellBackground: TDrawCellEvent;
+    {$endif}
     fMarked: array of byte;
     fMarkAllowed: boolean;
     fMouseDownMarkedValue: (markNone,markOn,markOff);
@@ -404,8 +412,13 @@ type
     /// used to display some hint text
     property Hint: THintWindowDelayed read fHint;
     /// assign an event here to customize the background drawing of a cell
+    {$ifdef FPC}
+    property OnDrawCellBackground: TOnDrawCell read fOnDrawCellBackground
+      write fOnDrawCellBackground;
+    {$else}
     property OnDrawCellBackground: TDrawCellEvent read fOnDrawCellBackground
       write fOnDrawCellBackground;
+    {$endif}
     /// true if Marked[] is available (add checkboxes at the left side of every row)
     property MarkAllowed: boolean read fMarkAllowed;
     /// true if any Marked[] is checked
@@ -440,7 +453,11 @@ type
     /// override this event to customize the Ctrl+Mouse click popup text
     property OnHintText: THintTextEvent read fOnHintText write fOnHintText;
     /// override this event to customize the Mouse click on a data cell
+    {$ifdef FPC}
+    property OnSelectCell: TOnSelectCellEvent read fOnSelectCell write fOnSelectCell;
+    {$else}
     property OnSelectCell: TSelectCellEvent read fOnSelectCell write fOnSelectCell;
+    {$endif}
     /// override this event to customize the Mouse right click on a data cell
     property OnRightClickCell: TRightClickCellEvent read fOnRightClickCell write fOnRightClickCell;
     /// override this event to be notified when the content is sorted
@@ -541,7 +558,9 @@ resourcestring
   SErrorFieldTooLarge = 'Field "%s"'#13'is too large, value must be <= %s';
   SMinMaxValue = 'Min. Value: %s, Max. Value: %s';
 
+{$ifndef FPC}
 {$define VISTAFORM}
+{$endif}
 
 {$ifdef VISTAFORM}
 
@@ -912,7 +931,7 @@ begin // unicode version
   Result := Rect(0, 0, MaxWidth, 0);
   U := Utf8DecodeToRawUnicode(AHint);
   DrawTextW(Canvas.Handle, pointer(U), length(U) shr 1, Result, DT_CALCRECT or DT_LEFT or
-    DT_WORDBREAK or DT_NOPREFIX or DrawTextBiDiModeFlagsReadingOnly);
+    DT_WORDBREAK or DT_NOPREFIX {$ifndef FPC}or DrawTextBiDiModeFlagsReadingOnly{$endif});
   Inc(Result.Right, 6);
   Inc(Result.Bottom, 2);
 end;
@@ -927,7 +946,7 @@ begin // unicode version
   Canvas.Font.Color := fFontColor;
   U := Utf8DecodeToRawUnicodeUI(fUTF8Text);
   DrawTextW(Canvas.Handle, pointer(U), -1, R, DT_LEFT or DT_NOPREFIX or
-    DT_WORDBREAK or DrawTextBiDiModeFlagsReadingOnly);
+    DT_WORDBREAK {$ifndef FPC}or DrawTextBiDiModeFlagsReadingOnly{$endif});
 end;
 
 procedure THintWindowDelayed.VisibleChanging;
@@ -1081,7 +1100,7 @@ begin
     (cardinal(ACol)>=cardinal(Table.FieldCount)) then // avoid any possible GPF
     exit;
   with TDrawGrid(Owner).Canvas do begin
-    Options := ETO_CLIPPED or TextFlags;
+    Options := ETO_CLIPPED {$ifndef FPC}or TextFlags{$endif};
     if Brush.Style <> bsClear then
       Options := Options or ETO_OPAQUE;
     WithMark := fMarkAllowed and (ACol=0);

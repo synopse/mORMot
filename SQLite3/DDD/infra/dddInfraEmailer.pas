@@ -522,7 +522,9 @@ begin
     Email.Sender := aSender;
     Email.Subject := aSubject;
     Email.Headers := aHeaders;
+    {$ifdef WITHLOG}
     Rest.LogClass.Enter('SendEmail %',[Email],self);
+    {$endif}
     Email.MessageCompressed := SynLZCompressToBytes(aBody);
     CqrsBeginMethod(qaNone,result);
     if not Email.FilterAndValidate(Rest,msg) then

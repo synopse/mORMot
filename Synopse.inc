@@ -205,47 +205,60 @@
   {$define FPC_OR_UNICODE}
   {$define FPC_ENUMHASINNER}
 
-  {$define FPCSQLITE3STATIC}
+  {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
   // -> enabled to support static-linked SQLite3 engine, after retrieval of
   // the needed .o files from http://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
   // -> only available for Win32 and Linux32 platforms by now
 
+  {$ifdef MSWINDOWS}
+    {$define FPCSQLITE3STATIC} // we supply Win32 and Win64 .obj
+  {$endif}
+  {$ifdef LINUX}
+    {$ifdef CPUX86}
+      {$define FPCSQLITE3STATIC} // we supply Linux 32-bit x86 .o
+    {$endif} 
+  {$endif} 
+
   {$ifdef ANDROID}
     {$define LINUX}
   {$endif}
+
   {$ifdef DARWIN}
-    {$define LINUX}
+    {$define LINUX} // not true, but a POSIX/BSD system
     {$define PUREPASCAL} // e.g. low-level stack layout differs
   {$endif}
 
   {$ifdef CPU64}
-    {$define PUREPASCAL}
+    {$define PUREPASCAL} // e.g. x64, AARCH64
     {$ifdef CPUX64}
-    {$define CPUINTEL}
-    {$ASMMODE INTEL} // as Delphi expects, and I use to write
+      {$define CPUINTEL}
+      {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX64}
   {$else}
     {$ifdef CPUARM}
-    {$define PUREPASCAL}
+      {$define PUREPASCAL} // ARM32
     {$endif CPUARM}
     {$ifdef CPUX86}
-    {$ASMMODE INTEL} // as Delphi expects, and I use to write
-    {$define CPUINTEL}
+      {$define CPUINTEL}
+      {$ASMMODE INTEL} // as Delphi expects
     {$endif CPUX86}
   {$endif CPU64}
 
   // FPC has its own RTTI layout only since late 3.x
   // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated trunk conditional
+  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated branch conditional
     {$ifdef CPUINTEL}
-    {$define HASINTERFACERTTI}
-  {$endif}
+      {$define HASINTERFACERTTI}
+    {$endif}
     {$ifdef CPUARM}
       {$define HASINTERFACERTTI}
     {$endif}
-  {$endif}
+    {$ifdef CPUAARCH64}
+      {$define HASINTERFACERTTI}
+    {$endif}
+  {$endif FPC_HAS_EXTENDEDINTERFACERTTI}
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -274,6 +287,9 @@
     // you should use 2.7.1/trunk branch in revision 28995 from 2014-11-05T22:17:54
     // => this will change the TInvokeableVariantType.SetProperty() signature
     {$define FPC_VARIANTSETVAR}
+  {$endif}
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$define FPC_ENUMHASINNER}
   {$endif}
 
 {$else FPC}

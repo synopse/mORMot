@@ -204,5 +204,5 @@ begin
 end;
 
 initialization
-  SetExecutableVersion(3,0,0);
+  SetExecutableVersion('3.1');
 end.

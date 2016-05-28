@@ -1,6 +1,16 @@
 /// MVC sample web application, publishing a simple BLOG
 program MVCServer;
 
+{$ifdef Linux}
+  {$ifdef FPC_CROSSCOMPILING}
+    {$ifdef CPUARM}
+      //if GUI, then uncomment
+      //{$linklib GLESv2}
+    {$endif}
+    {$linklib libc_nonshared.a}
+  {$endif}
+{$endif}
+
 {$APPTYPE CONSOLE}
 
 {$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
