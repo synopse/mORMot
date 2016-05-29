@@ -690,7 +690,7 @@ unit mORMot;
     - now huge service JSON response is truncated (to default 20 KB) in logs
 
   Version 1.18
-    - full Windows 64 bit compatibility, including RTTI and services
+    - full Windows 64-bit compatibility, including RTTI and services
     - renamed SQLite3Commons.pas to mORMot.pas
     - BREAKING CHANGE: all ORM IDs are now declared as TID (=Int64) instead of
       integer - also added a new TIDDynArray type to be used e.g. for BatchSend,
@@ -1339,7 +1339,7 @@ type
   TSQLRawBlob = type RawByteString;
 
   /// a reference to another record in any table in the database Model
-  // - stored as a 64 bit signed integer (just like the TID type)
+  // - stored as a 64-bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TSQLRest.Retrieve(Reference) to get a record value
@@ -1352,7 +1352,7 @@ type
   TRecordReference = type Int64;
 
   /// a reference to another record in any table in the database Model
-  // - stored as a 64 bit signed integer (just like the TID type)
+  // - stored as a 64-bit signed integer (just like the TID type)
   // - type cast any value of TRecordReference with the RecordRef object below
   // for easy access to its content
   // - use TSQLRest.Retrieve(Reference) to get a record value
@@ -1506,7 +1506,7 @@ type
   // since regular TSQLRecord published properties (i.e. sftID kind of field)
   // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
   // Win32, defining TID published properties would allow to store the ID
-  // as signed 64 bit, e.g. up to 9,223,372,036,854,775,808; despite to
+  // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
   // sftID kind of record, coherency is NOT ensured: after a deletion, all
   // values pointing to are NOT reset to 0 - it is up to your business logic
   // to ensure data coherency as expected
@@ -2395,7 +2395,7 @@ const
   // maps long string types
   tkStringTypes =
     [tkLString,tkWString{$ifdef HASVARUSTRING},tkUString{$endif}{$ifdef FPC},tkAString{$endif}];
-  // maps 1, 8, 16, 32 and 64 bit ordinal types
+  // maps 1, 8, 16, 32 and 64-bit ordinal types
   tkOrdinalTypes =
     [tkInteger, tkChar, tkWChar, tkEnumeration, tkSet, tkInt64
      {$ifdef FPC},tkBool,tkQWord{$endif}];
@@ -2770,7 +2770,7 @@ type
   // have to manually retrieve the record, using a integer(IDField) typecast)
   // - handle TSQLRecordMany descendant properties as an "has many" instance (this
   // is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
-  // - handle TRecordReference properties as INTEGER (64 bit) RecordRef-like value
+  // - handle TRecordReference properties as INTEGER (64-bit) RecordRef-like value
   //  (use TSQLRest.Retrieve(Reference) to get a record content)
   // - handle TSQLRawBlob properties as BLOB
   // - handle dynamic arrays as BLOB, in the TDynArray.SaveTo binary format (is able
@@ -6793,7 +6793,7 @@ type
     /// trick to get the ID even in case of a sftID published property
     function GetID: TID;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    /// trick to typecast the ID on 64 bit platform
+    /// trick to typecast the ID on 64-bit platform
     function GetIDAsPointer: pointer;
       {$ifdef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
   public
@@ -6804,7 +6804,7 @@ type
     // for the class within it is defined, and we need a var for each class:
     // so even Delphi XE syntax is not powerful enough for our purpose, and the
     // vmtAutoTable trick if very fast, and works with all versions of Delphi -
-    // including 64 bit target)
+    // including 64-bit target)
     class function RecordProps: TSQLRecordProperties;
       {$ifdef FPC_OR_PUREPASCAL}{$ifdef HASINLINE}inline;{$endif}{$endif}
     /// the Table name in the database, associated with this TSQLRecord class
@@ -7691,9 +7691,9 @@ type
     // ! Detail := TSQLRecordDetail.Create;
     // ! Detail.Main := Main.AsTSQLRecord; // will store Main.ID in MAIN column
     // ! Client.Add(Detail);
-    // - is especially useful on 64 bit plaform, since on 32 bit:
+    // - is especially useful on 64-bit plaform, since on 32 bit:
     // ! Detail.Main := pointer(Main.ID)
-    // compiles (whereas it won't on 64 bit) and is the same than platform-independent
+    // compiles (whereas it won't on 64-bit) and is the same than platform-independent
     // ! Detail.Main := Main.AsTSQLRecord;
     // - using Main.AsTSQLRecord will ensure that the ID is retrieved, even
     // if Main itself is not a true instance
@@ -9948,7 +9948,7 @@ type
 
   /// handled kind of parameters internal variables for an interface-based method
   // - reference-counted variables will have their own storage
-  // - all non referenced-counted variables are stored within some 64 bit content
+  // - all non referenced-counted variables are stored within some 64-bit content
   // - smvVariant kind of parameter will be handled as a special smvvRecord
   TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvvRawUTF8, smvvString, smvvWideString,
@@ -9994,7 +9994,7 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
     // cleared with ObjArrClear() and not TDynArray.Clear
-    // - vIsInFPR is used for floating point constant arguments
+    // - vIsInFPR is used for floating point constant arguments (not under x86/x87)
     ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray, vIsInFPR);
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
@@ -10008,7 +10008,7 @@ type
     // - contains 1 for X0, 2 X1 ... 8 for X7, with a backing store on the stack for aarch64
     RegisterIdent: integer;
     /// used to specify if a floating-point argument is passed as register
-    // - contains 0 for x86 (since the x87 FPU stack is used instead)
+    // - contains always 0 for x86/x87
     // - contains 1 for XMM0, 2 for XMM1 ... 4 for XMM3 for x64
     // - contains 1 for D0, 2 D1 ... 8 for D7 for armhf
     // - contains 1 for V0, 2 V1 ... 8 for V7 for aarch64
@@ -30713,7 +30713,7 @@ begin
     if fID>MaxInt then
       raise EORMException.CreateUTF8('%.GetIDAsPointer is storing ID=%, which '+
         'cannot be stored in a pointer/TSQLRecord 32 bit instance: use '+
-        'a TID/T*ID published field for 64 bit IDs',[self,fID]) else
+        'a TID/T*ID published field for 64-bit IDs',[self,fID]) else
     {$endif}
       result := pointer(fID);
   {$else}
@@ -50335,7 +50335,18 @@ const
   {$endif}
 {$endif CPU64}
 
+{$ifdef CPUX86}
+  // 32-bit integer param registers (in "register" calling convention)
+  REGEAX = 1;
+  REGEDX = 2;
+  REGECX = 3;
+  PARAMREG_FIRST = REGEAX;
+  PARAMREG_LAST = REGECX;
+  // floating-point params are passed by reference
+{$endif CPUX86}
+
 {$ifdef CPUX64}
+  // 64-bit integer param registers
   {$ifdef LINUX}
   REGRDI = 1;
   REGRSI = 2;
@@ -50344,14 +50355,17 @@ const
   REGR8 = 5;
   REGR9 = 6;
   PARAMREG_FIRST = REGRDI;
+  PARAMREG_RESULT = REGRSI;
   {$else}
   REGRCX = 1;
   REGRDX = 2;
   REGR8 = 3;
   REGR9 = 4;
   PARAMREG_FIRST = REGRCX;
+  PARAMREG_RESULT = REGRDX;
   {$endif}
   PARAMREG_LAST = REGR9;
+  // 64-bit floating-point (double) registers
   REGXMM0 = 1;
   REGXMM1 = 2;
   REGXMM2 = 3;
@@ -50361,31 +50375,25 @@ const
   REGXMM5 = 6;
   REGXMM6 = 7;
   REGXMM7 = 8;
+  FPREG_FIRST = REGXMM0;
   FPREG_LAST = REGXMM7;
   {$else}
+  FPREG_FIRST = REGXMM0;
   FPREG_LAST = REGXMM3;
   {$endif}
-  FPREG_FIRST = REGXMM0;
+  {$define HAS_FPREG}
 {$endif CPUX64}
 
-{$ifdef CPUX86}
-  REGEAX = 1;
-  REGEDX = 2;
-  REGECX = 3;
-  PARAMREG_FIRST = REGEAX;
-  PARAMREG_LAST = REGECX;
-  FPREG_FIRST = 0;
-  FPREG_LAST = 0;
-{$endif CPUX86}
-
-{$ifdef UNIX}
 {$ifdef CPUARM}
-  // 32-bit param register
+  // 32-bit integer param registers
   REGR0 = 1;
   REGR1 = 2;
   REGR2 = 3;
   REGR3 = 4;
-  // 64-bit fp register
+  PARAMREG_FIRST = REGR0;
+  PARAMREG_LAST = REGR3;
+  PARAMREG_RESULT = REGR1;
+  // 64-bit floating-point (double) registers
   REGD0 = 1;
   REGD1 = 2;
   REGD2 = 3;
@@ -50394,13 +50402,13 @@ const
   REGD5 = 6;
   REGD6 = 7;
   REGD7 = 8;
-  PARAMREG_FIRST = REGR0;
-  PARAMREG_LAST = REGR3;
   FPREG_FIRST = REGD0;
   FPREG_LAST = REGD7;
+  {$define HAS_FPREG}
 {$endif CPUARM}
 
 {$ifdef CPUAARCH64}
+  // 64-bit integer param registers
   REGX0 = 1;
   REGX1 = 2;
   REGX2 = 3;
@@ -50409,27 +50417,35 @@ const
   REGX5 = 6;
   REGX6 = 7;
   REGX7 = 8;
-  REGD0 = 1; // REGV0
+  PARAMREG_FIRST = REGX0;
+  PARAMREG_LAST = REGX7;
+  PARAMREG_RESULT = REGX0; // is really REGX1 self?
+  // 64-bit floating-point (double) registers
+  REGD0 = 1; // map REGV0 128-bit NEON register
   REGD1 = 2; // REGV1
   REGD2 = 3; // REGV2
   REGD3 = 4; // REGV3
   REGD4 = 5; // REGV4
   REGD5 = 6; // REGV5
   REGD6 = 7; // REGV6
+  {$ifdef aarch64regd7param} // circvumvent FPC bug which do not use REGD7
   REGD7 = 8; // REGV7
-  PARAMREG_FIRST = REGX0;
-  PARAMREG_LAST = REGX7;
+  {$endif}
   FPREG_FIRST = REGD0;
+  {$ifdef aarch64regd7param}
   FPREG_LAST = REGD7;
+  {$else}
+  FPREG_LAST = REGD6;
+  {$endif}
+  {$define HAS_FPREG}
 {$endif CPUAARCH64}
-{$endif UNIX}
 
   PTRSIZ = sizeof(Pointer);
   PTRSHR = {$ifdef CPU64}3{$else}2{$endif};
 
   STACKOFFSET_NONE = -1;
 
-  // ordinal values are stored within 64 bit buffer, and records in a RawUTF8
+  // ordinal values are stored within 64-bit buffer, and records in a RawUTF8
   CONST_ARGS_TO_VAR: array[TServiceMethodValueType] of TServiceMethodValueVar = (
     smvvNone, smvvSelf, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64, smvv64,
     smvv64, smvv64,
@@ -50437,7 +50453,8 @@ const
     {$ifndef NOVARIANTS}smvvRecord,{$endif} smvvObject, smvvRawUTF8,
     smvvDynArray, smvvInterface);
 
-  // always aligned to 8 bytes boundaries for 64 bit
+  {$ifdef CPU32}
+  // always aligned to 8 bytes boundaries for 64-bit
   CONST_ARGS_IN_STACK_SIZE: array[TServiceMethodValueType] of Cardinal = (
      0,  PTRSIZ,PTRSIZ, PTRSIZ,PTRSIZ,PTRSIZ, PTRSIZ,    8,     8,      8,
  // None, Self, Boolean, Enum, Set,  Integer, Cardinal, Int64, Double, DateTime,
@@ -50446,6 +50463,7 @@ const
     {$ifndef NOVARIANTS}PTRSIZ,{$endif} // Variant
     PTRSIZ, PTRSIZ,  PTRSIZ, PTRSIZ);
  // Object, RawJSON, DynArray, Interface
+  {$endif}
 
   CONST_ARGS_RESULT_BY_REF: TServiceMethodValueTypes = [
     smvRawUTF8, smvRawJSON, smvString, smvRawByteString, smvWideString, smvRecord,
@@ -50464,21 +50482,19 @@ type
     {$ifdef Linux}
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
     {$endif}
+    {$ifdef HAS_FPREG}
     FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of double;
+    {$endif}
     MethodIndex: PtrUInt;
     Frame: pointer;
     Ret: pointer;
     {$ifndef Linux}
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
     {$endif}
-    {$endif}
+    {$endif CPUX86}
     {$ifdef CPUARM}
     // alf: on ARM, there is more on the stack than you would expect
     DummyStack: packed array[0..9] of pointer;
-    {$endif}
-    {$ifdef CPUAARCH64}
-    // alf: on AArch64, there is more on the stack than you would expect
-    DummyStack: pointer;
     {$endif}
     Stack: packed array[word] of byte;
   end;
@@ -50654,7 +50670,7 @@ begin
     with method^.Args[arg] do
     if ValueType>smvSelf then begin
       V := nil;
-      {$ifndef CPUX86} // x64, arm, aarch64
+      {$ifdef HAS_FPREG} // x64, arm, aarch64
       if (vIsInFPR in ValueKindAsm) and (FPRegisterIdent>0) then
         V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*(FPRegisterIdent-1)));
       if (v=nil) and (RegisterIdent>0) then
@@ -50666,17 +50682,15 @@ begin
       {$endif}
       {$ifdef CPUX86}
       case RegisterIdent of
-        REGEAX: RaiseError('unexpected self',[]);
+      REGEAX: RaiseError('unexpected self',[]);
       REGEDX: V := @aCall.EDX;
       REGECX: V := @aCall.ECX;
       else
       {$endif}
-
-      if V=nil then begin
+      if V=nil then
         if (SizeInStack>0) and (InStackOffset<>STACKOFFSET_NONE) then
-          V := @aCall.Stack[InStackOffset] else 
+          V := @aCall.Stack[InStackOffset] else
           V := @I64s[IndexVar]; // for results in CPU
-      end;
       {$ifdef CPUX86}
       end;
       {$endif}
@@ -50854,20 +50868,12 @@ begin
   resultType := smvNone;
   InternalProcess; // use an inner proc to ensure direct fld/fild FPU ops
   case resultType of // al/ax/eax/eax:edx/rax already in result
-  {$ifdef CPUINTEL}
-  {$ifdef CPU64}
-  smvDouble,smvDateTime: aCall.FPRegs[REGXMM0] := PDouble(@result)^;
+  {$ifdef HAS_FPREG}
+  smvDouble,smvDateTime: aCall.FPRegs[FPREG_FIRST] := PDouble(@result)^;
   {$else}
   smvDouble,smvDateTime: asm fld  qword ptr [result] end;  // in st(0)
   smvCurrency:           asm fild qword ptr [result] end;  // in st(0)
   {$endif}
-  {$endif CPUINTEL}
-  {$ifdef CPUARM}
-  smvDouble,smvDateTime: aCall.FPRegs[REGD0] := PDouble(@result)^;
-  {$endif CPUARM}
-  {$ifdef CPUAARCH64}
-  smvDouble,smvDateTime: aCall.FPRegs[REGD0] := PDouble(@result)^;
-  {$endif CPUARM}
   end;
 end;
 
@@ -51229,28 +51235,16 @@ end;
 
 constructor TInterfaceFactory.Create(aInterface: PTypeInfo);
 var m,a,reg: integer;
-    {$ifdef Linux}
-    fpreg: integer;
-    {$endif}
     WR: TTextWriter;
     C: TClass;
     ErrorMsg: RawUTF8;
-    {$ifdef CPUARM}
-    resultIsREGR1: boolean;
-    {$endif}
-    {$ifdef CPUAARCH64}
-    resultIsREGX0: boolean;
-    {$endif}
-    {$ifdef CPUX64}
-    {$ifdef Linux}
-    resultIsRSI: boolean;
-    {$else}
-    resultIsRDX: boolean;
-    {$endif}
-    {$endif}
     {$ifdef CPUX86}
     offs: integer;
-   {$endif}
+    {$else}
+    {$ifdef Linux} // not used for Win64
+    fpreg: integer;
+    {$endif}
+    {$endif}
 label error;
 begin
   if aInterface=nil then
@@ -51376,31 +51370,13 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
   with fMethods[m] do begin
     // prepare stack and register layout
     reg := PARAMREG_FIRST;
+    {$ifndef CPUX86}
     {$ifdef Linux}
     fpreg := FPREG_FIRST;
-    {$endif}
-    {$ifdef CPUX64}
-      {$ifdef Linux}
-      resultIsRSI := (ArgsResultIndex>=0) and
-        (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
-      {$else}
-      resultIsRDX := (ArgsResultIndex>=0) and
-        (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
-    {$endif}
-    {$endif CPUX64}
-    {$ifdef CPUARM}
-    resultIsREGR1 := (ArgsResultIndex>=0) and
-      (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
-    {$endif CPUARM}
-    {$ifdef CPUAARCH64}
-    resultIsREGX0 := (ArgsResultIndex>=0) and
-      (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
-    // alf: self is now in REGX1 -  not sure if correct
-    {$endif CPUAARCH64}
+    {$endif Linux}
+    {$endif CPUX86}
     for a := 0 to high(Args) do
     with Args[a] do begin
-      RegisterIdent := 0;
-      FPRegisterIdent := 0;
       ValueVar := CONST_ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
@@ -51416,10 +51392,11 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       smvDynArray:
         if ObjArraySerializers.Find(ArgTypeInfo)<>nil then
           Include(ValueKindAsm,vIsObjArray);
-      {$ifndef CPUX86}
+      {$ifdef HAS_FPREG}
       smvDouble,smvDateTime:
-           if (reg<=FPREG_LAST) and not (vPassedByReference in ValueKindAsm) then
-             Include(ValueKindAsm,vIsInFPR);
+         // has to be unconditional: needed to detect float below
+         if not (vPassedByReference in ValueKindAsm) then
+           Include(ValueKindAsm,vIsInFPR);
       {$endif}
       end;
       case ValueType of
@@ -51450,106 +51427,88 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       if ValueDirection=smdResult then begin
         if not(ValueType in CONST_ARGS_RESULT_BY_REF) then
           continue; // ordinal/real/class results are returned in CPU/FPU registers
-        {$ifdef CPUX64}
+        {$ifndef CPUX86}
         InStackOffset := STACKOFFSET_NONE;
-        {$ifdef Linux}
-        RegisterIdent := REGRSI; // the result pointer is in rsi
-        {$else}
-        RegisterIdent := REGRDX; // the result pointer is in rdx
-        {$endif}
+        RegisterIdent := PARAMREG_RESULT;
         continue;
-        {$endif}
-        {$ifdef CPUARM}
-        InStackOffset := STACKOFFSET_NONE;
-        RegisterIdent := REGR1; // the result pointer is in r1
-        continue;
-        {$endif}
-        {$ifdef CPUAARCH64} 
-        // alf: FPC uses x0 to hold result pointer and self is stored in x1
-        // -> very different from all other calling methods (fixme?)
-        InStackOffset := STACKOFFSET_NONE;
-        RegisterIdent := REGX0; // the result pointer is in x1
-        continue;
-        {$endif}
+        {$endif CPUX86}
+        // CPUX86 would add an additional by-ref parameter
       end;
       {$ifdef CPU32}
       if ValueDirection=smdConst then
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
-        SizeInStack := PTRSIZ;
-      if
-        {$ifndef CPUARM}
+        SizeInStack := PTRSIZ; // always aligned to 8 bytes boundaries for 64-bit
+      if{$ifndef CPUARM}
         // on ARM, ordinals>PTRSIZ can also be placed in the normal registers !!
         (SizeInStack<>PTRSIZ) or
         {$endif}
-         ((vIsInFPR in ValueKindAsm) AND ({$ifdef Linux}fpreg{$else}reg{$endif}>FPREG_LAST))
-        or ((NOT(vIsInFPR in ValueKindAsm)) AND (reg>PARAMREG_LAST))
+        {$ifdef CPUX86}
+        (reg>PARAMREG_LAST) // Win32, Linux x86
+        {$else}
+        {$ifdef Linux}  // Linux x64, arm, aarch64
+        ((vIsInFPR in ValueKindAsm) and (fpreg>FPREG_LAST)) or
+        ((not(vIsInFPR in ValueKindAsm)) and (reg>PARAMREG_LAST))
+        {$else}
+        (reg>PARAMREG_LAST) // Win64
+        {$endif}
+        {$endif}
         // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
         {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
+        // this parameter would go on the stack
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack,SizeInStack);
+        if vIsInFPR in ValueKindAsm then
+          exclude(ValueKindAsm,vIsInFPR);
       end else begin
+        // this parameter would go in a register
         InStackOffset := STACKOFFSET_NONE;
-        {$ifdef CPUX64}
-        {$ifdef Linux}
-          if resultIsRSI and (reg=REGRSI) then
-            inc(reg); // RSI is reserved for function result pointer
-        {$else}
-          if resultIsRDX and (reg=REGRDX) then
-            inc(reg); // RDX is reserved for function result pointer
-        {$endif Linux}
-        {$endif CPUX64}
-        {$ifdef CPUARM}
-        if resultIsREGR1 and (reg=REGR1) then
-          inc(reg); // REGR1 is reserved for function result pointer
-        {$endif}
-        {$ifdef CPUAARCH64}
-        if resultIsREGX0 and (reg=REGX0) then
-        begin
-          inc(reg); // REGX0 is reserved for function result pointer
-          // alf: not sure if this is needed (fixme?)
-          inc(reg); // REGX1 is reserved for self
+        {$ifndef CPUX86}
+        if (ArgsResultIndex>=0) and (reg=PARAMREG_RESULT) and
+           (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF) then begin
+          inc(reg); // this register is reserved for method result pointer
+          {$ifdef CPUAARCH64} // alf: not sure if this is needed (fixme?)
+          inc(reg); // is really REGX1 reserved for self?
+          {$endif}
         end;
         {$endif}
+        {$ifdef HAS_FPREG}
         if vIsInFPR in ValueKindAsm then begin
+          // put in a floating-point register
           {$ifdef Linux}
           FPRegisterIdent := fpreg;
           inc(fpreg);
           {$else}
-          FPRegisterIdent := reg;
-        {$endif}
+          FPRegisterIdent := reg; // Win64 ABI: reg and fpreg do overlap
+          inc(reg);
+          {$endif Linux}
         end
-        else begin
+        else
+        {$endif} begin
+          // put in an integer register
           {$ifdef CPUARM}
-          // on ARM, ordinals>PTRSIZ are also placed in the normal registers
-          // but they must be aligned on a even boundary
+          // on 32-bit ARM, ordinals>PTRSIZ are also placed in normal registers
           if (SizeInStack>PTRSIZ) and ((reg and 1)=0) then
-            inc(reg);
-          // check if we are still able, after this increment, to put the parameter in the registers
-          if (((PARAMREG_LAST-reg+1)*PTRSIZ)<SizeInStack) then begin
-            // no space, put it on stack
+            inc(reg); // must be aligned on even boundary
+          // check if we have still enough registers, after previous increments
+          if ((PARAMREG_LAST-reg+1)*PTRSIZ)<SizeInStack then begin
+            // no space, put on stack
             InStackOffset := ArgsSizeInStack;
             inc(ArgsSizeInStack,SizeInStack);
             // all other parameters following the current one, must also be placed on stack
             reg := PARAMREG_LAST+1;
             continue;
           end;
-          {$endif}
           RegisterIdent := reg;
-          {$ifdef Linux}
+          if SizeInStack>PTRSIZ then
+            inc(reg,SizeInStack shr PTRSHR) else
+            inc(reg);
+          {$else}
+          RegisterIdent := reg;
           inc(reg);
-          {$ifdef CPUARM}
-          // on ARM, ordinals>PTRSIZ are also placed in the normal registers
-          // so we need double the registers
-          if (SizeInStack>PTRSIZ) then
-             inc(reg,(SizeInStack shr PTRSHR)-1);
-          {$endif}
-          {$endif}
+          {$endif CPUARM}
         end;
-        {$ifndef Linux}
-        inc(reg);
-        {$endif}
       end;
     end;
     if ArgsSizeInStack>MAX_EXECSTACK then
@@ -51566,7 +51525,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         InStackOffset := offs;
       end;
     //assert(offs=0);
-    {$endif}
+    {$endif CPUX86}
   end;
   WR := TJSONSerializer.CreateOwnedStream;
   try
@@ -51717,7 +51676,7 @@ end;
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
 var sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
-    sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
+    sd0, sd1, sd2, sd3, sd4, sd5, sd6{$ifdef regd7param}, sd7{$endif}: double;
     smetndx:pointer;
 asm
   // get method index
@@ -51730,7 +51689,9 @@ asm
   str d4,sd4
   str d5,sd5
   str d6,sd6
+  {$ifdef aarch64regd7param}
   str d7,sd7
+  {$endif}
   str x0,sx0
   str x1,sx1
   str x2,sx2
@@ -54112,7 +54073,7 @@ type
     StackSize: integer;
     StackAddr, method: PtrInt;
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of PtrInt;
-    {$ifndef CPUX86}
+    {$ifdef HAS_FPREG}
     FPRegs: packed array[FPREG_FIRST..FPREG_LAST] of Double;
     {$endif}
     res64: Int64Rec;
@@ -54235,6 +54196,9 @@ stack_loop:
    // decrement stacksize counter by 2 (2 registers are pushed every loop),
    // with update of flags for loop
    // (mandatory: stacksize must be a multiple of 2 [16 bytes] !!)
+   // inc stackaddr counter by 16 (2 registers are pushed every loop)
+   add	x4, x4, #16
+   // decrement stacksize counter by 2 (2 registers are pushed every loop), with update of flags for loop
    subs	x2, x2, #2
    b.ne stack_loop
 load_regs:
@@ -54253,7 +54217,9 @@ load_regs:
    ldr d4,[x19,#TCallMethodArgs.FPRegs+REGD4*8-8]
    ldr d5,[x19,#TCallMethodArgs.FPRegs+REGD5*8-8]
    ldr d6,[x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   {$ifdef aarch64regd7param}
    ldr d7,[x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   {$endif}
    // call TCallMethodArgs.method
    blr x20
    // store normal result
