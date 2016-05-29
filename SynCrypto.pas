@@ -7413,18 +7413,7 @@ asm
   db $0f,$c7,$f0
   // returns in eax, ignore carry flag (eax=0 won't hurt)
 end;
-
 // https://software.intel.com/en-us/articles/intel-digital-random-number-generator-drng-software-implementation-guide
-procedure AddEntropyFromCPU(var sha: TSHA256);
-var i, val: cardinal;
-begin
-  sha.Update(@CpuFeatures,sizeof(CpuFeatures));
-  if cfRAND in CpuFeatures then
-    for i := 1 to 20 do begin
-      val := RdRand32;
-      sha.Update(@val,sizeof(val));
-    end;
-end;
 {$endif}
 
 class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
@@ -7433,7 +7422,7 @@ var time: Int64;
     threads: array[0..2] of cardinal;
     version: RawByteString;
     sha: TSHA256;
-    entropy: array[0..1] of TSHA256Digest; // 64 bytes
+    entropy: array[0..3] of TSHA256Digest; // 128 bytes
     paranoid: cardinal;
     p: PByteArray;
     i: integer;
@@ -7445,6 +7434,28 @@ var time: Int64;
     {$ifdef MSWINDOWS}
     prov: HCRYPTPROV;
     {$endif}
+  procedure ShaInit;
+  var timenow: Int64;
+      g: TGUID;
+      i, val: cardinal;
+  begin
+    sha.Update(@time,sizeof(time));
+    sha.Update(@entropy,sizeof(entropy)); // bytes on CPU stack
+    QueryPerformanceCounter(timenow);
+    sha.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
+    for i := 0 to timenow and 3 do begin
+      CreateGUID(g); // not random, but genuine
+      sha.Update(@g,sizeof(g));
+    end;
+    {$ifdef CPUINTEL}
+    sha.Update(@CpuFeatures,sizeof(CpuFeatures));
+    if cfRAND in CpuFeatures then
+      for i := 1 to 20 do begin // hash 80 bytes from CPU
+        val := RdRand32;
+        sha.Update(@val,sizeof(val));
+      end;
+    {$endif}
+  end;
 begin
   QueryPerformanceCounter(time);
   SetLength(result,Len);
@@ -7475,6 +7486,11 @@ begin
   end;
   {$endif}
   if not fromOS then begin
+    {$ifdef CPUINTEL}
+    if cfRAND in CpuFeatures then
+      for i := 0 to (Len shr 2)-1 do
+        PCardinalArray(p)^[i] := PCardinalArray(p)^[i] xor RdRand32;
+    {$endif}
     i := Len;
     repeat
       CreateGUID(g); // is genuine, not random, but may be used as fallback seed
@@ -7488,31 +7504,23 @@ begin
   end;
   // always xor some minimal entropy - it won't hurt
   sha.Init;
-  sha.Update(@time,sizeof(time));
-  sha.Update(@entropy,sizeof(entropy));  // bytes on CPU stack
-  {$ifdef CPUINTEL}
-  AddEntropyFromCPU(sha);
-  {$endif}
-  ext := NowUTC;
-  sha.Update(@ext,sizeof(ext));
-  ext := Random;
-  sha.Update(@ext,sizeof(ext));
+  ShaInit;
   version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
   sha.Update(pointer(version),length(version)); // exe and host/user info
+  sha.Final(entropy[3]);
+  ShaInit;
+  ext := NowUTC;
+  sha.Update(@ext,sizeof(ext));
+  sha.Final(entropy[2]);
+  ShaInit;
+  ext := Random;
+  sha.Update(@ext,sizeof(ext));
   threads[0] := HInstance;
   threads[1] := GetCurrentThreadId;
   threads[2] := MainThreadID;
   sha.Update(@threads,sizeof(threads));
   sha.Final(entropy[1]);
-  sha.Update(@time,sizeof(time));
-  sha.Update(@entropy,sizeof(entropy));
-  {$ifdef CPUINTEL}
-  AddEntropyFromCPU(sha);
-  {$endif}
-  for i := 1 to 5 do begin
-    CreateGUID(g); // not random, but genuine
-    sha.Update(@g,sizeof(g));
-  end;
+  ShaInit;
   sha.Update(@SystemInfo,sizeof(SystemInfo));
   sha.Update(pointer(OSVersionText),Length(OSVersionText));
   SleepHiRes(0); // force non deterministic time shift
@@ -7523,11 +7531,6 @@ begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
-  {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
-    for i := 0 to (Len shr 2)-1 do
-      PCardinalArray(p)^[i] := PCardinalArray(p)^[i] xor RdRand32;
-  {$endif}
 end;
 
 procedure TAESPRNG.Seed;
