@@ -54067,7 +54067,7 @@ end;
 type
   PCallMethodArgs = ^TCallMethodArgs;
   {$ifdef FPC}
-    {$PACKRECORDS 16}
+  {$PACKRECORDS 16}
   {$endif}
   TCallMethodArgs = record
     StackSize: integer;
@@ -54080,9 +54080,12 @@ type
     resKind: TServiceMethodValueType;
   end;
   {$ifdef FPC}
-    {$PACKRECORDS DEFAULT}
+  {$PACKRECORDS DEFAULT}
   {$endif}
+
 procedure CallMethod(var Args: TCallMethodArgs);
+
+// ARM/AARCH64 code below provided by ALF, greatly inspired by pascalscript
 {$ifdef CPUARM}
 assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
@@ -54105,14 +54108,13 @@ asm
    //lr    14          link address / scratch register
    //pc    15          program counter
 
-   // greatly inspired by pascalscript
-   //prolog
+   // prolog
    mov	 ip, sp // sp is the stack pointer ; ip is the Intra-Procedure-call scratch register
    stmfd sp!, {v1, v2, sb, sl, fp, ip, lr, pc}
    sub	 fp, ip, #4
    // make space on stack
-   sub	 sp,sp,#MAX_EXECSTACK
-   mov   v1,Args
+   sub	 sp, sp, #MAX_EXECSTACK
+   mov   v1, Args
    // copy (push) stack content (if any)
    ldr   a1, [v1,#TCallMethodArgs.StackSize]
    // if there is no stack content, do nothing
@@ -54131,38 +54133,38 @@ stack_loop:
    subs	 a1, a1, #1
    bne	 stack_loop
 load_regs:
-   ldr r0,[v1,#TCallMethodArgs.ParamRegs+REGR0*4-4]
-   ldr r1,[v1,#TCallMethodArgs.ParamRegs+REGR1*4-4]
-   ldr r2,[v1,#TCallMethodArgs.ParamRegs+REGR2*4-4]
-   ldr r3,[v1,#TCallMethodArgs.ParamRegs+REGR3*4-4]
-   vldr d0,[v1,#TCallMethodArgs.FPRegs+REGD0*8-8]
-   vldr d1,[v1,#TCallMethodArgs.FPRegs+REGD1*8-8]
-   vldr d2,[v1,#TCallMethodArgs.FPRegs+REGD2*8-8]
-   vldr d3,[v1,#TCallMethodArgs.FPRegs+REGD3*8-8]
-   vldr d4,[v1,#TCallMethodArgs.FPRegs+REGD4*8-8]
-   vldr d5,[v1,#TCallMethodArgs.FPRegs+REGD5*8-8]
-   vldr d6,[v1,#TCallMethodArgs.FPRegs+REGD6*8-8]
-   vldr d7,[v1,#TCallMethodArgs.FPRegs+REGD7*8-8]
-   ldr v2, [v1,#TCallMethodArgs.method]
-   blx v2
-   str   a1,[v1,#TCallMethodArgs.res64.Lo]
-   str   a2,[v1,#TCallMethodArgs.res64.Hi]
-   ldr   a1,[v1,#TCallMethodArgs.resKind]
-   cmp   a1,smvDouble
+   ldr   r0, [v1,#TCallMethodArgs.ParamRegs+REGR0*4-4]
+   ldr   r1, [v1,#TCallMethodArgs.ParamRegs+REGR1*4-4]
+   ldr   r2, [v1,#TCallMethodArgs.ParamRegs+REGR2*4-4]
+   ldr   r3, [v1,#TCallMethodArgs.ParamRegs+REGR3*4-4]
+   vldr  d0, [v1,#TCallMethodArgs.FPRegs+REGD0*8-8]
+   vldr  d1, [v1,#TCallMethodArgs.FPRegs+REGD1*8-8]
+   vldr  d2, [v1,#TCallMethodArgs.FPRegs+REGD2*8-8]
+   vldr  d3, [v1,#TCallMethodArgs.FPRegs+REGD3*8-8]
+   vldr  d4, [v1,#TCallMethodArgs.FPRegs+REGD4*8-8]
+   vldr  d5, [v1,#TCallMethodArgs.FPRegs+REGD5*8-8]
+   vldr  d6, [v1,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   vldr  d7, [v1,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   ldr   v2, [v1,#TCallMethodArgs.method]
+   blx   v2
+   str   a1, [v1,#TCallMethodArgs.res64.Lo]
+   str   a2, [v1,#TCallMethodArgs.res64.Hi]
+   ldr   a1, [v1,#TCallMethodArgs.resKind]
+   cmp   a1, smvDouble
    beq   float_result
-   cmp   a1,smvDateTime
+   cmp   a1, smvDateTime
    beq   float_result
-   cmp   a1,smvCurrency
+   cmp   a1, smvCurrency
    bne   asmcall_end
    // store double result in res64
 float_result:
-   vstr   d0,[v1,#TCallMethodArgs.res64]
+   vstr  d0, [v1,#TCallMethodArgs.res64]
 asmcall_end:
    // epilog
-   ldmea fp, {v1, v2, sb, sl, fp, sp, pc}        ;
-   // ldmfd sp!,{v1, v2, sb, sl, fp, ip, lr, pc} // pop non volatile registers ftom stack
+   ldmea fp, {v1, v2, sb, sl, fp, sp, pc}
 end;
 {$endif CPUARM}
+
 {$ifdef CPUAARCH64}
 assembler; nostackframe;
 label stack_loop,load_regs,asmcall_end,float_result;
@@ -54171,12 +54173,12 @@ asm
    // fp       x29
    // lr       x30
    // sp       sp
-   stp	fp,lr,[sp, #-16]!
-   stp	x19,x20,[sp, #-16]!
-   mov	fp,sp
+   stp	fp, lr, [sp, #-16]!
+   stp	x19, x20, [sp, #-16]!
+   mov	fp, sp
    // make space on stack
-   sub	sp,sp,#MAX_EXECSTACK
-   mov  x19,Args
+   sub	sp, sp, #MAX_EXECSTACK
+   mov  x19, Args
    ldr  x20, [x19,#TCallMethodArgs.method]
    // prepare to copy (push) stack content (if any)
    ldr  x2, [x19,#TCallMethodArgs.StackSize]
@@ -54188,11 +54190,11 @@ asm
    // load x4 with CallMethod stack address
    ldr	x4, [x19,#TCallMethodArgs.StackAddr]
 stack_loop:
-  // load x5 and x6 with stack contents
-   ldr x5, [x4]
-   ldr x6, [x4,#8]
-   //store contents at "real" stack and decrement address counter
-   stp	x5,x6,[x3],#16
+   // load x5 and x6 with stack contents
+   ldr  x5, [x4]
+   ldr  x6, [x4,#8]
+   // store contents at "real" stack and decrement address counter
+   stp	x5, x6, [x3], #16
    // decrement stacksize counter by 2 (2 registers are pushed every loop),
    // with update of flags for loop
    // (mandatory: stacksize must be a multiple of 2 [16 bytes] !!)
@@ -54202,69 +54204,70 @@ stack_loop:
    subs	x2, x2, #2
    b.ne stack_loop
 load_regs:
-   ldr x0,[x19,#TCallMethodArgs.ParamRegs+REGX0*8-8]
-   ldr x1,[x19,#TCallMethodArgs.ParamRegs+REGX1*8-8]
-   ldr x2,[x19,#TCallMethodArgs.ParamRegs+REGX2*8-8]
-   ldr x3,[x19,#TCallMethodArgs.ParamRegs+REGX3*8-8]
-   ldr x4,[x19,#TCallMethodArgs.ParamRegs+REGX4*8-8]
-   ldr x5,[x19,#TCallMethodArgs.ParamRegs+REGX5*8-8]
-   ldr x6,[x19,#TCallMethodArgs.ParamRegs+REGX6*8-8]
-   ldr x7,[x19,#TCallMethodArgs.ParamRegs+REGX7*8-8]
-   ldr d0,[x19,#TCallMethodArgs.FPRegs+REGD0*8-8]
-   ldr d1,[x19,#TCallMethodArgs.FPRegs+REGD1*8-8]
-   ldr d2,[x19,#TCallMethodArgs.FPRegs+REGD2*8-8]
-   ldr d3,[x19,#TCallMethodArgs.FPRegs+REGD3*8-8]
-   ldr d4,[x19,#TCallMethodArgs.FPRegs+REGD4*8-8]
-   ldr d5,[x19,#TCallMethodArgs.FPRegs+REGD5*8-8]
-   ldr d6,[x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   ldr  x0, [x19,#TCallMethodArgs.ParamRegs+REGX0*8-8]
+   ldr  x1, [x19,#TCallMethodArgs.ParamRegs+REGX1*8-8]
+   ldr  x2, [x19,#TCallMethodArgs.ParamRegs+REGX2*8-8]
+   ldr  x3, [x19,#TCallMethodArgs.ParamRegs+REGX3*8-8]
+   ldr  x4, [x19,#TCallMethodArgs.ParamRegs+REGX4*8-8]
+   ldr  x5, [x19,#TCallMethodArgs.ParamRegs+REGX5*8-8]
+   ldr  x6, [x19,#TCallMethodArgs.ParamRegs+REGX6*8-8]
+   ldr  x7, [x19,#TCallMethodArgs.ParamRegs+REGX7*8-8]
+   ldr  d0, [x19,#TCallMethodArgs.FPRegs+REGD0*8-8]
+   ldr  d1, [x19,#TCallMethodArgs.FPRegs+REGD1*8-8]
+   ldr  d2, [x19,#TCallMethodArgs.FPRegs+REGD2*8-8]
+   ldr  d3, [x19,#TCallMethodArgs.FPRegs+REGD3*8-8]
+   ldr  d4, [x19,#TCallMethodArgs.FPRegs+REGD4*8-8]
+   ldr  d5, [x19,#TCallMethodArgs.FPRegs+REGD5*8-8]
+   ldr  d6, [x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
    {$ifdef aarch64regd7param}
-   ldr d7,[x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   ldr  d7, [x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
    {$endif}
    // call TCallMethodArgs.method
-   blr x20
+   blr  x20
    // store normal result
-   str  x0,[x19,#TCallMethodArgs.res64]
-   ldr  x20,[x19,#TCallMethodArgs.resKind]
-   cmp  x20,smvDouble
+   str  x0, [x19, #TCallMethodArgs.res64]
+   ldr  x20, [x19, #TCallMethodArgs.resKind]
+   cmp  x20, smvDouble
    b.eq float_result
-   cmp  x20,smvDateTime
+   cmp  x20, smvDateTime
    b.eq float_result
-   cmp  x20,smvCurrency
+   cmp  x20, smvCurrency
    b.ne asmcall_end
    // store double result in res64
 float_result:
-   str  d0,[x19,#TCallMethodArgs.res64]
+   str  d0, [x19,#TCallMethodArgs.res64]
 asmcall_end:
    // give back space on stack (add sp,sp,#MAX_EXECSTACK)
-   mov	sp,fp
-   ldp	x19,x20,[sp], #16
-   ldp	fp,lr,[sp], #16
+   mov	sp, fp
+   ldp	x19, x20, [sp], #16
+   ldp	fp, lr, [sp], #16
    ret
 end;
 {$endif CPUAARCH64}
+
 {$ifdef CPUX64}
-assembler;{$IFDEF FPC}nostackframe;{$ENDIF}
+assembler;{$ifdef FPC}nostackframe;{$endif}
 asm
-    {$IFNDEF FPC}.noframe{$ENDIF}
+    {$ifndef FPC}.noframe{$endif}
     push rbp
     push r12
     mov rbp,rsp
     // simulate .params 60 ... size for 60 parameters
     lea rsp,[rsp-MAX_EXECSTACK]
     // align stack
-    and rsp,-16
+    and rsp, -16
     // get Args
-    mov r12,Args
+    mov r12, Args
     // copy (push) stack content (if any)
     mov ecx, [r12].TCallMethodArgs.StackSize
     mov rdx, [r12].TCallMethodArgs.StackAddr
     jmp @checkstack
 @addstack:
-    {$IFDEF FPC}
+    {$ifdef FPC}
     push qword ptr [rdx]
-    {$ELSE}
+    {$else}
     push [rdx]
-    {$ENDIF}
+    {$endif}
     dec ecx
     sub rdx,8
 @checkstack:
@@ -54273,24 +54276,24 @@ asm
     // fill registers
     {$ifdef LINUX}
     // Linux/BSD System V AMD64 ABI
-    mov RDI,[r12+TCallMethodArgs.ParamRegs+REGRDI*8-8]
-    mov RSI,[r12+TCallMethodArgs.ParamRegs+REGRSI*8-8]
-    mov RDX, [r12+TCallMethodArgs.ParamRegs+REGRDX *8-8]
-    mov RCX, [r12+TCallMethodArgs.ParamRegs+REGRCX *8-8]
-    mov R8,[r12+TCallMethodArgs.ParamRegs+REGR8*8-8]
-    mov R9,[r12+TCallMethodArgs.ParamRegs+REGR9*8-8]
-    movlpd xmm0,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movlpd xmm1,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movlpd xmm2,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movlpd xmm3,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    movlpd xmm4,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
-    movlpd xmm5,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
-    movlpd xmm6,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
-    movlpd xmm7,qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
+    mov rdi, [r12+TCallMethodArgs.ParamRegs+REGRDI*8-8]
+    mov rsi, [r12+TCallMethodArgs.ParamRegs+REGRSI*8-8]
+    mov rdx, [r12+TCallMethodArgs.ParamRegs+REGRDX *8-8]
+    mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX *8-8]
+    mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8*8-8]
+    mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9*8-8]
+    movlpd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movlpd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movlpd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movlpd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    movlpd xmm4, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
+    movlpd xmm5, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
+    movlpd xmm6, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
+    movlpd xmm7, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
     {$else}
     // Win64 ABI
-    mov rcx,[r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
-    mov rdx,[r12+TCallMethodArgs.ParamRegs+REGRDX*8-8]
+    mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
+    mov rdx, [r12+TCallMethodArgs.ParamRegs+REGRDX*8-8]
     mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8 *8-8]
     mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9 *8-8]
     {$ifdef FPC}
@@ -54299,10 +54302,10 @@ asm
     movlpd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
     movlpd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
     {$else}
-    movsd xmm0,[r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movsd xmm1,[r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movsd xmm2,[r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movsd xmm3,[r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    movsd xmm0, [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movsd xmm1, [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movsd xmm2, [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movsd xmm3, [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
     {$endif FPC}
     {$endif LINUX}
     // alf: adjust for shadow-space (fixme?)
@@ -54318,16 +54321,16 @@ asm
     add rsp, $20
     {$endif}
     // retrieve result
-    mov [r12].TCallMethodArgs.res64,rax
-    mov cl,[r12].TCallMethodArgs.resKind
-    cmp cl,smvDouble
+    mov [r12].TCallMethodArgs.res64, rax
+    mov cl, [r12].TCallMethodArgs.resKind
+    cmp cl, smvDouble
     je @d
-    cmp cl,smvDateTime
+    cmp cl, smvDateTime
     je @d
-    cmp cl,smvCurrency
+    cmp cl, smvCurrency
     jne @e
 @d: movlpd qword ptr [r12].TCallMethodArgs.res64, xmm0
-@e: mov rsp,rbp
+@e: mov rsp, rbp
     pop r12
     pop rbp
 end;
