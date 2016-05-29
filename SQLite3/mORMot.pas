@@ -50459,7 +50459,7 @@ type
   /// map the stack memory layout at TInterfacedObjectFake.FakeCall()
   TFakeCallStack = packed record
     {$ifdef CPUX86}
-    EDX, ECX, MethodIndex, EBP, Ret: Cardinal;
+    EDX, ECX, MethodIndex, EBP, Ret: cardinal;
     {$else}
     {$ifdef Linux}
     ParamRegs: packed array[PARAMREG_FIRST..PARAMREG_LAST] of pointer;
@@ -51396,7 +51396,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
     resultIsREGX0 := (ArgsResultIndex>=0) and
       (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF);
     // alf: self is now in REGX1 -  not sure if correct
-    {$endif CPUARM}
+    {$endif CPUAARCH64}
     for a := 0 to high(Args) do
     with Args[a] do begin
       RegisterIdent := 0;
@@ -51477,7 +51477,13 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         SizeInStack := CONST_ARGS_IN_STACK_SIZE[ValueType] else
       {$endif}
         SizeInStack := PTRSIZ;
-      if (reg>PARAMREG_LAST) or (SizeInStack<>PTRSIZ)
+      if
+        {$ifndef CPUARM}
+        // on ARM, ordinals>PTRSIZ can also be placed in the normal registers !!
+        (SizeInStack<>PTRSIZ) or
+        {$endif}
+         ((vIsInFPR in ValueKindAsm) AND ({$ifdef Linux}fpreg{$else}reg{$endif}>FPREG_LAST))
+        or ((NOT(vIsInFPR in ValueKindAsm)) AND (reg>PARAMREG_LAST))
         // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
         {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
@@ -51855,7 +51861,6 @@ begin
   if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) then
     Q := High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) else
     Q := Q + (High(DWORD) div 2); // + 2GB
-
   while P < Q do begin
     PP := Pointer(P);
     if VirtualQuery(PP, mbiold, sizeof(_MEMORY_BASIC_INFORMATION64)) = 0 then
@@ -51952,7 +51957,8 @@ constructor TFakeStubBuffer.Create;
 begin
   {$ifdef MSWINDOWS}
   {$ifdef FPC}
-  // alf: this is necessary, because a plain call to VirtualAlloc with FPC reserves a piece of memory too far away for a relative jump (on x64)
+  // alf: this is necessary, because a plain call to VirtualAlloc with FPC
+  // reserves a piece of memory too far away for a relative jump (on x64)
   fStub := AddrAllocMem(STUB_SIZE,PAGE_EXECUTE_READWRITE);
   {$else FPC}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
@@ -54161,7 +54167,7 @@ stack_loop:
    // copy a4 to a2 and increment a2 (a2 = StackPointer)
    stmia a2!, {a4}
    // decrement stacksize counter, with update of flags for loop
-   subs	 a1, a1, #4
+   subs	 a1, a1, #1
    bne	 stack_loop
 load_regs:
    ldr r0,[v1,#TCallMethodArgs.ParamRegs+REGR0*4-4]
@@ -54226,8 +54232,10 @@ stack_loop:
    ldr x6, [x4,#8]
    //store contents at "real" stack and decrement address counter
    stp	x5,x6,[x3],#16
-   // decrement stacksize counter, with update of flags for loop
-   subs	x2, x2, #16
+   // decrement stacksize counter by 2 (2 registers are pushed every loop),
+   // with update of flags for loop
+   // (mandatory: stacksize must be a multiple of 2 [16 bytes] !!)
+   subs	x2, x2, #2
    b.ne stack_loop
 load_regs:
    ldr x0,[x19,#TCallMethodArgs.ParamRegs+REGX0*8-8]
@@ -56238,12 +56246,12 @@ begin
     {$else}
     // stack is filled normally (LTR)
     call.StackAddr := PtrInt(@Stack[0]);
-    call.StackSize := ArgsSizeInStack;
+    call.StackSize := ArgsSizeInStack shr 2;
     {$ifdef CPUAARCH64}
-    // mandatory on aarch64: make stack aligned on 16 bytes
-    // ab@alf: shouldn't it be "and 1", just for x64 above ?
-    if call.StackSize and 15 <> 0 then
-      inc(call.StackSize,16-(call.StackSize and 15));
+    call.StackSize := ArgsSizeInStack shr 3;
+    // ensure stack aligned on 16 bytes (mandatory: needed for correct low level asm)
+    if call.StackSize and 1 <> 0 then
+      inc(call.StackSize);
     {$endif}
     {$endif CPUINTEL}
     {$endif CPUX86}

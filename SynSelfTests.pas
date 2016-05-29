@@ -1038,6 +1038,10 @@ type
     /// swap two by-reference floating-point values
     // - would validate pointer use instead of XMM1/XMM2 registers under Win64 
     procedure Swap(var n1,n2: double);
+    // test unaligned stack access
+    function StackIntMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: integer): Int64;
+    // test float stack access
+    function StackFloatMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: double): Int64;
     /// do some work with strings, sets and enumerates parameters,
     // testing also var (in/out) parameters and set as a function result
     function SpecialCall(Txt: RawUTF8; var Int: integer; var Card: cardinal; field: TSynTableFieldTypes;
@@ -9379,7 +9383,7 @@ var R: TSQLRecordTest;
     db: TSQLRestServer;
     b: TSQLRestBatch;
 begin
-  DirectoryDelete(ExeVersion.ProgramFilePath,'test0*.dbs',True);
+  DirectoryDelete(ExeVersion.ProgramFilePath,'Test0*.dbs',True);
   db := CreateShardDB;
   try
     R := TSQLRecordTest.Create;
@@ -9434,8 +9438,8 @@ var R: TSQLRecordTest;
     i: integer;
     db: TSQLRestServer;
 begin
-  Check(DeleteFile(ExeVersion.ProgramFilePath+'test0000.dbs'));
-  Check(DeleteFile(ExeVersion.ProgramFilePath+'test0001.dbs'));
+  Check(DeleteFile(ExeVersion.ProgramFilePath+'Test0000.dbs'));
+  Check(DeleteFile(ExeVersion.ProgramFilePath+'Test0001.dbs'));
   db := CreateShardDB;
   try
     R := TSQLRecordTest.Create;
@@ -12214,6 +12218,8 @@ type
     function Multiply(n1,n2: Int64): Int64;
     procedure ToText(Value: Currency; var Result: RawUTF8);
     function ToTextFunc(Value: double): string;
+    function StackIntMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: integer): Int64;
+    function StackFloatMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: double): Int64;
     function SpecialCall(Txt: RawUTF8; var Int: integer; var Card: cardinal; field: TSynTableFieldTypes;
       fields: TSynTableFieldTypes; var options: TSynTableFieldOptions): TSynTableFieldTypes;
     function ComplexCall(const Ints: TIntegerDynArray; const Strs1: TRawUTF8DynArray;
@@ -12284,6 +12290,16 @@ end;
 function TServiceCalculator.Multiply(n1, n2: Int64): Int64;
 begin
   result := n1*n2;
+end;
+
+function TServiceCalculator.StackIntMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: integer): Int64;
+begin
+  result := n1*n2*n3*n4*n5*n6*n7*n8*n9*n10;
+end;
+
+function TServiceCalculator.StackFloatMultiply(n1,n2,n3,n4,n5,n6,n7,n8,n9,n10: double): Int64;
+begin
+  result := round(n1*n2*n3*n4*n5*n6*n7*n8*n9*n10);
 end;
 
 function TServiceCalculator.SpecialCall(Txt: RawUTF8; var Int: integer;
@@ -12661,6 +12677,8 @@ var s: RawUTF8;
 begin
   Check(Inst.I.Add(1,2)=3);
   Check(Inst.I.Multiply($1111333344445555,$2222666677778888)=$e26accccbf257d28);
+  Check(Inst.I.StackIntMultiply(1,2,3,4,5,6,7,8,9,10)=3628800);
+  Check(Inst.I.StackFloatMultiply(1,2,3,4,5,6,7,8,9,10)=3628800);
   CheckSame(Inst.I.Subtract(23,20),3);
   Inst.I.ToText(3.14,s);
   Check(s='3.14');
@@ -13065,8 +13083,8 @@ begin
   fClient.Server.Services.ExpectMangledURI := false;
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods)=8) then exit;
-  Check(S.ContractHash='"2808B548C9F6D59D"');
+  if CheckFailed(length(S.InterfaceFactory.Methods)=10) then exit;
+  Check(S.ContractHash='"F733467874E273A7"');
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
