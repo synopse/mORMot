@@ -284,13 +284,19 @@ begin
   end;
 end;
 
+const
+  TAG_NONE = 0;
+  TAG_ADDTHREADCOLANDREFRESHLOG = 1;
+  TAG_REFRESHLOG = 2;
+
 procedure TLogFrame.ReceivedOne(const Text: RawUTF8);
 var
   withoutThreads: boolean;
   P: PUTF8Char;
   line: RawUTF8;
   index: integer;
-begin // warning: this method is called from WebSockets thread, not UI thread
+begin
+  // warning: this method is called from WebSockets thread, not UI thread
   FLogSafe.Lock;
   try
     if (FLog = nil) or (Text = '') then
@@ -304,11 +310,11 @@ begin // warning: this method is called from WebSockets thread, not UI thread
       FLog.AddInMemoryLine(line);
       if FLog.Count = 0 then
         continue;
-      if tmrRefresh.Tag = 0 then
+      if tmrRefresh.Tag = TAG_NONE then
         if withoutThreads and (FLog.EventThread <> nil) then
-          tmrRefresh.Tag := 1
+          tmrRefresh.Tag := TAG_ADDTHREADCOLANDREFRESHLOG
         else
-          tmrRefresh.Tag := 2;
+          tmrRefresh.Tag := TAG_REFRESHLOG;
       index := FLog.Count - 1;
       if FLog.EventLevel[index] in FEventsSet then
         AddInteger(FlogSelected, FLogSelectedCount, index);
@@ -322,11 +328,11 @@ procedure TLogFrame.tmrRefreshTimer(Sender: TObject);
 var
   moveToLast: boolean;
 begin
-  FLogSafe.Lock;
+  FLogSafe.Lock; // to protect tmrRefresh.Tag access from ReceivedOne()
   try
-    if (tmrRefresh.Tag = 0) or (fLog = nil) then
+    if (tmrRefresh.Tag = TAG_NONE) or (fLog = nil) then
       exit;
-    if tmrRefresh.Tag = 1 then begin
+    if tmrRefresh.Tag = TAG_ADDTHREADCOLANDREFRESHLOG then begin
       drwgrdEvents.ColCount := 4;
       drwgrdEvents.ColWidths[2] := 30;
       drwgrdEvents.ColWidths[3] := 2000;
@@ -339,7 +345,7 @@ begin
         drwgrdEvents.Tag := 1;
       end;
     drwgrdEvents.Invalidate;
-    tmrRefresh.Tag := 0;
+    tmrRefresh.Tag := TAG_NONE;
   finally
     FLogSafe.UnLock;
   end;
@@ -347,6 +353,7 @@ end;
 
 const
   TIME_FORMAT: array[boolean] of string = ('hh:mm:ss.zzz', 'hh:mm:ss');
+  MAXLOGLINE = 300;
 
 procedure TLogFrame.drwgrdEventsDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
@@ -354,17 +361,6 @@ var
   txt: string;
   b: boolean;
   index: integer;
-
-  procedure SetTxtFromEvent;
-  var
-    u: RawUTF8;
-  begin
-    u := FLog.EventText[index];
-    if length(u) > 300 then
-      Setlength(u, 300);
-    txt := UTF8ToString(StringReplaceAll(u, #9, '   '));
-  end;
-
 begin
   with drwgrdEvents.Canvas do
   if FLog = nil then
@@ -390,9 +386,9 @@ begin
           if FLog.EventThread <> nil then
             txt := IntToString(cardinal(FLog.EventThread[index]))
           else
-            SetTxtFromEvent;
+            txt := FLog.EventString(index, '    ', MAXLOGLINE);
         3:
-          SetTxtFromEvent;
+          txt := FLog.EventString(index, '    ', MAXLOGLINE);
         end;
       end;
     finally
@@ -406,7 +402,7 @@ begin
       TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
   end
   else
-    TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.Strings[ARow]);
+    TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.EventString(ARow));
 end;
 
 procedure TLogFrame.drwgrdEventsClick(Sender: TObject);
@@ -420,7 +416,7 @@ begin
     if cardinal(i) >= cardinal(FLogSelectedCount) then
       s := ''
     else
-      s := FLog.Strings[FLogSelected[i]];
+      s := FLog.EventString(FLogSelected[i]);
   finally
     FLogSafe.UnLock;
   end;
@@ -476,7 +472,7 @@ begin
     drwgrdEvents.Row := Index;
     if (search = '') and drwgrdEvents.Visible then
       drwgrdEvents.SetFocus;
-    s := FLog.Strings[FLogSelected[Index]];
+    s := FLog.EventString(FLogSelected[Index]);
     mmoBottom.Text := s;
     if search <> '' then begin
       ss := UTF8ToString(search);

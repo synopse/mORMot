@@ -17332,7 +17332,7 @@ begin
     if c and $80<>0 then begin
       extra := UTF8_EXTRABYTES[c];
       if extra=0 then exit else // invalid leading byte
-      for i := 1 to extra do // inc(source,extra) is faster but not safe
+      for i := 1 to extra do
         if byte(source^) and $c0<>$80 then
           exit else
           inc(source); // check valid UTF-8 content
@@ -17355,7 +17355,7 @@ begin
     if c and $80<>0 then begin
       extra := UTF8_EXTRABYTES[c];
       if extra=0 then exit else // invalid leading byte
-      for i := 1 to extra do // inc(source,extra) is faster but not safe
+      for i := 1 to extra do
         if byte(source^) and $c0<>$80 then
           exit else
           inc(source); // check valid UTF-8 content
