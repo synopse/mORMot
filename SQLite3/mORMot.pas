@@ -9994,8 +9994,7 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
     // cleared with ObjArrClear() and not TDynArray.Clear
-    // - vIsInFPR is used for floating point constant arguments (not under x86/x87)
-    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray, vIsInFPR);
+    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray);
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -50669,13 +50668,13 @@ begin
     for arg := 1 to high(method^.Args) do
     with method^.Args[arg] do
     if ValueType>smvSelf then begin
-      V := nil;
       {$ifdef HAS_FPREG} // x64, arm, aarch64
-      if (vIsInFPR in ValueKindAsm) and (FPRegisterIdent>0) then
-        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*(FPRegisterIdent-1)));
-      if (v=nil) and (RegisterIdent>0) then
-        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+Sizeof(pointer)*(RegisterIdent-1)));
+      if FPRegisterIdent>0 then
+        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*(FPRegisterIdent-1))) else
+      if RegisterIdent>0 then
+        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+Sizeof(pointer)*(RegisterIdent-1))) else
       {$endif}
+        V := nil;
       {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
       if RegisterIdent=PARAMREG_FIRST then
          RaiseError('unexpected self',[]);
@@ -50851,10 +50850,20 @@ begin
   {$ifdef CPUAARCH64}
   // alf: on aarch64, the self is sometimes only available in x1, when we have a result pointer !
   // try to detect this ... although not very elegant, but I do not yet know how else to do this
-  if (fFactory=nil) or (fFactory.fDetectX0ResultMagic<>$AAAAAAAA) then begin
-    // aha, we have a reference result, placed in X0, so self is in X1 !!
+  try
+    if (fFactory=nil) or (fFactory.fDetectX0ResultMagic<>$AAAAAAAA) then begin
+      // aha, we have a reference result, placed in X0, so self is in X1 !!
+      self := aCall.ParamRegs[REGX1];
+      self := SelfFromInterface;
+      if fFactory.fDetectX0ResultMagic<>$AAAAAAAA then
+         raise EInterfaceFactoryException.CreateUTF8('Self error',[]);
+    end;
+  except
+    // if the above fails due to some error, we are definitely sure that the self is in REGX1 !!
     self := aCall.ParamRegs[REGX1];
     self := SelfFromInterface;
+    if fFactory.fDetectX0ResultMagic<>$AAAAAAAA then
+       raise EInterfaceFactoryException.CreateUTF8('Self error',[]);
   end;
   {$endif}
   if aCall.MethodIndex>=fFactory.fMethodsCount then
@@ -51238,6 +51247,9 @@ var m,a,reg: integer;
     WR: TTextWriter;
     C: TClass;
     ErrorMsg: RawUTF8;
+    {$ifdef HAS_FPREG}
+    ValueIsInFPR:boolean;
+    {$endif}
     {$ifdef CPUX86}
     offs: integer;
     {$else}
@@ -51377,6 +51389,11 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
     {$endif CPUX86}
     for a := 0 to high(Args) do
     with Args[a] do begin
+      RegisterIdent := 0;
+      {$ifdef HAS_FPREG}
+      FPRegisterIdent := 0;
+      ValueIsInFPR := false;
+      {$endif}
       ValueVar := CONST_ARGS_TO_VAR[ValueType];
       IndexVar := ArgsUsedCount[ValueVar];
       inc(ArgsUsedCount[ValueVar]);
@@ -51394,9 +51411,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
           Include(ValueKindAsm,vIsObjArray);
       {$ifdef HAS_FPREG}
       smvDouble,smvDateTime:
-         // has to be unconditional: needed to detect float below
-         if not (vPassedByReference in ValueKindAsm) then
-           Include(ValueKindAsm,vIsInFPR);
+        ValueIsInFPR := not (vPassedByReference in ValueKindAsm);
       {$endif}
       end;
       case ValueType of
@@ -51447,8 +51462,8 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         (reg>PARAMREG_LAST) // Win32, Linux x86
         {$else}
         {$ifdef Linux}  // Linux x64, arm, aarch64
-        ((vIsInFPR in ValueKindAsm) and (fpreg>FPREG_LAST)) or
-        ((not(vIsInFPR in ValueKindAsm)) and (reg>PARAMREG_LAST))
+        ((ValueIsInFPR) and (fpreg>FPREG_LAST)) or
+        ((not ValueIsInFPR) and (reg>PARAMREG_LAST))
         {$else}
         (reg>PARAMREG_LAST) // Win64
         {$endif}
@@ -51459,8 +51474,6 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         // this parameter would go on the stack
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack,SizeInStack);
-        if vIsInFPR in ValueKindAsm then
-          exclude(ValueKindAsm,vIsInFPR);
       end else begin
         // this parameter would go in a register
         InStackOffset := STACKOFFSET_NONE;
@@ -51468,13 +51481,10 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         if (ArgsResultIndex>=0) and (reg=PARAMREG_RESULT) and
            (Args[ArgsResultIndex].ValueType in CONST_ARGS_RESULT_BY_REF) then begin
           inc(reg); // this register is reserved for method result pointer
-          {$ifdef CPUAARCH64} // alf: not sure if this is needed (fixme?)
-          inc(reg); // is really REGX1 reserved for self?
-          {$endif}
         end;
-        {$endif}
+       {$endif}
         {$ifdef HAS_FPREG}
-        if vIsInFPR in ValueKindAsm then begin
+        if ValueIsInFPR then begin
           // put in a floating-point register
           {$ifdef Linux}
           FPRegisterIdent := fpreg;
@@ -54193,9 +54203,8 @@ stack_loop:
    // load x5 and x6 with stack contents
    ldr  x5, [x4]
    ldr  x6, [x4,#8]
-   // store contents at "real" stack and decrement address counter
+   // store contents at "real" stack and increment address counter x3
    stp	x5, x6, [x3], #16
-   // decrement stacksize counter by 2 (2 registers are pushed every loop),
    // with update of flags for loop
    // (mandatory: stacksize must be a multiple of 2 [16 bytes] !!)
    // inc stackaddr counter by 16 (2 registers are pushed every loop)
