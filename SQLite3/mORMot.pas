@@ -54135,40 +54135,40 @@ asm
    sub	 sp, sp, #MAX_EXECSTACK
    mov   v1, Args
    // copy (push) stack content (if any)
-   ldr   a1, [v1,#TCallMethodArgs.StackSize]
+   ldr   a1, [v2,#TCallMethodArgs.StackSize]
    // if there is no stack content, do nothing
-   cmp	 a1, #0
-   beq	 load_regs
+   cmp  a1, #0
+   beq  load_regs
    // point a2 to bottom of stack.
-   mov	 a2, sp
+   mov  a2, sp
    // load a3 with CallMethod stack address
-   ldr	 a3, [v1,#TCallMethodArgs.StackAddr]
+   ldr  a3, [v2,#TCallMethodArgs.StackAddr]
 stack_loop:
    // copy a3 to a4 and increment a3 (a3 = StackAddr)
    ldmia a3!, {a4}
    // copy a4 to a2 and increment a2 (a2 = StackPointer)
    stmia a2!, {a4}
    // decrement stacksize counter, with update of flags for loop
-   subs	 a1, a1, #1
-   bne	 stack_loop
+   subs  a1, a1, #1
+   bne  stack_loop
 load_regs:
-   ldr   r0, [v1,#TCallMethodArgs.ParamRegs+REGR0*4-4]
-   ldr   r1, [v1,#TCallMethodArgs.ParamRegs+REGR1*4-4]
-   ldr   r2, [v1,#TCallMethodArgs.ParamRegs+REGR2*4-4]
-   ldr   r3, [v1,#TCallMethodArgs.ParamRegs+REGR3*4-4]
-   vldr  d0, [v1,#TCallMethodArgs.FPRegs+REGD0*8-8]
-   vldr  d1, [v1,#TCallMethodArgs.FPRegs+REGD1*8-8]
-   vldr  d2, [v1,#TCallMethodArgs.FPRegs+REGD2*8-8]
-   vldr  d3, [v1,#TCallMethodArgs.FPRegs+REGD3*8-8]
-   vldr  d4, [v1,#TCallMethodArgs.FPRegs+REGD4*8-8]
-   vldr  d5, [v1,#TCallMethodArgs.FPRegs+REGD5*8-8]
-   vldr  d6, [v1,#TCallMethodArgs.FPRegs+REGD6*8-8]
-   vldr  d7, [v1,#TCallMethodArgs.FPRegs+REGD7*8-8]
-   ldr   v2, [v1,#TCallMethodArgs.method]
-   blx   v2
-   str   a1, [v1,#TCallMethodArgs.res64.Lo]
-   str   a2, [v1,#TCallMethodArgs.res64.Hi]
-   ldr   a1, [v1,#TCallMethodArgs.resKind]
+   ldr   r0, [v2,#TCallMethodArgs.ParamRegs+REGR0*4-4]
+   ldr   r1, [v2,#TCallMethodArgs.ParamRegs+REGR1*4-4]
+   ldr   r2, [v2,#TCallMethodArgs.ParamRegs+REGR2*4-4]
+   ldr   r3, [v2,#TCallMethodArgs.ParamRegs+REGR3*4-4]
+   vldr  d0, [v2,#TCallMethodArgs.FPRegs+REGD0*8-8]
+   vldr  d1, [v2,#TCallMethodArgs.FPRegs+REGD1*8-8]
+   vldr  d2, [v2,#TCallMethodArgs.FPRegs+REGD2*8-8]
+   vldr  d3, [v2,#TCallMethodArgs.FPRegs+REGD3*8-8]
+   vldr  d4, [v2,#TCallMethodArgs.FPRegs+REGD4*8-8]
+   vldr  d5, [v2,#TCallMethodArgs.FPRegs+REGD5*8-8]
+   vldr  d6, [v2,#TCallMethodArgs.FPRegs+REGD6*8-8]
+   vldr  d7, [v2,#TCallMethodArgs.FPRegs+REGD7*8-8]
+   ldr   v1, [v2,#TCallMethodArgs.method]
+   blx   v1
+   str   a1, [v2,#TCallMethodArgs.res64.Lo]
+   str   a2, [v2,#TCallMethodArgs.res64.Hi]
+   ldr   a1, [v2,#TCallMethodArgs.resKind]
    cmp   a1, smvDouble
    beq   float_result
    cmp   a1, smvDateTime
@@ -54177,7 +54177,7 @@ load_regs:
    bne   asmcall_end
    // store double result in res64
 float_result:
-   vstr  d0, [v1,#TCallMethodArgs.res64]
+   vstr  d0, [v2,#TCallMethodArgs.res64]
 asmcall_end:
    // epilog
    ldmea fp, {v1, v2, sb, sl, fp, sp, pc}
