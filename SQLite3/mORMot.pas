@@ -51732,6 +51732,7 @@ end;
 {$endif}
 
 {$ifdef CPUX64}
+// note: x64 code below uses movlpd for reg,reg/mem,reg and movsd for reg,mem
 procedure x64FakeStub;
 var
   smetndx,
@@ -51785,7 +51786,7 @@ asm // mov ax,{MethodIndex}; jmp x64FakeStub
   {$endif LINUX}
   call TInterfacedObjectFake.FakeCall
   // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["XMM0"]
-  movlpd xmm0,sxmm0
+  movsd xmm0,sxmm0
 end;
 {$endif CPUX64}
 
@@ -54300,31 +54301,24 @@ asm
     mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX *8-8]
     mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8*8-8]
     mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9*8-8]
-    movlpd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movlpd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movlpd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movlpd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    movlpd xmm4, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
-    movlpd xmm5, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
-    movlpd xmm6, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
-    movlpd xmm7, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
+    movsd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movsd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movsd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movsd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
+    movsd xmm4, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
+    movsd xmm5, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
+    movsd xmm6, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
+    movsd xmm7, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
     {$else}
     // Win64 ABI
     mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
     mov rdx, [r12+TCallMethodArgs.ParamRegs+REGRDX*8-8]
     mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8 *8-8]
     mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9 *8-8]
-    {$ifdef FPC}
-    movlpd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movlpd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movlpd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movlpd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    {$else}
-    movsd xmm0, [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movsd xmm1, [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movsd xmm2, [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movsd xmm3, [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    {$endif FPC}
+    movsd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
+    movsd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
+    movsd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
+    movsd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
     {$endif LINUX}
     // alf: adjust for shadow-space (fixme?)
     // caller must ensure that there is space on the stack for the API
