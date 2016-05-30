@@ -54134,7 +54134,7 @@ asm
    sub	 fp, ip, #4
    // make space on stack
    sub	 sp, sp, #MAX_EXECSTACK
-   mov   v1, Args
+   mov   v2, Args
    // copy (push) stack content (if any)
    ldr   a1, [v2,#TCallMethodArgs.StackSize]
    // if there is no stack content, do nothing
@@ -54169,12 +54169,12 @@ load_regs:
    blx   v1
    str   a1, [v2,#TCallMethodArgs.res64.Lo]
    str   a2, [v2,#TCallMethodArgs.res64.Hi]
-   ldr   a1, [v2,#TCallMethodArgs.resKind]
-   cmp   a1, smvDouble
+   ldr   a3, [v2,#TCallMethodArgs.resKind]
+   cmp   a3, smvDouble
    beq   float_result
-   cmp   a1, smvDateTime
+   cmp   a3, smvDateTime
    beq   float_result
-   cmp   a1, smvCurrency
+   cmp   a3, smvCurrency
    bne   asmcall_end
    // store double result in res64
 float_result:
@@ -54219,7 +54219,8 @@ stack_loop:
    // (mandatory: stacksize must be a multiple of 2 [16 bytes] !!)
    // inc stackaddr counter by 16 (2 registers are pushed every loop)
    add	x4, x4, #16
-   // decrement stacksize counter by 2 (2 registers are pushed every loop), with update of flags for loop
+   // decrement stacksize counter by 2 (2 registers are pushed every loop),
+   // with update of flags for loop
    subs	x2, x2, #2
    b.ne stack_loop
 load_regs:
