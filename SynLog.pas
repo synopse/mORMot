@@ -1128,6 +1128,14 @@ type
     /// retrieve the date and time of an event
     // - returns 0 in case of an invalid supplied index
     function EventDateTime(aIndex: integer): TDateTime;
+    /// retrieve the description text of an event, as native VCL string
+    // - returns '' if supplied index is out of range
+    // - if the text is not truly UTF-8 encoded, would use the current system
+    // codepage to create a valid string
+    // - you may specify a text to replace all #9 characters occurences
+    // - is used e.g. in TMainLogView.ListDrawCell
+    function EventString(index: integer; const replaceTabs: RawUTF8='';
+      maxutf8len: Integer=0): string;
     /// sort the LogProc[] array according to the supplied order
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
@@ -1157,6 +1165,7 @@ type
     property EventLevelUsed: TSynLogInfos read fLevelUsed;
     /// retrieve the description text of an event
     // - returns '' if supplied index is out of range
+    // - see also EventString() function, for direct VCL use
     property EventText[index: integer]: RawUTF8 read GetEventText;
     /// retrieve all event thread IDs
     // - contains something if TSynLogFamily.PerThreadLog was ptIdentifiedInOnFile
@@ -4611,6 +4620,24 @@ begin
       result := '' else
       SetString(result,PAnsiChar(fLines[index])+fLineTextOffset,L-fLineTextOffset);
   end;
+end;
+
+function TSynLogFile.EventString(index: integer; const replaceTabs: RawUTF8;
+  maxutf8len: Integer): string;
+var tmp: RawUTF8;
+begin
+  tmp := GetEventText(index);
+  if maxutf8len>0 then
+    Utf8TruncateToLength(tmp,maxutf8len);
+  if replaceTabs<>'' then
+    tmp := StringReplaceAll(tmp,#9,replaceTabs);
+  if IsValidUTF8(pointer(tmp)) then
+    result := UTF8ToString(tmp) else
+    {$ifdef UNICODE}
+    result := CurrentAnsiConvert.AnsiToUnicodeString(pointer(tmp),length(tmp));
+    {$else}
+    result := tmp;
+    {$endif}
 end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);

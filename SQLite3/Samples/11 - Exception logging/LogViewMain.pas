@@ -493,8 +493,8 @@ begin
         1: txt := FEventCaption[FLog.EventLevel[Index]];
         2: if FLog.EventThread<>nil then
              txt := IntToString(cardinal(FLog.EventThread[Index])) else
-             txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
-        3: txt := UTF8ToString(StringReplaceAll(FLog.EventText[Index],#9,'   '));
+             txt := FLog.EventString(Index,'   ',400);
+        3: txt := FLog.EventString(Index,'   ',400);
         end;
         {$ifdef FPC}
         FillRect(Rect);
@@ -509,16 +509,15 @@ begin
       {$ifdef FPC}
       FillRect(Rect);
       {$endif}
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.Strings[ARow]);
+      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(ARow,'   ',400));
     end;
 end;
 
 procedure TMainLogView.ListDrawItem(Control: TWinControl; Index: Integer;
   Rect: TRect; State: TOwnerDrawState);
-var s: RawUTF8;
-    b: boolean;
+var b: boolean;
 begin
-  with List.Canvas do 
+  with List.Canvas do
     if FLog=nil then
       FillRect(Rect) else
     if FLog.EventLevel<>nil then begin
@@ -529,17 +528,13 @@ begin
         Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
         Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
         FillRect(Rect);
-        s := FLog.Lines[Index];
-        if Length(s)>400 then
-          SetLength(s,400);
-        s := StringReplaceAll(s,#9,'    ');
-        TextOut(Rect.Left+4,Rect.Top,UTF8ToString(s));
+        TextOut(Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',400));
       end else begin
         Brush.Color := clLtGray;
         FillRect(Rect);
       end;
     end else
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.Strings[Index]);
+      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',400));
 end;
 
 procedure TMainLogView.BtnSearchNextClick(Sender: TObject);
@@ -686,7 +681,7 @@ begin
       s := Ansi7ToString(MicroSecToString(Tim));
     end;
     colName:
-      s := UTF8ToString(trim(FLog.EventText[Index]));
+      s := FLog.EventString(Index);
     end;
     ProfileList.Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,s);
   end;
@@ -701,7 +696,7 @@ begin
   i := List.Row;
   if cardinal(i)<cardinal(FLogSelectedCount) then begin
     i := FLogSelected[i];
-    s := FLog.Strings[i];
+    s := FLog.EventString(i);
     if FPanelThreadVisible and (FLog.EventThread<>nil) then begin
       ThreadListNameRefresh(i);    
       ndx := FLog.EventThread[i]-1;
@@ -713,7 +708,7 @@ begin
     end;
   end else
     if FLog<>nil then
-      s := FLog.Strings[i] else
+      s := FLog.EventString(i) else
       s := '';
   Selection := List.Selection;
   if Selection.Bottom>Selection.Top then begin
@@ -932,8 +927,8 @@ begin
     if (search='') and List.Visible then
       List.SetFocus;
     if FLog.EventLevel=nil then
-      s := FLog.Strings[Index] else
-      s := FLog.Strings[FLogSelected[Index]];
+      s := FLog.EventString(Index) else
+      s := FLog.EventString(FLogSelected[Index]);
     MemoBottom.Text := s;
     if search<>'' then begin
       ss := UTF8ToString(search);
@@ -1123,7 +1118,7 @@ begin
     s := s+TimeToStr(FLog.EventDateTime(i))+#9+FEventCaption[FLog.EventLevel[i]]+#9;
     if FLog.EventThread<>nil then
       s := s+IntToString(cardinal(FLog.EventThread[i]))+#9;
-    s := s+UTF8ToString(StringReplaceAll(FLog.EventText[i],#9,'   '))+sLineBreak;
+    s := s+FLog.EventString(i,'   ')+sLineBreak;
   end;
   Clipboard.AsText := s;
 end;
