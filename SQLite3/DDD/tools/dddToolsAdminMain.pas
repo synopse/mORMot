@@ -44,13 +44,17 @@ type
     fDBFrame: TDBFrameDynArray;
     fDefinition: TDDDRestClientSettings;
     fDlgSave: TSaveDialog;
-    procedure InternalGetState; virtual;
   public
     LogFrameClass: TLogFrameClass;
     DBFrameClass: TDBFrameClass;
-    Version: Variant;
-    LastState: Variant;
-    LastStateTicks: Int64;
+    State: record
+      raw: TDocVariantData;
+      daemon: RawUTF8;
+      version: RawUTF8;
+      mem: RawUTF8;
+      clients: integer;
+      lasttix: Int64;
+    end;
     SavePrefix: TFileName;
     OnAfterExecute: TNotifyEvent;
     OnAfterGetState: TNotifyEvent;
@@ -62,8 +66,8 @@ type
     function AddPage(const aCaption: RawUTF8): TSynPage; virtual;
     function AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
       TDBFrameClass): TDBFrame; virtual;
-    function AddLogFrame(page: TSynPage; const aCaption, aEvents, aPattern:
-      RawUTF8; aClass: TLogFrameClass): TLogFrame; virtual;
+    function AddLogFrame(page: TSynPage; const aCaption, aEvents, aPattern: RawUTF8;
+      aClass: TLogFrameClass): TLogFrame; virtual;
     procedure EndLog(aLogFrame: TLogFrame); virtual;
     procedure OnPageChange(Sender: TObject); virtual;
     function CurrentDBFrame: TDBFrame;
@@ -117,8 +121,6 @@ var
   AdminControlConnecting: TForm; // only one Open() attempt at once
 
 function TAdminControl.Open(Definition: TDDDRestClientSettings; Model: TSQLModel): boolean;
-var
-  exec: TServiceCustomAnswer;
 begin
   result := false;
   if Assigned(fAdmin) or (Definition.Orm.User = '') or Assigned(AdminControlConnecting) then
@@ -134,8 +136,7 @@ begin
       if not fClient.Services.Resolve(IAdministratedDaemon, fAdmin) then
         raise EDDDRestClient.CreateUTF8('Resolve(IAdministratedDaemon)=false: check % version',
           [Definition.ORM.ServerName]);
-      exec := fAdmin.DatabaseExecute('', '#version');
-      version := _JsonFast(exec.Content);
+      GetState;
       fDefinition := Definition;
       result := true;
     finally
@@ -152,26 +153,26 @@ begin
 end;
 
 procedure TAdminControl.GetState;
+var
+  exec: TServiceCustomAnswer;
 begin
   if self = nil then
     exit;
   try
-    InternalGetState;
+    if fAdmin <> nil then begin
+      exec := fAdmin.DatabaseExecute('', '#info');
+      State.raw.Clear;
+      State.raw.InitJSONInPlace(pointer(exec.Content), JSON_OPTIONS_FAST);
+      State.daemon := State.raw.U['daemon'];
+      State.version := State.raw.U['version'];
+      State.mem := State.raw.U['memused'];
+      State.clients := State.raw.I['clients'];
+      State.lasttix := GetTickCount64;
+    end;
     if Assigned(OnAfterGetState) then
       OnAfterGetState(self);
   except
-    VarClear(LastState);
-  end;
-end;
-
-procedure TAdminControl.InternalGetState;
-var
-  exec: TServiceCustomAnswer;
-begin
-  if fAdmin <> nil then begin
-    exec := fAdmin.DatabaseExecute('', '#state');
-    LastState := _JsonFast(exec.Content);
-    LastStateTicks := GetTickCount64;
+    Finalize(State);
   end;
 end;
 
@@ -254,7 +255,7 @@ begin
   fAdmin := nil;
   fDefinition.Free;
   if fClient <> nil then begin
-    for i := 1 to 10 do begin
+    for i := 1 to 5 do begin
       Sleep(50); // leave some time to flush all pending CallBackUnRegister()
       Application.ProcessMessages;
     end;
@@ -476,8 +477,8 @@ end;
 procedure TAdminForm.FormShow(Sender: TObject);
 begin
   fFrame.Show;
-  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName, fFrame.version.prog,
-    fFrame.version.version, fFrame.fDefinition.ORM.ServerName]);
+  Caption := Format('%s - %s %s via %s', [ExeVersion.ProgramName,
+    fFrame.State.daemon, fFrame.State.version, fFrame.fDefinition.ORM.ServerName]);
 end;
 
 end.

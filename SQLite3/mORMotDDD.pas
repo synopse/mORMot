@@ -888,7 +888,7 @@ type
     procedure InternalStart; virtual; abstract;
     // return TRUE and set Status (e.g. from monitoring info) on success
     // - this default implement returns the system memory info as current state
-    function InternalRetrieveState(var Status: variant): boolean; virtual; 
+    function InternalRetrieveState(var Status: variant): boolean; virtual;
     // should end the daemon: e.g. TDDDAdministratedThreadDaemon.fThread := nil
     procedure InternalStop; virtual;
     // set the list of published TSQLRestInstances - InternalStop would release it
@@ -2542,7 +2542,7 @@ begin
     exit;
   if SQL[1]='#' then begin
     cmd := IdemPCharArray(@SQL[2],['STATE','SETTINGS','VERSION','COMPUTER','LOG',
-      'CHAT','STARTDAEMON','STOPDAEMON','RESTARTDAEMON','HELP']);
+      'CHAT','STARTDAEMON','STOPDAEMON','RESTARTDAEMON','HELP','INFO']);
     case cmd of
     0: begin
       if InternalRetrieveState(status) then
@@ -2628,6 +2628,13 @@ begin
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
         '|#state|#settings [full.path=value/*/filename]|#version|#computer|#log [*/filename]|'+
         '#startdaemon|#stopdaemon|#restartdaemon|#help"';
+    10: begin
+      result.Content := JSONEncode(['daemon',DaemonName]);
+      if (DatabaseName='') and (fInternalDatabases<>nil) then begin
+        fInternalDatabases[0].AdministrationExecute('',SQL,result);
+        exit;
+      end;
+    end;
     end;
   end;
   rest := PublishedORM(DatabaseName);
