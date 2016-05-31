@@ -406,6 +406,7 @@ type
       const FieldName: RawUTF8; Increment: Int64): boolean; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); override;
+    procedure InternalInfo(var info: TDocVariantData); override;
     /// execute one SQL statement
     // - intercept any DB exception and return false on error, true on success
     // - optional LastInsertedID can be set (if ValueInt/ValueUTF8 are nil) to
@@ -1271,6 +1272,12 @@ end;
 function TSQLRestServerDB.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
   result := InternalExecute(aSQL,false);
+end;
+
+procedure TSQLRestServerDB.InternalInfo(var info: TDocVariantData);
+begin
+  inherited InternalInfo(info);
+  info.AddValue('db', Format('%s %s', [ExtractFileName(DB.FileName), KB(DB.FileSize)]));
 end;
 
 procedure TSQLRestServerDB.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);

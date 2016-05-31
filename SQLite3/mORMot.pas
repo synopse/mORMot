@@ -15652,10 +15652,12 @@ type
     end;
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); reintroduce; virtual;
+    function GetAuthenticationSchemesCount: integer;
+    // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
+    procedure InternalInfo(var info: TDocVariantData); virtual;
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
-    function GetAuthenticationSchemesCount: integer;
     /// fast get the associated static server, if any
     function GetStaticDataServer(aClass: TSQLRecordClass): TSQLRest;
     /// retrieve a TSQLRestStorage instance associated to a Virtual Table
@@ -16524,8 +16526,9 @@ type
     // too much resource (memory or process time)
     property SessionClass: TAuthSessionClass read fSessionClass write fSessionClass;
   published { standard method-based services }
-    /// REST service accessible from ModelRoot/Stat URI
+    /// REST service accessible from ModelRoot/Stat URI to gather detailed information
     // - returns the current execution statistics of this server, as a JSON object
+    // - this method would require an authenticated client, for safety
     // - by default, will return the high-level information of this server
     // - will return human-readable JSON layout if ModelRoot/Stat/json is used, or
     // the corresponding XML content if ModelRoot/Stat/xml is used
@@ -16543,15 +16546,21 @@ type
     procedure Stat(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from ModelRoot/Auth URI
     // - called by the clients for authentication and session management
+    // - this method would require an authenticated client, by design
     // - this global callback method is thread-safe
     procedure Auth(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/TimeStamp URI
     // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
+    // - this method would not require an authenticated client
+    // - hidden ModelRoot/TimeStamp/info command would return basic execution
+    // information, less verbose (and sensitive) than Stat(), calling virtual
+    // InternalInfo() protected method
     procedure TimeStamp(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/CacheFlush URI
     // - it will flush the server result cache
     // - this method shall be called by the clients when the Server cache may be
     // not consistent any more (e.g. after a direct write to an external database)
+    // - this method would require an authenticated client, for safety
     // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
     // for all tables
     // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
@@ -16565,6 +16574,7 @@ type
     /// REST service accessible from the ModelRoot/Batch URI
     // - will execute a set of RESTful commands, in a single step, with optional
     // automatic SQL transaction generation
+    // - this method would require an authenticated client, for safety
     // - expect input as JSON commands:
     // & '{"Table":["cmd":values,...]}'
     // or for multiple tables:
@@ -39382,6 +39392,22 @@ begin
   _Json(FullStatsAsJson,result,JSON_OPTIONS_FAST);
 end;
 
+procedure TSQLRestServer.InternalInfo(var info: TDocVariantData);
+begin // called by root/TimeStamp/info REST method
+  info.AddNameValuesToObject(['exe', ExeVersion.ProgramName,
+    'version', ExeVersion.Version.Detailed, 'started', Stats.StartDate,
+    'clients', Stats.ClientsCurrent, 'methods', Stats.ServiceMethod,
+    'interfaces', Stats.ServiceInterface, 'total', Stats.TaskCount,
+    'time', Stats.TotalTime.Text, 'host', ExeVersion.Host]);
+  with TSynMonitorMemory.Create do
+  try
+    info.AddNameValuesToObject(['memused', KB(AllocatedUsed.Bytes),
+      'memfree', FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text])]);
+  finally
+    Free;
+  end;
+end;
+
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 const READWRITE: array[boolean] of string[9] = ('{"read":','{"write":');
 var s,i: integer;
@@ -39533,6 +39559,7 @@ var isAjax: boolean;
     name,interf,method: RawUTF8;
     obj: TObject;
     call: TSQLRestURIParams;
+    info: TDocVariantData;
     P: PUTF8Char;
 
   procedure PrepareCall;
@@ -39551,7 +39578,7 @@ begin
     if (SQL<>'') and (SQL[1]='#') then begin
       P := @SQL[2];
       case IdemPCharArray(P,['INTERFACES','STATS(','STATS','SERVICES','SESSIONS',
-        'GET','POST','WRAPPER','HELP']) of
+        'GET','POST','WRAPPER','HELP','INFO']) of
       0: result.Content := ServicesPublishedInterfaces;
       1: begin
         name := copy(SQL,8,length(SQL)-8);
@@ -39587,8 +39614,14 @@ begin
       8: begin
         inherited;
         result.Content[length(result.Content)] := '|';
-        result.Content := result.Content+'#interfaces|#wrapper|#stats|#stats(method)|'+
-          '#stats(interface.method)|#services|#sessions|#get url|#post url"';
+        result.Content := result.Content+'#interfaces|#wrapper|#info|'+
+          '#stats|#stats(method)|#stats(interface.method)|#services|#sessions|'+
+          '#get url|#post url"';
+      end;
+      9: begin
+        info.InitJSONInPlace(pointer(result.Content)); // from DatabaseExecute()
+        InternalInfo(info);
+        result.Content := info.ToJSON;
       end;
       else inherited AdministrationExecute(DatabaseName,SQL,result);
       end;
@@ -39600,8 +39633,15 @@ begin
 end;
 
 procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
+var
+  info: TDocVariantData;
 begin
-  Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTML_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+  if IdemPropNameU(Ctxt.URIBlobFieldName,'info') then begin
+    info.InitFast;
+    InternalInfo(info);
+    Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
+  end else
+    Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTML_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);

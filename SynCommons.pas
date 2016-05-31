@@ -31763,15 +31763,15 @@ begin
   with SystemInfo do
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
-      {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
-      'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
-      {$endif}{$endif}
       'cpucount',
       {$ifdef MSWINDOWS}
       dwNumberOfProcessors,{$ifndef CPU64}'wow64',IsWow64,{$endif}
       {$else MSWINDOWS}
       nprocs,
       {$endif MSWINDOWS}
+      {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
+      'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
+      {$endif}{$endif}
       'freemem',TSynMonitorMemory.FreeAsText,'freedisk',TSynMonitorDisk.FreeAsText]);
 end;
 
