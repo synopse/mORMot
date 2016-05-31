@@ -469,6 +469,7 @@ end;
 const
   TIME_FORMAT: array[boolean] of string = (
     'hh:mm:ss.zzz','hh:mm:ss');
+  MAXLOGLINES = 300;
     
 procedure TMainLogView.ListDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
@@ -493,8 +494,8 @@ begin
         1: txt := FEventCaption[FLog.EventLevel[Index]];
         2: if FLog.EventThread<>nil then
              txt := IntToString(cardinal(FLog.EventThread[Index])) else
-             txt := FLog.EventString(Index,'   ',400);
-        3: txt := FLog.EventString(Index,'   ',400);
+             txt := FLog.EventString(Index,'   ',MAXLOGLINES);
+        3: txt := FLog.EventString(Index,'   ',MAXLOGLINES);
         end;
         {$ifdef FPC}
         FillRect(Rect);
@@ -509,7 +510,7 @@ begin
       {$ifdef FPC}
       FillRect(Rect);
       {$endif}
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(ARow,'   ',400));
+      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(ARow,'   ',MAXLOGLINES));
     end;
 end;
 
@@ -528,13 +529,13 @@ begin
         Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
         Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
         FillRect(Rect);
-        TextOut(Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',400));
+        TextOut(Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',MAXLOGLINES));
       end else begin
         Brush.Color := clLtGray;
         FillRect(Rect);
       end;
     end else
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',400));
+      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',MAXLOGLINES));
 end;
 
 procedure TMainLogView.BtnSearchNextClick(Sender: TObject);
@@ -696,7 +697,7 @@ begin
   i := List.Row;
   if cardinal(i)<cardinal(FLogSelectedCount) then begin
     i := FLogSelected[i];
-    s := FLog.EventString(i);
+    s := FLog.EventString(i,'',0,true);
     if FPanelThreadVisible and (FLog.EventThread<>nil) then begin
       ThreadListNameRefresh(i);    
       ndx := FLog.EventThread[i]-1;
@@ -708,7 +709,7 @@ begin
     end;
   end else
     if FLog<>nil then
-      s := FLog.EventString(i) else
+      s := FLog.EventString(i,'',0,true) else
       s := '';
   Selection := List.Selection;
   if Selection.Bottom>Selection.Top then begin
@@ -927,8 +928,8 @@ begin
     if (search='') and List.Visible then
       List.SetFocus;
     if FLog.EventLevel=nil then
-      s := FLog.EventString(Index) else
-      s := FLog.EventString(FLogSelected[Index]);
+      s := FLog.EventString(Index,'',0,true) else
+      s := FLog.EventString(FLogSelected[Index],'',0,true);
     MemoBottom.Text := s;
     if search<>'' then begin
       ss := UTF8ToString(search);

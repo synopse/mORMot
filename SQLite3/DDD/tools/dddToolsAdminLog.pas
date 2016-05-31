@@ -402,7 +402,7 @@ begin
       TextRect(Rect, Rect.Left + 4, Rect.Top, txt);
   end
   else
-    TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.EventString(ARow));
+    TextRect(Rect, Rect.Left + 4, Rect.Top, FLog.EventString(ARow, '', MAXLOGLINE));
 end;
 
 procedure TLogFrame.drwgrdEventsClick(Sender: TObject);
@@ -416,7 +416,7 @@ begin
     if cardinal(i) >= cardinal(FLogSelectedCount) then
       s := ''
     else
-      s := FLog.EventString(FLogSelected[i]);
+      s := FLog.EventString(FLogSelected[i], '', 0, true);
   finally
     FLogSafe.UnLock;
   end;
@@ -472,7 +472,7 @@ begin
     drwgrdEvents.Row := Index;
     if (search = '') and drwgrdEvents.Visible then
       drwgrdEvents.SetFocus;
-    s := FLog.EventString(FLogSelected[Index]);
+    s := FLog.EventString(FLogSelected[Index], '', 0, true);
     mmoBottom.Text := s;
     if search <> '' then begin
       ss := UTF8ToString(search);

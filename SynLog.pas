@@ -1135,7 +1135,7 @@ type
     // - you may specify a text to replace all #9 characters occurences
     // - is used e.g. in TMainLogView.ListDrawCell
     function EventString(index: integer; const replaceTabs: RawUTF8='';
-      maxutf8len: Integer=0): string;
+      maxutf8len: Integer=0; includeFirstColumns: boolean=false): string;
     /// sort the LogProc[] array according to the supplied order
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
@@ -4623,10 +4623,15 @@ begin
 end;
 
 function TSynLogFile.EventString(index: integer; const replaceTabs: RawUTF8;
-  maxutf8len: Integer): string;
+  maxutf8len: Integer; includeFirstColumns: boolean): string;
 var tmp: RawUTF8;
+    header: string;
 begin
   tmp := GetEventText(index);
+  if tmp = '' then begin
+    result := '';
+    exit;
+  end;
   if maxutf8len>0 then
     Utf8TruncateToLength(tmp,maxutf8len);
   if replaceTabs<>'' then
@@ -4638,6 +4643,10 @@ begin
     {$else}
     result := tmp;
     {$endif}
+  if includeFirstColumns then begin
+    UTF8DecodeToString(fLines[index],fLineTextOffset,header);
+    result := header+result;
+  end;   
 end;
 
 procedure TSynLogFile.SetLogProcMerged(const Value: boolean);
