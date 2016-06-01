@@ -161,13 +161,16 @@ begin
   try
     if fAdmin <> nil then begin
       exec := fAdmin.DatabaseExecute('', '#info');
+      State.version := fClient.SessionVersion;
       State.raw.Clear;
-      State.raw.InitJSONInPlace(pointer(exec.Content), JSON_OPTIONS_FAST);
-      State.daemon := State.raw.U['daemon'];
-      State.version := State.raw.U['version'];
-      State.mem := State.raw.U['memused'];
-      State.clients := State.raw.I['clients'];
-      State.lasttix := GetTickCount64;
+      if exec.Content <> '' then begin
+        State.raw.InitJSONInPlace(pointer(exec.Content), JSON_OPTIONS_FAST);
+        State.raw.GetAsRawUTF8('daemon', State.daemon);
+        State.raw.GetAsRawUTF8('version', State.version);
+        State.mem := State.raw.U['memused'];
+        State.clients := State.raw.I['clients'];
+        State.lasttix := GetTickCount64;
+      end;
     end;
     if Assigned(OnAfterGetState) then
       OnAfterGetState(self);
