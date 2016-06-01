@@ -1112,14 +1112,17 @@ end;
 procedure TMainLogView.ListMenuCopyClick(Sender: TObject);
 var s: string;
     Selection: TGridRect;
-    i: integer;
+    i,j: integer;
 begin
   Selection := List.Selection;
   for i := Selection.Top to Selection.Bottom do begin
-    s := s+TimeToStr(FLog.EventDateTime(i))+#9+FEventCaption[FLog.EventLevel[i]]+#9;
+    if cardinal(i)<cardinal(FLogSelectedCount) then
+      j := FLogSelected[i] else
+      j := i;
+    s := s+DateTimeToStr(FLog.EventDateTime(j))+#9+FEventCaption[FLog.EventLevel[j]]+#9;
     if FLog.EventThread<>nil then
-      s := s+IntToString(cardinal(FLog.EventThread[i]))+#9;
-    s := s+FLog.EventString(i,'   ')+sLineBreak;
+      s := s+IntToString(cardinal(FLog.EventThread[j]))+#9;
+    s := s+FLog.EventString(j,'   ')+sLineBreak;
   end;
   Clipboard.AsText := s;
 end;
