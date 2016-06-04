@@ -30,6 +30,7 @@ unit SynRestMidasVCL;
 
   Contributor(s):
   - Esteban Martin
+  - houdw2006
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -51,8 +52,9 @@ unit SynRestMidasVCL;
     but read/only)
   - introducing TSynRestDataSet (under Delphi), which allows to apply updates:
     will be used now for overloaded ToClientDataSet() functions result
-  - fixed Delphi XE2 compilation issue with SetCommandText declaration	
+  - fixed Delphi XE2 compilation issue with SetCommandText declaration
   - bug fix skipping first record
+  - fix memory leak adding TSynRestDataset.destroy (by houdw2006)
 
 }
 
@@ -141,6 +143,8 @@ type
   public
     /// initialize the instance
     constructor Create(AOwner: TComponent); override;
+    /// destroy the instance
+    destructor Destroy; override;
     /// initialize the internal TDataSet from a Rest statement result set
     // - Statement will have the form http://host:port/root/tablename or
     //   http://host:port/root/servicename.operationname?paramname=:paramalias
@@ -266,6 +270,14 @@ begin
   fDataSet.Name := 'InternalDataSet';                   { Do not localize }
   fDataSet.SetSubComponent(True);
   fProvider.DataSet := fDataSet;
+end;
+
+destructor TSynRestDataSet.Destroy;
+begin
+  fProvider.DataSet := nil;
+  FreeAndNil(fDataSet);
+  FreeAndNil(fProvider);
+  inherited;
 end;
 
 procedure TSynRestDataSet.DoOnFieldValidate(Sender: TField);

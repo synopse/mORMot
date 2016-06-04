@@ -30,6 +30,7 @@ unit SynRestVCL;
 
   Contributor(s):
   - Esteban Martin (EMartin)
+  - houdw2006
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -51,6 +52,8 @@ unit SynRestVCL;
   - Added that blob field updates they are made with AddJSONEscapeString.
   - bug fix when updating accentuated string fields.
   - bug fix with datetime fields
+  - bug fix with length string fields
+  - fixed Delphi XE3 compilation issue with PSExecuteStatement declaration (by houdw2006)
 
 }
 
@@ -139,7 +142,7 @@ type
     function PSIsSQLBased: Boolean; override;
     function PSIsSQLSupported: Boolean; override;
     {$ifdef ISDELPHIXE3}
-    //function PSExecuteStatement(const ASQL: string; AParams: TParams): Integer; overload; override;
+    function PSExecuteStatement(const ASQL: string; AParams: TParams): Integer; overload; override;
     function PSExecuteStatement(const ASQL: string; AParams: TParams; var ResultSet: TDataSet): Integer; overload; override;
     {$else}
     function PSExecuteStatement(const ASQL: string; AParams: TParams; ResultSet: Pointer=nil): Integer; overload; override;
@@ -544,6 +547,7 @@ procedure TSynRestSQLDataSet.InternalInitFieldDefs;
 var F: integer;
     lFields: TSQLPropInfoList;
     lFieldDef: TFieldDef;
+    lOldSize: Int64;
 begin
   inherited;
   if (GetTableName = '') then // JSON conversion to dataset ?
@@ -556,9 +560,14 @@ begin
     if Assigned(lFieldDef) then
     begin
       if (lFieldDef.DataType <> SQLFieldTypeToVCLDB[lFields.Items[F].SQLFieldType]) then
+      begin
+        lOldSize := lFieldDef.Size; // DB.pas.TFieldDef.SetDataType change the size
         lFieldDef.DataType := SQLFieldTypeToVCLDB[lFields.Items[F].SQLFieldType];
-      if (lFieldDef.Size < lFields.Items[F].FieldWidth) then
-        lFieldDef.Size := lFields.Items[F].FieldWidth;
+      end;
+      if (lFields.Items[F].FieldWidth > 0) and (lFieldDef.Size < lFields.Items[F].FieldWidth) then
+        lFieldDef.Size := lFields.Items[F].FieldWidth
+      else if (lOldSize > 0) and (lFieldDef.Size > 0) and (lOldSize <> lFieldDef.Size) then
+        lFieldDef.Size := lOldSize;
     end;
   end;
 end;
@@ -608,7 +617,14 @@ begin
 end;
 
 {$ifdef ISDELPHIXE3}
-
+function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string;
+  AParams: TParams): Integer;
+var DS: TDataSet;
+begin
+  DS := nil;
+  result := PSExecuteStatement(ASQL,AParams,DS);
+  DS.Free;
+end;
 function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TParams; var ResultSet: TDataSet): Integer;
 {$else}
 function TSynRestSQLDataSet.PSExecuteStatement(const ASQL: string; AParams: TParams; ResultSet: Pointer): Integer;
