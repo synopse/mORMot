@@ -4,6 +4,8 @@ unit Ffactwin;
  fields in a form.
 
  - This application use TWebBrowser for display the image from Project19Server.db3.
+ - Removed display of image because is need convert the Project19Server.db3 field image to base64 or any suggest.
+ - fixed memory leak (by houdw2006)
 }
 
 interface
@@ -53,6 +55,7 @@ type
     procedure FormCreate(Sender: TObject);
     procedure dbnvgr1Click(Sender: TObject; Button: TNavigateBtn);
     procedure btnUploadClick(Sender: TObject);
+    procedure FormDestroy(Sender: TObject);
   private
     { Private declarations }
     procedure DoOnAfterScroll(Dataset: TDataset);
@@ -103,9 +106,15 @@ begin
 end;
 
 procedure TForm1.DoOnAfterScroll(Dataset: TDataset);
-var blob: RawByteString;
 begin
   //img.Picture :=
+end;
+
+procedure TForm1.FormDestroy(Sender: TObject);
+begin
+  SynRestDataset.Dataset.SQLModel.Free;
+  SynRestDataset.Dataset.SQLModel := nil;
+  FreeAndNil(SynRestDataset);
 end;
 
 end.
