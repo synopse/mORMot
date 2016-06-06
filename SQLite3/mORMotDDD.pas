@@ -2487,7 +2487,12 @@ begin
       end;
     end;
     writeln('Press [Enter] to quit');
+    ioresult;
     readln;
+    {$ifdef LINUX}
+    if ioresult<>0 then // e.g. when redirected from "nohup daemon &" command
+      WaitUntilHalted;
+    {$endif}
   end;
   writeln('Shutting down server');
   ioresult;
