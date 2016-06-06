@@ -160,9 +160,11 @@ procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
 // - could be then compiled into a WRAPPER_RESOURCENAME resource, e.g. via the
 // following .rc source file, assuming ResourceDestFileName='wrapper.desc':
 // $ WrappersDescription 10 "wrapper.desc"
+// - you may specify a .json file name, for debugging/validation purposes
 // - calls internally FillDescriptionFromSource
 procedure ResourceDescriptionFromSource(const ResourceDestFileName: TFileName;
-  const SourceFileNames: array of TFileName);
+  const SourceFileNames: array of TFileName;
+  const JsonDestFileName: TFileName = '');
 
 const
   /// internal Resource name used for bounded description
@@ -560,14 +562,18 @@ begin
 end;
 
 procedure ResourceDescriptionFromSource(const ResourceDestFileName: TFileName;
-  const SourceFileNames: array of TFileName);
+  const SourceFileNames: array of TFileName; const JsonDestFileName: TFileName);
 var desc: TDocVariantData;
     i: integer;
+    json: RawUTF8;
 begin
   desc.InitFast;
   for i := 0 to high(SourceFileNames) do
     FillDescriptionFromSource(desc,SourceFileNames[i]);
-  FileFromString(SynLZCompress(desc.ToJSON),ResourceDestFileName);
+  json := desc.ToJSON;
+  if JsonDestFileName <> '' then
+    JSONReformatToFile(json, JsonDestFileName);
+  FileFromString(SynLZCompress(json),ResourceDestFileName);
 end;
 
 procedure FillDescriptionFromSource(var Descriptions: TDocVariantData;
@@ -585,6 +591,14 @@ begin
     P := GotoNextNotSpace(P);
     if IdemPChar(P,'IMPLEMENTATION') then
       break; // only the "interface" section is parsed
+    if (P[0]='{') and (P[1]='$') then begin
+      repeat // just ignore any $ifdef ... $endif
+        GetNextLineBegin(P,P);
+        if P=nil then exit;
+      until IdemPChar(GotoNextNotSpace(P),'{$');
+      GetNextLineBegin(P,P);
+      P := GotoNextNotSpace(P);
+    end;
     if (P[0]='/') and (P[1]='/') and (P[2]='/') then begin
       desc := GetNextLine(GotoNextNotSpace(P+3),P);
       if desc='' then
@@ -594,6 +608,13 @@ begin
         if P=nil then
           exit;
         P := GotoNextNotSpace(P);
+        if (P[0]='{') and (P[1]='$') then begin
+          repeat // just ignore any $ifdef ... $endif
+            GetNextLineBegin(P,P);
+            if P=nil then exit;
+          until IdemPChar(GotoNextNotSpace(P),'{$');
+          GetNextLineBegin(P,P);
+        end else
         if (P[0]='/') and (P[1]='/') then begin
           if P[2]='/' then inc(P,3) else inc(P,2);
           P := GotoNextNotSpace(P);
