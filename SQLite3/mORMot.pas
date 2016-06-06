@@ -55924,7 +55924,7 @@ begin
   fSafe.Lock;
   try
     if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
-      DoPurge;  // inline TryPurge within the locked instance
+      DoPurge;  // inline TryPurge within the locked list
     cache := TRawUTF8ObjectCache(GetObjectByName(Key));
     if cache = nil then begin
       if onlyexisting then begin

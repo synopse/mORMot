@@ -8040,6 +8040,9 @@ type
     /// store a new RawUTF8 item
     // - returns -1 and raise no exception in case of self=nil
     function Add(const aText: RawUTF8): PtrInt; {$ifdef HASINLINE}inline;{$endif}
+    /// store a new RawUTF8 item if not already in the list
+    // - returns -1 and raise no exception in case of self=nil
+    function AddIfNotExisting(const aText: RawUTF8; wasAdded: PBoolean=nil): PtrInt; virtual;
     /// store a new RawUTF8 item, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
     function AddObject(const aText: RawUTF8; aObject: TObject): PtrInt;
@@ -8150,10 +8153,16 @@ type
     // use rather the AddObjectIfNotExisting() method which would preserve
     // the internal hash array, so would perform better
     function IndexOf(const aText: RawUTF8): PtrInt; override;
+    /// store a new RawUTF8 item if not already in the list
+    // - returns -1 and raise no exception in case of self=nil
+    // - this overridden method will update and use the internal hash table,
+    // so is preferred to plain Add if you want faster insertion
+    // into the TRawUTF8ListHashed
+    function AddIfNotExisting(const aText: RawUTF8; wasAdded: PBoolean=nil): PtrInt; override;
     /// store a new RawUTF8 item if not already in the list, and its associated TObject
     // - returns -1 and raise no exception in case of self=nil
     // - this overridden method will update and use the internal hash table,
-    // so is preferred to plain Add/AddObject if you want faster insertion
+    // so is preferred to plain Add if you want faster insertion
     // into the TRawUTF8ListHashed
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
@@ -8179,32 +8188,35 @@ type
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
     /// add a RawUTF8 item in the stored Strings[] list
-    // - just a wrapper over Add() using Safe.Lock/Unloack
+    // - just a wrapper over Add() using Safe.Lock/Unlock
     // - warning: this method WON'T update the internal hash array: use
-    // AddObjectIfNotExisting() method instead 
+    // AddIfNotExisting/AddObjectIfNotExisting() methods instead 
     function LockedAdd(const aText: RawUTF8): PtrInt; virtual; 
     /// find a RawUTF8 item in the stored Strings[] list
-    // - just a wrapper over IndexOf() using Safe.Lock/Unloack
+    // - just a wrapper over IndexOf() using Safe.Lock/Unlock
     function IndexOf(const aText: RawUTF8): PtrInt; override;
     /// find a RawUTF8 item in the stored Strings[] list
-    // - just a wrapper over GetObjectByName() using Safe.Lock/Unloack
+    // - just a wrapper over GetObjectByName() using Safe.Lock/Unlock
     // - warning: the object instance should remain in the list, so the caller
     // should not make any Delete/LockedDeleteFromName otherwise a GPF may occur
     function LockedGetObjectByName(const aText: RawUTF8): TObject; virtual;
+    /// add a RawUTF8 item in the internal storage
+    // - just a wrapper over AddIfNotExisting() using Safe.Lock/Unlock
+    function AddIfNotExisting(const aText: RawUTF8; wasAdded: PBoolean=nil): PtrInt; override;
     /// add a RawUTF8 item in the internal storage, with an optional object
-    // - just a wrapper over AddObjectIfNotExisting() using Safe.Lock/Unloack
+    // - just a wrapper over AddObjectIfNotExisting() using Safe.Lock/Unlock
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
     /// find and delete an RawUTF8 item in the stored Strings[] list
-    // - just a wrapper over inherited DeleteFromName() using Safe.Lock/Unloack
+    // - just a wrapper over inherited DeleteFromName() using Safe.Lock/Unlock
     function DeleteFromName(const aText: RawUTF8): PtrInt; override;
     /// retrieve and delete the first RawUTF8 item in the list
     // - could be used as a FIFO
-    // - just a wrapper over inherited PopFirst() using Safe.Lock/Unloack
+    // - just a wrapper over inherited PopFirst() using Safe.Lock/Unlock
     function PopFirst(out aText: RawUTF8; aObject: PObject=nil): boolean; override;
     /// retrieve and delete the last RawUTF8 item in the list
     // - could be used as a FILO
-    // - just a wrapper over inherited PopLast() using Safe.Lock/Unloack
+    // - just a wrapper over inherited PopLast() using Safe.Lock/Unlock
     function PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean; override;
   end;
 
@@ -11195,6 +11207,8 @@ type
   protected
     fDetailed: string;
     fBuildDateTime: TDateTime;
+    /// change the version (not to be used in most cases)
+    procedure SetVersion(aMajor,aMinor,aRelease,aBuild: integer);
   public
     /// executable major version number
     Major: Integer;
@@ -31887,10 +31901,6 @@ var M,D: word;
     tmp: TFileName;
 {$endif}
 begin
-  Major := aMajor; // some default values
-  Minor := aMinor;
-  Release := aRelease;
-  Build := aBuild;
   {$ifdef MSWINDOWS}
   if aFileName<>'' then begin
     // GetFileVersionInfo modifies the filename parameter data while parsing.
@@ -31904,11 +31914,11 @@ begin
         VerQueryValue(Pt, '\', pointer(Info), Size2);
         with Info^ do begin
           if Version32=0 then begin
-            Major := dwFileVersionMS shr 16;
-            Minor := word(dwFileVersionMS);
-            Release := dwFileVersionLS shr 16;
+            aMajor := dwFileVersionMS shr 16;
+            aMinor := word(dwFileVersionMS);
+            aRelease := dwFileVersionLS shr 16;
           end;
-          Build := word(dwFileVersionLS);
+          aBuild := word(dwFileVersionLS);
           BuildYear := 2010;
           if (dwFileDateLS<>0) and (dwFileDateMS<>0) then begin
             FileTime.dwLowDateTime:= dwFileDateLS; // built date from version info
@@ -31924,8 +31934,7 @@ begin
     end;
   end;
   {$endif}
-  Main := IntToString(Major)+'.'+IntToString(Minor);
-  fDetailed := Main+ '.'+IntToString(Release)+'.'+IntToString(Build);
+  SetVersion(aMajor,aMinor,aRelease,aBuild);
   if fBuildDateTime=0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
   if fBuildDateTime<>0 then
@@ -31935,6 +31944,16 @@ end;
 function TFileVersion.Version32: integer;
 begin
   result := Major shl 16+Minor shl 8+Release;
+end;
+
+procedure TFileVersion.SetVersion(aMajor,aMinor,aRelease,aBuild: integer);
+begin
+  Major := aMajor;
+  Minor := aMinor;
+  Release := aRelease;
+  Build := aBuild;
+  Main := IntToString(Major)+'.'+IntToString(Minor);
+  fDetailed := Main+ '.'+IntToString(Release)+'.'+IntToString(Build);
 end;
 
 function TFileVersion.BuildDateTimeString: string;
@@ -31964,64 +31983,56 @@ begin
 end;
 
 procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer);
-var setVersion,i: integer;
+var i: integer;
 {$ifdef MSWINDOWS}
     Tmp: array[byte] of WideChar;
     TmpSize: cardinal;
 {$endif}
 begin
-  setVersion := aMajor shl 16+aMinor shl 8+aRelease;
-  with ExeVersion do
-  if Version<>nil then
-    if Version.Version32=setVersion then
-      exit else begin // forget previous to allow version number forcing
-      i := GarbageCollector.IndexOf(Version);
-      if i>0 then
-        GarbageCollector.Delete(i);
-      Version := nil; // will replace existing TFileVersion instance
-    end;
-  with ExeVersion do
-  if Version=nil then begin
-    {$ifdef MSWINDOWS}
-    ProgramFileName := paramstr(0);
-    {$else}
-    ProgramFileName := GetModuleName(hInstance);
-    if ProgramFileName='' then
-      ProgramFileName := ExpandFileName(paramstr(0));
-    {$endif}
-    ProgramFilePath := ExtractFilePath(ProgramFileName);
-    if IsLibrary then
-      InstanceFileName := GetModuleName(HInstance) else
-      InstanceFileName := ProgramFileName;
-    GarbageCollectorFreeAndNil(Version,
-      TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease,aBuild));
+  with ExeVersion do begin
+    if Version=nil then begin
+      {$ifdef MSWINDOWS}
+      ProgramFileName := paramstr(0);
+      {$else}
+      ProgramFileName := GetModuleName(hInstance);
+      if ProgramFileName='' then
+        ProgramFileName := ExpandFileName(paramstr(0));
+      {$endif}
+      ProgramFilePath := ExtractFilePath(ProgramFileName);
+      if IsLibrary then
+        InstanceFileName := GetModuleName(HInstance) else
+        InstanceFileName := ProgramFileName;
+      ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
+      i := length(ProgramName);
+      while i>0 do
+        if ProgramName[i]='.' then begin
+          SetLength(ProgramName,i-1);
+          break;
+        end else
+        dec(i);
+      {$ifdef MSWINDOWS}
+      TmpSize := sizeof(Tmp);
+      GetComputerNameW(Tmp,TmpSize);
+      RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),Host);
+      TmpSize := sizeof(Tmp);
+      GetUserNameW(Tmp,TmpSize);
+      RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),User);
+      {$else}
+      Host := GetHostName;
+      {$ifdef KYLIX3}
+      User := LibC.getpwuid(LibC.getuid)^.pw_name;
+      {$endif}
+      {$endif}
+      if Host='' then
+        Host := 'unknown';
+      if User='' then
+        User := 'unknown';
+      GarbageCollectorFreeAndNil(Version,
+        TFileVersion.Create(InstanceFileName,aMajor,aMinor,aRelease,aBuild));
+    end else
+      Version.SetVersion(aMajor,aMinor,aRelease,aBuild);
     FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
-    ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
-    i := length(ProgramName);
-    while i>0 do
-      if ProgramName[i]='.' then begin
-        SetLength(ProgramName,i-1);
-        break;
-      end else
-      dec(i);
-    {$ifdef MSWINDOWS}
-    TmpSize := sizeof(Tmp);
-    GetComputerNameW(Tmp,TmpSize);
-    RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),Host);
-    TmpSize := sizeof(Tmp);
-    GetUserNameW(Tmp,TmpSize);
-    RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),User);
-    {$else}
-    Host := GetHostName;
-    {$ifdef KYLIX3}
-    User := LibC.getpwuid(LibC.getuid)^.pw_name;
-    {$endif}
-    {$endif}
-    if Host='' then
-      Host := 'unknown';
-    if User='' then
-      User := 'unknown';
   end;
 end;
 
@@ -49022,8 +49033,20 @@ begin
     result := AddObject(aText,nil);
 end;
 
+function TRawUTF8List.AddIfNotExisting(const aText: RawUTF8; wasAdded: PBoolean): PtrInt;
+begin
+  result := IndexOf(aText);
+  if result<0 then begin
+    result := Add(aText);
+    if wasAdded<>nil then
+      wasAdded^ := true;
+  end else
+    if wasAdded<>nil then
+      wasAdded^ := false;
+end;
+
 function TRawUTF8List.AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
-  wasAdded: PBoolean=nil): PtrInt;
+  wasAdded: PBoolean): PtrInt;
 begin
   result := IndexOf(aText);
   if result<0 then begin
@@ -49828,6 +49851,22 @@ begin
   result := fHash.FindHashed(aText);
 end;
 
+function TRawUTF8ListHashed.AddIfNotExisting(const aText: RawUTF8;
+  wasAdded: PBoolean): PtrInt;
+var added: boolean;
+begin
+  if fChanged then
+    fChanged := not fHash.ReHash; // rough, but working implementation
+  result := fHash.FindHashedForAdding(aText,added);
+  if added then begin
+    fList[result] := aText;
+    if (fObjects<>nil) and (length(fObjects)<>length(fList)) then
+      SetLength(fObjects,length(fList));
+  end;
+  if wasAdded<>nil then
+    wasAdded^ := added;
+end;
+
 function TRawUTF8ListHashed.AddObjectIfNotExisting(
   const aText: RawUTF8; aObject: TObject; wasAdded: PBoolean): PtrInt;
 var added: boolean;
@@ -49890,6 +49929,17 @@ begin
   fSafe.Lock;
   try
     result := inherited GetObjectByName(aText);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.AddIfNotExisting(const aText: RawUTF8;
+  wasAdded: PBoolean): PtrInt;
+begin
+  fSafe.Lock;
+  try
+    result := inherited AddIfNotExisting(aText,wasAdded);
   finally
     fSafe.UnLock;
   end;
