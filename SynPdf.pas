@@ -6884,7 +6884,7 @@ end;
 procedure TPdfCanvas.Eoclip;
 begin
   if FContents<>nil then
-    FContents.Writer.Add('w*'#10);
+    FContents.Writer.Add('W*'#10);
 end;
 
 
