@@ -12752,6 +12752,7 @@ procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 
 /// same as Dest := Source, but copying by value
 // - will unreference any varByRef content
+// - will convert any string value into RawUTF8 (varString) for consistency
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
 
 /// same as FillChar(Value^,sizeof(TVarData),0)
@@ -19973,9 +19974,9 @@ begin
   if VType=varByRef or varString then begin
     wasString := true;
     {$ifdef HASCODEPAGE}
-      AnyAnsiToUTF8(PRawByteString(VString)^,result);
+    AnyAnsiToUTF8(PRawByteString(VString)^,result);
     {$else}
-      result := PRawUTF8(VString)^;
+    result := PRawUTF8(VString)^;
     {$endif}
   end else
   if VType=varByRef or varOleStr then begin
@@ -36027,15 +36028,38 @@ begin
 end;
 
 procedure SetVariantByValue(const Source: Variant; var Dest: Variant);
+var s: TVarData absolute Source;
+    d: TVarData absolute Dest;
 begin
-  if TVarData(Dest).VType and VTYPE_STATIC<>0 then
+  if d.VType and VTYPE_STATIC<>0 then
     VarClear(Dest);
-  if TVarData(Source).VType in [varEmpty..varDate,varBoolean,varShortInt..varWord64] then
-    TVarData(Dest) := TVarData(Source) else
-  if not SetVariantUnRefSimpleValue(Source,TVarData(Dest)) then
-    if TVarData(Source).VType=varVariant or varByRef then
-      Dest := PVariant(TVarData(Source).VPointer)^ else
+  case s.VType of
+  varEmpty..varDate,varBoolean,varShortInt..varWord64: begin
+    d.VType := s.VType;
+    d.VInt64 := s.VInt64;
+  end;
+  varString: begin
+    d.VType := varString;
+    d.VAny := nil;
+    RawByteString(d.VAny) := RawByteString(s.VAny);
+  end;
+  varVariant or varByRef:
+    Dest := PVariant(s.VPointer)^;
+  varByRef or varString: begin
+    d.VType := varString;
+    d.VAny := nil;
+    RawByteString(d.VAny) := PRawByteString(s.VAny)^;
+  end;
+  {$ifdef HASVARUSTRING} varUString, varByRef or varUString, {$endif}
+  varOleStr, varByRef or varOleStr: begin
+    d.VType := varString;
+    d.VAny := nil;
+    VariantToUTF8(Source,RawUTF8(d.VAny)); // store a RawUTF8 instance
+  end;
+  else
+    if not SetVariantUnRefSimpleValue(Source,d) then
       Dest := Source;
+  end;
 end;
 
 procedure ZeroFill(Value: PVarData);
