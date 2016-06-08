@@ -2155,7 +2155,7 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(ARP);
   U := W.Text;
-  Check(Hash32(U)={$ifdef CPU64}$9F98936D{$else}$54659D65{$endif});
+  Check(Hash32(U)={$ifdef CPUARM}$9F98936D{$else}{$ifdef CPU64}$9F98936D{$else}$54659D65{$endif}{$endif});
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC,2);
   U2 := RawUTF8('[')+JSON_BASE64_MAGIC_UTF8+RawUTF8(BinToBase64(ARP.SaveTo))+RawUTF8('"]');
@@ -6965,7 +6965,8 @@ begin
   v2 := _obj(['id',1]);
   v1.Add(v2);
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1}]');
-  v1.Add('abc');
+  s := 'abc';
+  v1.Add(s); // FPC does not accept v1.Add('abc') on ARM
   Check(VariantSaveJSON(v1)='[1.23456,1.234567,{"id":1},"abc"]');
   RawUTF8ToVariant('def',v2);
   v1.Add(v2);
@@ -14731,13 +14732,17 @@ function TTestDDDMultiThread.ClientTest(const aClients, aRequests: integer): boo
 var
   i,count: integer;
   arrThreads: array of TDDDThreadsThread;
+  {$ifdef MSWINDOWS}
   arrHandles: array of THandle;
+  {$endif}
   rWait: Cardinal;
 begin
   result := false;
   count := fRestServer.TableRowCount(TSQLRecordDDDTest);
   SetLength(arrThreads, aClients);
+  {$ifdef MSWINDOWS}
   SetLength(arrHandles, aClients);
+  {$endif}
   for i := Low(arrThreads) to High(arrThreads) do begin
     arrThreads[i] := TDDDThreadsThread.Create(i, aRequests);
     {$ifdef MSWINDOWS}
@@ -14820,11 +14825,13 @@ begin
   test := TDDDTest.Create;
   try
     success := true;
-    for i := 0 to fRequestCount - 1 do begin
+    i := fRequestCount; // circumvent weird FPC bug on ARM
+    while i>0 do begin
       test.Description := FormatUTF8('test-%-%', [fID, i]);
       success := success and (fHttpClient.MyCommand.Add(test) = cqrsSuccess);
       if not success then
         break;
+      dec(i);
     end;
     if success then
       success := fHttpClient.MyCommand.Commit = cqrsSuccess;

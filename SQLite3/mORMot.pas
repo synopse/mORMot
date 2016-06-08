@@ -28686,7 +28686,7 @@ begin
     if nfo=TypeInfo(IInterface) then
       exit;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    typ := PInterfaceTypeData(GetTypeData(@nfo));
+    typ := AlignToPtr(@nfo^.Name[ord(nfo^.Name[0])+1]);
     {$else}
     typ := @nfo^.Name[ord(nfo^.Name[0])+1];
     {$endif}
@@ -50477,15 +50477,9 @@ const
   REGD4 = 5; // REGV4
   REGD5 = 6; // REGV5
   REGD6 = 7; // REGV6
-  {$ifdef aarch64regd7param} // circvumvent FPC bug which do not use REGD7
   REGD7 = 8; // REGV7
-  {$endif}
   FPREG_FIRST = REGD0;
-  {$ifdef aarch64regd7param}
   FPREG_LAST = REGD7;
-  {$else}
-  FPREG_LAST = REGD6;
-  {$endif}
   {$define HAS_FPREG}
 {$endif CPUAARCH64}
 
@@ -50544,6 +50538,10 @@ type
     {$ifdef CPUARM}
     // alf: on ARM, there is more on the stack than you would expect
     DummyStack: packed array[0..9] of pointer;
+    {$endif}
+    {$ifdef CPUAARCH64}
+    // alf: on AARCH64, there is more on the stack than you would expect
+    DummyStack: packed array[0..0] of pointer;
     {$endif}
     Stack: packed array[word] of byte;
   end;
@@ -51742,7 +51740,7 @@ end;
 {$ifdef CPUAARCH64}
 procedure TInterfacedObjectFake.AArch64FakeStub;
 var sx0, sx1, sx2, sx3, sx4, sx5, sx6, sx7: pointer;
-    sd0, sd1, sd2, sd3, sd4, sd5, sd6{$ifdef regd7param}, sd7{$endif}: double;
+    sd0, sd1, sd2, sd3, sd4, sd5, sd6, sd7: double;
     smetndx:pointer;
 asm
   // get method index
@@ -51755,9 +51753,7 @@ asm
   str d4,sd4
   str d5,sd5
   str d6,sd6
-  {$ifdef aarch64regd7param}
   str d7,sd7
-  {$endif}
   str x0,sx0
   str x1,sx1
   str x2,sx2
@@ -54286,9 +54282,7 @@ load_regs:
    ldr  d4, [x19,#TCallMethodArgs.FPRegs+REGD4*8-8]
    ldr  d5, [x19,#TCallMethodArgs.FPRegs+REGD5*8-8]
    ldr  d6, [x19,#TCallMethodArgs.FPRegs+REGD6*8-8]
-   {$ifdef aarch64regd7param}
    ldr  d7, [x19,#TCallMethodArgs.FPRegs+REGD7*8-8]
-   {$endif}
    // call TCallMethodArgs.method
    blr  x20
    // store normal result

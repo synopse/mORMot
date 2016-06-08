@@ -779,6 +779,7 @@ begin
         exit;
       Check(SynLZDecompress(email.MessageCompressed)='body');
       email.Free;
+      sleep(10);
       Check(daemon.Stop(info)=cqrsSuccess);
       Check(info.working=0);
       smtpMock.Verify('SendEmail',qoEqualTo,2);
