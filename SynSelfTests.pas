@@ -13197,11 +13197,16 @@ procedure TTestServiceOrientedArchitecture.Security;
     CheckMatchAny(Ask('ToTextFunc','777'),['["777"]','{"Result":"777"}'],true,(5 in Expected),msg);
   end;
 var S: TServiceFactoryServer;
-    GroupID: integer;
+    GroupID: TID;
+    g: TIDDynArray;
 begin
   fClient.ServicesRouting := TSQLRestRoutingJSON_RPC;
   fClient.Server.ServicesRouting := TSQLRestRoutingJSON_RPC;
   GroupID := fClient.MainFieldID(TSQLAuthGroup,'User');
+  Check(GroupID<>0);
+  Check(fClient.MainFieldIDs(TSQLAuthGroup,['User','Admin'],g));
+  Check(length(g)=2);
+  Check((g[0]=GroupID) or (g[1]=GroupID));
   S := fClient.Server.Services['Calculator'] as TServiceFactoryServer;
   Test([1,2,3,4,5],'by default, all methods are allowed');
   S.AllowAll;
