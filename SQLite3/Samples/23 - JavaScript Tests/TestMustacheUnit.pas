@@ -50,7 +50,9 @@ uses
 
 {$R *.dfm}
 
+{$ifndef FPC}
 {$R Vista.res}
+{$endif}
 
 procedure TMainForm.Render(Sender: TObject);
 var Template, Context, Result: RawUTF8;

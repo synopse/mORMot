@@ -11,9 +11,14 @@ program Project18Server;
 uses
   {$I SynDprUses.inc}
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   Unit2 in 'Unit2.pas' {Form1};
 
+{$ifndef FPC}
 {$R *.res}
+{$endif}
 
 begin
   Application.Initialize;

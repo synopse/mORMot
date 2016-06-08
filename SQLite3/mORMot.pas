@@ -27609,7 +27609,8 @@ end;
 
 procedure TPropInfo.SetOrdProp(Instance: TObject; Value: PtrInt);
 begin
-  if (PropType^.Kind=tkClass) and (SetProc=0) and GetterIsField then
+  if {$ifndef FPC}(PropType^.Kind=tkClass) and {$endif}
+     (SetProc=0) and GetterIsField then
     // allow setting a class instance even if there is no "write ..." attribute
     PPtrInt(GetterAddr(Instance))^ := Value else
     TypInfo.SetOrdProp(Instance,@self,Value);
@@ -50746,7 +50747,13 @@ begin
         V := PPointer(V)^;
       case ValueType of
       smvDynArray:
+        {$ifdef FPC} // FIXME ?
+          if vIsObjArray in ValueKindAsm then
+             DynArrays[IndexVar].Init(ArgTypeInfo,V^) else
+             DynArrays[IndexVar].Init(ArgTypeInfo,V);
+        {$else}
         DynArrays[IndexVar].Init(ArgTypeInfo,V^);
+        {$endif}
       end;
       Value[arg] := V;
       if ValueDirection in [smdConst,smdVar] then

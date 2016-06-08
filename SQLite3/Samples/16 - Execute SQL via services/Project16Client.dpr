@@ -4,10 +4,16 @@ program Project16Client;
 uses
   {$I SynDprUses.inc}
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   Project16ClientMain in 'Project16ClientMain.pas' {MainForm},
   Project16Interface in 'Project16Interface.pas';
 
+{$ifndef FPC}
 {$R *.res}
+{$endif}
+
 
 begin
   Application.Initialize;

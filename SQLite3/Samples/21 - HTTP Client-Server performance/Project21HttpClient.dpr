@@ -5,11 +5,15 @@ program Project21HttpClient;
 uses
   {$I SynDprUses.inc}
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   Project21HttpClientMain in 'Project21HttpClientMain.pas' {MainForm};
 
+{$ifndef FPC}
 {$R *.res}
-
 {$R Vista.res}
+{$endif}
 
 begin
   Application.Initialize;

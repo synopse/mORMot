@@ -345,6 +345,7 @@ end;
 
 
 function MemoryUsed: cardinal; // directly from FastMM4
+{$ifndef FPC}
 var st: TMemoryManagerState;
     sb: Integer;
 begin
@@ -354,7 +355,11 @@ begin
   with st.SmallBlockTypeStates[sb] do
       result := result + UseableBlockSize * AllocatedBlockCount;
 end;
-
+{$else}
+begin
+  result := MaxInt;
+end;
+{$endif}
 
 { TTestSynopseRecord }
 

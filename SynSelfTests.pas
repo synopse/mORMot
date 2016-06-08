@@ -6659,7 +6659,9 @@ begin
   Check(variant(Doc)._JSON=JSON);
   Check(variant(Doc)._JSON__=JSON,'pseudo methods use IdemPChar');
   Check(VariantSaveMongoJSON(variant(Doc),modMongoStrict)=JSON);
+  {$ifndef FPC}
   Check(variant(Doc)=JSON);
+  {$endif}
   Check(Doc.U['name']='John');
   Check(Doc.I['birthyear']=ExpectedYear);
 end;
@@ -6750,9 +6752,6 @@ var Doc,Doc2: TDocVariantData;
     vd: double;
     vs: single;
 begin
-  {$ifdef FPC}
-  exit; // bypass the tests by now, until FPC variant supports is fixed
-  {$endif}
   Doc.Init;
   Check(Doc.Kind=dvUndefined);
   Check(variant(Doc)._kind=ord(dvUndefined));
@@ -6826,7 +6825,9 @@ begin
     Check(V._(i)=Doc.Values[i]);
   Check(V._(3)=4);
   Check(V._(4)='a5');
+  {$ifndef FPC}
   Check(V='["one",2,3,4,"a5"]');
+  {$endif}
   discogs := StringFromFile(discogsFileName);
   CheckNestedDoc([]);
   CheckNestedDoc([dvoValueCopiedByReference]);
@@ -6837,7 +6838,9 @@ begin
   V2.name := 'James';   // modifies V2.name, but also V1.name
   Check(V1.name='James');
   Check(V2.name='James');
+  {$ifndef FPC}
   Check(V1='{"name":"James","year":1972}');
+  {$endif}
   _Unique(V1);          // change options of V1 to be by-value
   V2 := V1;             // creates a full copy of the V1 instance
   V2.name := 'John';    // modifies V2.name, but not V1.name
@@ -6847,10 +6850,14 @@ begin
   Check(V1._Count=2);
   _UniqueFast(V1);      // change options of V1 to be by-reference
   V2 := V1;
+  {$ifndef FPC}
   Check(V1._(1)='{"name":"John","year":1972}');
+  {$endif}
   V1._(1).name := 'Jim';
+  {$ifndef FPC}
   Check(V1='["root",{"name":"Jim","year":1972}]');
   Check(V2='["root",{"name":"Jim","year":1972}]');
+  {$endif}
   Doc.Clear;
   Doc.Init;
   for i := 0 to MAX do begin
@@ -6871,15 +6878,25 @@ begin
   Check(TDocVariantData(V1)._[1].U['name']='Jim');
   Check(TDocVariantData(V1)._[1].I['year']=1972);
   V1.Add(3.1415);
+  {$ifndef FPC}
   Check(V1='["root",{"name":"Jim","year":1972},3.1415]');
+  {$endif}
   V1._(1).Delete('year');
+  {$ifndef FPC}
   Check(V1='["root",{"name":"Jim"},3.1415]');
+  {$endif}
   V1.Delete(1);
+  {$ifndef FPC}
   Check(V1='["root",3.1415]');
+  {$endif}
   TDocVariantData(V2).DeleteByProp('name','JIM',true);
+  {$ifndef FPC}
   Check(V2<>'["root"]');
+  {$endif}
   TDocVariantData(V2).DeleteByProp('name','JIM',false);
+  {$ifndef FPC}
   Check(V2='["root"]');
+  {$endif}
   s := '{"Url":"argentina","Seasons":[{"Name":"2011/2012","Url":"2011-2012",'+
     '"Competitions":[{"Name":"Ligue1","Url":"ligue-1"},{"Name":"Ligue2","Url":"ligue-2"}]},'+
     '{"Name":"2010/2011","Url":"2010-2011","Competitions":[{"Name":"Ligue1","Url":"ligue-1"},'+
@@ -6912,7 +6929,9 @@ begin
     ',"Url":"ligue-2"}],"2010/2011","2010-2011",[{"Name":"Ligue1","Url":"ligue-1"}'+
     ',{"Name":"Ligue2","Url":"ligue-2"}]]}');
   V := _Json('{result:{data:{"1000":"D1", "1001":"D2"}}}');
+  {$ifndef FPC}
   Check(V.result='{"data":{"1000":"D1", "1001":"D2"}}');
+  {$endif}
   Check(V.result.data.Exists('1000'));
   Check(V.result.data.Exists('1001'));
   Check(not V.result.data.Exists('1002'));

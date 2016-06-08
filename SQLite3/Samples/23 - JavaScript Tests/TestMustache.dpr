@@ -12,9 +12,14 @@ program TestMustache;
 uses
   {$I SynDprUses.inc}
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   TestMustacheUnit in 'TestMustacheUnit.pas' {MainForm};
 
+{$ifndef FPC}
 {$R *.res}
+{$endif}
 
 begin
   Application.Initialize;

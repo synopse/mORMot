@@ -5,9 +5,14 @@ uses
   {$I SynDprUses.inc}
   // SynFastWideString, // still works with fast WideString, and slightly faster
   Forms,
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
   PerfMain in 'PerfMain.pas' {MainForm};
 
+{$ifndef FPC}
 {$R *.res}
+{$endif}
 
 begin
   Application.Initialize;
