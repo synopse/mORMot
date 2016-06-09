@@ -4040,7 +4040,7 @@ begin
       exit;
     Check(L.EventLevel[0]=sllEnter);
     Check(L.EventLevel[1]=sllDebug);
-    CheckSame(L.EventDateTime(1),L.StartDateTime);
+    CheckSame(L.EventDateTime(1),L.StartDateTime,1 / SecsPerDay);
     Check(L.EventLevel[2]=sllLeave);
     if CheckFailed(L.LogProcCount=1) then
       exit;
@@ -9137,7 +9137,7 @@ begin
   n := 0;
   s3 := Demo.ExecuteJSON('select * from test where level=2',False,@n);
   Check(n=1);
-  Check(s3='{"fieldCount":3,"values":["DateTime","Level","Content",40640.5028819444,'+
+  Check(s3='{"fieldCount":3,"values":["DateTime","Level","Content",40640.5028826852,'+
     '2,"20110407 12040904 debug {\"TObjectList(00AF8D00)\":[\"TObjectList(00AF8D20)\",'+
     '\"TObjectList(00AF8D60)\",\"TFileVersion(00ADC0B0)\",\"TSynMapFile(00ACC990)\"]}"],'+
     '"rowCount":1}'#$A);
