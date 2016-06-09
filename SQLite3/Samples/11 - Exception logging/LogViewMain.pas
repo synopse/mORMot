@@ -74,6 +74,7 @@ type
     btnThreadAll: TButton;
     btnThreadDown: TButton;
     btnThreadUp: TButton;
+    lstDays: TListBox;
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
@@ -113,6 +114,8 @@ type
     procedure btnListClearClick(Sender: TObject);
     procedure btnListSaveClick(Sender: TObject);
     procedure ThreadListBoxClick(Sender: TObject);
+    procedure lstDaysDblClick(Sender: TObject);
+    procedure PanelLeftResize(Sender: TObject);
   protected
     FLog: TSynLogFile;
     FLogSelected: TIntegerDynArray;
@@ -123,6 +126,7 @@ type
     FEventCaption: array[TSynLogInfo] of string;
     FThreadSelected: TByteDynArray;
     FThreadNames: TRawUTF8DynArray;
+    FDays: TDateTimeDynArray;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
     FRemoteLogService: TSQLHTTPRemoteLogServer; // from mORMotHTTPServer
@@ -178,7 +182,7 @@ resourcestring
 
 procedure TMainLogView.SetLogFileName(const Value: TFileName);
 var E: TSynLogInfo;
-    i: integer;
+    i, y: integer;
 begin
   {$ifdef FPC}
   if (Value<>'') and (GetFileNameExtIndex(Value,'log,synlz,txt')<0) then
@@ -241,14 +245,17 @@ begin
   EventsList.Height := 8+EventsList.Count*EventsList.ItemHeight;
   ProfileGroup.Top := EventsList.Top+EventsList.Height+12;
   MergedProfile.Top := ProfileGroup.Top+ProfileGroup.Height+2;
-  BtnStats.Top := MergedProfile.Top+32;
-  BtnMapSearch.Top := BtnStats.Top;
+  y := MergedProfile.Top+32;
+  BtnStats.Top := y;
+  BtnMapSearch.Top := y;
+  inc(y,32);
   ThreadGroup.Visible := (FLog<>nil) and (FLog.EventThread<>nil);
   if ThreadGroup.Visible then begin
     SetLength(FThreadSelected,(FLog.ThreadsCount shr 3)+1);
     fillchar(FThreadSelected[0],Length(FThreadSelected),255);
     FThreadNames := FLog.ThreadNames(-1);
-    ThreadGroup.Top := BtnStats.Top+32;
+    ThreadGroup.Top := y;
+    inc(y,ThreadGroup.Height+8);
     ThreadListBox.Items.BeginUpdate;
     ThreadListBox.Items.Clear;
     for i := 0 to FLog.ThreadsCount-1 do begin
@@ -256,6 +263,17 @@ begin
       ThreadListBox.Checked[i] := true;
     end;
     ThreadListBox.Items.EndUpdate;
+  end;
+  lstDays.Visible := (FLog<>nil) and (FLog.DayChangeIndex<>nil);
+  if lstDays.Visible then begin
+    FLog.GetDays(FDays);
+    lstDays.Top := y;
+    lstDays.Items.BeginUpdate;
+    for i := 0 to high(FDays) do
+      lstDays.Items.Add(Format('%s (%d rows)',[DateToStr(FDays[i]),
+        FLog.DayCount[i]]));
+    lstDays.Items.EndUpdate;
+    lstDays.ItemIndex := 0;
   end;
   ProfileGroup.ItemIndex := 0;
   MergedProfile.Checked := false;
@@ -295,7 +313,7 @@ var F: TSynLogFilter;
     M: TMenuItem;
     E: TSynLogInfo;
 begin
-  FMainCaption := format(Caption,[SYNOPSE_FRAMEWORK_VERSION]);
+  FMainCaption := format(Caption,[SYNOPSE_FRAMEWORK_VERSION])+' ';
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
     M.Caption := GetCaptionFromEnum(TypeInfo(TSynLogFilter),Ord(F));
@@ -467,8 +485,8 @@ begin
 end;
 
 const
-  TIME_FORMAT: array[boolean] of string = (
-    'hh:mm:ss.zzz','hh:mm:ss');
+  TIME_FORMAT = 'hh:mm:ss.zzz';
+
   MAXLOGLINES = 300;
     
 procedure TMainLogView.ListDrawCell(Sender: TObject; ACol, ARow: Integer;
@@ -490,7 +508,7 @@ begin
           Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
         Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
         case ACol of
-        0: DateTimeToString(txt,TIME_FORMAT[FLog.Freq=0],FLog.EventDateTime(Index));
+        0: DateTimeToString(txt,TIME_FORMAT,FLog.EventDateTime(Index));
         1: txt := FEventCaption[FLog.EventLevel[Index]];
         2: if FLog.EventThread<>nil then
              txt := IntToString(cardinal(FLog.EventThread[Index])) else
@@ -660,7 +678,6 @@ begin
     i := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
     if i>=0 then begin
       SetListItem(i);
-      List.Row := i;
       List.SetFocus;
     end;
   end;
@@ -689,7 +706,7 @@ begin
 end;
 
 procedure TMainLogView.ListClick(Sender: TObject);
-var i,ndx: integer;
+var i,ndx,found: integer;
     Selection: TGridRect;
     elapsed: TDateTime;
     s,tim: string;
@@ -699,12 +716,25 @@ begin
     i := FLogSelected[i];
     s := FLog.EventString(i,'',0,true);
     if FPanelThreadVisible and (FLog.EventThread<>nil) then begin
-      ThreadListNameRefresh(i);    
+      ThreadListNameRefresh(i);
       ndx := FLog.EventThread[i]-1;
       if ndx<>ThreadListBox.ItemIndex then begin
         btnThread1.Caption := IntToStr(ndx+1);
         ThreadListBox.ItemIndex := ndx;
         ThreadListBoxClick(nil);
+      end;
+    end;
+    if lstDays.Visible then begin
+      ndx := lstDays.ItemIndex;
+      if (cardinal(ndx)<cardinal(Length(FDays))) and
+         (Trunc(FLog.EventDateTime(i))<>FDays[ndx]) then begin
+        found := high(FLog.DayChangeIndex);
+        for ndx := 1 to found do
+          if FLog.DayChangeIndex[ndx]>i then begin
+            found := ndx-1;
+            break;
+          end;
+        lstDays.ItemIndex := found;
       end;
     end;
   end else
@@ -715,12 +745,12 @@ begin
   if Selection.Bottom>Selection.Top then begin
     elapsed := FLog.EventDateTime(Selection.Bottom)-FLog.EventDateTime(Selection.Top);
     if FLog.Freq=0 then begin
-      DateTimeToString(tim,TIME_FORMAT[true],elapsed);
+      DateTimeToString(tim,TIME_FORMAT,elapsed);
       s := tim+#13#10+s;
     end else begin
       tim := IntToStr(trunc(elapsed*MSecsPerDay*1000) mod 1000);
       s := StringOfChar('0',3-length(tim))+tim+#13#10+s;
-      DateTimeToString(tim,TIME_FORMAT[false],elapsed);
+      DateTimeToString(tim,TIME_FORMAT,elapsed);
       s := tim+'.'+s;
     end;
     s := format(sTimeInfo,[Selection.Bottom-Selection.Top+1,s]);
@@ -927,9 +957,9 @@ begin
     List.Row := Index;
     if (search='') and List.Visible then
       List.SetFocus;
-    if FLog.EventLevel=nil then
-      s := FLog.EventString(Index,'',0,true) else
-      s := FLog.EventString(FLogSelected[Index],'',0,true);
+    if FLog.EventLevel<>nil then
+      Index := FLogSelected[Index];
+    s := FLog.EventString(Index,'',0,true);
     MemoBottom.Text := s;
     if search<>'' then begin
       ss := UTF8ToString(search);
@@ -1258,5 +1288,23 @@ begin
     RenameFile('temp~.log',dlgSaveList.FileName);
 end;
 
+procedure TMainLogView.lstDaysDblClick(Sender: TObject);
+var ndx, i: integer;
+begin
+  ndx := lstDays.ItemIndex;
+  if cardinal(ndx)>=cardinal(Length(FLog.DayChangeIndex)) then
+    exit;
+  ndx := FLog.DayChangeIndex[ndx];
+  for i := 0 to FLogSelectedCount-1 do
+    if FLogSelected[i]>=ndx then begin
+      SetListItem(i);
+      exit;
+    end;
+end;
+
+procedure TMainLogView.PanelLeftResize(Sender: TObject);
+begin
+  lstDays.Height := PanelLeft.ClientHeight-lstDays.Top-48;
+end;
 
 end.
