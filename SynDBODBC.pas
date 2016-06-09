@@ -30,6 +30,7 @@ unit SynDBODBC;
 
   Contributor(s):
   - Esteban Martin (EMartin)
+  - squirrel
   - zed
   
   Alternatively, the contents of this file may be used under the terms of
@@ -1075,8 +1076,8 @@ begin
   with TRegistry.Create do
   try
     RootKey := HKEY_LOCAL_MACHINE;
-    result := OpenKey('Software\ODBC\ODBCINST.INI\ODBC Drivers', false) or
-              OpenKey('Software\ODBC\ODBCINST.INI', false);
+    result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\ODBC Drivers') or
+              OpenKeyReadOnly('Software\ODBC\ODBCINST.INI');
     if result then begin
       if not Assigned(aDrivers) then
         aDrivers := TStringList.Create;
@@ -1084,7 +1085,7 @@ begin
       if aIncludeVersion then
       for I := 0 to aDrivers.Count-1 do begin
         CloseKey;
-        result := OpenKey('Software\ODBC\ODBCINST.INI\' + aDrivers[I], false);
+        result := OpenKeyReadOnly('Software\ODBC\ODBCINST.INI\' + aDrivers[I]);
         if result then begin
           // expand environment variable, i.e %windir%
           lDriver := ExpandEnvVars(ReadString('Driver'));
