@@ -3,7 +3,7 @@ object MainLogView: TMainLogView
   Top = 232
   Width = 860
   Height = 639
-  Caption = ' Synopse LogView  %s -'
+  Caption = ' Synopse LogView %s -'
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -54,6 +54,7 @@ object MainLogView: TMainLogView
     Align = alLeft
     Constraints.MinWidth = 150
     TabOrder = 0
+    OnResize = PanelLeftResize
     DesignSize = (
       150
       545)
@@ -404,6 +405,15 @@ object MainLogView: TMainLogView
       TabOrder = 14
       Visible = False
       OnClick = btnListSaveClick
+    end
+    object lstDays: TListBox
+      Left = 16
+      Top = 440
+      Width = 121
+      Height = 57
+      ItemHeight = 13
+      TabOrder = 15
+      OnDblClick = lstDaysDblClick
     end
   end
   object MemoBottom: TMemo

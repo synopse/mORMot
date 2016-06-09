@@ -1088,6 +1088,9 @@ type
     fWow64: boolean;
     {$endif}
     fStartDateTime: TDateTime;
+    fDayCurrent: Int64; // as PInt64('20160607')^
+    fDayChangeIndex: TIntegerDynArray;
+    fDayCount: TIntegerDynArray;
     /// retrieve all used event levels
     fLevelUsed: TSynLogInfos;
     /// =0 if date time resolution, >0 if high-resolution time stamp
@@ -1154,6 +1157,9 @@ type
     /// returns the name of all threads, according to the position in the log
     // - result[0] stores the name of ThreadID = 1
     function ThreadNames(CurrentLogIndex: integer): TRawUTF8DynArray;
+    /// returns all days of this log file
+    // - only available for low-resolution timestamp, i.e. Freq=0
+    procedure GetDays(out Days: TDateTimeDynArray);
     /// returns the number of occurences of a given thread
     function ThreadRows(ThreadID: integer): cardinal;
     /// retrieve the level of an event
@@ -1188,6 +1194,12 @@ type
     /// high-resolution time stamp frequence, as retrieved from log file header
     // - equals 0 if date time resolution, >0 if high-resolution time stamp
     property Freq: Int64 read fFreq;
+    /// the row indexes where the day changed
+    // - only available for low-resolution timestamp, i.e. Freq=0
+    // - if set, contains at least [0] if the whole log is over a single day
+    property DayChangeIndex: TIntegerDynArray read fDayChangeIndex;
+    /// the number of rows for each DayChangeIndex[] value
+    property DayCount: TIntegerDynArray read fDayCount;
     /// custom headers, to be searched as .ini content
     property Headers: RawUTF8 read fHeaders;
     /// the available CPU features, as recognized at program startup
@@ -4148,11 +4160,22 @@ end;
 
 function TSynLogFile.EventDateTime(aIndex: integer): TDateTime;
 var TimeStamp: Int64;
+    P: PUTF8Char;
+    Y,M,D, HH,MM,SS,MS: cardinal;
 begin
   if cardinal(aIndex)>=cardinal(fCount) then
     result := 0 else
-    if fFreq=0 then
-      Iso8601ToDateTimePUTF8CharVar(fLines[aIndex],17,result) else
+    if fFreq=0 then begin
+      P := fLines[aIndex]; // YYYYMMDD hhmmsszz
+      if Char4ToWord(P,Y) or Char2ToByte(P+4,M) or Char2ToByte(P+6,D) or
+         Char2ToByte(P+9,HH) or Char2ToByte(P+11,MM) or Char2ToByte(P+13,SS) or
+         Char2ToByte(P+15,MS) then
+        Iso8601ToDateTimePUTF8CharVar(P,17,result) else
+        if TryEncodeDate(Y,M,D,result) then
+          // shl 4 = 16 ms resolution in TTextWriter.AddCurrentLogTime()
+          result := result+EncodeTime(HH,MM,SS,MS shl 4) else
+          result := 0;
+    end else
       if HexDisplayToBin(fLines[aIndex],@TimeStamp,sizeof(TimeStamp)) then
         result := fStartDateTime+(TimeStamp/fFreqPerDay) else
         result := 0;
@@ -4209,10 +4232,15 @@ procedure TSynLogFile.LoadFromMap(AverageLineLength: integer=32);
     until false;
   end;
   procedure CleanLevels(Log: TSynLogFile);
-  var i, aCount, pCount: integer;
+  var i, aCount, pCount, dCount, dValue, dMax: integer;
   begin
     aCount := 0;
     pCount := 0;
+    dCount := 0;
+    dMax := Length(fDayChangeIndex);
+    if dMax>0 then
+      dValue := fDayChangeIndex[0] else
+      dValue := -1;
     with Log do
     for i := 0 to fCount-1 do
       if fLevels[i]<>sllNone then begin
@@ -4224,10 +4252,23 @@ procedure TSynLogFile.LoadFromMap(AverageLineLength: integer=32);
           fLogProcNatural[pCount].Index := aCount;
           inc(pCount);
         end;
+        if dValue=i then begin
+          fDayChangeIndex[dCount] := aCount;
+          inc(dCount);
+          if dCount<dMax then
+            dValue := fDayChangeIndex[dCount];
+        end;
         inc(aCount);
       end;
     Log.fCount := aCount;
     assert(pCount=Log.fLogProcNaturalCount);
+    if dMax>0 then begin
+      SetLength(fDayCount,dMax);
+      dec(dMax);
+      for i := 0 to dMax-1 do
+        fDayCount[i] := fDayChangeIndex[i+1]-fDayChangeIndex[i];
+      fDayCount[dMax] := aCount-fDayChangeIndex[dMax];
+    end;
   end;
 var aWow64, feat: RawUTF8;
     i, j, Level: integer;
@@ -4502,8 +4543,12 @@ begin
   if fLineLevelOffset=0 then begin
     if (fCount>50) or not (LineBeg[0] in ['0'..'9']) then
       exit; // definitively does not sound like a .log content
-    if LineBeg[8]=' ' then // YYYYMMDD HHMMSS is one char bigger than TimeStamp
-      fLineLevelOffset := 19 else
+    if LineBeg[8]=' ' then begin
+      // YYYYMMDD HHMMSS is one char bigger than TimeStamp
+      fLineLevelOffset := 19;
+      fDayCurrent := PInt64(LineBeg)^;
+      AddInteger(fDayChangeIndex,fCount-1);
+    end else
       fLineLevelOffset := 18;
     if (LineBeg[fLineLevelOffset]='!') or // ! = thread 1
        (GetLogLevelFromText(LineBeg)=sllNone) then begin
@@ -4518,6 +4563,10 @@ begin
   L := GetLogLevelFromText(LineBeg);
   if L=sllNone then
     exit;
+  if (fDayChangeIndex<>nil) and (fDayCurrent<>PInt64(LineBeg)^) then begin
+    fDayCurrent := PInt64(LineBeg)^;
+    AddInteger(fDayChangeIndex,fCount-1);
+  end;
   if fThreads<>nil then begin
     if fThreadsCount<fLinesMax then begin
       fThreadsCount := fLinesMax;
@@ -4608,6 +4657,15 @@ begin
     exit;
   for i := 1 to fThreadMax do
     result[i-1] := ThreadName(i,CurrentLogIndex);   
+end;
+
+procedure TSynLogFile.GetDays(out Days: TDateTimeDynArray);
+var i,n: integer;
+begin
+  n := length(fDayChangeIndex);
+  SetLength(Days,n);
+  for i := 0 to n-1 do
+    Days[i] := EventDateTime(fDayChangeIndex[i]);
 end;
 
 function TSynLogFile.GetEventText(index: integer): RawUTF8;

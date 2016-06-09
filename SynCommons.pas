@@ -7069,7 +7069,7 @@ type
     // - e.g. append '20110325 19241502 '
     // - you may set LocalTime=TRUE to write the local date and time instead
     // - this method is very fast, and avoid most calculation or API calls
-    procedure AddCurrentLogTime(LocalTime: boolean=false);
+    procedure AddCurrentLogTime(LocalTime: boolean=false; Use16msCache: boolean=true);
     /// append a time period, specified in micro seconds
     procedure AddMicroSec(MS: cardinal);
     /// append an Integer Value as a 4 digits String with comma
@@ -29581,7 +29581,7 @@ end;
 procedure Iso8601ToDateTimePUTF8CharVar(P: PUTF8Char; L: integer; var result: TDateTime);
 var i: integer;
     B: cardinal;
-    Y,M,D, H,MI,SS: cardinal;
+    Y,M,D, HH,MI,SS: cardinal;
 // expect 'YYYYMMDDThhmmss' format but handle also 'YYYY-MM-DDThh:mm:ss'
 begin
   unaligned(result) := 0;
@@ -29627,14 +29627,18 @@ begin
     if L<15 then
       exit; // not enough space to retrieve the time
   end;
-  H := ord(P[9])*10+ord(P[10])-(48+480);
-  if P[11]=':' then inc(P); // allow hh:mm:ss
-  MI := ord(P[11])*10+ord(P[12])-(48+480);
-  if P[13]=':' then inc(P); // allow hh:mm:ss
-  SS := ord(P[13])*10+ord(P[14])-(48+480);
-  if (H<24) and (MI<60) and (SS<60) then // inlined EncodeTime()
-    result := result+(H*(MinsPerHour*SecsPerMin*MSecsPerSec)+
-              MI*(SecsPerMin*MSecsPerSec)+SS*MSecsPerSec)/MSecsPerDay;
+  HH := ord(P[9])*10+ord(P[10])-(48+480);
+  if HH<24 then begin
+    if P[11]=':' then inc(P);
+    MI := ord(P[11])*10+ord(P[12])-(48+480);
+    if MI<60 then begin
+      if P[13]=':' then inc(P);
+      SS := ord(P[13])*10+ord(P[14])-(48+480);
+      if SS<60 then // inlined EncodeTime()
+        result := result+(HH*(MinsPerHour*SecsPerMin*MSecsPerSec)+
+                MI*(SecsPerMin*MSecsPerSec)+SS*MSecsPerSec)/MSecsPerDay;
+    end;
+  end;
 end;
 
 function Iso8601ToTimePUTF8Char(P: PUTF8Char; L: integer=0): TDateTime;
@@ -35991,12 +35995,9 @@ begin
     else
       if VType=varVariant or varByRef then
         result := VarIsVoid(PVariant(VPointer)^) else
-      if VType=varByRef or varOleStr then
+      if (VType=varByRef or varString) or (VType=varByRef or varOleStr)
+         {$ifdef HASVARUSTRING} or (VType=varByRef or varUString) {$endif} then
         result := PPointer(VAny)^=nil else
-      {$ifdef HASVARUSTRING}
-        if VType=varByRef or varUString then
-        result := PPointer(VAny)^=nil else
-      {$endif}
       {$ifndef NOVARIANTS}
       if VType=word(DocVariantVType) then
         result := TDocVariantData(V).Count=0 else
@@ -43421,22 +43422,24 @@ var // can be safely made global since timing is multi-thread safe
     clock: cardinal; // avoid slower API call
   end;
 
-procedure TTextWriter.AddCurrentLogTime(LocalTime: boolean);
+procedure TTextWriter.AddCurrentLogTime(LocalTime, Use16msCache: boolean);
 var Ticks: cardinal;
 begin
   if BEnd-B<=17 then
     FlushToStream;
   with GlobalLogTime[LocalTime] do begin
-    Ticks := GetTickCount; // this call is very fast (just one integer mul)
-    if clock<>Ticks then begin // typically in range of 10-16 ms
-      clock := Ticks;
-      if LocalTime then
-        GetLocalTime(time) else
-        {$ifdef MSWINDOWS}
-        GetSystemTime(time);
-        {$else}
-        GetNowUTCSystem(time);
-        {$endif}
+    if Use16msCache then begin
+      Ticks := GetTickCount; // this call is very fast (just one integer mul)
+      if clock<>Ticks then begin // typically in range of 10-16 ms
+        clock := Ticks;
+        if LocalTime then
+          GetLocalTime(time) else
+          {$ifdef MSWINDOWS}
+          GetSystemTime(time);
+          {$else}
+          GetNowUTCSystem(time);
+          {$endif}
+      end;
     end;
     inc(B);
     YearToPChar(time.{$ifdef MSWINDOWS}wYear{$else}Year{$endif},B);
@@ -43446,7 +43449,7 @@ begin
     PWord(B+9)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wHour{$else}Hour{$endif}];
     PWord(B+11)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMinute{$else}Minute{$endif}];
     PWord(B+13)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wSecond{$else}Second{$endif}];
-    PWord(B+15)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMilliseconds{$else}Millisecond{$endif} shr 4]; // range 0..62 = 16 ms
+    PWord(B+15)^ := TwoDigitLookupW[time.{$ifdef MSWINDOWS}wMilliseconds{$else}Millisecond{$endif} shr 4];
     B[17] := ' ';
     inc(B,16);
   end;
