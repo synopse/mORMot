@@ -8295,7 +8295,7 @@ type
     // corresponding to this TSQLTable result set
     // - use the specified TSQLRecord class or create instances
     // of the first associated record class (from internal QueryTables[])
-    // - returns TRUE on success, false on error
+    // - returns TRUE on success (even if ObjArray=[]), FALSE on error
     function ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): boolean;
 
     /// After a TSQLTable has been initialized, this method can be called
@@ -25324,7 +25324,7 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    SetLength(arr,fRowCount);        // faster than manual Add()
+    SetLength(arr,fRowCount);       // faster than manual Add()
     Row := @fResults[FieldCount];   // Row^ points to first row of data
     for i := 0 to fRowCount-1 do begin
       arr[i] := RecordType.Create;

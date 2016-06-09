@@ -53843,7 +53843,7 @@ begin
     B := P;
     repeat
       inc(P);
-    until P^ in [#0..' ',';',')'];
+    until P^ in [#0..' ',';',')',','];
     SetString(Where.Value,B,P-B);
     {$ifndef NOVARIANTS}
     Where.ValueVariant := VariantLoadJSON(Where.Value);
@@ -53872,6 +53872,43 @@ begin
   end;
   result := true;
 end;
+{$ifndef NOVARIANTS}
+function GetWhereValues(var Where: TSynTableStatementWhere): boolean;
+var v: TSynTableStatementWhereDynArray;
+    n, w: integer;
+    tmp: RawUTF8;
+begin
+  result := false;
+  if Where.ValueSQLLen<2 then
+    exit;
+  SetString(tmp,PAnsiChar(Where.ValueSQL)+1,Where.ValueSQLLen-2);
+  P := pointer(tmp); // parse again the IN (...,...,... ) expression
+  n := 0;
+  try
+    repeat
+      if n=length(v) then
+        SetLength(v,n+n shr 3+8);
+      if not GetWhereValue(v[n]) then
+        exit;
+      inc(n);
+      if P^=#0 then
+        break;
+      if P^<>',' then
+        exit;
+      inc(P);
+    until false;
+  finally
+    P := Where.ValueSQL+Where.ValueSQLLen; // continue parsing as usual
+  end;
+  with TDocVariantData(Where.ValueVariant) do begin
+    InitFast(n,dvArray);
+    for w := 0 to n-1 do
+      AddItem(v[w].ValueVariant);
+    Where.Value := ToJSON;
+  end;
+  result := true;
+end;
+{$endif}
 function GetWhereExpression(FieldIndex: integer; var Where: TSynTableStatementWhere): boolean;
 begin
   result := false;
@@ -53942,11 +53979,7 @@ begin
        SetString(Where.Value,PAnsiChar(B),P-B);
        Where.ValueSQL := B;
        Where.ValueSQLLen := P-B;
-       Where.Value[1] := '[';
-       Where.Value[P-B] := ']';
-       TDocVariantData(Where.ValueVariant).InitJSONInPlace(
-         pointer(Where.Value),JSON_OPTIONS_FAST);
-       result := true;
+       result := GetWhereValues(Where);
        exit;
     end;
     {$endif}
