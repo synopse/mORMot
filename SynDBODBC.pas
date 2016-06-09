@@ -1019,6 +1019,12 @@ type
   end;
 
 const
+  {$ifdef MSWINDOWS}
+  ODBC_LIB = 'odbc32.dll';
+  {$else}
+  ODBC_LIB = 'libodbc.so.1';
+  {$endif}
+  
   ODBC_ENTRIES: array[0..66] of PChar =
     ('SQLAllocEnv','SQLAllocHandle','SQLAllocStmt',
      'SQLBindCol','SQLBindParameter','SQLCancel','SQLCloseCursor',
@@ -1815,16 +1821,16 @@ constructor TODBCLib.Create;
 var P: PPointer;
     i: integer;
 begin
-  fHandle := SafeLoadLibrary('odbc32.dll');
+  fHandle := SafeLoadLibrary(ODBC_LIB);
   if fHandle=0 then
-    raise EODBCException.Create('Unable to find ODBC Client Interface (odbc32.dll)');
+    raise EODBCException.CreateUTF8('Unable to find ODBC Client Interface (%)',[ODBC_LIB]);
   P := @@AllocEnv;
   for i := 0 to High(ODBC_ENTRIES) do begin
     P^ := GetProcAddress(fHandle,ODBC_ENTRIES[i]);
     if P^=nil then begin
       FreeLibrary(fHandle);
       fHandle := 0;
-      raise EODBCException.CreateFmt('Invalid odbc32.dll: missing %s',[ODBC_ENTRIES[i]]);
+      raise EODBCException.CreateUTF8('Invalid %: missing %',[ODBC_LIB,ODBC_ENTRIES[i]]);
     end;
     inc(P);
   end;

@@ -271,38 +271,38 @@ end;
 class procedure TDDDAuthenticationAbstract.RegressionTests(
   test: TSynTestCase);
 var Factory: TDDDAuthenticationRestFactoryAbstract;
-procedure TestOne;
-const MAX=2000;
-var auth: IDomAuthCommand;
-    nonce: TAuthQueryNonce;
-    log,pass: RawUTF8;
-    info: TAuthInfo;
-    i: integer;
-begin
-  test.Check(Factory.GetOneInstance(auth));
-  for i := 1 to MAX do begin
-    UInt32ToUtf8(i,log);
-    UInt32ToUtf8(i*7,pass);
-    test.Check(auth.Add(log,ComputeHashPassword(log,pass))=cqrsSuccess);
-  end;
-  test.Check(auth.Commit=cqrsSuccess);
-  test.Check(Factory.GetOneInstance(auth));
-  info := TAuthInfo.Create;
-  try
+  procedure TestOne;
+  const MAX=2000;
+  var auth: IDomAuthCommand;
+      nonce: TAuthQueryNonce;
+      log,pass: RawUTF8;
+      info: TAuthInfo;
+      i: integer;
+  begin
+    test.Check(Factory.GetOneInstance(auth));
     for i := 1 to MAX do begin
       UInt32ToUtf8(i,log);
       UInt32ToUtf8(i*7,pass);
-      nonce := auth.ChallengeSelectFirst(log);
-      test.Check(nonce<>'');
-      test.Check(auth.ChallengeSelectFinal(
-        ClientComputeChallengedPassword(log,pass,nonce))=cqrsSuccess);
-      test.Check(auth.Get(info)=cqrsSuccess);
-      test.Check(info.LogonName=log);
+      test.Check(auth.Add(log,ComputeHashPassword(log,pass))=cqrsSuccess);
     end;
-  finally
-    info.Free;
+    test.Check(auth.Commit=cqrsSuccess);
+    test.Check(Factory.GetOneInstance(auth));
+    info := TAuthInfo.Create;
+    try
+      for i := 1 to MAX do begin
+        UInt32ToUtf8(i,log);
+        UInt32ToUtf8(i*7,pass);
+        nonce := auth.ChallengeSelectFirst(log);
+        test.Check(nonce<>'');
+        test.Check(auth.ChallengeSelectFinal(
+          ClientComputeChallengedPassword(log,pass,nonce))=cqrsSuccess);
+        test.Check(auth.Get(info)=cqrsSuccess);
+        test.Check(info.LogonName=log);
+      end;
+    finally
+      info.Free;
+    end;
   end;
-end;
 var Rest: TSQLRestServerFullMemory;
 begin
   Rest := TSQLRestServerFullMemory.CreateWithOwnModel([TSQLRecordUserAuth]);
