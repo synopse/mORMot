@@ -958,22 +958,32 @@ end;
 
 function TSQLRestStorageMongoDB.GetJSONValues(const Res: TBSONDocument;
   const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
-  function itemFind(item: PBSONElement; itemcount: integer; const aName: RawUTF8): integer;
-  var len: integer;
+  function itemFind(item: PBSONElement; itemcount,o1ndx: integer;
+    const aName: RawUTF8): PBSONElement;
+  var aNameLen, i: integer;
   begin
-    len := length(aName);
-    if len<>0 then
-      for result := 0 to itemcount-1 do
-      if (item^.NameLen=len) and
-         IdemPropNameUSameLen(pointer(aName),item^.Name,len) then
+    aNameLen := length(aName);
+    if aNameLen<>0 then begin
+      if o1ndx<itemcount then begin // O(1) optimistic search
+        result := @PAnsiChar(item)[o1ndx*sizeof(item^)];
+        if (result^.NameLen=aNameLen) and
+           IdemPropNameUSameLen(pointer(aName),result^.Name,aNameLen) then
+          exit;
+      end;
+      result := item;
+      for i := 1 to itemcount do // O(n) search if field missing or moved
+      if (result^.NameLen=aNameLen) and
+         IdemPropNameUSameLen(pointer(aName),result^.Name,aNameLen) then
         exit else
-        inc(PByte(item),SizeOf(item^));
-    result := -1;
+        inc(result);
+      end;
+    result := nil;
   end;
-var col, colCount, colFound: integer;
+var col, colCount: integer;
     row: TBSONIterator;
     item: array of TBSONElement;
     itemcount, itemsize: integer;
+    itemfound: PBSONElement;
 begin
   result := 0; // number of data rows in JSON output
   if W.Expand then
@@ -999,23 +1009,16 @@ begin
           Setlength(item,itemsize); // a field was deleted from TSQLRecord
         end;
       end;
-      for col := itemcount to colcount-1 do
-        item[col].Kind := betNull; // void any missing field (e.g. older schema) 
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
         W.Add('{');
       for col := 0 to colCount-1 do begin
         if W.Expand then
           W.AddString(W.ColNames[col]);
-        with item[col] do
-          if IdemPropNameU(extFieldNames[col],Name,NameLen) then
-            // optimistic O(1) if BSON document follows expected field order
-            colFound := col else
-            // O(n) search if fields are in another order, or missing
-            colFound := itemFind(pointer(item),itemcount,extFieldNames[col]);
-        if colfound<0 then // this field may not exist (e.g. older schema)
+        itemfound := itemFind(pointer(item),itemcount,col,extFieldNames[col]);
+        if itemfound=nil then // this field may not exist (e.g. older schema)
           W.AddShort('null') else
-          item[colFound].AddMongoJSON(W,modNoMongo);
+          itemfound^.AddMongoJSON(W,modNoMongo);
         W.Add(',');
       end;
       W.CancelLastComma;
