@@ -2187,8 +2187,10 @@ procedure SetDefaultValuesObject(Value: TObject);
 procedure ClearObject(Value: TObject; FreeAndNilNestedObjects: boolean=false);
 
 /// persist a class instance into a JSON file
-procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
-  Options: TTextWriterWriteObjectOptions=[woHumanReadable]);
+// - returns TRUE on success, false on error (e.g. the file name is invalid
+// or the file is existing and could not be overwritten)
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions=[woHumanReadable]): boolean;
 
 /// will serialize any TObject into its expanded UTF-8 JSON representation
 // - includes debugger-friendly information, similar to TSynLog, i.e.
@@ -46219,18 +46221,18 @@ begin
   end;
 end;
 
-procedure ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
-  Options: TTextWriterWriteObjectOptions);
+function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
+  Options: TTextWriterWriteObjectOptions): boolean;
 var humanread: boolean;
     json: RawUTF8;
 begin
-  humanread := woHumanReadable in Options; 
+  humanread := woHumanReadable in Options;
   Exclude(Options,woHumanReadable);
   json := ObjectToJSON(Value,Options);
   if humanread then
     // woHumanReadable not working with custom JSON serializers, e.g. T*ObjArray
-    JSONBufferReformatToFile(pointer(json),JSONFile) else
-    FileFromString(json,JSONFile);
+    result := JSONBufferReformatToFile(pointer(json),JSONFile) else
+    result := FileFromString(json,JSONFile);
 end;
 
 procedure ReadObject(Value: TObject; From: PUTF8Char; const SubCompName: RawUTF8=''); overload;
