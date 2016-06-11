@@ -45944,7 +45944,7 @@ function GetJSONField(P: PUTF8Char; out PDest: PUTF8Char;
   wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil): PUTF8Char;
 // this code is very fast
 var D: PUTF8Char;
-    b,c4: integer;
+    b,c4,surrogate,j: integer;
 label slash,num;
 begin
   if wasString<>nil then
@@ -46020,7 +46020,7 @@ slash:inc(P);
         'n': D^ := #$0a;
         'f': D^ := #$0c;
         'r': D^ := #$0d;
-        'u': begin // inlined decoding of '\0123' UTF-16 codepoint into UTF-8
+        'u': begin // inlined decoding of '\u0123' UTF-16 codepoint into UTF-8
           c4 := ConvertHexToBin[ord(P[1])];
           if c4<=15 then begin
             b := ConvertHexToBin[ord(P[2])];
@@ -46032,24 +46032,59 @@ slash:inc(P);
                 b := ConvertHexToBin[ord(P[4])];
                 if b<=15 then begin
                   c4 := c4 shl 4+b;
-                  if c4<>0 then begin
-                    if c4<=$7F then begin
-                      D^ := AnsiChar(c4);
-                      inc(D);
-                    end else
-                    if c4>$7ff then begin
-                      D^ := AnsiChar($E0 or (c4 shr 12));
-                      D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
-                      D[2] := AnsiChar($80 or (c4 and $3F));
-                      inc(D,3);
-                    end else begin
-                      D^ := AnsiChar($C0 or (c4 shr 6));
-                      D[1] := AnsiChar($80 or (c4 and $3F));
-                      inc(D,2);
-                    end;
-                    inc(P,5);
-                    continue;
+                  case c4 of
+                  0: begin
+                    D^ := '?'; // \u0000 is an invalid value
+                    inc(D);
                   end;
+                  1..$7f: begin
+                    D^ := AnsiChar(c4);
+                    inc(D);
+                  end;
+                  $80..$7ff: begin
+                    D[0] := AnsiChar($C0 or (c4 shr 6));
+                    D[1] := AnsiChar($80 or (c4 and $3F));
+                    inc(D,2);
+                  end;
+                  UTF16_HISURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                    if PWord(P+5)^=ord('\')+ord('u') shl 8 then begin
+                      inc(P,6);
+                      surrogate := (ConvertHexToBin[ord(P[1])] shl 12)+
+                                   (ConvertHexToBin[ord(P[2])] shl 8)+
+                                   (ConvertHexToBin[ord(P[3])] shl 4)+
+                                    ConvertHexToBin[ord(P[4])]; // optimistic approach
+                      case c4 of // inlined UTF16CharToUtf8()
+                      UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
+                        c4 := ((c4-$D7C0)shl 10)+(surrogate xor UTF16_LOSURROGATE_MIN);
+                      UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
+                        c4 := ((surrogate-$D7C0)shl 10)+(c4 xor UTF16_LOSURROGATE_MIN);
+                      end;
+                      case c4 of
+                      0..$7ff: b := 2;
+                      $800..$ffff: b := 3;
+                      $10000..$1FFFFF: b := 4;
+                      $200000..$3FFFFFF: b := 5;
+                      else b := 6;
+                      end;
+                      for j := b-1 downto 1 do begin
+                        D[j] := AnsiChar((c4 and $3f)+$80);
+                        c4 := c4 shr 6;
+                      end;
+                      D^ := AnsiChar(Byte(c4) or UTF8_FIRSTBYTE[b]);
+                      inc(D,b);
+                    end else begin
+                      D^ := '?'; // unexpected surrogate without its pair
+                      inc(D);
+                    end;
+                  else begin
+                    D[0] := AnsiChar($E0 or (c4 shr 12));
+                    D[1] := AnsiChar($80 or ((c4 shr 6) and $3F));
+                    D[2] := AnsiChar($80 or (c4 and $3F));
+                    inc(D,3);
+                  end;
+                  end;
+                  inc(P,5);
+                  continue;
                 end;
               end;
             end;

@@ -5654,6 +5654,14 @@ begin
   Check(V[1]='3.14159');
   Check(V[2]=nil);
   Check(V[3]='john');
+  J := '{surrogate:"\uD801\uDC00"}'; // see https://en.wikipedia.org/wiki/CESU-8
+  JSONDecode(J,['surrogate'],V);
+  Check(length(V)=1);
+  Check(StrLen(V[0])=4);
+  Check(V[0][0]=#$F0);
+  Check(V[0][1]=#$90);
+  Check(V[0][2]=#$90);
+  Check(V[0][3]=#$80);
   J := JSONEncode(['name','john','ab','[','a','b',']']);
   Check(J='{"name":"john","ab":["a","b"]}');
   J := JSONEncode(['name','john','ab','[','a','b']);
