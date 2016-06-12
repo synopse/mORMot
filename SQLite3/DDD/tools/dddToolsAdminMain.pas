@@ -220,6 +220,7 @@ begin
     if aLogFrame.Callback <> nil then begin
       fClient.Services.CallBackUnRegister(aLogFrame.Callback);
       aLogFrame.Callback := nil;
+      Sleep(10);
     end;
     aLogFrame.Closing;
   finally
@@ -270,15 +271,23 @@ end;
 procedure TAdminControl.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 
   procedure LogKeys(aLogFrame: TLogFrame);
+  var ch: char;
   begin
     if aLogFrame <> nil then
       case Key of
         VK_F3:
-          aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext);
-        ord('A')..ord('Z'), Ord('0')..ord('9'), 32:
-          if (shift = []) and (aLogFrame.ClassType <> TLogFrameChat) and not
-            aLogFrame.edtSearch.Focused then
-            aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text + string(Char(Key))
+         if Shift = [] then
+           aLogFrame.btnSearchNextClick(aLogFrame.btnSearchNext)
+         else
+           aLogFrame.btnSearchNextClick(aLogFrame.btnSearchPrevious);
+        ord('A')..ord('Z'), ord('0')..ord('9'), 32:
+          if (Shift = []) and (aLogFrame.ClassType <> TLogFrameChat) and not
+            aLogFrame.edtSearch.Focused then begin
+            ch := Char(Key);
+            if (Key in [ord('A')..ord('Z')]) and (GetKeyState(VK_CAPITAL) and 1=0) then
+              inc(ch,32); // emulate capslock behavior
+            aLogFrame.edtSearch.Text := aLogFrame.edtSearch.Text + string(ch);
+          end
           else if (key = ord('F')) and (ssCtrl in Shift) then begin
             aLogFrame.edtSearch.SelectAll;
             aLogFrame.edtSearch.SetFocus;
@@ -432,7 +441,7 @@ begin
     if not fDlgSave.Execute then
       exit;
     case fDlgSave.FilterIndex of
-      1:
+      1:                  
         JSONBufferReformat(pointer(grid.GetJSONValues(true)), table);
       2:
         table := grid.GetJSONValues(true);

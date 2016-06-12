@@ -30,9 +30,9 @@ object LogFrame: TLogFrame
       Caption = 'Existing KB:'
     end
     object edtSearch: TEdit
-      Left = 8
+      Left = 5
       Top = 8
-      Width = 101
+      Width = 98
       Height = 21
       Hint = 'Search (Ctrl+F, F3 for next) '
       Anchors = [akLeft, akTop, akRight]
@@ -42,8 +42,51 @@ object LogFrame: TLogFrame
       Visible = False
       OnChange = btnSearchNextClick
     end
-    object btnSearchNext: TButton
-      Left = 113
+    object chklstEvents: TCheckListBox
+      Left = 8
+      Top = 56
+      Width = 129
+      Height = 105
+      OnClickCheck = chklstEventsClickCheck
+      ItemHeight = 13
+      PopupMenu = pmFilter
+      Style = lbOwnerDrawFixed
+      TabOrder = 3
+      OnDblClick = chklstEventsDblClick
+      OnDrawItem = chklstEventsDrawItem
+    end
+    object btnStartLog: TButton
+      Left = 16
+      Top = 6
+      Width = 113
+      Height = 25
+      Caption = 'Start Logging'
+      TabOrder = 4
+      OnClick = btnStartLogClick
+    end
+    object edtExistingLogKB: TEdit
+      Left = 72
+      Top = 32
+      Width = 57
+      Height = 21
+      Hint = 'How many KB of log text should be transmitted at Start'
+      ParentShowHint = False
+      ShowHint = True
+      TabOrder = 5
+      Text = '512'
+    end
+    object btnStopLog: TButton
+      Left = 16
+      Top = 168
+      Width = 113
+      Height = 25
+      Caption = 'Stop Logging'
+      TabOrder = 6
+      Visible = False
+      OnClick = btnStopLogClick
+    end
+    object BtnSearchNext: TButton
+      Left = 103
       Top = 6
       Width = 20
       Height = 23
@@ -56,48 +99,19 @@ object LogFrame: TLogFrame
       Visible = False
       OnClick = btnSearchNextClick
     end
-    object chklstEvents: TCheckListBox
-      Left = 8
-      Top = 56
-      Width = 129
-      Height = 105
-      OnClickCheck = chklstEventsClickCheck
-      ItemHeight = 13
-      PopupMenu = pmFilter
-      Style = lbOwnerDrawFixed
-      TabOrder = 2
-      OnDblClick = chklstEventsDblClick
-      OnDrawItem = chklstEventsDrawItem
-    end
-    object btnStartLog: TButton
-      Left = 16
+    object BtnSearchPrevious: TButton
+      Left = 123
       Top = 6
-      Width = 113
-      Height = 25
-      Caption = 'Start Logging'
-      TabOrder = 3
-      OnClick = btnStartLogClick
-    end
-    object edtExistingLogKB: TEdit
-      Left = 72
-      Top = 32
-      Width = 57
-      Height = 21
-      Hint = 'How many KB of log text should be transmitted at Start'
+      Width = 20
+      Height = 23
+      Hint = 'Search Previous (Shift F3)'
+      Anchors = [akTop, akRight]
+      Caption = '^'
       ParentShowHint = False
       ShowHint = True
-      TabOrder = 4
-      Text = '512'
-    end
-    object btnStopLog: TButton
-      Left = 16
-      Top = 168
-      Width = 113
-      Height = 25
-      Caption = 'Stop Logging'
-      TabOrder = 5
+      TabOrder = 2
       Visible = False
-      OnClick = btnStopLogClick
+      OnClick = btnSearchNextClick
     end
   end
   object pnlRight: TPanel
@@ -128,6 +142,7 @@ object LogFrame: TLogFrame
       TabOrder = 0
       Visible = False
       OnClick = drwgrdEventsClick
+      OnDblClick = drwgrdEventsDblClick
       OnDrawCell = drwgrdEventsDrawCell
     end
   end
