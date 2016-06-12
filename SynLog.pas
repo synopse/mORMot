@@ -1143,12 +1143,6 @@ type
     procedure LogProcSort(Order: TLogProcSortOrder);
     /// return the number of matching events in the log
     function EventCount(const aSet: TSynLogInfos): integer;
-    /// add the indexes of all matching events to an array of integers
-    // - the supplied aSelectedIndexes dynamic array should already be allocated
-    // big enough to contain all potential events, i.e. length(aSelectedIndexes)
-    // should be >= Count
-    function EventSelect(const aSet: TSynLogInfos;
-      var aSelectedIndexes: TIntegerDynArray; aSelectedIndex: PInteger): integer;
     /// add a new line to the already parsed content
     // - overriden method which would identify the freq=%,%,% pseudo-header
     procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
@@ -1247,6 +1241,74 @@ type
     property LogProcCount: integer read fLogProcCurrentCount;
   end;
 
+  /// used to parse a .log file and process into VCL/LCL/FMX
+  // - would handle e.g. selection and search feature
+  TSynLogFileView = class(TSynLogFile)
+  protected
+    fSelected: TIntegerDynArray;
+    fSelectedCount: integer;
+    fEvents: TSynLogInfos;
+    fThreadSelected: TByteDynArray;
+    fThreadSelectedMax: integer;
+    procedure LoadFromMap(AverageLineLength: integer=32); override;
+    function GetThreads(thread: integer): boolean;
+    procedure SetThreads(thread: integer; value: boolean);
+  public
+    /// add a new line to the already parsed content
+    // - overriden method would add the inserted index to Selected[]
+    procedure AddInMemoryLine(const aNewLine: RawUTF8); override;
+    /// search for the next matching TSynLogInfo, from the current row index
+    // - returns -1 if no match was found
+    function SearchNextEvent(aEvent: TSynLogInfo; aRow: integer): integer;
+    /// search for the next matching text, from the current row index
+    // - returns -1 if no match was found
+    function SearchNextText(const aPattern: RawUTF8; aRow, aDelta: integer): integer;
+    /// search for the previous matching text, from the current row index
+    // - returns -1 if no match was found
+    function SearchPreviousText(const aPattern: RawUTF8; aRow: integer): integer;
+    /// search for the matching Enter/Leave item, from the current row index
+    // - returns -1 if no match was found
+    function SearchEnterLeave(aRow: integer): integer;
+    /// search for the next specified thread, from the current row index
+    // - returns -1 if no match was found
+    function SearchThread(aThreadID: word; aRow: integer): integer;
+    /// search for the next diverse thread, from the current row index
+    // - returns -1 if no match was found
+    function SearchNextThread(aRow: integer): integer;
+    /// search for the next matching thread, from the current row index
+    // - returns -1 if no match was found
+    function SearchNextSameThread(aRow: integer): integer;
+    /// search for the next row index, appearing after the supplied item index
+    // - returns -1 if no match was found
+    function SearchNextSelected(aIndex: integer): integer;
+    /// search for the previous matching thread, from the current row index
+    // - returns -1 if no match was found
+    function SearchPreviousSameThread(aRow: integer): integer;
+    /// returns the ready-to-be text of a cell of the main TDrawGrid
+    function GetCell(aCol, aRow: integer; out aLevel: TSynLogInfo): string;
+    /// returns the ready-to-be displayed text of one or several selected rows
+    function GetLineForMemo(aRow,aTop,aBottom: integer): string;
+    /// returns the ready-to-be copied text of a selected row
+    function GetLineForClipboard(aRow: integer): string;
+    /// fill all rows matching Events and Threads[] properties in Selected[]
+    // - you may specify the current selected row index, which would return
+    // the closest one after the selection has been applied
+    function Select(aRow: integer): integer; virtual;
+    /// set all Threads[] to a specified value
+    procedure SetAllThreads(enabled: boolean);
+    /// define the current selection range, according to event kinds
+    // - once you have set Events and Threads[], call Select() to fill Selected[]
+    property Events: TSynLogInfos read fEvents write fEvents;
+    /// define the current selection range, according to a thread ID
+    // - here the supplied thread ID starts at 1
+    // - once you have set Events and Threads[], call Select() to fill Selected[]
+    property Threads[thread: integer]: boolean read GetThreads write SetThreads;
+    /// the row indexes of the selected entries
+    property Selected: TIntegerDynArray read fSelected;
+    /// how many entries are currently stored in Selected[]
+    property SelectedCount: integer read fSelectedCount;
+  end;
+
 type
   /// a list of lof events families, used to gather events by type
   TSynLogFilter = (
@@ -1316,6 +1378,12 @@ const
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogInfo): RawUTF8; overload;
 
+/// returns the ready-to-be displayed text of a TSynLogInfo value
+function ToCaption(event: TSynLogInfo): string; overload;
+
+/// returns the ready-to-be displayed text of a TSynLogFilter value
+function ToCaption(filter: TSynLogFilter): string; overload;
+
 var
   /// the kind of .log file generated by TSynTestsLogged
   TSynLogTestLog: TSynLogClass = TSynLog;
@@ -1355,6 +1423,24 @@ uses
 function ToText(event: TSynLogInfo): RawUTF8;
 begin
   result := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(event)));
+end;
+
+var
+  LogInfoCaptions: array[TSynLogInfo] of string;
+
+function ToCaption(event: TSynLogInfo): string;
+var
+  E: TSynLogInfo;
+begin
+  if LogInfoCaptions[succ(sllNone)]='' then
+    for E := succ(sllNone) to high(E) do
+      LogInfoCaptions[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
+  result := LogInfoCaptions[event];
+end;
+
+function ToCaption(filter: TSynLogFilter): string;
+begin
+  result := GetCaptionFromEnum(TypeInfo(TSynLogFilter), Ord(filter))
 end;
 
 
@@ -4129,27 +4215,6 @@ begin
         inc(result);
 end;
 
-function TSynLogFile.EventSelect(const aSet: TSynLogInfos;
-  var aSelectedIndexes: TIntegerDynArray; aSelectedIndex: PInteger): integer;
-var i: integer;
-begin
-  result := 0;
-  if (aSelectedIndex<>nil) and (cardinal(aSelectedIndex^)>=cardinal(Count)) then
-    aSelectedIndex := nil; // nothing to search
-  if integer(aSet)<>0 then
-    for i := 0 to Count-1 do
-      if fLevels[i] in aSet then begin
-        if (aSelectedIndex<>nil) and (aSelectedIndex^<=i) then begin
-          aSelectedIndex^ := result; // found the first matching selected index
-          aSelectedIndex := nil;
-        end;
-        AddInteger(aSelectedIndexes,result,i);
-      end;
-  if aSelectedIndex<>nil then
-    aSelectedIndex^ := -1; // aSelectedIndex^ was not found
-end;
-
-
 function TSynLogFile.LineContains(const aUpperSearch: RawUTF8; aIndex: Integer): Boolean;
 begin
   if (self=nil) or (cardinal(aIndex)>=cardinal(fCount)) or (aUpperSearch='') then
@@ -4860,6 +4925,344 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
+
+
+{ TSynLogFileView }
+
+procedure TSynLogFileView.LoadFromMap(AverageLineLength: integer);
+begin
+  inherited LoadFromMap(AverageLineLength);
+  if fLevels<>nil then begin
+    SetLength(fSelected,fCount);
+    fSelectedCount := fCount;
+    FillIncreasing(pointer(fSelected),0,fCount);
+    SetLength(fThreadSelected,(fThreadMax shr 3)+1);
+    SetAllThreads(true);
+  end;
+end;
+
+procedure TSynLogFileView.AddInMemoryLine(const aNewLine: RawUTF8);
+var index: integer;
+    tm: cardinal;
+begin
+  tm := fThreadMax;
+  inherited AddInMemoryLine(aNewLine);
+  index := Count-1;
+  if EventLevel[index] in fEvents then
+    AddInteger(fSelected,fSelectedCount,index);
+  if tm<>fThreadMax then begin
+    tm := (fThreadMax shr 3)+1;
+    if integer(tm)<>length(fThreadSelected) then
+      SetLength(fThreadSelected,tm);
+    SetBit(fThreadSelected[0],fThreadMax-1)
+  end;
+end;
+
+const
+  TIME_FORMAT = 'hh:mm:ss.zzz';
+  MAXLOGLINES = 300;
+
+function TSynLogFileView.GetLineForMemo(aRow,aTop,aBottom: integer): string;
+var tim: string;
+    elapsed: TDateTime;
+begin
+  result := '';
+  if cardinal(aRow)<cardinal(fSelectedCount) then
+    aRow := fSelected[aRow];
+  if cardinal(aRow)<cardinal(fCount) then begin
+    result := EventString(aRow,'',0,true);
+    if aBottom>aTop then begin
+      elapsed := EventDateTime(aBottom)-EventDateTime(aTop);
+      if Freq=0 then begin
+        DateTimeToString(tim,TIME_FORMAT,elapsed);
+        result := tim+#13#10+result;
+      end else begin
+        tim := IntToStr(trunc(elapsed*MSecsPerDay*1000) mod 1000);
+        result := StringOfChar('0',3-length(tim))+tim+#13#10+result;
+        DateTimeToString(tim,TIME_FORMAT,elapsed);
+        result := tim+'.'+result;
+      end;
+      result := format('%d lines - time elapsed: %s',[aBottom-aTop+1,result]);
+    end;
+  end;
+end;
+
+function TSynLogFileView.GetLineForClipboard(aRow: integer): string;
+var dt: TDateTime;
+begin
+  result := '';
+  if cardinal(aRow)<cardinal(fSelectedCount) then
+    aRow := fSelected[aRow];
+  if cardinal(aRow)<cardinal(fCount) then begin
+    dt := EventDateTime(aRow);
+    result := Format('%s %s'#9'%s'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
+      ToCaption(EventLevel[aRow])]);
+    if fThreads<>nil then
+      result := result+IntToString(cardinal(fThreads[aRow]))+#9;
+    result := result+EventString(aRow,'   ');
+  end;
+end;
+
+function TSynLogFileView.GetCell(aCol, aRow: integer; out aLevel: TSynLogInfo): string;
+begin
+  aLevel := sllNone;
+  result := '';
+  if self<>nil then
+    if cardinal(aRow)<cardinal(fSelectedCount) then begin
+      aRow := fSelected[aRow];
+      case aCol of
+      0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
+      1: result := ToCaption(EventLevel[aRow]);
+      2: result := IntToString(cardinal(fThreads[aRow]));
+      3: result := EventString(aRow,'   ',MAXLOGLINES);
+      end;
+      aLevel := EventLevel[aRow];
+    end else
+      result := EventString(aRow,'   ',MAXLOGLINES);
+end;
+
+function TSynLogFileView.SearchNextEvent(aEvent: TSynLogInfo; aRow: integer): integer;
+begin
+  if cardinal(aRow)<cardinal(fSelectedCount) then begin
+    // search from next item
+    for result := aRow+1 to fSelectedCount-1 do
+      if fLevels[fSelected[result]]=aEvent then
+        exit;
+    // search from beginning
+    for result := 0 to aRow-1 do
+      if fLevels[fSelected[result]]=aEvent then
+        exit;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchNextText(
+  const aPattern: RawUTF8; aRow, aDelta: integer): integer;
+begin
+  result := -1;
+  if (self=nil) or (aPattern='') then
+    exit;
+  if fLevels=nil then begin // plain text search
+    // search from next item
+    for result := aRow+aDelta to fCount-1 do
+      if LineContains(aPattern,result) then
+        exit;
+    // search from beginning
+    for result := 0 to aRow-1 do
+      if LineContains(aPattern,result) then
+        exit;
+  end else begin
+    // search from next item
+    for result := aRow+aDelta to fSelectedCount-1 do
+      if LineContains(aPattern,fSelected[result]) then
+        exit;
+    // search from beginning
+    for result := 0 to aRow-1 do
+      if LineContains(aPattern,fSelected[result]) then
+        exit;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchPreviousText(
+  const aPattern: RawUTF8; aRow: integer): integer;
+begin
+  result := -1;
+  if (self=nil) or (aPattern='') then
+    exit;
+  if fLevels=nil then begin // plain text search
+    // search from previous item
+    for result := aRow-1 downto 0 do
+      if LineContains(aPattern,result) then
+        exit;
+    // search from end
+    for result := fCount-1 downto aRow+1 do
+      if LineContains(aPattern,result) then
+        exit;
+  end else begin
+    // search from previous item
+    for result := aRow-1 downto 0 do
+      if LineContains(aPattern,fSelected[result]) then
+        exit;
+    // search from end
+    for result := fCount-1 downto aRow+1 do
+      if LineContains(aPattern,fSelected[result]) then
+        exit;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchThread(aThreadID: word; aRow: integer): integer;
+begin
+  if (self<>nil) and (cardinal(aRow)<cardinal(fSelectedCount)) and (fThreads<>nil) then begin
+    for result := aRow+1 to fSelectedCount-1 do
+      if fThreads[fSelected[result]]=aThreadID then
+        exit;
+    for result := 0 to aRow-1 do
+      if fThreads[fSelected[result]]=aThreadID then
+        exit;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchNextThread(aRow: integer): integer;
+var currentThreadID: Word;
+begin
+  if (self<>nil) and (cardinal(aRow)<cardinal(fSelectedCount)) and (fThreads<>nil) then begin
+    result := aRow;
+    currentThreadID := fThreads[fSelected[result]];
+    repeat
+      inc(result);
+      if result=fSelectedCount then
+        break;
+      if fThreads[fSelected[result]]<>currentThreadID then
+        exit; // found
+    until false;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchNextSameThread(aRow: integer): integer;
+var currentThreadID: Word;
+begin
+  if (self<>nil) and (cardinal(aRow)<cardinal(fSelectedCount)) and (fThreads<>nil) then begin
+    result := aRow;
+    currentThreadID := fThreads[fSelected[result]];
+    repeat
+      inc(result);
+      if result=fSelectedCount then
+        break;
+      if fThreads[fSelected[result]]=currentThreadID then
+        exit; // found
+    until false;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchPreviousSameThread(aRow: integer): integer;
+var currentThreadID: Word;
+begin
+  if (self<>nil) and (cardinal(aRow)<cardinal(fSelectedCount)) and (fThreads<>nil) then begin
+    result := aRow;
+    currentThreadID := fThreads[fSelected[result]];
+    repeat
+      dec(result);
+      if result<0 then
+        break;
+      if fThreads[fSelected[result]]=currentThreadID then
+        exit; // found
+    until false;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchEnterLeave(aRow: integer): integer;
+var Level,ndx: integer;
+    currentThreadID: Word;
+begin
+  if (self=nil) or (cardinal(aRow)>=cardinal(fSelectedCount)) then begin
+    result := -1;
+    exit;
+  end;
+  Level := 0;
+  result := aRow;
+  ndx := fSelected[result];
+  if EventThread<>nil then
+    currentThreadID := EventThread[ndx] else
+    currentThreadID := 0;
+  case EventLevel[ndx] of
+  sllEnter: // retrieve corresponding Leave event
+    repeat
+      inc(result);
+      if result>=fSelectedCount then
+        break;
+      ndx := fSelected[result];
+      case EventLevel[ndx] of
+      sllEnter:
+        if (currentThreadID=0) or (EventThread[ndx]=currentThreadID) then
+          inc(Level);
+      sllLeave:
+        if (currentThreadID=0) or (EventThread[ndx]=currentThreadID) then
+          if Level=0 then
+            exit else
+            dec(Level);
+      end;
+    until false;
+  sllLeave: // retrieve corresponding Enter event
+    repeat
+      dec(result);
+      if result<0 then
+        break;
+      ndx := fSelected[result];
+      case EventLevel[ndx] of
+      sllLeave:
+        if (currentThreadID=0) or (EventThread[ndx]=currentThreadID) then
+          inc(Level);
+      sllEnter:
+        if (currentThreadID=0) or (EventThread[ndx]=currentThreadID) then
+          if Level=0 then
+            exit else
+            dec(Level);
+      end;
+    until false;
+  end;
+  result := -1;
+end;
+
+function TSynLogFileView.SearchNextSelected(aIndex: integer): integer;
+begin
+  for result := 0 to fSelectedCount-1 do
+    if fSelected[result]>=aIndex then
+      exit; // TODO: use faster binary search instead of this O(n) value?
+  result := -1;
+end;
+
+function TSynLogFileView.Select(aRow: integer): integer;
+var i, search: integer;
+begin
+  result := 0;
+  if integer(fEvents)<>0 then begin
+    if cardinal(aRow)<cardinal(fSelectedCount) then
+      search := fSelected[aRow] else
+      search := maxInt;
+    fSelectedCount := 0;
+    for i := 0 to Count-1 do
+      if fLevels[i] in fEvents then
+        if (fThreadSelected=nil) or GetBit(fThreadSelected[0],fThreads[i]-1) then begin
+          if search<=i then begin
+            result := fSelectedCount; // found the closed selected index
+            search := maxInt;
+          end;
+          if fSelectedCount=length(fSelected) then
+            SetLength(fSelected,fSelectedCount+256+fSelectedCount shr 3);
+          fSelected[fSelectedCount] := i;
+          inc(fSelectedCount);
+        end;
+  end;
+end;
+
+procedure TSynLogFileView.SetAllThreads(enabled: boolean);
+const B: array[boolean] of byte = (0, 255);
+begin
+  FillcharFast(fThreadSelected[0],length(fThreadSelected),B[enabled]);
+end;
+
+procedure TSynLogFileView.SetThreads(thread: integer; value: boolean);
+begin
+  dec(thread);
+  if cardinal(thread)<fThreadMax then
+    if value then
+      SetBit(fThreadSelected[0],thread) else
+      UnSetBit(fThreadSelected[0],thread);
+end;
+
+function TSynLogFileView.GetThreads(thread: integer): boolean;
+begin
+  dec(thread);
+  if cardinal(thread)<fThreadMax then
+    result := GetBit(fThreadSelected[0],thread) else
+    result := false;
+end;
 
 const
   _TSynMapSymbol = 'Name:RawUTF8 Start,Stop:integer';
