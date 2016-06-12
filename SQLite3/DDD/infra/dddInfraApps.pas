@@ -996,8 +996,8 @@ destructor TDDDSocketThread.Destroy;
 var
   timeOut: Int64;
 begin
-  {$ifdef WITHLOG}
-  FLog.Enter('Destroy %:%',[fHost,fPort],self);
+  {$ifdef WITHLOG} // FLog.Enter would void NotifyThreadEnded process
+  FLog.Family.SynLog.Log(sllTrace,'Destroy %:%',[fHost,fPort],self);
   {$endif}
   Terminate;
   timeOut := GetTickCount64 + 10000;
