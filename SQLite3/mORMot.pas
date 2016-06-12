@@ -7728,6 +7728,12 @@ type
     { published properties in inherited classes will be interpreted as SQL fields }
   end;
 
+  /// allow on-the-fly translation of a TSQLTable grid value
+  // - should return the JSON value of the given cell
+  // - may be optionally supplied as parameter to TSQLTable's GetJSONValues and
+  // GetCSVValues methods from TSQLTable.OnExportValue property
+  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer): RawJSON of object;
+
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
   // - contain all result in memory, until destroyed
   // - first row contains the field names
@@ -7783,6 +7789,7 @@ type
     fFieldLengthMeanSum: integer;
     /// column bit set at parsing to mark a string value (e.g. "..." in JSON)
     fFieldParsedAsString: set of 0..255;
+    fOnExportValue: TOnSQLTableGetValue;
     /// avoid GPF when TSQLTable is nil
     function GetRowCount: integer; {$ifdef HASINLINE}inline;{$endif}
     /// fill the fFieldType[] array (from fQueryTables[] or fResults[] content)
@@ -8391,6 +8398,9 @@ type
     // the TSQLRecord class, or by calling SetFieldType() overloaded methods
     property FieldTypeIntegerDetectionOnAllRows: boolean
       read fFieldTypeAllRows write fFieldTypeAllRows;
+    /// could be used by GetJsonValues and GetCSVValues methods to retrieve
+    // custom JSON content
+    property OnExportValue: TOnSQLTableGetValue read fOnExportValue write fOnExportValue;
   end;
 
 {$ifndef NOVARIANTS}
@@ -24331,7 +24341,7 @@ begin
     FillCharFast(directWrites,(FieldCount shr 3)+1,0);
     for F := 0 to FieldCount-1 do begin
       W.ColNames[F] := fResults[F]; // first Row is field Names
-      if QueryTables<>nil then
+      if (QueryTables<>nil) and not Assigned(OnExportValue) then
         with fFieldType[F] do
         if SQLFieldTypeToDBField(ContentType,ContentTypeInfo) in
            [ftInt64,ftDouble,ftCurrency] then
@@ -24348,15 +24358,17 @@ begin
       for F := 0 to FieldCount-1 do begin
         if Expand then
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
+        if Assigned(OnExportValue) then
+          W.AddString(OnExportValue(self,R,F)) else
         if U^=nil then
           W.AddShort('null') else
-          // IsStringJSON() is fast and safe: no need to guess exact value type
-          if (F in directWrites) or not IsStringJSON(U^) then
-            W.AddNoJSONEscape(U^,StrLen(U^)) else begin
-            W.Add('"');
-            W.AddJSONEscape(U^,StrLen(U^));
-            W.Add('"');
-          end;
+        // IsStringJSON() is fast and safe: no need to guess exact value type
+        if (F in directWrites) or not IsStringJSON(U^) then
+          W.AddNoJSONEscape(U^,StrLen(U^)) else begin
+          W.Add('"');
+          W.AddJSONEscape(U^,StrLen(U^));
+          W.Add('"');
+        end;
         W.Add(',');
         inc(U); // points to next value
       end;
@@ -24406,6 +24418,8 @@ begin
     U := @fResults[RowFirst*FieldCount];
     for R := RowFirst to RowLast do
       for F := 0 to FMax do begin
+        if Assigned(OnExportValue) then
+          W.AddString(OnExportValue(self,R,F)) else
         if Tab or (not IsStringJSON(U^)) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
