@@ -329,7 +329,7 @@ object MainLogView: TMainLogView
         ParentShowHint = False
         ShowHint = True
         TabOrder = 5
-        OnClick = BtnThreadNextClick
+        OnClick = btnThreadDownClick
       end
       object btnThreadUp: TButton
         Left = 80
@@ -341,7 +341,7 @@ object MainLogView: TMainLogView
         ParentShowHint = False
         ShowHint = True
         TabOrder = 6
-        OnClick = BtnThreadNextClick
+        OnClick = btnThreadUpClick
       end
     end
     object BtnSearchPrevious: TButton
@@ -355,7 +355,7 @@ object MainLogView: TMainLogView
       ParentShowHint = False
       ShowHint = True
       TabOrder = 9
-      OnClick = BtnSearchPreviousClick
+      OnClick = BtnSearchNextClick
     end
     object btnServerLaunch: TButton
       Left = 16

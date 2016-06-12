@@ -79,8 +79,6 @@ type
     procedure FormShow(Sender: TObject);
     procedure BtnFilterClick(Sender: TObject);
     procedure EventsListClickCheck(Sender: TObject);
-    procedure ListDrawItem(Control: TWinControl; Index: Integer;
-      Rect: TRect; State: TOwnerDrawState);
     procedure BtnSearchNextClick(Sender: TObject);
     procedure FormKeyDown(Sender: TObject; var Key: Word;
       Shift: TShiftState);
@@ -108,7 +106,6 @@ type
     procedure BtnBrowseClick(Sender: TObject);
     procedure FilesClick(Sender: TObject);
     procedure ListMenuCopyClick(Sender: TObject);
-    procedure BtnSearchPreviousClick(Sender: TObject);
     procedure btnServerLaunchClick(Sender: TObject);
     procedure tmrRefreshTimer(Sender: TObject);
     procedure btnListClearClick(Sender: TObject);
@@ -116,21 +113,18 @@ type
     procedure ThreadListBoxClick(Sender: TObject);
     procedure lstDaysDblClick(Sender: TObject);
     procedure PanelLeftResize(Sender: TObject);
+    procedure btnThreadDownClick(Sender: TObject);
+    procedure btnThreadUpClick(Sender: TObject);
   protected
-    FLog: TSynLogFile;
-    FLogSelected: TIntegerDynArray;
-    FLogSelectedCount: integer;
+    FLog: TSynLogFileView;
     FMainCaption: string;
     FMenuFilterAll: TMenuItem;
     FLogUncompressed: TMemoryStream;
-    FEventCaption: array[TSynLogInfo] of string;
-    FThreadSelected: TByteDynArray;
     FThreadNames: TRawUTF8DynArray;
     FDays: TDateTimeDynArray;
     FLastSearch: RawUTF8;
     FLastSearchSender: TObject;
     FRemoteLogService: TSQLHTTPRemoteLogServer; // from mORMotHTTPServer
-    FEventsRemoteViewSet: TSynLogInfos;
     FPanelThreadVisible: boolean;
     procedure SetLogFileName(const Value: TFileName);
     procedure SetListItem(Index: integer; const search: RawUTF8='');
@@ -159,7 +153,7 @@ implementation
 {$ifdef FPC}
 uses
   Themes,
-  LCLType, SynCommons;
+  LCLType, SynCommons, SynLog;
 {$endif}
 
 resourcestring
@@ -190,8 +184,6 @@ begin
   {$endif}
   FreeAndNil(FLog);
   FreeAndNil(FLogUncompressed);
-  Finalize(FLogSelected);
-  FLogSelectedCount := 0;
   ThreadListBox.Clear;
   List.RowCount := 0;
   EventsList.Items.Clear;
@@ -203,36 +195,23 @@ begin
       FLogUncompressed := StreamUnSynLZ(Value,LOG_MAGIC);
       if FLogUncompressed=nil then
         exit; // invalid file content
-      FLog := TSynLogFile.Create(FLogUncompressed.Memory,FLogUncompressed.Size);
+      FLog := TSynLogFileView.Create(FLogUncompressed.Memory,FLogUncompressed.Size);
       FLog.FileName := Value;
     end else
-      FLog := TSynLogFile.Create(Value);
+      FLog := TSynLogFileView.Create(Value);
     EventsList.Items.BeginUpdate;
     if FLog.EventLevel=nil then begin // if not a TSynLog file -> open as plain text
       List.ColCount := 1;
       List.ColWidths[0] := 2000;
     end else begin
-      if FLog.EventThread<>nil then begin
-        List.ColCount := 4;
-        List.ColWidths[0] := 70;
-        List.ColWidths[1] := 60;
-        case FLog.ThreadsCount of
-        0..9:     List.ColWidths[2] := 15;
-        10..99:   List.ColWidths[2] := 20;
-        100..999: List.ColWidths[2] := 30;
-             else List.ColWidths[2] := 40;
-        end;
-        List.ColWidths[3] := 2000;
-      end else begin
-        List.ColCount := 3;
-        List.ColWidths[0] := 70;
-        List.ColWidths[1] := 60;
-        List.ColWidths[2] := 2000;
-      end;
-      SetLength(FLogSelected,FLog.Count);
+      List.ColCount := 4;
+      List.ColWidths[0] := 70;
+      List.ColWidths[1] := 60;
+      List.ColWidths[2] := 24;
+      List.ColWidths[3] := 2000;
       for E := succ(sllNone) to high(E) do
         if E in FLog.EventLevelUsed then
-          EventsList.Items.AddObject(FEventCaption[E],pointer(ord(E)));
+          EventsList.Items.AddObject(ToCaption(E),pointer(ord(E)));
       for i := 1 to FilterMenu.Items.Count-1 do
         FilterMenu.Items[i].Visible :=
           LOG_FILTER[TSynLogFilter(FilterMenu.Items[i].Tag)]*FLog.EventLevelUsed<>[];
@@ -251,8 +230,6 @@ begin
   inc(y,32);
   ThreadGroup.Visible := (FLog<>nil) and (FLog.EventThread<>nil);
   if ThreadGroup.Visible then begin
-    SetLength(FThreadSelected,(FLog.ThreadsCount shr 3)+1);
-    fillchar(FThreadSelected[0],Length(FThreadSelected),255);
     FThreadNames := FLog.ThreadNames(-1);
     ThreadGroup.Top := y;
     inc(y,ThreadGroup.Height+8);
@@ -269,11 +246,13 @@ begin
     FLog.GetDays(FDays);
     lstDays.Top := y;
     lstDays.Items.BeginUpdate;
+    lstDays.Items.Clear;
     for i := 0 to high(FDays) do
       lstDays.Items.Add(Format('%s (%d rows)',[DateToStr(FDays[i]),
         FLog.DayCount[i]]));
     lstDays.Items.EndUpdate;
     lstDays.ItemIndex := 0;
+    PanelLeftResize(nil);
   end;
   ProfileGroup.ItemIndex := 0;
   MergedProfile.Checked := false;
@@ -311,12 +290,11 @@ procedure TMainLogView.FormCreate(Sender: TObject);
 var F: TSynLogFilter;
     O: TLogProcSortOrder;
     M: TMenuItem;
-    E: TSynLogInfo;
 begin
   FMainCaption := format(Caption,[SYNOPSE_FRAMEWORK_VERSION])+' ';
   for F := low(F) to high(F) do begin
     M := TMenuItem.Create(self);
-    M.Caption := GetCaptionFromEnum(TypeInfo(TSynLogFilter),Ord(F));
+    M.Caption := ToCaption(F);
     M.Tag := ord(F);
     M.OnClick := BtnFilterMenu;
     if F=lfAll then
@@ -329,9 +307,6 @@ begin
   ProfileList.ColWidths[0] := 60;
   ProfileList.ColWidths[1] := 1000;
   ProfileList.Hide;
-  for E := succ(sllNone) to high(E) do
-    FEventCaption[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
-  FEventsRemoteViewSet := [];
 end;
 
 procedure TMainLogView.FormShow(Sender: TObject);
@@ -403,57 +378,32 @@ begin
        aTheme := ThemeServices.GetElementDetails(tbCheckBoxUncheckedNormal);
     ThemeServices.DrawElement(Canvas.Handle, aTheme, BRect);
     Rect.Left := BRect.Right;
-    Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,FEventCaption[E]);
-    {$else}
-    Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,FEventCaption[E]);
     {$endif}
+    Canvas.TextRect(Rect,Rect.Left+4,Rect.Top,ToCaption(E));
   end;
 end;
 
 procedure TMainLogView.EventsListClickCheck(Sender: TObject);
-var i, ndx: integer;
+var i: integer;
     Sets: TSynLogInfos;
-    AllChecked: boolean;
 begin
-  FLogSelectedCount := 0;
-  ndx := -1;
   if FLog=nil then
     List.RowCount := 0 else
   if FLog.EventLevel<>nil then begin
-    ndx := List.Row;
-    if ndx>=0 then
-      ndx := FLogSelected[ndx];
     integer(Sets) := 0;
-    AllChecked := true;
     for i := 0 to EventsList.Count-1 do
       if EventsList.Checked[i] then
-        Include(Sets,TSynLogInfo(EventsList.Items.Objects[i])) else
-        AllChecked := false;
-    if AllChecked and (FLog.EventThread<>nil) then
-      for i := 0 to length(FThreadSelected)-1 do
-        if FThreadSelected[i]<>255 then 
-          AllChecked := false;
-    if AllChecked then begin
-      FLogSelectedCount := FLog.Count;
-      FillIncreasing(pointer(FlogSelected),0,FLogSelectedCount);
-    end else
-    if integer(Sets)=0 then
-      ndx := -1 else begin
-      for i := 0 to FLog.Count-1 do
-      if FLog.EventLevel[i] in Sets then
-        if (FLog.EventThread=nil) or
-           GetBit(FThreadSelected[0],FLog.EventThread[i]-1) then begin
-          FLogSelected[FLogSelectedCount] := i;
-          inc(FLogSelectedCount);
-        end;
-      if ndx>=0 then
-        ndx := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
-    end;
-    List.RowCount := FLogSelectedCount;
-    FEventsRemoteViewSet := Sets; // Remember set for filtering incoming remote log
+        Include(Sets,TSynLogInfo(EventsList.Items.Objects[i]));
+    FLog.Events := Sets;
+    i := FLog.Select(List.Row);
+    if cardinal(i) < cardinal(FLog.SelectedCount) then
+      List.Row := 0; // avoid "Grid Out Of Range" when setting RowCount
+    List.RowCount := FLog.SelectedCount;
+    if i>=0 then
+      List.Row := i;
   end else
     List.RowCount := FLog.Count;
-  SetListItem(ndx);
+  SetListItem(List.Row);
   if List.Visible then begin
     List.Repaint;
     ListClick(nil);
@@ -462,196 +412,71 @@ end;
 
 procedure TMainLogView.EventsListDblClick(Sender: TObject);
 var i: integer;
-    E: TSynLogInfo;
 begin
   if FLog.EventLevel=nil then // plain text file does not handle this
     exit;
   i := EventsList.ItemIndex;
-  if i<0 then
-    exit;
-  E := TSynLogInfo(EventsList.Items.Objects[i]);
-  // search from next item
-  for i := List.Row+1 to FLogSelectedCount-1 do
-    if FLog.EventLevel[FLogSelected[i]]=E then begin
-      SetListItem(i);
-      exit;
-    end;
-  // search from beginning
-  for i := 0 to List.Row-1 do
-    if FLog.EventLevel[FLogSelected[i]]=E then begin
-      SetListItem(i);
-      exit;
-    end;
+  if i>=0 then
+    i := fLog.SearchNextEvent(TSynLogInfo(EventsList.Items.Objects[i]),List.Row);
+  if i>=0 then
+    SetListItem(i);
 end;
 
 const
   TIME_FORMAT = 'hh:mm:ss.zzz';
-
   MAXLOGLINES = 300;
-    
+
 procedure TMainLogView.ListDrawCell(Sender: TObject; ACol, ARow: Integer;
   Rect: TRect; State: TGridDrawState);
 var txt: string;
-    b: boolean;
-    Index: integer;
+    inverted: boolean;
+    level: TSynLogInfo;
 begin
-  with List.Canvas do
-    if FLog=nil then
-      FillRect(Rect) else
-    if FLog.EventLevel<>nil then begin
-      Brush.Style := bsClear;
-      if cardinal(ARow)<cardinal(FLogSelectedCount) then begin
-        Index := FLogSelected[ARow];
-        b := (gdFocused in State) or (gdSelected in State);
-        if b then
-          Brush.Color := clBlack else
-          Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
-        Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
-        case ACol of
-        0: DateTimeToString(txt,TIME_FORMAT,FLog.EventDateTime(Index));
-        1: txt := FEventCaption[FLog.EventLevel[Index]];
-        2: if FLog.EventThread<>nil then
-             txt := IntToString(cardinal(FLog.EventThread[Index])) else
-             txt := FLog.EventString(Index,'   ',MAXLOGLINES);
-        3: txt := FLog.EventString(Index,'   ',MAXLOGLINES);
-        end;
-        {$ifdef FPC}
-        FillRect(Rect);
-        {$endif}
-        TextRect(Rect,Rect.Left+4,Rect.Top,txt);
-      end else begin
-        Brush.Color := clLtGray;
-        FillRect(Rect);
-      end;
-    end else
-    begin
-      {$ifdef FPC}
+  with List.Canvas do begin
+    if FLog=nil then begin
       FillRect(Rect);
-      {$endif}
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(ARow,'   ',MAXLOGLINES));
+      exit;
     end;
-end;
-
-procedure TMainLogView.ListDrawItem(Control: TWinControl; Index: Integer;
-  Rect: TRect; State: TOwnerDrawState);
-var b: boolean;
-begin
-  with List.Canvas do
-    if FLog=nil then
-      FillRect(Rect) else
+    txt := FLog.GetCell(ACol,ARow,level);
     if FLog.EventLevel<>nil then begin
       Brush.Style := bsClear;
-      if cardinal(Index)<cardinal(FLogSelectedCount) then begin
-        Index := FLogSelected[Index];
-        b := (odFocused in State) or (odSelected in State);
-        Brush.Color := LOG_LEVEL_COLORS[b,FLog.EventLevel[Index]];
-        Font.Color  := LOG_LEVEL_COLORS[not b,FLog.EventLevel[Index]];
-        FillRect(Rect);
-        TextOut(Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',MAXLOGLINES));
+      if cardinal(ARow)<cardinal(FLog.SelectedCount) then begin
+        inverted := (gdFocused in State) or (gdSelected in State);
+        if inverted then
+          Brush.Color := clBlack else
+          Brush.Color := LOG_LEVEL_COLORS[inverted,level];
+        Font.Color  := LOG_LEVEL_COLORS[not inverted,level];
       end else begin
         Brush.Color := clLtGray;
         FillRect(Rect);
+        exit;
       end;
-    end else
-      TextRect(Rect,Rect.Left+4,Rect.Top,FLog.EventString(Index,'   ',MAXLOGLINES));
+    end;
+    {$ifdef FPC}
+    FillRect(Rect);
+    {$endif}
+    TextRect(Rect,Rect.Left+4,Rect.Top,txt);
+  end;
 end;
 
 procedure TMainLogView.BtnSearchNextClick(Sender: TObject);
-var s: RawUTF8;
-    ndx, i, searchnext: integer;
+var ndx: integer;
+    s: RawUTF8;
 begin
   s := UpperCase(StringToUTF8(EditSearch.Text));
-  if (FLog=nil) or (s='') then
-    exit;
-  if (FLastSearchSender=Sender) and (FLastSearch=s) then
-    searchnext := 1 else begin
-    FLastSearch := s;
-    FLastSearchSender := Sender;
-    searchnext := 0;
-  end;
   Screen.Cursor := crHourGlass;
   try
-    ndx := List.Row;
-    if FLog.EventLevel=nil then begin // plain text search
-      // search from next item
-      for i := ndx+searchnext to FLog.Count-1 do
-        if FLog.LineContains(s,i) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-      // not found -> search from beginning
-      for i := 0 to ndx-1 do
-        if FLog.LineContains(s,i) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-    end else begin
-      // search from next item
-      for i := ndx+searchnext to FLogSelectedCount-1 do
-        if FLog.LineContains(s,FLogSelected[i]) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-      // not found -> search from beginning
-      for i := 0 to ndx-1 do
-        if FLog.LineContains(s,FLogSelected[i]) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-    end;
+    if Sender=BtnSearchPrevious then
+      ndx := FLog.SearchPreviousText(s,List.Row) else
+    if Sender=EditSearch then
+      ndx := FLog.SearchNextText(s,List.Row,0) else
+      ndx := FLog.SearchNextText(s,List.Row,1); // e.g. BtnSearchNext
+    if ndx>=0 then
+      SetListItem(ndx,s);
   finally
     Screen.Cursor := crDefault;
   end;
 end;
-
-procedure TMainLogView.BtnSearchPreviousClick(Sender: TObject);
-var s: RawUTF8;
-    ndx, i, searchnext: integer;
-begin
-  s := UpperCase(StringToUTF8(EditSearch.Text));
-  if s='' then
-    exit;
-  if (FLastSearchSender=Sender) and (FLastSearch=s) then
-    searchnext := 1 else begin
-    FLastSearch := s;
-    FLastSearchSender := Sender;
-    searchnext := 0;
-  end;
-  Screen.Cursor := crHourGlass;
-  try
-    ndx := List.Row;
-    if FLog.EventLevel=nil then begin // plain text search
-      // search from previous item
-      for i := ndx-searchnext downto 0 do
-        if FLog.LineContains(s,i) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-      // not found -> search from end
-      for i := FLog.Count-1 downto ndx+1 do
-        if FLog.LineContains(s,i) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-    end else begin
-      // search from previous item
-      for i := ndx-searchnext downto 0 do
-        if FLog.LineContains(s,FLogSelected[i]) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-      // not found -> search from end
-      for i := FLogSelectedCount-1 downto ndx+1 do
-        if FLog.LineContains(s,FLogSelected[i]) then begin
-          SetListItem(i,s);
-          exit;
-        end;
-    end;
-  finally
-    Screen.Cursor := crDefault;
-  end;
-end;
-
 
 procedure TMainLogView.FormKeyDown(Sender: TObject; var Key: Word;
   Shift: TShiftState);
@@ -660,13 +485,12 @@ begin
     if Shift=[] then
       BtnSearchNextClick(nil) else
     if ssShift in Shift then
-      BtnSearchPreviousClick(nil) else
+      BtnSearchNextClick(BtnSearchPrevious) else
       exit;
     List.SetFocus;
   end else
-  if (Shift=[ssCtrl]) and (Key=ord('F')) then begin
+  if (Shift=[ssCtrl]) and (Key=ord('F')) then
     EditSearch.SetFocus;
-  end;
 end;
 
 procedure TMainLogView.ProfileListClick(Sender: TObject);
@@ -675,7 +499,7 @@ begin
   i := ProfileList.Row;
   if (FLog<>Nil) and (cardinal(i)<=cardinal(FLog.LogProcCount)) then begin
     ndx := FLog.LogProc[i].Index;
-    i := IntegerScanIndex(pointer(FLogSelected),FLogSelectedCount,ndx);
+    i := IntegerScanIndex(pointer(FLog.Selected),FLog.SelectedCount,ndx);
     if i>=0 then begin
       SetListItem(i);
       List.SetFocus;
@@ -712,8 +536,8 @@ var i,ndx,found: integer;
     s,tim: string;
 begin
   i := List.Row;
-  if cardinal(i)<cardinal(FLogSelectedCount) then begin
-    i := FLogSelected[i];
+  if cardinal(i)<cardinal(FLog.SelectedCount) then begin
+    i := FLog.Selected[i];
     s := FLog.EventString(i,'',0,true);
     if FPanelThreadVisible and (FLog.EventThread<>nil) then begin
       ThreadListNameRefresh(i);
@@ -759,109 +583,34 @@ begin
 end;
 
 procedure TMainLogView.ListDblClick(Sender: TObject);
-var i, j, Level: integer;
-    currentThreadID: Word;
+var ndx: integer;
 begin
-  i := List.Row;
-  if (FLog<>nil) and (cardinal(i)<=cardinal(FLogSelectedCount)) then begin
-    Level := 0;
-    if FLog.EventThread<>nil then
-      currentThreadID := FLog.EventThread[FLogSelected[i]] else
-      currentThreadID := 0;
-    case FLog.EventLevel[FLogSelected[i]] of
-    sllEnter: // retrieve corresponding Leave event
-      repeat
-        inc(i);
-        if i>=FLogSelectedCount then
-          exit;
-        j := FLogSelected[i];
-        case FLog.EventLevel[j] of
-        sllEnter:
-          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
-            inc(Level);
-        sllLeave:
-          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
-            if Level=0 then begin
-              SetListItem(i);
-              exit;
-            end else
-              dec(Level);
-        end;
-      until false;
-    sllLeave: // retrieve corresponding Enter event
-      repeat
-        dec(i);
-        if i<0 then
-          exit;
-        j := FLogSelected[i];
-        case FLog.EventLevel[j] of
-        sllLeave:
-          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
-            inc(Level);
-        sllEnter:
-          if (currentThreadID=0) or (FLog.EventThread[j]=currentThreadID) then
-            if Level=0 then begin
-              SetListItem(i);
-              exit;
-            end else
-              dec(Level);
-        end;
-      until false;
-    end;
-  end;
+  ndx := fLog.SearchEnterLeave(List.Row);
+  if ndx>=0 then
+    SetListItem(ndx);
 end;
 
 procedure TMainLogView.BtnThreadNextClick(Sender: TObject);
-var i: integer;
-    ID: word;
 begin
-  i := List.Row;
-  if (FLog=nil) or (FLog.EventThread=nil) or
-     (cardinal(i)>=cardinal(FLogSelectedCount)) then
-    exit;
-  ID := FLog.EventThread[FLogSelected[i]];
-  if Sender=BtnThreadNext then begin
-    repeat
-      inc(i);
-      if i=FLogSelectedCount then
-        exit;
-    until FLog.EventThread[FLogSelected[i]]<>ID;
-  end else
-  if Sender=BtnThreadUp then begin
-    repeat
-      dec(i);
-      if i<0 then
-        exit;
-    until FLog.EventThread[FLogSelected[i]]=ID;
-  end else
-  if Sender=BtnThreadDown then begin
-    repeat
-      inc(i);
-      if i=FLogSelectedCount then
-        exit;
-    until FLog.EventThread[FLogSelected[i]]=ID;
-  end;
-  SetListItem(i);
+  SetListItem(FLog.SearchNextThread(List.Row));
+end;
+
+procedure TMainLogView.btnThreadDownClick(Sender: TObject);
+begin
+  SetListItem(FLog.SearchNextSameThread(List.Row));
+end;
+
+procedure TMainLogView.btnThreadUpClick(Sender: TObject);
+begin
+  SetListItem(FLog.SearchPreviousSameThread(List.Row));
 end;
 
 procedure TMainLogView.ThreadListBoxDblClick(Sender: TObject);
 var ID: cardinal;
-    i: integer;
 begin
   ID := ThreadListBox.ItemIndex;
-  if ID>=FLog.ThreadsCount then
-    exit;
-  inc(ID);
-  for i := List.Row+1 to FLogSelectedCount-1 do
-    if FLog.EventThread[FLogSelected[i]]=ID then begin
-      SetListItem(i);
-      exit;
-    end;
-  for i := 0 to List.Row-1 do
-    if FLog.EventThread[FLogSelected[i]]=ID then begin
-      SetListItem(i);
-      exit;
-    end;
+  if ID<FLog.ThreadsCount then
+    SetListItem(FLog.SearchThread(ID+1,List.Row));
 end;
 
 procedure TMainLogView.BtnThreadShowClick(Sender: TObject);
@@ -958,7 +707,7 @@ begin
     if (search='') and List.Visible then
       List.SetFocus;
     if FLog.EventLevel<>nil then
-      Index := FLogSelected[Index];
+      Index := FLog.Selected[Index];
     s := FLog.EventString(Index,'',0,true);
     MemoBottom.Text := s;
     if search<>'' then begin
@@ -1061,18 +810,10 @@ begin
 end;
 
 procedure TMainLogView.BtnThreadClick(Sender: TObject);
-var b: byte;
-    i: integer;
 begin
-  if Sender=BtnThreadAll then
-    b := 255 else
-    b := 0;
-  fillchar(FThreadSelected[0],Length(FThreadSelected),b);
-  if Sender=BtnThread1 then begin
-    i := ThreadListBox.ItemIndex;
-    if i>=0 then
-      SetBit(FThreadSelected[0],i);
-  end;
+  FLog.SetAllThreads(Sender=btnThreadAll);
+  if Sender=BtnThread1 then
+    FLog.Threads[ThreadListBox.ItemIndex+1] := true;
   ThreadListCheckRefresh;
   EventsListClickCheck(nil);
 end;
@@ -1081,7 +822,7 @@ procedure TMainLogView.ThreadListCheckRefresh;
 var i: integer;
 begin
   for i := 0 to ThreadListBox.Count-1 do
-    ThreadListBox.Checked[i] := GetBit(FThreadSelected[0],i);
+    ThreadListBox.Checked[i] := FLog.Threads[i+1];
 end;
 
 procedure TMainLogView.ThreadListBoxClickCheck(Sender: TObject);
@@ -1089,9 +830,7 @@ var i: integer;
 begin
   i := ThreadListBox.ItemIndex;
   if i>=0 then begin
-    if ThreadListBox.Checked[i] then
-      SetBit(FThreadSelected[0],i) else
-      UnSetBit(FThreadSelected[0],i);
+    FLog.Threads[i+1] := ThreadListBox.Checked[i];
     EventsListClickCheck(nil);
   end;
 end;
@@ -1140,20 +879,13 @@ begin
 end;
 
 procedure TMainLogView.ListMenuCopyClick(Sender: TObject);
-var s: string;
-    Selection: TGridRect;
-    i,j: integer;
+var Selection: TGridRect;
+    i: integer;
+    s: string;
 begin
   Selection := List.Selection;
-  for i := Selection.Top to Selection.Bottom do begin
-    if cardinal(i)<cardinal(FLogSelectedCount) then
-      j := FLogSelected[i] else
-      j := i;
-    s := s+DateTimeToStr(FLog.EventDateTime(j))+#9+FEventCaption[FLog.EventLevel[j]]+#9;
-    if FLog.EventThread<>nil then
-      s := s+IntToString(cardinal(FLog.EventThread[j]))+#9;
-    s := s+FLog.EventString(j,'   ')+sLineBreak;
-  end;
+  for i := Selection.Top to Selection.Bottom do
+    s := s+FLog.GetLineForClipboard(i)+sLineBreak;
   Clipboard.AsText := s;
 end;
 
@@ -1173,22 +905,20 @@ begin
     end;
   end;
   if FLog=nil then
-    FLog := TSynLogFile.Create;
+    FLog := TSynLogFileView.Create;
   List.DoubleBuffered := true;
-  List.ColCount := 3;
+  List.ColCount := 4;
   List.ColWidths[0] := 70;
   List.ColWidths[1] := 60;
-  List.ColWidths[2] := 2000;
-  FLogSelected := nil;
-  FLogSelectedCount := 0;
-
+  List.ColWidths[2] := 24;
+  List.ColWidths[3] := 2000;
   // Filtered remote log view support
-  FEventsRemoteViewSet := LOG_VERBOSE;
+  FLog.Events :=LOG_VERBOSE;
   EventsList.Items.Clear;
   EventsList.Items.BeginUpdate;
   try
     for E := succ(sllNone) to high(E) do begin
-      EventsList.Items.AddObject(FEventCaption[E],pointer(ord(E)));
+      EventsList.Items.AddObject(ToCaption(E),pointer(ord(E)));
       EventsList.Checked[EventsList.Count-1] := true;
     end;
     for i := 1 to FilterMenu.Items.Count-1 do
@@ -1206,11 +936,9 @@ begin
   if (btnListSave.Top + btnListSave.Height+12) > ImageLogo.top then begin
     BestFitHeight := height + btnListSave.Top + btnListSave.Height+12 - ImageLogo.top;
     if BestFitHeight > Screen.Height then
-      height := Screen.Height
-    else
+      height := Screen.Height else
       height := BestFitHeight;
   end;
-
   lblServerRoot.Hide;
   lblServerPort.Hide;
   edtServerRoot.Hide;
@@ -1229,43 +957,34 @@ begin
   tmrRefresh.Enabled := true;
 end;
 
+const
+  TAG_NONE = 0;
+  TAG_REFRESH = 1;
+
 procedure TMainLogView.ReceivedOne(const Text: RawUTF8);
-var withoutThreads: boolean;
-    P: PUTF8Char;
+var P: PUTF8Char;
     line: RawUTF8;
 begin
+  // warning: this method is called from WebSockets thread, not UI thread
   P := pointer(Text);
   repeat // handle multiple log rows in the incoming text
     line := GetNextLine(P,P);
     if length(line)<24 then
       continue;
-    withoutThreads := FLog.EventThread=nil;
     FLog.AddInMemoryLine(line);
-    if FLog.Count=0 then
-      continue;
-    if tmrRefresh.Tag=0 then
-      if withoutThreads and (FLog.EventThread<>nil) then
-        tmrRefresh.Tag := 1 else
-        tmrRefresh.Tag := 2;
-    if FLog.EventLevel[FLog.Count-1] in FEventsRemoteViewSet then
-      AddInteger(FlogSelected,FLogSelectedCount,FLog.Count-1);
+    tmrRefresh.Tag := TAG_REFRESH; // notify tmrRefreshTimer()
   until P=nil;
 end;
 
 procedure TMainLogView.tmrRefreshTimer(Sender: TObject);
 begin
-  if tmrRefresh.Tag=0 then
-    exit;
-  if tmrRefresh.Tag=1 then begin
-    List.ColCount := 4;
-    List.ColWidths[2] := 30;
-    List.ColWidths[3] := 2000;
-  end;
-  List.RowCount := FLogSelectedCount;
-  if FLogSelectedCount > 0 then
-    List.TopRow := FLogSelectedCount-List.VisibleRowCount;
+  if (tmrRefresh.Tag = TAG_NONE) or (fLog = nil) then
+    exit; // ReceivedOne() did not happen
+  List.RowCount := FLog.SelectedCount;
+  if FLog.SelectedCount > 0 then
+    List.TopRow := FLog.SelectedCount-List.VisibleRowCount;
   List.Invalidate;
-  tmrRefresh.Tag := 0;
+  tmrRefresh.Tag := TAG_NONE;
 end;
 
 procedure TMainLogView.btnListClearClick(Sender: TObject);
@@ -1289,22 +1008,17 @@ begin
 end;
 
 procedure TMainLogView.lstDaysDblClick(Sender: TObject);
-var ndx, i: integer;
+var ndx: integer;
 begin
   ndx := lstDays.ItemIndex;
-  if cardinal(ndx)>=cardinal(Length(FLog.DayChangeIndex)) then
-    exit;
-  ndx := FLog.DayChangeIndex[ndx];
-  for i := 0 to FLogSelectedCount-1 do
-    if FLogSelected[i]>=ndx then begin
-      SetListItem(i);
-      exit;
-    end;
+  if cardinal(ndx)<cardinal(Length(FLog.DayChangeIndex)) then
+    SetListItem(FLog.SearchNextSelected(FLog.DayChangeIndex[ndx]));
 end;
 
 procedure TMainLogView.PanelLeftResize(Sender: TObject);
 begin
   lstDays.Height := PanelLeft.ClientHeight-lstDays.Top-48;
 end;
+
 
 end.
