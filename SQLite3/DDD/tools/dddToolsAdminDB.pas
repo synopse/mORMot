@@ -48,7 +48,8 @@ type
     procedure btnCmdClick(Sender: TObject); virtual;
     procedure edtLabelsChange(Sender: TObject);
   protected
-    fmmoResultRow: integer;
+    fGridToCellRow: integer;
+    fGridToCellVariant: variant;
     fJson: RawJSON;
     fSQL, fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
@@ -56,10 +57,10 @@ type
     procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
       var Text: string): boolean;
+    function OnGridToCell(Sender: TSQLTable; Row, Field: integer): RawJSON;
     procedure LogClick(Sender: TObject);
     procedure LogDblClick(Sender: TObject);
     procedure LogSearch(Sender: TObject);
-    procedure GridToVariant(var result: variant); virtual;
   public
     DatabaseName: RawUTF8;
     mmoResult: TMemoEx; // initialized by code from SynMemoEx.pas
@@ -274,7 +275,7 @@ begin
   end;
   FreeAndNil(Grid);
   GridLastTableName := '';
-  fmmoResultRow := 0;
+  fGridToCellRow := 0;
   if fSQL[1] = '#' then begin
     if fJson <> '' then
       if IdemPropNameU(fSQL, '#help') then begin
@@ -317,6 +318,7 @@ begin
     Grid.SetFieldFixedWidth(100);
     Grid.FieldTitleTruncatedNotShownAsHint := true;
     Grid.OnValueText := OnText;
+    Grid.Table.OnExportValue := OnGridToCell;
     if Assigned(OnAfterExecute) then
       OnAfterExecute(self);
     drwgrdResult.Options := drwgrdResult.Options - [goRowSelect];
@@ -356,15 +358,16 @@ begin
   end;
 end;
 
-procedure TDBFrame.GridToVariant(var result: variant);
+function TDBFrame.OnGridToCell(Sender: TSQLTable; Row, Field: integer): RawJSON;
 var
   methodName: RawUTF8;
   s, m: integer;
 begin
-  Grid.Table.ToDocVariant(fmmoResultRow, result, JSON_OPTIONS_NAMEVALUE[true],
-    true, true, true);
-  if AssociatedServices <> nil then
-    with _Safe(result)^ do
+  if fGridToCellRow <> Row then begin
+    Sender.ToDocVariant(Row, fGridToCellVariant, JSON_OPTIONS_FAST, true, true, true);
+    fGridToCellRow := Row;
+    if AssociatedServices <> nil then
+    with _Safe(fGridToCellVariant)^ do
       if GetAsRawUTF8('Method', methodName) then
         for s := 0 to high(AssociatedServices) do begin
           m := AssociatedServices[s].FindFullMethodIndex(methodName, true);
@@ -375,20 +378,23 @@ begin
               break;
             end;
         end;
+  end;
+  with _Safe(fGridToCellVariant)^ do
+    if cardinal(Field)>=cardinal(Count) then
+      result := '' else
+      result := VariantSaveJSON(Values[Field]);
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);
 var
   R: integer;
-  row: variant;
   json: RawUTF8;
 begin
   R := drwgrdResult.Row;
-  if (R > 0) and (R <> fmmoResultRow) and (Grid <> nil) then begin
-    fmmoResultRow := R;
-    GridToVariant(row);
+  if (R > 0) and (R <> fGridToCellRow) and (Grid <> nil) then begin
+    OnGridToCell(Grid.Table,R,0);
+    JSONBufferReformat(pointer(VariantToUTF8(fGridToCellVariant)), json, jsonUnquotedPropNameCompact);
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
-    JSONBufferReformat(pointer(VariantToUTF8(row)), json, jsonUnquotedPropNameCompact);
     mmoResult.Text := UTF8ToString(json);
     mmoResult.SetCaret(0, 0);
     mmoResult.TopRow := 0;
