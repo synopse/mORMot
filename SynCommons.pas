@@ -7191,6 +7191,9 @@ type
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscapeString(const Text: string;
       Fmt: TTextWriterHTMLFormat=hfAnyWhere);
+    /// append some chars, escaping all HTML special chars as expected
+    procedure AddHtmlEscapeUTF8(const Text: RawUTF8;
+      Fmt: TTextWriterHTMLFormat=hfAnyWhere);
     /// convert some wiki-like text into proper HTML
     // - convert all #13#10 into <p>...</p>, *..* into <i>..</i> and +..+ into
     // <b>..</b>, then escape http:// as <a href=...> and any HTML special chars
@@ -44449,6 +44452,11 @@ end;
 procedure TTextWriter.AddHtmlEscapeString(const Text: string; Fmt: TTextWriterHTMLFormat);
 begin
   AddHtmlEscape(pointer(StringToUTF8(Text)),Fmt);
+end;
+
+procedure TTextWriter.AddHtmlEscapeUTF8(const Text: RawUTF8; Fmt: TTextWriterHTMLFormat);
+begin
+  AddHtmlEscape(pointer(Text),length(Text),Fmt);
 end;
 
 procedure TTextWriter.AddHtmlEscapeWiki(P: PUTF8Char);

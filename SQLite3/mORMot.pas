@@ -7729,9 +7729,10 @@ type
   end;
 
   /// allow on-the-fly translation of a TSQLTable grid value
-  // - should return the JSON value of the given cell
-  // - may be optionally supplied as parameter to TSQLTable's GetJSONValues and
-  // GetCSVValues methods from TSQLTable.OnExportValue property
+  // - should return valid JSON value of the given cell (i.e. quoted strings,
+  // or valid JSON object/array)
+  // - e.g. TSQLTable.OnExportValue property will customize TSQLTable's
+  // GetJSONValues, GetHtmlTable, and GetCSVValues methods returned content
   TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer): RawJSON of object;
 
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
@@ -8398,8 +8399,8 @@ type
     // the TSQLRecord class, or by calling SetFieldType() overloaded methods
     property FieldTypeIntegerDetectionOnAllRows: boolean
       read fFieldTypeAllRows write fFieldTypeAllRows;
-    /// could be used by GetJsonValues and GetCSVValues methods to retrieve
-    // custom JSON content
+    /// used by GetJsonValues, GetHtmlTable and GetCSVValues methods
+    // to export custom JSON content
     property OnExportValue: TOnSQLTableGetValue read fOnExportValue write fOnExportValue;
   end;
 
@@ -24629,7 +24630,9 @@ begin
       if R=0 then
         Dest.AddShort('<th>') else
         Dest.AddShort('<td>');
-      Dest.AddHtmlEscape(U^,hfOutsideAttributes);
+      if Assigned(OnExportValue) and (R>0) then
+        Dest.AddHtmlEscapeUTF8(OnExportValue(self,R,F),hfOutsideAttributes) else
+        Dest.AddHtmlEscape(U^,hfOutsideAttributes);
       if R=0 then
         Dest.AddShort('</th>') else
         Dest.AddShort('</td>');
