@@ -19330,7 +19330,7 @@ asm // eax=@Dest text=edx len=ecx
 {$ifdef UNICODE}
 @3: push CP_UTF8 // UTF-8 code page for Delphi 2009+
     call System.@LStrFromPCharLen // we need a call, not a jmp here
-    ret
+    rep ret
 {$else}
     jmp System.@LStrFromPCharLen
 {$endif}
@@ -19411,14 +19411,13 @@ end;
 {$else}
 asm
     test eax,eax
-    jz @z
+    jz @n
     cmp dl,[eax]
     movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
     jnz @n
     add eax,ecx
     ret
 @n: xor eax,eax
-@z:
 end;
 {$endif}
 
@@ -19438,13 +19437,13 @@ end;
 {$else}
 asm // eax=aTypeInfo edx=aExpectedKind
     test eax,eax
-    jz @z
+    jz @n
     movzx ecx,byte ptr [eax]
     bt edx,ecx
     movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
     jnb @n
     add eax,ecx
-@z: ret
+    ret
 @n: xor eax,eax
 end;
 {$endif}
@@ -19506,7 +19505,7 @@ end;
 {$else}
 asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
     test eax,eax
-    jz @z
+    jz @n
     cmp byte ptr [eax],tkEnumeration
     jnz @n
     push ecx
@@ -19523,7 +19522,6 @@ asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
     mov al,1
     ret
 @n: xor eax,eax
-@z:
 end;
 {$endif}
 
@@ -19585,13 +19583,14 @@ asm // eax=aTypeInfo edx=aIndex
     pop    edx
     and    edx,3
     jnz    @s
-@z: ret
-@1: pop    edx 
+    ret
+@1: pop    edx
 @s: movzx  ecx,byte ptr [eax]
     dec    edx
     lea    eax,[eax+ecx+1] // next short string
     jnz    @s
     ret
+@z: rep ret
 @0: lea    eax,NULL_SHORTSTRING
 end;
 {$endif}
@@ -20651,8 +20650,8 @@ asm  // fast implementation by John O'Harrow, modified for Delphi 2009+
 {$ifdef UNICODE}
   jbe  @@TrimRight
   push CP_UTF8 // UTF-8 code page for Delphi 2009+
-  call  System.@LStrFromPCharLen // we need a call, not a jmp here
-  ret
+  call System.@LStrFromPCharLen // we need a call, not a jmp here
+  rep  ret
 {$else}
   ja   System.@LStrFromPCharLen
 {$endif}
@@ -22284,7 +22283,8 @@ asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
     add eax,4
     jmp @s
 @1: inc eax
-@0: ret
+    ret
+@0: rep ret
 @2: add eax,2; ret
 @3: add eax,3
 end;
@@ -22306,7 +22306,7 @@ asm // no branch taken in case of not equal first char
 @exit:  movzx eax,cl
         movzx edx,ch
         sub   eax,edx
-@exit2: ret
+        ret
 @maynil:test  eax,eax  // Str1='' ?
         jz    @max
         test  edx,edx  // Str2='' ?
@@ -24684,37 +24684,33 @@ function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-  test eax,eax
-  jz @e // P=nil -> false
-  test edx,edx
-  push ebx
-  push esi
-  jz @z // up=nil -> true
-  mov esi,offset NormToUpper
-  xor ebx,ebx
-  xor ecx,ecx
-@1:
-  mov bx,[eax] // bl=p^
-  mov cl,[edx] // cl=up^
-  test bh,bh     // p^ > #255 -> FALSE
-  jnz @n
-  test cl,cl
-  mov bl,[ebx+esi] // bl=NormToUpper[p^]
-  jz @z // up^=#0 -> OK
-  lea edx,[edx+1] // = inc edx without changing flags
-  cmp bl,cl
-  lea eax,[eax+2]
-  je @1
-@n:
-  pop esi
-  pop ebx
-  xor eax,eax
-@e:
-  ret
-@z:
-  mov al,1 // up^=#0 -> OK
-  pop esi
-  pop ebx
+    test eax,eax
+    jz @e // P=nil -> false
+    test edx,edx
+    push ebx
+    push esi
+    jz @z // up=nil -> true
+    mov esi,offset NormToUpper
+    xor ebx,ebx
+    xor ecx,ecx
+@1: mov bx,[eax] // bl=p^
+    mov cl,[edx] // cl=up^
+    test bh,bh     // p^ > #255 -> FALSE
+    jnz @n
+    test cl,cl
+    mov bl,[ebx+esi] // bl=NormToUpper[p^]
+    jz @z // up^=#0 -> OK
+    lea edx,[edx+1] // = inc edx without changing flags
+    cmp bl,cl
+    lea eax,[eax+2]
+    je @1
+@n: pop esi
+    pop ebx
+@e: xor eax,eax
+    ret
+@z: mov al,1 // up^=#0 -> OK
+    pop esi
+    pop ebx
 end;
 {$endif}
 {$else}
@@ -25648,7 +25644,7 @@ end;
 {$else}
 asm // eax=P, edx=Count, Value=ecx
         test eax,eax
-        jz @end // avoid GPF
+        jz @z // avoid GPF
         cmp edx,8
         jae @s1
         jmp dword ptr [edx*4+@Table]
@@ -25676,7 +25672,7 @@ asm // eax=P, edx=Count, Value=ecx
 @2:     cmp [eax+4],ecx;    je @ok
 @1:     cmp [eax],ecx;      je @ok
 @z:     xor eax,eax
-@end:   ret
+        ret
 @ok:    mov al,1
 end;
 {$endif}
@@ -25757,7 +25753,8 @@ asm // eax=P, edx=Count, Value=ecx
        cmp [eax+20],ecx; je @ok20; dec edx; jz @z
        cmp [eax+24],ecx; je @ok24
 @z:    xor eax,eax // return nil if not found
-@ok0:  ret
+       ret
+@ok0:  rep ret
 @ok28: lea eax,[eax+28]; ret
 @ok24: lea eax,[eax+24]; ret
 @ok20: lea eax,[eax+20]; ret
@@ -29288,8 +29285,9 @@ asm
   jnz  @head
   pop  ebx
   not eax
-@ret:
   ret
+@ret:
+  rep ret
 @aligned:
   sub  edx, ecx
   add  ecx, 8
@@ -31145,7 +31143,7 @@ asm // eax=V
 {$ifdef UNICODE}
     push CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
     call System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
-    ret // we need a call just above for right push CP_UTF8 retrieval
+    rep ret // we need a call just above for right push CP_UTF8 retrieval
 {$else}
     jmp System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
 {$endif}
@@ -33982,8 +33980,8 @@ asm // eax=source edx=dest ecx=count
 @sml24: fistp   qword ptr [edx+8]     // save second 8
 @sml16: fistp   qword ptr [edx]       // save first 8
         fistp   qword ptr [edx+ecx]   // save last 8
-@exit:  ret
-        lea eax,[eax+0]  // for 4-byte alignment of @table
+        ret
+@exit:  rep ret
 @table: dd @exit,@m01,@m02,@m03,@m04,@m05,@m06,@m07,@m08
 @lrgfwd:push    edx
         fild    qword ptr [eax]       // first 8
@@ -34003,7 +34001,7 @@ asm // eax=source edx=dest ecx=count
         pop     edx
         fistp   qword ptr [edx]       // first 8
         ret
-@lrg:   jng     @done                 // count < 0
+@lrg:   jng     @exit                 // count < 0
         cmp     eax,edx
         ja      @lrgfwd
         sub     edx,ecx
@@ -34024,7 +34022,7 @@ asm // eax=source edx=dest ecx=count
         pop     ecx
         fistp   qword ptr [edx]       // first 8
         fistp   qword ptr [edx+ecx]   // last 8
-@done:  ret
+        ret
 @m01:   movzx   ecx,byte ptr [eax]
         mov     [edx],cl
         ret
@@ -34064,7 +34062,7 @@ function StrLenX86(S: pointer): PtrInt;
 // pure x86 function (if SSE2 not available) - faster than SysUtils' version
 asm
      test eax,eax
-     jz @@z
+     jz @@0
      cmp   byte ptr [eax+0],0; je @@0
      cmp   byte ptr [eax+1],0; je @@1
      cmp   byte ptr [eax+2],0; je @@2
@@ -34085,7 +34083,7 @@ asm
      shr   edx,3               { Byte Offset of First #0 }
      add   eax,edx             { Address of First #0 }
      sub   eax,ecx             { Returns Length }
-@@z: ret
+     ret
 @@0: xor eax,eax; ret
 @@1: mov eax,1;   ret
 @@2: mov eax,2;   ret
@@ -34201,7 +34199,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
         {$endif}
         jnz       @loop
         mov       eax,ecx
-@null:  ret
+        ret
+        nop   // for @loop alignment
 @loop:  add       eax,16
         {$ifdef HASAESNI}
         pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
@@ -34210,6 +34209,8 @@ asm // warning: may read up to 15 bytes beyond the string itself
         {$endif}
         jnz       @loop
 @ok:    add       eax,ecx
+        ret
+@null:  db $f3 // rep ret
 end;
 
 {$endif DELPHI5OROLDER}
@@ -52060,8 +52061,8 @@ asm
     bt [offset @f],edx
     mov ecx,offset @c
     jb @2
-    xor eax,eax
-@z: ret
+@z: xor eax,eax
+    ret
 @f: dd 0,$03FF0010,$87FFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifierFirstChar
 @c: dd 0,$03FF4000,$AFFFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifier
 @s: mov dl,[eax]

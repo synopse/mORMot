@@ -2574,7 +2574,7 @@ asm // eax=KeySize edx=pk
   call @key_expansion128
   db $66,$0F,$3A,$DF,$D1,$36 // aeskeygenassist xmm2,xmm1,$36
   call @key_expansion128
-@end:
+@end: db $f3 // rep ret
 end;
 {$endif CPU32}
 {$ifdef CPU64}
@@ -6959,7 +6959,8 @@ asm
     inc    edx
     stosb
     loop   @s
-@0:
+    ret
+@0: db $f3
 end;
 {$endif}
 
