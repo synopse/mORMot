@@ -6801,13 +6801,16 @@ type
   // objects, unless woObjectListWontStoreClassName is defined
   // - void strings would be serialized as "", unless woDontStoreEmptyString
   // is defined so that such properties would not be written
+  // - all inherited properties would be serialized, unless woDontStoreInherited
+  // is defined, and only the topmost class level properties would be serialized
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
     woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix,
     woSQLRawBlobAsBase64, woHideSynPersistentPassword,
-    woObjectListWontStoreClassName, woDontStoreEmptyString);
+    woObjectListWontStoreClassName, woDontStoreEmptyString,
+    woDontStoreInherited);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
