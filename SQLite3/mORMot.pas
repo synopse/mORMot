@@ -24626,7 +24626,7 @@ begin
   U := pointer(fResults);
   for R := 0 to fRowCount do begin
     Dest.AddShort('<tr>');
-    for F := 1 to FieldCount do begin
+    for F := 0 to FieldCount-1 do begin
       if R=0 then
         Dest.AddShort('<th>') else
         Dest.AddShort('<td>');
