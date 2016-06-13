@@ -19281,7 +19281,11 @@ begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 {$else}
 begin
+  {$ifdef VER3_0} // FPC issue woraround
+  SetInt64(P,result);
+  {$else}
   SetInt64(P,PInt64(@result)^);
+  {$endif}
 {$endif}
 {$else}
 asm
@@ -19296,7 +19300,7 @@ begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(pointer(U));
 {$else}
 begin
-  SetInt64(pointer(U),PInt64(@result)^);
+  SetID(pointer(U),result);
 {$endif}
 {$else}
 asm
@@ -48523,6 +48527,8 @@ begin
         Add(',');
 next: P := P^.Next;
     end;
+    if woDontStoreInherited in Options then
+      break;
     aClassType := aClassType.ClassParent;
   until aClassType=nil;
   CancelLastComma;
