@@ -5013,7 +5013,8 @@ begin
       case aCol of
       0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
       1: result := ToCaption(EventLevel[aRow]);
-      2: result := IntToString(cardinal(fThreads[aRow]));
+      2: if fThreads<>nil then
+           result := IntToString(cardinal(fThreads[aRow]));
       3: result := EventString(aRow,'   ',MAXLOGLINES);
       end;
       aLevel := EventLevel[aRow];
@@ -5228,7 +5229,7 @@ begin
     fSelectedCount := 0;
     for i := 0 to Count-1 do
       if fLevels[i] in fEvents then
-        if (fThreadSelected=nil) or GetBit(fThreadSelected[0],fThreads[i]-1) then begin
+        if (fThreads=nil) or GetBit(fThreadSelected[0],fThreads[i]-1) then begin
           if search<=i then begin
             result := fSelectedCount; // found the closed selected index
             search := maxInt;
