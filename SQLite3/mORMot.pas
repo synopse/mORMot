@@ -5616,7 +5616,7 @@ type
     optExecInMainThread, optFreeInMainThread,
     optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
-    optNoLogInput, optNoLogOutput
+    optNoLogInput, optNoLogOutput, optErrorOnMissingParam
   );
 
   /// set of per-method execution options for an interface-based service provider
@@ -5642,6 +5642,9 @@ type
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
   // (like a credit card number or a password), is logged during process
+  // - when parameters are transmitted as JSON object, any missing parameter
+  // would be replaced by their default value, unless optErrorOnMissingParam
+  // is defined to reject the call
   TServiceMethodOptions = set of TServiceMethodOption;
 
   /// internal per-method list of execution context as hold in TServiceFactory
@@ -56526,8 +56529,10 @@ begin
       with Args[a] do
       if ValueDirection<>smdOut then begin
         if ParObjValues<>nil then
-          if ParObjValues[a]=nil then // ignore missing parameter in input JSON
-            continue else
+          if ParObjValues[a]=nil then // missing parameter in input JSON
+            if optErrorOnMissingParam in Options then
+              exit else     // paranoid setting
+              continue else // ignore and replace by the default value
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
