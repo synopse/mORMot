@@ -1391,6 +1391,14 @@ type
   // ! property CreatedAt: TModTime read fCreatedAt write fCreatedAt;
   TCreateTime = type TTimeLog;
 
+  /// the Int64/TID of the TSQLAuthUser currently logged   
+  // - can be used as published property field in TSQLRecord for sftSessionUserID:
+  // if any such property is defined in the table, it will be auto-filled with
+  // the current TSQLAuthUser.ID value at update, or 0 if no session is running
+  // - could be defined as value in a TSQLRecord property as such:
+  // ! property User: TSessionUserID read fUser write fUser;
+  TSessionUserID = type TID;
+
   /// a monotonic version number, used to track changes on a table
   // - add such a published field to any TSQLRecord will allow tracking of
   // record modifications - note that only a single field of this type should
@@ -1517,6 +1525,13 @@ type
   // between the clients and the server, but will be updated at any write
   // operation by the low-level Engine*() storage methods - such a field
   // will use a TSQLRecordTableDeletion table to track the deleted items
+  // - sftSessionUserID is an INTEGER field containing the TSQLAuthUser.ID
+  // of the record modification; the value of this field is automatically
+  // updated with the current User ID of the active session; note also that
+  // only RESTful PUT/POST access will change this field value: manual SQL
+  // statements (like 'UPDATE Table SET Column=0') won't change its content;
+  // this is automated on Delphi client side, so only within TSQLRecord ORM use
+  // (a pure AJAX application should fill such fields explicitely before sending)
   TSQLFieldType = (
     sftUnknown,
     sftAnsiText,
@@ -1544,7 +1559,8 @@ type
     sftModTime,
     sftCreateTime,
     sftTID,
-    sftRecordVersion);
+    sftRecordVersion,
+    sftSessionUserID);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -2093,7 +2109,7 @@ function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
 // declared as sftCurrency type
 // - sftInteger is returned for any INTEGER stored value, even if it was declared
 // as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
-// sftBoolean or sftModTime / sftCreateTime / sftTimeLog type
+// sftSessionUserID, sftBoolean or sftModTime / sftCreateTime / sftTimeLog type
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 
 /// guess the number type of an UTF-8 encoded field value, as used in TSQLTable.Get()
@@ -5439,10 +5455,16 @@ type
   public
     /// bit set to 1 for indicating each TSQLFieldType fields of this TSQLRecord
     FieldBits: array[TSQLFieldType] of TSQLFieldBits;
-    /// bit set to 1 for indicating TModTime and TCreateTime fields
+    /// bit set to 1 for indicating TModTime/TSessionUserID fields
+    // of this TSQLRecord (leaving TCreateTime untouched)
+    // - as applied before an UPDATE
+    // - i.e. sftModTime and sftSessionUserID fields
+    ComputeBeforeUpdateFieldsBits: TSQLFieldBits;
+    /// bit set to 1 for indicating TModTime/TCreateTime/TSessionUserID fields
     // of this TSQLRecord
-    // - i.e. sftModTime and sftCreateTime fields
-    ModCreateTimeFieldsBits: TSQLFieldBits;
+    // - as applied before an INSERT
+    // - i.e. sftModTime, sftCreateTime and sftSessionUserID fields
+    ComputeBeforeAddFieldsBits: TSQLFieldBits;
     /// bit set to 1 for indicating fields to export, i.e. "simple" fields
     // - this array will handle special cases, like the TCreateTime fields
     // which shall not be included in soUpdate but soInsert and soSelect e.g.
@@ -6948,8 +6970,9 @@ type
       const aFields: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
       aValidator: PSynValidate=nil): RawUTF8; overload;
     /// should modify the record content before writing to the Server
-    // - this default implementation will update any sftModTime / TModTime and
-    // sftCreateTime / TCreateTime properties content with the exact server time stamp
+    // - this default implementation will update any sftModTime / TModTime,
+    // sftCreateTime / TCreateTime and sftSessionUserID / TSessionUserID
+    // properties content with the exact server time stamp
     // - you may override this method e.g. for custom calculated fields
     // - note that this is computed only on the Client side, before sending
     // back the content to the remote Server: therefore, TModTime / TCreateTime
@@ -13058,6 +13081,7 @@ type
     // UpdateField methods
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; virtual;
+    function GetCurrentSessionUserID: TID; virtual; abstract;
   public
     /// initialize the class, and associate it to a specified database Model
     constructor Create(aModel: TSQLModel); virtual;
@@ -15669,6 +15693,7 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aServerHandleAuthentication: boolean; aDefinition: TSynConnectionDefinition); reintroduce; virtual;
     function GetAuthenticationSchemesCount: integer;
+    function GetCurrentSessionUserID: TID; override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
     procedure InternalInfo(var info: TDocVariantData); virtual;
@@ -16641,6 +16666,7 @@ type
     // static table name only (not needed to check it twice)
     function AdaptSQLForEngineList(var SQL: RawUTF8): boolean; virtual;
     function GetStoredClassName: RawUTF8;
+    function GetCurrentSessionUserID: TID; override;
   public
     /// initialize the abstract storage data
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer); reintroduce; virtual;
@@ -17719,6 +17745,7 @@ type
 {$endif}
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); override;
+    function GetCurrentSessionUserID: TID; override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST;
@@ -19874,7 +19901,8 @@ const
      ftInt64,     // sftModTime
      ftInt64,     // sftCreateTime
      ftInt64,     // sftTID
-     ftInt64);    // sftRecordVersion = TRecordVersion
+     ftInt64,     // sftRecordVersion = TRecordVersion
+     ftInt64);    // sftSessionUserID
 
 function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType; aTypeInfo: pointer): TSQLDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
@@ -20009,8 +20037,8 @@ const
     varNull,{$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
- // sftRecordVersion,
-    varInt64);
+ // sftRecordVersion, sftSessionUserID
+    varInt64, varInt64);
 var tempCopy: RawByteString;
     err: integer;
 begin
@@ -20035,7 +20063,7 @@ begin
       not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
   sftEnumerate:
     result.VInteger := GetInteger(Value);
-  sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion,
+  sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion, sftSessionUserID,
   sftTimeLog, sftModTime, sftCreateTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text: begin
@@ -20203,6 +20231,8 @@ begin
         C := TSQLPropInfoRTTIID;
       sftTID: // = TID or T*ID
         C := TSQLPropInfoRTTITID;
+      sftSessionUserID:
+        C := TSQLPropInfoRTTIInt64;
       sftRecord: // = TRecordReference/TRecordReferenceToBeDeleted
         C := TSQLPropInfoRTTIRecordReference;
       sftRecordVersion:
@@ -24868,7 +24898,8 @@ var
     UTF8CompareInt64,    // TModTime
     UTF8CompareInt64,    // TCreateTime
     UTF8CompareInt64,    // TID
-    UTF8CompareInt64);   // TRecordVersion
+    UTF8CompareInt64,    // TRecordVersion
+    UTF8CompareInt64);   // TSessionUserID
 
 type
   /// a static object is used for smaller recursive stack size and faster code
@@ -25721,7 +25752,7 @@ begin
       inc(Result);
     end
   else
-  if ((Kind in [sftRecord,sftID,sftTID]) and
+  if ((Kind in [sftRecord,sftID,sftTID,sftSessionUserID]) and
      (Client<>nil) and Client.InheritsFrom(TSQLRest) and (CL.Model<>nil)) then
     while cardinal(result)<=cardinal(fRowCount) do begin
       SetInt64(U^,Val64);
@@ -25889,7 +25920,7 @@ IsDateTime:
       on {$ifdef LVCL}Exception{$else}EConvertError{$endif} do
         Text := '';
     end;
-  sftEnumerate, sftSet, sftRecord, sftID, sftTID, sftRecordVersion,
+  sftEnumerate, sftSet, sftRecord, sftID, sftTID, sftRecordVersion, sftSessionUserID,
   sftTimeLog, sftModTime, sftCreateTime: begin
     Value := GetInt64(Get(Row,Field),err);
     if err<>0 then
@@ -28441,6 +28472,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
         result := sftTID;
         exit;
       end else
+      if @self=TypeInfo(TSessionUserID) then begin
+        result := sftSessionUserID;
+        exit;
+      end else
       if @self=TypeInfo(TRecordVersion) then begin
         result := sftRecordVersion;
         exit;
@@ -29336,7 +29371,7 @@ procedure TSQLRecordFill.ComputeSetUpdatedFieldBits(Props: TSQLRecordProperties;
 begin
   if (self<>nil) and (fTable<>nil) and (fTableMapRecordManyInstances=nil) then
     // within FillPrepare/FillOne loop: update ID, TModTime and mapped fields
-    Bits := fTableMapFields+Props.FieldBits[sftModTime] else
+    Bits := fTableMapFields+Props.ComputeBeforeUpdateFieldsBits else
     // update all simple/custom fields (also for FillPrepareMany)
     Bits := Props.SimpleFieldsBits[soUpdate];
 end;
@@ -31149,7 +31184,7 @@ end;
 procedure TSQLRecord.ComputeFieldsBeforeWrite(aRest: TSQLRest; aOccasion: TSQLEvent);
 var F: integer;
     types: TSQLFieldTypes;
-    TimeStamp: TTimeLog;
+    i64: Int64;
 begin
   if (self<>nil) and (aRest<>nil) then
     with RecordProps do begin
@@ -31159,11 +31194,19 @@ begin
       if (sftCreateTime in HasTypeFields) and (aOccasion=seAdd) then
         include(types,sftCreateTime);
       if integer(types)<>0 then begin
-        TimeStamp := aRest.ServerTimeStamp;
+        i64 := aRest.ServerTimeStamp;
         for F := 0 to Fields.Count-1 do
         with TSQLPropInfoRTTIInt64(Fields.List[f]) do
         if SQLFieldType in types then
-          fPropInfo.SetInt64Prop(Self,TimeStamp);
+          fPropInfo.SetInt64Prop(Self,i64);
+      end;
+      if sftSessionUserID in HasTypeFields then begin
+        i64 := aRest.GetCurrentSessionUserID;
+        if i64<>0 then 
+          for F := 0 to Fields.Count-1 do
+          with TSQLPropInfoRTTIInt64(Fields.List[f]) do
+          if SQLFieldType=sftSessionUserID then
+            fPropInfo.SetInt64Prop(Self,i64);
       end;
     end;
 end;
@@ -32449,7 +32492,7 @@ begin
       FieldBits := Props.SimpleFieldsBits[soInsert] else
     if DoNotAutoComputeFields then
       FieldBits := CustomFields else
-      FieldBits := CustomFields+Props.ModCreateTimeFieldsBits;
+      FieldBits := CustomFields+Props.ComputeBeforeAddFieldsBits;
     SetExpandedJSONWriter(Props,fTablePreviousSendData<>PSQLRecordClass(Value)^,
       (Value.IDValue<>0) and ForceID,FieldBits);
     fTablePreviousSendData := PSQLRecordClass(Value)^;
@@ -33682,7 +33725,7 @@ begin
   if CustomFields <> nil then
     if DoNotAutoComputeFields then
       fields := CustomFields^ else
-      fields := CustomFields^+Value.RecordProps.ModCreateTimeFieldsBits else
+      fields := CustomFields^+Value.RecordProps.ComputeBeforeAddFieldsBits else
     if withBlobs then
       fields := Value.RecordProps.CopiableFieldsBits else
       fields := Value.RecordProps.SimpleFieldsBits[soInsert];
@@ -35354,6 +35397,13 @@ begin
   fSessionAuthentication := aAuth;
   aUser := nil; // now owned by this instance
   result := true;
+end;
+
+function TSQLRestClientURI.GetCurrentSessionUserID: TID;
+begin
+  if fSessionUser=nil then
+    result := 0 else
+    result := fSessionUser.IDValue;
 end;
 
 constructor TSQLRestClientURI.Create(aModel: TSQLModel);
@@ -37323,6 +37373,14 @@ begin
   result := length(fSessionAuthentication);
 end;
 
+function TSQLRestServer.GetCurrentSessionUserID: TID;
+begin
+  with PServiceRunningContext(@ServiceContext)^ do
+    if (Request<>nil) and (Request.Session>CONST_AUTHENTICATION_NOT_USED) then
+      result := Request.SessionUser else
+      result := 0;
+end;
+
 function TSQLRestServer.AuthenticationRegister(
   aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication;
 var i: integer;
@@ -38319,8 +38377,8 @@ procedure TSQLRestServerURIContext.ExecuteORMWrite;
       Rec.ComputeFieldsBeforeWrite(Server,Occasion);
       with TableRecordProps.Props do
         if Occasion=seAdd then
-          bits := bits+ModCreateTimeFieldsBits else
-          bits := bits+FieldBits[sftModTime];
+          bits := bits+ComputeBeforeAddFieldsBits else
+          bits := bits+ComputeBeforeUpdateFieldsBits;
       Call.Inbody := Rec.GetJSONValues(true,Rec.IDValue<>0,bits);
     finally
       Rec.Free;
@@ -44282,6 +44340,13 @@ begin
   LeaveCriticalSection(fStorageCriticalSection);
 end;
 
+function TSQLRestStorage.GetCurrentSessionUserID: TID;
+begin
+  if fOwner=nil then
+    result := 0 else
+    result := fOwner.GetCurrentSessionUserID;
+end;
+
 procedure TSQLRestStorage.RecordVersionFieldHandle(Occasion: TSQLOccasion;
   var Decoder: TJSONObjectDecoder);
 begin
@@ -47487,8 +47552,13 @@ begin
         inc(nBlobCustom);
         goto Simple;
       end;
-      sftCreateTime, sftModTime: begin
-        include(ModCreateTimeFieldsBits,i);
+      sftCreateTime: begin
+        include(ComputeBeforeAddFieldsBits,i);
+        goto Small;
+      end;
+      sftModTime, sftSessionUserID: begin
+        include(ComputeBeforeAddFieldsBits,i);
+        include(ComputeBeforeUpdateFieldsBits,i);
         goto Small;
       end;
       sftRecordVersion: begin
@@ -47618,7 +47688,8 @@ const
     ' INTEGER, ',                    // sftModTime
     ' INTEGER, ',                    // sftCreateTime
     ' INTEGER, ',                    // sftTID
-    ' INTEGER, ');                   // sftRecordVersion
+    ' INTEGER, ',                    // sftRecordVersion
+    ' INTEGER, ');                   // sftSessionUserID
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then
     result := '' else

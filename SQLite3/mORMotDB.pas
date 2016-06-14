@@ -731,7 +731,8 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftInt64,     // sftModTime
        ftInt64,     // sftCreateTime
        ftInt64,     // sftTID
-       ftInt64);    // sftRecordVersion
+       ftInt64,     // sftRecordVersion
+       ftInt64);    // sftSessionUserID
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
