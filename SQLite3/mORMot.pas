@@ -56595,7 +56595,10 @@ begin
       end;
     end;
     // decode input parameters (if any) in f*[]
-    if (Par<>nil) or (ParObjValues<>nil) then 
+    if (Par=nil) and (ParObjValues=nil) then begin
+      if (ArgsInputValuesCount>0) and (optErrorOnMissingParam in Options) then
+        exit; // paranoid setting
+    end else
       for a := ArgsInFirst to ArgsInLast do
       with Args[a] do
       if ValueDirection<>smdOut then begin
