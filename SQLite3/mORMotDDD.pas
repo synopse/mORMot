@@ -2754,6 +2754,15 @@ begin
 end;
 
 initialization
+  {$ifndef ISDELPHI2010}
+  {$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSResult));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryAction));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryState));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TDDDAdministratedDaemonStatus));
+  {$endif}
+  {$endif}
+
   TInterfaceFactory.RegisterInterfaces([
     TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),
     TypeInfo(IAdministratedDaemon),TypeInfo(IAdministratedDaemonAsProxy)]);

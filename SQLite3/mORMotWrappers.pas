@@ -821,7 +821,7 @@ begin
   end;
   if typName='' then begin
     if typInfo<>nil then
-      TypeInfoToName(typInfo,typName) else
+      TypeInfoToQualifiedName(typInfo,typName) else
       typName := TYPES_LANG[lngDelphi,typ];
   end;
   if (typ=wRecord) and IdemPropNameU(typName,'TGUID') then

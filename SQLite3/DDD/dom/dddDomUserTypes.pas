@@ -690,6 +690,12 @@ end;
 
 initialization
   Initialize;
+  {$ifndef ISDELPHI2010}
+  {$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TDomUserEmailValidation));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCountryIdentifier));
+  {$endif}
+  {$endif}
   TJSONSerializer.RegisterObjArrayForJSON([
     TypeInfo(TAddressObjArray),TAddress,
     TypeInfo(TPersonContactableObjArray),TPersonContactable,

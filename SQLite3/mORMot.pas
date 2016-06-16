@@ -2430,11 +2430,12 @@ type
   TTypeKinds = set of TTypeKind;
   PTypeKind = ^TTypeKind;
   PTypeInfo = ^TTypeInfo;
-  {$ifdef FPC}
+  {$ifdef HASDIRECTTYPEINFO}
   PPTypeInfo = PTypeInfo;
   {$else}
   PPTypeInfo = ^PTypeInfo;
   {$endif}
+
   PTypeInfoDynArray = array of PTypeInfo;
 
   TClassDynArray = array of TClass;
@@ -2891,6 +2892,10 @@ type
     /// the property definition Name
     Name: ShortString;
 
+    /// the type information of this property
+    // - would de-reference the PropType pointer on Delphi and newer FPC compilers
+    function TypeInfo: PTypeInfo;
+      {$ifdef HASINLINE}inline;{$endif}
     /// get the next property information
     // - no range check: use ClassProp()^.PropCount to determine the properties count
     // - get the first PPropInfo with ClassProp()^.PropList
@@ -19338,6 +19343,30 @@ asm
 {$endif}
 end;
 
+{$ifdef HASDIRECTTYPEINFO}
+type
+  Deref = PTypeInfo;
+
+{$else}
+
+function Deref(Info: PPTypeInfo): PTypeInfo;
+{$ifdef HASINLINE} inline;
+begin
+  if Info=nil then
+    result := pointer(Info) else
+    result := Info^;
+end;
+{$else}
+asm // Delphi is so bad at compiling above code...
+    test eax,eax
+    jz @z
+    mov eax,[eax]
+    ret
+@z: rep ret
+end;
+{$endif HASINLINE}
+{$endif HASDIRECTTYPEINFO}
+
 
 {$ifndef FPC}
 
@@ -20205,7 +20234,7 @@ begin
     raise EORMException.CreateUTF8('Invalid %.CreateFrom(nil) call',[self]);
   result := nil;
   aSQLFieldType := sftUnknown;
-  aType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
+  aType := aPropInfo^.TypeInfo;
   {$ifndef NOVARIANTS}
   if aType^.Kind=tkVariant then begin
     aSQLFieldType := NullableTypeToSQLFieldType(aType);
@@ -20329,7 +20358,7 @@ begin
   inherited Create(ToUTF8(aPropInfo^.Name),aSQLFieldType,attrib,
     aPropInfo^.Index,aPropIndex); // property MyProperty: RawUTF8 index 10; -> FieldWidth=10
   fPropInfo := aPropInfo;
-  fPropType := aPropInfo^.PropType{$ifndef FPC}^{$endif};
+  fPropType := aPropInfo^.TypeInfo;
   if aPropInfo.GetterIsField then begin
     fGetterIsFieldPropOffset := aPropInfo.GetProc{$ifndef FPC} and $00FFFFFF{$endif};
     if (aPropInfo.SetProc=0) or (aPropInfo.SetProc=fPropInfo.GetProc) then
@@ -22547,7 +22576,7 @@ begin
   byte(attrib) := 0;
   if aPropInfo^.IsStored(nil)=AS_UNIQUE then
     Include(attrib,aIsUnique); // property MyProperty: RawUTF8 stored AS_UNIQUE;ieldWidth=10
-  Create(aPropInfo^.PropType{$ifndef FPC}^{$endif},ToUTF8(aPropInfo^.Name),
+  Create(aPropInfo^.TypeInfo,ToUTF8(aPropInfo^.Name),
     aPropIndex,aPropInfo^.GetFieldAddr(nil),attrib,aPropInfo^.Index);
 end;
 
@@ -22943,7 +22972,7 @@ end;
 function MonitorPropUsageValue(info: PPropInfo): TSynMonitorType;
 var typ: pointer;
 begin
-  typ := info^.PropType{$ifndef FPC}^{$endif};
+  typ := info^.TypeInfo;
   if typ=TypeInfo(TSynMonitorTotalMicroSec) then
     result := smvMicroSec else
   if typ=TypeInfo(TSynMonitorOneMicroSec) then
@@ -27060,18 +27089,18 @@ end;
 
 function TPropInfo.GetDynArray(Instance: TObject): TDynArray;
 begin
-  result.Init(PropType{$ifndef FPC}^{$endif},GetFieldAddr(Instance)^);
+  result.Init(TypeInfo,GetFieldAddr(Instance)^);
 end;
 
 procedure TPropInfo.GetDynArray(Instance: TObject; var result: TDynArray);
 begin
-  result.Init(PropType{$ifndef FPC}^{$endif},GetFieldAddr(Instance)^);
+  result.Init(TypeInfo,GetFieldAddr(Instance)^);
 end;
 
 function TPropInfo.DynArrayIsObjArray: boolean;
 begin
   if PropType^.Kind=tkDynArray then
-    result := ObjArraySerializers.Find(PropType{$ifndef FPC}^{$endif})<>nil else
+    result := ObjArraySerializers.Find(TypeInfo)<>nil else
     result := false;
 end;
 
@@ -27079,7 +27108,7 @@ function TPropInfo.DynArrayIsObjArrayInstance: PClassInstance;
 begin
   if PropType^.Kind<>tkDynArray then
     result := nil else
-    result := TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif});
+    result := TJSONSerializer.RegisterObjArrayFindType(TypeInfo);
 end;
 
 procedure TPropInfo.GetLongStrValue(Instance: TObject; var result: RawUTF8);
@@ -27198,11 +27227,11 @@ begin
     DocVariantToObject(_Safe(Value)^,GetObjProp(Instance));
   tkDynArray:
     DocVariantToObjArray(_Safe(Value)^,GetFieldAddr(Instance)^,
-      TJSONSerializer.RegisterObjArrayFindType(PropType{$ifndef FPC}^{$endif}));
+      TJSONSerializer.RegisterObjArrayFindType(TypeInfo));
   {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
     VariantSaveJSON(Value,twJSONEscape,u);
-    RecordLoadJSON(GetFieldAddr(Instance)^,pointer(u),PropType{$ifndef FPC}^{$endif});
+    RecordLoadJSON(GetFieldAddr(Instance)^,pointer(u),TypeInfo);
   end;
   {$endif}
   end;
@@ -27253,8 +27282,8 @@ begin
   {$ifdef PUBLISHRECORD}
   tkRecord{$ifdef FPC},tkObject{$endif}: begin
     addr := GetFieldAddr(Instance);
-    RecordClear(addr^,PropType{$ifndef FPC}^{$endif});
-    FillcharFast(addr^,PropType^.RecordType^.Size,0);
+    RecordClear(addr^,TypeInfo);
+    FillcharFast(addr^,TypeInfo^.RecordType^.Size,0);
   end;
   {$endif}
   end;
@@ -27527,13 +27556,11 @@ str:  if kD in tkStringTypes then begin
       end else
         goto str;
     tkDynArray:
-      if (DestInfo=@self) or
-         (PropType{$ifndef FPC}^{$endif}=DestInfo.PropType{$ifndef FPC}^{$endif}) then
+      if (DestInfo=@self) or (TypeInfo=DestInfo.TypeInfo) then
         DestInfo.GetDynArray(Dest).Copy(GetDynArray(Source));
     tkRecord{$ifdef FPC},tkObject{$endif}:
-      if (DestInfo=@self) or
-         (PropType{$ifndef FPC}^{$endif}=DestInfo.PropType{$ifndef FPC}^{$endif}) then
-        RecordCopy(DestInfo.GetFieldAddr(Dest)^,GetFieldAddr(Source)^,PropType{$ifndef FPC}^{$endif});
+      if (DestInfo=@self) or (TypeInfo=DestInfo.TypeInfo) then
+        RecordCopy(DestInfo.GetFieldAddr(Dest)^,GetFieldAddr(Source)^,TypeInfo);
     {$ifndef NOVARIANTS}
     tkVariant:
       if kD=tkVariant then begin
@@ -27558,11 +27585,7 @@ end;
 
 function TPropInfo.IsBlob: boolean;
 begin
-  if @self=nil then
-    result := false else
-  with PropType^{$ifndef FPC}^{$endif} do
-    result := (Kind in [{$ifdef FPC}tkAString,{$endif}tkLString]) and
-      (PropType{$ifndef FPC}^{$endif}=TypeInfo(TSQLRawBlob));
+  result := (@self<>nil) and (TypeInfo=system.TypeInfo(TSQLRawBlob));
 end;
 
 function TPropInfo.IsStored(Instance: TObject): boolean;
@@ -27630,6 +27653,26 @@ begin
   result := Pointer(PtrInt(Instance)+SetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
 
+function TPropInfo.TypeInfo: PTypeInfo;
+{$ifdef HASINLINE}
+begin
+  {$ifndef HASDIRECTTYPEINFO}
+  if PropType<>nil then
+    result := PropType^ else
+  {$endif}
+    result := pointer(PropType);
+end;
+{$else}
+asm // Delphi is so bad at compiling above code...
+    mov eax,[eax].TPropInfo.PropType
+    test eax,eax
+    jz @z
+    mov eax,[eax]
+    ret
+@z: rep ret
+end;
+{$endif HASINLINE}
+      
 {$ifdef FPC_OR_PUREPASCAL}
 function TPropInfo.Next: PPropInfo;
 begin
@@ -27821,7 +27864,7 @@ begin
         value := TIndexedGetProc(Call)(Index);
       P := @value;
     end;
-  with PropType^{$ifndef FPC}^{$endif} do
+  with TypeInfo^ do
   if Kind=tkClass then
     result := PPtrInt(P)^ else
     case TOrdType(PByte(AlignToPtr(@Name[ord(Name[0])+1]))^) of // OrdType of
@@ -28370,7 +28413,7 @@ begin
     if (C<>TRawUTF8List) and (C<>TStrings) and
        (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
       if CT^.ParentInfo<>nil then begin
-        with CT^.ParentInfo^{$ifndef FPC}^{$endif} do
+        with Deref(CT^.ParentInfo)^ do
           CT := AlignToPtr(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
         if C<>TObject then
@@ -28720,7 +28763,7 @@ begin
       {$endif}
       if IntfParent=nil then
         result := nil else
-          result := mORMot.PTypeInfo(IntfParent{$ifndef FPC}^{$endif});
+          result := mORMot.PTypeInfo(Deref(IntfParent));
     end;
 end;
 
@@ -28743,7 +28786,7 @@ begin
   repeat
     if typ^.IntfParent=nil then
       exit;
-    nfo := typ^.IntfParent{$ifndef FPC}^{$endif};
+    nfo := Deref(typ^.IntfParent);
     if nfo=TypeInfo(IInterface) then
       exit;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -28818,17 +28861,17 @@ end;
 
 {$ifdef PUREPASCAL}
 function TClassType.InheritsFrom(AClass: TClass): boolean;
-var P: {$ifdef FPC}PTypeInfo{$else}PPTypeInfo{$endif};
+var P: PTypeInfo;
 begin
   result := true;
   if ClassType=AClass then
     exit;
-  P := ParentInfo;
+  P := DeRef(ParentInfo);
   while P<>nil do
     with P^.ClassType^ do
     if ClassType=AClass then
       exit else
-      P := ParentInfo;
+      P := DeRef(ParentInfo);
   result := false;
 end;
 {$else}
@@ -35411,7 +35454,6 @@ begin
   inherited Create(aModel);
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
-  fPrivateGarbageCollector.Add(fFakeCallbacks);
   {$ifdef USELOCKERDEBUG}
   fSafe := TAutoLockerDebug.Create(fLogClass,aModel.Root); // more verbose
   {$else}
@@ -35432,6 +35474,7 @@ begin
     SetLogClass(nil);
   {$endif}
   fBatchCurrent.Free;
+  fFakeCallbacks.Free;
   try
     // unlock all still locked records by this client
     if Model<>nil then
@@ -46144,12 +46187,11 @@ begin
         goto doProp else
       {$endif}
       if (Kind=tkSet) and (From^='[') then begin // set as string array
-        V := GetSetNameValue(P^.PropType{$ifndef FPC}^{$endif},From,EndOfObject);
+        V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
         P^.SetOrdProp(Value,V);
       end else
       if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+
-        From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,
-          P^.PropType{$ifndef FPC}^{$endif},@EndOfObject);
+        From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,P^.TypeInfo,@EndOfObject);
         if From=nil then
           exit; // invalid '{record}' content
         if EndOfObject='}' then
@@ -46245,7 +46287,7 @@ doProp: // normal property value
       tkRecord{$ifdef FPC},tkObject{$endif}:
         if not wasString then
           exit else
-          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.PropType{$ifndef FPC}^{$endif});
+          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.TypeInfo);
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: begin
@@ -46260,7 +46302,7 @@ doProp: // normal property value
       end;
       {$endif}
       tkFloat:
-        if P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then
+        if P^.TypeInfo=TypeInfo(TDateTime) then
           if wasString then begin
             if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
               inc(PropValue,3); // ignore U+FFF1 pattern
@@ -46269,8 +46311,7 @@ doProp: // normal property value
             exit else
         if wasString then
           exit else
-        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
-           P^.SetterIsField then
+        if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
           PInt64(P^.SetterAddr(Value))^ := StrToCurr64(PropValue) else begin
           E := GetExtended(pointer(PropValue),err);
           if err<>0 then
@@ -46356,8 +46397,7 @@ begin
       end;
       tkFloat:
       if U<>'' then
-        if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
-           P^.SetterIsField then
+        if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
           PInt64(P^.SetterAddr(Value))^ := StrToCurr64(pointer(U)) else begin
           E := GetExtended(pointer(U),err);
           if err=0 then
@@ -48447,8 +48487,7 @@ begin
           if (V<>P^.Default) or not (woDontStoreDefault in Options) then begin
             HR(P);
             if {$ifdef FPC}(Kind=tkBool) or{$endif}
-               ((Kind=tkEnumeration) and
-                (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(boolean))) then
+               ((Kind=tkEnumeration) and (P^.TypeInfo=TypeInfo(boolean))) then
               Add(boolean(V)) else
               if (woFullExpand in Options) or (woHumanReadable in Options) or
                  (woEnumSetsAsText in Options) or
@@ -48504,10 +48543,9 @@ begin
         end;
         tkFloat: begin
           HR(P);
-          if (P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(Currency)) and
-             P^.GetterIsField then
+          if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then
             AddCurr64(PInt64(P^.GetterAddr(Value))^) else
-          if P^.PropType{$ifndef FPC}^{$endif}=TypeInfo(TDateTime) then begin
+          if P^.TypeInfo=TypeInfo(TDateTime) then begin
             if woDateTimeWithMagic in Options then
               AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
               Add('"');
@@ -52241,7 +52279,7 @@ begin
   // handle interface inheritance via recursive calls
   P := aInterface^.ClassType;
   if PI^.IntfParent<>nil then
-    Ancestor := PI^.IntfParent{$ifndef FPC}^{$endif} else
+    Ancestor := Deref(PI^.IntfParent) else
     Ancestor := nil;
   if Ancestor<>nil then begin
     AddMethodsFromTypeInfo(Ancestor);
@@ -53789,7 +53827,7 @@ begin
       if P^.PropType^.Kind=tkInterface then
         if P^.GetterIsField then begin
           addr := P^.GetterAddr(self);
-          if not TryResolve(P^.PropType{$ifndef FPC}^{$endif},addr^) then
+          if not TryResolve(P^.TypeInfo,addr^) then
             if aRaiseEServiceExceptionIfNotFound then
               raise EServiceException.CreateUTF8(
                 '%.AutoResolve: impossible to resolve published property %: %',
@@ -53986,12 +54024,12 @@ end;
 destructor TServiceContainerServer.Destroy;
 var i: integer;
 begin
-  fRecordVersionCallback := nil;
   if fFakeCallbacks<>nil then begin
     for i := 0 to fFakeCallbacks.Count-1 do // prevent GPF in Destroy
       TInterfacedObjectFakeServer(fFakeCallbacks.List[i]).fServer := nil;
     FreeAndNil(fFakeCallbacks); // do not own objects
   end;
+  fRecordVersionCallback := nil; // to be done after fFakeCallbacks[].fServer := nil
   inherited Destroy;
 end;
 
@@ -55668,7 +55706,7 @@ begin
         inc(ClassesCount);
       end;
       tkDynArray:
-        if (ObjArraySerializers.Find(P^.PropType{$ifndef FPC}^{$endif})<>nil)
+        if (ObjArraySerializers.Find(P^.TypeInfo)<>nil)
            and P^.GetterIsField then begin
           SetLength(ObjArraysOffset,ObjArraysCount+1);
           ObjArraysOffset[ObjArraysCount] := PtrUInt(P^.GetterAddr(nil));
@@ -56360,7 +56398,7 @@ begin
     if call.StackSize and 1 <> 0 then
       inc(call.StackSize);
     // stack is filled reversed (RTL)
-    call.StackAddr := PtrInt(@Stack[call.StackSize shl 3-8]);
+    call.StackAddr := PtrInt(@Stack[call.StackSize*8-8]);
     {$else}
     // stack is filled normally (LTR)
     call.StackAddr := PtrInt(@Stack[0]);

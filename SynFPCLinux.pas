@@ -165,7 +165,8 @@ end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
-  DoneCriticalSection(cs);
+  if cs.__m_kind<>0 then 
+    DoneCriticalSection(cs);
 end;
 
 {$ifdef Linux}

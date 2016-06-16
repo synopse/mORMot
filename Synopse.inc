@@ -271,6 +271,9 @@
   {$endif}
   {$ifdef VER3_0}
     {$define ISFPC27}
+    {$define HASDIRECTTYPEINFO}
+    // PTypeInfo would be stored with no pointer de-reference
+    // => Delphi and newer FPC uses a pointer reference to ease exe linking
   {$endif}
   {$ifdef VER3_1}
     {$define ISFPC27}

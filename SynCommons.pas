@@ -5749,6 +5749,10 @@ function TypeInfoToName(aTypeInfo: pointer): RawUTF8; overload;
 procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8=''); overload;
 
+/// retrieve the unit name and type name from its low-level RTTI
+procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
+  const default: RawUTF8='');
+
 /// retrieve the record size from its low-level RTTI
 function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 
@@ -18781,7 +18785,7 @@ type
   {$endif}
 
   PTypeInfo = ^TTypeInfo;
-  {$ifdef FPC}
+  {$ifdef HASDIRECTTYPEINFO}
   PTypeInfoStored = PTypeInfo;
   {$else}
   PTypeInfoStored = ^PTypeInfo;
@@ -18968,6 +18972,30 @@ end;
 var
   KnownTypeInfo: array of PTypeInfo;
 
+{$ifdef HASDIRECTTYPEINFO}
+type
+  Deref = PTypeInfo;
+
+{$else}
+
+function Deref(Info: PTypeInfoStored): PTypeInfo;
+{$ifdef HASINLINE} inline;
+begin
+  if Info=nil then
+    result := pointer(Info) else
+    result := Info^;
+end;
+{$else}
+asm // Delphi is so bad at compiling above code...
+    or eax,eax
+    jz @z
+    mov eax,[eax]
+    ret
+@z: rep ret
+end;
+{$endif HASINLINE}
+{$endif HASDIRECTTYPEINFO}
+
 /// add some TypeInfo() RTTI for TypeInfoSave/TypeInfoLoad function
 // - warning: calling this after TypeInfoLoad() would trigger GPF
 procedure TypeInfoSaveRegisterKnown(const Types: array of pointer);
@@ -19011,13 +19039,7 @@ var k: TTypeKind;
   var nfo: PTypeInfo;
       known: integer;
   begin
-    {$ifdef FPC}
-    nfo := nested;
-    {$else}
-    if nested=nil then
-      nfo := nil else
-      nfo := nested^;
-    {$endif}
+    nfo := Deref(nested);
     if nfo=nil then
       tmp.wrw(0) else
     if nfo=info then
@@ -19457,7 +19479,7 @@ begin
   if info=nil then
     exit;
   if info^.elType<>nil then
-    result := info^.elType{$ifndef FPC}^{$endif};
+    result := Deref(info^.elType);
   if aDataSize<>nil then
     aDataSize^ := info^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
 end;
@@ -19469,6 +19491,21 @@ begin
     SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
       PTypeInfo(aTypeInfo)^.NameLen) else
     result := default;
+end;
+
+procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
+  const default: RawUTF8='');
+var unitname: RawUTF8;
+begin
+  if aTypeInfo<>nil then begin
+    SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
+      PTypeInfo(aTypeInfo)^.NameLen);
+    if PTypeInfo(aTypeInfo)^.Kind=tkClass then begin
+      with GetTypeInfo(aTypeInfo,PTypeKind(aTypeInfo)^)^ do
+        SetRawUTF8(unitname,PAnsiChar(@UnitNameLen)+1,UnitNameLen);
+      result := unitname+'.'+result;
+    end;
+  end else result := default;
 end;
 
 function TypeInfoToName(aTypeInfo: pointer): RawUTF8;
@@ -19495,7 +19532,7 @@ begin
     {$ifdef FPC}
     if info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil then
     {$endif}
-      info := GetTypeInfo(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType{$ifndef FPC}^{$endif},tkEnumeration);
+      info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType),tkEnumeration);
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
     Names := @info.NameList;
     result := true;
@@ -19535,7 +19572,7 @@ begin
     if info^.SetBaseType=nil then
       result := GetEnumInfo(aTypeInfo,MaxValue,Names) else
     {$endif}
-      result := GetEnumInfo(info^.SetBaseType{$ifndef FPC}^{$endif},MaxValue,Names) else
+      result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
     result := false;
 end;
 
@@ -32735,8 +32772,8 @@ begin
           exit;
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}:
-        if RecordEquals(A^,B^,Field^.TypeInfo{$ifndef FPC}^{$endif}) then
-          Diff := RecordTypeInfoSize(Field^.TypeInfo{$ifndef FPC}^{$endif}) else
+        if RecordEquals(A^,B^,Field^.TypeInfo{$ifndef HASDIRECTTYPEINFO}^{$endif}) then
+          Diff := RecordTypeInfoSize(Field^.TypeInfo{$ifndef HASDIRECTTYPEINFO}^{$endif}) else
           exit;
       {$ifndef NOVARIANTS}
       tkVariant:
@@ -32746,8 +32783,8 @@ begin
       {$endif}
       {$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
       tkDynArray: begin
-        DynA.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},A^);
-        DynB.Init(Field^.TypeInfo{$ifndef FPC}^{$endif},B^);
+        DynA.Init(Deref(Field^.TypeInfo),A^);
+        DynB.Init(Deref(Field^.TypeInfo),B^);
         if DynA.Equals(DynB) then
           Diff := sizeof(pointer) else
           exit;
@@ -32802,7 +32839,7 @@ begin
     P := pointer(R+Field.Offset);
     case Field.TypeInfo^.Kind of
       tkDynArray: begin
-        DynArray.Init(Field.TypeInfo{$ifndef FPC}^{$endif},P^);
+        DynArray.Init(Deref(Field.TypeInfo),P^);
         inc(result,DynArray.SaveToLength-sizeof(PtrUInt));
       end;
       tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
@@ -32817,13 +32854,13 @@ begin
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2)-sizeof(PtrUInt));
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        Len := RecordSaveLength(P^,Field.TypeInfo{$ifndef FPC}^{$endif});
+        infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+        Len := RecordSaveLength(P^,infoNested);
         if Len=0 then begin
           result := 0;
           exit; // invalid/unhandled nested record content
         end;
         inc(result,Len);
-        infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
         infoNested := GetFPCAlignPtr(infoNested);
         {$else}
@@ -32879,7 +32916,7 @@ begin
     Kind := Field.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Field.TypeInfo{$ifndef FPC}^{$endif},R^);
+      DynArray.Init(Deref(Field.TypeInfo),R^);
       Dest := DynArray.SaveTo(Dest);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -32900,12 +32937,12 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      Dest := RecordSave(R^,Dest,Field.TypeInfo{$ifndef FPC}^{$endif});
+      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      Dest := RecordSave(R^,Dest,infoNested);
       if Dest=nil then begin
         result := nil; // invalid/unhandled record content
         exit;
       end;
-      infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       infoNested := GetFPCAlignPtr(infoNested);
       {$else}
@@ -33070,7 +33107,7 @@ begin
   Field := @info^.ManagedFields[0];
   if Source=nil then begin  // inline RecordClear() function
     for F := 1 to  info^.ManagedCount do begin
-      _Finalize(R+Field^.Offset,Field^.TypeInfo{$ifndef FPC}^{$endif});
+      _Finalize(R+Field^.Offset,Deref(Field^.TypeInfo));
       inc(Field);
     end;
     result := nil;
@@ -33087,7 +33124,7 @@ begin
     Kind := Field.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Field.TypeInfo{$ifndef FPC}^{$endif},R^);
+      DynArray.Init(Deref(Field.TypeInfo),R^);
       Source := DynArray.LoadFrom(Source);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -33099,9 +33136,11 @@ begin
           SetString(PRawByteString(R)^,Source,LenBytes);
           {$ifdef HASCODEPAGE}
           { Delphi 2009+: set Code page for this AnsiString }
-          if LenBytes<>0 then
-            SetCodePage(PRawByteString(R)^,PWord(PtrUInt(Field.TypeInfo{$ifndef FPC}^{$endif})+
-              Field.TypeInfo{$ifndef FPC}^{$endif}^.NameLen+2)^,false);
+          if LenBytes<>0 then begin
+            infoNested := Deref(Field.TypeInfo); 
+            SetCodePage(PRawByteString(R)^,
+              PWord(PtrUInt(infoNested)+infoNested^.NameLen+2)^,false);
+          end;
           {$endif}
         end;
         tkWString:
@@ -33115,8 +33154,8 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      Source := RecordLoad(R^,Source,Field.TypeInfo{$ifndef FPC}^{$endif});
-      infoNested := Field.TypeInfo{$ifndef FPC}^{$endif}; // inlined GetTypeInfo()
+      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      Source := RecordLoad(R^,Source,infoNested);
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       infoNested := GetFPCAlignPtr(infoNested);
       {$else}
@@ -34721,7 +34760,7 @@ begin
       fDataSize := info^.arraySize;
       fFixedSize := fDataSize div info^.elCount;
       fNestedArray := TJSONCustomParserRTTI.CreateFromRTTI(
-        '',info^.arrayType{$ifndef FPC}^{$endif},fFixedSize);
+        '',Deref(info^.arrayType),fFixedSize);
       exit; // success
     end;
     tkDynArray: begin
@@ -35844,20 +35883,18 @@ begin // only tkRecord is needed here
     if i=FieldTable^.AllCount-1 then
       ItemFieldSize := FieldSize-ItemFields[i].Offset else
       ItemFieldSize := ItemFields[i+1].Offset-ItemFields[i].Offset;
-    if ItemFields[i]^.TypeInfo<>nil then
-      ItemField := ItemFields[i]^.TypeInfo{$ifndef FPC}^{$endif} else
-      ItemField := nil;
+    ItemField := Deref(ItemFields[i]^.TypeInfo);
     SetRawUTF8(ItemFieldName,PAnsiChar(@ItemFields[i]^.NameLen)+1,ItemFields[i]^.NameLen);
     Item := AddItemFromRTTI(ItemFieldName,ItemField,ItemFieldSize);
     Props.fNestedProperty[i] := Item;
     case Item.PropertyType of
     ptArray: begin
       inc(PByte(ItemField),ItemField^.NameLen);
-      ItemArray := AddItemFromRTTI('',ItemField^.elType2{$ifndef FPC}^{$endif},
+      ItemArray := AddItemFromRTTI('',Deref(ItemField^.elType2),
         ItemField^.elSize {$ifdef FPC}and $7FFFFFFF{$endif});
       if (ItemArray.PropertyType=ptCustom) and
          (ItemArray.ClassType=TJSONCustomParserRTTI) then
-        FromEnhancedRTTI(Item,ItemField^.elType2{$ifndef FPC}^{$endif}) else begin
+        FromEnhancedRTTI(Item,Deref(ItemField^.elType2)) else begin
         SetLength(Item.fNestedProperty,1);
         Item.fNestedProperty[0] := ItemArray;
         Item.ComputeNestedDataSize;
@@ -40456,7 +40493,7 @@ rec:    inc(PtrUInt(nested),(nested^.NameLen));
             tkUString: fKnownType := djString;
             {$endif}
             tkRecord{$ifdef FPC},tkObject{$endif}: begin
-              nested := pointer(TypeInfo{$ifndef FPC}^{$endif});
+              nested := Deref(TypeInfo);
               goto Rec;
             end;
             {$ifndef NOVARIANTS}
@@ -41255,7 +41292,11 @@ begin
   inc(PtrUInt(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
   {$endif}
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
+  {$ifdef FPC}
+  fElemType := Deref(PTypeInfo(aTypeInfo)^.elType);
+  {$else}
   fElemType := PTypeInfo(aTypeInfo)^.elType;
+  {$endif}
   if fElemType<>nil then
     {$ifndef FPC}
     fElemType := PPointer(fElemType)^;
