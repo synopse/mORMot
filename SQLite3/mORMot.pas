@@ -54405,10 +54405,10 @@ asmcall_end:
 end;
 {$endif CPUAARCH64}
 
-{$ifdef CPUX64}
-assembler;{$ifdef FPC}nostackframe;{$endif}
+{$ifdef CPUX64} assembler;
+{$ifdef FPC}
+  nostackframe;
 asm
-    {$ifndef FPC}.noframe{$endif}
     push rbp
     push r12
     mov rbp,rsp
@@ -54416,6 +54416,11 @@ asm
     lea rsp,[rsp-MAX_EXECSTACK]
     // align stack
     and rsp, -16
+{$else DELPHI} // ensure we use regular .params command for easier debugging
+asm
+    .params 64    // size for 64 parameters
+    .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
+{$endif FPC}
     // get Args
     mov r12, Args
     // copy (push) stack content (if any)
@@ -54423,17 +54428,13 @@ asm
     mov rdx, [r12].TCallMethodArgs.StackAddr
     jmp @checkstack
 @addstack:
-    {$ifdef FPC}
     push qword ptr [rdx]
-    {$else}
-    push [rdx]
-    {$endif}
     dec ecx
     sub rdx,8
 @checkstack:
     or ecx, ecx
     jnz @addstack
-    // fill registers
+    // fill registers and call method
     {$ifdef LINUX}
     // Linux/BSD System V AMD64 ABI
     mov rdi, [r12+TCallMethodArgs.ParamRegs+REGRDI*8-8]
@@ -54450,6 +54451,7 @@ asm
     movsd xmm5, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
     movsd xmm6, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
     movsd xmm7, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
+    call [r12].TCallMethodArgs.method
     {$else}
     // Win64 ABI
     mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
@@ -54460,19 +54462,10 @@ asm
     movsd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
     movsd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
     movsd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    {$endif LINUX}
-    // alf: adjust for shadow-space (fixme?)
-    // caller must ensure that there is space on the stack for the API
-    // to store the parameters (RCX,RDX,R8 and R9)
-    {$ifndef Linux}
-    sub rsp, $20
-    {$endif}
-    // call method
+    sub rsp,8*4   // reserve shadow-space for RCX,RDX,R8,R9 registers
     call [r12].TCallMethodArgs.method
-    // undo the damage (shadow-space) done earlier
-    {$ifndef Linux}
-    add rsp, $20
-    {$endif}
+    add rsp,8*4
+    {$endif LINUX}
     // retrieve result
     mov [r12].TCallMethodArgs.res64, rax
     mov cl, [r12].TCallMethodArgs.resKind
@@ -54483,9 +54476,12 @@ asm
     cmp cl, smvCurrency
     jne @e
 @d: movlpd qword ptr [r12].TCallMethodArgs.res64, xmm0
-@e: mov rsp, rbp
+@e:
+{$ifdef FPC}
+    mov rsp, rbp
     pop r12
     pop rbp
+{$endif}
 end;
 {$endif CPUX64}
 
@@ -56364,7 +56360,7 @@ begin
     if call.StackSize and 1 <> 0 then
       inc(call.StackSize);
     // stack is filled reversed (RTL)
-    call.StackAddr := PtrInt(@Stack[call.StackSize*8-8]);
+    call.StackAddr := PtrInt(@Stack[call.StackSize shl 3-8]);
     {$else}
     // stack is filled normally (LTR)
     call.StackAddr := PtrInt(@Stack[0]);
