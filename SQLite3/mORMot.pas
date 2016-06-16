@@ -56606,7 +56606,7 @@ begin
           if ParObjValues[a]=nil then // missing parameter in input JSON
             if optErrorOnMissingParam in Options then
               exit else     // paranoid setting
-              continue else // ignore and replace by the default value
+              continue else // ignore and use void value by default
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin

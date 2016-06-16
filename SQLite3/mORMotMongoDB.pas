@@ -998,16 +998,18 @@ begin
     SetLength(item,itemsize);
     while row.Next do begin
       // retrieve all values of this BSON document into item[]
-      if row.Item.Kind<>betDoc then
+      if (row.Item.Kind<>betDoc) or (row.Item.Data.DocList=nil) then
         raise EORMMongoDBException.CreateUTF8('%.GetJSONValues(%): invalid row kind=%',
           [self,StoredClass,ord(row.Item.Kind)]);
       itemcount := 0;
-      while item[itemcount].FromNext(row.Item.Data.DocList) do begin
-        inc(itemcount);
-        if itemcount>itemsize then begin
+      while row.Item.Data.DocList^<>byte(betEOF) do begin
+        if itemcount>=itemsize then begin
           inc(itemsize);
           Setlength(item,itemsize); // a field was deleted from TSQLRecord
         end;
+        if not item[itemcount].FromNext(row.Item.Data.DocList) then
+          break;
+        inc(itemcount);
       end;
       // convert this BSON document as JSON, following expected column order
       if W.Expand then
