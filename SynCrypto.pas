@@ -252,6 +252,13 @@ interface
     {.$define USEPADLOCK} // dedibox Linux tested only
   {$endif}
 {$else}
+//W3D MODIF
+  {$ifdef MACOS}
+    {$undef CPUINTEL}
+    {$undef USETHREADSFORBIGAESBLOCKS}
+  {$endif}
+//END W3D MODIF
+{$else}
   {$ifndef DELPHI5OROLDER}
     // on Windows: enable Microsoft AES Cryptographic Provider (XP SP3 and up)
     {$define USE_PROV_RSA_AES}
@@ -289,8 +296,15 @@ uses
 {$endif}
   Classes,
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
+//W3D MODIF
+{$IFDEF MACOS}
+  System.Types,
+  SyncObjs,
+  SynCommonsMac;
+{$ELSE}
   SynCommons;
-
+{$ENDIF}
+//END W3D MODIF
 
 const
   /// hide all AES Context complex code
@@ -661,7 +675,7 @@ type
   // - by design, such a PRNG is as good as the cypher used - for reference, see
   // https://en.wikipedia.org/wiki/Cryptographically_secure_pseudorandom_number_generator
   // - it would use fast hardware AES-NI or Padlock opcodes, if available 
-  TAESPRNG = class(TSynPersistent)
+  TAESPRNG = class(TPersistent)
   protected
     fCTR: array[0..3] of cardinal; // we use a litle-endian CTR
     fBytesSinceSeed: integer;
@@ -669,7 +683,13 @@ type
     fAES: TAES;
     fSeedPBKDF2Rounds: integer;
     fTotalBytes: Int64;
-    fLock: TRTLCriticalSection;
+//W3D MODIF
+{$ifdef MACOS}
+    fLock: TCriticalSection;
+{$else}
+    flock: TRTLCriticalSection;
+{$endif}
+//END W3D MODIF
     procedure IncrementCTR; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the internal secret key, using Operating System entropy
@@ -6368,10 +6388,17 @@ begin
   AESBlockToShortString(block,result);
 end;
 
+
 procedure AESBlockToShortString(const block: TAESBlock; out result: short32);
 begin
   result[0] := #32;
+//W3D MODIF
+{$ifdef MACOS}
+  SynCommonsMac.BinToHex(@block,@result[1],16);
+{$else}
   SynCommons.BinToHex(@block,@result[1],16);
+{$endif}
+//END W3D MODIF
 end;
 
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
@@ -7429,9 +7456,11 @@ var time: Int64;
     i: integer;
     fromOS: boolean;
     g: TGUID;
-    {$ifdef LINUX}
+//W3D MODIF
+    {$if defined(LINUX) or defined(MACOS)}
     dev: integer;
     {$endif}
+//END W3D MODIF
     {$ifdef MSWINDOWS}
     prov: HCRYPTPROV;
     {$endif}
@@ -7443,6 +7472,7 @@ var time: Int64;
     sha.Update(@time,sizeof(time));
     sha.Update(@entropy,sizeof(entropy)); // bytes on CPU stack
     QueryPerformanceCounter(timenow);
+
     sha.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
     for i := 0 to timenow and 3 do begin
       CreateGUID(g); // not random, but genuine
@@ -7463,7 +7493,9 @@ begin
   p := pointer(result);
   // retrieve entropy from OS
   fromOS := false;
-  {$ifdef LINUX} // Kylix's or FPC's CreateGUID() may be poor
+//W3D MODIF
+  {$if defined(LINUX) or defined(MACOS)} // Kylix's or FPC's CreateGUID() may be poor
+//END W3D MODIF
   dev := FileOpen('/dev/urandom',fmOpenRead);
   if dev<=0 then
     dev := FileOpen('/dev/random',fmOpenRead);
@@ -7506,11 +7538,21 @@ begin
   // always xor some minimal entropy - it won't hurt
   sha.Init;
   ShaInit;
+//W3D MODIF
+{$ifndef MACOS}
   version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
+{$endif}
+//END W3D MODIF
   sha.Update(pointer(version),length(version)); // exe and host/user info
   sha.Final(entropy[3]);
   ShaInit;
+//W3D MODIF
+{$ifndef MACOS}
   ext := NowUTC;
+{$else}
+  ext := time;
+{$endif}
+//END W3D MODIF
   sha.Update(@ext,sizeof(ext));
   sha.Final(entropy[2]);
   ShaInit;
@@ -7522,8 +7564,12 @@ begin
   sha.Update(@threads,sizeof(threads));
   sha.Final(entropy[1]);
   ShaInit;
+//W3D MODIF
+{$ifndef MACOS}
   sha.Update(@SystemInfo,sizeof(SystemInfo));
   sha.Update(pointer(OSVersionText),Length(OSVersionText));
+{$endif}
+//END W3D MODIF
   SleepHiRes(0); // force non deterministic time shift
   QueryPerformanceCounter(time);
   sha.Update(@time,sizeof(time)); // include GetEntropy() execution time
@@ -7832,7 +7878,6 @@ begin
   result := 'synshaaes'; // mark success
 end;
 
-
 initialization
   ComputeAesStaticTables;
 {$ifdef USEPADLOCK}
@@ -7842,6 +7887,12 @@ initialization
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
   assert(sizeof(TAESFullHeader)=AESBlockSize);
+
+//W3D MODIF
+{$IFDEF MACOS}
+  MoveFast := @System.Move;
+{$ENDIF}
+//END W3D MODIF
 
 finalization
 {$ifdef USEPADLOCKDLL}
