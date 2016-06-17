@@ -18781,8 +18781,8 @@ type
   PDynArrayRec = ^TDynArrayRec;
 
   {$ifdef FPC}
-  {$PACKRECORDS C}
-  {$endif}
+    {$PACKRECORDS C}
+  {$endif FPC}
 
   PTypeInfo = ^TTypeInfo;
   {$ifdef HASDIRECTTYPEINFO}
@@ -18975,9 +18975,7 @@ var
 {$ifdef HASDIRECTTYPEINFO}
 type
   Deref = PTypeInfo;
-
 {$else}
-
 function Deref(Info: PTypeInfoStored): PTypeInfo;
 {$ifdef HASINLINE} inline;
 begin
@@ -18991,7 +18989,7 @@ asm // Delphi is so bad at compiling above code...
     jz @z
     mov eax,[eax]
     ret
-@z: rep ret
+@z: db $f3 // rep ret
 end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
@@ -41292,18 +41290,19 @@ begin
   inc(PtrUInt(aTypeInfo),PTypeInfo(aTypeInfo)^.NameLen);
   {$endif}
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
-  {$ifdef FPC}
-  fElemType := Deref(PTypeInfo(aTypeInfo)^.elType);
-  {$else}
   fElemType := PTypeInfo(aTypeInfo)^.elType;
-  {$endif}
-  if fElemType<>nil then
-    {$ifndef FPC}
+  if fElemType<>nil then begin
+    // FPC compatibility: if you have a GPF here at startup, your trunk revision
+    // seems newer than June 2016
+    // -> disable HASDIRECTTYPEINFO conditional below $ifdef VER3_1 in Synopse.inc
+    {$ifndef HASDIRECTTYPEINFO}
     fElemType := PPointer(fElemType)^;
-    {$else} 
+    {$endif}
+    {$ifdef FPC}
     if not (PTypeKind(fElemType)^ in tkManagedTypes) then
       fElemType := nil; // as with Delphi
     {$endif}
+  end;
   fCountP := aCountPointer;
   if fCountP<>nil then
     fCountP^ := 0;

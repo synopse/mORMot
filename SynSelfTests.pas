@@ -4423,6 +4423,7 @@ procedure TTestLowLevelTypes.Variants;
 var v: Variant;
     vd: TVarData absolute v;
     t: pointer;
+    dt: TDateTime;
     ni: TNullableInteger;
     nt: TNullableUTF8Text;
 begin
@@ -4502,13 +4503,13 @@ begin
   GetVariantFromJSON('123.1234a',False,v,nil);
   Check(vd.VType=varString);
   Check(v='123.1234a');
-  Check(VariantToDateTime('2016',vd.VDate));
-  CheckSame(vd.VDate,42370);
-  Check(VariantToDateTime(2016,vd.VDate));
-  CheckSame(vd.VDate,42370);
-  Check(VariantToDateTime('1982/10/30',vd.VDate));
-  CheckSame(vd.VDate,30254);
-  Check(not VariantToDateTime('201a',vd.VDate));
+  Check(VariantToDateTime('2016',dt));
+  CheckSame(dt,42370);
+  Check(VariantToDateTime(2016,dt));
+  CheckSame(dt,42370);
+  Check(VariantToDateTime('1982/10/30',dt));
+  CheckSame(dt,30254);
+  Check(not VariantToDateTime('201a',dt));
   ni := NullableIntegerNull;
   Check(NullableIntegerIsEmptyOrNull(ni));
   ni := NullableInteger(10);
@@ -9336,7 +9337,7 @@ begin
       TTestBidirectionalRemoteConnection(Test).fHttpServer.RemoveServer(Master);
   finally
     Slave2Callback := nil;
-    Slave1.Free; // warning: Free should be in this order for callbacks release  
+    Slave1.Free; // warning: Free should be in this order for callbacks release
     Slave2.Free;
     Master.Free;
     MasterAccess.Free;
@@ -12930,6 +12931,8 @@ begin
   O := ObjectFromInterface(Inst.I);
   Check((O<>nil) and (copy(O.ClassName,1,21)='TInterfacedObjectFake'));
   Inst.ExpectedSessionID := fClient.SessionID;
+  if CheckFailed(fClient.SessionUser<>nil) then
+    exit;
   fClient.Retrieve('LogonName=?',[],[fClient.SessionUser.LogonName],fClient.SessionUser);
   Inst.ExpectedUserID := fClient.SessionUser.ID;
   Inst.ExpectedGroupID := fClient.SessionUser.GroupRights.ID;

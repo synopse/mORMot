@@ -19346,9 +19346,7 @@ end;
 {$ifdef HASDIRECTTYPEINFO}
 type
   Deref = PTypeInfo;
-
 {$else}
-
 function Deref(Info: PPTypeInfo): PTypeInfo;
 {$ifdef HASINLINE} inline;
 begin
@@ -19362,7 +19360,7 @@ asm // Delphi is so bad at compiling above code...
     jz @z
     mov eax,[eax]
     ret
-@z: rep ret
+@z: db $f3 // rep ret
 end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
@@ -52320,7 +52318,7 @@ begin
       {$endif CPUINTEL}
       inc(PB,sizeOf(TCallingConvention));
       P := AlignToPtr(P);// new Alignment
-      aResultType := PTypeInfo(ppointer(P)^);
+      aResultType := DeRef(PP^);
       inc(PP);
       inc(PW); // skip StackSize
       n := PB^;
@@ -52350,7 +52348,7 @@ begin
         ArgsNotResultLast := a;
         if ValueDirection<>smdConst then
           ArgsOutNotResultLast := a;
-          ArgTypeInfo := mORMot.PTypeInfo(ParamType);
+          ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(ParamType)));
         ArgTypeName := @ArgTypeInfo^.Name;
         if a>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
@@ -52368,7 +52366,7 @@ begin
           ParamName := @Name;
         P := AlignToPtr(@Name[ord(Name[0])+1]);
       end;
-      {$else FPC}
+      {$else FPC} // Delphi code
       PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
       Kind := PME^.Kind;
       if PME^.CC<>ccRegister then
