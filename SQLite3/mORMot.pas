@@ -48476,7 +48476,13 @@ begin
           V64 := P^.GetInt64Prop(Value);
           if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
             HR(P);
-            Add(V64);
+            if (woTimeLogAsText in Options) and (P^.PropType^.GetSQLFieldType
+                in [sftTimeLog,sftModTime,sftCreateTime]) then begin
+              Add('"');
+              AddTimeLog(@V64);
+              Add('"');
+            end else
+              Add(V64);
           end;
         end;
         {$ifdef FPC} tkBool, {$endif}
