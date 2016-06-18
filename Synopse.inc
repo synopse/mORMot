@@ -277,8 +277,8 @@
   {$endif}
   {$ifdef VER3_1}
     {$define ISFPC27}
-    {$define HASDIRECTTYPEINFO}
-    // UNDEFINE this for trunk newer than June 2016 - see
+    {.$define HASDIRECTTYPEINFO}
+    // define this for trunk revisions older than June 2016 - see
     // http://wiki.freepascal.org/User_Changes_Trunk#RTTI_Binary_format_change
   {$endif}
   {$ifdef FPC_HAS_CPSTRING}

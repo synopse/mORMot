@@ -41292,10 +41292,11 @@ begin
   fElemSize := PTypeInfo(aTypeInfo)^.elSize {$ifdef FPC}and $7FFFFFFF{$endif};
   fElemType := PTypeInfo(aTypeInfo)^.elType;
   if fElemType<>nil then begin
-    // FPC compatibility: if you have a GPF here at startup, your trunk revision
-    // seems newer than June 2016
-    // -> disable HASDIRECTTYPEINFO conditional below $ifdef VER3_1 in Synopse.inc
     {$ifndef HASDIRECTTYPEINFO}
+    // FPC compatibility: if you have a GPF here at startup, your 3.1 trunk
+    // revision seems older than June 2016
+    // -> enable HASDIRECTTYPEINFO conditional below $ifdef VER3_1 in Synopse.inc
+    // or in your project's options
     fElemType := PPointer(fElemType)^;
     {$endif}
     {$ifdef FPC}

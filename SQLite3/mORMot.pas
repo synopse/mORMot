@@ -51646,7 +51646,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
       if{$ifndef CPUARM}
         // on ARM, ordinals>PTRSIZ can also be placed in the normal registers !!
         (SizeInStack<>PTRSIZ) or
-        {$endif}
+        {$endif CPUARM}
         {$ifdef CPUX86}
         (reg>PARAMREG_LAST) // Win32, Linux x86
         {$else}
@@ -51655,8 +51655,8 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         ((not ValueIsInFPR) and (reg>PARAMREG_LAST))
         {$else}
         (reg>PARAMREG_LAST) // Win64
-        {$endif}
-        {$endif}
+        {$endif Linux}
+        {$endif CPUX86}
         // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
         {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
