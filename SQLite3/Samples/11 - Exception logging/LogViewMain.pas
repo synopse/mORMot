@@ -669,7 +669,7 @@ begin
            DateTimeToStr(ExecutableDate),UTF8ToString(ComputerHost),
            UTF8ToString(RunningUser),Ansi7ToString(CPU),feat,win,
            Integer(Wow64),DateTimeToStr(StartDateTime),Count,LogProcCount,
-           ThreadsCount,FormatDateTime('hh:mm:ss',EventDateTime(Count-1)-StartDateTime)]);
+           ThreadsCount,FormatDateTime('dd.hh:mm:ss',EventDateTime(Count-1)-StartDateTime)]);
         fillchar(sets,sizeof(sets),0);
         for i := 0 to Count-1 do
           inc(sets[EventLevel[i]]);

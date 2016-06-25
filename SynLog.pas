@@ -3401,7 +3401,9 @@ begin
   TextColor(LOGCOLORS[Level]);
   {$ifdef MSWINDOWS}
   tmp := CurrentAnsiConvert.UTF8ToAnsi(Text);
+  {$ifndef HASCODEPAGE}
   AnsiToOem(pointer(tmp),pointer(tmp));
+  {$endif}
   writeln(tmp);
   {$else}
   write(Text,#13#10);

@@ -14281,7 +14281,7 @@ function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
 {$endif}
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
-// - under Windows, will use the OEM_CHARSET encoding
+// - under Windows, will use the CP_OEMCP encoding
 // - under Linux, will expect the console is defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -16150,7 +16150,7 @@ var c: cardinal;
     DestBegin: PAnsiChar;
     SourceCharsBegin: integer;
 {$endif}
-{$endif}
+{$endif MSWINDOWS}
 begin
   {$ifdef KYLIX3}
   SourceCharsBegin := SourceChars;
@@ -16165,7 +16165,7 @@ begin
       dec(SourceChars,2);
       inc(Source,2);
       c := c shr 8 or c;
-      PWord(Dest)^ := c; 
+      PWord(Dest)^ := c;
       inc(Dest,2);
     until SourceChars<2;
   if (SourceChars>0) and (ord(Source^)<128) then
@@ -47595,7 +47595,7 @@ end;
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
 begin
   {$ifdef MSWINDOWS}
-  result := TSynAnsiConvert.Engine(OEM_CHARSET).UTF8ToAnsi(S);
+  result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
   {$else}
   result := S;
   {$endif}
