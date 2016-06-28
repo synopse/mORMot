@@ -4885,7 +4885,7 @@ function UnCompressStream(
 var strm: TZStream;
     code: integer;
     Bits: integer;
-    buf: array[word] of byte;
+    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
 procedure FlushBuf;
 var Count: integer;
 begin
