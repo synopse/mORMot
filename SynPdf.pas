@@ -291,6 +291,16 @@ unit SynPdf;
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
+{$ifndef MSWINDOWS}
+  { disable features requiring OS specific APIs
+    - until they are implemented }
+  {$define NO_USE_SYNGDIPLUS}
+  {$define NO_USE_UNISCRIBE}
+  {$define NO_USE_METAFILE}
+  {$define NO_USE_BITMAP}
+{$endif}
+
+
 {$define USE_PDFSECURITY}
 { - if defined, the TPdfDocument*.Create() constructor will have an additional
   AEncryption: TPdfEncryption parameter able to create secured PDF files
@@ -317,6 +327,7 @@ unit SynPdf;
   {$undef USE_UNISCRIBE}
 {$endif}
 
+
 {$define USE_SYNGDIPLUS}
 { - if defined, the PDF engine will use SynGdiPlus to handle all
     JPG, TIF, PNG and GIF image types (prefered way, but need XP or later OS)
@@ -329,6 +340,7 @@ unit SynPdf;
     use the default jpeg unit }
   {$undef USE_SYNGDIPLUS}
 {$endif}
+
 
 {$define USE_SYNZIP}
 { - if defined, the PDF engine will use SynZip to handle the ZIP/deflate
@@ -344,21 +356,59 @@ unit SynPdf;
 {$endif}
 
 
+{$define USE_BITMAP}
+{ - if defined, the PDF engine will support TBitmap
+  - it would induce a dependency to the VCL.Graphics unit }
+
+{$ifdef NO_USE_BITMAP}
+  { this special conditional can be set globaly for an application which doesn't
+    need the TBitmap features }
+  {$undef USE_BITMAP}
+{$endif}
+
+
+{$define USE_METAFILE}
+{ - if defined, the PDF engine will support TMetaFile/TMetaFileCanvas
+  - it would induce a dependency to the VCL.Graphics unit }
+
+{$ifdef NO_USE_METAFILE}
+  { this special conditional can be set globaly for an application which doesn't
+    need the TMetaFile features }
+  {$undef USE_METAFILE}
+{$endif}
+
+{$ifdef USE_BITMAP}
+  {$define USE_GRAPHICS_UNIT}
+{$endif}
+{$ifdef USE_METAFILE}
+  {$define USE_GRAPHICS_UNIT}
+{$endif}
+
 interface
 
 uses
+  {$ifdef MSWINDOWS}
   Windows, WinSpool,
-  SysConst, SysUtils, Classes,
-  {$ifdef ISDELPHIXE3}
-  System.Types,
-  System.AnsiStrings,
-  {$endif}
+  {$ifdef USE_GRAPHICS_UNIT}
   {$ifdef ISDELPHIXE2}
   VCL.Graphics,
   {$else}
   Graphics,
   {$endif}
-  SynCommons, SynLZ,
+  {$endif}
+  {$endif MSWINDOWS}
+  {$ifdef USE_SYNGDIPLUS}
+  SynGdiPlus, // use our GDI+ library for handling TJpegImage and such
+  {$else}
+  jpeg,
+  {$endif}
+  SysConst, SysUtils, Classes,
+  {$ifdef ISDELPHIXE3}
+  System.Types,
+  System.AnsiStrings,
+  {$else}
+  Types,
+  {$endif}
   {$ifdef USE_SYNZIP}
   SynZip,
   {$else}
@@ -367,11 +417,7 @@ uses
   {$ifdef USE_PDFSECURITY}
   SynCrypto,
   {$endif}
-  {$ifdef USE_SYNGDIPLUS}
-  SynGdiPlus; // use our GDI+ library for handling TJpegImage and such
-  {$else}
-  jpeg;
-  {$endif}
+  SynCommons, SynLZ;
 
 const
   MWT_IDENTITY = 1;
@@ -535,6 +581,10 @@ type
 
   /// the available PDF color range
   TPdfColor = -$7FFFFFFF-1..$7FFFFFFF;
+
+  /// the PDF color, as expressed in RGB terms
+  // - maps COLORREF / TColorRef as used e.g. under windows
+  TPdfColorRGB = cardinal;
 
   /// numerical ID for every XObject
   TXObjectID = integer;
@@ -808,8 +858,10 @@ type
     function AddEscapeText(Text: PAnsiChar; Font: TPdfFont): TPdfWrite;
     /// add some PDF /property value
     function AddEscapeName(Text: PAnsiChar): TPdfWrite;
-    /// add a PDF color, from its TColorRef RGB value
-    function AddColorStr(Color: TColorRef): TPdfWrite;
+    {$ifdef MSWINDOWS}
+    /// add a PDF color, from its TPdfColorRGB RGB value
+    function AddColorStr(Color: TPdfColorRGB): TPdfWrite;
+    {$endif}
     /// add a TBitmap.Scanline[] content into the stream
     procedure AddRGB(P: PAnsiChar; PInc, Count: integer);
     /// add an ISO 8601 encoded date time (e.g. '2010-06-16T15:06:59-07:00')
@@ -1283,6 +1335,11 @@ type
   // false positives
   TPdfImageHash = array[0..3] of cardinal;
 
+  /// potential font styles
+  TPdfFontStyle = (pfsBold, pfsItalic, pfsUnderline, pfsStrikeOut);
+  /// set of font styles
+  TPdfFontStyles = set of TPdfFontStyle;
+
   /// the main class of the PDF engine, processing the whole PDF document
   TPdfDocument = class(TObject)
   protected
@@ -1317,9 +1374,9 @@ type
     fEmbeddedWholeTTF: boolean;
     fEmbeddedTTFIgnore: TRawUTF8List;
     fRawPages: TList;
-{$ifdef USE_UNISCRIBE}
+    {$ifdef USE_UNISCRIBE}
     fUseUniscribe: boolean;
-{$endif}
+    {$endif}
     fSelectedDCFontOld: HDC;
     fForceJPEGCompression: Integer;
     fForceNoBitmapReuse: boolean;
@@ -1333,13 +1390,13 @@ type
     fFileFormat: TPdfFileFormat;
     fPDFA1: boolean;
     fSaveToStreamWriter: TPdfWrite;
-{$ifdef USE_PDFSECURITY}
+    {$ifdef USE_PDFSECURITY}
     fEncryption: TPdfEncryption;
     fFileID: TMD5Digest;
     fEncryptionObject: TPdfDictionary;
     fCurrentObjectNumber: integer;
     fCurrentGenerationNumber: integer;
-{$endif}
+    {$endif}
     function GetGeneratePDF15File: boolean;
     procedure SetGeneratePDF15File(const Value: boolean);
     function GetInfo: TPdfInfo;     {$ifdef HASINLINE}inline;{$endif}
@@ -1362,7 +1419,7 @@ type
     procedure CreateInfo;
     /// get the PostScript Name of a TrueType Font
     // - use the Naming Table ('name') of the TTF content if not 7 bit ascii
-    function TTFFontPostcriptName(aFontIndex: integer; AStyle: TFontStyles;
+    function TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
       AFont: TPdfFontTrueType): PDFString;
     /// if ANSI_CHARSET is used, create a standard embedded font
     function CreateEmbeddedFont(const FontName: RawUTF8): TPdfFont;
@@ -1380,7 +1437,7 @@ type
     // use the UnicodeFont property to get the corresponding Unicode aware
     // version, if it was used
     function GetRegisteredTrueTypeFont(AFontIndex: integer;
-      AStyle: TFontStyles; ACharSet: byte): TPdfFont; overload;
+      AStyle: TPdfFontStyles; ACharSet: byte): TPdfFont; overload;
     /// get the supplied TrueType Font from the internal font list
     // - if the true type font doesn't exist yet, returns NIL
     function GetRegisteredTrueTypeFont(const AFontLog: TLogFontW): TPdfFont; overload;
@@ -1451,11 +1508,13 @@ type
     /// retrieve a XObject index from its name
     // - this method won't handle the Virtual Objects
     function GetXObjectIndex(const AName: PDFString): integer;
+    {$ifdef USE_BITMAP}
     /// retrieve a XObject TPdfImage index from its picture attributes
     // - returns '' if this image is not already there
     // - uses 4 hash codes, created with 4 diverse algorithms, in order to avoid
     // false positives
     function GetXObjectImageName(const Hash: TPdfImageHash; Width, Height: Integer): PDFString;
+    {$endif USE_BITMAP}
     /// wrapper to create an annotation
     // - the annotation is set to a specified position of the current page
     function CreateAnnotation(AType: TPdfAnnotationSubType; const ARect: TPdfRect;
@@ -1480,6 +1539,7 @@ type
     // - a dtXYZ destination with the corresponding TopPosition Y value is defined
     // - the associated bookmark name must be unique, otherwise an exception is raised
     procedure CreateBookMark(TopPosition: Single; const aBookmarkName: RawUTF8);
+    {$ifdef USE_BITMAP}
     /// create an image from a supplied bitmap
     // - returns the internal XObject name of the resulting TPDFImage
     // - if you specify a PPdfBox to draw the image at the given position/size
@@ -1489,6 +1549,7 @@ type
     // - if ForceCompression property is set, the picture will be stored as a JPEG
     // - you can specify a clipping rectangle region as ClipRc parameter
     function CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox=nil; ClipRc: PPdfBox=nil): PDFString;
+    {$endif USE_BITMAP}
     // create a new optional content group (layer)
     // - returns a TPdfOptionalContentGroup needed for TPDFCanvas.BeginMarkedContent
     // - if ParentContentGroup is not nil, the new content group is a subgroup to ParentContentGroup
@@ -1732,10 +1793,10 @@ type
     FEmfBounds: TRect;
     FPrinterPxPerInch: TPoint;
     FNewPath: Boolean;
-{$ifdef USE_UNISCRIBE}
+    {$ifdef USE_UNISCRIBE}
     /// if Uniscribe-related methods must handle the text from right to left
     fRightToLeftText: Boolean;
-{$endif}
+    {$endif}
     /// parameters taken from RenderMetaFile() call
     fUseMetaFileTextPositioning: TPdfCanvasRenderMetaFileTextPositioning;
     fUseMetaFileTextClipping: TPdfCanvasRenderMetaFileTextClipping;
@@ -2045,7 +2106,7 @@ type
     // True Type font name available on the system
     // - if no CharSet is specified (i.e. if it remains -1), the current document
     // CharSet parameter is used
-    function SetFont(const AName: RawUTF8; ASize: Single; AStyle: TFontStyles;
+    function SetFont(const AName: RawUTF8; ASize: Single; AStyle: TPdfFontStyles;
       ACharSet: integer=-1; AForceTTF: integer=-1; AIsFixedWidth: boolean=false): TPdfFont; overload;
     /// set the current font for the PDF Canvas
     // - this method use the Win32 structure that defines the characteristics
@@ -2097,6 +2158,7 @@ type
     // - this function is compatible with MBCS strings, and returns
     // the index in Text, not the glyphs index
     function GetNextWord(const S: PDFString; var Index: integer): PDFString;
+    {$ifdef USE_METAFILE}
     /// draw a metafile content into the PDF page
     // - not 100% of content is handled yet, but most common are (even
     // metafiles embedded inside metafiles)
@@ -2110,6 +2172,7 @@ type
       TextPositioning: TPdfCanvasRenderMetaFileTextPositioning=tpSetTextJustification;
       KerningHScaleBottom: single=99.0; KerningHScaleTop: single=101.0;
       TextClipping: TPdfCanvasRenderMetaFileTextClipping=tcAlwaysClip);
+    {$endif USE_METAFILE}
     // starts optional content (layer)
     // - Group must be registered with TPdfDocument.CreateOptionalContentGroup
     // - each BeginMarkedContent must have a corresponding EndMarkedContent
@@ -2375,7 +2438,7 @@ type
   private
     function GetWideCharUsed: Boolean; {$ifdef HASINLINE}inline;{$endif}
   protected
-    fStyle: TFontStyles;
+    fStyle: TPdfFontStyles;
     fDoc: TPdfDocument;
     // note: fUsedWide[] and fUsedWideChar are used:
     // - in WinAnsi Fonts for glyphs used by ShowText
@@ -2401,22 +2464,22 @@ type
   public
     /// create the TrueType font object instance
     constructor Create(ADoc: TPdfDocument; AFontIndex: integer;
-      AStyle: TFontStyles; const ALogFont: TLogFontW; AWinAnsiFont: TPdfFontTrueType); reintroduce;
+      AStyle: TPdfFontStyles; const ALogFont: TLogFontW; AWinAnsiFont: TPdfFontTrueType); reintroduce;
     /// release the associated memory and handles
     destructor Destroy; override;
-    /// mark some unicode char as used
+    /// mark some UTF-16 codepoint as used
     // - return the index in fUsedWideChar[] and fUsedWide[]
     // - this index is the one just added, or the existing one if the value
     // was found to be already in the fUserWideChar[] array
     function FindOrAddUsedWideChar(aWideChar: WideChar): integer;
-    /// retrieve the width of an unicode character
+    /// retrieve the width of an UTF-16 codepoint
     // - WinAnsi characters are taken from fWinAnsiWidth[], unicode chars from
     // fUsedWide[].Width
     function GetWideCharWidth(aWideChar: WideChar): Integer;
     /// is set to TRUE if the PDF used any true type encoding
     property WideCharUsed: Boolean read GetWideCharUsed;
     /// the associated Font Styles
-    property Style: TFontStyles read fStyle;
+    property Style: TPdfFontStyles read fStyle;
     /// is set to TRUE if the font has a fixed width
     property FixedWidth: boolean read fFixedWidth;
     /// points to the corresponding Unicode font
@@ -2547,6 +2610,7 @@ type
     procedure Save; override;
   end;
 
+  {$ifdef USE_METAFILE}
   /// a PDF page, with its corresponding Meta File and Canvas
   TPdfPageGDI = class(TPdfPage)
   private
@@ -2648,7 +2712,9 @@ type
     // - set to 101.0 by default
     property KerningHScaleTop: Single read fKerningHScaleTop write fKerningHScaleTop;
   end;
+  {$endif USE_METAFILE}
 
+  {$ifdef USE_BITMAP}
   /// generic image object
   // - is either bitmap encoded or jpeg encoded
   TPdfImage = class(TPdfXObject)
@@ -2680,7 +2746,9 @@ type
     /// height of the image, in pixels units
     property PixelHeight: Integer read fPixelHeight;
   end;
+  {$endif USE_BITMAP}
 
+  {$ifdef USE_METAFILE}
   /// handle any form XObject
   // - A form XObject (see Section 4.9, of PDF reference 1.3) is a self-contained
   // description of an arbitrary sequence of graphics objects, defined as a
@@ -2692,6 +2760,7 @@ type
     /// create a form XObject from a supplied TMetaFile
     constructor Create(aDoc: TPdfDocumentGDI; aMetaFile: TMetafile); reintroduce;
   end;
+  {$endif USE_METAFILE}
 
   /// a form XObject with a Canvas for drawing
   // - once created, you can create this XObject, then draw it anywhere on
@@ -2762,7 +2831,7 @@ function PdfRect(const Box: TPdfBox): TPdfRect; overload; {$ifdef HASINLINE}inli
 function PdfBox(Left, Top, Width, Height: Single): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
 
 /// reverse char orders for every hebrew and arabic words
-// - just reverse all the chars in the supplied buffer
+// - just reverse all the UTF-16 codepoints in the supplied buffer
 procedure L2R(W: PWideChar; L: integer);
 
 /// convert some milli meters dimension to internal PDF twips value
@@ -4314,11 +4383,13 @@ begin
   result := self;
 end;
 
-function TPdfWrite.AddColorStr(Color: TColorRef): TPdfWrite;
-var X: array[0..3] of Byte absolute Color;
+function TPdfWrite.AddColorStr(Color: TPdfColorRGB): TPdfWrite;
+var X: array[0..3] of byte absolute Color;
 begin
+  {$ifdef MSWINDOWS}
   if integer(Color)<0 then
     Color := GetSysColor(Color and $ff);
+  {$endif}
   result := AddWithSpace(X[0]/255).AddWithSpace(X[1]/255).AddWithSpace(X[2]/255);
 end;
 
@@ -4621,14 +4692,13 @@ const
 
 /// reverse char orders for every hebrew and arabic words
 procedure L2R(W: PWideChar; L: integer);
-var tmp: array of WideChar; // faster than SynUnicode for a temp buffer
+var tmp: TSynTempBuffer;
     i: integer;
 begin
-  SetLength(tmp,L);
-  MoveFast(W^,tmp[0],L*2);
+  tmp.Init(W,L*2);
   dec(L);
   for i := 0 to L do
-    W[i] := tmp[L-i];
+    W[i] := PWideChar(tmp.buf)[L-i];
 end;
 
 function PdfCoord(MM: single): integer;
@@ -5524,6 +5594,7 @@ begin
   Result := nil;
 end;
 
+{$ifdef USE_BITMAP}
 function TPdfDocument.GetXObjectImageName(const Hash: TPdfImageHash;
   Width, Height: Integer): PDFString;
 var Obj: TPdfXObject;
@@ -5546,6 +5617,7 @@ begin
   end;
   result := '';
 end;
+{$endif USE_BITMAP}
 
 function TPdfDocument.CreateAnnotation(AType: TPdfAnnotationSubType;
   const ARect: TPdfRect; BorderStyle: TPdfAnnotationBorder; BorderWidth: integer): TPdfDictionary;
@@ -5951,7 +6023,7 @@ begin
 end;
 
 function TPdfDocument.GetRegisteredTrueTypeFont(AFontIndex: integer;
-  AStyle: TFontStyles; ACharSet: byte): TPdfFont;
+  AStyle: TPdfFontStyles; ACharSet: byte): TPdfFont;
 var i: integer;
 begin
   // if specified font exists in fontlist, returns the WinAnsi version
@@ -6102,21 +6174,21 @@ type
     FirstNameRecord: TNameRecord;
   end;
 
-function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TFontStyles;
+function TPdfDocument.TTFFontPostcriptName(aFontIndex: integer; AStyle: TPdfFontStyles;
   AFont: TPdfFontTrueType): PDFString;
 // see http://www.microsoft.com/typography/OTSPEC/name.htm
-function TrueTypeFontName(const aFontName: RawUTF8; AStyle: TFontStyles): PDFString;
+function TrueTypeFontName(const aFontName: RawUTF8; AStyle: TPdfFontStyles): PDFString;
 var i: Integer;
 begin // from PDF 1.3 § 5.5.2
   SetString(result,PAnsiChar(pointer(aFontName)),length(aFontName));
   for i := length(result) downto 1 do
     if (Result[i]<=' ') or (Result[i]>=#127) then
       Delete(result,i,1); // spaces and not ASCII chars are removed
-  if fsItalic in AStyle then
-    if fsBold in AStyle then
+  if pfsItalic in AStyle then
+    if pfsBold in AStyle then
       result := result+',BoldItalic' else
       result := result+',Italic' else
-    if fsBold in AStyle then
+    if pfsBold in AStyle then
       result := result+',Bold';
 end;
 const NAME_POSTCRIPT = 6;
@@ -6174,6 +6246,7 @@ begin
   fLastOutline := result;
 end;
 
+{$ifdef USE_BITMAP}
 function TPdfDocument.CreateOrGetImage(B: TBitmap; DrawAt: PPdfBox; ClipRc: PPdfBox): PDFString;
 var J: TJpegImage;
     Img: TPdfImage;
@@ -6243,6 +6316,7 @@ begin
         Canvas.DrawXObject(Left,Top,Width,Height, result);
   end;
 end;
+{$endif USE_BITMAP}
 
 function TPdfDocument.CreateOptionalContentGroup(
   ParentContentGroup: TPdfOptionalContentGroup;
@@ -6412,34 +6486,34 @@ begin
   FPage.FontSize := ASize;
 end;
 
-function StandardFontName(const AName: RawUTF8; AStyle: TFontStyles): RawUTF8;
+function StandardFontName(const AName: RawUTF8; AStyle: TPdfFontStyles): RawUTF8;
 begin
   result := AName;
-  if fsItalic in AStyle then
-    if fsBold in AStyle then
+  if pfsItalic in AStyle then
+    if pfsBold in AStyle then
       result := result+'-BoldOblique' else
       result := result+'-Oblique' else
-    if fsBold in AStyle then
+    if pfsBold in AStyle then
       result := result+'-Bold';
 end;
 
-procedure InitializeLogFontW(const aFontName: RawUTF8; aStyle: TFontStyles;
+procedure InitializeLogFontW(const aFontName: RawUTF8; aStyle: TPdfFontStyles;
   var aFont: TLogFontW);
 begin
   FillCharFast(AFont,sizeof(AFont),0);
   with aFont do begin
     lfHeight := -1000;
-    if fsBold in AStyle then
+    if pfsBold in AStyle then
       lfWeight := FW_BOLD else
       lfWeight := FW_NORMAL;
-    lfItalic := Byte(fsItalic in AStyle);
-    lfUnderline := Byte(fsUnderline in AStyle);
-    lfStrikeOut := Byte(fsStrikeOut in AStyle);
+    lfItalic := Byte(pfsItalic in AStyle);
+    lfUnderline := Byte(pfsUnderline in AStyle);
+    lfStrikeOut := Byte(pfsStrikeOut in AStyle);
     UTF8ToWideChar(lfFaceName,Pointer(aFontName));
   end;
 end;
 
-function TPdfCanvas.SetFont(const AName: RawUTF8; ASize: single; AStyle: TFontStyles;
+function TPdfCanvas.SetFont(const AName: RawUTF8; ASize: single; AStyle: TPdfFontStyles;
   ACharSet: integer=-1; AForceTTF: integer=-1; AIsFixedWidth: boolean=false): TPdfFont;
 const
   STAND_FONTS_PDF: array[0..2] of RawUTF8 = ('Helvetica','Courier','Times');
@@ -6505,12 +6579,12 @@ begin
     FillCharFast(AFont,sizeof(AFont),0);
     with AFont do begin
       lfHeight := -1000;
-      if fsBold in AStyle then
+      if pfsBold in AStyle then
         lfWeight := FW_BOLD else
         lfWeight := FW_NORMAL;
-      lfItalic := Byte(fsItalic in AStyle);
-      lfUnderline := Byte(fsUnderline in AStyle);
-      lfStrikeOut := Byte(fsStrikeOut in AStyle);
+      lfItalic := Byte(pfsItalic in AStyle);
+      lfUnderline := Byte(pfsUnderline in AStyle);
+      lfStrikeOut := Byte(pfsStrikeOut in AStyle);
       lfCharSet := ACharSet;
       UTF8ToWideChar(lfFaceName,Pointer(fDoc.FTrueTypeFonts[FontIndex]));
     end;
@@ -6522,7 +6596,7 @@ begin
 end;
 
 function TPdfCanvas.SetFont(ADC: HDC; const ALogFont: TLogFontW; ASize: single): TPdfFont;
-var AStyle: TFontStyles;
+var AStyle: TPdfFontStyles;
     AName: RawUTF8;
 begin
   // try if the font is already registered
@@ -6534,14 +6608,14 @@ begin
   // font is not existing -> create new
   AName := RawUnicodeToUtf8(ALogFont.lfFaceName,StrLenW(ALogFont.lfFaceName));
   if ALogFont.lfItalic<>0 then
-    AStyle := [fsItalic] else
+    AStyle := [pfsItalic] else
     byte(AStyle) := 0;
   if ALogFont.lfUnderline<>0 then
-    include(AStyle,fsUnderline);
+    include(AStyle,pfsUnderline);
   if ALogFont.lfStrikeOut<>0 then
-    include(AStyle,fsStrikeOut);
+    include(AStyle,pfsStrikeOut);
   if ALogFont.lfWeight>=FW_SEMIBOLD then
-    include(AStyle,fsBold);
+    include(AStyle,pfsBold);
   result := SetFont(AName,ASize,AStyle,ALogFont.lfCharSet,-1,
     ALogFont.lfPitchAndFamily and TMPF_FIXED_PITCH=0);
 end;
@@ -6675,12 +6749,14 @@ begin
     raise EPdfInvalidValue.Create('DrawXObject: no XObject');
   if FPageResources.ValueByName(AXObjectName)=nil then
     FPageResources.AddItem(AXObjectName, XObject);
+  {$ifdef USE_METAFILE}
   if XObject.InheritsFrom(TPdfForm) then
     with TPdfForm(XObject).FFontList do
       for i := 0 to ItemCount-1 do
       with Items[i] do
         if FPageFontList.ValueByName(Key)=nil then
           FPageFontList.AddItem(Key, Value);
+  {$endif USE_METAFILE}
 end;
 
 procedure TPdfCanvas.DrawXObject(X, Y, AWidth, AHeight: Single;
@@ -7690,7 +7766,6 @@ const
   PDF_FONT_SMALL_CAP   = 131072;
   PDF_FONT_FORCE_BOLD  = 262144;
 
-
 function TPdfFontTrueType.FindOrAddUsedWideChar(aWideChar: WideChar): integer;
 var n, i: integer;
     aSymbolAnsiChar: AnsiChar;
@@ -7745,7 +7820,7 @@ begin
 end;
 
 constructor TPdfFontTrueType.Create(ADoc: TPdfDocument; AFontIndex: integer;
-  AStyle: TFontStyles; const ALogFont: TLogFontW; AWinAnsiFont: TPdfFontTrueType);
+  AStyle: TPdfFontStyles; const ALogFont: TLogFontW; AWinAnsiFont: TPdfFontTrueType);
 var W: packed array of TABC;
     c: AnsiChar;
     aFontName: PDFString;
@@ -8558,6 +8633,8 @@ begin
 end;
 
 
+{$ifdef USE_METAFILE}
+
 { TPdfDocumentGDI }
 
 function TPdfDocumentGDI.AddPage: TPdfPage;
@@ -8785,7 +8862,7 @@ type
     // if Canvas.Doc.JPEGCompression<>0, draw not as a bitmap but jpeg encoded
     procedure DrawBitmap(xs,ys,ws,hs, xd,yd,wd,hd,usage: integer;
       Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm; dwRop: DWord;
-      transparent: TColorRef = $FFFFFFFF);
+      transparent: TPdfColorRGB = $FFFFFFFF);
     procedure FillRectangle(const Rect: TRect; ResetNewPath: boolean);
     // the current value set to SetRGBFillColor (rg)
     property FillColor: integer read fFillColor write SetFillColor;
@@ -9412,7 +9489,7 @@ end;
 
 procedure TPdfEnum.DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
   Bmi: PBitmapInfo; bits: pointer; clipRect: PRect; xSrcTransform: PXForm; dwRop: DWord;
-  transparent: TColorRef = $FFFFFFFF);
+  transparent: TPdfColorRGB = $FFFFFFFF);
 var B: TBitmap;
     R: TRect;
     Box, ClipRc: TPdfBox;
@@ -10271,6 +10348,51 @@ begin
 end;
 
 
+{ TPdfForm }
+
+constructor TPdfForm.Create(aDoc: TPdfDocumentGDI; aMetaFile: TMetafile);
+var P: TPdfPageGDI;
+    FResources: TPdfDictionary;
+    W,H: integer;
+    oldPage: TPdfPage;
+begin
+  inherited Create(aDoc,true);
+  W := aMetaFile.Width;
+  H := aMetaFile.Height;
+  P := TPdfPageGDI.Create(nil);
+  try
+    FResources := TPdfDictionary.Create(aDoc.FXref);
+    FFontList := TPdfDictionary.Create(nil);
+    FResources.AddItem('Font',FFontList);
+    FResources.AddItem('ProcSet',TPdfArray.CreateNames(nil,['PDF','Text','ImageC']));
+    with aDoc.FCanvas do begin
+      oldPage := FPage;
+      FPage := P;
+      try
+        FPageFontList := FFontList;
+        FContents := self;
+        FPage.SetPageHeight(H);
+        FFactor := 1;
+        RenderMetaFile(aMetaFile);
+      finally
+        if oldPage<>nil then
+          SetPage(oldPage);
+      end;
+    end;
+    FAttributes.AddItem('Type','XObject');
+    FAttributes.AddItem('Subtype','Form');
+    FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,H,W]));
+    FAttributes.AddItem('Matrix',TPdfRawText.Create('[1 0 0 1 0 0]'));
+    FAttributes.AddItem('Resources',FResources);
+  finally
+    P.Free;
+  end;
+end;
+
+{$endif USE_METAFILE}
+
+{$ifdef USE_BITMAP}
+
 { TPdfImage }
 
 constructor TPdfImage.Create(aDoc: TPdfDocument; aImage: TGraphic; DontAddToFXref: boolean);
@@ -10279,7 +10401,7 @@ var B: TBitmap;
     Pal: PDFString;
     Pals: array of TPaletteEntry;
     CA: TPdfArray;
-    TransparentColor: TColorRef;
+    TransparentColor: TPdfColorRGB;
 procedure NeedBitmap(PF: TPixelFormat);
 begin
   B := TBitmap.Create; // create a temp bitmap (pixelformat may change)
@@ -10457,47 +10579,8 @@ begin
   FAttributes.AddItem('BitsPerComponent',8);
 end;
 
+{$endif USE_BITMAP}
 
-{ TPdfForm }
-
-constructor TPdfForm.Create(aDoc: TPdfDocumentGDI; aMetaFile: TMetafile);
-var P: TPdfPageGDI;
-    FResources: TPdfDictionary;
-    W,H: integer;
-    oldPage: TPdfPage;
-begin
-  inherited Create(aDoc,true);
-  W := aMetaFile.Width;
-  H := aMetaFile.Height;
-  P := TPdfPageGDI.Create(nil);
-  try
-    FResources := TPdfDictionary.Create(aDoc.FXref);
-    FFontList := TPdfDictionary.Create(nil);
-    FResources.AddItem('Font',FFontList);
-    FResources.AddItem('ProcSet',TPdfArray.CreateNames(nil,['PDF','Text','ImageC']));
-    with aDoc.FCanvas do begin
-      oldPage := FPage;
-      FPage := P;
-      try
-        FPageFontList := FFontList;
-        FContents := self;
-        FPage.SetPageHeight(H);
-        FFactor := 1;
-        RenderMetaFile(aMetaFile);
-      finally
-        if oldPage<>nil then
-          SetPage(oldPage);
-      end;
-    end;
-    FAttributes.AddItem('Type','XObject');
-    FAttributes.AddItem('Subtype','Form');
-    FAttributes.AddItem('BBox',TPdfArray.Create(nil,[0,0,H,W]));
-    FAttributes.AddItem('Matrix',TPdfRawText.Create('[1 0 0 1 0 0]'));
-    FAttributes.AddItem('Resources',FResources);
-  finally
-    P.Free;
-  end;
-end;
 
 { TPdfFormWithCanvas }
 
@@ -10533,6 +10616,7 @@ begin
   FreeAndNil(FCanvas);
   FreeAndNil(FPage);
 end;
+
 
 {$ifdef USE_PDFSECURITY}
 
@@ -10744,11 +10828,11 @@ end;
 
 
 initialization
-{$ifdef USE_SYNGDIPLUS}
+  {$ifdef USE_SYNGDIPLUS}
   // initialize the Gdi+ library if necessary
   if Gdip=nil then
     Gdip := TGDIPlus.Create('gdiplus.dll');
-{$endif}
+  {$endif}
 
 finalization
   if (FontSub<>0) and (FontSub<>INVALID_HANDLE_VALUE) then

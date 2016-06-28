@@ -17638,6 +17638,9 @@ type
   // values to be sent for remote secure authentication
   // - should return FALSE if the user pressed cancel or the number of Retry
   // reached a defined limit
+  // - here input/output parameters are defined as plain string, to match the
+  // type expected by the client's User Interface, via VCL properties, or
+  // e.g. from TLoginForm as defined in mORMotUILogin.pas unit
   TOnAuthentificationFailed = function(Retry: integer;
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
   /// called by TSQLRestClientURI.URI() when an error occurred
