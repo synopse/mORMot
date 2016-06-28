@@ -631,6 +631,7 @@ type
     FirstFileHeader: PFileHeader;
     ReadOffset: cardinal;
     procedure UnMap;
+    function UnZipStream(aIndex: integer; const aInfo: TFileInfo; aDest: TStream): boolean;
   public
     /// the number of files inside a .zip archive
     Count: integer;
@@ -654,6 +655,8 @@ type
     function NameToIndex(const aName: TFileName): integer;
     /// uncompress a file stored inside the .zip archive into memory
     function UnZip(aIndex: integer): ZipString; overload;
+    /// uncompress a file stored inside the .zip archive into a stream
+    function UnZip(aIndex: integer; aDest: TStream): boolean; overload;
     /// uncompress a file stored inside the .zip archive into a destination directory
     function UnZip(aIndex: integer; const DestDir: TFileName;
       DestDirIsFileName: boolean=false): boolean; overload;
@@ -1420,12 +1423,37 @@ begin
   end;
 end;
 
+function TZipRead.UnZipStream(aIndex: integer; const aInfo: TFileInfo; aDest: TStream): boolean;
+var crc: cardinal;
+begin
+  result := false;
+  case aInfo.zZipMethod of
+  Z_STORED: begin
+    aDest.Write(Entry[aIndex].data^,aInfo.zfullsize);
+    crc := SynZip.crc32(0,Entry[aIndex].data,aInfo.zfullSize);
+  end;
+  Z_DEFLATED:
+    if UnCompressStream(Entry[aIndex].data,aInfo.zzipsize,aDest,@crc)<>aInfo.zfullsize then
+      exit;
+  else raise ESynZipException.CreateFmt('Unsupported method %d for %s',
+    [aInfo.zZipMethod,Entry[aIndex].zipName]);
+  end;
+  result := crc=aInfo.zcrc32;
+end;
+
+function TZipRead.UnZip(aIndex: integer; aDest: TStream): boolean;
+var info: TFileInfo;
+begin
+  if not RetrieveFileInfo(aIndex,info) then
+    result := false else
+    result := UnZipStream(aIndex,info,aDest);
+end;
+
 function TZipRead.UnZip(aIndex: integer; const DestDir: TFileName;
   DestDirIsFileName: boolean): boolean;
 var FS: TFileStream;
     Path: TFileName;
     info: TFileInfo;
-    CRC: Cardinal;
 begin
   result := false;
   if not RetrieveFileInfo(aIndex,info) then
@@ -1440,21 +1468,10 @@ begin
     end;
   FS := TFileStream.Create(Path,fmCreate);
   try
-    case info.zZipMethod of
-    Z_STORED: begin
-      FS.Write(Entry[aIndex].data^,info.zfullsize);
-      CRC := SynZip.crc32(0,Entry[aIndex].data,info.zfullSize);
-    end;
-    Z_DEFLATED:
-      if UnCompressStream(Entry[aIndex].data,info.zzipsize,FS,@CRC)<>info.zfullsize then
-        exit;
-    else raise ESynZipException.CreateFmt('Unsupported method %d for %s',
-      [info.zZipMethod,Entry[aIndex].zipName]);
-    end;
-    result := CRC=info.zcrc32;
-    if info.zlastMod<>0 then
+    result := UnZipStream(aIndex,info,FS);
+    if result and (info.zlastMod<>0) then
 {$ifdef CONDITIONALEXPRESSIONS}
-  {$WARN SYMBOL_PLATFORM OFF}
+  {$WARN SYMBOL_PLATFORM OFF} // zip expects a Windows timestamp
 {$endif}
       FileSetDate(FS.Handle,info.zlastMod);
 {$ifdef CONDITIONALEXPRESSIONS}
@@ -4878,9 +4895,8 @@ begin
   assert(crc32(0,dst,result)=R.Hi); Z.Free; }
 end;
 
-function UnCompressStream(
-  src: pointer; srcLen: integer; aStream: TStream; checkCRC: PCardinal;
-  ZlibFormat: Boolean): cardinal;
+function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
+  checkCRC: PCardinal; ZlibFormat: Boolean): cardinal;
 // result:=dstLen  checkCRC(<>nil)^:=crc32  (if aStream=nil -> fast crc calc)
 var strm: TZStream;
     code: integer;

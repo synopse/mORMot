@@ -435,7 +435,7 @@ type
   protected
     Data: RawByteString;
     M: THeapMemoryStream;
-    crc: cardinal;
+    crc0,crc1: cardinal;
   public
     /// release used instances and memory
     procedure CleanUp; override;
@@ -7974,7 +7974,7 @@ const
 
 function UpdateCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer) : cardinal;
 var i: integer;
-begin // slowest but always accurate version
+begin // slowest reference version
   result := not aCRC32;
   for i := 1 to inLen do begin
     result := crc32tab[(result xor pByte(inBuf)^) and $ff] xor (result shr 8);
@@ -8004,22 +8004,23 @@ begin
   Z := TSynZipCompressor.Create(M,6,szcfGZ);
   L := length(Data);
   P := Pointer(Data);
-  crc := 0;
+  crc0 := 0;
   crc2 := 0;
   while L<>0 do begin
     if L>1000 then
       n := 1000 else
       n := L;
     Z.Write(P^,n); // compress by little chunks to test streaming
-    crc := crc32(crc,P,n);
+    crc0 := crc32(crc0,P,n);
     crc2 := UpdateCrc32(crc2,P,n);
     inc(P,n);
     dec(L,n);
   end;
-  Check(crc=Z.CRC,'crc32');
-  Check(crc2=crc,'crc32');
+  Check(crc0=Z.CRC,'crc32');
+  Check(crc2=crc0,'crc32');
   Z.Free;
   Check(GZRead(M.Memory,M.Position)=Data);
+  crc1 := crc32(0,M.Memory,M.Position);
   s := Data;
   Check(CompressGZip(s,true)='gzip');
   Check(CompressGZip(s,false)='gzip');
@@ -8052,36 +8053,44 @@ var FN,FN2: TFileName;
 procedure Test(Z: TZipRead; aCount: integer);
 var i: integer;
     tmp: RawByteString;
-    crc: Cardinal;
+    tmpFN: TFileName;
+    info: TFileInfo;
 begin
   with Z do
   try
     Check(Count=aCount);
     i := NameToIndex('REP1\ONE.exe');
     Check(i=0);
+    FillcharFast(info,sizeof(info),0);
+    Check(RetrieveFileInfo(i,info));
+    Check(integer(info.zfullSize)=length(Data));
+    Check(info.zcrc32=crc0);
     Check(UnZip(i)=Data);
     i := NameToIndex('REp2\ident.gz');
     Check(i=1);
-    crc := crc32(0,M.Memory,M.Position);
-    Check(Entry[i].infoLocal^.zcrc32=crc);
+    Check(Entry[i].infoLocal^.zcrc32=crc1);
     tmp := UnZip(i);
     Check(tmp<>'');
-    Check(crc32(0,pointer(tmp),length(tmp))=crc);
+    Check(crc32(0,pointer(tmp),length(tmp))=crc1);
     i := NameToIndex(ExeName);
     Check(i=2);
     Check(UnZip(i)=Data);
-    Check(Entry[i].infoLocal^.zcrc32=crc32(0,pointer(Data),length(Data)));
+    Check(Entry[i].infoLocal^.zcrc32=info.zcrc32);
     i := NameToIndex('REp2\ident2.gz');
     Check(i=3);
-    Check(Entry[i].infoLocal^.zcrc32=crc);
+    Check(Entry[i].infoLocal^.zcrc32=crc1);
     tmp := UnZip(i);
     Check(tmp<>'');
-    Check(crc32(0,pointer(tmp),length(tmp))=crc);
+    Check(crc32(0,pointer(tmp),length(tmp))=crc1);
     if aCount=4 then
       Exit;
     i := NameToIndex('REP1\twO.exe');
     Check(i=4);
     Check(UnZip(i)=Data);
+    tmpFN := 'TestSQL3zipformat.tmp';
+    Check(UnZip('REP1\one.exe',tmpFN,true));
+    Check(StringFromFile(tmpFN)=Data);
+    Check(DeleteFile(tmpFN));
   finally
     Free;
   end;
