@@ -237,7 +237,7 @@ function CompressStream(src: pointer; srcLen: integer;
 /// ZLib INFLATE decompression from memory into a stream
 // - return the number of bytes written into the stream
 // - if checkCRC if not nil, it will contain thecrc32  (if aStream is nil, it will
-// fast calculate the crc of the the uncompressed memory block)
+// only calculate the crc of the the uncompressed memory block)
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
@@ -4615,13 +4615,13 @@ var
 function crc32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // adapted from fast Aleksandr Sharahov version
 asm
-{$ifdef BYFOUR}
   test edx, edx
   jz   @ret
   neg  ecx
   jz   @ret
   not eax
   push ebx
+{$ifdef BYFOUR}
 @head:
   test dl, 3
   jz   @bodyinit
@@ -4634,8 +4634,9 @@ asm
   jnz  @head
   pop  ebx
   not eax
-@ret:
   ret
+@ret:
+  rep ret
 @bodyinit:
   sub  edx, ecx
   add  ecx, 8
@@ -4710,13 +4711,7 @@ asm
   pop ebx
   not eax
 {$else}
-  test edx, edx
-  jz @ret
-  neg ecx
-  jz @ret
-  not eax
   sub edx,ecx
-  push ebx
 @next:
   movzx ebx, byte [edx + ecx]
   xor bl, al
@@ -4726,7 +4721,9 @@ asm
   jnz @next
   pop ebx
   not eax
+  ret
 @ret:
+  db $f3 // rep ret
 {$endif BYFOUR}
 end;
 
@@ -4841,7 +4838,7 @@ function CompressStream(src: pointer; srcLen: integer;
   aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false): cardinal;
 var strm: TZStream;
     code: integer;
-    buf: array[word] of byte;
+    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
 procedure FlushBuf;
 var Count: integer;
 begin

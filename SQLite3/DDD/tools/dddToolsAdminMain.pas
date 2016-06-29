@@ -160,17 +160,19 @@ begin
     exit;
   try
     if fAdmin <> nil then begin
-      exec := fAdmin.DatabaseExecute('', '#info');
-      State.version := fClient.SessionVersion;
       State.raw.Clear;
-      if exec.Content <> '' then begin
-        State.raw.InitJSONInPlace(pointer(exec.Content), JSON_OPTIONS_FAST);
-        State.raw.GetAsRawUTF8('daemon', State.daemon);
-        State.raw.GetAsRawUTF8('version', State.version);
-        State.mem := State.raw.U['memused'];
-        State.clients := State.raw.I['clients'];
-        State.lasttix := GetTickCount64;
-      end;
+      exec := fAdmin.DatabaseExecute('', '#info');
+      if (exec.Content = '') or (exec.Content[1] <> '{') then
+        exec := fAdmin.DatabaseExecute('', '#state'); // backward compatibility
+      State.raw.InitJSONInPlace(pointer(exec.Content), JSON_OPTIONS_FAST);
+      State.raw.GetAsRawUTF8('daemon', State.daemon);
+      if not State.raw.GetAsRawUTF8('version', State.version) then
+        State.version := fClient.SessionVersion;
+      State.mem := State.raw.U['memused'];
+      if State.mem = '' then
+        State.mem := KB(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10);
+      State.clients := State.raw.I['clients'];
+      State.lasttix := GetTickCount64;
     end;
     if Assigned(OnAfterGetState) then
       OnAfterGetState(self);
