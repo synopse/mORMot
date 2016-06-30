@@ -8065,7 +8065,11 @@ type
     procedure AddRawUTF8List(List: TRawUTF8List);
     /// delete a stored RawUTF8 item, and its associated TObject
     // - raise no exception in case of out of range supplied index
-    procedure Delete(Index: PtrInt); virtual;
+    procedure Delete(Index: PtrInt); overload; virtual;
+    /// delete a stored RawUTF8 item, and its associated TObject
+    // - will search for the value using IndexOf(aText), and returns its index
+    // - returns -1 if no entry was found and deleted
+    function Delete(const aText: RawUTF8): PtrInt; overload; virtual;
     /// delete a stored RawUTF8 item, and its associated TObject, from
     // a given Name when stored as 'Name=Value' pairs
     // - raise no exception in case of out of range supplied index
@@ -8219,8 +8223,11 @@ type
     function AddObjectIfNotExisting(const aText: RawUTF8; aObject: TObject;
       wasAdded: PBoolean=nil): PtrInt; override;
     /// find and delete an RawUTF8 item in the stored Strings[] list
+    // - just a wrapper over inherited Delete(aText) using Safe.Lock/Unlock
+    function Delete(const aText: RawUTF8): PtrInt; override;
+    /// find and delete an RawUTF8 item from its Name=... in the stored Strings[] list
     // - just a wrapper over inherited DeleteFromName() using Safe.Lock/Unlock
-    function DeleteFromName(const aText: RawUTF8): PtrInt; override;
+    function DeleteFromName(const Name: RawUTF8): PtrInt; override;
     /// retrieve and delete the first RawUTF8 item in the list
     // - could be used as a FIFO
     // - just a wrapper over inherited PopFirst() using Safe.Lock/Unlock
@@ -49268,6 +49275,13 @@ begin
   Changed;
 end;
 
+function TRawUTF8List.Delete(const aText: RawUTF8): PtrInt;
+begin
+  Result := IndexOf(aText);
+  if Result>=0 then
+    Delete(Result);
+end;
+
 function TRawUTF8List.DeleteFromName(const Name: RawUTF8): PtrInt;
 begin
   Result := IndexOfName(Name);
@@ -50072,11 +50086,25 @@ begin
   end;
 end;
 
-function TRawUTF8ListHashedLocked.DeleteFromName(const aText: RawUTF8): PtrInt;
+function TRawUTF8ListHashedLocked.Delete(const aText: RawUTF8): PtrInt;
 begin
   fSafe.Lock;
   try
-    result := inherited DeleteFromName(aText);
+    result := inherited IndexOf(aText);
+    if result>=0 then
+      inherited Delete(result);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.DeleteFromName(const Name: RawUTF8): PtrInt;
+begin
+  fSafe.Lock;
+  try
+    result := inherited IndexOfName(Name);
+    if result>=0 then
+      inherited Delete(result);
   finally
     fSafe.UnLock;
   end;
