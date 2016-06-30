@@ -4493,6 +4493,7 @@ type
     fLogEvent: TSynLogInfo;
     fClass: TRawUTF8ObjectCacheClass;
     fNextPurgeTix: Int64;
+    fPurgeForceList: TRawUTF8ListHashedLocked;
     fOnKeyResolve: TOnKeyResolve;
     procedure DoPurge; virtual;
     // returns fClass.Create by default: inherited classes may add custom check
@@ -4504,6 +4505,8 @@ type
     constructor Create(aClass: TRawUTF8ObjectCacheClass;
       aSettings: TRawUTF8ObjectCacheSettings; aLog: TSynLogFamily; aLogEvent: TSynLogInfo;
       const aOnKeyResolve: TOnKeyResolve); reintroduce;
+    /// finalize the cache information
+    destructor Destroy; override;
     /// fill TRawUTF8ObjectCache with the matching key information
     // - an unknown key, but with a successful NewObjectCache() call, will
     // create and append a new fClass instance to the list (if onlyexisting
@@ -4516,6 +4519,10 @@ type
     // - if Settings.PurgePeriodMS is reached, each TRawUTF8ObjectCache instance
     // would check for its TimeOutMS and call CacheClear if information is outdated
     procedure TryPurge;
+    /// register a key identifier so that next TryPurge would flush the entry
+    // - a direct CacheClear may trigger a race condition in NewObjectCache:
+    // so you may use this function e.g. from a SOA callback
+    procedure AddToPurge(const Key: RawUTF8); virtual;
     /// this method will clear all associated information
     // - a regular Clear would destroy all TRawUTF8ObjectCache instances,
     // whereas this method would call CacheClear on each entry, so would
@@ -54790,8 +54797,8 @@ begin
   Inst.Instance := CreateInstance(true);
   if Inst.Instance=nil then
     exit;
-  fRest.InternalLog('%.InternalInstanceRetrieve: Adding % instance (id=%)',
-    [ClassType,fInterfaceURI,Inst.InstanceID],sllDebug);
+  fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%)',
+    [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID],sllDebug);
   P := pointer(fInstances);
   for i := 1 to fInstancesCount do
     if P^.InstanceID=0 then begin
@@ -54816,8 +54823,8 @@ begin
       if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
         // deprecated -> mark this entry as empty
         fRest.InternalLog(
-          '%.InternalInstanceRetrieve: Deleted % instance (id=%) after % ms timeout (max % ms)',
-          [ClassType,fInterfaceURI,InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllDebug);
+          '%.InternalInstanceRetrieve: Deleted %(%) instance (id=%) after % ms timeout (max % ms)',
+          [ClassType,fInterfaceURI,pointer(Inst.Instance),InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllDebug);
         SafeFreeInstance(self);
       end;
     if Inst.InstanceID=0 then begin
@@ -55974,6 +55981,13 @@ begin
   fLog := aLog;
   fLogEvent := aLogEvent;
   fOnKeyResolve := aOnKeyResolve;
+  fPurgeForceList := TRawUTF8ListHashedLocked.Create;
+end;
+
+destructor TRawUTF8ObjectCacheList.Destroy;
+begin
+  inherited Destroy;
+  fPurgeForceList.Free;
 end;
 
 procedure TRawUTF8ObjectCacheList.Log(const TextFmt: RawUTF8; const TextArgs: array of const;
@@ -55995,11 +56009,17 @@ procedure TRawUTF8ObjectCacheList.TryPurge;
 begin
   fSafe.Lock;
   try
-    if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
+    if ((fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix)) or
+       (fPurgeForceList.Count > 0) then
       DoPurge;
   finally
     fSafe.UnLock;
   end;
+end;
+
+procedure TRawUTF8ObjectCacheList.AddToPurge(const Key: RawUTF8);
+begin
+  fPurgeForceList.AddIfNotExisting(Key);
 end;
 
 procedure TRawUTF8ObjectCacheList.ForceCacheClear;
@@ -56027,22 +56047,34 @@ procedure TRawUTF8ObjectCacheList.DoPurge;
 var tix: Int64;
     i: integer;
     purged: RawUTF8;
+    tryforcelist: boolean;
     log: ISynLog;
     cache: TRawUTF8ObjectCache;
+  procedure InternalPurge;
+  begin
+    if log = nil then
+      log := fLog.SynLog.Enter('DoPurge(%)', [fClass], self);
+    cache.CacheClear;
+    purged := purged + ' ' + cache.fKey;
+  end;
 begin // called within fSafe.Lock
+  tryforcelist := fPurgeForceList.Count > 0;
   tix := GetTickCount64;
   try
     for i := 0 to fCount - 1 do begin
       cache := TRawUTF8ObjectCache(fObjects[i]);
+      if tryforcelist and (fPurgeForceList.Delete(cache.fKey) >= 0) then
+      try
+        cache.Safe.Lock;
+        InternalPurge;
+      finally
+        cache.Safe.UnLock;
+      end else
       if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then
         try // test again the timeout after acquiring the TRawUTF8ObjectCache lock
           cache.Safe.Lock;
-          if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then begin
-            if log = nil then
-              log := fLog.SynLog.Enter(self);
-            cache.CacheClear; // would set fTimeoutTix := 0
-            purged := purged + ' ' + cache.fKey;
-          end;
+          if (cache.fTimeoutTix > 0) and (tix > cache.fTimeoutTix) then
+            InternalPurge;
         finally
           cache.Safe.UnLock;
         end;
@@ -56064,7 +56096,8 @@ begin
     exit;
   fSafe.Lock;
   try
-    if (fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix) then
+    if ((fNextPurgeTix <> 0) and (GetTickCount64 > fNextPurgeTix)) or
+       (fPurgeForceList.Count > 0) then
       DoPurge;  // inline TryPurge within the locked list
     cache := TRawUTF8ObjectCache(GetObjectByName(Key));
     if cache = nil then begin
