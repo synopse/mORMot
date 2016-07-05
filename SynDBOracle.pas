@@ -211,7 +211,6 @@ type
     fOnPasswordChanged: TNotifyEvent;
     fOnPasswordExpired: TOnPasswordExpired;
     fUseWallet: boolean;
-    fLogSQLWithoutValues: boolean;
     fIgnoreORA01453OnStartTransaction: boolean;
     function GetClientVersion: RawUTF8;
     /// initialize fForeignKeys content with all foreign keys of this DB
@@ -270,8 +269,6 @@ type
     // - see Oracle documentation
     // http://docs.oracle.com/cd/B28359_01/network.111/b28531/authentication.htm#DBSEG97906
     property UseWallet: boolean read fUseWallet write fUseWallet;
-    /// by default, will log values within sllSQL unless this propert is TRUE
-    property LogSQLWithoutValues: boolean read fLogSQLWithoutValues write fLogSQLWithoutValues;
     /// When we execute a SELECT statement across a database link, a transaction lock is placed
     // on the undo segments (transaction is implicity started).
     // Setting this options to true allow to ignore ORA-01453 during
@@ -2657,9 +2654,7 @@ begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   with SynDBLog.Add do
     if sllSQL in Family.Level then begin
-      if (Connection.Properties as TSQLDBOracleConnectionProperties).LogSQLWithoutValues then
-        tmp := SQL else
-        tmp := SQLWithInlinedParams;
+      tmp := SQLWithInlinedParams;
       Log(sllSQL,tmp,self,2048);
     end;
   fTimeElapsed.ProfileCurrentMethod;
