@@ -2934,18 +2934,24 @@ const
   MAXLOGTHREAD = 1 shl MAXLOGTHREADBITS;
 
 procedure TSynLog.GetThreadContextInternal;
+var secondpass: boolean;
 begin // should match TSynLog.ThreadContextRehash
+  secondpass := false;
   fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
     xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
   fThreadIndex := fThreadHash[fThreadLastHash];
-  if fThreadIndex<>0 then
+  if fThreadIndex<>0 then 
     repeat
       fThreadContext := @fThreadContexts[fThreadIndex-1];
       if fThreadContext^.ID=fThreadID then // match found
         exit;
       // hash collision -> try next item in fThreadHash[] if possible
       if fThreadLastHash=MAXLOGTHREAD-1 then
-        fThreadLastHash := 0 else
+        if secondpass then // avoid endless loop -> reuse last fThreadHash[]
+          exit else begin
+          fThreadLastHash := 0;
+          secondpass := true;
+        end else
         inc(fThreadLastHash);
       fThreadIndex := fThreadHash[fThreadLastHash];
     until fThreadIndex=0;
@@ -2966,6 +2972,7 @@ end;
 
 procedure TSynLog.ThreadContextRehash;
 var i, id, hash: integer;
+    secondpass: boolean;
 begin // should match TSynLog.GetThreadContextInternal
   FillcharFast(fThreadHash[0],MAXLOGTHREAD*sizeof(fThreadHash[0]),0);
   for i := 0 to fThreadContextCount-1 do begin
@@ -2974,12 +2981,17 @@ begin // should match TSynLog.GetThreadContextInternal
       continue; // empty slot
     hash := PtrUInt(id xor (id shr MAXLOGTHREADBITS)
       xor (id shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
+    secondpass := false;
     repeat
       if fThreadHash[hash]=0 then
         break;
       // hash collision (no need to check the ID here)
       if hash=MAXLOGTHREAD-1 then
-        hash := 0 else
+        if secondpass then // avoid endless loop
+          break else begin
+          hash := 0;
+          secondpass := true;
+        end else
         inc(hash);
     until false;
     fThreadHash[hash] := i+1;
