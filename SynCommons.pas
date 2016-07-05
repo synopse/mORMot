@@ -8236,6 +8236,9 @@ type
     // - could be used as a FILO
     // - just a wrapper over inherited PopLast() using Safe.Lock/Unlock
     function PopLast(out aText: RawUTF8; aObject: PObject=nil): boolean; override;
+    /// delete all RawUTF8 items in the list
+    // - just a wrapper over inherited Clear using Safe.Lock/Unlock
+    procedure Clear; override;
   end;
 
   /// This class is able to emulate a TStringList with our native UTF-8 string
@@ -50130,6 +50133,16 @@ begin
   end;
 end;
 
+procedure TRawUTF8ListHashedLocked.Clear;
+begin
+  fSafe.Lock;
+  try
+    inherited Clear;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
 
 { TRawUTF8MethodList }
 
@@ -53869,8 +53882,8 @@ end;
 
 
 constructor TSynTableStatement.Create(const SQL: RawUTF8;
-  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits=[0..MAX_SQLFIELDS-1];
-  FieldProp: TSynTableFieldProperties=nil);
+  GetFieldIndex: TSynTableFieldIndex; SimpleFieldsBits: TSQLFieldBits;
+  FieldProp: TSynTableFieldProperties);
 var Prop, whereBefore: RawUTF8;
     P, B: PUTF8Char;
     ndx,err,len,selectCount,whereCount: integer;
@@ -54595,16 +54608,16 @@ begin
           if (Head.Magic<>Magic) or
              (Head.CompressedSize>Count) then
             exit;
-          if Head.CompressedSize>Length(src) then
+          if Head.CompressedSize>length(src) then
             SetString(src,nil,Head.CompressedSize);
-          if dst='' then
-            SetString(dst,nil,Head.UnCompressedSize);
           if S.Read(pointer(src)^,Head.CompressedSize)<>Head.CompressedSize then
             exit;
           dec(Count,Head.CompressedSize);
           if (Hash32(pointer(src),Head.CompressedSize)<>Head.HashCompressed) or
              (SynLZdecompressdestlen(pointer(src))<>Head.UnCompressedSize) then
             exit;
+          if Head.UnCompressedSize>length(dst) then
+            SetString(dst,nil,Head.UnCompressedSize);
           if (SynLZDecompress1(pointer(src),Head.CompressedSize,pointer(dst))<>Head.UnCompressedSize) or
              (Hash32(pointer(dst),Head.UnCompressedSize)<>Head.HashUncompressed) then
             exit;
