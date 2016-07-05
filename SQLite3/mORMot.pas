@@ -8484,6 +8484,10 @@ type
 
 
   /// get a SQL result from a JSON message, and store it into its own memory
+  // - the JSON data is parsed and unescaped in-place, to enhanced performance
+  // and reduce resource consumption (mainly memory/heap fragmentation)
+  // - is used by the ORM for TSQLRecord.FillPrepare/FillOne methods for
+  // fast access to individual object values 
   TSQLTableJSON = class(TSQLTable)
   protected
     /// used if a private copy of the JSON buffer is needed
@@ -17708,13 +17712,16 @@ type
     function FindAndRelease(aID: integer): boolean;
   end;
 
+  /// signature e.g. of the TSQLRestClientURI.OnSetUser event handler
+  TOnRestClientNotify = procedure(Sender: TSQLRestClientURI) of object;
+
   /// a generic REpresentational State Transfer (REST) client with URI
   // - URI are standard Collection/Member implemented as ModelRoot/TableName/TableID
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   TSQLRestClientURI = class(TSQLRestClient)
   protected
     fOnAuthentificationFailed: TOnAuthentificationFailed;
-    fOnSetUser: TNotifyEvent;
+    fOnSetUser: TOnRestClientNotify;
     fMaximumAuthentificationRetry: Integer;
     fRetryOnceOnTimeout: boolean;
     fLastErrorCode: integer;
@@ -18242,11 +18249,12 @@ type
     property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
     // - is called always, on each TSQLRestClientURI.SetUser call
-    // - you can check the SessionUser property to retrieve the current
+    // - you can check the Sender.SessionUser property pointing to the current
     // authenticated user, or nil if authentication failed
     // - could be used to refresh the User Interface layout according to
-    // current authenticated user rights
-    property OnSetUser: TNotifyEvent read fOnSetUser write fOnSetUser;
+    // current authenticated user rights, or to subscribe to some services
+    // via callbacks
+    property OnSetUser: TOnRestClientNotify read fOnSetUser write fOnSetUser;
   end;
 
   /// Rest client with remote access to a server through a dll
@@ -26779,6 +26787,7 @@ begin
         if nrow=0 then // get field name from 1st Row
           fJSONResults[i] := GetJSONPropName(P) else
           P := GotoNextJSONItem(P);  // ignore field name for later rows
+          // warning: field order if not checked, and should be as expected  
         if max>=resmax then begin // check space inside loop for GPF security
           inc(resmax,resmax shr 3+nfield shl 8);
           SetLength(fJSONResults,resmax); // enough space for 256 more rows
@@ -49649,7 +49658,7 @@ begin
   if Sender=nil then
     exit;
   try
-    Sender.SessionClose;
+    Sender.SessionClose;  // ensure Sender.SessionUser=nil
     U := TSQLAuthUser.Create;
     try
       U.LogonName := trim(aUserName);
@@ -49892,7 +49901,7 @@ begin
   if aPasswordKind<>passClear then
     raise ESecurityException.CreateUTF8('%.ClientSetUser(%) expects passClear',
       [self,Sender]);
-  Sender.SessionClose;
+  Sender.SessionClose; // ensure Sender.SessionUser=nil
   try // inherited ClientSetUser() won't fit with Auth() method below
     ClientSetUserHttpOnly(Sender,aUserName,aPassword);
     Sender.fSessionAuthentication := self; // to enable ClientSessionSign()
