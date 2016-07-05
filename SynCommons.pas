@@ -11227,6 +11227,7 @@ type
   TFileVersion = class
   protected
     fDetailed: string;
+    fFileName: TFileName;
     fBuildDateTime: TDateTime;
     /// change the version (not to be used in most cases)
     procedure SetVersion(aMajor,aMinor,aRelease,aBuild: integer);
@@ -11256,9 +11257,14 @@ type
     function Version32: integer;
     /// build date and time of this exe file, as plain text
     function BuildDateTimeString: string;
+    /// returns the version information of this exe file as text
+    // - includes FileName (without path), Detailed and BuildDateTime properties
+    // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
+    function VersionInfo: RawUTF8;
     /// returns the version information of a specified exe file as text
-    // - includes Detailed and BuildDateTime
-    class function GetVersionInfo(const aFileName: TFileName): RawUTF8;
+    // - includes FileName (without path), Detailed and BuildDateTime properties
+    // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
+    class function GetVersionInfo(const aFileName: TFileName): RawUTF8; 
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -31956,6 +31962,7 @@ var M,D: word;
     tmp: TFileName;
 {$endif}
 begin
+  fFileName := aFileName;
   {$ifdef MSWINDOWS}
   if aFileName<>'' then begin
     // GetFileVersionInfo modifies the filename parameter data while parsing.
@@ -32016,11 +32023,16 @@ begin
   DateTimeToIso8601StringVar(fBuildDateTime,' ',result);
 end;
 
+function TFileVersion.VersionInfo: RawUTF8;
+begin
+  FormatUTF8('% % %',[ExtractFileName(fFileName),fDetailed,BuildDateTimeString],result);
+end;
+
 class function TFileVersion.GetVersionInfo(const aFileName: TFileName): RawUTF8;
 begin
   with Create(aFileName,0,0,0,0) do
   try
-    FormatUTF8('% % %',[ExtractFileName(aFileName),Detailed,BuildDateTimeString],result);
+    result := VersionInfo;
   finally
     Free;
   end;
