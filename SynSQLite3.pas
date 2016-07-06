@@ -3573,6 +3573,11 @@ var MI: PFTSMatchInfo;
 begin
   if argc>=1 then begin
     MI := sqlite3.value_blob(argv[0]);
+    // rank(nil) for example select rank(matchinfo(tabName)) without corresponding MATCH clause
+    if MI=nil then begin
+       sqlite3.result_double(Context,0);
+       exit;
+    end;
     if argc=MI^.nCol+1 then begin
       score := 0;
       for p := 1 to MI^.nPhrase do
