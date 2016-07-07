@@ -48459,6 +48459,12 @@ begin
       Add(' ');
     Add(TSQLRecord(Value).fID);
     Add(',');
+    if woIDAsIDstr in Options then begin
+      AddPropName('IDstr');
+      Add('"');
+      Add(TSQLRecord(Value).fID);
+      Add('"',',');
+    end;
   end else begin
     if woStorePointer in Options then begin // "Address":"0431298a" field
       HR;
