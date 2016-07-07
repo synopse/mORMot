@@ -47364,7 +47364,7 @@ end;
 
 procedure InvalidTextLengthMin(min: integer; var result: string);
 begin
-  result := Format(sInvalidTextLengthMin,[1,Character01n(1)]);
+  result := Format(sInvalidTextLengthMin,[min,Character01n(min)]);
 end;
 
 function TSynValidateNonVoidText.Process(aFieldIndex: integer; const Value: RawUTF8;
