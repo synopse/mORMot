@@ -41437,9 +41437,11 @@ begin // this method is faster than default System.DynArraySetLength() function
     OldLength := 0;
   // calculate the needed size of the resulting memory structure on heap
   NeededSize := NewLength*ElemSize+Sizeof(TDynArrayRec);
-  if NeededSize>1024*1024*512 then // max allowed memory block is 512MB
+  {$ifndef CPU64}
+  if NeededSize>1024*1024*1024 then // max workable memory block is 1 GB
     raise ERangeError.CreateFmt('TDynArray SetLength(%s,%d) size concern',
       [PShortString(@PTypeInfo(ArrayType).NameLen)^,NewLength]);
+  {$endif}
   // if not shared (refCnt=1), resize; if shared, create copy (not thread safe)
   if (p=nil) or (p^.refCnt=1) then begin
     if NewLength<OldLength then
