@@ -293,6 +293,7 @@ type
       Compression: boolean;
       Ajax: boolean;
     end;
+    fOnWebSocketsUpgraded: TOnRestClientNotify;
     function InternalCheckOpen: boolean; override;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
@@ -310,17 +311,31 @@ type
     // 'synopsejson' mode, i.e. TWebSocketProtocolJSON (to be used for AJAX
     // debugging/test purposes only)
     // and aWebSocketsEncryptionKey/aWebSocketsCompression parameters won't be used
+    // - once upgraded, the client would automatically re-upgrade any new
+    // HTTP client link on automatic reconnection, so that use of this class
+    // should be not tied to a particular TCP/IP socket - use OnWebsocketsUpgraded
+    // event to perform any needed initialization set, e.g. SOA real-time
+    // callbacks registration
     // - will return '' on success, or an error message on failure
     function WebSocketsUpgrade(const aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
     /// connect using a specified WebSockets protocol
     // - this method would call WebSocketsUpgrade, then ServerTimeStampSynchronize
-    // - it therefore expects SetUser() to have been previously called 
+    // - it therefore expects SetUser() to have been previously called
     function WebSocketsConnect(const aWebSocketsEncryptionKey: RawUTF8;
       aWebSocketsAJAX: boolean=false; aWebSocketsCompression: boolean=true): RawUTF8;
     /// internal HTTP/1.1 and WebSockets compatible client
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
+    /// this event would be executed just after the HTTP client has been
+    // upgraded to the expected WebSockets protocol
+    // - supplied Sender parameter will be this TSQLHttpClientWebsockets instance
+    // - it will be executed the first time, and also on each reconnection
+    // occuring when the HTTP-TCP/IP link is re-created, and user re-authenticated
+    // - this event handler is the right place to setup link-driven connection,
+    // e.g. SOA real-time callbacks registration (using Sender.Services)
+    property OnWebSocketsUpgraded: TOnRestClientNotify
+      read fOnWebSocketsUpgraded write fOnWebSocketsUpgraded;
   end;
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
@@ -761,12 +776,14 @@ begin
     result := 'Impossible to connect to the Server' else begin
     result := sockets.WebSocketsUpgrade(Model.Root,
       aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompression);
-    if result='' then
+    if result='' then // no error message = success
       with fWebSocketParams do begin // store parameters for auto-reconnection
         AutoUpgrade := true;
         Key := aWebSocketsEncryptionKey;
         Compression := aWebSocketsCompression;
         Ajax := aWebSocketsAJAX;
+        if Assigned(fOnWebSocketsUpgraded) then
+          fOnWebSocketsUpgraded(self);
       end;
   end;
 {$ifdef WITHLOG}
