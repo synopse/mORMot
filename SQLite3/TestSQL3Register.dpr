@@ -1,4 +1,4 @@
-{{ in order to be able to use http.sys server for TestSQL3.exe under
+{ in order to be able to use http.sys server for TestSQL3.exe under
    Vista or Seven, call first this program with Administrator rights
   - you can unregister it later with command line parameter /delete }
 program TestSQL3Register;

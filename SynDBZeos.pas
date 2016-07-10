@@ -55,6 +55,7 @@ unit SynDBZeos;
   - PostgreSQL array binding for select statements like
      SELECT usr.ID, usr.name FROM user usr WHERE usr.ID = ANY(?)
      work with all ZEOS versions
+}
 (*
   Note:
   - if you want to work as expected with SQlite3 backend (but how would need to
@@ -114,10 +115,10 @@ end;
 
 *)
 
-{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
-
 {$I Zeos.inc} // define conditionals like ZEOS72UP and ENABLE_*
 // for best performance: tune your project options or Zeos.inc to define USE_SYNCOMMONS
+
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
