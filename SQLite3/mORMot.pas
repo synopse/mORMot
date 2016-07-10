@@ -48460,7 +48460,7 @@ begin
     Add(TSQLRecord(Value).fID);
     Add(',');
     if woIDAsIDstr in Options then begin
-      AddPropName('IDstr');
+      AddPropName('ID_str');
       Add('"');
       Add(TSQLRecord(Value).fID);
       Add('"',',');

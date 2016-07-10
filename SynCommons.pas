@@ -6800,7 +6800,7 @@ type
   // - TTimeLog would be serialized as Int64, unless woTimeLogAsText is defined
   // - since TSQLRecord.ID could be huge Int64 numbers, they may be truncated
   // on client side, e.g. to 53-bit range in JavaScript: you could define
-  // woIDAsIDstr to append an additional "IDstr":"##########" field 
+  // woIDAsIDstr to append an additional "ID_str":"##########" field 
   // - by default, TSQLRawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
