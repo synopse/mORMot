@@ -8773,7 +8773,7 @@ Then we can use an interface:
 !function MyAdd(a,b: integer): integer;
 !var Calculator: ICalculator;
 !begin
-!  ICalculator := TServiceCalculator.Create;
+!  Calculator := TServiceCalculator.Create;
 !  result := Calculator.Add(a,b);
 !end;
 What's up over there?
@@ -8814,7 +8814,7 @@ Here the computation is not the same: we use {\f1\fs20 n2+n1} instead of {\f1\fs
 !function MyOtherAdd(a,b: integer): integer;
 !var Calculator: ICalculator;
 !begin
-!!  ICalculator := TOtherServiceCalculator.Create;
+!!  Calculator := TOtherServiceCalculator.Create;
 !  result := Calculator.Add(a,b);
 !end;
 :  Here comes the magic

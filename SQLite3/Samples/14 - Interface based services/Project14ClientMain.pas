@@ -1,5 +1,14 @@
 unit Project14ClientMain;
 
+{
+
+ By definition, you need the proper server to run:
+ - Project14Server.dpr for Named Pipes
+ - Project14ServerHttp.dpr for HTTP
+ - Project14ServerHttpWeak.dpr for HTTP/weak
+
+}
+
 interface
 
 uses
