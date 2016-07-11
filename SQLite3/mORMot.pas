@@ -45857,12 +45857,13 @@ const
 var i: integer;
 begin
   if aClassType<>nil then begin
-    aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
-    if aCustomIndex>=0 then begin
-      result := oCustom; // found exact custom type (ignore inherited)
-      exit;
-    end;
-    repeat // guess class type (faster than multiple InheritsFrom calls)
+   repeat // guess class type (faster than multiple InheritsFrom calls) 
+     aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
+      if aCustomIndex>=0 then begin
+        result := oCustom; // found exact custom type (ignore inherited)
+        exit;
+      end;
+ 
       i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
       if i>=0 then begin
         result := OBJ[i];
