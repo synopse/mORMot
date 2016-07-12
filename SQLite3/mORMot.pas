@@ -3358,6 +3358,10 @@ type
     // - it will raise an EORMException in case of an unhandled type
     class function CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
       aOptions: TSQLPropInfoListOptions; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
+    /// register this class corresponding to the RTTI TypeInfo() pointer
+    // - could be used e.g. to define custom serialization and process of
+    // any custom type
+    class procedure RegisterTypeInfo(aTypeInfo: Pointer);
     /// initialize the internal fields
     // - should not be called directly, but with dedicated class methods like
     // class function CreateFrom()
@@ -19310,7 +19314,6 @@ var
   SetThreadNameLog: TSynLogClass = TSQLLog; 
 {$endif}
 
-
 implementation
 
 uses
@@ -19323,7 +19326,6 @@ uses
   {$endif}
   {$endif}
   SynCrypto; // for TSQLRecordSigned and authentication
-
 
 // ************ some RTTI and SQL mapping routines
 
@@ -20223,6 +20225,17 @@ end;
 
 { TSQLPropInfoRTTI }
 
+var
+  SQLPropInfoRegistration: TSynDictionary = nil;
+
+class procedure TSQLPropInfoRTTI.RegisterTypeInfo(aTypeInfo: Pointer);
+begin
+  if SQLPropInfoRegistration=nil then
+    GarbageCollectorFreeAndNil(SQLPropInfoRegistration,
+     TSynDictionary.Create(TypeInfo(TPointerDynArray),TypeInfo(TPointerDynArray)));
+  SQLPropInfoRegistration.AddOrUpdate(aTypeInfo,self);
+end;
+
 class function TSQLPropInfoRTTI.CreateFrom(aPropInfo: PPropInfo; aPropIndex: integer;
   aOptions: TSQLPropInfoListOptions; const aFlattenedProps: PPropInfoDynArray): TSQLPropInfo;
 var aSQLFieldType: TSQLFieldType;
@@ -20261,6 +20274,8 @@ begin
   if result=nil then begin
     aSQLFieldType := aType^.GetSQLFieldType;
     C := nil;
+    if (SQLPropInfoRegistration=nil) or
+       not SQLPropInfoRegistration.FindAndCopy(aType,C) then
     case aSQLFieldType of
       sftUnknown, sftBlobCustom:
         ; // will raise an EORMException
