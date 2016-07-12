@@ -8276,9 +8276,9 @@ type
   // - if the implementation method returns FALSE, will stop values browsing
   TSynDictionaryEvent = function(const aKey, aValue; aIndex,aCount: integer): boolean of object;
 
-  /// dictionary to store any values with an associated key
+  /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
-  // array for the keys, so that saving or retrieving values would be O(1)
+  // array for the keys, so that setting or retrieving values would be O(1)
   // - all process would be protected by a TSynLocker, so would be thread-safe
   // - TDynArray is a wrapper which do not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
@@ -8307,8 +8307,8 @@ type
     function Add(const aKey, aValue): integer;
     /// store a value associated with a primary key
     // - returns the index of the matching item
-    // - if aKey did not exist, a new entry is added
-    // - if aKey did exist, the existing entry is overriden with aValue
+    // - if aKey does not exist, a new entry is added
+    // - if aKey does exist, the existing entry is overriden with aValue
     // - this method is thread-safe, since it would lock the instance
     function AddOrUpdate(const aKey, aValue): integer;
     /// clear the value associated via aKey
@@ -10121,7 +10121,13 @@ type
    cfSSE3, cfCLMUL, cfDS64, cfMON, cfDSCPL, cfVMX, cfSMX, cfEST,
    cfTM2, cfSSSE3, cfCID, cfSDBG, cfFMA, cfCX16, cfXTPR, cfPDCM,
    cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
-   cf_TSC, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP);
+   cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
+   { extended features in EBX, ECX }
+   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP, cfBMI2,
+   cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE, cfAVX512F,
+   cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
+   cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD,
+   cfSHA, cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI);
 
   /// all features, as retrieved from an Intel CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -29436,6 +29442,7 @@ asm
   jz @nocpuid
   push ebx
   mov eax,edi
+  xor ecx,ecx
   {$ifdef DELPHI5OROLDER}
   db $0f,$a2
   {$else}
@@ -34291,10 +34298,10 @@ begin
   {$else}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
-    if cfSSE42 in CpuFeatures then
-      StrLen := @StrLenSSE42 else
+  if cfSSE42 in CpuFeatures then
+    StrLen := @StrLenSSE42 else
   {$endif}
-      StrLen := @StrLenSSE2;
+    StrLen := @StrLenSSE2;
   FillcharFast := @FillCharSSE2;
   //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
   {$else}
@@ -56792,6 +56799,9 @@ begin
   GetCPUID(1,regs);
   PIntegerArray(@CpuFeatures)^[0] := regs.edx;
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
+  GetCPUID(7,regs);
+  PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
+  PByteArray(@CpuFeatures)^[12] := regs.ecx;
 end;
 {$endif CPUINTEL}
 
