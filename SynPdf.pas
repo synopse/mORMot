@@ -407,7 +407,9 @@ uses
   System.Types,
   System.AnsiStrings,
   {$else}
+  {$ifdef HASINLINE}
   Types,
+  {$endif}
   {$endif}
   {$ifdef USE_SYNZIP}
   SynZip,
