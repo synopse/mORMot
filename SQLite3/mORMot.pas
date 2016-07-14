@@ -28780,15 +28780,14 @@ end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td: PTypeData;
+var td: PInterfaceTypeData;
 {$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
     begin
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      td := GetTypeData(@Self);
+      td := PInterfaceTypeData(pointer(GetTypeData(@Self)));
       with td^ do
       {$else}
       with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
