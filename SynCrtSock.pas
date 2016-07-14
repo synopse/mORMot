@@ -3284,11 +3284,14 @@ begin
     exit;
   if (Buffer<>nil) and (Length>0) then begin
     endtime := GetTickCount+TimeOut;
-    repeat
+    repeat                                         
       Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
-      if Size<=0 then
+      if Size<=0 then begin
+        if Size=0 then
+          Close; // socket closed gracefully (otherwise SOCKET_ERROR=-1) 
         exit;
+      end;
       inc(fBytesIn,Size);
       dec(Length,Size);
       inc(PByte(Buffer),Size);

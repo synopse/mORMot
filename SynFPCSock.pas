@@ -649,7 +649,7 @@ begin
     sleep(1);
   until GetTickCount64>maxTicks;
   writeln('errno Send()=',errno);
-  result := -1; // error
+  result := SOCKET_ERROR; 
 end;
 
 function Recv(s: TSocket; Buf: pointer; len,flags,timeout: Integer): Integer;
@@ -671,7 +671,7 @@ begin
     sleep(1);
   until GetTickCount64>maxTicks;
   writeln('errno Recv()=',errno);
-  result := -1; // error
+  result := SOCKET_ERROR;
 end;
 
 function SendTo(s: TSocket; Buf: pointer; len,flags: Integer; addrto: TVarSin): Integer;
