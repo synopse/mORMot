@@ -1025,8 +1025,9 @@ begin
       GetFileTime(S.Handle,nil,nil,@Time);
       FileTimeToLocalFileTime(Time,Time);
       FileTimeToDosDateTime(Time,FileTime.Hi,FileTime.Lo);
-    {$else}
-        ZipName := StringReplace(aFileName,'/','\',[rfReplaceAll]);
+      ZipName := StringReplace(aFileName,'\','/',[rfReplaceAll]);
+      if (Length(ZipName) >= 2) and (ZipName[2]=':') then
+        Delete(ZipName, 2,1); //replace drive letter by 1 letter dir
     {$endif}
     Size := S.Size;
     if Size64.Hi<>0 then
