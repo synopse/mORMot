@@ -206,11 +206,12 @@ type
   public
     /// connect to TSQLHttpServer on aServer:aPort
     // - you can customize the default client timeouts by setting appropriate
-    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms)
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
+    // you left the 0 default parameters, it would use global
+    // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
+    // HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
-      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); reintroduce; overload; virtual;
+      SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); reintroduce; overload; virtual;
     /// connect to TSQLHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
@@ -359,29 +360,25 @@ type
   public
     /// connect to TSQLHttpServer on aServer:aPort with the default settings
     // - you can customize the default client timeouts by setting appropriate
-    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - note
-    // that after creation of this instance, the connection is tied to those
-    // initial parameters, so we won't publish any properties to change those
-    // initial values once created
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
+    // you left the 0 default parameters, it would use global
+    // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
+    // HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
-      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); overload; override;
+      SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); overload; override;
     /// connect to TSQLHttpServer on aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
     // IP addresses, or both, that should not be routed through the proxy
     // - you can customize the default client timeouts by setting appropriate
-    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - note
-    // that after creation of this instance, the connection is tied to those
-    // initial parameters, so we won't publish any properties to change those
-    // initial values once created
+    // ConnectTimeout, SendTimeout and ReceiveTimeout parameters (in ms) - if
+    // you left the 0 default parameters, it would use global
+    // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
+    // HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
       aHttps: boolean; const aProxyName: AnsiString='';
-      const aProxyByPass: AnsiString='';
-      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT;
-      ConnectTimeout: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT); reintroduce; overload;
+      const aProxyByPass: AnsiString=''; SendTimeout: DWORD=0;
+      ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); reintroduce; overload;
     /// internal class instance used for the connection
     // - will return either a TWinINet, a TWinHTTP or a TCurlHTTP class instance
     property Request: THttpRequest read fRequest;
@@ -535,9 +532,15 @@ begin
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ]; // may add hcDeflate for AJAX clients
-  fConnectTimeout := ConnectTimeout;
-  fSendTimeout := SendTimeout;
-  fReceiveTimeout := ReceiveTimeout;
+  if ConnectTimeout=0 then
+    fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT else
+    fConnectTimeout := ConnectTimeout;
+  if SendTimeout=0 then
+    fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT else
+    fSendTimeout := SendTimeout;
+  if ReceiveTimeout=0 then
+    fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT else
+    fReceiveTimeout := ReceiveTimeout;
 end;
 
 constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
@@ -824,9 +827,15 @@ begin
   fHttps := aHttps;
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
-  fSendTimeout := SendTimeout;
-  fReceiveTimeout := ReceiveTimeout;
-  fConnectTimeout := ConnectTimeout;
+  if ConnectTimeout=0 then
+    fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT else
+    fConnectTimeout := ConnectTimeout;
+  if SendTimeout=0 then
+    fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT else
+    fSendTimeout := SendTimeout;
+  if ReceiveTimeout=0 then
+    fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT else
+    fReceiveTimeout := ReceiveTimeout;
 end;
 
 constructor TSQLHttpClientRequest.Create(const aServer,

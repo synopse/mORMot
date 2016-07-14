@@ -280,22 +280,26 @@ const
   // - should match NORESPONSE_CONTENT_TYPE constant defined in mORMot.pas unit
   HTTP_RESP_NORESPONSE = '!NORESPONSE';
 
+var
   /// THttpRequest timeout default value for DNS resolution
   // - leaving to 0 will let system default value be used
-  HTTP_DEFAULT_RESOLVETIMEOUT = 0;
+  HTTP_DEFAULT_RESOLVETIMEOUT: integer = 0;
   /// THttpRequest timeout default value for remote connection
   // - default is 60 seconds
-  HTTP_DEFAULT_CONNECTTIMEOUT = 60000;
+  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
+  HTTP_DEFAULT_CONNECTTIMEOUT: integer = 60000;
   /// THttpRequest timeout default value for data sending
   // - default is 30 seconds
+  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
-  HTTP_DEFAULT_SENDTIMEOUT = 30000;
+  HTTP_DEFAULT_SENDTIMEOUT: integer = 30000;
   /// THttpRequest timeout default value for data receiving
   // - default is 30 seconds
+  // - used e.g. by THttpRequest, TSQLHttpClientRequest and TSQLHttpClientGeneric
   // - you can override this value by setting the corresponding parameter in
   // THttpRequest.Create() constructor
-  HTTP_DEFAULT_RECEIVETIMEOUT = 30000;
+  HTTP_DEFAULT_RECEIVETIMEOUT: integer = 30000;
 
 type
 {$ifdef UNICODE}
@@ -1546,13 +1550,13 @@ type
     // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
     // creation of this instance, the connection is tied to the initial
     // parameters, so we won't publish any properties to change those
-    // initial values once created
+    // initial values once created - if you left the 0 default parameters, it
+    // would use global HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT
+    // and HTTP_DEFAULT_RECEIVETIMEOUT variable values
     // - aProxyName and *TimeOut parameters are currently ignored by TCurlHttp
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
-      ConnectionTimeOut: DWORD=HTTP_DEFAULT_CONNECTTIMEOUT;
-      SendTimeout: DWORD=HTTP_DEFAULT_SENDTIMEOUT;
-      ReceiveTimeout: DWORD=HTTP_DEFAULT_RECEIVETIMEOUT); virtual;
+      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0); virtual;
 
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
@@ -6801,8 +6805,8 @@ begin
   result := RegisterCompressFunc(fCompress,aFunction,fCompressAcceptEncoding,aCompressMinSize)<>'';
 end;
 
-constructor THttpRequest.Create(const aServer, aPort: SockString; aHttps: boolean;
-  const aProxyName,aProxyByPass: SockString;
+constructor THttpRequest.Create(const aServer, aPort: SockString;
+  aHttps: boolean; const aProxyName,aProxyByPass: SockString;
   ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 begin
   fPort := GetCardinal(pointer(aPort));
@@ -6815,6 +6819,12 @@ begin
   fProxyName := aProxyName;
   fProxyByPass := aProxyByPass;
   fUserAgent := DefaultUserAgent(self);
+  if ConnectionTimeOut=0 then
+    ConnectionTimeOut := HTTP_DEFAULT_CONNECTTIMEOUT;
+  if SendTimeout=0 then
+    SendTimeout := HTTP_DEFAULT_SENDTIMEOUT;
+  if ReceiveTimeout=0 then
+    ReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
   InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout); // raise an exception on error
 end;
 
