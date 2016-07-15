@@ -719,7 +719,10 @@ type
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
-    constructor Create(aTimeOut: cardinal=10000); override;
+    // - you can customize the default client timeouts by setting appropriate
+    // aTimeout parameters (in ms) if you left the 0 default parameters,
+    // it would use global HTTP_DEFAULT_RECEIVETIMEOUT variable values
+    constructor Create(aTimeOut: cardinal=0); override;
     /// low-level HTTP/1.1 request
     // - called by all Get/Head/Post/Put/Delete REST methods
     // - after an Open(server,port), return 200,202,204 if OK, http status error otherwise
@@ -3476,6 +3479,8 @@ end;
 
 constructor THttpClientSocket.Create(aTimeOut: cardinal);
 begin
+  if aTimeOut=0 then
+    aTimeOut := HTTP_DEFAULT_RECEIVETIMEOUT;
   inherited Create(aTimeOut);
   UserAgent := DefaultUserAgent(self);
 end;
