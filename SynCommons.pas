@@ -3918,6 +3918,32 @@ type
 function MultiPartFormDataDecode(const MimeType,Body: RawUTF8;
   var MultiPart: TMultiPartDynArray): boolean;
 
+/// encode multipart fields and files
+// - only one of them can be used because MultiPartFormDataDecode must implement
+// both decodings
+// - MultiPart: parts to build the multipart content from, which may be created
+// using MultiPartFormDataAddFile/MultiPartFormDataAddField
+// - MultiPartContentType: variable returning
+// $ Content-Type: multipart/form-data; boundary=xxx
+// where xxx is the first generated boundary
+// - MultiPartContent: generated multipart content
+function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
+  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+
+/// encode a file in a multipart array
+// - FileName: file to encode
+// - Multipart: where the part is added
+// - Name: name of the part, is empty the name 'File###' is generated
+function MultiPartFormDataAddFile(const FileName: TFileName;
+  var MultiPart: TMultiPartDynArray; const Name: RawUTF8 = ''): boolean;
+
+/// encode a field in a multipart array
+// - FieldName: field name of the part
+// - FieldValue: value of the field
+// - Multipart: where the part is added
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive (so will work with any PAnsiChar)
@@ -30887,7 +30913,7 @@ procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 var i: integer;
     c: cardinal;
 begin
-  c := GetTickCount64+Random(maxInt);
+  c := GetTickCount64+Random(maxInt)+GetCurrentThreadID;
   for i := 0 to CardinalCount-1 do begin
     c := c xor crc32ctab[0,(c+cardinal(i)) and 1023];
     Dest^[i] := Dest^[i] xor c;
@@ -31581,9 +31607,12 @@ begin
     P := PUTF8Char(Pointer(Body))+i-1;
     Finalize(part);
     repeat
-      if IdemPCharAndGetNextItem(P,
-         'CONTENT-DISPOSITION: FORM-DATA; NAME="',part.Name,'"') then
-        IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else
+      if IdemPChar(P, 'CONTENT-DISPOSITION: ') then begin
+        inc(P,21);
+        if IdemPCharAndGetNextItem(P,'FORM-DATA; NAME="',part.Name,'"') then
+          IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else
+          IdemPCharAndGetNextItem(P,'FILE; FILENAME="',part.FileName,'"')
+      end else
       if not IdemPCharAndGetNextItem(P,'CONTENT-TYPE: ',part.ContentType) then
          IdemPCharAndGetNextItem(P,'CONTENT-TRANSFER-ENCODING: ',part.Encoding);
       GetNextLineBegin(P,P);
@@ -31612,6 +31641,108 @@ begin
     result := true;
     i := j;
   until false;
+end;
+
+function MultiPartFormDataEncode(const MultiPart: TMultiPartDynArray;
+  var MultiPartContentType, MultiPartContent: RawUTF8): boolean;
+var len, boundcount, filescount, i: integer;
+    boundaries: array of RawUTF8;
+    bound: RawUTF8;
+    W: TTextWriter;
+  procedure NewBound;
+  var random: array[1..3] of cardinal;
+  begin
+    FillRandom(@random,3);
+    bound := BinToBase64(@random,sizeof(Random));
+    SetLength(boundaries,boundcount+1);
+    boundaries[boundcount] := bound;
+    inc(boundcount);
+  end;
+begin
+  result := false;
+  len := length(MultiPart);
+  if len=0 then
+    exit;
+  boundcount := 0;
+  filescount := 0;
+  W := TTextWriter.CreateOwnedStream;
+  try
+    // header multipart
+    NewBound;
+    MultiPartContentType := 'Content-Type: multipart/form-data; boundary='+bound;
+    for i := 0 to len-1 do
+    with MultiPart[i] do begin
+      if FileName='' then
+        W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10+
+          'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
+          [bound,Name,ContentType,Content,bound]) else begin
+        // if this is the first file, create the header for files
+        if filescount=0 then begin
+          if i>0 then
+            NewBound;
+          W.Add('Content-Disposition: form-data; name="files"'#13#10+
+            'Content-Type: multipart/mixed; boundary=%'#13#10#13#10,[bound]);
+        end;
+        inc(filescount);
+        W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10+
+          'Content-Type: %'#13#10,[bound,FileName,ContentType]);
+        if Encoding<>'' then
+          W.Add('Content-Transfer-Encoding: %'#13#10,[Encoding]);
+        W.AddCR;
+        W.AddString(MultiPart[i].Content);
+        W.Add(#13#10'--%'#13#10,[bound]);
+      end;
+    end;
+    // footer multipart
+    for i := boundcount-1 downto 0 do
+      W.Add('--%--'#13#10, [boundaries[i]]);
+    W.SetText(MultiPartContent);
+    result := True;
+  finally
+    W.Free;
+  end;
+end;
+
+function MultiPartFormDataAddFile(const FileName: TFileName;
+  var MultiPart: TMultiPartDynArray; const Name: RawUTF8): boolean;
+var part: TMultiPart;
+    newlen: integer;
+    content: RawByteString;
+begin
+  result := false;
+  content := StringFromFile(FileName);
+  if content='' then
+    exit;
+  newlen := length(MultiPart)+1;
+  if Name='' then
+    FormatUTF8('File%',[newlen],part.Name) else
+    part.Name := Name;
+  part.FileName := StringToUTF8(ExtractFileName(FileName));
+  part.ContentType := GetMimeContentType(pointer(content),length(content),FileName);
+  part.Encoding := 'base64';
+  part.Content := BinToBase64(content);
+  SetLength(MultiPart,newlen);
+  MultiPart[newlen-1] := part;
+  result := true;
+end;
+
+function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
+  var MultiPart: TMultiPartDynArray): boolean;
+var
+  part: TMultiPart;
+  newlen: integer;
+begin
+  result := false;
+  if FieldName='' then
+    exit;
+  newlen := length(MultiPart)+1;
+  part.Name := FieldName;
+  part.ContentType := GetMimeContentTypeFromBuffer(
+    pointer(FieldValue),length(FieldValue),'text/plain');
+  part.Content := FieldValue;
+  SetLength(MultiPart,newlen);
+  MultiPart[newlen-1] := part;
+  result := true;
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
