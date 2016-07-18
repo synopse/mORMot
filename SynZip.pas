@@ -1402,7 +1402,7 @@ function DirectoryExists(const Directory: string): boolean;
 var Code: Integer;
 begin
   Code := GetFileAttributes(PChar(Directory));
-  Result := (Code <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
+  result := (Code <> -1) and (FILE_ATTRIBUTE_DIRECTORY and Code <> 0);
 end;
 {$endif}
 
@@ -1578,7 +1578,7 @@ function get_crc_table: pointer; cdecl; external libz name 'get_crc_table';
 
 function zlibAllocMem(AppData: Pointer; Items, Size: cardinal): Pointer; cdecl;
 begin
-  Getmem(Result,Items * Size);
+  Getmem(result,Items * Size);
 end;
 
 procedure zlibFreeMem(AppData, Block: Pointer);  cdecl;
@@ -2098,7 +2098,7 @@ end;
 
 function zsalloc(AppData: Pointer; Items, Size: cardinal): Pointer; stdcall;
 begin // direct use of the (FastMM4) delphi heap for all inflate memory allocation
-  Getmem(Result,Items * Size);
+  Getmem(result,Items * Size);
 end;
 
 procedure zsfree(AppData, Block: Pointer); stdcall;
@@ -4748,7 +4748,7 @@ end;
 
 function zcalloc(AppData: Pointer; Items, Size: cardinal): Pointer;
 begin // direct use of the (FastMM4) delphi heap for all zip memory allocation
-  Getmem(Result,Items * Size);
+  Getmem(result,Items * Size);
 end;
 
 procedure zcfree(AppData, Block: Pointer);
@@ -5148,12 +5148,12 @@ end;
 
 function TSynZipCompressor.FlushBufferOut: integer;
 begin
-  Result := 0;
+  result := 0;
   if not FInitialized then
     exit;
   if FStrm.avail_out < SizeOf(FBufferOut) then begin
-    Result := SizeOf(FBufferOut) - FStrm.avail_out;
-    FDestStream.Write(FBufferOut, Result);
+    result := SizeOf(FBufferOut) - FStrm.avail_out;
+    FDestStream.Write(FBufferOut, result);
     FStrm.next_out := @FBufferOut;
     FStrm.avail_out := SizeOf(FBufferOut);
   end;
@@ -5170,7 +5170,7 @@ begin
   if not FInitialized then
     result := 0 else
   if (Offset = 0) and (Origin = soFromCurrent) then // for TStream.Position
-      result := FStrm.total_in else begin
+    result := FStrm.total_in else begin
     result := 0;
     assert((Offset = 0) and (Origin = soFromBeginning) and (FStrm.total_in = 0));
   end;
