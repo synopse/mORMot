@@ -3494,7 +3494,7 @@ begin
   if (self<>nil) and (sllInfo in fFamily.fLevel) then
     if LogHeaderLock(sllInfo,false) then // inlined LogInternal
     try
-      fWriter.Add('SetThreadName %=%',[fThreadID,Name],twOnSameLine);
+      fWriter.Add('SetThreadName %=%',[pointer(fThreadID),Name],twOnSameLine);
       fThreadContext^.ThreadName := Name;
     finally
       LogTrailerUnLock(sllInfo);
