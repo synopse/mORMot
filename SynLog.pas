@@ -385,6 +385,8 @@ type
   TSynLogRotateEvent = function(aLog: TSynLog; const aOldLogFileName: TFileName): boolean;
 
   /// how threading is handled by the TSynLogFamily
+  // - proper threading expects the TSynLog.NotifyThreadEnded method to be called
+  // when a thread is about to terminate, e.g. from TSQLRest.EndCurrentThread
   // - by default, ptMergedInOneFile will indicate that all threads are logged
   // in the same file, in occurence order
   // - if set to ptOneFilePerThread, it will create one .log file per thread
@@ -393,8 +395,12 @@ type
   // display per-thread logging, if needed - note that your application shall
   // use a thread pool (just like all mORMot servers classes do), otherwise
   // some random hash collision may occur if Thread IDs are not recycled enough
+  // - if set to ptNoThreadProcess, no thread information is gathered, and all
+  // Enter/Leave would be merged into a single call - but it may be mandatory
+  // to use this option if TSynLog.NotifyThreadEnded is not called (e.g. from
+  // legacy code), and that your process experiment instability issues
   TSynLogPerThreadMode = (
-    ptMergedInOneFile, ptOneFilePerThread, ptIdentifiedInOnFile);
+    ptMergedInOneFile, ptOneFilePerThread, ptIdentifiedInOnFile, ptNoThreadProcess);
 
   /// how stack trace shall be computed during logging
   TSynLogStackTraceUse = (stManualAndAPI,stOnlyAPI,stOnlyManual);
@@ -2936,36 +2942,39 @@ const
 procedure TSynLog.GetThreadContextInternal;
 var secondpass: boolean;
 begin // should match TSynLog.ThreadContextRehash
-  secondpass := false;
-  fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
-    xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
-  fThreadIndex := fThreadHash[fThreadLastHash];
-  if fThreadIndex<>0 then 
-    repeat
-      fThreadContext := @fThreadContexts[fThreadIndex-1];
-      if fThreadContext^.ID=fThreadID then // match found
-        exit;
-      // hash collision -> try next item in fThreadHash[] if possible
-      if fThreadLastHash=MAXLOGTHREAD-1 then
-        if secondpass then // avoid endless loop -> reuse last fThreadHash[]
-          exit else begin
-          fThreadLastHash := 0;
-          secondpass := true;
-        end else
-        inc(fThreadLastHash);
-      fThreadIndex := fThreadHash[fThreadLastHash];
-    until fThreadIndex=0;
-  // here we know that fThreadIndex=fThreadHash[hash]=0 -> register the thread
-  if fThreadIndexReleasedCount>0 then begin // reuse NotifyThreadEnded() index
-    dec(fThreadIndexReleasedCount);
-    fThreadIndex := fThreadIndexReleased[fThreadIndexReleasedCount];
-  end else begin // store a new entry
-    if fThreadContextCount>=length(fThreadContexts) then
-      SetLength(fThreadContexts,fThreadContextCount+128);
-    inc(fThreadContextCount);
-    fThreadIndex := fThreadContextCount;
-  end;
-  fThreadHash[fThreadLastHash] := fThreadIndex;
+  if fFamily.fPerThreadLog<>ptNoThreadProcess then begin
+    secondpass := false;
+    fThreadLastHash := PtrUInt(fThreadID xor (fThreadID shr MAXLOGTHREADBITS)
+      xor (fThreadID shr (MAXLOGTHREADBITS*2))) and (MAXLOGTHREAD-1);
+    fThreadIndex := fThreadHash[fThreadLastHash];
+    if fThreadIndex<>0 then
+      repeat
+        fThreadContext := @fThreadContexts[fThreadIndex-1];
+        if fThreadContext^.ID=fThreadID then // match found
+          exit;
+        // hash collision -> try next item in fThreadHash[] if possible
+        if fThreadLastHash=MAXLOGTHREAD-1 then
+          if secondpass then // avoid endless loop -> reuse last fThreadHash[]
+            exit else begin
+            fThreadLastHash := 0;
+            secondpass := true;
+          end else
+          inc(fThreadLastHash);
+        fThreadIndex := fThreadHash[fThreadLastHash];
+      until fThreadIndex=0;
+    // here we know that fThreadIndex=fThreadHash[hash]=0 -> register the thread
+    if fThreadIndexReleasedCount>0 then begin // reuse NotifyThreadEnded() index
+      dec(fThreadIndexReleasedCount);
+      fThreadIndex := fThreadIndexReleased[fThreadIndexReleasedCount];
+    end else begin // store a new entry
+      if fThreadContextCount>=length(fThreadContexts) then
+        SetLength(fThreadContexts,fThreadContextCount+128);
+      inc(fThreadContextCount);
+      fThreadIndex := fThreadContextCount;
+    end;
+    fThreadHash[fThreadLastHash] := fThreadIndex;
+  end else
+    fThreadIndex := 1;
   fThreadContext := @fThreadContexts[fThreadIndex-1];
   fThreadContext^.ID := fThreadID;
 end;
@@ -2974,6 +2983,8 @@ procedure TSynLog.ThreadContextRehash;
 var i, id, hash: integer;
     secondpass: boolean;
 begin // should match TSynLog.GetThreadContextInternal
+  if fFamily.fPerThreadLog=ptNoThreadProcess then
+    exit;
   FillcharFast(fThreadHash[0],MAXLOGTHREAD*sizeof(fThreadHash[0]),0);
   for i := 0 to fThreadContextCount-1 do begin
     id := fThreadContexts[i].ID;
