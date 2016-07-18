@@ -31607,7 +31607,7 @@ begin
     P := PUTF8Char(Pointer(Body))+i-1;
     Finalize(part);
     repeat
-      if IdemPChar(P, 'CONTENT-DISPOSITION: ') then begin
+      if IdemPChar(P,'CONTENT-DISPOSITION: ') then begin
         inc(P,21);
         if IdemPCharAndGetNextItem(P,'FORM-DATA; NAME="',part.Name,'"') then
           IdemPCharAndGetNextItem(P,'; FILENAME="',part.FileName,'"') else

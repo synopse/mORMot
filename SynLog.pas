@@ -1085,7 +1085,8 @@ type
     fLineTextOffset: cardinal;
     fLineHeaderCountToIgnore: integer;
     /// as extracted from the .log header
-    fExeName, fExeVersion, fHost, fUser, fCPU, fOSDetailed, fInstanceName: RawUTF8;
+    fExeName, fExeVersion, fInstanceName: RawUTF8;
+    fHost, fUser, fCPU, fOSDetailed, fFramework: RawUTF8;
     fExeDate: TDateTime;
     fIntelCPU: TIntelCpuFeatures;
     {$ifdef MSWINDOWS}
@@ -1240,6 +1241,9 @@ type
     // - under Linux, it will return the full system version, e.g.
     // 'Linux-3.13.0-43-generic#72-Ubuntu-SMP-Mon-Dec-8-19:35:44-UTC-2014'
     property DetailedOS: RawUTF8 read fOSDetailed;
+    /// the associated framework information
+    // - returns e.g. 'TSQLLog 1.18.2765 ERTL FTS3'
+    property Framework: RawUTF8 read fFramework;
     /// the date and time at which the log file was started
     property StartDateTime: TDateTime read fStartDateTime;
     /// number of profiled methods in this .log file
@@ -4428,15 +4432,19 @@ begin
     if PWord(fLines[fHeaderLinesCount])^<>ord('0')+ord('0')shl 8 then // YYYYMMDD -> 20101225 e.g.
       fFreq := 0 else // =0 if date time, >0 if high-resolution time stamp
       fFreqPerDay := fFreq*SecsPerDay;
-    Iso8601ToDateTimePUTF8CharVar(PUTF8Char(
-      fLines[fHeaderLinesCount-2])+LineSize(fHeaderLinesCount-2)-19,19,fStartDateTime);
-    if fStartDateTime=0 then
-      exit;
+    {$ifdef MSWINDOWS} // use only fOSDetailed under Linux
     P := pointer(fOSDetailed);
-    {$ifdef MSWINDOWS} // use fOSDetailed under Linux
     fOS := TWindowsVersion(GetNextItemCardinal(P,'.'));
     fOSServicePack := GetNextItemCardinal(P);
     {$endif}
+    P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
+    i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
+    if i>19 then begin
+      SetString(fFramework,PAnsiChar(P),i-1);
+      Iso8601ToDateTimePUTF8CharVar(P+i,19,fStartDateTime);
+    end;
+    if fStartDateTime=0 then
+      exit;
     // 3. compute fCount and fLines[] so that all fLevels[]<>sllNone
     CleanLevels(self);
     if Length(fLevels)-fCount>16384 then begin // size down only if worth it
