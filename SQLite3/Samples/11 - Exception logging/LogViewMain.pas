@@ -158,14 +158,16 @@ uses
 
 resourcestring
   sEnterAddress = 'Enter an hexadecimal address:';
-  sStats = #13#10'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10'Size: %s'#13#10#13#10+
-    'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10+
-    'Date: %s'#13#10#13#10'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
-    'User: %s'#13#10'CPU: %s%s'#13#10'OS: %s'#13#10+
-    'Wow64: %d'#13#10#13#10'Log content'#13#10'-----------'#13#10#13#10+
+  sStats = #13#10+
+   'Log'#13#10'---'#13#10#13#10+
+    'Name: %s'#13#10'Date: %s'#13#10'Size: %s'#13#10'Class: %s'#13#10#13#10+
+   'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10#13#10+
+   'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
+    'User: %s'#13#10'CPU: %s%s'#13#10'OS: %s'#13#10'Wow64: %d'#13#10#13#10+
+   'Log content'#13#10'-----------'#13#10#13#10+
     'Log started at: %s'#13#10'Events count: %d'#13#10'Methods count: %d'#13#10+
     'Threads count: %d'#13#10'Time elapsed: %s'#13#10#13#10+
-    'Per event stats'#13#10'---------------'#13#10#13#10;
+   'Per event stats'#13#10'---------------'#13#10#13#10;
   sNoFile = 'No File';
   sRemoteLog = 'Remote Log';
   sUnknown = 'Unknown';
@@ -664,11 +666,11 @@ begin
         if feat<>'' then
           feat := '  ' + LowerCase(feat);
         s := format(sStats,
-          [FileName,Ansi7ToString(KB(Map.Size)),
+          [FileName,DateTimeToStr(ExecutableDate),Ansi7ToString(KB(Map.Size)),
+           Ansi7ToString(Framework),
            UTF8ToString(ExecutableName),s,Ansi7ToString(ExecutableVersion),
-           DateTimeToStr(ExecutableDate),UTF8ToString(ComputerHost),
-           UTF8ToString(RunningUser),Ansi7ToString(CPU),feat,win,
-           Integer(Wow64),DateTimeToStr(StartDateTime),Count,LogProcCount,
+           UTF8ToString(ComputerHost),UTF8ToString(RunningUser),Ansi7ToString(CPU),
+           feat,win,Integer(Wow64),DateTimeToStr(StartDateTime),Count,LogProcCount,
            ThreadsCount,FormatDateTime('dd.hh:mm:ss',EventDateTime(Count-1)-StartDateTime)]);
         fillchar(sets,sizeof(sets),0);
         for i := 0 to Count-1 do
