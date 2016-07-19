@@ -54,6 +54,7 @@ unit SynRestVCL;
   - bug fix with datetime fields
   - bug fix with length string fields
   - fixed Delphi XE3 compilation issue with PSExecuteStatement declaration (by houdw2006)
+  - added sftSessionUserID to SQLFIELDTYPETODBFIELDTYPE and SQLFieldTypeToVCLDB
 
 }
 
@@ -211,7 +212,8 @@ const
      SynCommons.ftInt64,     // sftModTime
      SynCommons.ftInt64,     // sftCreateTime
      SynCommons.ftInt64,     // sftTID
-     SynCommons.ftInt64);    // sftRecordVersion = TRecordVersion
+     SynCommons.ftInt64,     // sftRecordVersion = TRecordVersion
+     SynCommons.ftInt64);    // sftSessionUserID
 
   SQLFieldTypeToVCLDB: array[TSQLFieldType] of TFieldType =
     (DB.ftUnknown,           // sftUnknown
@@ -240,7 +242,8 @@ const
      DB.ftLargeInt,          // sftModTime
      DB.ftLargeInt,          // sftCreateTime
      DB.ftLargeInt,          // sftTID
-     DB.ftLargeInt);         // sftRecordVersion = TRecordVersion
+     DB.ftLargeInt,          // sftRecordVersion = TRecordVersion
+     DB.ftLargeInt);         // sftSessionUserID
 
   VCLDBFieldTypeSQLDB: array[0..23] of TSQLFieldType =
     (sftUnknown,        // ftUnknown
