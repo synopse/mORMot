@@ -403,6 +403,7 @@ type
     function LoadFromIStream(Stream: IStream): TGdipStatus;
     procedure LoadFromStream(Stream: TStream); override;
     procedure LoadFromFile(const FileName: string); override;
+    procedure LoadFromBuffer(Buffer: pointer; Len: integer);
     procedure SaveToStream(Stream: TStream); override;
     procedure SaveInternalToStream(Stream: TStream);
     procedure LoadFromResourceName(Instance: THandle; const ResName: string);
@@ -1324,11 +1325,28 @@ begin
   if fGlobalLen=0 then
     exit;
   Stream.Seek(0,soFromBeginning);
-  fGlobal := GlobalAlloc(GMEM_MOVEABLE, fGlobalLen);
+  fGlobal := GlobalAlloc(GMEM_MOVEABLE,fGlobalLen);
   if fGlobal=0 then
     exit;
   P := GlobalLock(fGlobal);
   Stream.Read(P^,fGlobalLen);
+  GlobalUnlock(fGlobal);
+  CreateStreamOnHGlobal(fGlobal,false,fStream); // fDeleteOnRelease=false
+  LoadFromIStream(fStream);
+end;
+
+procedure TSynPicture.LoadFromBuffer(Buffer: pointer; Len: integer);
+var P: pointer;
+begin
+  Clear;
+  if not Gdip.Exists or (Buffer=nil) or (Len=0) then
+    exit;
+  fGlobalLen := Len;
+  fGlobal := GlobalAlloc(GMEM_MOVEABLE,Len);
+  if fGlobal=0 then
+    exit;
+  P := GlobalLock(fGlobal);
+  Move(Buffer^,P^,Len);
   GlobalUnlock(fGlobal);
   CreateStreamOnHGlobal(fGlobal,false,fStream); // fDeleteOnRelease=false
   LoadFromIStream(fStream);
@@ -1618,23 +1636,16 @@ begin
 end;
 
 function LoadFromRawByteString(const Picture: RawByteString): TBitmap;
-var ST: TStringStream;
 begin
-  Result := nil;
-  if Picture='' then
-    exit;
-  ST := TStringStream.Create(Picture);
-  try
+  if Picture<>'' then
     with TSynPicture.Create do
     try
-      LoadFromStream(ST);
+      LoadFromBuffer(pointer(Picture),length(Picture));
       result := ToBitmap;
     finally
       Free;
-    end;
-  finally
-    ST.Free;
-  end;
+    end else
+    result := nil;
 end;
 
 function LoadFrom(const FileName: TFileName): TBitmap;

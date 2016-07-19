@@ -3631,7 +3631,7 @@ end;
 function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
 begin
   try
-    result := THttpClientSocket.Open(aServer,aPort);
+    result := THttpClientSocket.Open(aServer,aPort,cslTCP,0); // HTTP_DEFAULT_RECEIVETIMEOUT
   except
     on ECrtSocket do
       result := nil;
