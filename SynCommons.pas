@@ -7062,18 +7062,20 @@ type
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     procedure AddFloatStr(P: PUTF8Char);
     /// append strings or integers with a specified format
-    // - % = #37 indicates a string, integer, floating-point, or class parameter
+    // - % = #37 marks a string, integer, floating-point, or class parameter
     // to be appended as text (e.g. class name)
     // - if StringEscape is false (by default), the text won't be escaped before
     // adding; but if set to true text will be JSON escaped at writing
-    // - note that cardinal values should be type-casted to Int64() (otherwise
-    // the integer mapped value will be transmitted, therefore wrongly)
+    // - note that due to a limitation of the "array of const" format, cardinal
+    // values should be type-casted to Int64() - otherwise the integer mapped
+    // value will be transmitted, therefore wrongly
+    // - CR = #13 writes CR+LF chars (i.e. if you write #13 in the Format
+    // string, it will output #13#10 chars)
     {$ifdef OLDTEXTWRITERFORMAT}
     // - $ = #36 indicates an integer to be written with 2 digits and a comma
     // - £ = #163 indicates an integer to be written with 4 digits and a comma
     // - µ = #181 indicates an integer to be written with 3 digits without any comma
     // - ¤ = #164 indicates CR+LF chars
-    // - CR = #13 indicates CR+LF chars
     // - § = #167 indicates to trim last comma
     // - | = #124 will write the next char e.g. Add('%|$',[10]) will write '10$'
     // - since some of this characters above are > #127, they are not UTF-8
@@ -31673,29 +31675,29 @@ begin
     for i := 0 to len-1 do
     with MultiPart[i] do begin
       if FileName='' then
-        W.Add('--%'#13#10'Content-Disposition: form-data; name="%"'#13#10+
-          'Content-Type: %'#13#10#13#10'%'#13#10'--%'#13#10,
+        W.Add('--%'#13'Content-Disposition: form-data; name="%"'#13+
+          'Content-Type: %'#13#13'%'#13'--%'#13,
           [bound,Name,ContentType,Content,bound]) else begin
         // if this is the first file, create the header for files
         if filescount=0 then begin
           if i>0 then
             NewBound;
-          W.Add('Content-Disposition: form-data; name="files"'#13#10+
-            'Content-Type: multipart/mixed; boundary=%'#13#10#13#10,[bound]);
+          W.Add('Content-Disposition: form-data; name="files"'#13+
+            'Content-Type: multipart/mixed; boundary=%'#13#13,[bound]);
         end;
         inc(filescount);
-        W.Add('--%'#13#10'Content-Disposition: file; filename="%"'#13#10+
-          'Content-Type: %'#13#10,[bound,FileName,ContentType]);
+        W.Add('--%'#13'Content-Disposition: file; filename="%"'#13+
+          'Content-Type: %'#13,[bound,FileName,ContentType]);
         if Encoding<>'' then
-          W.Add('Content-Transfer-Encoding: %'#13#10,[Encoding]);
+          W.Add('Content-Transfer-Encoding: %'#13,[Encoding]);
         W.AddCR;
         W.AddString(MultiPart[i].Content);
-        W.Add(#13#10'--%'#13#10,[bound]);
+        W.Add(#13'--%'#13,[bound]);
       end;
     end;
     // footer multipart
     for i := boundcount-1 downto 0 do
-      W.Add('--%--'#13#10, [boundaries[i]]);
+      W.Add('--%--'#13, [boundaries[i]]);
     W.SetText(MultiPartContent);
     result := True;
   finally
