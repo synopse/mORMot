@@ -4439,7 +4439,7 @@ begin
     {$endif}
     P := fLines[fHeaderLinesCount-2]; // TSQLLog 1.18.2765 ERTL FTS3 2016-07-17T22:38:03
     i := LineSize(fHeaderLinesCount-2)-19; // length('2016-07-17T22:38:03')=19
-    if i>19 then begin
+    if i>0 then begin
       SetString(fFramework,PAnsiChar(P),i-1);
       Iso8601ToDateTimePUTF8CharVar(P+i,19,fStartDateTime);
     end;

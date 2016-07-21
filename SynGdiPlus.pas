@@ -1171,7 +1171,7 @@ begin
     exit;
   if (Gdip.CreateFromHDC(ACanvas.Handle,graphics)=stOk) and (graphics<>0) then
   try
-    Gdip.DrawImageRect(graphics,fImage,
+    Gdip.DrawImageRect(graphics, fImage,
       Rect.Left, Rect.Top, Rect.Right - Rect.Left, Rect.Bottom - Rect.Top);
   finally
     Gdip.DeleteGraphics(graphics);
