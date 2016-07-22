@@ -249,8 +249,8 @@ type
     procedure AllocStatement;
     procedure DeallocStatement;
     procedure BindColumns;
+    procedure GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
     function GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
-    function GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
     function MoreResults: boolean;
   public
     /// create a ODBC statement instance, from an existing ODBC connection
@@ -1357,10 +1357,12 @@ begin
         ColumnNonNullable := (Nullable=SQL_NO_NULLS);
         ColumnType := ODBCColumnToFieldType(DataType,10,DecimalDigits);
         if ColumnType=ftUTF8 then
-          siz := ColumnSize*2+16 else // guess max size as WideChar buffer
-          siz := ColumnSize;
+          if ColumnSize=0 then
+            siz := 256 else
+            siz := ColumnSize*2+16 else // guess max size as WideChar buffer
+            siz := ColumnSize;
         if siz<64 then
-          siz := 64; // ODBC never truncates fixed-length data: ensure enough
+          siz := 64; // ODBC never truncates fixed-length data: ensure minimum
         if siz>Length(fColData[c-1]) then
           SetLength(fColData[c-1],siz);
       end;
@@ -1369,59 +1371,86 @@ begin
   end;
 end;
 
-function TODBCStatement.GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
+procedure TODBCStatement.GetData(var Col: TSQLDBColumnProperty; ColIndex: integer);
 var ExpectedDataType: ShortInt;
+    ExpectedDataLen: integer;
     Status: SqlReturn;
     Indicator: SqlLen;
-    c: Integer;
+    P: PAnsiChar;
+  function IsTruncated: boolean;
+  begin
+    result := (Indicator>0) and (ODBC.GetDiagField(fStatement)='01004');
+  end;
+  procedure CheckStatus;
+  begin
+    if Status<>SQL_SUCCESS then
+      ODBC.HandleError(nil,self,Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
+  end;
+  procedure RaiseError;
+  begin
+    raise EODBCException.CreateUTF8('%.GetCol: "%" column had Indicator=%',
+      [self,Col.ColumnName,Indicator]);
+  end;
+begin
+  ExpectedDataType := ODBC_TYPE_TOC[Col.ColumnType];
+  ExpectedDataLen := length(fColData[ColIndex]);
+  //FillcharFast(pointer(fColData[ColIndex])^,ExpectedDataLen,ord('~'));
+  Status := ODBC.GetData(fStatement,ColIndex+1,ExpectedDataType,
+    pointer(fColData[ColIndex]),ExpectedDataLen,@Indicator);
+  Col.ColumnDataSize := Indicator;
+  if Status<>SQL_SUCCESS then
+    if Status=SQL_SUCCESS_WITH_INFO then
+      if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
+        Status := SQL_SUCCESS else // allow rounding problem
+      if IsTruncated then begin
+        if Col.ColumnType<>ftBlob then begin
+          dec(ExpectedDataLen,SizeOf(WideChar)); // ignore null termination
+          inc(Indicator,SizeOf(WideChar)); // always space for additional #0
+        end;
+        SetLength(fColData[ColIndex],Indicator);
+        P := pointer(fColData[ColIndex]);
+        inc(P,ExpectedDataLen);
+        ExpectedDataLen := Indicator-ExpectedDataLen;
+        //FillcharFast(P^,ExpectedDataLen,ord('~'));
+        Status := ODBC.GetData(fStatement,ColIndex+1,ExpectedDataType,
+          P,ExpectedDataLen,@Indicator);
+        CheckStatus; 
+      end else
+      CheckStatus else
+    CheckStatus;
+  if Indicator>=0 then
+    case Status of
+    SQL_SUCCESS, SQL_NO_DATA:
+      Col.ColumnDataState := colDataFilled;
+    else RaiseError;
+    end else
+  case Indicator of
+  SQL_NULL_DATA:
+    Col.ColumnDataState := colNull;
+  SQL_NO_TOTAL:
+    if Col.ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
+      Col.ColumnDataState := colDataFilled else
+      raise EODBCException.CreateUTF8('%.GetCol: "%" column has no size',
+        [self,Col.ColumnName]);
+  else RaiseError;
+  end;
+end;
+
+function TODBCStatement.GetCol(Col: integer; ExpectedType: TSQLDBFieldType): TSQLDBStatementGetCol;
+var c: Integer;
 begin // colNull, colWrongType, colTmpUsed, colTmpUsedTruncated
   CheckCol(Col); // check Col<fColumnCount
   if not Assigned(fStatement) or (fColData=nil) then
     raise EODBCException.CreateUTF8('%.Column*() with no prior Execute',[self]);
   // get all fColData[] (driver may be without SQL_GD_ANY_ORDER)
   for c := 0 to fColumnCount-1 do
-  with fColumns[c] do
-  if ColumnDataState=colNone then begin
-    ExpectedDataType := ODBC_TYPE_TOC[ColumnType];
-    Status := ODBC.GetData(fStatement,c+1,ExpectedDataType,
-      pointer(fColData[c]),length(fColData[c]),@Indicator);
-    if Status<>SQL_SUCCESS then
-      if (Status=SQL_SUCCESS_WITH_INFO) and
-         (ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE) then
-        Status := SQL_SUCCESS else // allow rounding problem
-        ODBC.HandleError(nil,self,Status,SQL_HANDLE_STMT,fStatement,false,sllNone);
-    ColumnDataSize := Indicator;
-    if Indicator>=0 then
-      if Status=SQL_SUCCESS then
-        ColumnDataState := colDataFilled else
-        ColumnDataState := colDataTruncated else
-    case Indicator of
-    SQL_NULL_DATA:
-      ColumnDataState := colNull;
-    SQL_NO_TOTAL:
-      if ColumnType in FIXEDLENGTH_SQLDBFIELDTYPE then
-        ColumnDataState := colDataFilled else
-        raise EODBCException.CreateUTF8('%.GetCol: "%" column has no size',
-          [self,ColumnName]);
-    else
-      raise EODBCException.CreateUTF8('%.GetCol: "%" column had Indicator=%',
-        [self,ColumnName,Indicator]);
-    end;
-  end;
+    if fColumns[c].ColumnDataState=colNone then
+      GetData(fColumns[c], c);
   // retrieve information for the specified column
   if (ExpectedType=ftNull) or (fColumns[Col].ColumnType=ExpectedType) or
      (fColumns[Col].ColumnDataState=colNull) then
     result := fColumns[Col].ColumnDataState else
     result := colWrongType;
-end;
-
-function TODBCStatement.GetColNextChunk(Col: Integer): TSQLDBStatementGetCol;
-const MINIMUM_CHUNK_SIZE = 65536;
-begin
-  if length(fColData[Col])<MINIMUM_CHUNK_SIZE then
-    SetString(fColData[Col],nil,MINIMUM_CHUNK_SIZE);
-  fColumns[Col].ColumnDataState := colNone; // force ODBC.GetData() call
-  result := GetCol(Col,ftNull); // ftNull to never return colWrongType here
 end;
 
 function TODBCStatement.MoreResults: Boolean;
@@ -1445,18 +1474,11 @@ var res: TSQLDBStatementGetCol;
 begin
   res := GetCol(Col,ftBlob);
   case res of
-    colNull:      result := '';
-    colWrongType: ColumnToTypedValue(Col,ftBlob,result);
-    else
-    with fColumns[Col] do begin
-      result := copy(fColData[Col],1,ColumnDataSize);
-      while res=colDataTruncated do begin
-        res := GetColNextChunk(Col);
-        if ColumnDataSize<=0 then
-          break;
-        result := result+copy(fColData[Col],1,ColumnDataSize);
-      end;
-    end;
+    colNull:
+      result := '';
+    colWrongType:
+      ColumnToTypedValue(Col,ftBlob,result);
+    else result := copy(fColData[Col],1,fColumns[Col].ColumnDataSize);
   end;
 end;
 
@@ -1465,18 +1487,12 @@ var res: TSQLDBStatementGetCol;
 begin
   res := GetCol(Col,ftUTF8);
   case res of
-    colNull:      result := '';
-    colWrongType: ColumnToTypedValue(Col,ftUTF8,result);
+    colNull:
+      result := '';
+    colWrongType:
+      ColumnToTypedValue(Col,ftUTF8,result);
     else
-    with fColumns[Col] do begin
-      result := RawUnicodeToUtf8(pointer(fColData[Col]),ColumnDataSize shr 1);
-      while res=colDataTruncated do begin
-        res := GetColNextChunk(Col);
-        if ColumnDataSize<=0 then
-          break;
-        result := result+RawUnicodeToUtf8(pointer(fColData[Col]),ColumnDataSize shr 1);
-      end;
-    end;
+      RawUnicodeToUtf8(pointer(fColData[Col]),fColumns[Col].ColumnDataSize shr 1,result);
   end;
 end;
 
@@ -1549,15 +1565,8 @@ begin
           PSQL_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToIso8601(tmp,ColumnValueDBType));
       ftUTF8: begin
         WR.Add('"');
-        if ColumnDataSize>1 then begin
+        if ColumnDataSize>1 then
           WR.AddJSONEscapeW(Pointer(fColData[Col]),ColumnDataSize shr 1);
-          while res=colDataTruncated do begin
-            res := GetColNextChunk(Col);
-            if ColumnDataSize<=0 then
-              break;
-            WR.AddJSONEscapeW(Pointer(fColData[Col]),ColumnDataSize shr 1);
-          end;
-        end;
         WR.Add('"');
       end;
       ftBlob:
