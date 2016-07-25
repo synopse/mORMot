@@ -13666,8 +13666,8 @@ type
     // when adding the record (instead of a database-generated ID)
     // - on success, returns the new RowID value; on error, returns 0
     // - call internaly the Add virtual method above
-    function Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
-      ForcedID: TID=0): TID; overload;
+    function AddSimple(aTable: TSQLRecordClass; const aSimpleFields: array of const;
+      ForcedID: TID=0): TID; 
     /// update a member from Value simple fields content
     // - implements REST PUT collection
     // - return true on success
@@ -33851,8 +33851,8 @@ begin
   result := InternalAdd(Value,true,@CustomFields,ForceID,DoNotAutoComputeFields);
 end;
 
-function TSQLRest.Add(aTable: TSQLRecordClass; const aSimpleFields: array of const;
-  ForcedID: TID=0): TID;
+function TSQLRest.AddSimple(aTable: TSQLRecordClass; const aSimpleFields: array of const;
+  ForcedID: TID): TID;
 var Value: TSQLRecord;
 begin
   result := 0; // means error

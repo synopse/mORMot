@@ -55304,7 +55304,7 @@ begin
     fPosition := Length(fDataString) else
     if fPosition<0 then
       fPosition := 0;
-  Result := fPosition;
+  result := fPosition;
 end;
 
 procedure TRawByteStringStream.SetSize(NewSize: Integer);
