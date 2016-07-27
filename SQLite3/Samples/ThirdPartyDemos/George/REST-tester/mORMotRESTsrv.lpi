@@ -28,8 +28,8 @@
             <Filename Value="bin\$(TargetCPU)-$(TargetOS)\mORMotRESTsrv"/>
           </Target>
           <SearchPaths>
-            <IncludeFiles Value="$(ProjOutDir);generics-collections\src\inc;..\..\..\.."/>
-            <OtherUnitFiles Value="generics-collections\src;..\..\..\..;..\..\.."/>
+            <IncludeFiles Value="$(ProjOutDir);generics-collections\src\inc;..\..\..\..\.."/>
+            <OtherUnitFiles Value="generics-collections\src;..\..\..\..\..;..\..\..\.."/>
             <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
           </SearchPaths>
           <Parsing>
@@ -77,8 +77,8 @@
       <Filename Value="bin\$(TargetCPU)-$(TargetOS)\mORMotRESTsrv"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="$(ProjOutDir);generics-collections\src\inc;..\..\..\.."/>
-      <OtherUnitFiles Value="generics-collections\src;..\..\..\..;..\..\.."/>
+      <IncludeFiles Value="$(ProjOutDir);generics-collections\src\inc;..\..\..\..\.."/>
+      <OtherUnitFiles Value="generics-collections\src;..\..\..\..\..;..\..\..\.."/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
