@@ -1411,6 +1411,8 @@ begin
         if action.ReturnedStatus=0 then
           action.ReturnedStatus := HTML_SUCCESS else
         if (action.ReturnedStatus=HTML_TEMPORARYREDIRECT) or
+           (action.ReturnedStatus=HTML_FOUND) or
+           (action.ReturnedStatus=HTML_SEEOTHER) or
            (action.ReturnedStatus=HTML_MOVEDPERMANENTLY) then
           if Redirects(action) then // if redirection is implemented
             exit else
