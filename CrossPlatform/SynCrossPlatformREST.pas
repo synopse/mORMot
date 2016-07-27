@@ -844,10 +844,10 @@ type
     function BatchCount: integer;
     /// execute a BATCH sequence started by BatchStart() method
     // - send all pending BatchAdd/Update/Delete statements to the remote server
-    // - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
+    // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     // - a dynamic array of 64 bit integers will be created in Results,
     // containing all ROWDID created for each BatchAdd call, or 200
-    // (=HTML_SUCCESS) for all successfull BatchUpdate/BatchDelete, or 0 on error
+    // (=HTTP_SUCCESS) for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
     // imply that all statements in the BATCH sequence were successfull
@@ -2331,7 +2331,7 @@ end;
 function TSQLRest.BatchSend(var Results: TIDDynArray): integer;
 begin
   if (self=nil) or (fBatch='') then
-    result := HTML_BADREQUEST else
+    result := HTTP_BADREQUEST else
   try
     if BatchCount>0 then begin
       fBatch[length(fBatch)] := ']';
@@ -2339,7 +2339,7 @@ begin
         fBatch := fBatch+'}';
       result := ExecuteBatchSend(fBatchTable,fBatch,Results);
     end else
-      result := HTML_SUCCESS; // nothing to send
+      result := HTTP_SUCCESS; // nothing to send
   finally
     BatchAbort;
   end;
@@ -2423,7 +2423,7 @@ begin
   LogClose;
   fLogClient := TSQLRestClientHTTP.Create(aServer,aPort,TSQLModel.Create([],aRoot),true);
   fLogClient.CallBackGet('TimeStamp',[],Call,nil); // synchronous connection
-  if Call.OutStatus=HTML_SUCCESS then begin
+  if Call.OutStatus=HTTP_SUCCESS then begin
     fLogLevel := LogLevel;
     OnLog := LogToRemoteServerText;
     asm @userAgent = navigator.userAgent; end;
@@ -2606,7 +2606,7 @@ begin
   // so we expect reUrlEncodedSQL to be defined in AllowRemoteExecute
   Call.Init(Model.Root+UrlEncode(['sql',sql]),'GET','');
   URI(Call);
-  if Call.OutStatus=HTML_SUCCESS then begin
+  if Call.OutStatus=HTTP_SUCCESS then begin
     json := Call.OutBodyUtf8;
     result := TSQLTableJSON.Create(json);
     result.fInternalState := fInternalState;
@@ -2626,7 +2626,7 @@ begin
      Call.Verb := 'LOCK' else
      Call.Verb := 'GET';
   URI(Call);
-  result := Call.OutStatus=HTML_SUCCESS;
+  result := Call.OutStatus=HTTP_SUCCESS;
   if result then begin
     json := Call.OutBodyUtf8;
     Value.FromJSON(json);
@@ -2691,7 +2691,7 @@ end;
 procedure TSQLRestClientURI.URI(var Call: TSQLRestURIParams);
 var sign: string;
 begin
-  Call.OutStatus := HTML_UNAVAILABLE;
+  Call.OutStatus := HTTP_UNAVAILABLE;
   if self=nil then
     exit;
   Call.UrlWithoutSignature := Call.Url;
@@ -2713,7 +2713,7 @@ begin
   if Assigned(Call.OnSuccess) then
     exit; // asynchronous call do not have a result yet
   {$endif}
-  if Call.OutStatus<>HTML_SUCCESS then
+  if Call.OutStatus<>HTTP_SUCCESS then
     Log(sllError,'Service %s returned %s',[aMethodName,Call.OutBodyUtf8]) else
     Log(sllServiceReturn,'%s success',[aMethodName]);
 end;
@@ -2746,7 +2746,7 @@ begin
   Call.Init(getURICallBack('Batch',Table,0),'POST',Data);
   URI(Call);
   result := Call.OutStatus;
-  if result<>HTML_SUCCESS then begin
+  if result<>HTTP_SUCCESS then begin
     Log(sllError,'BATCH error');
     exit; // transmission or internal server error
   end;
@@ -2755,7 +2755,7 @@ begin
   Results.Clear;
   if Call.OutBody='["OK"]' then begin
     for i := 0 to fBatchCount-1 do
-      Results.Add(HTML_SUCCESS);
+      Results.Add(HTTP_SUCCESS);
   end else begin
     doc := JSON.Parse(Call.OutBody);
     if (VariantType(doc)=jvArray) and (doc.length=fBatchCount) then
@@ -2767,7 +2767,7 @@ begin
   HttpBodyToText(Call.OutBody,jsonres);
   if jsonres='["OK"]' then begin
     for i := 0 to fBatchCount-1 do
-      Results[i] := HTML_SUCCESS;
+      Results[i] := HTTP_SUCCESS;
   end else begin
     doc.Init(jsonres);
     if (doc.Kind=jvArray) and (doc.Count=fBatchCount) then
@@ -2786,7 +2786,7 @@ var doc: TJSONVariantData;
 begin
   VarClear(result);
   outID := 0;
-  if aCall.OutStatus<>HTML_SUCCESS then
+  if aCall.OutStatus<>HTTP_SUCCESS then
     exit;
   {$ifdef ISSMS}
   var doc := JSON.Parse(aCall.OutBody);
@@ -2894,7 +2894,7 @@ var Call: TSQLRestURIParams;
 begin
   SetAsynch(Call,onSuccess,onError,
   lambda
-    result := (Call.OutStatus=HTML_SUCCESS) and SetServerTimeStamp(Call.OutBody);
+    result := (Call.OutStatus=HTTP_SUCCESS) and SetServerTimeStamp(Call.OutBody);
   end);
   CallBackGet('TimeStamp',[],Call,nil); // asynchronous call
 end;
@@ -2912,7 +2912,7 @@ begin
       if not assigned(onSuccess) then
         exit; // no result to handle
       if aReturnsCustomAnswer then begin
-        if Call.OutStatus=HTML_SUCCESS then begin
+        if Call.OutStatus=HTTP_SUCCESS then begin
           var result: TVariantDynArray;
           result.Add(Call.OutBody);
           onSuccess(result);
@@ -2940,7 +2940,7 @@ begin
     end,
     onError,
     lambda
-      result := (Call.OutStatus=HTML_SUCCESS) and (Call.OutBody<>'');
+      result := (Call.OutStatus=HTTP_SUCCESS) and (Call.OutBody<>'');
     end);
   CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
 end;
@@ -2960,7 +2960,7 @@ begin
   // ForceServiceResultAsJSONObject not implemented yet
   CallRemoteServiceInternal(Call,aCaller,aMethodName,JSON.Stringify(variant(aInputParams)));
   if aReturnsCustomAnswer then begin
-    if Call.OutStatus<>HTML_SUCCESS then
+    if Call.OutStatus<>HTTP_SUCCESS then
       RaiseError;
     result.Add(Call.OutBody);
     exit;
@@ -2987,7 +2987,7 @@ var Call: TSQLRestURIParams;
 begin
   Log(sllInfo,'Connect',self);
   CallBackGet('TimeStamp',[],Call,nil);
-  result := Call.OutStatus=HTML_SUCCESS;
+  result := Call.OutStatus=HTTP_SUCCESS;
   if not result then
     exit;
   result := SetServerTimeStamp(Call.OutBodyUtf8);
@@ -3007,7 +3007,7 @@ begin
   for i := 0 to high(aInputParams) do
     params.AddValue(aInputParams[i]);
   CallRemoteServiceInternal(Call,aCaller,aMethodName,params.ToJSON);
-  if Call.OutStatus<>HTML_SUCCESS then
+  if Call.OutStatus<>HTTP_SUCCESS then
     raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
       [aCaller.fServiceName,aMethodName,Call.OutStatus]);
   if aReturnsCustomAnswer then begin
@@ -3039,7 +3039,7 @@ begin
   result := 0;
   Call.Init(getURIID(tableIndex,0),'POST',json);
   URI(Call);
-  if Call.OutStatus<>HTML_CREATED then begin
+  if Call.OutStatus<>HTTP_CREATED then begin
     Log(sllError,'Error creating %s with %s',[Model.Info[tableIndex].Name,json]);
     exit;
   end;
@@ -3063,7 +3063,7 @@ begin
   tableIndex := Model.GetTableIndexExisting(Table);
   Call.Init(getURIID(tableIndex,ID),'DELETE','');
   URI(Call);
-  if Call.OutStatus=HTML_SUCCESS then
+  if Call.OutStatus=HTTP_SUCCESS then
     result := true;
   Log(LOGLEVELDB[result],'Delete %s.ID=%d',[Model.Info[tableIndex].Name,ID]);
 end;
@@ -3074,7 +3074,7 @@ var Call: TSQLRestURIParams;
 begin
   Call.Init(getURIID(tableIndex,ID),'PUT',json);
   URI(Call);
-  result := Call.OutStatus=HTML_SUCCESS;
+  result := Call.OutStatus=HTTP_SUCCESS;
   Log(LOGLEVELDB[result],'Update %s.ID=%d with %s',[Model.Info[tableIndex].Name,ID,json]);
 end;
 
@@ -3194,7 +3194,7 @@ begin
         end;
       end;
     if fConnection=nil then begin
-      Call.OutStatus := HTML_NOTIMPLEMENTED;
+      Call.OutStatus := HTTP_NOTIMPLEMENTED;
       break;
     end;
     try
@@ -3205,7 +3205,7 @@ begin
         Log(E);
         fConnection.Free;
         fConnection := nil;
-        Call.OutStatus := HTML_NOTIMPLEMENTED;
+        Call.OutStatus := HTTP_NOTIMPLEMENTED;
         if fForceTerminate then
           break;
       end; // will retry once (e.g. if connection broken)

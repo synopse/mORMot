@@ -5,7 +5,8 @@ interface
 uses 
   SmartCL.System,
   System.Types,
-  w3c.date,
+  ECMA.Date,
+  System.Date,
   SynCrossPlatformSpecific,
   SynCrossPlatformREST,
   SynCrossPlatformCrypto;
@@ -60,8 +61,8 @@ var D: TDateTime;
 begin
   s := '2014-06-28T11:50:22';
   D := Iso8601ToDateTime(s);
-  assert(Abs(D-41818.49331)<OneSecDateTime);
   assert(DateTimeToIso8601(D)=s);
+  assert(Abs(D-41818.40997685185)<OneSecDateTime);
   x := TTimeLogToIso8601(135181810838);
   assert(x=s);
   T := DateTimeToTTimeLog(D);
@@ -108,7 +109,7 @@ var people: TSQLRecordPeople;
 begin // all this is run in synchronous mode -> only 200 records in the set
   client.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   assert(client.InternalState>0);
-  assert(Call.OutStatus=HTML_SUCCESS);
+  assert(Call.OutStatus=HTTP_SUCCESS);
   client.BatchStart(TSQLRecordPeople);
   people := TSQLRecordPeople.Create;
   assert(people.InternalState=0);
@@ -120,7 +121,7 @@ begin // all this is run in synchronous mode -> only 200 records in the set
     assert(client.BatchAdd(people,true)=i-1);
     assert(people.InternalState=0);
   end;
-  assert(client.BatchSend(res)=HTML_SUCCESS);
+  assert(client.BatchSend(res)=HTTP_SUCCESS);
   assert(length(res)=200);
   for i := 1 to 200 do
     assert(res[i-1]=i);

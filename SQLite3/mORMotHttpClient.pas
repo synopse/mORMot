@@ -504,7 +504,7 @@ begin
     Call.OutHead := Head;
     Call.OutBody := Content;
   end else
-    Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501
 {$ifdef WITHLOG}
   with Call do
     fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',
@@ -734,7 +734,7 @@ begin
   end;
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   head := 'Sec-WebSockets-REST: NonBlocking';
-  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTML_SUCCESS;
+  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTTP_SUCCESS;
 end;
 
 function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
@@ -743,7 +743,7 @@ begin
   if (Ctxt=nil) or
      ((Ctxt.InContentType<>'') and
       not IdemPropNameU(Ctxt.InContentType,JSON_CONTENT_TYPE)) then begin
-    result := HTML_BADREQUEST;
+    result := HTTP_BADREQUEST;
     exit;
   end;
   params.Init(Ctxt.URL,Ctxt.Method,Ctxt.InHeaders,Ctxt.InContent);
@@ -888,7 +888,7 @@ function TSQLHttpClientRequest.InternalRequest(const url, method: RawUTF8;
 var OutHeader, OutData: RawByteString;
 begin
   if fRequest=nil then
-    result.Lo := HTML_NOTIMPLEMENTED else begin
+    result.Lo := HTTP_NOTIMPLEMENTED else begin
     result.Lo := fRequest.Request(url,method,KeepAliveMS,Header,Data,DataType,
       SockString(OutHeader),SockString(OutData));
     result.Hi := GetCardinal(pointer(

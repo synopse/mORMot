@@ -544,7 +544,7 @@ var people: TSQLRecordPeople;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   Check(fClient.InternalState>0);
-  Check(Call.OutStatus=HTML_SUCCESS);
+  Check(Call.OutStatus=HTTP_SUCCESS);
   people := TSQLRecordPeople.Create;
   try
     Check(people.InternalState=0);
@@ -664,7 +664,7 @@ var people: TSQLRecordPeople;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
   Check(fClient.InternalState>0);
-  Check(Call.OutStatus=HTML_SUCCESS);
+  Check(Call.OutStatus=HTTP_SUCCESS);
   fClient.BatchStart(TSQLRecordPeople);
   people := TSQLRecordPeople.Create;
   try
@@ -680,7 +680,7 @@ begin
   finally
     people.Free;
   end;
-  Check(fClient.BatchSend(res)=HTML_SUCCESS);
+  Check(fClient.BatchSend(res)=HTTP_SUCCESS);
   Check(length(res)=200);
   for i := 1 to length(res) do
     Check(res[i-1]=i);
@@ -758,10 +758,10 @@ begin
         people.Free;
       end;
     end;
-  Check(fClient.BatchSend(res)=HTML_SUCCESS);
+  Check(fClient.BatchSend(res)=HTTP_SUCCESS);
   Check(length(res)=14);
   for i := 1 to 14 do
-    Check(res[i-1]=HTML_SUCCESS);
+    Check(res[i-1]=HTTP_SUCCESS);
   for i := 1 to 200 do begin
     people := TSQLRecordPeople.Create(fClient,i);
     try

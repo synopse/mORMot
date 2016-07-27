@@ -746,12 +746,12 @@ begin
       Check(IdemPChar(pointer(call.Url),'ROOT/VALID/'),'deleted host in URI');
       call.Method := 'GET';
       Rest.URI(call);
-      Check(call.OutStatus=HTML_BADREQUEST,'wrong link');
+      Check(call.OutStatus=HTTP_BADREQUEST,'wrong link');
       call.Url := service.ComputeURIForReply('toto','toto@toto.com');
       delete(call.Url,1,24);
       call.Method := 'GET';
       Rest.URI(call);
-      Check(call.OutStatus=HTML_TEMPORARYREDIRECT,'emulated click on link');
+      Check(call.OutStatus=HTTP_TEMPORARYREDIRECT,'emulated click on link');
       Check(call.OutHead='Location: http://officialwebsite/success&logon=toto');
       Check(service.IsEmailValidated('toto','toto@toto.com'),'after click');
       Check(daemon.Stop(info)=cqrsSuccess);

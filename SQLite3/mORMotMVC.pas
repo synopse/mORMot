@@ -307,9 +307,9 @@ type
     // to the specified method
     RedirectToMethodParameters: RawUTF8;
     /// which HTML status code should be returned
-    // - if RedirectMethodName is set, will return 307 HTML_TEMPORARYREDIRECT
+    // - if RedirectMethodName is set, will return 307 HTTP_TEMPORARYREDIRECT
     // by default, but you can set here the expected HTML status code, e.g.
-    // 201 HTML_CREATED or 404 HTML_NOTFOUND
+    // 201 HTTP_CREATED or 404 HTTP_NOTFOUND
     ReturnedStatus: cardinal;
   end;
 
@@ -515,18 +515,18 @@ type
     fAction: TMVCAction;
   public
     /// same as calling TMVCApplication.GotoView()
-    // - HTML_TEMPORARYREDIRECT will change the URI, but HTML_SUCCESS won't
+    // - HTTP_TEMPORARYREDIRECT will change the URI, but HTTP_SUCCESS won't
     constructor CreateGotoView(const aMethod: RawUTF8;
       const aParametersNameValuePairs: array of const;
-      aStatus: cardinal=HTML_TEMPORARYREDIRECT);
+      aStatus: cardinal=HTTP_TEMPORARYREDIRECT);
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(const aErrorMessage: string;
-      aErrorCode: integer=HTML_BADREQUEST); overload;
+      aErrorCode: integer=HTTP_BADREQUEST); overload;
     /// same as calling TMVCApplication.GotoError()
     constructor CreateGotoError(aHtmlErrorCode: integer); overload;
     /// same as calling TMVCApplication.GotoDefault
-    // - HTML_TEMPORARYREDIRECT will change the URI, but HTML_SUCCESS won't
-    constructor CreateDefault(aStatus: cardinal=HTML_TEMPORARYREDIRECT);
+    // - HTTP_TEMPORARYREDIRECT will change the URI, but HTTP_SUCCESS won't
+    constructor CreateDefault(aStatus: cardinal=HTTP_TEMPORARYREDIRECT);
   end;
 
   /// defines the main and error pages for the ViewModel of one application
@@ -572,16 +572,16 @@ type
     /// compute the data context e.g. for the /mvc-info URI
     function GetMvcInfo: variant; virtual;
     /// wrappers to redirect to IMVCApplication standard methods
-    // - if status is HTML_TEMPORARYREDIRECT, it will change the URI
-    // whereas HTML_SUCCESS would just render the view for the current URI
+    // - if status is HTTP_TEMPORARYREDIRECT, it will change the URI
+    // whereas HTTP_SUCCESS would just render the view for the current URI
     class procedure GotoView(var Action: TMVCAction; const MethodName: RawUTF8;
       const ParametersNameValuePairs: array of const;
-      Status: cardinal=HTML_TEMPORARYREDIRECT);
+      Status: cardinal=HTTP_TEMPORARYREDIRECT);
     class procedure GotoError(var Action: TMVCAction; const Msg: string;
-      ErrorCode: integer=HTML_BADREQUEST); overload;
+      ErrorCode: integer=HTTP_BADREQUEST); overload;
     class procedure GotoError(var Action: TMVCAction; ErrorCode: integer); overload;
     class procedure GotoDefault(var Action: TMVCAction;
-      Status: cardinal=HTML_TEMPORARYREDIRECT);
+      Status: cardinal=HTTP_TEMPORARYREDIRECT);
   public
     /// initialize the instance of the MVC/MVVM application
     // - define the associated REST instance, and the interface definition for
@@ -1293,8 +1293,8 @@ end;
 class procedure TMVCApplication.GotoError(var Action: TMVCAction;
   ErrorCode: integer);
 begin
-  if ErrorCode<=HTML_CONTINUE then
-    ErrorCode := HTML_BADREQUEST;
+  if ErrorCode<=HTTP_CONTINUE then
+    ErrorCode := HTTP_BADREQUEST;
   GotoView(Action,'Error',['Msg',StatusCodeToErrorMsg(ErrorCode)],ErrorCode);
 end;
 
@@ -1359,7 +1359,7 @@ var action: TMVCAction;
     methodOutput: RawUTF8;
     renderContext: variant;
 begin
-  action.ReturnedStatus := HTML_SUCCESS;
+  action.ReturnedStatus := HTTP_SUCCESS;
   fMethodIndex := aMethodIndex;
   try
     if fMethodIndex>=0 then begin
@@ -1409,22 +1409,22 @@ begin
         fInput := action.RedirectToMethodParameters;
         fMethodIndex := fApplication.fFactory.FindMethodIndex(action.RedirectToMethodName);
         if action.ReturnedStatus=0 then
-          action.ReturnedStatus := HTML_SUCCESS else
-        if (action.ReturnedStatus=HTML_TEMPORARYREDIRECT) or
-           (action.ReturnedStatus=HTML_FOUND) or
-           (action.ReturnedStatus=HTML_SEEOTHER) or
-           (action.ReturnedStatus=HTML_MOVEDPERMANENTLY) then
+          action.ReturnedStatus := HTTP_SUCCESS else
+        if (action.ReturnedStatus=HTTP_TEMPORARYREDIRECT) or
+           (action.ReturnedStatus=HTTP_FOUND) or
+           (action.ReturnedStatus=HTTP_SEEOTHER) or
+           (action.ReturnedStatus=HTTP_MOVEDPERMANENTLY) then
           if Redirects(action) then // if redirection is implemented
             exit else
-            action.ReturnedStatus := HTML_SUCCESS; // fallback is to handle here
+            action.ReturnedStatus := HTTP_SUCCESS; // fallback is to handle here
       until fMethodIndex<0; // loop to handle redirection
     end;
     // if we reached here, there was a wrong URI -> render the 404 error page
-    CommandError('notfound',true,HTML_NOTFOUND);
+    CommandError('notfound',true,HTTP_NOTFOUND);
   except
     on E: Exception do
       CommandError('exception',
-        ObjectToVariantDebug(E,'%.ExecuteCommand',[self]),HTML_SERVERERROR);
+        ObjectToVariantDebug(E,'%.ExecuteCommand',[self]),HTTP_SERVERERROR);
   end;
 end;
 
@@ -1617,7 +1617,7 @@ begin
       mvcinfo.viewsFolder := fViews.ViewTemplateFolder;
       fMvcInfoCache := TSynMustache.Parse(MUSTACHE_MVCINFO).Render(mvcinfo);
     end;
-    Ctxt.Returns(fMvcInfoCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
+    Ctxt.Returns(fMvcInfoCache,HTTP_SUCCESS,HTML_CONTENT_TYPE_HEADER,True);
   end else
   if (publishStatic in fPublishOptions) and
      IdemPropNameU(rawMethodName,STATIC_URI) then begin
@@ -1635,9 +1635,9 @@ begin
       fStaticCache.Add(rawFormat,static);
     end;
     if static='' then
-      Ctxt.Error('',HTML_NOTFOUND) else begin
+      Ctxt.Error('',HTTP_NOTFOUND) else begin
       Split(static,#0,rawFormat,static);
-      Ctxt.Returns(static,HTML_SUCCESS,HEADER_CONTENT_TYPE+rawFormat,True);
+      Ctxt.Returns(static,HTTP_SUCCESS,HEADER_CONTENT_TYPE+rawFormat,True);
     end;
     exit;
   end else begin
@@ -1663,7 +1663,7 @@ begin
         end;
         renderer.ExecuteCommand(methodIndex);
       end else
-        renderer.CommandError('notfound',true,HTML_NOTFOUND);
+        renderer.CommandError('notfound',true,HTTP_NOTFOUND);
       Ctxt.Returns(renderer.Output.Content,renderer.Output.Status,
         renderer.Output.Header,True,true);
     finally
@@ -1696,7 +1696,7 @@ end;
 procedure TMVCRendererReturningData.ExecuteCommand(aMethodIndex: integer);
   procedure SetOutputValue(const aValue: RawUTF8);
   begin
-    fOutput.Status := HTML_SUCCESS;
+    fOutput.Status := HTTP_SUCCESS;
     Split(aValue,#0,fOutput.Header,RawUTF8(fOutput.Content));
   end;
   function RetrievedFromInputValues(const aKey: RawUTF8;
@@ -1773,13 +1773,13 @@ begin
       inc(fCacheCurrentSec,TimeOutSeconds);
       case fCacheCurrent of
       rootCache:
-        if fOutput.Status=HTML_SUCCESS then begin
+        if fOutput.Status=HTTP_SUCCESS then begin
           RootValue := fOutput.Header+#0+fOutput.Content;
           RootValueExpirationTime := fCacheCurrentSec;
         end else
           RootValue := '';
       inputCache:
-        if fOutput.Status=HTML_SUCCESS then
+        if fOutput.Status=HTTP_SUCCESS then
           InputValues.Add(fCacheCurrentInputValueKey,fOutput.Header+#0+fOutput.Content,fCacheCurrentSec) else
           InputValues.Add(fCacheCurrentInputValueKey,'');
       end;

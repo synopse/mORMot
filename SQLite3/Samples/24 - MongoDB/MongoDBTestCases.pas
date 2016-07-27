@@ -439,7 +439,7 @@ begin
   finally
     R.Free;
   end;
-  Check(fClient.BatchSend(IDs)=HTML_SUCCESS);
+  Check(fClient.BatchSend(IDs)=HTTP_SUCCESS);
   Check(length(IDs)=COLL_COUNT);
   NotifyTestSpeed('rows inserted',COLL_COUNT,fMongoClient.BytesTransmitted-bytes);
   Check(fClient.TableRowCount(TSQLORM)=COLL_COUNT);
@@ -954,7 +954,7 @@ begin
       Check(fClient.BatchDelete(i)>=0);
       dec(ExpectedCount);
     end;
-  Check(fClient.BatchSend(IDs)=HTML_SUCCESS);
+  Check(fClient.BatchSend(IDs)=HTTP_SUCCESS);
   Check(length(IDs)=COLL_COUNT-ExpectedCount);
   NotifyTestSpeed('rows deleted',length(IDs),fMongoClient.BytesTransmitted-bytes);
   R := TSQLORM.CreateAndFillPrepare(fClient,'');

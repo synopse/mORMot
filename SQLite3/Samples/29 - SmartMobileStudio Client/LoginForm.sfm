@@ -7,7 +7,6 @@
       <Name>LoginForm</Name>
       <object type="TW3Label">
         <Caption>&lt;b&gt;&lt;i&gt;mORMot&lt;/i&gt; Web Test&lt;/b&gt;</Caption>
-        <AlignText>1</AlignText>
         <Width>184</Width>
         <Top>8</Top>
         <StyleClass>h1</StyleClass>

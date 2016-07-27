@@ -866,19 +866,19 @@ begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI[Ctxt.UseSSL]<>'' then begin
       Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI[Ctxt.UseSSL];
-      result := HTML_TEMPORARYREDIRECT;
+      result := HTTP_TEMPORARYREDIRECT;
     end else
-      result := HTML_BADREQUEST else
+      result := HTTP_BADREQUEST else
   if (Ctxt.Method='') or (OnlyJSONRequests and
      not IdemPChar(pointer(Ctxt.InContentType),JSON_CONTENT_TYPE_UPPER)) then
     // wrong Input parameters or not JSON request: 400 BAD REQUEST
-    result := HTML_BADREQUEST else
+    result := HTTP_BADREQUEST else
   if Ctxt.Method='OPTIONS' then begin
     // handle CORS headers control
     Ctxt.OutCustomHeaders := 'Access-Control-Allow-Headers: '+
       FindIniNameValue(pointer(Ctxt.InHeaders),'ACCESS-CONTROL-REQUEST-HEADERS: ')+
       fAccessControlAllowOriginHeader;
-    result := HTML_SUCCESS;
+    result := HTTP_SUCCESS;
   end else begin
     // compute URI, handling any virtual host domain
     call.Init;
@@ -903,7 +903,7 @@ begin
         call.Url := copy(Ctxt.URL,2,maxInt) else
         call.Url := Ctxt.URL;
     // search and call any matching TSQLRestServer instance
-    result := HTML_NOTFOUND; // page not found by default (in case of wrong URL)
+    result := HTTP_NOTFOUND; // page not found by default (in case of wrong URL)
     for i := 0 to high(fDBServers) do
     with fDBServers[i] do
     if Ctxt.UseSSL=(Security=secSSL) then begin // registered for http or https
@@ -912,7 +912,7 @@ begin
         continue;
       if fRedirectServerRootUriForExactCase and (match=rmMatchWithCaseChange) then begin
         // force redirection to exact Server.Model.Root case sensitivity
-        call.OutStatus := HTML_TEMPORARYREDIRECT;
+        call.OutStatus := HTTP_TEMPORARYREDIRECT;
         call.OutHead := 'Location: '+Server.Model.Root+
           copy(call.Url,length(Server.Model.Root)+1,maxInt);
       end else begin
@@ -937,7 +937,7 @@ begin
         Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
       // handle HTTP redirection over virtual hosts
       if (host<>'') and
-         ((result=HTML_MOVEDPERMANENTLY) or (result=HTML_TEMPORARYREDIRECT)) then begin
+         ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
         redirect := FindIniNameValue(P,'LOCATION: ');
         len := length(host);
         if (length(redirect)>len) and (redirect[len+1]='/') and
@@ -1029,7 +1029,7 @@ begin
         ctxt.Prepare(FormatUTF8('%/%/%',[aSender.Model.Root,
           aInterfaceDotMethodName,aFakeCallID]),'POST','','['+aParams+']','');
         status := fHttpServer.Callback(ctxt,aResult=nil);
-        if status=HTML_SUCCESS then begin
+        if status=HTTP_SUCCESS then begin
           if aResult<>nil then
             aResult^ := Ctxt.OutContent;
           result := true;

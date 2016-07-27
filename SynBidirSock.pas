@@ -512,7 +512,7 @@ type
     // - caller should set the aRequest with the outgoing parameters, and
     // optionally receive a response from the other end
     // - the request may be sent in blocking or non blocking mode
-    // - returns the HTML status code (HTML_SUCCESS=200 for success)
+    // - returns the HTML status code (HTTP_SUCCESS=200 for success)
     function NotifyCallback(aRequest: THttpServerRequest;
       aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
     /// the settings currently used during the WebSockets process

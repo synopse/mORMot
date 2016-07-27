@@ -76,7 +76,7 @@ begin
     exit;
   if not TryStrToInt64(edtGetID.Text,Int64(ID)) then
     exit;
-  if fClient.CallBackGet('blob',[],resp,TSQLNoteFile,ID)=HTML_SUCCESS then
+  if fClient.CallBackGet('blob',[],resp,TSQLNoteFile,ID)=HTTP_SUCCESS then
     mmoGet.Text := UTF8ToString(resp) else
     mmoGet.Text := '? not found';
 end;
@@ -104,7 +104,7 @@ var resp: RawUTF8;
 begin
   if fClient=nil then
     exit;
-  if fClient.CallBackPut('blob',StringToUTF8(mmoSet.Text),resp,TSQLNoteFile,Tag)=HTML_CREATED then
+  if fClient.CallBackPut('blob',StringToUTF8(mmoSet.Text),resp,TSQLNoteFile,Tag)=HTTP_CREATED then
     mmoSet.Text := '.. saved ..';
 end;
 

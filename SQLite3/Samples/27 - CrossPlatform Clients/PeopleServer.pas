@@ -36,6 +36,16 @@ type
   end;
   {$endif TESTRECORD}
 
+  {
+  TRecB=packed record
+    a1:array of packed record
+      v1,v2:integer;
+    end;
+    a2:array of integer;
+    v1:integer;
+  end;
+  }
+
   TPeopleSexe = (sFemale, sMale);
 
   TPeopleSexeDynArray = array of TPeopleSexe;
@@ -54,6 +64,7 @@ type
     fLastName: RawUTF8;
     fYearOfBirth: integer;
     fYearOfDeath: word;
+    fAnother: TSQLRecordPeople;
     {$ifdef TESTRECORD}
     fSexe: TPeopleSexe;
     fSimple: TTestCustomJSONArraySimpleArray;
@@ -66,6 +77,7 @@ type
     property Data: TSQLRawBlob read fData write fData;
     property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
     property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+    property Another: TSQLRecordPeople read fAnother write fAnother;
   {$ifdef TESTRECORD}
     property Sexe: TPeopleSexe read fSexe write fSexe;
   public
@@ -83,6 +95,8 @@ type
     {$endif}
     function GetPeople(id: TID; out People: TSQLRecordPeople;
       out Sexes: TPeopleSexeDynArray; var arr: TSimpleRecordDynArray): boolean;
+//      var rec: TRecB): boolean;
+    //function Test(toto: integer): TServiceCustomAnswer;
   end;
 
   TCustomServer = class(TSQLRestServerFullMemory)
@@ -113,6 +127,8 @@ type
     {$endif}
     function GetPeople(id: TID; out People: TSQLRecordPeople;
       out Sexes: TPeopleSexeDynArray; var arr: TSimpleRecordDynArray): boolean;
+//      var rec: TRecB): boolean;
+    function Test(toto: integer): TServiceCustomAnswer;
   end;
 
 function TServiceCalculator.Add(n1, n2: integer): integer;
@@ -130,7 +146,7 @@ end;
 
 function TServiceCalculator.GetPeople(id: TID;
   out People: TSQLRecordPeople; out Sexes: TPeopleSexeDynArray;
-  var arr: TSimpleRecordDynArray): boolean;
+  var arr: TSimpleRecordDynArray{; var rec: TRecB}): boolean;
 var n: integer;
 begin
   result := ServiceContext.Request.Server.Retrieve(id,People);
@@ -221,6 +237,8 @@ const
   'H {H1 integer H2 WideString H3{H3a boolean H3b RawByteString}} I TDateTime '+
   'J [J1 byte J2 TGUID J3 TRecordEnum]';
   __TSimpleRecord = 'A,B:integer C: RawUTF8';
+   __TRecB = 'a2:array of integer v1:integer';
+  //  __TRecB = 'a1 [v1,v2:integer] a2:array of integer v1:integer';
 
 class procedure TSQLRecordPeople.InternalRegisterCustomProperties(
   Props: TSQLRecordProperties);
@@ -229,11 +247,19 @@ begin
     'Simple',@TSQLRecordPeople(nil).fSimple);
 end;
 
+function TServiceCalculator.Test(toto: integer): TServiceCustomAnswer;
+begin
+  result.Header := TEXT_CONTENT_TYPE_HEADER;
+  result.Content := Int32ToUtf8(toto);
+  result.Status := HTTP_SUCCESS;
+end;
+
 initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TRecordEnum));
   TTextWriter.RegisterCustomJSONSerializerFromText(
     TypeInfo(TTestCustomJSONArraySimpleArray),__TTestCustomJSONArraySimpleArray);
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TSimpleRecord),__TSimpleRecord);
+//  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TRecB),__TRecB);
 
 
 {$endif TESTRECORD}

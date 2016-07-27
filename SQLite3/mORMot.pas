@@ -799,7 +799,7 @@ unit mORMot;
       as an alternative, ResultAsXMLObjectIfAcceptOnlyXML option will recognize
       'Accept: application/xml' or 'Accept: text/xml' HTTP header and return
       XML content instead of JSON - with optional ResultAsXMLObjectNameSpace
-    - added TServiceCustomAnswer.Status member to override default HTML_SUCCESS
+    - added TServiceCustomAnswer.Status member to override default HTTP_SUCCESS
     - new TSQLRest.Service<T: IInterface> method to retrieve a service instance
     - added TServiceMethodArgument.AddJSON/AddValueJSON/AddDefaultJSON methods
     - method-based services are now able to handle "304 Not Modified" optimized
@@ -895,14 +895,14 @@ unit mORMot;
     - TSQLRestServer.URI() and TSQLRestClientURI.InternalURI() methods now uses
       one TSQLRestURIParams parameter for all request input and output values
     - TSQLRestServer.URI() method will return "405 Method Not Allowed" error
-      (HTML_NOTALLOWED) if the supplied URI does not match RestAccessRights
+      (HTTP_NOTALLOWED) if the supplied URI does not match RestAccessRights
     - TSQLRestServer.URI() will now handle POST/PUT/DELETE ModelRoot/MethodName
       as method-based services
     - added TSQLRestServerFullMemory.Flush method-based service
     - added TSQLRestServerFullMemory.DropDatabase method
     - TSQLRestServerFullMemory now generates its expected InternalState value
-    - completed HTML_* constant list and messages - feature request [d8de3eb76a]
-    - handle HTML_NOTMODIFIED and HTML_TEMPORARYREDIRECT as successful status -
+    - completed HTTP_* constant list and messages - feature request [d8de3eb76a]
+    - handle HTTP_NOTMODIFIED and HTTP_TEMPORARYREDIRECT as successful status -
       as expected by feature request [5d2634e8a3]
     - enhanced sllAuth session creation/deletion logged information
     - introducing TSQLRest.LogClass property, allowing to set a custom log class
@@ -4541,61 +4541,61 @@ type
 
 const
   /// HTML Status Code for "Continue"
-  HTML_CONTINUE = 100;
+  HTTP_CONTINUE = 100;
   /// HTML Status Code for "Switching Protocols"
-  HTML_SWITCHINGPROTOCOLS = 101;
+  HTTP_SWITCHINGPROTOCOLS = 101;
   /// HTML Status Code for "Success"
-  HTML_SUCCESS = 200;
+  HTTP_SUCCESS = 200;
   /// HTML Status Code for "Created"
-  HTML_CREATED = 201;
+  HTTP_CREATED = 201;
   /// HTML Status Code for "Accepted"
-  HTML_ACCEPTED = 202;
+  HTTP_ACCEPTED = 202;
   /// HTML Status Code for "Non-Authoritative Information"
-  HTML_NONAUTHORIZEDINFO = 203;
+  HTTP_NONAUTHORIZEDINFO = 203;
   /// HTML Status Code for "No Content"
-  HTML_NOCONTENT = 204;
+  HTTP_NOCONTENT = 204;
   /// HTML Status Code for "Multiple Choices"
-  HTML_MULTIPLECHOICES = 300;
+  HTTP_MULTIPLECHOICES = 300;
   /// HTML Status Code for "Moved Permanently"
-  HTML_MOVEDPERMANENTLY = 301;
+  HTTP_MOVEDPERMANENTLY = 301;
   /// HTML Status Code for "Found"
-  HTML_FOUND = 302;
+  HTTP_FOUND = 302;
   /// HTML Status Code for "See Other"
-  HTML_SEEOTHER = 303;
+  HTTP_SEEOTHER = 303;
   /// HTML Status Code for "Not Modified"
-  HTML_NOTMODIFIED = 304;
+  HTTP_NOTMODIFIED = 304;
   /// HTML Status Code for "Use Proxy"
-  HTML_USEPROXY = 305;
+  HTTP_USEPROXY = 305;
   /// HTML Status Code for "Temporary Redirect"
-  HTML_TEMPORARYREDIRECT = 307;
+  HTTP_TEMPORARYREDIRECT = 307;
   /// HTML Status Code for "Bad Request"
-  HTML_BADREQUEST = 400;
+  HTTP_BADREQUEST = 400;
   /// HTML Status Code for "Unauthorized"
-  HTML_UNAUTHORIZED = 401;
+  HTTP_UNAUTHORIZED = 401;
   /// HTML Status Code for "Forbidden"
-  HTML_FORBIDDEN = 403;
+  HTTP_FORBIDDEN = 403;
   /// HTML Status Code for "Not Found"
-  HTML_NOTFOUND = 404;
+  HTTP_NOTFOUND = 404;
   // HTML Status Code for "Method Not Allowed"
-  HTML_NOTALLOWED = 405;
+  HTTP_NOTALLOWED = 405;
   // HTML Status Code for "Not Acceptable"
-  HTML_NOTACCEPTABLE = 406;
+  HTTP_NOTACCEPTABLE = 406;
   // HTML Status Code for "Proxy Authentication Required"
-  HTML_PROXYAUTHREQUIRED = 407;
+  HTTP_PROXYAUTHREQUIRED = 407;
   /// HTML Status Code for "Request Time-out"
-  HTML_TIMEOUT = 408;
+  HTTP_TIMEOUT = 408;
   /// HTML Status Code for "Internal Server Error"
-  HTML_SERVERERROR = 500;
+  HTTP_SERVERERROR = 500;
   /// HTML Status Code for "Not Implemented"
-  HTML_NOTIMPLEMENTED = 501;
+  HTTP_NOTIMPLEMENTED = 501;
   /// HTML Status Code for "Bad Gateway"
-  HTML_BADGATEWAY = 502;
+  HTTP_BADGATEWAY = 502;
   /// HTML Status Code for "Service Unavailable"
-  HTML_UNAVAILABLE = 503;
+  HTTP_UNAVAILABLE = 503;
   /// HTML Status Code for "Gateway Timeout"
-  HTML_GATEWAYTIMEOUT = 504;
+  HTTP_GATEWAYTIMEOUT = 504;
   /// HTML Status Code for "HTTP Version Not Supported"
-  HTML_HTTPVERSIONNONSUPPORTED = 505;
+  HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
   /// you can use this cookie value to delete a cookie on the browser side
   COOKIE_EXPIRED = '; Expires=Sat, 01 Jan 2010 00:00:01 GMT';
@@ -4621,11 +4621,11 @@ const
   /// uppercase version of HTTP header for static file content serving
   STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER+STATICFILE_CONTENT_TYPE;
 
-/// convert any HTML_* constant to a short English text
+/// convert any HTTP_* constant to a short English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
 
-/// convert any HTML_* constant to an integer error code and its English text
+/// convert any HTTP_* constant to an integer error code and its English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 
@@ -5552,7 +5552,7 @@ type
     InBody: RawUTF8;
     /// output parameter to be set to the response message header
     // - it is the right place to set the returned message body content type,
-    // e.g. TEXT_CONTENT_TYPE_HEADER or HTML_CONTENT_TYPE_HEADER: if not set,
+    // e.g. TEXT_CONTENT_TYPE_HEADER or HTTP_CONTENT_TYPE_HEADER: if not set,
     // the default JSON_CONTENT_TYPE_HEADER will be returned to the client,
     // meaning that the message is JSON
     // - you can use OutBodyType() function to retrieve the stored content-type
@@ -5560,7 +5560,7 @@ type
     /// output parameter to be set to the response message body
     OutBody: RawUTF8;
     /// output parameter to be set to the HTTP status integer code
-    // - HTML_NOTFOUND=404 e.g. if the url doesn't start with Model.Root (caller
+    // - HTTP_NOTFOUND=404 e.g. if the url doesn't start with Model.Root (caller
     // can try another TSQLRestServer)
     OutStatus: cardinal;
     /// output parameter to be set to the database internal state
@@ -5898,7 +5898,7 @@ type
     function Authenticate: boolean; virtual;
     /// method called in case of authentication failure
     // - the failure origin is stated by the Reason parameter
-    // - this default implementation will just set OutStatus := HTML_FORBIDDEN
+    // - this default implementation will just set OutStatus := HTTP_FORBIDDEN
     // and call TSQLRestServer.OnAuthenticationFailed event (if any)
     procedure AuthenticationFailed(Reason: TNotifyAuthenticationFailedReason); virtual;
     /// direct launch of a method-based service
@@ -6182,18 +6182,18 @@ type
     // - e.g. '/root/methodname/toto/index.html' will return 'toto\index.html'
     property ResourceFileName: TFileName read GetResourceFileName;
     /// use this method to send back directly a result value to the caller
-    // - expects Status to be either HTML_SUCCESS, HTML_NOTMODIFIED,
-    // HTML_CREATED, or HTML_TEMPORARYREDIRECT, and will return as answer the
+    // - expects Status to be either HTTP_SUCCESS, HTTP_NOTMODIFIED,
+    // HTTP_CREATED, or HTTP_TEMPORARYREDIRECT, and will return as answer the
     // supplied Result content with no transformation
     // - if Status is an error code, it will call Error() method
     // - CustomHeader optional parameter can be set e.g. to
     // TEXT_CONTENT_TYPE_HEADER if the default JSON_CONTENT_TYPE is not OK,
     // or calling GetMimeContentTypeHeader() on the returned binary buffer
-    // - if Handle304NotModified is TRUE and Status is HTML_SUCCESS, the Result
+    // - if Handle304NotModified is TRUE and Status is HTTP_SUCCESS, the Result
     // content will be hashed (using crc32c) and in case of no modification
-    // will return HTML_NOTMODIFIED to the browser, without the actual result
+    // will return HTTP_NOTMODIFIED to the browser, without the actual result
     // content (to save bandwidth)
-    procedure Returns(const Result: RawUTF8; Status: integer=HTML_SUCCESS;
+    procedure Returns(const Result: RawUTF8; Status: integer=HTTP_SUCCESS;
       const CustomHeader: RawUTF8=''; Handle304NotModified: boolean=false;
       HandleErrorAsRegularResult: boolean=false); overload;
     /// use this method to send back a JSON object to the caller
@@ -6202,29 +6202,29 @@ type
     // - implementation is just a wrapper around Returns(JSONEncode([]))
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
-    // - expects Status to be either HTML_SUCCESS or HTML_CREATED
-    // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
-    procedure Returns(const NameValuePairs: array of const; Status: integer=HTML_SUCCESS;
+    // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
+    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
+    procedure Returns(const NameValuePairs: array of const; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
     // - you can customize SQLRecordOptions, to force the returned JSON
     // object to have its TSQLRecord nested fields serialized as true JSON
     // arrays or objects, or add an "ID_str" string field for JavaScript
-    procedure Returns(Value: TObject; Status: integer=HTML_SUCCESS;
+    procedure Returns(Value: TObject; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false;
       SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
-    procedure ReturnsJson(const Value: variant; Status: integer=HTML_SUCCESS;
+    procedure ReturnsJson(const Value: variant; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape;
       MakeHumanReadable: boolean=false);
     /// uses this method to send back directly any binary content to the caller
     // - the exact MIME type will be retrieved using GetMimeContentTypeHeader(),
     // from the supplied Blob binary buffer, and optional a file name
-    // - by default, the HTML_NOTMODIFIED process will take place, to minimize
+    // - by default, the HTTP_NOTMODIFIED process will take place, to minimize
     // bandwidth between the server and the client
-    procedure ReturnBlob(const Blob: RawByteString; Status: integer=HTML_SUCCESS;
+    procedure ReturnBlob(const Blob: RawByteString; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=true; const FileName: TFileName='');
     /// use this method to send back a file to the caller
     // - this method will let the HTTP server return the file content
@@ -6251,8 +6251,8 @@ type
       Handle304NotModified: boolean=true; const DefaultFileName: TFileName='index.html';
       const Error404Redirect: RawUTF8='');
     /// use this method notify the caller that the resource URI has changed
-    // - returns a HTML_TEMPORARYREDIRECT status with the specified location,
-    // or HTML_MOVEDPERMANENTLY if PermanentChange is TRUE
+    // - returns a HTTP_TEMPORARYREDIRECT status with the specified location,
+    // or HTTP_MOVEDPERMANENTLY if PermanentChange is TRUE
     procedure Redirect(const NewLocation: RawUTF8; PermanentChange: boolean=false);
     /// use this method to send back a JSON object with a "result" field
     // - this method will encode the supplied values as a {"result":"...}
@@ -6262,31 +6262,31 @@ type
     // method to call and decode this value)
     // or as a JSON object containing an array of values:
     // $ {"result":["One","two"]}
-    // - expects Status to be either HTML_SUCCESS or HTML_CREATED
-    // - caller can set Handle304NotModified=TRUE for Status=HTML_SUCCESS
-    procedure Results(const Values: array of const; Status: integer=HTML_SUCCESS;
+    // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
+    // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
+    procedure Results(const Values: array of const; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false);
     /// use this method if the caller expect no data, just a status
     // - just wrap the overloaded Returns() method with no result value
     // - if Status is an error code, it will call Error() method
     // - by default, calling this method will mark process as successfull
-    procedure Success(Status: integer=HTML_SUCCESS); virtual;
+    procedure Success(Status: integer=HTTP_SUCCESS); virtual;
     /// use this method to send back an error to the caller
-    // - expects Status to not be HTML_SUCCESS neither HTML_CREATED,
+    // - expects Status to not be HTTP_SUCCESS neither HTTP_CREATED,
     // and will send back a JSON error message to the caller, with the
     // supplied error text
     // - if no ErrorMessage is specified, will return a default text
     // corresponding to the Status code
     procedure Error(const ErrorMessage: RawUTF8='';
-      Status: integer=HTML_BADREQUEST); overload; virtual;
+      Status: integer=HTTP_BADREQUEST); overload; virtual;
     /// use this method to send back an error to the caller
     // - implementation is just a wrapper over Error(FormatUTF8(Format,Args))
     procedure Error(const Format: RawUTF8; const Args: array of const;
-      Status: integer=HTML_BADREQUEST); overload;
+      Status: integer=HTTP_BADREQUEST); overload;
     /// use this method to send back an error to the caller
     // - will serialize the supplied exception, with an optional error message
     procedure Error(E: Exception; const Format: RawUTF8; const Args: array of const;
-      Status: integer=HTML_BADREQUEST); overload;
+      Status: integer=HTTP_BADREQUEST); overload;
     /// implements a method-based service for live update of some settings
     // - should be called from a method-based service, e.g. Configuration()
     // - the settings are expected to be stored e.g. in a TSynAutoCreateFields
@@ -6434,7 +6434,7 @@ type
   // parameter can specify a custom header like TEXT_CONTENT_TYPE_HEADER
   // - if process succeeded, and no data is expected to be returned to the caller,
   // implementation shall call overloaded Ctxt.Success() method with the
-  // expected status (i.e. just Ctxt.Success will return HTML_SUCCESS)
+  // expected status (i.e. just Ctxt.Success will return HTTP_SUCCESS)
   // - if process failed, implementation shall call Ctxt.Error() method to
   // set the corresponding error message and error code number
   // - a typical implementation may be:
@@ -10459,7 +10459,7 @@ type
   TServiceCustomAnswer = record
     /// mandatory response type, as encoded in the HTTP header
     // - useful to set the response mime-type - see e.g. the
-    // TEXT_CONTENT_TYPE_HEADER or HTML_CONTENT_TYPE_HEADER constants or
+    // TEXT_CONTENT_TYPE_HEADER or HTTP_CONTENT_TYPE_HEADER constants or
     // GetMimeContentType() function
     // - in order to be handled as expected, this field SHALL be set to NOT ''
     // (otherwise TServiceCustomAnswer will be transmitted as raw JSON)
@@ -10468,8 +10468,8 @@ type
     // - corresponding to the response type, as defined in Header
     Content: RawByteString;
     /// the HTML response code
-    // - if not overriden, will default to HTML_SUCCESS = 200 on server side
-    // - on client side, would always contain HTML_SUCCESS = 200 on success,
+    // - if not overriden, will default to HTTP_SUCCESS = 200 on server side
+    // - on client side, would always contain HTTP_SUCCESS = 200 on success,
     // or any error should be handled as expected by the caller (e.g. using
     // TServiceFactoryClient.GetErrorMessage for decoding REST/SOA errors)
     Status: cardinal;
@@ -11855,7 +11855,7 @@ type
   // - should return TRUE if the method can be executed
   // - should return FALSE if the method should not be executed, and set the
   // corresponding error to the supplied context e.g.
-  // ! Ctxt.Error('Unauthorized method',HTML_NOTALLOWED);
+  // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
   // - i.e. called by TSQLRestServerURIContext.InternalExecuteSOAByInterface
   TOnServiceCanExecute = function(Ctxt: TSQLRestServerURIContext;
     const Method: TServiceMethod): boolean of object;
@@ -11914,7 +11914,7 @@ type
     // corresponding implemented interface method
     // - Ctxt.ID is an optional number, to be used in case of sicClientDriven
     // kind of Instance creation to identify the corresponding client session
-    // - returns 200/HTML_SUCCESS on success, or an HTTP error status, with an
+    // - returns 200/HTTP_SUCCESS on success, or an HTTP error status, with an
     // optional error message in aErrorMsg
     // - on success, Ctxt.Call.OutBody shall contain a serialized JSON object
     // with one nested result property, which may be a JSON array, containing
@@ -12212,11 +12212,11 @@ type
     // on TServiceFactoryServer side
     function RetrieveSignature: RawUTF8; override;
     /// convert a HTTP error from mORMot's REST/SOA into an English text message
-    // - would recognize the HTML_UNAVAILABLE, HTML_NOTIMPLEMENTED,
-    // HTML_NOTALLOWED, HTML_UNAUTHORIZED or HTML_NOTACCEPTABLE errors, as
+    // - would recognize the HTTP_UNAVAILABLE, HTTP_NOTIMPLEMENTED,
+    // HTTP_NOTALLOWED, HTTP_UNAUTHORIZED or HTTP_NOTACCEPTABLE errors, as
     // generated by the TSQLRestServer side
     // - is used by TServiceFactoryClient.InternalInvoke, but may be called
-    // on client side for TServiceCustomAnswer.Status <> HTML_SUCCESS 
+    // on client side for TServiceCustomAnswer.Status <> HTTP_SUCCESS 
     class function GetErrorMessage(status: integer): RawUTF8;
     /// define execution options for a given set of methods
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
@@ -13954,9 +13954,9 @@ type
     // - implements the "Unit Of Work" pattern, i.e. safe transactional process
     // even on multi-thread environments
     // - send all pending Add/Update/Delete statements to the DB or remote server
-    // - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
+    // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     // - a dynamic array of integers will be created in Results,
-    // containing all ROWDID created for each BatchAdd call, 200 (=HTML_SUCCESS)
+    // containing all ROWDID created for each BatchAdd call, 200 (=HTTP_SUCCESS)
     // for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
@@ -14940,7 +14940,7 @@ type
     // - will also check incoming "Authorization: Basic ...." HTTP header
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// handle the Auth RESTful method with HTTP Basic
-    // - will first return HTML_UNAUTHORIZED (401), then expect user and password
+    // - will first return HTTP_UNAUTHORIZED (401), then expect user and password
     // to be supplied as incoming "Authorization: Basic ...." headers
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; override;
   end;
@@ -15403,7 +15403,7 @@ type
     /// when this monitoring instance (therefore the server) was created
     property StartDate: RawUTF8 read fStartDate;
     /// number of valid responses
-    // - i.e. which returned status code 200/HTML_SUCCESS or 201/HTML_CREATED
+    // - i.e. which returned status code 200/HTTP_SUCCESS or 201/HTTP_CREATED
     // - any invalid request will increase the TSynMonitor.Errors property
     property Success: TSynMonitorCount64 read fSuccess;
     /// count of the remote method-based service calls
@@ -15622,10 +15622,10 @@ type
   // - some REST/AJAX clients may expect to return status code 204 as
   // instead of 200 in case of a successful operation, but with no returned
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
-  // rsoHtml200WithNoBodyReturns204 so that any HTML_SUCCESS (200) with no
-  // returned body would return a HTML_NOCONTENT (204)
-  // - by default, Add() or Update() would return HTML_CREATED (201) or
-  // HTML_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
+  // rsoHtml200WithNoBodyReturns204 so that any HTTP_SUCCESS (200) with no
+  // returned body would return a HTTP_NOCONTENT (204)
+  // - by default, Add() or Update() would return HTTP_CREATED (201) or
+  // HTTP_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
   // to return as JSON the last inserted/updated record
   // - TModTime / TCreateTime fields are expected to be filled on client side,
   // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
@@ -15887,7 +15887,7 @@ type
     // - should return TRUE if the method can be executed
     // - should return FALSE if the method should not be executed, and the
     // callback should set the corresponding error to the supplied context e.g.
-    // ! Ctxt.Error('Unauthorized method',HTML_NOTALLOWED);
+    // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
     // - since this event would be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
     OnBeforeURI: TNotifyBeforeURI;
@@ -16529,7 +16529,7 @@ type
     // - is in fact stored in rsoNoAJAXJSON item in Options property
     property NoAJAXJSON: boolean read GetNoAJAXJSON write SetNoAJAXJSON;
     /// allow to customize how TSQLRestServer.URI process the requests
-    // - e.g. if HTML_SUCCESS with no body should be translated into HTML_NOCONTENT
+    // - e.g. if HTTP_SUCCESS with no body should be translated into HTTP_NOCONTENT
     property Options: TSQLRestServerOptions read fOptions write fOptions;
     /// set to true if the server will handle per-user authentication and
     // access right management
@@ -16642,7 +16642,7 @@ type
     // & '["cmd@Table":values,...]'
     // with cmd in POST/PUT with {object} as value or DELETE with ID
     // - returns an array of integers: '[200,200,...]' or '["OK"]' if all
-    // returned status codes are 200 (HTML_SUCCESS)
+    // returned status codes are 200 (HTTP_SUCCESS)
     // - URI are either 'ModelRoot/TableName/Batch' or 'ModelRoot/Batch'
     procedure Batch(Ctxt: TSQLRestServerURIContext);
   end;
@@ -17510,7 +17510,7 @@ type
     // - URI is 'ModelRoot/TableName' with POST method
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID
-    // - server must return Status 201/HTML_CREATED on success
+    // - server must return Status 201/HTTP_CREATED on success
     // - server must send on success an header entry with
     // $ Location: ModelRoot/TableName/TableID
     // - on success, returns the new ROWID value; on error, returns 0
@@ -17523,7 +17523,7 @@ type
     /// update a member
     // - implements REST PUT collection
     // - URI is 'ModelRoot/TableName/TableID' with PUT method
-    // - server must return Status 200/HTML_SUCCESS OK on success
+    // - server must return Status 200/HTTP_SUCCESS OK on success
     // - this overridden method will call BeforeUpdateEvent and also update BLOB
     // fields, if any ForceBlobTransfert is set and CustomFields=[]
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
@@ -17531,7 +17531,7 @@ type
     /// get a member from its ID
     // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
-    // - server must return Status 200/HTML_SUCCESS OK on success
+    // - server must return Status 200/HTTP_SUCCESS OK on success
     // - if ForUpdate is true, the REST method is LOCK and not GET: it tries to lock
     // the corresponding record, then retrieve its content; caller has to call
     // UnLock() method after Value usage, to release the record
@@ -17539,7 +17539,7 @@ type
     /// get a member from its ID
     // - implements REST GET collection
     // - URI is 'ModelRoot/TableName/TableID' with GET method
-    // - returns true on server returned 200/HTML_SUCCESS OK success, false on error
+    // - returns true on server returned 200/HTTP_SUCCESS OK success, false on error
     // - set Refreshed to true if the content changed
     function Refresh(aID: TID; Value: TSQLRecord; var Refreshed: boolean): boolean;
 
@@ -17774,7 +17774,7 @@ type
     function GetCurrentSessionUserID: TID; override;
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
-    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTML_BADREQUEST;
+    procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTTP_BADREQUEST;
       Call: PSQLRestURIParams=nil);
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
@@ -17868,7 +17868,7 @@ type
     // - URI is 'ModelRoot/TableName' with GET method
     // - SQLSelect and SQLWhere are encoded as 'select=' and 'where=' URL parameters
     // (using inlined parameters via :(...): in SQLWhere is always a good idea)
-    // - server must return Status 200/HTML_SUCCESS OK on success
+    // - server must return Status 200/HTTP_SUCCESS OK on success
     function List(const Tables: array of TSQLRecordClass; const SQLSelect: RawUTF8 = 'RowID';
       const SQLWhere: RawUTF8 = ''): TSQLTableJSON; override;
     /// unlock the corresponding record
@@ -18036,9 +18036,9 @@ type
     /// execute a BATCH sequence started by BatchStart method
     // - send all pending BatchAdd/Update/Delete statements to the remote server
     // - URI is 'ModelRoot/TableName/0' with POST (or PUT) method
-    // - will return the URI Status value, i.e. 200/HTML_SUCCESS OK on success
+    // - will return the URI Status value, i.e. 200/HTTP_SUCCESS OK on success
     // - a dynamic array of integers will be created in Results,
-    // containing all ROWDID created for each BatchAdd call, 200 (=HTML_SUCCESS)
+    // containing all ROWDID created for each BatchAdd call, 200 (=HTTP_SUCCESS)
     // for all successfull BatchUpdate/BatchDelete, or 0 on error
     // - any error during server-side process MUST be checked against Results[]
     // (the main URI Status is 200 if about communication success, and won't
@@ -18052,7 +18052,7 @@ type
 
     /// wrapper to the protected URI method to call a method on the server, using
     // a ModelRoot/[TableName/[ID/]]MethodName RESTful GET request
-    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - this version will use a GET with supplied parameters (which will be encoded
     // with the URL)
     function CallBackGet(const aMethodName: RawUTF8;
@@ -18070,14 +18070,14 @@ type
       aTable: TSQLRecordClass=nil; aID: TID=0): RawUTF8;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful PUT request
-    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - this version will use a PUT with the supplied raw UTF-8 data
     function CallBackPut(const aMethodName, aSentData: RawUTF8;
       out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: TID=0;
       aResponseHead: PRawUTF8=nil): integer;
     /// wrapper to the protected URI method to call a method on the server, using
     //  a ModelRoot/[TableName/[ID/]]MethodName RESTful with any kind of request
-    // - returns the HTTP error code (e.g. 200/HTML_SUCCESS on success)
+    // - returns the HTTP error code (e.g. 200/HTTP_SUCCESS on success)
     // - for GET/PUT methods, you should better use CallBackGet/CallBackPut
     function CallBack(method: TSQLURIMethod; const aMethodName,aSentData: RawUTF8;
       out aResponse: RawUTF8; aTable: TSQLRecordClass=nil; aID: TID=0;
@@ -18184,14 +18184,14 @@ type
     {$endif MSWINDOWS}
   published
     /// low-level error code, as returned by server
-    // - check this value about HTML_* constants
-    // - HTML_SUCCESS or HTML_CREATED mean no error
+    // - check this value about HTTP_* constants
+    // - HTTP_SUCCESS or HTTP_CREATED mean no error
     // - otherwise, check LastErrorMessage property for additional information
     // - this property value will record status codes returned by URI() method
     property LastErrorCode: integer read fLastErrorCode;
     /// low-level error message, as returned by server
     // - this property value will record content returned by URI() method in
-    // case of an error, or '' if LastErrorCode is HTML_SUCCESS or HTML_CREATED
+    // case of an error, or '' if LastErrorCode is HTTP_SUCCESS or HTTP_CREATED
     property LastErrorMessage: RawUTF8 read fLastErrorMessage;
     /// low-level exception class, if any
     // - will record any Exception class raised within URI() method
@@ -18245,7 +18245,7 @@ type
     /// this Event is called in case of remote authentication failure
     // - client software can ask the user to enter a password and user name
     // - if no event is specified, the URI() method will return directly
-    // an HTML_FORBIDDEN "403 Forbidden" error code
+    // an HTTP_FORBIDDEN "403 Forbidden" error code
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
     /// this Event is called if URI() was not successfull
@@ -18313,7 +18313,7 @@ type
     constructor CreateOwned(aRedirected: TSQLRestServer); reintroduce;
     /// allows to change redirection to a client on the fly
     // - if aRedirected is nil, redirection would be disabled and any URI() call
-    // would return an HTML_GATEWAYTIMEOUT 504 error status
+    // would return an HTTP_GATEWAYTIMEOUT 504 error status
     procedure RedirectTo(aRedirected: TSQLRest);
   end;
 
@@ -18404,7 +18404,7 @@ type
     // a named pipe (faster than TCP/IP or HTTP connection)
     // - return status code in result.Lo
     // - return database internal state in result.Hi
-    // - status code 501 HTML_NOTIMPLEMENTED if no server is available
+    // - status code 501 HTTP_NOTIMPLEMENTED if no server is available
     procedure InternalURI(var Call: TSQLRestURIParams); override;
     /// overridden protected method to handle named-pipe connection
     function InternalCheckOpen: boolean; override;
@@ -19223,7 +19223,7 @@ var
 
 /// this function can be exported from a DLL to remotely access to a TSQLRestServer
 // - use TSQLRestServer.ExportServer to assign a server to this function
-// - return 501 HTML_NOTIMPLEMENTED if no TSQLRestServer.ExportServer has been assigned
+// - return 501 HTTP_NOTIMPLEMENTED if no TSQLRestServer.ExportServer has been assigned
 // - memory for Resp and Head are allocated with GlobalAlloc(): client must release
 // this pointers with GlobalFree() after having retrieved their content
 // - simply use TSQLRestClientURIDll to access to an exported URIRequest() function
@@ -22930,33 +22930,33 @@ end;
 procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
 begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
   case Code of
-    HTML_CONTINUE:            result := 'Continue';
-    HTML_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
-    HTML_SUCCESS:             result := 'OK';
-    HTML_CREATED:             result := 'Created';
-    HTML_ACCEPTED:            result := 'Accepted';
-    HTML_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
-    HTML_NOCONTENT:           result := 'No Content';
-    HTML_MULTIPLECHOICES:     result := 'Multiple Choices';
-    HTML_MOVEDPERMANENTLY:    result := 'Moved Permanently';
-    HTML_FOUND:               result := 'Found';
-    HTML_SEEOTHER:            result := 'See Other';
-    HTML_NOTMODIFIED:         result := 'Not Modified';
-    HTML_USEPROXY:            result := 'Use Proxy';
-    HTML_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
-    HTML_BADREQUEST:          result := 'Bad Request';
-    HTML_UNAUTHORIZED:        result := 'Unauthorized';
-    HTML_FORBIDDEN:           result := 'Forbidden';
-    HTML_NOTFOUND:            result := 'Not Found';
-    HTML_NOTALLOWED:          result := 'Method Not Allowed';
-    HTML_NOTACCEPTABLE:       result := 'Not Acceptable';
-    HTML_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
-    HTML_TIMEOUT:             result := 'Request Timeout';
-    HTML_SERVERERROR:         result := 'Internal Server Error';
-    HTML_BADGATEWAY:          result := 'Bad Gateway';
-    HTML_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
-    HTML_UNAVAILABLE:         result := 'Service Unavailable';
-    HTML_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
+    HTTP_CONTINUE:            result := 'Continue';
+    HTTP_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
+    HTTP_SUCCESS:             result := 'OK';
+    HTTP_CREATED:             result := 'Created';
+    HTTP_ACCEPTED:            result := 'Accepted';
+    HTTP_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
+    HTTP_NOCONTENT:           result := 'No Content';
+    HTTP_MULTIPLECHOICES:     result := 'Multiple Choices';
+    HTTP_MOVEDPERMANENTLY:    result := 'Moved Permanently';
+    HTTP_FOUND:               result := 'Found';
+    HTTP_SEEOTHER:            result := 'See Other';
+    HTTP_NOTMODIFIED:         result := 'Not Modified';
+    HTTP_USEPROXY:            result := 'Use Proxy';
+    HTTP_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
+    HTTP_BADREQUEST:          result := 'Bad Request';
+    HTTP_UNAUTHORIZED:        result := 'Unauthorized';
+    HTTP_FORBIDDEN:           result := 'Forbidden';
+    HTTP_NOTFOUND:            result := 'Not Found';
+    HTTP_NOTALLOWED:          result := 'Method Not Allowed';
+    HTTP_NOTACCEPTABLE:       result := 'Not Acceptable';
+    HTTP_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
+    HTTP_TIMEOUT:             result := 'Request Timeout';
+    HTTP_SERVERERROR:         result := 'Internal Server Error';
+    HTTP_BADGATEWAY:          result := 'Bad Gateway';
+    HTTP_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
+    HTTP_UNAVAILABLE:         result := 'Service Unavailable';
+    HTTP_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
     else                      result := 'Invalid Request';
   end;
 end;
@@ -22970,8 +22970,8 @@ end;
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
   case Code of
-  HTML_SUCCESS, HTML_NOCONTENT, HTML_CREATED,
-  HTML_NOTMODIFIED, HTML_TEMPORARYREDIRECT:
+  HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_CREATED,
+  HTTP_NOTMODIFIED, HTTP_TEMPORARYREDIRECT:
     result := true;
   else
     result := false;
@@ -33586,17 +33586,17 @@ function TSQLRest.BatchSend(Batch: TSQLRestBatch;
   var Results: TIDDynArray): integer;
 var Data: RawUTF8;
 begin
-  result := HTML_BADREQUEST;
+  result := HTTP_BADREQUEST;
   if (self=nil) or (Batch=nil) then // no opened BATCH sequence
     exit;
   if Batch.PrepareForSending(Data) then
     if Data='' then // i.e. Batch.Count=0
-      result := HTML_SUCCESS else
+      result := HTTP_SUCCESS else
       try
         result := EngineBatchSend(Batch.Table,Data,Results,Batch.Count);
       except
         on Exception do // e.g. from TSQLRestServer.EngineBatchSend()
-          result := HTML_SERVERERROR;
+          result := HTTP_SERVERERROR;
       end;
 end;
 
@@ -34998,7 +34998,7 @@ end;
 
 function TSQLRestClientURI.EngineExecute(const SQL: RawUTF8): boolean;
 begin
-  result := URI(Model.Root,'POST',nil,nil,@SQL).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+  result := URI(Model.Root,'POST',nil,nil,@SQL).Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.URIGet(Table: TSQLRecordClass; ID: TID;
@@ -35012,7 +35012,7 @@ function TSQLRestClientURI.UnLock(Table: TSQLRecordClass; aID: TID): boolean;
 begin
   if (self=nil) or not Model.UnLock(Table,aID) then
     result := false else // was not locked by the client
-    result := URI(Model.getURIID(Table,aID),'UNLOCK').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+    result := URI(Model.getURIID(Table,aID),'UNLOCK').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.ExecuteList(const Tables: array of TSQLRecordClass;
@@ -35022,7 +35022,7 @@ begin
   if self=nil then
     result := nil else
   with URI(Model.Root,'GET',@Resp,nil,@SQL) do
-    if Lo=HTML_SUCCESS then begin // GET with SQL sent
+    if Lo=HTTP_SUCCESS then begin // GET with SQL sent
       if high(Tables)=0 then
         result := TSQLTableJSON.CreateFromTables([Tables[0]],SQL,Resp) else
         result := TSQLTableJSON.CreateFromTables(Tables,SQL,Resp);
@@ -35043,7 +35043,7 @@ var aResp: RawUTF8;
 begin
   if (Self=nil) or (Model=nil) then // avoid GPF
     result := false else
-    result := CallBackGet('CacheFlush',[],aResp,aTable,aID) in [HTML_SUCCESS,HTML_NOCONTENT];
+    result := CallBackGet('CacheFlush',[],aResp,aTable,aID) in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.ServerTimeStampSynchronize: boolean;
@@ -35056,7 +35056,7 @@ begin
   end;
   fServerTimeStampOffset := 0.0001; // avoid endless recursive call
   status := CallBackGet('TimeStamp',[],aResp);
-  result := (status=HTML_SUCCESS) and (aResp<>'');
+  result := (status=HTTP_SUCCESS) and (aResp<>'');
   if result then
     SetServerTimeStamp(GetInt64(pointer(aResp))) else begin
     InternalLog('/TimeStamp call failed -> Server not available',sllWarning);
@@ -35067,7 +35067,7 @@ end;
 function TSQLRestClientURI.InternalRemoteLogSend(const aText: RawUTF8): boolean;
 begin
   result := URI(Model.getURICallBack('RemoteLog',nil,0),
-    'PUT',nil,nil,@aText).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+    'PUT',nil,nil,@aText).Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 
@@ -35153,7 +35153,7 @@ var url,root,interfmethod,interf,id,method,frames: RawUTF8;
     end;
   end;
 begin
-  Ctxt.OutStatus := HTML_BADREQUEST;
+  Ctxt.OutStatus := HTTP_BADREQUEST;
   url := Ctxt.Url;
   if url='' then
     exit;
@@ -35167,7 +35167,7 @@ begin
     exit;
   if interfmethod=SERVICE_PSEUDO_METHOD[imFree] then begin
     if fFakeCallbacks.FindAndRelease(callback.ID) then
-      Ctxt.OutStatus := HTML_SUCCESS;
+      Ctxt.OutStatus := HTTP_SUCCESS;
     exit;
   end;
   if not fFakeCallbacks.FindEntry(callback) then
@@ -35191,11 +35191,11 @@ begin
       if ok then begin
         if Ctxt.OutHead='' then begin // <>'' if set via TServiceCustomAnswer
           WR.Add(']','}');
-          Ctxt.OutStatus := HTML_SUCCESS;
+          Ctxt.OutStatus := HTTP_SUCCESS;
         end;
         Ctxt.OutBody := WR.Text;
       end else
-        Ctxt.OutStatus := HTML_SERVERERROR;
+        Ctxt.OutStatus := HTTP_SERVERERROR;
       if frames='[1]' then // call after the last method of the jumbo frame
         Call(callback.Factory.MethodIndexCurrentFrameCallback,frames,nil);
     finally
@@ -35205,7 +35205,7 @@ begin
     on E: Exception do begin
       Ctxt.OutHead := '';
       Ctxt.OutBody := ObjectToJSONDebug(E);
-      Ctxt.OutStatus := HTML_SERVERERROR;
+      Ctxt.OutStatus := HTTP_SERVERERROR;
     end;
   end;
 end;
@@ -35376,7 +35376,7 @@ begin
       T := TSQLTableJSON((Data[i]));
       if (T.QuerySQL<>'') and (T.InternalState<>State) then begin // refresh needed?
         with URI(Model.Root,'GET',@Resp,nil,@T.QuerySQL) do
-          if Lo=HTML_SUCCESS then begin // GET with SQL sent
+          if Lo=HTTP_SUCCESS then begin // GET with SQL sent
             if Assigned(OnTableUpdate) then
               OnTableUpdate(T,tusPrepare);
             TRefreshed := false;
@@ -35422,14 +35422,14 @@ begin
       U := U+UrlEncode(SQLWhere);
     end;
     with URI(Model.URI[TSQLRecordClass(Tables[0])]+U,'GET',@Resp) do
-      if Lo<>HTML_SUCCESS then
+      if Lo<>HTTP_SUCCESS then
         exit else
         InternalState := Hi;
     result := TSQLTableJSON.CreateFromTables([Tables[0]],SQL,Resp); // get data
   end else begin
     // multiple tables -> send SQL statement as HTTP body
     with URI(Model.Root,'GET',@Resp,nil,@SQL) do
-      if Lo<>HTML_SUCCESS then
+      if Lo<>HTTP_SUCCESS then
         exit else
         InternalState := Hi;
     result := TSQLTableJSON.CreateFromTables(Tables,SQL,Resp); // get data
@@ -35596,8 +35596,8 @@ begin
   if result then
     // fTransactionActiveSession flag was not already set
     if aTable=nil then
-      result := URI(Model.Root,'BEGIN').Lo in [HTML_SUCCESS,HTML_NOCONTENT] else
-      result := URI(Model.URI[aTable],'BEGIN').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+      result := URI(Model.Root,'BEGIN').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT] else
+      result := URI(Model.URI[aTable],'BEGIN').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.TransactionBeginRetry(aTable: TSQLRecordClass;
@@ -35628,7 +35628,7 @@ var url, header: RawUTF8;
     {$endif}
 begin
   if self=nil then
-    result := HTML_UNAVAILABLE else begin
+    result := HTTP_UNAVAILABLE else begin
     url := Model.getURICallBack(aMethodName,aTable,aID)+
       UrlEncode(aNameValueParameters);
     {$ifdef WITHLOG}
@@ -35692,7 +35692,7 @@ begin
     exit;
   InternalURI(Call^);
   if OnIdleBackgroundThreadActive then
-    if Call^.OutStatus=HTML_NOTIMPLEMENTED then begin
+    if Call^.OutStatus=HTTP_NOTIMPLEMENTED then begin
       // InternalCheckOpen failed -> force recreate connection
       InternalClose;
       if OnIdleBackgroundThreadActive then
@@ -35736,8 +35736,8 @@ var Retry: integer;
 label DoRetry;
 begin
   if self=nil then begin
-    Int64(result) := HTML_UNAVAILABLE;
-    SetLastException(nil,HTML_UNAVAILABLE);
+    Int64(result) := HTTP_UNAVAILABLE;
+    SetLastException(nil,HTTP_UNAVAILABLE);
     exit;
   end;
   aRetryOnceOnTimeout := RetryOnceOnTimeout;
@@ -35745,7 +35745,7 @@ begin
   fLastErrorException := nil;
   if fServerTimeStampOffset=0 then
     if not ServerTimeStampSynchronize then begin
-      Int64(result) := HTML_UNAVAILABLE;
+      Int64(result) := HTTP_UNAVAILABLE;
       exit; // if /TimeStamp is not available, server is down!
     end;
   Call.Init;
@@ -35768,12 +35768,12 @@ DoRetry:
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
           OnIdle,FormatUTF8('% "%" background',[self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
-        Call.OutStatus := HTML_UNAVAILABLE;
+        Call.OutStatus := HTTP_UNAVAILABLE;
     end else
 {$endif}
     begin
       InternalURI(Call);
-      if Call.OutStatus=HTML_NOTIMPLEMENTED then begin // InternalCheckOpen failed
+      if Call.OutStatus=HTTP_NOTIMPLEMENTED then begin // InternalCheckOpen failed
         InternalClose;     // force recreate connection
         InternalURI(Call); // try request again
       end;
@@ -35785,7 +35785,7 @@ DoRetry:
     if Resp<>nil then
       Resp^ := Call.OutBody;
     fLastErrorCode := Call.OutStatus;
-    if (Call.OutStatus=HTML_TIMEOUT) and aRetryOnceOnTimeout then begin
+    if (Call.OutStatus=HTTP_TIMEOUT) and aRetryOnceOnTimeout then begin
       aRetryOnceOnTimeout := false;
       InternalLog('% % returned "408 Request Timeout" -> RETRY',[method,url],sllError);
       goto DoRetry;
@@ -35800,7 +35800,7 @@ DoRetry:
       if Assigned(fOnFailed) then
         fOnFailed(self,nil,@Call);
     end;
-    if (Call.OutStatus<>HTML_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
+    if (Call.OutStatus<>HTTP_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
       break;
     // "403 Forbidden" in case of authentication failure -> try relog
     if not OnAuthentificationFailed(Retry+2,aUserName,aPassword,aPasswordHashed) or
@@ -35808,8 +35808,8 @@ DoRetry:
       break;
   except
     on E: Exception do begin
-      Int64(result) := HTML_NOTIMPLEMENTED; // 501
-      SetLastException(E,HTML_NOTIMPLEMENTED,@Call);
+      Int64(result) := HTTP_NOTIMPLEMENTED; // 501
+      SetLastException(E,HTTP_NOTIMPLEMENTED,@Call);
       exit;
     end;
   end;
@@ -35819,7 +35819,7 @@ function TSQLRestClientURI.CallBackGetResult(const aMethodName: RawUTF8;
   const aNameValueParameters: array of const; aTable: TSQLRecordClass; aID: TID): RawUTF8;
 var aResponse: RawUTF8;
 begin
-  if CallBackGet(aMethodName,aNameValueParameters,aResponse,aTable,aID)=HTML_SUCCESS then
+  if CallBackGet(aMethodName,aNameValueParameters,aResponse,aTable,aID)=HTTP_SUCCESS then
     result := JSONDecode(aResponse) else
     result := '';
 end;
@@ -35844,7 +35844,7 @@ var u: RawUTF8;
 {$endif}
 begin
   if (self=nil) or (method<Low(NAME)) then
-    result := HTML_UNAVAILABLE else begin
+    result := HTTP_UNAVAILABLE else begin
     u := Model.getURICallBack(aMethodName,aTable,aID);
     {$ifdef WITHLOG}
     Log := fLogClass.Enter('Callback %',[u],self);
@@ -35930,7 +35930,7 @@ function TSQLRestClientURI.ServiceRetrieveAssociated(const aServiceName: RawUTF8
   out URI: TSQLRestServerURIDynArray): boolean;
 var json: RawUTF8;
 begin
-  result := (CallBackGet('stat',['findservice',aServiceName],json)=HTML_SUCCESS) and
+  result := (CallBackGet('stat',['findservice',aServiceName],json)=HTTP_SUCCESS) and
     (DynArrayLoadJSON(URI,pointer(json),TypeInfo(TSQLRestServerURIDynArray))<>nil);
 end;
 
@@ -35951,7 +35951,7 @@ var P: PUTF8Char;
 begin
   result := 0;
   url := Model.URI[Model.Tables[TableModelIndex]];
-  if URI(url,'POST',nil,@Head,@SentData).Lo<>HTML_CREATED then
+  if URI(url,'POST',nil,@Head,@SentData).Lo<>HTTP_CREATED then
     exit; // response must be '201 Created'
   P := pointer(Head); // we need to check the headers
   if P<>nil then
@@ -35976,7 +35976,7 @@ function TSQLRestClientURI.EngineDelete(TableModelIndex: integer; ID: TID): bool
 var url: RawUTF8;
 begin
   url := Model.getURIID(Model.Tables[TableModelIndex],ID);
-  result := URI(url,'DELETE').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+  result := URI(url,'DELETE').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineDeleteWhere(TableModelIndex: Integer;
@@ -35984,14 +35984,14 @@ function TSQLRestClientURI.EngineDeleteWhere(TableModelIndex: Integer;
 var url: RawUTF8;
 begin  // ModelRoot/TableName?where=WhereClause to delete members
   url := Model.getURI(Model.Tables[TableModelIndex])+'?where='+UrlEncode(SQLWhere);
-  result := URI(url,'DELETE').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+  result := URI(url,'DELETE').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineList(const SQL: RawUTF8;
   ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawUTF8;
 begin
   if (self=nil) or (SQL='') or (ReturnedRowCount<>nil) or
-     (URI(Model.Root,'GET',@result,nil,@SQL).Lo<>HTML_SUCCESS) then
+     (URI(Model.Root,'GET',@result,nil,@SQL).Lo<>HTTP_SUCCESS) then
     result := '';
 end;
 
@@ -36000,7 +36000,7 @@ function TSQLRestClientURI.ClientRetrieve(TableModelIndex: integer; ID: TID;
 begin
   if cardinal(TableModelIndex)<=cardinal(Model.fTablesMax) then
   with URIGet(Model.Tables[TableModelIndex],ID,Resp,ForUpdate) do
-    if Lo=HTML_SUCCESS then begin
+    if Lo=HTTP_SUCCESS then begin
       InternalState := Hi;
       result := true;
     end else
@@ -36016,7 +36016,7 @@ begin
     result := false else begin
     // URI is 'ModelRoot/TableName/TableID/BlobFieldName' with GET method
     url := Model.getURICallBack(BlobField^.Name,Model.Tables[TableModelIndex],aID);
-    result := URI(url,'GET',@BlobData).Lo=HTML_SUCCESS;
+    result := URI(url,'GET',@BlobData).Lo=HTTP_SUCCESS;
   end;
 end;
 
@@ -36025,7 +36025,7 @@ function TSQLRestClientURI.EngineUpdate(TableModelIndex: integer; ID: TID;
 var url: RawUTF8;
 begin
   url := Model.getURIID(Model.Tables[TableModelIndex],ID);
-  result := URI(url,'PUT',nil,nil,@SentData).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+  result := URI(url,'PUT',nil,nil,@SentData).Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLRestClientURI.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
@@ -36037,7 +36037,7 @@ begin
     result := false else begin
     // PUT ModelRoot/TableName/TableID/BlobFieldName
     FormatUTF8('%/%/%',[Model.URI[Model.Tables[TableModelIndex]],aID,BlobField^.Name],url);
-    result := URI(url,'PUT',nil,@Head,@BlobData).Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+    result := URI(url,'PUT',nil,@Head,@BlobData).Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
   end;
 end;
 
@@ -36051,7 +36051,7 @@ begin
     FormatUTF8('%?setname=%&set=%&wherename=%&where=%',
       [Model.URI[Model.Tables[TableModelIndex]],
        SetFieldName,UrlEncode(SetValue),WhereFieldName,UrlEncode(WhereValue)],url);
-    result := URI(url,'PUT').Lo in [HTML_SUCCESS,HTML_NOCONTENT];
+    result := URI(url,'PUT').Lo in [HTTP_SUCCESS,HTTP_NOCONTENT];
   end;
 end;
 
@@ -36064,20 +36064,20 @@ begin // TSQLRest.BatchSend() ensured that Batch contains some data
   try
     // URI is 'ModelRoot/Batch' or 'ModelRoot/Batch/TableName' with PUT method
     result := URI(Model.getURICallBack('Batch',Table,0),'PUT',@Resp,nil,@Data).Lo;
-    if result<>HTML_SUCCESS then
+    if result<>HTTP_SUCCESS then
       exit;
     // returned Resp shall be an array of integers: '[200,200,...]'
     R := pointer(Resp);
     if R<>nil then
       while not (R^ in ['[',#0]) do inc(R);
-    result := HTML_BADREQUEST;
+    result := HTTP_BADREQUEST;
     if (R=nil) or (R^<>'[') then
       // invalid response
       exit;
     SetLength(Results,ExpectedResultsCount);
     if IdemPChar(R,'["OK"]') then begin // to save bandwith if no adding
       for i := 0 to ExpectedResultsCount-1 do
-        Results[i] := HTML_SUCCESS;
+        Results[i] := HTTP_SUCCESS;
     end else begin
       inc(R); // jump first '['
       for i := 0 to ExpectedResultsCount-1 do begin
@@ -36092,7 +36092,7 @@ begin // TSQLRest.BatchSend() ensured that Batch contains some data
       if R^<>']' then
         exit;
     end;
-    result := HTML_SUCCESS; // returns OK
+    result := HTTP_SUCCESS; // returns OK
   finally
     BatchAbort;
   end;
@@ -36167,7 +36167,7 @@ begin
   finally
     FreeAndNil(fBatchCurrent);
   end else
-    result := HTML_BADREQUEST;
+    result := HTTP_BADREQUEST;
 end;
 
 
@@ -36198,7 +36198,7 @@ end;
 var call: TSQLRestURIParams;
 begin
   if GlobalURIRequestServer=nil then begin
-    Int64(result) := HTML_NOTIMPLEMENTED; // 501
+    Int64(result) := HTTP_NOTIMPLEMENTED; // 501
     exit;
   end;
   call.Init;
@@ -36330,7 +36330,7 @@ var call: TSQLRestURIParams;
     Data: TCopyDataStruct;
     Header, ResStr: RawUTF8;
 begin
-  Msg.Result := HTML_NOTFOUND;
+  Msg.Result := HTTP_NOTFOUND;
   if (self=nil) or (Msg.From=0) then
     exit;
   input := PCopyDataStruct(Msg.CopyDataStruct);
@@ -36341,7 +36341,7 @@ begin
     exit; // invalid layout: a broadcasted WM_COPYDATA message? :(
   inc(P,4);
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
-  Msg.Result := HTML_SUCCESS; // Send something back
+  Msg.Result := HTTP_SUCCESS; // Send something back
   call.Init;
   call.Url := GetNextItem(P,#1);
   call.Method := GetNextItem(P,#1);
@@ -37011,7 +37011,7 @@ begin
     try
       fAcquireExecution[execORMWrite].Safe.Lock;
       fRecordVersionDeleteIgnore := true;
-      if BatchSend(Writer,IDs)=HTML_SUCCESS then begin
+      if BatchSend(Writer,IDs)=HTTP_SUCCESS then begin
         InternalLog('%.RecordVersionSynchronize Added=% Updated=% Deleted=% on %',
           [ClassType,Writer.AddCount,Writer.UpdateCount,Writer.DeleteCount,Master],sllDebug);
         if ChunkRowLimit=0 then begin
@@ -37842,7 +37842,7 @@ begin
   {$endif}
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
   // which is not what we used, so here we won't send 401 error code but 403
-  Call.OutStatus := HTML_FORBIDDEN;
+  Call.OutStatus := HTTP_FORBIDDEN;
   // call the notification event
   if Assigned(Server.OnAuthenticationFailed) then
     Server.OnAuthenticationFailed(Server,Reason,nil,self);
@@ -37862,7 +37862,7 @@ begin
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
   if Call<>nil then
-    Call^.OutStatus := HTML_TIMEOUT; // 408 Request Time-out
+    Call^.OutStatus := HTTP_TIMEOUT; // 408 Request Time-out
 end;
 var Method: TThreadMethod;
     Start64: Int64;
@@ -37967,7 +37967,7 @@ begin
   ObjectToVariant(SettingsStorage,config,[woDontStoreDefault]);
   if URIBlobFieldName<>'' then
     config := TDocVariantData(config).GetValueByPath(URIBlobFieldName);
-  ReturnsJson(config,HTML_SUCCESS,true,twJsonEscape,true);
+  ReturnsJson(config,HTTP_SUCCESS,true,twJsonEscape,true);
 end;
 
 procedure StatsAddSizeForCall(Stats: TSynMonitorInputOutput; const Call: TSQLRestURIParams);
@@ -38125,7 +38125,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
     end;
     if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceExecution<>nil) and
        (SessionGroup-1 in ServiceExecution.Denied) then begin
-      Error('Unauthorized method',HTML_NOTALLOWED);
+      Error('Unauthorized method',HTTP_NOTALLOWED);
       exit;
     end;
     // if we reached here, we have to run the service method
@@ -38235,14 +38235,14 @@ begin
                 // check for SELECT without any known table
                 if not (reSQLSelectWithoutTable in
                    Call.RestAccessRights^.AllowRemoteExecute) then begin
-                  Call.OutStatus := HTML_NOTALLOWED;
+                  Call.OutStatus := HTTP_NOTALLOWED;
                   exit;
                 end;
               end else begin
                 // check for SELECT with one (or several JOINed) tables
                 for i := 0 to high(TableIndexes) do
                   if not (TableIndexes[i] in Call.RestAccessRights^.GET) then begin
-                    Call.OutStatus := HTML_NOTALLOWED;
+                    Call.OutStatus := HTTP_NOTALLOWED;
                     exit;
                   end;
                 // use the first static table (poorman's JOIN)
@@ -38262,7 +38262,7 @@ begin
                 if opt<>[] then
                   ConvertOutBodyAsPlainJSON(SQLSelect,opt);
               end;
-              Call.OutStatus := HTML_SUCCESS;  // 200 OK
+              Call.OutStatus := HTTP_SUCCESS;  // 200 OK
               if not SQLisSelect then // accurate fStats.NotifyORM(Method) below
                 Method := TSQLURIMethod(IdemPCharArray(SQLBegin(pointer(SQL)),
                   ['INSERT','UPDATE','DELETE'])+2); // -1+2 -> mGET=1
@@ -38273,13 +38273,13 @@ begin
     end else
     // here, Table<>nil and TableIndex in [0..MAX_SQLTABLES-1]
     if not (TableIndex in Call.RestAccessRights^.GET) then // check User Access
-      Call.OutStatus := HTML_NOTALLOWED else begin
+      Call.OutStatus := HTTP_NOTALLOWED else begin
       if TableID>0 then begin
         // GET ModelRoot/TableName/TableID[/BlobFieldName] to retrieve one member,
         // with or w/out locking, or a specified BLOB field content
         if Method=mLOCK then // Safe.Lock is to be followed by PUT -> check user
           if not (TableIndex in Call.RestAccessRights^.PUT) then
-            Call.OutStatus := HTML_NOTALLOWED else
+            Call.OutStatus := HTTP_NOTALLOWED else
             if Server.Model.Lock(TableIndex,TableID) then
               Method := mGET; // mark successfully locked
         if Method<>mLOCK then
@@ -38290,9 +38290,9 @@ begin
               if TableEngine.EngineRetrieveBlob(TableIndex,
                    TableID,Blob,TSQLRawBlob(Call.OutBody)) then begin
                 Call.OutHead := GetMimeContentTypeHeader(Call.OutBody);
-                Call.OutStatus := HTML_SUCCESS; // 200 OK
+                Call.OutStatus := HTTP_SUCCESS; // 200 OK
               end else
-                Call.OutStatus := HTML_NOTFOUND;
+                Call.OutStatus := HTTP_NOTFOUND;
             end;
           end else begin
             // GET ModelRoot/TableName/TableID: retrieve a member content, JSON encoded
@@ -38317,9 +38317,9 @@ begin
                   rec.Free;
                 end;
               end;
-              Call.OutStatus := HTML_SUCCESS;
+              Call.OutStatus := HTTP_SUCCESS;
             end else // 200 OK
-              Call.OutStatus := HTML_NOTFOUND;
+              Call.OutStatus := HTTP_NOTFOUND;
           end;
       end else
       // ModelRoot/TableName with 'select=..&where=' or YUI paging
@@ -38382,7 +38382,7 @@ begin
           opt := ClientSQLRecordOptions;
           if opt<>[] then
             ConvertOutBodyAsPlainJSON(SQLSelect,opt);
-          Call.OutStatus := HTML_SUCCESS;  // 200 OK
+          Call.OutStatus := HTTP_SUCCESS;  // 200 OK
           if Server.URIPagingParameters.SendTotalRowsCountFmt<>'' then
             // insert "totalRows":% optional value to the JSON output
             if Server.NoAJAXJSON or (ClientKind=ckFramework) then begin
@@ -38409,25 +38409,25 @@ begin
                 FormatUTF8(Server.URIPagingParameters.SendTotalRowsCountFmt,[SQLTotalRowsCount])+'}';
             end;
         end else
-          Call.OutStatus := HTML_NOTFOUND;
+          Call.OutStatus := HTTP_NOTFOUND;
       end;
     end;
-    if Call.OutStatus=HTML_SUCCESS then
+    if Call.OutStatus=HTTP_SUCCESS then
       Server.fStats.NotifyORM(Method);
   end;
   mUNLOCK: begin
     // ModelRoot/TableName/TableID to unlock a member
     if not (TableIndex in Call.RestAccessRights^.PUT) then
-      Call.OutStatus := HTML_NOTALLOWED else
+      Call.OutStatus := HTTP_NOTALLOWED else
     if (Table<>nil) and (TableID>0) and
        Server.Model.UnLock(Table,TableID) then
-      Call.OutStatus := HTML_SUCCESS; // 200 OK
+      Call.OutStatus := HTTP_SUCCESS; // 200 OK
   end;
   mSTATE: begin
     // STATE method for TSQLRestClientServerInternalState
     // this method is called with Root (-> Table=nil -> Static=nil)
     // we need a specialized method in order to avoid fStats.Invalid increase
-    Call.OutStatus := HTML_SUCCESS;
+    Call.OutStatus := HTTP_SUCCESS;
     for i := 0 to high(Server.fStaticData) do
       if (Server.fStaticData[i]<>nil) and
          Server.fStaticData[i].InheritsFrom(TSQLRestStorage) then
@@ -38468,7 +38468,7 @@ begin
   end;
   if not Call.RestAccessRights^.CanExecuteORMWrite(
      Method,Table,TableIndex,TableID,self) then begin
-    Call.OutStatus := HTML_FORBIDDEN;
+    Call.OutStatus := HTTP_FORBIDDEN;
     exit;
   end;
   case Method of
@@ -38480,9 +38480,9 @@ begin
         if (Call.InBody<>'') and
            (not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0,'[','{'])) and
            Server.EngineExecute(Call.InBody) then begin
-          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          Call.OutStatus := HTTP_SUCCESS; // 200 OK
         end else
-        Call.OutStatus := HTML_FORBIDDEN;
+        Call.OutStatus := HTTP_FORBIDDEN;
     end else begin
       // ModelRoot/TableName with possible JSON SentData: create a new member
       // here, Table<>nil, TableID<0 and TableIndex in [0..MAX_SQLTABLES-1]
@@ -38490,7 +38490,7 @@ begin
         ComputeInBodyFields(seAdd);
       TableID := TableEngine.EngineAdd(TableIndex,Call.InBody);
       if TableID<>0 then begin
-        Call.OutStatus := HTML_CREATED; // 201 Created
+        Call.OutStatus := HTTP_CREATED; // 201 Created
         Call.OutHead := 'Location: '+URI+'/'+Int64ToUtf8(TableID);
         if rsoAddUpdateReturnsContent in Server.Options then begin
           Server.fCache.NotifyDeletion(TableIndex,TableID);
@@ -38522,9 +38522,9 @@ begin
           end;
         end;
         if OK then
-          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          Call.OutStatus := HTTP_SUCCESS; // 200 OK
       end else
-      Call.OutStatus := HTML_FORBIDDEN;
+      Call.OutStatus := HTTP_FORBIDDEN;
     end else
     if Parameters<>nil then begin // e.g. from TSQLRestClient.EngineUpdateField
       // PUT ModelRoot/TableName?setname=..&set=..&wherename=..&where=..
@@ -38538,17 +38538,17 @@ begin
         if TableEngine.EngineUpdateField(TableIndex,SQLSelect,SQLDir,SQLSort,SQLWhere) then begin
           if rsoAddUpdateReturnsContent in Server.Options then
             Call.OutBody := TableEngine.EngineRetrieve(TableIndex,TableID);
-          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          Call.OutStatus := HTTP_SUCCESS; // 200 OK
         end;
     end;
   mDELETE:
     if TableID>0 then
       // ModelRoot/TableName/TableID to delete a member
       if not Server.RecordCanBeUpdated(Table,TableID,seDelete,@CustomErrorMsg) then
-        Call.OutStatus := HTML_FORBIDDEN else begin
+        Call.OutStatus := HTTP_FORBIDDEN else begin
         if TableEngine.EngineDelete(TableIndex,TableID) and
            Server.AfterDeleteForceCoherency(TableIndex,TableID) then begin
-          Call.OutStatus := HTML_SUCCESS; // 200 OK
+          Call.OutStatus := HTTP_SUCCESS; // 200 OK
           Server.fCache.NotifyDeletion(TableIndex,TableID);
         end;
       end else
@@ -38559,7 +38559,7 @@ begin
           SQLWhere := trim(SQLWhere);
           if SQLWhere<>'' then begin
             if Server.Delete(Table,SQLWhere) then
-              Call.OutStatus := HTML_SUCCESS; // 200 OK
+              Call.OutStatus := HTTP_SUCCESS; // 200 OK
           end;
           break;
         end;
@@ -38577,7 +38577,7 @@ begin
         if Static<>nil then
           Static.TransactionBegin(Table,Session);
       end;
-      Call.OutStatus := HTML_SUCCESS; // 200 OK
+      Call.OutStatus := HTTP_SUCCESS; // 200 OK
     end;
   end;
   mEND: begin        // END=COMMIT
@@ -38591,7 +38591,7 @@ begin
         Static.Commit(Session,false);
     end;
     Server.Commit(Session,false);
-    Call.OutStatus := HTML_SUCCESS; // 200 OK
+    Call.OutStatus := HTTP_SUCCESS; // 200 OK
   end;
   mABORT: begin      // ABORT=ROLLBACK
     // this method is called with Root (-> Table=nil -> Static=nil)
@@ -38604,7 +38604,7 @@ begin
         Static.RollBack(Session);
     end;
     Server.RollBack(Session);
-    Call.OutStatus := HTML_SUCCESS; // 200 OK
+    Call.OutStatus := HTTP_SUCCESS; // 200 OK
   end;
   end;
   if StatusCodeIsSuccess(Call.OutStatus) then
@@ -38976,14 +38976,14 @@ begin
       Call.OutHead := CustomHeader else
       if Call.OutHead='' then
         Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
-    if Handle304NotModified and (Status=HTML_SUCCESS) and
+    if Handle304NotModified and (Status=HTTP_SUCCESS) and
        (Length(Result)>64) then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
       serverHash := '"'+crc32cUTF8ToHex(Result)+'"';
       if clientHash<>serverHash then
         Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash else begin
         Call.OutBody := ''; // save bandwidth for "304 Not Modified"
-        Call.OutStatus := HTML_NOTMODIFIED;
+        Call.OutStatus := HTTP_NOTMODIFIED;
       end;
     end;
   end else
@@ -39030,19 +39030,19 @@ begin
   if FileTime=0 then
     if Error404Redirect<>'' then
       Redirect(Error404Redirect) else
-      Error('',HTML_NOTFOUND) else begin
+      Error('',HTTP_NOTFOUND) else begin
     if Call.OutHead<>'' then
       Call.OutHead := Call.OutHead+#13#10;
     if ContentType<>'' then
       Call.OutHead := Call.OutHead+HEADER_CONTENT_TYPE+ContentType else
       Call.OutHead := Call.OutHead+GetMimeContentTypeHeader('',FileName);
-    Call.OutStatus := HTML_SUCCESS;
+    Call.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
       serverHash := '"'+DateTimeToIso8601(FileTime,false)+'"';
       Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash;
       if clientHash=serverHash then begin
-        Call.OutStatus := HTML_NOTMODIFIED;
+        Call.OutStatus := HTTP_NOTMODIFIED;
         exit;
       end;
     end;
@@ -39074,8 +39074,8 @@ procedure TSQLRestServerURIContext.Redirect(const NewLocation: RawUTF8;
   PermanentChange: boolean);
 begin
   if PermanentChange then
-    Call.OutStatus := HTML_MOVEDPERMANENTLY else
-    Call.OutStatus := HTML_TEMPORARYREDIRECT;
+    Call.OutStatus := HTTP_MOVEDPERMANENTLY else
+    Call.OutStatus := HTTP_TEMPORARYREDIRECT;
   Call.OutHead := 'Location: '+NewLocation;
 end;
 
@@ -39418,19 +39418,19 @@ begin
   QueryPerformanceCounter(timeStart);
   fStats.AddCurrentRequestCount(1);
   Call.OutInternalState := InternalState; // other threads may change it
-  Call.OutStatus := HTML_BADREQUEST; // default error code is 400 BAD REQUEST
+  Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
   Ctxt := ServicesRouting.Create(self,Call);
   try
     {$ifdef WITHLOG}
     Ctxt.Log := Log.Instance;
     {$endif}
     if fShutdownRequested then
-      Ctxt.Error('Server is shutting down',HTML_UNAVAILABLE) else
+      Ctxt.Error('Server is shutting down',HTTP_UNAVAILABLE) else
     if Ctxt.Method=mNone then
       Ctxt.Error('Unknown VERB') else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
-      Ctxt.Error('Invalid Root',HTML_NOTFOUND) else
+      Ctxt.Error('Invalid Root',HTTP_NOTFOUND) else
     if (RootRedirectGet<>'') and (Ctxt.Method=mGet) and
        (Call.Url=Model.Root) and (Call.InBody='') then
       Ctxt.Redirect(RootRedirectGet) else begin
@@ -39464,7 +39464,7 @@ begin
         on E: Exception do
           if (not Assigned(OnErrorURI)) or OnErrorURI(Ctxt,E) then
             // return 500 internal server error
-            Ctxt.Error(E,'',[],HTML_SERVERERROR);
+            Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
     end;
     // 4. returns expected result to the client and update Server statistics
@@ -39475,9 +39475,9 @@ begin
         outcomingfile := (len>=25) and (Call.OutHead[15]='!') and
           IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
       end else // Call.OutBody=''
-        if (Call.OutStatus=HTML_SUCCESS) and
+        if (Call.OutStatus=HTTP_SUCCESS) and
            (rsoHtml200WithNoBodyReturns204 in fOptions) then
-          Call.OutStatus := HTML_NOCONTENT;
+          Call.OutStatus := HTTP_NOCONTENT;
       fStats.ProcessSuccess(outcomingfile);
     end else begin
       fStats.ProcessErrorNumber(Call.OutStatus);
@@ -39800,7 +39800,7 @@ begin
     InternalInfo(info);
     Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
   end else
-    Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTML_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+    Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
@@ -39832,14 +39832,14 @@ begin
     EngineBatchSend(Ctxt.Table,Ctxt.Call.InBody,TIDDynArray(Results),0);
   except
     on E: Exception do begin
-      Ctxt.Error(E,'did break % BATCH process',[Ctxt.Table],HTML_SERVERERROR);
+      Ctxt.Error(E,'did break % BATCH process',[Ctxt.Table],HTTP_SERVERERROR);
       exit;
     end;
   end;
   // send back operation status array
-  Ctxt.Call.OutStatus := HTML_SUCCESS;
+  Ctxt.Call.OutStatus := HTTP_SUCCESS;
   for i := 0 to length(Results)-1 do
-    if Results[i]<>HTML_SUCCESS then begin
+    if Results[i]<>HTTP_SUCCESS then begin
       Ctxt.Call.OutBody := Int64DynArrayToCSV(Results,length(Results),'[',']');
       exit;
     end;
@@ -41005,7 +41005,7 @@ begin
           SetLength(Results,Count+256+Count shr 3);
       end;
       // process CRUD method operation
-      Results[Count] := HTML_NOTMODIFIED;
+      Results[Count] := HTTP_NOTMODIFIED;
       case URIMethod of
       mDELETE: begin
         OK := EngineDelete(RunTableIndex,ID);
@@ -41014,7 +41014,7 @@ begin
             fCache.NotifyDeletion(RunTableIndex,ID);
           if (RunningBatchRest<>nil) or
              AfterDeleteForceCoherency(RunTableIndex,ID) then
-            Results[Count] := HTML_SUCCESS; // 200 OK
+            Results[Count] := HTTP_SUCCESS; // 200 OK
         end;
       end;
       mPOST: begin
@@ -41026,7 +41026,7 @@ begin
       mPUT: begin
         OK := EngineUpdate(RunTableIndex,ID,Value);
         if OK then begin
-          Results[Count] := HTML_SUCCESS; // 200 OK
+          Results[Count] := HTTP_SUCCESS; // 200 OK
           if fCache<>nil then // JSON Value may be uncomplete -> delete from cache
             fCache.NotifyDeletion(RunTableIndex,ID);
         end;
@@ -41068,7 +41068,7 @@ begin
   end;
   // if we reached here, process was OK
   SetLength(Results,Count);
-  result := HTML_SUCCESS;
+  result := HTTP_SUCCESS;
 end;
 
 function CurrentServiceContext: TServiceRunningContext;
@@ -41175,7 +41175,7 @@ begin
   if aDLL=0 then
     raise ECommunicationException.CreateUTF8('%.Create: LoadLibrary(%)',[self,DllName]);
   aRequest := GetProcAddress(aDLL,'URIRequest');
-  if (@aRequest=nil) or (aRequest(nil,nil,nil,nil,nil).Lo<>HTML_NOTFOUND) then begin
+  if (@aRequest=nil) or (aRequest(nil,nil,nil,nil,nil).Lo<>HTTP_NOTFOUND) then begin
     FreeLibrary(aDLL);
     raise ECommunicationException.CreateUTF8(
       '%.Create: % doesn''t export a valid URIRequest() function',[self,DllName]);
@@ -41202,7 +41202,7 @@ var result: Int64Rec;
     pHead, pResp: PUTF8Char;
 begin
   if @Func=nil then begin
-    Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
     exit;
   end;
   pResp := nil;
@@ -41301,7 +41301,7 @@ begin
     if Assigned(fRedirectedClient) then
       // hook to access InternalURI() protected method
       TSQLRestClientRedirect(fRedirectedClient).InternalURI(Call) else
-      Call.OutStatus := HTML_GATEWAYTIMEOUT;
+      Call.OutStatus := HTTP_GATEWAYTIMEOUT;
   finally
     fSafe.Leave;
   end;
@@ -41727,7 +41727,7 @@ begin
   {$ifdef WITHLOG}
   Log := fLogClass.Enter(self);
   {$endif}
-  Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
+  Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
   fSafe.Enter;
   try
     if InternalCheckOpen then
@@ -41771,7 +41771,7 @@ begin
           exit;
         end else
         SleepHiRes(i);
-      Call.OutStatus := HTML_TIMEOUT; // 408 Request Timeout Error
+      Call.OutStatus := HTTP_TIMEOUT; // 408 Request Timeout Error
 {$else}
       if FileRead(fServerPipe,Call.OutStatus,sizeof(cardinal))=sizeof(cardinal) then begin
         // FileRead() waits till response arrived (or pipe is broken)
@@ -41779,12 +41779,12 @@ begin
         Call.OutHead := ReadString(fServerPipe);
         Call.OutBody := ReadString(fServerPipe);
       end else
-        Call.OutStatus := HTML_NOTFOUND;
+        Call.OutStatus := HTTP_NOTFOUND;
 {$endif}
      except
        on E: Exception do begin // error in ReadString()
          InternalLog('% for PipeName=%',[E,fPipeName],sllLastError);
-         Call.OutStatus := HTML_NOTIMPLEMENTED; // 501 (no valid application or library)
+         Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
          WriteString(fServerPipe,''); // try to notify the server of client logout
          FileClose(fServerPipe);
          fServerPipe := 0;
@@ -42118,7 +42118,7 @@ end;
 function TServicesPublishedInterfacesList.RegisterFromServer(Client: TSQLRestClientURI): boolean;
 var json: RawUTF8;
 begin
-  result := Client.CallBackGet('stat',['findservice','*'],json)=HTML_SUCCESS;
+  result := Client.CallBackGet('stat',['findservice','*'],json)=HTTP_SUCCESS;
   if result and (json<>'') then
     RegisterFromServerJSON(json);
 end;
@@ -44262,7 +44262,7 @@ begin
   try
     for i := 0 to high(fShardBatch) do
       if fShardBatch[i]<>nil then
-        if fShards[i].BatchSend(fShardBatch[i])<>HTML_SUCCESS then
+        if fShards[i].BatchSend(fShardBatch[i])<>HTTP_SUCCESS then
           InternalLog('%.InternalBatchStop(%): %.BatchSend failed for shard #%',
             [ClassType,fStoredClass,fShards[i].ClassType,i],sllWarning);
   finally
@@ -46723,7 +46723,7 @@ begin
   Log := fLogClass.Enter(self);
   {$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
-    Call.OutStatus := HTML_NOTIMPLEMENTED; // 501
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501
     InternalLog('InternalCheckOpen failure',sllClient);
     exit;
   end;
@@ -46759,14 +46759,14 @@ begin
           end;
         SleepHiRes(0);
         if GetTickCount64>Finished64 then begin
-          Call.OutStatus := HTML_TIMEOUT; // 408 Request Timeout Error
+          Call.OutStatus := HTTP_TIMEOUT; // 408 Request Timeout Error
           exit;
         end;
       until fCurrentResponse<>#0;
     end;
     // 3. return answer to caller
     if length(fCurrentResponse)<=sizeof(Int64) then
-      Call.OutStatus := HTML_NOTIMPLEMENTED else begin
+      Call.OutStatus := HTTP_NOTIMPLEMENTED else begin
       P := pointer(fCurrentResponse);
       if PCardinal(P)^<>MAGIC_SYN then // broadcasted WM_COPYDATA message? :(
         Call.OutStatus := 0 else begin
@@ -46775,7 +46775,7 @@ begin
         inc(P,sizeof(integer)*3);
       end;
       if Call.OutStatus=0 then
-        Call.OutStatus := HTML_NOTFOUND else begin
+        Call.OutStatus := HTTP_NOTFOUND else begin
         Call.OutHead := GetNextItem(P,#1);
         if P<>nil then
           SetString(Call.OutBody,P,length(fCurrentResponse)-(P-pointer(fCurrentResponse)));
@@ -46793,7 +46793,7 @@ begin
   if (self=nil) or (Msg.From<>fServerWindow) or
      (PCopyDataStruct(Msg.CopyDataStruct)^.dwData<>fServerWindow) then
     exit;
-  Msg.Result := HTML_SUCCESS; // Send something back
+  Msg.Result := HTTP_SUCCESS; // Send something back
   if fCurrentResponse=#0 then // expect some response?
     SetString(fCurrentResponse,PAnsiChar(PCopyDataStruct(Msg.CopyDataStruct)^.lpData),
       PCopyDataStruct(Msg.CopyDataStruct)^.cbData);
@@ -49652,7 +49652,7 @@ class function TSQLRestServerAuthentication.ClientGetSessionKey(
 var resp: RawUTF8;
     values: TPUtf8CharDynArray;
 begin
-  if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTML_SUCCESS) or
+  if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTTP_SUCCESS) or
      (JSONDecode(pointer(resp),['result','data','server','version',
        'logonid','logonname','logondisplay','logongroup'],values)=nil) then begin
     Sender.fSessionData := '';
@@ -50054,7 +50054,7 @@ begin
       Ctxt.AuthenticationFailed(afUnknownUser);
   end else begin
     Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';;
-    Ctxt.Error('',HTML_UNAUTHORIZED); // will popup for credentials in browser
+    Ctxt.Error('',HTTP_UNAUTHORIZED); // will popup for credentials in browser
   end;
 end;
 
@@ -50093,7 +50093,7 @@ begin
     if InDataEnc = '' then begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
-      Ctxt.Call.OutStatus := HTML_UNAUTHORIZED;
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED;
       StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
       exit;
     end;
@@ -50126,7 +50126,7 @@ begin
   if ServerSSPIAuth(fSSPIAuthContexts[SecCtxIdx], Base64ToBin(InDataEnc), OutData) then begin
     if BrowserAuth then begin
       Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData);
-      Ctxt.Call.OutStatus := HTML_UNAUTHORIZED;
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED;
       StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
     end else
       Ctxt.Returns(['result','','data',BinToBase64(OutData)]);
@@ -50156,7 +50156,7 @@ begin
             'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
             'logongroup',GroupRights.IDValue,
             'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]),
-            HTML_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
+            HTTP_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
           Ctxt.Returns([
             'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
             'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
@@ -54998,7 +54998,7 @@ var Inst: TServiceFactoryServerInstance;
       result := fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName else
       result := fInterface.fInterfaceName;
   end;
-  procedure Error(const Msg: RawUTF8; Status: integer=HTML_BADREQUEST);
+  procedure Error(const Msg: RawUTF8; Status: integer=HTTP_BADREQUEST);
   begin
     Ctxt.Error('(%) % for %',[ToText(InstanceCreation)^,Msg,GetFullMethodName],Status);
   end;
@@ -55063,7 +55063,7 @@ begin
           sicPerUser:    Inst.InstanceID := Ctxt.SessionUser;
           sicPerGroup:   Inst.InstanceID := Ctxt.SessionGroup;
           end else begin
-            Error('mode expects an authenticated session',HTML_UNAUTHORIZED);
+            Error('mode expects an authenticated session',HTTP_UNAUTHORIZED);
             exit;
           end;
       end;
@@ -55074,14 +55074,14 @@ begin
     end;
   end;
   if Inst.Instance=nil then begin
-    Error('instance not found or deprecated',HTML_BADREQUEST);
+    Error('instance not found or deprecated',HTTP_BADREQUEST);
     exit;
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
   if (Ctxt.ServiceExecution=nil) or
      (cardinal(Ctxt.ServiceMethodIndex)>=fInterface.fMethodsCount) then begin
-    Error('ServiceExecution=nil',HTML_SERVERERROR);
+    Error('ServiceExecution=nil',HTTP_SERVERERROR);
     exit;
   end;
   if mlInterfaces in TSQLRestServer(Rest).StatLevels then begin
@@ -55137,7 +55137,7 @@ begin
           Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
           Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
         end else begin
-          Error('execution failed (probably due to bad input parameters)',HTML_NOTACCEPTABLE);
+          Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
       finally
@@ -55147,7 +55147,7 @@ begin
       if Ctxt.Call.OutHead='' then begin // <>'' for TServiceCustomAnswer
         Ctxt.ServiceResultEnd(WR,Inst.InstanceID);
         Ctxt.Call.OutHead := JSON_CONTENT_TYPE_HEADER_VAR;
-        Ctxt.Call.OutStatus := HTML_SUCCESS;
+        Ctxt.Call.OutStatus := HTTP_SUCCESS;
       end;
       WR.SetText(Ctxt.Call.OutBody);
     finally
@@ -56781,7 +56781,7 @@ begin
           fServiceCustomAnswerHead := Header;
           Res.ForceContent(Content);
           if Status=0 then // Values[]=@Records[] is filled with 0 by default
-            fServiceCustomAnswerStatus := HTML_SUCCESS else
+            fServiceCustomAnswerStatus := HTTP_SUCCESS else
             fServiceCustomAnswerStatus := Status;
           Result := true;
           exit;
@@ -57255,11 +57255,11 @@ end;
 class function TServiceFactoryClient.GetErrorMessage(status: integer): RawUTF8;
 begin
   case status of
-    HTML_UNAVAILABLE: result := 'Check the communication parameters';
-    HTML_NOTIMPLEMENTED: result := 'Server not reachable';
-    HTML_NOTALLOWED: result := 'Method forbidden for this User group';
-    HTML_UNAUTHORIZED: result := 'No active session';
-    HTML_NOTACCEPTABLE: result := 'Invalid input parameters';
+    HTTP_UNAVAILABLE: result := 'Check the communication parameters';
+    HTTP_NOTIMPLEMENTED: result := 'Server not reachable';
+    HTTP_NOTALLOWED: result := 'Method forbidden for this User group';
+    HTTP_UNAUTHORIZED: result := 'No active session';
+    HTTP_NOTACCEPTABLE: result := 'Invalid input parameters';
     else result := '';
   end;
 end;

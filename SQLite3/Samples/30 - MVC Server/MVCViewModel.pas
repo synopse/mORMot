@@ -204,7 +204,7 @@ begin
         article.TagsAddOrdered(tags[random(length(tags))],fTagsLookup);
       batch.Add(article,true);
     end;
-    if RestModel.BatchSend(batch,articles)=HTML_SUCCESS then begin
+    if RestModel.BatchSend(batch,articles)=HTTP_SUCCESS then begin
       fTagsLookup.SaveOccurence(RestModel);
       comment.Author := article.Author;
       comment.AuthorName := article.AuthorName;
@@ -339,7 +339,7 @@ begin
       Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
     end;
   end else
-    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+    raise EMVCApplication.CreateGotoError(HTTP_NOTFOUND);
 end;
 
 procedure TBlogApplication.AuthorView(var ID: TID; out Author: TSQLAuthor;
@@ -350,7 +350,7 @@ begin
   if Author.ID<>0 then
     Articles := RestModel.RetrieveDocVariantArray(
       TSQLArticle,'','Author=? order by RowId desc limit 50',[ID],ARTICLE_FIELDS) else
-    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+    raise EMVCApplication.CreateGotoError(HTTP_NOTFOUND);
 end;
 
 function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
@@ -358,7 +358,7 @@ var Author: TSQLAuthor;
     SessionInfo: TCookieData;
 begin
   if CurrentSession.CheckAndRetrieve<>0 then begin
-    GotoError(result,HTML_BADREQUEST);
+    GotoError(result,HTTP_BADREQUEST);
     exit;
   end;
   Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
@@ -396,7 +396,7 @@ begin
     exit;
   end;
   if not RestModel.MemberExists(TSQLArticle,ID) then begin
-    GotoError(result,HTML_UNAVAILABLE);
+    GotoError(result,HTTP_UNAVAILABLE);
     exit;
   end;
   comm.Title := Title;
@@ -407,13 +407,13 @@ begin
     GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
     GotoView(result,'ArticleView',['ID',ID,'withComments',true,'Scope',_ObjFast([
       'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
-      HTML_BADREQUEST);
+      HTTP_BADREQUEST);
 end;
 
 function TBlogApplication.ArticleMatch(const Match: RawUTF8): TMVCAction;
 begin
   if Match='' then
-    GotoError(result,HTML_NOTMODIFIED) else
+    GotoError(result,HTTP_NOTMODIFIED) else
     GotoView(result,'Default',['scope',_ObjFast(['match',Match])]);
 end;
 
@@ -427,7 +427,7 @@ begin
     raise EMVCApplication.CreateGotoError(sErrorNeedValidAuthorSession);
   if ID<>0 then
     if not RestModel.Retrieve(ID,Article) then
-      raise EMVCApplication.CreateGotoError(HTML_UNAVAILABLE) else
+      raise EMVCApplication.CreateGotoError(HTTP_UNAVAILABLE) else
     if Article.Author<>pointer(AuthorID) then
       raise EMVCApplication.CreateGotoError(sErrorNeedValidAuthorSession);
   if Title<>'' then
@@ -454,11 +454,11 @@ begin
   if not Article.FilterAndValidate(RestModel,error) then
     GotoView(result,'ArticleEdit',
       ['ValidationError',error,'ID',ID,
-       'Title',Article.Title,'Content',Article.Content],HTML_BADREQUEST) else
+       'Title',Article.Title,'Content',Article.Content],HTTP_BADREQUEST) else
     if Article.ID=0 then begin
       Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
       if RestModel.Add(Article,true)<>0 then
-        GotoView(result,'ArticleView',['ID',Article.ID],HTML_SUCCESS) else
+        GotoView(result,'ArticleView',['ID',Article.ID],HTTP_SUCCESS) else
         GotoError(result,sErrorWriting);
     end else
       RestModel.Update(Article);

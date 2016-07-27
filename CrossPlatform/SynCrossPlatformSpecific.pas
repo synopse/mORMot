@@ -264,61 +264,61 @@ const
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
 
   /// HTML Status Code for "Continue"
-  HTML_CONTINUE = 100;
+  HTTP_CONTINUE = 100;
   /// HTML Status Code for "Switching Protocols"
-  HTML_SWITCHINGPROTOCOLS = 101;
+  HTTP_SWITCHINGPROTOCOLS = 101;
   /// HTML Status Code for "Success"
-  HTML_SUCCESS = 200;
+  HTTP_SUCCESS = 200;
   /// HTML Status Code for "Created"
-  HTML_CREATED = 201;
+  HTTP_CREATED = 201;
   /// HTML Status Code for "Accepted"
-  HTML_ACCEPTED = 202;
+  HTTP_ACCEPTED = 202;
   /// HTML Status Code for "Non-Authoritative Information"
-  HTML_NONAUTHORIZEDINFO = 203;
+  HTTP_NONAUTHORIZEDINFO = 203;
   /// HTML Status Code for "No Content"
-  HTML_NOCONTENT = 204;
+  HTTP_NOCONTENT = 204;
   /// HTML Status Code for "Multiple Choices"
-  HTML_MULTIPLECHOICES = 300;
+  HTTP_MULTIPLECHOICES = 300;
   /// HTML Status Code for "Moved Permanently"
-  HTML_MOVEDPERMANENTLY = 301;
+  HTTP_MOVEDPERMANENTLY = 301;
   /// HTML Status Code for "Found"
-  HTML_FOUND = 302;
+  HTTP_FOUND = 302;
   /// HTML Status Code for "See Other"
-  HTML_SEEOTHER = 303;
+  HTTP_SEEOTHER = 303;
   /// HTML Status Code for "Not Modified"
-  HTML_NOTMODIFIED = 304;
+  HTTP_NOTMODIFIED = 304;
   /// HTML Status Code for "Use Proxy"
-  HTML_USEPROXY = 305;
+  HTTP_USEPROXY = 305;
   /// HTML Status Code for "Temporary Redirect"
-  HTML_TEMPORARYREDIRECT = 307;
+  HTTP_TEMPORARYREDIRECT = 307;
   /// HTML Status Code for "Bad Request"
-  HTML_BADREQUEST = 400;
+  HTTP_BADREQUEST = 400;
   /// HTML Status Code for "Unauthorized"
-  HTML_UNAUTHORIZED = 401;
+  HTTP_UNAUTHORIZED = 401;
   /// HTML Status Code for "Forbidden"
-  HTML_FORBIDDEN = 403;
+  HTTP_FORBIDDEN = 403;
   /// HTML Status Code for "Not Found"
-  HTML_NOTFOUND = 404;
+  HTTP_NOTFOUND = 404;
   // HTML Status Code for "Method Not Allowed"
-  HTML_NOTALLOWED = 405;
+  HTTP_NOTALLOWED = 405;
   // HTML Status Code for "Not Acceptable"
-  HTML_NOTACCEPTABLE = 406;
+  HTTP_NOTACCEPTABLE = 406;
   // HTML Status Code for "Proxy Authentication Required"
-  HTML_PROXYAUTHREQUIRED = 407;
+  HTTP_PROXYAUTHREQUIRED = 407;
   /// HTML Status Code for "Request Time-out"
-  HTML_TIMEOUT = 408;
+  HTTP_TIMEOUT = 408;
   /// HTML Status Code for "Internal Server Error"
-  HTML_SERVERERROR = 500;
+  HTTP_SERVERERROR = 500;
   /// HTML Status Code for "Not Implemented"
-  HTML_NOTIMPLEMENTED = 501;
+  HTTP_NOTIMPLEMENTED = 501;
   /// HTML Status Code for "Bad Gateway"
-  HTML_BADGATEWAY = 502;
+  HTTP_BADGATEWAY = 502;
   /// HTML Status Code for "Service Unavailable"
-  HTML_UNAVAILABLE = 503;
+  HTTP_UNAVAILABLE = 503;
   /// HTML Status Code for "Gateway Timeout"
-  HTML_GATEWAYTIMEOUT = 504;
+  HTTP_GATEWAYTIMEOUT = 504;
   /// HTML Status Code for "HTTP Version Not Supported"
-  HTML_HTTPVERSIONNONSUPPORTED = 505;
+  HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
 
 /// gives access to the class type to implement a HTTP connection
@@ -653,7 +653,7 @@ begin
       fConnection.Request.Source := InStr;
     end;
     if Call.Verb='GET' then // allow 404 as valid Call.OutStatus
-      fConnection.Get(fURL+Call.Url,OutStr,[HTML_SUCCESS,HTML_NOTFOUND]) else
+      fConnection.Get(fURL+Call.Url,OutStr,[HTTP_SUCCESS,HTTP_NOTFOUND]) else
     if Call.Verb='POST' then
       fConnection.Post(fURL+Call.Url,InStr,OutStr) else
     if Call.Verb='PUT' then

@@ -5926,7 +5926,7 @@ Here is an extract of the regression test corresponding to external databases:
 !  aExternalClient.BatchStart(TSQLRecordPeopleExt);
 !  aExternalClient.BatchAdd(RExt,true);
 !  (...)
-!  Check(aExternalClient.BatchSend(BatchID)=HTML_SUCCESS);
+!  Check(aExternalClient.BatchSend(BatchID)=HTTP_SUCCESS);
 !  Check(aExternalClient.TableHasRows(TSQLRecordPeopleExt));
 !  Check(aExternalClient.TableRowCount(TSQLRecordPeopleExt)=n);
 !  (...)
@@ -6612,13 +6612,13 @@ You can write the exact same code as with any SQL back-end:
 !  finally
 !    R.Free;
 !  end;
-!  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
+!  assert(Client.BatchSend(IDs)=HTTP_SUCCESS);
 Or for deletion:
 !  Client.BatchStart(TSQLORM);
 !  for i := 5 to COLL_COUNT do
 !    if i mod 5=0 then
 !      assert(fClient.BatchDelete(i)>=0);
-!  assert(Client.BatchSend(IDs)=HTML_SUCCESS);
+!  assert(Client.BatchSend(IDs)=HTTP_SUCCESS);
 Speed benefit may be huge in regard to individual Add/Delete operations, even on a local {\i MongoDB} server. We will see some benchmark numbers now.
 :  ORM/ODM performance
 You can take a look at @59@ to compare {\i MongoDB} as back-end for our ORM classes.
@@ -6857,7 +6857,7 @@ Then the JSON can be parsed then emitted as such:
 !!  U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
 You can see that the {\f1\fs20 record} serialization is auto-magically available at dynamic array level, which is pretty convenient in our case, since the {\f1\fs20 api.github.com} RESTful service returns a JSON array.
 It will convert 160 KB of very verbose JSON information:
-$[{"id":8079771,"name":"Component_ZendAuthentication","full_name":"zendframework/Component_ZendAuthentication","owner":{"login":"zendframework","id":296074,"avatar_url":"https://1.gravatar.com/avatar/460576a0866d93fdacb597da4b90f233?d=https%3A%2F%2Fidenticons.github.com%2F292b7433472e2946c926bdca195cec8c.png&r=x","gravatar_id":"460576a0866d93fdacb597da4b90f233","url":"https://api.github.com/users/zendframework","html_url":"https://github.com/zendframework","followers_url":"https://api.github.com/users/zendframework/followers","following_url":"https://api.github.com/users/zendframework/following{/other_user}","gists_url":"https://api.github.com/users/zendframework/gists{/gist_id}","starred_url":"https://api.github.com/users/zendframework/starred{/owner}{/repo}",...
+$[{"id":8079771,"name":"Component_ZendAuthentication","full_name":"zendframework/Component_ZendAuthentication","owner":{"login":"zendframework","id":296074,"avatar_url":"https://1.gravatar.com/avatar/460576a0866d93fdacb597da4b90f233?d=https%3A%2F%2Fidenticons.github.com%2F292b7433472e2946c926bdca195cec8c.png&r=x","gravatar_id":"460576a0866d93fdacb597da4b90f233","url":"https://api.github.com/users/zendframework","HTTP_url":"https://github.com/zendframework","followers_url":"https://api.github.com/users/zendframework/followers","following_url":"https://api.github.com/users/zendframework/following{/other_user}","gists_url":"https://api.github.com/users/zendframework/gists{/gist_id}","starred_url":"https://api.github.com/users/zendframework/starred{/owner}{/repo}",...
 Into the much smaller (6 KB) and readable JSON content, containing only the information we need:
 $[
 $ {
@@ -8086,7 +8086,7 @@ On the server side, you may write for instance:
 !      R.Test := Int32ToUTF8(i);
 !      Check(Batch.Add(R,true)=i-10000);
 !    end;
-!    Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
+!    Check(Server.BatchSend(Batch,IDs)=HTTP_SUCCESS);
 !  finally
 !    Batch.Free;
 !  end;
@@ -8620,7 +8620,7 @@ Using {\f1\fs20 Ctxt.Returns()} will let the method return the content in any fo
 For instance, you can return directly a value as plain text:
 !procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
 !begin
-!  Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTML_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
+!  Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 !end;
 Or you can return some binary file, retrieving the corresponding MIME type from its binary content:
 !procedure TSQLRestServer.GetFile(Ctxt: TSQLRestServerURIContext);
@@ -8631,14 +8631,14 @@ Or you can return some binary file, retrieving the corresponding MIME type from 
 !  fileName :=  'c:\data\'+ExtractFileName(Ctxt['filename']); // or Ctxt.Input['filename']
 !  content := StringFromFile(fileName);
 !  if content='' then
-!    Ctxt.Error('',HTML_NOTFOUND) else
-!    Ctxt.Returns(content,HTML_SUCCESS,HEADER_CONTENT_TYPE+
+!    Ctxt.Error('',HTTP_NOTFOUND) else
+!    Ctxt.Returns(content,HTTP_SUCCESS,HEADER_CONTENT_TYPE+
 !         GetMimeContentType(pointer(content),Length(content),fileName));
 !end;
 The corresponding client method may be defined as such:
 !function TMyClient.GetFile(const aFileName: RawUTF8): RawByteString;
 !begin
-!  if CallBackGet('GetFile',['filename',aFileName],RawUTF8(result))<>HTML_SUCCESS then
+!  if CallBackGet('GetFile',['filename',aFileName],RawUTF8(result))<>HTTP_SUCCESS then
 !    raise Exception.CreateFmt('Impossible to get file: %s',[result]);
 !end;
 Note that the {\f1\fs20 Ctxt.ReturnFile()} method - see @95@ - is preferred than manual file retrieval as implemented in this {\f1\fs20 TSQLRestServer.GetFile()} method. It is shown here for demonstration purposes only.
@@ -8676,7 +8676,7 @@ Be aware that you should {\i disable authentication} for the methods using this 
 This @*stateless@ @9@ model will enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
 :95 Returning file content
 Framework's HTTP server is able to handle returning a file as response to a method-based service.\line The @88@ is even able to serve the file content asynchronously from kernel mode, with outstanding performance.
-You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTML_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
+You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTTP_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
 Another possibility may be to use the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method, which is able to efficiently return any file specified by its URI, from a local folder. It may be very handy to
 return some static web content from a {\i mORMot} HTTP server.
 \page
@@ -8690,14 +8690,14 @@ But you can have full access to the error workflow, if needed. In fact, calling 
 !    Ctxt.Error;
 !end;
 In case of an error on the server side, you may call {\f1\fs20 Ctxt.Error()} method (only the two valid status codes are {\f1\fs20 200} and {\f1\fs20 201}).
-The {\f1\fs20 Ctxt.Error()} method has an optional parameter to specify a custom error message in plain English, which will be returned to the client in case of an invalid status code. If no custom text is specified, the framework will return the corresponding generic HTTP status text (e.g. {\f1\fs20 "Bad Request"} for default status code {\f1\fs20 HTML_BADREQUEST} = 400).
-In this case, the client will receive a corresponding serialized JSON error object, e.g. for {\f1\fs20 Ctxt.Error('Missing Parameter',HTML_NOTFOUND)}:
+The {\f1\fs20 Ctxt.Error()} method has an optional parameter to specify a custom error message in plain English, which will be returned to the client in case of an invalid status code. If no custom text is specified, the framework will return the corresponding generic HTTP status text (e.g. {\f1\fs20 "Bad Request"} for default status code {\f1\fs20 HTTP_BADREQUEST} = 400).
+In this case, the client will receive a corresponding serialized JSON error object, e.g. for {\f1\fs20 Ctxt.Error('Missing Parameter',HTTP_NOTFOUND)}:
 ${
 $ "ErrorCode":404,
 $ "ErrorText":"Missing Parameter"
 $}
 If called from an AJAX client, or a browser, this content should be easy to interpret.
-Note that the framework core will catch any exception during the method execution, and will return a {\f1\fs20 "Internal Server Error" / HTML_SERVERERROR} = 500 error code with the associated textual exception details.
+Note that the framework core will catch any exception during the method execution, and will return a {\f1\fs20 "Internal Server Error" / HTTP_SERVERERROR} = 500 error code with the associated textual exception details.
 \page
 : Benefits and limitations of this implementation
 Method-based services allow fast and direct access to all {\f1\fs20 mORMot} Client-Server {\f1\fs20 RESTful} features, over all usual protocols of our framework: @*HTTP@/1.1, Named Pipe, Windows Messages, direct in-memory/in-process access.
@@ -11356,7 +11356,7 @@ In order to specify a custom format, you can use the following {\f1\fs20 @*TServ
 !    Content: RawByteString;
 !    Status: cardinal;
 !  end;
-The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overridden with a property HTML code, if the default {\f1\fs20 HTML_SUCCESS} is not enough for your purpose. Note that when consumed from {\i Delphi} clients, {\f1\fs20 HTML_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
+The {\f1\fs20 Header} field shall be not null (i.e. not equal to ''), and contains the expected content type header (e.g. {\f1\fs20 TEXT_CONTENT_TYPE_HEADER} or {\f1\fs20 HTML_CONTENT_TYPE_HEADER}).\line Then the {\f1\fs20 Content} value will be transmitted back directly to the client, with no JSON @*serialization@. Of course, no {\f1\fs20 var} nor {\f1\fs20 out} parameter will be transmitted (since there is no JSON result array any more).\line Finally, the {\f1\fs20 Status} field could be overridden with a property HTML code, if the default {\f1\fs20 HTTP_SUCCESS} is not enough for your purpose. Note that when consumed from {\i Delphi} clients, {\f1\fs20 HTTP_SUCCESS} is expected to be returned by the server: you should customize {\f1\fs20 Status} field only for plain AJAX / web clients.
 In order to implement such method, you may define such an interface:
 !  IComplexCalculator = interface(ICalculator)
 !    ['{8D0F3839-056B-4488-A616-986CF8D4DEB7}']
@@ -11767,7 +11767,7 @@ The data model and the expected authentication scheme were included in the {\f1\
 :   CRUD/ORM remote access
 Thanks to {\f1\fs20 SynCrossPlatform*} units, you could easily perform any remote ORM operation on your {\i mORMot} server, with the usual {\f1\fs20 TSQLRest} CRUD methods.\line For instance, the {\f1\fs20 RegressionTests.dpr} sample performs the following operations
 !!  fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople); // call of method-based service
-!  check(Call.OutStatus=HTML_SUCCESS);
+!  check(Call.OutStatus=HTTP_SUCCESS);
 !  people := TSQLRecordPeople.Create; // create a record ORM
 !  try
 !    for i := 1 to 200 do begin
@@ -11849,7 +11849,7 @@ As we already stated, @*BATCH@ mode is also supported, with the classic {\i mORM
 !  finally
 !    people.Free;
 !  end;
-!!  fClient.fBatchSend(res)=HTML_SUCCESS);
+!!  fClient.fBatchSend(res)=HTTP_SUCCESS);
 !  check(length(res)=200);
 !  for i := 1 to 200 do
 !    check(res[i-1]=i); // server returned the IDs of the newly created records
@@ -12676,7 +12676,7 @@ Any attempt to access to the {\f1\fs20 project.com} or {\f1\fs20 www.project.com
 !begin
 !  if fMyFileCache='' then
 !    fMyFileCache := StringFromFile(ChangeFileExt(paramstr(0),'.html'));
-!  Ctxt.Returns(fMyFileCache,HTML_SUCCESS,HTML_CONTENT_TYPE_HEADER,true);
+!  Ctxt.Returns(fMyFileCache,HTTP_SUCCESS,HTML_CONTENT_TYPE_HEADER,true);
 !end;
 This method will serve some static HTML content as the main front end page of this server connected to the Internet. For best performance, this UTF-8 content is cached in memory, and the HTTP 304 command will be handled, if the browser supports it. Of course, your application may return some more complex content, even serving a set of files hosted in a local folder, e.g. by calling {\f1\fs20 Ctxt.ReturnFile()} or {\f1\fs20 Ctxt.ReturnFileFromFolder()} methods in this {\f1\fs20 Html()} service:
 !procedure TMyServer.Html(Ctxt: TSQLRestServerURIContext);
@@ -12790,7 +12790,7 @@ Let's implement a simple command:
 !  if Author.ID<>0 then
 !    Articles := RestModel.RetrieveListJSON(
 !      TSQLArticle,'Author=? order by id desc limit 50',[ID],ARTICLE_FIELDS) else
-!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!    raise EMVCApplication.CreateGotoError(HTTP_NOTFOUND);
 !end;
 By convention, all parameters are allocated when {\f1\fs20 TMVCApplication} will execute a method. So you do not need to allocate or handle the {\f1\fs20 Author: TSQLAuthor} instance lifetime.\line You have direct access to the underlying {\f1\fs20 TSQLRest} instance via {\f1\fs20 TMVCApplication.RestModel}: so all CRUD operations are available. You can let the ORM do the low level SQL work for you: to retrieve all information about one {\f1\fs20 TSQLAuthor} and get the list of its associated articles, we just use a {\f1\fs20 TSQLRest} method with the appropriate WHERE clause. Here we returned the list of articles as a {\f1\fs20 TDocVariant}, so that they will be transmitted as a JSON array, without any intermediate marshalling to {\f1\fs20 TSQLArticle} instances, but with the {\f1\fs20 Tags} dynamic array published property returned as an array of integers (you may have used {\f1\fs20 TObjectList} or {\f1\fs20 RawJSON} instead, as will be detailed below).\line In case of any error, an {\f1\fs20 EMVCApplication} will be raised: when such an exception happens, the {\f1\fs20 TMVCApplication} will handle and convert it into a page change, and a redirection to the {\f1\fs20 IBlogApplication.Error()} method, which will return an error page, using the {\f1\fs20 Error.html} view template.
 Let's take a look at a bit more complex method, which we talked about in @%%mORMotMVCSequence@:
@@ -12814,7 +12814,7 @@ Let's take a look at a bit more complex method, which we talked about in @%%mORM
 !      Comments := RestModel.RetrieveList(TSQLComment,'Article=?',[Article.ID]);
 !    end;
 !  end else
-!    raise EMVCApplication.CreateGotoError(HTML_NOTFOUND);
+!    raise EMVCApplication.CreateGotoError(HTTP_NOTFOUND);
 !end;
 This method has to manage several use cases:
 - Display an {\f1\fs20 Article} from the database;
@@ -12953,7 +12953,7 @@ Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perfor
 !!    SessionInfo: TCookieData;
 !begin
 !!  if CurrentSession.CheckAndRetrieve<>0 then begin
-!    GotoError(result,HTML_BADREQUEST);
+!    GotoError(result,HTTP_BADREQUEST);
 !    exit;
 !  end;
 !!  Author := TSQLAuthor.Create(RestModel,'LogonName=?',[LogonName]);
@@ -13550,7 +13550,7 @@ This will allow checking of access right for all @*CRUD@ operations, according t
 !    end else
 !      // here, Table<>nil and TableIndex in [0..MAX_SQLTABLES-1]
 !!      if not (URI.TableIndex in Call.RestAccessRights^.POST) then // check User
-!!        Call.OutStatus := HTML_FORBIDDEN else
+!!        Call.OutStatus := HTTP_FORBIDDEN else
 !      (...)
 Making access rights a parameter allows this method to be handled as pure stateless, @*thread-safe@ and @*session@-free, from the bottom-most level of the framework.
 On the other hand, the security policy defined by this global parameter does not allow tuned per-user authorization. In the current implementation, the {\f1\fs20 SUPERVISOR_ACCESS_RIGHTS} constant is transmitted for all handled communication protocols (direct access, Windows Messages, named pipe or HTTP). Only direct access via {\f1\fs20 @*TSQLRestClientDB@} will use {\f1\fs20 FULL_ACCESS_RIGHTS}, i.e. will have {\f1\fs20 AllowRemoteExecute} parameter set to all possible flags.

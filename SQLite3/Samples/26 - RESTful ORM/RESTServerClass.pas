@@ -71,7 +71,7 @@ begin
     mDELETE:
       if DeleteFile(FileName) then
         Ctxt.Success else
-        Ctxt.Error('',HTML_NOTFOUND);
+        Ctxt.Error('',HTTP_NOTFOUND);
     end;
   end;
 end;

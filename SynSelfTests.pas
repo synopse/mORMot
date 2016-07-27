@@ -7480,10 +7480,10 @@ begin
             R.FillWith(i);
             Check(Client.BatchAdd(R,true,false,ALL_FIELDS)=i-100);
           end;
-          Check(Client.BatchSend(IDs)=HTML_SUCCESS);
+          Check(Client.BatchSend(IDs)=HTTP_SUCCESS);
           Check(Length(IDs)=9900);
           Check(not FileExists('fullmem.data'));
-          Check(Client.CallBackPut('Flush','',dummy)=HTML_SUCCESS);
+          Check(Client.CallBackPut('Flush','',dummy)=HTTP_SUCCESS);
           Check(FileExists('fullmem.data'));
           Check(Client.Retrieve(200,R));
           R.CheckWith(self,200);
@@ -7591,7 +7591,7 @@ begin
               R.FillWith(i);
               Check(Batch.Add(R,true,false,ALL_FIELDS)=i-10000);
             end;
-            Check(Server.BatchSend(Batch,IDs)=HTML_SUCCESS);
+            Check(Server.BatchSend(Batch,IDs)=HTTP_SUCCESS);
           finally
             Batch.Free;
           end;
@@ -9293,7 +9293,7 @@ begin
       MasterAccess.BatchStart(TSQLRecordPeopleVersioned,10000);
       while Rec.FillOne do // fast add via Batch
         Test.Check(MasterAccess.BatchAdd(Rec,true,true)>=0);
-      Test.Check(MasterAccess.BatchSend(IDs)=HTML_SUCCESS);
+      Test.Check(MasterAccess.BatchSend(IDs)=HTTP_SUCCESS);
       Test.Check(n=length(IDs)+10);
       Test.Check(Rec.FillRewind);
       for i := 0 to 9 do
@@ -9452,7 +9452,7 @@ begin
           R.FillWith(i);
           Check(b.Add(R,true,false,ALL_FIELDS)=i-51);
         end;
-        Check(db.BatchSend(b)=HTML_SUCCESS);
+        Check(db.BatchSend(b)=HTTP_SUCCESS);
       finally
         b.Free;
       end;
@@ -10355,7 +10355,7 @@ begin
                 Client.BatchAdd(R,true);
                 inc(n);
               end;
-              Check(Client.BatchSend(res)=HTML_SUCCESS);
+              Check(Client.BatchSend(res)=HTTP_SUCCESS);
               Check(length(res)=n);
               Check(length(res)=n);
               for i := 1 to 100 do begin
@@ -10376,9 +10376,9 @@ begin
             for i := 0 to high(ids) do begin
               Client.BatchStart(TSQLRecordPeople);
               Client.BatchDelete(ids[i]);
-              Check(Client.BatchSend(res)=HTML_SUCCESS);
+              Check(Client.BatchSend(res)=HTTP_SUCCESS);
               Check(length(res)=1);
-              Check(res[0]=HTML_SUCCESS);
+              Check(res[0]=HTTP_SUCCESS);
             end;
             for i := 0 to high(ids) do
               Check(not Client.Retrieve(ids[i],R));
@@ -10929,7 +10929,7 @@ begin
         Check(aExternalClient.Retrieve(1,RInt1));
         Check(RInt1.fID=1);
         Check(n=fPeopleData.RowCount);
-        Check(aExternalClient.BatchSend(BatchID)=HTML_SUCCESS);
+        Check(aExternalClient.BatchSend(BatchID)=HTTP_SUCCESS);
         Check(length(BatchID)=n-99);
         Check(aExternalClient.TableHasRows(TSQLRecordPeopleExt));
         Check(aExternalClient.TableRowCount(TSQLRecordPeopleExt)=n);
@@ -10991,7 +10991,7 @@ begin
               {$endif}
             end;
           end;
-        Check(aExternalClient.BatchSend(BatchIDUpdate)=HTML_SUCCESS);
+        Check(aExternalClient.BatchSend(BatchIDUpdate)=HTTP_SUCCESS);
         Check(length(BatchIDUpdate)=70);
         for i := 1 to BatchID[high(BatchID)] do
           if i and 127=0 then
@@ -11001,7 +11001,7 @@ begin
             Check(aExternalClient.BatchDelete(i)>=0,'BatchDelete 1/128 rows');
           end else
             Check(aExternalClient.Delete(TSQLRecordPeopleExt,i),'Delete 1/128 rows');
-        Check(aExternalClient.BatchSend(BatchIDUpdate)=HTML_SUCCESS);
+        Check(aExternalClient.BatchSend(BatchIDUpdate)=HTTP_SUCCESS);
         Check(length(BatchIDUpdate)=55);
         n := aExternalClient.TableRowCount(TSQLRecordPeople);
         Check(aExternalClient.Server.TableRowCount(TSQLRecordPeopleExt)=10925);
@@ -11060,9 +11060,9 @@ begin
         for i := 0 to high(ids) do begin
           aExternalClient.BatchStart(TSQLRecordPeopleExt);
           aExternalClient.BatchDelete(ids[i]);
-          Check(aExternalClient.BatchSend(BatchID)=HTML_SUCCESS);
+          Check(aExternalClient.BatchSend(BatchID)=HTTP_SUCCESS);
           Check(length(BatchID)=1);
-          Check(BatchID[0]=HTML_SUCCESS);
+          Check(BatchID[0]=HTTP_SUCCESS);
         end;
         for i := 0 to high(ids) do
           Check(not aExternalClient.Retrieve(ids[i],RExt));
@@ -11083,7 +11083,7 @@ begin
           RJoin.People := TSQLRecordPeopleExt(i);
           aExternalClient.BatchAdd(RJoin,true);
         end;
-        Check(aExternalClient.BatchSend(BatchIDJoined)=HTML_SUCCESS);
+        Check(aExternalClient.BatchSend(BatchIDJoined)=HTTP_SUCCESS);
         Check(length(BatchIDJoined)=993);
         RJoin.FillPrepare(aExternalClient);
         Check(RJoin.FillTable.RowCount=993);
@@ -11562,9 +11562,9 @@ begin
     for i := 0 to high(ids) do begin
       ClientDist.BatchStart(TSQLRecordPeople);
       ClientDist.BatchDelete(ids[i]);
-      Check(ClientDist.BatchSend(res)=HTML_SUCCESS);
+      Check(ClientDist.BatchSend(res)=HTTP_SUCCESS);
       Check(length(res)=1);
-      Check(res[0]=HTML_SUCCESS);
+      Check(res[0]=HTTP_SUCCESS);
     end;
     for i := 0 to high(ids) do
       Check(not ClientDist.Retrieve(ids[i],V2));
@@ -13392,10 +13392,10 @@ begin
       Inst.ExpectedUserID := HTTPClient.SessionUser.ID;
       Inst.ExpectedGroupID := HTTPClient.SessionUser.GroupRights.ID;
       //SetOptions(false{$ifndef LVCL},true,[optExecInMainThread]{$endif});
-      Check(HTTPClient.CallBackGet('stat',['findservice','toto'],json)=HTML_SUCCESS);
+      Check(HTTPClient.CallBackGet('stat',['findservice','toto'],json)=HTTP_SUCCESS);
       Check(json='[]');
       for i := 0 to High(SERVICES) do begin
-        Check(HTTPClient.CallBackGet('stat',['findservice',SERVICES[i]],json)=HTML_SUCCESS);
+        Check(HTTPClient.CallBackGet('stat',['findservice',SERVICES[i]],json)=HTTP_SUCCESS);
         Check(json<>'[]');
         Check(HTTPClient.ServiceRetrieveAssociated(SERVICES[i],URI));
         Check(length(URI)=1);
@@ -14418,7 +14418,7 @@ function TBidirServer.TestRestCustom(a: integer): TServiceCustomAnswer;
 begin
   result.Header := BINARY_CONTENT_TYPE_HEADER;
   result.Content := Int32ToUtf8(a)+#0#1;
-  result.Status := HTML_SUCCESS;
+  result.Status := HTTP_SUCCESS;
 end;
 
 function TBidirServer.TestCallback(d: Integer; const callback: IBidirCallback): boolean;
@@ -14496,7 +14496,7 @@ begin
     end;
   for a := -10 to 10 do begin
     res := I.TestRestCustom(a);
-    check(res.Status=HTML_SUCCESS);
+    check(res.Status=HTTP_SUCCESS);
     check(GetInteger(pointer(res.Content))=a);
     check(res.Content[Length(res.Content)]=#1);
   end;
