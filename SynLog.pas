@@ -869,7 +869,7 @@ type
     // enter (+) and leave (-) events:
     //  $ 20110325 19325801  +    MyDBUnit.TMyDB(004E11F4).SQLExecute
     //  $ 20110325 19325801 info   SQL=SELECT * FROM Table;
-    //  $ 20110325 19325801  -    MyDBUnit.TMyDB(004E11F4).SQLExecute
+    //  $ 20110325 19325801  -    01.512.320
     // - note that due to a limitation (feature?) of the FPC compiler, you need
     // to hold the returned value into a local ISynLog variable, as such:
     // ! procedure TMyDB.SQLFlush;
