@@ -15853,6 +15853,21 @@ function SynLZCompressToBytes(P: PAnsiChar; PLen: integer;
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
 
+/// directly returns the buffer
+// - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
+// - returns a pointer to the raw data and fill Len variable, after crc32c hash
+// - avoid any memory allocation in case of a stored content - otherwise, would
+// uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+function SynLZDecompress(const Data: RawByteString; out Len: integer;
+  var tmp: RawByteString): pointer; overload;
+
+/// directly returns a stored buffer, if SynLZCompress() just stored it
+// - returns nil if crc32 hash failed, i.e. if the supplied Data is not correct
+// - returns a pointer to the raw data and fill Len variable, after crc32c hash
+// - avoid any memory allocation in case of a stored content - otherwise, would
+// uncompress to the tmp variable, and return pointer(tmp) and length(tmp)
+function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
+  var tmp: RawByteString): pointer; overload;
 
 resourcestring
   sInvalidIPAddress = '"%s" is an invalid IP v4 address';
@@ -54972,7 +54987,7 @@ end;
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
 var len: integer;
 begin
-  if (PLen<=9) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
+  if (PLen<=9) or (P=nil) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
     exit;
   case P[4] of
   SYNLZCOMPRESS_STORED:
@@ -54989,13 +55004,42 @@ begin
   end;
 end;
 
+function SynLZDecompress(const Data: RawByteString; out Len: integer;
+  var tmp: RawByteString): pointer;
+begin
+  result := SynLZDecompress(pointer(Data),length(Data),Len,tmp);
+end;
+
+function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
+  var tmp: RawByteString): pointer;
+begin
+  result := nil;
+  if (PLen<=9) or (P=nil) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
+    exit;
+  case P[4] of
+  SYNLZCOMPRESS_STORED:
+    if PCardinal(P)^=PCardinal(P+5)^ then begin
+      result := P+9;
+      Len := PLen-9;
+    end;
+  SYNLZCOMPRESS_SYNLZ: begin
+    Len := SynLZdecompressdestlen(P+9);
+    SetString(tmp,nil,Len);
+    if (Len<>0) and
+       (SynLZDecompress1(P+9,PLen-9,pointer(tmp))=Len) and
+       (crc32c(0,pointer(tmp),Len)=PCardinal(P)^) then
+      result := pointer(tmp);
+  end;
+  end;
+end;
+
 function SynLZCompressToBytes(const Data: RawByteString;
   CompressionSizeTrigger: integer): TByteDynArray;
 begin
   result := SynLZCompressToBytes(pointer(Data),length(Data),CompressionSizeTrigger);
 end;
 
-function SynLZCompressToBytes(P: PAnsiChar; PLen,CompressionSizeTrigger: integer): TByteDynArray; overload;
+function SynLZCompressToBytes(P: PAnsiChar; PLen,CompressionSizeTrigger: integer): TByteDynArray;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
