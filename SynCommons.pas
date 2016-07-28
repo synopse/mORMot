@@ -5824,8 +5824,9 @@ function GUIDToString(const guid: TGUID): string;
 
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
-// - consider using instead the much safer TAESPRNG.Main.FillRandom() method
-// from the SynCrypto unit
+// - use internally crc32c() hashing with some rough entropy source
+// - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
+// method from the SynCrypto unit
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 
 /// compute a random GUID value
@@ -30929,10 +30930,14 @@ end;
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 var i: integer;
     c: cardinal;
+    timenow: Int64;
 begin
   c := GetTickCount64+Random(maxInt)+GetCurrentThreadID;
+  QueryPerformanceCounter(timenow);
+  c := c xor crc32c(c,@timenow,sizeof(timenow));
   for i := 0 to CardinalCount-1 do begin
-    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023];
+    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023]
+      xor crc32c(c,pointer(Dest),CardinalCount*4);
     Dest^[i] := Dest^[i] xor c;
   end;
 end;
