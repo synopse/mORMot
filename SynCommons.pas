@@ -15948,6 +15948,22 @@ function SynLZDecompress(const Data: RawByteString; out Len: integer;
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer; overload;
 
+/// RLE compression of a memory buffer containing mostly zeros
+// - will store the number of consecutive zeros instead of plain zero bytes
+// - used for spare bit sets, e.g. TSynBloomFilter serialization
+// - will also compute the crc32c of the supplied content
+// - use ZeroDecompress() to expand the compressed result
+// - resulting content would be at most 14 bytes bigger than the input
+// - you may use this function before SynLZ compression
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+
+/// RLE uncompression of a memory buffer containing mostly zeros
+// - returns Dest='' if P^ is not a valid ZeroCompress() function result
+// - used for spare bit sets, e.g. TSynBloomFilter serialization
+// - will also check the crc32c of the supplied content
+procedure ZeroDecompress(P: PByte; Len: integer; out Dest: RawByteString);
+
+
 resourcestring
   sInvalidIPAddress = '"%s" is an invalid IP v4 address';
   sInvalidEmailAddress = '"%s" is an invalid email address';
@@ -55157,6 +55173,67 @@ end;
 function SynLZDecompress(const Data: TByteDynArray): RawByteString; overload;
 begin
   SynLZDecompress(pointer(Data),length(Data),result);
+end;
+
+procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
+var PEnd,beg,zero: PAnsiChar;
+    crc: cardinal;
+begin
+  Dest.WriteVarUInt32(Len);
+  PEnd := P+Len;
+  beg := P;
+  crc := 0;
+  while P<PEnd do begin
+    while (P^<>#0) and (P<PEnd) do inc(P);
+    zero := P;
+    while (P^=#0) and (P<PEnd) do inc(P);
+    if P-zero>3 then begin
+      crc := crc32c(crc,beg,P-beg);
+      Len := zero-beg;
+      Dest.WriteVarUInt32(Len);
+      Dest.Write(beg,Len);
+      Dest.WriteVarUInt32(P-zero-3);
+      beg := P;
+    end;
+  end;
+  Len := P-beg;
+  if Len>0 then begin
+    crc := crc32c(crc,beg,Len);
+    Dest.WriteVarUInt32(Len);
+    Dest.Write(beg,Len);
+  end;
+  Dest.Write4(crc);
+end;
+
+procedure ZeroDecompress(P: PByte; Len: integer; out Dest: RawByteString);
+var PEnd,D,DEnd: PAnsiChar;
+    DestLen,crc: cardinal;
+begin
+  PEnd := PAnsiChar(P)+Len-4;
+  DestLen := FromVarUInt32(P);
+  SetLength(Dest,DestLen);
+  D := pointer(Dest);
+  DEnd := D+DestLen;
+  crc := 0;
+  while P<PEnd do begin
+    Len := FromVarUInt32(P);
+    if D+Len>DEnd then
+      break;
+    MoveFast(P^,D^,Len);
+    crc := crc32c(crc,D,Len);
+    inc(P,Len);
+    inc(D,Len);
+    if P>=PEnd then
+      break;
+    Len := FromVarUInt32(P)+3;
+    if D+Len>DEnd then
+      break;
+    FillCharFast(D^,Len,0);
+    crc := crc32c(crc,D,Len);
+    inc(D,Len);
+  end;
+  if crc<>PCardinal(P)^ then
+    Dest := '';
 end;
 
 
