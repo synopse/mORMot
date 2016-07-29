@@ -4206,6 +4206,66 @@ begin
   end;
 end;
 
+procedure TTestLowLevelCommon.BloomFilters;
+const SIZ=1000000;
+var b: TSynBloomFilter;
+    i,n: integer;
+    falsepositive: double;
+    sav1000, savSIZ: RawByteString;
+begin
+  b := TSynBloomFilter.Create(SIZ);
+  try
+    CheckSame(b.FalsePositivePercent,1);
+    Check(b.Size=SIZ);
+    Check(b.Bits>b.Size shl 3);
+    Check(b.HashFunctions=7);
+    Check(b.Inserted=0);
+    for i := 1 to SIZ do
+      Check(not b.MayExist(@i,sizeof(i)));
+    Check(b.Inserted=0);
+    for i := 1 to 1000 do
+      b.Insert(@i,sizeof(i));
+    Check(b.Inserted=1000);
+    sav1000 := b.SaveTo;
+    for i := 1001 to SIZ do
+      b.Insert(@i,sizeof(i));
+    Check(b.Inserted=SIZ);
+    savSIZ := b.SaveTo;
+    Check(length(savSIZ)>length(sav1000));
+    for i := 1 to SIZ do
+      Check(b.MayExist(@i,sizeof(i)));
+    n := 0;
+    for i := SIZ+1 to SIZ+SIZ shr 5 do
+      if b.MayExist(@i,sizeof(i)) then
+        inc(n);
+    falsepositive := (n*100)/(SIZ shr 5);
+    Check(falsepositive<1,Format('falsepositive=%g',[falsepositive]));
+    b.Reset;
+    Check(b.Inserted=0);
+    for i := 1 to SIZ do
+      Check(not b.MayExist(@i,sizeof(i)));
+    Check(b.Inserted=0);
+    Check(b.LoadFrom(sav1000));
+    Check(b.Inserted=1000);
+    for i := 1 to 1000 do
+      Check(b.MayExist(@i,sizeof(i)));
+  finally
+    b.Free;
+  end;
+  b := TSynBloomFilter.Create(savSIZ);
+  try
+    CheckSame(b.FalsePositivePercent,1);
+    Check(b.Size=SIZ);
+    Check(b.Bits>b.Size shl 3);
+    Check(b.HashFunctions=7);
+    Check(b.Inserted=SIZ);
+    for i := 1 to SIZ do
+      Check(b.MayExist(@i,sizeof(i)));
+  finally
+    b.Free;
+  end;
+end;
+
 
 {$ifndef DELPHI5OROLDER}
 
@@ -4355,66 +4415,6 @@ begin
     CheckItem(a[i],a[i].fID);
   for i := 1 to da.Count-1 do
     Check(a[i-1].FirstName<a[i].FirstName);
-end;
-
-procedure TTestLowLevelCommon.BloomFilters;
-const SIZ=1000000;
-var b: TSynBloomFilter;
-    i,n: integer;
-    falsepositive: double;
-    sav1000, savSIZ: RawByteString;
-begin
-  b := TSynBloomFilter.Create(SIZ);
-  try
-    CheckSame(b.FalsePositivePercent,1);
-    Check(b.Size=SIZ);
-    Check(b.Bits>b.Size shl 3);
-    Check(b.HashFunctions=7);
-    Check(b.Inserted=0);
-    for i := 1 to SIZ do
-      Check(not b.MayExist(@i,sizeof(i)));
-    Check(b.Inserted=0);
-    for i := 1 to 1000 do
-      b.Insert(@i,sizeof(i));
-    Check(b.Inserted=1000);
-    sav1000 := b.SaveTo;
-    for i := 1001 to SIZ do
-      b.Insert(@i,sizeof(i));
-    Check(b.Inserted=SIZ);
-    savSIZ := b.SaveTo;
-    Check(length(savSIZ)>length(sav1000));
-    for i := 1 to SIZ do
-      Check(b.MayExist(@i,sizeof(i)));
-    n := 0;
-    for i := SIZ+1 to SIZ+SIZ shr 5 do
-      if b.MayExist(@i,sizeof(i)) then
-        inc(n);
-    falsepositive := (n*100)/(SIZ shr 5);
-    Check(falsepositive<1,Format('falsepositive=%g',[falsepositive]));
-    b.Reset;
-    Check(b.Inserted=0);
-    for i := 1 to SIZ do
-      Check(not b.MayExist(@i,sizeof(i)));
-    Check(b.Inserted=0);
-    Check(b.LoadFrom(sav1000));
-    Check(b.Inserted=1000);
-    for i := 1 to 1000 do
-      Check(b.MayExist(@i,sizeof(i)));
-  finally
-    b.Free;
-  end;
-  b := TSynBloomFilter.Create(savSIZ);
-  try
-    CheckSame(b.FalsePositivePercent,1);
-    Check(b.Size=SIZ);
-    Check(b.Bits>b.Size shl 3);
-    Check(b.HashFunctions=7);
-    Check(b.Inserted=SIZ);
-    for i := 1 to SIZ do
-      Check(b.MayExist(@i,sizeof(i)));
-  finally
-    b.Free;
-  end;
 end;
 
 

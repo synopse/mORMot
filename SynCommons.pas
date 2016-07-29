@@ -55578,7 +55578,7 @@ begin
     fHashFunctions := 1 else
   if fHashFunctions>cardinal(length(BLOOM_SEED)) then
     fHashFunctions := length(BLOOM_SEED);
-  Safe.LockedInt64[0] := 0;
+  fSafe.Padding[0].VType := varInt64; // do not use LockedInt64[] for Delphi 5
   Reset;
 end;
 
@@ -55611,7 +55611,9 @@ end;
 
 function TSynBloomFilter.GetInserted: cardinal;
 begin
-  result := Safe.LockedInt64[0];
+  Safe.Lock;
+  result := fSafe.Padding[0].VInt64;
+  Safe.UnLock;
 end;
 
 function TSynBloomFilter.MayExist(const aValue: RawByteString): boolean;
@@ -55700,7 +55702,8 @@ begin
     fHashFunctions := P^; inc(P);
     if fHashFunctions-1>=cardinal(length(BLOOM_SEED)) then
       exit;
-    Safe.LockedInt64[0] := PCardinal(P)^; inc(P,4);
+    fSafe.Padding[0].VType := varInt64;
+    fSafe.Padding[0].VInt64 := PCardinal(P)^; inc(P,4);
     ZeroDecompress(P,PLen-(PAnsiChar(P)-start),fStore);
     result := length(fStore)=integer(fBits shr 3)+1;
   finally
