@@ -4207,16 +4207,17 @@ begin
 end;
 
 procedure TTestLowLevelCommon.BloomFilters;
-const SIZ=1000000;
+const SIZ=200000;
 var b: TSynBloomFilter;
-    i,n: integer;
+    d1,d2: TSynBloomFilterDiff;
+    i,j,n: integer;
     falsepositive: double;
     sav1000, savSIZ: RawByteString;
 begin
-  b := TSynBloomFilter.Create(SIZ);
+  b := TSynBloomFilter.Create(SIZ+5000);
   try
     CheckSame(b.FalsePositivePercent,1);
-    Check(b.Size=SIZ);
+    Check(b.Size=SIZ+5000);
     Check(b.Bits>b.Size shl 3);
     Check(b.HashFunctions=7);
     Check(b.Inserted=0);
@@ -4227,6 +4228,7 @@ begin
       b.Insert(@i,sizeof(i));
     Check(b.Inserted=1000);
     sav1000 := b.SaveTo;
+    Check(sav1000<>'');
     for i := 1001 to SIZ do
       b.Insert(@i,sizeof(i));
     Check(b.Inserted=SIZ);
@@ -4252,17 +4254,51 @@ begin
   finally
     b.Free;
   end;
-  b := TSynBloomFilter.Create(savSIZ);
+  d1 := TSynBloomFilterDiff.Create(savSIZ);
   try
-    CheckSame(b.FalsePositivePercent,1);
-    Check(b.Size=SIZ);
-    Check(b.Bits>b.Size shl 3);
-    Check(b.HashFunctions=7);
-    Check(b.Inserted=SIZ);
+    CheckSame(d1.FalsePositivePercent,1);
+    Check(d1.Size=SIZ+5000);
+    Check(d1.Bits>d1.Size shl 3);
+    Check(d1.HashFunctions=7);
+    Check(d1.Inserted=SIZ);
     for i := 1 to SIZ do
-      Check(b.MayExist(@i,sizeof(i)));
+      Check(d1.MayExist(@i,sizeof(i)));
+    d2 := TSynBloomFilterDiff.Create;
+    try
+      Check(d2.Revision=0);
+      n := SIZ;
+      for j := 1 to 3 do begin
+        savSiz := d1.SaveToDiff(d2.Revision);
+        Check(savSiz<>'');
+        Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
+        Check((d2.Revision=d1.Revision)=(j>1));
+        Check(d2.LoadFromDiff(savSiz));
+        Check(d2.Revision=d1.Revision);
+        Check(d2.Size=d1.Size);
+        for i := 1 to n do
+          Check(d2.MayExist(@i,sizeof(i)));
+        for i := n+1 to n+1000 do
+          d1.Insert(@i,sizeof(i));
+        Check(d2.Revision<>d1.Revision);
+        savSiz := d1.SaveToDiff(d2.Revision);
+        Check(savSiz<>'');
+        Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
+        Check(d2.Revision<>d1.Revision);
+        Check(d2.LoadFromDiff(savSiz));
+        Check(d2.Revision=d1.Revision);
+        inc(n,1000);
+        for i := 1 to n do
+          Check(d2.MayExist(@i,sizeof(i)));
+        Check(d1.Inserted=cardinal(n));
+        Check(d2.Inserted=cardinal(n));
+        if j=2 then
+          d1.DiffSnapshot;
+      end;
+    finally
+      d2.Free;
+    end;
   finally
-    b.Free;
+    d1.Free;
   end;
 end;
 

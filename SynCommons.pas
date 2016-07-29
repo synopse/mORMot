@@ -5430,84 +5430,6 @@ type
   // - could be used to create instances using its virtual constructor
   TSynPersistentClass = class of TSynPersistent;
 
-  /// implements a thread-safe Bloom Filter storage
-  // - a "Bloom Filter" is a space-efficient probabilistic data structure,
-  // that is used to test whether an element is a member of a set. False positive
-  // matches are possible, but false negatives are not. Elements can be added to
-  // the set, but not removed. Typical use cases are to avoid unecessary
-  // slow disk or network access if possible, when a lot of items are involved.
-  // - memory use is very low, when compared to storage of all values: fewer
-  // than 10 bits per element are required for a 1% false positive probability,
-  // independent of the size or number of elements in the set - for instance,
-  // storing 10,000,000 items presence with 1% of false positive ratio
-  // would consume only 11.5 MB of memory, using 7 hash functions
-  // - use Insert() methods to add an item to the internal bits array, and
-  // Reset() to clear all bits array, if needed
-  // - MayExist() function would check if the supplied item was probably set
-  // - SaveTo() and LoadFrom() methods allow transmission of the bits array,
-  // for a disk/database storage or transmission over a network
-  // - internally, several (hardware-accelerated) crc32c hash functions will be
-  // used, with some random seed values, to simulate several hashing functions
-  // - Insert/MayExist/Reset methods are thread-safe
-  TSynBloomFilter = class(TSynPersistentLocked)
-  private
-    fSize: cardinal;
-    fFalsePositivePercent: double;
-    fBits: cardinal;
-    fHashFunctions: cardinal;
-    fStore: RawByteString;
-    function GetInserted: cardinal;
-  public
-    /// initialize the internal bits storage for a given number of items
-    // - by default, internal bits array size will be guess from a 1 % false
-    // positive rate - but you may specify another value, to reduce memory use
-    // - this constructor would compute and initialize Bits and HashFunctions
-    // corresponding to the expected false positive ratio
-    constructor Create(aSize: integer; aFalsePositivePercent: double = 1); reintroduce; overload;
-    /// initialize the internal bits storage from a SaveTo() binary buffer
-    // - this constructor will initialize the internal bits array calling LoadFrom()
-    constructor Create(const aSaved: RawByteString; aMagic: cardinal=$B1003F11); reintroduce; overload;
-    /// add an item in the internal bits array storage
-    // - this method is thread-safe
-    procedure Insert(const aValue: RawByteString); overload;
-    /// add an item in the internal bits array storage
-    // - this method is thread-safe
-    procedure Insert(aValue: pointer; aValueLen: integer); overload;
-    /// clear the internal bits array storage
-    // - you may call this method after some time, if some items may have
-    // been removed, to reduce false positives
-    // - this method is thread-safe
-    procedure Reset;
-    /// returns TRUE if the supplied items was probably set via Insert()
-    // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
-    function MayExist(const aValue: RawByteString): boolean; overload;
-    /// returns TRUE if the supplied items was probably set via Insert()
-    // - some false positive may occur, but not much than FalsePositivePercent
-    // - this method is thread-safe
-    function MayExist(aValue: pointer; aValueLen: integer): boolean; overload;
-    /// store the internal bits array into a binary buffer
-    // - may be used to transmit or store the state of a dataset, avoiding
-    // to recompute all Insert() at program startup, or to synchronize
-    // networks nodes information and reduce the number of remote requests
-    function SaveTo(aMagic: cardinal=$B1003F11): RawByteString;
-    /// read the internal bits array from a binary buffer
-    // - as previously serialized by the SaveTo method
-    // - may be used to transmit or store the state of a dataset
-    function LoadFrom(const aSaved: RawByteString; aMagic: cardinal=$B1003F11): boolean;
-  published
-    /// maximum number of items which are expected to be inserted
-    property Size: cardinal read fSize;
-    /// expected percentage (1..100) of false positive results for MayExists()
-    property FalsePositivePercent: double read fFalsePositivePercent;
-    /// number of bits stored in the internal bits array
-    property Bits: cardinal read fBits;
-    /// how many hash functions would be applied for each Insert()
-    property HashFunctions: cardinal read fHashFunctions;
-    /// how many times the Insert() method has been called
-    property Inserted: cardinal read GetInserted;
-  end;
-
 
   /// internal item definition, used by TPendingTaskList storage
   TPendingTaskListItem = packed record
@@ -8971,6 +8893,138 @@ type
     property MappedBuffer: PAnsiChar read fMap.fBuf;
   end;
 
+
+  /// implements a thread-safe Bloom Filter storage
+  // - a "Bloom Filter" is a space-efficient probabilistic data structure,
+  // that is used to test whether an element is a member of a set. False positive
+  // matches are possible, but false negatives are not. Elements can be added to
+  // the set, but not removed. Typical use cases are to avoid unecessary
+  // slow disk or network access if possible, when a lot of items are involved.
+  // - memory use is very low, when compared to storage of all values: fewer
+  // than 10 bits per element are required for a 1% false positive probability,
+  // independent of the size or number of elements in the set - for instance,
+  // storing 10,000,000 items presence with 1% of false positive ratio
+  // would consume only 11.5 MB of memory, using 7 hash functions
+  // - use Insert() methods to add an item to the internal bits array, and
+  // Reset() to clear all bits array, if needed
+  // - MayExist() function would check if the supplied item was probably set
+  // - SaveTo() and LoadFrom() methods allow transmission of the bits array,
+  // for a disk/database storage or transmission over a network
+  // - internally, several (hardware-accelerated) crc32c hash functions will be
+  // used, with some random seed values, to simulate several hashing functions
+  // - Insert/MayExist/Reset methods are thread-safe
+  TSynBloomFilter = class(TSynPersistentLocked)
+  private
+    fSize: cardinal;
+    fFalsePositivePercent: double;
+    fBits: cardinal;
+    fHashFunctions: cardinal;
+    fInserted: cardinal;
+    fStore: RawByteString;
+    function GetInserted: cardinal;
+  public
+    /// initialize the internal bits storage for a given number of items
+    // - by default, internal bits array size will be guess from a 1 % false
+    // positive rate - but you may specify another value, to reduce memory use
+    // - this constructor would compute and initialize Bits and HashFunctions
+    // corresponding to the expected false positive ratio
+    constructor Create(aSize: integer; aFalsePositivePercent: double = 1); reintroduce; overload;
+    /// initialize the internal bits storage from a SaveTo() binary buffer
+    // - this constructor will initialize the internal bits array calling LoadFrom()
+    constructor Create(const aSaved: RawByteString; aMagic: cardinal=$B1003F11); reintroduce; overload;
+    /// add an item in the internal bits array storage
+    // - this method is thread-safe
+    procedure Insert(const aValue: RawByteString); overload;
+    /// add an item in the internal bits array storage
+    // - this method is thread-safe
+    procedure Insert(aValue: pointer; aValueLen: integer); overload; virtual;
+    /// clear the internal bits array storage
+    // - you may call this method after some time, if some items may have
+    // been removed, to reduce false positives
+    // - this method is thread-safe
+    procedure Reset; virtual;
+    /// returns TRUE if the supplied items was probably set via Insert()
+    // - some false positive may occur, but not much than FalsePositivePercent
+    // - this method is thread-safe
+    function MayExist(const aValue: RawByteString): boolean; overload;
+    /// returns TRUE if the supplied items was probably set via Insert()
+    // - some false positive may occur, but not much than FalsePositivePercent
+    // - this method is thread-safe
+    function MayExist(aValue: pointer; aValueLen: integer): boolean; overload;
+    /// store the internal bits array into a binary buffer
+    // - may be used to transmit or store the state of a dataset, avoiding
+    // to recompute all Insert() at program startup, or to synchronize
+    // networks nodes information and reduce the number of remote requests
+    function SaveTo(aMagic: cardinal=$B1003F11): RawByteString; overload;
+    /// store the internal bits array into a binary buffer
+    // - may be used to transmit or store the state of a dataset, avoiding
+    // to recompute all Insert() at program startup, or to synchronize
+    // networks nodes information and reduce the number of remote requests
+    procedure SaveTo(aDest: TFileBufferWriter; aMagic: cardinal=$B1003F11); overload;
+    /// read the internal bits array from a binary buffer
+    // - as previously serialized by the SaveTo method
+    // - may be used to transmit or store the state of a dataset
+    function LoadFrom(const aSaved: RawByteString; aMagic: cardinal=$B1003F11): boolean; overload;
+    /// read the internal bits array from a binary buffer
+    // - as previously serialized by the SaveTo method
+    // - may be used to transmit or store the state of a dataset
+    function LoadFrom(P: PByte; PLen: integer; aMagic: cardinal=$B1003F11): boolean; overload; virtual;
+  published
+    /// maximum number of items which are expected to be inserted
+    property Size: cardinal read fSize;
+    /// expected percentage (1..100) of false positive results for MayExists()
+    property FalsePositivePercent: double read fFalsePositivePercent;
+    /// number of bits stored in the internal bits array
+    property Bits: cardinal read fBits;
+    /// how many hash functions would be applied for each Insert()
+    property HashFunctions: cardinal read fHashFunctions;
+    /// how many times the Insert() method has been called
+    property Inserted: cardinal read GetInserted;
+  end;
+
+  /// implements a thread-safe differential Bloom Filter storage
+  // - this inherited class is able to compute incremental serialization of
+  // its internal bits array, to reduce network use
+  // - an obfuscated revision counter is used to identify storage history
+  TSynBloomFilterDiff = class(TSynBloomFilter)
+  protected
+    fRevision: Int64;
+    fKnownRevision: Int64;
+    fKnownStore: RawByteString;
+    fDiffTemp: RawByteString;
+  public
+    /// add an item in the internal bits array storage
+    // - this overloaded thread-safe method would compute fRevision
+    procedure Insert(aValue: pointer; aValueLen: integer); override;
+    /// read the internal bits array from a binary buffer
+    // - this overloaded thread-safe method would compute fRevision
+    function LoadFrom(P: PByte; PLen: integer; aMagic: cardinal=$B1003F11): boolean; override;
+    /// clear the internal bits array storage
+    // - this overloaded thread-safe method would reset fRevision
+    procedure Reset; override;
+    /// store the internal bits array into an incremental binary buffer
+    // - here the difference from a previous SaveToDiff revision will be computed
+    // - if aKnownRevision is outdated (e.g. if equals 0), the whole bits array
+    // would be returned
+    function SaveToDiff(const aKnownRevision: Int64): RawByteString;
+    /// use the current internal bits array state as known revision
+    // - is done the first time SaveToDiff() is called, and after 1/16th of
+    // the filter size has been inserted
+    procedure DiffSnapshot;
+    /// retrieve the revision number (i.e. the insertion count) from an
+    // incremental binary buffer
+    // - returns 0 if the supplied binary buffer does not match this bloom filter
+    function DiffKnownRevision(const aDiff: RawByteString): Int64;
+    /// read the internal bits array from an incremental binary buffer
+    // - as previously serialized by the SaveToDiff() method
+    // - may be used to transmit or store the state of a dataset
+    // - incremental retrieval could supply
+    // - returns false if the supplied content is incorrect, e.g. if the known
+    // revision is deprecated
+    function LoadFromDiff(const aDiff: RawByteString): boolean;
+    /// the opaque revision number of this internal storage
+    property Revision: Int64 read fRevision;
+  end;
 
 /// FileSeek() overloaded function, working with huge files
 // - Delphi FileSeek() is buggy -> use this function to safe access files > 2 GB
@@ -55552,7 +55606,7 @@ end;
 
 const
   BLOOM_VERSION = 0;
-  // crc32c() seed to define up to 24 hash functions
+  // crc32c() seeds to define up to 24 hash functions (1% ratio needs only 7)
   BLOOM_SEED: array[0..23] of cardinal = (2972236863, 1598500460, 767514222,
     1686591034, 606432534, 1979668746, 1525204767, 2697644595, 1943870826,
     797611026, 3393353117, 3611872701, 2057881040, 1886106000, 2949425219,
@@ -55578,7 +55632,6 @@ begin
     fHashFunctions := 1 else
   if fHashFunctions>cardinal(length(BLOOM_SEED)) then
     fHashFunctions := length(BLOOM_SEED);
-  fSafe.Padding[0].VType := varInt64; // do not use LockedInt64[] for Delphi 5
   Reset;
 end;
 
@@ -55603,7 +55656,7 @@ begin
   try
     for h := 0 to fHashFunctions-1 do
       SetBit(pointer(fStore)^,crc32c(BLOOM_SEED[h],aValue,aValueLen) mod fBits);
-    inc(fSafe.Padding[0].VInt64);
+    inc(fInserted);
   finally
     Safe.UnLock;
   end;
@@ -55612,8 +55665,11 @@ end;
 function TSynBloomFilter.GetInserted: cardinal;
 begin
   Safe.Lock;
-  result := fSafe.Padding[0].VInt64;
-  Safe.UnLock;
+  try
+    result := fInserted; // Delphi 5 does not support LockedInt64[]
+  finally
+    Safe.UnLock;
+  end;
 end;
 
 function TSynBloomFilter.MayExist(const aValue: RawByteString): boolean;
@@ -55645,7 +55701,7 @@ begin
     if fStore='' then
       SetLength(fStore,(fBits shr 3)+1);
     FillcharFast(pointer(fStore)^,length(fStore),0);
-    fSafe.Padding[0].VInt64 := 0;
+    fInserted := 0;
   finally
     Safe.UnLock;
   end;
@@ -55656,19 +55712,7 @@ var W: TFileBufferWriter;
 begin
   W := TFileBufferWriter.Create(TRawByteStringStream,length(fStore)+100);
   try
-    W.Write4(aMagic);
-    W.Write1(BLOOM_VERSION);
-    Safe.Lock;
-    try
-      W.Write8(fFalsePositivePercent);
-      W.Write4(fSize);
-      W.Write4(fBits);
-      W.Write1(fHashFunctions);
-      W.Write4(fSafe.Padding[0].VInteger);
-      ZeroCompress(pointer(fStore),Length(fStore),W);
-    finally
-      Safe.UnLock;
-    end;
+    SaveTo(W,aMagic);
     W.Flush;
     result := TRawByteStringStream(W.Stream).DataString;
   finally
@@ -55676,14 +55720,34 @@ begin
   end;
 end;
 
+procedure TSynBloomFilter.SaveTo(aDest: TFileBufferWriter; aMagic: cardinal=$B1003F11);
+begin
+  aDest.Write4(aMagic);
+  aDest.Write1(BLOOM_VERSION);
+  Safe.Lock;
+  try
+    aDest.Write8(fFalsePositivePercent);
+    aDest.Write4(fSize);
+    aDest.Write4(fBits);
+    aDest.Write1(fHashFunctions);
+    aDest.Write4(fInserted);
+    ZeroCompress(pointer(fStore),Length(fStore),aDest);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
 function TSynBloomFilter.LoadFrom(const aSaved: RawByteString; aMagic: cardinal): boolean;
-var P,start: PByte;
-    PLen, version: integer;
+begin
+  result := LoadFrom(pointer(aSaved),length(aSaved));
+end;
+
+function TSynBloomFilter.LoadFrom(P: PByte; PLen: integer; aMagic: cardinal): boolean;
+var start: PByte;
+    version: integer;
 begin
   result := false;
-  P := pointer(aSaved);
   start := P;
-  PLen := length(aSaved);
   if (P=nil) or (PLen<32) or (PCardinal(P)^<>aMagic) then
     exit;
   inc(P,4);
@@ -55702,13 +55766,183 @@ begin
     fHashFunctions := P^; inc(P);
     if fHashFunctions-1>=cardinal(length(BLOOM_SEED)) then
       exit;
-    fSafe.Padding[0].VType := varInt64;
-    fSafe.Padding[0].VInt64 := PCardinal(P)^; inc(P,4);
+    fInserted := PCardinal(P)^; inc(P,4);
     ZeroDecompress(P,PLen-(PAnsiChar(P)-start),fStore);
     result := length(fStore)=integer(fBits shr 3)+1;
   finally
     if not result then
       Reset;
+    Safe.UnLock;
+  end;
+end;
+
+
+{ TSynBloomFilterDiff }
+
+type
+  TBloomDiffHeader = packed record
+    kind: (bdDiff,bdFull,bdUpToDate);
+    size: cardinal;
+    inserted: cardinal;
+    revision: Int64;
+    crc: cardinal;
+    datafirst: Byte;
+  end;
+
+procedure TSynBloomFilterDiff.Insert(aValue: pointer; aValueLen: integer);
+begin
+  Safe.Lock;
+  try
+    inherited Insert(aValue,aValueLen);
+    if fRevision=0 then
+      fRevision := DateTimeToUnixTime(NowUTC) shl 31 else
+      inc(fRevision);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilterDiff.LoadFrom(P: PByte; PLen: integer; aMagic: cardinal): boolean;
+begin
+  Safe.Lock;
+  try
+    result := inherited LoadFrom(P,PLen,aMagic);
+    if result then
+      fRevision := DateTimeToUnixTime(NowUTC) shl 31;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynBloomFilterDiff.Reset;
+begin
+  Safe.Lock;
+  try
+    inherited Reset;
+    fRevision := 0;
+    fKnownRevision := 0;
+    fKnownStore := '';
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+procedure TSynBloomFilterDiff.DiffSnapshot;
+begin
+  Safe.Lock;
+  try
+    if fRevision<>0 then begin
+      fKnownRevision := fRevision;
+      SetString(fKnownStore,PAnsiChar(pointer(fStore)),length(fStore));
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
+  procedure ComputeDiff(Dest,New,Old: PByteArray; size: integer);
+  begin
+    while size>=sizeof(PtrInt) do begin
+      dec(size,sizeof(PtrInt));
+      PPtrInt(Dest)^ := PPtrInt(New)^ xor PPtrInt(Old)^;
+      inc(PPtrInt(Dest));
+      inc(PPtrInt(New));
+      inc(PPtrInt(Old));
+    end;
+    while size>0 do begin
+      dec(size);
+      Dest[size] := New[size] xor Old[size];
+    end;
+  end;
+var head: TBloomDiffHeader;
+    W: TFileBufferWriter;
+begin
+  W := TFileBufferWriter.Create(TRawByteStringStream,length(fStore)+100);
+  try
+    Safe.Lock;
+    try
+      head.size := length(fStore);
+      if fRevision-fKnownRevision>fSize shr 4 then begin
+        DiffSnapshot;
+        head.kind := bdFull;
+      end else
+      if (aKnownRevision<fKnownRevision) or (aKnownRevision>fRevision) or
+         (cardinal(length(fKnownStore))<>head.size) then
+        head.kind := bdFull else
+      if aKnownRevision=fRevision then
+        head.kind := bdUpToDate else
+        head.kind := bdDiff;
+      head.revision := fRevision;
+      head.inserted := fInserted;
+      head.crc := crc32c(0,@head,17);
+      W.Write(@head,21);
+      case head.kind of
+      bdFull:
+        SaveTo(W);
+      bdDiff: begin
+        if fDiffTemp='' then
+          SetLength(fDiffTemp,head.size);
+        ComputeDiff(pointer(fDiffTemp),pointer(fStore),pointer(fKnownStore),head.size);
+        ZeroCompress(pointer(fDiffTemp),head.size,W);
+      end;
+      end;
+    finally
+      Safe.UnLock;
+    end;
+    W.Flush;
+    result := TRawByteStringStream(W.Stream).DataString;
+  finally
+    W.Free;
+  end;
+end;
+
+function TSynBloomFilterDiff.DiffKnownRevision(const aDiff: RawByteString): Int64;
+var head: ^TBloomDiffHeader absolute aDiff;
+begin
+  if (length(aDiff)<21) or (head.kind>high(head.kind)) or
+     (head.size<>cardinal(length(fStore))) or (head.crc<>crc32c(0,pointer(head),17)) then
+    result := 0 else
+    result := head.Revision;
+end;
+
+function TSynBloomFilterDiff.LoadFromDiff(const aDiff: RawByteString): boolean;
+var head: ^TBloomDiffHeader absolute aDiff;
+    P: PByte;
+    PLen: integer;
+    diff: RawByteString;
+begin
+  result := false;
+  PLen := length(aDiff);
+  if (PLen<21) or (head.kind>high(head.kind)) or
+     (head.crc<>crc32c(0,pointer(head),17)) then
+    exit;
+  if (fStore<>'') and (head.size<>cardinal(length(fStore))) then
+    exit;
+  P := @head.datafirst;
+  dec(PLen,21);
+  Safe.Lock;
+  try
+    case head.kind of
+    bdFull:
+      result := LoadFrom(P,PLen);
+    bdDiff: begin
+      if fStore='' then
+        exit;
+      ZeroDecompress(P,PLen,diff);
+      if cardinal(length(diff))<>head.size then
+        exit;
+      OrMemory(pointer(fStore),pointer(diff),head.size);
+      result := true;
+    end;
+    bdUpToDate:
+      result := true;
+    end;
+    if result then begin
+      fRevision := head.revision;
+      fInserted := head.inserted;
+    end;
+  finally
     Safe.UnLock;
   end;
 end;
