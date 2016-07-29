@@ -55550,7 +55550,9 @@ end;
 
 { TSynBloomFilter }
 
-const // crc32c() seed to define up to 24 hash functions
+const
+  BLOOM_VERSION = 0;
+  // crc32c() seed to define up to 24 hash functions
   BLOOM_SEED: array[0..23] of cardinal = (2972236863, 1598500460, 767514222,
     1686591034, 606432534, 1979668746, 1525204767, 2697644595, 1943870826,
     797611026, 3393353117, 3611872701, 2057881040, 1886106000, 2949425219,
@@ -55653,6 +55655,7 @@ begin
   W := TFileBufferWriter.Create(TRawByteStringStream,length(fStore)+100);
   try
     W.Write4(aMagic);
+    W.Write1(BLOOM_VERSION);
     Safe.Lock;
     try
       W.Write8(fFalsePositivePercent);
@@ -55660,12 +55663,12 @@ begin
       W.Write4(fBits);
       W.Write1(fHashFunctions);
       W.Write4(fSafe.Padding[0].VInteger);
-      W.Write(pointer(fStore),Length(fStore));
+      ZeroCompress(pointer(fStore),Length(fStore),W);
     finally
       Safe.UnLock;
     end;
     W.Flush;
-    result := SynLZCompress(TRawByteStringStream(W.Stream).DataString);
+    result := TRawByteStringStream(W.Stream).DataString;
   finally
     W.Free;
   end;
@@ -55673,15 +55676,18 @@ end;
 
 function TSynBloomFilter.LoadFrom(const aSaved: RawByteString; aMagic: cardinal): boolean;
 var P,start: PByte;
-    PLen, len: integer;
-    tmpSynLZ: RawByteString;
+    PLen, version: integer;
 begin
   result := false;
-  P := SynLZDecompress(aSaved,PLen,tmpSynLZ);
-  if (P=nil) or (PCardinal(P)^<>aMagic) then
-    exit;
+  P := pointer(aSaved);
   start := P;
+  PLen := length(aSaved);
+  if (P=nil) or (PLen<32) or (PCardinal(P)^<>aMagic) then
+    exit;
   inc(P,4);
+  version := P^; inc(P);
+  if version>BLOOM_VERSION then
+    exit;
   Safe.Lock;
   try
     fFalsePositivePercent := PDouble(P)^; inc(P,8);
@@ -55692,14 +55698,11 @@ begin
     if fBits<fSize then
       exit;
     fHashFunctions := P^; inc(P);
-    if not (fHashFunctions in [1..20]) then
+    if fHashFunctions-1>=cardinal(length(BLOOM_SEED)) then
       exit;
     Safe.LockedInt64[0] := PCardinal(P)^; inc(P,4);
-    len := integer(fBits shr 3)+1;
-    if PAnsiChar(P)-start<>PLen-len then
-      exit;
-    SetString(fStore,PAnsiChar(P),len);
-    result := true;
+    ZeroDecompress(P,PLen-(PAnsiChar(P)-start),fStore);
+    result := length(fStore)=integer(fBits shr 3)+1;
   finally
     if not result then
       Reset;
