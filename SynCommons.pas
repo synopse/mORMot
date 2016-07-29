@@ -8989,6 +8989,10 @@ type
   TSynBloomFilterDiff = class(TSynBloomFilter)
   protected
     fRevision: Int64;
+    fSnapShotAfterMinutes: cardinal;
+    fSnapshotAfterInsertCount: cardinal;
+    fSnapshotTimeStamp: Int64;
+    fSnapshotInsertCount: cardinal;
     fKnownRevision: Int64;
     fKnownStore: RawByteString;
     fDiffTemp: RawByteString;
@@ -8996,9 +9000,6 @@ type
     /// add an item in the internal bits array storage
     // - this overloaded thread-safe method would compute fRevision
     procedure Insert(aValue: pointer; aValueLen: integer); override;
-    /// read the internal bits array from a binary buffer
-    // - this overloaded thread-safe method would compute fRevision
-    function LoadFrom(P: PByte; PLen: integer; aMagic: cardinal=$B1003F11): boolean; override;
     /// clear the internal bits array storage
     // - this overloaded thread-safe method would reset fRevision
     procedure Reset; override;
@@ -9008,8 +9009,8 @@ type
     // would be returned
     function SaveToDiff(const aKnownRevision: Int64): RawByteString;
     /// use the current internal bits array state as known revision
-    // - is done the first time SaveToDiff() is called, and after 1/16th of
-    // the filter size has been inserted
+    // - is done the first time SaveToDiff() is called, and after 1/32th of
+    // the filter size has been inserted (se SnapshotAfterInsertCount property)
     procedure DiffSnapshot;
     /// retrieve the revision number (i.e. the insertion count) from an
     // incremental binary buffer
@@ -9024,6 +9025,16 @@ type
     function LoadFromDiff(const aDiff: RawByteString): boolean;
     /// the opaque revision number of this internal storage
     property Revision: Int64 read fRevision;
+    /// after how many Insert() the internal bits array storage should be
+    // promoted as known revision
+    // - equals Size div 32 by default
+    property SnapshotAfterInsertCount: cardinal read fSnapshotAfterInsertCount
+      write fSnapshotAfterInsertCount;
+    /// after how many time the internal bits array storage should be
+    // promoted as known revision
+    // - equals 30 minutes by default
+    property SnapShotAfterMinutes: cardinal read fSnapShotAfterMinutes
+      write fSnapShotAfterMinutes;
   end;
 
 /// FileSeek() overloaded function, working with huge files
@@ -55242,11 +55253,13 @@ begin
     zero := P;
     while (P^=#0) and (P<PEnd) do inc(P);
     if P-zero>3 then begin
-      crc := crc32c(crc,beg,P-beg);
       Len := zero-beg;
+      crc := crc32c(crc,beg,Len);
       Dest.WriteVarUInt32(Len);
       Dest.Write(beg,Len);
-      Dest.WriteVarUInt32(P-zero-3);
+      Len := P-zero;
+      crc := crc32c(crc,@Len,sizeof(Len));
+      Dest.WriteVarUInt32(Len-3);
       beg := P;
     end;
   end;
@@ -55269,7 +55282,7 @@ begin
   D := pointer(Dest);
   DEnd := D+DestLen;
   crc := 0;
-  while P<PEnd do begin
+  while PAnsiChar(P)<PEnd do begin
     Len := FromVarUInt32(P);
     if D+Len>DEnd then
       break;
@@ -55277,13 +55290,13 @@ begin
     crc := crc32c(crc,D,Len);
     inc(P,Len);
     inc(D,Len);
-    if P>=PEnd then
+    if PAnsiChar(P)>=PEnd then
       break;
     Len := FromVarUInt32(P)+3;
     if D+Len>DEnd then
       break;
     FillCharFast(D^,Len,0);
-    crc := crc32c(crc,D,Len);
+    crc := crc32c(crc,@Len,sizeof(Len));
     inc(D,Len);
   end;
   if crc<>PCardinal(P)^ then
@@ -55766,12 +55779,11 @@ begin
     fHashFunctions := P^; inc(P);
     if fHashFunctions-1>=cardinal(length(BLOOM_SEED)) then
       exit;
+    Reset;
     fInserted := PCardinal(P)^; inc(P,4);
-    ZeroDecompress(P,PLen-(PAnsiChar(P)-start),fStore);
+    ZeroDecompress(P,PLen-(PAnsiChar(P)-PAnsiChar(start)),fStore);
     result := length(fStore)=integer(fBits shr 3)+1;
   finally
-    if not result then
-      Reset;
     Safe.UnLock;
   end;
 end;
@@ -55786,7 +55798,6 @@ type
     inserted: cardinal;
     revision: Int64;
     crc: cardinal;
-    datafirst: Byte;
   end;
 
 procedure TSynBloomFilterDiff.Insert(aValue: pointer; aValueLen: integer);
@@ -55794,21 +55805,8 @@ begin
   Safe.Lock;
   try
     inherited Insert(aValue,aValueLen);
-    if fRevision=0 then
-      fRevision := DateTimeToUnixTime(NowUTC) shl 31 else
-      inc(fRevision);
-  finally
-    Safe.UnLock;
-  end;
-end;
-
-function TSynBloomFilterDiff.LoadFrom(P: PByte; PLen: integer; aMagic: cardinal): boolean;
-begin
-  Safe.Lock;
-  try
-    result := inherited LoadFrom(P,PLen,aMagic);
-    if result then
-      fRevision := DateTimeToUnixTime(NowUTC) shl 31;
+    inc(fRevision);
+    inc(fSnapshotInsertCount);
   finally
     Safe.UnLock;
   end;
@@ -55819,9 +55817,14 @@ begin
   Safe.Lock;
   try
     inherited Reset;
-    fRevision := 0;
+    fSnapshotAfterInsertCount := fSize shr 5;
+    fSnapShotAfterMinutes := 30;
+    fSnapshotTimeStamp := 0;
+    fSnapshotInsertCount := 0;
+    fRevision := DateTimeToUnixTime(NowUTC) shl 31;
     fKnownRevision := 0;
     fKnownStore := '';
+    fDiffTemp := '';
   finally
     Safe.UnLock;
   end;
@@ -55831,52 +55834,61 @@ procedure TSynBloomFilterDiff.DiffSnapshot;
 begin
   Safe.Lock;
   try
-    if fRevision<>0 then begin
-      fKnownRevision := fRevision;
-      SetString(fKnownStore,PAnsiChar(pointer(fStore)),length(fStore));
-    end;
+    fKnownRevision := fRevision;
+    fSnapshotInsertCount := 0;
+    SetString(fKnownStore,PAnsiChar(pointer(fStore)),length(fStore));
+    if fSnapShotAfterMinutes=0 then
+      fSnapshotTimeStamp := 0 else
+      fSnapshotTimeStamp := GetTickCount64+fSnapShotAfterMinutes*60000;
   finally
     Safe.UnLock;
   end;
 end;
 
 function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
-  procedure ComputeDiff(Dest,New,Old: PByteArray; size: integer);
+  procedure ComputeDiff(Dest,New,Old: PPtrInt; size: integer);
+  var i: integer;
   begin
-    while size>=sizeof(PtrInt) do begin
-      dec(size,sizeof(PtrInt));
-      PPtrInt(Dest)^ := PPtrInt(New)^ xor PPtrInt(Old)^;
-      inc(PPtrInt(Dest));
-      inc(PPtrInt(New));
-      inc(PPtrInt(Old));
+    for i := 1 to size shr POINTERSHR do begin
+      Dest^ := New^ xor Old^;
+      inc(Dest);
+      inc(New);
+      inc(Old);
     end;
+    size := size and pred(sizeof(PtrInt));
     while size>0 do begin
+      PByteArray(Dest)[size] := PByteArray(New)[size] xor PByteArray(Old)[size];
       dec(size);
-      Dest[size] := New[size] xor Old[size];
     end;
   end;
 var head: TBloomDiffHeader;
     W: TFileBufferWriter;
 begin
-  W := TFileBufferWriter.Create(TRawByteStringStream,length(fStore)+100);
+  Safe.Lock;
   try
-    Safe.Lock;
+    if aKnownRevision=fRevision then
+      head.kind := bdUpToDate else
+    if (fKnownRevision=0) or
+       (fSnapshotInsertCount>fSnapshotAfterInsertCount) or
+       ((fSnapshotInsertCount>0) and (fSnapshotTimeStamp<>0) and
+        (GetTickCount64>fSnapshotTimeStamp)) then begin
+      DiffSnapshot;
+      head.kind := bdFull;
+    end else
+    if (aKnownRevision<fKnownRevision) or (aKnownRevision>fRevision) then
+      head.kind := bdFull else
+      head.kind := bdDiff;
+    head.size := length(fStore);
+    head.inserted := fInserted;
+    head.revision := fRevision;
+    head.crc := crc32c(0,@head,sizeof(head)-sizeof(head.crc));
+    if head.kind=bdUpToDate then begin
+      SetString(result,PAnsiChar(@head),sizeof(head));
+      exit;
+    end;
+    W := TFileBufferWriter.Create(TRawByteStringStream,head.size+100);
     try
-      head.size := length(fStore);
-      if fRevision-fKnownRevision>fSize shr 4 then begin
-        DiffSnapshot;
-        head.kind := bdFull;
-      end else
-      if (aKnownRevision<fKnownRevision) or (aKnownRevision>fRevision) or
-         (cardinal(length(fKnownStore))<>head.size) then
-        head.kind := bdFull else
-      if aKnownRevision=fRevision then
-        head.kind := bdUpToDate else
-        head.kind := bdDiff;
-      head.revision := fRevision;
-      head.inserted := fInserted;
-      head.crc := crc32c(0,@head,17);
-      W.Write(@head,21);
+      W.Write(@head,sizeof(head));
       case head.kind of
       bdFull:
         SaveTo(W);
@@ -55887,21 +55899,22 @@ begin
         ZeroCompress(pointer(fDiffTemp),head.size,W);
       end;
       end;
+      W.Flush;
+      result := TRawByteStringStream(W.Stream).DataString;
     finally
-      Safe.UnLock;
+      W.Free;
     end;
-    W.Flush;
-    result := TRawByteStringStream(W.Stream).DataString;
   finally
-    W.Free;
+    Safe.UnLock;
   end;
 end;
 
 function TSynBloomFilterDiff.DiffKnownRevision(const aDiff: RawByteString): Int64;
 var head: ^TBloomDiffHeader absolute aDiff;
 begin
-  if (length(aDiff)<21) or (head.kind>high(head.kind)) or
-     (head.size<>cardinal(length(fStore))) or (head.crc<>crc32c(0,pointer(head),17)) then
+  if (length(aDiff)<sizeof(head^)) or (head.kind>high(head.kind)) or
+     (head.size<>cardinal(length(fStore))) or
+     (head.crc<>crc32c(0,pointer(head),sizeof(head^)-sizeof(head.crc))) then
     result := 0 else
     result := head.Revision;
 end;
@@ -55913,14 +55926,15 @@ var head: ^TBloomDiffHeader absolute aDiff;
     diff: RawByteString;
 begin
   result := false;
+  P := pointer(aDiff);
   PLen := length(aDiff);
-  if (PLen<21) or (head.kind>high(head.kind)) or
-     (head.crc<>crc32c(0,pointer(head),17)) then
+  if (PLen<sizeof(head^)) or (head.kind>high(head.kind)) or
+     (head.crc<>crc32c(0,pointer(head),sizeof(head^)-sizeof(head.crc))) then
     exit;
   if (fStore<>'') and (head.size<>cardinal(length(fStore))) then
     exit;
-  P := @head.datafirst;
-  dec(PLen,21);
+  inc(P,sizeof(head^));
+  dec(PLen,sizeof(head^));
   Safe.Lock;
   try
     case head.kind of
