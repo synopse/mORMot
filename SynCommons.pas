@@ -9006,20 +9006,23 @@ type
     /// store the internal bits array into an incremental binary buffer
     // - here the difference from a previous SaveToDiff revision will be computed
     // - if aKnownRevision is outdated (e.g. if equals 0), the whole bits array
-    // would be returned
+    // would be returned, and around 10 bits per item would be transmitted
+    // (for 1% false positive ratio)
+    // - incremental retrieval would then return around 10 bytes per newly added
+    // item since the last snapshot reference state (with 1% ratio, i.e. 7 hash
+    // functions)
     function SaveToDiff(const aKnownRevision: Int64): RawByteString;
     /// use the current internal bits array state as known revision
-    // - is done the first time SaveToDiff() is called, and after 1/32th of
-    // the filter size has been inserted (se SnapshotAfterInsertCount property)
+    // - is done the first time SaveToDiff() is called, then after 1/32th of
+    // the filter size has been inserted (see SnapshotAfterInsertCount property),
+    // or after SnapShotAfterMinutes property timeout period
     procedure DiffSnapshot;
-    /// retrieve the revision number (i.e. the insertion count) from an
-    // incremental binary buffer
+    /// retrieve the revision number from an incremental binary buffer
     // - returns 0 if the supplied binary buffer does not match this bloom filter
     function DiffKnownRevision(const aDiff: RawByteString): Int64;
     /// read the internal bits array from an incremental binary buffer
     // - as previously serialized by the SaveToDiff() method
     // - may be used to transmit or store the state of a dataset
-    // - incremental retrieval could supply
     // - returns false if the supplied content is incorrect, e.g. if the known
     // revision is deprecated
     function LoadFromDiff(const aDiff: RawByteString): boolean;
@@ -16027,6 +16030,13 @@ procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
 // - used for spare bit sets, e.g. TSynBloomFilter serialization
 // - will also check the crc32c of the supplied content
 procedure ZeroDecompress(P: PByte; Len: integer; out Dest: RawByteString);
+
+/// RLE uncompression and ORing of a memory buffer containing mostly zeros
+// - will perform "Dest^ := Dest^ or P^" without any temporary memory allocation
+// - is used  e.g. by TSynBloomFilterDiff.LoadFromDiff() in incremental mode 
+// - returns false if P^ is not a valid ZeroCompress() function result
+// - will also check the crc32c of the supplied content
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len: integer): boolean;
 
 
 resourcestring
@@ -55303,6 +55313,31 @@ begin
     Dest := '';
 end;
 
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len: integer): boolean;
+var PEnd,DEnd: PAnsiChar;
+    DestLen,crc: cardinal;
+begin
+  PEnd := P+Len-4;
+  DestLen := FromVarUInt32(PByte(P));
+  DEnd := Dest+DestLen;
+  crc := 0;
+  while (P<PEnd) and (Dest<DEnd) do begin
+    Len := FromVarUInt32(PByte(P));
+    if Dest+Len>DEnd then
+      break;
+    crc := crc32c(crc,P,Len);
+    OrMemory(pointer(Dest),pointer(P),Len);
+    inc(P,Len);
+    inc(Dest,Len);
+    if P>=PEnd then
+      break;
+    Len := FromVarUInt32(PByte(P))+3;
+    crc := crc32c(crc,@Len,sizeof(Len));
+    inc(Dest,Len);
+  end;
+  result := crc=PCardinal(P)^;
+end;
+
 
 { ESynException }
 
@@ -55923,7 +55958,6 @@ function TSynBloomFilterDiff.LoadFromDiff(const aDiff: RawByteString): boolean;
 var head: ^TBloomDiffHeader absolute aDiff;
     P: PByte;
     PLen: integer;
-    diff: RawByteString;
 begin
   result := false;
   P := pointer(aDiff);
@@ -55940,15 +55974,9 @@ begin
     case head.kind of
     bdFull:
       result := LoadFrom(P,PLen);
-    bdDiff: begin
-      if fStore='' then
-        exit;
-      ZeroDecompress(P,PLen,diff);
-      if cardinal(length(diff))<>head.size then
-        exit;
-      OrMemory(pointer(fStore),pointer(diff),head.size);
-      result := true;
-    end;
+    bdDiff:
+      if fStore<>'' then
+        result := ZeroDecompressOr(pointer(P),Pointer(fStore),PLen);
     bdUpToDate:
       result := true;
     end;
