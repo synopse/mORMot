@@ -55654,12 +55654,7 @@ end;
 
 const
   BLOOM_VERSION = 0;
-  // crc32c() seeds to define up to 24 hash functions (1% ratio needs only 7)
-  BLOOM_SEED: array[0..23] of cardinal = (2972236863, 1598500460, 767514222,
-    1686591034, 606432534, 1979668746, 1525204767, 2697644595, 1943870826,
-    797611026, 3393353117, 3611872701, 2057881040, 1886106000, 2949425219,
-    3909233773, 167905, 2219786244, 2447558318, 3560350851, 4242904652,
-    2765041997, 173516824, 1097868889); // from TAESPRNG.Main.FillRandom
+  BLOOM_MAXHASH = 32; // only 7 is needed for 1% false positive ratio
 
 constructor TSynBloomFilter.Create(aSize: integer; aFalsePositivePercent: double);
 const LN2 = 0.69314718056;
@@ -55678,8 +55673,8 @@ begin
   fHashFunctions := Round(fBits/fSize*LN2);
   if fHashFunctions=0 then
     fHashFunctions := 1 else
-  if fHashFunctions>cardinal(length(BLOOM_SEED)) then
-    fHashFunctions := length(BLOOM_SEED);
+  if fHashFunctions>BLOOM_MAXHASH then
+    fHashFunctions := BLOOM_MAXHASH;
   Reset;
 end;
 
@@ -55697,13 +55692,18 @@ end;
 
 procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
 var h: integer;
+    h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 begin
   if (self=nil) or (aValueLen<=0) and (fBits=0) then
     exit;
+  h1 := crc32c(0,aValue,aValueLen);
+  if fHashFunctions=1 then
+    h2 := 0 else
+    h2 := crc32c(h1,aValue,aValueLen);
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      SetBit(pointer(fStore)^,crc32c(BLOOM_SEED[h],aValue,aValueLen) mod fBits);
+      SetBit(pointer(fStore)^,(h1+cardinal(h)*h2) mod fBits);
     inc(fInserted);
   finally
     Safe.UnLock;
@@ -55727,14 +55727,19 @@ end;
 
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var h: integer;
+    h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 begin
   result := false;
   if (self=nil) or (aValueLen<=0) and (fBits=0) then
     exit;
+  h1 := crc32c(0,aValue,aValueLen);
+  if fHashFunctions=1 then
+    h2 := 0 else
+    h2 := crc32c(h1,aValue,aValueLen);
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      if not GetBit(pointer(fStore)^,crc32c(BLOOM_SEED[h],aValue,aValueLen) mod fBits) then
+      if not GetBit(pointer(fStore)^,(h1+cardinal(h)*h2) mod fBits) then
         exit;
   finally
     Safe.UnLock;
@@ -55812,7 +55817,7 @@ begin
     if fBits<fSize then
       exit;
     fHashFunctions := P^; inc(P);
-    if fHashFunctions-1>=cardinal(length(BLOOM_SEED)) then
+    if fHashFunctions-1>=BLOOM_MAXHASH then
       exit;
     Reset;
     fInserted := PCardinal(P)^; inc(P,4);
