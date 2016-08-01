@@ -169,6 +169,7 @@ type
     fRunConsoleMemoryUsed: Int64;
     /// any text assigned to this field will be displayed on console
     fRunConsole: string;
+    fCheckLogTime: TPrecisionTimer;
     /// override this method to process some clean-up before Destroy call
     // - WARNING: this method should be re-entrant - so using FreeAndNil() is
     // a good idea in this method :)
@@ -208,6 +209,21 @@ type
     // and ExpectedResult=true
     procedure CheckMatchAny(const Value: RawUTF8; const Values: array of RawUTF8;
       CaseSentitive: Boolean=true; ExpectedResult: Boolean=true; const msg: string = '');
+    /// used by the published methods to run a test assertion, with a error
+    // message computed via FormatUTF8()
+    // - condition must equals TRUE to pass the test
+    procedure CheckUTF8(condition: Boolean; const msg: RawUTF8; const args: array of const);
+    /// used by published methods to start some timing on associated log
+    // - call this once, before one or several consecutive CheckLogTime()
+    procedure CheckLogTimeStart;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by published methods to write some timing on associated log
+    // - at least one CheckLogTimeStart method call should happen to reset the
+    // internal timer
+    // - condition must equals TRUE to pass the test
+    // - the supplied message would be appended, with its timing
+    procedure CheckLogTime(condition: boolean;
+      const msg: RawUTF8; const args: array of const; level: TSynLogInfo=sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
     // - it somewhat faster if CharCount is a multiple of 5
     class function RandomString(CharCount: Integer): RawByteString;
@@ -584,6 +600,35 @@ procedure TSynTestCase.CheckMatchAny(const Value: RawUTF8;
   const Values: array of RawUTF8; CaseSentitive,ExpectedResult: Boolean; const msg: string);
 begin
   Check((FindRawUTF8(Values,Value,CaseSentitive)>=0)=ExpectedResult);
+end;
+
+procedure TSynTestCase.CheckUTF8(condition: Boolean; const msg: RawUTF8;
+  const args: array of const);
+  procedure PerformFail;
+  var utf8: RawUTF8;
+  begin
+    FormatUTF8(msg,args,utf8);
+    TestFailed(UTF8ToString(utf8));
+  end;
+begin
+  if condition then
+    InterlockedIncrement(fAssertions) else
+    PerformFail;
+end;
+
+procedure TSynTestCase.CheckLogTimeStart;
+begin
+  fCheckLogTime.Start;
+end;
+
+procedure TSynTestCase.CheckLogTime(condition: boolean; const msg: RawUTF8;
+  const args: array of const; level: TSynLogInfo);
+var utf8: RawUTF8;
+begin
+  FormatUTF8(msg,args,utf8);
+  Check(condition,UTF8ToString(utf8));
+  TSynLogTestLog.Add.Log(level,utf8+' '+fCheckLogTime.Stop);
+  fCheckLogTime.Start;
 end;
 
 constructor TSynTestCase.Create(Owner: TSynTests; const Ident: string);
@@ -1148,6 +1193,5 @@ begin
     {$endif}
   end;
 end;
-
 
 end.

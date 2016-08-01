@@ -4221,84 +4221,93 @@ begin
     Check(b.Bits>b.Size shl 3);
     Check(b.HashFunctions=7);
     Check(b.Inserted=0);
+    CheckLogTimeStart;
     for i := 1 to SIZ do
       Check(not b.MayExist(@i,sizeof(i)));
-    Check(b.Inserted=0);
+    CheckLogTime(b.Inserted=0,'MayExists(%)=false',[SIZ]);
     for i := 1 to 1000 do
       b.Insert(@i,sizeof(i));
-    Check(b.Inserted=1000);
+    CheckLogTime(b.Inserted=1000,'Insert(%)',[b.Inserted]);
     sav1000 := b.SaveTo;
-    Check(sav1000<>'');
+    CheckLogTime(sav1000<>'','b.SaveTo(%) len=%',[b.Inserted,kb(length(sav1000))]);
     for i := 1001 to SIZ do
       b.Insert(@i,sizeof(i));
-    Check(b.Inserted=SIZ);
+    CheckLogTime(b.Inserted=SIZ,'Insert(%)',[SIZ-1000]);
     savSIZ := b.SaveTo;
-    Check(length(savSIZ)>length(sav1000));
+    CheckLogTime(length(savSIZ)>length(sav1000),'b.SaveTo(%) len=%',[SIZ,kb(length(savSIZ))]);
     for i := 1 to SIZ do
       Check(b.MayExist(@i,sizeof(i)));
+    CheckLogTime(b.Inserted=SIZ,'MayExists(%)=true',[SIZ]);
     n := 0;
     for i := SIZ+1 to SIZ+SIZ shr 5 do
       if b.MayExist(@i,sizeof(i)) then
         inc(n);
     falsepositive := (n*100)/(SIZ shr 5);
-    Check(falsepositive<1,Format('falsepositive=%g',[falsepositive]));
+    CheckLogTime(falsepositive<1,'falsepositive=%',[falsepositive]);
     b.Reset;
-    Check(b.Inserted=0);
+    CheckLogTime(b.Inserted=0,'b.Reset',[]);
     for i := 1 to SIZ do
       Check(not b.MayExist(@i,sizeof(i)));
-    Check(b.Inserted=0);
-    Check(b.LoadFrom(sav1000));
-    Check(b.Inserted=1000);
+    CheckLogTime(b.Inserted=0,'MayExists(%)=false',[SIZ]);
+    CheckLogTime(b.LoadFrom(sav1000),'b.LoadFrom(%)',[1000]);
     for i := 1 to 1000 do
       Check(b.MayExist(@i,sizeof(i)));
+    CheckLogTime(b.Inserted=1000,'MayExists(%)=true',[1000]);
   finally
     b.Free;
   end;
+  CheckLogTime(true,'b.Free',[]);
   d1 := TSynBloomFilterDiff.Create(savSIZ);
   try
+    CheckLogTime(true,'d1 := TSynBloomFilterDiff.Create(%)',[SIZ]);
     CheckSame(d1.FalsePositivePercent,1);
     Check(d1.Size=SIZ+5000);
     Check(d1.Bits>d1.Size shl 3);
     Check(d1.HashFunctions=7);
-    Check(d1.Inserted=SIZ);
     for i := 1 to SIZ do
       Check(d1.MayExist(@i,sizeof(i)));
+    CheckLogTime(d1.Inserted=SIZ,'MayExists(%)=true',[SIZ]);
     d2 := TSynBloomFilterDiff.Create;
     try
       Check(d2.Revision=0);
       n := SIZ;
       for j := 1 to 3 do begin
         savSiz := d1.SaveToDiff(d2.Revision);
-        Check(savSiz<>'');
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,KB(length(savSiz))]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check((d2.Revision=d1.Revision)=(j>1));
-        Check(d2.LoadFromDiff(savSiz));
+        CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);
         Check(d2.Revision=d1.Revision);
         Check(d2.Size=d1.Size);
         for i := 1 to n do
           Check(d2.MayExist(@i,sizeof(i)));
+        CheckLogTime(d2.Inserted=cardinal(n),'MayExists(%)=true',[n]);
         for i := n+1 to n+1000 do
           d1.Insert(@i,sizeof(i));
-        Check(d2.Revision<>d1.Revision);
+        CheckLogTime(d2.Revision<>d1.Revision,'d1.Insert(%)',[1000]);
         savSiz := d1.SaveToDiff(d2.Revision);
-        Check(savSiz<>'');
+        CheckLogTime(savSiz<>'','d1.SaveToDiff(%) len=%',[d2.Revision,kb(length(savSiz))]);
         Check(d1.DiffKnownRevision(savSIZ)=d1.Revision);
         Check(d2.Revision<>d1.Revision);
-        Check(d2.LoadFromDiff(savSiz));
+        CheckLogTime(d2.LoadFromDiff(savSiz),'d2.LoadFromDiff(%)',[n]);
         Check(d2.Revision=d1.Revision);
         inc(n,1000);
         for i := 1 to n do
           Check(d2.MayExist(@i,sizeof(i)));
-        Check(d1.Inserted=cardinal(n));
+        CheckLogTime(d2.Inserted=cardinal(n),'MayExists(%)=true',[n]);
         Check(d2.Inserted=cardinal(n));
-        if j=2 then
+        if j=2 then begin
           d1.DiffSnapshot;
+          CheckLogTime(d2.Revision=d1.Revision,'d1.DiffSnapshot',[]);
+        end;
       end;
     finally
       d2.Free;
+      CheckLogTime(true,'d2.Free',[]);
     end;
   finally
     d1.Free;
+    CheckLogTime(true,'d1.Free',[]);
   end;
 end;
 
