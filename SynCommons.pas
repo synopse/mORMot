@@ -10269,7 +10269,7 @@ function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // and 4 times better than kr32(), but also slower than the others
 // - fnv32() is 715.5 MB/s - kr32() 898.8 MB/s
 // - this hash function should not be usefull, unless you need several hashing
-// algorithms at once (e.g. to implement a bloom filter)
+// algorithms at once (e.g. if crc32c with diverse seeds is not enough)
 function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 var

@@ -1333,7 +1333,7 @@ type
   TPdfPageClass = class of TPdfPage;
 
   /// array used to store a TPdfImage hash
-  // - uses 4 hash codes, created with 4 diverse algorithms, in order to avoid
+  // - uses 4 crc32c hash codes, created with 4 diverse seeds, in order to avoid
   // false positives
   TPdfImageHash = array[0..3] of cardinal;
 
@@ -1513,7 +1513,7 @@ type
     {$ifdef USE_BITMAP}
     /// retrieve a XObject TPdfImage index from its picture attributes
     // - returns '' if this image is not already there
-    // - uses 4 hash codes, created with 4 diverse algorithms, in order to avoid
+    // - uses 4 hash codes, created with 4 diverse seeds, in order to avoid
     // false positives
     function GetXObjectImageName(const Hash: TPdfImageHash; Width, Height: Integer): PDFString;
     {$endif USE_BITMAP}
@@ -6257,13 +6257,12 @@ var J: TJpegImage;
     nPals: cardinal;
     Pals: array of TPaletteEntry;
 const PERROW: array[TPixelFormat] of byte = (0,1,4,8,15,16,24,32,0);
-procedure DoHash(bits: pointer; size: Integer);
-begin // "4 algorithms to rule them all": all SynCommons hashers to the rescue!
-  Hash[0] := crc32c(Hash[0],bits,size);
-  Hash[1] := kr32(Hash[1],bits,size);
-  Hash[2] := fnv32(Hash[2],bits,size);
-  Hash[3] := Hash[3] xor Hash32(bits,size);
-end;
+  procedure DoHash(bits: pointer; size: Integer);
+  var i: integer;
+  begin
+    for i := 0 to high(Hash) do
+      Hash[i] := crc32c(Hash[i],bits,size);
+  end;
 begin
   result := '';
   if (self=nil) or (B=nil) then exit;
@@ -6276,7 +6275,10 @@ begin
       B.PixelFormat := pf24bit;
       row := 24;
     end;
-    FillCharFast(Hash,sizeof(Hash),row);
+    Hash[0] := 0;
+    Hash[1] := 2972236863;
+    Hash[2] := 1598500460;
+    Hash[3] := 767514222;
     if B.Palette<>0 then begin
       nPals := 0;
       if (GetObject(B.Palette,sizeof(nPals),@nPals)<>0) and (nPals>0) then begin
