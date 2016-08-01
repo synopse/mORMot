@@ -8721,6 +8721,7 @@ type
     procedure Write(const Value: variant); overload;
     {$endif}
     /// append "New[0..Len-1] xor Old[0..Len-1]" bytes
+    // - as used e.g. by ZeroCompressXor/TSynBloomFilterDiff.SaveTo
     procedure WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal=nil);
     /// append a cardinal value using 32-bit variable-length integer encoding
     procedure WriteVarUInt32(Value: PtrUInt);
@@ -10326,7 +10327,7 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif CPUINTEL}
 
 /// naive symmetric encryption scheme using a 32 bit key
-// - fast, but not very secure
+// - fast, but not very secure (consider using SynCrypto instead)
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 var
@@ -10391,7 +10392,11 @@ procedure OrMemory(Dest,Source: PByteArray; size: integer);
   {$ifdef HASINLINE}inline;{$endif}
   
 /// logical XOR of two memory buffers
-procedure XorMemory(Dest,Source: PByteArray; size: integer);
+procedure XorMemory(Dest,Source: PByteArray; size: integer); overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// logical XOR of two memory buffers into a third
+procedure XorMemory(Dest,Source1,Source2: PByteArray; size: integer); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical AND of two memory buffers
@@ -29321,6 +29326,21 @@ begin
   end;
 end;
 
+procedure XorMemory(Dest,Source1,Source2: PByteArray; size: integer);
+begin
+  while size>=sizeof(PtrInt) do begin
+    dec(size,sizeof(PtrInt));
+    PPtrInt(Dest)^ := PPtrInt(Source1)^ xor PPtrInt(Source2)^;
+    inc(PPtrInt(Dest));
+    inc(PPtrInt(Source1));
+    inc(PPtrInt(Source2));
+  end;
+  while size>0 do begin
+    dec(size);
+    Dest[size] := Source1[size] xor Source2[size];
+  end;
+end;
+
 procedure AndMemory(Dest,Source: PByteArray; size: integer);
 begin
   while size>=sizeof(PtrInt) do begin
@@ -29500,23 +29520,6 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
 end;
 {$endif CPU64}
 {$endif CPUINTEL}
-
-procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
-var i,len: integer;
-    d: PCardinal;
-begin
-  UniqueString(AnsiString(data));
-  len := length(data);
-  d := pointer(data);
-  key := key xor cardinal(len);
-  for i := 0 to (len shr 2)-1 do begin
-    key := key xor crc32ctab[0,(cardinal(i) xor key)and 1023];
-    d^ := d^ xor key;
-    inc(d);
-  end;
-  for i := 0 to (len and 3)-1 do
-    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,17 shl i];
-end;
 
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef PUREPASCAL}
@@ -29740,6 +29743,23 @@ end;
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
   result := CardinalToHex(crc32c(0,pointer(str),length(str)));
+end;
+
+procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
+var i,len: integer;
+    d: PCardinal;
+begin
+  UniqueString(AnsiString(data));
+  len := length(data);
+  d := pointer(data);
+  key := key xor cardinal(len);
+  for i := 0 to (len shr 2)-1 do begin
+    key := key xor crc32ctab[0,(cardinal(i) xor key)and 1023];
+    d^ := d^ xor key;
+    inc(d);
+  end;
+  for i := 0 to (len and 3)-1 do
+    PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,17 shl i];
 end;
 
 function UnixTimeToDateTime(const UnixTime: Int64): TDateTime;
@@ -51263,13 +51283,15 @@ begin
       [self,TVarData(Value).VType]);
   inc(fTotalWritten,len);
   if tmp=nil then
-    inc(fPos,len) else
+    inc(fPos,len) else begin
+    fStream.Write(tmp^,len);
     FreeMem(tmp);
+  end;
 end;
 {$endif}
 
 procedure TFileBufferWriter.WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal);
-var L,i: integer;
+var L: integer;
     Dest: PAnsiChar;
 begin
   if (New=nil) or (Old=nil) then
@@ -51285,8 +51307,7 @@ begin
     if Len>fBufLen then
       L := fBufLen else
       L := Len;
-    for i := 0 to L-1 do
-      Dest[i] := AnsiChar(ord(New[i]) xor ord(Old[i]));
+    XorMemory(pointer(Dest),pointer(New),pointer(Old),L);
     if crc<>nil then
       crc^ := crc32c(crc^,Dest,L);
     inc(Old,L);
