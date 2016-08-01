@@ -8720,6 +8720,8 @@ type
     // - matches FromVarVariant() and VariantSave/VariantLoad format
     procedure Write(const Value: variant); overload;
     {$endif}
+    /// append "New[0..Len-1] xor Old[0..Len-1]" bytes
+    procedure WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal=nil);
     /// append a cardinal value using 32-bit variable-length integer encoding
     procedure WriteVarUInt32(Value: PtrUInt);
     /// append an integer value using 32-bit variable-length integer encoding of
@@ -8995,7 +8997,6 @@ type
     fSnapshotInsertCount: cardinal;
     fKnownRevision: Int64;
     fKnownStore: RawByteString;
-    fDiffTemp: RawByteString;
   public
     /// add an item in the internal bits array storage
     // - this overloaded thread-safe method would compute fRevision
@@ -16031,12 +16032,20 @@ procedure ZeroCompress(P: PAnsiChar; Len: integer; Dest: TFileBufferWriter);
 // - will also check the crc32c of the supplied content
 procedure ZeroDecompress(P: PByte; Len: integer; out Dest: RawByteString);
 
+/// RLE compression of XORed memory buffers resulting in mostly zeros
+// - will perform ZeroCompress(Dest^ := New^ xor Old^) without any temporary
+// memory allocation
+// - is used  e.g. by TSynBloomFilterDiff.SaveToDiff() in incremental mode
+// - will also compute the crc32c of the supplied content
+procedure ZeroCompressXor(New,Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWriter);
+
 /// RLE uncompression and ORing of a memory buffer containing mostly zeros
-// - will perform "Dest^ := Dest^ or P^" without any temporary memory allocation
-// - is used  e.g. by TSynBloomFilterDiff.LoadFromDiff() in incremental mode 
-// - returns false if P^ is not a valid ZeroCompress() function result
+// - will perform Dest^ := Dest^ or ZeroDecompress(P^) without any temporary
+// memory allocation
+// - is used  e.g. by TSynBloomFilterDiff.LoadFromDiff() in incremental mode
+// - returns false if P^ is not a valid ZeroCompress/ZeroCompressXor() result
 // - will also check the crc32c of the supplied content
-function ZeroDecompressOr(P,Dest: PAnsiChar; Len: integer): boolean;
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len,DestLen: integer): boolean;
 
 
 resourcestring
@@ -51128,6 +51137,7 @@ procedure TFileBufferWriter.Write(Data: pointer; DataLen: integer);
 begin
   if (DataLen<=0) or (Data=nil) then
     exit;
+  inc(fTotalWritten,PtrUInt(DataLen));
   if fPos+DataLen>fBufLen then begin
     if fPos>0 then begin
       fStream.Write(pointer(fBuf)^,fPos);
@@ -51135,18 +51145,17 @@ begin
     end;
     if DataLen>fBufLen then begin
       fStream.Write(Data^,DataLen);
-      inc(fTotalWritten,PtrUInt(DataLen));
       exit;
     end;
   end;
   MoveFast(Data^,PByteArray(fBuf)^[fPos],DataLen);
   inc(fPos,DataLen);
-  inc(fTotalWritten,PtrUInt(DataLen));
 end;
 
 procedure TFileBufferWriter.WriteN(Data: Byte; Count: integer);
 var len: integer;
 begin
+  inc(fTotalWritten,Count);
   while Count>0 do begin
     if Count>fBufLen then
       len := fBufLen else
@@ -51157,7 +51166,6 @@ begin
     end;
     FillcharFast(PByteArray(fBuf)^[fPos],len,Data);
     inc(fPos,len);
-    inc(fTotalWritten,len);
     dec(Count,len);
   end;
 end;
@@ -51260,6 +51268,34 @@ begin
 end;
 {$endif}
 
+procedure TFileBufferWriter.WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal);
+var L,i: integer;
+    Dest: PAnsiChar;
+begin
+  if (New=nil) or (Old=nil) then
+    exit;
+  inc(fTotalWritten,Len);
+  while Len>0 do begin
+    Dest := pointer(fBuf);
+    if fPos+Len>fBufLen then begin
+      fStream.Write(pointer(fBuf)^,fPos);
+      fPos := 0;
+    end else
+      inc(Dest,fPos);
+    if Len>fBufLen then
+      L := fBufLen else
+      L := Len;
+    for i := 0 to L-1 do
+      Dest[i] := AnsiChar(ord(New[i]) xor ord(Old[i]));
+    if crc<>nil then
+      crc^ := crc32c(crc^,Dest,L);
+    inc(Old,L);
+    inc(New,L);
+    dec(Len,L);
+    inc(fPos,L);
+  end;
+end;
+
 procedure TFileBufferWriter.WriteRawUTF8DynArray(const Values: TRawUTF8DynArray;
   ValuesCount: integer);
 var PI: PPtrUIntArray;
@@ -51320,7 +51356,7 @@ begin
       end;
       len := PAnsiChar(P)-PBeg; // format: Isize+varUInt32s*strings
       PInteger(PBeg)^ := len-4;
-      Inc(fTotalWritten,len);
+      inc(fTotalWritten,len);
       inc(fPos,len);
       inc(PtrUInt(PI),n*sizeof(PtrInt));
       dec(ValuesCount,n);
@@ -55282,6 +55318,34 @@ begin
   Dest.Write4(crc);
 end;
 
+procedure ZeroCompressXor(New,Old: PAnsiChar; Len: cardinal; Dest: TFileBufferWriter);
+var beg,same,index,crc,L: cardinal;
+begin
+  Dest.WriteVarUInt32(Len);
+  beg := 0;
+  index := 0;
+  crc := 0;
+  while index<Len do begin
+    while (New[index]<>Old[index]) and (index<Len) do inc(index);
+    same := index;
+    while (New[index]=Old[index]) and (index<Len) do inc(index);
+    L := index-same;
+    if L>3 then begin
+      Dest.WriteVarUInt32(same-beg);
+      Dest.WriteXor(New+beg,Old+beg,same-beg,@crc);
+      crc := crc32c(crc,@L,sizeof(L));
+      Dest.WriteVarUInt32(L-3);
+      beg := index;
+    end;
+  end;
+  L := index-beg;
+  if L>0 then begin
+    Dest.WriteVarUInt32(L);
+    Dest.WriteXor(New+beg,Old+beg,L,@crc);
+  end;
+  Dest.Write4(crc);
+end;
+
 procedure ZeroDecompress(P: PByte; Len: integer; out Dest: RawByteString);
 var PEnd,D,DEnd: PAnsiChar;
     DestLen,crc: cardinal;
@@ -55313,12 +55377,15 @@ begin
     Dest := '';
 end;
 
-function ZeroDecompressOr(P,Dest: PAnsiChar; Len: integer): boolean;
+function ZeroDecompressOr(P,Dest: PAnsiChar; Len,DestLen: integer): boolean;
 var PEnd,DEnd: PAnsiChar;
-    DestLen,crc: cardinal;
+    crc: cardinal;
 begin
   PEnd := P+Len-4;
-  DestLen := FromVarUInt32(PByte(P));
+  if cardinal(DestLen)<>FromVarUInt32(PByte(P)) then begin
+    result := false;
+    exit;
+  end;
   DEnd := Dest+DestLen;
   crc := 0;
   while (P<PEnd) and (Dest<DEnd) do begin
@@ -55864,7 +55931,6 @@ begin
     fRevision := DateTimeToUnixTime(NowUTC) shl 31;
     fKnownRevision := 0;
     fKnownStore := '';
-    fDiffTemp := '';
   finally
     Safe.UnLock;
   end;
@@ -55886,21 +55952,6 @@ begin
 end;
 
 function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
-  procedure ComputeDiff(Dest,New,Old: PPtrInt; size: integer);
-  var i: integer;
-  begin
-    for i := 1 to size shr POINTERSHR do begin
-      Dest^ := New^ xor Old^;
-      inc(Dest);
-      inc(New);
-      inc(Old);
-    end;
-    size := size and pred(sizeof(PtrInt));
-    while size>0 do begin
-      PByteArray(Dest)[size] := PByteArray(New)[size] xor PByteArray(Old)[size];
-      dec(size);
-    end;
-  end;
 var head: TBloomDiffHeader;
     W: TFileBufferWriter;
 begin
@@ -55932,12 +55983,8 @@ begin
       case head.kind of
       bdFull:
         SaveTo(W);
-      bdDiff: begin
-        if fDiffTemp='' then
-          SetLength(fDiffTemp,head.size);
-        ComputeDiff(pointer(fDiffTemp),pointer(fStore),pointer(fKnownStore),head.size);
-        ZeroCompress(pointer(fDiffTemp),head.size,W);
-      end;
+      bdDiff:
+        ZeroCompressXor(pointer(fStore),pointer(fKnownStore),head.size,W);
       end;
       W.Flush;
       result := TRawByteStringStream(W.Stream).DataString;
@@ -55981,7 +56028,7 @@ begin
       result := LoadFrom(P,PLen);
     bdDiff:
       if fStore<>'' then
-        result := ZeroDecompressOr(pointer(P),Pointer(fStore),PLen);
+        result := ZeroDecompressOr(pointer(P),Pointer(fStore),PLen,head.size);
     bdUpToDate:
       result := true;
     end;
