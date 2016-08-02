@@ -5824,7 +5824,8 @@ function GUIDToString(const guid: TGUID): string;
 
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
-// - use internally crc32c() hashing with some rough entropy source
+// - use internally crc32c() hashing with some rough entropy source, and
+// hardware RDRAND Intel x86/x64 opcode if available
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
@@ -31125,6 +31126,26 @@ begin
 end;
 {$endif}
 
+{$ifdef CPUINTEL}
+/// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
+function RdRand32: cardinal;
+{$ifdef CPU64}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm
+  .noframe
+{$endif FPC}
+{$endif CPU64}
+{$ifdef CPU32}
+asm
+{$endif}
+  // rdrand eax: same opcodes for x86 and x64
+  db $0f,$c7,$f0
+  // returns in eax, ignore carry flag (eax=0 won't hurt)
+end;
+{$endif}
+
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 var i: integer;
     c: cardinal;
@@ -31136,6 +31157,10 @@ begin
   for i := 0 to CardinalCount-1 do begin
     c := c xor crc32ctab[0,(c+cardinal(i)) and 1023]
       xor crc32c(c,pointer(Dest),CardinalCount*4);
+    {$ifdef CPUINTEL}
+    if cfRAND in CpuFeatures then
+      c := c xor RdRand32;
+    {$endif};
     Dest^[i] := Dest^[i] xor c;
   end;
 end;
