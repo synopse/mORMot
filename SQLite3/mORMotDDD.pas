@@ -63,6 +63,7 @@ uses
   Contnrs,
   Variants,
   SyncObjs,
+  SynCrtSock,
   SynCommons,
   SynLog,
   SynCrypto,
@@ -2597,6 +2598,10 @@ begin
       end;
       {$endif}
       result.Content := SystemInfoJson;
+      {$ifdef MSWINDOWS}
+      result.Content[length(result.Content)] := ',';
+      result.Content := result.Content+'"ip":"'+GetIPAddressesText+'"}';
+      {$endif}
       exit;
     end;
     {$ifdef WITHLOG}

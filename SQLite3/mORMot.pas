@@ -36244,7 +36244,7 @@ begin
       end;
     end;
   end;
-  files := FindFiles(Folder,Mask,'',True,False);
+  files := FindFiles(Folder,Mask,'',true,false);
   Answer.Content := DynArraySaveJSON(files,TypeInfo(TFindFilesDynArray));
 end;
 
