@@ -64,6 +64,7 @@ uses
   SynLog,
   mORMot,
   mORMotDDD,
+  SynCrtSock,
   SynSQLite3, mORMotSQLite3, // for internal SQlite3 database
   SynDB, mORMotDB,           // for TDDDRestSettings on external SQL database
   SynMongoDB, mORMotMongoDB, // for TDDDRestSettings on external NoSQL database
@@ -485,6 +486,17 @@ type
     procedure SetDefaults(const Root, MongoServerAddress, MongoDatabase,
       MongoUser, MongoPassword: RawUTF8);
   end;
+
+  TDDDEmailerSettings = class(TSynPersistent)
+  protected
+    fSMTP: RawUTF8;
+    fRecipients: RawUTF8;
+  public
+    constructor Create; override;
+  published
+    property SMTP: RawUTF8 read fSMTP write fSMTP;
+    property Recipients: RawUTF8 read fRecipients write fRecipients;
+  end;
   
 
 implementation
@@ -840,5 +852,15 @@ begin
   fORM.User := MongoUser;
   fORM.PasswordPlain := MongoPassword;
 end;
+
+
+{ TDDDEmailerSettings }
+
+constructor TDDDEmailerSettings.Create;
+begin
+  inherited Create;
+  fSMTP := SMTP_DEFAULT;
+end;
+
 
 end.
