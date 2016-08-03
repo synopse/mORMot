@@ -320,6 +320,9 @@ type
   /// points to a 8-bit raw storage variable, used for data buffer management
   PSockString = ^SockString;
 
+  /// defines a dynamic array of SockString
+  TSockStringDynArray = array of SockString;
+
 {$ifdef DELPHI5OROLDER}
   // not defined in Delphi 5 or older
   PPointer = ^Pointer;
@@ -1954,12 +1957,22 @@ function Base64Decode(const s: SockString): SockString;
 /// escaping of HTML codes like < > & "
 function HtmlEncode(const s: SockString): SockString;
 
-{$ifdef Win32}
+{$ifdef MSWINDOWS}
+
 /// remotly get the MAC address of a computer, from its IP Address
 // - only works under Win2K and later
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: SockString): SockString;
-{$endif}
+
+/// enumerate all IP addresses of the current computer
+// - may be used to enumerate all adapters
+function GetIPAddresses: TSockStringDynArray;
+
+/// returns all IP addresses of the current computer as a single CSV text 
+// - may be used to enumerate all adapters
+function GetIPAddressesText(const Sep: SockString = ' '): SockString;
+
+{$endif MSWINDOWS}
 
 /// low-level text description of  Socket error code
 function SocketErrorMessage(Error: integer): string;
@@ -2648,7 +2661,16 @@ begin
   result := '';
 end;
 
-{$ifdef Win32}
+procedure IP4Text(addr: TInAddr; var result: SockString);
+var b: array[0..3] of byte absolute addr;
+begin
+  if cardinal(addr)=0 then
+    result := '' else
+    result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
+end;
+
+{$ifdef MSWINDOWS}
+
 function GetRemoteMacAddress(const IP: SockString): SockString;
 // implements http://msdn.microsoft.com/en-us/library/aa366358
 type
@@ -2687,7 +2709,54 @@ begin
     FreeLibrary(SendARPLibHandle);
   end;
 end;
-{$endif}
+
+type
+  PMIB_IPADDRTABLE = ^MIB_IPADDRTABLE;
+  MIB_IPADDRTABLE = record
+    dwNumEntries: DWORD;
+    ip: array[0..200] of record
+      dwAddr: DWORD;
+      dwIndex: DWORD;
+      dwMask: DWORD;
+      dwBCastAddr: DWORD;
+      dwReasmSize: DWORD;
+      unused1: Word;
+      wType: Word;
+    end;
+  end;
+
+function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
+  var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external 'iphlpapi.dll';
+
+function GetIPAddresses: TSockStringDynArray;
+var Table: MIB_IPADDRTABLE;
+    Size: DWORD;
+    i: integer;
+begin
+  result := nil;
+  Size := SizeOf(Table);
+  if GetIpAddrTable(@Table,Size,false)<>NO_ERROR then
+    exit;
+  SetLength(result,Table.dwNumEntries);
+  for i := 0 to Table.dwNumEntries-1 do
+    IP4Text(TInAddr(Table.ip[i].dwAddr),result[i]);
+end;
+
+function GetIPAddressesText(const Sep: SockString = ' '): SockString;
+var ip: TSockStringDynArray;
+    i: integer;
+begin
+  ip := GetIPAddresses;
+  if ip=nil then begin
+    result := '';
+    exit;
+  end;
+  result := ip[0];
+  for i := 1 to high(ip) do
+    result := result+Sep+ip[i];
+end;
+
+{$endif MSWINDOWS}
 
 {$ifndef NOXPOWEREDNAME}
 const
@@ -3434,14 +3503,6 @@ function TCrtSocket.SockConnected: boolean;
 var Sin: TVarSin;
 begin
   result := GetPeerName(Sock,Sin)=0;
-end;
-
-procedure IP4Text(addr: TInAddr; var result: SockString);
-var b: array[0..3] of byte absolute addr;
-begin
-  if cardinal(addr)=0 then
-    result := '' else
-    result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
 end;
 
 function TCrtSocket.PeerAddress: SockString;
