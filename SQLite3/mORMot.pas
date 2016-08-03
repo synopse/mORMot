@@ -11040,6 +11040,7 @@ type
     procedure SetOutput(Index: Integer; const Value: variant);
     function GetInNamed(const aParamName: RawUTF8): variant;
     procedure SetOutNamed(const aParamName: RawUTF8; const Value: variant);
+    function GetInUTF8(const ParamName: RawUTF8): RawUTF8;
   protected
     fInput: TVariantDynArray;
     fOutput: TVariantDynArray;
@@ -11100,6 +11101,13 @@ type
     // Output[] property
     // - if an Output[]/Named[] item is not set, a default value would be used
     property Named[const ParamName: RawUTF8]: variant read GetInNamed write SetOutNamed; default;
+    /// access to UTF-8 input parameters when calling the method
+    // - if the supplied name is incorrect, an EInterfaceStub will be raised
+    // - is a bit slower than Input[]/Output[] indexed properties, but easier
+    // to work with, and safer in case of method signature change (like parameter
+    // add or rename)
+    // - slightly easier to use Ctxt.UTF8['str'] than ToUTF8(Ctxt.Named['str'])
+    property UTF8[const ParamName: RawUTF8]: RawUTF8 read GetInUTF8;
   end;
 {$endif NOVARIANTS}
 
@@ -52736,6 +52744,13 @@ begin
           break;
       end;
   raise EInterfaceStub.Create(fSender,fMethod^,'unknown input parameter "%"',[aParamName]);
+end;
+
+function TOnInterfaceStubExecuteParamsVariant.GetInUTF8(const ParamName: RawUTF8): RawUTF8;
+var wasString: boolean;
+begin
+  result := '';
+  VariantToUTF8(GetInNamed(ParamName),result,wasString);
 end;
 
 procedure TOnInterfaceStubExecuteParamsVariant.SetOutNamed(const aParamName: RawUTF8;
