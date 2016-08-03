@@ -756,8 +756,9 @@ begin
   if result.InheritsFrom(TSQLRestServerDB) then
     TSQLRestServerDB(result).DB.UseCache := false;
   // set the first supplied class type to log services
-  (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
-    SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]),aExcludedMethodNamesCSV);
+  if aMainRestWithServices <> nil then
+    (aMainRestWithServices.ServiceContainer as TServiceContainerServer).
+      SetServiceLog(result,TSQLRecordServiceLogClass(classes[0]),aExcludedMethodNamesCSV);
 end;
 
 

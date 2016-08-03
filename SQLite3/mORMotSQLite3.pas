@@ -1850,7 +1850,7 @@ begin
         end;
       end else
         AdministrationExecuteGetFiles(ExtractFilePath(DB.FileName),
-          '*.db;*.db3;*.dbsynlz',fn,result);
+          '*.db;*.db3;*.dbsynlz;*.dbs',fn,result);
     end;
     3: begin
       split(SQL,' ',cmd,fn);
