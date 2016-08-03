@@ -1862,10 +1862,15 @@ function HttpGet(const aURI: SockString;
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
 
+const
+  /// the layout of TSMTPConnection.FromText method
+  SMTP_DEFAULT = 'user:password@smtpserver:port';
+
 type
   /// may be used to store a connection to a SMTP server
   // - see SendEmail() overloaded function
-  TSMTPConnection = record
+  TSMTPConnection = {$ifdef UNICODE}record{$else}object{$endif}
+  public
     /// the SMTP server IP or host name
     Host: SockString;
     /// the SMTP server port (25 by default)
@@ -1874,6 +1879,11 @@ type
     User: SockString;
     /// the SMTP user password (if any)
     Pass: SockString;
+    /// fill the STMP server information from a single text field
+    // - expects 'user:password@smtpserver:port' format
+    // - if aText equals SMTP_DEFAULT ('user:password@smtpserver:port'),
+    // does nothing
+    function FromText(const aText: SockString): boolean;
   end;
 
 /// send an email using the SMTP protocol
@@ -2970,19 +2980,27 @@ end;
 
 { TCrtSocket }
 
+function Split(const Text: SockString; Sep: AnsiChar; var Before,After: SockString): boolean;
+var i: integer;
+begin
+  for i := length(Text)-1 downto 2 do
+    if Text[i]=Sep then begin
+      Before := trim(copy(Text,1,i-1));
+      After := trim(copy(Text,i+1,maxInt));
+      result := true;
+      exit;
+    end;
+  result := false;
+end;
+
 constructor TCrtSocket.Bind(const aPort: SockString; aLayer: TCrtSocketLayer=cslTCP);
 var s,p: SockString;
-    i: integer;
 begin
   // on Linux, Accept() blocks even after Shutdown() -> use 0.5 second timeout
   Create({$ifdef LINUX}500{$else}5000{$endif});
-  i := pos({$ifdef HASCODEPAGE}SockString{$endif}(':'),aPort);
-  if i=0 then begin
+  if not Split(aPort,':',s,p) then begin
     s := '0.0.0.0';
     p := aPort;
-  end else begin
-    s := Copy(aPort,1,i-1);
-    p := Copy(aPort,i+1,10);
   end;
   OpenBind(s,p,true,-1,aLayer); // raise an ECrtSocket exception on error
 end;
@@ -3690,6 +3708,27 @@ begin
   finally
     Http.Free;
   end;
+end;
+
+function TSMTPConnection.FromText(const aText: SockString): boolean;
+var u,h: SockString;
+begin
+  if aText=SMTP_DEFAULT then begin
+    result := false;
+    exit;
+  end;
+  if Split(aText,'@',u,h) then begin
+    if not Split(u,':',User,Pass) then
+      User := u;
+  end else
+    h := aText;
+  if not Split(h,':',Host,Port) then begin
+    Host := h;
+    Port := '25';
+  end;
+  if (Host<>'') and (Host[1]='?') then
+    Host := '';
+  result := Host<>'';
 end;
 
 function SendEmail(const Server: TSMTPConnection;
