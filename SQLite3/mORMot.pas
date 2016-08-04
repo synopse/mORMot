@@ -45879,13 +45879,12 @@ const
 var i: integer;
 begin
   if aClassType<>nil then begin
-   repeat // guess class type (faster than multiple InheritsFrom calls) 
-     aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
+    repeat // guess class type (faster than multiple InheritsFrom calls)
+      aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
       if aCustomIndex>=0 then begin
         result := oCustom; // found exact custom type (ignore inherited)
         exit;
       end;
- 
       i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
       if i>=0 then begin
         result := OBJ[i];
@@ -57135,7 +57134,6 @@ type
     fClient: TServiceFactoryClient;
     fRemote: TSQLRestClientURI;
     fRetryPeriodSeconds: Integer;
-    fPending: integer;
     procedure InternalExecute; override;
     procedure ProcessPendingNotification;
     function GetPendingCountFromDB: Int64;
@@ -57157,7 +57155,6 @@ begin
   if aRemote=nil then
     fRemote := fClient.fClient else
     fRemote := aRemote;
-  fPending := GetPendingCountFromDB;
   inherited Create(fClient.fClient,false,false);
 end;
 
@@ -57172,19 +57169,21 @@ procedure TServiceFactoryClientNotificationThread.ProcessPendingNotification;
 var pending: TSQLRecordServiceNotifications;
     params,error: RawUTF8;
     client: cardinal;
-    count: integer;
+    pendings,count: integer;
     timer: TPrecisionTimer;
 begin // one at a time, since InternalInvoke() is the bottleneck
   pending := fClient.fSendNotificationsLogClass.Create(
     fClient.fSendNotificationsRest,'Sent=? order by id limit 1',[0]);
   try
     if pending.IDValue=0 then begin
-      fPending := GetPendingCountFromDB;
-      if fPending=0 then
+      pendings := GetPendingCountFromDB;
+      fSafe.LockedInt64[0] := pendings;
+      if pendings=0 then
         exit else
         raise EServiceException.CreateUTF8(
-          '%.ProcessPendingNotification pending=% with no DB row',[self,fPending]);
+          '%.ProcessPendingNotification pending=% with no DB row',[self,pendings]);
     end;
+    pendings := fSafe.LockedInt64[0];
     timer.Start;
     VariantSaveJson(pending.Input,twJSONEscape,params);
     if (params<>'') and (params[1]='[') then
@@ -57201,14 +57200,14 @@ begin // one at a time, since InternalInvoke() is the bottleneck
       fClient.fSendNotificationsRest.Update(pending,'Output',true);
       raise EServiceException.CreateUTF8(
         '%.ProcessPendingNotification failed for %(%) [ID=%,pending=%] on %: %',
-        [self,pending.Method,params,pending.IDValue,fPending,fRemote,error]);
+        [self,pending.Method,params,pending.IDValue,pendings,fRemote,error]);
     end;
     fClient.fClient.InternalLog('ProcessPendingNotification %(%) in % [ID=%,pending=%]',
-      [pending.Method,params,timer.Stop,pending.IDValue,fPending],sllTrace);
+      [pending.Method,params,timer.Stop,pending.IDValue,pendings],sllTrace);
     pending.Sent := TimeLogNowUTC;
     pending.MicroSec := timer.LastTimeInMicroSec;
     fClient.fSendNotificationsRest.Update(pending,'MicroSec,Sent',true);
-    InterlockedDecrement(fPending);
+    fSafe.LockedInt64Increment(0,-1);
   finally
     pending.Free;
   end;
@@ -57217,9 +57216,10 @@ end;
 procedure TServiceFactoryClientNotificationThread.InternalExecute;
 var delay: integer;
 begin
+  fSafe.LockedInt64[0] := GetPendingCountFromDB;
   delay := 50;
   while not Terminated do begin
-    while fPending>0 do
+    while fSafe.LockedInt64[0]>0 do
     try
       ProcessPendingNotification;
       delay := 0;
@@ -57259,8 +57259,8 @@ begin
   if (fSendNotificationsRest<>nil) and (aMethod.ArgsOutputValuesCount=0) then begin
     SendNotificationsLog;
     if fSendNotificationsThread<>nil then
-      InterlockedIncrement(TServiceFactoryClientNotificationThread(
-        fSendNotificationsThread).fPending);
+      TServiceFactoryClientNotificationThread(fSendNotificationsThread).
+        Safe.LockedInt64Increment(0,1);
     result := true;
   end else
     result := InternalInvoke(
