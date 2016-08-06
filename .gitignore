@@ -11,7 +11,8 @@
 #
 # Diagram Portfolio file. Used by the diagram editor up to Delphi 7.
 # Uncomment this if you are not using diagrams or use newer Delphi version.
-#*.ddp
+*.ddp
+*.dof
 #
 # Visual LiveBindings file. Added in Delphi XE2.
 # Uncomment this if you are not using LiveBindings Designer.
@@ -68,3 +69,5 @@ __recovery/
 #other VCS
 _FOSSIL_
 .svn/
+# SourceCodeRep artifact
+*.txt

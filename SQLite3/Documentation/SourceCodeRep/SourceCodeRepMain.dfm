@@ -1,5 +1,5 @@
 object MainForm: TMainForm
-  Left = 265
+  Left = 506
   Top = 235
   BorderStyle = bsDialog
   Caption = ' mORMot Source Code Repository Synch'

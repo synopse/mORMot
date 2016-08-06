@@ -533,11 +533,11 @@ type
     // - this property shall be set before any actual logging, otherwise it
     // will have no effect
     // - can be set e.g. to LOG_VERBOSE in order to echo every kind of events
-    // - EchoCustom or EchoService can be activated separately
+    // - EchoCustom or EchoToConsole can be activated separately
     property EchoToConsole: TSynLogInfos read fEchoToConsole write SetEchoToConsole;
     /// can be set to a callback which will be called for each log line
     // - could be used with a third-party logging system
-    // - EchoToConsole or EchoService can be activated separately
+    // - EchoToConsole or EchoCustom can be activated separately
     // - you may even disable the integrated file output, via NoFile := true
     property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
   published

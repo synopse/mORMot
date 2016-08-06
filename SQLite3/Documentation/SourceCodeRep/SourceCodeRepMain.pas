@@ -117,15 +117,26 @@ begin
     fBatPath := ExtractFilePath(ExcludeTrailingPathDelimiter(fBatPath));
   if not FileExists(fBatPath + 'FossilStatus.bat') then
     ShowMessage('Missing .bat files');
-  fDevPath := 'd:\dev\lib';
-  fFossilRepository := 'c:\progs\fossil\lib';
-  fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
-  fGitRepository := 'd:\dev\github\mORMot';
+  fFossilRepository := GetEnvironmentVariable('SYN_FOSSILREPO_PATH');
+  if fFossilRepository = '' then fFossilRepository := 'c:\progs\fossil\lib';
+  fDevPath := GetEnvironmentVariable('SYN_DEVPATH');
+  if fDevPath = '' then
+    if fFossilRepository <> '' then fDevPath := fFossilRepository else
+    fDevPath := 'd:\dev\lib';
+  fGitExe := GetEnvironmentVariable('GIT_PATH');
+  if fGitExe = '' then fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
+  fGitRepository := GetEnvironmentVariable('SYN_GITREPO_PATH');
+  if fGitRepository = '' then fGitRepository := 'd:\dev\github\mORMot';
   if not DirectoryExists(fFossilRepository) then begin
-    ShowMessage('Please set Fossil Repository Name');
+    ShowMessage('Please set Fossil Repository Name or environment variable SYN_FOSSILREPO_PATH');
     Close;
-  end
-  else
+  end else if not DirectoryExists(fGitRepository) then begin
+    ShowMessage('Please set Git Repository Path or environment variable SYN_GITREPO_PATH');
+    Close;
+  end else if not FileExists(fGitExe) then begin
+    ShowMessage('Please install git to ' + fGitExe + ' or set environment variable GIT_PATH');
+    Close;
+  end else
     ReadStatus;
 end;
 
