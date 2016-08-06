@@ -39,6 +39,7 @@ type
     btnDMustache: TButton;
     btnLVCL: TButton;
     chkCopyLink: TCheckBox;
+    chkFossilPush: TCheckBox;
     procedure FormCreate(Sender: TObject);
     procedure btnFullSynchClick(Sender: TObject);
     procedure btnFossilSynchClick(Sender: TObject);
@@ -170,7 +171,9 @@ begin
   FileFromString(VersionText, fFossilRepository + '\SynopseCommit.inc');
   DescFile := fBatPath + 'desc.txt';
   FileFromString('{' + IntToStr(VersionNumber) + '} ' + Desc, DescFile);
-  ExecAndWait(fBatPath + 'FossilCommit.bat "' + DescFile + '"',
+
+  ExecAndWait(format('%sFossilCommit.bat "%s" %d', [fBatPath, DescFile,
+    Integer(chkFossilPush.Checked)]),
     fFossilRepository, SW_SHOWNORMAL, INFINITE);
   btnRefreshStatus.Click;
 end;

@@ -224,4 +224,12 @@ object MainForm: TMainForm
     State = cbChecked
     TabOrder = 15
   end
+  object chkFossilPush: TCheckBox
+    Left = 24
+    Top = 488
+    Width = 89
+    Height = 17
+    Caption = 'and fossil push'
+    TabOrder = 16
+  end
 end
