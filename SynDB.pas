@@ -297,6 +297,7 @@ unit SynDB;
   - added support for dInformix and dMSSQL in TSQLDBConnectionProperties.ExceptionIsAboutConnection
   - added error codes in TSQLDBConnectionProperties.ExceptionIsAboutConnection for dOracle
   - avoid GPI in TSQLDBConnection.GetLastErrorWasAboutConnection when fErrorMessage is empty
+  - added support for dMySQL in TSQLDBConnectionProperties.ExceptionIsAboutConnection
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -5917,6 +5918,9 @@ begin // see more complete list in feature request [f024266c0839]
     // using general error codes because MS SQL SERVER has multiple error codes in the error message
     result := IdemPCharArray(PosErrorNumber(aMessage,'['),
       ['08001','08S01','08007','28000','42000'])>=0;
+  dMySQL:
+    result := (aMessage = 'SQL Error: Lost connection to MySQL server during query') or
+              (aMessage = 'SQL Error: MySQL server has gone away');
   else
     result := PosI(' CONNE',aMessage)>0;
   end;
