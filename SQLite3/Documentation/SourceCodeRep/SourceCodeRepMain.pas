@@ -119,15 +119,19 @@ begin
   if not FileExists(fBatPath + 'FossilStatus.bat') then
     ShowMessage('Missing .bat files');
   fFossilRepository := GetEnvironmentVariable('SYN_FOSSILREPO_PATH');
-  if fFossilRepository = '' then fFossilRepository := 'c:\progs\fossil\lib';
+  if fFossilRepository = '' then
+    fFossilRepository := 'c:\progs\fossil\lib';
   fDevPath := GetEnvironmentVariable('SYN_DEVPATH');
   if fDevPath = '' then
-    if fFossilRepository <> '' then fDevPath := fFossilRepository else
-    fDevPath := 'd:\dev\lib';
+    if fFossilRepository <> '' then
+      fDevPath := fFossilRepository else
+      fDevPath := 'd:\dev\lib';
   fGitExe := GetEnvironmentVariable('GIT_PATH');
-  if fGitExe = '' then fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
+  if fGitExe = '' then
+    fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
   fGitRepository := GetEnvironmentVariable('SYN_GITREPO_PATH');
-  if fGitRepository = '' then fGitRepository := 'd:\dev\github\mORMot';
+  if fGitRepository = '' then
+    fGitRepository := 'd:\dev\github\mORMot';
   if not DirectoryExists(fFossilRepository) then begin
     ShowMessage('Please set Fossil Repository Name or environment variable SYN_FOSSILREPO_PATH');
     Close;
@@ -171,7 +175,6 @@ begin
   FileFromString(VersionText, fFossilRepository + '\SynopseCommit.inc');
   DescFile := fBatPath + 'desc.txt';
   FileFromString('{' + IntToStr(VersionNumber) + '} ' + Desc, DescFile);
-
   ExecAndWait(format('%sFossilCommit.bat "%s" %d', [fBatPath, DescFile,
     Integer(chkFossilPush.Checked)]),
     fFossilRepository, SW_SHOWNORMAL, INFINITE);
