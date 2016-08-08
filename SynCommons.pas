@@ -5266,6 +5266,8 @@ type
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
     procedure SetInt64(Index: integer; const Value: Int64);
+    function GetUnlockedInt64(Index: integer): Int64;
+    procedure SetUnlockedInt64(Index: integer; const Value: Int64);
     function GetPointer(Index: integer): Pointer;
     procedure SetPointer(Index: integer; const Value: Pointer);
     function GetUTF8(Index: integer): RawUTF8;
@@ -5384,6 +5386,14 @@ type
     // - returns the previous stored value, nil if the Index is out of range,
     // or does not store a pointer
     function LockedPointerExchange(Index: integer; Value: pointer): pointer;
+    /// unsafe access to a Int64 value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked and LockedUTF8 array properties
+    // - Int64s will be stored internally as a varInt64 variant
+    // - returns nil if the Index is out of range, or does not store a Int64
+    // - you should rather call LockedInt64[] property, or use this property
+    // with a Lock; try ... finally UnLock block
+    property UnlockedInt64[Index: integer]: Int64 read GetUnlockedInt64 write SetUnlockedInt64;
     {$endif NOVARIANTS}
   end;
   PSynLocker = ^TSynLocker;
@@ -8178,6 +8188,21 @@ type
     property ListPtr: PPUtf8CharArray read GetListPtr;
     /// direct access to the memory of the Objects array
     property ObjectPtr: PPointerArray read GetObjectPtr;
+  end;
+
+  /// a TRawUTF8List with an associated lock for thread-safety
+  TRawUTF8ListLocked = class(TRawUTF8List)
+  protected
+    fSafe: TSynLocker;
+  public
+    /// initialize the class instance
+    constructor Create(aOwnObjects: boolean=false);
+    /// finalize the instance
+    // - and all internal objects stored, if was created with Create(true)
+    destructor Destroy; override;
+    /// access to the locking methods of this instance
+    // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
+    property Safe: TSynLocker read fSafe;
   end;
 
   /// a TRawUTF8List which will use an internal hash table for faster IndexOf()
@@ -43345,6 +43370,22 @@ begin
     end;
 end;
 
+function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
+begin
+  if (Index<0) or (Index>PaddingMaxUsedIndex) or
+     not VariantToInt64(variant(Padding[index]),result) then
+    result := 0;
+end;
+
+procedure TSynLocker.SetUnlockedInt64(Index: integer; const Value: Int64);
+begin
+  if cardinal(Index)<=high(Padding) then begin
+    if Index>PaddingMaxUsedIndex then
+      PaddingMaxUsedIndex := Index;
+    variant(Padding[Index]) := Value;
+  end;
+end;
+
 function TSynLocker.GetPointer(Index: integer): Pointer;
 begin
   if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
@@ -50056,6 +50097,21 @@ begin
       aObject^ := fObjects[ndx] else
       aObject^ := nil;
   Delete(ndx);
+end;
+
+
+{ TRawUTF8ListLocked }
+
+constructor TRawUTF8ListLocked.Create(aOwnObjects: boolean);
+begin
+  inherited Create(aOwnObjects);
+  fSafe.Init;
+end;
+
+destructor TRawUTF8ListLocked.Destroy;
+begin
+  inherited;
+  fSafe.Done;
 end;
 
 
