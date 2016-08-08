@@ -1055,6 +1055,11 @@ function MD5DigestsEqual(const A, B: TMD5Digest): Boolean;
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
 
+/// compute the MD5 digest from its hexadecimal representation
+// - returns true on success (i.e. Source has the expected size and characters)
+// - just a wrapper around SynCommons.HexToBin()
+function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
+
 /// apply the XOR operation to the supplied binary buffers of 16 bytes
 procedure XorBlock16(A,B: {$ifdef CPU64}PInt64Array{$else}PCardinalArray{$endif});
   {$ifdef HASINLINE}inline;{$endif} overload;
@@ -6385,6 +6390,11 @@ begin
     P[1] := Digits[D[I] and 15];
     Inc(P,2);
   end;
+end;
+
+function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
 end;
 
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;

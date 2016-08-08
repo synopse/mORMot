@@ -34580,7 +34580,7 @@ begin
         Mutex.Lock;
         try
           CacheEnable := true;
-          CacheAll := True;
+          CacheAll := true;
           Value.Clear;
           result := true;
         finally
