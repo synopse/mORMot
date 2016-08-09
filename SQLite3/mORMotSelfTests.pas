@@ -126,7 +126,8 @@ begin
 {$endif}
 {$endif}
 {$endif}
-    TTestCryptographicRoutines, TTestCompression
+    TTestCryptographicRoutines, TTestECCCryptography,
+    TTestCompression
    ]);
 end;
 

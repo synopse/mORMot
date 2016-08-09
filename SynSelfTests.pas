@@ -151,6 +151,7 @@ uses
   {$endif}
   {$endif}
 {$endif LVCL}
+  SynEcc,
   SynDB,
   SynSQLite3,
   SynSQLite3Static,
@@ -479,6 +480,28 @@ type
     /// AES-based pseudorandom number generator
     procedure _TAESPNRG;
   end;
+
+  /// this test case will test ECDH and ECDSA cryptography as implemented
+  // in the SynECC unit
+  TTestECCCryptography = class(TSynTestCase)
+  protected
+    pub: array of TECCPublicKey;
+    priv: array of TECCPrivateKey;
+    sign: array of TECCSignature;
+    hash: TECCHash;
+  published
+    /// avoid regression among platforms and compilers
+    procedure ReferenceVectors;
+    /// ECC private/public keys generation
+    procedure _ecc_make_key;
+    /// ECDSA signature computation
+    procedure _ecdsa_sign;
+    /// ECDSA signature verification
+    procedure _ecdsa_verify;
+    /// ECDH key derivation
+    procedure _ecdh_shared_secret;
+  end;
+
 
 {$ifdef MSWINDOWS}
 {$ifndef LVCL}
@@ -8733,9 +8756,91 @@ begin
 end;
 
 
+{ TTestECCCryptography }
+
+const
+  ECC_COUNT = {$ifdef CPU64}200{$else}50{$endif};
+
+procedure TTestECCCryptography.ReferenceVectors;
+var pr1,pr2: TECCPrivateKey;
+    pu1,pu2: TECCPublicKey;
+    h: TECCHash;
+    si: TECCSignature;
+    s1,s2,s3: TECCSecretKey;
+begin
+  if not ecc_available then
+    exit;
+  SetLength(pub, ECC_COUNT);
+  SetLength(priv, ECC_COUNT);
+  SetLength(sign, ECC_COUNT);
+  TAESPRNG.Main.FillRandom(@hash,sizeof(hash));
+  Check(SynCommons.HexToBin(
+    'DC5B79BD481E536DD8075D06C18D42B25B557B4671017BA2A26102B69FD9B70A', @pr1, sizeof(pr1)));
+  Check(SynCommons.HexToBin(
+    '024698753E25650A3129320A7DDBA43D56051F4BEE3653897960A61FBC92AB24A5', @pu1, sizeof(pu1)));
+  Check(SynCommons.HexToBin(
+    'CFA96FAC873F522897000815BE96338DE8D355D5F495DD5C5A4FEF0AEDB66D5B', @pr2, sizeof(pr2)));
+  Check(SynCommons.HexToBin(
+    '0298D0D01FCE73146C10CD05E08BEA573BEE4EFC56D5EBAAC64B32672C8FAC1502', @pu2, sizeof(pu2)));
+  Check(SynCommons.HexToBin(
+    '9509D00BBBA2308445BC73311C3887E935183F65D361D4C39E2FA432B7168599', @h, sizeof(h)));
+  Check(SynCommons.HexToBin('F04CD0AA3D40433C51F35D07DBF4E11C91C922791A8BA7B930B5C30716D8B26E4B65EFBF'+
+    'BDC0526A94ABDAA31130248F0413AC33D5BFA903E09847AAF42FD043', @si, sizeof(si)));
+  Check(ecdsa_verify(pu1,h,si));
+  Check(SynCommons.HexToBin(
+    '3366C112F95B2F52836171CAD3F3441C4B3C75348859092B200DE5024CB0C91B', @h, sizeof(h)));
+  Check(SynCommons.HexToBin('EEEF6F1D0A590BFC72B9D7DC0DB4BF36A8928DA2B8078FEE567808BB082525438CF68546'+
+    '26E17FBB28528450E50E43AB2598ED2CD3ACC7B43865BEB843452713', @si, sizeof(si)));
+  Check(ecdsa_verify(pu2,h,si));
+  Check(SynCommons.HexToBin(
+    '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E', @s1, sizeof(s1)));
+  Check(ecdh_shared_secret(pu1,pr2,s2));
+  Check(CompareMem(@s1,@s2,sizeof(s1)));
+  Check(ecdh_shared_secret(pu2,pr1,s3));
+  Check(CompareMem(@s1,@s3,sizeof(s1)));
+end;
+
+procedure TTestECCCryptography._ecc_make_key;
+var i: integer;
+begin
+  if ecc_available then
+    for i := 0 to ECC_COUNT-1 do
+      Check(ecc_make_key(pub[i], priv[i]));
+end;
+
+procedure TTestECCCryptography._ecdsa_sign;
+var i: integer;
+begin
+  if ecc_available then
+    for i := 0 to ECC_COUNT-1 do
+      Check(ecdsa_sign(priv[i], hash, sign[i]));
+end;
+
+procedure TTestECCCryptography._ecdsa_verify;
+var i: integer;
+begin
+  if ecc_available then
+    for i := 0 to ECC_COUNT-1 do
+      check(ecdsa_verify(pub[i], hash, sign[i]));
+end;
+
+procedure TTestECCCryptography._ecdh_shared_secret;
+var sec1,sec2: TECCSecretKey;
+    i: integer;
+begin
+  if ecc_available then
+    for i := 0 to ECC_COUNT-2 do begin
+      check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
+      check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
+      check(comparemem(@sec1,@sec2,sizeof(sec1)));
+    end;
+end;
+
+
 {$ifdef MSWINDOWS}
 {$ifndef FPC}
 {$ifndef LVCL}
+
 
 { TTestSynopsePDF }
 

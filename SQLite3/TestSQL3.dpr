@@ -98,6 +98,7 @@ uses
   SynLZ in '..\SynLZ.pas',
   SynLZO in '..\SynLZO.pas',
   SynCrypto in '..\SynCrypto.pas',
+  SynEcc in '..\SynEcc.pas',
   SynCrtSock in '..\SynCrtSock.pas',
   SynBidirSock in '..\SynBiDirSock.pas',
   SynCommons in '..\SynCommons.pas',
