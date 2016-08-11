@@ -10153,6 +10153,12 @@ procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: RawByteString); ov
 /// fast conversion from Base64 encoded text into binary data
 procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); overload;
 
+/// fast conversion from Base64 encoded text into binary data
+// - returns TRUE on success, FALSE if base64 does not match binlen
+// - if nofullcheck is FALSE, IsBase64() will be first called to validate the input
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
+  nofullcheck: boolean=true): boolean; overload;
+
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC
 // '\uFFF0base64encodedbinary' content into binary
 // - input ParamValue shall have been checked to match the expected pattern
@@ -10186,9 +10192,12 @@ function BinToBase64Length(len: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the expected undecoded length of a Base64 encoded buffer
+// - here len is the number 16 bytes in sp
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 
-/// direct decoding of a Base64 encoded buffer
+/// direct low-level decoding of a Base64 encoded buffer
+// - here len is the number of 16 bytes chunks in sp
+// - you should better not use this, but Base64ToBin() overloaded functions
 procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
 
 /// revert the value as encoded by TTextWriter.AddInt18ToChars3() method
@@ -24608,6 +24617,15 @@ begin
     result.Init(resultLen);
     Base64Decode(sp,result.buf,len shr 2);
   end;
+end;
+
+function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
+  nofullcheck: boolean): boolean;
+begin
+  result := (bin<>nil) and (Base64ToBinLength(base64,base64len)=binlen) and
+     (nofullcheck or IsBase64(base64,base64len));
+  if result then
+    Base64Decode(base64,bin,base64len shr 2);
 end;
 
 

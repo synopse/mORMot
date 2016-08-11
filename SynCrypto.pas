@@ -309,10 +309,10 @@ type
   PAESBlock = ^TAESBlock;
 
   /// 128 bits memory block for AES data cypher/uncypher
-  TAESBlock = packed array[0..AESBlockSize-1] of byte;
+  TAESBlock = THash128;
 
   /// 256 bits memory block for maximum AES key storage
-  TAESKey = packed array[0..AESKeySize-1] of byte;
+  TAESKey = THash256;
 
   PAES = ^TAES;
   /// handle AES cypher/uncypher
@@ -764,7 +764,7 @@ type
 
   PSHA256Digest = ^TSHA256Digest;
   /// 256 bits (32 bytes) memory block for SHA256 hash digest storage
-  TSHA256Digest = packed array[0..31] of byte;
+  TSHA256Digest = THash256;
 
   PSHA256 = ^TSHA256;
   /// handle SHA256 hashing
@@ -789,7 +789,7 @@ type
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
-  TMD5Digest = array[0..15] of Byte;
+  TMD5Digest = THash128;
   PMD5Digest = ^TMD5Digest;
   PMD5 = ^TMD5;
   TMD5Buf = array[0..3] of cardinal;
@@ -1043,14 +1043,14 @@ function AESBlockToShortString(const block: TAESBlock): short32; overload;
 // - fill a stack-allocated short string
 procedure AESBlockToShortString(const block: TAESBlock; out result: short32); overload;
 
+/// compute the hexadecial representation of an AES 16-byte block
+function AESBlockToString(const block: TAESBlock): RawUTF8;
+
 /// compute the hexadecimal representation of a SHA1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 
 /// compute the hexadecimal representation of a SHA256 digest
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
-
-/// compare two supplied MD5 digests
-function MD5DigestsEqual(const A, B: TMD5Digest): Boolean;
 
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
@@ -1519,20 +1519,20 @@ var SHA: TSHA256;
 begin
   // 1. Hash complete RawByteString
   SHA.Full(pointer(s),length(s),Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := Equals(Digest,TDig);
   if not result then exit;
   // 2. one update call for all chars
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := Equals(Digest,TDig);
   // 3. test consistency with Padlock engine down results
 {$ifdef USEPADLOCK}
   if not result or not padlock_available then exit;
   padlock_available := false;  // force PadLock engine down
   SHA.Full(pointer(s),length(s),Digest);
-  result := CompareMem(@Digest,@TDig,sizeof(Digest));
+  result := Equals(Digest,TDig);
 {$ifdef PADLOCKDEBUG} write('=padlock '); {$endif}
   padlock_available := true;
 {$endif}
@@ -1552,7 +1552,7 @@ begin
      SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
   if not result then exit;
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
-  result := Comparemem(@Digest,@D3,sizeof(Digest));
+  result := Equals(Digest,D3);
   {$ifdef CPU64}
   {$ifdef CPUINTEL}
   if cfSSE41 in CpuFeatures then begin
@@ -1821,7 +1821,7 @@ begin
       A.DecryptInit(Key,ks);
       A.Decrypt(b,p);
       A.Done;
-      if not CompareMem(@p,@s,AESBLockSize) then begin
+      if not Equals(p,s) then begin
         writeln('AESSelfTest compareError with keysize=',ks);
         exit;
       end;
@@ -6361,11 +6361,6 @@ begin
   MD5.Full(@Buffer,Len,result);
 end;
 
-function MD5DigestsEqual(const A,B: TMD5Digest): Boolean;
-begin
-  result := CompareMem(@A,@B,sizeof(TMD5Digest));
-end;
-
 const Digits: array[0..15] of AnsiChar = '0123456789abcdef';
 
 function AESBlockToShortString(const block: TAESBlock): short32;
@@ -6377,6 +6372,12 @@ procedure AESBlockToShortString(const block: TAESBlock; out result: short32);
 begin
   result[0] := #32;
   SynCommons.BinToHex(@block,@result[1],16);
+end;
+
+function AESBlockToString(const block: TAESBlock): RawUTF8;
+begin
+  SetString(result,nil,32);
+  SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
