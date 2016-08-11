@@ -10345,6 +10345,61 @@ var
 // - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
+/// compute CRC64C checksum on the supplied buffer
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will combine two crc32c() calls into a single Int64 result
+// - by design, such combined hashes cannot be cascaded
+function crc64c(buf: PAnsiChar; len: cardinal): Int64;
+
+/// compute CRC63C checksum on the supplied buffer
+// - similar to crc64c, but with 63-bit, so no negative value, so may be used
+// safely e.g. as mORMot's TID source  
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will combine two crc32c() calls into a single Int64 result
+// - by design, such combined hashes cannot be cascaded
+function crc63c(buf: PAnsiChar; len: cardinal): Int64;
+
+type
+  /// store a 128-bit hash value
+  // - e.g. a MD5 digest, or an AES block
+  THash128 = array[0..15] of byte;
+  /// store a 256-bit hash value
+  // - e.g. a SHA-256 digest, or a TECCSignature result
+  THash256 = array[0..31] of byte;
+
+/// compute a 128-bit checksum on the supplied buffer using crc32c
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will combine two crc32c() calls into a single TAESBlock result
+// - by design, such combined hashes cannot be cascaded
+procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
+
+/// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
+// - e.g. a MD5 digest, or an AES block
+function IsZero(const dig: THash128): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// returns TRUE if all 16 bytes of both 128-bit buffers do match
+// - e.g. a MD5 digest, or an AES block
+function Equals(const A,B: THash128): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// compute a 256-bit checksum on the supplied buffer using crc32c
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will combine two crc32c() calls into a single TDigest256 result
+// - by design, such combined hashes cannot be cascaded
+procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
+
+/// returns TRUE if all 32 bytes of this 256-bit buffer equal zero
+// - e.g. a SHA-256 digest, or a TECCSignature result
+function IsZero(const dig: THash256): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// returns TRUE if all 32 bytes of both 256-bit buffers do match
+// - e.g. a SHA-256 digest, or a TECCSignature result
+function Equals(const A,B: THash256): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif} overload;
+
+
 type
   /// the potential features, retrieved from an Intel CPU
   // - see https://en.wikipedia.org/wiki/CPUID#EAX.3D1:_Processor_Info_and_Feature_Bits
@@ -29906,6 +29961,96 @@ end;
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
   result := CardinalToHex(crc32c(0,pointer(str),length(str)));
+end;
+
+function crc64c(buf: PAnsiChar; len: cardinal): Int64;
+var hilo: Int64Rec absolute result;
+begin
+  hilo.Lo := crc32c(0,buf,len);
+  hilo.Hi := crc32c(hilo.Lo,buf,len);
+end;
+
+function crc63c(buf: PAnsiChar; len: cardinal): Int64;
+var hilo: Int64Rec absolute result;
+begin
+  hilo.Lo := crc32c(0,buf,len);
+  hilo.Hi := crc32c(hilo.Lo,buf,len) and $7fffffff;
+end;
+
+procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
+var h: array[0..3] of cardinal absolute crc;
+begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+  assert(sizeof(h)=sizeof(crc));
+  h[0] := crc32c(0,buf,len);
+  h[1] := crc32c(h[0],buf,len);
+  h[2] := h[0]+h[1];
+  h[3] := h[0]+2*h[1];
+end;
+
+function IsZero(const dig: THash128): boolean;
+begin
+  {$ifdef CPU64}
+  result := (PInt64Array(@dig)^[0]=0) and (PInt64Array(@dig)^[1]=0);
+  {$else}
+  result := (PCardinalArray(@dig)^[0]=0) and (PCardinalArray(@dig)^[1]=0) and
+            (PCardinalArray(@dig)^[2]=0) and (PCardinalArray(@dig)^[3]=0);
+  {$endif}
+end;
+
+function Equals(const A,B: THash128): boolean;
+begin
+  {$ifdef CPU64}
+  result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
+            (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]);
+  {$else}
+  result := (PCardinalArray(@A)^[0]=PCardinalArray(@B)^[0]) and
+            (PCardinalArray(@A)^[1]=PCardinalArray(@B)^[1]) and
+            (PCardinalArray(@A)^[2]=PCardinalArray(@B)^[2]) and
+            (PCardinalArray(@A)^[3]=PCardinalArray(@B)^[3]);
+  {$endif}
+end;
+
+procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
+var h: array[0..7] of cardinal absolute crc;
+    i: cardinal;
+begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+  assert(sizeof(h)=sizeof(crc));
+  h[0] := crc32c(0,buf,len);
+  h[1] := crc32c(h[0],buf,len);
+  for i := 0 to 5 do
+    h[i+2] := h[0]+i*h[1];
+end;
+
+function IsZero(const dig: THash256): boolean;
+begin
+  {$ifdef CPU64}
+  result := (PInt64Array(@dig)^[0]=0) and (PInt64Array(@dig)^[1]=0) and
+            (PInt64Array(@dig)^[2]=0) and (PInt64Array(@dig)^[3]=0);
+  {$else}
+  result := (PCardinalArray(@dig)^[0]=0) and (PCardinalArray(@dig)^[1]=0) and
+            (PCardinalArray(@dig)^[2]=0) and (PCardinalArray(@dig)^[3]=0) and
+            (PCardinalArray(@dig)^[4]=0) and (PCardinalArray(@dig)^[5]=0) and
+            (PCardinalArray(@dig)^[6]=0) and (PCardinalArray(@dig)^[7]=0);
+  {$endif}
+end;
+
+function Equals(const A,B: THash256): boolean;
+begin
+  {$ifdef CPU64}
+  result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
+            (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]) and
+            (PInt64Array(@A)^[2]=PInt64Array(@B)^[2]) and
+            (PInt64Array(@A)^[3]=PInt64Array(@B)^[3]);
+  {$else}
+  result := (PCardinalArray(@A)^[0]=PCardinalArray(@B)^[0]) and
+            (PCardinalArray(@A)^[1]=PCardinalArray(@B)^[1]) and
+            (PCardinalArray(@A)^[2]=PCardinalArray(@B)^[2]) and
+            (PCardinalArray(@A)^[3]=PCardinalArray(@B)^[3]) and
+            (PCardinalArray(@A)^[4]=PCardinalArray(@B)^[4]) and
+            (PCardinalArray(@A)^[5]=PCardinalArray(@B)^[5]) and
+            (PCardinalArray(@A)^[6]=PCardinalArray(@B)^[6]) and
+            (PCardinalArray(@A)^[7]=PCardinalArray(@B)^[7]);
+  {$endif}
 end;
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
