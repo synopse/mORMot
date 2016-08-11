@@ -3609,7 +3609,7 @@ function ReadStringFromStream(S: TStream; MaxAllowedSize: integer=255): RawUTF8;
 
 /// write an UTF-8 text into a TStream
 // - format is Length(Integer):Text, i.e. the one used by ReadStringFromStream
-procedure WriteStringToStream(S: TStream; const Text: RawUTF8);
+function WriteStringToStream(S: TStream; const Text: RawUTF8): boolean;
 
 /// get a file date and time, from its name
 // - returns 0 if file doesn't exist
@@ -25683,24 +25683,22 @@ begin
   L := 0;
   if (S.Read(L,4)<>4) or (L<=0) or (L>MaxAllowedSize) then
     exit;
-  SetLength(Result,L);
+  SetLength(result,L);
   if S.Read(pointer(result)^,L)<>L then
     result := '';
 end;
 
-procedure WriteStringToStream(S: TStream; const Text: RawUTF8);
+function WriteStringToStream(S: TStream; const Text: RawUTF8): boolean;
 var L: integer;
 begin
   L := length(Text);
   if L=0 then
-    S.Write(L,4) else begin
+    result := S.Write(L,4)=4 else
     {$ifdef FPC}
-    S.Write(L,4);
-    S.Write(pointer(Text)^,L);
+    result := (S.Write(L,4)=4) and (S.Write(pointer(Text)^,L)=L);
     {$else}
-    S.Write(pointer(PtrInt(Text)-sizeof(integer))^,L+4);
+    result := S.Write(pointer(PtrInt(Text)-sizeof(integer))^,L+4)=L+4;
     {$endif}
-    end;
 end;
 
 function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
