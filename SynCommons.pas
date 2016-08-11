@@ -26087,7 +26087,7 @@ begin
       if (P^[0]=Value) or (P^[1]=Value) or
          (P^[2]=Value) or (P^[3]=Value) then
         exit else
-        inc(PtrUInt(P),16);
+        inc(PtrUInt(P),sizeof(P^[0])*4);
     for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
       if P^[i]=Value then
         exit;
@@ -26135,12 +26135,12 @@ var i: PtrInt;
 begin
   if P<>nil then begin
     result := true;
-    for i := 1 to (Count shr 2) do   // 4 DWORD by loop - aligned read
+    for i := 1 to (Count shr 2) do   // 4 QWORD by loop - aligned read
       if (P^[0]=Value) or (P^[1]=Value) or
          (P^[2]=Value) or (P^[3]=Value) then
         exit else
-        inc(PtrUInt(P),16);
-    for i := 0 to (Count and 3)-1 do // last 0..3 DWORD
+        inc(PtrUInt(P),sizeof(P^[0])*4);
+    for i := 0 to (Count and 3)-1 do // last 0..3 QWORD
       if P^[i]=Value then
         exit;
   end;
@@ -26160,7 +26160,7 @@ begin // very optimized code
         result := @P^[3];
         exit;
       end else
-        inc(PtrUInt(P),16) else begin
+        inc(PtrUInt(P),sizeof(P^[0])*4) else begin
         result := @P^[2];
         exit;
       end else begin
@@ -26222,7 +26222,7 @@ function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
 var i: PtrInt;
 begin
   if P<>nil then begin
-    for i := 1 to Count shr 2 do      // 4 Int64 by loop - aligned read
+    for i := 1 to Count shr 2 do      // 4 QWORD by loop - aligned read
       if P^[0]<>Value then
       if P^[1]<>Value then
       if P^[2]<>Value then
@@ -26230,7 +26230,7 @@ begin
         result := @P^[3];
         exit;
       end else
-        inc(PtrUInt(P),16) else begin
+        inc(PtrUInt(P),sizeof(P^[0])*4) else begin
         result := @P^[2];
         exit;
       end else begin
@@ -26240,7 +26240,7 @@ begin
         result := pointer(P);
         exit;
       end;
-    for i := 0 to (Count and 3)-1 do  // last 0..3 DWORD
+    for i := 0 to (Count and 3)-1 do  // last 0..3 QWORD
       if P^[i]=Value then begin
         result := @P^[i];
         exit;
@@ -26514,7 +26514,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),16);
+        inc(PtrUInt(P),sizeof(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -26574,7 +26574,7 @@ begin
       if P^[1]<>Value then
       if P^[2]<>Value then
       if P^[3]<>Value then begin
-        inc(PtrUInt(P),sizeof(PtrUInt)*4);
+        inc(PtrUInt(P),sizeof(P^[0])*4);
         inc(result,4);
       end else begin
         inc(result,3);
@@ -42023,7 +42023,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     length := newLength;
     {$endif}
   end;
-  Inc(PtrUInt(p),Sizeof(p^));
+  inc(PtrUInt(p),Sizeof(p^));
   // reset new allocated elements content to zero
   if NewLength>OldLength then begin
     OldLength := OldLength*elemSize;
