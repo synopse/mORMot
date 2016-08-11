@@ -2269,6 +2269,40 @@ function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 
 {$endif ENHANCEDRTL}
 
+/// convert some ASCII-7 text into binary, using Emile Baudot code
+// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
+// - also #13 and #10 control chars will be transcoded
+// - any upper case char will be converted into lowercase during encoding
+// - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
+// - resulting binary will consume 5 (or 10) bits per character
+// - reverse of the BaudotToAscii() function
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
+
+/// convert some ASCII-7 text into binary, using Emile Baudot code
+// - as used in telegraphs, covering a-z 0-9 - ' , ! : ( + ) $ ? @ . / ; charset
+// - also #13 and #10 control chars will be transcoded
+// - any upper case char will be converted into lowercase during encoding
+// - other characters (e.g. UTF-8 accents, or controls chars) will be ignored
+// - resulting binary will consume 5 (or 10) bits per character
+// - reverse of the BaudotToAscii() function
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function AsciiToBaudot(const Text: RawUTF8): RawByteString; overload;
+
+/// convert some Baudot code binary, into ASCII-7 text
+// - reverse of the AsciiToBaudot() function
+// - any uppercase character would be decoded as lowercase - and some characters
+// may have disapeared
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function BaudotToAscii(Baudot: PByteArray; len: integer): RawUTF8; overload;
+
+/// convert some Baudot code binary, into ASCII-7 text
+// - reverse of the AsciiToBaudot() function
+// - any uppercase character would be decoded as lowercase - and some characters
+// may have disapeared
+// - the "baud" symbol rate measurement comes from Emile's name ;)
+function BaudotToAscii(const Baudot: RawByteString): RawUTF8; overload;
+
 {$ifdef UNICODE}
 /// our fast RawUTF8 version of Pos(), for Unicode only compiler
 // - this Pos() is seldom used, but this RawUTF8 specific version is needed
@@ -18852,8 +18886,113 @@ begin
   result := P;
 end;
 
+const
+  // see https://en.wikipedia.org/wiki/Baudot_code
+  B2A: array[0..63] of AnsiChar =
+   #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
+   #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
+var
+  A2B: array[AnsiChar] of byte;
 
-// some minimal RTTI const and types
+function AsciiToBaudot(const Text: RawUTF8): RawByteString;
+begin
+  result := AsciiToBaudot(pointer(Text),length(Text));
+end;
+
+function AsciiToBaudot(P: PAnsiChar; len: integer): RawByteString; overload;
+var i,c,d,bits: integer;
+    shift: boolean;
+    dest: PByte;
+    tmp: TSynTempBuffer;
+begin
+  result := '';
+  if (P=nil) or (len=0) then
+    exit;
+  shift := false;
+  tmp.Init((len*10)shr 3);
+  dest := tmp.buf;
+  d := 0;
+  bits := 0;
+  for i := 0 to len-1 do begin
+    c := A2B[P[i]];
+    if c>32 then begin
+      if not shift then begin
+        d := (d shl 5) or 27;
+        inc(bits,5);
+        shift := true;
+      end;
+      d := (d shl 5) or (c-32);
+      inc(bits,5);
+    end else
+    if c>0 then begin
+      if shift and (P[i]>=' ') then begin
+        d := (d shl 5) or 31;
+        inc(bits,5);
+        shift := false;
+      end;
+      d := (d shl 5) or c;
+      inc(bits,5);
+    end;
+    while bits>=8 do begin
+      dec(bits,8);
+      dest^ := d shr bits;
+      inc(dest);
+    end;
+  end;
+  if bits>0 then begin
+    dest^ := d shl (8-bits);
+    inc(dest);
+  end;
+  SetString(result,PAnsiChar(tmp.buf),PAnsiChar(dest)-PAnsiChar(tmp.buf));
+  tmp.Done;
+end;
+
+function BaudotToAscii(const Baudot: RawByteString): RawUTF8;
+begin
+  result := BaudotToAscii(pointer(Baudot),length(Baudot));
+end;
+
+function BaudotToAscii(Baudot: PByteArray; len: integer): RawUTF8; overload;
+var i,c,b,bits,shift: integer;
+    tmp: TSynTempBuffer;
+    dest: PAnsiChar;
+begin
+  result := '';
+  if (Baudot=nil) or (len=0) then
+    exit;
+  tmp.Init((len*8)div 5+1);
+  dest := tmp.buf;
+  shift := 0;
+  b := 0;
+  bits := 0;
+  for i := 0 to len-1 do begin
+    b := (b shl 8) or Baudot[i];
+    inc(bits,8);
+    while bits>=5 do begin
+      dec(bits,5);
+      c := (b shr bits) and 31;
+      case c of
+      27: if shift<>0 then
+            exit else
+            shift := 32;
+      31: if shift<>0 then
+            shift := 0 else
+            exit;
+      else begin
+        c := ord(B2A[c+shift]);
+        if c=0 then
+          if Baudot[i+1]=0 then // allow triming of last 5 bits
+            break else
+            exit;
+        dest^ := AnsiChar(c);
+        inc(dest);
+      end;
+      end;
+    end;
+  end;
+  SetString(result,PAnsiChar(tmp.buf),dest-PAnsiChar(tmp.buf));
+  tmp.Done;
+end;
 
 {$ifdef CPU64}
 procedure Exchg16(P1,P2: PInt64Array);
@@ -57810,6 +57949,11 @@ begin
   for i := 0 to high(b64) do
     ConvertBase64ToBin[b64[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
+  for i := high(B2A) downto 0 do
+    if B2A[i]<#128 then
+      A2B[B2A[i]] := i;
+  for i := ord('a') to ord('z') do
+    A2B[AnsiChar(i-32)] := A2B[AnsiChar(i)]; // A-Z -> a-z
   // initialize our internaly used TSynAnsiConvert engines
   TSynAnsiConvert.Engine(0);
   // initialize tables for crc32cfast() and SymmetricEncrypt/FillRandom
