@@ -5127,6 +5127,7 @@ var n, LastLen: cardinal;
     i: integer;
     Last: TAESBlock;
 begin
+  result := 0; // makes FixInsight happy
   Tmp := nil;
   outStreamCreated := nil;
   Head.SourceLen := InLen;
@@ -6732,13 +6733,13 @@ end;
 
 function TAESAbstract.EncryptPKCS7Buffer(Input,Output: Pointer; InputLen,OutputLen: cardinal;
   IVAtBeginning: boolean): boolean;
-var padding, iv: cardinal;
+var padding, ivsize: cardinal;
 begin
   padding := AESBlockSize-(InputLen and (AESBlockSize-1));
   if IVAtBeginning then
-    iv := AESBlockSize else
-    iv := 0;
-  if OutputLen<>iv+InputLen+padding then begin
+    ivsize := AESBlockSize else
+    ivsize := 0;
+  if OutputLen<>ivsize+InputLen+padding then begin
     result := false;
     exit;
   end;
@@ -6746,9 +6747,9 @@ begin
     TAESPRNG.Main.FillRandom(fIV);
     PAESBlock(Output)^ := fIV;
   end;
-  MoveFast(Input^,PByteArray(Output)^[iv],InputLen);
-  FillcharFast(PByteArray(Output)^[iv+InputLen],padding,padding);
-  Inc(PByte(Output),iv);
+  MoveFast(Input^,PByteArray(Output)^[ivsize],InputLen);
+  FillcharFast(PByteArray(Output)^[ivsize+InputLen],padding,padding);
+  Inc(PByte(Output),ivsize);
   Encrypt(Output,Output,InputLen+padding);
   result := true;
 end;
@@ -6768,12 +6769,12 @@ end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
-var len,iv,padding: integer;
+var len,ivsize,padding: integer;
 begin
   len := length(Input);
-  DecryptLen(len,iv,pointer(Input),IVAtBeginning);
+  DecryptLen(len,ivsize,pointer(Input),IVAtBeginning);
   SetString(result,nil,len);
-  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
+  Decrypt(@PByteArray(Input)^[ivsize],pointer(result),len);
   padding := ord(result[len]); // result[1..len]
   if padding>AESBlockSize then
     raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid content',[self]);
@@ -6782,12 +6783,12 @@ end;
 
 function TAESAbstract.DecryptPKCS7(const Input: TBytes;
   IVAtBeginning: boolean): TBytes;
-var len,iv,padding: integer;
+var len,ivsize,padding: integer;
 begin
   len := length(Input);
-  DecryptLen(len,iv,pointer(Input),IVAtBeginning);
+  DecryptLen(len,ivsize,pointer(Input),IVAtBeginning);
   SetLength(result,len);
-  Decrypt(@PByteArray(Input)^[iv],pointer(result),len);
+  Decrypt(@PByteArray(Input)^[ivsize],pointer(result),len);
   padding := result[len-1]; // result[0..len-1]
   if padding>AESBlockSize then
     raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid content',[self]);
