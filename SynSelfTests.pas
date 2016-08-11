@@ -348,6 +348,8 @@ type
     procedure IniFiles;
     /// test UTF-8 and Win-Ansi conversion (from or to, through RawUnicode)
     procedure _UTF8;
+    /// test ASCII Baudot encoding
+    procedure BaudotCode;
     /// the ISO-8601 date and time encoding
     // - test especially the conversion to/from text
     procedure Iso8601DateAndTime;
@@ -3069,6 +3071,42 @@ begin
     Inc(Source);
     Inc(Dest);
     Dec(L);
+  end;
+end;
+
+procedure TTestLowLevelCommon.BaudotCode;
+var u: RawUTF8;
+    b: RawByteString;
+    i,j,k: integer;
+    P: PAnsiChar absolute u;
+const CHR: array[0..54] of AnsiChar =
+  'abcdefghijklm nopqrstuvwx yz012345 6789-''3,!:(+)$?@./; ';
+begin
+  b := AsciiToBaudot('');
+  check(b='');
+  b := AsciiToBaudot('abc');
+  u := BaudotToAscii(b);
+  check(u='abc');
+  b := AsciiToBaudot('mORMot.net');
+  check(BaudotToAscii(b)='mormot.net');
+  b := b+#0#0#0;
+  u := BaudotToAscii(b);
+  check(u='mormot.net');
+  b := AsciiToBaudot('http://synopse.info');
+  u := BaudotToAscii(b);
+  check(u='http://synopse.info');
+  b := AsciiToBaudot('abcdef 1234 5678'#13#10'ABCD;/23u'#13#10'op @toto.#com');
+  check(b<>'');
+  u := BaudotToAscii(b);
+  check(u='abcdef 1234 5678'#13#10'abcd;/23u'#13#10'op @toto.com');
+  for i := 1 to 200 do begin
+    SetLength(u,i);
+    for k := 1 to 50 do begin
+      for j := 0 to i-1 do
+        P[j] := CHR[Random(55)];
+      b := AsciiToBaudot(u);
+      check(BaudotToAscii(b)=u);
+    end;
   end;
 end;
 
