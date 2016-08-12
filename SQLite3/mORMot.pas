@@ -1271,7 +1271,8 @@ uses
 {$endif}
   SynCommons,
   SynLog,
-  SynTests;
+  SynTests,
+  SynEcc; // for TECCCertificates
 
 
 
@@ -4537,6 +4538,34 @@ type
       Level: TSynLogInfo = sllNone);
     /// optional service locator for by-key Dependency Injection
     property OnKeyResolve: TOnKeyResolve read fOnKeyResolve write fOnKeyResolve;
+  end;
+
+  /// manage certificates using ECC secp256r1 cryptography and JSON file storage
+  // - convenient human-readable JSON file serialization for TECCCertificateChain
+  TECCCertificateChainFile = class(TECCCertificateChain)
+  public
+    /// initialize the certificate store from some JSON-serialized file
+    // - the file would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    // - you may use SaveToFile() method to create such JSON file
+    // - will call LoadFromFile(), and raise EECCException on any error
+    constructor CreateFromFile(const jsonfile: TFileName);
+    /// save the whole certificates chain as a JSON file
+    // - is in fact the human-friendly JSON serialization of this instance
+    // - the file would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    function SaveToFile(const jsonfile: TFileName): boolean;
+    /// load a certificates chain from some JSON-serialized file
+    // - you may use SaveToFile() method to create such JSON file
+    // - would create only TECCCertificate instances with their public keys,
+    // since no private key, therefore no TECCCertificateSecret is expected
+    function LoadFromFile(const jsonfile: TFileName): boolean;
   end;
 
 const
@@ -56173,6 +56202,45 @@ begin
 end;
 
 
+{ TECCCertificateChainFile }
+
+constructor TECCCertificateChainFile.CreateFromFile(const jsonfile: TFileName);
+begin
+  Create;
+  if not LoadFromFile(jsonfile) then
+    raise EECCException.CreateUTF8('Invalid %.CreateFromFile(%)',[self,jsonfile]);
+end;
+
+const
+  ECCCERTIFICATES_FILEEXT = '.certif';
+
+function GetChainFileName(const jsonfile: TFileName): TFileName;
+begin
+  if ExtractFileExt(jsonfile)='' then
+    result := jsonfile+ECCCERTIFICATES_FILEEXT else
+    result := jsonfile;
+end;
+
+function TECCCertificateChainFile.SaveToFile(const jsonfile: TFileName): boolean;
+var json: RawUTF8;
+begin
+  if (Count=0) or (jsonfile='') then
+    result := false else begin
+    json := ObjectToJSON(self,[woHumanReadable]);
+    result := FileFromString(json,GetChainFileName(jsonfile));
+  end;
+end;
+
+function TECCCertificateChainFile.LoadFromFile(const jsonfile: TFileName): boolean;
+var json: RawUTF8;
+begin
+  json := StringFromFile(GetChainFileName(jsonfile));
+  if json='' then
+    result := false else
+    JsonToObject(self,pointer(json),result,nil,JSONTOOBJECT_TOLERANTOPTIONS);
+end;
+
+
 { TServiceMethod }
 
 type
@@ -57831,7 +57899,8 @@ initialization
   SetThreadNameInternal := SetThreadNameWithLog;
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(
-    [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
+    [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties,
+     TypeInfo(TECCCertificateObjArray),TECCCertificate]);
   TJSONSerializer.RegisterCustomJSONSerializerFromText(
     [TypeInfo(TServicesPublishedInterfaces),_TServicesPublishedInterfaces,
      TypeInfo(TSQLRestServerURI),_TSQLRestServerURI]);
