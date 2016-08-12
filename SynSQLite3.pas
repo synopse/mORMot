@@ -47,7 +47,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.13.0 database engine
+       SQLite3 3.14.1 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -135,7 +135,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.13.0
+  - updated SQLite3 engine to latest version 3.14.1
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1258,7 +1258,7 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.13.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.14.1', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -1883,22 +1883,7 @@ type
     // statement first begins executing. Additional sqlite3.trace() callbacks might
     // occur as each triggered subprogram is entered. The callbacks for triggers
     // contain a UTF-8 SQL comment that identifies the trigger.
-    trace: function(DB: TSQLite3DB; Callback: TSQLTraceCallback;
-      UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-
-    /// Register callback function that can be used for tracing the execution of
-    // SQL statements
-    // - The callback function registered by sqlite3.profile() is invoked as
-    // each SQL statement finishes. The profile callback contains the original
-    // statement text and an estimate of wall-clock time of how long that
-    // statement took to run. The profile callback time is in units of
-    // nanoseconds, however the current implementation is only capable
-    // of millisecond resolution so the six least significant digits in the time
-    // are meaningless. Future versions of SQLite might provide greater resolution
-    // on the profiler callback.
-    // - The sqlite3.profile() function is considered experimental and is subject
-    // to change in future versions of SQLite.
-    profile: function(DB: TSQLite3DB; Callback: TSQLProfileCallback;
+    trace_v2: function(DB: TSQLite3DB; Mask: cardinal; Callback: TSQLTraceCallback;
       UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Allows the size of various constructs to be limited on a connection
@@ -5687,7 +5672,7 @@ end;
 { TSQLite3LibraryDynamic }
 
 const
-  SQLITE3_ENTRIES: array[0..86] of TFileName =
+  SQLITE3_ENTRIES: array[0..85] of TFileName =
   ('initialize','shutdown','open','open_v2','key','rekey','close',
    'libversion','errmsg','extended_errcode',
    'create_function','create_function_v2',
@@ -5704,7 +5689,7 @@ const
    'blob_open','blob_close','blob_read','blob_write','blob_bytes',
    'create_module_v2','declare_vtab','set_authorizer','update_hook',
    'commit_hook','rollback_hook','changes','total_changes','malloc', 'realloc',
-   'free','memory_used','memory_highwater','trace','profile','limit',
+   'free','memory_used','memory_highwater','trace_v2','limit',
    'backup_init','backup_step','backup_finish','backup_remaining',
    'backup_pagecount','config');
 

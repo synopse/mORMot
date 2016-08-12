@@ -1,4 +1,4 @@
-/// SQLite3 3.13.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.14.1 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -47,7 +47,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.13.0 engine
+    Statically linked SQLite3 3.14.1 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -74,7 +74,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.13.0
+  - updated SQLite3 engine to latest version 3.14.1
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -1215,9 +1215,7 @@ function sqlite3_config(operation: integer): integer; cdecl varargs; external;
 function sqlite3_db_config(DB: TSQLite3DB; operation: integer): integer; cdecl varargs; external;
 {$endif}
 {$ifdef INCLUDE_TRACE}
-function sqlite3_trace(DB: TSQLite3DB; Callback: TSQLTraceCallback;
-  UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_profile(DB: TSQLite3DB; Callback: TSQLProfileCallback;
+function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCallback;
   UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 {$endif INCLUDE_TRACE}
 
@@ -1226,7 +1224,7 @@ function sqlite3_profile(DB: TSQLite3DB; Callback: TSQLProfileCallback;
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.13.0';
+  EXPECTED_SQLITE3_VERSION = '3.14.1';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1310,8 +1308,7 @@ begin
   memory_used          := @sqlite3_memory_used;
   memory_highwater     := @sqlite3_memory_highwater;
 {$ifdef INCLUDE_TRACE}
-  trace                := @sqlite3_trace;
-  profile              := @sqlite3_profile;
+  trace_v2             := @sqlite3_trace_v2;
 {$endif}
   limit                := @sqlite3_limit;
   backup_init          := @sqlite3_backup_init;

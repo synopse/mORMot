@@ -32,7 +32,7 @@ program SynDBExplorer;
   - changed .config file format from binary to JSON (with Base64+Zip if needed)
 
   Version 1.18
-  - SQlite3 engine updated to revision 3.13.0
+  - SQlite3 engine updated to revision 3.14.1
   - optimized grid content initialization speed and layout
   - will now initialize the REGEXP function for SQLite3 (for Delphi XE+)
   - added incremental text search in SQL history
