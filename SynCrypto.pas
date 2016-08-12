@@ -1519,14 +1519,14 @@ var SHA: TSHA256;
 begin
   // 1. Hash complete RawByteString
   SHA.Full(pointer(s),length(s),Digest);
-  result := Equals(Digest,TDig);
+  result := IsEqual(Digest,TDig);
   if not result then exit;
   // 2. one update call for all chars
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
-  result := Equals(Digest,TDig);
+  result := IsEqual(Digest,TDig);
   // 3. test consistency with Padlock engine down results
 {$ifdef USEPADLOCK}
   if not result or not padlock_available then exit;
@@ -1552,7 +1552,7 @@ begin
      SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq', D2);
   if not result then exit;
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
-  result := Equals(Digest,D3);
+  result := IsEqual(Digest,D3);
   {$ifdef CPU64}
   {$ifdef CPUINTEL}
   if cfSSE41 in CpuFeatures then begin
@@ -1571,7 +1571,7 @@ var MD5: TMD5;
 begin
   MD5.Full(pointer(s),Length(s),D);
   result := MD5DigestToString(D);
-  FillcharFast(D,sizeof(D),0);
+  FillZero(D);
 end;
 
 function SHA1(const s: RawByteString): RawUTF8;
@@ -1634,7 +1634,7 @@ var SHA: TSHA256;
 begin
   SHA.Full(pointer(s),length(s),Digest);
   result := SHA256DigestToString(Digest);
-  FillcharFast(Digest,sizeof(Digest),0);
+  FillZero(Digest);
 end;
 
 function SHA256(Data: pointer; Len: integer): RawUTF8;
@@ -1643,7 +1643,13 @@ var SHA: TSHA256;
 begin
   SHA.Full(Data,Len,Digest);
   result := SHA256DigestToString(Digest);
-  FillcharFast(Digest,sizeof(Digest),0);
+  FillZero(Digest);
+end;
+
+function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
+var SHA: TSHA256;
+begin
+  SHA.Full(Data,Len,result);
 end;
 
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
@@ -1821,7 +1827,7 @@ begin
       A.DecryptInit(Key,ks);
       A.Decrypt(b,p);
       A.Done;
-      if not Equals(p,s) then begin
+      if not IsEqual(p,s) then begin
         writeln('AESSelfTest compareError with keysize=',ks);
         exit;
       end;
@@ -5275,7 +5281,7 @@ var Digest: TSHA256Digest;
 begin
   SHA256Weak(Password,Digest);
   AES(Digest,sizeof(Digest)*8,bIn,bOut,Len,Encrypt);
-  FillcharFast(Digest,sizeof(Digest),0);
+  FillZero(Digest);
 end;
 
 function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString;
@@ -6704,7 +6710,7 @@ end;
 destructor TAESAbstract.Destroy;
 begin
   inherited Destroy;
-  FillCharFast(fKey,sizeof(fKey),0);
+  FillZero(fKey);
 end;
 
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
@@ -7558,7 +7564,7 @@ begin
   EnterCriticalSection(fLock);
   PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
   fAES.EncryptInit(key,256);
-  FillcharFast(key,sizeof(key),0); // avoid the key appear in clear on stack
+  FillZero(key); // avoid the key appear in clear on stack
   FillcharFast(pointer(pass)^,length(pass),0); // remove entropy from heap
   assert(SALTLEN>=sizeof(fCTR));
   MoveFast(pointer(salt)^,fCTR,sizeof(fCTR));

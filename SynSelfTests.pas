@@ -8516,6 +8516,7 @@ begin
         A.Decrypt(b,p);
         A.Done;
         Check(CompareMem(@p,@s,AESBLockSize));
+        Check(IsEqual(p,s));
         Timer[noaesni].Resume;
         Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);
         Timer[noaesni].Pause;
@@ -8628,6 +8629,7 @@ begin
       md.Update(tmp[0],1);
     md.Final(dig);
     md.Full(pointer(tmp),n,dig2);
+    check(IsEqual(dig,dig2));
     check(CompareMem(@dig,@dig2,sizeof(dig)));
   end;
 end;
@@ -8697,12 +8699,14 @@ var SHA: TSHA256;
 begin
   // 1. Hash complete AnsiString
   SHA.Full(pointer(s),length(s),Digest);
+  Check(IsEqual(Digest,TDig));
   Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
   // 2. one update call for each char
   SHA.Init;
   for i := 1 to length(s) do
     SHA.Update(@s[i],1);
   SHA.Final(Digest);
+  Check(IsEqual(Digest,TDig));
   Check(CompareMem(@Digest,@TDig,sizeof(Digest)));
 end;
 const
@@ -8720,6 +8724,7 @@ begin
   SingleTest('abc',D1);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
   SHA256Weak('lagrangehommage',Digest); // test with len=256>64
+  Check(IsEqual(Digest,D3));
   Check(Comparemem(@Digest,@D3,sizeof(Digest)));
   PBKDF2_HMAC_SHA256('password','salt',1,Digest);
   check(SHA256DigestToString(Digest)=
@@ -8759,12 +8764,14 @@ var b1,b2: TAESBlock;
 begin
   TAESPRNG.Main.FillRandom(b1);
   TAESPRNG.Main.FillRandom(b2);
+  Check(not IsEqual(b1,b2));
   Check(not CompareMem(@b1,@b2,sizeof(b1)));
   a1 := TAESPRNG.Create;
   a2 := TAESPRNG.Create;
   try
     a1.FillRandom(b1);
     a2.FillRandom(b2);
+    Check(not IsEqual(b1,b2));
     Check(not CompareMem(@b1,@b2,sizeof(b1)));
     Check(a1.FillRandom(0)='');
     for i := 1 to 2000 do begin
@@ -8833,8 +8840,10 @@ begin
   Check(SynCommons.HexToBin(
     '51A0C8018EC725F9B9F821D826FEEC4CAE8843066685522F1961D25935EAA39E', @s1, sizeof(s1)));
   Check(ecdh_shared_secret(pu1,pr2,s2));
+  Check(IsEqual(s1,s2));
   Check(CompareMem(@s1,@s2,sizeof(s1)));
   Check(ecdh_shared_secret(pu2,pr1,s3));
+  Check(IsEqual(s1,s3));
   Check(CompareMem(@s1,@s3,sizeof(s1)));
 end;
 
@@ -8870,7 +8879,7 @@ begin
     for i := 0 to ECC_COUNT-2 do begin
       check(ecdh_shared_secret(pub[i],priv[i+1],sec1));
       check(ecdh_shared_secret(pub[i+1],priv[i],sec2));
-      check(comparemem(@sec1,@sec2,sizeof(sec1)));
+      check(IsEqual(sec1,sec2));
     end;
 end;
 

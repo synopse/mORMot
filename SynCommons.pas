@@ -10110,6 +10110,7 @@ function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload
 function HexDisplayToInt64(const Hex: RawByteString): Int64; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 function BinToBase64(const s: RawByteString): RawUTF8; overload;
 
@@ -10410,8 +10411,13 @@ function IsZero(const dig: THash128): boolean; overload;
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
-function Equals(const A,B: THash128): boolean; overload;
+function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// fill all 16 bytes of this 128-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash128); overload;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -10426,8 +10432,13 @@ function IsZero(const dig: THash256): boolean; overload;
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TECCSignature result
-function Equals(const A,B: THash256): boolean; overload;
+function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif} overload;
+
+/// fill all 32 bytes of this 256-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash256); overload;
 
 
 type
@@ -10569,7 +10580,7 @@ function IsZero(const Fields: TSQLFieldBits): boolean; overload;
 /// fast comparison of two TSQLFieldBits values
 // - is optimized for 64, 128, 192 and 256 max bits count (i.e. MAX_SQLFIELDS)
 // - will work also with any other value
-function IsEqual(const A,B: TSQLFieldBits): boolean;
+function IsEqual(const A,B: TSQLFieldBits): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fill all entries of a supplied array of RawUTF8 with ''
@@ -29673,17 +29684,16 @@ begin
 end;
 {$else}
 asm // eax=crc, edx=buf, ecx=len
+    push ebx
     test edx,edx; jz @0
     neg ecx; jz @0
-    push ebx
     sub edx,ecx
 @1: movzx ebx,byte ptr [edx+ecx]
     xor eax,ebx
     imul eax,eax,16777619
     inc ecx
     jnz @1
-    pop ebx
-@0:
+@0: pop ebx
 end; // we tried an unrolled version, but it was slower on our Core i7!
 {$endif}
 
@@ -30086,7 +30096,7 @@ begin
   {$endif}
 end;
 
-function Equals(const A,B: THash128): boolean;
+function IsEqual(const A,B: THash128): boolean;
 begin
   {$ifdef CPU64}
   result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
@@ -30097,6 +30107,12 @@ begin
             (PCardinalArray(@A)^[2]=PCardinalArray(@B)^[2]) and
             (PCardinalArray(@A)^[3]=PCardinalArray(@B)^[3]);
   {$endif}
+end;
+
+procedure FillZero(out dig: THash128);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
@@ -30123,7 +30139,7 @@ begin
   {$endif}
 end;
 
-function Equals(const A,B: THash256): boolean;
+function IsEqual(const A,B: THash256): boolean;
 begin
   {$ifdef CPU64}
   result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
@@ -30140,6 +30156,14 @@ begin
             (PCardinalArray(@A)^[6]=PCardinalArray(@B)^[6]) and
             (PCardinalArray(@A)^[7]=PCardinalArray(@B)^[7]);
   {$endif}
+end;
+
+procedure FillZero(out dig: THash256);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
+  PInt64Array(@dig)^[2] := 0;
+  PInt64Array(@dig)^[3] := 0;
 end;
 
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
@@ -57176,6 +57200,7 @@ begin
            kr32(crc,pointer(aSharedObfuscationKey),len) xor
            crc32c(crc,pointer(aSharedObfuscationKey),len) xor
            fnv32(crc,pointer(aSharedObfuscationKey),len);
+    // do not modify those hashes above or you will break obfuscation pattern!
     if i<=high(fCrypto) then
       fCrypto[i] := crc else
       fCryptoCRC := crc;
