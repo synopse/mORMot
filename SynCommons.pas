@@ -10200,6 +10200,27 @@ function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 // - you should better not use this, but Base64ToBin() overloaded functions
 procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
 
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01,$02,$03);
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUTF8;
+  Data: pointer; Len: integer; PerLine: integer=16); overload;
+
+/// generate some pascal source code holding some data binary as constant
+// - can store sensitive information (e.g. certificates) within the executable
+// - generates a source code snippet of the following format:
+// ! const
+// !   // Comment
+// !   ConstName: array[0..2] of byte = (
+// !     $01,$02,$03);
+function BinToSource(const ConstName, Comment: RawUTF8; Data: pointer;
+  Len: integer; PerLine: integer=16; const Suffix: RawUTF8=''): RawUTF8; overload;
+
+
 /// revert the value as encoded by TTextWriter.AddInt18ToChars3() method
 function Chars3ToInt18(P: pointer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
@@ -24626,6 +24647,56 @@ begin
      (nofullcheck or IsBase64(base64,base64len));
   if result then
     Base64Decode(base64,bin,base64len shr 2);
+end;
+
+
+function BinToSource(const ConstName, Comment: RawUTF8;
+  Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
+var W: TTextWriter;
+begin
+  if (Data=nil) or (Len<=0) or (PerLine<=0) then
+    result := '' else begin
+    W := TTextWriter.CreateOwnedStream(Len*5+50+length(Comment)+length(Suffix));
+    try
+      BinToSource(W,ConstName,Comment,Data,Len,PerLine);
+      if Suffix<>'' then begin
+        W.AddString(Suffix);
+        W.AddCR;
+      end;
+      W.SetText(result);
+    finally
+      W.Free;
+    end;
+  end;
+end;
+
+procedure BinToSource(Dest: TTextWriter; const ConstName, Comment: RawUTF8;
+  Data: pointer; Len, PerLine: integer);
+var line,i: integer;
+    P: PByte;
+begin
+  if (Dest=nil) or (Data=nil) or (Len<=0) or (PerLine<=0) then
+    exit;
+  Dest.AddShort('const');
+  if Comment<>'' then
+    Dest.Add(#13'  // %',[Comment]);
+  Dest.Add(#13'  %: array[0..%] of byte = (',[ConstName,Len-1]);
+  P := pointer(Data);
+  repeat
+    if len>PerLine then
+      line := PerLine else
+      line := Len;
+    Dest.AddShort(#13#10'    ');
+    for i := 0 to line-1 do begin
+      Dest.Add('$');
+      Dest.AddByteToHex(P^);
+      inc(P);
+      Dest.Add(',');
+    end;
+    dec(Len,line);
+  until Len=0;
+  Dest.CancelLastComma;
+  Dest.Add(');'#13'  %_LEN = SizeOf(%);'#13,[ConstName,ConstName]);
 end;
 
 
