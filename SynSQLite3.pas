@@ -1140,10 +1140,35 @@ type
   TSQLCommitCallback = function(pArg: Pointer): Integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
 
-  /// Callback function registered by sqlite3.trace()
-  // - this procedure will be invoked at various times when an SQL statement is
-  // being run by sqlite3.step()
-  TSQLTraceCallback = procedure(TraceArg: Pointer; Trace: PUTF8Char);
+  /// events monitored by sqlite3.trace_v2() tracing logic
+  // - stmStmt callback is invoked when a prepared statement first begins
+  // running and possibly at other times during the execution of the prepared
+  // statement, such as at the start of each trigger subprogram. The P argument
+  // is a pointer to the prepared statement. The X argument is a pointer to a
+  // string which is the unexpanded SQL text of the prepared statement or an
+  // SQL comment that indicates the invocation of a trigger.
+  // - stmProfile callback provides approximately the same information as was
+  // provided by the deprecated sqlite3.profile() callback. The P argument is
+  // a pointer to the prepared statement and the X argument points to a 64-bit
+  // integer which is the estimated of the number of nanosecond that the
+  // prepared statement took to run. The stmProfile callback is invoked when
+  // the statement finishes.
+  // - stmRow callback is invoked whenever a prepared statement generates
+  // a single row of result. The P argument is a pointer to the prepared
+  // statement and the X argument is unused.
+  // - stmClose callback is invoked when a database connection closes. The
+  // P argument is a pointer to the database connection object and the X
+  // argument is unused.
+  TSQLTraceMask = set of (stmStmt, stmProfile, stmRow, stmClose);
+
+  /// Callback function registered by sqlite3.trace_v2()
+  // - the Trace argument has one of the TSQLTraceMask items set, to indicate
+  // why the callback was invoked
+  // - UserData argument is a copy of the context pointer, as provided at
+  // sqlite3.trace_v2() call
+  // - P and X arguments are pointers whose meanings depend on Trace content:
+  // see TSQLTraceMask for the various use cases
+  TSQLTraceCallback = procedure(Trace: TSQLTraceMask; UserData,P,X: pointer);
     {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
   /// Callback function registered by sqlite3.profile()
@@ -1877,13 +1902,12 @@ type
 
     /// Register callback function that can be used for tracing the execution of
     // SQL statements
-    // - The callback function registered by sqlite3.trace() is invoked at various
-    // times when an SQL statement is being run by sqlite3.step(). The sqlite3.trace()
-    // callback is invoked with a UTF-8 rendering of the SQL statement text as the
-    // statement first begins executing. Additional sqlite3.trace() callbacks might
-    // occur as each triggered subprogram is entered. The callbacks for triggers
-    // contain a UTF-8 SQL comment that identifies the trigger.
-    trace_v2: function(DB: TSQLite3DB; Mask: cardinal; Callback: TSQLTraceCallback;
+    // - registers a trace callback function Callback against database connection
+    // DB, using property mask TSQLTraceMask and context pointer UserData
+    // - if the Callback parameter is NULL or if the TSQLTraceMask mask is zero,
+    // then tracing is disabled
+    // - parameters of the Callback functions depend of the TSQLTraceMask involved
+    trace_v2: function(DB: TSQLite3DB; Mask: TSQLTraceMask; Callback: TSQLTraceCallback;
       UserData: Pointer): Pointer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Allows the size of various constructs to be limited on a connection
