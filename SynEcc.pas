@@ -708,6 +708,11 @@ type
     // - this method is thread-safe, and not blocking
     function IsValid(const content: TECCCertificateContent;
       ignoreDate: boolean=false): TECCCertificateValidity; overload;
+    /// check all stored certificates and their authorization chain
+    // - returns nil if all items were valid
+    // - returns the list of any invalid instances
+    // - do not free the returned items, since they are reference to Items[]
+    function ValidateItems: TECCCertificateObjArray;
     /// check if the digital signature of a given data hash is valid
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
@@ -1140,6 +1145,7 @@ function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boo
 var match: TFindFilesDynArray;
     ext: TFileName;
 begin
+  match := nil; // to please Kylix
   if privkey then
     ext := ECCCERTIFICATESECRET_FILEEXT else
     ext := ECCCERTIFICATEPUBLIC_FILEEXT;
@@ -1972,6 +1978,22 @@ begin
     fSafe.UnLock;
   end;
   result := true;
+end;
+
+function TECCCertificateChain.ValidateItems: TECCCertificateObjArray;
+var i: integer;
+begin
+  result := nil;
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    for i := 0 to high(fItems) do
+      if not (IsValid(fItems[i]) in [ecvValidSigned, ecvValidSelfSigned]) then
+        ObjArrayAdd(result,fItems[i]);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 initialization
