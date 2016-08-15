@@ -143,12 +143,12 @@ function GetTickCount64: Int64;
 
 /// compatibility function, to be implemented according to the running OS
 // - expect more or less the same result as the homonymous Win32 API function
-function GetTickCount: cardinal;
+function GetTickCount: cardinal; inline;
 
 /// similar to Windows sleep() API call, to be truly cross-platform
 // - it should have a millisecond resolution, and handle ms=0 as a switch to
 // another pending thread, i.e. call sched_yield() API
-procedure SleepHiRes(ms: cardinal);
+procedure SleepHiRes(ms: cardinal); inline;
 
 
 implementation
@@ -336,7 +336,7 @@ end;
 
 function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pwidechar;
   cchCount1: longint; lpString2: Pwidechar; cchCount2: longint): longint;
-var W1,W2: WideString;
+var W1,W2: UnicodeString; // faster than WideString under Windows
 begin
   W1 := lpString1;
   W2 := lpString2;

@@ -1343,7 +1343,7 @@ type
 
     /// add SQL functions or aggregates or to redefine the behavior of existing
     // SQL functions or aggregates, including destruction
-    // - if the additinal xDestroy parameter is not NULL, then it is invoked when
+    // - if the additinal xDestroy parameter is not nil, then it is invoked when
     // the function is deleted, either by being overloaded or when the database
     // connection closes.
     // - When the destructure callback of the tenth parameter is invoked, it is
@@ -1384,10 +1384,10 @@ type
     /// Register A Callback To Handle SQLITE_BUSY Errors
     // - This routine sets a callback function that might be invoked whenever an
     // attempt is made to open a database table that another thread or process has locked.
-    // - If the busy callback is NULL, then SQLITE_BUSY or SQLITE_IOERR_BLOCKED is
+    // - If the busy callback is nil, then SQLITE_BUSY or SQLITE_IOERR_BLOCKED is
     // returned immediately upon encountering the lock. If the busy callback is not
-    // NULL, then the callback might be invoked with two arguments.
-    // - The default busy callback is NULL.
+    // nil, then the callback might be invoked with two arguments.
+    // - The default busy callback is nil.
     busy_handler: function(DB: TSQLite3DB;
       CallbackPtr: TSQLBusyHandler; user: Pointer): integer;  {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
@@ -1656,7 +1656,7 @@ type
     // callback of the aggregate function implementation is never called and xFinal()
     // is called exactly once. In those cases, sqlite3.aggregate_context() might be
     // called for the first time from within xFinal().
-    // - The sqlite3.aggregate_context(C,N) routine returns a NULL pointer if N is
+    // - The sqlite3.aggregate_context(C,N) routine returns a nil pointer if N is
     // less than or equal to zero or if a memory allocate error occurs.
     // - The amount of space allocated by sqlite3.aggregate_context(C,N) is
     // determined by the N parameter on first successful call. Changing the value
@@ -1904,7 +1904,7 @@ type
     // SQL statements
     // - registers a trace callback function Callback against database connection
     // DB, using property mask TSQLTraceMask and context pointer UserData
-    // - if the Callback parameter is NULL or if the TSQLTraceMask mask is zero,
+    // - if the Callback parameter is nil or if the TSQLTraceMask mask is zero,
     // then tracing is disabled
     // - parameters of the Callback functions depend of the TSQLTraceMask involved
     trace_v2: function(DB: TSQLite3DB; Mask: TSQLTraceMask; Callback: TSQLTraceCallback;
@@ -3353,46 +3353,28 @@ end;
 
 function Utf16SQLCompCase(CollateParam: pointer; s1Len: integer; S1: pointer;
     s2Len: integer; S2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-{$ifndef MSWINDOWS}
-var W1,W2: WideString;
-{$endif}
 begin
   if s1Len<=0 then
     if s2Len<=0 then
       result := 0 else
       result := -1 else
   if s2Len<=0 then
-    result := 1 else begin
-    {$ifdef MSWINDOWS}
-    result := CompareStringW(GetThreadLocale,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
-    {$else} // cross-platform but slower version using two temporary WideString
-    SetString(W1,PWideChar(S1),s1len shr 1);
-    SetString(W2,PWideChar(S2),s2len shr 1);
-    result := WideCompareStr(W1,W2); // use OS string comparison API
-    {$endif}
-  end;
+    result := 1 else
+    result := CompareStringW(
+      LOCALE_USER_DEFAULT,0,S1,s1len shr 1,S2,s2Len shr 1)-2;
 end;
 
 function Utf16SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-{$ifndef MSWINDOWS}
-var W1,W2: WideString;
-{$endif}
 begin
   if s1Len<=0 then
     if s2Len<=0 then
       result := 0 else
       result := -1 else
   if s2Len<=0 then
-    result := 1 else begin
-    {$ifdef MSWINDOWS}
-    result := CompareStringW(GetThreadLocale,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
-    {$else} // cross-platform but slower version using two temporary WideString
-    SetString(W1,PWideChar(S1),s1len shr 1);
-    SetString(W2,PWideChar(S2),s2len shr 1);
-    result := WideCompareText(W1,W2); // use OS string comparison API
-    {$endif}
-  end;
+    result := 1 else
+    result := CompareStringW(
+      LOCALE_USER_DEFAULT,NORM_IGNORECASE,S1,s1len shr 1,S2,s2Len shr 1)-2;
 end;
 
 function Utf8SQLCompNoCase(CollateParam: pointer; s1Len: integer; s1: pointer;
