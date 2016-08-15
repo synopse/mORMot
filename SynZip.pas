@@ -357,6 +357,7 @@ type
     reserved: Int64;
   end;
   PZStream64 = ^TZStream64;
+  
   /// the internal memory structure as expected by the ZLib library
   {$ifdef USECFZLIB}
   { CloudFlare zip uses uLong for total_in, total_out, adler and reserved }

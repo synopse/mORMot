@@ -50,7 +50,7 @@ unit SynEcc;
   https://github.com/esxgx/easy-ecc
 
   Version 1.18
-  - first public release, corresponding to SQLite3 Framework 1.18
+  - first public release, corresponding to mORMot Framework 1.18
 
 *)
 
@@ -1368,6 +1368,7 @@ begin
 end;
 
 const
+  ECCCERTIFICATEPUBLIC_FILEEXT = '.pubkey';
   ECCCERTIFICATESECRET_FILEEXT = '.privkey';
 
 function TECCCertificateSecret.SaveToSecureFileName: TFileName;
