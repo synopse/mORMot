@@ -8,7 +8,8 @@ program ECC;
 
   Sample 33 - ECC command line tool
     Manage certificate-based public-key cryptography using ECC-secp256r1,
-    i.e. certificates and public/private key pairs, as implemented in SynECC.
+    i.e. public/private key pairs, certificates and digital signatures,
+    as implemented in SynECC.
 
 
   Version 1.18
@@ -26,7 +27,7 @@ uses
   mORMot,
   SynCrypto,
   SynEcc,
-  EccProcess;
+  ECCProcess;
 
 type
   TSwitches = (swHelp, swNew, swSign, swVerify);
@@ -46,6 +47,8 @@ begin
     TextColor(ccGreen);
     writeln('Using mORMot''s SynECC rev. ' + {$I SynopseCommit.inc} + #13#10);
     TextColor(ccLightGray);
+    if not ecc_available then
+      raise EECCException.Create('ECC is not implemented on this platform');
     sw := TCommandLine.Create;
     cmd := StringToUTF8(ParamStr(1));
     case GetEnumNameValueTrimmed(TypeInfo(TSwitches),pointer(cmd),length(cmd)) of
