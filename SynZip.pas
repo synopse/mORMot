@@ -173,8 +173,8 @@ unit SynZip;
   {$define USEZLIB}
   {$ifdef MSWINDOWS} // avoid link to zlib1.dll
     {$define USEPASZLIB}
-		{$ifdef Win32}
-			{.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win32 fails
+    {$ifdef Win32}
+      {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win32 fails
     {$endif}
     {$ifdef Win64}
       {$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
@@ -183,12 +183,16 @@ unit SynZip;
     {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
   {$endif}
 {$else}
-  {$ifdef Win32}
-    {$define USEINLINEASM}
-    // if defined, we use a special inlined asm version for uncompress:
-    // seems 50% faster than BC++ generated .obj, and is 3KB smaller in code size
+  {$ifdef MSWINDOWS}
+    {$ifdef Win32}
+      {$define USEINLINEASM}
+      // if defined, we use a special inlined asm version for uncompress:
+      // seems 50% faster than BC++ generated .obj, and is 3KB smaller in code size
+    {$else}
+      {$define USEZLIB}
+    {$endif}
   {$else}
-    {$define USEZLIB} // e.g. for Kylix
+    {$define USEEXTZLIB} // e.g. for Kylix
   {$endif}
 {$endif}
 
@@ -5308,6 +5312,7 @@ begin
 end;
 
 {$ifndef USEZLIB}
+{$ifndef USEEXTZLIB}
 
 {
   Generate a table for a byte-wise 32-bit CRC calculation on the polynomial:
@@ -5361,6 +5366,7 @@ initialization
   // crc32 tables content is created from code in initialization section below
   // (save 8 KB of code size from standard crc32.obj, with no speed penalty)
   InitCrc32Tab;
+{$endif}
 {$endif}
 end.
 
