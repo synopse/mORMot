@@ -3678,6 +3678,10 @@ function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName=''; SortByName: boolean=false;
   IncludesDir: boolean=true): TFindFilesDynArray;
 
+/// convert a result list, as returned by FindFiles(), into an array of Files[].Name
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
+
+
 {$ifdef DELPHI5OROLDER}
 
 /// DirectoryExists returns a boolean value that indicates whether the
@@ -14663,7 +14667,7 @@ function Utf8ToConsole(const S: RawUTF8): RawByteString;
 // !      ConsoleShowFatalException(E);
 // !  end;
 // !end.
-procedure ConsoleShowFatalException(E: Exception);
+procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean=true);
 
 var
   /// low-level handle used for console writing
@@ -26113,6 +26117,15 @@ begin
     if SortByName and (n>0) then
       da.Sort(SortDynArrayStringI);
   end;
+end;
+
+function FindFilesDynArrayToFileNames(const Files: TFindFilesDynArray): TFileNameDynArray;
+var i,n: integer;
+begin
+  n := length(Files);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := Files[i].Name;
 end;
 
 function EnsureDirectoryExists(const Directory: TFileName;
@@ -48464,7 +48477,7 @@ begin
 end;
 
 {$I-}
-procedure ConsoleShowFatalException(E: Exception);
+procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
   ioresult;
   TextColor(ccLightRed);
@@ -48474,12 +48487,14 @@ begin
   TextColor(ccLightRed);
   Writeln(' raised with message:'#13#10' ',UTF8ToConsole(StringToUTF8(E.Message)));
   TextColor(ccLightGray);
-  writeln(#13#10'Program will now abort');
-  {$ifndef LINUX}
-  writeln('Press [Enter] to quit');
-  if ioresult=0 then
-    Readln;
-  {$endif}
+  if WaitForEnterKey then begin
+    writeln(#13#10'Program will now abort');
+    {$ifndef LINUX}
+    writeln('Press [Enter] to quit');
+    if ioresult=0 then
+      Readln;
+    {$endif}
+  end;
   ioresult;
 end;
 {$I+}
