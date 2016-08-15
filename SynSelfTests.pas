@@ -8169,7 +8169,7 @@ begin
   Check(crc32(0,pointer(PtrInt(@crc32tab)+1),2)=$41D912FF,'crc32');
   Check(UpdateCrc32(0,pointer(PtrInt(@crc32tab)+1),2)=$41D912FF);
   Check(crc32(0,pointer(PtrInt(@crc32tab)+3),1024-5)=$E5FAEC6C,'crc32');
-  Check(UpdateCrc32(0,pointer(PtrInt(@crc32tab)+3),1024-5)=$E5FAEC6C);
+  Check(UpdateCrc32(0,pointer(PtrInt(@crc32tab)+3),1024-5)=$E5FAEC6C,'crc32');
   M := SynCommons.THeapMemoryStream.Create;
   Z := TSynZipCompressor.Create(M,6,szcfGZ);
   L := length(Data);
@@ -8189,16 +8189,16 @@ begin
   Check(crc0=Z.CRC,'crc32');
   Check(crc2=crc0,'crc32');
   Z.Free;
-  Check(GZRead(M.Memory,M.Position)=Data);
+  Check(GZRead(M.Memory,M.Position)=Data,'gzread');
   crc1 := crc32(0,M.Memory,M.Position);
   s := Data;
   Check(CompressGZip(s,true)='gzip');
   Check(CompressGZip(s,false)='gzip');
-  Check(s=Data);
+  Check(s=Data,'compressGZip');
   s := Data;
   Check(CompressDeflate(s,true)='deflate');
   Check(CompressDeflate(s,false)='deflate');
-  Check(s=Data);
+  Check(s=Data,'CompressDeflate');
 end;
 
 procedure TTestCompression.InMemoryCompression;
