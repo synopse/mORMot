@@ -2631,6 +2631,10 @@ function GetInt64(P: PUTF8Char): Int64; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the 64 bits integer value stored in P^
+// - if P if nil or not start with a valid numerical value, returns Default
+function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
+
+/// get the 64 bits integer value stored in P^
 procedure SetInt64(P: PUTF8Char; var result: Int64);
   {$ifdef CPU64}inline;{$endif}
 
@@ -26080,7 +26084,8 @@ begin
       da.AddArray(masked);
     end;
   end else begin
-    Dir := IncludeTrailingPathDelimiter(Directory);
+    if Directory<>'' then
+      Dir := IncludeTrailingPathDelimiter(Directory);
     if FindFirst(Dir+Mask,faAnyfile-faDirectory,F)=0 then begin
       repeat
         {$ifndef DELPHI5OROLDER}
@@ -27306,6 +27311,14 @@ begin
   SetInt64(P,result);
 end;
 {$endif}
+
+function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
+var err: integer;
+begin
+  result := GetInt64(P,err);
+  if err>0 then
+    result := Default;
+end;
 
 {$ifdef CPU64}
 function GetInt64(P: PUTF8Char; var err: integer): Int64;
@@ -30491,8 +30504,11 @@ end;
 
 function DateToIso8601Text(Date: TDateTime): RawUTF8;
 begin // into 'YYYY-MM-DD' date format
-  SetLength(Result,10);
-  DateToIso8601PChar(Date,pointer(Result),True);
+  if Date=0 then
+    result := '' else begin
+    SetLength(result,10);
+    DateToIso8601PChar(Date,pointer(result),True);
+  end;
 end;
 
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
