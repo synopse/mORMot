@@ -571,6 +571,14 @@ type
     property StoreOnlyPublicKey: boolean read fStoreOnlyPublicKey write fStoreOnlyPublicKey;
   end;
 
+  /// result of TECCSignatureCertified.Verify and TECCCertificateChain.IsValid
+  // methods
+  TECCCertificateValidity = (
+    ecvValidSigned, ecvValidSelfSigned,
+    ecvNotSupported, ecvBadParameter, ecvCorrupted,
+    ecvInvalidDate, ecvUnknownAuthority, ecvDeprecatedAuthority,
+    ecvInvalidSignature);
+
   /// a ECDSA secp256r1 digital signature of some content, signed by an authority
   TECCSignatureCertified = class(TSynPersistent)
   protected
@@ -600,7 +608,25 @@ type
     constructor CreateFromBase64(const base64: RawUTF8);
     /// fast check of the binary buffer storage of this signature
     // - performs basic checks, avoiding any void date, authority or signature
+    // - use Verify() or TECCCertificateChain.IsSigned() methods for full
+    // digital signature validation
     function Check: boolean;
+    /// check if this digital signature matches a given data hash
+    // - will check internal properties of the certificate (e.g. validity dates),
+    // and validate the stored ECDSA signature according to the public key of
+    // the supplied signing authority
+    // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
+    // - this method is thread-safe, and not blocking
+    function Verify(Authority: TECCCertificate;
+      const hash: THash256): TECCCertificateValidity; overload;
+    /// check if this digital signature matches a given memory buffer
+    // - will check internal properties of the certificate (e.g. validity dates),
+    // and validate the stored ECDSA signature according to the public key of
+    // the supplied signing authority
+    // - will compute and verify the SHA-256 hash of the supplied data
+    // - this method is thread-safe, and not blocking
+    function Verify(Authority: TECCCertificate;
+      Data: pointer; Len: integer): TECCCertificateValidity; overload;
     /// persist the signature as some base-64 encoded binary
     function ToBase64: RawUTF8;
     /// retrieve the signature from some base-64 encoded binary
@@ -620,13 +646,6 @@ type
     /// identify the authoritify issuer used for signing, as text
     property AuthorityIssuer: RawUTF8 read GetAuthorityIssuer;
   end;
-
-  /// results of TECCCertificateChain.IsValid method
-  TECCCertificateValidity = (
-    ecvValidSigned, ecvValidSelfSigned,
-    ecvNotSupported, ecvBadParameter, ecvCorrupted,
-    ecvInvalidDate, ecvUnknownAuthority, ecvDeprecatedAuthority,
-    ecvInvalidSignature);
 
   /// manage certificates using ECC secp256r1 cryptography
   // - consider using TECCCertificateChainFile from mORMot.pas if you want
@@ -700,6 +719,7 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
+    // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
     function IsSigned(sign: TECCSignatureCertified; Data: pointer; Len: integer): TECCCertificateValidity; overload;
     /// check if the digital signature of a given data hash is valid
@@ -714,6 +734,7 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
+    // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
     function IsSigned(const sign: TECCSignatureCertifiedContent;
       Data: pointer; Len: integer): TECCCertificateValidity; overload;
@@ -729,6 +750,7 @@ type
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
     // the associated signing authority (which should be stored in Items[])
+    // - will compute and verify the SHA-256 hash of the supplied data
     // - this method is thread-safe, and not blocking
     function IsSigned(const base64sign: RawUTF8;
       Data: pointer; Len: integer): TECCCertificateValidity; overload;
@@ -784,6 +806,16 @@ type
     property IsValidCached: boolean read fIsValidCached write SetIsValidCached;
   end;
 
+const
+  ECCCERTIFICATEPUBLIC_FILEEXT = '.pubkey';
+  ECCCERTIFICATESECRET_FILEEXT = '.privkey';
+  ECCCERTIFICATESIGN_FILEEXT   = '.sign';
+
+/// search the single .pubkey or .privkey file starting with the supplied file name
+// - as used in the ECC.dpr command-line sample project
+// - returns true and set the full file name of the matching file
+// - returns false is there is no match, or more than one matching file
+function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 
 
 function ToText(val: TECCCertificateValidity): PShortString; overload;
@@ -1073,6 +1105,27 @@ begin
     result := '';
 end;
 
+function ECCVerify(const sign: TECCSignatureCertifiedContent;
+  const hash: THash256; const auth: TECCCertificateContent): TECCCertificateValidity;
+begin
+  if not ecc_available then
+    result := ecvNotSupported else
+  if IsZero(hash) then
+    result := ecvBadParameter else
+  if not ECCCheck(sign) then
+    result := ecvCorrupted else
+  if sign.Date>NowECCDate then
+    result := ecvInvalidDate else
+  if not ECCCheck(auth) then
+    result := ecvUnknownAuthority else
+  if not ECCCheckDate(auth) then
+    result := ecvDeprecatedAuthority else
+  if not ecdsa_verify(auth.Signed.PublicKey,hash,sign.Signature) then
+    result := ecvInvalidSignature else
+  if ECCSelfSigned(auth) then
+    result := ecvValidSelfSigned else
+    result := ecvValidSigned;
+end;
 
 
 { *********** high-level certificate-based public-key cryptography *********** }
@@ -1081,6 +1134,28 @@ function ToText(val: TECCCertificateValidity): PShortString;
 begin
   result := GetEnumName(TypeInfo(TECCCertificateValidity),ord(val));
 end;
+
+
+function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
+var match: TFindFilesDynArray;
+    ext: TFileName;
+begin
+  if privkey then
+    ext := ECCCERTIFICATESECRET_FILEEXT else
+    ext := ECCCERTIFICATEPUBLIC_FILEEXT;
+  result := true;
+  if FileExists(TruncatedFileName) then
+    exit;
+  if FileExists(TruncatedFileName+ext) then begin
+    TruncatedFileName := TruncatedFileName+ext;
+    exit;
+  end;
+  match := FindFiles(ExtractFilePath(TruncatedFileName),ExtractFileName(TruncatedFileName)+'*'+ext);
+  if length(match)<>1 then
+    result := false else
+    TruncatedFileName := match[0].Name;
+end;
+
 
 { TECCCertificate }
 
@@ -1367,10 +1442,6 @@ begin
   end;
 end;
 
-const
-  ECCCERTIFICATEPUBLIC_FILEEXT = '.pubkey';
-  ECCCERTIFICATESECRET_FILEEXT = '.privkey';
-
 function TECCCertificateSecret.SaveToSecureFileName: TFileName;
 begin
   if self=nil then
@@ -1569,6 +1640,22 @@ end;
 function TECCSignatureCertified.Check: boolean;
 begin
   result := (self<>nil) and ECCCheck(fContent);
+end;
+
+function TECCSignatureCertified.Verify(Authority: TECCCertificate;
+  const hash: THash256): TECCCertificateValidity;
+begin
+  if self=nil then
+    result := ecvBadParameter else
+  if not Authority.CheckCRC then
+    result := ecvUnknownAuthority else
+    result := ECCVerify(fContent,hash,Authority.fContent);
+end;
+
+function TECCSignatureCertified.Verify(Authority: TECCCertificate;
+  Data: pointer; Len: integer): TECCCertificateValidity;
+begin
+  result := Verify(Authority,SHA256Digest(Data,Len));
 end;
 
 
@@ -1829,25 +1916,11 @@ function TECCCertificateChain.IsSigned(const sign: TECCSignatureCertifiedContent
   const hash: THash256): TECCCertificateValidity;
 var auth: TECCCertificateContent;
 begin
-  if not ecc_available then begin
-    result := ecvNotSupported;
-    exit;
-  end;
-  if (self=nil) or IsZero(hash) then
+  if self=nil then
     result := ecvBadParameter else
-  if sign.Date>NowECCDate then
-    result := ecvInvalidDate else
-  if not ECCCheck(sign) then
-    result := ecvCorrupted else
   if not GetBySerial(sign.AuthoritySerial,auth) then
     result := ecvUnknownAuthority else
-  if not ECCCheckDate(auth) then
-    result := ecvDeprecatedAuthority else
-  if not ecdsa_verify(auth.Signed.PublicKey,hash,sign.Signature) then
-    result := ecvInvalidSignature else
-  if ECCSelfSigned(auth) then
-    result := ecvValidSelfSigned else
-    result := ecvValidSigned;
+    result := ECCVerify(sign,hash,auth);
 end;
 
 function TECCCertificateChain.SaveToJson: RawUTF8;
