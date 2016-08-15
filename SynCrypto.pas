@@ -703,6 +703,9 @@ type
     /// returns a binary buffer filled with some pseudorandom data
     // - this method is thread-safe
     function FillRandomBytes(Len: integer): TBytes;
+    /// computes a random ASCII password
+    // - will contain uppercase/lower letters, digits and punctuations 
+    function RandomPassword(Len: integer): RawUTF8;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security 
     // - would be called by FillRandom() methods, according to SeedAfterBytes
@@ -7663,6 +7666,25 @@ function TAESPRNG.FillRandomBytes(Len: integer): TBytes;
 begin
   SetLength(result,Len);
   FillRandom(pointer(result),Len);
+end;
+
+function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
+const CHARS: array[0..137] of AnsiChar =
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'+
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789;.:()?%!=+*/@#';
+var i,j: integer;
+    haspunct: boolean;
+begin
+  repeat
+    result := FillRandom(Len);
+    haspunct := false;
+    for i := 1 to Len do begin
+      j := ord(result[i]) mod sizeof(CHARS);
+      if j>=124 then
+        haspunct := true;
+      result[i] := CHARS[j];
+    end;
+  until haspunct and (LowerCase(result)<>result);
 end;
 
 var
