@@ -1545,6 +1545,8 @@ begin
   if IncludePassword then
     suffix := FormatUTF8('  %_PASS = %;'#13#10'  %_CYPH = ''%'';'#13#10,
       [name,QuotedStr(PassWord),name,TSynPersistentWithPassword.ComputePassword(PassWord)]);
+  if ConstName<>'' then
+    suffix := FormatUTF8('  %_SERIAL = ''%'';'#13#10'%',[name,Serial,suffix]);
   suffix := FormatUTF8('  %_ROUNDS = %;'#13#10'%',[name,PBKDF2Rounds,suffix]);
   result := BinToSource(name,Comment,pointer(data),length(data),16,suffix)
 end;
