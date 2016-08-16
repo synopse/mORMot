@@ -449,7 +449,7 @@ type
   /// a public/private certificate using ECC secp256r1 cryptography
   // - will store TECCCertificate public and associated private key secret
   // - implements a custom binary format, with validation period, and chaining
-  // - could be used for safe data signing via SignToBase64, and
+  // - could be used for safe data signing via SignToBase64/SignFile, and
   // authentication / key derivation
   // - allows optional anti-forensic diffusion during storage via AFSplitStripes
   TECCCertificateSecret = class(TECCCertificate)
@@ -556,6 +556,12 @@ type
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - create internally a temporary TECCSignatureCertified instance
     function SignToBase64(const Hash: THash256): RawUTF8; overload;
+    /// compute a .sign digital signature of any file
+    // - the digital signature is a JSON file containing basic information
+    // - you can set some additional metadata information for the "meta": field 
+    // - returns the .sign file name, which is in fact FileToSign+'.sign'
+    function SignFile(const FileToSign: TFileName;
+      const MetaNameValuePairs: array of const): TFileName;
   public
     /// how many anti-forensic diffusion stripes are used for private key storage
     // - default is 0, meaning no diffusion, i.e. 32 bytes of storage space
@@ -812,6 +818,9 @@ type
   end;
 
 const
+  /// TECCCertificateValidity results indicating a valid digital signature
+  ECC_VALIDSIGN = [ecvValidSigned, ecvValidSelfSigned];
+
   ECCCERTIFICATEPUBLIC_FILEEXT = '.pubkey';
   ECCCERTIFICATESECRET_FILEEXT = '.privkey';
   ECCCERTIFICATESIGN_FILEEXT   = '.sign';
@@ -1420,7 +1429,6 @@ begin
     st := TRawByteStringStream.Create;
     try
       if SaveToStream(st) then begin
-        XorBlock16(pointer(salt),@PRIVKEY_HEADER);
         PBKDF2_HMAC_SHA256(PassWord,salt,PBKDF2Rounds,aeskey);
         a := AES.Create(aeskey,256);
         try
@@ -1483,9 +1491,9 @@ begin
   dec(Len,PRIVKEY_SALTSIZE);
   if (self=nil) or (Len<=sizeof(PRIVKEY_HEADER)+AESBlockSize) then
     exit;
-  if CompareMem(Data,@PRIVKEY_HEADER,sizeof(PRIVKEY_HEADER)) then begin
-    dec(len,sizeof(PRIVKEY_HEADER));
-    head := sizeof(PRIVKEY_HEADER);
+  if IsEqual(THash128(PRIVKEY_HEADER),PHash128(Data)^) then begin
+    dec(len,16);
+    head := 16;
   end else
     head := 0; // was with NoHeader=true (e.g. SaveToSource)
   if Len and (AESBlockSize-1)<>0 then
@@ -1570,6 +1578,28 @@ begin
   finally
     sign.Free;
   end;
+end;
+
+function TECCCertificateSecret.SignFile(const FileToSign: TFileName;
+  const MetaNameValuePairs: array of const): TFileName;
+var content: RawByteString;
+    sign: RawUTF8;
+    json, meta: TDocVariantData;
+    sha: TSHA256Digest;
+begin
+  content := StringFromFile(FileToSign);
+  if content='' then
+    raise EECCException.CreateUTF8('File not found: %',[FileToSign]);
+  sha := SHA256Digest(pointer(content),length(content));
+  sign := SignToBase64(sha);
+  meta.InitObject(['name',ExtractFileName(FileToSign),
+    'date',DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],JSON_OPTIONS_FAST);
+  meta.AddNameValuesToObject(MetaNameValuePairs);
+  json.InitObject([
+    'meta',variant(meta), 'size',length(content), 'md5',MD5(content),
+    'sha256',SHA256DigestToString(sha), 'sign',sign],JSON_OPTIONS_FAST);
+  result := FileToSign+ECCCERTIFICATESIGN_FILEEXT;
+  FileFromString(json.ToJSON('','',jsonHumanReadable),result);
 end;
 
 
@@ -1991,7 +2021,7 @@ begin
   fSafe.Lock;
   try
     for i := 0 to high(fItems) do
-      if not (IsValid(fItems[i]) in [ecvValidSigned, ecvValidSelfSigned]) then
+      if not (IsValid(fItems[i]) in ECC_VALIDSIGN) then
         ObjArrayAdd(result,fItems[i]);
   finally
     fSafe.UnLock;

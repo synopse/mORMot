@@ -10405,6 +10405,10 @@ type
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, or a TECCSignature result
   THash256 = array[0..31] of byte;
+  /// pointer to a 128-bit hash value
+  PHash128 = ^THash128;
+  /// pointer to a 256-bit hash value
+  PHash256 = ^THash256;
 
 /// compute a 128-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
