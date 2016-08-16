@@ -580,6 +580,7 @@ type
   /// result of TECCSignatureCertified.Verify and TECCCertificateChain.IsValid
   // methods
   TECCCertificateValidity = (
+    ecvUnknown,
     ecvValidSigned, ecvValidSelfSigned,
     ecvNotSupported, ecvBadParameter, ecvCorrupted,
     ecvInvalidDate, ecvUnknownAuthority, ecvDeprecatedAuthority,
