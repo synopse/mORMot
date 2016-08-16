@@ -56,11 +56,13 @@ begin
     cmd := StringToUTF8(ParamStr(1));
     case GetEnumNameValueTrimmed(TypeInfo(TSwitches),pointer(cmd),length(cmd)) of
     ord(swNew): begin
-      auth := sw.AsString('Auth','','Enter the first chars of the .privkey file name of the signing authority.'#13#10+
-        'Will create a self-signed certificate if left void.');
-      if (auth<>'') and ECCKeyFileFind(auth,true) then begin
+      repeat
+        auth := sw.AsString('Auth','','Enter the first chars of the .privkey file name of the signing authority.'#13#10+
+          'Will create a self-signed certificate if left void.');
+      until (auth='') or ECCKeyFileFind(auth,true);
+      if auth<>'' then begin
         writeln('Will use: ',ExtractFileName(auth),#13#10);
-        authpass := sw.AsString('Pass','','Enter the PassPhrase of this .privkey file.');
+        authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
         authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
       end else
         authrounds := 0;
@@ -97,7 +99,7 @@ begin
         auth := sw.AsString('Auth','','Enter the first chars of the .privkey file name of the signing authority.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsString('Pass','','Enter the PassPhrase of this .privkey file.');
+      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
       authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
       newfile := EccCommandSignFile(signfile,auth,authpass,authrounds);
     end;
@@ -106,7 +108,7 @@ begin
         signfile := sw.AsString('File','','Enter the name of the file to be verified.');
       until FileExists(signfile) and FileExists(signfile+ECCCERTIFICATESIGN_FILEEXT);
       verif := ECCCommandVerifyFile(signfile,sw.AsString('auth','',''),'');
-      if verif in [ecvValidSigned,ecvValidSelfSigned] then begin
+      if verif in ECC_VALIDSIGN then begin
         TextColor(ccLightGreen);
         write(signfile,' file verified as ');
       end else begin
@@ -114,14 +116,14 @@ begin
         write(signfile,' file verification failure: ');
         ExitCode := 1;
       end;
-      writeln(lowercase(GetEnumCaption(TypeInfo(TECCCertificateValidity),verif)),'.');
+      writeln(sysutils.lowercase(GetEnumCaption(TypeInfo(TECCCertificateValidity),verif)),'.');
     end;
     ord(swSource): begin
       repeat
         auth := sw.AsString('Auth','','Enter the first chars of the .privkey certificate file name.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsString('Pass','','Enter the PassPhrase of this .privkey file.');
+      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
       authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
       constname := sw.AsUTF8('Const','','Enter the variable name to define the const in source.');
       comment := sw.AsUTF8('Comment','','Enter some optional comment to identify this private key');
@@ -133,7 +135,7 @@ begin
         auth := sw.AsString('Auth','','Enter the first chars of the .privkey certificate file name.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsString('Pass','','Enter the PassPhrase of this .privkey file.');
+      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
       authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
       writeln(ECCCommandInfoFile(auth,authpass,authrounds));
     end;
@@ -147,17 +149,25 @@ begin
       newfile := ECCCommandChainCertificates(['*']);
     end;
     else begin
-      writeln(ExeVersion.ProgramName,' help');
-      writeln(ExeVersion.ProgramName,' new -auth file.privkey -pass P@ssW0rd -rounds 60000'#13#10+
-              '        -issuer toto@toto.com -start 2016-10-30 -days 30'#13#10+
-              '        -newpass newP@ssw0RD@ -newrounds 60000');
-      writeln(ExeVersion.ProgramName,' sign -file some.doc -auth file.privkey -pass P@ssW0rd -rounds 60000');
-      writeln(ExeVersion.ProgramName,' verify -file some.doc -auth file.pubkey');
-      writeln(ExeVersion.ProgramName,' source -auth file.privkey -pass P@ssW0rd -rounds 60000'#13#10+
-              '           -const MY_PRIVKEY -comment "My Private Key"');
-      writeln(ExeVersion.ProgramName,' info -auth file.privkey -pass P@ssW0rd -rounds 60000');
-      writeln(ExeVersion.ProgramName,' chain file1.pubkey file2.pubkey file3.pubkey ...');
-      writeln(ExeVersion.ProgramName,' chainall');
+      writeln(ExeVersion.ProgramName,
+        ' help');
+      writeln(ExeVersion.ProgramName,
+        ' new -auth file.privkey -pass P@ssW0rd -rounds 60000'#13#10+
+        '        -issuer toto@toto.com -start 2016-10-30 -days 30'#13#10+
+        '        -newpass newP@ssw0RD@ -newrounds 60000');
+      writeln(ExeVersion.ProgramName,
+        ' sign -file some.doc -auth file.privkey -pass P@ssW0rd -rounds 60000');
+      writeln(ExeVersion.ProgramName,
+        ' verify -file some.doc -auth file.pubkey');
+      writeln(ExeVersion.ProgramName,
+        ' source -auth file.privkey -pass P@ssW0rd -rounds 60000'#13#10+
+        '           -const MY_PRIVKEY -comment "My Private Key"');
+      writeln(ExeVersion.ProgramName,
+        ' info -auth file.privkey -pass P@ssW0rd -rounds 60000');
+      writeln(ExeVersion.ProgramName,
+        ' chain file1.pubkey file2.pubkey file3.pubkey ...');
+      writeln(ExeVersion.ProgramName,
+        ' chainall');
       ExitCode:= 2;
     end;
     end;
@@ -169,7 +179,7 @@ begin
   end;
   TextColor(ccWhite);
   if newfile<>'' then
-    writeln(' ',newfile,' file created.');
+    writeln(' ',newfile,' file created.'#13#10);
   TextColor(ccLightGray);
   {$WARNINGS OFF}
   {$ifdef MSWINDOWS}

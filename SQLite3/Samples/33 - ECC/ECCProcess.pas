@@ -186,26 +186,10 @@ end;
 function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer): TFileName;
 var auth: TECCCertificateSecret;
-    content: RawByteString;
-    sign: RawUTF8;
-    json: TDocVariantData;
-    sha: TSHA256Digest;
 begin
-  content := StringFromFile(FileToSign);
-  if content='' then
-    raise EECCException.CreateUTF8('File not found: %',[FileToSign]);
   auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
   try
-    sha := SHA256Digest(pointer(content),length(content));
-    sign := auth.SignToBase64(sha);
-    json.InitObject([
-      'meta',_ObjFast(['name',ExtractFileName(FileToSign),
-        'date',DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))]),
-      'size',length(content),
-      'md5',MD5(content),'sha256',SHA256DigestToString(sha),
-      'sign',sign],JSON_OPTIONS_FAST);
-    result := FileToSign+ECCCERTIFICATESIGN_FILEEXT;
-    FileFromString(json.ToJSON('','',jsonHumanReadable),result);
+    result := auth.SignFile(FileToSign,[]);
   finally
     auth.Free;
   end;
