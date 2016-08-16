@@ -317,8 +317,16 @@ cd "%samples%31 - WebSockets"
 echo.
 echo %CD%
 %DCC% Project31SimpleEchoServer.dpr %Switches%
+@if errorlevel 1 pause
 %DCC% Project31LongWorkClient.dpr %Switches%
+@if errorlevel 1 pause
 %DCC% Project31LongWorkServer.dpr %Switches%
+@if errorlevel 1 pause
+
+cd "%samples%33 - ECC"
+echo.
+echo %CD%
+%DCC% ECC.dpr %Switches%
 @if errorlevel 1 pause
 
 
