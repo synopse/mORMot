@@ -29,6 +29,8 @@ uses
   SynEcc,
   ECCProcess;
 
+{$R *.res}
+
 type
   TSwitches = (
     swHelp, swNew, swSign, swVerify, swSource, swInfo, swChain, swChainAll);
