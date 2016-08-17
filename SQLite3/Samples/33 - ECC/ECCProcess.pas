@@ -12,28 +12,6 @@ uses
   SynCrypto,
   mORMot;
 
-type
-  ICommandLine = interface
-    ['{77AB427C-1025-488B-8E04-3E62C8100E62}']
-    function AsUTF8(const Switch, Default: RawUTF8; const Prompt: string): RawUTF8;
-    function AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
-    function AsInt(const Switch: RawUTF8; Default: Int64; const Prompt: string): Int64;
-    function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
-  end;
-
-  TCommandLine = class(TInterfacedObjectWithCustomCreate, ICommandLine)
-  private
-    Values: TDocVariantData;
-  public
-    constructor Create; override;
-    function AsUTF8(const Switch, Default: RawUTF8; const Prompt: string): RawUTF8;
-    function AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
-    function AsInt(const Switch: RawUTF8; Default: Int64; const Prompt: string): Int64;
-    function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
-    function AsJSON(Format: TTextWriterJSONFormat=jsonCompact): RawUTF8;
-  end;
-
-  
 /// end-user command to create a new private/public key file
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandNew(const AuthPrivKey: TFileName;
@@ -69,96 +47,9 @@ function ECCCommandChainCertificates(const CertFiles: array of string): TFileNam
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandInfoFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer): RawUTF8;
-  
-  
+
+
 implementation
-
-
-{ TCommandLine }
-
-constructor TCommandLine.Create;
-var i: integer;
-    p, sw: RawUTF8;
-begin
-  inherited Create;
-  Values.InitFast(10,dvObject);
-  for i := 1 to ParamCount do begin
-    p := StringToUTF8(ParamStr(i));
-    if p='' then
-      continue;
-    if p[1] in ['-','/'] then
-      sw := LowerCase(copy(p,2,100)) else
-      if sw<>'' then begin
-        Values.AddValueFromText(sw,p,true);
-        sw := '';
-      end;
-  end;
-end;
-
-function TCommandLine.AsUTF8(const Switch, Default: RawUTF8;
-  const Prompt: string): RawUTF8;
-var i: integer;
-begin
-  i := Values.GetValueIndex(Switch);
-  if i>=0 then begin
-    VariantToUTF8(Values.Values[i],result);
-    Values.Delete(i);
-    exit;
-  end;
-  result := '';
-  if Prompt='' then
-    exit;
-  TextColor(ccLightGray);
-  {$I-}
-  writeln(Prompt);
-  TextColor(ccCyan);
-  write(Switch);
-  if Default<>'' then
-    write(' [',Default,'] ');
-  write(': ');
-  TextColor(ccWhite);
-  readln(result);
-  writeln;
-  ioresult;
-  {$I+}
-  TextColor(ccLightGray);
-  result := trim(result);
-  if result='' then
-    result := Default;
-end;
-
-function TCommandLine.AsInt(const Switch: RawUTF8; Default: Int64;
-  const Prompt: string): Int64;
-var res: RawUTF8;
-begin
-  res := AsUTF8(Switch, Int64ToUtf8(Default), Prompt);
-  result := GetInt64Def(pointer(res),Default);
-end;
-
-function TCommandLine.AsDate(const Switch: RawUTF8; Default: TDateTime;
-  const Prompt: string): TDateTime;
-var res: RawUTF8;
-begin
-  res := AsUTF8(Switch, DateToIso8601Text(Default), Prompt);
-  if res='0' then begin
-    result := 0;
-    exit;
-  end;
-  result := Iso8601ToDateTime(res);
-  if result=0 then
-    result := Default;
-end;
-
-function TCommandLine.AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
-begin
-  result := Values.ToJSON('','',Format);
-end;
-
-function TCommandLine.AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
-begin
-  result := UTF8ToString(AsUTF8(Switch,StringToUTF8(Default),Prompt));
-end;
-
 
 function ECCCommandNew(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;

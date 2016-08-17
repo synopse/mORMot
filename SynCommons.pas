@@ -14706,6 +14706,58 @@ var
   // - is initialized when TextColor() is called
   StdOut: THandle;
 
+{$ifndef NOVARIANTS}
+type
+  /// an interface to process the command line switches
+  // - as implemented e.g. by TCommandLine class
+  ICommandLine = interface
+    ['{77AB427C-1025-488B-8E04-3E62C8100E62}']
+    /// returns a command line switch value as UTF-8 text
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsUTF8(const Switch, Default: RawUTF8; const Prompt: string): RawUTF8;
+    /// returns a command line switch value as VCL string text
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
+    /// returns a command line switch value as integer
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsInt(const Switch: RawUTF8; Default: Int64; const Prompt: string): Int64;
+    /// returns a command line switch ISO-8601 value as date value
+    // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+  end;
+
+  /// a class to process the command line switches
+  // - will parse "-switch1 value1 -switch2 value2" layout
+  // - stand-alone "-switch1 -switch2 value2" will create switch1=true value
+  // - implements ICommandLine interface
+  TCommandLine = class(TInterfacedObjectWithCustomCreate, ICommandLine)
+  private
+    fValues: TDocVariantData;
+  public
+    /// initialize the internal storage
+    constructor Create; override;
+    /// returns a command line switch value as UTF-8 text
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsUTF8(const Switch, Default: RawUTF8; const Prompt: string): RawUTF8;
+    /// returns a command line switch value as VCL string text
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
+    /// returns a command line switch value as integer
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsInt(const Switch: RawUTF8; Default: Int64; const Prompt: string): Int64;
+    /// returns a command line switch ISO-8601 value as date value
+    // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// serialize all recognized switches as UTF-8 JSON text
+    function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+    /// low-level access to the internal switches storage
+    property Values: TDocVariantData read fValues;
+  end;
+{$endif NOVARIANTS}
+
+
 
 { ******************* process monitoring / statistics ********************** }
 
@@ -48508,7 +48560,7 @@ begin
   {$endif}
 end;
 
-//procedure WriteUTF8(const Fmt: RawUTF8; const args:  
+//procedure WriteUTF8(const Fmt: RawUTF8; const args:
 {$I-}
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
@@ -48532,6 +48584,101 @@ begin
 end;
 {$I+}
 
+
+{$ifndef NOVARIANTS}
+
+{ TCommandLine }
+
+constructor TCommandLine.Create;
+var i: integer;
+    p, sw: RawUTF8;
+begin
+  inherited Create;
+  fValues.InitFast(10,dvObject);
+  for i := 1 to ParamCount do begin
+    p := StringToUTF8(ParamStr(i));
+    if p<>'' then
+      if p[1] in ['-','/'] then begin
+        if sw<>'' then
+          fValues.AddValue(sw,true); // -flag -switch value -> flag=true
+        sw := LowerCase(copy(p,2,100));
+      end else
+        if sw<>'' then begin
+          fValues.AddValueFromText(sw,p,true);
+          sw := '';
+        end;
+  end;
+  if sw<>'' then
+    fValues.AddValue(sw,true); // trailing -flag
+end;
+
+function TCommandLine.AsUTF8(const Switch, Default: RawUTF8;
+  const Prompt: string): RawUTF8;
+var i: integer;
+begin
+  i := fValues.GetValueIndex(Switch);
+  if i>=0 then begin
+    VariantToUTF8(fValues.Values[i],result);
+    fValues.Delete(i);
+    exit;
+  end;
+  result := '';
+  if Prompt='' then
+    exit;
+  TextColor(ccLightGray);
+  {$I-}
+  writeln(Prompt);
+  if ioresult<>0 then
+    exit; // no console -> no prompt
+  TextColor(ccCyan);
+  write(Switch);
+  if Default<>'' then
+    write(' [',Default,'] ');
+  write(': ');
+  TextColor(ccWhite);
+  readln(result);
+  writeln;
+  ioresult;
+  {$I+}
+  TextColor(ccLightGray);
+  result := trim(result);
+  if result='' then
+    result := Default;
+end;
+
+function TCommandLine.AsInt(const Switch: RawUTF8; Default: Int64;
+  const Prompt: string): Int64;
+var res: RawUTF8;
+begin
+  res := AsUTF8(Switch, Int64ToUtf8(Default), Prompt);
+  result := GetInt64Def(pointer(res),Default);
+end;
+
+function TCommandLine.AsDate(const Switch: RawUTF8; Default: TDateTime;
+  const Prompt: string): TDateTime;
+var res: RawUTF8;
+begin
+  res := AsUTF8(Switch, DateToIso8601Text(Default), Prompt);
+  if res='0' then begin
+    result := 0;
+    exit;
+  end;
+  result := Iso8601ToDateTime(res);
+  if result=0 then
+    result := Default;
+end;
+
+function TCommandLine.AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+begin
+  result := fValues.ToJSON('','',Format);
+end;
+
+function TCommandLine.AsString(const Switch: RawUTF8; const Default, Prompt: string): string;
+begin
+  result := UTF8ToString(AsUTF8(Switch,StringToUTF8(Default),Prompt));
+end;
+
+{$endif NOVARIANTS}
 
 
 { ************ Unit-Testing classes and functions }
