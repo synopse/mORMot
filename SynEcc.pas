@@ -76,24 +76,20 @@ uses
   {$define ECC_AVAILABLE}
 
   {$ifdef CPUX86}
-    {$ifdef FPC}
-      {$define ECC_32ASM}       // gcc -g -O1 -c ecc.c
+    {$ifdef KYLIX3}
+      {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
     {$else}
-      {$ifdef KYLIX3}
-        {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
-      {$else}
-        {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
-        {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
-        {$define ECC_O2}        // gcc -g -O2 -c ecc.c
-        {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
-      {$endif KYLIX}
-    {$endif FPC}
-  {$endif CPUX86}
-
-  {$ifdef CPUX64}
+      {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
       {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
       {$define ECC_O2}        // gcc -g -O2 -c ecc.c
       {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+    {$endif KYLIX}
+  {$endif CPUX86}
+
+  {$ifdef CPUX64}
+    {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
+    {$define ECC_O2}        // gcc -g -O2 -c ecc.c
+    {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
   {$endif CPUX64}
 
 {$endif CPUINTEL}
@@ -921,7 +917,7 @@ implementation
 {$ifdef ECC_AVAILABLE}
 
 function getRandomNumber(dest: pointer): integer; cdecl;
-{$ifdef FPC}{$ifdef CPU64}alias: 'getRandomNumber'{$else}alias: '_getRandomNumber'{$endif};{$endif}
+  {$ifdef FPC}alias: {$ifdef Win32}'_getRandomNumber'{$else}'getRandomNumber'{$endif};{$endif}
 begin
   TAESPRNG.Main.FillRandom(dest,ECC_BYTES);
   result := 1;
@@ -934,18 +930,43 @@ end;
 {$else}
 
 {$ifdef CPUX86}
-  {$ifdef ECC_O1}
-    {$L SynEcc32O1.obj}
-  {$endif}
-  {$ifdef ECC_O2}
-    {$L SynEcc32O2.obj}
-  {$endif}
-  {$ifdef ECC_O3}
-    {$L SynEcc32O3.obj}
-  {$endif}
+  {$ifdef FPC}
+    {$ifdef MSWINDOWS}
+      {$ifdef ECC_O1}
+        {$L fpc-win32\eccwin32O1.o}
+      {$endif}
+      {$ifdef ECC_O2}
+        {$L fpc-win32\eccwin32O2.o}
+      {$endif}
+      {$ifdef ECC_O3}
+        {$L fpc-win32\eccwin32O3.o}
+      {$endif}
+    {$else}
+      {$ifdef ECC_O1}
+        {$L fpc-linux32/ecclin32O1.o}
+      {$endif}
+      {$ifdef ECC_O2}
+        {$L fpc-linux32/ecclin32O2.o}
+      {$endif}
+      {$ifdef ECC_O3}
+        {$L fpc-linux32/ecclin32O3.o}
+      {$endif}
+    {$endif MSWINDOWS}
+  {$else}
+    {$ifdef ECC_O1}
+      {$L SynEcc32O1.obj}
+    {$endif}
+    {$ifdef ECC_O2}
+      {$L SynEcc32O2.obj}
+    {$endif}
+    {$ifdef ECC_O3}
+      {$L SynEcc32O3.obj}
+    {$endif}
+  {$endif FPC}
 {$endif CPUX86}
 
 {$ifdef CPUX64}
+  {$ifdef MSWINDOWS} // same .o format under Win64 for Delphi and FPC :)
   {$ifdef ECC_O1}
     {$L SynEcc64O1.o}
   {$endif}
@@ -955,6 +976,19 @@ end;
   {$ifdef ECC_O3}
     {$L SynEcc64O3.o}
   {$endif}
+  {$else}
+  {$ifdef FPC}
+    {$ifdef ECC_O1}
+      {$L fpc-linux64/ecclin64O1.o}
+    {$endif}
+    {$ifdef ECC_O2}
+      {$L fpc-linux64/ecclin64O2.o}
+    {$endif}
+    {$ifdef ECC_O3}
+      {$L fpc-linux64/ecclin64O3.o}
+    {$endif}
+  {$endif FPC}
+  {$endif MSWINDOWS}
 {$endif CPUX64}
 
 function ecc_make_key; external;

@@ -204,12 +204,14 @@ begin
     writeln(' ',newfile,' file created.');
   writeln;
   TextColor(ccLightGray);
+  {$ifndef FPC}
   {$WARNINGS OFF}
   {$ifdef MSWINDOWS}
   if DebugHook<>0 then
     readln;
   {$endif}
   {$WARNINGS ON}
+  {$endif}
 end;
 
 begin

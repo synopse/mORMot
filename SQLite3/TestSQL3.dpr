@@ -146,7 +146,11 @@ uses
   {$endif FPC}
 {$endif DELPHI5OROLDER}
 {$ifndef LVCL}
-{$ifndef FPC}
+{$ifdef FPC}
+{$ifdef WIN64}
+  SynZLibSSE in '..\SynZLibSSE.pas',
+{$endif}
+{$else}
   SynPdf in '..\SynPdf.pas',
   SynGdiPlus in '..\SynGdiPlus.pas',
 {$endif FPC}
