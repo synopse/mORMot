@@ -556,12 +556,14 @@ type
     // - supplied hash is likely to be from SHA-256, but could be e.g. crc256c
     // - create internally a temporary TECCSignatureCertified instance
     function SignToBase64(const Hash: THash256): RawUTF8; overload;
+    {$ifndef NOVARIANTS}
     /// compute a .sign digital signature of any file
     // - the digital signature is a JSON file containing basic information
-    // - you can set some additional metadata information for the "meta": field 
+    // - you can set some additional metadata information for the "meta": field
     // - returns the .sign file name, which is in fact FileToSign+'.sign'
     function SignFile(const FileToSign: TFileName;
       const MetaNameValuePairs: array of const): TFileName;
+    {$endif}
   public
     /// how many anti-forensic diffusion stripes are used for private key storage
     // - default is 0, meaning no diffusion, i.e. 32 bytes of storage space
@@ -801,9 +803,9 @@ type
     // - would create only TECCCertificate instances with their public keys,
     // since no private key, therefore no TECCCertificateSecret is expected
     function LoadFromJson(const json: RawUTF8): boolean;
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   published
-{$endif}
+  {$endif}
     /// low-level access to the internal certificates chain
     // - thread-safe process may be done using
     // ! Safe.Lock; try ... finally Safe.Unlock; end;
@@ -1581,6 +1583,7 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS}
 function TECCCertificateSecret.SignFile(const FileToSign: TFileName;
   const MetaNameValuePairs: array of const): TFileName;
 var content: RawByteString;
@@ -1602,6 +1605,7 @@ begin
   result := FileToSign+ECCCERTIFICATESIGN_FILEEXT;
   FileFromString(json.ToJSON('','',jsonHumanReadable),result);
 end;
+{$endif}
 
 
 { TECCSignatureCertified }
