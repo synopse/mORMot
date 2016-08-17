@@ -558,8 +558,9 @@ type
     function SignToBase64(const Hash: THash256): RawUTF8; overload;
     {$ifndef NOVARIANTS}
     /// compute a .sign digital signature of any file
-    // - the digital signature is a JSON file containing basic information
+    // - SHA-256/ECDSA digital signature is included in a JSON document
     // - you can set some additional metadata information for the "meta": field
+    // - will raise an EECCException if FileToSign does not exist
     // - returns the .sign file name, which is in fact FileToSign+'.sign'
     function SignFile(const FileToSign: TFileName;
       const MetaNameValuePairs: array of const): TFileName;
@@ -1588,22 +1589,22 @@ function TECCCertificateSecret.SignFile(const FileToSign: TFileName;
   const MetaNameValuePairs: array of const): TFileName;
 var content: RawByteString;
     sign: RawUTF8;
-    json, meta: TDocVariantData;
+    doc, meta: TDocVariantData;
     sha: TSHA256Digest;
 begin
   content := StringFromFile(FileToSign);
   if content='' then
-    raise EECCException.CreateUTF8('File not found: %',[FileToSign]);
+    raise EECCException.CreateUTF8('%.SignFile: % not found',[self, FileToSign]);
   sha := SHA256Digest(pointer(content),length(content));
   sign := SignToBase64(sha);
   meta.InitObject(['name',ExtractFileName(FileToSign),
     'date',DateTimeToIso8601Text(FileAgeToDateTime(FileToSign))],JSON_OPTIONS_FAST);
   meta.AddNameValuesToObject(MetaNameValuePairs);
-  json.InitObject([
+  doc.InitObject([
     'meta',variant(meta), 'size',length(content), 'md5',MD5(content),
     'sha256',SHA256DigestToString(sha), 'sign',sign],JSON_OPTIONS_FAST);
   result := FileToSign+ECCCERTIFICATESIGN_FILEEXT;
-  FileFromString(json.ToJSON('','',jsonHumanReadable),result);
+  FileFromString(doc.ToJSON('','',jsonHumanReadable),result);
 end;
 {$endif}
 
