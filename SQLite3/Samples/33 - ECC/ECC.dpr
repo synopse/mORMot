@@ -201,7 +201,8 @@ begin
   end;
   TextColor(ccWhite);
   if newfile<>'' then
-    writeln(' ',newfile,' file created.'#13#10);
+    writeln(' ',newfile,' file created.');
+  writeln;
   TextColor(ccLightGray);
   {$WARNINGS OFF}
   {$ifdef MSWINDOWS}

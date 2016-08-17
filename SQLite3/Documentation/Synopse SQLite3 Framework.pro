@@ -15063,7 +15063,7 @@ Therefore, {\f1\fs20 sqlite3.obj} and {\f1\fs20 sqlite3fts.obj} files are availa
 Please download the latest compiled version of these {\f1\fs20 .obj} files from this link. You can also use the supplied {\f1\fs20 c.bat} file to compile from the original {\f1\fs20 sqlite3.c} file available in the repository, if you have the {\f1\fs20 bcc32} C command-line compiler installed.
 The free version works and was used to create both {\f1\fs20 .obj} files, i.e. {\i C++Builder Compiler (bcc compiler) free download} - as available from {\i Embarcadero} web site.
 For native {\i Windows} @*64-bit@ applications (since {\i Delphi} XE2), an external {\f1\fs20 .dll} file is needed. Since there is no official {\i SQLite3} download for {\i Win64} yet, you can use the one we supply at @http://synopse.info/files/SQLite3-64.7z
-For FPC, you can download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files will be statically linked to the executable.
+For FPC, you need to download both {\f1\fs20 Win32} and {\i Linux 32} {\f1\fs20 .o} files from @http://synopse.info/files/sqlite3fpc.7z then uncompress both embedded folders at the {\i mORMot} root folder (i.e. where {\f1\fs20 Synopse.inc} or {\f1\fs20 SynCommons.pas} stay). Those static files have been patched to support optional encryption of the {\i SQLite3} database file. Then enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in your project, or directly modify {\f1\fs20 Synopse.inc} to include it, so that those {\f1\fs20 .o} files will be statically linked to the executable.
 You could also compile the static libraries from the {\f1\fs20 sqlite3.c} source, to run with FPC - do not forget to enable the {\f1\fs20 FPCSQLITE3STATIC} conditional in this case also.\line Under {\i Windows}, ensure the {\i MinGW} compiler is installed, then execute {\f1\fs20 c-fpcmingw.bat} from the {\i SQLite3} folder. It will create the {\f1\fs20 sqlite3.o} and {\f1\fs20 sqlite3fts.o} files, as expected by FPC.\line Under {\i @*Linux@}, Use the {\f1\fs20 c-fpcgcclin.sh} bash script.
 :  SpiderMonkey library
 To enable {\i @*JavaScript@} support in {\i mORmot}, we rely on our version of the {\i @*SpiderMonkey@} library. See @79@.
@@ -15105,6 +15105,7 @@ In the {\i Root folder}, some common files are defined:
 |{\f1\fs20 SynCrtSock.pas}|classes implementing @*HTTP@/1.1 client and server protocol
 |{\f1\fs20 SynCrypto.pas}|fast cryptographic routines (hashing and cypher)
 |{\f1\fs20 SynDprUses.inc}|generic header included in the beginning of the uses clause of a .dpr source code
+|{\f1\fs20 SynEcc.pas}|certificate-based public-key cryptography using ECC-secp256r1
 |{\f1\fs20 SynGdiPlus.pas}|GDI+ library API access with anti-aliasing drawing
 |{\f1\fs20 SynLog.pas}|logging functions used by most Synopse projects
 |{\f1\fs20 SynLZ.pas}|@**SynLZ@ compression decompression unit - used by {\f1\fs20 SynCommons.pas}
@@ -15199,7 +15200,7 @@ Download and uncompress the framework archives, including all sub-folders, into 
 |{\b Static 32-bit SQLite3 .obj files}\line\tab @http://synopse.info/files/sqlite3obj.7z \line\tab into {\f1\fs20 D:\\Dev\\Lib\\SQLite3\\}
 |{\b 64-bit SQlite3 library}\line\tab @http://synopse.info/files/SQLite3-64.7z \line\tab into your Win64 {\f1\fs20 .exe} folders
 |{\b 32-bit SpiderMonkey library}\line\tab @http://synopse.info/files/synsm.7z \line\tab into your {\f1\fs20 .exe} folders needing JavaScript
-|{\b for FPC only: static {\i SQLite3} .o files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
+|{\b for FPC only: static {\f1\fs20 .o} files for Windows or Linux}\line\tab @http://synopse.info/files/sqlite3fpc.7z \line\tab two folders into {\f1\fs20 D:\\Dev\\Lib\\}
 |%
 Please, read the {\f1\fs20 ReadMe.txt} file content supplied with the package! RTFM!
 In short, add the following paths to your {\i Delphi} IDE (in {\i Tools/Environment/Library} menu):
@@ -15219,7 +15220,7 @@ You should better use the latest SVN trunk version of the FPC 2.7.1 / 3.1.1 comp
 If you want to use @80@, ensure that your revision includes the fix for @http://mantis.freepascal.org/view.php?id=26773 bug, i.e. newer than revision 28995 from 2014-11-05T22:17:54. This bug has not been fixed in 2.6.4 branch.
 We recommend using the @*fpcup@ tool, as published at @http://wiki.freepascal.org/fpcup \line To compile the latest svn version of the trunk, just write:
 $fpcup.exe --fpcURL="trunk" --lazURL="trunk"
-Then ensure you set the static {\i SQlite3} .o files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@.
+Then ensure you downloaded and set the static {\f1\fs20 .o} files for {\i Windows} or {\i Linux} in the right folder, as stated about the @113@. Those {\f1\fs20 .o} files are needed not only for {\i SQlite3} static linking, but also for the {\f1\fs20 @*SynEcc@} linking.
 :  Creating the missing RTTI for interfaces
 Sadly, we have to face some unresolved FPC compiler-level issue, which does not supply the needed {\f1\fs20 interface} RTTI - see @http://bugs.freepascal.org/view.php?id=26774
 As a result, SOA, mock/stub and MVC features will not work directly with FPC trunk. There is a private branch including the needed RTTI, but it has not been merged to the trunk yet.\line In the meanwihle, we propose a workaround to compile such applications with FPC. You could use Delphi to generate one unit containing the needed information.
