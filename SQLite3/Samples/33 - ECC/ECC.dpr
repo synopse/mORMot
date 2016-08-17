@@ -46,6 +46,7 @@ var cmd, issuer, authpass, savepass, constname, comment: RawUTF8;
     i: integer;
 begin
   try
+  try
     TextColor(ccLightGreen);
     writeln(#13#10'Synopse ECC certificate-based public-key cryptography'+
             #13#10'-----------------------------------------------------');
@@ -59,18 +60,22 @@ begin
     case GetEnumNameValueTrimmed(TypeInfo(TSwitches),pointer(cmd),length(cmd)) of
     ord(swNew): begin
       repeat
-        auth := sw.AsString('Auth','','Enter the first chars of the .privkey file name of the signing authority.'#13#10+
+        auth := sw.AsString('Auth','',
+          'Enter the first chars of the .privkey file name of the signing authority.'#13#10+
           'Will create a self-signed certificate if left void.');
       until (auth='') or ECCKeyFileFind(auth,true);
       if auth<>'' then begin
         writeln('Will use: ',ExtractFileName(auth),#13#10);
-        authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
-        authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
+        authpass := sw.AsUTF8('Pass','',
+          'Enter the PassPhrase of this .privkey file.');
+        authrounds := sw.AsInt('Rounds',60000,
+          'Enter the PassPhrase iteration rounds of this .privkey file.');
       end else
         authrounds := 0;
-      issuer := sw.AsUTF8('Issuer',ExeVersion.User,'Enter Issuer identifier text.'#13#10+
-        'Will be truncated to 15-20 ascii-7 chars.');
-      start := sw.AsDate('Start',NowUTC,'Enter the YYYY-MM-DD start date of its validity.'#13#10+
+      issuer := sw.AsUTF8('Issuer',ExeVersion.User,
+        'Enter Issuer identifier text.'#13#10'Will be truncated to 15-20 ascii-7 chars.');
+      start := sw.AsDate('Start',NowUTC,
+        'Enter the YYYY-MM-DD start date of its validity.'#13#10+
         '0 will create a never-expiring certificate');
       if start<=0 then
         days := 0 else
@@ -98,11 +103,14 @@ begin
         signfile := sw.AsString('File','','Enter the name of the file to be signed');
       until FileExists(signfile);
       repeat
-        auth := sw.AsString('Auth','','Enter the first chars of the .privkey file name of the signing authority.');
+        auth := sw.AsString('Auth','',
+          'Enter the first chars of the .privkey file name of the signing authority.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
-      authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
+      authpass := sw.AsUTF8('Pass','',
+        'Enter the PassPhrase of this .privkey file.');
+      authrounds := sw.AsInt('Rounds',60000,
+        'Enter the PassPhrase iteration rounds of this .privkey file.');
       newfile := EccCommandSignFile(signfile,auth,authpass,authrounds);
     end;
     ord(swVerify): begin
@@ -122,23 +130,31 @@ begin
     end;
     ord(swSource): begin
       repeat
-        auth := sw.AsString('Auth','','Enter the first chars of the .privkey certificate file name.');
+        auth := sw.AsString('Auth','',
+          'Enter the first chars of the .privkey certificate file name.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
-      authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
-      constname := sw.AsUTF8('Const','','Enter the variable name to define the const in source.');
-      comment := sw.AsUTF8('Comment','','Enter some optional comment to identify this private key');
+      authpass := sw.AsUTF8('Pass','',
+        'Enter the PassPhrase of this .privkey file.');
+      authrounds := sw.AsInt('Rounds',60000,
+        'Enter the PassPhrase iteration rounds of this .privkey file.');
+      constname := sw.AsUTF8('Const','',
+        'Enter the variable name to define the const in source.');
+      comment := sw.AsUTF8('Comment','',
+        'Enter some optional comment to identify this private key');
       newfile := EccCommandSourceFile(auth,authpass,authrounds,constname,comment,
         TAESPRNG.Main.RandomPassword(24));
     end;
     ord(swInfo): begin
       repeat
-        auth := sw.AsString('Auth','','Enter the first chars of the .privkey certificate file name.');
+        auth := sw.AsString('Auth','',
+          'Enter the first chars of the .privkey certificate file name.');
       until ECCKeyFileFind(auth,true);
       writeln('Will use: ',ExtractFileName(auth),#13#10);
-      authpass := sw.AsUTF8('Pass','','Enter the PassPhrase of this .privkey file.');
-      authrounds := sw.AsInt('Rounds',60000,'Enter the PassPhrase iteration rounds of this .privkey file.');
+      authpass := sw.AsUTF8('Pass','',
+        'Enter the PassPhrase of this .privkey file.');
+      authrounds := sw.AsInt('Rounds',60000,
+        'Enter the PassPhrase iteration rounds of this .privkey file.');
       writeln(ECCCommandInfoFile(auth,authpass,authrounds));
     end;
     ord(swChain): begin
@@ -179,6 +195,10 @@ begin
       ExitCode := 3;
     end;
   end;
+  finally
+    FillcharFast(pointer(authpass),length(authpass),0);
+    FillcharFast(pointer(savepass),length(savepass),0);
+  end;
   TextColor(ccWhite);
   if newfile<>'' then
     writeln(' ',newfile,' file created.'#13#10);
@@ -188,6 +208,7 @@ begin
   if DebugHook<>0 then
     readln;
   {$endif}
+  {$WARNINGS ON}
 end;
 
 begin
