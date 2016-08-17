@@ -13950,10 +13950,17 @@ type
     // - return a cleared variant if aName is not found, or if the instance is
     // not a TDocVariant
     function GetValueOrEmpty(const aName: RawUTF8): variant;
+    /// find an item in this document, and returns its value as enumerate
+    // - return false if aName is not found, if the instance is not a TDocVariant,
+    // or if the value is not a string corresponding to the supplied enumerate
+    // - return true if the name has been found, and aValue stores the value
+    // - will call Delete() on the found entry, if aDeleteFoundEntry is true
+    function GetValueEnumerate(const aName: RawUTF8; aTypeInfo: pointer;
+      out aValue; aDeleteFoundEntry: boolean=false): Boolean;
     /// returns a TDocVariant object containing all properties matching the
     // first characters of the supplied property name
     // - returns null if the document is not a dvObject
-    // - will use IdemPChar(), so search would be case-insensitive 
+    // - will use IdemPChar(), so search would be case-insensitive
     function GetValuesByStartName(const aStartName: RawUTF8;
       TrimLeftStartName: boolean=false): variant;
     /// returns a JSON object containing all properties matching the
@@ -39149,6 +39156,25 @@ begin
     VariantToUTF8(PVariant(found)^,aValue,wasString);
     result := true;
   end;
+end;
+
+function TDocVariantData.GetValueEnumerate(const aName: RawUTF8;
+  aTypeInfo: pointer; out aValue; aDeleteFoundEntry: boolean): boolean;
+var text: RawUTF8;
+    ndx, ord: integer;
+begin
+  result := false;
+  ndx := GetValueIndex(aName);
+  if ndx<0 then
+    exit;
+  VariantToUTF8(Values[ndx],text);
+  ord := GetEnumNameValue(aTypeInfo,text,true);
+  if ord<0 then
+    exit;
+  byte(aValue) := ord;
+  if aDeleteFoundEntry then
+    Delete(ndx);
+  result := true;
 end;
 
 function TDocVariantData.GetAsDocVariant(const aName: RawUTF8; out aValue: PDocVariantData;
