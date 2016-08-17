@@ -7916,11 +7916,7 @@ type
     // - this method is thread-safe, using the Safe locker of this instance
     function Reset: boolean;
     /// number of entries in the cache
-    {$ifdef VER220} { circumvent Delphi XE compilation with packages }
     function Count: integer;
-    {$else}
-    property Count: integer read fNameValue.Count;
-    {$endif}
     /// access to the internal locker, for thread-safe process
     // - Find/Add methods calls should be protected as such: 
     // ! cache.Safe.Lock;
@@ -14665,10 +14661,10 @@ type
     ccYellow, ccWhite);
 
 /// change the Windows console text writing color
-// - call this procedure to initialize internal console process, if you manually
-// intialized the Windows console, e.g. via the following code:
+// - you should call this procedure to initialize StdOut global variable, if
+// you manually initialized the Windows console, e.g. via the following code:
 // ! AllocConsole;
-// ! TextColor(ccLightGray);
+// ! TextColor(ccLightGray); // initialize internal console context 
 procedure TextColor(Color: TConsoleColor);
 
 /// change the Windows console text background color
@@ -14687,7 +14683,7 @@ function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
 
 /// direct conversion of a UTF-8 encoded string into a console OEM-encoded String
 // - under Windows, will use the CP_OEMCP encoding
-// - under Linux, will expect the console is defined with UTF-8 encoding
+// - under Linux, will expect the console to be defined with UTF-8 encoding
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -14707,6 +14703,7 @@ procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean=true)
 var
   /// low-level handle used for console writing
   // - may be overriden when console is redirected
+  // - is initialized when TextColor() is called
   StdOut: THandle;
 
 
@@ -50057,12 +50054,19 @@ begin
   end;
 end;
 
-{$ifdef VER220}
 function TSynCache.Count: integer;
 begin
-  result := fNameValue.Count;
+  if self=nil then begin
+    result := 0;
+    exit;
+  end;
+  fSafe.Lock;
+  try
+    result := fNameValue.Count;
+  finally
+    fSafe.Unlock;
+  end;
 end;
-{$endif}
 
 
 { TRawUTF8List }
