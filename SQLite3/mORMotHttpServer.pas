@@ -848,8 +848,8 @@ begin
     [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot]);
   if err=ERROR_ACCESS_DENIED then
     if aRegisterURI then
-      result := result+' (administrator rights needed)' else
-      result := result+' (you need to register the URI )';
+      result := result+' (administrator rights needed, at least once to register the URI)' else
+      result := result+' (you need to register the URI - try to use useHttpApiRegisteringURI)';
   fLog.Add.Log(sllLastError,result,self);
   if aRaiseExceptionOnError then
     raise EHttpServerException.CreateUTF8('%: %',[self,result]);
