@@ -7091,6 +7091,7 @@ type
     /// append a boolean Value as text
     // - write either 'true' or 'false'
     procedure Add(Value: boolean); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a Currency from its Int64 in-memory representation
     procedure AddCurr64(const Value: Int64); overload;
     /// append a Currency from its Int64 in-memory representation
@@ -26857,7 +26858,7 @@ begin
   result := -1;
 end;
 {$else}
-asm
+asm // identical to IntegerScanIndex() asm stub
     push eax
     call IntegerScan
     test eax,eax
@@ -44453,7 +44454,7 @@ begin
 end;
 
 var // can be safely made global since timing is multi-thread safe
-  GlobalLogTime: array[boolean] of record
+  GlobalLogTime: array[boolean] of record // GlobalLogTime[LocalTime]
     time: TSystemTime;
     clock: cardinal; // avoid slower API call
   end;
