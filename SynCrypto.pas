@@ -1067,8 +1067,18 @@ function AESBlockToString(const block: TAESBlock): RawUTF8;
 /// compute the hexadecimal representation of a SHA1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 
+/// compute the SHA-1 digest from its hexadecimal representation
+// - returns true on success (i.e. Source has the expected size and characters)
+// - just a wrapper around SynCommons.HexToBin()
+function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+
 /// compute the hexadecimal representation of a SHA256 digest
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
+
+/// compute the SHA-256 digest from its hexadecimal representation
+// - returns true on success (i.e. Source has the expected size and characters)
+// - just a wrapper around SynCommons.HexToBin()
+function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
 
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
@@ -6436,6 +6446,11 @@ begin
   end;
 end;
 
+function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
+end;
+
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 var P: PAnsiChar;
     I: Integer;
@@ -6447,6 +6462,11 @@ begin
     P[1] := Digits[D[I] and 15];
     Inc(P,2);
   end;
+end;
+
+function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+begin
+  result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
 end;
 
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
