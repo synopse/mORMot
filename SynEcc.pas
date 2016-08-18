@@ -766,6 +766,22 @@ type
     // - returns the list of any invalid instances
     // - do not free the returned items, since they are reference to Items[]
     function ValidateItems: TECCCertificateObjArray;
+    /// check if the digital signature is recognized by the stored certificates
+    // - will check that sign.AuthoritySerial is part of the Items[] list
+    // - this method won't perform the ECDSA verification: use IsSigned() instead
+    // - this method is thread-safe, and not blocking
+    function IsAuthorized(sign: TECCSignatureCertified): boolean; overload;
+    /// check if the digital signature is recognized by the stored certificates
+    // - will check that sign.AuthoritySerial is part of the Items[] list
+    // - this method won't perform the ECDSA verification: use IsSigned() instead
+    // - this method is thread-safe, and not blocking
+    function IsAuthorized(const sign: TECCSignatureCertifiedContent): boolean; overload;
+    /// check if the digital signature is recognized by the stored certificates
+    // - will check that the supplied base64 encoded text is a ECC signature,
+    // and that its AuthoritySerial is part of the Items[] list
+    // - this method won't perform the ECDSA verification: use IsSigned() instead
+    // - this method is thread-safe, and not blocking
+    function IsAuthorized(const base64sign: RawUTF8): boolean; overload;
     /// check if the digital signature of a given data hash is valid
     // - will check internal properties of the certificate (e.g. validity dates),
     // and validate the stored ECDSA signature according to the public key of
@@ -2026,11 +2042,46 @@ begin
     result := length(fItems);
 end;
 
-function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified;
-  Data: pointer; Len: integer): TECCCertificateValidity;
+function TECCCertificateChain.IsAuthorized(sign: TECCSignatureCertified): boolean;
 begin
   if (self<>nil) and (sign<>nil) then
-    result := IsSigned(sign.Content,Data,Len) else
+    result := IsAuthorized(sign.Content) else
+    result := false;
+end;
+
+function TECCCertificateChain.IsAuthorized(
+  const sign: TECCSignatureCertifiedContent): boolean;
+var content: TECCCertificateContent;
+begin
+  result := GetBySerial(sign.AuthoritySerial, content) and
+    IsEqual(THash128(content.Signed.AuthorityIssuer), THash128(sign.AuthorityIssuer));
+end;
+
+function TECCCertificateChain.IsAuthorized(const base64sign: RawUTF8): boolean;
+var sign: TECCSignatureCertifiedContent;
+begin
+  if ECCSign(base64sign,sign) then
+    result := IsAuthorized(sign) else
+    result := false;
+end;
+
+function TECCCertificateChain.IsSigned(sign: TECCSignatureCertified;
+  Data: pointer; Len: integer): TECCCertificateValidity;
+var hash: TSHA256Digest;
+begin
+  if (self<>nil) and (sign<>nil) and (Data<>nil) and (Len>0) then begin
+    hash := SHA256Digest(Data,Len);
+    {$ifndef NOVARIANTS}
+    if sign.InheritsFrom(TECCSignatureCertifiedFile) then
+      with TECCSignatureCertifiedFile(sign) do
+        if (Size<>Len) or not IsEqual(hash,Sha256Digest) or
+           not IsEqual(MD5Buf(Data^,Len),MD5Digest) then begin
+          result := ecvCorrupted;
+          exit;
+        end;
+    {$endif}
+    result := IsSigned(sign.Content,hash);
+  end else
     result := ecvBadParameter;
 end;
 
@@ -2145,6 +2196,7 @@ begin
     fSafe.UnLock;
   end;
 end;
+
 
 initialization
   assert(sizeof(TECCCertificateContent)=173);
