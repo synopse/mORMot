@@ -39033,25 +39033,27 @@ function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
   aCaseSensitive: boolean): integer;
 var err: integer;
 begin
-  if Kind=dvArray then begin
-    result := GetInteger(aName,err);
-    if err<>0 then
-      raise EDocVariant.CreateUTF8('Impossible to find "%" property in an array',[aName]);
-    if cardinal(result)>=cardinal(VCount) then
-      raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
-    exit;
+  if (DocVariantType<>nil) and (VType=DocVariantVType) then begin
+    if Kind=dvArray then begin
+      result := GetInteger(aName,err);
+      if err<>0 then
+        raise EDocVariant.CreateUTF8('Impossible to find "%" property in an array',[aName]);
+      if cardinal(result)>=cardinal(VCount) then
+        raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
+      exit;
+    end;
+    // simple lookup for object names -> hashing may be needed for huge count
+    if aCaseSensitive then begin
+      for result := 0 to VCount-1 do
+        if (length(VName[result])=aNameLen) and
+           CompareMem(pointer(VName[result]),aName,aNameLen) then
+          exit;
+    end else
+      for result := 0 to VCount-1 do
+        if (length(VName[result])=aNameLen) and
+           IdemPropNameUSameLen(pointer(VName[result]),aName,aNameLen) then
+          exit;
   end;
-  // simple lookup for object names -> hashing may be needed for huge count
-  if aCaseSensitive then begin
-    for result := 0 to VCount-1 do
-      if (length(VName[result])=aNameLen) and
-         CompareMem(pointer(VName[result]),aName,aNameLen) then
-        exit;
-  end else
-    for result := 0 to VCount-1 do
-      if (length(VName[result])=aNameLen) and
-         IdemPropNameUSameLen(pointer(VName[result]),aName,aNameLen) then
-        exit;
   result := -1;
 end;
 
