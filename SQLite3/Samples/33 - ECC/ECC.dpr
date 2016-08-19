@@ -41,7 +41,7 @@ var cmd, issuer, authpass, savepass, constname, comment: RawUTF8;
     authrounds, days, saverounds: integer;
     sw: ICommandLine;
     signfile,auth,newfile: TFileName;
-    verif: TECCCertificateValidity;
+    verif: TECCValidity;
     certs: TStringDynArray;
     i: integer;
 begin
@@ -126,7 +126,7 @@ begin
         write(signfile,' file verification failure: ');
         ExitCode := 1;
       end;
-      writeln(sysutils.lowercase(GetEnumCaption(TypeInfo(TECCCertificateValidity),verif)),'.');
+      writeln(sysutils.lowercase(GetEnumCaption(TypeInfo(TECCValidity),verif)),'.');
     end;
     ord(swSource): begin
       repeat

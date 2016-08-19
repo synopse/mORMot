@@ -27,7 +27,7 @@ function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
 /// end-user command to verify a file signature
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
-  const AuthBase64: RawUTF8): TECCCertificateValidity;
+  const AuthBase64: RawUTF8): TECCValidity;
 
 /// end-user command to create a .inc pascal source file from a private key file
 // - ready to be included within the executable binary as private secret
@@ -101,7 +101,7 @@ begin
 end;
 
 function ECCCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
-  const AuthBase64: RawUTF8): TECCCertificateValidity;
+  const AuthBase64: RawUTF8): TECCValidity;
 var auth: TECCCertificate;
     content: RawByteString;
     json: TDocVariantData;
