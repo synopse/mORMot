@@ -89,11 +89,11 @@ var
 
 {$ifndef ISDWS}
 /// compute the zlib/deflate crc32 hash value on a supplied buffer
-function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
+function crc32(aCrc32: hash32; const buf: array of byte): hash32;
 {$endif}
 
 /// compute the zlib/deflate crc32 hash value on a supplied ASCII-7 buffer
-function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
+function crc32ascii(aCrc32: hash32; const buf: string): hash32;
 
 type
   /// internal buffer for SHA256 hashing
@@ -176,9 +176,7 @@ begin
   end;
 end;
 
-{$ifdef ISDWS}
-
-function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
+function crc32ascii(aCrc32: hash32; const buf: string): hash32;
 var i: integer;
 begin
   result := shr0(not aCRC32);
@@ -187,9 +185,8 @@ begin
   result := shr0(not result);
 end;
 
-{$else}
-
-function crc32(aCrc32: hash32; const buf: array of byte) : hash32;
+{$ifndef ISDWS}
+function crc32(aCrc32: hash32; const buf: array of byte): hash32;
 var i: integer;
 begin
   result := shr0(not aCRC32);
@@ -197,16 +194,6 @@ begin
     result := crc32tab[(result xor buf[i]) and $ff] xor (result shr 8);
   result := shr0(not result);
 end;
-
-function crc32ascii(aCrc32: hash32; const buf: string) : hash32;
-var i: integer;
-begin
-  result := shr0(not aCRC32);
-  for i := 1 to length(buf) do
-    result := crc32tab[(result xor ord(buf[i])) and $ff] xor (result shr 8);
-  result := shr0(not result);
-end;
-
 {$endif ISDWS}
 
 const
@@ -292,7 +279,7 @@ begin
     end;
   end;
 end;
-{$endif}
+{$endif ISDWS}
 
 procedure TSHA256.Update(const ascii: string);
 var Len, aLen, i: integer;

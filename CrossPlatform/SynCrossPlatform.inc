@@ -83,24 +83,17 @@
   {$define ISDWS}           // e.g. for SmartMobileStudio or Delphi Web Script
   {$define ISSMS}           // for SmartMobileStudio
 {$else}
-  {$ifdef NEXTGEN}
-    {$define HASINLINE}
-    {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
-    {$define ISDELPHI2010}
-    {$define ISDELPHIXE}
-    {$define USETMONITOR}
-    {$if CompilerVersion >= 29.0}
-      {$define ISDELPHIXE8} // e.g. for System.Net.HttpClient
-    {$ifend}
-  {$else}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
+    {$ifdef NEXTGEN}
+      {$ZEROBASEDSTRINGS OFF}      // we expect to share code among platforms
+    {$endif NEXTGEN}
     {$ifdef UNICODE}
       {$ifdef CPUX64}
         {$define CPU64}
       {$endif}
     {$else}
       {$define USEOBJECTINSTEADOFRECORD}
-    {$endif}
+    {$endif UNICODE}
     {$ifdef VER140}
       {$define ISDELPHI6}
     {$endif}
@@ -116,7 +109,7 @@
     {$if CompilerVersion >= 23.0}
       {$define ISDELPHIXE2} // e.g. for Vcl.Graphics
       {$ifndef MSWINDOWS}
-      {$define USETMONITOR}
+        {$define USETMONITOR}
       {$endif}
     {$ifend}
     {$if CompilerVersion >= 25.0}
@@ -127,11 +120,13 @@
     {$if CompilerVersion >= 29.0}
       {$define ISDELPHIXE8} // e.g. for System.Net.HttpClient
     {$ifend}
+    {$if CompilerVersion >= 32.0}
+      {$define ISDELPHI102} // e.g. for System.Net.URLClient.ResponseTimeout
+    {$ifend}
   {$else}
     {$define ISDELPHI5OROLDER}
     {$define USEOBJECTINSTEADOFRECORD}
   {$endif CONDITIONALEXPRESSIONS}
-  {$endif NEXTGEN}
   {$Q-} // disable overflow checking
   {$R-} // disable range checking
 {$endif DELPHIWEBSCRIPT}

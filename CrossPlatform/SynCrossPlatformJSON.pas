@@ -114,12 +114,12 @@ type
   // - it is in fact already faster (and using less memory) than DBXJSON and
   // SuperObject / XSuperObject libraries - of course, mORMot's TDocVariant
   // is faster, as dwsJSON is in some cases, but those are not cross-platform
-  {$ifdef UNICODE}
-  TJSONVariantData = record
-  private
-  {$else}
+  {$ifdef USEOBJECTINSTEADOFRECORD}
   TJSONVariantData = object
   protected
+  {$else}
+  TJSONVariantData = record
+  private
   {$endif}
     VType: TVarType;
     _Align: byte;
@@ -645,7 +645,7 @@ begin
 end;
 {$else}
 var len: Integer;
-begin
+begin // str := str+chr would have created a temporary string for chr
   len := length(str);
   SetLength(str,len+1);
   PChar(pointer(str))[len] := chr; // SetLength() made str unique
@@ -876,7 +876,11 @@ type
     kNone, kNull, kFalse, kTrue, kString, kInteger, kFloat, kObject, kArray);
 
   /// used to parse any JSON content
-  TJSONParser = {$ifdef UNICODE}record{$else}object{$endif}
+  {$ifdef USEOBJECTINSTEADOFRECORD}
+  TJSONParser = object
+  {$else}
+  TJSONParser = record
+  {$endif}
     JSON: string;
     Index: integer;
     JSONLength: integer;

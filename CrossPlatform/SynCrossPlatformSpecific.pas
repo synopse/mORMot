@@ -60,7 +60,7 @@ unit SynCrossPlatformSpecific;
   {$define ISSMS}           // for SmartMobileStudio
   {$define HASINLINE}
 {$else}           // Delphi or FPC: select a single USE* conditional
-  {$i SynCrossPlatform.inc} // define e.g. HASINLINE
+  {$I SynCrossPlatform.inc} // define e.g. HASINLINE
   {$ifdef MSWINDOWS}
     {$ifdef FPC}
       {$define USESYNCRT}       // sounds to be the best choice under Windows
@@ -165,14 +165,10 @@ type
   {$endif ISDWS}
 
   /// used to store the request of a REST call
-  {$ifdef FPC}
-  TSQLRestURIParams = object
-  {$else}
-  {$ifdef USESYNCRT}
+  {$ifdef USEOBJECTINSTEADOFRECORD}
   TSQLRestURIParams = object
   {$else}
   TSQLRestURIParams = record
-  {$endif}
   {$endif}
     /// input parameter containing the caller URI
     Url: string;
@@ -701,6 +697,10 @@ constructor THttpClientHttpConnectionClass.Create(const aParameters: TSQLRestCon
 begin
   inherited Create(aParameters);
   fConnection := THttpClient.Create;
+  {$ifdef ISDELPHI102} // this basic settings are available only since Berlin!
+  fConnection.ConnectionTimeout := aParameters.ConnectionTimeOut;
+  fConnection.ResponseTimeout := aParameters.ReceiveTimeout;
+  {$endif}
   fConnection.OnValidateServerCertificate := DoValidateServerCertificate;
   fOpaqueConnection := fConnection;
 end;
