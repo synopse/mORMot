@@ -606,6 +606,7 @@ begin
   fOpaqueConnection := fConnection;
   fConnection.HTTPOptions := fConnection.HTTPOptions+[hoKeepOrigProtocol];
   fConnection.ConnectTimeout := fParameters.ConnectionTimeOut;
+  fConnection.ReadTimeout := fParameters.ReceiveTimeout;
   if fParameters.Https then begin
     fIOHandler := TIdSSLIOHandlerSocketOpenSSL.Create(nil);
     fConnection.IOHandler := fIOHandler;
