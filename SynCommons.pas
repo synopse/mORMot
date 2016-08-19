@@ -7885,6 +7885,7 @@ type
     fTimeoutSeconds: cardinal;
     fTimeoutTix: cardinal;
     fSafe: TSynLocker;
+    procedure ResetIfNeeded;
   public
     /// initialize the internal storage
     // - aMaxCacheRamUsed can set the maximum RAM to be used for values, in bytes
@@ -7910,6 +7911,12 @@ type
     // - this method is not thread-safe, unless you call Safe.Lock before
     // calling Find(), and Safe.Unlock after calling Add()
     procedure Add(const aValue: RawUTF8; aTag: PtrInt);
+    /// add a Key/Value pair in the cache entries
+    // - returns true if aKey was not existing yet, and aValue has been stored
+    // - returns false if aKey did already exist in the internal cache, and
+    // its entry has been updated with the supplied aValue/aTag
+    // - this method is thread-safe, using the Safe locker of this instance
+    function AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
     /// called after a write access to the database to flush the cache
     // - set Count to 0
     // - release all cache memory
@@ -9123,6 +9130,8 @@ type
     // revision is deprecated
     function LoadFromDiff(const aDiff: RawByteString): boolean;
     /// the opaque revision number of this internal storage
+    // - is in fact the Unix timestamp shifted by 31 bits, and an incremental
+    // counter: this pattern will allow consistent IDs over several ServPanels
     property Revision: Int64 read fRevision;
     /// after how many Insert() the internal bits array storage should be
     // promoted as known revision
@@ -50157,22 +50166,27 @@ begin
   fSafe.Done;
 end;
 
-procedure TSynCache.Add(const aValue: RawUTF8; aTag: PtrInt);
+procedure TSynCache.ResetIfNeeded;
 var tix: cardinal;
 begin
-  if (self=nil) or (fFindLastAddedIndex<0) or (fFindLastKey='') then
-    // fFindLastAddedIndex should have been set by a previous call to Find()
-    exit;
-  inc(fRamUsed,length(aValue));
   if fRamUsed>fMaxRamUsed then
-    Reset;  
+    Reset;
   if fTimeoutSeconds>0 then begin
     tix := GetTickCount64 shr 10;
     if fTimeoutTix>tix then
       Reset;
     fTimeoutTix := tix+fTimeoutSeconds;
   end;
-  if fFindLastAddedIndex<0 then // Reset occurred just above
+end;
+
+procedure TSynCache.Add(const aValue: RawUTF8; aTag: PtrInt);
+begin
+  if (self=nil) or (fFindLastAddedIndex<0) or (fFindLastKey='') then
+    // fFindLastAddedIndex should have been set by a previous call to Find()
+    exit;
+  ResetIfNeeded;
+  inc(fRamUsed,length(aValue));
+  if fFindLastAddedIndex<0 then // Reset occurred in ResetIfNeeded
     fNameValue.Add(fFindLastKey,aValue,aTag) else
     with fNameValue.List[fFindLastAddedIndex] do begin // at Find() position
       Name := fFindLastKey;
@@ -50202,6 +50216,28 @@ begin
           aResultTag^ := Tag;
         fFindLastAddedIndex := -1;
       end;
+  end;
+end;
+
+function TSynCache.AddOrUpdate(const aKey, aValue: RawUTF8; aTag: PtrInt): boolean;
+var ndx: integer;
+begin
+  result := false;
+  if self=nil then
+    exit; // avoid GPF
+  fSafe.Lock;
+  try
+    ResetIfNeeded;
+    ndx := fNameValue.fDynArray.FindHashedForAdding(aKey,result);
+    with fNameValue.List[ndx] do begin 
+      Name := aKey;
+      dec(fRamUsed,length(Value));
+      Value := aValue;
+      inc(fRamUsed,length(Value));
+      Tag := aTag;
+    end;
+  finally
+    fSafe.Unlock;
   end;
 end;
 
