@@ -52075,77 +52075,7 @@ const
   STUB_SIZE = 65536; // 16*4 KB (4 KB = memory granularity)
 
 {$ifdef FPC} // alf: multi platforms support
-{$ifdef MSWINDOWS}
-function AddrAllocMem(const Size, flProtect: DWORD): Pointer;
-type
-  PMEMORY_BASIC_INFORMATION64 = ^_MEMORY_BASIC_INFORMATION64;
-  _MEMORY_BASIC_INFORMATION64 = record
-     BaseAddress: ULONGLONG;
-     AllocationBase: ULONGLONG;
-     AllocationProtect: DWORD;
-     __alignment1: DWORD;
-     RegionSize: ULONGLONG;
-     State: DWORD;
-     Protect: DWORD;
-     Type_: DWORD;
-     __alignment2: DWORD;
-  end;
-var
-  mbiold: TMemoryBasicInformation;
-  {$ifdef CPUX64}
-  mbi: _MEMORY_BASIC_INFORMATION64 absolute mbiold;
-  {$else}
-  mbi: TMemoryBasicInformation;
-  {$endif}
-  Info: TSystemInfo;
-  P, Q: UInt64;
-  PP: Pointer;
-  error: DWORD;
-  Addr: UInt64;
-begin
-  {$ifdef CPUX64}
-  Addr := UInt64(@x64FakeStub);
-  {$else}
-  Addr := 0;
-  {$endif}
-  result := nil;
-  if Addr = 0 then begin
-    result := VirtualAlloc(nil,Size,MEM_COMMIT,flProtect);
-    exit;
-  end;
-  P := UInt64(Addr);
-  Q := UInt64(Addr);
-  GetSystemInfo(Info);
-  // Interval = [2GB ..P.. 2GB] = 4GB
-  if Int64(P - (High(DWORD) div 2)) < 0 then
-    P := 1 else
-    P := UInt64(P - (High(DWORD) div 2)); // -2GB .
-  if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) then
-    Q := High( {$IFDEF CPUX64}UInt64{$ELSE}UInt{$ENDIF} ) else
-    Q := Q + (High(DWORD) div 2); // + 2GB
-  while P < Q do begin
-    PP := Pointer(P);
-    if VirtualQuery(PP, mbiold, sizeof(_MEMORY_BASIC_INFORMATION64)) = 0 then
-      break;
-    if (mbi.State and MEM_FREE = MEM_FREE) and (UInt64(mbi.RegionSize) > Size) then
-      // this memory block is usable
-      if (UInt64(mbi.RegionSize) >= Info.dwAllocationGranularity) then begin
-        { The RegionSize must be greater than the dwAllocationGranularity  }
-        { The address (PP) must be multiple of the allocation granularity (dwAllocationGranularity) . }
-        PP := Pointer(Info.dwAllocationGranularity *
-          (UInt64(PP) div Info.dwAllocationGranularity) +
-          Info.dwAllocationGranularity);
-        // if PP is multiple of dwAllocationGranularity then alloc memory
-        // if PP is not multiple of dwAllocationGranularity, VirtualAlloc will fail
-        if UInt64(PP) mod Info.dwAllocationGranularity=0 then
-          result := VirtualAlloc(PP, Size, MEM_COMMIT or MEM_RESERVE, flProtect);
-        if result <> nil then
-          exit;
-      end;
-    P := UInt64(mbi.BaseAddress) + UInt64(mbi.RegionSize); // Next region
-  end;
-end;
-{$else}
+{$ifndef MSWINDOWS}
 function AddrAllocMem(const Size, flProtect: DWORD): Pointer;
 var P, Q: UInt64;
     PP: Pointer;
@@ -52175,10 +52105,10 @@ begin
   if UInt64(Q + (High(DWORD) div 2)) > High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) then
     Q := High( {$IFDEF CPU64}UInt64{$ELSE}DWORD{$ENDIF} ) else
     Q := Q + (High(DWORD) div 2); // + 2GB
-  P := P AND $FFFFFFFFFFFF0000; //AND QWORD(-(STUB_SIZE-1));
-  Q := Q AND $FFFFFFFFFFFF0000;
+  P := P and $FFFFFFFFFFFF0000; //AND QWORD(-(STUB_SIZE-1));
+  Q := Q and $FFFFFFFFFFFF0000;
   while P < Q do begin
-    P := P + (STUB_SIZE);
+    P := P + STUB_SIZE;
     PP := Pointer(P);
     Result := fpmmap(PP,STUB_SIZE,flProtect,MAP_PRIVATE or MAP_ANONYMOUS,-1,0);
     if (Result <> MAP_FAILED) then begin
@@ -52218,13 +52148,7 @@ var
 constructor TFakeStubBuffer.Create;
 begin
   {$ifdef MSWINDOWS}
-  {$ifdef FPC}
-  // alf: this is necessary, because a plain call to VirtualAlloc with FPC
-  // reserves a piece of memory too far away for a relative jump (on x64)
-  fStub := AddrAllocMem(STUB_SIZE,PAGE_EXECUTE_READWRITE);
-  {$else FPC}
   fStub := VirtualAlloc(nil,STUB_SIZE,MEM_COMMIT,PAGE_EXECUTE_READWRITE);
-  {$endif FPC}
   {$else MSWINDOWS}
   {$ifdef KYLIX3}
   fStub := mmap(nil,STUB_SIZE,PROT_READ OR PROT_WRITE OR PROT_EXEC,MAP_PRIVATE OR MAP_ANONYMOUS,-1,0);
@@ -52281,20 +52205,20 @@ begin
           exit;
         end;
         tmp := {$ifdef CPUX86}fMethodsCount*24{$endif}
-             {$ifdef CPUX64}fMethodsCount*12{$endif}
-             {$ifdef CPUARM}fMethodsCount*12{$endif}
-             {$ifdef CPUAARCH64}($120 shr 2)+fMethodsCount*28{$endif};
+               {$ifdef CPUX64}fMethodsCount*16{$endif}
+               {$ifdef CPUARM}fMethodsCount*12{$endif}
+               {$ifdef CPUAARCH64}($120 shr 2)+fMethodsCount*28{$endif};
         fFakeStub := TFakeStubBuffer.Reserve(tmp);
         PtrUInt(fFakeStub) := PtrUInt(fFakeStub){$ifdef CPUAARCH64} + $120{$endif};
         P := pointer(fFakeStub);
         for i := 0 to fMethodsCount-1 do begin
           fFakeVTable[i+RESERVED_VTABLE_SLOTS] := P;
           {$ifdef CPUX64}
+          PWord(P)^ := $b848; inc(PWord(P)); // mov rax,offset x64FakeStub
+          PPtrUInt(P)^ := PtrUInt(@x64FakeStub); inc(PPtrUInt(P));
+          PByte(P)^ := $50; inc(PByte(P)); // push rax
           P^ := $b866+(i shl 16); inc(P);  // mov (r)ax,{MethodIndex}
-          PByte(P)^ := $e9; inc(PByte(P)); // jmp x64FakeStub
-          P^ := PtrUInt(@x64FakeStub)-PtrUInt(P)-4; inc(P);
-          P^ := $909090;
-          inc(PByte(P),3);
+          PByte(P)^ := $c3; inc(PByte(P)); // ret
           {$endif CPUX64}
           {$ifdef CPUARM}
           P^ := ($e3a040 shl 8)+i;  inc(P); // mov r4 (v1),{MethodIndex} : store method index in register
