@@ -19134,6 +19134,19 @@ const
   JSONSERIALIZEROPTIONS_AJAX = [jwoAsJsonNotAsString,jwoID_str];
 
 var
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Admin' group
+  // - you can override this value to follow your own application expectations
+  AuthAdminGroupDefaultTimeout: integer = 10;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Supervisor' group
+  // - you can override this value to follow your own application expectations
+  AuthSupervisorGroupDefaultTimeout: integer = 60;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'User' group
+  // - you can override this value to follow your own application expectations
+  AuthUserGroupDefaultTimeout: integer = 60;
+  /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Guest' group
+  // - you can override this value to follow your own application expectations
+  AuthGuestGroupDefaultTimeout: integer = 60;
+
   /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
   // - you can override this value to follow your own application expectations
   AuthAdminDefaultPassword: RawUTF8 = DEFAULT_HASH_SYNOPSE;
@@ -49507,21 +49520,21 @@ begin
           A := FULL_ACCESS_RIGHTS;
           G.Ident := 'Admin';
           G.SQLAccessRights := A;
-          G.SessionTimeout := 10;
+          G.SessionTimeout := AuthAdminGroupDefaultTimeout;
           AdminID := Server.Add(G,true);
           G.Ident := 'Supervisor';
           A.AllowRemoteExecute := SUPERVISOR_ACCESS_RIGHTS.AllowRemoteExecute;
           A.Edit(AuthUserIndex,[soSelect]); // AuthUser  R/O
           A.Edit(AuthGroupIndex,[soSelect]); // AuthGroup R/O
           G.SQLAccessRights := A;
-          G.SessionTimeout := 60;
+          G.SessionTimeout := AuthSupervisorGroupDefaultTimeout;
           SupervisorID := Server.Add(G,true);
           G.Ident := 'User';
           Exclude(A.AllowRemoteExecute,reSQLSelectWithoutTable);
           Exclude(A.GET,AuthUserIndex); // no Auth R
           Exclude(A.GET,AuthGroupIndex);
           G.SQLAccessRights := A;
-          G.SessionTimeout := 60;
+          G.SessionTimeout := AuthUserGroupDefaultTimeout;
           UserID := Server.Add(G,true);
           G.Ident := 'Guest';
           A.AllowRemoteExecute := [];
@@ -49529,7 +49542,7 @@ begin
           FillcharFast(A.PUT,sizeof(TSQLFieldTables),0);
           FillcharFast(A.DELETE,sizeof(TSQLFieldTables),0);
           G.SQLAccessRights := A;
-          G.SessionTimeout := 60;
+          G.SessionTimeout := AuthGuestGroupDefaultTimeout;
           Server.Add(G,true);
         finally
           G.Free;
