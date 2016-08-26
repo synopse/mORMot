@@ -5,6 +5,7 @@ unit SyNodeBinding_fs;
 
 interface
 
+{$I Synopse.inc}
 {$I SyNode.inc}
 
 uses
@@ -17,7 +18,7 @@ function SyNodeBindingProc_fs(const Engine: TSMEngine; const bindingNamespaceNam
 implementation
 
 uses
-  {$ifdef ISDELPHIXE2}System.SysUtils{$else}SysUtils,{$endif}
+  {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Windows;
 
 /// decode text file to string using BOM
@@ -123,24 +124,24 @@ begin
     try
       {$ifdef ISDELPHIXE2}
       if FileGetDateTimeInfo(fn, infoRec, true) then begin
-          val.asDate[cx] := infoRec.LastAccessTime;
-          obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-          val.asDate[cx] := infoRec.TimeStamp;
-          obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-          val.asDate[cx] := infoRec.CreationTime;
-          obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asDate[cx] := infoRec.LastAccessTime;
+        obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asDate[cx] := infoRec.TimeStamp;
+        obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        val.asDate[cx] := infoRec.CreationTime;
+        obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         {$IFDEF MSWINDOWS}
           if TWin32FindData(infoRec).nFileSizeHigh > 0 then
             val := JSVAL_NAN
           else
             val.asInt64 := TWin32FindData(infoRec).nFileSizeLow;
-          obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         {$ENDIF MSWINDOWS}
         {$IFDEF POSIX}
           //st: _stat platform;
           raise Exception.Create('TODO');
         {$ENDIF POSIX}
-          vp.rval := obj.ptr.ToJSValue;
+        vp.rval := obj.ptr.ToJSValue;
       end else
         vp.rval := JSVAL_NULL;
       {$else}
@@ -156,6 +157,7 @@ begin
         else
           val.asInt64 := fad.nFileSizeLow;
         obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+        vp.rval := obj.ptr.ToJSValue;
       end else
         vp.rval := JSVAL_NULL;
       {$endif ISDELPHIXE2}
