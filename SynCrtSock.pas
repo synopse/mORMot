@@ -1914,23 +1914,23 @@ function SendEmail(const Server: TSMTPConnection;
 function SendEmailSubject(const Text: string): SockString;
 
 const
-  /// HTML Status Code for "Success"
+  /// HTTP Status Code for "Success"
   STATUS_SUCCESS = 200;
-  /// HTML Status Code for "Created"
+  /// HTTP Status Code for "Created"
   STATUS_CREATED = 201;
-  /// HTML Status Code for "No Content"
+  /// HTTP Status Code for "No Content"
   STATUS_NOCONTENT = 204;
-  /// HTML Status Code for "Bad Request"
+  /// HTTP Status Code for "Bad Request"
   STATUS_BADREQUEST = 400;
-  /// HTML Status Code for "Unauthorized"
+  /// HTTP Status Code for "Unauthorized"
   STATUS_UNAUTHORIZED = 401;
-  /// HTML Status Code for "Forbidden"
+  /// HTTP Status Code for "Forbidden"
   STATUS_FORBIDDEN = 403;
-  /// HTML Status Code for "Not Found"
+  /// HTTP Status Code for "Not Found"
   STATUS_NOTFOUND = 404;
-  /// HTML Status Code for "Internal Server Error"
+  /// HTTP Status Code for "Internal Server Error"
   STATUS_SERVERERROR = 500;
-  /// HTML Status Code for "Not Implemented"
+  /// HTTP Status Code for "Not Implemented"
   STATUS_NOTIMPLEMENTED = 501;
 
   {$ifdef MSWINDOWS}

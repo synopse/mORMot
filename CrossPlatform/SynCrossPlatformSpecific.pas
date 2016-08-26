@@ -259,61 +259,63 @@ const
   /// MIME content type used for JSON communication
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
 
-  /// HTML Status Code for "Continue"
+  /// HTTP Status Code for "Continue"
   HTTP_CONTINUE = 100;
-  /// HTML Status Code for "Switching Protocols"
+  /// HTTP Status Code for "Switching Protocols"
   HTTP_SWITCHINGPROTOCOLS = 101;
-  /// HTML Status Code for "Success"
+  /// HTTP Status Code for "Success"
   HTTP_SUCCESS = 200;
-  /// HTML Status Code for "Created"
+  /// HTTP Status Code for "Created"
   HTTP_CREATED = 201;
-  /// HTML Status Code for "Accepted"
+  /// HTTP Status Code for "Accepted"
   HTTP_ACCEPTED = 202;
-  /// HTML Status Code for "Non-Authoritative Information"
+  /// HTTP Status Code for "Non-Authoritative Information"
   HTTP_NONAUTHORIZEDINFO = 203;
-  /// HTML Status Code for "No Content"
+  /// HTTP Status Code for "No Content"
   HTTP_NOCONTENT = 204;
-  /// HTML Status Code for "Multiple Choices"
+  /// HTTP Status Code for "Partial Content"
+  HTTP_PARTIALCONTENT = 206;
+  /// HTTP Status Code for "Multiple Choices"
   HTTP_MULTIPLECHOICES = 300;
-  /// HTML Status Code for "Moved Permanently"
+  /// HTTP Status Code for "Moved Permanently"
   HTTP_MOVEDPERMANENTLY = 301;
-  /// HTML Status Code for "Found"
+  /// HTTP Status Code for "Found"
   HTTP_FOUND = 302;
-  /// HTML Status Code for "See Other"
+  /// HTTP Status Code for "See Other"
   HTTP_SEEOTHER = 303;
-  /// HTML Status Code for "Not Modified"
+  /// HTTP Status Code for "Not Modified"
   HTTP_NOTMODIFIED = 304;
-  /// HTML Status Code for "Use Proxy"
+  /// HTTP Status Code for "Use Proxy"
   HTTP_USEPROXY = 305;
-  /// HTML Status Code for "Temporary Redirect"
+  /// HTTP Status Code for "Temporary Redirect"
   HTTP_TEMPORARYREDIRECT = 307;
-  /// HTML Status Code for "Bad Request"
+  /// HTTP Status Code for "Bad Request"
   HTTP_BADREQUEST = 400;
-  /// HTML Status Code for "Unauthorized"
+  /// HTTP Status Code for "Unauthorized"
   HTTP_UNAUTHORIZED = 401;
-  /// HTML Status Code for "Forbidden"
+  /// HTTP Status Code for "Forbidden"
   HTTP_FORBIDDEN = 403;
-  /// HTML Status Code for "Not Found"
+  /// HTTP Status Code for "Not Found"
   HTTP_NOTFOUND = 404;
-  // HTML Status Code for "Method Not Allowed"
+  // HTTP Status Code for "Method Not Allowed"
   HTTP_NOTALLOWED = 405;
-  // HTML Status Code for "Not Acceptable"
+  // HTTP Status Code for "Not Acceptable"
   HTTP_NOTACCEPTABLE = 406;
-  // HTML Status Code for "Proxy Authentication Required"
+  // HTTP Status Code for "Proxy Authentication Required"
   HTTP_PROXYAUTHREQUIRED = 407;
-  /// HTML Status Code for "Request Time-out"
+  /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
-  /// HTML Status Code for "Internal Server Error"
+  /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
-  /// HTML Status Code for "Not Implemented"
+  /// HTTP Status Code for "Not Implemented"
   HTTP_NOTIMPLEMENTED = 501;
-  /// HTML Status Code for "Bad Gateway"
+  /// HTTP Status Code for "Bad Gateway"
   HTTP_BADGATEWAY = 502;
-  /// HTML Status Code for "Service Unavailable"
+  /// HTTP Status Code for "Service Unavailable"
   HTTP_UNAVAILABLE = 503;
-  /// HTML Status Code for "Gateway Timeout"
+  /// HTTP Status Code for "Gateway Timeout"
   HTTP_GATEWAYTIMEOUT = 504;
-  /// HTML Status Code for "HTTP Version Not Supported"
+  /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
 

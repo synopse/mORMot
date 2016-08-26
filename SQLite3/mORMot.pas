@@ -4577,61 +4577,63 @@ type
   end;
 
 const
-  /// HTML Status Code for "Continue"
+  /// HTTP Status Code for "Continue"
   HTTP_CONTINUE = 100;
-  /// HTML Status Code for "Switching Protocols"
+  /// HTTP Status Code for "Switching Protocols"
   HTTP_SWITCHINGPROTOCOLS = 101;
-  /// HTML Status Code for "Success"
+  /// HTTP Status Code for "Success"
   HTTP_SUCCESS = 200;
-  /// HTML Status Code for "Created"
+  /// HTTP Status Code for "Created"
   HTTP_CREATED = 201;
-  /// HTML Status Code for "Accepted"
+  /// HTTP Status Code for "Accepted"
   HTTP_ACCEPTED = 202;
-  /// HTML Status Code for "Non-Authoritative Information"
+  /// HTTP Status Code for "Non-Authoritative Information"
   HTTP_NONAUTHORIZEDINFO = 203;
-  /// HTML Status Code for "No Content"
+  /// HTTP Status Code for "No Content"
   HTTP_NOCONTENT = 204;
-  /// HTML Status Code for "Multiple Choices"
+  /// HTTP Status Code for "Partial Content"
+  HTTP_PARTIALCONTENT = 206;
+    /// HTTP Status Code for "Multiple Choices"
   HTTP_MULTIPLECHOICES = 300;
-  /// HTML Status Code for "Moved Permanently"
+  /// HTTP Status Code for "Moved Permanently"
   HTTP_MOVEDPERMANENTLY = 301;
-  /// HTML Status Code for "Found"
+  /// HTTP Status Code for "Found"
   HTTP_FOUND = 302;
-  /// HTML Status Code for "See Other"
+  /// HTTP Status Code for "See Other"
   HTTP_SEEOTHER = 303;
-  /// HTML Status Code for "Not Modified"
+  /// HTTP Status Code for "Not Modified"
   HTTP_NOTMODIFIED = 304;
-  /// HTML Status Code for "Use Proxy"
+  /// HTTP Status Code for "Use Proxy"
   HTTP_USEPROXY = 305;
-  /// HTML Status Code for "Temporary Redirect"
+  /// HTTP Status Code for "Temporary Redirect"
   HTTP_TEMPORARYREDIRECT = 307;
-  /// HTML Status Code for "Bad Request"
+  /// HTTP Status Code for "Bad Request"
   HTTP_BADREQUEST = 400;
-  /// HTML Status Code for "Unauthorized"
+  /// HTTP Status Code for "Unauthorized"
   HTTP_UNAUTHORIZED = 401;
-  /// HTML Status Code for "Forbidden"
+  /// HTTP Status Code for "Forbidden"
   HTTP_FORBIDDEN = 403;
-  /// HTML Status Code for "Not Found"
+  /// HTTP Status Code for "Not Found"
   HTTP_NOTFOUND = 404;
-  // HTML Status Code for "Method Not Allowed"
+  // HTTP Status Code for "Method Not Allowed"
   HTTP_NOTALLOWED = 405;
-  // HTML Status Code for "Not Acceptable"
+  // HTTP Status Code for "Not Acceptable"
   HTTP_NOTACCEPTABLE = 406;
-  // HTML Status Code for "Proxy Authentication Required"
+  // HTTP Status Code for "Proxy Authentication Required"
   HTTP_PROXYAUTHREQUIRED = 407;
-  /// HTML Status Code for "Request Time-out"
+  /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
-  /// HTML Status Code for "Internal Server Error"
+  /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
-  /// HTML Status Code for "Not Implemented"
+  /// HTTP Status Code for "Not Implemented"
   HTTP_NOTIMPLEMENTED = 501;
-  /// HTML Status Code for "Bad Gateway"
+  /// HTTP Status Code for "Bad Gateway"
   HTTP_BADGATEWAY = 502;
-  /// HTML Status Code for "Service Unavailable"
+  /// HTTP Status Code for "Service Unavailable"
   HTTP_UNAVAILABLE = 503;
-  /// HTML Status Code for "Gateway Timeout"
+  /// HTTP Status Code for "Gateway Timeout"
   HTTP_GATEWAYTIMEOUT = 504;
-  /// HTML Status Code for "HTTP Version Not Supported"
+  /// HTTP Status Code for "HTTP Version Not Supported"
   HTTP_HTTPVERSIONNONSUPPORTED = 505;
 
   /// you can use this cookie value to delete a cookie on the browser side
@@ -4667,7 +4669,7 @@ procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
 function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 
 /// returns true for SUCCESS (200), CREATED (201), NOCONTENT (204),
-// NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
+// PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -15667,8 +15669,9 @@ type
   // - some REST/AJAX clients may expect to return status code 204 as
   // instead of 200 in case of a successful operation, but with no returned
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
-  // rsoHtml200WithNoBodyReturns204 so that any HTTP_SUCCESS (200) with no
-  // returned body would return a HTTP_NOCONTENT (204)
+  // rsoHttp200WithNoBodyReturns204 so that any HTTP_SUCCESS (200) with no
+  // returned body would return a HTTP_NOCONTENT (204), as expected by
+  // some clients
   // - by default, Add() or Update() would return HTTP_CREATED (201) or
   // HTTP_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
   // to return as JSON the last inserted/updated record
@@ -15681,7 +15684,7 @@ type
     rsoGetAsJsonNotAsString,
     rsoGetID_str,
     rsoRedirectForbiddenToAuth,
-    rsoHtml200WithNoBodyReturns204,
+    rsoHttp200WithNoBodyReturns204,
     rsoAddUpdateReturnsContent,
     rsoComputeFieldsBeforeWriteOnServerSide);
   /// allow to customize the TSQLRestServer process via its Options property
@@ -22995,6 +22998,7 @@ begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
     HTTP_ACCEPTED:            result := 'Accepted';
     HTTP_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
     HTTP_NOCONTENT:           result := 'No Content';
+    HTTP_PARTIALCONTENT:      result := 'Partial Content';
     HTTP_MULTIPLECHOICES:     result := 'Multiple Choices';
     HTTP_MOVEDPERMANENTLY:    result := 'Moved Permanently';
     HTTP_FOUND:               result := 'Found';
@@ -23028,7 +23032,7 @@ end;
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
   case Code of
-  HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_CREATED,
+  HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT, HTTP_CREATED,
   HTTP_NOTMODIFIED, HTTP_TEMPORARYREDIRECT:
     result := true;
   else
@@ -39534,7 +39538,7 @@ begin
           IdemPChar(pointer(Call.OutHead),STATICFILE_CONTENT_TYPE_HEADER_UPPPER);
       end else // Call.OutBody=''
         if (Call.OutStatus=HTTP_SUCCESS) and
-           (rsoHtml200WithNoBodyReturns204 in fOptions) then
+           (rsoHttp200WithNoBodyReturns204 in fOptions) then
           Call.OutStatus := HTTP_NOCONTENT;
       fStats.ProcessSuccess(outcomingfile);
     end else begin

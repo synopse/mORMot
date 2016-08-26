@@ -306,9 +306,9 @@ type
     /// may contain a JSON object which will be used to specify parameters
     // to the specified method
     RedirectToMethodParameters: RawUTF8;
-    /// which HTML status code should be returned
+    /// which HTTP Status code should be returned
     // - if RedirectMethodName is set, will return 307 HTTP_TEMPORARYREDIRECT
-    // by default, but you can set here the expected HTML status code, e.g.
+    // by default, but you can set here the expected HTTP Status code, e.g.
     // 201 HTTP_CREATED or 404 HTTP_NOTFOUND
     ReturnedStatus: cardinal;
   end;
