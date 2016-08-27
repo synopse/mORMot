@@ -11,6 +11,8 @@
 
 @cd ..\dmustache
 
+%3 pull
+
 @xcopy %1\SynCommons.pas . /Y >nul
 @xcopy %1\SynLZ.pas . /Y >nul
 @xcopy %1\SynMustache.pas . /Y >nul

@@ -11,6 +11,8 @@
 
 @cd ..\SynPDF
 
+%3 pull
+
 @xcopy %1\SynCommons.pas . /Y >nul
 @xcopy %1\SynLZ.pas . /Y >nul
 @xcopy %1\Synopse.inc . /Y >nul

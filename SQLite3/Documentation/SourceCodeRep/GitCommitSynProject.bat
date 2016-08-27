@@ -11,6 +11,8 @@
 
 @cd ..\SynProject
 
+%3 pull
+
 ROBOCOPY %1\SynProject . /s >nul
 
 %3 add .

@@ -11,6 +11,8 @@
 
 @cd ..\LVCL
 
+%3 pull
+
 ROBOCOPY %1\LVCL . /s >nul
 
 %3 add .
