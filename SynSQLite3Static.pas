@@ -29,7 +29,8 @@ unit SynSQLite3Static;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-   Alfred Glaenzer (alf)
+   - Alfred Glaenzer (alf)
+   - Maciej Izak (hnb)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -54,8 +55,8 @@ unit SynSQLite3Static;
   global variable with all statically linked .obj API entries.
   sqlite3 := TSQLite3LibraryStatic.Create; is called at unit initialization.
 
-  Will work only on Windows 32 bit (with Delphi or FPC, with expected .obj / .o)
-  or Linux 32 bit (with FPC, with the corresponding .o)
+  Will work on Windows 32-bit or 64-bit (with Delphi or FPC, with expected
+  .obj / .o) or Linux 32 bit (with FPC, with the corresponding .o)
   under other platforms, this unit will just do nothing (but compile).
 
   To compile our patched SQlite3.c version, available in this source folder:
@@ -184,38 +185,7 @@ procedure ChangeSQLEncryptTablePassWord(const FileName: TFileName;
 {$endif}
 
 
-{$ifdef FPC}
-{ **** latest FPC trunk expect those definitions to be part of the unit interface **** }
-
-function malloc(size: cardinal): Pointer; cdecl;
-procedure free(P: Pointer); cdecl;
-function realloc(P: Pointer; Size: Integer): Pointer; cdecl;
-function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl;
-procedure memmove(dest, source: pointer; count: Integer); cdecl;
-procedure memcpy(dest, source: Pointer; count: Integer); cdecl;
-function strlen(p: PAnsiChar): integer; cdecl;
-function strcmp(p1,p2: PAnsiChar): integer; cdecl;
-function memcmp(p1, p2: pByte; Size: integer): integer; cdecl;
-function strncmp(p1, p2: PByte; Size: integer): integer; cdecl;
-procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
-function localtime(t: PCardinal): pointer; cdecl;
-{$ifdef MSWINDOWS}
-function _beginthreadex(security: pointer; stksize: dword;
-  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
-procedure _endthreadex(ExitCode: DWORD); cdecl;
-function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-{$else}
-function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-{$endif}
-
-{ **** you may safely ignore the above definitions, and should never use them **** }
-{$endif}
-
-
 implementation
-
 
 const
   /// encryption XOR mask table size (in bytes)
@@ -277,27 +247,61 @@ extern int unixWrite(
 *)
 
 {$ifdef FPC}  // FPC expects .o linking, and only one version including FTS3
+
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
       {$L fpc-win64\sqlite3-64.o}
       {$linklib fpc-win64\libkernel32.a}
       {$linklib fpc-win64\libgcc.a}
+      {$linklib fpc-win64\libmsvcrt.a}
     {$else}
       {$L fpc-win32\sqlite3.o}
       {$linklib fpc-win32\libkernel32.a}
       {$linklib fpc-win32\libgcc.a}
-  {$endif}
+      {$linklib fpc-win32\libmsvcrt.a}
+    {$endif CPU64}
   {$else}
-  {$L fpc-linux32\sqlite3.o}
-  {$linklib fpc-linux32\gcc.a}
-  {$endif MSWINDOWS}
-{$else}
-  {$ifdef MSWINDOWS} // Delphi
-    {$ifdef INCLUDE_FTS3}
-    {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+    {$ifdef CPU64}
+      {$L fpc-linux64\sqlite3-64.o}
+      {$linklib fpc-linux64\gcc.a}
     {$else}
-    {$L sqlite3.obj}       // link SQlite3 database engine
-    {$endif INCLUDE_FTS3}
+      {$L fpc-linux32\sqlite3.o}
+      {$linklib fpc-linux32\gcc.a}
+    {$endif CPU64}
+
+    function newstat64(path: pchar; buf: PStat): cint; cdecl;
+      public name 'stat64'; export;
+    begin
+      result := fpstat(path,buf^);
+    end;
+
+    function newfstat64(fd: cint; buf: PStat): cint; cdecl;
+      public name 'fstat64'; export;
+    begin
+      result := fpfstat(fd,buf^);
+    end;
+
+    function newlstat64(path: pchar; buf: PStat): cint; cdecl;
+      public name 'lstat64'; export;
+    begin
+      result := fplstat(path,buf^);
+    end;
+
+  {$endif MSWINDOWS}
+
+{$else}
+
+  // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
+  {$ifdef MSWINDOWS}
+    {$ifdef CPU64}
+      {$L fpc-win64\sqlite3-64.o} // still buggy -> need Borland C++ linking?
+    {$else}
+      {$ifdef INCLUDE_FTS3}
+      {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+      {$else}
+      {$L sqlite3.obj}       // link SQlite3 database engine
+      {$endif INCLUDE_FTS3}
+    {$endif}
   {$else}
   {$ifdef KYLIX3}
   {$L kylix/sqlite3/sqlite3.o}
@@ -308,11 +312,9 @@ extern int unixWrite(
   {$L kylix/sqlite3/_cmpdi2.o}
   {$endif KYLIX3}
   {$endif MSWINDOWS}
-{$endif}
 
 // we then implement all needed Borland C++ runtime functions in pure pascal:
 
-{$ifndef FPC}
 function _ftol: Int64;
 // Borland C++ float to integer (Int64) conversion
 asm
@@ -324,26 +326,25 @@ function _ftoul: Int64;
 asm
   jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
 end;
-{$endif FPC}
 
 // those functions will be called only under Windows
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'malloc'{$else}alias : '_malloc'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'free'{$else}alias : '_free'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'free'{$else}'_free'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4 very fast heap manager
 begin
   FreeMem(P);
 end;
 
 function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'realloc'{$else}alias : '_realloc'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'realloc'{$else}'_realloc'{$endif};{$endif}
 // the SQLite3 database engine will use the FastMM4/SynScaleMM very fast heap manager
 begin
   result := P;
@@ -351,7 +352,7 @@ begin
 end;
 
 function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'memset'{$else}alias : '_memset'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   result := P;
@@ -359,22 +360,21 @@ begin
 end;
 
 procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'memmove'{$else}alias : '_memmove'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count); // move() is overlapping-friendly
 end;
 
 procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'memcpy'{$else}alias : '_memcpy'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   MoveFast(source^, dest^, count);
 end;
 
-{$ifndef FPC}
-
 {$ifdef MSWINDOWS}
+{$ifdef CPU32}
 
 var __turbofloat: word; { not used, but must be present for linking }
 
@@ -437,25 +437,25 @@ asm
   jmp System.@_llushr
 end;
 
+{$endif CPU32}
 {$endif MSWINDOWS}
-{$endif FPC}
 
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'strlen'{$else}alias : '_strlen'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'strlen'{$else}'_strlen'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrLen(pointer(p));
 end;
 
 function strcmp(p1,p2: PAnsiChar): integer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'strcmp'{$else}alias : '_strcmp'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'strcmp'{$else}'_strcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin // called only by some obscure FTS3 functions (normal code use dedicated functions)
   result := SynCommons.StrComp(p1,p2);
 end;
 
 function memcmp(p1, p2: pByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'memcmp'{$else}alias : '_memcmp'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memcmp'{$else}'_memcmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (p1<>p2) and (Size<>0) then
@@ -478,7 +478,7 @@ begin
 end;
 
 function strncmp(p1, p2: PByte; Size: integer): integer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'strncmp'{$else}alias : '_strncmp'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'strncmp'{$else}'_strncmp'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 var i: integer;
 begin
@@ -571,7 +571,7 @@ begin
 end;
 
 procedure qsort(baseP: pointer; NElem, Width: integer; comparF: pointer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'qsort'{$else}alias : '_qsort'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'qsort'{$else}'_qsort'{$endif};{$endif}
 // a fast full pascal version of the standard C library function
 begin
   if (cardinal(NElem)>1) and (Width>0) then
@@ -600,7 +600,7 @@ var
   end;
 
 function localtime64(const t: Int64): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__localtime64'{$else}alias : '__localtime64'{$endif};{$endif}
+  {$ifdef FPC}public name '__imp__localtime64';{$endif}
 // a fast full pascal version of the standard C library function
 var {$ifdef MSWINDOWS}
     uTm: TFileTime;
@@ -633,43 +633,59 @@ begin
 end;
 
 function localtime(t: PCardinal): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'localtime'{$else}alias : '__localtime32'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'localtime32'{$else}'__localtime32'{$endif};{$endif}
 begin
   result := localtime64(t^);
 end;
 
 {$ifdef MSWINDOWS}
 
+const
+  msvcrt = 'msvcrt.dll';
+
 function _beginthreadex(security: pointer; stksize: dword;
-  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__beginthreadex'{$else}alias : '__imp___beginthreadex'{$endif};{$endif}
-begin
-  result := CreateThread(security,stkSize,start,arg,flags,threadid);
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt;
+procedure _endthreadex(ExitCode: DWORD); cdecl; external msvcrt;
+
+{$ifdef CPU64}
+
+var
+  // still buffy as hell -> GPF at startup! :(
+  __imp__localtime64: pointer = @localtime64;
+  __imp__beginthreadex: pointer = @_beginthreadex;
+  __imp__endthreadex: pointer = @_endthreadex;
+  __imp_InitializeCriticalSection: pointer = @Windows.InitializeCriticalSection;
+
+//procedure __imp_InitializeCriticalSection; external kernel32 name 'InitializeCriticalSection';
+procedure __imp_DeleteCriticalSection; external kernel32 name 'DeleteCriticalSection';
+procedure __imp_TryEnterCriticalSection; external kernel32 name 'TryEnterCriticalSection';
+procedure __imp_EnterCriticalSection; external kernel32 name 'EnterCriticalSection';
+procedure __imp_LeaveCriticalSection; external kernel32 name 'LeaveCriticalSection';
+procedure __imp_GetCurrentThreadId; external kernel32 name 'GetCurrentThreadId';
+procedure __imp_CloseHandle; external kernel32 name 'CloseHandle';
+
+procedure ___chkstk_ms; // weird gcc dependency
+asm
+        .noframe
+        push    rcx
+        push    rax
+        cmp     rax, 4096
+        lea     rcx, [rsp+18H]
+        jc      @2
+@1:     sub     rcx, 4096
+        or      qword ptr [rcx], 00H
+        sub     rax, 4096
+        cmp     rax, 4096
+        ja      @1
+@2:     sub     rcx, rax
+        or      qword ptr [rcx], 00H
+        pop     rax
+        pop     rcx
 end;
 
-procedure _endthreadex(ExitCode: DWORD); cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias : '__imp__endthreadex'{$else}alias : '__imp___endthreadex'{$endif};{$endif}
-begin
-  ExitThread(ExitCode);
-end;
+{$endif CPU64}
 
 {$else MSWINDOWS}
-
-{$ifdef FPC}
-
-function newstat64(path: pchar; buf: PStat): cint; cdecl;
-  alias: 'stat64'; export;
-begin
-  result := fpstat(path,buf^);
-end;
-
-function newfstat64(fd: cint; buf: PStat): cint; cdecl;
-  alias: 'fstat64'; export;
-begin
-  result := fpfstat(fd,buf^);
-end;
-
-{$endif FPC}
 
 {$ifdef KYLIX3}
 
@@ -690,6 +706,8 @@ end;
 {$endif KYLIX3}
 
 {$endif MSWINDOWS}
+
+{$endif FPC}
 
 procedure CreateSQLEncryptTableBytes(const PassWord: RawUTF8; Table: PByteArray);
 // very fast table (private key) computation from a given password
@@ -821,12 +839,13 @@ type
 {$endif}
 {$endif}
   {$ifdef MSWINDOWS}
-  TSQLFile = packed record // see struct winFile in sqlite3.c
+  TSQLFile = record // see struct winFile in sqlite3.c
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
-    bulk1: cardinal;       // lockType+sharedLockByte are word-aligned
-    bulk2: cardinal;       // ctrlFlags (with DWORD alignment)
+    locktype:byte;         // Type of lock currently held on this file */
+    sharedLockByte:word;   // Randomly chosen byte used as a shared lock */
+    ctrlFlags:byte;        // Flags.  See WINFILE_* below */
     lastErrno: cardinal;   // The Windows errno from the last I/O error
     // asm code generated from c is [esi+20] for lastErrNo -> OK
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
@@ -951,14 +970,15 @@ function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
+    public name
     {$ifdef MSWINDOWS}
       {$ifdef CPU64}
-      alias : 'winWrite';
+      'winWrite';
       {$else}
-      alias : '_winWrite';
+      '_winWrite';
       {$endif}
     {$else}
-    alias : 'unixWrite'; export;
+    'unixWrite'; export;
     {$endif}
   {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
@@ -1041,14 +1061,15 @@ function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 {$endif}
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
   {$ifdef FPC}
+    public name
     {$ifdef MSWINDOWS}
       {$ifdef CPU64}
-      alias : 'winRead';
+      'winRead';
       {$else}
-      alias : '_winRead';
+      '_winRead';
       {$endif}
     {$else}
-      alias : 'unixRead'; export;
+      'unixRead'; export;
     {$endif}
   {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
@@ -1356,3 +1377,5 @@ initialization
 {$endif NOSQLITE3STATIC}
 
 end.
+
+

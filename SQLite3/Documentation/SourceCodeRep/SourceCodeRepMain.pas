@@ -168,8 +168,8 @@ begin
     exit;
   end;
   if chkFossilPull.Checked then
-    ExecAndWait(format('%sFossilUpdate.bat "%s" %d', [fBatPath, DescFile,
-      Integer(chkFossilPush.Checked)]),
+    ExecAndWait(format('%sFossilUpdate.bat "%s" %d',
+      [fBatPath, DescFile, Integer(chkFossilPush.Checked)]),
       fFossilRepository, SW_SHOWNORMAL, INFINITE);
   VersionText := UnQuoteSQLString(StringFromFile(fDevPath + '\SynopseCommit.inc'));
   VersionText := GetCSVItem(pointer(VersionText), 2, '.');

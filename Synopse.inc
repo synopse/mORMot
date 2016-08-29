@@ -216,7 +216,11 @@
   // -> only available for Win32 and Linux32 platforms by now
 
   {$ifdef MSWINDOWS}
-    {$define FPCSQLITE3STATIC} // we supply Win32 and Win64 .obj
+  {$ifdef CPUX86}
+    {$define FPCSQLITE3STATIC} // we supply Win32 .obj
+  {$else}
+    {.$define FPCSQLITE3STATIC} // we supply Win64 .o trigger GPF
+  {$endif}
   {$endif}
   {$ifdef LINUX}
     {$ifdef CPUX86}
@@ -501,7 +505,7 @@
     {$define NOSQLITE3STATIC}
   {$endif}
 {$endif}
-{$ifdef CPU64}
+{$ifndef CPUINTEL}
   {$define NOSQLITE3STATIC}
 {$endif}
 {$ifdef ANDROID}

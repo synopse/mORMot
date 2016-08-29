@@ -64,16 +64,6 @@ uses
   Classes,
   SynCommons;
 
-{$ifdef FPC}
-{$ifndef WIN32}
-{ **** latest FPC trunk expect external definitions to be part of the unit interface **** }
-procedure memcpy(dest, src: Pointer; count: integer); cdecl;
-procedure memset(dest: Pointer; val: Integer; count: integer); cdecl;
-function malloc(size: cardinal): Pointer; cdecl;
-procedure free(P: Pointer); cdecl;
-{$endif WIN32}
-{$endif FPC}
-
 /// in-memory ZLib DEFLATE compression using CloudFlare's fork
 // - returns Z_VERSION_ERROR (-6) if the CPU doesn't support SSE4.2 instructions
 // - by default, will use the deflate/.zip header-less format, but you may set
@@ -145,25 +135,25 @@ function inflate(var strm: TZStream; flush: integer): integer; cdecl; external;
 function inflateEnd(var strm: TZStream): integer; cdecl; external;
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'malloc'{$else}alias : '_malloc'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};{$endif}
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'free'{$else}alias : '_free'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'free'{$else}'_free'{$endif};{$endif}
 begin
   FreeMem(P);
 end;
 
 procedure memcpy(dest, src: Pointer; count: integer); cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias: 'memcpy'{$else}alias: 'memcpy'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'memcpy'{$endif};{$endif}
 begin // will use fastcode if compiled within
   MoveFast(src^, dest^, count);
 end;
 
 procedure memset(dest: Pointer; val: Integer; count: integer); cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias: 'memset'{$else}alias: 'memset'{$endif};{$endif}
+  {$ifdef FPC}public name{$ifdef CPU64}'memset'{$else}'memset'{$endif};{$endif}
 begin // will use fastcode if compiled within
   FillCharFast(dest^, count, val);
 end;
