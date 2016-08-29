@@ -29,6 +29,7 @@ unit SynSQLite3;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
+  - Alfred Glaenzer (alf)
   - Eric Grange
   - Vaclav
 
@@ -582,7 +583,7 @@ type
     // - The first column of the virtual table is column 0
     // - The ROWID of the virtual table is column -1
     // - Hidden columns are counted when determining the column index.
-    iColumn: Integer;
+    iColumn: integer;
     /// Constraint operator
     // - OP is =, <, <=, >, or >= using one of the SQLITE_INDEX_CONSTRAINT_* values
     op: byte;
@@ -592,9 +593,9 @@ type
     // because of the way tables are ordered in a join. The xBestIndex method
     // must therefore only consider constraints that have a usable flag which is
     // true, and just ignore contraints with usable set to false
-    usable: boolean;
+    usable: bytebool;
     /// Used internally - xBestIndex() should ignore this field
-    iTermOffset: Integer;
+    iTermOffset: integer;
   end;
   PSQLite3IndexConstraintArray = ^TSQLite3IndexConstraintArray;
   TSQLite3IndexConstraintArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraint)-1] of TSQLite3IndexConstraint;
@@ -605,9 +606,9 @@ type
     // - The first column of the virtual table is column 0
     // - The ROWID of the virtual table is column -1
     // - Hidden columns are counted when determining the column index.
-    iColumn: Integer;
+    iColumn: integer;
     /// True for DESC.  False for ASC.
-    desc: boolean;
+    desc: bytebool;
   end;
   PSQLite3IndexOrderByArray = ^TSQLite3IndexOrderByArray;
   TSQLite3IndexOrderByArray = array[0..MaxInt div SizeOf(TSQLite3IndexOrderBy)-1] of TSQLite3IndexOrderBy;
@@ -630,7 +631,7 @@ type
     // - By default, the SQLite core double checks all constraints on each
     // row of the virtual table that it receives. If such a check is redundant,
     // xBestFilter() method can suppress that double-check by setting this field
-    omit: boolean;
+    omit: bytebool;
   end;
   PSQLite3IndexConstraintUsageArray = ^TSQLite3IndexConstraintUsageArray;
   TSQLite3IndexConstraintUsageArray = array[0..MaxInt div SizeOf(TSQLite3IndexConstraintUsage) - 1] of TSQLite3IndexConstraintUsage;
@@ -649,11 +650,11 @@ type
   // of any needed data.
   TSQLite3IndexInfo = record
     /// input: Number of entries in aConstraint array
-    nConstraint: Integer;
+    nConstraint: integer;
     /// input: List of WHERE clause constraints of the form "column OP expr"
     aConstraint: PSQLite3IndexConstraintArray;
     /// input: Number of terms in the aOrderBy array
-    nOrderBy: Integer;
+    nOrderBy: integer;
     /// input: List of ORDER BY clause, one per column
     aOrderBy: PSQLite3IndexOrderByArray;
     /// output: filled by xBestIndex() method with information about what
@@ -663,20 +664,20 @@ type
     // argument in xFilter() argc/argv[] expression list
     aConstraintUsage: PSQLite3IndexConstraintUsageArray;
     /// output: Number used to identify the index
-    idxNum: Integer;
+    idxNum: integer;
     /// output: String, possibly obtained from sqlite3.malloc()
     // - may contain any variable-length data or class/record content, as
     // necessary
     idxStr: PAnsiChar;
     /// output: Free idxStr using sqlite3.free() if true (=1)
-    needToFreeIdxStr: Integer;
+    needToFreeIdxStr: integer;
     /// output: True (=1) if output is already ordered
     // - i.e. if the virtual table will output rows in the order specified
     // by the ORDER BY clause
     // - if False (=0), will indicate to the SQLite core that it will need to
     // do a separate sorting pass over the data after it comes out
     // of the virtual table
-    orderByConsumed: Integer;
+    orderByConsumed: integer;
     /// output: Estimated cost of using this index
     // - Should be set to the estimated number of disk access operations
     // required to execute this query against the virtual table
@@ -720,7 +721,7 @@ type
     /// The module for this virtual table
     pModule: PSQLite3Module;
     /// no longer used
-    nRef: Integer;
+    nRef: integer;
     /// Error message from sqlite3.mprintf()
     // - Virtual tables methods can set an error message by assigning a string
     // obtained from sqlite3.mprintf() to zErrMsg.
@@ -770,7 +771,7 @@ type
     // - Currently, handled iVersion is 2, but in future releases of SQLite the
     // module structure definition might be extended with additional methods and
     // in that case the iVersion value will be increased
-    iVersion: Integer;
+    iVersion: integer;
     /// called to create a new instance of a virtual table in response to a
     // CREATE VIRTUAL TABLE statement
     // - The job of this method is to construct the new virtual table object (an
@@ -5199,7 +5200,12 @@ function TSQLRequest.Step: integer;
 begin
   if Request=0 then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'Step');
-  result := sqlite3_check(RequestDB,sqlite3.step(Request),'Step');
+  {$ifdef FPC} // compiled with GCC -> safest to reset x87 exceptions
+  {$ifdef CPUX86}
+  with TSynFPUException.ForLibraryCode do
+  {$endif CPUX86}
+  {$endif FPC}
+    result := sqlite3_check(RequestDB,sqlite3.step(Request),'Step');
 end;
 
 function TSQLRequest.GetReadOnly: Boolean;
