@@ -4591,9 +4591,11 @@ const
   HTTP_NONAUTHORIZEDINFO = 203;
   /// HTTP Status Code for "No Content"
   HTTP_NOCONTENT = 204;
+  /// HTTP Status Code for "Reset Content"
+  HTTP_RESETCONTENT = 205;
   /// HTTP Status Code for "Partial Content"
   HTTP_PARTIALCONTENT = 206;
-    /// HTTP Status Code for "Multiple Choices"
+  /// HTTP Status Code for "Multiple Choices"
   HTTP_MULTIPLECHOICES = 300;
   /// HTTP Status Code for "Moved Permanently"
   HTTP_MOVEDPERMANENTLY = 301;
@@ -4668,8 +4670,11 @@ procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
 function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 
-/// returns true for SUCCESS (200), CREATED (201), NOCONTENT (204),
+/// returns true for successful HTTP status codes, i.e. in 200..399 range
+// - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
 // PARTIALCONTENT (206), NOTMODIFIED (304) or TEMPORARYREDIRECT (307) codes
+// - any HTTP status not part of this range will be identified as an erronous
+// requests in the internal server statistics
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -22998,6 +23003,7 @@ begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
     HTTP_ACCEPTED:            result := 'Accepted';
     HTTP_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
     HTTP_NOCONTENT:           result := 'No Content';
+    HTTP_RESETCONTENT:        result := 'Reset Content';
     HTTP_PARTIALCONTENT:      result := 'Partial Content';
     HTTP_MULTIPLECHOICES:     result := 'Multiple Choices';
     HTTP_MOVEDPERMANENTLY:    result := 'Moved Permanently';
@@ -23031,13 +23037,7 @@ end;
 
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
-  case Code of
-  HTTP_SUCCESS, HTTP_NOCONTENT, HTTP_PARTIALCONTENT, HTTP_CREATED,
-  HTTP_NOTMODIFIED, HTTP_TEMPORARYREDIRECT:
-    result := true;
-  else
-    result := false;
-  end;
+  result := (Code>=HTTP_SUCCESS) and (Code<HTTP_BADREQUEST); // 200..399
 end;
 
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
