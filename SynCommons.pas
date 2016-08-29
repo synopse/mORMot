@@ -15409,7 +15409,7 @@ type
     property RefCount: integer read fRefCount write fRefCount;
   end;
 
-{$ifdef MSWINDOWS}
+{$ifdef CPUINTEL}
 {$ifndef DELPHI5OROLDER}
   /// a simple class which will set FPU exception flags for a code block
   // - using an IUnknown interface to let the compiler auto-generate a
@@ -15447,9 +15447,8 @@ type
     // - this method is thread-safe and re-entrant (by reference-counting)
     class function ForDelphiCode: IUnknown;
   end;
-
 {$endif DELPHI5OROLDER}
-{$endif MSWINDOWS}
+{$endif CPUINTEL}
 
   /// interface for TAutoFree to register another TObject instance
   // to an existing IAutoFree local variable
@@ -49760,7 +49759,7 @@ begin
   result := E_NOINTERFACE;
 end;
 
-{$ifdef MSWINDOWS}
+{$ifdef CPUINTEL}
 {$ifndef DELPHI5OROLDER}
 
 { TSynFPUException }
@@ -49812,7 +49811,7 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
-{$endif MSWINDOWS}
+{$endif CPUINTEL}
 
 
 { TAutoFree }
