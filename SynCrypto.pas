@@ -662,6 +662,7 @@ type
 
 type
   /// cryptographic pseudorandom number generators (CSPRNG) based on AES-256
+  // - use as a shared instance via TAESPRNG.Fill() overloaded class methods
   // - this class is able to generate some random output by encrypting successive
   // values of a counter with AES-256 and a secret key
   // - the internal secret key is generated from PBKDF2 derivation of OS-supplied
@@ -704,24 +705,44 @@ type
     // - this method is thread-safe
     function FillRandomBytes(Len: integer): TBytes;
     /// computes a random ASCII password
-    // - will contain uppercase/lower letters, digits and punctuations 
+    // - will contain uppercase/lower letters, digits and punctuations
     function RandomPassword(Len: integer): RawUTF8;
     /// would force the internal generator to re-seed its private key
-    // - avoid potential attacks on backward or forward security 
+    // - avoid potential attacks on backward or forward security
     // - would be called by FillRandom() methods, according to SeedAfterBytes
     // - this method is thread-safe
     procedure Seed;
     /// retrieve some entropy bytes from the Operating System
     // - entropy comes from CryptGenRandom API on Windows, and /dev/urandom or
     // /dev/random on Linux
-    // - depending on the system, entropy may not be true randomness: if you
-    // need some truly random values, use TAESPRNG.Main.FillRandom() methods,
-    // NOT this class function (which would be much slower, BTW)
+    // - depending on the system, entropy may not be true randomness: if you need
+    // some truly random values, use TAESPRNG.Main.FillRandom() or TAESPRNG.Fill()
+    // methods, NOT this class function (which will be much slower, BTW)
     class function GetEntropy(Len: integer): RawByteString; virtual;
     /// returns a shared instance of a TAESPRNG instance
     // - if you need to generate some random content, just call the
-    // TAESPRNG.Main.FillRandom() overloaded methods
+    // TAESPRNG.Main.FillRandom() overloaded methods, or directly TAESPRNG.Fill()
     class function Main: TAESPRNG;
+    /// just a wrapper around TAESPRNG.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class procedure Fill(Buffer: pointer; Len: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAESPRNG.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class procedure Fill(out Block: TAESBlock); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAESPRNG.Main.FillRandom() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class function Fill(Len: integer): RawByteString; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// just a wrapper around TAESPRNG.Main.FillRandomBytes() function
+    // - this method is thread-safe, but you may use your own TAESPRNG instance
+    // if you need some custom entropy level
+    class function Bytes(Len: integer): TBytes;
+      {$ifdef HASINLINE}inline;{$endif}
     /// create an anti-forensic representation of a key for safe storage
     // - a binary buffer will be split into StripesCount items, ready to be
     // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
@@ -7785,6 +7806,26 @@ begin
     inc(PByte(src),BufferBytes);
   end;
   XorBlockN(src,@Buffer,pointer(tmp),BufferBytes);
+end;
+
+class procedure TAESPRNG.Fill(Buffer: pointer; Len: integer);
+begin
+  Main.FillRandom(Buffer,Len);
+end;
+
+class procedure TAESPRNG.Fill(out Block: TAESBlock);
+begin
+  Main.FillRandom(Block);
+end;
+
+class function TAESPRNG.Fill(Len: integer): RawByteString;
+begin
+  result := Main.FillRandom(Len);
+end;
+
+class function TAESPRNG.Bytes(Len: integer): TBytes;
+begin
+  result := Main.FillRandomBytes(Len);
 end;
 
 
