@@ -124,9 +124,9 @@ begin
     fFossilRepository := 'c:\progs\fossil\lib';
   fDevPath := GetEnvironmentVariable('SYN_DEVPATH');
   if fDevPath = '' then
-    if fFossilRepository <> '' then
-      fDevPath := fFossilRepository else
-      fDevPath := 'd:\dev\lib';
+    if DirectoryExists('d:\dev\lib') then
+      fDevPath := 'd:\dev\lib' else
+      fDevPath := fFossilRepository;
   fGitExe := GetEnvironmentVariable('GIT_PATH');
   if fGitExe = '' then
     fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
