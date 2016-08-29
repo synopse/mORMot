@@ -145,25 +145,25 @@ function inflate(var strm: TZStream; flush: integer): integer; cdecl; external;
 function inflateEnd(var strm: TZStream): integer; cdecl; external;
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'malloc'{$else}alias : '_malloc'{$endif};{$endif}
+  {$ifdef FPC}{$ifdef CPU64}public name 'malloc'{$else}public name '_malloc'{$endif};{$endif}
 begin
   GetMem(Result, size);
 end;
 
 procedure free(P: Pointer); cdecl; { always cdecl }
-  {$ifdef FPC}{$ifdef CPU64}alias : 'free'{$else}alias : '_free'{$endif};{$endif}
+  {$ifdef FPC}{$ifdef CPU64}public name 'free'{$else}public name '_free'{$endif};{$endif}
 begin
   FreeMem(P);
 end;
 
 procedure memcpy(dest, src: Pointer; count: integer); cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias: 'memcpy'{$else}alias: 'memcpy'{$endif};{$endif}
+  {$ifdef FPC}{$ifdef CPU64}public name 'memcpy'{$else}public name 'memcpy'{$endif};{$endif}
 begin // will use fastcode if compiled within
   MoveFast(src^, dest^, count);
 end;
 
 procedure memset(dest: Pointer; val: Integer; count: integer); cdecl;
-  {$ifdef FPC}{$ifdef CPU64}alias: 'memset'{$else}alias: 'memset'{$endif};{$endif}
+  {$ifdef FPC}{$ifdef CPU64}public name 'memset'{$else}public name 'memset'{$endif};{$endif}
 begin // will use fastcode if compiled within
   FillCharFast(dest^, count, val);
 end;
