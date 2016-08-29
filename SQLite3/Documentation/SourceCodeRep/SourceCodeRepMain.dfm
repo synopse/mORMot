@@ -3,7 +3,7 @@ object MainForm: TMainForm
   Top = 235
   BorderStyle = bsDialog
   Caption = ' mORMot Source Code Repository Synch'
-  ClientHeight = 503
+  ClientHeight = 507
   ClientWidth = 601
   Color = clBtnFace
   Constraints.MinHeight = 422
@@ -17,7 +17,7 @@ object MainForm: TMainForm
   OnCreate = FormCreate
   DesignSize = (
     601
-    503)
+    507)
   PixelsPerInch = 96
   TextHeight = 13
   object lbl1: TLabel
@@ -54,7 +54,7 @@ object MainForm: TMainForm
     Left = 16
     Top = 240
     Width = 569
-    Height = 176
+    Height = 180
     Anchors = [akLeft, akTop, akRight, akBottom]
     Font.Charset = DEFAULT_CHARSET
     Font.Color = clWindowText
@@ -67,9 +67,9 @@ object MainForm: TMainForm
   end
   object btnFossilSynch: TButton
     Left = 168
-    Top = 423
+    Top = 427
     Width = 113
-    Height = 41
+    Height = 32
     Anchors = [akLeft, akBottom]
     Caption = 'Fossil Synch'
     TabOrder = 3
@@ -77,7 +77,7 @@ object MainForm: TMainForm
   end
   object btnFullSynch: TButton
     Left = 472
-    Top = 423
+    Top = 427
     Width = 113
     Height = 57
     Anchors = [akLeft, akBottom]
@@ -94,7 +94,7 @@ object MainForm: TMainForm
   end
   object btnGitSynch: TButton
     Left = 304
-    Top = 423
+    Top = 427
     Width = 81
     Height = 41
     Anchors = [akLeft, akBottom]
@@ -114,7 +114,7 @@ object MainForm: TMainForm
   end
   object btnGitShell: TButton
     Left = 232
-    Top = 471
+    Top = 478
     Width = 49
     Height = 25
     Anchors = [akLeft, akBottom]
@@ -124,7 +124,7 @@ object MainForm: TMainForm
   end
   object btnFossilShell: TButton
     Left = 168
-    Top = 471
+    Top = 478
     Width = 65
     Height = 25
     Anchors = [akLeft, akBottom]
@@ -134,7 +134,7 @@ object MainForm: TMainForm
   end
   object btnTests: TButton
     Left = 16
-    Top = 423
+    Top = 427
     Width = 113
     Height = 60
     Anchors = [akLeft, akBottom]
@@ -154,12 +154,13 @@ object MainForm: TMainForm
   end
   object btnGitAll: TButton
     Left = 304
-    Top = 472
+    Top = 474
     Width = 41
     Height = 25
     Hint = 
       'Git Commit mORMot + SynPDF + SynMustache + LVCL + SynProject rep' +
       'ositories'
+    Anchors = [akLeft, akBottom]
     Caption = 'Git ALL'
     ParentShowHint = False
     ShowHint = True
@@ -168,10 +169,11 @@ object MainForm: TMainForm
   end
   object btnSynProject: TButton
     Left = 392
-    Top = 424
+    Top = 426
     Width = 65
     Height = 25
     Hint = 'Git Commit SynProject Repository'
+    Anchors = [akLeft, akBottom]
     Caption = 'SynProject'
     ParentShowHint = False
     ShowHint = True
@@ -180,10 +182,11 @@ object MainForm: TMainForm
   end
   object btnSynPdf: TButton
     Left = 392
-    Top = 448
+    Top = 450
     Width = 65
     Height = 25
     Hint = 'Git Commit SynPdf Repository'
+    Anchors = [akLeft, akBottom]
     Caption = 'SynPdf'
     ParentShowHint = False
     ShowHint = True
@@ -192,10 +195,11 @@ object MainForm: TMainForm
   end
   object btnDMustache: TButton
     Left = 392
-    Top = 472
+    Top = 474
     Width = 65
     Height = 25
     Hint = 'Git Commit dmustache Repository'
+    Anchors = [akLeft, akBottom]
     Caption = 'dmustache'
     ParentShowHint = False
     ShowHint = True
@@ -204,10 +208,11 @@ object MainForm: TMainForm
   end
   object btnLVCL: TButton
     Left = 344
-    Top = 472
+    Top = 474
     Width = 41
     Height = 25
     Hint = 'Git Commit LVCL Repository'
+    Anchors = [akLeft, akBottom]
     Caption = 'LVCL'
     ParentShowHint = False
     ShowHint = True
@@ -216,27 +221,30 @@ object MainForm: TMainForm
   end
   object chkCopyLink: TCheckBox
     Left = 496
-    Top = 482
+    Top = 486
     Width = 89
     Height = 17
+    Anchors = [akLeft, akBottom]
     Caption = 'and copy link'
     Checked = True
     State = cbChecked
     TabOrder = 15
   end
   object chkFossilPush: TCheckBox
-    Left = 8
-    Top = 488
-    Width = 89
+    Left = 168
+    Top = 458
+    Width = 65
     Height = 17
-    Caption = 'and fossil push'
+    Anchors = [akLeft, akBottom]
+    Caption = 'and push'
     TabOrder = 16
   end
   object chkFossilPull: TCheckBox
-    Left = 102
-    Top = 487
-    Width = 67
+    Left = 230
+    Top = 458
+    Width = 59
     Height = 17
+    Anchors = [akLeft, akBottom]
     Caption = 'and pull'
     Checked = True
     State = cbChecked
