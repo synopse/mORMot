@@ -4786,7 +4786,12 @@ procedure TSQLRequest.Close;
 begin
   if Request=0 then
     exit;
-  sqlite3.finalize(Request);
+  {$ifdef CPUX86} // safest to reset x87 exceptions
+  {$ifndef DELPHI5OROLDER}
+  with TSynFPUException.ForLibraryCode do
+  {$endif}
+  {$endif}
+    sqlite3.finalize(Request);
   fRequest := 0;
   fFieldCount := 0;
 end;
@@ -5161,11 +5166,19 @@ begin
   fRequest := 0;
   if DB=0 then
     raise ESQLite3Exception.Create(DB,SQLITE_CANTOPEN,SQL);
-  result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL)+1, fRequest, fNextSQL);
-  while (result=SQLITE_OK) and (Request=0) do // comment or white-space
-    result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
-  fFieldCount := sqlite3.column_count(fRequest);
-  sqlite3_check(RequestDB,result,SQL);
+  {$ifdef CPUX86} // safest to reset x87 exceptions
+  {$ifndef DELPHI5OROLDER}
+  with TSynFPUException.ForLibraryCode do
+  {$endif}
+  {$endif}
+  begin
+    result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL)+1,
+      fRequest, fNextSQL);
+    while (result=SQLITE_OK) and (Request=0) do // comment or white-space
+      result := sqlite3.prepare_v2(RequestDB, fNextSQL, -1, fRequest, fNextSQL);
+    fFieldCount := sqlite3.column_count(fRequest);
+    sqlite3_check(RequestDB,result,SQL);
+  end;
 end;
 
 function TSQLRequest.PrepareAnsi(DB: TSQLite3DB; const SQL: WinAnsiString): integer;
@@ -5193,19 +5206,37 @@ function TSQLRequest.Reset: integer;
 begin
   if Request=0 then
     raise ESQLite3Exception.Create('TSQLRequest.Reset called with no previous Request');
-  result := sqlite3.reset(Request); // no check here since it was PREVIOUS state
+  {$ifdef CPUX86} // safest to reset x87 exceptions
+  {$ifndef DELPHI5OROLDER}
+  with TSynFPUException.ForLibraryCode do
+  {$endif}
+  {$endif}
+    result := sqlite3.reset(Request); // no check here since it was PREVIOUS state
 end;
 
 function TSQLRequest.Step: integer;
+{$ifdef CPUX86} // safest to reset x87 exceptions - inlined TSynFPUException
+{$ifndef DELPHI5OROLDER}
+var cw87: word;
+{$endif}
+{$endif}
 begin
   if Request=0 then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'Step');
-  {$ifdef FPC} // compiled with GCC -> safest to reset x87 exceptions
   {$ifdef CPUX86}
-  with TSynFPUException.ForLibraryCode do
-  {$endif CPUX86}
-  {$endif FPC}
+  {$ifndef DELPHI5OROLDER}
+  cw87 := Get8087CW;
+  try
+  {$endif}
+  {$endif}
     result := sqlite3_check(RequestDB,sqlite3.step(Request),'Step');
+  {$ifdef CPUX86}
+  {$ifndef DELPHI5OROLDER}
+  finally
+    Set8087CW(cw87);
+  end;
+  {$endif}
+  {$endif}
 end;
 
 function TSQLRequest.GetReadOnly: Boolean;

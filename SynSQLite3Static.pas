@@ -645,12 +645,12 @@ const
 
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt;
-procedure _endthreadex(ExitCode: DWORD); cdecl; external msvcrt;
+procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
 
 var
-  // still buffy as hell -> GPF at startup! :(
+  // still buggy as hell -> GPF at startup! :(
   __imp__localtime64: pointer = @localtime64;
   __imp__beginthreadex: pointer = @_beginthreadex;
   __imp__endthreadex: pointer = @_endthreadex;
