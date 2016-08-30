@@ -3391,6 +3391,9 @@ function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawU
 function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
   Sep: AnsiChar = ','): RawUTF8;
 
+/// append a Value to a CSV string
+procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
+
 /// quick helper to initialize a dynamic array of RawUTF8 from some constants
 // - can be used e.g. as:
 // ! MyArray := TRawUTF8DynArrayFrom(['a','b','c']);
@@ -25064,7 +25067,7 @@ type TWordRec = packed record YDiv100, YMod100: byte; end;
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
 function Div100(Y: word): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result.YDiv100 := Y div 100;
+  result.YDiv100 := Y div 100;  
   result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
 end;
 {$else}
@@ -28785,6 +28788,13 @@ begin
     if s<>'' then
       result := result+','+Prefix+s;
   end;
+end;
+
+procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
+begin
+  if CSV='' then
+    CSV := Value else
+    CSV := CSV+Sep+Value;
 end;
 
 function RawUTF8ArrayToCSV(const Values: array of RawUTF8; const Sep: RawUTF8 = ','): RawUTF8;
@@ -46077,7 +46087,8 @@ begin
   vtUnicodeString:
     if VUnicodeString<>nil then // convert to UTF-8
       AddW(VUnicodeString,length(UnicodeString(VUnicodeString)),Escape);
-  {$endif} end;
+  {$endif}
+  end;
 end;
 
 {$ifndef NOVARIANTS}
