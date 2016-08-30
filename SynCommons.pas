@@ -49793,21 +49793,27 @@ begin // $1332=Delphi $133F=library (mask all exceptions)
 end;
 
 class function TSynFPUException.ForLibraryCode: IUnknown;
+var obj: TSynFPUException;
 begin
-  if GlobalSynFPUExceptionLibrary=nil then begin
-    GlobalSynFPUExceptionLibrary := TSynFPUException.Create($133F);
-    GarbageCollector.Add(GlobalSynFPUExceptionLibrary);
-  end;
   result := GlobalSynFPUExceptionLibrary;
+  if result<>nil then
+    exit;
+  obj := TSynFPUException.Create($133F);
+  GarbageCollector.Add(obj);
+  GlobalSynFPUExceptionLibrary := obj;
+  result := obj;
 end;
 
 class function TSynFPUException.ForDelphiCode: IUnknown;
+var obj: TSynFPUException;
 begin
-  if GlobalSynFPUExceptionDelphi=nil then begin
-    GlobalSynFPUExceptionDelphi := TSynFPUException.Create($1332);
-    GarbageCollector.Add(GlobalSynFPUExceptionDelphi);
-  end;
   result := GlobalSynFPUExceptionDelphi;
+  if result<>nil then
+    exit;
+  obj := TSynFPUException.Create($1332);
+  GarbageCollector.Add(obj);
+  GlobalSynFPUExceptionDelphi := obj;
+  result := obj;
 end;
 
 {$endif DELPHI5OROLDER}
