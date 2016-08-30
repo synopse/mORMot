@@ -142,9 +142,10 @@ type
     //  freed when this TSynSQLTableDataSet instance will be released
     // - you can also set it after Create(), on purpose
     property TableShouldBeFreed: boolean read fTableShouldBeFreed write fTableShouldBeFreed;
-    /// read-only access to the internal TSQLTable[JSON] data
+    /// access to the internal TSQLTable[JSON] data
     // - you can use e.g. the SortFields() methods
-    property Table: TSQLTable read fTable;
+    // - you may change the table content on the fly, if the column remains the same
+    property Table: TSQLTable read fTable write fTable;
   end;
 
 
