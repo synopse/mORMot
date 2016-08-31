@@ -164,14 +164,18 @@ function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: RawByteStrin
 /// Free aSecContext on client or server side
 procedure FreeSecContext(var aSecContext: TSecContext);
 
-const
-  /// identification name used for SSPI authentication
-  SECPKGNAMEINTERNAL = 'Negotiate';
-  /// HTTP header to be set for SSPI authentication
-  SECPKGNAMEHTTPWWWAUTHENTICATE = 'WWW-Authenticate: '+SECPKGNAMEINTERNAL;
-  /// HTTP header pattern received for SSPI authentication
-  SECPKGNAMEHTTPAUTHORIZATION = 'AUTHORIZATION: NEGOTIATE ';
+/// force NTLM authorization instead of Negotiate
+// use in case SPNs not configured propertly in domain
+// - see here for details http://synopse.info/forum/viewtopic.php?id=931&p=3
+procedure ForceNTLM(IsNTLM: boolean);
 
+var
+  /// identification name used for SSPI authentication 'Negotiate' or 'NTLM';
+  SECPKGNAMEINTERNAL: PWideChar;
+  /// HTTP header to be set for SSPI authentication  'WWW-Authenticate: NTLM' ||  'WWW-Authenticate: Negotiate';
+  SECPKGNAMEHTTPWWWAUTHENTICATE: RawUTF8;
+  /// HTTP header pattern received for SSPI authentication 'AUTHORIZATION: NTLM ' || 'AUTHORIZATION: NEGOTIATE '
+  SECPKGNAMEHTTPAUTHORIZATION: PAnsiChar;
 
 implementation
 
@@ -619,4 +623,19 @@ begin
   end;
 end;
 
+procedure ForceNTLM(IsNTLM: boolean);
+begin
+  if IsNTLM then begin
+    SECPKGNAMEINTERNAL := 'NTLM';
+    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: NTLM';
+    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NTLM ';
+  end else begin
+    SECPKGNAMEINTERNAL := 'Negotiate';
+    SECPKGNAMEHTTPWWWAUTHENTICATE := 'WWW-Authenticate: Negotiate';
+    SECPKGNAMEHTTPAUTHORIZATION := 'AUTHORIZATION: NEGOTIATE ';
+  end;
+end;
+
+initialization
+  ForceNTLM(False);
 end.
