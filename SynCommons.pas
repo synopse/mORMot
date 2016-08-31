@@ -18375,12 +18375,18 @@ begin
   GUIDToText(pointer(result),@guid);
 end;
 
-procedure Int32ToUTF8(Value : integer; var result: RawUTF8);
+var // naive but efficient cache to avoid memory alloc (use around 16KB of heap)
+  SmallUInt32UTF8: array[0..999] of RawUTF8;
+
+procedure Int32ToUTF8(Value: integer; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
-  SetRawUTF8(result,P,@tmp[15]-P);
+  if cardinal(Value)<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrInt32(@tmp[15],Value);
+    SetRawUTF8(result,P,@tmp[15]-P);
+  end;
 end;
 
 procedure Int64ToUtf8(Value: Int64; var result: RawUTF8);
@@ -22333,12 +22339,15 @@ end;
 
 {$ifndef DEFINED_INT32TOUTF8}
 
-function Int32ToUTF8(Value : integer): RawUTF8; // faster than SysUtils.IntToStr
+function Int32ToUTF8(Value: integer): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  if cardinal(Value)<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrInt32(@tmp[15],Value);
+    SetString(result,P,@tmp[15]-P);
+  end;
 end;
 
 function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
@@ -22388,16 +22397,22 @@ function UInt32ToUTF8(Value: Cardinal): RawUTF8;
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[15],Value);
-  SetString(result,P,@tmp[15]-P);
+  if Value<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrUInt32(@tmp[15],Value);
+    SetString(result,P,@tmp[15]-P);
+  end;
 end;
 
 procedure UInt32ToUtf8(Value: cardinal; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
     P: PAnsiChar;
 begin
-  P := StrUInt32(@tmp[15],Value);
-  SetRawUTF8(result,P,@tmp[15]-P);
+  if Value<=high(SmallUInt32UTF8) then
+    result := SmallUInt32UTF8[Value] else begin
+    P := StrUInt32(@tmp[15],Value);
+    SetRawUTF8(result,P,@tmp[15]-P);
+  end;
 end;
 
 {$ifndef EXTENDEDTOSTRING_USESTR}
@@ -58461,6 +58476,8 @@ procedure InitSynCommonsConversionTables;
 var i,n: integer;
     v: byte;
     crc: cardinal;
+    tmp: array[0..15] of AnsiChar;
+    P: PAnsiChar;
 {$ifdef OWNNORMTOUPPER}
     d: integer;
 const n2u: array[138..255] of byte =
@@ -58551,6 +58568,10 @@ begin
       crc := (crc shr 8) xor crc32ctab[0,ToByte(crc)];
       crc32ctab[n,i] := crc;
     end;
+  end;
+  for i := 0 to high(SmallUInt32UTF8) do begin
+    P := StrUInt32(@tmp[15],i);
+    SetString(SmallUInt32UTF8[i],P,@tmp[15]-P);
   end;
   UpperCopy255Buf := @UpperCopy255BufPas;
   {$ifdef CPUINTEL}
