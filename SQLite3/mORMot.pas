@@ -17715,8 +17715,10 @@ type
   // - so that you may have a single entry point for all client-side issues
   // - information would be available in Sender's LastErrorCode and
   // LastErrorMessage properties
-  // - if the error comes from an Execption, it would be supplied as parameter
-  // - the REST context (if any) would be supplied within the Call parameter
+  // - if the error comes from an Exception, it would be supplied as parameter
+  // - the REST context (if any) would be supplied within the Call parameter,
+  // and in this case Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken
+  // connection
   TOnClientFailed = procedure(Sender: TSQLRestClientURI; E: Exception;
     Call: PSQLRestURIParams) of object;
 
@@ -18303,6 +18305,7 @@ type
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
     /// this Event is called if URI() was not successfull
     // - the callback would have all needed information
+    // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
     // - is called always, on each TSQLRestClientURI.SetUser call
@@ -36718,13 +36721,13 @@ end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
 {$ifdef WITHLOG}
-var Log: ISynLog; // for Enter auto-leave to work with FPC
+var log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
   if fSessions=nil then
     exit; // avoid GPF e.g. in case of missing sqlite3-64.dll
   {$ifdef WITHLOG}
-  Log := fLogClass.Enter('Shutdown CurrentRequestCount=% File=%',
+  log := fLogClass.Enter('Shutdown CurrentRequestCount=% File=%',
     [fStats.AddCurrentRequestCount(0),aStateFileName],self);
   {$endif}
   OnNotifyCallback := nil;
@@ -54913,7 +54916,7 @@ begin
         'ickFromInjectedResolver: TryResolveInternal(%)=false',
         [fInterface.fInterfaceName]);
     result := TInterfacedObject(ObjectFromInterface(IInterface(dummyObj)));
-    if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal() 
+    if AndIncreaseRefCount then // RefCount=1 after TryResolveInternal()
       AndIncreaseRefCount := false else
       dec(TInterfacedObjectHooked(result).FRefCount);
   end;

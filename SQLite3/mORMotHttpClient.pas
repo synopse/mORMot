@@ -504,7 +504,7 @@ begin
     Call.OutHead := Head;
     Call.OutBody := Content;
   end else
-    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501
+    Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed 
 {$ifdef WITHLOG}
   with Call do
     fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',

@@ -264,7 +264,8 @@ type
   // or WS 2K3 - but you need to have administrator rights under Vista or Seven:
   // if http.sys fails to initialize, it will use the socket-based THttpServer;
   // a solution is to call the THttpApiServer.AddUrlAuthorize class method during
-  // program setup for the desired port, in order to allow it for every user
+  // program setup for the desired port, or define a useHttpApiRegisteringURI
+  // kind of server, in order to allow it for every user
   // - under Linux, only THttpServer is available
   // - you can specify useBidirSocket kind of server (i.e. TWebSocketServerRest)
   // if you want the HTTP protocol connection to be upgraded to a WebSockets
