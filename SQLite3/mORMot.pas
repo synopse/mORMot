@@ -4782,7 +4782,7 @@ type
     /// change the resolution of the stored information
     procedure Truncate(gran: TSynMonitorUsageGranularity);
     /// low-level read of a time field stored in this ID, per granularity
-    function GetTime(gran: TSynMonitorUsageGranularity): integer;
+    function GetTime(gran: TSynMonitorUsageGranularity; monthdaystartat0: boolean=false): integer;
       {$ifdef HASINLINE}inline;{$endif}
     /// low-level modification of a time field stored in this ID, per granularity
     procedure SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
@@ -15509,7 +15509,6 @@ type
   /// would store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
   // - the TSQLRecord.ID would be the TSynMonitorUsageID shifted by 16 bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
-  private
   protected
     fStorage: TSQLRest;
     fProcessID: TSynUniqueIdentifierProcess;
@@ -23109,7 +23108,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
           ShortStringToAnsi7String(nfo^.Name,p^.Name);
           if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
             p^.Name := RawUTF8(parent.ClassName); // meaningful property name
-          for g := mugHour to mugYear do
+          for g := low(p^.Values) to high(p^.Values) do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
           if k in SYNMONITORVALUE_CUMULATIVE then
             p^.CumulativeLast := nfo^.GetInt64Value(Instance);
@@ -23248,8 +23247,8 @@ procedure TSynMonitorUsage.Modified(Instance: TObject;
             CumulativeLast := v;
             inc(Values[mugHour][min],diff);
             inc(Values[mugDay][time.Hour],diff); // propagate
-            inc(Values[mugMonth][time.Day],diff);
-            inc(Values[mugYear][time.Month],diff);
+            inc(Values[mugMonth][time.Day-1],diff);
+            inc(Values[mugYear][time.Month-1],diff);
           end;
         end else
           for k := min to 59 do // make instant values continous
@@ -23303,6 +23302,8 @@ var t,n,p: Integer;
     track: PSynMonitorUsageTrack;
     data,val: TDocVariantData;
 begin
+  if Gran<low(fValues) then
+    raise ESynException.CreateUTF8('%.Save(%) unexpected',[self,ToText(Gran)^]);
   TDocVariant.IsOfTypeOrNewFast(fValues[Gran]);
   for t := 0 to length(fTracked)-1 do begin
     track := @fTracked[t];
@@ -23322,8 +23323,8 @@ begin
         end else begin
           if Gran<mugYear then // propagate instant values
             // e.g. Values[mugDay][hour] := Values[mugHour][minute] (=v)
-            Values[succ(Gran)][ID.GetTime(Gran)] :=
-              Values[Gran][ID.GetTime(pred(Gran))];
+            Values[succ(Gran)][ID.GetTime(Gran,true)] :=
+              Values[Gran][ID.GetTime(pred(Gran),true)];
         end;
       end;
     _Safe(fValues[Gran]).AddOrUpdateValue(track^.Name,variant(data));
@@ -23415,7 +23416,8 @@ begin
   From(now.Value);
 end;
 
-function TSynMonitorUsageID.GetTime(gran: TSynMonitorUsageGranularity): integer;
+function TSynMonitorUsageID.GetTime(gran: TSynMonitorUsageGranularity;
+  monthdaystartat0: boolean): integer;
 begin
   if not (gran in [low(USAGE_ID_SHIFT)..high(USAGE_ID_SHIFT)]) then
     result := 0 else begin
@@ -23424,7 +23426,8 @@ begin
     mugYear:
       inc(result,USAGE_ID_YEAROFFSET);
     mugDay, mugMonth:
-      inc(result);
+      if not monthdaystartat0 then
+        inc(result);
     mugHour:
       if cardinal(result)>USAGE_ID_MAX[mugHour] then
         result := 0; // stored fake USAGE_ID_HOURMARKER[mugDay..mugYear] value
@@ -41952,6 +41955,7 @@ begin
   end;
 end;
 
+
 { TSQLMonitorUsage }
 
 const
@@ -41966,6 +41970,7 @@ procedure TSQLMonitorUsage.SetUsageID(Value: integer);
 begin
   fID := (Int64(Value) shl SQLMONITORSHIFT) or Int64(fProcess);
 end;
+
 
 { TSynMonitorUsageRest }
 
@@ -42001,7 +42006,7 @@ function TSynMonitorUsageRest.LoadDB(ID: integer; Gran: TSynMonitorUsageGranular
 var recid: TID;
     rec: TSQLMonitorUsage;
 begin
-  if (ID=0) or (Gran<Low(fStoredCache)) then begin
+  if (ID=0) or (Gran<Low(fStoredCache)) or (Gran>high(fStoredCache)) then begin
     result := false;
     exit;
   end;
@@ -42029,7 +42034,7 @@ var update: boolean;
     recid: TID;
     rec: TSQLMonitorUsage;
 begin
-  if (ID=0) or (Gran<Low(fStoredCache)) then begin
+  if (ID=0) or (Gran<Low(fStoredCache)) or (Gran>high(fStoredCache)) then begin
     result := false;
     exit;
   end;

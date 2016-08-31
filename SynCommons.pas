@@ -30914,7 +30914,7 @@ procedure TTimeLogBits.FromUTCTime;
 var Ticks: cardinal;
     Now: TSystemTime;
 begin
-  Ticks := GetTickCount64 shr 8; // 256 ms resolution
+  Ticks := GetTickCount64 shr 7; // 128 ms resolution
   if Ticks=UTCTimeTicks then begin
     Value := UTCTimeCache;
     exit;
