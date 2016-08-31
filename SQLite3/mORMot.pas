@@ -4867,7 +4867,7 @@ const
   // - would recognize TSynMonitorTotalMicroSec, TSynMonitorTotalBytes,
   // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
   // TSynMonitorCount64 types
-  SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvCount, smvCount64];
+  SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvCount,smvCount64];
 
 
 function ToText(gran: TSynMonitorUsageGranularity): PShortString; overload;

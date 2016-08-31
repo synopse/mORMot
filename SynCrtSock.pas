@@ -539,7 +539,7 @@ type
     property KeepAlive: Integer index SO_KEEPALIVE write SetInt32OptionByIndex;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
     property SockIn: PTextFile read fSockIn;
-    /// after CreateSockOut, use Writeln(SockOut^S,s) to send a line to the opened socket
+    /// after CreateSockOut, use Writeln(SockOut^,s) to send a line to the opened socket
     property SockOut: PTextFile read fSockOut;
   published
     /// low-level socket handle, initialized after Open() with socket

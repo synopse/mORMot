@@ -13800,7 +13800,6 @@ procedure TTestServiceOrientedArchitecture.ClientSideRESTSessionsStats;
 var stats: RawUTF8;
     store: TSQLRestServerDB;
 begin
-  exit;
   fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS+[mlSessions];
   store := TSQLRestServerDB.CreateWithOwnModel([TSQLMonitorUsage],'servicestats.db3');
   try
@@ -13810,7 +13809,7 @@ begin
     fClient.Server.StatUsage := TSynMonitorUsageRest.Create(store,1);
     ClientTest(TSQLRestRoutingREST,false);
     fClient.CallBackGet('stat',['withall',true],stats);
-    FileFromString(JSONReformat(stats),'statsSessions.json');
+    JSONReformatToFile(stats,'statsSessions.json');
     fClient.Server.StatLevels := SERVERDEFAULTMONITORLEVELS;
     fClient.Server.StatUsage := nil;
   finally
