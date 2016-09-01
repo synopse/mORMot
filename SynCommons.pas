@@ -39076,7 +39076,7 @@ begin
         raise EDocVariant.CreateUTF8('Out of range [%] property in an array',[aName]);
       exit;
     end;
-    // simple lookup for object names -> hashing may be needed for huge count
+    // simple lookup for object names -> hashing (may be) needed for huge count
     if aCaseSensitive then begin
       for result := 0 to VCount-1 do
         if (length(VName[result])=aNameLen) and

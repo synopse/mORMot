@@ -218,8 +218,10 @@ type
     /// compute the relative memory address from its absolute (pointer) value
     function AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
     /// retrieve a symbol according to a relative code address
+    // - use fast O(log n) binary search
     function FindSymbol(aAddressOffset: integer): integer;
     /// retrieve an unit and source line, according to a relative code address
+    // - use fast O(log n) binary search
     function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
@@ -1590,21 +1592,22 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
           // trim left 'UnitName.' for each symbol (since Delphi 2005)
           case PWord(P)^ of // ignore RTL namespaces
           ord('S')+ord('y') shl 8:
-             if IdemPChar(P+2,'STEM.') then
-               if IdemPChar(P+7,'WIN.') then inc(P,9) else
-               if IdemPChar(P+7,'RTTI.') then inc(P,10) else
-               if IdemPChar(P+7,'TYPES.') then inc(P,10) else
-               if IdemPChar(P+7,'ZLIB.') then inc(P,10) else
-               if IdemPChar(P+7,'CLASSES.') then inc(P,10) else
-               if IdemPChar(P+7,'SYSUTILS.') then inc(P,10) else
-               if IdemPChar(P+7,'VARUTILS.') then inc(P,10) else
-               if IdemPChar(P+7,'STRUTILS.') then inc(P,10) else
-               if IdemPChar(P+7,'SYNCOBJS.') then inc(P,10) else
-               if IdemPChar(P+7,'GENERICS.') then inc(P,16) else
-               if IdemPChar(P+7,'CHARACTER.') then inc(P,10) else
-               if IdemPChar(P+7,'TYPINFO.') then inc(P,10) else
-               if IdemPChar(P+7,'VARIANTS.') then inc(P,10);
+            if IdemPChar(P+2,'STEM.') then
+              if IdemPChar(P+7,'WIN.') then inc(P,9) else
+              if IdemPChar(P+7,'RTTI.') then inc(P,10) else
+              if IdemPChar(P+7,'TYPES.') then inc(P,10) else
+              if IdemPChar(P+7,'ZLIB.') then inc(P,10) else
+              if IdemPChar(P+7,'CLASSES.') then inc(P,10) else
+              if IdemPChar(P+7,'SYSUTILS.') then inc(P,10) else
+              if IdemPChar(P+7,'VARUTILS.') then inc(P,10) else
+              if IdemPChar(P+7,'STRUTILS.') then inc(P,10) else
+              if IdemPChar(P+7,'SYNCOBJS.') then inc(P,10) else
+              if IdemPChar(P+7,'GENERICS.') then inc(P,16) else
+              if IdemPChar(P+7,'CHARACTER.') then inc(P,10) else
+              if IdemPChar(P+7,'TYPINFO.') then inc(P,10) else
+              if IdemPChar(P+7,'VARIANTS.') then inc(P,10);
           ord('W')+ord('i') shl 8: if IdemPChar(P+2,'NAPI.') then inc(P,7);
+          ord('F')+ord('m') shl 8: if IdemPChar(P+2,'X.') then inc(P,7);
           ord('V')+ord('c') shl 8: if IdemPChar(P+2,'L.') then inc(P,7);
           end;
           while (P<PEnd) and (P^<>'.') do if P^<=' ' then break else inc(P);
@@ -2002,28 +2005,35 @@ begin
 end;
 
 var
-  InstanceMapFile: TSynMapFile;
+  ExeInstanceMapFile: TSynMapFile;
+
+function GetInstanceMapFile: TSynMapFile;
+begin
+  if ExeInstanceMapFile=nil then
+    GarbageCollectorFreeAndNil(ExeInstanceMapFile,TSynMapFile.Create);
+  result := ExeInstanceMapFile;
+end;
 
 function ToText(const Event: TMethod): RawUTF8;
 begin
-  FormatUTF8('% on %(%)', [InstanceMapFile.FindLocation(PtrUInt(Event.Code)),
+  FormatUTF8('% using %(%)', [GetInstanceMapFile.FindLocation(PtrUInt(Event.Code)),
     TObject(Event.Data), Event.Data], result);
 end;
 
 function TSynMapFile.AbsoluteToOffset(aAddressAbsolute: PtrUInt): integer;
 begin
-  if InstanceMapFile=nil then
+  if self=nil then
     result := 0 else
-    result := PtrInt(aAddressAbsolute)-PtrInt(InstanceMapFile.fCodeOffset);
+    result := PtrInt(aAddressAbsolute)-PtrInt(fCodeOffset);
 end;
 
 class procedure TSynMapFile.Log(W: TTextWriter; aAddressAbsolute: PtrUInt;
   AllowNotCodeAddr: boolean);
 var u, s, Line, offset: integer;
 begin
-  if (W=nil) or (aAddressAbsolute=0) or (InstanceMapFile=nil) then
+  if (W=nil) or (aAddressAbsolute=0) then
     exit;
-  with InstanceMapFile do
+  with GetInstanceMapFile do
   if HasDebugInfo then begin
     offset := AbsoluteToOffset(aAddressAbsolute);
     s := FindSymbol(offset);
@@ -3623,8 +3633,6 @@ begin
   end else
     if (fFileRotationSize>0) or (fFileRotationNextHour<>0) then
       fFamily.HighResolutionTimeStamp := false;
-  if InstanceMapFile=nil then
-    GarbageCollectorFreeAndNil(InstanceMapFile,TSynMapFile.Create);
   fStreamPositionAfterHeader := fWriter.WrittenBytes;
   QueryPerformanceCounter(fStartTimeStamp);
   if fFamily.LocalTimeStamp then

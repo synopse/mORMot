@@ -8326,9 +8326,14 @@ type
     function SearchValue(const aUpperValue: RawUTF8; StartRow: integer;
       FieldIndex: PInteger; Client: TObject; Lang: TSynSoundExPronunciation=sndxNone;
       UnicodeComparison: boolean=false): integer; overload;
-    /// search for a value inside the raw table data
+    /// search for a value inside the raw table data, using UTF8IComp/StrComp()
     // - returns 0 if not found, or the matching Row number otherwise
-    function SearchFieldEquals(const aValue: RawUTF8; FieldIndex: integer): integer;
+    function SearchFieldEquals(const aValue: RawUTF8; FieldIndex: integer;
+      StartRow: integer=1; CaseSensitive: boolean=false): integer;
+    /// search for a value inside the raw table data, using IdemPChar()
+    // - returns 0 if not found, or the matching Row number otherwise
+    function SearchFieldIdemPChar(const aValue: RawUTF8; FieldIndex: integer;
+      StartRow: integer=1): integer;
 
     /// if the ID column is available, hides it from fResults[]
     // - useful for simplier UI, with a hidden ID field
@@ -25946,14 +25951,38 @@ begin
   end;
 end;
 
-function TSQLTable.SearchFieldEquals(const aValue: RawUTF8; FieldIndex: integer): integer;
+function TSQLTable.SearchFieldEquals(const aValue: RawUTF8; FieldIndex, StartRow: integer;
+  CaseSensitive: boolean): integer;
+var U: PPUTF8Char;
 begin
+  if (self<>nil) and (aValue<>'') and (cardinal(FieldIndex)<cardinal(fFieldCount)) then begin
+    U := @fResults[FieldCount*StartRow+FieldIndex];
+    if CaseSensitive then
+      for result := StartRow to fRowCount do
+        if StrComp(U^,pointer(aValue))=0 then
+          exit else
+          inc(U,FieldCount) else
+      for result := StartRow to fRowCount do
+        if UTF8IComp(U^,pointer(aValue))=0 then
+          exit else
+          inc(U,FieldCount);
+  end;
   result := 0;
-  if (self=nil) or (aValue='') or (cardinal(FieldIndex)>cardinal(fFieldCount)) then
-    exit;
-  for result := 1 to fRowCount do
-    if UTF8IComp(Get(result,FieldIndex),pointer(aValue))=0 then
-      exit;
+end;
+
+function TSQLTable.SearchFieldIdemPChar(const aValue: RawUTF8;
+  FieldIndex, StartRow: integer): integer;
+var U: PPUTF8Char;
+    up: RawUTF8;
+begin
+  if (self<>nil) and (aValue<>'') and (cardinal(FieldIndex)<cardinal(fFieldCount)) then begin
+    UpperCaseCopy(aValue,up);
+    U := @fResults[FieldCount*StartRow+FieldIndex];
+    for result := StartRow to fRowCount do
+      if IdemPChar(U^,pointer(up)) then
+        exit else
+        inc(U,FieldCount);
+  end;
   result := 0;
 end;
 
