@@ -112,6 +112,9 @@ type
     // - result should point to Int64,Double,Blob,UTF8 data (if ResultLen<>nil)
     function GetRowFieldData(Field: TField; RowIndex: integer; out ResultLen: Integer;
       OnlyCheckNull: boolean): Pointer; virtual; abstract;
+    // - to search for a field, returning RecNo (0 = not found by default)
+    function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
+      aOptions: TLocateOptions): integer; virtual;
   public
     /// this overridden constructor will compute an unique Name property
     constructor Create(Owner: TComponent); override;
@@ -136,6 +139,10 @@ type
     {$ifndef UNICODE}
     function GetFieldData(Field: TField; Buffer: pointer; NativeFormat: Boolean): Boolean; override;
     {$endif}
+    /// searching a dataset for a specified record and making it the active record
+    // - will call SearchForField protected virtual method for actual lookup
+    function Locate(const KeyFields: string; const KeyValues: Variant;
+      Options: TLocateOptions) : boolean; override;
   published
     property Active;
     property BeforeOpen;
@@ -179,6 +186,8 @@ type
     function GetRecordCount: Integer; override;
     function GetRowFieldData(Field: TField; RowIndex: integer;
       out ResultLen: Integer; OnlyCheckNull: boolean): Pointer; override;
+    function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
+      aOptions: TLocateOptions): integer; override;
   public
     /// initialize the virtual TDataSet from a dynamic array of TDocVariant
     // - you can set the expected column names and types matching the results
@@ -511,6 +520,53 @@ begin
   Name := ClassName+IntToStr(GlobalDataSetCount); // force unique name
 end;
 
+function TSynVirtualDataSet.SearchForField(const aLookupFieldName: RawUTF8;
+  const aLookupValue: variant; aOptions: TLocateOptions): integer;
+begin
+  result := 0; // nothing found
+end;
+
+function TSynVirtualDataSet.Locate(const KeyFields: string;
+  const KeyValues: Variant; Options: TLocateOptions) : boolean;
+var i, l, h, found: Integer;
+    FieldList: TList;
+begin
+  CheckActive;
+  result := true;
+  if not IsEmpty then
+    if VarIsArray(KeyValues) then begin
+      FieldList := TList.Create;
+      try
+        GetFieldList(FieldList,KeyFields);
+        l := VarArrayLowBound(KeyValues,1);
+        h := VarArrayHighBound(KeyValues,1);
+        if (FieldList.Count = 1) and (l < h) then begin
+          found := SearchForField(KeyFields,KeyValues,Options);
+          if found>0 then begin
+            RecNo := found;
+            exit;
+          end;
+        end
+        else for i := 0 to FieldList.Count - 1 do begin
+          found := SearchForField(TField(FieldList[i]).FieldName,KeyValues[l+i],Options);
+          if found>0 then begin
+            RecNo := found;
+            exit;
+          end;
+        end;
+      finally
+        FieldList.Free;
+      end;
+    end else begin
+      found := SearchForField(KeyFields,KeyValues,Options);
+      if found>0 then begin
+        RecNo := found;
+        exit;
+      end;
+    end;
+  result := false;
+end;
+
 
 function DataSetToJSON(Data: TDataSet): RawUTF8;
 var W: TJSONWriter;
@@ -665,8 +721,7 @@ begin
 end;
 
 function TDocVariantArrayDataSet.GetRowFieldData(Field: TField;
-  RowIndex: integer; out ResultLen: Integer;
-  OnlyCheckNull: boolean): Pointer;
+  RowIndex: integer; out ResultLen: Integer; OnlyCheckNull: boolean): Pointer;
 var F,ndx: integer;
     wasString: Boolean;
 begin
@@ -721,6 +776,25 @@ begin
     FieldDefs.Add(UTF8ToString(fColumns[F].Name),TYPES[fColumns[F].FieldType],siz);
   end;
 end;
+
+function TDocVariantArrayDataSet.SearchForField(const aLookupFieldName: RawUTF8;
+  const aLookupValue: variant; aOptions: TLocateOptions): integer;
+var f: integer;
+begin
+  f := -1; // allows O(1) field lookup for invariant object columns
+  for result := 1 to length(fValues) do
+  with _Safe(fValues[result-1])^ do
+    if (Kind=dvObject) and (Count>0) then begin
+      if (cardinal(f)>=cardinal(Count)) or
+         not IdemPropNameU(aLookupFieldName,Names[f]) then
+        f := GetValueIndex(aLookupFieldName);
+      if (f>=0) and (SortDynArrayVariantComp(TVarData(Values[f]),
+         TVarData(aLookupValue),loCaseInsensitive in aOptions)=0) then
+        exit;
+   end;
+  result := 0;
+end;
+
 
 function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
   const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
