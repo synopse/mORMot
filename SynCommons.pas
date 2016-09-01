@@ -10058,6 +10058,13 @@ var
   // - returns 255 for any character out of 0..9,A..Z,a..z range
   // - used e.g. by HexToBin() function
   ConvertHexToBin: array[byte] of byte;
+  /// naive but efficient cache to avoid string memory allocation for
+  // 0..999 small numbers by Int32ToUTF8/UInt32ToUTF8
+  // - use around 16KB of heap, but increase multi-thread abilities
+  // - is especially useful when strings are used as array indexes (e.g.
+  // in SynMongoDB BSON)
+  SmallUInt32UTF8: array[0..999] of RawUTF8;
+
 
 /// fast conversion from hexa chars into binary data
 // - BinBytes contain the bytes count to be converted: Hex^ must contain
@@ -10340,11 +10347,11 @@ function ExtractInlineParameters(const SQL: RawUTF8;
 procedure YearToPChar(Y: cardinal; P: PUTF8Char);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
-/// creates a 3 digits string from a 0..999 value
+/// creates a 3 digits string from a 0..999 value as '000'..'999'
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// creates a 4 digits string from a 0..9999 value
+/// creates a 4 digits string from a 0..9999 value as '0000'.'9999'
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -18374,9 +18381,6 @@ begin
   FastNewRawUTF8(result,36);
   GUIDToText(pointer(result),@guid);
 end;
-
-var // naive but efficient cache to avoid memory alloc (use around 16KB of heap)
-  SmallUInt32UTF8: array[0..999] of RawUTF8;
 
 procedure Int32ToUTF8(Value: integer; var result: RawUTF8);
 var tmp: array[0..15] of AnsiChar;
