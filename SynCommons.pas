@@ -35,8 +35,9 @@ unit SynCommons;
    - itSDS
    - Johan Bontes
    - kevinday
-   - mazinsw
    - Marius Maximus (mariuszekpl)
+   - mazinsw
+   - mingda
    - RalfS
    - Sanyin
    - Pavel (mpv)
@@ -43413,6 +43414,7 @@ var i, n, cap, ndx: integer;
 begin
   result := false;
   fHashs := nil;
+  fHashsCount := 0;
   n := Count;
   if (n=0) or (n<fHashCountTrigger) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
@@ -46954,7 +46956,7 @@ begin
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     if StrIComp(Name,pointer(aName))=0 then begin
-      Result := RawUTF8(Value);
+      SetString(result,PAnsiChar(Value),StrLen(Value));
       exit;
     end;
   until (P=nil) or (EndOfObject='}');
