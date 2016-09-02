@@ -12989,6 +12989,7 @@ type
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
     fFrequencyTimeStamp: Int64;
+    fBackgroundTimer: TSynBackgroundTimer;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
@@ -14094,6 +14095,17 @@ type
     function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
       aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
+    /// define a task running on a periodic number of seconds
+    // - could be used to run background maintenance or monitoring tasks on
+    // this TSQLRest instance, at a low pace (typically every few minutes)
+    // - will instantiate and run a shared TSynBackgroundTimer instance for this
+    // TSQLRest, so all tasks will share the very same thread
+    // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
+    procedure TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+    /// undefine a task running on a periodic number of seconds
+    // - should have been registered by a previous call to TimerEnable() method
+    // - returns true on success, false if the supplied task was not registered
+    function TimerDisable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -33030,6 +33042,30 @@ begin
       BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
+procedure TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess;
+  aOnProcessSecs: cardinal);
+begin
+  if self=nil then
+    exit;
+  if aOnProcessSecs=0 then begin
+    TimerDisable(aOnProcess);
+    exit;
+  end;
+  if fBackgroundTimer=nil then begin
+    fBackgroundTimer := TSynBackgroundTimer.Create(FormatUTF8('% "%" Timer',
+      [self,Model.Root]),BeginCurrentThread,EndCurrentThread);
+    PrivateGarbageCollector.Add(fBackgroundTimer);
+  end;
+  fBackgroundTimer.Enable(aOnProcess,aOnProcessSecs);
+end;
+
+function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+begin
+  if (self=nil) or (fBackgroundTimer=nil) then
+    result := false else
+    result := fBackgroundTimer.Disable(aOnProcess);
+end;
+
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
   var result: TServiceCustomAnswer);
 begin
@@ -39676,6 +39712,12 @@ begin
     W.AddU(fCache.CachedMemory); // will also flush outdated JSON
     W.Add(',');
   end;
+  if fBackgroundTimer<>nil then begin
+    W.CancelLastComma;
+    W.AddShort(',"backgroundTimer":');
+    fBackgroundTimer.Stats.ComputeDetailsTo(W);
+    W.Add(',');
+  end;
   withall := Ctxt.InputExists['withall'];
   if withall or Ctxt.InputExists['withtables'] then begin
     W.CancelLastComma;
@@ -40245,7 +40287,6 @@ begin
         RunningThread := nil;
   inherited EndCurrentThread(Sender); // should be done eventually
 end;
-
 
 
 { TSQLRecordModification }
