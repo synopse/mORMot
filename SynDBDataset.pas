@@ -68,10 +68,11 @@ uses
   SynLog,
   SynDB,
   {$ifdef ISDELPHIXE2}
-  Data.DB, Data.FMTBcd;
+  Data.DB,
   {$else}
-  DB, FMTBcd;
+  DB,
   {$endif}
+  SynVirtualDataSet; // for AddBcd/BCDToCurr
 
 
 { -------------- DB.pas TDataSet (TQuery like) abstract connection }
@@ -234,97 +235,12 @@ type
   end;
 
 
-/// append a TBcd value as text to the output buffer
-// - very optimized for speed
-procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
-
-/// convert a TBcd value as text to the output buffer
-// - buffer is to be array[0..66] of AnsiChar
-// - returns the resulting text start in PBeg, and the length as function result
-// - does not handle negative sign and 0 value - see AddBcd() function use case
-// - very optimized for speed
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
-
-
 implementation
 
 
 const
   IsTLargeIntField = 1;
   IsTWideStringField = 2;
-
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
-var i,DecimalPos: integer;
-    P,Frac: PByte;
-    PEnd: PAnsiChar;
-begin
-  result := 0;
-  if AValue.Precision=0 then
-    exit;
-  DecimalPos := AValue.Precision-(AValue.SignSpecialPlaces and $3F);
-  P := pointer(ADest);
-  Frac := @Avalue.Fraction;
-  for i := 0 to AValue.Precision-1 do begin
-    if i=DecimalPos then
-      if i=0 then begin
-        PWord(P)^ := ord('0')+ord('.')shl 8;
-        inc(P,2);
-      end else begin
-        P^ := ord('.');
-        inc(P);
-      end;
-    if (i and 1)=0 then
-      P^ := ((Frac^ and $F0) shr 4)+ord('0') else begin
-      P^ := ((Frac^ and $0F))+ord('0');
-      inc(Frac);
-    end;
-    inc(P);
-  end;
-  // remove trailing 0 after decimal
-  if AValue.Precision>DecimalPos then begin
-    repeat dec(P) until (P^<>ord('0')) or (P=pointer(ADest));
-    PEnd := pointer(P);
-    if PEnd^<>'.' then
-      inc(PEnd);
-  end else
-    PEnd := pointer(P);
-  PEnd^ := #0;
-  // remove leading 0
-  PBeg := ADest;
-  while (PBeg[0]='0') and (PBeg[1] in ['0'..'9']) do inc(PBeg);
-  result := PEnd-PBeg;
-end;
-
-procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
-var len: integer;
-    PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
-begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
-  if len<=0 then
-    WR.Add('0') else begin
-    if AValue.SignSpecialPlaces and $80=$80 then
-      WR.Add('-');
-    WR.AddNoJSONEscape(PBeg,len);
-  end;
-end;
-
-{$ifdef ISDELPHIXE} // latest purepascal version is slower than this
-function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
-var len: integer;
-    PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
-begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
-  if len<=0 then
-    Curr := 0 else begin
-    PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
-    if AValue.SignSpecialPlaces and $80=$80 then
-      Curr := -Curr;
-  end;
-  result := true;
-end;
-{$endif}
 
 
 { TSQLDBDatasetConnectionProperties }

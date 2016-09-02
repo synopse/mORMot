@@ -63,8 +63,10 @@ uses
   Classes,
   {$ifndef DELPHI5OROLDER}
   Variants,
+  {$ifdef MSWINDOWS}
   {$ifndef FPC}
   MidasLib,
+  {$endif}
   {$endif}
   {$endif}
   SynCommons, mORmot,

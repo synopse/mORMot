@@ -64,14 +64,18 @@ unit SynDBMidasVCL;
 interface
 
 uses
-  {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
+  {$ifdef ISDELPHIXE2}
+  System.SysUtils,
+  {$else}
+  SysUtils,
+  {$endif}
   Classes,
-{$ifndef DELPHI5OROLDER}
+  {$ifndef DELPHI5OROLDER}
   Variants,
   {$ifndef FPC}
   MidasLib,
   {$endif}
-{$endif}
+  {$endif}
   SynCommons,
   SynDB, SynDBVCL,
   DB,
@@ -303,7 +307,7 @@ function ToClientDataSet(aDataSet: TClientDataSet; aStatement: TSQLDBStatement;
   aMaxRowCount: integer; aMode: TClientDataSetMode; aLogChange: boolean): boolean; overload;
 var Source: TSynBinaryDataSet;
     Columns: array of record
-      Field: TField;
+      Field: DB.TField;
       WasReadOnly: boolean;
       OnChange: TFieldNotifyEvent;
     end;
@@ -386,9 +390,9 @@ begin
           Field.AsInteger := Source.DataAccess.ColumnInt(f);
         ftLargeint:
           TLargeintField(Field).Value := Source.DataAccess.ColumnInt(f);
-        ftFloat, ftCurrency:
+        ftFloat, DB.ftCurrency:
           Field.AsFloat := Source.DataAccess.ColumnDouble(f);
-        ftDate,ftDateTime,ftTime:
+        DB.ftDate,ftDateTime,ftTime:
           Field.AsDateTime := Source.DataAccess.ColumnDateTime(f);
         ftString:
           Field.AsString := Source.DataAccess.ColumnString(f);
@@ -397,7 +401,7 @@ begin
         {$ifdef ISDELPHI2007ANDUP}
         ftWideMemo,
         {$endif}
-        ftMemo, ftBlob: begin
+        ftMemo, DB.ftBlob: begin
           SourceStream := Source.GetBlobStream(Source.Fields[f],row);
           if SourceStream=nil then
             Field.Clear else

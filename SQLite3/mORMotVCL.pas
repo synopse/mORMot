@@ -65,9 +65,9 @@ uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   Contnrs,
+  DB,
   SynVirtualDataSet,
-  SynCommons, mORMot,
-  DB;
+  SynCommons, mORMot;
 
 
 type
@@ -361,7 +361,7 @@ begin
       DBType := ftDateTime;
     sftBlob: begin
         DataSize := (fTable.FieldLengthMax(F,true)*3) shr 2;
-        DBType := ftBlob;
+        DBType := DB.ftBlob;
       end;
     sftUTF8Text: begin
       DataSize := fTable.FieldLengthMax(F,true);

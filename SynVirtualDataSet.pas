@@ -66,8 +66,12 @@ uses
   Variants,
   {$endif}
   SynCommons,
-  SynDBDataSet, // for AddBcd()
-  DB;
+  {$ifdef ISDELPHIXE2}
+  System.Generics.Collections,
+  Data.DB, Data.FMTBcd;
+  {$else}
+  DB, FMTBcd;
+  {$endif}
 
 
 type
@@ -212,6 +216,23 @@ const
   ftDefaultMemo = ftMemo;
   {$endif}
 
+
+/// append a TBcd value as text to the output buffer
+// - very optimized for speed
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
+
+/// convert a TBcd value as text to the output buffer
+// - buffer is to be array[0..66] of AnsiChar
+// - returns the resulting text start in PBeg, and the length as function result
+// - does not handle negative sign and 0 value - see AddBcd() function use case
+// - very optimized for speed
+function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+
+/// convert a TBcd value into a currency
+// - purepascal version included in latest Delphi versions is slower than this
+function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
+
+
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet
 function DataSetToJSON(Data: TDataSet): RawUTF8;
@@ -224,6 +245,79 @@ function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
 
 
 implementation
+
+function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+var i,DecimalPos: integer;
+    P,Frac: PByte;
+    PEnd: PAnsiChar;
+begin
+  result := 0;
+  if AValue.Precision=0 then
+    exit;
+  DecimalPos := AValue.Precision-(AValue.SignSpecialPlaces and $3F);
+  P := pointer(ADest);
+  Frac := @Avalue.Fraction;
+  for i := 0 to AValue.Precision-1 do begin
+    if i=DecimalPos then
+      if i=0 then begin
+        PWord(P)^ := ord('0')+ord('.')shl 8;
+        inc(P,2);
+      end else begin
+        P^ := ord('.');
+        inc(P);
+      end;
+    if (i and 1)=0 then
+      P^ := ((Frac^ and $F0) shr 4)+ord('0') else begin
+      P^ := ((Frac^ and $0F))+ord('0');
+      inc(Frac);
+    end;
+    inc(P);
+  end;
+  // remove trailing 0 after decimal
+  if AValue.Precision>DecimalPos then begin
+    repeat dec(P) until (P^<>ord('0')) or (P=pointer(ADest));
+    PEnd := pointer(P);
+    if PEnd^<>'.' then
+      inc(PEnd);
+  end else
+    PEnd := pointer(P);
+  PEnd^ := #0;
+  // remove leading 0
+  PBeg := ADest;
+  while (PBeg[0]='0') and (PBeg[1] in ['0'..'9']) do inc(PBeg);
+  result := PEnd-PBeg;
+end;
+
+procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: array[0..66] of AnsiChar;
+begin
+  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  if len<=0 then
+    WR.Add('0') else begin
+    if AValue.SignSpecialPlaces and $80=$80 then
+      WR.Add('-');
+    WR.AddNoJSONEscape(PBeg,len);
+  end;
+end;
+
+function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: array[0..66] of AnsiChar;
+begin
+  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  if len<=0 then
+    Curr := 0 else begin
+    PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
+    if AValue.SignSpecialPlaces and $80=$80 then
+      Curr := -Curr;
+  end;
+  result := true;
+end;
+
+
 
 var
   GlobalDataSetCount: integer;
@@ -427,7 +521,7 @@ end;
 procedure TSynVirtualDataSet.InternalClose;
 begin
   BindFields(false);
-  {$ifdef ISDELPHIXE7}
+  {$ifdef ISDELPHIXE6}
   if not(lcPersistent in Fields.LifeCycles) then
   {$else}
   if DefaultFields then
@@ -455,7 +549,7 @@ end;
 
 procedure TSynVirtualDataSet.InternalInitRecord(Buffer: TRecordBuffer);
 begin
-  fillchar(Buffer^,sizeof(TRecInfo),0);
+  FillcharFast(Buffer^,sizeof(TRecInfo),0);
 end;
 
 procedure TSynVirtualDataSet.InternalLast;
@@ -467,7 +561,7 @@ procedure TSynVirtualDataSet.InternalOpen;
 begin
   BookmarkSize := SizeOf(TRecInfo)-sizeof(TRecInfoIdentifier);
   InternalInitFieldDefs;
-  {$ifdef ISDELPHIXE7}
+  {$ifdef ISDELPHIXE6}
   if not(lcPersistent in Fields.LifeCycles) then
   {$else}
   if DefaultFields then
@@ -529,26 +623,35 @@ end;
 function TSynVirtualDataSet.Locate(const KeyFields: string;
   const KeyValues: Variant; Options: TLocateOptions) : boolean;
 var i, l, h, found: Integer;
+    {$ifdef ISDELPHIXE4}
+    FieldList: TList<TField>;
+    {$else}
     FieldList: TList;
+    {$endif}
 begin
   CheckActive;
   result := true;
   if not IsEmpty then
     if VarIsArray(KeyValues) then begin
+      {$ifdef ISDELPHIXE4}
+      FieldList := TList<TField>.Create;
+      {$else}
       FieldList := TList.Create;
+      {$endif}
       try
         GetFieldList(FieldList,KeyFields);
         l := VarArrayLowBound(KeyValues,1);
         h := VarArrayHighBound(KeyValues,1);
         if (FieldList.Count = 1) and (l < h) then begin
-          found := SearchForField(KeyFields,KeyValues,Options);
+          found := SearchForField(StringToUTF8(KeyFields),KeyValues,Options);
           if found>0 then begin
             RecNo := found;
             exit;
           end;
         end
         else for i := 0 to FieldList.Count - 1 do begin
-          found := SearchForField(TField(FieldList[i]).FieldName,KeyValues[l+i],Options);
+          found := SearchForField(StringToUTF8(TField(FieldList[i]).FieldName),
+            KeyValues[l+i],Options);
           if found>0 then begin
             RecNo := found;
             exit;
@@ -558,7 +661,7 @@ begin
         FieldList.Free;
       end;
     end else begin
-      found := SearchForField(KeyFields,KeyValues,Options);
+      found := SearchForField(StringToUTF8(KeyFields),KeyValues,Options);
       if found>0 then begin
         RecNo := found;
         exit;
