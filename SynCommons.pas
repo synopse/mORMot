@@ -15928,7 +15928,7 @@ type
       aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
       aOnBeforeExecute: TNotifyThreadEvent=nil;
       aOnAfterExecute: TNotifyThreadEvent=nil;
-      aStats: TSynMonitorClass = nil); reintroduce; virtual;
+      aStats: TSynMonitorClass=nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// access to the implementation event of the periodic task
@@ -15943,6 +15943,48 @@ type
     property Stats: TSynMonitor read fStats;
   end;
 
+  /// used by TSynBackgroundTimer internal registration list
+  TSynBackgroundTimerTask = record
+    OnProcess: TOnSynBackgroundThreadProcess;
+    Secs: cardinal;
+    NextTix: Int64;
+  end;
+  /// stores TSynBackgroundTimer internal registration list
+  TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
+
+  /// TThread able to run one of several tasks at a periodic pace
+  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods
+  TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
+  protected
+    fTask: TSynBackgroundTimerTaskDynArray;
+    fTasks: TDynArray;
+    fTaskLock: TSynLocker;
+    procedure EverySecond(Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+    function Find(const aProcess: TMethod): integer;
+  public
+    /// initialize the thread for a periodic task processing
+    // - you could define some callbacks to nest the thread execution, e.g.
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    constructor Create(const aThreadName: RawUTF8;
+      aOnBeforeExecute: TNotifyThreadEvent=nil;
+      aOnAfterExecute: TNotifyThreadEvent=nil;
+      aStats: TSynMonitorClass=nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// define a task running on a periodic number of seconds
+    // - for background process on a mORMot service, consider using TSQLRest
+    // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
+    procedure Enable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+    /// undefine a task running on a periodic number of seconds
+    // - should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    // - for background process on a mORMot service, consider using TSQLRestServer
+    // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
+    function Disable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+    /// low-level access to the internal task list
+    property Task: TSynBackgroundTimerTaskDynArray read fTask;
+  end;
+  
 type
   /// class-reference type (metaclass) of an authentication class
   TSynAuthenticationClass = class of TSynAuthenticationAbstract;
@@ -58033,6 +58075,7 @@ begin
   fProcessEvent.SetEvent; // notify execution
 end;
 
+
 { TSynBackgroundThreadProcess }
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
@@ -58084,6 +58127,98 @@ begin
     end;
 end;
 
+
+{ TSynBackgroundTimer }
+
+constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
+begin
+  fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),fTask);
+  fTaskLock.Init;
+  inherited Create(aThreadName,EverySecond,1000,aOnBeforeExecute,aOnAfterExecute,aStats);
+end;
+
+destructor TSynBackgroundTimer.Destroy;
+begin
+  inherited Destroy;
+  fTaskLock.Done;
+end;
+
+procedure TSynBackgroundTimer.EverySecond(
+  Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
+var tix: Int64;
+    i: integer;
+begin
+  if (fTask=nil) or Terminated then
+    exit;
+  tix := GetTickCount64;
+  fTaskLock.Lock;
+  try
+    for i := 0 to length(fTask)-1 do
+    with fTask[i] do
+      if tix>=NextTix then begin
+        OnProcess(self,Event);
+        tix := GetTickCount64;
+        NextTix := tix+(Secs*1000);
+      end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
+begin // caller should have made fTaskLock.Lock;
+  for result := length(fTask)-1 downto 0 do
+    with TMethod(fTask[result].OnProcess) do
+      if (Code=aProcess.Code) and (Data=aProcess.Data) then
+        exit;
+  result := -1;
+end;
+
+procedure TSynBackgroundTimer.Enable(
+  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+var task: TSynBackgroundTimerTask;
+    found: integer;
+begin
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  if aOnProcessSecs=0 then begin
+    Disable(aOnProcess);
+    exit;
+  end;
+  task.OnProcess := aOnProcess;
+  task.Secs := aOnProcessSecs;
+  task.NextTix := GetTickCount64+aOnProcessSecs*1000;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then
+      fTask[found] := task else
+      fTasks.Add(task);
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.Disable(
+  aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+var found: integer;
+    method: TMethod absolute aOnProcess;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then begin
+      fTasks.Delete(found);
+      result := true;
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
 
 { TSynParallelProcess }
 
