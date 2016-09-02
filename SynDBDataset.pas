@@ -56,7 +56,10 @@ unit SynDBDataset;
 interface
 
 uses
-  Windows, SysUtils,
+  {$ifdef MSWINDOWS}
+  Windows,
+  {$endif}
+  SysUtils,
   {$IFNDEF DELPHI5OROLDER}
   Variants,
   {$ENDIF}
@@ -67,7 +70,8 @@ uses
   {$ifdef ISDELPHIXE2}
   Data.DB, Data.FMTBcd;
   {$else}
-  DB, FMTBcd;{$endif}
+  DB, FMTBcd;
+  {$endif}
 
 
 { -------------- DB.pas TDataSet (TQuery like) abstract connection }
