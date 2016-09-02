@@ -93,12 +93,15 @@ end;
 
 procedure _vli_clear;
 asm
-        mov     edx, 0
-@001:   mov     dword ptr[eax + edx * 8], 0
-        mov     dword ptr[eax + edx * 8 + 4H], 0
-        add     edx, 1
-        cmp     edx, 4
-        jnz     @001
+        xor     edx, edx
+        mov     dword ptr[eax + 00H], edx
+        mov     dword ptr[eax + 04H], edx
+        mov     dword ptr[eax + 08H], edx
+        mov     dword ptr[eax + 0CH], edx
+        mov     dword ptr[eax + 10H], edx
+        mov     dword ptr[eax + 14H], edx
+        mov     dword ptr[eax + 18H], edx
+        mov     dword ptr[eax + 1CH], edx
 end;
 
 procedure _vli_isZero;
@@ -1063,96 +1066,39 @@ asm
         test    eax, eax
         setne   al
         movzx   eax, al
-
 @070:   pop     ebx
 end;
 
-procedure _ecc_bytes2native;
+procedure _ecc_bytesnative;
 asm
-        push    ebp
-        push    edi
-        push    esi
         push    ebx
-        mov     esi, eax
-        add     edx, 24
-        mov     eax, 0
-@071:   movzx   ebp, byte ptr[edx]
-        shl     ebp, 24
-        movzx   ecx, byte ptr[edx + 1H]
-        shl     ecx, 16
-        or      ebp, ecx
-        movzx   edi, byte ptr[edx + 7H]
-        movzx   ecx, byte ptr[edx + 2H]
-        shl     ecx, 8
-        or      ebp, ecx
-        movzx   ecx, byte ptr[edx + 3H]
-        or      ebp, ecx
-        movzx   ecx, byte ptr[edx + 4H]
-        mov     ebx, 0
-        shld    ebx, ecx, 24
-        shl     ecx, 24
-        or      edi, ecx
-        or      ebp, ebx
-        movzx   ecx, byte ptr[edx + 5H]
-        mov     ebx, 0
-        shld    ebx, ecx, 16
-        shl     ecx, 16
-        or      edi, ecx
-        or      ebp, ebx
-        movzx   ecx, byte ptr[edx + 6H]
-        mov     ebx, 0
-        shld    ebx, ecx, 8
-        shl     ecx, 8
-        or      edi, ecx
-        mov     dword ptr[esi + eax * 8], edi
-        or      ebp, ebx
-        mov     dword ptr[esi + eax * 8 + 4H], ebp
-        add     eax, 1
-        sub     edx, 8
-        cmp     eax, 4
-        jnz     @071
-        pop     ebx
-        pop     esi
-        pop     edi
-        pop     ebp
-end;
-
-procedure _ecc_native2bytes;
-asm
         push    esi
-        push    ebx
-        mov     ebx, edx
-        lea     ecx, [eax + 18H]
-        lea     esi, [eax - 8H]
-@072:   movzx   eax, byte ptr[ebx + 7H]
-        mov     byte ptr[ecx], al
-        movzx   eax, word ptr[ebx + 6H]
-        mov     byte ptr[ecx + 1H], al
-        mov     eax, dword ptr[ebx + 4H]
-        shr     eax, 8
-        mov     byte ptr[ecx + 2H], al
-        mov     eax, dword ptr[ebx + 4H]
-        mov     byte ptr[ecx + 3H], al
-        mov     eax, dword ptr[ebx]
-        mov     edx, dword ptr[ebx + 4H]
-        shrd    eax, edx, 24
-        mov     byte ptr[ecx + 4H], al
-        mov     eax, dword ptr[ebx]
-        mov     edx, dword ptr[ebx + 4H]
-        shrd    eax, edx, 16
-        mov     byte ptr[ecx + 5H], al
-        mov     eax, dword ptr[ebx]
-        mov     edx, dword ptr[ebx + 4H]
-        shrd    eax, edx, 8
-        mov     byte ptr[ecx + 6H], al
-        mov     eax, dword ptr[ebx]
-        mov     byte ptr[ecx + 7H], al
-        add     ebx, 8
-        sub     ecx, 8
-        cmp     ecx, esi
-        jnz     @072
-        pop     ebx
+        mov     ebx, dword ptr [edx + 18H]
+        mov     esi, dword ptr [edx + 1CH]
+        bswap   ebx
+        bswap   esi
+        mov     dword ptr [eax + 00H], esi
+        mov     dword ptr [eax + 04H], ebx
+        mov     ebx, dword ptr [edx + 10H]
+        mov     esi, dword ptr [edx + 14H]
+        bswap   ebx
+        bswap   esi
+        mov     dword ptr [eax + 08H], esi
+        mov     dword ptr [eax + 0CH], ebx
+        mov     ebx, dword ptr [edx + 08H]
+        mov     esi, dword ptr [edx + 0CH]
+        bswap   ebx
+        bswap   esi
+        mov     dword ptr [eax + 10H], esi
+        mov     dword ptr [eax + 14H], ebx
+        mov     ebx, dword ptr [edx + 00H]
+        mov     esi, dword ptr [edx + 04H]
+        bswap   ebx
+        bswap   esi
+        mov     dword ptr [eax + 18H], esi
+        mov     dword ptr [eax + 1CH], ebx
         pop     esi
+        pop     ebx
 end;
 
 procedure _vli_modMult;
@@ -1976,7 +1922,7 @@ asm
         mov     dword ptr[esp + 4CH], 0
         lea     edx, [ebp + 1H]
         mov     eax, edi
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         lea     esi, [edi + 20H]
         mov     edx, edi
         mov     eax, esi
@@ -2092,11 +2038,11 @@ asm
         jnz     @110
         lea     edx, [esp + 50H]
         mov     eax, dword ptr[esp + 84H]
-        call    _ecc_native2bytes
+        call    _ecc_bytesnative
         mov     eax, dword ptr[esp + 80H]
         add     eax, 1
         lea     edx, [esp + 10H]
-        call    _ecc_native2bytes
+        call    _ecc_bytesnative
         movzx   eax, byte ptr[esp + 30H]
         and     eax, 01H
         add     eax, 2
@@ -2123,7 +2069,7 @@ asm
         call    _ecc_point_decompress
         mov     edx, dword ptr[esp + 0E4H]
         lea     eax, [esp + 70H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         lea     eax, [esp + 50H]
         mov     dword ptr[esp], eax
         lea     ecx, [esp + 70H]
@@ -2132,7 +2078,7 @@ asm
         call    _EccPoint_mult
         lea     edx, [esp + 10H]
         mov     eax, dword ptr[esp + 0E8H]
-        call    _ecc_native2bytes
+        call    _ecc_bytesnative
         lea     eax, [esp + 10H]
         call    _EccPoint_isZero
         test    eax, eax
@@ -2187,10 +2133,10 @@ asm
         jne     @116
         lea     edx, [esp + 10H]
         mov     eax, dword ptr[esp + 0C8H]
-        call    _ecc_native2bytes
+        call    _ecc_bytesnative
         mov     edx, dword ptr[esp + 0C0H]
         lea     eax, [esp + 70H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         mov     dword ptr[esp], offset _curve_n
         lea     ecx, [esp + 70H]
         lea     edx, [esp + 10H]
@@ -2198,7 +2144,7 @@ asm
         call    _vli_modMult
         mov     edx, dword ptr[esp + 0C4H]
         lea     eax, [esp + 70H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         mov     dword ptr[esp], offset _curve_n
         lea     ecx, [esp + 50H]
         lea     edx, [esp + 70H]
@@ -2216,7 +2162,7 @@ asm
         mov     eax, dword ptr[esp + 0C8H]
         add     eax, 32
         lea     edx, [esp + 50H]
-        call    _ecc_native2bytes
+        call    _ecc_bytesnative
         mov     eax, 1
         jmp     @120
 @119:   mov     eax, 0
@@ -2238,10 +2184,10 @@ asm
         call    _ecc_point_decompress
         mov     edx, ebx
         lea     eax, [esp + 38H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         lea     edx, [ebx + 20H]
         lea     eax, [esp + 18H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         lea     eax, [esp + 38H]
         call    _vli_isZero
         mov     ebx, 0
@@ -2269,7 +2215,7 @@ asm
         call    _vli_modInv
         mov     edx, dword ptr[esp + 1F4H]
         lea     eax, [esp + 1B8H]
-        call    _ecc_bytes2native
+        call    _ecc_bytesnative
         mov     dword ptr[esp], offset _curve_n
         lea     ecx, [esp + 178H]
         lea     edx, [esp + 1B8H]
