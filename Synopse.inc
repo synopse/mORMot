@@ -219,7 +219,7 @@
   {$ifdef CPUX86}
     {$define FPCSQLITE3STATIC} // we supply Win32 .obj
   {$else}
-    {.$define FPCSQLITE3STATIC} // we supply Win64 .o trigger GPF
+    {$define FPCSQLITE3STATIC} // we supply Win64 .o (compiled with -O1)
   {$endif}
   {$endif}
   {$ifdef LINUX}

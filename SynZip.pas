@@ -177,7 +177,7 @@ unit SynZip;
       {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win32 fails
     {$endif}
     {$ifdef Win64}
-      {$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
+      {.$define USEZLIBSSE} // SynZLibSSE static .o files for FPC + Win64
     {$endif}
   {$else}
     {$define USEEXTZLIB}  // will use zlib.so under Linux/Posix
