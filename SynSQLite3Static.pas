@@ -294,7 +294,7 @@ extern int unixWrite(
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L fpc-win64\sqlite3-64.o} // still buggy -> need Borland C++ linking?
+      {$L sqlite3.o} // compiled with bcc64 via c64.bat
     {$else}
       {$ifdef INCLUDE_FTS3}
       {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
@@ -313,21 +313,7 @@ extern int unixWrite(
   {$endif KYLIX3}
   {$endif MSWINDOWS}
 
-// we then implement all needed Borland C++ runtime functions in pure pascal:
-
-function _ftol: Int64;
-// Borland C++ float to integer (Int64) conversion
-asm
-  jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
-end;
-
-function _ftoul: Int64;
-// Borland C++ float to integer (Int64) conversion
-asm
-  jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
-end;
-
-// those functions will be called only under Windows
+// those functions will be called only under Delphi + Win32
 
 function malloc(size: cardinal): Pointer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'malloc'{$else}'_malloc'{$endif};{$endif}
@@ -351,30 +337,22 @@ begin
   ReallocMem(result,Size);
 end;
 
-function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
-begin
-  result := P;
-  FillCharFast(P^, count, B);
-end;
-
-procedure memmove(dest, source: pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
-begin
-  MoveFast(source^, dest^, count); // move() is overlapping-friendly
-end;
-
-procedure memcpy(dest, source: Pointer; count: Integer); cdecl; { always cdecl }
-  {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
-// a fast full pascal version of the standard C library function
-begin
-  MoveFast(source^, dest^, count);
-end;
-
 {$ifdef MSWINDOWS}
 {$ifdef CPU32}
+
+// we then implement all needed Borland C++ runtime functions in pure pascal:
+
+function _ftol: Int64;
+// Borland C++ float to integer (Int64) conversion
+asm
+  jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
+end;
+
+function _ftoul: Int64;
+// Borland C++ float to integer (Int64) conversion
+asm
+  jmp System.@Trunc  // FST(0) -> EDX:EAX, as expected by BCC32 compiler
+end;
 
 var __turbofloat: word; { not used, but must be present for linking }
 
@@ -439,6 +417,30 @@ end;
 
 {$endif CPU32}
 {$endif MSWINDOWS}
+
+function memset(P: Pointer; B: Integer; count: Integer): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}public name{$ifdef CPU64}'memset'{$else}'_memset'{$endif};{$endif}
+// a fast full pascal version of the standard C library function
+begin
+  FillCharFast(P^, count, B);
+  result := P;
+end;
+
+function memmove(dest, source: pointer; count: Integer): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}public name{$ifdef CPU64}'memmove'{$else}'_memmove'{$endif};{$endif}
+// a fast full pascal version of the standard C library function
+begin
+  MoveFast(source^, dest^, count); // move() is overlapping-friendly
+  result := dest;
+end;
+
+function memcpy(dest, source: Pointer; count: Integer): pointer; cdecl; { always cdecl }
+  {$ifdef FPC}public name{$ifdef CPU64}'memcpy'{$else}'_memcpy'{$endif};{$endif}
+// a fast full pascal version of the standard C library function
+begin
+  MoveFast(source^, dest^, count);
+  result := dest;
+end;
 
 function strlen(p: PAnsiChar): integer; cdecl; { always cdecl }
   {$ifdef FPC}public name{$ifdef CPU64}'strlen'{$else}'_strlen'{$endif};{$endif}
@@ -649,39 +651,18 @@ procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
 
-var
-  // still buggy as hell -> GPF at startup! :(
-  __imp__localtime64: pointer = @localtime64;
-  __imp__beginthreadex: pointer = @_beginthreadex;
-  __imp__endthreadex: pointer = @_endthreadex;
-  __imp_InitializeCriticalSection: pointer = @Windows.InitializeCriticalSection;
-
-//procedure __imp_InitializeCriticalSection; external kernel32 name 'InitializeCriticalSection';
-procedure __imp_DeleteCriticalSection; external kernel32 name 'DeleteCriticalSection';
-procedure __imp_TryEnterCriticalSection; external kernel32 name 'TryEnterCriticalSection';
-procedure __imp_EnterCriticalSection; external kernel32 name 'EnterCriticalSection';
-procedure __imp_LeaveCriticalSection; external kernel32 name 'LeaveCriticalSection';
-procedure __imp_GetCurrentThreadId; external kernel32 name 'GetCurrentThreadId';
-procedure __imp_CloseHandle; external kernel32 name 'CloseHandle';
-
-procedure ___chkstk_ms; // weird gcc dependency
-asm
-        .noframe
-        push    rcx
-        push    rax
-        cmp     rax, 4096
-        lea     rcx, [rsp+18H]
-        jc      @2
-@1:     sub     rcx, 4096
-        or      qword ptr [rcx], 00H
-        sub     rax, 4096
-        cmp     rax, 4096
-        ja      @1
-@2:     sub     rcx, rax
-        or      qword ptr [rcx], 00H
-        pop     rax
-        pop     rcx
+procedure __chkstk;
+begin
 end;
+
+procedure __faststorefence;
+asm
+  .noframe
+  mfence;
+end;
+
+var
+  _fltused: byte; // not used, but needed for linking
 
 {$endif CPU64}
 
@@ -962,6 +943,11 @@ begin
     Cypher.Delete(i); // do it after file closing
 end;
 
+const
+  SQLITE_IOERR_READ       = $010A;
+  SQLITE_IOERR_SHORT_READ = $020A;
+  SQLITE_IOERR_WRITE      = $030A;
+
 // note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 {$ifdef MSWINDOWS}
 function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
@@ -983,7 +969,7 @@ function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
   {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
 // or some other error code on failure
-var n, i: integer;
+var n, i, written: integer;
     EncryptTable: PByteArray;
     offset: Int64Rec absolute off;
     F: PSQLFile absolute FP;
@@ -1028,31 +1014,29 @@ begin
       end;
   b := buf;
   n := buflen;
-  result := 0;
   while n>0 do begin
-    result := FileWrite(F.h,b^,n);
-    if result=-1 then begin
+    written := FileWrite(F.h,b^,n);
+    if written=0 then
+      break;
+    if written=-1 then begin
 err:  F.lastErrno := GetLastError;
-      result := SQLITE_FULL;
+      {$ifdef MSWINDOWS}
+      if not (F.lastErrno in [ERROR_HANDLE_DISK_FULL,ERROR_DISK_FULL]) then
+        result := SQLITE_IOERR_WRITE else
+      {$endif}
+        result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
         XorOffset(buf,offset.Lo,buflen,EncryptTable);
       exit;
     end;
-    if result=0 then break;
-    dec(n,result);
-    inc(b,result);
+    dec(n,written);
+    inc(b,written);
   end;
-  if n>result then
-    goto err;
   result := SQLITE_OK;
   if EncryptTable<>nil then // restore buf content
     XorOffset(buf,offset.Lo,buflen,EncryptTable);
 end;
 
-
-const
-  SQLITE_IOERR_READ       = $010A;
-  SQLITE_IOERR_SHORT_READ = $020A;
 
 {$ifdef MSWINDOWS}
 function WinRead(FP: pointer; buf: PByte; buflen: Cardinal; off: Int64): integer;
@@ -1077,7 +1061,8 @@ function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 var offset: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
-    i: integer;
+    b: PByte;
+    i,n,read: integer;
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
@@ -1105,23 +1090,29 @@ begin
       exit;
     end;
   end;
-  result := FileRead(F.h,buf^,buflen);
-  if result=-1 then begin
-    F.lastErrno := GetLastError;
-    result := SQLITE_IOERR_READ;
-    exit;
-  end;
+  b := buf;
+  n := buflen;
+  repeat
+    read := FileRead(F.h,b^,n);
+    if read=0 then
+      break;
+    if read=-1 then begin
+      F.lastErrno := GetLastError;
+      result := SQLITE_IOERR_READ;
+      exit;
+    end;
+    inc(b,read);
+    dec(n,read);
+  until n=0;
   if CypherCount>0 then
   if (offset.Lo>=1024) or (offset.Hi<>0) then // uncrypt after first page
     for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
       if Cyphers[i].Handle=F.h then begin
-        XorOffset(buf,offset.Lo,result,pointer(Cyphers[i].CypherBuf));
+        XorOffset(buf,offset.Lo,buflen,pointer(Cyphers[i].CypherBuf));
         break;
       end;
-  dec(buflen,result);
-  if buflen>0 then begin // remaining bytes are set to 0
-    inc(buf,result);
-    FillcharFast(buf^,buflen,0);
+  if n>0 then begin // remaining bytes are set to 0
+    FillcharFast(b^,n,0);
     result := SQLITE_IOERR_SHORT_READ;
   end else
     result := SQLITE_OK;
@@ -1346,7 +1337,11 @@ begin
   {$ifdef FPC}
   ForceToUseSharedMemoryManager; // before sqlite3_initialize otherwise SQLITE_MISUSE
   {$else}
+  {$ifdef CPUX86}
   fUseInternalMM := true; // Delphi .obj are using FastMM4
+  {$else}
+  ForceToUseSharedMemoryManager; // Delphi .o
+  {$endif}
   {$endif}
   sqlite3_initialize;
   inherited Create; // set fVersionNumber/fVersionText
