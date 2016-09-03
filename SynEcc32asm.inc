@@ -106,17 +106,18 @@ end;
 
 procedure _vli_isZero;
 asm
-        mov     edx, dword ptr[eax + 4H]
-        or      edx, dword ptr[eax]
+        mov     edx, dword ptr[eax + 00H]
+        or      edx, dword ptr[eax + 04H]
         jnz     @003
-        lea     edx, [eax + 8H]
-        add     eax, 32
-@002:   mov     ecx, dword ptr[edx + 4H]
-        or      ecx, dword ptr[edx]
+        mov     edx, dword ptr[eax + 08H]
+        or      edx, dword ptr[eax + 0CH]
         jnz     @003
-        add     edx, 8
-        cmp     edx, eax
-        jnz     @002
+        mov     edx, dword ptr[eax + 10H]
+        or      edx, dword ptr[eax + 14H]
+        jnz     @003
+        mov     edx, dword ptr[eax + 18H]
+        or      edx, dword ptr[eax + 1CH]
+        jnz     @003
         mov     eax, 1
         ret
 @003:   mov     eax, 0
@@ -194,18 +195,22 @@ end;
 
 procedure _vli_set;
 asm
-        push    esi
-        push    ebx
-        mov     ecx, 0
-@013:   mov     ebx, dword ptr[edx + ecx * 8]
-        mov     esi, dword ptr[edx + ecx * 8 + 4H]
-        mov     dword ptr[eax + ecx * 8], ebx
-        mov     dword ptr[eax + ecx * 8 + 4H], esi
-        add     ecx, 1
-        cmp     ecx, 4
-        jnz     @013
-        pop     ebx
-        pop     esi
+        mov     ecx, dword ptr[edx + 00H]
+        mov     dword ptr[eax + 00H], ecx
+        mov     ecx, dword ptr[edx + 04H]
+        mov     dword ptr[eax + 04H], ecx
+        mov     ecx, dword ptr[edx + 08H]
+        mov     dword ptr[eax + 08H], ecx
+        mov     ecx, dword ptr[edx + 0CH]
+        mov     dword ptr[eax + 0CH], ecx
+        mov     ecx, dword ptr[edx + 10H]
+        mov     dword ptr[eax + 10H], ecx
+        mov     ecx, dword ptr[edx + 14H]
+        mov     dword ptr[eax + 14H], ecx
+        mov     ecx, dword ptr[edx + 18H]
+        mov     dword ptr[eax + 18H], ecx
+        mov     ecx, dword ptr[edx + 1CH]
+        mov     dword ptr[eax + 1CH], ecx
 end;
 
 procedure _vli_cmp;
@@ -1072,32 +1077,30 @@ end;
 procedure _ecc_bytesnative;
 asm
         push    ebx
-        push    esi
         mov     ebx, dword ptr [edx + 18H]
-        mov     esi, dword ptr [edx + 1CH]
+        mov     ecx, dword ptr [edx + 1CH]
         bswap   ebx
-        bswap   esi
-        mov     dword ptr [eax + 00H], esi
+        bswap   ecx
+        mov     dword ptr [eax + 00H], ecx
         mov     dword ptr [eax + 04H], ebx
         mov     ebx, dword ptr [edx + 10H]
-        mov     esi, dword ptr [edx + 14H]
+        mov     ecx, dword ptr [edx + 14H]
         bswap   ebx
-        bswap   esi
-        mov     dword ptr [eax + 08H], esi
+        bswap   ecx
+        mov     dword ptr [eax + 08H], ecx
         mov     dword ptr [eax + 0CH], ebx
         mov     ebx, dword ptr [edx + 08H]
-        mov     esi, dword ptr [edx + 0CH]
+        mov     ecx, dword ptr [edx + 0CH]
         bswap   ebx
-        bswap   esi
-        mov     dword ptr [eax + 10H], esi
+        bswap   ecx
+        mov     dword ptr [eax + 10H], ecx
         mov     dword ptr [eax + 14H], ebx
         mov     ebx, dword ptr [edx + 00H]
-        mov     esi, dword ptr [edx + 04H]
+        mov     ecx, dword ptr [edx + 04H]
         bswap   ebx
-        bswap   esi
-        mov     dword ptr [eax + 18H], esi
+        bswap   ecx
+        mov     dword ptr [eax + 18H], ecx
         mov     dword ptr [eax + 1CH], ebx
-        pop     esi
         pop     ebx
 end;
 
