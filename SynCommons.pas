@@ -10058,12 +10058,15 @@ var
   /// a conversion table from hexa chars into binary data
   // - returns 255 for any character out of 0..9,A..Z,a..z range
   // - used e.g. by HexToBin() function
+  // - is defined globally, since may be used from an inlined function 
   ConvertHexToBin: array[byte] of byte;
   /// naive but efficient cache to avoid string memory allocation for
   // 0..999 small numbers by Int32ToUTF8/UInt32ToUTF8
-  // - use around 16KB of heap, but increase multi-thread abilities
-  // - is especially useful when strings are used as array indexes (e.g.
-  // in SynMongoDB BSON)
+  // - use around 16KB of heap (since each item consumes 16 bytes), but increase
+  // overall performance and reduce memory allocation (and fragmentation),
+  // especially during multi-threaded execution
+  // - noticeable when strings are used as array indexes (e.g. in SynMongoDB BSON)
+  // - is defined globally, since may be used from an inlined function 
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 
 
@@ -10344,15 +10347,19 @@ function ExtractInlineParameters(const SQL: RawUTF8;
   var maxParam: integer; var Nulls: TSQLFieldBits): RawUTF8;
 
 
-/// add the 4 digits of integer Y to P^
+/// add the 4 digits of integer Y to P^ as '0000'..'9999'
 procedure YearToPChar(Y: cardinal; P: PUTF8Char);
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
 
 /// creates a 3 digits string from a 0..999 value as '000'..'999'
+// - consider using UInt3DigitsToShort() to avoid temporary memory allocation,
+// e.g. when used as FormatUTF8() parameter
 function UInt3DigitsToUTF8(Value: Cardinal): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// creates a 4 digits string from a 0..9999 value as '0000'.'9999'
+/// creates a 4 digits string from a 0..9999 value as '0000'..'9999'
+// - consider using UInt4DigitsToShort() to avoid temporary memory allocation,
+// e.g. when used as FormatUTF8() parameter
 function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -25149,15 +25156,19 @@ begin
   PWordArray(P)[1] := TwoDigitLookupW[Y-(d100*100)];
 end;
 {$else}
-asm
-  mov cl,100
-  div cl // ah=remainder=Y mod 100, al=quotient=Year div 100
-  movzx ecx,al // al=quotient=Y div 100
-  mov cx,word ptr [TwoDigitLookup+ecx*2]
-  mov [edx],cx
-  movzx ecx,ah // ah=remainder=Y mod 100
-  mov cx,word ptr [TwoDigitLookup+ecx*2]
-  mov [edx+2],cx
+asm // eax=Y, edx=P
+  push edx
+  mov ecx,eax
+  mov edx,1374389535 // use power of two reciprocal to avoid division
+  mul edx
+  shr	edx,5          // now edx=Y div 100
+  movzx eax,word ptr [TwoDigitLookup+edx*2]
+  imul edx,-200
+  movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
+  pop ecx
+  shl edx,16
+  or eax,edx
+  mov [ecx],eax
 end;
 {$endif}
 
