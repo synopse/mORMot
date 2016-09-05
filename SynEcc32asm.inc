@@ -215,55 +215,43 @@ end;
 
 procedure _vli_cmp;
 asm
-        push    ebp
-        push    edi
-        push    esi
-        push    ebx
-        mov     edi, dword ptr[eax + 18H]
-        mov     ebx, dword ptr[eax + 1CH]
-        mov     esi, dword ptr[edx + 18H]
-        mov     ecx, dword ptr[edx + 1CH]
-        cmp     ebx, ecx
-        ja      @019
-        jc      @014
-        cmp     edi, esi
-        ja      @019
-@014:   cmp     ebx, ecx
-        jc      @020
-        ja      @015
-        cmp     edi, esi
-        jc      @020
-@015:   mov     ecx, 2
-@016:   mov     ebp, dword ptr[eax + ecx * 8]
-        mov     esi, dword ptr[eax + ecx * 8 + 4H]
-        mov     edi, dword ptr[edx + ecx * 8]
-        mov     ebx, dword ptr[edx + ecx * 8 + 4H]
-        cmp     esi, ebx
-        ja      @021
-        jc      @017
-        cmp     ebp, edi
-        ja      @021
-@017:   cmp     esi, ebx
-        jc      @022
-        ja      @018
-        cmp     ebp, edi
-        jc      @022
-@018:   sub     ecx, 1
-        cmp     ecx,  - 1
-        jnz     @016
+        mov     ecx, dword ptr[eax + 1CH]
+        cmp     ecx, dword ptr[edx + 1CH]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 18H]
+        cmp     ecx, dword ptr[edx + 18H]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 14H]
+        cmp     ecx, dword ptr[edx + 14H]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 10H]
+        cmp     ecx, dword ptr[edx + 10H]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 0CH]
+        cmp     ecx, dword ptr[edx + 0CH]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 08H]
+        cmp     ecx, dword ptr[edx + 08H]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 04H]
+        cmp     ecx, dword ptr[edx + 04H]
+        ja      @a
+        jc      @c
+        mov     ecx, dword ptr[eax + 00H]
+        cmp     ecx, dword ptr[edx + 00H]
+        ja      @a
+        jc      @c
         mov     eax, 0
-        jmp     @023
-@019:   mov     eax, 1
-        jmp     @023
-@020:   mov     eax, 4294967295
-        jmp     @023
-@021:   mov     eax, 1
-        jmp     @023
-@022:   mov     eax, 4294967295
-@023:   pop     ebx
-        pop     esi
-        pop     edi
-        pop     ebp
+        ret
+@a:     mov     eax, 1
+        ret
+@c:     mov     eax, -1
 end;
 
 procedure _vli_lshift;

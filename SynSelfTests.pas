@@ -2817,6 +2817,10 @@ begin
   check(UInt3DigitsToUTF8(1)='001');
   check(UInt3DigitsToUTF8(12)='012');
   check(UInt3DigitsToUTF8(123)='123');
+  check(UInt4DigitsToUTF8(1)='0001');
+  check(UInt4DigitsToUTF8(12)='0012');
+  check(UInt4DigitsToUTF8(123)='0123');
+  check(UInt4DigitsToUTF8(1234)='1234');
   Check(KB(1024)='1024 B');
   Check(KB(16384)='16 KB');
   Check(KB(3*1024*1024-800*1024)='2.2 MB');
