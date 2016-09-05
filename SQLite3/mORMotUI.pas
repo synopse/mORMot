@@ -117,6 +117,7 @@ unit mORMotUI;
       see feature request [c2e1ff324b]
     - added TSQLTableToGrid.OnSort event handler - see request [bffff9b4c3]
     - added some values to TSQLAction - thanks kevinday for the patch
+    - get rid of mORMoti18n dependency
 
 *)
 
@@ -128,7 +129,7 @@ interface
 uses
   Windows,
   Types, DateUtils,
-  SynCommons, mORMot, mORMoti18n,
+  SynCommons, mORMot,
   SysUtils, Classes, Messages, Variants,
   {$ifdef WITHUXTHEME}
   Themes,
@@ -905,7 +906,7 @@ begin
   inc(R.Right,X);
   inc(R.Top,Y);
   inc(R.Bottom,Y);
-  ActivateHint(R,U2S(Text)); // perform Caption := Text
+  ActivateHint(R,UTF8ToString(Text)); // perform Caption := Text
   fUTF8Text  := Text; // so it will work with Delphi 2009/2010
   if Time<>0 then begin
     if fTimerEnabled then
@@ -974,14 +975,14 @@ end;
 procedure THintWindowDelayed.ShowDelayedString(const Text: string; X, Y,
   Time: integer; FontColor: TColor; AlignLeft: boolean=false);
 begin
-  ShowDelayedUTF8(S2U(Text),X,Y,Time,FontColor,AlignLeft);
+  ShowDelayedUTF8(StringToUTF8(Text),X,Y,Time,FontColor,AlignLeft);
 end;
 
 procedure THintWindowDelayed.ShowDelayedString(const Text: string;
   Origin: TControl; X, Y, Time: integer; FontColor: TColor; AlignLeft: boolean=false);
 begin
   with Origin.ClientToScreen(Point(X,Y)) do
-    ShowDelayedUTF8(S2U(Text),X,Y,Time,FontColor,AlignLeft);
+    ShowDelayedUTF8(StringToUTF8(Text),X,Y,Time,FontColor,AlignLeft);
 end;
 
 
@@ -1270,7 +1271,7 @@ begin
   if ARow=0 then
   if (ssCtrl in Shift) or (Button<>mbLeft) then begin
     // Ctrl or right button pressed -> display first row as hint
-    ShowHintString(U2S(Table.Get(ARow,ACol)),ACol,ARow,4000);
+    ShowHintString(UTF8ToString(Table.Get(ARow,ACol)),ACol,ARow,4000);
   end else begin
     // first row -> sort fields
     if fMarkAllowed and (X<CheckBoxWidth+4) then
@@ -1428,9 +1429,9 @@ begin // incremental key lookup
     fIncrementalSearchMove := true; // DrawGridSelectCell() won't reset fIncremental
     TDrawGrid(Owner).Row := R;
     fIncrementalSearchMove := false;
-    ShowHintString(U2S(fIncrementalSearch),F,R,2000,clNavy);
+    ShowHintString(UTF8ToString(fIncrementalSearch),F,R,2000,clNavy);
   end else // not found: display searched string in red
-    ShowHintString(U2S(fIncrementalSearch)+'?',fCurrentFieldOrder,
+    ShowHintString(UTF8ToString(fIncrementalSearch)+'?',fCurrentFieldOrder,
       TDrawGrid(Owner).Row,2000,clRed);
 end;
 

@@ -17,7 +17,7 @@ uses
   SynSQLite3RegEx, // use direct PCRE library as available since Delphi XE
   {$endif}
   SynCommons, SynZip, mORMot, SynSQLite3, SynSQLite3Static,
-  mORMoti18n, mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
+  mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
   SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
   SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC, SynDBRemote,
   {$ifdef USEZEOS}
@@ -139,7 +139,7 @@ begin
       end;
     end else 
       Props := CONN_CLASSES[C.Connection].Create(C.Server,C.Database,C.UserName,Pass);
-    ConnectionName := U2S(C.Ident);
+    ConnectionName := UTF8ToString(C.Ident);
     with CreateTempForm(format(sPleaseWaitN,[ConnectionName]),nil,True) do
     try
       Connection := C.Connection;
@@ -156,7 +156,7 @@ begin
         Props.ForeignKeysData := UncompressString(C.ForeignKeys); 
       end;
       for i := 0 to High(C.TableNames) do
-        Tables.Add(U2S(C.TableNames[i]));
+        Tables.Add(StringToUTF8(C.TableNames[i]));
 {$ifdef ISDELPHIXE}
      with TSQLDBSQLite3Connection(Props.ThreadSafeConnection) do
      if InheritsFrom(TSQLDBSQLite3Connection) then
@@ -223,7 +223,7 @@ begin
     C := TSQLConnection.Create;
     try
       C.Connection := CmdLine;
-      C.Ident := S2U(FN);
+      C.Ident := StringToUTF8(FN);
       C.Server := C.Ident;
       TryConnect(C,True);
     finally
@@ -240,9 +240,9 @@ begin
       if Conns.Count=0 then
         Btns := [cbCancel] else begin
         for i := 0 to Conns.Count-1 do
-          Task.Selection := Task.Selection+U2S(TSQLConnection(Conns[i]).Ident)+#10;
+          Task.Selection := Task.Selection+StringToUTF8(TSQLConnection(Conns[i]).Ident)+#10;
         Btns := [cbOk,cbCancel];
-        Task.Query := U2S(TSQLConnection(Conns[0]).Ident);
+        Task.Query := StringToUTF8(TSQLConnection(Conns[0]).Ident);
         Task.Verify := sUpdateConnection;
       end;
       Task.VerifyChecked := false;
