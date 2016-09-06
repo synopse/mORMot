@@ -1251,7 +1251,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
   if self=nil then
     exit;
   InternalLog(SQL,sllSQL);
-  StorageLock(false);
+  StorageLock(false,'EngineList');
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
       SetCount(TableRowCount(fStoredClass)) else
@@ -1338,7 +1338,7 @@ function TSQLRestStorageMongoDB.InternalBatchStart(
 begin
   result := false; // means BATCH mode not supported
   if method in [mPOST,mDELETE] then begin
-    StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
+    StorageLock(true,'InternalBatchStart'); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if (fBatchMethod<>mNone) or (fBatchWriter<>nil) then
         raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);

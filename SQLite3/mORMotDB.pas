@@ -1073,7 +1073,7 @@ begin
   result := false; // means BATCH mode not supported
   if (self<>nil) and (method in [mPOST..mDELETE]) and
      (BATCH[method] in fProperties.BatchSendingAbilities) then begin
-    StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
+    StorageLock(true,'InternalBatchStart'); // protected by try..finally in TSQLRestServer.RunBatch
     try
       if fBatchMethod<>mNone then
         raise EORMException.CreateUTF8('Missing previous %.InternalBatchStop(%)',
@@ -1836,7 +1836,7 @@ var Decoder: TJSONObjectDecoder;
     Query: ISQLDBStatement;
 begin
   result := 0;
-  StorageLock(false); // avoid race condition against max(ID)
+  StorageLock(false,'ExecuteFromJson'); // avoid race condition against max(ID)
   try
     case Occasion of
     soInsert: begin
@@ -1934,7 +1934,7 @@ end;
 
 procedure TSQLRestStorageExternal.EngineAddForceSelectMaxID;
 begin
-  StorageLock(true);
+  StorageLock(true,'EngineAddForceSelectMaxID');
   fEngineLockedMaxID := 0;
   StorageUnLock;
 end;
@@ -2131,7 +2131,7 @@ begin // aRowID is just ignored here since IDs are always auto calculated
   result := false;
   if (self<>nil) and (Static<>nil) then
   with Static as TSQLRestStorageExternal do begin
-    StorageLock(false); // to avoid race condition against max(RowID)
+    StorageLock(false,'Insert'); // to avoid race condition against max(RowID)
     try
       insertedRowID := EngineLockedNextID;
       with StoredClassProps.ExternalDB do

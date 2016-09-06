@@ -16763,7 +16763,7 @@ type
     destructor Destroy; override;
     /// should be called before any access to the storage content
     // - and protected with a try ... finally StorageUnLock; end section
-    procedure StorageLock(WillModifyContent: boolean); virtual;
+    procedure StorageLock(WillModifyContent: boolean; const msg: RawUTF8); virtual;
     /// should be called after any StorageLock-protected access to the content
     // - e.g. protected with a try ... finally StorageUnLock; end section
     procedure StorageUnLock; virtual;
@@ -17221,7 +17221,7 @@ type
     // cache used at SQLite3 database level; but TSQLVirtualTableJSON virtual
     // tables could flush the database content without proper notification
     // - this overridden implementation will call Owner.FlushInternalDBCache
-    procedure StorageLock(WillModifyContent: boolean); override;
+    procedure StorageLock(WillModifyContent: boolean; const msg: RawUTF8); override;
   end;
 
   /// REST storage with redirection to another REST instance
@@ -42337,7 +42337,7 @@ begin
   Rec := fStoredClass.Create;
   try
     Rec.FillFrom(SentData);
-    StorageLock(true);
+    StorageLock(true,'EngineAdd');
     try
       result := AddOne(Rec,Rec.fID>0,SentData);
     finally
@@ -42360,7 +42360,7 @@ begin
     result := false; // mark error
     exit;
   end;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdate');
   try
     Rec := fStoredClass.Create;
     try
@@ -42383,7 +42383,7 @@ begin
     result := false; // mark error
     exit;
   end;
-  StorageLock(true);
+  StorageLock(true,'UpdateOne');
   try
     Rec := fStoredClass.Create;
     try
@@ -42538,7 +42538,7 @@ begin
   if (self=nil) or (ID<=0) or (TableModelIndex<0) or
      (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else begin
-    StorageLock(True);
+    StorageLock(True,'EngineDelete');
     try
       result := DeleteOne(IDToIndex(ID));
     finally
@@ -42573,7 +42573,7 @@ begin // RecordCanBeUpdated() has already been called
   n := length(IDs);
   SetLength(ndx,n);
   dec(n);
-  StorageLock(True);
+  StorageLock(True,'EngineDeleteWhere');
   try
     for i := 0 to n do begin
       ndx[i] := IDToIndex(IDs[i]);
@@ -42914,7 +42914,7 @@ var i: integer;
 begin
   if (self=nil) or (fValue.Count=0) or not Assigned(OnEachProcess) then
     exit;
-  StorageLock(WillModifyContent);
+  StorageLock(WillModifyContent,'ForEach');
   try
     for i := 0 to fValue.Count-1 do
       OnEachProcess(Dest,fValue.List[i],i);
@@ -43066,7 +43066,7 @@ end;
 begin
   result := '';
   ResCount := 0;
-  StorageLock(false);
+  StorageLock(false,'EngineList');
   try
     if IdemPropNameU(fBasicSQLCount,SQL) then
       SetCount(TableRowCount(fStoredClass)) else
@@ -43136,7 +43136,7 @@ end;
 
 procedure TSQLRestStorageInMemory.DropValues;
 begin
-  StorageLock(true);
+  StorageLock(true,'DropValues');
   try
     fModified := fValue.Count>0;
     fValue.Clear;
@@ -43198,7 +43198,7 @@ var i: integer;
 begin
   if self=nil then
     exit;
-  StorageLock(false);
+  StorageLock(false,'SaveToJSON');
   try
     W := fStoredClassRecordProps.CreateJSONWriter(
       Stream,Expand,true,ALL_FIELDS,fValue.Count);
@@ -43356,7 +43356,7 @@ begin
     exit;
   MS := THeapMemoryStream.Create;
   W := TFileBufferWriter.Create(MS);
-  StorageLock(false);
+  StorageLock(false,'SaveToBinary');
   try
     with fStoredClassRecordProps do
     try
@@ -43409,7 +43409,7 @@ end;
 function TSQLRestStorageInMemory.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var i: integer;
 begin // TableModelIndex is not useful here
-  StorageLock(false);
+  StorageLock(false,'EngineRetrieve');
   try
     i := IDToIndex(ID);
     if i<0 then
@@ -43423,7 +43423,7 @@ end;
 function TSQLRestStorageInMemory.GetOne(aID: TID): TSQLRecord;
 var i: integer;
 begin
-  StorageLock(false);
+  StorageLock(false,'GetOne');
   try
     i := IDToIndex(aID);
     if i<0 then
@@ -43451,7 +43451,7 @@ begin
   P := fStoredClassProps.Prop[FieldName];
   if P=nil then
     exit;
-  StorageLock(false);
+  StorageLock(false,'EngineUpdateFieldIncrement');
   try
     i := IDToIndex(ID);
     if i<0 then
@@ -43483,7 +43483,7 @@ begin
     result := True;
     exit;
   end;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdate');
   try
     i := IDToIndex(ID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
@@ -43516,7 +43516,7 @@ begin
   result := false;
   if (Rec=nil) or (PSQLRecordClass(Rec)^<>fStoredClass) or (Rec.fID<=0) then
     exit;
-  StorageLock(true);
+  StorageLock(true,'UpdateOne');
   try
     i := IDToIndex(Rec.fID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,Rec.fID,seUpdate) then
@@ -43541,7 +43541,7 @@ begin
   result := false;
   if ID<=0 then
     exit;
-  StorageLock(true);
+  StorageLock(true,'UpdateOne');
   try
     i := IDToIndex(ID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,ID,seUpdate) then
@@ -43577,7 +43577,7 @@ begin
   if (TableModelIndex<0) or (not BlobField^.IsBlob) or
      (fModel.Tables[TableModelIndex]<>fStoredClass) then
     exit;
-  StorageLock(false);
+  StorageLock(false,'EngineRetrieveBlob');
   try
     i := IDToIndex(aID);
     if i<0 then
@@ -43597,7 +43597,7 @@ begin
   if (Value<>nil) and (Value.fID>0) and (PSQLRecordClass(Value)^=fStoredClass) then
   with Value.RecordProps do
   if BlobFields<>nil then begin
-    StorageLock(false);
+    StorageLock(false,'RetrieveBlobFields');
     try
       i := IDToIndex(Value.fID);
       if i<0 then
@@ -43620,7 +43620,7 @@ begin
   if (aID<0) or (TableModelIndex<0) or (not BlobField^.IsBlob) or
      (fModel.Tables[TableModelIndex]<>fStoredClass) then
     exit;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdateBlob');
   try
     i := IDToIndex(aID);
     if (i<0) or not RecordCanBeUpdated(fStoredClass,aID,seUpdate) then
@@ -43644,7 +43644,7 @@ begin
   if (Value<>nil) and (Value.fID>0) and (PSQLRecordClass(Value)^=fStoredClass) then
   with Value.RecordProps do
   if BlobFields<>nil then begin
-    StorageLock(true);
+    StorageLock(true,'UpdateBlobFields');
     try
       i := IDToIndex(Value.fID);
       if (i<0) or not RecordCanBeUpdated(Table,Value.fID,seUpdate) then
@@ -43713,7 +43713,7 @@ begin
     WhereValueString := WhereValue;
   // search indexes, then apply updates
   Where := TList.Create;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdateField');
   SetValueJson := ''; // alf: to circumvent FPC issues
   try
     // find matching Where[]
@@ -43760,7 +43760,7 @@ begin
   if (self=nil) or (not Modified) or (FileName='') then
     exit;
   Timer.Start;
-  StorageLock(false);
+  StorageLock(false,'UpdateFile');
   try
     if fValue.Count=0 then
       DeleteFile(FileName) else begin
@@ -43835,7 +43835,7 @@ begin
   end;
   Where := TList.Create;
   try
-    StorageLock(false);
+    StorageLock(false,'SearchField');
     try
       n := FindWhereEqual(WhereField,FieldValue,AddIntegerDynArrayEvent,Where,0,0);
     finally
@@ -43862,7 +43862,7 @@ begin
   result := 0;
   if (self=nil) or (fValue.Count=0) or (FieldName='') then
     exit;
-  StorageLock(false);
+  StorageLock(false,'SearchEvent');
   try
     result := FindWhereEqual(FieldName,FieldValue,OnFind,Dest,FoundLimit,FoundOffset);
   finally
@@ -43925,9 +43925,10 @@ begin
   fStorageLockShouldIncreaseOwnerInternalState := false; // done by overriden StorageLock()
 end;
 
-procedure TSQLRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean);
+procedure TSQLRestStorageInMemoryExternal.StorageLock(WillModifyContent: boolean;
+  const msg: RawUTF8);
 begin
-  inherited StorageLock(WillModifyContent);
+  inherited StorageLock(WillModifyContent,msg);
   if WillModifyContent and (Owner<>nil) then
     Owner.FlushInternalDBCache;
 end;
@@ -44066,7 +44067,7 @@ end;
 
 procedure TSQLRestStorageShard.RemoveShard(aShardIndex: integer);
 begin
-  StorageLock(true);
+  StorageLock(true,'RemoveShard');
   try
     if (fShards<>nil) and (cardinal(aShardIndex)<=fShardLast) then
       FreeAndNil(fShards[aShardIndex]);
@@ -44135,7 +44136,7 @@ begin
   if JSONGetID(pointer(SentData),result) then
     raise EORMException.CreateUTF8('%.EngineAdd(%) unexpected ID in %',
       [self,fStoredClass,SentData]);
-  StorageLock(true);
+  StorageLock(true,'EngineAdd');
   try
     inc(fShardLastID);
     if fShardLastID>=fShardNextID then begin
@@ -44167,7 +44168,7 @@ function TSQLRestStorageShard.EngineDelete(TableModelIndex: integer;
 var tableIndex,shardIndex: integer;
     rest: TSQLRest;
 begin
-  StorageLock(true);
+  StorageLock(true,'EngineDelete');
   try
     if not ShardFromID(ID,tableIndex,rest,soDelete,@shardIndex) then
       result := false else
@@ -44189,7 +44190,7 @@ begin
   result := false;
   if (IDs=nil) or (ssoNoDelete in fOptions) then
     exit;
-  StorageLock(true);
+  StorageLock(true,'EngineDeleteWhere');
   try
     SetLength(id,fShardLast+1);
     for i := 0 to high(IDs) do begin
@@ -44214,7 +44215,7 @@ end;
 
 function TSQLRestStorageShard.EngineExecute(const aSQL: RawUTF8): boolean;
 begin
-  StorageLock(false);
+  StorageLock(false,'EngineExecute');
   try
     if (integer(fShardLast)>=0) and not (ssoNoExecute in fOptions) then
       result := fShards[fShardLast].EngineExecute(aSQL) else
@@ -44244,7 +44245,7 @@ function TSQLRestStorageShard.EngineList(const SQL: RawUTF8;
 var ResCount: PtrInt;
 begin
   result := ''; // indicates error occurred
-  StorageLock(false);
+  StorageLock(false,'EngineList');
   try
     ResCount := 0;
     if IdemPropNameU(fBasicSQLCount,SQL) then begin
@@ -44273,7 +44274,7 @@ function TSQLRestStorageShard.EngineRetrieve(TableModelIndex: integer;
 var tableIndex: integer;
     rest: TSQLRest;
 begin
-  StorageLock(false);
+  StorageLock(false,'EngineRetrieve');
   try
     if not ShardFromID(ID,tableIndex,rest) then
       result := '' else
@@ -44288,7 +44289,7 @@ function TSQLRestStorageShard.EngineRetrieveBlob(TableModelIndex: integer;
 var tableIndex: integer;
     rest: TSQLRest;
 begin
-  StorageLock(false);
+  StorageLock(false,'EngineRetrieveBlob');
   try
     if not ShardFromID(aID,tableIndex,rest) then
       result := false else
@@ -44303,7 +44304,7 @@ function TSQLRestStorageShard.EngineUpdate(TableModelIndex: integer;
 var tableIndex,shardIndex: integer;
     rest: TSQLRest;
 begin
-  StorageLock(true);
+  StorageLock(true,'EngineUpdate');
   try
     if not ShardFromID(ID,tableIndex,rest,soUpdate,@shardIndex) then
       result := false else
@@ -44323,7 +44324,7 @@ var tableIndex: integer;
     rest: TSQLRest;
 begin
   result := false;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdateBlob');
   try
     if ShardFromID(aID,tableIndex,rest,soUpdate) then
       result := rest.EngineUpdateBlob(tableIndex,aID,BlobField,BlobData);
@@ -44336,7 +44337,7 @@ function TSQLRestStorageShard.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 begin
   result := false;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdateField');
   try
     if not ((ssoNoUpdate in fOptions) or (ssoNoUpdateField in fOptions)) then
       result := fShards[fShardLast].EngineUpdateField(fShardTableIndex[fShardLast],
@@ -44353,7 +44354,7 @@ var tableIndex: integer;
     rest: TSQLRest;
 begin
   result := false;
-  StorageLock(true);
+  StorageLock(true,'EngineUpdateFieldIncrement');
   try
     if ShardFromID(ID,tableIndex,rest,soUpdate) then
       result := rest.EngineUpdateFieldIncrement(tableIndex,ID,FieldName,Increment);
@@ -44368,7 +44369,7 @@ begin
   result := false;
   if ssoNoBatch in fOptions then
     exit;
-  StorageLock(true); // protected by try..finally in TSQLRestServer.RunBatch
+  StorageLock(true,'InternalBatchStart'); // protected by try..finally in TSQLRestServer.RunBatch
   try
     if fShardBatch<>nil then
       raise EORMException.CreateUTF8('%.InternalBatchStop should have been called',[self]);
@@ -44532,10 +44533,11 @@ begin
   result := false; // no refresh necessary with "normal" static tables
 end;
 
-procedure TSQLRestStorage.StorageLock(WillModifyContent: boolean);
+procedure TSQLRestStorage.StorageLock(WillModifyContent: boolean;
+  const msg: RawUTF8);
 begin
-  if fStorageLockLogTrace then
-    InternalLog('StorageLock % %',[fStoredClass,fStorageCriticalSectionCount],sllTrace);
+  if fStorageLockLogTrace or (fStorageCriticalSectionCount>1) then
+    InternalLog('StorageLock % [%] %',[fStoredClass,msg,fStorageCriticalSectionCount],sllTrace);
   EnterCriticalSection(fStorageCriticalSection);
   inc(fStorageCriticalSectionCount);
   if WillModifyContent and
