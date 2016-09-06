@@ -1436,7 +1436,9 @@ type
     /// initialize a new temporary buffer of a given number of bytes
     procedure Init(SourceLen: integer); overload;
     /// finalize the temporary storage
-    procedure Done; {$ifdef HASINLINE}inline;{$endif}
+    procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
+    /// finalize the temporary storage, and create a RawUTF8 string from it
+    procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
   private
     tmp: array[0..4095] of AnsiChar;
   end;
@@ -16666,8 +16668,7 @@ begin
   if (Source=nil) or (SourceChars=0) then
     result := '' else begin
     tmp.Init(SourceChars*3+1);
-    SetString(result,PAnsiChar(tmp.buf),AnsiBufferToUTF8(tmp.buf,Source,SourceChars)-tmp.buf);
-    tmp.Done;
+    tmp.Done(AnsiBufferToUTF8(tmp.buf,Source,SourceChars),result);
   end;
 end;
 
@@ -17414,6 +17415,16 @@ end;
 
 procedure TSynTempBuffer.Done;
 begin
+  if buf<>@tmp then
+    if buf<>nil then
+      FreeMem(buf);
+end;
+
+procedure TSynTempBuffer.Done(EndBuf: pointer; var Dest: RawUTF8);
+begin
+  if EndBuf=nil then
+    Dest := '' else
+    SetString(Dest,PAnsiChar(buf),PAnsiChar(EndBuf)-PAnsiChar(buf));
   if buf<>@tmp then
     if buf<>nil then
       FreeMem(buf);
@@ -19225,9 +19236,9 @@ var i,c,b,bits,shift: integer;
     dest: PAnsiChar;
 begin
   result := '';
-  if (Baudot=nil) or (len=0) then
+  if (Baudot=nil) or (len<=0) then
     exit;
-  tmp.Init((len*8)div 5+1);
+  tmp.Init((len shl 3)div 5+1);
   dest := tmp.buf;
   shift := 0;
   b := 0;
@@ -19257,8 +19268,7 @@ begin
       end;
     end;
   end;
-  SetString(result,PAnsiChar(tmp.buf),dest-PAnsiChar(tmp.buf));
-  tmp.Done;
+  tmp.Done(dest,result);
 end;
 
 {$ifdef CPU64}
@@ -47802,7 +47812,7 @@ var n: integer;
     tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON);
-  if tmp.len<4096 then
+  if tmp.len<2048 then
     n := 4096 else // minimal rough estimation of the output buffer size
     n := tmp.Len shr 2;
   with TTextWriter.CreateOwnedStream(n) do

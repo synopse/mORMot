@@ -3085,8 +3085,8 @@ var u: RawUTF8;
     b: RawByteString;
     i,j,k: integer;
     P: PAnsiChar absolute u;
-const CHR: array[0..54] of AnsiChar =
-  'abcdefghijklm nopqrstuvwx yz012345 6789-''3,!:(+)$?@./; ';
+const CHR: array[0..82] of AnsiChar =
+  'abcdefghijklm nopqrstuvwx yzabcdefghijklm nopqrstuvwx yz012345 6789-''3,!:(+)$?@./; ';
 begin
   b := AsciiToBaudot('');
   check(b='');
@@ -3109,7 +3109,7 @@ begin
     SetLength(u,i);
     for k := 1 to 50 do begin
       for j := 0 to i-1 do
-        P[j] := CHR[Random(55)];
+        P[j] := CHR[Random(83)];
       b := AsciiToBaudot(u);
       check(BaudotToAscii(b)=u);
     end;
