@@ -156,7 +156,7 @@ begin
         Props.ForeignKeysData := UncompressString(C.ForeignKeys); 
       end;
       for i := 0 to High(C.TableNames) do
-        Tables.Add(StringToUTF8(C.TableNames[i]));
+        Tables.Add(UTF8ToString(C.TableNames[i]));
 {$ifdef ISDELPHIXE}
      with TSQLDBSQLite3Connection(Props.ThreadSafeConnection) do
      if InheritsFrom(TSQLDBSQLite3Connection) then
@@ -240,9 +240,9 @@ begin
       if Conns.Count=0 then
         Btns := [cbCancel] else begin
         for i := 0 to Conns.Count-1 do
-          Task.Selection := Task.Selection+StringToUTF8(TSQLConnection(Conns[i]).Ident)+#10;
+          Task.Selection := Task.Selection+UTF8ToString(TSQLConnection(Conns[i]).Ident)+#10;
         Btns := [cbOk,cbCancel];
-        Task.Query := StringToUTF8(TSQLConnection(Conns[0]).Ident);
+        Task.Query := UTF8ToString(TSQLConnection(Conns[0]).Ident);
         Task.Verify := sUpdateConnection;
       end;
       Task.VerifyChecked := false;
