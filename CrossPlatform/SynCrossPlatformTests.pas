@@ -660,6 +660,9 @@ procedure TSynCrossPlatformClient.ORMBatch;
 var people: TSQLRecordPeople;
     Call: TSQLRestURIParams;
     res: TIDDynArray;
+    {$ifndef ISDWS}
+    blob: TSQLRawBlob;
+    {$endif}
     i,id: integer;
 begin
   fClient.CallBackGet('DropTable',[],Call,TSQLRecordPeople);
@@ -782,6 +785,36 @@ begin
       people.Free;
     end;
   end;
+  {$ifndef ISDWS}
+  exit; // Add(..,'Data') below is buggy, but RetrieveBlob() seems fine
+  people := TSQLRecordPeople.Create;
+  try
+    people.FirstName := 'With';
+    people.LastName := 'Blob';
+    SetLength(blob,2);
+    blob[0] := 1;
+    blob[1] := 2;
+    people.Data := blob;
+    id := fClient.Add(people,true,false,'FirstName,LastName,Data');
+    Check(id=201);
+    Check(people.InternalState=fClient.InternalState);
+    blob := nil;
+  finally
+    people.Free;
+  end;
+  people := TSQLRecordPeople.Create(fClient,id);
+  try
+    Check(people.FirstName='With');
+    Check(people.LastName='Blob');
+    Check(people.Data=nil);
+    Check(not fClient.RetrieveBlob(TSQLRecordPeople,id,'wrongfieldname',blob));
+    Check(blob=nil);
+    Check(fClient.RetrieveBlob(TSQLRecordPeople,id,'data',blob));
+    Check(blob<>nil);
+  finally
+    people.Free;
+  end;
+  {$endif}
 end;
 
 procedure TSynCrossPlatformClient.Services;

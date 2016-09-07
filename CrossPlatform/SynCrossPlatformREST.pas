@@ -757,6 +757,12 @@ type
     // - FieldNames='' retrieve simple fields, '*' all fields, or as specified
     function Retrieve(const FieldNames, SQLWhere: string;
      const BoundsSQLWhere: array of const; Value: TSQLRecord): boolean; overload;
+    {$ifndef ISSMS}
+    /// get a blob field content from its record ID and supplied blob field name
+    // - returns true on success, and the blob binary data
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+      const BlobFieldName: string; out BlobData: TSQLRawBlob): boolean; virtual; abstract;
+    {$endif}
     /// execute directly a SQL statement, expecting a list of results
     // - return a result table on success, nil on failure
     // - you can bind parameters by using ? in the SQLWhere clause
@@ -770,7 +776,7 @@ type
     // - FieldNames='' retrieve simple fields, '*' all fields, or as specified
     function MultiFieldValues(Table: TSQLRecordClass; const FieldNames,
       SQLWhere: string): TSQLTableJSON; overload;
-    /// execute directly a SQL statement, returning a list of TSQLRecord 
+    /// execute directly a SQL statement, returning a list of TSQLRecord
     // - you can bind parameters by using ? in the SQLWhere clause
     // - use DateTimeToSQL() for date/time database fields
     // - FieldNames='' retrieve simple fields, '*' all fields, or as specified
@@ -783,7 +789,11 @@ type
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
-    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false): TID; virtual;
+    // - by default, only simple fields are pushed to the server, but you may
+    // specify a CSV list of field values to be transmitted - including blobs,
+    // which will be sent as base-64 encoded JSON
+    function Add(Value: TSQLRecord; SendData: boolean; ForceID: boolean=false;
+      const FieldNames: string=''): TID; virtual;
     /// delete a member
     function Delete(Table: TSQLRecordClass; ID: TID): boolean; virtual; abstract;
     /// update a member
@@ -991,6 +1001,13 @@ type
     /// get a member from its ID using URI()
     function Retrieve(aID: TID; Value: TSQLRecord;
       ForUpdate: boolean=false): boolean; overload; override;
+    {$ifndef ISSMS}
+    /// get a blob field content from its record ID and supplied blob field name
+    // - returns true on success, and the blob binary data, as direclty
+    // retrieved from the server via a dedicated HTTP GET request
+    function RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+      const BlobFieldName: string; out BlobData: TSQLRawBlob): boolean; override;
+    {$endif}
     /// execute directly a SQL statement, returning a list of rows or nil
     // - we expect reUrlEncodedSQL to be defined in AllowRemoteExecute on
     // server side, since we will encode the SQL at URL level, so that all
@@ -2220,13 +2237,14 @@ begin
     end;
 end;
 
-function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean): TID;
+function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean;
+  const FieldNames: string): TID;
 var tableIndex: Integer;
     json: string;
 begin
   tableIndex := Model.GetTableIndexExisting(Value.RecordClass);
   if SendData then
-    json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID,'');
+    json := Model.Info[tableIndex].ToJSONAdd(self,Value,ForceID,FieldNames);
   result := ExecuteAdd(tableIndex,json);
   if result>0 then
     Value.fInternalState := InternalState;
@@ -2634,6 +2652,23 @@ begin
   end;
   Log(LOGLEVELDB[result],'%s.Retrieve(ID=%d) %s',[Model.Info[tableIndex].Name,aID,json]);
 end;
+
+{$ifndef ISSMS}
+function TSQLRestClientURI.RetrieveBlob(Table: TSQLRecordClass; aID: TID;
+  const BlobFieldName: string; out BlobData: TSQLRawBlob): boolean;
+var tableIndex: Integer;
+    Call: TSQLRestURIParams;
+begin
+  tableIndex := Model.GetTableIndexExisting(Table);
+  Call.Init(getURIID(tableIndex,aID)+'/'+BlobFieldName,'GET','');
+  URI(Call);
+  result := Call.OutStatus=HTTP_SUCCESS;
+  if result then
+    BlobData := TSQLRawBlob(Call.OutBody);
+  Log(LOGLEVELDB[result],'%s.RetrieveBlob(ID=%d,"%s") len=%d',
+    [Model.Info[tableIndex].Name,aID,BlobFieldName,length(BlobData)]);
+end;
+{$endif}
 
 function FindHeader(const Headers, Name: string): string;
 {$ifdef ISSMS} // dedicated function using faster JavaScript library
