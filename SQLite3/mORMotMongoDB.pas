@@ -601,7 +601,7 @@ begin
           if blob='' then
             SetVariantNull(Variant(V^)) else begin
             typenfo := (info as TSQLPropInfoRTTIDynArray).PropType;
-            if typenfo=TypeInfo(TByteDynArray) then
+            if (typenfo=TypeInfo(TByteDynArray)) or (typenfo=TypeInfo(TBytes)) then
               js := '' else // embedded BLOB type stored as BSON binary
               js := DynArraySaveJSON(typenfo,blob);
             if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
