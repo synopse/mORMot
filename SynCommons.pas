@@ -17295,7 +17295,10 @@ end;
 procedure TSynAnsiUTF8.UTF8BufferToAnsi(Source: PUTF8Char; SourceChars: Cardinal;
   var result: RawByteString);
 begin
-  SetString(Result,Source,SourceChars);
+  SetString(result,Source,SourceChars);
+  {$ifdef HASCODEPAGE}
+  SetCodePage(result,CP_UTF8,false);
+  {$endif}
 end;
 
 function TSynAnsiUTF8.UTF8ToAnsi(const UTF8: RawUTF8): RawByteString;
