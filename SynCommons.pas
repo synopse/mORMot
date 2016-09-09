@@ -4249,12 +4249,24 @@ procedure CSVToInt64DynArray(CSV: PUTF8Char; var Result: TInt64DynArray);
 /// return the corresponding CSV text from a dynamic array of 32-bit integer
 // - you can set some custom Prefix and Suffix text
 function IntegerDynArrayToCSV(const Values: array of integer; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
 
 /// return the corresponding CSV text from a dynamic array of 64-bit integers
 // - you can set some custom Prefix and Suffix text
 function Int64DynArrayToCSV(const Values: array of Int64; ValuesCount: integer;
-  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+
+/// return the corresponding CSV text from a dynamic array of 32-bit integer
+// - you can set some custom Prefix and Suffix text
+function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return the corresponding CSV text from a dynamic array of 64-bit integers
+// - you can set some custom Prefix and Suffix text
+function Int64DynArrayToCSV(const Values: TInt64DynArray;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
@@ -26861,6 +26873,18 @@ begin
   finally
     FreeMem(ints);
   end;
+end;
+
+function IntegerDynArrayToCSV(const Values: TIntegerDynArray;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+begin
+  result := IntegerDynArrayToCSV(Values,length(Values),Prefix,Suffix);
+end;
+
+function Int64DynArrayToCSV(const Values: TInt64DynArray;
+  const Prefix: RawUTF8=''; const Suffix: RawUTF8=''): RawUTF8;
+begin
+  result := Int64DynArrayToCSV(Values,length(Values),Prefix,Suffix);
 end;
 
 function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
