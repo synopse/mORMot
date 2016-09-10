@@ -16217,6 +16217,10 @@ type
     // - returns false if the supplied obfuscated text is invalid
     function FromObfuscated(const aObfuscated: TSynUniqueIdentifierObfuscated;
       out aIdentifier: TSynUniqueIdentifier): boolean;
+    /// some 32-bit value, derivated from aSharedObfuscationKey as supplied
+    // to the class constructor
+    // - may be used e.g. as system-depending salt 
+    property CryptoCRC: cardinal read fCryptoCRC;
   published
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
