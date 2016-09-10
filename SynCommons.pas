@@ -30324,12 +30324,15 @@ end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var h: array[0..3] of cardinal absolute crc;
+    h1,h2: cardinal;
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
   assert(sizeof(h)=sizeof(crc));
-  h[0] := crc32c(0,buf,len);
-  h[1] := crc32c(h[0],buf,len);
-  h[2] := h[0]+h[1];
-  h[3] := h[0]+2*h[1];
+  h1 := crc32c(0,buf,len);
+  h2 := crc32c(h1,buf,len);
+  h[0] := h1; inc(h1,h2);
+  h[1] := h1; inc(h1,h2);
+  h[2] := h1; inc(h1,h2);
+  h[3] := h1;
 end;
 
 function IsZero(const dig: THash128): boolean;
@@ -30363,13 +30366,19 @@ end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 var h: array[0..7] of cardinal absolute crc;
-    i: cardinal;
+    h1,h2: cardinal;
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
   assert(sizeof(h)=sizeof(crc));
-  h[0] := crc32c(0,buf,len);
-  h[1] := crc32c(h[0],buf,len);
-  for i := 0 to 5 do
-    h[i+2] := h[0]+i*h[1];
+  h1 := crc32c(0,buf,len);
+  h2 := crc32c(h1,buf,len);
+  h[0] := h1; inc(h1,h2);
+  h[1] := h1; inc(h1,h2);
+  h[2] := h1; inc(h1,h2);
+  h[3] := h1; inc(h1,h2);
+  h[4] := h1; inc(h1,h2);
+  h[5] := h1; inc(h1,h2);
+  h[6] := h1; inc(h1,h2);
+  h[7] := h1;
 end;
 
 function IsZero(const dig: THash256): boolean;
@@ -56700,8 +56709,10 @@ begin
     h2 := crc32c(h1,aValue,aValueLen);
   Safe.Lock;
   try
-    for h := 0 to fHashFunctions-1 do
-      SetBit(pointer(fStore)^,(h1+cardinal(h)*h2) mod fBits);
+    for h := 0 to fHashFunctions-1 do begin
+      SetBit(pointer(fStore)^,h1 mod fBits);
+      inc(h1,h2);
+    end;
     inc(fInserted);
   finally
     Safe.UnLock;
@@ -56737,7 +56748,8 @@ begin
   Safe.Lock;
   try
     for h := 0 to fHashFunctions-1 do
-      if not GetBit(pointer(fStore)^,(h1+cardinal(h)*h2) mod fBits) then
+      if GetBit(pointer(fStore)^,h1 mod fBits) then
+        inc(h1,h2) else
         exit;
   finally
     Safe.UnLock;
