@@ -18581,18 +18581,31 @@ begin
       result := 1;
       exit;
     end;
-    vtInteger: begin
-      Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],V.VInteger));
-      Res.Len := @Res.Temp[23]-Res.Text;
-      result := Res.Len;
-      exit;
-    end;
-    vtInt64: begin
-      Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],V.VInt64^));
-      Res.Len := @Res.Temp[23]-Res.Text;
-      result := Res.Len;
-      exit;
-    end;
+    vtInteger:
+      if cardinal(V.VInteger)<=high(SmallUInt32UTF8) then begin
+        Res.Text := pointer(SmallUInt32UTF8[V.VInteger]);
+        Res.Len := length(RawByteString(pointer(Res.Text)));
+        result := Res.Len;
+        exit;
+      end else begin
+        Res.Text := PUTF8Char(StrInt32(@Res.Temp[23],V.VInteger));
+        Res.Len := @Res.Temp[23]-Res.Text;
+        result := Res.Len;
+        exit;
+      end;
+    vtInt64:
+      if (PCardinalArray(V.VInt64)^[0]<=high(SmallUInt32UTF8)) and
+         (PCardinalArray(V.VInt64)^[1]=0) then begin
+        Res.Text := pointer(SmallUInt32UTF8[PCardinalArray(V.VInt64)^[0]]);
+        Res.Len := length(RawByteString(pointer(Res.Text)));
+        result := Res.Len;
+        exit;
+      end else begin
+        Res.Text := PUTF8Char(StrInt64(@Res.Temp[23],V.VInt64^));
+        Res.Len := @Res.Temp[23]-Res.Text;
+        result := Res.Len;
+        exit;
+      end;
     vtCurrency: begin
       Res.Text := @Res.Temp;
       Res.Len := Curr64ToPChar(V.VInt64^,Res.Temp);

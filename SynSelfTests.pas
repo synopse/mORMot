@@ -10840,7 +10840,6 @@ begin
               end;
               Check(Client.BatchSend(res)=HTTP_SUCCESS);
               Check(length(res)=n);
-              Check(length(res)=n);
               for i := 1 to 100 do begin
                 R.ClearProperties;
                 Check(Client.Retrieve(res[Random(n)],R));
@@ -11180,6 +11179,7 @@ begin
           Check(Client2.TransactionBegin(TSQLRecordPeople));
           Check(Client2.BatchStart(TSQLRecordPeople));
           Check(Client2.BatchSend(Res)=200,'Void batch');
+          Check(Res=nil);
           Client2.Commit;
           Check(Client2.TransactionBegin(TSQLRecordPeople));
           Check(Client2.BatchStart(TSQLRecordPeople));
