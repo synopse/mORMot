@@ -10411,6 +10411,12 @@ function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
 // - if you know the precision range of A and B, it's faster to check abs(A-B)<range
 function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
 
+/// compute CRC16-CCITT checkum on the supplied buffer
+// - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021) and
+// $ffff as initial value
+// - this version is not optimized for speed, but for correctness
+function crc16(Data: PAnsiChar; Len: integer): cardinal;
+
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
@@ -10459,7 +10465,7 @@ function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 
 /// compute CRC63C checksum on the supplied buffer
 // - similar to crc64c, but with 63-bit, so no negative value, so may be used
-// safely e.g. as mORMot's TID source  
+// safely e.g. as mORMot's TID source
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single Int64 result
 // - by design, such combined hashes cannot be cascaded
@@ -29698,6 +29704,20 @@ begin
   FieldIndexToBits(Index,result);
 end;
 
+
+function crc16(Data: PAnsiChar; Len: integer): cardinal;
+var i, j: Integer;
+begin
+  result := $ffff;
+  for i := 0 to Len-1 do begin
+    result := result xor (ord(Data[i]) shl 8);
+    for j := 1 to 8 do
+      if result and $8000<>0 then
+        result := (result shl 1) xor $1021 else
+        result := result shl 1;
+  end;
+  result := result and $ffff;
+end;
 
 function Hash32(const Text: RawByteString): cardinal;
 begin

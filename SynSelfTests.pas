@@ -2760,9 +2760,19 @@ begin
   fRunConsole := format('%s %s %s %s/s',[fRunConsole,name,Timer.Stop,
     KB(Timer.PerSec(totallen))]);
 end;
+procedure test16(const text: RawUTF8; expected: cardinal);
+begin
+  Check(crc16(pointer(text),length(text))=expected);
+end;
 var i: integer;
     Timer: TPrecisionTimer;
 begin
+  test16('',$ffff);
+  test16('a',$9d77);
+  test16('ab',$69f0);
+  test16('toto',$e2ca);
+  test16('123456789',$29b1);
+  test16('123456789123456789',$a86d);
   totallen := 36;
   for i := 0 to High(crc) do
   with crc[i] do begin
