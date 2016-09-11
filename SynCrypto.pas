@@ -7556,8 +7556,8 @@ begin
       i := Len;
       repeat
         dec(i,FileRead(dev,p^[Len-i],i));
-      until i=0;
-      fromOS := true;
+      until i<=0;
+      fromOS := i=0;
     finally
       FileClose(dev);
     end;
@@ -7624,20 +7624,23 @@ const PASSLEN = 256;
 var key: TSHA256Digest;
     pass, salt: RawByteString;
 begin
-  pass := GetEntropy(PASSLEN+SALTLEN); // get all entropy in one call
-  salt := copy(pass,PASSLEN+1,SALTLEN);
-  SetLength(pass,PASSLEN);
-  EnterCriticalSection(fLock);
-  PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds,key);
-  fAES.EncryptInit(key,256);
-  FillZero(key); // avoid the key appear in clear on stack
-  FillcharFast(pointer(pass)^,length(pass),0); // remove entropy from heap
-  assert(SALTLEN>=sizeof(fCTR));
-  MoveFast(pointer(salt)^,fCTR,sizeof(fCTR));
-  fCTR[0] := fCTR[0] xor fTotalBytes;
-  fAES.Encrypt(TAESBlock(fCTR),TAESBlock(fCTR));
-  fBytesSinceSeed := 0;
-  LeaveCriticalSection(fLock);
+  try
+    pass := GetEntropy(PASSLEN+SALTLEN); // get all entropy in one call
+    salt := copy(pass,PASSLEN+1,SALTLEN);
+    SetLength(pass,PASSLEN);
+    PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds+(ord(salt[1]) and 7),key);
+    EnterCriticalSection(fLock);
+    fAES.EncryptInit(key,256);
+    crc128c(pointer(salt),SALTLEN,THash128(fCTR));
+    fCTR[0] := fCTR[0] xor fTotalBytes;
+    fAES.Encrypt(TAESBlock(fCTR),TAESBlock(fCTR));
+    fBytesSinceSeed := 0;
+    LeaveCriticalSection(fLock);
+  finally
+    FillZero(key); // avoid the key appear in clear on stack
+    FillcharFast(pointer(pass)^,length(pass),0); // remove entropy from heap
+    FillcharFast(pointer(salt)^,length(salt),0);
+  end;
 end;
 
 procedure TAESPRNG.IncrementCTR;
