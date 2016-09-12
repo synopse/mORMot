@@ -36306,9 +36306,6 @@ end;
 
 { TSQLRestServer }
 
-const
-  ServerPipeNamePrefix: TFileName = '\\.\pipe\mORMot_';
-
 var
   GlobalURIRequestServer: TSQLRestServer = nil;
 
@@ -36414,6 +36411,9 @@ begin
 end;
 
 {$ifdef MSWINDOWS}
+
+const
+  ServerPipeNamePrefix: TFileName = '\\.\pipe\mORMot_';
 
 function TSQLRestServer.ExportServerNamedPipe(const ServerApplicationName: TFileName): boolean;
 var PipeName: TFileName;
