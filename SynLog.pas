@@ -2473,6 +2473,7 @@ function InternalDefaultSynLogExceptionToStr(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 {$ifdef MSWINDOWS}
 var i: integer;
+    code: cardinal;
 {$endif}
 begin
   WR.AddClassName(Context.EClass);
@@ -2481,9 +2482,10 @@ begin
     {$ifdef MSWINDOWS}
     if ExceptionInheritsFrom(Context.EClass,'EOleSysError') then begin
       WR.Add(' ');
-      WR.AddPointer(EOleSysError(Context.EInstance).ErrorCode);
+      code := EOleSysError(Context.EInstance).ErrorCode;
+      WR.AddPointer(code);
       for i := 0 to high(DOTNET_EXCEPTIONHRESULT) do
-        if DOTNET_EXCEPTIONHRESULT[i]=EOleSysError(Context.EInstance).ErrorCode then begin
+        if DOTNET_EXCEPTIONHRESULT[i]=code then begin
           WR.AddShort(' [.NET/CLR unhandled ');
           WR.AddString(DOTNET_EXCEPTIONNAME[i]);
           WR.AddShort('Exception]');

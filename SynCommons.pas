@@ -18466,7 +18466,7 @@ end;
 {$ifdef UNICODE}
 function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char;
 begin
-  result := Dest+RawUnicodeToUtf8(Dest,SourceChars*3,PWideChar(Source),SourceChars);
+  result := Dest+RawUnicodeToUtf8(Dest,SourceChars*3,PWideChar(Source),SourceChars,false);
 end;
 {$else}
 function StringBufferToUtf8(Dest: PUTF8Char; Source: PChar; SourceChars: PtrInt): PUTF8Char;
@@ -37799,7 +37799,7 @@ var Buf: array[byte] of AnsiChar; // to avoid heap allocation
 {$endif}
 begin
 {$ifdef UNICODE}
-  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name));
+  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),false);
   IntGet(Dest,V,Buf);
 {$else}
   IntGet(Dest,V,pointer(Name));
@@ -37821,7 +37821,7 @@ var ValueSet: TVarData;
 {$endif}
 begin
 {$ifdef UNICODE}
-  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name));
+  RawUnicodeToUtf8(Buf,SizeOf(Buf),pointer(Name),length(Name),false);
   PropName := @Buf[0];
 {$else}
   PropName := pointer(Name);
