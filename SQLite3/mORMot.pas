@@ -14151,7 +14151,7 @@ type
     // - in order to handle safe transactions and multi-thread safe writing, the
     // server will identify transactions using the client Session ID: this
     // property will set the time out wait period
-    // - default value is 2000, i.e. TSQLRestServer.URI will wait up to 2 seconds
+    // - default value is 5000, i.e. TSQLRestServer.URI will wait up to 5 seconds
     // in order to acquire the right to write on the database before returning
     // a "408 Request Time-out" status error
     property AcquireWriteTimeOut: cardinal index execORMWrite
@@ -32866,7 +32866,7 @@ begin
   for cmd := Low(cmd) to high(cmd) do
     fAcquireExecution[cmd] := TSQLRestAcquireExecution.Create;
   AcquireWriteMode := amLocked;
-  AcquireWriteTimeOut := 2000; // default 2 seconds
+  AcquireWriteTimeOut := 5000; // default 5 seconds
   fRoutingClass := TSQLRestRoutingREST;
   QueryPerformanceFrequency(fFrequencyTimeStamp);
   {$ifdef WITHLOG}
@@ -38031,7 +38031,7 @@ begin
             Safe.UnLock;
           end;
           if (LockedTimeOut<>0) and (GetTickCount64>Start64+LockedTimeOut) then begin
-            TimeOut; // wait up to 2 second by default
+            TimeOut; // wait up to 5 second by default
             exit;
           end;
           SleepHiRes(1); // retry every 1 ms
