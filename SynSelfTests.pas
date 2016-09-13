@@ -9075,6 +9075,8 @@ begin
     check(sign.AuthoritySerial=secret.Serial);
     check(sign.AuthorityIssuer=secret.Issuer);
     sav := sign.ToBase64;
+    bin := sign.SaveToDERBinary;
+    check(length(bin)>=ECC_BYTES*2+6);
     sign.Free;
     sign := TECCSignatureCertified.CreateFromBase64(sav);
     check(sign.Check);
@@ -9082,6 +9084,7 @@ begin
     check(sign.Date=ECCText(NowECCDate));
     check(sign.AuthoritySerial=secret.Serial);
     check(sign.AuthorityIssuer='toto.com');
+    check(sign.SaveToDERBinary=bin);
     check(chain.IsSigned(sign,pointer(json),length(json))=ecvValidSigned);
     signcontent := sign.Content;
     inc(signcontent.Signature[10]); // corrupt
@@ -9497,16 +9500,20 @@ begin
   Check(JSONGetID('{"rowid":1234}',id) and (id=1234));
   Check(JSONGetID(' { "id": 123}',id) and (id=123));
   Check(JSONGetID(' { "ROWID": 1234}',id) and (id=1234));
+  Check(JSONGetID('{id:123}',id) and (id=123));
+  Check(JSONGetID('{rowid:1234}',id) and (id=1234));
   Check(not JSONGetID('{"id":0}',id));
   Check(not JSONGetID('{"id":-10}',id));
   Check(not JSONGetID('{"id":null}',id));
   Check(not JSONGetID('{"ROWID":null}',id));
+  Check(not JSONGetID('{id:0}',id));
+  Check(not JSONGetID('{id:-10}',id));
   Check(not JSONGetID('{"ide":123}',id));
   Check(not JSONGetID('{"rowide":1234}',id));
   Check(not JSONGetID('{"as":123}',id));
   Check(not JSONGetID('{"s":1234}',id));
   Check(not JSONGetID('"ide":123}',id));
-  Check(not JSONGetID('{ rowide":1234}',id));
+  Check(not JSONGetID('{ "rowide":1234}',id));
   if ClassType=TTestMemoryBased then
     TempFileName := SQLITE_MEMORY_DATABASE_NAME else begin
     TempFileName := 'test.db3';

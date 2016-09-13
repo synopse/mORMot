@@ -1824,19 +1824,18 @@ function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger=nil): RawU
 // - returns the resulting length (in bytes) will be stored within Dest
 function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; var Dest: RawUnicode): integer; overload;
 
+/// convert a RawUnicode PWideChar into a UTF-8 string
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: RawUTF8); overload;
+
+/// convert a RawUnicode PWideChar into a UTF-8 string
+function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 type
   /// option set for RawUnicodeToUtf8() conversion
   TCharConversionFlags = set of (
     ccfNoTrailingZero, ccfReplacementCharacterForUnmatchedSurrogate);
-
-/// convert a RawUnicode PWideChar into a UTF-8 string
-procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var result: RawUTF8; Flags: TCharConversionFlags = [ccfNoTrailingZero]); overload;
-
-/// convert a RawUnicode PWideChar into a UTF-8 string
-function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a RawUnicode UTF-16 PWideChar into a UTF-8 buffer
 // - replace system.UnicodeToUtf8 implementation, which is rather slow
@@ -18286,21 +18285,20 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var result: RawUTF8; Flags: TCharConversionFlags = [ccfNoTrailingZero]);
+  var result: RawUTF8);
 var tmp: TSynTempBuffer;
 begin
   if (WideChar=nil) or (WideCharCount=0) then
     result := '' else begin
     tmp.Init(WideCharCount*3);
-    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,Flags));
+    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,[ccfNoTrailingZero]));
     tmp.Done;
   end;
 end;
 
-function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8;
+function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer): RawUTF8;
 begin
-  RawUnicodeToUTF8(WideChar,WideCharCount,result, Flags);
+  RawUnicodeToUTF8(WideChar,WideCharCount,result);
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; out UTF8Length: integer): RawUTF8; overload;
