@@ -1855,10 +1855,9 @@ begin
   P[1] := SLen;
   if SLen<>ECC_BYTES then begin
     P[2] := $00;
-    inc(PByte(P),3);
-  end else
-    inc(PByte(P),2);
-  MoveFast(fContent.Signature[ECC_BYTES],P[0],ECC_BYTES);
+    inc(PByte(P));
+  end;
+  MoveFast(fContent.Signature[ECC_BYTES],P[2],ECC_BYTES);
 end;
 
 function TECCSignatureCertified.SaveToDERFile(
