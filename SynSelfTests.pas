@@ -9496,7 +9496,11 @@ begin
   Check(JSONGetID('{"id":123}',id) and (id=123));
   Check(JSONGetID('{"rowid":1234}',id) and (id=1234));
   Check(JSONGetID(' { "id": 123}',id) and (id=123));
-  Check(JSONGetID(' { "rowid": 1234}',id) and (id=1234));
+  Check(JSONGetID(' { "ROWID": 1234}',id) and (id=1234));
+  Check(not JSONGetID('{"id":0}',id));
+  Check(not JSONGetID('{"id":-10}',id));
+  Check(not JSONGetID('{"id":null}',id));
+  Check(not JSONGetID('{"ROWID":null}',id));
   Check(not JSONGetID('{"ide":123}',id));
   Check(not JSONGetID('{"rowide":1234}',id));
   Check(not JSONGetID('{"as":123}',id));

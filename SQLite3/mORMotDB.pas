@@ -1253,8 +1253,7 @@ begin
   if fBatchMethod<>mNone then
     if fBatchMethod<>mPOST then
       result := 0 else begin
-      JSONGetID(pointer(SentData),result);
-      if result=0 then
+      if not JSONGetID(pointer(SentData),result) then
         result := EngineLockedNextID else
         if result>fEngineLockedMaxID then
           fEngineLockedMaxID := result;
@@ -1839,13 +1838,12 @@ begin
   StorageLock(false,'ExecuteFromJson'); // avoid race condition against max(ID)
   try
     case Occasion of
-    soInsert: begin
-      JSONGetID(pointer(SentData),InsertedID);
-      if InsertedID=0 then // no specified "ID":... field value -> compute next
+    soInsert:
+      if not JSONGetID(pointer(SentData),InsertedID) then
+        // no specified "ID":... field value -> compute next
         InsertedID := EngineLockedNextID else
         if InsertedID>fEngineLockedMaxID then
           fEngineLockedMaxID := InsertedID;
-    end;
     soUpdate:
       if UpdatedID<>0 then
         InsertedID := 0 else
