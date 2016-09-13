@@ -1824,18 +1824,19 @@ function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; DestLen: PInteger=nil): RawU
 // - returns the resulting length (in bytes) will be stored within Dest
 function Utf8DecodeToRawUnicodeUI(const S: RawUTF8; var Dest: RawUnicode): integer; overload;
 
-/// convert a RawUnicode PWideChar into a UTF-8 string
-procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var result: RawUTF8); overload;
-
-/// convert a RawUnicode PWideChar into a UTF-8 string
-function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
 type
   /// option set for RawUnicodeToUtf8() conversion
   TCharConversionFlags = set of (
     ccfNoTrailingZero, ccfReplacementCharacterForUnmatchedSurrogate);
+
+/// convert a RawUnicode PWideChar into a UTF-8 string
+procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  var result: RawUTF8; Flags: TCharConversionFlags = [ccfNoTrailingZero]); overload;
+
+/// convert a RawUnicode PWideChar into a UTF-8 string
+function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a RawUnicode UTF-16 PWideChar into a UTF-8 buffer
 // - replace system.UnicodeToUtf8 implementation, which is rather slow
@@ -18241,7 +18242,7 @@ begin
       end;
       UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
         if (PtrInt(Source)>=SourceLen) or
-           (cardinal(Source^)-UTF16_LOSURROGATE_MIN>UTF16_LOSURROGATE_MAX-UTF16_LOSURROGATE_MIN) then begin
+           ((cardinal(Source^)<UTF16_LOSURROGATE_MIN) or (cardinal(Source^)>UTF16_LOSURROGATE_MAX)) then begin
 unmatch:  if (PtrInt(@Dest[3])>DestLen) or
              not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
             break;
@@ -18255,7 +18256,7 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
         end;
       UTF16_LOSURROGATE_MIN..UTF16_LOSURROGATE_MAX:
         if (PtrInt(Source)>=SourceLen) or
-           (cardinal(Source^)-UTF16_HISURROGATE_MIN>UTF16_HISURROGATE_MAX-UTF16_HISURROGATE_MIN) then
+           ((cardinal(Source^)<UTF16_HISURROGATE_MIN) or (cardinal(Source^)>UTF16_HISURROGATE_MAX)) then
           goto unmatch else begin
           c := ((cardinal(Source^)-$D7C0)shl 10)+(c xor UTF16_LOSURROGATE_MIN);
           inc(Source);
@@ -18285,20 +18286,21 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var result: RawUTF8);
+  var result: RawUTF8; Flags: TCharConversionFlags = [ccfNoTrailingZero]);
 var tmp: TSynTempBuffer;
 begin
   if (WideChar=nil) or (WideCharCount=0) then
     result := '' else begin
     tmp.Init(WideCharCount*3);
-    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,[ccfNoTrailingZero]));
+    SetRawUTF8(Result,tmp.buf,RawUnicodeToUtf8(tmp.buf,tmp.len+1,WideChar,WideCharCount,Flags));
     tmp.Done;
   end;
 end;
 
-function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer): RawUTF8;
+function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
+  Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8;
 begin
-  RawUnicodeToUTF8(WideChar,WideCharCount,result);
+  RawUnicodeToUTF8(WideChar,WideCharCount,result, Flags);
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer; out UTF8Length: integer): RawUTF8; overload;
