@@ -4737,7 +4737,7 @@ begin
   len := length(Value);
   GetMem(P,len*3+1);
   {$ifdef UNICODE}
-  len := RawUnicodeToUtf8(P,len*3,pointer(Value),len,false);
+  len := RawUnicodeToUtf8(P,len*3,pointer(Value),len,[]);
   {$else}
   len := CurrentAnsiConvert.AnsiBufferToUTF8(P,pointer(Value),len)-P;
   {$endif}
