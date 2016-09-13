@@ -18242,7 +18242,8 @@ begin
       UTF16_HISURROGATE_MIN..UTF16_HISURROGATE_MAX:
         if (PtrInt(Source)>=SourceLen) or
            ((cardinal(Source^)<UTF16_LOSURROGATE_MIN) or (cardinal(Source^)>UTF16_LOSURROGATE_MAX)) then begin
-unmatch:  if PtrInt(@Dest[3])>DestLen then
+unmatch:  if (PtrInt(@Dest[3])>DestLen) or
+             not (ccfReplacementCharacterForUnmatchedSurrogate in Flags) then
             break;
           PWord(Dest)^ := $BFEF;
           Dest[2] := AnsiChar($BD);
@@ -18277,7 +18278,7 @@ unmatch:  if PtrInt(@Dest[3])>DestLen then
       inc(Dest,i);
       if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then continue else break;
     until false;
-    if ccfNoTrailingZero in Flags then
+    if not (ccfNoTrailingZero in Flags) then
       Dest^ := #0;
   end;
   result := PtrInt(Dest)-result;
