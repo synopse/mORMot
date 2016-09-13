@@ -2215,7 +2215,8 @@ function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 // - could be used to create a TDocVariant object with full information
 // - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
 // also able to serialize plain Exception as a simple '{"Exception":"Message"}'
-function ObjectToJSONDebug(Value: TObject): RawUTF8;
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions=
+  [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]): RawUTF8;
 
 /// will serialize any TObject into a TDocVariant debugging document
 // - just a wrapper around _JsonFast(ObjectToJSONDebug()) with an optional
@@ -45674,14 +45675,13 @@ begin
   end;
 end;
 
-function ObjectToJSONDebug(Value: TObject): RawUTF8;
+function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
   if Value=nil then
     result := 'null' else
   if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
     result := FormatUTF8('{"%":?}',[Value],[Exception(Value).Message],True) else
-    result := ObjectToJSON(Value,
-      [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]);
+    result := ObjectToJSON(Value,Options);
 end;
 
 function ObjectToVariantDebug(Value: TObject): variant;

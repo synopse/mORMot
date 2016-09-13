@@ -18286,7 +18286,7 @@ unmatch:  if (PtrInt(@Dest[3])>DestLen) or
 end;
 
 procedure RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  var result: RawUTF8; Flags: TCharConversionFlags = [ccfNoTrailingZero]);
+  var result: RawUTF8; Flags: TCharConversionFlags);
 var tmp: TSynTempBuffer;
 begin
   if (WideChar=nil) or (WideCharCount=0) then
@@ -18298,7 +18298,7 @@ begin
 end;
 
 function RawUnicodeToUtf8(WideChar: PWideChar; WideCharCount: integer;
-  Flags: TCharConversionFlags = [ccfNoTrailingZero]): RawUTF8;
+  Flags: TCharConversionFlags): RawUTF8;
 begin
   RawUnicodeToUTF8(WideChar,WideCharCount,result, Flags);
 end;
