@@ -14101,7 +14101,7 @@ type
     // - will instantiate and run a shared TSynBackgroundTimer instance for this
     // TSQLRest, so all tasks will share the very same thread
     // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
-    procedure TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+    function TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal): TSynBackgroundTimer;
     /// undefine a task running on a periodic number of seconds
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
@@ -14191,6 +14191,9 @@ type
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
       read fRoutingClass write SetRoutingClass;
+    /// low-level access to the background timer thread used by TimerEnable
+    // - contains nil if TimerEnable was never executed
+    property BackgroundTimer: TSynBackgroundTimer read fBackgroundTimer;
     /// the Database Model associated with this REST Client or Server
     property Model: TSQLModel read fModel;
   published
@@ -33042,9 +33045,10 @@ begin
       BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
-procedure TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess;
-  aOnProcessSecs: cardinal);
+function TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess;
+  aOnProcessSecs: cardinal): TSynBackgroundTimer;
 begin
+  result := nil;
   if self=nil then
     exit;
   if aOnProcessSecs=0 then begin
@@ -33057,6 +33061,7 @@ begin
     PrivateGarbageCollector.Add(fBackgroundTimer);
   end;
   fBackgroundTimer.Enable(aOnProcess,aOnProcessSecs);
+  result := fBackgroundTimer;
 end;
 
 function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
@@ -55799,7 +55804,8 @@ type // use AutoTable VMT entry to store a cache of the needed fields RTTI
       Offset: cardinal;
       Instance: TClassInstance;
     end;
-    ObjArraysOffset: array of cardinal;
+    ObjArraysOffset: TCardinalDynArray;
+    InterfacesOffset: TCardinalDynArray;
     constructor Create(aClass: TClass);
   end;
 
@@ -55828,6 +55834,9 @@ begin
           ObjArraysOffset[ObjArraysCount] := PtrUInt(P^.GetterAddr(nil));
           inc(ObjArraysCount);
         end;
+      tkInterface:
+        if P^.GetterIsField then
+          AddInteger(TIntegerDynArray(InterfacesOffset),PtrUInt(P^.GetterAddr(nil)));
       end;
       P := P^.Next;
     end;
@@ -55860,20 +55869,19 @@ begin
       PObject(PtrUInt(self)+Offset)^ := Instance.CreateNew;
 end;
 
-procedure AutoDestroyFields(self: TObject);
- {$ifdef HASINLINE}inline;{$endif}
+function AutoDestroyFields(self: TObject): TAutoCreateFields;
+  {$ifdef HASINLINE}inline;{$endif}
 var i: integer;
-    fields: TAutoCreateFields;
 begin
-  fields := PPointer(PPtrInt(self)^+vmtAutoTable)^;
-  if fields=nil then
+  result := PPointer(PPtrInt(self)^+vmtAutoTable)^;
+  if result=nil then
     exit; // may happen in a weird finalization code
   // auto-release published persistent class instances
-  for i := 0 to fields.ClassesCount-1 do
-    PObject(PtrUInt(self)+fields.Classes[i].Offset)^.Free;
+  for i := 0 to result.ClassesCount-1 do
+    FreeAndNil(PObject(PtrUInt(self)+result.Classes[i].Offset)^);
   // auto-release published T*ObjArray instances
-  for i := 0 to fields.ObjArraysCount-1 do
-    ObjArrayClear(pointer(PtrUInt(self)+fields.ObjArraysOffset[i])^);
+  for i := 0 to result.ObjArraysCount-1 do
+    ObjArrayClear(pointer(PtrUInt(self)+result.ObjArraysOffset[i])^);
 end;
 
 
