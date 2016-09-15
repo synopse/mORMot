@@ -5794,7 +5794,8 @@ function ObjArrayFind(const aObjArray; aItem: TObject): integer;
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - do nothing if the index is out of range in the dynamic array
-procedure ObjArrayDelete(var aObjArray; aItemIndex: integer); overload;
+procedure ObjArrayDelete(var aObjArray; aItemIndex: integer;
+  aContinueOnException: boolean=false); overload;
 
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -5812,7 +5813,7 @@ procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
-procedure ObjArrayClear(var aObjArray);
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean=false);
 
 /// wrapper to release all items stored in an array of T*ObjArray dynamic array
 // - e.g. aObjArray may be defined as "array of array of TSynFilter"
@@ -43789,14 +43790,20 @@ begin
     length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
 end;
 
-procedure ObjArrayDelete(var aObjArray; aItemIndex: integer);
+procedure ObjArrayDelete(var aObjArray; aItemIndex: integer;
+  aContinueOnException: boolean);
 var n: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
   n := length(a);
   if cardinal(aItemIndex)>=cardinal(n) then
     exit; // out of range
-  a[aItemIndex].Free;
+  if aContinueOnException then
+    try
+      a[aItemIndex].Free;
+    except
+    end else
+    a[aItemIndex].Free;
   dec(n);
   if n>aItemIndex then
     MoveFast(a[aItemIndex+1],a[aItemIndex],(n-aItemIndex)*sizeof(TObject));
@@ -43823,13 +43830,20 @@ begin
   end;
 end;
 
-procedure ObjArrayClear(var aObjArray);
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
 var i: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
   if a<>nil then begin
-    for i := 0 to length(a)-1 do
-      a[i].Free;
+    if aContinueOnException then
+      for i := 0 to length(a)-1 do
+      try
+        a[i].Free
+      except
+      end
+    else
+      for i := 0 to length(a)-1 do
+        a[i].Free;
     a := nil;
   end;
 end;

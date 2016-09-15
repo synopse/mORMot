@@ -7030,16 +7030,16 @@ end;
 { TAESCFB }
 
 {$ifdef USEAESNI32}
-procedure AesNiTrailer;
-asm
+procedure AesNiTrailer; // = TAESAbstractSyn.EncryptTrailer from AES-NI asm
+asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
     and    ecx,15
     jz     @0
-    call   AesNiEncryptXmm7
+    call   AesNiEncryptXmm7 // = AES.Encrypt(fCV,fCV)
     lea    edx,[eax].TAESContext.buf
     movdqu [edx],xmm7
     cld
 @s: lodsb
-    xor    al,[edx]
+    xor    al,[edx] // = XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
     inc    edx
     stosb
     loop   @s
