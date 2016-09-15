@@ -19226,6 +19226,12 @@ function ObjArraySearch(const aSQLRecordObjArray; aID: TID): TSQLRecord;
 /// wrapper to return all TID values of an array of TSQLRecord
 procedure ObjArrayRecordIDs(const aSQLRecordObjArray; out result: TInt64DynArray);
 
+/// wrapper to create a new T*ObjArray with copied instances of a source T*ObjArray
+// - use internally to copy aSourceObjArray[] instances
+// - will clear aDestObjArray before items copy, if aDestObjArrayClear = TRUE
+procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray;
+  aDestObjArrayClear: boolean=true);
+
 /// safe deletion of a T*InterfaceArray dynamic array item
 // - similar to InterfaceArrayDelete, but with a safe try .. except block
 // during the entry deletion (since the system may be unstable)
@@ -57929,6 +57935,21 @@ begin
   for i := 0 to n-1 do
     result[i] := a[i].IDValue;
 end;
+
+procedure ObjArrayCopy(const aSourceObjArray; var aDestObjArray;
+  aDestObjArrayClear: boolean);
+var s: TObjectDynArray absolute aSourceObjArray;
+    d: TObjectDynArray absolute aDestObjArray;
+    dlen,i: integer;
+begin
+  if aDestObjArrayClear then
+    ObjArrayClear(aDestObjArray);
+  dlen := length(d);
+  SetLength(d,dlen+length(s));
+  for i := 0 to length(s)-1 do
+    d[dlen+i] := CopyObject(s[i]);
+end;
+
 
 procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
   const aItemIndex: integer; aLog: TSynLogFamily; const aLogMsg: RawUTF8;
