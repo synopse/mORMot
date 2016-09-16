@@ -8358,6 +8358,15 @@ type
     /// finalize the instance
     // - and all internal objects stored, if was created with Create(true)
     destructor Destroy; override;
+    /// thread-safe adding of an item to the list
+    // - will just call Add() within Safe.Lock/Unlock 
+    // - you may use SafePop to handle a thread-safe FIFO
+    procedure SafePush(const aValue: RawUTF8);
+    /// thread-safe retrieving of an item to the list
+    // - returns TRUE and set aValue from the oldest SafePush() content
+    // - returns FALSE if there is no pending item in the list
+    // - you may have used SafePush before to handle a thread-safe FIFO
+    function SafePop(out aValue: RawUTF8): boolean;
     /// access to the locking methods of this instance
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
     property Safe: TSynLocker read fSafe;
@@ -51141,6 +51150,35 @@ destructor TRawUTF8ListLocked.Destroy;
 begin
   inherited;
   fSafe.Done;
+end;
+
+procedure TRawUTF8ListLocked.SafePush(const aValue: RawUTF8);
+begin
+  if self=nil then
+    exit;
+  fSafe.Lock;
+  try
+    Add(aValue);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListLocked.SafePop(out aValue: RawUTF8): boolean;
+begin
+  result := false;
+  if (self=nil) or (fCount=0) then
+    exit;
+  fSafe.Lock;
+  try
+    if fCount=0 then
+      exit;
+    aValue := fList[0];
+    Delete(0);
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 
