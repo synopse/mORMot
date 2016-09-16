@@ -16045,17 +16045,28 @@ type
     property Stats: TSynMonitor read fStats;
   end;
 
+  TSynBackgroundTimer = class;
+  
+  /// event callback executed periodically by TSynBackgroundThreadProcess
+  // - Event is wrTimeout after the OnProcessMS waiting period 
+  // - Event is wrSignaled if ProcessEvent.SetEvent has been called
+  // - Msg is '' if there is no pending message in this task FIFO
+  // - Msg is set for each pending message in this task FIFO
+  TOnSynBackgroundTimerProcess = procedure(Sender: TSynBackgroundTimer;
+    Event: TWaitResult; const Msg: RawUTF8) of object;
   /// used by TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTask = record
-    OnProcess: TOnSynBackgroundThreadProcess;
+    OnProcess: TOnSynBackgroundTimerProcess;
     Secs: cardinal;
     NextTix: Int64;
+    FIFO: TRawUTF8DynArray;
   end;
   /// stores TSynBackgroundTimer internal registration list
   TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
 
-  /// TThread able to run one of several tasks at a periodic pace
+  /// TThread able to run one or several tasks at a periodic pace
   // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods
+  // - each process can have its own FIFO of text messages
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
     fTask: TSynBackgroundTimerTaskDynArray;
@@ -16063,30 +16074,51 @@ type
     fTaskLock: TSynLocker;
     procedure EverySecond(Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
     function Find(const aProcess: TMethod): integer;
+    function Add(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
   public
     /// initialize the thread for a periodic task processing
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8;
-      aOnBeforeExecute: TNotifyThreadEvent=nil;
-      aOnAfterExecute: TNotifyThreadEvent=nil;
+      aOnBeforeExecute: TNotifyThreadEvent=nil; aOnAfterExecute: TNotifyThreadEvent=nil;
       aStats: TSynMonitorClass=nil); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
-    /// define a task running on a periodic number of seconds
+    /// define a process method for a task running on a periodic number of seconds
     // - for background process on a mORMot service, consider using TSQLRest
-    // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
-    procedure Enable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+    // TimerEnable/TimerDisable methods, and its associated BackgroundTimer thread
+    procedure Enable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
     /// undefine a task running on a periodic number of seconds
-    // - should have been registered by a previous call to Enable() method
+    // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     // - for background process on a mORMot service, consider using TSQLRestServer
     // TimerEnable/TimerDisable methods, and their TSynBackgroundTimer thread
-    function Disable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+    function Disable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// add a message to be processed during the next execution of a task
+    // - supplied message will be added to the internal FIFO list associated
+    // with aOnProcess, then supplied to as aMsg parameter for each call
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsg: RawUTF8; aExecuteNow: boolean=false): boolean; overload;
+    /// add a message to be processed during the next execution of a task
+    // - supplied message will be added to the internal FIFO list associated
+    // with aOnProcess, then supplied to as aMsg parameter for each call
+    // - if aExecuteNow is true, won't wait for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+      const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean=false): boolean; overload;
+    /// execute a task without waiting for the next aOnProcessSecs occurence
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied task was not registered
+    function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// low-level access to the internal task list
     property Task: TSynBackgroundTimerTaskDynArray read fTask;
   end;
-  
+
 type
   /// class-reference type (metaclass) of an authentication class
   TSynAuthenticationClass = class of TSynAuthenticationAbstract;
@@ -58436,7 +58468,7 @@ end;
 procedure TSynBackgroundTimer.EverySecond(
   Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
 var tix: Int64;
-    i: integer;
+    i,f: integer;
 begin
   if (fTask=nil) or Terminated then
     exit;
@@ -58446,7 +58478,12 @@ begin
     for i := 0 to length(fTask)-1 do
     with fTask[i] do
       if tix>=NextTix then begin
-        OnProcess(self,Event);
+        if FIFO=nil then
+          OnProcess(self,Event,'') else begin
+          for f := 0 to length(FIFO)-1 do
+            OnProcess(self,Event,FIFO[f]);
+          FIFO := nil;
+        end;
         tix := GetTickCount64;
         NextTix := tix+(Secs*1000);
       end;
@@ -58465,7 +58502,7 @@ begin // caller should have made fTaskLock.Lock;
 end;
 
 procedure TSynBackgroundTimer.Enable(
-  aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal);
+  aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal);
 var task: TSynBackgroundTimerTask;
     found: integer;
 begin
@@ -58489,10 +58526,53 @@ begin
   end;
 end;
 
-function TSynBackgroundTimer.Disable(
-  aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+begin
+  result := Add(aOnProcess,#0,true);
+end;
+
+function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
+begin
+  result := Add(aOnProcess,aMsg,aExecuteNow);
+end;
+
+function TSynBackgroundTimer.EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean): boolean;
+var msg: RawUTF8;
+begin
+  FormatUTF8(aMsgFmt,Args,msg);
+  result := Add(aOnProcess,msg,aExecuteNow);
+end;
+
+function TSynBackgroundTimer.Add(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8; aExecuteNow: boolean): boolean;
 var found: integer;
-    method: TMethod absolute aOnProcess;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then begin
+      with fTask[found] do begin
+        if aExecuteNow then
+          NextTix := 0;
+        if aMsg<>#0 then
+          AddRawUTF8(FIFO,aMsg);
+      end;
+      ProcessEvent.SetEvent;
+      result := true;
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.Disable(
+  aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+var found: integer;
 begin
   result := false;
   if (self=nil) or Terminated or not Assigned(aOnProcess) then

@@ -1408,7 +1408,6 @@ var
   Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
   Xor32Byte: TByteArray absolute Td0;  // 2^13=$2000=8192 bytes of XOR tables ;)
 
-
 procedure ComputeAesStaticTables; // will compute 4.5 KB of constant tables
 var i, x,y: byte;
     pow,log: array[byte] of byte;
