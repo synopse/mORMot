@@ -689,6 +689,12 @@ var
 /// test function
 procedure GdipTest(const JpegFile: TFileName);
 
+/// enter global critical section for safe use of SynGdiPlus from multiple threads
+procedure GdipLock;
+
+/// leave global critical section for safe use of SynGdiPlus from multiple threads
+procedure GdipUnlock;
+
 
 implementation
 
@@ -2646,7 +2652,21 @@ begin
   Int64(aObjFont) := 0;
 end;
 
+var
+  GdipCS: TRTLCriticalSection;
+
+procedure GdipLock;
+begin
+  EnterCriticalSection(GdipCS);
+end;
+
+procedure GdipUnlock;
+begin
+  LeaveCriticalSection(GdipCS);
+end;
+
 initialization
+  InitializeCriticalSection(GdipCS);
 {$ifndef NOTSYNPICTUREREGISTER}
   Gdip.RegisterPictures; // will initialize the Gdip library if necessary
 //  GdipTest('d:\Data\Pictures\Sample Pictures\Tree.jpg');
@@ -2654,4 +2674,5 @@ initialization
 
 finalization
   Gdip.Free;
+  DeleteCriticalSection(GdipCS);
 end.
