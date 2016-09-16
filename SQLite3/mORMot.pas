@@ -14102,11 +14102,11 @@ type
     // - will instantiate and run a shared TSynBackgroundTimer instance for this
     // TSQLRest, so all tasks will share the very same thread
     // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
-    function TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessSecs: cardinal): TSynBackgroundTimer;
+    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal): TSynBackgroundTimer;
     /// undefine a task running on a periodic number of seconds
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
-    function TimerDisable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+    function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -21374,7 +21374,7 @@ end;
 procedure TSQLPropInfoRTTIRawUTF8.CopySameClassProp(Source: TObject;
   DestInfo: TSQLPropInfo; Dest: TObject);
 var Value: RawByteString;
-begin
+begin // don't know why, but fInPlaceCopySameClassPropOffset trick leaks memory :(
   fPropInfo.GetLongStrProp(Source,Value);
   TSQLPropInfoRTTIRawUTF8(DestInfo).fPropInfo.SetLongStrProp(Dest,Value);
 end;
@@ -33052,7 +33052,7 @@ begin
       BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
-function TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundThreadProcess;
+function TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
   aOnProcessSecs: cardinal): TSynBackgroundTimer;
 begin
   result := nil;
@@ -33071,7 +33071,7 @@ begin
   result := fBackgroundTimer;
 end;
 
-function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundThreadProcess): boolean;
+function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
 begin
   if (self=nil) or (fBackgroundTimer=nil) then
     result := false else
