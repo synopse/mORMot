@@ -3997,6 +3997,22 @@ function IsContentCompressed(Content: Pointer; Len: integer): boolean;
 // 'Content-Type: application/json' or 'Content-Type: application/xml'
 function IsHTMLContentTypeTextual(Headers: PUTF8Char): Boolean;
 
+/// fast guess of the size, in pixels, of a JPEG memory buffer
+// - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
+// - returns TRUE if the buffer is likely to be a JPEG picture, and set the
+// Height + Width variable with its dimensions - but there may be false positive
+// recognition, and no waranty that the memory buffer holds a valid JPEG picture
+// - returns FALSE if the buffer does not have any expected SOI/SOF markers
+function GetJpegSize(jpeg: PAnsiChar; len: integer; out Height, Width: integer): boolean; overload;
+
+/// fast guess of the size, in pixels, of a JPEG file
+// - will only scan for basic JPEG structure, up to the StartOfFrame (SOF) chunk
+// - returns TRUE if the buffer is likely to be a JPEG picture, and set the
+// Height + Width variable with its dimensions - but there may be false positive
+// recognition, and no waranty that the file is a valid JPEG picture
+// - returns FALSE if the file content does not have any expected SOI/SOF markers
+function GetJpegSize(const jpeg: TFileName; out Height, Width: integer): boolean; overload;
+
 type
   /// used by MultiPartFormDataDecode() to return one item of its data
   TMultiPart = record
@@ -20420,7 +20436,7 @@ asm // eax=aTypeInfo edx=aIndex
     test   edx,edx
     jz     @z
     push   edx
-    shr    edx,2 // fast pipelined by-four scanning
+    shr    edx,2 // fast by-four scanning
     jz     @1
 @4: dec    edx
     movzx  ecx,byte ptr [eax]
@@ -32614,6 +32630,47 @@ begin
           result := true;
         else result := false;
       end;
+    end else
+    result := false;
+end;
+
+function GetJpegSize(jpeg: PAnsiChar; len: integer; out Height, Width: integer): boolean;
+var je: PAnsiChar;
+begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
+  result := false;
+  if (jpeg=nil) or (len<100) or (PWord(jpeg)^<>$d8ff) then // SOI
+    exit;
+  je := jpeg+len-1;
+  inc(jpeg,2);
+  while jpeg<je do begin
+    if jpeg^<>#$ff then
+      exit;
+    inc(jpeg);
+    case ord(jpeg^) of
+      $c0..$c3,$c5..$c7,$c9..$cb,$cd..$cf: begin // SOF
+        Height := swap(PWord(jpeg+4)^);
+        Width := swap(PWord(jpeg+6)^);
+        result := (Height>0) and (Height<20000) and (Width>0) and (Width<20000);
+        exit;
+      end;
+      $d0..$d8,$01: // RST, SOI
+        inc(jpeg);
+      $d9: break;   // EOI
+      $ff: ;        // padding
+      else
+        inc(jpeg,swap(PWord(jpeg+1)^)+1);
+    end;
+  end;
+end;
+
+function GetJpegSize(const jpeg: TFileName; out Height, Width: integer): boolean; overload;
+var map: TMemoryMap;
+begin
+  if map.Map(jpeg) then
+    try
+      result := GetJpegSize(map.Buffer,map.Size,Height,Width);
+    finally
+      map.UnMap;
     end else
     result := false;
 end;
