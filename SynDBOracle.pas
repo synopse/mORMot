@@ -1321,16 +1321,16 @@ type
 { TSQLDBOracleLib }
 
 const
-  OCI_ENTRIES: array[0..38] of PChar = (
+  OCI_ENTRIES: array[0..39] of PChar = (
     'OCIClientVersion', 'OCIEnvNlsCreate', 'OCIHandleAlloc', 'OCIHandleFree',
     'OCIServerAttach', 'OCIServerDetach', 'OCIAttrGet', 'OCIAttrSet',
     'OCISessionBegin', 'OCISessionEnd', 'OCIErrorGet', 'OCIStmtPrepare',
     'OCIStmtExecute', 'OCIStmtFetch', 'OCIBindByPos', 'OCIParamGet',
     'OCITransStart', 'OCITransRollback', 'OCITransCommit', 'OCIDescriptorAlloc',
     'OCIDescriptorFree', 'OCIDateTimeConstruct', 'OCIDateTimeGetDate',
-    'OCIDefineByPos', 'OCILobGetLength', 'OCILobOpen', 'OCILobRead',
-    'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2', 'OCIStmtRelease',
-    'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
+    'OCIDefineByPos', 'OCILobGetLength', 'OCILobGetChunkSize', 'OCILobOpen',
+    'OCILobRead', 'OCILobClose', 'OCINlsCharSetNameToId', 'OCIStmtPrepare2',
+    'OCIStmtRelease', 'OCITypeByName', 'OCIObjectNew', 'OCIObjectFree',
     'OCINumberFromInt','OCIStringAssignText', 'OCICollAppend', 'OCIBindObject',
     'OCIPasswordChange');
 
@@ -1343,6 +1343,11 @@ type
       Status: Integer; ErrorHandle: POCIError; InfoRaiseException: Boolean=false;
       LogLevelNoRaise: TSynLogInfo=sllNone);
     procedure RetrieveVersion;
+    function BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor): ub4;
+    function BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
+      csid: ub2=0; csfrm: ub1=SQLCS_IMPLICIT): integer;
   public
     ClientVersion: function(var major_version, minor_version,
       update_num, patch_num, port_update_num: sword): sword; cdecl;
@@ -1401,6 +1406,8 @@ type
       indp: Pointer; rlenp: Pointer; rcodep: Pointer; mode: ub4): sword; cdecl;
     LobGetLength: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; var lenp: ub4): sword; cdecl;
+    LobGetChunkSize: function(svchp: POCISvcCtx; errhp: POCIError;
+      locp: POCILobLocator; var chunk_size: ub4): sword; cdecl;
     LobOpen: function(svchp: POCISvcCtx; errhp: POCIError;
       locp: POCILobLocator; mode: ub1): sword; cdecl;
     LobRead: function(svchp: POCISvcCtx; errhp: POCIError;
@@ -1435,6 +1442,10 @@ type
     major_version, minor_version, update_num, patch_num, port_update_num: sword;
     /// if OCI handles directly Int64 bound parameters (revision >= 11.2)
     SupportsInt64Params: boolean;
+    /// OCI will call OCILobGetChunkSize when retrieving BLOB/CLOB content
+    // - is enabled by default, to avoid ORA-2481 errors when reading more than
+    // 96 MB of data, but you may disable chunking if you prefer by setting false
+    UseLobChunks: boolean;
     /// load the oci.dll library
     // - and retrieve all Oci*() addresses for OCI_ENTRIES[] items
     constructor Create;
@@ -1460,8 +1471,9 @@ type
     procedure BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
       errhp: POCIError; locp: POCIDescriptor; out result: TBytes); overload;
     /// retrieve some CLOB/NCLOB content as UTF-8 text
-    procedure ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
-      errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer; out result: RawUTF8);
+    function ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+      errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
+      out Text: RawUTF8; TextResize: boolean=true): ub4;
   end;
 
 
@@ -1471,25 +1483,56 @@ begin
     ClientVersion(major_version, minor_version,
       update_num, patch_num, port_update_num);
     SupportsInt64Params := (major_version>11) or ((major_version=11) and (minor_version>1));
+    UseLobChunks := true;
   end;
+end;
+
+function TSQLDBOracleLib.BlobOpen(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+  errhp: POCIError; locp: POCIDescriptor): ub4;
+begin
+  result := 0;
+  Check(nil,Stmt,LobOpen(svchp,errhp,locp,OCI_LOB_READONLY),errhp);
+  try
+    Check(nil,Stmt,LobGetLength(svchp,errhp,locp,result),errhp);
+  except
+    Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
+    raise;
+  end;
+end;
+
+function TSQLDBOracleLib.BlobRead(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+  errhp: POCIError; locp: POCIDescriptor; Blob: PByte; BlobLen: ub4;
+  csid: ub2; csfrm: ub1): integer;
+var Read, ChunkSize: ub4;
+    Status: sword;
+begin
+  result := BlobLen;
+  if BlobLen=0 then
+    exit; // nothing to read
+  if UseLobChunks then begin
+    Check(nil,Stmt,LobGetChunkSize(svchp,errhp,locp,ChunkSize),errhp);
+    result := 0;
+    repeat
+      Read := BlobLen;
+      Status := LobRead(svchp,errhp,locp,Read,1,Blob,ChunkSize,nil,nil,csid,csfrm);
+      inc(Blob,Read);
+      inc(result,Read);
+    until Status<>OCI_NEED_DATA;
+    Check(nil,Stmt,Status,errhp);
+  end else
+    Check(nil,Stmt,LobRead(svchp,errhp,locp,result,1,Blob,result,nil,nil,csid,csfrm),errhp);
 end;
 
 procedure TSQLDBOracleLib.BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; out result: RawByteString);
 var Len, Read: ub4;
 begin
-  Check(nil,Stmt,LobOpen(svchp,errhp,locp,OCI_LOB_READONLY),errhp);
+  Len := BlobOpen(Stmt,svchp,errhp,locp);
   try
-    Len := 0;
-    Check(nil,Stmt,LobGetLength(svchp,errhp,locp,Len),errhp);
     SetLength(result,Len);
-    if Len>0 then begin
-      Read := Len;
-      Check(nil,Stmt,
-        LobRead(svchp,errhp,locp,Read,1,pointer(result),Read),errhp);
-      if Read<>Len then
-        raise ESQLDBOracle.Create('LOB read error');
-    end;
+    Read := BlobRead(Stmt,svchp,errhp,locp,pointer(result),Len);
+    if Read<>Len then
+      SetLength(result,Read);
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
@@ -1499,41 +1542,33 @@ procedure TSQLDBOracleLib.BlobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCIS
   errhp: POCIError; locp: POCIDescriptor; out result: TBytes);
 var Len, Read: ub4;
 begin
-  Check(nil,Stmt,LobOpen(svchp,errhp,locp,OCI_LOB_READONLY),errhp);
+  Len := BlobOpen(Stmt,svchp,errhp,locp);
   try
-    Len := 0;
-    Check(nil,Stmt,LobGetLength(svchp,errhp,locp,Len),errhp);
     SetLength(result,Len);
-    if Len>0 then begin
-      Read := Len;
-      Check(nil,Stmt,
-        LobRead(svchp,errhp,locp,Read,1,pointer(result),Read),errhp);
-      if Read<>Len then
-        raise ESQLDBOracle.Create('LOB read error');
-    end;
+    Read := BlobRead(Stmt,svchp,errhp,locp,pointer(result),Len);
+    if Read<>Len then
+      SetLength(result,Read);
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
 end;
 
-procedure TSQLDBOracleLib.ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
+function TSQLDBOracleLib.ClobFromDescriptor(Stmt: TSQLDBStatement; svchp: POCISvcCtx;
   errhp: POCIError; locp: POCIDescriptor; ColumnDBForm: integer;
-  out result: RawUTF8);
-var Len,Read: ub4;
+  out Text: RawUTF8; TextResize: boolean): ub4;
+var Len: ub4;
 begin
-  Check(nil,Stmt,LobOpen(svchp,errhp,locp,OCI_LOB_READONLY),errhp);
+  Len := BlobOpen(Stmt,svchp,errhp,locp);
   try
-    Len := 0;
-    Check(nil,Stmt,LobGetLength(svchp,errhp,locp,Len),errhp);
     if Len>0 then begin
       Len := Len*3; // max UTF-8 size according to number of characters
-      SetLength(result,Len);
-      Read := Len;
-      Check(nil,Stmt,
-        LobRead(svchp,errhp,locp,Read,1,pointer(result),Read,nil,nil,
-          OCI_UTF8,ColumnDBForm),errhp);
-      SetLength(result,Read);
-    end;
+      SetLength(Text,Len);
+      result := BlobRead(Stmt,svchp,errhp,locp,pointer(Text),Len,OCI_UTF8,ColumnDBForm);
+      if TextResize then
+        SetLength(Text,result) else
+        Text[result+1] := #0; // ensure ASCIIZ (e.g. when escaping to JSON)
+    end else
+      result := 0;
   finally
     Check(nil,Stmt,LobClose(svchp,errhp,locp),errhp);
   end;
@@ -2176,7 +2211,7 @@ begin
     if C^.ColumnType=ftBlob then
       if C^.ColumnValueInlined then begin
         SetLength(result,C^.ColumnValueDBSize);
-        move(V^,pointer(result)^,C^.ColumnValueDBSize);
+        MoveFast(V^,pointer(result)^,C^.ColumnValueDBSize);
       end else
         // conversion from POCILobLocator
         with TSQLDBOracleConnection(Connection) do
@@ -2300,8 +2335,8 @@ begin // dedicated version to avoid as much memory allocation than possible
          with TSQLDBOracleConnection(Connection) do
            if ColumnValueInlined then
              STRToUTF8(V,U,ColumnValueDBCharSet,ColumnValueDBForm) else
-             OCI.ClobFromDescriptor(self,fContext,fError,PPOCIDescriptor(V)^,ColumnValueDBForm,U);
-         WR.AddJSONEscape(pointer(U),length(U));
+             OCI.ClobFromDescriptor(self,fContext,fError,PPOCIDescriptor(V)^,ColumnValueDBForm,U,false);
+         WR.AddJSONEscape(pointer(U));
          WR.Add('"');
        end;
        ftBlob:
@@ -2355,7 +2390,7 @@ begin // dedicated version to avoid as much memory allocation than possible
         if C^.ColumnValueInlined then
           STRToUTF8(V,RawUTF8(Temp),C^.ColumnValueDBCharSet,C^.ColumnValueDBForm) else
           OCI.ClobFromDescriptor(self,fContext,fError,PPOCIDescriptor(V)^,
-            C^.ColumnValueDBForm,RawUTF8(Temp));
+            C^.ColumnValueDBForm,RawUTF8(Temp),false);
       Value.VText := pointer(Temp);
     end;
     ftBlob:
@@ -2566,7 +2601,7 @@ var V: Byte;
     Size, Exp, i: Integer;
     Mant: array[0..19] of byte;
 begin
-  fillchar(Mant,sizeof(Mant),0);
+  FillcharFast(Mant,sizeof(Mant),0);
   Exp := 0;
   Size := 1;
   minus := Value>=0;
@@ -2607,7 +2642,7 @@ begin
   if S=nil then
     D^ := #0 else
   if S^<>'''' then
-    move(S^,D^,PInteger(S-sizeof(integer))^+1) else begin
+    MoveFast(S^,D^,PInteger(S-sizeof(integer))^+1) else begin
     inc(S);
     repeat
       if S[0]='''' then
@@ -2752,7 +2787,7 @@ begin
           oData := Pointer(VData);
           oDataSTR := oData;
           for j := 0 to fParamsArrayCount-1 do begin
-            move(Pointer(PtrInt(VArray[j])-sizeof(Integer))^,oDataSTR^,
+            MoveFast(Pointer(PtrInt(VArray[j])-sizeof(Integer))^,oDataSTR^,
               length(VArray[j])+sizeof(integer));
             inc(oDataSTR,oLength);
           end;
@@ -2765,7 +2800,7 @@ begin
       fRowCount := fParamsArrayCount; // set iters count for OCI.StmtExecute()
     end else begin
       // 1.2. One row DML optimized binding
-      fillchar(Int32,sizeof(Int32),0);
+      FillcharFast(Int32,sizeof(Int32),0);
       SetLength(oIndicator,fParamCount);
       SetLength(ociArrays,fParamCount);
       for i := 0 to fParamCount-1 do
