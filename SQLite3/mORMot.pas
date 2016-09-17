@@ -10816,7 +10816,7 @@ type
   // aServiceCustomAnswer is not nil, the result shall use this record
   // to set HTTP custom content and headers, and ignore aResult content
   // - aClientDrivenID can be set optionally to specify e.g. an URI-level session
-  TOnFakeInstanceInvoke = function (const aMethod: TServiceMethod;
+  TOnFakeInstanceInvoke = function(const aMethod: TServiceMethod;
     const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
     aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean of object;
 
@@ -13065,7 +13065,10 @@ type
       CustomFields: PSQLFieldBits; var result: RawUTF8);
     /// used by all overloaded Add() methods
     function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
-      ForceID, DoNotAutoComputeFields: boolean): TID; virtual; 
+      ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
+    // used by AsynchRedirect()
+    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
    protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -13762,7 +13765,7 @@ type
       const aSimpleFields: array of const): boolean; overload;
     /// create or update a member, depending if the Value has already an ID
     // - implements REST POST if Value.ID=0 or ForceID is set, or a REST PUT
-    // collection to update the record pointed by a Value.ID<>0 
+    // collection to update the record pointed by a Value.ID<>0
     // - will return the created or updated ID
     function AddOrUpdate(Value: TSQLRecord; ForceID: boolean=false): TID;
     /// update one field/column value a given member
@@ -14096,17 +14099,38 @@ type
     function NewBackgroundThreadProcess(aOnProcess: TOnSynBackgroundThreadProcess;
       aOnProcessMS: cardinal; const Format: RawUTF8; const Args: array of const;
       aStats: TSynMonitorClass=nil): TSynBackgroundThreadProcess;
-    /// define a task running on a periodic number of seconds
+    /// define a task running on a periodic number of seconds in a background thread
     // - could be used to run background maintenance or monitoring tasks on
     // this TSQLRest instance, at a low pace (typically every few minutes)
     // - will instantiate and run a shared TSynBackgroundTimer instance for this
     // TSQLRest, so all tasks will share the very same thread
+    // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
+    // a FIFO queue, or force immediate execution of the process
     // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
     function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal): TSynBackgroundTimer;
     /// undefine a task running on a periodic number of seconds
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
     function TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface);
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -50953,7 +50977,6 @@ type
       const Format: RawUTF8; const Args: array of const); overload;
   end;
 
-
 constructor TInterfacedObjectFake.Create(aFactory: TInterfaceFactory;
   aOptions: TInterfacedObjectFromFactoryOptions; aInvoke: TOnFakeInstanceInvoke;
   aNotifyDestroy: TOnFakeInstanceDestroy);
@@ -52616,6 +52639,93 @@ begin
 end;
 
 
+{ TInterfaceAsynch }
+
+type
+  TInterfacedObjectAsynch = class(TInterfacedObjectFake)
+  protected
+    fRest: TSQLRest;
+    fDest: IInvokable;
+    function FakeInvoke(const aMethod: TServiceMethod;
+      const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+      aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+  public
+    constructor Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+      const aDestinationInterface: IInvokable; out aCallbackInterface);
+  end;
+  TInterfacedObjectAsynchCall = packed record
+    Method: PServiceMethod;
+    Instance: pointer;
+    Params: RawUTF8;
+  end;
+
+procedure TSQLRest.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+var exec: TServiceMethodExecute;
+    call: TInterfacedObjectAsynchCall;
+begin
+  if Msg='' then
+    exit; // ignore periodic execution
+  if RecordLoad(call,pointer(Msg),TypeInfo(TInterfacedObjectAsynchCall))=nil then
+    exit; // invalid message
+  LogClass.Enter('AsynchBackgroundExecute % %',
+    [call.Method^.InterfaceDotMethodName,call.Params],self);
+  exec := TServiceMethodExecute.Create(call.Method);
+  try
+    exec.ExecuteJson([call.Instance],pointer(call.Params),nil);
+  finally
+    exec.Free;
+  end;
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface);
+var factory: TInterfaceFactory;
+begin
+  factory := TInterfaceFactory.Get(aGUID);
+  if factory=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect: unknown %',
+      [self,GUIDToShort(aGUID)]);
+  if aDestinationInterface=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
+  LogFamily.SynLog.Log(sllTrace,'AsynchRedirect %',[factory.InterfaceName],self);
+  TimerEnable(AsynchBackgroundExecute,3600);
+  TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface);
+end;
+
+constructor TInterfacedObjectAsynch.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+  const aDestinationInterface: IInvokable; out aCallbackInterface);
+begin
+  fRest := aRest;
+  fDest := aDestinationInterface;
+  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  pointer(aCallbackInterface) := @fVTable;
+  _AddRef;
+end;
+
+function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TServiceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+var msg: RawUTF8;
+    call: TInterfacedObjectAsynchCall;
+begin
+  fRest.LogFamily.SynLog.Log(sllTrace,'FakeInvoke % %',
+    [aMethod.InterfaceDotMethodName,aParams],self);
+  result := false;
+  if aMethod.ArgsOutputValuesCount>0 then begin
+    if aErrorMsg<>nil then
+      FormatUTF8('%.FakeInvoke: % has out parameters',
+        [self,aMethod.InterfaceDotMethodName], aErrorMsg^);
+    exit;
+  end;
+  call.Method := @aMethod;
+  call.Instance := pointer(fDest);
+  call.Params := aParams;
+  msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
+  result := fRest.BackgroundTimer.EnQueue(fRest.AsynchBackgroundExecute,msg,true);
+end;
+
+
 { TInterfaceStubRules }
 
 function TInterfaceStubRules.FindRuleIndex(const aParams: RawUTF8): integer;
@@ -52673,7 +52783,7 @@ begin
 end;
 
 
-{ TInterfaceStub }
+{ EInterfaceStub }
 
 constructor EInterfaceStub.Create(Sender: TInterfaceStub;
   const Method: TServiceMethod; const Error: RawUTF8);
@@ -52687,6 +52797,9 @@ constructor EInterfaceStub.Create(Sender: TInterfaceStub;
 begin
   Create(Sender,Method,FormatUTF8(Format,Args));
 end;
+
+
+{ TInterfaceStubLog }
 
 function TInterfaceStubLog.Results: RawUTF8;
 begin
@@ -52720,6 +52833,9 @@ begin
   WR.Add(SepChar);
 end;
 
+
+{ TOnInterfaceStubExecuteParamsAbstract }
+
 constructor TOnInterfaceStubExecuteParamsAbstract.Create(aSender: TInterfaceStub;
   aMethod: PServiceMethod; const aParams,aEventParams: RawUTF8);
 begin
@@ -52746,6 +52862,8 @@ begin
   result := (fSender as TInterfaceMock).TestCase;
 end;
 
+{ TOnInterfaceStubExecuteParamsJSON }
+
 procedure TOnInterfaceStubExecuteParamsJSON.Returns(const Values: array of const);
 begin
   JSONEncodeArrayOfConst(Values,false,fResult);
@@ -52757,6 +52875,8 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+{ TOnInterfaceStubExecuteParamsVariant }
 
 constructor TOnInterfaceStubExecuteParamsVariant.Create(aSender: TInterfaceStub;
   aMethod: PServiceMethod; const aParams, aEventParams: RawUTF8);
@@ -52888,6 +53008,8 @@ begin
 end;
 
 {$endif NOVARIANTS}
+
+{ TInterfaceStub }
 
 constructor TInterfaceStub.Create(aFactory: TInterfaceFactory;
   const aInterfaceName: RawUTF8);
@@ -53108,7 +53230,6 @@ begin
   Executes(OnExecuteToLog,tmp);
   result := self;
 end;
-
 
 {$endif NOVARIANTS}
 
