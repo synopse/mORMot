@@ -58468,28 +58468,42 @@ end;
 procedure TSynBackgroundTimer.EverySecond(
   Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
 var tix: Int64;
-    i,f: integer;
+    i,f,n: integer;
+    t: ^TSynBackgroundTimerTask;
+    todo: TSynBackgroundTimerTaskDynArray; // avoid lock contention
 begin
   if (fTask=nil) or Terminated then
     exit;
   tix := GetTickCount64;
+  n := 0;
   fTaskLock.Lock;
   try
-    for i := 0 to length(fTask)-1 do
-    with fTask[i] do
-      if tix>=NextTix then begin
-        if FIFO=nil then
-          OnProcess(self,Event,'') else begin
-          for f := 0 to length(FIFO)-1 do
-            OnProcess(self,Event,FIFO[f]);
-          FIFO := nil;
-        end;
-        tix := GetTickCount64;
-        NextTix := tix+(Secs*1000);
+    for i := 0 to length(fTask)-1 do begin
+      t := @fTask[i];
+      if tix>=t^.NextTix then begin
+        SetLength(todo,n+1);
+        todo[n] := t^;
+        inc(n);
+        t^.FIFO := nil;
+        t^.NextTix := tix+(t^.Secs*1000);
       end;
+    end;
   finally
     fTaskLock.UnLock;
   end;
+  for i := 0 to n-1 do 
+    with todo[i] do
+      if FIFO<>nil then
+        for f := 0 to length(FIFO)-1 do
+        try
+          OnProcess(self,Event,FIFO[f]);
+        except
+        end
+      else
+        try
+          OnProcess(self,Event,'');
+        except
+        end;
 end;
 
 function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
@@ -58562,7 +58576,8 @@ begin
         if aMsg<>#0 then
           AddRawUTF8(FIFO,aMsg);
       end;
-      ProcessEvent.SetEvent;
+      if aExecuteNow then
+        ProcessEvent.SetEvent;
       result := true;
     end;
   finally
