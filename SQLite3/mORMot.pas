@@ -14130,7 +14130,26 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInterface: IInvokable; out aCallbackInterface);
+      const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface); overload;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -52688,9 +52707,22 @@ begin
       [self,GUIDToShort(aGUID)]);
   if aDestinationInterface=nil then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
-  LogFamily.SynLog.Log(sllTrace,'AsynchRedirect %',[factory.InterfaceName],self);
+  LogFamily.SynLog.Log(sllTrace,'AsynchRedirect % to %',[factory.InterfaceName,
+    ObjectFromInterface(aDestinationInterface).ClassType],self);
   TimerEnable(AsynchBackgroundExecute,3600);
   TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface);
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface);
+var dest: IInvokable;
+begin
+  if aDestinationInstance=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
+  if not aDestinationInstance.GetInterface(aGUID,dest) then
+    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect: % is not a %',
+      [self,aDestinationInstance.ClassType,GUIDToShort(aGUID)]);
+  AsynchRedirect(aGUID,dest,aCallbackInterface);
 end;
 
 constructor TInterfacedObjectAsynch.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
@@ -52720,7 +52752,7 @@ begin
   end;
   call.Method := @aMethod;
   call.Instance := pointer(fDest);
-  call.Params := aParams;
+  call.Params := '['+aParams+']';
   msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
   result := fRest.BackgroundTimer.EnQueue(fRest.AsynchBackgroundExecute,msg,true);
 end;
