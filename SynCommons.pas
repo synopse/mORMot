@@ -4622,6 +4622,12 @@ type
     // - this method will recognize T*ObjArray types and free all instances
     procedure Clear;
       {$ifdef HASINLINE}inline;{$endif}
+    /// delete the whole dynamic array content, ignoring exceptions
+    // - returns true if no exception occured when calling Clear, false otherwise
+    // - you should better not call this method, which will catch and ignore
+    // all exceptions - but it may somewhat make sense in a destructor
+    // - this method will recognize T*ObjArray types and free all instances
+    function ClearSafe: boolean;
     /// delete one item inside the dynamic array
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
@@ -41064,6 +41070,16 @@ end;
 procedure TDynArray.Clear;
 begin
   SetCount(0);
+end;
+
+function TDynArray.ClearSafe: boolean;
+begin
+  try
+    SetCount(0);
+    result := true;
+  except // weak code, but may be a good idea in a destructor
+    result := false;
+  end;
 end;
 
 procedure TDynArray.Delete(aIndex: Integer);
