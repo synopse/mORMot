@@ -5693,6 +5693,9 @@ type
     // - will first call Init(false) to initialize the internal array
     procedure InitFromCSV(CSV: PUTF8Char; NameValueSep: AnsiChar='=';
       ItemSep: AnsiChar=#10);
+    /// reset content, then add all name, value pairs 
+    // - will first call Init(false) to initialize the internal array
+    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
     /// search for a Name, return the index in List
     // - using fast O(1) hash algoritm
     function Find(const aName: RawUTF8): integer;
@@ -57409,6 +57412,17 @@ begin
       break;
     Add(n,v);
   end;
+end;
+
+procedure TSynNameValue.InitFromNamesValues(const Names, Values: array of RawUTF8);
+var i: integer;
+begin
+  Init(false);
+  if high(Names)<>high(Values) then
+    exit;
+  fDynArray.SetCapacity(length(Names));
+  for i := 0 to high(Names) do
+    Add(Names[i],Values[i]);
 end;
 
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
