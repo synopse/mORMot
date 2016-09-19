@@ -3550,6 +3550,7 @@ begin
   {$endif}
 end;
 
+{$HINTS OFF} // [dcc64 Hint] H2135 FOR or WHILE loop executes zero times - deleted
 procedure TTestLowLevelCommon._IdemPropName;
   function IPNUSL(const s1,s2: RawUTF8; len: integer): boolean;
   begin
@@ -3640,6 +3641,7 @@ begin
   Check(PosCharAny('ABC','bB')^='B');
   Check(PosCharAny('ABC','cC')^='C');
 end;
+{$HINTS ON}
 
 procedure TTestLowLevelCommon._TSynTable;
 var T: TSynTable;
