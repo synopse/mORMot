@@ -362,6 +362,12 @@
       {$define HASREGION}
       {$define HASFASTMM4}
     {$ifend}
+    {$ifdef VER180}
+      {$define ISDELPHI20062007} // to circumvent some specific bugs
+    {$endif}
+    {$ifdef VER185}
+      {$define ISDELPHI20062007}
+    {$endif}
     {$if CompilerVersion > 18}
       {$define ISDELPHI2007ANDUP} // Delphi 2007 or newer
     {$ifend}

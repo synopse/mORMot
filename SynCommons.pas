@@ -16126,6 +16126,8 @@ type
     function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
     /// low-level access to the internal task list
     property Task: TSynBackgroundTimerTaskDynArray read fTask;
+    /// low-level access to the internal task mutex
+    property TaskLock: TSynLocker read fTaskLock;
   end;
 
 type
@@ -18631,10 +18633,16 @@ end;
 
 procedure Int64ToUtf8(Value: Int64; var result: RawUTF8);
 var tmp: array[0..23] of AnsiChar;
+    V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  P := StrInt64(@tmp[23],Value);
-  SetRawUTF8(result,P,@tmp[23]-P);
+  {$ifdef ISDELPHI20062007} // weird compiler internal error C4963
+  if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
+    result := SmallUInt32UTF8[Value] else
+  {$endif} begin
+    P := StrInt64(@tmp[23],Value);
+    SetRawUTF8(result,P,@tmp[23]-P);
+  end;
 end;
 
 function VarRecAsChar(const V: TVarRec): integer;
@@ -22604,10 +22612,16 @@ end;
 
 function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..23] of AnsiChar;
+    V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  P := StrInt64(@tmp[23],Value);
-  SetString(result,P,@tmp[23]-P);
+  {$ifdef ISDELPHI20062007} // weird compiler internal error C4963
+  if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
+    result := SmallUInt32UTF8[Value] else
+  {$endif} begin
+    P := StrInt64(@tmp[23],Value);
+    SetRawUTF8(result,P,@tmp[23]-P);
+  end;
 end;
 
 function Trim(const S: RawUTF8): RawUTF8;
@@ -50525,6 +50539,7 @@ begin
     {$elseif defined(VER300)}'Delphi 10 Seattle'
     {$elseif defined(VER310)}'Delphi 10.1 Berlin'
     {$elseif defined(VER320)}'Delphi 10.2 Tokyo'
+    {$elseif defined(VER320)}'Delphi 10.3 Carnival'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
