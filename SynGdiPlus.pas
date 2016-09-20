@@ -634,6 +634,7 @@ function PictureName(Pic: TGraphicClass): string;
 // and is expected to be from 0 to 100
 // - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
 // picture biggest side won't exceed this pixel number
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 procedure SaveAs(Graphic: TPersistent; Stream: TStream;
   Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
@@ -643,6 +644,7 @@ procedure SaveAs(Graphic: TPersistent; Stream: TStream;
 // and is expected to be from 0 to 100
 // - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
 // picture biggest side won't exceed this pixel number
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 procedure SaveAs(Graphic: TPersistent; const FileName: TFileName;
   Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
@@ -652,28 +654,41 @@ procedure SaveAs(Graphic: TPersistent; const FileName: TFileName;
 // and is expected to be from 0 to 100
 // - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
 // picture biggest side won't exceed this pixel number
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 procedure SaveAsRawByteString(Graphic: TPersistent;
   out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
   Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0);
 
 /// helper to load a specified graphic from GIF/PNG/JPG/TIFF format content
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 function LoadFromRawByteString(const Picture: {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif}): TBitmap;
 
 /// helper function to create a bitmap from any GIF/PNG/JPG/TIFF/EMF/WMF file
 // - if file extension if .EMF, the file is drawn with a special antialiased
 // GDI+ drawing method (if the global Gdip var is a TGDIPlusFull instance)
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 function LoadFrom(const FileName: TFileName): TBitmap; overload;
 
 /// helper function to create a bitmap from any EMF content
 // - the file is drawn with a special antialiased
 // GDI+ drawing method (if the global Gdip var is a TGDIPlusFull instance)
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 function LoadFrom(const MetaFile: TMetaFile): TBitmap; overload;
+
+/// recompress a JPEG binary in-place
+// - no sizing is done, but a bitmap is created from the supplied JPEG, and
+// re-compressed as JPEG using the specified quality
+// - may be used to ensure a JPEG binary is a JPEG is a JPEG
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
+function JpegRecompress(const jpeg: {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
+  quality: integer=80): {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
 
 /// draw the specified GDI TMetaFile (emf) using the GDI-plus antialiaised engine
 // - by default, no font fall-back is implemented (for characters not included
 // within the font glyphs), but you may force it via the corresponding parameter
 // (used to set the TGDIPlusFull.ForceUseDrawString property)
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
 procedure DrawEmfGdip(aHDC: HDC; Source: TMetaFile; var R: TRect;
   ForceInternalAntiAliased: boolean; ForceInternalAntiAliasedFontFallBack: boolean=false);
 
@@ -683,8 +698,14 @@ var
   // defined (which is not the default)
   // - Gdip.Exists return FALSE if the GDI+ library is not available in this
   // operating system (e.g. on Windows 2000) nor the current executable folder
+  // - you can run ExpectGDIPlusFull to ensure you use GDI+ 1.1
   Gdip: TGDIPlus = nil;
 
+/// will set global Gdip instance from a TGDIPlusFull, if available
+// - this GDI+ 1.1 version (i.e. gdiplus11.dll) allows proper TMetaFile
+// antialiasing, as requested by LoadFrom and DrawEmfGdip functions 
+procedure ExpectGDIPlusFull(ForceInternalAntiAliased: boolean=true;
+  ForceInternalAntiAliasedFontFallBack: boolean=true);
 
 /// test function
 procedure GdipTest(const JpegFile: TFileName);
@@ -1578,32 +1599,39 @@ var Bmp: TBitmap;
     R: TRect;
     Pic: TSynPicture;
 begin
-  if Graphic.InheritsFrom(TSynPicture) then
-    Pic := TSynPicture(Graphic) else
-    Pic := TSynPicture.Create;
+  GdipLock;
   try
-    if Pic<>Graphic then
-      Pic.Assign(Graphic); // will do the conversion
-    if (MaxPixelsForBiggestSide=0) or
-       ((Pic.fWidth<=MaxPixelsForBiggestSide) and (Pic.fHeight<=MaxPixelsForBiggestSide)) then
-      // no resize necessary
-      Pic.SaveAs(Stream,Format,CompressionQuality,BitmapSetResolution) else begin
-      // resize to the maximum side specified parameter
-      Bmp := TBitmap.Create;
-      try
-        Bmp.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
-        R := Pic.RectNotBiggerThan(MaxPixelsForBiggestSide);
-        Bmp.Width := R.Right;
-        Bmp.Height := R.Bottom;
-        Pic.Draw(Bmp.Canvas,R);
-        SynGdiPlus.SaveAs(Bmp,Stream,Format,CompressionQuality,0,BitmapSetResolution);
-      finally
-        Bmp.Free;
+    if Gdip = nil then
+      Gdip := TGDIPlus.Create('gdiplus.dll');
+    if Graphic.InheritsFrom(TSynPicture) then
+      Pic := TSynPicture(Graphic) else
+      Pic := TSynPicture.Create;
+    try
+      if Pic<>Graphic then
+        Pic.Assign(Graphic); // will do the conversion
+      if (MaxPixelsForBiggestSide=0) or
+         ((Pic.fWidth<=MaxPixelsForBiggestSide) and (Pic.fHeight<=MaxPixelsForBiggestSide)) then
+        // no resize necessary
+        Pic.SaveAs(Stream,Format,CompressionQuality,BitmapSetResolution) else begin
+        // resize to the maximum side specified parameter
+        Bmp := TBitmap.Create;
+        try
+          Bmp.PixelFormat := pf24bit; // create as DIB (device-independent bitmap)
+          R := Pic.RectNotBiggerThan(MaxPixelsForBiggestSide);
+          Bmp.Width := R.Right;
+          Bmp.Height := R.Bottom;
+          Pic.Draw(Bmp.Canvas,R);
+          SynGdiPlus.SaveAs(Bmp,Stream,Format,CompressionQuality,0,BitmapSetResolution);
+        finally
+          Bmp.Free;
+        end;
       end;
+    finally
+      if Pic<>Graphic then
+        Pic.Free;
     end;
   finally
-    if Pic<>Graphic then
-      Pic.Free;
+    GdipUnlock;
   end;
 end;
 
@@ -1629,29 +1657,92 @@ procedure SaveAsRawByteString(Graphic: TPersistent;
   out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
   Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
+{$ifdef UNICODE}
 var Stream: TMemoryStream;
 begin
   Stream := TMemoryStream.Create;
+{$else}
+var Stream: TStringStream;
+begin
+  Stream := TStringStream.Create('');
+{$endif}
+  GdipLock;
   try
+    if Gdip = nil then
+      Gdip := TGDIPlus.Create('gdiplus.dll');
     SaveAs(Graphic,Stream,Format,CompressionQuality,MaxPixelsForBiggestSide,
       BitmapSetResolution);
-    SetString(RawByteString(DataRawByteString),PAnsiChar(Stream.Memory),Stream.Seek(0,soFromCurrent));
+{$ifdef UNICODE}
+    SetString(RawByteString(DataRawByteString),PAnsiChar(Stream.Memory),
+      Stream.Seek(0,soFromCurrent));
+{$else}
+    string(DataRawByteString) := Stream.DataString;
+{$endif}
   finally
+    GdipUnlock;
     Stream.Free;
   end;
 end;
 
 function LoadFromRawByteString(const Picture: RawByteString): TBitmap;
 begin
-  if Picture<>'' then
+  result := nil;
+  if Picture='' then
+    exit;
+  GdipLock;
+  try
+    if Gdip = nil then
+      Gdip := TGDIPlus.Create('gdiplus.dll');
     with TSynPicture.Create do
     try
       LoadFromBuffer(pointer(Picture),length(Picture));
       result := ToBitmap;
     finally
       Free;
-    end else
-    result := nil;
+    end;
+  finally
+    GdipUnlock;
+  end;
+end;
+
+function JpegRecompress(const jpeg: {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
+  quality: integer=80): {$ifdef HASCODEPAGE}RawByteString{$else}AnsiString{$endif};
+var bitmap: TBitmap;
+begin
+  result := '';
+  GdipLock;
+  try
+    if Gdip = nil then
+      Gdip := TGDIPlus.Create('gdiplus.dll');
+    bitmap := SynGdiPlus.LoadFromRawByteString(jpeg);
+    if bitmap <> nil then
+      try
+        SaveAsRawByteString(bitmap,result,gptJPG,quality);
+      finally
+        bitmap.Free;
+      end;
+  finally
+    GdipUnlock;
+  end;
+end;
+
+procedure ExpectGDIPlusFull(ForceInternalAntiAliased,
+  ForceInternalAntiAliasedFontFallBack: boolean);
+begin
+  GdipLock;
+  try
+    if (Gdip<>nil) and not Gdip.InheritsFrom(TGDIPlusFull) then
+      FreeAndNil(Gdip); // we need the TGDIPlusFull features
+    if Gdip=nil then
+      // if specific gdiplus11.dll is not available then load OS default
+      Gdip := TGDIPlusFull.Create;
+    with Gdip as TGDIPlusFull do begin
+      ForceInternalConvertToEmfPlus := ForceInternalAntiAliased;
+      ForceUseDrawString := ForceInternalAntiAliasedFontFallBack;
+    end;
+  finally
+    GdipUnlock;
+  end;
 end;
 
 function LoadFrom(const FileName: TFileName): TBitmap;
@@ -1659,14 +1750,19 @@ var P: TSynPicture;
     MF: TMetafile;
     Ext: TFileName;
 begin
-  if FileExists(FileName) then begin
+  result := nil;
+  if not FileExists(FileName) then
+    exit;
+  GdipLock;
+  try
+    ExpectGDIPlusFull(true,true);
     Ext := ExtractFileExt(FileName);
     if SameText(Ext,'.WMF') or SameText(Ext,'.EMF') then begin
       // EMF will be loaded and rendered using GDI+ anti-aliasing
       MF := TMetaFile.Create;
       try
         MF.LoadFromFile(FileName);
-        result := LoadFrom(MF);
+        result := LoadFrom(MF);  // will initialize TGDIPlusFull if needed
       finally
         MF.Free;
       end;
@@ -1680,37 +1776,32 @@ begin
         P.Free;
       end;
     end;
-  end else
-    result := nil;
+  finally
+    GdipUnlock;
+  end;
 end;
 
-function LoadFrom(const MetaFile: TMetaFile): TBitmap; overload;
+function LoadFrom(const MetaFile: TMetaFile): TBitmap;
 begin
-  if (Gdip<>nil) and not Gdip.InheritsFrom(TGDIPlusFull) then
-    FreeAndNil(Gdip); // we need the TGDIPlusFull features
-  if Gdip=nil then
-    // if specific gdiplus11.dll is not available then load OS default
-    Gdip := TGDIPlusFull.Create;
-  with Gdip as TGDIPlusFull do begin
-    ForceInternalConvertToEmfPlus := true;
-    ForceUseDrawString := true;
+  GdipLock;
+  try
+    ExpectGDIPlusFull(true,true);
+    result := TGDIPlusFull(gdip).DrawAntiAliased(MetaFile);
+  finally
+    GdipUnlock;
   end;
-  result := TGDIPlusFull(gdip).DrawAntiAliased(MetaFile);
 end;
 
 procedure DrawEmfGdip(aHDC: HDC; Source: TMetaFile; var R: TRect;
   ForceInternalAntiAliased, ForceInternalAntiAliasedFontFallBack: boolean);
 begin
-  if (Gdip<>nil) and not Gdip.InheritsFrom(TGDIPlusFull) then
-    FreeAndNil(Gdip); // we need the TGDIPlusFull features
-  if Gdip=nil then
-    // if specific gdiplus11.dll is not available then load OS default
-    Gdip := TGDIPlusFull.Create;
-  with Gdip as TGDIPlusFull do begin
-    ForceInternalConvertToEmfPlus := ForceInternalAntiAliased;
-    ForceUseDrawString := ForceInternalAntiAliasedFontFallBack;
+  GdipLock;
+  try
+    ExpectGDIPlusFull(ForceInternalAntiAliased,ForceInternalAntiAliasedFontFallBack);
+    Gdip.DrawAntiAliased(Source,aHDC,R);
+  finally
+    GdipUnlock;
   end;
-  Gdip.DrawAntiAliased(Source,aHDC,R);
 end;
 
 procedure GdipTest(const JpegFile: TFileName);
