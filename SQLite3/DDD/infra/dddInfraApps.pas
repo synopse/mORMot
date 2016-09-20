@@ -594,12 +594,16 @@ end;
 {$ifdef MSWINDOWS} // to support Windows Services
 
 procedure TDDDDaemon.DoStart(Sender: TService);
+var log: ISynLog;
+    res: TCQRSResult;
 begin
   {$ifdef WITHLOG}
-  SQLite3Log.Enter('DoStart %',[fSettings.ServiceName],self);
+  log := SQLite3Log.Enter('DoStart %',[fSettings.ServiceName],self);
   {$endif}
   fDaemon := NewDaemon;
-  fDaemon.Start;
+  res := fDaemon.Start;
+  if log <> nil then
+    log.Log(sllTrace, 'fDaemon.Start=%', [ToText(res)^], self);
 end;
 
 procedure TDDDDaemon.DoStop(Sender: TService);
