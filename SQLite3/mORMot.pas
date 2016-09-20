@@ -54624,7 +54624,7 @@ begin
     result := false else begin
     if callbacktext<>nil then
       Append(callbacktext^,PShortString(PPointer(PPtrInt(instance)^+vmtClassName)^)^);
-    result := (PPointer(instance)^=TInterfacedObjectFakeServer) and
+    result := (instance.ClassType=TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
   end;
 end;
