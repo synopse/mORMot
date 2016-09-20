@@ -12574,7 +12574,10 @@ type
     // instance has been released on the client side
     // - may be used to automatically purge a list of subscribed callbacks,
     // e.g. before trigerring the interface instance, and avoid an exception
-    class function CallbackReleasedOnClientSide(const callback: IInterface): boolean;
+    // - can optionally append the callback class instance information to
+    // a local shortstring variable, e.g. for logging/debug purposes
+    class function CallbackReleasedOnClientSide(const callback: IInterface;
+      callbacktext: PShortString=nil): boolean; overload;
     /// method called on the server side to register a service via its
     // interface(s) and a specified implementation class or a shared
     // instance (for sicShared mode)
@@ -54602,13 +54605,28 @@ begin
 end;
 
 class function TServiceContainerServer.CallbackReleasedOnClientSide(
-  const callback: IInterface): boolean;
+  const callback: IInterface; callbacktext: PShortString): boolean;
+  procedure Append(var dest: shortstring; const source: shortstring);
+  var d,s: integer;
+  begin
+    d := ord(dest[0]);
+    s := ord(source[0]);
+    if d+s<255 then begin
+      dest[d+1] := ' ';
+      MoveFast(source[1],dest[d+2],s);
+      inc(dest[0],s+1);
+    end;
+  end;
 var instance: TObject;
 begin
   instance := ObjectFromInterface(callback);
-  result := (instance<>nil) and
-            (instance.ClassType=TInterfacedObjectFakeServer) and
-            TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
+  if instance=nil then
+    result := false else begin
+    if callbacktext<>nil then
+      Append(callbacktext^,PShortString(PPointer(PPtrInt(instance)^+vmtClassName)^)^);
+    result := (PPointer(instance)^=TInterfacedObjectFakeServer) and
+              TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
+  end;
 end;
 
 procedure TServiceContainerServer.RecordVersionCallbackNotify(TableIndex: integer;
