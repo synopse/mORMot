@@ -15894,12 +15894,12 @@ type
     // - TSQLRestServer.URI will make a difference between the a static server
     // or a TSQLVirtualTable, but this method won't - you can set a reference
     // to a TSQLRestServerKind variable to retrieve the database server type
-    function GetStaticDataServerOrVirtualTable(aClass: TSQLRecordClass): TSQLRest; overload;
+    function GetStaticTable(aClass: TSQLRecordClass): TSQLRest; 
        {$ifdef HASINLINE}inline;{$endif}
     /// overloaded method using table index in associated Model
-    function GetStaticDataServerOrVirtualTable(aTableIndex: integer): TSQLRest;
+    function GetStaticTableIndex(aTableIndex: integer): TSQLRest;
       overload; {$ifdef HASINLINE}inline;{$endif}
-    function GetStaticDataServerOrVirtualTable(aTableIndex: integer;
+    function GetStaticTableIndex(aTableIndex: integer;
       out Kind: TSQLRestServerKind): TSQLRest; overload;
        {$ifdef HASINLINE}inline;{$endif}
     function GetRemoteTable(TableIndex: Integer): TSQLRest;
@@ -16653,6 +16653,9 @@ type
     // the VirtualTableExternalRegister() global function
     property StaticVirtualTable[aClass: TSQLRecordClass]: TSQLRest
       read GetVirtualTable;
+    /// fast get the associated static server or virtual table, if any
+    // - same as a dual call to StaticDataServer[aClass] + StaticVirtualTable[aClass]
+    property StaticTable[aClass: TSQLRecordClass]: TSQLRest read GetStaticTable;
     /// the options specified to TSQLRestServer.CreateMissingTables
     // - as expected by TSQLRecord.InitializeTable methods
     property CreateMissingTablesOptions: TSQLInitializeTableOptions
@@ -37049,15 +37052,14 @@ begin
     result := nil;
 end;
 
-function TSQLRestServer.GetStaticDataServerOrVirtualTable(
-  aClass: TSQLRecordClass): TSQLRest;
+function TSQLRestServer.GetStaticTable(aClass: TSQLRecordClass): TSQLRest;
 begin
   if (aClass=nil) or ((fStaticData=nil) and (fStaticVirtualTable=nil)) then
     result := nil else
-    result := GetStaticDataServerOrVirtualTable(Model.GetTableIndexExisting(aClass));
+    result := GetStaticTableIndex(Model.GetTableIndexExisting(aClass));
 end;
 
-function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer): TSQLRest;
+function TSQLRestServer.GetStaticTableIndex(aTableIndex: integer): TSQLRest;
 begin
   result := nil;
   if aTableIndex>=0 then begin
@@ -37069,7 +37071,7 @@ begin
   end;
 end;
 
-function TSQLRestServer.GetStaticDataServerOrVirtualTable(aTableIndex: integer;
+function TSQLRestServer.GetStaticTableIndex(aTableIndex: integer;
   out Kind: TSQLRestServerKind): TSQLRest;
 begin
   result := nil;
@@ -37644,7 +37646,7 @@ end;
 function TSQLRestServer.TableRowCount(Table: TSQLRecordClass): Int64;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(Table);
+  Rest := GetStaticTable(Table);
   if Rest<>nil then // faster direct call
     result := Rest.TableRowCount(Table) else
     result := inherited TableRowCount(Table);
@@ -37653,7 +37655,7 @@ end;
 function TSQLRestServer.TableHasRows(Table: TSQLRecordClass): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(Table);
+  Rest := GetStaticTable(Table);
   if Rest<>nil then // faster direct call
     result := Rest.TableHasRows(Table) else
     result := inherited TableHasRows(Table);
@@ -37664,7 +37666,7 @@ var Rest: TSQLRest;
 begin // overridden method to update all BLOB fields at once
   if (Value=nil) or (Value.fID<=0) then
     result := false else begin
-    Rest := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+    Rest := GetStaticTable(PSQLRecordClass(Value)^);
     if Rest<>nil then // faster direct call
       result := Rest.UpdateBlobFields(Value) else
       result := inherited UpdateBlobFields(Value);
@@ -37676,7 +37678,7 @@ var Rest: TSQLRest;
 begin // overridden method to update all BLOB fields at once
   if Value=nil then
     result := false else begin
-    Rest := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+    Rest := GetStaticTable(PSQLRecordClass(Value)^);
     if Rest<>nil then // faster direct call
       result := Rest.RetrieveBlobFields(Value) else
       result := inherited RetrieveBlobFields(Value);
@@ -37697,7 +37699,7 @@ function TSQLRestServer.AfterDeleteForceCoherency(aTableIndex: integer;
     if Ref^.CascadeDelete then
       cascadeOK := Delete(Model.Tables[Ref^.TableIndex],
         Ref^.FieldType.Name+'=:('+W+'):') else begin
-      Rest := GetStaticDataServerOrVirtualTable(Ref^.TableIndex);
+      Rest := GetStaticTableIndex(Ref^.TableIndex);
       if Rest<>nil then // fast direct call
         cascadeOK := Rest.EngineUpdateField(Ref^.TableIndex,
           Ref^.FieldType.Name,'0',Ref^.FieldType.Name,W) else
@@ -38056,7 +38058,7 @@ begin
   InternalSetTableFromTableIndex(Server.Model.GetTableIndex(TableName));
   if TableIndex<0 then
     exit;
-  Static := Server.GetStaticDataServerOrVirtualTable(TableIndex,StaticKind);
+  Static := Server.GetStaticTableIndex(TableIndex,StaticKind);
   if Static<>nil then
     TableEngine := Static;
 end;
@@ -41013,7 +41015,7 @@ end;
 function TSQLRestServer.EngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineAdd(TableModelIndex,SentData) else
     result := Rest.EngineAdd(TableModelIndex,SentData);
@@ -41022,7 +41024,7 @@ end;
 function TSQLRestServer.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineRetrieve(TableModelIndex,ID) else
     result := Rest.EngineRetrieve(TableModelIndex,ID);
@@ -41044,7 +41046,7 @@ function TSQLRestServer.EngineUpdate(TableModelIndex: integer; ID: TID;
   const SentData: RawUTF8): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineUpdate(TableModelIndex,ID,SentData) else
     result := Rest.EngineUpdate(TableModelIndex,ID,SentData);
@@ -41053,7 +41055,7 @@ end;
 function TSQLRestServer.EngineDelete(TableModelIndex: integer; ID: TID): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineDelete(TableModelIndex,ID) else
     result := Rest.EngineDelete(TableModelIndex,ID);
@@ -41072,7 +41074,7 @@ begin
   0: result := false;
   1: result := EngineDelete(TableModelIndex,IDs[0]);
   else begin
-    Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+    Rest := GetStaticTableIndex(TableModelIndex);
     if Rest=nil then
       result := MainEngineDeleteWhere(TableModelIndex,SQLWhere,IDs) else
       result := Rest.EngineDeleteWhere(TableModelIndex,SQLWhere,IDs);
@@ -41095,7 +41097,7 @@ function TSQLRestServer.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; out BlobData: TSQLRawBlob): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData) else
     result := Rest.EngineRetrieveBlob(TableModelIndex,aID,BlobField,BlobData);
@@ -41105,7 +41107,7 @@ function TSQLRestServer.EngineUpdateBlob(TableModelIndex: integer; aID: TID;
   BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData) else
     result := Rest.EngineUpdateBlob(TableModelIndex,aID,BlobField,BlobData);
@@ -41115,7 +41117,7 @@ function TSQLRestServer.EngineUpdateField(TableModelIndex: integer;
   const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineUpdateField(TableModelIndex,SetFieldName,SetValue,
       WhereFieldName,WhereValue) else
@@ -41127,7 +41129,7 @@ function TSQLRestServer.EngineUpdateFieldIncrement(TableModelIndex: integer;
   ID: TID; const FieldName: RawUTF8; Increment: Int64): boolean;
 var Rest: TSQLRest;
 begin
-  Rest := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Rest := GetStaticTableIndex(TableModelIndex);
   if Rest=nil then
     result := MainEngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment) else
     result := Rest.EngineUpdateFieldIncrement(TableModelIndex,ID,FieldName,Increment);
@@ -41250,7 +41252,7 @@ begin
             [self,MethodTable]);
         RunTable := Model.Tables[RunTableIndex];
       end;
-      RunStatic := GetStaticDataServerOrVirtualTable(RunTableIndex,RunStaticKind);
+      RunStatic := GetStaticTableIndex(RunTableIndex,RunStaticKind);
       if RunStatic=nil then
         RunningRest := self else
         RunningRest := RunStatic;
