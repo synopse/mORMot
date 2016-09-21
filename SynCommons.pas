@@ -18636,7 +18636,7 @@ var tmp: array[0..23] of AnsiChar;
     V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  {$ifdef ISDELPHI20062007} // weird compiler internal error C4963
+  {$ifndef ISDELPHI20062007} // weird compiler internal error C4963
   if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
     result := SmallUInt32UTF8[Value] else
   {$endif} begin
@@ -22615,7 +22615,7 @@ var tmp: array[0..23] of AnsiChar;
     V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  {$ifdef ISDELPHI20062007} // weird compiler internal error C4963
+  {$ifndef ISDELPHI20062007} // weird compiler internal error C4963
   if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
     result := SmallUInt32UTF8[Value] else
   {$endif} begin
