@@ -11438,6 +11438,7 @@ begin
         Check(aExternalClient.BatchSend(BatchID)=HTTP_SUCCESS);
         Check(length(BatchID)=n-99);
         Check(aExternalClient.TableHasRows(TSQLRecordPeopleExt));
+        Check(aExternalClient.TableMaxID(TSQLRecordPeopleExt)=n);
         Check(aExternalClient.TableRowCount(TSQLRecordPeopleExt)=n);
         Check(aExternalClient.Server.TableHasRows(TSQLRecordPeopleExt));
         Check(aExternalClient.Server.TableRowCount(TSQLRecordPeopleExt)=n);
