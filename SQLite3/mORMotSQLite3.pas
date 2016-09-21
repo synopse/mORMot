@@ -848,9 +848,12 @@ end;
 function TSQLRestServerDB.TableMaxID(Table: TSQLRecordClass): TID;
 var SQL: RawUTF8;
 begin
-  SQL := 'select rowid from '+Table.SQLTableName+' order by rowid desc limit 1';
-  if not InternalExecute(SQL,true,PInt64(@result)) then
-    result := 0;
+  if StaticTable[Table]<>nil then
+    result := inherited TableMaxID(Table) else begin
+    SQL := 'select rowid from '+Table.SQLTableName+' order by rowid desc limit 1';
+    if not InternalExecute(SQL,true,PInt64(@result)) then
+      result := 0;
+  end;
 end;
 
 function TSQLRestServerDB.MainEngineAdd(TableModelIndex: integer;
@@ -1401,7 +1404,7 @@ begin
   result := false;
   if Value=nil then
     exit;
-  Static := GetStaticDataServerOrVirtualTable(PSQLRecordClass(Value)^);
+  Static := GetStaticTable(PSQLRecordClass(Value)^);
   if Static<>nil then
     result := Static.RetrieveBlobFields(Value) else
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
@@ -1587,7 +1590,7 @@ begin
   if Value=nil then
     exit;
   TableModelIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
-  Static := GetStaticDataServerOrVirtualTable(TableModelIndex);
+  Static := GetStaticTableIndex(TableModelIndex);
   if Static<>nil then
     result := Static.UpdateBlobFields(Value) else
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
