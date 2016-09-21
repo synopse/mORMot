@@ -25363,14 +25363,19 @@ procedure YearToPChar(Y: cardinal; P: PUTF8Char);
 {$ifdef PUREPASCAL}
 var d100: cardinal;
 begin
-  d100 := Y div 100;
-  PWordArray(P)[0] := TwoDigitLookupW[d100];
-  PWordArray(P)[1] := TwoDigitLookupW[Y-(d100*100)];
+  if Y<=9999 then begin
+    d100 := Y div 100;
+    PWordArray(P)[0] := TwoDigitLookupW[d100];
+    PWordArray(P)[1] := TwoDigitLookupW[Y-(d100*100)];
+  end else
+    PCardinal(P)^ := $39393939; // '9999'
 end;
 {$else}
 asm // eax=Y, edx=P
+  cmp eax,9999
   push edx
   mov ecx,eax
+  ja @big
   mov edx,1374389535 // use power of two reciprocal to avoid division
   mul edx
   shr	edx,5          // now edx=Y div 100
@@ -25381,6 +25386,10 @@ asm // eax=Y, edx=P
   shl edx,16
   or eax,edx
   mov [ecx],eax
+  ret
+@big:
+  pop eax
+  mov [edx],$39393939 // '9999'
 end;
 {$endif}
 
