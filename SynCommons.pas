@@ -26979,12 +26979,14 @@ var i, L, Len: PtrInt;
     tmp: array[0..15] of AnsiChar;
     ints: ^TInts16;
     P: PAnsiChar;
+    tmpbuf: TSynTempBuffer;
 begin
   result := '';
   if ValuesCount=0 then
     exit;
-  GetMem(ints,ValuesCount*sizeof(ints[0])); // getmem is faster than a dynamic array
+  tmpbuf.Init(ValuesCount*sizeof(ints[0])); // faster than a dynamic array
   try
+    ints := tmpbuf.buf;
      // compute whole result length at once
     dec(ValuesCount);
     Len := length(Prefix)+length(Suffix);
@@ -27011,7 +27013,7 @@ begin
     if Suffix<>'' then
       MoveFast(pointer(Suffix)^,P^,length(Suffix));
   finally
-    FreeMem(ints);
+    tmpbuf.Done;
   end;
 end;
 
@@ -27023,19 +27025,19 @@ type
     Val: array[0..19] of AnsiChar; // Int64: 19 digits, then - sign
   end;
 var i, L, Len: PtrInt;
-    ints: pointer;
     int: ^TInt;
     P: PAnsiChar;
+    tmp: TSynTempBuffer;
 begin
   result := '';
   if ValuesCount=0 then
     exit;
-  GetMem(ints,ValuesCount*sizeof(TInt)); // getmem is faster than a dynamic array
+  tmp.Init(ValuesCount*sizeof(TInt)); // faster than a dynamic array
   try
      // compute whole result length at once
     dec(ValuesCount);
     Len := length(Prefix)+length(Suffix);
-    int := ints;
+    int := tmp.buf;
     for i := 0 to ValuesCount do begin
       P := StrInt64(PAnsiChar(int)+21,Values[i]);
       L := PAnsiChar(int)+21-P;
@@ -27052,7 +27054,7 @@ begin
       MoveFast(pointer(Prefix)^,P^,length(Prefix));
       inc(P,length(Prefix));
     end;
-    int := ints;
+    int := tmp.buf;
     repeat
       L := int^.Len;
       MoveFast(PAnsiChar(int)[21-L],P^,L);
@@ -27067,7 +27069,7 @@ begin
     if Suffix<>'' then
       MoveFast(pointer(Suffix)^,P^,length(Suffix));
   finally
-    FreeMem(ints);
+    tmp.Done;
   end;
 end;
 
