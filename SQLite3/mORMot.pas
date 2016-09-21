@@ -33175,6 +33175,9 @@ var data: RawUTF8;
     table: TSQLRecordClass;
     count, status: integer;
     res: TIDDynArray;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if fBackgroundBatch<>nil then
   try
@@ -33185,7 +33188,7 @@ begin
       if count>0 then
       try
         {$ifdef WITHLOG}
-        LogClass.Enter('AsynchBatchExecute % % count=%',[fModel.Root,table,count],self);
+        log := LogClass.Enter('AsynchBatchExecute % % count=%',[fModel.Root,table,count],self);
         {$endif}
         fBackgroundBatch.PrepareForSending(data);
       finally
@@ -33224,12 +33227,15 @@ end;
 
 function TSQLRest.AsynchBatchStop: boolean;
 var timeout: Int64;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   result := false;
   if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundBatch=nil) then
     exit;
   {$ifdef WITHLOG}
-  LogClass.Enter('AsynchBatchStop(%)',[fBackgroundBatch.Table],self);
+  log := LogClass.Enter('AsynchBatchStop(%)',[fBackgroundBatch.Table],self);
   {$endif}
   if not fBackgroundTimer.EnQueue(AsynchBatchExecute,'free',true) then
     exit;
@@ -35983,7 +35989,7 @@ function TSQLRestClientURI.CallBackGet(const aMethodName: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
 var url, header: RawUTF8;
     {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
 begin
   if self=nil then
@@ -35991,7 +35997,7 @@ begin
     url := Model.getURICallBack(aMethodName,aTable,aID)+
       UrlEncode(aNameValueParameters);
     {$ifdef WITHLOG}
-    Log := fLogClass.Enter('CallBackGet %',[url],self);
+    log := fLogClass.Enter('CallBackGet %',[url],self);
     {$endif}
     result := URI(url,'GET',@aResponse,@header).Lo;
     if aResponseHead<>nil then
@@ -35999,8 +36005,8 @@ begin
     {$ifdef WITHLOG}
     if (aResponse<>'') and (sllServiceReturn in fLogFamily.Level) then
       if IsHTMLContentTypeTextual(pointer(header)) then
-        Log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
-        Log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header],self);
+        log.Log(sllServiceReturn,aResponse,self,MAX_SIZE_RESPONSE_LOG) else
+        log.Log(sllServiceReturn,'% bytes "%"',[length(aResponse),header],self);
     {$endif}
   end;
 end;
@@ -36199,14 +36205,14 @@ const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
   'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
 var u: RawUTF8;
 {$ifdef WITHLOG}
-   Log: ISynLog; // for Enter auto-leave to work with FPC
+   log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
   if (self=nil) or (method<Low(NAME)) then
     result := HTTP_UNAVAILABLE else begin
     u := Model.getURICallBack(aMethodName,aTable,aID);
     {$ifdef WITHLOG}
-    Log := fLogClass.Enter('Callback %',[u],self);
+    log := fLogClass.Enter('Callback %',[u],self);
     {$endif}
     result := URI(u,NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
     InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
@@ -37347,9 +37353,9 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
 {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter('RecordVersionSynchronizeSlave %',[Table],self);
+  log := fLogClass.Enter('RecordVersionSynchronizeSlave %',[Table],self);
 {$else}
 begin
 {$endif}
@@ -37401,9 +37407,9 @@ var TableIndex,SourceTableIndex,UpdatedRow,DeletedRow: integer;
     DeletedMinID: TID;
     Deleted: TSQLRecordTableDeleted;
 {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',[Table],self);
+  log := fLogClass.Enter('RecordVersionSynchronizeSlaveToBatch %',[Table],self);
 {$else}
 begin
 {$endif}
@@ -38162,7 +38168,7 @@ begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
-            Log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
+            log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
               aSession.RemoteIP],self);
             {$endif}
             fSessionAccessRights := aSession.fAccessRights; // local copy
@@ -38195,7 +38201,7 @@ procedure TSQLRestServerURIContext.AuthenticationFailed(
   Reason: TNotifyAuthenticationFailedReason);
 begin
   {$ifdef WITHLOG}
-  Log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',[GetEnumName(
+  log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',[GetEnumName(
     TypeInfo(TNotifyAuthenticationFailedReason),ord(Reason))^,Call^.Url,Session],self);
   {$endif}
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
@@ -38216,7 +38222,7 @@ procedure TSQLRestServerURIContext.ExecuteCommand;
 procedure TimeOut;
 begin
   {$ifdef WITHLOG}
-  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,ToText(Command)^,
+  log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,ToText(Command)^,
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
   if Call<>nil then
@@ -39767,9 +39773,9 @@ var Ctxt: TSQLRestServerURIContext;
     elapsed, len: cardinal;
     outcomingfile: boolean;
 {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
+  log := fLogClass.Enter('URI(% % inlen=%)',[Call.Method,Call.Url,length(Call.InBody)],self);
 {$else}
 begin
 {$endif}
@@ -40806,9 +40812,9 @@ var HistBlob: TSQLRecordHistory;
     TableHistoryIndex,i,HistIDCount,n: integer;
     ModifRecord, ModifRecordCount, MaxRevisionJSON: integer;
 {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter('TrackChangesFlush(%)',[aTableHistory],self);
+  log := fLogClass.Enter('TrackChangesFlush(%)',[aTableHistory],self);
 {$else}
 begin
 {$endif}
@@ -41187,9 +41193,9 @@ var EndOfObject: AnsiChar;
   end;
 
 {$ifdef WITHLOG}
-var Log: ISynLog; // for Enter auto-leave to work with FPC
+var log: ISynLog; // for Enter auto-leave to work with FPC
 begin
-  Log := fLogClass.Enter('EngineBatchSend % inlen=%',[Table,length(Data)],self);
+  log := fLogClass.Enter('EngineBatchSend % inlen=%',[Table,length(Data)],self);
 {$else}
 begin
 {$endif}
@@ -42001,7 +42007,7 @@ procedure InternalCreateClientPipe;
 var Pipe: THandle;
     StartTime64: Int64;
     {$ifdef WITHLOG}
-    Log: ISynLog;
+    log: ISynLog;
     {$endif}
 procedure CreatePipe;
 begin
@@ -42016,7 +42022,7 @@ begin
 end;
 begin
   {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self);
+  log := fLogClass.Enter(self);
   {$endif}
 {$ifdef ANONYMOUSNAMEDPIPE}
   if not ImpersonateAnonymousToken(GetCurrentThread) then
@@ -42082,13 +42088,13 @@ var Card: cardinal;
     {$ifdef TSQLRestClientURIDll_TIMEOUT}
     i: integer;
     {$endif}
-    {$ifdef WITHLOG}
-    Log: ISynLog;
-    {$endif}
+{$ifdef WITHLOG}
+    log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self);
-  {$endif}
+  log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 (no valid application or library)
   fSafe.Enter;
   try
@@ -44302,9 +44308,12 @@ end;
 
 procedure TSQLRestStorageShard.InternalAddNewShard;
 var rest: TSQLRest;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   {$ifdef WITHLOG}
-  fLogClass.Enter('%.InternalAddNewShard: #% for %',[fShardLast+1,fStoredClass],self);
+  log := fLogClass.Enter('%.InternalAddNewShard: #% for %',[fShardLast+1,fStoredClass],self);
   {$endif}
   rest := InitNewShard;
   if rest=nil then
@@ -47079,13 +47088,13 @@ var Msg: RawUTF8;
     Finished64: Int64;
     P: PUTF8Char;
     aMsg: TMsg;
-    {$ifdef WITHLOG}
-    Log: ISynLog;
-    {$endif}
+{$ifdef WITHLOG}
+    log: ISynLog;
 begin
-  {$ifdef WITHLOG}
-  Log := fLogClass.Enter(self);
-  {$endif}
+  log := fLogClass.Enter(self);
+{$else}
+begin
+{$endif}
   if (fClientWindow=0) or not InternalCheckOpen then begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501
     InternalLog('InternalCheckOpen failure',sllClient);
@@ -52851,13 +52860,16 @@ procedure TSQLRest.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
 var exec: TServiceMethodExecute;
     call: TInterfacedObjectAsynchCall;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if Msg='' then
     exit; // ignore periodic execution
   if RecordLoad(call,pointer(Msg),TypeInfo(TInterfacedObjectAsynchCall))=nil then
     exit; // invalid message
   {$ifdef WITHLOG}
-  LogClass.Enter('AsynchBackgroundExecute % %',
+  log := LogClass.Enter('AsynchBackgroundExecute % %',
     [call.Method^.InterfaceDotMethodName,call.Params],self);
   {$endif}
   exec := TServiceMethodExecute.Create(call.Method);
@@ -53584,7 +53596,7 @@ var ndx: cardinal;
     rule: integer;
     ExecutesCtxtJSON: TOnInterfaceStubExecuteParamsJSON;
     ExecutesCtxtVariant: TOnInterfaceStubExecuteParamsVariant;
-    Log: TInterfaceStubLog;
+    log: TInterfaceStubLog;
 begin
   ndx := aMethod.ExecutionMethodIndex-RESERVED_VTABLE_SLOTS;
   if ndx>=fInterface.MethodsCount then
@@ -53606,7 +53618,7 @@ begin
           inc(Rules[rule].RulePassCount);
         if imoReturnErrorIfNoRuleDefined in Options then begin
           result := false;
-          Log.CustomResults := FormatUTF8('No stubbing rule defined for %.%',
+          log.CustomResults := FormatUTF8('No stubbing rule defined for %.%',
             [fInterface.fInterfaceName,aMethod.URI]);
         end else
           result := true;
@@ -53620,7 +53632,7 @@ begin
           try
             TOnInterfaceStubExecuteJSON(Execute)(ExecutesCtxtJSON);
             result := not ExecutesCtxtJSON.Failed;
-            Log.CustomResults := ExecutesCtxtJSON.Result;
+            log.CustomResults := ExecutesCtxtJSON.Result;
           finally
             ExecutesCtxtJSON.Free;
           end;
@@ -53634,7 +53646,7 @@ begin
             result := not ExecutesCtxtVariant.Failed;
             if result then begin
               ExecutesCtxtVariant.SetResultFromOutput;
-              Log.CustomResults := ExecutesCtxtVariant.Result;
+              log.CustomResults := ExecutesCtxtVariant.Result;
             end;
           finally
             ExecutesCtxtVariant.Free;
@@ -53645,12 +53657,12 @@ begin
           raise ExceptionClass.Create(UTF8ToString(Values));
         isReturns: begin
           result := true;
-          Log.CustomResults := Values;
+          log.CustomResults := Values;
         end;
         isFails: begin
           result := InternalCheck(false,false,'%',[Values]);
           if not result then
-            Log.CustomResults := Values;
+            log.CustomResults := Values;
         end;
         else
           result := true; // ignore isUndefined (ExpectsCount only) rules
@@ -53658,20 +53670,20 @@ begin
       end;
       if result then begin
         if aResult<>nil then // make unique due to JSONDecode()
-          if Log.CustomResults='' then
+          if log.CustomResults='' then
             SetString(aResult^,PAnsiChar(pointer(aMethod.DefaultResult)),
               length(aMethod.DefaultResult)) else
-            SetString(aResult^,PAnsiChar(pointer(Log.CustomResults)),
-              length(Log.CustomResults));
+            SetString(aResult^,PAnsiChar(pointer(log.CustomResults)),
+              length(log.CustomResults));
       end else
       if aErrorMsg<>nil then
-        aErrorMsg^ := Log.CustomResults;
+        aErrorMsg^ := log.CustomResults;
       if imoLogMethodCallsAndResults in Options then begin
-        Log.TimeStamp64 := GetTickCount64;
-        Log.WasError := not result;
-        Log.Method := @aMethod;
-        Log.Params := aParams;
-        fLog.Add(Log);
+        log.TimeStamp64 := GetTickCount64;
+        log.WasError := not result;
+        log.Method := @aMethod;
+        log.Params := aParams;
+        fLog.Add(log);
       end;
     end;
 end;
@@ -53690,23 +53702,23 @@ function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
   aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
 var i: integer;
     WR: TTextWriter;
-    Log: ^TInterfaceStubLog;
+    log: ^TInterfaceStubLog;
 begin
   if fLogCount=0 then
     result := '' else begin
     WR := TTextWriter.CreateOwnedStream;
     try
-      Log := Pointer(fLogs);
+      log := Pointer(fLogs);
       if asmndx<RESERVED_VTABLE_SLOTS then
         for i := 1 to fLogCount do begin
-          Log^.AddAsText(WR,aScope,SepChar);
-          inc(Log);
+          log^.AddAsText(WR,aScope,SepChar);
+          inc(log);
         end else
         for i := 1 to fLogCount do begin
-          if Log^.Method^.ExecutionMethodIndex=asmndx then
-            if (aParams='') or (Log^.Params=aParams) then
-              Log^.AddAsText(WR,aScope,SepChar);
-          inc(Log);
+          if log^.Method^.ExecutionMethodIndex=asmndx then
+            if (aParams='') or (log^.Params=aParams) then
+              log^.AddAsText(WR,aScope,SepChar);
+          inc(log);
         end;
       WR.CancelLastChar(SepChar);
       WR.SetText(result);
@@ -56479,10 +56491,15 @@ end;
 procedure TRawUTF8ObjectCacheList.ForceCacheClear;
 var i: integer;
     cache: TRawUTF8ObjectCache;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   fSafe.Lock;
   try
-    fLog.SynLog.Enter('ForceCacheClear of % entries',[fCount],self);
+    {$ifdef WITHLOG}
+    log := fLog.SynLog.Enter('ForceCacheClear of % entries',[fCount],self);
+    {$endif}
     for i := 0 to fCount - 1 do begin
       cache := TRawUTF8ObjectCache(fObjects[i]);
       cache.fSafe.Lock;
@@ -56502,12 +56519,16 @@ var tix: Int64;
     i: integer;
     purged: RawUTF8;
     tryforcelist: boolean;
-    log: ISynLog;
     cache: TRawUTF8ObjectCache;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
   procedure InternalPurge;
   begin
+    {$ifdef WITHLOG}
     if log = nil then
       log := fLog.SynLog.Enter('DoPurge(%)', [fClass], self);
+    {$endif}
     cache.CacheClear;
     purged := purged + ' ' + cache.fKey;
   end;
@@ -56533,8 +56554,10 @@ begin // called within fSafe.Lock
           cache.Safe.UnLock;
         end;
     end;
+    {$ifdef WITHLOG}
     if log <> nil then
       log.Log(fLogEvent, '%.ReleaseServices:% - count=%', [fClass, purged, fCount], self);
+    {$endif}
   finally
     fNextPurgeTix := tix + fSettings.PurgePeriodMS;
   end;
@@ -57769,7 +57792,7 @@ var uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
     status,m: integer;
     {$ifdef WITHLOG}
-    Log: ISynLog; // for Enter auto-leave to work with FPC
+    log: ISynLog; // for Enter auto-leave to work with FPC
     p: RawUTF8;
     {$endif}
 begin
@@ -57787,7 +57810,7 @@ begin
   if (m<0) or not (optNoLogInput in fExecution[m].Options) then
     p := aParams else
     p := 'optNoLogInput';
-  Log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
+  log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
   // compute URI according to current routing scheme
@@ -57984,11 +58007,14 @@ end;
 
 procedure TServiceFactoryClient.SendNotificationsWait(aTimeOutSeconds: integer);
 var timeOut: Int64;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
 begin
   if SendNotificationsPending=0 then
     exit;
   {$ifdef WITHLOG}
-  fClient.LogClass.Enter;
+  log := fClient.LogClass.Enter;
   {$endif}
   timeOut := GetTickCount64+aTimeOutSeconds*1000;
   repeat
