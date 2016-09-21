@@ -19529,7 +19529,7 @@ begin
 {$endif}
 {$else}
 asm
-  jmp SynCommons.SetInt64
+        jmp     SynCommons.SetInt64
 {$endif}
 end;
 
@@ -19544,7 +19544,7 @@ begin
 {$endif}
 {$else}
 asm
-  jmp SynCommons.SetInt64
+        jmp     SynCommons.SetInt64
 {$endif}
 end;
 
@@ -19560,12 +19560,12 @@ begin
     result := Info^;
 end;
 {$else}
-asm // Delphi is so bad at compiling above code...
-    test eax,eax
-    jz @z
-    mov eax,[eax]
-    ret
-@z: db $f3 // rep ret
+asm     // Delphi is so bad at compiling above code...
+        test    eax, eax
+        jz      @z
+        mov     eax, [eax]
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
@@ -19702,12 +19702,13 @@ begin // code is a bit abstract, but compiles very well
     result := nil;
 {$else}
 asm // this code is the fastest possible
-  mov eax,[eax+vmtTypeInfo]
-  test eax,eax; jz @z // avoid GPF if no RTTI available for this class
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  lea eax,[eax+edx].TTypeInfo.Name[1]
-  movzx edx,byte ptr [eax].TClassType.UnitName
-  lea eax,[eax+edx].TClassType.UnitName[1].TClassProp
+        mov     eax, [eax + vmtTypeInfo]
+        test    eax, eax
+        jz      @z // avoid GPF if no RTTI available for this class
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+        movzx   edx, byte ptr[eax].TClassType.UnitName
+        lea     eax, [eax + edx].TClassType.UnitName[1].TClassProp
 @z:
 {$endif PUREPASCAL}
 {$endif FPC}
@@ -24531,9 +24532,9 @@ end;
 {$else}
 function TSQLTable.GetDateTime(Row, Field: integer): TDateTime;
 asm
-  call TSQLTable.Get
-  xor edx,edx // L=0 -> will call strlen()
-  jmp Iso8601ToDateTimePUTF8Char
+        call    TSQLTable.Get
+        xor     edx, edx // L=0 -> will call strlen()
+        jmp     Iso8601ToDateTimePUTF8Char
 end;
 {$endif}
 
@@ -25228,18 +25229,18 @@ begin
 end;
 {$else}
 asm // eax=P1 edx=P2 ecx=FieldCount
-    push esi
-    push edi
-@1: dec ecx
-    mov esi,[eax]
-    mov edi,[edx]
-    mov [edx],esi
-    mov [eax],edi
-    lea eax,[eax+4]
-    lea edx,[edx+4]
-    jnz @1
-    pop edi
-    pop esi
+        push    esi
+        push    edi
+@1:     dec     ecx
+        mov     esi, [eax]
+        mov     edi, [edx]
+        mov     [edx], esi
+        mov     [eax], edi
+        lea     eax, [eax + 4]
+        lea     edx, [edx + 4]
+        jnz     @1
+        pop     edi
+        pop     esi
 end;
 {$endif}
 
@@ -25247,14 +25248,14 @@ procedure TUTF8QuickSort.QuickSort(L, R: Integer);
   {$ifndef PUREPASCAL}
   procedure Exchg32(P: pointer; I,J: integer);
   asm // eax=P edx=I ecx=J
-    push ebx
-    lea edx,[eax+edx*4]
-    lea ecx,[eax+ecx*4]
-    mov eax,[edx]
-    mov ebx,[ecx]
-    mov [ecx],eax
-    mov [edx],ebx
-    pop ebx
+          push    ebx
+          lea     edx, [eax + edx * 4]
+          lea     ecx, [eax + ecx * 4]
+          mov     eax, [edx]
+          mov     ebx, [ecx]
+          mov     [ecx], eax
+          mov     [edx], ebx
+          pop     ebx
   end;
   {$endif}
 // code below is very fast and optimized
@@ -27883,9 +27884,9 @@ begin
 end;
 {$else}
 asm
-  mov eax,[eax].TPropInfo.GetProc
-  and eax,$00ffffff
-  add eax,edx
+        mov     eax, [eax].TPropInfo.GetProc
+        and     eax, $00ffffff
+        add     eax, edx
 end;
 {$endif}
 
@@ -27905,12 +27906,12 @@ begin
 end;
 {$else}
 asm // Delphi is so bad at compiling above code...
-    mov eax,[eax].TPropInfo.PropType
-    test eax,eax
-    jz @z
-    mov eax,[eax]
-    ret
-@z: rep ret
+        mov     eax, [eax].TPropInfo.PropType
+        test    eax, eax
+        jz      @z
+        mov     eax, [eax]
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif HASINLINE}
       
@@ -27927,9 +27928,9 @@ begin
 end;
 {$else}
 function TPropInfo.Next: PPropInfo;
-asm // very fast code
-  movzx edx,byte ptr [eax].TPropInfo.Name
-  lea eax,[eax+edx].TPropInfo.Name[1]
+asm     // very fast code
+        movzx   edx, byte ptr[eax].TPropInfo.Name
+        lea     eax, [eax + edx].TPropInfo.Name[1]
 end;
 {$endif HASINLINE}
 {$endif FPC_OR_PUREPASCAL}
@@ -28613,8 +28614,8 @@ end;
 {$else}
 function TTypeInfo.ClassType: PClassType;
 asm // very fast code
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  lea eax,[eax+edx].TTypeInfo.Name[1]
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
 end;
 {$endif}
 
@@ -28631,8 +28632,8 @@ begin
   result := AlignToPtr(@Name[ord(Name[0])+1]);
 {$else}
 asm // very fast code
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  lea eax,[eax+edx].TTypeInfo.Name[1]
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
 {$endif}
 end;
 
@@ -28686,12 +28687,12 @@ begin
     result := @Name[ord(Name[0])+1];
 {$endif}
 {$else}
-asm // very fast code
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  mov eax,[eax+edx].TTypeInfo.Name[1].TEnumType.BaseType
-  mov eax,[eax]
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  lea eax,[eax+edx].TTypeInfo.Name[1]
+asm     // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        mov     eax, [eax + edx].TTypeInfo.Name[1].TEnumType.BaseType
+        mov     eax, [eax]
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
 {$endif}
 end;
 
@@ -28712,18 +28713,18 @@ begin
   result := false;
 end;
 {$else}
-asm // eax=PClassType edx=AClass
-@1:movzx ecx,byte ptr [eax].TTypeInfo.Name
-   lea eax,[eax+ecx].TTypeInfo.Name[1]
-   cmp edx,[eax].TClassType.ClassType
-   jz @2
-   mov eax,[eax].TClassType.ParentInfo
-   test eax,eax
-   jz @3 // no parent
-   mov eax,[eax] // get parent type info
-   jmp @1
-@3:rep ret
-@2:mov eax,1
+asm     // eax=PClassType edx=AClass
+@1:     movzx   ecx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + ecx].TTypeInfo.Name[1]
+        cmp     edx, [eax].TClassType.ClassType
+        jz      @2
+        mov     eax, [eax].TClassType.ParentInfo
+        test    eax, eax
+        jz      @3 // no parent
+        mov     eax, [eax] // get parent type info
+        jmp     @1
+@3:     rep     ret
+@2:     mov     eax, 1
 end;
 {$endif}
 
@@ -29117,17 +29118,17 @@ end;
 {$else}
 function TClassType.InheritsFrom(AClass: TClass): boolean;
 asm // eax=PClassType edx=AClass
-    cmp [eax].TClassType.ClassType,edx
-    jz @3
-@2: mov eax,[eax].TClassType.ParentInfo
-    test eax,eax
-    jz @0
-@1: mov eax,[eax]
-    movzx ecx,byte ptr [eax].TTypeInfo.Name
-    lea eax,[eax+ecx].TTypeInfo.Name[1]
-    cmp edx,[eax].TClassType.ClassType
-    jnz @2
-@3: mov eax,1
+        cmp     [eax].TClassType.ClassType, edx
+        jz      @3
+@2:     mov     eax, [eax].TClassType.ParentInfo
+        test    eax, eax
+        jz      @0
+@1:     mov     eax, [eax]
+        movzx   ecx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + ecx].TTypeInfo.Name[1]
+        cmp     edx, [eax].TClassType.ClassType
+        jnz     @2
+@3:     mov     eax, 1
 @0:
 end;
 {$endif}
@@ -29177,40 +29178,40 @@ begin
 end;
 {$else}
 asm // eax=PEnumType edx=Value
-    xor    ecx,ecx
-    {$ifdef FPC_ENUMHASINNER}
-    cmp    edx,[eax].TEnumType.inner.iMaxValue
-    {$else}
-    cmp    edx,[eax].TEnumType.MaxValue
-    {$endif}
-    lea    eax,[eax].TEnumType.NameList
-    ja     @0
-    test   edx,edx
-    jz     @z
-    push   edx
-    shr    edx,2 // fast pipelined by-four scanning
-    jz     @1
-@4: dec    edx
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    jnz    @4
-    pop    edx
-    and    edx,3
-    jnz    @s
-@z: ret
-@1: pop    edx
-@s: movzx  ecx,byte ptr [eax]
-    dec    edx
-    lea    eax,[eax+ecx+1] // next short string
-    jnz    @s
-    ret
-@0: lea    eax,NULL_SHORTSTRING
+        xor     ecx, ecx
+        {$ifdef FPC_ENUMHASINNER}
+        cmp     edx, [eax].TEnumType.inner.iMaxValue
+        {$else}
+        cmp     edx, [eax].TEnumType.MaxValue
+        {$endif}
+        lea     eax, [eax].TEnumType.NameList
+        ja      @0
+        test    edx, edx
+        jz      @z
+        push    edx
+        shr     edx, 2 // fast pipelined by-four scanning
+        jz      @1
+@4:     dec     edx
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        jnz     @4
+        pop     edx
+        and     edx, 3
+        jnz     @s
+@z:     ret
+@1:     pop     edx
+@s:     movzx   ecx, byte ptr[eax]
+        dec     edx
+        lea     eax, [eax + ecx + 1] // next short string
+        jnz     @s
+        ret
+@0:     lea     eax, NULL_SHORTSTRING
 end;
 {$endif}
 
@@ -29308,10 +29309,10 @@ end;
 {$else}
 function TEnumType.GetEnumNameTrimed(const Value): RawUTF8;
 asm
-  push ecx
-  call TEnumType.GetEnumName
-  pop edx
-  jmp TrimLeftLowerCaseShort
+        push    ecx
+        call    TEnumType.GetEnumName
+        pop     edx
+        jmp     TrimLeftLowerCaseShort
 end;
 {$endif}
 {$endif}
@@ -30633,8 +30634,9 @@ end;
 {$else}
 function TSQLRecord.RecordClass: TSQLRecordClass;
 asm
-  test eax,eax; jz @z
-  mov eax,[eax]
+        test    eax, eax
+        jz      @z
+        mov     eax, [eax]
 @z:
 end;
 {$endif}
@@ -30649,15 +30651,18 @@ end;
 {$else}
 function TSQLRecord.ClassProp: PClassProp;
 asm
-  test eax,eax; jz @z // avoid GPF
-  mov eax,[eax] // get ClassType of this TSQLRecord instance
-  test eax,eax; jz @z // avoid GPF
-  mov eax,[eax+vmtTypeInfo]
-  test eax,eax; jz @z // avoid GPF
-  movzx edx,byte ptr [eax].TTypeInfo.Name
-  lea eax,[eax+edx].TTypeInfo.Name[1]
-  movzx edx,byte ptr [eax].TClassType.UnitName
-  lea eax,[eax+edx].TClassType.UnitName[1].TClassProp
+        test    eax, eax
+        jz      @z // avoid GPF
+        mov     eax, [eax] // get ClassType of this TSQLRecord instance
+        test    eax, eax
+        jz      @z // avoid GPF
+        mov     eax, [eax + vmtTypeInfo]
+        test    eax, eax
+        jz      @z // avoid GPF
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+        movzx   edx, byte ptr[eax].TClassType.UnitName
+        lea     eax, [eax + edx].TClassType.UnitName[1].TClassProp
 @z:
 end;
 {$endif}
@@ -31247,12 +31252,12 @@ end;
 {$else}
 class function TSQLRecord.RecordProps: TSQLRecordProperties;
 asm
-  test eax,eax
-  jz @null
-  mov edx,[eax+vmtAutoTable]
-  test edx,edx
-  jz PropsCreate
-  mov eax,edx
+        test    eax, eax
+        jz      @null
+        mov     edx, [eax + vmtAutoTable]
+        test    edx, edx
+        jz      PropsCreate
+        mov     eax, edx
 @null:
 end;
 {$endif}
@@ -52339,50 +52344,51 @@ var
   {$ifdef Linux}
   sr9, sr8, srcx, srdx, srsi, srdi: pointer;
   {$endif}
-asm // mov ax,{MethodIndex}; jmp x64FakeStub
-  {$ifndef FPC}
-  // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
-  // So, make space for two variables (+shadow space)
-  // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
-  .params 2
-  {$endif}
-  and rax,$ffff
-  movlpd sxmm0,xmm0
-  movlpd sxmm1,xmm1
-  movlpd sxmm2,xmm2
-  movlpd sxmm3,xmm3
-  {$ifdef LINUX}
-  movlpd sxmm4,xmm4
-  movlpd sxmm5,xmm5
-  movlpd sxmm6,xmm6
-  movlpd sxmm7,xmm7
-  mov sr9,r9
-  mov sr8,r8
-  mov srcx,rcx
-  mov srdx,rdx
-  mov srsi,rsi
-  mov srdi,rdi
-  {$endif LINUX}
-  mov smetndx,rax
-  {$ifdef LINUX}
-  lea rsi, srdi // TFakeCallStack address as 2nd parameter
-  {$else}
-  {$ifndef FPC}
-  mov [rbp+$60],rcx
-  mov [rbp+$68],rdx
-  mov [rbp+$70],r8
-  mov [rbp+$78],r9
-  {$else}
-  mov [rbp+$10],rcx
-  mov [rbp+$18],rdx
-  mov [rbp+$20],r8
-  mov [rbp+$28],r9
-  {$endif FPC}
-  lea rdx, sxmm0 // TFakeCallStack address as 2nd parameter
-  {$endif LINUX}
-  call TInterfacedObjectFake.FakeCall
-  // FakeCall should set Int64 result in method result, and float in aCall.FPRegs["XMM0"]
-  movsd xmm0,sxmm0
+asm // caller = mov ax,{MethodIndex}; jmp x64FakeStub
+        {$ifndef FPC}
+        // FakeCall(self: TInterfacedObjectFake; var aCall: TFakeCallStack): Int64
+        // So, make space for two variables (+shadow space)
+        // adds $50 to stack, so rcx .. at rpb+$10+$50 = rpb+$60
+       .params 2
+        {$endif}
+        and     rax, $ffff
+        movlpd  sxmm0, xmm0
+        movlpd  sxmm1, xmm1
+        movlpd  sxmm2, xmm2
+        movlpd  sxmm3, xmm3
+        {$ifdef LINUX}
+        movlpd  sxmm4, xmm4
+        movlpd  sxmm5, xmm5
+        movlpd  sxmm6, xmm6
+        movlpd  sxmm7, xmm7
+        mov     sr9, r9
+        mov     sr8, r8
+        mov     srcx, rcx
+        mov     srdx, rdx
+        mov     srsi, rsi
+        mov     srdi, rdi
+        {$endif LINUX}
+        mov     smetndx, rax
+        {$ifdef LINUX}
+        lea     rsi, srdi // TFakeCallStack address as 2nd parameter
+        {$else}
+        {$ifndef FPC}
+        mov     [rbp + $60], rcx
+        mov     [rbp + $68], rdx
+        mov     [rbp + $70], r8
+        mov     [rbp + $78], r9
+        {$else}
+        mov     [rbp + $10], rcx
+        mov     [rbp + $18], rdx
+        mov     [rbp + $20], r8
+        mov     [rbp + $28], r9
+        {$endif FPC}
+        lea     rdx, sxmm0 // TFakeCallStack address as 2nd parameter
+        {$endif LINUX}
+        call    TInterfacedObjectFake.FakeCall
+        // FakeCall should set Int64 result in method result,
+        //and float in aCall.FPRegs["XMM0"]
+        movsd   xmm0, sxmm0
 end;
 {$endif CPUX64}
 
@@ -54924,121 +54930,120 @@ end;
 {$ifdef FPC}
   nostackframe;
 asm
-    push rbp
-    push r12
-    mov rbp,rsp
-    // simulate .params 60 ... size for 60 parameters
-    lea rsp,[rsp-MAX_EXECSTACK]
-    // align stack
-    and rsp, -16
+        push    rbp
+        push    r12
+        mov     rbp, rsp
+        // simulate .params 60 ... size for 60 parameters
+        lea     rsp, [rsp - MAX_EXECSTACK]
+        // align stack
+        and     rsp, -16
 {$else DELPHI} // ensure we use regular .params command for easier debugging
 asm
-    .params 64    // size for 64 parameters
-    .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
+        .params 64     // size for 64 parameters
+        .pushnv r12   // generate prolog+epilog to save and restore non-volatile r12
 {$endif FPC}
-    // get Args
-    mov r12, Args
-    // copy (push) stack content (if any)
-    mov ecx, [r12].TCallMethodArgs.StackSize
-    mov rdx, [r12].TCallMethodArgs.StackAddr
-    jmp @checkstack
+        // get Args
+        mov     r12, Args
+        // copy (push) stack content (if any)
+        mov     ecx, [r12].TCallMethodArgs.StackSize
+        mov     rdx, [r12].TCallMethodArgs.StackAddr
+        jmp     @checkstack
 @addstack:
-    push qword ptr [rdx]
-    dec ecx
-    sub rdx,8
+        push    qword ptr[rdx]
+        dec     ecx
+        sub     rdx, 8
 @checkstack:
-    or ecx, ecx
-    jnz @addstack
-    // fill registers and call method
-    {$ifdef LINUX}
-    // Linux/BSD System V AMD64 ABI
-    mov rdi, [r12+TCallMethodArgs.ParamRegs+REGRDI*8-8]
-    mov rsi, [r12+TCallMethodArgs.ParamRegs+REGRSI*8-8]
-    mov rdx, [r12+TCallMethodArgs.ParamRegs+REGRDX *8-8]
-    mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX *8-8]
-    mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8*8-8]
-    mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9*8-8]
-    movsd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movsd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movsd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movsd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    movsd xmm4, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM4*8-8]
-    movsd xmm5, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM5*8-8]
-    movsd xmm6, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM6*8-8]
-    movsd xmm7, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM7*8-8]
-    call [r12].TCallMethodArgs.method
-    {$else}
-    // Win64 ABI
-    mov rcx, [r12+TCallMethodArgs.ParamRegs+REGRCX*8-8]
-    mov rdx, [r12+TCallMethodArgs.ParamRegs+REGRDX*8-8]
-    mov r8, [r12+TCallMethodArgs.ParamRegs+REGR8 *8-8]
-    mov r9, [r12+TCallMethodArgs.ParamRegs+REGR9 *8-8]
-    movsd xmm0, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM0*8-8]
-    movsd xmm1, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM1*8-8]
-    movsd xmm2, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM2*8-8]
-    movsd xmm3, qword ptr [r12+TCallMethodArgs.FPRegs+REGXMM3*8-8]
-    sub rsp,8*4   // reserve shadow-space for RCX,RDX,R8,R9 registers
-    call [r12].TCallMethodArgs.method
-    add rsp,8*4
-    {$endif LINUX}
-    // retrieve result
-    mov [r12].TCallMethodArgs.res64, rax
-    mov cl, [r12].TCallMethodArgs.resKind
-    cmp cl, smvDouble
-    je @d
-    cmp cl, smvDateTime
-    je @d
-    cmp cl, smvCurrency
-    jne @e
-@d: movlpd qword ptr [r12].TCallMethodArgs.res64, xmm0
-@e:
-{$ifdef FPC}
-    mov rsp, rbp
-    pop r12
-    pop rbp
-{$endif}
+        or      ecx, ecx
+        jnz     @addstack
+        // fill registers and call method
+        {$ifdef LINUX}
+        // Linux/BSD System V AMD64 ABI
+        mov     rdi, [r12 + TCallMethodArgs.ParamRegs + REGRDI * 8 - 8]
+        mov     rsi, [r12 + TCallMethodArgs.ParamRegs + REGRSI * 8 - 8]
+        mov     rdx, [r12 + TCallMethodArgs.ParamRegs + REGRDX * 8 - 8]
+        mov     rcx, [r12 + TCallMethodArgs.ParamRegs + REGRCX * 8 - 8]
+        mov     r8, [r12 + TCallMethodArgs.ParamRegs + REGR8 * 8 - 8]
+        mov     r9, [r12 + TCallMethodArgs.ParamRegs + REGR9 * 8 - 8]
+        movsd   xmm0, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
+        movsd   xmm1, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
+        movsd   xmm2, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
+        movsd   xmm3, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
+        movsd   xmm4, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM4 * 8 - 8]
+        movsd   xmm5, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM5 * 8 - 8]
+        movsd   xmm6, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM6 * 8 - 8]
+        movsd   xmm7, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM7 * 8 - 8]
+        call    [r12].TCallMethodArgs.method
+        {$else}
+        // Win64 ABI
+        mov     rcx, [r12 + TCallMethodArgs.ParamRegs + REGRCX * 8 - 8]
+        mov     rdx, [r12 + TCallMethodArgs.ParamRegs + REGRDX * 8 - 8]
+        mov     r8, [r12 + TCallMethodArgs.ParamRegs + REGR8 * 8 - 8]
+        mov     r9, [r12 + TCallMethodArgs.ParamRegs + REGR9 * 8 - 8]
+        movsd   xmm0, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM0 * 8 - 8]
+        movsd   xmm1, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM1 * 8 - 8]
+        movsd   xmm2, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM2 * 8 - 8]
+        movsd   xmm3, qword ptr[r12 + TCallMethodArgs.FPRegs + REGXMM3 * 8 - 8]
+        sub     rsp, 8 * 4   // reserve shadow-space for RCX,RDX,R8,R9 registers
+        call    [r12].TCallMethodArgs.method
+        add     rsp, 8 * 4
+        {$endif LINUX}
+        // retrieve result
+        mov     [r12].TCallMethodArgs.res64, rax
+        mov     cl, [r12].TCallMethodArgs.resKind
+        cmp     cl, smvDouble
+        je      @d
+        cmp     cl, smvDateTime
+        je      @d
+        cmp     cl, smvCurrency
+        jne     @e
+@d:     movlpd  qword ptr[r12].TCallMethodArgs.res64, xmm0
+@e:     {$ifdef FPC}
+        mov     rsp, rbp
+        pop     r12
+        pop     rbp
+        {$endif}
 end;
 {$endif CPUX64}
 
 {$ifdef CPUX86}
 asm
-    push esi
-    push ebp
-    mov ebp,esp
-    mov esi,Args
-    // copy stack content (if any)
-    mov eax,[esi].TCallMethodArgs.StackSize
-    mov edx,dword ptr [esi].TCallMethodArgs.StackAddr
-    add edx,eax // pascal/register convention = left-to-right
-    shr eax,2
-    jz @z
-@n: sub edx,4
-    mov ecx,[edx]
-    push ecx
-    dec eax
-    jnz @n
-    // call method
-@z: mov eax,[esi+TCallMethodArgs.ParamRegs+REGEAX*4-4]
-    mov edx,[esi+TCallMethodArgs.ParamRegs+REGEDX*4-4]
-    mov ecx,[esi+TCallMethodArgs.ParamRegs+REGECX*4-4]
-    call [esi].TCallMethodArgs.method
-    // retrieve result
-    mov cl,[esi].TCallMethodArgs.resKind
-    cmp cl,smvDouble
-    je @d
-    cmp cl,smvDateTime
-    je @d
-    cmp cl,smvCurrency
-    jne @i
-    fistp qword [esi].TCallMethodArgs.res64
-    jmp @e
-@d: fstp qword [esi].TCallMethodArgs.res64
-    jmp @e
-@i: mov [esi].TCallMethodArgs.res64.Lo,eax
-    mov [esi].TCallMethodArgs.res64.Hi,edx
-@e: mov esp,ebp
-    pop ebp
-    pop esi
+        push    esi
+        push    ebp
+        mov     ebp, esp
+        mov     esi, Args
+        // copy stack content (if any)
+        mov     eax, [esi].TCallMethodArgs.StackSize
+        mov     edx, dword ptr[esi].TCallMethodArgs.StackAddr
+        add     edx, eax // pascal/register convention = left-to-right
+        shr     eax, 2
+        jz      @z
+@n:     sub     edx, 4
+        mov     ecx, [edx]
+        push    ecx
+        dec     eax
+        jnz     @n
+        // call method
+@z:     mov     eax, [esi + TCallMethodArgs.ParamRegs + REGEAX * 4 - 4]
+        mov     edx, [esi + TCallMethodArgs.ParamRegs + REGEDX * 4 - 4]
+        mov     ecx, [esi + TCallMethodArgs.ParamRegs + REGECX * 4 - 4]
+        call    [esi].TCallMethodArgs.method
+        // retrieve result
+        mov     cl, [esi].TCallMethodArgs.resKind
+        cmp     cl, smvDouble
+        je      @d
+        cmp     cl, smvDateTime
+        je      @d
+        cmp     cl, smvCurrency
+        jne     @i
+        fistp   qword[esi].TCallMethodArgs.res64
+        jmp     @e
+@d:     fstp    qword[esi].TCallMethodArgs.res64
+        jmp     @e
+@i:     mov     [esi].TCallMethodArgs.res64.Lo, eax
+        mov     [esi].TCallMethodArgs.res64.Hi, edx
+@e:     mov     esp, ebp
+        pop     ebp
+        pop     esi
 end;
 {$endif CPUX86}
 
@@ -56270,20 +56275,20 @@ end;
 
 class function TSynAutoCreateFields.NewInstance: TObject;
 asm
-        push eax  // class
-        mov eax,[eax].vmtInstanceSize
-        push eax  // size
-        call System.@GetMem
-        pop edx   // size
-        push eax  // self
-        mov cl,0
-        call dword ptr [FillcharFast]
-        pop eax   // self
-        pop edx   // class
-        mov [eax],edx // store VMT
-        push eax
-        call AutoCreateFields
-        pop eax
+        push    eax  // class
+        mov     eax, [eax].vmtInstanceSize
+        push    eax  // size
+        call    System.@GetMem
+        pop     edx   // size
+        push    eax  // self
+        mov     cl, 0
+        call    dword ptr[FillcharFast]
+        pop     eax   // self
+        pop     edx   // class
+        mov     [eax], edx // store VMT
+        push    eax
+        call    AutoCreateFields
+        pop     eax
 end; // ignore vmtIntfTable for this class hierarchy (won't implement interfaces)
 
 {$endif}

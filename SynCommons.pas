@@ -16740,22 +16740,21 @@ begin
 end;
 {$else}
 asm // eax=s edx=len
-     test edx,edx
-     mov ecx,[eax]
-     jz System.@LStrClr
-     test ecx,ecx
-     jz @set
-     cmp dword ptr [ecx-8],1
-     jne @set
-     cmp dword ptr [ecx-4],edx
-     je @out
-@set:mov ecx,edx
-     xor edx,edx
+        test    edx, edx
+        mov     ecx, [eax]
+        jz      System.@LStrClr
+        test    ecx, ecx
+        jz      @set
+        cmp     dword ptr[ecx - 8], 1
+        jne     @set
+        cmp     dword ptr[ecx - 4], edx
+        je      @out
+@set:   mov     ecx, edx
+        xor     edx, edx
 {$ifdef UNICODE}
-     push CP_UTF8 // UTF-8 code page for Delphi 2009+
-     call  System.@LStrFromPCharLen // we need a call, not a jmp here
-{$else}
-     jmp System.@LStrFromPCharLen
+        push    CP_UTF8 // UTF-8 code page for Delphi 2009+
+        call    System.@LStrFromPCharLen // we need a call, not a jmp here
+{$else} jmp     System.@LStrFromPCharLen
 {$endif}
 @out:
 end;
@@ -19090,46 +19089,47 @@ asm
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
     .NOFRAME
 {$endif FPC}
-    {$ifndef win64}
-    mov rcx,rdi
-    mov rdx,rsi
-    {$endif win64}
-    mov r10,rdx
-    sar r10,63                  // r10=0 if val>=0 or -1 if val<0
-    xor rdx,r10
-    sub rdx,r10                 // rdx=abs(val)
-    cmp rdx,10; jb @3           // direct process of common val<10
-    mov rax,rdx
-    lea r8,TwoDigitLookup
-@s: cmp rax,100
-    lea rcx,[rcx-2]
-    jb @2
-    lea r9,[rax*2]
-    shr rax,2
-    mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
-    mul rdx
-    shr rdx,2
-    mov rax,rdx
-    imul rdx,-200
-    lea rdx,[rdx+r8]
-    movzx rdx,word ptr [rdx+r9]
-    mov [rcx],dx
-    cmp rax,10
-    jae @s
-@1: or al,'0'
-    mov byte ptr [rcx-2],'-'
-    mov [rcx-1],al
-    lea rax,[rcx+r10-1]         // includes '-' if val<0
-    ret
-@2: movzx eax,word ptr [r8+rax*2]
-    mov byte ptr [rcx-1],'-'
-    mov [rcx],ax
-    lea rax,[rcx+r10]           // includes '-' if val<0
-    ret
-@3: or dl,'0'
-    mov byte ptr [rcx-2],'-'
-    mov [rcx-1],dl
-    lea rax,[rcx+r10-1]         // includes '-' if val<0
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        mov     r10, rdx
+        sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
+        xor     rdx, r10
+        sub     rdx, r10        // rdx=abs(val)
+        cmp     rdx, 10;
+        jb      @3              // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, TwoDigitLookup
+@s:     cmp     rax, 100
+        lea     rcx, [rcx - 2]
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx,  - 200
+        lea     rdx, [rdx + r8]
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     or      al, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], al
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     byte ptr[rcx - 1], '-'
+        mov     [rcx], ax
+        lea     rax, [rcx + r10]           // includes '-' if val<0
+        ret
+@3:     or      dl, '0'
+        mov     byte ptr[rcx - 2], '-'
+        mov     [rcx - 1], dl
+        lea     rax, [rcx + r10 - 1]       // includes '-' if val<0
 end;
 {$endif FPC}
 {$else}
@@ -19143,52 +19143,52 @@ begin // this code is faster than the Borland's original str() or IntToStr()
 end;
 {$else}
 asm // eax=P, edx=val
-    mov ecx,edx
-    sar ecx,31         // 0 if val>=0 or -1 if val<0
-    push ecx
-    xor edx,ecx
-    sub edx,ecx        // edx=abs(val)
-    cmp edx,10; jb @3  // direct process of common val<10
-    push edi
-    mov edi,eax
-    mov eax,edx
-    //nop; nop           // for loop alignment
-@s: cmp eax,100
-    lea edi,[edi-2]
-    jb @2
-    mov ecx,eax
-    mov	edx,1374389535 // use power of two reciprocal to avoid division
-    mul edx
-    shr	edx,5          // now edx=eax div 100
-    mov eax,edx
-    imul edx,-200
-    movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
-    mov [edi],dx
-    cmp eax,10
-    jae @s
-@1: dec edi
-    or al,'0'
-    mov byte ptr [edi-1],'-'
-    mov [edi],al
-    mov eax,edi
-    pop edi
-    pop ecx
-    lea eax,[eax+ecx] // includes '-' if val<0
-    ret
-@2: movzx eax,word ptr [TwoDigitLookup+eax*2]
-    mov byte ptr [edi-1],'-'
-    mov [edi],ax
-    mov eax,edi
-    pop edi
-    pop ecx
-    lea eax,[eax+ecx] // includes '-' if val<0
-    ret
-@3: dec eax
-    pop ecx
-    or dl,'0'
-    mov byte ptr [eax-1],'-'
-    mov [eax],dl
-    lea eax,[eax+ecx] // includes '-' if val<0
+        mov     ecx, edx
+        sar     ecx, 31         // 0 if val>=0 or -1 if val<0
+        push    ecx
+        xor     edx, ecx
+        sub     edx, ecx        // edx=abs(val)
+        cmp     edx, 10;
+        jb      @3  // direct process of common val<10
+        push    edi
+        mov     edi, eax
+        mov     eax, edx
+@s:     cmp     eax, 100
+        lea     edi, [edi - 2]
+        jb      @2
+        mov     ecx, eax
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=eax div 100
+        mov     eax, edx
+        imul    edx,  - 200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        mov     [edi], dx
+        cmp     eax, 10
+        jae     @s
+@1:     dec     edi
+        or      al, '0'
+        mov     byte ptr[edi - 1], '-'
+        mov     [edi], al
+        mov     eax, edi
+        pop     edi
+        pop     ecx
+        lea     eax, [eax + ecx] // includes '-' if val<0
+        ret
+@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     byte ptr[edi - 1], '-'
+        mov     [edi], ax
+        mov     eax, edi
+        pop     edi
+        pop     ecx
+        lea     eax, [eax + ecx] // includes '-' if val<0
+        ret
+@3:     dec     eax
+        pop     ecx
+        or      dl, '0'
+        mov     byte ptr[eax - 1], '-'
+        mov     [eax], dl
+        lea     eax, [eax + ecx] // includes '-' if val<0
 end;
 {$endif CPU64}
 {$endif PUREPASCAL}
@@ -19199,42 +19199,43 @@ function StrUInt32(P: PAnsiChar; val: PtrUInt): PAnsiChar;
 asm
 {$else}
 asm // rcx=P, rdx=val (Linux: rdi,rsi)
-    .NOFRAME
+        .NOFRAME
 {$endif FPC}
-    {$ifndef win64}
-    mov rcx,rdi
-    mov rdx,rsi
-    {$endif win64}
-    cmp rdx,10; jb @3           // direct process of common val<10
-    mov rax,rdx
-    lea r8, [rip+TwoDigitLookup]
-@s: cmp rax,100
-    lea rcx,[rcx-2]
-    jb @2
-    lea r9,[rax*2]
-    shr rax,2
-    mov rdx,2951479051793528259 // use power of two reciprocal to avoid division
-    mul rdx
-    shr rdx,2
-    mov rax,rdx
-    imul rdx,-200
-    lea rdx,[rdx+r8]
-    movzx rdx,word ptr [rdx+r9]
-    mov [rcx],dx
-    cmp rax,10
-    jae @s
-@1: dec rcx
-    or al,'0'
-    mov [rcx],al
-@0: mov rax,rcx
-    ret
-@2: movzx eax,word ptr [r8+rax*2]
-    mov [rcx],ax
-    mov rax,rcx
-    ret
-@3: lea rax,[rcx-1]
-    or dl,'0'
-    mov [rax],dl
+        {$ifndef win64}
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$endif win64}
+        cmp     rdx, 10;
+        jb      @3           // direct process of common val<10
+        mov     rax, rdx
+        lea     r8, [rip + TwoDigitLookup]
+@s:     cmp     rax, 100
+        lea     rcx, [rcx - 2]
+        jb      @2
+        lea     r9, [rax * 2]
+        shr     rax, 2
+        mov     rdx, 2951479051793528259 // use power of two reciprocal to avoid division
+        mul     rdx
+        shr     rdx, 2
+        mov     rax, rdx
+        imul    rdx,  - 200
+        lea     rdx, [rdx + r8]
+        movzx   rdx, word ptr[rdx + r9]
+        mov     [rcx], dx
+        cmp     rax, 10
+        jae     @s
+@1:     dec     rcx
+        or      al, '0'
+        mov     [rcx], al
+@0:     mov     rax, rcx
+        ret
+@2:     movzx   eax, word ptr[r8 + rax * 2]
+        mov     [rcx], ax
+        mov     rax, rcx
+        ret
+@3:     lea     rax, [rcx - 1]
+        or      dl, '0'
+        mov     [rax], dl
 end;
 {$else}
 {$ifdef PUREPASCAL}
@@ -19261,39 +19262,41 @@ begin // this code is faster than the Borland's original str() or IntToStr()
   result := P;
 end;
 {$else}
-asm // eax=P, edx=val
-    cmp edx,10; jb @3  // direct process of common val=0 (or val<10)
-    push edi
-    mov edi,eax
-    mov eax,edx
-    nop; nop           // for loop alignment
-@s: cmp eax,100
-    lea edi,[edi-2]
-    jb @2
-    mov ecx,eax
-    mov	edx,1374389535 // use power of two reciprocal to avoid division
-    mul edx
-    shr	edx,5          // now edx=eax div 100
-    mov eax,edx
-    imul edx,-200
-    movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
-    mov [edi],dx
-    cmp eax,10
-    jae @s
-@1: dec edi
-    or al,'0'
-    mov [edi],al
-    mov eax,edi
-    pop edi
-    ret
-@2: movzx eax,word ptr [TwoDigitLookup+eax*2]
-    mov [edi],ax
-    mov eax,edi
-    pop edi
-    ret
-@3: dec eax
-    or dl,'0'
-    mov [eax],dl
+asm     // eax=P, edx=val
+        cmp     edx, 10
+        jb      @3  // direct process of common val=0 (or val<10)
+        push    edi
+        mov     edi, eax
+        mov     eax, edx
+        nop
+        nop         // @s loop alignment
+@s:     cmp     eax, 100
+        lea     edi, [edi - 2]
+        jb      @2
+        mov     ecx, eax
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=eax div 100
+        mov     eax, edx
+        imul    edx, -200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        mov     [edi], dx
+        cmp     eax, 10
+        jae     @s
+@1:     dec     edi
+        or      al, '0'
+        mov     [edi], al
+        mov     eax, edi
+        pop     edi
+        ret
+@2:     movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     [edi], ax
+        mov     eax, edi
+        pop     edi
+        ret
+@3:     dec     eax
+        or      dl, '0'
+        mov     [eax], dl
 end;
 {$endif CPU64}
 {$endif PUREPASCAL}
@@ -19315,25 +19318,25 @@ begin
       dec(c,c100*100);     // fast c := c mod 100
       {$else}
       asm // by-passing the RTL is a good idea here
-        push ebx
-        mov edx,dword ptr [c+4]
-        mov eax,dword ptr [c]
-        mov ebx,100
-        mov ecx,eax
-        mov eax,edx
-        xor edx,edx
-        div ebx
-        mov dword ptr [c100+4],eax
-        xchg eax,ecx
-        div ebx
-        mov dword ptr [c100],eax
-        imul ebx,ecx
-        mov ecx,100
-        mul ecx
-        add edx,ebx
-        pop ebx
-        sub dword ptr [c+4],edx
-        sbb dword ptr [c],eax
+        push    ebx
+        mov     edx, dword ptr[c + 4]
+        mov     eax, dword ptr[c]
+        mov     ebx, 100
+        mov     ecx, eax
+        mov     eax, edx
+        xor     edx, edx
+        div     ebx
+        mov     dword ptr[c100 + 4], eax
+        xchg    eax, ecx
+        div     ebx
+        mov     dword ptr[c100], eax
+        imul    ebx, ecx
+        mov     ecx, 100
+        mul     ecx
+        add     edx, ebx
+        pop     ebx
+        sub     dword ptr[c + 4], edx
+        sbb     dword ptr[c], eax
       end;
       {$endif}
       dec(P,2);
@@ -19517,32 +19520,32 @@ begin
 end;
 {$else}
 asm // eax=P1, edx=P2, ecx=count
-   push ebx
-   push esi
-   push ecx
-   shr ecx,2
-   jz @2
-@4:dec ecx
-   mov ebx,[eax]
-   mov esi,[edx]
-   mov [eax],esi
-   mov [edx],ebx
-   lea eax,[eax+4]
-   lea edx,[edx+4]
-   jnz @4
-@2:pop ecx
-   and ecx,3
-   jz @0
-@1:dec ecx
-   mov bl,[eax]
-   mov bh,[edx]
-   mov [eax],bh
-   mov [edx],bl
-   lea eax,[eax+1]
-   lea edx,[edx+1]
-   jnz @1
-@0:pop esi
-   pop ebx
+        push    ebx
+        push    esi
+        push    ecx
+        shr     ecx, 2
+        jz      @2
+@4:     dec     ecx
+        mov     ebx, [eax]
+        mov     esi, [edx]
+        mov     [eax], esi
+        mov     [edx], ebx
+        lea     eax, [eax + 4]
+        lea     edx, [edx + 4]
+        jnz     @4
+@2:     pop     ecx
+        and     ecx, 3
+        jz      @0
+@1:     dec     ecx
+        mov     bl, [eax]
+        mov     bh, [edx]
+        mov     [eax], bh
+        mov     [edx], bl
+        lea     eax, [eax + 1]
+        lea     edx, [edx + 1]
+        jnz     @1
+@0:     pop     esi
+        pop     ebx
 end;
 {$endif}
 
@@ -19876,11 +19879,11 @@ begin
 end;
 {$else}
 asm // Delphi is so bad at compiling above code...
-    or eax,eax
-    jz @z
-    mov eax,[eax]
-    ret
-@z: db $f3 // rep ret
+        or      eax, eax
+        jz      @z
+        mov     eax, [eax]
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif HASINLINE}
 {$endif HASDIRECTTYPEINFO}
@@ -20221,54 +20224,51 @@ begin
 end;
 {$else}
 asm // eax=@Dest text=edx len=ecx
-    cmp ecx,128 // avoid huge move() in ReallocMem()
+        cmp     ecx, 128 // avoid huge move() in ReallocMem()
 {$ifdef UNICODE}
-    ja @3
-{$else}
-    ja System.@LStrFromPCharLen
+        ja      @3
+{$else} ja      System.@LStrFromPCharLen
 {$endif}
-    test ecx,ecx // len=0
+        test    ecx, ecx // len=0
 {$ifdef UNICODE}
-    jz @3
-{$else}
-    jz System.@LStrFromPCharLen
+        jz      @3
+{$else} jz      System.@LStrFromPCharLen
 {$endif}
-    push ebx
-    mov ebx,[eax]
-    test ebx,ebx
-    jnz @2
-@0: pop ebx
+        push    ebx
+        mov     ebx, [eax]
+        test    ebx, ebx
+        jnz     @2
+@0:     pop     ebx
 {$ifdef UNICODE}
-@3: push CP_UTF8 // UTF-8 code page for Delphi 2009+
-    call System.@LStrFromPCharLen // we need a call, not a jmp here
-    rep ret
-{$else}
-    jmp System.@LStrFromPCharLen
+@3:     push    CP_UTF8 // UTF-8 code page for Delphi 2009+
+        call    System.@LStrFromPCharLen // we need a call, not a jmp here
+        rep     ret
+{$else} jmp     System.@LStrFromPCharLen
 {$endif}
-@2: cmp dword ptr [ebx-8],1
-    jne @0
-    cmp dword ptr [ebx-4],ecx
-    je @1
-    sub ebx,STRRECSIZE
-    push edx
-    push eax
-    push ecx
-    push ebx
-    mov eax,esp // ReallocMem() over ebx pointer on stack
-    lea edx,ecx+STRRECSIZE+1
-    call System.@ReallocMem
-    pop ebx
-    pop ecx
-    add ebx,STRRECSIZE
-    pop eax
-    pop edx
-    mov [eax],ebx
-    mov dword ptr [ebx-4],ecx
-    mov byte ptr [ebx+ecx],0
-@1: mov eax,edx
-    mov edx,ebx
-    call dword ptr [MoveFast]
-    pop ebx
+@2:     cmp     dword ptr[ebx - 8], 1
+        jne     @0
+        cmp     dword ptr[ebx - 4], ecx
+        je      @1
+        sub     ebx, STRRECSIZE
+        push    edx
+        push    eax
+        push    ecx
+        push    ebx
+        mov     eax, esp // ReallocMem() over ebx pointer on stack
+        lea     edx, ecx + STRRECSIZE + 1
+        call    System.@ReallocMem
+        pop     ebx
+        pop     ecx
+        add     ebx, STRRECSIZE
+        pop     eax
+        pop     edx
+        mov     [eax], ebx
+        mov     dword ptr[ebx - 4], ecx
+        mov     byte ptr[ebx + ecx], 0
+@1:     mov     eax, edx
+        mov     edx, ebx
+        call    dword ptr[MoveFast]
+        pop     ebx
 end;
 {$endif}
 {$endif}
@@ -20321,14 +20321,14 @@ begin
 end;
 {$else}
 asm
-    test eax,eax
-    jz @n
-    cmp dl,[eax]
-    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
-    jnz @n
-    add eax,ecx
-    ret
-@n: xor eax,eax
+        test    eax, eax
+        jz      @n
+        cmp     dl, [eax]
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        jnz     @n
+        add     eax, ecx
+        ret
+@n:     xor     eax, eax
 end;
 {$endif}
 
@@ -20347,15 +20347,15 @@ begin
 end;
 {$else}
 asm // eax=aTypeInfo edx=aExpectedKind
-    test eax,eax
-    jz @n
-    movzx ecx,byte ptr [eax]
-    bt edx,ecx
-    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
-    jnb @n
-    add eax,ecx
-    ret
-@n: xor eax,eax
+        test    eax, eax
+        jz      @n
+        movzx   ecx, byte ptr[eax]
+        bt      edx, ecx
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        jnb     @n
+        add     eax, ecx
+        ret
+@n:     xor     eax, eax
 end;
 {$endif}
 
@@ -20430,24 +20430,24 @@ begin
 end;
 {$else}
 asm // eax=aTypeInfo edx=@MaxValue ecx=@Names
-    test eax,eax
-    jz @n
-    cmp byte ptr [eax],tkEnumeration
-    jnz @n
-    push ecx
-    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
-    mov eax,[eax+ecx+TTypeInfo.EnumBaseType]
-    mov eax,[eax]
-    movzx ecx,byte ptr [eax+TTypeInfo.NameLen]
-    add eax,ecx
-    mov ecx,[eax+TTypeInfo.MaxValue]
-    mov [edx],ecx
-    pop ecx
-    lea eax,[eax+TTypeInfo.NameList]
-    mov [ecx],eax
-    mov al,1
-    ret
-@n: xor eax,eax
+        test    eax, eax
+        jz      @n
+        cmp     byte ptr[eax], tkEnumeration
+        jnz     @n
+        push    ecx
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        mov     eax, [eax + ecx + TTypeInfo.EnumBaseType]
+        mov     eax, [eax]
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        add     eax, ecx
+        mov     ecx, [eax + TTypeInfo.MaxValue]
+        mov     [edx], ecx
+        pop     ecx
+        lea     eax, [eax + TTypeInfo.NameList]
+        mov     [ecx], eax
+        mov     al, 1
+        ret
+@n:     xor     eax, eax
 end;
 {$endif}
 
@@ -20480,44 +20480,44 @@ begin
 end;
 {$else}
 asm // eax=aTypeInfo edx=aIndex
-    test   eax,eax
-    jz     @0
-    cmp    byte ptr [eax],tkEnumeration
-    jnz    @0
-    movzx  ecx,byte ptr [eax+TTypeInfo.NameLen]
-    mov    eax,[eax+ecx+TTypeInfo.EnumBaseType]
-    mov    eax,[eax]
-    movzx  ecx,byte ptr [eax+TTypeInfo.NameLen]
-    cmp    edx,[eax+ecx+TTypeInfo.MaxValue]
-    ja     @0
-    lea    eax,[eax+ecx+TTypeInfo.NameList]
-    test   edx,edx
-    jz     @z
-    push   edx
-    shr    edx,2 // fast by-four scanning
-    jz     @1
-@4: dec    edx
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    movzx  ecx,byte ptr [eax]
-    lea    eax,[eax+ecx+1]
-    jnz    @4
-    pop    edx
-    and    edx,3
-    jnz    @s
-    ret
-@1: pop    edx
-@s: movzx  ecx,byte ptr [eax]
-    dec    edx
-    lea    eax,[eax+ecx+1] // next short string
-    jnz    @s
-    ret
-@z: rep ret
-@0: lea    eax,NULL_SHORTSTRING
+        test    eax, eax
+        jz      @0
+        cmp     byte ptr[eax], tkEnumeration
+        jnz     @0
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        mov     eax, [eax + ecx + TTypeInfo.EnumBaseType]
+        mov     eax, [eax]
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        cmp     edx, [eax + ecx + TTypeInfo.MaxValue]
+        ja      @0
+        lea     eax, [eax + ecx + TTypeInfo.NameList]
+        test    edx, edx
+        jz      @z
+        push    edx
+        shr     edx, 2 // fast by-four scanning
+        jz      @1
+@4:     dec     edx
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        movzx   ecx, byte ptr[eax]
+        lea     eax, [eax + ecx + 1]
+        jnz     @4
+        pop     edx
+        and     edx, 3
+        jnz     @s
+        ret
+@1:     pop     edx
+@s:     movzx   ecx, byte ptr[eax]
+        dec     edx
+        lea     eax, [eax + ecx + 1] // next short string
+        jnz     @s
+        ret
+@z:     rep     ret
+@0:     lea     eax, NULL_SHORTSTRING
 end;
 {$endif}
 
@@ -21213,432 +21213,410 @@ end;
 function Int32ToUTF8(Value : integer): RawUtf8; // 3x faster than SysUtils.IntToStr
 // from IntToStr32_JOH_IA32_6_a, adapted for Delphi 2009+
 asm // eax=Value, edx=@result
-  push   ebx
-  push   edi
-  push   esi
-  mov    ebx,eax                {Value}
-  sar    ebx,31                 {0 for +ve Value or -1 for -ve Value}
-  xor    eax,ebx
-  sub    eax,ebx                {ABS(Value)}
-  mov    esi,10                 {Max Digits in result}
-  mov    edi,edx                {@result}
-  cmp    eax,10;         sbb    esi, 0
-  cmp    eax,100;        sbb    esi, 0
-  cmp    eax,1000;       sbb    esi, 0
-  cmp    eax,10000;      sbb    esi, 0
-  cmp    eax,100000;     sbb    esi, 0
-  cmp    eax,1000000;    sbb    esi, 0
-  cmp    eax,10000000;   sbb    esi, 0
-  cmp    eax,100000000;  sbb    esi, 0
-  cmp    eax,1000000000; sbb    esi, ebx    {esi=Digits (Including Sign Character)}
-  mov    ecx,[edx]              {result}
-  test   ecx,ecx
-  je     @@NewStr               {Create New string for result}
-  cmp    dword ptr [ecx-8], 1
-  jne    @@ChangeStr            {Reference Count <> 1}
-  cmp    esi,[ecx-4]
-  je     @@LengthOk             {Existing Length = Required Length}
-  sub    ecx,STRRECSIZE         {Allocation Address}
-  push   eax                    {ABS(Value)}
-  push   ecx
-  mov    eax,esp
-  lea    edx,[esi+STRRECSIZE+1] {New Allocation Size}
-  call   system.@ReallocMem     {Reallocate result string}
-  pop    ecx
-  pop    eax                    {ABS(Value)}
-  add    ecx,STRRECSIZE         {result}
-  mov    [ecx-4],esi            {Set New Length}
-  mov    byte ptr [ecx+esi],0   {Add Null Terminator}
-  mov    [edi],ecx              {Set result Address}
-  jmp    @@LengthOk
-@@ChangeStr:
-  mov     edx,dword ptr [ecx-8]  {Reference Count}
-  add     edx,1
-  jz      @@NewStr               {RefCount = -1 (string Constant)}
-  lock    dec dword ptr [ecx-8]  {Decrement Existing Reference Count}
-@@NewStr:
-  push   eax                     {ABS(Value)}
-  mov    eax,esi                 {Length}
-{$ifdef UNICODE}
-  mov    edx,CP_UTF8 // UTF-8 code page for Delphi 2009+
-{$endif}
-  call   system.@NewAnsiString
-  mov    [edi],eax               {Set result Address}
-  mov    ecx,eax                 {result}
-  pop    eax                     {ABS(Value)}
-@@LengthOk:
-  mov    byte ptr [ecx],'-'      {Store '-' Character (May be Overwritten)}
-  add    esi,ebx                 {Digits (Excluding Sign Character)}
-  sub    ecx,ebx                 {Destination of 1st Digit}
-  sub    esi,2                   {Digits (Excluding Sign Character) - 2}
-  jle    @@FinalDigits           {1 or 2 Digit Value}
-  cmp    esi,8                   {10 Digit Value?}
-  jne    @@SetResult             {Not a 10 Digit Value}
-  sub    eax,2000000000          {Digit 10 must be either '1' or '2'}
-  mov    dl,'2'
-  jnc    @@SetDigit10            {Digit 10 = '2'}
-  mov    dl,'1'                  {Digit 10 = '1'}
-  add    eax,1000000000
-@@SetDigit10:
-  mov    [ecx],dl                {Save Digit 10}
-  mov    esi,7                   {9 Digits Remaining}
-  add    ecx,1                   {Destination of 2nd Digit}
-@@SetResult:
-  mov    edi,$28F5C29            {((2^32)+100-1)/100}
-@@Loop:
-  mov    ebx,eax                 {Dividend}
-  mul    edi                     {EDX = Dividend DIV 100}
-  mov    eax,edx                 {Set Next Dividend}
-  imul   edx,-200                {-2 * (100 * Dividend DIV  100)}
-  movzx  edx,word ptr [TwoDigitLookup+ebx*2+edx] {Dividend MOD 100 in ASCII}
-  mov    [ecx+esi],dx
-  sub    esi,2
-  jg     @@Loop                  {Loop until 1 or 2 Digits Remaining}
-@@FinalDigits:
-  pop    esi
-  pop    edi
-  pop    ebx
-  jnz    @@LastDigit
-  movzx  eax,word ptr [TwoDigitLookup+eax*2]
-  mov    [ecx],ax                {Save Final 2 Digits}
-  ret
-@@LastDigit:
-  or     al,'0'                  {Ascii Adjustment}
-  mov    [ecx],al                {Save Final Digit}
+        push    ebx
+        push    edi
+        push    esi
+        mov     ebx, eax                // value
+        sar     ebx, 31                 // 0 for +ve value or -1 for -ve value
+        XOR     eax, ebx
+        sub     eax, ebx                // abs(value)
+        mov     esi, 10                 // max dig in result
+        mov     edi, edx                // @result
+        cmp     eax, 10
+        sbb     esi, 0
+        cmp     eax, 100
+        sbb     esi, 0
+        cmp     eax, 1000
+        sbb     esi, 0
+        cmp     eax, 10000
+        sbb     esi, 0
+        cmp     eax, 100000
+        sbb     esi, 0
+        cmp     eax, 1000000
+        sbb     esi, 0
+        cmp     eax, 10000000
+        sbb     esi, 0
+        cmp     eax, 100000000
+        sbb     esi, 0
+        cmp     eax, 1000000000
+        sbb     esi, ebx                // esi=dig (including sign character)
+        mov     ecx, [edx]              // result
+        test    ecx, ecx
+        je      @newstr                 // create new string for result
+        cmp     dword ptr[ecx - 8], 1
+        jne     @chgstr                 // reference count <> 1
+        cmp     esi, [ecx - 4]
+        je      @lenok                  // existing length = required length
+        sub     ecx, STRRECSIZE         // allocation address
+        push    eax                     // abs(value)
+        push    ecx
+        mov     eax, esp
+        lea     edx, [esi + STRRECSIZE + 1] // new allocation size
+        call    System.@ReallocMem      // reallocate result string
+        pop     ecx
+        pop     eax                     // abs(value)
+        add     ecx, STRRECSIZE         // result
+        mov     [ecx - 4], esi          // set new length
+        mov     byte ptr[ecx + esi], 0  // add null terminator
+        mov     [edi], ecx              // set result address
+        jmp     @lenok
+@chgstr:mov     edx, dword ptr[ecx - 8] // reference count
+        add     edx, 1
+        jz      @newstr                 // refcount = -1 (string constant)
+lock    dec dword ptr[ecx - 8]  // decrement existing reference count
+@newstr:push    eax                     // abs(value)
+        mov     eax, esi                // length
+        {$ifdef UNICODE}
+        mov     edx, CP_UTF8            // utf-8 code page for delphi 2009+
+        {$endif}
+        call    System.@NewAnsiString
+        mov     [edi], eax              // set result address
+        mov     ecx, eax                // result
+        pop     eax                     // abs(value)
+@lenok: mov     byte ptr[ecx], '-'      // store '-' character (may be overwritten)
+        add     esi, ebx                // dig (excluding sign character)
+        sub     ecx, ebx                // destination of 1st dig
+        sub     esi, 2                  // dig (excluding sign character) - 2
+        jle     @findig                 // 1 or 2 dig value
+        cmp     esi, 8                  // 10 dig value?
+        jne     @setres              // not a 10 dig value
+        sub     eax, 2000000000         // dig 10 must be either '1' or '2'
+        mov     dl, '2'
+        jnc     @set10               // dig 10 = '2'
+        mov     dl, '1'                 // dig 10 = '1'
+        add     eax, 1000000000
+@set10: mov     [ecx], dl               // save dig 10
+        mov     esi, 7                  // 9 dig remaining
+        add     ecx, 1                  // destination of 2nd dig
+@setres:mov     edi, $28f5c29           // ((2^32)+100-1)/100
+@loop:  mov     ebx, eax                // dividend
+        mul     edi                     // edx = dividend div 100
+        mov     eax, edx                // set next dividend
+        imul    edx,  - 200             // -2 * (100 * dividend div  100)
+        movzx   edx, word ptr[TwoDigitLookup + ebx * 2 + edx] // dividend mod 100 in ascii
+        mov     [ecx + esi], dx
+        sub     esi, 2
+        jg      @loop                   // loop until 1 or 2 dig remaining
+@findig:pop     esi
+        pop     edi
+        pop     ebx
+        jnz     @last
+        movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     [ecx], ax               // save final 2 dig
+        ret
+@last:  or      al, '0'                 // ascii adjustment
+        mov     [ecx], al               // save final dig
 end;
 
 function Int64ToUTF8(Value: Int64): RawUtf8;
-// from IntToStr64_JOH_IA32_6_b, adapted for Delphi 2009+
-asm
-  push   ebx
-  mov    ecx, [ebp+8]            {Low Integer of Value}
-  mov    edx, [ebp+12]           {High Integer of Value}
-  xor    ebp, ebp                {Clear Sign Flag (EBP Already Pushed)}
-  mov    ebx, ecx                {Low Integer of Value}
-  test   edx, edx
-  jnl    @@AbsValue
-  mov    ebp, 1                  {EBP = 1 for -ve Value or 0 for +ve Value}
-  neg    ecx
-  adc    edx, 0
-  neg    edx
-@@AbsValue:                      {EDX:ECX = Abs(Value)}
-  jnz    @@Large
-  test   ecx, ecx
-  js     @@Large
-  mov    edx, eax                {@Result}
-  mov    eax, ebx                {Low Integer of Value}
-  call   Int32ToUTF8               {Call Fastest Integer IntToStr Function}
-  pop    ebx
-@@Exit:
-  pop    ebp                     {Restore Stack and Exit}
-  ret    8
-@@Large:
-  push   edi
-  push   esi
-  mov    edi, eax
-  xor    ebx, ebx
-  xor    eax, eax
-@@Test15:                        {Test for 15 or More Digits}
-  cmp    edx, $00005af3          {100000000000000 div $100000000}
-  jne    @@Check15
-  cmp    ecx, $107a4000          {100000000000000 mod $100000000}
-@@Check15:
-  jb     @@Test13
-@@Test17:                        {Test for 17 or More Digits}
-  cmp    edx, $002386f2          {10000000000000000 div $100000000}
-  jne    @@Check17
-  cmp    ecx, $6fc10000          {10000000000000000 mod $100000000}
-@@Check17:
-  jb     @@Test15or16
-@@Test19:                        {Test for 19 Digits}
-  cmp    edx, $0de0b6b3          {1000000000000000000 div $100000000}
-  jne    @@Check19
-  cmp    ecx, $a7640000          {1000000000000000000 mod $100000000}
-@@Check19:
-  jb     @@Test17or18
-  mov    al, 19
-  jmp    @@SetLength
-@@Test17or18:                    {17 or 18 Digits}
-  mov    bl, 18
-  cmp    edx, $01634578          {100000000000000000 div $100000000}
-  jne    @@SetLen
-  cmp    ecx, $5d8a0000          {100000000000000000 mod $100000000}
-  jmp    @@SetLen
-@@Test15or16:                    {15 or 16 Digits}
-  mov    bl, 16
-  cmp    edx, $00038d7e          {1000000000000000 div $100000000}
-  jne    @@SetLen
-  cmp    ecx, $a4c68000          {1000000000000000 mod $100000000}
-  jmp    @@SetLen
-@@Test13:                        {Test for 13 or More Digits}
-  cmp    edx, $000000e8          {1000000000000 div $100000000}
-  jne    @@Check13
-  cmp    ecx, $d4a51000          {1000000000000 mod $100000000}
-@@Check13:
-  jb     @@Test11
-@@Test13or14:                    {13 or 14 Digits}
-  mov    bl, 14
-  cmp    edx, $00000918          {10000000000000 div $100000000}
-  jne    @@SetLen
-  cmp    ecx, $4e72a000          {10000000000000 mod $100000000}
-  jmp    @@SetLen
-@@Test11:                        {10, 11 or 12 Digits}
-  cmp    edx, $02                {10000000000 div $100000000}
-  jne    @@Check11
-  cmp    ecx, $540be400          {10000000000 mod $100000000}
-@@Check11:
-  mov    bl, 11
-  jb     @@SetLen                {10 Digits}
-@@Test11or12:                    {11 or 12 Digits}
-  mov    bl, 12
-  cmp    edx, $17                {100000000000 div $100000000}
-  jne    @@SetLen
-  cmp    ecx, $4876e800          {100000000000 mod $100000000}
-@@SetLen:
-  sbb    eax, 0                  {Adjust for Odd/Evem Digit Count}
-  add    eax, ebx
-@@SetLength:                     {Abs(Value) in EDX:ECX, Digits in EAX}
-  push   ecx                     {Save Abs(Value)}
-  push   edx
-  lea    edx, [eax+ebp]          {Digits Needed (Including Sign Character)}
-  mov    ecx, [edi]              {@Result}
-  mov    esi, edx                {Digits Needed (Including Sign Character)}
-  test   ecx, ecx
-  je     @@NewStr                {Create New AnsiString for Result}
-  cmp    dword ptr [ecx-8], 1
-  jne    @@ChangeStr             {Reference Count <> 1}
-  cmp    esi, [ecx-4]
-  je     @@LengthOk              {Existing Length = Required Length}
-  sub    ecx, STRRECSIZE         {Allocation Address}
-  push   eax                     {ABS(Value)}
-  push   ecx
-  mov    eax, esp
-  lea    edx, [esi+STRRECSIZE+1] {New Allocation Size}
-  call   system.@ReallocMem      {Reallocate Result AnsiString}
-  pop    ecx
-  pop    eax                     {ABS(Value)}
-  add    ecx, STRRECSIZE         {@Result}
-  mov    [ecx-4], esi            {Set New Length}
-  mov    byte ptr [ecx+esi], 0   {Add Null Terminator}
-  mov    [edi], ecx              {Set Result Address}
-  jmp    @@LengthOk
-@@ChangeStr:
-  mov     edx, dword ptr [ecx-8]  {Reference Count}
-  add     edx, 1
-  jz      @@NewStr                {RefCount = -1 (AnsiString Constant)}
-  lock    dec dword ptr [ecx-8]   {Decrement Existing Reference Count}
-@@NewStr:
-  push   eax                     {ABS(Value)}
-  mov    eax, esi                {Length}
-{$ifdef UNICODE}
-  mov    edx,CP_UTF8 // UTF-8 code page for Delphi 2009+
-{$endif}
-  call   system.@NewAnsiString
-  mov    [edi], eax              {Set Result Address}
-  mov    ecx, eax                {@Result}
-  pop    eax                     {ABS(Value)}
-@@LengthOk:
-  mov    edi, [edi]              {@Result}
-  sub    esi, ebp                {Digits Needed (Excluding Sign Character)}
-  mov    byte ptr [edi], '-'     {Store '-' Character (May be Overwritten)}
-  add    edi, ebp                {Destination of 1st Digit}
-  pop    edx                     {Restore Abs(Value)}
-  pop    eax
-  cmp    esi, 17
-  jl     @@LessThan17Digits      {Digits < 17}
-  je     @@SetDigit17            {Digits = 17}
-  cmp    esi, 18
-  je     @@SetDigit18            {Digits = 18}
-  mov    cl, '0' - 1
-  mov    ebx, $a7640000          {1000000000000000000 mod $100000000}
-  mov    ebp, $0de0b6b3          {1000000000000000000 div $100000000}
-@@CalcDigit19:
-  add    ecx, 1
-  sub    eax, ebx
-  sbb    edx, ebp
-  jnc    @@CalcDigit19
-  add    eax, ebx
-  adc    edx, ebp
-  mov    [edi], cl
-  add    edi, 1
-@@SetDigit18:
-  mov    cl, '0' - 1
-  mov    ebx, $5d8a0000          {100000000000000000 mod $100000000}
-  mov    ebp, $01634578          {100000000000000000 div $100000000}
-@@CalcDigit18:
-  add    ecx, 1
-  sub    eax, ebx
-  sbb    edx, ebp
-  jnc    @@CalcDigit18
-  add    eax, ebx
-  adc    edx, ebp
-  mov    [edi], cl
-  add    edi, 1
-@@SetDigit17:
-  mov    cl, '0' - 1
-  mov    ebx, $6fc10000          {10000000000000000 mod $100000000}
-  mov    ebp, $002386f2          {10000000000000000 div $100000000}
-@@CalcDigit17:
-  add    ecx, 1
-  sub    eax, ebx
-  sbb    edx, ebp
-  jnc    @@CalcDigit17
-  add    eax, ebx
-  adc    edx, ebp
-  mov    [edi], cl
-  add    edi, 1                  {Update Destination}
-  mov    esi, 16                 {Set 16 Digits Left}
-@@LessThan17Digits:              {Process Next 8 Digits}
-  mov    ecx, 100000000          {EDX:EAX = Abs(Value) = Dividend}
-  div    ecx
-  mov    ebp, eax                {Dividend DIV 100000000}
-  mov    ebx, edx
-  mov    eax, edx                {Dividend MOD 100000000}
-  mov    edx, $51EB851F
-  mul    edx
-  shr    edx, 5                  {Dividend DIV 100}
-  mov    eax, edx                {Set Next Dividend}
-  lea    edx, [edx*4+edx]
-  lea    edx, [edx*4+edx]
-  shl    edx, 2                  {Dividend DIV 100 * 100}
-  sub    ebx, edx                {Remainder (0..99)}
-  movzx  ebx, word ptr [TwoDigitLookup+ebx*2]
-  shl    ebx, 16
-  mov    edx, $51EB851F
-  mov    ecx, eax                {Dividend}
-  mul    edx
-  shr    edx, 5                  {Dividend DIV 100}
-  mov    eax, edx
-  lea    edx, [edx*4+edx]
-  lea    edx, [edx*4+edx]
-  shl    edx, 2                  {Dividend DIV 100 * 100}
-  sub    ecx, edx                {Remainder (0..99)}
-  or     bx, word ptr [TwoDigitLookup+ecx*2]
-  mov    [edi+esi-4], ebx        {Store 4 Digits}
-  mov    ebx, eax
-  mov    edx, $51EB851F
-  mul    edx
-  shr    edx, 5                  {EDX = Dividend DIV 100}
-  lea    eax, [edx*4+edx]
-  lea    eax, [eax*4+eax]
-  shl    eax, 2                  {EAX = Dividend DIV 100 * 100}
-  sub    ebx, eax                {Remainder (0..99)}
-  movzx  ebx, word ptr [TwoDigitLookup+ebx*2]
-  movzx  ecx, word ptr [TwoDigitLookup+edx*2]
-  shl    ebx, 16
-  or     ebx, ecx
-  mov    [edi+esi-8], ebx        {Store 4 Digits}
-  mov    eax, ebp                {Remainder}
-  sub    esi, 10                 {Digits Left - 2}
-  jz     @@Last2Digits
-@@SmallLoop:                     {Process Remaining Digits}
-  mov    edx, $28F5C29           {((2^32)+100-1)/100}
-  mov    ebx, eax                {Dividend}
-  mul    edx
-  mov    eax, edx                {Set Next Dividend}
-  imul   edx, -200
-  movzx  edx, word ptr [TwoDigitLookup+ebx*2+edx] {Dividend MOD 100 in ASCII}
-  mov    [edi+esi], dx
-  sub    esi, 2
-  jg     @@SmallLoop             {Repeat Until Less than 2 Digits Remaining}
-  jz     @@Last2Digits
-  or     al , '0'                {Ascii Adjustment}
-  mov    [edi], al               {Save Final Digit}
-  jmp    @@Done
-@@Last2Digits:
-  movzx  eax, word ptr [TwoDigitLookup+eax*2]
-  mov    [edi], ax               {Save Final 2 Digits}
-@@Done:
-  pop    esi
-  pop    edi
-  pop    ebx
+asm     // from IntToStr64_JOH_IA32_6_b, adapted for Delphi 2009+
+        push    ebx
+        mov     ecx, [ebp + 8]          // low integer of val
+        mov     edx, [ebp + 12]         // high integer of val
+        xor     ebp, ebp                // clear sign flag (ebp already pushed)
+        mov     ebx, ecx                // low integer of val
+        test    edx, edx
+        jnl     @absval
+        mov     ebp, 1                  // ebp = 1 for -ve val or 0 for +ve val
+        neg     ecx
+        adc     edx, 0
+        neg     edx
+@absval:jnz     @large                  // edx:ecx = abs(val)
+        test    ecx, ecx
+        js      @large
+        mov     edx, eax                // @result
+        mov     eax, ebx                // low integer of val
+        call    Int32ToUtf8             // call fastest integer inttostr function
+        pop     ebx
+@exit:  pop     ebp                     // restore stack and exit
+        ret     8
+@large: push    edi
+        push    esi
+        mov     edi, eax
+        xor     ebx, ebx
+        xor     eax, eax
+@t15:   cmp     edx, $00005af3          // test for 15 or more dig
+        jne     @chk15                  // 100000000000000 div $100000000
+        cmp     ecx, $107a4000          // 100000000000000 mod $100000000
+@chk15: jb      @t13
+@t17:   cmp     edx, $002386f2          // test for 17 or more dig
+        jne     @chk17                  // 10000000000000000 div $100000000
+        cmp     ecx, $6fc10000          // 10000000000000000 mod $100000000
+@chk17: jb      @t1516
+@t19:   cmp     edx, $0de0b6b3          // test for 19 dig
+        jne     @chk19                  // 1000000000000000000 div $100000000
+        cmp     ecx, $a7640000          // 1000000000000000000 mod $100000000
+@chk19: jb      @t1718
+        mov     al, 19
+        jmp     @setl2
+@t1718: mov     bl, 18                  // 17 or 18 dig
+        cmp     edx, $01634578          // 100000000000000000 div $100000000
+        jne     @setlen
+        cmp     ecx, $5d8a0000          // 100000000000000000 mod $100000000
+        jmp     @setlen
+@t1516: mov     bl, 16                  // 15 or 16 dig
+        cmp     edx, $00038d7e          // 1000000000000000 div $100000000
+        jne     @setlen
+        cmp     ecx, $a4c68000          // 1000000000000000 mod $100000000
+        jmp     @setlen
+@t13:   cmp     edx, $000000e8          // test for 13 or more dig
+        jne     @chk13                  // 1000000000000 div $100000000
+        cmp     ecx, $d4a51000          // 1000000000000 mod $100000000
+@chk13: jb      @t11
+@t1314: mov     bl, 14                  // 13 or 14 dig
+        cmp     edx, $00000918          // 10000000000000 div $100000000
+        jne     @setlen
+        cmp     ecx, $4e72a000          // 10000000000000 mod $100000000
+        jmp     @setlen
+@t11:   cmp     edx, $02                // 10, 11 or 12 dig
+        jne     @chk11                  // 10000000000 div $100000000
+        cmp     ecx, $540be400          // 10000000000 mod $100000000
+@chk11: mov     bl, 11
+        jb      @setlen                 // 10 dig
+@t1112: mov     bl, 12                  // 11 or 12 dig
+        cmp     edx, $17                // 100000000000 div $100000000
+        jne     @setlen
+        cmp     ecx, $4876e800          // 100000000000 mod $100000000
+@setlen:sbb     eax, 0                  // adjust for odd/evem digit count
+        add     eax, ebx
+@setl2: push    ecx                     // abs(val) in edx:ecx, dig in eax
+        push    edx                     // save abs(val)
+        lea     edx, [eax + ebp]        // digit needed (including sign character)
+        mov     ecx, [edi]              // @result
+        mov     esi, edx                // digit needed (including sign character)
+        test    ecx, ecx
+        je      @newstr                 // create new ansistring for result
+        cmp     dword ptr[ecx - 8], 1
+        jne     @chgstr                 // reference count <> 1
+        cmp     esi, [ecx - 4]
+        je      @lenok                  // existing length = required length
+        sub     ecx, STRRECSIZE         // allocation address
+        push    eax                     // abs(val)
+        push    ecx
+        mov     eax, esp
+        lea     edx, [esi + STRRECSIZE + 1] // new allocation size
+        call    System.@ReallocMem      // reallocate result ansistring
+        pop     ecx
+        pop     eax                     // abs(val)
+        add     ecx, STRRECSIZE         // @result
+        mov     [ecx - 4], esi          // set new length
+        mov     byte ptr[ecx + esi], 0  // add null terminator
+        mov     [edi], ecx              // set result address
+        jmp     @lenok
+@chgstr:mov     edx, dword ptr[ecx - 8] // reference count
+        add     edx, 1
+        jz      @newstr                 // refcount = -1 (ansistring constant)
+lock    dec     dword ptr[ecx - 8]      // decrement existing reference count
+@newstr:push    eax                     // abs(val)
+        mov     eax, esi                // length
+        {$ifdef UNICODE}
+        mov     edx, CP_UTF8            // utf-8 code page for delphi 2009+
+        {$endif}
+        call    System.@NewAnsiString
+        mov     [edi], eax              // set result address
+        mov     ecx, eax                // @result
+        pop     eax                     // abs(val)
+@lenok: mov     edi, [edi]              // @result
+        sub     esi, ebp                // digit needed (excluding sign character)
+        mov     byte ptr[edi], '-'      // store '-' character (may be overwritten)
+        add     edi, ebp                // destination of 1st digit
+        pop     edx                     // restore abs(val)
+        pop     eax
+        cmp     esi, 17
+        jl      @less17                 // dig < 17
+        je      @set17                  // dig = 17
+        cmp     esi, 18
+        je      @set18                  // dig = 18
+        mov     cl, '0' - 1
+        mov     ebx, $a7640000          // 1000000000000000000 mod $100000000
+        mov     ebp, $0de0b6b3          // 1000000000000000000 div $100000000
+@dig19: add     ecx, 1
+        sub     eax, ebx
+        sbb     edx, ebp
+        jnc     @dig19
+        add     eax, ebx
+        adc     edx, ebp
+        mov     [edi], cl
+        add     edi, 1
+@set18: mov     cl, '0' - 1
+        mov     ebx, $5d8a0000          // 100000000000000000 mod $100000000
+        mov     ebp, $01634578          // 100000000000000000 div $100000000
+@dig18: add     ecx, 1
+        sub     eax, ebx
+        sbb     edx, ebp
+        jnc     @dig18
+        add     eax, ebx
+        adc     edx, ebp
+        mov     [edi], cl
+        add     edi, 1
+@set17: mov     cl, '0' - 1
+        mov     ebx, $6fc10000          // 10000000000000000 mod $100000000
+        mov     ebp, $002386f2          // 10000000000000000 div $100000000
+@dig17: add     ecx, 1
+        sub     eax, ebx
+        sbb     edx, ebp
+        jnc     @dig17
+        add     eax, ebx
+        adc     edx, ebp
+        mov     [edi], cl
+        add     edi, 1                  // update destination
+        mov     esi, 16                 // set 16 dig left
+@less17:mov     ecx, 100000000          // process next 8 dig
+        div     ecx                     // edx:eax = abs(val) = dividend
+        mov     ebp, eax                // dividend div 100000000
+        mov     ebx, edx
+        mov     eax, edx                // dividend mod 100000000
+        mov     edx, $51eb851f
+        mul     edx
+        shr     edx, 5                  // dividend div 100
+        mov     eax, edx                // set next dividend
+        lea     edx, [edx * 4 + edx]
+        lea     edx, [edx * 4 + edx]
+        shl     edx, 2                  // dividend div 100 * 100
+        sub     ebx, edx                // remainder (0..99)
+        movzx   ebx, word ptr[TwoDigitLookup + ebx * 2]
+        shl     ebx, 16
+        mov     edx, $51eb851f
+        mov     ecx, eax                // dividend
+        mul     edx
+        shr     edx, 5                  // dividend div 100
+        mov     eax, edx
+        lea     edx, [edx * 4 + edx]
+        lea     edx, [edx * 4 + edx]
+        shl     edx, 2                  // dividend div 100 * 100
+        sub     ecx, edx                // remainder (0..99)
+        or      bx, word ptr[TwoDigitLookup + ecx * 2]
+        mov     [edi + esi - 4], ebx        // store 4 dig
+        mov     ebx, eax
+        mov     edx, $51eb851f
+        mul     edx
+        shr     edx, 5                  // edx = dividend div 100
+        lea     eax, [edx * 4 + edx]
+        lea     eax, [eax * 4 + eax]
+        shl     eax, 2                  // eax = dividend div 100 * 100
+        sub     ebx, eax                // remainder (0..99)
+        movzx   ebx, word ptr[TwoDigitLookup + ebx * 2]
+        movzx   ecx, word ptr[TwoDigitLookup + edx * 2]
+        shl     ebx, 16
+        or      ebx, ecx
+        mov     [edi + esi - 8], ebx    // store 4 dig
+        mov     eax, ebp                // remainder
+        sub     esi, 10                 // dig left - 2
+        jz      @last2
+@small: mov     edx, $28f5c29           // ((2^32)+100-1)/100
+        mov     ebx, eax                // dividend
+        mul     edx
+        mov     eax, edx                // set next dividend
+        imul    edx,  - 200
+        movzx   edx, word ptr[TwoDigitLookup + ebx * 2 + edx] // dividend mod 100 in ascii
+        mov     [edi + esi], dx
+        sub     esi, 2
+        jg      @small                  // repeat until less than 2 dig remaining
+        jz      @last2
+        or      al, '0'                 // ascii adjustment
+        mov     [edi], al               // save final digit
+        jmp     @done
+@last2: movzx   eax, word ptr[TwoDigitLookup + eax * 2]
+        mov     [edi], ax               // save final 2 dig
+@done:  pop     esi
+        pop     edi
+        pop     ebx
 end;
 
 function Trim(const S: RawUTF8): RawUTF8;
 asm  // fast implementation by John O'Harrow, modified for Delphi 2009+
-  test eax,eax                   {S = nil?}
-  xchg eax,edx
-  jz   System.@LStrClr           {Yes, Return Empty String}
-  mov  ecx,[edx-4]               {Length(S)}
-  cmp  byte ptr [edx],' '        {S[1] <= ' '?}
-  jbe  @@TrimLeft                {Yes, Trim Leading Spaces}
-  cmp  byte ptr [edx+ecx-1],' '  {S[Length(S)] <= ' '?}
-  jbe  @@TrimRight               {Yes, Trim Trailing Spaces}
-  jmp  System.@LStrLAsg          {No, Result := S (which occurs most time)}
-@@TrimLeft:                      {Strip Leading Whitespace}
-  dec  ecx
-  jle  System.@LStrClr           {All Whitespace}
-  inc  edx
-  cmp  byte ptr [edx],' '
-  jbe  @@TrimLeft
-@@CheckDone:
-  cmp  byte ptr [edx+ecx-1],' '
+        test    eax, eax                 // S = nil?
+        xchg    eax, edx
+        jz      System.@LStrClr          // Yes, Return Empty String
+        mov     ecx, [edx - 4]           // Length(S)
+        cmp     byte ptr[edx], ' '       // S[1] <= ' '?
+        jbe     @left                    // Yes, Trim Leading Spaces
+        cmp     byte ptr[edx + ecx - 1], ' '  // S[Length(S)] <= ' '?
+        jbe     @right                   // Yes, Trim Trailing Spaces
+        jmp     System.@LStrLAsg         // No, Result := S (which occurs most time)
+@left:  dec     ecx                      // Strip Leading Whitespace
+        jle     System.@LStrClr          // All Whitespace
+        inc     edx
+        cmp     byte ptr[edx], ' '
+        jbe     @left
+@done:  cmp     byte ptr[edx + ecx - 1], ' '
 {$ifdef UNICODE}
-  jbe  @@TrimRight
-  push CP_UTF8 // UTF-8 code page for Delphi 2009+
-  call System.@LStrFromPCharLen // we need a call, not a jmp here
-  rep  ret
-{$else}
-  ja   System.@LStrFromPCharLen
+        jbe     @right
+        push    CP_UTF8 // UTF-8 code page for Delphi 2009+
+        call    System.@LStrFromPCharLen // we need a call, not a jmp here
+        rep     ret
+{$else} ja      System.@LStrFromPCharLen
 {$endif}
-@@TrimRight:                     {Strip Trailing Whitespace}
-  dec  ecx
-  jmp  @@CheckDone
+@right: dec     ecx                      // Strip Trailing Whitespace
+        jmp     @done
 end;
 
 {$endif FPC}  { these asm function had some low-level system.pas calls }
 
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 asm     // eax=P1 edx=P2 ecx=Length
-        cmp   eax,edx
-        je    @0                // P1=P2
-        sub   ecx,8
-        jl    @small
-        push  ebx
-        mov   ebx,[eax]         // Compare First 4 Bytes
-        cmp   ebx,[edx]
-        jne   @setbig
-        lea   ebx,[eax+ecx]     // Compare Last 8 Bytes
-        add   edx,ecx
-        mov   eax,[ebx]
-        cmp   eax,[edx]
-        jne   @setbig
-        mov   eax,[ebx+4]
-        cmp   eax,[edx+4]
-        jne   @setbig
-        sub   ecx,4
-        jle   @true              // All Bytes already Compared
-        neg   ecx                // ecx=-(Length-12)
-        add   ecx,ebx            // DWORD Align Reads
-        and   ecx,-4
-        sub   ecx,ebx
-@loop:  mov   eax,[ebx+ecx]      // Compare 8 Bytes per Loop
-        cmp   eax,[edx+ecx]
-        jne   @setbig
-        mov   eax,[ebx+ecx+4]
-        cmp   eax,[edx+ecx+4]
-        jne   @setbig
-        add   ecx,8
-        jl    @loop
-@true:  pop   ebx
-@0:     mov   al,1
+        cmp     eax, edx
+        je      @0                 // P1=P2
+        sub     ecx, 8
+        jl      @small
+        push    ebx
+        mov     ebx, [eax]         // Compare First 4 Bytes
+        cmp     ebx, [edx]
+        jne     @setbig
+        lea     ebx, [eax + ecx]   // Compare Last 8 Bytes
+        add     edx, ecx
+        mov     eax, [ebx]
+        cmp     eax, [edx]
+        jne     @setbig
+        mov     eax, [ebx + 4]
+        cmp     eax, [edx + 4]
+        jne     @setbig
+        sub     ecx, 4
+        jle     @true              // All Bytes already Compared
+        neg     ecx                // ecx=-(Length-12)
+        add     ecx, ebx           // DWORD Align Reads
+        and     ecx, -4
+        sub     ecx, ebx
+@loop:  mov     eax, [ebx + ecx]   // Compare 8 Bytes per Loop
+        cmp     eax, [edx + ecx]
+        jne     @setbig
+        mov     eax, [ebx + ecx + 4]
+        cmp     eax, [edx + ecx + 4]
+        jne     @setbig
+        add     ecx, 8
+        jl      @loop
+@true:  pop     ebx
+@0:     mov     al, 1
         ret
-@setbig:pop   ebx
-        setz  al
+@setbig:pop     ebx
+        setz    al
         ret
-@small: add   ecx,8              // ecx=0..7
-        jle   @0                 // Length <= 0
-        neg   ecx                // ecx=-1..-7
-        lea   ecx,[@1+ecx*8+8]   // each @#: line below = 8 bytes
-        jmp   ecx
-@7:     mov cl,[eax+6];   cmp cl,[edx+6];   jne @setsml
-@6:     mov ch,[eax+5];   cmp ch,[edx+5];   jne @setsml
-@5:     mov cl,[eax+4];   cmp cl,[edx+4];   jne @setsml
-@4:     mov ch,[eax+3];   cmp ch,[edx+3];   jne @setsml
-@3:     mov cl,[eax+2];   cmp cl,[edx+2];   jne @setsml
-@2:     mov ch,[eax+1];   cmp ch,[edx+1];   jne @setsml
-@1:     mov al,[eax];     cmp al,[edx]
-@setsml:setz al
+@small: add     ecx, 8             // ecx=0..7
+        jle     @0                 // Length <= 0
+        neg     ecx                // ecx=-1..-7
+        lea     ecx, [@1 + ecx * 8 + 8]   // each @#: line below = 8 bytes
+        jmp     ecx
+@7:     mov     cl, [eax + 6]
+        cmp     cl, [edx + 6]
+        jne     @setsml
+@6:     mov     ch, [eax + 5]
+        cmp     ch, [edx + 5]
+        jne     @setsml
+@5:     mov     cl, [eax + 4]
+        cmp     cl, [edx + 4]
+        jne     @setsml
+@4:     mov     ch, [eax + 3]
+        cmp     ch, [edx + 3]
+        jne     @setsml
+@3:     mov     cl, [eax + 2]
+        cmp     cl, [edx + 2]
+        jne     @setsml
+@2:     mov     ch, [eax + 1]
+        cmp     ch, [edx + 1]
+        jne     @setsml
+@1:     mov     al, [eax]
+        cmp     al, [edx]
+@setsml:setz    al
 end;
 
 {$ifndef ISDELPHI2007ANDUP}
@@ -21727,91 +21705,79 @@ Exit:
 end;
 {$else}
 function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
-asm  // eax=SubStr, edx=S, ecx=Offset
-  push    ebx
-  push    esi
-  push    edx                 // @Str
-  test    eax,eax
-  jz      @@NotFound          // Exit if SubStr = ''
-  test    edx,edx
-  jz      @@NotFound          // Exit if Str = ''
-  mov     esi,ecx
-  mov     ecx,[edx-4]         // Length(Str)
-  mov     ebx,[eax-4]         // Length(Search string)
-  add     ecx,edx
-  sub     ecx,ebx             // ecx = Max Start Pos for Full Match
-  lea     edx,[edx+esi-1]     // edx = Start Position
-  cmp     edx,ecx
-  jg      @@NotFound          // StartPos > Max Start Pos
-  cmp     ebx,1               // Length(SubStr)
-  jle     @@SingleChar        // Length(SubStr) <= 1
-  push    edi
-  push    ebp
-  lea     edi,[ebx-2]         // edi = Length(Search string) - 2
-  mov     esi,eax             // esi = Search string
-  movzx   ebx,byte ptr [eax]  // bl = Search Character
-@@Loop:                       // Compare 2 Characters per Loop
-  cmp     bl,[edx]
-  je      @@Char1Found
-@@NotChar1:
-  cmp     bl,[edx+1]
-  je      @@Char2Found
-@@NotChar2:
-  lea     edx,[edx+2]
-  cmp     edx,ecx             // Next Start Position <= Max Start Position
-  jle     @@Loop
-  pop     ebp
-  pop     edi
-@@NotFound:
-  xor     eax,eax            // returns 0 if not found
-  pop     edx
-  pop     esi
-  pop     ebx
-  ret
-@@Char1Found:
-  mov     ebp,edi             // ebp = Length(Search string) - 2
-@@Char1Loop:
-  movzx   eax,word ptr [esi+ebp]
-  cmp     ax,[edx+ebp]       // Compare 2 Chars per Char1Loop (may include #0)
-  jne     @@NotChar1
-  sub     ebp,2
-  jnc     @@Char1Loop
-  pop     ebp
-  pop     edi
-  jmp     @@SetResult
-@@Char2Found:
-  mov     ebp,edi             // ebp = Length(Search string) - 2
-@@Char2Loop:
-  movzx   eax,word ptr [esi+ebp]
-  cmp     ax,[edx+ebp+1]     // Compare 2 Chars per Char2Loop (may include #0)
-  jne     @@NotChar2
-  sub     ebp,2
-  jnc     @@Char2Loop
-  pop     ebp
-  pop     edi
-  jmp     @@CheckResult
-@@SingleChar:
-  jl      @@NotFound          // Needed for Zero-Length Non-NIL Strings
-  movzx   eax,byte ptr [eax]  // Search Character
-@@CharLoop:
-  cmp     al,[edx]
-  je      @@SetResult
-  cmp     al,[edx+1]
-  je      @@CheckResult
-  lea     edx,[edx+2]
-  cmp     edx,ecx
-  jle     @@CharLoop
-  jmp     @@NotFound
-@@CheckResult:                // Check within AnsiString
-  cmp     edx,ecx
-  jge     @@NotFound
-  add     edx,1
-@@SetResult:
-  pop     ecx                 // @Str
-  pop     esi
-  pop     ebx
-  neg     ecx
-  lea     eax,[edx+ecx+1]
+asm     // eax=SubStr, edx=S, ecx=Offset
+        push    ebx
+        push    esi
+        push    edx                // @str
+        test    eax, eax
+        jz      @notfnd            // exit if substr = ''
+        test    edx, edx
+        jz      @notfnd            // exit if str = ''
+        mov     esi, ecx
+        mov     ecx, [edx - 4]     // length(str)
+        mov     ebx, [eax - 4]     // length(search string)
+        add     ecx, edx
+        sub     ecx, ebx           // ecx = max start pos for full match
+        lea     edx, [edx + esi - 1]  // edx = start position
+        cmp     edx, ecx
+        jg      @notfnd            // startpos > max start pos
+        cmp     ebx, 1             // length(substr)
+        jle     @onec              // length(substr) <= 1
+        push    edi
+        push    ebp
+        lea     edi, [ebx - 2]     // edi = length(search string) - 2
+        mov     esi, eax           // esi = search string
+        movzx   ebx, byte ptr[eax] // bl = search character
+@l:     cmp     bl, [edx]          // compare 2 characters per l
+        je      @c1fnd
+@notc1: cmp     bl, [edx + 1]
+        je      @c2fnd
+@notc2: lea     edx, [edx + 2]
+        cmp     edx, ecx            // next start position <= max start position
+        jle     @l
+        pop     ebp
+        pop     edi
+@notfnd:xor     eax, eax            // returns 0 if not fnd
+        pop     edx
+        pop     esi
+        pop     ebx
+        ret
+@c1fnd: mov     ebp, edi            // ebp = length(search string) - 2
+@c1l:   movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp]     // compare 2 chars per c1l (may include #0)
+        jne     @notc1
+        sub     ebp, 2
+        jnc     @c1l
+        pop     ebp
+        pop     edi
+        jmp     @setres
+@c2fnd: mov     ebp, edi             // ebp = length(search string) - 2
+@c2l:   movzx   eax, word ptr[esi + ebp]
+        cmp     ax, [edx + ebp + 1]  // compare 2 chars per c2l (may include #0)
+        jne     @notc2
+        sub     ebp, 2
+        jnc     @c2l
+        pop     ebp
+        pop     edi
+        jmp     @chkres
+@onec:  jl      @notfnd             // needed for zero-length non-nil strings
+        movzx   eax, byte ptr[eax]  // search character
+@charl: cmp     al, [edx]
+        je      @setres
+        cmp     al, [edx + 1]
+        je      @chkres
+        lea     edx, [edx + 2]
+        cmp     edx, ecx
+        jle     @charl
+        jmp     @notfnd
+@chkres:cmp     edx, ecx           // check within ansistring
+        jge     @notfnd
+        add     edx, 1
+@setres:pop     ecx                // @str
+        pop     esi
+        pop     ebx
+        neg     ecx
+        lea     eax, [edx + ecx + 1]
 end;
 {$endif PUREPASCAL}
 
@@ -21981,21 +21947,22 @@ begin
 end;
 {$else}
 asm // faster version by AB - eax=Str dl=Chr
-    test eax,eax
-    jz @z
-@1: mov ecx,[eax]
-    cmp cl,dl
-    jz @z
-    lea eax,[eax+1]
-    test cl,cl
-    jz @e
-    cmp ch,dl
-    jz @z
-    lea eax,[eax+1]
-    test ch,ch
-    jnz @1
-@e: xor eax,eax
-@z:
+        test    eax, eax
+        jz      @z
+@1:     mov     ecx, [eax]
+        cmp     cl, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    cl, cl
+        jz      @e
+        cmp     ch, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    ch, ch
+        jnz     @1
+@e:     xor     eax, eax
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif}
 
@@ -23055,52 +23022,52 @@ begin
 end;
 {$else}
 asm // faster version by AB, from Agner Fog's original
-        mov     ecx,eax
-        test    eax,edx
+        mov     ecx, eax
+        test    eax, edx
         jz      @n
-@ok:    sub     edx,eax
+@ok:    sub     edx, eax
         jz      @0
-@10:    mov     al,[ecx]
-        cmp     al,[ecx+edx]
+@10:    mov     al, [ecx]
+        cmp     al, [ecx + edx]
         jne     @20
         inc     ecx
-        test    al,al
+        test    al, al
         jnz     @10                    // continue with next byte
         // terminating zero found. Strings are equal
-@0:     xor     eax,eax
+@0:     xor     eax, eax
         ret
 @20:    // bytes are different. check case
-        xor     al,20H                // toggle case
-        cmp     al,[ecx+edx]
+        xor     al, 20H                // toggle case
+        cmp     al, [ecx + edx]
         jne     @30
         // possibly differing only by case. Check if a-z
-        or      al,20H                // upper case
-        sub     al,'a'
-        cmp     al,'z'-'a'
+        or      al, 20H                // upper case
+        sub     al, 'a'
+        cmp     al, 'z' - 'a'
         ja      @30                    // not a-z
         // a-z and differing only by case
         inc     ecx
         jmp     @10                    // continue with next byte
 @30:    // bytes are different,even after changing case
-        movzx   eax,byte [ecx]        // get original value again
-        sub     eax,'A'
-        cmp     eax,'Z' - 'A'
+        movzx   eax, byte[ecx]        // get original value again
+        sub     eax, 'A'
+        cmp     eax, 'Z' - 'A'
         ja      @40
-        add     eax,20H
-@40:    movzx   edx,byte [ecx+edx]
-        sub     edx,'A'
-        cmp     edx,'Z' - 'A'
+        add     eax, 20H
+@40:    movzx   edx, byte[ecx + edx]
+        sub     edx, 'A'
+        cmp     edx, 'Z' - 'A'
         ja      @50
-        add     edx,20H
-@50:    sub     eax,edx                 // subtract to get result
+        add     edx, 20H
+@50:    sub     eax, edx                 // subtract to get result
         ret
-@n:     cmp     eax,edx
+@n:     cmp     eax, edx
         je      @0
-        test    eax,eax  // Str1='' ?
+        test    eax, eax  // Str1='' ?
         jz      @max
-        test    edx,edx  // Str2='' ?
+        test    edx, edx  // Str2='' ?
         jnz     @ok
-        mov     eax,1
+        mov     eax, 1
         ret
 @max:   dec     eax
 end;
@@ -23213,50 +23180,55 @@ end;
 
 function StrLenPas(S: pointer): PtrInt;
 asm // slower than x86/SSE* StrLen(), but won't read any byte beyond the string
-    test eax,eax
-    mov edx,eax
-    jz @0
-    xor eax,eax
-@s: cmp byte ptr [eax+edx+0],0; je @0
-    cmp byte ptr [eax+edx+1],0; je @1
-    cmp byte ptr [eax+edx+2],0; je @2
-    cmp byte ptr [eax+edx+3],0; je @3
-    add eax,4
-    jmp @s
-@1: inc eax
-    ret
-@0: rep ret
-@2: add eax,2; ret
-@3: add eax,3
+        test    eax, eax
+        mov     edx, eax
+        jz      @0
+        xor     eax, eax
+@s:     cmp     byte ptr[eax + edx + 0], 0
+        je      @0
+        cmp     byte ptr[eax + edx + 1], 0
+        je      @1
+        cmp     byte ptr[eax + edx + 2], 0
+        je      @2
+        cmp     byte ptr[eax + edx + 3], 0
+        je      @3
+        add     eax, 4
+        jmp     @s
+@1:     inc     eax
+        ret
+@0:     rep     ret
+@2:     add     eax, 2
+        ret
+@3:     add     eax, 3
 end;
 
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 asm // no branch taken in case of not equal first char
-        cmp   eax,edx
-        je    @zero  // same string or both nil
-        test  eax,edx
-        jz    @maynil
-@1:     mov   cl,[eax]
-        mov   ch,[edx]
-        test  cl,cl
-        lea   eax,[eax+1]
-        lea   edx,[edx+1]
-        jz    @exit
-        cmp   cl,ch
-        je    @1
-@exit:  movzx eax,cl
-        movzx edx,ch
-        sub   eax,edx
+        cmp     eax, edx
+        je      @zero  // same string or both nil
+        test    eax, edx
+        jz      @maynil
+@1:     mov     cl, [eax]
+        mov     ch, [edx]
+        test    cl, cl
+        lea     eax, [eax + 1]
+        lea     edx, [edx + 1]
+        jz      @exit
+        cmp     cl, ch
+        je      @1
+@exit:  movzx   eax, cl
+        movzx   edx, ch
+        sub     eax, edx
         ret
-@maynil:test  eax,eax  // Str1='' ?
-        jz    @max
-        test  edx,edx  // Str2='' ?
-        jnz   @1
-        mov   eax,1
+@maynil:test    eax, eax  // Str1='' ?
+        jz      @max
+        test    edx, edx  // Str2='' ?
+        jnz     @1
+        mov     eax, 1
         ret
-@max:   dec   eax
+@max:   dec     eax
         ret
-@zero:  xor   eax,eax
+@zero:  xor     eax, eax
 end;
 
 const
@@ -23377,39 +23349,39 @@ begin
 end;
 {$else}
 asm // eax=p1, edx=p2
-        cmp eax,edx
-        je @out1
-        test eax,edx
-        jz @maybenil
-@notnil:mov ecx,[eax-4] // compare lengths
-        cmp ecx,[edx-4]
-        jne @out1
-        push ebx
-        lea edx,[edx+ecx-4]  // may include the length for shortest strings
-        lea ebx,[eax+ecx-4]
-        neg ecx
-        mov eax,[ebx]     // compare last 4 chars
-        xor eax,[edx]
-        and eax,$dfdfdfdf // case insensitive
-        jne @out2
-@by4:   add ecx,4
-        jns @match
-        mov eax,[ebx+ecx]
-        xor eax,[edx+ecx]
-        and eax,$dfdfdfdf // case insensitive
-        je @by4
-@out2:  pop ebx
-@out1:  setz al
+        cmp     eax, edx
+        je      @out1
+        test    eax, edx
+        jz      @maybenil
+@notnil:mov     ecx, [eax - 4] // compare lengths
+        cmp     ecx, [edx - 4]
+        jne     @out1
+        push    ebx
+        lea     edx, [edx + ecx - 4]  // may include the length for shortest strings
+        lea     ebx, [eax + ecx - 4]
+        neg     ecx
+        mov     eax, [ebx]     // compare last 4 chars
+        xor     eax, [edx]
+        and     eax, $dfdfdfdf // case insensitive
+        jne     @out2
+@by4:   add     ecx, 4
+        jns     @match
+        mov     eax, [ebx + ecx]
+        xor     eax, [edx + ecx]
+        and     eax, $dfdfdfdf // case insensitive
+        je      @by4
+@out2:  pop     ebx
+@out1:  setz    al
         ret
-@match: mov al,1
-        pop ebx
+@match: mov     al, 1
+        pop     ebx
         ret
 @maybenil: // here we know that eax<>edx
-        test eax,eax
-        jz @nil0     // eax=nil and eax<>edx -> edx<>nil -> false
-        test edx,edx
-        jnz @notnil
-        mov al,dl   // eax<>nil and edx=nil -> false
+        test    eax, eax
+        jz      @nil0     // eax=nil and eax<>edx -> edx<>nil -> false
+        test    edx, edx
+        jnz     @notnil
+        mov     al, dl    // eax<>nil and edx=nil -> false
 @nil0:
 end;
 {$endif}
@@ -23459,38 +23431,39 @@ begin
 end;
 {$else}
 asm // eax=p1, edx=p2, ecx=P1P2Len
-        cmp eax,edx
-        je @out2
-        cmp ecx,4
-        jbe @sml
-        push ebx
-        lea edx,[edx+ecx-4]
-        lea ebx,[eax+ecx-4]
-        neg ecx
-        mov eax,[ebx]     // compare last 4 chars
-        xor eax,[edx]
-        and eax,$dfdfdfdf // case insensitive
-        jne @out1
-@by4:   add ecx,4
-        jns @match
-        mov eax,[ebx+ecx]
-        xor eax,[edx+ecx]
-        and eax,$dfdfdfdf // case insensitive
-        je @by4
-@out1:  pop ebx
-@out2:  setz al
+        cmp     eax, edx
+        je      @out2
+        cmp     ecx, 4
+        jbe     @sml
+        push    ebx
+        lea     edx, [edx + ecx - 4]
+        lea     ebx, [eax + ecx - 4]
+        neg     ecx
+        mov     eax, [ebx]     // compare last 4 chars
+        xor     eax, [edx]
+        and     eax, $dfdfdfdf // case insensitive
+        jne     @out1
+@by4:   add     ecx, 4
+        jns     @match
+        mov     eax, [ebx + ecx]
+        xor     eax, [edx + ecx]
+        and     eax, $dfdfdfdf // case insensitive
+        je      @by4
+@out1:  pop     ebx
+@out2:  setz    al
         ret
-        nop; nop
-@match: pop ebx
-        mov al,1
+        nop
+        nop
+@match: pop     ebx
+        mov     al, 1
         ret
-@mask:  dd 0,$df,$dfdf,$dfdfdf,$dfdfdfdf // compare 1..4 chars
-@sml:   test ecx,ecx
-        jz @smlo      // P1P2Len=0
-        mov eax,[eax]
-        xor eax,[edx]
-        and eax,dword ptr [@mask+ecx*4]
-@smlo:  setz al
+@mask:  dd      0, $df, $dfdf, $dfdfdf, $dfdfdfdf // compare 1..4 chars
+@sml:   test    ecx, ecx
+        jz      @smlo      // p1p2len=0
+        mov     eax, [eax]
+        xor     eax, [edx]
+        and     eax, dword ptr[@mask + ecx * 4]
+@smlo:  setz    al
 end;
 {$endif}
 
@@ -23735,18 +23708,18 @@ end;
 
 function InterlockedIncrement(var I: Integer): Integer;
 asm
-     mov  edx,1
-     xchg eax,edx
-lock xadd [edx],eax
-     inc  eax
+        mov     edx, 1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        inc     eax
 end;
 
 function InterlockedDecrement(var I: Integer): Integer;
 asm
-     mov  edx,-1
-     xchg eax,edx
-lock xadd [edx],eax
-     dec  eax
+        mov     edx, -1
+        xchg    eax, edx
+   lock xadd    [edx], eax
+        dec     eax
 end;
 
 {$endif}
@@ -24108,53 +24081,53 @@ end;
 {$else}
 function AnsiIComp(Str1, Str2: PWinAnsiChar): PtrInt;
 asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
-    cmp eax,edx
-    je @2
-    test eax,edx // is either of the strings perhaps nil?
-    jz @3
-@0: push ebx // compare the first character (faster quicksort)
-    movzx ebx,byte ptr [eax] // ebx=S1[1]
-    movzx ecx,byte ptr [edx] // ecx=S2[1]
-    test ebx,ebx
-    jz @z
-    cmp ebx,ecx
-    je @s
-    mov bl,byte ptr [NormToUpper+ebx]
-    mov cl,byte ptr [NormToUpper+ecx]
-    cmp ebx,ecx
-    je @s
-    mov eax,ebx
-    pop ebx
-    sub eax,ecx // return S1[1]-S2[1]
-    ret
-@2: xor eax, eax
-    ret
-@3: test eax,eax // S1=''
-    jz @4
-    test edx,edx // S2='' ?
-    jnz @0
-    mov eax,1 // return 1 (S1>S2)
-    ret
-@s: inc eax
-    inc edx
-    mov bl,[eax] // ebx=S1[i]
-    mov cl,[edx] // ecx=S2[i]
-    test ebx,ebx
-    je @z        // end of S1
-    cmp ebx,ecx
-    je @s
-    mov bl,byte ptr [NormToUpper+ebx]
-    mov cl,byte ptr [NormToUpper+ecx]
-    cmp ebx,ecx
-    je @s
-    mov eax,ebx
-    pop ebx
-    sub eax,ecx // return S1[i]-S2[i]
-    ret
-@z: cmp ebx,ecx // S1=S2?
-    pop ebx
-    jz @2
-@4: or eax,-1 // return -1 (S1<S2)
+        cmp     eax, edx
+        je      @2
+        test    eax, edx // is either of the strings perhaps nil?
+        jz      @3
+@0:     push    ebx // compare the first character (faster quicksort)
+        movzx   ebx, byte ptr[eax] // ebx=S1[1]
+        movzx   ecx, byte ptr[edx] // ecx=S2[1]
+        test    ebx, ebx
+        jz      @z
+        cmp     ebx, ecx
+        je      @s
+        mov     bl, byte ptr[NormToUpper + ebx]
+        mov     cl, byte ptr[NormToUpper + ecx]
+        cmp     ebx, ecx
+        je      @s
+        mov     eax, ebx
+        pop     ebx
+        sub     eax, ecx // return S1[1]-S2[1]
+        ret
+@2:     xor     eax, eax
+        ret
+@3:     test    eax, eax // S1=''
+        jz      @4
+        test    edx, edx // S2='' ?
+        jnz     @0
+        mov     eax, 1 // return 1 (S1>S2)
+        ret
+@s:     inc     eax
+        inc     edx
+        mov     bl, [eax] // ebx=S1[i]
+        mov     cl, [edx] // ecx=S2[i]
+        test    ebx, ebx
+        je      @z        // end of S1
+        cmp     ebx, ecx
+        je      @s
+        mov     bl, byte ptr[NormToUpper + ebx]
+        mov     cl, byte ptr[NormToUpper + ecx]
+        cmp     ebx, ecx
+        je      @s
+        mov     eax, ebx
+        pop     ebx
+        sub     eax, ecx // return S1[i]-S2[i]
+        ret
+@z:     cmp     ebx, ecx // S1=S2?
+        pop     ebx
+        jz      @2
+@4:     or      eax,  - 1 // return -1 (S1<S2)
 end;
 {$endif}
 
@@ -24678,58 +24651,58 @@ begin
 end;
 {$else}
 asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
-    push ebx
-    push esi
-    push edi
-    push ebp
-    mov ebx,edx
-    mov esi,eax
-    mov eax,ecx
-    mov edx,1431655766 // faster eax=len div 3 using reciprocal
-    sar ecx,31
-    imul edx
-    mov eax,edx
-    sub eax,ecx
-    mov edi,offset b64
-    mov ebp,eax
-    push eax
-    jz @z
-    // edi=b64 ebx=sp esi=rp ebp=len div 3
-    xor eax,eax
-@1: // read 3 bytes from sp
-    movzx edx,byte ptr [ebx]
-    shl edx,16
-    mov al,[ebx+2]
-    mov ah,[ebx+1]
-    lea ebx,[ebx+3]
-    or eax,edx
-    // encode as Base64
-    mov ecx,eax
-    mov edx,eax
-    shr ecx,6
-    and edx,$3F
-    and ecx,$3F
-    mov dh,[edi+edx]
-    mov dl,[edi+ecx]
-    mov ecx,eax
-    shr eax,12
-    shr ecx,18
-    shl edx,16
-    and ecx,$3F
-    and eax,$3F
-    mov cl,[edi+ecx]
-    mov ch,[edi+eax]
-    or ecx,edx
-    // write the 4 encoded bytes into rp
-    dec ebp
-    mov [esi],ecx
-    lea esi,[esi+4]
-    jnz @1
-@z: pop eax // result := len div 3
-    pop ebp
-    pop edi
-    pop esi
-    pop ebx
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        mov     ebx, edx
+        mov     esi, eax
+        mov     eax, ecx
+        mov     edx, 1431655766 // faster eax=len div 3 using reciprocal
+        sar     ecx, 31
+        imul    edx
+        mov     eax, edx
+        sub     eax, ecx
+        mov     edi, offset b64
+        mov     ebp, eax
+        push    eax
+        jz      @z
+        // edi=b64 ebx=sp esi=rp ebp=len div 3
+        xor     eax, eax
+@1:    // read 3 bytes from sp
+        movzx   edx, byte ptr[ebx]
+        shl     edx, 16
+        mov     al, [ebx + 2]
+        mov     ah, [ebx + 1]
+        lea     ebx, [ebx + 3]
+        or      eax, edx
+        // encode as Base64
+        mov     ecx, eax
+        mov     edx, eax
+        shr     ecx, 6
+        and     edx, $3f
+        and     ecx, $3f
+        mov     dh, [edi + edx]
+        mov     dl, [edi + ecx]
+        mov     ecx, eax
+        shr     eax, 12
+        shr     ecx, 18
+        shl     edx, 16
+        and     ecx, $3f
+        and     eax, $3f
+        mov     cl, [edi + ecx]
+        mov     ch, [edi + eax]
+        or      ecx, edx
+        // write the 4 encoded bytes into rp
+        dec     ebp
+        mov     [esi], ecx
+        lea     esi, [esi + 4]
+        jnz     @1
+@z:     pop     eax // result := len div 3
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
 end;
 
 {$endif}
@@ -24948,59 +24921,59 @@ begin
 end;
 {$else}
 asm // eax=sp edx=rp ecx=len - pipeline optimized version by AB
-     push ebx
-     push esi
-     push edi
-     push ebp
-     push eax
-     test ecx,ecx
-     mov ebp,edx
-     lea edi,[ConvertBase64ToBin]
-     mov [esp],ecx
-     jz @4
-@0:  movzx edx,byte ptr [eax]
-     movzx ebx,byte ptr [eax+$01]
-     movsx ecx,byte ptr [edi+edx]
-     movsx esi,byte ptr [edi+ebx]
-     test ecx,ecx
-     jl @1
-     shl ecx,$06
-     test esi,esi
-     jl @1
-     or ecx,esi
-     movzx edx,byte ptr [eax+$02]
-     movzx ebx,byte ptr [eax+$03]
-     shl ecx,$06
-     movsx esi,byte ptr [edi+edx]
-     movsx edx,byte ptr [edi+ebx]
-     test esi,esi
-     jl @1
-     or ecx,esi
-     shl ecx,$06
-     test edx,edx
-     jl @2
-     or ecx,edx
-     lea eax,[eax+4]
-     mov [ebp+2],cl
-     mov [ebp+1],ch
-     shr ecx,16
-     dec dword ptr [esp]
-     mov [ebp],cl
-     lea ebp,[ebp+3]
-     jnz @0
-@4:  pop eax
-     pop ebp
-     pop edi
-     pop esi
-     pop ebx
-     ret
-@2:  shr ecx,$08
-     mov [ebp+$01],cl
-     mov [ebp],ch
-     jmp @4
-@1:  shr ecx,$0a
-     mov [ebp],cl
-     jmp @4
+        push    ebx
+        push    esi
+        push    edi
+        push    ebp
+        push    eax
+        test    ecx, ecx
+        mov     ebp, edx
+        lea     edi, [ConvertBase64ToBin]
+        mov     [esp], ecx
+        jz      @4
+@0:     movzx   edx, byte ptr[eax]
+        movzx   ebx, byte ptr[eax + $01]
+        movsx   ecx, byte ptr[edi + edx]
+        movsx   esi, byte ptr[edi + ebx]
+        test    ecx, ecx
+        jl      @1
+        shl     ecx, $06
+        test    esi, esi
+        jl      @1
+        or      ecx, esi
+        movzx   edx, byte ptr[eax + $02]
+        movzx   ebx, byte ptr[eax + $03]
+        shl     ecx, $06
+        movsx   esi, byte ptr[edi + edx]
+        movsx   edx, byte ptr[edi + ebx]
+        test    esi, esi
+        jl      @1
+        or      ecx, esi
+        shl     ecx, $06
+        test    edx, edx
+        jl      @2
+        or      ecx, edx
+        lea     eax, [eax + 4]
+        mov     [ebp + 2], cl
+        mov     [ebp + 1], ch
+        shr     ecx, 16
+        dec     dword ptr[esp]
+        mov     [ebp], cl
+        lea     ebp, [ebp + 3]
+        jnz     @0
+@4:     pop     eax
+        pop     ebp
+        pop     edi
+        pop     esi
+        pop     ebx
+        ret
+@2:     shr     ecx, $08
+        mov     [ebp + $01], cl
+        mov     [ebp], ch
+        jmp     @4
+@1:     shr     ecx, $0a
+        mov     [ebp], cl
+        jmp     @4
 end;
 {$endif}
 
@@ -25354,8 +25327,8 @@ end;
 {$else}
 function Div100(Y: word): TWordRec;
 asm
-  mov cl,100
-  div cl // ah=remainder=Y mod 100, al=quotient=Year div 100
+        mov     cl, 100
+        div     cl // ah=remainder=Y mod 100, al=quotient=Year div 100
 end;
 {$endif}
 
@@ -25372,24 +25345,23 @@ begin
 end;
 {$else}
 asm // eax=Y, edx=P
-  cmp eax,9999
-  push edx
-  mov ecx,eax
-  ja @big
-  mov edx,1374389535 // use power of two reciprocal to avoid division
-  mul edx
-  shr	edx,5          // now edx=Y div 100
-  movzx eax,word ptr [TwoDigitLookup+edx*2]
-  imul edx,-200
-  movzx edx,word ptr [TwoDigitLookup+ecx*2+edx]
-  pop ecx
-  shl edx,16
-  or eax,edx
-  mov [ecx],eax
-  ret
-@big:
-  pop eax
-  mov [edx],$39393939 // '9999'
+        cmp     eax, 9999
+        push    edx
+        mov     ecx, eax
+        ja      @big
+        mov     edx, 1374389535 // use power of two reciprocal to avoid division
+        mul     edx
+        shr     edx, 5          // now edx=Y div 100
+        movzx   eax, word ptr[TwoDigitLookup + edx * 2]
+        imul    edx, -200
+        movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
+        pop     ecx
+        shl     edx, 16
+        or      eax, edx
+        mov     [ecx], eax
+        ret
+@big:   pop     eax
+        mov     dword ptr [edx], $39393939 // '9999'
 end;
 {$endif}
 
@@ -25629,50 +25601,50 @@ begin
 end;
 {$else}
 asm // eax=source edx=search
-    push eax       // save source var
-    mov eax,[eax]  // eax=source
-    test eax,eax
-    jz @z
-    push ebx
-    mov ebx,edx    // save search
-    cmp byte ptr [eax],'['
-    lea eax,[eax+1]
-    jne @s
-@i: push eax
-    mov edx,ebx   // edx=search
-    call IdemPChar
-    pop ecx       // ecx=source
-    jmp @1
-@s: mov ecx,eax
-    xor eax,eax   // result := false
-@1: mov dl,[ecx]  // while not (source^ in [#0,#10,#13]) do inc(source);
-    inc ecx
-    cmp dl,13
-    ja @1
-    je @e
-    or dl,dl
-    jz @0
-    cmp dl,10
-    jne @1
-    cmp byte [ecx],13
-    jbe @1
-    jmp @4
-@e: cmp byte ptr [ecx],10 // jump #13#10
-    jne @4
-    inc ecx
-@4: test al,al
-    jnz @x         // exit if IdemPChar returned true
-    cmp byte ptr [ecx],'['
-    lea ecx,[ecx+1]
-    jne @1
-    mov eax,ecx
-    jmp @i
-@0: xor ecx,ecx    // set source=nil
-@x: pop ebx
-    pop edx        // restore source var
-    mov [edx],ecx  // update source var
-    ret
-@z: pop edx       // ignore source var, result := false
+        push    eax       // save source var
+        mov     eax, [eax]  // eax=source
+        test    eax, eax
+        jz      @z
+        push    ebx
+        mov     ebx, edx    // save search
+        cmp     byte ptr[eax], '['
+        lea     eax, [eax + 1]
+        jne     @s
+@i:     push    eax
+        mov     edx, ebx   // edx=search
+        call    IdemPChar
+        pop     ecx       // ecx=source
+        jmp     @1
+@s:     mov     ecx, eax
+        xor     eax, eax   // result := false
+@1:     mov     dl, [ecx]  // while not (source^ in [#0,#10,#13]) do inc(source);
+        inc     ecx
+        cmp     dl, 13
+        ja      @1
+        je      @e
+        OR      dl, dl
+        jz      @0
+        cmp     dl, 10
+        jne     @1
+        cmp     byte[ecx], 13
+        jbe     @1
+        jmp     @4
+@e:     cmp     byte ptr[ecx], 10 // jump #13#10
+        jne     @4
+        inc     ecx
+@4:     test    al, al
+        jnz     @x         // exit if IdemPChar returned true
+        cmp     byte ptr[ecx], '['
+        lea     ecx, [ecx + 1]
+        jne     @1
+        mov     eax, ecx
+        jmp     @i
+@0:     xor     ecx, ecx    // set source=nil
+@x:     pop     ebx
+        pop     edx         // restore source var
+        mov     [edx], ecx  // update source var
+        ret
+@z:     pop     edx         // ignore source var, result := false
 end;
 {$endif}
 
@@ -25697,33 +25669,33 @@ function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-    test eax,eax
-    jz @e // P=nil -> false
-    test edx,edx
-    push ebx
-    push esi
-    jz @z // up=nil -> true
-    mov esi,offset NormToUpper
-    xor ebx,ebx
-    xor ecx,ecx
-@1: mov bx,[eax] // bl=p^
-    mov cl,[edx] // cl=up^
-    test bh,bh     // p^ > #255 -> FALSE
-    jnz @n
-    test cl,cl
-    mov bl,[ebx+esi] // bl=NormToUpper[p^]
-    jz @z // up^=#0 -> OK
-    lea edx,[edx+1] // = inc edx without changing flags
-    cmp bl,cl
-    lea eax,[eax+2]
-    je @1
-@n: pop esi
-    pop ebx
-@e: xor eax,eax
-    ret
-@z: mov al,1 // up^=#0 -> OK
-    pop esi
-    pop ebx
+        test    eax, eax
+        jz      @e // P=nil -> false
+        test    edx, edx
+        push    ebx
+        push    esi
+        jz      @z // up=nil -> true
+        mov     esi, offset NormToUpper
+        xor     ebx, ebx
+        xor     ecx, ecx
+@1:     mov     bx, [eax]  // bl=p^
+        mov     cl, [edx]  // cl=up^
+        test    bh, bh     // p^ > #255 -> FALSE
+        jnz     @n
+        test    cl, cl
+        mov     bl, [ebx + esi] // bl=NormToUpper[p^]
+        jz      @z              // up^=#0 -> OK
+        lea     edx, [edx + 1]  // = inc edx without changing flags
+        cmp     bl, cl
+        lea     eax, [eax + 2]
+        je      @1
+@n:     pop     esi
+        pop     ebx
+@e:     xor     eax, eax
+        ret
+@z:     mov     al, 1 // up^=#0 -> OK
+        pop     esi
+        pop     ebx
 end;
 {$endif}
 {$else}
@@ -25763,48 +25735,48 @@ begin
 end;
 {$else}
 asm // eax=source edx=search
-    push eax       // save source var
-    mov eax,[eax]  // eax=source
-    test eax,eax
-    jz @z
-    push ebx
-    mov ebx,edx    // save search
-    cmp word ptr [eax],'['
-    lea eax,[eax+2]
-    jne @s
-@i: push eax
-    mov edx,ebx   // edx=search
-    call IdemPCharW
-    pop ecx       // ecx=source
-    jmp @1
-@s: mov ecx,eax
-    xor eax,eax   // result := false
-@1: mov dx,[ecx]  // while not (source^ in [#0,#10,#13]) do inc(source);
-    lea ecx,[ecx+2]
-    cmp dx,13
-    ja @1
-    je @e
-    or dx,dx
-    jz @0
-    cmp dx,10
-    jne @1
-    jmp @4
-@e: cmp word ptr [ecx],10 // jump #13#10
-    jne @4
-    lea ecx,[ecx+2]
-@4: test al,al
-    jnz @x         // exit if IdemPChar returned true
-    cmp word ptr [ecx],'['
-    lea ecx,[ecx+2]
-    jne @1
-    mov eax,ecx
-    jmp @i
-@0: xor ecx,ecx    // set source=nil
-@x: pop ebx
-    pop edx        // restore source var
-    mov [edx],ecx  // update source var
-    ret
-@z: pop edx       // ignore source var, result := false
+        push    eax        // save source var
+        mov     eax, [eax] // eax=source
+        test    eax, eax
+        jz      @z
+        push    ebx
+        mov     ebx, edx   // save search
+        cmp     word ptr[eax], '['
+        lea     eax, [eax + 2]
+        jne     @s
+@i:     push    eax
+        mov     edx, ebx   // edx=search
+        call    IdemPCharW
+        pop     ecx        // ecx=source
+        jmp     @1
+@s:     mov     ecx, eax
+        xor     eax, eax   // result := false
+@1:     mov     dx, [ecx]  // while not (source^ in [#0,#10,#13]) do inc(source)
+        lea     ecx, [ecx + 2]
+        cmp     dx, 13
+        ja      @1
+        je      @e
+        or      dx, dx
+        jz      @0
+        cmp     dx, 10
+        jne     @1
+        jmp     @4
+@e:     cmp     word ptr[ecx], 10 // jump #13#10
+        jne     @4
+        lea     ecx, [ecx + 2]
+@4:     test    al, al
+        jnz     @x         // exit if IdemPChar returned true
+        cmp     word ptr[ecx], '['
+        lea     ecx, [ecx + 2]
+        jne     @1
+        mov     eax, ecx
+        jmp     @i
+@0:     xor     ecx, ecx    // set source=nil
+@x:     pop     ebx
+        pop     edx         // restore source var
+        mov     [edx], ecx  // update source var
+        ret
+@z:     pop     edx         // ignore source var, result := false
 end;
 {$endif}
 
@@ -26664,37 +26636,51 @@ begin
 end;
 {$else}
 asm // eax=P, edx=Count, Value=ecx
-        test eax,eax
-        jz @z // avoid GPF
-        cmp edx,8
-        jae @s1
-        jmp dword ptr [edx*4+@Table]
-        nop // align @Table
-@Table: dd @z, @1, @2, @3, @4, @5, @6, @7
-@s1: // fast search by 8 integers (pipelined instructions)
-        sub edx,8
-        cmp [eax],ecx;      je @ok
-        cmp [eax+4],ecx;    je @ok
-        cmp [eax+8],ecx;    je @ok
-        cmp [eax+12],ecx;   je @ok
-        cmp [eax+16],ecx;   je @ok
-        cmp [eax+20],ecx;   je @ok
-        cmp [eax+24],ecx;   je @ok
-        cmp [eax+28],ecx;   je @ok
-        cmp edx,8
-        lea eax,[eax+32] // preserve flags during 'cmp edx,8' computation
-@s2:    jae @s1
-        jmp dword ptr [edx*4+@Table]
-@7:     cmp [eax+24],ecx;   je @ok
-@6:     cmp [eax+20],ecx;   je @ok
-@5:     cmp [eax+16],ecx;   je @ok
-@4:     cmp [eax+12],ecx;   je @ok
-@3:     cmp [eax+8],ecx;    je @ok
-@2:     cmp [eax+4],ecx;    je @ok
-@1:     cmp [eax],ecx;      je @ok
-@z:     xor eax,eax
+        test    eax, eax
+        jz      @z // avoid GPF
+        cmp     edx, 8
+        jae     @s1
+        jmp     dword ptr[edx * 4 + @Table]
+@Table: dd      @z, @1, @2, @3, @4, @5, @6, @7
+@s1:    // fast search by 8 integers (pipelined instructions)
+        sub     edx, 8
+        cmp     [eax], ecx
+        je      @ok
+        cmp     [eax + 4], ecx
+        je      @ok
+        cmp     [eax + 8], ecx
+        je      @ok
+        cmp     [eax + 12], ecx
+        je      @ok
+        cmp     [eax + 16], ecx
+        je      @ok
+        cmp     [eax + 20], ecx
+        je      @ok
+        cmp     [eax + 24], ecx
+        je      @ok
+        cmp     [eax + 28], ecx
+        je      @ok
+        cmp     edx, 8
+        lea     eax, [eax + 32] // preserve flags during 'cmp edx,8' computation
+@s2:    jae     @s1
+        jmp     dword ptr[edx * 4 + @Table]
+@7:     cmp     [eax + 24], ecx
+        je      @ok
+@6:     cmp     [eax + 20], ecx
+        je      @ok
+@5:     cmp     [eax + 16], ecx
+        je      @ok
+@4:     cmp     [eax + 12], ecx
+        je      @ok
+@3:     cmp     [eax + 8], ecx
+        je      @ok
+@2:     cmp     [eax + 4], ecx
+        je      @ok
+@1:     cmp     [eax], ecx
+        je      @ok
+@z:     xor     eax, eax
         ret
-@ok:    mov al,1
+@ok:    mov     al, 1
 end;
 {$endif}
 
@@ -26748,41 +26734,77 @@ begin // very optimized code
 end;
 {$else}
 asm // eax=P, edx=Count, Value=ecx
-       test eax,eax
-       jz @ok0 // avoid GPF
-       cmp edx,8
-       jb @s2
-       nop; nop; nop // @s1 loop align
-@s1:   sub edx,8
-       cmp [eax],ecx;    je @ok0
-       cmp [eax+4],ecx;  je @ok4
-       cmp [eax+8],ecx;  je @ok8
-       cmp [eax+12],ecx; je @ok12
-       cmp [eax+16],ecx; je @ok16
-       cmp [eax+20],ecx; je @ok20
-       cmp [eax+24],ecx; je @ok24
-       cmp [eax+28],ecx; je @ok28
-       cmp edx,8
-       lea eax,[eax+32]  // preserve flags during 'cmp edx,8' computation
-       jae @s1
-@s2:   test edx,edx; jz @z
-       cmp [eax],ecx;    je @ok0;  dec edx; jz @z
-       cmp [eax+4],ecx;  je @ok4;  dec edx; jz @z
-       cmp [eax+8],ecx;  je @ok8;  dec edx; jz @z
-       cmp [eax+12],ecx; je @ok12; dec edx; jz @z
-       cmp [eax+16],ecx; je @ok16; dec edx; jz @z
-       cmp [eax+20],ecx; je @ok20; dec edx; jz @z
-       cmp [eax+24],ecx; je @ok24
-@z:    xor eax,eax // return nil if not found
-       ret
-@ok0:  rep ret
-@ok28: lea eax,[eax+28]; ret
-@ok24: lea eax,[eax+24]; ret
-@ok20: lea eax,[eax+20]; ret
-@ok16: lea eax,[eax+16]; ret
-@ok12: lea eax,[eax+12]; ret
-@ok8:  lea eax,[eax+8];  ret
-@ok4:  lea eax,[eax+4]
+        test    eax, eax
+        jz      @ok0 // avoid GPF
+        cmp     edx, 8
+        jb      @s2
+        nop
+        nop
+        nop // @s1 loop align
+@s1:    sub     edx, 8
+        cmp     [eax], ecx
+        je      @ok0
+        cmp     [eax + 4], ecx
+        je      @ok4
+        cmp     [eax + 8], ecx
+        je      @ok8
+        cmp     [eax + 12], ecx
+        je      @ok12
+        cmp     [eax + 16], ecx
+        je      @ok16
+        cmp     [eax + 20], ecx
+        je      @ok20
+        cmp     [eax + 24], ecx
+        je      @ok24
+        cmp     [eax + 28], ecx
+        je      @ok28
+        cmp     edx, 8
+        lea     eax, [eax + 32]  // preserve flags during 'cmp edx,8' computation
+        jae     @s1
+@s2:    test    edx, edx
+        jz      @z
+        cmp     [eax], ecx
+        je      @ok0
+        dec     edx
+        jz      @z
+        cmp     [eax + 4], ecx
+        je      @ok4
+        dec     edx
+        jz      @z
+        cmp     [eax + 8], ecx
+        je      @ok8
+        dec     edx
+        jz      @z
+        cmp     [eax + 12], ecx
+        je      @ok12
+        dec     edx
+        jz      @z
+        cmp     [eax + 16], ecx
+        je      @ok16
+        dec     edx
+        jz      @z
+        cmp     [eax + 20], ecx
+        je      @ok20
+        dec     edx
+        jz      @z
+        cmp     [eax + 24], ecx
+        je      @ok24
+@z:     xor     eax, eax // return nil if not found
+        ret
+@ok0:   rep     ret
+@ok28:  lea     eax, [eax + 28]
+        ret
+@ok24:  lea     eax, [eax + 24]
+        ret
+@ok20:  lea     eax, [eax + 20]
+        ret
+@ok16:  lea     eax, [eax + 16]
+        ret
+@ok12:  lea     eax, [eax + 12]
+        ret
+@ok8:   lea     eax, [eax + 8]
+        ret
+@ok4:   lea     eax, [eax + 4]
 end;
 {$endif}
 
@@ -27118,15 +27140,15 @@ begin
 end;
 {$else}
 asm
-    push eax
-    call IntegerScan
-    test eax,eax
-    pop edx
-    jnz @e
-    dec eax // returns -1
-    ret
-@e: sub eax,edx
-    shr eax,2
+        push    eax
+        call    IntegerScan
+        test    eax, eax
+        pop     edx
+        jnz     @e
+        dec     eax // returns -1
+        ret
+@e:     sub     eax, edx
+        shr     eax, 2
 end;
 {$endif}
 
@@ -27178,15 +27200,15 @@ begin
 end;
 {$else}
 asm // identical to IntegerScanIndex() asm stub
-    push eax
-    call IntegerScan
-    test eax,eax
-    pop edx
-    jnz @e
-    dec eax // returns -1
-    ret
-@e: sub eax,edx
-    shr eax,2
+        push    eax
+        call    IntegerScan
+        test    eax, eax
+        pop     edx
+        jnz     @e
+        dec     eax // returns -1
+        ret
+@e:     sub     eax, edx
+        shr     eax, 2
 end;
 {$endif}
 
@@ -27930,147 +27952,124 @@ begin
 end;
 {$else}
 const Ten: double = 10.0;
-asm  // in: eax=text, edx=@err  out: st(0)=result
-  push  ebx             {Save Used Registers}
-  push  esi
-  push  edi
-  mov   esi,eax         {String Pointer}
-  push  eax             {Save for Error Condition}
-  xor   ebx,ebx
-  push  eax             {Allocate Local Storage for Loading FPU}
-  test  esi,esi
-  jz    @@Nil           {Nil String}
-@@Trim:                 {Strip Leading Spaces}
-  movzx ebx,byte ptr [esi]
-  inc   esi
-  cmp   bl,' '
-  je    @@Trim
-  xor   ecx,ecx         {Clear Sign Flag}
-  fld   qword [Ten]     {Load 10 into FPU}
-  xor   eax,eax         {Zero Number of Decimal Places}
-  fldz                  {Zero Result in FPU}
-  cmp   bl,'0'
-  jl    @@CheckSign     {Check for Sign Character}
-@@FirstDigit:
-  xor   edi,edi         {Zero Exponent Value}
-@@DigitLoop:
-  sub   bl,'0'
-  cmp   bl,9
-  ja    @@Fraction      {Non-Digit}
-  mov   cl,1            {Set Digit Found Flag}
-  mov   [esp],ebx       {Store for FPU Use}
-  fmul  st(0),st(1)     {Multply by 10}
-  fiadd dword ptr [esp] {Add Next Digit}
-  movzx ebx,byte ptr [esi]   {Get Next Char}
-  inc   esi
-  test  bl,bl           {End Reached?}
-  jnz   @@DigitLoop     {No,Get Next Digit}
-  jmp   @@Finish        {Yes,Finished}
-@@CheckSign:
-  cmp   bl,'-'
-  je    @@Minus
-  cmp   bl,'+'
-  je    @@SignSet
-@@GetFirstDigit:
-  test  bl,bl
-  jz    @@Error         {No Digits Found}
-  jmp   @@FirstDigit
-@@Minus:
-  mov   ch,1            {Set Sign Flag}
-@@SignSet:
-  movzx ebx,byte ptr [esi]  {Get Next Char}
-  inc   esi
-  jmp   @@GetFirstDigit
-@@Fraction:
-  cmp   bl,'.'-'0'
-  jne   @@Exponent      {No Decimal Point}
-  movzx ebx,byte ptr [esi]   {Get Next Char}
-  test  bl,bl
-  jz    @@DotEnd        {String Ends with '.'}
-  inc   esi
-@@FractionLoop:
-  sub   bl,'0'
-  cmp   bl,9
-  ja    @@Exponent      {Non-Digit}
-  mov   [esp],ebx
-  dec   eax             {-(Number of Decimal Places)}
-  fmul  st(0),st(1)     {Multply by 10}
-  fiadd dword ptr [esp] {Add Next Digit}
-  movzx ebx,byte ptr [esi]   {Get Next Char}
-  inc   esi
-  test  bl,bl           {End Reached?}
-  jnz   @@FractionLoop  {No,Get Next Digit}
-  jmp   @@Finish        {Yes,Finished (No Exponent)}
-@@DotEnd:
-  test  cl,cl           {Any Digits Found before '.'?}
-  jnz   @@Finish        {Yes,Valid}
-  jmp   @@Error         {No,Invalid}
-@@Exponent:
-  or    bl,$20
-  cmp   bl,'e'-'0'
-  jne   @@Error         {Not 'e' or 'E'}
-@@GetExponent:
-  movzx ebx,byte ptr [esi]  {Get Next Char}
-  inc   esi
-  mov   cl,0            {Clear Exponent Sign Flag}
-  cmp   bl,'-'
-  je    @@MinusExp
-  cmp   bl,'+'
-  je    @@ExpSignSet
-  jmp   @@ExpLoop
-@@MinusExp:
-  mov   cl,1            {Set Exponent Sign Flag}
-@@ExpSignSet:
-  movzx ebx,byte ptr [esi]   {Get Next Char}
-  inc   esi
-@@ExpLoop:
-  sub   bl,'0'
-  cmp   bl,9
-  ja    @@Error         {Non-Digit}
-  lea   edi,[edi+edi*4] {Multiply by 10}
-  add   edi,edi
-  add   edi,ebx         {Add Next Digit}
-  movzx ebx,byte ptr [esi]   {Get Next Char}
-  inc   esi
-  test  bl,bl           {End Reached?}
-  jnz   @@ExpLoop       {No,Get Next Digit}
-@@EndExp:
-  test  cl,cl           {Positive Exponent?}
-  jz    @@Finish        {Yes,Keep Exponent Value}
-  neg   edi             {No,Negate Exponent Value}
-@@Finish:
-  add   eax,edi         {Exponent Value - Number of Decimal Places}
-  mov   [edx],ebx       {Result Code = 0}
-  jz    @@PowerDone     {No call to _Pow10 Needed}
-  mov   edi,ecx         {Save Decimal Sign Flag}
-  call  System.@Pow10   {Raise to Power of 10}
-  mov   ecx,edi         {Restore Decimal Sign Flag}
-@@PowerDone:
-  test  ch,ch           {Decimal Sign Flag Set?}
-  jnz   @@Negate        {Yes,Negate Value}
-@@Success:
-  add   esp,8           {Dump Local Storage and String Pointer}
-@@Exit:
-  ffree st(1)           {Remove Ten Value from FPU}
-  pop   edi             {Restore Used Registers}
-  pop   esi
-  pop   ebx
-  ret                   {Finished}
-@@Negate:
-  fchs                  {Negate Result in FPU}
-  jmp   @@Success
-@@Nil:
-  inc   esi             {Force Result Code = 1}
-  fldz                  {Result Value = 0}
-@@Error:
-  pop   ebx             {Dump Local Storage}
-  pop   eax             {String Pointer}
-  sub   esi,eax         {Error Offset}
-  mov   [edx],esi       {Set Result Code}
-  test  ch,ch           {Decimal Sign Flag Set?}
-  jz    @@Exit          {No,exit}
-  fchs                  {Yes. Negate Result in FPU}
-  jmp   @@Exit          {Exit Setting Result Code}
+asm     // in: eax=text, edx=@err  out: st(0)=result
+        push    ebx                 // save used registers
+        push    esi
+        push    edi
+        mov     esi, eax            // string pointer
+        push    eax                 // save for error condition
+        xor     ebx, ebx
+        push    eax                 // allocate local storage for loading fpu
+        test    esi, esi
+        jz      @nil                // nil string
+@trim:  movzx   ebx, byte ptr[esi]  // strip leading spaces
+        inc     esi
+        cmp     bl, ' '
+        je      @trim
+        xor     ecx, ecx            // clear sign flag
+        fld     qword[Ten]          // load 10 into fpu
+        xor     eax, eax            // zero number of decimal places
+        fldz                        // zero result in fpu
+        cmp     bl, '0'
+        jl      @chksig             // check for sign character
+@dig1:  xor     edi, edi            // zero exponent value
+@digl:  sub     bl, '0'
+        cmp     bl, 9
+        ja      @frac               // non-digit
+        mov     cl, 1               // set digit found flag
+        mov     [esp], ebx          // store for fpu use
+        fmul    st(0), st(1)        // multply by 10
+        fiadd   dword ptr[esp]      // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @digl               // no,get next digit
+        jmp     @finish             // yes,finished
+@chksig:cmp     bl, '-'
+        je      @minus
+        cmp     bl, '+'
+        je      @sigset
+@gdig1: test    bl, bl
+        jz      @error              // no digits found
+        jmp     @dig1
+@minus: mov     ch, 1               // set sign flag
+@sigset:movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        jmp     @gdig1
+@frac:  cmp     bl, '.' - '0'
+        jne     @exp                // no decimal point
+        movzx   ebx, byte ptr[esi]  // get next char
+        test    bl, bl
+        jz      @dotend             // string ends with '.'
+        inc     esi
+@fracl: sub     bl, '0'
+        cmp     bl, 9
+        ja      @exp                // non-digit
+        mov     [esp], ebx
+        dec     eax                 // -(number of decimal places)
+        fmul    st(0), st(1)        // multply by 10
+        fiadd   dword ptr[esp]      // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @fracl              // no, get next digit
+        jmp     @finish             // yes, finished (no exponent)
+@dotend:test    cl, cl              // any digits found before '.'?
+        jnz     @finish             // yes, valid
+        jmp     @error              // no,invalid
+@exp:   or      bl, $20
+        cmp     bl, 'e' - '0'
+        jne     @error              // not 'e' or 'e'
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        mov     cl, 0               // clear exponent sign flag
+        cmp     bl, '-'
+        je      @minexp
+        cmp     bl, '+'
+        je      @expset
+        jmp     @expl
+@minexp:mov     cl, 1               // set exponent sign flag
+@expset:movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+@expl:  sub     bl, '0'
+        cmp     bl, 9
+        ja      @error              // non-digit
+        lea     edi, [edi + edi * 4]// multiply by 10
+        add     edi, edi
+        add     edi, ebx            // add next digit
+        movzx   ebx, byte ptr[esi]  // get next char
+        inc     esi
+        test    bl, bl              // end reached?
+        jnz     @expl               // no, get next digit
+@endexp:test    cl, cl              // positive exponent?
+        jz      @finish             // yes, keep exponent value
+        neg     edi                 // no, negate exponent value
+@finish:add     eax, edi            // exponent value - number of decimal places
+        mov     [edx], ebx          // result code = 0
+        jz      @pow                // no call to _pow10 needed
+        mov     edi, ecx            // save decimal sign flag
+        call    System.@Pow10       // raise to power of 10
+        mov     ecx, edi            // restore decimal sign flag
+@pow:   test    ch, ch              // decimal sign flag set?
+        jnz     @negate             // yes, negate value
+@ok:    add     esp, 8              // dump local storage and string pointer
+@exit:  ffree   st(1)               // remove ten value from fpu
+        pop     edi                 // restore used registers
+        pop     esi
+        pop     ebx
+        ret                         // finished
+@negate:fchs                        // negate result in fpu
+        jmp     @ok
+@nil:   inc     esi                 // force result code = 1
+        fldz                        // result value = 0
+@error: pop     ebx                 // dump local storage
+        pop     eax                 // string pointer
+        sub     esi, eax            // error offset
+        mov     [edx], esi          // set result code
+        test    ch, ch              // decimal sign flag set?
+        jz      @exit               // no,exit
+        fchs                        // yes. negate result in fpu
+        jmp     @exit               // exit setting result code
 end;
 {$endif}
 
@@ -28180,38 +28179,38 @@ function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
 // if the beginning of p^ is same as up^ (ignore case - up^ must be already Upper)
 // eax=p edx=up
 asm
-    test eax,eax
-    jz @e // P=nil -> false
-    test edx,edx
-    push ebx
-    jz @t // up=nil -> true
-    mov ecx,[edx] // cl=up^[0]
-    test cl,cl
-    movzx ebx,byte ptr [eax] // bl=p^[0]
-    jz @t
-    cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
-    jnz @f // quick return in case of first invalid char
-    lea eax,[eax+1]
-    lea edx,[edx+1]
-    shr ecx,8 // cl=up^[1], ch=up^[2]
-@1: mov bl,[eax] // bl=p^[0]
-    test cl,cl
-    jz @t // up^[0]=#0 -> OK
-    cmp cl,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
-    mov bl,[eax+1] // bl=p^[1]
-    lea eax,[eax+2]
-    lea edx,[edx+2]
-    jne @f
-    test ch,ch
-    jz @t // up^[1]=#0 -> OK
-    cmp ch,byte ptr [ebx+NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
-    mov ecx,[edx] // cl=up^[0] ch=up^[1]
-    je @1
-@f: pop ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
-@e: xor eax,eax
-    ret
-@t: pop ebx // up^=#0 -> TRUE
-    mov al,1
+        test    eax, eax
+        jz      @e // P=nil -> false
+        test    edx, edx
+        push    ebx
+        jz      @t // up=nil -> true
+        mov     ecx, [edx] // cl=up^[0]
+        test    cl, cl
+        movzx   ebx, byte ptr[eax] // bl=p^[0]
+        jz      @t
+        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+        jnz     @f // quick return in case of first invalid char
+        lea     eax, [eax + 1]
+        lea     edx, [edx + 1]
+        shr     ecx, 8 // cl=up^[1], ch=up^[2]
+@1:     mov     bl, [eax] // bl=p^[0]
+        test    cl, cl
+        jz      @t // up^[0]=#0 -> OK
+        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
+        mov     bl, [eax + 1] // bl=p^[1]
+        lea     eax, [eax + 2]
+        lea     edx, [edx + 2]
+        jne     @f
+        test    ch, ch
+        jz      @t // up^[1]=#0 -> OK
+        cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
+        mov     ecx, [edx] // cl=up^[0] ch=up^[1]
+        je      @1
+@f:     pop     ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
+@e:     xor     eax, eax
+        ret
+@t:     pop     ebx // up^=#0 -> TRUE
+        mov     al, 1
 end;
 {$endif}
 
@@ -28476,20 +28475,20 @@ end;
 {$else}
 function UpperCopy(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 asm // eax=dest source=edx
-    test edx,edx
-    jz @z
-    push esi
-    mov esi,offset NormToUpperAnsi7
-    xor ecx,ecx
-@1: mov cl,[edx]
-    inc edx
-    test cl,cl
-    mov cl,[esi+ecx]
-    jz @2
-    mov [eax],cl
-    inc eax
-    jmp @1
-@2: pop esi
+        test    edx, edx
+        jz      @z
+        push    esi
+        mov     esi, offset NormToUpperAnsi7
+        xor     ecx, ecx
+@1:     mov     cl, [edx]
+        inc     edx
+        test    cl, cl
+        mov     cl, [esi + ecx]
+        jz      @2
+        mov     [eax], cl
+        inc     eax
+        jmp     @1
+@2:     pop     esi
 @z:
 end;
 {$endif}
@@ -28507,23 +28506,23 @@ end;
 {$else}
 function UpperCopyShort(dest: PAnsiChar; const source: shortstring): PAnsiChar;
 asm // eax=dest source=edx
-    push esi
-    push ebx
-    movzx ebx,byte ptr [edx] // ebx = length(source)
-    xor ecx,ecx
-    test ebx,ebx
-    mov esi,offset NormToUpperAnsi7
-    jz @2 // source=''
-    inc edx
-@1: mov cl,[edx]
-    inc edx
-    dec ebx
-    mov cl,[esi+ecx]
-    mov [eax],cl
-    lea eax,[eax+1]
-    jnz @1
-@2: pop ebx
-    pop esi
+        push    esi
+        push    ebx
+        movzx   ebx, byte ptr[edx] // ebx = length(source)
+        xor     ecx, ecx
+        test    ebx, ebx
+        mov     esi, offset NormToUpperAnsi7
+        jz      @2 // source=''
+        inc     edx
+@1:     mov     cl, [edx]
+        inc     edx
+        dec     ebx
+        mov     cl, [esi + ecx]
+        mov     [eax], cl
+        lea     eax, [eax + 1]
+        jnz     @1
+@2:     pop     ebx
+        pop     esi
 @z:
 end;
 {$endif}
@@ -28617,34 +28616,34 @@ begin
 end;
 {$else}
 asm // eax=source edx=searchUp
-    push eax       // save source var
-    mov eax,[eax]  // eax=source
-    test eax,eax
-    jz @z
-    push eax
-    call IdemPChar
-    pop ecx       // ecx=source
-    push eax      // save result
-@1: mov dl,[ecx]  // while not (source^ in [#0,#10,#13]) do inc(source);
-    inc ecx
-    cmp dl,13
-    ja @1
-    je @e
-    or dl,dl
-    jz @0
-    cmp dl,10
-    jne @1
-    jmp @4
-@e: cmp byte ptr [ecx],10 // jump #13#10
-    jne @4
-@3: inc ecx
-@4: pop eax        // restore result
-    pop edx        // restore source var
-    mov [edx],ecx  // update source var
-    ret
-@0: xor ecx,ecx    // set source=nil
-    jmp @4
-@z: pop edx       // ignore source var, result := false
+        push    eax        // save source var
+        mov     eax, [eax] // eax=source
+        test    eax, eax
+        jz      @z
+        push    eax
+        call    IdemPChar
+        pop     ecx        // ecx=source
+        push    eax        // save result
+@1:     mov     dl, [ecx]  // while not (source^ in [#0,#10,#13]) do inc(source)
+        inc     ecx
+        cmp     dl, 13
+        ja      @1
+        je      @e
+        or      dl, dl
+        jz      @0
+        cmp     dl, 10
+        jne     @1
+        jmp     @4
+@e:     cmp     byte ptr[ecx], 10 // jump #13#10
+        jne     @4
+@3:     inc     ecx
+@4:     pop     eax        // restore result
+        pop     edx        // restore source var
+        mov     [edx], ecx // update source var
+        ret
+@0:     xor     ecx, ecx   // set source=nil
+        jmp     @4
+@z:     pop     edx        // ignore source var, result := false
 end;
 {$endif}
 
@@ -29970,7 +29969,7 @@ begin
 end;
 {$else}
 asm
-  bts [eax],edx // use very fast i386 bit statement
+        bts     [eax], edx // use very fast i386 bit statement
 end;
 {$endif}
 
@@ -29982,7 +29981,7 @@ begin
 end;
 {$else}
 asm
-  btr [eax],edx // use very fast i386 bit statement
+        btr     [eax], edx // use very fast i386 bit statement
 end;
 {$endif}
 
@@ -30023,10 +30022,11 @@ begin
 end;
 {$else}
 asm
-  cmp edx,64
-  jae @z
-  bts [eax],edx  // use very fast i386 bit statement
-@z:
+        cmp     edx, 64
+        jae     @z
+        bts     [eax], edx  // use very fast i386 bit statement
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif}
 
@@ -30044,10 +30044,11 @@ begin
 end;
 {$else}
 asm
-  cmp edx,64
-  jae @z
-  btr [eax],edx // use very fast i386 bit statement
-@z:
+        cmp     edx, 64
+        jae     @z
+        btr     [eax], edx  // use very fast i386 bit statement
+        ret
+@z:     db      $f3 // rep ret
 end;
 {$endif}
 
@@ -30063,14 +30064,14 @@ begin
 end;
 {$else}
 asm
-    xor ecx,ecx
-@1: test edx,edx
-    jz @n
-    dec edx
-    bt [eax],edx
-    adc ecx,0
-    jmp @1
-@n: mov eax,ecx
+        xor     ecx, ecx
+@1:     test    edx, edx
+        jz      @n
+        dec     edx
+        bt      [eax], edx
+        adc     ecx, 0
+        jmp     @1
+@n:     mov     eax, ecx
 end;
 {$endif}
 
@@ -30142,16 +30143,18 @@ begin
 end;
 {$else}
 asm // eax=crc, edx=buf, ecx=len
-    push ebx
-    test edx,edx; jz @0
-    neg ecx; jz @0
-    sub edx,ecx
-@1: movzx ebx,byte ptr [edx+ecx]
-    xor eax,ebx
-    imul eax,eax,16777619
-    inc ecx
-    jnz @1
-@0: pop ebx
+        push    ebx
+        test    edx, edx
+        jz      @0
+        neg     ecx
+        jz      @0
+        sub     edx, ecx
+@1:     movzx   ebx, byte ptr[edx + ecx]
+        xor     eax, ebx
+        imul    eax, eax, 16777619
+        inc     ecx
+        jnz     @1
+@0:     pop     ebx
 end; // we tried an unrolled version, but it was slower on our Core i7!
 {$endif}
 
@@ -30165,55 +30168,55 @@ begin
 end;
 {$else}
 asm // eax=crc, edx=buf, ecx=len
-    test ecx,ecx
-    push edi
-    push esi
-    push ebx
-    push ebp
-    jz @z
-    cmp ecx,4
-    jb @s
-@8: mov ebx,[edx] // unrolled version reading per DWORD
-    lea edx,[edx+4]
-    mov esi,eax
-    movzx edi,bl
-    movzx ebp,bh
-    shr ebx,16
-    shl eax,5
-    sub eax,esi
-    lea eax,[eax+edi]
-    mov esi,eax
-    shl eax,5
-    sub eax,esi
-    lea esi,[eax+ebp]
-    lea eax,[eax+ebp]
-    movzx edi,bl
-    movzx ebx,bh
-    shl eax,5
-    sub eax,esi
-    lea ebp,[eax+edi]
-    lea eax,[eax+edi]
-    shl eax,5
-    sub eax,ebp
-    cmp ecx,8
-    lea eax,[eax+ebx]
-    lea ecx,[ecx-4]
-    jae @8
-    test ecx,ecx
-    jz @z
-@s: mov esi,eax
-@1: shl eax,5
-    movzx ebx,byte ptr [edx]
-    lea edx,[edx+1]
-    sub eax,esi
-    dec ecx
-    lea esi,[eax+ebx]
-    lea eax,[eax+ebx]
-    jnz @1
-@z: pop ebp
-    pop ebx
-    pop esi
-    pop edi
+        test    ecx, ecx
+        push    edi
+        push    esi
+        push    ebx
+        push    ebp
+        jz      @z
+        cmp     ecx, 4
+        jb      @s
+@8:     mov     ebx, [edx] // unrolled version reading per dword
+        lea     edx, [edx + 4]
+        mov     esi, eax
+        movzx   edi, bl
+        movzx   ebp, bh
+        shr     ebx, 16
+        shl     eax, 5
+        sub     eax, esi
+        lea     eax, [eax + edi]
+        mov     esi, eax
+        shl     eax, 5
+        sub     eax, esi
+        lea     esi, [eax + ebp]
+        lea     eax, [eax + ebp]
+        movzx   edi, bl
+        movzx   ebx, bh
+        shl     eax, 5
+        sub     eax, esi
+        lea     ebp, [eax + edi]
+        lea     eax, [eax + edi]
+        shl     eax, 5
+        sub     eax, ebp
+        cmp     ecx, 8
+        lea     eax, [eax + ebx]
+        lea     ecx, [ecx - 4]
+        jae     @8
+        test    ecx, ecx
+        jz      @z
+@s:     mov     esi, eax
+@1:     shl     eax, 5
+        movzx   ebx, byte ptr[edx]
+        lea     edx, [edx + 1]
+        sub     eax, esi
+        dec     ecx
+        lea     esi, [eax + ebx]
+        lea     eax, [eax + ebx]
+        jnz     @1
+@z:     pop     ebp
+        pop     ebx
+        pop     esi
+        pop     edi
 end;
 {$endif}
 
@@ -30229,25 +30232,25 @@ procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
 {$else}
 asm // ecx=param, rdx=Registers (Linux: edi,rsi)
-  .NOFRAME
+        .NOFRAME
 {$endif FPC}
-  {$ifdef win64}
-  mov eax,ecx
-  mov r9,rdx
-  {$else}
-  mov eax,edi
-  mov r9,rsi
-  {$endif win64}
-  mov r10,rbx // preserve rbx
-  xor ebx,ebx
-  xor ecx,ecx
-  xor edx,edx
-  cpuid
-  mov TRegisters(r9).&eax,eax
-  mov TRegisters(r9).&ebx,ebx
-  mov TRegisters(r9).&ecx,ecx
-  mov TRegisters(r9).&edx,edx
-  mov rbx,r10
+        {$ifdef win64}
+        mov     eax, ecx
+        mov     r9, rdx
+        {$else}
+        mov     eax, edi
+        mov     r9, rsi
+        {$endif win64}
+        mov     r10, rbx // preserve rbx
+        xor     ebx, ebx
+        xor     ecx, ecx
+        xor     edx, edx
+        cpuid
+        mov     TRegisters(r9).&eax, eax
+        mov     TRegisters(r9).&ebx, ebx
+        mov     TRegisters(r9).&ecx, ecx
+        mov     TRegisters(r9).&edx, edx
+        mov     rbx, r10
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
@@ -30255,43 +30258,52 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm
 {$else}
 asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
-  .NOFRAME
+        .NOFRAME
 {$endif FPC}
-    {$ifdef win64}
-    mov eax,ecx
-    {$else}
-    mov eax,edi
-    mov r8,rdx
-    mov rdx,rsi
-    {$endif win64}
-    not eax
-    test r8,r8;   jz @0
-    test rdx,rdx; jz @0
-@7: test rdx,7;   jz @8 // align to 8 bytes boundary
-    crc32 eax,byte ptr [rdx]
-    inc rdx
-    dec r8;     jz @0
-    test rdx,7; jnz @7
-@8: mov rcx,r8
-    shr r8,3
-    jz @2
-@1: crc32 eax,dword ptr [rdx]
-    crc32 eax,dword ptr [rdx+4]
-    dec r8
-    lea rdx,[rdx+8]
-    jnz @1
-@2: and rcx,7; jz @0
-    cmp rcx,4; jb @4
-    crc32 eax,dword ptr [rdx]
-    sub rcx,4
-    lea rdx,[rdx+4]
-    jz @0
-@4: crc32 eax,byte ptr [rdx]
-    dec rcx; jz @0
-    crc32 eax,byte ptr [rdx+1]
-    dec rcx; jz @0
-    crc32 eax,byte ptr [rdx+2]
-@0: not eax
+        {$ifdef win64}
+        mov     eax, ecx
+        {$else}
+        mov     eax, edi
+        mov     r8, rdx
+        mov     rdx, rsi
+        {$endif win64}
+        not     eax
+        test    r8, r8
+        jz      @0
+        test    rdx, rdx
+        jz      @0
+@7:     test    rdx, 7
+        jz      @8 // align to 8 bytes boundary
+        crc32   eax, byte ptr[rdx]
+        inc     rdx
+        dec     r8
+        jz      @0
+        test    rdx, 7
+        jnz     @7
+@8:     mov     rcx, r8
+        shr     r8, 3
+        jz      @2
+@1:     crc32   eax, dword ptr[rdx]
+        crc32   eax, dword ptr[rdx + 4]
+        dec     r8
+        lea     rdx, [rdx + 8]
+        jnz     @1
+@2:     and     rcx, 7
+        jz      @0
+        cmp     rcx, 4
+        jb      @4
+        crc32   eax, dword ptr[rdx]
+        sub     rcx, 4
+        lea     rdx, [rdx + 4]
+        jz      @0
+@4:     crc32   eax, byte ptr[rdx]
+        dec     rcx
+        jz      @0
+        crc32   eax, byte ptr[rdx + 1]
+        dec     rcx
+        jz      @0
+        crc32   eax, byte ptr[rdx + 2]
+@0:     not     eax
 end;
 {$endif CPU64}
 {$endif CPUINTEL}
@@ -30328,190 +30340,195 @@ end;
 {$else}
 // adapted from fast Aleksandr Sharahov version
 asm
-  test edx, edx
-  jz   @ret
-  neg  ecx
-  jz   @ret
-  not eax
-  push ebx
-@head:
-  test dl,3
-  jz   @aligned
-  movzx ebx, byte [edx]
-  inc  edx
-  xor  bl, al
-  shr  eax, 8
-  xor  eax,dword ptr [ebx*4 + crc32ctab]
-  inc  ecx
-  jnz  @head
-  pop  ebx
-  not eax
-  ret
-@ret:
-  rep ret
+        test    edx, edx
+        jz      @ret
+        neg     ecx
+        jz      @ret
+        not     eax
+        push    ebx
+@head:  test    dl, 3
+        jz      @aligned
+        movzx   ebx, byte[edx]
+        inc     edx
+        xor     bl, al
+        shr     eax, 8
+        xor     eax, dword ptr[ebx * 4 + crc32ctab]
+        inc     ecx
+        jnz     @head
+        pop     ebx
+        not     eax
+        ret
+@ret:   rep     ret
 @aligned:
-  sub  edx, ecx
-  add  ecx, 8
-  jg   @bodydone
-  push esi
-  push edi
-  mov  edi, edx
-  mov  edx, eax
+        sub     edx, ecx
+        add     ecx, 8
+        jg      @bodydone
+        push    esi
+        push    edi
+        mov     edi, edx
+        mov     edx, eax
 @bodyloop:
-  mov ebx, [edi + ecx - 4]
-  xor edx, [edi + ecx - 8]
-  movzx esi, bl
-  mov eax,dword ptr [esi*4 + crc32ctab + 1024*3]
-  movzx esi, bh
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*2]
-  shr ebx, 16
-  movzx esi, bl
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*1]
-  movzx esi, bh
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*0]
-  movzx esi, dl
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*7]
-  movzx esi, dh
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*6]
-  shr edx, 16
-  movzx esi, dl
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*5]
-  movzx esi, dh
-  xor eax,dword ptr [esi*4 + crc32ctab + 1024*4]
-  add ecx, 8
-  jg  @done
-  mov ebx, [edi + ecx - 4]
-  xor eax, [edi + ecx - 8]
-  movzx esi, bl
-  mov edx,dword ptr [esi*4 + crc32ctab + 1024*3]
-  movzx esi, bh
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*2]
-  shr ebx, 16
-  movzx esi, bl
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*1]
-  movzx esi, bh
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*0]
-  movzx esi, al
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*7]
-  movzx esi, ah
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*6]
-  shr eax, 16
-  movzx esi, al
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*5]
-  movzx esi, ah
-  xor edx,dword ptr [esi*4 + crc32ctab + 1024*4]
-  add ecx, 8
-  jle @bodyloop
-  mov eax, edx
-@done:
-  mov edx, edi
-  pop edi
-  pop esi
+        mov     ebx, [edi + ecx - 4]
+        xor     edx, [edi + ecx - 8]
+        movzx   esi, bl
+        mov     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, bh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        shr     ebx, 16
+        movzx   esi, bl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, bh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        movzx   esi, dl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 7]
+        movzx   esi, dh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 6]
+        shr     edx, 16
+        movzx   esi, dl
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 5]
+        movzx   esi, dh
+        xor     eax, dword ptr[esi * 4 + crc32ctab + 1024 * 4]
+        add     ecx, 8
+        jg      @done
+        mov     ebx, [edi + ecx - 4]
+        xor     eax, [edi + ecx - 8]
+        movzx   esi, bl
+        mov     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 3]
+        movzx   esi, bh
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 2]
+        shr     ebx, 16
+        movzx   esi, bl
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 1]
+        movzx   esi, bh
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 0]
+        movzx   esi, al
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 7]
+        movzx   esi, ah
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 6]
+        shr     eax, 16
+        movzx   esi, al
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 5]
+        movzx   esi, ah
+        xor     edx, dword ptr[esi * 4 + crc32ctab + 1024 * 4]
+        add     ecx, 8
+        jle     @bodyloop
+        mov     eax, edx
+@done:  mov     edx, edi
+        pop     edi
+        pop     esi
 @bodydone:
-  sub ecx, 8
-  jl @tail
-  pop ebx
-  not eax
-  ret
-@tail:
-  movzx ebx, byte [edx + ecx]
-  xor bl,al
-  shr eax,8
-  xor eax,dword ptr [ebx*4 + crc32ctab]
-  inc ecx
-  jnz @tail
-  pop ebx
-  not eax
+        sub     ecx, 8
+        jl      @tail
+        pop     ebx
+        not     eax
+        ret
+@tail:  movzx   ebx, byte[edx + ecx]
+        xor     bl, al
+        shr     eax, 8
+        xor     eax, dword ptr[ebx * 4 + crc32ctab]
+        inc     ecx
+        jnz     @tail
+        pop     ebx
+        not     eax
 end;
 
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
-  push esi
-  push edi
-  mov esi,edx
-  mov edi,eax
-  pushfd
-  pop eax
-  mov edx,eax
-  xor eax,$200000
-  push eax
-  popfd
-  pushfd
-  pop eax
-  xor eax,edx
-  jz @nocpuid
-  push ebx
-  mov eax,edi
-  xor ecx,ecx
-  {$ifdef DELPHI5OROLDER}
-  db $0f,$a2
-  {$else}
-  cpuid
-  {$endif}
-  mov TRegisters(esi).&eax,eax
-  mov TRegisters(esi).&ebx,ebx
-  mov TRegisters(esi).&ecx,ecx
-  mov TRegisters(esi).&edx,edx
-  pop ebx
+        push    esi
+        push    edi
+        mov     esi, edx
+        mov     edi, eax
+        pushfd
+        pop     eax
+        mov     edx, eax
+        xor     eax, $200000
+        push    eax
+        popfd
+        pushfd
+        pop     eax
+        xor     eax, edx
+        jz      @nocpuid
+        push    ebx
+        mov     eax, edi
+        xor     ecx, ecx
+        {$ifdef DELPHI5OROLDER}
+        db      $0f, $a2
+        {$else}
+        cpuid
+        {$endif}
+        mov     TRegisters(esi).&eax, eax
+        mov     TRegisters(esi).&ebx, ebx
+        mov     TRegisters(esi).&ecx, ecx
+        mov     TRegisters(esi).&edx, edx
+        pop     ebx
 @nocpuid:
-  pop edi
-  pop esi
+        pop     edi
+        pop     esi
 end;
 
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // eax=crc, edx=buf, ecx=len
-    not eax
-    test ecx,ecx; jz @0
-    test edx,edx; jz @0
-@3: test edx,3;   jz @8 // align to 4 bytes boundary
-    {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,byte ptr [edx]
-    {$else}
-    db $F2,$0F,$38,$F0,$02
-    {$endif}
-    inc edx
-    dec ecx;    jz @0
-    test edx,3; jnz @3
-@8: push ecx
-    shr ecx,3
-    jz @2
-@1: {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,dword ptr [edx]
-    crc32 dword ptr eax,dword ptr [edx+4]
-    {$else}
-    db $F2,$0F,$38,$F1,$02
-    db $F2,$0F,$38,$F1,$42,$04
-    {$endif}
-    dec ecx
-    lea edx,[edx+8]
-    jnz @1
-@2: pop ecx
-    and ecx,7
-    jz @0
-    cmp ecx,4
-    jb @4
-    {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,dword ptr [edx]
-    {$else}
-    db $F2,$0F,$38,$F1,$02
-    {$endif}
-    sub ecx,4
-    lea edx,[edx+4]
-    jz @0
-@4: {$ifdef ISDELPHI2010}
-    crc32 dword ptr eax,byte ptr [edx]
-    dec ecx; jz @0
-    crc32 dword ptr eax,byte ptr [edx+1]
-    dec ecx; jz @0
-    crc32 dword ptr eax,byte ptr [edx+2]
-    {$else}
-    db $F2,$0F,$38,$F0,$02
-    dec ecx; jz @0
-    db $F2,$0F,$38,$F0,$42,$01
-    dec ecx; jz @0
-    db $F2,$0F,$38,$F0,$42,$02
-    {$endif}
-@0: not eax
+        not     eax
+        test    ecx, ecx
+        jz      @0
+        test    edx, edx
+        jz      @0
+@3:     test    edx, 3
+        jz      @8 // align to 4 bytes boundary
+        {$ifdef ISDELPHI2010}
+        crc32   dword ptr eax, byte ptr[edx]
+        {$else}
+        db      $F2, $0F, $38, $F0, $02
+        {$endif}
+        inc     edx
+        dec     ecx
+        jz      @0
+        test    edx, 3
+        jnz     @3
+@8:     push    ecx
+        shr     ecx, 3
+        jz      @2
+@1:     {$ifdef ISDELPHI2010}
+        crc32   dword ptr eax, dword ptr[edx]
+        crc32   dword ptr eax, dword ptr[edx + 4]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        db      $F2, $0F, $38, $F1, $42, $04
+        {$endif}
+        dec     ecx
+        lea     edx, [edx + 8]
+        jnz     @1
+@2:     pop     ecx
+        and     ecx, 7
+        jz      @0
+        cmp     ecx, 4
+        jb      @4
+        {$ifdef ISDELPHI2010}
+        crc32   dword ptr eax, dword ptr[edx]
+        {$else}
+        db      $F2, $0F, $38, $F1, $02
+        {$endif}
+        sub     ecx, 4
+        lea     edx, [edx + 4]
+        jz      @0
+@4:     {$ifdef ISDELPHI2010}
+        crc32   dword ptr eax, byte ptr[edx]
+        dec     ecx
+        jz      @0
+        crc32   dword ptr eax, byte ptr[edx + 1]
+        dec     ecx
+        jz      @0
+        crc32   dword ptr eax, byte ptr[edx + 2]
+        {$else}
+        db      $F2, $0F, $38, $F0, $02
+        dec     ecx
+        jz      @0
+        db      $F2, $0F, $38, $F0, $42, $01
+        dec     ecx
+        jz      @0
+        db      $F2, $0F, $38, $F0, $42, $02
+        {$endif}
+@0:     not     eax
 end;
 {$endif PUREPASCAL}
 
@@ -32346,29 +32363,28 @@ begin
 end;
 {$else}
 asm // eax=V
-    xor ecx,ecx
-    push edx // save result RawUTF8
-    test eax,eax
-    jz @2 // avoid GPF
-    lea edx,eax+1
-    mov cl,[eax]
-@1: mov ch,[edx] // edx=source cl=length
-    sub ch,'a'
-    sub ch,'z'-'a'
-    ja @2 // not a lower char -> create a result string starting at edx
-    dec cl
-    lea edx,[edx+1]
-    jnz @1
-    mov cl,[eax]
-    lea edx,[eax+1]  // no UpperCase -> retrieve full text (result := V^)
-@2: pop eax
-    movzx ecx,cl
+        xor     ecx, ecx
+        push    edx // save result RawUTF8
+        test    eax, eax
+        jz      @2 // avoid GPF
+        lea     edx, eax + 1
+        mov     cl, [eax]
+@1:     mov     ch, [edx] // edx=source cl=length
+        sub     ch, 'a'
+        sub     ch, 'z' - 'a'
+        ja      @2 // not a lower char -> create a result string starting at edx
+        dec     cl
+        lea     edx, [edx + 1]
+        jnz     @1
+        mov     cl, [eax]
+        lea     edx, [eax + 1]  // no UpperCase -> retrieve full text (result := V^)
+@2:     pop     eax
+        movzx   ecx, cl
 {$ifdef UNICODE}
-    push CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
-    call System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
-    rep ret // we need a call just above for right push CP_UTF8 retrieval
-{$else}
-    jmp System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
+        push    CP_UTF8 // UTF-8 code page for Delphi 2009+ + call below, not jump
+        call    System.@LStrFromPCharLen // eax=Dest edx=Source ecx=Length
+        rep     ret // we need a call just above for right push CP_UTF8 retrieval
+{$else} jmp     System.@LStrFromPCharLen // eax=dest edx=source ecx=length(source)
 {$endif}
 end;
 {$endif}
@@ -33625,16 +33641,16 @@ end;
 {$else}
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
 asm
-      test eax,eax
-      jnl @pos
-      neg eax
-      add eax,eax
-      jmp ToVarUInt32
-@pos: jz @zer
-      lea eax,[eax*2-1]
-      jmp ToVarUInt32
-@zer: mov [edx],al
-      lea eax,[edx+1]
+        test    eax, eax
+        jnl     @pos
+        neg     eax
+        add     eax, eax
+        jmp     ToVarUInt32
+@pos:   jz      @zer
+        lea     eax, [eax * 2 - 1]
+        jmp     ToVarUInt32
+@zer:   mov     [edx], al
+        lea     eax, [edx + 1]
 end;
 {$endif}
 
@@ -33690,30 +33706,30 @@ end;
 {$else}
 function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
 asm // eax=Value edx=Dest
-    cmp eax,$7F
-    ja @n
-    mov [edx],al
-    lea eax,[edx+1]
-    ret
-@n: mov ecx,eax
-@s: and cl,$7F // handle two bytes per loop
-    shr eax,7
-    or cl,$80
-    cmp eax,$7f
-    mov [edx],cl
-    lea edx,[edx+1]
-    mov ecx,eax
-    jbe @z
-    and cl,$7F
-    shr eax,7
-    or cl,$80
-    cmp eax,$7f
-    mov [edx],cl
-    mov ecx,eax
-    lea edx,[edx+1]
-    ja @s
-@z: mov [edx],al
-    lea eax,[edx+1]
+        cmp     eax, $7F
+        ja      @n
+        mov     [edx], al
+        lea     eax, [edx + 1]
+        ret
+@n:     mov     ecx, eax
+@s:     and     cl, $7F // handle two bytes per loop
+        shr     eax, 7
+        or      cl, $80
+        cmp     eax, $7f
+        mov     [edx], cl
+        lea     edx, [edx + 1]
+        mov     ecx, eax
+        jbe     @z
+        and     cl, $7f
+        shr     eax, 7
+        or      cl, $80
+        cmp     eax, $7f
+        mov     [edx], cl
+        mov     ecx, eax
+        lea     edx, [edx + 1]
+        ja      @s
+@z:     mov     [edx], al
+        lea     eax, [edx + 1]
 end;
 {$endif}
 
@@ -34054,11 +34070,10 @@ end;
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 asm
 {$ifdef CPU64}
-  .NOFRAME
-  jmp System.@CopyArray
-{$else}
-  push dword ptr [EBP+8]
-  call System.@CopyArray // RTL is fast enough for this
+        .NOFRAME
+        jmp     System.@CopyArray
+{$else} push    dword ptr[EBP + 8]
+        call    System.@CopyArray // RTL is fast enough for this
 {$endif}
 end;
 
@@ -34385,44 +34400,49 @@ procedure _Finalize(Data: Pointer; TypeInfo: Pointer);
 asm
 {$ifdef CPU64}
         .NOFRAME
-        mov r8,1 // rcx=p rdx=typeInfo r8=ElemCount
-        jmp System.@FinalizeArray
+        mov     r8, 1 // rcx=p rdx=typeInfo r8=ElemCount
+        jmp     System.@FinalizeArray
 {$else} // much faster than FinalizeArray(Data,TypeInfo,1)
-        movzx ecx,byte ptr [edx]  // eax=ptr edx=typeinfo ecx=datatype
-        sub cl,tkLString
+        movzx   ecx, byte ptr[edx]  // eax=ptr edx=typeinfo ecx=datatype
+        sub     cl, tkLString
         {$ifdef UNICODE}
-        cmp cl,tkUString-tkLString+1
-{$else} cmp cl,tkDynArray-tkLString+1
-{$endif}jnb @@err
-        jmp dword ptr [@@Tab+ecx*4]
-        nop; nop // for @@Tab alignment
-@@Tab:  dd System.@LStrClr
-{$IFDEF LINUX} // under Linux, WideString are refcounted as AnsiString
-        dd System.@LStrClr
-{$else} dd System.@WStrClr
-{$endif}
-{$ifdef LVCL}dd @@err
-{$else} dd System.@VarClr {$endif}
-        dd @@Array
-        dd RecordClear
-        dd System.@IntfClear
-        dd @@err
-        dd System.@DynArrayClear
-        {$ifdef UNICODE}
-        dd System.@UStrClr
-        {$endif}
-@@err:  mov al,reInvalidPtr
-        {$ifdef DELPHI5OROLDER}
-        jmp System.@RunError
+        cmp     cl, tkUString - tkLString + 1
         {$else}
-        jmp System.Error
+        cmp     cl, tkDynArray - tkLString + 1
         {$endif}
-@@array:movzx ecx,[edx].TTypeInfo.NameLen
-        add ecx,edx
-        mov edx,dword ptr [ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
-        mov ecx,[ecx].TTypeInfo.ManagedCount
-        mov edx,[edx]
-        jmp System.@FinalizeArray
+        jnb     @@err
+        jmp     dword ptr[@@Tab + ecx * 4]
+        nop
+        nop // for @@Tab alignment
+@@Tab:  dd      System.@LStrClr
+{$IFDEF LINUX} // under Linux, WideString are refcounted as AnsiString
+        dd      System.@LStrClr
+{$else} dd      System.@WStrClr
+{$endif LINUX}
+{$ifdef LVCL}
+        dd      @@err
+{$else} dd      System.@VarClr
+{$endif LVCL}
+        dd      @@ARRAY
+        dd      RecordClear
+        dd      System.@IntfClear
+        dd      @@err
+        dd      System.@DynArrayClear
+        {$ifdef UNICODE}
+        dd      System.@UStrClr
+        {$endif}
+@@err:  mov     al, reInvalidPtr
+        {$ifdef DELPHI5OROLDER}
+        jmp     System.@RunError
+        {$else}
+        jmp     System.Error
+        {$endif}
+@@array:movzx   ecx, [edx].TTypeInfo.NameLen
+        add     ecx, edx
+        mov     edx, dword ptr[ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov     ecx, [ecx].TTypeInfo.ManagedCount
+        mov     edx, [edx]
+        jmp     System.@FinalizeArray
 {$endif CPU64}
 end;
 {$endif FPC}
@@ -34610,81 +34630,80 @@ asm // faster version by AB
   mov edx,[edx+ecx].TTypeInfo.Size
   xor ecx,ecx
   jmp dword ptr [FillCharFast] *)
-        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
-        push ebx
-        mov ebx,eax
-        push esi
-        push edi
-        mov edi,[edx+ecx].TTypeInfo.ManagedCount
-        lea esi,[edx+ecx].TTypeInfo.ManagedFields
-        test edi,edi
-        jz @@end
-@@loop: mov edx,[esi].TFieldInfo.TypeInfo
-        mov eax,[esi].TFieldInfo.&Offset
-        mov edx,[edx]
-        lea esi,[esi+8]
-        movzx ecx,[edx].TTypeInfo.Kind
-        lea eax,[eax+ebx] // eax=data to be initialized
-        jmp dword ptr [@@Tab+ecx*4-tkLString*4]
-@@Tab:  dd @@ptr, @@ptr, @@variant, @@array, @@array, @@ptr, @@ptr, @@ptr, @@ptr
-@@ptr:  dec edi
-        mov dword ptr [eax],0 // pointer initialization
-        jg @@loop
-@@end:  pop edi
-        pop esi
-        pop ebx
+        movzx   ecx, byte ptr[edx].TTypeInfo.NameLen
+        push    ebx
+        mov     ebx, eax
+        push    esi
+        push    edi
+        mov     edi, [edx + ecx].TTypeInfo.ManagedCount
+        lea     esi, [edx + ecx].TTypeInfo.ManagedFields
+        test    edi, edi
+        jz      @end
+@loop:  mov     edx, [esi].TFieldInfo.TypeInfo
+        mov     eax, [esi].TFieldInfo.&Offset
+        mov     edx, [edx]
+        lea     esi, [esi + 8]
+        movzx   ecx, [edx].TTypeInfo.Kind
+        lea     eax, [eax + ebx] // eax=data to be initialized
+        jmp     dword ptr[@tab + ecx * 4 - tkLString * 4]
+@tab:   dd      @ptr, @ptr, @varrec, @array, @array, @ptr, @ptr, @ptr, @ptr
+@ptr:   dec     edi
+        mov     dword ptr[eax], 0 // pointer initialization
+        jg      @loop
+@end:  pop     edi
+        pop     esi
+        pop     ebx
         ret
-@@variant:
-        xor ecx,ecx
-        dec edi
-        mov dword ptr [eax],ecx
-        mov dword ptr [eax+4],ecx
-        mov dword ptr [eax+8],ecx
-        mov dword ptr [eax+12],ecx
-        jg @@loop
-        pop edi
-        pop esi
-        pop ebx
+@varrec:xor     ecx, ecx
+        dec     edi
+        mov     dword ptr[eax], ecx
+        mov     dword ptr[eax + 4], ecx
+        mov     dword ptr[eax + 8], ecx
+        mov     dword ptr[eax + 12], ecx
+        jg      @loop
+        pop     edi
+        pop     esi
+        pop     ebx
         ret
-@@array:mov ecx,1 // here eax=data edx=typeinfo
-        call System.@InitializeArray
-        dec edi
-        jg @@loop
-        pop edi
-        pop esi
-        pop ebx
+@array: mov     ecx, 1 // here eax=data edx=typeinfo
+        call    System.@InitializeArray
+        dec     edi
+        jg      @loop
+        pop     edi
+        pop     esi
+        pop     ebx
 end;
 
 {$ifndef UNICODE} // TMonitor.Destroy is not available ! -> apply to D2007 only
 procedure TObjectCleanupInstance;
 asm // faster version by AB
-        push ebx
-        mov ebx,eax
-@@loop: mov ebx,[ebx] // handle three VMT levels per iteration
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jz @@end
-        mov ebx,[ebx]
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jz @@end
-        mov ebx,[ebx]
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jnz @@loop
-@@end:  pop ebx
+        push    ebx
+        mov     ebx, eax
+@loop:  mov     ebx, [ebx] // handle three VMT levels per iteration
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jz      @end
+        mov     ebx, [ebx]
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jz      @end
+        mov     ebx, [ebx]
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jnz     @loop
+@end:   pop     ebx
         ret
-@@clr:  push offset @@loop // TObject has no vmtInitTable -> safe
-        jmp RecordClear // eax=self edx=typeinfo
+@clr:   push    offset @loop // TObject has no vmtInitTable -> safe
+        jmp     RecordClear // eax=self edx=typeinfo
 end;
 {$endif}
 
@@ -34693,62 +34712,67 @@ asm // faster version by AB (direct call to finalization procedures)
         { ->    EAX pointer to record to be finalized   }
         {       EDX pointer to type info                }
         { <-    EAX pointer to record to be finalized   }
-        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
-        push ebx
-        mov ebx,eax
-        push esi         
-        push edi
-        mov edi,[edx+ecx].TTypeInfo.ManagedCount
-        lea esi,[edx+ecx].TTypeInfo.ManagedFields
-        test edi,edi
-        jz @@end
-@@loop: mov edx,[esi].TFieldInfo.TypeInfo
-        mov eax,[esi].TFieldInfo.&Offset
-        mov edx,[edx]
-        lea esi,[esi+8]
-        movzx ecx,[edx].TTypeInfo.Kind
-        lea eax,[eax+ebx] // eax=data to be initialized
-        sub cl,tkLString
-        {$ifdef UNICODE}
-        cmp cl,tkUString-tkLString+1
-{$else} cmp cl,tkDynArray-tkLString+1
-{$endif}jnb @@err
-        call dword ptr [@@Tab+ecx*4]
-        dec edi
-        jg @@loop
-@@end:  mov eax,ebx // keep eax at return (see e.g. TObject.CleanupInstance)
-        pop edi
-        pop esi
-        pop ebx
+        movzx   ecx, byte ptr[edx].TTypeInfo.NameLen
+        push    ebx
+        mov     ebx, eax
+        push    esi
+        push    edi
+        mov     edi, [edx + ecx].TTypeInfo.ManagedCount
+        lea     esi, [edx + ecx].TTypeInfo.ManagedFields
+        test    edi, edi
+        jz      @end
+@loop:  mov     edx, [esi].TFieldInfo.TypeInfo
+        mov     eax, [esi].TFieldInfo.&Offset
+        mov     edx, [edx]
+        lea     esi, [esi + 8]
+        movzx   ecx, [edx].TTypeInfo.Kind
+        lea     eax, [eax + ebx] // eax=data to be initialized
+        sub     cl, tkLString
+{$ifdef UNICODE}
+        cmp     cl, tkUString - tkLString + 1
+{$else} cmp     cl, tkDynArray - tkLString + 1
+{$endif}
+        jnb     @err
+        call    dword ptr[@Tab + ecx * 4]
+        dec     edi
+        jg      @loop
+@end:   mov     eax, ebx // keep eax at return (see e.g. TObject.CleanupInstance)
+        pop     edi
+        pop     esi
+        pop     ebx
         ret
-        nop; nop; nop // align @@Tab
-@@Tab:  dd System.@LStrClr
+        nop
+        nop
+        nop // align @Tab
+@Tab:   dd      System.@LStrClr
 {$IFDEF LINUX} // under Linux, WideString are refcounted as AnsiString
-        dd System.@LStrClr
-{$else} dd System.@WStrClr {$endif}
+        dd      System.@LStrClr
+{$else} dd      System.@WStrClr
+{$endif}
 {$ifdef LVCL}
-        dd @@err
-{$else} dd System.@VarClr  {$endif}
-        dd @@Array
-        dd RecordClear
-        dd System.@IntfClear
-        dd @@err
-        dd System.@DynArrayClear
+        dd      @err
+{$else} dd      System.@VarClr
+{$endif}
+        dd      @ARRAY
+        dd      RecordClear
+        dd      System.@IntfClear
+        dd      @err
+        dd      System.@DynArrayClear
         {$ifdef UNICODE}
-        dd System.@UStrClr
+        dd      System.@UStrClr
         {$endif}
-@@err:  mov al,reInvalidPtr
-        pop edi
-        pop esi
-        pop ebx
-        jmp System.Error
-@@array:movzx ecx,[edx].TTypeInfo.NameLen
-        add ecx,edx
-        mov edx,dword ptr [ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
-        mov ecx,[ecx].TTypeInfo.ManagedCount
-        mov edx,[edx]
-        call System.@FinalizeArray
-        // we made Call @@Array -> ret to continue
+@err:   mov     al, reInvalidPtr
+        pop     edi
+        pop     esi
+        pop     ebx
+        jmp     System.Error
+@array: movzx   ecx, [edx].TTypeInfo.NameLen
+        add     ecx, edx
+        mov     edx, dword ptr[ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov     ecx, [ecx].TTypeInfo.ManagedCount
+        mov     edx, [edx]
+        call    System.@FinalizeArray
+        // we made Call @Array -> ret to continue
 end;
 
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
@@ -34756,132 +34780,142 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         { ->    EAX pointer to dest             }
         {       EDX pointer to source           }
         {       ECX pointer to typeInfo         }
-        push ebp
-        push ebx
-        push esi
-        push edi
-        movzx ebx,byte ptr [ecx].TTypeInfo.NameLen
-        mov esi,edx                     // esi = source
-        mov edi,eax                     // edi = dest
-        add ebx,ecx                     // ebx = TFieldTable
-        xor eax,eax                     // eax = current offset
-        mov ebp,[ebx].TTypeInfo.ManagedCount // ebp = TFieldInfo count
-        mov ecx,[ebx].TTypeInfo.recSize
-        test ebp,ebp
-        jz @fullcopy
-        push ecx                        // sizeof(record) on stack
-        add ebx,offset TTypeInfo.ManagedFields[0] // ebx = first TFieldInfo
-@next:  mov ecx,[ebx].TFieldInfo.&Offset
-        mov edx,[ebx].TFieldInfo.TypeInfo
-        sub ecx,eax
-        mov edx,[edx]
-        jle @nomov
-        lea esi,[esi+ecx]
-        lea edi,[edi+ecx]
-        neg ecx
-@mov1:  mov al,[esi+ecx] // fast copy not destructable data
-        mov [edi+ecx],al
-        inc ecx
-        jnz @mov1
-@nomov: mov eax,edi
-        movzx ecx,[edx].TTypeInfo.Kind
-        cmp ecx,tkLString
-        je @@LString
-        jb @@err
+        push    ebp
+        push    ebx
+        push    esi
+        push    edi
+        movzx   ebx, byte ptr[ecx].TTypeInfo.NameLen
+        mov     esi, edx                     // esi = source
+        mov     edi, eax                     // edi = dest
+        add     ebx, ecx                     // ebx = TFieldTable
+        XOR     eax, eax                     // eax = current offset
+        mov     ebp, [ebx].TTypeInfo.ManagedCount // ebp = TFieldInfo count
+        mov     ecx, [ebx].TTypeInfo.recSize
+        test    ebp, ebp
+        jz      @fullcopy
+        push    ecx                        // sizeof(record) on stack
+        add     ebx, offset TTypeInfo.ManagedFields[0] // ebx = first TFieldInfo
+@next:  mov     ecx, [ebx].TFieldInfo.&Offset
+        mov     edx, [ebx].TFieldInfo.TypeInfo
+        sub     ecx, eax
+        mov     edx, [edx]
+        jle     @nomov
+        lea     esi, [esi + ecx]
+        lea     edi, [edi + ecx]
+        neg     ecx
+@mov1:  mov     al, [esi + ecx] // fast copy not destructable data
+        mov     [edi + ecx], al
+        inc     ecx
+        jnz     @mov1
+@nomov: mov     eax, edi
+        movzx   ecx, [edx].TTypeInfo.Kind
+        cmp     ecx, tkLString
+        je      @LString
+        jb      @err
 {$ifdef UNICODE}
-        cmp ecx,tkUString
-        je @@UString
-{$else} cmp ecx,tkDynArray
-        je @@DynArray
-{$endif}ja @@err
-        jmp dword ptr [ecx*4+@@tab-tkWString*4]
-@@Tab:  dd @@WString,@@Variant,@@Array,@@Record,@@Interface,@@err
-        {$ifdef UNICODE}dd @@DynArray{$endif}
-@@errv: mov al,reVarInvalidOp
-        jmp @@err2
-@@err:  mov al,reInvalidPtr
-@@err2: pop edi
-        pop esi
-        pop ebx
-        pop ebp
-        jmp System.Error
+        cmp     ecx, tkUString
+        je      @UString
+{$else} cmp     ecx, tkDynArray
+        je      @DynArray
+{$endif}        ja      @err
+        jmp     dword ptr[ecx * 4 + @tab - tkWString * 4]
+
+@Tab:   dd      @WString, @Variant, @ARRAY, @RECORD, @INTERFACE, @err
+{$ifdef UNICODE}
+        dd      @DynArray
+{$endif}
+@errv:  mov     al, reVarInvalidOp
+        jmp     @err2
+@err:   mov     al, reInvalidPtr
+@err2:  pop     edi
+        pop     esi
+        pop     ebx
+        pop     ebp
+        jmp     System.Error
         nop // all functions below have esi=source edi=dest
-@@Array:
-        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
-        push dword ptr [edx+ecx].TTypeInfo.recSize
-        push dword ptr [edx+ecx].TTypeInfo.ManagedCount
-        mov ecx,dword ptr [edx+ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
-        mov ecx,[ecx]
-        mov edx,esi
-        call System.@CopyArray
-        pop eax // restore sizeof(Array)
-        jmp @@finish
-@@Record:
-        movzx ecx,byte ptr [edx].TTypeInfo.NameLen
-        mov ecx,[edx+ecx].TTypeInfo.recSize
-        push ecx
-        mov ecx,edx
-        mov edx,esi
-        call RecordCopy
-        pop eax // restore sizeof(Record)
-        jmp @@finish
-        nop; nop; nop
-@@Variant:
+@Array: movzx   ecx, byte ptr[edx].TTypeInfo.NameLen
+        push    dword ptr[edx + ecx].TTypeInfo.recSize
+        push    dword ptr[edx + ecx].TTypeInfo.ManagedCount
+        mov     ecx, dword ptr[edx + ecx].TTypeInfo.ManagedFields[0] // Fields[0].TypeInfo^
+        mov     ecx, [ecx]
+        mov     edx, esi
+        call    System.@CopyArray
+        pop     eax // restore sizeof(Array)
+        jmp     @finish
+@Record:movzx   ecx, byte ptr[edx].TTypeInfo.NameLen
+        mov     ecx, [edx + ecx].TTypeInfo.recSize
+        push    ecx
+        mov     ecx, edx
+        mov     edx, esi
+        call    RecordCopy
+        pop     eax // restore sizeof(Record)
+        jmp     @finish
+        nop
+        nop
+        nop
+@Variant:
 {$ifdef NOVARCOPYPROC}
-        mov edx,esi
-        call System.@VarCopy
-{$else} cmp dword ptr [VarCopyProc],0
-        mov edx,esi
-        jz @@errv
-        call [VarCopyProc]
-{$endif}mov eax,16
-        jmp @@finish
-{$ifdef DELPHI6OROLDER} nop; nop; {$endif}
-@@Interface:
-        mov edx,[esi]
-        call System.@IntfCopy
-        jmp @@fin4
-        nop; nop; nop
-@@DynArray:
-        mov ecx,edx // ecx=TypeInfo
-        mov edx,[esi]
-        call System.@DynArrayAsg
-        jmp @@fin4
-@@WString:
+        mov     edx, esi
+        call    System.@VarCopy
+{$else} cmp     dword ptr[VarCopyProc], 0
+        mov     edx, esi
+        jz      @errv
+        call    [VarCopyProc]
+{$endif}
+        mov     eax, 16
+        jmp     @finish
+{$ifdef DELPHI6OROLDER}
+        nop
+        nop
+{$endif}
+@Interface:
+        mov     edx, [esi]
+        call    System.@IntfCopy
+        jmp     @fin4
+        nop
+        nop
+        nop
+@DynArray:
+        mov     ecx, edx // ecx=TypeInfo
+        mov     edx, [esi]
+        call    System.@DynArrayAsg
+        jmp     @fin4
+@WString:
 {$ifndef LINUX}
-        mov edx,[esi]
-        call System.@WStrAsg
-        jmp @@fin4
+        mov     edx, [esi]
+        call    System.@WStrAsg
+        jmp     @fin4
 {$endif}
-@@LString:
-        mov edx,[esi]
-        call System.@LStrAsg
+@LString:
+        mov     edx, [esi]
+        call    System.@LStrAsg
 {$ifdef UNICODE}
-        jmp @@fin4
-        nop; nop
-@@UString:
-        mov edx,[esi]
-        call System.@UStrAsg
+        jmp     @fin4
+        nop
+        nop
+@UString:
+        mov     edx, [esi]
+        call    System.@UStrAsg
 {$endif}
-@@fin4: mov eax,4
-@@finish:
-        add esi,eax
-        add edi,eax
-        add eax,[ebx].TFieldInfo.&Offset
-        dec ebp    // any other TFieldInfo?
-        lea ebx,[ebx+8]
-        jnz @next
-        pop ecx // ecx= sizeof(record)
+@fin4: mov     eax, 4
+@finish:
+        add     esi, eax
+        add     edi, eax
+        add     eax, [ebx].TFieldInfo.&Offset
+        dec     ebp    // any other TFieldInfo?
+        lea     ebx, [ebx + 8]
+        jnz     @next
+        pop     ecx // ecx= sizeof(record)
 @fullcopy:
-        mov edx,edi
-        sub ecx,eax
-        mov eax,esi
-        jle @nomov2
-        call dword ptr [MoveFast]
-@nomov2:pop edi
-        pop esi
-        pop ebx
-        pop ebp
+        mov     edx, edi
+        sub     ecx, eax
+        mov     eax, esi
+        jle     @nomov2
+        call    dword ptr[MoveFast]
+@nomov2:        pop     edi
+        pop     esi
+        pop     ebx
+        pop     ebp
 end;
 
 {$endif DOPATCHTRTL}
@@ -35220,34 +35254,34 @@ end;
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         .NOFRAME
-        test     rcx,rcx
-        mov      rax,rcx             // get pointer to string from rcx
-        mov      r8,rcx              // copy pointer
-        jz       @null               // returns 0 if S=nil
+        test    rcx, rcx
+        mov     rax, rcx             // get pointer to string from rcx
+        mov     r8, rcx              // copy pointer
+        jz      @null                // returns 0 if S=nil
         // rax = s,ecx = 32 bits of s
-        pxor     xmm0,xmm0           // set to zero
-        and      ecx,0FH             // lower 4 bits indicate misalignment
-        and      rax,-10H            // align pointer by 16
-        movdqa   xmm1,[rax]          // read from nearest preceding boundary
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        shr      edx,cl              // shift out false bits
-        shl      edx,cl              // shift back again
-        bsf      edx,edx             // find first 1-bit
-        jnz      @L2                 // found
+        pxor    xmm0, xmm0           // set to zero
+        and     ecx, 0FH             // lower 4 bits indicate misalignment
+        and     rax,  - 10H          // align pointer by 16
+        movdqa  xmm1, [rax]          // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        shr     edx, cl              // shift out false bits
+        shl     edx, cl              // shift back again
+        bsf     edx, edx             // find first 1-bit
+        jnz     @L2                  // found
         // Main loop, search 16 bytes at a time
-@L1:    add      rax,10H             // increment pointer by 16
-        movdqa   xmm1,[rax]          // read 16 bytes aligned
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        bsf      edx,edx             // find first 1-bit
+@L1:    add     rax, 10H             // increment pointer by 16
+        movdqa  xmm1, [rax]          // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
+        pmovmskb edx, xmm1           // get one bit for each byte result
+        bsf     edx, edx             // find first 1-bit
         // (moving the bsf out of the loop and using test here would be faster
         // for long strings on old processors, but we are assuming that most
         // strings are short, and newer processors have higher priority)
-        jz       @L1                 // loop if not found
+        jz      @L1                  // loop if not found
 @L2:    // Zero-byte found. Compute string length
-        sub      rax,r8              // subtract start address
-        add      rax,rdx             // add byte index
+        sub     rax, r8              // subtract start address
+        add     rax, rdx             // add byte index
 @null:
 end;
 
@@ -35259,17 +35293,17 @@ const
 function StrLenSSE42(S: pointer): PtrInt;
 asm // rcx=S
         .NOFRAME
-        test      rcx,rcx
-        mov       rdx,rcx
-        mov       rax,-16
-        jz        @null
-        pxor      xmm0,xmm0
-@L:     add       rax,16   // add before comparison flag
-        pcmpistri xmm0,[rdx+rax],EQUAL_EACH
-        jnz       @L
-        add       rax,rcx
+        test    rcx, rcx
+        mov     rdx, rcx
+        mov     rax,  - 16
+        jz      @null
+        pxor    xmm0, xmm0
+@L:     add     rax, 16   // add before comparison flag
+        pcmpistri xmm0, [rdx + rax], EQUAL_EACH
+        jnz     @L
+        add     rax, rcx
         ret
-@null:  xor       rax,rax
+@null:  xor     rax, rax
 end;
 {$endif}
 
@@ -35280,314 +35314,316 @@ end;
 procedure FillCharX87;
 asm // eax=Dest edx=Count cl=Value
         // faster version by John O'Harrow  (Code Size = 153 Bytes)
-        cmp   edx,32
-        mov   ch,cl                 // copy value into both bytes of cx
-        jl    @small
-        mov   [eax  ],cx            // fill first 8 bytes
-        mov   [eax+2],cx
-        mov   [eax+4],cx
-        mov   [eax+6],cx
-        sub   edx,16
-        fld   qword ptr [eax]
-        fst   qword ptr [eax+edx]    // fill last 16 bytes
-        fst   qword ptr [eax+edx+8]
-        mov   ecx,eax
-        and   ecx,7                 // 8-byte align writes
-        sub   ecx,8
-        sub   eax,ecx
-        add   edx,ecx
-        add   eax,edx
-        neg   edx
-@loop:  fst   qword ptr [eax+edx]    // fill 16 bytes per loop
-        fst   qword ptr [eax+edx+8]
-        add   edx,16
-        jl    @loop
-        ffree st(0)
+        cmp     edx, 32
+        mov     ch, cl                 // copy value into both bytes of cx
+        jl      @small
+        mov     [eax], cx              // fill first 8 bytes
+        mov     [eax + 2], cx
+        mov     [eax + 4], cx
+        mov     [eax + 6], cx
+        sub     edx, 16
+        fld     qword ptr[eax]
+        fst     qword ptr[eax + edx]    // fill last 16 bytes
+        fst     qword ptr[eax + edx + 8]
+        mov     ecx, eax
+        and     ecx, 7                 // 8-byte align writes
+        sub     ecx, 8
+        sub     eax, ecx
+        add     edx, ecx
+        add     eax, edx
+        neg     edx
+@loop:  fst     qword ptr[eax + edx]    // fill 16 bytes per loop
+        fst     qword ptr[eax + edx + 8]
+        add     edx, 16
+        jl      @loop
+        ffree   st(0)
         fincstp
         ret
         nop
-@small: test  edx,edx
-        jle   @done
-        mov   [eax+edx-1],cl        // fill last byte
-        and   edx,-2                // no. of words to fill
-        neg   edx
-        lea   edx,[@fill+60+edx*2]
-        jmp   edx
-        nop                          // align jump destinations
+@small: test    edx, edx
+        jle     @done
+        mov     [eax + edx - 1], cl      // fill last byte
+        and     edx,  - 2                // no. of words to fill
+        neg     edx
+        lea     edx, [@fill + 60 + edx * 2]
+        jmp     edx
+        nop                              // align jump destinations
         nop
-@fill:  mov   [eax+28],cx
-        mov   [eax+26],cx
-        mov   [eax+24],cx
-        mov   [eax+22],cx
-        mov   [eax+20],cx
-        mov   [eax+18],cx
-        mov   [eax+16],cx
-        mov   [eax+14],cx
-        mov   [eax+12],cx
-        mov   [eax+10],cx
-        mov   [eax+ 8],cx
-        mov   [eax+ 6],cx
-        mov   [eax+ 4],cx
-        mov   [eax+ 2],cx
-        mov   [eax   ],cx
+@fill:  mov     [eax + 28], cx
+        mov     [eax + 26], cx
+        mov     [eax + 24], cx
+        mov     [eax + 22], cx
+        mov     [eax + 20], cx
+        mov     [eax + 18], cx
+        mov     [eax + 16], cx
+        mov     [eax + 14], cx
+        mov     [eax + 12], cx
+        mov     [eax + 10], cx
+        mov     [eax + 8], cx
+        mov     [eax + 6], cx
+        mov     [eax + 4], cx
+        mov     [eax + 2], cx
+        mov     [eax], cx
         ret                         // for alignment
-@done:  db $f3 // rep ret AMD trick here
+@done:  db      $f3 // rep ret AMD trick here
 end;
 
 /// faster implementation of Move() for Delphi versions with no FastCode inside
 procedure MoveX87;
 asm // eax=source edx=dest ecx=count
          // original code by John O'Harrow - included since delphi 2007
-        cmp     eax,edx
-        jz      @exit                 // exit if source=dest
-        cmp     ecx,32
-        ja      @lrg                  // count > 32 or count < 0
-        sub     ecx,8
-        jg      @sml                  // 9..32 byte move
-        jmp     dword ptr [@table+32+ecx*4]   // 0..8 byte move
-@sml:   fild    qword ptr [eax+ecx]   // load last 8
-        fild    qword ptr [eax]       // load first 8
-        cmp     ecx,8
+        cmp     eax, edx
+        jz      @exit                  // exit if source=dest
+        cmp     ecx, 32
+        ja      @lrg                   // count > 32 or count < 0
+        sub     ecx, 8
+        jg      @sml                   // 9..32 byte move
+        jmp     dword ptr[@table + 32 + ecx * 4]   // 0..8 byte move
+@sml:   fild    qword ptr[eax + ecx]   // load last 8
+        fild    qword ptr[eax]         // load first 8
+        cmp     ecx, 8
         jle     @sml16
-        fild    qword ptr [eax+8]     // load second 8
-        cmp     ecx,16
+        fild    qword ptr[eax + 8]     // load second 8
+        cmp     ecx, 16
         jle     @sml24
-        fild    qword ptr [eax+16]    // load third 8
-        fistp   qword ptr [edx+16]    // save third 8
-@sml24: fistp   qword ptr [edx+8]     // save second 8
-@sml16: fistp   qword ptr [edx]       // save first 8
-        fistp   qword ptr [edx+ecx]   // save last 8
+        fild    qword ptr[eax + 16]    // load third 8
+        fistp   qword ptr[edx + 16]    // save third 8
+@sml24: fistp   qword ptr[edx + 8]     // save second 8
+@sml16: fistp   qword ptr[edx]         // save first 8
+        fistp   qword ptr[edx + ecx]   // save last 8
         ret
-@exit:  rep ret
-@table: dd @exit,@m01,@m02,@m03,@m04,@m05,@m06,@m07,@m08
+@exit:  rep     ret
+@table: dd      @exit, @m01, @m02, @m03, @m04, @m05, @m06, @m07, @m08
 @lrgfwd:push    edx
-        fild    qword ptr [eax]       // first 8
-        lea     eax,[eax+ecx-8]
-        lea     ecx,[ecx+edx-8]
-        fild    qword ptr [eax]       // last 8
+        fild    qword ptr[eax]       // first 8
+        lea     eax, [eax + ecx - 8]
+        lea     ecx, [ecx + edx - 8]
+        fild    qword ptr[eax]       // last 8
         push    ecx
         neg     ecx
-        and     edx,-8                // 8-byte align writes
-        lea     ecx,[ecx+edx+8]
+        and     edx,  -8             // 8-byte align writes
+        lea     ecx, [ecx + edx + 8]
         pop     edx
-@fwd:   fild    qword ptr [eax+ecx]
-        fistp   qword ptr [edx+ecx]
-        add     ecx,8
+@fwd:   fild    qword ptr[eax + ecx]
+        fistp   qword ptr[edx + ecx]
+        add     ecx, 8
         jl      @fwd
-        fistp   qword ptr [edx]       // last 8
+        fistp   qword ptr[edx]       // last 8
         pop     edx
-        fistp   qword ptr [edx]       // first 8
+        fistp   qword ptr[edx]       // first 8
         ret
-@lrg:   jng     @exit                 // count < 0
-        cmp     eax,edx
+@lrg:   jng     @exit                // count < 0
+        cmp     eax, edx
         ja      @lrgfwd
-        sub     edx,ecx
-        cmp     eax,edx
-        lea     edx,[edx+ecx]
+        sub     edx, ecx
+        cmp     eax, edx
+        lea     edx, [edx + ecx]
         jna     @lrgfwd
-        sub     ecx,8                 // backward move
+        sub     ecx, 8               // backward move
         push    ecx
-        fild    qword ptr [eax+ecx]   // last 8
-        fild    qword ptr [eax]       // first 8
-        add     ecx,edx
-        and     ecx,-8                // 8-byte align writes
-        sub     ecx,edx
-@bwd:   fild    qword ptr [eax+ecx]
-        fistp   qword ptr [edx+ecx]
-        sub     ecx,8
+        fild    qword ptr[eax + ecx] // last 8
+        fild    qword ptr[eax]       // first 8
+        add     ecx, edx
+        and     ecx, -8              // 8-byte align writes
+        sub     ecx, edx
+@bwd:   fild    qword ptr[eax + ecx]
+        fistp   qword ptr[edx + ecx]
+        sub     ecx, 8
         jg      @bwd
         pop     ecx
-        fistp   qword ptr [edx]       // first 8
-        fistp   qword ptr [edx+ecx]   // last 8
+        fistp   qword ptr[edx]       // first 8
+        fistp   qword ptr[edx + ecx] // last 8
         ret
-@m01:   movzx   ecx,byte ptr [eax]
-        mov     [edx],cl
+@m01:   movzx   ecx, byte ptr[eax]
+        mov     [edx], cl
         ret
-@m02:   movzx   ecx,word ptr [eax]
-        mov     [edx],cx
+@m02:   movzx   ecx, word ptr[eax]
+        mov     [edx], cx
         ret
-@m03:   mov     cx,[eax]
-        mov     al,[eax+2]
-        mov     [edx],cx
-        mov     [edx+2],al
+@m03:   mov     cx, [eax]
+        mov     al, [eax + 2]
+        mov     [edx], cx
+        mov     [edx + 2], al
         ret
-@m04:   mov     ecx,[eax]
-        mov     [edx],ecx
+@m04:   mov     ecx, [eax]
+        mov     [edx], ecx
         ret
-@m05:   mov     ecx,[eax]
-        mov     al,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],al
+@m05:   mov     ecx, [eax]
+        mov     al, [eax + 4]
+        mov     [edx], ecx
+        mov     [edx + 4], al
         ret
-@m06:   mov     ecx,[eax]
-        mov     ax,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],ax
+@m06:   mov     ecx, [eax]
+        mov     ax, [eax + 4]
+        mov     [edx], ecx
+        mov     [edx + 4], ax
         ret
-@m07:   mov     ecx,[eax]
-        mov     eax,[eax+3]
-        mov     [edx],ecx
-        mov     [edx+3],eax
+@m07:   mov     ecx, [eax]
+        mov     eax, [eax + 3]
+        mov     [edx], ecx
+        mov     [edx + 3], eax
         ret
-@m08:   mov     ecx,[eax]
-        mov     eax,[eax+4]
-        mov     [edx],ecx
-        mov     [edx+4],eax
+@m08:   mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        mov     [edx], ecx
+        mov     [edx + 4], eax
 end;
 
 function StrLenX86(S: pointer): PtrInt;
 // pure x86 function (if SSE2 not available) - faster than SysUtils' version
 asm
-     test eax,eax
-     jz @@0
-     cmp   byte ptr [eax+0],0; je @@0
-     cmp   byte ptr [eax+1],0; je @@1
-     cmp   byte ptr [eax+2],0; je @@2
-     cmp   byte ptr [eax+3],0; je @@3
-     push  eax
-     and   eax,-4              { DWORD Align Reads }
-@@Loop:
-     add   eax,4
-     mov   edx,[eax]           { 4 Chars per Loop }
-     lea   ecx,[edx-$01010101]
-     not   edx
-     and   edx,ecx
-     and   edx,$80808080       { Set Byte to $80 at each #0 Position }
-     jz    @@Loop              { Loop until any #0 Found }
-@@SetResult:
-     pop   ecx
-     bsf   edx,edx             { Find First #0 Position }
-     shr   edx,3               { Byte Offset of First #0 }
-     add   eax,edx             { Address of First #0 }
-     sub   eax,ecx             { Returns Length }
-     ret
-@@0: xor eax,eax; ret
-@@1: mov eax,1;   ret
-@@2: mov eax,2;   ret
-@@3: mov eax,3
+        test    eax, eax
+        jz      @0
+        cmp     byte ptr[eax + 0], 0
+        je      @0
+        cmp     byte ptr[eax + 1], 0
+        je      @1
+        cmp     byte ptr[eax + 2], 0
+        je      @2
+        cmp     byte ptr[eax + 3], 0
+        je      @3
+        push    eax
+        and     eax, -4              { DWORD Align Reads }
+@Loop:  add     eax, 4
+        mov     edx, [eax]           { 4 Chars per Loop }
+        lea     ecx, [edx - $01010101]
+        not     edx
+        and     edx, ecx
+        and     edx, $80808080       { Set Byte to $80 at each #0 Position }
+        jz      @Loop                { Loop until any #0 Found }
+        pop     ecx
+        bsf     edx, edx             { Find First #0 Position }
+        shr     edx, 3               { Byte Offset of First #0 }
+        add     eax, edx             { Address of First #0 }
+        sub     eax, ecx             { Returns Length }
+        ret
+@0:     xor     eax, eax
+        ret
+@1:     mov     eax, 1
+        ret
+@2:     mov     eax, 2
+        ret
+@3:     mov     eax, 3
 end;
 
 {$ifndef DELPHI5OROLDER} // need SSE2 asm instruction set
 
 procedure FillCharSSE2;
 asm // Dest=eax Count=edx Value=cl
-  cmp       edx, 32
-  mov       ch,cl                {copy value into both bytes of cx}
-  jl        @@small
-  sub       edx,16
-  movd      xmm0,ecx
-  pshuflw   xmm0,xmm0,0
-  pshufd    xmm0,xmm0,0
-  movups    [eax],xmm0           {fill first 16 bytes}
-  movups    [eax+edx],xmm0       {fill last 16 bytes}
-  mov       ecx,eax              {16-byte align writes}
-  and       ecx,15
-  sub       ecx,16
-  sub       eax,ecx
-  add       edx,ecx
-  add       eax,edx
-  neg       edx
-  cmp       edx,-512*1024
-  jb        @@large
-@@loop:
-  movaps    [eax+edx],xmm0       {fill 16 bytes per loop}
-  add       edx,16
-  jl        @@loop
-  ret
-@@large:
-  movntdq    [eax+edx],xmm0      {fill 16 bytes per loop}
-  add       edx,16
-  jl        @@large
-  ret
-@@small:
-  test      edx,edx
-  jle       @@done
-  mov       [eax+edx-1],cl       {fill last byte}
-  and       edx,-2               {no. of words to fill}
-  neg       edx
-  lea       edx,[@@smallfill+60+edx*2]
-  jmp       edx
-  nop                             {align jump destinations}
-  nop
-@@smallfill:
-  mov       [eax+28],cx
-  mov       [eax+26],cx
-  mov       [eax+24],cx
-  mov       [eax+22],cx
-  mov       [eax+20],cx
-  mov       [eax+18],cx
-  mov       [eax+16],cx
-  mov       [eax+14],cx
-  mov       [eax+12],cx
-  mov       [eax+10],cx
-  mov       [eax+ 8],cx
-  mov       [eax+ 6],cx
-  mov       [eax+ 4],cx
-  mov       [eax+ 2],cx
-  mov       [eax   ],cx
-  ret {do not remove - this is for alignment}
-@@done:
+        cmp     edx, 32
+        mov     ch, cl                {copy value into both bytes of cx}
+        jl      @small
+        sub     edx, 16
+        movd    xmm0, ecx
+        pshuflw xmm0, xmm0, 0
+        pshufd  xmm0, xmm0, 0
+        movups  [eax], xmm0           {fill first 16 bytes}
+        movups  [eax + edx], xmm0     {fill last 16 bytes}
+        mov     ecx, eax              {16-byte align writes}
+        and     ecx, 15
+        sub     ecx, 16
+        sub     eax, ecx
+        add     edx, ecx
+        add     eax, edx
+        neg     edx
+        cmp     edx,  - 512 * 1024
+        jb      @large
+@loop:  movaps  [eax + edx], xmm0     {fill 16 bytes per loop}
+        add     edx, 16
+        jl      @loop
+        ret
+@large: movntdq [eax + edx], xmm0     {fill 16 bytes per loop}
+        add     edx, 16
+        jl      @large
+        ret
+@small: test    edx, edx
+        jle     @done
+        mov     [eax + edx - 1], cl   {fill last byte}
+        and     edx,  - 2             {no. of words to fill}
+        neg     edx
+        lea     edx, [@smallfill + 60 + edx * 2]
+        jmp     edx
+        nop                           {align jump destinations}
+        nop
+@smallfill:
+        mov     [eax + 28], cx
+        mov     [eax + 26], cx
+        mov     [eax + 24], cx
+        mov     [eax + 22], cx
+        mov     [eax + 20], cx
+        mov     [eax + 18], cx
+        mov     [eax + 16], cx
+        mov     [eax + 14], cx
+        mov     [eax + 12], cx
+        mov     [eax + 10], cx
+        mov     [eax + 8], cx
+        mov     [eax + 6], cx
+        mov     [eax + 4], cx
+        mov     [eax + 2], cx
+        mov     [eax], cx
+        ret {do not remove - this is for alignment}
+@done:
 end;
 
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen32.asm by Agner Fog - www.agner.org/optimize
-        test     eax,eax
-        mov      ecx,eax             // copy pointer
-        jz       @null               // returns 0 if S=nil
-        push     eax                 // save start address
-        pxor     xmm0,xmm0           // set to zero
-        and      ecx,0FH             // lower 4 bits indicate misalignment
-        and      eax,-10H            // align pointer by 16
-        movdqa   xmm1,[eax]          // read from nearest preceding boundary
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        shr      edx,cl              // shift out false bits
-        shl      edx,cl              // shift back again
-        bsf      edx,edx             // find first 1-bit
-        jnz      @A200               // found
+        test    eax, eax
+        mov     ecx, eax            // copy pointer
+        jz      @null               // returns 0 if S=nil
+        push    eax                 // save start address
+        pxor    xmm0, xmm0          // set to zero
+        and     ecx, 15             // lower 4 bits indicate misalignment
+        and     eax, -16            // align pointer by 16
+        movdqa  xmm1, [eax]         // read from nearest preceding boundary
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        shr     edx, cl             // shift out false bits
+        shl     edx, cl             // shift back again
+        bsf     edx, edx            // find first 1-bit
+        jnz     @A200               // found
         // Main loop, search 16 bytes at a time
-@A100:  add      eax,10H             // increment pointer by 16
-        movdqa   xmm1,[eax]          // read 16 bytes aligned
-        pcmpeqb  xmm1,xmm0           // compare 16 bytes with zero
-        pmovmskb edx,xmm1            // get one bit for each byte result
-        bsf      edx,edx             // find first 1-bit
+@A100:  add     eax, 10H            // increment pointer by 16
+        movdqa  xmm1, [eax]         // read 16 bytes aligned
+        pcmpeqb xmm1, xmm0          // compare 16 bytes with zero
+        pmovmskb edx, xmm1          // get one bit for each byte result
+        bsf     edx, edx            // find first 1-bit
         // (moving the bsf out of the loop and using test here would be faster
         // for long strings on old processors, but we are assuming that most
         // strings are short, and newer processors have higher priority)
-        jz       @A100               // loop if not found
+        jz      @A100               // loop if not found
 @A200:  // Zero-byte found. Compute string length
-        pop      ecx                 // restore start address
-        sub      eax,ecx             // subtract start address
-        add      eax,edx             // add byte index
+        pop     ecx                 // restore start address
+        sub     eax, ecx            // subtract start address
+        add     eax, edx            // add byte index
 @null:
 end;
 
 function StrLenSSE42(S: pointer): PtrInt;
 asm // warning: may read up to 15 bytes beyond the string itself
-        test      eax,eax
-        mov       edx,eax             // copy pointer
-        jz        @null               // returns 0 if S=nil
-        xor       eax,eax
-        pxor      xmm0,xmm0
+        test    eax, eax
+        mov     edx, eax             // copy pointer
+        jz      @null                // returns 0 if S=nil
+        xor     eax, eax
+        pxor    xmm0, xmm0
         {$ifdef HASAESNI}
-        pcmpistri xmm0,dqword [edx],EQUAL_EACH  // comparison result in ecx
+        pcmpistri xmm0, dqword[edx], EQUAL_EACH  // comparison result in ecx
         {$else}
-        db $66,$0F,$3A,$63,$02,EQUAL_EACH
+        db      $66, $0F, $3A, $63, $02, EQUAL_EACH
         {$endif}
-        jnz       @loop
-        mov       eax,ecx
+        jnz     @loop
+        mov     eax, ecx
         ret
         nop   // for @loop alignment
-@loop:  add       eax,16
+@loop:  add     eax, 16
         {$ifdef HASAESNI}
-        pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH  // comparison result in ecx
+        pcmpistri xmm0, dqword[edx + eax], EQUAL_EACH  // comparison result in ecx
         {$else}
-        db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH
+        db      $66, $0F, $3A, $63, $04, $10, EQUAL_EACH
         {$endif}
-        jnz       @loop
-@ok:    add       eax,ecx
+        jnz     @loop
+@ok:    add     eax, ecx
         ret
-@null:  db $f3 // rep ret
+@null:  db      $f3 // rep ret
 end;
 
 {$endif DELPHI5OROLDER}
@@ -40877,59 +40913,59 @@ begin
 end;
 {$else}
 asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
-    mov  eax,[eax]
-    mov  edx,[edx]
-    cmp  eax,edx
-    je   @0
-    test eax,edx
-    jz   @n1
-@n2:movzx ecx,byte ptr [eax] // first char comparison (QuickSort speedup)
-    sub  cl,[edx]
-    jne  @no
-    push ebx
-    mov  ebx,[eax-4]
-    sub  ebx,[edx-4]
-    push ebx
-    adc  ecx,-1
-    and  ecx,ebx
-    sub  ecx,[eax-4]
-    sub  eax,ecx
-    sub  edx,ecx
-@s: mov  ebx,[eax+ecx]  // compare by DWORD
-    xor  ebx,[edx+ecx]
-    jnz  @d
-    add  ecx,4
-    js   @s
-@L: pop  eax            // all chars equal -> returns length(A)-length(B)
-    pop  ebx
-    ret
-@d: bsf  ebx,ebx        // char differs -> returns PByte(A)^-PByte(B)^
-    shr  ebx,3
-    add  ecx,ebx
-    jns  @L
-    movzx eax,byte ptr [eax+ecx]
-    movzx edx,byte ptr [edx+ecx]
-    pop  ebx
-    pop  ebx
-    sub  eax,edx
-    ret
-@n1:test eax,eax       // A or B may be ''
-    jz   @n0
-    test edx,edx
-    jnz  @n2
-    cmp  [eax-4],edx
-    je   @0
-@no:jnc  @1
-    or   eax,-1
-    ret
-@n0:cmp  eax,[edx-4]
-    je   @0
-    jnc  @1
-    or   eax,-1
-    ret
-@0: xor  eax,eax
-    ret
-@1: mov  eax,1
+        mov     eax, [eax]
+        mov     edx, [edx]
+        cmp     eax, edx
+        je      @0
+        test    eax, edx
+        jz      @n1
+@n2:    movzx   ecx, byte ptr[eax] // first char comparison (quicksort speedup)
+        sub     cl, [edx]
+        jne     @no
+        push    ebx
+        mov     ebx, [eax - 4]
+        sub     ebx, [edx - 4]
+        push    ebx
+        adc     ecx,  - 1
+        and     ecx, ebx
+        sub     ecx, [eax - 4]
+        sub     eax, ecx
+        sub     edx, ecx
+@s:     mov     ebx, [eax + ecx]  // compare by dword
+        xor     ebx, [edx + ecx]
+        jnz     @d
+        add     ecx, 4
+        js      @s
+@l:     pop     eax            // all chars equal -> returns length(a)-length(b)
+        pop     ebx
+        ret
+@d:     bsf     ebx, ebx       // char differs -> returns pbyte(a)^-pbyte(b)^
+        shr     ebx, 3
+        add     ecx, ebx
+        jns     @l
+        movzx   eax, byte ptr[eax + ecx]
+        movzx   edx, byte ptr[edx + ecx]
+        pop     ebx
+        pop     ebx
+        sub     eax, edx
+        ret
+@n1:    test    eax, eax       // a or b may be ''
+        jz      @n0
+        test    edx, edx
+        jnz     @n2
+        cmp     [eax - 4], edx
+        je      @0
+@no:    jnc     @1
+        or      eax,  - 1
+        ret
+@n0:    cmp     eax, [edx - 4]
+        je      @0
+        jnc     @1
+        or      eax,  - 1
+        ret
+@0:     xor     eax, eax
+        ret
+@1:     mov     eax, 1
 end;
 {$endif}
 
@@ -44516,50 +44552,50 @@ end;
 
 class function TSynPersistent.NewInstance: TObject;
 asm
-        push eax  // class
-        mov eax,[eax].vmtInstanceSize
-        push eax  // size
-        call System.@GetMem
-        pop edx   // size
-        push eax  // self
-        mov cl,0
-        call dword ptr [FillcharFast]
-        pop eax   // self
-        pop edx   // class
-        mov [eax],edx // store VMT
-end; // TSynPersistent has no interface -> bypass vmtIntfTable 
+        push    eax  // class
+        mov     eax, [eax].vmtInstanceSize
+        push    eax  // size
+        call    System.@GetMem
+        pop     edx   // size
+        push    eax  // self
+        mov     cl, 0
+        call    dword ptr[FillcharFast]
+        pop     eax   // self
+        pop     edx   // class
+        mov     [eax], edx // store VMT
+end; // TSynPersistent has no interface -> bypass vmtIntfTable
 
 procedure TSynPersistent.FreeInstance;
 asm
-        push ebx
-        mov ebx,eax
-@@loop: mov ebx,[ebx] // handle three VMT levels per iteration
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jz @@end
-        mov ebx,[ebx]
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jz @@end
-        mov ebx,[ebx]
-        mov edx,[ebx].vmtInitTable
-        mov ebx,[ebx].vmtParent
-        test edx,edx
-        jnz @@clr
-        test ebx,ebx
-        jnz @@loop
-@@end:  pop ebx
-        jmp System.@FreeMem
+        push    ebx
+        mov     ebx, eax
+@loop:  mov     ebx, [ebx] // handle three VMT levels per iteration
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jz      @end
+        mov     ebx, [ebx]
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jz      @end
+        mov     ebx, [ebx]
+        mov     edx, [ebx].vmtInitTable
+        mov     ebx, [ebx].vmtParent
+        test    edx, edx
+        jnz     @clr
+        test    ebx, ebx
+        jnz     @loop
+@end:   pop     ebx
+        jmp     System.@FreeMem
         // TSynPersistent has no TMonitor -> bypass TMonitor.Destroy(self)
-        // BTW, TMonitor.Destroy is private, so unreachable 
-@@clr:  push offset @@loop // parent has never any vmtInitTable -> @@loop
-        jmp RecordClear // eax=self edx=typeinfo
+        // BTW, TMonitor.Destroy is private, so unreachable
+@clr:   push    offset @loop // parent has never any vmtInitTable -> @loop
+        jmp     RecordClear // eax=self edx=typeinfo
 end;
 
 {$endif FPC_OR_PUREPASCAL}
@@ -53766,31 +53802,31 @@ begin
 end;
 {$else}
 asm
-    test eax,eax
-    jz @z
-    movzx edx,byte ptr [eax]
-    bt [offset @f],edx
-    mov ecx,offset @c
-    jb @2
-@z: xor eax,eax
-    ret
-@f: dd 0,$03FF0010,$87FFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifierFirstChar
-@c: dd 0,$03FF4000,$AFFFFFFE,$07FFFFFE,0,0,0,0 // IsJsonIdentifier
-@s: mov dl,[eax]
-    bt [ecx],edx
-    jnb @1
-@2: mov dl,[eax+1]
-    bt [ecx],edx
-    jnb @1
-    mov dl,[eax+2]
-    bt [ecx],edx
-    jnb @1
-    mov dl,[eax+3]
-    bt [ecx],edx
-    lea eax,[eax+4]
-    jb @s
-@1: test dl,dl
-    setz al
+        test    eax, eax
+        jz      @z
+        movzx   edx, byte ptr[eax]
+        bt      [offset @first], edx
+        mov     ecx, offset @chars
+        jb      @2
+@z:     xor     eax, eax
+        ret
+@first: dd      0, $03FF0010, $87FFFFFE, $07FFFFFE, 0, 0, 0, 0 // IsJsonIdentifierFirstChar
+@chars: dd      0, $03FF4000, $AFFFFFFE, $07FFFFFE, 0, 0, 0, 0 // IsJsonIdentifier
+@s:     mov     dl, [eax]
+        bt      [ecx], edx
+        jnb     @1
+@2:     mov     dl, [eax + 1]
+        bt      [ecx], edx
+        jnb     @1
+        mov     dl, [eax + 2]
+        bt      [ecx], edx
+        jnb     @1
+        mov     dl, [eax + 3]
+        bt      [ecx], edx
+        lea     eax, [eax + 4]
+        jb      @s
+@1:     test    dl, dl
+        setz    al
 end;
 {$endif}
 
