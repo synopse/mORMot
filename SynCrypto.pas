@@ -466,7 +466,13 @@ type
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
     class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean;
-      IVAtBeginning: boolean=false): RawByteString;
+      IVAtBeginning: boolean=false): RawByteString; overload;
+    /// simple wrapper able to cypher/decypher any content
+    // - here all data variable could be text or binary
+    // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
+    // and stored at the beginning of the output binary buffer
+    class function SimpleEncrypt(const Input: RawByteString; const Key;
+      KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false): RawByteString; overload;
 
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
@@ -1015,7 +1021,7 @@ procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA
 /// compute the PBKDF2 derivation of a password using HMAC over SHA256
 // - this function expect the resulting key length to match SHA256 digest size
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
-  out result: TSHA256Digest);
+  out result: TSHA256Digest; const saltdefault: RawByteString='');
 
 
 /// direct Encrypt/Decrypt of data using the TAES class
@@ -1735,11 +1741,13 @@ begin
 end;
 
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
-  out result: TSHA256Digest);
+  out result: TSHA256Digest; const saltdefault: RawByteString);
 var i: integer;
     tmp: TSHA256Digest;
 begin
-  HMAC_SHA256(password,salt+#0#0#0#1,result);
+  if salt='' then
+    HMAC_SHA256(password,saltdefault+#0#0#0#1,result) else
+    HMAC_SHA256(password,salt+#0#0#0#1,result);
   tmp := result;
   for i := 2 to count do begin
     HMAC_SHA256(pointer(password),@tmp,length(password),SizeOf(tmp),tmp);
@@ -6871,6 +6879,20 @@ class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
 var instance: TAESAbstract;
 begin
   instance := CreateFromSha256(Key);
+  try
+    if Encrypt then
+      result := instance.EncryptPKCS7(Input,IVAtBeginning) else
+      result := instance.DecryptPKCS7(Input,IVAtBeginning);
+  finally
+    instance.Free;
+  end;
+end;
+
+class function TAESAbstract.SimpleEncrypt(const Input: RawByteString; const Key;
+  KeySize: integer; Encrypt, IVAtBeginning: boolean): RawByteString;
+var instance: TAESAbstract;
+begin
+  instance := Create(Key,KeySize);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input,IVAtBeginning) else

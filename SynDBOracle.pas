@@ -2637,12 +2637,12 @@ begin
   OutData[0] := Size;
 end;
 
-procedure UnQuoteSQLString(S,D: PUTF8Char);
+procedure UnQuoteSQLString(S,D: PUTF8Char; SLen: integer);
 begin
   if S=nil then
     D^ := #0 else
   if S^<>'''' then
-    MoveFast(S^,D^,PInteger(S-sizeof(integer))^+1) else begin
+    MoveFast(S^,D^,SLen+1) else begin // +1 to include #0
     inc(S);
     repeat
       if S[0]='''' then
@@ -2778,7 +2778,7 @@ begin
           oData := Pointer(VData); // in-place quote removal in text
           oDataSTR := oData;
           for j := 0 to fParamsArrayCount-1 do begin
-            UnQuoteSQLString(pointer(VArray[j]),oDataSTR);
+            UnQuoteSQLString(pointer(VArray[j]),oDataSTR,length(VArray[j]));
             inc(oDataSTR,oLength);
           end;
         end;
@@ -2787,8 +2787,12 @@ begin
           oData := Pointer(VData);
           oDataSTR := oData;
           for j := 0 to fParamsArrayCount-1 do begin
-            MoveFast(Pointer(PtrInt(VArray[j])-sizeof(Integer))^,oDataSTR^,
-              length(VArray[j])+sizeof(integer));
+            {$ifdef FPC}
+            PInteger(oDataSTR)^ := length(VArray[j]);
+            MoveFast(Pointer(VArray[j])^,oDataSTR[4],length(VArray[j]));
+            {$else}
+            MoveFast(Pointer(PtrInt(VArray[j])-4)^,oDataSTR^,length(VArray[j])+4);
+            {$endif}
             inc(oDataSTR,oLength);
           end;
         end;
