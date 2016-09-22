@@ -14805,7 +14805,7 @@ type
 // - you should call this procedure to initialize StdOut global variable, if
 // you manually initialized the Windows console, e.g. via the following code:
 // ! AllocConsole;
-// ! TextColor(ccLightGray); // initialize internal console context 
+// ! TextColor(ccLightGray); // initialize internal console context
 procedure TextColor(Color: TConsoleColor);
 
 /// change the Windows console text background color
@@ -14849,8 +14849,9 @@ var
 
 {$ifndef NOVARIANTS}
 type
-  /// an interface to process the command line switches
+  /// an interface to process the command line switches over a console
   // - as implemented e.g. by TCommandLine class
+  // - can implement any process, optionally with console interactivity
   ICommandLine = interface
     ['{77AB427C-1025-488B-8E04-3E62C8100E62}']
     /// returns a command line switch value as UTF-8 text
@@ -14866,18 +14867,45 @@ type
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// equals TRUE if the -noprompt switch has been supplied
+    // - may be used to force pure execution without console interaction,
+    // e.g. when run from another process
+    function NoPrompt: boolean;
+    /// change the console text color
+    // - do nothing if NoPrompt is TRUE
+    procedure TextColor(Color: TConsoleColor);
+    /// write some console text, with an optional color
+    // - will output the text even if NoPrompt is TRUE
+    procedure Text(const Fmt: RawUTF8; const Args: array of const;
+      Color: TConsoleColor=ccLightGray);
   end;
 
-  /// a class to process the command line switches
-  // - will parse "-switch1 value1 -switch2 value2" layout
-  // - stand-alone "-switch1 -switch2 value2" will create switch1=true value
+  /// a class to process the command line switches, with console interactivity
+  // - is able to redirect all Text() output to an internal UTF-8 storage,
+  // in addition or instead of the console (to be used e.g. from a GUI)
   // - implements ICommandLine interface
   TCommandLine = class(TInterfacedObjectWithCustomCreate, ICommandLine)
   private
     fValues: TDocVariantData;
+    fNoPrompt: boolean;
+    fNoConsole: boolean;
+    fLines: TRawUTF8DynArray;
+    procedure SetNoConsole(value: boolean);
   public
-    /// initialize the internal storage
-    constructor Create; override;
+    /// initialize the internal storage from the command line
+    // - will parse "-switch1 value1 -switch2 value2" layout
+    // - stand-alone "-switch1 -switch2 value2" will a create switch1=true value
+    constructor Create; overload; override;
+    /// initialize the internal storage with some ready-to-use switches
+    // - will also set the NoPrompt option, and set the supplied NoConsole value
+    // - may be used e.g. from a graphical interface instead of console mode
+    constructor Create(const switches: variant;
+      aNoConsole: boolean=true); reintroduce; overload;
+    /// initialize the internal storage with some ready-to-use name/value pairs
+    // - will also set the NoPrompt option, and set the supplied NoConsole value
+    // - may be used e.g. from a graphical interface instead of console mode
+    constructor Create(const NameValuePairs: array of const;
+      aNoConsole: boolean=true); reintroduce; overload;
     /// returns a command line switch value as UTF-8 text
     // - you can specify a prompt text, when asking for any missing switch
     function AsUTF8(const Switch, Default: RawUTF8; const Prompt: string): RawUTF8;
@@ -14893,8 +14921,27 @@ type
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
     /// serialize all recognized switches as UTF-8 JSON text
     function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
+    /// equals TRUE if the -noprompt switch has been supplied
+    // - may be used to force pure execution without console interaction,
+    // e.g. when run from another process
+    function NoPrompt: boolean;
+    /// change the console text color
+    // - do nothing if NoPrompt is TRUE
+    procedure TextColor(Color: TConsoleColor);
+    /// write some console text, with an optional color
+    // - will output the text even if NoPrompt=TRUE, but not if NoConsole=TRUE
+    // - will append the text to the internal storage, available from ConsoleText
+    procedure Text(const Fmt: RawUTF8; const Args: array of const;
+      Color: TConsoleColor=ccLightGray);
     /// low-level access to the internal switches storage
     property Values: TDocVariantData read fValues;
+    /// if Text() should be redirected to ConsoleText internal storage
+    // - and don't write anything to the console
+    // - should be associated with NoProperty = TRUE property
+    property NoConsole: boolean read fNoConsole write SetNoConsole;
+    /// returns the UTF-8 text as inserted by Text() calls
+    // - line feeds will be included
+    function ConsoleText(const LineFeed: RawUTF8=sLineBreak): RawUTF8;
   end;
 {$endif NOVARIANTS}
 
@@ -32641,6 +32688,7 @@ begin
       end;
     end;
 end;
+
 function GetMimeContentType(Content: Pointer; Len: integer;
   const FileName: TFileName=''): RawUTF8;
 begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
@@ -49087,7 +49135,7 @@ var i: integer;
     p, sw: RawUTF8;
 begin
   inherited Create;
-  fValues.InitFast(10,dvObject);
+  fValues.InitFast(ParamCount shr 1,dvObject);
   for i := 1 to ParamCount do begin
     p := StringToUTF8(ParamStr(i));
     if p<>'' then
@@ -49095,6 +49143,10 @@ begin
         if sw<>'' then
           fValues.AddValue(sw,true); // -flag -switch value -> flag=true
         sw := LowerCase(copy(p,2,100));
+        if sw='noprompt' then begin
+          fNoPrompt := true;
+          sw := '';
+        end;
       end else
         if sw<>'' then begin
           fValues.AddValueFromText(sw,p,true);
@@ -49105,14 +49157,78 @@ begin
     fValues.AddValue(sw,true); // trailing -flag
 end;
 
+constructor TCommandLine.Create(const switches: variant; aNoConsole: boolean);
+begin
+  inherited Create;
+  fValues.InitCopy(switches,JSON_OPTIONS_FAST);
+  fNoPrompt := true;
+  fNoConsole := aNoConsole;
+end;
+
+constructor TCommandLine.Create(const NameValuePairs: array of const; aNoConsole: boolean);
+begin
+  inherited Create;
+  fValues.InitObject(NameValuePairs,JSON_OPTIONS_FAST);
+  fNoPrompt := true;
+  fNoConsole := aNoConsole;
+end;
+
+function TCommandLine.NoPrompt: boolean;
+begin
+  result := fNoPrompt;
+end;
+
+function TCommandLine.ConsoleText(const LineFeed: RawUTF8): RawUTF8;
+begin
+  result := RawUTF8ArrayToCSV(fLines,LineFeed);
+end;
+
+procedure TCommandLine.SetNoConsole(value: boolean);
+begin
+  if value=fNoConsole then
+    exit;
+  if value then
+    fNoPrompt := true;
+  fNoConsole := false;
+end;
+
+procedure TCommandLine.TextColor(Color: TConsoleColor);
+begin
+  if not fNoPrompt then
+    SynCommons.TextColor(Color);
+end;
+
+procedure TCommandLine.Text(const Fmt: RawUTF8; const Args: array of const;
+  Color: TConsoleColor);
+var msg: RawUTF8;
+begin
+  FormatUTF8(Fmt,Args,msg);
+  {$I-}
+  if msg<>'' then begin
+    TextColor(Color);
+    AddRawUTF8(fLines,msg);
+    if not fNoConsole then
+      write(Utf8ToConsole(msg));
+  end;
+  if not fNoConsole then begin
+    writeln;
+    ioresult;
+  end;
+  {$I+}
+end;
+
 function TCommandLine.AsUTF8(const Switch, Default: RawUTF8;
   const Prompt: string): RawUTF8;
 var i: integer;
 begin
   i := fValues.GetValueIndex(Switch);
-  if i>=0 then begin
+  if i>=0 then begin // found
     VariantToUTF8(fValues.Values[i],result);
     fValues.Delete(i);
+    exit;
+  end;
+  if fNoPrompt then begin
+    result := Default;
     exit;
   end;
   result := '';
