@@ -3606,7 +3606,7 @@ begin
     ctx.ViaCtx := nil;
   end;
   {$endif USEPADLOCK}
-  FillCharFast(ctx,sizeof(ctx),0); // always erase key in memory after use
+  FillcharFast(ctx,sizeof(ctx),0); // always erase key in memory after use
 end;
 
 {$ifdef USETHREADSFORBIGAESBLOCKS}

@@ -10609,6 +10609,13 @@ function IsEqual(const A,B: THash256): boolean; overload;
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash256); overload;
 
+/// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
+// - will write the memory buffer directly, so if this string instance is shared
+// (i.e. has refcount>1), all other variables will contains zeros
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(secret); end;
+procedure FillZero(var secret: RawByteString); overload;
+  {$ifdef HASINLINE}inline;{$endif} overload;
 
 type
   /// the potential features, retrieved from an Intel CPU
@@ -14255,7 +14262,7 @@ type
     // - returns the index of the corresponding value, which may be just added
     function AddOrUpdateValue(const aName: RawUTF8; const aValue: variant;
       wasAdded: PBoolean=nil; OnlyAddMissing: boolean=false): integer;
-    /// add a value in this document
+    /// add a value in this document, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible
     // - if Update=TRUE, will set the property, even if it is existing
@@ -14286,6 +14293,12 @@ type
     // ! Assert(TDocVariantData(aVariant).Kind=dvArray);
     // - returns the index of the corresponding newly added item
     function AddItem(const aValue: variant): integer;
+    /// add a value to this document, handled as array, from its text representation
+    // - this function expects a UTF-8 text for the value, which would be
+    // converted to a variant number, if possible
+    // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - returns the index of the corresponding newly added item
+    function AddItemFromText(const aValue: RawUTF8): integer;
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
@@ -14867,6 +14880,12 @@ type
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// returns all command line values as an array of UTF-8 text
+    // - i.e. won't interpret the various switches in the input parameters
+    // - as created e.g. by TCommandLine.CreateAsArray constructor
+    function AsArray: TRawUTF8DynArray;
+    /// serialize all recognized switches as UTF-8 JSON text
+    function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
     /// equals TRUE if the -noprompt switch has been supplied
     // - may be used to force pure execution without console interaction,
     // e.g. when run from another process
@@ -14896,6 +14915,10 @@ type
     // - will parse "-switch1 value1 -switch2 value2" layout
     // - stand-alone "-switch1 -switch2 value2" will a create switch1=true value
     constructor Create; overload; override;
+    /// initialize the internal storage from the command line
+    // - will set paramstr(firstParam)..paramstr(paramcount) in fValues as array
+    // - may be used e.g. for "val1 val2 val3" command line layout
+    constructor CreateAsArray(firstParam: integer);
     /// initialize the internal storage with some ready-to-use switches
     // - will also set the NoPrompt option, and set the supplied NoConsole value
     // - may be used e.g. from a graphical interface instead of console mode
@@ -14919,6 +14942,10 @@ type
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// returns all command line values as an array of UTF-8 text
+    // - i.e. won't interpret the various switches in the input parameters
+    // - as created e.g. by TCommandLine.CreateAsArray constructor
+    function AsArray: TRawUTF8DynArray;
     /// serialize all recognized switches as UTF-8 JSON text
     function AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
     /// equals TRUE if the -noprompt switch has been supplied
@@ -14939,8 +14966,10 @@ type
     // - and don't write anything to the console
     // - should be associated with NoProperty = TRUE property
     property NoConsole: boolean read fNoConsole write SetNoConsole;
+    /// low-level access to the internal UTF-8 console lines storage
+    property ConsoleLines: TRawUTF8DynArray read fLines;
     /// returns the UTF-8 text as inserted by Text() calls
-    // - line feeds will be included
+    // - line feeds will be included to the ConsoleLines[] values
     function ConsoleText(const LineFeed: RawUTF8=sLineBreak): RawUTF8;
   end;
 {$endif NOVARIANTS}
@@ -24813,10 +24842,7 @@ end;
 procedure Base64ToURI(var base64: RawUTF8);
 var P: PUTF8Char;
 begin
-  {$ifdef FPC}
-  UniqueString(base64); // @base64[1] won't call UniqueString() under FPC :(
-  {$endif}
-  P := @base64[1];
+  P := UniqueRawUTF8(base64);
   if P<>nil then
     repeat
       case P^ of
@@ -24839,10 +24865,7 @@ begin
   len := length(base64);
   if len=0 then
     exit;
-  {$ifdef FPC}
-  UniqueString(base64); // @base64[1] won't call UniqueString() under FPC :(
-  {$endif}
-  P := @base64[1];
+  P := UniqueRawUTF8(base64);
   repeat
     case P^ of
     #0: break;
@@ -30699,13 +30722,20 @@ begin
   PInt64Array(@dig)^[3] := 0;
 end;
 
+procedure FillZero(var secret: RawByteString); overload;
+begin
+  FillcharFast(pointer(secret)^,length(secret),0);
+end;
+
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 var i,len: integer;
     d: PCardinal;
 begin
-  UniqueString(AnsiString(data));
-  len := length(data);
+  {$ifdef FPC}
+  UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
+  {$endif}
   d := pointer(data);
+  len := length(data);
   key := key xor cardinal(len);
   for i := 0 to (len shr 2)-1 do begin
     key := key xor crc32ctab[0,(cardinal(i) xor key)and 1023];
@@ -32748,6 +32778,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
     case PCardinal(Content)^ of
     $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
     $04034b50, // 'application/zip' = 50 4B 03 04
+    $184d2204, // LZ4 stream format = 04 22 4D 18
     $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
     $28635349, // cab = 49 53 63 28
     $38464947, // 'image/gif' = 47 49 46 38
@@ -32756,6 +32787,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
     $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
     $46464f77, // 'application/font-woff' = wOFF in BigEndian
     $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+    $4d5a4cff, // LZMA = FF 4C 5A 4D 41 00
     $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
     $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
     $89a8275f, // jar = 5F 27 A8 89
@@ -39183,6 +39215,13 @@ function TDocVariantData.AddItem(const aValue: variant): integer;
 begin
   result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
   SetVariantByValue(aValue,VValue[result]);
+end;
+
+function TDocVariantData.AddItemFromText(const aValue: RawUTF8): integer;
+begin
+  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result])) then
+    RawUTF8ToVariant(aValue,VValue[result]);
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
@@ -49173,6 +49212,15 @@ begin
   fNoConsole := aNoConsole;
 end;
 
+constructor TCommandLine.CreateAsArray(firstParam: integer);
+var i: integer;
+begin
+  inherited Create;
+  fValues.InitFast(ParamCount,dvArray);
+  for i := firstParam to ParamCount do
+    fValues.AddItem(ParamStr(i));
+end;
+
 function TCommandLine.NoPrompt: boolean;
 begin
   result := fNoPrompt;
@@ -49275,6 +49323,11 @@ begin
   result := Iso8601ToDateTime(res);
   if result=0 then
     result := Default;
+end;
+
+function TCommandLine.AsArray: TRawUTF8DynArray;
+begin
+  fValues.ToRawUTF8DynArray(result);
 end;
 
 function TCommandLine.AsJSON(Format: TTextWriterJSONFormat): RawUTF8;
