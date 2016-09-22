@@ -3990,7 +3990,8 @@ function GetMimeContentTypeHeader(const Content: RawByteString;
 
 /// retrieve if some content is compressed, from a supplied binary buffer
 // - returns TRUE, if the header in binary buffer "may" be compressed (this method
-// can trigger false positives), e.g. begin with zip/gz/gif/wma/png/jpeg markers
+// can trigger false positives), e.g. begin with most common already compressed
+// zip/gz/gif/png/jpeg/avi/mp3/mp4 markers (aka "magic numbers")
 function IsContentCompressed(Content: Pointer; Len: integer): boolean;
 
 /// returns TRUE if the supplied HTML Headers contains 'Content-Type: text/...',
@@ -11343,6 +11344,7 @@ procedure IntervalTextToDateTimeVar(Text: PUTF8Char; var result: TDateTime);
 /// basic Date/Time conversion into ISO-8601
 // - use 'YYYYMMDDThhmmss' format if not Expanded
 // - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
+// - you may rather use DateTimeToIso8601Text() to handle 0 or date-only values
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
   FirstChar: AnsiChar='T'): RawUTF8;
 
@@ -19110,7 +19112,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         mul     rdx
         shr     rdx, 2
         mov     rax, rdx
-        imul    rdx,  - 200
+        imul    rdx, -200
         lea     rdx, [rdx + r8]
         movzx   rdx, word ptr[rdx + r9]
         mov     [rcx], dx
@@ -19161,7 +19163,7 @@ asm // eax=P, edx=val
         mul     edx
         shr     edx, 5          // now edx=eax div 100
         mov     eax, edx
-        imul    edx,  - 200
+        imul    edx, -200
         movzx   edx, word ptr[TwoDigitLookup + ecx * 2 + edx]
         mov     [edi], dx
         cmp     eax, 10
@@ -19218,7 +19220,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         mul     rdx
         shr     rdx, 2
         mov     rax, rdx
-        imul    rdx,  - 200
+        imul    rdx, -200
         lea     rdx, [rdx + r8]
         movzx   rdx, word ptr[rdx + r9]
         mov     [rcx], dx
@@ -21292,7 +21294,7 @@ lock    dec dword ptr[ecx - 8]  // decrement existing reference count
 @loop:  mov     ebx, eax                // dividend
         mul     edi                     // edx = dividend div 100
         mov     eax, edx                // set next dividend
-        imul    edx,  - 200             // -2 * (100 * dividend div  100)
+        imul    edx, -200             // -2 * (100 * dividend div  100)
         movzx   edx, word ptr[TwoDigitLookup + ebx * 2 + edx] // dividend mod 100 in ascii
         mov     [ecx + esi], dx
         sub     esi, 2
@@ -21507,7 +21509,7 @@ lock    dec     dword ptr[ecx - 8]      // decrement existing reference count
         mov     ebx, eax                // dividend
         mul     edx
         mov     eax, edx                // set next dividend
-        imul    edx,  - 200
+        imul    edx, -200
         movzx   edx, word ptr[TwoDigitLookup + ebx * 2 + edx] // dividend mod 100 in ascii
         mov     [edi + esi], dx
         sub     esi, 2
@@ -24127,7 +24129,7 @@ asm // fast 8 bits WinAnsi comparaison using the NormToUpper[] array
 @z:     cmp     ebx, ecx // S1=S2?
         pop     ebx
         jz      @2
-@4:     or      eax,  - 1 // return -1 (S1<S2)
+@4:     or      eax, -1 // return -1 (S1<S2)
 end;
 {$endif}
 
@@ -26075,7 +26077,7 @@ begin
 end;
 
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
-  FlushOnDisk: boolean=false): boolean;
+  FlushOnDisk: boolean): boolean;
 var F: THandle;
     L: integer;
 begin
@@ -30996,7 +30998,7 @@ function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
 // use YYYYMMDDThhmmss format
 const ISO8601_LEN: array[boolean,boolean] of integer = ((19,18),(15,14));
 var tmp: array[0..31] of AnsiChar;
-begin
+begin // D=0 is handled in DateTimeToIso8601Text()
   if Expanded then begin
     DateToIso8601PChar(D,tmp,true);
     TimeToIso8601PChar(D,@tmp[10],true,FirstChar);
@@ -32692,37 +32694,49 @@ begin
 end;
 
 function IsContentCompressed(Content: Pointer; Len: integer): boolean;
-begin
-  if (Content<>nil) and (Len>4) then
+begin // see http://www.garykessler.net/library/file_sigs.html
+  result := false;
+  if (Content<>nil) and (Len>8) then
     case PCardinal(Content)^ of
-    $04034B50, // 'application/zip' = 50 4B 03 04
+    $002a4949, $2a004d4d, $2b004d4d, // 'image/tiff'
+    $04034b50, // 'application/zip' = 50 4B 03 04
     $21726152, // 'application/x-rar-compressed' = 52 61 72 21 1A 07 00
-    $AFBC7A37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
-    $75B22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
-    $9AC6CDD7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
-    $474E5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+    $28635349, // cab = 49 53 63 28
     $38464947, // 'image/gif' = 47 49 46 38
-    $46464F77, // 'application/font-woff' = wOFF in BigEndian
-    $002A4949, $2A004D4D, $2B004D4D: // 'image/tiff'
+    $43614c66, // FLAC = 66 4C 61 43 00 00 00 22
+    $4643534d, // cab = 4D 53 43 46 [MSCF]
+    $46464952, // avi,webp,wav = 52 49 46 46 [RIFF]
+    $46464f77, // 'application/font-woff' = wOFF in BigEndian
+    $474e5089, // 'image/png' = 89 50 4E 47 0D 0A 1A 0A
+    $75b22630, // 'audio/x-ms-wma' = 30 26 B2 75 8E 66
+    $766f6f6d, // mov = 6D 6F 6F 76 [....moov]
+    $89a8275f, // jar = 5F 27 A8 89
+    $9ac6cdd7, // 'video/x-ms-wmv' = D7 CD C6 9A 00 00
+    $afbc7a37, // 'application/x-7z-compressed' = 37 7A BC AF 27 1C
+    $b7010000, $ba010000, // mpeg = 00 00 01 Bx
+    $cececece, // jceks = CE CE CE CE
+    $e011cfd0: // msi = D0 CF 11 E0 A1 B1 1A E1
       result := true;
-    $46464952: if Len>16 then // RIFF
-      case PCardinalArray(Content)^[2] of
-      $50424557: // 'image/webp'
-        result := true;
-      else result := False;
-      end else
-      result := false;
     else
       case PCardinal(Content)^ and $00ffffff of
-        $685A42, // 'application/bzip2' = 42 5A 68
-        $088B1F, // 'application/gzip' = 1F 8B 08
+        $088b1f, // 'application/gzip' = 1F 8B 08
+        $334449, // mp3 = 49 44 33 [ID3]
         $492049, // 'image/tiff' = 49 20 49
-        $FFD8FF: // 'image/jpeg' = FF D8 FF DB/E0/E1/E2/E3/E8
+        $535746, // swf = 46 57 53 [FWS]
+        $535743, // swf = 43 57 53 [zlib]
+        $53575a, // zws/swf = 5A 57 53 [FWS]
+        $564c46, // flv = 46 4C 56 [FLV]
+        $685a42, // 'application/bzip2' = 42 5A 68
+        $ffd8ff: // 'image/jpeg' = FF D8 FF DB/E0/E1/E2/E3/E8
           result := true;
-        else result := false;
+        else
+        case PCardinalArray(Content)^[1] of // 4 byte offset
+        $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
+        $766f6f6d: // mov = 6D 6F 6F 76
+          result := true;
+        end;
       end;
-    end else
-    result := false;
+    end;
 end;
 
 function GetJpegSize(jpeg: PAnsiChar; len: integer; out Height, Width: integer): boolean;
@@ -35261,7 +35275,7 @@ asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
         // rax = s,ecx = 32 bits of s
         pxor    xmm0, xmm0           // set to zero
         and     ecx, 0FH             // lower 4 bits indicate misalignment
-        and     rax,  - 10H          // align pointer by 16
+        and     rax, -16             // align pointer by 16
         movdqa  xmm1, [rax]          // read from nearest preceding boundary
         pcmpeqb xmm1, xmm0           // compare 16 bytes with zero
         pmovmskb edx, xmm1           // get one bit for each byte result
@@ -35295,7 +35309,7 @@ asm // rcx=S
         .NOFRAME
         test    rcx, rcx
         mov     rdx, rcx
-        mov     rax,  - 16
+        mov     rax, -16
         jz      @null
         pxor    xmm0, xmm0
 @L:     add     rax, 16   // add before comparison flag
@@ -35343,7 +35357,7 @@ asm // eax=Dest edx=Count cl=Value
 @small: test    edx, edx
         jle     @done
         mov     [eax + edx - 1], cl      // fill last byte
-        and     edx,  - 2                // no. of words to fill
+        and     edx, -2                  // no. of words to fill
         neg     edx
         lea     edx, [@fill + 60 + edx * 2]
         jmp     edx
@@ -35539,7 +35553,7 @@ asm // Dest=eax Count=edx Value=cl
 @small: test    edx, edx
         jle     @done
         mov     [eax + edx - 1], cl   {fill last byte}
-        and     edx,  - 2             {no. of words to fill}
+        and     edx,  -2              {no. of words to fill}
         neg     edx
         lea     edx, [@smallfill + 60 + edx * 2]
         jmp     edx
@@ -40926,7 +40940,7 @@ asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
         mov     ebx, [eax - 4]
         sub     ebx, [edx - 4]
         push    ebx
-        adc     ecx,  - 1
+        adc     ecx, -1
         and     ecx, ebx
         sub     ecx, [eax - 4]
         sub     eax, ecx
@@ -40956,12 +40970,12 @@ asm // x86 version optimized for RawByteString/AnsiString/RawUTF8 types
         cmp     [eax - 4], edx
         je      @0
 @no:    jnc     @1
-        or      eax,  - 1
+        or      eax, -1
         ret
 @n0:    cmp     eax, [edx - 4]
         je      @0
         jnc     @1
-        or      eax,  - 1
+        or      eax, -1
         ret
 @0:     xor     eax, eax
         ret
@@ -45065,7 +45079,7 @@ begin
       exit;
     end else
     if not(woFullExpand in Options) or
-       not (Value.InheritsFrom(TList)
+       not(Value.InheritsFrom(TList)
        {$ifndef LVCL} or Value.InheritsFrom(TCollection){$endif}) then
       Value := nil;
   if Value=nil then begin
@@ -49036,11 +49050,10 @@ begin
   {$ifdef MSWINDOWS}
   result := TSynAnsiConvert.Engine(CP_OEMCP).UTF8ToAnsi(S);
   {$else}
-  result := S;
+  result := S; // expect a UTF-8 console under Linux
   {$endif}
 end;
 
-//procedure WriteUTF8(const Fmt: RawUTF8; const args:
 {$I-}
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
