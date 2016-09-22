@@ -13058,7 +13058,8 @@ type
     /// send/execute the supplied JSON BATCH content, and return the expected array
     // - this method will be implemented for TSQLRestClient and TSQLRestServer only
     // - this default implementation will trigger an EORMException
-    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+    // - warning: supplied JSON Data can be parsed in-place, so modified
+    function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; virtual;
     /// any overriden TSQLRest class should call it in the initialization section
     class procedure RegisterClassNameForDefinition;
@@ -15960,7 +15961,7 @@ type
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
     function EngineUpdateFieldIncrement(TableModelIndex: integer; ID: TID;
       const FieldName: RawUTF8; Increment: Int64): boolean; override;
-    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+    function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
     /// virtual methods which will perform CRUD operations on the main DB
     function MainEngineAdd(TableModelIndex: integer; const SentData: RawUTF8): TID; virtual; abstract;
@@ -17976,7 +17977,7 @@ type
       BlobField: PPropInfo; const BlobData: TSQLRawBlob): boolean; override;
     function EngineUpdateField(TableModelIndex: integer;
       const SetFieldName, SetValue, WhereFieldName, WhereValue: RawUTF8): boolean; override;
-    function EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+    function EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
        var Results: TIDDynArray; ExpectedResultsCount: integer): integer; override;
   public
     /// initialize REST client instance
@@ -34677,7 +34678,7 @@ begin
   raise EORMException.CreateUTF8('Unexpected %.InternalBatchStop',[self]);
 end;
 
-function TSQLRest.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+function TSQLRest.EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 begin
   raise EORMException.CreateUTF8('BATCH not supported by %',[self]);
@@ -36425,7 +36426,7 @@ begin
   end;
 end;
 
-function TSQLRestClientURI.EngineBatchSend(Table: TSQLRecordClass; const Data: RawUTF8;
+function TSQLRestClientURI.EngineBatchSend(Table: TSQLRecordClass; var Data: RawUTF8;
   var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var Resp: RawUTF8;
     R: PUTF8Char;
@@ -41151,7 +41152,7 @@ type
   EORMBatchException = class(EORMException);
 
 function TSQLRestServer.EngineBatchSend(Table: TSQLRecordClass;
-  const Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
+  var Data: RawUTF8; var Results: TIDDynArray; ExpectedResultsCount: integer): integer;
 var EndOfObject: AnsiChar;
     wasString, OK: boolean;
     TableName, Value, ErrMsg: RawUTF8;
@@ -41204,10 +41205,9 @@ begin
 {$else}
 begin
 {$endif}
-  Sent := pointer(Data);
+  Sent := pointer(Data); // parsed, therefore modified in-placed
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
-  CurrentContext := ServiceContext.Request;
   if Table<>nil then begin
     TableIndex := Model.GetTableIndexExisting(Table);
     // unserialize expected sequence array as '{"Table":["cmd",values,...]}'
@@ -41235,13 +41235,14 @@ begin
     byte(batchOptions) := GetNextItemCardinal(Sent,',');
   end else
     byte(batchOptions) := 0;
+  CurrentContext := ServiceContext.Request;
   MethodTable := nil;
   RunningBatchRest := nil;
   RunningBatchTable := nil;
   RunningBatchURIMethod := mNone;
   Count := 0;
   FillcharFast(counts,SizeOf(counts),0);
-  fAcquireExecution[execORMWrite].fSafe.Lock; // multi thread protection 
+  fAcquireExecution[execORMWrite].fSafe.Lock; // multi thread protection
   try // to protect automatic transactions and global write lock
   try // to protect InternalBatchStart/Stop locking
     repeat // main loop: process one POST/PUT/DELETE per iteration
@@ -56655,7 +56656,7 @@ begin
   if (Count=0) or (jsonfile='') then
     result := false else begin
     json := ObjectToJSON(self,[woHumanReadable]);
-    result := JSONReformatToFile(json,GetChainFileName(jsonfile));
+    result := JSONBufferReformatToFile(pointer(json),GetChainFileName(jsonfile));
   end;
 end;
 
