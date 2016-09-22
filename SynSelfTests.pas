@@ -177,6 +177,7 @@ uses
   dddInfraEmailer,
   dddInfraAuthRest,
   dddInfraRepoUser,
+  ECCProcess,
 {$endif DELPHI5OROLDER}
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
@@ -189,6 +190,7 @@ uses
   SynCommons,
   SynLog,
   SynTests;
+
 
 
 
@@ -504,6 +506,10 @@ type
     procedure _ecdh_shared_secret;
     /// ECDSA certificates chains and digital signatures
     procedure CertificatesAndSignatures;
+{$ifndef DELPHI5OROLDER}
+    /// run most commands of the ECC tool
+    procedure ECCCommandLineTool;
+{$endif}
   end;
 
 
@@ -9123,6 +9129,100 @@ begin
   end;
 end;
 
+{$ifndef DELPHI5OROLDER}
+procedure TTestECCCryptography.ECCCommandLineTool;
+var sw: ICommandLine;
+    ctxt: TCommandLine;
+    i: integer;
+    previd,prevpass: RawUTF8;
+    fn: TFileName;
+    keys: array of record
+      priv,pub,test,crypt: TFileName;
+      id,issuer,pass,text: RawUTF8;
+      rounds: integer;
+    end;
+    exectemp: variant;
+  function Exec(const nv: array of const; cmd: TECCCommand): PDocVariantData;
+  var sw: ICommandLine;
+      ctxt: TCommandLine;
+  begin
+    ctxt := TCommandLine.Create(nv);
+    sw := ctxt;
+    check(ECCCommand(cmd,sw)=eccSuccess);
+    if CheckFailed(ctxt.ConsoleLines<>nil) then
+      result := @DocVariantDataFake else begin
+      exectemp := _JsonFast(ctxt.ConsoleLines[0]);
+      result := _Safe(exectemp);
+    end;
+  end;
+begin
+  if DirectoryExists('synecc') then
+    DirectoryDelete('synecc','*.*',true) else
+    CreateDir('synecc');
+  SetCurrentDir('synecc');
+  try
+    SetLength(keys,ECC_COUNT shr 4);
+    for i := 0 to high(keys) do
+    with keys[i] do begin
+      formatUTF8('name%',[i],issuer);
+      formatUTF8('pass%',[i],pass);
+      rounds := 1000+i;
+      ctxt := TCommandLine.Create([
+        'auth',previd,'authpass',prevpass,'authrounds',rounds-1,
+        'issuer',issuer,'days',30+i,'newpass',pass,'newrounds',rounds]);
+      sw := ctxt;
+      check(ECCCommand(swNew,sw)=eccSuccess);
+      if CheckFailed(ctxt.ConsoleLines<>nil) then
+        exit;
+      id := Trim(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)],'.'));
+      priv := format('%s.privkey',[id]);
+      pub := format('%s.pubkey',[id]);
+      previd := id;
+      prevpass := pass;
+      text := RandomTextParagraph(1000);
+      test := format('test%d.txt',[i]);
+      crypt := 'crypt-'+test;
+      FileFromString(text,test);
+      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],swCrypt);
+    end;
+    sw := TCommandLine.Create([]);
+    check(ECCCommand(swChainAll,sw)=eccSuccess);
+    for i := 0 to high(keys) do
+    with keys[i] do begin
+      with Exec(['auth',priv,'pass',pass,'rounds',rounds],swInfoPriv)^ do begin
+        check(I['Version']=1);
+        check(U['Serial']=id);
+        check(U['Issuer']=issuer);
+      end;
+      with Exec(['file',crypt],swInfoCrypt)^ do begin
+        check(I['Size']=length(text));
+        check(U['recipient']=issuer);
+        check(U['Recipientserial']=id);
+        check(O['Signature']^.VarType=varNull,'not signed');
+      end;
+      fn := 'plain-'+test;
+      Exec(['file',crypt,'out',fn,'auth',priv,'authpass',pass,
+        'authrounds',rounds,'saltrounds',i+10],swDecrypt);
+      check(StringFromFile(fn)=text);
+      Exec(['file',test,'out',crypt,'auth',id,'pass',pass,'rounds',rounds],swSign);
+      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],swCrypt);
+      with Exec(['file',crypt],swInfoCrypt)^ do begin
+        check(I['Size']=length(text));
+        check(U['recipient']=issuer);
+        check(U['Recipientserial']=id);
+        check(O['Signature']^.I['Version']=1,'signed');
+        check(O['Signature']^.U['AuthoritySerial']=id);
+      end;
+      DeleteFile(fn);
+      Exec(['file',crypt,'out',fn,'authpass',pass,'authrounds',rounds,
+        'saltrounds',i+10],swDecrypt);
+      check(StringFromFile(fn)=text,'guess .privkey from header');
+    end;
+  finally
+    SetCurrentDir('..');
+  end;
+end;
+{$endif}
 
 {$ifdef MSWINDOWS}
 {$ifndef FPC}

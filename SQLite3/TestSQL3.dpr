@@ -85,6 +85,7 @@ program TestSQL3;
 uses
   {$ifdef KYLIX3}
   FastMM4,
+  ECCProcess in 'Samples/33 - ECC/ECCProcess.pas',
   mORMotSelfTests;
   {$else}
   {$ifdef FullDebugMode}  // defined for the project e.g. under Win64
@@ -144,6 +145,7 @@ uses
   mORMotService in 'mORMotService.pas',
   //mORMotBigTable,
   {$endif FPC}
+  ECCProcess in 'Samples\33 - ECC\ECCProcess.pas',
 {$endif DELPHI5OROLDER}
 {$ifndef LVCL}
 {$ifdef FPC}

@@ -41205,7 +41205,7 @@ begin
 {$else}
 begin
 {$endif}
-  Sent := pointer(Data); // parsed, therefore modified in-placed
+  Sent := UniqueRawUTF8(Data); // parsed, therefore modified in-placed
   if Sent=nil then
     raise EORMBatchException.CreateUTF8('%.EngineBatchSend(%,"")',[self,Table]);
   if Table<>nil then begin
