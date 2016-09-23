@@ -19,6 +19,12 @@ function ECCCommandNew(const AuthPrivKey: TFileName;
   const Issuer: RawUTF8; StartDate: TDateTime; ExpirationDays: integer;
   const SavePassword: RawUTF8; SavePassordRounds, SplitFiles: integer): TFileName;
 
+/// end-user command to create a renew a .privkey file password
+// - as used in the ECC.dpr command-line sample project
+function ECCCommandRekey(const AuthPrivKey: TFileName;
+  const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
+  const SavePassword: RawUTF8; SavePassordRounds: integer): TFileName;
+
 /// end-user command to sign a file using a private key file
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
@@ -73,7 +79,8 @@ type
   // - as used in the ECC.dpr command-line sample project
   // - retrieved from the command line as first parameter
   TECCCommand = (
-    ecHelp, ecNew, ecSign, ecVerify, ecSource, ecInfoPriv, ecChain, ecChainAll,
+    ecHelp, ecNew, ecRekey, ecSign, ecVerify, ecSource, ecInfoPriv,
+    ecChain, ecChainAll,
     ecCrypt, ecDecrypt, ecInfoCrypt);
   /// the result code returned by ECCCommand()
   // - as used in the ECC.dpr command-line sample project
@@ -110,6 +117,20 @@ begin
     finally
       new.Free;
     end;
+  finally
+    auth.Free;
+  end;
+end;
+
+function ECCCommandRekey(const AuthPrivKey: TFileName;
+  const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
+  const SavePassword: RawUTF8; SavePassordRounds: integer): TFileName;
+var auth: TECCCertificateSecret;
+begin
+  auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
+  try
+    auth.SaveToSecureFile(SavePassword,'.',64,SavePassordRounds);
+    result := auth.SaveToSecureFileName;
   finally
     auth.Free;
   end;
@@ -334,17 +355,17 @@ begin
         'Enter Issuer identifier text.'#13#10'Will be truncated to 15-20 ascii-7 chars.');
       start := sw.AsDate('Start',NowUTC,
         'Enter the YYYY-MM-DD start date of its validity.'#13#10+
-        '0 will create a never-expiring certificate');
+        '0 will create a never-expiring certificate.');
       if start<=0 then
         days := 0 else
-        days := sw.AsInt('Days',365,'Enter the number of days of its validity');
+        days := sw.AsInt('Days',365,'Enter the number of days of its validity.');
       repeat
         savepass := sw.AsUTF8('NewPass',TAESPRNG.Main.RandomPassword(12),
           'Enter a private PassPhrase for the new key (at least 8 chars long).'#13#10+
           'Save this in a safe place: if you forget it, the key will be useless!');
       until (length(savepass)>=8) or sw.NoPrompt;
       sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:',[]);
-      sw.Text(' %',[TSynPersistentWithPassword.ComputePassword(savepass)],ccWhite);
+      sw.Text(' %'#13#10,[TSynPersistentWithPassword.ComputePassword(savepass)],ccWhite);
       repeat
         saverounds := sw.AsInt('NewRounds',60000,
           'Enter the PassPhrase iteration round for the new key (at least 1000).'#13#10+
@@ -360,9 +381,33 @@ begin
       if newfile<>'' then
         newfile := newfile+'/.privkey';
     end;
+    ecRekey: begin
+      repeat
+        auth := sw.AsString('Auth','',
+          'Enter the first chars of the .privkey certificate file name.');
+      until ECCKeyFileFind(auth,true) or sw.NoPrompt;
+      sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
+      authpass := sw.AsUTF8('AuthPass','',
+        'Enter the PassPhrase of this .privkey file.');
+      authrounds := sw.AsInt('AuthRounds',60000,
+        'Enter the PassPhrase iteration rounds of this .privkey file.');
+      repeat
+        savepass := sw.AsUTF8('NewPass',TAESPRNG.Main.RandomPassword(12),
+          'Enter a NEW private PassPhrase for the key (at least 8 chars long).'#13#10+
+          'Save this in a safe place: if you forget it, the key will be useless!');
+      until (length(savepass)>=8) or sw.NoPrompt;
+      sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:',[]);
+      sw.Text(' %'#13#10,[TSynPersistentWithPassword.ComputePassword(savepass)],ccWhite);
+      repeat
+        saverounds := sw.AsInt('NewRounds',60000,
+          'Enter the NEW PassPhrase iteration round for the key (at least 1000).'#13#10+
+          'The higher, the safer, but will demand more computation time.');
+      until (saverounds>=1000) or sw.NoPrompt;
+      newfile := EccCommandRekey(auth,authpass,authrounds,savepass,saverounds);
+    end;
     ecSign: begin
       repeat
-        origfile := sw.AsString('File','','Enter the name of the file to be signed');
+        origfile := sw.AsString('File','','Enter the name of the file to be signed.');
       until FileExists(origfile) or sw.NoPrompt;
       repeat
         auth := sw.AsString('Auth','',
@@ -395,7 +440,7 @@ begin
       constname := sw.AsUTF8('Const','',
         'Enter the variable name to define the const in source.');
       comment := sw.AsUTF8('Comment','',
-        'Enter some optional comment to identify this private key');
+        'Enter some optional comment to identify this private key.');
       newfile := EccCommandSourceFile(auth,authpass,authrounds,constname,comment,
         TAESPRNG.Main.RandomPassword(24));
     end;
@@ -418,7 +463,7 @@ begin
       newfile := ECCCommandChainCertificates(['*']);
     ecCrypt: begin
       repeat
-        origfile := sw.AsString('File','','Enter the name of the file to be encrypted');
+        origfile := sw.AsString('File','','Enter the name of the file to be encrypted.');
       until FileExists(origfile) or sw.NoPrompt;
       repeat
         newfile := SysUtils.Trim(sw.AsString('Out',origfile+ENCRYPTED_FILEEXT,
@@ -435,13 +480,13 @@ begin
     end;
     ecInfoCrypt: begin
       repeat
-        origfile := sw.AsString('File','','Enter the name of the encrypted file');
+        origfile := sw.AsString('File','','Enter the name of the encrypted file.');
       until FileExists(origfile) or sw.NoPrompt;
       sw.Text('%',[JSONReformat(ECIESHeaderText(origfile))]);
     end;
     ecDecrypt: begin
       repeat
-        origfile := sw.AsString('File','','Enter the name of the file to be decrypted');
+        origfile := sw.AsString('File','','Enter the name of the file to be decrypted.');
       until FileExists(origfile) or sw.NoPrompt;
       repeat
         newfile := SysUtils.Trim(sw.AsString('Out',GetFileNameWithoutExt(origfile)+'.2',
