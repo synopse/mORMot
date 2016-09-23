@@ -38,7 +38,7 @@ var cmd: RawUTF8;
 begin
   cmd := StringToUTF8(ParamStr(1));
   main := TECCCommand(GetEnumNameValueTrimmed(TypeInfo(TECCCommand),pointer(cmd),length(cmd)));
-  if main=swChain then
+  if main=ecChain then
     sw := TCommandLine.CreateAsArray(2) else
     sw := TCommandLine.Create;
   result := ECCCommand(main,sw);
@@ -54,7 +54,7 @@ begin
     writeln(ExeVersion.ProgramName,
       ' new -auth file.privkey -authpass P@ssW0rd -authrounds 60000'#13#10+
       '     -issuer toto@toto.com -start 2016-10-30 -days 30'#13#10+
-      '     -newpass newP@ssw0RD@ -newrounds 60000');
+      '     -newpass newP@ssw0RD@ -newrounds 60000'); // -splitfiles 1');
     writeln(ExeVersion.ProgramName,
       ' sign -file some.doc -auth file.privkey -pass P@ssW0rd -rounds 60000');
     writeln(ExeVersion.ProgramName,

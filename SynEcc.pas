@@ -660,7 +660,7 @@ type
     function HasSecret: boolean;
     /// computes the 'Serial.privkey' file name of this certificate
     // - as used by SaveToSecureFile()
-    function SaveToSecureFileName: TFileName;
+    function SaveToSecureFileName(FileNumber: integer=0): TFileName;
     /// backup the private secret key into an encrypted .privkey binary file
     // - you should keep all your private keys in a safe dedicated folder
     // - filename will be the certificate hexadecimal as 'Serial.privkey'
@@ -670,6 +670,18 @@ type
     function SaveToSecureFile(const PassWord: RawUTF8; const DestFolder: TFileName;
       AFStripes: integer=64; PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil;
       NoHeader: boolean=false): boolean;
+    /// backup the private secret key into several encrypted -###.privkey binary files
+    // - secret sharing can be used to store keys at many different places, e.g.
+    // on several local or remote drives, and therefore enhance privacy and safety
+    // - it will use anti-forensic diffusion of the private key to distribute it
+    // into pieces, in a manner that a subset of files can not regenerate the key:
+    // as a result, a compromission of one sub-file won't affect the secret key
+    // - filename will be the certificate hexadecimal as 'Serial-###.privkey'
+    // - AES-256-CFB encryption (or the one specified in AES parameter) will be
+    // performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
+    function SaveToSecureFiles(const PassWord: RawUTF8; const DestFolder: TFileName;
+      DestFileCount: integer; AFStripes: integer=64; PBKDF2Rounds: integer=65000;
+      AES: TAESAbstractClass=nil; NoHeader: boolean=false): boolean;
     /// read a private secret key from an encrypted .privkey binary file
     // - perform all reverse steps from SaveToSecureFile() method
     // - returns TRUE on success, FALSE otherwise
@@ -2001,11 +2013,16 @@ begin
   end;
 end;
 
-function TECCCertificateSecret.SaveToSecureFileName: TFileName;
+function TECCCertificateSecret.SaveToSecureFileName(FileNumber: integer): TFileName;
+var tmp: RawUTF8;
 begin
   if self=nil then
-    result := '' else
-    result := UTF8ToString(Serial)+ECCCERTIFICATESECRET_FILEEXT;
+    result := '' else begin
+    if FileNumber>0 then
+      FormatUTF8('%-%',[Serial,UInt3DigitsToShort(FileNumber)],tmp) else
+      tmp := Serial;
+    result := UTF8ToString(tmp)+ECCCERTIFICATESECRET_FILEEXT;
+  end;
 end;
 
 function TECCCertificateSecret.SaveToSecureFile(const PassWord: RawUTF8;
@@ -2016,6 +2033,47 @@ begin
     result := false else
     result := FileFromString(SaveToSecureBinary(PassWord,AFStripes,PBKDF2Rounds,AES,NoHeader),
       IncludeTrailingPathDelimiter(DestFolder)+SaveToSecureFileName);
+end;
+
+function TECCCertificateSecret.SaveToSecureFiles(const PassWord: RawUTF8;
+  const DestFolder: TFileName; DestFileCount, AFStripes, PBKDF2Rounds: integer;
+  AES: TAESAbstractClass; NoHeader: boolean): boolean;
+var diff,one: RawByteString;
+    head,index,pos,difflen,onechunk,onelen: integer;
+    o: PAnsiChar absolute one;
+    dest: TFileName;
+begin
+  if DestFileCount=1 then begin
+    result := SaveToSecureFile(PassWord,DestFolder,AFStripes,PBKDF2Rounds,AES,NoHeader);
+    exit;
+  end;
+  result := false;
+  dest := IncludeTrailingPathDelimiter(DestFolder);
+  if (self=nil) or (DestFileCount<=0) or not DirectoryExists(dest) then
+    exit;
+  if DestFileCount>255 then
+    DestFileCount := 255;
+  diff := SaveToSecureBinary(PassWord,AFStripes*DestFileCount,PBKDF2Rounds,AES,true);
+  difflen := length(diff);
+  onechunk := difflen div DestFileCount;
+  if NoHeader then
+    head := 0 else
+    head := sizeof(PRIVKEY_MAGIC);
+  pos := 0;
+  for index := 1 to DestFileCount do begin
+    if index<DestFileCount then
+      onelen := onechunk else
+      onelen := difflen-pos;
+    SetLength(one,head+2+onelen);
+    MoveFast(PRIVKEY_MAGIC,PByteArray(one)^[0],head);
+    PByteArray(one)^[head] := index;
+    PByteArray(one)^[head+1] := DestFileCount;
+    MoveFast(PByteArray(diff)[pos],PByteArray(one)^[head+2],onelen);
+    inc(pos,onelen);
+    if not FileFromString(one,SaveToSecureFileName(index)) then
+      exit;
+  end;
+  result := true;
 end;
 
 function TECCCertificateSecret.LoadFromSecureBinary(const Binary: RawByteString;

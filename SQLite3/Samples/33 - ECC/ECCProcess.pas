@@ -17,7 +17,7 @@ uses
 function ECCCommandNew(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const Issuer: RawUTF8; StartDate: TDateTime; ExpirationDays: integer;
-  const SavePassword: RawUTF8; const SavePassordRounds: integer): TFileName;
+  const SavePassword: RawUTF8; SavePassordRounds, SplitFiles: integer): TFileName;
 
 /// end-user command to sign a file using a private key file
 // - as used in the ECC.dpr command-line sample project
@@ -73,16 +73,16 @@ type
   // - as used in the ECC.dpr command-line sample project
   // - retrieved from the command line as first parameter
   TECCCommand = (
-    swHelp, swNew, swSign, swVerify, swSource, swInfoPriv, swChain, swChainAll,
-    swCrypt, swDecrypt, swInfoCrypt);
+    ecHelp, ecNew, ecSign, ecVerify, ecSource, ecInfoPriv, ecChain, ecChainAll,
+    ecCrypt, ecDecrypt, ecInfoCrypt);
   /// the result code returned by ECCCommand()
   // - as used in the ECC.dpr command-line sample project
   TECCCommandError = (
     eccSuccess, eccUnknownCommand, eccValidationError, eccError, eccException);
 
 
-/// execute the encryption process corresponding to the command line
-// - as used in the ECC.dpr command-line sample project
+/// execute the encryption process corresponding to the command line options
+// - as used in the ECC.dpr sample project
 // - returns the ExitCode expected value (0=eccSuccess)
 function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
 
@@ -92,18 +92,21 @@ implementation
 function ECCCommandNew(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const Issuer: RawUTF8; StartDate: TDateTime; ExpirationDays: integer;
-  const SavePassword: RawUTF8; const SavePassordRounds: integer): TFileName;
+  const SavePassword: RawUTF8; SavePassordRounds, SplitFiles: integer): TFileName;
 var auth,new: TECCCertificateSecret;
 begin
   if AuthPrivKey='' then
     auth := nil else
     auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
   try
+    // generate pair
     new := TECCCertificateSecret.CreateNew(auth,Issuer,ExpirationDays,StartDate);
     try
-      new.SaveToSecureFile(SavePassword,'.',64,SavePassordRounds);
-      result := new.SaveToSecureFileName;
-      ObjectToJSONFile(new,ChangeFileExt(result,ECCCERTIFICATEPUBLIC_FILEEXT));
+      // save private key as .privkey password-protected binary file
+      new.SaveToSecureFiles(SavePassword,'.',SplitFiles,64,SavePassordRounds);
+      // save public key as .pubkey JSON file
+      result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
+      ObjectToJSONFile(new,result);
     finally
       new.Free;
     end;
@@ -299,7 +302,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
 
 var issuer, authpass, savepass, constname, comment: RawUTF8;
     start: TDateTime;
-    authrounds, days, saverounds: integer;
+    authrounds, days, saverounds, splitfiles: integer;
     msg: string;
     origfile,auth,newfile: TFileName;
     decrypt: TECCDecrypt;
@@ -313,7 +316,7 @@ begin
     if not ecc_available then
       raise EECCException.Create('ECC is not implemented on this platform');
     case cmd of
-    swNew: begin
+    ecNew: begin
       repeat
         auth := sw.AsString('Auth','',
           'Enter the first chars of the .privkey file name of the signing authority.'#13#10+
@@ -347,11 +350,17 @@ begin
           'Enter the PassPhrase iteration round for the new key (at least 1000).'#13#10+
           'The higher, the safer, but will demand more computation time.');
       until (saverounds>=1000) or sw.NoPrompt;
-      newfile := EccCommandNew(auth,authpass,authrounds,issuer,start,days,savepass,saverounds);
+      splitfiles := 1;
+      {repeat
+        splitfiles := sw.AsInt('SplitFiles',1,
+          'Into how many files the private key should be parceled out.');
+      until (splitfiles>0) or sw.NoPrompt;}
+      newfile := EccCommandNew(
+        auth,authpass,authrounds,issuer,start,days,savepass,saverounds,splitfiles);
       if newfile<>'' then
-        newfile := newfile+'/.pubkey';
+        newfile := newfile+'/.privkey';
     end;
-    swSign: begin
+    ecSign: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the file to be signed');
       until FileExists(origfile) or sw.NoPrompt;
@@ -366,14 +375,14 @@ begin
         'Enter the PassPhrase iteration rounds of this .privkey file.');
       newfile := EccCommandSignFile(origfile,auth,authpass,authrounds);
     end;
-    swVerify: begin
+    ecVerify: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the file to be verified.');
       until sw.NoPrompt or
         (FileExists(origfile) and FileExists(origfile+ECCCERTIFICATESIGN_FILEEXT));
       WriteVerif(ECCCommandVerifyFile(origfile,sw.AsString('auth','',''),''),origfile,sw);
     end;
-    swSource: begin
+    ecSource: begin
       repeat
         auth := sw.AsString('Auth','',
           'Enter the first chars of the .privkey certificate file name.');
@@ -390,7 +399,7 @@ begin
       newfile := EccCommandSourceFile(auth,authpass,authrounds,constname,comment,
         TAESPRNG.Main.RandomPassword(24));
     end;
-    swInfoPriv: begin
+    ecInfoPriv: begin
       repeat
         auth := sw.AsString('Auth','',
           'Enter the first chars of the .privkey certificate file name.');
@@ -403,11 +412,11 @@ begin
         'Enter the PassPhrase iteration rounds of this .privkey file.');
       sw.Text('%',[ECCCommandInfoPrivFile(auth,authpass,authrounds)]);
     end;
-    swChain:
+    ecChain:
       newfile := ECCCommandChainCertificates(sw.AsArray);
-    swChainAll:
+    ecChainAll:
       newfile := ECCCommandChainCertificates(['*']);
-    swCrypt: begin
+    ecCrypt: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the file to be encrypted');
       until FileExists(origfile) or sw.NoPrompt;
@@ -424,13 +433,13 @@ begin
       authrounds := sw.AsInt('SaltRounds',60000, 'Enter the PassPhrase iteration rounds.');
       ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds);
     end;
-    swInfoCrypt: begin
+    ecInfoCrypt: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the encrypted file');
       until FileExists(origfile) or sw.NoPrompt;
       sw.Text('%',[JSONReformat(ECIESHeaderText(origfile))]);
     end;
-    swDecrypt: begin
+    ecDecrypt: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the file to be decrypted');
       until FileExists(origfile) or sw.NoPrompt;
