@@ -1827,6 +1827,12 @@ var
   i: integer;
 begin
   engine := FManager.ThreadSafeEngine;
+  // mustache.js is not strict mode friendly :(
+  {$ifdef FIXBUGXE3}
+  engine.cx.SetOptions(engine.cx.GetOptions - [jsoExtraWarning]);
+  {$else}
+  engine.cx.Options := engine.cx.Options - [jsoExtraWarning];
+  {$endif}
   mustacheFN := ExeVersion.ProgramFilePath + 'js\mustache.js';
   mSource := AnyTextFileToSynUnicode(mustacheFN);
   if mSource='' then begin
