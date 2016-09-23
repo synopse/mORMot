@@ -414,7 +414,7 @@ type
     // - optional LastChangeCount can be set (if ValueInt/ValueUTF8 are nil) to
     // retrieve the modified row count when aSQL is an UPDATE statement (thread safe)
     function InternalExecute(const aSQL: RawUTF8; ForceCacheStatement: boolean;
-      ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil; ValueInts: PIntegerDynArray=nil;
+      ValueInt: PInt64=nil; ValueUTF8: PRawUTF8=nil; ValueInts: PInt64DynArray=nil;
       LastInsertedID: PInt64=nil; LastChangeCount: PInteger=nil): boolean;
     // overridden method returning TRUE for next calls to EngineAdd
     // will properly handle operations until InternalBatchStop is called
@@ -1163,7 +1163,7 @@ end;
 
 function TSQLRestServerDB.InternalExecute(const aSQL: RawUTF8;
   ForceCacheStatement: boolean; ValueInt: PInt64; ValueUTF8: PRawUTF8;
-  ValueInts: PIntegerDynArray; LastInsertedID: PInt64; LastChangeCount: PInteger): boolean;
+  ValueInts: PInt64DynArray; LastInsertedID: PInt64; LastChangeCount: PInteger): boolean;
 var ValueIntsCount, Res: Integer;
     msg: RawUTF8;
 begin
@@ -1181,7 +1181,7 @@ begin
           repeat
             res := fStatement^.Step;
             if res=SQLITE_ROW then
-              AddInteger(ValueInts^,ValueIntsCount,fStatement^.FieldInt(0));
+              AddInt64(ValueInts^,ValueIntsCount,fStatement^.FieldInt(0));
           until res=SQLITE_DONE;
           SetLength(ValueInts^,ValueIntsCount);
           msg := FormatUTF8('returned % integer%',
