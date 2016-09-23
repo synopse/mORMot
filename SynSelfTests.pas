@@ -9171,7 +9171,7 @@ begin
         'auth',previd,'authpass',prevpass,'authrounds',rounds-1,
         'issuer',issuer,'days',30+i,'newpass',pass,'newrounds',rounds]);
       sw := ctxt;
-      check(ECCCommand(swNew,sw)=eccSuccess);
+      check(ECCCommand(ecNew,sw)=eccSuccess);
       if CheckFailed(ctxt.ConsoleLines<>nil) then
         exit;
       id := Trim(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)],'.'));
@@ -9183,18 +9183,18 @@ begin
       test := format('test%d.txt',[i]);
       crypt := 'crypt-'+test;
       FileFromString(text,test);
-      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],swCrypt);
+      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],ecCrypt);
     end;
     sw := TCommandLine.Create([]);
-    check(ECCCommand(swChainAll,sw)=eccSuccess);
+    check(ECCCommand(ecChainAll,sw)=eccSuccess);
     for i := 0 to high(keys) do
     with keys[i] do begin
-      with Exec(['auth',priv,'pass',pass,'rounds',rounds],swInfoPriv)^ do begin
+      with Exec(['auth',priv,'pass',pass,'rounds',rounds],ecInfoPriv)^ do begin
         check(I['Version']=1);
         check(U['Serial']=id);
         check(U['Issuer']=issuer);
       end;
-      with Exec(['file',crypt],swInfoCrypt)^ do begin
+      with Exec(['file',crypt],ecInfoCrypt)^ do begin
         check(I['Size']=length(text));
         check(U['recipient']=issuer);
         check(U['Recipientserial']=id);
@@ -9202,11 +9202,11 @@ begin
       end;
       fn := 'plain-'+test;
       Exec(['file',crypt,'out',fn,'auth',priv,'authpass',pass,
-        'authrounds',rounds,'saltrounds',i+10],swDecrypt);
+        'authrounds',rounds,'saltrounds',i+10],ecDecrypt);
       check(StringFromFile(fn)=text);
-      Exec(['file',test,'out',crypt,'auth',id,'pass',pass,'rounds',rounds],swSign);
-      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],swCrypt);
-      with Exec(['file',crypt],swInfoCrypt)^ do begin
+      Exec(['file',test,'out',crypt,'auth',id,'pass',pass,'rounds',rounds],ecSign);
+      Exec(['file',test,'out',crypt,'auth',pub,'saltrounds',i+10],ecCrypt);
+      with Exec(['file',crypt],ecInfoCrypt)^ do begin
         check(I['Size']=length(text));
         check(U['recipient']=issuer);
         check(U['Recipientserial']=id);
@@ -9215,7 +9215,7 @@ begin
       end;
       DeleteFile(fn);
       Exec(['file',crypt,'out',fn,'authpass',pass,'authrounds',rounds,
-        'saltrounds',i+10],swDecrypt);
+        'saltrounds',i+10],ecDecrypt);
       check(StringFromFile(fn)=text,'guess .privkey from header');
     end;
   finally

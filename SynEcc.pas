@@ -137,7 +137,7 @@ var
   // - returns false if an error occurred
   ecc_make_key: function(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean; cdecl;
 
-  /// compute a shared secret given your secret key and someone else's public key
+  /// compute an ECDH shared secret given your secret key and someone else's public key
   // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
   // - Note: it is recommended that you hash the result of ecdh_shared_secret
   // before using it for symmetric encryption or HMAC
