@@ -291,7 +291,7 @@ begin
         end;
       end
       else if IdemPropNameU(fSQL, '#wrapper') then begin
-        ctxt := _JsonFast(fJson);
+        _Json(fJson,ctxt,JSON_OPTIONS_FAST);
         res := TSynMustache.Parse(WRAPPER_TEMPLATE).Render(ctxt, nil,
           TSynMustache.HelpersGetStandardList, nil, true);
       end

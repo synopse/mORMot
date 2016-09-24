@@ -5326,7 +5326,7 @@ var secHost: TRawUTF8DynArray;
 begin
   fConnectionTimeOut := 30000;
   fLogReplyEventMaxSize := 1024;
-  fConnectionString := FormatUTF8('mongodb://%:%',[Host,Port]);
+  FormatUTF8('mongodb://%:%',[Host,Port],fConnectionString);
   CSVToRawUTF8DynArray(pointer(SecondaryHostCSV),secHost);
   nHost := length(secHost);
   SetLength(fConnections,nHost+1);
@@ -5872,7 +5872,7 @@ function TMongoCollection.FindCount(Criteria: PUTF8Char;
 var cmd: RawUTF8;
     res: variant;
 begin
-  cmd := FormatUTF8('{count:"%",query:%',[Name,FormatUTF8(Criteria,Args,Params,true)]);
+  FormatUTF8('{count:"%",query:%',[Name,FormatUTF8(Criteria,Args,Params,true)],cmd);
   if MaxNumberToReturn>0 then
     cmd := FormatUTF8('%,limit:%',[cmd,MaxNumberToReturn]);
   if NumberToSkip>0 then
@@ -6031,7 +6031,7 @@ procedure TMongoCollection.Insert(const Document: RawUTF8;
 var doc: variant;
     oid: variant;
 begin
-  doc := _JsonFastFmt(Document,[],Params);
+  _JsonFmt(Document,[],Params,JSON_OPTIONS_FAST,doc);
   EnsureDocumentHasID(TDocVariantData(doc),oid,CreatedObjectID);
   Insert([doc]);
 end;
@@ -6052,7 +6052,7 @@ procedure TMongoCollection.Save(const Document: RawUTF8;
   const Params: array of const; CreatedObjectID: PBSONObjectID);
 var doc: variant;
 begin
-  doc := _JsonFastFmt(Document,[],Params);
+  _JsonFmt(Document,[],Params,JSON_OPTIONS_FAST,doc);
   Save(doc,CreatedObjectID);
 end;
 

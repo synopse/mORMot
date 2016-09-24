@@ -2282,7 +2282,7 @@ begin
   except
     on E: Exception do begin
       FreeAndNil(fProcess);
-      result := FormatUTF8('%: %',[E,E.Message]);
+      FormatUTF8('%: %',[E,E.Message],result);
     end;
   end;
 end;

@@ -1106,7 +1106,7 @@ begin
       exit;
     if rec<>nil then begin
       recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
-      result := _JsonFast(recJSON);
+      _Json(recJSON,result,JSON_OPTIONS_FAST);
     end;
     _ObjAddProps(['id',sessionID],result);
   finally
@@ -1392,7 +1392,7 @@ begin
             // was a TMVCAction mapped in a TServiceCustomAnswer record
             action.RedirectToMethodParameters := methodOutput else begin
             // rendering, e.g. with fast Mustache {{template}}
-            renderContext := _JsonFast(methodOutput);
+            _Json(methodOutput,renderContext,JSON_OPTIONS_FAST);
             TDocVariantData(renderContext).AddValue(
               'main',fApplication.GetViewInfo(fMethodIndex));
             if fMethodIndex=fApplication.fFactoryErrorIndex then

@@ -5297,8 +5297,8 @@ var msg: RawUTF8;
 begin
   fErrorCode := aErrorCode;
   fSQLite3ErrorCode := sqlite3_resultToErrorCode(aErrorCode);
-  msg := FormatUTF8('Error % (%) [%] using %',
-    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,aSQL,sqlite3.VersionText]);
+  FormatUTF8('Error % (%) [%] using %',
+    [ErrorCodeToText(SQLite3ErrorCode),aErrorCode,aSQL,sqlite3.VersionText],msg);
   if aDB=0 then
     msg := msg+' with aDB=nil' else begin
     msg := FormatUTF8('% - %',[msg,sqlite3.errmsg(aDB)]);
@@ -5708,7 +5708,7 @@ const MM: array[boolean] of string[2] = ('ex','in');
 begin
   if self=nil then
     result := 'No TSQLite3Library available' else
-    result := FormatUTF8('% with %ternal MM',[fVersionText,MM[fUseInternalMM]]);
+    FormatUTF8('% with %ternal MM',[fVersionText,MM[fUseInternalMM]],result);
 end;
 
 

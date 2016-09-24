@@ -21629,7 +21629,7 @@ asm  // fast implementation by John O'Harrow, modified for Delphi 2009+
         jmp     @done
 end;
 
-{$endif FPC}  { these asm function had some low-level system.pas calls }
+{$endif FPC}  { above asm function had some low-level system.pas calls }
 
 function CompareMem(P1, P2: Pointer; Length: Integer): Boolean;
 asm     // eax=P1 edx=P2 ecx=Length
@@ -21672,7 +21672,7 @@ asm     // eax=P1 edx=P2 ecx=Length
 @small: add     ecx, 8             // ecx=0..7
         jle     @0                 // Length <= 0
         neg     ecx                // ecx=-1..-7
-        lea     ecx, [@1 + ecx * 8 + 8]   // each @#: line below = 8 bytes
+        lea     ecx, [@1 + ecx * 8 + 8]   // each @#: block below = 8 bytes
         jmp     ecx
 @7:     mov     cl, [eax + 6]
         cmp     cl, [edx + 6]
@@ -21786,27 +21786,27 @@ function PosEx(const SubStr, S: RawUTF8; Offset: PtrUInt = 1): Integer;
 asm     // eax=SubStr, edx=S, ecx=Offset
         push    ebx
         push    esi
-        push    edx                // @str
+       push    edx
         test    eax, eax
-        jz      @notfnd            // exit if substr = ''
+        jz      @notfnd            // exit if SubStr=''
         test    edx, edx
-        jz      @notfnd            // exit if str = ''
+        jz      @notfnd            // exit if S=''
         mov     esi, ecx
-        mov     ecx, [edx - 4]     // length(str)
-        mov     ebx, [eax - 4]     // length(search string)
+        mov     ecx, [edx - 4]     // length(S)
+        mov     ebx, [eax - 4]     // length(SubStr)
         add     ecx, edx
-        sub     ecx, ebx           // ecx = max start pos for full match
+        sub     ecx, ebx              // ecx = max start pos for full match
         lea     edx, [edx + esi - 1]  // edx = start position
         cmp     edx, ecx
         jg      @notfnd            // startpos > max start pos
-        cmp     ebx, 1             // length(substr)
-        jle     @onec              // length(substr) <= 1
+        cmp     ebx, 1
+        jle     @onec              // optimized loop for length(SubStr)<=1
         push    edi
         push    ebp
-        lea     edi, [ebx - 2]     // edi = length(search string) - 2
-        mov     esi, eax           // esi = search string
+        lea     edi, [ebx - 2]     // edi = length(SubStr)-2
+        mov     esi, eax           // esi = SubStr
         movzx   ebx, byte ptr[eax] // bl = search character
-@l:     cmp     bl, [edx]          // compare 2 characters per l
+@l:     cmp     bl, [edx]          // compare 2 characters per @l
         je      @c1fnd
 @notc1: cmp     bl, [edx + 1]
         je      @c2fnd
@@ -21820,18 +21820,18 @@ asm     // eax=SubStr, edx=S, ecx=Offset
         pop     esi
         pop     ebx
         ret
-@c1fnd: mov     ebp, edi            // ebp = length(search string) - 2
+@c1fnd: mov     ebp, edi            // ebp = length(SubStr)-2
 @c1l:   movzx   eax, word ptr[esi + ebp]
-        cmp     ax, [edx + ebp]     // compare 2 chars per c1l (may include #0)
+        cmp     ax, [edx + ebp]     // compare 2 chars per @c1l (may include #0)
         jne     @notc1
         sub     ebp, 2
         jnc     @c1l
         pop     ebp
         pop     edi
         jmp     @setres
-@c2fnd: mov     ebp, edi             // ebp = length(search string) - 2
+@c2fnd: mov     ebp, edi            // ebp = length(SubStr)-2
 @c2l:   movzx   eax, word ptr[esi + ebp]
-        cmp     ax, [edx + ebp + 1]  // compare 2 chars per c2l (may include #0)
+        cmp     ax, [edx + ebp + 1] // compare 2 chars per @c2l (may include #0)
         jne     @notc2
         sub     ebp, 2
         jnc     @c2l
@@ -21851,12 +21851,12 @@ asm     // eax=SubStr, edx=S, ecx=Offset
 @chkres:cmp     edx, ecx           // check within ansistring
         jge     @notfnd
         add     edx, 1
-@setres:pop     ecx                // @str
+@setres:pop     ecx                // ecx = S
         pop     esi
         pop     ebx
         neg     ecx
         lea     eax, [edx + ecx + 1]
-end;
+e
 {$endif PUREPASCAL}
 
 function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;

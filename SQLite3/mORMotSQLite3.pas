@@ -831,7 +831,7 @@ begin
     fStatementGenericSQL := '';
     fStatementMaxParam := 0;
     if E<>nil then
-      fStatementLastException := FormatUTF8('% %',[E,ObjectToJSONDebug(E)]);
+      FormatUTF8('% %',[E,ObjectToJSONDebug(E)],fStatementLastException);
   end;
 end;
 
@@ -1184,19 +1184,18 @@ begin
               AddInt64(ValueInts^,ValueIntsCount,fStatement^.FieldInt(0));
           until res=SQLITE_DONE;
           SetLength(ValueInts^,ValueIntsCount);
-          msg := FormatUTF8('returned % integer%',
-            [ValueIntsCount,PLURAL_FORM[ValueIntsCount>1]]);
+          FormatUTF8('returned Int64 len=%',[ValueIntsCount],msg);
         end else
         if (ValueInt=nil) and (ValueUTF8=nil) then begin
           // default execution: loop through all rows
           repeat until fStatement^.Step<>SQLITE_ROW;
           if LastInsertedID<>nil then begin
             LastInsertedID^ := DB.LastInsertRowID;
-            msg := FormatUTF8(' lastInsertedID=%',[LastInsertedID^]);
+            FormatUTF8(' lastInsertedID=%',[LastInsertedID^],msg);
           end;
           if LastChangeCount<>nil then begin
             LastChangeCount^ := DB.LastChangeCount;
-            msg := FormatUTF8(' lastChangeCount=%',[LastChangeCount^]);
+            FormatUTF8(' lastChangeCount=%',[LastChangeCount^],msg);
           end;
         end else
           // get one row, and retrieve value
@@ -1204,10 +1203,10 @@ begin
             result := false else
             if ValueInt<>nil then begin
               ValueInt^ := fStatement^.FieldInt(0);
-              msg := FormatUTF8('returned=%',[ValueInt^]);
+              FormatUTF8('returned=%',[ValueInt^],msg);
             end else begin
               ValueUTF8^ := fStatement^.FieldUTF8(0);
-              msg := FormatUTF8('returned="%"',[ValueUTF8^]);
+              FormatUTF8('returned="%"',[ValueUTF8^],msg);
             end;
         GetAndPrepareStatementRelease(nil,msg);
       except
@@ -1350,8 +1349,8 @@ begin
   if (ID<0) or (TableModelIndex<0) or (result<>'') then
     exit;
   with Model.TableProps[TableModelIndex] do
-    aSQL := FormatUTF8('SELECT % FROM % WHERE RowID=:(%):;',
-      [SQL.TableSimpleFields[true,false],Props.SQLTableName,ID]);
+    FormatUTF8('SELECT % FROM % WHERE RowID=:(%):;',
+      [SQL.TableSimpleFields[true,false],Props.SQLTableName,ID],aSQL);
   result := EngineList(aSQL,true); // ForceAJAX=true -> '[{...}]'#10
   if result<>'' then
     if IsNotAjaxJSON(pointer(result)) then
@@ -1410,8 +1409,8 @@ begin
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
     with Value.RecordProps do
     if BlobFields<>nil then begin
-      SQL := FormatUTF8('SELECT % FROM % WHERE ROWID=?;',
-        [SQLTableRetrieveBlobFields,Table.RecordProps.SQLTableName]);
+      FormatUTF8('SELECT % FROM % WHERE ROWID=?;',
+        [SQLTableRetrieveBlobFields,Table.RecordProps.SQLTableName],SQL);
       DB.Lock(SQL);
       try
         with fStatementCache.Prepare(SQL)^ do begin
@@ -1470,8 +1469,7 @@ begin
     result := false else
   with Model.TableProps[TableModelIndex].Props do
   try
-    SQL := FormatUTF8('UPDATE % SET %=? WHERE RowID=?;',
-             [SQLTableName,BlobField^.Name]);
+    FormatUTF8('UPDATE % SET %=? WHERE RowID=?;',[SQLTableName,BlobField^.Name],SQL);
     DB.Lock(SQL); // UPDATE for a blob field -> no JSON cache flush, but UI refresh
     try
       with fStatementCache.Prepare(SQL)^ do begin
@@ -1596,8 +1594,7 @@ begin
     if (DB<>nil) and (Value.ID>0) and (PSQLRecordClass(Value)^<>nil) then
     with Model.TableProps[TableModelIndex].Props do
     if BlobFields<>nil then begin
-      SQL := FormatUTF8('UPDATE % SET % WHERE ROWID=?;',
-        [SQLTableName,SQLTableUpdateBlobFields]);
+      FormatUTF8('UPDATE % SET % WHERE ROWID=?;',[SQLTableName,SQLTableUpdateBlobFields],SQL);
       DB.Lock(SQL); // UPDATE for all blob fields -> no cache flush, but UI refresh
       try
         with fStatementCache.Prepare(SQL)^ do begin
@@ -2005,7 +2002,7 @@ begin
       DB.LockAndFlushCache;
       try
         try
-          fStatementSQL := FormatUTF8('% multi %',[rowCount,SQL]);
+          FormatUTF8('% multi %',[rowCount,SQL],fStatementSQL);
           if rowCount>1 then
             SQL := SQL+','+CSVOfValue('('+CSVOfValue('?',fieldCount)+')',rowCount-1);
           fStatementGenericSQL := SQL; // full log on error

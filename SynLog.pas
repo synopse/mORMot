@@ -2864,7 +2864,7 @@ begin
       try
         fEchoRemoteEvent(nil,sllClient,
           FormatUTF8('%00%    Remote Client % Disconnected',
-          [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
+            [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
       finally
         FreeAndNil(fEchoRemoteClient);
       end;

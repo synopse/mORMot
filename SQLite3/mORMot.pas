@@ -4556,8 +4556,8 @@ type
     // - you may use SaveToFile() method to create such JSON file
     // - will call LoadFromFile(), and raise EECCException on any error
     constructor CreateFromFile(const jsonfile: TFileName);
-    /// initialize the certificate store from an array of .pubkey file names
-    // - raise EECCException on any error when reading a .pubkey file
+    /// initialize the certificate store from an array of .public file names
+    // - raise EECCException on any error when reading a .public file
     constructor CreateFromFiles(const files: array of TFileName);
     /// save the whole certificates chain as a JSON file
     // - is in fact the human-friendly JSON serialization of this instance
@@ -56132,7 +56132,7 @@ begin
         VariantSaveJSON(Value,twJSONEscape,json);
         dyn.LoadFromJSON(pointer(json));
         json := dyn.SaveToJSON(true);
-        Value := _JsonFast(json);
+        _Json(json,Value,JSON_OPTIONS_FAST);
       finally
         dyn.Clear;
       end;
@@ -56144,7 +56144,7 @@ begin
         VariantSaveJSON(Value,twJSONEscape,json);
         RecordLoadJSON(rec[0],pointer(json),ArgTypeInfo);
         json := RecordSaveJSON(rec[0],ArgTypeInfo,true);
-        Value := _JsonFast(json);
+        _Json(json,Value,JSON_OPTIONS_FAST);
       finally
         RecordClear(rec[0],ArgTypeInfo);
       end;
