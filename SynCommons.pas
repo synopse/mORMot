@@ -3618,7 +3618,7 @@ function StringFromFile(const FileName: TFileName): RawByteString;
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
-  FlushOnDisk: boolean=false): boolean;
+  FlushOnDisk: boolean=false; FileDate: TDateTime=0): boolean;
 
 /// get text File contents (even Unicode or UTF8) and convert it into a
 // Charset-compatible AnsiString (for Delphi 7) or an UnicodeString (for Delphi
@@ -26147,7 +26147,7 @@ begin
 end;
 
 function FileFromString(const Content: RawByteString; const FileName: TFileName;
-  FlushOnDisk: boolean): boolean;
+  FlushOnDisk: boolean; FileDate: TDateTime): boolean;
 var F: THandle;
     L: integer;
 begin
@@ -26164,8 +26164,14 @@ begin
 {$ifdef MSWINDOWS}
   if FlushOnDisk then
     FlushFileBuffers(F);
-{$endif}
+  if FileDate<>0 then
+    FileSetDate(F,DateTimeToFileDate(FileDate));
   FileClose(F);
+{$else}
+  FileClose(F);
+  if FileDate<>0 then
+    FileSetDate(FileName,DateTimeToFileDate(FileDate));
+{$endif}
 end;
 
 type
