@@ -654,27 +654,27 @@ end;
 
 function StringToJSON(const Text: string): string;
 var len,j: integer;
-procedure DoEscape;
-var i: Integer;
-begin
-  result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
-  for i := j to len do begin
-    case Text[i] of
-    #8:  result := result+'\b';
-    #9:  result := result+'\t';
-    #10: result := result+'\n';
-    #12: result := result+'\f';
-    #13: result := result+'\r';
-    '\': result := result+'\\';
-    '"': result := result+'\"';
-    else
-    if Text[i]<' ' then
-      result := result+'\u00'+IntToHex(ord(Text[i]),2) else
-      AppendChar(result,Text[i]); // will be UTF-8 encoded later
+  procedure DoEscape;
+  var i: Integer;
+  begin
+    result := '"'+copy(Text,1,j-1); // here FPC 2.7.1 erases UTF-8 encoding
+    for i := j to len do begin
+      case Text[i] of
+      #8:  result := result+'\b';
+      #9:  result := result+'\t';
+      #10: result := result+'\n';
+      #12: result := result+'\f';
+      #13: result := result+'\r';
+      '\': result := result+'\\';
+      '"': result := result+'\"';
+      else
+      if Text[i]<' ' then
+        result := result+'\u00'+IntToHex(ord(Text[i]),2) else
+        AppendChar(result,Text[i]); // will be UTF-8 encoded later
+      end;
     end;
+    AppendChar(result,'"');
   end;
-  AppendChar(result,'"');
-end;
 begin
   len := length(Text);
   for j := 1 to len do
@@ -803,12 +803,16 @@ begin
     result := ValueToJSON(PVariant(TVarData(Value).VPointer)^) else
   if TVarData(Value).VType<=varNull then
     result := 'null' else
+  if TVarData(Value).VType=varBoolean then
+    if TVarData(Value).VBoolean then
+      result := 'true' else
+      result := 'false' else
+  if TVarData(Value).VType=varDate then
+    result := DateTimeToJSON(TVarData(Value).VDouble) else
   if VarIsOrdinal(Value) then begin
     I64 := Value;
     result := IntToStr(I64);
   end else
-  if TVarData(Value).VType=varDate then
-    result := DateTimeToJSON(TVarData(Value).VDouble) else
   if VarIsFloat(Value) then
     DoubleToJSON(Value,result) else
   if VarIsStr(Value) then
