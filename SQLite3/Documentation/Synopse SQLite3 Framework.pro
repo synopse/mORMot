@@ -638,7 +638,7 @@ If you do not know some of those concepts, don't worry: this document will detai
 With {\i mORMot}, {\i ORM} is not used only for data persistence of objects in databases (like in other implementations), but as part of a global n-@*Tier@, Service Oriented Architecture (SOA), ready to implement {\i Domain-Driven} solutions.\line {\i mORMot} is not another ORM on which a transmission layer has been added, like almost everything existing in Delphi, C# or Java: this is a full Client-Server ORM/SOA from the ground up. This really makes the difference.
 The business logic of your applications will be easily exposed as {\i Services}, and will be accessible from light clients (written in {\i Delphi} or any other mean, including AJAX).
 The framework Core is non-visual: it provides only a set of classes to be used from code. But you have also some UI units available (including screen auto-creation, reporting and ribbon GUI), and you can use it from any RAD, web, or AJAX clients.
-No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich {\i Delphi} clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Client authentication is performed via several secure methods, and communication can be encrypted via HTTS or with proprietary SHA/AES-256 algorithm. SOA endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.
+No dependency is needed at the client side (no DB driver, or third-party runtime): it is able to connect via standard HTTP or HTTPS, even through a corporate proxy or a VPN. Rich {\i Delphi} clients can be deployed just by copying and running a @*stand-alone@ small executable, with no installation process. Client authentication is performed via several secure methods, and communication can be encrypted via HTTS or with proprietary SHA/@*AES@-256 algorithm. SOA endpoints are configured automatically for each published interface on both server and client sides, and creating a load-balancing proxy is a matter of one method call. Changing from one database engine to another is just a matter of one line of code; full audit-trail history is available, if needed, to track all changes of any class persisted by the ORM/ODM.
 Cross-platform clients can be easily created, as {\i Win32} and {\i Win64} executables of course, but also for any platform supported by the {\i Delphi} compiler (including {\i Mac @*OSX@}, {\i @*iPhone@}/{\i @*iPad@} and {\i @*Android@}), or by {\i @*FreePascal@} / {\i @*Lazarus@}. AJAX applications can easily be created via {\i @*Smart Mobile Studio@}, as will any mobile operating system be accessible as an HTML5 web rich client or stand-alone {\i @*PhoneGap@} application, ready to be added to the {\i Windows}, {\i Apple} or {\i Google} store. See @86@ for how {\i mORMot} client code generation leverages all platforms.
 Speed and scalability has been implemented from the ground up - see @59@: a genuine optimized multi-threaded core let a single server handle more than 50,000 concurrent clients, faster than {\i DataSnap}, {\f1\fs20 WCF} or {\f1\fs20 node.js}, and our rich SOA design is able to implement both vertical and horizontal scalable @*hosting@, using recognized enterprise-level SQL or NoSQL databases for storage.
 In short, with {\i mORMot}, your ROI is maximized.
@@ -3998,7 +3998,7 @@ As stated below, you can use any other database access layer, if you wish:
 This framework uses a compiled version of the official {\i SQLite3} library source code, and includes it natively into {\i Delphi} code. This framework therefore adds some very useful capabilities to the Standard {\i SQLite3} database engine, but keeping all its advantages, as listed in the previous paragraph of this document:
 - Can be either statically linked to the executable, or load external {\f1\fs20 sqlite3.dll};
 - Faster database access, through unified memory model, and usage of the {\f1\fs20 @*FastMM4@} memory manager (which is almost 10 times faster than the default Windows memory manager for memory allocation);
-- Optional direct encryption of the data on the disk (up to @*AES@-256 level, that is Top-Secret @*security@);
+- Optional direct @*encryption@ of the data on the disk (up to @*AES@-256 level, that is Top-Secret @*security@);
 - Use via {\i mORMot}'s @*ORM@ let database layout be declared once in the {\i Delphi} source code (as @*published properties@ of classes), avoiding most SQL writing, hence common field or table names mismatch;
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
@@ -7524,7 +7524,7 @@ Note that even if {\i WinHTTP} does not share by default any @*proxy@ settings w
 Note that by design, the {\f1\fs20 TSQLHttpClient*} classes, like other {\f1\fs20 TSQLRestClientURI} implementations, were designed to be thread safe, since their {\f1\fs20 URI()} method is protected by a lock. See @25@.
 :122  HTTPS server
 The {\f1\fs20 http.sys} kernel mode server can be defined to serve @**HTTPS@ secure content, i.e. the @**SSL@ protocol over @*HTTP@.
-When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL encryption yet.
+When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSSL} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, the SSL layer will be enabled within {\f1\fs20 http.sys}. Note that {\f1\fs20 useHttpSocket} kind of server does not offer SSL/TLS @*encryption@ yet.
 In order to let the SSL layer work as expected, you need first to create and import a set of certificates.
 :   Certificates
 You need one {\i certificate} (cert) to act as your root authority, and one to act as the actual certificate to be used for the SSL, which needs to be signed by your root authority. If you don't set up the root authority your single certificate won't be trusted, and you will start to discover this through a series of extremely annoying exceptions, long after the fact. To get a free certificate, i.e. for testing purposes, you may use an online service like @http://www.startssl.com
@@ -7569,7 +7569,7 @@ $httpcfg delete ssl -i 0.0.0.0:8005
 $netsh http delete sslcert ipport=0.0.0.0:8005
 (under Vista/Seven/Eight)
 Note that this is mandatory to first delete an existing certificate for a given port before replacing it with a new one.
-:  Custom Encodings
+:188  Custom Encodings
 :   SynLZ/deflate compression
 On the client side, the {\f1\fs20 TSQLHttpClientGeneric.Compression} property is by default set as such:
 ! MyClient.Compression := [hcSynLZ];
@@ -7579,8 +7579,8 @@ Our {\i SynLZ} is efficient, especially on @*JSON@ content, and very fast on the
 You may include {\f1\fs20 hcDeflate} to the property, if you want to support this zip-derivated compression algorithm, e.g. from browsers or any HTTP library. In terms of CPU resources, {\f1\fs20 hcDeflate} will be more consumming than {\f1\fs20 hcSynLZ}, but will obtain a slightly better compression ratio.
 If both {\f1\fs20 [hcSynLZ,hcDeflate]} are defined, {\i mORMot} clients will use {\i SynLZ} compression, while other clients (e.g. browsers which do not know about the {\i SynLZ} encoding), will use the standard {\i deflate} compression.
 :151   AES encryption over HTTP
-In addition to regular HTTPS flow encryption, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and @**AES@-256/CTR algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
-Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCTR} mode is not what you expect.
+In addition to regular HTTPS flow @**encryption@, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA-256 and @**AES@-256/ECB algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
+Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESECB} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
 ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
 On the client side, you can just set the {\f1\fs20 TSQLHttpClientGeneric.Compression} property as expected:
@@ -7591,7 +7591,7 @@ Then all HTTP body content will be compressed via our {\i SynLZ} algorithm, and 
 Since it is a proprietary algorithm, it will work only for {\i Delphi} clients. When accessing for a plain AJAX client, or a {\i Delphi} application with {\f1\fs20 TSQLHttpClientGeneric.Compression = []}, there won't be any encryption at all, due to way HTTP accepts its encoding. For safety, you should therefore use it in conjunction with per-URI Authentication - see @18@.
 :   Prefer WebSockets between mORMot nodes
 As we just saw, defining {\f1\fs20 hcSynShaAes} will only be available between {\i mORMot} nodes, if both do support the encoding. There is no insurance that content will be encrypted during transmission, e.g. if the client did not define {\f1\fs20 synshaaes}.
-Therefore, for truly safe communication between {\i mORMot} nodes, you may consider our {\i @*WebSockets@} client/server implementation instead - see @150@. It implements a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and AES-256. And, last but not least, it features real-time callbacks, if needed. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server, from stable {\i mORMot} clients, e.g. in a {\i mORMot} @*Cloud@. Then RESTful (AJAX/mobile) clients, may rely on plain HTTP, with {\f1\fs20 hcDeflate} compression.
+Therefore, for truly safe communication between {\i mORMot} nodes, you may consider our {\i @*WebSockets@} client/server implementation instead - see @150@. It implements a proprietary binary protocol for its communication frames, using also {\i SynLZ} compression and @*AES@-256-ECB @*encryption@. And, last but not least, it features real-time callbacks, if needed. This kind of access may in fact be considered as the safest available mean of remote connection to a {\i mORMot} server, from stable {\i mORMot} clients, e.g. in a {\i mORMot} @*Cloud@. Then RESTful (AJAX/mobile) clients, may rely on plain HTTP, with {\f1\fs20 hcDeflate} compression.
 \page
 :25 Thread-safety
 We tried to make {\i mORMot} at the same time fast and safe, and able to scale with the best possible performance on the hardware it runs on. @**Multi-thread@ing is the key to better usage of modern multi-core CPUs, and also client responsiveness.
@@ -10407,11 +10407,11 @@ The {\f1\fs20 TWebSocketProtocol} class defines an abstract {\i WebSockets proto
 \
 For our @63@, we will still need to make {\i RESTful} requests, so the basic {\i WebSockets} framing has been enhanced to support {\f1\fs20 TWebSocketProtocolRest} REST-compatible protocols, able to use the single connection for both REST queries and asynchronous notifications.\line Two classes are available for your @*SOA@ applications:
 - {\f1\fs20 TWebSocketProtocolJSON} as a "pure" JSON light protocol;
-- {\f1\fs20 TWebSocketProtocolBinary} as a binary proprietary protocol, with optional frame compression and @*AES@ encryption (using @*AES-NI@ hardware instructions, if available).
+- {\f1\fs20 TWebSocketProtocolBinary} as a binary proprietary protocol, with optional frame compression and @*AES@ @*encryption@ (using @*AES-NI@ hardware instructions, if available).
 In practice, on the server side, you will start your {\f1\fs20 TSQLHttpServer} by specifying {\f1\fs20 useBidirSocket} as kind of server:
 ! HttpServer := TSQLHttpServer.Create('8888',[Server],'+',useBidirSocket);
 Under the hood, it will instantiate a {\f1\fs20 TWebSocketServer} HTTP server, as defined in {\f1\fs20 mORMotHttpServer.pas}, based on the sockets API, able to upgrade the HTTP protocol into {\i WebSockets}. Our @88@ is not yet able to switch to {\i WebSockets} - and at API level, it will require at least {\i Windows 8} or {\i Windows 2012 Server}.
-Then you enable {\i WebSockets} for the {\f1\fs20 TWebSocketProtocolBinary} protocol, with an encryption key:
+Then you enable {\i WebSockets} for the {\f1\fs20 TWebSocketProtocolBinary} protocol, with a symmetric encryption key:
 !   HttpServer.WebSocketsEnable(Server,'encryptionkey');
 On the client side, you will use a {\f1\fs20 TSQLHttpClientWebsockets} instance, as defined in {\f1\fs20 mORMotHttpClient.pas}, then explicitly upgrade the connection to use {\i WebSockets} (since by default, it will stick to the HTTP protocol):
 !  Client := TSQLHttpClientWebsockets.Create('127.0.0.1','8888',TSQLModel.Create([]));
@@ -10545,7 +10545,7 @@ The following {\f1\fs20 class} will define, implement and register the {\f1\fs20
 !!  HttpServer.WebSocketsEnable(Server,PROJECT31_TRANSMISSION_KEY);
 !...
 Purpose of those methods is just to create and launch the {\f1\fs20 TLongWorkServiceThread} process from a client request, then maintain a total count of started works, in a {\f1\fs20 sicShared} service instance - see @92@ - hosted in a {\f1\fs20 useBidirSocket} kind of HTTP server.
-We have to explicitly call {\f1\fs20 TSQLHttpServer.WebSocketsEnable()} so that this server will be able to upgrade to our {\i WebSockets} protocol, using our binary framing, and the very same encryption key as on the client side - shared as a {\f1\fs20 PROJECT31_TRANSMISSION_KEY} constant in the sample, but which may be safely stored on both sides.
+We have to explicitly call {\f1\fs20 TSQLHttpServer.WebSocketsEnable()} so that this server will be able to upgrade to our {\i WebSockets} protocol, using our binary framing, and the very same symmetric @*encryption@ key as on the client side - shared as a {\f1\fs20 PROJECT31_TRANSMISSION_KEY} constant in the sample, but which may be safely stored on both sides.
 :173  Publish-subscribe for events
 In @*event-driven@ architectures, the {\i @**publish-subscribe@} messaging pattern is a way of letting senders (called {\i publishers}) transmit messages to their receivers (called {\i subscribers}), without any prior knowledge of who those subscribers are. In practice, the {\i subscribers} will express interest for a set of messages, which will be sent by the {\i publisher} to all the {\i subscribers} of a given message, as soon as it is be notified.
 \graph PublishSubscribe1 Publish-Subscribe Pattern
@@ -13265,6 +13265,7 @@ The framework tries to implement @**security@ via:
 - Authentication;
 - Authorization.
 {\i Process safety} is implemented at every @7@ level:
+- Strong @*encryption@ to keep information private - see @151@ and @187@;
 - @*Atomic@ity of the {\i @*SQLite3@} database - see @60@;
 - @15@ architecture to avoid most synchronization issues;
 - @13@ associated to the Object pascal @*strong type@ syntax;
@@ -13837,8 +13838,621 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 !    content := engine.GlobalObject.Run('showDownRunner',[SynUnicode(FileName)]);
 !  ...
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
-:68Domain-Driven-Design
+:187Asymmetric Encryption
 %cartoon05.png
+As we have seen when dealing about @43@, the framework offers built-in @**encryption@ of the content transmitted between its @*REST@ client and server sides, especially via @188@, or @*HTTPS@. The later, when using TLS 1.2 and proven patterns, implements state-of-the-art security. But default {\i mORMot} encryption, even if using proven algorithms like @*AES@-CFB-256 and SHA-256, uses symmetric keys, that is the same secret key is shared on both client and server sides.
+@**Asymmetric@ encryption, also known as @**public-key@ cryptography, uses pairs of keys:
+- {\i Public} keys that may be disseminated widely;
+- Paired with {\i private} keys which are known only to the owner.
+The framework features a full asymmetric encryption system, based on {\i @*Elliptic curve@ cryptography} (@**ECC@), which may be used at application level (i.e. to protect your application data), or at transmission level (to enhance communication safety).
+\page
+: Public-key Cryptography
+Once you have {\i generated} a public/private pairs of keys, you can perform two functions:
+- {\i Authenticate} a message originated with a holder of the private key; a {\i certification} system should be used to maintain a trust chain of authority;
+- {\i Encrypt} a message with a public key to ensure that only the holder of the paired private key can decrypt it.
+:  Keys Generation and Distribution
+First process is to generate a pair of public/private keys. Some random number generator, probably based on an external entropy source, will gather unpredictable numbers, which will be consumed by a public-key algorithm to generate the actual set of keys. This step usually requires some computing powers, due to the complexity of the algorithms involved, and the encryption needed for storing the private key in secret.
+Let's explain how it works for the classic Alice/Bob scheme:
+\graph AsymmKeygen Asymmetric Key Generation
+\Random Seed\Key Generation Algorithm
+\Key Generation Algorithm\alice.public
+\Key Generation Algorithm\alice.private
+\Random Seed \Key Generation  Algorithm
+\Key Generation  Algorithm\bob.public
+\Key Generation  Algorithm\bob.private
+\
+Now we have two pairs of keys:
+- {\f1\fs20 alice.public} and {\f1\fs20 alice.private} for Alice;
+- {\f1\fs20 bob.public} and {\f1\fs20 bob.private} for Bob.
+By design, {\i public} keys ({\f1\fs20 alice.public} and {\f1\fs20 bob.public}) can be published, via mail, in application settings, as unprotected file, or even on a public server. On the contrary, {\i private} keys ({\f1\fs20 alice.private} or {\f1\fs20 bob.private}) should remain as secret as possible, and are usually encrypted, then stored in password-protected files, in some safe place of the operating system, or even dedicated hardware.
+In practice, Alice will send her {\f1\fs20 alice.public} key to Bob, so that:
+- Bob can verify the digital signature of a message sent by Alice, who signed it with her {\f1\fs20 alice.private} key;
+- Bob can encrypt some information with the known {\f1\fs20 alice.public} key, then send it to Alice - and that only Alice could decrypt it using her {\f1\fs20 alice.private} key.
+Of course, since Bob has his own set of keys, he also publishes his {\f1\fs20 bob.public} key, so that:
+- Alice can verify the digital signature of a message sent by Blob, who signed it with his {\f1\fs20 bob.private} key;
+- Alice can encrypt some information with the known {\f1\fs20 bob.public} key, then send it to Bob - and that only Bob could decrypt it using his {\f1\fs20 bob.private} key.
+Key distribution is an important part of any asymmetric encryption scheme. The whole security chain is as secure as its weakest link, so the secrecy of the private keys requires as most attention as possible. Every software solution using security will probably require external audits, at least peer review, to validate each implementation.
+:  Message Authentication
+Any kind of message (most probably a file or a memory buffer) can be authenticated using {\i @*digital signature@s}, using the private key of the sender. Then, on the other side, the receiver can verify the message signature, using the public key of the sender.
+\graph AsymmSign Asymmetric Digital Signature
+subgraph cluster_0 {
+label="Alice";
+\alice.private\Signing Algorithm
+\message.txt\Signing Algorithm
+\Signing Algorithm\message.sign
+}
+subgraph cluster_1 {
+label="Bob";
+\message.txt \Verifying Algorithm
+\message.sign \Verifying Algorithm
+\alice.public\Verifying Algorithm
+\Verifying Algorithm\accepted\  ?
+\Verifying Algorithm\rejected
+}
+\
+As you can see, if Bob believes that the {\f1\fs20 alice.public} file comes from Alice, he can assume that the {\f1\fs20 messate.txt} content has really been sent by Alice. Most of the time, in such simple scenarios, Alice probably gave directly her {\f1\fs20 alice.public} file to Bob, for instance via an email. But for most complex scenarios, like the Client/Server solutions which can be built using the {\i mORMot} framework, the multiplicity of nodes, and therefore keys, induces a potential risk.
+:  Certificates and Public Key Infrastructure
+A central problem with the use of public-key cryptography is confidence that a particular public key is authentic, in that it belongs to the person or entity claimed, and has not been tampered with or replaced by a malicious third party. Digital signature is more than just creating a hash of some content, or applying some kind of "seal" on it: validation should be done against some reference public keys, which are hosted into a {\i public-key infrastructure} ({\f1\fs20 @*PKI@}). One or more third-parties, aka certification authorities ({\f1\fs20 @*CA@}), certify ownership of key pairs, by supplying some online service and/or local safe storage of reference public keys, but keeping their own private keys secret. Any certificate authority could sign a message with his private key, or even delegate his own authority to another certification instance, by signing the intermediate authority with his private key. If one certificate is compromised - i.e. if its private key has been released - the whole chain of trust is broken, and all dependent certificates should be immediately revoked.
+In practice, when a public certificate key is generated in such a trusted {\f1\fs20 PKI} system, it will contain:
+- The genuine public key material, depending on the underlying algorithm used;
+- Some ownership information (i.e. who emitted it);
+- The scope of the certification (may apply to a user, a company, a web site, an application...);
+- A certified link to one or several other certificates, signed with their private key to prove their authenticity using the known public key of the {\f1\fs20 CA} chain;
+- Optional validity and revocation dates - since it is a good practice to renew certificates on a regular basis.
+The private key store may also contain the very same set of information, added to its private key material. It will enforce consistency between public and private keys - for instance, you won't be fooled by using a private key after its associated public certificates expired.
+Certification authorities create a chain of trust, used as reference to authenticate public keys. Every Operating System, or Internet browser do contain some root certificates, and the whole Internet security (HTTPS/TLS) is governed by such a {\f1\fs20 PKI}. Of course, for your own set of applications or products, you can create your own key chain, keeping the same principles - mainly private key secrecy and trust chain management.
+:  Message encryption
+A naive approach of hiding a message content is by using a secret key or pattern, then apply it on the message. It has been done since ages, and will be safe as much as the symmetric key is safe. As a side effect, you have to trust the receiver not to spread the key to the public - and in fact, you shouldn't: don't trust anyone, even not you!
+Public-key cryptography solves this problem by using a public key to encrypt a message, which will therefore only be decryptable by someone knowing the corresponding secret key.
+\graph AsymmEncrypt Asymmetric Encryption Scheme
+subgraph cluster_0 {
+label="Bob";
+\alice.public\Encryption Algorithm
+\message.txt\Encryption Algorithm
+\Encryption Algorithm\message.encrypted
+}
+subgraph cluster_1 {
+label="Alice";
+\message.encrypted \Decryption Algorithm
+\alice.private\Decryption Algorithm
+\Decryption Algorithm\ message.txt
+}
+\
+Of course, you can not only encrypt the message, but also sign it, using the other end public key. Here is how a sign-then-encrypt pattern can be implemented:
+\graph AsymmSignEncrypt Asymmetric Sign-Then-Encrypt Scheme
+subgraph cluster_0 {
+label="Bob";
+\bob.private\Signing Algorithm
+\message.txt\Signing Algorithm
+\Signing Algorithm\message.sign
+\alice.public\Encryption Algorithm
+\message.txt\Encryption Algorithm
+\message.sign\Encryption Algorithm
+\Encryption Algorithm\message.signencrypted
+}
+subgraph cluster_1 {
+label="Alice";
+\message.signencrypted \Decryption Algorithm
+\alice.private\Decryption Algorithm
+\Decryption Algorithm\ message.txt
+\message.signencrypted \Verifying Algorithm
+\ message.txt\Verifying Algorithm
+\bob.public\Verifying Algorithm
+\Verifying Algorithm\accepted\  ?
+\Verifying Algorithm\rejected
+}
+\
+As always, the {\f1\fs20 alice.public} and {\f1\fs20 bob.public} keys are validated against the trust chain of certificates of a {\i public-key infrastructure} ({\f1\fs20 @*PKI@}).
+With all this elements, we can now apply them to our {\i mORMot} applications.
+\page
+: Elliptic Curve Cryptography
+The framework features an implementation of {\i Elliptic Curve Cryptography} (@**ECC@), based on the mathematical structure of the "elliptic curve discrete logarithm problem". The mathematical community has not made any major progress in improving algorithms to solve this problem since it was independently introduced by Koblitz and Miller in 1985. In short, the public key is an equation for an elliptic curve and a point that lies on that curve. The private key is a number. Thanks to the symmetry of the elliptic curve, there is some kind of symmetry also between ECC public and private key values, and ECDSA and ECDH algorithms capitalize on this characteristic to compute a digital signature or a shared secret.
+In comparison to the RSA algorithm, ECC has some advantages:
+- Smaller key size, for the same level of safety (a 256-bit elliptic curve key is comparable to a 3072-bit RSA key);
+- Well endorsed by most certification authorities (NIST/NSA);
+- Faster performance, especially when the key size increases;
+- Offers @*perfect forward secrecy@, since a fresh key is created for every encryption;
+- Potentially less patents infringement, in all its practical appliances;
+- Last but not least, it is officially replacing RSA for the future of web.
+:  Introducing SynEcc
+The {\i mORMot}'s {\f1\fs20 SynEcc.pas} unit implements full ECC computation, using {\f1\fs20 secp256r1} curve, i.e. {\f1\fs20 NIST P-256}, or OpenSSL's {\f1\fs20 prime256v1}. The low-level computation is done in optimized C code - from the @https://github.com/esxgx/easy-ecc {\i Open Source} project - and is statically linked in your Windows or Linux executable: i.e. no external {\f1\fs20 .dll}/{\f1\fs20 .so} library is needed. Then we defined a feature-rich set of object pascal classes on top of this solid ECC ground, to include certificates, safe storage of private keys, JSON publication of public keys, as an integrated toolset.
+All needed low-level asymmetric cryptography is available:
+- ECC key generation, using {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} as random seed;
+- ECDSA signature and verification of 256-bit hashes;
+- ECDSH shared secret computation - suitable for ECIES encryption, after PBK2_HMAC_SHA256 derivation.
+The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and structures, ready to implement:
+- Authority certificates - via public {\f1\fs20 TECCCertificate} and private {\f1\fs20 TECCCertificateSecret} classes, and full {\f1\fs20 PKI} chaining - see {\f1\fs20 TECCCertificateChain};
+- Digital signature of files or memory buffers - via {\f1\fs20 TECCSignatureCertified};
+- Encryption of files or memory buffers - calling {\f1\fs20 TECCCertificate.Encrypt} and {\f1\fs20 TECCCertificateSecret.Decrypt} methods.
+You are free to use those classes, in your programs, whenever some advanced cryptography is needed - and it will eventually be the case, trust me! A command-line {\f1\fs20 ECC} tool has also been developed, for convenient operation on files.
+:  ECC command line tool
+You will find in the {\f1\fs20 SQLite3\\Samples\\33 - ECC} folder the source code of the {\f1\fs20 @*ECC@.dpr} console project. Just compile it into an executable, accessible from your command line prompt. Or download an already compiled version from @http://synopse.info/files/ecc.7z
+It works with no problem under @*Windows@, or @*Linux@, with no external dependency (e.g. no {\i OpenSLL} needed), so could be used in an automated server infrastructure. No need to deploy a complex @*PKI@ system, just manage your certificates, encryption and signature details, via a single command line tool.
+If you run it without argument, you will get simple help information (here is the list at the time of this writing, your own version may differ):
+$>ecc
+$
+$Synopse ECC certificate-based public-key cryptography
+$-----------------------------------------------------
+$Using mORMot's SynECC rev. 1.18.2996
+$
+$ECC help
+$ECC new -auth key.private -authpass authP@ssW0rd -authrounds 60000
+$      -issuer toto@toto.com -start 2016-10-30 -days 30
+$      -newpass P@ssw0RD@ -newrounds 60000
+$ECC rekey -auth key.private -authpass P@ssW0rd -authrounds 60000
+$      -newpass newP@ssw0RD@ -newrounds 60000
+$ECC sign -file some.doc -auth key.private -pass P@ssW0rd -rounds 60000
+$ECC verify -file some.doc -auth key.public
+$ECC source -auth key.private -pass P@ssW0rd -rounds 60000
+$      -const MY_PRIVKEY -comment "My Private Key"
+$ECC infopriv -auth key.private -pass P@ssW0rd -rounds 60000
+$ECC chain file1.public file2.public file3.public ...
+$ECC chainall
+$ECC crypt -file some.doc -out some.doc.synecc -auth key.public
+$      -saltpass salt -saltrounds 60000
+$ECC decrypt -file some.doc.synecc -out some.doc -auth key.private
+$      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000
+$ECC infocrypt -file some.doc.synecc
+As you can see, the action is defined by a keyword, at first place ({\f1\fs20 new sign verify source}...). Then some optional parameters, in form of {\f1\fs20 -key value} pairs, can be supplied. If no parameter is specified, the {\f1\fs20 ECC} console application will prompt for input, with user-friendly questions, and adequate default values.
+You can define the {\f1\fs20 -noprompt} switch to force no console interaction at all, therefore allowing automated use from another process, or batch file. The {\f1\fs20 ECCProcess.pas} unit publishes all high-level commands of the {\f1\fs20 ECC} tool, so could be reused in your own setup or maintenance projects.
+We will now use this {\f1\fs20 ECC} tool to show most common features of the {\f1\fs20 SynEcc} unit, but also showing the code corresponding to each action.
+:  Keys and Certificates Generation
+The first step is to create a new key pair, which will contain their own certification information:
+$>ecc new
+$Enter the first chars of the .private file name of the signing authority.
+$Will create a self-signed certificate if left void.
+$Auth:
+$
+$Enter Issuer identifier text.
+$Will be truncated to 15-20 ascii-7 chars.
+$Issuer [arbou] :
+$
+$Enter the YYYY-MM-DD start date of its validity.
+$0 will create a never-expiring certificate
+$Start [2016-09-23] :
+$
+$Enter the number of days of its validity.
+$Days [365] :
+$
+$Enter a private PassPhrase for the new key (at least 8 chars long).
+$Save this in a safe place: if you forget it, the key will be useless!
+$NewPass [#weLHn5E.Qfe] :
+$
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ Mca4j0KGyo3r4UAn
+$
+$Enter the PassPhrase iteration round for the new key (at least 1000).
+$The higher, the safer, but will demand more computation time.
+$NewRounds [60000] :
+$
+$ 8BC90201EF55EE34F62DBA8FE8CF14DC.public/.private file created.
+Here we keep the default values, including the safe generated password ({\f1\fs20 #weLHn5E.Qfe}). You should {\ul write down this password} in a safe place, because it will be required for any use of the private key, e.g. when signing or decrypting a message. If you forget about this password, there will be no way of accessing this private key any more - you have been warned!
+The last line contains the {\i identifier} (or serial) of the generated key. This hexadecimal value ({\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC}) will be used externally to identify the key, and internally (within other certificates) to map this particular key. Note that you do not need to type all the characters of the serial in the {\f1\fs20 ECC} tool: only the first characters are enough (e.g. {\f1\fs20 8BC9}), as soon as they identify one unique file in the current folder.
+You can check the generated files in the current folder:
+$>dir *.p*
+$23/09/2016  13:46             2 320 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$23/09/2016  13:46               544 8BC90201EF55EE34F62DBA8FE8CF14DC.public
+The {\f1\fs20 .private} is some raw binary content, encrypted using the {\f1\fs20 #weLHn5E.Qfe} password.\line The {\f1\fs20 .public} file, on the contrary, is stored as a plain JSON object:
+${
+$ "Version": 1,
+$ "Serial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$ "Issuer": "arbou",
+$ "IssueDate": "2016-09-23",
+$ "ValidityStart": "2016-09-23",
+$ "ValidityEnd": "2017-09-23",
+$ "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$ "AuthorityIssuer": "arbou",
+$ "IsSelfSigned": true,
+$ "Base64": "AQA1ADUAogGLyQIB71XuNPYtuo/ozxTcGrODgAAAAAAAAAAAAAAAAIvJAgHvVe409i26j+jPFNwas4OAAA
+$AAAAAAAAAAAAAAAqjxQhWz5NjFLoWBsqvWyywne8ncNVSi/MmnVg+IZ4WknxoNvAia6oBBhC/tpo3zTjUQDssB8AId+/QR
+$SF15RccuOy/j/ebeqX6qxANtZEZO3dT/sWBUjQy/CYIVQe5TSDZy5pQAAAAA"
+$}
+You can see all information stored in a {\f1\fs20 TECCCertificate} instance. The {\f1\fs20 "Base64"} field is in fact a raw serialization of the whole content, so its string value contains all information of a public certificate, e.g. in application settings.
+We did not specify any authority at the first {\f1\fs20 Auth:} prompt. As a result, this key pair will be a {\i self-signed} certificate - see the {\f1\fs20 "IsSelfSigned": true} field in the above JSON, and that {\f1\fs20 "Serial"} and {\f1\fs20 "AuthoritySerial"} identifiers do match. We will use it as {\i root certificate} to create a certificate chain.
+All further certificates will eventually be signed by this root authority.\line For instance:
+$>ecc new
+$Enter the first chars of the .private file name of the signing authority.
+$Will create a self-signed certificate if left void.
+$Auth: 8
+$
+$Will use: 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$
+$Enter the PassPhrase of this .private file.
+$AuthPass: #weLHn5E.Qfe
+$
+$Enter the PassPhrase iteration rounds of this .private file.
+$AuthRounds [60000] :
+$
+$Enter Issuer identifier text.
+$Will be truncated to 15-20 ascii-7 chars.
+$Issuer [arbou] : toto
+$
+$Enter the YYYY-MM-DD start date of its validity.
+$0 will create a never-expiring certificate.
+$Start [2016-09-23] : 0
+$
+$Enter a private PassPhrase for the new key (at least 8 chars long).
+$Save this in a safe place: if you forget it, the key will be useless!
+$NewPass [b3dEB+DW8BJd] :
+$
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ cIK5hkjDu5/98mwm
+$
+$Enter the PassPhrase iteration round for the new key (at least 1000).
+$The higher, the safer, but will demand more computation time.
+$NewRounds [60000] :
+$
+$ 03B8865C6B982A39E9EFB1DC1A95D227.public/.private file created.
+As you can see, we entered just {\f1\fs20 8} for the first {\f1\fs20 Auth:} prompt, and the tool identified the single {\f1\fs20 8*.private} file in the current folder. Then we entered its associated {\f1\fs20 #weLHn5E.Qfe} password - any wrong password would have broken the generation. This authority will never expire by itself (we entered {\f1\fs20 0} as {\f1\fs20 Start:} prompt) - but since its root certificate has an expiration date, it will expire when the root expires.
+Now we can see the two sets of keys:
+$>dir *.p*
+$23/09/2016  14:27             2 320 03B8865C6B982A39E9EFB1DC1A95D227.private
+$23/09/2016  14:27               524 03B8865C6B982A39E9EFB1DC1A95D227.public
+$23/09/2016  13:46             2 320 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$23/09/2016  13:46               544 8BC90201EF55EE34F62DBA8FE8CF14DC.public
+The newly created {\f1\fs20 .public} file contains:
+${
+$ "Version": 1,
+$ "Serial": "03B8865C6B982A39E9EFB1DC1A95D227",
+$ "Issuer": "toto",
+$ "IssueDate": "2016-09-23",
+$ "ValidityStart": "",
+$ "ValidityEnd": "",
+$ "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$ "AuthorityIssuer": "arbou",
+$ "IsSelfSigned": false,
+$ "Base64": "AQA1AAAAAAADuIZca5gqOenvsdwaldInhiGAAAAAAAAAAAAAAAAAAIvJAgHvVe409i26j+jPFNwas4OAAAA
+$AAAAAAAAAAAAAA2rPT7XPmCH6xIt3+710FFYVAPBPWhcsR6uwYoyndrqNI7557iYC7qLrfKPgp6EmEENX4Vw0tEexu3O9SJ
+$OAG/EHau0BtwoqZBNhJEiUyGqKa0ioMwasbKtjJBNMfX7EMIsnxn4AAAAA"
+$}
+You can recognize the expected values of {\f1\fs20 "Serial"}, {\f1\fs20 "AuthoritySerial"} and {\f1\fs20 "IsSelfSigned"} fields.
+We could create a {\i certificates chain} of all available keys in the current folder, by running:
+$>ecc chainall
+$ chain.certif file created.
+The {\f1\fs20 chain.certif} file is a JSON object, containing all public information of the whole certificates chain, with the {\f1\fs20 "PublicBase64"} JSON array ready to be copied and pasted in your applications settings or source, then used via the {\f1\fs20 TECCCertificateChain} class:
+${
+$ "PublicBase64":
+$ [
+$  "AQA1AAAAAA...",
+$  "AQA1ADUAogG..."
+$ ],
+$ "Items":
+$ [
+$  {
+$   "Version": 1,
+$   "Serial": "03B8865C6B982A39E9EFB1DC1A95D227",
+$   "Issuer": "toto",
+$   "IssueDate": "2016-09-23",
+$   "ValidityStart": "",
+$   "ValidityEnd": "",
+$   "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$   "AuthorityIssuer": "arbou",
+$   "IsSelfSigned": false,
+$   "Base64": "AQA1AAAAA..."
+$  },
+$  {
+$   "Version": 1,
+$   "Serial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$   "Issuer": "arbou",
+$   "IssueDate": "2016-09-23",
+$   "ValidityStart": "2016-09-23",
+$   "ValidityEnd": "2017-09-23",
+$   "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$   "AuthorityIssuer": "arbou",
+$   "IsSelfSigned": true,
+$   "Base64": "AQA1ADUAogG..."
+$  }
+$ ],
+$ "Count": 2,
+$}
+In the above sample, we cut down the {\f1\fs20 "*Base64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored three times: once in {\f1\fs20 "PublicBase64"}, another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items, and last but not least once again in all {\f1\fs20 "Base64"} strings.
+An easy way of managing your keys is to keep a safe mean of storage (e.g. a pair of USB pendrives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.certif} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES-256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
+Remember that often, the weakest link of the security chain is between the chair and the keyboard, not within the computer. Do not reuse passwords between keys, and remember you have a "{\f1\fs20 rekey}" command available on the {\f1\fs20 ECC} tool, so that you can change a private key password, without changing its content, nor re-publish its associated {\f1\fs20 .public} key:
+$>ecc rekey
+$Enter the first chars of the .private certificate file name.
+$Auth: 8
+$
+$Will use: 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$
+$Enter the PassPhrase of this .private file.
+$AuthPass: #weLHn5E.Qfe
+$
+$Enter the PassPhrase iteration rounds of this .private file.
+$AuthRounds [60000] :
+$
+$Enter a NEW private PassPhrase for the key (at least 8 chars long).
+$Save this in a safe place: if you forget it, the key will be useless!
+$NewPass [mPy3kjWHE@LK] :
+$
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ f+Gk8GGCqICA8GoJ
+$
+$Enter the NEW PassPhrase iteration round for the key (at least 1000).
+$The higher, the safer, but will demand more computation time.
+$NewRounds [60000] :
+$
+$ 8BC90201EF55EE34F62DBA8FE8CF14DC.private file created.
+From now on, the root certificate will expect {\f1\fs20 mPy3kjWHE@LK} as keyphrase, for accessing its {\f1\fs20 .private} content. For instance (using only command line switches including the {\f1\fs20 -noprompt} option), you can now write:
+$>ecc infopriv -auth 8B -pass mPy3kjWHE@LK -noprompt
+${
+$        "Version": 1,
+$        "Serial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$        "Issuer": "arbou",
+$        "IssueDate": "2016-09-23",
+$        "ValidityStart": "2016-09-23",
+$        "ValidityEnd": "2017-09-23",
+$        "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$        "AuthorityIssuer": "arbou",
+$        "IsSelfSigned": true,
+$        "Base64": "AQA1ADUAogG...."
+$}
+Here, the {\f1\fs20 "Base64":} field only contains the public key information, not the private key content, which is kept secret and never serialized as JSON.
+:  TECCCertificate and TECCCertificateSecret
+As reference, here is how creating a new certificate is implemented in the {\f1\fs20 ECC} tool, and its {\f1\fs20 .private}/{\f1\fs20 .public} files generated, using {\f1\fs20 TECCCertificateSecret} class:
+!function ECCCommandNew(const AuthPrivKey: TFileName;
+!  const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
+!  const Issuer: RawUTF8; StartDate: TDateTime; ExpirationDays: integer;
+!  const SavePassword: RawUTF8; SavePassordRounds, SplitFiles: integer): TFileName;
+!var auth,new: TECCCertificateSecret;
+!begin
+!  if AuthPrivKey='' then
+!    auth := nil else
+!    auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
+!  try
+!    // generate pair
+!    new := TECCCertificateSecret.CreateNew(auth,Issuer,ExpirationDays,StartDate);
+!    try
+!      // save private key as .private password-protected binary file
+!      new.SaveToSecureFiles(SavePassword,'.',SplitFiles,64,SavePassordRounds);
+!      // save public key as .public JSON file
+!      result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
+!      ObjectToJSONFile(new,result);
+!    finally
+!      new.Free;
+!    end;
+!  finally
+!    auth.Free;
+!  end;
+!end;
+See the {\f1\fs20 SynEcc.pas} unit API reference, especially the {\f1\fs20 TECCCertificateChain} and {\f1\fs20 TECCCertificateChainFile} classes, which allow to store a certificate chain as JSON files or as a JSON array of base-64 encoded strings in your settings, using these constructors:
+!    constructor CreateFromJson(const json: RawUTF8);
+!    constructor CreateFromArray(const values: TRawUTF8DynArray);
+You can use the "{\f1\fs20 source}" command of the ECC tool to generate some pascal constant source code, containing an encrypted private key, ready to be embedded to your executable. For instance:
+$>ecc source -auth 8 -pass mPy3kjWHE@LK -const MY_PRIV -noprompt
+$Will use: 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$
+$ 8BC90201EF55EE34F62DBA8FE8CF14DC.private.inc file created.
+When you look at the {\f1\fs20 .private.inc} generated file, you can directly use it in your source code, via copy and paste:
+!const
+!  MY_PRIV: array[0..255] of byte = (
+!    $C3,$31,$17,$48,$35,$B6,$30,$AA,$87,$ED,$AE,$DF,$84,$29,$AA,$85,
+!    $8D,$BF,$A0,$05,$92,$7F,$6C,$47,$66,$D7,$23,$B3,$5B,$4C,$42,$97,
+!    $5B,$07,$73,$3B,$FE,$FA,$BE,$A7,$96,$9B,$F9,$1D,$84,$CC,$6E,$F0,
+!    $C9,$A1,$A7,$2A,$24,$8D,$4A,$B3,$F3,$B3,$89,$52,$70,$46,$83,$84,
+!    $5D,$FD,$E7,$E9,$C3,$D9,$DC,$07,$C1,$FF,$82,$F8,$78,$45,$BF,$18,
+!    $CA,$F7,$EE,$8E,$A3,$42,$0D,$0B,$35,$2F,$20,$4A,$65,$82,$4A,$78,
+!    $C4,$41,$19,$0E,$98,$77,$7D,$81,$58,$DB,$04,$C9,$52,$2E,$5F,$07,
+!    $CF,$44,$34,$93,$1B,$FD,$00,$38,$E0,$E7,$DC,$3A,$AC,$CB,$14,$73,
+!    $B2,$E0,$13,$BE,$84,$79,$F7,$55,$8A,$12,$4F,$9A,$09,$97,$CC,$9B,
+!    $8E,$7C,$04,$92,$93,$24,$73,$50,$41,$B3,$92,$54,$D7,$66,$05,$4A,
+!    $3E,$4F,$D4,$1B,$94,$71,$AA,$04,$29,$42,$B3,$57,$B0,$F3,$24,$74,
+!    $19,$8E,$BA,$52,$FA,$D6,$56,$99,$7B,$73,$1B,$D0,$8B,$3A,$95,$AB,
+!    $94,$63,$C2,$C0,$78,$05,$9C,$8B,$85,$B7,$A1,$E3,$ED,$93,$27,$18,
+!    $F6,$DD,$87,$D7,$E9,$35,$74,$01,$2E,$35,$DF,$1A,$6E,$FA,$4A,$3F,
+!    $E3,$70,$19,$A3,$D7,$E3,$39,$37,$59,$15,$43,$B2,$F4,$36,$B5,$64,
+!    $D6,$BF,$75,$12,$6B,$C5,$89,$95,$2D,$E5,$70,$64,$EB,$70,$98,$9D);
+!  MY_PRIV_LEN = SizeOf(MY_PRIV);
+!  MY_PRIV_ROUNDS = 100;
+!  MY_PRIV_SERIAL = '8BC90201EF55EE34F62DBA8FE8CF14DC';
+!  MY_PRIV_PASS = 'Oute?/I#JSxL0VcLeR/HY(yr';
+!  MY_PRIV_CYPH = '2R3VSFXfikiNaKTM3MqbTlw+PiMBwshk';
+With these classes, you have everything needed to implement your own private and secure {\f1\fs20 @*PKI@} logic in your client/server applications.
+:  File Signature
+Starting from those two text files:
+$>dir test*.*
+$19/09/2016  21:46            94 161 test1.txt
+$05/09/2016  10:37            72 209 test2.txt
+In order to sign {\f1\fs20 test1.txt}, as proposed in @%%AsymmSign@, we will run the following command:
+$>ecc sign -file test1.txt
+$Enter the first chars of the .private file name of the signing authority.
+$Auth: 8B
+$
+$Will use: 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$
+$Enter the PassPhrase of this .private file.
+$Pass: mPy3kjWHE@LK
+$
+$Enter the PassPhrase iteration rounds of this .private file.
+$Rounds [60000] :
+$
+$ test1.txt.sign file created.
+As you can see, a new {\f1\fs20 .sign} file appeared:
+$>dir test*.*
+$19/09/2016  21:46            94 161 test1.txt
+$24/09/2016  16:24               369 test1.txt.sign
+$05/09/2016  10:37            72 209 test2.txt
+It is a simple JSON object, with some information about the associated {\f1\fs20 test1.txt} file:
+${
+$        "meta": {
+$                "name": "test1.txt",
+$                "date": "2016-09-19T21:46:24"
+$        },
+$        "size": 94161,
+$        "md5": "e80f2bf959c943e240f2c1f5efcf1e89",
+$        "sha256": "6bc2d25e9cc93201914e7c6588624696778de80c6f63a590262ccf610310ea0e",
+$        "sign": "AQA2AIvJAgHvVe409i26j+jPFNwas4OAAAAAAAAAA...."
+$}
+In additional to some general information (name, date, size), you have unsigned hashes ({\f1\fs20 "md5"} and {\f1\fs20 "sha256"}), and an ECC digital signature, stored as a base-64 encoded string in the {\f1\fs20 "sign":} field. This signature has been computed using the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key, and the SHA-256 hash of the {\f1\fs20 test1.txt} file content. Note that you can add whatever JSON field you need to any {\f1\fs20 .sign} file, especially in the {\f1\fs20 "meta":} nested object, as soon as you don't modify the {\f1\fs20 size/md5/sha256/sign} values.
+To verify the file, ensure that both {\f1\fs20 test1.txt} and {\f1\fs20 test1.txt.sign} files are in the current directory, then run:
+$>ecc verify -file test1.txt
+$ test1.txt file verified as valid self signed.
+Since the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key has been signed using itself as authority, it is reported as "{\f1\fs20 valid self signed}". A signature verified against a certificate itself issued from another authority would have returned "{\f1\fs20 valid signed}".
+Now if you modify {\f1\fs20 test1.txt}, e.g. changing one character, the verification will fail:
+$>ecc verify -file test1.txt
+$ test1.txt file verification failure: invalid signature (9).
+Don't forget to fix the test1.txt content back, since we will use it now as encryption source.
+To check that you reverted to the original file content, run:
+$>ecc verify -file test1.txt
+$ test1.txt file verified as valid self signed.
+:  Signing in Code
+From the source code point of view, you can easily add asymmetric digital signatures in your project using the {\f1\fs20 TECCCertificateSecret.SignFile} method, or working with memory buffer instead of files thanks to {\f1\fs20 TECCCertificateSecret.SignToBase64} overloaded methods.
+As reference, here is how the signing is implemented in the {\f1\fs20 ECC} tool:
+!function ECCCommandSignFile(const FileToSign, AuthPrivKey: TFileName;
+!  const AuthPassword: RawUTF8; AuthPasswordRounds: integer): TFileName;
+!var auth: TECCCertificateSecret;
+!begin
+!  auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
+!  try
+!    result := auth.SignFile(FileToSign,[]);
+!  finally
+!    auth.Free;
+!  end;
+!end;
+Verification can be done via the dedicated {\f1\fs20 TECCSignatureCertified} class:
+!function ECCCommandVerifyFile(const FileToVerify, AuthPubKey: TFileName;
+!  const AuthBase64: RawUTF8): TECCValidity;
+!var content: RawByteString;
+!    auth: TECCCertificate;
+!    cert: TECCSignatureCertified;
+!begin
+!  content := StringFromFile(FileToVerify);
+!  if content='' then
+!    raise EECCException.CreateUTF8('File not found: %',[FileToVerify]);
+!  cert := TECCSignatureCertified.CreateFromFile(FileToVerify);
+!  try
+!    if not cert.Check then begin
+!      result := ecvInvalidSignature;
+!      exit;
+!    end;
+!    auth := TECCCertificate.Create;
+!    try
+!      if auth.FromAuth(AuthPubKey,AuthBase64,cert.AuthoritySerial) then
+!        result := cert.Verify(auth,pointer(content),length(content)) else
+!        result := ecvUnknownAuthority;
+!    finally
+!      auth.Free;
+!    end;
+!  finally
+!    cert.Free;
+!  end;
+!end;
+Here, the signing authority is supplied as a single {\f1\fs20 .public} local file, loaded in a {\f1\fs20 TECCCertificate} instance, but your projects may use {\f1\fs20 TECCCertificateChain} for a full {\f1\fs20 @*PKI@} authority chain.
+:  File Encryption
+In order to encrypt out both test files, as proposed in @%%AsymmEncrypt@, we will run the following commands:
+$>ecc crypt -file test1.txt -auth 03 -salt pass monsecret -noprompt
+$Will use: 03B8865C6B982A39E9EFB1DC1A95D227.public
+$
+$ test1.txt.synecc file created.
+$
+$>ecc crypt -file test2.txt -auth 03 -saltpass monsecret2 -noprompt
+$Will use: 03B8865C6B982A39E9EFB1DC1A95D227.public
+$
+$ test2.txt.synecc file created.
+As we can see, two new {\f1\fs20 .synecc} encrypted files have been computed:
+$>dir test*
+$24/09/2016  16:36            94 161 test1.txt
+$24/09/2016  16:24               369 test1.txt.sign
+$24/09/2016  17:13            22 436 test1.txt.synecc
+$05/09/2016  10:37            72 209 test2.txt
+$24/09/2016  17:13            15 220 test2.txt.synecc
+You may notice that the {\f1\fs20 .synecc} files are smaller than the original {\f1\fs20 .txt} files... in fact, {\f1\fs20 SynEcc} did recognize that the plain content was easily compressible, then applied {\f1\fs20 @*SynLZ@} compression on it, before the encryption step.
+If we ask for information about the {\f1\fs20 test1.txt.synecc} file:
+$>ecc infocrypt -file test1.txt.synecc
+${
+$        "Date": "2016-09-24",
+$        "Size": 94161,
+$        "Recipient": "toto",
+$        "RecipientSerial": "03B8865C6B982A39E9EFB1DC1A95D227",
+$        "FileTime": "2016-09-24T16:36:59",
+$        "Algorithm": "ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ",
+$        "RandomPublicKey": "038C73D421D9A7F2F7FFC0F3EF62C79897D13064EF2D6FAA0DB0F246CD9B173B90",
+$        "HMAC": "c6bf56792e58c68c45ebdff1fbd6a3b2e4d3e95e522f41eba2ecab41fd53183b",
+$        "Signature": {
+$                "Version": 1,
+$                "Date": "2016-09-24",
+$                "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
+$                "AuthorityIssuer": "arbou",
+$                "ECDA": "2AwyyNYAcfSyJW+5BzvksbSdXcOUbYNqm...."
+$        }
+$}
+We can see the information stored in the file header, including the recipient name and {\f1\fs20 .publickey} identifier, and also the {\f1\fs20 "ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ"} algorithm, which indeed includes {\f1\fs20 _SYNLZ} compression. Other algorithms are available (with diverse {\f1\fs20 @*AES@} chaining modes), and some new methods may be added in the future.
+The {\f1\fs20 ecc crypt} command did also include the digital signature available in the {\f1\fs20 test1.txt.sign} file in the current folder - so was in fact following @%%AsymmSignEncrypt@ - whereas {\f1\fs20 test2.txt.synecc} does not have any embedded signature, since there was no {\f1\fs20 test2.txt.sign} file available at encryption time:
+$>ecc infocrypt -file test2.txt.synecc
+${
+$        "Date": "2016-09-24",
+$        "Size": 72209,
+$        "Recipient": "toto",
+$        "RecipientSerial": "03B8865C6B982A39E9EFB1DC1A95D227",
+$        "FileTime": "2016-09-05T10:37:50",
+$        "Algorithm": "ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ",
+$        "RandomPublicKey": "03914AA67BCC92F78A9D670B2209587E3C97A3E08FD39A38B459558511F88F7651",
+$        "HMAC": "07ddc90f7695fff8ca0683be98f7b1043e13a7bceb79f0d6a929069c5d9767d1",
+$        "Signature": null
+$}
+As you can see, encryption is defined by its {\f1\fs20 "Algorithm":} field, and uses two additional properties:
+- {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES-256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending billions of dollars in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
+- {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. SHA-256 in our case.
+In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using PBKDF2_HMAC_SHA256_AES256_CFB as key derivation function and symmetric encryption scheme and HMAC_SHA256 algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
+{\f1\fs20 ECIES} provides semantic security against an adversary who is allowed to use chosen-plaintext and chosen-ciphertext attacks. In addition to the expected genuine secret and message authentication in {\f1\fs20 "RandomPublicKey"} and {\f1\fs20 "HMAC"} properties, {\f1\fs20 SynEcc} implementation allows to customize the default "salt" value, to add a password protection for each {\f1\fs20 .synecc} encrypted file.
+Decryption is pretty straightforward:
+$>ecc decrypt -file test1.txt.synecc
+$Enter the name of the decrypted file
+$Out [test1.txt.2] :
+$
+$Enter the PassPhrase of the associated .private file.
+$AuthPass: b3dEB+DW8BJd
+$
+$Enter the PassPhrase iteration rounds of this .private file.
+$AuthRounds [60000] :
+$
+$Enter the optional PassPhrase to be used for decryption.
+$SaltPass [salt] : monsecret
+$
+$Enter the PassPhrase iteration rounds.
+$SaltRounds [60000] :
+$
+$ test1.txt.2 file verified as valid self signed.
+$ test1.txt.synecc file decrypted with signature.
+$ test1.txt.2 file created.
+To decrypt the second file in a single step, and no console interaction:
+$>ecc decrypt -file test2.txt.synecc -authpass b3dEB+DW8BJd -saltpass monsecret2 -noprompt
+$ test2.txt.synecc file decrypted.
+$ test2.txt.2 file created.
+As expected, the second file didn't contain any digital signature, so there is no "{\f1\fs20 test2.txt.2 file verified as valid self signed.}" message.
+The decrypted files are available in the current folder:
+$> dir test*
+$24/09/2016  16:36            94 161 test1.txt
+$24/09/2016  16:36            94 161 test1.txt.2
+$24/09/2016  16:24               369 test1.txt.sign
+$24/09/2016  17:13            22 436 test1.txt.synecc
+$05/09/2016  10:37            72 209 test2.txt
+$05/09/2016  10:37            72 209 test2.txt.2
+$24/09/2016  17:13            15 220 test2.txt.synecc
+The {\f1\fs20 *.2} decrypted files have the expect size (and content), after decompression. Even the file timestamp has been set to match the original.
+:  Encryption in Code
+From the source code point of view, you can easily add asymmetric encryption in your project using {\f1\fs20 TECCCertificate.EncryptFile} and {\f1\fs20 TECCCertificateSecret.DecryptFile} methods, even working with memory buffers, thanks to {\f1\fs20 TECCCertificate.Encrypt} and {\f1\fs20 TECCCertificateSecret.Decrypt} methods.
+As reference, here is how the encryption is implemented in the {\f1\fs20 ECC} tool:
+!procedure ECCCommandCryptFile(const FileToCrypt, DestFile, AuthPubKey: TFileName;
+!  const AuthBase64, AuthSerial, Password: RawUTF8; PasswordRounds: integer; Algo: TECIESAlgo);
+!var content: RawByteString;
+!    auth: TECCCertificate;
+!begin
+!  content := StringFromFile(FileToCrypt);
+!  if content='' then
+!    raise EECCException.CreateUTF8('File not found: %',[FileToCrypt]);
+!  auth := TECCCertificate.Create;
+!  try
+!    if auth.FromAuth(AuthPubKey,AuthBase64,AuthSerial) then begin
+!      auth.EncryptFile(FileToCrypt,DestFile,Password,PasswordRounds,Algo,true);
+!    end;
+!  finally
+!    auth.Free;
+!    FillZero(content);
+!  end;
+!end;
+You may note here the use of {\f1\fs20 FillZero()} in the {\f1\fs20 finally} block of the function, which is a common - and strongly encouraged - way of protecting your sensitive data from remaining in RAM, after use. Both {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas} code has been checked to follow similar safety patterns, and not leave any sensitive information in the program stack or heap.
+:68Domain-Driven-Design
+%cartoon06.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
 This is were @54@ - abbreviated DDD - patterns are worth looking at.
 : Domain
@@ -14553,7 +15167,7 @@ label="Domain Model";
 In order to provide the better scaling of the server side, @*cache@ can be easily implemented at every level, and hosting can be tuned in order to provide the best response time possible: one central server, several dedicated servers for application, domain and persistence layers...
 Due to the @*SOLID@ design of {\i mORMot} - see @47@ - you can use as many Client-Server services layers as needed in the same architecture (i.e. a Server can be a Client of other processes), in order to fit your project needs, and let it evolve from the simplest architecture to a full scalable {\i Domain-Driven} design.
 :12Testing and logging
-%cartoon06.png
+%cartoon07.png
 Since we covered most architectural and technical aspects of the framework, it is time to put the last missing bricks to the building, meaning testing and logging.
 \page
 : Automated testing
@@ -15030,7 +15644,7 @@ Logging could be very handy for interactive debug of a client application. Since
 !  (...)
 Of course, this interactive console refresh slows down the process a lot. It is therefore to be defined only for debugging purposes, not on production.
 :44Source code
-%cartoon07.png
+%cartoon08.png
 =[License]
 \page
 : Availability
@@ -15419,7 +16033,7 @@ TitleOffset=0
 DisplayName=Main SynFile Demo
 
 :50SynFile application
-%cartoon08.png
+%cartoon01.png
 This sample application is a simple database tool which stores text content and files into the database, in both clear and "safe" manner. Safe records are stored using {\i AES-256/SHA-256} encryption. There is an {\i Audit Trail} table for tracking the changes made to the database.
 This document will follow the application architecture and implementation, in order to introduce the reader to some main aspects of the Framework:
 - General architecture - see @7@;

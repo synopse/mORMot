@@ -164,6 +164,7 @@ var
 
 /// create a public/private key pair
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+// - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the key pair was generated successfully in pub/priv
 // - returns false if an error occurred, or if ecc_available=false
 // - this function is thread-safe and does not perform any memory allocation
@@ -171,6 +172,7 @@ function ecc_make_key(out pub: TECCPublicKey; out priv: TECCPrivateKey): boolean
 
 /// compute a shared secret given your secret key and someone else's public key
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+// - directly low-level access to the statically linked easy-ecc library function
 // - note: it is recommended that you hash the result of ecdh_shared_secret
 // before using it for symmetric encryption or HMAC
 // - returns true if the shared secret was generated successfully in secret
@@ -181,6 +183,7 @@ function ecdh_shared_secret(const pub: TECCPublicKey; const priv: TECCPrivateKey
 
 /// generate an ECDSA signature for a given hash value
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+// - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the signature generated successfully in sign
 // - returns false if an error occurred, or if ecc_available=false
 // - this function is thread-safe and does not perform any memory allocation
@@ -189,6 +192,7 @@ function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
 
 /// verify an ECDSA signature
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
+// - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the signature is valid
 // - returns false if it is invalid, or if ecc_available=false
 // - this function is thread-safe and does not perform any memory allocation
