@@ -19,7 +19,7 @@ function ECCCommandNew(const AuthPrivKey: TFileName;
   const Issuer: RawUTF8; StartDate: TDateTime; ExpirationDays: integer;
   const SavePassword: RawUTF8; SavePassordRounds, SplitFiles: integer): TFileName;
 
-/// end-user command to create a renew a .privkey file password
+/// end-user command to create a renew a .private file password
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandRekey(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
@@ -49,7 +49,7 @@ function ECCCommandSourceFile(const AuthPrivKey: TFileName;
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandChainCertificates(const CertFiles: array of RawUTF8): TFileName;
 
-/// end-user command to display the json information from a .privkey file
+/// end-user command to display the json information from a .private file
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandInfoPrivFile(const AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer): RawUTF8;
@@ -109,9 +109,9 @@ begin
     // generate pair
     new := TECCCertificateSecret.CreateNew(auth,Issuer,ExpirationDays,StartDate);
     try
-      // save private key as .privkey password-protected binary file
+      // save private key as .private password-protected binary file
       new.SaveToSecureFiles(SavePassword,'.',SplitFiles,64,SavePassordRounds);
-      // save public key as .pubkey JSON file
+      // save public key as .public JSON file
       result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
       ObjectToJSONFile(new,result);
     finally
@@ -340,15 +340,15 @@ begin
     ecNew: begin
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .privkey file name of the signing authority.'#13#10+
+          'Enter the first chars of the .private file name of the signing authority.'#13#10+
           'Will create a self-signed certificate if left void.');
       until (auth='') or ECCKeyFileFind(auth,true) or sw.NoPrompt;
       if auth<>'' then begin
         sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
         authpass := sw.AsUTF8('AuthPass','',
-          'Enter the PassPhrase of this .privkey file.');
+          'Enter the PassPhrase of this .private file.');
         authrounds := sw.AsInt('AuthRounds',60000,
-          'Enter the PassPhrase iteration rounds of this .privkey file.');
+          'Enter the PassPhrase iteration rounds of this .private file.');
       end else
         authrounds := 0;
       issuer := sw.AsUTF8('Issuer',ExeVersion.User,
@@ -379,18 +379,18 @@ begin
       newfile := EccCommandNew(
         auth,authpass,authrounds,issuer,start,days,savepass,saverounds,splitfiles);
       if newfile<>'' then
-        newfile := newfile+'/.privkey';
+        newfile := newfile+'/.private';
     end;
     ecRekey: begin
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .privkey certificate file name.');
+          'Enter the first chars of the .private certificate file name.');
       until ECCKeyFileFind(auth,true) or sw.NoPrompt;
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('AuthPass','',
-        'Enter the PassPhrase of this .privkey file.');
+        'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('AuthRounds',60000,
-        'Enter the PassPhrase iteration rounds of this .privkey file.');
+        'Enter the PassPhrase iteration rounds of this .private file.');
       repeat
         savepass := sw.AsUTF8('NewPass',TAESPRNG.Main.RandomPassword(12),
           'Enter a NEW private PassPhrase for the key (at least 8 chars long).'#13#10+
@@ -411,13 +411,13 @@ begin
       until FileExists(origfile) or sw.NoPrompt;
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .privkey file name of the signing authority.');
+          'Enter the first chars of the .private file name of the signing authority.');
       until ECCKeyFileFind(auth,true) or sw.NoPrompt;
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
-        'Enter the PassPhrase of this .privkey file.');
+        'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',60000,
-        'Enter the PassPhrase iteration rounds of this .privkey file.');
+        'Enter the PassPhrase iteration rounds of this .private file.');
       newfile := EccCommandSignFile(origfile,auth,authpass,authrounds);
     end;
     ecVerify: begin
@@ -430,13 +430,13 @@ begin
     ecSource: begin
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .privkey certificate file name.');
+          'Enter the first chars of the .private certificate file name.');
       until ECCKeyFileFind(auth,true) or sw.NoPrompt;
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
-        'Enter the PassPhrase of this .privkey file.');
+        'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',60000,
-        'Enter the PassPhrase iteration rounds of this .privkey file.');
+        'Enter the PassPhrase iteration rounds of this .private file.');
       constname := sw.AsUTF8('Const','',
         'Enter the variable name to define the const in source.');
       comment := sw.AsUTF8('Comment','',
@@ -447,14 +447,14 @@ begin
     ecInfoPriv: begin
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .privkey certificate file name.');
+          'Enter the first chars of the .private certificate file name.');
       until ECCKeyFileFind(auth,true) or sw.NoPrompt;
       if not sw.NoPrompt then
         sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
-        'Enter the PassPhrase of this .privkey file.');
+        'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',60000,
-        'Enter the PassPhrase iteration rounds of this .privkey file.');
+        'Enter the PassPhrase iteration rounds of this .private file.');
       sw.Text('%',[ECCCommandInfoPrivFile(auth,authpass,authrounds)]);
     end;
     ecChain:
@@ -471,7 +471,7 @@ begin
       until (newfile <> '') or sw.NoPrompt;
       repeat
         auth := sw.AsString('Auth','',
-          'Enter the first chars of the .pubkey file name of the encryption authority.');
+          'Enter the first chars of the .public file name of the encryption authority.');
       until ECCKeyFileFind(auth,false) or sw.NoPrompt;
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for encryption.');
@@ -493,9 +493,9 @@ begin
           'Enter the name of the decrypted file'));
       until (newfile <> '') or sw.NoPrompt;
       authpass := sw.AsUTF8('AuthPass','',
-        'Enter the PassPhrase of the associated .privkey file.');
+        'Enter the PassPhrase of the associated .private file.');
       authrounds := sw.AsInt('AuthRounds',60000,
-        'Enter the PassPhrase iteration rounds of this .privkey file.');
+        'Enter the PassPhrase iteration rounds of this .private file.');
       savepass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for decryption.');
       saverounds := sw.AsInt('SaltRounds',60000, 'Enter the PassPhrase iteration rounds.');
       decrypt := ECCCommandDecryptFile(origfile,newfile,

@@ -52,30 +52,30 @@ begin
     writeln(ExeVersion.ProgramName,
       ' help');
     writeln(ExeVersion.ProgramName,
-      ' new -auth file.privkey -authpass P@ssW0rd -authrounds 60000'#13#10+
+      ' new -auth key.private -authpass authP@ssW0rd -authrounds 60000'#13#10+
       '      -issuer toto@toto.com -start 2016-10-30 -days 30'#13#10+
-      '      -newpass newP@ssw0RD@ -newrounds 60000'); // -splitfiles 1');
+      '      -newpass P@ssw0RD@ -newrounds 60000'); // -splitfiles 1');
     writeln(ExeVersion.ProgramName,
-      ' rekey -auth file.privkey -authpass P@ssW0rd -authrounds 60000'#13#10+
+      ' rekey -auth key.private -authpass P@ssW0rd -authrounds 60000'#13#10+
       '      -newpass newP@ssw0RD@ -newrounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' sign -file some.doc -auth file.privkey -pass P@ssW0rd -rounds 60000');
+      ' sign -file some.doc -auth key.private -pass P@ssW0rd -rounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' verify -file some.doc -auth file.pubkey');
+      ' verify -file some.doc -auth key.public');
     writeln(ExeVersion.ProgramName,
-      ' source -auth file.privkey -pass P@ssW0rd -rounds 60000'#13#10+
+      ' source -auth key.private -pass P@ssW0rd -rounds 60000'#13#10+
       '      -const MY_PRIVKEY -comment "My Private Key"');
     writeln(ExeVersion.ProgramName,
-      ' infopriv -auth file.privkey -pass P@ssW0rd -rounds 60000');
+      ' infopriv -auth key.private -pass P@ssW0rd -rounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' chain file1.pubkey file2.pubkey file3.pubkey ...');
+      ' chain file1.public file2.public file3.public ...');
     writeln(ExeVersion.ProgramName,
       ' chainall');
     writeln(ExeVersion.ProgramName,
-      ' crypt -file some.doc -out some.doc.synecc -auth file.pubkey'#13#10+
+      ' crypt -file some.doc -out some.doc.synecc -auth key.public'#13#10+
       '      -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' decrypt -file some.doc.synecc -out some.doc -auth file.privkey'#13#10+
+      ' decrypt -file some.doc.synecc -out some.doc -auth key.private'#13#10+
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
       ' infocrypt -file some.doc.synecc');

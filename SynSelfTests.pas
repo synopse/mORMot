@@ -9175,8 +9175,8 @@ begin
       if CheckFailed(ctxt.ConsoleLines<>nil) then
         exit;
       id := Trim(split(ctxt.ConsoleLines[high(ctxt.ConsoleLines)],'.'));
-      priv := format('%s.privkey',[id]);
-      pub := format('%s.pubkey',[id]);
+      priv := format('%s.private',[id]);
+      pub := format('%s.public',[id]);
       previd := id;
       prevpass := pass;
       text := RandomTextParagraph(1000);
@@ -9216,7 +9216,7 @@ begin
       DeleteFile(fn);
       Exec(['file',crypt,'out',fn,'authpass',pass,'authrounds',rounds,
         'saltrounds',i+10],ecDecrypt);
-      check(StringFromFile(fn)=text,'guess .privkey from header');
+      check(StringFromFile(fn)=text,'guess .private from header');
     end;
   finally
     SetCurrentDir('..');

@@ -496,8 +496,8 @@ type
     // - would raise an EECCException if the supplied base64 is incorrect
     constructor CreateFromBase64(const base64: RawUTF8); virtual;
     /// initialize this certificate from a set of potential inputs
-    // - will first search from a .pubkey file name, base-64 encoded binary,
-    // or a serial number which be used to search for a local .pubkey file
+    // - will first search from a .public file name, base-64 encoded binary,
+    // or a serial number which be used to search for a local .public file
     // (as located by ECCKeyFileFind)
     // - would raise an EECCException if no supplied media is correct
     constructor CreateFromAuth(const AuthPubKey: TFileName;
@@ -513,13 +513,13 @@ type
     // - will use LoadFromStream serialization
     // - returns true on success, false otherwise
     function FromBase64(const base64: RawUTF8): boolean;
-    /// retrieve the certificate from the "Base64": JSON entry of a .pubkey file
+    /// retrieve the certificate from the "Base64": JSON entry of a .public file
     // - will use FromBase64/LoadFromStream serialization
     // - returns true on success, false otherwise
     function FromFile(const filename: TFileName): boolean;
     /// retrieve the certificate from a set of potential inputs
-    // - will first search from a .pubkey file name, base-64 encoded binary,
-    // or a serial number which be used to search for a local .pubkey file
+    // - will first search from a .public file name, base-64 encoded binary,
+    // or a serial number which be used to search for a local .public file
     // (as located by ECCKeyFileFind)
     // - returns true on success, false otherwise
     function FromAuth(const AuthPubKey: TFileName;
@@ -641,13 +641,13 @@ type
     constructor CreateFromSecureBinary(Data: pointer; Len: integer; const PassWord: RawUTF8;
       PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil); overload;
     /// create a certificate with its private secret key from an encrypted
-    // secure .privkey binary file and its associated password
+    // secure .private binary file and its associated password
     // - perform all reverse steps from SaveToSecureFile() method
     // - would raise an EECCException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FileName: TFileName; const PassWord: RawUTF8;
       PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil); overload;
     /// create a certificate with its private secret key from an encrypted
-    // secure .privkey binary file stored in a given folder
+    // secure .private binary file stored in a given folder
     // - overloaded constructor retrieving the file directly from its folder
     // - perform all reverse steps from SaveToSecureFile() method
     // - would raise an EECCException if the supplied file is incorrect
@@ -658,31 +658,31 @@ type
     destructor Destroy; override;
     /// returns TRUE if the private secret key is not filled with zeros
     function HasSecret: boolean;
-    /// computes the 'Serial.privkey' file name of this certificate
+    /// computes the 'Serial.private' file name of this certificate
     // - as used by SaveToSecureFile()
     function SaveToSecureFileName(FileNumber: integer=0): TFileName;
-    /// backup the private secret key into an encrypted .privkey binary file
+    /// backup the private secret key into an encrypted .private binary file
     // - you should keep all your private keys in a safe dedicated folder
-    // - filename will be the certificate hexadecimal as 'Serial.privkey'
+    // - filename will be the certificate hexadecimal as 'Serial.private'
     // - will use anti-forensic diffusion of the private key (64 stripes = 2KB)
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
     // be performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
     function SaveToSecureFile(const PassWord: RawUTF8; const DestFolder: TFileName;
       AFStripes: integer=64; PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil;
       NoHeader: boolean=false): boolean;
-    /// backup the private secret key into several encrypted -###.privkey binary files
+    /// backup the private secret key into several encrypted -###.private binary files
     // - secret sharing can be used to store keys at many different places, e.g.
     // on several local or remote drives, and therefore enhance privacy and safety
     // - it will use anti-forensic diffusion of the private key to distribute it
     // into pieces, in a manner that a subset of files can not regenerate the key:
     // as a result, a compromission of one sub-file won't affect the secret key
-    // - filename will be the certificate hexadecimal as 'Serial-###.privkey'
+    // - filename will be the certificate hexadecimal as 'Serial-###.private'
     // - AES-256-CFB encryption (or the one specified in AES parameter) will be
     // performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
     function SaveToSecureFiles(const PassWord: RawUTF8; const DestFolder: TFileName;
       DestFileCount: integer; AFStripes: integer=64; PBKDF2Rounds: integer=65000;
       AES: TAESAbstractClass=nil; NoHeader: boolean=false): boolean;
-    /// read a private secret key from an encrypted .privkey binary file
+    /// read a private secret key from an encrypted .private binary file
     // - perform all reverse steps from SaveToSecureFile() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureFile(const FileName: TFileName; const PassWord: RawUTF8;
@@ -902,7 +902,9 @@ type
   end;
   {$endif NOVARIANTS}
 
-  /// manage certificates using ECC secp256r1 cryptography
+  /// manage PKI certificates using ECC secp256r1 cryptography
+  // - will implement a simple and efficient public-key infrastructure (PKI),
+  // based on JSON objects or even plain base-64 encoded JSON strings
   // - consider using TECCCertificateChainFile from mORMot.pas if you want
   // to use convenient human-readable JSON serialization in files
   TECCCertificateChain = class(TSynPersistentLocked)
@@ -1086,10 +1088,10 @@ type
 
 const
   /// file extension of the JSON file storing a TECCCertificate public key
-  ECCCERTIFICATEPUBLIC_FILEEXT = '.pubkey';
+  ECCCERTIFICATEPUBLIC_FILEEXT = '.public';
   /// file extension of the binary encrypted file storing a private key
   // - as generated by TECCCertificateSecret.SaveToSecureFile method
-  ECCCERTIFICATESECRET_FILEEXT = '.privkey';
+  ECCCERTIFICATESECRET_FILEEXT = '.private';
   /// file extension of the JSON file storing a digital signature of a file
   // - by convention, this .sign extension is appended to the original file name
   // - as generated by TECCCertificateSecret.SignFile, and loaded by the
@@ -1101,13 +1103,13 @@ const
   // TECCCertificateSecret.Decrypt
   ENCRYPTED_FILEEXT = '.synecc';
 
-/// search the single .pubkey or .privkey file starting with the supplied file name
+/// search the single .public or .private file starting with the supplied file name
 // - as used in the ECC.dpr command-line sample project
 // - returns true and set the full file name of the matching file
 // - returns false is there is no match, or more than one matching file
 function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 
-/// search the single .pubkey or .privkey file used to crypt a given content
+/// search the single .public or .private file used to crypt a given content
 // - match the format generated by TECCCertificate.Encrypt/EncryptFile
 // - returns true on success, false otherwise
 function ECIESKeyFileFind(const encrypted: RawByteString; out keyfile: TFileName;
@@ -2285,9 +2287,8 @@ begin
       dest := DestFile;
     result := Decrypt(content,plain,Signature,@filetime,Salt,SaltRounds);
     if result in ECC_VALIDDECRYPT then
-      if not FileFromString(plain,dest,false) then
-        result := ecdWriteFileError else
-        FileSetDate(dest,DateTimeToFileDate(filetime));
+      if not FileFromString(plain,dest,false,filetime) then
+        result := ecdWriteFileError;
   finally
     FillZero(plain);
   end;
