@@ -50,8 +50,8 @@ var
   begin
     for i := 0 to COUNT-1 do begin
       // here we fill with some data
-      rec.Key := FormatUTF8('KEY%',[i and pred(UNIQUE_KEY)]);
-      rec.Value := FormatUTF8('VALUE%',[i]);
+      FormatUTF8('KEY%',[i and pred(UNIQUE_KEY)],rec.Key);
+      FormatUTF8('VALUE%',[i],rec.Value);
       entries.Add(rec);
     end;
   end;
@@ -62,7 +62,7 @@ var
   begin
     total := 0;
     for i := 0 to pred(UNIQUE_KEY) do begin
-      key := FormatUTF8('KEY%',[i]);
+      FormatUTF8('KEY%',[i],key);
       assert(entries.FindAllSorted(key,first,last));
       for j := first to last do
         assert(entry[j].Key=key);
@@ -86,10 +86,17 @@ begin
   timer.Start;
   DoSelect;
   writeln(' in ',timer.Stop);
+//  exit; // comment this line to avoid binary and json serialization
+  timer.Start;
+  FileFromString(entries.SaveTo,'test.db');
+  FileFromString(entries.SaveToJson,'test.json');
+  writeln('SAVED in ',timer.Stop);
 end;
 
 begin
+  TTextwriter.RegisterCustomJSONSerializerFromText(
+    TypeInfo(TEntryDynArray),'key,value:RawUTF8');
   Process;
-  writeln('Press any key');
+  writeln('Press [Enter]');
   readln;
 end.

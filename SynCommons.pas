@@ -4636,9 +4636,9 @@ type
     /// returns a pointer to an element of the array
     // - returns nil if aIndex is out of range
     // - since TDynArray is just a wrapper around an existing array, you should
-    // better use direct access to its wrapped variable, and not using this slower
-    // and more error prone method (such pointer access lacks of strong typing
-    // abilities)
+    // better use direct access to its wrapped variable, and not using this
+    // slower and more error prone method (such pointer access lacks of strong
+    // typing abilities), which was designed for TDynArray internal use
     function ElemPtr(aIndex: integer): pointer;
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -4742,6 +4742,11 @@ type
     // - it will change the dynamic array content, and exchange all elements
     // in order to be sorted in increasing order according to Compare function
     procedure Sort(aCompare: TDynArraySortCompare=nil);
+    /// search the elements range which match a given value in a sorted dynamic array
+    // - this method will use the Compare property function for the search
+    // - returns TRUE and the matching indexes, or FALSE if none found
+    // - if the array is not sorted, returns FALSE
+    function FindAllSorted(const Elem; out FirstIndex,LastIndex: Integer): boolean;
     /// search for an element value inside a sorted dynamic array
     // - this method will use the Compare property function for the search
     // - will be faster than a manual FindAndAddIfNotExisting+Sort process
@@ -4766,7 +4771,7 @@ type
     function FastLocateOrAddSorted(const Elem; wasAdded: PBoolean=nil): integer;
     /// delete a sorted element value at the proper place
     // - plain Delete(Index) would reset the fSorted flag to FALSE, so use
-    // this method with a FastLocateSorted/FastAddSorted array 
+    // this method with a FastLocateSorted/FastAddSorted array
     procedure FastDeleteSorted(Index: Integer);
     /// will reverse all array elements, in place
     procedure Reverse;
@@ -42428,6 +42433,23 @@ begin
   result := -1;
 end;
 
+function TDynArray.FindAllSorted(const Elem; out FirstIndex,LastIndex: Integer): boolean;
+var found,last: integer;
+    P: PAnsiChar;
+begin
+  result := FastLocateSorted(Elem,found);
+  if not result then
+    exit;
+  FirstIndex := found;
+  P := fValue^;
+  while (FirstIndex>0) and (fCompare(P[cardinal(FirstIndex-1)*ElemSize],Elem)=0) do
+    dec(FirstIndex);
+  last := Count-1;
+  LastIndex := found;
+  while (LastIndex<last) and (fCompare(P[cardinal(LastIndex+1)*ElemSize],Elem)=0) do
+    inc(LastIndex);
+end;
+
 function TDynArray.FastLocateSorted(const Elem; out Index: Integer): boolean;
 var n, i, cmp: integer;
     P: PAnsiChar;
@@ -42536,11 +42558,11 @@ begin
       if I <= J then begin
         if I<>J then
           if ElemSize=SizeOf(pointer) then begin
-            // optimized version e.g. for TRawUTF8DynArray
+            // optimized version e.g. for TRawUTF8DynArray/TObjectDynArray
             tmp := PPointer(IP)^;
             PPointer(IP)^ := PPointer(JP)^;
             PPointer(JP)^ := tmp;
-          end else
+          end else 
             // generic exchange of row element data
             Exchg(IP,JP,ElemSize);
         if P = I then P := J else

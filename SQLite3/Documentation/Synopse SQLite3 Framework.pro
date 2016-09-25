@@ -13953,13 +13953,25 @@ In comparison to the RSA algorithm, ECC has some advantages:
 - Faster performance, especially when the key size increases;
 - Offers @*perfect forward secrecy@, since a fresh key is created for every encryption;
 - Potentially less patents infringement, in all its practical appliances;
-- Last but not least, it is officially replacing RSA for the future of web.
+- Last but not least, it is one the strongest algorithms for the future of web.
+There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and existing standards (like X509). Here are some reasons:
+- We did not start from scratch, since we used another Open Source library for the raw ECC computation, which was the most sensitive part;
+- Most existing implementations have to deal with a lot of algorithms, options and old features: we wanted a reduced scope, to ease risk assessment - only well-known and future-proof algorithms were selected (AES-256-CFB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) and default values are very aggressive (password strength, 60,000 PBKDF2 iterations...);
+- Existing libraries are so complex that interfacing with them makes the consuming code complex to write and maintain - {\f1\fs20 SynEcc} logic is implemented in a few dozen lines of code: most of the unit source is about wrapper methods and documentation, and an average programmer can understand and review it, even if he/she is no Delphi expert;
+- A new implementation can always benefit from existing past issues: we followed all identified best practices, and tried to avoid, from the beginning, known issues which appeared on previous implementations, like buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, evil optimizations;
+- It integrates nicely with other {\i mORMot} features, and re-use the {\f1\fs20 SynCrypto.pas} unit for actual cryptography on all supported platforms, so the development effort was not big, and the resulting executables size did not increase;
+- As always, we started by writing tests, and we have pretty good automated tests coverage, from low-level ECC functions up to the highest level (we even validate the ECC command line tool);
+- We forbid file stamping, preferred JSON as any other text format, and used fixed sized binary buffers (e.g. for identifiers), with all-inclusive information, to avoid memory copies of sensitive data and logic flows depending on the feature set;
+- Some unique features were introduced (like AFSpliting or enforcing passwords for private keys), and in doubt, we always did choose the paranoid solution;
+- We are proud that {\i mORMot} application are stand-alone executables, so the last thing we want to do is to start mandating DLLs, or be coupled to a specific Operating System;
+- Having our own embedded code fight against old/unsafe versions already installed, especially on an existing server (what is the OpenSSL version in your good old Debian VM?);
+- It was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
 :  Introducing SynEcc
 The {\i mORMot}'s {\f1\fs20 SynEcc.pas} unit implements full ECC computation, using {\f1\fs20 secp256r1} curve, i.e. {\f1\fs20 NIST P-256}, or OpenSSL's {\f1\fs20 prime256v1}. The low-level computation is done in optimized C code - from the @https://github.com/esxgx/easy-ecc {\i Open Source} project - and is statically linked in your Windows or Linux executable: i.e. no external {\f1\fs20 .dll}/{\f1\fs20 .so} library is needed. Then we defined a feature-rich set of object pascal classes on top of this solid ECC ground, to include certificates, safe storage of private keys, JSON publication of public keys, as an integrated toolset.
 All needed low-level asymmetric cryptography is available:
 - ECC key generation, using {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} as random seed;
 - ECDSA signature and verification of 256-bit hashes;
-- ECDSH shared secret computation - suitable for ECIES encryption, after PBK2_HMAC_SHA256 derivation.
+- ECDSH shared secret computation - suitable for ECIES encryption, after PBKDF2_HMAC_SHA256 derivation.
 The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and structures, ready to implement:
 - Authority certificates - via public {\f1\fs20 TECCCertificate} and private {\f1\fs20 TECCCertificateSecret} classes, and full {\f1\fs20 PKI} chaining - see {\f1\fs20 TECCCertificateChain};
 - Digital signature of files or memory buffers - via {\f1\fs20 TECCSignatureCertified};
@@ -13967,7 +13979,7 @@ The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and str
 You are free to use those classes, in your programs, whenever some advanced cryptography is needed - and it will eventually be the case, trust me! A command-line {\f1\fs20 ECC} tool has also been developed, for convenient operation on files.
 :  ECC command line tool
 You will find in the {\f1\fs20 SQLite3\\Samples\\33 - ECC} folder the source code of the {\f1\fs20 @*ECC@.dpr} console project. Just compile it into an executable, accessible from your command line prompt. Or download an already compiled version from @http://synopse.info/files/ecc.7z
-It works with no problem under @*Windows@, or @*Linux@, with no external dependency (e.g. no {\i OpenSLL} needed), so could be used in an automated server infrastructure. No need to deploy a complex @*PKI@ system, just manage your certificates, encryption and signature details, via a single command line tool.
+It works with no problem under @*Windows@, or @*Linux@, with no external dependency (e.g. no {\i OpenSSL} needed), so could be used in an automated server infrastructure. No need to deploy a complex @*PKI@ system, just manage your certificates, encryption and signature details, via a single command line tool.
 If you run it without argument, you will get simple help information (here is the list at the time of this writing, your own version may differ):
 $>ecc
 $
@@ -14146,7 +14158,7 @@ $ ],
 $ "Count": 2,
 $}
 In the above sample, we cut down the {\f1\fs20 "*Base64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored three times: once in {\f1\fs20 "PublicBase64"}, another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items, and last but not least once again in all {\f1\fs20 "Base64"} strings.
-An easy way of managing your keys is to keep a safe mean of storage (e.g. a pair of USB pendrives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.certif} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES-256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
+An easy way of managing your keys is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.certif} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES-256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
 Remember that often, the weakest link of the security chain is between the chair and the keyboard, not within the computer. Do not reuse passwords between keys, and remember you have a "{\f1\fs20 rekey}" command available on the {\f1\fs20 ECC} tool, so that you can change a private key password, without changing its content, nor re-publish its associated {\f1\fs20 .public} key:
 $>ecc rekey
 $Enter the first chars of the .private certificate file name.
@@ -14375,7 +14387,7 @@ $                "AuthorityIssuer": "arbou",
 $                "ECDA": "2AwyyNYAcfSyJW+5BzvksbSdXcOUbYNqm...."
 $        }
 $}
-We can see the information stored in the file header, including the recipient name and {\f1\fs20 .publickey} identifier, and also the {\f1\fs20 "ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ"} algorithm, which indeed includes {\f1\fs20 _SYNLZ} compression. Other algorithms are available (with diverse {\f1\fs20 @*AES@} chaining modes), and some new methods may be added in the future.
+We can see the information stored in the file header, including the recipient name and {\f1\fs20 .publickey} identifier, and also the {\f1\fs20 "PBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ"} algorithm, which indeed includes {\f1\fs20 _SYNLZ} compression. Other algorithms are available (with diverse {\f1\fs20 @*AES@} chaining modes), and some new methods may be added in the future.
 The {\f1\fs20 ecc crypt} command did also include the digital signature available in the {\f1\fs20 test1.txt.sign} file in the current folder - so was in fact following @%%AsymmSignEncrypt@ - whereas {\f1\fs20 test2.txt.synecc} does not have any embedded signature, since there was no {\f1\fs20 test2.txt.sign} file available at encryption time:
 $>ecc infocrypt -file test2.txt.synecc
 ${
