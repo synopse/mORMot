@@ -6,15 +6,20 @@ program ORMFastMultiInsertWithIndex;
    and search by Key using an index (only 1024 diverse values of Key)
    - note that two similar SELECT are executed, to show two ORM methods
 
-  with db.CreateSQLIndex(TSQLEntry,'Key',false) :
+  with index defined before insertion:
     INSERT 1000000 rows in 6.71s
+    SELECT 1000000 rows per Key index in 1.15s
+
+  with index created after insertion:
+    INSERT 1000000 rows in 2.91s
+    CREATE INDEX 1000000 in 1.28s
     SELECT 1000000 rows per Key index in 1.15s
 
   without the index:
     INSERT 1000000 rows in 2.94s
     SELECT 1000000 rows per Key index in 129.27s
 
-  So for huge data set, an index is worth it!
+  So for huge data set, an index is worth it, and better done AFTER insertion!
 
 }
 
@@ -103,10 +108,13 @@ begin
   db := TSQLRestServerDB.CreateWithOwnModel([TSQLEntry],SQLITE_MEMORY_DATABASE_NAME);
   try
     db.CreateMissingTables;
-    db.CreateSQLIndex(TSQLEntry,'Key',false);
     write('INSERT ', COUNT, ' rows');
     timer.Start;
     DoInsert;
+    writeln(' in ',timer.Stop);
+    write('CREATE INDEX ', COUNT);
+    timer.Start;
+    db.CreateSQLIndex(TSQLEntry,'Key',false); // faster done after insertion
     writeln(' in ',timer.Stop);
     write('SELECT ', COUNT, ' rows per Key index');
     timer.Start;
