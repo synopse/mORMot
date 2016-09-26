@@ -36910,17 +36910,19 @@ begin
     result := true;
     exit;
   end;
+  EndOfObject := #0;
   if not (PropertyType in [ptRecord,ptArray]) then begin
     ptr := P;
     result := ProcessValue(Self,P,Data);
-    if result then // ProcessValue() did set and jump over EndOfObject -> rewind
-      repeat
+    if result and (P<>nil) and (P^<>#0) and (EndOfObject in EndOfJSONField) then
+      // ProcessValue() did set and jump over EndOfObject -> rewind
+      while P>ptr do begin
         dec(P);
-        if P^=#0 then begin
+        if (P^=#0) or (P^=EndOfObject) then begin
           P^ := EndOfObject;
           exit;
         end;
-      until (P=ptr) or (P^=EndOfObject);
+      end;
     exit;
   end;
   if P^<>'{' then
