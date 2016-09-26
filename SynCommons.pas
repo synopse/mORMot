@@ -54739,6 +54739,7 @@ var len: integer;
     PB: PByte absolute FieldBuffer;
     PC: PAnsiChar absolute FieldBuffer;
 begin
+  result := '';
   case FieldType of
   // fixed-sized field value
   tftBoolean:
@@ -54773,11 +54774,9 @@ begin
     if len>0 then
       if FieldType<>tftWinAnsi then
         SetString(result,PC,len) else
-        result := WinAnsiConvert.AnsiBufferToRawUTF8(PC,len) else
-      result := '';
+        result := WinAnsiConvert.AnsiBufferToRawUTF8(PC,len);
   end;
-  else
-    result := ''; // tftBlobExternal fields e.g. must be directly accessed
+  // tftBlobExternal fields e.g. must be directly accessed
   end;
 end;
 

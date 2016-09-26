@@ -780,13 +780,14 @@ type
 
 const
   STATUS_WEBSOCKETCLOSED = 0;
+
 procedure ComputeChallenge(const Base64: RawByteString; out Digest: TSHA1Digest);
 const SALT: string[36] = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 var SHA: TSHA1;
 begin
   SHA.Init;
   SHA.Update(pointer(Base64),length(Base64));
-  SHA.Update(@salt[1],36);
+  SHA.Update(@SALT[1],36);
   SHA.Final(Digest);
 end;
 

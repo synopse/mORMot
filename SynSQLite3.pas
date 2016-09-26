@@ -2737,7 +2737,7 @@ type
     procedure SetLimit(Category: TSQLLimitCategory; Value: integer);
     function GetBackupBackgroundInProcess: boolean;
     function SQLShouldBeLogged(const aSQL: RawUTF8): boolean;
-    class function GetSQLite3Library: TSQLite3Library;
+    function GetSQLite3Library: TSQLite3Library; // class function = bug in D2005
   public
     /// enter the TRTLCriticalSection: called before any DB access
     // - provide the SQL statement about to be executed: handle proper caching
@@ -3129,6 +3129,7 @@ type
     /// the latest BackupBackground() process file name
     property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
+    // - part of TSQLDatabase published properties, to publish e.g. Version  
     property SQLite3Library: TSQLite3Library read GetSQLite3Library;
   end;
 
@@ -4320,8 +4321,8 @@ begin
   result := (self<>nil) and (fBackupBackgroundInProcess<>nil);
 end;
 
-class function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
-begin
+function TSQLDataBase.GetSQLite3Library: TSQLite3Library;
+begin // class function may be better, but fails on Delphi 2005
   result := sqlite3;
 end;
 
