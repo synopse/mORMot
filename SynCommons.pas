@@ -36911,7 +36911,16 @@ begin
     exit;
   end;
   if not (PropertyType in [ptRecord,ptArray]) then begin
+    ptr := P;
     result := ProcessValue(Self,P,Data);
+    if result then // ProcessValue() did set and jump over EndOfObject -> rewind
+      repeat
+        dec(P);
+        if P^=#0 then begin
+          P^ := EndOfObject;
+          exit;
+        end;
+      until (P=ptr) or (P^=EndOfObject);
     exit;
   end;
   if P^<>'{' then
