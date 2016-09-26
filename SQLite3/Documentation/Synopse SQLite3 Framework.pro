@@ -13954,18 +13954,18 @@ In comparison to the RSA algorithm, ECC has some advantages:
 - Offers @*perfect forward secrecy@, since a fresh key is created for every encryption;
 - Potentially less patents infringement, in all its practical appliances;
 - Last but not least, it is one the strongest algorithms for the future of web.
-There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and existing standards (like X509). Here are some reasons:
-- We did not start from scratch, since we used another Open Source library for the raw ECC computation, which was the most sensitive part;
-- Most existing implementations have to deal with a lot of algorithms, options and old features: we wanted a reduced scope, to ease risk assessment - only well-known and future-proof algorithms were selected (AES-256-CFB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) and default values are very aggressive (password strength, 60,000 PBKDF2 iterations...);
-- Existing libraries are so complex that interfacing with them makes the consuming code complex to write and maintain - {\f1\fs20 SynEcc} logic is implemented in a few dozen lines of code: most of the unit source is about wrapper methods and documentation, and an average programmer can understand and review it, even if he/she is no Delphi expert;
-- A new implementation can always benefit from existing past issues: we followed all identified best practices, and tried to avoid, from the beginning, known issues which appeared on previous implementations, like buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, evil optimizations;
-- It integrates nicely with other {\i mORMot} features, and re-use the {\f1\fs20 SynCrypto.pas} unit for actual cryptography on all supported platforms, so the development effort was not big, and the resulting executables size did not increase;
-- As always, we started by writing tests, and we have pretty good automated tests coverage, from low-level ECC functions up to the highest level (we even validate the ECC command line tool);
-- We forbid file stamping, preferred JSON as any other text format, and used fixed sized binary buffers (e.g. for identifiers), with all-inclusive information, to avoid memory copies of sensitive data and logic flows depending on the feature set;
-- Some unique features were introduced (like AFSpliting or enforcing passwords for private keys), and in doubt, we always did choose the paranoid solution;
-- We are proud that {\i mORMot} application are stand-alone executables, so the last thing we want to do is to start mandating DLLs, or be coupled to a specific Operating System;
-- Having our own embedded code fight against old/unsafe versions already installed, especially on an existing server (what is the OpenSSL version in your good old Debian VM?);
-- It was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
+There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and established standards (like X509).\line To be fair, such libraries are complex and confusing, whereas we selected a set of future-proof algorithms (AES-256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) to follow {\i mORMot}'s KISS and DRY principles, keep code maintainable and readable, and reduce risk assessment scope. We followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations. The last thing we want to do is to start mandating DLLs, which are perhaps deprecated/unsafe if part of the OS. Last but not least, it was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
+;- We did not start from scratch, since we used another proven Open Source library for the raw ECC computation, which was the most sensitive part;
+;- Existing librairies have to deal with a lot of algorithms, options and old features: we wanted a reduced scope, to ease risk assessment - only well-known and future-proof algorithms were selected (AES-256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) and default values are very aggressive (password strength, 60,000 PBKDF2 iterations...);
+;- Existing libraries are so complex that interfacing with them makes the consuming code complex to write and maintain - {\f1\fs20 SynEcc} logic is implemented in a few dozen lines of code: most of the unit source is about wrapper methods and documentation, and an average programmer can understand and review it, even if he/she is no Delphi expert;
+;- A new implementation may benefit from past issues: we followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations;
+;- It integrates nicely with other {\i mORMot} features, and re-uses the {\f1\fs20 SynCrypto.pas} unit for actual cryptography on all supported platforms, so the development effort was not big, and the resulting executables size did not increase;
+;- As always, we started by writing tests, and we have pretty good automated tests coverage, from low-level ECC functions up to the highest level (we even validate the ECC command line tool);
+;- We forbid file stamping, preferred JSON to any other text format, and used fixed sized binary buffers (e.g. for identifiers), with all-inclusive information, to avoid memory copies of sensitive data and logic flows depending on the feature set;
+;- Some unique features were introduced (like AFSpliting or enforcing passwords for private keys), and in doubt, we always did choose the paranoid solution;
+;- We are proud that {\i mORMot} applications are stand-alone executables, so the last thing we want to do is to start mandating DLLs, or be coupled to a specific Operating System;
+;- Having our own embedded code is safer than using the old/unsafe already installed libraries, especially on an existing server (what is the OpenSSL version in your good old Debian VM?);
+;- It was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
 :  Introducing SynEcc
 The {\i mORMot}'s {\f1\fs20 SynEcc.pas} unit implements full ECC computation, using {\f1\fs20 secp256r1} curve, i.e. {\f1\fs20 NIST P-256}, or OpenSSL's {\f1\fs20 prime256v1}. The low-level computation is done in optimized C code - from the @https://github.com/esxgx/easy-ecc {\i Open Source} project - and is statically linked in your Windows or Linux executable: i.e. no external {\f1\fs20 .dll}/{\f1\fs20 .so} library is needed. Then we defined a feature-rich set of object pascal classes on top of this solid ECC ground, to include certificates, safe storage of private keys, JSON publication of public keys, as an integrated toolset.
 All needed low-level asymmetric cryptography is available:
@@ -15301,10 +15301,10 @@ $Total assertions failed for all test suits:  0 / 4,000
 $! All tests passed successfully.
 You can see that all text on screen was created by "UnCamelCasing" the method names (thanks to our good old @*Camel@), and that the test suit just follows the order defined when registering the classes. Each method has its own timing, which is pretty convenient to track performance regressions.
 This test program has been uploaded in the {\f1\fs20 SQLite3\\Sample\\07 - SynTest} folder of the Source Code Repository.
-:  Implemented tests
-The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 175,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
+:  Framework test coverage
+The @SAD-DI-2.2.2@ defines all classes released with the framework source code, which covers all core aspects of the framework. Global testing coverage is good, excellent for core components (more than 25,000,000 individual checks are performed for revision 1.18), but there is still some User-Interface related tests to be written.
 Before any release all unitary regression tests are performed with the following compilers:
-- {\i Delphi} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynLog.pas}, {\f1\fs20 SynTests.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
+- {\i @*Delphi@} 5 (for a limited scope, including {\f1\fs20 SynCommons.pas}, {\f1\fs20 SynLog.pas}, {\f1\fs20 SynTests.pas}, {\f1\fs20 SynCryto.pas}, {\f1\fs20 SynEcc.pas}, {\f1\fs20 SynPdf.pas} and {\f1\fs20 SynDB.pas});
 - {\i Delphi} 6;
 - {\i Delphi} 7, with and without our Enhanced Run Time Library;
 - {\i Delphi} 2007;
@@ -15312,7 +15312,11 @@ Before any release all unitary regression tests are performed with the following
 - {\i Delphi} XE4;
 - {\i Delphi} XE6;
 - {\i Delphi} XE7;
-- {\i FPC} 2.7.1 / 3.1.1 (svn revision).
+- {\i Delphi} 10 Seattle;
+- {\i Delphi} 10.1 Berlin;
+- {\i @*CrossKylix@} 3.0;
+- {\i @*FPC@} 3.x.x / 3.1.1 (svn revision).
+Target platforms are {\i Win32} and {\i Win64} for {\i Delphi} and {\i FPC}, plus {\i Linux 32/64} for {\i FPC} and {\i CrossKylix}.
 Then all sample source code (including the {\i Main Demo} and {\f1\fs20 @*SynDBExplorer@} sophisticated tools) are compiled, and user-level testing is performed against those applications.
 You can find in the {\f1\fs20 compil.bat} and {\f1\fs20 compilpil.bat} files of our source code repository how incremental builds and tests are performed.
 \page
