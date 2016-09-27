@@ -10595,7 +10595,7 @@ procedure FillZero(out dig: THash128); overload;
 
 /// compute a 256-bit checksum on the supplied buffer using crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
-// - will combine two crc32c() calls into a single TDigest256 result
+// - will combine two crc32c() calls into a single THash256 result
 // - by design, such combined hashes cannot be cascaded
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 

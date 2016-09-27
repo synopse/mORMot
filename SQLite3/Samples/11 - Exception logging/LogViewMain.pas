@@ -159,15 +159,16 @@ uses
 resourcestring
   sEnterAddress = 'Enter an hexadecimal address:';
   sStats = #13#10+
-   'Log'#13#10'---'#13#10#13#10+
-    'Name: %s'#13#10'Date: %s'#13#10'Size: %s'#13#10'Class: %s'#13#10#13#10+
-   'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10'Version: %s'#13#10#13#10+
+   'Log'#13#10'---'#13#10#13#10'Name: %s'#13#10+
+     'Size: %s'#13#10'Started: %s'#13#10'Closed:  %s'#13#10+
+     'Time elapsed: %d.%s'#13#10#13#10+
+   'Executable'#13#10'----------'#13#10#13#10'Name: %s%s'#13#10+
+     'Build Date: %s'#13#10'Version: %s'#13#10'Framework: %s'#13#10#13#10+
    'Host'#13#10'----'#13#10#13#10'Computer: %s'#13#10+
-    'User: %s'#13#10'CPU: %s%s'#13#10'OS: %s'#13#10'Wow64: %d'#13#10#13#10+
-   'Log content'#13#10'-----------'#13#10#13#10+
-    'Log started at: %s'#13#10'Events count: %d'#13#10'Methods count: %d'#13#10+
-    'Threads count: %d'#13#10'Time elapsed: %s'#13#10#13#10+
-   'Per event stats'#13#10'---------------'#13#10#13#10;
+     'User: %s'#13#10'CPU: %s%s'#13#10'OS: %s'#13#10'Wow64: %d'#13#10#13#10+
+   'Count'#13#10'------'#13#10#13#10+
+     'Events: %d'#13#10'Methods: %d'#13#10'Threads: %d'#13#10#13#10+
+   'Events'#13#10'------'#13#10#13#10;
   sNoFile = 'No File';
   sRemoteLog = 'Remote Log';
   sUnknown = 'Unknown';
@@ -639,6 +640,7 @@ var M: TMemo;
     i: integer;
     P: PUTF8Char;
     feat,line,name,value: RawUTF8;
+    closed,elapsed: TDateTime;
 begin
   F := TForm.Create(Application);
   try
@@ -665,13 +667,15 @@ begin
         feat := ToText(IntelCPU,' ');
         if feat<>'' then
           feat := '  ' + LowerCase(feat);
+        closed := EventDateTime(Count-1);
+        elapsed := closed-StartDateTime;
         s := format(sStats,
-          [FileName,DateTimeToStr(ExecutableDate),Ansi7ToString(KB(Map.Size)),
-           Ansi7ToString(Framework),
-           UTF8ToString(ExecutableName),s,Ansi7ToString(ExecutableVersion),
-           UTF8ToString(ComputerHost),UTF8ToString(RunningUser),Ansi7ToString(CPU),
-           feat,win,Integer(Wow64),DateTimeToStr(StartDateTime),Count,LogProcCount,
-           ThreadsCount,FormatDateTime('dd.hh:mm:ss',EventDateTime(Count-1)-StartDateTime)]);
+          [FileName,KB(Map.Size),DateTimeToStr(StartDateTime),DateTimeToStr(closed),
+           trunc(elapsed),FormatDateTime('hh:mm:ss',elapsed),
+           UTF8ToString(ExecutableName),s,DateTimeToStr(ExecutableDate),
+           ExecutableVersion,Framework,UTF8ToString(ComputerHost),
+           UTF8ToString(RunningUser),CPU,feat,win,Integer(Wow64),
+           Count,LogProcCount,ThreadsCount]);
         fillchar(sets,sizeof(sets),0);
         for i := 0 to Count-1 do
           inc(sets[EventLevel[i]]);
