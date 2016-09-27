@@ -1240,7 +1240,7 @@ The following diagram is a map of the patterns presented and the relationships b
 You may recognize a lot of existing patterns you already met or implemented. What makes DDD unique is that those patterns have been organized around some clear concepts, thanks to decades of business software experiment.
 :  Is DDD good for you?
 {\i Domain-Driven design} is not to be used everywhere, and in every situation.
-First of all, the following are pre-requisites of using DDD:
+First of all, the following are prerequisite of using DDD:
 - Identified and well-bounded domain (e.g. your business target should be clearly identified);
 - You must have access to domain experts to establish a creative collaboration, in an iterative (may be {\i agile}) way;
 - Skilled team, able to write clean code - note also that since DDD is more about code expressiveness than technology, it may not appear so "trendy" to youngest developers;
@@ -8674,7 +8674,7 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 \page
 :96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
-In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE 4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
+In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
 This @*stateless@ @9@ model will enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
@@ -18065,4 +18065,86 @@ The following table is a partial list of related documentation, including the cu
 Here is a table of the implementation of the {\i ISO 123456} standard in all the documentation:
 \TableImplements=ISO
 At the beginning of the @RK@, @SRS@, @SAD@ and @SDD@, a dedicated table will list all {\i ISO 123456} requirements implemented in this document, with its associated page.
+
+[SandBox]
+Owner=DI
+Name=SandBox
+PreparedBy=Arnaud Bouchez
+
+:ECDHE
+{\f1\fs20 SynEcc} implementation of {\f1\fs20 @*ECDHE@} handshaking and key derivation is done in a single round trip, to avoid harmful triple handshakes, and reduce network latency. Both mutual authentication and server authentication are available, requiring a shared {\i public-key infrastructure} ({\f1\fs20 @*PKI@}) - provided e.g. by {\f1\fs20 TECCCertificateChain} - to validate exchanged certificates. Handshaking is protected against replay attacks, and features perfect forward security in its key derivation (used for encryption and message authentication).
+Thanks to the proven set of algorithms used, resulting security is comparable to the best TLS 1.2 configurations, without the overhead and complexity of this standard.
+: Mutual Authentication
+To perform @*mutual authentication@, the prerequisite for each party is to have private keys ({\f1\fs20 dA} and {\f1\fs20 dB}) and public keys in certificates ({\f1\fs20 QCA} and {\f1\fs20 QCB}), hosted in a shared PKI system.
+$Client (dA, QCA)                                            Server (dB, QCB)
+When the client initiates the communication, it generates an ephemeral ({\f1\fs20 dE, QE}) ECC key pair (without certification), then send an identifier to the current algorithm {\f1\fs20 Algo}, a random value {\f1\fs20 RndA}, its own public key {\f1\fs20 QCA}, the ephemeral public key {\f1\fs20 QE}, concatenated and digitally signed with @*ECDSA@ using its private key {\f1\fs20 dA}.
+$Client (dA, QCA)                                            Server (dB, QCB)
+$
+$  (dE, QE) = ECCMakeKey
+$  Sign = ECDSASign(dA,sha-256(Algo|RndA|QCA|QE))
+$
+$    Algo|RndA|QCA|QE|Sign
+$   ----------------------------------------------------------->
+$
+On the server side, the ECDSA signature is checked using {\f1\fs20 QCA} certificated public key, then an ephemeral ({\f1\fs20 dF, QF}) key pair is generated (without certification), and all information is sent back to the client, with a digital signature using Server private key {\f1\fs20 dB}. The signature is then validated using ECDSA on the client side, checking {\f1\fs20 QCB} certificate information.
+$Client (dA, QCA)                                            Server (dB, QCB)
+$
+$                                                           ECDSAVerify(QCA, Sign)
+$                                                           (dF, QF) = ECCMakeKey
+$                                          Sign = ECDSASign(dB,sha-256(Algo|RndA|RndB|QCB|QF))
+$
+$                                    Algo|RndA|RndB|QCB|QF|Sign
+$   <-----------------------------------------------------------
+$
+$  ECDSAVerify(QCB, Sign)
+$
+Now both ends can calculate shared secret keys {\f1\fs20 S1} and {\f1\fs20 S2}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function. Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} function, and {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function.
+$Client (dA, QCA)                                            Server (dB, QCB)
+$
+$  S1 = ECDH(dA,QF)                                         S1 = ECDH(dF,QCA)
+$  S2 = ECDH(dE,QCB)                                        S2 = ECDH(dB,QE)
+$                  kE = KDF(S1|S2|RndA|RndB,"salt")
+$                  kM = KDF(S1|S2|RndA|RndB,"hmac")
+$
+$   EF(kE,m1)|MAC(kM,m1)
+$   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+$
+$                                            E(Ks,m2)|MAC(Hs,m2)
+$   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+$
+$   EF(kE,m3)|MAC(kM,m3)
+$   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+$    ...
+$
+A typical {\f1\fs20 SynEcc} implementation may use, as algorithms for high security but very fast process, using hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions:
+- {\f1\fs20 KDF} = HMAC-SHA256,
+- {\f1\fs20 EF} = AES256-CFB, and
+- {\f1\fs20 MAC} = HMAC-CRC256C.
+: Unilateral Authentication
+For server-side only authentication - as is most currently implemented in regular TLS/HTTPS communications, the handshaking process is slightly reduced:
+$Client                                                      Server (dB, QCB)
+$
+$  (dE, QE) = ECCMakeKey
+$
+$    Algo|RndA|QE
+$   ----------------------------------------------------------->
+$
+$                                          Sign = ECDSASign(dB,sha-256(Algo|RndA|RndB|QCB))
+$
+$                                       Algo|RndA|RndB|QCB|Sign
+$   <-----------------------------------------------------------
+$
+$  ECDSAVerify(QCB, Sign)
+$  S = ECDH(dE,QCB)                                         S = ECDH(dB,QE)
+$                  kE = KDF(S|RndA|RndB,"salt")
+$                  kM = KDF(S|RndA|RndB,"hmac")
+$
+$   EF(kE,m1)|MAC(kM,m1)
+$   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+$
+$                                            E(Ks,m2)|MAC(Hs,m2)
+$   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+$    ...
+$
+In this case, the client party does not have any private/public key certification, and is the only side computing an ephemeral {\f1\fs20 (dE, QE)} pair. The server has no mean of authenticating its client, but the connection is secured and private. The handshaking process will be slightly faster than with mutual authentication, since less ECC computing operations are performed (2 instead of 5 on the server side).
 
