@@ -826,6 +826,8 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
   end;
 
+  THash64 = array[0..15] of cardinal;
+  
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
@@ -970,6 +972,24 @@ function MD5(const s: RawByteString): RawUTF8;
 // - result is returned in hexadecimal format
 function SHA1(const s: RawByteString): RawUTF8;
 
+type
+  /// compute the HMAC message authentication code using SHA1 as hash function
+  // - you may use HMAC_SHA1() overloaded functions for one-step process
+  THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    step7data: THash64;
+    sha: TSHA1;
+  public
+    /// prepare the HMAC authentication with the supplied key
+    procedure Init(key: pointer; keylen: integer);
+    /// call this method for each continuous message block
+    procedure Update(msg: pointer; msglen: integer);
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: TSHA1Digest);
+  end;
+  /// points to a HMAC message authentication context using SHA1
+  PHMAC_SHA1 = ^THMAC_SHA1;
+
 /// compute the HMAC message authentication code using SHA1 as hash function
 procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest); overload;
 
@@ -1008,6 +1028,24 @@ function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
 // such a feature improve security for small passwords, e.g.
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
+type
+  /// compute the HMAC message authentication code using SHA256 as hash function
+  // - you may use HMAC_SHA256() overloaded functions for one-step process
+  THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    step7data: THash64;
+    sha: TSha256;
+  public
+    /// prepare the HMAC authentication with the supplied key
+    procedure Init(key: pointer; keylen: integer);
+    /// call this method for each continuous message block
+    procedure Update(msg: pointer; msglen: integer);
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: TSHA256Digest);
+  end;
+  /// points to a HMAC message authentication context using SHA256
+  PHMAC_SHA256 = ^THMAC_SHA256;
+
 /// compute the HMAC message authentication code using SHA256 as hash function
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest); overload;
 
@@ -1022,6 +1060,7 @@ procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA
 // - this function expect the resulting key length to match SHA256 digest size
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   out result: TSHA256Digest; const saltdefault: RawByteString='');
+
 
 /// compute the HMAC message authentication code using crc256c as hash function
 // - HMAC over a non cryptographic hash function like crc256c is known to be
@@ -1041,23 +1080,46 @@ procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString; out result
 // - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
 procedure HMAC_CRC256C(const key,msg: RawByteString; out result: THash256); overload;
 
-/// compute the HMAC message authentication code using crc32c as hash function
-// - HMAC over a non cryptographic hash function like crc32c is known to be a
-// safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
-// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
-procedure HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer; out result: cardinal); overload;
+type
+  /// compute the HMAC message authentication code using crc32c as hash function
+  // - HMAC over a non cryptographic hash function like crc32c is known to be a
+  // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+  // - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+  // - you may use HMAC_CRC32C() overloaded functions for one-step process
+  THMAC_CRC32C = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    seed: cardinal;
+    step7data: THash64;
+  public
+    /// prepare the HMAC authentication with the supplied key
+    procedure Init(key: pointer; keylen: integer);
+    /// call this method for each continuous message block
+    procedure Update(msg: pointer; msglen: integer);
+    /// computes the HMAC of all supplied message according to the key
+    function Done: cardinal;
+  end;
+
+  /// points to HMAC message authentication code using crc32c as hash function
+  PHMAC_CRC32C= ^THMAC_CRC32C;
 
 /// compute the HMAC message authentication code using crc32c as hash function
 // - HMAC over a non cryptographic hash function like crc32c is known to be a
 // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
 // - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
-procedure HMAC_CRC32C(const key: THash256; const msg: RawByteString; out result: cardinal); overload;
+function HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer): cardinal; overload;
 
 /// compute the HMAC message authentication code using crc32c as hash function
 // - HMAC over a non cryptographic hash function like crc32c is known to be a
 // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
 // - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
-procedure HMAC_CRC32C(const key,msg: RawByteString; out result: cardinal); overload;
+function HMAC_CRC32C(const key: THash256; const msg: RawByteString): cardinal; overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+function HMAC_CRC32C(const key,msg: RawByteString): cardinal; overload;
+
 
 /// direct Encrypt/Decrypt of data using the TAES class
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
@@ -1674,15 +1736,12 @@ begin
   FillcharFast(Digest,sizeof(Digest),0);
 end;
 
-procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
-begin
-  HMAC_SHA1(Pointer(key),pointer(msg),length(key),length(msg),result);
-end;
 
-procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer; out result: TSHA1Digest);
+{ THMAC_SHA1 }
+
+procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
-    sha: TSHA1;
-    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+    k0,k0xorIpad: THash64;
 begin
   FillcharFast(k0,sizeof(k0),0);
   if keylen>64 then
@@ -1694,27 +1753,139 @@ begin
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,64);
+end;
+
+procedure THMAC_SHA1.Update(msg: pointer; msglen: integer);
+begin
   sha.Update(msg,msglen);
+end;
+
+procedure THMAC_SHA1.Done(out result: TSHA1Digest);
+begin
   sha.Final(result);
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
   sha.Final(result);
 end;
 
-procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString; out result: TSHA1Digest);
+procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer; out result: TSHA1Digest);
+var mac: THMAC_SHA1;
 begin
-  HMAC_SHA1(@key,pointer(msg),SizeOf(key),length(msg),result);
+  mac.Init(key,keylen);
+  mac.Update(msg,msglen);
+  mac.Done(result);
+end;
+
+procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
+var mac: THMAC_SHA1;
+begin
+  mac.Init(Pointer(key),length(key));
+  mac.Update(pointer(msg),length(msg));
+  mac.Done(result);
+end;
+
+procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString; out result: TSHA1Digest);
+var mac: THMAC_SHA1;
+begin
+  mac.Init(@key,sizeof(key));
+  mac.Update(pointer(msg),length(msg));
+  mac.Done(result);
 end;
 
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
   out result: TSHA1Digest);
 var i: integer;
     tmp: TSHA1Digest;
+    mac: THMAC_SHA1;
+    first: THMAC_SHA1;
 begin
   HMAC_SHA1(password,salt+#0#0#0#1,result);
+  if count<2 then
+    exit;
   tmp := result;
+  first.Init(pointer(password),length(password));
   for i := 2 to count do begin
-    HMAC_SHA1(pointer(password),@tmp,length(password),SizeOf(tmp),tmp);
+    mac := first; // re-use the very same SHA-1 context for best performance
+    mac.sha.Update(@tmp,sizeof(tmp));
+    mac.Done(tmp);
+    XorMemory(@result,@tmp,sizeof(result));
+  end;
+end;
+
+
+{ THMAC_SHA256 }
+
+procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
+var i: integer;
+    k0,k0xorIpad: THash64;
+begin
+  FillcharFast(k0,sizeof(k0),0);
+  if keylen>64 then
+    sha.Full(key,keylen,PSHA256Digest(@k0)^) else
+    MoveFast(key^,k0,keylen);
+  for i := 0 to 15 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 15 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  sha.Init;
+  sha.Update(@k0xorIpad,64);
+end;
+
+procedure THMAC_SHA256.Update(msg: pointer; msglen: integer);
+begin
+  sha.Update(msg,msglen);
+end;
+
+procedure THMAC_SHA256.Done(out result: TSHA256Digest);
+begin
+  sha.Final(result);
+  sha.Update(@step7data,64);
+  sha.Update(@result,sizeof(result));
+  sha.Final(result);
+end;
+
+procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
+var mac: THMAC_SHA256;
+begin
+  mac.Init(key,keylen);
+  mac.Update(msg,msglen);
+  mac.Done(result);
+end;
+
+procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
+var mac: THMAC_SHA256;
+begin
+  mac.Init(Pointer(key),length(key));
+  mac.Update(pointer(msg),length(msg));
+  mac.Done(result);
+end;
+
+procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString; out result: TSHA256Digest);
+var mac: THMAC_SHA256;
+begin
+  mac.Init(@key,sizeof(key));
+  mac.Update(pointer(msg),length(msg));
+  mac.Done(result);
+end;
+
+procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
+  out result: TSHA256Digest; const saltdefault: RawByteString);
+var i: integer;
+    tmp: TSHA256Digest;
+    mac: THMAC_SHA256;
+    first: THMAC_SHA256;
+begin
+  if salt='' then
+    HMAC_SHA256(password,saltdefault+#0#0#0#1,result) else
+    HMAC_SHA256(password,salt+#0#0#0#1,result);
+  if count<2 then
+    exit;
+  tmp := result;
+  first.Init(pointer(password),length(password));
+  for i := 2 to count do begin
+    mac := first; // re-use the very same SHA-256 context for best performance
+    mac.sha.Update(@tmp,sizeof(tmp));
+    mac.Done(tmp);
     XorMemory(@result,@tmp,sizeof(result));
   end;
 end;
@@ -1743,37 +1914,8 @@ begin
   SHA.Full(Data,Len,result);
 end;
 
-procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
-begin
-  HMAC_SHA256(Pointer(key),pointer(msg),length(key),length(msg),result);
-end;
 
-procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
-var i: integer;
-    sha: TSHA256;
-    k0,k0xorIpad,step7data: array[0..15] of cardinal;
-begin
-  FillcharFast(k0,sizeof(k0),0);
-  if keylen>64 then
-    sha.Full(key,keylen,PSHA256Digest(@k0)^) else
-    MoveFast(key^,k0,keylen);
-  for i := 0 to 15 do
-    k0xorIpad[i] := k0[i] xor $36363636;
-  for i := 0 to 15 do
-    step7data[i] := k0[i] xor $5c5c5c5c;
-  sha.Init;
-  sha.Update(@k0xorIpad,64);
-  sha.Update(msg,msglen);
-  sha.Final(result);
-  sha.Update(@step7data,64);
-  sha.Update(@result,sizeof(result));
-  sha.Final(result);
-end;
-
-procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString; out result: TSHA256Digest);
-begin
-  HMAC_SHA256(@key,pointer(msg),SizeOf(key),length(msg),result);
-end;
+{ HMAC_CRC256C() functions - THMAC_CRC256C not possible due to h1/h2 coupling }
 
 procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
@@ -1790,7 +1932,7 @@ end;
 procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256);
 var i: integer;
     h1,h2: cardinal;
-    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+    k0,k0xorIpad,step7data: THash64;
 begin
   FillcharFast(k0,sizeof(k0),0);
   if keylen>64 then
@@ -1818,9 +1960,12 @@ begin
   HMAC_CRC256C(Pointer(key),pointer(msg),length(key),length(msg),result);
 end;
 
-procedure HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer; out result: cardinal);
+
+{ THMAC_CRC32C }
+
+procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+    k0,k0xorIpad: THash64;
 begin
   FillcharFast(k0,sizeof(k0),0);
   if keylen>64 then
@@ -1830,33 +1975,43 @@ begin
     k0xorIpad[i] := k0[i] xor $36363636;
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
-  result := crc32c(crc32c(crc32c(0,@k0xorIpad,64),msg,msglen),@step7data,64);
+  seed := crc32c(0,@k0xorIpad,64);
 end;
 
-procedure HMAC_CRC32C(const key: THash256; const msg: RawByteString; out result: cardinal);
+procedure THMAC_CRC32C.Update(msg: pointer; msglen: integer);
 begin
-  HMAC_CRC32C(@key,pointer(msg),SizeOf(key),length(msg),result);
+  seed := crc32c(seed,msg,msglen);
 end;
 
-procedure HMAC_CRC32C(const key,msg: RawByteString; out result: cardinal);
+function THMAC_CRC32C.Done: cardinal;
 begin
-  HMAC_CRC32C(Pointer(key),pointer(msg),length(key),length(msg),result);
+  result := crc32c(seed,@step7data,64);
 end;
 
-procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
-  out result: TSHA256Digest; const saltdefault: RawByteString);
-var i: integer;
-    tmp: TSHA256Digest;
+function HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer): cardinal;
+var mac: THMAC_CRC32C;
 begin
-  if salt='' then
-    HMAC_SHA256(password,saltdefault+#0#0#0#1,result) else
-    HMAC_SHA256(password,salt+#0#0#0#1,result);
-  tmp := result;
-  for i := 2 to count do begin
-    HMAC_SHA256(pointer(password),@tmp,length(password),SizeOf(tmp),tmp);
-    XorMemory(@result,@tmp,sizeof(result));
-  end;
+  mac.Init(@key,sizeof(key));
+  mac.Update(msg,msglen);
+  result := mac.Done;
 end;
+
+function HMAC_CRC32C(const key: THash256; const msg: RawByteString): cardinal;
+var mac: THMAC_CRC32C;
+begin
+  mac.Init(@key,sizeof(key));
+  mac.Update(pointer(msg),length(msg));
+  result := mac.Done;
+end;
+
+function HMAC_CRC32C(const key,msg: RawByteString): cardinal;
+var mac: THMAC_CRC32C;
+begin
+  mac.Init(pointer(key),length(key));
+  mac.Update(pointer(msg),length(msg));
+  result := mac.Done;
+end;
+
 
 function SHA1SelfTest: boolean;
 function SingleTest(const s: RawByteString; TDig: TSHA1Digest): boolean;
