@@ -733,7 +733,7 @@ begin
     exit;
   end;
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
-  head := 'Sec-WebSockets-REST: NonBlocking';
+  head := 'Sec-WebSocket-REST: NonBlocking';
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTTP_SUCCESS;
 end;
 

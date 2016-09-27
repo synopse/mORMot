@@ -259,12 +259,14 @@ uses
   Classes;
 
 const
-  /// the current version number of the freeware Synopse framework
-  // - match the value defined in SynCommons.pas
-  SYNOPSE_FRAMEWORK_VERSION = {$I SynopseCommit.inc};
-
   /// the full text of the current Synopse mORMot framework version
-  XPOWEREDPROGRAM = 'Synopse mORMot '+SYNOPSE_FRAMEWORK_VERSION;
+  // - match the value defined in SynCommons.pas and SynopseCommit.inc
+  XPOWEREDPROGRAM = 'mORMot 1.18';
+
+  /// the running Operating System
+  XPOWEREDOS = {$ifdef MSWINDOWS} 'Windows' {$else}
+                 {$ifdef LINUX} 'Linux' {$else} 'Posix' {$endif LINUX}
+               {$endif MSWINDOWS};
 
   /// used by THttpApiServer.Request for http.sys to send a static file
   // - the OutCustomHeader should contain the proper 'Content-type: ....'
@@ -1094,7 +1096,7 @@ type
   published
     /// returns the API version used by the inherited implementation
     property APIVersion: string read GetAPIVersion;
-    /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18.777 (Linux)'
+    /// the Server name, UTF-8 encoded, e.g. 'mORMot/1.18 (Linux)'
     // - will be served as "Server: ..." HTTP header
     // - for THttpApiServer, when called from the main instance, will propagate
     // the change to all cloned instances, and included in any HTTP API 2.0 log
@@ -2561,22 +2563,11 @@ begin  // fast ANSI 7 bit conversion
 end;
 
 function DefaultUserAgent(Instance: TObject): SockString;
-const
-  DEFAULT_AGENT = 'Mozilla/5.0 (' +
-    {$ifdef MSWINDOWS}
-      'Windows'
-    {$else}
-      {$ifdef LINUX}
-        'Linux'
-      {$else}
-        'Posix'
-      {$endif LINUX}
-    {$endif MSWINDOWS}
-    + '; Synopse mORMot '+ SYNOPSE_FRAMEWORK_VERSION+' ';
 begin
   // note: some part of mORMot.pas would identify 'mORMot' pattern in the
   // agent header to enable advanced behavior e.g. about JSON transmission
-  result := DEFAULT_AGENT+SockString(Instance.ClassName)+')';
+  result := 'Mozilla/5.0 ('+XPOWEREDOS+'; '+XPOWEREDPROGRAM+' '+
+    SockString(Instance.ClassName)+')';
 end;
 
 /// decode 'CONTENT-ENCODING: ' parameter from registered compression list
@@ -2761,7 +2752,7 @@ end;
 {$ifndef NOXPOWEREDNAME}
 const
   XPOWEREDNAME = 'X-Powered-By';
-  XPOWEREDVALUE = XPOWEREDPROGRAM + ' http://synopse.info';
+  XPOWEREDVALUE = XPOWEREDPROGRAM + ' synopse.info';
 {$endif}
 
 { TURI }
@@ -3923,7 +3914,7 @@ constructor THttpServerGeneric.Create(CreateSuspended: Boolean;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 begin
   fProcessName := ProcessName;
-  SetServerName('Synopse mORMot ('+{$ifdef MSWINDOWS}'Windows)'{$else}'Linux)'{$endif});
+  SetServerName('mORMot ('+XPOWEREDOS+')');
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
   inherited Create(CreateSuspended);

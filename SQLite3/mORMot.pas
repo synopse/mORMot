@@ -39303,6 +39303,7 @@ begin
       fClientKind := ckAjax else begin
       agent := GetUserAgent;
       if (agent='') or (PosEx('mORMot',agent)>0) then
+        // 'mORMot' set e.g. from XPOWEREDPROGRAM value in SynCrtSock 
         fClientKind := ckFramework else
         fClientKind := ckAjax;
     end;

@@ -2203,7 +2203,7 @@ begin
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
         Ctxt.Prepare(url,method,header,data,dataType);
-        resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKETS-REST: ');
+        resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKET-REST: ');
         if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else
           block := wscBlockWithAnswer;
