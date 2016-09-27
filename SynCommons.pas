@@ -5041,6 +5041,7 @@ type
     // - you should NOT use this method, but rather high-level FindHashed*()
     function HashFind(aHashCode: cardinal): integer; overload;
     function GetHashFromIndex(aIndex: Integer): Cardinal;
+    procedure HashInvalidate;
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -5085,7 +5086,10 @@ type
     // e.g. if the searched/hashed field in a record is a string as first field,
     // you may use a string variable as Elem: other fields will be ignored
     // - returns -1 if not found, or the index in the dynamic array if found
-    function FindHashed(const Elem): integer;
+    // - optional aHashCode parameter can be supplied with an already hashed
+    // value of the item, to be used e.g. after a call to HashFind() - default
+    // 0 will use fHashElement(Elem,fHasher)
+    function FindHashed(const Elem; aHashCode: cardinal=0): integer;
     /// search for an element value inside the dynamic array using hashing, and
     // fill Elem with the found content
     // - return the index found (0..Count-1), or -1 if Elem was not found
@@ -8053,8 +8057,6 @@ type
     fCount: integer;
     fHash: TDynArrayHashed;
     fFreeItems: boolean;
-    fHashValid: boolean;
-    fHashed: boolean;
   public
     /// initialize the class instance
     // - if aFreeItems is TRUE (default), will behave like a TObjectList
@@ -8103,7 +8105,6 @@ type
     fSubPropAccess: TObjectListPropertyHashedAccessProp;
     function IntHash(const Elem): cardinal;
     function IntComp(const A,B): integer;
-    procedure IntHashValid;
   public
     /// initialize the class instance with the corresponding callback in order
     // to handle sub-property hashing and search
@@ -43460,10 +43461,12 @@ begin
   result := -1;
 end;
 
-function TDynArrayHashed.FindHashed(const Elem): integer;
+function TDynArrayHashed.FindHashed(const Elem; aHashCode: cardinal): integer;
 begin
   if (fHashs<>nil) and Assigned(fHashElement) then begin
-    result := HashFind(fHashElement(Elem,fHasher),Elem);
+    if aHashCode=0 then
+      aHashCode := fHashElement(Elem,fHasher);
+    result := HashFind(aHashCode,Elem);
     if result<0 then
       result := -1; // for coherency with most methods
   end else begin
@@ -43514,9 +43517,8 @@ begin
   end;
   if fHashs=nil then
     ReHash; // compute hash of all previously added fHashCountTrigger items
-  if aHashCode=0 then
-    if Assigned(fHashElement) then
-      aHashCode := fHashElement(Elem,fHasher);
+  if (aHashCode=0) and Assigned(fHashElement) then
+    aHashCode := fHashElement(Elem,fHasher);
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
   result := HashFind(aHashCode,Elem);
@@ -43806,9 +43808,14 @@ begin
   end;
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
+  HashInvalidate;
+  fHashCountTrigger := 32;
+end;
+
+procedure TDynArrayHashed.HashInvalidate;
+begin
   fHashs := nil;
   fHashFindCount := 0;
-  fHashCountTrigger := 32;
 end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
@@ -50926,7 +50933,7 @@ begin
           Capacity := 0;   // force free all fNameValue.List[] key/value pairs
           Capacity := 200; // then reserve some space for future cached entries
         end;
-      fNameValue.fDynArray.fHashs := nil; // will force reset all hash content
+      fNameValue.fDynArray.HashInvalidate;
       result := true; // mark something was flushed
     end;
     fFindLastAddedIndex := -1; // fFindLastKey should remain untouched for Add()
@@ -51543,7 +51550,7 @@ begin
   if fFreeItems then
     FreeAndNil(List[aIndex]);
   fHash.Delete(aIndex);
-  fHashValid := false;
+  fHash.HashInvalidate;
 end;
 
 procedure TObjectListHashedAbstract.Delete(aObject: TObject);
@@ -51555,48 +51562,22 @@ end;
 
 { TObjectListHashed }
 
-const
-  // hashing will start only when List[] reaches 32 items (not worth it before)
-  TOBJECTLISTHASHED_START_HASHING_COUNT = 32;
-
 function TObjectListHashed.Add(aObject: TObject; out wasAdded: boolean): integer;
 begin
   wasAdded := false;
-  if self<>nil then
-    if fHashed then begin
-      if not fHashValid then
-        fHashValid := fHash.ReHash;
-      result := fHash.FindHashedForAdding(aObject,wasAdded);
-      if wasAdded then
-        fList[result] := aObject;
-    end else begin
-      for result := 0 to fCount-1 do
-        if fList[result]=aObject then
-          exit;
-      wasAdded := true;
-      result := fHash.Add(aObject);
-      if fCount>=TOBJECTLISTHASHED_START_HASHING_COUNT then
-        fHashed := true;
-    end
-  else
+  if self<>nil then begin
+    result := fHash.FindHashedForAdding(aObject,wasAdded);
+    if wasAdded then
+      fList[result] := aObject;
+  end else
     result := -1;
 end;
 
 function TObjectListHashed.IndexOf(aObject: TObject): integer;
 begin
   if (self<>nil) and (fCount>0) then
-    if fHashed then begin
-      if not fHashValid then begin
-        fHash.ReHash;
-        fHashValid := true;
-      end;
-      result := fHash.FindHashed(aObject);
-      exit;
-    end else
-    for result := 0 to fCount-1 do
-      if fList[result]=aObject then
-        exit;
-  result := -1;
+    result := fHash.FindHashed(aObject) else
+    result := -1;
 end;
 
 
@@ -51630,50 +51611,27 @@ begin
   result := fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(O,B);
 end;
 
-procedure TObjectListPropertyHashed.IntHashValid;
-begin
-  fHash.ReHash(IntHash);
-  fHashValid := true;
-end;
-
 function TObjectListPropertyHashed.Add(aObject: TObject; out wasAdded: boolean): integer;
 begin
   wasAdded := false;
-  if self<>nil then
-    if fHashed then begin
-      if not fHashValid then
-        IntHashValid;
-      result := fHash.FindHashedForAdding(aObject,wasAdded,
-        fHash.fHashElement(aObject,fHash.fHasher));
-      if wasAdded then
-        fList[result] := aObject;
-    end else begin
-      for result := 0 to fCount-1 do
-        if IntComp(fList[result],aObject)=0 then
-          exit;
-      wasAdded := true;
-      result := fHash.Add(aObject);
-      if fCount>=TOBJECTLISTHASHED_START_HASHING_COUNT then
-        fHashed := true;
-    end
-  else
+  if self<>nil then begin
+    result := fHash.FindHashedForAdding(aObject,wasAdded,
+      fHash.fHashElement(aObject,fHash.fHasher));
+    if wasAdded then
+      fList[result] := aObject;
+  end else
     result := -1;
 end;
 
 function TObjectListPropertyHashed.IndexOf(aObject: TObject): integer;
 begin
-  if fCount>0 then
-    if fHashed then begin
-      if not fHashValid then
-        IntHashValid;
-      result := fHash.HashFind(fHash.fHashElement(aObject,fHash.fHasher),PtrInt(aObject));
-      if result>=0 then
-        exit; // if found
-    end else
-    for result := 0 to fCount-1 do
-      if IntComp(fList[result],aObject)=0 then
-        exit;
-  result := -1;
+  if fCount>0 then begin
+    result := fHash.FindHashed(aObject,fHash.fHashElement(aObject,fHash.fHasher));
+    if result>=0 then
+      exit else // found
+      result := -1; // for consistency
+  end else
+    result := -1;
 end;
 
 
@@ -51711,19 +51669,10 @@ function TPointerClassHash.Find(aInfo: pointer): TPointerClassHashed;
 var i: integer;
 begin
   if self<>nil then begin
-    if not fHashed then begin // Count<TOBJECTLISTHASHED_START_HASHING_COUNT
-      for i := 0 to fCount-1 do begin
-        result := TPointerClassHashed(List[i]);
-        if result.Info=aInfo then
-          exit;
-      end;
+    i := IndexOf(aInfo);
+    if i>=0 then
+      result := TPointerClassHashed(List[i]) else
       result := nil;
-    end else begin
-      i := IndexOf(aInfo);
-      if i>=0 then
-        result := TPointerClassHashed(List[i]) else
-        result := nil;
-    end;
   end else
     result := nil;
 end;
@@ -57711,7 +57660,7 @@ end;
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   List := nil; // release dynamic arrays memory before Fillchar()
-  fDynArray.fHashs := nil;
+  fDynArray.HashInvalidate;
   FillcharFast(self,sizeof(self),0);
   fDynArray.InitSpecific(TypeInfo(TSynNameValueItemDynArray),List,
     djRawUTF8,@Count,not aCaseSensitive);
