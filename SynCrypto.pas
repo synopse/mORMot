@@ -1023,6 +1023,41 @@ procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   out result: TSHA256Digest; const saltdefault: RawByteString='');
 
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256); overload;
+
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString; out result: THash256); overload;
+
+/// compute the HMAC message authentication code using crc256c as hash function
+// - HMAC over a non cryptographic hash function like crc256c is known to be
+// safe as MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - performs two crc32c hashes, so SSE 4.2 gives more than 2.2 GB/s on a Core i7
+procedure HMAC_CRC256C(const key,msg: RawByteString; out result: THash256); overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+procedure HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer; out result: cardinal); overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+procedure HMAC_CRC32C(const key: THash256; const msg: RawByteString; out result: cardinal); overload;
+
+/// compute the HMAC message authentication code using crc32c as hash function
+// - HMAC over a non cryptographic hash function like crc32c is known to be a
+// safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
+// - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
+procedure HMAC_CRC32C(const key,msg: RawByteString; out result: cardinal); overload;
 
 /// direct Encrypt/Decrypt of data using the TAES class
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
@@ -1738,6 +1773,74 @@ end;
 procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString; out result: TSHA256Digest);
 begin
   HMAC_SHA256(@key,pointer(msg),SizeOf(key),length(msg),result);
+end;
+
+procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
+begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+  h^[0] := h1; inc(h1,h2);
+  h^[1] := h1; inc(h1,h2);
+  h^[2] := h1; inc(h1,h2);
+  h^[3] := h1; inc(h1,h2);
+  h^[4] := h1; inc(h1,h2);
+  h^[5] := h1; inc(h1,h2);
+  h^[6] := h1; inc(h1,h2);
+  h^[7] := h1;
+end;
+
+procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256);
+var i: integer;
+    h1,h2: cardinal;
+    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+begin
+  FillcharFast(k0,sizeof(k0),0);
+  if keylen>64 then
+    crc256c(key,keylen,PHash256(@k0)^) else
+    MoveFast(key^,k0,keylen);
+  for i := 0 to 15 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 15 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  h1 := crc32c(crc32c(0,@k0xorIpad,64),msg,msglen);
+  h2 := crc32c(crc32c(h1,@k0xorIpad,64),msg,msglen);
+  crc256cmix(h1,h2,@result);
+  h1 := crc32c(crc32c(0,@step7data,64),@result,sizeof(result));
+  h2 := crc32c(crc32c(h1,@step7data,64),@result,sizeof(result));
+  crc256cmix(h1,h2,@result);
+end;
+
+procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString; out result: THash256);
+begin
+  HMAC_CRC256C(@key,pointer(msg),SizeOf(key),length(msg),result);
+end;
+
+procedure HMAC_CRC256C(const key,msg: RawByteString; out result: THash256);
+begin
+  HMAC_CRC256C(Pointer(key),pointer(msg),length(key),length(msg),result);
+end;
+
+procedure HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer; out result: cardinal);
+var i: integer;
+    k0,k0xorIpad,step7data: array[0..15] of cardinal;
+begin
+  FillcharFast(k0,sizeof(k0),0);
+  if keylen>64 then
+    crc256c(key,keylen,PHash256(@k0)^) else
+    MoveFast(key^,k0,keylen);
+  for i := 0 to 15 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 15 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  result := crc32c(crc32c(crc32c(0,@k0xorIpad,64),msg,msglen),@step7data,64);
+end;
+
+procedure HMAC_CRC32C(const key: THash256; const msg: RawByteString; out result: cardinal);
+begin
+  HMAC_CRC32C(@key,pointer(msg),SizeOf(key),length(msg),result);
+end;
+
+procedure HMAC_CRC32C(const key,msg: RawByteString; out result: cardinal);
+begin
+  HMAC_CRC32C(Pointer(key),pointer(msg),length(key),length(msg),result);
 end;
 
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
