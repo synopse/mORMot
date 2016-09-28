@@ -518,12 +518,15 @@ type
     /// the settings currently used during the WebSockets process
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current state of the underlying connection
+    function State: TWebSocketProcessState;
     /// the associated communication socket
     // - on the server side, is a THttpServerSocket
     // - access to this instance is protected by Safe.Lock/Unlock
     property Socket: TCrtSocket read fSocket;
     /// how many frames are currently processed by this connection
     property ProcessCount: integer read fProcessCount;
+
   published
     /// the Sec-WebSocket-Protocol application protocol currently involved
     // - TWebSocketProtocolJSON or TWebSocketProtocolBinary in the mORMot context
@@ -705,7 +708,8 @@ type
   protected
     fProcess: TWebSocketProcessClient;
     fSettings: TWebSocketProcessSettings;
-    fRequestProcess: TOnHttpServerRequest;
+    fOnCallbackRequestProcess: TOnHttpServerRequest;
+    fOnWebSocketsClosed: TNotifyEvent;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -733,8 +737,13 @@ type
     // - defined as a pointer so that you may be able to change the values
     function Settings: PWebSocketProcessSettings; {$ifdef HASINLINE}inline;{$endif}
     /// this event handler will be executed for any incoming push notification
-    property CallbackRequestProcess: TOnHttpServerRequest
-      read fRequestProcess write fRequestProcess;
+    property OnCallbackRequestProcess: TOnHttpServerRequest
+      read fOnCallbackRequestProcess write fOnCallbackRequestProcess;
+    /// this event handler when the WebSocket link is destroyed
+    // - may happen e.g. after graceful close from the server side, or
+    // after DisconnectAfterInvalidHeartbeatCount is reached
+    property OnWebSocketsClosed: TNotifyEvent
+      read fOnWebSocketsClosed write fOnWebSocketsClosed;
   published
     /// the current WebSockets processing class
     // - equals nil for plain HTTP/1.1 mode
@@ -1739,6 +1748,13 @@ begin
   result := @fSettings;
 end;
 
+function TWebSocketProcess.State: TWebSocketProcessState;
+begin
+  if self=nil then
+    result := wpsCreate else
+    result := fState;
+end;
+
 function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
   aMode: TWebSocketProcessNotifyCallback): cardinal;
 var request,answer: TWebSocketFrame;
@@ -2316,7 +2332,7 @@ function TWebSocketProcessClient.ComputeContext(
   out RequestProcess: TOnHttpServerRequest): THttpServerRequest;
 begin
   result := THttpServerRequest.Create(nil,0,fOwnerThread);
-  RequestProcess := (fSocket as THttpClientWebSockets).fRequestProcess;
+  RequestProcess := (fSocket as THttpClientWebSockets).fOnCallbackRequestProcess;
 end;
 
 
@@ -2340,6 +2356,10 @@ begin
     fThreadState := sClosed else
     fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
+  if (fProcess.Socket<>nil) and fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
+    with THttpClientWebSockets(fProcess.Socket) do
+      if Assigned(OnWebSocketsClosed) then
+        OnWebSocketsClosed(self);
 end;
 
 

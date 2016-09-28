@@ -295,6 +295,7 @@ type
       Ajax: boolean;
     end;
     fOnWebSocketsUpgraded: TOnRestClientNotify;
+    fOnWebSocketsClosed: TNotifyEvent;
     function InternalCheckOpen: boolean; override;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
       const Method: TServiceMethod; const ParamInfo: TServiceMethodArgument;
@@ -328,7 +329,10 @@ type
     /// internal HTTP/1.1 and WebSockets compatible client
     // - you could use its properties after upgrading the connection to WebSockets
     function WebSockets: THttpClientWebSockets;
-    /// this event would be executed just after the HTTP client has been
+    /// returns true if the connection is a running WebSockets
+    // - may be false even if fSocket<>nil, e.g. when gracefully disconnected  
+    function WebSocketsConnected: boolean;
+    /// this event will be executed just after the HTTP client has been
     // upgraded to the expected WebSockets protocol
     // - supplied Sender parameter will be this TSQLHttpClientWebsockets instance
     // - it will be executed the first time, and also on each reconnection
@@ -337,6 +341,11 @@ type
     // e.g. SOA real-time callbacks registration (using Sender.Services)
     property OnWebSocketsUpgraded: TOnRestClientNotify
       read fOnWebSocketsUpgraded write fOnWebSocketsUpgraded;
+    /// this event handler will be executed when the WebSocket link is destroyed
+    // - may happen e.g. after graceful close from the server side, or
+    // after DisconnectAfterInvalidHeartbeatCount is reached
+    property OnWebSocketsClosed: TNotifyEvent
+      read fOnWebSocketsClosed write fOnWebSocketsClosed;
   end;
 
   /// HTTP/1.1 RESTful JSON mORMot Client abstract class using either WinINet,
@@ -617,9 +626,9 @@ end;
 
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
 begin
-  result := true;
-  if fSocket<>nil then
-    exit; // already connected
+  result := fSocket<>nil;
+  if result or (ioNoOpen in fInternalOpen) then
+    exit;
   fSafe.Enter;
   try
     if fSocket=nil then
@@ -646,9 +655,9 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP gzip compression
         fSocket.RegisterCompress(CompressGZip);
+      result := true;
     except
       FreeAndNil(fSocket);
-      result := false;
     end;
   finally
     fSafe.Leave;
@@ -682,8 +691,8 @@ end;
 
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
-  result := true;
-  if fSocket<>nil then
+  result := WebSocketsConnected;
+  if result or (ioNoOpen in fInternalOpen) then
     exit; // already connected
   fSafe.Enter;
   try
@@ -722,16 +731,14 @@ end;
 function TSQLHttpClientWebsockets.FakeCallbackUnregister(
   Factory: TInterfaceFactory; FakeCallbackID: integer;
   Instance: pointer): boolean;
-var ws: THttpClientWebSockets;
-    body,head,resp: RawUTF8;
+var body,head,resp: RawUTF8;
 begin
-  ws := WebSockets;
-  if ws=nil then
-    raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
-  if FakeCallbackID=0 then begin
-    result := true;
+  if (FakeCallbackID=0) or not WebSocketsConnected then begin
+    result := true; // nothing to notify
     exit;
   end;
+  if WebSockets=nil then
+    raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   head := 'Sec-WebSocket-REST: NonBlocking';
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTTP_SUCCESS;
@@ -754,6 +761,13 @@ begin
   result := params.OutStatus;
 end;
 
+function TSQLHttpClientWebsockets.WebSocketsConnected: boolean;
+begin
+  result := (self<>nil) and (fSocket<>nil) and
+    fSocket.InheritsFrom(THttpClientWebSockets) and
+    (THttpClientWebSockets(fSocket).WebSockets.State<=wpsRun);
+end;
+
 function TSQLHttpClientWebsockets.WebSockets: THttpClientWebSockets;
 begin
   if fSocket=nil then
@@ -762,8 +776,10 @@ begin
       exit;
     end;
   result := fSocket as THttpClientWebSockets;
-  if not Assigned(result.CallbackRequestProcess) then
-    result.CallbackRequestProcess := CallbackRequest;
+  if not Assigned(result.OnCallbackRequestProcess) then
+    result.OnCallbackRequestProcess := CallbackRequest;
+  if not Assigned(result.OnWebSocketsClosed) then
+    result.OnWebSocketsClosed := OnWebSocketsClosed;
 end;
 
 function TSQLHttpClientWebsockets.WebSocketsUpgrade(
@@ -846,9 +862,9 @@ end;
 
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
-  result := true;
-  if fRequest<>nil then
-    exit; // already connected
+  result := fRequest<>nil;
+  if result or (ioNoOpen in fInternalOpen) then
+    exit;
   fSafe.Enter;
   try
     if fRequest=nil then
@@ -869,9 +885,9 @@ begin
       if hcDeflate in Compression then
         // standard (slower) AJAX/HTTP zip/deflate compression
         fRequest.RegisterCompress(CompressGZip);
+      result := true;
     except
       FreeAndNil(fRequest);
-      result := false;
     end;
   finally
     fSafe.Leave;

@@ -18009,6 +18009,7 @@ type
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
+    fInternalOpen: set of (ioOpened, ioNoOpen);
     fRemoteLogThread: TObject; // private TRemoteLogThread
     fFakeCallbacks: TSQLRestClientCallbacks;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -35886,6 +35887,7 @@ var t,i: integer;
     aID: TID;
     Table: TSQLRecordClass;
 begin
+  include(fInternalOpen,ioNoOpen);
   {$ifdef MSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
   {$endif}
@@ -36080,13 +36082,15 @@ begin
   if Call=nil then
     exit;
   InternalURI(Call^);
-  if OnIdleBackgroundThreadActive then
-    if Call^.OutStatus=HTTP_NOTIMPLEMENTED then begin
+  if OnIdleBackgroundThreadActive and not(ioNoOpen in fInternalOpen) then
+    if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (ioOpened in fInternalOpen) then begin
       // InternalCheckOpen failed -> force recreate connection
       InternalClose;
+      Exclude(fInternalOpen,ioOpened);
       if OnIdleBackgroundThreadActive then
         InternalURI(Call^); // try request again
-    end;
+    end else
+      Include(fInternalOpen,ioOpened);
 end;
 
 function TSQLRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
@@ -36162,10 +36166,13 @@ DoRetry:
 {$endif}
     begin
       InternalURI(Call);
-      if Call.OutStatus=HTTP_NOTIMPLEMENTED then begin // InternalCheckOpen failed
-        InternalClose;     // force recreate connection
-        InternalURI(Call); // try request again
-      end;
+      if not(ioNoOpen in fInternalOpen) then
+        if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (ioOpened in fInternalOpen) then begin
+          InternalClose;     // force recreate connection
+          Exclude(fInternalOpen,ioOpened);
+          InternalURI(Call); // try request again
+        end else
+          Include(fInternalOpen,ioOpened);
     end;
     result.Lo := Call.OutStatus;
     result.Hi := Call.OutInternalState;
@@ -37570,7 +37577,14 @@ var current,previous: TRecordVersion;
     service: IServiceRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
+{$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
 begin
+  log := fLogClass.Enter('RecordVersionSynchronizeSlaveStart % over %',
+    [Table, MasterRemoteAccess],self);
+{$else}
+begin
+{$endif}
   callback := nil; // weird fix for FPC/ARM
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
@@ -37578,7 +37592,8 @@ begin
   tableIndex := Model.GetTableIndexExisting(Table);
   if (fRecordVersionSlaveCallbacks<>nil) and
      (fRecordVersionSlaveCallbacks[tableIndex]<>nil) then begin
-    InternalLog('%.RecordVersionSynchronizeSlaveStart(%): already running',[self,Table],sllWarning);
+    InternalLog('%.RecordVersionSynchronizeSlaveStart(%): already running',
+      [ClassType,Table],sllWarning);
     exit;
   end;
   tableName := Model.TableProps[tableIndex].Props.SQLTableName;
@@ -37594,19 +37609,22 @@ begin
       previous := current;
       current := RecordVersionSynchronizeSlave(Table,MasterRemoteAccess,10000,OnNotify);
       if current<0 then begin
-        InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',[self,Table],sllError);
+        InternalLog('%.RecordVersionSynchronizeSlaveStart(%): REST failure',
+          [ClassType,Table],sllError);
         exit;
       end;
     until current=previous;
     // subscribe for any further modification
     if callback=nil then
       callback := TServiceRecordVersionCallback.Create(self,MasterRemoteAccess,Table,OnNotify);
+    InternalLog('%.RecordVersionSynchronizeSlaveStart(%) current=% Subscribe(%)',
+      [ClassType,Table,current,pointer(callback)],sllDebug);
     if service.Subscribe(tableName,current,callback) then begin // push notifications
       if fRecordVersionSlaveCallbacks=nil then
         SetLength(fRecordVersionSlaveCallbacks,Model.TablesMax+1);
       fRecordVersionSlaveCallbacks[tableIndex] := callback;
       InternalLog('%.RecordVersionSynchronizeSlaveStart(%): started from revision %',
-        [self,Table,current],sllDebug);
+        [ClassType,Table,current],sllDebug);
       result := true;
       exit;
     end;
@@ -52930,8 +52948,8 @@ begin
   result := false;
   if (self=nil) or (fBackgroundBatch<>nil) or (SendSeconds<=0) then
     exit;
-  fRest.InternalLog('AsynchBatchStart(%,%,%) on [%]',
-    [Table,SendSeconds,PendingRowThreshold,fName],sllDebug);
+  fRest.InternalLog('AsynchBatchStart(%,%,%) on [%] using %',
+    [Table,SendSeconds,PendingRowThreshold,fName,self],sllDebug);
   Enable(AsynchBatchExecute,SendSeconds);
   fBackgroundBatch := TSQLRestBatchLocked.Create(
     fRest,Table,AutomaticTransactionPerRow,Options);
@@ -53061,8 +53079,8 @@ begin
       [self,GUIDToShort(aGUID)]);
   if aDestinationInterface=nil then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
-  fRest.InternalLog('AsynchRedirect % to %',[factory.InterfaceName,
-    ObjectFromInterface(aDestinationInterface)]);
+  fRest.InternalLog('AsynchRedirect % to % using %',[factory.InterfaceName,
+    ObjectFromInterface(aDestinationInterface),self]);
   Enable(AsynchBackgroundExecute,3600);
   TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface);
 end;
@@ -54797,7 +54815,7 @@ class function TServiceContainerServer.CallbackReleasedOnClientSide(
   begin
     d := ord(dest[0]);
     s := ord(source[0]);
-    if d+s<255 then begin
+    if d+s<254 then begin
       dest[d+1] := ' ';
       MoveFast(source[1],dest[d+2],s);
       inc(dest[0],s+1);
