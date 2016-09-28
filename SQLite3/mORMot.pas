@@ -10460,7 +10460,7 @@ type
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
     // fields would contain the execution data context when Hook is called
     procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
-    /// execute the corresponding method of weak IInvokable instances
+    /// execute the corresponding method of weak IInvokable references
     // - will retrieve a JSON array of parameters from Par
     // - will append a JSON array of results in Res, or set an Error message, or
     // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
@@ -12982,6 +12982,105 @@ type
     destructor Destroy; override;
   end;
 
+  /// TThread able to run one or several tasks at a periodic pace, or do
+  // asynchronous interface or batch execution, with proper TSQLRest integration
+  // - used e.g. by TSQLRest.TimerEnable/AsynchRedirect/AsynchBatchStart methods
+  // - TSQLRest.BackgroundTimer will define one instance, but you may create
+  // other dedicated instances to instantiate separated threads
+  TSQLRestBackgroundTimer = class(TSynBackgroundTimer)
+  protected
+    fRest: TSQLRest;
+    fName: RawUTF8;
+    fBackgroundBatch: TSQLRestBatchLocked;
+    // used by AsynchRedirect() and AsynchBatch()
+    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+  public
+    /// initialize the thread for a periodic task processing
+    constructor Create(aRest: TSQLRest; const aThreadName: RawUTF8='';
+      aStats: TSynMonitorClass=nil); reintroduce; virtual;
+    /// finalize the thread
+    destructor Destroy; override;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
+    /// define asynchronous execution of interface methods in a background thread
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of another interface, but as a FIFO
+    // in a background thread, shared with TimerEnable/TimerDisable process
+    // - parameters will be serialized and stored as JSON in the queue
+    // - by design, only procedure methods without any output parameters are
+    // allowed, since their execution will take place asynchronously
+    // - of course, a slight delay is introduced in aDestinationInterface
+    // methods execution, but the main process thread is not delayed any more,
+    // and is free from potential race conditions
+    // - the returned fake aCallbackInterface should be freed before TSQLRest
+    // is destroyed, to release the redirection resources
+    // - it is an elegant resolution to the most difficult implementation
+    // problem of SOA callbacks, which is to avoid race condition on reentrance,
+    // e.g. if a callback is run from a thread, and then the callback code try
+    // to execute something in the context of the initial thread, protected
+    // by a critical section (mutex)
+    procedure AsynchRedirect(const aGUID: TGUID;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface); overload;
+    /// prepare an asynchronous ORM BATCH process, executed in a background thread
+    // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
+    // background thread, following the given processing period (in seconds),
+    // or the TSQLRestBatch.Count threshold to call BatchSend
+    // - actual REST/CRUD commands will take place via AsynchBatchAdd,
+    // AsynchBatchUpdate and AsynchBatchDelete methods
+    // - only a single AsynchBatch() call is allowed at a time, unless
+    // AsynchBatchStop method is used to flush the current asynchronous BATCH
+    // - using a BATCH in a dedicated thread will allow very fast bacgkround
+    // asynchronous process of ORM methods, sufficient for most use cases
+    function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
+      PendingRowThreshold: integer=500; AutomaticTransactionPerRow: integer=1000;
+      Options: TSQLRestBatchOptions=[boExtendedJSON]): boolean;
+    /// finalize asynchronous ORM BATCH process, executed in a background thread
+    // - should have been preceded by a call to AsynchBatch(), or returns false
+    function AsynchBatchStop: boolean;
+    /// create a new ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Add() sent in the Timer thread,
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
+      ForceID: boolean=false; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): integer;
+    /// update an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Update() sent in the Timer thread
+    // - this method is thread-safe
+    function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
+      DoNotAutoComputeFields: boolean=false): integer;
+    /// delete an ORM member in a BATCH to be written in a background thread
+    // - should have been preceded by a call to AsynchBatchStart(), or returns -1
+    // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
+    // - this method is thread-safe
+    function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+  published
+    /// the identifier of the thread, as logged
+    property Name: RawUTF8 read fName;
+  end;
+
   /// a generic REpresentational State Transfer (REST) client/server class
   TSQLRest = class
   protected
@@ -12996,8 +13095,7 @@ type
     fPrivateGarbageCollector: TObjectList;
     fRoutingClass: TSQLRestServerURIContextClass;
     fFrequencyTimeStamp: Int64;
-    fBackgroundTimer: TSynBackgroundTimer;
-    fBackgroundBatch: TSQLRestBatchLocked;
+    fBackgroundTimer: TSQLRestBackgroundTimer;
     fAcquireExecution: array[TSQLRestServerURIContextCommand] of TSQLRestAcquireExecution;
     {$ifdef WITHLOG}
     fLogClass: TSynLogClass;   // =SQLite3Log by default
@@ -13005,6 +13103,7 @@ type
     procedure SetLogClass(aClass: TSynLogClass); virtual;
     function GetLogClass: TSynLogClass;
     {$endif}
+    function EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
     /// log the corresponding text (if logging is enabled)
     procedure InternalLog(const Text: RawUTF8; Level: TSynLogInfo); overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -13074,11 +13173,6 @@ type
     /// used by all overloaded Add() methods
     function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
       ForceID, DoNotAutoComputeFields: boolean): TID; virtual;
-    // used by AsynchRedirect() and AsynchBatch()
-    procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
-    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
-      Event: TWaitResult; const Msg: RawUTF8);
    protected // these abstract methods must be overriden by real database engine
     /// retrieve a list of members as JSON encoded data
     // - implements REST GET collection
@@ -14117,7 +14211,8 @@ type
     // - you can run BackgroundTimer.EnQueue or ExecuteNow methods to implement
     // a FIFO queue, or force immediate execution of the process
     // - will call BeginCurrentThread/EndCurrentThread as expected e.g. by logs
-    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess; aOnProcessSecs: cardinal): TSynBackgroundTimer;
+    function TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
+      aOnProcessSecs: cardinal): TSynBackgroundTimer;
     /// undefine a task running on a periodic number of seconds
     // - should have been registered by a previous call to TimerEnable() method
     // - returns true on success, false if the supplied task was not registered
@@ -14126,38 +14221,24 @@ type
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
     // in a background thread, shared with TimerEnable/TimerDisable process
-    // - parameters will be serialized and stored as JSON in the queue
-    // - by design, only procedure methods without any output parameters are
-    // allowed, since their execution will take place asynchronously
-    // - of course, a slight delay is introduced in aDestinationInterface
-    // methods execution, but the main process thread is not delayed any more,
-    // and is free from potential race conditions
-    // - the returned fake aCallbackInterface should be freed before TSQLRest
-    // is destroyed, to release the redirection resources
     // - it is an elegant resolution to the most difficult implementation
     // problem of SOA callbacks, which is to avoid race condition on reentrance,
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
     procedure AsynchRedirect(const aGUID: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
     // in a background thread, shared with TimerEnable/TimerDisable process
-    // - parameters will be serialized and stored as JSON in the queue
-    // - by design, only procedure methods without any output parameters are
-    // allowed, since their execution will take place asynchronously
-    // - of course, a slight delay is introduced in aDestinationInterface
-    // methods execution, but the main process thread is not delayed any more,
-    // and is free from potential race conditions
-    // - the returned fake aCallbackInterface should be freed before TSQLRest
-    // is destroyed, to release the redirection resources
     // - it is an elegant resolution to the most difficult implementation
     // problem of SOA callbacks, which is to avoid race condition on reentrance,
     // e.g. if a callback is run from a thread, and then the callback code try
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
+    // - is a wrapper around BackgroundTimer.AsynchRedirect()
     procedure AsynchRedirect(const aGUID: TGUID;
       const aDestinationInstance: TInterfacedObject; out aCallbackInterface); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
@@ -14170,15 +14251,17 @@ type
     // AsynchBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast bacgkround
     // asynchronous process of ORM methods, sufficient for most use cases
+    // - is a wrapper around BackgroundTimer.AsynchBatchStart()
     function AsynchBatchStart(Table: TSQLRecordClass; SendSeconds: integer;
       PendingRowThreshold: integer=500; AutomaticTransactionPerRow: integer=1000;
       Options: TSQLRestBatchOptions=[boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - is a wrapper around BackgroundTimer.AsynchBatchStop()
     function AsynchBatchStop: boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around the TSQLRestBatch.Add() sent in the Timer thread,
+    // - is a wrapper around BackgroundTimer.AsynchBatchAdd(),
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
     function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
@@ -14186,7 +14269,7 @@ type
       DoNotAutoComputeFields: boolean=false): integer;
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around the TSQLRestBatch.Update() sent in the Timer thread
+    // - is a wrapper around BackgroundTimer.AsynchBatchUpdate()
     // - this method is thread-safe
     function AsynchBatchUpdate(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
       DoNotAutoComputeFields: boolean=false): integer;
@@ -14280,9 +14363,11 @@ type
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
       read fRoutingClass write SetRoutingClass;
-    /// low-level access to the background timer thread used by TimerEnable
-    // - contains nil if TimerEnable was never executed
-    property BackgroundTimer: TSynBackgroundTimer read fBackgroundTimer;
+    /// low-level background timer thread associated with this TSQLRest
+    // - contains nil if TimerEnable/AsynchInvoke was never executed
+    // - you may instantiate your own TSQLRestBackgroundTimer instances, if
+    // more than one working thread is needed
+    property BackgroundTimer: TSQLRestBackgroundTimer read fBackgroundTimer;
     /// the Database Model associated with this REST Client or Server
     property Model: TSQLModel read fModel;
   published
@@ -19351,10 +19436,10 @@ function SQLGetOrder(const SQL: RawUTF8): RawUTF8;
 function PropsCreate(aTable: TSQLRecordClass): TSQLRecordProperties;
 {$endif}{$endif}
 
-/// low-level function to retrieve the class instance implementing a given
-// interface
+/// low-level function to retrieve the class instance implementing a given interface
 // - this will work with interfaces stubs generated by the compiler, but also
 // with TInterfaceFactory.CreateFakeInstance kind of classes
+// - returns nil if aValue is nil or not recognized
 function ObjectFromInterface(const aValue: IInterface): TObject;
 
 /// low-level function to check if a class instance, retrieved from its
@@ -33149,6 +33234,15 @@ begin
       BeginCurrentThread,EndCurrentThread,aStats);
 end;
 
+function TSQLRest.EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
+begin
+  if fBackgroundTimer=nil then begin
+    fBackgroundTimer := TSQLRestBackgroundTimer.Create(self);
+    PrivateGarbageCollector.Add(fBackgroundTimer);
+  end;
+  result := fBackgroundTimer;
+end;
+
 function TSQLRest.TimerEnable(aOnProcess: TOnSynBackgroundTimerProcess;
   aOnProcessSecs: cardinal): TSynBackgroundTimer;
 begin
@@ -33159,13 +33253,8 @@ begin
     TimerDisable(aOnProcess);
     exit;
   end;
-  if fBackgroundTimer=nil then begin
-    fBackgroundTimer := TSynBackgroundTimer.Create(FormatUTF8('% % Timer',
-      [self,Model.Root]),BeginCurrentThread,EndCurrentThread);
-    PrivateGarbageCollector.Add(fBackgroundTimer);
-  end;
-  fBackgroundTimer.Enable(aOnProcess,aOnProcessSecs);
-  result := fBackgroundTimer;
+  result := EnsureBackgroundTimerExists;
+  result.Enable(aOnProcess,aOnProcessSecs);
 end;
 
 function TSQLRest.TimerDisable(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
@@ -33175,133 +33264,62 @@ begin
     result := fBackgroundTimer.Disable(aOnProcess);
 end;
 
-procedure TSQLRest.AsynchBatchExecute(Sender: TSynBackgroundTimer;
-  Event: TWaitResult; const Msg: RawUTF8);
-var data: RawUTF8;
-    table: TSQLRecordClass;
-    count, status: integer;
-    res: TIDDynArray;
-    {$ifdef WITHLOG}
-    log: ISynLog; // for Enter auto-leave to work with FPC
-    {$endif}
-begin
-  if fBackgroundBatch<>nil then
-  try
-    fBackgroundBatch.Safe.Lock;
-    try
-      table := fBackgroundBatch.Table;
-      count := fBackgroundBatch.Count;
-      if count>0 then
-      try
-        {$ifdef WITHLOG}
-        log := LogClass.Enter('AsynchBatchExecute % % count=%',[fModel.Root,table,count],self);
-        {$endif}
-        fBackgroundBatch.PrepareForSending(data);
-      finally
-        fBackgroundBatch.Reset;
-      end;
-    finally
-      fBackgroundBatch.Safe.UnLock;
-    end;
-    // inlined TSQLRest.BatchSend for lower contention
-    if data<>'' then begin
-      status := EngineBatchSend(table,data,res,count); // may take a while
-      InternalLog('AsynchBatchExecute EngineBatchSend=%',[status]);
-    end;
-  finally
-    if Msg='free' then begin
-      InternalLog('AsynchBatchExecute % "free"',[fModel.Root]);
-      FreeAndNil(fBackgroundBatch);
-    end;
-  end;
-end;
-
 function TSQLRest.AsynchBatchStart(Table: TSQLRecordClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TSQLRestBatchOptions): boolean;
 begin
-  result := false;
-  if (self=nil) or (fBackgroundBatch<>nil) then
-    exit;
-  InternalLog('AsynchBatchStart(%,%,%)',[Table,SendSeconds,PendingRowThreshold],sllDebug);
-  TimerEnable(AsynchBatchExecute,SendSeconds);
-  fBackgroundBatch := TSQLRestBatchLocked.Create(self,Table,
-    AutomaticTransactionPerRow,Options);
-  fBackgroundBatch.Threshold := PendingRowThreshold;
-  result := true;
+  if self=nil then
+    result := false else
+    result := EnsureBackgroundTimerExists.AsynchBatchStart(
+      Table,SendSeconds,PendingRowThreshold,AutomaticTransactionPerRow,Options);
 end;
 
 function TSQLRest.AsynchBatchStop: boolean;
-var timeout: Int64;
-    {$ifdef WITHLOG}
-    log: ISynLog; // for Enter auto-leave to work with FPC
-    {$endif}
 begin
-  result := false;
-  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundBatch=nil) then
-    exit;
-  {$ifdef WITHLOG}
-  log := LogClass.Enter('AsynchBatchStop(%)',[fBackgroundBatch.Table],self);
-  {$endif}
-  if not fBackgroundTimer.EnQueue(AsynchBatchExecute,'free',true) then
-    exit;
-  timeout := GetTickCount64+5000;
-  repeat
-    sleep(1); // wait for all pending rows to be sent
-  until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
-  result := TimerDisable(AsynchBatchExecute);
+  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
+    result := false else
+    result := fBackgroundTimer.AsynchBatchStop;
 end;
 
-function TSQLRest.AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
-  ForceID: boolean=false; const CustomFields: TSQLFieldBits=[];
-  DoNotAutoComputeFields: boolean=false): integer;
+function TSQLRest.AsynchBatchAdd(Value: TSQLRecord; SendData,ForceID: boolean;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := -1;
-  if (self=nil) or (fBackgroundBatch=nil) then
-    exit;
-  InternalLog('AsynchBatchAdd %',[Value],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Add(
+  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
+    result := -1 else
+    result := fBackgroundTimer.AsynchBatchAdd(
       Value,SendData,ForceID,CustomFields,DoNotAutoComputeFields);
-    if result>=fBackgroundBatch.Threshold then
-      fBackgroundTimer.ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
 end;
 
 function TSQLRest.AsynchBatchUpdate(Value: TSQLRecord;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
-  result := -1;
-  if (self=nil) or (fBackgroundBatch=nil) then
-    exit;
-  InternalLog('AsynchBatchUpdate %',[Value],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Update(Value,CustomFields,DoNotAutoComputeFields);
-    if result>=fBackgroundBatch.Threshold then
-      fBackgroundTimer.ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
+  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
+    result := -1 else
+    result := fBackgroundTimer.AsynchBatchUpdate(
+      Value,CustomFields,DoNotAutoComputeFields);
 end;
 
 function TSQLRest.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
 begin
-  result := -1;
-  if (self=nil) or (fBackgroundBatch=nil) then
-    exit;
-  InternalLog('AsynchBatchDelete % %',[Table,ID],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Delete(Table,ID);
-    if result>=fBackgroundBatch.Threshold then
-      fBackgroundTimer.ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
+  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
+    result := -1 else
+    result := fBackgroundTimer.AsynchBatchDelete(Table,ID);
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInterface: IInvokable; out aCallbackInterface);
+begin
+  if self<>nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID,aDestinationInterface,aCallbackInterface);
+end;
+
+procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface);
+begin
+  if self<>nil then
+    EnsureBackgroundTimerExists.AsynchRedirect(
+      aGUID,aDestinationInstance,aCallbackInterface);
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
@@ -35447,7 +35465,7 @@ type
   TSQLRestClientURIServiceNotification = class(TServiceMethodExecute)
   protected
     fOwner: TSQLRestClientURI;
-    fInstance: pointer; // weak IInvokable variable
+    fInstance: pointer; // weak IInvokable reference
     fPar: RawUTF8;
   end;
 
@@ -37553,8 +37571,7 @@ var current,previous: TRecordVersion;
     callback: IServiceRecordVersionCallback;
     retry: integer;
 begin
-  //alfchange
-  callback:=nil;
+  callback := nil; // weird fix for FPC/ARM
   result := false;
   if (self=nil) or (MasterRemoteAccess=nil) then
     exit;
@@ -52844,27 +52861,175 @@ begin
 end;
 
 
-{ TInterfaceAsynch to implement TSQLRest.AsynchRedirect }
+{ TSQLRestBackgroundTimer }
+
+constructor TSQLRestBackgroundTimer.Create(aRest: TSQLRest;
+  const aThreadName: RawUTF8; aStats: TSynMonitorClass);
+begin
+  if aRest=nil then
+    raise EORMException.CreateUTF8('%.Create(nil,"%")',[self,aThreadName]);
+  fRest := aRest;
+  if aThreadName<>'' then
+    fName := aThreadName else
+    FormatUTF8('% % Timer',[self,fRest.Model.Root],fName);
+  inherited Create(fName,fRest.BeginCurrentThread,fRest.EndCurrentThread,aStats);
+end;
+
+destructor TSQLRestBackgroundTimer.Destroy;
+begin
+  inherited Destroy;
+  fBackgroundBatch.Free;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+var data: RawUTF8;
+    table: TSQLRecordClass;
+    count, status: integer;
+    res: TIDDynArray;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
+begin
+  if fBackgroundBatch<>nil then
+  try
+    fBackgroundBatch.Safe.Lock;
+    try
+      table := fBackgroundBatch.Table;
+      count := fBackgroundBatch.Count;
+      if count>0 then
+      try
+        {$ifdef WITHLOG}
+        log := fRest.LogClass.Enter('AsynchBatchExecute [%] % count=%',
+          [fName,table,count],self);
+        {$endif}
+        fBackgroundBatch.PrepareForSending(data);
+      finally
+        fBackgroundBatch.Reset;
+      end;
+    finally
+      fBackgroundBatch.Safe.UnLock;
+    end;
+    // inlined TSQLRest.BatchSend for lower contention
+    if data<>'' then begin
+      status := fRest.EngineBatchSend(table,data,res,count); // may take a while
+      fRest.InternalLog('AsynchBatchExecute [%] EngineBatchSend=%',[fName,status]);
+    end;
+  finally
+    if Msg='free' then begin
+      fRest.InternalLog('AsynchBatchExecute [%] "free"',[fName]);
+      FreeAndNil(fBackgroundBatch);
+    end;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchStart(Table: TSQLRecordClass;
+  SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
+  Options: TSQLRestBatchOptions): boolean;
+begin
+  result := false;
+  if (self=nil) or (fBackgroundBatch<>nil) or (SendSeconds<=0) then
+    exit;
+  fRest.InternalLog('AsynchBatchStart(%,%,%) on [%]',
+    [Table,SendSeconds,PendingRowThreshold,fName],sllDebug);
+  Enable(AsynchBatchExecute,SendSeconds);
+  fBackgroundBatch := TSQLRestBatchLocked.Create(
+    fRest,Table,AutomaticTransactionPerRow,Options);
+  fBackgroundBatch.Threshold := PendingRowThreshold;
+  result := true;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchStop: boolean;
+var timeout: Int64;
+    {$ifdef WITHLOG}
+    log: ISynLog; // for Enter auto-leave to work with FPC
+    {$endif}
+begin
+  result := false;
+  if (self=nil) or (fBackgroundBatch=nil) then
+    exit;
+  {$ifdef WITHLOG}
+  log := fRest.LogClass.Enter('AsynchBatchStop(%) on [%]',[fBackgroundBatch.Table,fName],self);
+  {$endif}
+  if not EnQueue(AsynchBatchExecute,'free',true) then
+    exit;
+  timeout := GetTickCount64+5000;
+  repeat
+    sleep(1); // wait for all pending rows to be sent
+  until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
+  result := Disable(AsynchBatchExecute);
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchAdd(Value: TSQLRecord; SendData,ForceID: boolean;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+begin
+  result := -1;
+  if (self=nil) or (fBackgroundBatch=nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchAdd %',[Value],sllDebug);
+  fBackgroundBatch.Safe.Lock;
+  try
+    result := fBackgroundBatch.Add(
+      Value,SendData,ForceID,CustomFields,DoNotAutoComputeFields);
+    if result>=fBackgroundBatch.Threshold then
+      ExecuteNow(AsynchBatchExecute);
+  finally
+    fBackgroundBatch.Safe.UnLock;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchUpdate(Value: TSQLRecord;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+begin
+  result := -1;
+  if (self=nil) or (fBackgroundBatch=nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchUpdate %',[Value],sllDebug);
+  fBackgroundBatch.Safe.Lock;
+  try
+    result := fBackgroundBatch.Update(Value,CustomFields,DoNotAutoComputeFields);
+    if result>=fBackgroundBatch.Threshold then
+      ExecuteNow(AsynchBatchExecute);
+  finally
+    fBackgroundBatch.Safe.UnLock;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+begin
+  result := -1;
+  if (self=nil) or (fBackgroundBatch=nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchDelete % %',[Table,ID],sllDebug);
+  fBackgroundBatch.Safe.Lock;
+  try
+    result := fBackgroundBatch.Delete(Table,ID);
+    if result>=fBackgroundBatch.Threshold then
+      ExecuteNow(AsynchBatchExecute);
+  finally
+    fBackgroundBatch.Safe.UnLock;
+  end;
+end;
 
 type
   TInterfacedObjectAsynch = class(TInterfacedObjectFake)
   protected
-    fRest: TSQLRest;
+    fTimer: TSQLRestBackgroundTimer;
     fDest: IInvokable;
     function FakeInvoke(const aMethod: TServiceMethod;
       const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
       aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
   public
-    constructor Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+    constructor Create(aTimer: TSQLRestBackgroundTimer; aFactory: TInterfaceFactory;
       const aDestinationInterface: IInvokable; out aCallbackInterface);
   end;
   TInterfacedObjectAsynchCall = packed record
     Method: PServiceMethod;
-    Instance: pointer; // weak IInvokable variable
+    Instance: pointer; // weak IInvokable reference
     Params: RawUTF8;
   end;
 
-procedure TSQLRest.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
+procedure TSQLRestBackgroundTimer.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
 var exec: TServiceMethodExecute;
     call: TInterfacedObjectAsynchCall;
@@ -52872,12 +53037,10 @@ var exec: TServiceMethodExecute;
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
 begin
-  if Msg='' then
-    exit; // ignore periodic execution
   if RecordLoad(call,pointer(Msg),TypeInfo(TInterfacedObjectAsynchCall))=nil then
-    exit; // invalid message
+    exit; // invalid message (e.g. periodic execution)
   {$ifdef WITHLOG}
-  log := LogClass.Enter('AsynchBackgroundExecute % %',
+  log := fRest.LogClass.Enter('AsynchBackgroundExecute % %',
     [call.Method^.InterfaceDotMethodName,call.Params],self);
   {$endif}
   exec := TServiceMethodExecute.Create(call.Method);
@@ -52888,7 +53051,7 @@ begin
   end;
 end;
 
-procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
   const aDestinationInterface: IInvokable; out aCallbackInterface);
 var factory: TInterfaceFactory;
 begin
@@ -52898,28 +53061,29 @@ begin
       [self,GUIDToShort(aGUID)]);
   if aDestinationInterface=nil then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
-  InternalLog('AsynchRedirect % to %',[factory.InterfaceName,
-    ObjectFromInterface(aDestinationInterface).ClassType]);
-  TimerEnable(AsynchBackgroundExecute,3600);
+  fRest.InternalLog('AsynchRedirect % to %',[factory.InterfaceName,
+    ObjectFromInterface(aDestinationInterface)]);
+  Enable(AsynchBackgroundExecute,3600);
   TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface);
 end;
 
-procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
+procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
   const aDestinationInstance: TInterfacedObject; out aCallbackInterface);
 var dest: IInvokable;
 begin
   if aDestinationInstance=nil then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
   if not aDestinationInstance.GetInterface(aGUID,dest) then
-    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect: % is not a %',
-      [self,aDestinationInstance.ClassType,GUIDToShort(aGUID)]);
+    raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
+      [self,fName,aDestinationInstance.ClassType,GUIDToShort(aGUID)]);
   AsynchRedirect(aGUID,dest,aCallbackInterface);
 end;
 
-constructor TInterfacedObjectAsynch.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
-  const aDestinationInterface: IInvokable; out aCallbackInterface);
+constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
+  aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
+  out aCallbackInterface);
 begin
-  fRest := aRest;
+  fTimer := aTimer;
   fDest := aDestinationInterface;
   inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
   pointer(aCallbackInterface) := @fVTable;
@@ -52932,19 +53096,19 @@ function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TServiceMethod;
 var msg: RawUTF8;
     call: TInterfacedObjectAsynchCall;
 begin
-  fRest.InternalLog('FakeInvoke % %',[aMethod.InterfaceDotMethodName,aParams]);
+  fTimer.fRest.InternalLog('FakeInvoke % %',[aMethod.InterfaceDotMethodName,aParams]);
   result := false;
   if aMethod.ArgsOutputValuesCount>0 then begin
     if aErrorMsg<>nil then
-      FormatUTF8('%.FakeInvoke: % has out parameters',
-        [self,aMethod.InterfaceDotMethodName], aErrorMsg^);
+      FormatUTF8('%.FakeInvoke [%]: % has out parameters',
+        [self,fTimer.fName,aMethod.InterfaceDotMethodName], aErrorMsg^);
     exit;
   end;
   call.Method := @aMethod;
   call.Instance := pointer(fDest);
   call.Params := '['+aParams+']';
   msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
-  result := fRest.BackgroundTimer.EnQueue(fRest.AsynchBackgroundExecute,msg,true);
+  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute,msg,true);
 end;
 
 
@@ -55425,7 +55589,7 @@ procedure TServiceFactoryServer.ExecuteMethod(Ctxt: TSQLRestServerURIContext);
 var Inst: TServiceFactoryServerInstance;
     WR: TJSONSerializer;
     entry: PInterfaceEntry;
-    instancePtr: pointer; // weak IInvokable variable
+    instancePtr: pointer; // weak IInvokable reference
     dolock: boolean;
     exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
@@ -57174,18 +57338,17 @@ begin
   end;
 end;
 
-function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
-  Res: TTextWriter; ResAsJSONObject: boolean): boolean;
+function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
+  Par: PUTF8Char; Res: TTextWriter; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
     wasString, valid: boolean;
     Val: PUTF8Char;
     Name: PUTF8Char;
     NameLen: integer;
     EndOfObject: AnsiChar;
-    ParObjValues: TPUTF8CharDynArray;
+    ParObjValuesUsed: boolean;
+    ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
 begin
-  //alfchange
-  ParObjValues:=nil;
   result := false;
   if high(Instances)<0 then
     exit;
@@ -57193,6 +57356,7 @@ begin
   with fMethod^ do
   try
     // validate input parameters
+    ParObjValuesUsed := false;
     if (ArgsInputValuesCount<>0) and (Par<>nil) then begin
       if Par^ in [#1..' '] then repeat inc(Par) until not(Par^ in [#1..' ']);
       case Par^ of
@@ -57200,7 +57364,8 @@ begin
         inc(Par);
       '{': begin // retrieve parameters values from JSON object
         inc(Par);
-        SetLength(ParObjValues,ArgsInLast+1); // nil will set default value
+        ParObjValuesUsed := true;
+        FillCharFast(ParObjValues,(ArgsInLast+1)*sizeof(pointer),0); // := nil
         a1 := ArgsInFirst;
         repeat
           Name := GetJSONPropName(Par);
@@ -57225,18 +57390,18 @@ begin
       end;
     end;
     // decode input parameters (if any) in f*[]
-    if (Par=nil) and (ParObjValues=nil) then begin
+    if (Par=nil) and not ParObjValuesUsed then begin
       if (ArgsInputValuesCount>0) and (optErrorOnMissingParam in Options) then
         exit; // paranoid setting
     end else
       for a := ArgsInFirst to ArgsInLast do
       with Args[a] do
       if ValueDirection<>smdOut then begin
-        if ParObjValues<>nil then
+        if ParObjValuesUsed then
           if ParObjValues[a]=nil then // missing parameter in input JSON
             if optErrorOnMissingParam in Options then
-              exit else     // paranoid setting
-              continue else // ignore and use void value by default
+              exit else     
+              continue else // ignore and leave void value by default
             Par := ParObjValues[a]; // value is to be retrieved from JSON object
         case ValueType of
         smvObject: begin
@@ -57324,7 +57489,6 @@ begin
     end;
     Result := true;
   finally
-    Finalize(ParObjValues);
     AfterExecute;
   end;
 end;

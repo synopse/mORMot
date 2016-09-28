@@ -16158,7 +16158,8 @@ type
   TSynBackgroundTimerTaskDynArray = array of TSynBackgroundTimerTask;
 
   /// TThread able to run one or several tasks at a periodic pace
-  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods
+  // - as used e.g. by TSQLRest.TimerEnable/TimerDisable methods, via the
+  // inherited TSQLRestBackgroundTimer
   // - each process can have its own FIFO of text messages
   TSynBackgroundTimer = class(TSynBackgroundThreadProcess)
   protected
@@ -16172,7 +16173,8 @@ type
   public
     /// initialize the thread for a periodic task processing
     // - you could define some callbacks to nest the thread execution, e.g.
-    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
+    // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread, as
+    // made by TSQLRestBackgroundTimer.Create
     constructor Create(const aThreadName: RawUTF8;
       aOnBeforeExecute: TNotifyThreadEvent=nil; aOnAfterExecute: TNotifyThreadEvent=nil;
       aStats: TSynMonitorClass=nil); reintroduce; virtual;
@@ -20409,7 +20411,7 @@ asm
         jz      @n
         cmp     dl, [eax]
         movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
-        jnz     @n
+        jne     @n
         add     eax, ecx
         ret
 @n:     xor     eax, eax
