@@ -58729,6 +58729,9 @@ begin
   fTaskLock.Done;
 end;
 
+const
+  TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
+  
 procedure TSynBackgroundTimer.EverySecond(
   Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
 var tix: Int64;
@@ -58748,8 +58751,8 @@ begin
         SetLength(todo,n+1);
         todo[n] := t^;
         inc(n);
-        t^.FIFO := nil;
-        t^.NextTix := tix+(t^.Secs*1000);
+        t^.FIFO := nil; // now owned by todo[n].FIFO
+        t^.NextTix := tix+((t^.Secs*1000)-TIXPRECISION);
       end;
     end;
   finally
@@ -58792,7 +58795,7 @@ begin
   end;
   task.OnProcess := aOnProcess;
   task.Secs := aOnProcessSecs;
-  task.NextTix := GetTickCount64+aOnProcessSecs*1000;
+  task.NextTix := GetTickCount64+(aOnProcessSecs*1000-TIXPRECISION);
   fTaskLock.Lock;
   try
     found := Find(TMethod(aOnProcess));
