@@ -16235,7 +16235,8 @@ type
 
   /// event handler which may be executed by TCPUUsage.BackgroundExecute
   // - called just after the measurement of each process CPU usage
-  // - run from the background thread, so should not directly make VCL calls
+  // - run from the background thread, so should not directly make VCL calls,
+  // unless BackgroundExecute is run from a VCL timer
   TOnCPUUsageMeasured = procedure(ProcessHandle: integer; const Data: TCPUUsageData) of object;
 
   /// monitor CPU usage of one or several processes
@@ -16249,11 +16250,11 @@ type
       PrevKernel: Int64;
       PrevUser: Int64;
       Data: TCPUUsageDataDynArray;
-      DataIndex: integer;
     end;
+    fDataIndex: integer;
     fSysPrevKernel: Int64;
     fSysPrevUser: Int64;
-    fSafe: IAutoLocker;
+    fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnCPUUsageMeasured;
     function ProcessIndex(aProcessHandle: integer): integer;
@@ -16267,12 +16268,18 @@ type
     /// track the CPU usage of the supplied set of Process Handle
     // - any aProcessHandle[]=0 will be replaced by the current process handle
     // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(const aProcessHandle: array of integer;
       aHistoryDepth: integer=60); reintroduce; overload; virtual;
     /// track the CPU usage of the current process
     // - you can specify the number of sample values for the History() method
+    // - you should then execute the BackgroundExecute method of this instance
+    // in a VCL timer or from a TSynBackgroundTimer.Enable() registration
     constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
-    /// returns the CPU usage percent of the supplied process
+    /// finalize all internal data information
+    destructor Destroy; override;
+    /// returns the total (Kernel+User) CPU usage percent of the supplied process
     // - aProcessHandle=0 will return information from the current process
     // - returns -1 if the Process Handle was not registered as Create() parameter
     function Percent(aProcessHandle: integer=0): single; overload;
@@ -16284,16 +16291,20 @@ type
     // - aProcessHandle=0 will return information from the current process
     // - returns -1 if the Process Handle was not registered as Create() parameter
     function PercentUser(aProcessHandle: integer=0): single; overload;
-    /// returns CPU usage percent history of the supplied process
+    /// returns the detailed CPU usage percent of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns -1 if the Process Handle was not registered as Create() parameter
+    function Data(out aData: TCPUUsageData; aProcessHandle: integer=0): boolean; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessHandle=0 will return information from the current process
     // - returns nil if the Process Handle was not registered as Create() parameter
     // - returns the sample values as an array, starting from the last to the oldest
-    function History(aProcessHandle: integer=0): TSingleDynArray;
+    function History(aProcessHandle: integer=0): TSingleDynArray; overload;
     /// returns detailed CPU usage history of the supplied process
     // - aProcessHandle=0 will return information from the current process
     // - returns nil if the Process Handle was not registered as Create() parameter
     // - returns the sample values as an array, starting from the last to the oldest
-    function HistoryData(aProcessHandle: integer=0): TCPUUsageDataDynArray;
+    function HistoryData(aProcessHandle: integer=0): TCPUUsageDataDynArray; overload;
     /// how many items are stored internally, and returned by the History() method
     property HistoryDepth: integer read fHistoryDepth;
     /// executed when TCPUUsage.BackgroundExecute finished its measurement
@@ -58976,11 +58987,16 @@ var fti,ftk,ftu,ftp,fte: TFileTime;
     i: integer;
     now: TDateTime;
 begin
-  if (fProcess<>nil) and GetSystemTimes(fti,ftk,ftu) then
-  with fSafe.ProtectMethod do begin
-    now := NowUTC;
-    ToInt64(ftk,sk);
-    ToInt64(ftu,su);
+  if (fProcess=nil) or (fHistoryDepth=0) or not GetSystemTimes(fti,ftk,ftu) then
+    exit;
+  now := NowUTC;
+  ToInt64(ftk,sk);
+  ToInt64(ftu,su);
+  fSafe.Enter;
+  try
+    inc(fDataIndex);
+    if fDataIndex>=fHistoryDepth then
+      fDataIndex := 0;
     sdk := fSysPrevKernel-sk;
     sdu := fSysPrevUser-su;
     sdt := sdk+sdu;
@@ -58992,7 +59008,7 @@ begin
         if PrevKernel<>0 then begin
           pdk := PrevKernel-pk;
           pdu := PrevUser-pu;
-          with Data[DataIndex] do begin
+          with Data[fDataIndex] do begin
             TimeStamp := now;
             if sdt>0 then
               Total := (pdk+pdu)*100/sdt else
@@ -59005,16 +59021,15 @@ begin
               User := 0;
           end;
           if Assigned(fOnMeasured) then
-            fOnMeasured(Handle,Data[DataIndex]);
-          if DataIndex=high(Data) then
-            DataIndex := 0 else
-            inc(DataIndex);
+            fOnMeasured(Handle,Data[fDataIndex]);
         end;
         PrevKernel := pk;
         PrevUser := pu;
       end;
     fSysPrevKernel := sk;
     fSysPrevUser := su;
+  finally
+    fSafe.Leave;
   end;
 end;
 
@@ -59042,6 +59057,7 @@ begin
   {$else}
   exit; // not implemented yet
   {$endif}
+  fSafe := TAutoLocker.Create;
   if aHistoryDepth<=0 then
     aHistoryDepth := 1;
   fHistoryDepth := aHistoryDepth;
@@ -59063,34 +59079,10 @@ begin
   Create([0],aHistoryDepth);
 end;
 
-function TCPUUsage.Percent(aProcessHandle: integer): single;
-var i: integer;
+destructor TCPUUsage.Destroy;
 begin
-  i := ProcessIndex(aProcessHandle);
-  if i>=0 then
-    with fSafe.ProtectMethod, fProcess[i] do
-      result := Data[DataIndex].Total else
-    result := 0;
-end;
-
-function TCPUUsage.PercentKernel(aProcessHandle: integer): single;
-var i: integer;
-begin
-  i := ProcessIndex(aProcessHandle);
-  if i>=0 then
-    with fSafe.ProtectMethod, fProcess[i] do
-      result := Data[DataIndex].Kernel else
-    result := 0;
-end;
-
-function TCPUUsage.PercentUser(aProcessHandle: integer): single;
-var i: integer;
-begin
-  i := ProcessIndex(aProcessHandle);
-  if i>=0 then
-    with fSafe.ProtectMethod, fProcess[i] do
-      result := Data[DataIndex].User else
-    result := 0;
+  inherited Destroy;
+  fSafe.Free;
 end;
 
 function TCPUUsage.ProcessIndex(aProcessHandle: integer): integer;
@@ -59105,26 +59097,72 @@ begin
   result := -1;
 end;
 
+function TCPUUsage.Data(out aData: TCPUUsageData; aProcessHandle: integer=0): boolean;
+var i: integer;
+begin
+  i := ProcessIndex(aProcessHandle);
+  if i>=0 then begin
+    fSafe.Enter;
+    try
+      with fProcess[i] do
+        aData := Data[fDataIndex];
+    finally
+      fSafe.Leave;
+    end;
+    result := aData.TimeStamp<>0;
+  end else
+    result := false;
+end;
+
+function TCPUUsage.Percent(aProcessHandle: integer): single;
+var tmp: TCPUUsageData;
+begin
+  if Data(tmp,aProcessHandle) then
+    result := tmp.Total else
+    result := 0;
+end;
+
+function TCPUUsage.PercentKernel(aProcessHandle: integer): single;
+var tmp: TCPUUsageData;
+begin
+  if Data(tmp,aProcessHandle) then
+    result := tmp.Kernel else
+    result := 0;
+end;
+
+function TCPUUsage.PercentUser(aProcessHandle: integer): single;
+var tmp: TCPUUsageData;
+begin
+  if Data(tmp,aProcessHandle) then
+    result := tmp.User else
+    result := 0;
+end;
+
 function TCPUUsage.HistoryData(aProcessHandle: integer): TCPUUsageDataDynArray;
 var i,n: integer;
 begin
   i := ProcessIndex(aProcessHandle);
   if i>=0 then begin
-    with fSafe.ProtectMethod, fProcess[i] do begin
-      n := length(Data);
-      SetLength(result,n); // private ordered copy
-      dec(n);
-      for i := 0 to n do begin
-        if i<=DataIndex then
-          result[i] := Data[DataIndex-i] else begin
-          result[i] := Data[n];
-          dec(n);
-        end;
-        if result[i].TimeStamp=0 then begin
-          SetLength(result,i); // truncate to latest available sample
-          break;
+    fSafe.Enter;
+    try
+      with fProcess[i] do begin
+        n := length(Data);
+        SetLength(result,n); // private ordered copy
+        dec(n);
+        for i := 0 to n do begin
+          if i<=fDataIndex then
+            result[i] := Data[fDataIndex-i] else begin
+            result[i] := Data[n];
+            dec(n);
+          end;
+          if result[i].TimeStamp=0 then begin
+            SetLength(result,i); // truncate to latest available sample
+            break;
+          end;
         end;
       end;
+    finally
+      fSafe.Leave;
     end;
   end else
     result := nil;
