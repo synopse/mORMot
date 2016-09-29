@@ -261,7 +261,7 @@ begin
     // normal operator search
     Ope := integer(Operation.Items.Objects[Operation.ItemIndex]);
     if Reference.InheritsFrom(TEdit) then
-      Ref := Language.StringToUTF8(TEdit(Reference).Text) else
+      Ref := StringToUTF8(TEdit(Reference).Text) else
     if Reference.InheritsFrom(TComboBox) then begin
       i := TComboBox(Reference).ItemIndex;
       if i<0 then
@@ -274,7 +274,7 @@ begin
         sftDateTime:
           Ref := DateTimeToIso8601(DateTime,false);
         sftTimeLog, sftModTime, sftCreateTime:
-          Ref := IntToStr(Iso8601FromDateTime(DateTime));
+          Ref := IntToStr(TimeLogFromDateTime(DateTime));
       end;
     Ref := Trim(Ref);
     if Ref='' then begin
@@ -298,7 +298,7 @@ begin
     if not Reference.InheritsFrom(TEdit) then
       exit;
     Ope := 0;
-    Ref := Language.StringToUTF8(Trim(TEdit(Reference).Text));
+    Ref := StringToUTF8(Trim(TEdit(Reference).Text));
     R := pointer(Ref);
     assert(FieldIndex<0);
   end;
