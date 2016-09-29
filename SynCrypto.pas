@@ -795,6 +795,7 @@ type
     procedure Update(Buffer: pointer; Len: integer);
     /// finalize and compute the resulting SHA1 hash Digest of all data
     // affected to Update() method
+    // - will also call Init to reset all internal temporary context, for safety 
     procedure Final(out Digest: TSHA1Digest);
     /// one method to rule them all
     // - call Init, then Update(), then Final()
@@ -960,6 +961,15 @@ type
     procedure Finish;
   end;
 
+/// overwrite a 64-byte buffer with zeros
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(temp); end;
+procedure FillZero(var hash: THash64); overload;
+
+/// overwrite a SHA-1 digest buffer with zeros
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(temp); end;
+procedure FillZero(var hash: TSHA1Digest); overload;
 
 /// direct MD5 hash calculation of some data
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
@@ -1733,17 +1743,27 @@ var SHA: TSHA1;
 begin
   SHA.Full(pointer(s),length(s),Digest);
   result := SHA1DigestToString(Digest);
-  FillcharFast(Digest,sizeof(Digest),0);
+  FillZero(Digest);
 end;
 
 
 { THMAC_SHA1 }
 
+procedure FillZero(var hash: TSHA1Digest); overload;
+begin
+  FillCharFast(hash,sizeof(hash),0);
+end;
+
+procedure FillZero(var hash: THash64);
+begin
+  FillCharFast(hash,sizeof(hash),0);
+end;
+
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: THash64;
 begin
-  FillcharFast(k0,sizeof(k0),0);
+  FillZero(k0);
   if keylen>64 then
     sha.Full(key,keylen,PSHA1Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -1753,6 +1773,8 @@ begin
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,64);
+  FillZero(k0);
+  FillZero(k0xorIpad);
 end;
 
 procedure THMAC_SHA1.Update(msg: pointer; msglen: integer);
@@ -1766,6 +1788,7 @@ begin
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
   sha.Final(result);
+  FillZero(step7data);
 end;
 
 procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer; out result: TSHA1Digest);
@@ -1810,6 +1833,8 @@ begin
     mac.Done(tmp);
     XorMemory(@result,@tmp,sizeof(result));
   end;
+  FillcharFast(first,sizeof(first),0);
+  FillZero(tmp);
 end;
 
 
@@ -1819,7 +1844,7 @@ procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: THash64;
 begin
-  FillcharFast(k0,sizeof(k0),0);
+  FillZero(k0);
   if keylen>64 then
     sha.Full(key,keylen,PSHA256Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -1829,6 +1854,8 @@ begin
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
   sha.Update(@k0xorIpad,64);
+  FillZero(k0);
+  FillZero(k0xorIpad);
 end;
 
 procedure THMAC_SHA256.Update(msg: pointer; msglen: integer);
@@ -1842,6 +1869,7 @@ begin
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
   sha.Final(result);
+  FillZero(step7data);
 end;
 
 procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
@@ -1888,6 +1916,8 @@ begin
     mac.Done(tmp);
     XorMemory(@result,@tmp,sizeof(result));
   end;
+  FillcharFast(first,sizeof(first),0);
+  FillZero(tmp);
 end;
 
 function SHA256(const s: RawByteString): RawUTF8;
@@ -1934,7 +1964,7 @@ var i: integer;
     h1,h2: cardinal;
     k0,k0xorIpad,step7data: THash64;
 begin
-  FillcharFast(k0,sizeof(k0),0);
+  FillZero(k0);
   if keylen>64 then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -1948,6 +1978,9 @@ begin
   h1 := crc32c(crc32c(0,@step7data,64),@result,sizeof(result));
   h2 := crc32c(crc32c(h1,@step7data,64),@result,sizeof(result));
   crc256cmix(h1,h2,@result);
+  FillZero(k0);
+  FillZero(k0xorIpad);
+  FillZero(step7data);
 end;
 
 procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString; out result: THash256);
@@ -1967,7 +2000,7 @@ procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: THash64;
 begin
-  FillcharFast(k0,sizeof(k0),0);
+  FillZero(k0);
   if keylen>64 then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -1976,6 +2009,8 @@ begin
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   seed := crc32c(0,@k0xorIpad,64);
+  FillZero(k0);
+  FillZero(k0xorIpad);
 end;
 
 procedure THMAC_CRC32C.Update(msg: pointer; msglen: integer);
@@ -1986,6 +2021,7 @@ end;
 function THMAC_CRC32C.Done: cardinal;
 begin
   result := crc32c(seed,@step7data,64);
+  FillZero(step7data);
 end;
 
 function HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer): cardinal;
@@ -7917,8 +7953,8 @@ begin
     LeaveCriticalSection(fLock);
   finally
     FillZero(key); // avoid the key appear in clear on stack
-    FillcharFast(pointer(pass)^,length(pass),0); // remove entropy from heap
-    FillcharFast(pointer(salt)^,length(salt),0);
+    FillZero(pass);
+    FillZero(salt);
   end;
 end;
 
@@ -8204,7 +8240,7 @@ end;
 procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractClass);
 begin
   if Key='' then
-    FillcharFast(CompressShaAesKey,sizeof(CompressShaAesKey),0) else
+    FillZero(CompressShaAesKey) else
     SHA256Weak(Key,CompressShaAesKey);
 end;
 
