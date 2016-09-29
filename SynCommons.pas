@@ -16217,6 +16217,90 @@ type
   end;
 
 type
+  /// store CPU usage percent for a given process
+  // - as used by TCPcUUsage
+  TCPUUsageData = packed record
+    /// when the data has been sampled
+    TimeStamp: TDateTime;
+    /// percent of current total CPU usage for this process
+    Total: single;
+    /// percent of current Kernel-space CPU usage for this process
+    Kernel: single;
+    /// percent of current User-space CPU usage for this process
+    User: single;
+  end;
+  /// store CPU usage percent history for a given process
+  // - as returned by TCPUUsage.History
+  TCPUUsageDataDynArray = array of TCPUUsageData;
+
+  /// event handler which may be executed by TCPUUsage.BackgroundExecute
+  // - called just after the measurement of each process CPU usage
+  // - run from the background thread, so should not directly make VCL calls
+  TOnCPUUsageMeasured = procedure(ProcessHandle: integer; const Data: TCPUUsageData) of object;
+
+  /// monitor CPU usage of one or several processes
+  // - you should execute BackgroundExecute on a regular pace (e.g. every second)
+  // to gather CPU information for the given set of processes
+  // - is able to keep an history of latest sample values
+  TCPUUsage = class(TSynPersistent)
+  protected
+    fProcess: array of record
+      Handle: integer;
+      PrevKernel: Int64;
+      PrevUser: Int64;
+      Data: TCPUUsageDataDynArray;
+      DataIndex: integer;
+    end;
+    fSysPrevKernel: Int64;
+    fSysPrevUser: Int64;
+    fSafe: IAutoLocker;
+    fHistoryDepth: integer;
+    fOnMeasured: TOnCPUUsageMeasured;
+    function ProcessIndex(aProcessHandle: integer): integer;
+  public
+    /// a TSynBackgroundThreadProcess compatible event handler
+    // - to be supplied to a TSynBackgroundTimer.Enable method so that it will
+    // run every few seconds and retrieve the CPU use
+    // - matches TOnSynBackgroundTimerProcess callback signature
+    procedure BackgroundExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
+    /// track the CPU usage of the supplied set of Process Handle
+    // - any aProcessHandle[]=0 will be replaced by the current process handle
+    // - you can specify the number of sample values for the History() method
+    constructor Create(const aProcessHandle: array of integer;
+      aHistoryDepth: integer=60); reintroduce; overload; virtual;
+    /// track the CPU usage of the current process
+    // - you can specify the number of sample values for the History() method
+    constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
+    /// returns the CPU usage percent of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns -1 if the Process Handle was not registered as Create() parameter
+    function Percent(aProcessHandle: integer=0): single; overload;
+    /// returns the Kernel-space CPU usage percent of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns -1 if the Process Handle was not registered as Create() parameter
+    function PercentKernel(aProcessHandle: integer=0): single; overload;
+    /// returns the User-space CPU usage percent of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns -1 if the Process Handle was not registered as Create() parameter
+    function PercentUser(aProcessHandle: integer=0): single; overload;
+    /// returns CPU usage percent history of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns nil if the Process Handle was not registered as Create() parameter
+    // - returns the sample values as an array, starting from the last to the oldest
+    function History(aProcessHandle: integer=0): TSingleDynArray;
+    /// returns detailed CPU usage history of the supplied process
+    // - aProcessHandle=0 will return information from the current process
+    // - returns nil if the Process Handle was not registered as Create() parameter
+    // - returns the sample values as an array, starting from the last to the oldest
+    function HistoryData(aProcessHandle: integer=0): TCPUUsageDataDynArray;
+    /// how many items are stored internally, and returned by the History() method
+    property HistoryDepth: integer read fHistoryDepth;
+    /// executed when TCPUUsage.BackgroundExecute finished its measurement
+    property OnMeasured: TOnCPUUsageMeasured read fOnMeasured write fOnMeasured;
+  end;
+
+type
   /// class-reference type (metaclass) of an authentication class
   TSynAuthenticationClass = class of TSynAuthenticationAbstract;
 
@@ -58871,6 +58955,193 @@ begin
   end;
 end;
 
+
+{ TCPUUsage }
+
+{$ifdef MSWINDOWS}
+var
+  GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+  GetProcessTimes: function(hProcess: THandle;
+    var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
+
+procedure TCPUUsage.BackgroundExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+  procedure ToInt64(const FT: TFileTime; out I64: Int64);
+  begin
+    PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
+    PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
+  end;
+var fti,ftk,ftu,ftp,fte: TFileTime;
+    sk,su, pk,pu, sdk,sdu,sdt, pdk,pdu: Int64;
+    i: integer;
+    now: TDateTime;
+begin
+  if (fProcess<>nil) and GetSystemTimes(fti,ftk,ftu) then
+  with fSafe.ProtectMethod do begin
+    now := NowUTC;
+    ToInt64(ftk,sk);
+    ToInt64(ftu,su);
+    sdk := fSysPrevKernel-sk;
+    sdu := fSysPrevUser-su;
+    sdt := sdk+sdu;
+    for i := 0 to high(fProcess) do
+    with fProcess[i] do
+      if GetProcessTimes(Handle,ftp,fte,ftk,ftu) then begin
+        ToInt64(ftk,pk);
+        ToInt64(ftu,pu);
+        if PrevKernel<>0 then begin
+          pdk := PrevKernel-pk;
+          pdu := PrevUser-pu;
+          with Data[DataIndex] do begin
+            TimeStamp := now;
+            if sdt>0 then
+              Total := (pdk+pdu)*100/sdt else
+              Total := 0;
+            if sdk>0 then
+              Kernel := pdk*100/sdk else
+              Kernel := 0;
+            if sdu>0 then
+              User := pdu*100/sdu else
+              User := 0;
+          end;
+          if Assigned(fOnMeasured) then
+            fOnMeasured(Handle,Data[DataIndex]);
+          if DataIndex=high(Data) then
+            DataIndex := 0 else
+            inc(DataIndex);
+        end;
+        PrevKernel := pk;
+        PrevUser := pu;
+      end;
+    fSysPrevKernel := sk;
+    fSysPrevUser := su;
+  end;
+end;
+
+{$else}
+
+procedure TCPUUsage.BackgroundExecute(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+begin // not implemented yet (using /proc ?)
+end;
+
+{$endif MSWINDOWS}
+
+constructor TCPUUsage.Create(const aProcessHandle: array of integer;
+  aHistoryDepth: integer);
+var i: integer;
+begin
+  inherited Create;
+  {$ifdef MSWINDOWS}
+  if not Assigned(GetSystemTimes) then begin
+    @GetSystemTimes := GetProcAddress(GetModuleHandle(kernel32),'GetSystemTimes');
+    @GetProcessTimes := GetProcAddress(GetModuleHandle(kernel32),'GetProcessTimes');
+    if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) then
+      exit; // impossible to monitor CPU under older Windows
+  end;
+  {$else}
+  exit; // not implemented yet
+  {$endif}
+  if aHistoryDepth<=0 then
+    aHistoryDepth := 1;
+  fHistoryDepth := aHistoryDepth;
+  SetLength(fProcess,length(aProcessHandle));
+  if fProcess=nil then
+    Create([0]) else
+    for i := 0 to high(aProcessHandle) do begin
+      {$ifdef MSWINDOWS}
+      if aProcessHandle[i]=0 then
+        fProcess[i].Handle := GetCurrentProcess else
+      {$endif}
+        fProcess[i].Handle := aProcessHandle[i];
+      SetLength(fProcess[i].Data,fHistoryDepth);
+    end;
+end;
+
+constructor TCPUUsage.Create(aHistoryDepth: integer);
+begin
+  Create([0],aHistoryDepth);
+end;
+
+function TCPUUsage.Percent(aProcessHandle: integer): single;
+var i: integer;
+begin
+  i := ProcessIndex(aProcessHandle);
+  if i>=0 then
+    with fSafe.ProtectMethod, fProcess[i] do
+      result := Data[DataIndex].Total else
+    result := 0;
+end;
+
+function TCPUUsage.PercentKernel(aProcessHandle: integer): single;
+var i: integer;
+begin
+  i := ProcessIndex(aProcessHandle);
+  if i>=0 then
+    with fSafe.ProtectMethod, fProcess[i] do
+      result := Data[DataIndex].Kernel else
+    result := 0;
+end;
+
+function TCPUUsage.PercentUser(aProcessHandle: integer): single;
+var i: integer;
+begin
+  i := ProcessIndex(aProcessHandle);
+  if i>=0 then
+    with fSafe.ProtectMethod, fProcess[i] do
+      result := Data[DataIndex].User else
+    result := 0;
+end;
+
+function TCPUUsage.ProcessIndex(aProcessHandle: integer): integer;
+begin
+  {$ifdef MSWINDOWS}
+  if aProcessHandle=0 then
+    aProcessHandle := GetCurrentProcess;
+  {$endif}
+  for result := 0 to high(fProcess) do
+    if fProcess[result].Handle=aProcessHandle then
+      exit;
+  result := -1;
+end;
+
+function TCPUUsage.HistoryData(aProcessHandle: integer): TCPUUsageDataDynArray;
+var i,n: integer;
+begin
+  i := ProcessIndex(aProcessHandle);
+  if i>=0 then begin
+    with fSafe.ProtectMethod, fProcess[i] do begin
+      n := length(Data);
+      SetLength(result,n); // private ordered copy
+      dec(n);
+      for i := 0 to n do begin
+        if i<=DataIndex then
+          result[i] := Data[DataIndex-i] else begin
+          result[i] := Data[n];
+          dec(n);
+        end;
+        if result[i].TimeStamp=0 then begin
+          SetLength(result,i); // truncate to latest available sample
+          break;
+        end;
+      end;
+    end;
+  end else
+    result := nil;
+end;
+
+function TCPUUsage.History(aProcessHandle: integer): TSingleDynArray;
+var i,n: integer;
+    data: TCPUUsageDataDynArray;
+begin
+  data := HistoryData(aProcessHandle);
+  n := length(data);
+  SetLength(result,n);
+  for i := 0 to n-1 do
+    result[i] := data[i].Total;
+end;
+
+
 { TSynParallelProcess }
 
 constructor TSynParallelProcess.Create(ThreadPoolCount: integer; const ThreadName: RawUTF8;
@@ -59414,8 +59685,11 @@ initialization
   InitSynCommonsConversionTables;
   RetrieveSystemInfo;
   SetExecutableVersion(0,0,0,0);
-  TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TFindFilesDynArray),
-    'Name string Attr Integer Size Int64 TimeStamp TDateTime');
+  TTextWriter.RegisterCustomJSONSerializerFromText([
+    TypeInfo(TFindFilesDynArray),
+     'Name string Attr Integer Size Int64 TimeStamp TDateTime',
+    TypeInfo(TCPUUsageDataDynArray),
+     'TimeStamp TDateTime Usage,Kernel,User single']);
   // some type definition assertions
   Assert(SizeOf(TSynTableFieldType)=1); // as expected by TSynTableFieldProperties
   Assert(SizeOf(TSynTableFieldOptions)=1);
