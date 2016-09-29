@@ -6490,7 +6490,7 @@ procedure TSQLDBStatement.Bind(Param: Integer; ParamType: TSQLDBFieldType;
   const Value: RawUTF8; ValueAlreadyUnquoted: boolean; IO: TSQLDBParamInOutType=paramIn);
 var tmp: RawUTF8;
 begin
-  if (not ValueAlreadyUnquoted) and (Value='null') then
+  if not ValueAlreadyUnquoted and (Value='null') then
     // bind null (ftUTF8 should be '"null"')
     BindNull(Param,IO) else
     case ParamType of

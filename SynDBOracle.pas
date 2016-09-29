@@ -2628,7 +2628,7 @@ begin
     for i := 0 to Size-1 do
       OutData[Size-i] := Mant[i];
   Exp := (Exp+65) or $80;
-  if (not minus) and (Size<high(TSQLT_VNU)) then begin
+  if not minus and (Size<high(TSQLT_VNU)) then begin
     Exp := not Exp;
     inc(Size);
     OutData[Size] := (100+2);
@@ -2706,7 +2706,7 @@ begin
     if not fExpectResults then
       fRowCount := 1; // to avoid ORA-24333 error
     if (fParamCount>0) then
-    if (fParamsArrayCount>0) and (not fExpectResults) then begin
+    if (fParamsArrayCount>0) and not fExpectResults then begin
       // 1.1. Array DML binding
       SetLength(aIndicator,fParamCount);
       for i := 0 to fParamCount-1 do

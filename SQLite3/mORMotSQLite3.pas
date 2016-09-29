@@ -1062,8 +1062,8 @@ begin
     if not IsZero(@TableJustCreated,sizeof(TSQLFieldTables)) then
       for t := 0 to high(Model.Tables) do
         if t in TableJustCreated then
-          if (not(Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL)) or
-             (not TableHasRows(Model.Tables[t])) then // check is really void
+          if not(Model.TableProps[t].Kind in IS_CUSTOM_VIRTUAL) or
+             not TableHasRows(Model.Tables[t]) then // check is really void
             Model.Tables[t].InitializeTable(self,'',Options); // '' for table creation
     DB.Commit;
   except
@@ -1323,7 +1323,7 @@ begin
         GetAndPrepareStatement(SQL,false);
         MS := TRawByteStringStream.Create;
         try
-          RowCount := fStatement^.Execute(0,'',MS,ForceAJAX or (not NoAJAXJSON));
+          RowCount := fStatement^.Execute(0,'',MS,ForceAJAX or not NoAJAXJSON);
           result := MS.DataString;
         finally
           MS.Free;

@@ -22267,7 +22267,7 @@ end;
 function NullableIntegerToValue(const V: TNullableInteger; out Value: Int64): Boolean;
 begin
   Value := 0;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToInt64(PVariant(@V)^,Value);
+  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,Value);
 end;
 
 function NullableIntegerToValue(const V: TNullableInteger): Int64;
@@ -22289,7 +22289,7 @@ end;
 function NullableBooleanToValue(const V: TNullableBoolean; out Value: Boolean): Boolean;
 begin
   Value := false;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToBoolean(PVariant(@V)^,Value);
+  result := not VarDataIsEmptyOrNull(@V) and VariantToBoolean(PVariant(@V)^,Value);
 end;
 
 function NullableBooleanToValue(const V: TNullableBoolean): Boolean;
@@ -22311,7 +22311,7 @@ end;
 function NullableFloatToValue(const V: TNullableFloat; out Value: Double): Boolean;
 begin
   Value := 0;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToDouble(PVariant(@V)^,Value);
+  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,Value);
 end;
 
 function NullableFloatToValue(const V: TNullableFloat): Double;
@@ -22333,7 +22333,7 @@ end;
 function NullableCurrencyToValue(const V: TNullableCurrency; out Value: currency): Boolean;
 begin
   Value := 0;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToCurrency(PVariant(@V)^,Value);
+  result := not VarDataIsEmptyOrNull(@V) and VariantToCurrency(PVariant(@V)^,Value);
 end;
 
 function NullableCurrencyToValue(const V: TNullableCurrency): currency;
@@ -22355,7 +22355,7 @@ end;
 function NullableDateTimeToValue(const V: TNullableDateTime; out Value: TDateTime): Boolean;
 begin
   Value := 0;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToDouble(PVariant(@V)^,Double(Value));
+  result := not VarDataIsEmptyOrNull(@V) and VariantToDouble(PVariant(@V)^,Double(Value));
 end;
 
 function NullableDateTimeToValue(const V: TNullableDateTime): TDateTime;
@@ -22377,7 +22377,7 @@ end;
 function NullableTimeLogToValue(const V: TNullableTimeLog; out Value: TTimeLog): Boolean;
 begin
   Value := 0;
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToInt64(PVariant(@V)^,Int64(Value));
+  result := not VarDataIsEmptyOrNull(@V) and VariantToInt64(PVariant(@V)^,Int64(Value));
 end;
 
 function NullableTimeLogToValue(const V: TNullableTimeLog): TTimeLog;
@@ -22401,7 +22401,7 @@ end;
 
 function NullableUTF8TextToValue(const V: TNullableUTF8Text; out Value: RawUTF8): boolean;
 begin
-  result := (not VarDataIsEmptyOrNull(@V)) and VariantToUTF8(PVariant(@V)^,Value);
+  result := not VarDataIsEmptyOrNull(@V) and VariantToUTF8(PVariant(@V)^,Value);
 end;
 
 function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
@@ -23656,7 +23656,7 @@ end;
 procedure TSynMonitorUsageID.Truncate(gran: TSynMonitorUsageGranularity);
 begin
   if gran>mugHour then
-    Value := Value and (not USAGE_ID_MASK[mugHour]) or USAGE_ID_HOURMARKER[gran];
+    Value := (Value and not USAGE_ID_MASK[mugHour]) or USAGE_ID_HOURMARKER[gran];
 end;
 
 procedure TSynMonitorUsageID.SetTime(gran: TSynMonitorUsageGranularity; aValue: integer);
@@ -23669,7 +23669,7 @@ begin
   end;
   if cardinal(aValue)>USAGE_ID_MAX[gran] then
     raise ERangeError.CreateFmt('%s should be 0..%d',[ToText(gran)^,USAGE_ID_MAX[gran]]);
-  Value := (Value and (not (USAGE_ID_MASK[gran] shl USAGE_ID_SHIFT[gran])))
+  Value := (Value and not (USAGE_ID_MASK[gran] shl USAGE_ID_SHIFT[gran]))
      or (aValue shl USAGE_ID_SHIFT[gran]);
 end;
 
@@ -24791,7 +24791,7 @@ begin
       for F := 0 to FMax do begin
         if Assigned(OnExportValue) then
           W.AddString(OnExportValue(self,R,F)) else
-        if Tab or (not IsStringJSON(U^)) then
+        if Tab or not IsStringJSON(U^) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
           W.AddNoJSONEscape(U^,StrLen(U^));
@@ -30442,7 +30442,7 @@ function TSQLRecord.GetJSONValues(Expand: boolean; withID: boolean;
   SQLRecordOptions: TJSONSerializerSQLRecordOptions): RawUTF8;
 var J: TRawByteStringStream;
 begin
-  if (not withID) and IsZero(RecordProps.SimpleFieldsBits[Occasion]) then
+  if not withID and IsZero(RecordProps.SimpleFieldsBits[Occasion]) then
     // no simple field to write -> quick return
     result := '' else
   if UsingStream<>nil then begin
@@ -32181,7 +32181,7 @@ begin
     if cardinal(j-1)<64 then begin
       k := i+j;
       while SQL[k] in [#1..' '] do inc(k);
-      if (not EnsureUniqueTableInFrom) or (SQL[k]<>',') then begin
+      if not EnsureUniqueTableInFrom or (SQL[k]<>',') then begin
         SetString(result,PAnsiChar(PtrInt(SQL)+i-1),j);
         exit;
       end;
@@ -32848,7 +32848,7 @@ begin
   if SendData and
      (fRest.Model.Props[PSQLRecordClass(Value)^].Kind in INSERT_WITH_ID) then
       ForceID := true; // same format as TSQLRestClient.Add
-  if SendData and (not ForceID) and IsZero(CustomFields) and
+  if SendData and not ForceID and IsZero(CustomFields) and
      not(boPostNoSimpleFields in fOptions) then begin
     PostSimpleFields := true;
     fBatch.AddShort('"SIMPLE');
@@ -34193,7 +34193,7 @@ begin
     if withBlobs then
       fields := Value.RecordProps.CopiableFieldsBits else
       fields := Value.RecordProps.SimpleFieldsBits[soInsert];
-  if (not ForceID) and IsZero(fields) then
+  if not ForceID and IsZero(fields) then
     result := '' else
     result := Value.GetJSONValues(true,ForceID,fields);
 end;
@@ -34801,7 +34801,7 @@ begin
   Mutex.Lock;
   try
     CacheEnable := true;
-    if (not CacheAll) and (not Value.FastLocateSorted(aID,i)) and (i>=0) then begin
+    if not CacheAll and not Value.FastLocateSorted(aID,i) and (i>=0) then begin
       Rec.ID := aID;
       Rec.TimeStamp64 := 0; // indicates no value cache yet
       Value.FastAddSorted(i,Rec);
@@ -37882,8 +37882,8 @@ begin
     fSQLAuthGroupClass := Model.AddTableInherited(TSQLAuthGroup);
     fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
     if fAfterCreation and
-      ((not TableHasRows(fSQLAuthUserClass)) or
-       (not TableHasRows(fSQLAuthGroupClass))) then
+      (not TableHasRows(fSQLAuthUserClass) or
+       not TableHasRows(fSQLAuthGroupClass)) then
       CreateMissingTables(0,fCreateMissingTablesOptions);
   finally
     fSessions.Safe.UnLock;
@@ -38883,7 +38883,7 @@ begin
       // see e.g. TSQLRestClientURI.EngineExecute
       if reSQL in Call.RestAccessRights^.AllowRemoteExecute then
         if (Call.InBody<>'') and
-           (not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0,'[','{'])) and
+           not (GotoNextNotSpace(Pointer(Call.InBody))^ in [#0,'[','{']) and
            Server.EngineExecute(Call.InBody) then begin
           Call.OutStatus := HTTP_SUCCESS; // 200 OK
         end else
@@ -39864,11 +39864,11 @@ begin
           Ctxt.Command := execORMGet else
           // write methods (mPOST, mPUT, mDELETE...)
           Ctxt.Command := execORMWrite;
-        if (not Assigned(OnBeforeURI)) or OnBeforeURI(Ctxt) then
+        if not Assigned(OnBeforeURI) or OnBeforeURI(Ctxt) then
           Ctxt.ExecuteCommand;
       except
         on E: Exception do
-          if (not Assigned(OnErrorURI)) or OnErrorURI(Ctxt,E) then
+          if not Assigned(OnErrorURI) or OnErrorURI(Ctxt,E) then
             // return 500 internal server error
             Ctxt.Error(E,'',[],HTTP_SERVERERROR);
       end;
@@ -40495,7 +40495,7 @@ begin
   if self=nil then
     result := false else
     result := (aTableIndex>=cardinal(length(fStaticData))) or
-      (not fStaticData[aTableIndex].InheritsFrom(TSQLRestStorageInMemory));
+      not fStaticData[aTableIndex].InheritsFrom(TSQLRestStorageInMemory);
 end;
 
 procedure TSQLRestServer.BeginCurrentThread(Sender: TThread);
@@ -43821,8 +43821,8 @@ begin
     if fUniqueFields<>nil then begin
       Orig := TSQLRecord(fValue.List[i]);
       Rec := Orig.CreateCopy; // copy since can be a partial update
-      if (not Rec.SetFieldSQLVars(Values)) or
-         (not UniqueFieldsUpdateOK(Rec,i)) then begin
+      if not Rec.SetFieldSQLVars(Values) or
+         not UniqueFieldsUpdateOK(Rec,i) then begin
         Rec.Free; // stored false property duplicated value -> error
         exit;
       end;
@@ -43846,7 +43846,7 @@ function TSQLRestStorageInMemory.EngineRetrieveBlob(TableModelIndex: integer; aI
 var i: integer;
 begin
   result := false;
-  if (TableModelIndex<0) or (not BlobField^.IsBlob) or
+  if (TableModelIndex<0) or not BlobField^.IsBlob or
      (fModel.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   StorageLock(false,'EngineRetrieveBlob');
@@ -43889,7 +43889,7 @@ var i: integer;
     AffectedField: TSQLFieldBits;
 begin
   result := false;
-  if (aID<0) or (TableModelIndex<0) or (not BlobField^.IsBlob) or
+  if (aID<0) or (TableModelIndex<0) or not BlobField^.IsBlob or
      (fModel.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   StorageLock(true,'EngineUpdateBlob');
@@ -44029,7 +44029,7 @@ procedure TSQLRestStorageInMemory.UpdateFile;
 var F: TFileStream;
     Timer: TPrecisionTimer;
 begin
-  if (self=nil) or (not Modified) or (FileName='') then
+  if (self=nil) or not Modified or (FileName='') then
     exit;
   Timer.Start;
   StorageLock(false,'UpdateFile');
@@ -45928,7 +45928,7 @@ begin
     C2 := Value2.ClassType;
     repeat
       for i := 1 to InternalClassPropInfo(C1,P1) do begin
-        if (not ignoreGetterFields) or P1^.GetterIsField then
+        if not ignoreGetterFields or P1^.GetterIsField then
           if C2<>C1 then begin
             P2 := ClassFieldPropWithParents(C2,P1^.Name);
             if (P2=nil) or not P1^.SameValue(Value1,P2,Value2) then
@@ -46589,7 +46589,7 @@ begin
     if IdemPropName('ClassName',PropName,PropNameLen) then begin
       // WriteObject() was called with woStoreClassName option -> handle it
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
-      if (PropValue=nil) or (not wasString) or not (EndOfObject in ['}',',']) then
+      if (PropValue=nil) or not wasString or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content
       continue; // just ignore the field here
     end;
@@ -48921,8 +48921,8 @@ begin
         if IsRowIDShort(P^.Name) then
           goto next; // should not happen
       end else
-        if (not (woStoreStoredFalse in Options)) and
-           (not P^.IsStored(Value)) then
+        if not (woStoreStoredFalse in Options) and
+           not P^.IsStored(Value) then
           goto next; // ignore regular "stored false" attribute
       Added := false;  // HR(P) would write field name and set Added := true
       Kind := P^.PropType^.Kind;
@@ -49522,7 +49522,7 @@ function TSQLVirtualTableCursorJSON.Search(const Prepared: TSQLVirtualTablePrepa
 var Hash: TListFieldHash;
 begin
   result := inherited Search(Prepared); // mark EOF by default
-  if (not result) or (not Table.InheritsFrom(TSQLVirtualTableJSON)) or
+  if not result or not Table.InheritsFrom(TSQLVirtualTableJSON) or
      (TSQLVirtualTableJSON(Table).fStaticInMemory=nil) then
     result := false else
     with TSQLVirtualTableJSON(Table).fStaticInMemory do begin
@@ -49905,7 +49905,7 @@ begin
         finally
           G.Free;
         end;
-        if (not (itoNoAutoCreateUsers in Options)) and
+        if not (itoNoAutoCreateUsers in Options) and
            (Server.TableRowCount(Server.fSQLAuthUserClass)=0) then begin
           U := Server.fSQLAuthUserClass.Create;
           try
@@ -50496,7 +50496,7 @@ var i: integer;
     Session: TAuthSession;
 begin
   result := AuthSessionRelease(Ctxt);
-  if result or (not Ctxt.InputExists['UserName']) or (not Ctxt.InputExists['Data']) then
+  if result or not Ctxt.InputExists['UserName'] or not Ctxt.InputExists['Data'] then
     exit;
   // use ConnectionID to find authentication session
   ConnectionID := Ctxt.Call^.LowLevelConnectionID;
@@ -52112,7 +52112,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         {$else}
         {$ifdef Linux}  // Linux x64, arm, aarch64
         ((ValueIsInFPR) and (fpreg>FPREG_LAST)) or
-        ((not ValueIsInFPR) and (reg>PARAMREG_LAST))
+        (not ValueIsInFPR and (reg>PARAMREG_LAST))
         {$else}
         (reg>PARAMREG_LAST) // Win64
         {$endif Linux}
@@ -57587,7 +57587,7 @@ end;
 function TServiceContainerClient.Info(aTypeInfo: PTypeInfo): TServiceFactory;
 begin
   result := inherited Info(aTypeInfo);
-  if (result=nil) and (not fDisableAutoRegisterAsClientDriven) then
+  if (result=nil) and not fDisableAutoRegisterAsClientDriven then
     result := AddInterface(aTypeInfo,sicClientDriven);
 end;
 

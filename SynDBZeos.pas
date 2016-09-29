@@ -1052,7 +1052,7 @@ begin
   try
     if arrayBinding=nil then
   {$else}
-  if (fParamsArrayCount>0) and (not fExpectResults) then
+  if (fParamsArrayCount>0) and not fExpectResults then
     raise ESQLDBZEOS.CreateUTF8('%.BindArray() not supported',[self]) else
   {$endif}
     for i := 0 to fParamCount-1 do

@@ -3802,7 +3802,7 @@ begin
       LogFileHeader else
       if not (logInitDone in fInternalFlags) then
         LogFileInit;
-    if (not (sllEnter in fFamily.Level)) and (Level in fFamily.fLevelStackTrace) then
+    if not (sllEnter in fFamily.Level) and (Level in fFamily.fLevelStackTrace) then
        for i := 0 to fThreadContext^.RecursionCount-1 do begin
          fWriter.AddChars(' ',i+24-byte(fFamily.HighResolutionTimeStamp));
          AddRecursion(i,sllNone);

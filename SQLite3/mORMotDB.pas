@@ -1364,7 +1364,7 @@ begin
   if Stmt=nil then
     result := '' else
     Stmt.ExecutePreparedAndFetchAllAsJSON(
-      ForceAJAX or (Owner=nil) or (not Owner.NoAJAXJSON),result);
+      ForceAJAX or (Owner=nil) or not Owner.NoAJAXJSON,result);
 end;
 
 function TSQLRestStorageExternal.EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8;
@@ -1421,7 +1421,7 @@ function TSQLRestStorageExternal.EngineRetrieveBlob(TableModelIndex: integer; aI
 var Rows: ISQLDBRows;
 begin
   result := false;
-  if (aID<=0) or (not BlobField^.IsBlob) or
+  if (aID<=0) or not BlobField^.IsBlob or
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   with StoredClassProps.ExternalDB do
@@ -1524,7 +1524,7 @@ var Statement: ISQLDBStatement;
     AffectedField: TSQLFieldBits;
 begin
   result := false;
-  if (aID<=0) or (not BlobField^.IsBlob) or
+  if (aID<=0) or not BlobField^.IsBlob or
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   try
@@ -1603,7 +1603,7 @@ begin
   result := nil; // returns nil interface on error
   if self=nil then
     exit;
-  if (not ExpectResults) and (Owner<>nil) then
+  if not ExpectResults and (Owner<>nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   try
     result := fProperties.ExecuteInlined(aSQL,ExpectResults);
@@ -1644,7 +1644,7 @@ begin
   result := nil;
   if self=nil then
     exit;
-  if (not ExpectResults) and (Owner<>nil) then
+  if not ExpectResults and (Owner<>nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   Query := fProperties.NewThreadSafeStatementPrepared(SQLFormat,Args,ExpectResults);
   if Query<>nil then

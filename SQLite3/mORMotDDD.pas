@@ -1867,7 +1867,7 @@ function TDDDRepositoryRestQuery.ORMGetNextAggregate(
 begin
   if CqrsBeginMethod(qaGet,result) then
     if (aRewind and fCurrentORMInstance.FillRewind) or
-       ((not aRewind) and fCurrentORMInstance.FillOne) then begin
+       (not aRewind and fCurrentORMInstance.FillOne) then begin
       Factory.AggregateFromTable(fCurrentORMInstance,aAggregate);
       CqrsSetResult(cqrsSuccess);
     end else

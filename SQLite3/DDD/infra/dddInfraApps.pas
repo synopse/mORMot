@@ -961,7 +961,7 @@ end;
 
 function TDDDSocketThreadMonitoring.GetSocket: variant;
 begin
-  if (fOwner = nil) or (not fOwner.InheritsFrom(TDDDSocketThread)) or
+  if (fOwner = nil) or not fOwner.InheritsFrom(TDDDSocketThread) or
      (TDDDSocketThread(fOwner).fSocket = nil) then
     SetVariantNull(result)
   else

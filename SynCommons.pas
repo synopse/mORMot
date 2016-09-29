@@ -23080,7 +23080,7 @@ Txt:  len := F-FDeb;
   end;
   if L=0 then
     exit;
-  if (not JSONFormat) and (tmpN>SizeOf(inlin)shl 3) then
+  if not JSONFormat and (tmpN>SizeOf(inlin)shl 3) then
     raise ESynException.CreateUTF8(
       'Too many parameters for FormatUTF8(): %>%',[tmpN,SizeOf(inlin)shl 3]);
   SetLength(result,L);
@@ -26550,7 +26550,7 @@ begin
       until FindNext(F)<>0;
       FindClose(F);
     end;
-    if (not DeleteOnlyFilesNotDirectory) and (not RemoveDir(Dir)) then
+    if not DeleteOnlyFilesNotDirectory and not RemoveDir(Dir) then
       result := false;
   end;
   if DeletedCount<>nil then
@@ -32158,13 +32158,13 @@ begin // decode from '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
   end;
   inc(PByte(guid),4);
   for i := 1 to 2 do begin
-    if (P^<>'-') or (not HexaToByte(P+1,guid[1])) or (not HexaToByte(P+3,guid[0])) then
+    if (P^<>'-') or not HexaToByte(P+1,guid[1]) or not HexaToByte(P+3,guid[0]) then
       exit;
     inc(P,5);
     inc(PByte(guid),2);
   end;
   if (P[0]<>'-') or (P[5]<>'-') or
-     (not HexaToByte(P+1,guid[0])) or (not HexaToByte(P+3,guid[1])) then
+     not HexaToByte(P+1,guid[0]) or not HexaToByte(P+3,guid[1]) then
     exit;
   inc(PByte(guid),2);
   inc(P,6);
@@ -36236,7 +36236,7 @@ begin // code below must match TTextWriter.AddRecordJSON
       raise ESynException.CreateUTF8('RecordLoadJSON(%/%)',
         [PShortString(@PTypeInfo(TypeInfo).NameLen)^,PByte(TypeInfo)^]);
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
-    if (Val=nil) or (not wasString) or
+    if (Val=nil) or not wasString or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
        (RecordLoad(Rec,pointer(Base64ToBin(Val+3)),TypeInfo)=nil) then
       exit; // invalid content
@@ -39280,7 +39280,7 @@ begin
     exit;
   end;
   result := GetValueIndex(aName);
-  if (not Update) and (dvoCheckForDuplicatedNames in VOptions) and (result>=0) then
+  if not Update and (dvoCheckForDuplicatedNames in VOptions) and (result>=0) then
     raise EDocVariant.CreateUTF8('Duplicated "%" name',[aName]);
   if result<0 then
     result := InternalAdd(aName);
@@ -39513,7 +39513,7 @@ begin
       for j := 0 to high(aPropNames) do
         for ndx := 0 to VCount-1 do
           if VName[ndx]=aPropNames[j] then begin
-            if (not aDoNotAddVoidProp) or (not VarIsVoid(VValue[ndx])) then
+            if not aDoNotAddVoidProp or not VarIsVoid(VValue[ndx]) then
               result.AddValue(VName[ndx],VValue[ndx]);
             break;
           end;
@@ -39521,7 +39521,7 @@ begin
       for j := 0 to high(aPropNames) do
         for ndx := 0 to VCount-1 do
           if IdemPropNameU(VName[ndx],aPropNames[j]) then begin
-            if (not aDoNotAddVoidProp) or (not VarIsVoid(VValue[ndx])) then
+            if not aDoNotAddVoidProp or not VarIsVoid(VValue[ndx]) then
               result.AddValue(VName[ndx],VValue[ndx]);
             break;
           end;
@@ -39553,7 +39553,7 @@ begin
     item := _Safe(VValue[ndx]);
     j := item^.GetValueIndex(aPropName);
     if j>=0 then
-      if (not Assigned(OnReduce)) or OnReduce(item) then
+      if not Assigned(OnReduce) or OnReduce(item) then
         result.AddItem(item^.VValue[j]);
   end;
 end;
@@ -39579,7 +39579,7 @@ begin
     j := item^.GetValueIndex(aPropName);
     if j>=0 then begin
       v := @item^.VValue[j];
-      if (not Assigned(OnReduce)) or OnReduce(v^) then
+      if not Assigned(OnReduce) or OnReduce(v^) then
         result.AddItem(v^);
     end;
   end;
@@ -42187,7 +42187,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
     if n<>1 then
       exit; // expect one Base64 encoded string value preceded by \uFFF0
     Val := GetJSONField(P,P,@wasString,@EndOfObject);
-    if (Val=nil) or (not wasString) or
+    if (Val=nil) or not wasString or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
        (LoadFrom(pointer(Base64ToBin(Val+3)))=nil) then
       exit; // invalid content
@@ -42594,7 +42594,7 @@ end;
 function TDynArray.FastLocateOrAddSorted(const Elem; wasAdded: PBoolean): integer;
 var toInsert: boolean;
 begin
-  toInsert := (not FastLocateSorted(Elem,result)) and (result>=0);
+  toInsert := not FastLocateSorted(Elem,result) and (result>=0);
   if toInsert then
     FastAddSorted(result,Elem);
   if wasAdded<>nil then
@@ -44050,7 +44050,7 @@ begin
   n := Count;
   if (n=0) or (n<fHashCountTrigger) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if (not Assigned(aHasher)) and (not Assigned(fHashElement)) then
+  if not Assigned(aHasher) and not Assigned(fHashElement) then
     exit;
   // find nearest power of two for new fHashs[] size
   cap := Capacity*2; // Capacity sounds better than Count
@@ -47150,7 +47150,7 @@ begin
     fEchoStart := 0;
   end;
   inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
-  if (not (twoFlushToStreamNoAutoResize in fCustomOptions)) and
+  if not (twoFlushToStreamNoAutoResize in fCustomOptions) and
      (fTempBufSize<49152) and
      (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
     FreeMem(fTempBuf); // with big content (256KB) comes bigger buffer (64KB)
@@ -47904,7 +47904,7 @@ begin  // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
   end;
   '"': begin
     Name := GetJSONField(P,P,@wasString,@EndOfObject);
-    if (Name=nil) or (not wasString) or (EndOfObject<>':') then
+    if (Name=nil) or not wasString or (EndOfObject<>':') then
       exit;
   end else
     exit;
@@ -48031,7 +48031,7 @@ begin
     result := Value;
   end else begin
     result := GetJSONField(P,P,@wStr,EndOfObject);
-    if (result<>nil) and (not wStr) and (result^>='f') then
+    if (result<>nil) and not wStr and (result^>='f') then
       if PInteger(result)^=TRUE_LOW then
         result := '1' else   // normalize true -> 1
       if PInteger(result)^=FALSE_LOW then
@@ -48744,7 +48744,7 @@ function IsMatch(const Pattern, Text: RawUTF8; CaseInsensitive: boolean): boolea
               end;
             end;
           end;
-          if (Invert and MemberMatch) or (not (Invert or MemberMatch)) then begin
+          if (Invert and MemberMatch) or not (Invert or MemberMatch) then begin
             result := mRANGE;
             exit;
           end;
@@ -52308,8 +52308,8 @@ begin
   fSafe.Lock;
   try
     result := 0;
-    if (not Assigned(OnMatch)) or
-       (not Assigned(KeyCompare)) and (not Assigned(ValueCompare)) then
+    if not Assigned(OnMatch) or
+       (not Assigned(KeyCompare) and not Assigned(ValueCompare)) then
       exit;
     n := fSafe.Padding[DIC_KEYCOUNT].VInteger;
     k := fKeys.fValue^;

@@ -4884,7 +4884,7 @@ begin
   if (TTF=nil) and (Ansi<0) then
     Ansi := ord('?'); // WinAnsi only font shows ? glyph for unicode chars
   while Ansi<>0 do begin
-    if (Ansi>0) and (not isSymbolFont) then begin
+    if (Ansi>0) and not isSymbolFont then begin
       // add WinAnsi-encoded chars as such
       if (TTF<>nil) and (Canvas.FPage.Font<>TTF) then
         Canvas.SetPDFFont(TTF,Canvas.FPage.FontSize);
@@ -5609,7 +5609,7 @@ begin
       Obj := TPdfXObject(FXRef.GetObject(Obj.FObjectNumber));
     if (Obj<>nil) and Obj.InheritsFrom(TPdfImage) and
        (Img.PixelWidth=Width) and (Img.PixelHeight=Height) and
-       (not IsZero(@Img.fHash,sizeof(Hash))) and
+       not IsZero(@Img.fHash,sizeof(Hash)) and
        CompareMem(@Img.fHash,@Hash,SizeOf(Hash)) and
        (Obj.Attributes<>nil) then begin
       result := TPdfName(Obj.Attributes.ValueByName('Name')).Value;
@@ -7560,7 +7560,7 @@ begin
   if FDictionary=nil then
     Exit;
   FPageMode := FDictionary.PdfNameByName('NonFullScreenPageMode');
-  if (FPageMode=nil) or (not (FPageMode is TPdfName)) then
+  if (FPageMode=nil) or not (FPageMode is TPdfName) then
     Exit;
   S := FPageMode.Value;
   for result := Low(TPdfPageMode) to High(TPdfPageMode) do
@@ -7590,7 +7590,7 @@ procedure TPdfCatalog.SetPageMode(Value: TPdfPageMode);
 var FPageMode: TPdfName;
 begin
   FPageMode := FData.PdfNameByName('PageMode');
-  if (FPageMode=nil) or (not (FPageMode is TPdfName)) then
+  if (FPageMode=nil) or not (FPageMode is TPdfName) then
     FData.AddItem('PageMode', PDF_PAGE_MODE_NAMES[Value]) else
     FPageMode.Value := PDF_PAGE_MODE_NAMES[Value];
 end;
@@ -7608,7 +7608,7 @@ begin
   if (Value=pmFullScreen) or (Value=pmUseNone) then
     FDictionary.RemoveItem('NonFullScreenPageMode') else begin
     FPageMode := FDictionary.PdfNameByName('NonFullScreenPageMode');
-    if (FPageMode=nil) or (not (FPageMode is TPdfName)) then
+    if (FPageMode=nil) or not (FPageMode is TPdfName) then
       FDictionary.AddItem('NonFullScreenPageMode', PDF_PAGE_MODE_NAMES[Value]) else
       FPageMode.Value := PDF_PAGE_MODE_NAMES[Value];
   end;
@@ -8978,7 +8978,7 @@ begin
   end;
   EMR_LINETO: begin
     E.NeedPen;
-    if (not E.Canvas.FNewPath) and not Moved then
+    if not E.Canvas.FNewPath and not Moved then
       E.Canvas.MoveToI(Position.X,Position.Y);
     E.Canvas.LineToI(PEMRLineTo(R)^.ptl.X,PEMRLineTo(R)^.ptl.Y);
     Position := PEMRLineTo(R)^.ptl;
@@ -9011,7 +9011,7 @@ begin
     E.FillRectangle(PRgnDataHeader(@PEMRFillRgn(R)^.RgnData[0])^.rcBound,false);
   end;
   EMR_POLYGON, EMR_POLYLINE, EMR_POLYGON16, EMR_POLYLINE16:
-  if (not brush.null) or (not pen.null) then begin
+  if not brush.null or not pen.null then begin
     if R^.iType in [EMR_POLYGON,EMR_POLYGON16] then
       E.NeedBrushAndPen else
       E.NeedPen;
@@ -9142,7 +9142,7 @@ begin
     polytypes := @PEMRPolyDraw(R)^.aptl[PEMRPolyDraw(R)^.cptl];
     i := 0;
     while i<integer(PEMRPolyDraw(R)^.cptl) do begin
-      case polytypes^[i] and (not PT_CLOSEFIGURE) of
+      case polytypes^[i] and not PT_CLOSEFIGURE of
         PT_LINETO: begin
           E.Canvas.LineToI(PEMRPolyDraw(R)^.aptl[i].X,PEMRPolyDraw(R)^.aptl[i].Y);
           if polytypes^[i] and PT_CLOSEFIGURE<>0 then begin
@@ -9181,7 +9181,7 @@ begin
     polytypes := @PEMRPolyDraw16(R)^.apts[PEMRPolyDraw16(R)^.cpts];
     i := 0;
     while i<integer(PEMRPolyDraw16(R)^.cpts) do begin
-      case polytypes^[i] and (not PT_CLOSEFIGURE) of
+      case polytypes^[i] and not PT_CLOSEFIGURE of
         PT_LINETO: begin
           E.Canvas.LineToI(PEMRPolyDraw16(R)^.apts[i].X,PEMRPolyDraw16(R)^.apts[i].Y);
           if polytypes^[i] and PT_CLOSEFIGURE<>0 then begin
@@ -10231,7 +10231,7 @@ begin
             WithClip := (Right>Left) and (Bottom>Top);
         if WithClip then
           ClipRect := Canvas.BoxI(R.rclBounds,true) else begin
-          WithClip := (not ClipRgnNull) and
+          WithClip := not ClipRgnNull and
                       (Canvas.fUseMetaFileTextClipping=tcAlwaysClip);
           if WithClip then
             ClipRect := GetClipRect;
@@ -10239,7 +10239,7 @@ begin
       end;
     end else
       WithClip := False;
-    bOpaque := (not brush.null) and (brush.Color<>clWhite) and
+    bOpaque := not brush.null and (brush.Color<>clWhite) and
        ((R.emrtext.fOptions and ETO_OPAQUE<>0) or
         ((font.BkMode=OPAQUE) and (font.BkColor=brush.color)));
     if bOpaque then
@@ -10331,7 +10331,7 @@ begin
       Canvas.GRestore;
       fFillColor := -1; // force set drawing color
     end;
-    if (not Canvas.FNewPath) then begin
+    if not Canvas.FNewPath then begin
       if WithClip then
         if not DC[nDC].ClipRgnNull then begin
           ClipRect := GetClipRect;

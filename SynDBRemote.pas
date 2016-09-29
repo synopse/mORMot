@@ -317,7 +317,7 @@ function TSQLDBServerAbstract.Process(Ctxt: THttpServerRequest): cardinal;
 var o: RawByteString;
 begin
   if (Ctxt.Method<>'POST') or (Ctxt.InContent='') or
-     (not IdemPropNameU(trim(Ctxt.InContentType),BINARY_CONTENT_TYPE)) then begin
+     not IdemPropNameU(trim(Ctxt.InContentType),BINARY_CONTENT_TYPE) then begin
     result := STATUS_NOTFOUND;
     exit;
   end;

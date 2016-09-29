@@ -2270,7 +2270,7 @@ begin
       if AlignDataInternalBuffer then
         Assert((result and 7)=0);
     end;
-    assert((not AlignDataInternalBuffer) or (result and 7=0));
+    assert(not AlignDataInternalBuffer or (result and 7=0));
     assert(fColumnCount=integer(nCols));
   finally
     OleDBConnection.fMalloc.Free(Cols);

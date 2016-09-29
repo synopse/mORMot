@@ -1321,13 +1321,13 @@ begin
   result := GetValueFromContext(ValueName,Value);
   if result<>msNothing then begin
     if (Value.VType<=varNull) or
-       ((Value.VType=varBoolean) and (not Value.VBoolean)) then
+       ((Value.VType=varBoolean) and not Value.VBoolean) then
       result := msNothing;
     exit;
   end;
   PushContext(Value);
   if (Value.VType<=varNull) or
-     ((Value.VType=varBoolean) and (not Value.VBoolean)) then
+     ((Value.VType=varBoolean) and not Value.VBoolean) then
     exit; // null or false value will not display the section
   with fContext[fContextCount-1] do
       if ListCount<0 then

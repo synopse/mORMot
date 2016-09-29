@@ -4904,7 +4904,7 @@ begin
   PCardinalArray(result)^[2] := adler32(0, pointer(data), length(data));
   i1 := CompressMem(pointer(data), @PByteArray(result)[12], length(data),
     length(result) - 12, CompressionLevel);
-  if (i1 > 0) and ( (12 + i1 < length(data)) or (not failIfGrow) ) then
+  if (i1 > 0) and ( (12 + i1 < length(data)) or not failIfGrow ) then
        SetLength(result, 12 + i1)
   else result := '';
 end;

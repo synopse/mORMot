@@ -3495,7 +3495,7 @@ var tmp: variant; // we use a local variant for only BSONVariant values
     Kind: TBSONElementType;
 begin
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
-  if (not DoNotTryExtendedMongoSyntax) and
+  if not DoNotTryExtendedMongoSyntax and
      BSONVariantType.TryJSONToVariant(JSON,tmp,EndOfObject) then
     // was betDateTime, betObjectID or betRegEx, from strict or extended JSON
     BSONWriteVariant(name,tmp) else
