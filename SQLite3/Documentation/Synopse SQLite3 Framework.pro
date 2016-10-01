@@ -18099,18 +18099,18 @@ $   <-----------------------------------------------------------
 $
 $  ECDSAVerify(QCB, Sign)
 $
-Now both ends can calculate shared secret keys {\f1\fs20 S1} and {\f1\fs20 S2}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function. Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} function, and {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function. Note that {\f1\fs20 S2} is intentionally not part of {\f1\fs20 kM} to reduce shared secret exposure.
+Now both ends can calculate shared secret keys {\f1\fs20 S1} and {\f1\fs20 S2}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C).
 $Client (dA, QCA)                                            Server (dB, QCB)
 $
 $  S1 = ECDH(dA,QF)                                         S1 = ECDH(dF,QCA)
 $  S2 = ECDH(dE,QCB)                                        S2 = ECDH(dB,QE)
 $                  kE = KDF(S1|S2|RndA|RndB,"salt")
-$                  kM = KDF(kE|S1|RndA|RndB,"hmac")
+$                  kM = KDF(kE|S1|S2|RndA|RndB,"hmac")
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
 $
-$                                     E(Ks,m2)|MAC(Hs,EF(kE,m2))
+$                                     E(kE,m2)|MAC(kM,EF(kE,m2))
 $   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 $
 $   EF(kE,m3)|MAC(kM,EF(kE,m3))
@@ -18119,7 +18119,7 @@ $    ...
 $
 A typical {\f1\fs20 SynEcc} implementation may use, as algorithms for high security but very fast process, hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions:
 - {\f1\fs20 KDF} = HMAC-SHA256 ("salt" and "hmac" values may be customized, but known on both sides);
-- {\f1\fs20 EF} = AES256-CFB or any AES256 mode, excluding ECB;
+- {\f1\fs20 EF} = AES256-CFB or any AES256 mode excluding ECB, with optional {\f1\fs20 @*SynLZ@} real-time compression;
 - {\f1\fs20 MAC} = HMAC-CRC256C (fast), HMAC-CRC32C (fastest) or HMAC-SHA256 (safest, but not mandatory).
 
 : Unilateral Authentication
@@ -18141,10 +18141,10 @@ $  S = ECDH(dE,QCB)                                         S = ECDH(dB,QE)
 $                  kE = KDF(S|RndA|RndB,"salt")
 $                  kM = KDF(kE|S|RndA|RndB,"hmac")
 $
-$   EF(kE,m1)|MAC(kM,m1)
+$   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
 $
-$                                            E(Ks,m2)|MAC(Hs,m2)
+$                                     E(kE,m2)|MAC(kM,EF(kE,m2))
 $   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 $    ...
 $
