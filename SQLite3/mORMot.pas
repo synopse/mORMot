@@ -5701,6 +5701,8 @@ type
     {$endif}
     optNoLogInput, optNoLogOutput, optErrorOnMissingParam
   );
+  /// how TServiceFactoryServer.SetOptions() will set the options value
+  TServiceMethodOptionsAction = (moaReplace, moaInclude, moaExclude);
 
   /// set of per-method execution options for an interface-based service provider
   // - by default, mehthod executions are concurrent, for better server
@@ -11794,6 +11796,10 @@ type
     fContractExpected: RawUTF8;
     // per-method execution rights
     fExecution: array of TServiceFactoryExecution;
+    /// union of all fExecution[].Options
+    fAnyOptions: TServiceMethodOptions;
+    procedure ExecutionAction(const aMethod: array of RawUTF8;
+      aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
     function GetInterfaceTypeInfo: PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     function GetInterfaceIID: TGUID;
@@ -11952,8 +11958,6 @@ type
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: array of TServiceMethodExecuteEvent;
     fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
-    /// union of all fExecution[].Options
-    fAnyOptions: TServiceMethodOptions;
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
@@ -12102,7 +12106,8 @@ type
     // a RunningThread.Synchronize() call - slower, but thread-safe
     // - this method returns self in order to allow direct chaining of security
     // calls, in a fluent interface
-    function SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions): TServiceFactoryServer;
+    function SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions;
+      aAction: TServiceMethodOptionsAction=moaReplace): TServiceFactoryServer;
     /// define the the instance life time-out, in seconds
     // - for sicClientDriven, sicPerSession, sicPerUser or sicPerGroup modes
     // - raise an exception for other kind of execution
@@ -12283,7 +12288,8 @@ type
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
     // - only supports optNoLogInput and optNoLogOutput on the client side
-    procedure SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions);
+    procedure SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions;
+      aAction: TServiceMethodOptionsAction=moaReplace);
     /// persist all service calls into a database instead of calling the client 
     // - expect a REST instance, which would store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
@@ -54543,6 +54549,31 @@ begin
   result := fInterface.fInterfaceIID;
 end;
 
+procedure TServiceFactory.ExecutionAction(const aMethod: array of RawUTF8;
+  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
+  procedure SetAction(i: integer);
+  begin
+    case aAction of
+    moaReplace:
+      fExecution[i].Options := aOptions;
+    moaInclude:
+      fExecution[i].Options := fExecution[i].Options + aOptions;
+    moaExclude:
+      fExecution[i].Options := fExecution[i].Options - aOptions;
+    end;
+  end;
+var i,m: integer;
+begin
+  if high(aMethod)<0 then
+    for i := 0 to fInterface.fMethodsCount-1 do
+      SetAction(i) else
+    for m := 0 to high(aMethod) do
+      SetAction(fInterface.CheckMethodIndex(aMethod[m]));
+  fAnyOptions := [];
+  for i := 0 to fInterface.fMethodsCount-1 do
+    fAnyOptions := fAnyOptions+fExecution[i].Options;
+end;
+
 constructor TServiceFactory.Create(aRest: TSQLRest;
   aInterface: PTypeInfo; aInstanceCreation: TServiceInstanceImplementation;
   const aContractExpected: RawUTF8);
@@ -55935,8 +55966,7 @@ begin
 end;
 
 function TServiceFactoryServer.SetOptions(const aMethod: array of RawUTF8;
-  aOptions: TServiceMethodOptions): TServiceFactoryServer;
-var m,i: integer;
+  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction): TServiceFactoryServer;
 begin
   if self<>nil then begin
     if (fInstanceCreation=sicPerThread) and (optExecLockedPerInterface in aOptions) then
@@ -55954,14 +55984,7 @@ begin
       raise EServiceException.CreateUTF8('%.SetOptions(I%,optExecLockedPerInterface)'+
         ' with opt*In*Thread options',[self,fInterfaceURI]);
     {$endif}
-    if high(aMethod)<0 then
-      for i := 0 to fInterface.fMethodsCount-1 do
-        fExecution[i].Options := aOptions else
-      for m := 0 to high(aMethod) do
-        fExecution[fInterface.CheckMethodIndex(aMethod[m])].Options := aOptions;
-    fAnyOptions := [];
-    for i := 0 to fInterface.fMethodsCount-1 do
-      fAnyOptions := fAnyOptions+fExecution[i].Options;
+    ExecutionAction(aMethod,aOptions,aAction);
     if (optFreeInPerInterfaceThread in fAnyOptions) and
        not (optExecInPerInterfaceThread in fAnyOptions) then
       raise EServiceException.CreateUTF8('%.SetOptions(I%,optFreeInPerInterfaceThread)'+
@@ -58214,19 +58237,14 @@ begin
 end;
 
 procedure TServiceFactoryClient.SetOptions(const aMethod: array of RawUTF8;
-  aOptions: TServiceMethodOptions);
+  aOptions: TServiceMethodOptions; aAction: TServiceMethodOptionsAction);
 var o: TServiceMethodOption;
-    m,i: integer;
 begin
   for o := low(o) to high(o) do
-    if (o in aOptions) and not (o in [optNoLogInput,optNoLogOutput]) then
+    if (o in aOptions) and not (o in [optNoLogInput..optErrorOnMissingParam]) then
       raise EServiceException.CreateUTF8('%.SetOptions(%) not supported',
         [self,GetEnumName(TypeInfo(TServiceMethodOption),ord(o))^]);
-  if high(aMethod)<0 then
-    for i := 0 to fInterface.fMethodsCount-1 do
-      fExecution[i].Options := aOptions else
-    for m := 0 to high(aMethod) do
-      fExecution[fInterface.CheckMethodIndex(aMethod[m])].Options := aOptions;
+  ExecutionAction(aMethod,aOptions,aAction);
 end;
 
 
