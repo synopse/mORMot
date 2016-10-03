@@ -299,7 +299,7 @@ type
     // - will raise an ESynMustache exception on error
     class function Parse(const aTemplate: RawUTF8): TSynMustache;
     /// remove the specified {{mustache}} template from the internal cache
-    // - returns TRUE on success, and FALSE if the template was not cached
+    // - returns TRUE on success, or FALSE if the template was not cached
     // by a previous call to Parse() class function
     class function UnParse(const aTemplate: RawUTF8): boolean;
     /// parse and render a {{mustache}} template over the supplied JSON

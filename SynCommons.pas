@@ -16245,6 +16245,7 @@ type
   // - you should execute BackgroundExecute on a regular pace (e.g. every second)
   // to gather low-level CPU and RAM information for the given set of processes
   // - is able to keep an history of latest sample values
+  // - use Current class function to access a process-wide instance
   TSystemUse = class(TSynPersistent)
   protected
     fProcess: array of record
@@ -16259,6 +16260,7 @@ type
     fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnSystemUseMeasured;
+    fTimer: TSynBackgroundTimer;
     function ProcessIndex(aProcessID: integer): integer;
   public
     /// a TSynBackgroundThreadProcess compatible event IDr
@@ -16309,16 +16311,39 @@ type
     // - aProcessID=0 will return information from the current process
     // - returns nil if the Process ID was not registered as Create() parameter
     // - returns the sample values as an array, starting from the last to the oldest
-    function History(aProcessID: integer=0): TSingleDynArray; overload;
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function History(aProcessID: integer=0; aDepth: integer=0): TSingleDynArray; overload;
+    /// returns total (Kernel+User) CPU usage percent history of the supplied
+    // process, as a string of two digits values
+    // - aProcessID=0 will return information from the current process
+    // - returns '' if the Process ID was not registered as Create() parameter
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryText(aProcessID: integer=0; aDepth: integer=0): RawUTF8;
+    {$ifndef NOVARIANTS}
+    /// returns total (Kernel+User) CPU usage percent history of the supplied process
+    // - aProcessID=0 will return information from the current process
+    // - returns null if the Process ID was not registered as Create() parameter
+    // - returns the sample values as a TDocVariant array, starting from the
+    // last to the oldest, with two digits precision (as currency values)
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryVariant(aProcessID: integer=0; aDepth: integer=0): variant;
+    {$endif}
+    /// access to a global instance, corresponding to the current process
+    // - its HistoryDepth will be of 60 items
+    class function Current(aCreateIfNone: boolean=true): TSystemUse;
     /// returns detailed CPU and RAM usage history of the supplied process
     // - aProcessID=0 will return information from the current process
     // - returns nil if the Process ID was not registered as Create() parameter
     // - returns the sample values as an array, starting from the last to the oldest
-    function HistoryData(aProcessID: integer=0): TSystemUseDataDynArray; overload;
+    // - you can customize the maximum depth, with aDepth < HistoryDepth
+    function HistoryData(aProcessID: integer=0; aDepth: integer=0): TSystemUseDataDynArray; overload;
     /// how many items are stored internally, and returned by the History() method
     property HistoryDepth: integer read fHistoryDepth;
     /// executed when TSystemUse.BackgroundExecute finished its measurement
     property OnMeasured: TOnSystemUseMeasured read fOnMeasured write fOnMeasured;
+    /// low-level access to the associated timer running BackgroundExecute
+    // - equals nil if has been associated to no timer
+    property Timer: TSynBackgroundTimer read fTimer write fTimer;
   end;
 
 type
@@ -33400,7 +33425,8 @@ begin
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
       'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
       {$endif}{$endif}
-      'freemem',TSynMonitorMemory.FreeAsText,'freedisk',TSynMonitorDisk.FreeAsText]);
+      'freemem',TSynMonitorMemory.FreeAsText,'freedisk',TSynMonitorDisk.FreeAsText,
+      'cpu',TSystemUse.Current(false).HistoryText(0,15)]);
 end;
 
 {$ifdef MSWINDOWS}
@@ -58821,6 +58847,9 @@ end;
 
 { TSynBackgroundTimer }
 
+var
+  ProcessSystemUse: TSystemUse;
+
 constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
   aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
 begin
@@ -58831,6 +58860,8 @@ end;
 
 destructor TSynBackgroundTimer.Destroy;
 begin
+  if (ProcessSystemUse<>nil) and (ProcessSystemUse.fTimer=self) then
+    ProcessSystemUse.fTimer := nil; // allows processing by another background timer
   inherited Destroy;
   fTaskLock.Done;
 end;
@@ -59014,6 +59045,7 @@ var ftidl,ftkrn,ftusr,ftp,fte: TFileTime;
 begin
   if (fProcess=nil) or (fHistoryDepth=0) or not GetSystemTimes(ftidl,ftkrn,ftusr) then
     exit;
+  fTimer := Sender;
   now := NowUTC;
   FileTimeToInt64(ftkrn,skrn);
   FileTimeToInt64(ftusr,susr);
@@ -59182,7 +59214,7 @@ begin
   result := Data(aProcessID).User;
 end;
 
-function TSystemUse.HistoryData(aProcessID: integer): TSystemUseDataDynArray;
+function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
 var i,n: integer;
 begin
   i := ProcessIndex(aProcessID);
@@ -59191,6 +59223,8 @@ begin
     try
       with fProcess[i] do begin
         n := length(Data);
+        if (aDepth>0) and (n>aDepth) then
+          n := aDepth;
         SetLength(result,n); // make ordered copy
         dec(n);
         for i := 0 to n do begin
@@ -59199,7 +59233,7 @@ begin
             result[i] := Data[n];
             dec(n);
           end;
-          if result[i].TimeStamp=0 then begin
+          if PInt64(@result[i].TimeStamp)^=0 then begin
             SetLength(result,i); // truncate to latest available sample
             break;
           end;
@@ -59212,16 +59246,52 @@ begin
     result := nil;
 end;
 
-function TSystemUse.History(aProcessID: integer): TSingleDynArray;
+function TSystemUse.History(aProcessID,aDepth: integer): TSingleDynArray;
 var i,n: integer;
     data: TSystemUseDataDynArray;
 begin
-  data := HistoryData(aProcessID);
+  data := HistoryData(aProcessID,aDepth);
   n := length(data);
   SetLength(result,n);
   for i := 0 to n-1 do
     result[i] := data[i].Kernel+data[i].User;
 end;
+
+class function TSystemUse.Current(aCreateIfNone: boolean): TSystemUse;
+begin
+  if (ProcessSystemUse=nil) and aCreateIfNone then
+    GarbageCollectorFreeAndNil(ProcessSystemUse,TSystemUse.Create(60));
+  result := ProcessSystemUse;
+end;
+
+function TSystemUse.HistoryText(aProcessID,aDepth: integer): RawUTF8;
+var data: TSystemUseDataDynArray;
+    i: integer;
+begin
+  result := '';
+  if self=nil then
+    exit;
+  data := HistoryData(aProcessID,aDepth);
+  for i := 0 to high(data) do
+    result := FormatUTF8('%% ',[result,TruncTo2Digits(data[i].Kernel+data[i].User)]);
+  result := trim(result);
+end;
+
+{$ifndef NOVARIANTS}
+
+function TSystemUse.HistoryVariant(aProcessID,aDepth: integer): variant;
+var doc: TDocVariantData absolute result;
+    data: TSystemUseDataDynArray;
+    i: integer;
+begin
+  VarClear(result);
+  data := HistoryData(aProcessID,aDepth);
+  doc.InitFast(length(data),dvArray);
+  for i := 0 to high(data) do
+    doc.AddItem(TruncTo2Digits(data[i].Kernel+data[i].User));
+end;
+
+{$endif NOVARIANTS}
 
 
 { TSynParallelProcess }
