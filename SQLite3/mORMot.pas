@@ -14284,6 +14284,12 @@ type
     // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// will gather CPU and RAM information in a background thread
+    // - you can specify the update frequency, in seconds
+    // - access to the information via the returned instance, which maps
+    // the TSystemUse.Current class function
+    // - do nothing if global TSystemUse.Current was already assigned 
+    function SystemUseTrack(periodSec: integer=10): TSystemUse;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -33327,6 +33333,20 @@ begin
   if self<>nil then
     EnsureBackgroundTimerExists.AsynchRedirect(
       aGUID,aDestinationInstance,aCallbackInterface);
+end;
+
+function TSQLRest.SystemUseTrack(periodSec: integer=10): TSystemUse;
+begin
+  result := nil;
+  if self=nil then
+    exit;
+  result := TSystemUse.Current;
+  if (result.Timer=nil) or
+     ((BackgroundTimer<>nil) and (result.Timer=BackgroundTimer)) then begin
+    if periodSec>0 then
+      result.Timer := EnsureBackgroundTimerExists;
+    TimerEnable(result.BackgroundExecute,periodSec);
+  end;
 end;
 
 procedure TSQLRest.AdministrationExecute(const DatabaseName,SQL: RawUTF8;
