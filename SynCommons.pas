@@ -59022,7 +59022,7 @@ begin
     inc(fDataIndex);
     if fDataIndex>=fHistoryDepth then
       fDataIndex := 0;
-    difftot := (fSysPrevKernel-skrn)+(fSysPrevUser-susr);
+    difftot := (skrn-fSysPrevKernel)+(susr-fSysPrevUser);
     fSysPrevKernel := skrn;
     fSysPrevUser := susr;
     for i := 0 to high(fProcess) do
@@ -59033,8 +59033,8 @@ begin
           FileTimeToInt64(ftkrn,pkrn);
           FileTimeToInt64(ftusr,pusr);
           if PrevKernel<>0 then begin
-            diffkrn := PrevKernel-pkrn;
-            diffusr := PrevUser-pusr;
+            diffkrn := pkrn-PrevKernel;
+            diffusr := pusr-PrevUser;
             FillcharFast(mem,sizeof(mem),0);
             mem.cb := sizeof(mem);
             GetProcessMemoryInfo(hnd,mem,SizeOf(mem));
