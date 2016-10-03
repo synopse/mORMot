@@ -16262,9 +16262,9 @@ type
     function ProcessIndex(aProcessID: integer): integer;
   public
     /// a TSynBackgroundThreadProcess compatible event IDr
-    // - to be supplied to a TSynBackgroundTimer.Enable method so that it will
-    // run every few seconds and retrieve the CPU and RAM use
     // - matches TOnSynBackgroundTimerProcess callback signature
+    // - to be supplied e.g. to a TSynBackgroundTimer.Enable method so that it
+    // will run every few seconds and retrieve the CPU and RAM use
     procedure BackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
     /// track the CPU and RAM usage of the supplied set of Process ID
@@ -23660,6 +23660,17 @@ end;
 
 
 {$ifdef MSWINDOWS}
+procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef CPU64} // as recommended by MSDN to avoid align issue
+  PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
+  PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
+  {$else}
+  I64 := PInt64(@FT)^;
+  {$endif}
+end;
+
 const
   // lpMinimumApplicationAddress retrieved from Windows is very low $10000
   // - i.e. maximum number of ID per table would be 65536 in TSQLRecord.GetID
@@ -23684,11 +23695,7 @@ var fileTime: TFileTime;
 begin
    GetSystemTimeAsFileTime(fileTime); // very fast, with 100 ns unit
    {$ifdef CPU64} // 64 bit XP ? not very likely - but who knows :)
-   // http://msdn.microsoft.com/en-us/library/windows/desktop/ms724284 states:
-   // do not cast a pointer to a FILETIME structure to either a int64* value
-   // because it can cause alignment faults on 64-bit Windows -> manual compute
-   result := fileTime.dwHighDateTime;
-   result := (result shl 32)+fileTime.dwLowDateTime;
+   FileTimeToInt64(fileTime,result);
    result := result div 10000;
    {$else}
    result := trunc(PInt64(@fileTime)^/10000); // 100 ns unit
@@ -58989,22 +58996,17 @@ type
   end;
 
 var
+  hsapi: HMODULE;
   GetSystemTimes: function(var lpIdleTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
   GetProcessTimes: function(hProcess: THandle;
     var lpCreationTime, lpExitTime, lpKernelTime, lpUserTime: TFileTime): BOOL; stdcall;
-  hsapi: HMODULE;
   GetProcessMemoryInfo: function(Process: THandle;
     var ppsmemCounters: TProcessMemoryCounters; cb: DWORD): BOOL; stdcall;
 
 procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
-  procedure ToInt64(const FT: TFileTime; out I64: Int64);
-  begin
-    PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
-    PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
-  end;
 var ftidl,ftkrn,ftusr,ftp,fte: TFileTime;
-    skrn,susr, pkrn,pusr, sdkrn,sdusr, pdkrn,pdusr: Int64;
+    skrn,susr, pkrn,pusr, difftot, diffkrn,diffusr: Int64;
     i: integer;
     hnd: THandle;
     mem: TProcessMemoryCounters;
@@ -59013,36 +59015,38 @@ begin
   if (fProcess=nil) or (fHistoryDepth=0) or not GetSystemTimes(ftidl,ftkrn,ftusr) then
     exit;
   now := NowUTC;
-  ToInt64(ftkrn,skrn);
-  ToInt64(ftusr,susr);
+  FileTimeToInt64(ftkrn,skrn);
+  FileTimeToInt64(ftusr,susr);
   fSafe.Enter;
   try
     inc(fDataIndex);
     if fDataIndex>=fHistoryDepth then
       fDataIndex := 0;
-    sdkrn := fSysPrevKernel-skrn;
-    sdusr := fSysPrevUser-susr;
+    difftot := (fSysPrevKernel-skrn)+(fSysPrevUser-susr);
+    fSysPrevKernel := skrn;
+    fSysPrevUser := susr;
     for i := 0 to high(fProcess) do
     with fProcess[i] do begin
       hnd := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ,false,ID);
       try
         if GetProcessTimes(hnd,ftp,fte,ftkrn,ftusr) then begin
-          ToInt64(ftkrn,pkrn);
-          ToInt64(ftusr,pusr);
+          FileTimeToInt64(ftkrn,pkrn);
+          FileTimeToInt64(ftusr,pusr);
           if PrevKernel<>0 then begin
-            pdkrn := PrevKernel-pkrn;
-            pdusr := PrevUser-pusr;
+            diffkrn := PrevKernel-pkrn;
+            diffusr := PrevUser-pusr;
             FillcharFast(mem,sizeof(mem),0);
             mem.cb := sizeof(mem);
             GetProcessMemoryInfo(hnd,mem,SizeOf(mem));
             with Data[fDataIndex] do begin
               TimeStamp := now;
-              if sdkrn>0 then
-                Kernel := pdkrn*100/sdkrn else
+              if difftot>0 then begin
+                Kernel := diffkrn*100/difftot;
+                User := diffusr*100/difftot;
+              end else begin
                 Kernel := 0;
-              if sdusr>0 then
-                User := pdusr*100/sdusr else
                 User := 0;
+              end;
               WorkKB := mem.WorkingSetSize shr 10;
               VirtualKB := mem.PagefileUsage shr 10;
             end;
@@ -59056,8 +59060,6 @@ begin
         CloseHandle(hnd);
       end;
     end;
-    fSysPrevKernel := skrn;
-    fSysPrevUser := susr;
   finally
     fSafe.Leave;
   end;
@@ -59075,7 +59077,9 @@ end;
 constructor TSystemUse.Create(const aProcessID: array of integer;
   aHistoryDepth: integer);
 var i: integer;
+    {$ifdef MSWINDOWS}
     h: HMODULE;
+    {$endif}
 begin
   inherited Create;
   {$ifdef MSWINDOWS}
@@ -59087,7 +59091,7 @@ begin
     @GetProcessMemoryInfo := GetProcAddress(hsapi,'GetProcessMemoryInfo');
     if not Assigned(GetSystemTimes) or not Assigned(GetProcessTimes) or
        not Assigned(GetProcessMemoryInfo) then
-      exit; // impossible to monitor CPU under older Windows
+      exit; // no system monitoring API under oldest Windows
   end;
   {$else}
   exit; // not implemented yet
