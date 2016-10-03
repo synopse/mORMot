@@ -554,6 +554,7 @@ end;
 function TSQLRestStorageMongoDB.DocFromJSON(const JSON: RawUTF8;
   Occasion: TSQLOccasion; var Doc: TDocVariantData): TID;
 var i, ndx: integer;
+    dt: TDateTime;
     blob: RawByteString;
     info: TSQLPropInfo;
     typenfo: pointer;
@@ -591,11 +592,16 @@ begin
       end;
       varString: // handle some TEXT values
       case info.SQLFieldType of
-        sftDateTime: // store ISO-8601 text as MongoDB date/time
-          Variant(V^) := Iso8601ToDateTime(RawByteString(V^.VAny));
-        sftBlob, sftBlobCustom: // store Base64-encoded BLOB as binary
-          BSONVariantType.FromBinary(BlobToTSQLRawBlob(RawByteString(V^.VAny)),
-            bbtGeneric,Variant(V^));
+        sftDateTime: begin // store ISO-8601 text as MongoDB date/time
+          dt := Iso8601ToDateTime(RawByteString(V^.VAny));
+          RawByteString(V^.VAny) := '';
+          V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+          V^.VDate := dt;
+        end;
+        sftBlob, sftBlobCustom: begin // store Base64-encoded BLOB as binary
+          blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
+          BSONVariantType.FromBinary(blob,bbtGeneric,Variant(V^));
+        end;
         sftBlobDynArray: begin // store dynamic array as object (if has any JSON)
           blob := BlobToTSQLRawBlob(RawByteString(V^.VAny));
           if blob='' then
