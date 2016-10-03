@@ -218,10 +218,13 @@ type
   end;
 
   /// some options to be used for TDDDRestSettings
+  // - as part of the .settings, they may be tuned for specific installations,
+  // whereas TDDDNewRestInstanceOptions are defined in code
   TDDDRestSettingsOption =
     (optEraseDBFileAtStartup,
      optSQlite3FileSafeSlowMode,
-     optSQlite3FileSafeNonExclusive);
+     optSQlite3FileSafeNonExclusive,
+     optNoSystemUse);
 
   /// define options to be used for TDDDRestSettings
   TDDDRestSettingsOptions = set of TDDDRestSettingsOption;
@@ -660,6 +663,9 @@ begin
     except
       FreeAndNil(result);
     end; // note: TSQLRestClient.SetUser() has been called in TSQLRest*DBCreate()
+    if not(optNoSystemUse in Options) then
+      // if not already set, update cpu/ram info every 10 sec + 10 min history
+      result.SystemUseTrack(10);
   finally
     if riOwnModel in aOptions then
       if result=nil then // avoid memory leak
