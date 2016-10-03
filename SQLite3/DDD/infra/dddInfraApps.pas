@@ -503,6 +503,7 @@ type
     fHost, fPort: SockString;
     fSocketInputBuffer: RawByteString;
     fShouldDisconnect: boolean;
+    fSocketDisable: boolean;
     procedure InternalExecute; override;
     procedure ExecuteConnect;
     procedure ExecuteDisconnect;
@@ -526,6 +527,9 @@ type
     // - resulting format is
     // $ {...MonitoringProperties...,"Rest":{...RestStats...}}
     function StatsAsJson: RawUTF8;
+    /// will pause any communication with the associated socket
+    // - could be used before stopping the service for cleaner shutdown
+    procedure Shutdown;
     /// the parameters used to setup this thread process
     property Settings: TDDDSocketThreadSettings read fSettings;
   published
@@ -1114,6 +1118,8 @@ procedure TDDDSocketThread.ExecuteSocket;
 var
   pending, len: integer;
 begin
+  if Terminated or fSocketDisable then
+    exit;
   pending := fSocket.DataInPending(fSettings.SocketLoopPeriod);
   if Terminated or (pending = 0) then
     exit;
@@ -1194,6 +1200,15 @@ begin // CachedMemory method will also purge any outdated cached entries
   fPreviousMonitorTix := GetTickCount64;
 end;
 
+procedure TDDDSocketThread.Shutdown;
+begin
+  if (self <> nil) and not fSocketDisable then begin
+    fSocketDisable := true;
+    fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
+      'with %:%', [ClassType, fHost, fPort], self);
+  end;
+end;
+
 function TDDDSocketThread.StatsAsJson: RawUTF8;
 begin
   with TJSONSerializer.CreateOwnedStream do
@@ -1217,6 +1232,10 @@ function TDDDSocketThread.TrySend(const aFrame: RawByteString;
 var
   tmpSock: IDDDSocket; // avoid GPF if fSocket=nil after fSafe.UnLock (unlikely)
 begin
+  if fSocketDisable then begin
+    result := false;
+    exit;
+  end;
   fSafe.Lock;
   result := (aFrame <> '') and (fSocket <> nil) and
     (fMonitoring.State = tpsConnected) and not fShouldDisconnect;
