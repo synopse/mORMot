@@ -16248,9 +16248,9 @@ type
     Kernel: single;
     /// percent of current User-space CPU usage for this process
     User: single;
-    /// how much KB of memory are used by this process
+    /// how many KB of working memory are used by this process
     WorkKB: cardinal;
-    /// how much KB of virtual memory are used by this process
+    /// how many KB of virtual memory are used by this process
     VirtualKB: cardinal;
   end;
   /// store CPU and RAM usage history for a given process
@@ -16340,7 +16340,9 @@ type
     // - aProcessID=0 will return information from the current process
     // - returns '' if the Process ID was not registered as Create() parameter
     // - you can customize the maximum depth, with aDepth < HistoryDepth
-    function HistoryText(aProcessID: integer=0; aDepth: integer=0): RawUTF8;
+    // - the memory history (in MB) can be optionally returned in aDestMemoryMB
+    function HistoryText(aProcessID: integer=0; aDepth: integer=0;
+      aDestMemoryMB: PRawUTF8=nil): RawUTF8;
     {$ifndef NOVARIANTS}
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessID=0 will return information from the current process
@@ -33443,7 +33445,9 @@ begin
 end;
 
 function SystemInfoJson: RawUTF8;
+var cpu,mem: RawUTF8;
 begin
+  cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
   with SystemInfo do
     result := JSONEncode([
       'host',ExeVersion.Host,'user',ExeVersion.User,'os',OSVersionText,
@@ -33456,8 +33460,9 @@ begin
       {$ifndef PUREPASCAL}{$ifdef CPUINTEL}
       'cpufeatures', LowerCase(ToText(CpuFeatures, ' ')),
       {$endif}{$endif}
-      'freemem',TSynMonitorMemory.FreeAsText,'freedisk',TSynMonitorDisk.FreeAsText,
-      'cpu',TSystemUse.Current(false).HistoryText(0,15)]);
+      'processcpu',cpu,'processmem',mem,
+      'freemem',TSynMonitorMemory.FreeAsText,
+      'freedisk',TSynMonitorDisk.FreeAsText]);
 end;
 
 {$ifdef MSWINDOWS}
@@ -50518,7 +50523,7 @@ procedure TSynMonitorDisk.RetrieveDiskInfo;
       dn: RawUTF8;
   begin
     if fName='' then
-      fName := UpperCase(StringToUTF8(ExtractFileDrive(GetCurrentDir)));
+      fName := UpperCase(StringToUTF8(ExtractFileDrive(ExeVersion.ProgramFilePath)));
     dn := fName;
     if (dn<>'') and (dn[2]=':') and (dn[3]=#0) then
       dn := dn+'\';
@@ -59218,9 +59223,10 @@ begin
   if aProcessID=0 then
     aProcessID := GetCurrentProcessID;
   {$endif}
-  for result := 0 to high(fProcess) do
-    if fProcess[result].ID=aProcessID then
-      exit;
+  if self<>nil then
+    for result := 0 to high(fProcess) do
+      if fProcess[result].ID=aProcessID then
+        exit;
   result := -1;
 end;
 
@@ -59271,7 +59277,7 @@ begin
 end;
 
 function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
-var i,n: integer;
+var i,n,last: integer;
 begin
   i := ProcessIndex(aProcessID);
   if i>=0 then begin
@@ -59279,15 +59285,15 @@ begin
     try
       with fProcess[i] do begin
         n := length(Data);
+        last := n-1;
         if (aDepth>0) and (n>aDepth) then
           n := aDepth;
         SetLength(result,n); // make ordered copy
-        dec(n);
-        for i := 0 to n do begin
+        for i := 0 to n-1 do begin
           if i<=fDataIndex then
             result[i] := Data[fDataIndex-i] else begin
-            result[i] := Data[n];
-            dec(n);
+            result[i] := Data[last];
+            dec(last);
           end;
           if PInt64(@result[i].TimeStamp)^=0 then begin
             SetLength(result,i); // truncate to latest available sample
@@ -59320,31 +59326,37 @@ begin
   result := ProcessSystemUse;
 end;
 
-function TSystemUse.HistoryText(aProcessID,aDepth: integer): RawUTF8;
+function TSystemUse.HistoryText(aProcessID,aDepth: integer;
+  aDestMemoryMB: PRawUTF8): RawUTF8;
 var data: TSystemUseDataDynArray;
+    mem: RawUTF8;
     i: integer;
 begin
-  result := '';
-  if self=nil then
-    exit;
   data := HistoryData(aProcessID,aDepth);
+  result := '';
   for i := 0 to high(data) do
-    result := FormatUTF8('%% ',[result,TruncTo2Digits(data[i].Kernel+data[i].User)]);
+  with data[i] do begin
+    result := FormatUTF8('%% ',[result,TruncTo2Digits(Kernel+User)]);
+    if aDestMemoryMB<>nil then
+      mem := FormatUTF8('%% ',[mem,TruncTo2Digits(WorkKB/1024)]);
+  end;
   result := trim(result);
+  if aDestMemoryMB<>nil then
+    aDestMemoryMB^ := trim(mem);
 end;
 
 {$ifndef NOVARIANTS}
 
 function TSystemUse.HistoryVariant(aProcessID,aDepth: integer): variant;
-var doc: TDocVariantData absolute result;
+var res: TDocVariantData absolute result;
     data: TSystemUseDataDynArray;
     i: integer;
 begin
   VarClear(result);
   data := HistoryData(aProcessID,aDepth);
-  doc.InitFast(length(data),dvArray);
+  res.InitFast(length(data),dvArray);
   for i := 0 to high(data) do
-    doc.AddItem(TruncTo2Digits(data[i].Kernel+data[i].User));
+    res.AddItem(TruncTo2Digits(data[i].Kernel+data[i].User));
 end;
 
 {$endif NOVARIANTS}
