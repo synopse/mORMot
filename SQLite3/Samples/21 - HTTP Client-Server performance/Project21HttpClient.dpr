@@ -8,6 +8,7 @@ uses
   {$ifdef FPC}
   Interfaces,
   {$endif}
+  ECCProcess in '..\33 - ECC\ECCProcess.pas',
   Project21HttpClientMain in 'Project21HttpClientMain.pas' {MainForm};
 
 {$ifndef FPC}

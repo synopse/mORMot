@@ -876,6 +876,14 @@ type
 
 {$endif FPC}
 
+{$ifdef DELPHI6OROLDER}
+
+// some definitions not available prior to Delphi 7
+type
+  UInt64 = Int64;
+
+{$endif}
+
 {$ifdef DELPHI5OROLDER}
   // Delphi 5 doesn't have those basic types defined :(
 const
@@ -897,7 +905,6 @@ type
   PBoolean = ^Boolean;
   PComp = ^Comp;
   THandle = LongWord;
-  UInt64 = Int64;
   PVarData = ^TVarData;
   TVarData = packed record
     // mostly used for varNull, varInt64, varDouble, varString and varAny
@@ -3767,6 +3774,12 @@ type
 procedure RaiseLastOSError;
 
 {$endif DELPHI5OROLDER}
+
+{$ifdef DELPHI6OROLDER}
+
+procedure VarCastError;
+
+{$endif}
 
 /// extract file name, without its extension
 function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
@@ -26803,6 +26816,15 @@ begin
 end;
 
 {$endif DELPHI5OROLDER}
+
+{$ifdef DELPHI6OROLDER}
+
+procedure VarCastError;
+begin
+  raise EVariantError.Create('Variant Type Cast Error');
+end;
+
+{$endif}
 
 function FileSetDateFrom(const Dest: TFileName; SourceHandle: integer): boolean;
 {$ifdef MSWINDOWS}
