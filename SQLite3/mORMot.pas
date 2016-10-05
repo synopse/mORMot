@@ -39990,8 +39990,9 @@ begin // called by root/TimeStamp/info REST method
   m := TSynMonitorMemory.Create;
   try
     cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
-    info.AddNameValuesToObject(['exe', ExeVersion.ProgramName,
-      'version',ExeVersion.Version.Detailed, 'started',Stats.StartDate,
+    info.AddNameValuesToObject(['timestamp',ServerTimeStamp,
+      'exe', ExeVersion.ProgramName, 'version',ExeVersion.Version.Detailed,
+      'started',Stats.StartDate,
       'clients',Stats.ClientsCurrent, 'methods',Stats.ServiceMethod,
       'interfaces',Stats.ServiceInterface, 'total',Stats.TaskCount,
       'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
