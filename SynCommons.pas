@@ -14590,7 +14590,10 @@ const
   // - would have VKind=dvUndefined and VCount=0, so _Safe() would return
   // a valid, but void document
   // - its VType is varNull, so would be viewed as a null variant
-  DocVariantDataFake: TDocVariantData = (VType:1);
+  // - dvoReturnNullForUnknownProperty is defined, so that U[]/I[]... methods
+  // won't raise any exception about unexpected field name
+  DocVariantDataFake: TDocVariantData = (
+    VType:1; VOptions:[dvoReturnNullForUnknownProperty]);
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
