@@ -39984,18 +39984,21 @@ begin
 end;
 
 procedure TSQLRestServer.InternalInfo(var info: TDocVariantData);
+var cpu,mem: RawUTF8;
+    m: TSynMonitorMemory;
 begin // called by root/TimeStamp/info REST method
-  info.AddNameValuesToObject(['exe', ExeVersion.ProgramName,
-    'version', ExeVersion.Version.Detailed, 'started', Stats.StartDate,
-    'clients', Stats.ClientsCurrent, 'methods', Stats.ServiceMethod,
-    'interfaces', Stats.ServiceInterface, 'total', Stats.TaskCount,
-    'time', Stats.TotalTime.Text, 'host', ExeVersion.Host]);
-  with TSynMonitorMemory.Create do
+  m := TSynMonitorMemory.Create;
   try
-    info.AddNameValuesToObject(['memused', KB(AllocatedUsed.Bytes),
-      'memfree', FormatUTF8('% / %',[PhysicalMemoryFree.Text,PhysicalMemoryTotal.Text])]);
+    cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
+    info.AddNameValuesToObject(['exe', ExeVersion.ProgramName,
+      'version',ExeVersion.Version.Detailed, 'started',Stats.StartDate,
+      'clients',Stats.ClientsCurrent, 'methods',Stats.ServiceMethod,
+      'interfaces',Stats.ServiceInterface, 'total',Stats.TaskCount,
+      'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
+      'cpu',cpu, 'mem',mem, 'memused', KB(m.AllocatedUsed.Bytes),
+      'memfree', FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text])]);
   finally
-    Free;
+    m.Free;
   end;
 end;
 
