@@ -42925,7 +42925,9 @@ begin
   n := Source.Count;
   if n<>0 then
     if ElemType=nil then
-      MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
+      if GetIsObjArray then
+        LoadFromJSON(pointer(Source.SaveToJSON)) else
+        MoveFast(Source.fValue^^,fValue^^,n*ElemSize) else
       CopyArray(fValue^,Source.fValue^,ElemType,n);
 end;
 
