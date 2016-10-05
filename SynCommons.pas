@@ -14863,6 +14863,12 @@ function ConsoleKeyPressed(ExpectedKey: Word): Boolean;
 function Utf8ToConsole(const S: RawUTF8): RawByteString;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
+/// direct conversion of a VCL string into a console OEM-encoded String
+// - under Windows, will use the CP_OEMCP encoding
+// - under Linux, will expect the console to be defined with UTF-8 encoding
+function StringToConsole(const S: string): RawByteString;
+  {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
 /// could be used in the main program block of a console application to
 // handle unexpected fatal exceptions
 // - typical use may be:
@@ -49363,6 +49369,11 @@ begin
   {$endif}
 end;
 
+function StringToConsole(const S: string): RawByteString;
+begin
+  result := Utf8ToConsole(StringToUTF8(S));
+end;
+
 {$I-}
 procedure ConsoleShowFatalException(E: Exception; WaitForEnterKey: boolean);
 begin
@@ -49372,7 +49383,7 @@ begin
   TextColor(ccWhite);
   write(E.ClassName);
   TextColor(ccLightRed);
-  Writeln(' raised with message:'#13#10' ',UTF8ToConsole(StringToUTF8(E.Message)));
+  Writeln(' raised with message:'#13#10' ',StringToConsole(E.Message));
   TextColor(ccLightGray);
   if WaitForEnterKey then begin
     writeln(#13#10'Program will now abort');
