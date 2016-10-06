@@ -24849,7 +24849,7 @@ begin
     W.AddShort('<xml xmlns:s="uuid:BDC6E3F0-6DA3-11d1-A2A3-00AA00C14882" '+
       'xmlns:dt="uuid:C2F41010-65B3-11d1-A29F-00AA00C14882" '+
       'xmlns:rs="urn:schemas-microsoft-com:rowset" xmlns:z="#RowsetSchema">');
-    if (self<>nil) and (FieldCount>0) or (fRowCount>0) then begin
+    if (self<>nil) and ((FieldCount>0) or (fRowCount>0)) then begin
       // retrieve normalized field names and types
       if length(fFieldNames)<>fFieldCount then
         InitFieldNames;
