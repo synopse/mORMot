@@ -13281,6 +13281,7 @@ const
 
   /// TDocVariant options to be used for case-sensitive TSynNameValue-like
   // storage, with optional extended JSON syntax serialization
+  // - consider using JSON_OPTIONS_FAST_EXTENDED for case-insensitive objects
   JSON_OPTIONS_NAMEVALUE: array[boolean] of TDocVariantOptions = (
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoNameCaseSensitive],
@@ -13305,7 +13306,8 @@ const
   // ! begin
   // !   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
   // ! end;
-  // - consider using JSON_OPTIONS_NAMEVALUE[true] for TSynNameValue-like storage
+  // - consider using JSON_OPTIONS_NAMEVALUE[true] for case-sensitive
+  // TSynNameValue-like storage
   JSON_OPTIONS_FAST_EXTENDED: TDocVariantOptions =
     [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,
      dvoSerializeAsExtendedJson];
@@ -18898,13 +18900,12 @@ end;
 
 procedure Int64ToUtf8(Value: Int64; var result: RawUTF8);
 var tmp: array[0..23] of AnsiChar;
-    V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  {$ifndef ISDELPHI20062007} // weird compiler internal error C4963
-  if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
-    result := SmallUInt32UTF8[Value] else
-  {$endif} begin
+  if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
+     (PCardinalArray(@Value)^[1]=0) then
+    // Int64Rec gives compiler internal error C4963
+    result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
     SetRawUTF8(result,P,@tmp[23]-P);
   end;
@@ -22845,13 +22846,12 @@ end;
 
 function Int64ToUtf8(Value: Int64): RawUTF8; // faster than SysUtils.IntToStr
 var tmp: array[0..23] of AnsiChar;
-    V: Int64Rec absolute Value;
     P: PAnsiChar;
 begin
-  {$ifndef ISDELPHI20062007} // weird compiler internal error C4963
-  if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then
-    result := SmallUInt32UTF8[Value] else
-  {$endif} begin
+  if (PCardinalArray(@Value)^[0]<=high(SmallUInt32UTF8)) and
+     (PCardinalArray(@Value)^[1]=0) then
+    // Int64Rec gives compiler internal error C4963
+    result := SmallUInt32UTF8[Value] else begin
     P := StrInt64(@tmp[23],Value);
     SetRawUTF8(result,P,@tmp[23]-P);
   end;
@@ -44988,8 +44988,17 @@ var tmp: array[0..23] of AnsiChar;
 begin
   if BEnd-B<=16 then
     FlushToStream;
-  P := StrInt32(@tmp[23],value);
-  Len := @tmp[23]-P;
+  if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    {$ifdef HASINLINE}
+    Len := length(SmallUInt32UTF8[Value]);
+    {$else}
+    Len := PInteger(P-4)^;
+    {$endif}
+  end else begin
+    P := StrInt32(@tmp[23],value);
+    Len := @tmp[23]-P;
+  end;
   MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
@@ -45081,8 +45090,17 @@ var tmp: array[0..15] of AnsiChar;
 begin
   if BEnd-B<=16 then
     FlushToStream;
-  P := StrUInt32(@tmp[15],Value);
-  Len := @tmp[15]-P;
+  if Value<=high(SmallUInt32UTF8) then begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    {$ifdef HASINLINE}
+    Len := length(SmallUInt32UTF8[Value]);
+    {$else}
+    Len := PInteger(P-4)^;
+    {$endif}
+  end else begin
+    P := StrUInt32(@tmp[15],Value);
+    Len := @tmp[15]-P;
+  end;
   MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;
@@ -45122,9 +45140,19 @@ begin
   if Value<0 then begin
     P := StrUInt64(@tmp[23],-Value)-1;
     P^ := '-';
+    Len := @tmp[23]-P;
   end else
+  if Value<=high(SmallUInt32UTF8) then begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    {$ifdef HASINLINE}
+    Len := length(SmallUInt32UTF8[Value]);
+    {$else}
+    Len := PInteger(P-4)^;
+    {$endif}
+  end else begin
     P := StrUInt64(@tmp[23],Value);
-  Len := @tmp[23]-P;
+    Len := @tmp[23]-P;
+  end;
   MoveFast(P[0],B[1],Len);
   inc(B,Len);
 end;

@@ -2853,6 +2853,8 @@ begin
   Check(s='-2147483647');
   Int64ToUtf8(-1,s);
   Check(s='-1');
+  Int64ToUtf8(100,s);
+  Check(s='100');
   Int64ToUtf8(-9223372036854775807,s);
   Check(s='-9223372036854775807');
   {$ifdef HASINLINE} // bug with MinInt64 with older versions of Delphi
