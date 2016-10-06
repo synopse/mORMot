@@ -43707,7 +43707,8 @@ begin
   n := Count;
   SetCount(n+1); // reserve space for a void element in array
   cap := Capacity;
-  if cap*2-cap shr 3>=fHashsCount then begin
+  if cap*2-cap shr 3>=fHashsCount then
+  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     // fHashs[] is too small -> recreate
     if fCountP<>nil then
       dec(fCountP^); // don't rehash the latest entry (which may not be set)
