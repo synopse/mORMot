@@ -2723,28 +2723,42 @@ function GetIPAddresses: TSockStringDynArray;
 var Table: MIB_IPADDRTABLE;
     Size: DWORD;
     i: integer;
+    n: cardinal;
 begin
   result := nil;
   Size := SizeOf(Table);
   if GetIpAddrTable(@Table,Size,false)<>NO_ERROR then
     exit;
   SetLength(result,Table.dwNumEntries);
+  n := 0;
   for i := 0 to Table.dwNumEntries-1 do
-    IP4Text(TInAddr(Table.ip[i].dwAddr),result[i]);
+    with Table.ip[i] do
+    if (dwAddr <> $0100007f) and (dwAddr <> 0) then begin
+      IP4Text(TInAddr(dwAddr),result[n]);
+      inc(n);
+    end;
+  if n<>Table.dwNumEntries then
+    SetLength(result,n);
 end;
 
+var
+  // should not change during process livetime
+  IPAddressesText: SockString;
+  
 function GetIPAddressesText(const Sep: SockString = ' '): SockString;
 var ip: TSockStringDynArray;
     i: integer;
 begin
-  ip := GetIPAddresses;
-  if ip=nil then begin
-    result := '';
+  result := IPAddressesText;
+  if result<>'' then
     exit;
-  end;
+  ip := GetIPAddresses;
+  if ip=nil then
+    exit;
   result := ip[0];
   for i := 1 to high(ip) do
     result := result+Sep+ip[i];
+  IPAddressesText := result;
 end;
 
 {$endif MSWINDOWS}
