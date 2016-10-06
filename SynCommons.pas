@@ -14824,6 +14824,18 @@ function _Copy(const DocVariant: variant): variant;
 function _CopyFast(const DocVariant: variant): variant;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// copy a TDocVariant to another variable, changing the options on the fly
+// - note that the content (items or properties) is copied by reference,
+// so consider using _Copy() instead
+// - will return null if the supplied variant is not a TDocVariant
+function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant; overload;
+
+/// copy a TDocVariant to another variable, changing the options on the fly
+// - note that the content (items or properties) is copied by reference,
+// so consider using _Copy() instead
+// - will return null if the supplied variant is not a TDocVariant
+procedure _ByRef(const DocVariant: variant; out Dest: variant;
+  Options: TDocVariantOptions); overload;
 
 {$endif NOVARIANTS}
 
@@ -41050,6 +41062,21 @@ end;
 function _CopyFast(const DocVariant: variant): variant;
 begin
   result := TDocVariant.NewUnique(DocVariant,JSON_OPTIONS_FAST);
+end;
+
+function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant;
+begin
+  if TVarData(result).VType and VTYPE_STATIC<>0 then
+    VarClear(result);
+  TDocVariantData(result) := _Safe(DocVariant)^; // fast byref copy
+  TDocVariantData(result).Options := Options;
+end;
+
+procedure _ByRef(const DocVariant: variant; out Dest: variant;
+  Options: TDocVariantOptions);
+begin
+  TDocVariantData(Dest) := _Safe(DocVariant)^; // fast byref copy
+  TDocVariantData(Dest).Options := Options;
 end;
 
 {$endif NOVARIANTS}
