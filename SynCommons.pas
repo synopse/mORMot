@@ -16306,12 +16306,17 @@ type
     fTimer: TSynBackgroundTimer;
     function ProcessIndex(aProcessID: integer): integer;
   public
-    /// a TSynBackgroundThreadProcess compatible event IDr
+    /// a TSynBackgroundThreadProcess compatible event
     // - matches TOnSynBackgroundTimerProcess callback signature
     // - to be supplied e.g. to a TSynBackgroundTimer.Enable method so that it
     // will run every few seconds and retrieve the CPU and RAM use
     procedure BackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
+    /// a VCL's TTimer.OnTimer compatible event
+    // - to be run every few seconds and retrieve the CPU and RAM use:
+    // ! tmrSystemUse.Interval := 10000; // every 10 seconds
+    // ! tmrSystemUse.OnTimer := TSystemUse.Current.OnTimerExecute;
+    procedure OnTimerExecute(Sender: TObject);
     /// track the CPU and RAM usage of the supplied set of Process ID
     // - any aProcessID[]=0 will be replaced by the current process ID
     // - you can specify the number of sample values for the History() method
@@ -59209,6 +59214,11 @@ begin // not implemented yet (using /proc ?)
 end;
 
 {$endif MSWINDOWS}
+
+procedure TSystemUse.OnTimerExecute(Sender: TObject);
+begin
+  BackgroundExecute(nil,wrSignaled,'');
+end;
 
 constructor TSystemUse.Create(const aProcessID: array of integer;
   aHistoryDepth: integer);

@@ -7368,11 +7368,11 @@ type
     // AppendAsJsonObject() method
     procedure GetJSONValues(W : TJSONSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values of this TSQLRecord
+    // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
+  	// and the supplied TJSONSerializer instance will be freed by this method
     // - layout and fields should have been set at TJSONSerializer construction:
     // to append some content to an existing TJsonSerializer, call the
     // AppendAsJsonObject() method
-    // - the JSON buffer will be finalized if needed (e.g. non expanded mode),
-  	// and the supplied TJSONSerializer instance will be freed by this method
     procedure GetJSONValuesAndFree(JSON : TJSONSerializer); overload;
     /// return the UTF-8 encoded JSON objects for the values contained
     // in the current published fields of a TSQLRecord child
@@ -54679,7 +54679,7 @@ begin
   for j := 0 to high(aInterfaces) do
     UID[j] := pointer(aInterfaces[j]^.InterfaceGUID);
     //UID[j] := @PInterfaceTypeData(aInterfaces[j]^.ClassType)^.IntfGuid;
-  // check that all interfaces are implemented by this class
+  // check all interfaces available in aSharedImplementation/aImplementationClass
   if (aSharedImplementation<>nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then begin
     if IsEqualGUID(UID[0]^,TInterfacedObjectFake(aSharedImplementation).
@@ -55625,7 +55625,7 @@ begin
       W.AddString(InterfaceDotMethodName);
       W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
       if optNoLogInput in Sender.fOptions then
-        W.AddShort('optNoLogInput: true') else
+        W.AddShort('optNoLogInput:true') else
         for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
@@ -55638,7 +55638,7 @@ begin
     smsAfter: begin
       W.AddShort('},Output:{');
       if optNoLogOutput in Sender.fOptions then
-        W.AddShort('optNoLogOutput: true') else
+        W.AddShort('optNoLogOutput:true') else
         for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
