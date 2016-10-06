@@ -4974,7 +4974,8 @@ type
   TDynArrayHashOne = function(const Elem; Hasher: THasher): cardinal;
 
   /// event handler to be used for hashing of a dynamic array element
-  TOnDynArrayHashOne = function(const Elem): cardinal of object;
+  // - can be set as an alternative to TDynArrayHashOne
+  TEventDynArrayHashOne = function(const Elem): cardinal of object;
 
   /// internal structure used to store one item hash
   // - used e.g. by TDynArrayHashed or TObjectHash via TSynHashDynArray
@@ -5039,6 +5040,7 @@ type
     fHashs: TSynHashDynArray;
     fHashsCount: integer;
     fEventCompare: TEventDynArraySortCompare;
+    fEventHash: TEventDynArrayHashOne;
     fHashCountTrigger: integer;
     fHashFindCount: integer;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
@@ -5086,7 +5088,7 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash(aHasher: TOnDynArrayHashOne=nil): boolean;
+    function ReHash: boolean;
     /// low-level function which would inspect the internal fHashs[] array for
     // any collision
     // - is a brute force search within fHashs[].Hash values, which may be handy
@@ -5181,6 +5183,11 @@ type
     property EventCompare: TEventDynArraySortCompare read fEventCompare write fEventCompare;
     /// custom hash function to be used for hashing of a dynamic array element
     property HashElement: TDynArrayHashOne read fHashElement;
+    /// alternative event-oriented Hash function for ReHash
+    // - this object-oriented callback will be used instead of HashElement
+    // on each dynamic array entries - HashElement will still be used on
+    // const Elem values, since they may be just a sub part of the stored entry  
+    property EventHash: TEventDynArrayHashOne read fEventHash write fEventHash;
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) seach if faster than O(1) hashing, since
     // maintaining the fHashs[] lookup has some CPU and memory costs
@@ -43702,7 +43709,11 @@ begin
   cap := Capacity;
   if cap*2-cap shr 3>=fHashsCount then begin
     // fHashs[] is too small -> recreate
+    if fCountP<>nil then
+      dec(fCountP^); // don't rehash the latest entry (which may not be set)
     ReHash;
+    if fCountP<>nil then
+      inc(fCountP^);
     result := HashFind(aHashCode,Elem); // fHashs[] has changed -> recompute
     assert(result<0);
   end;
@@ -44001,13 +44012,14 @@ begin
 end;
 
 procedure TDynArrayHashed.Init(aTypeInfo: pointer; var aValue;
-      aHashElement: TDynArrayHashOne=nil; aCompare: TDynArraySortCompare=nil;
-      aHasher: THasher=nil; aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
+  aHashElement: TDynArrayHashOne; aCompare: TDynArraySortCompare;
+  aHasher: THasher; aCountPointer: PInteger; aCaseInsensitive: boolean);
 var aKind: TDynArrayKind;
 begin
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$else}inherited{$endif}
     Init(aTypeInfo,aValue,aCountPointer);
   fEventCompare := nil;
+  fEventHash := nil;
   if @aHasher=nil then
     fHasher := DefaultHasher else
     fHasher := aHasher;
@@ -44104,12 +44116,12 @@ begin
         end else begin
           if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}ElemEquals(P^,Elem) then begin
             result := Index;
-            exit; // found -> returns index in dynamic array
+            exit; // found
           end;
         end else
         if fEventCompare(P^,Elem)=0 then begin
           result := Index;
-          exit; // found -> returns index in dynamic array
+          exit; // found
         end;
     end else
     if Hash=HASH_VOID then begin
@@ -44136,12 +44148,15 @@ end;
 function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
 var P: pointer;
 begin
-  if (cardinal(aIndex)>=cardinal(Count)) or not Assigned(fHashElement) then
+  if (cardinal(aIndex)>=cardinal(Count)) or
+    (not Assigned(fHashElement) and not Assigned(fEventHash)) then
     result := 0 else begin
     // it's faster to rehash than to loop in fHashs[].Index values
     // and it will also work with Count<fHashCountTrigger
     P := PAnsiChar(fValue^)+cardinal(aIndex)*ElemSize;
-    result := fHashElement(P^,fHasher);
+    if Assigned(fEventHash) then
+      result := fEventHash(P^) else
+      result := fHashElement(P^,fHasher);
     if result=HASH_VOID then
       result := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
   end;
@@ -44166,7 +44181,7 @@ begin
   result := -1;
 end;
 
-function TDynArrayHashed.ReHash(aHasher: TOnDynArrayHashOne=nil): boolean;
+function TDynArrayHashed.ReHash: boolean;
 var i, n, cap, ndx: integer;
     P: PAnsiChar;
     aHashCode: cardinal;
@@ -44177,7 +44192,7 @@ begin
   n := Count;
   if (n=0) or (n<fHashCountTrigger) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
-  if not Assigned(aHasher) and not Assigned(fHashElement) then
+  if not Assigned(fEventHash) and not Assigned(fHashElement) then
     exit;
   // find nearest power of two for new fHashs[] size
   cap := Capacity*2; // Capacity sounds better than Count
@@ -44188,8 +44203,8 @@ begin
   // fill fHashs[] from all existing items
   P := fValue^;
   for i := 0 to n-1 do begin
-    if Assigned(aHasher) then
-      aHashCode := aHasher(P^) else
+    if Assigned(fEventHash) then
+      aHashCode := fEventHash(P^) else
       aHashCode := fHashElement(P^,fHasher);
     if aHashCode=HASH_VOID then
       aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
@@ -45516,6 +45531,7 @@ class procedure TTextWriter.UnRegisterCustomJSONSerializer(aTypeInfo: pointer);
 begin
   GlobalJSONCustomParsers.RegisterCallbacks(aTypeInfo,nil,nil);
 end;
+
 class function TTextWriter.RegisterCustomJSONSerializerFromText(aTypeInfo: pointer;
   const aRTTIDefinition: RawUTF8): TJSONRecordAbstract;
 begin
@@ -51802,7 +51818,6 @@ begin
   inherited Create;
   fFreeItems := aFreeItems;
   fHash.Init(TypeInfo(TObjectDynArray),fList,@HashPtrUInt,@SortDynArrayPointer,nil,@fCount);
-  fHash.fHashCountTrigger := 0; // has dedicated inherited process of small lists 
 end;
 
 destructor TObjectListHashedAbstract.Destroy;
@@ -51866,6 +51881,7 @@ begin
   if Assigned(aCompare) then
     fHash.{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
   fHash.EventCompare := IntComp;
+  fHash.EventHash := IntHash;
 end;
 
 function TObjectListPropertyHashed.IntHash(const Elem): cardinal;
@@ -51918,7 +51934,9 @@ end;
 
 function PointerClassHashProcess(aObject: TPointerClassHashed): pointer;
 begin
-  result := aObject.Info;
+  if aObject=nil then // may happen for Rehash after SetCount(n+1)
+    result := nil else
+    result := aObject.Info;
 end;
 
 constructor TPointerClassHash.Create;
