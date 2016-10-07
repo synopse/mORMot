@@ -314,6 +314,38 @@ type
   /// 256 bits memory block for maximum AES key storage
   TAESKey = THash256;
 
+  /// buffer matching a THash128, for fast comparison
+  // - as used e.g. in THash128History
+  THash128_ = packed record
+    case integer of
+    0: (A,B,C,D: cardinal);
+    1: (A64,B64: Int64);
+    2: (hash: THash128);
+  end;
+
+  PHash128_ = ^THash128_;
+
+  /// stores an array of THash128 to check for their unicity
+  // - used e.g. to implement TAESAbstract.IVHistoryDepth property
+  THash128History = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    Previous: array of THash128_;
+    Index: integer;
+  public
+    /// how many THash128 values can be stored
+    Depth: integer;
+    /// how many THash128 values are currently stored
+    Count: integer;
+    /// initialize the storage for a given history depth
+    procedure Init(size: integer);
+    /// O(n) fast search of a hash value in the stored entries
+    // - returns true if the hash was found, or false if it did not appear
+    function Exists(const hash: THash128): boolean;
+    /// add a hash value to the stored entries, checking for duplicates
+    // - returns true if the hash was added, or false if it did already appear
+    function Add(const hash: THash128): boolean;
+  end;
+
   PAES = ^TAES;
   /// handle AES cypher/uncypher
   // - this is the default Electronic codebook (ECB) mode
@@ -382,6 +414,8 @@ type
     fKeySizeBytes: cardinal;
     fKey: TAESKey;
     fIV: TAESBlock;
+    fIVHistoryEnc, fIVHistoryDec: THash128History;
+    procedure SetIVHistory(aDepth: integer);
     procedure DecryptLen(var InputLen,ivsize: integer; Input: pointer; IVAtBeginning: boolean);
   public
     /// Initialize AES contexts for cypher
@@ -480,6 +514,10 @@ type
     // - you should better use PKCS7 encoding with IVAtBeginning option than
     // a fixed Initialization Vector, especially in ECB mode
     property IV: TAESBlock read fIV write fIV;
+    /// maintains an history of previous IV, to avoid re-play attacks
+    // - when EncryptPKCS7/DecryptPKCS7 are used with IVAtBeginning=true
+    // - is set e.g. to 64 for TWebSocketProtocolBinary encryption
+    property IVHistoryDepth: integer read fIVHistoryEnc.Depth write SetIVHistory;
   end;
 
   /// handle AES cypher/uncypher with chaining
@@ -7075,6 +7113,12 @@ begin
   FillZero(fKey);
 end;
 
+procedure TAESAbstract.SetIVHistory(aDepth: integer);
+begin
+  fIVHistoryEnc.Init(aDepth);
+  fIVHistoryDec.Init(aDepth);
+end;
+
 function TAESAbstract.EncryptPKCS7(const Input: RawByteString;
   IVAtBeginning: boolean): RawByteString;
 begin
@@ -7112,7 +7156,9 @@ begin
     exit;
   end;
   if IVAtBeginning then begin
-    TAESPRNG.Main.FillRandom(fIV);
+    repeat
+      TAESPRNG.Main.FillRandom(fIV);
+    until (fIVHistoryEnc.Depth=0) or fIVHistoryEnc.Add(fIV);
     PAESBlock(Output)^ := fIV;
   end;
   MoveFast(Input^,PByteArray(Output)^[ivsize],InputLen);
@@ -7129,6 +7175,9 @@ begin
     raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]);
   if IVAtBeginning then begin
     fIV := PAESBlock(Input)^;
+    if (fIVHistoryDec.Depth>0) and not fIVHistoryDec.Add(fIV) then
+      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: duplicated IV=% -> '+
+        'potential replay attack',[self,AESBlockToShortString(fIV)]);
     dec(InputLen,AESBlockSize);
     ivsize := AESBlockSize;
   end else
@@ -7199,6 +7248,7 @@ end;
 function TAESAbstract.Clone: TAESAbstract;
 begin
   result := TAESAbstractClass(ClassType).Create(fKey,fKeySize);
+  result.IVHistoryDepth := IVHistoryDepth;
 end;
 
 
@@ -8274,6 +8324,54 @@ begin
 end;
 
 
+{ THash128History }
+
+procedure THash128History.Init(size: integer);
+begin
+  Depth := size;
+  SetLength(Previous,size);
+  Count := 0;
+  Index := 0;
+end;
+
+function HashFound(P: PHash128_; Count: integer; const h: THash128_): boolean;
+var first: PtrUInt;
+    i: integer;
+begin
+  if P<>nil then begin
+    result := true;
+    first := h.A64;
+    for i := 1 to Count do
+      {$ifdef CPU64}
+      if (P^.A64=first) and (P^.B64=h.B64) then
+      {$else}
+      if (P^.A=first) and (P^.B=h.B) and (P^.C=h.C) and (P^.D=h.D) then
+      {$endif}
+        exit else
+        inc(P);
+  end;
+  result := false;
+end;
+
+function THash128History.Exists(const hash: THash128): boolean;
+begin
+  result := HashFound(pointer(Previous),Count,THash128_(hash));
+end;
+
+function THash128History.Add(const hash: THash128): boolean;
+begin
+  result := not HashFound(pointer(Previous),Count,THash128_(hash));
+  if not result then
+    exit;
+  Previous[Index].hash := hash;
+  inc(Index);
+  if Index>=Depth then
+    Index := 0;
+  if Count<Depth then
+    inc(Count);
+end;
+
+
 initialization
   ComputeAesStaticTables;
 {$ifdef USEPADLOCK}
@@ -8283,6 +8381,7 @@ initialization
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
   assert(sizeof(TAESFullHeader)=AESBlockSize);
+  assert(sizeof(THash128_)=sizeof(THash128));
 
 finalization
 {$ifdef USEPADLOCKDLL}
