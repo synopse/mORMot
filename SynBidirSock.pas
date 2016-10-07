@@ -762,6 +762,13 @@ var
   // global variables to true (as defined in mORMotHttpServer/mORMotHttpClient)
   WebSocketLog: TSynLogClass;
 
+  /// how many AES IV should be held in memory to check for reuse
+  // - to avoid replay attacks of a previously used frame
+  // - to be used in conjunction with the 256 ms temporal nonce included in
+  // TSQLRestServerAuthenticationDefault session signature
+  // - you may increase this default value, if you are really paranoid
+  WebSocketsIVReplayDepth: integer = 64;
+
 
 implementation
 
@@ -1184,8 +1191,10 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
   inherited Create('synopsebinary',aURI);
-  if aKeySize>=128 then
+  if aKeySize>=128 then begin
     fEncryption := TAESCFB.Create(aKey,aKeySize);
+    fEncryption.IVHistoryDepth := WebSocketsIVReplayDepth; 
+  end;
   fCompressed := aCompressed;
 end;
 
