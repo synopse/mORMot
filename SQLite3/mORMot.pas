@@ -14436,6 +14436,8 @@ type
     fOwnRest: boolean;
     fLog: TSynLog;
     fSafe: TSynLocker;
+    /// allows customization in overriden Create (before Execute)
+    fThreadName: RawUTF8;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
     procedure Execute; override;
     /// you should override this method with the proper process
@@ -14466,7 +14468,7 @@ type
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
     property Safe: TSynLocker read fSafe;
-    /// read-only access to the TSynLog instance of the associated REST instance 
+    /// read-only access to the TSynLog instance of the associated REST instance
     property Log: TSynLog read fLog;
     /// publishes the thread running state
     property Terminated;
@@ -35190,14 +35192,21 @@ begin
   fSafe.Init;
   fRest := aRest;
   fOwnRest := aOwnRest;
+  if fThreadName='' then
+    FormatUTF8('% %',[self,fRest.Model.Root],fThreadName);
   inherited Create(aCreateSuspended);
 end;
 
 destructor TSQLRestThread.Destroy;
 begin
   inherited Destroy;
-  if fOwnRest then
+  if fOwnRest and (fRest<>nil) then begin
+    if GetCurrentThreadId=ThreadID then begin
+      fRest.fLogFamily := nil; // no log after fRest.EndCurrentThread(self)
+      fRest.fLogClass := nil;
+    end;
     FreeAndNil(fRest);
+  end;
   fSafe.Done;
 end;
 
@@ -35225,10 +35234,10 @@ end;
 procedure TSQLRestThread.Execute;
 begin
   {$ifdef WITHLOG}
-  fLog := FRest.LogClass.Add;
+  fLog := fRest.LogClass.Add;
   {$endif}
-  SetCurrentThreadName('% %',[self,fRest.Model.Root]);
-  FRest.BeginCurrentThread(self);
+  SetCurrentThreadName('%',[fThreadName]);
+  fRest.BeginCurrentThread(self);
   try
     try
       InternalExecute;
@@ -35239,7 +35248,8 @@ begin
         {$endif}
     end;
   finally
-    FRest.EndCurrentThread(self);
+    fRest.EndCurrentThread(self);
+    fLog := nil; // no log after EndCurrentThread
   end;
 end;
 
