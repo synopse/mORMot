@@ -16721,12 +16721,13 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
-function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100): RawByteString; overload;
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100;
+  CheckMagicForCompressed: boolean=false): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  CompressionSizeTrigger: integer=100); overload;
+  CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
@@ -56885,22 +56886,25 @@ const
   SYNLZCOMPRESS_STORED = #0;
   SYNLZCOMPRESS_SYNLZ = #1;
 
-function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer): RawByteString;
+function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
+  CheckMagicForCompressed: boolean): RawByteString;
 begin
-  SynLZCompress(pointer(Data),length(Data),result,CompressionSizeTrigger);
+  SynLZCompress(pointer(Data),length(Data),result,CompressionSizeTrigger,
+    CheckMagicForCompressed);
 end;
 
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
-  CompressionSizeTrigger: integer);
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
-    tmp: array[0..4095] of AnsiChar;  // resize Result instead of TSynTempBuffer 
+    tmp: array[0..4095] of AnsiChar;  // resize Result instead of TSynTempBuffer
 begin
   if PLen=0 then
     exit;
   crc := crc32c(0,P,PLen);
-  if PLen<CompressionSizeTrigger then begin
+  if (PLen<CompressionSizeTrigger) or
+     (CheckMagicForCompressed and IsContentCompressed(P,PLen)) then begin
     SetString(result,nil,PLen+9);
     R := pointer(result);
     PCardinal(R)^ := crc;

@@ -1280,7 +1280,7 @@ begin
   inherited BeforeSendFrame(frame);
   if frame.opcode=focBinary then begin
     if fCompressed then
-      SynLZCompress(pointer(frame.payload),length(frame.payload),value,512) else
+      SynLZCompress(pointer(frame.payload),length(frame.payload),value,512,true) else
       value := frame.payload;
     if fEncryption<>nil then
       frame.payload := fEncryption.EncryptPKCS7(value,true) else
