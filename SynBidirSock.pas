@@ -300,7 +300,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsebinary
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
-    fEncryption: TAESAbstract;
+    fEncryptionRX, fEncryptionTX: TAESAbstract;
     fCompressed: boolean;
     fFramesInBytesSocket: QWord;
     fFramesOutBytesSocket: QWord;
@@ -773,13 +773,11 @@ var
   // global variables to true (as defined in mORMotHttpServer/mORMotHttpClient)
   WebSocketLog: TSynLogClass;
 
-  /// how many AES IV should be held in memory to check for reuse
-  // - to avoid replay attacks of a previously used frame
-  // - to be used in conjunction with the 256 ms temporal nonce included in
-  // TSQLRestServerAuthenticationDefault session signature
-  // - you may increase this default value, if you are really paranoid
-  WebSocketsIVReplayDepth: integer = 64;
-
+  /// number of bytes above which SynLZ compression may be done
+  // - when working with TWebSocketProtocolBinary
+  // - it is useless to compress smaller frames, which fits in network MTU 
+  WebSocketsBinarySynLzThreshold: integer = 450;
+                                             
 
 implementation
 
@@ -1205,8 +1203,10 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
 begin
   inherited Create('synopsebinary',aURI);
   if aKeySize>=128 then begin
-    fEncryption := TAESCFB.Create(aKey,aKeySize);
-    fEncryption.IVHistoryDepth := WebSocketsIVReplayDepth; 
+    fEncryptionRX := TAESCFB.Create(aKey,aKeySize);
+    fEncryptionRX.IVReplayAttackCheck := true; // safe paranoid approach
+    fEncryptionTX := TAESCFB.Create(aKey,aKeySize);
+    fEncryptionTX.IVReplayAttackCheck := true;
   end;
   fCompressed := aCompressed;
 end;
@@ -1225,15 +1225,19 @@ begin
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
+var dest: TWebSocketProtocolBinary absolute result;
 begin
   result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
-  if fEncryption<>nil then
-    TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
+  if fEncryptionRX<>nil then begin
+    dest.fEncryptionRX := fEncryptionRX.Clone;
+    dest.fEncryptionTX := fEncryptionTX.Clone;
+  end;
 end;
 
 destructor TWebSocketProtocolBinary.Destroy;
 begin
-  FreeAndNil(fEncryption);
+  FreeAndNil(fEncryptionRX);
+  FreeAndNil(fEncryptionTX);
   inherited;
 end;
 
@@ -1302,13 +1306,13 @@ begin
   if frame.opcode=focBinary then begin
     if fCompressed then begin
       if fRemoteLocalhost or (fopAlreadyCompressed in frame.content) then
-        threshold := maxInt else // localhost or compressed -> no SynLZ 
-        threshold := 400;
+        threshold := maxInt else // localhost or compressed -> no SynLZ
+        threshold := WebSocketsBinarySynLzThreshold;
       SynLZCompress(pointer(frame.payload),length(frame.payload),value,threshold);
     end else
       value := frame.payload;
-    if fEncryption<>nil then
-      frame.payload := fEncryption.EncryptPKCS7(value,true) else
+    if fEncryptionTX<>nil then
+      frame.payload := fEncryptionTX.EncryptPKCS7(value,true) else
       frame.payload := value;
   end;
   inc(fFramesOutBytesSocket,length(frame.payload)+2);
@@ -1319,8 +1323,8 @@ var value: RawByteString;
 begin
   inc(fFramesInBytesSocket,length(frame.payload)+2);
   if frame.opcode=focBinary then begin
-    if fEncryption<>nil then
-      frame.payload := fEncryption.DecryptPKCS7(frame.payload,true);
+    if fEncryptionRX<>nil then
+      frame.payload := fEncryptionRX.DecryptPKCS7(frame.payload,true);
     if fCompressed then begin
       SynLZDecompress(pointer(frame.payload),length(frame.payload),value);
       frame.payload := value;
@@ -1416,7 +1420,7 @@ end;
 
 function TWebSocketProtocolBinary.GetEncrypted: boolean;
 begin
-  result := (self<>nil) and (fEncryption<>nil);
+  result := (self<>nil) and (fEncryptionRX<>nil);
 end;
 
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;

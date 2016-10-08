@@ -753,7 +753,8 @@ end;
 destructor TSQLHttpServer.Destroy;
 begin
   fLog.Enter(self);
-  fLog.Add.Log(sllHttp,'% finalized for % server(s)',[fHttpServer,length(fDBServers)],self);
+  fLog.Add.Log(sllHttp,'% finalized for % server%',
+    [fHttpServer,length(fDBServers),PLURAL_FORM[length(fDBServers)>1]],self);
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
