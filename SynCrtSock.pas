@@ -943,7 +943,8 @@ type
     /// prepare an incoming request
     // - will set input parameters URL/Method/InHeaders/InContent/InContentType
     // - will reset output parameters
-    procedure Prepare(const aURL,aMethod,aInHeaders,aInContent,aInContentType: SockString);
+    procedure Prepare(const aURL,aMethod,aInHeaders,aInContent,aInContentType,
+      aRemoteIP: SockString);
     /// append some lines to the InHeaders input parameter
     procedure AddInHeader(additionalHeader: SockString);
     /// input parameter containing the caller URI
@@ -2657,6 +2658,8 @@ var b: array[0..3] of byte absolute addr;
 begin
   if cardinal(addr)=0 then
     result := '' else
+  if cardinal(addr)=$0100007f then
+    result := '127.0.0.1' else
     result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
 end;
 
@@ -3898,12 +3901,16 @@ begin
   fConnectionThread := aConnectionThread;
 end;
 
-procedure THttpServerRequest.Prepare(
-  const aURL, aMethod, aInHeaders, aInContent, aInContentType: SockString);
+procedure THttpServerRequest.Prepare(const aURL, aMethod,
+   aInHeaders, aInContent, aInContentType, aRemoteIP: SockString);
 begin
   fURL := aURL;
   fMethod := aMethod;
-  fInHeaders := aInHeaders;
+  if aRemoteIP<>'' then
+    if aInHeaders='' then
+      fInHeaders := 'RemoteIP: '+aRemoteIP else
+      fInHeaders := aInHeaders+#13#10'RemoteIP: '+aRemoteIP else
+    fInHeaders := aInHeaders;
   fInContent := aInContent;
   fInContentType := aInContentType;
   fOutContent := '';
@@ -4138,7 +4145,7 @@ begin
   try
     // calc answer
     with ClientSock do
-      Context.Prepare(URL,Method,HeaderGetText,Content,ContentType);
+      Context.Prepare(URL,Method,HeaderGetText,Content,ContentType,'');
     try
       Code := Request(Context);
     except
