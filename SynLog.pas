@@ -2134,7 +2134,7 @@ threadvar
 {$ifndef NOEXCEPTIONINTERCEPT}
 
 var
-  GlobalCurrentHandleExceptionHooked: boolean; 
+  GlobalCurrentHandleExceptionHooked: boolean;
 
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
@@ -2178,6 +2178,10 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   end;
 var SynLog: TSynLog;
 begin
+  {$ifdef CPU64} // used internally in System.pas to retrieve the exit code
+  if PShortString(PPointer(PtrInt(Ctxt.EClass)+vmtClassName)^)^='_TExitDllException' then
+    exit;
+  {$endif}
   SynLog := GlobalCurrentHandleExceptionSynLog;
   if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then
     SynLog := GetHandleExceptionSynLog;
