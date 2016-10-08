@@ -105,6 +105,7 @@ type
 
 type
   /// defines the interpretation of the WebSockets frame data
+  // - match order expected by the WebSockets RFC
   TWebSocketFrameOpCode = (
     focContinuation, focText, focBinary,
     focReserved3, focReserved4, focReserved5, focReserved6, focReserved7,
@@ -114,11 +115,19 @@ type
   /// set of WebSockets frame interpretation
   TWebSocketFrameOpCodes = set of TWebSocketFrameOpCode;
 
+  /// define one attribute of a WebSockets frame data
+  TWebSocketFramePayload = (
+    fopAlreadyCompressed);
+  /// define the attributes of a WebSockets frame data
+  TWebSocketFramePayloads = set of TWebSocketFramePayload;
+
   /// stores a WebSockets frame
   // - see @http://tools.ietf.org/html/rfc6455 for reference
   TWebSocketFrame = record
     /// the interpretation of the frame data
     opcode: TWebSocketFrameOpCode;
+    /// what is stored in the frame data, i.e. in payload field
+    content: TWebSocketFramePayloads;
     /// the frame data itself
     // - is plain UTF-8 for focText kind of frame
     // - is raw binary for focBinary or any other frames
@@ -166,6 +175,8 @@ type
     fFramesInBytes: QWord;
     fFramesOutCount: integer;
     fFramesOutBytes: QWord;
+    fRemoteIP: SockString;
+    fRemoteLocalhost: boolean;
     fLastError: string;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
@@ -966,6 +977,7 @@ begin
   if (Sender.Server as TWebSocketServer).IsActiveWebSocket(Sender)<>Sender then
     exit;
   tmp.opcode := frame.opcode;
+  tmp.content := frame.content;
   SetString(tmp.payload,PAnsiChar(Pointer(frame.payload)),length(frame.payload));
   result := (Sender as TWebSocketServerResp).fProcess.SendFrame(tmp)
 end;
@@ -1033,7 +1045,7 @@ begin
       InContentType := JSON_CONTENT_TYPE_VAR;
     if Method='' then
       Method := 'POST';
-    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType);
+    Ctxt.Prepare(URL,Method,InHeaders,InContent,InContentType,fRemoteIP);
     aNoAnswer := NoAnswer='1';
   end;
 end;
@@ -1085,6 +1097,7 @@ var WR: TTextWriter;
     i: integer;
 begin
   frame.opcode := focText;
+  frame.content := [];
   WR := TTextWriter.CreateOwnedStream;
   try
     WR.Add('{');
@@ -1224,6 +1237,9 @@ begin
   inherited;
 end;
 
+const
+  FRAME_HEAD_SEP = #1;
+
 procedure TWebSocketProtocolBinary.FrameCompress(const Head: RawUTF8;
   const Values: array of const; const Content, ContentType: RawByteString;
   var frame: TWebSocketFrame);
@@ -1232,10 +1248,15 @@ var item: RawUTF8;
     W: TFileBufferWriter;
 begin
   frame.opcode := focBinary;
+  if (ContentType<>'') and (Content<>'') and
+     not IdemPChar(pointer(ContentType),'TEXT/') and
+     IsContentCompressed(pointer(Content),length(Content)) then
+    frame.content := [fopAlreadyCompressed] else
+    frame.content := [];
   W := TFileBufferWriter.Create(TRawByteStringStream);
   try
     W.WriteBinary(Head);
-    W.Write1(1);
+    W.Write1(byte(FRAME_HEAD_SEP));
     for i := 0 to high(Values) do
     with Values[i] do begin
       VarRecToUTF8(Values[i],item);
@@ -1257,7 +1278,7 @@ begin
   headLen := length(Head);
   result := (frame.opcode=focBinary) and
             (length(frame.payload)>=headLen+6) and
-            (frame.payload[headLen+1]=#1) and
+            (frame.payload[headLen+1]=FRAME_HEAD_SEP) and
             IdemPropNameU(Head,pointer(frame.payload),headLen);
 end;
 
@@ -1267,20 +1288,24 @@ var i: integer;
 begin
   if (length(frame.payload)<10) or (frame.opcode<>focBinary) then
     i := 0 else
-    i := PosEx(#1,frame.payload);
+    i := PosEx(FRAME_HEAD_SEP,frame.payload);
   if i=0 then
     result := '*' else
     result := copy(frame.payload,1,i-1);
 end;
 
-
 procedure TWebSocketProtocolBinary.BeforeSendFrame(var frame: TWebSocketFrame);
 var value: RawByteString;
+    threshold: integer;
 begin
   inherited BeforeSendFrame(frame);
   if frame.opcode=focBinary then begin
-    if fCompressed then
-      SynLZCompress(pointer(frame.payload),length(frame.payload),value,512,true) else
+    if fCompressed then begin
+      if fRemoteLocalhost or (fopAlreadyCompressed in frame.content) then
+        threshold := maxInt else // localhost or compressed -> no SynLZ 
+        threshold := 400;
+      SynLZCompress(pointer(frame.payload),length(frame.payload),value,threshold);
+    end else
       value := frame.payload;
     if fEncryption<>nil then
       frame.payload := fEncryption.EncryptPKCS7(value,true) else
@@ -1341,9 +1366,10 @@ begin
     exit;
   end;
   jumboFrame.opcode := focBinary;
+  jumboFrame.content := [];
   W := TFileBufferWriter.Create(TRawByteStringStream);
   try
-    W.WriteBinary('frames'#1);
+    W.WriteBinary('frames'+FRAME_HEAD_SEP);
     dec(FramesCount);
     W.WriteVarUInt32(FramesCount);
     for i := 0 to FramesCount do
@@ -1370,7 +1396,7 @@ var jumboInfo: RawByteString;
 begin
   if FrameIs(request,'frames') then begin
     P := pointer(request.payload);
-    inc(P,7); // jump 'frames'#1
+    inc(P,7); // jump 'frames'FRAME_HEAD_SEP
     n := FromVarUInt32(P);
     for i := 0 to n do begin
       if i=0 then
@@ -1379,6 +1405,7 @@ begin
         jumboInfo := 'Sec-WebSocket-Frame: [1]' else
         jumboInfo := '';
       frame.opcode := focBinary;
+      frame.content := [];
       frame.payload := FromVarString(P);
       Sender.Log(frame,FormatUTF8('GetSubFrame(%/%)',[i+1,n+1]));
       inherited ProcessIncomingFrame(Sender,frame,jumboInfo);
@@ -1643,6 +1670,7 @@ begin
       exit; // not enough data available
     GetHeader;
     Frame.opcode := opcode;
+    Frame.content := [];
     GetData(Frame.payload);
     while hdr.first and FRAME_FIN=0 do begin // handle partial payloads
       GetHeader;
@@ -2002,6 +2030,8 @@ begin
     prot := fProtocols.CloneByURI(uri);
   if prot=nil then
     exit;
+  prot.fRemoteIP := ClientSock.RemoteIP;
+  prot.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
   Context.fProcess := TWebSocketProcessServer.Create(
     ClientSock,prot,Context.ConnectionID,Context,fSettings,fProcessName);
   Context.fProcess.fServerResp := Context;
@@ -2227,7 +2257,7 @@ begin
       Ctxt := THttpServerRequest.Create(
         nil,fProcess.fOwnerConnection,fProcess.fOwnerThread);
       try
-        Ctxt.Prepare(url,method,header,data,dataType);
+        Ctxt.Prepare(url,method,header,data,dataType,'');
         resthead := FindIniNameValue(Pointer(header),'SEC-WEBSOCKET-REST: ');
         if resthead='NonBlocking' then
           block := wscNonBlockWithoutAnswer else
@@ -2299,6 +2329,11 @@ begin
       if not CompareMem(@digest1,@digest2,SizeOf(digest1)) then
         exit;
       // if we reached here, connection is successfully upgraded to WebSockets
+      if (Server='localhost') or (Server='127.0.0.1') then begin
+        protocol.fRemoteIP := '127.0.0.1';
+        protocol.fRemoteLocalhost := true;
+      end else
+        protocol.fRemoteIP := Server;
       result := ''; // no error message = success
       fProcess := TWebSocketProcessClient.Create(self,protocol,fProcessName);
       protocol := nil; // protocol will be owned by fProcess now
