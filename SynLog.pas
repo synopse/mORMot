@@ -2178,10 +2178,14 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   end;
 var SynLog: TSynLog;
 begin
-  {$ifdef CPU64} // used before Delphi XE6 in System.pas to retrieve the exit code
-  if PShortString(PPointer(PPtrInt(Ctxt.EInstance)^+vmtClassName)^)^='_TExitDllException' then
-    exit; // note: Ctxt.EClass is EExternalException for this plain TObject
-  {$endif}
+  {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
+  {$ifndef ISDELPHIXE6}
+  if (Ctxt.EInstance<>nil) and // Ctxt.EClass is EExternalException
+     (PShortString(PPointer(PPtrInt(Ctxt.EInstance)^+vmtClassName)^)^=
+      '_TExitDllException') then
+    exit;
+  {$endif ISDELPHIXE6}
+  {$endif CPU64DELPHI}
   SynLog := GlobalCurrentHandleExceptionSynLog;
   if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then
     SynLog := GetHandleExceptionSynLog;
@@ -2192,7 +2196,7 @@ begin
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
     repeat
-      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) and
+      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) and 
          Ctxt.EInstance.InheritsFrom(ESynException) then begin
         if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
           break;
