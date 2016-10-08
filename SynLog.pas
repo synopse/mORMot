@@ -2178,9 +2178,9 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
   end;
 var SynLog: TSynLog;
 begin
-  {$ifdef CPU64} // used internally in System.pas to retrieve the exit code
-  if PShortString(PPointer(PtrInt(Ctxt.EClass)+vmtClassName)^)^='_TExitDllException' then
-    exit;
+  {$ifdef CPU64} // used before Delphi XE6 in System.pas to retrieve the exit code
+  if PShortString(PPointer(PPtrInt(Ctxt.EInstance)^+vmtClassName)^)^='_TExitDllException' then
+    exit; // note: Ctxt.EClass is EExternalException for this plain TObject
   {$endif}
   SynLog := GlobalCurrentHandleExceptionSynLog;
   if (SynLog=nil) or not SynLog.fFamily.fHandleExceptions then
@@ -2363,7 +2363,7 @@ begin
       case Ctxt.ECode of
       Internal_UW_EXC_CLASS_BORLANDDELPHI: begin
         ExcRec := PInternalUnwindException(Exc)^.private_1;
-        if (ExcRec<>nil) and (ExcRec^.ExceptObject is Exception) then begin
+        if (ExcRec<>nil) and (ExcRec^.ExceptObject<>nil) then begin
           Ctxt.EInstance := ExcRec^.ExceptObject;
           Ctxt.EClass := PPointer(Ctxt.EInstance)^;
           if Ctxt.EInstance is EExternal then begin
