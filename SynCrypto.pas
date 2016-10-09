@@ -7195,7 +7195,7 @@ begin
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey,fKey,fKeySizeBytes);
-  TAESPRNG.Main.FillRandom(PAESBLock(@fIVCTR)^);
+  TAESPRNG.Main.FillRandom(TAESBLock(fIVCTR)); // set nonce + ctr
   blockmode := PPointer(PPtrInt(self)^+vmtClassName)^;
   fIVCtr.magic := crc32c($aba5aba5,@blockmode^[2],6); // TAESECB_API -> 'AESECB'
 end;
@@ -7256,10 +7256,10 @@ begin
   end;
   if IVAtBeginning then begin
     if fIVReplayAttackCheck<>repNoCheck then begin
-      IVCtrEncryptDecrypt(fIVCTR,fIV,true); // strong PRNG
-      inc(fIVCTR.ctr);
+      IVCtrEncryptDecrypt(fIVCTR,fIV,true); // PRNG from fixed secret
+      inc(fIVCTR.ctr); // replay attack protection
     end else
-      TAESPRNG.Main.FillRandom(fIV);
+      TAESPRNG.Main.FillRandom(fIV); // PRNG from real entropy
     PAESBlock(Output)^ := fIV;
   end;
   MoveFast(Input^,PByteArray(Output)^[ivsize],InputLen);
@@ -7291,7 +7291,7 @@ begin
             if fIVHistoryDec.Depth=0 then
               SetIVHistory(64); // naive but efficient fallback
           end else
-        if (ctr.magic=fIVCTR.magic) and (ctr.ctr=fIVCTR.ctr) then
+        if IsEqual(TAESBlock(ctr),TAESBlock(fIVCTR)) then
           inc(fIVCTR.ctr) else
           raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> '+
            'potential replay attack',[self,ctr.magic,fIVCTR.magic,ctr.ctr,fIVCTR.ctr]);

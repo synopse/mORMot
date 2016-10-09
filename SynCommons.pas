@@ -30043,36 +30043,57 @@ end;
 {$WARNINGS OFF} // yes, we know there will be dead code below: we rely on it ;)
 
 function IsZero(const Fields: TSQLFieldBits): boolean; overload;
+var f: TPtrIntArray absolute Fields;
 begin
+  {$ifdef CPU64}
   if MAX_SQLFIELDS=64 then
-    result := (PInt64(@Fields)^=0) else
+    result := (f[0]=0) else
   if MAX_SQLFields=128 then
-    result := (PInt64Array(@Fields)^[0]=0) and (PInt64Array(@Fields)^[1]=0) else
+    result := (f[0]=0) and (f[1]=0) else
   if MAX_SQLFields=192 then
-    result := (PInt64Array(@Fields)^[0]=0) and (PInt64Array(@Fields)^[1]=0) and
-      (PInt64Array(@Fields)^[2]=0) else
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) else
   if MAX_SQLFields=256 then
-    result := (PInt64Array(@Fields)^[0]=0) and (PInt64Array(@Fields)^[1]=0) and
-      (PInt64Array(@Fields)^[2]=0) and (PInt64Array(@Fields)^[3]=0) else
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
+  {$else}
+  if MAX_SQLFIELDS=64 then
+    result := (f[0]=0) and (f[1]=0) else
+  if MAX_SQLFields=128 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0) else
+  if MAX_SQLFields=192 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
+          and (f[4]=0) and (f[5]=0) else
+  if MAX_SQLFields=256 then
+    result := (f[0]=0) and (f[1]=0) and (f[2]=0) and (f[3]=0)
+          and (f[4]=0) and (f[5]=0) and (f[6]=0) and (f[7]=0) else
+  {$endif}
     result := IsZero(@Fields,sizeof(Fields))
 end;
 
 function IsEqual(const A,B: TSQLFieldBits): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
 begin
+  {$ifdef CPU64}
   if MAX_SQLFIELDS=64 then
-    result := (PInt64(@A)^=PInt64(@B)^) else
+    result := (a_[0]=b_[0]) else
   if MAX_SQLFields=128 then
-    result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
-              (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]) else
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
   if MAX_SQLFields=192 then
-    result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
-              (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]) and
-              (PInt64Array(@A)^[2]=PInt64Array(@B)^[2]) else
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) else
   if MAX_SQLFields=256 then
-    result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
-              (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]) and
-              (PInt64Array(@A)^[2]=PInt64Array(@B)^[2]) and
-              (PInt64Array(@A)^[3]=PInt64Array(@B)^[3]) else
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
+  {$else}
+  if MAX_SQLFIELDS=64 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) else
+  if MAX_SQLFields=128 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3]) else
+  if MAX_SQLFields=192 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
+          and (a_[4]=b_[4]) and (a_[5]=b_[5]) else
+  if MAX_SQLFields=256 then
+    result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
+          and (a_[4]=b_[4]) and (a_[5]=b_[5]) and (a_[6]=b_[6]) and (a_[7]=b_[7]) else
+  {$endif}
     result := CompareMem(@A,@B,sizeof(TSQLFieldBits))
 end;
 
@@ -30167,7 +30188,6 @@ function FieldIndexToBits(const Index: TSQLFieldIndexDynArray): TSQLFieldBits;
 begin
   FieldIndexToBits(Index,result);
 end;
-
 
 function crc16(Data: PAnsiChar; Len: integer): cardinal;
 var i, j: Integer;
@@ -30855,26 +30875,18 @@ begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 end;
 
 function IsZero(const dig: THash128): boolean;
+var a: TPtrIntArray absolute dig;
 begin
-  {$ifdef CPU64}
-  result := (PInt64Array(@dig)^[0]=0) and (PInt64Array(@dig)^[1]=0);
-  {$else}
-  result := (PCardinalArray(@dig)^[0]=0) and (PCardinalArray(@dig)^[1]=0) and
-            (PCardinalArray(@dig)^[2]=0) and (PCardinalArray(@dig)^[3]=0);
-  {$endif}
+  result := (a[0]=0) and (a[1]=0)
+    {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
 end;
 
 function IsEqual(const A,B: THash128): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
 begin
-  {$ifdef CPU64}
-  result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
-            (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]);
-  {$else}
-  result := (PCardinalArray(@A)^[0]=PCardinalArray(@B)^[0]) and
-            (PCardinalArray(@A)^[1]=PCardinalArray(@B)^[1]) and
-            (PCardinalArray(@A)^[2]=PCardinalArray(@B)^[2]) and
-            (PCardinalArray(@A)^[3]=PCardinalArray(@B)^[3]);
-  {$endif}
+  result := (a_[0]=b_[0]) and (a_[1]=b_[1])
+    {$ifndef CPU64} and (a_[2]=b_[2]) and (a_[3]=b_[3]){$endif};
 end;
 
 procedure FillZero(out dig: THash128);
@@ -30901,35 +30913,20 @@ begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 end;
 
 function IsZero(const dig: THash256): boolean;
+var a: TPtrIntArray absolute dig;
 begin
-  {$ifdef CPU64}
-  result := (PInt64Array(@dig)^[0]=0) and (PInt64Array(@dig)^[1]=0) and
-            (PInt64Array(@dig)^[2]=0) and (PInt64Array(@dig)^[3]=0);
-  {$else}
-  result := (PCardinalArray(@dig)^[0]=0) and (PCardinalArray(@dig)^[1]=0) and
-            (PCardinalArray(@dig)^[2]=0) and (PCardinalArray(@dig)^[3]=0) and
-            (PCardinalArray(@dig)^[4]=0) and (PCardinalArray(@dig)^[5]=0) and
-            (PCardinalArray(@dig)^[6]=0) and (PCardinalArray(@dig)^[7]=0);
-  {$endif}
+  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0)
+    {$ifndef CPU64} and (a[4]=0) and (a[5]=0)
+                    and (a[6]=0) and (a[7]=0){$endif};
 end;
 
 function IsEqual(const A,B: THash256): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
 begin
-  {$ifdef CPU64}
-  result := (PInt64Array(@A)^[0]=PInt64Array(@B)^[0]) and
-            (PInt64Array(@A)^[1]=PInt64Array(@B)^[1]) and
-            (PInt64Array(@A)^[2]=PInt64Array(@B)^[2]) and
-            (PInt64Array(@A)^[3]=PInt64Array(@B)^[3]);
-  {$else}
-  result := (PCardinalArray(@A)^[0]=PCardinalArray(@B)^[0]) and
-            (PCardinalArray(@A)^[1]=PCardinalArray(@B)^[1]) and
-            (PCardinalArray(@A)^[2]=PCardinalArray(@B)^[2]) and
-            (PCardinalArray(@A)^[3]=PCardinalArray(@B)^[3]) and
-            (PCardinalArray(@A)^[4]=PCardinalArray(@B)^[4]) and
-            (PCardinalArray(@A)^[5]=PCardinalArray(@B)^[5]) and
-            (PCardinalArray(@A)^[6]=PCardinalArray(@B)^[6]) and
-            (PCardinalArray(@A)^[7]=PCardinalArray(@B)^[7]);
-  {$endif}
+  result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
+    {$ifndef CPU64} and (a_[4]=b_[4]) and (a_[5]=b_[5])
+                    and (a_[6]=b_[6]) and (a_[7]=b_[7]){$endif};
 end;
 
 procedure FillZero(out dig: THash256);
@@ -32174,25 +32171,12 @@ begin
 end;
 
 function IsEqualGUID(const guid1, guid2: TGUID): Boolean;
-{$ifdef CPU64}
-var a: array[0..1] of Int64 absolute guid1;
-    b: array[0..1] of Int64 absolute guid2;
+var a: TPtrIntArray absolute guid1;
+    b: TPtrIntArray absolute guid2;
 begin
-  result := (a[0]=b[0]) and (a[1]=b[1]);
+  result := (a[0]=b[0]) and (a[1]=b[1])
+    {$ifndef CPU64} and (a[2]=b[2]) and (a[3]=b[3]){$endif};
 end;
-{$else}
-var a: array[0..3] of integer absolute guid1;
-    b: array[0..3] of integer absolute guid2;
-begin // slightly faster implementation than in SysUtils.pas
-  {$ifdef HASINLINE}
-  result := (a[0]=b[0]) and (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
-  {$else}
-  if a[0]<>b[0] then
-    result := false else
-    result := (a[1]=b[1]) and (a[2]=b[2]) and (a[3]=b[3]);
-  {$endif}
-end;
-{$endif}
 
 function IsEqualGUIDArray(const guid: TGUID; const guids: array of TGUID): integer;
 begin
@@ -32203,13 +32187,10 @@ begin
 end;
 
 function IsNullGUID(const guid: TGUID): Boolean;
+var a: TPtrIntArray absolute guid;
 begin
-  {$ifdef CPU64}
-  result := (PInt64Array(@guid)^[0]=0) and (PInt64Array(@guid)^[1]=0);
-  {$else}
-  result := (PIntegerArray(@guid)^[0]=0) and (PIntegerArray(@guid)^[1]=0) and
-            (PIntegerArray(@guid)^[2]=0) and (PIntegerArray(@guid)^[3]=0);
-  {$endif}
+  result := (a[0]=0) and (a[1]=0)
+    {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
 end;
 
 function AddGUID(var guids: TGUIDDynArray; const guid: TGUID;
