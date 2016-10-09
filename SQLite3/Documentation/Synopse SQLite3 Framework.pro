@@ -18099,13 +18099,14 @@ $   <-----------------------------------------------------------
 $
 $  ECDSAVerify(QCB, Sign)
 $
-Now both ends can calculate shared secret keys {\f1\fs20 S1} and {\f1\fs20 S2}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C).
+Now both ends can calculate shared secret keys {\f1\fs20 SA} and {\f1\fs20 SB}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). If needed, an {\f1\fs20 IV} is also derived using the {\f1\fs20 KDF} function and a third salt. Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and its {\f1\fs20 IV}. Finally, {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C), and {\f1\fs20 kM} value will increase as a CTR to maintain read and write sequence numbers on both sides, and avoid replay attacks.
 $Client (dA, QCA)                                            Server (dB, QCB)
 $
-$  S1 = ECDH(dA,QF)                                         S1 = ECDH(dF,QCA)
-$  S2 = ECDH(dE,QCB)                                        S2 = ECDH(dB,QE)
-$                  kE = KDF(S1|S2|RndA|RndB,"salt")
-$                  kM = KDF(kE|S1|S2|RndA|RndB,"hmac")
+$  SA = ECDH(dA,QF)                                         SA = ECDH(dF,QCA)
+$  SB = ECDH(dE,QCB)                                        SB = ECDH(dB,QE)
+$                  kE = KDF(SA|SB|RndA|RndB,"salt")
+$                  kM = KDF(SA|SB|RndA|RndB,"hmac")
+$                [ IV = KDF(SA|SB|RndA|RndB,"iv") ]
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
@@ -18119,9 +18120,9 @@ $    ...
 $
 A typical {\f1\fs20 SynEcc} implementation may use, as algorithms for high security but very fast process, hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions:
 - {\f1\fs20 KDF} = HMAC-SHA256 ("salt" and "hmac" values may be customized, but known on both sides);
-- {\f1\fs20 EF} = AES256-CFB or any AES256 mode excluding ECB, with optional {\f1\fs20 @*SynLZ@} real-time compression;
-- {\f1\fs20 MAC} = HMAC-CRC256C (fast), HMAC-CRC32C (fastest) or HMAC-SHA256 (safest, but not mandatory).
-
+- {\f1\fs20 EF} = AES256-CFB or any AES256 mode excluding ECB;
+- {\f1\fs20 MAC} = HMAC-CRC256C (fast) or HMAC-SHA256 (safest, but not mandatory in practice).
+Note that encryption is not handled at this level, since all conservative protocol implementations do not enable compression, to avoid security exploit as occured for TLS with CRIME. It is up to the application layer to process the data using e.g. {\f1\fs20 deflate} or our {\f1\fs20 @*SynLZ@} algorithm.
 : Unilateral Authentication
 For server-side only authentication - as is most currently implemented in regular TLS/HTTPS communications, the handshaking process is slightly reduced:
 $Client                                                      Server (dB, QCB)
@@ -18139,7 +18140,8 @@ $
 $  ECDSAVerify(QCB, Sign)
 $  S = ECDH(dE,QCB)                                         S = ECDH(dB,QE)
 $                  kE = KDF(S|RndA|RndB,"salt")
-$                  kM = KDF(kE|S|RndA|RndB,"hmac")
+$                  kM = KDF(S|RndA|RndB,"hmac")
+$                [ IV = KDF(S|RndA|RndB,"iv") ]
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
@@ -18149,4 +18151,5 @@ $   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 $    ...
 $
 In this case, the client party does not have any private/public key certification, and is the only side computing an ephemeral {\f1\fs20 (dE, QE)} pair. The server has no mean of authenticating its client, but the connection is secured and private. The handshaking process will be slightly faster than with mutual authentication, since less ECC computing operations are performed (2 instead of 5 on the server side).
+The protocol is also able to handle client-side only authentication, even if this scheme may not be very useful in practice.
 

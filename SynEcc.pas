@@ -127,6 +127,7 @@ type
   PECCPublicKey = ^TECCPublicKey;
   PECCPrivateKey = ^TECCPrivateKey;
   PECCHash = ^TECCHash;
+  PECCSignature = ^TECCSignature;
   PECCSecretKey = ^TECCSecretKey;
 
 {$ifdef ECC_32ASM}
@@ -258,6 +259,7 @@ type
   end;
 
   /// store a TECCCertificate binary buffer for ECC secp256r1 cryptography
+  // - i.e. a certificate public key, with its ECDSA signature 
   // - would be stored in 173 bytes
   TECCCertificateContent = packed record
     /// the TECCCertificate format version
@@ -277,6 +279,7 @@ type
   PECCCertificateContent = ^TECCCertificateContent;
 
   /// store a TECCSignatureCertified binary buffer for ECDSA secp256r1 signature
+  // - i.e. the digital signature of some content
   TECCSignatureCertifiedContent = packed record
     /// the TECCSignatureCertificated format version
     Version: word;
@@ -1572,7 +1575,6 @@ begin
   result := GetEnumName(TypeInfo(TECIESAlgo),ord(algo));
 end;
 
-
 function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 var match: TFindFilesDynArray;
     ext: TFileName;
@@ -2847,9 +2849,456 @@ begin
   end;
 end;
 
+type
+  /// the Authentication schemes recognized by TECDHEAbstract
+  // - specifying the authentication allows a safe one-way handshake
+  TECDHEAuth = (authMutual, authServer, authClient);
+  /// the Key Derivation Functions recognized by TECDHEAbstract
+  // - used to compute the EF secret and MAC secret
+  TECDHEKDF = (kdfHmacSha256);
+  /// the Encryption Functions recognized by TECDHEAbstract
+  // - efAesCfb256 will use TAESCFB in 256-bit mode, with AES-NI if available
+  TECDHEEF = (efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
+  /// the Message Authentication Codes recognized by TECDHEAbstract
+  // - macHmacSha256 is the safest, but in practice macHmacCrc256c is much
+  // faster (thanks to HW acceleration), and secure enough due to the nature of
+  // HMAC - see http://cseweb.ucsd.edu/~mihir/papers/hmac-new.html
+  TECDHEMAC = (macHmacCrc256c, macHmacSha256);
+
+  /// defines one protocol Algorithm recognized by TECDHEAbstract
+  // - only safe and strong parameters are allowed, and the default values
+  // (i.e. all fields set to 0) will ensure a very good combination
+  // - in current implementation, there is no negociation between nodes:
+  // client and server should have the very same algorithm
+  TECDHEAlgo = packed record
+    /// the current Authentication scheme
+    auth: TECDHEAuth;
+    /// the current Key Derivation Function
+    kdf: TECDHEKDF;
+    /// the current Encryption Function
+    ef: TECDHEEF;
+    /// the current Message Authentication Code
+    mac: TECDHEMAC;
+  end;
+  /// points to one protocol Algorithm recognized by TECDHEAbstract
+  PECDHEAlgo = ^TECDHEAlgo;
+
+  /// the binary handshake message, sent by client to server
+  // - the frame will always have the same fixed size of 290 bytes, for both
+  // mutual or unilateral authentication
+  TECDHEFrameClient = packed record
+    /// expected algorithm used
+    algo: TECDHEAlgo;
+    /// a client-generated random seed
+    RndA: THash128;
+    /// client public key, with its certificate
+    // - may be zero, in case of unilateral authentication (algo=authServer)
+    QCA: TECCCertificateContent;
+    /// client-generated ephemeral public key
+    // - may be zero, in case of unilateral authentication (algo=authClient)
+    QE: TECCPublicKey;
+    /// SHA-256 + ECDSA secp256r1 signature of the previous fields, computed
+    // with the client private key
+    // - i.e. ECDSASign(dA,sha256(algo|RndA|QCA|QE))
+    // - may be zero, in case of unilateral authentication (algo=authServer)
+    Sign: TECCSignature;
+  end;
+
+  /// the binary handshake message, sent back from server to client
+  // - the frame will always have the same fixed size of 306 bytes, for both
+  // mutual or unilateral authentication
+  TECDHEFrameServer = packed record
+    /// algorithm used by the server
+    algo: TECDHEAlgo;
+    /// client-generated random seed
+    RndA: THash128;
+    /// a server-generated random seed
+    RndB: THash128;
+    /// server public key, with its certificate
+    // - may be zero, in case of unilateral authentication (algo=authClient)
+    QCB: TECCCertificateContent;
+    /// server-generated ephemeral public key
+    // - may be zero, in case of unilateral authentication (algo=authServer)
+    QF: TECCPublicKey;
+    /// SHA-256 + ECDSA secp256r1 signature of the previous fields, computed
+    // with the server private key
+    // - i.e. ECDSASign(dB,sha256(algo|RndA|RndB|QCB|QF))
+    // - may be zero, in case of unilateral authentication (algo=authClient)
+    Sign: TECCSignature;
+  end;
+
+  /// possible return codes by TECDHEAbstract classes
+  TECDHEResult = (erSuccess,
+    erUnexpectedAlgorithm, erBadRequest,
+    erInvalidCertificate, erInvalidSignature,
+    erInvalidEphemeralKey, erInvalidPublicKey,
+    erInvalidMAC);
+
+  /// implements ECDHE secure protocol with unilateral or mutual authentication
+  // - could be used e.g. to implement a secure client/server transmission,
+  // with a one-way handshake and asymmetric encryption
+  // - will validate ECDSA signatures using certificates of the associated PKI
+  // - will create an ephemeral ECC key pair for perfect forward security
+  // - will use ECDH to compute a shared ephemeral secret on both sides, safely
+  // derivated for AES-256 encryption, and HMAC with anti-replay
+  TECDHEAbstract = class(TSynPersistent)
+  protected
+    fPKI: TECCCertificateChain;
+    fPrivate: TECCCertificateSecret;
+    fAES: TAESAbstract;
+    fAlgo: TECDHEAlgo;
+    fEFSalt: RawByteString;
+    fMACSalt: RawByteString;
+    fOwned: set of (ownPKI, ownPrivate);
+    fCertificateValidity: TECCValidity;
+    fRndA,fRndB: THash128;
+    fKM: array[boolean] of THash256;
+    // contains inc(PInt64(@aKey)^) to maintain RX/TX sequence number
+    procedure ComputeMAC(var aKey: THash256; aEncrypted: pointer; aLen: integer; out aMAC);
+    function Verify(frame: PByteArray; len: integer; const QC: TECCCertificateContent;
+      out res: TECDHEResult): boolean;
+    procedure Sign(frame: PByteArray; len: integer; out QC: TECCCertificateContent);
+    procedure SharedSecret(sA,sB: PHash256);
+  public
+    /// initialize the ECDHE protocol with a PKI and a private secret key
+    // - if aPKI is not set, the certificates won't be validated and the protocol
+    // will allow self-signed credentials
+    // - aPrivate should always be set for mutual or unilateral authentication
+    // - will do unilateral authentication if aPrivate=nil for this end
+    constructor Create(aAuth: TECDHEAuth;
+      aPKI: TECCCertificateChain; aPrivate: TECCCertificateSecret);
+      reintroduce; overload; virtual;
+    /// finalize the instance
+    // - also erase all temporary secret keys, for safety
+    destructor Destroy; override;
+    /// encrypt a message on one side, ready to be transmitted to the other side
+    // - will use the Encryption Function EF, according to the shared secret key
+    procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString); virtual;
+    /// decrypt a message on one side, as transmitted from the other side
+    // - will use the Encryption Function EF, according to the shared secret key
+    // - returns erInvalidMAC in case of wrong aEncrypted input (e.g. packet
+    // corruption, MiM or Replay attacks attempts)
+    function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TECDHEResult; virtual;
+    /// shared public-key infrastructure, used to validate exchanged certificates
+    // - will be used for authenticity validation of ECDSA signatures
+    property PKI: TECCCertificateChain read fPKI;
+    /// the current Authentication scheme
+    property Auth: TECDHEAuth read fAlgo.auth;
+    /// the current Key Derivation Function
+    property KDF: TECDHEKDF read fAlgo.kdf write fAlgo.kdf;
+    /// the current salt, used by the Key Derivation Function KDF to compute the
+    // key supplied to the Encryption Function EF
+    // - equals 'ecdhesalt' by default
+    property EFSalt: RawByteString read fEFSalt write fEFSalt;
+    /// the current Encryption Function
+    property EF: TECDHEEF read fAlgo.ef write fAlgo.ef;
+    /// the current salt, used by the Key Derivation Function KDF to compute the
+    // key supplied to the Message Authentication Code MAC
+    // - equals 'ecdhemac' by default
+    property MACSalt: RawByteString read fMACSalt write fMACSalt;
+    /// the current Message Authentication Code
+    property MAC: TECDHEMAC read fAlgo.mac write fAlgo.mac;
+    /// after handshake, contains the information about the other side
+    // public key certificate validity, against the shared PKI
+    property CertificateValidity: TECCValidity read fCertificateValidity;
+  end;
+
+  /// implements ECDHE secure protocol on client side
+  TECDHEClient = class(TECDHEAbstract)
+  protected
+    fdE: TECCPrivateKey;
+  public
+    /// generate the authentication frame sent from the client
+    procedure ComputeHandshake(out aClient: TECDHEFrameClient);
+    /// validate the authentication frame sent back by the server
+    function ValidateHandshake(const aServer: TECDHEFrameServer): TECDHEResult;
+  end;
+
+  /// implements ECDHE secure protocol on server side
+  TECDHEServer = class(TECDHEAbstract)
+  protected
+  public
+    /// generate the authentication frame corresponding to the client request
+    function ComputeHandshake(const aClient: TECDHEFrameClient;
+      out aServer: TECDHEFrameServer): TECDHEResult;
+  end;
+
+
+
+function ToText(algo: TECDHEAuth): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TECDHEAuth),ord(algo));
+end;
+
+function ToText(algo: TECDHEKDF): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TECDHEKDF),ord(algo));
+end;
+
+function ToText(algo: TECDHEEF): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TECDHEEF),ord(algo));
+end;
+
+function ToText(algo: TECDHEMAC): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TECDHEMAC),ord(algo));
+end;
+
+function ToText(res: TECDHEResult): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TECDHEResult),ord(res));
+end;
+
+
+{ TECDHEAbstract }
+
+constructor TECDHEAbstract.Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
+  aPrivate: TECCCertificateSecret);
+begin
+  if not ecc_available then
+    raise EECCException.CreateUTF8('%.Create but ECC not supported',[self]);
+  inherited Create;
+  fAlgo.auth := aAuth;
+  fPKI := aPKI;
+  fPrivate := aPrivate;
+  fEFSalt := 'ecdhesalt';
+  fMACSalt := 'ecdhemac';
+end;
+
+destructor TECDHEAbstract.Destroy;
+begin
+  fAES.Free;
+  FillZero(fKM[false]);
+  FillZero(fKM[true]);
+  if ownPKI in fOwned then
+    fPKI.Free;
+  if ownPrivate in fOwned then
+    fPrivate.Free;
+  inherited Destroy;
+end;
+
+procedure TECDHEAbstract.ComputeMAC(var aKey: THash256;
+  aEncrypted: pointer; aLen: integer; out aMAC);
+begin
+  case fAlgo.mac of
+    macHmacCrc256c:
+      HMAC_CRC256C(@aKey,aEncrypted,sizeof(aKey),aLen,THash256(aMAC));
+    macHmacSha256:
+      HMAC_SHA256(@aKey,aEncrypted,sizeof(aKey),aLen,THash256(aMAC));
+    else
+      raise EECCException.CreateUTF8('%.ComputeMAC %?',[self,ToText(fAlgo.mac)^]);
+  end;
+  inc(PInt64(@aKey)^); // use kM as a 64-bit sequence number against replay attacks
+end;
+
+procedure TECDHEAbstract.Encrypt(const aPlain: RawByteString;
+  out aEncrypted: RawByteString);
+var len: integer;
+begin
+  if fAES=nil then
+    raise EECCException.CreateUTF8('%.Encrypt with no handshake',[self]);
+  aEncrypted := fAES.EncryptPKCS7(aPlain,false);
+  len := length(aEncrypted);
+  SetLength(aEncrypted,len+sizeof(THash256));
+  ComputeMac(fKM[true],pointer(aEncrypted),len,PByteArray(aEncrypted)[len]);
+end;
+
+function TECDHEAbstract.Decrypt(const aEncrypted: RawByteString;
+  out aPlain: RawByteString): TECDHEResult;
+var P: PAnsiChar absolute aEncrypted;
+    len: integer;
+    mac: THash256;
+begin
+  if fAES=nil then
+    raise EECCException.CreateUTF8('%.Decrypt with no handshake',[self]);
+  result := erInvalidMAC;
+  len := length(aEncrypted)-sizeof(THash256);
+  if len<=0 then
+    exit;
+  ComputeMac(fKM[false],P,len,mac);
+  if not IsEqual(mac,PHash256(P+len)^) then
+    exit;
+  aPlain := fAES.DecryptPKCS7Buffer(P,len,false);
+  if aPlain<>'' then
+    result := erSuccess;
+end;
+
+procedure TECDHEAbstract.SharedSecret(sA,sB: PHash256);
+const
+  AES_CLASS: array[TECDHEEF] of TAESAbstractClass = (
+  // efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256
+    TAESCFB, TAESOFB, TAESCTR, TAESCBC);
+var secret: THash256;
+  procedure ComputeSecret(const salt: RawByteString);
+  var hmac: THMAC_SHA256;
+  begin
+    hmac.Init(pointer(salt),length(salt));
+    if fAlgo.auth<>authServer then
+      hmac.Update(sA^);
+    if fAlgo.auth<>authClient then
+      hmac.Update(sB^);
+    hmac.Update(fRndA);
+    hmac.Update(fRndB);
+    hmac.Done(secret);
+  end;
+begin
+  if fAES<>nil then
+    raise EECCException.CreateUTF8('%.SharedSecret already called',[self]);
+  if fAlgo.kdf<>kdfHmacSha256 then
+    raise EECCException.CreateUTF8('%.SharedSecret %?',[self,ToText(fAlgo.kdf)^]);
+  try
+    ComputeSecret(fEFSalt);
+    fAES := AES_CLASS[fAlgo.ef].Create(secret,256);
+    ComputeSecret(fMACSalt);
+    fKM[false] := secret;
+    fKM[true] := secret;
+    ComputeSecret('ecdheiv');
+    fAES.IV := PHash128(@secret)^;
+  finally
+    FillZero(secret);
+  end;
+end;
+
+function TECDHEAbstract.Verify(frame: PByteArray; len: integer;
+  const QC: TECCCertificateContent; out res: TECDHEResult): boolean;
+var hash: TSHA256Digest;
+    sha: TSHA256;
+begin
+  result := false;
+  res := erInvalidCertificate;
+  if fPKI<>nil then begin
+    fCertificateValidity := fPKI.IsValid(QC);
+    if not (fCertificateValidity in ECC_VALIDSIGN) then
+      exit;
+  end else
+    if not ECCCheck(QC) then
+      exit;
+  dec(len,sizeof(TECCSignature)); // Sign at the latest position
+  sha.Full(frame,len,hash);
+  if ecdsa_verify(QC.Signed.PublicKey,hash,PECCSignature(@frame[len])^) then begin
+    res := erSuccess;
+    result := true;
+  end else
+    res := erInvalidSignature;
+end;
+
+procedure TECDHEAbstract.Sign(frame: PByteArray; len: integer;
+  out QC: TECCCertificateContent);
+var hash: TSHA256Digest;
+    sha: TSHA256;
+begin
+  if fPrivate=nil then
+    raise EECCException.CreateUTF8('%.Sign: % with Private=nil',
+      [self,ToText(fAlgo.auth)^]) else
+  QC := fPrivate.fContent;
+  dec(len,sizeof(TECCSignature)); // Sign at the latest position
+  sha.Full(frame,len,hash);
+  if not ecdsa_sign(fPrivate.fPrivateKey,hash,PECCSignature(@frame[len])^) then
+    raise EECCException.CreateUTF8('%.Sign: ecdsa_sign',[self]);
+end;
+
+
+{ TECDHEClient }
+
+procedure TECDHEClient.ComputeHandshake(out aClient: TECDHEFrameClient);
+begin
+  if fAES<>nil then
+    raise EECCException.CreateUTF8('%.ComputeHandshake already called',[self]);
+  FillCharFast(aClient,sizeof(aClient),0);
+  aClient.algo := fAlgo;
+  TAESPRNG.Main.FillRandom(fRndA);
+  aClient.RndA := fRndA;
+  if fAlgo.auth<>authClient then
+    if not ecc_make_key(aClient.QE,fdE) then
+      raise EECCException.CreateUTF8('%.ComputeHandshake: ecc_make_key',[self]);
+  if fAlgo.auth<>authServer then
+    Sign(@aClient,sizeof(aClient),aClient.QCA);
+end;
+
+function TECDHEClient.ValidateHandshake(const aServer: TECDHEFrameServer): TECDHEResult;
+var sA,sB: THash256;
+begin
+  result := erUnexpectedAlgorithm;
+  if cardinal(aServer.algo)<>cardinal(fAlgo) then
+    exit;
+  result := erBadRequest;
+  if not IsEqual(aServer.RndA,fRndA) or
+     IsZero(aServer.RndB) or IsEqual(aServer.RndA,aServer.RndB) then
+    exit;
+  fRndB := aServer.RndB;
+  if fAlgo.auth<>authClient then
+    if not Verify(@aServer,sizeof(aServer),aServer.QCB,result) then
+      exit;
+  try
+    result := erInvalidEphemeralKey;
+    if fAlgo.auth<>authServer then
+      if not ecdh_shared_secret(aServer.QF,fPrivate.fPrivateKey,sA) then
+        exit;
+    result := erInvalidPublicKey;
+    if fAlgo.auth<>authClient then
+      if not ecdh_shared_secret(aServer.QCB.Signed.PublicKey,fdE,sB) then
+        exit;
+    SharedSecret(@sA,@sB);
+  finally
+    FillZero(sA);
+    FillZero(sB);
+    FillZero(THash256(fdE));
+  end;
+  result := erSuccess;
+end;
+
+
+{ TECDHEServer }
+
+function TECDHEServer.ComputeHandshake(const aClient: TECDHEFrameClient;
+  out aServer: TECDHEFrameServer): TECDHEResult;
+var dF: TECCPrivateKey;
+    sA,sB: THash256;
+begin
+  result := erUnexpectedAlgorithm;
+  if cardinal(aClient.algo)<>cardinal(fAlgo) then
+    exit;
+  result := erBadRequest;
+  if IsZero(aClient.RndA) then
+    exit;
+  if fAlgo.auth<>authServer then
+    if not Verify(@aClient,sizeof(aClient),aClient.QCA,result) then
+      exit;
+  fRndA := aClient.RndA;
+  FillCharFast(aServer,sizeof(aServer),0);
+  aServer.algo := fAlgo;
+  aServer.RndA := fRndA;
+  TAESPRNG.Main.FillRandom(fRndB);
+  aServer.RndB := fRndB;
+  if fAlgo.auth<>authServer then
+    if not ecc_make_key(aServer.QF,dF) then
+      raise EECCException.CreateUTF8('%.ComputeHandshake: ecc_make_key',[self]);
+  try
+    result := erInvalidPublicKey;
+    if fAlgo.auth<>authServer then
+      if not ecdh_shared_secret(aClient.QCA.Signed.PublicKey,dF,sA) then
+        exit;
+    result := erInvalidEphemeralKey;
+    if fAlgo.auth<>authClient then
+      if not ecdh_shared_secret(aClient.QE,fPrivate.fPrivateKey,sB) then
+        exit;
+    SharedSecret(@sA,@sB);
+  finally
+    FillZero(sA);
+    FillZero(sB);
+    FillZero(THash256(dF));
+  end;
+  if fAlgo.auth<>authClient then
+    Sign(@aServer,sizeof(aServer),aServer.QCB);
+  result := erSuccess;
+end;
+
 
 initialization
-  assert(sizeof(TECCCertificateContent)=173);
+  assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers
+  assert(sizeof(TECDHEFrameClient)=290);
+  assert(sizeof(TECDHEFrameServer)=306);
   {$ifdef ECC_32ASM}
   pointer(@ecc_make_key) := pointer(@_ecc_make_key);
   pointer(@ecdh_shared_secret) := pointer(@_ecdh_shared_secret);
