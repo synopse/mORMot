@@ -777,7 +777,10 @@ var
   // - when working with TWebSocketProtocolBinary
   // - it is useless to compress smaller frames, which fits in network MTU 
   WebSocketsBinarySynLzThreshold: integer = 450;
-                                             
+
+  /// how replay attacks will be handled in TWebSocketProtocolBinary encryption
+  WebSocketsIVReplayAttackCheck: TAESIVReplayAttackCheck = repCheckedIfAvailable;
+
 
 implementation
 
@@ -1204,9 +1207,9 @@ begin
   inherited Create('synopsebinary',aURI);
   if aKeySize>=128 then begin
     fEncryptionRX := TAESCFB.Create(aKey,aKeySize);
-    fEncryptionRX.IVReplayAttackCheck := true; // safe paranoid approach
+    fEncryptionRX.IVReplayAttackCheck := WebSocketsIVReplayAttackCheck;
     fEncryptionTX := TAESCFB.Create(aKey,aKeySize);
-    fEncryptionTX.IVReplayAttackCheck := true;
+    fEncryptionTX.IVReplayAttackCheck := WebSocketsIVReplayAttackCheck;
   end;
   fCompressed := aCompressed;
 end;
