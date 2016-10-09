@@ -766,10 +766,15 @@ type
 
 var
   /// 128-bit random AES-128 entropy key for TAESAbstract.IVReplayAttackCheck
+  // - as used internally by AESIVCtrEncryptDecrypt() function
   // - you may customize this secret for your own project, but be aware that
   // it will affect all TAESAbstract instances, so should match on all ends
   AESIVCTR_KEY: array[0..3] of cardinal = (
     $ce5d5e3e, $26506c65, $568e0092, $12cce480);
+
+/// global shared function which may encrypt or decrypt any 128-bit block
+// using AES-128 and the global AESIVCTR_KEY
+procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 
 type
   /// thread-safe class containing a TAES encryption/decryption engine
@@ -1162,7 +1167,11 @@ type
     /// prepare the HMAC authentication with the supplied key
     procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
-    procedure Update(msg: pointer; msglen: integer);
+    procedure Update(msg: pointer; msglen: integer); overload;
+    /// call this method for each continuous message block
+    procedure Update(const msg: THash128); overload;
+    /// call this method for each continuous message block
+    procedure Update(const msg: THash256); overload;
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA256Digest);
   end;
@@ -1183,7 +1192,6 @@ procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA
 // - this function expect the resulting key length to match SHA256 digest size
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   out result: TSHA256Digest; const saltdefault: RawByteString='');
-
 
 /// compute the HMAC message authentication code using crc256c as hash function
 // - HMAC over a non cryptographic hash function like crc256c is known to be
@@ -1976,6 +1984,16 @@ begin
   sha.Update(msg,msglen);
 end;
 
+procedure THMAC_SHA256.Update(const msg: THash128);
+begin
+  sha.Update(@msg,sizeof(msg));
+end;
+
+procedure THMAC_SHA256.Update(const msg: THash256);
+begin
+  sha.Update(@msg,sizeof(msg));
+end;
+
 procedure THMAC_SHA256.Done(out result: TSHA256Digest);
 begin
   sha.Final(result);
@@ -2058,7 +2076,7 @@ begin
 end;
 
 
-{ HMAC_CRC256C() functions - THMAC_CRC256C not possible due to h1/h2 coupling }
+{ HMAC_CRC256C }
 
 procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
@@ -2140,7 +2158,7 @@ end;
 function HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer): cardinal;
 var mac: THMAC_CRC32C;
 begin
-  mac.Init(@key,sizeof(key));
+  mac.Init(key,sizeof(key));
   mac.Update(msg,msglen);
   result := mac.Done;
 end;
@@ -7168,7 +7186,7 @@ const
 var
   aesivctr: array[boolean] of TAESLocked;
 
-procedure IVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
+procedure AESIVCtrEncryptDecrypt(const BI; var BO; DoEncrypt: boolean);
 begin
   if aesivctr[DoEncrypt]=nil then begin
     GarbageCollectorFreeAndNil(aesivctr[DoEncrypt],TAESLocked.Create);
@@ -7256,7 +7274,7 @@ begin
   end;
   if IVAtBeginning then begin
     if fIVReplayAttackCheck<>repNoCheck then begin
-      IVCtrEncryptDecrypt(fIVCTR,fIV,true); // PRNG from fixed secret
+      AESIVCtrEncryptDecrypt(fIVCTR,fIV,true); // PRNG from fixed secret
       inc(fIVCTR.ctr); // replay attack protection
     end else
       TAESPRNG.Main.FillRandom(fIV); // PRNG from real entropy
@@ -7277,7 +7295,7 @@ begin
     raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]);
   if IVAtBeginning then begin
     if (fIVReplayAttackCheck<>repNoCheck) and (fIVCTRState<>ctrNotUsed) then begin
-      IVCtrEncryptDecrypt(Input^,ctr,false);
+      AESIVCtrEncryptDecrypt(Input^,ctr,false);
       if fIVCTRState=ctrUnknown then
         if ctr.magic=fIVCTR.magic then begin
           fIVCTR := ctr;
