@@ -2772,6 +2772,11 @@ begin
 end;
 var i: integer;
     Timer: TPrecisionTimer;
+    c1,c2: cardinal;
+    digest: THash256;
+    tmp: RawByteString;
+    hmac32: THMAC_CRC32C;
+//    hmac256: THMAC_CRC256C;
 begin
   test16('',$ffff);
   test16('a',$9d77);
@@ -2780,11 +2785,26 @@ begin
   test16('123456789',$29b1);
   test16('123456789123456789',$a86d);
   totallen := 36;
+  tmp := '123456789123456789';
+  c2 := $12345678;
+  c1 := HMAC_CRC32C(@c2,pointer(tmp),4,length(tmp));
+  check(c1=$1C3C4B51);
+  hmac32.Init(@c2,4);
+  hmac32.Update(pointer(tmp),length(tmp));
+  check(hmac32.Done=c1);
+  c2 := $12345678;
+  HMAC_CRC256C(@c2,pointer(tmp),4,length(tmp),digest);
+  check(SHA256DigestToString(digest)='46da01fb9f4a97b5f8ba2c70512bc22aa'+
+    'a9b57e5030ced9f5c7c825ab5ec1715');
   for i := 0 to High(crc) do
   with crc[i] do begin
     s := RandomString(i shr 3+1);
     crc := crc32cpas(0,pointer(s),length(s));
     inc(totallen,length(s));
+    c2 := HMAC_CRC32C(@c1,pointer(s),4,length(s));
+    hmac32.Init(@c1,4);
+    hmac32.Update(pointer(s),length(s));
+    check(hmac32.Done=c2);
   end;
   Test(crc32cpas,'pas');
   Test(crc32cfast,'fast');
