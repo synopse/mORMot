@@ -462,6 +462,12 @@ type
     constructor CreateFromSha256(const aKey: RawUTF8); virtual;
     /// compute a class instance similar to this one
     function Clone: TAESAbstract; virtual;
+    /// compute a class instance similar to this one, for performing the
+    // reverse encryption/decryption process
+    // - this default implementation calls Clone, but CFB/OFB/CTR chaining modes
+    // using only AES encryption will return self to avoid creating two instances
+    // - warning: to be used only with IVAtBeginning=false
+    function CloneEncryptDecrypt: TAESAbstract; virtual;
     /// release the used instance memory and resources
     // - also fill the secret fKey buffer with zeros, for safety
     destructor Destroy; override;
@@ -556,8 +562,9 @@ type
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
     /// associated Initialization Vector
-    // - you should better use PKCS7 encoding with IVAtBeginning option than
-    // a fixed Initialization Vector, especially in ECB mode
+    // - all modes (except ECB) do expect an IV to be supplied for chaining,
+    // before any encryption or decryption is performed
+    // - you could also use PKCS7 encoding with IVAtBeginning=true option
     property IV: TAESBlock read fIV write fIV;
     /// let IV detect replay attack for EncryptPKCS7 and DecryptPKCS7
     // - if IVAtBeginning=true and this property is set, EncryptPKCS7 will
@@ -631,6 +638,7 @@ type
   /// handle AES cypher/uncypher with Cipher-block chaining (CBC)
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! CBC192: 24.91ms in x86 optimized code, 9.75ms with AES-NI
+  // - expect IV to be set before process, or IVAtBeginning=true
   TAESCBC = class(TAESAbstractSyn)
   public
     /// perform the AES cypher in the CBC mode
@@ -639,21 +647,33 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
+  /// abstract parent class for chaining modes using only AES encryption 
+  TAESAbstractEncryptOnly = class(TAESAbstractSyn)
+  public
+    /// returns this class instance, for performing the reverse process
+    // - return self for inherited classes of chaining modes using only Encrypt
+    // - warning: to be used only with IVAtBeginning=false, otherwise replay
+    // atacks attempts algorithm will fail the decryption
+    function CloneEncryptDecrypt: TAESAbstract; override;
+  end;
+
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! CFB128: 22.25ms in x86 optimized code, 9.29ms with AES-NI
-  TAESCFB = class(TAESAbstractSyn)
+  // - expect IV to be set before process, or IVAtBeginning=true
+  TAESCFB = class(TAESAbstractEncryptOnly)
   public
     /// perform the AES cypher in the CFB mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the CFB mode
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
-
+  
   /// handle AES cypher/uncypher with Output feedback (OFB)
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
-  TAESOFB = class(TAESAbstractSyn)
+  // - expect IV to be set before process, or IVAtBeginning=true
+  TAESOFB = class(TAESAbstractEncryptOnly)
   public
     /// perform the AES cypher in the OFB mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -664,7 +684,8 @@ type
   /// handle AES cypher/uncypher with Counter mode (CTR)
   // - this class will use AES-NI hardware instructions, e.g.
   // ! CTR256: 28.13ms in x86 optimized code, 10.63ms with AES-NI
-  TAESCTR = class(TAESAbstractSyn)
+  // - expect IV to be set before process, or IVAtBeginning=true
+  TAESCTR = class(TAESAbstractEncryptOnly)
   public
     /// perform the AES cypher in the CTR mode
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -7334,7 +7355,7 @@ begin
   padding := ord(result[InputLen]); // result[1..len]
   if padding>AESBlockSize then
     result := '' else
-    SetLength(result,InputLen-padding);
+    SetLength(result,InputLen-padding); // fast in-place resize
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
@@ -7354,7 +7375,7 @@ begin
   padding := result[len-1]; // result[0..len-1]
   if padding>AESBlockSize then
     result := nil else
-    SetLength(result,len-padding);
+    SetLength(result,len-padding); // fast in-place resize
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
@@ -7390,6 +7411,11 @@ begin
   result := TAESAbstractClass(ClassType).Create(fKey,fKeySize);
   result.IVHistoryDepth := IVHistoryDepth;
   result.IVReplayAttackCheck := IVReplayAttackCheck;
+end;
+
+function TAESAbstract.CloneEncryptDecrypt: TAESAbstract;
+begin
+  result := Clone;
 end;
 
 
@@ -7537,6 +7563,14 @@ begin
     inc(fOut);
   end;
   EncryptTrailer;
+end;
+
+
+{ TAESAbstractEncryptOnly }
+
+function TAESAbstractEncryptOnly.CloneEncryptDecrypt: TAESAbstract;
+begin
+  result := self;
 end;
 
 

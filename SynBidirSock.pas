@@ -1208,8 +1208,7 @@ begin
   if aKeySize>=128 then begin
     fEncryptionRX := TAESCFB.Create(aKey,aKeySize);
     fEncryptionRX.IVReplayAttackCheck := WebSocketsIVReplayAttackCheck;
-    fEncryptionTX := TAESCFB.Create(aKey,aKeySize);
-    fEncryptionTX.IVReplayAttackCheck := WebSocketsIVReplayAttackCheck;
+    fEncryptionTX := fEncryptionRX.Clone;
   end;
   fCompressed := aCompressed;
 end;
@@ -1233,7 +1232,7 @@ begin
   result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
   if fEncryptionRX<>nil then begin
     dest.fEncryptionRX := fEncryptionRX.Clone;
-    dest.fEncryptionTX := fEncryptionTX.Clone;
+    dest.fEncryptionTX := fEncryptionRX.Clone;
   end;
 end;
 
