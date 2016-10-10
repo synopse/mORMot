@@ -18099,14 +18099,13 @@ $   <-----------------------------------------------------------
 $
 $  ECDSAVerify(QCB, Sign)
 $
-Now both ends can calculate shared secret keys {\f1\fs20 SA} and {\f1\fs20 SB}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). If needed, an {\f1\fs20 IV} is also derived using the {\f1\fs20 KDF} function and a third salt. Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and its {\f1\fs20 IV}. Finally, {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C), and {\f1\fs20 kM} value will increase as a CTR to maintain read and write sequence numbers on both sides, and avoid replay attacks.
+Now both ends can calculate shared secret keys {\f1\fs20 SA} and {\f1\fs20 SB}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and the current {\f1\fs20 IV} Initialization Vector, derived from the current {\f1\fs20 kM}. Finally, {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C), and {\f1\fs20 kM} value will increase as a CTR to maintain read and write sequence numbers on both sides, ensure {\f1\fs20 IV} do change, and avoid replay attacks.
 $Client (dA, QCA)                                            Server (dB, QCB)
 $
 $  SA = ECDH(dA,QF)                                         SA = ECDH(dF,QCA)
 $  SB = ECDH(dE,QCB)                                        SB = ECDH(dB,QE)
 $                  kE = KDF(SA|SB|RndA|RndB,"salt")
 $                  kM = KDF(SA|SB|RndA|RndB,"hmac")
-$                [ IV = KDF(SA|SB|RndA|RndB,"iv") ]
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
@@ -18141,7 +18140,6 @@ $  ECDSAVerify(QCB, Sign)
 $  S = ECDH(dE,QCB)                                         S = ECDH(dB,QE)
 $                  kE = KDF(S|RndA|RndB,"salt")
 $                  kM = KDF(S|RndA|RndB,"hmac")
-$                [ IV = KDF(S|RndA|RndB,"iv") ]
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
