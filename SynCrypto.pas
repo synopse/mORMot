@@ -291,6 +291,11 @@ uses
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
   SynCommons;
 
+{$ifdef USEPADLOCK}
+var
+  /// if dll/so and VIA padlock compatible CPU are present
+  padlock_available: boolean = false;
+{$endif}
 
 const
   /// hide all AES Context complex code
@@ -1468,15 +1473,59 @@ procedure CompressShaAesSetKey(const Key: RawByteString; AesClass: TAESAbstractC
 // data is corrupted during transmission, will instantly return ''
 function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
 
+type
+  /// possible return codes by IProtocol classes
+  TProtocolResult = (sprSuccess,
+    sprBadRequest, sprUnexpectedAlgorithm,
+    sprInvalidCertificate, sprInvalidSignature,
+    sprInvalidEphemeralKey, sprInvalidPublicKey, sprInvalidPrivateKey,
+    sprInvalidMAC);
 
-{$ifdef USEPADLOCK}
-var
-  /// if dll/so and VIA padlock compatible CPU are present
-  padlock_available: boolean = false;
-{$endif}
+  /// perform safe communication after unilateral or mutual authentication
+  // - see e.g. TProtocolNone or SynEcc's TECDHEProtocolClient and
+  // TECDHEProtocolServer implementation classes
+  IProtocol = interface
+    ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
+    /// encrypt a message on one side, ready to be transmitted to the other side
+    // - this method should be thread-safe in the implementation class
+    procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
+    /// decrypt a message on one side, as transmitted from the other side
+    // - should return sprSuccess if the
+    // - should return sprInvalidMAC in case of wrong aEncrypted input (e.g.
+    // packet corruption, MiM or Replay attacks attempts)
+    // - this method should be thread-safe in the implementation class
+    function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult;
+  end;
+
+  /// implements a fake no-encryption protocol
+  // - may be used for debugging purposes, or when encryption is not needed
+  TProtocolNone = class(TInterfacedObjectLocked, IProtocol)
+  public
+    /// encrypt a message on one side, ready to be transmitted to the other side
+    // - this method will return the plain text with no actual encryption
+    procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
+    /// decrypt a message on one side, as transmitted from the other side
+    // - this method will return the encrypted text with no actual decryption
+    function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult;
+  end;
+
+function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
+function ToText(res: TProtocolResult): PShortString; overload;
 
 
 implementation
+
+function ToText(res: TProtocolResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TProtocolResult),ord(res));
+end;
+
+function ToText(chk: TAESIVReplayAttackCheck): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TAESIVReplayAttackCheck),ord(chk));
+end;
+
+
 
 {$ifdef USEPADLOCK}
 
@@ -8529,7 +8578,7 @@ end;
 function HashFound(P: PHash128_; Count: integer; const h: THash128_): boolean;
 var first: PtrUInt;
     i: integer;
-begin
+begin // fast O(n) brute force search
   if P<>nil then begin
     result := true;
     first := h.A64;
@@ -8562,6 +8611,23 @@ begin
   if Count<Depth then
     inc(Count);
 end;
+
+
+{ TProtocolNone }
+
+function TProtocolNone.Decrypt(const aEncrypted: RawByteString;
+  out aPlain: RawByteString): TProtocolResult;
+begin
+  aPlain := aEncrypted;
+  result := sprSuccess;
+end;
+
+procedure TProtocolNone.Encrypt(const aPlain: RawByteString;
+  out aEncrypted: RawByteString);
+begin
+  aEncrypted := aPlain;
+end;
+
 
 
 initialization
