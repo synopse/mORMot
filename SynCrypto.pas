@@ -407,7 +407,7 @@ type
     function UsesAESNI: boolean; {$ifdef HASINLINE}inline;{$endif}
   end;
 
-  /// class-reference type (metaclass) of a AES cypher/uncypher
+  /// class-reference type (metaclass) of an AES cypher/uncypher
   TAESAbstractClass = class of TAESAbstract;
 
   /// used internally by TAESAbstract to detect replay attacks
@@ -1495,11 +1495,13 @@ type
     // packet corruption, MiM or Replay attacks attempts)
     // - this method should be thread-safe in the implementation class
     function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult;
+    /// will create another instance of this communication protocol
+    function Clone: IProtocol;
   end;
 
   /// implements a fake no-encryption protocol
   // - may be used for debugging purposes, or when encryption is not needed
-  TProtocolNone = class(TInterfacedObjectLocked, IProtocol)
+  TProtocolNone = class(TInterfacedObject, IProtocol)
   public
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method will return the plain text with no actual encryption
@@ -1507,7 +1509,38 @@ type
     /// decrypt a message on one side, as transmitted from the other side
     // - this method will return the encrypted text with no actual decryption
     function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult;
+    /// will create another instance of this communication protocol
+    function Clone: IProtocol;
   end;
+
+  /// implements a secure protocol using AES encryption
+  // - as used e.g. by 'synopsebinary' WebSockets protocol
+  // - this class will maintain two TAESAbstract instances, one for encryption
+  // and another one for decryption, with PKCS7 padding and no MAC validation
+  TProtocolAES = class(TInterfacedObjectLocked, IProtocol)
+  protected
+    fAES: array[boolean] of TAESAbstract;
+  public
+    /// initialize this encryption protocol with the given AES settings
+    constructor Create(aClass: TAESAbstractClass; const aKey; aKeySize: cardinal;
+      aIVReplayAttackCheck: TAESIVReplayAttackCheck=repCheckedIfAvailable); reintroduce; virtual;
+    /// will create another instance of this communication protocol
+    constructor CreateFrom(aAnother: TProtocolAES); reintroduce; virtual;
+    /// finalize the encryption
+    destructor Destroy; override;
+    /// encrypt a message on one side, ready to be transmitted to the other side
+    // - this method uses AES encryption and PKCS7 padding
+    procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
+    /// decrypt a message on one side, as transmitted from the other side
+    // - this method uses AES decryption and PKCS7 padding
+    function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult;
+    /// will create another instance of this communication protocol
+    function Clone: IProtocol;
+  end;
+
+  /// class-reference type (metaclass) of an AES secure protocol
+  TProtocolAESClass = class of TProtocolAES;
+
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 function ToText(res: TProtocolResult): PShortString; overload;
@@ -8628,6 +8661,70 @@ begin
   aEncrypted := aPlain;
 end;
 
+function TProtocolNone.Clone: IProtocol;
+begin
+  result := TProtocolNone.Create;
+end;
+
+
+{ TProtocolAES }
+
+constructor TProtocolAES.Create(aClass: TAESAbstractClass; const aKey;
+  aKeySize: cardinal; aIVReplayAttackCheck: TAESIVReplayAttackCheck);
+begin
+  inherited Create;
+  fAES[false] := aClass.Create(aKey,aKeySize);
+  fAES[false].IVReplayAttackCheck := aIVReplayAttackCheck;
+  fAES[true] := fAES[false].Clone;
+end;
+
+constructor TProtocolAES.CreateFrom(aAnother: TProtocolAES);
+begin
+  inherited Create;
+  fAES[false] := aAnother.fAES[false].Clone;
+  fAES[true] := fAES[false].Clone;
+end;
+
+destructor TProtocolAES.Destroy;
+begin
+  fAES[false].Free;
+  fAES[true].Free;
+  inherited Destroy;
+end;
+
+function TProtocolAES.Decrypt(const aEncrypted: RawByteString;
+  out aPlain: RawByteString): TProtocolResult;
+begin
+  fSafe.Lock;
+  try
+    try
+      aPlain := fAES[false].DecryptPKCS7(aEncrypted,true);
+      if aPlain='' then
+        result := sprBadRequest else
+        result := sprSuccess;
+    except
+      result := sprInvalidMAC;
+    end;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+procedure TProtocolAES.Encrypt(const aPlain: RawByteString;
+  out aEncrypted: RawByteString);
+begin
+  fSafe.Lock;
+  try
+    aEncrypted := fAES[true].EncryptPKCS7(aPlain,true);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TProtocolAES.Clone: IProtocol;
+begin
+ result := TProtocolAESClass(ClassType).CreateFrom(self);
+end;
 
 
 initialization

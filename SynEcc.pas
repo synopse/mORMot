@@ -1208,6 +1208,8 @@ type
     // - will implement unilateral authentication if aPrivate=nil for this end
     constructor Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
       aPrivate: TECCCertificateSecret); reintroduce; overload; virtual;
+    /// will create another instance of this communication protocol
+    constructor CreateFrom(aAnother: TECDHEProtocol); reintroduce; virtual;
     /// finalize the instance
     // - also erase all temporary secret keys, for safety
     destructor Destroy; override;
@@ -1221,6 +1223,8 @@ type
     // corruption, MiM or Replay attacks attempts)
     // - this method is thread-safe
     function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult; virtual;
+    /// will create another instance of this communication protocol
+    function Clone: IProtocol;
     /// shared public-key infrastructure, used to validate exchanged certificates
     // - will be used for authenticity validation of ECDSA signatures
     property PKI: TECCCertificateChain read fPKI;
@@ -1276,6 +1280,8 @@ type
     // - will check that aAuth is compatible with the supplied aPKI/aPrivate
     constructor Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
       aPrivate: TECCCertificateSecret); override;
+    /// will create another instance of this communication protocol
+    constructor CreateFrom(aAnother: TECDHEProtocol); override;
     /// generate the authentication frame corresponding to the client request
     // - may change Auth property if the Client requested another authentication
     // scheme, allowed in Authorized setting and compatible with fPrivate
@@ -3085,6 +3091,13 @@ begin
   fMACSalt := 'ecdhemac';
 end;
 
+constructor TECDHEProtocol.CreateFrom(aAnother: TECDHEProtocol);
+begin
+  Create(aAnother.fAlgo.auth,aAnother.fPKI,aAnother.fPrivate);
+  fEFSalt := aAnother.fEFSalt;
+  fMACSalt := aAnother.fMACSalt;
+end;
+
 destructor TECDHEProtocol.Destroy;
 begin
   if fAES[true]<>fAES[false] then
@@ -3233,6 +3246,11 @@ begin
     raise EECCException.CreateUTF8('%.Sign: ecdsa_sign',[self]);
 end;
 
+function TECDHEProtocol.Clone: IProtocol;
+begin
+  result := CreateFrom(self);
+end;
+
 
 { TECDHEProtocolClient }
 
@@ -3305,6 +3323,12 @@ begin
   include(fAuthorized,aAuth); // conservative default
 end;
 
+constructor TECDHEProtocolServer.CreateFrom(aAnother: TECDHEProtocol);
+begin
+  inherited CreateFrom(aAnother);
+  fAuthorized := (aAnother as TECDHEProtocolServer).fAuthorized;
+end;
+
 function TECDHEProtocolServer.ComputeHandshake(const aClient: TECDHEFrameClient;
   out aServer: TECDHEFrameServer): TProtocolResult;
 var dF: TECCPrivateKey;
@@ -3354,7 +3378,6 @@ begin
     Sign(@aServer,sizeof(aServer),aServer.QCB);
   result := sprSuccess;
 end;
-
 
 initialization
   assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers
