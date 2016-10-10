@@ -300,7 +300,7 @@ type
   // $ Sec-WebSocket-Protocol: synopsebinary
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
-    fEncryptionRX, fEncryptionTX: TAESAbstract;
+    fEncryption: IProtocol;
     fCompressed: boolean;
     fFramesInBytesSocket: QWord;
     fFramesOutBytesSocket: QWord;
@@ -322,8 +322,6 @@ type
   public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
-    /// finalize the encryption, if was used
-    destructor Destroy; override;
     /// initialize the WebSockets binary protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
@@ -1205,11 +1203,9 @@ constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
   inherited Create('synopsebinary',aURI);
-  if aKeySize>=128 then begin
-    fEncryptionRX := TAESCFB.Create(aKey,aKeySize);
-    fEncryptionRX.IVReplayAttackCheck := WebSocketsIVReplayAttackCheck;
-    fEncryptionTX := fEncryptionRX.Clone;
-  end;
+  if aKeySize>=128 then
+    fEncryption := TProtocolAES.Create(
+      TAESCFB,aKey,aKeySize,WebSocketsIVReplayAttackCheck);
   fCompressed := aCompressed;
 end;
 
@@ -1227,20 +1223,10 @@ begin
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
-var dest: TWebSocketProtocolBinary absolute result;
 begin
   result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
-  if fEncryptionRX<>nil then begin
-    dest.fEncryptionRX := fEncryptionRX.Clone;
-    dest.fEncryptionTX := fEncryptionRX.Clone;
-  end;
-end;
-
-destructor TWebSocketProtocolBinary.Destroy;
-begin
-  FreeAndNil(fEncryptionRX);
-  FreeAndNil(fEncryptionTX);
-  inherited;
+  if fEncryption<>nil then
+    TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
 end;
 
 const
@@ -1313,8 +1299,8 @@ begin
       SynLZCompress(pointer(frame.payload),length(frame.payload),value,threshold);
     end else
       value := frame.payload;
-    if fEncryptionTX<>nil then
-      frame.payload := fEncryptionTX.EncryptPKCS7(value,true) else
+    if fEncryption<>nil then
+      fEncryption.Encrypt(value,frame.payload) else
       frame.payload := value;
   end;
   inc(fFramesOutBytesSocket,length(frame.payload)+2);
@@ -1325,12 +1311,12 @@ var value: RawByteString;
 begin
   inc(fFramesInBytesSocket,length(frame.payload)+2);
   if frame.opcode=focBinary then begin
-    if fEncryptionRX<>nil then
-      frame.payload := fEncryptionRX.DecryptPKCS7(frame.payload,true);
-    if fCompressed then begin
-      SynLZDecompress(pointer(frame.payload),length(frame.payload),value);
+    if fEncryption<>nil then
+      fEncryption.Decrypt(frame.payload,value) else
+      value := frame.payload;
+    if fCompressed then
+      SynLZDecompress(pointer(value),length(value),frame.payload) else
       frame.payload := value;
-    end;
   end;
   inherited AfterGetFrame(frame);
 end;
@@ -1422,7 +1408,7 @@ end;
 
 function TWebSocketProtocolBinary.GetEncrypted: boolean;
 begin
-  result := (self<>nil) and (fEncryptionRX<>nil);
+  result := (self<>nil) and (fEncryption<>nil);
 end;
 
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;
