@@ -3251,7 +3251,7 @@ end;
 
 function TECDHEProtocol.Clone: IProtocol;
 begin
-  result := TECDHEProtocol(ClassType).CreateFrom(self);
+  result := TECDHEProtocolClass(ClassType).CreateFrom(self);
 end;
 
 
