@@ -30878,7 +30878,7 @@ function IsZero(const dig: THash128): boolean;
 var a: TPtrIntArray absolute dig;
 begin
   result := (a[0]=0) and (a[1]=0)
-    {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
+     {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
 end;
 
 function IsEqual(const A,B: THash128): boolean;

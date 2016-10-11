@@ -1308,11 +1308,16 @@ end;
 
 procedure TWebSocketProtocolBinary.AfterGetFrame(var frame: TWebSocketFrame);
 var value: RawByteString;
+    res: TProtocolResult;
 begin
   inc(fFramesInBytesSocket,length(frame.payload)+2);
   if frame.opcode=focBinary then begin
-    if fEncryption<>nil then
-      fEncryption.Decrypt(frame.payload,value) else
+    if fEncryption<>nil then begin
+      res := fEncryption.Decrypt(frame.payload,value);
+      if res<>sprSuccess then
+        raise ESynBidirSocket.CreateUTF8('%.AfterGetFrame: encryption error %',
+          [self,ToText(res)^]);
+     end else
       value := frame.payload;
     if fCompressed then
       SynLZDecompress(pointer(value),length(value),frame.payload) else

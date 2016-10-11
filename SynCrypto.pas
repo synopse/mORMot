@@ -845,6 +845,9 @@ type
     // - could be used e.g. to compute an AES Initialization Vector (IV)
     // - this method is thread-safe
     procedure FillRandom(out Block: TAESBlock); overload;
+    /// fill a 256-bit buffer with some pseudorandom data
+    // - this method is thread-safe
+    procedure FillRandom(out Buffer: THash256); overload;
     /// fill a binary buffer with some pseudorandom data
     // - this method is thread-safe
     procedure FillRandom(Buffer: pointer; Len: integer); overload;
@@ -2198,7 +2201,7 @@ var i: integer;
     h1,h2: cardinal;
     k0,k0xorIpad,step7data: THash64;
 begin
-  FillZero(k0);
+  FillCharFast(k0,sizeof(k0),0);
   if keylen>64 then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -2212,9 +2215,9 @@ begin
   h1 := crc32c(crc32c(0,@step7data,64),@result,sizeof(result));
   h2 := crc32c(crc32c(h1,@step7data,64),@result,sizeof(result));
   crc256cmix(h1,h2,@result);
-  FillZero(k0);
-  FillZero(k0xorIpad);
-  FillZero(step7data);
+  FillCharFast(k0,sizeof(k0),0);
+  FillCharFast(k0xorIpad,sizeof(k0),0);
+  FillCharFast(step7data,sizeof(k0),0);
 end;
 
 procedure HMAC_CRC256C(const key: THash256; const msg: RawByteString; out result: THash256);
@@ -2234,7 +2237,7 @@ procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: THash64;
 begin
-  FillZero(k0);
+  FillCharFast(k0,sizeof(k0),0);
   if keylen>64 then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
@@ -2243,8 +2246,8 @@ begin
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   seed := crc32c(0,@k0xorIpad,64);
-  FillZero(k0);
-  FillZero(k0xorIpad);
+  FillCharFast(k0,sizeof(k0),0);
+  FillCharFast(k0xorIpad,sizeof(k0xorIpad),0);
 end;
 
 procedure THMAC_CRC32C.Update(msg: pointer; msglen: integer);
@@ -7405,13 +7408,13 @@ begin
           fIVCTRState := ctrUsed;
           inc(fIVCTR.ctr);
         end else
-          if fIVReplayAttackCheck=repMandatory then
-            raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: IVCTR is not handled '+
-               'on encryption',[self]) else begin
-            fIVCTRState := ctrNotused;
-            if fIVHistoryDec.Depth=0 then
-              SetIVHistory(64); // naive but efficient fallback
-          end else
+        if fIVReplayAttackCheck=repMandatory then
+          raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: IVCTR is not handled '+
+             'on encryption',[self]) else begin
+          fIVCTRState := ctrNotused;
+          if fIVHistoryDec.Depth=0 then
+            SetIVHistory(64); // naive but efficient fallback
+        end else
         if IsEqual(TAESBlock(ctr),TAESBlock(fIVCTR)) then
           inc(fIVCTR.ctr) else
           raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> '+
@@ -7430,14 +7433,22 @@ end;
 function TAESAbstract.DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
   IVAtBeginning: boolean): RawByteString;
 var ivsize,padding: integer;
+    tmp: array[0..1023] of AnsiChar;
+    P: PAnsiChar;
 begin
   DecryptLen(InputLen,ivsize,Input,IVAtBeginning);
-  SetString(result,nil,InputLen);
-  Decrypt(@PByteArray(Input)^[ivsize],pointer(result),InputLen);
-  padding := ord(result[InputLen]); // result[1..len]
+  if InputLen<sizeof(tmp) then
+    P := @tmp else begin
+    SetString(result,nil,InputLen);
+    P := pointer(result);
+  end;
+  Decrypt(@PByteArray(Input)^[ivsize],P,InputLen);
+  padding := ord(P[InputLen-1]); // result[1..len]
   if padding>AESBlockSize then
     result := '' else
-    SetLength(result,InputLen-padding); // fast in-place resize
+    if P=@tmp then
+      SetString(result,P,InputLen-padding) else
+      SetLength(result,InputLen-padding); // fast in-place resize
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
@@ -8309,6 +8320,11 @@ begin
   inc(fBytesSinceSeed,SizeOf(Block));
   inc(fTotalBytes,SizeOf(Block));
   LeaveCriticalSection(fLock);
+end;
+
+procedure TAESPRNG.FillRandom(out Buffer: THash256);
+begin
+  FillRandom(@Buffer,sizeof(Buffer));
 end;
 
 procedure TAESPRNG.FillRandom(Buffer: pointer; Len: integer);

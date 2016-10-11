@@ -506,10 +506,12 @@ type
     procedure _ecdh_shared_secret;
     /// ECDSA certificates chains and digital signatures
     procedure CertificatesAndSignatures;
-{$ifndef DELPHI5OROLDER}
+    {$ifndef DELPHI5OROLDER}
     /// run most commands of the ECC tool
     procedure ECCCommandLineTool;
-{$endif}
+    {$endif}
+    /// ECDHE stream protocol
+    procedure ECDHEStreamProtocol;
   end;
 
 
@@ -9245,6 +9247,79 @@ begin
   end;
 end;
 {$endif}
+
+procedure TTestECCCryptography.ECDHEStreamProtocol;
+const MAX = 5000;
+  function Test(const prot: IProtocol; const name: string): integer;
+  var i: integer;
+      plain,enc,after: RawByteString;
+      ref: IProtocol; // to release memory
+      timer: TPrecisionTimer;
+  begin
+    ref := prot;
+    result := 0;
+    timer.Start;
+    for i := 1 to MAX do begin
+      plain := RandomString(i shr 3+1);
+      prot.Encrypt(plain,enc);
+      inc(result,length(plain)+length(enc));
+      check(length(enc)>=length(plain));
+      check(prot.Decrypt(enc,after)=sprSuccess);
+      check(after=plain);
+    end;
+    timer.ComputeTime;
+    fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
+  end;
+var key: THash256;
+    a: TECDHEAuth;
+    c: TECDHEProtocolClient;
+    s: TECDHEProtocolServer;
+    cs, ss: TECCCertificateSecret;
+    i: integer;
+    plain,enc,after: RawByteString;
+  procedure handshake;
+  var cf: TECDHEFrameClient;
+      sf: TECDHEFrameServer;
+  begin
+    c := TECDHEProtocolClient.Create(a,nil,cs);
+    s := TECDHEProtocolServer.Create(a,nil,ss);
+    c.ComputeHandshake(cf);
+    Check(s.ComputeHandshake(cf,sf)=sprSuccess);
+    Check(c.ValidateHandshake(sf)=sprSuccess);
+  end;
+begin
+  Test(TProtocolNone.Create,'none');
+  TAESPRNG.Main.FillRandom(key);
+  Test(TProtocolAES.Create(TAESCFB,key,256),'aes');
+  cs := TECCCertificateSecret.CreateNew(nil,'client');
+  ss := TECCCertificateSecret.CreateNew(nil,'server');
+  for a := low(a) to high(a) do begin
+    handshake;
+    for i := 1 to MAX do begin
+      plain := RandomString(i shr 3+1);
+      c.Encrypt(plain,enc);
+      check(s.Decrypt(enc,after)=sprSuccess);
+      check(after=plain);
+      if i and 7=0 then
+         continue; // check asymmetric communication
+      s.Encrypt(plain,enc);
+      check(c.Decrypt(enc,after)=sprSuccess);
+      check(after=plain);
+      if i and 3=0 then
+         continue;
+      c.Encrypt(plain,enc);
+      check(s.Decrypt(enc,after)=sprSuccess);
+      check(after=plain);
+    end;
+    c.Free;
+    s.Free;
+    handshake;
+    Test(c,format('c%d',[ord(a)]));
+    Test(s,format('s%d',[ord(a)]));
+  end;
+  cs.Free;
+  ss.Free;
+end;
 
 {$ifdef MSWINDOWS}
 {$ifndef FPC}

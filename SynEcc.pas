@@ -368,17 +368,28 @@ type
   /// set of Authentication schemes recognized by TECDHEProtocolServer
   TECDHEAuths = set of TECDHEAuth;
   /// the Key Derivation Functions recognized by TECDHEProtocol
-  // - used to compute the EF secret and MAC secret
+  // - used to compute the EF secret and MAC secret from shared ephemeral secret
+  // - only a single very safe algorithm is proposed
   TECDHEKDF = (kdfHmacSha256);
   /// the Encryption Functions recognized by TECDHEProtocol
-  // - efAesCfb256 will use TAESCFB in 256-bit mode, with AES-NI if available
+  // - will use TAESCFB/TAESOFB/TAESCTR/TAESCBC in 256-bit mode, with AES-NI
+  // hardware acceleration if available (weack ECB is avoided)
   TECDHEEF = (efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
   /// the Message Authentication Codes recognized by TECDHEProtocol
-  // - macHmacSha256 is the safest, but default macHmacCrc256c is much faster
-  // (thanks to HW acceleration), and secure enough due to the nature of
-  // HMAC - see http://cseweb.ucsd.edu/~mihir/papers/hmac-new.html -
-  // macHmacCrc32c is the fastest, especially on very large messages 
-  TECDHEMAC = (macHmacCrc256c, macHmacCrc32c, macHmacSha256);
+  // - macHmacSha256 is the safest, but slow, especially when used as MAC for
+  // AES-NI accellerated encryption (70MB/s to compare with 320MB/s for macNone)
+  // - macHmacCrc256c is much faster (250MB/s with hardware acceleration), but
+  // weaker, since it is not a cryptographic hash, and has known collisions -
+  // is defined as the default, since MiM attacks would imply encryption key
+  // compromission, and in such case MAC abuse will be our last worry
+  // - macHmacCrc32c is a bit faster (280MB/s), especially on large messages,
+  // detects basic transmission errors, but is very easily broken,
+  // since composition of two crcs is a multiplication by a polynomial - see
+  // http://mslc.ctf.su/wp/boston-key-party-ctf-2016-hmac-crc-crypto-5pts
+  // (macHmacCrc256c will be harder to compose)
+  // - macNone (320MB/s, which is the speed of AES-NI encryption itself for a
+  // random set of small messages) won't check integrity, but only replay attacks
+  TECDHEMAC = (macHmacCrc256c, macHmacSha256, macHmacCrc32c, macNone);
 
   /// defines one protocol Algorithm recognized by TECDHEProtocol
   // - only safe and strong parameters are allowed, and the default values
@@ -3127,8 +3138,10 @@ begin
     macHmacCrc32c: begin
       c := HMAC_CRC32C(@aKey,aEncrypted,sizeof(aKey),aLen);
       for i := 0 to 7 do
-        THash64(aMac)[i] := c xor crc32ctab[0,i]; // naive 256-bit diffusion
+        THash64(aMac)[i] := c; // naive 256-bit diffusion
     end;
+    macNone:
+      crc256c(@aKey,sizeof(aKey),THash256(aMAC)); // replay attack only
     else
       raise EECCException.CreateUTF8('%.ComputeMAC %?',[self,ToText(fAlgo.mac)^]);
   end;
@@ -3144,9 +3157,10 @@ begin
   fSafe.Lock;
   try
     fAES[true].IV := PHash128(@fkM[true])^; // kM is a CTR -> IV unicity
-    aEncrypted := fAES[true].EncryptPKCS7(aPlain,false);
-    len := length(aEncrypted);
-    SetLength(aEncrypted,len+sizeof(THash256));
+    len := fAES[true].EncryptPKCS7Length(length(aPlain),false);
+    SetString(aEncrypted,nil,len+sizeof(THash256));
+    fAES[true].EncryptPKCS7Buffer(Pointer(aPlain),pointer(aEncrypted),
+      length(aPlain),len,false);
     ComputeMac(fkM[true],pointer(aEncrypted),len,PByteArray(aEncrypted)[len]);
   finally
     fSafe.UnLock;
@@ -3381,6 +3395,7 @@ begin
     Sign(@aServer,sizeof(aServer),aServer.QCB);
   result := sprSuccess;
 end;
+
 
 initialization
   assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers

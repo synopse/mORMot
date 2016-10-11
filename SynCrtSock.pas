@@ -4653,7 +4653,7 @@ begin
     IP4Text(Sin.sin_addr,result) else begin
     result := GetSinIP(Sin); // AF_INET6 may be optimized in a future revision
     if result='::1' then
-      result := '127.0.0.1'; // IP6 localhost benefits of matching IP4
+      result := '127.0.0.1'; // IP6 localhost loopback benefits of matching IP4
   end;
 end;
 
