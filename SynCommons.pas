@@ -10554,6 +10554,10 @@ function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 // algorithms at once (e.g. if crc32c with diverse seeds is not enough)
 function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
+/// perform very fast xxHash hashing in 32-bit mode
+// - will use optimized asm for x86/x64, or a pascal version on other CPUs
+function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+
 var
   /// tables used by crc32cfast() function
   // - created with a polynom diverse from zlib's crc32() algorithm, but
@@ -30529,6 +30533,272 @@ asm // eax=crc, edx=buf, ecx=len
         pop     edi
 end;
 {$endif}
+
+{$ifdef CPUINTEL} // use optimized x86/x64 asm versions for xxHash32
+
+{$ifdef CPUX86}
+function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+asm
+        xchg    eax, ecx // compiled with gcc using __fastcall
+        push    ebp
+        push    edi
+        lea     ebp, [ecx+edx]
+        push    esi
+        push    ebx
+        sub     esp, 8
+        cmp     edx, 15
+        mov     ebx, eax
+        mov     dword ptr [esp], edx
+        lea     eax, [ebx+165667B1H]
+        jbe     @2
+        lea     eax, [ebp-10H]
+        lea     edi, [ebx+24234428H]
+        lea     esi, [ebx-7A143589H]
+        mov     dword ptr [esp+4H], ebp
+        mov     edx, eax
+        lea     eax, [ebx+61C8864FH]
+        mov     ebp, edx
+@1:     imul    edx, dword ptr [ecx], -2048144777
+        add     ecx, 16
+        add     edi, edx
+        imul    edx, dword ptr [ecx-0CH], -2048144777
+        rol     edi, 13
+        imul    edi, edi, -1640531535
+        add     esi, edx
+        imul    edx, dword ptr [ecx-8H], -2048144777
+        rol     esi, 13
+        imul    esi, esi, -1640531535
+        add     ebx, edx
+        imul    edx, dword ptr [ecx-4H], -2048144777
+        rol     ebx, 13
+        imul    ebx, ebx, -1640531535
+        add     eax, edx
+        rol     eax, 13
+        imul    eax, eax, -1640531535
+        cmp     ebp, ecx
+        jnc     @1
+        rol     edi, 1
+        rol     esi, 7
+        rol     ebx, 12
+        add     esi, edi
+        mov     ebp, dword ptr [esp+4H]
+        ror     eax, 14
+        add     ebx, esi
+        add     eax, ebx
+@2:     lea     esi, [ecx+4H]
+        add     eax, dword ptr [esp]
+        cmp     ebp, esi
+        jc      @4
+        mov     ebx, esi
+        nop
+@3:     imul    edx, dword ptr [ebx-4H], -1028477379
+        add     ebx, 4
+        add     eax, edx
+        ror     eax, 15
+        imul    eax, eax, 668265263
+        cmp     ebp, ebx
+        jnc     @3
+        lea     edx, [ebp-4H]
+        sub     edx, ecx
+        mov     ecx, edx
+        and     ecx, 0FFFFFFFCH
+        add     ecx, esi
+@4:     cmp     ebp, ecx
+        jbe     @6
+@5:     movzx   edx, byte ptr [ecx]
+        add     ecx, 1
+        imul    edx, edx, 374761393
+        add     eax, edx
+        rol     eax, 11
+        imul    eax, eax, -1640531535
+        cmp     ebp, ecx
+        jnz     @5
+@6:     mov     edx, eax
+        add     esp, 8
+        shr     edx, 15
+        xor     eax, edx
+        imul    eax, eax, -2048144777
+        pop     ebx
+        pop     esi
+        mov     edx, eax
+        shr     edx, 13
+        xor     eax, edx
+        imul    eax, eax, -1028477379
+        pop     edi
+        pop     ebp
+        mov     edx, eax
+        shr     edx, 16
+        xor     eax, edx
+end;
+{$endif CPUX86}
+
+{$ifdef CPUX64}
+function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+asm
+        push    rdi
+        push    rsi
+        push    rbx
+        lea     r10, [rcx+rdx]
+        cmp     rdx, 15
+        lea     eax, [r8+165667B1H]
+        jbe     @2
+        lea     rsi, [r10-10H]
+        lea     ebx, [r8+24234428H]
+        lea     edi, [r8-7A143589H]
+        lea     eax, [r8+61C8864FH]                     
+@1:     imul    r9d, dword ptr [rcx], -2048144777
+        add     rcx, 16
+        imul    r11d, dword ptr [rcx-0CH], -2048144777
+        add     ebx, r9d
+        lea     r9d, [r11+rdi]
+        rol     ebx, 13
+        rol     r9d, 13
+        imul    ebx, ebx, -1640531535
+        imul    edi, r9d, -1640531535
+        imul    r9d, dword ptr [rcx-8H], -2048144777
+        add     r8d, r9d
+        imul    r9d, dword ptr [rcx-4H], -2048144777
+        rol     r8d, 13
+        imul    r8d, r8d, -1640531535
+        add     eax, r9d
+        rol     eax, 13
+        imul    eax, eax, -1640531535
+        cmp     rsi, rcx
+        jnc     @1
+        rol     edi, 7
+        rol     ebx, 1
+        rol     r8d, 12
+        mov     r9d, edi
+        ror     eax, 14
+        add     r9d, ebx
+        add     r8d, r9d
+        add     eax, r8d
+@2:     lea     r9, [rcx+4H]
+        add     eax, edx
+        cmp     r10, r9
+        jc      @4
+        mov     r8, r9
+@3:     imul    edx, dword ptr [r8-4H], -1028477379
+        add     r8, 4
+        add     eax, edx
+        ror     eax, 15
+        imul    eax, eax, 668265263
+        cmp     r10, r8
+        jnc     @3
+        lea     rdx, [r10-4H]
+        sub     rdx, rcx
+        mov     rcx, rdx
+        and     rcx, 0FFFFFFFFFFFFFFFCH
+        add     rcx, r9
+@4:     cmp     r10, rcx
+        jbe     @6
+@5:     movzx   edx, byte ptr [rcx]
+        add     rcx, 1
+        imul    edx, edx, 374761393
+        add     eax, edx
+        rol     eax, 11
+        imul    eax, eax, -1640531535
+        cmp     r10, rcx
+        jnz     @5
+@6:     mov     edx, eax
+        shr     edx, 15
+        xor     eax, edx
+        imul    eax, eax, -2048144777
+        mov     edx, eax
+        shr     edx, 13
+        xor     eax, edx
+        imul    eax, eax, -1028477379
+        mov     edx, eax
+        shr     edx, 16
+        xor     eax, edx
+        pop     rbx
+        pop     rsi
+        pop     rdi
+end;
+{$endif CPUX64}
+
+{$else not CPUINTEL}
+
+const
+  PRIME32_1 = 2654435761;
+  PRIME32_2 = 2246822519;
+  PRIME32_3 = 3266489917;
+  PRIME32_4 = 668265263;
+  PRIME32_5 = 374761393;
+
+{$ifdef FPC} // RolDWord is an intrinsic function under FPC :)
+function Rol13(value: cardinal): cardinal; inline;
+begin
+  result := RolDWord(value, 13);
+end;
+{$else}
+{$ifdef HASINLINE}
+function RolDWord(value: cardinal; count: integer): cardinal; inline;
+begin
+  result := (value shl count) or (value shr (32-count));
+end;
+
+function Rol13(value: cardinal): cardinal;
+begin
+  result := (value shl 13) or (value shr 19);
+end;
+{$else}
+function RolDWord(value: cardinal; count: integer): cardinal;
+asm
+      mov     cl, dl
+      rol     eax, cl
+end;
+
+function Rol13(value: cardinal): cardinal;
+asm
+      rol     eax, 13
+end;
+{$endif HASINLINE}
+{$endif FPC}
+
+function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+var c1, c2, c3, c4: cardinal;
+    PLimit, PEnd: PAnsiChar;
+begin
+  PEnd := P + len;
+  if len >= 16 then
+    begin
+      PLimit := PEnd - 16;
+      c1 := seed + PRIME32_1 + PRIME32_2;
+      c2 := seed + PRIME32_2;
+      c3 := seed;
+      c4 := seed - PRIME32_1;
+      repeat
+        c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
+        c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
+        c3 := PRIME32_1 * Rol13(c3 + PRIME32_2 * PCardinal(P+8)^);
+        c4 := PRIME32_1 * Rol13(c4 + PRIME32_2 * PCardinal(P+12)^);
+        inc(P, 16);
+      until not (P <= PLimit);
+      result := RolDWord(c1, 1) + RolDWord(c2, 7) + RolDWord(c3, 12) + RolDWord(c4, 18);
+    end else
+    result := seed + PRIME32_5;
+  inc(result, len);
+  while P <= PEnd - 4 do begin
+    inc(result, PCardinal(P)^ * PRIME32_3);
+    result := RolDWord(result, 17) * PRIME32_4;
+    inc(P, 4);
+  end;
+  while P < PEnd do begin
+    inc(result, PByte(P)^ * PRIME32_5);
+    result := RolDWord(result, 11) * PRIME32_1;
+    inc(P);
+  end;
+  result := result xor (result shr 15);
+  result := result * PRIME32_2;
+  result := result xor (result shr 13);
+  result := result * PRIME32_3;
+  result := result xor (result shr 16);
+end;
+
+{$endif CPUINTEL}
+
+
 
 {$ifdef CPUINTEL}
 type
