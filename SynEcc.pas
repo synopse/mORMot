@@ -1256,6 +1256,9 @@ type
     property CertificateValidity: TECCValidity read fCertificateValidity;
   end;
 
+  /// meta-class of the TECDHEProtocol type
+  TECDHEProtocolClass = class of TECDHEProtocol;
+
   /// implements ECDHE secure protocol on client side
   TECDHEProtocolClient = class(TECDHEProtocol)
   protected
@@ -3248,7 +3251,7 @@ end;
 
 function TECDHEProtocol.Clone: IProtocol;
 begin
-  result := CreateFrom(self);
+  result := TECDHEProtocol(ClassType).CreateFrom(self);
 end;
 
 
