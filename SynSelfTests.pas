@@ -12854,7 +12854,7 @@ begin
         Comp2 := J.SortCompare(F2);
         if (@Comp1=nil) or (@Comp2=nil) then
           continue; // BLOB fields will be ignored
-        J.SortFields([F1,F2],[]);
+        J.SortFields([F1,F2],[],[]);
         for aR := 1 to J.RowCount-1 do begin
           // ensure data sorted in increasing order for both fields
           aF := Comp1(pointer(J.Get(aR,F1)),pointer(J.Get(aR+1,F1)));
@@ -12870,7 +12870,7 @@ begin
         Comp2 := J.SortCompare(F2);
         if (@Comp1=nil) or (@Comp2=nil) then
           continue; // BLOB fields will be ignored
-        J.SortFields([F1,F2],[false,true]); // 1st=DESC, 2nd=ASC order
+        J.SortFields([F1,F2],[false,true],[]); // 1st=DESC, 2nd=ASC order
         for aR := 1 to J.RowCount-1 do begin
           // ensure data sorted in expected order for both fields
           aF := Comp1(pointer(J.Get(aR,F1)),pointer(J.Get(aR+1,F1)));

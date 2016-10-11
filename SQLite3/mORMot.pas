@@ -8213,11 +8213,14 @@ type
       CustomCompare: TUTF8Compare=nil); overload;
     /// sort result Rows, according to some specific fields
     // - is able to make multi-field sort
-    // - both Fields[] and Asc[] array should have the same count, otherwise
+    // - both Fields[] and Asc[] arrays should have the same count, otherwise
     // default Asc[]=true value will be assumed
     // - set any Fields[]=-1 to identify the ID column (even if is hidden)
+    // - if CustomCompare=[], which use the default comparison function for the
+    // field type, unless you set as many custom comparison function items
+    // as in the Fields[] and Asc[] parameters
     procedure SortFields(const Fields: array of integer;
-      const Asc: array of boolean); overload;
+      const Asc: array of boolean; const CustomCompare: array of TUTF8Compare); overload;
     /// sort result Rows, according to the Bits set to 1 first
     procedure SortBitsFirst(var Bits);
     /// guess the field type from first non null data row
@@ -25436,9 +25439,8 @@ begin
   SortFields(FieldIndex(FieldName),Asc,PCurrentRow,FieldType,CustomCompare);
 end;
 
-procedure TSQLTable.SortFields(Field: integer; Asc: boolean=true;
-  PCurrentRow: PInteger=nil; FieldType: TSQLFieldType=sftUnknown;
-  CustomCompare: TUTF8Compare=nil);
+procedure TSQLTable.SortFields(Field: integer; Asc: boolean; PCurrentRow: PInteger;
+  FieldType: TSQLFieldType; CustomCompare: TUTF8Compare);
 var Sort: TUTF8QuickSort; // fast static object for sorting
 begin
   if (FieldCount=0) or (Cardinal(Field)>=cardinal(FieldCount)) then
@@ -25544,7 +25546,7 @@ begin
 end;
 
 procedure TSQLTable.SortFields(const Fields: array of integer;
-  const Asc: array of boolean);
+  const Asc: array of boolean; const CustomCompare: array of TUTF8Compare);
 var Sort: TUTF8QuickSortMulti;
     i: integer;
 begin
@@ -25555,17 +25557,21 @@ begin
   SetLength(Sort.Index,Sort.IndexMax+1);
   for i := 0 to Sort.IndexMax do
   with Sort.Index[i] do begin
+    if i<=high(CustomCompare) then
+      Comp := CustomCompare[i];
     ndx := Fields[i];
     if ndx<0 then begin // Fields[]=-1 for ID column
       if not Assigned(fIDColumn) then begin // leave ndx<0 for hidden ID
         ndx := fFieldIndexID;  // use the ID column
         if ndx<0 then
           exit; // no ID column available
-        Comp := @UTF8CompareInt64;
+        if @Comp=nil then
+          Comp := @UTF8CompareInt64;
       end;
       continue;
     end;
-    Comp := SortCompare(ndx);
+    if @Comp=nil then
+      Comp := SortCompare(ndx);
     if @Comp=nil then
       exit; // impossible to sort this kind of field (or invalid field index)
   end;
