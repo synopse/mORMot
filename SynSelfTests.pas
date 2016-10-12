@@ -2712,7 +2712,7 @@ begin
   end;
 end;
 
-function kr32pas(buf: PAnsiChar; len: cardinal): cardinal;
+function kr32reference(buf: PAnsiChar; len: cardinal): cardinal;
 var i: integer;
 begin
   result := 0;
@@ -2720,7 +2720,7 @@ begin
     result := result*31+ord(buf[i]);
 end;
 
-function fnv32pas(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function fnv32reference(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 var i: integer;
 begin
   for i := 0 to len-1 do
@@ -2728,7 +2728,7 @@ begin
   result := crc;
 end;
 
-function crc32cpas(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+function crc32creference(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 begin
   result := not crc;
   if buf<>nil then
@@ -2738,6 +2738,60 @@ begin
       inc(buf);
     end;
   result := not result;
+end;
+
+{$ifndef FPC} // RolDWord is an intrinsic function under FPC :)
+function RolDWord(value: cardinal; count: integer): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (value shl count) or (value shr (32-count));
+end;
+{$endif FPC}
+
+function xxHash32reference(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+const
+  PRIME32_1 = 2654435761;
+  PRIME32_2 = 2246822519;
+  PRIME32_3 = 3266489917;
+  PRIME32_4 = 668265263;
+  PRIME32_5 = 374761393;
+var c1, c2, c3, c4: cardinal;
+    PLimit, PEnd: PAnsiChar;
+begin
+  PEnd := P + len;
+  if len >= 16 then
+    begin
+      PLimit := PEnd - 16;
+      c1 := seed + PRIME32_1 + PRIME32_2;
+      c2 := seed + PRIME32_2;
+      c3 := seed;
+      c4 := seed - PRIME32_1;
+      repeat
+        c1 := PRIME32_1 * RolDWord(c1 + PRIME32_2 * PCardinal(P)^, 13);
+        c2 := PRIME32_1 * RolDWord(c2 + PRIME32_2 * PCardinal(P+4)^, 13);
+        c3 := PRIME32_1 * RolDWord(c3 + PRIME32_2 * PCardinal(P+8)^, 13);
+        c4 := PRIME32_1 * RolDWord(c4 + PRIME32_2 * PCardinal(P+12)^, 13);
+        inc(P, 16);
+      until not (P <= PLimit);
+      result := RolDWord(c1, 1) + RolDWord(c2, 7) + RolDWord(c3, 12) + RolDWord(c4, 18);
+    end else
+    result := seed + PRIME32_5;
+  inc(result, len);
+  while P <= PEnd - 4 do begin
+    inc(result, PCardinal(P)^ * PRIME32_3);
+    result := RolDWord(result, 17) * PRIME32_4;
+    inc(P, 4);
+  end;
+  while P < PEnd do begin
+    inc(result, PByte(P)^ * PRIME32_5);
+    result := RolDWord(result, 11) * PRIME32_1;
+    inc(P);
+  end;
+  result := result xor (result shr 15);
+  result := result * PRIME32_2;
+  result := result xor (result shr 13);
+  result := result * PRIME32_3;
+  result := result xor (result shr 16);
 end;
 
 procedure TTestLowLevelCommon._crc32c;
@@ -2801,14 +2855,14 @@ begin
   for i := 0 to High(crc) do
   with crc[i] do begin
     s := RandomString(i shr 3+1);
-    crc := crc32cpas(0,pointer(s),length(s));
+    crc := crc32creference(0,pointer(s),length(s));
     inc(totallen,length(s));
     c2 := HMAC_CRC32C(@c1,pointer(s),4,length(s));
     hmac32.Init(@c1,4);
     hmac32.Update(pointer(s),length(s));
     check(hmac32.Done=c2);
   end;
-  Test(crc32cpas,'pas');
+  Test(crc32creference,'pas');
   Test(crc32cfast,'fast');
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then
@@ -2947,17 +3001,23 @@ begin
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
   DecimalSeparator := '.';
 {$endif}
+  check(xxHash32('A',1)=275094093);
+  check(xxHash32('ABACK',5)=314231639);
+  check(xxHash32('ABBREVIATIONS',13)=3058487595);
+  check(xxHash32('LORD',4)=3395586315);
+  check(xxHash32('MICROINSTRUCTION''S',18)=1576115228);
   for i := -10000 to 10000 do
     check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
     j := Random(maxInt)-Random(maxInt);
     str(j,a);
     s := RawUTF8(a);
-    Check(kr32(0,pointer(s),length(s))=kr32pas(pointer(s),length(s)));
-    Check(fnv32(0,pointer(s),length(s))=fnv32pas(0,pointer(s),length(s)));
-    crc := crc32cpas(0,pointer(s),length(s));
+    Check(kr32(0,pointer(s),length(s))=kr32reference(pointer(s),length(s)));
+    Check(fnv32(0,pointer(s),length(s))=fnv32reference(0,pointer(s),length(s)));
+    crc := crc32creference(0,pointer(s),length(s));
     Check(crc32cfast(0,pointer(s),length(s))=crc);
     Check(crc32c(0,pointer(s),length(s))=crc);
+    Check(xxhash32(pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
     u := string(a);
     Check(SysUtils.IntToStr(j)=u);
     s2 := Int32ToUtf8(j);
@@ -3288,7 +3348,7 @@ begin
       Check(StringToUTF8(UTF8ToString(U))=U);
     Up := UpperCaseUnicode(U);
     Check(Up=UpperCaseUnicode(LowerCaseUnicode(U)));
-    Check(kr32(0,pointer(U),length(U))=kr32pas(pointer(U),length(U)));
+    Check(kr32(0,pointer(U),length(U))=kr32reference(pointer(U),length(U)));
     if U='' then
       continue;
     Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);

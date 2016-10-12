@@ -7704,11 +7704,11 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   AesNiEncryptXmm7
+@s: call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm0,xmm7
-    movdqu xmm7,dqword ptr [esi]
-    movdqu dqword ptr [edi],xmm0
+    movdqu xmm7,dqword ptr [esi]  // fCV := fIn
+    movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
     dec    ecx
     lea    esi,[esi+16]
     lea    edi,[edi+16]
@@ -7757,10 +7757,10 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   AesNiEncryptXmm7
+@s: call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
-    movdqu dqword ptr [edi],xmm7
+    movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV
     dec    ecx
     lea    esi,[esi+16]
     lea    edi,[edi+16]
@@ -7816,10 +7816,10 @@ begin
     push   ecx
     shr    ecx,4
     jz     @z
-@s: call   AesNiEncryptXmm7
+@s: call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm0,xmm7
-    movdqu dqword ptr [edi],xmm0
+    movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
     dec    ecx
     lea    esi,[esi+16]
     lea    edi,[edi+16]

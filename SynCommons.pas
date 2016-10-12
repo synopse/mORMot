@@ -30635,8 +30635,14 @@ end;
 {$ifdef CPUX64}
 function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
 asm
+        {$ifdef LINUX}
+        mov     r8, rdx
+        mov     rcx, rdi
+        mov     rdx, rsi
+        {$else}
+        push    rsi   // Win64 expects those registers to be preserved
         push    rdi
-        push    rsi
+        {$endif}
         push    rbx
         lea     r10, [rcx+rdx]
         cmp     rdx, 15
@@ -30712,8 +30718,10 @@ asm
         shr     edx, 16
         xor     eax, edx
         pop     rbx
-        pop     rsi
+        {$ifndef LINUX}
         pop     rdi
+        pop     rsi
+        {$endif}
 end;
 {$endif CPUX64}
 
@@ -30764,10 +30772,10 @@ begin
   if len >= 16 then
     begin
       PLimit := PEnd - 16;
-      c1 := seed + PRIME32_1 + PRIME32_2;
-      c2 := seed + PRIME32_2;
       c3 := seed;
-      c4 := seed - PRIME32_1;
+      c2 := c3 + PRIME32_2;
+      c1 := c2 + PRIME32_1;
+      c4 := c3 + cardinal(-Int64(PRIME32_1));
       repeat
         c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
         c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
