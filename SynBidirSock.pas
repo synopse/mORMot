@@ -779,6 +779,8 @@ var
   /// how replay attacks will be handled in TWebSocketProtocolBinary encryption
   WebSocketsIVReplayAttackCheck: TAESIVReplayAttackCheck = repCheckedIfAvailable;
 
+  /// the allowed maximum size, in MB, of a WebSockets frame
+  WebSocketsMaxFrameMB: cardinal = 256;
 
 implementation
 
@@ -1617,8 +1619,8 @@ var hdr: TFrameHeader;
     opcode: TWebSocketFrameOpCode;
     masked: boolean;
 
-  procedure GetHeader;  // SockInRead() below raise a ESynBidirSocket error on failure
-  begin
+  procedure GetHeader;
+  begin // SockInRead() below raise a ESynBidirSocket error on failure
     FillCharFast(hdr,sizeof(hdr),0);
     fSocket.SockInRead(@hdr.first,2,false);
     opcode := TWebSocketFrameOpCode(hdr.first and 15);
@@ -1636,8 +1638,9 @@ var hdr: TFrameHeader;
       if hdr.len32<>0 then // size is more than 32 bits -> reject
         hdr.len32 := maxInt else
         hdr.len32 := bswap32(hdr.len64);
-      if hdr.len32>1 shl 28 then
-        raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < 256MB',[self]);
+      if hdr.len32>WebSocketsMaxFrameMB shl 20 then
+        raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < % MB',
+          [self,WebSocketsMaxFrameMB]);
     end;
     if masked then
       fSocket.SockInRead(@hdr.mask,4,false);
@@ -2397,7 +2400,8 @@ begin
     fThreadState := sClosed else
     fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
-  if (fProcess.Socket<>nil) and fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
+  if (fProcess<>nil) and (fProcess.Socket<>nil) and
+     fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
     with THttpClientWebSockets(fProcess.Socket) do
       if Assigned(OnWebSocketsClosed) then
         OnWebSocketsClosed(self);
