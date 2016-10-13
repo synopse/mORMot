@@ -684,6 +684,41 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
   
+  /// handle AES cypher/uncypher with Cipher feedback (CFB) and 128-bit CRC
+  // - computes on-the-fly a proprietary 256-bit MAC, as 128-bit CRC of the
+  // encrypted data and 128-bit CRC of the plain data, derived from a Key
+  // - the plain CRC is then encrypted using the current AES engine, so returned
+  // 256-bit MAC value has cryptographic level, and ensure data integrity,
+  // authenticity, and check against transmission errors
+  // - this class will use AES-NI and CRC32C hardware instructions, if available
+  // - expect IV to be set before process, or IVAtBeginning=true
+  // - this class expect the Encrypt/Decrypt Count parameters to be a mutiple of
+  // 16-byte blocks, e.g. with PKCS7 padding 
+  TAESCFBCRC = class(TAESAbstractEncryptOnly)
+  protected
+    fKey: THash256;
+    fCRC: array[boolean] of THash128;
+    procedure BeforeEncryptDecrypt(aEncrypt: boolean; aCount: cardinal);
+  public
+    /// perform the AES cypher in the CFB mode, and compute a 128-bit CRC
+    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
+    procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+    /// perform the AES un-cypher in the CFB mode, and compute a 128-bit CRC
+    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
+    procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
+    /// initialize optional 256-bit MAC computation during next Encrypt/Decrypt call
+    // - initialize the internal fCRC[] property, and returns true
+    // - should be set with a new MAC key value before each message, to avoid
+    // replay attacks
+    function MACSetKey(const aKey: THash256): boolean; override;
+    /// returns optional 256-bit MAC computation during last Encrypt/Decrypt call
+    // - encrypt the internal fCRC[] property value using the current AES cypher
+    // on the plain content and returns true; only the plain content CRC-128 is
+    // AES encrypted, to avoid reverse attacks against the known encrypted data
+    // and its CRC-128
+    function MACGetLast(out aCRC: THash256): boolean; override;
+  end;
+
   /// handle AES cypher/uncypher with Output feedback (OFB)
   // - this class will use AES-NI hardware instructions, if available, e.g.
   // ! OFB256: 27.69ms in x86 optimized code, 9.94ms with AES-NI
@@ -7806,6 +7841,77 @@ begin
       inc(fOut);
     end;
     EncryptTrailer;
+  end;
+end;
+
+
+{ TAESCFBCRC }
+
+function TAESCFBCRC.MACSetKey(const aKey: THash256): boolean;
+begin
+  fKey := aKey;
+  result := true;
+end;
+
+function TAESCFBCRC.MACGetLast(out aCRC: THash256): boolean;
+begin
+  AES.Encrypt(fCRC[false],THash128Rec(aCRC).Lo);
+  AES.Encrypt(fCRC[true],THash128Rec(aCRC).Hi);
+  result := true;
+end;
+
+const
+  ED: array[boolean] of string[7] = ('Decrypt','Encrypt');
+
+procedure TAESCFBCRC.BeforeEncryptDecrypt(aEncrypt: boolean; aCount: cardinal);
+begin
+  if aCount and 15<>0 then
+     raise ESynCrypto.CreateUTF8('%.%: Count=% should be a multiple of 16',
+       [self,ED[aEncrypt],aCount]);
+  PHash256(@fCRC)^ := fKey; // reuse the same key until next MACSetKey()
+  if fAESInit<>initEncrypt then
+    EncryptInit;
+end;
+
+procedure TAESCFBCRC.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
+var i: integer;
+    tmp: TAESBlock;
+begin
+  BeforeEncryptDecrypt(false,Count);
+  inherited; // CV := IV + set fIn,fOut,fCount
+  for i := 1 to Count shr 4 do begin
+    tmp := fIn^;
+    crcblock(@fCRC[false],pointer(fIn)); // fIn may be = fOut
+    {$ifdef USEAESNI64}
+    if TAESContext(AES.Context).AesNi then
+      AesNiEncrypt(AES.Context,fCV,fCV) else
+    {$endif USEAESNI64}
+      AES.Encrypt(fCV,fCV);
+    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+    fCV := tmp;
+    crcblock(@fCRC[true],pointer(fOut));
+    inc(fIn);
+    inc(fOut);
+  end;
+end;
+
+procedure TAESCFBCRC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+var i: integer;
+begin
+  BeforeEncryptDecrypt(true,Count);
+  inherited; // CV := IV + set fIn,fOut,fCount
+  for i := 1 to Count shr 4 do begin
+    {$ifdef USEAESNI64}
+    if TAESContext(AES.Context).AesNi then
+      AesNiEncrypt(AES.Context,fCV,fCV) else
+    {$endif USEAESNI64}
+      AES.Encrypt(fCV,fCV);
+    crcblock(@fCRC[true],pointer(fIn)); // fOut may be = fIn
+    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+    fCV := fOut^;
+    crcblock(@fCRC[false],pointer(fOut));
+    inc(fIn);
+    inc(fOut);
   end;
 end;
 
