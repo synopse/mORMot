@@ -30590,23 +30590,27 @@ asm
         mov     edx, eax
         lea     eax, [ebx+61C8864FH]
         mov     ebp, edx
-@1:     imul    edx, dword ptr [ecx], -2048144777
-        add     ecx, 16
+@1:     mov     edx, dword ptr [ecx]
+        imul    edx, -2048144777
         add     edi, edx
-        imul    edx, dword ptr [ecx-0CH], -2048144777
         rol     edi, 13
-        imul    edi, edi, -1640531535
+        imul    edi, -1640531535
+        mov     edx, dword ptr [ecx+4]
+        imul    edx, -2048144777
         add     esi, edx
-        imul    edx, dword ptr [ecx-8H], -2048144777
         rol     esi, 13
-        imul    esi, esi, -1640531535
+        imul    esi, -1640531535
+        mov     edx, dword ptr [ecx+8]
+        imul    edx, -2048144777
         add     ebx, edx
-        imul    edx, dword ptr [ecx-4H], -2048144777
         rol     ebx, 13
-        imul    ebx, ebx, -1640531535
+        imul    ebx, -1640531535
+        mov     edx, dword ptr [ecx+12]
+        lea     ecx, [ecx+16]
+        imul    edx, -2048144777
         add     eax, edx
         rol     eax, 13
-        imul    eax, eax, -1640531535
+        imul    eax, -1640531535
         cmp     ebp, ecx
         jnc     @1
         rol     edi, 1
@@ -30807,7 +30811,7 @@ begin
       c3 := seed;
       c2 := c3 + PRIME32_2;
       c1 := c2 + PRIME32_1;
-      c4 := c3 + cardinal(-Int64(PRIME32_1));
+      c4 := c3 + cardinal(0-PRIME32_1);
       repeat
         c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
         c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
@@ -31049,10 +31053,10 @@ end;
 {$else}
 asm // eax=crc128, edx=data128
         test    byte ptr [CpuFeatures+6], $10 // cfSSE42 in CpuFeatures
-        jz      crcblockpas
         mov     ecx, eax
-        mov     eax, dword ptr[ecx]
+        jz      crcblockpas
         {$ifdef ISDELPHI2010}
+        mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
         mov     dword ptr[ecx], eax
         mov     eax, dword ptr[ecx+4]
@@ -31065,6 +31069,7 @@ asm // eax=crc128, edx=data128
         crc32   eax, dword ptr[edx+12]
         mov     dword ptr[ecx+12], eax
         {$else}
+        mov     eax, dword ptr[ecx]
         db      $F2, $0F, $38, $F1, $02
         mov     dword ptr[ecx], eax
         mov     eax, dword ptr[ecx+4]
