@@ -550,6 +550,16 @@ type
     // contain an internal encrypted CTR, to detect any replay attack attempt
     function DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
       IVAtBeginning: boolean): RawByteString;
+    /// initialize optional 256-bit MAC computation during next Encrypt/Decrypt call
+    // - may be used e.g. for AES-GCM or our custom AES-CTR modes
+    // - default implementation, for a protocol which does not support on-the-fly
+    // CRC computation, does nothing and returns false
+    function MACSetKey(const aKey: THash256): boolean; virtual; 
+    /// returns optional 256-bit MAC computation during last Encrypt/Decrypt call
+    // - may be used e.g. for AES-GCM or our custom AES-CTR modes
+    // - default implementation, for a protocol which does not support on-the-fly
+    // CRC computation, returns false
+    function MACGetLast(out aCRC: THash256): boolean; virtual;
 
     /// simple wrapper able to cypher/decypher any content
     // - here all data variable could be text or binary
@@ -7469,6 +7479,16 @@ begin
   if padding>AESBlockSize then
     result := nil else
     SetLength(result,len-padding); // fast in-place resize
+end;
+
+function TAESAbstract.MACSetKey(const aKey: THash256): boolean;
+begin
+  result := false;
+end;
+
+function TAESAbstract.MACGetLast(out aCRC: THash256): boolean;
+begin
+  result := false;
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
