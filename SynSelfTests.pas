@@ -9366,7 +9366,7 @@ end;
 {$endif}
 
 procedure TTestECCCryptography.ECDHEStreamProtocol;
-const MAX = 5000;
+const MAX = 10000;
 var timer: TPrecisionTimer;
     str: TRawByteStringDynArray;
   function Test(const prot: IProtocol; const name: string): integer;
@@ -9401,9 +9401,9 @@ var key: THash256;
     c := TECDHEProtocolClient.Create(a,nil,cs);
     s := TECDHEProtocolServer.Create(a,nil,ss);
 {    c.EF := efAesCfb128;
-    c.MAC := macNone;
+    c.MAC := macHmacCrc32c;
     s.EF := c.EF;
-    s.MAC := c.MAC; }
+    s.MAC := c.MAC; } 
     c.ComputeHandshake(cf);
     Check(s.ComputeHandshake(cf,sf)=sprSuccess);
     Check(c.ValidateHandshake(sf)=sprSuccess);

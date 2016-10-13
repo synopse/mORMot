@@ -7761,8 +7761,9 @@ begin
     jz     @z
 @s: call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
+    movdqa xmm1,xmm0
     pxor   xmm0,xmm7
-    movdqu xmm7,dqword ptr [esi]  // fCV := fIn
+    movdqa xmm7,xmm1              // fCV := fIn
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
     dec    ecx
     lea    esi,[esi+16]
@@ -7878,20 +7879,53 @@ var i: integer;
     tmp: TAESBlock;
 begin
   BeforeEncryptDecrypt(false,Count);
-  inherited; // CV := IV + set fIn,fOut,fCount
-  for i := 1 to Count shr 4 do begin
-    tmp := fIn^;
-    crcblock(@fCRC[false],pointer(fIn)); // fIn may be = fOut
-    {$ifdef USEAESNI64}
-    if TAESContext(AES.Context).AesNi then
-      AesNiEncrypt(AES.Context,fCV,fCV) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,fCV);
-    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    fCV := tmp;
-    crcblock(@fCRC[true],pointer(fOut));
-    inc(fIn);
-    inc(fOut);
+  {$ifdef USEAESNI32}
+  if TAESContext(AES.Context).AesNi then
+  asm
+    push   ebx
+    push   esi
+    push   edi
+    mov    ebx,self
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [ebx].TAESCFBCRC.fIV
+@s: lea    eax,[ebx].TAESCFBCRC.fCRC
+    mov    edx,esi
+    call   crcblock // using SSE4.2 or fast tables
+    lea    eax,[ebx].TAESCFBCRC.AES
+    call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
+    movdqu xmm0,dqword ptr [esi]
+    movdqa xmm1,xmm0
+    pxor   xmm0,xmm7
+    movdqu xmm7,xmm1              // fCV := fIn
+    movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
+    lea    eax,[ebx+16].TAESCFBCRC.fCRC
+    mov    edx,edi
+    call   crcblock
+    sub    dword ptr [Count],16
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    ja     @s
+    pop    edi
+    pop    esi
+    pop    ebx
+  end else
+  {$endif} begin
+    inherited; // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      tmp := fIn^;
+      crcblock(@fCRC[false],pointer(fIn)); // fIn may be = fOut
+      {$ifdef USEAESNI64}
+      if TAESContext(AES.Context).AesNi then
+        AesNiEncrypt(AES.Context,fCV,fCV) else
+      {$endif USEAESNI64}
+        AES.Encrypt(fCV,fCV);
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      fCV := tmp;
+      crcblock(@fCRC[true],pointer(fOut));
+      inc(fIn);
+      inc(fOut);
+    end;
   end;
 end;
 
@@ -7899,19 +7933,50 @@ procedure TAESCFBCRC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
   BeforeEncryptDecrypt(true,Count);
-  inherited; // CV := IV + set fIn,fOut,fCount
-  for i := 1 to Count shr 4 do begin
-    {$ifdef USEAESNI64}
-    if TAESContext(AES.Context).AesNi then
-      AesNiEncrypt(AES.Context,fCV,fCV) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,fCV);
-    crcblock(@fCRC[true],pointer(fIn)); // fOut may be = fIn
-    XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-    fCV := fOut^;
-    crcblock(@fCRC[false],pointer(fOut));
-    inc(fIn);
-    inc(fOut);
+  {$ifdef USEAESNI32}
+  if TAESContext(AES.Context).AesNi then
+  asm
+    push   ebx
+    push   esi
+    push   edi
+    mov    ebx,self
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [ebx].TAESCFBCRC.fIV
+@s: lea    eax,[ebx+16].TAESCFBCRC.fCRC
+    mov    edx,esi
+    call   crcblock
+    lea    eax,[ebx].TAESCFBCRC.AES
+    call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
+    movdqu xmm0,dqword ptr [esi]
+    pxor   xmm7,xmm0
+    movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV
+    lea    eax,[ebx].TAESCFBCRC.fCRC
+    mov    edx,edi
+    call   crcblock
+    sub    dword ptr [Count],16
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    ja     @s
+    pop    edi
+    pop    esi
+    pop    ebx
+  end else
+  {$endif} begin
+    inherited; // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      {$ifdef USEAESNI64}
+      if TAESContext(AES.Context).AesNi then
+        AesNiEncrypt(AES.Context,fCV,fCV) else
+      {$endif USEAESNI64}
+        AES.Encrypt(fCV,fCV);
+      crcblock(@fCRC[true],pointer(fIn)); // fOut may be = fIn
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      fCV := fOut^;
+      crcblock(@fCRC[false],pointer(fOut));
+      inc(fIn);
+      inc(fOut);
+    end;
   end;
 end;
 

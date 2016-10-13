@@ -376,7 +376,7 @@ type
   // AES-CFB encryption with on-the-fly 256-bit CRC computation of the plain and
   // encrypted blocks, and AES-encryption of the CRCs to ensure cryptographic
   // level message authentication and integrity - associated TECDHEMAC 
-  // property should be macDuringEF, or an EECCException is raised
+  // property should be macDuringEF
   // - other values will define TAESCFB/TAESOFB/TAESCTR/TAESCBC in 128-bit or
   // 256-bit mode, in conjunction with a TECDHEMAC setting
   // - AES-NI hardware acceleration will be used, if available
@@ -384,18 +384,18 @@ type
   TECDHEEF = (efAesCrc128, efAesCfb128, efAesOfb128, efAesCtr128, efAesCbc128,
     efAesCrc256, efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
   /// the Message Authentication Codes recognized by TECDHEProtocol
-  // - default macDuringEF (370MB/s for efAesCrc128 with SSE4.2 and AES-NI)
+  // - default macDuringEF (680MB/s for efAesCrc128 with SSE4.2 and AES-NI)
   // means that no separated MAC is performed, but done during encryption step:
-  // only supported by efAesCrc128 or efAesCrc256 (AES-GCM may be in the future) 
+  // only supported by efAesCrc128 or efAesCrc256 (may be a future AES-GCM) 
   // - macHmacSha256 is the safest, but slow, especially when used as MAC for
   // AES-NI accellerated encryption (110MB/s with efAesCfb128, to be compared
-  // with 370MB/s for macNone or macDuringEF)
-  // - macHmacCrc256c and macHmacCrc32c are faster (340MB/s with efAesCfb128),
-  // but weak, since it is not a cryptographic hash, and has known collisions
+  // with macDuringEF, which produces a similar level of MAC)
+  // - macHmacCrc256c and macHmacCrc32c are faster (550-650MB/s with efAesCfb128),
+  // but prevent transmission errors but not message integrity or authentication 
   // since composition of two crcs is a multiplication by a polynomial - see
   // http://mslc.ctf.su/wp/boston-key-party-ctf-2016-hmac-crc-crypto-5pts
-  // - macNone (370MB/s, which is the speed of AES-NI encryption itself for a
-  // random set of small messages) won't check integrity, but only replay attacks
+  // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
+  // random set of small messages) won't check errors, but only replay attacks
   TECDHEMAC = (macDuringEF, macHmacSha256, macHmacCrc256c, macHmacCrc32c, macNone);
                 
   /// defines one protocol Algorithm recognized by TECDHEProtocol
