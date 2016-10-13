@@ -2555,7 +2555,7 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// x86 asm version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - this version won't access the memory beyond the string, so may be
-// preferred to StrcompSSE42 or StrComp, when using e.g. mapped files
+// preferred to StrCompSSE42 or StrComp, when using e.g. mapped files
 function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
@@ -10498,16 +10498,19 @@ type
 // - using Short4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt4DigitsToShort(Value: Cardinal): Short4;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 3 digits short string from a 0..999 value
 // - using Short4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt3DigitsToShort(Value: Cardinal): Short4;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 2 digits short string from a 0..99 value
 // - using Short4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt2DigitsToShort(Value: byte): Short4;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// compare to floating point values, with IEEE 754 double precision
 // - use this function instead of raw = operator
@@ -10558,7 +10561,7 @@ function fnv32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// perform very fast xxHash hashing in 32-bit mode
 // - will use optimized asm for x86/x64, or a pascal version on other CPUs
-function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 
 var
   /// tables used by crc32cfast() function
@@ -30569,9 +30572,9 @@ end;
 {$ifdef CPUINTEL} // use optimized x86/x64 asm versions for xxHash32
 
 {$ifdef CPUX86}
-function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 asm
-        xchg    eax, ecx // compiled with gcc using __fastcall
+        xchg    edx, ecx
         push    ebp
         push    edi
         lea     ebp, [ecx+edx]
@@ -30649,6 +30652,7 @@ asm
         imul    eax, eax, -1640531535
         cmp     ebp, ecx
         jnz     @5
+        nop
 @6:     mov     edx, eax
         add     esp, 8
         shr     edx, 15
@@ -30669,16 +30673,21 @@ end;
 {$endif CPUX86}
 
 {$ifdef CPUX64}
-function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 asm
-        {$ifdef LINUX}
-        mov     r8, rdx
-        mov     rcx, rdi
-        mov     rdx, rsi
-        {$else}
+        {$ifdef LINUX} // crc=rdi P=rsi len=rdx
+        mov     r8, rsi
+        mov     rcx, rdx
+        mov     rdx, rdi
+        {$else} // crc=r8 P=rcx len=rdx
+        mov     r10, r8
+        mov     r8, rcx
+        mov     rcx, rdx
+        mov     rdx, r10
         push    rsi   // Win64 expects those registers to be preserved
         push    rdi
         {$endif}
+        // P=r8 len=rcx crc=rdx
         push    rbx
         lea     r10, [rcx+rdx]
         cmp     rdx, 15

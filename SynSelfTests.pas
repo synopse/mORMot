@@ -3055,11 +3055,11 @@ begin
   {$ifdef ISDELPHIXE}FormatSettings.{$endif}{$ifdef FPC}FormatSettings.{$endif}
   DecimalSeparator := '.';
 {$endif}
-  check(xxHash32('A',1)=275094093);
-  check(xxHash32('ABACK',5)=314231639);
-  check(xxHash32('ABBREVIATIONS',13)=3058487595);
-  check(xxHash32('LORD',4)=3395586315);
-  check(xxHash32('MICROINSTRUCTION''S',18)=1576115228);
+  check(xxHash32(0,'A',1)=275094093);
+  check(xxHash32(0,'ABACK',5)=314231639);
+  check(xxHash32(0,'ABBREVIATIONS',13)=3058487595);
+  check(xxHash32(0,'LORD',4)=3395586315);
+  check(xxHash32(0,'MICROINSTRUCTION''S',18)=1576115228);
   for i := -10000 to 10000 do
     check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
@@ -3070,7 +3070,7 @@ begin
     Check(crc32cfast(0,pointer(s),length(s))=crc);
     Check(crc32c(0,pointer(s),length(s))=crc);
     if s<>'' then
-      Check(xxhash32(pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
+      Check(xxhash32(0,pointer(s),length(s))=xxHash32reference(pointer(s),length(s)));
     j := Random(maxInt)-Random(maxInt);
     str(j,a);
     s := RawUTF8(a);
@@ -9296,7 +9296,6 @@ var sw: ICommandLine;
     end;
   end;
 begin
-  exit;
   if DirectoryExists('synecc') then
     DirectoryDelete('synecc','*.*',true) else
     CreateDir('synecc');
@@ -9385,7 +9384,7 @@ var timer: TPrecisionTimer;
       check(after=str[i]);
     end;
     timer.ComputeTime;
-    fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
+    //fRunConsole := format('%s %s %s',[fRunConsole,name,KB(timer.PerSec(result))]);
   end;
 var key: THash256;
     a: TECDHEAuth;
