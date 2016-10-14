@@ -372,17 +372,18 @@ type
   // - only a single very safe algorithm is proposed
   TECDHEKDF = (kdfHmacSha256);
   /// the Encryption Functions recognized by TECDHEProtocol
+  // - all supported AES chaining blocks have their 128-bit and 256-bit flavours
   // - default efAesCrc128 will use the dedicated TAESCFBCRC class, i.e.
   // AES-CFB encryption with on-the-fly 256-bit CRC computation of the plain and
-  // encrypted blocks, and AES-encryption of the CRCs to ensure cryptographic
-  // level message authentication and integrity - associated TECDHEMAC 
+  // encrypted blocks, and AES-encryption of the CRC to ensure cryptographic
+  // level message authentication and integrity - associated TECDHEMAC
   // property should be macDuringEF
   // - other values will define TAESCFB/TAESOFB/TAESCTR/TAESCBC in 128-bit or
   // 256-bit mode, in conjunction with a TECDHEMAC setting
   // - AES-NI hardware acceleration will be used, if available
   // - of course, weack ECB mode is not available
   TECDHEEF = (efAesCrc128, efAesCfb128, efAesOfb128, efAesCtr128, efAesCbc128,
-    efAesCrc256, efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
+              efAesCrc256, efAesCfb256, efAesOfb256, efAesCtr256, efAesCbc256);
   /// the Message Authentication Codes recognized by TECDHEProtocol
   // - default macDuringEF (680MB/s for efAesCrc128 with SSE4.2 and AES-NI)
   // means that no separated MAC is performed, but done during encryption step:
@@ -3158,8 +3159,8 @@ begin
   case fAlgo.mac of
     macDuringEF:
       if not fAES[aEncrypt].MACGetLast(aMac) then // computed during EF process
-        raise EECCException.CreateUTF8('%.Encrypt: macDuringEF not available in %/%',
-          [self,ToText(fAlgo.ef)^,fAES[aEncrypt]]);
+        raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%',
+          [self,ED[aEncrypt],ToText(fAlgo.ef)^,fAES[aEncrypt]]);
     macHmacCrc256c:
       HMAC_CRC256C(@fkM[aEncrypt],aEncrypted,sizeof(THash256),aLen,aMAC);
     macHmacSha256:

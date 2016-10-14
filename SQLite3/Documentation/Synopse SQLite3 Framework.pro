@@ -18073,8 +18073,8 @@ PreparedBy=Arnaud Bouchez
 
 :Secure Communication using ECDHE
 In addition to ECDSA digital signatures or ECDH-based content encryption, the {\i mORMot} framework offers a proprietary {\f1\fs20 @*ECDHE@} secure protocol for securing Client/Server communication. HTTPS/TLS should still be used with AJAX or third party endpoints. But this alternate protocol can be enabled, with both @140@ and @150@, between @*SOA@ nodes implemented with {\i mORMot} Delphi/FPC services. Advantages are easier deployment, better performance, reduced protocol complexity, and higher integration.
-{\f1\fs20 SynEcc} implementation of {\f1\fs20 ECDHE} handshaking and key derivation is done in a single round trip, to avoid harmful triple handshakes, and reduce network latency. Both mutual authentication and server authentication are available, requiring a shared {\i public-key infrastructure} ({\f1\fs20 @*PKI@}) - provided e.g. by {\f1\fs20 TECCCertificateChain} - to validate exchanged certificates. Handshaking is protected against replay attacks, and features perfect forward security in its key derivation (used for encryption and message authentication).
-Thanks to the proven set of algorithms used, resulting security is comparable to the best TLS 1.2 configurations, without the overhead and complexity of this standard.
+{\f1\fs20 SynEcc} implementation of {\f1\fs20 ECDHE} handshaking and key derivation is done in a single round trip, to avoid harmful triple handshakes, and reduce network latency. Both mutual authentication and server authentication are available, requiring a shared {\i public-key infrastructure} ({\f1\fs20 @*PKI@}) - provided e.g. by {\f1\fs20 TECCCertificateChain} - to validate exchanged certificates. Thanks to the use of ephemeral keys, handshaking features perfect forward security in its key derivation (used for encryption and message authentication). Messages transmission checks authentication, data integrity, and replay attacks, with hardware acceleration of the process, if available.
+Thanks to the proven set of algorithms used, resulting security is comparable to the best TLS 1.2 configurations, without the overhead and complexity of this standard, and at very high speed.
 : Mutual Authentication
 To perform @*mutual authentication@, the prerequisite for each party is to have private keys ({\f1\fs20 dA} and {\f1\fs20 dB}) and public keys in certificates ({\f1\fs20 QCA} and {\f1\fs20 QCB}), hosted in a shared PKI system.
 $Client (dA, QCA)                                            Server (dB, QCB)
@@ -18099,7 +18099,7 @@ $   <-----------------------------------------------------------
 $
 $  ECDSAVerify(QCB, Sign)
 $
-Now both ends can calculate shared secret keys {\f1\fs20 SA} and {\f1\fs20 SB}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and the current {\f1\fs20 IV} Initialization Vector, derived from the current {\f1\fs20 kM}. Finally, {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-CRC32C), and {\f1\fs20 kM} value will increase as a CTR to maintain read and write sequence numbers on both sides, ensure {\f1\fs20 IV} do change, and avoid replay attacks.
+Now both ends can calculate shared secret keys {\f1\fs20 SA} and {\f1\fs20 SB}. Two session keys {\f1\fs20 kE} and {\f1\fs20 kM} are then derived using a {\f1\fs20 KDF} function (e.g. HMAC-SHA256). Subsequent {\f1\fs20 m1}, {\f1\fs20 m2}... messages will be encrypted using {\f1\fs20 kE} via an {\f1\fs20 EF} encryption function (e.g. AES256-CFB), and the current {\f1\fs20 IV} Initialization Vector, derived from the current {\f1\fs20 kM}. Finally, {\f1\fs20 kM} will authenticate them using a {\f1\fs20 MAC} function (e.g. HMAC-SHA256). {\f1\fs20 kM} value will increase as a CTR to maintain read and write sequence numbers on both sides, ensuring {\f1\fs20 IV} will change, and {\f1\fs20 MAC} won't suffer from replay attacks.
 $Client (dA, QCA)                                            Server (dB, QCB)
 $
 $  SA = ECDH(dA,QF)                                         SA = ECDH(dF,QCA)
@@ -18109,18 +18109,20 @@ $                  kM = KDF(SA|SB|RndA|RndB,"hmac")
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
-$
+$  kM++
 $                                     E(kE,m2)|MAC(kM,EF(kE,m2))
 $   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-$
+$                                                           kM++
 $   EF(kE,m3)|MAC(kM,EF(kE,m3))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
+$  kM++
 $    ...
 $
-A typical {\f1\fs20 SynEcc} implementation may use, as algorithms for high security but very fast process, hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions:
+A typical {\f1\fs20 SynEcc} implementation may use, as algorithms:
 - {\f1\fs20 KDF} = HMAC-SHA256 ("salt" and "hmac" values may be customized, but known on both sides);
-- {\f1\fs20 EF} = AES256-CFB or any AES256 mode excluding ECB;
-- {\f1\fs20 MAC} = HMAC-CRC256C (fast) or HMAC-SHA256 (safest, but not mandatory in practice).
+- {\f1\fs20 EF} = AES128-CFB or any AES mode excluding ECB, potentially in 256-bit;
+- {\f1\fs20 MAC} = HMAC-SHA256 (safest), HMAC-CRC256C (fast), or combined with {\f1\fs20 EF}.
+By default, the {\f1\fs20 TECDHEProtocol} class will use {\f1\fs20 kdfHmacSha256} as {\f1\fs20 KDF}, and {\f1\fs20 efAesCrc128} (i.e. AES128-CFB with combined {\f1\fs20 EF} and {\f1\fs20 MAC}), for best performance (around 700MB/s messages process thanks to hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions).
 Note that encryption is not handled at this level, since all conservative protocol implementations do not enable compression, to avoid security exploit as occured for TLS with CRIME. It is up to the application layer to process the data using e.g. {\f1\fs20 deflate} or our {\f1\fs20 @*SynLZ@} algorithm.
 : Unilateral Authentication
 For server-side only authentication - as is most currently implemented in regular TLS/HTTPS communications, the handshaking process is slightly reduced:
@@ -18143,11 +18145,12 @@ $                  kM = KDF(S|RndA|RndB,"hmac")
 $
 $   EF(kE,m1)|MAC(kM,EF(kE,m1))
 $   +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++>
-$
+$  kM++
 $                                     E(kE,m2)|MAC(kM,EF(kE,m2))
 $   <+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+$                                                           kM++
 $    ...
 $
-In this case, the client party does not have any private/public key certification, and is the only side computing an ephemeral {\f1\fs20 (dE, QE)} pair. The server has no mean of authenticating its client, but the connection is secured and private. The handshaking process will be slightly faster than with mutual authentication, since less ECC computing operations are performed (2 instead of 5 on the server side).
+In this case, the client party does not have any private/public key certification, and will compute an ephemeral {\f1\fs20 (dE, QE)} pair, which will be used using server's {\f1\fs20 CA}. The server has no mean of authenticating its client, but the connection is secured and private. The handshaking process will be slightly faster than with mutual authentication, since less ECC computing operations are performed (2 instead of 5 on the server side).
 The protocol is also able to handle client-side only authentication, even if this scheme may not be very useful in practice.
 

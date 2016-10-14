@@ -8655,12 +8655,18 @@ var A: TAES;
     noaesni: boolean;
     Timer: array[boolean] of TPrecisionTimer;
     ValuesCrypted,ValuesOrig: array[0..1] of RawByteString;
+    {$ifdef CPUINTEL}
+    backup: TIntelCpuFeatures;
+    {$endif CPUINTEL}
 const MAX = 4096*1024;  // test 4 MB data, i.e. multi-threaded AES
       MODES: array[0..4{$ifdef USE_PROV_RSA_AES}+2{$endif}] of TAESAbstractClass =
         (TAESECB, TAESCBC, TAESCFB, TAESOFB, TAESCTR
          {$ifdef USE_PROV_RSA_AES}, TAESECB_API, TAESCBC_API{$endif});
       // TAESCFB_API and TAESOFB_API just do not work
 begin
+  {$ifdef CPUINTEL}
+  backup := CpuFeatures;
+  {$endif CPUINTEL}
   Check(AESSelfTest(true),'Internal Tables');
   SetLength(orig,MAX);
   SetLength(crypted,MAX+256);
@@ -8756,6 +8762,9 @@ begin
       break;
     {$endif CPUINTEL}
   end;
+  {$ifdef CPUINTEL}
+  CpuFeatures := backup;
+  {$endif CPUINTEL}
 end;
 
 procedure TTestCryptographicRoutines._CompressShaAes;

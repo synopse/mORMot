@@ -617,8 +617,7 @@ type
     fAESInit: (initNone, initEncrypt, initDecrypt); 
     procedure EncryptInit;
     procedure DecryptInit;
-    procedure EncryptTrailer;
-    procedure DecryptTrailer;
+    procedure TrailerBytes; 
   public
     /// release the used instance memory and resources
     // - also fill the TAES instance with zeros, for safety
@@ -708,29 +707,32 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
+  TAESMAC256 = record
+    plain: THash128;
+    encrypted: THash128;
+  end;
+  
   /// abstract AES encryption performing on-the-fly MAC computation
-  // - this class expect the Encrypt/Decrypt Count parameters to be a mutiple of
-  // 16-byte blocks, e.g. with PKCS7 padding, otherwise will raise an ESynCrypto
   // - computes on-the-fly a proprietary 256-bit MAC, as 128-bit CRC of the
-  // encrypted data and 128-bit CRC of the plain data, derived from a Key
+  // encrypted data and 128-bit CRC of the plain data, seeded from a Key
   // - the 128-bit CRC of the plain text is then encrypted using the current AES
   // engine, so returned 256-bit MAC value has cryptographic level, and ensure
   // data integrity, authenticity, and check against transmission errors
   TAESAbstractMAC = class(TAESAbstractEncryptOnly)
   protected
-    fMAC, fMACKey: array[boolean] of THash128;
-    procedure BeforeEncryptDecrypt(aEncrypt: boolean; aCount: cardinal);
+    fMAC, fMACKey: TAESMAC256;
   public
-    /// initialize optional 256-bit MAC computation during next Encrypt/Decrypt call
-    // - initialize the internal fMAC[] property, and returns true
+    /// initialize 256-bit MAC computation for next Encrypt/Decrypt call
+    // - initialize the internal fMACKey property, and returns true
+    // - only the plain text crc is seeded from aKey - encrypted message crc
+    // will use -1 as fixed seed, to avoid aKey compromission
     // - should be set with a new MAC key value before each message, to avoid
-    // replay attacks
+    // replay attacks (as called from TECDHEProtocol.SetKey)
     function MACSetKey(const aKey: THash256): boolean; override;
-    /// returns optional 256-bit MAC computation during last Encrypt/Decrypt call
-    // - encrypt the internal fMAC[] property value using the current AES cypher
+    /// returns 256-bit MAC computed during last Encrypt/Decrypt call
+    // - encrypt the internal fMAC property value using the current AES cypher
     // on the plain content and returns true; only the plain content CRC-128 is
     // AES encrypted, to avoid reverse attacks against the known encrypted data
-    // and its CRC-128
     function MACGetLast(out aCRC: THash256): boolean; override;
   end;
 
@@ -740,10 +742,8 @@ type
   TAESCFBCRC = class(TAESAbstractMAC)
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
-    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the CFB mode, and compute 256-bit MAC
-    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
@@ -751,14 +751,10 @@ type
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
   TAESOFBCRC = class(TAESAbstractMAC)
-  protected
-    procedure EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal; DoEncrypt: boolean);
   public
     /// perform the AES cypher in the OFB mode, and compute a 256-bit MAC
-    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
     /// perform the AES un-cypher in the OFB mode, and compute a 256-bit MAC
-    // - raise an ESynCrypto if Count is not a multiple of 16-byte blocks
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
@@ -7624,25 +7620,10 @@ begin
     raise ESynCrypto.Create(sAESException);
 end;
 
-procedure TAESAbstractSyn.EncryptTrailer;
-var len: Cardinal;
+procedure TAESAbstractSyn.TrailerBytes;
 begin
-  len := fCount and (AESBlockSize-1);
-  if len<>0 then begin
-    {$ifdef USEAESNI64}
-    if TAESContext(AES.Context).AesNi then
-      AesNiEncrypt(AES.Context,fCV,fCV) else
-    {$endif USEAESNI64}
-      AES.Encrypt(fCV,fCV);
-    XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
-  end;
-end;
-
-procedure TAESAbstractSyn.DecryptTrailer;
-var len: Cardinal;
-begin
-  len := fCount and (AESBlockSize-1);
-  if len<>0 then begin
+  fCount := fCount and (AESBlockSize-1);
+  if fCount<>0 then begin
     if fAESInit<>initEncrypt then
       EncryptInit;
     {$ifdef USEAESNI64}
@@ -7650,7 +7631,7 @@ begin
       AesNiEncrypt(AES.Context,fCV,fCV) else
     {$endif USEAESNI64}
       AES.Encrypt(fCV,fCV);
-    XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
+    XorBlockN(pointer(fIn),pointer(fOut),@fCV,fCount);
   end;
 end;
 
@@ -7668,7 +7649,7 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  DecryptTrailer;
+  TrailerBytes;
 end;
 
 procedure TAESECB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -7686,7 +7667,7 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  EncryptTrailer;
+  TrailerBytes;
 end;
 
 
@@ -7709,7 +7690,7 @@ begin
       inc(fOut);
     end;
   end;
-  DecryptTrailer;
+  TrailerBytes;
 end;
 
 procedure TAESCBC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -7729,7 +7710,7 @@ begin
     inc(fIn);
     inc(fOut);
   end;
-  EncryptTrailer;
+  TrailerBytes;
 end;
 
 
@@ -7809,7 +7790,7 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    EncryptTrailer;
+    TrailerBytes;
   end;
 end;
 
@@ -7860,7 +7841,7 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    EncryptTrailer;
+    TrailerBytes;
   end;
 end;
 
@@ -7869,29 +7850,22 @@ end;
 
 function TAESAbstractMAC.MACSetKey(const aKey: THash256): boolean;
 begin
-  fMACKey[false] := THash128Rec(aKey).Lo; // seed for plain text crc
-  FillcharFast(fMACKey[true],sizeof(THash128),255);
+  // safe seed for plain text crc, before AES encryption
+  // from TECDHEProtocol.SetKey, aKey is a CTR to avoid replay attacks
+  fMACKey.plain := THash128Rec(aKey).Lo;
+  XorBlock16(@fMACKey.plain,@THash128Rec(aKey).Hi);
+  // neutral seed for encrypted crc, to check for errors, with no compromission
+  FillcharFast(fMACKey.encrypted,sizeof(THash128),255);
   result := true;
 end;
 
 function TAESAbstractMAC.MACGetLast(out aCRC: THash256): boolean;
 begin
-  AES.Encrypt(fMACKey[false],THash128Rec(aCRC).Lo); // encrypt the plain text crc
-  THash128Rec(aCRC).Hi := fMACKey[true];            // store the encrypted crc
+  // encrypt the plain text crc, to perform message authentication and integrity
+  AES.Encrypt(fMAC.plain,THash128Rec(aCRC).Lo);
+  // store the encrypted text crc, to check for errors, with no compromission
+  THash128Rec(aCRC).Hi := fMAC.encrypted;
   result := true;
-end;
-
-const
-  ED: array[boolean] of string[7] = ('Decrypt','Encrypt');
-
-procedure TAESAbstractMAC.BeforeEncryptDecrypt(aEncrypt: boolean; aCount: cardinal);
-begin
-  if aCount and 15<>0 then
-     raise ESynCrypto.CreateUTF8('%.%: Count=% should be a multiple of 16',
-       [self,ED[aEncrypt],aCount]);
-  fMAC := fMACKey; // reuse the same key until next MACSetKey()
-  if fAESInit<>initEncrypt then
-    EncryptInit;
 end;
 
 
@@ -7901,9 +7875,13 @@ procedure TAESCFBCRC.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
     tmp: TAESBlock;
 begin
-  BeforeEncryptDecrypt(false,Count);
+  if Count=0 then
+    exit;
+  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  if fAESInit<>initEncrypt then
+    EncryptInit;
   {$ifdef USEAESNI32}
-  if TAESContext(AES.Context).AesNi then
+  if TAESContext(AES.Context).AesNi and (Count and (AESBlockSize-1)=0) then
   asm
     push   ebx
     push   esi
@@ -7912,7 +7890,7 @@ begin
     mov    esi,BufIn
     mov    edi,BufOut
     movdqu xmm7,dqword ptr [ebx].TAESCFBCRC.fIV
-@s: lea    eax,[ebx+16].TAESCFBCRC.fMAC
+@s: lea    eax,[ebx].TAESCFBCRC.fMAC.encrypted
     mov    edx,esi
     call   crcblock // using SSE4.2 or fast tables
     lea    eax,[ebx].TAESCFBCRC.AES
@@ -7922,14 +7900,14 @@ begin
     pxor   xmm0,xmm7
     movdqa xmm7,xmm1              // fCV := fIn
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
-    lea    eax,[ebx].TAESCFBCRC.fMAC
+    lea    eax,[ebx].TAESCFBCRC.fMAC.plain
     mov    edx,edi
     call   crcblock
     sub    dword ptr [Count],16
     lea    esi,[esi+16]
     lea    edi,[edi+16]
     ja     @s
-    pop    edi
+@z: pop    edi
     pop    esi
     pop    ebx
   end else
@@ -7937,7 +7915,7 @@ begin
     inherited; // CV := IV + set fIn,fOut,fCount
     for i := 1 to Count shr 4 do begin
       tmp := fIn^;
-      crcblock(@fMAC[true],pointer(fIn)); // fIn may be = fOut
+      crcblock(@fMAC.encrypted,pointer(fIn)); // fIn may be = fOut
       {$ifdef USEAESNI64}
       if TAESContext(AES.Context).AesNi then
         AesNiEncrypt(AES.Context,fCV,fCV) else
@@ -7945,19 +7923,26 @@ begin
         AES.Encrypt(fCV,fCV);
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := tmp;
-      crcblock(@fMAC[false],pointer(fOut));
+      crcblock(@fMAC.plain,pointer(fOut));
       inc(fIn);
       inc(fOut);
     end;
+    TrailerBytes;
+    with fMAC do // includes trailing bytes to the plain crc
+      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
   end;
 end;
 
 procedure TAESCFBCRC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  BeforeEncryptDecrypt(true,Count);
+  if Count=0 then
+    exit;
+  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  if fAESInit<>initEncrypt then
+    EncryptInit;
   {$ifdef USEAESNI32}
-  if TAESContext(AES.Context).AesNi then
+  if TAESContext(AES.Context).AesNi and (Count and (AESBlockSize-1)=0) then
   asm
     push   ebx
     push   esi
@@ -7966,7 +7951,7 @@ begin
     mov    esi,BufIn
     mov    edi,BufOut
     movdqu xmm7,dqword ptr [ebx].TAESCFBCRC.fIV
-@s: lea    eax,[ebx].TAESCFBCRC.fMAC
+@s: lea    eax,[ebx].TAESCFBCRC.fMAC.plain
     mov    edx,esi
     call   crcblock
     lea    eax,[ebx].TAESCFBCRC.AES
@@ -7974,7 +7959,7 @@ begin
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
     movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV
-    lea    eax,[ebx+16].TAESCFBCRC.fMAC
+    lea    eax,[ebx].TAESCFBCRC.fMAC.encrypted
     mov    edx,edi
     call   crcblock
     sub    dword ptr [Count],16
@@ -7993,26 +7978,32 @@ begin
         AesNiEncrypt(AES.Context,fCV,fCV) else
       {$endif USEAESNI64}
         AES.Encrypt(fCV,fCV);
-      crcblock(@fMAC[false],pointer(fIn)); // fOut may be = fIn
+      crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
       fCV := fOut^;
-      crcblock(@fMAC[true],pointer(fOut));
+      crcblock(@fMAC.encrypted,pointer(fOut));
       inc(fIn);
       inc(fOut);
     end;
+    TrailerBytes;
+    with fMAC do // includes trailing bytes to the plain crc
+      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
   end;
 end;
 
 
 { TAESOFBCRC }
 
-procedure TAESOFBCRC.EncryptDecrypt(BufIn, BufOut: pointer; Count: cardinal;
-  DoEncrypt: boolean);
+procedure TAESOFBCRC.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  BeforeEncryptDecrypt(DoEncrypt,Count);
+  if Count=0 then
+    exit;
+  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  if fAESInit<>initEncrypt then
+    EncryptInit;
   {$ifdef USEAESNI32}
-  if TAESContext(AES.Context).AesNi then
+  if TAESContext(AES.Context).AesNi and (Count and (AESBlockSize-1)=0) then
   asm
     push   ebx
     push   esi
@@ -8021,10 +8012,7 @@ begin
     mov    esi,BufIn
     mov    edi,BufOut
     movdqu xmm7,dqword ptr [ebx].TAESOFBCRC.fIV
-@s: movzx  ecx,DoEncrypt
-    xor    ecx,1
-    shl    ecx,4
-    lea    eax,[ebx+ecx].TAESOFBCRC.fMAC
+@s: lea    eax,[ebx].TAESOFBCRC.fMAC.encrypted
     mov    edx,esi
     call   crcblock
     lea    eax,[ebx].TAESOFBCRC.AES
@@ -8032,9 +8020,7 @@ begin
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
-    movzx  ecx,DoEncrypt
-    shl    ecx,4
-    lea    eax,[ebx+ecx].TAESOFBCRC.fMAC
+    lea    eax,[ebx].TAESOFBCRC.fMAC.plain
     mov    edx,edi
     call   crcblock
     sub    dword ptr [Count],16
@@ -8053,23 +8039,73 @@ begin
         AesNiEncrypt(AES.Context,fCV,fCV) else
       {$endif USEAESNI64}
         AES.Encrypt(fCV,fCV);
-      crcblock(@fMAC[not DoEncrypt],pointer(fIn)); // fOut may be = fIn
+      crcblock(@fMAC.encrypted,pointer(fIn)); // fOut may be = fIn
       XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
-      crcblock(@fMAC[DoEncrypt],pointer(fOut));
+      crcblock(@fMAC.plain,pointer(fOut));
       inc(fIn);
       inc(fOut);
     end;
+    TrailerBytes;
+    with fMAC do // includes trailing bytes to the plain crc
+      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fOut),fCount);
   end;
 end;
 
-procedure TAESOFBCRC.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
-begin
-  EncryptDecrypt(BufIn, BufOut, Count, false);
-end;
-
 procedure TAESOFBCRC.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
+var i: integer;
 begin
-  EncryptDecrypt(BufIn, BufOut, Count, true);
+  if Count=0 then
+    exit;
+  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  if fAESInit<>initEncrypt then
+    EncryptInit;
+  {$ifdef USEAESNI32}
+  if TAESContext(AES.Context).AesNi and (Count and (AESBlockSize-1)=0) then
+  asm
+    push   ebx
+    push   esi
+    push   edi
+    mov    ebx,self
+    mov    esi,BufIn
+    mov    edi,BufOut
+    movdqu xmm7,dqword ptr [ebx].TAESOFBCRC.fIV
+@s: lea    eax,[ebx].TAESOFBCRC.fMAC.plain
+    mov    edx,esi
+    call   crcblock
+    lea    eax,[ebx].TAESOFBCRC.AES
+    call   AesNiEncryptXmm7       // AES.Encrypt(fCV,fCV)
+    movdqu xmm0,dqword ptr [esi]
+    pxor   xmm7,xmm0
+    movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
+    lea    eax,[ebx].TAESOFBCRC.fMAC.encrypted
+    mov    edx,edi
+    call   crcblock
+    sub    dword ptr [Count],16
+    lea    esi,[esi+16]
+    lea    edi,[edi+16]
+    ja     @s
+    pop    edi
+    pop    esi
+    pop    ebx
+  end else
+  {$endif} begin
+    inherited Encrypt(BufIn,BufOut,Count); // CV := IV + set fIn,fOut,fCount
+    for i := 1 to Count shr 4 do begin
+      {$ifdef USEAESNI64}
+      if TAESContext(AES.Context).AesNi then
+        AesNiEncrypt(AES.Context,fCV,fCV) else
+      {$endif USEAESNI64}
+        AES.Encrypt(fCV,fCV);
+      crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      crcblock(@fMAC.encrypted,pointer(fOut));
+      inc(fIn);
+      inc(fOut);
+    end;
+    TrailerBytes;
+    with fMAC do // includes trailing bytes to the plain crc
+      PCardinal(@plain)^ := crc32c(PCardinal(@plain)^,pointer(fIn),fCount);
+  end;
 end;
 
 
@@ -8126,7 +8162,7 @@ begin
       inc(fIn);
       inc(fOut);
     end;
-    EncryptTrailer;
+    TrailerBytes;
   end;
 end;
 
