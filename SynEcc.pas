@@ -1293,7 +1293,23 @@ type
     constructor Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
       aPrivate: TECCCertificateSecret); reintroduce; overload; virtual;
     /// will create another instance of this communication protocol
-    constructor CreateFrom(aAnother: TECDHEProtocol); reintroduce; virtual;
+    constructor CreateFrom(aAnother: TECDHEProtocol); virtual;
+    /// creates a new TECDHEProtocolClient or TECDHEProtocolServer from a text key
+    // - expected layout is CSV of values, with at least p=... as the password
+    // file name (searching for first matching unique file name with .private
+    // extension), and pw=...;pr=... for the associated password protection
+    // - optional ca=..;a=..;k=..;e=..;m=.. switches will match PKI, Auth, KDF,
+    // EF and MAC properties of this class instance (triming left lowercase chars)
+    // - optional ca=.. may be in ca=base64,base64 format, or as JSON array
+    // (ca="base64","base64")
+    // - a full text key with default values may be:
+    // $ a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=passwordFor34a2;
+    // $ pr=60000;ca=base64+1,base64+2
+    // - returns nil if aKey does not match this format, i.e. has no p=..,pw=..
+    class function FromKey(const aKey: RawUTF8; aServer: boolean): TECDHEProtocol;
+    /// defines the default PKI instance to be used by FromKey
+    // - used if the ca=... property is not set in the aKey value
+    class procedure FromKeySetCA(aPKI: TECCCertificateChain);
     /// finalize the instance
     // - also erase all temporary secret keys, for safety
     destructor Destroy; override;
@@ -1307,6 +1323,13 @@ type
     // corruption, MiM or Replay attacks attempts)
     // - this method is thread-safe
     function Decrypt(const aEncrypted: RawByteString; out aPlain: RawByteString): TProtocolResult; virtual;
+    /// check for any transmission error of the supplied encrypted text
+    // - returns sprSuccess if the stored CRC of the encrypted flow matches
+    // - returns sprInvalidMAC in case of wrong aEncrypted input
+    // - is only implemented for MAC=macDuringEF, otherwise returns sprUnsupported
+    // - to be called before Decrypt(), since this later method will change the
+    // internal kM[false] sequence number 
+    function CheckError(const aEncrypted: RawByteString): TProtocolResult; virtual;
     /// will create another instance of this communication protocol
     function Clone: IProtocol;
     /// shared public-key infrastructure, used to validate exchanged certificates
@@ -2651,6 +2674,7 @@ begin
   end;
 end;
 
+
 { TECCSignatureCertified }
 
 constructor TECCSignatureCertified.Create;
@@ -3345,6 +3369,70 @@ begin
   if ownPrivate in fOwned then
     fPrivate.Free;
   inherited Destroy;
+end;
+
+var
+  _FromKeySetCA: TECCCertificateChain;
+
+class procedure TECDHEProtocol.FromKeySetCA(aPKI: TECCCertificateChain);
+begin
+  _FromKeySetCA.Free;
+  _FromKeySetCA := aPKI;
+end;
+
+class function TECDHEProtocol.FromKey(const aKey: RawUTF8; aServer: boolean): TECDHEProtocol;
+const CL: array[boolean] of TECDHEProtocolClass = (
+  TECDHEProtocolServer, TECDHEProtocolClient);
+var sw: TSynNameValue;
+    p,pw,c: RawUTF8;
+    fn: TFileName;
+    algo: TECDHEAlgo;
+    ca: TECCCertificateChain;
+    chain: TRawUTF8DynArray;
+    priv: TECCCertificateSecret;
+    i: integer;
+begin
+  result := nil;
+  if PosEx('p=',aKey)=0 then
+    exit;
+  // a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=password;pr=65000;ca=..
+  sw.InitFromCSV(pointer(aKey),'=',';');
+  p := sw.Str['p'];
+  pw := sw.Str['pw'];
+  if (p='') or (pw='') then
+    exit; // mandatory switches
+  sw.ValueEnum('a',TypeInfo(TECDHEAuth),algo.auth);
+  sw.ValueEnum('k',TypeInfo(TECDHEKDF),algo.kdf);
+  sw.ValueEnum('e',TypeInfo(TECDHEEF),algo.ef);
+  sw.ValueEnum('m',TypeInfo(TECDHEEF),algo.mac);
+  ca := nil;
+  c := sw.Str['ca'];
+  if c<>'' then begin
+    ca := TECCCertificateChain.Create;
+    {$ifndef NOVARIANTS}
+    fn := UTF8ToString(c);
+    if not ca.LoadFromFile(fn) then
+    {$endif NOVARIANTS} begin
+      CSVToRawUTF8DynArray(c,',','',chain);
+      for i := 0 to high(chain) do
+        chain[i] := UnQuoteSQLString(chain[i]);
+      if ca.LoadFromArray(chain) then
+        ca.IsValidCached := true else // for faster Clone process
+        FreeAndnil(ca);
+    end;
+  end;
+  if ca=nil then
+    ca := _FromKeySetCA;
+  fn := UTF8ToString(aKey);
+  if ECCKeyFileFind(fn,true) then
+    priv := TECCCertificateSecret.CreateFromSecureFile(fn,pw,
+      sw.ValueInt('pr',60000)) else
+    priv := nil;
+  result := CL[aServer].Create(algo.auth,ca,priv);
+  result.fOwned := [ownPKI,ownPrivate];
+  result.KDF := algo.kdf;
+  result.EF := algo.ef;
+  result.MAC := algo.mac;
 end;
 
 const

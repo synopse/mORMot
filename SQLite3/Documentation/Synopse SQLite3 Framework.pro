@@ -14120,8 +14120,8 @@ $}
 You can recognize the expected values of {\f1\fs20 "Serial"}, {\f1\fs20 "AuthoritySerial"} and {\f1\fs20 "IsSelfSigned"} fields.
 We could create a {\i certificates chain} of all available keys in the current folder, by running:
 $>ecc chainall
-$ chain.certif file created.
-The {\f1\fs20 chain.certif} file is a JSON object, containing all public information of the whole certificates chain, with the {\f1\fs20 "PublicBase64"} JSON array ready to be copied and pasted in your applications settings or source, then used via the {\f1\fs20 TECCCertificateChain} class:
+$ chain.ca file created.
+The {\f1\fs20 chain.ca} file is a JSON object, containing all public information of the whole certificates chain, with the {\f1\fs20 "PublicBase64"} JSON array ready to be copied and pasted in your applications settings or source, then used via the {\f1\fs20 TECCCertificateChain} class:
 ${
 $ "PublicBase64":
 $ [
@@ -14139,8 +14139,7 @@ $   "ValidityStart": "",
 $   "ValidityEnd": "",
 $   "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
 $   "AuthorityIssuer": "arbou",
-$   "IsSelfSigned": false,
-$   "Base64": "AQA1AAAAA..."
+$   "IsSelfSigned": false
 $  },
 $  {
 $   "Version": 1,
@@ -14151,14 +14150,13 @@ $   "ValidityStart": "2016-09-23",
 $   "ValidityEnd": "2017-09-23",
 $   "AuthoritySerial": "8BC90201EF55EE34F62DBA8FE8CF14DC",
 $   "AuthorityIssuer": "arbou",
-$   "IsSelfSigned": true,
-$   "Base64": "AQA1ADUAogG..."
+$   "IsSelfSigned": true
 $  }
 $ ],
 $ "Count": 2,
 $}
-In the above sample, we cut down the {\f1\fs20 "*Base64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored three times: once in {\f1\fs20 "PublicBase64"}, another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items, and last but not least once again in all {\f1\fs20 "Base64"} strings.
-An easy way of managing your keys is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.certif} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
+In the above sample, we cut down the {\f1\fs20 "PublicBase64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored two times: once in {\f1\fs20 "PublicBase64"}, and another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items.
+An easy way of keys management is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.ca} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
 Remember that often, the weakest link of the security chain is between the chair and the keyboard, not within the computer. Do not reuse passwords between keys, and remember you have a "{\f1\fs20 rekey}" command available on the {\f1\fs20 ECC} tool, so that you can change a private key password, without changing its content, nor re-publish its associated {\f1\fs20 .public} key:
 $>ecc rekey
 $Enter the first chars of the .private certificate file name.
