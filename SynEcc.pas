@@ -392,7 +392,7 @@ type
   // AES-NI accellerated encryption (110MB/s with efAesCfb128, to be compared
   // with macDuringEF, which produces a similar level of MAC)
   // - macHmacCrc256c and macHmacCrc32c are faster (550-650MB/s with efAesCfb128),
-  // but prevent transmission errors but not message integrity or authentication 
+  // but prevent transmission errors but not message integrity or authentication
   // since composition of two crcs is a multiplication by a polynomial - see
   // http://mslc.ctf.su/wp/boston-key-party-ctf-2016-hmac-crc-crypto-5pts
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
@@ -418,8 +418,9 @@ type
   PECDHEAlgo = ^TECDHEAlgo;
 
   /// the binary handshake message, sent by client to server
-  // - the frame will always have the same fixed size of 290 bytes, for both
-  // mutual or unilateral authentication
+  // - the frame will always have the same fixed size of 290 bytes (i.e. 388
+  // base64-encoded chars, which could be transmitted in a HTTP header),
+  // for both mutual or unilateral authentication
   TECDHEFrameClient = packed record
     /// expected algorithm used
     algo: TECDHEAlgo;
@@ -439,8 +440,9 @@ type
   end;
 
   /// the binary handshake message, sent back from server to client
-  // - the frame will always have the same fixed size of 306 bytes, for both
-  // mutual or unilateral authentication
+  // - the frame will always have the same fixed size of 306 bytes (i.e. 408
+  // base64-encoded chars, which could be transmitted in a HTTP header),
+  // for both mutual or unilateral authentication
   TECDHEFrameServer = packed record
     /// algorithm used by the server
     algo: TECDHEAlgo;
@@ -626,8 +628,8 @@ type
     function FromFile(const filename: TFileName): boolean;
     /// retrieve the certificate from a set of potential inputs
     // - will first search from a .public file name, base-64 encoded binary,
-    // or a serial number which be used to search for a local .public file
-    // (as located by ECCKeyFileFind)
+    // or a serial number which be used to search for a local .public file in
+    // the current folder or ECCKeyFileFolder (as located by ECCKeyFileFind)
     // - returns true on success, false otherwise
     function FromAuth(const AuthPubKey: TFileName;
       const AuthBase64, AuthSerial: RawUTF8): boolean;
@@ -677,6 +679,11 @@ type
     function EncryptFile(const FileToCrypt: TFileName; const DestFile: TFileName='';
       const Salt: RawUTF8='salt'; SaltRounds: integer=60000;
       Algo: TECIESAlgo=ecaUnknown; IncludeSignFile: boolean=true): boolean;
+    {$ifndef NOVARIANTS}
+    /// returns a TDocVariant object of all published properties of this instance
+    // - excludes the Base64 property content if withBase64 is set to false
+    function ToVariant(withBase64: boolean=true): variant;
+    {$endif}
     /// low-level access to the binary buffer used ECC secp256r1 cryptography
     // - you should not use this property, but other methods
     property Content: TECCCertificateContent read fContent write fContent;
@@ -938,6 +945,10 @@ type
       Data: pointer; Len: integer): TECCValidity; overload;
     /// persist the signature as some base-64 encoded binary
     function ToBase64: RawUTF8;
+    {$ifndef NOVARIANTS}
+    /// returns a TDocVariant object of all published properties of this instance
+    function ToVariant: variant; virtual;
+    {$endif}
     /// retrieve the signature from some base-64 encoded binary
     // - returns true on success, false otherwise
     function FromBase64(const base64: RawUTF8): boolean;
@@ -1176,6 +1187,56 @@ type
     // - would create only TECCCertificate instances with their public keys,
     // since no private key, therefore no TECCCertificateSecret is expected
     function LoadFromJson(const json: RawUTF8): boolean;
+  {$ifndef NOVARIANTS}
+  public
+    /// initialize the certificate store from some JSON-serialized .ca file
+    // - the file would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    // - you may use SaveToFile() method to create such JSON file
+    // - will call LoadFromFile(), and raise EECCException on any error
+    constructor CreateFromFile(const jsonfile: TFileName);
+    /// initialize the certificate store from an array of .public file names
+    // - raise EECCException on any error when reading a .public file
+    constructor CreateFromFiles(const files: array of TFileName);
+    /// save the whole certificates chain as a JSON object, matching .ca format
+    // - is in fact the human-friendly JSON serialization of this instance
+    // - would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, .ca file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    function SaveToFileVariant: variant;
+    /// save the whole certificates chain as a JSON content, matching .ca format
+    // - is in fact the human-friendly JSON serialization of this instance
+    // - would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, .ca file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    function SaveToFileContent: RawUTF8;
+    /// load a certificates chain from some JSON-serialized .ca file content
+    // - you may use SaveToFileContent method to create such JSON content
+    // - would create only TECCCertificate instances with their public keys,
+    // since no private key, therefore no TECCCertificateSecret is expected
+    function LoadFromFileContent(const cajsoncontent: RawUTF8): boolean;
+    /// save the whole certificates chain as a .ca JSON file
+    // - is in fact the human-friendly JSON serialization of this instance
+    // - the .ca file would store plain verbose information of all certificates,
+    // i.e. base-64 full information (containing only public keys) and also
+    // high-level published properties of all stored certificates (e.g. Serial)
+    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
+    // and may be convenient for managing certificates with a text/json editor
+    function SaveToFile(const jsonfile: TFileName): boolean;
+    /// load a certificates chain from some JSON-serialized .ca file
+    // - you may use SaveToFile() method to create such JSON file
+    // - would create only TECCCertificate instances with their public keys,
+    // since no private key, therefore no TECCCertificateSecret is expected
+    // - if jsonfile is not in the current folder, will try ECCKeyFileFolder
+    function LoadFromFile(const jsonfile: TFileName): boolean;
+  {$endif NOVARIANTS}
   {$ifndef DELPHI5OROLDER}
   published
   {$endif}
@@ -1331,6 +1392,10 @@ const
   // - as generated by TECCCertificateSecret.SignFile, and loaded by the
   // TECCSignatureCertifiedFile class
   ECCCERTIFICATESIGN_FILEEXT = '.sign';
+  /// file extension of the JSON file storing a certificate authorities chain
+  // - as generated by mORMot.pas TECCCertificateChainFile.SaveToFile()
+  // and loaded by TECCCertificateChain.LoadFromFile
+  ECCCERTIFICATES_FILEEXT = '.ca';
   /// file extension of the ECIES encrypted file
   // - with optional digital signature of the plain content
   // - as generated by TECCCertificate.Encrypt/EncryptFile, and decoded via
@@ -1341,13 +1406,22 @@ const
 // - as used in the ECC.dpr command-line sample project
 // - returns true and set the full file name of the matching file
 // - returns false is there is no match, or more than one matching file
+// - will also search in ECCKeyFileFolder, if the supplied folder is not enough 
 function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 
 /// search the single .public or .private file used to crypt a given content
 // - match the format generated by TECCCertificate.Encrypt/EncryptFile
 // - returns true on success, false otherwise
+// - will also search in ECCKeyFileFolder, if the current folder is not enough 
 function ECIESKeyFileFind(const encrypted: RawByteString; out keyfile: TFileName;
   privkey: boolean=true): boolean;
+
+/// retrieve the private local folder used to store .public or .private files
+// - it is better to store all you key files in a single place, for easier
+// and safer management
+// - under Windows, returns 'C:\Users\username\AppData\Local\Synopse\Keys\'
+// - under Linux, returns '$HOME/.synopse/keys/'
+function ECCKeyFileFolder: TFileName;
 
 
 function ToText(val: TECCValidity): PShortString; overload;
@@ -1673,7 +1747,7 @@ end;
 
 function ECCSign(const base64: RawUTF8; out content: TECCSignatureCertifiedContent): boolean;
 begin
-  result := Base64ToBin(pointer(base64),@content,length(base64),sizeof(content));
+  result := Base64ToBin(pointer(base64),@content,length(base64),sizeof(content),false);
 end;
 
 function ECCText(const sign: TECCSignatureCertifiedContent): RawUTF8; overload;
@@ -1761,11 +1835,8 @@ begin
   sign := TECCSignatureCertified.CreateFrom(head.sign,true);
   try
     if sign.Check then begin
-      s := ObjectToVariant(sign);
-      with _Safe(s)^ do
-        if Count=0 then // mORMot.pas was not linked to this executable
-          s := sign.ToBase64 else
-          AddValue('ECDA',ECCText(head.sign.Signature));
+      s := sign.ToVariant;
+      TDocVariantData(s).AddValue('ECDA',RawUTF8ToVariant(ECCText(head.sign.Signature)));
     end;
   finally
     sign.Free;
@@ -1827,9 +1898,23 @@ begin
 end;
 
 
+var
+  _ECCKeyFileFolder: TFileName;
+
+function ECCKeyFileFolder: TFileName;
+begin
+  if _ECCKeyFileFolder='' then begin
+    _ECCKeyFileFolder := GetSystemPath(spUserData)+
+      {$ifdef MSWINDOWS}'Synopse\Keys\'{$else}'.synopse/keys/'{$endif};
+    if not DirectoryExists(_ECCKeyFileFolder) then
+      CreateDir(_ECCKeyFileFolder); // always create this folder
+  end;
+  result := _ECCKeyFileFolder;
+end;
+
 function ECCKeyFileFind(var TruncatedFileName: TFileName; privkey: boolean): boolean;
 var match: TFindFilesDynArray;
-    ext: TFileName;
+    ext,mask: TFileName;
 begin
   match := nil; // to please Kylix
   if privkey then
@@ -1842,7 +1927,10 @@ begin
     TruncatedFileName := TruncatedFileName+ext;
     exit;
   end;
-  match := FindFiles(ExtractFilePath(TruncatedFileName),ExtractFileName(TruncatedFileName)+'*'+ext);
+  mask := ExtractFileName(TruncatedFileName)+'*'+ext;
+  match := FindFiles(ExtractFilePath(TruncatedFileName),mask);
+  if length(match)<>1 then
+    match := FindFiles(ECCKeyFileFolder,mask);
   if length(match)<>1 then
     result := false else
     TruncatedFileName := match[0].Name;
@@ -1941,7 +2029,7 @@ var st: TRawByteStringStream;
 begin
   if base64='' then
     result := false else begin
-    st := TRawByteStringStream.Create(Base64ToBin(base64));
+    st := TRawByteStringStream.Create(Base64ToBinSafe(base64));
     try
       result := LoadFromStream(st) and ECCCheck(fContent);
     finally
@@ -2117,6 +2205,17 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS}
+function TECCCertificate.ToVariant(withBase64: boolean): variant;
+begin
+  result := _ObjFast(['Version',Version,'Serial',Serial,'Issuer',Issuer,
+    'IssueDate',IssueDate,'ValidityStart',ValidityStart,'ValidityEnd',ValidityEnd,
+    'AuthoritySerial',AuthoritySerial,'AuthorityIssuer',AuthorityIssuer,
+    'IsSelfSigned',IsSelfSigned]);
+  if withBase64 then
+    TDocVariantData(result).AddValue('Base64',RawUTF8ToVariant(ToBase64));
+end;
+{$endif}
 
 { TECCCertificateSecret }
 
@@ -2647,6 +2746,14 @@ begin
   result := BinToBase64(@fContent,sizeof(fContent));
 end;
 
+{$ifndef NOVARIANTS}
+function TECCSignatureCertified.ToVariant: variant;
+begin
+  result := _ObjFast(['Version',Version,'Date',Date,
+    'AuthoritySerial',AuthoritySerial,'AuthorityIssuer',AuthorityIssuer]);
+end;
+{$endif}
+
 function TECCSignatureCertified.Check: boolean;
 begin
   result := (self<>nil) and ECCCheck(fContent);
@@ -3101,14 +3208,116 @@ begin
   end;
 end;
 
+{$ifndef NOVARIANTS} // uses TDocVariantData for JSON serialization
+
+constructor TECCCertificateChain.CreateFromFile(const jsonfile: TFileName);
+begin
+  Create;
+  if not LoadFromFile(jsonfile) then
+    raise EECCException.CreateUTF8('Invalid %.CreateFromFile(%)',[self,jsonfile]);
+end;
+
+constructor TECCCertificateChain.CreateFromFiles(const files: array of TFileName);
+var i: integer;
+    auth: TECCCertificate;
+begin
+  Create;
+  for i := 0 to high(files) do begin
+    auth := TECCCertificate.Create;
+    try
+      if auth.FromFile(files[i]) then begin
+        ObjArrayAdd(fItems,auth);
+        auth := nil;
+      end else
+        raise EECCException.CreateUTF8('%.CreateFromFiles: invalid %',[self,files[i]]);
+    finally
+      auth.Free;
+    end;
+  end;
+end;
+
+function TECCCertificateChain.SaveToFileVariant: variant;
+var pub64,items: TDocVariantData;
+    i,n: integer;
+begin
+  fSafe.Lock;
+  try
+    n := length(fItems);
+    pub64.InitFast(n,dvArray);
+    items.InitFast(n,dvArray);
+    for i := 0 to n-1 do begin
+      pub64.AddItem(RawUTF8ToVariant(fItems[i].PublicToBase64));
+      items.AddItem(fItems[i].ToVariant(false));
+    end;
+    result := _ObjFast(['PublicBase64',variant(pub64),'Items',variant(items)]);
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TECCCertificateChain.SaveToFileContent: RawUTF8;
+begin
+  VariantSaveJSON(SaveToFileVariant,twJSONEscape,result);
+end;
+
+function TECCCertificateChain.LoadFromFileContent(const cajsoncontent: RawUTF8): boolean;
+var doc: TDocVariantData;
+    values: TRawUTF8DynArray;
+begin
+  result := false;
+  if doc.InitJSON(cajsoncontent,JSON_OPTIONS_FAST) then begin
+    doc.GetAsDocVariantSafe('PublicBase64')^.ToRawUTF8DynArray(values);
+    result := LoadFromArray(values);
+  end;
+end;
+
+function GetChainFileName(const jsonfile: TFileName): TFileName;
+begin
+  if ExtractFileExt(jsonfile)='' then
+    result := jsonfile+ECCCERTIFICATES_FILEEXT else
+    result := jsonfile;
+end;
+
+function TECCCertificateChain.SaveToFile(const jsonfile: TFileName): boolean;
+var json: RawUTF8;
+begin
+  if (Count=0) or (jsonfile='') then
+    result := false else begin
+    json := SaveToFileContent;
+    result := JSONBufferReformatToFile(pointer(json),GetChainFileName(jsonfile));
+  end;
+end;
+
+function TECCCertificateChain.LoadFromFile(const jsonfile: TFileName): boolean;
+var json: RawUTF8;
+    fn: TFileName;
+begin
+  fn := GetChainFileName(jsonfile);
+  json := StringFromFile(fn);
+  if json='' then
+    json := StringFromFile(ECCKeyFileFolder+fn);
+  if json='' then
+    result := false else
+    result := LoadFromFileContent(json);
+end;
+
+{$endif NOVARIANTS}
+
 
 { TECDHEProtocol }
 
 constructor TECDHEProtocol.Create(aAuth: TECDHEAuth; aPKI: TECCCertificateChain;
   aPrivate: TECCCertificateSecret);
+var res: TECCValidity;
 begin
   if not ecc_available then
     raise EECCException.CreateUTF8('%.Create but ECC not supported',[self]);
+  if (aPKI<>nil) and (aPrivate<>nil) then begin
+    res := aPKI.IsValid(aPrivate);
+    if not (res in ECC_VALIDSIGN) then
+      raise EECCException.CreateUTF8('%.Create failed: aPKI.IsValid(%)=%',
+        [self,aPrivate.Serial,ToText(res)^]);
+  end;
   inherited Create;
   fAlgo.auth := aAuth;
   fPKI := aPKI;
@@ -3147,7 +3356,7 @@ begin
     raise EECCException.CreateUTF8('%.% with no handshake',[self,ED[aEncrypt]]);
   fAES[aEncrypt].IV := PHash128(@fkM[aEncrypt])^; // kM is a CTR -> IV unicity
   if fAlgo.mac=macDuringEF then
-    if not fAES[aEncrypt].MACSetKey(fkM[aEncrypt]) then
+    if not fAES[aEncrypt].MACSetNonce(fkM[aEncrypt]) then
       raise EECCException.CreateUTF8('%.%: macDuringEF not available in %/%',
         [self,ED[aEncrypt],ToText(fAlgo.ef)^,fAES[aEncrypt]]);
 end;
@@ -3212,10 +3421,30 @@ begin
   try
     SetKey(false);
     aPlain := fAES[false].DecryptPKCS7Buffer(P,len,false);
+    if aPlain='' then begin
+      inc(PInt64(@fkM[false])^); // don't compute MAC, but increase sequence
+      exit;
+    end;
     ComputeMac(false,P,len,mac);
     if IsEqual(mac,PHash256(P+len)^) then
-      if aPlain<>'' then
-        result := sprSuccess;
+      result := sprSuccess;
+  finally
+    fSafe.Unlock;
+  end;
+end;
+
+function TECDHEProtocol.CheckError(const aEncrypted: RawByteString): TProtocolResult;
+begin
+  if fAlgo.mac<>macDuringEF then begin
+    result := sprUnsupported;
+    exit;
+  end;
+  fSafe.Lock;
+  try
+    SetKey(false);
+    if fAES[false].MACCheckError(pointer(aEncrypted),length(aEncrypted)) then
+      result := sprSuccess else
+      result := sprInvalidMAC;
   finally
     fSafe.Unlock;
   end;
