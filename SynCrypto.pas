@@ -550,16 +550,22 @@ type
     // contain an internal encrypted CTR, to detect any replay attack attempt
     function DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
       IVAtBeginning: boolean): RawByteString;
-    /// initialize optional 256-bit MAC computation during next Encrypt/Decrypt call
+    /// initialize AEAD (authenticated-encryption with associated-data) nonce
+    // - i.e. setup 256-bit MAC computation during next Encrypt/Decrypt call
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
-    // - default implementation, for a protocol which does not support on-the-fly
-    // CRC computation, does nothing and returns false
-    function MACSetKey(const aKey: THash256): boolean; virtual; 
-    /// returns optional 256-bit MAC computation during last Encrypt/Decrypt call
+    // - default implementation, for a non AEAD protocol, returns false
+    function MACSetNonce(const aKey: THash256; aAssociated: pointer=nil;
+      aAssociatedLen: integer=0): boolean; virtual;
+    /// returns AEAD (authenticated-encryption with associated-data) MAC
+    /// - i.e. optional 256-bit MAC computation during last Encrypt/Decrypt call
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
-    // - default implementation, for a protocol which does not support on-the-fly
-    // CRC computation, returns false
+    // - default implementation, for a non AEAD protocol, returns false
     function MACGetLast(out aCRC: THash256): boolean; virtual;
+    /// validate if an encrypted buffer matches the stored MAC
+    // - expects the 256-bit MAC, as returned by MACGetLast, to be stored after
+    // the encrypted data
+    // - default implementation, for a non AEAD protocol, returns false
+    function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; virtual;
 
     /// simple wrapper able to cypher/decypher any content
     // - here all data variable could be text or binary
@@ -712,13 +718,14 @@ type
     encrypted: THash128;
   end;
   
-  /// abstract AES encryption performing on-the-fly MAC computation
-  // - computes on-the-fly a proprietary 256-bit MAC, as 128-bit CRC of the
+  /// AEAD (authenticated-encryption with associated-data) abstract class
+  // - perform AES encryption and on-the-fly MAC computation, i.e. computes
+  // a proprietary 256-bit MAC during AES cyphering, as 128-bit CRC of the
   // encrypted data and 128-bit CRC of the plain data, seeded from a Key
   // - the 128-bit CRC of the plain text is then encrypted using the current AES
   // engine, so returned 256-bit MAC value has cryptographic level, and ensure
   // data integrity, authenticity, and check against transmission errors
-  TAESAbstractMAC = class(TAESAbstractEncryptOnly)
+  TAESAbstractAEAD = class(TAESAbstractEncryptOnly)
   protected
     fMAC, fMACKey: TAESMAC256;
   public
@@ -728,18 +735,29 @@ type
     // will use -1 as fixed seed, to avoid aKey compromission
     // - should be set with a new MAC key value before each message, to avoid
     // replay attacks (as called from TECDHEProtocol.SetKey)
-    function MACSetKey(const aKey: THash256): boolean; override;
+    function MACSetNonce(const aKey: THash256; aAssociated: pointer=nil;
+      aAssociatedLen: integer=0): boolean; override;
     /// returns 256-bit MAC computed during last Encrypt/Decrypt call
     // - encrypt the internal fMAC property value using the current AES cypher
     // on the plain content and returns true; only the plain content CRC-128 is
     // AES encrypted, to avoid reverse attacks against the known encrypted data
     function MACGetLast(out aCRC: THash256): boolean; override;
+    /// validate if an encrypted buffer matches the stored MAC
+    // - expects the 256-bit MAC, as returned by MACGetLast, to be stored after
+    // the encrypted data
+    // - returns true if the 128-bit CRC of the encrypted text matches the
+    // supplied buffer, ignoring the 128-bit CRC of the plain data
+    // - since it is easy to forge such 128-bit CRC, it will only indicate
+    // that no transmission error occured, but won't be an integrity or
+    // authentication proof (which will need full Decrypt + MACGetLast)
+    // - may use any MACSetNonce() aAssociated value
+    function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; override;
   end;
 
-  /// handle AES cypher/uncypher with Cipher feedback (CFB) and 256-bit MAC
+  /// AEAD combination of AES with Cipher feedback (CFB) and 256-bit MAC
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  TAESCFBCRC = class(TAESAbstractMAC)
+  TAESCFBCRC = class(TAESAbstractAEAD)
   public
     /// perform the AES cypher in the CFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -747,10 +765,10 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
-  /// handle AES cypher/uncypher with Output feedback (OFB) and 256-bit MAC
+  /// AEAD combination of AES with Output feedback (OFB) and 256-bit MAC
   // - this class will use AES-NI and CRC32C hardware instructions, if available
   // - expect IV to be set before process, or IVAtBeginning=true
-  TAESOFBCRC = class(TAESAbstractMAC)
+  TAESOFBCRC = class(TAESAbstractAEAD)
   public
     /// perform the AES cypher in the OFB mode, and compute a 256-bit MAC
     procedure Encrypt(BufIn, BufOut: pointer; Count: cardinal); override;
@@ -1539,7 +1557,7 @@ function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
 type
   /// possible return codes by IProtocol classes
   TProtocolResult = (sprSuccess,
-    sprBadRequest, sprUnexpectedAlgorithm,
+    sprBadRequest, sprUnsupported, sprUnexpectedAlgorithm, 
     sprInvalidCertificate, sprInvalidSignature,
     sprInvalidEphemeralKey, sprInvalidPublicKey, sprInvalidPrivateKey,
     sprInvalidMAC);
@@ -7531,12 +7549,18 @@ begin
     SetLength(result,len-padding); // fast in-place resize
 end;
 
-function TAESAbstract.MACSetKey(const aKey: THash256): boolean;
+function TAESAbstract.MACSetNonce(const aKey: THash256; aAssociated: pointer;
+  aAssociatedLen: integer): boolean;
 begin
   result := false;
 end;
 
 function TAESAbstract.MACGetLast(out aCRC: THash256): boolean;
+begin
+  result := false;
+end;
+
+function TAESAbstract.MACCheckError(aEncrypted: pointer; Count: cardinal): boolean;
 begin
   result := false;
 end;
@@ -7846,26 +7870,40 @@ begin
 end;
 
 
-{ TAESAbstractMAC }
+{ TAESAbstractAEAD }
 
-function TAESAbstractMAC.MACSetKey(const aKey: THash256): boolean;
+function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer;
+  aAssociatedLen: integer): boolean;
 begin
   // safe seed for plain text crc, before AES encryption
   // from TECDHEProtocol.SetKey, aKey is a CTR to avoid replay attacks
   fMACKey.plain := THash128Rec(aKey).Lo;
   XorBlock16(@fMACKey.plain,@THash128Rec(aKey).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
-  FillcharFast(fMACKey.encrypted,sizeof(THash128),255);
+  if (aAssociated<>nil) and (aAssociatedLen>0) then
+    crc128c(aAssociated,aAssociatedLen,fMACKey.encrypted) else
+    FillcharFast(fMACKey.encrypted,sizeof(THash128),255);
   result := true;
 end;
 
-function TAESAbstractMAC.MACGetLast(out aCRC: THash256): boolean;
+function TAESAbstractAEAD.MACGetLast(out aCRC: THash256): boolean;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
   AES.Encrypt(fMAC.plain,THash128Rec(aCRC).Lo);
   // store the encrypted text crc, to check for errors, with no compromission
   THash128Rec(aCRC).Hi := fMAC.encrypted;
   result := true;
+end;
+
+function TAESAbstractAEAD.MACCheckError(aEncrypted: pointer; Count: cardinal): boolean;
+var crc: THash128;
+begin
+  result := false;
+  if (Count<32) or (Count and 15<>0) then
+    exit;
+  crc := fMACKey.encrypted;
+  crcblocks(@crc,aEncrypted,Count shr 4-2);
+  result := IsEqual(crc,PHash128(@PByteArray(aEncrypted)[Count-sizeof(crc)])^);
 end;
 
 
@@ -7877,7 +7915,7 @@ var i: integer;
 begin
   if Count=0 then
     exit;
-  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   if fAESInit<>initEncrypt then
     EncryptInit;
   {$ifdef USEAESNI32}
@@ -7938,7 +7976,7 @@ var i: integer;
 begin
   if Count=0 then
     exit;
-  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   if fAESInit<>initEncrypt then
     EncryptInit;
   {$ifdef USEAESNI32}
@@ -7999,7 +8037,7 @@ var i: integer;
 begin
   if Count=0 then
     exit;
-  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   if fAESInit<>initEncrypt then
     EncryptInit;
   {$ifdef USEAESNI32}
@@ -8056,7 +8094,7 @@ var i: integer;
 begin
   if Count=0 then
     exit;
-  fMAC := fMACKey; // reuse the same key until next MACSetKey()
+  fMAC := fMACKey; // reuse the same key until next MACSetNonce()
   if fAESInit<>initEncrypt then
     EncryptInit;
   {$ifdef USEAESNI32}
