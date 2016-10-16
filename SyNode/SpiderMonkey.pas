@@ -3070,8 +3070,6 @@ begin
       U8 := @tmpU8;
     strL := CurrentAnsiConvert.AnsiBufferToUTF8(U8,pointer(str8),strL)-U8;
     W.AddNoJSONEscape(pointer(U8), strL);
-    if U8<>@tmpU8 then
-      FreeMem(U8);
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
     W.AddNoJSONEscapeW(pointer(str16),strL);

@@ -9,8 +9,7 @@ uses
   Classes,
   SynCommons,
   SynEcc,
-  SynCrypto,
-  mORMot;
+  SynCrypto;
 
 /// end-user command to create a new private/public key file
 // - as used in the ECC.dpr command-line sample project
@@ -44,7 +43,7 @@ function ECCCommandSourceFile(const AuthPrivKey: TFileName;
 
 /// end-user command to create a .json base-64 text array from a set of public key files
 // - ready to be included e.g. as settings of any server
-// - ECCCommandChainCertificates(['*']) will create a 'chain.certif' of all
+// - ECCCommandChainCertificates(['*']) will create a 'chain.ca' of all
 // public key files in the current folder
 // - as used in the ECC.dpr command-line sample project
 function ECCCommandChainCertificates(const CertFiles: array of RawUTF8): TFileName;
@@ -113,7 +112,7 @@ begin
       new.SaveToSecureFiles(SavePassword,'.',SplitFiles,64,SavePassordRounds);
       // save public key as .public JSON file
       result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
-      ObjectToJSONFile(new,result);
+      FileFromString(VariantSaveJSON(new.ToVariant),result);
     finally
       new.Free;
     end;
@@ -273,7 +272,7 @@ begin
   if (n=1) and (CertFiles[0]='*') then begin
     files := FindFilesDynArrayToFileNames(
       FindFiles('.','*'+ECCCERTIFICATEPUBLIC_FILEEXT));
-    result := 'chain.certif';
+    result := 'chain'+ECCCERTIFICATES_FILEEXT;
   end else begin
     SetLength(files,n);
     for i := 0 to n-1 do begin
@@ -281,9 +280,9 @@ begin
       if not ECCKeyFileFind(files[i],false) then
         exit;
      end;
-    result := format('chain%d.certif',[GetTickCount64]);
+    result := format('chain%d'+ECCCERTIFICATES_FILEEXT,[GetTickCount64]);
   end;
-  with TECCCertificateChainFile.CreateFromFiles(files) do
+  with TECCCertificateChain.CreateFromFiles(files) do
   try
     if ValidateItems<>nil then begin
       result := '';
@@ -313,7 +312,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
   procedure WriteVerif(verif: TECCValidity; const filename: TFileName; const sw: ICommandLine);
   var res: string;
   begin
-    res := SysUtils.LowerCase(GetEnumCaption(TypeInfo(TECCValidity),verif));
+    res := SysUtils.LowerCase(GetCaptionFromEnum(TypeInfo(TECCValidity),ord(verif)));
     if verif in ECC_VALIDSIGN then
       sw.Text(' % file verified as %.',[filename,res],ccLightGreen) else begin
       sw.Text(' % file verification failure: % (%).',[filename,res,ord(verif)],ccLightRed);
@@ -500,7 +499,7 @@ begin
       saverounds := sw.AsInt('SaltRounds',60000, 'Enter the PassPhrase iteration rounds.');
       decrypt := ECCCommandDecryptFile(origfile,newfile,
         sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign);
-      msg := SysUtils.LowerCase(GetEnumCaption(TypeInfo(TECCDecrypt),decrypt));
+      msg := SysUtils.LowerCase(GetCaptionFromEnum(TypeInfo(TECCDecrypt),ord(decrypt)));
       if decrypt in ECC_VALIDDECRYPT then begin
         if decrypt=ecdDecryptedWithSignature then
           WriteVerif(ECCCommandVerifyDecryptedFile(newfile,decryptsign),newfile,sw);

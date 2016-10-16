@@ -4541,42 +4541,6 @@ type
     property OnKeyResolve: TOnKeyResolve read fOnKeyResolve write fOnKeyResolve;
   end;
 
-  /// manage certificates using ECC secp256r1 cryptography and JSON file storage
-  // - convenient human-readable JSON file serialization for TECCCertificateChain
-  TECCCertificateChainFile = class(TECCCertificateChain)
-  protected
-    function GetPublicBase64: variant;
-  public
-    /// initialize the certificate store from some JSON-serialized file
-    // - the file would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
-    // high-level published properties of all stored certificates (e.g. Serial)
-    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
-    // and may be convenient for managing certificates with a text/json editor
-    // - you may use SaveToFile() method to create such JSON file
-    // - will call LoadFromFile(), and raise EECCException on any error
-    constructor CreateFromFile(const jsonfile: TFileName);
-    /// initialize the certificate store from an array of .public file names
-    // - raise EECCException on any error when reading a .public file
-    constructor CreateFromFiles(const files: array of TFileName);
-    /// save the whole certificates chain as a JSON file
-    // - is in fact the human-friendly JSON serialization of this instance
-    // - the file would store plain verbose information of all certificates,
-    // i.e. base-64 full information (containing only public keys) and also
-    // high-level published properties of all stored certificates (e.g. Serial)
-    // - as such, this file format is more verbose than CreateFromJson/SaveToJson
-    // and may be convenient for managing certificates with a text/json editor
-    function SaveToFile(const jsonfile: TFileName): boolean;
-    /// load a certificates chain from some JSON-serialized file
-    // - you may use SaveToFile() method to create such JSON file
-    // - would create only TECCCertificate instances with their public keys,
-    // since no private key, therefore no TECCCertificateSecret is expected
-    function LoadFromFile(const jsonfile: TFileName): boolean;
-  published
-    /// returns all certificates information as a base-64 encoded text array
-    property PublicBase64: variant read GetPublicBase64;
-  end;
-
 const
   /// HTTP Status Code for "Continue"
   HTTP_CONTINUE = 100;
@@ -56859,75 +56823,6 @@ end;
 
 
 { TECCCertificateChainFile }
-
-constructor TECCCertificateChainFile.CreateFromFile(const jsonfile: TFileName);
-begin
-  Create;
-  if not LoadFromFile(jsonfile) then
-    raise EECCException.CreateUTF8('Invalid %.CreateFromFile(%)',[self,jsonfile]);
-end;
-
-constructor TECCCertificateChainFile.CreateFromFiles(const files: array of TFileName);
-var i: integer;
-    auth: TECCCertificate;
-begin
-  Create;
-  for i := 0 to high(files) do begin
-    auth := TECCCertificate.Create;
-    try
-      if JSONFileToObject(files[i],auth) then begin
-        ObjArrayAdd(fItems,auth);
-        auth := nil;
-      end else
-        raise EECCException.CreateUTF8('%.CreateFromFiles: invalid %',[self,files[i]]);
-    finally
-      auth.Free;
-    end;
-  end;
-end;
-
-const
-  ECCCERTIFICATES_FILEEXT = '.certif';
-
-function GetChainFileName(const jsonfile: TFileName): TFileName;
-begin
-  if ExtractFileExt(jsonfile)='' then
-    result := jsonfile+ECCCERTIFICATES_FILEEXT else
-    result := jsonfile;
-end;
-
-function TECCCertificateChainFile.SaveToFile(const jsonfile: TFileName): boolean;
-var json: RawUTF8;
-begin
-  if (Count=0) or (jsonfile='') then
-    result := false else begin
-    json := ObjectToJSON(self,[woHumanReadable]);
-    result := JSONBufferReformatToFile(pointer(json),GetChainFileName(jsonfile));
-  end;
-end;
-
-function TECCCertificateChainFile.LoadFromFile(const jsonfile: TFileName): boolean;
-var json: RawUTF8;
-begin
-  json := StringFromFile(GetChainFileName(jsonfile));
-  if json='' then
-    result := false else
-    JsonToObject(self,pointer(json),result,nil,JSONTOOBJECT_TOLERANTOPTIONS);
-end;
-
-function TECCCertificateChainFile.GetPublicBase64: variant;
-var i: integer;
-begin
-  VarClear(result);
-  TDocVariantData(result).InitFast;
-  fSafe.Lock;
-  try
-    for i := 0 to high(fItems) do
-      TDocVariantData(result).AddItem(RawUTF8ToVariant(fItems[i].PublicToBase64));
-  finally
-    fSafe.UnLock;
-  end;
-end;
 
 
 { TServiceMethod }

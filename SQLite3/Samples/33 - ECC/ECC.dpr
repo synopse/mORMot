@@ -24,7 +24,6 @@ uses
   {$I SynDprUses.inc}
   SysUtils,
   SynCommons,
-  mORMot,
   SynCrypto,
   SynEcc,
   ECCProcess;
