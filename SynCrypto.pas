@@ -1525,6 +1525,11 @@ procedure XorOffset(p: pByte; Index,Count: integer);
 // compression rate will not change a lot
 procedure XorConst(p: PIntegerArray; Count: integer);
 
+/// fast compute of some 32-bit random value
+// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
+// generator by P. L'Ecuyer (period=2^88, i.e. about 10^26)
+function Random32: cardinal;
+
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
@@ -8508,6 +8513,28 @@ end;
 // https://software.intel.com/en-us/articles/intel-digital-random-number-generator-drng-software-implementation-guide
 {$endif}
 
+var
+  rs1: cardinal = 2654435761;
+  rs2: cardinal = 668265263;
+  rs3: cardinal = 3266489917;
+
+function Random32: cardinal;
+begin
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then begin
+    result := RdRand32;
+    exit;
+  end;
+  {$endif}
+  result := rs1;
+  rs1 := ((result and -2)shl 12) xor (((result shl 13)xor result)shr 19);
+  result := rs2;
+  rs2 := ((result and -8)shl 4) xor (((result shl 2)xor result)shr 25);
+  result := rs3;
+  rs3 := ((result and -16)shl 17) xor (((result shl 3)xor result)shr 11);
+  result := rs1 xor rs2 xor result;
+end;
+
 class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
 var time: Int64;
     ext: TSynExtended;
@@ -8623,6 +8650,17 @@ begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
+  {$ifdef CPUINTEL}
+  if not (cfRAND in CpuFeatures) then
+  {$endif}
+    repeat // seed Random32 function above
+      QueryPerformanceCounter(time);
+      rs1 := rs1 xor time;
+      rs2 := rs2 xor time;
+      rs3 := rs3 xor time;
+    until (rs1>1) and (rs2>7) and (rs3>15);
+  for i := 1 to time and 15 do
+    Random32; // warm up
 end;
 
 procedure TAESPRNG.Seed;
@@ -8638,8 +8676,7 @@ begin
     PBKDF2_HMAC_SHA256(pass,salt,fSeedPBKDF2Rounds+(ord(salt[1]) and 7),key);
     EnterCriticalSection(fLock);
     fAES.EncryptInit(key,256);
-    crc128c(pointer(salt),SALTLEN,THash128(fCTR));
-    fCTR[0] := fCTR[0] xor fTotalBytes;
+    crcblock(@fCTR,pointer(salt));
     fAES.Encrypt(TAESBlock(fCTR),TAESBlock(fCTR));
     fBytesSinceSeed := 0;
     LeaveCriticalSection(fLock);
