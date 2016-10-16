@@ -5751,6 +5751,12 @@ type
     /// search for a Name, return the associated Value as boolean
     // - returns true only if the value is exactly '1'
     function ValueBool(const aName: RawUTF8): Boolean;
+    /// search for a Name, return the associated Value as an enumerate
+    // - returns true and set aEnum if aName was found, and associated value
+    // matched an aEnumTypeInfo item
+    // - returns false if no match was found
+    function ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer; out aEnum;
+      aEnumDefault: byte=0): boolean; overload;
     /// returns all values, as CSV or INI content
     function AsCSV(const KeySeparator: RawUTF8='=';
       const ValueSeparator: RawUTF8=#13#10; const IgnoreKey: RawUTF8=''): RawUTF8;
@@ -58498,6 +58504,25 @@ end;
 function TSynNameValue.ValueBool(const aName: RawUTF8): Boolean;
 begin
   result := Value(aName)='1';
+end;
+
+function TSynNameValue.ValueEnum(const aName: RawUTF8; aEnumTypeInfo: pointer;
+  out aEnum; aEnumDefault: byte): boolean;
+var v: RawUTF8;
+    err,i: integer;
+begin
+  result := false;
+  byte(aEnum) := aEnumDefault;
+  v := trim(Value(aName,''));
+  if v='' then
+    exit;
+  i := GetInteger(pointer(v),err);
+  if (err<>0) and (i>=0) then
+    i := GetEnumNameValue(aEnumTypeInfo,v,true);
+  if i>=0 then begin
+    byte(aEnum) := i;
+    result := true;
+  end;
 end;
 
 function TSynNameValue.Initialized: boolean;
