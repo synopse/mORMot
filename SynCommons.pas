@@ -10349,6 +10349,20 @@ procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); o
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean=true): boolean; overload;
 
+/// fast conversion from Base64 encoded text into binary data
+// - will check supplied text is a valid Base64 encoded stream
+function Base64ToBinSafe(const s: RawByteString): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from Base64 encoded text into binary data
+// - will check supplied text is a valid Base64 encoded stream
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fast conversion from Base64 encoded text into binary data
+// - will check supplied text is a valid Base64 encoded stream
+procedure Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC
 // '\uFFF0base64encodedbinary' content into binary
 // - input ParamValue shall have been checked to match the expected pattern
@@ -10382,8 +10396,13 @@ function BinToBase64Length(len: PtrUInt): PtrUInt;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the expected undecoded length of a Base64 encoded buffer
-// - here len is the number 16 bytes in sp
+// - here len is the number of bytes in sp
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
+
+/// retrieve the expected undecoded length of a Base64 encoded buffer
+// - here len is the number of bytes in sp
+// - will check supplied text is a valid Base64 encoded stream
+function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 
 /// direct low-level decoding of a Base64 encoded buffer
 // - here len is the number of 16 bytes chunks in sp
@@ -25184,12 +25203,24 @@ begin
   result := IsBase64(pointer(s),length(s));
 end;
 
+function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
+begin
+  if IsBase64(sp,len) then begin
+    if ConvertBase64ToBin[sp[len-2]]>=0 then
+      if ConvertBase64ToBin[sp[len-1]]>=0 then
+        result := 0 else
+        result := 1 else
+        result := 2;
+    result := (len shr 2)*3-result;
+  end else
+    result := 0;
+end;
+
 function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 begin
-  if (len=0) or (len and 3<>0) then begin
-    result := 0;
+  result := 0;
+  if (len=0) or (len and 3<>0) then
     exit;
-  end;
   if ConvertBase64ToBin[sp[len-2]]>=0 then
     if ConvertBase64ToBin[sp[len-1]]>=0 then
       result := 0 else
@@ -25325,7 +25356,35 @@ begin
   end;
 end;
 
-procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer); overload;
+function Base64ToBinSafe(const s: RawByteString): RawByteString;
+var len, resultLen: PtrInt;
+begin
+  len := length(s);
+  resultLen := Base64ToBinLengthSafe(pointer(s),len);
+  if resultLen=0 then
+    result := '' else begin
+    SetString(result,nil,resultLen);
+    Base64Decode(pointer(s),pointer(result),len shr 2);
+  end;
+end;
+
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString;
+begin
+  Base64ToBinSafe(sp,len,result);
+end;
+
+procedure Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
+var resultLen: PtrInt;
+begin
+  resultLen := Base64ToBinLengthSafe(sp,len);
+  if resultLen=0 then
+    result := '' else begin
+    SetString(result,nil,resultLen);
+    Base64Decode(sp,pointer(result),len shr 2);
+  end;
+end;
+
+procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer);
 var resultLen: PtrInt;
 begin
   resultLen := Base64ToBinLength(sp,len);
@@ -25344,7 +25403,6 @@ begin
   if result then
     Base64Decode(base64,bin,base64len shr 2);
 end;
-
 
 function BinToSource(const ConstName, Comment: RawUTF8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
