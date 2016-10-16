@@ -87,7 +87,8 @@ uses
   SynCommons,
   SynLog,
   SynCrtSock,
-  SynCrypto;
+  SynCrypto,
+  SynEcc;
 
 {$ifndef DELPHI5OROLDER}
   {$ifdef USELOCKERDEBUG}
@@ -177,7 +178,10 @@ type
     fFramesOutBytes: QWord;
     fRemoteIP: SockString;
     fRemoteLocalhost: boolean;
+    fServer: boolean;
     fLastError: string;
+    function ProcessHandshake(Sender: TWebSocketProcess; const InHeader: RawUTF8;
+      out OutHeader: RawUTF8): boolean; virtual;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -192,9 +196,12 @@ type
     // for a given protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aName,aURI: RawUTF8); reintroduce;
+    constructor Create(const aName,aURI: RawUTF8; aServer: boolean); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; virtual; abstract;
+    /// true if this protocol is used on the server side
+    // - false for a protocol used on the client side
+    property Server: boolean read fServer;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - is currently 'synopsejson' or 'synopsebinary'
@@ -291,7 +298,7 @@ type
     /// initialize the WebSockets JSON protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aURI: RawUTF8); reintroduce;
+    constructor Create(const aURI: RawUTF8; aServer: boolean); reintroduce;
   end;
 
   /// handle a REST application-level WebSockets protocol using compressed and
@@ -316,7 +323,7 @@ type
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
-    function GetEncrypted: boolean; 
+    function GetEncrypted: boolean;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
   public
@@ -327,14 +334,15 @@ type
     // can specify an URI to limit the protocol upgrade to a single resource
     // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used
     // on this protocol
-    constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
-      aCompressed: boolean=true); reintroduce; overload;
+    constructor Create(const aURI: RawUTF8; aServer: boolean;
+      const aKey; aKeySize: cardinal; aCompressed: boolean=true); reintroduce; overload;
     /// initialize the WebSockets binary protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    /// - AES-CFB 256 bit encryption will be enabled on this protocol if the
-    // aKey parameter supplied, after been hashed using SHA-256 algorithm
-    constructor Create(const aURI, aKey: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
+    // - AES-CFB 256 bit encryption will be enabled on this protocol if the
+    // aKey parameter is supplied, after been hashed using SHA-256 algorithm
+    constructor Create(const aURI: RawUTF8; aServer: boolean; const aKey: RawUTF8;
+      aCompressed: boolean=true); reintroduce; overload;
   published
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
@@ -854,10 +862,11 @@ begin
   inc(fFramesOutBytes,length(frame.payload)+2);
 end;
 
-constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8);
+constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8; aServer: boolean);
 begin
   fName := aName;
   fURI := aURI;
+  fServer := aServer;
 end;
 
 function TWebSocketProtocol.FrameIs(const frame: TWebSocketFrame;
@@ -870,6 +879,12 @@ function TWebSocketProtocol.FrameType(
   const frame: TWebSocketFrame): RawUTF8;
 begin
   result := '*'; // no frame URI by default
+end;
+
+function TWebSocketProtocol.ProcessHandshake(Sender: TWebSocketProcess;
+  const InHeader: RawUTF8; out OutHeader: RawUTF8): boolean;
+begin
+  result := false; // do nothing by default
 end;
 
 function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
@@ -955,7 +970,7 @@ end;
 
 function TWebSocketProtocolChat.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolChat.Create(fName,fURI);
+  result := TWebSocketProtocolChat.Create(fName,fURI,fServer);
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
 end;
 
@@ -1081,14 +1096,14 @@ end;
 
 { TWebSocketProtocolJSON }
 
-constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8);
+constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8; aServer: boolean);
 begin
-  inherited Create('synopsejson',aURI);
+  inherited Create('synopsejson',aURI,aServer);
 end;
 
 function TWebSocketProtocolJSON.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolJSON.Create(fURI);
+  result := TWebSocketProtocolJSON.Create(fURI,fServer);
 end;
 
 procedure TWebSocketProtocolJSON.FrameCompress(const Head: RawUTF8;
@@ -1202,31 +1217,36 @@ end;
 { TWebSocketProtocolBinary }
 
 constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
-  const aKey; aKeySize: cardinal; aCompressed: boolean);
+  aServer: boolean; const aKey; aKeySize: cardinal; aCompressed: boolean);
 begin
-  inherited Create('synopsebinary',aURI);
+  inherited Create('synopsebinary',aURI,aServer);
   if aKeySize>=128 then
     fEncryption := TProtocolAES.Create(
       TAESCFB,aKey,aKeySize,WebSocketsIVReplayAttackCheck);
   fCompressed := aCompressed;
 end;
 
-constructor TWebSocketProtocolBinary.Create(const aURI, aKey: RawUTF8;
-  aCompressed: boolean);
+constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
+  aServer: boolean; const aKey: RawUTF8; aCompressed: boolean);
 var key: TSHA256Digest;
     keySize: integer;
 begin
   if aKey<>'' then begin
+    fEncryption := TECDHEProtocol.FromKey(aKey,aServer);
+    if fEncryption<>nil then begin
+      Create(aURI,aServer,self,0,aCompressed);
+      exit;
+    end;
     SHA256Weak(aKey,key);
     keySize := 256;
   end else
     keySize := 0;
-  Create(aURI,key,keySize,aCompressed);
+  Create(aURI,aServer,key,keySize,aCompressed);
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
+  result := TWebSocketProtocolBinary.Create(fURI,fServer,self,0,fCompressed);
   if fEncryption<>nil then
     TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
 end;
@@ -1730,7 +1750,7 @@ begin
       len := Length(Frame.payload);
       hdr.first := byte(Frame.opcode) or FRAME_FIN;
       if fMaskSentFrames<>0 then begin
-        hdr.mask := (GetTickCount64 xor PtrInt(self))*Random(MaxInt);
+        hdr.mask := Random32;
         ProcessMask(pointer(Frame.payload),hdr.mask,len);
       end;
       if len<FRAME_LEN2BYTES then begin
@@ -2137,9 +2157,9 @@ begin
   if self=nil  then
     exit;
   fProtocols.AddOnce(TWebSocketProtocolBinary.Create(
-    aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsCompressed));
+    aWebSocketsURI,true,aWebSocketsEncryptionKey,aWebSocketsCompressed));
   if aWebSocketsAJAX then
-    fProtocols.AddOnce(TWebSocketProtocolJSON.Create(aWebSocketsURI));
+    fProtocols.AddOnce(TWebSocketProtocolJSON.Create(aWebSocketsURI,true));
 end;
 
 function TWebSocketServerRest.Callback(
@@ -2300,9 +2320,9 @@ begin
   end;
   try
     if aWebSocketsAJAX then
-      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
+      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI,false) else
       protocol := TWebSocketProtocolBinary.Create(
-        aWebSocketsURI,aWebSocketsEncryptionKey,aWebSocketsCompression);
+        aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
     try
       RequestSendHeader(aWebSocketsURI,'GET');
       TAESPRNG.Main.FillRandom(key);
