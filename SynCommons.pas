@@ -12114,6 +12114,17 @@ procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer); overload
 // - e.g. SetExecutableVersion('7.1.2.512');
 procedure SetExecutableVersion(const aVersionText: RawUTF8); overload;
 
+type
+  /// identify an operating system folder
+  TSystemPath = (spCommonData, spUserData, spCommonDocuments, spUserDocuments);
+
+/// returns an operating system folder
+// - will return the full path of a given kind of private or shared folder,
+// depending on the underlying operating system
+// - will use SHGetFolderPath and the corresponding CSIDL constant under Windows
+// - will return the $HOME folder (whatever kind value is given) otherwise
+function GetSystemPath(kind: TSystemPath): TFileName;
+
 /// self-modifying code - change some memory buffer in the code segment
 // - if Backup is not nil, it should point to a Size array of bytes, ready
 // to contain the overridden code buffer, for further hook disabling
@@ -30658,26 +30669,26 @@ asm
         lea     eax, [ebx+61C8864FH]
         mov     ebp, edx
 @1:     mov     edx, dword ptr [ecx]
-        imul    edx, -2048144777
+        imul    edx, edx, -2048144777
         add     edi, edx
         rol     edi, 13
-        imul    edi, -1640531535
+        imul    edi, edi, -1640531535
         mov     edx, dword ptr [ecx+4]
-        imul    edx, -2048144777
+        imul    edx, edx, -2048144777
         add     esi, edx
         rol     esi, 13
-        imul    esi, -1640531535
+        imul    esi, esi, -1640531535
         mov     edx, dword ptr [ecx+8]
-        imul    edx, -2048144777
+        imul    edx, edx, -2048144777
         add     ebx, edx
         rol     ebx, 13
-        imul    ebx, -1640531535
+        imul    ebx, ebx, -1640531535
         mov     edx, dword ptr [ecx+12]
         lea     ecx, [ecx+16]
-        imul    edx, -2048144777
+        imul    edx, edx, -2048144777
         add     eax, edx
         rol     eax, 13
-        imul    eax, -1640531535
+        imul    eax, eax, -1640531535
         cmp     ebp, ecx
         jnc     @1
         rol     edi, 1
@@ -31007,8 +31018,33 @@ end;
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 begin
+  {$ifdef CPUX86}
+  if (cfSSE42 in CpuFeatures) and (count>0) then
+  asm
+        mov     ecx, crc128
+        mov     edx, data128
+@s:     mov     eax, dword ptr[ecx]
+        db      $F2, $0F, $38, $F1, $02
+        mov     dword ptr[ecx], eax
+        mov     eax, dword ptr[ecx+4]
+        db      $F2, $0F, $38, $F1, $42, $04
+        mov     dword ptr[ecx+4], eax
+        mov     eax, dword ptr[ecx+8]
+        db      $F2, $0F, $38, $F1, $42, $08
+        mov     dword ptr[ecx+8], eax
+        mov     eax, dword ptr[ecx+12]
+        db      $F2, $0F, $38, $F1, $42, $0C
+        mov     dword ptr[ecx+12], eax
+        dec     count
+        lea     edx, [edx+16]
+        jnz @s
+  end else
+  while count>0 do begin
+    crcblockpas(crc128,data128);
+  {$else}
   while count>0 do begin
     crcblock(crc128,data128);
+  {$endif CPUX86}
     inc(data128);
     dec(count);
   end;
@@ -34277,6 +34313,47 @@ begin
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
   end;
 end;
+
+{$ifdef MSWINDOWS}
+// avoid unneeded reference to ShlObj.pas
+function SHGetFolderPath(hwnd: HWND; csidl: Integer; hToken: THandle;
+  dwFlags: DWord; pszPath: PChar): HRESULT; stdcall; external 'SHFolder.dll'
+  name {$ifdef UNICODE}'SHGetFolderPathW'{$else}'SHGetFolderPathA'{$endif};
+
+var
+  _SystemPath: array[TSystemPath] of TFileName;
+  
+function GetSystemPath(kind: TSystemPath): TFileName;
+const
+  CSIDL_PERSONAL = $0005;
+  CSIDL_LOCAL_APPDATA = $001C; // local non roaming user folder
+  CSIDL_COMMON_APPDATA = $0023;
+  CSIDL_COMMON_DOCUMENTS = $002E;
+  CSIDL: array[TSystemPath] of integer = (
+  // spCommonData, spUserData, spCommonDocuments, spUserDocuments
+    CSIDL_COMMON_APPDATA, CSIDL_LOCAL_APPDATA,
+    CSIDL_COMMON_DOCUMENTS, CSIDL_PERSONAL);
+var tmp: array[0..MAX_PATH] of char;
+    k: TSystemPath;
+begin
+  if _SystemPath[spCommonData]='' then
+    for k := low(k) to high(k) do
+      if SHGetFolderPath(0,CSIDL[k],0,0,@tmp)=S_OK then
+        _SystemPath[k] := IncludeTrailingPathDelimiter(tmp) else
+        _SystemPath[k] := IncludeTrailingPathDelimiter(GetEnvironmentVariable('APPDATA'));
+  result := _SystemPath[kind];
+end;
+{$else MSWINDOWS}
+var
+  _HomePath: TFileName;
+
+function GetSystemPath(kind: TSystemPath): TFileName;
+begin
+  if _HomePath='' then
+    _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
+  result := _HomePath;
+end;
+{$endif MSWINDOWS}
 
 {$ifdef DARWIN}
 function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
