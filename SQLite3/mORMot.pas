@@ -10167,9 +10167,8 @@ type
   /// describe an interface-based service provider method
   TServiceMethod = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
-    /// the method URI
-    // - basicaly the method name as declared in Delphi code (e.g. 'Add' for
-    // ICalculator.Add)
+    /// the method URI, i.e. the method name
+    // - as declared in Delphi code, e.g. 'Add' for ICalculator.Add
     // - this property value is hashed internaly for faster access
     URI: RawUTF8;
     /// the method default result, formatted as a JSON array

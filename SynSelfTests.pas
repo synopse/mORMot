@@ -15148,15 +15148,15 @@ end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsBinaryProtocol;
 begin
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',false),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','pass',false),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','',true),focBinary);
-  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('','pass',true),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,''),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass'),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'',true),focBinary);
+  WebsocketsLowLevel(TWebSocketProtocolBinary.Create('',false,'pass',true),focBinary);
 end;
 
 procedure TTestBidirectionalRemoteConnection.WebsocketsJSONProtocol;
 begin
-  WebsocketsLowLevel(TWebSocketProtocolJSON.Create('',false),focText);
+  WebsocketsLowLevel(TWebSocketProtocolJSON.Create(''),focText);
 end;
 
 type // to access protected low-level frame methods

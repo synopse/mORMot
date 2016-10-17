@@ -5050,13 +5050,16 @@ type
     {$endif}
     procedure HashAdd(const Elem; aHashCode: Cardinal; var result: integer);
     /// low-level search of an element from its pre-computed hash
-    // - you should NOT use this method, but rather high-level FindHashed*()
-    function HashFind(aHashCode: cardinal; const Elem): integer; overload;
-    /// low-level search of an element from its pre-computed hash
+    // - if not found and aForAdd=true, returns -(indexofvoidfHashs[]+1)
     // - this overloaded method will return the first matching item: use the
-    // HashFind(...; const Elem) method to avoid any HashElement collision issue
+    // HashFindAndCompare(...; const Elem) method to avoid any collision issue
     // - you should NOT use this method, but rather high-level FindHashed*()
-    function HashFind(aHashCode: cardinal): integer; overload;
+    function HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
+    /// low-level search of an element from its pre-computed hash
+    // - search for the hash, then use fEventCompare/fCompare/ElemEquals
+    // - if not found, returns -(indexofvoidfHashs[]+1)
+    // - you should NOT use this method, but rather high-level FindHashed*()
+    function HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
     function GetHashFromIndex(aIndex: Integer): Cardinal;
     procedure HashInvalidate;
   public
@@ -5090,7 +5093,7 @@ type
     // the dynamic array content (e.g. in case of element deletion or update,
     // or after calling LoadFrom/Clear method) - this is not necessary after
     // FindHashedForAdding / FindHashedAndUpdate / FindHashedAndDelete methods
-    function ReHash: boolean;
+    function ReHash(forAdd: boolean=false): boolean;
     /// low-level function which would inspect the internal fHashs[] array for
     // any collision
     // - is a brute force search within fHashs[].Hash values, which may be handy
@@ -32505,7 +32508,7 @@ end;
 procedure TSynTimeZone.LoadFromBuffer(const Buffer: RawByteString);
 begin
   fZones.LoadFrom(pointer(SynLZDecompress(Buffer)));
-  fZones.ReHash;
+  fZones.ReHash(false);
   FreeAndNil(fIds);
   FreeAndNil(fDisplays);
 end;
@@ -44291,7 +44294,7 @@ begin
   if (fHashs<>nil) and Assigned(fHashElement) then begin
     if aHashCode=0 then
       aHashCode := fHashElement(Elem,fHasher);
-    result := HashFind(aHashCode,Elem);
+    result := HashFindAndCompare(aHashCode,Elem);
     if result<0 then
       result := -1; // for coherency with most methods
   end else begin
@@ -44316,11 +44319,11 @@ begin
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     // fHashs[] is too small -> recreate
     if fCountP<>nil then
-      dec(fCountP^); // don't rehash the latest entry (which may not be set)
+      dec(fCountP^); // ignore latest entry (which is not filled yet)
     ReHash;
     if fCountP<>nil then
       inc(fCountP^);
-    result := HashFind(aHashCode,Elem); // fHashs[] has changed -> recompute
+    result := HashFind(aHashCode,true); // fHashs[] has changed -> recompute
     assert(result<0);
   end;
   with fHashs[-result-1] do begin // HashFind returned negative index in fHashs[]
@@ -44338,7 +44341,7 @@ begin
   if n<fHashCountTrigger then begin
     result := Scan(Elem);
     if result<0 then begin
-      SetCount(n+1); // like HashAdd(): reserve space for added item
+      SetCount(n+1); // reserve space for added item, as in HashAdd()
       result := n;
       wasadded := true;
     end else
@@ -44346,12 +44349,12 @@ begin
     exit;
   end;
   if fHashs=nil then
-    ReHash; // compute hash of all previously added fHashCountTrigger items
+    ReHash(true); // compute hash of all previously added fHashCountTrigger items
   if (aHashCode=0) and Assigned(fHashElement) then
     aHashCode := fHashElement(Elem,fHasher);
   if aHashCode=HASH_VOID then
     aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
-  result := HashFind(aHashCode,Elem);
+  result := HashFindAndCompare(aHashCode,Elem);
   if result>=0 then
     // found matching existing item
     wasAdded := false else begin
@@ -44404,7 +44407,7 @@ begin
   if fHashs=nil then // Count<fHashCountTrigger
     result := Scan(ElemToFill) else
     if Assigned(fHashElement) then begin
-      result := HashFind(fHashElement(ElemToFill,fHasher),ElemToFill);
+      result := HashFindAndCompare(fHashElement(ElemToFill,fHasher),ElemToFill);
       if result<0 then
         result := -1;
     end else
@@ -44434,7 +44437,7 @@ h:if Assigned(fHashElement) then begin
     aHashCode := fHashElement(Elem,fHasher);
     if aHashCode=HASH_VOID then
       aHashCode := HASH_ONVOIDCOLISION; // as in HashFind() -> for HashAdd() below
-    result := HashFind(aHashCode,Elem);
+    result := HashFindAndCompare(aHashCode,Elem);
     if result<0 then
       if AddIfNotExisting then begin
         // not existing -> add as new element
@@ -44458,7 +44461,7 @@ begin
       Delete(result);
   end else
   if Assigned(fHashElement) then begin
-    result := HashFind(fHashElement(Elem,fHasher),Elem);
+    result := HashFindAndCompare(fHashElement(Elem,fHasher),Elem);
     if result<0 then
       result := -1 else begin
       Delete(result);
@@ -44639,8 +44642,9 @@ begin
   end;
   fHashElement := aHashElement;
   {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare := aCompare;
-  HashInvalidate;
   fHashCountTrigger := 32;
+  fHashs := nil; // = HashInvalidate;
+  fHashFindCount := 0;
 end;
 
 procedure TDynArrayHashed.HashInvalidate;
@@ -44651,7 +44655,7 @@ end;
 
 //var TDynArrayHashedCollisionCount: cardinal;
 
-function TDynArrayHashed.HashFind(aHashCode: cardinal): integer;
+function TDynArrayHashed.HashFind(aHashCode: cardinal; aForAdd: boolean): integer;
 var first,last: integer;
     h: cardinal;
     P: PAnsiChar;
@@ -44678,13 +44682,15 @@ begin
   first := result;
   repeat
     with fHashs[result] do
-    if Hash=aHashCode then begin
-      result := Index;
-      exit;
-    end else
-    if Hash=HASH_VOID then
-      break; // not found
-    inc(result);
+      if (Hash=aHashCode) and not aForAdd then begin
+        result := Index;
+        exit;
+      end else
+      if Hash=HASH_VOID then begin
+        result := -(result+1);
+        exit; // aForAdd or not found -> returns void index in fHashs[] as negative
+      end;
+    inc(result); // try next entry on hash collision
     if result=last then
       // reached the end -> search once from fHash[0] to fHash[first-1]
       if result=first then
@@ -44693,10 +44699,10 @@ begin
         last := first;
       end;
   until false;
-  result := -1;
+  raise ESynException.Create('HashFind fatal collision'); // should never be here
 end;
 
-function TDynArrayHashed.HashFind(aHashCode: cardinal; const Elem): integer;
+function TDynArrayHashed.HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
 var first,last: integer;
     P: PAnsiChar;
 begin
@@ -44748,7 +44754,7 @@ begin
         last := first;
       end;
   until false;
-  raise ESynException.Create('HashFind fatal collision'); // should never be here
+  raise ESynException.Create('HashFindAndCompare fatal collision');
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
@@ -44779,15 +44785,15 @@ begin
       if h=HASH_VOID then
         continue;
       result := fHashs[i].Index;
-      for j := i+1 to fHashsCount-1 do
-        if fHashs[j].Hash=h then
+      for j := 0 to fHashsCount-1 do
+        if (i<>j) and (fHashs[j].Hash=h) then
           exit; // found duplicate
     end;
   end;
   result := -1;
 end;
 
-function TDynArrayHashed.ReHash: boolean;
+function TDynArrayHashed.ReHash(forAdd: boolean): boolean;
 var i, n, cap, ndx: integer;
     P: PAnsiChar;
     aHashCode: cardinal;
@@ -44796,7 +44802,7 @@ begin
   fHashs := nil;
   fHashsCount := 0;
   n := Count;
-  if (n=0) or (n<fHashCountTrigger) then
+  if not forAdd and ((n=0) or (n<fHashCountTrigger)) then
     exit; // hash only if needed, and avoid GPF after TDynArray.Clear (Count=0)
   if not Assigned(fEventHash) and not Assigned(fHashElement) then
     exit;
@@ -44814,9 +44820,9 @@ begin
       aHashCode := fHashElement(P^,fHasher);
     if aHashCode=HASH_VOID then
       aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
-    ndx := HashFind(aHashCode,P^);
+    ndx := HashFindAndCompare(aHashCode,P^);
     if ndx<0 then
-      // >=0 -> already found -> not necessary to add duplicated hash
+      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore 
       with fHashs[-ndx-1] do begin
         Hash := aHashCode;
         Index := i;
@@ -52721,7 +52727,7 @@ end;
 
 function TRawUTF8ListHashed.HashFind(aHashCode: cardinal): integer;
 begin
-  result := fHash.HashFind(aHashCode);
+  result := fHash.HashFind(aHashCode,false);
 end;
 
 
