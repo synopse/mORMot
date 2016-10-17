@@ -45,9 +45,34 @@ unit SynEcc;
 
   ***** END LICENSE BLOCK *****
 
+  
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
   Copyright (c) 2013, Kenneth MacKay - BSD 2-clause license
   https://github.com/esxgx/easy-ecc
+
+  *** BEGIN LICENSE BLOCK *****
+  Copyright (c) 2013, Kenneth MacKay
+  All rights reserved.
+
+  Redistribution and use in source and binary forms, with or without modification,
+  are permitted provided that the following conditions are met:
+   * Redistributions of source code must retain the above copyright notice, this
+     list of conditions and the following disclaimer.
+   * Redistributions in binary form must reproduce the above copyright notice,
+     this list of conditions and the following disclaimer in the documentation
+     and/or other materials provided with the distribution.
+
+  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+  ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+  DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR
+  ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
+  ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+  SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+  ***** END LICENSE BLOCK *****
 
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
@@ -569,6 +594,9 @@ function ECIESHeaderText(const encryptedfile: TFileName): RawUTF8; overload;
 
 { *********** high-level certificate-based public-key cryptography *********** }
 
+const
+  DEFAULT_ECCROUNDS = 60000;
+
 type
   /// exception class associated with this SynEcc unit
   EECCException = class(ESynException);
@@ -663,7 +691,7 @@ type
     // - use TECCCertificateSecret.Decrypt to uncypher the resulting content
     function Encrypt(const Plain: RawByteString;
       Signature: TECCSignatureCertified=nil; FileDateTime: TDateTime=0;
-      const KDFSalt: RawUTF8='salt'; KDFRounds: integer=60000;
+      const KDFSalt: RawUTF8='salt'; KDFRounds: integer=DEFAULT_ECCROUNDS;
       const MACSalt: RawUTF8='hmac'; MACRounds: integer=100;
       Algo: TECIESAlgo=ecaUnknown): RawByteString;
     /// encrypt a file using the ECIES scheme, using this public certificate as
@@ -677,7 +705,7 @@ type
     // - optional salt information used for PBKDF2 can be customized, to lock
     // the encryted file with the supplied password
     function EncryptFile(const FileToCrypt: TFileName; const DestFile: TFileName='';
-      const Salt: RawUTF8='salt'; SaltRounds: integer=60000;
+      const Salt: RawUTF8='salt'; SaltRounds: integer=DEFAULT_ECCROUNDS;
       Algo: TECIESAlgo=ecaUnknown; IncludeSignFile: boolean=true): boolean;
     {$ifndef NOVARIANTS}
     /// returns a TDocVariant object of all published properties of this instance
@@ -746,27 +774,27 @@ type
     // - perform all reverse steps from SaveToSecureBinary() method
     // - would raise an EECCException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(const Binary: RawByteString; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil); overload;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil); overload;
     /// create a certificate with its private secret key from a password-protected
     // secure binary buffer
     // - may be used on a constant array in executable, created via SaveToSource()
     // - perform all reverse steps from SaveToSecureBinary() method
     // - would raise an EECCException if the supplied Binary is incorrect
     constructor CreateFromSecureBinary(Data: pointer; Len: integer; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil); overload;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil); overload;
     /// create a certificate with its private secret key from an encrypted
     // secure .private binary file and its associated password
     // - perform all reverse steps from SaveToSecureFile() method
     // - would raise an EECCException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FileName: TFileName; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil); overload;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil); overload;
     /// create a certificate with its private secret key from an encrypted
     // secure .private binary file stored in a given folder
     // - overloaded constructor retrieving the file directly from its folder
     // - perform all reverse steps from SaveToSecureFile() method
     // - would raise an EECCException if the supplied file is incorrect
     constructor CreateFromSecureFile(const FolderName: TFileName;
-      const Serial, PassWord: RawUTF8; PBKDF2Rounds: integer=65000;
+      const Serial, PassWord: RawUTF8; PBKDF2Rounds: integer=DEFAULT_ECCROUNDS;
       AES: TAESAbstractClass=nil); overload;
     /// finalize the instance
     destructor Destroy; override;
@@ -782,7 +810,7 @@ type
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
     // be performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
     function SaveToSecureFile(const PassWord: RawUTF8; const DestFolder: TFileName;
-      AFStripes: integer=64; PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil;
+      AFStripes: integer=64; PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil;
       NoHeader: boolean=false): boolean;
     /// backup the private secret key into several encrypted -###.private binary files
     // - secret sharing can be used to store keys at many different places, e.g.
@@ -794,20 +822,20 @@ type
     // - AES-256-CFB encryption (or the one specified in AES parameter) will be
     // performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
     function SaveToSecureFiles(const PassWord: RawUTF8; const DestFolder: TFileName;
-      DestFileCount: integer; AFStripes: integer=64; PBKDF2Rounds: integer=65000;
+      DestFileCount: integer; AFStripes: integer=64; PBKDF2Rounds: integer=DEFAULT_ECCROUNDS;
       AES: TAESAbstractClass=nil; NoHeader: boolean=false): boolean;
     /// read a private secret key from an encrypted .private binary file
     // - perform all reverse steps from SaveToSecureFile() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureFile(const FileName: TFileName; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil): boolean;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil): boolean;
     /// backup the private secret key into an encrypted secure binary buffer
     // - you should keep all your private keys in a safe place
     // - will use anti-forensic diffusion of the private key (64 stripes = 2KB)
     // - then AES-256-CFB encryption (or the one specified in AES parameter) will
     // be performed from PBKDF2_HMAC_SHA256 derivation of an user-supplied password
     function SaveToSecureBinary(const PassWord: RawUTF8; AFStripes: integer=64;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil; NoHeader: boolean=false): RawByteString;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil; NoHeader: boolean=false): RawByteString;
     /// backup the private secret key into an encrypted source code constant
     // - may be used to integrate some private keys within an executable
     // - if ConstName='', _HEXASERIAL will be used, from 24 first chars of Serial
@@ -820,12 +848,12 @@ type
     // - perform all reverse steps from SaveToSecureBinary() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureBinary(const Binary: RawByteString; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil): boolean; overload;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil): boolean; overload;
     /// read a private secret key from an encrypted secure binary buffer
     // - perform all reverse steps from SaveToSecureBinary() method
     // - returns TRUE on success, FALSE otherwise
     function LoadFromSecureBinary(Data: pointer; Len: integer; const PassWord: RawUTF8;
-      PBKDF2Rounds: integer=65000; AES: TAESAbstractClass=nil): boolean; overload;
+      PBKDF2Rounds: integer=DEFAULT_ECCROUNDS; AES: TAESAbstractClass=nil): boolean; overload;
   public
     /// compute a base-64 encoded signature of some digital content
     // - memory buffer will be hashed using SHA-256, then will be signed using
@@ -861,7 +889,7 @@ type
     // IsSigned method), and/or the associated file timestamp
     function Decrypt(const Encrypted: RawByteString; out Decrypted: RawByteString;
       Signature: PECCSignatureCertifiedContent=nil; FileDateTime: PDateTime=nil;
-      const KDFSalt: RawUTF8='salt'; KDFRounds: integer=60000;
+      const KDFSalt: RawUTF8='salt'; KDFRounds: integer=DEFAULT_ECCROUNDS;
       const MACSalt: RawUTF8='hmac'; MACRounds: integer=100): TECCDecrypt;
     /// decrypt a file using the ECIES scheme, using this private certificate as
     // key, via AES-256-CFB/PKCS7 over PBKDF2_HMAC_SHA256, and HMAC_SHA256
@@ -872,7 +900,7 @@ type
     // - optionally, you can retrieve the sign-then-encrypt ECDSA secp256r1
     // signature stored in the header for TECCCertificateChain.IsSigned()
     function DecryptFile(const FileToDecrypt: TFileName; const DestFile: TFileName='';
-      const Salt: RawUTF8='salt'; SaltRounds: integer=60000;
+      const Salt: RawUTF8='salt'; SaltRounds: integer=DEFAULT_ECCROUNDS;
       Signature: PECCSignatureCertifiedContent=nil): TECCDecrypt;
   public
     /// how many anti-forensic diffusion stripes are used for private key storage
@@ -1315,6 +1343,16 @@ type
     /// defines the default PKI instance to be used by FromKey
     // - used if the ca=... property is not set in the aKey value
     class procedure FromKeySetCA(aPKI: TECCCertificateChain);
+    /// computes a TSynPersistentWithPassword key expected by FromKey
+    // - the .private key file name, and its associated password/rounds should
+    // be specified, but for unilateral authentication on the other side
+    // - pki should be a .ca file name, 'base64,base64' or '"base64","base64"'
+    // - result of this method can be stored directly in a .settings file,
+    // to enable the TECDHEProtocol safe protocol for transmission
+    class function FromKeyCompute(const privkey, privpassword: RawUTF8;
+      privrounds: integer=DEFAULT_ECCROUNDS; const pki: RawUTF8=''; auth: TECDHEAuth=authMutual;
+      kdf: TECDHEKDF=kdfHmacSha256; ef: TECDHEEF=efAesCrc128;
+      mac: TECDHEMAC=macDuringEF; customkey: cardinal=0): RawUTF8;  
     /// finalize the instance
     // - also erase all temporary secret keys, for safety
     destructor Destroy; override;
@@ -3413,9 +3451,9 @@ var sw: TSynNameValue;
     i,pr: integer;
 begin
   result := nil;
-  if PosEx('a=',aKey)=0 then
+  if not IdemPChar(pointer(aKey),'A=') then
     exit;
-  // a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=password;pr=65000;ca=..
+  // a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=password;pr=60000;ca=..
   sw.InitFromCSV(pointer(aKey),'=',';');
   if not sw.ValueEnum('a',TypeInfo(TECDHEAuth),algo.auth) then
     exit; // mandatory parameter
@@ -3447,7 +3485,7 @@ begin
   priv := nil;
   fn := UTF8ToString(sw.Str['p']);
   pw := sw.Str['pw'];
-  pr := sw.ValueInt('pr',60000);
+  pr := sw.ValueInt('pr',60000); // DEFAULT_ECCROUNDS may change
   if (fn<>'') and (pw<>'') and ECCKeyFileFind(fn,true) then
     priv := TECCCertificateSecret.CreateFromSecureFile(fn,pw,pr);
   result := CL[aServer].Create(algo.auth,ca,priv);
@@ -3458,6 +3496,28 @@ begin
     include(result.fOwned,ownPKI);
   if priv<>nil then
     include(result.fOwned,ownPrivate);
+end;
+
+class function TECDHEProtocol.FromKeyCompute(const privkey,privpassword: RawUTF8;
+  privrounds: integer; const pki: RawUTF8; auth: TECDHEAuth; kdf: TECDHEKDF;
+  ef: TECDHEEF; mac: TECDHEMAC; customkey: cardinal): RawUTF8;
+begin
+  FormatUTF8('a=%',[ord(auth)],result);
+  if kdf<>low(kdf) then
+    result := result+';k='+TrimLeftLowerCaseShort(ToText(kdf));
+  if ef<>low(ef) then
+    result := result+';e='+TrimLeftLowerCaseShort(ToText(ef));
+  if mac<>low(mac) then
+    result := result+';m='+TrimLeftLowerCaseShort(ToText(mac));
+  result := lowercase(result);
+  if pki<>'' then
+    result := result+';ca='+pki;
+  if privkey<>'' then begin
+    result := FormatUTF8('%;p=%;pw=%',[result,privkey,privpassword]);
+    if privrounds<>60000 then // DEFAULT_ECCROUNDS may change
+      result := FormatUTF8('%;pr=%',[result,privrounds]);
+  end;
+  result := TSynPersistentWithPassword.ComputePassword(result,customkey);
 end;
 
 const
