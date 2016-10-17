@@ -33393,7 +33393,7 @@ begin
   L := ord(PS^);
   inc(PS);
   while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
-  tmp[L] := #0; // GetCaptionFromPCharLen expect
+  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
   MoveFast(PS^,tmp,L);
   GetCaptionFromPCharLen(tmp,result);
 end;
@@ -58659,7 +58659,7 @@ begin
   if v='' then
     exit;
   i := GetInteger(pointer(v),err);
-  if (err<>0) and (i>=0) then
+  if (err<>0) or (i<0) then
     i := GetEnumNameValue(aEnumTypeInfo,v,true);
   if i>=0 then begin
     byte(aEnum) := i;
