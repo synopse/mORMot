@@ -10361,7 +10361,7 @@ function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt): RawByteString; overload;
 
 /// fast conversion from Base64 encoded text into binary data
 // - will check supplied text is a valid Base64 encoded stream
-procedure Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var result: RawByteString); overload;
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean; overload;
 
 /// just a wrapper around Base64ToBin() for in-place decode of JSON_BASE64_MAGIC
 // '\uFFF0base64encodedbinary' content into binary
@@ -25384,14 +25384,15 @@ begin
   Base64ToBinSafe(sp,len,result);
 end;
 
-procedure Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var result: RawByteString);
-var resultLen: PtrInt;
+function Base64ToBinSafe(sp: PAnsiChar; len: PtrInt; var data: RawByteString): boolean;
+var datalen: PtrInt;
 begin
-  resultLen := Base64ToBinLengthSafe(sp,len);
-  if resultLen=0 then
-    result := '' else begin
-    SetString(result,nil,resultLen);
-    Base64Decode(sp,pointer(result),len shr 2);
+  datalen := Base64ToBinLengthSafe(sp,len);
+  if datalen=0 then
+    result := false else begin
+    SetString(data,nil,datalen);
+    Base64Decode(sp,pointer(data),len shr 2);
+    result := true;
   end;
 end;
 

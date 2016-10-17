@@ -1562,7 +1562,7 @@ function CompressShaAes(var DataRawByteString; Compress: boolean): AnsiString;
 type
   /// possible return codes by IProtocol classes
   TProtocolResult = (sprSuccess,
-    sprBadRequest, sprUnsupported, sprUnexpectedAlgorithm, 
+    sprBadRequest, sprUnsupported, sprUnexpectedAlgorithm,
     sprInvalidCertificate, sprInvalidSignature,
     sprInvalidEphemeralKey, sprInvalidPublicKey, sprInvalidPrivateKey,
     sprInvalidMAC);
@@ -1572,6 +1572,15 @@ type
   // TECDHEProtocolServer implementation classes
   IProtocol = interface
     ['{91E3CA39-3AE2-44F4-9B8C-673AC37C1D1D}']
+    /// initialize the communication by exchanging some client/server information
+    // - expects the handshaking messages to be supplied as UTF-8 text, may be as
+    // base64-encoded binary - see e.g. TWebSocketProtocolBinary.ProcessHandshake
+    // - should return sprUnsupported if the implemented protocol does not
+    // expect any handshaking mechanism
+    // - returns sprSuccess and set something into OutData, depending on the
+    // current step of the handshake
+    // - returns an error code otherwise
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method should be thread-safe in the implementation class
     procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
@@ -1589,6 +1598,9 @@ type
   // - may be used for debugging purposes, or when encryption is not needed
   TProtocolNone = class(TInterfacedObject, IProtocol)
   public
+    /// initialize the communication by exchanging some client/server information
+    // - this method will return sprUnsupported
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method will return the plain text with no actual encryption
     procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
@@ -1614,6 +1626,9 @@ type
     constructor CreateFrom(aAnother: TProtocolAES); reintroduce; virtual;
     /// finalize the encryption
     destructor Destroy; override;
+    /// initialize the communication by exchanging some client/server information
+    // - this method will return sprUnsupported
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
     /// encrypt a message on one side, ready to be transmitted to the other side
     // - this method uses AES encryption and PKCS7 padding
     procedure Encrypt(const aPlain: RawByteString; out aEncrypted: RawByteString);
@@ -9058,6 +9073,12 @@ end;
 
 { TProtocolNone }
 
+function TProtocolNone.ProcessHandshake(
+  const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
+begin
+  result := sprUnsupported;
+end;
+
 function TProtocolNone.Decrypt(const aEncrypted: RawByteString;
   out aPlain: RawByteString): TProtocolResult;
 begin
@@ -9100,6 +9121,12 @@ begin
   fAES[false].Free;
   fAES[true].Free;
   inherited Destroy;
+end;
+
+function TProtocolAES.ProcessHandshake(
+  const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult;
+begin
+  result := sprUnsupported;
 end;
 
 function TProtocolAES.Decrypt(const aEncrypted: RawByteString;
