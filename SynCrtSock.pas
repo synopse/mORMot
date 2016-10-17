@@ -679,10 +679,10 @@ type
     /// contains the URL ('/' e.g.) after GetRequest()
     URL: SockString;
     /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
-    // (default HTTP/1.1 behavior is keep alive, unless 'Connection: Close'
+    // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
     // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
     // support persistent connections MUST include the "close" connection option
-    // in every message")
+    // in every message"
     KeepAliveClient: boolean;
     /// the recognized client IP, after a call to InitRequest()
     RemoteIP: SockString;

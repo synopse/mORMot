@@ -1294,17 +1294,22 @@ type
       aPrivate: TECCCertificateSecret); reintroduce; overload; virtual;
     /// will create another instance of this communication protocol
     constructor CreateFrom(aAnother: TECDHEProtocol); virtual;
+    /// initialize the communication by exchanging some client/server information
+    // - this method should be overriden with the proper implementation
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult; virtual; abstract;
     /// creates a new TECDHEProtocolClient or TECDHEProtocolServer from a text key
-    // - expected layout is CSV of values, with at least p=... as the password
-    // file name (searching for first matching unique file name with .private
-    // extension), and pw=...;pr=... for the associated password protection
+    // - expected layout is values separated by ; with at least a=... pair
+    // - if needed, you can specify p=... as the password file name (searching
+    // for first matching unique file name with .private extension in the
+    // current directory of in ECCKeyFileFolder), and pw=...;pr=... for the
+    // associated password protection (password content and rounds)
     // - optional ca=..;a=..;k=..;e=..;m=.. switches will match PKI, Auth, KDF,
     // EF and MAC properties of this class instance (triming left lowercase chars)
-    // - optional ca=.. may be in ca=base64,base64 format, or as JSON array
-    // (ca="base64","base64")
+    // - global value set by FromKeySetCA() is used as PKI, unless ca=.. is set
+    // (as a .ca file name, or as ca=base64,base64 or ca="base64","base64")
     // - a full text key with default values may be:
     // $ a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=passwordFor34a2;
-    // $ pr=60000;ca=base64+1,base64+2
+    // $ pr=60000;ca=websockets
     // - returns nil if aKey does not match this format, i.e. has no p=..,pw=..
     class function FromKey(const aKey: RawUTF8; aServer: boolean): TECDHEProtocol;
     /// defines the default PKI instance to be used by FromKey
@@ -1379,6 +1384,10 @@ type
     procedure ComputeHandshake(out aClient: TECDHEFrameClient);
     /// validate the authentication frame sent back by the server
     function ValidateHandshake(const aServer: TECDHEFrameServer): TProtocolResult;
+    /// initialize the client communication
+    // - if MsgIn is '', will call ComputeHandshake
+    // - if MsgIn is set, will call ValidateHandshake
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult; override;
   end;
 
   /// implements ECDHE secure protocol on server side
@@ -1397,6 +1406,9 @@ type
     // scheme, allowed in Authorized setting and compatible with fPrivate
     function ComputeHandshake(const aClient: TECDHEFrameClient;
       out aServer: TECDHEFrameServer): TProtocolResult;
+    /// initialize the server communication
+    // - will call ComputeHandshake
+    function ProcessHandshake(const MsgIn: RawUTF8; out MsgOut: RawUTF8): TProtocolResult; override;
     /// the Authentication Schemes allowed by this server
     // - by default, only the aAuth value specified to Create is allowed
     // - you can set e.g. [authMutual,authServer] for a weaker pattern
@@ -3357,6 +3369,10 @@ begin
   fMACSalt := aAnother.fMACSalt;
 end;
 
+var
+  _FromKeySetCA: TECCCertificateChain;
+  _FromKeySetCARefCount: integer;
+
 destructor TECDHEProtocol.Destroy;
 begin
   if fAES[true]<>fAES[false] then
@@ -3364,19 +3380,23 @@ begin
   fAES[false].Free;
   FillZero(fkM[false]);
   FillZero(fkM[true]);
-  if ownPKI in fOwned then
-    fPKI.Free;
+  if fPKI<>nil then
+    if ownPKI in fOwned then
+      fPKI.Free else
+    if (fPKI=_FromKeySetCA) and (_FromKeySetCARefCount>0) then
+      dec(_FromKeySetCARefCount);
   if ownPrivate in fOwned then
     fPrivate.Free;
   inherited Destroy;
 end;
 
-var
-  _FromKeySetCA: TECCCertificateChain;
-
 class procedure TECDHEProtocol.FromKeySetCA(aPKI: TECCCertificateChain);
 begin
-  _FromKeySetCA.Free;
+  if _FromKeySetCA<>nil then
+    if _FromKeySetCARefCount>0 then
+      raise EECCException.CreateUTF8('%.FromKeySetCA: % is still used by % instance(s)',
+        [self,_FromKeySetCA,_FromKeySetCARefCount]) else
+    _FromKeySetCA.Free;
   _FromKeySetCA := aPKI;
 end;
 
@@ -3384,27 +3404,25 @@ class function TECDHEProtocol.FromKey(const aKey: RawUTF8; aServer: boolean): TE
 const CL: array[boolean] of TECDHEProtocolClass = (
   TECDHEProtocolServer, TECDHEProtocolClient);
 var sw: TSynNameValue;
-    p,pw,c: RawUTF8;
+    pw,c: RawUTF8;
     fn: TFileName;
     algo: TECDHEAlgo;
     ca: TECCCertificateChain;
     chain: TRawUTF8DynArray;
     priv: TECCCertificateSecret;
-    i: integer;
+    i,pr: integer;
 begin
   result := nil;
-  if PosEx('p=',aKey)=0 then
+  if PosEx('a=',aKey)=0 then
     exit;
   // a=mutual;k=hmacsha256;e=aescrc128;m=duringef;p=34a2;pw=password;pr=65000;ca=..
   sw.InitFromCSV(pointer(aKey),'=',';');
-  p := sw.Str['p'];
-  pw := sw.Str['pw'];
-  if (p='') or (pw='') then
-    exit; // mandatory switches
-  sw.ValueEnum('a',TypeInfo(TECDHEAuth),algo.auth);
+  if not sw.ValueEnum('a',TypeInfo(TECDHEAuth),algo.auth) then
+    exit; // mandatory parameter
   sw.ValueEnum('k',TypeInfo(TECDHEKDF),algo.kdf);
   sw.ValueEnum('e',TypeInfo(TECDHEEF),algo.ef);
   sw.ValueEnum('m',TypeInfo(TECDHEEF),algo.mac);
+  // compute ca: TECCCertificateChain
   ca := nil;
   c := sw.Str['ca'];
   if c<>'' then begin
@@ -3421,18 +3439,25 @@ begin
         FreeAndnil(ca);
     end;
   end;
-  if ca=nil then
+  if (ca=nil) and (_FromKeySetCA<>nil) then begin
     ca := _FromKeySetCA;
-  fn := UTF8ToString(aKey);
-  if ECCKeyFileFind(fn,true) then
-    priv := TECCCertificateSecret.CreateFromSecureFile(fn,pw,
-      sw.ValueInt('pr',60000)) else
-    priv := nil;
+    inc(_FromKeySetCARefCount);
+  end;
+  // compute priv: TECCCertificateSecret
+  priv := nil;
+  fn := UTF8ToString(sw.Str['p']);
+  pw := sw.Str['pw'];
+  pr := sw.ValueInt('pr',60000);
+  if (fn<>'') and (pw<>'') and ECCKeyFileFind(fn,true) then
+    priv := TECCCertificateSecret.CreateFromSecureFile(fn,pw,pr);
   result := CL[aServer].Create(algo.auth,ca,priv);
-  result.fOwned := [ownPKI,ownPrivate];
   result.KDF := algo.kdf;
   result.EF := algo.ef;
   result.MAC := algo.mac;
+  if (ca<>nil) and (ca<>_FromKeySetCA) then
+    include(result.fOwned,ownPKI);
+  if priv<>nil then
+    include(result.fOwned,ownPrivate);
 end;
 
 const
@@ -3650,7 +3675,7 @@ begin
   if cardinal(aServer.algo)<>cardinal(fAlgo) then
     exit;
   result := sprBadRequest;
-  if not IsEqual(aServer.RndA,fRndA) or
+  if IsZero(fRndA) or not IsEqual(aServer.RndA,fRndA) or
      IsZero(aServer.RndB) or IsEqual(aServer.RndA,aServer.RndB) then
     exit;
   fRndB := aServer.RndB;
@@ -3673,6 +3698,21 @@ begin
     FillZero(THash256(fdE));
   end;
   result := sprSuccess;
+end;
+
+function TECDHEProtocolClient.ProcessHandshake(const MsgIn: RawUTF8;
+  out MsgOut: RawUTF8): TProtocolResult;
+var out1: TECDHEFrameClient;
+    in2: TECDHEFrameServer;
+begin
+  if MsgIn='' then begin
+    ComputeHandshake(out1);
+    MsgOut := BinToBase64(@out1,SizeOf(out1));
+    result := sprSuccess;
+  end else
+    if Base64ToBin(Pointer(MsgIn),@in2,length(MsgIn),sizeof(in2),false) then
+      result := ValidateHandshake(in2) else
+      result := sprBadRequest;
 end;
 
 
@@ -3742,6 +3782,18 @@ begin
   if fAlgo.auth<>authClient then
     Sign(@aServer,sizeof(aServer),aServer.QCB);
   result := sprSuccess;
+end;
+
+function TECDHEProtocolServer.ProcessHandshake(const MsgIn: RawUTF8;
+  out MsgOut: RawUTF8): TProtocolResult;
+var in1: TECDHEFrameClient;
+    out1: TECDHEFrameServer;
+begin
+  if Base64ToBin(Pointer(MsgIn),@in1,length(MsgIn),sizeof(in1),false) then begin
+    result := ComputeHandshake(in1,out1);
+    MsgOut := BinToBase64(@out1,SizeOf(out1));
+  end else
+    result := sprBadRequest;
 end;
 
 

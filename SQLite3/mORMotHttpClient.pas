@@ -808,7 +808,7 @@ begin
 {$ifdef WITHLOG}
   with fLogFamily.SynLog do
     if result<>'' then
-      Log(sllWarning,'"%" against %',[result,sockets],self) else
+      Log(sllWarning,'[%] error upgrading %',[result,sockets],self) else
       Log(sllHTTP,'HTTP link upgraded to WebSockets using %',[sockets],self);
 {$endif}
 end;

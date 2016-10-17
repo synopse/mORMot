@@ -178,10 +178,9 @@ type
     fFramesOutBytes: QWord;
     fRemoteIP: SockString;
     fRemoteLocalhost: boolean;
-    fServer: boolean;
     fLastError: string;
-    function ProcessHandshake(Sender: TWebSocketProcess; const InHeader: RawUTF8;
-      out OutHeader: RawUTF8): boolean; virtual;
+    function ProcessHandshake(const ExtIn: RawUTF8; out ExtOut: RawUTF8;
+      ErrorMsg: PRawUTF8): boolean; virtual;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); virtual; abstract;
     function SendFrames(Owner: TWebSocketProcess;
@@ -196,12 +195,9 @@ type
     // for a given protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aName,aURI: RawUTF8; aServer: boolean); reintroduce;
+    constructor Create(const aName,aURI: RawUTF8); reintroduce;
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; virtual; abstract;
-    /// true if this protocol is used on the server side
-    // - false for a protocol used on the client side
-    property Server: boolean read fServer;
   published
     /// the Sec-WebSocket-Protocol application name currently involved
     // - is currently 'synopsejson' or 'synopsebinary'
@@ -298,7 +294,7 @@ type
     /// initialize the WebSockets JSON protocol
     // - if aURI is '', any URI would potentially upgrade to this protocol; you can
     // specify an URI to limit the protocol upgrade to a single resource
-    constructor Create(const aURI: RawUTF8; aServer: boolean); reintroduce;
+    constructor Create(const aURI: RawUTF8); reintroduce;
   end;
 
   /// handle a REST application-level WebSockets protocol using compressed and
@@ -326,21 +322,31 @@ type
     function GetEncrypted: boolean;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
-  public
+    function ProcessHandshake(const ExtIn: RawUTF8; out ExtOut: RawUTF8;
+      ErrorMsg: PRawUTF8): boolean; override;
+public
     /// compute a new instance of the WebSockets protocol, with same parameters
     function Clone: TWebSocketProtocol; override;
-    /// initialize the WebSockets binary protocol
+    /// initialize the WebSockets binary protocol with no encryption
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    // - if aKeySize if 128, 192 or 256, AES-CFB encryption will be used
-    // on this protocol
-    constructor Create(const aURI: RawUTF8; aServer: boolean;
-      const aKey; aKeySize: cardinal; aCompressed: boolean=true); reintroduce; overload;
-    /// initialize the WebSockets binary protocol
+    // - SynLZ compression is enabled by default, unless aCompressed is false
+    constructor Create(const aURI: RawUTF8; aCompressed: boolean=true); reintroduce; overload;
+    /// initialize the WebSockets binary protocol with a symmetric AES key 
     // - if aURI is '', any URI would potentially upgrade to this protocol; you
     // can specify an URI to limit the protocol upgrade to a single resource
-    // - AES-CFB 256 bit encryption will be enabled on this protocol if the
-    // aKey parameter is supplied, after been hashed using SHA-256 algorithm
+    // - if aKeySize if 128, 192 or 256, TProtocolAES (i.e. AES-CFB encryption)
+    //  will be used to secure the transmission
+    // - SynLZ compression is enabled by default, unless aCompressed is false
+    constructor Create(const aURI: RawUTF8; const aKey; aKeySize: cardinal;
+      aCompressed: boolean=true); reintroduce; overload;
+    /// initialize the WebSockets binary protocol from a textual key
+    // - if aURI is '', any URI would potentially upgrade to this protocol; you
+    // can specify an URI to limit the protocol upgrade to a single resource
+    // - will create a TProtocolAES or TECDHEProtocol instance, corresponding to
+    // the supplied aKey and aServer values, to secure the transmission using
+    // a symmetric or assymetric algorithm
+    // - SynLZ compression is enabled by default, unless aCompressed is false
     constructor Create(const aURI: RawUTF8; aServer: boolean; const aKey: RawUTF8;
       aCompressed: boolean=true); reintroduce; overload;
   published
@@ -601,7 +607,7 @@ type
     fSettings: TWebSocketProcessSettings;
     /// will validate the WebSockets handshake, then call WebSocketProcessLoop()
     function WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
-      Context: TWebSocketServerResp): boolean; virtual;
+      Context: TWebSocketServerResp): integer; virtual;
     /// overriden method which will recognize the WebSocket protocol handshake,
     // then run the whole bidirectional communication in its calling thread
     // - here aCallingThread is a THttpServerResp, and ClientSock.Headers
@@ -862,11 +868,10 @@ begin
   inc(fFramesOutBytes,length(frame.payload)+2);
 end;
 
-constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8; aServer: boolean);
+constructor TWebSocketProtocol.Create(const aName,aURI: RawUTF8);
 begin
   fName := aName;
   fURI := aURI;
-  fServer := aServer;
 end;
 
 function TWebSocketProtocol.FrameIs(const frame: TWebSocketFrame;
@@ -881,8 +886,8 @@ begin
   result := '*'; // no frame URI by default
 end;
 
-function TWebSocketProtocol.ProcessHandshake(Sender: TWebSocketProcess;
-  const InHeader: RawUTF8; out OutHeader: RawUTF8): boolean;
+function TWebSocketProtocol.ProcessHandshake(const ExtIn: RawUTF8; out ExtOut: RawUTF8;
+  ErrorMsg: PRawUTF8): boolean;
 begin
   result := false; // do nothing by default
 end;
@@ -970,7 +975,7 @@ end;
 
 function TWebSocketProtocolChat.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolChat.Create(fName,fURI,fServer);
+  result := TWebSocketProtocolChat.Create(fName,fURI);
   TWebSocketProtocolChat(result).OnIncomingFrame := OnIncomingFrame;
 end;
 
@@ -1096,14 +1101,14 @@ end;
 
 { TWebSocketProtocolJSON }
 
-constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8; aServer: boolean);
+constructor TWebSocketProtocolJSON.Create(const aURI: RawUTF8);
 begin
-  inherited Create('synopsejson',aURI,aServer);
+  inherited Create('synopsejson',aURI);
 end;
 
 function TWebSocketProtocolJSON.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolJSON.Create(fURI,fServer);
+  result := TWebSocketProtocolJSON.Create(fURI);
 end;
 
 procedure TWebSocketProtocolJSON.FrameCompress(const Head: RawUTF8;
@@ -1217,36 +1222,39 @@ end;
 { TWebSocketProtocolBinary }
 
 constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
-  aServer: boolean; const aKey; aKeySize: cardinal; aCompressed: boolean);
+  aCompressed: boolean);
 begin
-  inherited Create('synopsebinary',aURI,aServer);
+  inherited Create('synopsebinary',aURI);
+  fCompressed := aCompressed;
+end;
+
+constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
+  const aKey; aKeySize: cardinal; aCompressed: boolean);
+begin
+  Create(aURI,aCompressed);
   if aKeySize>=128 then
     fEncryption := TProtocolAES.Create(
       TAESCFB,aKey,aKeySize,WebSocketsIVReplayAttackCheck);
-  fCompressed := aCompressed;
 end;
 
 constructor TWebSocketProtocolBinary.Create(const aURI: RawUTF8;
   aServer: boolean; const aKey: RawUTF8; aCompressed: boolean);
 var key: TSHA256Digest;
-    keySize: integer;
 begin
-  if aKey<>'' then begin
+  if aKey='' then
+    Create(aURI,aCompressed) else begin
     fEncryption := TECDHEProtocol.FromKey(aKey,aServer);
-    if fEncryption<>nil then begin
-      Create(aURI,aServer,self,0,aCompressed);
-      exit;
+    if fEncryption<>nil then
+      Create(aURI,aCompressed) else begin
+      SHA256Weak(aKey,key);
+      Create(aURI,key,256,aCompressed);
     end;
-    SHA256Weak(aKey,key);
-    keySize := 256;
-  end else
-    keySize := 0;
-  Create(aURI,aServer,key,keySize,aCompressed);
+  end;
 end;
 
 function TWebSocketProtocolBinary.Clone: TWebSocketProtocol;
 begin
-  result := TWebSocketProtocolBinary.Create(fURI,fServer,self,0,fCompressed);
+  result := TWebSocketProtocolBinary.Create(fURI,self,0,fCompressed);
   if fEncryption<>nil then
     TWebSocketProtocolBinary(result).fEncryption := fEncryption.Clone;
 end;
@@ -1452,6 +1460,32 @@ begin
     result := 0 else
     result := (fFramesOutBytesSocket*100) div fFramesOutBytes;
   result := 100-result;
+end;
+
+function TWebSocketProtocolBinary.ProcessHandshake(const ExtIn: RawUTF8;
+  out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean;
+var res: TProtocolResult;
+    msgin,msgout: RawUTF8;
+begin
+  result := false; // not supported
+  if fEncryption=nil then
+    exit;
+  if ExtIn<>'' then
+    if IdemPChar(pointer(ExtIn),'SYNHK; HK=') then
+      msgin := copy(ExtIn,11,maxInt) else
+      exit;
+  res := fEncryption.ProcessHandshake(msgin,msgout);
+  if res=sprUnsupported then
+    exit;
+  if res<>sprSuccess then begin
+    WebSocketLog.Add.Log(sllWarning,'ProcessHandshake=% In=[%]',[ToText(res)^,msgin],self);
+    if ErrorMsg<>nil then
+      ErrorMsg^ := FormatUTF8('%: %',[ErrorMsg^,
+        GetCaptionFromEnum(TypeInfo(TProtocolResult),ord(res))]);
+  end else begin
+    FormatUTF8('synhk; hk=%',[msgout],ExtOut);
+    result := true;
+  end;
 end;
 
 
@@ -2021,14 +2055,14 @@ begin
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
-  Context: TWebSocketServerResp): boolean;
-var upgrade,uri,version,protocol,key: RawUTF8;
+  Context: TWebSocketServerResp): integer;
+var upgrade,uri,version,protocol,key,extin,extout: RawUTF8;
     P: PUTF8Char;
     Digest: TSHA1Digest;
     prot: TWebSocketProtocol;
     i: integer;
 begin
-  result := false; // quiting now will process it like a regular GET HTTP request
+  result := STATUS_BADREQUEST;
   if Context.fProcess<>nil then
     exit; // already upgraded
   upgrade := ClientSock.HeaderValue('Upgrade');
@@ -2052,19 +2086,30 @@ begin
     exit;
   prot.fRemoteIP := ClientSock.RemoteIP;
   prot.fRemoteLocalhost := ClientSock.RemoteIP='127.0.0.1';
+  extin := ClientSock.HeaderValue('Sec-WebSocket-Extensions');
+  if (extin<>'') and not prot.ProcessHandshake(extin,extout,nil) then begin
+    prot.Free;
+    result := STATUS_UNAUTHORIZED;
+    exit;
+  end;
   Context.fProcess := TWebSocketProcessServer.Create(
     ClientSock,prot,Context.ConnectionID,Context,fSettings,fProcessName);
   Context.fProcess.fServerResp := Context;
   key := ClientSock.HeaderValue('Sec-WebSocket-Key');
-  if Base64ToBinLength(pointer(key),length(key))<>16 then
+  if Base64ToBinLengthSafe(pointer(key),length(key))<>16 then begin
+    prot.Free;
     exit; // this nonce must be a Base64-encoded value of 16 bytes
+  end;
   ComputeChallenge(key,Digest);
   ClientSock.SockSend(['HTTP/1.1 101 Switching Protocols'#13#10+
     'Upgrade: websocket'#13#10'Connection: Upgrade'#13#10+
     'Sec-WebSocket-Protocol: ',prot.Name,#13#10+
-    'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest)),#13#10]);
+    'Sec-WebSocket-Accept: ',BinToBase64(@Digest,sizeof(Digest))]);
+  if extout<>'' then
+    ClientSock.SockSend(['Sec-WebSocket-Extensions: ',extout]);
+  ClientSock.SockSend;
   ClientSock.SockSendFlush;
-  result := true; // connection upgraded: never back to HTTP/1.1
+  result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
   fWebSocketConnections.Safe.Lock;
   fWebSocketConnections.Add(Context);
   fWebSocketConnections.Safe.UnLock;
@@ -2086,11 +2131,19 @@ end;
 
 procedure TWebSocketServer.Process(ClientSock: THttpServerSocket;
   ConnectionID: integer; ConnectionThread: TSynThread);
+var err: integer;
 begin
   if ClientSock.ConnectionUpgrade and ClientSock.KeepAliveClient and
      IdemPropName('GET',pointer(ClientSock.Method),length(ClientSock.Method)) and
-     ConnectionThread.InheritsFrom(TWebSocketServerResp) then
-    WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread)) else
+     ConnectionThread.InheritsFrom(TWebSocketServerResp) then begin
+    err := WebSocketProcessUpgrade(ClientSock,TWebSocketServerResp(ConnectionThread));
+    if err<>STATUS_SUCCESS then begin
+      ClientSock.SockSend(['HTTP/1.0 ',err,' WebSocket Upgrade Error'#13#10+
+        'Connection: Close'#13#10]);
+      ClientSock.SockSendFlush;
+      ClientSock.KeepAliveClient := false;
+    end;
+  end else
     inherited Process(ClientSock,ConnectionID,ConnectionThread);
 end;
 
@@ -2159,7 +2212,7 @@ begin
   fProtocols.AddOnce(TWebSocketProtocolBinary.Create(
     aWebSocketsURI,true,aWebSocketsEncryptionKey,aWebSocketsCompressed));
   if aWebSocketsAJAX then
-    fProtocols.AddOnce(TWebSocketProtocolJSON.Create(aWebSocketsURI,true));
+    fProtocols.AddOnce(TWebSocketProtocolJSON.Create(aWebSocketsURI));
 end;
 
 function TWebSocketServerRest.Callback(
@@ -2203,7 +2256,7 @@ begin
     result := STATUS_NOTFOUND else begin
     result := fProcess.NotifyCallback(Ctxt,aMode);
     if result=STATUS_WEBSOCKETCLOSED then begin
-      WebSocketLog.Add.Log(sllError,'%.NotifyCallback on closed connection',[self]);
+      WebSocketLog.Add.Log(sllError,'NotifyCallback on closed connection',self);
       ServerSock.KeepAliveClient := false; // force close the connection
       result := STATUS_NOTFOUND;
     end;
@@ -2307,6 +2360,7 @@ function THttpClientWebSockets.WebSocketsUpgrade(const aWebSocketsURI,
 var protocol: TWebSocketProtocolRest;
     key: TAESBlock;
     bin1,bin2: RawByteString;
+    extin,extout: RawUTF8;
     cmd: SockString;
     digest1,digest2: TSHA1Digest;
 begin
@@ -2320,7 +2374,7 @@ begin
   end;
   try
     if aWebSocketsAJAX then
-      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI,false) else
+      protocol := TWebSocketProtocolJSON.Create(aWebSocketsURI) else
       protocol := TWebSocketProtocolBinary.Create(
         aWebSocketsURI,false,aWebSocketsEncryptionKey,aWebSocketsCompression);
     try
@@ -2330,7 +2384,10 @@ begin
       SockSend(['Content-Length: 0'#13#10'Connection: Upgrade'#13#10+
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ',bin1,#13#10+
         'Sec-WebSocket-Protocol: ',protocol.Name,#13#10+
-        'Sec-WebSocket-Version: 13'#13#10]);
+        'Sec-WebSocket-Version: 13']);
+      if protocol.ProcessHandshake('',extout,nil) then
+        SockSend(['Sec-WebSocket-Extensions: ',extout]);
+      SockSend;
       SockSendFlush;
       SockRecvLn(cmd);
       GetHeader;
@@ -2343,11 +2400,15 @@ begin
       result := 'Invalid HTTP Upgrade Accept Challenge';
       ComputeChallenge(bin1,digest1);
       bin2 := HeaderValue('Sec-WebSocket-Accept');
-      if (Base64ToBinLength(pointer(bin2),length(bin2))<>sizeof(digest2)) then
+      if not Base64ToBin(pointer(bin2),@digest2,length(bin2),sizeof(digest2),false) or
+         not CompareMem(@digest1,@digest2,SizeOf(digest1)) then
         exit;
-      SynCommons.Base64Decode(pointer(bin2),@digest2,length(bin2) shr 2);
-      if not CompareMem(@digest1,@digest2,SizeOf(digest1)) then
-        exit;
+      if extout<>'' then begin
+        result := 'Invalid HTTP Upgrade ProcessHandshake';
+        extin := HeaderValue('Sec-WebSocket-Extensions');
+        if (extin='') or not protocol.ProcessHandshake(extin,extout,@result) then
+          exit;
+      end;
       // if we reached here, connection is successfully upgraded to WebSockets
       if (Server='localhost') or (Server='127.0.0.1') then begin
         protocol.fRemoteIP := '127.0.0.1';
