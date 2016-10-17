@@ -78,6 +78,7 @@ begin
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
       ' infocrypt -file some.doc.synecc');
+    writeln(#10'Note that you can add the -noprompt switch for no console interactivity.');
   end;
 end;
 

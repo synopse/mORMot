@@ -300,7 +300,7 @@ var auth: TECCCertificateSecret;
 begin
   auth := TECCCertificateSecret.CreateFromSecureFile(AuthPrivKey,AuthPassword,AuthPasswordRounds);
   try
-    result := ObjectToJSON(auth,[woHumanReadable]);
+    result := JSONReformat(VariantSaveJSON(auth.ToVariant))
   finally
     auth.Free;
   end;
@@ -318,6 +318,21 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
       sw.Text(' % file verification failure: % (%).',[filename,res,ord(verif)],ccLightRed);
       result := eccValidationError;
     end;
+  end;
+  procedure WritePassword(const privfile: TFileName;
+    const pass: RawUTF8; rounds: integer);
+  var a: TECDHEAuth;
+      privkey: RawUTF8;
+  begin
+    if privfile='' then
+      exit;
+    sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:',[]);
+    sw.Text(' encryption %',[TSynPersistentWithPassword.ComputePassword(pass)],ccLightBlue);
+    privkey := StringToUTF8(copy(GetFileNameWithoutExt(privfile),1,8));
+    for a := low(a) to high(a) do
+      sw.Text(' % %',[ToText(a)^,TECDHEProtocol.FromKeyCompute(
+        privkey,pass,rounds,'',a)],ccLightBlue);
+    sw.Text('',[]);
   end;
 
 var issuer, authpass, savepass, constname, comment: RawUTF8;
@@ -346,7 +361,7 @@ begin
         sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
         authpass := sw.AsUTF8('AuthPass','',
           'Enter the PassPhrase of this .private file.');
-        authrounds := sw.AsInt('AuthRounds',60000,
+        authrounds := sw.AsInt('AuthRounds',DEFAULT_ECCROUNDS,
           'Enter the PassPhrase iteration rounds of this .private file.');
       end else
         authrounds := 0;
@@ -363,10 +378,8 @@ begin
           'Enter a private PassPhrase for the new key (at least 8 chars long).'#13#10+
           'Save this in a safe place: if you forget it, the key will be useless!');
       until (length(savepass)>=8) or sw.NoPrompt;
-      sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:',[]);
-      sw.Text(' %'#13#10,[TSynPersistentWithPassword.ComputePassword(savepass)],ccWhite);
       repeat
-        saverounds := sw.AsInt('NewRounds',60000,
+        saverounds := sw.AsInt('NewRounds',DEFAULT_ECCROUNDS,
           'Enter the PassPhrase iteration round for the new key (at least 1000).'#13#10+
           'The higher, the safer, but will demand more computation time.');
       until (saverounds>=1000) or sw.NoPrompt;
@@ -377,6 +390,7 @@ begin
       until (splitfiles>0) or sw.NoPrompt;}
       newfile := EccCommandNew(
         auth,authpass,authrounds,issuer,start,days,savepass,saverounds,splitfiles);
+      WritePassword(newfile,savepass,saverounds);
       if newfile<>'' then
         newfile := newfile+'/.private';
     end;
@@ -388,21 +402,20 @@ begin
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('AuthPass','',
         'Enter the PassPhrase of this .private file.');
-      authrounds := sw.AsInt('AuthRounds',60000,
+      authrounds := sw.AsInt('AuthRounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
       repeat
         savepass := sw.AsUTF8('NewPass',TAESPRNG.Main.RandomPassword(12),
           'Enter a NEW private PassPhrase for the key (at least 8 chars long).'#13#10+
           'Save this in a safe place: if you forget it, the key will be useless!');
       until (length(savepass)>=8) or sw.NoPrompt;
-      sw.Text('Corresponding TSynPersistentWithPassword.ComputePassword:',[]);
-      sw.Text(' %'#13#10,[TSynPersistentWithPassword.ComputePassword(savepass)],ccWhite);
       repeat
-        saverounds := sw.AsInt('NewRounds',60000,
+        saverounds := sw.AsInt('NewRounds',DEFAULT_ECCROUNDS,
           'Enter the NEW PassPhrase iteration round for the key (at least 1000).'#13#10+
           'The higher, the safer, but will demand more computation time.');
       until (saverounds>=1000) or sw.NoPrompt;
       newfile := EccCommandRekey(auth,authpass,authrounds,savepass,saverounds);
+      WritePassword(newfile,savepass,saverounds);
     end;
     ecSign: begin
       repeat
@@ -415,7 +428,7 @@ begin
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
         'Enter the PassPhrase of this .private file.');
-      authrounds := sw.AsInt('Rounds',60000,
+      authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
       newfile := EccCommandSignFile(origfile,auth,authpass,authrounds);
     end;
@@ -434,7 +447,7 @@ begin
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
         'Enter the PassPhrase of this .private file.');
-      authrounds := sw.AsInt('Rounds',60000,
+      authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
       constname := sw.AsUTF8('Const','',
         'Enter the variable name to define the const in source.');
@@ -452,9 +465,11 @@ begin
         sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('Pass','',
         'Enter the PassPhrase of this .private file.');
-      authrounds := sw.AsInt('Rounds',60000,
+      authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
       sw.Text('%',[ECCCommandInfoPrivFile(auth,authpass,authrounds)]);
+      if not sw.NoPrompt then
+        WritePassword(auth,authpass,authrounds);
     end;
     ecChain:
       newfile := ECCCommandChainCertificates(sw.AsArray);
@@ -474,7 +489,7 @@ begin
       until ECCKeyFileFind(auth,false) or sw.NoPrompt;
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for encryption.');
-      authrounds := sw.AsInt('SaltRounds',60000, 'Enter the PassPhrase iteration rounds.');
+      authrounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
       ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds);
     end;
     ecInfoCrypt: begin
@@ -493,10 +508,10 @@ begin
       until (newfile <> '') or sw.NoPrompt;
       authpass := sw.AsUTF8('AuthPass','',
         'Enter the PassPhrase of the associated .private file.');
-      authrounds := sw.AsInt('AuthRounds',60000,
+      authrounds := sw.AsInt('AuthRounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
       savepass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for decryption.');
-      saverounds := sw.AsInt('SaltRounds',60000, 'Enter the PassPhrase iteration rounds.');
+      saverounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
       decrypt := ECCCommandDecryptFile(origfile,newfile,
         sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign);
       msg := SysUtils.LowerCase(GetCaptionFromEnum(TypeInfo(TECCDecrypt),ord(decrypt)));
