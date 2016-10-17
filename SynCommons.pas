@@ -1501,7 +1501,7 @@ type
     /// finalize the temporary storage
     procedure Done;
     /// append some binary to the internal buffer
-    // - would raise an ESynException in case of potential overflow
+    // - will raise an ESynException in case of potential overflow
     procedure wr(const val; len: integer);
     /// append some shortstring as binary to the internal buffer
     procedure wrss(const str: shortstring);
@@ -4354,7 +4354,7 @@ function Int64DynArrayToCSV(const Values: TInt64DynArray;
 function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray; 
 
 /// quick helper to initialize a dynamic array of integer from 64-bit integers
-// - would raise a ESynException if any Value[] can not fit into 32-bit, unless
+// - will raise a ESynException if any Value[] can not fit into 32-bit, unless
 // raiseExceptionOnOverflow is FALSE and the returned array slot is filled
 // with maxInt/minInt
 function TIntegerDynArrayFrom64(const Values: TInt64DynArray;
@@ -4601,7 +4601,7 @@ type
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts to specify how comparison should occur, using
     // TDynArrayKind  kind of first field
-    // - djNone and djCustom are too vague, and would raise an exception
+    // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches the dynamic array element definition
     // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
@@ -5080,7 +5080,7 @@ type
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts to specify how both hashing and comparison should
     // occur, using TDynArrayKind  kind of first field
-    // - djNone and djCustom are too vague, and would raise an exception
+    // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
     // ensure that the aKind parameter matches the dynamic array element definition
     // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
@@ -7832,7 +7832,7 @@ type
     // to the generated JSON stream (for faster unserialization of huge content)
     procedure AddColumns(aKnownRowsCount: integer=0);
     /// allow to change on the fly an expanded format column layout
-    // - by definition, a non expanded format would raise a ESynException
+    // - by definition, a non expanded format will raise a ESynException
     // - caller should then set ColNames[] and run AddColumns()
     procedure ChangeExpandedFields(aWithID: boolean; const aFields: TSQLFieldIndexDynArray); overload;
     /// end the serialized JSON object
@@ -16154,7 +16154,7 @@ type
     function ToJSON(HumanReadable: boolean=false): RawUTF8;
     /// the document fields would be safely accessed via this property
     // - this is the main entry point of this storage
-    // - would raise an EDocVariant exception if Name does not exist at reading
+    // - will raise an EDocVariant exception if Name does not exist at reading
     // - implementation class would make a thread-safe copy of the variant value
     property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
   end;
@@ -16217,7 +16217,7 @@ type
     // - implemented as just a wrapper around VariantSaveJSON()
     function ToJSON(HumanReadable: boolean=false): RawUTF8;
     /// the document fields would be safely accessed via this property
-    // - would raise an EDocVariant exception if Name does not exist
+    // - will raise an EDocVariant exception if Name does not exist
     // - result variant is returned as a copy, not as varByRef, since a copy
     // will definitively be more thread safe
     property Value[const Name: RawUTF8]: Variant read GetValue write SetValue; default;
@@ -16506,11 +16506,11 @@ type
     /// finalize the authentation
     destructor Destroy; override;
     /// register one credential for a given user
-    // - this abstract method would raise an exception: inherited classes should
+    // - this abstract method will raise an exception: inherited classes should
     // implement them as expected
     procedure AuthenticateUser(const aName, aPassword: RawUTF8); virtual;
     /// unregister one credential for a given user
-    // - this abstract method would raise an exception: inherited classes should
+    // - this abstract method will raise an exception: inherited classes should
     // implement them as expected
     procedure DisauthenticateUser(const aName: RawUTF8); virtual;
     /// create a new session

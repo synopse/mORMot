@@ -78,6 +78,10 @@ begin
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
       ' infocrypt -file some.doc.synecc');
+    writeln(ExeVersion.ProgramName,
+      ' cheatinit -newpass MasterP@ssw0RD@ -newrounds 100000');
+    writeln(ExeVersion.ProgramName,
+      ' cheat -auth key.private -authpass MasterP@ssw0RD@ -authrounds 100000');
     writeln(#10'Note that you can add the -noprompt switch for no console interactivity.');
   end;
 end;
