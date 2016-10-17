@@ -936,7 +936,8 @@ type
     // - this method is thread-safe
     function FillRandomBytes(Len: integer): TBytes;
     /// computes a random ASCII password
-    // - will contain uppercase/lower letters, digits and punctuations
+    // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
+    // excluding ;,= to allow direct use in CSV content
     function RandomPassword(Len: integer): RawUTF8;
     /// would force the internal generator to re-seed its private key
     // - avoid potential attacks on backward or forward security
@@ -8781,7 +8782,7 @@ end;
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
 const CHARS: array[0..137] of AnsiChar =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'+
-  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789;.:()?%!=+*/@#';
+  'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789$.:()?%!-+*/@#';
 var i,j: integer;
     haspunct: boolean;
 begin
