@@ -686,11 +686,13 @@ type
     // - typical use may be:
     // ! Server.StaticDataAdd(TSQLRestStorageShardDB.Create(TSQLRecordSharded,Server,500000))
     // - you may define some low-level tuning of SQLite3 process via aSynchronous
-    // / aCacheSizePrevious / aCacheSizeLast parameters
+    // / aCacheSizePrevious / aCacheSizeLast / aMaxShardCount parameters, if
+    // the default smOff / 1MB / 2MB / 100 values are not enough
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aShardRange: TID; aOptions: TSQLRestStorageShardOptions=[];
-      const aShardRootFileName: TFileName=''; aSynchronous: TSQLSynchronousMode=smOff;
-      aCacheSizePrevious: integer=1000; aCacheSizeLast: integer=10000); reintroduce; virtual;
+      const aShardRootFileName: TFileName=''; aMaxShardCount: integer=100;
+      aSynchronous: TSQLSynchronousMode=smOff;
+      aCacheSizePrevious: integer=250; aCacheSizeLast: integer=500); reintroduce; virtual;
   published
     /// associated file name for the SQLite3 database files
     // - contains the folder, and root file name for the storage
@@ -2598,14 +2600,14 @@ end;
 
 constructor TSQLRestStorageShardDB.Create(aClass: TSQLRecordClass;
   aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
-  const aShardRootFileName: TFileName; aSynchronous: TSQLSynchronousMode;
-  aCacheSizePrevious, aCacheSizeLast: Integer);
+  const aShardRootFileName: TFileName; aMaxShardCount: integer;
+  aSynchronous: TSQLSynchronousMode; aCacheSizePrevious,aCacheSizeLast: Integer);
 begin
   fShardRootFileName := aShardRootFileName;
   fSynchronous := aSynchronous;
   fCacheSizePrevious := aCacheSizePrevious;
   fCacheSizeLast := aCacheSizeLast;
-  inherited Create(aClass,aServer,aShardRange,aOptions);
+  inherited Create(aClass,aServer,aShardRange,aOptions,aMaxShardCount);
 end;
 
 function TSQLRestStorageShardDB.DBFileName(ShardIndex: Integer): TFileName;
@@ -2621,7 +2623,7 @@ var db: TSQLRestServerDB;
 begin
   inc(fShardLast);
   model := TSQLModel.Create([fStoredClass],FormatUTF8('shard%',[fShardLast]));
-  if fInitShardsIsLast then // last .dbs uses 40MB cache, previous 4MB only
+  if fInitShardsIsLast then // last/new .dbs = 2MB cache, previous 1MB only
     cachesize := fCacheSizeLast else
     cachesize := fCacheSizePrevious;
   sql := TSQLDatabase.Create(DBFileName(fShardLast),'',0,cachesize);
