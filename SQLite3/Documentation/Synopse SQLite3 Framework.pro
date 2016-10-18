@@ -13975,7 +13975,8 @@ All needed low-level asymmetric cryptography is available:
 The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and structures, ready to implement:
 - Authority certificates - via public {\f1\fs20 TECCCertificate} and private {\f1\fs20 TECCCertificateSecret} classes, and full {\f1\fs20 PKI} chaining - see {\f1\fs20 TECCCertificateChain};
 - Digital signature of files or memory buffers - via {\f1\fs20 TECCSignatureCertified};
-- Encryption of files or memory buffers - calling {\f1\fs20 TECCCertificate.Encrypt} and {\f1\fs20 TECCCertificateSecret.Decrypt} methods.
+- Encryption of files or memory buffers - calling {\f1\fs20 TECCCertificate.Encrypt} and {\f1\fs20 TECCCertificateSecret.Decrypt} methods;
+- Innovative {\f1\fs20 .cheat} files generation, for safe storage of private keys passwords, encrypted from a master {\f1\fs20 cheat.public} key and its master password.
 You are free to use those classes, in your programs, whenever some advanced cryptography is needed - and it will eventually be the case, trust me! A command-line {\f1\fs20 ECC} tool has also been developed, for convenient operation on files.
 :  ECC command line tool
 You will find in the {\f1\fs20 SQLite3\\Samples\\33 - ECC} folder the source code of the {\f1\fs20 @*ECC@.dpr} console project. Just compile it into an executable, accessible from your command line prompt. Or download an already compiled version from @http://synopse.info/files/ecc.7z
@@ -13985,7 +13986,7 @@ $>ecc
 $
 $Synopse ECC certificate-based public-key cryptography
 $-----------------------------------------------------
-$Using mORMot's SynECC rev. 1.18.2996
+$Using mORMot's SynECC rev. 1.18.3112
 $
 $ECC help
 $ECC new -auth key.private -authpass authP@ssW0rd -authrounds 60000
@@ -14005,6 +14006,11 @@ $      -saltpass salt -saltrounds 60000
 $ECC decrypt -file some.doc.synecc -out some.doc -auth key.private
 $      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000
 $ECC infocrypt -file some.doc.synecc
+$ECC cheatinit -newpass MasterP@ssw0RD@ -newrounds 100000
+$ECC cheat -auth key.private -authpass MasterP@ssw0RD@ -authrounds 100000
+$
+$Note that you can add the -noprompt switch for no console interactivity.
+$
 As you can see, the action is defined by a keyword, at first place ({\f1\fs20 new sign verify source}...). Then some optional parameters, in form of {\f1\fs20 -key value} pairs, can be supplied. If no parameter is specified, the {\f1\fs20 ECC} console application will prompt for input, with user-friendly questions, and adequate default values.
 You can define the {\f1\fs20 -noprompt} switch to force no console interaction at all, therefore allowing automated use from another process, or batch file. The {\f1\fs20 ECCProcess.pas} unit publishes all high-level commands of the {\f1\fs20 ECC} tool, so could be reused in your own setup or maintenance projects.
 We will now use this {\f1\fs20 ECC} tool to show most common features of the {\f1\fs20 SynEcc} unit, but also showing the code corresponding to each action.
@@ -14030,15 +14036,18 @@ $Enter a private PassPhrase for the new key (at least 8 chars long).
 $Save this in a safe place: if you forget it, the key will be useless!
 $NewPass [#weLHn5E.Qfe] :
 $
-$Corresponding TSynPersistentWithPassword.ComputePassword:
-$ Mca4j0KGyo3r4UAn
-$
 $Enter the PassPhrase iteration round for the new key (at least 1000).
 $The higher, the safer, but will demand more computation time.
 $NewRounds [60000] :
 $
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ encryption ErHdwwro/8jFsCZC
+$ authMutual 5qMgx6Miv+O71+VYL95zk6U2wP79lKL3s1BFnd+a
+$ authServer 5qMhx6Miv+O71+VYL95zk6U2wP79lKL3s1BFnd+a
+$ authClient 5qMix6Miv+O71+VYL95zk6U2wP79lKL3s1BFnd+a
+$
 $ 8BC90201EF55EE34F62DBA8FE8CF14DC.public/.private file created.
-Here we keep the default values, including the safe generated password ({\f1\fs20 #weLHn5E.Qfe}). You should {\ul write down this password} in a safe place, because it will be required for any use of the private key, e.g. when signing or decrypting a message. If you forget about this password, there will be no way of accessing this private key any more - you have been warned!
+Here we keep the default values, including the safe generated password ({\f1\fs20 #weLHn5E.Qfe}). You should {\ul write down this password} in a safe place, because it will be required for any use of the private key, e.g. when signing or decrypting a message. If you forget about this password, there will be no way of accessing this private key any more - you have been warned!\line We will see @189@ how enabling the {\f1\fs20 ECC cheat} mode may help storing the generated {\f1\fs20 .private} key passwords in a {\f1\fs20 .cheat} encrypted local file using a {\f1\fs20 cheat.public} key, to safely recover a password, from a master {\f1\fs20 cheat.private} key and its associated password.
 The last line contains the {\i identifier} (or serial) of the generated key. This hexadecimal value ({\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC}) will be used externally to identify the key, and internally (within other certificates) to map this particular key. Note that you do not need to type all the characters of the serial in the {\f1\fs20 ECC} tool: only the first characters are enough (e.g. {\f1\fs20 8BC9}), as soon as they identify one unique file in the current folder.
 You can check the generated files in the current folder:
 $>dir *.p*
@@ -14347,7 +14356,7 @@ Verification can be done via the dedicated {\f1\fs20 TECCSignatureCertified} cla
 !  end;
 !end;
 Here, the signing authority is supplied as a single {\f1\fs20 .public} local file, loaded in a {\f1\fs20 TECCCertificate} instance, but your projects may use {\f1\fs20 TECCCertificateChain} for a full {\f1\fs20 @*PKI@} authority chain.
-:  File Encryption
+:190  File Encryption
 In order to encrypt out both test files, as proposed in @%%AsymmEncrypt@, we will run the following commands:
 $>ecc crypt -file test1.txt -auth 03 -salt pass monsecret -noprompt
 $Will use: 03B8865C6B982A39E9EFB1DC1A95D227.public
@@ -14439,6 +14448,102 @@ $05/09/2016  10:37            72 209 test2.txt
 $05/09/2016  10:37            72 209 test2.txt.2
 $24/09/2016  17:13            15 220 test2.txt.synecc
 The {\f1\fs20 *.2} decrypted files have the expect size (and content), after decompression. Even the file timestamp has been set to match the original.
+:189  Private Keys Passwords Cheat Mode
+In order to follow best practice, our {\f1\fs20 .private} key files are always protected by a password. A random value with enough length and entropy is always proposed by the {\f1\fs20 ECC} tool when a key pair is generated, and could be used directly. It is always preferred to trust a computer to create true randomness (and {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} was designed to be the best possible seed, using hardware entropy if available), than using our human brain, which could be defeated by dictionary-based password attacks. Brute force cracking would be almost impossible, since {\f1\fs20 PBKDF2_HMAC_SHA256} Password-Based Key Derivation Function with 60,000 rounds is used, so rainbow tables (i.e. pre-computed passwords list) will be inoperative, and each password trial would take more time than with a regular Key Derivation Function.
+The issue with strong passwords is that they are difficult to remember. If you use not pure random passwords, but some easier to remember values with good entropy, you may try some tools like @https://xkpasswd.net/s which returns values like {\f1\fs20 $$19*wrong*DRIVE*read*61$$}. But even then, you will be able to remember only a dozen of such passwords. In a typical public key infrastructure, you may create hundredths of keys, so remembering all passwords is no option for an average human being as you and me.
+At the end, you end up with using a tool to store all your passwords (last trend is to use an online service with browser integration), or - admit it - store them in an {\f1\fs20 Excel} document protected by a password. Most IT people - and even security specialists - end with using such a mean of storage, just because they need it.\line The weaknesses of such solutions can be listed:
+- How could we trust closed source software and third-party online services?
+- Even open source like @http://keepass.info/help/base/security.html may appear weak (no PBKDF, no AFSplit, managed C#, SHA as PRNG);
+- The storage is as safe as the "master password" is safe;
+- If the "master password" is compromised, all your passwords are published;
+- You need to know the master password to add a new item to the store.
+The {\f1\fs20 ECC} tool is able to work in "cheat mode", storing all {\f1\fs20 .private} key files generated passwords in an associated {\f1\fs20 .cheat} local file, encrypted using a {\f1\fs20 cheat.public} key.\line As a result:
+- Each key pair will have its own associated {\f1\fs20 .cheat} file, so you only unleash one key at a time;
+- The {\f1\fs20 .cheat} file content is meaningless without the {\f1\fs20 cheat.private} key and its master password, so you can manage and store them together with your {\f1\fs20 .private} files;
+- Only the {\f1\fs20 cheat.public} key is needed when creating a key pair, so you won't leak your master password, and even could generate keys in an automated way, on a distant server;
+- The {\f1\fs20 cheat.private} key will be safely stored in a separated place, only needed when you need to recover a password;
+- It uses strong @190@, with proven PBKDF, AFSplit, AES-PRNG, and ECDH/ECIES algorithms.
+By default, no {\f1\fs20 .cheat} files are created. You need to explicitly initialize the "cheat mode", by creating master {\f1\fs20 cheat.public} and {\f1\fs20 cheat.private} key files:
+$ >ecc cheatinit
+$Enter Issuer identifier text of the master cheat keys.
+$Will be truncated to 15-20 ascii-7 chars.
+$Issuer [arbou] :
+$
+$Enter a private PassPhrase for the master cheat.private key (at least 8 chars).
+$Save this in a safe place: if you forget it, the key will be useless!
+$NewPass [uQHH*am39LLj] : verysafelongpassword
+$
+$Enter iteration rounds for the mastercheat.private key (at least 100000).
+$NewRounds [100000] :
+$
+$ cheat.public/.private file created.
+$
+As you can see, the default number of PBKDF rounds is high (100000), and local files have been created:
+$>dir cheat.*
+$
+$18/10/2016  11:12             4 368 cheat.private
+$18/10/2016  11:12               568 cheat.public
+$
+Now we will create a new key pair (in a single command line, with no console interaction):
+$>ecc new -newpass NewKeyP@ssw0rd -noprompt
+$
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ encryption HeOyjDUAsOhvLZkMA0Y=
+$ authMutual lO0mv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$ authServer lO0nv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$ authClient lO0kv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$
+$ D1045FCBAA1382EE44ED2C212596E9E1.public/.private file created.
+$
+An associated {\f1\fs20 .cheat} file has been created:
+$>dir D10*
+$
+$18/10/2016  11:15             1 668 D1045FCBAA1382EE44ED2C212596E9E1.cheat
+$18/10/2016  11:15             2 320 D1045FCBAA1382EE44ED2C212596E9E1.private
+$18/10/2016  11:15               588 D1045FCBAA1382EE44ED2C212596E9E1.public
+$
+Imagine you forgot about the {\f1\fs20 NewKeyP@ssw0rd} value. You could use the following command to retrieve it:
+$>ecc cheat
+$
+$Enter the first chars of the .private certificate file name.
+$Auth: D10
+$
+$Will use: D1045FCBAA1382EE44ED2C212596E9E1.private
+$
+$Enter the PassPhrase of the master cheat.private file.
+$AuthPass: verysafelongpassword
+$
+$Enter the PassPhrase iteration rounds of the cheat.private file.
+$AuthRounds [100000] :
+$
+${
+$        "pass": "NewKeyP@ssw0rd",
+$        "rounds": 60000
+$}
+$Corresponding TSynPersistentWithPassword.ComputePassword:
+$ encryption HeOyjDUAsOhvLZkMA0Y=
+$ authMutual lO0mv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$ authServer lO0nv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$ authClient lO0kv+8VpoFrrFfbBFilNppn1WumaIL+AN3JXEUUpCY=
+$
+If your {\f1\fs20 .private} key does not have its associated {\f1\fs20 .cheat} file, you won't be able to recover your password:
+$>ecc cheat
+$
+$Enter the first chars of the .private certificate file name.
+$Auth: 8BC9
+$
+$Will use: 8BC90201EF55EE34F62DBA8FE8CF14DC.private
+$
+$Enter the PassPhrase of the master cheat.private file.
+$AuthPass: verysafelongpassword
+$
+$Enter the PassPhrase iteration rounds of the cheat.private file.
+$AuthRounds [100000] :
+$
+$Fatal exception EECCException raised with message:
+$ Unknown file 8BC90201EF55EE34F62DBA8FE8CF14DC.cheat
+$
+In practice, this "cheat mode" will help you implement a safe public key infrastructure of any size. It will be as secure as the main {\f1\fs20 cheat.private} key file and its associated password remain hidden and only wisely spread, of course. Don't forget to use the {\f1\fs20 ecc rekey} command on a regular basis, so that you change the master password of {\f1\fs20 cheat.private}. The main benefit of this implementation is that for all key generation process, only the {\f1\fs20 cheat.public} key file is needed.
 :  Encryption in Code
 From the source code point of view, you can easily add asymmetric encryption in your project using {\f1\fs20 TECCCertificate.EncryptFile} and {\f1\fs20 TECCCertificateSecret.DecryptFile} methods, even working with memory buffers, thanks to {\f1\fs20 TECCCertificate.Encrypt} and {\f1\fs20 TECCCertificateSecret.Decrypt} methods.
 As reference, here is how the encryption is implemented in the {\f1\fs20 ECC} tool:
