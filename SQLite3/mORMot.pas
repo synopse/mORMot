@@ -5663,7 +5663,7 @@ type
     optExecInMainThread, optFreeInMainThread,
     optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
-    optNoLogInput, optNoLogOutput, optErrorOnMissingParam
+    optNoLogInput, optNoLogOutput, optErrorOnMissingParam, optForceStandardJSON
   );
   /// how TServiceFactoryServer.SetOptions() will set the options value
   TServiceMethodOptionsAction = (moaReplace, moaInclude, moaExclude);
@@ -5694,6 +5694,9 @@ type
   // - when parameters are transmitted as JSON object, any missing parameter
   // would be replaced by their default value, unless optErrorOnMissingParam
   // is defined to reject the call
+  // - by default, it wil check for the client user agent, and use extended
+  // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
+  // you can set optForceStandardJSON to ensure standard JSON is alwyas returned  
   TServiceMethodOptions = set of TServiceMethodOption;
 
   /// internal per-method list of execution context as hold in TServiceFactory
@@ -55770,7 +55773,8 @@ begin
     WR := TJSONSerializer.CreateOwnedStream;
     try
       Ctxt.fThreadServer^.Factory := self;
-      if (Ctxt.Call.InHead='') or (Ctxt.ClientKind=ckFramework) then
+      if not(optForceStandardJSON in Ctxt.ServiceExecution.Options) and
+         ((Ctxt.Call.InHead='') or (Ctxt.ClientKind=ckFramework)) then
         include(WR.fCustomOptions,twoForceJSONExtended) else
         include(WR.fCustomOptions,twoForceJSONStandard); // AJAX
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
