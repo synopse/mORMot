@@ -2610,7 +2610,7 @@ end;
 
 function TSQLRestStorageShardDB.DBFileName(ShardIndex: Integer): TFileName;
 begin
-  result := Format('%s%.4d.dbs',[fShardRootFileName,ShardIndex]);
+  result := Format('%s%.4d.dbs',[fShardRootFileName,fShardOffset+ShardIndex]);
 end;
 
 function TSQLRestStorageShardDB.InitNewShard: TSQLRest;
@@ -2636,7 +2636,7 @@ begin
 end;
 
 procedure TSQLRestStorageShardDB.InitShards;
-var f,i,num: integer;
+var f,i,num,first: integer;
     db: TFindFilesDynArray;
     mask: TFileName;
 begin
@@ -2652,12 +2652,19 @@ begin
   db := FindFiles(ExtractFilePath(mask),ExtractFileName(mask),'',true); // sorted = true
   if db=nil then
     exit; // no existing data
-  for f := 0 to high(db) do begin
+  fShardOffset := -1;
+  first := length(db)-integer(fMaxShardCount);
+  if first<0 then
+    first := 0;
+  for f := first to high(db) do begin
     i := Pos('.dbs',db[f].Name);
     if (i<=4) or not TryStrToInt(Copy(db[f].Name,i-4,4),num) then begin
       InternalLog('InitShards(%)?',[db[f].Name],sllWarning);
       continue;
     end;
+    if fShardOffset<0 then
+      fShardOffset := num;
+    dec(num,fShardOffset);
     if not SameText(DBFileName(num),db[f].Name) then
       raise EORMException.CreateUTF8('%.InitShards(%)',[self,db[f].Name]);
     if f = high(db) then
@@ -2665,11 +2672,13 @@ begin
     fShardLast := num-1; // 'folder\root0005.dbs' -> fShardLast := 4
     InitNewShard;        // now fShardLast=5, fShards[5] contains root005.dbs
   end;
+  if fShardOffset<0 then
+    fShardOffset := 0;
   if Integer(fShardLast)<0 then begin
     InternalLog('InitShards?',sllWarning);
     exit;
   end;
-  fInitShardsIsLast := true; // any newly appended .dbs would use 40MB of cache
+  fInitShardsIsLast := true; // any newly appended .dbs would use 2MB of cache
   fShardLastID := fShards[fShardLast].TableMaxID(fStoredClass);
   if fShardLastID<0 then
     fShardLastID := 0; // no data yet

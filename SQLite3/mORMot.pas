@@ -17445,6 +17445,8 @@ type
   TSQLRestStorageShard = class(TSQLRestStorage)
   protected
     fShardRange: TID;
+    fShardOffset: integer;
+    fMaxShardCount: cardinal;
     fLastID: TID;
     fOptions: TSQLRestStorageShardOptions;
     fShards: array of TSQLRest;
@@ -17453,7 +17455,7 @@ type
     fShardNextID: TID;
     fShardTableIndex: TIntegerDynArray;
     fShardBatch: array of TSQLRestBatch;
-    // would set Shards[],fShardLast,fShardLastID, nil if not available any more
+    // would set Shards[],fShardLast,fShardLastID,fShardOffset
     procedure InitShards; virtual; abstract;
     // should always return non nil shard to contain new added IDs
     function InitNewShard: TSQLRest; virtual; abstract;
@@ -17486,7 +17488,8 @@ type
     // - the supplied aShardRange should be < 1000 - and once set, you should NOT
     // change this value on an existing shard, unless process would be broken
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
-      aShardRange: TID; aOptions: TSQLRestStorageShardOptions); reintroduce; virtual;
+      aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
+      aMaxShardCount: integer); reintroduce; virtual;
     /// finalize the table storage, including Shards[] instances
     destructor Destroy; override;
     /// you may call this method sometimes to consolidate the sharded data
@@ -17496,7 +17499,8 @@ type
     /// remove a shard database from the current set
     // - it would allow e.g. to delete a *.dbs file at runtime, without
     // restarting the server
-    // - this default implementation would free and nil fShard[aShardIndex]
+    // - this default implementation would free and nil fShard[aShardIndex],
+    // which is enough for most implementations (e.g. TSQLRestStorageShardDB)
     procedure RemoveShard(aShardIndex: integer); virtual;
     /// retrieve the ORM shard instance corresponding to an ID
     // - may return false if the correspondig shard is not available any more
@@ -17515,6 +17519,11 @@ type
     // otherwise the whole ID partition would fail
     // - each shard would hold [ShardIndex*ShardRange..(ShardIndex+1)*ShardRange-1] IDs
     property ShardRange: TID read fShardRange;
+    /// how many shards should be maintained at most
+    // - if some older shards are available on disk, they won't be loaded by
+    // InitShards, and newly added shard via InitNewShard will trigger
+    // RemoveShard if the total number of shards 
+    property MaxShardCount: cardinal read fMaxShardCount;
     /// defines how this instance would handle its sharding process
     // - by default, update/delete operations or per ID retrieval would take
     // place on all shards, whereas EngineList and EngineExecute would only run
@@ -44303,7 +44312,8 @@ end;
 const MIN_SHARD = 1000;
 
 constructor TSQLRestStorageShard.Create(aClass: TSQLRecordClass;
-  aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions);
+  aServer: TSQLRestServer; aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
+  aMaxShardCount: integer);
 var i,n: integer;
 begin
   if aShardRange<MIN_SHARD then
@@ -44313,9 +44323,12 @@ begin
   fShardRange := aShardRange;
   fShardLast := cardinal(-1);
   fOptions := aOptions;
+  if aMaxShardCount<2 then
+    fMaxShardCount := 2 else
+    fMaxShardCount := aMaxShardCount;
   InitShards; // set fShards[], fShardLast and fShardLastID
   n := length(fShards);
-  fShardNextID := n*fShardRange+1;
+  fShardNextID := (n+fShardOffset)*fShardRange+1;
   SetLength(fShardTableIndex,n);
   for i := 0 to fShardLast do
     if fShards[i]=nil then
@@ -44353,8 +44366,10 @@ procedure TSQLRestStorageShard.RemoveShard(aShardIndex: integer);
 begin
   StorageLock(true,'RemoveShard');
   try
-    if (fShards<>nil) and (cardinal(aShardIndex)<=fShardLast) then
+    if (fShards<>nil) and (cardinal(aShardIndex)<=fShardLast) then begin
       FreeAndNil(fShards[aShardIndex]);
+      fShardTableIndex[aShardIndex] := -1;
+    end;
   finally
     StorageUnLock;
   end;
@@ -44362,6 +44377,7 @@ end;
 
 procedure TSQLRestStorageShard.InternalAddNewShard;
 var rest: TSQLRest;
+    i: integer;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
@@ -44375,6 +44391,12 @@ begin
   inc(fShardNextID,fShardRange);
   SetLength(fShardTableIndex,fShardLast+1);
   fShardTableIndex[fShardLast] := rest.Model.GetTableIndexExisting(fStoredClass);
+  if fShardLast>=fMaxShardCount then
+    for i := 0 to fShardLast do
+      if fShards[i]<>nil then begin
+        RemoveShard(i);
+        break;
+      end;
 end;
 
 function TSQLRestStorageShard.ShardFromID(aID: TID; out aShardTableIndex: integer;
@@ -44394,7 +44416,7 @@ begin
   end;
   EnterCriticalSection(fStorageCriticalSection);
   try
-    ndx := (aID-1) div fShardRange;
+    ndx := ((aID-1) div fShardRange)-fShardOffset;
     if (ndx<=fShardLast) and (fShards[ndx]<>nil) then begin
       case aOccasion of
         soUpdate:
@@ -44481,7 +44503,7 @@ begin
   try
     SetLength(id,fShardLast+1);
     for i := 0 to high(IDs) do begin
-      ndx := (IDs[i]-1) div fShardRange;
+      ndx := ((IDs[i]-1) div fShardRange)-fShardOffset;
       if (ndx>=fShardLast) or (fShards[ndx]=nil) then
         continue;
       if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then

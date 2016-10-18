@@ -618,7 +618,7 @@ type
   // 100% Delphi simple database engine
   TTestMemoryBased = class(TTestSQLite3Engine)
   protected
-    function CreateShardDB: TSQLRestServer;
+    function CreateShardDB(maxshard: Integer): TSQLRestServer;
   published
     /// validate RTREE virtual tables
     procedure _RTree;
@@ -628,6 +628,8 @@ type
     procedure ShardRead;
     /// validate TSQLRestStorageShardDB reading after deletion of several shards
     procedure ShardReadAfterPurge;
+    /// validate TSQLRestStorageShardDB.MaxShardCount implementation
+    procedure _MaxShardCount;
   end;
 
   /// this test case will test most functions, classes and types defined and
@@ -10255,10 +10257,11 @@ end;
 const SHARD_MAX = 10000;
       SHARD_RANGE = 1000;
 
-function TTestMemoryBased.CreateShardDB: TSQLRestServer;
+function TTestMemoryBased.CreateShardDB(maxshard: Integer): TSQLRestServer;
 begin
   result := TSQLRestServer.CreateWithOwnModel([TSQLRecordTest],false,'shardtest');
-  Check(result.StaticDataAdd(TSQLRestStorageShardDB.Create(TSQLRecordTest,result,SHARD_RANGE,[])));
+  Check(result.StaticDataAdd(TSQLRestStorageShardDB.Create(
+    TSQLRecordTest,result,SHARD_RANGE,[],'',maxshard)));
 end;
 
 procedure TTestMemoryBased.ShardWrite;
@@ -10268,7 +10271,7 @@ var R: TSQLRecordTest;
     b: TSQLRestBatch;
 begin
   DirectoryDelete(ExeVersion.ProgramFilePath,'Test0*.dbs',True);
-  db := CreateShardDB;
+  db := CreateShardDB(100);
   try
     R := TSQLRecordTest.Create;
     try
@@ -10300,7 +10303,7 @@ var R: TSQLRecordTest;
     i: integer;
     db: TSQLRestServer;
 begin
-  db := CreateShardDB;
+  db := CreateShardDB(100);
   try
     R := TSQLRecordTest.Create;
     try
@@ -10324,7 +10327,7 @@ var R: TSQLRecordTest;
 begin
   Check(DeleteFile(ExeVersion.ProgramFilePath+'Test0000.dbs'));
   Check(DeleteFile(ExeVersion.ProgramFilePath+'Test0001.dbs'));
-  db := CreateShardDB;
+  db := CreateShardDB(100);
   try
     R := TSQLRecordTest.Create;
     try
@@ -10334,6 +10337,49 @@ begin
         Check(db.Retrieve(i,R));
         Check(db.RetrieveBlobFields(R));
         R.CheckWith(self,i,0);
+      end;
+    finally
+      R.Free;
+    end;
+  finally
+    db.Free;
+  end;
+end;
+
+procedure TTestMemoryBased._MaxShardCount;
+var R: TSQLRecordTest;
+    i,last: integer;
+    db: TSQLRestServer;
+    b: TSQLRestBatch;
+begin
+  db := CreateShardDB(5);
+  try
+    R := TSQLRecordTest.Create;
+    try
+      last := SHARD_MAX-SHARD_RANGE*5;
+      for i := 1 to last do
+        Check(not db.Retrieve(i,R));
+      for i := last+1 to SHARD_MAX do begin
+        Check(db.Retrieve(i,R));
+        Check(db.RetrieveBlobFields(R));
+        R.CheckWith(self,i,0);
+      end;
+      b := TSQLRestBatch.Create(db,TSQLRecordTest,SHARD_RANGE div 3,[boExtendedJSON]);
+      try
+        for i := SHARD_MAX+1 to SHARD_MAX+2000 do begin
+          R.FillWith(i);
+          Check(b.Add(R,true)=i-(SHARD_MAX+1));
+        end;
+        Check(db.BatchSend(b)=HTTP_SUCCESS);
+      finally
+        b.Free;
+      end;
+      last := SHARD_MAX+2000-SHARD_RANGE*5;
+      for i := 1 to last do
+        Check(not db.Retrieve(i,R));
+      for i := last+1 to SHARD_MAX+2000 do begin
+        Check(db.Retrieve(i,R));
+        R.CheckWith(self,i,0,false);
       end;
     finally
       R.Free;
