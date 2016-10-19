@@ -834,7 +834,7 @@ unit mORMot;
     - new TSQLRestClientURI.ForceBlobTransfertTable[] property which enable to
       get and set BLOB fields values with usual Add/Update/Retrieve methods for
       a particular table (more tuned than existing ForceBlobTransfert property)
-    - once authenticated, TSQLRestClientURI.SessionUser would have all its
+    - once authenticated, TSQLRestClientURI.SessionUser will have all its
       properties retrieved from the remote server
     - added TSQLRestClientURI.SessionID/SessionServer/SessionVersion properties
     - added TSQLRestClientURI.CallBack() method allowing any HTTP verb
@@ -1271,8 +1271,7 @@ uses
 {$endif}
   SynCommons,
   SynLog,
-  SynTests,
-  SynEcc; // for TECCCertificates
+  SynTests;
 
 
 
@@ -1514,7 +1513,7 @@ type
   // - sftTID is an INTEGER field containing a TID pointing to another record;
   // since regular TSQLRecord published properties (i.e. sftID kind of field)
   // can not be greater than 2,147,483,647 (i.e. a signed 32 bit value) under
-  // Win32, defining TID published properties would allow to store the ID
+  // Win32, defining TID published properties will allow to store the ID
   // as signed 64-bit, e.g. up to 9,223,372,036,854,775,808; despite to
   // sftID kind of record, coherency is NOT ensured: after a deletion, all
   // values pointing to are NOT reset to 0 - it is up to your business logic
@@ -1884,9 +1883,9 @@ type
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
   // - boInsertOrUpdate will create 'INSERT OR REPLACE' statements instead of
   // plain 'INSERT' - by now, only the direct mORMotSQLite3 engine supports it
-  // - boExtendedJSON would force the JSON to unquote the column names,
+  // - boExtendedJSON will force the JSON to unquote the column names,
   // e.g. writing col1:...,col2:... instead of "col1":...,"col2"...
-  // - boPostNoSimpleFields would avoid to send a TSQLRestBach.Add() with simple
+  // - boPostNoSimpleFields will avoid to send a TSQLRestBach.Add() with simple
   // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
   // without the field names
   TSQLRestBatchOption = (
@@ -2183,7 +2182,7 @@ procedure CopyStrings(Source, Dest: TStrings);
 {$ifndef LVCL}
 /// copy two TCollection instances
 // - will call CopyObject() in loop to repopulate the Dest collection,
-// which would work even if Assign() method was not overriden
+// which will work even if Assign() method was not overriden
 procedure CopyCollection(Source, Dest: TCollection);
 {$endif}
 
@@ -2194,7 +2193,7 @@ procedure CopyCollection(Source, Dest: TCollection);
 procedure SetDefaultValuesObject(Value: TObject);
 
 /// will reset all the object properties to their default
-// - strings would be set to '', numbers to 0
+// - strings will be set to '', numbers to 0
 // - if FreeAndNilNestedObjects is the default FALSE, will recursively reset
 // all nested class properties values
 // - if FreeAndNilNestedObjects is TRUE, will FreeAndNil() all the nested
@@ -2250,10 +2249,10 @@ type
   /// available options for JSONToObject() parsing process
   // - by default, function will fail if a JSON field name is not part of the
   // object published properties, unless j2oIgnoreUnknownProperty is defined
-  // - by default, function will check that the supplied JSON value would
+  // - by default, function will check that the supplied JSON value will
   // be a JSON string when the property is a string, unless j2oIgnoreStringType
   // is defined and JSON numbers are accepted and stored as text
-  // - by default any unexpected value for enumerations would be marked as
+  // - by default any unexpected value for enumerations will be marked as
   // invalid, unless j2oIgnoreUnknownEnum is defined, so that in such case the
   // ordinal 0 value is left, and loading continues
   // - by default, only simple kind of variant types (string/numbers) are
@@ -2262,7 +2261,7 @@ type
   // also define j2oHandleCustomVariantsWithinString, it will also try to
   // un-escape a JSON string first, i.e. handle "[array]" or "{object}" content
   // (may be used e.g. when JSON has been retrieved from a database TEXT column)
-  // - by default, a temporary instance would be created if a published field
+  // - by default, a temporary instance will be created if a published field
   // has a setter, and the instance is expected to be released later by the
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns
@@ -2284,7 +2283,7 @@ const
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - the data inside From^ is modified in-place (unescaped and transformed):
-// calling JSONToObject(pointer(JSONRawUTF8)) would change the JSONRawUTF8
+// calling JSONToObject(pointer(JSONRawUTF8)) will change the JSONRawUTF8
 // variable content, which may not be what you expect - consider using the
 // ObjectLoadJSON() function instead
 // - handle Integer, Int64, enumerate (including boolean), set, floating point,
@@ -2359,8 +2358,8 @@ type
     cicTCollection,cicTCollectionItem,cicTComponent,cicTObject);
 
   /// store information about a class, able to easily create new instances
-  // - using this temporary storage would speed up the creation process
-  // - any virtual constructor would be used, including for TCollection types
+  // - using this temporary storage will speed up the creation process
+  // - any virtual constructor will be used, including for TCollection types
   TClassInstance = object
   public
     /// the class type itself
@@ -2644,9 +2643,9 @@ type
     // its first lowercase chars ('Done' will find otDone e.g.)
     // - return -1 if not found (don't use directly this value to avoid any GPF)
     function GetEnumNameTrimedValue(Value: PUTF8Char): Integer; overload;
-    /// compute how many bytes this type would use to be stored as a enumerate
+    /// compute how many bytes this type will use to be stored as a enumerate
     function SizeInStorageAsEnum: Integer;
-    /// compute how many bytes this type would use to be stored as a set
+    /// compute how many bytes this type will use to be stored as a set
     function SizeInStorageAsSet: Integer;
     /// store an enumeration value from its ordinal representation
     // - copy SizeInStorageAsEnum bytes from Ordinal to Value pointer
@@ -2754,10 +2753,10 @@ type
     // - returns nil if this type has no parent
     function InterfaceAncestor: PTypeInfo;
     /// get all ancestors/parents of a given interface type information
-    // - only ancestors with an associated TGUID would be added
+    // - only ancestors with an associated TGUID will be added
     // - if OnlyImplementedBy is not nil, only the interface explicitly
-    // implemented by this class would be added, and AncestorsImplementedEntry[]
-    // would contain the corresponding PInterfaceEntry values 
+    // implemented by this class will be added, and AncestorsImplementedEntry[]
+    // will contain the corresponding PInterfaceEntry values 
     procedure InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
       OnlyImplementedBy: TInterfacedObjectClass;
       out AncestorsImplementedEntry: TPointerDynArray);
@@ -2895,7 +2894,7 @@ type
     Name: ShortString;
 
     /// the type information of this property
-    // - would de-reference the PropType pointer on Delphi and newer FPC compilers
+    // - will de-reference the PropType pointer on Delphi and newer FPC compilers
     function TypeInfo: PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the next property information
@@ -3043,7 +3042,7 @@ type
     // - will use direct in-memory reference to the object, or call the corresponding
     // setter method (if any), creating a temporary instance via TTypeInfo.ClassCreate
     // - unserialize the JSON input buffer via a call to JSONToObject()
-    // - by default, a temporary instance would be created if a published field
+    // - by default, a temporary instance will be created if a published field
     // has a setter, and the instance is expected to be released later by the
     // owner class: you can set the j2oSetterExpectsToFreeTempInstance option
     // to let this method release it when the setter returns
@@ -3215,7 +3214,7 @@ type
     property SQLFieldType: TSQLFieldType read fSQLFieldType;
     /// the corresponding column type, as stored by the ORM layer
     // - match SQLFieldType, unless for SQLFieldType=sftNullable, in which this
-    // field would contain the simple type eventually stored in the database
+    // field will contain the simple type eventually stored in the database
     property SQLFieldTypeStored: TSQLFieldType read fSQLFieldTypeStored;
     /// the corresponding column type name, as managed by the ORM layer and
     // retrieved by the RTTI
@@ -3226,7 +3225,7 @@ type
     // - will return the TSQLPropInfo class name if it is not a TSQLPropInfoRTTI
     property SQLFieldRTTITypeName: RawUTF8 read GetSQLFieldRTTITypeName;
     /// the corresponding column type, as managed for abstract database access
-    // - TNullable* fields would report here the corresponding simple DB type,
+    // - TNullable* fields will report here the corresponding simple DB type,
     // e.g. ftInt64 for TNullableInteger (following SQLFieldTypeStored value)
     property SQLDBFieldType: TSQLDBFieldType read fSQLDBFieldType;
     /// the corresponding column type name, as managed for abstract database access
@@ -3339,7 +3338,7 @@ type
 
   /// define how the published properties RTTI is to be interpreted
   // - i.e. how TSQLPropInfoList.Create() and TSQLPropInfoRTTI.CreateFrom()
-  // would handle the incoming RTTI
+  // will handle the incoming RTTI
   TSQLPropInfoListOptions = set of (
     pilRaiseEORMExceptionIfNotHandled, pilAllowIDFields,
     pilSubClassesFlattening, pilIgnoreIfGetter,
@@ -3711,7 +3710,7 @@ type
     // - by default, contains JSON_OPTIONS_FAST for best performance - i.e.
     // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
     // - set JSON_OPTIONS_FAST_EXTENDED (or include dvoSerializeAsExtendedJson)
-    // so that any TDocVariant nested field names would not be double-quoted,
+    // so that any TDocVariant nested field names will not be double-quoted,
     // saving some chars in the stored TEXT column and in the JSON escaped
     // transmitted data over REST, by writing '{name:"John",age:123}' instead of
     // '{"name":"John","age":123}': be aware that this syntax is supported by
@@ -4036,14 +4035,14 @@ type
   TJSONSerializerCustomReader = function(const aValue: TObject; aFrom: PUTF8Char;
     var aValid: Boolean; aOptions: TJSONToObjectOptions): PUTF8Char of object;
 
-  /// several options to customize how TSQLRecord would be serialized
+  /// several options to customize how TSQLRecord will be serialized
   // - e.g. if properties storing JSON should be serialized as an object, and not
   // escaped as a string (which is the default, matching ORM column storage)
   // - if an additional "ID_str":"12345" field should be added to the standard
   // "ID":12345 field, which may exceed 53-bit integer precision of JavsCript
   TJSONSerializerSQLRecordOption = (
     jwoAsJsonNotAsString, jwoID_str);
-  /// options to customize how TSQLRecord would be written by TJSONSerializer
+  /// options to customize how TSQLRecord will be written by TJSONSerializer
   TJSONSerializerSQLRecordOptions = set of TJSONSerializerSQLRecordOption;
 
   /// simple writer to a Stream, specialized for writing an object as JSON
@@ -4077,12 +4076,12 @@ type
     procedure AddInstancePointer(Instance: TObject; SepChar: AnsiChar;
       IncludeUnitName: boolean); override;
     /// customize TSQLRecord.GetJSONValues serialization process
-    // - jwoAsJsonNotAsString would force TSQLRecord.GetJSONValues to serialize
+    // - jwoAsJsonNotAsString will force TSQLRecord.GetJSONValues to serialize
     // nested property instances as a JSON object/array, not a JSON string:
-    // i.e. root/table/id REST would be ready-to-be-consummed from AJAX clients
+    // i.e. root/table/id REST will be ready-to-be-consummed from AJAX clients
     // (e.g. TSQLPropInfoRTTIObject.GetJSONValues as a JSON object, and
     // TSQLPropInfoRTTIDynArray.GetJSONValues as a JSON array)
-    // - jwoID_str would add an "ID_str":"12345" property to the default
+    // - jwoID_str will add an "ID_str":"12345" property to the default
     // "ID":12345 field to circumvent JavaScript's limitation of 53-bit for
     // integer numbers, which is easily reached with our 64-bit TID values, e.g.
     // if TSynUniqueIdentifier are used to generate the IDs: AJAX clients should
@@ -4328,7 +4327,7 @@ type
   // - could be used for gathering of TCollectionItem properties, e.g. for
   // Domain objects in DDD, especially for list of value objects
   // - note that non published properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
+  // - please take care that you will not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
@@ -4348,7 +4347,7 @@ type
   // class published properties, then release them (and any T*ObjArray) when freed
   // - TSynAutoCreateFields is to be preferred in most cases, due to its lower overhead
   // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
+  // - please take care that you will not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
@@ -4374,7 +4373,7 @@ type
   // - this class is a perfect parent for any class storing data by value, e.g.
   // DDD Value Objects, Entities or Aggregates
   // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
+  // - please take care that you will not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
@@ -4416,7 +4415,7 @@ type
   // - could be used for gathering of TCollectionItem properties, e.g. for
   // Domain objects in DDD, especially for list of value objects
   // - note that non published properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
+  // - please take care that you will not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
@@ -4440,10 +4439,10 @@ type
     constructor Create; override;
   published
     /// period after which the cache information should be flushed
-    // - use -1 to disable time out; any big value would be limited to 10 minutes
+    // - use -1 to disable time out; any big value will be limited to 10 minutes
     // - default is 120000, i.e. 2 minutes
     property TimeOutMS: integer read fTimeOutMS write fTimeOutMS;
-    // period after which TRawUTF8ObjectCacheList would search for expired entries
+    // period after which TRawUTF8ObjectCacheList will search for expired entries
     // - use -1 to disable purge (not adviced, since may break process)
     // - default is 1000, i.e. 1 second
     property PurgePeriodMS: integer read fPurgePeriodMS write fPurgePeriodMS;
@@ -4476,7 +4475,7 @@ type
     // - should not be called directly, but by TRawUTF8ObjectCacheList.GetLocked
     constructor Create(aOwner: TRawUTF8ObjectCacheList; const aKey: RawUTF8); reintroduce; virtual;
     /// finalize the information cache entry
-    // - would also call the virtual CacheClear method
+    // - will also call the virtual CacheClear method
     destructor Destroy; override;
     /// Dependency Injection using fOwner.OnKeyResolve, for the current Key
     function Resolve(const aInterface: TGUID; out Obj): boolean;
@@ -4491,7 +4490,7 @@ type
   /// manage a list of information cache, identified by a hashed key
   // - you should better inherit from this class, to give a custom name and
   // constructor, or alter the default behavior
-  // - would maintain a list of TRawUTF8ObjectCache instances
+  // - will maintain a list of TRawUTF8ObjectCache instances
   TRawUTF8ObjectCacheList = class(TRawUTF8ListHashedLocked)
   protected
     fSettings: TRawUTF8ObjectCacheSettings;
@@ -4517,21 +4516,21 @@ type
     // - an unknown key, but with a successful NewObjectCache() call, will
     // create and append a new fClass instance to the list (if onlyexisting
     // is left to its default FALSE)
-    // - global or key-specific purge would be performed, if needed
-    // - on success (true), output cache instance would be locked
+    // - global or key-specific purge will be performed, if needed
+    // - on success (true), output cache instance will be locked
     function GetLocked(const Key: RawUTF8; out cache: TRawUTF8ObjectCache;
       onlyexisting: boolean=false): boolean; virtual;
     /// you may call this method regularly to check for a needed purge
     // - if Settings.PurgePeriodMS is reached, each TRawUTF8ObjectCache instance
-    // would check for its TimeOutMS and call CacheClear if information is outdated
+    // will check for its TimeOutMS and call CacheClear if information is outdated
     procedure TryPurge;
-    /// register a key identifier so that next TryPurge would flush the entry
+    /// register a key identifier so that next TryPurge will flush the entry
     // - a direct CacheClear may trigger a race condition in NewObjectCache:
     // so you may use this function e.g. from a SOA callback
     procedure AddToPurge(const Key: RawUTF8); virtual;
     /// this method will clear all associated information
-    // - a regular Clear would destroy all TRawUTF8ObjectCache instances,
-    // whereas this method would call CacheClear on each entry, so would
+    // - a regular Clear will destroy all TRawUTF8ObjectCache instances,
+    // whereas this method will call CacheClear on each entry, so will
     // be more thread-safe and efficient in pratice
     procedure ForceCacheClear;
     /// access to the associated logging instance
@@ -4699,48 +4698,48 @@ type
   // year (9 bit - starting at 2016) so that it is monotonic over time
   // - by default, will store the information using mugHour granularity (i.e.
   // values for the 60 minutes in a record), and pseudo-hours of 29, 30 and 31
-  // (see USAGE_ID_HOURMARKER[]) would identify mugDay, mugMonth and mugYear
+  // (see USAGE_ID_HOURMARKER[]) will identify mugDay, mugMonth and mugYear
   // consolidated statistics
-  // - it would therefore store up to 24*365+365+12+1 = 9138 records per year
+  // - it will therefore store up to 24*365+365+12+1 = 9138 records per year
   // in the associated storage engine (so there is no actual need to purge it)
   TSynMonitorUsageID = object
   public
     /// the TID, as computed from time and granularity
     Value: integer;
     /// computes an ID corresponding to mugHour granularity of a given time
-    // - minutes and seconds would be ignored
-    // - mugHour granularity would store 0..59 information about each minute
+    // - minutes and seconds will be ignored
+    // - mugHour granularity will store 0..59 information about each minute
     procedure From(Y,M,D,H: integer); overload;
     /// computes an ID corresponding to mugDay granularity of a given time
-    // - hours, minutes and seconds would be merged
-    // - mugDay granularity would store 0..23 information about each hour
+    // - hours, minutes and seconds will be merged
+    // - mugDay granularity will store 0..23 information about each hour
     // - a pseudo hour of 29 (i.e. USAGE_ID_HOURMARKER[mugDay]) is used
     procedure From(Y,M,D: integer); overload;
     /// computes an ID corresponding to mugMonth granularity of a given time
-    // - days, hours, minutes and seconds would be merged
-    // - mugMonth granularity would store 0..31 information about each day
+    // - days, hours, minutes and seconds will be merged
+    // - mugMonth granularity will store 0..31 information about each day
     // - a pseudo hour of 30 (i.e. USAGE_ID_HOURMARKER[mugMonth]) is used
     procedure From(Y,M: integer); overload;
     /// computes an ID corresponding to mugYear granularity of a given time
-    // - months, days, hours, minutes and seconds would be merged
-    // - mugYear granularity would store 0..11 information about each month
+    // - months, days, hours, minutes and seconds will be merged
+    // - mugYear granularity will store 0..11 information about each month
     // - a pseudo hour of 31 (i.e. USAGE_ID_HOURMARKER[mugYear]) is used
     procedure From(Y: integer); overload;
     /// computes an ID corresponding to a given time
     // - will set the ID with mugHour granularity, i.e. the information about
     // the given hour, stored as per minute 0..59 values
-    // - minutes and seconds in supplied TimeLog value would therefore be ignored
+    // - minutes and seconds in supplied TimeLog value will therefore be ignored
     procedure FromTimeLog(const TimeLog: TTimeLog); 
     /// computes an ID corresponding to the current UTC date/time
-    // - minutes and seconds would be ignored
+    // - minutes and seconds will be ignored
     procedure FromNowUTC;
     /// returns the date/time
-    // - minutes and seconds would set to 0
+    // - minutes and seconds will set to 0
     function ToTimeLog: TTimeLog;
     /// convert to Iso-8601 encoded text
     function Text(Expanded: boolean; FirstTimeChar: AnsiChar = 'T'): RawUTF8;
     /// retrieve the resolution of the stored information
-    // - i.e. either mugHour, mugDay, mugMonth or mugYear, which would store
+    // - i.e. either mugHour, mugDay, mugMonth or mugYear, which will store
     // a true 0..23 hour value (for mugHour), or 29/30/31 pseudo-hour (i.e.
     // USAGE_ID_HOURMARKER[mugDay/mugMonth/mugYear])
     function Granularity: TSynMonitorUsageGranularity;
@@ -4784,7 +4783,7 @@ type
     fPrevious: TTimeLogBits;
     fComment: RawUTF8;
     function TrackPropLock(Instance: TObject; Info: PPropInfo): PSynMonitorUsageTrackProp;
-    // those methods would be protected (e.g. in Modified) by fSafe.Lock:
+    // those methods will be protected (e.g. in Modified) by fSafe.Lock:
     procedure SavePrevious(Scope: TSynMonitorUsageGranularity);
     procedure Save(ID: TSynMonitorUsageID; Gran, Scope: TSynMonitorUsageGranularity);
     function Load(const Time: TTimeLogBits): boolean;
@@ -4798,15 +4797,15 @@ type
     /// finalize the statistics, saving any pending information
     destructor Destroy; override;
     /// track the values of one named object instance
-    // - would recognize the TSynMonitor* properties as TSynMonitorType from
+    // - will recognize the TSynMonitor* properties as TSynMonitorType from
     // RTTI, using MonitorPropUsageValue(), within any (nested) object
-    // - the instance would be stored in fTracked[].Instance: ensure it would
+    // - the instance will be stored in fTracked[].Instance: ensure it will
     // stay available during the whole TSynMonitorUsage process
     function Track(Instance: TObject; const Name: RawUTF8=''): integer; overload; virtual;
     /// track the values of the given object instances
-    // - would recognize the TSynMonitor* properties as TSynMonitorType from
+    // - will recognize the TSynMonitor* properties as TSynMonitorType from
     // RTTI, using MonitorPropUsageValue(), within any (nested) object
-    // - instances would be stored in fTracked[].Instance: ensure they would
+    // - instances will be stored in fTracked[].Instance: ensure they will
     // stay available during the whole TSynMonitorUsage process
     procedure Track(const Instances: array of TSynMonitor); overload;
     /// to be called when tracked properties changed on a tracked class instance
@@ -4814,7 +4813,7 @@ type
     /// to be called when tracked properties changed on a tracked class instance
     procedure Modified(Instance: TObject; const PropNames: array of RawUTF8); overload; virtual;
     /// some custom text, associated with the current stored state
-    // - would be persistented by Save() methods
+    // - will be persistented by Save() methods
     property Comment: RawUTF8 read fComment write fComment;
   end;
 
@@ -4828,8 +4827,8 @@ const
   USAGE_ID_YEAROFFSET = 2016;
 
   /// kind of "cumulative" TSynMonitorType stored in TSynMonitor / TSynMonitorUsage
-  // - those properties would have their values reset for each granularity level
-  // - would recognize TSynMonitorTotalMicroSec, TSynMonitorTotalBytes,
+  // - those properties will have their values reset for each granularity level
+  // - will recognize TSynMonitorTotalMicroSec, TSynMonitorTotalBytes,
   // TSynMonitorOneBytes, TSynMonitorBytesPerSec, TSynMonitorCount and
   // TSynMonitorCount64 types
   SYNMONITORVALUE_CUMULATIVE = [smvMicroSec,smvBytes,smvCount,smvCount64];
@@ -4838,7 +4837,7 @@ const
 function ToText(gran: TSynMonitorUsageGranularity): PShortString; overload;
 
 /// guess the kind of value stored in a TSynMonitor / TSynMonitorUsage property
-// - would recognize TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec,
+// - will recognize TSynMonitorTotalMicroSec, TSynMonitorOneMicroSec,
 // TSynMonitorTotalBytes, TSynMonitorOneBytes, TSynMonitorBytesPerSec,
 // TSynMonitorCount and TSynMonitorCount64 types from supplied RTTI
 function MonitorPropUsageValue(info: PPropInfo): TSynMonitorType;
@@ -4866,7 +4865,7 @@ const
   // - you could set the aContractExpected parameter to this value for
   // TSQLRestClientURI.ServiceDefine or TSQLRestClientURI.ServiceRegister
   // so that the contract won't be checked with the server
-  // - it would be used e.g. if the remote server is not a mORMot server,
+  // - it will be used e.g. if the remote server is not a mORMot server,
   // but a plain REST/HTTP server - e.g. for public API notifications 
   SERVICE_CONTRACT_NONE_EXPECTED = '*';
 
@@ -4885,7 +4884,7 @@ type
   TSQLAuthUser = class;
   TSQLRest = class;
   TSQLRestClient = class;
-  {.$METHODINFO ON} // this would include public methods as RESTful callbacks :(
+  {.$METHODINFO ON} // this will include public methods as RESTful callbacks :(
   TSQLRestServer = class;
   {.$METHODINFO OFF}
   TSQLRestStorage = class;
@@ -4993,8 +4992,8 @@ type
     /// will setup the corresponding RecordClass property from the TID type name
     // - the TSQLRecord type should have previously been registered to the
     // TJSONSerializer.RegisterClassForJSON list, e.g. in TSQLModel.Create, so
-    // that e.g. 'TSQLRecordClientID' type name would match TSQLRecordClient
-    // - in addition, the '...ToBeDeletedID' name pattern would set CascadeDelete
+    // that e.g. 'TSQLRecordClientID' type name will match TSQLRecordClient
+    // - in addition, the '...ToBeDeletedID' name pattern will set CascadeDelete
     constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     /// the TSQLRecord class associated to this TID
     // - is computed from its type name - for instance, if you define:
@@ -5004,12 +5003,12 @@ type
     // !   ...
     // !   published OrderedBy: TSQLRecordClientID read fOrderedBy write fOrderedBy;
     // !   ...
-    // then this OrderedBy property would be tied to the TSQLRecordClient class
+    // then this OrderedBy property will be tied to the TSQLRecordClient class
     // of the corresponding model, and the field value will be reset to 0 when
     // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
     property RecordClass: TSQLRecordClass read fRecordClass;
     /// TRUE if this sftTID type name follows the '...ToBeDeletedID' pattern
-    // - e.g. 'TSQLRecordClientToBeDeletedID' type name would match
+    // - e.g. 'TSQLRecordClientToBeDeletedID' type name will match
     // TSQLRecordClient and set CascadeDelete
     // - is computed from its type name - for instance, if you define:
     // ! type
@@ -5018,7 +5017,7 @@ type
     // !   ...
     // !   published OrderedBy: TSQLRecordClientToBeDeletedID read fOrderedBy write fOrderedBy;
     // !   ...
-    // then this OrderedBy property would be tied to the TSQLRecordClient class
+    // then this OrderedBy property will be tied to the TSQLRecordClient class
     // of the corresponding model, and the whole record will be deleted when
     // the targetting record is deleted (emulating a ON DELETE CASCADE)
     property CascadeDelete: boolean read fCascadeDelete;
@@ -5172,7 +5171,7 @@ type
       var Bits: TSQLFieldBits): boolean; overload;
     /// set all bits corresponding to the supplied CSV field names, including ID
     // - returns TRUE on success, FALSE if any field name is not existing
-    // - this overloaded method would identify ID/RowID field name, and set
+    // - this overloaded method will identify ID/RowID field name, and set
     // withID output parameter according to its presence
     // - if aFieldsCSV='*', Bits will contain all simple fields, and withID=true
     function FieldBitsFromCSV(const aFieldsCSV: RawUTF8;
@@ -5297,7 +5296,7 @@ type
     function CreateJSONWriter(JSON: TStream; Expand: boolean; withID: boolean;
       const aFields: TSQLFieldIndexDynArray; KnownRowsCount: integer): TJSONSerializer; overload;
     /// create a TJSONWriter, ready to be filled with TSQLRecord.GetJSONValues(W)
-    // - this overloaded method would call FieldBitsFromCSV(aFieldsCSV,bits,withID)
+    // - this overloaded method will call FieldBitsFromCSV(aFieldsCSV,bits,withID)
     // to retrieve the bits just like a SELECT (i.e. '*' for simple fields)
     function CreateJSONWriter(JSON: TStream; Expand: boolean;
        const aFieldsCSV: RawUTF8; KnownRowsCount: integer): TJSONSerializer; overload;
@@ -5534,8 +5533,11 @@ type
   PSQLAccessRights = ^TSQLAccessRights;
 
   /// flags which may be set by the caller to notify low-level context
-  // - llfSSL will indicates that the communication was made over HTTPS
-  TSQLRestURIParamsLowLevelFlag = (llfSSL);
+  // - llfHttps will indicates that the communication was made over HTTPS
+  // - llfSecured is set if the transmission is encrypted or in-process,
+  // using e.g. HTTPS/SSL/TLS or our proprietary AES/ECDHE algorithms
+  // - llfWebsockets communication was made using WebSockets
+  TSQLRestURIParamsLowLevelFlag = (llfHttps, llfSecured, llfWebsockets);
 
   /// some flags set by the caller to notify low-level context
   TSQLRestURIParamsLowLevelFlags = set of TSQLRestURIParamsLowLevelFlag;
@@ -5622,7 +5624,8 @@ type
   TNotifyAuthenticationFailedReason = (
    afInvalidSignature,afRemoteServiceExecutionNotAllowed,
    afUnknownUser,afInvalidPassword,
-   afSessionAlreadyStartedForThisUser,afSessionCreationAborted);
+   afSessionAlreadyStartedForThisUser,afSessionCreationAborted,
+   afSecureConnectionRequired);
 
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
@@ -5686,13 +5689,13 @@ type
   // - optExecInPerInterfaceThread and optFreeInPerInterfaceThread will allow
   // creation of a per-interface dedicated thread
   // - if optInterceptInputOutput is set, TServiceFactoryServer.AddInterceptor()
-  // events would have their Sender.Input/Output values defined
+  // events will have their Sender.Input/Output values defined
   // - if optNoLogInput/optNoLogOutput is set, TSynLog and ServiceLog() database
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
   // (like a credit card number or a password), is logged during process
   // - when parameters are transmitted as JSON object, any missing parameter
-  // would be replaced by their default value, unless optErrorOnMissingParam
+  // will be replaced by their default value, unless optErrorOnMissingParam
   // is defined to reject the call
   // - by default, it wil check for the client user agent, and use extended
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
@@ -5755,9 +5758,9 @@ type
   // session is not closed gracefully
   // - by default, read/write access to the TSQLAuthUser table is disallowed,
   // for obvious security reasons: but you can define reUserCanChangeOwnPassword
-  // so that the current logged user would be able to change its own password
+  // so that the current logged user will be able to change its own password
   // - order of this set does matter, since it will be stored as a byte value
-  // e.g. by TSQLAccessRights.ToString: ensure that new items would always be
+  // e.g. by TSQLAccessRights.ToString: ensure that new items will always be
   // appended to the list, not inserted within
   TSQLAllowRemoteExecute = set of (
     reSQL, reService, reUrlEncodedSQL, reUrlEncodedDelete, reOneSessionPerUser,
@@ -6014,7 +6017,7 @@ type
     ForceServiceResultAsXMLObjectNameSpace: RawUTF8;
     /// URI inlined parameters
     // - use UrlDecodeValue*() functions to retrieve the values
-    // - for mPOST requests, would also be filled for following content types:
+    // - for mPOST requests, will also be filled for following content types:
     // ! application/x-www-form-urlencoded or multipart/form-data
     Parameters: PUTF8Char;
     /// URI inlined parameters position in Call^.url string
@@ -6148,7 +6151,7 @@ type
     // will be encoded with its textual values, or with nested objects, if
     // the data was supplied as binary:
     // ! {"name1":{"data":..,"filename":...,"contenttype":...},"name2":...}
-    // since name1.data would be Base64 encoded, so you should better
+    // since name1.data will be Base64 encoded, so you should better
     // use the InputAsMultiPart() method instead when working with binary
     property InputAsTDocVariant: variant read GetInputAsTDocVariant;
     {$endif}
@@ -6246,7 +6249,7 @@ type
     // that the file content will be sent back to the server only if it changed
     // - if ContentType is left to default '', method will guess the expected
     // mime-type from the file name extension
-    // - if the file name does not exist, a generic 404 error page would be
+    // - if the file name does not exist, a generic 404 error page will be
     // returned, unless an explicit redirection is defined in Error404Redirect
     // - you can also specify the resulting file name, as downloaded and written
     // by the client browser, in the optional AttachmentFileName parameter, if
@@ -6255,7 +6258,7 @@ type
       Handle304NotModified: boolean=false; const ContentType: RawUTF8='';
       const AttachmentFileName: RawUTF8=''; const Error404Redirect: RawUTF8='');
     /// use this method to send back a file from a local folder to the caller
-    // - URIBlobFieldName value, as parsed from the URI, would containn the
+    // - URIBlobFieldName value, as parsed from the URI, will containn the
     // expected file name in the local folder, using DefaultFileName if the
     // URI is void, and redirecting to Error404Redirect if the file is not found
     // - this method will let the HTTP server return the file content
@@ -6358,7 +6361,7 @@ type
     // - this overridden implementation expects parameters to be sent as one JSON
     // array body (Delphi/AJAX way) or optionally with URI decoding (HTML way):
     // ! function TServiceCalculator.Add(n1, n2: integer): integer;
-    // would accept such requests:
+    // will accept such requests:
     // !  URL='root/Calculator.Add' and InBody='[ 1,2 ]'
     // !  URL='root/Calculator.Add?+%5B+1%2C2+%5D' // decoded as ' [ 1,2 ]'
     // !  URL='root/Calculator.Add?n1=1&n2=2'      // in any order, even missing
@@ -6750,7 +6753,7 @@ type
     function Delete(Table: TSQLRecordClass; ID: TID): integer; overload;
     /// allow to append some JSON content to the internal raw buffer
     // - could be used to emulate Add/Update/Delete
-    // - FullRow=TRUE would increment the global Count
+    // - FullRow=TRUE will increment the global Count
     function RawAppend(FullRow: boolean=true): TTextWriter;
     /// allow to append some JSON content to the internal raw buffer for a POST
     // - could be used to emulate Add() with an already pre-computed JSON object
@@ -6842,7 +6845,7 @@ type
     class procedure InternalRegisterCustomProperties(Props: TSQLRecordProperties); virtual;
     /// virtual class method to be overridden to define some record-level modeling
     // - do nothing by default, but allow inherited classes to define some
-    // process which would take place after TSQLRecordProperties initialization
+    // process which will take place after TSQLRecordProperties initialization
     // - this may be the place e.g. to call AddFilter*() methods, if you do not
     // want those to be written "in stone", and not manually when creating the
     // TSQLModel instance
@@ -7351,7 +7354,7 @@ type
     // ! { "fieldCount":1,"values":["col1","col2",val11,"val12",val21,..] }
     // - if withID is true, then the first ID field value is included
     // - you can customize SQLRecordOptions, e.g. if sftObject/sftBlobDynArray
-    // property instance would be serialized as a JSON object or array, not a
+    // property instance will be serialized as a JSON object or array, not a
     // JSON string (which is the default, as expected by the database storage),
     // or if an "ID_str" string field should be added for JavaScript
     procedure GetJSONValues(JSON: TStream; Expand: boolean; withID: boolean;
@@ -7702,7 +7705,7 @@ type
     /// clear the values of all published properties, and also the ID property
     procedure ClearProperties; overload;
     /// clear the values of specified published properties
-    // - '' would leave the content untouched, '*' will clear all simple fields
+    // - '' will leave the content untouched, '*' will clear all simple fields
     procedure ClearProperties(const aFieldsCSV: RawUTF8); overload;
     /// set the simple fields with the supplied values
     // - the aSimpleFields parameters must follow explicitely the order of published
@@ -8037,7 +8040,7 @@ type
     {$ifndef NOVARIANTS}
     /// retrieve a field value in a variant
     // - returns null if the row/field is incorrect
-    // - expand* methods would allow to return human-friendly representations 
+    // - expand* methods will allow to return human-friendly representations 
     procedure GetAsVariant(row,field: integer; out value: variant;
       expandTimeLogAsText,expandEnumsAsText,expandHugeIDAsUniqueIdentifier: boolean;
       options: TDocVariantOptions=JSON_OPTIONS_FAST);
@@ -8045,7 +8048,7 @@ type
     // - Row parameter numbering starts from 1 to RowCount
     // - this method will return a TDocVariant containing a copy of all
     // field values of this row, uncoupled to the TSQLTable instance life time
-    // - expand* methods would allow to return human-friendly representations 
+    // - expand* methods will allow to return human-friendly representations 
     procedure ToDocVariant(Row: integer; out doc: variant;
       options: TDocVariantOptions=JSON_OPTIONS_FAST;
       expandTimeLogAsText: boolean=false; expandEnumsAsText: boolean=false;
@@ -8733,7 +8736,7 @@ type
   /// set of standard actions for User Interface generation
   TSQLActions = set of TSQLAction;
 
-  /// how TSQLModel.URIMatch() would compare an URI
+  /// how TSQLModel.URIMatch() will compare an URI
   // - will allow to make a difference about case-sensitivity
   TSQLRestModelMatch = (rmNoMatch, rmMatchExact, rmMatchWithCaseChange);
 
@@ -8869,11 +8872,11 @@ type
   // - rpmAutoMapKeywordFields is set if MapAutoKeywordFields has been defined,
   // i.e. if field names which may conflict with a keyword should be
   // automatically mapped to a harmless symbol name
-  // - rpmNoCreateMissingTable would bypass the existing table check, e.g.
+  // - rpmNoCreateMissingTable will bypass the existing table check, e.g.
   // to circumvent some specific DB provider or case sensitivity issue on tables
-  // - rpmNoCreateMissingField would bypass the existing field check, e.g.
+  // - rpmNoCreateMissingField will bypass the existing field check, e.g.
   // to circumvent some specific DB provider or case sensitivity issue on fields
-  // - by default, check of missing field name would be case insensitive, unless
+  // - by default, check of missing field name will be case insensitive, unless
   // the rpmMissingFieldNameCaseSensitive option is set
   TSQLRecordPropertiesMappingOptions = set of (
     rpmAutoMapKeywordFields,
@@ -9032,7 +9035,7 @@ type
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
     property FieldNamesMatchInternal: TSQLFieldBits read fFieldNamesMatchInternal;
-    /// how the mapping process would take place
+    /// how the mapping process will take place
     property Options: TSQLRecordPropertiesMappingOptions read fOptions;
     /// each time MapField/MapFields is called, this number will increase
     // - can be used to track mapping changes in real time
@@ -9081,7 +9084,7 @@ type
     // virtual SQLite3 table - but if ExternalTable is TRUE, then it will
     // compute a SELECT matching ExternalDB settings
     function SQLFromSelectWhere(const SelectFields, Where: RawUTF8): RawUTF8;
-    /// define if a FTS4 virtual table will not store its content, but would
+    /// define if a FTS4 virtual table will not store its content, but will
     // be defined as an "external content" FTS4 table
     // - see https://www.sqlite.org/fts3.html#section_6_2_2
     // - the virtual table will be created with content="ContentTableName",
@@ -9204,7 +9207,7 @@ type
     function AddTable(aTable: TSQLRecordClass; aTableIndexCreated: PInteger=nil): boolean;
     /// add the class if it doesn't exist yet as itself or as inherited class
     // - similar to AddTable(), but any class inheriting from the supplied type
-    // would be considered as sufficient
+    // will be considered as sufficient
     // - return the class which has been added, or was already there as
     // inherited, so that could be used for further instance creation:
     // ! fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
@@ -9306,7 +9309,7 @@ type
     procedure SetVariantFieldsDocVariantOptions(const Options: TDocVariantOptions);
     {$endif}
     /// force a given table to use a TSynUniqueIdentifierGenerator for its IDs
-    /// - would initialize a generator for the supplied table, using the
+    /// - will initialize a generator for the supplied table, using the
     // given 16-bit process identifier
     // - you can supply an obfuscation key, which should be shared for the
     // whole system, so that you may use FromObfuscated/ToObfuscated methods
@@ -9927,7 +9930,7 @@ type
     procedure UnSign;
   end;
 
-  /// a base record, which would have creation and modification timestamp fields
+  /// a base record, which will have creation and modification timestamp fields
   TSQLRecordTimed = class(TSQLRecord)
   protected
     fCreated: TCreateTime;
@@ -10130,7 +10133,7 @@ type
     procedure AsJson(var DestValue: RawUTF8; V: pointer);
     {$ifndef NOVARIANTS}
     /// convert a value into its variant representation
-    // - complex objects would be converted into a TDocVariant, after JSON
+    // - complex objects will be converted into a TDocVariant, after JSON
     // serialization: variant conversion options may e.g. be retrieve from
     // TInterfaceFactory.DocVariantOptions
     procedure AsVariant(var DestValue: variant; V: pointer;
@@ -10139,12 +10142,12 @@ type
     // - Dest should already have set its Kind to either dvObject or dvArray
     procedure AddAsVariant(var Dest: TDocVariantData; V: pointer);
     /// normalize a value containing one input or output argument
-    // - sets and enumerates would be translated to strings (also in embedded
+    // - sets and enumerates will be translated to strings (also in embedded
     // objects and T*ObjArray)
     procedure FixValue(var Value: variant);
     /// normalize a value containing one input or output argument, and add
     // it to a destination variant Document
-    // - sets and enumerates would be translated to strings (also in embedded
+    // - sets and enumerates will be translated to strings (also in embedded
     // objects and T*ObjArray)
     procedure FixValueAndAddToObject(const Value: variant; var DestDoc: TDocVariantData);
     {$endif}
@@ -10160,7 +10163,7 @@ type
   TServiceMethodExecuteCallback =
     procedure(var Par: PUTF8Char; ParamInterfaceInfo: PTypeInfo; out Obj) of object;
 
-  /// how TServiceMethod.TServiceMethod method would return the generated document
+  /// how TServiceMethod.TServiceMethod method will return the generated document
   // - will return either a dvObject or dvArray TDocVariantData, depending on
   // the expected returned document layout
   // - returned content could be "normalized" (for any set or enumerate) if
@@ -10259,7 +10262,7 @@ type
     {$ifndef NOVARIANTS}
     /// computes a TDocVariant containing the input or output arguments values
     // - Values[] should contain the input/output raw values as variant
-    // - Kind would specify the expected returned document layout
+    // - Kind will specify the expected returned document layout
     procedure ArgsValuesAsDocVariant(Kind: TServiceMethodParamsDocVariantKind;
       out Dest: TDocVariantData; const Values: TVariantDynArray; Input: boolean;
       Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
@@ -10270,7 +10273,7 @@ type
     procedure ArgsAsDocVariantFix(var ArgsObject: TDocVariantData; Input: boolean);
     /// convert a TDocVariant array containing the input or output arguments
     // values in order, into an object with named parameters
-    // - here sets and enums would keep their current values, mainly numerical
+    // - here sets and enums will keep their current values, mainly numerical
     // - if Input is TRUE, will handle const / var arguments
     // - if Input is FALSE, will handle var / out / result arguments
     procedure ArgsAsDocVariantObject(const ArgsParams: TDocVariantData;
@@ -10357,11 +10360,11 @@ type
       Service: TInterfaceFactory; out Dest: TDocVariantData;
       const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): boolean;
     /// allows to convert the Input array into a proper single JSON Object
-    // - "ID": field would be included, and Method as "MethodName": field
+    // - "ID": field will be included, and Method as "MethodName": field
     function SaveInputAsObject(Service: TInterfaceFactory;
       const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false): variant; virtual;
     /// run FillOne and SaveInputAsObject into a TDocVariant array of JSON Objects
-    // - "ID": field would be included, and Method as "MethodName": field
+    // - "ID": field will be included, and Method as "MethodName": field
     procedure SaveFillInputsAsObjects(Service: TInterfaceFactory; out Dest: TDocVariantData;
       const MethodName: RawUTF8 = 'Method'; IDAsHexa: boolean = false);
   published
@@ -10429,7 +10432,7 @@ type
     destructor Destroy; override;
     /// allow to hook method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
-    // fields would contain the execution data context when Hook is called
+    // fields will contain the execution data context when Hook is called
     procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
     /// execute the corresponding method of weak IInvokable references
     // - will retrieve a JSON array of parameters from Par
@@ -10493,7 +10496,7 @@ type
     Content: RawByteString;
     /// the HTML response code
     // - if not overriden, will default to HTTP_SUCCESS = 200 on server side
-    // - on client side, would always contain HTTP_SUCCESS = 200 on success,
+    // - on client side, will always contain HTTP_SUCCESS = 200 on success,
     // or any error should be handled as expected by the caller (e.g. using
     // TServiceFactoryClient.GetErrorMessage for decoding REST/SOA errors)
     Status: cardinal;
@@ -10573,7 +10576,7 @@ type
       aImplementationClass: TClass): PInterfaceEntry;
   public
     /// define a global class type for interface resolution
-    // - most of the time, you would need a local DI/IoC resolution list; but
+    // - most of the time, you will need a local DI/IoC resolution list; but
     // you may use this method to register a set of shared and global resolution
     // patterns, common to the whole injection process
     // - by default, TAutoLocker and TLockedDocVariant will be registered by
@@ -10581,11 +10584,11 @@ type
     class procedure RegisterGlobal(aInterface: PTypeInfo;
       aImplementationClass: TInterfacedObjectWithCustomCreateClass); overload;
     /// define a global instance for interface resolution
-    // - most of the time, you would need a local DI/IoC resolution list; but
+    // - most of the time, you will need a local DI/IoC resolution list; but
     // you may use this method to register a set of shared and global resolution
     // patterns, common to the whole injection process
     // - the supplied instance will be owned by the global list (incrementing
-    // its internal reference count), until it would be released via
+    // its internal reference count), until it will be released via
     // ! RegisterGlobalDelete()
     // - the supplied instance will be freed in the finalization of this unit,
     // if not previously released via RegisterGlobalDelete()
@@ -10604,7 +10607,7 @@ type
     // kind of factory
     // - e.g. a customized TInterfaceStub/TInterfaceMock, a TServiceContainer,
     // a TDDDRepositoryRestObjectMapping or any factory class
-    // - by default, only TInterfaceStub/TInterfaceMock would be owned by this
+    // - by default, only TInterfaceStub/TInterfaceMock will be owned by this
     // instance, and released by Destroy - unless you set OwnOtherResolvers
     procedure InjectResolver(const aOtherResolvers: array of TInterfaceResolver;
       OwnOtherResolvers: boolean=false); overload; virtual;
@@ -10656,7 +10659,7 @@ type
   // - once created, the framework will call AddResolver() member, so that its
   // Resolve*() methods could be used to inject any needed dependency for lazy
   // dependency resolution (e.g. within a public property getter)
-  // - any interface published property would also be automatically injected
+  // - any interface published property will also be automatically injected
   // - if you implement a SOA service with this class, TSQLRestServer.Services
   // will be auto-injected via TServiceFactoryServer.CreateInstance()
   TInjectableObject = class(TInterfacedObjectWithCustomCreate)
@@ -10673,7 +10676,7 @@ type
     // then any kind of DI/IoC resolver instances could be specified, i.e.
     // either customized TInterfaceStub/TInterfaceMock, a TServiceContainer or
     // a TDDDRepositoryRestObjectMapping, and then any TInterfacedObject
-    // instance would be used during dependency resolution:
+    // instance will be used during dependency resolution:
     // ! procedure TMyTestCase.OneTestCaseMethod;
     // ! var Test: IServiceToBeTested;
     // ! begin
@@ -10723,7 +10726,7 @@ type
   // - allow dependency injection aka SOLID DI/IoC by the framework using
   // inherited TInjectableObject.Resolve() methods
   // - allows direct access to the underlying ORM using its Server method
-  // - this class would allow Server instance access outside the scope of
+  // - this class will allow Server instance access outside the scope of
   // remote SOA execution, e.g. when a DI is performed on server side: it
   // is therefore a better alternative to ServiceContext.Factory,
   // ServiceContext.Factory.RestServer or ServiceContext.Request.Server
@@ -10763,7 +10766,7 @@ type
   // - this class is a perfect parent for any class storing data by value, and
   // dependency injection, e.g. DDD services or daemons
   // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you would not create any endless recursion: you
+  // - please take care that you will not create any endless recursion: you
   // should ensure that at one level, nested published properties won't have any
   // class instance matching its parent type
   // - since the destructor will release all nested properties, you should
@@ -10876,8 +10879,8 @@ type
     // - will search for a match against Methods[].URI property
     // - won't find the default AddRef/Release/QueryInterface methods
     // - will return -1 if the method is not known
-    // - if aMethodName does not have an exact method match, it would try with a
-    // trailing underscore, so that e.g. /service/start would match IService._Start()
+    // - if aMethodName does not have an exact method match, it will try with a
+    // trailing underscore, so that e.g. /service/start will match IService._Start()
     function FindMethodIndex(const aMethodName: RawUTF8): integer;
     /// find the index of a particular interface.method in internal Methods[] list
     // - will search for a match against Methods[].InterfaceDotMethodName property
@@ -10961,11 +10964,11 @@ type
   {$endif HASINTERFACERTTI}
   
   {$M+}
-  /// how TInterfacedObjectFromFactory would perform its execution
-  // - by default, fInvoke() would receive standard JSON content, unless
+  /// how TInterfacedObjectFromFactory will perform its execution
+  // - by default, fInvoke() will receive standard JSON content, unless
   // ifoJsonAsExtended is set, and extended JSON is used
   TInterfacedObjectFromFactoryOption = (ifoJsonAsExtended);
-  /// defines how TInterfacedObjectFromFactory would perform its execution
+  /// defines how TInterfacedObjectFromFactory will perform its execution
   TInterfacedObjectFromFactoryOptions = set of TInterfacedObjectFromFactoryOption;
 
   /// abstract class handling a generic interface implementation class
@@ -11009,7 +11012,7 @@ type
   public
     /// register one interface type definition from the current class
     // - will be called by mORMotWrapper.pas generated code, in initialization
-    // section, so that the needed type information would be available
+    // section, so that the needed type information will be available
     class procedure RegisterInterface(aInterface: PTypeInfo); virtual;
   end;
 
@@ -11102,7 +11105,7 @@ type
     // !  end;
     // - consider using the safest Named[] property, to avoid parameters
     // index matching issue
-    // - if an Output[]/Named[] item is not set, a default value would be used
+    // - if an Output[]/Named[] item is not set, a default value will be used
     property Output[Index: Integer]: variant write SetOutput;
     /// access to input/output parameters when calling the method
     // - if the supplied name is incorrect, an EInterfaceStub will be raised
@@ -11123,7 +11126,7 @@ type
     // !  end;
     // - using this default Named[] property is recommended over the index-based
     // Output[] property
-    // - if an Output[]/Named[] item is not set, a default value would be used
+    // - if an Output[]/Named[] item is not set, a default value will be used
     property Named[const ParamName: RawUTF8]: variant read GetInNamed write SetOutNamed; default;
     /// access to UTF-8 input parameters when calling the method
     // - if the supplied name is incorrect, an EInterfaceStub will be raised
@@ -11443,10 +11446,10 @@ type
     /// add an execution rule for all methods, with Variant marshalling
     // - optional aEventParams parameter will be transmitted to aEvent handler
     // - callback's Ctxt: TOnInterfaceStubExecuteParamsVariant's Method field
-    // would identify the executed method
+    // will identify the executed method
     function Executes(aEvent: TOnInterfaceStubExecuteVariant; const aEventParams: RawUTF8=''): TInterfaceStub; overload;
     /// will add execution rules for all methods to log the input parameters
-    // - aKind would define how the input parameters are serialized in JSON
+    // - aKind will define how the input parameters are serialized in JSON
     function Executes(aLog: TSynLogClass; aLogLevel: TSynLogInfo;
        aKind: TServiceMethodParamsDocVariantKind): TInterfaceStub; overload;
 {$endif}
@@ -11599,7 +11602,7 @@ type
     // - same as the Options property, but in a fluent-style interface
     function SetOptions(Options: TInterfaceStubOptions): TInterfaceStub;
     /// reset the internal trace
-    // - Log, LogAsText, LogHash and LogCount would be initialized
+    // - Log, LogAsText, LogHash and LogCount will be initialized
     procedure ClearLog;
 
     /// the stubbed method execution trace items
@@ -11886,8 +11889,8 @@ type
   // its execution
   // - see Ctxt.Service, Ctxt.ServiceMethodIndex and Ctxt.ServiceParameters
   // are used to identify the executed method context
-  // - Method parameter would help identify easily the corresponding method, and
-  // would contain in fact Service.InterfaceFactory.Methods[ServiceMethodIndex]
+  // - Method parameter will help identify easily the corresponding method, and
+  // will contain in fact Service.InterfaceFactory.Methods[ServiceMethodIndex]
   // - should return TRUE if the method can be executed
   // - should return FALSE if the method should not be executed, and set the
   // corresponding error to the supplied context e.g.
@@ -12086,7 +12089,7 @@ type
     /// log method execution information to a TSQLRecordServiceLog table
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
-    // - will write to the specified aLogRest instance, and would disable
+    // - will write to the specified aLogRest instance, and will disable
     // writing if aLogRest is nil
     // - will write to a (inherited) TSQLRecordServiceLog table, as available in
     // TSQLRest's model, unless a dedicated table is specified as aLogClass
@@ -12098,10 +12101,10 @@ type
     // of this service, at runtime
     property OnMethodExecute: TOnServiceCanExecute read fOnMethodExecute write fOnMethodExecute;
     /// allow to hook the methods execution
-    // - several events could be registered, and would be called directly
+    // - several events could be registered, and will be called directly
     // before and after method execution
     // - if optInterceptInputOutput is defined in Options, then Sender.Input/Output
-    // fields would contain the execution data context when Hook is called
+    // fields will contain the execution data context when Hook is called
     // - see OnMethodExecute if you want to implement security features
     procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
 
@@ -12114,7 +12117,7 @@ type
     // on the server side, there is no notion of client, session, user nor group
     // - if ServiceContext.Factory is nil (i.e. if there is no other
     // service context currently associated), this method will also update
-    // ServiceContext.Factory, so that the implementation method would be able
+    // ServiceContext.Factory, so that the implementation method will be able
     // to access the associated TSQLRestServer instance if needed
     function Get(out Obj): Boolean; override;
     /// retrieve the published signature of this interface
@@ -12191,7 +12194,7 @@ type
     property ResultAsXMLObjectIfAcceptOnlyXML: boolean
       read fResultAsJSONObjectIfAccept write fResultAsJSONObjectIfAccept;
     /// specify a custom name space content when returning a XML object
-    // - by default, no name space would be appended - but such rough XML would
+    // - by default, no name space will be appended - but such rough XML will
     // have potential validation problems
     // - you may use e.g. XMLUTF8_NAMESPACE, which will append <content ...> ...
     // </content> around the generated XML data
@@ -12247,7 +12250,7 @@ type
     // on TServiceFactoryServer side
     function RetrieveSignature: RawUTF8; override;
     /// convert a HTTP error from mORMot's REST/SOA into an English text message
-    // - would recognize the HTTP_UNAVAILABLE, HTTP_NOTIMPLEMENTED,
+    // - will recognize the HTTP_UNAVAILABLE, HTTP_NOTIMPLEMENTED,
     // HTTP_NOTALLOWED, HTTP_UNAUTHORIZED or HTTP_NOTACCEPTABLE errors, as
     // generated by the TSQLRestServer side
     // - is used by TServiceFactoryClient.InternalInvoke, but may be called
@@ -12260,27 +12263,27 @@ type
     procedure SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions;
       aAction: TServiceMethodOptionsAction=moaReplace);
     /// persist all service calls into a database instead of calling the client 
-    // - expect a REST instance, which would store all methods without any
+    // - expect a REST instance, which will store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
     // associated TSQLRecordServiceNotifications class
     // - once set, regular fClient.URI() won't be called but a new aLogClass
-    // entry would be stored in aRest
+    // entry will be stored in aRest
     // - to disable this redirection, set aRest and aLogClass to nil
     procedure StoreNotifications(aRest: TSQLRest;
       aLogClass: TSQLRecordServiceNotificationsClass);
     /// allow background process of method with no results, via a temporary
     // database, to be used e.g. for safe notifications transmission
-    // - would call StoreNotifications() and start background notification
-    // - expect a REST instance, which would store all methods without any
+    // - will call StoreNotifications() and start background notification
+    // - expect a REST instance, which will store all methods without any
     // results (i.e. procedure without any var/out parameters) on the
     // associated TSQLRecordServiceNotifications class
-    // - a background thread would be used to check for pending notifications,
+    // - a background thread will be used to check for pending notifications,
     // and send them to the supplied aRemote TSQLRestClient instance, or
     // to the main TServiceFactoryClient.fClient instance 
     // - if the remote client is not reachable, will retry after the specified
     // period of time, in seconds
-    // - this method is not blocking, and would write the pending calls to
-    // the aRest/aLogClass table, which would be retrieved asynchronously
+    // - this method is not blocking, and will write the pending calls to
+    // the aRest/aLogClass table, which will be retrieved asynchronously
     // by the background thread
     procedure SendNotifications(aRest: TSQLRest;
       aLogClass: TSQLRecordServiceNotificationsClass; aRetryPeriodSeconds: Integer=30;
@@ -12289,11 +12292,11 @@ type
     // initiated by SendNotifications() method
     function SendNotificationsPending: integer;
     /// wait for all pending notifications to be sent
-    // - you can supply a time out period after which no wait would take place
+    // - you can supply a time out period after which no wait will take place
     procedure SendNotificationsWait(aTimeOutSeconds: integer);
   published
     /// could be used to force the remote URI to access the service
-    // - by default, the URI would be Root/Calculator or Root/InterfaceMangledURI
+    // - by default, the URI will be Root/Calculator or Root/InterfaceMangledURI
     // but you may use this property to use another value, e.g. if you are
     // accessign a non mORMot REST server (probably with aContractExpected set
     // to SERVICE_CONTRACT_NONE_EXPECTED, and running
@@ -12371,8 +12374,8 @@ type
     /// release all registered services
     destructor Destroy; override;
     /// release all services of a TSQLRest instance before shutdown
-    // - would allow to properly release any pending callbacks
-    // - TSQLRest.Services.Release would call FreeAndNil(fServices)
+    // - will allow to properly release any pending callbacks
+    // - TSQLRest.Services.Release will call FreeAndNil(fServices)
     procedure Release;
     /// return the number of registered service interfaces
     function Count: integer;
@@ -12415,7 +12418,7 @@ type
     // - can be used as such to resolve an I: ICalculator interface
     // ! if fClient.Services.Info(TypeInfo(ICalculator)).Get(I) then
     // !   ... use I
-    // - is defined as virtual so that e.g. TServiceContainerClient would
+    // - is defined as virtual so that e.g. TServiceContainerClient will
     // automatically register the interface, if it was not already done
     function Info(aTypeInfo: PTypeInfo): TServiceFactory; overload; virtual;
     /// notify the other side that the given Callback event interface is released
@@ -12495,7 +12498,7 @@ type
     ['{8D518FCB-62C3-42EB-9AE7-96ED322140F7}']
     /// will be called when a callback is released on the client side
     // - this method matches the TInterfaceFactory.MethodIndexCallbackReleased
-    // signature, so that it would be called with the interface instance by
+    // signature, so that it will be called with the interface instance by
     // TServiceContainerServer.FakeCallbackRelease
     // - you may use it as such - see sample Project31ChatServer.dpr:
     // ! procedure TChatService.CallbackReleased(const callback: IInvokable;
@@ -12511,13 +12514,13 @@ type
   // - used by TServiceContainerServer.OnCallbackReleasedOnClientSide
   // and TServiceContainerServer.OnCallbackReleasedOnServerSide event properties
   // - the supplied Instance will be a TInterfacedObjectFakeServer, and the
-  // Callback would be a pointer to the corresponding interface value
+  // Callback will be a pointer to the corresponding interface value
   // - assigned implementation should be as fast a possible, since this event
   // will be executed in a global lock for all server-side callbacks
   TOnCallbackReleased = procedure(Sender: TServiceContainer;
     Instance: TInterfacedObject; Callback: pointer) of object;
 
-  /// how TServiceContainerServer would handle SOA callbacks
+  /// how TServiceContainerServer will handle SOA callbacks
   // - by default, a callback released on the client side will log a warning
   // and continue the execution (relying e.g. on a CallbackReleased() method to
   // unsubscribe the event), but coRaiseExceptionIfReleasedByClient can be
@@ -12591,7 +12594,7 @@ type
     /// log method execution information to a TSQLRecordServiceLog table
     // - TServiceFactoryServer.SetServiceLog() will be called for all registered
     // interfaced-based services of this container
-    // - will write to the specified aLogRest instance, and would disable
+    // - will write to the specified aLogRest instance, and will disable
     // writing if aLogRest is nil
     // - will write to a (inherited) TSQLRecordServiceLog table, as available in
     // TSQLRest's model, unless a dedicated table is specified as aLogClass
@@ -12609,7 +12612,7 @@ type
     /// this event will be launched when a callback interface is notified as
     // relased on the Client side
     // - as an alternative, you may define the following method on the
-    // registration service interface type, which would be called when a
+    // registration service interface type, which will be called when a
     // callback registered via this service is released (e.g. to unsubscribe
     // the callback from an interface list, via InterfaceArrayDelete):
     // ! procedure CallbackReleased(const callback: IInvokable; const interfaceName: RawUTF8);
@@ -12655,9 +12658,9 @@ type
       read fDisableAutoRegisterAsClientDriven write fDisableAutoRegisterAsClientDriven;
   end;
 
-  /// TInterfacedObject class which would notify a REST server when it is released
+  /// TInterfacedObject class which will notify a REST server when it is released
   // - could be used when implementing event callbacks as interfaces, so that
-  // the other side instance would be notified when it is destroyed
+  // the other side instance will be notified when it is destroyed
   TInterfacedCallback = class(TInterfacedObjectLocked)
   protected
     fRest: TSQLRest;
@@ -12673,7 +12676,7 @@ type
     // is now unreachable
     // - i.e. will call CallbackRestUnregister
     destructor Destroy; override;
-    /// the associated TSQLRestServer instance, which would be notified
+    /// the associated TSQLRestServer instance, which will be notified
     // when the callback is released
     property Rest: TSQLRest read fRest;
     /// the interface type, implemented by this callback class
@@ -12681,7 +12684,7 @@ type
   end;
 
   /// asynchrounous callback to emulate a synchronous/blocking process
-  // - once created, process would block via a WaitFor call, which would be
+  // - once created, process will block via a WaitFor call, which will be
   // released when CallbackFinished() is called by the process background thread
   TBlockingCallback = class(TInterfacedCallback)
   protected
@@ -12690,22 +12693,22 @@ type
   public
     /// initialize the callback instance
     // - specify a time out millliseconds period after which blocking execution
-    // should be handled as failure (if 0 is set, default 3000 would be used)
+    // should be handled as failure (if 0 is set, default 3000 will be used)
     // - you can optionally set a REST and callback interface for automatic
-    // notification when this TInterfacedCallback would be released
+    // notification when this TInterfacedCallback will be released
     constructor Create(aTimeOutMs: integer;
       aRest: TSQLRest; const aGUID: TGUID); reintroduce;
     /// finalize the callback instance
     destructor Destroy; override;
     /// called to wait for the callback to be processed, or trigger timeout
-    // - would block until CallbackFinished() is called by the processing thread
+    // - will block until CallbackFinished() is called by the processing thread
     // - returns the final state of the process, i.e. beRaised or beTimeOut
     function WaitFor: TBlockingEvent; virtual;
     /// should be called by the callback when the process is finished
-    // - the caller would then let its WaitFor method return
+    // - the caller will then let its WaitFor method return
     // - if aServerUnregister is TRUE, will also call CallbackRestUnregister to
     // notify the server that the callback is no longer needed
-    // - would optionally log all published properties values to the log class
+    // - will optionally log all published properties values to the log class
     // of the supplied REST instance
     procedure CallbackFinished(aRestForLog: TSQLRest;
       aServerUnregister: boolean=false); virtual;
@@ -13596,8 +13599,8 @@ type
     // and RawJSON results, for direct process from the client side
     // - returns '' on error
     // - the data is directly retrieved from raw JSON as returned by the database
-    // without any conversion, so this method would be the fastest, but complex
-    // types like dynamic array would be returned as Base64-encoded blob value -
+    // without any conversion, so this method will be the fastest, but complex
+    // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
       const BoundsSQLWhere: array of const;
@@ -13614,8 +13617,8 @@ type
     // and RawJSON results, for direct process from the client side
     // - returns '' on error
     // - the data is directly retrieved from raw JSON as returned by the database
-    // without any conversion, so this method would be the fastest, but complex
-    // types like dynamic array would be returned as Base64-encoded blob value -
+    // without any conversion, so this method will be the fastest, but complex
+    // types like dynamic array will be returned as Base64-encoded blob value -
     // if you need proper JSON access to those, see RetrieveDocVariantArray()
     function RetrieveListJSON(Table: TSQLRecordClass; const SQLWhere: RawUTF8;
       const aCustomFieldsCSV: RawUTF8=''; aForceAJAX: boolean=false): RawJSON; overload;
@@ -13630,7 +13633,7 @@ type
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName, CustomFieldsCSV: RawUTF8; FirstRecordID: PID=nil;
@@ -13651,7 +13654,7 @@ type
     // - if aCustomFieldsCSV is '', will get all simple fields, excluding BLOBs
     // - if aCustomFieldsCSV is '*', will get ALL fields, including ID and BLOBs
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveDocVariantArray(Table: TSQLRecordClass;
       const ObjectName: RawUTF8;
@@ -13666,7 +13669,7 @@ type
     // DateToSQL()/DateTimeToSQL() for TDateTime, or directly any integer,
     // double, currency, RawUTF8 values to be bound to the request as parameters
     // - the data will be converted to variants and TDocVariant following the
-    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values (in contrast to the RetrieveListJSON method)
     function RetrieveOneFieldDocVariantArray(Table: TSQLRecordClass;
       const FieldName, FormatSQLWhere: RawUTF8;
@@ -13674,7 +13677,7 @@ type
     /// get one member from a SQL statement as a TDocVariant
     // - implements REST GET collection
     // - the data will be converted to a TDocVariant variant following the
-    // TSQLRecord layout, so complex types like dynamic array would be returned
+    // TSQLRecord layout, so complex types like dynamic array will be returned
     // as a true array of values
     function RetrieveDocVariant(Table: TSQLRecordClass;
       const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
@@ -13789,8 +13792,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// create a new member, including its BLOB fields
     // - implements REST POST collection
-    // - this method would create a JSON representation of the document
-    // including the BLOB fields as Base64 encoded text, so would be less
+    // - this method will create a JSON representation of the document
+    // including the BLOB fields as Base64 encoded text, so will be less
     // efficient than a dual Add() + UpdateBlobFields() methods if the
     // binary content has a non trivial size
     // - this method will call EngineAdd() to perform the request
@@ -13899,10 +13902,10 @@ type
     // - return true on success
     // - note that this method won't update the TModTime properties: you should
     // rather use a classic Retrieve()/FillPrepare() followed by Update(), but
-    // it would be much slower, even over a BATCH
+    // it will be much slower, even over a BATCH
     // - will be executed as a regular SQL statement:
     // $ UPDATE table SET fieldname=fieldvalue WHERE RowID IN (...)
-    // - warning: this method would call directly EngineExecute(), and would
+    // - warning: this method will call directly EngineExecute(), and will
     // work just fine with SQLite3, but some other DB engines may not allow
     // a huge number of items within the IN(...) clause
     function UpdateField(Table: TSQLRecordClass; const IDs: array of Int64;
@@ -13962,7 +13965,7 @@ type
     // "premature optimization is the root of all evil"
     property Cache: TSQLRestCache read GetCache;
     /// access the internal caching parameters for a given TSQLRecord
-    // - would return nil if no TSQLRestCache instance has been defined
+    // - will return nil if no TSQLRestCache instance has been defined
     function CacheOrNil: TSQLRestCache;
       {$ifdef HASINLINE}inline;{$endif}
 
@@ -14074,7 +14077,7 @@ type
     // ! AcquireExecutionMode[execORMWrite] := amBackgroundThread;
     // ! AcquireWriteMode := amBackgroundThread; // same as previous
     // - by default, any exception will be catch and ignored, unless RaiseException
-    // is set to TRUE so that the caller would be able to handle it
+    // is set to TRUE so that the caller will be able to handle it
     procedure Commit(SessionID: cardinal; RaiseException: boolean=false); virtual;
     /// abort a transaction
     // - implements REST ABORT collection
@@ -14160,7 +14163,7 @@ type
     /// you can call this method just before a thread is finished to ensure
     // e.g. that the associated external DB connection will be released
     // - this abstract method will call fLogClass.Add.NotifyThreadEnded
-    // but TSQLRestServer.EndCurrentThread would do the main process
+    // but TSQLRestServer.EndCurrentThread will do the main process
     procedure EndCurrentThread(Sender: TThread); virtual;
     /// allows to safely execute a processing method in a background thread
     // - returns a TSynBackgroundThreadMethod instance, ready to execute any
@@ -14320,7 +14323,7 @@ type
     // no ICalculator is defined on server side:
     // ! if fServer.Services['Calculator'].Get(Calc)) then
     // !   ...
-    // - safer typical use, following the DI/IoC pattern, and which would not
+    // - safer typical use, following the DI/IoC pattern, and which will not
     // trigger any access violation if Services=nil, could be:
     // ! if fServer.Services.Resolve(ICalculator,Calc) then
     // !   ...
@@ -14332,7 +14335,7 @@ type
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
-    // - overriden methods would return TServiceContainerClient or
+    // - overriden methods will return TServiceContainerClient or
     // TServiceContainerServer instances, on TSQLRestClient or TSQLRestServer
     function ServiceContainer: TServiceContainer; virtual; abstract;
     /// the routing classs of the service remote request
@@ -14340,7 +14343,7 @@ type
     // layout which is secure (since will use our RESTful authentication scheme),
     // and also very fast
     // - but TSQLRestRoutingJSON_RPC can e.g. be set (on BOTH client and
-    // server sides), if the client would rather use JSON/RPC alternative pattern
+    // server sides), if the client will rather use JSON/RPC alternative pattern
     // - NEVER set the abstract TSQLRestServerURIContext class on this property
     property ServicesRouting: TSQLRestServerURIContextClass
       read fRoutingClass write SetRoutingClass;
@@ -14413,7 +14416,7 @@ type
     procedure InternalExecute; virtual; abstract;
   public
     /// initialize the thread
-    // - if aOwnRest is TRUE, the supplied REST instance would be
+    // - if aOwnRest is TRUE, the supplied REST instance will be
     // owned by this thread
     constructor Create(aRest: TSQLRest; aOwnRest, aCreateSuspended: boolean);
     {$ifndef HASTTHREADSTART}
@@ -14432,7 +14435,7 @@ type
     function SleepOrTerminated(MS: integer): boolean;
     /// read-only access to the associated REST instance
     property Rest: TSQLRest read FRest;
-    /// TRUE if the associated REST instance would be owned by this thread
+    /// TRUE if the associated REST instance will be owned by this thread
     property OwnRest: boolean read fOwnRest;
     /// a critical section is associated to this thread
     // - could be used to protect shared resources within the internal process
@@ -14575,7 +14578,7 @@ type
   /// callback allowing to customize the retrieval of an authenticated user
   // - as defined in TSQLRestServer.OnAuthenticationUserRetrieve
   // - and executed by TSQLRestServerAuthentication.GetUser
-  // - on call, either aUserID would be <> 0, or aUserName is to be used
+  // - on call, either aUserID will be <> 0, or aUserName is to be used
   // - if the function returns nil, default Server.SQLAuthUserClass.Create()
   // methods won't be called, and the user will be reported as not found
   TOnAuthenticationUserRetrieve = function(Sender: TSQLRestServerAuthentication;
@@ -14702,7 +14705,7 @@ type
     // - as expected by this class
     // - defined as virtual so that you may use your own hashing class
     // - you may specify your own values in aHashSalt/aHashRound, to enable
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it would increase
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     class function ComputeHashedPassword(const aPasswordPlain: RawUTF8;
       const aHashSalt: RawUTF8=''; aHashRound: integer=20000): RawUTF8; virtual;
@@ -14712,7 +14715,7 @@ type
     property PasswordPlain: RawUTF8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
     // - use this method to specify aHashSalt/aHashRound values, enabling
-    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it would increase
+    // PBKDF2_HMAC_SHA256() use instead of plain SHA256(): it will increase
     // security on storage side (reducing brute force attack via rainbow tables)
     // - you may use an application specific fixed salt, and/or append the
     // user LogonName to make the challenge unique for each TSQLAuthUser
@@ -14889,7 +14892,7 @@ type
     // - if aUserName is an integer, it will try to retrieve it from ORM using
     // the supplied value as its TSQLAuthUser.ID: it may be convenient when the
     // client is not an end-user application but a mORMot server (in a cloud
-    // architecture), since it would benefit from local ORM cache
+    // architecture), since it will benefit from local ORM cache
     // - you can override this method and return an on-the-fly created value
     // as a TSQLRestServer.SQLAuthUserClass instance (i.e. not persisted
     // in database nor retrieved by ORM), but the resulting TSQLAuthUser
@@ -15179,7 +15182,7 @@ type
   /// authentication of the current logged user using Windows Security Support
   // Provider Interface (SSPI)
   // - is able to authenticate the currently logged user on the client side,
-  // using either NTLM or Kerberos - it would allow to safely authenticate
+  // using either NTLM or Kerberos - it will allow to safely authenticate
   // on a mORMot server without prompting the user to enter its password
   // - if ClientSetUser() receives aUserName as '', aPassword should be either
   // '' if you expect NTLM authentication to take place, or contain the SPN
@@ -15203,7 +15206,7 @@ type
     // - if User.LogonName is '', then User.PasswordHashHexa is '' for
     // NTLM authentication, or the SPN registration for Kerberos authentication
     // - if User.LogonName is set as 'DomainName\UserName', then authentication
-    // would take place on the specified domain, with User.PasswordHashHexa as
+    // will take place on the specified domain, with User.PasswordHashHexa as
     // plain password
     class function ClientComputeSessionKey(Sender: TSQLRestClientURI;
       User: TSQLAuthUser): RawUTF8; override;
@@ -15330,7 +15333,7 @@ type
   // - TSQLRestServer.InternalUpdateEvent will use this table to store individual
   // row changes as SentDataJSON, then will compress them in History BLOB
   // - note that any layout change of the tracked TSQLRecord table (e.g. adding
-  // a new property) would break the internal data format, so will void the table
+  // a new property) will break the internal data format, so will void the table
   TSQLRecordHistory = class(TSQLRecordModification)
   protected
     fEvent: TSQLHistoryEvent;
@@ -15444,7 +15447,7 @@ type
   TSQLRecordHistoryClass = class of TSQLRecordHistory;
 
   /// ORM table used to store the deleted items of a versioned table
-  // - the ID/RowID primary key of this table would be the version number
+  // - the ID/RowID primary key of this table will be the version number
   // (i.e. value computed by TSQLRestServer.InternalRecordVersionCompute),
   // mapped with the corresponding 'TableIndex shl 58' (so that e.g.
   // TSQLRestServer.RecordVersionSynchronizeToBatch() could easily ask for the
@@ -15507,7 +15510,7 @@ type
     /// finalize this temporary storage instance
     destructor Destroy; override;
     /// add a copy of a TSQLRecord to the internal storage list
-    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is true, Value.ID will be supplied with the ID to add
     // - if ForceID is false, a "fake" ID is returned, which may be used later
     // on for Update() calls - WARNING: but this ID should not be stored as
     // a cross reference in another record, since it is private to this storage;
@@ -15522,7 +15525,7 @@ type
     function AddCopy(Value: TSQLRecord; ForceID: boolean;
       const FieldNames: RawUTF8=''): TID; overload;
     /// add and own a TSQLRecord in the internal storage list
-    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is true, Value.ID will be supplied with the ID to add
     // - if ForceID is false, a "fake" ID is returned, which may be used later
     // on for Update() calls - WARNING: but this ID should not be stored as
     // a cross reference in another record, since it is private to this storage;
@@ -15543,7 +15546,7 @@ type
     // - returns false in case of error (e.g. duplicated ID or void JSON)
     function FromEvent(Event: TSQLEvent; ID: TID; const JSON: RawUTF8): boolean;
     /// add and own a TSQLRecord in the internal storage list
-    // - if ForceID is true, Value.ID would be supplied with the ID to add
+    // - if ForceID is true, Value.ID will be supplied with the ID to add
     // - if ForceID is false, a "fake" ID is returned, which may be used later
     // on for Update() calls - WARNING: but this ID should not be stored as
     // a cross reference in another record, since it is private to this storage;
@@ -15609,7 +15612,7 @@ type
     fDeleted: TSynMonitorCount64;
     // [Write: boolean] per-table statistics
     fPerTable: array[boolean] of TSynMonitorWithSizeObjArray;
-    // no overriden Changed: TSQLRestServer.URI would do it in finally block
+    // no overriden Changed: TSQLRestServer.URI will do it in finally block
   public
     /// initialize the instance
     constructor Create(aServer: TSQLRestServer); reintroduce;
@@ -15683,8 +15686,8 @@ type
   /// class-reference type (metaclass) of a TSQLMonitorUsage table
   TSQLMonitorUsageClass = class of TSQLMonitorUsage;
 
-  /// would store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
-  // - the TSQLRecord.ID would be the TSynMonitorUsageID shifted by 16 bits
+  /// will store TSynMonitorUsage information in TSQLMonitorUsage ORM tables
+  // - the TSQLRecord.ID will be the TSynMonitorUsageID shifted by 16 bits
   TSynMonitorUsageRest = class(TSynMonitorUsage)
   protected
     fStorage: TSQLRest;
@@ -15695,9 +15698,9 @@ type
     function LoadDB(ID: integer; Gran: TSynMonitorUsageGranularity; out Track: variant): boolean; override;
   public
     /// initialize storage via ORM
-    // - if a TSynUniqueIdentifierProcess is supplied, it would be used to
+    // - if a TSynUniqueIdentifierProcess is supplied, it will be used to
     // identify the generating process by shifting TSynMonitorUsageID values
-    // - would use TSQLMonitorUsage table, unless another one is specified
+    // - will use TSQLMonitorUsage table, unless another one is specified
     constructor Create(aStorage: TSQLRest; aProcessID: TSynUniqueIdentifierProcess;
       aStoredClass: TSQLMonitorUsageClass=nil); reintroduce; virtual;
     /// finalize the process
@@ -15776,7 +15779,7 @@ type
   public
     /// the internal list of published services
     // - the list is stored in-order, i.e. it will follow the RegisterFromJSON()
-    // execution order: the latest registrations would appear last
+    // execution order: the latest registrations will appear last
     List: TServicesPublishedInterfacesDynArray;
     /// how many items are actually stored in List[]
     Count: Integer;
@@ -15788,12 +15791,12 @@ type
     /// add the JSON serialized TServicesPublishedInterfaces to the list
     // - called by TSQLRestServerURIContext.InternalExecuteSOAByInterface when
     // the client provides its own services as _contract_ HTTP body
-    // - warning: supplied PublishedJson would be parsed in place, so modified
+    // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromClientJSON(var PublishedJson: RawUTF8);
     /// set the list from JSON serialized TServicesPublishedInterfacesDynArray
     // - may be used to duplicate the whole TSQLRestServer.AssociatedServices
     // content, as returned from /root/Stat?findservice=*
-    // - warning: supplied PublishedJson would be parsed in place, so modified
+    // - warning: supplied PublishedJson will be parsed in place, so modified
     procedure RegisterFromServerJSON(var PublishedJson: RawUTF8);
     /// set the list from a remote TSQLRestServer
     // - will call /root/Stat?findservice=* URI, then RegisterFromServerJSON()
@@ -15804,19 +15807,19 @@ type
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
     // - if the service name has been registered several times, all
-    // registration would be returned, the latest in first position
+    // registration will be returned, the latest in first position
     function FindService(const aServiceName: RawUTF8): TSQLRestServerURIDynArray;
     /// return all services URI by name, from the registration list, as URIs
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
-    // - the returned string would contain all matching server URI, the latest
+    // - the returned string will contain all matching server URI, the latest
     // registration being the first to appear, e.g.
     // $ ["addresslast:port/root","addressprevious:port/root","addressfirst:port/root"]
     function FindServiceAll(const aServiceName: RawUTF8): TSQLRestServerURIStringDynArray; overload;
     /// return all services URI by name, from the registration list, as JSON
     // - will lookup for the Interface name without the initial 'I', e.g.
     // 'Calculator' for ICalculator - warning: research is case-sensitive
-    // - the returned JSON array would contain all matching server URI, encoded as
+    // - the returned JSON array will contain all matching server URI, encoded as
     // a TSQLRestServerURI JSON array, the latest registration being
     // the first to appear, e.g.
     // $ [{"Address":"addresslast","Port":"port","Root":"root"},...]
@@ -15840,9 +15843,9 @@ type
   // this property in TSQLRestServer.Options, but always call explicitly
   // TSQLRestServer.NoAJAXJSON := true so that the SetNoAJAXJSON virtual
   // method should be called as expected (e.g. to flush TSQLRestServerDB cache)
-  // - rsoGetAsJsonNotAsString would let ORM GET return to AJAX (non Delphi)
+  // - rsoGetAsJsonNotAsString will let ORM GET return to AJAX (non Delphi)
   // clients JSON objects instead of the JSON text stored in database fields
-  // - rsoGetID_str would add a "ID_str": string field to circumvent JavaScript
+  // - rsoGetID_str will add a "ID_str": string field to circumvent JavaScript
   // limitation of 53-bit for integers - only for AJAX (non Delphi) clients
   // - unauthenticated requests from browsers (i.e. not Delphi clients) may
   // be redirected to the TSQLRestServer.Auth() method via rsoRedirectForbiddenToAuth
@@ -15851,15 +15854,17 @@ type
   // instead of 200 in case of a successful operation, but with no returned
   // body (e.g. a DELETE with SAPUI5 / OpenUI5 framework): include
   // rsoHttp200WithNoBodyReturns204 so that any HTTP_SUCCESS (200) with no
-  // returned body would return a HTTP_NOCONTENT (204), as expected by
+  // returned body will return a HTTP_NOCONTENT (204), as expected by
   // some clients
-  // - by default, Add() or Update() would return HTTP_CREATED (201) or
+  // - by default, Add() or Update() will return HTTP_CREATED (201) or
   // HTTP_SUCCESS (200) with no body, unless rsoAddUpdateReturnsContent is set
   // to return as JSON the last inserted/updated record
   // - TModTime / TCreateTime fields are expected to be filled on client side,
   // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
-  // would set the fields on the server side by calling the TSQLRecord
+  // will set the fields on the server side by calling the TSQLRecord
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
+  // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured -
+  // with the only exception of the Timestamp method-based service
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -15867,7 +15872,8 @@ type
     rsoRedirectForbiddenToAuth,
     rsoHttp200WithNoBodyReturns204,
     rsoAddUpdateReturnsContent,
-    rsoComputeFieldsBeforeWriteOnServerSide);
+    rsoComputeFieldsBeforeWriteOnServerSide,
+    rsoSecureConnectionRequired);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -15916,6 +15922,7 @@ type
     {$endif}
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
+    fPublishedMethodTimeStampIndex: integer;
     fPublishedMethodBatchIndex: integer;
     fPublicURI: TSQLRestServerURI;
     fAssociatedServices: TServicesPublishedInterfacesList;
@@ -16109,25 +16116,25 @@ type
     // - consider using a TInjectableObjectClass implementation for pure IoC/DI
     OnServiceCreateInstance: TOnServiceCreateInstance;
     /// event trigerred when URI() starts to process a request
-    // - the supplied Ctxt parameter would give access to the command about to
-    // be executed, e.g. Ctxt.Command=execSOAByInterface would identify a SOA
+    // - the supplied Ctxt parameter will give access to the command about to
+    // be executed, e.g. Ctxt.Command=execSOAByInterface will identify a SOA
     // service execution, with the corresponding Service and ServiceMethodIndex
     // parameters as set by TSQLRestServerURIContext.URIDecodeSOAByInterface
     // - should return TRUE if the method can be executed
     // - should return FALSE if the method should not be executed, and the
     // callback should set the corresponding error to the supplied context e.g.
     // ! Ctxt.Error('Unauthorized method',HTTP_NOTALLOWED);
-    // - since this event would be executed by every TSQLRestServer.URI call,
+    // - since this event will be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
     OnBeforeURI: TNotifyBeforeURI;
     /// event trigerred when URI() finished to process a request
-    // - the supplied Ctxt parameter would give access to the command which has
+    // - the supplied Ctxt parameter will give access to the command which has
     // been executed, e.g. via Ctxt.Call.OutStatus or Ctxt.MicroSecondsElapsed
-    // - since this event would be executed by every TSQLRestServer.URI call,
+    // - since this event will be executed by every TSQLRestServer.URI call,
     // it should better not make any slow process (like writing to a remote DB)
     OnAfterURI: TNotifyAfterURI;
     /// event trigerred when URI() failed to process a request
-    // - if Ctxt.ExecuteCommand raised an execption, this callback would be
+    // - if Ctxt.ExecuteCommand raised an execption, this callback will be
     // run with all neeed information
     // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
     // content has already been set as expected by the client
@@ -16210,7 +16217,7 @@ type
     // - both remote Master and local slave TSQLRestServer should have the supplied
     // Table class in their data model (maybe in diverse order)
     // - by default, all pending updates are retrieved, but you can define a value
-    // to ChunkRowLimit, so that the updates would be retrieved by smaller chunks
+    // to ChunkRowLimit, so that the updates will be retrieved by smaller chunks
     // - returns -1 on error, or the latest applied revision number (which may
     // be 0 if there is no data in the table)
     // - this method will use regular REST ORM commands, so will work with any
@@ -16228,12 +16235,12 @@ type
     // - both remote Source and local TSQLRestSever should have the supplied
     // Table class in each of their data model
     // - by default, all pending updates are retrieved, but you can define a value
-    // to MaxRowLimit, so that the updates would be retrieved by smaller chunks
+    // to MaxRowLimit, so that the updates will be retrieved by smaller chunks
     // - returns nil if nothing new was found, or a TSQLRestBatch instance
     // containing all modifications since RecordVersion revision
     // - when executing the returned TSQLRestBatch on the database, you should
     // set TSQLRestServer.RecordVersionDeleteIgnore := true so that the
-    // TRecordVersion fields would be forced from the supplied value
+    // TRecordVersion fields will be forced from the supplied value
     // - usually, you should not need to use this method, but rather the more
     // straightforward RecordVersionSynchronizeSlave()
     function RecordVersionSynchronizeSlaveToBatch(Table: TSQLRecordClass;
@@ -16243,7 +16250,7 @@ type
     // - allow synchronization of a TSQLRecord table, using its TRecordVersion
     // field, for real-time master/slave replication on the master side
     // - this method will register the IServiceRecordVersion service on the
-    // server side, so that RecordVersionSynchronizeStartSlave() would be able
+    // server side, so that RecordVersionSynchronizeStartSlave() will be able
     // to receive push notifications of any updates
     // - this method expects the communication channel to be bidirectional, e.g.
     // a mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode
@@ -16275,8 +16282,8 @@ type
     // each time a write operation is performed on a given TSQLRecord with a
     // TRecordVersion field
     // - the callback parameter could be a TServiceRecordVersionCallback instance,
-    // which would perform all update operations as expected
-    // - the callback process would be blocking for the ORM write point of view:
+    // which will perform all update operations as expected
+    // - the callback process will be blocking for the ORM write point of view:
     // so it should be as fast as possible, or asynchronous - note that regular
     // callbacks using WebSockets, as implemented by SynBidirSock.pas and
     // mORMotHTTPServer's TSQLHttpServer in useBidirSocket mode, are asynchronous
@@ -16396,7 +16403,7 @@ type
     // all pending requests are finished, for proper server termination
     // - you could optionally save the current server state (e.g. user sessions)
     // into a file, ready to be retrieved later on using SessionsLoadFromFile -
-    // note that this would work only for ORM sessions, NOT complex SOA state
+    // note that this will work only for ORM sessions, NOT complex SOA state
     // - this method is called by Destroy itself
     procedure Shutdown(const aStateFileName: TFileName=''); virtual;
 
@@ -16452,8 +16459,8 @@ type
     // redirected to aRemoteRest, which may be a TSQLRestClient or another
     // TSQLRestServer instance (e.g. a fast SQLITE_MEMORY_DATABASE_NAME)
     // - if aRemoteRest is a TSQLRestClient, it should have been authenticated
-    // to the remote TSQLRestServer, so that CRUD / ORM operations would pass
-    // - this would enable easy creation of proxies, or local servers, with they
+    // to the remote TSQLRestServer, so that CRUD / ORM operations will pass
+    // - this will enable easy creation of proxies, or local servers, with they
     // own cache and data model - e.g. a branch office server which may server
     // its local client over Ethernet, but communicating to a main mORMot
     // server via Internet, storing the corporate data in the main office server
@@ -16553,9 +16560,10 @@ type
     // - by default, only Auth and TimeStamp methods do not require the RESTful
     // authentication of the URI; you may call this method to add another method
     // to the list (e.g. for returning some HTML content from a public URI)
-    // - if the supplied aMethodName='', all method-based services would
+    // - if the supplied aMethodName='', all method-based services will
     // bypass the authenticaton process
-    procedure ServiceMethodByPassAuthentication(const aMethodName: RawUTF8);
+    // - returns the method index number 
+    function ServiceMethodByPassAuthentication(const aMethodName: RawUTF8): integer;
     /// retrieve detailed statistics about a method-based service use
     // - will return a reference to the actual alive item: caller should
     // not free the returned instance
@@ -16571,10 +16579,10 @@ type
     // - warning: the public URI should have been set via SetPublicURI()
     function ServicesPublishedInterfaces: RawUTF8;
     /// the HTTP server should call this method so that ServicesPublishedInterfaces
-    // registration would be able to work
+    // registration will be able to work
     procedure SetPublicURI(const Address,Port: RawUTF8);
     /// a list of the services associated by all clients of this server instance
-    // - when a client connects to this server, it would publish its own services
+    // - when a client connects to this server, it will publish its own services
     // (when checking its interface contract), so that they may be identified
     property AssociatedServices: TServicesPublishedInterfacesList read fAssociatedServices;
     /// returns a copy of the user associated to a session ID
@@ -16597,7 +16605,7 @@ type
     // - typical use is after a server restart, with the file supplied to the
     // Shutdown() method: it could be used e.g. for a short maintainance server
     // shutdown, without loosing the current logged user sessions
-    // - WARNING: this method would restore authentication sessions for the ORM,
+    // - WARNING: this method will restore authentication sessions for the ORM,
     // but not any complex state information used by interface-based services,
     // like sicClientDriven class instances - DO NOT use this feature with SOA
     // - this method IS thread-safe, and call internaly fSessions.Lock
@@ -16684,7 +16692,7 @@ type
     // remote services, but internal IoC, without the ServiceRegister()
     // or ServiceDefine() methods - e.g.
     // ! aRest.ServiceContainer.InjectResolver([TInfraRepoUserFactory.Create(aRest)],true);
-    // - this overriden method would return a TServiceContainerServer instance
+    // - this overriden method will return a TServiceContainerServer instance
     // - you may enable SOA audit trail for all methods execution:
     // ! (aRestSOAServer.ServiceContainer as TServiceContainerServer).SetServiceLog(
     // !   aRestLogServer,TSQLRecordServiceLog);
@@ -16716,7 +16724,7 @@ type
     // return a TSQLRestStorageExternal instance (as defined in mORMotDB)
     // - this property will return nil if there is no Virtual Table associated
     // or if the corresponding module is not a TSQLVirtualTable
-    // (e.g. "pure" static tables registered by StaticDataCreate would be
+    // (e.g. "pure" static tables registered by StaticDataCreate will be
     // accessible only via StaticDataServer[], not via StaticVirtualTable[])
     // - has been associated by the TSQLModel.VirtualTableRegister method or
     // the VirtualTableExternalRegister() global function
@@ -16732,7 +16740,7 @@ type
     /// the URI to redirect any plain GET on root URI, without any method
     // - could be used to ease access from web browsers URI
     property RootRedirectGet: RawUTF8 read fRootRedirectGet write fRootRedirectGet;
-    /// you can force this property to TRUE so that any Delete() would not
+    /// you can force this property to TRUE so that any Delete() will not
     // write to the TSQLRecordTableDelete table for TRecordVersion tables
     // - to be used when applying a TSQLRestBatch instance as returned by
     // RecordVersionSynchronizeToBatch()
@@ -16769,9 +16777,9 @@ type
     // TSQLAuthGroup tables (set by constructor)
     property HandleAuthentication: boolean read fHandleAuthentication;
     /// allow to by-pass Authentication for a given set of HTTP verbs
-    // - by default, RESTful access to the ORM would follow HandleAuthentication
+    // - by default, RESTful access to the ORM will follow HandleAuthentication
     /// setting: but you could define some HTTP verb to this property, which
-    // would by-pass the authentication - may be used e.g. for public GET
+    // will by-pass the authentication - may be used e.g. for public GET
     // of the content by an AJAX client 
     property BypassORMAuthentication: TSQLURIMethods read fBypassORMAuthentication write fBypassORMAuthentication;
     /// read-only access to the high-level Server statistics
@@ -16782,7 +16790,7 @@ type
     /// which level of detailed information is gathered
     // - by default, contains SERVERDEFAULTMONITORLEVELS, i.e.
     // ! [mlTables,mlMethods,mlInterfaces,mlSQLite3]
-    // - you can add mlSessions to maintain per-session statistics: this would
+    // - you can add mlSessions to maintain per-session statistics: this will
     // lead into a slightly higher memory consumption, for each session
     property StatLevels: TSQLRestServerMonitorLevels read fStatLevels write fStatLevels;
     /// could be set to track statistic from Stats information
@@ -16821,7 +16829,7 @@ type
   published { standard method-based services }
     /// REST service accessible from ModelRoot/Stat URI to gather detailed information
     // - returns the current execution statistics of this server, as a JSON object
-    // - this method would require an authenticated client, for safety
+    // - this method will require an authenticated client, for safety
     // - by default, will return the high-level information of this server
     // - will return human-readable JSON layout if ModelRoot/Stat/json is used, or
     // the corresponding XML content if ModelRoot/Stat/xml is used
@@ -16834,18 +16842,19 @@ type
     // - defining a 'withall' parameter will retrieve all available statistics
     // - note that TSQLRestServer.StatLevels property will enable statistics
     // gathering for tables, methods, interfaces, sqlite3 or sessions
-    // - a specific findservice=ServiceName parameter would not return any
+    // - a specific findservice=ServiceName parameter will not return any
     // statistics, but matching URIs from the server AssociatedServices list
     procedure Stat(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from ModelRoot/Auth URI
     // - called by the clients for authentication and session management
-    // - this method would require an authenticated client, by design
+    // - this method won't require an authenticated client, since it is used to
+    // initiate authentication
     // - this global callback method is thread-safe
     procedure Auth(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/TimeStamp URI
     // - returns the server time stamp TTimeLog/Int64 value as UTF-8 text
-    // - this method would not require an authenticated client
-    // - hidden ModelRoot/TimeStamp/info command would return basic execution
+    // - this method will not require an authenticated client
+    // - hidden ModelRoot/TimeStamp/info command will return basic execution
     // information, less verbose (and sensitive) than Stat(), calling virtual
     // InternalInfo() protected method
     procedure TimeStamp(Ctxt: TSQLRestServerURIContext);
@@ -16853,7 +16862,7 @@ type
     // - it will flush the server result cache
     // - this method shall be called by the clients when the Server cache may be
     // not consistent any more (e.g. after a direct write to an external database)
-    // - this method would require an authenticated client, for safety
+    // - this method will require an authenticated client, for safety
     // - GET ModelRoot/CacheFlush URI will flush the whole Server cache,
     // for all tables
     // - GET ModelRoot/CacheFlush/TableName URI will flush the specified
@@ -16867,7 +16876,7 @@ type
     /// REST service accessible from the ModelRoot/Batch URI
     // - will execute a set of RESTful commands, in a single step, with optional
     // automatic SQL transaction generation
-    // - this method would require an authenticated client, for safety
+    // - this method will require an authenticated client, for safety
     // - expect input as JSON commands:
     // & '{"Table":["cmd":values,...]}'
     // or for multiple tables:
@@ -16973,7 +16982,7 @@ type
     function SearchField(const FieldName, FieldValue: RawUTF8;
       out ResultID: TIDDynArray): boolean; overload; virtual; abstract;
     /// access or initialize the internal IoC resolver
-    // - this overriden method would return always nil, since IoC only makes
+    // - this overriden method will return always nil, since IoC only makes
     // sense at TSQLRestClient and TSQLRestServer level
     function ServiceContainer: TServiceContainer; override;
 
@@ -17315,7 +17324,7 @@ type
       OnFind: TFindWhereEqualEvent; Dest: pointer; FoundLimit,FoundOffset: integer;
       CaseInsensitive: boolean=true): PtrInt; overload;
     /// search the maximum value of a given column
-    // - would only handle integer/Int64 kind of column
+    // - will only handle integer/Int64 kind of column
     function FindMax(WhereField: integer; out max: Int64): boolean;
     /// execute a method on every TSQLRecord item
     // - the loop execution will be protected via StorageLock/StorageUnlock 
@@ -17328,7 +17337,7 @@ type
     // - warning: this method should be protected via StorageLock/StorageUnlock
     property Items[Index: integer]: TSQLRecord read GetItem; default;
     /// direct access to the memory of the internal fValues[] array
-    // - Items[] is preferred, since it would check the index, but is slightly
+    // - Items[] is preferred, since it will check the index, but is slightly
     // slower, e.g. in a loop or after a IDToIndex() call
     // - warning: this method should be protected via StorageLock/StorageUnlock
     property ListPtr: PPointerArray read GetListPtr;
@@ -17339,14 +17348,14 @@ type
     // - you can call the TSQLRestServer.StaticDataCreate method to
     // update the file name of an already instanciated static table
     // - if you change manually the file name from this property, the storage
-    // would be marked as "modified" so that UpdateFile would save the content
+    // will be marked as "modified" so that UpdateFile will save the content
     property FileName: TFileName read fFileName write SetFileName;
     /// if set to true, file content on disk will expect binary format
     // - default format on disk is JSON but can be overridden at constructor call
     // - binary format should be more efficient in term of speed and disk usage,
     // but can be proprietary
     // - if you change manually the file format from this property, the storage
-    // would be marked as "modified" so that UpdateFile would save the content
+    // will be marked as "modified" so that UpdateFile will save the content
     property BinaryFile: boolean read fBinaryFile write SetBinaryFile;
     // JSON writing, can set if the format should be expanded or not
     // - by default, the JSON will be in the custom non-expanded format,
@@ -17423,19 +17432,19 @@ type
     property RemoteRest: TSQLRest read fRemoteRest;
   end;
 
-  /// defines how TSQLRestStorageShard would handle its partioned process
+  /// defines how TSQLRestStorageShard will handle its partioned process
   TSQLRestStorageShardOption = (ssoNoUpdate, ssoNoUpdateButLastShard,
     ssoNoDelete, ssoNoDeleteButLastShard, ssoNoBatch,
     ssoNoList, ssoNoExecute, ssoNoUpdateField, ssoNoConsolidateAtDestroy);
-  /// how TSQLRestStorageShard would handle its partioned process
+  /// how TSQLRestStorageShard will handle its partioned process
   TSQLRestStorageShardOptions = set of TSQLRestStorageShardOption;
 
   /// abstract REST storage with redirection to several REST instances, implementing
   // range ID partitioning for horizontal scaling
-  // - such database shards would allow to scale with typical BigData storage
-  // - this storage would add items on a server, initializing a new server
+  // - such database shards will allow to scale with typical BigData storage
+  // - this storage will add items on a server, initializing a new server
   // when the ID reached a defined range
-  // - it would maintain a list of previous storages, then redirect reading and
+  // - it will maintain a list of previous storages, then redirect reading and
   // updates to the server managing this ID (if possible - older shards may
   // be deleted/ignored to release resources)
   // - inherited class should override InitShards/InitNewShard to customize the
@@ -17455,13 +17464,13 @@ type
     fShardNextID: TID;
     fShardTableIndex: TIntegerDynArray;
     fShardBatch: array of TSQLRestBatch;
-    // would set Shards[],fShardLast,fShardLastID,fShardOffset
+    // will set Shards[],fShardLast,fShardLastID,fShardOffset
     procedure InitShards; virtual; abstract;
     // should always return non nil shard to contain new added IDs
     function InitNewShard: TSQLRest; virtual; abstract;
     procedure InternalAddNewShard;
     function InternalShardBatch(ShardIndex: integer): TSQLRestBatch;
-    // overriden methods which would handle all ORM process
+    // overriden methods which will handle all ORM process
     function EngineRetrieve(TableModelIndex: integer; ID: TID): RawUTF8; override;
     function EngineList(const SQL: RawUTF8; ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawUTF8; override;
     function EngineExecute(const aSQL: RawUTF8): boolean; override;
@@ -17486,7 +17495,7 @@ type
     // - you should not have to use this constructor, but e.g.
     // TSQLRestStorageShardDB.Create on a main TSQLRestServer.StaticDataAdd()
     // - the supplied aShardRange should be < 1000 - and once set, you should NOT
-    // change this value on an existing shard, unless process would be broken
+    // change this value on an existing shard, unless process will be broken
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aShardRange: TID; aOptions: TSQLRestStorageShardOptions;
       aMaxShardCount: integer); reintroduce; virtual;
@@ -17497,9 +17506,9 @@ type
     // - also called by Destroy - do nothing by default
     procedure ConsolidateShards; virtual;
     /// remove a shard database from the current set
-    // - it would allow e.g. to delete a *.dbs file at runtime, without
+    // - it will allow e.g. to delete a *.dbs file at runtime, without
     // restarting the server
-    // - this default implementation would free and nil fShard[aShardIndex],
+    // - this default implementation will free and nil fShard[aShardIndex],
     // which is enough for most implementations (e.g. TSQLRestStorageShardDB)
     procedure RemoveShard(aShardIndex: integer); virtual;
     /// retrieve the ORM shard instance corresponding to an ID
@@ -17516,17 +17525,17 @@ type
   published
     /// how much IDs should store each ORM shard instance
     // - once set, you should NEVER change this value on an existing shard,
-    // otherwise the whole ID partition would fail
-    // - each shard would hold [ShardIndex*ShardRange..(ShardIndex+1)*ShardRange-1] IDs
+    // otherwise the whole ID partition will fail
+    // - each shard will hold [ShardIndex*ShardRange..(ShardIndex+1)*ShardRange-1] IDs
     property ShardRange: TID read fShardRange;
     /// how many shards should be maintained at most
     // - if some older shards are available on disk, they won't be loaded by
     // InitShards, and newly added shard via InitNewShard will trigger
     // RemoveShard if the total number of shards 
     property MaxShardCount: cardinal read fMaxShardCount;
-    /// defines how this instance would handle its sharding process
-    // - by default, update/delete operations or per ID retrieval would take
-    // place on all shards, whereas EngineList and EngineExecute would only run
+    /// defines how this instance will handle its sharding process
+    // - by default, update/delete operations or per ID retrieval will take
+    // place on all shards, whereas EngineList and EngineExecute will only run
     // only on the latest shard (to save resources)
     property Options: TSQLRestStorageShardOptions read fOptions write fOptions;
   end;
@@ -17901,10 +17910,10 @@ type
     var aUserName, aPassword: string; out aPasswordHashed: boolean): boolean of object;
   /// called by TSQLRestClientURI.URI() when an error occurred
   // - so that you may have a single entry point for all client-side issues
-  // - information would be available in Sender's LastErrorCode and
+  // - information will be available in Sender's LastErrorCode and
   // LastErrorMessage properties
-  // - if the error comes from an Exception, it would be supplied as parameter
-  // - the REST context (if any) would be supplied within the Call parameter,
+  // - if the error comes from an Exception, it will be supplied as parameter
+  // - the REST context (if any) will be supplied within the Call parameter,
   // and in this case Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken
   // connection
   TOnClientFailed = procedure(Sender: TSQLRestClientURI; E: Exception;
@@ -18091,7 +18100,7 @@ type
       aHashedPassword: Boolean=false): boolean;
     /// save the TSQLRestClientURI properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
-    // credentials which would be used by SetUser()
+    // credentials which will be used by SetUser()
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
     /// clear session and call the /auth service on the server to notify shutdown
     // - is called by Destroy and SetUser/ClientSetUser methods, so you should
@@ -18161,7 +18170,7 @@ type
     // - a dedicated background thread will run the transmission process without
     // blocking the main program execution, gathering log rows in chunks in case
     // of high activity
-    // - map TOnTextWriterEcho signature, so that you would be able to set e.g.:
+    // - map TOnTextWriterEcho signature, so that you will be able to set e.g.:
     // ! TSQLLog.Family.EchoCustom := aClient.ServerRemoteLog;
     function ServerRemoteLog(Sender: TTextWriter; Level: TSynLogInfo;
       const Text: RawUTF8): boolean; overload; virtual;
@@ -18408,7 +18417,7 @@ type
     // the WebSockets client thread: using VCL Synchronize() method may
     // trigger some unexpected race conditions, e.g. when asynchronous
     // notifications are received during a blocking REST command - this
-    // message-based mechanism would allow safe and easy notification for
+    // message-based mechanism will allow safe and easy notification for
     // any VCL client application
     // - the associated ServiceNotificationMethodExecute() method shall be
     // called in the client HWND TForm for the defined WM_* message
@@ -18418,7 +18427,7 @@ type
     // in the main UI thread
     // - WM_* message identifier should have been set e.g. via the associated
     // ServiceNotificationMethodViaMessages(Form.Handle,WM_USER)
-    // - message would be sent for any interface-based service method callback
+    // - message will be sent for any interface-based service method callback
     // which expects no result (i.e. no out parameter nor function result),
     // so is safely handled as asynchronous notification
     // - is defines as a class procedure, since the underlying TSQLRestClientURI
@@ -18493,7 +18502,7 @@ type
     property OnAuthentificationFailed: TOnAuthentificationFailed
       read fOnAuthentificationFailed write fOnAuthentificationFailed;
     /// this Event is called if URI() was not successfull
-    // - the callback would have all needed information
+    // - the callback will have all needed information
     // - e.g. Call^.OutStatus=HTTP_NOTIMPLEMENTED indicates a broken connection
     property OnFailed: TOnClientFailed read fOnFailed write fOnFailed;
     /// this Event is called when a user is authenticated
@@ -18546,19 +18555,19 @@ type
     procedure InternalClose; override;
   public
     /// prepare the redirection, to be enabled later via RedirectTo()
-    // - the supplied aModel instance would be owned by this class
+    // - the supplied aModel instance will be owned by this class
     constructor Create(aModel: TSQLModel); overload; override;
-    /// would pass all client commands to the supplied TSQLRest instance
+    /// will pass all client commands to the supplied TSQLRest instance
     // - aRedirected is expected to be either a TSQLRestClientURI or
     // a TSQLRestServer
     // - will make a copy of the aRedirected.Model, and own it
     constructor Create(aRedirected: TSQLRest); reintroduce; overload;
-    /// would pass all client commands to the supplied TSQLRestServer instance
-    // - aRedirected would be owned by this TSQLRestClientRedirect
+    /// will pass all client commands to the supplied TSQLRestServer instance
+    // - aRedirected will be owned by this TSQLRestClientRedirect
     constructor CreateOwned(aRedirected: TSQLRestServer); reintroduce;
     /// allows to change redirection to a client on the fly
-    // - if aRedirected is nil, redirection would be disabled and any URI() call
-    // would return an HTTP_GATEWAYTIMEOUT 504 error status
+    // - if aRedirected is nil, redirection will be disabled and any URI() call
+    // will return an HTTP_GATEWAYTIMEOUT 504 error status
     procedure RedirectTo(aRedirected: TSQLRest);
   end;
 
@@ -19263,7 +19272,7 @@ function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 // - for sftObject, sftVariant, sftBlobDynArray and sftUTF8Custom, the
 // JSON buffer may be an array or an object, so createValueTempCopy can
 // create a temporary copy before parsing it in-place, to preserve the buffer
-// - sftUnknown and sftMany would set a varEmpty (Unassigned) value
+// - sftUnknown and sftMany will set a varEmpty (Unassigned) value
 // - typeInfo may be used for sftBlobDynArray conversion to a TDocVariant array
 procedure ValueVarToVariant(Value: PUTF8Char; fieldType: TSQLFieldType;
   var result: TVarData; createValueTempCopy: boolean; typeInfo: pointer;
@@ -19551,6 +19560,8 @@ function ToText(V: TInterfaceMockSpyCheck): PShortString; overload;
 function ToText(m: TSQLURIMethod): PShortString; overload;
 function ToText(o: TSynTableStatementOperator): PShortString; overload;
 function ToText(t: TSQLVirtualTableTransaction): PShortString; overload;
+function ToText(res: TNotifyAuthenticationFailedReason): PShortString; overload;
+
 
 { ************ Logging classes and functions }
 
@@ -22399,7 +22410,7 @@ end;
 function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
 var dummy: boolean;
 begin
-  if VarDataIsEmptyOrNull(@V) then // VariantToUTF8() would return 'null'
+  if VarDataIsEmptyOrNull(@V) then // VariantToUTF8() will return 'null'
     result := '' else
     VariantToUTF8(PVariant(@V)^,result,dummy);
 end;
@@ -22493,7 +22504,7 @@ begin
   VariantToUTF8(value,result,wasString);
   if wasSQLString<>nil then
     if fSQLFieldType=sftNullable then
-      // only TNullableUTF8Text and TNullableDateTime would be actual text
+      // only TNullableUTF8Text and TNullableDateTime will be actual text
       wasSQLString^ := (fSQLDBFieldType in TEXT_DBFIELDS) and
                         not VarIsEmptyOrNull(value) else
       // from SQL point of view, variant columns are TEXT or NULL
@@ -34238,7 +34249,7 @@ function TSQLRest.Add(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
 var f: TSQLFieldBits;
 begin
   with Value.RecordProps do
-    if CustomCSVFields='*' then // FieldBitsFromCSV('*') would use [soSelect]
+    if CustomCSVFields='*' then // FieldBitsFromCSV('*') will use [soSelect]
       f := SimpleFieldsBits[soInsert] else
       f := FieldBitsFromCSV(CustomCSVFields);
   result := InternalAdd(Value,true,@f,ForceID,DoNotAutoComputeFields);
@@ -34669,7 +34680,7 @@ begin // nothing do to at this level -> see TSQLRestServer.BeginCurrentThread
 end;
 
 procedure TSQLRest.EndCurrentThread(Sender: TThread);
-begin // most would be done e.g. in TSQLRestServer.EndCurrentThread
+begin // most will be done e.g. in TSQLRestServer.EndCurrentThread
   {$ifdef WITHLOG}
   fLogClass.Add.NotifyThreadEnded;
   {$endif}
@@ -36615,6 +36626,7 @@ begin
   call.Url := url;
   call.Method := method;
   call.LowLevelConnectionID := PtrInt(GlobalURIRequestServer);
+  call.LowLevelFlags := [llfSecured]; // in-process communication is safe
   call.InHead := 'RemoteIP: 127.0.0.1';
   if (Head<>nil) and (Head^<>nil) then
     call.InHead := RawUTF8(Head^)+#13#10+call.InHead;
@@ -36908,7 +36920,7 @@ begin
       for i := 1 to n do begin
         RI := M^.ReturnInfo;
         if (RI<>nil) then
-          // $METHODINFO would also include public methods -> check signature
+          // $METHODINFO will also include public methods -> check signature
           if (RI^.CallingConvention<>ccRegister) or (RI^.ReturnType<>nil) then
             SignatureError else
           case RI^.Version of
@@ -36981,11 +36993,11 @@ begin
     fPublishedMethod,djRawUTF8,nil,true);
   ServiceMethodRegisterPublishedMethods('',self);
   ServiceMethodByPassAuthentication('Auth');
-  ServiceMethodByPassAuthentication('TimeStamp');
+  fPublishedMethodTimeStampIndex := ServiceMethodByPassAuthentication('TimeStamp');
   tmp := 'Batch';
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
-  if fPublishedMethodBatchIndex<0 then
-    raise EORMException.CreateUTF8('%.Create: no Batch method!',[self]);
+  if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimeStampIndex<0) then
+    raise EORMException.CreateUTF8('%.Create: missing method!',[self]);
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
@@ -37950,17 +37962,18 @@ begin
   fSessions.Safe.UnLock;
 end;
 
-procedure TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8);
-var i: Integer;
+function TSQLRestServer.ServiceMethodByPassAuthentication(const aMethodName: RawUTF8): integer;
+var i: integer;
 begin
+  result := -1;
   if self=nil then
     exit;
   if aMethodName='' then
     for i := 0 to fPublishedMethods.Count-1 do
       fPublishedMethod[i].ByPassAuthentication := true else begin
-    i := fPublishedMethods.FindHashed(aMethodName);
-    if i>=0 then
-      fPublishedMethod[i].ByPassAuthentication := true;
+    result := fPublishedMethods.FindHashed(aMethodName);
+    if result>=0 then
+      fPublishedMethod[result].ByPassAuthentication := true;
   end;
 end;
 
@@ -38257,14 +38270,18 @@ end;
 
 procedure TSQLRestServerURIContext.AuthenticationFailed(
   Reason: TNotifyAuthenticationFailedReason);
+var txt: PShortString;
 begin
+  txt := ToText(Reason);
   {$ifdef WITHLOG}
-  log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',[GetEnumName(
-    TypeInfo(TNotifyAuthenticationFailedReason),ord(Reason))^,Call^.Url,Session],self);
+  log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',
+    [txt^,Call^.Url,Session],self);
   {$endif}
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
   // which is not what we used, so here we won't send 401 error code but 403
   Call.OutStatus := HTTP_FORBIDDEN;
+  FormatUTF8('Authentication Failed: % (%)',
+    [UnCamelCase(TrimLeftLowerCaseShort(txt)),ord(Reason)],CustomErrorMsg);
   // call the notification event
   if Assigned(Server.OnAuthenticationFailed) then
     Server.OnAuthenticationFailed(Server,Reason,nil,self);
@@ -39861,6 +39878,10 @@ begin
       if (Ctxt.MethodIndex<0) and (Ctxt.URI<>'') then
         Ctxt.URIDecodeSOAByInterface;
       // 2. handle security
+      if (rsoSecureConnectionRequired in fOptions) and
+         (Ctxt.MethodIndex<>fPublishedMethodTimeStampIndex) and
+         not (llfSecured in Call.LowLevelFlags) then
+        Ctxt.AuthenticationFailed(afSecureConnectionRequired) else
       if not Ctxt.Authenticate then
         Ctxt.AuthenticationFailed(afInvalidSignature) else
       if (Ctxt.Service<>nil) and
@@ -39916,7 +39937,7 @@ begin
       Call.OutInternalState := InternalState;
     if Ctxt.OutSetCookie<>'' then
       Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
-        '; Path=/'); // not Path=/ModelRoot, since would be case sensitive
+        '; Path=/'); // not Path=/ModelRoot, since will be case sensitive
   finally
     QueryPerformanceCounter(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
@@ -40157,6 +40178,7 @@ var isAjax: boolean;
   procedure PrepareCall;
   begin
     call.Init;
+    call.LowLevelFlags := [llfSecured]; // admin access considered as safe
     BYPASS_ACCESS_RIGHTS := SUPERVISOR_ACCESS_RIGHTS;
     call.RestAccessRights := @BYPASS_ACCESS_RIGHTS;
     call.Url := Model.Root;
@@ -41581,9 +41603,14 @@ begin
   result := GetEnumName(TypeInfo(TSynTableStatementOperator),ord(o));
 end;
 
-function ToText(t: TSQLVirtualTableTransaction): PShortString; 
+function ToText(t: TSQLVirtualTableTransaction): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSQLVirtualTableTransaction),ord(t));
+end;
+
+function ToText(res: TNotifyAuthenticationFailedReason): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TNotifyAuthenticationFailedReason),ord(res));
 end;
 
 
@@ -41973,8 +42000,8 @@ end;
 
 procedure TSQLRestServerNamedPipeResponse.InternalExecute;
 var call: TSQLRestURIParams;
-    Code: integer;
-    Ticks64, Sleeper64, ClientTimeOut64: Int64;
+    Sleeper, Code: integer;
+    Ticks64, ClientTimeOut64: Int64;
     Header: RawUTF8;
     Available: cardinal;
 begin
@@ -41983,9 +42010,10 @@ begin
   Header := 'RemoteIP: 127.0.0.1';
   call.Init;
   call.LowLevelConnectionID := fPipe;
+  call.LowLevelFlags := [llfSecured]; // assume pipes communication is safe
   Ticks64 := 0;
-  Sleeper64 := 0;
-  ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min of inactivity
+  Sleeper := 0;
+  ClientTimeOut64 := GetTickCount64+30*60*1000; // disconnect after 30 min idle
   try
     while not Terminated do
     if // (WaitForSingleObject(fPipe,200)=WAIT_OBJECT_0)  = don't wait
@@ -42013,7 +42041,7 @@ begin
           FlushFileBuffers(fPipe); // Flush the pipe to allow the client to read
           Ticks64 := GetTickCount64+20; // start sleeping after 20 ms
           ClientTimeOut64 := Ticks64+30*60*1000;
-          Sleeper64 := 0;
+          Sleeper := 0;
           SleepHiRes(0);
         except
           on Exception do // error in ReadString() or fServer.URI()
@@ -42022,12 +42050,14 @@ begin
           break; // invalid magic word: disconnect client
     end else
     if (Ticks64=0) or (GetTickCount64>Ticks64) then begin
-      if Sleeper64<128 then
-        inc(Sleeper64,16);
-      SleepHiRes(Sleeper64); // doesn't slow down connection but decreases CSwitch
+      if Sleeper<128 then
+        inc(Sleeper,8);
+      SleepHiRes(Sleeper); // doesn't slow down connection but decreases CSwitch
       Ticks64 := 0;
-      if GetTickCount64>ClientTimeOut64 then
-        break; // disconnect client after 30 min of inactivity
+      if GetTickCount64>ClientTimeOut64 then begin
+        fServer.InternalLog('Disconnected % after 30 min of inactivity',[self]);
+        break; 
+      end;
     end else
       SleepHiRes(0);
   finally
@@ -42359,7 +42389,7 @@ end;
 destructor TSynMonitorUsageRest.Destroy;
 var g: TSynMonitorUsageGranularity;
 begin
-  inherited Destroy; // would save pending changes
+  inherited Destroy; // will save pending changes
   for g := low(fStoredCache) to high(fStoredCache) do
     fStoredCache[g].Free;
 end;
@@ -47409,7 +47439,7 @@ begin
   main := Server.Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
   if not Server.IsInternalSQLite3Table(Props.fFTSWithoutContentTableIndex) then begin
     Server.InternalLog('% is an external content FTS4 table but source % is not '+
-      'a local SQLite3 table: FTS search would be unavailable',[self,main],sllWarning);
+      'a local SQLite3 table: FTS search will be unavailable',[self,main],sllWarning);
     exit;
   end;
   fts := Props.Props.SQLTableName;
@@ -47715,7 +47745,7 @@ begin
   fItems.InitSpecific(
     TypeInfo(TSQLRestTempStorageItemDynArray),fItem,djInt64,@fCount);
   fItems.Sorted := true;
-  // space for 524287 fake items (our sorted array would not like bigger extent)
+  // space for 524287 fake items (our sorted array will not like bigger extent)
   fLastFakeID := $100000000000;
 end;
 
@@ -48791,7 +48821,7 @@ var Added: boolean;
     end;
     if P=nil then
       exit;
-    AddPropName(P^.Name); // would handle twoForceJSONExtended in CustomOptions
+    AddPropName(P^.Name); // will handle twoForceJSONExtended in CustomOptions
     if woHumanReadable in Options then
       Add(' ');
     Added := true;
@@ -48958,7 +48988,7 @@ begin
         if not (woStoreStoredFalse in Options) and
            not P^.IsStored(Value) then
           goto next; // ignore regular "stored false" attribute
-      Added := false;  // HR(P) would write field name and set Added := true
+      Added := false;  // HR(P) will write field name and set Added := true
       Kind := P^.PropType^.Kind;
       case Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
@@ -49763,7 +49793,7 @@ begin
   W.Write1(TAUTHSESSION_MAGIC);
   W.WriteVarUInt32(IDCardinal);
   W.WriteVarUInt32(fUser.fID);
-  fUser.GetBinaryValues(W); // User.fGroup is a pointer, but would be overriden
+  fUser.GetBinaryValues(W); // User.fGroup is a pointer, but will be overriden
   W.WriteVarUInt32(fUser.GroupRights.fID);
   fUser.GroupRights.GetBinaryValues(W);
   W.Write(fPrivateKey);
@@ -49780,7 +49810,7 @@ begin
   UInt32ToUtf8(fIDCardinal,fID);
   fUser := Server.SQLAuthUserClass.Create;
   fUser.fID := FromVarUInt32(PB);
-  fUser.SetBinaryValues(P); // fUser.fGroup would be overriden by true instance
+  fUser.SetBinaryValues(P); // fUser.fGroup will be overriden by true instance
   fUser.fGroup := Server.SQLAuthGroupClass.Create;
   fUser.fGroup.fID := FromVarUInt32(PB);
   fUser.fGroup.SetBinaryValues(P);
@@ -51166,11 +51196,11 @@ type
     {$endif}
     {$endif CPUX86}
     {$ifdef CPUARM}
-    // alf: on ARM, there is more on the stack than you would expect
+    // alf: on ARM, there is more on the stack than you will expect
     DummyStack: packed array[0..9] of pointer;
     {$endif}
     {$ifdef CPUAARCH64}
-    // alf: on AARCH64, there is more on the stack than you would expect
+    // alf: on AARCH64, there is more on the stack than you will expect
     DummyStack: packed array[0..0] of pointer;
     {$endif}
     Stack: packed array[word] of byte;
@@ -52130,7 +52160,7 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         RegisterIdent := PARAMREG_RESULT;
         continue;
         {$endif CPUX86}
-        // CPUX86 would add an additional by-ref parameter
+        // CPUX86 will add an additional by-ref parameter
       end;
       {$ifdef CPU32}
       if ValueDirection=smdConst then
@@ -52154,11 +52184,11 @@ error:  raise EInterfaceFactoryException.CreateUTF8(
         // alf: TODO: fix smvDynArray as expected by fpc\compiler\i386\cpupara.pas
         {$ifdef FPC}or ((ValueType in [smvRecord,smvDynArray]) and
           not (vPassedByReference in ValueKindAsm)){$endif} then begin
-        // this parameter would go on the stack
+        // this parameter will go on the stack
         InStackOffset := ArgsSizeInStack;
         inc(ArgsSizeInStack,SizeInStack);
       end else begin
-        // this parameter would go in a register
+        // this parameter will go in a register
         InStackOffset := STACKOFFSET_NONE;
         {$ifndef CPUX86}
         if (ArgsResultIndex>=0) and (reg=PARAMREG_RESULT) and
@@ -58521,8 +58551,7 @@ initialization
   SetThreadNameInternal := SetThreadNameWithLog;
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(
-    [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties,
-     TypeInfo(TECCCertificateObjArray),TECCCertificate]);
+    [TypeInfo(TSQLModelRecordPropertiesObjArray),TSQLModelRecordProperties]);
   TJSONSerializer.RegisterCustomJSONSerializerFromText(
     [TypeInfo(TServicesPublishedInterfaces),_TServicesPublishedInterfaces,
      TypeInfo(TSQLRestServerURI),_TSQLRestServerURI]);

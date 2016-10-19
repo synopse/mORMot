@@ -886,7 +886,13 @@ begin
     call.Init;
     call.LowLevelConnectionID := Ctxt.ConnectionID;
     if Ctxt.UseSSL then
-      include(call.LowLevelFlags,llfSSL);
+      call.LowLevelFlags := call.LowLevelFlags+[llfHttps,llfSecured];
+    if Ctxt.ConnectionThread<>nil then
+      if PClass(Ctxt.ConnectionThread)^=TWebSocketServerResp then begin
+        include(call.LowLevelFlags,llfWebsockets);
+        if TWebSocketServerResp(Ctxt.ConnectionThread).WebSocketProtocol.Encrypted then
+          include(call.LowLevelFlags,llfSecured);
+    end;
     if fHosts.Count>0 then begin
       host := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
       i := PosEx(':',host);
@@ -947,9 +953,9 @@ begin
           // host/method -> method on same domain
           call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
       end;
-      // handle optional CORS origin
       Ctxt.OutCustomHeaders := Trim(call.OutHead)+
         #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
+      // handle optional CORS origin
       if ExistsIniName(pointer(call.InHead),'ORIGIN:') then
         Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders+fAccessControlAllowOriginHeader) else
         Ctxt.OutCustomHeaders := Trim(Ctxt.OutCustomHeaders);

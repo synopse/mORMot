@@ -179,6 +179,7 @@ type
     fRemoteIP: SockString;
     fRemoteLocalhost: boolean;
     fLastError: string;
+    fEncryption: IProtocol;
     function ProcessHandshake(const ExtIn: RawUTF8; out ExtOut: RawUTF8;
       ErrorMsg: PRawUTF8): boolean; virtual;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
@@ -189,6 +190,7 @@ type
     procedure BeforeSendFrame(var frame: TWebSocketFrame); virtual;
     function FrameIs(const frame: TWebSocketFrame; const Head: RawUTF8): boolean; virtual;
     function FrameType(const frame: TWebSocketFrame): RawUTF8; virtual;
+    function GetEncrypted: boolean;
   public
     /// abstract constructor to initialize the protocol
     // - the protocol should be named, so that the client may be able to request
@@ -207,6 +209,9 @@ type
     property URI: RawUTF8 read fURI;
     /// the last error message, during frame processing
     property LastError: string read fLastError;
+    /// returns TRUE if encryption is enabled during the transmission
+    // - is only possible for TWebSocketProtocolBinary
+    property Encrypted: boolean read GetEncrypted;
     /// how many frames have been received by this instance
     property FramesInCount: integer read fFramesInCount;
     /// how many frames have been sent by this instance
@@ -303,7 +308,6 @@ type
   // $ Sec-WebSocket-Protocol: synopsebinary
   TWebSocketProtocolBinary = class(TWebSocketProtocolRest)
   protected
-    fEncryption: IProtocol;
     fCompressed: boolean;
     fFramesInBytesSocket: QWord;
     fFramesOutBytesSocket: QWord;
@@ -319,7 +323,6 @@ type
       var Frames: TWebSocketFrameDynArray; var FramesCount: integer): boolean; override;
     procedure ProcessIncomingFrame(Sender: TWebSocketProcess;
       var request: TWebSocketFrame; const info: RawUTF8); override;
-    function GetEncrypted: boolean;
     function GetFramesInCompression: integer;
     function GetFramesOutCompression: integer;
     function ProcessHandshake(const ExtIn: RawUTF8; out ExtOut: RawUTF8;
@@ -353,10 +356,6 @@ public
     /// defines if SynLZ compression is enabled during the transmission
     // - is set to TRUE by default
     property Compressed: boolean read fCompressed write fCompressed;
-    /// defines if AES encryption is enabled during the transmission
-    // - is set to TRUE by default, following the aCompressed optional parameter
-    // of the class overloaded Create() constructors 
-    property Encrypted: boolean read GetEncrypted;
     /// how many bytes have been received by this instance from the wire
     property FramesInBytesSocket: QWord read fFramesInBytesSocket;
     /// how many bytes have been sent by this instance to the wire
@@ -908,6 +907,11 @@ begin // this default implementation will send all frames one by one
   result := true;
 end;
 
+function TWebSocketProtocol.GetEncrypted: boolean;
+begin
+  result := (self<>nil) and (fEncryption<>nil);
+end;
+
 
 { TWebSocketFrameList }
 
@@ -1439,11 +1443,6 @@ begin
     end;
   end else
     inherited ProcessIncomingFrame(Sender,request,info);
-end;
-
-function TWebSocketProtocolBinary.GetEncrypted: boolean;
-begin
-  result := (self<>nil) and (fEncryption<>nil);
 end;
 
 function TWebSocketProtocolBinary.GetFramesInCompression: integer;

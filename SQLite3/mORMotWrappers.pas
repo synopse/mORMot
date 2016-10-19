@@ -1027,7 +1027,7 @@ begin // URI is e.g. GET http://localhost:888/root/wrapper/Delphi/UnitName.pas
   end;
   context := ContextFromModel(Ctxt.Server,SourcePath,Descriptions);
   context.uri := Ctxt.URIWithoutSignature;
-  if llfSSL in Ctxt.Call^.LowLevelFlags then begin
+  if llfHttps in Ctxt.Call^.LowLevelFlags then begin
     context.protocol := 'https';
     context.https := true;
   end else
