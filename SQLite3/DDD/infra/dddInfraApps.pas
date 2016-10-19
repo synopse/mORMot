@@ -245,6 +245,7 @@ type
   protected
     fORM: TSynConnectionDefinition;
     fClient: TDDDRestClient;
+    fTimeout: integer;
   public
     /// set the default values for Client.Root, ORM.ServerName,
     // Client.WebSocketsPassword and ORM.Password
@@ -265,6 +266,8 @@ type
     // property, so that the client would automatically try to re-connect
     function OnAuthentificationFailed(Retry: integer; var aUserName, aPassword: string;
       out aPasswordHashed: boolean): boolean;
+    /// you can overload here the TCP timeout delay, in seconds
+    property Timeout: integer read fTimeout write fTimeout;
   published
     /// defines a mean of access to a TSQLRest instance
     // - using Kind/ServerName/DatabaseName/User/Password properties: Kind
