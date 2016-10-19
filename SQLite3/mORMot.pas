@@ -1271,7 +1271,9 @@ uses
 {$endif}
   SynCommons,
   SynLog,
-  SynTests;
+  SynCrypto, // SHA-256 and IProtocol
+  SynTests;  // for mocks integration
+
 
 
 
@@ -5846,6 +5848,8 @@ type
     fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
     fInputCookieLastName: RawUTF8;
     fInputCookieLastValue: RawUTF8;
+    fInHeaderLastName: RawUTF8;
+    fInHeaderLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
     fUserAgent: RawUTF8;
     fAuthSession: TAuthSession;
@@ -6046,6 +6050,8 @@ type
     /// the remote IP from which the TAuthSession was created, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionRemoteIP: RawUTF8;
+    /// the internal ID used to identify modelroot/safe custom encryption
+    SafeProtocolID: integer;
     /// the static instance corresponding to the associated Table (if any)
     {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
     /// the kind of static instance corresponding to the associated Table (if any)
@@ -15932,6 +15938,10 @@ type
     fShutdownRequested: boolean;
     fCreateMissingTablesOptions: TSQLInitializeTableOptions;
     fRootRedirectGet: RawUTF8;
+    fSafeRootUpper: RawUTF8;
+    fSafeProtocol: IProtocol;
+    fSafeProtocolNext: IProtocol;
+    fSafeProtocols: TSynDictionary;
     fRecordVersionMax: TRecordVersion;
     fRecordVersionDeleteIgnore: boolean;
     fOnIdleLastTix: cardinal;
@@ -15980,6 +15990,11 @@ type
        {$ifdef HASINLINE}inline;{$endif}
     function GetRemoteTable(TableIndex: Integer): TSQLRest;
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
+    /// intercepts all calls to TSQLRestServer.URI for fSafeProtocol
+    // - e.g. ModelRoot/safe URI called by the clients to implement a secure
+    // custom encryption, by sending POST requests with an encrypted body as
+    // BINARY_CONTENT_TYPE ('application/octet-stream') input and output
+    procedure InternalSafeProtocol(var Call: TSQLRestURIParams; var SafeID: integer);
     /// retrieve a list of members as JSON encoded data - used by OneFieldValue()
     // and MultiFieldValue() public functions
     function InternalAdaptSQL(TableIndex: integer; var SQL: RawUTF8): TSQLRest;
@@ -19585,22 +19600,21 @@ var
   // for a given REST instance
   SQLite3Log: TSynLogClass = TSQLLog;
 
-  /// TSQLogClass used by overriden SetThreadName() function to name the thread 
-  SetThreadNameLog: TSynLogClass = TSQLLog; 
+  /// TSQLogClass used by overriden SetThreadName() function to name the thread
+  SetThreadNameLog: TSynLogClass = TSQLLog;
 {$endif}
 
 implementation
 
+{$ifdef FPC}
+{$ifndef MSWINDOWS}
 uses
-  {$ifdef FPC}
-  {$ifndef MSWINDOWS}
   SynFPCLinux,
   BaseUnix,
   Unix,
-  dynlibs,
-  {$endif}
-  {$endif}
-  SynCrypto; // for TSQLRecordSigned and authentication
+  dynlibs;
+{$endif}
+{$endif}
 
 // ************ some RTTI and SQL mapping routines
 
@@ -36191,8 +36205,7 @@ DoRetry:
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
-{$endif}
-    begin
+{$endif} begin
       InternalURI(Call);
       if not(ioNoOpen in fInternalOpen) then
         if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (ioOpened in fInternalOpen) then begin
@@ -36998,6 +37011,7 @@ begin
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
   if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimeStampIndex<0) then
     raise EORMException.CreateUTF8('%.Create: missing method!',[self]);
+  fSafeRootUpper := UpperCase(fModel.Root)+'/SAFE/';
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
@@ -39281,12 +39295,18 @@ function TSQLRestServerURIContext.GetInHeader(const HeaderName: RawUTF8): RawUTF
 var up: array[byte] of AnsiChar;
 begin
   if self=nil then
-    result := '' else begin
+    result := '' else
+  if fInHeaderLastName=HeaderName then
+    result := fInHeaderLastValue else begin
     PWord(UpperCopy255(up,HeaderName))^ := ord(':');
     result := Trim(FindIniNameValue(pointer(Call.InHead),up));
     if (result='') and (SessionRemoteIP<>'') and IdemPropNameU(HeaderName,'remoteip') then
       // some protocols (e.g. WebSockets) do not send headers at each call
       result := SessionRemoteIP;
+    if result<>'' then begin
+      fInHeaderLastName := HeaderName;
+      fInHeaderLastValue := result;
+    end;
   end;
 end;
 
@@ -39848,6 +39868,8 @@ var Ctxt: TSQLRestServerURIContext;
     timeStart,timeEnd: Int64;
     elapsed, len: cardinal;
     outcomingfile: boolean;
+    safeid: integer;
+    P: PUTF8Char;
 {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -39859,11 +39881,23 @@ begin
   fStats.AddCurrentRequestCount(1);
   Call.OutInternalState := InternalState; // other threads may change it
   Call.OutStatus := HTTP_BADREQUEST; // default error code is 400 BAD REQUEST
+  safeid := 0;
+  if (fSafeProtocol<>nil) and IdemPropNameU(Call.Method,'POST') then begin
+    P := pointer(Call.Url);
+    if P^='/' then
+      inc(P); // may be /modelroot/safe
+    if IdemPChar(P,pointer(fSafeRootUpper)) then begin // 'ROOT/SAFE/'
+      InternalSafeProtocol(Call,safeid);
+      if safeid=0 then
+        exit; // low-level error
+    end;
+  end;
   Ctxt := ServicesRouting.Create(self,Call);
   try
     {$ifdef WITHLOG}
     Ctxt.Log := Log.Instance;
     {$endif}
+    Ctxt.SafeProtocolID := safeID;
     if fShutdownRequested then
       Ctxt.Error('Server is shutting down',HTTP_UNAVAILABLE) else
     if Ctxt.Method=mNone then
@@ -39967,6 +40001,8 @@ begin
     end;
     Ctxt.Free;
   end;
+  if safeid<>0 then
+    InternalSafeProtocol(Call,safeid); // encrypt Call.OutBody+OutHead
   if Assigned(OnIdle) then begin
     elapsed := GetTickCount64 shr 7; // trigger every 128 ms
     if elapsed<>fOnIdleLastTix then begin
@@ -40359,6 +40395,39 @@ begin
   finally
     fSessions.Safe.UnLock;
   end;
+end;
+
+procedure TSQLRestServer.InternalSafeProtocol(var Call: TSQLRestURIParams;
+  var SafeID: integer);
+var res: TProtocolResult;
+    P: PUTF8Char;
+    prot: IProtocol;
+begin
+  if SafeID<>0 then begin
+    // todo: encrypt Call.OutBody+OutHeader
+    exit;
+  end;
+  P := pointer(Call.Url);
+  inc(P,length(fSafeRootUpper));
+  if P^='/' then
+    inc(P);
+  if IdemPChar(P,'OPEN') then begin
+    if fSafeProtocolNext=nil then
+      fSafeProtocolNext := fSafeProtocol.Clone;
+    res := fSafeProtocolNext.ProcessHandshake(Call.InBody,Call.OutBody);
+    InternalLog('InternalSafeProtocol ProcessHandshake=%',[ToText(res)^]);
+    if not (res in [sprSuccess,sprUnsupported]) then
+      exit;
+    prot := fSafeProtocolNext;
+    fSafeProtocolNext := nil;
+    // todo: register the new connection and return new SafeID
+    exit;
+  end;
+  SafeID := GetCardinal(P);
+  if SafeID=0 then
+    exit;
+  // todo: store IProtocol instance in the associated session 
+  // todo: decrypt Call.Url+Method+Inbody+InHeader or close connection
 end;
 
 procedure TSQLRestServer.SessionDelete(aSessionIndex: integer;
@@ -50463,10 +50532,10 @@ begin
   result := inherited RetrieveSession(Ctxt);
   if result=nil then
     exit; // not a valid 'Cookie: mORMot_session_signature=...' header
-  if GetUserPassFromInHead(Ctxt,userPass,user,pass) then begin
-    if (result.fExpectedHttpAuthentication<>'') and // fast validation
-       (result.fExpectedHttpAuthentication=userPass) then
-      exit; // already previously authenticated
+  if (result.fExpectedHttpAuthentication<>'') and
+     (result.fExpectedHttpAuthentication=Ctxt.InHeader['Authorization']) then
+    exit; // already previously authenticated for this session
+  if GetUserPassFromInHead(Ctxt,userPass,user,pass) then
     if user=Result.User.LogonName then
     with Ctxt.Server.SQLAuthUserClass.Create do
     try
@@ -50479,7 +50548,6 @@ begin
     finally
       Free;
     end;
-  end;
   result := nil; // identicates authentication error
 end;
 
@@ -50533,7 +50601,7 @@ begin
       Ctxt.AuthenticationFailed(afUnknownUser);
   end else begin
     Ctxt.Call.OutHead := 'WWW-Authenticate: Basic realm="mORMot Server"';;
-    Ctxt.Error('',HTTP_UNAUTHORIZED); // will popup for credentials in browser
+    Ctxt.Error('',HTTP_UNAUTHORIZED); // 401 will popup for credentials in browser
   end;
 end;
 
@@ -50572,7 +50640,7 @@ begin
     if InDataEnc = '' then begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
-      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED;
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
       StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
       exit;
     end;
@@ -50605,7 +50673,7 @@ begin
   if ServerSSPIAuth(fSSPIAuthContexts[SecCtxIdx], Base64ToBin(InDataEnc), OutData) then begin
     if BrowserAuth then begin
       Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData);
-      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED;
+      Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
       StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
     end else
       Ctxt.Returns(['result','','data',BinToBase64(OutData)]);
@@ -58066,7 +58134,7 @@ begin
       if Values[0]=nil then begin // no "result":... layout
         if aErrorMsg<>nil then
           aErrorMsg^ :=
-            'Invalid returned JSON content: expects {"result":...}, got '+resp;
+            'Invalid returned JSON content: expects {result:...}, got '+resp;
         exit; // leave result=false
       end;
       if aResult<>nil then

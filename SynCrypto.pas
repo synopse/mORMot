@@ -1601,6 +1601,8 @@ type
     /// will create another instance of this communication protocol
     function Clone: IProtocol;
   end;
+  /// stores a list of IProtocol instances
+  IProtocolDynArray = array of IProtocol;
 
   /// implements a fake no-encryption protocol
   // - may be used for debugging purposes, or when encryption is not needed

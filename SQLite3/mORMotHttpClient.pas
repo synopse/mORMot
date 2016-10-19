@@ -211,7 +211,7 @@ type
     // HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT and
     // HTTP_DEFAULT_RECEIVETIMEOUT variable values
     constructor Create(const aServer, aPort: AnsiString; aModel: TSQLModel;
-      SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0; ConnectTimeout: DWORD=0); reintroduce; overload; virtual;
+      aSendTimeout: DWORD=0; aReceiveTimeout: DWORD=0; aConnectTimeout: DWORD=0); reintroduce; overload; virtual;
     /// connect to TSQLHttpServer via 'address:port/root' URI format
     // - if port is not specified, aDefaultPort is used
     // - if root is not specified, aModel.Root is used
@@ -516,8 +516,8 @@ begin
     Call.OutStatus := HTTP_NOTIMPLEMENTED; // 501 indicates not socket closed 
 {$ifdef WITHLOG}
   with Call do
-    fLogFamily.SynLog.Log(sllClient,'% % status=% state=%',
-      [method,url,OutStatus,OutInternalState],self);
+    fLogFamily.SynLog.Log(sllClient,'% % status=% len=% state=%',
+      [method,url,OutStatus,length(OutBody),OutInternalState],self);
 {$endif}
 end;
 
@@ -534,22 +534,22 @@ begin
 end;
 
 constructor TSQLHttpClientGeneric.Create(const aServer, aPort: AnsiString;
-  aModel: TSQLModel; SendTimeout,ReceiveTimeout,ConnectTimeout: DWORD);
+  aModel: TSQLModel; aSendTimeout,aReceiveTimeout,aConnectTimeout: DWORD);
 begin
   inherited Create(aModel);
   fServer := aServer;
   fPort := aPort;
   fKeepAliveMS := 20000; // 20 seconds connection keep alive by default
   fCompression := [hcSynLZ]; // may add hcDeflate for AJAX clients
-  if ConnectTimeout=0 then
+  if aConnectTimeout=0 then
     fConnectTimeout := HTTP_DEFAULT_CONNECTTIMEOUT else
-    fConnectTimeout := ConnectTimeout;
-  if SendTimeout=0 then
+    fConnectTimeout := aConnectTimeout;
+  if aSendTimeout=0 then
     fSendTimeout := HTTP_DEFAULT_SENDTIMEOUT else
-    fSendTimeout := SendTimeout;
-  if ReceiveTimeout=0 then
+    fSendTimeout := aSendTimeout;
+  if aReceiveTimeout=0 then
     fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT else
-    fReceiveTimeout := ReceiveTimeout;
+    fReceiveTimeout := aReceiveTimeout;
 end;
 
 constructor TSQLHttpClientGeneric.CreateForRemoteLogging(const aServer: AnsiString;
