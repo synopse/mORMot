@@ -2332,6 +2332,7 @@ var server: TSQLRestServer;
 begin
   server := TSQLRestServerFullMemory.CreateWithOwnedAuthenticatedModel([],
     aUserName,aHashedPassword,aRoot);
+  server.Options := server.Options+[rsoSecureConnectionRequired];
   Create(server);
   if FRefCount=2 then
     dec(FRefCount); // circumvent a Delphi compiler bug
