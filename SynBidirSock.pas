@@ -69,13 +69,16 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  SynWinSock,
   {$else}
   {$ifdef KYLIX3}
   LibC,
   Types,
+  SynFPCSock, // shared with Kylix
   SynKylix,
   {$endif}
   {$ifdef FPC}
+  SynFPCSock,
   SynFPCLinux,
   {$endif}
   {$endif}
@@ -732,6 +735,7 @@ type
     fSettings: TWebSocketProcessSettings;
     fOnCallbackRequestProcess: TOnHttpServerRequest;
     fOnWebSocketsClosed: TNotifyEvent;
+    procedure SetInt32OptionByIndex(OptName, OptVal: integer); override;
   public
     /// common initialization of all constructors
     // - this overridden method will set the UserAgent with some default value
@@ -1879,6 +1883,8 @@ begin
     start := GetTickCount64;
     if fSettings.CallbackAnswerTimeOutMS=0 then
       max := start+30000 else // never wait for ever
+    if fSettings.CallbackAnswerTimeOutMS<2000 then
+      max := start+2000 else // 2 seconds minimal wait 
       max := start+fSettings.CallbackAnswerTimeOutMS;
     while not fIncoming.Pop(fProtocol,'answer',answer) do
       if fState in [wpsDestroy,wpsClose] then begin
@@ -2347,6 +2353,13 @@ begin
     end else
     // standard HTTP/1.1 REST request
     result := inherited Request(url,method,KeepAlive,header,Data,DataType,retry);
+end;
+
+procedure THttpClientWebSockets.SetInt32OptionByIndex(OptName, OptVal: integer);
+begin
+  inherited SetInt32OptionByIndex(OptName,OptVal);
+  if OptName=SO_RCVTIMEO then
+    fSettings.CallbackAnswerTimeOutMS := OptVal;
 end;
 
 function THttpClientWebSockets.Settings: PWebSocketProcessSettings;

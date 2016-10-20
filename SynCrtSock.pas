@@ -409,7 +409,7 @@ type
     fPeerAddr: TSockAddr;
     /// close and shutdown the connection (called from Destroy)
     procedure Close;
-    procedure SetInt32OptionByIndex(OptName, OptVal: integer);
+    procedure SetInt32OptionByIndex(OptName, OptVal: integer); virtual;
   public
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
