@@ -414,23 +414,24 @@ public
     /// current number of WebSocket frames in the list
     Count: integer;
     /// the mutex associated with this resource
-    {$ifdef DELPHI5OROLDER}
+    // - here we use TAutoLocker and not IAutoLocker for Delphi 5 compatibility
     Safe: TAutoLocker;
-    {$else}
-    Safe: IAutoLocker;
-    {$endif}
     /// initialize the list
     constructor Create(const identifier: RawUTF8); reintroduce;
-    {$ifdef DELPHI5OROLDER}
+    /// finalize the list
     destructor Destroy; override;
-    {$endif}
     /// add a WebSocket frame in the list
+    // - this method is thread-safe
     procedure Push(const frame: TWebSocketFrame);
     /// retrieve a WebSocket frame from the list, oldest first
     // - you should specify a frame type to search for, according to the
     // specified WebSockets protocl
+    // - this method is thread-safe
     function Pop(protocol: TWebSocketProtocol;
       const head: RawUTF8; out frame: TWebSocketFrame): boolean;
+    /// how many 'answer' frames are to be ignored
+    // - this method is thread-safe
+    function AnswerToIgnore(incr: integer=0): integer;
   end;
 
   /// parameters to be used for WebSockets process
@@ -929,13 +930,20 @@ begin
   {$endif}
 end;
 
-{$ifdef DELPHI5OROLDER}
 destructor TWebSocketFrameList.Destroy;
 begin
   inherited;
   Safe.Free;
 end;
-{$endif}
+
+function TWebSocketFrameList.AnswerToIgnore(incr: integer): integer;
+begin
+  Safe.Enter;
+  if incr<>0 then
+    inc(Safe.Safe^.Padding[0].VInteger,incr);
+  result := Safe.Locker.Padding[0].VInteger;
+  Safe.Leave;
+end;
 
 function TWebSocketFrameList.Pop(protocol: TWebSocketProtocol; const head: RawUTF8;
   out frame: TWebSocketFrame): boolean;
@@ -1044,6 +1052,10 @@ begin
   except
     on E: Exception do
       fLastError := Format('%s [%s]',[E.ClassName,E.Message]);
+  end else
+  if (Sender.fIncoming.AnswerToIgnore>0) and FrameIs(request,'answer') then begin
+    Sender.fIncoming.AnswerToIgnore(-1);
+    Sender.Log(request,'Ignored answer after NotifyCallback TIMEOUT',sllWarning);
   end else
     Sender.fIncoming.Push(request);
 end;
@@ -1864,11 +1876,30 @@ begin
     log := WebSocketLog.Enter('NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request);
-  if aMode=wscNonBlockWithoutAnswer then begin
+  case aMode of
+  wscNonBlockWithoutAnswer: begin
     // add to the internal sending list for asynchronous sending
     fOutgoing.Push(request);
     result := STATUS_SUCCESS;
     exit;
+  end;
+  wscBlockWithAnswer:
+    if fIncoming.AnswerToIgnore>0 then begin
+      if log<>nil then
+        log.Log(sllDebug,'NotifyCallback: Waiting for AnswerToIgnore=%',
+          [fIncoming.AnswerToIgnore],self);
+      max := GetTickCount64+30000;
+      repeat
+        SleepHiRes(1);
+        if fIncoming.AnswerToIgnore=0 then
+          break; // it is now safe to send a new 'request'
+        if GetTickCount64<max then
+          continue;
+        self.Log(request,'NotifyCallback AnswerToIgnore TIMEOUT -> abort connection',sllError);
+        result := STATUS_NOTIMPLEMENTED; // 501 will force recreate connection
+        exit;
+      until false;
+    end;
   end;
   i := InterlockedIncrement(fProcessCount);
   try
@@ -1892,7 +1923,8 @@ begin
         exit;
       end else
       if GetTickCount64>max then begin
-        self.Log(request,'NotifyCallback TIMEOUT',sllWarning);
+        self.Log(request,'NotifyCallback TIMEOUT -> AnswerToIgnore(+1)',sllWarning);
+        fIncoming.AnswerToIgnore(1); // ignore next 'answer'
         exit;
       end else
         HiResDelay(start);
@@ -2025,7 +2057,8 @@ begin
   if (logHeartbeat in fSettings.LogDetails) or
      not (frame.opcode in [focPing,focPong]) then begin
     log := SynLog;
-    log.DisableRemoteLog(DisableRemoteLog);
+    if DisableRemoteLog then
+      log.DisableRemoteLog(true);
     try
       if (frame.opcode=focText) and
          (logTextFrameContent in fSettings.LogDetails) then
@@ -2037,7 +2070,8 @@ begin
           ToText(frame.opcode)^,length(frame.PayLoad),content],self);
       end;
     finally
-      log.DisableRemoteLog(false);
+      if DisableRemoteLog then
+        log.DisableRemoteLog(false);
     end;
   end;
 end;

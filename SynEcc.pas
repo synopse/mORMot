@@ -745,6 +745,8 @@ type
 
   /// used to store a list of TECCCertificate instances
   // - e.g. in TECCCertificateChain.Items
+  // - TJSONSerializer.RegisterObjArrayForJSON done in dddInfraApps and not
+  // in this unit to avoid dependency to mORMot.pas
   TECCCertificateObjArray = array of TECCCertificate;
 
   /// a public/private certificate using ECC secp256r1 cryptography

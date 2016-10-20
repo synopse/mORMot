@@ -15928,6 +15928,7 @@ type
     /// finalize the mutex
     destructor Destroy; override;
     /// will enter the mutex until the IUnknown reference is released
+    // - as expected by IAutoLocker interface
     // - could be used as such under Delphi:
     // !begin
     // !  ... // unsafe code
@@ -15951,6 +15952,7 @@ type
     // !end;
     function ProtectMethod: IUnknown;
     /// enter the mutex
+    // - as expected by IAutoLocker interface
     // - any call to Enter should be ended with a call to Leave, and
     // protected by a try..finally block, as such:
     // !begin
@@ -15964,9 +15966,14 @@ type
     // !end;
     procedure Enter; virtual;
     /// leave the mutex
+    // - as expected by IAutoLocker interface
     procedure Leave; virtual;
     /// access to the locking methods of this instance
+    // - as expected by IAutoLocker interface
     function Safe: PSynLocker;
+    /// direct access to the locking methods of this instance
+    // - faster than IAutoLocker.Safe function
+    property Locker: TSynLocker read fSafe;
   end;
 
   /// the current state of a TBlockingProcess instance
