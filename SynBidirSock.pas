@@ -1866,14 +1866,13 @@ function TWebSocketProcess.NotifyCallback(aRequest: THttpServerRequest;
 var request,answer: TWebSocketFrame;
     i: integer;
     start,max: Int64;
-    log: ISynLog;
 begin
   result := STATUS_NOTFOUND;
   if (fProtocol=nil) or (aRequest=nil) or
      not fProtocol.InheritsFrom(TWebSocketProtocolRest) then
     exit;
   if WebSocketLog<>nil then
-    log := WebSocketLog.Enter('NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
+    WebSocketLog.Add.Log(sllTrace,'NotifyCallback(%,%)',[aRequest.URL,ToText(aMode)^],self);
   TWebSocketProtocolRest(fProtocol).InputToFrame(
     aRequest,aMode in [wscBlockWithoutAnswer,wscNonBlockWithoutAnswer],request);
   case aMode of
@@ -1885,9 +1884,8 @@ begin
   end;
   wscBlockWithAnswer:
     if fIncoming.AnswerToIgnore>0 then begin
-      if log<>nil then
-        log.Log(sllDebug,'NotifyCallback: Waiting for AnswerToIgnore=%',
-          [fIncoming.AnswerToIgnore],self);
+      WebSocketLog.Add.Log(sllDebug,'NotifyCallback: Waiting for AnswerToIgnore=%',
+        [fIncoming.AnswerToIgnore],self);
       max := GetTickCount64+30000;
       repeat
         SleepHiRes(1);
@@ -1903,8 +1901,8 @@ begin
   end;
   i := InterlockedIncrement(fProcessCount);
   try
-    if (i>2) and (log<>nil) then
-      log.Log(sllWarning,'NotifyCallback with fProcessCount=%',[i],self);
+    if (i>2) and (WebSocketLog<>nil) then
+      WebSocketLog.Add.Log(sllWarning,'NotifyCallback with fProcessCount=%',[i],self);
     if not SendFrame(request) then
       exit;
     if aMode=wscBlockWithoutAnswer then begin
@@ -1923,7 +1921,7 @@ begin
         exit;
       end else
       if GetTickCount64>max then begin
-        self.Log(request,'NotifyCallback TIMEOUT -> AnswerToIgnore(+1)',sllWarning);
+        WebSocketLog.Add.Log(sllWarning,'NotifyCallback TIMEOUT -> AnswerToIgnore(+1)',self);
         fIncoming.AnswerToIgnore(1); // ignore next 'answer'
         exit;
       end else
@@ -2057,8 +2055,7 @@ begin
   if (logHeartbeat in fSettings.LogDetails) or
      not (frame.opcode in [focPing,focPong]) then begin
     log := SynLog;
-    if DisableRemoteLog then
-      log.DisableRemoteLog(true);
+    log.DisableRemoteLog(DisableRemoteLog);
     try
       if (frame.opcode=focText) and
          (logTextFrameContent in fSettings.LogDetails) then
@@ -2070,8 +2067,7 @@ begin
           ToText(frame.opcode)^,length(frame.PayLoad),content],self);
       end;
     finally
-      if DisableRemoteLog then
-        log.DisableRemoteLog(false);
+      log.DisableRemoteLog(false);
     end;
   end;
 end;

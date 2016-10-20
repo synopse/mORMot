@@ -883,7 +883,8 @@ function CanSubscribeLog(const Callback: ISynLogCallback): Boolean;
 begin
   result := false;
   if Assigned(Callback) then
-    if HttpClientFullWebSocketsLog or HttpServerFullWebSocketsLog then begin
+    if {$ifdef WITHLOG}(WebSocketLog<>nil) or{$endif}
+       HttpClientFullWebSocketsLog or HttpServerFullWebSocketsLog then begin
       Callback.Log(sllError, FormatUTF8(
         '%00%  SubscribeLog is not allowed when low-level WebSockets ' +
         'frame logging is enabled (otherwise a race condition happens)',
