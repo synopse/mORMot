@@ -72,6 +72,7 @@ uses
   Variants,
   SynCommons,
   SynLog,
+  SynEcc,
   mORMot,
   mORMotDDD,
   dddInfraSettings,
@@ -1817,6 +1818,8 @@ begin
 end;
 
 initialization
+  TJSONSerializer.RegisterObjArrayForJSON(
+    [TypeInfo(TECCCertificateObjArray),TECCCertificate]);
   {$ifdef EnableMemoryLeakReporting}
   {$ifdef HASFASTMM4} // FastMM4 integrated in Delphi 2006 (and up)
   ReportMemoryLeaksOnShutdown := True;
