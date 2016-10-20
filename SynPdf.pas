@@ -1825,7 +1825,7 @@ type
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
-      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; counterclock, isPieSlice: Boolean);
+      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -7328,13 +7328,13 @@ begin
     cx * FDevScaleX * GetWorldFactorX,-cy * FDevScaleY * GetWorldFactorY);
 end;
 
-procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; counterclock, isPieSlice: Boolean);
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
 var
    res: teaDrawArray;
    i: integer;
 begin
    setlength(res, 0);
-   if doArc(centerx, centery, W, H, Sx, Sy, Ex, Ey, counterclock,  isPieSlice, res) then begin
+   if doArc(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  isPieSlice, res) then begin
       for I := Low(res) to High(res) do begin
          case res[i].res of
             caMoveto: MoveTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
