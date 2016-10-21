@@ -2460,10 +2460,25 @@ type
   TSynExtended = extended;
   {$endif}
   {$endif}
+  /// the non-number values potentially stored in an IEEE floating point 
+  TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
+
+const
+  /// the JavaScript-like values of non-number IEEE constants
+  // - as recognized by ExtendedToStringNan, and used by TTextWriter.Add()
+  // when serializing such single/double/extended floating-point values
+  JSON_NAN: array[TSynExtendedNan] of string[11] = (
+    '', '"NaN"', '"Infinity"', '"-Infinity"');
 
 /// convert a floating-point value to its numerical text equivalency
 // - returns the count of chars stored into S (S[0] is not set)
 function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
+
+/// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
+// - as returned by ExtendedToString() textual conversion
+// - such values do appear as IEEE floating points, but are not defined in JSON 
+function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overload;
@@ -23077,6 +23092,21 @@ begin
     PByteArray(@S)[i] := PWordArray(PtrInt(@S)-1)[i];
   {$endif}
 {$endif EXTENDEDTOSTRING_USESTR}
+end;
+
+function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
+begin
+  case PInteger(@s)^ and $ffdfdfdf of
+    3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
+      result := seNan;
+    3+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24,
+    4+ord('+')shl 8+ord('I')shl 16+ord('N')shl 24:
+      result := seInf;
+    4+ord('-')shl 8+ord('I')shl 16+ord('N')shl 24:
+      result := seNegInf;
+    else
+      result := seNumber;
+  end;
 end;
 
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8;
@@ -45743,8 +45773,20 @@ procedure TTextWriter.Add(Value: Extended; precision: integer);
 var S: ShortString;
 begin
   if Value=0 then
-    Add('0') else
-    AddNoJSONEscape(@S[1],ExtendedToString(S,Value,precision));
+    Add('0') else begin
+    S[0] := AnsiChar(ExtendedToString(S,Value,precision));
+    case PInteger(@S)^ and $ffdfdfdf of // inlined ExtendedToStringNan()
+      3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
+        AddShort(JSON_NAN[seNan]);
+      3+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24,
+      4+ord('+')shl 8+ord('I')shl 16+ord('N')shl 24:
+        AddShort(JSON_NAN[seInf]);
+      4+ord('-')shl 8+ord('I')shl 16+ord('N')shl 24:
+        AddShort(JSON_NAN[seNegInf]);
+    else
+      AddNoJSONEscape(@S[1],ord(S[0]));
+    end;
+  end;
 end;
 
 procedure TTextWriter.AddDouble(Value: double);
