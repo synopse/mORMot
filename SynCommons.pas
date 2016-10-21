@@ -7256,13 +7256,20 @@ type
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add(const guid: TGUID); overload;
     /// append a floating-point Value as a String
+    // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     procedure AddDouble(Value: double);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
+    // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     procedure AddSingle(Value: single);
+      {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
+    // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
     procedure Add(Value: Extended; precision: integer); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
+    // - is used when the input comes from a third-party source with no regular
+    // output, e.g. a database driver 
     procedure AddFloatStr(P: PUTF8Char);
     /// append strings or integers with a specified format
     // - % = #37 marks a string, integer, floating-point, or class parameter
@@ -45790,19 +45797,17 @@ begin
 end;
 
 procedure TTextWriter.AddDouble(Value: double);
-var S: ShortString;
 begin
   if Value=0 then
     Add('0') else
-    AddNoJSONEscape(@S[1],ExtendedToString(S,Value,DOUBLE_PRECISION));
+    Add(Value,DOUBLE_PRECISION);
 end;
 
 procedure TTextWriter.AddSingle(Value: single);
-var S: ShortString;
 begin
   if Value=0 then
     Add('0') else
-    AddNoJSONEscape(@S[1],ExtendedToString(S,Value,SINGLE_PRECISION));
+    Add(Value,SINGLE_PRECISION);
 end;
 
 {$ifndef CPU64} // Add(Value: PtrInt) already implemented it
