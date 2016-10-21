@@ -79,6 +79,7 @@ type
     constructor Create(AOwner: TComponent); override;
     procedure EnableChkTables(const aCaption: string);
     procedure Open; virtual;
+    procedure FillTables(const customcode: string); virtual;
     procedure AddSQL(SQL: string; AndExec: boolean);
     destructor Destroy; override;
   end;
@@ -124,6 +125,15 @@ begin
 end;
 
 procedure TDBFrame.Open;
+begin
+  FillTables('');
+  edtLabelsChange(nil);
+  mmoSQL.Text := '#help';
+  btnExecClick(nil);
+  mmoSQL.Text := '';
+end;
+
+procedure TDBFrame.FillTables(const customcode: string);
 var
   i: integer;
   aTables: TRawUTF8DynArray;
@@ -131,12 +141,13 @@ begin
   drwgrdResult.Align := alClient;
   aTables := Admin.DatabaseTables(DatabaseName);
   Tables.Clear;
-  for i := 0 to high(aTables) do
-    Tables.Add(UTF8ToString(aTables[i]));
-  edtLabelsChange(nil);
-  mmoSQL.Text := '#help';
-  btnExecClick(nil);
-  mmoSQL.Text := '';
+  Tables.BeginUpdate;
+  try
+    for i := 0 to high(aTables) do
+      Tables.Add(UTF8ToString(aTables[i]));
+  finally
+    Tables.EndUpdate;
+  end;
 end;
 
 procedure TDBFrame.lstTablesDblClick(Sender: TObject);
@@ -547,7 +558,11 @@ begin
   if i >= 0 then
     previous := lstTables.Items[i];
   index := -1;
-  match := SysUtils.UpperCase(edtLabels.Text);
+  match := SysUtils.Trim(SysUtils.UpperCase(edtLabels.Text));
+  if (length(match) > 5) and (match[1] = '%') then begin
+    FillTables(match);
+    match := '';
+  end;
   with lstTables.Items do
   try
     BeginUpdate;
@@ -564,6 +579,7 @@ begin
   if index >= 0 then
     lstTables.ItemIndex := index;
 end;
+
 
 end.
 
