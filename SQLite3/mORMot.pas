@@ -20285,7 +20285,8 @@ begin
         {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
     W.Add('"');
   end else
-    if PtrUInt(tmp)<>0 then
+    if PtrUInt(tmp)=0 then
+      W.AddShort('null') else
       W.AddNoJSONEscape(pointer(tmp),
         {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
 end;
