@@ -377,6 +377,11 @@ unit SynPdf;
   {$undef USE_METAFILE}
 {$endif}
 
+ {$define USE_ARC}
+{$ifdef NO_USE_ARC}
+  { Dont use the SynPdfArc unit }
+  {$undef USE_ARC}
+{$endif}
 {$ifdef USE_BITMAP}
   {$define USE_GRAPHICS_UNIT}
 {$endif}
@@ -1767,6 +1772,10 @@ type
   TPdfCanvasRenderMetaFileTextClipping = (
     tcClipReference, tcClipExplicit, tcAlwaysClip, tcNeverClip);
 
+{$IFDEF USE_ARC}
+  TPdfCanvasArcType =(
+    acArc, acArcTo, acArcAngle, acPie, acChoord);
+{$ENDIF}
   /// access to the PDF Canvas, used to draw on the page
   TPdfCanvas = class(TObject)
   protected
@@ -1825,7 +1834,9 @@ type
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
-      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
+   {$IFDEF USE_ARC}
+      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType);
+   {$ENDIF}
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -7328,13 +7339,14 @@ begin
     cx * FDevScaleX * GetWorldFactorX,-cy * FDevScaleY * GetWorldFactorY);
 end;
 
-procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
+{$IFDEF USE_ARC}
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType);
 var
    res: teaDrawArray;
    i: integer;
 begin
    setlength(res, 0);
-   if doArc(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  isPieSlice, res) then begin
+   if doArc(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  integer(arctype), res) then begin
       for I := Low(res) to High(res) do begin
          case res[i].res of
             caMoveto: MoveTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
@@ -7346,6 +7358,7 @@ begin
       end;
    end;
 end;
+{$ENDIF}
 procedure TPdfCanvas.PointI(x, y: Single);
 begin
   Rectangle(I2X(X),I2Y(Y),1E-2,1E-2); //smalest difference 1E-2 because of rounding to two decimals
@@ -9024,6 +9037,7 @@ begin
         szlCorner.cx,szlCorner.cy);
     E.FlushPenBrush;
   end;
+  {$IFDEF USE_ARC} 
   EMR_ARC: begin
     NormalizeRect(PEMRARC(R)^.rclBox);
     E.NeedPen;
@@ -9033,8 +9047,22 @@ begin
       ptlStart.x, ptlStart.y,
       ptlEnd.x, ptlEnd.y,
       e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-      false);
+      acArc);
       E.Canvas.Stroke;
+   end;
+  EMR_ARCTO: begin
+    NormalizeRect(PEMRARCTO(R)^.rclBox);
+    E.NeedPen;
+    with PEMRARC(R)^ do  begin
+    E.Canvas.LineTo(ptlStart.x, ptlStart.y);
+    E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+      rclBox.Width, rclBox.Height,
+      ptlStart.x, ptlStart.y,
+      ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      acArcTo);
+      E.Canvas.Stroke;
+     end;
    end;
   EMR_PIE: begin
     NormalizeRect(PEMRPie(R)^.rclBox);
@@ -9045,11 +9073,26 @@ begin
         ptlStart.x, ptlStart.y,
         ptlEnd.x, ptlEnd.y,
         e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-        true);
+        acPie);
       if pen.null then
         E.Canvas.Fill else
         E.Canvas.FillStroke;
     end;
+  EMR_CHORD: begin
+    NormalizeRect(PEMRChord(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRChord(R)^ do
+      E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+        rclBox.Width, rclBox.Height,
+        ptlStart.x, ptlStart.y,
+        ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        acChoord);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+  end;
+  {$ENDIF}
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
