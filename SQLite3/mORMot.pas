@@ -34046,7 +34046,12 @@ begin
   if not RecordCanBeUpdated(Table,ID,seDelete) then
     result := false else begin
     fCache.NotifyDeletion(TableIndex,ID);
-    result := EngineDelete(TableIndex,ID);
+    fAcquireExecution[execORMWrite].fSafe.Lock;
+    try // may be within a batch in another thread
+      result := EngineDelete(TableIndex,ID);
+    finally
+      fAcquireExecution[execORMWrite].fSafe.Unlock;
+    end;
   end;
 end;
 
@@ -34069,8 +34074,14 @@ end;
 function TSQLRest.Delete(Table: TSQLRecordClass; const SQLWhere: RawUTF8): boolean;
 var IDs: TIDDynArray;
 begin
-  if InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs) then
-    result := EngineDeleteWhere(Model.GetTableIndexExisting(Table),SQLWhere,IDs) else
+  if InternalDeleteNotifyAndGetIDs(Table,SQLWhere,IDs) then begin
+    fAcquireExecution[execORMWrite].fSafe.Lock;
+    try // may be within a batch in another thread
+      result := EngineDeleteWhere(Model.GetTableIndexExisting(Table),SQLWhere,IDs);
+    finally
+      fAcquireExecution[execORMWrite].fSafe.Unlock;
+    end;
+  end else
     result := false;
 end;
 
@@ -34111,7 +34122,12 @@ begin
   end;
   fCache.Notify(Value,soUpdate); // will serialize Value (JSONValues may not be enough)
   JSONValues := Value.GetJSONValues(true,false,FieldBits);
-  result := EngineUpdate(TableIndex,Value.fID,JSONValues);
+  fAcquireExecution[execORMWrite].fSafe.Lock;
+  try // may be within a batch in another thread
+    result := EngineUpdate(TableIndex,Value.fID,JSONValues);
+  finally
+    fAcquireExecution[execORMWrite].fSafe.UnLock;
+  end;
 end;
 
 function TSQLRest.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
@@ -34249,7 +34265,12 @@ begin
     GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,false,CustomFields,json) else
     json := '';
   // on success, returns the new ROWID value; on error, returns 0
-  result := EngineAdd(TableIndex,json); // will call static if necessary
+  fAcquireExecution[execORMWrite].fSafe.Lock;
+  try // may be within a batch in another thread
+    result := EngineAdd(TableIndex,json); // will call static if necessary
+  finally
+    fAcquireExecution[execORMWrite].fSafe.Unlock;
+  end;
   // on success, Value.ID is updated with the new ROWID
   Value.fID := result;
   if SendData and (result<>0) then
@@ -34309,7 +34330,12 @@ begin
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
   GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,true,nil,json);
   // on success, returns the new ROWID value; on error, returns 0
-  result := EngineAdd(TableIndex,json); // will call static if necessary
+  fAcquireExecution[execORMWrite].fSafe.Lock;
+  try // may be within a batch in another thread
+    result := EngineAdd(TableIndex,json); // will call static if necessary
+  finally
+    fAcquireExecution[execORMWrite].fSafe.Unlock;
+  end;
   // on success, Value.ID is updated with the new ROWID
   Value.fID := result;
   // here fCache.Notify is not called, since the JSONValues is verbose
@@ -37729,7 +37755,12 @@ begin
   if (IDs=nil) or not result then
     exit; // nothing to delete
   TableIndex := Model.GetTableIndexExisting(Table);
-  result := EngineDeleteWhere(TableIndex,SQLWhere,IDs);
+  fAcquireExecution[execORMWrite].fSafe.Lock;
+  try // may be within a batch in another thread
+    result := EngineDeleteWhere(TableIndex,SQLWhere,IDs);
+  finally
+    fAcquireExecution[execORMWrite].fSafe.Unlock;
+  end;
   if result then
     // force relational database coherency (i.e. our FOREIGN KEY implementation)
     for i := 0 to high(IDs) do
@@ -41104,8 +41135,13 @@ begin
   try // low-level Add(TSQLRecordHistory) without cache
     JSON := JSONEncode(['ModifiedRecord',aTableIndex+aID shl 6,'Event',ord(Event),
                         'SentDataJSON',aSentData,'TimeStamp',ServerTimeStamp]);
-    EngineAdd(TableHistoryIndex,JSON);
-    { TODO: use a BATCH to speed up TSQLHistory storage }
+    fAcquireExecution[execORMWrite].fSafe.Lock;
+    try // may be within a batch in another thread
+      EngineAdd(TableHistoryIndex,JSON);
+    finally
+      fAcquireExecution[execORMWrite].fSafe.Unlock;
+    end;
+    { TODO: use a BATCH (in background thread) to speed up TSQLHistory storage }
     if fTrackChangesHistory[TableHistoryIndex].CurrentRow>
         fTrackChangesHistory[TableHistoryIndex].MaxSentDataJsonRow then begin
       // gather & compress TSQLRecordHistory.SentDataJson into History BLOB
@@ -57947,7 +57983,7 @@ end;
 function TServiceFactoryClientNotificationThread.GetPendingCountFromDB: Int64;
 begin
   if not fClient.fSendNotificationsRest.OneFieldValue(
-      fClient.fSendNotificationsLogClass,'count(*)','Sent=?',[],[0],result) then
+      fClient.fSendNotificationsLogClass,'count(*)','Sent is null',[],[],result) then
     result := 0;
 end;
 
@@ -57959,7 +57995,7 @@ var pending: TSQLRecordServiceNotifications;
     timer: TPrecisionTimer;
 begin // one at a time, since InternalInvoke() is the bottleneck
   pending := fClient.fSendNotificationsLogClass.Create(
-    fClient.fSendNotificationsRest,'Sent=? order by id limit 1',[0]);
+    fClient.fSendNotificationsRest,'Sent is null order by id limit 1');
   try
     if pending.IDValue=0 then begin
       pendings := GetPendingCountFromDB;
@@ -58034,9 +58070,11 @@ function TServiceFactoryClient.Invoke(const aMethod: TServiceMethod;
       pending.Method := aMethod.URI;
       json := '['+aParams+']';
       TDocVariantData(pending.fInput).InitJSONInPlace(pointer(json),JSON_OPTIONS_FAST_EXTENDED);
-      if aClientDrivenID<>nil then
+      if (aClientDrivenID<>nil) and (aClientDrivenID^<>0) then begin
         pending.Session := aClientDrivenID^;
-      fSendNotificationsRest.Add(pending,true);
+        fSendNotificationsRest.Add(pending,'Method,Input,Session');
+      end else
+        fSendNotificationsRest.Add(pending,'Method,Input');
     finally
       pending.Free;
     end;
