@@ -6774,12 +6774,6 @@ type
     function PrepareForSending(out Data: RawUTF8): boolean; virtual;
     /// read only access to the associated TSQLRest instance
     property Rest: TSQLRest read fRest;
-    /// retrieve the current number of pending transactions in the BATCH sequence
-    property Count: integer read GetCount;
-    /// retrieve the current JSON size of pending transaction in the BATCH sequence
-    property SizeBytes: cardinal read GetSizeBytes;
-    /// read only access to the main associated TSQLRecord class (if any)
-    property Table: TSQLRecordClass read fTable;
     /// how many times Add() has been called for this BATCH process
     property AddCount: integer read fAddCount;
     /// how many times Update() has been called for this BATCH process
@@ -6788,6 +6782,13 @@ type
     property DeleteCount: integer read fDeleteCount;
     /// this event handler will be triggerred by each Add/Update/Delete method
     property OnWrite: TOnBatchWrite read fOnWrite write fOnWrite;
+  published
+    /// read only access to the main associated TSQLRecord class (if any)
+    property Table: TSQLRecordClass read fTable;
+    /// retrieve the current number of pending transactions in the BATCH sequence
+    property Count: integer read GetCount;
+    /// retrieve the current JSON size of pending transaction in the BATCH sequence
+    property SizeBytes: cardinal read GetSizeBytes;
   end;
 
   /// thread-safe class to store a BATCH sequence of writing operations
@@ -34014,6 +34015,7 @@ begin
   result := HTTP_BADREQUEST;
   if (self=nil) or (Batch=nil) then // no opened BATCH sequence
     exit;
+  InternalLog('BatchSend %',[Batch]);
   if Batch.PrepareForSending(Data) then
     if Data='' then // i.e. Batch.Count=0
       result := HTTP_SUCCESS else
@@ -41575,12 +41577,14 @@ begin
     end;
   end;
   except
-    on Exception do begin
+    on E: Exception do begin
       if (AutomaticTransactionPerRow>0) and (RowCountForCurrentTransaction>0) then begin
         for i := 0 to high(RunTableTransactions) do
           if RunTableTransactions[i]<>nil then
             RunTableTransactions[i].RollBack(CONST_AUTHENTICATION_NOT_USED);
-        InternalLog('PARTIAL rollback of latest auto-committed transaction',sllWarning);
+        UniqueRawUTF8ZeroToTilde(data,1 shl 16);
+        InternalLog('% -> PARTIAL rollback of latest auto-committed transaction data=%',
+          [E,data], sllWarning);
       end;
       raise;
     end;
@@ -55939,38 +55943,41 @@ begin
       WR.Free;
     end;
   finally
-    if InstanceCreation=sicSingle then
-      Inst.SafeFreeInstance(self); // always release single shot instance
-    if stats<>nil then begin
-      QueryPerformanceCounter(timeEnd);
-      dec(timeEnd,timeStart);
-      Ctxt.StatsFromContext(stats,timeEnd,false);
-      if Ctxt.Server.StatUsage<>nil then
-        Ctxt.Server.StatUsage.Modified(stats,[]);
-      if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
-        if Ctxt.fAuthSession.fInterfaces=nil then
-          SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
-        m := Ctxt.fServiceListInterfaceMethodIndex;
-        if m<0 then
-          m := Rest.Services.fListInterfaceMethods.FindHashed(
-            fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
-        if m>=0 then
-        with Ctxt.fAuthSession do begin
-          stats := fInterfaces[m];
-          if stats=nil then begin
-            stats := StatsCreate;
-            fInterfaces[m] := stats;
+    try
+      if InstanceCreation=sicSingle then
+        Inst.SafeFreeInstance(self); // always release single shot instance
+      if stats<>nil then begin
+        QueryPerformanceCounter(timeEnd);
+        dec(timeEnd,timeStart);
+        Ctxt.StatsFromContext(stats,timeEnd,false);
+        if Ctxt.Server.StatUsage<>nil then
+          Ctxt.Server.StatUsage.Modified(stats,[]);
+        if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
+          if Ctxt.fAuthSession.fInterfaces=nil then
+            SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+          m := Ctxt.fServiceListInterfaceMethodIndex;
+          if m<0 then
+            m := Rest.Services.fListInterfaceMethods.FindHashed(
+              fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
+          if m>=0 then
+          with Ctxt.fAuthSession do begin
+            stats := fInterfaces[m];
+            if stats=nil then begin
+              stats := StatsCreate;
+              fInterfaces[m] := stats;
+            end;
+            Ctxt.StatsFromContext(stats,timeEnd,true);
+            // mlSessions stats are not yet tracked per Client
           end;
-          Ctxt.StatsFromContext(stats,timeEnd,true);
-          // mlSessions stats are not yet tracked per Client
         end;
+      end else
+        timeEnd := 0;
+    finally
+      if exec<>nil then begin
+        if Ctxt.ServiceExecution.LogRest<>nil then
+          FinalizeLogRest;
+        exec.Free;
       end;
-    end else
-      timeEnd := 0;
-    if exec<>nil then begin
-      if Ctxt.ServiceExecution.LogRest<>nil then
-        FinalizeLogRest;
-      exec.Free;
     end;
   end;
 end;
@@ -58136,9 +58143,11 @@ begin
     end else begin
       JSONDecode(pointer(resp),['result','id'],Values,True);
       if Values[0]=nil then begin // no "result":... layout
-        if aErrorMsg<>nil then
+        if aErrorMsg<>nil then begin
+          UniqueRawUTF8ZeroToTilde(resp,1 shl 10);
           aErrorMsg^ :=
             'Invalid returned JSON content: expects {result:...}, got '+resp;
+        end;
         exit; // leave result=false
       end;
       if aResult<>nil then

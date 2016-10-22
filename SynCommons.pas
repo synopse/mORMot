@@ -1622,6 +1622,14 @@ procedure FastNewRawUTF8(var s: RawUTF8; len: integer);
 function UniqueRawUTF8(var UTF8: RawUTF8): pointer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// will fast replace all #0 chars as ~
+// - could be used after UniqueRawUTF8() on a in-placed modified JSON buffer,
+// in which all values have been ended with #0
+// - you can optionally specify a maximum size, in bytes (this won't reallocate
+// the string, but just add a #0 at some point in the UTF8 buffer)
+// - could allow logging of parsed input e.g. after an exception
+procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer=maxInt);
+
 /// conversion of a wide char into a WinAnsi (CodePage 1252) char
 // - return '?' for an unknown WideChar in code page 1252
 function WideCharToWinAnsiChar(wc: cardinal): AnsiChar;
@@ -20693,6 +20701,19 @@ begin
   UniqueString(UTF8); // @UTF8[1] won't call UniqueString() under FPC :(
   {$endif}
   result := @UTF8[1];
+end;
+
+procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer);
+var i: integer;
+begin
+  i := length(UTF8);
+  if i>MaxSize then begin
+    PByteArray(UTF8)[i] := 0;
+    MaxSize := i;
+  end;
+  for i := 0 to maxSize-1 do
+    if PByteArray(UTF8)[i]=0 then
+      PByteArray(UTF8)[i] := ord('~');
 end;
 
 {$ifdef FPC}
