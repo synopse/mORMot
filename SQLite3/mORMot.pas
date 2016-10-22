@@ -41565,11 +41565,14 @@ begin
       // send pending rows within transaction
       PerformAutomaticCommit;
   finally
-    if RunningBatchRest<>nil then
-      RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
-    fAcquireExecution[execORMWrite].fSafe.UnLock;
-    InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
-      [KB(length(Data)),counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table]);
+    try
+      if RunningBatchRest<>nil then
+        RunningBatchRest.InternalBatchStop; // send pending rows, and release Safe.Lock
+    finally
+      fAcquireExecution[execORMWrite].fSafe.UnLock;
+      InternalLog('EngineBatchSend json=% add=% update=% delete=% %%',
+        [KB(length(Data)),counts[mPOST],counts[mPUT],counts[mDELETE],MethodTable,Table]);
+    end;
   end;
   except
     on Exception do begin
