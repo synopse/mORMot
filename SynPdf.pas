@@ -1835,7 +1835,7 @@ type
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
    {$IFDEF USE_ARC}
-      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType);
+      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType; var position : tpoint);
    {$ENDIF}
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
@@ -3435,7 +3435,7 @@ end;
 {$ifdef USE_ARC}
 type
   //  Result types for use in ARC Functions
-  tcaRes = (caMoveto, caLine, EaRcurve);
+  tcaRes = (caMoveto, caLine, caCurve, caPosition);
   teaDrawtype = record
     res: tcaRes;
     pts: array[0..2] of record x, y: single;
@@ -3495,6 +3495,7 @@ var fcx, fcy: double; //  center of the ellipse.
      fxLeft, fyUp: double;  // leftmost point of the arc.
      fwidth, fheight: double; //   Horizontal width of the arc. Vertical height of the arc.
      fArctype: TPdfCanvasArcType;  //Indicator for center to endpoints line inclusion.
+     fClockWise : boolean;
 
 procedure InitFuncData;
 var lambda1, lambda2 : double;
@@ -3505,6 +3506,7 @@ begin
   fbRad := (H-1) / 2;
   fArctype := arctype;
   // Calculate Rotation at Start and EndPoint
+  fClockWise := aClockWise;
   if aclockwise then begin
     lambda1 := ArcTan2(Sy - fcy, Sx - fcx);
     lambda2 := ArcTan2(Ey - fcy, Ex - fcx);
@@ -3635,7 +3637,7 @@ begin
   size := n; // Res Size
   case fArctype of
    acArc :  inc(size,1); // Res Size n+1 because first move;
-   acArcTo :inc(size,1); // Res Size n+1 because first Line;
+   acArcTo :inc(size,3); // Res Size n+1 because first Line and SetPosition;
    acArcAngle : inc(size,1); // Res Size n+1 because first move;
    acPie : inc(size, 3); // for first and last Line if wie want a pie
    acChoord : inc(size,2);
@@ -3644,17 +3646,29 @@ begin
   resindex := 0;
   case fArctype of
    acArc : begin   // Start with moveto
-             res[resindex].res := caMoveto;
-             res[resindex].pts[0].x := xB;
-             res[resindex].pts[0].y := yB;
-             inc(resindex);
-           end;
+     res[resindex] := emptyres;
+     res[resindex].res := caMoveto;
+     res[resindex].pts[0].x := xB;
+     res[resindex].pts[0].y := yB;
+     inc(resindex);
+   end;
    acArcTo : begin   // Start with moveto
-             res[resindex].res := caMoveto;
-             res[resindex].pts[0].x := xB;
-             res[resindex].pts[0].y := yB;
-             inc(resindex);
-           end;
+     res[resindex] := emptyres;
+     res[resindex].res := caLine;
+     if fClockwise then  begin
+       res[resindex].pts[0].x := fx1;
+       res[resindex].pts[0].y := fy1;
+     end else begin
+       res[resindex].pts[0].x := fx2;
+       res[resindex].pts[0].y := fy2;
+     end;
+     inc(resindex);
+     res[resindex] := emptyres;
+     res[resindex].res := caMoveto;
+     res[resindex].pts[0].x := fx1;
+     res[resindex].pts[0].y := fy1;
+     inc(resindex);
+   end;
    acArcAngle :;
    acPie : begin
     res[resindex] := emptyres;
@@ -3667,14 +3681,14 @@ begin
     res[resindex].pts[0].x := xB;
     res[resindex].pts[0].y := yB;
     inc(resindex);
-           end;
+   end;
    acChoord : begin
-                res[resindex] := emptyres;
+    res[resindex] := emptyres;
     res[resindex].res := caMoveto;
     res[resindex].pts[0].x := xB;
     res[resindex].pts[0].y := yB;
     inc(resindex);
-              end;
+   end;
   end;
 
   t := tan(0.5 * dEta);
@@ -3697,7 +3711,7 @@ begin
     xBDot := -aSinEtaB;
     yBDot := bCosEtaB;
     res[resindex] := emptyres;
-    res[resindex].res := EaRcurve;
+    res[resindex].res := caCurve;
     res[resindex].pts[0].x := (xA + alpha * xADot);
     res[resindex].pts[0].y := (yA + alpha * yADot);
     res[resindex].pts[1].x := (xB - alpha * xBDot);
@@ -3707,6 +3721,18 @@ begin
     inc(resindex);
   end; // Loop
 
+ if fArctype = acArcTo then begin
+    res[resindex] := emptyres;
+    res[resindex].res := caPosition;
+    if fClockWise then begin
+     res[resindex].pts[0].x := fx2;
+     res[resindex].pts[0].y := fy2;
+    end else begin
+     res[resindex].pts[0].x := fx1;
+     res[resindex].pts[0].y := fy1;
+    end
+  end
+  else
   if fArctype = acPie then begin
     res[resindex] := emptyres;
     res[resindex].res := caLine;
@@ -7640,7 +7666,7 @@ begin
 end;
 
 {$IFDEF USE_ARC}
-procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType);
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType; var position : tpoint);
 var
    res: teaDrawArray;
    i: integer;
@@ -7651,9 +7677,13 @@ begin
          case res[i].res of
             caMoveto: MoveTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
             caLine: LineTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
-            EaRcurve: CurveToC(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y),
+            caCurve: CurveToC(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y),
                   I2X(res[i].pts[1].x), i2y(res[i].pts[1].y),
                   I2X(res[i].pts[2].x), i2y(res[i].pts[2].y));
+            caPosition : begin
+              position.x := Round(res[i].pts[0].x);
+              position.y := Round(res[i].pts[0].y);
+            end;
          end;
       end;
    end;
@@ -9231,6 +9261,7 @@ function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
 var i: integer;
     InitTransX: XForm;
     polytypes: PByteArray;
+
 begin
   result := true;
 
@@ -9347,21 +9378,28 @@ begin
       ptlStart.x, ptlStart.y,
       ptlEnd.x, ptlEnd.y,
       e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-      acArc);
+      acArc, Position);
       E.Canvas.Stroke;
    end;
   EMR_ARCTO: begin
     NormalizeRect(PEMRARCTO(R)^.rclBox);
     E.NeedPen;
+     if not E.Canvas.FNewPath and not Moved then
+      E.Canvas.MoveToI(Position.X,Position.Y);
     with PEMRARC(R)^ do  begin
-    E.Canvas.LineTo(ptlStart.x, ptlStart.y);
+   // E.Canvas.LineTo(ptlStart.x, ptlStart.y);
     E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
       rclBox.Width, rclBox.Height,
       ptlStart.x, ptlStart.y,
       ptlEnd.x, ptlEnd.y,
       e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-      acArcTo);
-      E.Canvas.Stroke;
+      acArcTo,
+      Position);
+    Moved := false;
+    E.fInLined := true;
+    if not E.Canvas.FNewPath then
+      if not pen.null then
+        E.Canvas.Stroke ;
      end;
    end;
   EMR_PIE: begin
@@ -9373,7 +9411,7 @@ begin
         ptlStart.x, ptlStart.y,
         ptlEnd.x, ptlEnd.y,
         e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-        acPie);
+        acPie, Position);
       if pen.null then
         E.Canvas.Fill else
         E.Canvas.FillStroke;
@@ -9387,7 +9425,7 @@ begin
         ptlStart.x, ptlStart.y,
         ptlEnd.x, ptlEnd.y,
         e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
-        acChoord);
+        acChoord,Position);
       if pen.null then
         E.Canvas.Fill else
         E.Canvas.FillStroke;
