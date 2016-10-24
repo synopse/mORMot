@@ -58094,8 +58094,8 @@ end;
 class function TServiceFactoryClient.GetErrorMessage(status: integer): RawUTF8;
 begin
   case status of
-    HTTP_UNAVAILABLE: result := 'Check the communication parameters';
-    HTTP_NOTIMPLEMENTED: result := 'Server not reachable';
+    HTTP_UNAVAILABLE: result := 'Check the communication parameters and network config';
+    HTTP_NOTIMPLEMENTED: result := 'Server not reachable or broken connection';
     HTTP_NOTALLOWED: result := 'Method forbidden for this User group';
     HTTP_UNAUTHORIZED: result := 'No active session';
     HTTP_NOTACCEPTABLE: result := 'Invalid input parameters';
