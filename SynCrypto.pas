@@ -1029,7 +1029,7 @@ type
     /// finalize and compute the resulting SHA1 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety 
-    procedure Final(out Digest: TSHA1Digest);
+    procedure Final(out Digest: TSHA1Digest; NoInit: boolean=false);
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     // - only Full() is Padlock-implemented - use this rather than Update()
@@ -1053,7 +1053,7 @@ type
     procedure Update(Buffer: pointer; Len: integer);
     /// finalize and compute the resulting SHA256 hash Digest of all data
     // affected to Update() method
-    procedure Final(out Digest: TSHA256Digest);
+    procedure Final(out Digest: TSHA256Digest; NoInit: boolean=false);
     /// one method to rule them all
     // - call Init, then Update(), then Final()
     // - only Full() is Padlock-implemented - use this rather than Update()
@@ -1228,7 +1228,7 @@ type
     /// call this method for each continuous message block
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA1Digest);
+    procedure Done(out result: TSHA1Digest; NoInit: boolean=false);
   end;
   /// points to a HMAC message authentication context using SHA1
   PHMAC_SHA1 = ^THMAC_SHA1;
@@ -1288,7 +1288,7 @@ type
     /// call this method for each continuous message block
     procedure Update(const msg: THash256); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA256Digest);
+    procedure Done(out result: TSHA256Digest; NoInit: boolean=false);
   end;
   /// points to a HMAC message authentication context using SHA256
   PHMAC_SHA256 = ^THMAC_SHA256;
@@ -1907,10 +1907,10 @@ type
   end;
 
   TSHAContext = packed record
-    // Working hash
-    Hash  : TSHAHash;
+    // Working hash (TSHA256.Init expect this field to be the first)
+    Hash: TSHAHash;
     // 64bit msg length
-    MLen  : Int64;
+    MLen: Int64;
     // Block buffer
     Buffer: array[0..63] of byte;
     // Index in buffer
@@ -2117,12 +2117,12 @@ begin
   sha.Update(msg,msglen);
 end;
 
-procedure THMAC_SHA1.Done(out result: TSHA1Digest);
+procedure THMAC_SHA1.Done(out result: TSHA1Digest; NoInit: boolean);
 begin
   sha.Final(result);
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
-  sha.Final(result);
+  sha.Final(result,NoInit);
   FillZero(step7data);
 end;
 
@@ -2165,7 +2165,7 @@ begin
   for i := 2 to count do begin
     mac := first; // re-use the very same SHA-1 context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
-    mac.Done(tmp);
+    mac.Done(tmp,true);
     XorMemory(@result,@tmp,sizeof(result));
   end;
   FillcharFast(first,sizeof(first),0);
@@ -2208,13 +2208,14 @@ begin
   sha.Update(@msg,sizeof(msg));
 end;
 
-procedure THMAC_SHA256.Done(out result: TSHA256Digest);
+procedure THMAC_SHA256.Done(out result: TSHA256Digest; NoInit: boolean);
 begin
   sha.Final(result);
   sha.Update(@step7data,64);
   sha.Update(@result,sizeof(result));
-  sha.Final(result);
-  FillZero(step7data);
+  sha.Final(result,NoInit);
+  if not NoInit then
+    FillZero(step7data);
 end;
 
 procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
@@ -2258,10 +2259,11 @@ begin
   for i := 2 to count do begin
     mac := first; // re-use the very same SHA-256 context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
-    mac.Done(tmp);
+    mac.Done(tmp,true);
     XorMemory(@result,@tmp,sizeof(result));
   end;
   FillcharFast(first,sizeof(first),0);
+  FillcharFast(mac,sizeof(mac),0);
   FillZero(tmp);
 end;
 
@@ -5551,7 +5553,7 @@ begin
   end;
 end;
 
-procedure TSHA256.Final(out Digest: TSHA256Digest);
+procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
 // finalize SHA256 calculation, clear context
 var Data: TSHAContext absolute Context;
 begin
@@ -5571,7 +5573,8 @@ begin
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
   // clear Data and internally stored Digest
-  Init;
+  if not NoInit then
+    Init;
 end;
 
 procedure TSHA256.Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
@@ -5595,7 +5598,6 @@ procedure TSHA256.Init;
 // initialize context
 var Data: TSHAContext absolute Context;
 begin
-  FillcharFast(Data,sizeof(Data),0);
   Data.Hash.A := $6a09e667;
   Data.Hash.B := $bb67ae85;
   Data.Hash.C := $3c6ef372;
@@ -5604,6 +5606,7 @@ begin
   Data.Hash.F := $9b05688c;
   Data.Hash.G := $1f83d9ab;
   Data.Hash.H := $5be0cd19;
+  FillcharFast(Data.MLen,sizeof(Data)-sizeof(Data.Hash),0);
 end;
 
 procedure TSHA256.Update(Buffer: pointer; Len: integer);
@@ -7273,7 +7276,7 @@ begin
   end;
 end;
 
-procedure TSHA1.Final(out Digest: TSHA1Digest);
+procedure TSHA1.Final(out Digest: TSHA1Digest; NoInit: boolean);
 var Data: TSHAContext absolute Context;
 begin
   // 1. append bit '1' after Buffer
@@ -7292,7 +7295,8 @@ begin
   // Hash -> Digest to little endian format
   bswap160(@Data.Hash,@Digest);
   // Clear Data
-  Init;
+  if not NoInit then
+    Init;
 end;
 
 procedure TSHA1.Full(Buffer: pointer; Len: integer; out Digest: TSHA1Digest);
@@ -8578,7 +8582,7 @@ var time: Int64;
     {$ifdef MSWINDOWS}
     prov: HCRYPTPROV;
     {$endif}
- procedure hmacInit;
+  procedure hmacInit;
   var timenow: Int64;
       g: TGUID;
       i, val: cardinal;
