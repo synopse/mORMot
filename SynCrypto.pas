@@ -8565,7 +8565,7 @@ var time: Int64;
     ext: TSynExtended;
     threads: array[0..2] of cardinal;
     version: RawByteString;
-    sha: TSHA256;
+    hmac: THMAC_SHA256;
     entropy: array[0..3] of TSHA256Digest; // 128 bytes
     paranoid: cardinal;
     p: PByteArray;
@@ -8578,25 +8578,25 @@ var time: Int64;
     {$ifdef MSWINDOWS}
     prov: HCRYPTPROV;
     {$endif}
-  procedure ShaInit;
+ procedure hmacInit;
   var timenow: Int64;
       g: TGUID;
       i, val: cardinal;
   begin
-    sha.Update(@time,sizeof(time));
-    sha.Update(@entropy,sizeof(entropy)); // bytes on CPU stack
+    hmac.Init(@entropy,sizeof(entropy)); // bytes on CPU stack
+    hmac.Update(@time,sizeof(time));
     QueryPerformanceCounter(timenow);
-    sha.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
+    hmac.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
     for i := 0 to timenow and 3 do begin
       CreateGUID(g); // not random, but genuine
-      sha.Update(@g,sizeof(g));
+      hmac.Update(@g,sizeof(g));
     end;
     {$ifdef CPUINTEL}
-    sha.Update(@CpuFeatures,sizeof(CpuFeatures));
+    hmac.Update(@CpuFeatures,sizeof(CpuFeatures));
     if cfRAND in CpuFeatures then
-      for i := 1 to 20 do begin // hash 80 bytes from CPU
+      for i := 1 to (PCardinal(@entropy[3])^ and 15)+2 do begin
         val := RdRand32;
-        sha.Update(@val,sizeof(val));
+        hmac.Update(@val,sizeof(val));
       end;
     {$endif}
   end;
@@ -8647,30 +8647,29 @@ begin
     until false;
   end;
   // always xor some minimal entropy - it won't hurt
-  sha.Init;
-  ShaInit;
+  hmacInit;
   version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
-  sha.Update(pointer(version),length(version)); // exe and host/user info
-  sha.Final(entropy[3]);
-  ShaInit;
+  hmac.Update(pointer(version),length(version)); // exe and host/user info
+  hmac.Done(entropy[3]);
+  hmacInit;
   ext := NowUTC;
-  sha.Update(@ext,sizeof(ext));
-  sha.Final(entropy[2]);
-  ShaInit;
+  hmac.Update(@ext,sizeof(ext));
+  hmac.Done(entropy[2]);
+  hmacInit;
   ext := Random;
-  sha.Update(@ext,sizeof(ext));
+  hmac.Update(@ext,sizeof(ext));
   threads[0] := HInstance;
   threads[1] := GetCurrentThreadId;
   threads[2] := MainThreadID;
-  sha.Update(@threads,sizeof(threads));
-  sha.Final(entropy[1]);
-  ShaInit;
-  sha.Update(@SystemInfo,sizeof(SystemInfo));
-  sha.Update(pointer(OSVersionText),Length(OSVersionText));
+  hmac.Update(@threads,sizeof(threads));
+  hmac.Done(entropy[1]);
+  hmacInit;
+  hmac.Update(@SystemInfo,sizeof(SystemInfo));
+  hmac.Update(pointer(OSVersionText),Length(OSVersionText));
   SleepHiRes(0); // force non deterministic time shift
   QueryPerformanceCounter(time);
-  sha.Update(@time,sizeof(time)); // include GetEntropy() execution time
-  sha.Final(entropy[0]);
+  hmac.Update(@time,sizeof(time)); // include GetEntropy() execution time
+  hmac.Done(entropy[0]);
   for i := 0 to Len-1 do begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
@@ -8680,11 +8679,11 @@ begin
   {$endif}
     repeat // seed Random32 function above
       QueryPerformanceCounter(time);
-      rs1 := rs1 xor time;
-      rs2 := rs2 xor time;
-      rs3 := rs3 xor time;
+      rs1 := rs1 xor time xor PCardinal(@entropy[0])^;
+      rs2 := rs2 xor time xor PCardinal(@entropy[1])^;
+      rs3 := rs3 xor time xor PCardinal(@entropy[2])^;
     until (rs1>1) and (rs2>7) and (rs3>15);
-  for i := 1 to time and 15 do
+  for i := 1 to PCardinal(@entropy[3])^ and 15 do
     Random32; // warm up
 end;
 
