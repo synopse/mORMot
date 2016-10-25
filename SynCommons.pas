@@ -1602,6 +1602,10 @@ var
   // to avoid a memory allocation each time it is assigned to a variable
   JSON_CONTENT_TYPE_HEADER_VAR: RawUTF8;
 
+  /// can be used to avoid a memory allocation for res := 'null'
+  NULL_STR_VAR: RawUTF8;
+
+
 
 /// faster equivalence to SetString() function for a RawUTF8
 // - will reallocate the content in-place if the string refcount is 1
@@ -10695,10 +10699,12 @@ type
 
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
-  /// map a 256-bit hash as an array of two 128-bit hash values 
+  /// map a 256-bit hash as an array of two 128-bit hash values
   THash128Rec = packed record
     Lo,Hi: THash128
   end;
+  /// pointer to an array of two 128-bit hash values
+  PHash128Rec = ^THash128Rec;
   /// map an infinite array of 128-bit hash values
   THash128Array = array[0..(maxInt div sizeof(THash128))-1] of THash128;
   /// pointer to an infinite array of 128-bit hash values
@@ -13143,11 +13149,11 @@ const
   /// can be used e.g. in logs
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
-  /// can be used to append to most English nouns to form a plural
-  PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
-
   /// used by TSynTableStatement.WhereField for "SELECT .. FROM TableName WHERE ID=?"
   SYNTABLESTATEMENTWHEREID = 0;
+
+  /// can be used to append to most English nouns to form a plural
+  PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
 
 /// convert any AnsiString content into our SBF compact binary format storage
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
@@ -19291,7 +19297,7 @@ begin
     vtWideChar:
       RawUnicodeToUtf8(@VWideChar,1,result);
     vtBoolean:
-      if VBoolean then result := '1' else result := '0';
+      if VBoolean then result := SmallUInt32UTF8[1] else result := SmallUInt32UTF8[0];
     vtInteger:
       Int32ToUtf8(VInteger,result);
     vtInt64:
@@ -21312,7 +21318,7 @@ begin
   case VType of
   varEmpty,
   varNull:
-    result := 'null';
+    result := NULL_STR_VAR;
   varSmallint:
     Int32ToUTF8(VSmallInt,result);
   {$ifndef DELPHI5OROLDER}
@@ -23200,7 +23206,7 @@ function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8;
 var tmp: ShortString;
 begin
   if Value=0 then
-    result := '0' else
+    result := SmallUInt32UTF8[0] else
     SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
@@ -23209,7 +23215,7 @@ procedure ExtendedToStr(Value: TSynExtended; Precision: integer;
 var tmp: ShortString;
 begin
   if Value=0 then
-    result := '0' else
+    result := SmallUInt32UTF8[0] else
     SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,Precision));
 end;
 
@@ -23217,7 +23223,7 @@ function DoubleToStr(Value: Double): RawUTF8;
 var tmp: ShortString;
 begin
   if Value=0 then
-    result := '0' else
+    result := SmallUInt32UTF8[0] else
     SetRawUTF8(result,@tmp[1],ExtendedToString(tmp,Value,DOUBLE_PRECISION));
 end;
 
@@ -28154,9 +28160,13 @@ end;
 
 function GetBoolean(P: PUTF8Char): boolean;
 begin
-  if (P<>nil) and (PInteger(P)^=TRUE_LOW) then
-    result := true else
-    result := GetInteger(P)<>0;
+  if P<>nil then
+    case PInteger(P)^ of
+      TRUE_LOW:  result := true;
+      FALSE_LOW: result := false;
+      else result := PWord(P)^<>ord('0');
+    end else
+    result := false;
 end;
 
 function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
@@ -29702,7 +29712,7 @@ var
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
   if Value=nil then
-    result := 'null' else
+    result := NULL_STR_VAR else
     with DefaultTextWriterJSONClass.CreateOwnedStream do
     try
       include(fCustomOptions,twoForceJSONStandard);
@@ -40900,7 +40910,7 @@ var Up: array[byte] of AnsiChar;
     W: TTextWriter;
 begin
   if (Kind<>dvObject) or (VCount=0) then begin
-    result := 'null';
+    result := NULL_STR_VAR;
     exit;
   end;
   UpperCopy255(Up,aStartName)^ := #0;
@@ -50596,7 +50606,7 @@ end;
 function TPrecisionTimer.ByCount(Count: QWord): RawUTF8;
 begin
   if Count=0 then
-    result := '0' else // avoid div per 0 exception
+    result := SmallUInt32UTF8[0] else // avoid div per 0 exception
     result := MicroSecToString(iTime div Count);
 end;
 
@@ -57014,7 +57024,7 @@ begin
   end else
   if (PInteger(P)^ and $DFDFDFDF=NULL_UPP) and (P[4] in [#0..' ',';']) then begin
     // NULL statement
-    Where.Value := 'null'; // not void
+    Where.Value := NULL_STR_VAR; // not void
     {$ifndef NOVARIANTS}
     SetVariantNull(Where.ValueVariant);
     {$endif}
@@ -57120,7 +57130,7 @@ begin
     's','S': begin
       P := GotoNextNotSpace(P+2);
       if IdemPChar(P,'NULL') then begin
-        Where.Value := 'null';
+        Where.Value := NULL_STR_VAR;
         Where.Operator := opIsNull;
         Where.ValueSQL := P;
         Where.ValueSQLLen := 4;
@@ -60820,6 +60830,7 @@ const HexChars: array[0..15] of AnsiChar = '0123456789ABCDEF';
 begin
   JSON_CONTENT_TYPE_VAR := JSON_CONTENT_TYPE;
   JSON_CONTENT_TYPE_HEADER_VAR := JSON_CONTENT_TYPE_HEADER;
+  NULL_STR_VAR := 'null';
   {$ifdef FPC}
   {$ifdef ISFPC27}
   SetMultiByteConversionCodePage(CP_UTF8);

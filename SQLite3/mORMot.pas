@@ -20174,7 +20174,7 @@ begin
   if Value='' then begin
     if wasSQLString<>nil then
       wasSQLString^ := false;
-    Value := 'null';
+    Value := NULL_STR_VAR;
   end else begin
     if wasSQLString<>nil then
       wasSQLString^ := true;
@@ -20870,7 +20870,7 @@ begin
   w := WideChar(fPropInfo.GetOrdProp(Instance));
   if ToSQL and (w=#0) then begin
     // 'null' and not #0 to avoid end of SQL text - JSON will escape #0
-    result := 'null';
+    result := NULL_STR_VAR;
     if wasSQLString<>nil then
       wasSQLString^ := false;
    end else begin
@@ -26420,8 +26420,8 @@ end;
 const
   EndOfJSONField = [',',']','}',':'];
 
-function GetJSONArrayOrObject(P: PUTF8Char; out PDest: PUTF8Char;
-  EndOfObject: PUTF8Char): RawUTF8;
+procedure GetJSONArrayOrObject(P: PUTF8Char; out PDest: PUTF8Char;
+  EndOfObject: PUTF8Char; var result: RawUTF8);
 var Beg: PUTF8Char;
 begin
   PDest := nil;
@@ -26437,8 +26437,8 @@ begin
   SetString(result,PAnsiChar(Beg),P-Beg);
 end;
 
-function GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
-  EndOfObject: PUTF8Char): RawUTF8;
+procedure GetJSONArrayOrObjectAsQuotedStr(P: PUTF8Char; out PDest: PUTF8Char;
+  EndOfObject: PUTF8Char; var result: RawUTF8);
 var Beg: PUTF8Char;
 begin
   result := '';
@@ -26473,7 +26473,7 @@ var EndOfObject: AnsiChar;
        (res[4] in [#0,#9,#10,#13,' ',',','}',']'])  then begin
       /// GetJSONField('null') returns '' -> check here to make a diff with '""'
       FieldTypeApproximation[ndx] := ftaNull;
-      FieldValues[ndx] := 'null';
+      FieldValues[ndx] := NULL_STR_VAR;
       inc(res,4);
       while res^ in [#1..' '] do inc(res);
       if res^=#0 then
@@ -26488,14 +26488,14 @@ var EndOfObject: AnsiChar;
       '{': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaObject;
         if params=pNonQuoted then
-          FieldValues[ndx] := GetJSONArrayOrObject(res,P,@EndOfObject) else
-          FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
+          GetJSONArrayOrObject(res,P,@EndOfObject,FieldValues[ndx]) else
+          GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject,FieldValues[ndx]);
       end;
       '[': begin // will work e.g. for custom variant types
         FieldTypeApproximation[ndx] := ftaArray;
         if params=pNonQuoted then
-          FieldValues[ndx] := GetJSONArrayOrObject(res,P,@EndOfObject) else
-          FieldValues[ndx] := GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject);
+          GetJSONArrayOrObject(res,P,@EndOfObject,FieldValues[ndx]) else
+          GetJSONArrayOrObjectAsQuotedStr(res,P,@EndOfObject,FieldValues[ndx]);
       end;
       else begin
         // handle JSON string, number or false/true in P
@@ -26512,7 +26512,7 @@ var EndOfObject: AnsiChar;
               Base64MagicToBlob(res+3,FieldValues[ndx]);
             pNonQuoted:}
             else // returned directly as RawByteString
-              FieldValues[ndx] := Base64ToBin(res+3);
+              Base64ToBin(PAnsiChar(res)+3,StrLen(res+3),RawByteString(FieldValues[ndx]));
             end;
           end else begin
             if c=JSON_SQLDATE_MAGIC then begin
@@ -26531,20 +26531,18 @@ var EndOfObject: AnsiChar;
               QuotedStr(res,'''',FieldValues[ndx]);
           end;
         end else
-          if res=nil then begin
-            FieldValues[ndx] := ''; // avoid GPF, but will return invalid SQL
-            exit;
-          end else
+          if res=nil then
+            FieldValues[ndx] := '' else // avoid GPF, but will return invalid SQL
           // non string params (numeric or false/true) are passed untouched
           if PInteger(res)^=FALSE_LOW then begin
-            FieldValues[ndx] := '0';
+            FieldValues[ndx] := SmallUInt32UTF8[0];
             FieldTypeApproximation[ndx] := ftaBoolean;
           end else
           if PInteger(res)^=TRUE_LOW then begin
-            FieldValues[ndx] := '1';
+            FieldValues[ndx] := SmallUInt32UTF8[1];
             FieldTypeApproximation[ndx] := ftaBoolean;
           end else begin
-            FieldValues[ndx] := res;
+            SetString(FieldValues[ndx],PAnsiChar(res),StrLen(res));
             FieldTypeApproximation[ndx] := ftaNumber;
           end;
       end;
@@ -26567,7 +26565,7 @@ begin
       if ReplaceRowIDWithID then
         FieldNames[0] := 'ID' else
         FieldNames[0] := 'RowID';
-      FieldValues[0] := Int64ToUtf8(RowID);
+      Int64ToUtf8(RowID,FieldValues[0]);
       FieldCount := 1;
       DecodedRowID := RowID;
     end;
@@ -46124,7 +46122,7 @@ end;
 function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
 begin
   if Value=nil then
-    result := 'null' else
+    result := NULL_STR_VAR else
   if Value.InheritsFrom(Exception) and not Value.InheritsFrom(ESynException) then
     result := FormatUTF8('{"%":?}',[Value],[Exception(Value).Message],True) else
     result := ObjectToJSON(Value,Options);
