@@ -9610,6 +9610,16 @@ function JSONArrayCount(P,PMax: PUTF8Char): integer; overload;
 // - incoming P^ should point to the first initial '[' char
 function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
 
+/// retrieve all elements of a JSON array
+// - this will handle any kind of arrays, including those with nested
+// JSON objects or arrays
+// - incoming P^ should point to the first char AFTER the initial '[' (which
+// may be a closing ']')
+// - returns false if the supplied input is invalid
+// - returns true on success, with Values[] pointing to each unescaped value,
+// may be a JSON string, object, array of constant
+function JSONArrayDecode(P: PUTF8Char; out Values: TPUTF8CharDynArray): boolean;
+
 /// compute the number of fields in a JSON object
 // - this will handle any kind of objects, including those with nested
 // JSON objects or arrays
@@ -42646,6 +42656,45 @@ begin
   until false;
   if P^=']' then
     result := n;
+end;
+
+function JSONArrayDecode(P: PUTF8Char; out Values: TPUTF8CharDynArray): boolean;
+var n,max: integer;
+begin
+  result := false;
+  max := 0;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+  repeat
+    if max=n then begin
+      inc(max,max shr 3+16);
+      SetLength(Values,max);
+    end;
+    Values[n] := P;
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArray(P);
+      if P=nil then
+        exit; // invalid content
+    end;
+    end;
+    while not (P^ in [#0,',',']']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  until false;
+  if P^=']' then begin
+    SetLength(Values,n);
+    result := true;
+  end else
+    Values := nil;
 end;
 
 function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
