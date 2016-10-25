@@ -31241,7 +31241,7 @@ asm
 asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
         .NOFRAME
 {$endif FPC}
-        test    byte ptr [CpuFeatures+6], $10 // cfSSE42 in CpuFeatures
+        test    byte ptr [rip+CpuFeatures+6], $10 // cfSSE42 in CpuFeatures
         jz      crcblockpas
         {$ifdef Linux}
         mov     rcx, rdi
