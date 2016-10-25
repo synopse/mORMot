@@ -13527,7 +13527,8 @@ function VariantLoad(const Bin: RawByteString;
 // a temporary copy or the overloaded functions with RawUTF8 parameter
 // if you need to access it later
 function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
-  EndOfObject: PUTF8Char=nil; TryCustomVariants: PDocVariantOptions=nil): PUTF8Char; overload;
+  EndOfObject: PUTF8Char=nil; TryCustomVariants: PDocVariantOptions=nil;
+  AllowDouble: boolean=false): PUTF8Char; overload;
 
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
@@ -13540,7 +13541,7 @@ function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
-  TryCustomVariants: PDocVariantOptions=nil); overload;
+  TryCustomVariants: PDocVariantOptions=nil; AllowDouble: boolean=false); overload;
 
 /// retrieve a variant value from a JSON number or string
 // - follows TTextWriter.AddVariant() format (calls GetVariantFromJSON)
@@ -13553,7 +13554,7 @@ procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
 // - this overloaded procedure will make a temporary copy before JSON parsing
 // and return the variant as result
 function VariantLoadJSON(const JSON: RawUTF8;
-  TryCustomVariants: PDocVariantOptions=nil): variant; overload;
+  TryCustomVariants: PDocVariantOptions=nil; AllowDouble: boolean=false): variant; overload;
 
 /// save a variant value into a JSON content
 // - follows the TTextWriter.AddVariant() and VariantLoadJSON() format
@@ -38455,7 +38456,7 @@ end;
 /// internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSONInPlace()
 procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; Options: PDocVariantOptions); forward;
+  EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean); forward;
 
 procedure SetVariantByRef(const Source: Variant; var Dest: Variant);
 begin
@@ -38754,7 +38755,7 @@ begin
           try
             JSON := tmp.buf;
             VType := varEmpty; // avoid GPF below
-            GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions);
+            GetJSONToAnyVariant(Value,JSON,nil,CustomVariantOptions,false);
           finally
             tmp.Done;
           end;
@@ -38775,8 +38776,8 @@ begin
   Source := PByte(VariantLoad(Value,PAnsiChar(Source),CustomVariantOptions));
 end;
 
-function VariantLoadJSON(var Value: variant; JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; TryCustomVariants: PDocVariantOptions): PUTF8Char;
+function VariantLoadJSON(var Value: variant; JSON: PUTF8Char; EndOfObject: PUTF8Char;
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean): PUTF8Char;
 var wasString: boolean;
     Val: PUTF8Char;
 begin
@@ -38788,37 +38789,38 @@ begin
       JSON := GotoNextNotSpace(JSON);
       if JSON^='"' then begin
         Val := GetJSONField(result,result,@wasString,EndOfObject);
-        GetJSONToAnyVariant(Value,Val,EndOfObject,TryCustomVariants);
+        GetJSONToAnyVariant(Value,Val,EndOfObject,TryCustomVariants,false);
       end else
-        GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants);
+        GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,false);
     end else
-      GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants);
+      GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,false);
   end else begin
     Val := GetJSONField(result,result,@wasString,EndOfObject);
-    GetVariantFromJSON(Val,wasString,Value);
+    GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
   end;
   if result=nil then
     result := @NULCHAR;
 end;
 
 procedure VariantLoadJSON(var Value: Variant; const JSON: RawUTF8;
-  TryCustomVariants: PDocVariantOptions);
+  TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
 var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON);
   try
-    VariantLoadJSON(Value,tmp.buf,nil,TryCustomVariants);
+    VariantLoadJSON(Value,tmp.buf,nil,TryCustomVariants,AllowDouble);
   finally
     tmp.Done;
   end;
 end;
 
-function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOptions): variant;
+function VariantLoadJSON(const JSON: RawUTF8; TryCustomVariants: PDocVariantOptions;
+  AllowDouble: boolean): variant;
 var tmp: TSynTempBuffer;
 begin
   tmp.Init(JSON);
   try
-    VariantLoadJSON(result,tmp.buf,nil,TryCustomVariants);
+    VariantLoadJSON(result,tmp.buf,nil,TryCustomVariants,AllowDouble);
   finally
     tmp.Done;
   end;
@@ -39146,13 +39148,13 @@ begin
 end;
 
 procedure GetJSONToAnyVariant(var Value: variant; var JSON: PUTF8Char;
-  EndOfObject: PUTF8Char; Options: PDocVariantOptions);
+  EndOfObject: PUTF8Char; Options: PDocVariantOptions; AllowDouble: boolean);
 // internal method used by VariantLoadJSON(), GetVariantFromJSON() and
 // TDocVariantData.InitJSON()
 var wasString: boolean;
   procedure ProcessSimple(Val: PUTF8Char);
   begin
-    GetVariantFromJSON(Val,wasString,Value);
+    GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
     if JSON=nil then
       JSON := @NULCHAR;
   end;
@@ -39170,6 +39172,8 @@ begin
     ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
     exit;
   end;
+  if dvoAllowDoubleValue in Options^ then
+    AllowDouble := true; // for ProcessSimple() above
   if JSON^='"' then
     if dvoJSONObjectParseWithinString in Options^ then begin
       ToBeParsed := GetJSONField(JSON,JSON,@wasString,EndOfObject);
@@ -39352,7 +39356,7 @@ begin
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
   if (TryCustomVariants<>nil) and (JSON<>nil) then
     if JSON^ in ['{','['] then begin
-      GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants);
+      GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants,false);
       exit;
     end else
     AllowDouble := dvoAllowDoubleValue in TryCustomVariants^;
@@ -39910,7 +39914,7 @@ begin
       repeat
         if VCount>=n then
           exit; // unexpected array size means invalid JSON
-        GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
+        GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
           exit;
         inc(VCount);
@@ -39937,7 +39941,7 @@ begin
         if Name=nil then
           exit;
         SetString(VName[VCount],PAnsiChar(Name),StrLen(Name));
-        GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions);
+        GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
           exit;
         inc(VCount);
