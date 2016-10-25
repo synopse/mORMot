@@ -26451,7 +26451,7 @@ begin
     EndOfObject^ := P^;
   P^ := #0; // so Beg will be a valid ASCIIZ string
   PDest := P+1;
-  result := QuotedStr(Beg,'''');
+  QuotedStr(Beg,'''',result);
 end;
 
 procedure TJSONObjectDecoder.Decode(var P: PUTF8Char; const Fields: TRawUTF8DynArray;

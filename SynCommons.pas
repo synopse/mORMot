@@ -22793,7 +22793,7 @@ var from: PUTF8Char;
 begin
   if P<>nil then begin
     P := SQLBegin(P);
-    if IdemPChar(P,'SELECT ') then begin
+    if IdemPChar(P,'SELECT') and (P[6]<=' ') then begin
       if SelectClause<>nil then begin
         inc(P,7);
         from := StrPosI(' FROM ',P);
