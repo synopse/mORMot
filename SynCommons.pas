@@ -9515,7 +9515,17 @@ function GetJSONFieldOrObjectOrArray(var P: PUTF8Char; wasString: PBoolean=nil;
 // - buffer can be either any JSON item, i.e. a string, a number or even a
 // JSON array (ending with ]) or a JSON object (ending with })
 // - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
-procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON; EndOfObject: PAnsiChar=nil);
+procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON;
+  EndOfObject: PAnsiChar=nil);
+
+/// retrieve the next JSON item as a RawUTF8 decoded buffer
+// - buffer can be either any JSON item, i.e. a string, a number or even a
+// JSON array (ending with ]) or a JSON object (ending with })
+// - EndOfObject (if not nil) is set to the JSON value end char (',' ':' or '}')
+// - just call GetJSONField(), and create a new RawUTF8 from the returned value,
+// after proper unescape if wasString^=true
+function GetJSONItemAsRawUTF8(var P: PUTF8Char; var output: RawUTF8;
+  wasString: PBoolean=nil; EndOfObject: PUTF8Char=nil): boolean;
 
 /// test if the supplied buffer is a "string" value or a numerical value
 // (floating point or integer), according to the characters within
@@ -9574,8 +9584,10 @@ function GotoNextJSONObjectOrArrayMax(P,PMax: PUTF8Char): PUTF8Char;
 /// compute the number of elements of a JSON array
 // - this will handle any kind of arrays, including those with nested
 // JSON objects or arrays
-// - incoming P^ should point to the first char after the initial '[' (which
+// - incoming P^ should point to the first char AFTER the initial '[' (which
 // may be a closing ']')
+// - returns -1 if the supplied input is invalid, or the number of identified
+// items in the JSON array buffer 
 function JSONArrayCount(P: PUTF8Char): integer; overload;
 
 /// compute the number of elements of a JSON array
@@ -49084,7 +49096,8 @@ next:
   result := P;
 end;
 
-procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON; EndOfObject: PAnsiChar);
+procedure GetJSONItemAsRawJSON(var P: PUTF8Char; var result: RawJSON;
+  EndOfObject: PAnsiChar);
 var B: PUTF8Char;
 begin
   result := '';
@@ -49100,6 +49113,18 @@ begin
     EndOfObject^ := P^;
   if P^<>#0 then //if P^=',' then
     repeat inc(P) until not(P^ in [#1..' ']);
+end;
+
+function GetJSONItemAsRawUTF8(var P: PUTF8Char; var output: RawUTF8;
+  wasString: PBoolean; EndOfObject: PUTF8Char): boolean;
+var V: PUTF8Char;
+begin
+  V := GetJSONFieldOrObjectOrArray(P,wasstring,EndOfObject,true);
+  if V=nil then // parsing error
+    result := false else begin
+    SetString(output,PAnsiChar(V),StrLen(V));
+    result := true;
+  end;
 end;
 
 function GotoNextJSONItem(P: PUTF8Char; NumberOfItemsToJump: cardinal;
