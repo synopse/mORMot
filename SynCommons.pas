@@ -2492,6 +2492,12 @@ function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: in
 function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
+// - as returned by ExtendedToString() textual conversion
+// - such values do appear as IEEE floating points, but are not defined in JSON
+function ExtendedToStrNan(const s: RawUTF8): TSynExtendedNan;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a floating-point value to its numerical text equivalency
 function ExtendedToStr(Value: TSynExtended; Precision: integer): RawUTF8; overload;
 
@@ -14462,7 +14468,7 @@ type
     /// add a value in this document, from its text representation
     // - this function expects a UTF-8 text for the value, which would be
     // converted to a variant number, if possible (as varInt/varInt64/varCurrency
-    // unless AllowVarDouble is set)
+    // and/or as varDouble is AllowVarDouble is set)
     // - if Update=TRUE, will set the property, even if it is existing
     function AddValueFromText(const aName,aValue: RawUTF8; Update: boolean=false;
       AllowVarDouble: boolean=false): integer;
@@ -23199,6 +23205,23 @@ begin
       result := seNegInf;
     else
       result := seNumber;
+  end;
+end;
+
+function ExtendedToStrNan(const s: RawUTF8): TSynExtendedNan;
+begin
+  case length(s) of
+  3: case PInteger(s)^ and $dfdfdf of
+     ord('N')+ord('A')shl 8+ord('N')shl 16: result := seNan;
+     ord('I')+ord('N')shl 8+ord('F')shl 16: result := seInf;
+     else result := seNumber;
+     end;
+  4: case PInteger(s)^ and $dfdfdfdf of
+     ord('+')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := seInf;
+     ord('-')+ord('I')shl 8+ord('N')shl 16+ord('F')shl 24: result := seNegInf;
+     else result := seNumber;
+     end;
+  else result := seNumber;
   end;
 end;
 
