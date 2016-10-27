@@ -5851,6 +5851,9 @@ type
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to delete an item from a array of pointer dynamic array storage
+function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
+
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - could be used as such (note the T*ObjArray type naming convention):
@@ -45178,6 +45181,19 @@ begin
   a[result] := aItem;
 end;
 
+function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
+var a: TPointerDynArray absolute aPtrArray;
+    n: integer;
+begin
+  n := length(a);
+  result := PtrUIntScanIndex(pointer(a),n,PtrUInt(aItem));
+  if result<0 then
+    exit;
+  dec(n);
+  if n>result then
+    MoveFast(a[result+1],a[result],(n-result)*sizeof(pointer));
+  SetLength(a,n);
+end;
 
 { wrapper functions to T*ObjArr types }
 
