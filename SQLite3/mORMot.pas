@@ -12779,9 +12779,14 @@ type
     ID: TID;
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
-    /// GetTickCount64() value when this cached value was stored
+    /// GetTickCount64 shr 9 timestamp when this cached value was stored
+    // - resulting time period has therefore a resolution of 512 ms, and
+    // overflows after 70 years without computer reboot
     // - equals 0 when there is no JSON value cached
-    TimeStamp64: Int64;
+    TimeStamp512: cardinal;
+    /// some associated unsigned integer value
+    // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
+    Tag: PtrUInt;
   end;
 
   /// for TSQLRestCache, stores all tables values
@@ -12821,13 +12826,16 @@ type
     /// add the supplied ID to the Value[] array
     procedure SetCache(aID: TID);
     /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJSON(aID: TID; const aJSON: RawUTF8); overload;
+    procedure SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt=0); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
     procedure SetJSON(aRecord: TSQLRecord); overload;
     /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean; overload;
+    function RetrieveJSON(aID: TID; var aJSON: RawUTF8; aTag: PPtrUInt=nil): boolean; overload;
     /// unserialize a JSON cached record of a given ID
-    function RetrieveJSON(aID: TID; aValue: TSQLRecord): boolean; overload;
+    function RetrieveJSON(aID: TID; aValue: TSQLRecord; aTag: PPtrUInt=nil): boolean; overload;
+    /// compute how much memory stored entries are using
+    // - will also flush outdated entries
+    function CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
   end;
 
   /// for TSQLRestCache, stores all table settings and values
@@ -12903,6 +12911,7 @@ type
     // - return true on success
     function SetCache(aRecord: TSQLRecord): boolean; overload;
     /// set the internal caching time out delay (in ms) for a given table
+    // - actual resolution is 512 ms
     // - time out setting is common to all items of the table
     // - if aTimeOut is left to its default 0 value, caching will never expire
     // - return true on success
@@ -17445,6 +17454,7 @@ type
     // one TSQLRestStorageRemote instance
     constructor Create(aClass: TSQLRecordClass; aServer: TSQLRestServer;
       aRemoteRest: TSQLRest); reintroduce; virtual;
+  published
     /// the remote ORM instance used for data persistence
     // - may be a TSQLRestClient or a TSQLRestServer instance
     property RemoteRest: TSQLRest read fRemoteRest;
@@ -34833,8 +34843,9 @@ begin
     if CacheAll then
       Value.FastDeleteSorted(Index) else
       with Values[Index] do begin
-        TimeStamp64 := 0;
+        TimeStamp512 := 0;
         JSON := '';
+        Tag := 0;
       end;
 end;
 
@@ -34849,8 +34860,9 @@ begin
       Value.Clear else
       for i := 0 to Count-1 do
       with Values[i] do begin
-        TimeStamp64 := 0;
+        TimeStamp512 := 0;
         JSON := '';
+        Tag := 0;
       end;
   finally
     Mutex.UnLock;
@@ -34866,7 +34878,8 @@ begin
     CacheEnable := true;
     if not CacheAll and not Value.FastLocateSorted(aID,i) and (i>=0) then begin
       Rec.ID := aID;
-      Rec.TimeStamp64 := 0; // indicates no value cache yet
+      Rec.TimeStamp512 := 0; // indicates no value cache yet
+      Rec.Tag := 0;
       Value.FastAddSorted(i,Rec);
     end; // do nothing if aID is already in Values[]
   finally
@@ -34874,13 +34887,14 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8);
+procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
   Rec.ID := aID;
-  Rec.TimeStamp64 := GetTickCount64;
   Rec.JSON := aJSON;
+  Rec.TimeStamp512 := GetTickCount64 shr 9;
+  Rec.Tag := aTag;
   Mutex.Lock;
   try
     if Value.FastLocateSorted(Rec,i) then
@@ -34897,7 +34911,8 @@ begin  // soInsert = include all fields
   SetJSON(aRecord.fID,aRecord.GetJSONValues(true,false,soInsert));
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8): boolean;
+function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
+  aTag: PPtrUInt): boolean;
 var i: integer;
 begin
   result := false;
@@ -34906,9 +34921,11 @@ begin
     i := Value.Find(aID); // fast binary search by first ID field
     if i>=0 then
       with Values[i] do
-      if TimeStamp64<>0 then // 0 when there is no JSON value cached
-        if (TimeOutMS<>0) and (GetTickCount64>TimeStamp64+TimeOutMS) then
+      if TimeStamp512<>0 then // 0 when there is no JSON value cached
+        if (TimeOutMS<>0) and ((GetTickCount64-TimeOutMS) shr 9>TimeStamp512) then
           FlushCacheEntry(i) else begin
+          if aTag<>nil then
+            aTag^ := Tag;
           aJSON := JSON;
           result := true; // found a non outdated serialized value in cache
         end;
@@ -34917,15 +34934,40 @@ begin
   end;
 end;
 
-function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord): boolean;
+function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
+  aTag: PPtrUInt): boolean;
 var JSON: RawUTF8;
 begin
-  if RetrieveJSON(aID,JSON) then begin
+  if RetrieveJSON(aID,JSON,aTag) then begin
     aValue.FillFrom(JSON);
     aValue.fID := aID; // override RowID field (may be not present after Update)
     result := true;
   end else
     result := false;
+end;
+
+function TSQLRestCacheEntry.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+var i: integer;
+    tix512: cardinal;
+begin
+  result := 0;
+  if CacheEnable and (Count>0) then begin
+    tix512 := (GetTickCount64-TimeOutMS) shr 9;
+    Mutex.Lock;
+    try
+      for i := Count-1 downto 0 do
+        with Values[i] do
+        if TimeStamp512<>0 then
+          if (TimeOutMS<>0) and (tix512>TimeStamp512) then begin
+            FlushCacheEntry(i);
+            if FlushedEntriesCount<>nil then
+              inc(FlushedEntriesCount^);
+          end else
+            inc(result,length(JSON)+(sizeof(TSQLRestCacheEntryValue)+16));
+    finally
+      Mutex.UnLock;
+    end;
+  end;
 end;
 
 
@@ -34942,7 +34984,7 @@ begin
         Mutex.Lock;
         try
           for j := 0 to Count-1 do
-            if Values[j].TimeStamp64<>0 then
+            if Values[j].TimeStamp512<>0 then
               inc(result);
         finally
           Mutex.UnLock;
@@ -34950,33 +34992,15 @@ begin
       end;
 end;
 
-function TSQLRestCache.CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
-var i,j: integer;
-    tix: Int64;
+function TSQLRestCache.CachedMemory(FlushedEntriesCount: PInteger): cardinal;
+var i: integer;
 begin
   result := 0;
   if FlushedEntriesCount<>nil then
     FlushedEntriesCount^ := 0;
   if self<>nil then
-  for i := 0 to high(fCache) do
-    with fCache[i] do
-    if CacheEnable and (Count>0) then begin
-      tix := GetTickCount64-TimeOutMS;
-      Mutex.Lock;
-      try
-        for j := Count-1 downto 0 do
-          if Values[j].TimeStamp64<>0 then begin
-            if (TimeOutMS<>0) and (tix>Values[j].TimeStamp64) then begin
-              FlushCacheEntry(j);
-              if FlushedEntriesCount<>nil then
-                inc(FlushedEntriesCount^);
-            end else
-              inc(result,length(Values[j].JSON)+(sizeof(Values[j])+16));
-        end;
-      finally
-        Mutex.UnLock;
-      end;
-    end;
+    for i := 0 to high(fCache) do
+      inc(result,fCache[i].CachedMemory(FlushedEntriesCount));
 end;
 
 function TSQLRestCache.SetTimeOut(aTable: TSQLRecordClass; aTimeoutMS: Cardinal): boolean;
