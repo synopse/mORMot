@@ -12705,7 +12705,7 @@ type
     constructor Create(aRest: TSQLRest; const aGUID: TGUID); reintroduce;
     /// notify the associated TSQLRestServer that the callback is disconnnected
     // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
-    // - this method will process the unsubscription only once, and
+    // - this method will process the unsubscription only once
     procedure CallbackRestUnregister; virtual;
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
@@ -12797,6 +12797,27 @@ type
     procedure CurrentFrame(isLast: boolean); virtual;
     /// low-level event handler triggerred by Added/Updated/Deleted methods
     property OnNotify: TOnBatchWrite read fOnNotify write fOnNotify;
+  end;
+
+  /// prototype of a class implementing redirection of a given interface
+  // - as returned e.g. by TSQLRest.MultiRedirect methods
+  // - can be used as a main callback, then call Redirect() to manage
+  // an internal list of redirections
+  // - when you release this instance, will call Rest.Service.CallbackUnregister 
+  // with the associated fake callback generated
+  IMultiCallbackRedirect = interface
+    ['{E803A30A-8C06-4BB9-94E6-EB87EACFE980}']
+    /// add or remove an interface callback to the internal redirection list
+    // - will register a callback if aSubscribe is true
+    // - will unregister a callback if aSubscribe is false
+    // - this method will be implemented as thread-safe
+    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean=true); overload;
+    /// add or remove a class instance callback to the internal redirection list
+    // - supplied aInstance should implement the interface GUID
+    // - will register a callback if aSubscribe is true
+    // - will unregister a callback if aSubscribe is false
+    // - this method will be implemented as thread-safe
+    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean=true); overload;
   end;
 
   /// for TSQLRestCache, stores a table values
@@ -14300,11 +14321,34 @@ type
     // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// define redirection of interface methods calls in one or several instances
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of one or several interfaces
+    // - returned aCallbackInterface will redirect all its methods (identified
+    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // - typical use is thefore:
+    // ! fSharedCallback: IMyService;
+    // ! fSharedCallbacks: IMultiCallbackRedirect;
+    // ! ...
+    // !   if fSharedCallbacks=nil then begin
+    // !     fSharedCallbacks := aRest.MultiRedirect(IMyService,fSharedCallback);
+    // !     aServices.SubscribeForEvents(fSharedCallback);
+    // !   end;
+    // !   fSharedCallbacks.Redirect(TMyCallback.Create);
+    // !   // now each time fSharedCallback receive one event, all callbacks
+    // !   // previously registered via Redirect() will receive it
+    // ! ...
+    // ! destructor TMainClass.Destroy;
+    // ! begin
+    // !   fSharedCallbacks.FlushAndCallbackReleaseOnRest;
+    // !   ...
+    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+      aCallBackUnRegisterNeeded: boolean=true): IMultiCallbackRedirect; overload;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
     // the TSystemUse.Current class function
-    // - do nothing if global TSystemUse.Current was already assigned 
+    // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer=10): TSystemUse;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
@@ -53385,16 +53429,24 @@ begin
 end;
 
 
-{ TInterfacedObjectMulti }
+{ TInterfacedObjectMulti / TInterfacedObjectMultiList }
 
 type
-  TOnMultiSubscribe = function(const aCallback: IInvokable; const aService: TGUID;
-    const aParams): boolean of object;
-  TInterfacedObjectMulti = class(TInterfacedObjectFakeCallback)
+  TInterfacedObjectMulti = class;
+  TInterfacedObjectMultiList = class(TInterfacedObjectLocked,
+    IMultiCallbackRedirect)
   protected
     fDest: TInterfaceDynArray;
+    fFakeCallback: TInterfacedObjectMulti;
+    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean); overload;
+    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean); overload;
+    procedure CallBackUnRegister;
+    destructor Destroy; override;
+  end;
+  TInterfacedObjectMulti = class(TInterfacedObjectFakeCallback)
+  protected
+    fList: TInterfacedObjectMultiList;
     fCallBackUnRegisterNeeded: boolean;
-    fSafe: TSynLocker;
     function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
       aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
@@ -53402,23 +53454,42 @@ type
     constructor Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
       aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
     destructor Destroy; override;
-    procedure RegisterDestination(const aCallback: IInvokable; aSubscribe: boolean);
+    procedure CallBackUnRegister;
   end;
 
-constructor TInterfacedObjectMulti.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
-  aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
+  aSubscribe: boolean);
+const NAM: array[boolean] of string[11] = ('Unsubscribe','Subscribe');
 begin
-  if aRest=nil then
-    raise EServiceException.CreateUTF8('%.Create(aRest=nil)',[self]);
-  fRest := aRest;
-  fName := fRest.Model.Root;
-  fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
-  fSafe.Init;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
-  Get(aCallbackInterface);
+  if (self=nil) or (fFakeCallback=nil) then
+    exit;
+  fFakeCallback.fRest.InternalLog('%.Redirect: % % using %',[ClassType,NAM[aSubscribe],
+    fFakeCallback.fFactory.fInterfaceName,ObjectFromInterface(aCallback)],sllDebug);
+  fSafe.Lock;
+  try
+    if aSubscribe then
+      InterfaceArrayAddOnce(fDest,aCallback) else
+      InterfaceArrayDelete(fDest,aCallback);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
-destructor TInterfacedObjectMulti.Destroy;
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject;
+  aSubscribe: boolean);
+var dest: IInvokable;
+begin
+  if (self=nil) or (fFakeCallback=nil) then
+    exit;
+  if aCallback=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Redirect(nil)',[self]);
+  if not aCallback.GetInterface(fFakeCallback.fFactory.fInterfaceIID,dest) then
+    raise EInterfaceFactoryException.CreateUTF8('%.Redirect [%]: % is not a %',
+      [self,fFakeCallback.fName,aCallback.ClassType,fFakeCallback.fFactory.fInterfaceName]);
+  Redirect(dest,aSubscribe);
+end;
+
+procedure TInterfacedObjectMultiList.CallBackUnRegister;
 begin
   if fDest<>nil then begin
     fSafe.Lock;
@@ -53428,12 +53499,44 @@ begin
       fSafe.UnLock;
     end;
   end;
+  if fFakeCallback<>nil then begin
+    fFakeCallback.CallBackUnRegister;
+    fFakeCallback := nil; // disable any further Redirect()
+  end;
+end;
+
+destructor TInterfacedObjectMultiList.Destroy;
+begin
+  CallBackUnRegister;
+  inherited Destroy;
+end;
+
+procedure TInterfacedObjectMulti.CallBackUnRegister;
+begin
   if fCallBackUnRegisterNeeded then begin
     fRest.InternalLog('%.Destroy -> Services.CallbackUnRegister(%)',
-      [ClassType,fFactory.fInterfaceTypeInfo.Name],sllDebug);
+      [fList.ClassType,fFactory.fInterfaceTypeInfo.Name],sllDebug);
     fRest.Services.CallBackUnRegister(IInvokable(pointer(@fVTable)));
   end;
-  fSafe.Done;
+end;
+
+constructor TInterfacedObjectMulti.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+  aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
+begin
+  if aRest=nil then
+    raise EServiceException.CreateUTF8('%.Create(aRest=nil)',[self]);
+  fRest := aRest;
+  fName := fRest.Model.Root;
+  fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
+  fList := TInterfacedObjectMultiList.Create;
+  fList.fFakeCallback := self;
+  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  Get(aCallbackInterface);
+end;
+
+destructor TInterfacedObjectMulti.Destroy;
+begin
+  fList.CallBackUnRegister;
   inherited Destroy;
 end;
 
@@ -53445,47 +53548,41 @@ var i: integer;
 begin
   result := inherited FakeInvoke(aMethod,aParams,aResult,aErrorMsg,
     aClientDrivenID,aServiceCustomAnswer);
-  if not result or (fDest=nil) then
+  if not result or (fList.fDest=nil) then
     exit;
   exec := TServiceMethodExecute.Create(@aMethod);
   try
     exec.Options := [optIgnoreException];
-    fSafe.Lock;
+    fList.fSafe.Lock;
     try
-      exec.ExecuteJson(TPointerDynArray(pointer(fDest)),pointer('['+aParams+']'),nil);
+      exec.ExecuteJson(TPointerDynArray(pointer(fList.fDest)),pointer('['+aParams+']'),nil);
       if exec.ExecutedInstancesFailed<>nil then
         for i := high(exec.ExecutedInstancesFailed) downto 0 do
           if exec.ExecutedInstancesFailed[i]<>'' then
           try
             fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
               [ClassType,aMethod.InterfaceDotMethodName,exec.ExecutedInstancesFailed[i]],sllDebug);
-            InterfaceArrayDelete(fDest,i);
+            InterfaceArrayDelete(fList.fDest,i);
           except // ignore any exception when releasing the (unstable?) callback
           end;
     finally
-      fSafe.UnLock;
+      fList.fSafe.UnLock;
     end;
   finally
     exec.Free;
   end;
 end;
 
-procedure TInterfacedObjectMulti.RegisterDestination(const aCallback: IInvokable;
-  aSubscribe: boolean);
-const NAM: array[boolean] of string[11] = ('Unsubscribe','Subscribe');
+function TSQLRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
+var factory: TInterfaceFactory;
 begin
-  if self=nil then
-    exit;
-  fRest.InternalLog('%.RegisterDestination: % % using %',[ClassType,NAM[aSubscribe],
-    fFactory.fInterfaceTypeInfo.Name,ObjectFromInterface(aCallback)],sllDebug);
-  fSafe.Lock;
-  try
-    if aSubscribe then
-      InterfaceArrayAddOnce(fDest,aCallback) else
-      InterfaceArrayDelete(fDest,aCallback);
-  finally
-    fSafe.UnLock;
-  end;
+  factory := TInterfaceFactory.Get(aGUID);
+  if factory=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.MultiRedirect: unknown %',
+      [self,GUIDToShort(aGUID)]);
+   result := TInterfacedObjectMulti.Create(self,factory,aCallBackUnRegisterNeeded,
+     aCallbackInterface).fList;
 end;
 
 
