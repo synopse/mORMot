@@ -12786,7 +12786,7 @@ type
     TimeStamp512: cardinal;
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
-    Tag: PtrUInt;
+    Tag: cardinal;
   end;
 
   /// for TSQLRestCache, stores all tables values
@@ -12826,13 +12826,13 @@ type
     /// add the supplied ID to the Value[] array
     procedure SetCache(aID: TID);
     /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt=0); overload;
+    procedure SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal=0); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
     procedure SetJSON(aRecord: TSQLRecord); overload;
     /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJSON(aID: TID; var aJSON: RawUTF8; aTag: PPtrUInt=nil): boolean; overload;
+    function RetrieveJSON(aID: TID; var aJSON: RawUTF8; aTag: PCardinal=nil): boolean; overload;
     /// unserialize a JSON cached record of a given ID
-    function RetrieveJSON(aID: TID; aValue: TSQLRecord; aTag: PPtrUInt=nil): boolean; overload;
+    function RetrieveJSON(aID: TID; aValue: TSQLRecord; aTag: PCardinal=nil): boolean; overload;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
     function CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
@@ -34887,7 +34887,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt);
+procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
@@ -34912,7 +34912,7 @@ begin  // soInsert = include all fields
 end;
 
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
-  aTag: PPtrUInt): boolean;
+  aTag: PCardinal): boolean;
 var i: integer;
 begin
   result := false;
@@ -34935,7 +34935,7 @@ begin
 end;
 
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
-  aTag: PPtrUInt): boolean;
+  aTag: PCardinal): boolean;
 var JSON: RawUTF8;
 begin
   if RetrieveJSON(aID,JSON,aTag) then begin
