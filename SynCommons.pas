@@ -778,7 +778,7 @@ uses
 {$endif}
 {$endif}
 {$ifndef NOVARIANTS}
-  Variants,
+  Variants, FmtBCD,
 {$endif}
   SynLZ, // needed for TSynMapFile .mab format
   SysUtils;
@@ -46587,6 +46587,9 @@ begin
     if Escape=twJSONEscape then
       Add('"');
   end else
+  if (VType and varTypeMask)=varFmtBCD then
+    AddDouble(Value)
+  else
   if FindCustomVariantType(VType,CustomVariantType) and
      CustomVariantType.InheritsFrom(TSynInvokeableVariantType) then
     TSynInvokeableVariantType(CustomVariantType).ToJson(self,Value,Escape) else
