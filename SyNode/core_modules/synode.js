@@ -45,11 +45,6 @@ function startup() {
      *	    - process.startupPath + 'node_modules'
      *   - in case we run in production mode (`!process.isDebug`) and minimized version of main module exists, it will be loaded.
      *     By "minimized version" we mean package.json `main` entry with `.min.js` extension <br>
-     *   - `require` know about UnityBase **models**. In **server thread** context, in case `moduleName` start from `models/ModelName` require search for module inside `ModelName.path` folder:
-     *
-     *          require('models/UBS/public/UBReport');
-     *
-     *     will search in domain config (ubConfig.json) path for `UBS` model and perform request relative to this folder, i.e. load `D:\projects\UnityBase\models\UBS\public\UBReport.js` in my case.
      *
      *  *In case you need to debug from there module is loaded set OS Environment variable*
      *  `>SET NODE_DEBUG=modules` *and restart server - require will put to debug log all information about how module are loaded.* Do not do this on production, of course :)
@@ -60,6 +55,72 @@ function startup() {
      * @returns {*}
      */
     global.require = Module.prototype.require;
+    global.Buffer = NativeModule.require('buffer').Buffer;
+    //global.clearTimeout = function() {};
+
+    global.sleep = process.binding('syNode').sleep;
+
+    const WindowTimer =  NativeModule.require('polyfill/WindowTimer');
+    global._timerLoop = WindowTimer.makeWindowTimer(global, function (ms) { global.sleep(ms); });
+    /**
+     * This function is just to be compatible with node.js
+     * @param {Function} callback Callback (called immediately in SyNode)
+     */
+    process.nextTick = function(callback, arg1, arg2, arg3){
+		if (typeof callback !== 'function') {
+			throw new TypeError('"callback" argument must be a function');
+		}
+        // on the way out, don't bother. it won't get fired anyway.
+        if (process._exiting)
+            return;
+
+        var i, args;
+
+		switch (arguments.length) {
+		// fast cases
+		case 1:
+		  break;
+		case 2:
+		  args = [arg1];
+		  break;
+		case 3:
+		  args = [arg1, arg2];
+		  break;
+		default:
+		  args = [arg1, arg2, arg3];
+		  for (i = 4; i < arguments.length; i++)
+			args[i - 1] = arguments[i];
+		  break;
+		}
+        global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, -1].concat(args));
+    };
+
+    global.setImmediate = function(callback, arg1, arg2, arg3){
+	  if (typeof callback !== 'function') {
+		throw new TypeError('"callback" argument must be a function');
+	  }
+
+	  var i, args;
+
+	  switch (arguments.length) {
+		// fast cases
+		case 1:
+		  break;
+		case 2:
+		  args = [arg1];
+		  break;
+		case 3:
+		  args = [arg1, arg2];
+		  break;
+		default:
+		  args = [arg1, arg2, arg3];
+		  for (i = 4; i < arguments.length; i++)
+			args[i - 1] = arguments[i];
+		  break;
+	  }
+      global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, 1].concat(args));
+    };
+
 }
 
 
@@ -70,8 +131,11 @@ function NativeModule(id) {
     this.loaded = false;
 }
 
-const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 'events',
- 'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process']; 
+const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 'events','vm',
+ 'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process', 
+ 'buffer', 'string_decoder', 'internal/util', 'stream', '_stream_readable', '_stream_writable', 
+ 'internal/streams/BufferList', '_stream_duplex', '_stream_transform', '_stream_passthrough',
+ 'polyfill/WindowTimer']; 
 
 NativeModule._source = {};
 NODE_CORE_MODULES.forEach( (module_name) => { 

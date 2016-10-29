@@ -54,7 +54,9 @@ unit SyNodeSimpleProto;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
