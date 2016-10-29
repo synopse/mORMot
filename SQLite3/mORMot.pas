@@ -5668,8 +5668,8 @@ type
     optExecInMainThread, optFreeInMainThread,
     optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
-    optNoLogInput, optNoLogOutput, optErrorOnMissingParam, optForceStandardJSON
-  );
+    optNoLogInput, optNoLogOutput, optErrorOnMissingParam, optForceStandardJSON,
+    optIgnoreException);
   /// how TServiceFactoryServer.SetOptions() will set the options value
   TServiceMethodOptionsAction = (moaReplace, moaInclude, moaExclude);
 
@@ -5701,7 +5701,10 @@ type
   // is defined to reject the call
   // - by default, it wil check for the client user agent, and use extended
   // JSON if none is found (e.g. from WebSockets), or if it contains 'mORMot':
-  // you can set optForceStandardJSON to ensure standard JSON is alwyas returned  
+  // you can set optForceStandardJSON to ensure standard JSON is alwyas returned
+  // - any exceptions will be propagated during execution, unless
+  // optIgnoreException is set and the exception is trapped (not to be used
+  // unless you know what you are doing)
   TServiceMethodOptions = set of TServiceMethodOption;
 
   /// internal per-method list of execution context as hold in TServiceFactory
@@ -10429,8 +10432,9 @@ type
     fInput: TDocVariantData;
     fOutput: TDocVariantData;
     fCurrentStep: TServiceMethodExecuteEventStep;
+    fExecutedInstancesFailed: TRawUTF8DynArray;
     procedure BeforeExecute;
-    procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer);
+    procedure RawExecute(const Instances: PPointerArray; InstancesLast: integer); virtual;
     procedure AfterExecute;
   public
     /// initialize the execution instance
@@ -10442,11 +10446,24 @@ type
     // fields will contain the execution data context when Hook is called
     procedure AddInterceptor(const Hook: TServiceMethodExecuteEvent);
     /// execute the corresponding method of weak IInvokable references
-    // - will retrieve a JSON array of parameters from Par
+    // - will retrieve a JSON array of parameters from Par (as [1,"par2",3])
     // - will append a JSON array of results in Res, or set an Error message, or
     // a JSON object (with parameter names) in Res if ResultAsJSONObject is set
+    // - if one Instances[] is supplied, any exception will be propagated (unless
+    // optIgnoreException is set); if more than one Instances[] is supplied,
+    // corresponding ExecutedInstancesFailed[] property will be filled with
+    // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
+    /// execute the corresponding method of one weak IInvokable reference,
+    // with no output argument, i.e. no returned data
+    // - this version will identify TInterfacedObjectFake implementations,
+    // and will call directly fInvoke() if possible, to avoid JSON marshalling
+    // - expect params value to be without [ ], just like TOnFakeInstanceInvoke
+    function ExecuteJsonCallback(Instance: pointer; const params: RawUTF8): boolean;
+    /// execute directly TInterfacedObjectFake.fInvoke()
+    // - expect params value to be with [ ], just like ExecuteJson
+    function ExecuteJsonFake(Instance: pointer; params: PUTF8Char): boolean;
     /// low-level direct access to the associated method information
     property Method: PServiceMethod read fMethod;
     /// low-level direct access to the current input/output parameter values
@@ -10469,16 +10486,24 @@ type
     // - this is a read-only property: you cannot change the input content
     property Input: TDocVariantData read fInput;
     /// set if optInterceptInputOutput is defined in TServiceFactoryServer.Options
-    // - this is a read-only property: you cannot change the output content
     // - contains a dvObject with output parameters as "argname":value pairs
+    // - this is a read-only property: you cannot change the output content
     property Output: TDocVariantData read fOutput;
-    /// set if intercepted event Step is smsError
+    /// only set during AddInterceptor() callback execution, if Step is smsError
     property LastException: Exception read fLastException;
     /// reference to the background execution thread, if any
     property BackgroundExecutionThread: TSynBackgroundThreadMethod
       read fBackgroundExecutionThread;
     /// points e.g. to TSQLRestServerURIContext.ExecuteCallback
     property OnCallback: TServiceMethodExecuteCallback read fOnCallback;
+    /// contains exception serialization after ExecuteJson of multiple instances
+    // - follows the Instances[] order as supplied to RawExecute/ExecuteJson
+    // - if only a single Instances[] is supplied, the exception will be
+    // propagated to the caller, unless optIgnoreException option is defined
+    // - if more than one Instances[] is supplied, any raised Exception will
+    // be serialized using ObjectToJSONDebug(), or this property will be left
+    // to its default nil content if no exception occurred
+    property ExecutedInstancesFailed: TRawUTF8DynArray read fExecutedInstancesFailed;
     /// allow to use an instance-specific temporary TTextWriter
     function TempTextWriter: TJSONSerializer;
   end;
@@ -10793,7 +10818,8 @@ type
 
   /// event used by TInterfaceFactory to run a method from a fake instance
   // - aMethod will specify which method is to be executed
-  // - aParams will contain the input parameters, encoded as a JSON array
+  // - aParams will contain the input parameters, encoded as a JSON array,
+  // without the [ ] characters (e.g. '1,"arg2",3')
   // - shall return TRUE on success, or FALSE in case of failure, with
   // a corresponding explanation in aErrorMsg
   // - method results shall be serialized as JSON in aResult;  if
@@ -12679,7 +12705,7 @@ type
     constructor Create(aRest: TSQLRest; const aGUID: TGUID); reintroduce;
     /// notify the associated TSQLRestServer that the callback is disconnnected
     // - i.e. will call TSQLRestServer's TServiceContainer.CallBackUnRegister()
-    // - this method will process the unsubscription only once, and
+    // - this method will process the unsubscription only once
     procedure CallbackRestUnregister; virtual;
     /// finalize the instance, and notify the TSQLRestServer that the callback
     // is now unreachable
@@ -12773,6 +12799,27 @@ type
     property OnNotify: TOnBatchWrite read fOnNotify write fOnNotify;
   end;
 
+  /// prototype of a class implementing redirection of a given interface
+  // - as returned e.g. by TSQLRest.MultiRedirect methods
+  // - can be used as a main callback, then call Redirect() to manage
+  // an internal list of redirections
+  // - when you release this instance, will call Rest.Service.CallbackUnregister 
+  // with the associated fake callback generated
+  IMultiCallbackRedirect = interface
+    ['{E803A30A-8C06-4BB9-94E6-EB87EACFE980}']
+    /// add or remove an interface callback to the internal redirection list
+    // - will register a callback if aSubscribe is true
+    // - will unregister a callback if aSubscribe is false
+    // - this method will be implemented as thread-safe
+    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean=true); overload;
+    /// add or remove a class instance callback to the internal redirection list
+    // - supplied aInstance should implement the interface GUID
+    // - will register a callback if aSubscribe is true
+    // - will unregister a callback if aSubscribe is false
+    // - this method will be implemented as thread-safe
+    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean=true); overload;
+  end;
+
   /// for TSQLRestCache, stores a table values
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
@@ -12786,7 +12833,7 @@ type
     TimeStamp512: cardinal;
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
-    Tag: PtrUInt;
+    Tag: cardinal;
   end;
 
   /// for TSQLRestCache, stores all tables values
@@ -12826,13 +12873,13 @@ type
     /// add the supplied ID to the Value[] array
     procedure SetCache(aID: TID);
     /// update/refresh the cached JSON serialization of a given ID
-    procedure SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt=0); overload;
+    procedure SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal=0); overload;
     /// update/refresh the cached JSON serialization of a supplied Record
     procedure SetJSON(aRecord: TSQLRecord); overload;
     /// retrieve a JSON serialization of a given ID from cache
-    function RetrieveJSON(aID: TID; var aJSON: RawUTF8; aTag: PPtrUInt=nil): boolean; overload;
+    function RetrieveJSON(aID: TID; var aJSON: RawUTF8; aTag: PCardinal=nil): boolean; overload;
     /// unserialize a JSON cached record of a given ID
-    function RetrieveJSON(aID: TID; aValue: TSQLRecord; aTag: PPtrUInt=nil): boolean; overload;
+    function RetrieveJSON(aID: TID; aValue: TSQLRecord; aTag: PCardinal=nil): boolean; overload;
     /// compute how much memory stored entries are using
     // - will also flush outdated entries
     function CachedMemory(FlushedEntriesCount: PInteger=nil): cardinal;
@@ -14274,11 +14321,34 @@ type
     // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// define redirection of interface methods calls in one or several instances
+    // - this class allows to implements any interface via a fake class, which will
+    // redirect all methods calls into calls of one or several interfaces
+    // - returned aCallbackInterface will redirect all its methods (identified
+    // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
+    // - typical use is thefore:
+    // ! fSharedCallback: IMyService;
+    // ! fSharedCallbacks: IMultiCallbackRedirect;
+    // ! ...
+    // !   if fSharedCallbacks=nil then begin
+    // !     fSharedCallbacks := aRest.MultiRedirect(IMyService,fSharedCallback);
+    // !     aServices.SubscribeForEvents(fSharedCallback);
+    // !   end;
+    // !   fSharedCallbacks.Redirect(TMyCallback.Create);
+    // !   // now each time fSharedCallback receive one event, all callbacks
+    // !   // previously registered via Redirect() will receive it
+    // ! ...
+    // ! destructor TMainClass.Destroy;
+    // ! begin
+    // !   fSharedCallbacks.FlushAndCallbackReleaseOnRest;
+    // !   ...
+    function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+      aCallBackUnRegisterNeeded: boolean=true): IMultiCallbackRedirect; overload;
     /// will gather CPU and RAM information in a background thread
     // - you can specify the update frequency, in seconds
     // - access to the information via the returned instance, which maps
     // the TSystemUse.Current class function
-    // - do nothing if global TSystemUse.Current was already assigned 
+    // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer=10): TSystemUse;
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
@@ -19473,7 +19543,7 @@ function PropsCreate(aTable: TSQLRecordClass): TSQLRecordProperties;
 function ObjectFromInterface(const aValue: IInterface): TObject;
 
 /// low-level function to check if a class instance, retrieved from its
-// interface variable, does in fact implement a given interface 
+// interface variable, does in fact implement a given interface
 // - this will call ObjectFromInterface(), so will work with interfaces
 // stubs generated by the compiler, but also with
 // TInterfaceFactory.CreateFakeInstance kind of classes
@@ -34887,7 +34957,7 @@ begin
   end;
 end;
 
-procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: PtrUInt);
+procedure TSQLRestCacheEntry.SetJSON(aID: TID; const aJSON: RawUTF8; aTag: cardinal);
 var Rec: TSQLRestCacheEntryValue;
     i: integer;
 begin
@@ -34912,7 +34982,7 @@ begin  // soInsert = include all fields
 end;
 
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; var aJSON: RawUTF8;
-  aTag: PPtrUInt): boolean;
+  aTag: PCardinal): boolean;
 var i: integer;
 begin
   result := false;
@@ -34935,7 +35005,7 @@ begin
 end;
 
 function TSQLRestCacheEntry.RetrieveJSON(aID: TID; aValue: TSQLRecord;
-  aTag: PPtrUInt): boolean;
+  aTag: PCardinal): boolean;
 var JSON: RawUTF8;
 begin
   if RetrieveJSON(aID,JSON,aTag) then begin
@@ -51561,7 +51631,7 @@ begin
         end;
     end;
     Params.CancelLastComma;
-    Params.SetText(ParamsJSON);
+    Params.SetText(ParamsJSON); // without [ ]
     // call remote server or stub implementation
     if method^.ArgsResultIsServiceCustomAnswer then
       ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
@@ -53079,6 +53149,83 @@ begin
 end;
 
 
+{ TInterfacedObjectFakeCallback }
+
+type
+  TInterfacedObjectFakeCallback = class(TInterfacedObjectFake)
+  protected
+    fRest: TSQLRest;
+    fName: RawUTF8;
+    function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; virtual;
+  end;
+
+function TInterfacedObjectFakeCallback.FakeInvoke(const aMethod: TServiceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+begin
+  fRest.InternalLog('%.FakeInvoke %(%)',[ClassType,aMethod.InterfaceDotMethodName,aParams]);
+  if aMethod.ArgsOutputValuesCount>0 then begin
+    if aErrorMsg<>nil then
+      FormatUTF8('%.FakeInvoke [%]: % has out parameters',
+        [self,fName,aMethod.InterfaceDotMethodName], aErrorMsg^);
+    result := false;
+  end else
+    result := true;
+end;
+
+
+{ TInterfacedObjectAsynch }
+
+type
+  TInterfacedObjectAsynch = class(TInterfacedObjectFakeCallback)
+  protected
+    fTimer: TSQLRestBackgroundTimer;
+    fDest: IInvokable;
+    function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
+  public
+    constructor Create(aTimer: TSQLRestBackgroundTimer; aFactory: TInterfaceFactory;
+      const aDestinationInterface: IInvokable; out aCallbackInterface);
+  end;
+  TInterfacedObjectAsynchCall = packed record
+    Method: PServiceMethod;
+    Instance: pointer; // weak IInvokable reference
+    Params: RawUTF8;
+  end;
+
+constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
+  aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
+  out aCallbackInterface);
+begin
+  fTimer := aTimer;
+  fRest := fTimer.fRest;
+  fName := fTimer.fName;
+  fDest := aDestinationInterface;
+  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  Get(aCallbackInterface);
+end;
+
+function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TServiceMethod;
+  const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
+  aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
+var msg: RawUTF8;
+    call: TInterfacedObjectAsynchCall;
+begin
+  result := inherited FakeInvoke(aMethod,aParams,aResult,aErrorMsg,
+    aClientDrivenID,aServiceCustomAnswer);
+  if not result then
+    exit;
+  call.Method := @aMethod;
+  call.Instance := pointer(fDest);
+  call.Params := aParams;
+  msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
+  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute,msg,true);
+end;
+
+
 { TSQLRestBackgroundTimer }
 
 constructor TSQLRestBackgroundTimer.Create(aRest: TSQLRest;
@@ -53229,24 +53376,6 @@ begin
   end;
 end;
 
-type
-  TInterfacedObjectAsynch = class(TInterfacedObjectFake)
-  protected
-    fTimer: TSQLRestBackgroundTimer;
-    fDest: IInvokable;
-    function FakeInvoke(const aMethod: TServiceMethod;
-      const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
-      aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
-  public
-    constructor Create(aTimer: TSQLRestBackgroundTimer; aFactory: TInterfaceFactory;
-      const aDestinationInterface: IInvokable; out aCallbackInterface);
-  end;
-  TInterfacedObjectAsynchCall = packed record
-    Method: PServiceMethod;
-    Instance: pointer; // weak IInvokable reference
-    Params: RawUTF8;
-  end;
-
 procedure TSQLRestBackgroundTimer.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
 var exec: TServiceMethodExecute;
@@ -53263,7 +53392,9 @@ begin
   {$endif}
   exec := TServiceMethodExecute.Create(call.Method);
   try
-    exec.ExecuteJson([call.Instance],pointer(call.Params),nil);
+    if not exec.ExecuteJsonCallback(call.Instance,call.Params) then
+      fRest.InternalLog('%.AsynchBackgroundExecute %: ExecuteJsonCallback failed',
+        [ClassType,call.Method^.InterfaceDotMethodName],sllWarning);
   finally
     exec.Free;
   end;
@@ -53297,36 +53428,161 @@ begin
   AsynchRedirect(aGUID,dest,aCallbackInterface);
 end;
 
-constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
-  aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
-  out aCallbackInterface);
+
+{ TInterfacedObjectMulti / TInterfacedObjectMultiList }
+
+type
+  TInterfacedObjectMulti = class;
+  TInterfacedObjectMultiList = class(TInterfacedObjectLocked,
+    IMultiCallbackRedirect)
+  protected
+    fDest: TInterfaceDynArray;
+    fFakeCallback: TInterfacedObjectMulti;
+    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean); overload;
+    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean); overload;
+    procedure CallBackUnRegister;
+    destructor Destroy; override;
+  end;
+  TInterfacedObjectMulti = class(TInterfacedObjectFakeCallback)
+  protected
+    fList: TInterfacedObjectMultiList;
+    fCallBackUnRegisterNeeded: boolean;
+    function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
+      aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
+      aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
+  public
+    constructor Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+      aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
+    destructor Destroy; override;
+    procedure CallBackUnRegister;
+  end;
+
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
+  aSubscribe: boolean);
+const NAM: array[boolean] of string[11] = ('Unsubscribe','Subscribe');
 begin
-  fTimer := aTimer;
-  fDest := aDestinationInterface;
-  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
-  pointer(aCallbackInterface) := @fVTable;
-  _AddRef;
+  if (self=nil) or (fFakeCallback=nil) then
+    exit;
+  fFakeCallback.fRest.InternalLog('%.Redirect: % % using %',[ClassType,NAM[aSubscribe],
+    fFakeCallback.fFactory.fInterfaceName,ObjectFromInterface(aCallback)],sllDebug);
+  fSafe.Lock;
+  try
+    if aSubscribe then
+      InterfaceArrayAddOnce(fDest,aCallback) else
+      InterfaceArrayDelete(fDest,aCallback);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
-function TInterfacedObjectAsynch.FakeInvoke(const aMethod: TServiceMethod;
+procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject;
+  aSubscribe: boolean);
+var dest: IInvokable;
+begin
+  if (self=nil) or (fFakeCallback=nil) then
+    exit;
+  if aCallback=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.Redirect(nil)',[self]);
+  if not aCallback.GetInterface(fFakeCallback.fFactory.fInterfaceIID,dest) then
+    raise EInterfaceFactoryException.CreateUTF8('%.Redirect [%]: % is not a %',
+      [self,fFakeCallback.fName,aCallback.ClassType,fFakeCallback.fFactory.fInterfaceName]);
+  Redirect(dest,aSubscribe);
+end;
+
+procedure TInterfacedObjectMultiList.CallBackUnRegister;
+begin
+  if fDest<>nil then begin
+    fSafe.Lock;
+    try
+      fDest := nil;
+    finally
+      fSafe.UnLock;
+    end;
+  end;
+  if fFakeCallback<>nil then begin
+    fFakeCallback.CallBackUnRegister;
+    fFakeCallback := nil; // disable any further Redirect()
+  end;
+end;
+
+destructor TInterfacedObjectMultiList.Destroy;
+begin
+  CallBackUnRegister;
+  inherited Destroy;
+end;
+
+procedure TInterfacedObjectMulti.CallBackUnRegister;
+begin
+  if fCallBackUnRegisterNeeded then begin
+    fRest.InternalLog('%.Destroy -> Services.CallbackUnRegister(%)',
+      [fList.ClassType,fFactory.fInterfaceTypeInfo.Name],sllDebug);
+    fRest.Services.CallBackUnRegister(IInvokable(pointer(@fVTable)));
+  end;
+end;
+
+constructor TInterfacedObjectMulti.Create(aRest: TSQLRest; aFactory: TInterfaceFactory;
+  aCallBackUnRegisterNeeded: boolean; out aCallbackInterface);
+begin
+  if aRest=nil then
+    raise EServiceException.CreateUTF8('%.Create(aRest=nil)',[self]);
+  fRest := aRest;
+  fName := fRest.Model.Root;
+  fCallBackUnRegisterNeeded := aCallBackUnRegisterNeeded;
+  fList := TInterfacedObjectMultiList.Create;
+  fList.fFakeCallback := self;
+  inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
+  Get(aCallbackInterface);
+end;
+
+destructor TInterfacedObjectMulti.Destroy;
+begin
+  fList.CallBackUnRegister;
+  inherited Destroy;
+end;
+
+function TInterfacedObjectMulti.FakeInvoke(const aMethod: TServiceMethod;
   const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
-var msg: RawUTF8;
-    call: TInterfacedObjectAsynchCall;
+var i: integer;
+    exec: TServiceMethodExecute;
 begin
-  fTimer.fRest.InternalLog('FakeInvoke % %',[aMethod.InterfaceDotMethodName,aParams]);
-  result := false;
-  if aMethod.ArgsOutputValuesCount>0 then begin
-    if aErrorMsg<>nil then
-      FormatUTF8('%.FakeInvoke [%]: % has out parameters',
-        [self,fTimer.fName,aMethod.InterfaceDotMethodName], aErrorMsg^);
+  result := inherited FakeInvoke(aMethod,aParams,aResult,aErrorMsg,
+    aClientDrivenID,aServiceCustomAnswer);
+  if not result or (fList.fDest=nil) then
     exit;
+  exec := TServiceMethodExecute.Create(@aMethod);
+  try
+    exec.Options := [optIgnoreException];
+    fList.fSafe.Lock;
+    try
+      exec.ExecuteJson(TPointerDynArray(pointer(fList.fDest)),pointer('['+aParams+']'),nil);
+      if exec.ExecutedInstancesFailed<>nil then
+        for i := high(exec.ExecutedInstancesFailed) downto 0 do
+          if exec.ExecutedInstancesFailed[i]<>'' then
+          try
+            fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
+              [ClassType,aMethod.InterfaceDotMethodName,exec.ExecutedInstancesFailed[i]],sllDebug);
+            InterfaceArrayDelete(fList.fDest,i);
+          except // ignore any exception when releasing the (unstable?) callback
+          end;
+    finally
+      fList.fSafe.UnLock;
+    end;
+  finally
+    exec.Free;
   end;
-  call.Method := @aMethod;
-  call.Instance := pointer(fDest);
-  call.Params := '['+aParams+']';
-  msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
-  result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute,msg,true);
+end;
+
+function TSQLRest.MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
+  aCallBackUnRegisterNeeded: boolean): IMultiCallbackRedirect;
+var factory: TInterfaceFactory;
+begin
+  factory := TInterfaceFactory.Get(aGUID);
+  if factory=nil then
+    raise EInterfaceFactoryException.CreateUTF8('%.MultiRedirect: unknown %',
+      [self,GUIDToShort(aGUID)]);
+   result := TInterfacedObjectMulti.Create(self,factory,aCallBackUnRegisterNeeded,
+     aCallbackInterface).fList;
 end;
 
 
@@ -55851,7 +56107,7 @@ var Inst: TServiceFactoryServerInstance;
     WR: TJSONSerializer;
     entry: PInterfaceEntry;
     instancePtr: pointer; // weak IInvokable reference
-    dolock: boolean;
+    dolock, execres: boolean;
     exec: TServiceMethodExecute;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
@@ -55999,13 +56255,19 @@ begin
           MultiEventMerge(exec.fOnExecute,fOnExecute);
         if Ctxt.ServiceExecution.LogRest<>nil then
           exec.AddInterceptor(OnLogRestExecuteMethod);
-        if exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject) then begin
-          Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
-          Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
-        end else begin
+        if (fImplementationClassKind=ickFake) and
+           ((Ctxt.ServiceParameters=nil) or (Ctxt.ServiceParameters^='[')) and
+           {$ifndef LVCL}not ((optExecInMainThread in exec.fOptions) or
+             (optExecInPerInterfaceThread in exec.fOptions)) and {$endif}
+           (exec.fMethod^.ArgsOutputValuesCount=0) then // bypass JSON marshalling
+          execres := exec.ExecuteJsonFake(Inst.Instance,Ctxt.ServiceParameters) else
+          execres := exec.ExecuteJson([instancePtr],Ctxt.ServiceParameters,WR,Ctxt.ForceServiceResultAsJSONObject);
+        if not execres then begin
           Error('execution failed (probably due to bad input parameters)',HTTP_NOTACCEPTABLE);
           exit; // wrong request
         end;
+        Ctxt.Call.OutHead := exec.ServiceCustomAnswerHead;
+        Ctxt.Call.OutStatus := exec.ServiceCustomAnswerStatus;
       finally
         if dolock then
           LeaveCriticalSection(fInstanceLock);
@@ -57141,7 +57403,6 @@ begin
   end;
 end;
 
-
 {$ifndef NOVARIANTS}
 
 procedure TServiceMethod.ArgsStackAsDocVariant(const Values: TPPointerDynArray;
@@ -57466,8 +57727,8 @@ begin
         end;
       except // also intercept any error during method execution
         on Exc: Exception do begin
+          fCurrentStep := smsError;
           if fOnExecute<>nil then begin
-            fCurrentStep := smsError;
             fLastException := Exc;
             for e := 0 to length(fOnExecute)-1 do
             try
@@ -57476,7 +57737,11 @@ begin
             end;
             fLastException := nil;
           end;
-          raise; // caller expects the exception to be propagated
+          if (InstancesLast=0) and not (optIgnoreException in Options) then
+            raise; // single caller expects exception to be propagated
+          if fExecutedInstancesFailed=nil then // multiple Instances[] execution
+            SetLength(fExecutedInstancesFailed,InstancesLast+1);
+          fExecutedInstancesFailed[i] := ObjectToJSONDebug(Exc);
         end;
       end;
     end;
@@ -57526,6 +57791,51 @@ begin
   end;
 end;
 
+function TServiceMethodExecute.ExecuteJsonCallback(Instance: pointer;
+  const params: RawUTF8): boolean;
+var tmp: TSynTempBuffer;
+    fake: TInterfacedObjectFake;
+    n: integer;
+begin
+  result := false;
+  if (Instance=nil) or (fMethod^.ArgsOutputValuesCount>0) then
+    exit;
+  if (PCardinal(PPointer(PPointer(Instance)^)^)^=
+      PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^) then begin
+    fake := TInterfacedObjectFake(Instance).SelfFromInterface;
+    if Assigned(fake.fInvoke) then begin // bypass all JSON marshalling
+      result := fake.fInvoke(fMethod^,params,nil,nil,nil,nil);
+      exit;
+    end;
+  end;
+  n := length(params);
+  tmp.Init(n+2);
+  PAnsiChar(tmp.buf)[0] := '[';
+  MoveFast(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
+  PWord(PAnsiChar(tmp.buf)+n+1)^ := ord(']'); // ']'#0
+  result := ExecuteJson([Instance],tmp.buf,nil);
+  tmp.Done;
+end;
+
+function TServiceMethodExecute.ExecuteJsonFake(Instance: pointer; params: PUTF8Char): boolean;
+var tmp: RawUTF8;
+    len: integer;
+begin
+  result := false;
+  if not Assigned(TInterfacedObjectFake(Instance).fInvoke) then
+    exit;
+  if params<>nil then begin
+    if params^<>'[' then
+      exit;
+    inc(params);
+    len := StrLen(params);
+    if params[len-1]=']' then
+      dec(len);
+    SetString(tmp,PAnsiChar(params),len);
+  end;
+  result := TInterfacedObjectFake(Instance).fInvoke(fMethod^,tmp,nil,nil,nil,nil);
+end;
+
 function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
@@ -57538,8 +57848,6 @@ var a,a1: integer;
     ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
 begin
   result := false;
-  if high(Instances)<0 then
-    exit;
   BeforeExecute;
   with fMethod^ do
   try
@@ -58398,7 +58706,6 @@ begin
         [self,GetEnumName(TypeInfo(TServiceMethodOption),ord(o))^]);
   ExecutionAction(aMethod,aOptions,aAction);
 end;
-
 
 function ObjectFromInterface(const aValue: IInterface): TObject;
 {$ifndef HASINTERFACEASTOBJECT}

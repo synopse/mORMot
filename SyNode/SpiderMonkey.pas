@@ -85,6 +85,8 @@ type
   int32 = Integer;
   /// 32 bit unsigned integer type for C APIs
   uint32 = Cardinal;
+{$endif}
+{$ifndef ISDELPHIXE2}
   uintptr = PtrUInt;
 {$endif}
   uintN = PtrUInt;
