@@ -43940,9 +43940,9 @@ begin
          if PByteArray(P)^[result]=byte(Elem) then exit;
     2: for result := 0 to max do
          if PWordArray(P)^[result]=word(Elem) then exit;
-    4: for result := 0 to max do
+    4: for result := 0 to max do // integer,single,32bitPointer
          if PIntegerArray(P)^[result]=integer(Elem) then exit;
-    8: for result := 0 to max do // Int64,Currency,Double
+    8: for result := 0 to max do // Int64,Currency,Double,64bitPointer
          if PInt64Array(P)^[result]=Int64(Elem) then exit;
   else // generic binary comparison (fast with our overloaded CompareMem)
     for result := 0 to max do

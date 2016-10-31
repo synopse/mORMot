@@ -12821,13 +12821,17 @@ type
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
     // - this method will be implemented as thread-safe
-    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean=true); overload;
+    // - you can specify some method names, or all redirect methods if []
+    procedure Redirect(const aCallback: IInvokable;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean=true); overload;
     /// add or remove a class instance callback to the internal redirection list
     // - supplied aInstance should implement the interface GUID
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
     // - this method will be implemented as thread-safe
-    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean=true); overload;
+    // - you can specify some method names, or all redirect methods if []
+    procedure Redirect(const aCallback: TInterfacedObject;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean=true); overload;
   end;
 
   /// for TSQLRestCache, stores a table values
@@ -53444,15 +53448,24 @@ end;
 { TInterfacedObjectMulti / TInterfacedObjectMultiList }
 
 type
+  TInterfacedObjectMultiDest = record
+    instance: IInvokable;
+    methods: TInterfaceFactoryMethodBits;
+  end;
+  TInterfacedObjectMultiDestDynArray = array of TInterfacedObjectMultiDest;
   TInterfacedObjectMulti = class;
   TInterfacedObjectMultiList = class(TInterfacedObjectLocked,
     IMultiCallbackRedirect)
   protected
-    fDest: TInterfaceDynArray;
+    fDest: TInterfacedObjectMultiDestDynArray;
+    fDests: TDynArray;
     fFakeCallback: TInterfacedObjectMulti;
-    procedure Redirect(const aCallback: IInvokable; aSubscribe: boolean); overload;
-    procedure Redirect(const aCallback: TInterfacedObject; aSubscribe: boolean); overload;
+    procedure Redirect(const aCallback: IInvokable;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
+    procedure Redirect(const aCallback: TInterfacedObject;
+      const aMethodsNames: array of RawUTF8; aSubscribe: boolean); overload;
     procedure CallBackUnRegister;
+    constructor Create; override;
     destructor Destroy; override;
   end;
   TInterfacedObjectMulti = class(TInterfacedObjectFakeCallback)
@@ -53469,26 +53482,40 @@ type
     procedure CallBackUnRegister;
   end;
 
+constructor TInterfacedObjectMultiList.Create;
+begin
+  inherited Create;
+  fDests.InitSpecific(TypeInfo(TInterfacedObjectMultiDestDynArray),
+    fDest,djInterface);
+end;
+
 procedure TInterfacedObjectMultiList.Redirect(const aCallback: IInvokable;
-  aSubscribe: boolean);
+  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
+var ndx: integer;
+    new: TInterfacedObjectMultiDest;
 const NAM: array[boolean] of string[11] = ('Unsubscribe','Subscribe');
 begin
   if (self=nil) or (fFakeCallback=nil) then
     exit;
   fFakeCallback.fRest.InternalLog('%.Redirect: % % using %',[ClassType,NAM[aSubscribe],
     fFakeCallback.fFactory.fInterfaceName,ObjectFromInterface(aCallback)],sllDebug);
+  fFakeCallback.fFactory.CheckMethodIndexes(aMethodsNames,true,new.methods);
+  new.instance := aCallback;
   fSafe.Lock;
   try
+    ndx := fDests.IndexOf(aCallback);
     if aSubscribe then
-      InterfaceArrayAddOnce(fDest,aCallback) else
-      InterfaceArrayDelete(fDest,aCallback);
+      if ndx<0 then
+        fDests.Add(new) else
+        fDest[ndx] := new else
+      fDests.Delete(ndx);
   finally
     fSafe.UnLock;
   end;
 end;
 
 procedure TInterfacedObjectMultiList.Redirect(const aCallback: TInterfacedObject;
-  aSubscribe: boolean);
+  const aMethodsNames: array of RawUTF8; aSubscribe: boolean);
 var dest: IInvokable;
 begin
   if (self=nil) or (fFakeCallback=nil) then
@@ -53498,7 +53525,7 @@ begin
   if not aCallback.GetInterface(fFakeCallback.fFactory.fInterfaceIID,dest) then
     raise EInterfaceFactoryException.CreateUTF8('%.Redirect [%]: % is not a %',
       [self,fFakeCallback.fName,aCallback.ClassType,fFakeCallback.fFactory.fInterfaceName]);
-  Redirect(dest,aSubscribe);
+  Redirect(dest,aMethodsNames,aSubscribe);
 end;
 
 procedure TInterfacedObjectMultiList.CallBackUnRegister;
@@ -53555,33 +53582,49 @@ end;
 function TInterfacedObjectMulti.FakeInvoke(const aMethod: TServiceMethod;
   const aParams: RawUTF8; aResult, aErrorMsg: PRawUTF8;
   aClientDrivenID: PCardinal; aServiceCustomAnswer: PServiceCustomAnswer): boolean;
-var i: integer;
+var i,m,n,d: integer;
     exec: TServiceMethodExecute;
+    instances: TPointerDynArray;
+    indexes: TIntegerDynArray;
 begin
   result := inherited FakeInvoke(aMethod,aParams,aResult,aErrorMsg,
     aClientDrivenID,aServiceCustomAnswer);
-  if not result or (fList.fDest=nil) then
+  m := aMethod.ExecutionMethodIndex-RESERVED_VTABLE_SLOTS;
+  if not result or (fList.fDest=nil) or (m<0) then
     exit;
-  exec := TServiceMethodExecute.Create(@aMethod);
+  fList.fSafe.Lock;
   try
-    exec.Options := [optIgnoreException];
-    fList.fSafe.Lock;
+    n := length(fList.fDest);
+    SetLength(indexes,n);
+    SetLength(instances,n);
+    d := 0;
+    for i := 0 to n-1 do
+      if m in fList.fDest[i].methods then begin
+        instances[d] := pointer(fList.fDest[i].instance);
+        indexes[d] := i;
+      end;
+    if instances=nil then
+      exit;
+    if d<>n then
+      SetLength(instances,d);
+    exec := TServiceMethodExecute.Create(@aMethod);
     try
-      exec.ExecuteJson(TPointerDynArray(pointer(fList.fDest)),pointer('['+aParams+']'),nil);
+      exec.Options := [optIgnoreException]; // use exec.ExecutedInstancesFailed
+      result := exec.ExecuteJson(instances,pointer('['+aParams+']'),nil);
       if exec.ExecutedInstancesFailed<>nil then
         for i := high(exec.ExecutedInstancesFailed) downto 0 do
           if exec.ExecutedInstancesFailed[i]<>'' then
           try
             fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
               [ClassType,aMethod.InterfaceDotMethodName,exec.ExecutedInstancesFailed[i]],sllDebug);
-            InterfaceArrayDelete(fList.fDest,i);
+            InterfaceArrayDelete(fList.fDest,indexes[i]);
           except // ignore any exception when releasing the (unstable?) callback
           end;
     finally
-      fList.fSafe.UnLock;
+      exec.Free;
     end;
   finally
-    exec.Free;
+    fList.fSafe.UnLock;
   end;
 end;
 
