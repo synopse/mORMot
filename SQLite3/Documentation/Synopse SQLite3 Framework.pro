@@ -3553,7 +3553,7 @@ By default, change-tracking feature will be disabled, saving performance and dis
 This single line will let {\f1\fs20 aServer: TSQLRestServer} monitor all CRUD operations, and store all changes of the {\f1\fs20 TSQLInvoice} table within a {\f1\fs20 TSQLRecordHistory} table.
 Since all content changes will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your main database may be powered by high-end hardware (and smaller SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
 !type
-!  TSQLRecordSecondaryHistory = class(TSQLRecord);
+!  TSQLRecordSecondaryHistory = class(TSQLRecordHistory);
 ! (...)
 ! aServer.TrackChanges([TSQLInvoice],TSQLRecordSecondaryHistory);
 Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
