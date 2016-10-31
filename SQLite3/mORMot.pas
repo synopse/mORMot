@@ -4871,6 +4871,14 @@ const
   // but a plain REST/HTTP server - e.g. for public API notifications 
   SERVICE_CONTRACT_NONE_EXPECTED = '*';
 
+  /// maximum number of methods handled by interfaces
+  // - if you think this constant is too low, you are about to break
+  // the "Interface Segregation" SOLID principle: so don't ask to increase
+  // this value, we won't allow to write un-SOLID code! :)
+  // - used e.g. to avoid creating dynamic arrays if not needed, and
+  // ease method calls
+  MAX_METHOD_COUNT = 128;
+
 
 type
   TSQLTable = class;
@@ -10837,7 +10845,9 @@ type
   TOnFakeInstanceDestroy = procedure(aClientDrivenID: cardinal) of object;
 
   /// may be used to store the Methods[] indexes of a TInterfaceFactory
-  TInterfaceFactoryMethodBits = set of 0..255;
+  // - current implementation handles up to 128 methods, a limit above
+  // which "Interface Segregation" principles is obviously broken
+  TInterfaceFactoryMethodBits = set of 0..MAX_METHOD_COUNT-1;
 
   /// a dynamic array of TInterfaceFactory instances
   TInterfaceFactoryObjArray = array of TInterfaceFactory;
@@ -14322,8 +14332,8 @@ type
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
     /// define redirection of interface methods calls in one or several instances
-    // - this class allows to implements any interface via a fake class, which will
-    // redirect all methods calls into calls of one or several interfaces
+    // - this class allows to implements any interface via a fake class, which
+    // will redirect all methods calls to one or several other interfaces
     // - returned aCallbackInterface will redirect all its methods (identified
     // by aGUID) into an internal list handled by IMultiCallbackRedirect.Redirect
     // - typical use is thefore:
@@ -14334,14 +14344,12 @@ type
     // !     fSharedCallbacks := aRest.MultiRedirect(IMyService,fSharedCallback);
     // !     aServices.SubscribeForEvents(fSharedCallback);
     // !   end;
-    // !   fSharedCallbacks.Redirect(TMyCallback.Create);
+    // !   fSharedCallbacks.Redirect(TMyCallback.Create,[]);
     // !   // now each time fSharedCallback receive one event, all callbacks
     // !   // previously registered via Redirect() will receive it
     // ! ...
-    // ! destructor TMainClass.Destroy;
-    // ! begin
-    // !   fSharedCallbacks.FlushAndCallbackReleaseOnRest;
-    // !   ...
+    // !   fSharedCallbacks := nil; // will stop redirection
+    // !                            // and unregister callbacks, if needed
     function MultiRedirect(const aGUID: TGUID; out aCallbackInterface;
       aCallBackUnRegisterNeeded: boolean=true): IMultiCallbackRedirect; overload;
     /// will gather CPU and RAM information in a background thread
@@ -51230,11 +51238,11 @@ end;
 { TInterfacedObjectFake }
 
 const
-  // this is used to avoid creating dynamic arrays if not needed
-  MAX_METHOD_ARGS = 32;
-
   // QueryInterface, _AddRef and _Release methods are hard-coded
   RESERVED_VTABLE_SLOTS = 3;
+  // used e.g. to avoid creating dynamic arrays if not needed, and
+  // ease method calls
+  MAX_METHOD_ARGS = 32; // should match TInterfaceFactoryMethodBits set
 
 // see http://docwiki.embarcadero.com/RADStudio/en/Program_Control
 
@@ -52202,6 +52210,10 @@ begin
   if fMethodsCount=0 then
     raise EInterfaceFactoryException.CreateUTF8(
       '%.Create(%): interface has no RTTI',[self,fInterfaceName]);
+  if fMethodsCount>MAX_METHOD_COUNT then
+    raise EInterfaceFactoryException.CreateUTF8(
+      '%.Create(%): interface has too much method, and would break '+
+      'the interface segregation principle',[self,fInterfaceName]);
   fMethodIndexCurrentFrameCallback := -1;
   fMethodIndexCallbackReleased := -1;
   SetLength(fMethods,fMethodsCount);
