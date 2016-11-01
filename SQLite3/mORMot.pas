@@ -53602,8 +53602,9 @@ begin
       if m in fList.fDest[i].methods then begin
         instances[d] := pointer(fList.fDest[i].instance);
         indexes[d] := i;
+        inc(d);
       end;
-    if instances=nil then
+    if d=0 then
       exit;
     if d<>n then
       SetLength(instances,d);
