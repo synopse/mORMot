@@ -8626,12 +8626,11 @@ begin
     end;
   {$endif}
   {$ifdef MSWINDOWS}
-  if CryptoAPI.Available then begin
+  if CryptoAPI.Available then
     if CryptoAPI.AcquireContextA(prov,nil,nil,PROV_RSA_FULL,CRYPT_VERIFYCONTEXT) then begin
       fromOS := CryptoAPI.GenRandom(prov,len,p);
       CryptoAPI.ReleaseContext(prov,0);
     end;
-  end;
   {$endif}
   if not fromOS then begin
     {$ifdef CPUINTEL}
