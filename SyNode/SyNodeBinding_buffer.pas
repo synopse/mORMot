@@ -144,10 +144,10 @@ begin
           dec(length, 1);
         end;
 
-        vp.rval := cx.NewJSString(Pointer(tmp_str), System.length(tmp_str), WinAnsiConvert.CodePage).ToJSVal;
+        vp.rval := JS_NewStringCopyN(cx, bufData, length).ToJSVal;
       end;
 
-      LATIN1: vp.rval := cx.NewJSString(bufData, length, WinAnsiConvert.CodePage).ToJSVal;
+      LATIN1: vp.rval := JS_NewStringCopyN(cx, bufData, length).ToJSVal;
       UTF8: vp.rval := cx.NewJSString(bufData, length, CP_UTF8).ToJSVal;
       BASE64: vp.rval := cx.NewJSString(BinToBase64(bufData, length)).ToJSVal;
       //todo: optimize
