@@ -1007,6 +1007,12 @@ type
     property FileName: TFileName read fFileName;
     /// the current size, in bytes, of the associated file containing the log
     property FileSize: Int64 read GetFileSize;
+    /// the current number of thread contexts associated with this instance
+    // - doesn't match necessary the number of threads of the process, but the
+    // threads which are still marked as active for this TSynLog
+    // - a huge number may therefore not indicate a potential "out of memory"
+    // error, but a broken logic with missing NotifyThreadEnded calls
+    property ThreadContextCount: integer read fThreadContextCount;
     /// the associated logging family
     property GenericFamily: TSynLogFamily read fFamily;
   end;
