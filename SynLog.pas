@@ -477,6 +477,7 @@ type
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    function GetSynLogClassName: string;
   public
     /// intialize for a TSynLog class family
     // - add it in the global SynLogFileFamily[] list
@@ -542,9 +543,11 @@ type
     // - EchoToConsole or EchoCustom can be activated separately
     // - you may even disable the integrated file output, via NoFile := true
     property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
-  published
     /// the associated TSynLog class
     property SynLogClass: TSynLogClass read fSynLogClass;
+  published
+    /// the associated TSynLog class
+    property SynLogClassName: string read GetSynLogClassName;
     /// index in global SynLogFileFamily[] and SynLogFileIndexThreadVar[] lists
     property Ident: integer read fIdent;
     /// the current level of logging information for this family
@@ -2663,6 +2666,13 @@ begin
   if (self=nil) or (aEnabled=fEchoToConsole) then
     exit;
   fEchoToConsole := aEnabled;
+end;
+
+function TSynLogFamily.GetSynLogClassName: string;
+begin
+  if self=nil then
+    result := '' else
+    result := ClassName;
 end;
 
 constructor TSynLogFamily.Create(aSynLog: TSynLogClass);
