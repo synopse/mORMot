@@ -956,6 +956,8 @@ end;
 procedure TDDDRestHttpDaemon.InternalStop;
 begin
   try
+    if Assigned(fRest) then
+      fRest.Shutdown; // no incoming TSQLRestServer.URI allowed from now on
     FreeAndNil(fHttpServer);
   finally
     inherited InternalStop; // FreeAndNil(fRest)
