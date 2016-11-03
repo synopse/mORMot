@@ -1886,9 +1886,14 @@ begin
     if fIncoming.AnswerToIgnore>0 then begin
       WebSocketLog.Add.Log(sllDebug,'NotifyCallback: Waiting for AnswerToIgnore=%',
         [fIncoming.AnswerToIgnore],self);
-      max := GetTickCount64+30000;
+      start := GetTickCount64;
+      max := start+30000;
       repeat
-        SleepHiRes(1);
+        HiResDelay(start);
+        if fState in [wpsDestroy,wpsClose] then begin
+          result := STATUS_WEBSOCKETCLOSED;
+          exit;
+        end;
         if fIncoming.AnswerToIgnore=0 then
           break; // it is now safe to send a new 'request'
         if GetTickCount64<max then
@@ -1913,7 +1918,7 @@ begin
     if fSettings.CallbackAnswerTimeOutMS=0 then
       max := start+30000 else // never wait for ever
     if fSettings.CallbackAnswerTimeOutMS<2000 then
-      max := start+2000 else // 2 seconds minimal wait 
+      max := start+2000 else // 2 seconds minimal wait
       max := start+fSettings.CallbackAnswerTimeOutMS;
     while not fIncoming.Pop(fProtocol,'answer',answer) do
       if fState in [wpsDestroy,wpsClose] then begin
