@@ -12810,7 +12810,7 @@ type
   end;
 
   /// prototype of a class implementing redirection of a given interface
-  // - as returned e.g. by TSQLRest.MultiRedirect methods
+  // - as returned e.g. by TSQLRest.MultiRedirect method
   // - can be used as a main callback, then call Redirect() to manage
   // an internal list of redirections
   // - when you release this instance, will call Rest.Service.CallbackUnregister 
@@ -12821,7 +12821,7 @@ type
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
     // - this method will be implemented as thread-safe
-    // - you can specify some method names, or all redirect methods if []
+    // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: IInvokable;
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean=true); overload;
     /// add or remove a class instance callback to the internal redirection list
@@ -12829,7 +12829,7 @@ type
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
     // - this method will be implemented as thread-safe
-    // - you can specify some method names, or all redirect methods if []
+    // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: TInterfacedObject;
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean=true); overload;
   end;
