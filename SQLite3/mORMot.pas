@@ -37229,8 +37229,9 @@ begin
 end;
 
 procedure TSQLRestServer.Shutdown(const aStateFileName: TFileName);
+var timeout: Int64;
 {$ifdef WITHLOG}
-var log: ISynLog; // for Enter auto-leave to work with FPC
+   log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
   if fSessions=nil then
@@ -37248,9 +37249,10 @@ begin
   finally
     fSessions.Safe.UnLock;
   end;
+  timeout := GetTickCount64+30000; // never wait forever
   repeat
     SleepHiRes(5);
-  until fStats.AddCurrentRequestCount(0)=0;
+  until (fStats.AddCurrentRequestCount(0)=0) or (GetTickCount64>timeout);
   if aStateFileName<>'' then
     SessionsSaveToFile(aStateFileName);
 end;
