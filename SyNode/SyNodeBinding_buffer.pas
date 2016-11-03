@@ -144,7 +144,7 @@ begin
           dec(length, 1);
         end;
 
-        vp.rval := JS_NewStringCopyN(cx, bufData, length).ToJSVal;
+        vp.rval := JS_NewStringCopyN(cx, Pointer(tmp_str), System.length(tmp_str)).ToJSVal;
       end;
 
       LATIN1: vp.rval := JS_NewStringCopyN(cx, bufData, length).ToJSVal;
