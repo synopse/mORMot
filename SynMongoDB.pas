@@ -107,6 +107,11 @@ type
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     betJSScope, betInt32, betTimeStamp, betInt64);
 
+  { TODO: add betDecimal128 support, and $numberDecimal variant (MongoDB >= 3.4)
+    https://github.com/mongodb/specifications/blob/master/source/bson-decimal128/decimal128.rst
+    https://github.com/mongodb/mongo-csharp-driver/blob/master/src/MongoDB.Bson/ObjectModel/Decimal128.cs
+    https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c }
+
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
 
@@ -3680,7 +3685,7 @@ begin // this is a bit complex, but we have to avoid any collision
         PCardinal(@MachineID)^ := crc32c(crc32c(MainThreadID,
           pointer(Host),length(Host)),pointer(User),length(User));
       ProcessID := PtrUInt(GetCurrentThreadId);
-      FirstCounter := (cardinal(Random($ffffff))*GetTickCount) and $ffffff;
+      TAESPRNG.Main.FillRandom(@FirstCounter,3);
       Counter := FirstCounter;
       LatestCounterOverflowUnixCreateTime := UnixCreateTime;
     end else begin
