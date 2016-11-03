@@ -53507,7 +53507,7 @@ begin
   new.instance := aCallback;
   fSafe.Lock;
   try
-    ndx := fDests.IndexOf(aCallback);
+    ndx := fDests.Find(aCallback);
     if aSubscribe then
       if ndx<0 then
         fDests.Add(new) else
@@ -53534,13 +53534,11 @@ end;
 
 procedure TInterfacedObjectMultiList.CallBackUnRegister;
 begin
-  if fDest<>nil then begin
-    fSafe.Lock;
-    try
-      fDest := nil;
-    finally
-      fSafe.UnLock;
-    end;
+  fSafe.Lock;
+  try
+    fDests.ClearSafe;
+  finally
+    fSafe.UnLock;
   end;
   if fFakeCallback<>nil then begin
     fFakeCallback.CallBackUnRegister;
@@ -53614,7 +53612,7 @@ var i: integer;
 begin
   result := inherited FakeInvoke(aMethod,aParams,aResult,aErrorMsg,
     aClientDrivenID,aServiceCustomAnswer);
-  if not result or (fList.fDest=nil) then
+  if not result or (fList.fDestCount=0) then
     exit;
   fList.fSafe.Lock;
   try
@@ -53630,7 +53628,7 @@ begin
           try
             fRest.InternalLog('%.FakeInvoke % failed due to % -> unsubscribe',
               [ClassType,aMethod.InterfaceDotMethodName,exec.ExecutedInstancesFailed[i]],sllDebug);
-            InterfaceArrayDelete(fList.fDest,fList.fDests.IndexOf(instances[i]));
+            fList.fDests.FindAndDelete(instances[i]);
           except // ignore any exception when releasing the (unstable?) callback
           end;
     finally
