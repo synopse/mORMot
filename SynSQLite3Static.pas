@@ -1,4 +1,4 @@
-/// SQLite3 3.15.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.15.1 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.15.0 engine
+    Statically linked SQLite3 3.15.1 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -75,7 +75,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.15.0
+  - updated SQLite3 engine to latest version 3.15.1
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -85,6 +85,8 @@ unit SynSQLite3Static;
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
   - added sqlite3.db_config() support
+  - enabled FTS5 and RBU support
+  - added FPC cross-platform support, statically linked for Win32/Win64
 
 }
 
@@ -254,11 +256,13 @@ extern int unixWrite(
       {$linklib fpc-win64\libkernel32.a}
       {$linklib fpc-win64\libgcc.a}
       {$linklib fpc-win64\libmsvcrt.a}
+      const LOGFUNCLINKNAME = 'log';
     {$else}
       {$L fpc-win32\sqlite3.o}
       {$linklib fpc-win32\libkernel32.a}
       {$linklib fpc-win32\libgcc.a}
       {$linklib fpc-win32\libmsvcrt.a}
+      const LOGFUNCLINKNAME = '_log';
     {$endif CPU64}
   {$else}
     {$ifdef CPU64}
@@ -267,6 +271,7 @@ extern int unixWrite(
     {$else}
       {$L fpc-linux32\sqlite3.o}
       {$linklib fpc-linux32\gcc.a}
+      const LOGFUNCLINKNAME = 'log';
     {$endif CPU64}
 
     function newstat64(path: pchar; buf: PStat): cint; cdecl;
@@ -289,6 +294,11 @@ extern int unixWrite(
 
   {$endif MSWINDOWS}
 
+function log(x: double): double; cdecl; public name LOGFUNCLINKNAME; export;
+begin
+  result := ln(x);
+end;
+
 {$else}
 
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
@@ -297,19 +307,19 @@ extern int unixWrite(
       {$L sqlite3.o} // compiled with bcc64 via c64.bat
     {$else}
       {$ifdef INCLUDE_FTS3}
-      {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+      {$L sqlite3fts3.obj}   // link SQlite3 with FTS3/FTS4/FTS5 + TRACE
       {$else}
       {$L sqlite3.obj}       // link SQlite3 database engine
       {$endif INCLUDE_FTS3}
     {$endif}
   {$else}
-  {$ifdef KYLIX3}
-  {$L kylix/sqlite3/sqlite3.o}
-  {$L kylix/sqlite3/_divdi3.o}
-  {$L kylix/sqlite3/_moddi3.o}
-  {$L kylix/sqlite3/_udivdi3.o}
-  {$L kylix/sqlite3/_umoddi3.o}
-  {$L kylix/sqlite3/_cmpdi2.o}
+  {$ifdef KYLIX3} // in practice, failed to compile SQLite3 with gcc 2 :(
+    {$L kylix/sqlite3/sqlite3.o}
+    {$L kylix/sqlite3/_divdi3.o}
+    {$L kylix/sqlite3/_moddi3.o}
+    {$L kylix/sqlite3/_udivdi3.o}
+    {$L kylix/sqlite3/_umoddi3.o}
+    {$L kylix/sqlite3/_cmpdi2.o}
   {$endif KYLIX3}
   {$endif MSWINDOWS}
 
@@ -335,6 +345,16 @@ function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
 begin
   result := P;
   ReallocMem(result,Size);
+end;
+
+function rename(oldname, newname: PUTF8Char): integer; cdecl; { always cdecl }
+  {$ifdef FPC}public name{$ifdef CPU64}'rename'{$else}'_rename'{$endif};{$endif}
+// the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
+begin
+  if RenameFile(UTF8DecodeToString(oldname,StrLen(oldname)),
+                UTF8DecodeToString(newname,StrLen(newname))) then
+    result := 0 else
+    result := -1;
 end;
 
 {$ifdef MSWINDOWS}
@@ -413,6 +433,15 @@ end;
 procedure _llushr;
 asm
   jmp System.@_llushr
+end;
+
+function log(const val: extended): extended;
+asm
+  fld val
+  fldln2
+  fxch
+  fyl2x
+  fwait
 end;
 
 {$endif CPU32}
@@ -1236,7 +1265,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.15.0';
+  EXPECTED_SQLITE3_VERSION = '3.15.1';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
