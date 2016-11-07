@@ -1232,6 +1232,14 @@ function TTimeLogToDateTime(Value: TTimeLog): TDateTime;
 /// convert a TTimeLog value into an ISO-8601 encoded date/time text
 function TTimeLogToIso8601(Value: TTimeLog): string;
 
+/// returns a string with 2 digits
+// - the supplied value should be in 0..99 range
+function ToDigit2(value: integer): string;
+
+/// returns a string with 4 digits
+// - the supplied value should be in 0..9999 range
+function ToDigit4(value: integer): string;
+
 /// convert a date/time to a ISO-8601 string format for SQL '?' inlined parameters
 // - if DT=0, returns ''
 // - if DT contains only a date, returns the date encoded as '\uFFF1YYYY-MM-DD'
@@ -1397,6 +1405,24 @@ end;
 function TimeLogToSQL(const TimeStamp: TTimeLog): string;
 begin
   result := JSON_SQLDATE_MAGIC+TTimeLogToIso8601(TimeStamp);
+end;
+
+function ToDigit2(value: integer): string;
+begin
+  if value<=0 then
+    result := '00' else
+  if value>99 then
+    result := '99' else
+    result := chr(48+value div 10)+chr(48+value mod 10);
+end;
+
+function ToDigit4(value: integer): string;
+begin
+  if value<=0 then
+    result := '0000' else
+  if value>9999 then
+    result := '9999' else
+    result := ToDigit2(value div 100)+ToDigit2(value mod 100);
 end;
 
 function UrlEncode(const aValue: string): string; overload;
@@ -2375,14 +2401,18 @@ end;
 procedure TSQLRest.Log(Level: TSynLogInfo; const Text: string; Instance: TObject);
 procedure DoLog;
 var line: string;
+    Value: TDateTime;
+    HH,MM,SS,MS,Y,M,D: word;
     {$ifndef ISSMS}
     i: integer;
     {$endif}
 begin
   // compute the line as expected by TSynLog / LogView
-  line := copy(FormatDateTime(
-    {$ifdef ISSMS}'yyyymmdd hhnnsszzz'{$else}'yyyymmdd" "hhnnsszzz'{$endif},
-    Now),1,17)+LOG_LEVEL_TEXT[Level];
+  Value := Now;
+  DecodeTime(Value,HH,MM,SS,MS);
+  DecodeDate(Value,Y,M,D);
+  line := ToDigit4(Y)+ToDigit2(M)+ToDigit2(D)+' '+ToDigit2(HH)+ToDigit2(MM)+
+    ToDigit2(SS)+ToDigit2(MS shr 4)+LOG_LEVEL_TEXT[Level];
   if Assigned(Instance) then
     line := line+Instance.ClassName+
     {$ifdef ISSMS}' ';{$else}'('+IntToHex(
