@@ -12820,14 +12820,15 @@ type
     /// add or remove an interface callback to the internal redirection list
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
+    // - supplied aCallback shoud implement the expected interface GUID
     // - this method will be implemented as thread-safe
     // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: IInvokable;
       const aMethodsNames: array of RawUTF8; aSubscribe: boolean=true); overload;
     /// add or remove a class instance callback to the internal redirection list
-    // - supplied aInstance should implement the interface GUID
     // - will register a callback if aSubscribe is true
     // - will unregister a callback if aSubscribe is false
+    // - supplied aCallback instance should implement the expected interface GUID
     // - this method will be implemented as thread-safe
     // - you can specify some method names, or all methods redirection if []
     procedure Redirect(const aCallback: TInterfacedObject;
@@ -13061,7 +13062,7 @@ type
     /// finalize the thread
     destructor Destroy; override;
     /// define asynchronous execution of interface methods in a background thread
-    // - this class allows to implements any interface via a fake class, which will
+    // - this method implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
     // in a background thread, shared with TimerEnable/TimerDisable process
     // - parameters will be serialized and stored as JSON in the queue
@@ -13080,7 +13081,7 @@ type
     procedure AsynchRedirect(const aGUID: TGUID;
       const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
     /// define asynchronous execution of interface methods in a background thread
-    // - this class allows to implements any interface via a fake class, which will
+    // - this method implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
     // in a background thread, shared with TimerEnable/TimerDisable process
     // - parameters will be serialized and stored as JSON in the queue
