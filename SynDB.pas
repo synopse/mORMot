@@ -2994,7 +2994,7 @@ type
   // dynamic array (and our TDynArrayHashed wrapper) for fast property name
   // handling (via name hashing) and pre-allocation
   // - it is based on an internal Variant to store the parameter or column value
-  TQueryValue = {$ifndef UNICODE}object{$else}record{$endif}
+  TQueryValue = {$ifndef FPC_OR_UNICODE}object{$else}record{$endif}
   private
     /// fName should be the first property, i.e. the searched hashed value
     fName: string;
@@ -6381,7 +6381,7 @@ function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Inte
 var ID: TThreadID;
 begin
   if self<>nil then begin
-    ID := GetCurrentThreadId;
+    ID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
     result := fLatestConnectionRetrievedInPool;
     if (result>=0) and
        (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID) then
@@ -6438,7 +6438,7 @@ begin
           exit;
       end;
       result := NewConnection;
-      (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
+      (result as TSQLDBConnectionThreadSafe).fThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
       LeaveCriticalSection(fConnectionCS);

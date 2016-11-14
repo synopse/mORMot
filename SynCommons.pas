@@ -827,7 +827,9 @@ const
 
 type
   PBoolean = ^Boolean;
-
+  {$ifdef BSD}
+  TThreadID = Cardinal;
+  {$endif}
 {$else FPC}
 
 type
@@ -17017,9 +17019,9 @@ implementation
 {$ifdef FPC}
 uses
   {$ifdef Linux}
-  SynFPCLinux, Unix, dynlibs, Linux,
-  {$ifndef Darwin}
-  SysCall,
+  SynFPCLinux, Unix, dynlibs,
+  {$ifndef BSD}
+  Linux,SysCall,
   {$endif}
   {$endif}
   SynFPCTypInfo, TypInfo; // small wrapper unit around FPC's TypInfo.pp
@@ -20037,7 +20039,8 @@ type
     tkSet,tkMethod,tkSString,tkLStringOld,tkLString,
     tkWString,tkVariant,tkArray,tkRecord,tkInterface,
     tkClass,tkObject,tkWChar,tkBool,tkInt64,tkQWord,
-    tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,tkHelper);
+    tkDynArray,tkInterfaceRaw,tkProcVar,tkUString,tkUChar,
+    tkHelper,tkFile,tkClassRef,tkPointer);
 
 const
    // all potentially managed types
@@ -20059,12 +20062,14 @@ const
     dkSet,dkMethod,dkString,dkLString,dkLString,
     dkWString,dkVariant,dkArray,dkRecord,dkInterface,
     dkClass,dkRecord,dkWChar,dkEnumeration,dkInt64,dkInt64,
-    dkDynArray,dkInterface,dkProcedure,dkUString,dkWChar,dkPointer);
+    dkDynArray,dkInterface,dkProcedure,dkUString,dkWChar,
+    dkPointer,dkPointer,dkClassRef,dkPointer);
+
   DELPHITOFPC: array[TDelphiTypeKind] of TTypeKind = (
     tkUnknown, tkInteger, tkChar, tkEnumeration, tkFloat,
     tkSString, tkSet, tkClass, tkMethod, tkWChar, tkLString, tkWString,
     tkVariant, tkArray, tkRecord, tkInterface, tkInt64, tkDynArray,
-    tkUString, tkProcVar, tkProcVar, tkProcVar);
+    tkUString, tkClassRef, tkPointer, tkProcVar);
 
 {$else}
 
@@ -20187,6 +20192,21 @@ type
   {$endif}
 
   /// map the Delphi/FPC RTTI content
+  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  PPRecordInitTable = ^PRecordInitTable;
+  PRecordInitTable = ^TRecordInitTable;
+  TRecordInitTable =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
+      recSize: longint;
+      Terminator: Pointer;
+      recManagementOperators: Pointer;
+      ManagedCount: longint;
+    end;
+  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
@@ -20234,6 +20254,9 @@ type
     {$ifdef FPC}
     tkRecord, tkObject:(
       recSize: longint;
+      {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+      recInitTable: PPRecordInitTable;
+      {$endif FPC_HAS_MANAGEMENT_OPERATORS}
       ManagedCount: longint;
     {$else}
     tkRecord: (
@@ -30928,9 +30951,8 @@ end;
 function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 asm
         {$ifdef LINUX} // crc=rdi P=rsi len=rdx
-        mov     r8, rsi
-        mov     rcx, rdx
-        mov     rdx, rdi
+        mov     r8, rdi
+        mov     rcx, rsi
         {$else} // crc=r8 P=rcx len=rdx
         mov     r10, r8
         mov     r8, rcx
@@ -31061,7 +31083,7 @@ end;
 {$endif HASINLINE}
 {$endif FPC}
 
-function xxHash32(P: PAnsiChar; len: integer; seed: cardinal = 0): cardinal;
+function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
 var c1, c2, c3, c4: cardinal;
     PLimit, PEnd: PAnsiChar;
 begin
@@ -31069,7 +31091,7 @@ begin
   if len >= 16 then
     begin
       PLimit := PEnd - 16;
-      c3 := seed;
+      c3 := crc;
       c2 := c3 + PRIME32_2;
       c1 := c2 + PRIME32_1;
       c4 := c3 + cardinal(0-PRIME32_1);
@@ -31082,7 +31104,7 @@ begin
       until not (P <= PLimit);
       result := RolDWord(c1, 1) + RolDWord(c2, 7) + RolDWord(c3, 12) + RolDWord(c4, 18);
     end else
-    result := seed + PRIME32_5;
+    result := crc + PRIME32_5;
   inc(result, len);
   while P <= PEnd - 4 do begin
     inc(result, PCardinal(P)^ * PRIME32_3);
@@ -31496,6 +31518,11 @@ asm
         not     eax
 end;
 
+
+
+
+{$endif PUREPASCAL}
+{$ifdef CPU386}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
         push    esi
@@ -31529,7 +31556,6 @@ asm
         pop     edi
         pop     esi
 end;
-
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         not     eax
@@ -31594,7 +31620,7 @@ asm // eax=crc, edx=buf, ecx=len
         {$endif}
 @0:     not     eax
 end;
-{$endif PUREPASCAL}
+{$endif CPU386}
 
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
@@ -33090,7 +33116,7 @@ var i: integer;
     c: cardinal;
     timenow: Int64;
 begin
-  c := GetTickCount64+Random(maxInt)+GetCurrentThreadID;
+  c := GetTickCount64+Random(maxInt)+{$ifdef BSD}Cardinal{$endif}(GetCurrentThreadID);
   QueryPerformanceCounter(timenow);
   c := c xor crc32c(c,@timenow,sizeof(timenow));
   for i := 0 to CardinalCount-1 do begin
@@ -34532,9 +34558,13 @@ begin
 end;
 {$endif MSWINDOWS}
 
-{$ifdef DARWIN}
+{$ifdef BSD}
 function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
+{$ifdef Darwin}
   cdecl external 'libc.dylib' name 'mprotect';
+{$else}
+  cdecl external 'libc.so' name 'mprotect';
+{$endif}
   {$define USEMPROTECT}
 {$endif}
 {$ifdef KYLIX3}
@@ -35140,12 +35170,53 @@ procedure RecordClear(var Dest; TypeInfo: pointer);
 procedure RecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
 
+{$ifndef USEFPCCOPY}
+
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin // external name 'FPC_COPY' does not work as we need
   RecordClear(Dest,TypeInfo);
   MoveFast(Source,Dest,RTTIManagedSize(TypeInfo));
   RecordAddRef(Dest,TypeInfo);
 end;
+
+{$else USEFPCCOPY}
+// in theory, this should (must) work, but it does not !! :-(
+{$ifdef fpc}
+function fpc_Copy_internal (Src, Dest, TypeInfo : Pointer) : SizeInt;[external name 'FPC_COPY'];
+procedure RecordCopy(const Dest; const Source; TypeInfo: pointer);assembler;nostackframe;
+// swap Dest and Source using assembler
+asm
+ {$ifdef CPUX86}
+ xchg eax, edx
+ {$endif CPUX86}
+ {$ifdef CPUX64}
+ {$ifdef LINUX}
+ xchg rdi, rsi
+ {$else LINUX}
+ xchg rcx, rdx
+ {$endif LINUX}
+ {$endif CPUX64}
+ {$ifdef CPUARM}
+ eor r0, r0, r1 ; r0 <-- r0 xor r1
+ eor r1, r0, r1 ; r1 <-- (r0 xor r1) xor r1 = r0
+ eor r0, r0, r1 ; r0 <-- (r0 xor r1) xor r0 = r1
+ {$endif CPUARM}
+ {$ifdef CPUAARCH64}
+ eor x0, x0, x1 ; x0 <-- x0 xor x1
+ eor x1, x0, x1 ; x1 <-- (x0 xor x1) xor x1 = x0
+ eor x0, x0, x1 ; x0 <-- (x0 xor x1) xor x0 = x1
+{$endif CPUAARCH64}
+ jmp fpc_Copy_internal
+end;
+{$else}
+//procedure RecordCopy(const dest, source, typeinfo: ptypeinfo);
+procedure RecordCopy(const Dest; Source; TypeInfo: pointer);
+asm
+ jmp System.@CopyRecord
+end;
+{$endif}
+
+{$endif USEFPCCOPY}
 
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 var i, size: SizeInt;
@@ -35249,7 +35320,7 @@ begin
           raise ESynException.CreateUTF8('RecordEquals(kind=%)',
             [ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           if not CompareMem(A,B,Diff) then
             exit; // binary block not equal
@@ -35264,7 +35335,7 @@ begin
     inc(Diff,Field^.Offset);
     inc(Field);
   end;
-  if CompareMem(A,B,info.recSize-Diff) then
+  if CompareMem(A,B,info^.recSize-Diff) then
     result := true;
 end;
 
@@ -35282,13 +35353,13 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
-  Field := @info.ManagedFields[0];
-  result := info.recSize;
-  for F := 1 to info.ManagedCount do begin
-    P := pointer(R+Field.Offset);
-    case Field.TypeInfo^.Kind of
+  Field := @info^.ManagedFields[0];
+  result := info^.recSize;
+  for F := 1 to info^.ManagedCount do begin
+    P := pointer(R+Field^.Offset);
+    case Field^.TypeInfo^.Kind of
       tkDynArray: begin
-        DynArray.Init(Deref(Field.TypeInfo),P^);
+        DynArray.Init(Deref(Field^.TypeInfo),P^);
         inc(result,DynArray.SaveToLength-sizeof(PtrUInt));
       end;
       tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
@@ -35303,7 +35374,7 @@ begin
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2)-sizeof(PtrUInt));
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+        infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
         Len := RecordSaveLength(P^,infoNested);
         if Len=0 then begin
           result := 0;
@@ -35362,10 +35433,10 @@ begin
       inc(R,Diff);
       inc(Dest,Diff);
     end;
-    Kind := Field.TypeInfo^.Kind;
+    Kind := Field^.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Deref(Field.TypeInfo),R^);
+      DynArray.Init(Deref(Field^.TypeInfo),R^);
       Dest := DynArray.SaveTo(Dest);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -35386,7 +35457,7 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
       Dest := RecordSave(R^,Dest,infoNested);
       if Dest=nil then begin
         result := nil; // invalid/unhandled record content
@@ -35414,7 +35485,7 @@ begin
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordSave(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(R^,Dest^,Diff);
           inc(Dest,Diff);
@@ -35575,10 +35646,10 @@ begin
       inc(Source,Diff);
       inc(R,Diff);
     end;
-    Kind := Field.TypeInfo^.Kind;
+    Kind := Field^.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Deref(Field.TypeInfo),R^);
+      DynArray.Init(Deref(Field^.TypeInfo),R^);
       Source := DynArray.LoadFrom(Source);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -35591,7 +35662,7 @@ begin
           {$ifdef HASCODEPAGE}
           { Delphi 2009+: set Code page for this AnsiString }
           if LenBytes<>0 then begin
-            infoNested := Deref(Field.TypeInfo); 
+            infoNested := Deref(Field^.TypeInfo); 
             SetCodePage(PRawByteString(R)^,
               PWord(PtrUInt(infoNested)+infoNested^.NameLen+2)^,false);
           end;
@@ -35608,7 +35679,7 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
       Source := RecordLoad(R^,Source,infoNested);
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       infoNested := GetFPCAlignPtr(infoNested);
@@ -35628,7 +35699,7 @@ begin
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordLoad(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(Source^,R^,Diff);
           inc(Source,Diff);
@@ -51507,7 +51578,7 @@ begin
   FVirtualMemoryTotal.fBytes := MemoryStatus.ullTotalVirtual;
   FVirtualMemoryFree.fBytes := MemoryStatus.ullAvailVirtual;
 {$else}
-{$ifdef LINUX}
+{$ifndef BSD}
 var si: TSysInfo;
 begin
   {$ifdef FPC}
@@ -52083,9 +52154,9 @@ begin
 {$ifdef FPC}
   'Free Pascal'
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
-  {$ifdef VER2_7_0}+' 2.7.0'{$endif}
-  {$ifdef VER2_7_1}+' 2.7.1'{$endif}
+  {$ifdef VER3_0_0}+' 3.0.0'{$endif}
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
+  {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
@@ -59638,7 +59709,7 @@ function IsDebuggerPresent: BOOL; stdcall; external kernel32; // since XP
 
 procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 begin
-  SetThreadName(GetCurrentThreadId,Format,Args);
+  SetThreadName({$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId),Format,Args);
 end;
 
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
@@ -59911,7 +59982,7 @@ begin
     result := fPendingProcessFlag;
     if result=flagIdle then begin // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
-      fCallerThreadID := ThreadID;
+      fCallerThreadID := {$ifdef BSD}Cardinal{$endif}(ThreadID);
     end;
   finally
     LeaveCriticalSection(fPendingProcessLock);
@@ -59962,7 +60033,7 @@ var start: Int64;
     ThreadID: TThreadID;
 begin
   result := false;
-  ThreadID := GetCurrentThreadId;
+  ThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
   if (self=nil) or (ThreadID=fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;

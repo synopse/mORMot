@@ -2943,7 +2943,7 @@ begin
     SO_True := 1;
     SetSockOpt(result, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
     {$endif}
-    {$ifdef darwin}
+    {$ifdef BSD}
     SO_True := 1;
     SetSockOpt(result, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
     {$endif}
@@ -4687,7 +4687,7 @@ begin
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
   {$endif}
-  {$ifdef darwin}
+  {$ifdef BSD}
   SO_True := 1;
   SetSockOpt(aClientSock, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
   {$endif}

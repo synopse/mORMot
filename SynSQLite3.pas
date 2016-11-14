@@ -206,7 +206,11 @@ uses
   {$ifdef FPC}
   {$ifdef Linux}
   SynFPCLinux,
+  {$ifdef BSDNOTDARWIN}
+  dl,
+  {$else}
   DynLibs,
+  {$endif}
   {$endif}
   {$endif}
   {$endif}
@@ -2059,7 +2063,11 @@ type
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
   TSQLite3LibraryDynamic = class(TSQLite3Library)
   protected
+    {$ifdef BSDNOTDARWIN}
+    fHandle: pointer;
+    {$else}
     fHandle: THandle;
+    {$endif}
     fLibraryName: TFileName;
   public
     /// initialize the specified external library
@@ -2460,7 +2468,7 @@ type
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Value, with no memory
-    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable
     procedure Bind(Param: Integer; const Value: RawUTF8); overload;
     /// bind a generic VCL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
@@ -2476,8 +2484,8 @@ type
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Data, with no memory
-    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
-    procedure BindBlob(Param: Integer; const Data: RawByteString); 
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable
+    procedure BindBlob(Param: Integer; const Data: RawByteString);
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
@@ -3129,7 +3137,7 @@ type
     /// the latest BackupBackground() process file name
     property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
-    // - part of TSQLDatabase published properties, to publish e.g. Version  
+    // - part of TSQLDatabase published properties, to publish e.g. Version
     property SQLite3Library: TSQLite3Library read GetSQLite3Library;
   end;
 
@@ -5741,23 +5749,38 @@ constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
     i: integer;
 begin
+  fLibraryName := LibraryName;
   {$ifdef MSWINDOWS}
   fHandle := SafeLoadLibrary(LibraryName);
-  {$else}
-  fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
-  {$endif}
-  fLibraryName := LibraryName;
   if fHandle=0 then
+  {$else}
+    {$ifdef BSDNOTDARWIN}
+    fHandle := dlopen(PChar(LibraryName),0);
+    if fHandle=nil then
+    {$else}
+    fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
+    if fHandle=0 then
+    {$endif}
+  {$endif MSWINDOWS}
     raise ESQLite3Exception.CreateFmt('Unable to load %s - %s',
       [LibraryName,SysErrorMessage(GetLastError)]);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
+    {$ifdef BSDNOTDARWIN}
+    P^[i] := dlsym(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
+    {$else}
     P^[i] := GetProcAddress(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
+    {$endif}
   if not Assigned(initialize) or not Assigned(libversion) or
      not Assigned(open) or not Assigned(close) or not Assigned(create_function) or
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
+    {$ifdef BSDNOTDARWIN}
+    dlclose(fHandle);
+    fHandle := nil;
+    {$else}
     FreeLibrary(fHandle);
     fHandle := 0;
+    {$endif}
     raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
@@ -5768,8 +5791,13 @@ end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
 begin
+  {$ifdef BSDNOTDARWIN}
+  if fHandle<>nil then
+    dlclose(fHandle);
+  {$else}
   if fHandle<>0 then
     FreeLibrary(fHandle);
+  {$endif}
   inherited;
 end;
 

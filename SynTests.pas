@@ -1052,6 +1052,16 @@ begin
   Writeln(fSaveToFile,#13#10,Version,CustomVersions,
     #13#10'Generated with: ',GetDelphiCompilerVersion,' compiler', Elapsed,
     #13#10'Tests performed at ',DateTimeToStr(Now));
+  {$ifdef FPC}
+  Writeln(fSaveToFile,#13#10,'FPC specialities:'
+  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI}
+  ,' with interface RTTI;'
+  {$endif FPC_HAS_EXTENDEDINTERFACERTTI}
+  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  ,' with with management operators;'
+  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+  );
+  {$endif FPC}
   if result then
     Color(ccWhite) else
     Color(ccLightRed);

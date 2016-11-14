@@ -265,33 +265,22 @@ extern int unixWrite(
       const LOGFUNCLINKNAME = '_log';
     {$endif CPU64}
   {$else}
+    {$ifndef FPC_CROSSCOMPILING}
+      {$linklib gcc.a}
+    {$endif}
     {$ifdef CPU64}
       {$L fpc-linux64\sqlite3-64.o}
-      {$linklib fpc-linux64\gcc.a}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib fpc-linux64\gcc.a}
+      {$endif}
+      const LOGFUNCLINKNAME = 'log';
     {$else}
       {$L fpc-linux32\sqlite3.o}
-      {$linklib fpc-linux32\gcc.a}
+      {$ifdef FPC_CROSSCOMPILING}
+        {$linklib fpc-linux32\gcc.a}
+      {$endif}
       const LOGFUNCLINKNAME = 'log';
     {$endif CPU64}
-
-    function newstat64(path: pchar; buf: PStat): cint; cdecl;
-      public name 'stat64'; export;
-    begin
-      result := fpstat(path,buf^);
-    end;
-
-    function newfstat64(fd: cint; buf: PStat): cint; cdecl;
-      public name 'fstat64'; export;
-    begin
-      result := fpfstat(fd,buf^);
-    end;
-
-    function newlstat64(path: pchar; buf: PStat): cint; cdecl;
-      public name 'lstat64'; export;
-    begin
-      result := fplstat(path,buf^);
-    end;
-
   {$endif MSWINDOWS}
 
 function log(x: double): double; cdecl; public name LOGFUNCLINKNAME; export;
@@ -304,7 +293,7 @@ end;
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L sqlite3.o} // compiled with bcc64 via c64.bat
+      {$L fpc-win64\sqlite3-64.o} // compiled with gcc for FPC ... try
     {$else}
       {$ifdef INCLUDE_FTS3}
       {$L sqlite3fts3.obj}   // link SQlite3 with FTS3/FTS4/FTS5 + TRACE
@@ -673,12 +662,35 @@ end;
 
 const
   msvcrt = 'msvcrt.dll';
+  kernel = 'kernel32.dll';
 
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt;
 procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
+
+// first try for static on Win64 with Delphi
+function __imp__beginthreadex(security: pointer; stksize: dword;
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt name '_beginthreadex';
+procedure __imp__endthreadex(exitcode: dword); cdecl; external msvcrt name '_endthreadex';
+
+function __imp_TryEnterCriticalSection(lpCriticalSection:pointer):boolean; cdecl; external kernel name 'TryEnterCriticalSection';
+procedure __imp_LeaveCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'LeaveCriticalSection';
+procedure __imp_EnterCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'EnterCriticalSection';
+procedure __imp_DeleteCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'DeleteCriticalSection';
+procedure __imp_InitializeCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'InitializeCriticalSection';
+function __imp_GetCurrentThreadId:dword; cdecl; external kernel name 'GetCurrentThreadId';
+function __imp_CloseHandle(hObject:THandle):boolean; cdecl; external kernel name 'CloseHandle';
+function __imp__localtime64(t: PCardinal): pointer; cdecl;
+begin
+  result := localtime64(t^);
+end;
+function log(x: double): double; cdecl; export;
+begin
+  result := ln(x);
+end;
+// try ends here
 
 procedure __chkstk;
 begin

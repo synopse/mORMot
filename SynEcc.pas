@@ -104,10 +104,15 @@ uses
     {$ifdef KYLIX3}
       {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
     {$else}
-      {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
-      {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
-      {$define ECC_O2}        // gcc -g -O2 -c ecc.c
-      {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+      {$ifdef BSD}
+        // just to let it compile ... does not work yet !
+        {$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
+      {$else}
+        {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
+        {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
+        {$define ECC_O2}        // gcc -g -O2 -c ecc.c
+        {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+      {$endif}
     {$endif KYLIX}
   {$endif CPUX86}
 

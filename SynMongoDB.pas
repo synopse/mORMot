@@ -3682,7 +3682,7 @@ begin // this is a bit complex, but we have to avoid any collision
     end;
     if ProcessID=0 then begin
       with ExeVersion do
-        PCardinal(@MachineID)^ := crc32c(crc32c(MainThreadID,
+        PCardinal(@MachineID)^ := crc32c(crc32c({$ifdef BSD}Cardinal{$endif}(MainThreadID),
           pointer(Host),length(Host)),pointer(User),length(User));
       ProcessID := PtrUInt(GetCurrentThreadId);
       TAESPRNG.Main.FillRandom(@FirstCounter,3);
