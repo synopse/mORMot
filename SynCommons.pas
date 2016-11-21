@@ -796,7 +796,9 @@ const
     {$ifdef LVCL}+'_LVCL'{$else}
     {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
     {$ifdef DOPATCHTRTL}+' PRTL'{$endif}
-    {$ifdef INCLUDE_FTS3}+' FTS3'{$endif};
+    {$ifdef INCLUDE_FTS3}+' FTS3'{$endif}
+    ;
+
 
 
 { ************ common types used for compatibility between compilers and CPU }
@@ -52150,7 +52152,7 @@ end;
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
-  result :=
+  result :=   
 {$ifdef FPC}
   'Free Pascal'
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
@@ -52158,6 +52160,8 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
+    {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI}+' ERTTI'{$endif}
+    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
