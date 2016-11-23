@@ -1009,6 +1009,13 @@ type
     property TotalBytes: Int64 read fTotalBytes;
   end;
 
+var
+  /// the shared TAESPRNG instance returned by TAESPRNG.Main class function
+  // - you may override this to a customized instance, e.g. if you expect
+  // a specific random generator to be used, like TAESPRNGSystem
+  // - all TAESPRNG.Fill() class functions will use this instance
+  MainAESPRNG: TAESPRNG;
+
 
 type
   PSHA1Digest = ^TSHA1Digest;
@@ -8809,18 +8816,15 @@ begin
   until haspunct and (LowerCase(result)<>result);
 end;
 
-var
-  FillRandomAES: TAESPRNG;
-
 class function TAESPRNG.Main: TAESPRNG;
 begin
-  if FillRandomAES=nil then begin
+  if MainAESPRNG=nil then begin
     GlobalLock;
-    if FillRandomAES=nil then
-      GarbageCollectorFreeAndNil(FillRandomAES, TAESPRNG.Create);
+    if MainAESPRNG=nil then
+      GarbageCollectorFreeAndNil(MainAESPRNG, TAESPRNG.Create);
     GlobalUnLock;
   end;
-  result := FillRandomAES;
+  result := MainAESPRNG;
 end;
 
 procedure _afdiffusesha256(buf,rnd: pointer; size: cardinal);
