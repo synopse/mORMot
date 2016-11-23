@@ -27109,6 +27109,8 @@ begin
     if ExtractID<>nil then
       if JSONGetID(Beg,ExtractID^) and not KeepIDField then begin
         PC := PosChar(Beg,','); // ignore the '"ID":203,' pair
+        if PC=nil then
+          exit;
         PC^ := '{';
         SetString(result,PAnsiChar(PC),P-PC-1);
         exit;
@@ -33771,8 +33773,10 @@ end;
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
   const Args, Bounds: array of const): TSQLTableJSON;
+var where: RawUTF8;
 begin
-  result := MultiFieldValues(Table,FieldNames,FormatUTF8(WhereClauseFormat,Args,Bounds));
+  where := FormatUTF8(WhereClauseFormat,Args,Bounds);
+  result := MultiFieldValues(Table,FieldNames,where);
 end;
 
 function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
