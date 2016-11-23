@@ -22474,6 +22474,17 @@ asm // faster version by AB - eax=Str dl=Chr
         je      @z
         lea     eax, [eax + 1]
         test    ch, ch
+        jz      @e
+        shr     ecx, 16
+        cmp     cl, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    cl, cl
+        jz      @e
+        cmp     ch, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    ch, ch
         jnz     @1
 @e:     xor     eax, eax
         ret
