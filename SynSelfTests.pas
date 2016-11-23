@@ -15236,6 +15236,7 @@ procedure TestOne(const content,contentType: RawByteString);
 var C1,C2: THttpServerRequest;
     P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
+    head: RawUTF8;
     noAnswer1,noAnswer2: boolean;
 begin
   C1 := THttpServerRequest.Create(nil,0,nil);
@@ -15245,7 +15246,7 @@ begin
     C1.Prepare('url','POST','headers',content,contentType,'');
     noAnswer1 := opcode=focBinary;
     noAnswer2 := not noAnswer1;
-    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame);
+    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame,head);
     Check(frame.opcode=opcode);
     TWebSocketProtocolRestHook(P2).FrameToInput(frame,noAnswer2,C2);
     Check(noAnswer1=noAnswer2);
@@ -15258,7 +15259,8 @@ begin
     C1.OutContentType := contentType;
     C1.OutCustomHeaders := 'outheaders';
     frame.opcode := focContinuation;
-    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
+    head := 'answer';
+    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,head,frame);
     Check(frame.opcode=opcode);
     Check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2)=200);
     Check(C2.OutContent=content);
