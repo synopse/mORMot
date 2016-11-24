@@ -541,7 +541,7 @@ type
   end;
 
   ISSCommandWithParameters = interface(ICommandWithParameters)
-  ['{EEC30162-6087-467C-B995-7C523CE96561}']
+    ['{EEC30162-6087-467C-B995-7C523CE96561}']
     function GetParameterProperties(var pcParams: PtrUInt; var prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
     function SetParameterProperties (cParams: PtrUInt; prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
   end;
@@ -1954,7 +1954,7 @@ begin
         end;
         if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
           OleDBConnection.OleDBCheck(self,
-            (fCommand as ISSCommandWithParameters).SetParameterInfo(
+            (fCommand as ICommandWithParameters).SetParameterInfo(
               fParamCount, pointer(fParamOrdinals), pointer(fParamBindInfo)));
           if ssParamPropsCount>0 then
             OleDBConnection.OleDBCheck(self,
