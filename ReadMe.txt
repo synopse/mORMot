@@ -22,6 +22,7 @@ Contributors
   David Mead (MDW)
   Delphinium (louisyeow)
   DigDiver
+  Dominikcz
   EgorovAlex
   Emanuele (lele9)
   Eric Grange

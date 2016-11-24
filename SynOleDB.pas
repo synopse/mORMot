@@ -1805,10 +1805,9 @@ begin
       CreateCommand(nil,IID_ICommandText,ICommand(fCommand)));
   end;
   L := Length(fSQL);
-  if StripSemicolon then begin
+  if StripSemicolon then
     while (L>0) and (fSQL[L] in [#1..' ',';']) do
       dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
-  end;
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
