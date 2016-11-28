@@ -15089,7 +15089,9 @@ type
   protected
     fNoTimeStampCoherencyCheck: Boolean;
     fTimeStampCoherencySeconds: cardinal;
+    fTimeStampCoherencyTicks: cardinal;
     procedure SetNoTimeStampCoherencyCheck(value: boolean);
+    procedure SetTimeStampCoherencySeconds(value: cardinal);
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
@@ -15119,7 +15121,7 @@ type
     // - default value is 5 seconds, which cover most kind of clients (AJAX or
     // WebSockets), even over a slow Internet connection
     property TimeStampCoherencySeconds: cardinal read fTimeStampCoherencySeconds
-      write fTimeStampCoherencySeconds;
+      write SetTimeStampCoherencySeconds;
   end;
 
   /// mORMot secure RESTful authentication scheme
@@ -50461,13 +50463,23 @@ end;
 constructor TSQLRestServerAuthenticationSignedURI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
-  fTimeStampCoherencySeconds := 5;
+  TimeStampCoherencySeconds := 5;
 end;
 
-procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(value: boolean);
+procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(
+  value: boolean);
 begin
   if self<>nil then
     fNoTimeStampCoherencyCheck := value;
+end;
+
+procedure TSQLRestServerAuthenticationSignedURI.SetTimeStampCoherencySeconds(
+  value: cardinal);
+begin
+  if self=nil then
+    exit;
+  fTimeStampCoherencySeconds := value;
+  fTimeStampCoherencyTicks := round(value*(1000/256)); // 256 ms resolution
 end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
@@ -50487,7 +50499,7 @@ begin
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
      (fNoTimeStampCoherencyCheck or (result.fLastTimeStamp=0) or
-      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencySeconds)) then begin
+      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencyTicks)) then begin
     aExpectedSignature := crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
       pointer(Ctxt.Call^.url),aURLlength);
     if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
@@ -50504,7 +50516,7 @@ begin
   end else begin
     {$ifdef WITHLOG}
     Ctxt.Log.Log(sllUserAuth,'Invalid TimeStamp: expected >=%, got %',
-      [result.fLastTimeStamp-fTimeStampCoherencySeconds,aTimeStamp],self);
+      [result.fLastTimeStamp-fTimeStampCoherencyTicks],self);
     {$endif}
   end;
   result := nil; // indicates invalid signature
