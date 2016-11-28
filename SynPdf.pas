@@ -1825,6 +1825,7 @@ type
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
+      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -3143,7 +3144,7 @@ function ScriptApplyDigitSubstitution(
 
 
 implementation
-
+  uses SynPdfArc;
 
 function RGBA(r, g, b, a: cardinal): COLORREF; {$ifdef HASINLINE}inline;{$endif}
 begin
@@ -7327,6 +7328,24 @@ begin
     cx * FDevScaleX * GetWorldFactorX,-cy * FDevScaleY * GetWorldFactorY);
 end;
 
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise, isPieSlice: Boolean);
+var
+   res: teaDrawArray;
+   i: integer;
+begin
+   setlength(res, 0);
+   if doArc(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  isPieSlice, res) then begin
+      for I := Low(res) to High(res) do begin
+         case res[i].res of
+            caMoveto: MoveTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
+            caLine: LineTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
+            EaRcurve: CurveToC(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y),
+                  I2X(res[i].pts[1].x), i2y(res[i].pts[1].y),
+                  I2X(res[i].pts[2].x), i2y(res[i].pts[2].y));
+         end;
+      end;
+   end;
+end;
 procedure TPdfCanvas.PointI(x, y: Single);
 begin
   Rectangle(I2X(X),I2Y(Y),1E-2,1E-2); //smalest difference 1E-2 because of rounding to two decimals
@@ -9005,6 +9024,32 @@ begin
         szlCorner.cx,szlCorner.cy);
     E.FlushPenBrush;
   end;
+  EMR_ARC: begin
+    NormalizeRect(PEMRARC(R)^.rclBox);
+    E.NeedPen;
+    with PEMRARC(R)^ do
+    E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+      rclBox.Width, rclBox.Height,
+      ptlStart.x, ptlStart.y,
+      ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      false);
+      E.Canvas.Stroke;
+   end;
+  EMR_PIE: begin
+    NormalizeRect(PEMRPie(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRPie(R)^ do
+      E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+        rclBox.Width, rclBox.Height,
+        ptlStart.x, ptlStart.y,
+        ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        true);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+    end;
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
@@ -9375,7 +9420,6 @@ begin
   end;
   // TBD
   EMR_SMALLTEXTOUT,
-  EMR_ARC,
   EMR_SETROP2,
   EMR_ALPHADIBBLEND,
   EMR_SETBRUSHORGEX,
