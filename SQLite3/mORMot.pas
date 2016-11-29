@@ -6061,7 +6061,7 @@ type
     /// the remote IP from which the TAuthSession was created, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionRemoteIP: RawUTF8;
-    /// the internal ID used to identify modelroot/safe custom encryption
+    /// the internal ID used to identify modelroot/_safe_ custom encryption
     SafeProtocolID: integer;
     /// the static instance corresponding to the associated Table (if any)
     {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
@@ -16088,7 +16088,7 @@ type
     function GetRemoteTable(TableIndex: Integer): TSQLRest;
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// intercepts all calls to TSQLRestServer.URI for fSafeProtocol
-    // - e.g. ModelRoot/safe URI called by the clients to implement a secure
+    // - e.g. ModelRoot/_safe_ URI called by the clients to implement a secure
     // custom encryption, by sending POST requests with an encrypted body as
     // BINARY_CONTENT_TYPE ('application/octet-stream') input and output
     procedure InternalSafeProtocol(var Call: TSQLRestURIParams; var SafeID: integer);
@@ -25366,9 +25366,8 @@ type
     IDColumn: PPUtf8CharArray;
     Params: TSQLTableSortParams;
     CurrentRow: integer;
-    // used to avoid multiplications to calculate data memory position from index
-    // - CPU64 ready
-    FieldCountNextPtr, FieldIndexNextPtr: PtrInt;
+    // avoid multiplications to calculate data memory position from index
+    FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrInt;
     // temp vars (avoid stack usage):
     PID: Int64;
     PP, CI, CJ: PPUTF8Char;
@@ -25394,27 +25393,39 @@ begin
   // PID must be updated every time PP is modified
   if Assigned(IDColumn) then
     SetInt64(IDColumn[aP],PID) else
-    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIndexNextPtr)^,PID);
+    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIDPtr)^,PID);
 end;
 
 function TUTF8QuickSort.CompI: integer;
+var i64: Int64;
 begin
   result := fComp(CI^,PP^);
-  if result=0 then
+  if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInt64(IDColumn[I])-PID else
-      result := GetInt64(PPUTF8Char(PtrInt(CI)-FieldIndexNextPtr)^)-PID;
+      SetInt64(IDColumn[I],i64) else
+      SetInt64(PPUTF8Char(PtrInt(CI)-FieldIDPtr)^,i64);
+    if i64<PID then
+      result := -1 else
+    if i64>PID then
+      result := +1;
+  end;
 end;
 
 function TUTF8QuickSort.CompJ: integer;
+var i64: Int64;
 begin
   result := fComp(CJ^,PP^);
-  if result=0 then
+  if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInt64(IDColumn[J])-PID else
-      result := GetInt64(PPUTF8Char(PtrInt(CJ)-FieldIndexNextPtr)^)-PID;
+      SetInt64(IDColumn[J],i64) else
+      SetInt64(PPUTF8Char(PtrInt(CJ)-FieldIDPtr)^,i64);
+    if i64<PID then
+      result := -1 else
+    if i64>PID then
+      result := +1;
+  end;
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: integer);
@@ -25500,7 +25511,7 @@ begin
           if CurrentRow=I then
             CurrentRow := J;
           // full row exchange
-          ExchgPtrUInt(PtrInt(CI)-FieldIndexNextPtr,PtrInt(CJ)-FieldIndexNextPtr,
+          ExchgPtrUInt(PtrInt(CI)-FieldFirstPtr,PtrInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
           if Assigned(IDColumn) then begin // update hidden ID column also
           {$ifdef PUREPASCAL}
@@ -25562,7 +25573,10 @@ begin
   Sort.Results := fResults;
   Sort.IDColumn := @fIDColumn[0];
   Sort.FieldCountNextPtr := FieldCount*sizeof(PtrInt);
-  Sort.FieldIndexNextPtr := Field*sizeof(PtrInt);
+  Sort.FieldFirstPtr := Field*sizeof(PtrInt);
+  if fFieldIndexID<0 then // if no ID colum, assume first
+    Sort.FieldIDPtr := Sort.FieldFirstPtr else
+    Sort.FieldIDPtr := (Field-fFieldIndexID)*sizeof(PtrInt);
   if PCurrentRow=nil then
     Sort.CurrentRow := -1 else
     Sort.CurrentRow := PCurrentRow^;
@@ -37159,8 +37173,8 @@ begin
   fAfterCreation := true;
   fStats := TSQLRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  TAESPRNG.Fill(@fSessionCounter,sizeof(fSessionCounter));
-  if fSessionCounter>cardinal(maxInt) then
+  TAESPRNG.Main.Fill(@fSessionCounter,sizeof(fSessionCounter));
+  if fSessionCounter>cardinal(maxInt) then // ensure positive 31-bit integer
     dec(fSessionCounter,maxInt);
   // retrieve published methods
   fPublishedMethods.InitSpecific(TypeInfo(TSQLRestServerMethods),
@@ -37172,7 +37186,7 @@ begin
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
   if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimeStampIndex<0) then
     raise EORMException.CreateUTF8('%.Create: missing method!',[self]);
-  fSafeRootUpper := UpperCase(fModel.Root)+'/SAFE/';
+  fSafeRootUpper := UpperCase(fModel.Root)+'/_SAFE_/';
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
@@ -40053,8 +40067,8 @@ begin
   if (fSafeProtocol<>nil) and IdemPropNameU(Call.Method,'POST') then begin
     P := pointer(Call.Url);
     if P^='/' then
-      inc(P); // may be /modelroot/safe
-    if IdemPChar(P,pointer(fSafeRootUpper)) then begin // 'ROOT/SAFE/'
+      inc(P); // may be /modelroot/_safe_
+    if IdemPChar(P,pointer(fSafeRootUpper)) then begin // 'ROOT/_SAFE_/'
       InternalSafeProtocol(Call,safeid);
       if safeid=0 then
         exit; // low-level error
@@ -40576,7 +40590,7 @@ begin
     exit;
   end;
   P := pointer(Call.Url);
-  inc(P,length(fSafeRootUpper));
+  inc(P,length(fSafeRootUpper)); // IdemPChar() done by caller
   if P^='/' then
     inc(P);
   if IdemPChar(P,'OPEN') then begin
@@ -49985,7 +49999,7 @@ begin
           UInt32ToUtf8(fIDCardinal,fID);
       end;
       // set session parameters
-      TAESPRNG.Fill(@rnd,sizeof(rnd));
+      TAESPRNG.Main.Fill(@rnd,sizeof(rnd));
       fPrivateKey := BinToHex(@rnd,sizeof(rnd));
       aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
@@ -50594,7 +50608,7 @@ end;
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var aServerNonce, aClientNonce: RawUTF8;
-    rnd: TSHA256Digest;
+    rnd: THash256;
 begin
   result := '';
   if User.LogonName='' then
@@ -50603,7 +50617,7 @@ begin
   if aServerNonce='' then
     exit;
   TAESPRNG.Main.FillRandom(@rnd,SizeOf(rnd));
-  aClientNonce := SHA256DigestToString(rnd);
+  aClientNonce := BinToHex(@rnd,SizeOf(rnd));
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);
