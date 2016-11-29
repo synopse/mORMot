@@ -1801,6 +1801,10 @@ Note that a set of global functions have been defined, which allows direct creat
 !!    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
 When working with complex documents, e.g. with @*BSON@ / {\i @*MongoDB@} documents, almost all content will be created in "fast" {\i per-reference} mode.
 :  Advanced TDocVariant process
+:   Number values options
+By default, {\f1\fs20 TDocVariantData} will only recognize {\f1\fs20 integer}, {\f1\fs20 Int64} and {\f1\fs20 currency} - see @33@ - as number values. Any floating point value which may not be translated to/from @*JSON@ textual representation safely will be stored as a JSON string, i.e. if it does match an integer or up to 4 fixed decimals, with 64-bit precision.
+You can set the {\f1\fs20 dvoAllowDoubleValue} option to {\f1\fs20 TDocVariantData}, so that such numbers will be recognized and stored. In this case, only {\f1\fs20 varDouble} storage will be used for the {\f1\fs20 variant} values, i.e. 32-bit IEEE storage, handling 5.0 x 10^-324 .. 1.7 x 10^308 range. With such floating-point values, you may loose precision and digits during the JSON serialization process. This is why it is not enabled by default.
+Also note that some JSON engines do not support 64-bit integer numbers. For instance, {\f1\fs20 @*JavaScript@} engines only store up to 53-bit of information without precision loss, due to their internal storage as a 8 bytes IEEE 754 container. In some cases, it is safest to use JSON string representation of such numbers, as is done with the {\f1\fs20 woIDAsIDstr} value of {\f1\fs20 TTextWriterWriteObjectOption} for safe serialization of {\f1\fs20 TSQLRecord.ID} ORM values.
 :   Object or array document creation options
 As stated above, a {\f1\fs20 TDocVariantOptions} parameter enables to define the behavior of a {\f1\fs20 TDocVariant} custom type for a given instance. Please refer to the documentation of this set of options to find out the available settings. Some are related to the memory model, other to case-sensitivity of the property names, other to the behavior expected in case of non-existing property, and so on...
 Note that this setting is {\i local} to the given {\f1\fs20 variant} instance.
@@ -3549,7 +3553,7 @@ By default, change-tracking feature will be disabled, saving performance and dis
 This single line will let {\f1\fs20 aServer: TSQLRestServer} monitor all CRUD operations, and store all changes of the {\f1\fs20 TSQLInvoice} table within a {\f1\fs20 TSQLRecordHistory} table.
 Since all content changes will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your main database may be powered by high-end hardware (and smaller SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
 !type
-!  TSQLRecordSecondaryHistory = class(TSQLRecord);
+!  TSQLRecordSecondaryHistory = class(TSQLRecordHistory);
 ! (...)
 ! aServer.TrackChanges([TSQLInvoice],TSQLRecordSecondaryHistory);
 Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
@@ -10667,9 +10671,23 @@ Then you subscribe to your remote service as such:
 !      Service := nil;  // release the service local instance BEFORE Client.Free
 !    end;
 You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s - see @48@, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
-:   Interacting with UI/VCL
+:   Subscriber multiple redirection
+Sometimes, in a complex business system, you will define several uncoupled parts of your code subscribing to the same service events. In a DDD architecture, it will be typically happen when several domain bounded contexts subscribe to a single event source, implemented in the infrastructure layer.
+The easiest implementation path is to have each part registering from its side. But it will induce some redundant traffic with the publisher. And it will most probably end-up with duplicated code on subscribers side.
+You may try {\f1\fs20 TSQLRest.MultiRedirect} and register once to a remote service, then use an internal registration mechanism to have every part of your business logic registering and consuming the events. The method returns an {\f1\fs20 IMultiCallbackRedirect} interface, allowing registration of sub-callbacks, with an optional set of method names, if only a sub-set of events are needed.
+Note that sub-callbacks do not need to inherit from the {\f1\fs20 TInterfacedCallback} type: a regular {\f1\fs20 TInterfacedObject} is enough. They will be automatically unregistered from the internal list, if they raise an exception.
+:   Proper threaded implementation
+A {\i mORMot} @*multi-thread@ed server will use critical sections to protect shared data, and avoid potential race conditions. But even on client side, callbacks will be executed in the context of the {\i @*WebSocket@} transmission thread. And in a typical micro-services or event-driven architecture, most nodes are clients and servers at the same time, creating a peer-to-peer mesh of services. So you should prevent any race conditions in each and every node, by protecting access to any shared data.
+Likewise, if your callback triggers another method which shares the same critical section in another thread, you may have a dead lock. If an event triggers a callback within a critical section used to protect a shared resource, and if this callback runs a blocking REST request, the REST answer will be received in the context of the transmission thread. If this answer tries to access the same shared resource, there will be a conflict with the main critical section lock, so the execution will lock.
+To implement proper thread-safety of your callback process you could follow some patterns.
+- Use several small critical sections, protecting any shared data, with the smallest granularity possible. You may use {\f1\fs20 TSynLocker} mutex or {\f1\fs20 TLockedDocVariant} schema-less storage.
+- In your regression tests, ensure you run multi-threaded scenarios, with parallel requests. You may find in {\f1\fs20 TSynParallelProcess} an easy way of running concurrent client/server tests. It will help finding out most obvious implementation issues.
+- By definition, most deadlocks are difficult to reproduce - they are some kind of "Heisenbugs". You may ensure proper logging of the callback process, so that you will be able to track for any deadlock which may occur on production.
+- A good idea may be to gather all non-blocking callback process in a background thread using {\f1\fs20 TSQLRest.AsynchRedirect}. This method will implement any interface via a fake class, which will redirect all methods calls into calls of another interface, but as a FIFO in a background thread. So you will ensure that all callback process will take place in a single thread, avoiding most concurrency issues. As a side effect, the internal FIFO will leverage other threads, so may help scaling your system. For a client application using some User Interface, see @191@ a lock-free alternative.
+Multi-threading is the key to performance. But it is also hard to properly implement. By following those simple rules, you may reduce the risk of concurrency issues.
+:191   Interacting with UI/VCL
 As we have stated, all callback notifications do take place in the transmission thread, i.e. in the {\f1\fs20 TWebSocketProcessClientThread} instance corresponding to each connected client.
-You may be tempted to use the VCL {\f1\fs20 @*Synchronize@()} method, as usual, to forward the notifications to the UI layer. Unfortunately, this may trigger some unexpected race conditions, e.g. when asynchronous notifications (e.g. {\f1\fs20 TChatCallback.NotifyBlaBla()}) are received during a blocking REST command (e.g. {\f1\fs20 Service.BlaBla()}). The {\f1\fs20 Synchronize} call within the blocking command will avoid any incoming asynchronous notification wait for the main thread to be available, and will block the reception of the answer of the pending REST command...\line If you experiment random hangouts of your User Interface, and {\f1\fs20 404 errors} corresponding to a low-level {\i WebSockets} timeout, even when closing the application, you have certainly hit such a race condition.
+You may be tempted to use the VCL {\f1\fs20 @*Synchronize@()} method, as usual, to forward the notifications to the UI layer. Unfortunately, this may trigger some unexpected concurrency issue, e.g. when asynchronous notifications (e.g. {\f1\fs20 TChatCallback.NotifyBlaBla()}) are received during a blocking REST command (e.g. {\f1\fs20 Service.BlaBla()}). The {\f1\fs20 Synchronize} call within the blocking command will avoid any incoming asynchronous notification wait for the main thread to be available, and will block the reception of the answer of the pending REST command...\line If you experiment random hangouts of your User Interface, and {\f1\fs20 404 errors} corresponding to a low-level {\i WebSockets} timeout, even when closing the application, you have certainly hit such a dead lock.
 Get rid of all your {\f1\fs20 Synchronize()} calls! Use {\i Windows} messages instead: they are safe, efficient and fast. The framework allows to forward all incoming notifications as a dedicated {\i Windows} message in a single line:
 ! Client.ServiceNotificationMethodViaMessages(MainForm.Handle,WM_SERVICENOTIFICATION);
 The {\f1\fs20 WM_SERVICENOTIFICATION} should have been defined as a custom user message:
@@ -10685,7 +10703,7 @@ Then, the {\f1\fs20 TFormMain} should execute the message, as a regular event ha
 !  TSQLRestClientURI.ServiceNotificationMethodExecute(Msg);
 !end;
 Thanks to these two lines, the callbacks will be executed asynchronously in the main UI thread, using the optimized {\i Message} queue of the Operating System, without any blocking execution, nor race condition.
-:  Benefits of interface callbacks instead of class messages
+:  Interface callbacks instead of class messages
 If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.
 Most {\i Events Oriented} solutions do use a set of dedicated messages to propagate the events, with a centralized {\i Message Bus} (like {\i MSMQ} or {\i JMS}), or a P2P approach (see e.g. {\i ZeroMQ} or {\i NanoMsg}). In practice, you are expected to define one {\f1\fs20 class} per message, the {\f1\fs20 class} fields being the message values. You will define e.g. one {\f1\fs20 class} to notify a successful process, and another {\f1\fs20 class} to notify an error. @*SOA@ services will eventually tend to be defined by a huge number of individual classes, with the temptation of re-using existing classes in several contexts.
 Our {\f1\fs20 interface}-based approach allows to gather all messages:
@@ -10718,7 +10736,7 @@ For instance, you may define the following generic service and callback to retri
 !  end;
 Take a deep breath, and keep in mind those two type definitions as reference. In a single look, I guess you did get the expectation of the "Camera Service". We will now compare with a classical message-based pattern.
 :   Classical message(s) event
-With a {\f1\fs20 class}-based message kind of implementation, you may either have to define a single class, containing all potential information:
+With a {\f1\fs20 class}-based message kind of implementation, you will probably define a single {\f1\fs20 class}, containing all potential information:
 !type
 !  // a single class message will need a status
 !  TMyCameraCallbackState = (
@@ -10776,12 +10794,13 @@ In order to have an implementation closer to @47@, you may define a set of class
 !    property MessageText: RawUTF8 read fMessageText write fMessageText;
 !  end;
 Inheritance makes this class hierarchy not as verbose as it may have been with plain "flat" classes, but it is still much less readable than the {\f1\fs20 IMyCameraCallback} type definition.
-In both cases, such {\f1\fs20 class} definitions make it difficult to guess which message does match with a given service. You must be very careful and consistent about your naming conventions, and uncouple your service definitions in clear name spaces.
+In both cases, such {\f1\fs20 class} definitions make it difficult to guess to which message matches which service. You must be very careful and consistent about your naming conventions, and uncouple your service definitions in clear name spaces.
 When implementing @*SOA@ services, @*DDD@'s {\i @*Ubiquitous Language@} tends to be polluted by the {\f1\fs20 class} definition (getters and setters), and implementation details of the messages-based notification: your {\i Domain} code will be tied to the message oriented nature of the {\i Infrastructure} layer. We will see @172@ how {\f1\fs20 interface} callbacks will help implementing DDD's {\i @*Event-Driven@} pattern, in a cleaner way.
 :181   Workflow adaptation
-Sometimes, it may be necessary to react to some unexpected event. The consumer may be able to change the workflow of the producer, depending on some business rules, or user expectations. By definition, all message-based implementation are asynchronous: as a result, implementing "reverse" messaging tends to be difficult to write and debug.
-A common implementation is to have a dedicated set of "answer" messages, to notify the service providers of a state change - it comes with potential race conditions, or unexpected rebound phenomenons, for instance when you add a node to an existing event-driven system.
-Another solution may be to define explicit {\i rules} for service providers, e.g. when the service is called. You may define a set of workflows, injected to the provider service at runtime. It will definitively tend to break the @182@.
+Sometimes, it may be necessary to react to some unexpected event. The consumer may need to change the workflow of the producer, depending on some business rules, an unexpected error, or end-user interaction.
+By design, message-based implementations are asynchronous, and non-blocking: messages are sent and stored in a message broker/bus, and its internal processing loop propages the messages to all subscribers. In such an implementation, there is no natural place for "reverse" feedback messages.
+A common pattern is to have a dedicated set of "answer/feedback" messages, to notify the service providers of a state change - it comes with potential race conditions, or unexpected rebound phenomenons, for instance when you add a node to an existing event-driven system.
+Another solution may be to define explicit {\i rules} for service providers, e.g. when the service is called. You may define a set of workflows, injected to the provider/bus service at runtime. It will definitively tend to break the @182@, and put logic in the infrastructure layer.
 On the other hand, since {\i mORMot}'s callbacks are true {\f1\fs20 interface} methods, they may return some values (as a {\f1\fs20 function} result or a {\f1\fs20 var/out} parameter). On the server side, such callbacks will block and wait for the client end to respond.
 So by writing an additional method like:
 !  IMyCameraCallback = interface(IInvokable)
@@ -10793,6 +10812,7 @@ So by writing an additional method like:
 As an additional benefit, integration with the Delphi language is clearly implementation agnostic: you are not even tied to use the framework, when working with such {\f1\fs20 interface} type definitions. In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}, only if necessary.
 The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} instance calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and binary/JSON marshalling over TCP/IP).
 On the server side, your code - especially your {\i Domain} code - may interact directly with the lower level services, defined in the {\i Domain} as {\f1\fs20 interface} types, and implemented in the {\i infrastructure} layer. You may host both {\i Domain} and {\i Infrastructure} code in a single server executable, with direct assignment of local {\f1\fs20 class} instance as callbacks. This will minimize the program resources, in both CPU and memory terms - which is always a very valuable goal, for any business system.
+You may be able to reuse your application and business logic in a stand-alone application, with similar direct calls from the UI to the application {\f1\fs20 interface}. On need, the {\f1\fs20 interface} variable may point to a remote {\i mORMot} server, without touching VCL/FMX code.
 Last but not least, using an {\f1\fs20 interface} will help implementing the whole callback mechanism using @166@, e.g. for easy unit testing via @180@.\line You may also write your unit tests with real local callback {\f1\fs20 class} instances, which will be much easier to debug than over the whole client/server stack. Once you identified a scenario which fails the system, you could reproduce it with a dedicated test, even in an aggressive multi-threaded way, then use the debugger to trace the execution and identify the root cause of the issue.
 \page
 : Implementation details
@@ -14358,7 +14378,7 @@ Verification can be done via the dedicated {\f1\fs20 TECCSignatureCertified} cla
 Here, the signing authority is supplied as a single {\f1\fs20 .public} local file, loaded in a {\f1\fs20 TECCCertificate} instance, but your projects may use {\f1\fs20 TECCCertificateChain} for a full {\f1\fs20 @*PKI@} authority chain.
 :190  File Encryption
 In order to encrypt out both test files, as proposed in @%%AsymmEncrypt@, we will run the following commands:
-$>ecc crypt -file test1.txt -auth 03 -salt pass monsecret -noprompt
+$>ecc crypt -file test1.txt -auth 03 -saltpass monsecret -noprompt
 $Will use: 03B8865C6B982A39E9EFB1DC1A95D227.public
 $
 $ test1.txt.synecc file created.
@@ -14409,9 +14429,9 @@ $        "HMAC": "07ddc90f7695fff8ca0683be98f7b1043e13a7bceb79f0d6a929069c5d9767
 $        "Signature": null
 $}
 As you can see, encryption is defined by its {\f1\fs20 "Algorithm":} field, and uses two additional properties:
-- {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending billions of dollars in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
+- {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending lots of money in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
 - {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. SHA256 in our case.
-In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using PBKDF2_HMAC_SHA256_AES256_CFB as key derivation function and symmetric encryption scheme and HMAC_SHA256 algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
+In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using PBKDF2_HMAC_SHA256 as key derivation function, AES256-CFB as symmetric encryption scheme, and HMAC_SHA256 algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
 {\f1\fs20 ECIES} provides semantic security against an adversary who is allowed to use chosen-plaintext and chosen-ciphertext attacks. In addition to the expected genuine secret and message authentication in {\f1\fs20 "RandomPublicKey"} and {\f1\fs20 "HMAC"} properties, {\f1\fs20 SynEcc} implementation allows to customize the default "salt" value, to add a password protection for each {\f1\fs20 .synecc} encrypted file.
 Decryption is pretty straightforward:
 $>ecc decrypt -file test1.txt.synecc

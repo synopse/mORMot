@@ -114,7 +114,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
 
 const
   CHEAT_FILEEXT = '.cheat';
-  MASTERCHEAT_FILE = 'cheat';
+  CHEAT_FILEMASTER = 'cheat';
   CHEAT_ROUNDS = 100000;
   CHEAT_SPLIT = 100;
 
@@ -129,7 +129,7 @@ var json,bin: RawByteString;
 begin
   master := TECCCertificate.Create;
   try
-    if master.FromFile(MASTERCHEAT_FILE) then
+    if master.FromFile(CHEAT_FILEMASTER) then
       try
         if SavePasswordRounds=DEFAULT_ECCROUNDS then
           json := SavePassword else
@@ -364,17 +364,17 @@ function ECCCommandCheatInit(const Issuer, CheatPassword: RawUTF8;
 var new: TECCCertificateSecret;
     priv: RawByteString;
 begin
-  if FileExists(MASTERCHEAT_FILE+ECCCERTIFICATEPUBLIC_FILEEXT) or
-     FileExists(MASTERCHEAT_FILE+ECCCERTIFICATESECRET_FILEEXT) then
-    raise EECCException.Create(MASTERCHEAT_FILE+' file already exist');
+  if FileExists(CHEAT_FILEMASTER+ECCCERTIFICATEPUBLIC_FILEEXT) or
+     FileExists(CHEAT_FILEMASTER+ECCCERTIFICATESECRET_FILEEXT) then
+    raise EECCException.Create(CHEAT_FILEMASTER+' file already exist');
   // generate pair
   new := TECCCertificateSecret.CreateNew(nil,Issuer);
   try
     // save private key as cheat.private password-protected binary file
     priv := new.SaveToSecureBinary(CheatPassword,128,CheatRounds);
-    FileFromString(priv,MASTERCHEAT_FILE+ECCCERTIFICATESECRET_FILEEXT);
+    FileFromString(priv,CHEAT_FILEMASTER+ECCCERTIFICATESECRET_FILEEXT);
     // save public key as mastercheat.public JSON file
-    result := MASTERCHEAT_FILE+ECCCERTIFICATEPUBLIC_FILEEXT;
+    result := CHEAT_FILEMASTER+ECCCERTIFICATEPUBLIC_FILEEXT;
     JSONReformatToFile(VariantSaveJSON(new.ToVariant),result);
   finally
     new.Free;
@@ -395,7 +395,7 @@ begin
   if bin='' then
     raise EECCException.CreateUTF8('Unknown file %',[fn]);
   master := TECCCertificateSecret.CreateFromSecureFile(
-    MASTERCHEAT_FILE,CheatPassword,CheatRounds);
+    CHEAT_FILEMASTER,CheatPassword,CheatRounds);
   try
     res := master.Decrypt(bin,split);
     if res<>ecdDecrypted then
@@ -500,8 +500,11 @@ begin
       newfile := EccCommandNew(
         auth,authpass,authrounds,issuer,start,days,savepass,saverounds,splitfiles);
       WritePassword(newfile,savepass,saverounds);
-      if newfile<>'' then
+      if newfile<>'' then begin
         newfile := newfile+'/.private';
+        if FileExists(ChangeFileExt(newfile, CHEAT_FILEEXT)) then
+          newfile := newfile+('/'+CHEAT_FILEEXT);
+      end;
     end;
     ecRekey: begin
       repeat
@@ -525,6 +528,8 @@ begin
       until (saverounds>=1000) or sw.NoPrompt;
       newfile := EccCommandRekey(auth,authpass,authrounds,savepass,saverounds);
       WritePassword(newfile,savepass,saverounds);
+      if FileExists(ChangeFileExt(newfile,CHEAT_FILEEXT)) then
+        newfile := newfile+('/'+CHEAT_FILEEXT);
     end;
     ecSign: begin
       repeat

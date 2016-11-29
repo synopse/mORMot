@@ -62,7 +62,7 @@ uses
   SysUtils,
   Classes,
   Contnrs,
-  {$ifndef DELPHI5OROLDER}
+  {$ifndef NOVARIANTS}
   Variants,
   {$endif}
   SynCommons,
@@ -119,6 +119,11 @@ type
     // - to search for a field, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
       aOptions: TLocateOptions): integer; virtual;
+    {$ifndef NOVARIANTS}
+    // used to serialize TBCDVariant as JSON - BcdRead will always fail
+    class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
+    //class function BcdRead(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    {$endif}
   public
     /// this overridden constructor will compute an unique Name property
     constructor Create(Owner: TComponent); override;
@@ -173,6 +178,7 @@ type
     property OnPostError;
   end;
 
+  {$ifndef NOVARIANTS}
   /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
   // - could be used e.g. from the result of TMongoCollection.FindDocs() to
   // avoid most temporary conversion into JSON or TClientDataSet buffers
@@ -200,6 +206,7 @@ type
     constructor Create(Owner: TComponent; const Data: TVariantDynArray;
       const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType); reintroduce;
   end;
+  {$endif}
 
 const
   /// map the VCL string type, depending on the Delphi compiler version
@@ -237,11 +244,13 @@ function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 // - will work for any kind of TDataSet
 function DataSetToJSON(Data: TDataSet): RawUTF8;
 
+{$ifndef NOVARIANTS}
 /// convert a dynamic array of TDocVariant result into a VCL DataSet
 // - this function is just a wrapper around TDocVariantArrayDataSet.Create()
 // - the TDataSet will be opened once created
 function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
   const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
+{$endif}
 
 
 implementation
@@ -670,6 +679,25 @@ begin
   result := false;
 end;
 
+{$ifndef NOVARIANTS}
+type // as in FMTBcd.pas
+  TFMTBcdData = class(TPersistent)
+  private
+    FBcd: TBcd;
+  end;
+  TFMTBcdVarData = packed record
+    VType: TVarType;
+    Reserved1, Reserved2, Reserved3: Word;
+    VBcd: TFMTBcdData;
+    Reserved4: LongWord;
+  end;
+
+class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);
+begin
+  AddBCD(aWriter,TFMTBcdVarData(aValue).VBcd.FBcd);
+end;
+{$endif NOVARIANTS}
+
 
 function DataSetToJSON(Data: TDataSet): RawUTF8;
 var W: TJSONWriter;
@@ -906,4 +934,9 @@ begin
   result.Open;
 end;
 
+initialization
+  {$ifndef NOVARIANTS}
+  TTextWriter.RegisterCustomJSONSerializerForVariantByType(
+    VarFMTBcd,nil,TSynVirtualDataSet.BcdWrite);
+  {$endif}
 end.

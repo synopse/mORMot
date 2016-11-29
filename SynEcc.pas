@@ -104,10 +104,15 @@ uses
     {$ifdef KYLIX3}
       {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
     {$else}
-      {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
-      {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
-      {$define ECC_O2}        // gcc -g -O2 -c ecc.c
-      {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+      {$ifdef BSD}
+        // just to let it compile ... does not work yet !
+        {$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
+      {$else}
+        {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
+        {.$define ECC_O1}       // gcc -g -O1 -c ecc.c
+        {$define ECC_O2}        // gcc -g -O2 -c ecc.c
+        {.$define ECC_O3}       // gcc -g -O3 -c ecc.c
+      {$endif}
     {$endif KYLIX}
   {$endif CPUX86}
 
@@ -324,6 +329,10 @@ type
   PECCSignatureCertifiedContent = ^TECCSignatureCertifiedContent;
 
   /// the known algorithms implemented in ECIES encryption
+  // - supports AES 256-bit encryption with safe block modes (weack ECB mode
+  // is not available)
+  // - safe HMAC SHA-256 is used as Message Authentication Code algorithm
+  // - optional SynLZ compression can be enabled
   TECIESAlgo = (
     ecaUnknown,
     ecaPBKDF2_HMAC_SHA256_AES256_CFB,
@@ -341,6 +350,7 @@ type
   // - a sign-then-encrypt pattern may have been implemented for additional safety
   TECIESHeader = packed record
     /// contains 'SynEccEncrypted'#26
+    // - so every .synecc file starts with those characters as signature
     magic: THash128;
     /// TECCCertificate.Issuer of the recipient public key used for encryption
     // - is either geniune random bytes, or some Baudot-encoded text
@@ -394,7 +404,7 @@ type
   TECDHEAuths = set of TECDHEAuth;
   /// the Key Derivation Functions recognized by TECDHEProtocol
   // - used to compute the EF secret and MAC secret from shared ephemeral secret
-  // - only a single very safe algorithm is proposed
+  // - only HMAC SHA-256 safe algorithm is proposed currently
   TECDHEKDF = (kdfHmacSha256);
   /// the Encryption Functions recognized by TECDHEProtocol
   // - all supported AES chaining blocks have their 128-bit and 256-bit flavours
@@ -417,7 +427,7 @@ type
   // AES-NI accellerated encryption (110MB/s with efAesCfb128, to be compared
   // with macDuringEF, which produces a similar level of MAC)
   // - macHmacCrc256c and macHmacCrc32c are faster (550-650MB/s with efAesCfb128),
-  // but prevent transmission errors but not message integrity or authentication
+  // and prevent transmission errors but not message integrity or authentication
   // since composition of two crcs is a multiplication by a polynomial - see
   // http://mslc.ctf.su/wp/boston-key-party-ctf-2016-hmac-crc-crypto-5pts
   // - macNone (800MB/s, which is the speed of AES-NI encryption itself for a
@@ -446,6 +456,7 @@ type
   // - the frame will always have the same fixed size of 290 bytes (i.e. 388
   // base64-encoded chars, which could be transmitted in a HTTP header),
   // for both mutual or unilateral authentication
+  // - ephemeral keys may be included for perfect forward security
   TECDHEFrameClient = packed record
     /// expected algorithm used
     algo: TECDHEAlgo;
@@ -468,6 +479,7 @@ type
   // - the frame will always have the same fixed size of 306 bytes (i.e. 408
   // base64-encoded chars, which could be transmitted in a HTTP header),
   // for both mutual or unilateral authentication
+  // - ephemeral keys may be included for perfect forward security
   TECDHEFrameServer = packed record
     /// algorithm used by the server
     algo: TECDHEAlgo;

@@ -49,7 +49,9 @@ unit SpiderMonkey;
   ***** END LICENSE BLOCK *****
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
   Version 1.18
@@ -85,6 +87,8 @@ type
   int32 = Integer;
   /// 32 bit unsigned integer type for C APIs
   uint32 = Cardinal;
+{$endif}
+{$ifndef ISDELPHIXE2}
   uintptr = PtrUInt;
 {$endif}
   uintN = PtrUInt;
@@ -290,8 +294,9 @@ type
     JSVAL_TYPE_MISSING  = $21
   );
 
-{$Z4}
+{$ifndef CPU64}
 /// first 4 bytes for JSValue
+{$Z4}
   JSValueTag = (
   JSVAL_TAG_CLEAR      = Cardinal($FFFFFF80),
   JSVAL_TAG_INT32      = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_INT32)),
@@ -303,6 +308,7 @@ type
   JSVAL_TAG_NULL       = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_NULL)),
   JSVAL_TAG_OBJECT     = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_OBJECT))
   );
+{$endif}
 
 
 {$Z2}
@@ -403,8 +409,8 @@ type
   _JSIdArray = record
     cx: PJSContext;
     mBegin: PjsidVector;    //* actually, length jsid words */
-    mLength: UInt32;
-    mCapacity: UInt32;
+    mLength: size_t;
+    mCapacity: size_t;
     mStorage: Int64;
   end;
 /// internal Spidermonkey structure for storrage jsid
@@ -413,7 +419,7 @@ type
     _internal: _JSIdArray;
     procedure init(cx: PJSContext); {$ifdef HASINLINE}inline;{$endif}
   public
-    property Length: UInt32 read _internal.mLength;
+    property Length: size_t read _internal.mLength;
     property vector: PjsidVector read _internal.mBegin;
   end;
 
@@ -423,18 +429,24 @@ type
     case Byte of
       0: (i32: int32);
       1: (u32: uint32);
+{$IFNDEF CPU64}
       2: (boo: uint32);   // Don't use |bool| -- it must be four bytes.
       3: (str: PJSString);
       4: (obj: PJSObject);
       5: (ptr: pointer);
+{$ENDIF}
       6: (why: JSWhyMagic);
+{$IFNDEF CPU64}
       7: (word: size_t);
       8: (uintptr: PtrUInt)
+{$ENDIF}
   end;
 {$ifdef IS_LITTLE_ENDIAN}
   jsval_val_layout = packed record
     payload: jsval_payload;
+{$IFNDEF CPU64}
     tag: JSValueTag;
+{$ENDIF}
   end;
 {$else} //BIG_ENDIAN
   jsval_val_layout = record
@@ -448,7 +460,9 @@ type
   jsval_layout = record
     case Byte of
       0: (asBits: QWord);
+{$IFNDEF CPU64}
       1: (s: jsval_val_layout);
+{$ENDIF}
       2: (asDouble: double);
       3: (asPtr: Pointer);
   end;
@@ -738,6 +752,8 @@ type
     property Options: PJSRuntimeOptions read GetOptions;
     /// Get/Set performance parameters related to garbage collection.
     property GCParameter[key: JSGCParamKey]: uint32 read GetGCParameter write SetGCParameter;
+    /// Adjust performance parameters related to garbage collection based on available memory(in megabytes).
+    procedure SetGCParametersBasedOnAvailableMemory(availMem: uint32);
     /// Get/Set the error reporting mechanism for an application.
     property ErrorReporter: JSErrorReporter read GetErrorReporter write SetErrorReporter;
     /// Get/Set a callback function that is automatically called periodically while JavaScript code runs.
@@ -1155,23 +1171,29 @@ type
   /// JSObject is the type of JavaScript objects in the JSAPI
   // - this object does not store anything, but just provide some helper methods
   // to access a PJSObject value via low-level API functions
-  JSObject = object
+  JSObject = {$ifdef UNICODE}record{$else}object{$endif}
   private
     function GetPrivate: Pointer; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetPrivate(data: Pointer); cdecl;
+    procedure SetPrivate(data: Pointer); cdecl; {$ifdef HASINLINE}inline;{$endif}
     function GetReservedSlot(index: uint32): jsval; {$ifdef HASINLINE}inline;{$endif}
-    procedure SetReservedSlot(index: uint32; v: jsval);
+    procedure SetReservedSlot(index: uint32; v: jsval); {$ifdef HASINLINE}inline;{$endif}
     function GetClass: PJSClass; {$ifdef HASINLINE}inline;{$endif}
+    function GetConstructor(cx: PJSContext): PJSObject; {$ifdef HASINLINE}inline;{$endif}
   public
     /// get a jsval corresponding to this object
     function ToJSValue: jsval; {$ifdef HASINLINE}inline;{$endif}
 
     /// Access the private data field of an object.
     property PrivateData: Pointer read GetPrivate write SetPrivate;
+
+    property Ctor[cx: PJSContext]: PJSObject read GetConstructor;
     /// Read access an object's reserved slots.
     property ReservedSlot[index: uint32]: jsval read GetReservedSlot write SetReservedSlot;
     /// Retrieves the class associated with an object.
     property Class_: PJSClass read GetClass;
+
+    /// JSAPI method equivalent to the instanceof operator in JavaScript.
+    function HasInstance(cx: PJSContext; var val: jsval): Boolean;
 
     /// is object is Date object
     function isDate(cx: PJSContext): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -1242,11 +1264,11 @@ type
     function RunMethod(cx: PJSContext; const name: PCChar;
       out rval: jsval): Boolean; overload; {$ifdef HASINLINE}inline;{$endif}
     function CallFunction(cx: PJSContext; var fun: PJSFunction;
-      argc: uintN; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
+      argc: size_t; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
     function CallFunctionValue(cx: PJSContext; val: jsval;
-      argc: uintN; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
+      argc: size_t; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
     function CallFunctionName(cx: PJSContext; const name: PCChar;
-      argc: uintN; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
+      argc: size_t; argv: PjsvalVector; out rval: jsval): Boolean; {$ifdef HASINLINE}inline;{$endif}
 
     /// Make a JSClass accessible to JavaScript code by creating its prototype,
     // constructor, properties, and functions.
@@ -1258,6 +1280,16 @@ type
     /// Get the prototype of obj, storing it in result.
     // - Implements: ES6 [[GetPrototypeOf]] internal method.
     function GetPrototype(cx: PJSContext; out protop: PJSObject): Boolean; {$ifdef HASINLINE}inline;{$endif}
+    /// Change the prototype of obj.
+    // - Implements: ES6 [[SetPrototypeOf]] internal method.
+    // - In cases where ES6 [[SetPrototypeOf]] returns false without an exception,
+    // JS_SetPrototype throws a TypeError and returns false.
+    // - Performance warning: JS_SetPrototype is very bad for performance. It may
+    // cause compiled jit-code to be invalidated. It also causes not only obj but
+    // all other objects in the same "group" as obj to be permanently deoptimized.
+    // It's better to create the object with the right prototype from the start.
+    function SetPrototype(cx: PJSContext; var proto: PJSObject): Boolean; {$ifdef HASINLINE}inline;{$endif}
+
     /// Get an array of the non-symbol enumerable properties of obj.
     // This function is roughly equivalent to:
     //
@@ -1390,7 +1422,7 @@ type
     /// Get the type of elements in a typed array, or jsabTYPE_DATAVIEW if a DataView
     function GetArrayBufferViewType: JSArrayBufferViewType;{$ifdef HASINLINE}inline;{$endif}
 
-    function GetSharedArrayBufferViewType: JSArrayBufferViewType;{$ifdef HASINLINE}inline;{$endif}
+//    function GetSharedArrayBufferViewType: JSArrayBufferViewType;{$ifdef HASINLINE}inline;{$endif}
 
     /// Check whether obj supports the JS_GetArrayBuffer* APIs
     // - Note that this may return false if a security wrapper is encountered that denies the
@@ -1466,7 +1498,8 @@ type
     // - obj must have passed a JS_Is*Array test, or somehow be known that it would
     // pass such a test: it is a typed array or a wrapper of a typed array, and the
     // unwrapping will succeed
-    function GetUint8ArrayData(out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector;{$ifdef HASINLINE}inline;{$endif}
+    function GetUint8ArrayData(out isSharedMemory: Boolean; nogc: PJSAutoCheckCannotGC): Puint8Vector; overload;{$ifdef HASINLINE}inline;{$endif}
+    function GetUInt8ArrayData: Puint8Vector; overload;{$ifdef HASINLINE}inline;{$endif}
 
     /// Return a pointer to the start of the data referenced by a typed 8 bit unsigned integer array
     // - The data is still owned by the typed array, and should not be modified on
@@ -1834,6 +1867,11 @@ type
     property Line: integer read FLineNum;
   end;
 
+/// pass exception of this type to JSError for raising JS RangeError exception
+  ESMRangeException = class(ESMException);
+/// pass exception of this type to JSError for raising JS TypeError exception
+  ESMTypeException = class(ESMException);
+
 /// to be used to catch Delphi exceptions inside JSNative function implementation
 // - usage example:
 // ! try
@@ -1848,6 +1886,8 @@ type
 
 procedure JSError(cx: PJSContext; aException: Exception);
 procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
+procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
+procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
 
 // must be called ONCE per process before any interaction with JavaScript
 function InitJS: Boolean;
@@ -1857,8 +1897,40 @@ procedure ShutDownJS;
 var
     nullObj: PJSObject = nil;
 const
+{$ifdef CPU64}
+  JSVAL_TAG_SHIFT              = 47;
+  JSVAL_PAYLOAD_MASK           = $00007FFFFFFFFFFF;
+  JSVAL_TAG_MASK               = $FFFF800000000000;
+
+  JSVAL_TAG_MAX_DOUBLE                = UInt32($1FFF0);
+  JSVAL_TAG_INT32                     = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_INT32));
+  JSVAL_TAG_UNDEFINED                 = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_UNDEFINED));
+  JSVAL_TAG_STRING                    = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_STRING));
+  JSVAL_TAG_SYMBOL                    = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_SYMBOL));
+  JSVAL_TAG_BOOLEAN                   = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_BOOLEAN));
+  JSVAL_TAG_MAGIC                     = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_MAGIC));
+  JSVAL_TAG_NULL                      = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_NULL));
+  JSVAL_TAG_OBJECT                    = UInt32(JSVAL_TAG_MAX_DOUBLE or UInt8(JSVAL_TYPE_OBJECT));
+
+  JSVAL_SHIFTED_TAG_MAX_DOUBLE        = (uint64(JSVAL_TAG_MAX_DOUBLE) shl JSVAL_TAG_SHIFT) or $FFFFFFFF;
+  JSVAL_SHIFTED_TAG_INT32             = uint64(JSVAL_TAG_INT32) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_UNDEFINED         = uint64(JSVAL_TAG_UNDEFINED) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_STRING            = uint64(JSVAL_TAG_STRING) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_SYMBOL            = uint64(JSVAL_TAG_SYMBOL) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_BOOLEAN           = uint64(JSVAL_TAG_BOOLEAN) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_MAGIC             = uint64(JSVAL_TAG_MAGIC) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_NULL              = uint64(JSVAL_TAG_NULL) shl JSVAL_TAG_SHIFT;
+  JSVAL_SHIFTED_TAG_OBJECT            = uint64(JSVAL_TAG_OBJECT) shl JSVAL_TAG_SHIFT;
+{$endif}
+
+{$ifdef CPU64}
+  JSVAL_NULL_impl =  QWord(JSVAL_SHIFTED_TAG_NULL);
+  JSVAL_VOID_impl =  QWord(JSVAL_SHIFTED_TAG_UNDEFINED);
+{$ELSE}
   JSVAL_NULL_impl =  QWord(QWord(JSVAL_TAG_NULL     ) shl 32) or 0;
   JSVAL_VOID_impl =  QWord(QWord(JSVAL_TAG_UNDEFINED) shl 32) or 0;
+{$endif}
+
   JSVAL_NAN_impl  =  $7FF8000000000000;
 
 const
@@ -1998,6 +2070,10 @@ procedure JS_SetGCParameter(rt: PJSRuntime; key: JSGCParamKey; value: uint32);
 function JS_GetGCParameter(rt: PJSRuntime; key: JSGCParamKey): uint32;
   cdecl; external SpiderMonkeyLib;
 
+///Adjust performance parameters related to garbage collection based on available memory(in megabytes).
+procedure JS_SetGCParametersBasedOnAvailableMemory(rt: PJSRuntime; availMem: uint32);
+  cdecl; external SpiderMonkeyLib;
+
 /// Creates a new JSString whose characters are stored in external memory, i.e.,
 //  memory allocated by the application, not the JavaScript engine
 // - Since the program allocated the memory, it will need to free it;
@@ -2048,11 +2124,17 @@ function JS_InitClass(cx: PJSContext; var obj: PJSObject; var parent_proto: PJSO
 /// Retrieves the class associated with an object.
 function JS_GetClass(obj: PJSObject): PJSClass; cdecl; external SpiderMonkeyLib;
 
+/// JSAPI method equivalent to the instanceof operator in JavaScript.
+function JS_HasInstance(cx: PJSContext; var obj: PJSObject; var val: jsval; out res: Boolean): Boolean; cdecl; external SpiderMonkeyLib;
+
 /// Access the private data field of an object.
 function JS_GetPrivate(obj: PJSObject): Pointer; cdecl; external SpiderMonkeyLib;
 
 /// Sets the private data field of an object.
 procedure JS_SetPrivate(obj: PJSObject; data: Pointer); cdecl; external SpiderMonkeyLib;
+
+/// Retrieves the constructor for an object.
+function JS_GetConstructor(cx: PJSContext; var proto: PJSObject): PJSObject; cdecl; external SpiderMonkeyLib;
 
 /// Retrieve the private data associated with an object, if that object is an
 // instance of a specified class.
@@ -2073,22 +2155,32 @@ function JS_NewObjectWithGivenProto(cx: PJSContext; clasp: PJSClass; var proto: 
 
 /// Get the prototype of obj, storing it in result.
 // - Implements: ES6 [[GetPrototypeOf]] internal method.
-function JS_GetPrototype(cx: PJSContext; var obj: PJSObject; out protop: PJSObject):Boolean; cdecl; external SpiderMonkeyLib;
+function JS_GetPrototype(cx: PJSContext; var obj: PJSObject; out result: PJSObject):Boolean; cdecl; external SpiderMonkeyLib;
+
+/// Change the prototype of obj.
+// - Implements: ES6 [[SetPrototypeOf]] internal method.
+// - In cases where ES6 [[SetPrototypeOf]] returns false without an exception,
+// JS_SetPrototype throws a TypeError and returns false.
+// - Performance warning: JS_SetPrototype is very bad for performance. It may
+// cause compiled jit-code to be invalidated. It also causes not only obj but
+// all other objects in the same "group" as obj to be permanently deoptimized.
+// It's better to create the object with the right prototype from the start.
+function JS_SetPrototype(cx: PJSContext; var obj: PJSObject; var proto: PJSObject):Boolean; cdecl; external SpiderMonkeyLib;
 
 /// Create a new property on an object.
 // Name indentifies by ID
 function JS_DefinePropertyById(cx: PJSContext; var obj: PJSObject; var id: jsid;
-  const value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
+  var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
     cdecl; external SpiderMonkeyLib;
 /// Create a new property on an object.
 // Name indentifies by ansi string
 function JS_DefineProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    const value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
+    var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): boolean;
     cdecl; external SpiderMonkeyLib;
 /// Create a new property on an object.
 // Name indentifies by unicode string
 function JS_DefineUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16;
-    namelen: size_t; const value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): Boolean;
+    namelen: size_t; var value: jsval; attrs: uint32; getter: JSNative; setter: JSNative): Boolean;
     cdecl; external SpiderMonkeyLib;
 
 /// Determine whether a JavaScript object has a specified property.
@@ -2121,14 +2213,14 @@ function JS_GetElement(cx: PJSContext; var obj: PJSObject; index: uint32;
 /// Assign a value to a property of an object.
 // Name indentifies by ansi string
 function JS_SetProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar;
-    const vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+    var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
 /// Assign a value to a property of an object.
 // Name indentifies by unicode string
 function JS_SetUCProperty(cx: PJSContext; var obj: PJSObject; const name: PCChar16; namelen: size_t;
-    const vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
+    var vp: jsval): boolean; cdecl; external SpiderMonkeyLib;
 /// Assign a value to a numeric property of an object.
 function JS_SetElement(cx: PJSContext; var obj: PJSObject; index: uint32;
-  const vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
+    var vp: jsval): Boolean; cdecl; external SpiderMonkeyLib;
 
 /// Removes a specified property from an object.
 // Name indentifies by ID
@@ -2162,7 +2254,7 @@ type
 /// Calls a specified JS function.
 // Function identifies by jsvalue
 // - equivalent of `rval = Reflect.apply(fun, obj, args)`.
-function JS_CallFunctionValue(cx: PJSContext; var obj: PJSObject; const val: jsval;
+function JS_CallFunctionValue(cx: PJSContext; var obj: PJSObject; var val: jsval;
   var args: JSHandleValueArray; out rval: jsval): Boolean; cdecl; external SpiderMonkeyLib;
 /// Calls a specified JS function.
 // Function identifies by PJSFunction
@@ -2300,7 +2392,7 @@ function JS_GetTwoByteStringCharsAndLength(cx: PJSContext; nogc: PJSAutoCheckCan
 // function is specified, or optionally including only the specified properties
 // if a replacer array is specified
 function JS_Stringify(cx: PJSContext; var vp: jsval; var replacer: PJSObject;
-    const space: jsval; callback: JSONWriteCallback; data: pointer): Boolean;
+    var space: jsval; callback: JSONWriteCallback; data: pointer): Boolean;
   cdecl; external SpiderMonkeyLib;
 
 /// parse a string using the JSON syntax described in ECMAScript 5 and
@@ -2722,8 +2814,8 @@ function JS_GetObjectAsArrayBuffer(obj: PJSObject; out length: uint32; out Data:
 function JS_GetArrayBufferViewType(obj: PJSObject): JSArrayBufferViewType;
   cdecl; external SpiderMonkeyLib;
 
-function JS_GetSharedArrayBufferViewType(obj: PJSObject): JSArrayBufferViewType;
-  cdecl; external SpiderMonkeyLib;
+//function JS_GetSharedArrayBufferViewType(obj: PJSObject): JSArrayBufferViewType;
+//  cdecl; external SpiderMonkeyLib;
 
 /// Check whether obj supports the JS_GetArrayBuffer* APIs
 // - Note that this may return false if a security wrapper is encountered that denies the
@@ -2889,6 +2981,8 @@ function JS_CompileModule(cx: PJSContext;
 /// Set handler for module resolving
 procedure JS_SetModuleResolveHook(cx: PJSContext; var hook: PJSFunction); cdecl; external SpiderMonkeyLib;
 
+type
+  pjsval = ^jsval;
 
 implementation
 
@@ -2905,7 +2999,14 @@ begin
   if not JS_IsExceptionPending(cx) then
     // raise only if this is the first exception in chain
     if aException is EOutOfMemory then
-      JS_ReportOutOfMemory(cx) else begin
+      JS_ReportOutOfMemory(cx)
+    else if aException is ESMRangeException then begin
+      ws := StringToSynUnicode(aException.Message);
+      JSRangeErrorUC(cx, ws);
+    end else if aException is ESMTypeException then begin
+      ws := StringToSynUnicode(aException.Message);
+      JSTypeErrorUC(cx, ws);
+    end else begin
       ws := StringToSynUnicode(aException.Message);
       JSErrorUC(cx, ws);
     end;
@@ -2918,17 +3019,51 @@ const
     argCount: 1;
     exnType: JSEXN_ERR;
   );
-  SMExceptionNumber = 500;//from 0 to 350 Error numbers are reserved
+ RangeErrorUCFormatString: JSErrorFormatString =
+  (
+    format: '{0}';
+    argCount: 1;
+    exnType: JSEXN_RANGEERR;
+  );
+ TypeErrorUCFormatString: JSErrorFormatString =
+  (
+    format: '{0}';
+    argCount: 1;
+    exnType: JSEXN_TYPEERR;
+  );
+  SMExceptionNumber = 500;//from 0 to JSErr_Limit(421 for SM 45 ) Error numbers are reserved
 
 function ReportErrorUC(userRef: Pointer; const errorNumber: uintN): PJSErrorFormatString; cdecl;
 begin
   result := @ErrorUCFormatString;
 end;
 
+function ReportRangeErrorUC(userRef: Pointer; const errorNumber: uintN): PJSErrorFormatString; cdecl;
+begin
+  result := @RangeErrorUCFormatString;
+end;
+
+function TypeRangeErrorUC(userRef: Pointer; const errorNumber: uintN): PJSErrorFormatString; cdecl;
+begin
+  result := @TypeErrorUCFormatString;
+end;
+
 procedure JSErrorUC(cx: PJSContext; aMessage: WideString);
 begin
   if not JS_IsExceptionPending(cx) then
     JS_ReportErrorNumberUC(cx, ReportErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+end;
+
+procedure JSRangeErrorUC(cx: PJSContext; aMessage: WideString);
+begin
+  if not JS_IsExceptionPending(cx) then
+    JS_ReportErrorNumberUC(cx, ReportRangeErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
+end;
+
+procedure JSTypeErrorUC(cx: PJSContext; aMessage: WideString);
+begin
+  if not JS_IsExceptionPending(cx) then
+    JS_ReportErrorNumberUC(cx, TypeRangeErrorUC, nil, SMExceptionNumber ,Pointer(aMessage));
 end;
 
 function InitJS: Boolean;
@@ -3013,10 +3148,10 @@ var
 begin
   if JS_StringHasLatin1Chars(@self) then begin
     str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
-    result := CurrentAnsiConvert.AnsiBufferToRawUTF8(str8, strL);
+    result := WinAnsiConvert.AnsiBufferToRawUTF8(str8, strL);
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
-    RawUnicodeToUTF8(str16,strL,result);
+    RawUnicodeToUTF8(str16,strL,result, [ccfNoTrailingZero, ccfReplacementCharacterForUnmatchedSurrogate]);
   end;
 end;
 
@@ -3064,6 +3199,7 @@ var
 begin
   if JS_StringHasLatin1Chars(@self) then begin
     str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
+
     if strL>=SizeOf(tmpU8)div 3 then
       Getmem(U8,strL*3+1) else
       U8 := @tmpU8;
@@ -3671,6 +3807,11 @@ begin
   JS_SetGCParameter(@Self, key, Value);
 end;
 
+procedure JSRuntime.SetGCParametersBasedOnAvailableMemory(availMem: uint32);
+begin
+  JS_SetGCParametersBasedOnAvailableMemory(@Self, availMem);
+end;
+
 procedure JSRuntime.SetInterruptCallback(callback: JSInterruptCallback);
 begin
   JS_SetInterruptCallback(@Self, callback);
@@ -3951,10 +4092,10 @@ begin
   result := JS_GetSharedArrayBufferByteLength(@self);
 end;
 
-function JSObject.GetSharedArrayBufferViewType: JSArrayBufferViewType;
-begin
-  result := JS_GetSharedArrayBufferViewType(@self);
-end;
+//function JSObject.GetSharedArrayBufferViewType: JSArrayBufferViewType;
+//begin
+//  result := JS_GetSharedArrayBufferViewType(@self);
+//end;
 
 function JSObject.GetTypedArrayByteLength: uint32;
 begin
@@ -4067,7 +4208,7 @@ function JSObject.DefineProperty(cx: PJSContext; const name: PCChar;
 var obj: PJSObject;
 begin
   obj := @Self;
-  result := JS_DefineProperty(cx, obj, name, value, attrs, getter, setter)
+  result := JS_DefineProperty(cx, obj, name, pjsval(@value)^, attrs, getter, setter)
 end;
 
 function JSObject.DefinePropertyById(cx: PJSContext; var id: jsid;
@@ -4075,7 +4216,7 @@ function JSObject.DefinePropertyById(cx: PJSContext; var id: jsid;
 var obj: PJSObject;
 begin
   obj := @Self;
-  result := JS_DefinePropertyById(cx, obj, id, value, attrs, getter, setter)
+  result := JS_DefinePropertyById(cx, obj, id, pjsval(@value)^, attrs, getter, setter)
 end;
 
 function JSObject.DefineUCFunction(cx: PJSContext; name: PCChar16;
@@ -4091,7 +4232,7 @@ function JSObject.DefineUCProperty(cx: PJSContext; const name: SynUnicode;
 var obj: PJSObject;
 begin
   obj := @Self;
-  result := JS_DefineUCProperty(cx, obj, Pointer(name), Length(name), value, attrs, getter, setter)
+  result := JS_DefineUCProperty(cx, obj, Pointer(name), Length(name), pjsval(@value)^, attrs, getter, setter)
 end;
 
 function JSObject.DefineUCProperty(cx: PJSContext; const name: PCChar16;
@@ -4100,7 +4241,7 @@ function JSObject.DefineUCProperty(cx: PJSContext; const name: PCChar16;
 var obj: PJSObject;
 begin
   obj := @Self;
-  result := JS_DefineUCProperty(cx, obj, name, namelen, value, attrs, getter, setter)
+  result := JS_DefineUCProperty(cx, obj, name, namelen, pjsval(@value)^, attrs, getter, setter)
 end;
 
 function JSObject.DeleteElement(cx: PJSContext; index: uint32;
@@ -4129,7 +4270,7 @@ begin
   {$ifdef WITHASSERT}
   Assert(
   {$ENDIF}
-  JS_Enumerate(cx, obj, Result);
+  JS_Enumerate(cx, obj, Result)
   {$ifdef WITHASSERT}
   );
   {$ENDIF}
@@ -4161,10 +4302,24 @@ begin
   result := JS_GetUInt8ArrayData(@self, isSharedMemory, nogc);
 end;
 
+function JSObject.GetUint8ArrayData: Puint8Vector;
+var isShared: Boolean;
+begin
+  result := JS_GetUInt8ArrayData(@self, isShared, nil);
+end;
+
 function JSObject.GetUint8ClampedArrayData(out isSharedMemory: Boolean;
   nogc: PJSAutoCheckCannotGC): Puint8Vector;
 begin
   result := JS_GetUint8ClampedArrayData(@self, isSharedMemory, nogc);
+end;
+
+function JSObject.HasInstance(cx: PJSContext; var val: jsval): Boolean;
+var obj: PJSObject;
+    res: Boolean;
+begin
+  obj := @Self;
+  Result := JS_HasInstance(cx, obj, val, res) and res;
 end;
 
 function JSObject.HasProperty(cx: PJSContext; const name: PCChar): Boolean;
@@ -4232,6 +4387,13 @@ begin
   result := JS_GetClass(@self);
 end;
 
+function JSObject.GetConstructor(cx: PJSContext): PJSObject;
+var obj: PJSObject;
+begin
+  obj := @Self;
+  Result := JS_GetConstructor(cx, obj);
+end;
+
 function JSObject.GetElement(cx: PJSContext; index: uint32;
   out vp: jsval): Boolean;
 var obj: PJSObject;
@@ -4262,7 +4424,7 @@ function JSObject.SetElement(cx: PJSContext; index: uint32;
 var obj: PJSObject;
 begin
   obj := @Self;
-  result := JS_SetElement(cx, obj, index, vp);
+  result := JS_SetElement(cx, obj, index, pjsval(@vp)^);
 end;
 
 procedure JSObject.SetPrivate(data: Pointer);
@@ -4275,7 +4437,15 @@ function JSObject.SetProperty(cx: PJSContext; const name: PCChar;
 var obj: PJSObject;
 begin
   obj := @Self;
-  Result := JS_SetProperty(cx, obj, name, vp);
+  Result := JS_SetProperty(cx, obj, name, pjsval(@vp)^);
+end;
+
+function JSObject.SetPrototype(cx: PJSContext; var proto: PJSObject): Boolean;
+var
+  obj: PJSObject;
+begin
+  obj := @Self;
+  Result := JS_SetPrototype(cx, obj, proto);
 end;
 
 procedure JSObject.SetReservedSlot(index: uint32; v: jsval);
@@ -4288,7 +4458,7 @@ function JSObject.SetUCProperty(cx: PJSContext; const name: PCChar16;
 var obj: PJSObject;
 begin
   obj := @Self;
-  Result := JS_SetUCProperty(cx, obj, name, namelen, vp);
+  Result := JS_SetUCProperty(cx, obj, name, namelen, pjsval(@vp)^);
 end;
 
 function JSObject.ToJSValue: jsval;
@@ -4352,18 +4522,29 @@ end;
 { jsval }
 
 const
+{$ifdef CPU64}
+  JSVAL_LOWER_INCL_TAG_OF_OBJ_OR_NULL_SET         = JSVAL_TAG_NULL;
+  JSVAL_UPPER_EXCL_TAG_OF_PRIMITIVE_SET           = JSVAL_TAG_OBJECT;
+
+  JSVAL_UPPER_EXCL_SHIFTED_TAG_OF_NUMBER_SET      = JSVAL_SHIFTED_TAG_UNDEFINED;
+  JSVAL_UPPER_EXCL_SHIFTED_TAG_OF_PRIMITIVE_SET   = JSVAL_SHIFTED_TAG_OBJECT;
+{$else}
   JSVAL_LOWER_INCL_TAG_OF_OBJ_OR_NULL_SET         = JSVAL_TAG_NULL;
   JSVAL_UPPER_EXCL_TAG_OF_PRIMITIVE_SET           = JSVAL_TAG_OBJECT;
   JSVAL_UPPER_INCL_TAG_OF_NUMBER_SET              = JSVAL_TAG_INT32;
   JSVAL_LOWER_INCL_TAG_OF_GCTHING_SET             = JSVAL_TAG_STRING;
-
+{$endif}
 
 function jsval.getAsBoolean: Boolean;
 begin
   {$ifdef WITHASSERT}
   assert(isBoolean);
   {$endif}
+  {$ifdef  CPU64}
+  Result := Boolean(_l.asBits and JSVAL_PAYLOAD_MASK)
+  {$else}
   Result := Boolean(_l.s.payload.boo);
+  {$endif}
 end;
 
 function jsval.getAsDate(cx: PJSContext): TDateTime;
@@ -4421,7 +4602,11 @@ begin
   {$ifdef WITHASSERT}
   assert(isInteger);
   {$endif}
+  {$ifdef CPU64}
+  Result := int32(_l.asBits);
+  {$else}
   Result := _l.s.payload.i32;
+  {$endif}
 end;
 
 function writeCallback(const buf: PCChar16; len: uint32; data: pointer): Boolean; cdecl;
@@ -4432,7 +4617,7 @@ end;
 
 procedure jsval.AddJSON(cx: PJSContext; W: TTextWriter);
 var
-  voidVal: jsval;
+//  voidVal: jsval;
   T: JSType;
 begin
   if @self=nil then
@@ -4453,8 +4638,7 @@ begin
         W.Add(asBoolean);
       JSTYPE_OBJECT,
       JSTYPE_FUNCTION: begin
-        voidVal.setNull;
-        if not Stringify(cx, nullObj, voidVal, writeCallback, pointer(W)) then
+        if not Stringify(cx, nullObj, JSVAL_VOID, writeCallback, pointer(W)) then
           ;
       end
       else
@@ -4487,47 +4671,84 @@ begin
 end;
 
 function jsval.getAsObject: PJSObject;
+{$ifdef  CPU64}
+var  ptrBits: UInt64 absolute Result;
+{$endif}
 begin
   {$ifdef WITHASSERT}
   assert(isObject);
   {$endif}
+  {$ifdef CPU64}
+  ptrBits := _l.asBits and JSVAL_PAYLOAD_MASK;
+  {$ifdef WITHASSERT}
+  assert(ptrBits and 7 = 0);
+  {$endif}
+  {$else}
   Result := _l.s.payload.obj;
+  {$endif}
 end;
 
 function jsval.getIsBoolean: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits shr JSVAL_TAG_SHIFT = JSVAL_TAG_BOOLEAN;
+  {$else}
   Result := _l.s.tag = JSVAL_TAG_BOOLEAN;
+  {$endif}
 end;
 
 function jsval.getIsDouble: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits <= JSVAL_SHIFTED_TAG_MAX_DOUBLE
+  {$else}
   Result := UInt32(_l.s.tag) <= UInt32(JSVAL_TAG_CLEAR)
+  {$endif}
 end;
 
 function jsval.getIsInteger: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits shr JSVAL_TAG_SHIFT = JSVAL_TAG_INT32;
+  {$else}
   Result := _l.s.tag = JSVAL_TAG_INT32;
+  {$endif}
 end;
 
 function jsval.getIsNull: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits  = JSVAL_SHIFTED_TAG_NULL;
+  {$else}
   Result := _l.s.tag = JSVAL_TAG_NULL;
+  {$endif}
 end;
 
 function jsval.getIsNumber: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits  < JSVAL_UPPER_EXCL_SHIFTED_TAG_OF_NUMBER_SET;
+  {$else}
   {$ifdef WITHASSERT}
   assert(_l.s.tag <> JSVAL_TAG_CLEAR);
   {$endif}
   Result := (UInt32(_l.s.tag) <= UInt32(JSVAL_UPPER_INCL_TAG_OF_NUMBER_SET));
+  {$endif}
 end;
 
 function jsval.getIsObject: Boolean;
 begin
+  {$ifdef CPU64}
+  {$ifdef WITHASSERT}
+  Assert(_l.asBits shr JSVAL_TAG_SHIFT <= JSVAL_TAG_OBJECT);
+  {$endif}
+  Result := _l.asBits >= JSVAL_SHIFTED_TAG_OBJECT;
+  {$else}
   {$ifdef WITHASSERT}
   Assert(_l.s.tag <= JSVAL_TAG_OBJECT);
   {$endif}
   Result := (UInt32(_l.s.tag) >= UInt32(JSVAL_LOWER_INCL_TAG_OF_OBJ_OR_NULL_SET));
+  {$endif}
 end;
 
 function jsval.getIsSimpleVariant(cx: PJSContext): Boolean;
@@ -4541,28 +4762,47 @@ end;
 
 function jsval.getIsString: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits shr JSVAL_TAG_SHIFT = JSVAL_TAG_STRING;
+  {$else}
   Result := _l.s.tag = JSVAL_TAG_STRING;
+  {$endif}
 end;
 
 function jsval.getIsVoid: Boolean;
 begin
+  {$ifdef CPU64}
+  Result := _l.asBits = JSVAL_SHIFTED_TAG_UNDEFINED;
+  {$else}
   Result := _l.s.tag = JSVAL_TAG_UNDEFINED;
+  {$endif}
 end;
 
 function jsval.getJSString: PJSString;
 begin
+  {$ifdef CPU64}
+  Result := PJSString(_l.asBits and JSVAL_PAYLOAD_MASK);
+  {$else}
   {$ifdef WITHASSERT}
   Assert(isString);
   {$endif}
   Result := _l.s.payload.str;
+  {$endif}
 end;
 
 function jsval.getPrivate: Pointer;
 begin
+  {$ifdef CPU64}
+  {$ifdef WITHASSERT}
+  Assert(_l.asBits and $8000000000000000 = 0);
+  {$endif}
+  Result := Pointer(_l.asBits shl 1);
+  {$else}
   {$ifdef WITHASSERT}
   Assert(isDouble);
   {$endif}
   Result := _l.s.payload.ptr;
+  {$endif}
 end;
 
 function jsval.getSimpleVariant(cx: PJSContext): Variant;
@@ -4595,12 +4835,20 @@ end;
 
 function jsval.IsMagic: Boolean;
 begin
+  {$IFDEF CPU64}
+  Result := _l.asBits shr JSVAL_TAG_SHIFT = JSVAL_TAG_MAGIC;
+  {$ELSE}
   Result := _l.s.tag = JSVAL_TAG_MAGIC;
+  {$ENDIF}
 end;
 
 function jsval.IsPrimitive: Boolean;
 begin
+  {$IFDEF CPU64}
+  Result := _l.asBits < JSVAL_UPPER_EXCL_SHIFTED_TAG_OF_PRIMITIVE_SET;
+  {$ELSE}
   Result := (UInt32(_l.s.tag) < UInt32(JSVAL_UPPER_EXCL_TAG_OF_PRIMITIVE_SET));
+  {$ENDIF}
 end;
 
 function doubleIsInt(Value: Double):boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -4628,8 +4876,12 @@ end;
 
 procedure jsval.setAsBoolean(const Value: Boolean);
 begin
+  {$ifdef CPU64}
+  _l.asBits := uint64(ord(Value)) or JSVAL_SHIFTED_TAG_BOOLEAN;
+  {$else}
   _l.s.tag := JSVAL_TAG_BOOLEAN;
   _l.s.payload.boo := ord(Value);
+  {$endif}
 end;
 
 procedure jsval.setAsDate(cx: PJSContext; const Value: TDateTime);
@@ -4681,9 +4933,15 @@ begin
 end;
 
 procedure jsval.setAsInteger(const Value: Integer);
+
 begin
+  {$ifdef CPU64}
+  _l.asBits := Value;
+  _l.asBits := uint32(Value) or JSVAL_SHIFTED_TAG_INT32;
+  {$else}
   _l.s.tag := JSVAL_TAG_INT32;
   _l.s.payload.i32 := Value;
+  {$endif}
 end;
 
 procedure jsval.setAsJson(cx: PJSContext; const Value: RawUTF8);
@@ -4711,21 +4969,41 @@ begin
 end;
 
 procedure jsval.setAsObject(const Value: PJSObject);
+{$ifdef CPU64}
+var objBits: UInt64 absolute Value;
+{$endif}
 begin
+  {$ifdef CPU64}
+  {$ifdef WITHASSERT}
+  Assert(objBits shr JSVAL_TAG_SHIFT = 0);
+  {$endif}
+  _l.asBits := QWord(objBits or JSVAL_SHIFTED_TAG_OBJECT);
+  {$else}
   if Value<>nil then begin
     _l.s.tag := JSVAL_TAG_OBJECT;
     _l.s.payload.obj := Value;
   end else
     _l.asBits := JSVAL_NULL_impl;
+  {$endif}
 end;
 
 procedure jsval.setJSString(const Value: PJSString);
+{$ifdef CPU64}
+var strBits: UInt64 absolute Value;
+{$endif}
 begin
+  {$ifdef CPU64}
+  {$ifdef WITHASSERT}
+  Assert(strBits shr JSVAL_TAG_SHIFT = 0);
+  {$endif}
+  _l.asBits := strBits or JSVAL_SHIFTED_TAG_STRING;
+  {$else}
   {$ifdef WITHASSERT}
   assert(str<>nil) ;
   {$endif}
   _l.s.tag := JSVAL_TAG_STRING;
   _l.s.payload.str := Value;
+  {$endif}
 end;
 
 procedure jsval.setNull;
@@ -4734,7 +5012,19 @@ begin
 end;
 
 procedure jsval.setPrivate(const Value: Pointer);
+{$ifdef CPU64}
+var ptrBits: UInt64 absolute Value;
+{$endif}
 begin
+  {$ifdef CPU64}
+  {$ifdef WITHASSERT}
+  Assert(ptrBits and 1 = 0);
+  {$endif}
+  _l.asBits := ptrBits shr 1;
+  {$ifdef WITHASSERT}
+  assert(isDouble);
+  {$endif}
+  {$else}
   {$ifdef WITHASSERT}
   assert((uint32(ptr) and 1) = 0);
   {$endif}
@@ -4742,6 +5032,7 @@ begin
   _l.s.payload.ptr := Value;
   {$ifdef WITHASSERT}
   assert(isDouble);
+  {$endif}
   {$endif}
 end;
 
@@ -4792,6 +5083,7 @@ end;
 function jsval.Stringify(cx: PJSContext; var replacer: PJSObject;
   space: jsval; callback: JSONWriteCallback; data: pointer): Boolean;
 begin
+  TSynFPUException.ForLibraryCode;
   Result := JS_Stringify(cx, Self, replacer, space, callback, data);
 end;
 

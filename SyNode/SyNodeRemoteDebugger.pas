@@ -54,7 +54,9 @@ unit SyNodeRemoteDebugger;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
@@ -199,7 +201,6 @@ end;
 
 procedure TSMRemoteDebuggerThread.doLog(const Text: RawUTF8);
 var
-  i: Integer;
   Debugger: TSMDebugger;
   eng: TSMEngine;
   curThreadID: TThreadID;
@@ -207,18 +208,8 @@ begin
   curThreadID := GetCurrentThreadId;
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
-    fDebuggers.Safe.Lock;
-    try
-      for I := 0 to fDebuggers.Count - 1 do begin
-        if TSMDebugger(fDebuggers[i]).fSmThreadID = curThreadID then begin
-          Debugger := TSMDebugger(fDebuggers[i]);
-          Debugger.fLogQueue.LockedAdd(Text);
-          break;
-        end;
-      end;
-    finally
-      fDebuggers.Safe.UnLock;
-    end;
+    Debugger := eng.PrivateDataForDebugger;
+    Debugger.fLogQueue.LockedAdd(Text);
 
     if eng.cx.IsRunning then
       eng.rt.RequestInterruptCallback

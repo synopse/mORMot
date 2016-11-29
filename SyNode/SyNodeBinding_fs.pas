@@ -13,8 +13,6 @@ uses
   SpiderMonkey,
   SyNode;
 
-function SyNodeBindingProc_fs(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
-
 implementation
 
 uses
@@ -57,7 +55,7 @@ end;
 /// call RelToAbs
 function fs_relToAbs(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 const
-  USAGE = 'usage: relToAbs(ABaseDir, AFileName: string;)';
+  USAGE = 'usage: relToAbs(ABase, ATail: string;)';
 var
   in_argv: PjsvalVector;
   baseDir, fileName, resPath: TFileName;
@@ -250,5 +248,8 @@ begin
     cx.FreeRootedObject(obj);
   end;
 end;
+
+initialization
+  TSMEngineManager.RegisterBinding('fs', SyNodeBindingProc_fs);
 
 end.

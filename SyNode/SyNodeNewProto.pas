@@ -54,7 +54,9 @@ unit SyNodeNewProto;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
@@ -423,7 +425,8 @@ begin
       end;
     end;
     System.TypInfo.tkRecord: begin
-      if Value.IsType(typeInfo(TValue)) then
+//      if Value.IsType(typeInfo(TValue)) then
+      if Value.TypeInfo = typeInfo(TValue) then
         Result := TVal2JSVal(cx, Value.AsType<TValue>, aParentProto);
     end;
     System.TypInfo.tkVariant: begin

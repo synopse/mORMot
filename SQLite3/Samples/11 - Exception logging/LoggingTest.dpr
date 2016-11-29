@@ -22,6 +22,7 @@ uses
 {$ifdef CONDITIONALEXPRESSIONS}
   mORMot,
   SynSelfTests,
+  ECCProcess in '..\33 - ECC\ECCProcess.pas',
 {$endif}
   SynCommons,
   SynLog;

@@ -54,7 +54,9 @@ unit SyNodeProto;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
@@ -561,7 +563,7 @@ begin
       for i := 0 to FMethodsDA.Count-1 do with FMethods[i] do begin
         obj.ReservedSlot[fFirstDeterministicSlotIndex + i + 1] :=
         obj.DefineUCFunction(cx, PCChar16(ujsName),
-          Length(ujsName), call, nargs, uintN(flags)).ToJSValue;
+          Length(ujsName), call, nargs, uint32(flags)).ToJSValue;
       end;
     new(ObjRec);
     ObjRec.init(otProto,self);

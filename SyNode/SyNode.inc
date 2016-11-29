@@ -69,3 +69,5 @@
 {$ifend}
 {$endif}
 
+{$DEFINE SM45}
+

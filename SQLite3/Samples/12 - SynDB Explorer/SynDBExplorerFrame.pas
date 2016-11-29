@@ -263,7 +263,7 @@ procedure TDBExplorerFrame.BtnExecClick(Sender: TObject);
 var SQL, Stop: RawUTF8;
     Table: TSQLTable;
     Timer: TPrecisionTimer;
-    SelStart, SelLength, RowsCount, Kind: integer;
+    SelStart, SelLength, RowsCount, Kind, i: integer;
     Rows: ISQLDBRows;
     RowsSize: Int64;
     FN: TFileName;
@@ -277,6 +277,9 @@ begin
   if SelLength>10 then
     SQL := Trim(S2U(MemoSQL.SelText)) else
     SQL := Trim(S2U(MemoSQL.Lines.Text));
+  for i := 1 to length(SQL) do
+    if SQL[i]<' ' then
+      SQL[i] := ' '; // some engines (e.g. MSSQL) don't like line feeds
   Frame := self;
   Screen.Cursor := crSQLWait;
   Timer.Start;

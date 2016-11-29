@@ -2058,8 +2058,11 @@ begin
   end;
   Check(length(AV)=1001);
   Check(AVP.Count=1001);
-  for i := 0 to 1000 do
-    Check(AVP.IndexOf(i)=i);
+  for i := 0 to 1000 do begin
+    // untyped const must be the same exact type !
+    PtrInt(V) := i;
+    Check(AVP.IndexOf(V)=i);
+  end;
   Test := AVP.SaveTo;
   Check(Hash32(Test)={$ifdef CPU64}$31484630{$else}$924462C{$endif});
   // validate TRawUTF8DynArray
@@ -5266,9 +5269,14 @@ type
     ID: Int64;
     /// JSON encoded UTF-8 serialization of the record
     JSON: RawUTF8;
-    /// GetTickCount value when this cached value was stored
-    // - equals 0 licwhen there is no JSON value cached
-    TimeStamp64: Int64;
+    /// GetTickCount64 shr 9 timestamp when this cached value was stored
+    // - resulting time period has therefore a resolution of 512 ms, and
+    // overflows after 70 years without computer reboot
+    // - equals 0 when there is no JSON value cached
+    TimeStamp512: cardinal;
+    /// some associated unsigned integer value
+    // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
+    Tag: cardinal;
   end;
 {$endif}
 
@@ -5387,7 +5395,7 @@ const // convention may be to use __ before the type name
     'TRRMK RawUTF8]';
   __TTestCustomDiscogs = 'pagination{per_page,items,page Integer}'+
     'releases[status,title,format,label,artist RawUTF8 year,id integer]';
-  __TSQLRestCacheEntryValue = 'ID: Int64; JSON: RawUTF8; TimeStamp64: Int64';
+  __TSQLRestCacheEntryValue = 'ID: Int64; JSON: RawUTF8; TimeStamp512,Tag: cardinal';
   __TSubAB = 'a : RawUTF8; b : integer;';
   __TSubCD = 'c : byte; d : RawUTF8;';
   __TAggregate = 'abArr : array of TSubAB; cdArr : array of TSubCD;';
@@ -5846,17 +5854,19 @@ begin
   Finalize(Cache);
   FillChar(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":0,"JSON":"","TimeStamp64":0}');
+  Check(U='{"ID":0,"JSON":"","TimeStamp512":0,"Tag":0}');
   Cache.ID := 10;
-  Cache.TimeStamp64 := 200;
+  Cache.TimeStamp512 := 200;
   Cache.JSON := 'test';
+  Cache.Tag := 12;
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":10,"JSON":"test","TimeStamp64":200}');
-  U := '{"ID":210,"TimeStamp64":2200,"JSON":"test2"}';
+  Check(U='{"ID":10,"JSON":"test","TimeStamp512":200,"Tag":12}');
+  U := '{"ID":210,"TimeStamp512":2200,"JSON":"test2"}';
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=210);
-  Check(Cache.TimeStamp64=2200);
+  Check(Cache.TimeStamp512=2200);
   Check(Cache.JSON='test2');
+  Check(Cache.Tag=12);
 
   {$ifdef ISDELPHI2010}
   fillchar(nav,sizeof(nav),0);
@@ -7240,7 +7250,7 @@ begin
   {$ifndef FPC}
   Check(V1='["root",{"name":"Jim"},3.1415]');
   {$endif}
-  V1.Delete(1);
+  V1.Delete(1); //<--- here we get an error with FPC on win64 if optimization = -O1 !??? All ok with -O2
   {$ifndef FPC}
   Check(V1='["root",3.1415]');
   {$endif}
@@ -13297,7 +13307,7 @@ begin
   SetLength(Str2,i+1);
   Str2[i] := UTF8ToWideString(RawUTF8ArrayToCSV(Strs1));
   inc(Rec2.ID);
-  dec(Rec2.TimeStamp64);
+  dec(Rec2.TimeStamp512);
   Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
   Float2 := Float1;
 end;
@@ -13323,17 +13333,17 @@ end;
 
 function GetThreadID: TThreadID;
 begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  result := GetCurrentThreadId;
+  result := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
 end;
 
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetThreadID<>MainThreadID then
+    if GetThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID) then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetThreadID=MainThreadID then
+    if GetThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID) then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -13493,7 +13503,7 @@ begin
     raise Exception.Create('Unexpected Thread=nil');
   if Thread=nil then
     result := 0 else begin
-    result := Thread.ThreadID;
+    result := {$ifdef BSD}Cardinal{$endif}(Thread.ThreadID);
     if result<>GetThreadID then
       raise Exception.Create('Unexpected ThreadID');
   end;
@@ -13567,7 +13577,7 @@ begin
     Rec1.Features := [vtTransaction,vtSavePoint];
     Rec1.FileExtension := ExeVersion.ProgramFileName;
     Rec2.ID := i1;
-    Rec2.TimeStamp64 := c;
+    Rec2.TimeStamp512 := c;
     Rec2.JSON := 'abc';
     RecRes := I.ComplexCall(Ints,Strs1,Str2,Rec1,Rec2,n1,n2);
     Check(length(Str2)=4);
@@ -13578,10 +13588,10 @@ begin
     Check(Rec1.Features=[vtTransaction,vtSavePoint]);
     Check(Rec1.FileExtension=ExeVersion.ProgramFileName);
     Check(Rec2.ID=i1+1);
-    Check(Rec2.TimeStamp64=c-1);
+    Check(Rec2.TimeStamp512=c-1);
     Check(Rec2.JSON=IntegerDynArrayToCSV(Ints,length(Ints)));
     Check(RecRes.ID=i1);
-    Check(RecRes.TimeStamp64=c);
+    Check(RecRes.TimeStamp512=c);
     Check(RecRes.JSON=StringToUTF8(Rec1.FileExtension));
     CheckSame(n1,n2);
     Rec1.FileExtension := ''; // to avoid memory leak
@@ -13609,7 +13619,7 @@ var s: RawUTF8;
     Item: TCollTest;
     List,Copy: TCollTestsI;
     j: integer;
-    x,y: PtrUInt; // alf: to help debugging
+    x,y: TThreadID; // alf: to help debugging
 {$endif}
 {$ifndef NOVARIANTS}
     V1,V2,V3: variant;
@@ -13633,9 +13643,9 @@ begin
   end;
   case GlobalInterfaceTestMode of
   itmMainThread:
-    Check(Inst.CC.GetCurrentThreadID=MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID));
   itmPerInterfaceThread,itmLocked:
-    Check(Inst.CC.GetCurrentThreadID<>MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -13755,22 +13765,22 @@ begin
   case GlobalInterfaceTestMode of
   itmDirect: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
+    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID=0);
   end;
   itmClient, itmPerInterfaceThread: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
+    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmLocked, itmMainThread: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)<>0);
+    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmHttp: begin
-    Check(Inst.CT.GetCurrentRunningThreadID<>0);
-    Check(PtrUInt(Inst.CT.GetCurrentThreadID)<>MainThreadID);
+    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
+    Check(Inst.CT.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   end;
@@ -14443,7 +14453,7 @@ begin // {"ID":1786554763,"TimeStamp":323618765,"JSON":"D:\\TestSQL3.exe"}
   if result=nil then
     aValid := false else begin
     V.ID := GetInteger(Values[0]);
-    V.TimeStamp64 := GetCardinal(Values[1]);
+    V.TimeStamp512 := GetCardinal(Values[1]);
     V.JSON := Values[2];
     aValid := true;
   end;
@@ -14453,7 +14463,7 @@ class procedure TTestServiceOrientedArchitecture.CustomWriter(
   const aWriter: TTextWriter; const aValue);
 var V: TSQLRestCacheEntryValue absolute aValue;
 begin
-  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp64),'JSON',V.JSON]);
+  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp512),'JSON',V.JSON]);
 end;
 
 type
@@ -15226,6 +15236,7 @@ procedure TestOne(const content,contentType: RawByteString);
 var C1,C2: THttpServerRequest;
     P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
+    head: RawUTF8;
     noAnswer1,noAnswer2: boolean;
 begin
   C1 := THttpServerRequest.Create(nil,0,nil);
@@ -15235,7 +15246,7 @@ begin
     C1.Prepare('url','POST','headers',content,contentType,'');
     noAnswer1 := opcode=focBinary;
     noAnswer2 := not noAnswer1;
-    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame);
+    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame,head);
     Check(frame.opcode=opcode);
     TWebSocketProtocolRestHook(P2).FrameToInput(frame,noAnswer2,C2);
     Check(noAnswer1=noAnswer2);
@@ -15248,7 +15259,8 @@ begin
     C1.OutContentType := contentType;
     C1.OutCustomHeaders := 'outheaders';
     frame.opcode := focContinuation;
-    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
+    head := 'answer';
+    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,head,frame);
     Check(frame.opcode=opcode);
     Check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2)=200);
     Check(C2.OutContent=content);

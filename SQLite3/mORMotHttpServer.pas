@@ -288,11 +288,13 @@ type
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
+    fAccessControlAllowCredentials: boolean;
     fRootRedirectToURI: array[boolean] of RawUTF8;
     fRedirectServerRootUriForExactCase: boolean;
     fHttpServerKind: TSQLHttpServerOptions;
     fLog: TSynLogClass;
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
+    procedure SetAccessControlAllowCredential(Value: boolean);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
@@ -486,11 +488,20 @@ type
     property OnlyJSONRequests: boolean read fOnlyJSONRequests write fOnlyJSONRequests;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
-    // - can be set e.g. to '*' to allow requests from any sites
-    // - or specify an URI to be allowed as origin (e.g. 'http://foo.example')
+    // - can be set e.g. to '*' to allow requests from any site/domain; or
+    // specify an URI to be allowed as origin (e.g. 'http://foo.example')
     // - current implementation is pretty basic, and does not check the incoming
-    // "Origin: " header value
-    property AccessControlAllowOrigin: RawUTF8 read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
+    // "Origin: " header value,
+    // - see also AccessControlAllowCredential property
+    property AccessControlAllowOrigin: RawUTF8
+      read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
+    /// enable cookies, authorization headers or TLS client certificates CORS exposition
+    // - this option works with the AJAX XMLHttpRequest.withCredentials property
+    // on client/JavaScript side, as stated by
+    // @https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/withCredentials
+    // - see @https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials
+    property AccessControlAllowCredential: boolean
+      write SetAccessControlAllowCredential;
     /// enable redirectoin to fix any URI for a case-sensitive match of Model.Root
     // - by default, TSQLRestServer.Model.Root would be accepted with case
     // insensitivity; but it may induce errors for HTTP cookies, since they
@@ -982,18 +993,28 @@ begin
     fDBServers[i].Server.BeginCurrentThread(Sender);
 end;
 
+procedure TSQLHttpServer.SetAccessControlAllowCredential(Value: boolean);
+begin
+  fAccessControlAllowCredentials := Value;
+  SetAccessControlAllowOrigin(fAccessControlAllowOrigin); // compute header
+end;
+
 procedure TSQLHttpServer.SetAccessControlAllowOrigin(const Value: RawUTF8);
 begin
   fAccessControlAllowOrigin := Value;
   if Value='' then
     fAccessControlAllowOriginHeader :=
-      #13#10'Access-Control-Allow-Origin: ' else
+      #13#10'Access-Control-Allow-Origin: ' else begin
     fAccessControlAllowOriginHeader :=
       #13#10'Access-Control-Allow-Methods: POST, PUT, GET, DELETE, LOCK, OPTIONS'+
       #13#10'Access-Control-Max-Age: 1728000'+
       // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
       #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
+    if fAccessControlAllowCredentials then
+      fAccessControlAllowOriginHeader := fAccessControlAllowOriginHeader+
+        #13#10'Access-Control-Allow-Credentials: true';
+  end;
 end;
 
 function TSQLHttpServer.WebSocketsEnable(

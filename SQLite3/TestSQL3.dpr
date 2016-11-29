@@ -79,6 +79,11 @@ program TestSQL3;
   - first line of uses clause must be  {$I SynDprUses.inc}  to enable FastMM4
     on older versions of Delphi *)
 
+{$ifdef Linux}
+  {$ifdef FPC_CROSSCOMPILING}
+    {$linklib libc_nonshared.a}
+  {$endif}
+{$endif}
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
