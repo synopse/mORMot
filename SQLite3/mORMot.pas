@@ -37159,7 +37159,7 @@ begin
   fAfterCreation := true;
   fStats := TSQLRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  fSessionCounter := GetTickCount64*PtrInt(self); // pseudo-random session ID
+  TAESPRNG.Fill(@fSessionCounter,sizeof(fSessionCounter));
   if fSessionCounter>cardinal(maxInt) then
     dec(fSessionCounter,maxInt);
   // retrieve published methods
@@ -40714,7 +40714,8 @@ begin
       W.WriteVarUInt32(fSessions.Count);
       for i := 0 to fSessions.Count-1 do
         TAuthSession(fSessions.List[i]).SaveTo(W);
-      W.Write4(MAGIC_SESSION);
+      W.Write4(fSessionCounter);
+      W.Write4(MAGIC_SESSION+1);
       W.Flush;
     finally
       fSessions.Safe.UnLock;
@@ -40760,7 +40761,9 @@ begin
       fSessions.Add(fSessionClass.CreateFrom(P,self));
       fStats.ClientConnect;
     end;
-    if PCardinal(P)^<>MAGIC_SESSION then
+    fSessionCounter := PCardinal(P)^;
+    inc(P,4);
+    if PCardinal(P)^<>MAGIC_SESSION+1 then
       ContentError;
   finally
     fSessions.Safe.UnLock;
@@ -49964,6 +49967,7 @@ end;
 
 constructor TAuthSession.Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
 var GID: TSQLAuthGroup;
+    rnd: THash256;
 begin
   fUser := aUser;
   if (aCtxt<>nil) and (User<>nil) and (User.fID<>0) then begin
@@ -49981,7 +49985,8 @@ begin
           UInt32ToUtf8(fIDCardinal,fID);
       end;
       // set session parameters
-      fPrivateKey := SHA256(NowToString+fID);
+      TAESPRNG.Fill(@rnd,sizeof(rnd));
+      fPrivateKey := BinToHex(@rnd,sizeof(rnd));
       aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
