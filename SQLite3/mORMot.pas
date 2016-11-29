@@ -25372,9 +25372,9 @@ type
     PID: Int64;
     PP, CI, CJ: PPUTF8Char;
     I, J: PtrInt;
-{$ifdef PUREPASCAL}
+    {$ifdef PUREPASCAL}
     Tmp: PUTF8Char;
-{$endif}
+    {$endif}
     /// recursively perform the sort
     procedure QuickSort(L, R: Integer);
     /// compare value at index I with pivot value
@@ -25407,7 +25407,7 @@ begin
       SetInt64(PPUTF8Char(PtrInt(CI)-FieldIDPtr)^,i64);
     if i64<PID then
       result := -1 else
-    if i64>PID then
+    if i64<>PID then
       result := +1;
   end;
 end;
@@ -25423,7 +25423,7 @@ begin
       SetInt64(PPUTF8Char(PtrInt(CJ)-FieldIDPtr)^,i64);
     if i64<PID then
       result := -1 else
-    if i64>PID then
+    if i64<>PID then
       result := +1;
   end;
 end;
@@ -25460,7 +25460,7 @@ end;
 
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
   {$ifndef PUREPASCAL}
-  procedure Exchg32(P: pointer; I,J: integer);
+  procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
   asm // eax=P edx=I ecx=J
           push    ebx
           lea     edx, [eax + edx * 4]
@@ -25484,7 +25484,7 @@ begin
     P := ((I+J) shr 1);
     SetPP(@Results[P*Params.FieldCount+Params.FieldIndex],P);
     repeat
-      // this loop has no multiplication -> most of the time is spent in comp()
+      // this loop has no multiplication -> most of the time is spent in compIJ
       if Params.Asc then begin // ascending order comparaison
         while compI<0 do begin
           inc(I);
@@ -25513,14 +25513,14 @@ begin
           // full row exchange
           ExchgPtrUInt(PtrInt(CI)-FieldFirstPtr,PtrInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
-          if Assigned(IDColumn) then begin // update hidden ID column also
-          {$ifdef PUREPASCAL}
+          if Assigned(IDColumn) then begin // exchange hidden ID column also
+            {$ifdef PUREPASCAL}
             Tmp := IDColumn[I];
             IDColumn[I] := IDColumn[J];
             IDColumn[J] := Tmp;
-          {$else}
-            Exchg32(IDColumn,I,J);
-          {$endif}
+            {$else}
+            ExchgPUTF8Charx86(IDColumn,I,J);
+            {$endif}
           end;
         end;
         if PP=CI then
@@ -29903,7 +29903,7 @@ procedure TSQLRecordFill.Map(aRecord: TSQLRecord; aTable: TSQLTable;
   aCheckTableName: TSQLCheckTableName);
 var f: integer;
     ColumnName: PUTF8Char;
-    FieldName: shortstring;
+    FieldName: RawUTF8;
     Props: TSQLRecordProperties;
 begin
   if aTable=nil then // avoid any GPF
@@ -29915,12 +29915,12 @@ begin
   for f := 0 to aTable.FieldCount-1 do begin
     ColumnName := aTable.fResults[f];
     if aCheckTableName=ctnNoCheck then
-      FieldName := ColumnName else
+      Utf8ToRawUTF8(ColumnName,FieldName) else
       if IdemPChar(ColumnName,pointer(Props.SQLTableNameUpperWithDot)) then
-        FieldName := ColumnName+length(Props.SQLTableNameUpperWithDot) else
+        Utf8ToRawUTF8(ColumnName+length(Props.SQLTableNameUpperWithDot),FieldName) else
         if aCheckTableName=ctnMustExist then
           continue else
-          FieldName := ColumnName;
+          Utf8ToRawUTF8(ColumnName,FieldName);
     AddMap(aRecord,FieldName,f);
   end;
   fFillCurrentRow := 1; // point to first data row (0 is field names)
