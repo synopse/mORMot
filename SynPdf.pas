@@ -377,6 +377,11 @@ unit SynPdf;
   {$undef USE_METAFILE}
 {$endif}
 
+ {$define USE_ARC}
+{$ifdef NO_USE_ARC}
+  { Dont use the SynPdfArc unit }
+  {$undef USE_ARC}
+{$endif}
 {$ifdef USE_BITMAP}
   {$define USE_GRAPHICS_UNIT}
 {$endif}
@@ -402,7 +407,7 @@ uses
   {$else}
   jpeg,
   {$endif}
-  SysConst, SysUtils, Classes,
+  SysConst, SysUtils, Classes, Math,
   {$ifdef ISDELPHIXE3}
   System.Types,
   System.AnsiStrings,
@@ -1767,6 +1772,10 @@ type
   TPdfCanvasRenderMetaFileTextClipping = (
     tcClipReference, tcClipExplicit, tcAlwaysClip, tcNeverClip);
 
+{$IFDEF USE_ARC}
+  TPdfCanvasArcType =(
+    acArc, acArcTo, acArcAngle, acPie, acChoord);
+{$ENDIF}
   /// access to the PDF Canvas, used to draw on the page
   TPdfCanvas = class(TObject)
   protected
@@ -1825,6 +1834,9 @@ type
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
+   {$IFDEF USE_ARC}
+      procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType; var position : tpoint);
+   {$ENDIF}
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -3419,6 +3431,332 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
+
+{$ifdef USE_ARC}
+type
+  //  Result types for use in ARC Functions
+  tcaRes = (caMoveto, caLine, caCurve, caPosition);
+  teaDrawtype = record
+    res: tcaRes;
+    pts: array[0..2] of record x, y: single;
+  end;
+  end;
+  teaDrawArray = array of teaDrawtype;
+
+function CalcCurveArcData(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; aClockWise: boolean; arctype: TPdfCanvasArcType; var res:
+    teaDrawArray): Boolean;
+type
+  tcoeffArray = array[0..1, 0..3, 0..3] of double;
+  tSafetyArray = array[0..3] of double;
+
+const
+  twoPi = 2 * PI;
+  { (* }
+  // coefficients for error estimation
+  // while using cubic Bézier curves for approximation
+  // 0 < b/a < 1/4
+  coeffsLow: tcoeffArray = (
+  (
+  (3.85268, -21.229, -0.330434, 0.0127842),
+  (-1.61486, 0.706564, 0.225945, 0.263682),
+  (-0.910164, 0.388383, 0.00551445, 0.00671814),
+  (-0.630184, 0.192402, 0.0098871, 0.0102527)
+  ),(
+  (-0.162211, 9.94329, 0.13723, 0.0124084),
+  (-0.253135, 0.00187735, 0.0230286, 0.01264),
+  (-0.0695069, -0.0437594, 0.0120636, 0.0163087),
+  (-0.0328856, -0.00926032, -0.00173573, 0.00527385)
+  ));
+
+  // coefficients for error estimation
+  // while using cubic Bézier curves for approximation
+  // 1/4 <= b/a <= 1
+  coeffsHigh: tcoeffArray = (
+  (
+  (0.0899116, -19.2349, -4.11711, 0.183362),
+  (0.138148, -1.45804, 1.32044, 1.38474),
+  (0.230903, -0.450262, 0.219963, 0.414038),
+  (0.0590565, -0.101062, 0.0430592, 0.0204699)
+  ),(
+  (0.0164649, 9.89394, 0.0919496, 0.00760802),
+  (0.0191603, -0.0322058, 0.0134667, -0.0825018),
+  (0.0156192, -0.017535, 0.00326508, -0.228157),
+  (-0.0236752, 0.0405821, -0.0173086, 0.176187)
+  ));
+
+  // safety factor to convert the "best" error approximation
+  // into a "max bound" error
+  safety: tSafetyArray = (0.001, 4.98, 0.207, 0.0067);
+
+var fcx, fcy: double; //  center of the ellipse.
+     faRad, fbRad: double; // Semi-major axis.
+     feta1, feta2: double; //  Start End angle of the arc.
+     fx1, fy1, fx2, fy2: double;  //start and and endpoint.
+     fxLeft, fyUp: double;  // leftmost point of the arc.
+     fwidth, fheight: double; //   Horizontal width of the arc. Vertical height of the arc.
+     fArctype: TPdfCanvasArcType;  //Indicator for center to endpoints line inclusion.
+     fClockWise : boolean;
+
+procedure InitFuncData;
+var lambda1, lambda2 : double;
+begin
+  fcx := centerx;
+  fcy := centery;
+  faRad := (W-1) / 2;
+  fbRad := (H-1) / 2;
+  fArctype := arctype;
+  // Calculate Rotation at Start and EndPoint
+  fClockWise := aClockWise;
+  if aclockwise then begin
+    lambda1 := ArcTan2(Sy - fcy, Sx - fcx);
+    lambda2 := ArcTan2(Ey - fcy, Ex - fcx);
+  end else begin
+    lambda2 := ArcTan2(Sy - fcy, Sx - fcx);
+    lambda1 := ArcTan2(Ey - fcy, Ex - fcx);
+  end;
+    feta1 := ArcTan2(sin(lambda1) / fbRad,
+      cos(lambda1) / faRad);
+   feta2 := ArcTan2(sin(lambda2) / fbRad,
+      cos(lambda2) / faRad);
+  // make sure we have eta1 <= eta2 <= eta1 + 2 PI
+  feta2 := feta2 - (twoPi * floor((feta2 - feta1) / twoPi));
+  // the preceding correction fails if we have exactly et2 - eta1 = 2 PI
+  // it reduces the interval to zero length
+  if SameValue(feta1, feta2) then
+    feta2 := feta2 + twoPi;
+
+  // start point
+  fx1 := fcx + (faRad * cos(feta1));
+  fy1 := fcy + (fbRad * sin(feta1));
+
+  // end point
+  fx2 := fcx + (faRad * cos(feta2));
+  fy2 := fcy + (fbRad * sin(feta2));
+  // Dimensions
+  fxLeft := min(fx1, fx2);
+  fyUp := min(fy1, fy2);
+  fwidth := max(fx1, fx2) - fxLeft;
+  fheight := max(fy1, fy2) - fyUp;
+end;
+
+function estimateError(etaA, etaB: double): double;
+var
+  c0: double;
+  c1: double;
+  coeffs: tcoeffArray;
+  cos2: double;
+  cos4: double;
+  cos6: double;
+  dEta: double;
+  eta: double;
+  x: double;
+
+function rationalFunction(x: double; c: array of double): double;
+begin
+  assert(high(c) >= 3);
+  result := (x * (x * c[0] + c[1]) + c[2]) / (x + c[3]);
+end;
+
+begin
+  eta := 0.5 * (etaA + etaB);
+  x := fbRad / faRad;
+  dEta := etaB - etaA;
+  cos2 := cos(2 * eta);
+  cos4 := cos(4 * eta);
+  cos6 := cos(6 * eta);
+  // select the right coeficients set according to degree and b/a
+  if (x < 0.25) then
+    coeffs := coeffsLow
+  else
+    coeffs := coeffsHigh;
+  c0 := rationalFunction(x, coeffs[0][0]) + cos2 * rationalFunction(x, coeffs[0][1]) + cos4 * rationalFunction(x,
+    coeffs[0][2]) + cos6 *
+    rationalFunction(x, coeffs[0][3]);
+  c1 := rationalFunction(x, coeffs[1][0]) + cos2 * rationalFunction(x, coeffs[1][1]) + cos4 * rationalFunction(x,
+    coeffs[1][2]) + cos6 *
+    rationalFunction(x, coeffs[1][3]);
+  result := rationalFunction(x, safety) * faRad * exp(c0 + c1 * dEta);
+end;
+
+procedure buildPathIterator(var res: teaDrawArray);
+var
+  alpha: double;
+  found: Boolean;
+  n: integer;
+  dEta, etaB, etaA: double;
+  cosEtaB, sinEtaB, aCosEtaB, bSinEtaB, aSinEtaB, bCosEtaB, xB, yB, xBDot, yBDot: double;
+  I: integer;
+  t: double;
+  xA: double;
+  xADot: double;
+  yA: double;
+  yADot: double;
+  size: integer; // Size for result Array
+  resindex: integer; // Index var for result Array
+  emptyres: teaDrawtype;
+  lstartx, lstarty : double;  // Start From
+const
+  defaultFlatness = 0.5; // half a pixel
+begin
+  setlength(res, 0);
+  fillchar(emptyres, sizeof(emptyres), 0);
+  // find the number of Bézier curves needed
+  found := false;
+  n := 1;
+  while ((not found) and (n < 1024)) do begin
+    dEta := (feta2 - feta1) / n;
+    if (dEta <= 0.5 * PI) then begin
+      etaB := feta1;
+      found := true;
+      for I := 0 to n - 1 do begin
+        etaA := etaB;
+        etaB := etaB + dEta;
+        found := (estimateError(etaA, etaB) <= defaultFlatness);
+        if not found then
+          break;
+      end;
+    end;
+    // if not found then
+    n := n shl 1;
+  end;
+  dEta := (feta2 - feta1) / n;
+  etaB := feta1;
+  cosEtaB := cos(etaB);
+  sinEtaB := sin(etaB);
+  aCosEtaB := faRad * cosEtaB;
+  bSinEtaB := fbRad * sinEtaB;
+  aSinEtaB := faRad * sinEtaB;
+  bCosEtaB := fbRad * cosEtaB;
+  xB := fcx + aCosEtaB;
+  yB := fcy + bSinEtaB;
+  xBDot := -aSinEtaB;
+  yBDot := +bCosEtaB;
+  lstartx := xB;
+  lstarty := yB;
+  // calculate and reserve Space for the result
+  size := n; // Res Size
+  case fArctype of
+   acArc :  inc(size,1); // Res Size n+1 because first move;
+   acArcTo :inc(size,3); // Res Size n+1 because first Line and SetPosition;
+   acArcAngle : inc(size,1); // Res Size n+1 because first move;
+   acPie : inc(size, 3); // for first and last Line if wie want a pie
+   acChoord : inc(size,2);
+  end;
+  setlength(res, size);
+  resindex := 0;
+  case fArctype of
+   acArc : begin   // Start with moveto
+     res[resindex] := emptyres;
+     res[resindex].res := caMoveto;
+     res[resindex].pts[0].x := xB;
+     res[resindex].pts[0].y := yB;
+     inc(resindex);
+   end;
+   acArcTo : begin   // Start with moveto
+     res[resindex] := emptyres;
+     res[resindex].res := caLine;
+     if fClockwise then  begin
+       res[resindex].pts[0].x := fx1;
+       res[resindex].pts[0].y := fy1;
+     end else begin
+       res[resindex].pts[0].x := fx2;
+       res[resindex].pts[0].y := fy2;
+     end;
+     inc(resindex);
+     res[resindex] := emptyres;
+     res[resindex].res := caMoveto;
+     res[resindex].pts[0].x := fx1;
+     res[resindex].pts[0].y := fy1;
+     inc(resindex);
+   end;
+   acArcAngle :;
+   acPie : begin
+    res[resindex] := emptyres;
+    res[resindex].res := caMoveto;
+    res[resindex].pts[0].x := fcx;
+    res[resindex].pts[0].y := fcy;
+    inc(resindex);
+    res[resindex] := emptyres;
+    res[resindex].res := caLine;
+    res[resindex].pts[0].x := xB;
+    res[resindex].pts[0].y := yB;
+    inc(resindex);
+   end;
+   acChoord : begin
+    res[resindex] := emptyres;
+    res[resindex].res := caMoveto;
+    res[resindex].pts[0].x := xB;
+    res[resindex].pts[0].y := yB;
+    inc(resindex);
+   end;
+  end;
+
+  t := tan(0.5 * dEta);
+  alpha := sin(dEta) * (sqrt(4 + 3 * t * t) - 1) / 3;
+
+  for I := 0 to n - 1 do begin
+    xA := xB;
+    yA := yB;
+    xADot := xBDot;
+    yADot := yBDot;
+    etaB := etaB + dEta;
+    cosEtaB := cos(etaB);
+    sinEtaB := sin(etaB);
+    aCosEtaB := faRad * cosEtaB;
+    bSinEtaB := fbRad * sinEtaB;
+    aSinEtaB := faRad * sinEtaB;
+    bCosEtaB := fbRad * cosEtaB;
+    xB := fcx + aCosEtaB;
+    yB := fcy + bSinEtaB;
+    xBDot := -aSinEtaB;
+    yBDot := bCosEtaB;
+    res[resindex] := emptyres;
+    res[resindex].res := caCurve;
+    res[resindex].pts[0].x := (xA + alpha * xADot);
+    res[resindex].pts[0].y := (yA + alpha * yADot);
+    res[resindex].pts[1].x := (xB - alpha * xBDot);
+    res[resindex].pts[1].y := (yB - alpha * yBDot);
+    res[resindex].pts[2].x := xB;
+    res[resindex].pts[2].y := yB;
+    inc(resindex);
+  end; // Loop
+
+ if fArctype = acArcTo then begin
+    res[resindex] := emptyres;
+    res[resindex].res := caPosition;
+    if fClockWise then begin
+     res[resindex].pts[0].x := fx2;
+     res[resindex].pts[0].y := fy2;
+    end else begin
+     res[resindex].pts[0].x := fx1;
+     res[resindex].pts[0].y := fy1;
+    end
+  end
+  else
+  if fArctype = acPie then begin
+    res[resindex] := emptyres;
+    res[resindex].res := caLine;
+    res[resindex].pts[0].x := fcx;
+    res[resindex].pts[0].y := fcy;
+  end
+  else
+  if fArctype = acChoord then begin
+    res[resindex] := emptyres;
+    res[resindex].res := caLine;
+    res[resindex].pts[0].x := lstartx;
+    res[resindex].pts[0].y := lstarty;
+  end;
+end;
+
+
+begin
+  setlength(res, 0);
+  InitFuncData;  // Initialize Data
+  buildPathIterator(res);
+  result := length(res) > 1;
+end;
+
+{$endif USE_ARC}
 
 { TPdfObject }
 
@@ -7327,6 +7665,30 @@ begin
     cx * FDevScaleX * GetWorldFactorX,-cy * FDevScaleY * GetWorldFactorY);
 end;
 
+{$IFDEF USE_ARC}
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer; clockwise: Boolean; arctype : TPdfCanvasArcType; var position : tpoint);
+var
+   res: teaDrawArray;
+   i: integer;
+begin
+   setlength(res, 0);
+   if CalcCurveArcData(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  arctype, res) then begin
+      for I := Low(res) to High(res) do begin
+         case res[i].res of
+            caMoveto: MoveTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
+            caLine: LineTo(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y));
+            caCurve: CurveToC(I2X(res[i].pts[0].x), i2y(res[i].pts[0].y),
+                  I2X(res[i].pts[1].x), i2y(res[i].pts[1].y),
+                  I2X(res[i].pts[2].x), i2y(res[i].pts[2].y));
+            caPosition : begin
+              position.x := Round(res[i].pts[0].x);
+              position.y := Round(res[i].pts[0].y);
+            end;
+         end;
+      end;
+   end;
+end;
+{$ENDIF}
 procedure TPdfCanvas.PointI(x, y: Single);
 begin
   Rectangle(I2X(X),I2Y(Y),1E-2,1E-2); //smalest difference 1E-2 because of rounding to two decimals
@@ -8899,6 +9261,7 @@ function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
 var i: integer;
     InitTransX: XForm;
     polytypes: PByteArray;
+
 begin
   result := true;
 
@@ -9005,6 +9368,69 @@ begin
         szlCorner.cx,szlCorner.cy);
     E.FlushPenBrush;
   end;
+  {$IFDEF USE_ARC} 
+  EMR_ARC: begin
+    NormalizeRect(PEMRARC(R)^.rclBox);
+    E.NeedPen;
+    with PEMRARC(R)^ do
+    E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+      rclBox.Width, rclBox.Height,
+      ptlStart.x, ptlStart.y,
+      ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      acArc, Position);
+      E.Canvas.Stroke;
+   end;
+  EMR_ARCTO: begin
+    NormalizeRect(PEMRARCTO(R)^.rclBox);
+    E.NeedPen;
+     if not E.Canvas.FNewPath and not Moved then
+      E.Canvas.MoveToI(Position.X,Position.Y);
+    with PEMRARC(R)^ do  begin
+   // E.Canvas.LineTo(ptlStart.x, ptlStart.y);
+    E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+      rclBox.Width, rclBox.Height,
+      ptlStart.x, ptlStart.y,
+      ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      acArcTo,
+      Position);
+    Moved := false;
+    E.fInLined := true;
+    if not E.Canvas.FNewPath then
+      if not pen.null then
+        E.Canvas.Stroke ;
+     end;
+   end;
+  EMR_PIE: begin
+    NormalizeRect(PEMRPie(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRPie(R)^ do
+      E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+        rclBox.Width, rclBox.Height,
+        ptlStart.x, ptlStart.y,
+        ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        acPie, Position);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+    end;
+  EMR_CHORD: begin
+    NormalizeRect(PEMRChord(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRChord(R)^ do
+      E.Canvas.ARCI(rclBox.CenterPoint.x, rclBox.CenterPoint.y,
+        rclBox.Width, rclBox.Height,
+        ptlStart.x, ptlStart.y,
+        ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        acChoord,Position);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+  end;
+  {$ENDIF}
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
@@ -9375,7 +9801,6 @@ begin
   end;
   // TBD
   EMR_SMALLTEXTOUT,
-  EMR_ARC,
   EMR_SETROP2,
   EMR_ALPHADIBBLEND,
   EMR_SETBRUSHORGEX,
