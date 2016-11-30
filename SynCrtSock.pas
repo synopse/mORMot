@@ -3902,7 +3902,7 @@ begin
 end;
 
 procedure THttpServerRequest.Prepare(const aURL, aMethod,
-   aInHeaders, aInContent, aInContentType, aRemoteIP: SockString);
+  aInHeaders, aInContent, aInContentType, aRemoteIP: SockString);
 begin
   fURL := aURL;
   fMethod := aMethod;
@@ -6318,6 +6318,8 @@ begin
     ReqID := 0;
     Context.fServer := self;
     repeat
+      Context.fInContent := ''; // release input/output body buffers ASAP
+      Context.fOutContent := '';
       // retrieve next pending request, and read its headers
       fillchar(Req^,sizeof(HTTP_REQUEST),0);
       Err := Http.ReceiveHttpRequest(fReqQueue,ReqID,0,Req^,length(ReqBuf),bytesRead);
@@ -6355,7 +6357,6 @@ begin
               Context.fAuthenticationStatus := hraFailed;
             end;
         // retrieve body
-        Context.fInContent := '';
         if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
           with Req^.Headers.KnownHeaders[reqContentLength] do
             InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
@@ -6373,6 +6374,8 @@ begin
                 InContentLengthChunk := fReceiveBufferSize;
               Err := Http.ReceiveRequestEntityBody(fReqQueue,Req^.RequestId,flags,
                 BufRead,InContentLengthChunk,BytesRead);
+              if Terminated then
+                exit;
               inc(InContentLengthRead,BytesRead);
               if Err=ERROR_HANDLE_EOF then begin
                 if InContentLengthRead<InContentLength then
