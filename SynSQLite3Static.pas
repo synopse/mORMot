@@ -94,7 +94,7 @@ unit SynSQLite3Static;
 
 interface
 
-{$ifdef NOSQLITE3STATIC}
+{$ifdef NOSQLITE3STATIC} // conditional defined -> auto-load local .dll/.so
 uses
   SysUtils,
   SynSQLite3;
@@ -103,7 +103,6 @@ implementation
 
 uses
   SynCommons;
-
 
 procedure DoInitialization;
 begin
@@ -865,15 +864,15 @@ type
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
-    locktype:byte;         // Type of lock currently held on this file */
-    sharedLockByte:word;   // Randomly chosen byte used as a shared lock */
-    ctrlFlags:byte;        // Flags.  See WINFILE_* below */
+    locktype: byte;        // Type of lock currently held on this file */
+    sharedLockByte: word;  // Randomly chosen byte used as a shared lock */
+    ctrlFlags: byte;       // Flags.  See WINFILE_* below */
     lastErrno: cardinal;   // The Windows errno from the last I/O error
     // asm code generated from c is [esi+20] for lastErrNo -> OK
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
     zPath: PAnsiChar;
     szChunk, nFetchOut: integer;
-    hMap: THANDLE;
+    hMap: THandle;
     pMapRegion: PAnsiChar;
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
@@ -886,8 +885,8 @@ type
     eFileLock: cuchar;          // The type of lock held on this fd
     ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
     lastErrno: cint;            // The unix errno from the last I/O error
-    lockingContext : PAnsiChar; // Locking style specific state
-    UnixUnusedFd : pointer;     // unused
+    lockingContext: PAnsiChar; // Locking style specific state
+    UnixUnusedFd: pointer;     // unused
     zPath: PAnsiChar;           // Name of the file
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
     szChunk: cint;
@@ -956,10 +955,8 @@ begin
   SetLength(buf,SQLEncryptTableSize);
   CreateSQLEncryptTableBytes(pass,pointer(buf));
   Cyph.Handle := PSQLDBStruct(DB)^.DB0^.Btree^.pBt^.pPager^.fd^.h;
-  if Cyphers=nil then begin
-    Cypher.Init(TypeInfo(TSQLCypherDynArray),Cyphers,@CypherCount);
-    Cypher.Compare := SortDynArrayPointer;
-  end;
+  if Cyphers=nil then
+    Cypher.InitSpecific(TypeInfo(TSQLCypherDynArray),Cyphers,djCardinal,@CypherCount);
   if Cypher.Find(Cyph.Handle)>=0 then
     raise ESQLite3Exception.Create('Invalid call to sqlite3_key() with no previous sqlite3_close()');
   Cyph.CypherBuf := buf;
@@ -1012,21 +1009,24 @@ function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
 // or some other error code on failure
 var n, i, written: integer;
     EncryptTable: PByteArray;
-    offset: Int64Rec absolute off;
+    off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
-label err;
+    {$ifdef MSWINDOWS}
+    ol: TOverlapped;
+    ol64: Int64;
+    {$endif}
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(buf^,F.pMapRegion[offset.Lo],bufLen);
+        MoveFast(buf^,F.pMapRegion[off64.Lo],bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
-        nCopy := F.mmapSize.Lo-offset.Lo;
-        MoveFast(buf^,F.pMapRegion[offset.Lo],nCopy);
+        nCopy := F.mmapSize.Lo-off64.Lo;
+        MoveFast(buf^,F.pMapRegion[off64.Lo],nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -1035,7 +1035,11 @@ begin
         'sqlite3_key(%) expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
-  offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS}
+  FillCharFast(ol,sizeof(ol),0);
+  ol64 := off;
+  {$else}
   if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -1044,30 +1048,39 @@ begin
       exit;
     end;
   end;
+  {$endif}
   EncryptTable := nil; // mark no encryption
   if CypherCount>0 then
-    if (offset.Lo>=1024) or (offset.Hi<>0) then // crypt content after first page
+    if (off64.Lo>=1024) or (off64.Hi<>0) then // crypt content after first page
     for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
       if Cyphers[i].Handle=F.h then begin
         EncryptTable := Pointer(Cyphers[i].CypherBuf);
-        XorOffset(buf,offset.Lo,buflen,EncryptTable);
+        XorOffset(buf,off64.Lo,buflen,EncryptTable);
         break;
       end;
   b := buf;
   n := buflen;
   while n>0 do begin
+    {$ifdef MSWINDOWS}
+    ol.Offset := Int64Rec(ol64).Lo;
+    ol.OffsetHigh := Int64Rec(ol64).Hi;
+    if WriteFile(F.h,b^,n,cardinal(written),@ol) then
+      inc(ol64,written) else
+      written := -1;
+    {$else}
     written := FileWrite(F.h,b^,n);
+    {$endif}
     if written=0 then
       break;
     if written=-1 then begin
-err:  F.lastErrno := GetLastError;
+      F.lastErrno := GetLastError;
       {$ifdef MSWINDOWS}
       if not (F.lastErrno in [ERROR_HANDLE_DISK_FULL,ERROR_DISK_FULL]) then
         result := SQLITE_IOERR_WRITE else
       {$endif}
         result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
-        XorOffset(buf,offset.Lo,buflen,EncryptTable);
+        XorOffset(buf,off64.Lo,buflen,EncryptTable);
       exit;
     end;
     dec(n,written);
@@ -1075,7 +1088,7 @@ err:  F.lastErrno := GetLastError;
   end;
   result := SQLITE_OK;
   if EncryptTable<>nil then // restore buf content
-    XorOffset(buf,offset.Lo,buflen,EncryptTable);
+    XorOffset(buf,off64.Lo,buflen,EncryptTable);
 end;
 
 
@@ -1099,21 +1112,24 @@ function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
   {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
-var offset: Int64Rec absolute off;
+var off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
     i,n,read: integer;
+    {$ifdef MSWINDOWS}
+    ol: TOverlapped;
+    {$endif}
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(F.pMapRegion[offset.Lo],buf^,bufLen);
+        MoveFast(F.pMapRegion[off64.Lo],buf^,bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
-        nCopy := F.mmapSize.Lo-offset.Lo;
-        MoveFast(F.pMapRegion[offset.Lo],buf^,nCopy);
+        nCopy := F.mmapSize.Lo-off64.Lo;
+        MoveFast(F.pMapRegion[off64.Lo],buf^,nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -1122,7 +1138,24 @@ begin
         'sqlite3_key(%) expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
-  offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS} // read chunk in one single API call
+  FillCharFast(ol,sizeof(ol),0);
+  ol.Offset := off64.Lo;
+  ol.OffsetHigh := off64.Hi and $7fffffff;
+  b := buf;
+  n := buflen;
+  if not ReadFile(F.h,b^,n,cardinal(read),@ol) then begin
+    i := GetLastError;
+    if i<>ERROR_HANDLE_EOF then begin
+      F.lastErrno := i;
+      result := SQLITE_IOERR_READ;
+      exit;
+    end;
+  end;
+  inc(b,read);
+  dec(n,read);
+  {$else} // use standard cross-platform FPC/Delphi RTL calls
+  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -1145,11 +1178,12 @@ begin
     inc(b,read);
     dec(n,read);
   until n=0;
+  {$endif}
   if CypherCount>0 then
-  if (offset.Lo>=1024) or (offset.Hi<>0) then // uncrypt after first page
+  if (off64.Lo>=1024) or (off64.Hi<>0) then // uncrypt after first page
     for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
       if Cyphers[i].Handle=F.h then begin
-        XorOffset(buf,offset.Lo,buflen,pointer(Cyphers[i].CypherBuf));
+        XorOffset(buf,off64.Lo,buflen,pointer(Cyphers[i].CypherBuf));
         break;
       end;
   if n>0 then begin // remaining bytes are set to 0
