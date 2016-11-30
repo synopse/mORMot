@@ -1,16 +1,24 @@
 program TaskDialogTest;
 
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
+
 uses
+  {$ifdef FPC}
+  Interfaces,
+  {$endif}
+  Forms,
   {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SysUtils,
-  SynTaskDialog,
-  mORMot,
-  mORMotUILogin,
-  Forms
   {$ifdef FPC}
-  ,Interfaces
+  SynTaskDialog in '..\..\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
+  {$IFDEF MSWINDOWS}
+  win32extra,  // for TaskDialogIndirect
+  {$ENDIF}
+  {$else}
+  SynTaskDialog,
   {$endif}
-  ;
+  mORMot,
+  mORMotUILogin;
 
 {$ifndef FPC}
 {$R *.res}
@@ -124,9 +132,13 @@ begin
 end;
 
 begin
+  {$ifdef FPC}
+  Application.Initialize;
+  {$endif}
   Test;
-  if @TaskDialogIndirect<>nil then begin
-    ShowMessage('Now displaying the dialogs using Delphi emulation');
+  if @TaskDialogIndirect<>nil then
+  begin
+    ShowMessage('Now displaying the dialogs using TaskDialogIndirect');
     @TaskDialogIndirect := nil;
     Test;
   end;
