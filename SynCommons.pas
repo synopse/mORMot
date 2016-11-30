@@ -20187,6 +20187,21 @@ type
   {$endif}
 
   /// map the Delphi/FPC RTTI content
+  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+  PPRecordInitTable = ^PRecordInitTable;
+  PRecordInitTable = ^TRecordInitTable;
+  TRecordInitTable =
+    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+    packed
+    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+    record
+      recSize: longint;
+      Terminator: Pointer;
+      recManagementOperators: Pointer;
+      ManagedCount: longint;
+    end;
+  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
     packed
@@ -20234,6 +20249,9 @@ type
     {$ifdef FPC}
     tkRecord, tkObject:(
       recSize: longint;
+      {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+      recInitTable: PPRecordInitTable;
+      {$endif FPC_HAS_MANAGEMENT_OPERATORS}
       ManagedCount: longint;
     {$else}
     tkRecord: (
@@ -35249,7 +35267,7 @@ begin
           raise ESynException.CreateUTF8('RecordEquals(kind=%)',
             [ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           if not CompareMem(A,B,Diff) then
             exit; // binary block not equal
@@ -35264,7 +35282,7 @@ begin
     inc(Diff,Field^.Offset);
     inc(Field);
   end;
-  if CompareMem(A,B,info.recSize-Diff) then
+  if CompareMem(A,B,info^.recSize-Diff) then
     result := true;
 end;
 
@@ -35282,13 +35300,13 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
-  Field := @info.ManagedFields[0];
-  result := info.recSize;
-  for F := 1 to info.ManagedCount do begin
-    P := pointer(R+Field.Offset);
-    case Field.TypeInfo^.Kind of
+  Field := @info^.ManagedFields[0];
+  result := info^.recSize;
+  for F := 1 to info^.ManagedCount do begin
+    P := pointer(R+Field^.Offset);
+    case Field^.TypeInfo^.Kind of
       tkDynArray: begin
-        DynArray.Init(Deref(Field.TypeInfo),P^);
+        DynArray.Init(Deref(Field^.TypeInfo),P^);
         inc(result,DynArray.SaveToLength-sizeof(PtrUInt));
       end;
       tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
@@ -35303,7 +35321,7 @@ begin
           inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2)-sizeof(PtrUInt));
       {$endif}
       tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+        infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
         Len := RecordSaveLength(P^,infoNested);
         if Len=0 then begin
           result := 0;
@@ -35362,10 +35380,10 @@ begin
       inc(R,Diff);
       inc(Dest,Diff);
     end;
-    Kind := Field.TypeInfo^.Kind;
+    Kind := Field^.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Deref(Field.TypeInfo),R^);
+      DynArray.Init(Deref(Field^.TypeInfo),R^);
       Dest := DynArray.SaveTo(Dest);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -35386,7 +35404,7 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
       Dest := RecordSave(R^,Dest,infoNested);
       if Dest=nil then begin
         result := nil; // invalid/unhandled record content
@@ -35414,7 +35432,7 @@ begin
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordSave(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(R^,Dest^,Diff);
           inc(Dest,Diff);
@@ -35575,10 +35593,10 @@ begin
       inc(Source,Diff);
       inc(R,Diff);
     end;
-    Kind := Field.TypeInfo^.Kind;
+    Kind := Field^.TypeInfo^.Kind;
     case Kind of
     tkDynArray: begin
-      DynArray.Init(Deref(Field.TypeInfo),R^);
+      DynArray.Init(Deref(Field^.TypeInfo),R^);
       Source := DynArray.LoadFrom(Source);
       Diff := sizeof(PtrUInt); // size of tkDynArray in record
     end;
@@ -35591,7 +35609,7 @@ begin
           {$ifdef HASCODEPAGE}
           { Delphi 2009+: set Code page for this AnsiString }
           if LenBytes<>0 then begin
-            infoNested := Deref(Field.TypeInfo); 
+            infoNested := Deref(Field^.TypeInfo); 
             SetCodePage(PRawByteString(R)^,
               PWord(PtrUInt(infoNested)+infoNested^.NameLen+2)^,false);
           end;
@@ -35608,7 +35626,7 @@ begin
       Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
     tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field.TypeInfo); // inlined GetTypeInfo()
+      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
       Source := RecordLoad(R^,Source,infoNested);
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
       infoNested := GetFPCAlignPtr(infoNested);
@@ -35628,7 +35646,7 @@ begin
         if Field^.TypeInfo^.Kind in tkManagedTypes then
           raise ESynException.CreateUTF8('RecordLoad(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
           if F=info^.ManagedCount then
-            Diff := info.recSize-Field^.Offset else
+            Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
           MoveFast(Source^,R^,Diff);
           inc(Source,Diff);
