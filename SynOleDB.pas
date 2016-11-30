@@ -541,7 +541,7 @@ type
   end;
 
   ISSCommandWithParameters = interface(ICommandWithParameters)
-  ['{EEC30162-6087-467C-B995-7C523CE96561}']
+    ['{EEC30162-6087-467C-B995-7C523CE96561}']
     function GetParameterProperties(var pcParams: PtrUInt; var prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
     function SetParameterProperties (cParams: PtrUInt; prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
   end;
@@ -1805,8 +1805,9 @@ begin
       CreateCommand(nil,IID_ICommandText,ICommand(fCommand)));
   end;
   L := Length(fSQL);
-  while (L>0) and (fSQL[L] in [#1..' ',';']) do
-    dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
+  if StripSemicolon then
+    while (L>0) and (fSQL[L] in [#1..' ',';']) do
+      dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
@@ -1953,7 +1954,7 @@ begin
         end;
         if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
           OleDBConnection.OleDBCheck(self,
-            (fCommand as ISSCommandWithParameters).SetParameterInfo(
+            (fCommand as ICommandWithParameters).SetParameterInfo(
               fParamCount, pointer(fParamOrdinals), pointer(fParamBindInfo)));
           if ssParamPropsCount>0 then
             OleDBConnection.OleDBCheck(self,

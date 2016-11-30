@@ -2266,11 +2266,12 @@ type
   // - by default, a temporary instance will be created if a published field
   // has a setter, and the instance is expected to be released later by the
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
-  // (and TPropInfo.ClassFromJSON) release it when the setter returns
+  // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
+  // j2oSetterNoCreate to avoid the published field instance creation
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -6061,7 +6062,7 @@ type
     /// the remote IP from which the TAuthSession was created, if any
     // - is undefined if Session is 0 or 1 (no authentication running)
     SessionRemoteIP: RawUTF8;
-    /// the internal ID used to identify modelroot/safe custom encryption
+    /// the internal ID used to identify modelroot/_safe_ custom encryption
     SafeProtocolID: integer;
     /// the static instance corresponding to the associated Table (if any)
     {$ifdef FPC}&Static{$else}Static{$endif}: TSQLRest;
@@ -15089,7 +15090,9 @@ type
   protected
     fNoTimeStampCoherencyCheck: Boolean;
     fTimeStampCoherencySeconds: cardinal;
+    fTimeStampCoherencyTicks: cardinal;
     procedure SetNoTimeStampCoherencyCheck(value: boolean);
+    procedure SetTimeStampCoherencySeconds(value: cardinal);
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
@@ -15119,7 +15122,7 @@ type
     // - default value is 5 seconds, which cover most kind of clients (AJAX or
     // WebSockets), even over a slow Internet connection
     property TimeStampCoherencySeconds: cardinal read fTimeStampCoherencySeconds
-      write fTimeStampCoherencySeconds;
+      write SetTimeStampCoherencySeconds;
   end;
 
   /// mORMot secure RESTful authentication scheme
@@ -16086,7 +16089,7 @@ type
     function GetRemoteTable(TableIndex: Integer): TSQLRest;
     function IsInternalSQLite3Table(aTableIndex: integer): boolean;
     /// intercepts all calls to TSQLRestServer.URI for fSafeProtocol
-    // - e.g. ModelRoot/safe URI called by the clients to implement a secure
+    // - e.g. ModelRoot/_safe_ URI called by the clients to implement a secure
     // custom encryption, by sending POST requests with an encrypted body as
     // BINARY_CONTENT_TYPE ('application/octet-stream') input and output
     procedure InternalSafeProtocol(var Call: TSQLRestURIParams; var SafeID: integer);
@@ -25364,16 +25367,15 @@ type
     IDColumn: PPUtf8CharArray;
     Params: TSQLTableSortParams;
     CurrentRow: integer;
-    // used to avoid multiplications to calculate data memory position from index
-    // - CPU64 ready
-    FieldCountNextPtr, FieldIndexNextPtr: PtrInt;
+    // avoid multiplications to calculate data memory position from index
+    FieldCountNextPtr, FieldFirstPtr, FieldIDPtr: PtrInt;
     // temp vars (avoid stack usage):
     PID: Int64;
     PP, CI, CJ: PPUTF8Char;
     I, J: PtrInt;
-{$ifdef PUREPASCAL}
+    {$ifdef PUREPASCAL}
     Tmp: PUTF8Char;
-{$endif}
+    {$endif}
     /// recursively perform the sort
     procedure QuickSort(L, R: Integer);
     /// compare value at index I with pivot value
@@ -25392,27 +25394,39 @@ begin
   // PID must be updated every time PP is modified
   if Assigned(IDColumn) then
     SetInt64(IDColumn[aP],PID) else
-    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIndexNextPtr)^,PID);
+    SetInt64(PPUTF8Char(PtrInt(aPP)-FieldIDPtr)^,PID);
 end;
 
 function TUTF8QuickSort.CompI: integer;
+var i64: Int64;
 begin
   result := fComp(CI^,PP^);
-  if result=0 then
+  if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInt64(IDColumn[I])-PID else
-      result := GetInt64(PPUTF8Char(PtrInt(CI)-FieldIndexNextPtr)^)-PID;
+      SetInt64(IDColumn[I],i64) else
+      SetInt64(PPUTF8Char(PtrInt(CI)-FieldIDPtr)^,i64);
+    if i64<PID then
+      result := -1 else
+    if i64<>PID then
+      result := +1;
+  end;
 end;
 
 function TUTF8QuickSort.CompJ: integer;
+var i64: Int64;
 begin
   result := fComp(CJ^,PP^);
-  if result=0 then
+  if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
-      result := GetInt64(IDColumn[J])-PID else
-      result := GetInt64(PPUTF8Char(PtrInt(CJ)-FieldIndexNextPtr)^)-PID;
+      SetInt64(IDColumn[J],i64) else
+      SetInt64(PPUTF8Char(PtrInt(CJ)-FieldIDPtr)^,i64);
+    if i64<PID then
+      result := -1 else
+    if i64<>PID then
+      result := +1;
+  end;
 end;
 
 procedure ExchgPtrUInt(P1,P2: PtrUInt; FieldCount: integer);
@@ -25447,7 +25461,7 @@ end;
 
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
   {$ifndef PUREPASCAL}
-  procedure Exchg32(P: pointer; I,J: integer);
+  procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
   asm // eax=P edx=I ecx=J
           push    ebx
           lea     edx, [eax + edx * 4]
@@ -25471,7 +25485,7 @@ begin
     P := ((I+J) shr 1);
     SetPP(@Results[P*Params.FieldCount+Params.FieldIndex],P);
     repeat
-      // this loop has no multiplication -> most of the time is spent in comp()
+      // this loop has no multiplication -> most of the time is spent in compIJ
       if Params.Asc then begin // ascending order comparaison
         while compI<0 do begin
           inc(I);
@@ -25498,16 +25512,16 @@ begin
           if CurrentRow=I then
             CurrentRow := J;
           // full row exchange
-          ExchgPtrUInt(PtrInt(CI)-FieldIndexNextPtr,PtrInt(CJ)-FieldIndexNextPtr,
+          ExchgPtrUInt(PtrInt(CI)-FieldFirstPtr,PtrInt(CJ)-FieldFirstPtr,
             Params.FieldCount); // exchange PUTF8Char for whole I,J rows
-          if Assigned(IDColumn) then begin // update hidden ID column also
-          {$ifdef PUREPASCAL}
+          if Assigned(IDColumn) then begin // exchange hidden ID column also
+            {$ifdef PUREPASCAL}
             Tmp := IDColumn[I];
             IDColumn[I] := IDColumn[J];
             IDColumn[J] := Tmp;
-          {$else}
-            Exchg32(IDColumn,I,J);
-          {$endif}
+            {$else}
+            ExchgPUTF8Charx86(IDColumn,I,J);
+            {$endif}
           end;
         end;
         if PP=CI then
@@ -25560,7 +25574,10 @@ begin
   Sort.Results := fResults;
   Sort.IDColumn := @fIDColumn[0];
   Sort.FieldCountNextPtr := FieldCount*sizeof(PtrInt);
-  Sort.FieldIndexNextPtr := Field*sizeof(PtrInt);
+  Sort.FieldFirstPtr := Field*sizeof(PtrInt);
+  if fFieldIndexID<0 then // if no ID colum, assume first
+    Sort.FieldIDPtr := Sort.FieldFirstPtr else
+    Sort.FieldIDPtr := (Field-fFieldIndexID)*sizeof(PtrInt);
   if PCurrentRow=nil then
     Sort.CurrentRow := -1 else
     Sort.CurrentRow := PCurrentRow^;
@@ -27109,6 +27126,8 @@ begin
     if ExtractID<>nil then
       if JSONGetID(Beg,ExtractID^) and not KeepIDField then begin
         PC := PosChar(Beg,','); // ignore the '"ID":203,' pair
+        if PC=nil then
+          exit;
         PC^ := '{';
         SetString(result,PAnsiChar(PC),P-PC-1);
         exit;
@@ -27462,7 +27481,7 @@ begin
     // setter to field -> direct in-memory access
     Field := SetterAddr(Instance) else
   {$ifndef FPC}
-  if SetProc<>0  then begin
+  if WriteIsDefined and not (j2oSetterNoCreate in Options) then begin
     // it is a setter method -> create a temporary object
     tmp := PropType^.ClassCreate;
     try
@@ -27636,8 +27655,6 @@ begin
   end;
 end;
 
-const null_vardata: TVarData = (VType: varNull);
-
 {$ifndef NOVARIANTS}
 procedure TPropInfo.SetFromVariant(Instance: TObject; const Value: variant);
 var i: integer;
@@ -27707,7 +27724,7 @@ begin
     SetFloatProp(Instance,0);
   {$ifndef NOVARIANTS}
   tkVariant:
-    SetVariantProp(Instance,variant(null_vardata));
+    SetVariantProp(Instance,SynCommons.Null);
   {$endif}
   tkClass:
   begin
@@ -29302,6 +29319,24 @@ begin
   result := PtrUInt(P)-PtrUInt(@self);
 end;
 
+{$ifdef HASDIRECTTYPEINFO}
+// asm could also be adjusted for this, but this is the easy way ... ;-)
+// for the upcoming fpc 3.0.2 / fixes
+function TClassType.InheritsFrom(AClass: TClass): boolean;
+var P: PTypeInfo;
+begin
+  result := true;
+  if ClassType=AClass then
+    exit;
+  P := DeRef(ParentInfo);
+  while P<>nil do
+    with P^.ClassType^ do
+    if ClassType=AClass then
+      exit else
+      P := DeRef(ParentInfo);
+  result := false;
+end;
+{$else}
 {$ifdef PUREPASCAL}
 function TClassType.InheritsFrom(AClass: TClass): boolean;
 var P: PTypeInfo;
@@ -29333,6 +29368,7 @@ asm // eax=PClassType edx=AClass
 @3:     mov     eax, 1
 @0:
 end;
+{$endif}
 {$endif}
 
 
@@ -29866,7 +29902,7 @@ procedure TSQLRecordFill.Map(aRecord: TSQLRecord; aTable: TSQLTable;
   aCheckTableName: TSQLCheckTableName);
 var f: integer;
     ColumnName: PUTF8Char;
-    FieldName: shortstring;
+    FieldName: RawUTF8;
     Props: TSQLRecordProperties;
 begin
   if aTable=nil then // avoid any GPF
@@ -29878,12 +29914,12 @@ begin
   for f := 0 to aTable.FieldCount-1 do begin
     ColumnName := aTable.fResults[f];
     if aCheckTableName=ctnNoCheck then
-      FieldName := ColumnName else
+      Utf8ToRawUTF8(ColumnName,FieldName) else
       if IdemPChar(ColumnName,pointer(Props.SQLTableNameUpperWithDot)) then
-        FieldName := ColumnName+length(Props.SQLTableNameUpperWithDot) else
+        Utf8ToRawUTF8(ColumnName+length(Props.SQLTableNameUpperWithDot),FieldName) else
         if aCheckTableName=ctnMustExist then
           continue else
-          FieldName := ColumnName;
+          Utf8ToRawUTF8(ColumnName,FieldName);
     AddMap(aRecord,FieldName,f);
   end;
   fFillCurrentRow := 1; // point to first data row (0 is field names)
@@ -33752,8 +33788,10 @@ end;
 function TSQLRest.MultiFieldValues(Table: TSQLRecordClass;
   const FieldNames: RawUTF8; const WhereClauseFormat: RawUTF8;
   const Args, Bounds: array of const): TSQLTableJSON;
+var where: RawUTF8;
 begin
-  result := MultiFieldValues(Table,FieldNames,FormatUTF8(WhereClauseFormat,Args,Bounds));
+  where := FormatUTF8(WhereClauseFormat,Args,Bounds);
+  result := MultiFieldValues(Table,FieldNames,where);
 end;
 
 function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
@@ -36407,24 +36445,20 @@ end;
 function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
-const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
-  'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
-  'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
-var u: RawUTF8;
+var u, m: RawUTF8;
 {$ifdef WITHLOG}
    log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
-  if (self=nil) or (method<Low(NAME)) then
+  if (self=nil) or (method=mNone) then
     result := HTTP_UNAVAILABLE else begin
     u := Model.getURICallBack(aMethodName,aTable,aID);
     {$ifdef WITHLOG}
     log := fLogClass.Enter('Callback %',[u],self);
     {$endif}
-    result := URI(u,NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
-    InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
-      sllServiceReturn);
+    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSQLURIMethod),ord(method)));
+    result := URI(u,m,@aResponse,aResponseHead,@aSentData).Lo;
+    InternalLog('% result=% resplen=%',[m,result,length(aResponse)],sllServiceReturn);
   end;
 end;
 
@@ -37134,8 +37168,8 @@ begin
   fAfterCreation := true;
   fStats := TSQLRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
-  fSessionCounter := GetTickCount64*PtrInt(self); // pseudo-random session ID
-  if fSessionCounter>cardinal(maxInt) then
+  TAESPRNG.Main.Fill(@fSessionCounter,sizeof(fSessionCounter));
+  if fSessionCounter>cardinal(maxInt) then // ensure positive 31-bit integer
     dec(fSessionCounter,maxInt);
   // retrieve published methods
   fPublishedMethods.InitSpecific(TypeInfo(TSQLRestServerMethods),
@@ -37147,7 +37181,7 @@ begin
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
   if (fPublishedMethodBatchIndex<0) or (fPublishedMethodTimeStampIndex<0) then
     raise EORMException.CreateUTF8('%.Create: missing method!',[self]);
-  fSafeRootUpper := UpperCase(fModel.Root)+'/SAFE/';
+  fSafeRootUpper := UpperCase(fModel.Root)+'/_SAFE_/';
 end;
 
 constructor TSQLRestServer.CreateWithOwnModel(const Tables: array of TSQLRecordClass;
@@ -40028,8 +40062,8 @@ begin
   if (fSafeProtocol<>nil) and IdemPropNameU(Call.Method,'POST') then begin
     P := pointer(Call.Url);
     if P^='/' then
-      inc(P); // may be /modelroot/safe
-    if IdemPChar(P,pointer(fSafeRootUpper)) then begin // 'ROOT/SAFE/'
+      inc(P); // may be /modelroot/_safe_
+    if IdemPChar(P,pointer(fSafeRootUpper)) then begin // 'ROOT/_SAFE_/'
       InternalSafeProtocol(Call,safeid);
       if safeid=0 then
         exit; // low-level error
@@ -40551,7 +40585,7 @@ begin
     exit;
   end;
   P := pointer(Call.Url);
-  inc(P,length(fSafeRootUpper));
+  inc(P,length(fSafeRootUpper)); // IdemPChar() done by caller
   if P^='/' then
     inc(P);
   if IdemPChar(P,'OPEN') then begin
@@ -40689,7 +40723,8 @@ begin
       W.WriteVarUInt32(fSessions.Count);
       for i := 0 to fSessions.Count-1 do
         TAuthSession(fSessions.List[i]).SaveTo(W);
-      W.Write4(MAGIC_SESSION);
+      W.Write4(fSessionCounter);
+      W.Write4(MAGIC_SESSION+1);
       W.Flush;
     finally
       fSessions.Safe.UnLock;
@@ -40735,7 +40770,9 @@ begin
       fSessions.Add(fSessionClass.CreateFrom(P,self));
       fStats.ClientConnect;
     end;
-    if PCardinal(P)^<>MAGIC_SESSION then
+    fSessionCounter := PCardinal(P)^;
+    inc(P,4);
+    if PCardinal(P)^<>MAGIC_SESSION+1 then
       ContentError;
   finally
     fSessions.Safe.UnLock;
@@ -40758,12 +40795,12 @@ var i, tc: integer;
     CurrentThreadId: TThreadID;
 begin
   tc := fStats.NotifyThreadCount(1);
-  CurrentThreadId := GetCurrentThreadId;
+  CurrentThreadId := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ThreadCount=%',
     [Sender.ClassType,Model.Root,pointer(CurrentThreadId),tc]);
-  if Sender.ThreadID<>CurrentThreadId then
+  if {$ifdef BSD}Cardinal{$endif}(Sender.ThreadID)<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
       [self,Sender.ThreadID,CurrentThreadId]);
@@ -40785,12 +40822,12 @@ var i, tc: integer;
     Inst: TServiceFactoryServerInstance;
 begin
   tc := fStats.NotifyThreadCount(-1);
-  CurrentThreadId := GetCurrentThreadId;
+  CurrentThreadId := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
     [Sender.ClassType,pointer(CurrentThreadId),tc]);
-  if Sender.ThreadID<>CurrentThreadId then
+  if {$ifdef BSD}Cardinal{$endif}(Sender.ThreadID)<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
       [self,Sender,Sender.ThreadID,CurrentThreadId]);
@@ -43714,26 +43751,31 @@ procedure TSQLRestStorageInMemory.LoadFromJSON(JSONBuffer: PUTF8Char; JSONBuffer
   end;
 var T: TSQLTableJSON;
 begin
-  fModified := false;
-  fValue.Clear;
-  if JSONBuffer=nil then
-    exit;
-  T := TSQLTableJSON.CreateFromTables([fStoredClass],'',JSONBuffer,JSONBufferLen);
+  StorageLock(true,'LoadFromJSON');
   try
-    if T.fFieldIndexID<0 then
-      exit; // no ID field -> load is impossible -> error
-    // ensure ID were stored in an increasing order
-    if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then begin
-      // force sorted by ID -> faster IDToIndex()
-      T.SortFields(T.fFieldIndexID,true,nil,sftInteger);
-      // if data is corrupted, IDs may not be unique -> check it now
-      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then
-        exit; // some duplicated ID fields -> error
+    fModified := false;
+    fValue.Clear;
+    if JSONBuffer=nil then
+      exit;
+    T := TSQLTableJSON.CreateFromTables([fStoredClass],'',JSONBuffer,JSONBufferLen);
+    try
+      if T.fFieldIndexID<0 then
+        exit; // no ID field -> load is impossible -> error
+      // ensure ID were stored in an increasing order
+      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then begin
+        // force sorted by ID -> faster IDToIndex()
+        T.SortFields(T.fFieldIndexID,true,nil,sftInteger);
+        // if data is corrupted, IDs may not be unique -> check it now
+        if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then
+          exit; // some duplicated ID fields -> error
+      end;
+      // create TSQLRecord instances with data from T
+      T.ToObjectList(fValue,fStoredClass);
+    finally
+      T.Free;
     end;
-    // create TSQLRecord instances with data from T
-    T.ToObjectList(fValue,fStoredClass);
   finally
-    T.Free;
+    StorageUnLock;
   end;
 end;
 
@@ -43812,7 +43854,9 @@ begin
   if self=nil then
     exit;
   MS := StreamUnSynLZ(Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
-  if MS<>nil then
+  if MS=nil then
+    exit;
+  StorageLock(true,'LoadFromBinary');
   with fStoredClassRecordProps do
   try
     // check header: expect same exact RTTI
@@ -43856,6 +43900,7 @@ begin
         end;
     Result := true;
   finally
+    StorageUnlock;
     R.Close;
     MS.Free;
   end;
@@ -43901,8 +43946,8 @@ begin
     exit;
   MS := THeapMemoryStream.Create;
   W := TFileBufferWriter.Create(MS);
-  StorageLock(false,'SaveToBinary');
   try
+    StorageLock(false,'SaveToBinary');
     with fStoredClassRecordProps do
     try
       // primitive magic and fields signature for file type identification
@@ -43940,14 +43985,14 @@ begin
         with Fields.List[f], fValue do
           for i := 0 to Count-1 do
             GetBinary(TSQLRecord(List[i]),W);
-      W.Flush;
-      result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
     finally
-      W.Free;
-      MS.Free;
+      StorageUnLock;
     end;
+    W.Flush;
+    result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
   finally
-    StorageUnLock;
+    W.Free;
+    MS.Free;
   end;
 end;
 
@@ -44349,7 +44394,7 @@ var JSON: RawUTF8;
 begin
   if (fFileName<>'') and FileExists(fFileName) then begin
     if fBinaryFile then begin
-      Stream := TSynMemoryStreamMapped.Create(fFileName);
+      Stream := FileStreamSequentialRead(fFileName);
       try
         LoadFromBinary(Stream)
       finally
@@ -49939,6 +49984,7 @@ end;
 
 constructor TAuthSession.Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
 var GID: TSQLAuthGroup;
+    rnd: THash256;
 begin
   fUser := aUser;
   if (aCtxt<>nil) and (User<>nil) and (User.fID<>0) then begin
@@ -49956,7 +50002,8 @@ begin
           UInt32ToUtf8(fIDCardinal,fID);
       end;
       // set session parameters
-      fPrivateKey := SHA256(NowToString+fID);
+      TAESPRNG.Main.Fill(@rnd,sizeof(rnd));
+      fPrivateKey := BinToHex(@rnd,sizeof(rnd));
       aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
@@ -50438,13 +50485,23 @@ end;
 constructor TSQLRestServerAuthenticationSignedURI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
-  fTimeStampCoherencySeconds := 5;
+  TimeStampCoherencySeconds := 5;
 end;
 
-procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(value: boolean);
+procedure TSQLRestServerAuthenticationSignedURI.SetNoTimeStampCoherencyCheck(
+  value: boolean);
 begin
   if self<>nil then
     fNoTimeStampCoherencyCheck := value;
+end;
+
+procedure TSQLRestServerAuthenticationSignedURI.SetTimeStampCoherencySeconds(
+  value: cardinal);
+begin
+  if self=nil then
+    exit;
+  fTimeStampCoherencySeconds := value;
+  fTimeStampCoherencyTicks := round(value*(1000/256)); // 256 ms resolution
 end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
@@ -50464,7 +50521,7 @@ begin
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
      (fNoTimeStampCoherencyCheck or (result.fLastTimeStamp=0) or
-      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencySeconds)) then begin
+      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencyTicks)) then begin
     aExpectedSignature := crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
       pointer(Ctxt.Call^.url),aURLlength);
     if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
@@ -50481,7 +50538,7 @@ begin
   end else begin
     {$ifdef WITHLOG}
     Ctxt.Log.Log(sllUserAuth,'Invalid TimeStamp: expected >=%, got %',
-      [result.fLastTimeStamp-fTimeStampCoherencySeconds,aTimeStamp],self);
+      [result.fLastTimeStamp-fTimeStampCoherencyTicks],self);
     {$endif}
   end;
   result := nil; // indicates invalid signature
@@ -50554,7 +50611,7 @@ end;
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser): RawUTF8;
 var aServerNonce, aClientNonce: RawUTF8;
-    rnd: TSHA256Digest;
+    rnd: THash256;
 begin
   result := '';
   if User.LogonName='' then
@@ -50563,7 +50620,7 @@ begin
   if aServerNonce='' then
     exit;
   TAESPRNG.Main.FillRandom(@rnd,SizeOf(rnd));
-  aClientNonce := SHA256DigestToString(rnd);
+  aClientNonce := BinToHex(@rnd,SizeOf(rnd));
   result := ClientGetSessionKey(Sender,User,['UserName',User.LogonName,'Password',
      Sha256(Sender.Model.Root+aServerNonce+aClientNonce+User.LogonName+User.PasswordHashHexa),
      'ClientNonce',aClientNonce]);
@@ -59066,7 +59123,7 @@ end;
 procedure SetThreadNameWithLog(ThreadID: TThreadID; const Name: RawUTF8);
 begin
   {$ifdef WITHLOG}
-  if (SetThreadNameLog<>nil) and (ThreadID=GetCurrentThreadId) then
+  if (SetThreadNameLog<>nil) and (ThreadID={$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId)) then
     SetThreadNameLog.Add.LogThreadName(Name);
   {$endif}
   SetThreadNameDefault(ThreadID,Name);
@@ -59083,7 +59140,7 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
-  SetThreadNameDefault(GetCurrentThreadID,'Main Thread');
+  SetThreadNameDefault({$ifdef BSD}Cardinal{$endif}(GetCurrentThreadID),'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);
   TJSONSerializer.RegisterObjArrayForJSON(

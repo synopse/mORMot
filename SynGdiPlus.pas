@@ -112,9 +112,10 @@ unit SynGdiPlus;
    - fixed ticket [84dae0a2da] about EMR_BITBLT, thanks to Pierre le Riche
    - implemented clipping - ticket [ba90f15370] - thanks to Pierre le Riche
    - TGDIPlusEnum.DrawText() now handles ETO_GLYPH_INDEX option
-   - fixed ticket [125fc8d280] about random crash in TSynPicture.LoadFromStream 
+   - fixed ticket [125fc8d280] about random crash in TSynPicture.LoadFromStream
    - implemented multi-page support for TTiffImage - thanks sllimr7139 for
      the patch!
+   - FPC / Lazarus compatibility - thanks Alf for the patch
 
 }
 
@@ -123,7 +124,19 @@ unit SynGdiPlus;
 interface
 
 uses
-  Windows, Classes, SysUtils,
+  {$ifdef MSWINDOWS}
+  Windows,
+  CommCtrl,
+  Messages,
+  {$endif}
+  {$ifdef FPC}
+  LCLType,
+  LCLIntf,
+  LResources,
+  SynFPCMetaFile,
+  {$endif}
+  Classes, 
+  SysUtils,
   {$ifdef ISDELPHIXE2}
   VCL.Graphics,
   {$else}
@@ -388,12 +401,21 @@ type
     function GetWidth: Integer; override;
     procedure SetHeight(Value: Integer); override;
     procedure SetWidth(Value: Integer); override;
+    {$ifndef FPC}
     procedure Clear;
+    {$endif}
     procedure fImageSet;
     procedure BitmapSetResolution(DPI: single);
+    {$ifdef FPC}
+    function GetTransparent: Boolean; override;
+    procedure SetTransparent(Value: Boolean); override;
+    {$endif}
   public
     constructor CreateFromFile(const FileName: string);
     destructor Destroy; override;
+    {$ifdef FPC}
+    procedure Clear; override;
+    {$endif}
     procedure Assign(Source: TPersistent); override;
     procedure Draw(ACanvas: TCanvas; const Rect: TRect); override;
 {$ifdef USEDPI}
@@ -406,11 +428,16 @@ type
     procedure LoadFromBuffer(Buffer: pointer; Len: integer);
     procedure SaveToStream(Stream: TStream); override;
     procedure SaveInternalToStream(Stream: TStream);
-    procedure LoadFromResourceName(Instance: THandle; const ResName: string);
+    procedure LoadFromResourceName(Instance: THandle; const ResName: string);{$ifdef FPC} override;{$endif}
+    {$ifdef FPC}
+    procedure LoadFromClipboardFormat(FormatID: TClipboardFormat); override;
+    procedure SaveToClipboardFormat(FormatID: TClipboardFormat); override;
+    {$else}
     procedure LoadFromClipboardFormat(AFormat: Word; AData: THandle;
       APalette: HPALETTE); override;
     procedure SaveToClipboardFormat(var AFormat: Word; var AData: THandle;
       var APalette: HPALETTE); override;
+    {$endif}
     /// save the picture into any GIF/PNG/JPG/TIFF format
     // - CompressionQuality is used for gptJPG format saving
     // and is expected to be from 0 to 100; for gptTIF format, use
@@ -703,7 +730,7 @@ var
 
 /// will set global Gdip instance from a TGDIPlusFull, if available
 // - this GDI+ 1.1 version (i.e. gdiplus11.dll) allows proper TMetaFile
-// antialiasing, as requested by LoadFrom and DrawEmfGdip functions 
+// antialiasing, as requested by LoadFrom and DrawEmfGdip functions
 procedure ExpectGDIPlusFull(ForceInternalAntiAliased: boolean=true;
   ForceInternalAntiAliasedFontFallBack: boolean=true);
 
@@ -718,7 +745,6 @@ procedure GdipUnlock;
 
 
 implementation
-
 
 {
 // Common GDI+ color constants
@@ -1162,6 +1188,9 @@ end;
 
 procedure TSynPicture.Clear;
 begin
+  {$ifdef FPC}
+  inherited Clear;
+  {$endif}
   fHasContent := false;
   fAssignedFromBitmap := false;
   fWidth := 0;
@@ -1293,10 +1322,23 @@ begin
     end;
 end;
 
+{$ifdef FPC}
+procedure TSynPicture.LoadFromClipboardFormat(FormatID: TClipboardFormat);
+begin // not implemented
+end;
+procedure TSynPicture.SaveToClipboardFormat(FormatID: TClipboardFormat);
+begin // not implemented
+end;
+{$else}
 procedure TSynPicture.LoadFromClipboardFormat(AFormat: Word;
   AData: THandle; APalette: HPALETTE);
 begin // not implemented
 end;
+procedure TSynPicture.SaveToClipboardFormat(var AFormat: Word;
+  var AData: THandle; var APalette: HPALETTE);
+begin // not implemented
+end;
+{$endif}
 
 procedure TSynPicture.LoadFromFile(const FileName: string);
 var FS: TFileStream;
@@ -1423,7 +1465,7 @@ const
 function TSynPicture.SaveAs(Stream: TStream; Format: TGDIPPictureType;
   CompressionQuality: integer; IfBitmapSetResolution: single): TGdipStatus;
 var fStream: IStream;
-    Len,Dummy: {$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};
+    Len,Dummy: {$ifdef FPC}QWord;{$else}{$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};{$endif}
     tmp: pointer;
     Params: TEncoderParameters;
     PParams: pointer;
@@ -1500,11 +1542,6 @@ begin
   end;
 end;
 
-procedure TSynPicture.SaveToClipboardFormat(var AFormat: Word;
-  var AData: THandle; var APalette: HPALETTE);
-begin // not implemented
-end;
-
 procedure TSynPicture.SaveToStream(Stream: TStream);
 begin
   SaveInternalToStream(Stream);
@@ -1529,6 +1566,17 @@ begin
     result.Canvas.Draw(0,0,self);
   end;
 end;
+
+{$ifdef FPC}
+function TSynPicture.GetTransparent: Boolean;
+begin // not implemented
+  result := false;
+end;
+
+procedure TSynPicture.SetTransparent(Value: Boolean);
+begin // not implemented
+end;
+{$endif}
 
 
 { TJpegImage }
@@ -1656,7 +1704,7 @@ type RawByteString = AnsiString;
 procedure SaveAsRawByteString(Graphic: TPersistent;
   out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
   Format: TGDIPPictureType; CompressionQuality: integer=80;
-  MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0); overload;
+  MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0);{$ifndef FPC}overload;{$endif}
 {$ifdef UNICODE}
 var Stream: TMemoryStream;
 begin
@@ -1992,6 +2040,10 @@ end;
  { TGDIPlusEnum }
 
 type
+  {$ifdef FPC}
+  TEMRExtTextOut = TEMREXTTEXTOUTA;
+  {$endif}
+
   /// expected font specifications
   TFontSpec = packed record
     angle: smallint; // -360..+360
@@ -2003,9 +2055,9 @@ type
   /// one DC state properties
   TGDIPlusEnumState = record
     pen, brush, font, ClipRegion: THandle;
-    move: TPoint;
+    move: {$ifdef FPC}TPointL{$else}TPoint{$endif};
     WinSize, ViewSize: TSize;
-    WinOrg, ViewOrg: TPoint;
+    WinOrg, ViewOrg: {$ifdef FPC}TPointL{$else}TPoint{$endif};
     fontColor, fontAlign: integer;
     fontSpec: TFontSpec;
     BkMode, BkColor: cardinal;
@@ -2085,7 +2137,7 @@ begin
   end;
 end;
 
-procedure NormalizeRect(var Rect: TRect);
+procedure NormalizeRect(var Rect: {$ifdef FPC}TRectL{$else}TRect{$endif});
 var tmp: integer;
 begin // GDI+ can't draw twisted rects -> normalize such values
   if Rect.Right<Rect.Left then begin
@@ -2142,7 +2194,11 @@ begin
       Ref.gdip.DeleteMatrix(matrixOrg);
     end;
   EMR_EXTCREATEFONTINDIRECTW:
+    {$ifdef FPC}
+    with PEMRExtCreateFontIndirectW(Rec)^ do begin
+    {$else}
     with PEMRExtCreateFontIndirect(Rec)^ do begin
+    {$endif}
       Ref.DeleteObj(ihFont-1);
       with Ref.obj[ihFont-1] do begin
         kind := OBJ_FONT;
@@ -2193,7 +2249,11 @@ begin
   EMR_SETTEXTALIGN:
     fontAlign := PEMRSetTextAlign(Rec)^.iMode;
   EMR_EXTTEXTOUTW:
+    {$ifdef FPC}
+    Ref.DrawText(PEMRExtTextOutW(Rec)^);
+    {$else}
     Ref.DrawText(PEMRExtTextOut(Rec)^);
+    {$endif}
   EMR_MOVETOEX:
     move := PEMRMoveToEx(Rec)^.ptl;
   EMR_LINETO: begin
@@ -2257,7 +2317,11 @@ begin
     with PEMRPolyLine16(Rec)^ do begin
       Points16To32(@apts,P32,cpts);
       Ref.gdip.DrawLines(Ref.graphics,Pen,P32,cpts);
+      {$ifdef FPC}
+      move := PPointL(PAnsiChar(P32)+(cpts-1)*8)^;
+      {$else}
       move := PPoint(PAnsiChar(P32)+(cpts-1)*8)^;
+      {$endif}
       FreeMem(P32);
     end;
   EMR_POLYBEZIER:
@@ -2269,7 +2333,11 @@ begin
     with PEMRPolyBezier16(Rec)^ do begin
       Points16To32(@apts,P32,cpts);
       Ref.gdip.DrawCurve(Ref.graphics,Pen,P32,cpts);
+      {$ifdef FPC}
+      move := PPointL(PAnsiChar(P32)+(cpts-1)*8)^;
+      {$else}
       move := PPoint(PAnsiChar(P32)+(cpts-1)*8)^;
+      {$endif}
       FreeMem(P32);
     end;
   EMR_BITBLT: begin
@@ -2476,6 +2544,13 @@ begin
   end;
 end;
 
+function Ceil(const X: single): integer; // avoid dependency to Math.pas unit
+begin
+  result := Integer(Trunc(X));
+  if Frac(X)>0 then
+    inc(result);
+end;
+
 procedure TGDIPlusEnum.DrawText(var EMR: TEMRExtTextOut);
 var DF,RF: TGdipRectF;
     flags, i: integer;
@@ -2499,7 +2574,7 @@ begin
     SetLength(F32,emrtext.nChars);
     if DrawString or (emrtext.offDx=0) then begin // if emf content is not correct -> best guess
       gdip.MeasureString(graphics,Text,emrtext.nChars,font,@GdipRectFNull,0,@RF,nil,nil);
-      Siz.cx := Trunc(RF.Width);
+      Siz.cx := Ceil(RF.Width);
       flags := 5; // RealizedAdvance is set -> F32 = 1st glyph position
     end else begin
       Siz.cx := DXTextWidth(pointer(PAnsiChar(@EMR)+emrtext.offDx),emrText.nChars);
@@ -2550,7 +2625,8 @@ begin
     end;
     //If the background is opaque it must be filled with the background colour
     if BkMode = OPAQUE then
-      gdip.FillRectangle(graphics,GetCachedSolidBrush(bkColor),Trunc(DF.X),Trunc(DF.Y),Trunc(DF.Width),Trunc(DF.Height));
+      gdip.FillRectangle(graphics,GetCachedSolidBrush(bkColor),Trunc(DF.X),Trunc(DF.Y),
+        Ceil(DF.Width),Ceil(DF.Height));
     if DrawString then
       gdip.DrawString(graphics,Text,emrtext.nChars,font,@DF,0,GetCachedSolidBrush(fontColor)) else
       gdip.DrawDriverString(graphics,Text,emrtext.nChars,font,GetCachedSolidBrush(fontColor),pointer(F32),flags,0);
@@ -2757,7 +2833,7 @@ begin
 end;
 
 initialization
-  InitializeCriticalSection(GdipCS);
+  Windows.InitializeCriticalSection(GdipCS);
 {$ifndef NOTSYNPICTUREREGISTER}
   Gdip.RegisterPictures; // will initialize the Gdip library if necessary
 //  GdipTest('d:\Data\Pictures\Sample Pictures\Tree.jpg');
@@ -2765,5 +2841,5 @@ initialization
 
 finalization
   Gdip.Free;
-  DeleteCriticalSection(GdipCS);
+  Windows.DeleteCriticalSection(GdipCS);
 end.

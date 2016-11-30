@@ -2058,8 +2058,11 @@ begin
   end;
   Check(length(AV)=1001);
   Check(AVP.Count=1001);
-  for i := 0 to 1000 do
-    Check(AVP.IndexOf(i)=i);
+  for i := 0 to 1000 do begin
+    // untyped const must be the same exact type !
+    PtrInt(V) := i;
+    Check(AVP.IndexOf(V)=i);
+  end;
   Test := AVP.SaveTo;
   Check(Hash32(Test)={$ifdef CPU64}$31484630{$else}$924462C{$endif});
   // validate TRawUTF8DynArray
@@ -7247,7 +7250,7 @@ begin
   {$ifndef FPC}
   Check(V1='["root",{"name":"Jim"},3.1415]');
   {$endif}
-  V1.Delete(1);
+  V1.Delete(1); //<--- here we get an error with FPC on win64 if optimization = -O1 !??? All ok with -O2
   {$ifndef FPC}
   Check(V1='["root",3.1415]');
   {$endif}
@@ -13330,17 +13333,17 @@ end;
 
 function GetThreadID: TThreadID;
 begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  result := GetCurrentThreadId;
+  result := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
 end;
 
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetThreadID<>MainThreadID then
+    if GetThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID) then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetThreadID=MainThreadID then
+    if GetThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID) then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -13500,7 +13503,7 @@ begin
     raise Exception.Create('Unexpected Thread=nil');
   if Thread=nil then
     result := 0 else begin
-    result := Thread.ThreadID;
+    result := {$ifdef BSD}Cardinal{$endif}(Thread.ThreadID);
     if result<>GetThreadID then
       raise Exception.Create('Unexpected ThreadID');
   end;
@@ -13616,7 +13619,7 @@ var s: RawUTF8;
     Item: TCollTest;
     List,Copy: TCollTestsI;
     j: integer;
-    x,y: PtrUInt; // alf: to help debugging
+    x,y: TThreadID; // alf: to help debugging
 {$endif}
 {$ifndef NOVARIANTS}
     V1,V2,V3: variant;
@@ -13640,9 +13643,9 @@ begin
   end;
   case GlobalInterfaceTestMode of
   itmMainThread:
-    Check(Inst.CC.GetCurrentThreadID=MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID));
   itmPerInterfaceThread,itmLocked:
-    Check(Inst.CC.GetCurrentThreadID<>MainThreadID);
+    Check(Inst.CC.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -13762,22 +13765,22 @@ begin
   case GlobalInterfaceTestMode of
   itmDirect: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
+    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID=0);
   end;
   itmClient, itmPerInterfaceThread: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)=0);
+    Check(Inst.CT.GetCurrentRunningThreadID=TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmLocked, itmMainThread: begin
     Check(x=y);
-    Check(PtrUInt(Inst.CT.GetCurrentRunningThreadID)<>0);
+    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   itmHttp: begin
-    Check(Inst.CT.GetCurrentRunningThreadID<>0);
-    Check(PtrUInt(Inst.CT.GetCurrentThreadID)<>MainThreadID);
+    Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
+    Check(Inst.CT.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   end;
@@ -15233,6 +15236,7 @@ procedure TestOne(const content,contentType: RawByteString);
 var C1,C2: THttpServerRequest;
     P2: TWebSocketProtocol;
     frame: TWebSocketFrame;
+    head: RawUTF8;
     noAnswer1,noAnswer2: boolean;
 begin
   C1 := THttpServerRequest.Create(nil,0,nil);
@@ -15242,7 +15246,7 @@ begin
     C1.Prepare('url','POST','headers',content,contentType,'');
     noAnswer1 := opcode=focBinary;
     noAnswer2 := not noAnswer1;
-    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame);
+    TWebSocketProtocolRestHook(protocol).InputToFrame(C1,noAnswer1,frame,head);
     Check(frame.opcode=opcode);
     TWebSocketProtocolRestHook(P2).FrameToInput(frame,noAnswer2,C2);
     Check(noAnswer1=noAnswer2);
@@ -15255,7 +15259,8 @@ begin
     C1.OutContentType := contentType;
     C1.OutCustomHeaders := 'outheaders';
     frame.opcode := focContinuation;
-    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,frame);
+    head := 'answer';
+    TWebSocketProtocolRestHook(protocol).OutputToFrame(C1,200,head,frame);
     Check(frame.opcode=opcode);
     Check(TWebSocketProtocolRestHook(P2).FrameToOutput(frame,C2)=200);
     Check(C2.OutContent=content);

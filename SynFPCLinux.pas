@@ -61,7 +61,7 @@ interface
 {$ifdef ANDROID}
   {$define LINUX}
 {$endif}
-{$ifdef Darwin}
+{$ifdef BSD}
   {$define LINUX}
 {$endif}
 
@@ -88,7 +88,7 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef Linux}
 
-{$ifndef DARWIN}
+{$ifndef BSD}
 const
   CLOCK_MONOTONIC = 1;
   CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
@@ -155,7 +155,7 @@ implementation
 
 {$ifdef Linux}
 uses
-  Classes, Unix, BaseUnix, {$ifndef Darwin}linux,{$endif} dynlibs;
+  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dynlibs;
 {$endif}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
@@ -165,7 +165,9 @@ end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
-  if cs.__m_kind<>0 then 
+  {$ifndef BSD}
+  if cs.__m_kind<>0 then
+  {$endif}
     DoneCriticalSection(cs);
 end;
 
@@ -237,7 +239,7 @@ const
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
-{$ifdef DARWIN}
+{$ifdef Darwin}
 // clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
 
 type
@@ -278,6 +280,16 @@ end;
 
 {$else}
 
+{$ifdef BSD}
+function clock_gettime(ID:cardinal;r:ptimespec): Integer;
+  cdecl external 'libc.so' name 'clock_gettime';
+function clock_getres(ID:cardinal;r:ptimespec): Integer;
+  cdecl external 'libc.so' name 'clock_getres';
+const
+  CLOCK_MONOTONIC=4;
+  CLOCK_MONOTONIC_TICKCOUNT=CLOCK_MONOTONIC;
+{$endif}
+
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
@@ -303,7 +315,7 @@ begin
   result := FIsHighResolution;
 end;
 
-{$endif DARWIN}
+{$endif Darwin}
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
@@ -360,7 +372,7 @@ begin
   SysUtils.Sleep(ms);
 end;
 
-{$ifndef DARWIN}
+{$ifndef BSD}
 
 procedure GetKernelRevision;
 var uts: UtsName;
@@ -390,6 +402,6 @@ end;
 
 initialization
   GetKernelRevision;
-{$endif DARWIN}
+{$endif BSD}
 {$endif Linux}
 end.

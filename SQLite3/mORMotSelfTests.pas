@@ -126,7 +126,10 @@ begin
 {$endif}
 {$endif}
 {$endif}
-    TTestCryptographicRoutines, TTestECCCryptography,
+    TTestCryptographicRoutines,
+    {$ifndef BSD} // todo: proper ECC support for BSD/Darwin
+    TTestECCCryptography,
+    {$endif}
     TTestCompression
    ]);
 end;

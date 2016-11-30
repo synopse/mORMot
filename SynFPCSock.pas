@@ -68,7 +68,7 @@ unit SynFPCSock;
 {$ifdef SUNOS}
   {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
-{$ifdef darwin}
+{$ifdef BSD}
   {$DEFINE SOCK_HAS_SINLEN}
 {$endif}
 
@@ -174,7 +174,7 @@ const
   SO_SNDLOWAT   = sockets.SO_SNDLOWAT;
   SO_RCVTIMEO   = sockets.SO_RCVTIMEO;
   SO_SNDTIMEO   = sockets.SO_SNDTIMEO;
-{$IFDEF DARWIN}
+{$IFDEF BSD}
   SO_NOSIGPIPE  = $1022;
 {$ENDIF}
   SOMAXCONN     = 1024;
@@ -189,7 +189,7 @@ const
   MSG_OOB       = sockets.MSG_OOB;      // Process out-of-band data.
   MSG_PEEK      = sockets.MSG_PEEK;     // Peek at incoming messages.
 
-  {$ifdef DARWIN}
+  {$ifdef BSD}
   MSG_NOSIGNAL  = $20000;  // Do not generate SIGPIPE.
   // Works under MAC OS X, but is undocumented, so FPC doesn't include it
   {$else}
@@ -777,13 +777,13 @@ begin
 end;
 
 function Socket(af,Struc,Protocol: Integer): TSocket;
-{$IFDEF DARWIN}
+{$IFDEF BSD}
 var on_off: integer;
 {$ENDIF}
 begin
   result := {$ifdef KYLIX3}LibC.socket{$else}fpSocket{$endif}(af,struc,protocol);
-// ##### Patch for Mac OS to avoid "Project XXX raised exception class 'External: SIGPIPE'" error.
-{$IFDEF DARWIN}
+// ##### Patch for BSD to avoid "Project XXX raised exception class 'External: SIGPIPE'" error.
+{$IFDEF BSD}
   if result <> INVALID_SOCKET then begin
     on_off := 1;
     fpSetSockOpt(result,integer(SOL_SOCKET),integer(SO_NOSIGPIPE),@on_off,SizeOf(integer));

@@ -145,6 +145,7 @@
   {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
   {$define HASVARUSTRING}
   {$define HASCODEPAGE}
+  {$define FPC_OR_UNICODE}
   { due to a bug in Delphi 2009+, we need to fake inheritance of record,
     since TDynArrayHashed = object(TDynArray) fails to initialize
     http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
@@ -225,16 +226,23 @@
   {$ifdef LINUX}
     {$ifdef CPUX86}
       {$define FPCSQLITE3STATIC} // we supply Linux 32-bit x86 .o
-    {$endif} 
+    {$endif}
+    {$ifdef CPUX64}
+      {$define FPCSQLITE3STATIC} // we supply Linux 64-bit x86_64 .o
+    {$endif}
   {$endif} 
 
   {$ifdef ANDROID}
     {$define LINUX}
   {$endif}
 
-  {$ifdef DARWIN}
+  {$ifdef BSD}
+    // this includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system
     {$define PUREPASCAL} // e.g. low-level stack layout differs
+    {$ifndef DARWIN}
+      {$define BSDNOTDARWIN}
+    {$endif}
   {$endif}
 
   {$ifdef CPU64}
@@ -304,6 +312,10 @@
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
     {$define FPC_ENUMHASINNER}
   {$endif}
+
+  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+    {$define ISDELPHI2006ANDUP}
+  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
 
 {$else FPC}
 
@@ -502,7 +514,7 @@
 {$endif}
 
 {$ifdef FPC}
-  {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional 
+  {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
@@ -517,8 +529,13 @@
 {$ifdef ANDROID}
   {$define NOSQLITE3STATIC}
 {$endif}
-{$ifdef DARWIN}
-  {$define NOSQLITE3STATIC}
+{$ifdef BSD}
+  {$ifdef Darwin}
+    {$define NOSQLITE3STATIC}
+  {$else}
+    // not yet sure if needed, but it works !
+    {$define NOSQLITE3STATIC}
+  {$endif}
 {$endif}
 
 {$ifdef NOSQLITE3STATIC}
