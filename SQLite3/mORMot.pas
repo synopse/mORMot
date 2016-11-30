@@ -27655,8 +27655,6 @@ begin
   end;
 end;
 
-const null_vardata: TVarData = (VType: varNull);
-
 {$ifndef NOVARIANTS}
 procedure TPropInfo.SetFromVariant(Instance: TObject; const Value: variant);
 var i: integer;
@@ -27726,7 +27724,7 @@ begin
     SetFloatProp(Instance,0);
   {$ifndef NOVARIANTS}
   tkVariant:
-    SetVariantProp(Instance,variant(null_vardata));
+    SetVariantProp(Instance,SynCommons.Null);
   {$endif}
   tkClass:
   begin
