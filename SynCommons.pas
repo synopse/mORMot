@@ -58013,17 +58013,17 @@ begin
     exit;
   resultSize := 0;
   repeat
-    Source.Read(Head,sizeof(Head));
-    if Head.Magic<>Magic then begin
+    if (Source.Read(Head,sizeof(Head))<>sizeof(Head)) or
+       (Head.Magic<>Magic) then begin
       // Source not positioned as expected -> try from the end
       Source.Position := sourceSize-sizeof(Trailer);
-      Source.Read(Trailer,sizeof(Trailer));
-      if Trailer.Magic<>Magic then
+      if (Source.Read(Trailer,sizeof(Trailer))<>sizeof(Trailer)) or
+         (Trailer.Magic<>Magic) then
         exit;
       sourcePosition := sourceSize-Trailer.HeaderRelativeOffset;
       Source.Position := sourcePosition;
-      Source.Read(Head,sizeof(Head));
-      if Head.Magic<>Magic then
+      if (Source.Read(Head,sizeof(Head))<>sizeof(Head)) or
+         (Head.Magic<>Magic) then
         exit;
     end;
     inc(sourcePosition,sizeof(Head));
