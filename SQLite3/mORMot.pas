@@ -7759,6 +7759,8 @@ type
     // - notice: the Setter should not be used usualy; you should not have to write
     //  aRecord.ID := someID in your code, since the ID is set during Retrieve or
     //  Add of the record
+    // - use IDValue property for direct read/write access to the record's ID
+    // field, if you know that this TSQLRecord is a true allocated class instance
     property ID: TID read GetID;
     /// this property gives direct access to the record's integer ID
     // - using IDValue expects this TSQLRecord to be a true instance, not a
@@ -43621,7 +43623,7 @@ begin
           R := result - 1;
       until (L > R);
     end else
-      // IDs are not sorted -> compare all from beginning to end
+      // IDs are not sorted (not possible in practice) -> O(n) lookup 
       for result := 0 to R do
         if TSQLRecord(List[result]).fID=ID then
           exit;
@@ -43703,7 +43705,7 @@ begin
                 FormatUTF8('[{"Max()":%}]'#$A,[max],result);
                 ResCount := 1;
               end;
-            else exit;
+            else exit; // unhandled Distinct() or other SQL functions
            end;
       finally
         Stmt.Free;

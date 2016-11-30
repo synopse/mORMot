@@ -1,7 +1,7 @@
 object MainLogView: TMainLogView
-  Left = 465
+  Left = 454
   Height = 639
-  Top = 123
+  Top = 95
   Width = 860
   Caption = ' Synopse LogView  %s -'
   ClientHeight = 639
@@ -14,7 +14,7 @@ object MainLogView: TMainLogView
   OnCreate = FormCreate
   OnKeyDown = FormKeyDown
   OnShow = FormShow
-  LCLVersion = '1.5'
+  LCLVersion = '1.7'
   object Splitter2: TSplitter
     Cursor = crVSplit
     Left = 0
@@ -32,7 +32,7 @@ object MainLogView: TMainLogView
     Visible = False
   end
   object Splitter1: TSplitter
-    Left = 681
+    Left = 829
     Height = 583
     Top = 0
     Width = 4
@@ -197,12 +197,12 @@ object MainLogView: TMainLogView
     end
     object BtnSearchNext: TButton
       Left = 105
-      Height = 23
+      Height = 21
       Hint = 'Search Next (F3)'
-      Top = 38
+      Top = 40
       Width = 20
       Anchors = [akTop, akRight]
-      Caption = '?'
+      Caption = 'v'
       OnClick = BtnSearchNextClick
       ParentShowHint = False
       ShowHint = True
@@ -267,31 +267,94 @@ object MainLogView: TMainLogView
       object BtnThreadNext: TButton
         Left = 8
         Height = 25
-        Top = 16
-        Width = 97
-        Caption = 'Goto next thread'
+        Top = 0
+        Width = 41
+        Caption = 'Next'
         OnClick = BtnThreadNextClick
         TabOrder = 0
       end
       object BtnThreadShow: TButton
         Left = 8
         Height = 25
-        Top = 45
+        Top = 24
         Width = 97
         Caption = 'View threads'
         OnClick = BtnThreadShowClick
         TabOrder = 1
       end
+      object btnThread0: TButton
+        Left = 8
+        Height = 25
+        Hint = 'Select No Thread'
+        Top = 48
+        Width = 25
+        Caption = '0'
+        Enabled = False
+        OnClick = BtnThreadClick
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 2
+      end
+      object btnThread1: TButton
+        Left = 40
+        Height = 25
+        Hint = 'Select Only This Thread'
+        Top = 48
+        Width = 25
+        Caption = '1'
+        Enabled = False
+        OnClick = BtnThreadClick
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 3
+      end
+      object btnThreadAll: TButton
+        Left = 72
+        Height = 25
+        Hint = 'Select All Threads'
+        Top = 48
+        Width = 33
+        Caption = 'All'
+        Enabled = False
+        OnClick = BtnThreadClick
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 4
+      end
+      object btnThreadDown: TButton
+        Left = 56
+        Height = 25
+        Hint = 'Goto Next  Row'
+        Top = 0
+        Width = 25
+        Caption = 'v'
+        OnClick = btnThreadDownClick
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 5
+      end
+      object btnThreadUp: TButton
+        Left = 80
+        Height = 25
+        Hint = 'Goto Previous Row'
+        Top = 0
+        Width = 25
+        Caption = '^'
+        OnClick = btnThreadUpClick
+        ParentShowHint = False
+        ShowHint = True
+        TabOrder = 6
+      end
     end
     object BtnSearchPrevious: TButton
-      Left = 127
-      Height = 23
+      Left = 125
+      Height = 21
       Hint = 'Search Previous (Shift F3)'
-      Top = 38
+      Top = 40
       Width = 20
       Anchors = [akTop, akRight]
       Caption = '^'
-      OnClick = BtnSearchPreviousClick
+      OnClick = BtnSearchNextClick
       ParentShowHint = False
       ShowHint = True
       TabOrder = 9
@@ -344,6 +407,15 @@ object MainLogView: TMainLogView
       OnClick = btnListSaveClick
       TabOrder = 14
       Visible = False
+    end
+    object lstDays: TListBox
+      Left = 16
+      Height = 57
+      Top = 440
+      Width = 121
+      ItemHeight = 0
+      OnDblClick = lstDaysDblClick
+      TabOrder = 15
     end
   end
   object MemoBottom: TMemo
@@ -401,18 +473,48 @@ object MainLogView: TMainLogView
     OnClick = ProfileListClick
     OnDrawCell = ProfileListDrawCell
   end
-  object ThreadListBox: TCheckListBox
-    Left = 685
+  object PanelThread: TPanel
+    Left = 681
     Height = 583
     Top = 0
     Width = 148
     Align = alLeft
-    ItemHeight = 0
-    OnClickCheck = ThreadListBoxClick
-    OnDblClick = ThreadListBoxDblClick
-    PopupMenu = ThreadListMenu
+    ClientHeight = 583
+    ClientWidth = 148
     TabOrder = 4
     Visible = False
+    object ThreadListBox: TCheckListBox
+      Left = 1
+      Height = 541
+      Top = 1
+      Width = 146
+      Align = alClient
+      ItemHeight = 0
+      OnClick = ThreadListBoxClick
+      OnClickCheck = ThreadListBoxClickCheck
+      OnDblClick = ThreadListBoxDblClick
+      TabOrder = 0
+    end
+    object pnlThreadBottom: TPanel
+      Left = 1
+      Height = 40
+      Top = 542
+      Width = 146
+      Align = alBottom
+      ClientHeight = 40
+      ClientWidth = 146
+      TabOrder = 1
+      object lblThreadName: TLabel
+        Left = 3
+        Height = 33
+        Top = 3
+        Width = 141
+        Anchors = [akTop, akLeft, akRight, akBottom]
+        ParentColor = False
+        ParentFont = False
+        WordWrap = True
+      end
+    end
   end
   object PanelBrowse: TPanel
     Left = 0
@@ -453,35 +555,19 @@ object MainLogView: TMainLogView
     end
   end
   object FilterMenu: TPopupMenu
-    left = 320
-    top = 136
+    left = 88
+    top = 16
   end
   object OpenDialog: TOpenDialog
     DefaultExt = '.log'
     Filter = 'Log|*.log;*.txt;*.synlz'
     Options = [ofHideReadOnly, ofPathMustExist, ofFileMustExist, ofEnableSizing]
-    left = 344
-    top = 72
-  end
-  object ThreadListMenu: TPopupMenu
-    left = 544
-    top = 112
-    object ThreadListMenuAll: TMenuItem
-      Caption = 'Select All'
-      OnClick = ThreadListMenuClick
-    end
-    object ThreadListMenuNone: TMenuItem
-      Caption = 'Select None'
-      OnClick = ThreadListMenuClick
-    end
-    object ThreadListMenuThis: TMenuItem
-      Caption = 'Select Only This'
-      OnClick = ThreadListMenuThisClick
-    end
+    left = 40
+    top = 80
   end
   object ListMenu: TPopupMenu
-    left = 816
-    top = 120
+    left = 40
+    top = 16
     object ListMenuCopy: TMenuItem
       Caption = '&Copy'
       OnClick = ListMenuCopyClick
@@ -491,14 +577,14 @@ object MainLogView: TMainLogView
     Enabled = False
     Interval = 200
     OnTimer = tmrRefreshTimer
-    left = 241
-    top = 472
+    left = 88
+    top = 80
   end
   object dlgSaveList: TSaveDialog
     DefaultExt = '.log'
     Filter = 'log|*.log|txt|*.txt|synlz|*.synlz'
     Options = [ofOverwritePrompt, ofHideReadOnly, ofEnableSizing]
-    left = 345
-    top = 200
+    left = 136
+    top = 16
   end
 end
