@@ -125,12 +125,12 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows, 
-  CommCtrl, 
+  Windows,
+  CommCtrl,
   Messages,
   {$endif}
   {$ifdef FPC}
-  LCLType, 
+  LCLType,
   LCLIntf,
   LResources,
   SynFPCMetaFile,
@@ -2544,6 +2544,13 @@ begin
   end;
 end;
 
+function Ceil(const X: single): integer; // avoid dependency to Math.pas unit
+begin
+  result := Integer(Trunc(X));
+  if Frac(X)>0 then
+    inc(result);
+end;
+
 procedure TGDIPlusEnum.DrawText(var EMR: TEMRExtTextOut);
 var DF,RF: TGdipRectF;
     flags, i: integer;
@@ -2567,7 +2574,7 @@ begin
     SetLength(F32,emrtext.nChars);
     if DrawString or (emrtext.offDx=0) then begin // if emf content is not correct -> best guess
       gdip.MeasureString(graphics,Text,emrtext.nChars,font,@GdipRectFNull,0,@RF,nil,nil);
-      Siz.cx := Trunc(RF.Width);
+      Siz.cx := Ceil(RF.Width);
       flags := 5; // RealizedAdvance is set -> F32 = 1st glyph position
     end else begin
       Siz.cx := DXTextWidth(pointer(PAnsiChar(@EMR)+emrtext.offDx),emrText.nChars);
@@ -2618,7 +2625,8 @@ begin
     end;
     //If the background is opaque it must be filled with the background colour
     if BkMode = OPAQUE then
-      gdip.FillRectangle(graphics,GetCachedSolidBrush(bkColor),Trunc(DF.X),Trunc(DF.Y),Trunc(DF.Width),Trunc(DF.Height));
+      gdip.FillRectangle(graphics,GetCachedSolidBrush(bkColor),Trunc(DF.X),Trunc(DF.Y),
+        Ceil(DF.Width),Ceil(DF.Height));
     if DrawString then
       gdip.DrawString(graphics,Text,emrtext.nChars,font,@DF,0,GetCachedSolidBrush(fontColor)) else
       gdip.DrawDriverString(graphics,Text,emrtext.nChars,font,GetCachedSolidBrush(fontColor),pointer(F32),flags,0);

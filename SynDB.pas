@@ -33,6 +33,7 @@ unit SynDB;
   - Alexander (volax)
   - Alfred Glaenzer (alf)
   - delphinium
+  - dominikcz
   - Esteban Martin (EMartin)
   - Joe (at jokusoftware)
   - Maciej Izak (hnb)
@@ -298,6 +299,7 @@ unit SynDB;
   - added error codes in TSQLDBConnectionProperties.ExceptionIsAboutConnection for dOracle
   - avoid GPI in TSQLDBConnection.GetLastErrorWasAboutConnection when fErrorMessage is empty
   - added support for dMySQL in TSQLDBConnectionProperties.ExceptionIsAboutConnection
+  - added property stripSemicolon to strip last semicolon in query (default = true)
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -1847,6 +1849,7 @@ type
   // and Column*() methods
   TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
   protected
+    fStripSemicolon: boolean;
     fConnection: TSQLDBConnection;
     fSQL: RawUTF8;
     fExpectResults: boolean;
@@ -2330,6 +2333,10 @@ type
     property TotalRowsRetrieved: Integer read fTotalRowsRetrieved;
     /// the associated database connection
     property Connection: TSQLDBConnection read fConnection;
+    /// strip last semicolon in query
+    // - expectation may vary, depending on the SQL statement and the engine
+    // - default is true
+    property StripSemicolon: boolean read fStripSemicolon write fStripSemicolon;
   end;
 
   /// abstract connection created from TSQLDBConnectionProperties
@@ -6720,6 +6727,7 @@ begin
   // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
+  fStripSemicolon := true;
   if aConnection<>nil then
     fDBMS := aConnection.fProperties.DBMS;
 end;
@@ -7442,10 +7450,11 @@ begin
   Connection.InternalProcess(speActive);
   try
     L := length(aSQL);
-    if (L>5) and (aSQL[L]=';') and // avoid syntax error for some drivers
-       not IdemPChar(@aSQL[L-4],' END') then
-      fSQL := copy(aSQL,1,L-1) else
-      fSQL := aSQL;
+    if StripSemicolon then
+      if (L>5) and (aSQL[L]=';') and // avoid syntax error for some drivers
+         not IdemPChar(@aSQL[L-4],' END') then
+        fSQL := copy(aSQL,1,L-1) else
+        fSQL := aSQL;
     fExpectResults := ExpectResults;
     if not fConnection.IsConnected then
       fConnection.Connect;

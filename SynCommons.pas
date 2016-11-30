@@ -796,7 +796,9 @@ const
     {$ifdef LVCL}+'_LVCL'{$else}
     {$ifdef ENHANCEDRTL}+' ERTL'{$endif}{$endif}
     {$ifdef DOPATCHTRTL}+' PRTL'{$endif}
-    {$ifdef INCLUDE_FTS3}+' FTS3'{$endif};
+    {$ifdef INCLUDE_FTS3}+' FTS3'{$endif}
+    ;
+
 
 
 { ************ common types used for compatibility between compilers and CPU }
@@ -3468,7 +3470,7 @@ function FindCSVIndex(CSV: PUTF8Char; const Value: RawUTF8; Sep: AnsiChar = ',';
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar=','); overload;
+  Sep: AnsiChar=','; TrimItems: boolean=false); overload;
 
 /// add the strings in the specified CSV text into a dynamic array of UTF-8 strings
 procedure CSVToRawUTF8DynArray(const CSV,Sep,SepEnd: RawUTF8; var Result: TRawUTF8DynArray); overload;
@@ -3488,6 +3490,7 @@ function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8;
 
 /// append a Value to a CSV string
 procedure AddToCSV(const Value: RawUTF8; var CSV: RawUTF8; const Sep: RawUTF8 = ',');
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// quick helper to initialize a dynamic array of RawUTF8 from some constants
 // - can be used e.g. as:
@@ -10523,9 +10526,17 @@ function BinToSource(const ConstName, Comment: RawUTF8; Data: pointer;
   Len: integer; PerLine: integer=16; const Suffix: RawUTF8=''): RawUTF8; overload;
 
 
-/// revert the value as encoded by TTextWriter.AddInt18ToChars3() method
+/// revert the value as encoded by TTextWriter.AddInt18ToChars3() or Int18ToChars3()
+// - no range check is performed: you should ensure that the incoming text
+// follows the expected 3-chars layout
 function Chars3ToInt18(P: pointer): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
+function Int18ToChars3(Value: cardinal): RawUTF8; overload;
+
+/// compute the value as encoded by TTextWriter.AddInt18ToChars3() method
+procedure Int18ToChars3(Value: cardinal; var result: RawUTF8); overload;
 
 /// convert a date to a ISO-8601 string format for SQL '?' inlined parameters
 // - will return the date encoded as '\uFFF1YYYY-MM-DD' - therefore
@@ -22472,6 +22483,17 @@ asm // faster version by AB - eax=Str dl=Chr
         je      @z
         lea     eax, [eax + 1]
         test    ch, ch
+        jz      @e
+        shr     ecx, 16
+        cmp     cl, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    cl, cl
+        jz      @e
+        cmp     ch, dl
+        je      @z
+        lea     eax, [eax + 1]
+        test    ch, ch
         jnz     @1
 @e:     xor     eax, eax
         ret
@@ -29655,11 +29677,13 @@ begin
 end;
 
 procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
-  Sep: AnsiChar);
+  Sep: AnsiChar; TrimItems: boolean);
 var s: RawUTF8;
 begin
   while CSV<>nil do begin
     s := GetNextItem(CSV,Sep);
+    if TrimItems then
+      s := trim(s);
     if s<>'' then begin
       SetLength(Result,length(Result)+1);
       Result[high(Result)] := s;
@@ -33121,7 +33145,7 @@ begin
   c := c xor crc32c(c,@timenow,sizeof(timenow));
   for i := 0 to CardinalCount-1 do begin
     c := c xor crc32ctab[0,(c+cardinal(i)) and 1023]
-      xor crc32c(c,pointer(Dest),CardinalCount*4);
+           xor crc32c(c,pointer(Dest),CardinalCount*4);
     {$ifdef CPUINTEL}
     if cfRAND in CpuFeatures then
       c := c xor RdRand32;
@@ -47522,8 +47546,24 @@ begin
   PCardinal(B+1)^ := ((Value shr 12) and $3f)+
                      ((Value shr 6) and $3f)shl 8+
                      (Value and $3f)shl 16+$202020;
-  //assert(Chars3ToInt18(B)=Value);
+  //assert(Chars3ToInt18(B+1)=Value);
   inc(B,3);
+end;
+
+function Int18ToChars3(Value: cardinal): RawUTF8;
+begin
+  SetString(result,nil,3);
+  PCardinal(result)^ := ((Value shr 12) and $3f)+
+                        ((Value shr 6) and $3f)shl 8+
+                        (Value and $3f)shl 16+$202020;
+end;
+
+procedure Int18ToChars3(Value: cardinal; var result: RawUTF8);
+begin
+  SetString(result,nil,3);
+  PCardinal(result)^ := ((Value shr 12) and $3f)+
+                        ((Value shr 6) and $3f)shl 8+
+                        (Value and $3f)shl 16+$202020;
 end;
 
 function Chars3ToInt18(P: pointer): cardinal;
@@ -52150,7 +52190,7 @@ end;
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
-  result :=
+  result :=   
 {$ifdef FPC}
   'Free Pascal'
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
@@ -52158,6 +52198,8 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
+    {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI}+' ERTTI'{$endif}
+    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
   {$ifdef CONDITIONALEXPRESSIONS}  // Delphi 6 or newer
@@ -57971,17 +58013,17 @@ begin
     exit;
   resultSize := 0;
   repeat
-    Source.Read(Head,sizeof(Head));
-    if Head.Magic<>Magic then begin
+    if (Source.Read(Head,sizeof(Head))<>sizeof(Head)) or
+       (Head.Magic<>Magic) then begin
       // Source not positioned as expected -> try from the end
       Source.Position := sourceSize-sizeof(Trailer);
-      Source.Read(Trailer,sizeof(Trailer));
-      if Trailer.Magic<>Magic then
+      if (Source.Read(Trailer,sizeof(Trailer))<>sizeof(Trailer)) or
+         (Trailer.Magic<>Magic) then
         exit;
       sourcePosition := sourceSize-Trailer.HeaderRelativeOffset;
       Source.Position := sourcePosition;
-      Source.Read(Head,sizeof(Head));
-      if Head.Magic<>Magic then
+      if (Source.Read(Head,sizeof(Head))<>sizeof(Head)) or
+         (Head.Magic<>Magic) then
         exit;
     end;
     inc(sourcePosition,sizeof(Head));

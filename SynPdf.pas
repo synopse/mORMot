@@ -285,6 +285,7 @@ unit SynPdf;
   - EMR_INTERSECTCLIPRECT fix supplied by Marsh - but patch disabled by default
   - huge UniScribe fixes supplied by Mehrdad Momeni (nosa) - THANKS A LOT!
   - enhanced clipping process by Achim Kalwa
+  - added Support for ARC ARCTO PIE and CHORD - thanks ProHolz for the patch 
 
 }
 
@@ -304,14 +305,12 @@ unit SynPdf;
 {$define USE_PDFSECURITY}
 { - if defined, the TPdfDocument*.Create() constructor will have an additional
   AEncryption: TPdfEncryption parameter able to create secured PDF files
-  - this feature will need the SynCrypto unit for MD5 and RC4 algorithms }
-
+  - this feature will link the SynCrypto unit for MD5 and RC4 algorithms }
 {$ifdef NO_USE_PDFSECURITY}
   { this special conditional can be set globaly for an application which doesn't
     need the security features, therefore dependency to SynCrypto unit }
   {$undef USE_PDFSECURITY}
 {$endif}
-
 
 {$define USE_UNISCRIBE}
 { - if defined, the PDF engine will use the Windows Uniscribe API to
@@ -320,20 +319,17 @@ unit SynPdf;
   - this feature need the TPdfDocument.UseUniscribe property to be forced to true
   according to the language of the text you want to render
   - can be undefined to safe some KB if you're sure you won't need it }
-
 {$ifdef NO_USE_UNISCRIBE}
   { this special conditional can be set globaly for an application which doesn't
     need the UniScribe features }
   {$undef USE_UNISCRIBE}
 {$endif}
 
-
 {$define USE_SYNGDIPLUS}
 { - if defined, the PDF engine will use SynGdiPlus to handle all
     JPG, TIF, PNG and GIF image types (prefered way, but need XP or later OS)
   - if you'd rather use the default jpeg unit (and add some more code to your
     executable), undefine this conditional }
-
 {$ifdef NO_USE_SYNGDIPLUS}
   { this special conditional can be set globaly for an application which doesn't
     need the SynGdiPlus features (like TMetaFile drawing), and would rather
@@ -341,40 +337,40 @@ unit SynPdf;
   {$undef USE_SYNGDIPLUS}
 {$endif}
 
-
 {$define USE_SYNZIP}
 { - if defined, the PDF engine will use SynZip to handle the ZIP/deflate
     compression schema (this unit is faster than the default ZLib unit,
     and used by other units of the framework)
   - if you'd rather use the default ZLib unit (and add some more code to your
     executable), undefine this conditional }
-
 {$ifdef NO_USE_SYNZIP}
   { this special conditional can be set globaly for an application for which
     standard ZLib unit is enough (not to be used with a mORMot application) }
   {$undef USE_SYNZIP}
 {$endif}
 
-
 {$define USE_BITMAP}
 { - if defined, the PDF engine will support TBitmap
   - it would induce a dependency to the VCL.Graphics unit }
-
 {$ifdef NO_USE_BITMAP}
   { this special conditional can be set globaly for an application which doesn't
     need the TBitmap features }
   {$undef USE_BITMAP}
 {$endif}
 
-
 {$define USE_METAFILE}
 { - if defined, the PDF engine will support TMetaFile/TMetaFileCanvas
   - it would induce a dependency to the VCL.Graphics unit }
-
 {$ifdef NO_USE_METAFILE}
   { this special conditional can be set globaly for an application which doesn't
     need the TMetaFile features }
   {$undef USE_METAFILE}
+{$endif}
+
+{$define USE_ARC}
+{ - if defined, the PDF engine will support ARC, inducing a dependency to Math.pas }
+{$ifdef NO_USE_ARC}
+  {$undef USE_ARC}
 {$endif}
 
 {$ifdef USE_BITMAP}
@@ -388,7 +384,8 @@ interface
 
 uses
   {$ifdef MSWINDOWS}
-  Windows, WinSpool,
+  Windows,
+  WinSpool,
   {$ifdef USE_GRAPHICS_UNIT}
   {$ifdef ISDELPHIXE2}
   VCL.Graphics,
@@ -402,7 +399,12 @@ uses
   {$else}
   jpeg,
   {$endif}
-  SysConst, SysUtils, Classes,
+  SysConst,
+  SysUtils,
+  Classes,
+  {$ifdef USE_ARC}
+  Math,
+  {$endif}
   {$ifdef ISDELPHIXE3}
   System.Types,
   System.AnsiStrings,
@@ -419,7 +421,8 @@ uses
   {$ifdef USE_PDFSECURITY}
   SynCrypto,
   {$endif}
-  SynCommons, SynLZ;
+  SynCommons,
+  SynLZ;
 
 const
   MWT_IDENTITY = 1;
@@ -1767,6 +1770,12 @@ type
   TPdfCanvasRenderMetaFileTextClipping = (
     tcClipReference, tcClipExplicit, tcAlwaysClip, tcNeverClip);
 
+  {$ifdef USE_ARC}
+  /// is used to define the TMetaFile kind of arc to be drawn
+  TPdfCanvasArcType =(
+    acArc, acArcTo, acArcAngle, acPie, acChoord);
+  {$endif}
+
   /// access to the PDF Canvas, used to draw on the page
   TPdfCanvas = class(TObject)
   protected
@@ -1825,6 +1834,10 @@ type
     procedure CurveToCI(x1, y1, x2, y2, x3, y3: integer);
     // wrapper call I2X() and I2Y() for conversion
     procedure RoundRectI(x1,y1,x2,y2,cx,cy: integer);
+   {$ifdef USE_ARC}
+   procedure ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
+     clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
+   {$endif}
     // wrapper call I2X() and I2Y() for conversion (points to origin+size)
     function BoxI(Box: TRect; Normalize: boolean): TPdfBox; {$ifdef HASINLINE}inline;{$endif}
     // wrapper call I2X() and I2Y() for conversion
@@ -3124,7 +3137,7 @@ function ScriptApplyDigitSubstitution(
     const psds: Pointer; const psControl: pointer;
     const psState: pointer): HRESULT; stdcall; external Usp10;
 
-// C++Builder code should #include <usp10.h> directly instead of using these.
+// C++Builder code should #include <usp10.h> directly instead of using these
 {$NODEFINE TScriptState }
 {$NODEFINE PScriptState }
 {$NODEFINE TScriptAnalysis }
@@ -3175,8 +3188,8 @@ function PrinterDriverExists: boolean;
 var Flags, Count, NumInfo: dword;
     Level: Byte;
 begin
-  //avoid using fPrinter.printers.count as this will raise an
-  //exception if no printer driver is installed...
+  // avoid using fPrinter.printers.count as this will raise an
+  // exception if no printer driver is installed...
   Count := 0;
   Flags := PRINTER_ENUM_CONNECTIONS or PRINTER_ENUM_LOCAL;
   Level := 4;
@@ -3419,6 +3432,287 @@ begin
 end;
 {$endif DELPHI5OROLDER}
 
+
+{$ifdef USE_ARC}
+type
+  tcaRes = (caMoveto, caLine, caCurve, caPosition);
+  teaDrawtype = record
+    res: tcaRes;
+    pts: array[0..2] of record x, y: single;
+  end;
+  end;
+  teaDrawArray = array of teaDrawtype;
+
+function CalcCurveArcData(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
+  aClockWise: boolean; arctype: TPdfCanvasArcType; out res: teaDrawArray): boolean;
+type
+  TCoeff = array[0..3] of double;
+  TCoeffArray = array[0..1, 0..3] of TCoeff;
+const
+  twoPi = 2 * PI;
+  // coefficients for error estimation
+  // while using cubic Bezier curves for approximation
+  // 0 < b/a < 1/4
+  coeffsLow: TCoeffArray = (
+  ((3.85268, -21.229, -0.330434, 0.0127842),
+   (-1.61486, 0.706564, 0.225945, 0.263682),
+   (-0.910164, 0.388383, 0.00551445, 0.00671814),
+   (-0.630184, 0.192402, 0.0098871, 0.0102527)),
+  ((-0.162211, 9.94329, 0.13723, 0.0124084),
+   (-0.253135, 0.00187735, 0.0230286, 0.01264),
+   (-0.0695069, -0.0437594, 0.0120636, 0.0163087),
+   (-0.0328856, -0.00926032, -0.00173573, 0.00527385)));
+  // coefficients for error estimation
+  // while using cubic Bezier curves for approximation
+  // 1/4 <= b/a <= 1
+  coeffsHigh: TCoeffArray = (
+  ((0.0899116, -19.2349, -4.11711, 0.183362),
+   (0.138148, -1.45804, 1.32044, 1.38474),
+   (0.230903, -0.450262, 0.219963, 0.414038),
+   (0.0590565, -0.101062, 0.0430592, 0.0204699)),
+  ((0.0164649, 9.89394, 0.0919496, 0.00760802),
+   (0.0191603, -0.0322058, 0.0134667, -0.0825018),
+   (0.0156192, -0.017535, 0.00326508, -0.228157),
+   (-0.0236752, 0.0405821, -0.0173086, 0.176187)));
+  // safety factor to convert the "best" error approximation
+  // into a "max bound" error
+  safety: TCoeff = (0.001, 4.98, 0.207, 0.0067);
+
+var fcx, fcy: double; //  center of the ellipse
+    faRad, fbRad: double; // Semi-major axis
+    feta1, feta2: double; //  Start End angle of the arc
+    fx1, fy1, fx2, fy2: double;  //start and and endpoint
+    fxLeft, fyUp: double;  // leftmost point of the arc
+    fwidth, fheight: double; //   Horizontal width of the arc Vertical height of the arc
+    fArctype: TPdfCanvasArcType;  //Indicator for center to endpoints line inclusion
+    fClockWise : boolean;
+
+procedure InitFuncData;
+var lambda1, lambda2 : double;
+begin
+  fcx := centerx;
+  fcy := centery;
+  faRad := (W-1) / 2;
+  fbRad := (H-1) / 2;
+  fArctype := arctype;
+  // Calculate Rotation at Start and EndPoint
+  fClockWise := aClockWise;
+  if aclockwise then begin
+    lambda1 := ArcTan2(Sy - fcy, Sx - fcx);
+    lambda2 := ArcTan2(Ey - fcy, Ex - fcx);
+  end else begin
+    lambda2 := ArcTan2(Sy - fcy, Sx - fcx);
+    lambda1 := ArcTan2(Ey - fcy, Ex - fcx);
+  end;
+  feta1 := ArcTan2(sin(lambda1) / fbRad, cos(lambda1) / faRad);
+  feta2 := ArcTan2(sin(lambda2) / fbRad, cos(lambda2) / faRad);
+  // make sure we have eta1 <= eta2 <= eta1 + 2 PI
+  feta2 := feta2 - (twoPi * floor((feta2 - feta1) / twoPi));
+  // the preceding correction fails if we have exactly et2 - eta1 = 2 PI
+  // it reduces the interval to zero length
+  if SameValue(feta1, feta2) then
+    feta2 := feta2 + twoPi;
+  // start point
+  fx1 := fcx + (faRad * cos(feta1));
+  fy1 := fcy + (fbRad * sin(feta1));
+  // end point
+  fx2 := fcx + (faRad * cos(feta2));
+  fy2 := fcy + (fbRad * sin(feta2));
+  // Dimensions
+  fxLeft := min(fx1, fx2);
+  fyUp := min(fy1, fy2);
+  fwidth := max(fx1, fx2) - fxLeft;
+  fheight := max(fy1, fy2) - fyUp;
+end;
+
+function estimateError(etaA, etaB: double): double;
+var coeffs: ^TCoeffArray;
+    c0, c1, cos2, cos4, cos6, dEta, eta, x: double;
+
+  function rationalFunction(x: double; const c: TCoeff): double;
+  begin
+    result := (x * (x * c[0] + c[1]) + c[2]) / (x + c[3]);
+  end;
+
+begin
+  eta := 0.5 * (etaA + etaB);
+  x := fbRad / faRad;
+  dEta := etaB - etaA;
+  cos2 := cos(2 * eta);
+  cos4 := cos(4 * eta);
+  cos6 := cos(6 * eta);
+  // select the right coeficients set according to degree and b/a
+  if x < 0.25 then
+    coeffs := @coeffsLow else
+    coeffs := @coeffsHigh;
+  c0 := rationalFunction(x, coeffs[0][0]) +
+    cos2 * rationalFunction(x, coeffs[0][1]) +
+    cos4 * rationalFunction(x, coeffs[0][2]) +
+    cos6 * rationalFunction(x, coeffs[0][3]);
+  c1 := rationalFunction(x, coeffs[1][0]) +
+    cos2 * rationalFunction(x, coeffs[1][1]) +
+    cos4 * rationalFunction(x, coeffs[1][2]) +
+    cos6 * rationalFunction(x, coeffs[1][3]);
+  result := rationalFunction(x, safety) * faRad * exp(c0 + c1 * dEta);
+end;
+
+procedure BuildPathIterator;
+var alpha: double;
+    found: Boolean;
+    n: integer;
+    dEta, etaB, etaA: double;
+    cosEtaB, sinEtaB, aCosEtaB, bSinEtaB, aSinEtaB, bCosEtaB, xB, yB, xBDot, yBDot: double;
+    i: integer;
+    t, xA, xADot, yA, yADot: double;
+    ressize: integer; // Index var for result Array
+    r: ^teaDrawtype;
+    lstartx, lstarty : double;  // Start from
+const
+  defaultFlatness = 0.5; // half a pixel
+begin
+  // find the number of Bezier curves needed
+  found := false;
+  n := 1;
+  while (not found) and (n < 1024) do begin
+    dEta := (feta2 - feta1) / n;
+    if dEta <= 0.5 * PI then begin
+      etaB := feta1;
+      found := true;
+      for i := 0 to n - 1 do begin
+        etaA := etaB;
+        etaB := etaB + dEta;
+        found := (estimateError(etaA, etaB) <= defaultFlatness);
+        if not found then
+          break;
+      end;
+    end;
+    // if not found then
+    n := n shl 1;
+  end;
+  dEta := (feta2 - feta1) / n;
+  etaB := feta1;
+  cosEtaB := cos(etaB);
+  sinEtaB := sin(etaB);
+  aCosEtaB := faRad * cosEtaB;
+  bSinEtaB := fbRad * sinEtaB;
+  aSinEtaB := faRad * sinEtaB;
+  bCosEtaB := fbRad * cosEtaB;
+  xB := fcx + aCosEtaB;
+  yB := fcy + bSinEtaB;
+  xBDot := -aSinEtaB;
+  yBDot := +bCosEtaB;
+  lstartx := xB;
+  lstarty := yB;
+  // calculate and reserve Space for the result
+  ressize := n; 
+  case fArctype of
+    acArc :     inc(ressize,1); // first move
+    acArcTo:    inc(ressize,3); // first line and move
+    acArcAngle: inc(ressize,1); // first move
+    acPie:      inc(ressize,3); // first and last Line
+    acChoord:   inc(ressize,2);
+  end;
+  SetLength(res, ressize);
+  r := pointer(res);
+  case fArctype of
+    acArc: begin   // start with move
+      r^.res := caMoveto;
+      r^.pts[0].x := xB;
+      r^.pts[0].y := yB;
+      inc(r);
+    end;
+    acArcTo : begin   // start with line and move
+      r^.res := caLine;
+      if fClockwise then  begin
+        r^.pts[0].x := fx1;
+        r^.pts[0].y := fy1;
+      end else begin
+        r^.pts[0].x := fx2;
+        r^.pts[0].y := fy2;
+      end;
+      inc(r);
+      r^.res := caMoveto;
+      r^.pts[0].x := fx1;
+      r^.pts[0].y := fy1;
+      inc(r);
+    end;
+    acArcAngle: ;
+    acPie : begin
+     r^.res := caMoveto;
+     r^.pts[0].x := fcx;
+     r^.pts[0].y := fcy;
+     inc(r);
+     r^.res := caLine;
+     r^.pts[0].x := xB;
+     r^.pts[0].y := yB;
+     inc(r);
+    end;
+    acChoord : begin
+     r^.res := caMoveto;
+     r^.pts[0].x := xB;
+     r^.pts[0].y := yB;
+     inc(r);
+    end;
+  end;
+  t := tan(0.5 * dEta);
+  alpha := sin(dEta) * (sqrt(4 + 3 * t * t) - 1) / 3;
+  for i := 0 to n - 1 do begin
+    xA := xB;
+    yA := yB;
+    xADot := xBDot;
+    yADot := yBDot;
+    etaB := etaB + dEta;
+    cosEtaB := cos(etaB);
+    sinEtaB := sin(etaB);
+    aCosEtaB := faRad * cosEtaB;
+    bSinEtaB := fbRad * sinEtaB;
+    aSinEtaB := faRad * sinEtaB;
+    bCosEtaB := fbRad * cosEtaB;
+    xB := fcx + aCosEtaB;
+    yB := fcy + bSinEtaB;
+    xBDot := -aSinEtaB;
+    yBDot := bCosEtaB;
+    r^.res := caCurve;
+    r^.pts[0].x := xA + alpha * xADot;
+    r^.pts[0].y := yA + alpha * yADot;
+    r^.pts[1].x := xB - alpha * xBDot;
+    r^.pts[1].y := yB - alpha * yBDot;
+    r^.pts[2].x := xB;
+    r^.pts[2].y := yB;
+    inc(r);
+  end; // Loop
+  case fArctype of
+  acArcTo: begin
+    r^.res := caPosition;
+    if fClockWise then begin
+     r^.pts[0].x := fx2;
+     r^.pts[0].y := fy2;
+    end else begin
+     r^.pts[0].x := fx1;
+     r^.pts[0].y := fy1;
+    end
+  end;
+  acPie: begin
+    r^.res := caLine;
+    r^.pts[0].x := fcx;
+    r^.pts[0].y := fcy;
+  end;
+  acChoord: begin
+    r^.res := caLine;
+    r^.pts[0].x := lstartx;
+    r^.pts[0].y := lstarty;
+  end;
+  end;
+end;
+
+begin
+  res := nil;
+  InitFuncData;  // Initialize Data
+  buildPathIterator;
+  result := length(res) > 1;
+end;
+
+{$endif USE_ARC}
 
 { TPdfObject }
 
@@ -6872,26 +7166,29 @@ end;
 procedure TPdfCanvas.CurveToC(x1, y1, x2, y2, x3, y3: Single);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(x1).AddWithSpace(y1).AddWithSpace(x2).AddWithSpace(y2).AddWithSpace(x3).AddWithSpace(y3).
-      Add('c'#10);
+    FContents.Writer.AddWithSpace(x1).AddWithSpace(y1).AddWithSpace(x2).
+      AddWithSpace(y2).AddWithSpace(x3).AddWithSpace(y3).Add('c'#10);
 end;
 
 procedure TPdfCanvas.CurveToV(x2, y2, x3, y3: Single);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(x2).AddWithSpace(y2).AddWithSpace(x3).AddWithSpace(y3).Add('v'#10);
+    FContents.Writer.AddWithSpace(x2).AddWithSpace(y2).AddWithSpace(x3).
+      AddWithSpace(y3).Add('v'#10);
 end;
 
 procedure TPdfCanvas.CurveToY(x1, y1, x3, y3: Single);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(x1).AddWithSpace(y1).AddWithSpace(x3).AddWithSpace(y3).Add('y'#10);
+    FContents.Writer.AddWithSpace(x1).AddWithSpace(y1).AddWithSpace(x3).
+      AddWithSpace(y3).Add('y'#10);
 end;
 
 procedure TPdfCanvas.Rectangle(x, y, width, height: Single);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(x).AddWithSpace(y).AddWithSpace(width).AddWithSpace(height).Add('re'#10);
+    FContents.Writer.AddWithSpace(x).AddWithSpace(y).AddWithSpace(width).
+      AddWithSpace(height).Add('re'#10);
 end;
 
 procedure TPdfCanvas.Closepath;
@@ -7110,13 +7407,15 @@ end;
 procedure TPdfCanvas.SetCMYKFillColor(C, M, Y, K: integer);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(C/100).AddWithSpace(M/100).AddWithSpace(Y/100).AddWithSpace(K/100).Add('k'#10);
+    FContents.Writer.AddWithSpace(C/100).AddWithSpace(M/100).
+      AddWithSpace(Y/100).AddWithSpace(K/100).Add('k'#10);
 end;
 
 procedure TPdfCanvas.SetCMYKStrokeColor(C, M, Y, K: integer);
 begin
   if FContents<>nil then
-    FContents.Writer.AddWithSpace(C/100).AddWithSpace(M/100).AddWithSpace(Y/100).AddWithSpace(K/100).Add('K'#10);
+    FContents.Writer.AddWithSpace(C/100).AddWithSpace(M/100).
+      AddWithSpace(Y/100).AddWithSpace(K/100).Add('K'#10);
 end;
 
 function TPdfCanvas.TextWidth(const Text: PDFString): Single;
@@ -7326,6 +7625,32 @@ begin
   RoundRect(I2X(x1),I2Y(y1),I2X(x2),I2Y(y2),
     cx * FDevScaleX * GetWorldFactorX,-cy * FDevScaleY * GetWorldFactorY);
 end;
+
+{$ifdef USE_ARC}
+procedure TPdfCanvas.ARCI(centerx, centery, W, H, Sx, Sy, Ex, Ey: integer;
+  clockwise: boolean; arctype: TPdfCanvasArcType; var position: TPoint);
+var res: teaDrawArray;
+    i: integer;
+begin
+  if CalcCurveArcData(centerx, centery, W, H, Sx, Sy, Ex, Ey, clockwise,  arctype, res) then
+    for I := 0 to High(res) do
+      with res[i] do
+      case res of
+        caMoveto:
+          MoveTo(I2X(pts[0].x), i2y(pts[0].y));
+        caLine:
+          LineTo(I2X(pts[0].x), i2y(pts[0].y));
+        caCurve:
+          CurveToC(I2X(pts[0].x), i2y(pts[0].y),
+            I2X(pts[1].x), i2y(pts[1].y),
+            I2X(pts[2].x), i2y(pts[2].y));
+        caPosition: begin
+          position.x := Round(pts[0].x);
+          position.y := Round(pts[0].y);
+        end;
+      end;
+end;
+{$endif}
 
 procedure TPdfCanvas.PointI(x, y: Single);
 begin
@@ -8892,6 +9217,12 @@ const
   STOCKPENCOLOR: array[WHITE_PEN..BLACK_PEN] of cardinal = (
     clWhite, clBlack);
 
+function CenterPoint(const Rect: TRect): TPoint;
+begin
+  result.X := (Rect.Right-Rect.Left) div 2+Rect.Left;
+  result.Y := (Rect.Bottom-Rect.Top) div 2+Rect.Top;
+end;
+
 /// EMF enumeration callback function, called from GDI
 // - draw most content on PDF canvas (do not render 100% GDI content yet)
 function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
@@ -8899,6 +9230,7 @@ function EnumEMFFunc(DC: HDC; var Table: THandleTable; R: PEnhMetaRecord;
 var i: integer;
     InitTransX: XForm;
     polytypes: PByteArray;
+
 begin
   result := true;
 
@@ -9005,6 +9337,61 @@ begin
         szlCorner.cx,szlCorner.cy);
     E.FlushPenBrush;
   end;
+  {$ifdef USE_ARC}
+  EMR_ARC: begin
+    NormalizeRect(PEMRARC(R)^.rclBox);
+    E.NeedPen;
+    with PEMRARC(R)^, CenterPoint(rclBox) do
+    E.Canvas.ARCI(x, y, rclBox.Right-rclBox.Left, rclBox.Bottom-rclBox.Top,
+      ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      acArc, Position);
+      E.Canvas.Stroke;
+   end;
+  EMR_ARCTO: begin
+    NormalizeRect(PEMRARCTO(R)^.rclBox);
+    E.NeedPen;
+     if not E.Canvas.FNewPath and not Moved then
+      E.Canvas.MoveToI(Position.X,Position.Y);
+    with PEMRARC(R)^, CenterPoint(rclBox) do  begin
+    // E.Canvas.LineTo(ptlStart.x, ptlStart.y);
+    E.Canvas.ARCI(x, y, rclBox.Right-rclBox.Left, rclBox.Bottom-rclBox.Top,
+      ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
+      e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+      acArcTo,
+      Position);
+    Moved := false;
+    E.fInLined := true;
+    if not E.Canvas.FNewPath then
+      if not pen.null then
+        E.Canvas.Stroke ;
+     end;
+   end;
+  EMR_PIE: begin
+    NormalizeRect(PEMRPie(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRPie(R)^, CenterPoint(rclBox) do
+      E.Canvas.ARCI(x, y, rclBox.Right-rclBox.Left, rclBox.Bottom-rclBox.Top,
+        ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        acPie, Position);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+    end;
+  EMR_CHORD: begin
+    NormalizeRect(PEMRChord(R)^.rclBox);
+    E.NeedBrushAndPen;
+    with PEMRChord(R)^, CenterPoint(rclBox) do
+      E.Canvas.ARCI(x, y, rclBox.Right-rclBox.Left, rclBox.Bottom-rclBox.Top,
+        ptlStart.x, ptlStart.y, ptlEnd.x, ptlEnd.y,
+        e.dc[e.nDC].ArcDirection = AD_CLOCKWISE,
+        acChoord,Position);
+      if pen.null then
+        E.Canvas.Fill else
+        E.Canvas.FillStroke;
+  end;
+  {$endif USE_ARC}
   EMR_FILLRGN: begin
     E.SelectObjectFromIndex(PEMRFillRgn(R)^.ihBrush);
     E.NeedBrushAndPen;
@@ -9375,7 +9762,6 @@ begin
   end;
   // TBD
   EMR_SMALLTEXTOUT,
-  EMR_ARC,
   EMR_SETROP2,
   EMR_ALPHADIBBLEND,
   EMR_SETBRUSHORGEX,
