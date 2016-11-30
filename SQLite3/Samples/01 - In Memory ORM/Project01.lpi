@@ -59,8 +59,6 @@
       <OtherUnitFiles Value="..\..;..\..\.."/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
-    <Conditionals Value="if TargetOS='darwin' then
-   CustomOptions := ' -Cg-';"/>
     <Linking>
       <Options>
         <Win32>

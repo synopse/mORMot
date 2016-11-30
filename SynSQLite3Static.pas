@@ -752,16 +752,13 @@ end;
 
 // XorOffset: fast and simple Cypher using Index (= offset in file)
 // -> not to be set as local proc for FPC
-// see
-// http://bugs.freepascal.org/view.php?id=24061
-// http://wiki.freepascal.org/Code_Conversion_Guide#Nested_procedures.2Ffunctions_as_procedural_variables
-{$ifndef PUREPASCAL}
-procedure Xor64(PI, P: PPtrIntArray; Count: cardinal); // fast xor
+// see http://bugs.freepascal.org/view.php?id=24061
+procedure Xor64(PI, P: PInt64Array; Count: cardinal); // fast xor
 {$ifdef PUREPASCAL}
-var i: cardinal;
+var i: integer;
 begin
-  for i := 0 to (Count div sizeof(PtrInt))-1 do
-    P^[i] := P^[i] xor PI^[i]; // this will compile fine for 64 bit CPU
+  for i := 0 to (Count shr 3)-1 do
+    P^[i] := P^[i] xor PI^[i]; // this will compile fine on all CPUs
 end;
 {$else}
 asm // eax=PI edx=P ecx=bytes count

@@ -129,9 +129,6 @@ uses
   {$ENDIF}
   {$IFDEF MSWINDOWS}
   Windows, CommCtrl, Messages,
-  {$IFDEF FPC}
-  win32extra, // for TaskDialogIndirect
-  {$ENDIF}
   {$ENDIF}
   {$ifdef FPC}
   LResources,
@@ -158,13 +155,6 @@ uses
   {$ENDIF}
   ;
 
-const
-  SMsgDlgWarning = 'Warning';
-  SMsgDlgError = 'Error';
-  SMsgDlgInformation = 'Information';
-  SMsgDlgConfirm = 'Confirm';
-
-
 var
   /// will map a generic Arrow picture from SynTaskDialog.res
   {$IFNDEF FMX}
@@ -185,10 +175,8 @@ var
   /// is filled once in the initialization block below
   // - you can set this reference to nil to force Delphi dialogs even
   // on Vista/Seven (e.g. make sense if TaskDialogBiggerButtons=true)
-  {$ifndef FPC}
   TaskDialogIndirect: function(AConfig: pointer; Res: PInteger;
     ResRadio: PInteger; VerifyFlag: PBOOL): HRESULT; stdcall;
-  {$endif}
 {$ENDIF}
 type
   {$IFDEF FMX} // width, height, screen position
@@ -492,11 +480,6 @@ type
     fDropDownMenu: TSynPopupMenu;
 {$endif}
   public
-    /// create a standard button instance
-    // - ModalResult/Default/Cancel properties will be set as exepcted for this
-    // kind of button
-    constructor CreateKind(Owner: TWinControl; Btn: TCommonButton;
-      Left, Right, Width, Height: integer);
     /// set the glyph of the button
     // - set nothing under Delphi 6
     procedure SetBitmap(Bmp: TBitmap);
@@ -630,25 +613,6 @@ end;
 
 { TSynButton }
 
-constructor TSynButton.CreateKind(Owner: TWinControl; Btn: TCommonButton;
-  Left, Right, Width, Height: integer);
-begin
-  Create(Owner);
-  Parent := Owner;
-  SetBounds(Left,Right,Width,Height);
-  Caption := LoadResString(TD_BTNS(Btn));
-  ModalResult := TD_BTNMOD[Btn];
-  case Btn of
-    cbOK:     Default := true;
-    cbCancel: Cancel := true;
-  end;
-  {
-  case Btn of
-    cbOK: SetBitmap(BitmapOK);
-  end;
-  }
-end;
-
 {$ifndef USETMSPACK}
 procedure TSynButton.DoDropDown;
 begin
@@ -769,7 +733,6 @@ begin
 end;
 
 {$IFDEF MSWINDOWS}
-{$ifndef FPC}
 procedure InitComCtl6;
 var OSVersionInfo: TOSVersionInfo;
 begin
@@ -779,7 +742,6 @@ begin
     @TaskDialogIndirect := nil else
     @TaskDialogIndirect := GetProcAddress(GetModuleHandle(comctl32),'TaskDialogIndirect');
 end;
-{$endif}
 {$ENDIF}
 
 type
@@ -1108,7 +1070,7 @@ begin
   {$ELSE}
     if Screen.ActiveCustomForm<>nil then
       aParent := Screen.ActiveCustomForm.Handle else
-      aParent := {$ifndef fpc}Application.Handle{$else}Application.MainFormHandle{$endif};
+      aParent := {$ifndef fpc}Application.Handle{$else}0{$endif};
   {$ENDIF}
   if not TaskDialog_ForceEmulation and
      Assigned(TaskDialogIndirect) and not aNonNative
@@ -1811,9 +1773,7 @@ initialization
 
   {$ifndef USETMSPACK}
   {$IFDEF MSWINDOWS}
-  {$ifndef FPC}
   InitComCtl6;
-  {$endif}
   {$ENDIF}
   assert(ord(tdfCanBeMinimized)=15);
   {$endif USETMSPACK}
