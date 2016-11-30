@@ -24,6 +24,8 @@ type
    TDirectoryListBox = TShellTreeView;
    {$endif}
 
+  { TMainLogView }
+
   TMainLogView = class(TForm)
     PanelLeft: TPanel;
     PanelThread: TPanel;
@@ -153,7 +155,7 @@ implementation
 {$ifdef FPC}
 uses
   Themes,
-  LCLType, SynCommons, SynLog;
+  LCLType;
 {$endif}
 
 resourcestring
