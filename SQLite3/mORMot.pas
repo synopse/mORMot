@@ -2266,11 +2266,12 @@ type
   // - by default, a temporary instance will be created if a published field
   // has a setter, and the instance is expected to be released later by the
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
-  // (and TPropInfo.ClassFromJSON) release it when the setter returns
+  // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
+  // j2oSetterNoCreate to avoid the published field instance creation
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -27480,7 +27481,7 @@ begin
     // setter to field -> direct in-memory access
     Field := SetterAddr(Instance) else
   {$ifndef FPC}
-  if SetProc<>0  then begin
+  if WriteIsDefined and not (j2oSetterNoCreate in Options) then begin
     // it is a setter method -> create a temporary object
     tmp := PropType^.ClassCreate;
     try
@@ -36446,24 +36447,20 @@ end;
 function TSQLRestClientURI.CallBack(method: TSQLURIMethod;
   const aMethodName,aSentData: RawUTF8; out aResponse: RawUTF8;
   aTable: TSQLRecordClass; aID: TID; aResponseHead: PRawUTF8): integer;
-const NAME: array[mGET..high(TSQLURIMethod)] of RawUTF8 = (
-  'GET','POST','PUT','DELETE','HEAD','BEGIN','END','ABORT','LOCK','UNLOCK','STATE',
-  'OPTIONS','PROPFIND','PROPPATCH','TRACE','COPY','MKCOL','MOVE','PURGE','REPORT',
-  'MKACTIVITY','MKCALENDAR','CHECKOUT','MERGE','NOTIFY','PATCH','SEARCH','CONNECT');
-var u: RawUTF8;
+var u, m: RawUTF8;
 {$ifdef WITHLOG}
    log: ISynLog; // for Enter auto-leave to work with FPC
 {$endif}
 begin
-  if (self=nil) or (method<Low(NAME)) then
+  if (self=nil) or (method=mNone) then
     result := HTTP_UNAVAILABLE else begin
     u := Model.getURICallBack(aMethodName,aTable,aID);
     {$ifdef WITHLOG}
     log := fLogClass.Enter('Callback %',[u],self);
     {$endif}
-    result := URI(u,NAME[method],@aResponse,aResponseHead,@aSentData).Lo;
-    InternalLog('% result=% resplen=%',[NAME[method],result,length(aResponse)],
-      sllServiceReturn);
+    m := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSQLURIMethod),ord(method)));
+    result := URI(u,m,@aResponse,aResponseHead,@aSentData).Lo;
+    InternalLog('% result=% resplen=%',[m,result,length(aResponse)],sllServiceReturn);
   end;
 end;
 
