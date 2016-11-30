@@ -43751,26 +43751,31 @@ procedure TSQLRestStorageInMemory.LoadFromJSON(JSONBuffer: PUTF8Char; JSONBuffer
   end;
 var T: TSQLTableJSON;
 begin
-  fModified := false;
-  fValue.Clear;
-  if JSONBuffer=nil then
-    exit;
-  T := TSQLTableJSON.CreateFromTables([fStoredClass],'',JSONBuffer,JSONBufferLen);
+  StorageLock(true,'LoadFromJSON');
   try
-    if T.fFieldIndexID<0 then
-      exit; // no ID field -> load is impossible -> error
-    // ensure ID were stored in an increasing order
-    if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then begin
-      // force sorted by ID -> faster IDToIndex()
-      T.SortFields(T.fFieldIndexID,true,nil,sftInteger);
-      // if data is corrupted, IDs may not be unique -> check it now
-      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then
-        exit; // some duplicated ID fields -> error
+    fModified := false;
+    fValue.Clear;
+    if JSONBuffer=nil then
+      exit;
+    T := TSQLTableJSON.CreateFromTables([fStoredClass],'',JSONBuffer,JSONBufferLen);
+    try
+      if T.fFieldIndexID<0 then
+        exit; // no ID field -> load is impossible -> error
+      // ensure ID were stored in an increasing order
+      if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then begin
+        // force sorted by ID -> faster IDToIndex()
+        T.SortFields(T.fFieldIndexID,true,nil,sftInteger);
+        // if data is corrupted, IDs may not be unique -> check it now
+        if not IsSorted(@T.fResults[T.fFieldIndexID+T.FieldCount],T.fRowCount,T.FieldCount) then
+          exit; // some duplicated ID fields -> error
+      end;
+      // create TSQLRecord instances with data from T
+      T.ToObjectList(fValue,fStoredClass);
+    finally
+      T.Free;
     end;
-    // create TSQLRecord instances with data from T
-    T.ToObjectList(fValue,fStoredClass);
   finally
-    T.Free;
+    StorageUnLock;
   end;
 end;
 
@@ -43849,7 +43854,9 @@ begin
   if self=nil then
     exit;
   MS := StreamUnSynLZ(Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
-  if MS<>nil then
+  if MS=nil then
+    exit;
+  StorageLock(true,'LoadFromBinary');
   with fStoredClassRecordProps do
   try
     // check header: expect same exact RTTI
@@ -43893,6 +43900,7 @@ begin
         end;
     Result := true;
   finally
+    StorageUnlock;
     R.Close;
     MS.Free;
   end;
@@ -43938,8 +43946,8 @@ begin
     exit;
   MS := THeapMemoryStream.Create;
   W := TFileBufferWriter.Create(MS);
-  StorageLock(false,'SaveToBinary');
   try
+    StorageLock(false,'SaveToBinary');
     with fStoredClassRecordProps do
     try
       // primitive magic and fields signature for file type identification
@@ -43977,14 +43985,14 @@ begin
         with Fields.List[f], fValue do
           for i := 0 to Count-1 do
             GetBinary(TSQLRecord(List[i]),W);
-      W.Flush;
-      result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
     finally
-      W.Free;
-      MS.Free;
+      StorageUnLock;
     end;
+    W.Flush;
+    result := StreamSynLZ(MS,Stream,TSQLRESTSTORAGEINMEMORY_MAGIC);
   finally
-    StorageUnLock;
+    W.Free;
+    MS.Free;
   end;
 end;
 
@@ -44386,7 +44394,7 @@ var JSON: RawUTF8;
 begin
   if (fFileName<>'') and FileExists(fFileName) then begin
     if fBinaryFile then begin
-      Stream := TSynMemoryStreamMapped.Create(fFileName);
+      Stream := FileStreamSequentialRead(fFileName);
       try
         LoadFromBinary(Stream)
       finally
