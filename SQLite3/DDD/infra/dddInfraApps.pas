@@ -553,6 +553,39 @@ const
   // - could be used to simulate a slow network
   ALL_DDDMOCKED_LATENCIES = [Low(TDDDMockedSocketLatency)..high(TDDDMockedSocketLatency)];
 
+  /// a Mustache template of a .rc version information
+  // - could be used to compile a custom .res version file in an automated way
+  // - if you use this generated .res, ensure your "Version Info" is disabled
+  // (unchecked) in the Delphi IDE project options
+  EXEVERSION_RCTEMPLATE: RawUTF8 =
+  '1 VERSIONINFO'#13#10 +
+  'FILEVERSION {{maj}},{{min}},{{rel}},{{build}}'#13#10 +
+  'PRODUCTVERSION {{maj}},{{min}},{{rel}},{{build}}'#13#10 +
+  'FILEOS 0x4'#13#10 +
+  'FILETYPE 0x1'#13#10 +
+  '{'#13#10 +
+  'BLOCK "StringFileInfo"'#13#10 +
+  '{'#13#10 +
+  '	BLOCK "040904E4"'#13#10 +
+  '	{'#13#10 +
+  '		VALUE "CompanyName", "{{compname}}\0"'#13#10 +
+  '		VALUE "FileDescription", "{{compname}}, {{product}} {{name}}{{#isDaemon}} Daemon{{/isDaemon}}\0"'#13#10 +
+  '		VALUE "FileVersion", "{{maj}}.{{min}}.{{rel}}.{{build}}\0"'#13#10 +
+  '		VALUE "InternalName", "{{name}}\0"'#13#10 +
+  '		VALUE "LegalCopyright", "(c){{year}} {{compname}}\0"'#13#10 +
+  '		VALUE "LegalTrademarks", "All rights reserved to {{compname}}\0"'#13#10 +
+  '		VALUE "OriginalFilename", "{{name}}\0"'#13#10 +
+  '		VALUE "ProductName", "{{product}} {{name}}\0"'#13#10 +
+  '		VALUE "ProductVersion", "{{maj}}.{{min}}.{{rel}}.{{build}}\0"'#13#10 +
+  '	}'#13#10 +
+  '}'#13#10 +
+  #13#10 +
+  'BLOCK "VarFileInfo"'#13#10 +
+  '{'#13#10 +
+  '	VALUE "Translation", 0x0409 0x04E4'#13#10 +
+  '}'#13#10 +
+  '}';
+
 var
   /// you could set a text to this global variable at runtime, so that
   // it would be displayed as copyright older name for the console
