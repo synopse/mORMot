@@ -8666,7 +8666,7 @@ var time: Int64;
   procedure hmacInit;
   var timenow: Int64;
       g: TGUID;
-      i, val: cardinal;
+      i {$ifdef CPUINTEL}, val{$endif}: cardinal;
   begin
     hmac.Init(@entropy,sizeof(entropy)); // bytes on CPU stack
     hmac.Update(@time,sizeof(time));

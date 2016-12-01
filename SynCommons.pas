@@ -31120,7 +31120,7 @@ begin
       c3 := crc;
       c2 := c3 + PRIME32_2;
       c1 := c2 + PRIME32_1;
-      c4 := c3 + cardinal(0-PRIME32_1);
+      c4 := c3 - PRIME32_1;
       repeat
         c1 := PRIME32_1 * Rol13(c1 + PRIME32_2 * PCardinal(P)^);
         c2 := PRIME32_1 * Rol13(c2 + PRIME32_2 * PCardinal(P+4)^);
@@ -31243,6 +31243,10 @@ end;
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 begin
+  {$ifdef PUREPASCAL}
+  while count>0 do begin
+    crcblock(crc128,data128);
+  {$else}
   {$ifdef CPUX86}
   if (cfSSE42 in CpuFeatures) and (count>0) then
   asm
@@ -31270,6 +31274,7 @@ begin
   while count>0 do begin
     crcblock(crc128,data128);
   {$endif CPUX86}
+  {$endif PUREPASCAL}
     inc(data128);
     dec(count);
   end;
@@ -31544,10 +31549,6 @@ asm
         not     eax
 end;
 
-
-
-
-{$endif PUREPASCAL}
 {$ifdef CPU386}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
@@ -31582,6 +31583,7 @@ asm
         pop     edi
         pop     esi
 end;
+
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 asm // eax=crc, edx=buf, ecx=len
         not     eax
@@ -31647,6 +31649,7 @@ asm // eax=crc, edx=buf, ecx=len
 @0:     not     eax
 end;
 {$endif CPU386}
+{$endif PUREPASCAL}
 
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin

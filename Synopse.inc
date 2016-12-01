@@ -319,8 +319,8 @@
 
 {$else FPC}
 
-  {$ifndef PUREPASCAL} // if PUREPASCAL is forced, ignore any x86/x64 asm
-    {$define CPUINTEL} // no NextGen support yet
+  {$ifndef PUREPASCAL}
+    {$define CPUINTEL} // Delphi only for Intel by now
   {$endif}
   {$ifdef CPUX64}
     {$define CPU64} // Delphi compiler for 64 bit CPU
