@@ -16835,6 +16835,8 @@ type
     // to the class constructor
     // - may be used e.g. as system-depending salt 
     property CryptoCRC: cardinal read fCryptoCRC;
+    /// direct access to the associated mutex 
+    property Safe: TSynLocker read fSafe;
   published
     /// the process identifier, associated with this generator
     property Identifier: TSynUniqueIdentifierProcess read fIdentifier;
@@ -59692,7 +59694,7 @@ begin
   inherited Destroy;
 end;
 
-type // used to compute a 24 hexadecimal chars obfuscated pseudo file name
+type // compute a 24 hexadecimal chars (96 bits) obfuscated pseudo file name
   TSynUniqueIdentifierObfuscatedBits = packed record
     crc: cardinal;
     id: TSynUniqueIdentifierBits;

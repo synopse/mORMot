@@ -17334,11 +17334,11 @@ type
     // - return -1 if this ID was not found
     // - use fast binary search algorithm (since Items[].ID should be increasing)
     function IDToIndex(ID: TID): integer;
-    /// manual Add of a TSQLRecord
+    /// low-level Add of a TSQLRecord instance
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
     // - on success, the Rec instance is added to the Values[] list: caller
-    // doesn't need to Free it
+    // doesn't need to Free it, since it will be owned by the storage
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function AddOne(Rec: TSQLRecord; ForceID: boolean; const SentData: RawUTF8): TID; override;
     /// manual Retrieval of a TSQLRecord field values

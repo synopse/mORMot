@@ -976,7 +976,7 @@ type
     // - if the debugging info is available from TSynMapFile, will log the
     // unit name, associated symbol and source code line
     procedure Log(Level: TSynLogInfo); overload;
-    /// allows to identify the current thread with a
+    /// allows to identify the current thread with a textual representation
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
     procedure LogThreadName(const Name: RawUTF8);
