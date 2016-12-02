@@ -8143,7 +8143,7 @@ type
     // - this is a set of XML files compressed in a zip container
     // - this method will return the raw binary buffer of the file
     // - see @http://synopse.info/forum/viewtopic.php?id=2133
-    function GetODSDocument: RawByteString;
+    function GetODSDocument(withColumnTypes: boolean = false): RawByteString;
     /// append the table content as a HTML <table> ... </table>
     procedure GetHtmlTable(Dest: TTextWriter); overload;
     /// save the table as a <html><body><table> </table></body></html> content
@@ -25048,7 +25048,7 @@ begin
   end;
 end;
 
-function TSQLTable.GetODSDocument: RawByteString;
+function TSQLTable.GetODSDocument(withColumnTypes: boolean): RawByteString;
 const
   ODSmimetype: RawUTF8 = 'application/vnd.oasis.opendocument.spreadsheet';
   ODSContentHeader: RawUTF8 = '<office:document-content office:version="1.2" xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0"'+
@@ -25069,6 +25069,7 @@ var Zip: TZipWriteToStream;
     W: TTextWriter;
     U: PPUTF8Char;
     R,F: integer;
+    fieldType: TSQLDBFieldTypeDynArray;
 begin
   Dest := TRawByteStringStream.Create;
   try
@@ -25085,16 +25086,60 @@ begin
         W.AddString(ODSContentHeader);
         W.Add(FieldCount);
         W.AddShort('" />');
+        if (self<>nil) and ((FieldCount>0) or (fRowCount>0)) then begin
         U := pointer(fResults);
-        for R := 0 to fRowCount do begin
+          if withColumnTypes then begin
+            // retrieve normalized field names and types
+            if length(fFieldNames)<>fFieldCount then
+              InitFieldNames;
+            if not Assigned(fFieldType) then
+              InitFieldTypes;
+            SetLength(fieldType,FieldCount);
+            for f := 0 to FieldCount-1 do
+              with fFieldType[F] do
+                fieldType[f] := SQLFieldTypeToDBField(ContentType,ContentTypeInfo);
+          end;
+          // write column names
           W.AddShort('<table:table-row>');
-          for F := 1 to FieldCount do begin
+          for F := 0 to FieldCount-1 do begin
             W.AddShort('<table:table-cell office:value-type="string"><text:p>');
             W.AddXmlEscape(U^);
             W.AddShort('</text:p></table:table-cell>');
             inc(U); // points to next value
           end;
           W.AddShort('</table:table-row>');
+
+          // and values
+          for R := 1 to fRowCount do begin
+            W.AddShort('<table:table-row>');
+            if withColumnTypes then begin
+              for F := 0 to FieldCount-1 do begin
+                W.AddShort('<table:table-cell office:value-type="');
+                case fieldType[F] of
+                  ftInt64, ftDouble, ftCurrency: begin
+                    W.AddShort('float" office:value="');
+                    W.AddXmlEscape(U^);
+        end;
+                  ftDate: begin
+                   W.AddShort('date" office:date-value="');
+                   W.AddXmlEscape(U^);
+                  end;
+                else //ftUnknown, ftNull, ftUTF8, ftBlob:
+                  W.AddShort('string');
+                end;
+                W.AddShort('"><text:p>');
+                if fieldType[F] in [ftUTF8, ftBlob] then
+                  W.AddXmlEscape(U^);
+                W.AddShort('</text:p></table:table-cell>');
+                inc(U); // points to next value
+              end;
+            end else begin
+              W.AddShort('<table:table-cell office:value-type="string"><text:p>');
+              W.AddXmlEscape(U^);
+              W.AddShort('</text:p></table:table-cell>');
+            end;
+            W.AddShort('</table:table-row>');
+          end;
         end;
         W.AddShort(ODSContentFooter);
         W.SetText(content);
