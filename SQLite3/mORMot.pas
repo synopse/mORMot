@@ -8057,7 +8057,8 @@ type
     procedure GetRowValues(Field: integer; out Values: TInt64DynArray); overload;
     /// get all values for a specified field as CSV
     // - don't perform any conversion, but create a CSV from raw PUTF8Char data
-    function GetRowValues(Field: integer; Sep: AnsiChar=','): RawUTF8; overload;
+    function GetRowValues(Field: integer; const Sep: RawUTF8=',';
+      const Head: RawUTF8=''; const Trail: RawUTF8=''): RawUTF8; overload;
     {$ifndef NOVARIANTS}
     /// retrieve a field value in a variant
     // - returns null if the row/field is incorrect
@@ -24774,34 +24775,49 @@ begin
   end;
 end;
 
-function TSQLTable.GetRowValues(Field: integer; Sep: AnsiChar): RawUTF8;
-var i, L: integer;
+function TSQLTable.GetRowValues(Field: integer; const Sep,Head,Trail: RawUTF8): RawUTF8;
+var i, L, SepLen: integer;
     U: PPUTF8Char;
     P: PUTF8Char;
+    len: PInteger;
+    tmp: TSynTempBuffer;
 begin
   result := '';
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
-  L := 0;
+  SepLen := length(Sep);
+  L := length(Head)+SepLen*(fRowCount-1)+length(Trail);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
+  tmp.Init(fRowCount*4);
+  len := tmp.buf;
   for i := 1 to fRowCount do begin
-    inc(L,StrLen(U^)+1);
+    len^ := StrLen(U^);
+    inc(L,len^);
+    inc(len);
     inc(U,FieldCount); // go to next row
   end;
-  if L=0 then
-    exit;
-  SetLength(result,L-1); // L-1 = don't add a last ','
-  P := pointer(result);
-  U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  for i := 1 to fRowCount do begin
-    L := StrLen(U^);
-    MoveFast(U^^,P^,L);
-    if i=fRowCount then // don't add a last ','
-      break;
-    P[L] := Sep;
-    inc(P,L+1);
-    inc(U,FieldCount); // go to next row
+  if L<>0 then begin
+    SetLength(result,L);
+    P := pointer(result);
+    if Head<>'' then begin
+      MoveFast(pointer(Head)^,P^,length(Head));
+      inc(P,length(Head));
+    end;
+    U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
+    len := tmp.buf;
+    for i := 2 to fRowCount do begin
+      MoveFast(U^^,P^,len^);
+      inc(P,len^);
+      MoveFast(pointer(Sep)^,P^,SepLen);
+      inc(P,SepLen);
+      inc(len);
+      inc(U,FieldCount); // go to next row
+    end;
+    MoveFast(U^^,P^,len^); // last row without Sep
+    if Trail<>'' then
+      MoveFast(pointer(Trail)^,P[len^],length(Trail));
   end;
+  tmp.Done;
 end;
 
 procedure TSQLTable.GetJSONValues(JSON: TStream; Expand: boolean;

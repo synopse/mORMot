@@ -19334,7 +19334,9 @@ begin
     vtWideChar:
       RawUnicodeToUtf8(@VWideChar,1,result);
     vtBoolean:
-      if VBoolean then result := SmallUInt32UTF8[1] else result := SmallUInt32UTF8[0];
+      if VBoolean then
+        result := SmallUInt32UTF8[1] else
+        result := SmallUInt32UTF8[0];
     vtInteger:
       Int32ToUtf8(VInteger,result);
     vtInt64:
@@ -19589,10 +19591,10 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         sar     r10, 63         // r10=0 if val>=0 or -1 if val<0
         xor     rdx, r10
         sub     rdx, r10        // rdx=abs(val)
-        cmp     rdx, 10;
+        cmp     rdx, 10
         jb      @3              // direct process of common val<10
         mov     rax, rdx
-        lea     r8, TwoDigitLookup
+        lea     r8, [rip + TwoDigitLookup]
 @s:     cmp     rax, 100
         lea     rcx, [rcx - 2]
         jb      @2
@@ -19640,7 +19642,7 @@ asm // eax=P, edx=val
         push    ecx
         xor     edx, ecx
         sub     edx, ecx        // edx=abs(val)
-        cmp     edx, 10;
+        cmp     edx, 10
         jb      @3  // direct process of common val<10
         push    edi
         mov     edi, eax
@@ -19697,7 +19699,7 @@ asm // rcx=P, rdx=val (Linux: rdi,rsi)
         mov     rcx, rdi
         mov     rdx, rsi
         {$endif win64}
-        cmp     rdx, 10;
+        cmp     rdx, 10
         jb      @3           // direct process of common val<10
         mov     rax, rdx
         lea     r8, [rip + TwoDigitLookup]
@@ -46059,7 +46061,7 @@ begin
     FlushToStream;
   if PtrUInt(Value)<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef HASINLINE}
+    {$ifdef FPC}
     Len := length(SmallUInt32UTF8[Value]);
     {$else}
     Len := PInteger(P-4)^;
@@ -46161,7 +46163,7 @@ begin
     FlushToStream;
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef HASINLINE}
+    {$ifdef FPC}
     Len := length(SmallUInt32UTF8[Value]);
     {$else}
     Len := PInteger(P-4)^;
@@ -46223,7 +46225,7 @@ begin
   end else
   if Value<=high(SmallUInt32UTF8) then begin
     P := pointer(SmallUInt32UTF8[Value]);
-    {$ifdef HASINLINE}
+    {$ifdef FPC}
     Len := length(SmallUInt32UTF8[Value]);
     {$else}
     Len := PInteger(P-4)^;
