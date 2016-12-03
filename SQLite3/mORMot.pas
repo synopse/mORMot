@@ -8143,7 +8143,7 @@ type
     // - this is a set of XML files compressed in a zip container
     // - this method will return the raw binary buffer of the file
     // - see @http://synopse.info/forum/viewtopic.php?id=2133
-    function GetODSDocument(withColumnTypes: boolean = false): RawByteString;
+    function GetODSDocument(withColumnTypes: boolean=false): RawByteString;
     /// append the table content as a HTML <table> ... </table>
     procedure GetHtmlTable(Dest: TTextWriter); overload;
     /// save the table as a <html><body><table> </table></body></html> content
@@ -17334,7 +17334,11 @@ type
     /// retrieve the index in Items[] of a particular ID
     // - return -1 if this ID was not found
     // - use fast binary search algorithm (since Items[].ID should be increasing)
+    // - warning: this method should be protected via StorageLock/StorageUnlock
     function IDToIndex(ID: TID): integer;
+    /// retrieve all IDs stored at once
+    // - will make a thread-safe copy, for unlocked use
+    procedure GetAllIDs(out ID: TIDDynArray);
     /// low-level Add of a TSQLRecord instance
     // - returns the ID created on success
     // - returns -1 on failure (not UNIQUE field value e.g.)
@@ -25087,7 +25091,6 @@ begin
         W.Add(FieldCount);
         W.AddShort('" />');
         if (self<>nil) and ((FieldCount>0) or (fRowCount>0)) then begin
-        U := pointer(fResults);
           if withColumnTypes then begin
             // retrieve normalized field names and types
             if length(fFieldNames)<>fFieldCount then
@@ -25101,14 +25104,14 @@ begin
           end;
           // write column names
           W.AddShort('<table:table-row>');
-          for F := 0 to FieldCount-1 do begin
+          U := pointer(fResults);
+          for F := 1 to FieldCount do begin
             W.AddShort('<table:table-cell office:value-type="string"><text:p>');
             W.AddXmlEscape(U^);
             W.AddShort('</text:p></table:table-cell>');
             inc(U); // points to next value
           end;
           W.AddShort('</table:table-row>');
-
           // and values
           for R := 1 to fRowCount do begin
             W.AddShort('<table:table-row>');
@@ -25119,7 +25122,7 @@ begin
                   ftInt64, ftDouble, ftCurrency: begin
                     W.AddShort('float" office:value="');
                     W.AddXmlEscape(U^);
-        end;
+                  end;
                   ftDate: begin
                    W.AddShort('date" office:date-value="');
                    W.AddXmlEscape(U^);
@@ -43690,6 +43693,20 @@ begin
           exit;
   end;
   result := -1;
+end;
+
+procedure TSQLRestStorageInMemory.GetAllIDs(out ID: TIDDynArray);
+var i: integer;
+begin
+  StorageLock(false,'GetAllIDs');
+  with fValue do
+  try
+    SetLength(ID, Count);
+    for i := 0 to Count-1 do
+      ID[i] := TSQLRecord(List[i]).fID;
+  finally
+    StorageUnlock;
+  end;
 end;
 
 function TSQLRestStorageInMemory.EngineList(const SQL: RawUTF8;
