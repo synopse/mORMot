@@ -314,6 +314,8 @@ type
     procedure _TDynArrayHashed;
     /// test TObjectListHashed class
     procedure _TObjectListHashed;
+    /// test TSynNameValue class
+    procedure _TSynNameValue;
     {$ifndef DELPHI5OROLDER}
     /// test TObjectDynArrayWrapper class
     procedure _TObjectDynArrayWrapper;
@@ -4304,6 +4306,60 @@ begin
     '"TObjectList(00AF8D60)","TFileVersion(00ADC0B0)","TSynMapFile(00ACC990)"]}'#13#10+
     '20110407 12040915  -    SQLite3Commons.TSQLRestServer.URI (14163) 10.020.006',
     40641.464653);
+end;
+
+procedure TTestLowLevelCommon._TSynNameValue;
+const MAX=10000;
+var nv: TSynNameValue;
+    i: integer;
+    tmp: TSynTempBuffer;
+begin
+  nv.Init(false);
+  check(nv.Count=0);
+  for i := 1 to MAX do
+    nv.Add(UInt32ToUtf8(i),UInt32ToUtf8(i+MAX));
+  check(nv.Count=MAX);
+  for i := 1 to MAX do
+    check(nv.Find(UInt32ToUtf8(i))=i-1);
+  for i := MAX+1 to MAX*2 do
+    check(nv.Find(UInt32ToUtf8(i))<0);
+  for i := 1 to MAX do
+    check(nv.Value(UInt32ToUtf8(i))=UInt32ToUtf8(i+MAX));
+  for i := 1 to MAX do
+    check(nv.Str[UInt32ToUtf8(i)]=UInt32ToUtf8(i+MAX));
+  nv.InitFromNamesValues(['a','b'],['1','be']);
+  check(nv.Count=2);
+  check(nv.Str['a']='1');
+  check(nv.Str['b']='be');
+  check(nv.Str['c']='');
+  check(nv.ValueInt('a')=1);
+  check(nv.ValueInt('b')=0);
+  check(nv.ValueInt('c')=0);
+  check(nv.AsCSV('=',';')='a=1;b=be;');
+  check(nv.AsJSON='{"a":"1","b":"be"}');
+  tmp.Init('{a:10,b:"bee"}');
+  check(nv.InitFromJSON(tmp.buf));
+  check(nv.Count=2);
+  check(nv.Str['a']='10');
+  check(nv.Str['b']='bee');
+  check(nv.Str['c']='');
+  check(nv.Int['a']=10);
+  check(nv.Int['b']=0);
+  check(nv.Int['c']=0);
+  check(nv.AsCSV('=',';')='a=10;b=bee;');
+  check(nv.AsJSON='{"a":"10","b":"bee"}');
+  check(nv.Delete('b'));
+  check(nv.ValueInt('a')=10);
+  check(nv.Str['b']='');
+  check(not nv.Delete('b'));
+  check(nv.DeleteByValue('10')=1);
+  check(nv.ValueInt('a')=0);
+  check(nv.DeleteByValue('10')=0);
+  check(nv.Count=0);
+  check(nv.AsCSV('=',';')='');
+  tmp.Init('{"a":20,b:"bi"]');
+  check(not nv.InitFromJSON(tmp.buf));
+  check(nv.Count=0);
 end;
 
 procedure TTestLowLevelCommon._TObjectListHashed;
