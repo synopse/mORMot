@@ -21279,8 +21279,12 @@ end;
 function VariantToBoolean(const V: Variant; var Value: Boolean): boolean;
 var tmp: TVarData;
 begin
-  if TVarData(V).VType=varBoolean then
-    Value := TVarData(V).VBoolean else
+  case TVarData(V).VType of
+  varBoolean:
+    Value := TVarData(V).VBoolean;
+  varInteger: // coming e.g. from GetJsonField() 
+    Value := TVarData(V).VInteger=1;
+  else
     if SetVariantUnRefSimpleValue(V,tmp) then
       if tmp.VType=varBoolean then
         Value := tmp.VBoolean else begin
@@ -21290,6 +21294,7 @@ begin
         result := false;
         exit;
       end;
+  end;
   result := true;
 end;
 
