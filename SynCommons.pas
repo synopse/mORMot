@@ -53466,6 +53466,7 @@ const
   DIC_VALUE = 3;
   DIC_TIMECOUNT = 4;
   DIC_TIMESEC = 5;
+  DIC_TIMETIX = 6;
 
 constructor TSynDictionary.Create(aKeyTypeInfo,aValueTypeInfo: pointer;
   aKeyCaseInsensitive: boolean; aTimeoutSeconds: cardinal);
@@ -53477,7 +53478,8 @@ begin
   fSafe.Padding[DIC_VALUE].VType := varUnknown;
   fSafe.Padding[DIC_TIMECOUNT].VType := varInteger;
   fSafe.Padding[DIC_TIMESEC].VType := varInteger;
-  fSafe.PaddingMaxUsedIndex := DIC_TIMESEC;
+  fSafe.Padding[DIC_TIMETIX].VType := varInteger;
+  fSafe.PaddingMaxUsedIndex := DIC_TIMETIX;
   fKeys.Init(aKeyTypeInfo,fSafe.Padding[DIC_KEY].VAny,nil,nil,nil,
     @fSafe.Padding[DIC_KEYCOUNT].VInteger,aKeyCaseInsensitive);
   fValues.Init(aValueTypeInfo,fSafe.Padding[DIC_VALUE].VAny,
@@ -53503,16 +53505,20 @@ var i: integer;
     now: cardinal;
 begin
   result := 0;
-  if fSafe.Padding[DIC_TIMESEC].VInteger=0 then
+  if fSafe.Padding[DIC_TIMESEC].VInteger=0 then // nothing in fTimeOut[]
     exit;
   now := GetTickCount64 shr 10;
+  if fSafe.Padding[DIC_TIMETIX].VInteger=integer(now) then
+    exit; // no need to search more often than every second
   fSafe.Lock;
   try
+    fSafe.Padding[DIC_TIMETIX].VInteger := now;
     for i := fSafe.Padding[DIC_TIMECOUNT].VInteger-1 downto 0 do
       if (now>fTimeOut[i]) and (fTimeOut[i]<>0) then begin
         fKeys.Delete(i);
         fValues.Delete(i);
         fTimeOuts.Delete(i);
+        inc(result);
       end;
   finally
     fSafe.UnLock;
