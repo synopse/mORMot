@@ -483,6 +483,10 @@ type
     procedure _CompressShaAes;
     /// AES-based pseudorandom number generator
     procedure _TAESPNRG;
+    {$ifndef NOVARIANTS}
+    /// JWT classes
+    procedure _JWT;
+    {$endif NOVARIANTS}
   end;
 
   /// this test case will test ECDH and ECDSA cryptography as implemented
@@ -8996,6 +9000,62 @@ begin
     end;
   check(PosEx(s1,split)=0);
 end;
+
+{$ifndef NOVARIANTS}
+procedure TTestCryptographicRoutines._JWT;
+  procedure test(one: TJWTAbstract);
+  var t: RawUTF8;
+      jwt: TJWTContent;
+      i: integer;
+  begin
+    t := one.Compute(['http://example.com/is_root',true],'joe');
+    check(one.CacheTimeoutSeconds=0);
+    one.CacheTimeoutSeconds := 60;
+    check(one.CacheTimeoutSeconds=60);
+    check(t<>'');
+    one.Verify(t,jwt);
+    check(jwt.result=jwtValid);
+    check(jwt.reg[jrcExpirationTime]<>'');
+    check(jwt.reg[jrcIssuer]='joe');
+    check(jwt.data.B['http://example.com/is_root']);
+    check((jwt.reg[jrcIssuedAt]<>'')=(jrcIssuedAt in one.Claims));
+    check((jwt.reg[jrcJWTID]<>'')=(jrcJWTID in one.Claims));
+    for i := 1 to 1000 do begin
+      Finalize(jwt);
+      FillCharFast(jwt,sizeof(jwt),0);
+      check(jwt.reg[jrcIssuer]='');
+      one.Verify(t,jwt);
+      check(jwt.result=jwtValid,'from cache');
+      check(jwt.reg[jrcIssuer]='joe');
+      check((jwt.reg[jrcJWTID]<>'')=(jrcJWTID in one.Claims));
+    end;
+    one.Free;
+  end;
+var j: TJWTAbstract;
+    jwt: TJWTContent;
+begin
+  test(TJWTNone.Create([jrcIssuer,jrcExpirationTime],[],60));
+  test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
+  test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
+  test(TJWTHS256.Create('sec',100,[jrcIssuer,jrcExpirationTime],[],60));
+  test(TJWTHS256.Create('sec',200,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
+  test(TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
+  j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
+  jwt.result := jwtWrongFormat;
+  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+    'ONFh7HgQ',jwt); // reference from jwt.io
+  check(jwt.result=jwtValid);
+  check(jwt.reg[jrcSubject]='1234567890');
+  check(jwt.data.U['name']='John Doe');
+  check(jwt.data.B['admin']);
+  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+    'ONFh7hgQ',jwt); // altered one char in signature
+  check(jwt.result=jwtInvalidSignature);
+  j.Free;
+end;
+{$endif NOVARIANTS}
 
 
 { TTestECCCryptography }
