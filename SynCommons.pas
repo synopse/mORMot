@@ -2691,51 +2691,51 @@ var
   NormToUpperAnsi7: TNormTable;
   NormToUpperAnsi7Byte: TNormTableByte absolute NormToUpperAnsi7;
 
-/// get the signed 32 bits integer value stored in P^
-// - we use the PtrInt result type, even if expected to be 32 bits, to use
-// native CPU register size (don't want any 32 bits overflow here)
+/// get the signed 32-bit integer value stored in P^
+// - we use the PtrInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
 // - it will stop the parsing when P^ does not contain numbers any more
 function GetInteger(P: PUTF8Char): PtrInt; overload;
 
-/// get the signed 32 bits integer value stored in P^
+/// get the signed 32-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetIntegerDef(P: PUTF8Char; Default: PtrInt): PtrInt;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the signed 32 bits integer value stored in P^
+/// get the signed 32-bit integer value stored in P^
 // - this version return 0 in err if no error occured, and 1 if an invalid
 // character was found, not its exact index as for the val() function
 function GetInteger(P: PUTF8Char; var err: integer): PtrInt; overload;
 
-/// get the unsigned 32 bits integer value stored in P^
-// - we use the PtrUInt result type, even if expected to be 32 bits, to use
-// native CPU register size (don't want any 32 bits overflow here)
+/// get the unsigned 32-bit integer value stored in P^
+// - we use the PtrUInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
 function GetCardinal(P: PUTF8Char): PtrUInt;
 
-/// get the unsigned 32 bits integer value stored in P^
+/// get the unsigned 32-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetCardinalDef(P: PUTF8Char; Default: PtrUInt): PtrUInt;
 
-/// get the unsigned 32 bits integer value stored as Unicode string in P^
+/// get the unsigned 32-bit integer value stored as Unicode string in P^
 function GetCardinalW(P: PWideChar): PtrUInt;
 
 /// get a boolean value stored as true/false text in P^
 // - would also recognize any non 0 integer as true
 function GetBoolean(P: PUTF8Char): boolean;
 
-/// get the 64 bits integer value stored in P^
+/// get the 64-bit integer value stored in P^
 function GetInt64(P: PUTF8Char): Int64; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the 64 bits integer value stored in P^
+/// get the 64-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
 
-/// get the 64 bits integer value stored in P^
+/// get the 64-bit integer value stored in P^
 procedure SetInt64(P: PUTF8Char; var result: Int64);
   {$ifdef CPU64}inline;{$endif}
 
-/// get the 64 bits integer value stored in P^
+/// get the 64-bit integer value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
@@ -2759,16 +2759,31 @@ function GetUTF8Char(P: PUTF8Char): cardinal;
 function NextUTF8UCS4(var P: PUTF8Char): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get the signed 32 bits integer value stored in a RawUTF8 string
-// - we use the PtrInt result type, even if expected to be 32 bits, to use
-// native CPU register size (don't want any 32 bits overflow here)
+/// get the signed 32-bit integer value stored in a RawUTF8 string
+// - we use the PtrInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
 function UTF8ToInteger(const value: RawUTF8; Default: PtrInt=0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// get and check range of a signed 32 bits integer stored in a RawUTF8 string
-// - we use the PtrInt result type, even if expected to be 32 bits, to use
-// native CPU register size (don't want any 32 bits overflow here)
+/// get and check range of a signed 32-bit integer stored in a RawUTF8 string
+// - we use the PtrInt result type, even if expected to be 32-bit, to use
+// native CPU register size (don't want any 32-bit overflow here)
 function UTF8ToInteger(const value: RawUTF8; Min,Max: PtrInt; Default: PtrInt=0): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the signed 32-bit integer value stored in a RawUTF8 string
+// - returns TRUE if the supplied text was successfully converted into an integer
+function ToInteger(const text: RawUTF8; out value: integer): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the unsigned 32-bit cardinal value stored in a RawUTF8 string
+// - returns TRUE if the supplied text was successfully converted into a cardinal
+function ToCardinal(const text: RawUTF8; out value: cardinal): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// get the signed 64-bit integer value stored in a RawUTF8 string
+// - returns TRUE if the supplied text was successfully converted into an Int64
+function ToInt64(const text: RawUTF8; out value: Int64): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// encode a string to be compatible with URI encoding
@@ -28244,6 +28259,26 @@ begin
   result := GetInteger(pointer(value),err);
   if (err<>0) or (result<Min) or (result>Max) then
     result := Default;
+end;
+
+function ToInteger(const text: RawUTF8; out value: integer): boolean;
+var err: integer;
+begin
+  value := GetInteger(pointer(text),err);
+  result := err=0;
+end;
+
+function ToCardinal(const text: RawUTF8; out value: cardinal): boolean;
+begin
+  value := GetCardinalDef(pointer(text),cardinal(-1));
+  result := value<>cardinal(-1);
+end;
+
+function ToInt64(const text: RawUTF8; out value: Int64): boolean;
+var err: integer;
+begin
+  value := GetInt64(pointer(text),err);
+  result := err=0;
 end;
 
 function GetBoolean(P: PUTF8Char): boolean;
