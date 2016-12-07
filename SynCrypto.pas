@@ -288,6 +288,9 @@ uses
   {$endif}
 {$endif}
   Classes,
+{$ifndef NOVARIANTS}
+  Variants,
+{$endif}
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
   SynCommons;
 
@@ -1715,19 +1718,19 @@ type
   /// JWT decoded content, as processed by TJWTAbstract
   // - optionally cached in memory
   TJWTContent = record
-    /// the registered claims UTF-8 values, as stored in the JWT payload
-    // - e.g. reg[jrcSubject]='1234567890' for
+    /// set of registered claims, as stored in the JWT payload
+    claims: TJWTClaims;
+    /// store latest Verify() result
+    result: TJWTResult;
+    /// registered claims UTF-8 values, as stored in the JWT payload
+    // - e.g. reg[jrcSubject]='1234567890' and reg[jrcIssuer]='' for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
     reg: array[TJWTClaim] of RawUTF8;
-    /// all public/private claim values, as stored in the JWT payload
+    /// unregistered public/private claim values, as stored in the JWT payload
     // - registered claims will be available from reg[], not in this field
     // - e.g. data.U['name']='John Doe' and data.B['admin']=true for
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
     data: TDocVariantData;
-    /// set of registered claims, as stored in the JWT payload 
-    claims: TJWTClaims;
-    /// store latest Verify() result
-    result: TJWTResult;
   end;
   /// used to store a list of JWT decoded content
   // - as used e.g. by TJWTAbstract cache
@@ -1766,6 +1769,11 @@ type
       const signature: RawByteString); virtual; abstract;
   public
     /// initialize the JWT processing instance
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(const aAlgorithm: RawUTF8; aClaims: TJWTClaims;
       const aAudience: array of RawUTF8; aExpirationMinutes: integer;
       aIDIdentifier: TSynUniqueIdentifierProcess; aIDObfuscationKey: RawUTF8); reintroduce;
@@ -1802,22 +1810,23 @@ type
     // - this method is thread-safe
     function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUTF8;
       out JWT: TJWTContent): boolean; overload;
-    /// the JWT Registered Claims, as implemented by this instance
-    property Claims: TJWTClaims read fClaims;
+  published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUTF8 read fAlgorithm;
+    /// the JWT Registered Claims, as implemented by this instance
+    property Claims: TJWTClaims read fClaims;
     /// the audience string values associated with this instance
     // - will be checked by Verify() methods, and
     property Audience: TRawUTF8DynArray read fAudience;
-    /// delay of optional in-memory cache of previous Verify() content
+    /// delay of optional in-memory cache of Verify() TJWTContent
     // - equals 0 by default, i.e. cache is disabled
-    // - may be useful only if the signature process is very resource
-    // consumming (e.g. for TJWTES256 or even for HMAC-SHA256)
+    // - may be useful if the signature process is very resource consumming
+    // (e.g. for TJWTES256 or even HMAC-SHA256) - see also CacheResults
     // - each time this property is assigned with a new value, internal cache
     // content is flushed
     property CacheTimeoutSeconds: integer read fCacheTimeoutSeconds
       write SetCacheTimeoutSeconds;
-    /// which results should be stored in in-memory cache
+    /// which TJWTContent.result should be stored in in-memory cache
     // - default is [jwtValid] but you may also include jwtInvalidSignature
     // if signature checking uses a lot of resources
     // - only used if CacheTimeoutSeconds>0
@@ -1837,6 +1846,11 @@ type
       const signature: RawByteString); override;
   public
     /// initialize the JWT processing instance using the 'none' algorithm
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(aClaims: TJWTClaims; const aAudience: array of RawUTF8;
       aExpirationMinutes: integer=0; aIDIdentifier: TSynUniqueIdentifierProcess=0;
       aIDObfuscationKey: RawUTF8=''); reintroduce;
@@ -1851,9 +1865,14 @@ type
       const signature: RawByteString); override;
   public
     /// initialize the JWT processing instance using HMAC SHA-256 algorithm
+    // - the supplied set of claims are expected to be defined in the JWT payload
     // - the supplied secret text will be used to compute HMAC authentication,
     // directly if aSecretPBKDF2Rounds=0, or via PBKDF2_HMAC_SHA256 if some
     // number of rounds are specified
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
     constructor Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
       aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
       aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8=''); reintroduce;
@@ -1868,11 +1887,12 @@ const
   JWT_CLAIMS_TEXT: array[TJWTClaim] of RawUTF8 = (
     'iss','sub','aud','exp','nbf','iat','jti');
 
+function ToText(res: TJWTResult): PShortString; overload;
+
 {$endif NOVARIANTS}
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 function ToText(res: TProtocolResult): PShortString; overload;
-function ToText(res: TJWTResult): PShortString; overload;
 
 
 implementation
@@ -1885,11 +1905,6 @@ end;
 function ToText(chk: TAESIVReplayAttackCheck): PShortString;
 begin
   result := GetEnumName(TypeInfo(TAESIVReplayAttackCheck),ord(chk));
-end;
-
-function ToText(res: TJWTResult): PShortString;
-begin
-  result := GetEnumName(TypeInfo(TJWTResult),ord(res));
 end;
 
 
@@ -9573,8 +9588,8 @@ var i,c,len: integer;
     wasString: boolean;
     EndOfObject: AnsiChar;
     claim: TJWTClaim;
-    value: variant;
     id: TSynUniqueIdentifier;
+    value: variant;
     payload, signature64: RawUTF8;
 begin
   JWT.data.InitFast(0,dvObject);
@@ -9590,14 +9605,16 @@ begin
   signature64 := copy(Token,i+1,maxInt);
   if (length(payload64)>2700) or (length(signature64)>=2048) then
     exit; // too much data kills the data
-  payload := payload64;
-  Base64FromURI(payload);
   Base64FromURI(signature64);
-  payload := Base64ToBin(payload);
   signature := Base64ToBin(signature64);
-  if (payload='') or ((signature='') and (signature64<>'')) then
+  if (signature='') and (signature64<>'') then
     exit;
   JWT.result := jwtInvalidPayload;
+  payload := payload64;
+  Base64FromURI(payload);
+  payload := Base64ToBin(payload);
+  if payload='' then
+    exit;
   P := GotoNextNotSpace(pointer(payload));
   if P^<>'{' then
     exit;
@@ -9735,6 +9752,11 @@ destructor TJWTHS256.Destroy;
 begin
   inherited Destroy;
   FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret in heap
+end;
+
+function ToText(res: TJWTResult): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TJWTResult),ord(res));
 end;
 
 {$endif NOVARIANTS}

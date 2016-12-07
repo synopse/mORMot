@@ -53525,8 +53525,8 @@ var i: integer;
     now: cardinal;
 begin
   result := 0;
-  if (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or
-     (fSafe.Padding[DIC_TIMESEC].VInteger=0 then // nothing in fTimeOut[]
+  if (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or // no entry
+     (fSafe.Padding[DIC_TIMESEC].VInteger=0) then // nothing in fTimeOut[]
     exit;
   now := GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger=integer(now) then
