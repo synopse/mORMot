@@ -5777,10 +5777,16 @@ type
     // - Section can be retrieved e.g. via FindSectionFirstLine()
     procedure InitFromIniSection(Section: PUTF8Char; OnTheFlyConvert: TConvertRawUTF8=nil;
       OnAdd: TSynNameValueNotify=nil);
-    /// reset content, then add all name=value; CSV pairs 
+    /// reset content, then add all name=value; CSV pairs
     // - will first call Init(false) to initialize the internal array
     procedure InitFromCSV(CSV: PUTF8Char; NameValueSep: AnsiChar='=';
       ItemSep: AnsiChar=#10);
+    /// reset content, then add all fields from an JSON object
+    // - will first call Init() to initialize the internal array
+    // - then parse the incoming JSON object, storing all its field values
+    // as RawUTF8, and returning TRUE if the supplied content is correct
+    // - warning: the supplied JSON buffer will be decoded and modified in-place
+    function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
     /// reset content, then add all name, value pairs 
     // - will first call Init(false) to initialize the internal array
     procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
@@ -5816,6 +5822,8 @@ type
     /// returns all values, as CSV or INI content
     function AsCSV(const KeySeparator: RawUTF8='=';
       const ValueSeparator: RawUTF8=#13#10; const IgnoreKey: RawUTF8=''): RawUTF8;
+    /// returns all values as a JSON object of string fields
+    function AsJSON: RawUTF8;
     /// fill the supplied two arrays of RawUTF8 with the stored values
     procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
     {$ifndef NOVARIANTS}
@@ -8622,7 +8630,7 @@ type
   /// thread-safe dictionary to store some values from associated keys
   // - will maintain a dynamic array of values, associated with a hashed dynamic
   // array for the keys, so that setting or retrieving values would be O(1)
-  // - all process would be protected by a TSynLocker, so would be thread-safe
+  // - all process is protected by a TSynLocker, so will be thread-safe
   // - TDynArray is a wrapper which do not store anything, whereas this class
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
@@ -8651,28 +8659,31 @@ type
     destructor Destroy; override;
     /// try to add a value associated with a primary key
     // - returns the index of the inserted item, -1 if aKey is already existing
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function Add(const aKey, aValue): integer;
     /// store a value associated with a primary key
     // - returns the index of the matching item
     // - if aKey does not exist, a new entry is added
     // - if aKey does exist, the existing entry is overriden with aValue
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function AddOrUpdate(const aKey, aValue): integer;
     /// clear the value associated via aKey
     // - does not delete the entry, but reset its value
     // - returns the index of the matching item, -1 if aKey was not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function Clear(const aKey): integer;
     /// delete all key/value stored in the current instance
     procedure DeleteAll;
     /// delete a key/value association from its supplied aKey
     // - this would delete the entry, i.e. matching key and value pair
     // - returns the index of the deleted item, -1 if aKey was not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function Delete(const aKey): integer;
     /// search and delete all deprecated items according to TimeoutSeconds
     // - returns how many items have been deleted
+    // - you can call this method very often: it will ensure that the
+    // search process will take place at most once every second
+    // - this method is thread-safe, but blocking during the process
     function DeleteDeprecated: integer;
     /// search of a primary key within the internal hashed dictionary
     // - returns the index of the matching item, -1 if aKey was not found
@@ -8691,14 +8702,14 @@ type
     /// apply a specified event over all items stored in this dictionnary
     // - would browse the list in the adding order
     // - returns the number of times OnEach has been called
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function ForEach(const OnEach: TSynDictionaryEvent): integer; overload;
     /// apply a specified event over matching items stored in this dictionnary
     // - would browse the list in the adding order, comparing each key and/or
     // value item with the supplied comparison functions and aKey/aValue content
     // - returns the number of times OnMatch has been called, i.e. how many times
     // KeyCompare(aKey,Keys[#])=0 or ValueCompare(aValue,Values[#])=0
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function ForEach(const OnMatch: TSynDictionaryEvent;
       KeyCompare,ValueCompare: TDynArraySortCompare; const aKey,aValue): integer; overload;
     /// search aArrayValue item in a dynamic-array value associated via aKey
@@ -8707,14 +8718,14 @@ type
     // to delete any aArrayValue match in the associated dynamic array
     // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
     // not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function FindInArray(const aKey, aArrayValue): boolean;
     /// add aArrayValue item within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
     // - would search for aKey as primary key, then use TDynArray.Add
     // to add aArrayValue to the associated dynamic array
     // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function AddInArray(const aKey, aArrayValue): boolean;
     /// add once aArrayValue within a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
@@ -8722,7 +8733,7 @@ type
     // TDynArray.FindAndAddIfNotExisting to add once aArrayValue to the
     // associated dynamic array
     // - returns FALSE if Values is not a tkDynArray, or if aKey was not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function AddOnceInArray(const aKey, aArrayValue): boolean;
     /// clear aArrayValue item of a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
@@ -8730,7 +8741,7 @@ type
     // to delete any aArrayValue match in the associated dynamic array
     // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
     // not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function DeleteInArray(const aKey, aArrayValue): boolean;
     /// replace aArrayValue item of a dynamic-array value associated via aKey
     // - expect the stored value to be a dynamic array itself
@@ -8738,7 +8749,7 @@ type
     // to delete any aArrayValue match in the associated dynamic array
     // - returns FALSE if Values is not a tkDynArray, or if aKey or aArrayValue were
     // not found
-    // - this method is thread-safe, since it would lock the instance
+    // - this method is thread-safe, since it will lock the instance
     function UpdateInArray(const aKey, aArrayValue): boolean;
     /// serialize the content as a "key":value JSON object
     procedure SaveToJSON(W: TTextWriter; EnumSetsAsText: boolean=false); overload;
@@ -10402,7 +10413,7 @@ function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
 // - reverse function of Int64ToHex()
 function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload;
     {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
-    // inline gives an error under release conditions with FPC
+    { inline gives an error under release conditions with FPC }
 
 /// fast conversion from hexa chars into a cardinal
 // - reverse function of Int64ToHex()
@@ -10420,7 +10431,12 @@ function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - will trim any right-sided '=' unsignificant characters, and replace
 // '+' or '/' by '_' or '-'
-function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
+function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+
+/// fast conversion from a binary buffer into Base64-like URI-compatible encoded text
+// - will trim any right-sided '=' unsignificant characters, and replace
+// '+' or '/' by '_' or '-'
+function BinToBase64URI(const Bin: RawByteString): RawUTF8; overload;
 
 /// conversion from any Base64 encoded value into URI-compatible encoded text
 // - will trim any right-sided '=' unsignificant characters, and replace
@@ -13678,7 +13694,7 @@ function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind=twJ
 // - will instantiate either an Integer, Int64, currency, double (if AllowDouble
 // is true or dvoAllowDoubleValue is in TryCustomVariants^) or string value (as
 // RawUTF8), guessing the best numeric type according to the textual content,
-//  and string in all other cases, except if TryCustomVariants points to some
+// and string in all other cases, except if TryCustomVariants points to some
 // options (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known
 // object or array, either encoded as strict-JSON (i.e. {..} or [..]),
 // or with some extended (e.g. BSON) syntax
@@ -25407,6 +25423,12 @@ begin
   Base64ToURI(result);
 end;
 
+function BinToBase64URI(const Bin: RawByteString): RawUTF8; overload;
+begin
+  result := BinToBase64(pointer(Bin),length(Bin));
+  Base64ToURI(result);
+end;
+
 function BinToBase64WithMagic(const s: RawByteString): RawUTF8;
 var len: integer;
 begin
@@ -34424,7 +34446,6 @@ begin
   end else
     result := false;
 end;
-
 
 {$else}
 
@@ -48843,15 +48864,14 @@ begin
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
-procedure JSONDecode(var JSON: RawUTF8;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false);
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
+  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
 begin
   JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
 function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
-  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char;
+  var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
 var n, i: PtrInt;
     Name, Value: PUTF8Char;
     EndOfObject: AnsiChar;
@@ -48919,7 +48939,7 @@ begin
 end;
 
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
-  HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char;
+  HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
 var n: PtrInt;
     Name, Value: PUTF8Char;
     EndOfObject: AnsiChar;
@@ -53505,7 +53525,8 @@ var i: integer;
     now: cardinal;
 begin
   result := 0;
-  if fSafe.Padding[DIC_TIMESEC].VInteger=0 then // nothing in fTimeOut[]
+  if (fSafe.Padding[DIC_TIMECOUNT].VInteger=0) or
+     (fSafe.Padding[DIC_TIMESEC].VInteger=0 then // nothing in fTimeOut[]
     exit;
   now := GetTickCount64 shr 10;
   if fSafe.Padding[DIC_TIMETIX].VInteger=integer(now) then
@@ -59195,6 +59216,38 @@ begin
     Add(Names[i],Values[i]);
 end;
 
+function TSynNameValue.InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean): boolean;
+var N,V: PUTF8Char;
+    nam,val: RawUTF8;
+    c: integer;
+    EndOfObject: AnsiChar;
+begin
+  result := false;
+  Init(aCaseSensitive);
+  if JSON=nil then
+    exit;
+  if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  if JSON^<>'{' then
+    exit;
+  repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  c := JSONObjectPropCount(JSON);
+  if c<=0 then
+    exit;
+  fDynArray.SetCapacity(c);
+  repeat
+    N := GetJSONPropName(JSON);
+    if N=nil then
+      exit;
+    V := GetJSONFieldOrObjectOrArray(JSON,nil,@EndOfObject,true);
+    if V=nil then
+      exit;
+    SetString(nam,N,StrLen(N));
+    SetString(val,V,StrLen(V));
+    Add(nam,val);
+  until EndOfObject='}';
+  result := true;
+end;
+
 procedure TSynNameValue.Init(aCaseSensitive: boolean);
 begin
   // release dynamic arrays memory before FillcharFast()
@@ -59357,6 +59410,27 @@ begin
   end;
 end;
 
+function TSynNameValue.AsJSON: RawUTF8;
+var i: integer;
+begin
+  with TTextWriter.CreateOwnedStream do
+  try
+    Add('{');
+    for i := 0 to Count-1 do
+    with List[i] do begin
+      AddFieldName(pointer(Name),length(Name));
+      Add('"');
+      AddJSONEscape(pointer(Value),length(Value));
+      Add('"',',');
+    end;
+    CancelLastComma;
+    Add('}');
+    SetText(result);
+  finally
+    Free;
+  end;
+end;
+
 procedure TSynNameValue.AsNameValues(out Names,Values: TRawUTF8DynArray);
 var i: integer;
 begin
@@ -59430,7 +59504,7 @@ begin
     inc(result);
   end;
 end;
-{$endif}
+{$endif NOVARIANTS}
 
 
 { TSynAuthenticationAbstract }
