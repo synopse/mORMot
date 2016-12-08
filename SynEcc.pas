@@ -225,7 +225,7 @@ function ecdsa_sign(const priv: TECCPrivateKey; const hash: TECCHash;
 // - using secp256r1 curve, i.e. NIST P-256, or OpenSSL prime256v1
 // - directly low-level access to the statically linked easy-ecc library function
 // - returns true if the signature is valid
-// - returns false if it is invalid, or if ecc_available=false
+// - returns false if sign is invalid, or if ecc_available=false
 // - this function is thread-safe and does not perform any memory allocation
 function ecdsa_verify(const pub: TECCPublicKey; const hash: TECCHash;
   const sign: TECCSignature): boolean; cdecl;
@@ -1467,6 +1467,44 @@ type
     property Authorized: TECDHEAuths read fAuthorized write fAuthorized;
   end;
 
+{$ifndef NOVARIANTS}
+
+  /// implements JSON Web Tokens using 'ES256' algorithm
+  // - i.e. ECDSA using the P-256 curve and the SHA-256 hash algorithm
+  // - as defined in https://tools.ietf.org/html/rfc7518 paragraph 3.4
+  // - since ECDSA signature and verification is CPU consumming (under x86, it
+  // takes 2-3 ms, but only 0.3 ms on x64) you may enable CacheTimeoutSeconds
+  TJWTES256 = class(TJWTAbstract)
+  protected
+    fCertificate: TECCCertificate;
+    fOwnCertificate: boolean;
+    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
+      const signature: RawByteString); override;
+  public
+    /// initialize the JWT processing instance using ECDSA P-256 algorithm
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - the supplied ECC certificate should be a TECCCertificate storing the
+    // public key needed for Verify(), or a TECCCertificateSecret storing also
+    // the private key required by Compute()
+    // - aCertificate is owned by this instance if property OwnCertificate is true
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(aCertificate: TECCCertificate; aClaims: TJWTClaims;
+      const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
+      aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8=''); reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// access to the associated TECCCertificate instance
+    // - which may be a TECCCertificateSecret for Compute() private key
+    property Certificate: TECCCertificate read fCertificate;
+    /// if the associated TECCCertificate is to be owned by this instance
+    property OwnCertificate: boolean read fOwnCertificate write fOwnCertificate;
+  end;
+
+{$endif NOVARIANTS}
 
 const
   /// file extension of the JSON file storing a TECCCertificate public key
@@ -3876,6 +3914,59 @@ begin
     result := sprBadRequest;
 end;
 
+
+{$ifndef NOVARIANTS}
+
+{ TJWTES256 }
+
+constructor TJWTES256.Create(aCertificate: TECCCertificate;
+  aClaims: TJWTClaims; const aAudience: array of RawUTF8;
+  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
+  aIDObfuscationKey: RawUTF8);
+begin
+  if not aCertificate.CheckCRC then
+    raise EJWTException.CreateUTF8('%.Create(aCertificate?)',[self]);
+  inherited Create('ES256',aClaims,aAudience,aExpirationMinutes,
+    aIDIdentifier,aIDObfuscationKey);
+  fCertificate := aCertificate;
+end;
+
+destructor TJWTES256.Destroy;
+begin
+  if fOwnCertificate then
+    fCertificate.Free;
+  inherited;
+end;
+
+procedure TJWTES256.CheckSignature(var JWT: TJWTContent;
+  const payload64: RawUTF8; const signature: RawByteString);
+var sha: TSHA256;
+    hash: TSHA256Digest;
+begin
+  JWT.result := jwtInvalidSignature;
+  if length(signature)<>sizeof(TECCSignature) then
+    exit;
+  sha.Full(pointer(payload64),length(payload64),hash);
+  if ecdsa_verify(fCertificate.fContent.Signed.PublicKey,hash,PECCSignature(signature)^) then
+    JWT.result := jwtValid;
+end;
+
+function TJWTES256.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+var sha: TSHA256;
+    hash: TSHA256Digest;
+    sign: TECCSignature;
+begin
+  if not fCertificate.InheritsFrom(TECCCertificateSecret) or
+     not TECCCertificateSecret(fCertificate).HasSecret then
+    raise EECCException.CreateUTF8('%.ComputeSignature expects % (%) to hold '+
+      'a private key',[self,fCertificate,fCertificate.Serial]);
+  sha.Full(pointer(payload64),length(payload64),hash);
+  if not ecdsa_sign(TECCCertificateSecret(fCertificate).fPrivateKey,hash,sign) then
+    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign failed',[self]);
+  result := BinToBase64URI(@sign,sizeof(sign));
+end;
+
+{$endif NOVARIANTS}
 
 initialization
   assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers

@@ -9085,10 +9085,17 @@ procedure TTestCryptographicRoutines._JWT;
       check(jwt.reg[jrcIssuer]='joe');
       check((jwt.reg[jrcJWTID]<>'')=(jrcJWTID in one.Claims));
     end;
+    if (one.Algorithm<>'none') and (t[length(t)] in ['1'..'9','B'..'Z','b'..'z']) then begin
+      dec(t[length(t)]); // invalidate signature
+      one.Verify(t,jwt);
+      check(jwt.result<>jwtValid);
+    end;
     one.Free;
   end;
-var j: TJWTAbstract;
+var i: integer;
+    j: TJWTAbstract;
     jwt: TJWTContent;
+    secret: TECCCertificateSecret;
 begin
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime],[],60));
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
@@ -9110,6 +9117,13 @@ begin
     'ONFh7hgQ',jwt); // altered one char in signature
   check(jwt.result=jwtInvalidSignature);
   j.Free;
+  for i := 1 to 10 do begin
+    secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
+    test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
+    test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
+    test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
+    secret.Free;
+  end;
 end;
 {$endif NOVARIANTS}
 
