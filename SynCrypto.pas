@@ -1817,14 +1817,20 @@ type
     // if the value supplied starts with '[', it is expected to be an array
     // of text values, already serialized as a JSON array of strings
     // - this method is thread-safe
-    function Compute(const DataNameValue: array of const;
-      const Issuer: RawUTF8=''; const Subject: RawUTF8='';
-      const Audience: RawUTF8=''; NotBefore: TDateTime=0;
+    function Compute(const DataNameValue: array of const; const Issuer: RawUTF8='';
+      const Subject: RawUTF8=''; const Audience: RawUTF8=''; NotBefore: TDateTime=0;
       ExpirationMinutes: integer=0): RawUTF8;
+    /// compute a HTTP Authorization header containing a JWT for a given payload
+    // - just a wrapper around Compute(), returned the HTTP header value:
+    // $ Authorization: <HttpAuthorizationHeader>
+    // - this method is thread-safe
+    function ComputeAuthorizationHeader(const DataNameValue: array of const;
+      const Issuer: RawUTF8=''; const Subject: RawUTF8=''; const Audience: RawUTF8='';
+      NotBefore: TDateTime=0; ExpirationMinutes: integer=0): RawUTF8;
     /// check a JWT value, and its signature
     // - will validate all expected Claims, and the associated signature
     // - verification state is returned in JWT.result (jwtValid for a valid JWT),
-    // together with all parsed payload information 
+    // together with all parsed payload information
     // - supplied JWT is transmitted e.g. in HTTP header:
     // $ Authorization: Bearer <Token>
     // - this method is thread-safe
@@ -1832,7 +1838,7 @@ type
     /// check a HTTP Authorization header value as JWT, and its signature
     // - will validate all expected Claims, and the associated signature
     // - verification state is returned in JWT.result (jwtValid for a valid JWT),
-    // together with all parsed payload information 
+    // together with all parsed payload information
     // - expect supplied HttpAuthorizationHeader as transmitted in HTTP header:
     // $ Authorization: <HttpAuthorizationHeader>
     // - this method is thread-safe
@@ -9530,6 +9536,13 @@ begin
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   payload := BinToBase64URI(payload);
   result := fHeaderB64+payload+'.'+ComputeSignature(payload);
+end;
+
+function TJWTAbstract.ComputeAuthorizationHeader(const DataNameValue: array of const;
+  const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
+  ExpirationMinutes: integer): RawUTF8;
+begin
+  result := 'Bearer '+Compute(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
 end;
 
 function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
