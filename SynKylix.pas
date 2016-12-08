@@ -48,6 +48,8 @@ unit SynKylix;
 
 }
 
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
+
 interface
 
 uses

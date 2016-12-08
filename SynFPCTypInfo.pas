@@ -56,6 +56,8 @@ interface
 {$MODESWITCH AdvancedRecords}
 {$inline on}
 {$h+}
+{$r-} 
+{$q-} 
 
 uses
   SysUtils,
