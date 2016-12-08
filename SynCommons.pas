@@ -40008,7 +40008,8 @@ end;
 
 procedure TDocVariantData.InitFast(InitialCapacity: integer; aKind: TDocVariantKind);
 begin
-  Init(JSON_OPTIONS_FAST,aKind);
+  InitFast;
+  VKind := aKind;
   if aKind=dvObject then
     SetLength(VName,InitialCapacity);
   SetLength(VValue,InitialCapacity);
