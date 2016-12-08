@@ -39718,7 +39718,10 @@ end;
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
   Status: integer; Handle304NotModified: boolean; const FileName: TFileName);
 begin
-  Returns(Blob,Status,GetMimeContentTypeHeader(Blob,FileName),Handle304NotModified);
+  if Call.OutHead<>'' then
+    Call.OutHead := Call.OutHead+#13#10;
+  Call.OutHead := Call.OutHead+GetMimeContentTypeHeader(Blob,FileName);
+  Returns(Blob,Status,Call.OutHead,Handle304NotModified);
 end;
 
 procedure TSQLRestServerURIContext.ReturnFile(const FileName: TFileName;
