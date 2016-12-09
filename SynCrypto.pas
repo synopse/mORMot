@@ -1753,7 +1753,7 @@ type
   TJWTContentDynArray = array of TJWTContent;
 
   /// available options for TJWTAbstract process
-  TJWTOption = (joAllowUnexpectedClaims, joAllowUnexpectedAudience,
+  TJWTOption = (joHeaderParse, joAllowUnexpectedClaims, joAllowUnexpectedAudience,
     joNoJwtIDGenerate, joNoJwtIDCheck, joDoubleInData);
   /// store options for TJWTAbstract process
   TJWTOptions = set of TJWTOption;
@@ -9528,6 +9528,9 @@ begin
   inherited;
 end;
 
+const
+  JWT_MAXSIZE = 4096; // coherent with HTTP headers limitations
+
 function TJWTAbstract.Compute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
   ExpirationMinutes: integer): RawUTF8;
@@ -9536,6 +9539,8 @@ begin
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   payload := BinToBase64URI(payload);
   result := fHeaderB64+payload+'.'+ComputeSignature(payload);
+  if length(result)>JWT_MAXSIZE then
+    raise EJWTException.CreateUTF8('%.Compute oversize: len=%',[self,length(result)]);
 end;
 
 function TJWTAbstract.ComputeAuthorizationHeader(const DataNameValue: array of const;
@@ -9639,7 +9644,7 @@ end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
   out payload64: RawUTF8; out signature: RawByteString);
-var i,j,c,len: integer;
+var i,j,c,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
     wasString: boolean;
@@ -9648,23 +9653,37 @@ var i,j,c,len: integer;
     id: TSynUniqueIdentifierBits;
     value: variant;
     payload, signature64: RawUTF8;
+    head,aud: TDocVariantData;
 begin
   JWT.data.InitFast(0,dvObject);
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
-  len := length(fHeaderB64);
-  if (length(Token)<=len) or not CompareMem(pointer(fHeaderB64),pointer(Token),len) then begin
-    JWT.result := jwtInvalidAlgorithm;
-    exit; // JWT should begin with exact fHeaderB64 content (including "alg")
+  JWT.result := jwtInvalidAlgorithm;
+  c := length(Token);
+  if joHeaderParse in fOptions then begin
+    len := PosEx('.',Token);
+    if (len=0) or (len>512) then
+      exit;
+    signature64 := copy(Token,1,len-1);
+    Base64FromURI(signature64);
+    signature := Base64ToBin(signature64);
+    if (head.InitJSONInPlace(pointer(signature),JSON_OPTIONS_FAST)=nil) or
+       (head.U['alg']<>fAlgorithm) or
+       (head.GetAsRawUTF8('typ',payload) and (payload<>'JWT')) then
+      exit;
+  end else begin
+    len := length(fHeaderB64); // fast direct compare of fHeaderB64 (including "alg")
+    if (c<=len) or not CompareMem(pointer(fHeaderB64),pointer(Token),len) then
+      exit;
   end;
   JWT.result := jwtWrongFormat;
+  if c>JWT_MAXSIZE Then
+    exit;
   i := PosEx('.',Token,len+1);
-  if i=0 then
+  if (i=0) or (i-len>2700) then
     exit;
   payload64 := copy(Token,len+1,i-len-1);
   signature64 := copy(Token,i+1,maxInt);
-  if (length(payload64)>2700) or (length(signature64)>=2048) then
-    exit; // too much data kills the data
   Base64FromURI(signature64);
   signature := Base64ToBin(signature64);
   if (signature='') and (signature64<>'') then
@@ -9714,29 +9733,29 @@ begin
               end;
           jrcAudience:
             if JWT.reg[jrcAudience][1]='[' then begin
-              with _Safe(_JsonFast(JWT.reg[jrcAudience]))^ do
-                if Count=0 then
-                  exit else
-                  for j := 0 to Count-1 do begin
-                    c := FindRawUTF8(fAudience,VariantToUTF8(Values[j]));
-                    if c<0 then begin
-                      JWT.result := jwtUnknownAudience;
-                      if not (joAllowUnexpectedAudience in fOptions) then
-                        exit;
-                    end else
-                      include(JWT.audience,c);
-                  end;
+              aud.InitJSON(JWT.reg[jrcAudience],JSON_OPTIONS_FAST);
+              if aud.Count=0 then
+                exit else
+                for j := 0 to aud.Count-1 do begin
+                  a := FindRawUTF8(fAudience,VariantToUTF8(aud.Values[j]));
+                  if a<0 then begin
+                    JWT.result := jwtUnknownAudience;
+                    if not (joAllowUnexpectedAudience in fOptions) then
+                      exit;
+                  end else
+                    include(JWT.audience,a);
+                end;
             end else begin
-              c := FindRawUTF8(fAudience,JWT.reg[jrcAudience]);
-              if c<0 then begin
+              a := FindRawUTF8(fAudience,JWT.reg[jrcAudience]);
+              if a<0 then begin
                 JWT.result := jwtUnknownAudience;
                 if not (joAllowUnexpectedAudience in fOptions) then
                   exit;
               end else
-                include(JWT.audience,c);
+                include(JWT.audience,a);
             end;
           end;
-          len := 0;
+          len := 0; // don't add to JWT.data
           break;
         end;
       if len=0 then

@@ -9065,10 +9065,15 @@ procedure TTestCryptographicRoutines._JWT;
       i: integer;
   begin
     t := one.Compute(['http://example.com/is_root',true],'joe');
+    check(t<>'');
     check(one.CacheTimeoutSeconds=0);
+    one.Options := one.Options+[joHeaderParse];
+    one.Verify(t,jwt);
+    check(jwt.result=jwtValid);
+    check(jwt.reg[jrcIssuer]='joe');
+    one.Options := one.Options-[joHeaderParse];
     one.CacheTimeoutSeconds := 60;
     check(one.CacheTimeoutSeconds=60);
-    check(t<>'');
     one.Verify(t,jwt);
     check(jwt.result=jwtValid);
     check(jwt.reg[jrcExpirationTime]<>'');
