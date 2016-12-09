@@ -127,6 +127,9 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
+/// returns the current UTC time, as Unix Epoch seconds
+function GetUnixUTC: cardinal;
+
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
@@ -204,14 +207,14 @@ begin
   Year := YYear+(JulianDN*100);
 end;
 
-procedure EpochToLocal(epoch: integer; out year,month,day,hour,minute,second: Word);
+procedure EpochToLocal(epoch: cardinal; out year,month,day,hour,minute,second: Word);
 begin
-  JulianToGregorian((Epoch div SecsPerDay)+c1970,year,month,day);
-  Epoch := abs(Epoch mod SecsPerDay);
-  Hour := Epoch div SecsPerHour;
-  Epoch := Epoch mod SecsPerHour;
-  Minute := Epoch div SecsPerMin;
-  Second := Epoch mod SecsPerMin;
+  JulianToGregorian((epoch div SecsPerDay)+C1970,year,month,day);
+  epoch := abs(epoch mod SecsPerDay);
+  Hour := epoch div SecsPerHour;
+  epoch := epoch mod SecsPerHour;
+  Minute := epoch div SecsPerMin;
+  Second := epoch mod SecsPerMin;
 end;
 
 function GetNowUTC: TDateTime;
@@ -225,8 +228,16 @@ procedure GetNowUTCSystem(var result: TSystemTime);
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,result.year,result.month,result.day,result.hour,result.Minute,result.Second);
+  EpochToLocal(tz.tv_sec,
+    result.year,result.month,result.day,result.hour,result.Minute,result.Second);
   result.MilliSecond := tz.tv_usec div 1000;
+end;
+
+function GetUnixUTC: cardinal;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  result := tz.tv_sec;
 end;
 
 function GetTickCount: cardinal;
@@ -253,17 +264,20 @@ function mach_absolute_time: UInt64;
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
   cdecl external 'libc.dylib' name 'mach_timebase_info';
 
+var
+  mach_timeinfo: TTimebaseInfoData;
+  mach_timecoeff: double;
+
 procedure QueryPerformanceCounter(var Value: Int64);
-var info: TTimebaseInfoData;
 begin // returns time in nano second resolution
-  mach_timebase_info(info);
-  if info.Denom=1 then
-    if info.Numer=1 then
+  Value := mach_absolute_time;
+  if mach_timeinfo.Denom=1 then
+    if mach_timeinfo.Numer=1 then
       // seems to be the case on Intel CPUs
-      Value := mach_absolute_time else
-      Value := mach_absolute_time*info.Numer else
+      exit else
+      Value := Value*mach_timeinfo.Numer else
     // use floating point to avoid potential overflow
-    Value := round(mach_absolute_time*(info.Numer/info.Denom));
+    Value := round(Value*mach_timecoeff);
 end;
 
 function QueryPerformanceFrequency(var Value: Int64):boolean;
@@ -281,13 +295,14 @@ end;
 {$else}
 
 {$ifdef BSD}
-function clock_gettime(ID:cardinal;r:ptimespec): Integer;
+function clock_gettime(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_gettime';
-function clock_getres(ID:cardinal;r:ptimespec): Integer;
+function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
 const
-  CLOCK_MONOTONIC=4;
-  CLOCK_MONOTONIC_TICKCOUNT=CLOCK_MONOTONIC;
+  CLOCK_MONOTONIC = 4;
+  CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
+  CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
 {$endif}
 
 function GetTickCount64: Int64;
@@ -304,7 +319,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-function QueryPerformanceFrequency(var Value: Int64):boolean;
+function QueryPerformanceFrequency(var Value: Int64): boolean;
 var r : TTimeSpec;
     FIsHighResolution : boolean;
 begin
@@ -372,8 +387,6 @@ begin
   SysUtils.Sleep(ms);
 end;
 
-{$ifndef BSD}
-
 procedure GetKernelRevision;
 var uts: UtsName;
     P: PAnsiChar;
@@ -392,16 +405,22 @@ var uts: UtsName;
       inc(P);
   end;
 begin
-  fpuname(uts);
-  P := @uts.release;
-  KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-  if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+  if fpuname(uts)=0 then begin
+    P := @uts.release;
+    KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
+    {$ifndef BSD}
+    if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
+      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
+      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+    {$endif BSD}
+  end;
+  {$ifdef Darwin}
+  mach_timebase_info(mach_timeinfo);
+  mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
+  {$endif}
 end;
 
 initialization
   GetKernelRevision;
-{$endif BSD}
 {$endif Linux}
 end.

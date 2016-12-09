@@ -2258,7 +2258,7 @@ begin
   P := pointer(protocol);
   if P<>nil then
     repeat
-      subprot := trim(GetNextItem(P));
+      GetNextItemTrimed(P,',',subprot);
       prot := fProtocols.CloneByName(subprot,uri);
     until (P=nil) or (prot<>nil) else
     // if no protocol is specified, try to match by URI

@@ -121,6 +121,9 @@ function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
+/// returns the current UTC time, as Unix Epoch seconds
+function GetUnixUTC: cardinal;
+
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
@@ -272,6 +275,13 @@ var SystemTime: TSystemTime;
 begin
   GetNowUTCSystem(SystemTime);
   result := SystemTimeToDateTime(SystemTime);
+end;
+
+function GetUnixUTC: cardinal;
+var tz: TTimeVal;
+begin
+  gettimeofday(tz,nil);
+  result := tz.tv_sec;
 end;
 
 procedure GetNowUTCSystem(var result: TSystemTime);

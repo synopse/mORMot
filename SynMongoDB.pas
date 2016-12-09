@@ -3669,7 +3669,7 @@ begin // this is a bit complex, but we have to avoid any collision
     Tick := GetTickCount shr 8;
     if LastTick<>Tick then begin
       LastTick := Tick; // huge speed improvement when caching time
-      CurrentTime := bswap32(DateTimeToUnixTime(NowUTC));
+      CurrentTime := bswap32(UnixTimeUTC);
       if CurrentTime<>UnixCreateTime then begin
         UnixCreateTime := CurrentTime;
         LatestCounterOverflowUnixCreateTime := UnixCreateTime;

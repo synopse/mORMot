@@ -9479,6 +9479,8 @@ type
   TNameValuePUTF8Char = record
     Name: PUTF8Char;
     Value: PUTF8Char;
+    NameLen: integer;
+    ValueLen: integer;
   end;
   /// used e.g. by JSONDecode() overloaded function to returns name/value pairs
   TNameValuePUTF8CharDynArray = array of TNameValuePUTF8Char;
@@ -11710,13 +11712,21 @@ function DateTimeToHTTPDate(UTCDateTime: TDateTime): RawUTF8;
 // - useful for direct on screen logging e.g.
 function TimeToString: RawUTF8;
 
-/// convert a second-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
+/// convert a second-based c-encoded time as TDateTime
+//  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
 function UnixTimeToDateTime(const UnixTime: Int64): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// convert a TDateTime into a second-based c-encoded time (from Unix epoch 1/1/1970)
+/// convert a TDateTime into a second-based c-encoded time
+//  - i.e. TDateTime into number of seconds elapsed since Unix epoch 1/1/1970
 function DateTimeToUnixTime(const AValue: TDateTime): Int64;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// returns the current UTC date/time as a second-based c-encoded time
+//  - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
+// - faster than NowUTC, on Windows or Unix platforms
+function UnixTimeUTC: cardinal;
+  {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixTime: Int64): TDateTime;
@@ -16829,7 +16839,6 @@ type
   // and digital signature
   TSynUniqueIdentifierGenerator = class(TSynPersistent)
   protected
-    fLastTix: cardinal;
     fUnixCreateTime: cardinal;
     fLatestCounterOverflowUnixCreateTime: cardinal;
     fIdentifier: TSynUniqueIdentifierProcess;
@@ -25249,7 +25258,7 @@ begin
 end;
 
 const
-  b64: array[0..63] of AnsiChar =
+  b64enc: array[0..63] of AnsiChar =
     'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
 function Base64EncodeMain(rp, sp: PAnsiChar; len: cardinal): integer;
@@ -25261,10 +25270,10 @@ begin
   result := len div 3;
   for i := 1 to result do begin
     c := ord(sp[0]) shl 16 + ord(sp[1]) shl 8 + ord(sp[2]);
-    rp[0] := b64[(c shr 18) and $3f];
-    rp[1] := b64[(c shr 12) and $3f];
-    rp[2] := b64[(c shr 6) and $3f];
-    rp[3] := b64[c and $3f];
+    rp[0] := b64enc[(c shr 18) and $3f];
+    rp[1] := b64enc[(c shr 12) and $3f];
+    rp[2] := b64enc[(c shr 6) and $3f];
+    rp[3] := b64enc[c and $3f];
     inc(rp,4);
     inc(sp,3);
   end;
@@ -25283,11 +25292,11 @@ asm // eax=rp edx=sp ecx=len - pipeline optimized version by AB
         imul    edx
         mov     eax, edx
         sub     eax, ecx
-        mov     edi, offset b64
+        mov     edi, offset b64enc
         mov     ebp, eax
         push    eax
         jz      @z
-        // edi=b64 ebx=sp esi=rp ebp=len div 3
+        // edi=b64enc[] ebx=sp esi=rp ebp=len div 3
         xor     eax, eax
 @1:    // read 3 bytes from sp
         movzx   edx, byte ptr[ebx]
@@ -25334,16 +25343,16 @@ begin
   case len of
     1: begin
       c := ord(sp[0]) shl 4;
-      rp[0] := b64[(c shr 6) and $3f];
-      rp[1] := b64[c and $3f];
+      rp[0] := b64enc[(c shr 6) and $3f];
+      rp[1] := b64enc[c and $3f];
       rp[2] := '=';
       rp[3] := '=';
     end;
     2: begin
       c := ord(sp[0]) shl 10 + ord(sp[1]) shl 2;
-      rp[0] := b64[(c shr 12) and $3f];
-      rp[1] := b64[(c shr 6) and $3f];
-      rp[2] := b64[c and $3f];
+      rp[0] := b64enc[(c shr 12) and $3f];
+      rp[1] := b64enc[(c shr 6) and $3f];
+      rp[2] := b64enc[c and $3f];
       rp[3] := '=';
     end;
   end;
@@ -25419,8 +25428,8 @@ begin
   append := 4-(len and 3);
   if append<>4 then begin // add unsignificant trailing '=' characters
     SetLength(base64,len+append);
-    for i := len+1 to len+append do
-      base64[i] := '=';
+    for i := len to len+append-1 do
+      PByteArray(base64)[i] := ord('=');
   end;
 end;
 
@@ -25461,6 +25470,7 @@ end;
 var
   /// a conversion table from Base64 text into binary data
   // - used by Base64ToBin/IsBase64 functions
+  // - contains -1 for invalid char, -2 for '=', 0..63 for b64enc[] chars
   ConvertBase64ToBin: array[AnsiChar] of shortint;
 
 function IsBase64(sp: PAnsiChar; len: PtrInt): boolean;
@@ -25473,8 +25483,8 @@ begin
     if ConvertBase64ToBin[sp[i]]<0 then
       exit;
   inc(sp,len-4);
-  if (ConvertBase64ToBin[sp[0]]=-1) or // -2 = '=' is allowed here
-     (ConvertBase64ToBin[sp[1]]=-1) or (ConvertBase64ToBin[sp[2]]=-1) or (ConvertBase64ToBin[sp[3]]=-1) then
+  if (ConvertBase64ToBin[sp[0]]=-1) or (ConvertBase64ToBin[sp[1]]=-1) or
+     (ConvertBase64ToBin[sp[2]]=-1) or (ConvertBase64ToBin[sp[3]]=-1) then
       exit;
   result := true; // layout seems correct
 end;
@@ -25667,14 +25677,10 @@ begin
 end;
 
 procedure Base64ToBin(sp: PAnsiChar; len: PtrInt; var result: TSynTempBuffer);
-var resultLen: PtrInt;
 begin
-  resultLen := Base64ToBinLength(sp,len);
-  if resultLen=0 then
-    result.Init(0) else begin
-    result.Init(resultLen);
+  result.Init(Base64ToBinLength(sp,len));
+  if result.len>0 then
     Base64Decode(sp,result.buf,len shr 2);
-  end;
 end;
 
 function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
@@ -30017,7 +30023,7 @@ end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
   const PropNamesToIgnore: array of RawUTF8): RawUTF8;
-var i,j, NameLen: integer;
+var i,j: integer;
     sep: AnsiChar;
     Params: TNameValuePUTF8CharDynArray;
 begin
@@ -30028,19 +30034,19 @@ begin
       AddString(URIName);
       if (JSONDecode(ParametersJSON,Params,true)<>nil) and (Params<>nil) then begin
         sep := '?';
-        for i := 0 to High(Params) do begin
-          NameLen := StrLen(Params[i].Name);
+        for i := 0 to High(Params) do
+        with Params[i] do begin
           for j := 0 to high(PropNamesToIgnore) do
-            if IdemPropNameU(PropNamesToIgnore[j],Params[i].Name,NameLen) then begin
+            if IdemPropNameU(PropNamesToIgnore[j],Name,NameLen) then begin
               NameLen := 0;
               break;
             end;
           if NameLen=0 then
             continue;
           Add(sep);
-          AddNoJSONEscape(Params[i].Name,NameLen);
+          AddNoJSONEscape(Name,NameLen);
           Add('=');
-          AddString(UrlEncode(Params[i].Value));
+          AddString(UrlEncode(Value));
           sep := '&';
         end;
       end;
@@ -31868,6 +31874,32 @@ function DateTimeToUnixTime(const AValue: TDateTime): Int64;
 begin
   result := Round((AValue - UnixDateDelta) * SecsPerDay);
 end;
+
+const
+  UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
+
+function UnixTimeUTC: cardinal;
+{$ifdef MSWINDOWS}
+var ft: TFileTime;
+{$ifdef CPU64}
+    nano100: Int64Rec;
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  nano100.Lo := ft.dwLowDateTime;
+  nano100.Hi := ft.dwHighDateTime;
+  result := (Int64(nano100)-UnixFileTimeDelta) div 10000000;
+{$else}
+begin
+  GetSystemTimeAsFileTime(ft);
+  result := (Int64(ft)-UnixFileTimeDelta) div 10000000;
+{$endif}
+// assert(Round((NowUTC-UnixDateDelta)*SecsPerDay)-result<2);
+end;
+{$else}
+begin
+  result := GetUnixUTC; // direct retrieval from UNIX API
+end;
+{$endif}
 
 function UnixMSTimeToDateTime(const UnixTime: Int64): TDateTime;
 begin
@@ -48967,7 +48999,7 @@ end;
 function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
 var n: PtrInt;
-    Name, Value: PUTF8Char;
+    field: TNameValuePUTF8Char;
     EndOfObject: AnsiChar;
 begin
   result := nil;
@@ -48979,16 +49011,16 @@ begin
         inc(P);
     inc(P); // jump {
     repeat
-      Name := GetJSONPropName(P);
-      if Name=nil then
+      field.Name := GetJSONPropName(P,@field.NameLen);
+      if field.Name=nil then
         exit;  // invalid JSON content
-      Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,HandleValuesAsObjectOrArray);
+      field.Value := GetJSONFieldOrObjectOrArray(P,nil,@EndOfObject,
+        HandleValuesAsObjectOrArray,true,@field.ValueLen);
       if not(EndOfObject in [',','}']) then
         exit; // invalid item separator
       if n=length(Values) then
         SetLength(Values,n+32);
-      Values[n].Name := Name;
-      Values[n].Value := Value;
+      Values[n] := field;
       inc(n);
     until (P=nil) or (EndOfObject='}');
   end;
@@ -58988,7 +59020,7 @@ begin
     fSnapShotAfterMinutes := 30;
     fSnapshotTimeStamp := 0;
     fSnapshotInsertCount := 0;
-    fRevision := DateTimeToUnixTime(NowUTC) shl 31;
+    fRevision := Int64(UnixTimeUTC) shl 31;
     fKnownRevision := 0;
     fKnownStore := '';
   finally
@@ -59773,18 +59805,14 @@ const // fSafe.Padding[] slots
   
 procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
-var tix, currentTime: cardinal;
+var currentTime: cardinal;
 begin
-  tix := GetTickCount64 shr 8; // retrieve time every 256 ms
+  currentTime := UnixTimeUTC;
   fSafe.Lock;
   try
-    if tix<>fLastTix then begin
-      fLastTix := tix;
-      currentTime := DateTimeToUnixTime(NowUTC);
-      if currentTime>fUnixCreateTime then begin
-        fUnixCreateTime := currentTime;
-        fLastCounter := 0; // reset
-      end;
+    if currentTime>fUnixCreateTime then begin
+      fUnixCreateTime := currentTime;
+      fLastCounter := 0; // reset
     end;
     if fLastCounter=$7fff then begin // collision (unlikely) -> cheat on timestamp
       inc(fUnixCreateTime);
@@ -61317,8 +61345,8 @@ begin
     TwoDigitsHex[i][2] := HexChars[i and $f];
   end;
   FillcharFast(ConvertBase64ToBin,256,255); // invalid value set to -1
-  for i := 0 to high(b64) do
-    ConvertBase64ToBin[b64[i]] := i;
+  for i := 0 to high(b64enc) do
+    ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
   for i := high(B2A) downto 0 do
     if B2A[i]<#128 then
