@@ -17636,6 +17636,7 @@ type
     // - may return false if the correspondig shard is not available any more
     // - may return true, and a TSQLRestHookClient or a TSQLRestHookServer instance
     // with its associated index in TSQLRest.Model.Tables[]
+    // - warning: this method should be protected via StorageLock/StorageUnlock
     function ShardFromID(aID: TID; out aShardTableIndex: integer;
       out aShard: TSQLRest; aOccasion: TSQLOccasion=soSelect;
       aShardIndex: PInteger=nil): boolean; virtual;
@@ -26639,7 +26640,7 @@ var EndOfObject: AnsiChar;
   procedure GetSQLValue(ndx: integer);
   var wasString: boolean;
       res: PUTF8Char;
-      c: integer;
+      resLen, c: integer;
   begin
     res := P;
     if res=nil then begin
@@ -26677,7 +26678,7 @@ var EndOfObject: AnsiChar;
       end;
       else begin
         // handle JSON string, number or false/true in P
-        res := GetJSONField(res,P,@wasString,@EndOfObject);
+        res := GetJSONField(res,P,@wasString,@EndOfObject,@resLen);
         if wasString then begin
           c := PInteger(res)^ and $00ffffff;
           if c=JSON_BASE64_MAGIC then begin
@@ -26690,7 +26691,7 @@ var EndOfObject: AnsiChar;
               Base64MagicToBlob(res+3,FieldValues[ndx]);
             pNonQuoted:}
             else // returned directly as RawByteString
-              Base64ToBin(PAnsiChar(res)+3,StrLen(res+3),RawByteString(FieldValues[ndx]));
+              Base64ToBin(PAnsiChar(res)+3,resLen-3,RawByteString(FieldValues[ndx]));
             end;
           end else begin
             if c=JSON_SQLDATE_MAGIC then begin
@@ -26701,7 +26702,7 @@ var EndOfObject: AnsiChar;
             // regular string content
             if Params=pNonQuoted then
               // returned directly as RawUTF8
-              SetString(FieldValues[ndx],PAnsiChar(res),StrLen(res)) else
+              SetString(FieldValues[ndx],PAnsiChar(res),resLen) else
               { escape SQL strings, cf. the official SQLite3 documentation:
                 "A string is formed by enclosing the string in single quotes (').
                  A single quote within the string can be encoded by putting two
@@ -26720,7 +26721,7 @@ var EndOfObject: AnsiChar;
             FieldValues[ndx] := SmallUInt32UTF8[1];
             FieldTypeApproximation[ndx] := ftaBoolean;
           end else begin
-            SetString(FieldValues[ndx],PAnsiChar(res),StrLen(res));
+            SetString(FieldValues[ndx],PAnsiChar(res),resLen);
             FieldTypeApproximation[ndx] := ftaNumber;
           end;
       end;
@@ -26729,7 +26730,7 @@ var EndOfObject: AnsiChar;
   end;
 
 var FN: PUTF8Char;
-    F: integer;
+    F, FNlen: integer;
     FieldIsRowID: Boolean;
 begin
   FieldCount := 0;
@@ -26750,7 +26751,7 @@ begin
     repeat
       if P=nil then
         break;
-      FN := GetJSONPropName(P);
+      FN := GetJSONPropName(P,@FNlen);
       if (FN=nil) or (P=nil) then
         break; // invalid JSON field name
       FieldIsRowID := IsRowId(FN);
@@ -26760,9 +26761,11 @@ begin
           if EndOfObject in [#0,'}',']'] then
             break else continue;
         end else
-        if ReplaceRowIDWithID then
+        if ReplaceRowIDWithID then begin
           FN := 'ID';
-      SetString(FieldNames[FieldCount],PAnsiChar(FN),StrLen(FN));
+          FNlen := 2;
+        end;
+      SetString(FieldNames[FieldCount],PAnsiChar(FN),FNlen);
       GetSQLValue(FieldCount); // update EndOfObject
       if FieldIsRowID then
         SetID(FieldValues[FieldCount],DecodedRowID);
@@ -39718,9 +39721,11 @@ end;
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
   Status: integer; Handle304NotModified: boolean; const FileName: TFileName);
 begin
-  if Call.OutHead<>'' then
-    Call.OutHead := Call.OutHead+#13#10;
-  Call.OutHead := Call.OutHead+GetMimeContentTypeHeader(Blob,FileName);
+  if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then begin
+    if Call.OutHead<>'' then
+      Call.OutHead := Call.OutHead+#13#10;
+    Call.OutHead := Call.OutHead+GetMimeContentTypeHeader(Blob,FileName);
+  end;
   Returns(Blob,Status,Call.OutHead,Handle304NotModified);
 end;
 
@@ -39737,11 +39742,13 @@ begin
     if Error404Redirect<>'' then
       Redirect(Error404Redirect) else
       Error('',HTTP_NOTFOUND) else begin
-    if Call.OutHead<>'' then
-      Call.OutHead := Call.OutHead+#13#10;
-    if ContentType<>'' then
-      Call.OutHead := Call.OutHead+HEADER_CONTENT_TYPE+ContentType else
-      Call.OutHead := Call.OutHead+GetMimeContentTypeHeader('',FileName);
+    if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then begin
+      if Call.OutHead<>'' then
+        Call.OutHead := Call.OutHead+#13#10;
+      if ContentType<>'' then
+        Call.OutHead := Call.OutHead+HEADER_CONTENT_TYPE+ContentType else
+        Call.OutHead := Call.OutHead+GetMimeContentTypeHeader('',FileName);
+    end;
     Call.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
@@ -43955,7 +43962,7 @@ begin
     fValue.Clear;
     n := R.ReadVarUInt32Array(ID32);
     fValue.Count := abs(n); // faster than fValue.Add() to allocate all at once
-    if n<0 then begin // was wkFakeMarker -> TID were stored as Int64
+    if n<0 then begin // was wkFakeMarker -> TID were stored as VarUInt64
       lastID := 0;
       for i := 0 to -n-1 do begin
         aRecord := fStoredClass.Create;
@@ -43975,7 +43982,7 @@ begin
     for f := 0 to Fields.Count-1 do
       with Fields.List[f], fValue do
         for i := 0 to Count-1 do begin
-          P := SetBinary(TSQLRecord(List[i]),P);
+          P := SetBinary(List[i],P);
           if P=nil then begin
             fValue.Clear; // on error, reset whole
             exit;
@@ -44706,7 +44713,7 @@ begin
   if aMaxShardCount<2 then
     fMaxShardCount := 2 else
     fMaxShardCount := aMaxShardCount;
-  InitShards; // set fShards[], fShardLast and fShardLastID
+  InitShards; // set fShards[], fShardLast, fShardOffset and fShardLastID
   n := length(fShards);
   fShardNextID := (n+fShardOffset)*fShardRange+1;
   SetLength(fShardTableIndex,n);
@@ -44794,26 +44801,21 @@ begin
       if ssoNoDelete in fOptions then
         exit;
   end;
-  EnterCriticalSection(fStorageCriticalSection);
-  try
-    ndx := ((aID-1) div fShardRange)-fShardOffset;
-    if (ndx<=fShardLast) and (fShards[ndx]<>nil) then begin
-      case aOccasion of
-        soUpdate:
-          if (ssoNoUpdateButLastShard in fOptions) and (ndx<>fShardLast) then
-            exit;
-        soDelete:
-          if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
-            exit;
-      end;
-      aShard := fShards[ndx];
-      aShardTableIndex := fShardTableIndex[ndx];
-      if aShardIndex<>nil then
-        aShardIndex^ := ndx;
-      result := true;
+  ndx := ((aID-1) div fShardRange)-fShardOffset;
+  if (ndx<=fShardLast) and (fShards[ndx]<>nil) then begin
+    case aOccasion of
+      soUpdate:
+        if (ssoNoUpdateButLastShard in fOptions) and (ndx<>fShardLast) then
+          exit;
+      soDelete:
+        if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
+          exit;
     end;
-  finally
-    LeaveCriticalSection(fStorageCriticalSection);
+    aShard := fShards[ndx];
+    aShardTableIndex := fShardTableIndex[ndx];
+    if aShardIndex<>nil then
+      aShardIndex^ := ndx;
+    result := true;
   end;
 end;
 
@@ -44874,6 +44876,7 @@ function TSQLRestStorageShard.EngineDeleteWhere(TableModelIndex: integer;
 var i: integer;
     ndx: cardinal;
     id: array of TInt64DynArray; // IDs split per shard
+    idn: TIntegerDynArray;
     sql: RawUTF8;
 begin
   result := false;
@@ -44882,18 +44885,19 @@ begin
   StorageLock(true,'EngineDeleteWhere');
   try
     SetLength(id,fShardLast+1);
+    SetLength(idn,fShardLast+1);
     for i := 0 to high(IDs) do begin
-      ndx := ((IDs[i]-1) div fShardRange)-fShardOffset;
+      ndx := ((IDs[i]-1) div fShardRange)-fShardOffset; // inlined ShardFromID()
       if (ndx>=fShardLast) or (fShards[ndx]=nil) then
         continue;
       if (ssoNoDeleteButLastShard in fOptions) and (ndx<>fShardLast) then
         continue;
-      AddInt64(id[ndx],IDs[i]);
+      AddInt64(id[ndx],idn[ndx],IDs[i]);
     end;
     result := true;
     for i := 0 to high(id) do
       if id[i]<>nil then begin
-        sql := Int64DynArrayToCSV(id[i],length(id[i]),'ID in (',')');
+        sql := Int64DynArrayToCSV(id[i],idn[i],'ID in (',')');
         if not fShards[i].EngineDeleteWhere(fShardTableIndex[i],sql,TIDDynArray(id[i])) then
           result := false;
       end;
@@ -44924,7 +44928,7 @@ var i: integer;
 begin
   result := 0;
   InternalLog('TableRowCount(%) may take a while',[fStoredClass],sllWarning);
-  for i := 0 to high(fShards) do
+  for i := 0 to high(fShards) do // no StorageLock protection to avoid blocking
     if fShards[i]<>nil then
       inc(result,fShards[i].TableRowCount(fStoredClass));
 end;
@@ -46772,9 +46776,8 @@ var P: PPropInfo;
     err: integer;
     E: TSynExtended;
     V64: Int64;
-    PropName: PUTF8Char;
-    PropNameLen: integer;
-    PropValue: PUTF8Char;
+    PropName, PropValue: PUTF8Char;
+    PropNameLen, PropValueLen: integer;
     EndOfObject: AnsiChar;
     Kind: TTypeKind;
     wasString, NestedValid: boolean;
@@ -46918,10 +46921,10 @@ begin
           end;
           '"': begin
             result := From;
-            PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
+            PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
             if (PropValue=nil) or not wasString then
               exit;
-            UTF8DecodeToString(PropValue,StrLen(PropValue),s);
+            UTF8DecodeToString(PropValue,PropValueLen,s);
             Str.Add(s);
             case EndOfObject of
               ']': break;
@@ -46953,10 +46956,10 @@ begin
           end;
           '"': begin
             result := From;
-            PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
+            PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
             if (PropValue=nil) or not wasString then
               exit;
-            SetString(U,PAnsiChar(PropValue),StrLen(PropValue));
+            SetString(U,PAnsiChar(PropValue),PropValueLen);
             utf.Add(U);
             case EndOfObject of
               ']': break;
@@ -46996,16 +46999,15 @@ begin
   repeat
     wasString := false;
     result := From;
-    PropName := GetJSONPropName(From);  // get property name
-    PropNameLen := StrLen(PropName);
+    PropName := GetJSONPropName(From,@PropNameLen);  // get property name
     if (From=nil) or (PropNameLen=0) then
       exit; // invalid JSON content
     if IdemPropName('ClassName',PropName,PropNameLen) then begin
-      // WriteObject() was called with woStoreClassName option -> handle it
+      // WriteObject() was called with woStoreClassName option -> ignore it
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
       if (PropValue=nil) or not wasString or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content
-      continue; // just ignore the field here
+      continue; 
     end;
     if (IsObj in [oSQLRecord,oSQLMany]) and IsRowID(PropName) then begin
       // manual handling of TSQLRecord.ID property unserialization
@@ -47078,8 +47080,8 @@ begin
         inc(From);
     end else begin
 doProp: // normal property value
-      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject
-        {$ifndef NOVARIANTS},Kind=tkVariant{$endif});
+      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject,
+        {$ifdef NOVARIANTS}false{$else}Kind=tkVariant{$endif},true,@PropValueLen);
       if (PropValue=nil) or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content (null has been handled above)
       case Kind of
@@ -47101,7 +47103,7 @@ doProp: // normal property value
       end;
       tkEnumeration: begin
         if wasString then begin // in case enum stored as string
-          V := P^.PropType^.EnumBaseType^.GetEnumNameValue(PropValue);
+          V := P^.PropType^.EnumBaseType^.GetEnumNameValue(PropValue,PropValueLen);
           if V<0 then
             if j2oIgnoreUnknownEnum in Options then
               V := 0 else
@@ -47127,7 +47129,7 @@ doProp: // normal property value
         end;
       {$ifdef FPC}tkAString,{$endif} tkLString: 
         if wasString or (j2oIgnoreStringType in Options) then begin
-          SetString(U,PAnsiChar(PropValue),StrLen(PropValue));
+          SetString(U,PAnsiChar(PropValue),PropValueLen);
           P^.SetLongStrValue(Value,U);
         end else
           exit;
@@ -47135,12 +47137,12 @@ doProp: // normal property value
       tkUString:
         if wasString or (j2oIgnoreStringType in Options) then
           P^.SetUnicodeStrProp(Value,
-            UTF8DecodeToUnicodeString(PropValue,StrLen(PropValue))) else
+            UTF8DecodeToUnicodeString(PropValue,PropValueLen)) else
           exit;
       {$endif}
       tkWString:
         if wasString or (j2oIgnoreStringType in Options) then begin
-          UTF8ToWideString(PropValue,StrLen(PropValue),WS);
+          UTF8ToWideString(PropValue,PropValueLen,WS);
           P^.SetWideStrProp(Value,WS);
         end else
           exit;
@@ -47167,7 +47169,7 @@ doProp: // normal property value
           if wasString then begin
             if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
               inc(PropValue,3); // ignore U+FFF1 pattern
-            P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,0));
+            P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
           end else
             exit else
         if wasString then
@@ -51812,10 +51814,9 @@ begin
     if arg>0 then
     repeat
       if resultAsJSONObject then begin
-        Val := GetJSONPropName(R);
+        Val := GetJSONPropName(R,@ValLen);
         if Val=nil then
           break; // end of JSON object
-        ValLen := StrLen(Val);
         if (arg>0) and not IdemPropName(method^.Args[arg].ParamName^,Val,ValLen) then begin
           arg := method^.ArgIndex(Val,ValLen,false); // only if were not in-order
           if arg<0 then
@@ -51853,7 +51854,7 @@ begin
           IgnoreComma(R);
         end;
         smvBoolean..smvWideString: begin
-          Val := GetJSONField(R,R,@wasString);
+          Val := GetJSONField(R,R,@wasString,nil,@ValLen);
           if (Val=nil) or (wasString<>(vIsString in ValueKindAsm)) then
             if resultAsJSONObject then
               RaiseError('missing or invalid value',[]) else
@@ -51868,14 +51869,14 @@ begin
             2: PWord(V)^     := GetCardinal(Val);
             4: PCardinal(V)^ := GetCardinal(Val);
             end;
-          smvInteger:    PInteger(V)^ := GetInteger(Val);
-          smvInt64:      SetInt64(Val,PInt64(V)^);
+          smvInteger:       PInteger(V)^ := GetInteger(Val);
+          smvInt64:         SetInt64(Val,PInt64(V)^);
           smvDouble,smvDateTime: PDouble(V)^ := GetExtended(Val);
-          smvCurrency:   PInt64(V)^   := StrToCurr64(Val);
-          smvRawUTF8:    SetString(PRawUTF8(V)^,PAnsiChar(Val),StrLen(Val));
-          smvString:     UTF8DecodeToString(Val,StrLen(Val),PString(V)^);
-          smvRawByteString: Base64ToBin(PAnsiChar(Val),StrLen(Val),PRawByteString(V)^);
-          smvWideString: UTF8ToWideString(Val,StrLen(Val),PWideString(V)^);
+          smvCurrency:      PInt64(V)^   := StrToCurr64(Val);
+          smvRawUTF8:       SetString(PRawUTF8(V)^,PAnsiChar(Val),ValLen);
+          smvString:        UTF8DecodeToString(Val,ValLen,PString(V)^);
+          smvRawByteString: Base64ToBin(PAnsiChar(Val),ValLen,PRawByteString(V)^);
+          smvWideString:    UTF8ToWideString(Val,ValLen,PWideString(V)^);
           else RaiseError('ValueType=%',[ord(ValueType)]);
           end;
         end;
@@ -58047,9 +58048,8 @@ function TServiceMethodExecute.ExecuteJson(const Instances: array of pointer;
   Par: PUTF8Char; Res: TTextWriter; ResAsJSONObject: boolean): boolean;
 var a,a1: integer;
     wasString, valid: boolean;
-    Val: PUTF8Char;
-    Name: PUTF8Char;
-    NameLen: integer;
+    Val, Name: PUTF8Char;
+    ValLen, NameLen: integer;
     EndOfObject: AnsiChar;
     ParObjValuesUsed: boolean;
     ParObjValues: array[0..MAX_METHOD_ARGS-1] of PUTF8Char;
@@ -58071,10 +58071,9 @@ begin
         FillCharFast(ParObjValues,(ArgsInLast+1)*sizeof(pointer),0); // := nil
         a1 := ArgsInFirst;
         repeat
-          Name := GetJSONPropName(Par);
+          Name := GetJSONPropName(Par,@NameLen);
           if Name=nil then
             exit; // invalid JSON object in input
-          NameLen := StrLen(Name);
           Val := Par;
           Par := GotoNextJSONItem(Par,1,@EndOfObject);
           for a := a1 to ArgsInLast do
@@ -58132,7 +58131,7 @@ begin
             @JSON_OPTIONS[optVariantCopiedByReference in Options]);
         {$endif}
         smvBoolean..smvWideString: begin
-          Val := GetJSONField(Par,Par,@wasString,@EndOfObject);
+          Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
             exit;  // 'null' will set Val=nil and Par<>nil
           if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
@@ -58148,13 +58147,13 @@ begin
           smvCurrency:
             fInt64s[IndexVar] := StrToCurr64(Val);
           smvRawUTF8:
-            SetString(fRawUTF8s[IndexVar],Val,StrLen(Val));
+            SetString(fRawUTF8s[IndexVar],Val,ValLen);
           smvString:
-            UTF8DecodeToString(Val,StrLen(Val),fStrings[IndexVar]);
+            UTF8DecodeToString(Val,ValLen,fStrings[IndexVar]);
           smvRawByteString:
-            Base64ToBin(PAnsiChar(Val),StrLen(Val),RawByteString(fRawUTF8s[IndexVar]));
+            Base64ToBin(PAnsiChar(Val),ValLen,RawByteString(fRawUTF8s[IndexVar]));
           smvWideString:
-            UTF8ToWideString(Val,StrLen(Val),fWideStrings[IndexVar]);
+            UTF8ToWideString(Val,ValLen,fWideStrings[IndexVar]);
           else exit; // should not happen
           end;
           continue; // here Par=nil or Val=nil is correct

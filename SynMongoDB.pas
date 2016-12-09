@@ -3519,7 +3519,7 @@ begin
       JSON := BSONWriteDocFromJSON(JSON,EndOfObject,Kind,DoNotTryExtendedMongoSyntax);
     end;
     else begin // simple types
-      Value := GetJSONField(JSON,JSON,@wasString,EndOfObject);
+      Value := GetJSONField(JSON,JSON,@wasString,EndOfObject,@ValueLen);
       if JSON=nil then
         JSON := @NULCHAR;
       if Value=nil then begin
@@ -3558,7 +3558,6 @@ begin
         end;
       end;
       // found no numerical value -> check text value
-      ValueLen := StrLen(Value);
       if Base64MagicCheckAndDecode(Value,ValueLen,blob) then
         // recognized '\uFFF0base64encodedbinary' pattern
         BSONWrite(name,pointer(blob),length(blob)) else

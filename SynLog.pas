@@ -736,13 +736,10 @@ type
     fThreadID: TThreadID;
     fThreadLastHash: integer;
     fThreadIndex: integer;
-    {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
-    fThreadHandleExceptionBackup: TSynLog;
-    {$endif}
     fStartTimeStamp: Int64;
-    fStartTimeStampDateTime: TDateTime;
     fCurrentTimeStamp: Int64;
     fFrequencyTimeStamp: Int64;
+    fStartTimeStampDateTime: TDateTime;
     fStreamPositionAfterHeader: cardinal;
     fFileName: TFileName;
     fFileRotationSize: cardinal;
@@ -755,6 +752,9 @@ type
     fCurrentLevel: TSynLogInfo;
     fInternalFlags: set of (logHeaderWritten, logInitDone);
     fDisableRemoteLog: boolean;
+    {$ifndef NOEXCEPTIONINTERCEPT} // for IsBadCodePtr() or any internal exception
+    fThreadHandleExceptionBackup: TSynLog;
+    {$endif}
     {$ifdef FPC}
     function QueryInterface(
       {$IFDEF FPC_HAS_CONSTREF}constref{$ELSE}const{$ENDIF} IID: TGUID; out Obj): longint; {$IFNDEF WINDOWS}cdecl{$ELSE}stdcall{$ENDIF};

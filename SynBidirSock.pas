@@ -1255,10 +1255,17 @@ end;
 
 function TWebSocketProtocolJSON.FrameDecompress(
   const frame: TWebSocketFrame; const Head: RawUTF8;
-  const values: array of PRawByteString; var contentType,
-  content: RawByteString): Boolean;
+  const values: array of PRawByteString;
+  var contentType,content: RawByteString): Boolean;
 var i: Integer;
-    P,txt: PUTF8Char;
+    P: PUTF8Char;
+  procedure GetNext(var content: RawByteString);
+  var txt: PUTF8Char;
+      txtlen: integer;
+  begin
+    txt := GetJSONField(P,P,nil,nil,@txtlen);
+    SetString(content,txt,txtlen);
+  end;
 begin
   result := false;
   P := FrameData(frame,Head);
@@ -1268,18 +1275,17 @@ begin
      not NextNotSpaceCharIs(P,'[') then
     exit;
   for i := 0 to high(values) do
-    values[i]^ := GetJSONField(P,P);
-  contentType := GetJSONField(P,P);
+    GetNext(values[i]^);
+  GetNext(contentType);
   if P=nil then
     exit;
   if (contentType='') or
      IdemPropNameU(contentType,JSON_CONTENT_TYPE) then
     GetJSONItemAsRawJSON(P,RawJSON(content)) else begin
-    txt := GetJSONField(P,P);
-    if IdemPChar(pointer(contentType),'TEXT/') then
-      SetString(content,txt,StrLen(txt)) else
-    if not Base64MagicCheckAndDecode(txt,content) then
-      exit;
+    GetNext(content);
+    if not IdemPChar(pointer(contentType),'TEXT/') then
+      if not Base64MagicCheckAndDecode(pointer(content),length(content),content) then
+        exit;
   end;
   result := true;
 end;
