@@ -1096,7 +1096,8 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
   end;
 
-  THash64 = array[0..15] of cardinal;
+  /// 64 bytes buffer, used internally during HMAC process
+  TByte64 = array[0..15] of cardinal;
   
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
@@ -1233,7 +1234,7 @@ type
 /// overwrite a 64-byte buffer with zeros
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(temp); end;
-procedure FillZero(var hash: THash64); overload;
+procedure FillZero(var hash: TByte64); overload;
 
 /// overwrite a SHA-1 digest buffer with zeros
 // - may be used to cleanup stack-allocated content
@@ -1256,7 +1257,7 @@ type
   // - you may use HMAC_SHA1() overloaded functions for one-step process
   THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: THash64;
+    step7data: TByte64;
     sha: TSHA1;
   public
     /// prepare the HMAC authentication with the supplied key
@@ -1312,7 +1313,7 @@ type
   // - you may use HMAC_SHA256() overloaded functions for one-step process
   THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    step7data: THash64;
+    step7data: TByte64;
     sha: TSha256;
   public
     /// prepare the HMAC authentication with the supplied key
@@ -1371,7 +1372,7 @@ type
   THMAC_CRC32C = {$ifndef UNICODE}object{$else}record{$endif}
   private
     seed: cardinal;
-    step7data: THash64;
+    step7data: TByte64;
   public
     /// prepare the HMAC authentication with the supplied key
     procedure Init(key: pointer; keylen: integer);
@@ -1379,6 +1380,10 @@ type
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
     function Done: cardinal;
+    /// computes the HMAC of the supplied message according to the key
+    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
+    // - this method is thread-safe
+    function Compute(msg: pointer; msglen: integer): cardinal;
   end;
 
   /// points to HMAC message authentication code using crc32c as hash function
@@ -1786,7 +1791,7 @@ type
     procedure SetCacheTimeoutSeconds(value: integer); virtual;
     function PayloadToJSON(const DataNameValue: array of const;
       const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-      ExpirationMinutes: integer): RawUTF8; virtual;
+      ExpirationMinutes: cardinal): RawUTF8; virtual;
     procedure Parse(const Token: RawUTF8; var JWT: TJWTContent;
       out payload64: RawUTF8; out signature: RawByteString); virtual;
     // abstract methods which should be overriden by inherited classes
@@ -2365,17 +2370,17 @@ begin
   FillCharFast(hash,sizeof(hash),0);
 end;
 
-procedure FillZero(var hash: THash64);
+procedure FillZero(var hash: TByte64);
 begin
   FillCharFast(hash,sizeof(hash),0);
 end;
 
 procedure THMAC_SHA1.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: THash64;
+    k0,k0xorIpad: TByte64;
 begin
   FillZero(k0);
-  if keylen>64 then
+  if keylen>sizeof(k0) then
     sha.Full(key,keylen,PSHA1Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
@@ -2383,7 +2388,7 @@ begin
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
-  sha.Update(@k0xorIpad,64);
+  sha.Update(@k0xorIpad,sizeof(k0xorIpad));
   FillZero(k0);
   FillZero(k0xorIpad);
 end;
@@ -2396,7 +2401,7 @@ end;
 procedure THMAC_SHA1.Done(out result: TSHA1Digest; NoInit: boolean);
 begin
   sha.Final(result);
-  sha.Update(@step7data,64);
+  sha.Update(@step7data,sizeof(step7data));
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   FillZero(step7data);
@@ -2453,10 +2458,10 @@ end;
 
 procedure THMAC_SHA256.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: THash64;
+    k0,k0xorIpad: TByte64;
 begin
   FillZero(k0);
-  if keylen>64 then
+  if keylen>sizeof(k0) then
     sha.Full(key,keylen,PSHA256Digest(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
@@ -2464,7 +2469,7 @@ begin
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
   sha.Init;
-  sha.Update(@k0xorIpad,64);
+  sha.Update(@k0xorIpad,sizeof(k0xorIpad));
   FillZero(k0);
   FillZero(k0xorIpad);
 end;
@@ -2487,7 +2492,7 @@ end;
 procedure THMAC_SHA256.Done(out result: TSHA256Digest; NoInit: boolean);
 begin
   sha.Final(result);
-  sha.Update(@step7data,64);
+  sha.Update(@step7data,sizeof(step7data));
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   if not NoInit then
@@ -2585,21 +2590,21 @@ end;
 procedure HMAC_CRC256C(key,msg: pointer; keylen,msglen: integer; out result: THash256);
 var i: integer;
     h1,h2: cardinal;
-    k0,k0xorIpad,step7data: THash64;
+    k0,k0xorIpad,step7data: TByte64;
 begin
   FillCharFast(k0,sizeof(k0),0);
-  if keylen>64 then
+  if keylen>sizeof(k0) then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
-  h1 := crc32c(crc32c(0,@k0xorIpad,64),msg,msglen);
-  h2 := crc32c(crc32c(h1,@k0xorIpad,64),msg,msglen);
+  h1 := crc32c(crc32c(0,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
+  h2 := crc32c(crc32c(h1,@k0xorIpad,sizeof(k0xorIpad)),msg,msglen);
   crc256cmix(h1,h2,@result);
-  h1 := crc32c(crc32c(0,@step7data,64),@result,sizeof(result));
-  h2 := crc32c(crc32c(h1,@step7data,64),@result,sizeof(result));
+  h1 := crc32c(crc32c(0,@step7data,sizeof(step7data)),@result,sizeof(result));
+  h2 := crc32c(crc32c(h1,@step7data,sizeof(step7data)),@result,sizeof(result));
   crc256cmix(h1,h2,@result);
   FillCharFast(k0,sizeof(k0),0);
   FillCharFast(k0xorIpad,sizeof(k0),0);
@@ -2621,17 +2626,17 @@ end;
 
 procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
-    k0,k0xorIpad: THash64;
+    k0,k0xorIpad: TByte64;
 begin
   FillCharFast(k0,sizeof(k0),0);
-  if keylen>64 then
+  if keylen>sizeof(k0) then
     crc256c(key,keylen,PHash256(@k0)^) else
     MoveFast(key^,k0,keylen);
   for i := 0 to 15 do
     k0xorIpad[i] := k0[i] xor $36363636;
   for i := 0 to 15 do
     step7data[i] := k0[i] xor $5c5c5c5c;
-  seed := crc32c(0,@k0xorIpad,64);
+  seed := crc32c(0,@k0xorIpad,sizeof(k0xorIpad));
   FillCharFast(k0,sizeof(k0),0);
   FillCharFast(k0xorIpad,sizeof(k0xorIpad),0);
 end;
@@ -2643,8 +2648,13 @@ end;
 
 function THMAC_CRC32C.Done: cardinal;
 begin
-  result := crc32c(seed,@step7data,64);
+  result := crc32c(seed,@step7data,sizeof(step7data));
   FillZero(step7data);
+end;
+
+function THMAC_CRC32C.Compute(msg: pointer; msglen: integer): cardinal;
+begin
+  result := crc32c(crc32c(seed,msg,msglen),@step7data,sizeof(step7data));
 end;
 
 function HMAC_CRC32C(key,msg: pointer; keylen,msglen: integer): cardinal;
@@ -7318,7 +7328,7 @@ begin
   t := bytes[0];
   Inc(bytes[0],len);
   if bytes[0]<t then
-    Inc(bytes[1]);  // 64 bit carry from low to high
+    Inc(bytes[1]);     // 64 bit carry from low to high
   t := 64-(t and 63);  // space available in in_ (at least 1)
   if t>len then begin
     MoveFast(p^,Pointer(PtrUInt(@in_)+64-t)^,len);
@@ -9552,7 +9562,7 @@ end;
 
 function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-  ExpirationMinutes: integer): RawUTF8;
+  ExpirationMinutes: cardinal): RawUTF8;
 var payload: TDocVariantData;
 begin
   result := '';
@@ -9576,13 +9586,12 @@ begin
       exit else
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore],DateTimeToUnixTime(NotBefore));
   if jrcIssuedAt in fClaims then
-    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcIssuedAt],DateTimeToUnixTime(NowUTC));
+    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcIssuedAt],UnixTimeUTC);
   if jrcExpirationTime in fClaims then begin
     if ExpirationMinutes=0 then
       ExpirationMinutes := fExpirationSeconds else
       ExpirationMinutes := ExpirationMinutes*60;
-    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcExpirationTime],
-      DateTimeToUnixTime(NowUTC)+ExpirationMinutes);
+    payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcExpirationTime],UnixTimeUTC+ExpirationMinutes);
   end;
   if jrcJwtID in fClaims then
     if joNoJwtIDGenerate in fOptions then begin
@@ -9617,7 +9626,7 @@ begin
     Parse(Token,JWT,payload64,signature);
   if JWT.result=jwtValid then begin
     if [jrcExpirationTime,jrcNotBefore,jrcIssuedAt]*JWT.claims<>[] then begin
-      nowunix := DateTimeToUnixTime(NowUTC); // validate against actual timestamp 
+      nowunix := UnixTimeUTC; // validate against actual timestamp 
       if jrcExpirationTime in JWT.claims then
         if not ToCardinal(JWT.reg[jrcExpirationTime],unix) or (nowunix>unix) then begin
           JWT.result := jwtExpired;
