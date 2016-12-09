@@ -3408,8 +3408,13 @@ function GetLineSize(P,PEnd: PUTF8Char): PtrUInt;
 // the specified count
 function GetLineSizeSmallerThan(P,PEnd: PUTF8Char; aMinimalCount: integer): boolean;
 
-/// return next CSV string from P, nil if no more
+/// return next CSV string from P
+// - P=nil after call when end of text is reached
 function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8;
+
+/// return trimmed next CSV string from P
+// - P=nil after call when end of text is reached
+procedure GetNextItemTrimed(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8);
 
 /// return next CSV string from P, nil if no more
 // - this function returns the generic string type of the compiler, and
@@ -29388,6 +29393,24 @@ begin
     while (S^<>#0) and (S^<>Sep) do
       inc(S);
     SetString(result,P,S-P);
+    if S^<>#0 then
+      P := S+1 else
+      P := nil;
+  end;
+end;
+
+procedure GetNextItemTrimed(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8);
+var S,E: PUTF8Char;
+begin
+  if (P=nil) or (Sep<=' ') then
+    result := '' else begin
+    while P^ in [#1..' '] do inc(P);
+    S := P;
+    while (S^<>#0) and (S^<>Sep) do
+      inc(S);
+    E := S;
+    while (E>P) and (E[-1] in [#1..' ']) do dec(E);
+    SetString(result,P,E-P);
     if S^<>#0 then
       P := S+1 else
       P := nil;
