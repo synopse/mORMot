@@ -5857,9 +5857,9 @@ type
     fInput: TRawUTF8DynArray; // even items are parameter names, odd are values
     fInputPostContentType: RawUTF8;
     fInputCookiesRetrieved: boolean;
-    fInputCookies: TRawUTF8DynArray; // only computed if InCookie[] is used
-    fInputCookieLastName: RawUTF8;
-    fInputCookieLastValue: RawUTF8;
+    fInputCookies: array of record
+      Name, Value: RawUTF8; // only computed if InCookie[] is used
+    end;
     fInHeaderLastName: RawUTF8;
     fInHeaderLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
@@ -5887,6 +5887,7 @@ type
     function GetInputUTF8OrVoid(const ParamName: RawUTF8): RawUTF8;
     function GetInputStringOrVoid(const ParamName: RawUTF8): string;
     function GetInHeader(const HeaderName: RawUTF8): RawUTF8;
+    procedure RetrieveCookies;
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetUserAgent: RawUTF8;
@@ -39556,49 +39557,57 @@ begin
   end;
 end;
 
+procedure TSQLRestServerURIContext.RetrieveCookies;
+var n: integer;
+    P: PUTF8Char;
+    cn,cv: RawUTF8;
+begin
+  fInputCookiesRetrieved := true;
+  P := pointer(GetInHeader('cookie'));
+  n := 0;
+  while P<>nil do begin
+    GetNextItemTrimed(P,'=',cn);
+    GetNextItemTrimed(P,';',cv);
+    if (cn='') and (cv='') then
+      break;
+    SetLength(fInputCookies,n+1);
+    fInputCookies[n].Name := cn;
+    fInputCookies[n].Value := cv;
+    inc(n);
+  end;
+end;
+
 procedure TSQLRestServerURIContext.SetInCookie(CookieName, CookieValue: RawUTF8);
 var i,n: integer;
 begin
-  GetInCookie(CookieName); // force retrieve cookies
-  fInputCookieLastName := ''; // cache reset
-  CookieName := UpperCase(trim(CookieName))+'=';
+  CookieName := trim(CookieName);
+  if (self=nil) or (CookieName='') then
+    exit;
+  if not fInputCookiesRetrieved then
+    RetrieveCookies;
   n := length(fInputCookies);
   for i := 0 to n-1 do
-    if IdemPChar(pointer(fInputCookies[i]),pointer(CookieName)) then begin
-      fInputCookies[i] := CookieName+CookieValue; // update in-place
+    if fInputCookies[i].Name=CookieName then begin
+      fInputCookies[i].Value := CookieValue; // in-place update
       exit;
     end;
   SetLength(fInputCookies,n+1);
-  fInputCookies[n] := CookieName+CookieValue; // add new cookie
+  fInputCookies[n].Name := CookieName;
+  fInputCookies[n].Value := CookieValue;
 end;
 
 function TSQLRestServerURIContext.GetInCookie(CookieName: RawUTF8): RawUTF8;
 var i: integer;
-    cookieSearch: RawUTF8;
 begin
   result := '';
   CookieName := trim(CookieName);
   if (self=nil) or (CookieName='') then
     exit;
-  if CookieName=fInputCookieLastName then begin
-    result := fInputCookieLastValue;
-    exit;
-  end;
-  if not fInputCookiesRetrieved then begin
-    fInputCookiesRetrieved := true;
-    CSVToRawUTF8DynArray(pointer(GetInHeader('cookie')),fInputCookies,';');
-    for i := 0 to length(fInputCookies)-1 do
-      fInputCookies[i] := trim(fInputCookies[i]);
-  end;
-  fInputCookieLastName := CookieName;
-  fInputCookieLastValue := '';
-  if fInputCookies=nil then
-    exit;
-  cookieSearch := UpperCase(CookieName)+'=';
+  if not fInputCookiesRetrieved then
+    RetrieveCookies;
   for i := 0 to length(fInputCookies)-1 do
-    if IdemPChar(pointer(fInputCookies[i]),pointer(cookieSearch)) then begin
-      result := copy(fInputCookies[i],length(cookieSearch)+1,MaxInt);
-      fInputCookieLastValue := result;
+    if fInputCookies[i].Name=CookieName then begin
+      result := fInputCookies[i].Value;
       exit;
     end;
 end;
@@ -39614,7 +39623,6 @@ begin
   if PosI('; PATH=',aOutSetCookie)=0 then
     fOutSetCookie := aOutSetCookie+'; Path=/'+Server.Model.Root else
     fOutSetCookie := aOutSetCookie;
-  fInputCookieLastName := ''; // cache reset
 end;
 
 function TSQLRestServerURIContext.GetUserAgent: RawUTF8;
@@ -55454,7 +55462,7 @@ begin
   fakeID := GetCardinal(Values[0].Value);
   if (fakeID=0) or (connectionID=0) or (Values[0].Name=nil) then
     exit;
-  withLog := not IdemPropNameU('ISynLogCallback',Values[0].Name,StrLen(Values[0].Name));
+  withLog := not IdemPropNameU('ISynLogCallback',Values[0].Name,Values[0].NameLen);
   if withLog then // avoid stack overflow ;)
     fRest.InternalLog('%.FakeCallbackRelease(%,"%") remote call',
       [ClassType,fakeID,Values[0].Name],sllDebug);
