@@ -20512,12 +20512,13 @@ const
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
  // sftRecordVersion, sftSessionUserID
     varInt64, varInt64);
-var tempCopy: RawByteString;
-    err: integer;
+var err: integer;
+    tmp: TSynTempBuffer;
 begin
   if result.VType and VTYPE_STATIC<>0 then
     VarClear(variant(result));
   result.VType := SQL_ELEMENTTYPES[fieldType];
+  result.VAny := nil; // avoid GPF
   case fieldType of
   sftCurrency:
     result.VInt64 := StrToCurr64(Value);
@@ -20525,8 +20526,7 @@ begin
     result.VDouble := GetExtended(Value,err);
     if err<>0 then begin
       result.VType := varString;
-      result.VAny := nil; // avoid GPF
-      RawUTF8(result.VAny) := Value;
+      SetString(RawUTF8(result.VAny),Value,StrLen(Value));
     end;
   end;
   sftDateTime:
@@ -20539,28 +20539,20 @@ begin
   sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion, sftSessionUserID,
   sftTimeLog, sftModTime, sftCreateTime:
     SetInt64(Value,result.VInt64);
-  sftAnsiText, sftUTF8Text: begin
-    pointer(result.VAny) := nil;
-    RawUTF8(result.VAny) := Value;
-  end;
-  sftBlobCustom, sftBlob: begin
-    pointer(result.VAny) := nil;
+  sftAnsiText, sftUTF8Text:
+    SetString(RawUTF8(result.VAny),Value,StrLen(Value));
+  sftBlobCustom, sftBlob:
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
-  end;
   sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom, sftNullable: begin
     if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
-       (Value<>nil) and (Value^<>'[') then begin
-      tempCopy := BlobToTSQLRawBlob(Value);
-      if tempCopy<>'' then begin
-        Value := pointer(DynArraySaveJSON(typeInfo,tempCopy));
-        createValueTempCopy := false;
-      end;
-    end;
-    if createValueTempCopy then begin
-      SetString(tempCopy,PAnsiChar(Value),StrLen(Value));
-      Value := pointer(tempCopy);
-    end;
+       (Value<>nil) and (Value^<>'[') and
+       Base64MagicCheckAndDecode(Value,tmp) then
+      Value := pointer(DynArrayBlobSaveJSON(typeInfo,tmp.buf)) else
+    if createValueTempCopy then
+      Value := tmp.Init(Value) else
+      tmp.buf := nil;
     GetVariantFromJSON(Value,false,variant(result),@options);
+    tmp.Done;
   end;
   end;
 end;
@@ -22355,10 +22347,8 @@ begin
     da.Clear else
     try
       if (fObjArray=nil) and Base64MagicCheckAndDecode(Value,tmp) then
-        da.LoadFrom(tmp.buf) else begin
-        tmp.Init(Value);
-        da.LoadFromJSON(tmp.buf);
-      end;
+        da.LoadFrom(tmp.buf) else 
+        da.LoadFromJSON(tmp.Init(Value));
     finally
       tmp.Done;
     end;
@@ -24821,8 +24811,7 @@ begin
   SepLen := length(Sep);
   L := length(Head)+SepLen*(fRowCount-1)+length(Trail);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  tmp.Init(fRowCount*4);
-  len := tmp.buf;
+  len := tmp.Init(fRowCount*4);
   for i := 1 to fRowCount do begin
     len^ := StrLen(U^);
     inc(L,len^);
@@ -34031,8 +34020,7 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
-function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass;
-  const ObjectName: RawUTF8;
+function TSQLRest.RetrieveDocVariantArray(Table: TSQLRecordClass; const ObjectName: RawUTF8;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
   const CustomFieldsCSV: RawUTF8; FirstRecordID,LastRecordID: PID): variant;
 var T: TSQLTable;

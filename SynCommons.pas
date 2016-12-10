@@ -1473,11 +1473,11 @@ type
     /// initialize a temporary copy of the supplied text supplied as RawByteString
     procedure Init(const Source: RawByteString); overload;
     /// initialize a temporary copy of the supplied text buffer, ending with #0
-    procedure Init(Source: PUTF8Char); overload;
+    function Init(Source: PUTF8Char): PUTF8Char; overload;
     /// initialize a temporary copy of the supplied text buffer
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
-    procedure Init(SourceLen: integer); overload;
+    function Init(SourceLen: integer): pointer; overload;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -6255,17 +6255,16 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
 // (following EnumSetsAsText optional parameter for nested enumerates and sets)
 function DynArraySaveJSON(const Value; TypeInfo: pointer;
-  EnumSetsAsText: boolean=false): RawUTF8; overload;
+  EnumSetsAsText: boolean=false): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
-/// serialize a dynamic array content, supplied as raw binary, as JSON
+/// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
 // - is just a wrapper around TTextWriter.AddDynArrayJSON(), creating
 // a temporary TDynArray wrapper on the stack
 // - to be used e.g. for custom record JSON serialization, within a
 // TDynArrayJSONCustomWriter callback or RegisterCustomJSONSerializerFromText()
-function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
-  overload;
+function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 
 /// compute a dynamic array element information
 // - will raise an exception if the supplied RTTI is not a dynamic array
@@ -17251,8 +17250,7 @@ procedure TSynAnsiConvert.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Car
 var W: TTextWriter absolute DestTextWriter;
     tmp: TSynTempBuffer;
 begin // rely on explicit conversion
-  tmp.Init(SourceChars*3+1);
-  SourceChars := AnsiBufferToUTF8(tmp.buf,Source,SourceChars)-tmp.buf;
+  SourceChars := AnsiBufferToUTF8(tmp.Init(SourceChars*3+1),Source,SourceChars)-tmp.buf;
   W.Add(tmp.buf,SourceChars,Escape);
   tmp.Done;
 end;
@@ -17350,10 +17348,8 @@ function TSynAnsiConvert.AnsiBufferToRawUTF8(Source: PAnsiChar; SourceChars: Car
 var tmp: TSynTempBuffer;
 begin
   if (Source=nil) or (SourceChars=0) then
-    result := '' else begin
-    tmp.Init(SourceChars*3+1);
-    tmp.Done(AnsiBufferToUTF8(tmp.buf,Source,SourceChars),result);
-  end;
+    result := '' else
+    tmp.Done(AnsiBufferToUTF8(tmp.Init(SourceChars*3+1),Source,SourceChars),result);
 end;
 
 constructor TSynAnsiConvert.Create(aCodePage: cardinal);
@@ -18078,7 +18074,7 @@ begin
   end;
 end;
 
-procedure TSynTempBuffer.Init(Source: PUTF8Char);
+function TSynTempBuffer.Init(Source: PUTF8Char): PUTF8Char;
 begin
   len := StrLen(Source);
   if len=0 then
@@ -18088,6 +18084,7 @@ begin
       GetMem(buf,len+1); // +1 to include trailing #0
     MoveFast(Source^,buf^,len+1);
   end;
+  result := buf;
 end;
 
 procedure TSynTempBuffer.Init(Source: pointer; SourceLen: integer);
@@ -18102,7 +18099,7 @@ begin
   end;
 end;
 
-procedure TSynTempBuffer.Init(SourceLen: integer);
+function TSynTempBuffer.Init(SourceLen: integer): pointer;
 begin
   len := SourceLen;
   if len=0 then
@@ -18110,6 +18107,7 @@ begin
     if len<sizeof(tmp) then
       buf := @tmp else
       GetMem(buf,len+1); // +1 to include trailing #0
+  result := buf;
 end;
 
 procedure TSynTempBuffer.Done;
@@ -18136,8 +18134,7 @@ procedure TSynTempWriter.Init(maxsize: integer);
 begin
   if maxsize<=0 then
     maxsize := sizeof(tmp.tmp)-1; // -1 for trailing #0
-  tmp.Init(maxsize);
-  pos := tmp.buf;
+  pos := tmp.Init(maxsize);
 end;
 
 procedure TSynTempWriter.Done;
@@ -19929,8 +19926,7 @@ begin
   if (P=nil) or (len=0) then
     exit;
   shift := false;
-  tmp.Init((len*10)shr 3);
-  dest := tmp.buf;
+  dest := tmp.Init((len*10)shr 3);
   d := 0;
   bits := 0;
   for i := 0 to len-1 do begin
@@ -19980,8 +19976,7 @@ begin
   result := '';
   if (Baudot=nil) or (len<=0) then
     exit;
-  tmp.Init((len shl 3)div 5+1);
-  dest := tmp.buf;
+  dest := tmp.Init((len shl 3)div 5+1);
   shift := 0;
   b := 0;
   bits := 0;
@@ -27736,12 +27731,11 @@ begin
   result := '';
   if ValuesCount=0 then
     exit;
-  tmp.Init(ValuesCount*sizeof(TInt)); // faster than a dynamic array
+  int := tmp.Init(ValuesCount*sizeof(TInt)); // faster than a dynamic array
   try
      // compute whole result length at once
     dec(ValuesCount);
     Len := length(Prefix)+length(Suffix);
-    int := tmp.buf;
     for i := 0 to ValuesCount do begin
       P := StrInt64(PAnsiChar(int)+21,Values[i]);
       L := PAnsiChar(int)+21-P;
@@ -42255,14 +42249,14 @@ begin
   result := SaveJSON(Value,TypeInfo,EnumSetsAsText);
 end;
 
-function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
+function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
-    Value: pointer;
+    Value: pointer; // store the temporary dynamic array
 begin
   Value := nil;
   DynArray.Init(TypeInfo,Value);
   try
-    if DynArray.LoadFrom(pointer(BlobValue))=nil then
+    if DynArray.LoadFrom(BlobValue)=nil then
       result := '' else begin
       with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
       try
