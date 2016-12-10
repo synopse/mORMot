@@ -1261,8 +1261,12 @@ type
     sha: TSHA1;
   public
     /// prepare the HMAC authentication with the supplied key
+    // - content of this record is stateless, so you can prepare a HMAC for a
+    // key using Init, then copy this THMAC_SHA1 instance to a local variable,
+    // and use this local thread-safe copy for actual HMAC computing
     procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA1Digest; NoInit: boolean=false);
@@ -1317,13 +1321,22 @@ type
     sha: TSha256;
   public
     /// prepare the HMAC authentication with the supplied key
+    // - content of this record is stateless, so you can prepare a HMAC for a
+    // key using Init, then copy this THMAC_SHA256 instance to a local variable,
+    // and use this local thread-safe copy for actual HMAC computing
     procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
     /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: THash128); overload;
     /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: THash256); overload;
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
+    procedure Update(const msg: RawByteString); overload;
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA256Digest; NoInit: boolean=false);
   end;
@@ -1375,8 +1388,10 @@ type
     step7data: TByte64;
   public
     /// prepare the HMAC authentication with the supplied key
+    // - consider using Compute to re-use a prepared HMAC instance 
     procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
     function Done: cardinal;
@@ -2449,6 +2464,7 @@ begin
     mac.Done(tmp,true);
     XorMemory(@result,@tmp,sizeof(result));
   end;
+  FillcharFast(mac,sizeof(mac),0);
   FillcharFast(first,sizeof(first),0);
   FillZero(tmp);
 end;
@@ -2487,6 +2503,11 @@ end;
 procedure THMAC_SHA256.Update(const msg: THash256);
 begin
   sha.Update(@msg,sizeof(msg));
+end;
+
+procedure THMAC_SHA256.Update(const msg: RawByteString);
+begin
+  sha.Update(pointer(msg),length(msg));
 end;
 
 procedure THMAC_SHA256.Done(out result: TSHA256Digest; NoInit: boolean);
@@ -2649,7 +2670,7 @@ end;
 function THMAC_CRC32C.Done: cardinal;
 begin
   result := crc32c(seed,@step7data,sizeof(step7data));
-  FillZero(step7data);
+  FillcharFast(self,sizeof(self),0);
 end;
 
 function THMAC_CRC32C.Compute(msg: pointer; msglen: integer): cardinal;
