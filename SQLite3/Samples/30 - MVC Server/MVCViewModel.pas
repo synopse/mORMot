@@ -226,20 +226,18 @@ function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
   ContentToFillAuthor: TSQLContent): TID;
 var SessionInfo: TCookieData;
     author: TSQLAuthor;
-    auto: IAutoFree; // mandatory only for FPC
 begin
   result := 0;
-  if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))=0) or
-     not(Right in SessionInfo.AuthorRights) then
-    exit;
-  auto := TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID);
-  if Right in author.Rights then begin
-    result := SessionInfo.AuthorID;
-    if ContentToFillAuthor<>nil then begin
-      ContentToFillAuthor.Author := pointer(result);
-      ContentToFillAuthor.AuthorName := author.LogonName;
+  if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))>0) and
+     (Right in SessionInfo.AuthorRights) then
+    with TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID) do
+    if Right in author.Rights then begin
+      result := SessionInfo.AuthorID;
+      if ContentToFillAuthor<>nil then begin
+        ContentToFillAuthor.Author := pointer(result);
+        ContentToFillAuthor.AuthorName := author.LogonName;
+      end;
     end;
-  end;
 end;
 
 function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
@@ -384,30 +382,30 @@ end;
 
 function TBlogApplication.ArticleComment(ID: TID;
   const Title,Comment: RawUTF8): TMVCAction;
-var AuthorID: TID;
-    comm: TSQLComment;
+var comm: TSQLComment;
+    AuthorID: TID;
     error: string;
-    auto: IAutoFree; // mandatory only for FPC
 begin
-  auto := TSQLComment.AutoFree(comm);
-  AuthorID := GetLoggedAuthorID(canComment,comm);
-  if AuthorID=0 then begin
-    GotoError(result,sErrorNeedValidAuthorSession);
-    exit;
+  with TSQLComment.AutoFree(comm) do begin
+    AuthorID := GetLoggedAuthorID(canComment,comm);
+    if AuthorID=0 then begin
+      GotoError(result,sErrorNeedValidAuthorSession);
+      exit;
+    end;
+    if not RestModel.MemberExists(TSQLArticle,ID) then begin
+      GotoError(result,HTTP_UNAVAILABLE);
+      exit;
+    end;
+    comm.Title := Title;
+    comm.Content := Comment;
+    comm.Article := TSQLArticle(ID);
+    if comm.FilterAndValidate(RestModel,error) and
+       (RestModel.Add(comm,true)<>0) then
+      GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
+      GotoView(result,'ArticleView',['ID',ID,'withComments',true,'Scope',_ObjFast([
+        'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
+        HTTP_BADREQUEST);
   end;
-  if not RestModel.MemberExists(TSQLArticle,ID) then begin
-    GotoError(result,HTTP_UNAVAILABLE);
-    exit;
-  end;
-  comm.Title := Title;
-  comm.Content := Comment;
-  comm.Article := TSQLArticle(ID);
-  if comm.FilterAndValidate(RestModel,error) and
-     (RestModel.Add(comm,true)<>0) then
-    GotoView(result,'ArticleView',['ID',ID,'withComments',true]) else
-    GotoView(result,'ArticleView',['ID',ID,'withComments',true,'Scope',_ObjFast([
-      'CommentError',error,'CommentTitle',comm.Title,'CommentContent',comm.Content])],
-      HTTP_BADREQUEST);
 end;
 
 function TBlogApplication.ArticleMatch(const Match: RawUTF8): TMVCAction;
@@ -437,31 +435,31 @@ begin
 end;
 
 function TBlogApplication.ArticleCommit(ID: TID; const Title,Content: RawUTF8): TMVCAction;
-var AuthorID: TID;
-    Article: TSQLArticle;
+var Article: TSQLArticle;
+    AuthorID: TID;
     error: string;
-    auto: IAutoFree; // mandatory only for FPC
 begin
-  auto := TSQLArticle.AutoFree(Article,RestModel,ID);
-  AuthorID := GetLoggedAuthorID(canPost,Article);
-  if AuthorID=0 then begin
-    GotoError(result,sErrorNeedValidAuthorSession);
-    exit;
+  with TSQLArticle.AutoFree(Article,RestModel,ID) do begin
+    AuthorID := GetLoggedAuthorID(canPost,Article);
+    if AuthorID=0 then begin
+      GotoError(result,sErrorNeedValidAuthorSession);
+      exit;
+    end;
+    FlushAnyCache;
+    Article.Title := Title;
+    Article.Content := Content;
+    if not Article.FilterAndValidate(RestModel,error) then
+      GotoView(result,'ArticleEdit',
+        ['ValidationError',error,'ID',ID,
+         'Title',Article.Title,'Content',Article.Content],HTTP_BADREQUEST) else
+      if Article.ID=0 then begin
+        Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
+        if RestModel.Add(Article,true)<>0 then
+          GotoView(result,'ArticleView',['ID',Article.ID],HTTP_SUCCESS) else
+          GotoError(result,sErrorWriting);
+      end else
+        RestModel.Update(Article);
   end;
-  FlushAnyCache;
-  Article.Title := Title;
-  Article.Content := Content;
-  if not Article.FilterAndValidate(RestModel,error) then
-    GotoView(result,'ArticleEdit',
-      ['ValidationError',error,'ID',ID,
-       'Title',Article.Title,'Content',Article.Content],HTTP_BADREQUEST) else
-    if Article.ID=0 then begin
-      Article.PublishedMonth := TSQLArticle.CurrentPublishedMonth;
-      if RestModel.Add(Article,true)<>0 then
-        GotoView(result,'ArticleView',['ID',Article.ID],HTTP_SUCCESS) else
-        GotoError(result,sErrorWriting);
-    end else
-      RestModel.Update(Article);
 end;
 
 {$ifndef ISDELPHI2010}
