@@ -6911,6 +6911,7 @@ type
     // all text fields, after space trimming, won't be void
     // - will only affect RAWTEXT_FIELDS
     class procedure AddFilterNotVoidAllTextFields;
+
     /// protect several TSQLRecord local variable instances
     // - specified as localVariable/recordClass pairs
     // - is a wrapper around TAutoFree.Several(...) constructor
@@ -6926,8 +6927,9 @@ type
     // !     @info,TSQLBlogInfo, @article,TSQLArticle, @comment,TSQLComment]);
     // !   .... now you can use info, article or comment
     // ! end; // will call info.Free article.Free and comment.Free
-    // - warning: under FPC, you should assign the result of this method to a local
-    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - warning: under FPC, you should assign the result of this method to
+    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(varClassPairs: array of pointer): IAutoFree; overload;
     /// protect one TSQLRecord local variable instance
     // - be aware that it won't implement a full ARC memory model, but may be
@@ -6939,16 +6941,41 @@ type
     // !   TSQLBlogInfo.AutoFree(info);
     // !   .... now you can use info
     // ! end; // will call info.Free
-    // - warning: under FPC, you should assign the result of this method to a local
-    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - warning: under FPC, you should assign the result of this method to
+    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable): IAutoFree; overload;
     /// read and protect one TSQLRecord local variable instance
+    // - is a wrapper around TAutoFree.Create(localVariable,Create(Rest,ID))
     // - be aware that it won't implement a full ARC memory model, but may be
     // just used to avoid writing some try ... finally blocks on local variables
     // - use with caution, only on well defined local scope
-    // - warning: under FPC, you should assign the result of this method to a local
-    // IAutoFree variable - see bug http://bugs.freepascal.org/view.php?id=26602
+    // - warning: under FPC, you should assign the result of this method to
+    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // statement - see http://bugs.freepascal.org/view.php?id=26602
     class function AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree; overload;
+    /// FillPrepare and protect one TSQLRecord local variable instance
+    // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
+    // - be aware that it won't implement a full ARC memory model, but may be
+    // just used to avoid writing some try ... finally blocks on local variables
+    // - use with caution, only on well defined local scope
+    // - warning: under FPC, you should assign the result of this method to
+    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // statement - see http://bugs.freepascal.org/view.php?id=26602
+    class function AutoFree(var localVariable; Rest: TSQLRest;
+      const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): IAutoFree; overload;
+    /// FillPrepare and protect one TSQLRecord local variable instance
+    // - is a wrapper around TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,...))
+    // - be aware that it won't implement a full ARC memory model, but may be
+    // just used to avoid writing some try ... finally blocks on local variables
+    // - use with caution, only on well defined local scope
+    // - warning: under FPC, you should assign the result of this method to
+    // a local IAutoFree variable, or use a with TSQLRecord.AutoFree() do
+    // statement - see http://bugs.freepascal.org/view.php?id=26602
+    class function AutoFree(var localVariable; Rest: TSQLRest;
+      const FormatSQLWhere: RawUTF8; const ParamsSQLWhere,BoundsSQLWhere: array of const;
+      const aCustomFieldsCSV: RawUTF8=''): IAutoFree; overload;
 
     /// get the captions to be used for this class
     // - if Action is nil, return the caption of the table name
@@ -31634,6 +31661,22 @@ end;
 class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest; ID: TID): IAutoFree;
 begin
   result := TAutoFree.Create(localVariable,Create(Rest,ID));
+end;
+
+class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest;
+  const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8): IAutoFree;
+begin
+  result := TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,
+    FormatSQLWhere,BoundsSQLWhere,aCustomFieldsCSV));
+end;
+
+class function TSQLRecord.AutoFree(var localVariable; Rest: TSQLRest;
+  const FormatSQLWhere: RawUTF8; const ParamsSQLWhere,BoundsSQLWhere: array of const;
+  const aCustomFieldsCSV: RawUTF8): IAutoFree;
+begin
+  result := TAutoFree.Create(localVariable,CreateAndFillPrepare(Rest,
+    FormatSQLWhere,ParamsSQLWhere,BoundsSQLWhere,aCustomFieldsCSV));
 end;
 
 class procedure TSQLRecord.AddFilterOrValidate(const aFieldName: RawUTF8;
