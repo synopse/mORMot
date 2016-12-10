@@ -215,6 +215,19 @@ type
 
   /// an abstract class able to implement ViewModel/Controller sessions
   // - see TMVCSessionWithCookies to implement cookie-based sessions
+  // - this kind of ViewModel will implement client side storage of sessions,
+  // storing any (simple) record content on the browser client side
+  // - at login, a record containing session-related information (session ID,
+  // display and login name, preferences, rights...) can be computed only once
+  // on the server side from the Model, then stored on the client side (typically
+  // in a cookie): later on, session information can be retrieved by the server
+  // logic (via CheckAndRetrieve - note that any security attribute should be
+  // verified against the Model), then the renderer (CheckAndRetrieveInfo
+  // returning the record as TDocVariant in the data context "Session" field) -
+  // such a pattern is very efficient and allows good scaling
+  // - session are expected to be tied to the TMVCSessionAbstract instance
+  // lifetime, so are lost after server restart, unless they are persisted
+  // via LoadContext/SaveContext methods
   TMVCSessionAbstract = class
   public
     /// create an instance of this ViewModel implementation class
@@ -233,7 +246,7 @@ type
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data
     // - will call CheckAndRetrieve() then RecordSaveJSON() and _JsonFast()
-    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual; 
+    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual;
     /// clear the session
     procedure Finalize; virtual; abstract;
     /// return all session generation information as ready-to-be stored string
@@ -244,36 +257,32 @@ type
     function LoadContext(const Saved: RawUTF8): boolean; virtual; abstract;
   end;
 
-  /// information need for cookie generation
-  // - i.e. the session counts, cookie name, encryption and HMAC secret keys
+  /// information used by TMVCSessionWithCookies for cookie generation
+  // - i.e. the session ID, cookie name, encryption and HMAC secret keys
   // - this data can be persisted so that the very same cookie information
   // are available after server restart
   TMVCSessionWithCookiesContext = packed record
     /// the cookie name, used for storage on the client side
     CookieName: RawUTF8;
-    /// an increasing counter, to implement session count
+    /// an increasing counter, to implement unique session ID
     SessionCount: integer;
     /// secret information, used for HMAC digital signature of cookie content
     Secret: THMAC_CRC32C;
-    /// secret information, used for encryption of cookie content
+    /// secret information, used for encryption of the cookie content
     Crypt: array[0..63] of cardinal;
   end;
 
   /// a class able to implement ViewModel/Controller sessions with cookies
   // - this kind of ViewModel will implement cookie-based sessions, able to
   // store any (simple) record content in the cookie, on the browser client side
-  // - record content will be stored in raw binary format (using RecordSave),
-  // and base64 encoded: at login, session-related information can be computed
-  // only once on the server side, then stored on the client side and used by
-  // the renderer - such a pattern is very efficient and allows easy scaling
   // - those cookies have the same feature set than JWT, but with a lower
   // payload (thanks to binary serialization), and cookie safety (not accessible
   // from JavaScript): they are digitally signed (with HMAC-CRC32C and a
   // temporary secret key), they include an unique session identifier (like
   // "jti" claim), issue and expiration dates (like "iat" and "exp" claims),
-  // and they are encrypted with a temporary key - all keys are tied to the
-  // TMVCSessionWithCookies instance lifetime, so new cookies are generated
-  // after server restart
+  // and they are encrypted with a temporary key- all secret keys are tied to
+  // the TMVCSessionWithCookies instance lifetime, so new cookies are generated
+  // after server restart, unless they are persisted via LoadContext/SaveContext
   TMVCSessionWithCookies = class(TMVCSessionAbstract)
   protected
     fContext: TMVCSessionWithCookiesContext;
@@ -302,7 +311,11 @@ type
     // - to be retrieved via LoadContext
     function SaveContext: RawUTF8; override;
     /// restore cookie generation information from SaveContext text format
-    // - returns TRUE after checking the crc and unserializing the supplied data  
+    // - returns TRUE after checking the crc and unserializing the supplied data
+    // - WARNING: if the unerlying record type structure changed (i.e. any
+    // field is modified or added), restoration will lead to data corruption of
+    // low-level binary content, then trigger unexpected GPF: if you change the
+    // record type defition, do NOT use LoadContext - and reset all cookies
     function LoadContext(const Saved: RawUTF8): boolean; override;
     /// direct access to the low-level information used for cookies generation
     // - use SaveContext and LoadContext methods to persist this information

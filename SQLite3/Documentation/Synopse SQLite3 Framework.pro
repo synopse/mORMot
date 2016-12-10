@@ -2692,21 +2692,32 @@ It may also be useful for queries.\line Instead of writing:
 We may write:
 !var aMale: TSQLBaby;
 !...
-!  TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
-!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !  while aMale.FillOne do
 !    DoSomethingWith(aMale);
 Without the need to write the {\f1\fs20 try ... finally} block.
 See the {\f1\fs20 TSQLRecord.AutoFree()} overloaded methods in {\f1\fs20 mORMot.pas} for the several use cases, and the associated {\f1\fs20 TAutoFree} / {\f1\fs20 IAutoFree} types as defined in {\f1\fs20 SynCommons.pas}. Note that you can handle several local variables in a single {\f1\fs20 TSQLRecord.AutoFree()} or {\f1\fs20 TAutoFree.Create()} initialization.
 Be aware that it does not introduce some kind of magic @*garbage collector@, as available in C# or Java. It is not even similar to the {\f1\fs20 ARC} memory model used by {\i Apple} and the {\i Delphi} {\i NextGen} compiler. It is just some syntaxic sugar creating a local hidden {\f1\fs20 IAutoFree} interface, which will be released at the end of the local method by the compiler, and also release all associated class instances. So the local class instances should stay in the local scope, and should not be sent and stored in another process: in such cases, you may encounter access violation issues.
-Due to an issue in the @*FPC@ implementation of interfaces - see issue @http://bugs.freepascal.org/view.php?id=26602 - the above code will not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
+Due to an issue (feature?) in the @*FPC@ implementation of interfaces - see @http://bugs.freepascal.org/view.php?id=26602 - the above code will not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
 !var aMale: TSQLBaby;
 !!    auto: IAutoFree;
 !...
-!  auto := TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
-!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  auto := TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !  while aMale.FillOne do
 !    DoSomethingWith(aMale);
+One alternative may be to use a {\f1\fs20 with} statement, which prevents the need of defining a local variable:
+!var aMale: TSQLBaby;
+!...
+!  with TAutoFree.One(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)])) do
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
+Or use one of the {\f1\fs20 TSQLRecord.AutoFree} overloaded {\f1\fs20 class} methods:
+!var aMale: TSQLBaby;
+!...
+!  with TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]) do
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
 If you want your code to cross-compile with both Delphi and FPC, consider this expectation of the FPC compiler.
 : Objects relationship: cardinality
 All previous code is fine if your application requires "flat" data. But most of the time, you'll need to define master/child relationship, perhaps over several levels. In data modeling, the {\i @**cardinality@} of one data table with respect to another data table is a critical aspect of database design. Relationships between data tables define {\i cardinality} when explaining how each table links to another.
@@ -12960,7 +12971,7 @@ A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant
 Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) will take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample. Even @63@ may benefit from this {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process - see @72@.
 :  Web Sessions
 @*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the @*web application@, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows creating such sessions.
-You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
+You can store whatever information you need within the client-side cookie. {\f1\fs20 TMVCSessionWithCookies} allows to define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name, his/her preferences or rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses secure encryption, and a digital signature via a {\f1\fs20 HMAC-CRC32C} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform any security-related action. The cookie also stores an integer Session ID, and issuing and expiration dates: as such, it matches all {\f1\fs20 @*JWT@} ({\i Javascript Web Token}) - see @http://jwt.io - features, as signature, encryption, and {\i jwi/iat/exp} claims, with a smaller overhead, and without using unsafe Web Local Storage.
 For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
 !  TCookieData = packed record
 !    AuthorName: RawUTF8;
@@ -12968,10 +12979,10 @@ For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1
 !    AuthorRights: TSQLAuthorRights;
 !  end;
 This record will be serialized in two ways:
-- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
-- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
+- As raw binary, without the field names, within the cookie, after Base64 encoding of encrypted and digitally signed data;
+- As a JSON object, with explicit field names, when transmitted to the {\i Views} as {\f1\fs20 "Session"} data context.
 In order to have proper JSON serialization of the {\f1\fs20 record}, you will need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
-Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
+Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication, after successful login:
 !function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
 !var Author: TSQLAuthor;
 !!    SessionInfo: TCookieData;
@@ -12995,7 +13006,7 @@ Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perfor
 !  end;
 !end;
 As you can see, this {\f1\fs20 Login()} method will be triggered from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
-The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI will have been requested.
+The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI will have been requested. On invalid credential, an error page is displayed instead.
 When a web page is computed, the following overridden method will be executed:
 !function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
 !begin
@@ -13019,23 +13030,56 @@ $!    "session": {
 !$      "AuthorName": "synopse",
 !$      "AuthorID": 1,
 !$      "AuthorRights": {
-!$        "canComment": true,
-!$        "canPost": true,
-!$        "canDelete": true,
-!$        "canAdministrate": true
+!$        "Comment": true,
+!$        "Post": true,
+!$        "Delete": true,
+!$        "Administrate": true
 !$      },
 $      "id": 1
 $    }
 $  }
 $}
-Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
-When the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
+Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View} - e.g. as {\f1\fs20 session.AuthorName}. In addition, your view may include some buttons for logged-only features, like comments or content edition, using {\f1\fs20 boolean} fields defined in {\f1\fs20 session.AuthorRights}.
+For security reasons, before actually performing an action requiring a specific right, it is preferred to check from the Model if the user is effectively allowed. An attacker may have forged a fake cookie - even if it is very unlikely, since cookies are encrypted and signed. It is a good approach to treat all cookies information as an unsafe cache, acceptable for most operation, but which should always be dual checked.\line So your server code will call {\f1\fs20 CurrentSession.CheckAndRetrieve} then access the data {\f1\fs20 RestModel} for verification before any sensitive action is performed. Defining a common method could be handy:
+!function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
+!  ContentToFillAuthor: TSQLContent): TID;
+!var SessionInfo: TCookieData;
+!    author: TSQLAuthor;
+!begin
+!  result := 0;
+!!  if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))>0) and
+!!     (Right in SessionInfo.AuthorRights) then
+!!    with TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID) do
+!!    if Right in author.Rights then begin
+!      result := SessionInfo.AuthorID;
+!      if ContentToFillAuthor<>nil then begin
+!        ContentToFillAuthor.Author := pointer(result);
+!        ContentToFillAuthor.AuthorName := author.LogonName;
+!      end;
+!    end;
+!end;
+It will be used as such, e.g. to verify if a user can comment an article:
+!function TBlogApplication.ArticleComment(ID: TID;
+!  const Title,Comment: RawUTF8): TMVCAction;
+!var comm: TSQLComment;
+!    AuthorID: TID;
+!    error: string;
+!begin
+!  with TSQLComment.AutoFree(comm) do begin
+!!    AuthorID := GetLoggedAuthorID(canComment,comm);
+!    if AuthorID=0 then begin
+!      GotoError(result,sErrorNeedValidAuthorSession);
+!      exit;
+!    end;
+!  ...
+Eventually, when the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
 !function TBlogApplication.Logout: TMVCAction;
 !begin
 !!  CurrentSession.Finalize;
 !  GotoDefault(result);
 !end;
 The session cookie will then be deleted on the browser side.
+Note that if any deprecated or invalid cookie is detected by the {\i mORMot} MVC server, it will also be automatically deleted on the browser side.
 : Writing the Views
 See @81@ for a description of how rendering take place in this MVC/MVVM application. You will find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
 You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
