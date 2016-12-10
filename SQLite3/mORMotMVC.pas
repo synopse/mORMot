@@ -1149,7 +1149,8 @@ begin
     if sessionID=0 then
       exit;
     if rec<>nil then begin
-      recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
+      SaveJSON(pointer(rec)^,PRecordDataTypeInfo,
+        [twoEnumSetsAsBooleanInRecord,twoTrimLeftEnumSets],recJSON);
       _Json(recJSON,result,JSON_OPTIONS_FAST);
     end;
     _ObjAddProps(['id',sessionID],result);
