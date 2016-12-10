@@ -3978,7 +3978,7 @@ begin
     if Instance<>nil then
       fWriter.AddInstancePointer(Instance,' ',fFamily.WithUnitName);
     fWriter.AddFieldName(aName);
-    fWriter.AddTypedJSON(aTypeInfo,aValue,true,true);
+    fWriter.AddTypedJSON(aTypeInfo,aValue);
   finally
     LogTrailerUnLock(Level);
   end;
@@ -4061,8 +4061,10 @@ begin
   end;
   if fWriterClass=nil then
     fWriterClass := TTextWriter;
-  if fWriter=nil then
+  if fWriter=nil then begin
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
+    fWriter.CustomOptions := fWriter.CustomOptions+[twoEnumSetsAsTextInRecord,twoFullSetsAsStar];
+  end;
   fWriter.EndOfLineCRLF := fFamily.EndOfLineCRLF;
   if integer(fFamily.EchoToConsole)<>0 then
     fWriter.EchoAdd(ConsoleEcho);

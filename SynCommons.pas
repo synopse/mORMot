@@ -6127,22 +6127,6 @@ function StringToGUID(const text: string): TGUID;
 function RawUTF8ToGUID(const text: RawByteString): TGUID;
 
 
-/// serialize most kind of content as JSON, using its RTTI
-// - is just a wrapper around TTextWriter.AddTypedJSON()
-// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
-// tkVariant kind of content - other kinds would return 'null'
-procedure SaveJSON(const Value; TypeInfo: pointer;
-  EnumSetsAsText: boolean; var result: RawUTF8); overload;
-
-/// serialize most kind of content as JSON, using its RTTI
-// - is just a wrapper around TTextWriter.AddTypedJSON()
-// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
-// tkVariant kind of content - other kinds would return 'null'
-function SaveJSON(const Value; TypeInfo: pointer;
-  EnumSetsAsText: boolean=false): RawUTF8; overload;
-  {$ifdef HASINLINE}inline;{$endif}
-
-
 /// check equality of two records by content
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties
@@ -7159,7 +7143,10 @@ type
   // before calling a last FlushToStream
   // - by default, custom serializers defined via RegisterCustomJSONSerializer()
   // would let AddRecordJSON() and AddDynArrayJSON() write enumerates and sets
-  // as integer numbers, unless twoEnumSetsAsTextInRecord is set
+  // as integer numbers, unless twoEnumSetsAsTextInRecord or
+  // twoEnumSetsAsBooleanInRecord (exclusively) are set - for Mustache data
+  // context, twoEnumSetsAsBooleanInRecord will return a JSON object with
+  // "setname":true/false fields
   // - variants and nested objects would be serialized with their default
   // JSON serialization options, unless twoForceJSONExtended or
   // twoForceJSONStandard is defined
@@ -7172,9 +7159,11 @@ type
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
     twoEnumSetsAsTextInRecord,
+    twoEnumSetsAsBooleanInRecord,
+    twoFullSetsAsStar,
+    twoTrimLeftEnumSets,
     twoForceJSONExtended,
     twoForceJSONStandard,
-    twoTrimLeftEnumSets,
     twoEndOfLineCRLF);
   /// options set for a TTextWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
@@ -7656,7 +7645,8 @@ type
     // handling this kind of records, or directly from TypeInfo() of the record
     // - by default, custom serializers defined via RegisterCustomJSONSerializer()
     // would write enumerates and sets as integer numbers, unless
-    // twoEnumSetsAsTextInRecord is set in the instance Options
+    // twoEnumSetsAsTextInRecord or twoEnumSetsAsBooleanInRecord is set in
+    // the instance CustomOptions
     procedure AddRecordJSON(const Rec; TypeInfo: pointer);
     {$ifndef NOVARIANTS}
     /// append a variant content as number or string
@@ -7675,13 +7665,7 @@ type
     /// append a JSON value from its RTTI type
     // - handle tkClass,tkEnumeration,tkSet,tkRecord,tkDynArray,tkVariant types
     // - write null for other types
-    // - if EnumSetsAsText is FALSE, tkEnumeration and tkSet would be written as
-    // integer numbers; if EnumSetsAsText is TRUE, they would be serialized as
-    // a JSON string (for tkEnumeration) or JSON array of strings (for tkSet)
-    // - if FullSetsAsStar is TRUE, a tkSet value containing all its items
-    // would be serialized as the ["*"] JSON array  
-    procedure AddTypedJSON(aTypeInfo: pointer; const aValue;
-      EnumSetsAsText, FullSetsAsStar: boolean); 
+    procedure AddTypedJSON(aTypeInfo: pointer; const aValue);
     /// serialize as JSON the given object
     // - this default implementation will write null, or only write the
     // class name and pointer if FullExpand is true - use TJSONSerializer.
@@ -7945,6 +7929,23 @@ type
     property StartDataPosition: integer read fStartDataPosition;
   end;
 
+/// serialize most kind of content as JSON, using its RTTI
+// - is just a wrapper around TTextWriter.AddTypedJSON()
+// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
+// tkVariant kind of content - other kinds would return 'null'
+// - you can override serialization options if needed
+procedure SaveJSON(const Value; TypeInfo: pointer;
+  Options: TTextWriterOptions; var result: RawUTF8); overload;
+
+/// serialize most kind of content as JSON, using its RTTI
+// - is just a wrapper around TTextWriter.AddTypedJSON()
+// - so would handle tkClass, tkEnumeration, tkSet, tkRecord, tkDynArray,
+// tkVariant kind of content - other kinds would return 'null'
+function SaveJSON(const Value; TypeInfo: pointer;
+  EnumSetsAsText: boolean=false): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+type
   /// abstract TSynPersistent class allowing safe storage of a password
   // - the associated Password, e.g. for storage or transmission encryption
   // will be persisted encrypted with a private key (which can be customized)
@@ -37003,23 +37004,25 @@ end;
 { ************  Custom record / dynamic array JSON serialization }
 
 procedure SaveJSON(const Value; TypeInfo: pointer;
-  EnumSetsAsText: boolean; var result: RawUTF8);
+  Options: TTextWriterOptions; var result: RawUTF8);
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
-    if EnumSetsAsText then
-      CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
-    AddTypedJSON(TypeInfo,Value,EnumSetsAsText,true);
+    fCustomOptions := fCustomOptions+Options;
+    AddTypedJSON(TypeInfo,Value);
     SetText(result);
   finally
     Free;
   end;
 end;
 
-function SaveJSON(const Value; TypeInfo: pointer;
-  EnumSetsAsText: boolean=false): RawUTF8;
+function SaveJSON(const Value; TypeInfo: pointer; EnumSetsAsText: boolean): RawUTF8;
+var options: TTextWriterOptions;
 begin
-  SaveJSON(Value,TypeInfo,EnumSetsAsText,result);
+  if EnumSetsAsText then
+    options := [twoEnumSetsAsTextInRecord,twoFullSetsAsStar] else
+    options := [twoFullSetsAsStar];
+  SaveJSON(Value,TypeInfo,options,result);
 end;
 
 type
@@ -37398,7 +37401,7 @@ end;
 
 function RecordSaveJSON(const Rec; TypeInfo: pointer; EnumSetsAsText: boolean): RawUTF8;
 begin
-  SaveJSON(Rec,TypeInfo,EnumSetsAsText,result);
+  result := SaveJSON(Rec,TypeInfo,EnumSetsAsText);
 end;
 
 const
@@ -37560,8 +37563,7 @@ begin
     aWriter.Add(']');
   end;
   ktEnumeration, ktSet: 
-    aWriter.AddTypedJSON(fCustomTypeInfo,aValue,
-      twoEnumSetsAsTextInRecord in aWriter.CustomOptions, true);
+    aWriter.AddTypedJSON(fCustomTypeInfo,aValue);
   ktDynamicArray:
     raise ESynException.CreateUTF8('%.CustomWriter("%"): Unsupported',
         [self,fCustomTypeName]);
@@ -40216,7 +40218,7 @@ procedure TDocVariantData.InitFromTypeInfo(const aValue; aTypeInfo: pointer;
   aEnumSetsAsText: boolean; aOptions: TDocVariantOptions);
 var tmp: RawUTF8;
 begin
-  SaveJSON(aValue,aTypeInfo,aEnumSetsAsText, tmp);
+  tmp := SaveJSON(aValue,aTypeInfo,aEnumSetsAsText);
   InitJSONInPlace(pointer(tmp),aOptions);
 end;
 
@@ -42250,7 +42252,7 @@ end;
 function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean): RawUTF8;
 begin
-  SaveJSON(Value,TypeInfo,EnumSetsAsText,result);
+  result := SaveJSON(Value,TypeInfo,EnumSetsAsText);
 end;
 
 function DynArraySaveJSON(TypeInfo: pointer; const BlobValue: RawByteString): RawUTF8;
@@ -46945,37 +46947,58 @@ begin
   Add(']');
 end;
 
-procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue;
-  EnumSetsAsText,FullSetsAsStar: boolean);
+procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
 var max, i: Integer;
     PS: PShortString;
+  procedure AddPS; overload;
+  begin
+    Add('"');
+    if twoTrimLeftEnumSets in fCustomOptions then
+      AddTrimLeftLowerCase(PS) else
+      AddShort(PS^);
+    Add('"');
+  end;
+  procedure AddPS(bool: boolean); overload;
+  begin
+    AddPS;
+    Add(':');
+    Add(bool);
+  end;
 begin
   case PTypeKind(aTypeInfo)^ of
     tkClass:
       WriteObject(TObject(aValue),[woFullExpand]);
     tkEnumeration:
-      if EnumSetsAsText then begin
-        Add('"');
+      if twoEnumSetsAsBooleanInRecord in fCustomOptions then begin
         PS := GetEnumName(aTypeInfo,byte(aValue));
-        if twoTrimLeftEnumSets in fCustomOptions then
-          AddTrimLeftLowerCase(PS) else
-          AddShort(PS^);
-        Add('"');
+        AddPS(true);
+      end else
+      if twoEnumSetsAsTextInRecord in fCustomOptions then begin
+        PS := GetEnumName(aTypeInfo,byte(aValue));
+        AddPS;
       end else
         AddU(byte(aValue));
     tkSet:
       if GetSetInfo(aTypeInfo,max,PS) then
-        if EnumSetsAsText then begin
+        if twoEnumSetsAsBooleanInRecord in fCustomOptions then begin
+          Add('{');
+          for i := 0 to max do begin
+            AddPS(GetBit(aValue,i));
+            Add(',');
+            inc(PByte(PS),ord(PS^[0])+1); // next short string
+          end;
+          CancelLastComma;
+          Add('}');
+        end else
+        if twoEnumSetsAsTextInRecord in fCustomOptions then begin
           Add('[');
-          if FullSetsAsStar and GetAllBits(cardinal(aValue),max+1) then
+          if (twoFullSetsAsStar in fCustomOptions) and
+             GetAllBits(cardinal(aValue),max+1) then
             AddShort('"*"') else begin
             for i := 0 to max do begin
               if GetBit(aValue,i) then begin
-                Add('"');
-                if twoTrimLeftEnumSets in fCustomOptions then
-                  AddTrimLeftLowerCase(PS) else
-                  AddShort(PS^);
-                Add('"',',');
+                AddPS;
+                Add(',');
               end;
               inc(PByte(PS),ord(PS^[0])+1); // next short string
             end;
