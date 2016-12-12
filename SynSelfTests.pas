@@ -1339,7 +1339,7 @@ var Bits: array[byte] of byte;
     Si,i: integer;
     c: cardinal;
 begin
-  fillchar(Bits,sizeof(Bits),0);
+  FillcharFast(Bits,sizeof(Bits),0);
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
   RandSeed := 10; // will reproduce the same Random() values
@@ -2515,7 +2515,7 @@ begin
     Owner.CustomVersions := Owner.CustomVersions+#13#10'Using mORMot '+
       SYNOPSE_FRAMEWORK_FULLVERSION+#13#10'Running on '+string(OSVersionText)
       {$ifdef MSWINDOWS}+' with code page '+IntToString(GetACP){$endif};
-  fillchar(A,sizeof(A),0);
+  FillCharFast(A,sizeof(A),0);
   for i := 0 to High(A.Bulk) do
     A.Bulk[i] := i;
   A.S1 := 'one';
@@ -2549,7 +2549,7 @@ begin
   Check(CompareMem(@A,@A,0));
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i));
-  fillchar(A.Bulk,sizeof(A.Bulk),255);
+  FillCharFast(A.Bulk,sizeof(A.Bulk),255);
   for i := 0 to High(B.Bulk) do
     Check(CompareMem(@A.Bulk,@B.Bulk,i)=(i=0));
   B.Three := 3;
@@ -2629,7 +2629,7 @@ begin
   Check(utf='00amyWGct0y_ze4lIsj2Mw');
   Base64FromURI(utf);
   Check(Base64ToBinLength(pointer(utf),length(utf))=sizeof(GUID2));
-  fillchar(GUID2,sizeof(GUID2),0);
+  FillCharFast(GUID2,sizeof(GUID2),0);
   SynCommons.Base64Decode(Pointer(utf),@GUID2,SizeOf(GUID2));
   Check(IsEqualGUID(GUID2,GUID));
   Check(U.From('toto.com'));
@@ -2681,7 +2681,7 @@ begin
   end;
   {$ifdef ISDELPHI2010}
   s := RecordSaveJSON(g,TypeInfo(TGUID));
-  fillchar(g2,sizeof(g2),0);
+  FillCharFast(g2,sizeof(g2),0);
   Check(RecordLoadJSON(g2,pointer(s),TypeInfo(TGUID))<>nil);
   Check(IsEqualGUID(g2,g));
   {$endif}
@@ -3421,7 +3421,7 @@ begin
     Check(UnQuoteSQLStringVar(pointer(QuotedStr(U,'"')),res)<>nil);
     Check(res=U);
     Check(not IsZero(pointer(W),length(W)));
-    fillchar(pointer(W)^,length(W),0);
+    FillCharFast(pointer(W)^,length(W),0);
     Check(IsZero(pointer(W),length(W)));
     Check(FormatUTF8(U,[])=U);
 {$ifndef DELPHI5OROLDER}
@@ -3630,7 +3630,7 @@ begin
   tz := TSynTimeZone.Create;
   try
     check(tz.Zone=nil);
-    fillchar(d,sizeof(d),0);
+    FillCharFast(d,sizeof(d),0);
     for i := 0 to 40 do begin
       UInt32ToUTF8(i,RawUTF8(d.id));
       d.display := 'displayed '+d.id;
@@ -5327,8 +5327,6 @@ type
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
     ID: Int64;
-    /// JSON encoded UTF-8 serialization of the record
-    JSON: RawUTF8;
     /// GetTickCount64 shr 9 timestamp when this cached value was stored
     // - resulting time period has therefore a resolution of 512 ms, and
     // overflows after 70 years without computer reboot
@@ -5337,6 +5335,8 @@ type
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
     Tag: cardinal;
+    /// JSON encoded UTF-8 serialization of the record
+    JSON: RawUTF8;
   end;
 {$endif}
 
@@ -5455,7 +5455,7 @@ const // convention may be to use __ before the type name
     'TRRMK RawUTF8]';
   __TTestCustomDiscogs = 'pagination{per_page,items,page Integer}'+
     'releases[status,title,format,label,artist RawUTF8 year,id integer]';
-  __TSQLRestCacheEntryValue = 'ID: Int64; JSON: RawUTF8; TimeStamp512,Tag: cardinal';
+  __TSQLRestCacheEntryValue = 'ID: Int64; TimeStamp512,Tag: cardinal; JSON: RawUTF8';
   __TSubAB = 'a : RawUTF8; b : integer;';
   __TSubCD = 'c : byte; d : RawUTF8;';
   __TAggregate = 'abArr : array of TSubAB; cdArr : array of TSubCD;';
@@ -5656,8 +5656,8 @@ var i: Integer;
 begin
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSONGitHub),
     __TTestCustomJSONGitHub).Options := Options;
-  FillChar(git,sizeof(git),0);
-  FillChar(git2,sizeof(git2),0);
+  FillCharFast(git,sizeof(git),0);
+  FillCharFast(git2,sizeof(git2),0);
   U := zendframeworkJson; // need unique string for procedure re-entrance
   Check(DynArrayLoadJSON(git,UniqueRawUTF8(U),TypeInfo(TTestCustomJSONGitHubs))<>nil);
   U := DynArraySaveJSON(git,TypeInfo(TTestCustomJSONGitHubs));
@@ -5742,10 +5742,10 @@ begin
   Finalize(JR2);
   Finalize(JA);
   Finalize(JA2);
-  fillchar(JR,sizeof(JR),0);
-  fillchar(JR2,sizeof(JR2),0);
-  fillchar(JA,sizeof(JA),0);
-  fillchar(JA2,sizeof(JA2),0);
+  FillCharFast(JR,sizeof(JR),0);
+  FillCharFast(JR2,sizeof(JR2),0);
+  FillCharFast(JA,sizeof(JA),0);
+  FillCharFast(JA2,sizeof(JA2),0);
   U := RecordSaveJSON(JR,TypeInfo(TTestCustomJSONRecord));
   Check(U='{"A":0,"B":0,"C":0,"D":"","E":{"E1":0,"E2":0},"F":""}');
   X := JSONToXML(U,'');
@@ -5854,7 +5854,7 @@ begin
   Check(Hash32(j)=$E3AC9C44);
 
   Finalize(JAS);
-  FillChar(JAS,sizeof(JAS),0);
+  FillCharFast(JAS,sizeof(JAS),0);
   U := RecordSaveJSON(JAS,TypeInfo(TTestCustomJSONArraySimple));
   Check(U='{"A":0,"B":0,"C":[],"D":"","E":[],"H":""}');
   U := '{"a":1,"b":2,"c":["C9A646D3-9C61-4CB7-BFCD-EE2522C8F633",'+
@@ -5878,7 +5878,7 @@ begin
 
 {$ifndef NOVARIANTS}
   Finalize(JAV);
-  FillChar(JAV,sizeof(JAV),0);
+  FillCharFast(JAV,sizeof(JAV),0);
   U := RecordSaveJSON(JAV,TypeInfo(TTestCustomJSONArrayVariant));
   Check(U='{"A":0,"B":0,"C":[],"D":""}');
   assert(DocVariantType<>nil);
@@ -5912,25 +5912,31 @@ begin
 {$endif}
 
   Finalize(Cache);
-  FillChar(Cache,sizeof(Cache),0);
+  FillCharFast(Cache,sizeof(Cache),0);
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":0,"JSON":"","TimeStamp512":0,"Tag":0}');
+  Check(U='{"ID":0,"TimeStamp512":0,"Tag":0,"JSON":""}');
   Cache.ID := 10;
   Cache.TimeStamp512 := 200;
   Cache.JSON := 'test';
   Cache.Tag := 12;
   U := RecordSaveJSON(Cache,TypeInfo(TSQLRestCacheEntryValue));
-  Check(U='{"ID":10,"JSON":"test","TimeStamp512":200,"Tag":12}');
+  Check(U='{"ID":10,"TimeStamp512":200,"Tag":12,"JSON":"test"}');
   U := '{"ID":210,"TimeStamp512":2200,"JSON":"test2"}';
   RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
   Check(Cache.ID=210);
   Check(Cache.TimeStamp512=2200);
   Check(Cache.JSON='test2');
   Check(Cache.Tag=12);
+  U := '{ID:220,JSON:"test3",TimeStamp512:2300}';
+  RecordLoadJSON(Cache,UniqueRawUTF8(U),TypeInfo(TSQLRestCacheEntryValue));
+  Check(Cache.ID=220);
+  Check(Cache.TimeStamp512=2300);
+  Check(Cache.JSON='test3');
+  Check(Cache.Tag=12);
 
   {$ifdef ISDELPHI2010}
-  fillchar(nav,sizeof(nav),0);
-  fillchar(nav2,sizeof(nav2),1);
+  FillCharFast(nav,sizeof(nav),0);
+  FillCharFast(nav2,sizeof(nav2),1);
   Check(not CompareMem(@nav,@nav2,sizeof(nav)));
   Check(nav2.MaxRows<>0);
   check(nav2.EOF);
@@ -5944,12 +5950,12 @@ begin
   Check(J=RecordSaveJSON(nav,TypeInfo(TConsultaNav)));
   Check(CompareMem(@nav,@nav2,sizeof(nav)));
   Finalize(nrtti);
-  fillchar(nrtti,sizeof(nrtti),0);
+  FillCharFast(nrtti,sizeof(nrtti),0);
   U := RecordSaveJSON(nrtti,TypeInfo(TNewRTTI));
   Check(U='{"Number":0,"StaticArray":[{"Name":"","Single":0,"Double":0},'+
      '{"Name":"","Single":0,"Double":0}],"Int":[0,0,0,0,0]}');
   Finalize(nrtti2);
-  fillchar(nrtti2,sizeof(nrtti2),0);
+  FillCharFast(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
   check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
@@ -5969,7 +5975,7 @@ begin
   Check(U='{"Number":1,"StaticArray":[{"Name":"one","Single":1.5,"Double":1.7},'+
     '{"Name":"two","Single":2.5,"Double":2.7}],"Int":[1,2,3,4,5]}');
   Finalize(nrtti2);
-  fillchar(nrtti2,sizeof(nrtti2),0);
+  FillCharFast(nrtti2,sizeof(nrtti2),0);
   Check(RecordLoadJSON(nrtti2,pointer(U),TypeInfo(TNewRTTI))<>nil);
   J := RecordSaveJSON(nrtti2,TypeInfo(TNewRTTI));
   check(J=RecordSaveJSON(nrtti,TypeInfo(TNewRTTI)));
@@ -6594,7 +6600,7 @@ begin
   U := RecordSaveJSON(JA2,TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(U='{"A":100,"B":0,"C":0,"D":null,"E":[{"E1":1,"E2":"2"},{"E1":3,"E2":"4"}]}');
   Finalize(JA);
-  fillchar(JA,sizeof(JA),0);
+  FillCharFast(JA,sizeof(JA),0);
   RecordLoadJSON(JA,pointer(U),TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(JA.A=100);
   Check(JA.D='');
@@ -6605,7 +6611,7 @@ begin
   U := RecordSaveJSON(JA,TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(length(JA.E)=2);
   Finalize(JA);
-  fillchar(JA,sizeof(JA),0);
+  FillCharFast(JA,sizeof(JA),0);
   RecordLoadJSON(JA,pointer(U),TypeInfo(TTestCustomJSONArrayWithoutF));
   Check(length(JA.E)=2);
   Check(JA.D='1234');
@@ -6627,7 +6633,7 @@ begin
     __TTestCustomJSON2Title).Options := [soWriteHumanReadable];
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomJSON2),
     __TTestCustomJSON2).Options := [soWriteHumanReadable];
-  fillchar(Trans,sizeof(Trans),0);
+  FillCharFast(Trans,sizeof(Trans),0);
   U := RecordSaveJSON(Trans,TypeInfo(TTestCustomJSON2));
   Check(U='{'#$D#$A#9'"Transactions": []'#$D#$A'}');
   for i := 1 to 10 do begin
@@ -6652,7 +6658,7 @@ begin
   Parser := TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomDiscogs),
     __TTestCustomDiscogs) as TJSONRecordTextDefinition;
   Parser.Options := [soReadIgnoreUnknownFields];
-  fillchar(Disco,sizeof(Disco),0);
+  FillCharFast(Disco,sizeof(Disco),0);
   Check(PtrUInt(@Disco.releases)-PtrUInt(@Disco)=3*sizeof(integer));
   Check(sizeof(Disco.releases[0])=5*sizeof(Pointer)+2*sizeof(integer));
   Check(sizeof(Disco)=sizeof(Pointer)+3*sizeof(integer));
@@ -6670,7 +6676,7 @@ begin
   U := RecordSaveJSON(Disco,TypeInfo(TTestCustomDiscogs));
   FileFromString(U,'discoExtract.json');
   Finalize(Disco);
-  fillchar(Disco,sizeof(Disco),0);
+  FillCharFast(Disco,sizeof(Disco),0);
   U := '{"pagination":{"per_page":1},"releases":[{"title":"TEST","id":10}]}';
   RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=1);
@@ -6680,7 +6686,7 @@ begin
     Check(Disco.releases[0].id=10);
   end;
   Finalize(Disco);
-  fillchar(Disco,sizeof(Disco),0);
+  FillCharFast(Disco,sizeof(Disco),0);
   U := '{"pagination":{},"releases":[{"Id":10},{"TITle":"blabla"}]}';
   RecordLoadJSON(Disco,UniqueRawUTF8(U),TypeInfo(TTestCustomDiscogs));
   Check(Disco.pagination.per_page=0);
@@ -8798,7 +8804,7 @@ begin
           for m := low(MODES) to high(MODES) do
           with MODES[m].Create(Key,ks) do
           try
-            fillchar(pointer(@IV)^,sizeof(TAESBlock),1);
+            FillCharFast(pointer(@IV)^,sizeof(TAESBlock),1);
             //Timer.Start;
             for i := 0 to 256 do begin
               if i<64 then
@@ -8806,9 +8812,9 @@ begin
               if i<128 then
                 len := i*16 else
                 len := i*32;
-              FillChar(pointer(crypted)^,len,0);
+              FillCharFast(pointer(crypted)^,len,0);
               Encrypt(AES.outStreamCreated.Memory,pointer(crypted),len);
-              FillChar(pointer(orig)^,len,0);
+              FillCharFast(pointer(orig)^,len,0);
               Decrypt(pointer(crypted),pointer(orig),len);
               Check((len=0) or (not isZero(pointer(orig),len)) or
                 isZero(AES.outStreamCreated.Memory,len));
@@ -9824,13 +9830,13 @@ begin
         Check(length(s)>6500) else begin
         i := PosEx('/FontBBox[',s);
         if CheckFailed(i<>0) then exit;
-        fillchar(s[i],32,32);
+        FillCharFast(s[i],32,32);
         j := PosEx('/FontBBox[',s);
         if CheckFailed(j<>0) then exit;
-        fillchar(s[j],32,32);
+        FillCharFast(s[j],32,32);
         i := PosEx('/FontBBox[',s);
         if CheckFailed(i<>0)then exit;
-        fillchar(s[i],32,32);
+        FillCharFast(s[i],32,32);
         H := Hash32(s);
         Check(H=3564778312);
       end;
@@ -12620,7 +12626,7 @@ end;
 procedure Direct(const URI: RawUTF8; Hash: cardinal; const head: RawUTF8='');
 var call: TSQLRestURIParams;
 begin
-  fillchar(call,sizeof(call),0);
+  FillCharFast(call,sizeof(call),0);
   call.Method :='GET';
   call.url := URI;
   call.InHead := head;
@@ -13708,7 +13714,7 @@ begin
     Str2[0] := 'ABC';
     Str2[1] := 'DEF';
     Str2[2] := 'GHIJK';
-    fillchar(Rec1,sizeof(Rec1),0);
+    FillCharFast(Rec1,sizeof(Rec1),0);
     Rec1.Features := [vtTransaction,vtSavePoint];
     Rec1.FileExtension := ExeVersion.ProgramFileName;
     Rec2.ID := i1;
@@ -13942,7 +13948,7 @@ var Inst: TTestServiceInstances;
     sign: RawUTF8;
     stat: TSynMonitorInputOutput;
 begin
-  fillchar(Inst,sizeof(Inst),0);
+  FillCharFast(Inst,sizeof(Inst),0);
   GlobalInterfaceTestMode := itmClient;
   {$ifndef LVCL}
   if aRunInOtherThread then
@@ -14020,7 +14026,7 @@ end;
 procedure TTestServiceOrientedArchitecture.DirectCall;
 var Inst: TTestServiceInstances;
 begin
-  fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
+  FillCharFast(Inst,sizeof(Inst),0); // all Expected..ID=0
   Inst.I := TServiceCalculator.Create;
   Inst.CC := TServiceComplexCalculator.Create;
   Inst.CN := TServiceComplexNumber.Create;
@@ -14036,7 +14042,7 @@ end;
 procedure TTestServiceOrientedArchitecture.ServerSide;
 var Inst: TTestServiceInstances;
 begin
-  fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
+  FillCharFast(Inst,sizeof(Inst),0); // all Expected..ID=0
   if CheckFailed(fModel<>nil) or CheckFailed(fClient<>nil) or
      CheckFailed(fClient.Server.Services.Count=7) or
      CheckFailed(fClient.Server.Services.Index(0).Get(Inst.I)) or
@@ -14399,7 +14405,7 @@ begin
     {$ifdef ONLYUSEHTTPSOCKET}useHttpSocket{$else}useHttpApiRegisteringURI{$endif},
     8,secNone);
   try
-    fillchar(Inst,sizeof(Inst),0); // all Expected..ID=0
+    FillCharFast(Inst,sizeof(Inst),0); // all Expected..ID=0
     HTTPClient := TSQLHttpClient.Create('127.0.0.1',HTTP_DEFAULTPORT,fModel);
     try
       HTTPClient.ServicePublishOwnInterfaces(fClient.Server); 

@@ -6070,6 +6070,9 @@ type
     /// the kind of static instance corresponding to the associated Table (if any)
     StaticKind: TSQLRestServerKind;
     /// optional error message which will be transmitted as JSON error (if set)
+    // - contains e.g. TNotifyAuthenticationFailedReason text during
+    // TSQLRestServer.OnAuthenticationFailed event call, or the reason of a
+    // TSQLRestServer.RecordCanBeUpdated failure
     CustomErrorMsg: RawUTF8;
     /// high-resolution timimg of the execution command, in micro-seconds
     // - only set when TSQLRestServer.URI finished
@@ -12872,8 +12875,6 @@ type
   TSQLRestCacheEntryValue = packed record
     /// corresponding ID
     ID: TID;
-    /// JSON encoded UTF-8 serialization of the record
-    JSON: RawUTF8;
     /// GetTickCount64 shr 9 timestamp when this cached value was stored
     // - resulting time period has therefore a resolution of 512 ms, and
     // overflows after 70 years without computer reboot
@@ -12882,6 +12883,8 @@ type
     /// some associated unsigned integer value
     // - not used by TSQLRestCache, but available at TSQLRestCacheEntry level
     Tag: cardinal;
+    /// JSON encoded UTF-8 serialization of the record
+    JSON: RawUTF8;
   end;
 
   /// for TSQLRestCache, stores all tables values
@@ -12988,6 +12991,13 @@ type
     // - this will flush all stored JSON content, AND destroy the settings
     // (SetCache/SetTimeOut) to default (i.e. no cache enabled)
     procedure Clear;
+    // - will fill the internal JSON cache of a given Table with data coming
+    // from a REST query
+    // - returns the number of TSQLRecord items actually cached
+    // - may be handy to pre-load a set of values (e.g. a lookup table) from a
+    // single REST query, without waiting for each record to be retrieved 
+    function FillFromQuery(aTable: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+      const BoundsSQLWhere: array of const): integer;
     /// activate the internal caching for a whole Table
     // - any cached item of this table will be flushed
     // - return true on success
@@ -35205,6 +35215,25 @@ end;
 
 { TSQLRestCache }
 
+constructor TSQLRestCache.Create(aRest: TSQLRest);
+var i: integer;
+begin
+  if aRest=nil then
+    EBusinessLayerException.CreateUTF8('%.Create',[self]);
+  fRest := aRest;
+  SetLength(fCache,length(fRest.Model.Tables));
+  for i := 0 to high(fCache) do
+    fCache[i].Init;
+end;
+
+destructor TSQLRestCache.Destroy;
+var i: integer;
+begin
+  for i := 0 to high(fCache) do
+    fCache[i].Done;
+  inherited;
+end;
+
 function TSQLRestCache.CachedEntries: cardinal;
 var i,j: integer;
 begin
@@ -35327,31 +35356,34 @@ begin
     result := SetCache(PSQLRecordClass(aRecord)^,aRecord.fID);
 end;
 
-constructor TSQLRestCache.Create(aRest: TSQLRest);
-var i: integer;
-begin
-  if aRest=nil then
-    EBusinessLayerException.CreateUTF8('%.Create',[self]);
-  fRest := aRest;
-  SetLength(fCache,length(fRest.Model.Tables));
-  for i := 0 to high(fCache) do
-    fCache[i].Init;
-end;
-
-destructor TSQLRestCache.Destroy;
-var i: integer;
-begin
-  for i := 0 to high(fCache) do
-    fCache[i].Done;
-  inherited;
-end;
-
 procedure TSQLRestCache.Clear;
 var i: integer;
 begin
   if self<>nil then
   for i := 0 to high(fCache) do
     fCache[i].Clear;
+end;
+
+function TSQLRestCache.FillFromQuery(aTable: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
+  const BoundsSQLWhere: array of const): integer;
+var rec: TSQLRecord;
+    cache: ^TSQLRestCacheEntry;
+begin
+  result := 0;
+  if self=nil then
+    exit;
+  cache := @fCache[fRest.Model.GetTableIndexExisting(aTable)];
+  if not cache^.CacheEnable then
+    exit;
+  rec := aTable.CreateAndFillPrepare(fRest,FormatSQLWhere,BoundsSQLWhere);
+  try
+    while rec.FillOne do begin
+      cache^.SetJSON(rec);
+      inc(result);
+    end;
+  finally
+    rec.Free;
+  end;
 end;
 
 procedure TSQLRestCache.Flush;

@@ -31877,12 +31877,11 @@ function UnixTimeUTC: cardinal;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
 {$ifdef CPU64}
-    nano100: Int64Rec;
+    nano100: Int64;
 begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
-  nano100.Lo := ft.dwLowDateTime;
-  nano100.Hi := ft.dwHighDateTime;
-  result := (Int64(nano100)-UnixFileTimeDelta) div 10000000;
+  FileTimeToInt64(ft,nano100);
+  result := (nano100-UnixFileTimeDelta) div 10000000;
 {$else}
 begin
   GetSystemTimeAsFileTime(ft);
