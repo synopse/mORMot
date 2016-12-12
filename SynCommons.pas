@@ -43030,7 +43030,8 @@ begin
     P := GotoNextNotSpace(P);
     if P^='[' then begin
       P := GotoNextNotSpace(P+1);
-      while P^<>']' do begin
+      if P^<>']' then
+      repeat
         if Index<=0 then begin
           result := P;
           exit;
@@ -43052,7 +43053,7 @@ begin
         if P^<>',' then break;
         repeat inc(P) until not(P^ in [#1..' ']);
         dec(Index);
-      end;
+      until false;
     end;
   end;
   result := nil;
@@ -43137,7 +43138,8 @@ begin
       end;
       if P^='{' then
         P := GotoNextNotSpace(P+1);
-      while P^<>'}' do begin
+      if P^<>'}' then
+      repeat
         GetJSONPropName(P,name);
         if (name[0]=#0) or (name[0]>#200) then
           break;
@@ -43146,7 +43148,7 @@ begin
           name[ord(name[0])+1] := #0; // make ASCIIZ
           if IdemPChar(@name[1],PropNameUpper) then begin
             if PropNameFound<>nil then
-              PropNameFound^ := name;
+              SetString(PropNameFound^,PAnsiChar(@name[1]),ord(name[0]));
             result := P;
             exit;
           end;
@@ -43168,10 +43170,10 @@ begin
             break; // invalid content
         end;
         end;
-        while not (P^ in [#0,',',']']) do inc(P);
+        while not (P^ in [#0,',','}']) do inc(P);
         if P^<>',' then break;
         repeat inc(P) until not(P^ in [#1..' ']);
-      end;
+      until false;
     end;
   end;
   result := nil;
@@ -43190,9 +43192,7 @@ begin
     JsonObject := JsonObjectItem(JsonObject,objName);
     if JsonObject=nil then
       exit;
-    if PropPath=nil then
-      break; // found full name scope
-  until false;
+  until PropPath=nil; // found full name scope
   result := JsonObject;
 end;
 

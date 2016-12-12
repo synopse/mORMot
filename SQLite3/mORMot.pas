@@ -1323,6 +1323,9 @@ type
   /// used to store a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
   TIDDynArray = array of TID;
 
+  /// pointer to a dynamic array of ORM primary keys, i.e. TSQLRecord.ID
+  PIDDynArray = ^TIDDynArray;
+
   /// used to store bit set for all available Tables in a Database Model
   TSQLFieldTables = set of 0..MAX_SQLTABLES-1;
 
