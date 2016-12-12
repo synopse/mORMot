@@ -6194,7 +6194,8 @@ type
     // - if not void, TSQLRestServer.URI() will define a new 'set-cookie: ...'
     // header in Call^.OutHead
     // - you can use COOKIE_EXPIRED as value to delete a cookie in the browser
-    // - if no Path=/.. is included, it will append '; Path=/'+Server.Model.Root
+    // - if no Path=/.. is included, it will append
+    // $ '; Path=/'+Server.Model.Root+'; HttpOnly'
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUTF8 read GetUserAgent;
@@ -16000,6 +16001,9 @@ type
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
   // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured -
   // with the only exception of the Timestamp method-based service
+  // - by default, cookies will contain only 'Path=/Model.Root', but
+  // '; Path=/' may be also added setting rsoCookieIncludeRootPath
+  // - you can disable the 'HttpOnly' flag via rsoCookieHttpOnlyFlagDisable
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16008,7 +16012,9 @@ type
     rsoHttp200WithNoBodyReturns204,
     rsoAddUpdateReturnsContent,
     rsoComputeFieldsBeforeWriteOnServerSide,
-    rsoSecureConnectionRequired);
+    rsoSecureConnectionRequired,
+    rsoCookieIncludeRootPath,
+    rsoCookieHttpOnlyFlagDisable);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -16238,6 +16244,7 @@ type
     // - you can access the current execution context from the Ctxt parameter,
     // e.g. to retrieve the caller's IP and ban aggressive users:
     // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
+    // or the text error message corresponding to Reason in Ctxt.CustomErrorMsg
     OnAuthenticationFailed: TNotifyAuthenticationFailed;
     /// a method can be specified to be notified when a session is closed
     // - for OnSessionClosed, the returning boolean value is ignored
@@ -33902,6 +33909,7 @@ function TSQLRest.MultiFieldValue(Table: TSQLRecordClass;
 var SQL: RawUTF8;
     n,i: integer;
     T: TSQLTableJSON;
+    P: PUTF8Char;
 begin
   result := false;
   n := length(FieldName);
@@ -33923,8 +33931,10 @@ begin
       if (T.FieldCount<>length(FieldName)) or (T.fRowCount<=0) then
         exit;
       // get field values from the first (and unique) row
-      for i := 0 to T.FieldCount-1 do
-        FieldValue[i] := T.fResults[T.FieldCount+i];
+      for i := 0 to T.FieldCount-1 do begin
+        P := T.fResults[T.FieldCount+i];
+        SetString(FieldValue[i],P,StrLen(P));
+      end;
       result := true;
     finally
       T.Free;
@@ -39588,6 +39598,9 @@ begin
   end;
 end;
 
+const
+  COOKIE_MAXCOUNT_DOSATTACK = 512;
+
 procedure TSQLRestServerURIContext.RetrieveCookies;
 var n: integer;
     P: PUTF8Char;
@@ -39605,6 +39618,8 @@ begin
     fInputCookies[n].Name := cn;
     fInputCookies[n].Value := cv;
     inc(n);
+    if n>COOKIE_MAXCOUNT_DOSATTACK then
+      raise EParsingException.CreateUTF8('%.RetrieveCookies overflow',[self]);
   end;
 end;
 
@@ -39618,7 +39633,7 @@ begin
     RetrieveCookies;
   n := length(fInputCookies);
   for i := 0 to n-1 do
-    if fInputCookies[i].Name=CookieName then begin
+    if fInputCookies[i].Name=CookieName then begin // cookies are case-sensitive
       fInputCookies[i].Value := CookieValue; // in-place update
       exit;
     end;
@@ -39637,13 +39652,15 @@ begin
   if not fInputCookiesRetrieved then
     RetrieveCookies;
   for i := 0 to length(fInputCookies)-1 do
-    if fInputCookies[i].Name=CookieName then begin
+    if fInputCookies[i].Name=CookieName then begin // cookies are case-sensitive
       result := fInputCookies[i].Value;
       exit;
     end;
 end;
 
 procedure TSQLRestServerURIContext.SetOutSetCookie(aOutSetCookie: RawUTF8);
+const
+  HTTPONLY: array[boolean] of RawUTF8 = ('; HttpOnly','');
 begin
   if self=nil then
     exit;
@@ -39651,8 +39668,9 @@ begin
   if PosEx('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
-  if PosI('; PATH=',aOutSetCookie)=0 then
-    fOutSetCookie := aOutSetCookie+'; Path=/'+Server.Model.Root else
+  if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
+    FormatUTF8('%; Path=%%',[aOutSetCookie,Server.Model.Root,
+      HTTPONLY[rsoCookieHttpOnlyFlagDisable in Server.fOptions]],fOutSetCookie) else
     fOutSetCookie := aOutSetCookie;
 end;
 
@@ -40261,9 +40279,11 @@ begin
       Call.OutInternalState := cardinal(-1) else
       // database state may have changed above
       Call.OutInternalState := InternalState;
-    if Ctxt.OutSetCookie<>'' then
-      Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie+
-        '; Path=/'); // not Path=/ModelRoot, since will be case sensitive
+    if Ctxt.OutSetCookie<>'' then begin
+      Call.OutHead := Trim(Call.OutHead+#13#10'Set-Cookie: '+Ctxt.OutSetCookie);
+      if rsoCookieIncludeRootPath in fOptions then
+        Call.OutHead := Call.OutHead+'; Path=/'; // case-sensitive Path=/ModelRoot
+    end;
   finally
     QueryPerformanceCounter(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
@@ -40330,7 +40350,8 @@ begin // called by root/TimeStamp/info REST method
   m := TSynMonitorMemory.Create;
   try
     cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
-    info.AddNameValuesToObject(['timestamp',ServerTimeStamp,
+    info.AddNameValuesToObject([
+      'timestamp',ServerTimeStamp, 'now',DateTimeToIso8601Text(ServerTimeStamp,' '),
       'exe', ExeVersion.ProgramName, 'version',ExeVersion.Version.Detailed,
       'started',Stats.StartDate,
       'clients',Stats.ClientsCurrent, 'methods',Stats.ServiceMethod,
