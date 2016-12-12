@@ -116,6 +116,7 @@ uses
   {$ifndef NOVARIANTS}
   SynMustache in '..\SynMustache.pas',
   mORMotWrappers in 'mORMotWrappers.pas',
+  mORMotMVC in 'mORMotMVC.pas',
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
