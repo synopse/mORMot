@@ -3792,9 +3792,12 @@ type
   /// result list, as returned by FindFiles()
   TFindFilesDynArray = array of TFindFiles;
 
+  /// a pointer to a TFileName variable
+  PFileName = ^TFileName;
+
 /// search for matching file names
 // - just a wrapper around FindFirst/FindNext
-// - you may specify several masks in Mask, e.g. as '*.htm;*.html'
+// - you may specify several masks in Mask, e.g. as '*.jpg;*.jpeg'
 function FindFiles(const Directory,Mask: TFileName;
   const IgnoreFileName: TFileName=''; SortByName: boolean=false;
   IncludesDir: boolean=true): TFindFilesDynArray;
@@ -3842,7 +3845,9 @@ procedure VarCastError;
 {$endif}
 
 /// extract file name, without its extension
-function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
+// - may optionally return the associated extension, as '.ext'
+function GetFileNameWithoutExt(const FileName: TFileName;
+  Extension: PFileName=nil): TFileName;
 
 /// extract a file extension from a file name, then compare with a comma
 // separated list of extensions
@@ -6327,6 +6332,11 @@ function SortDynArrayString(const A,B): integer;
 /// compare two "array of generic string" elements, with no case sensitivity
 // - the expected string type is the generic VCL string
 function SortDynArrayStringI(const A,B): integer;
+
+/// compare two "array of TFileName" elements, as file names
+// - i.e. with no case sensitivity, and grouped by file extension
+// - the expected string type is the generic RTL string, i.e. TFileName
+function SortDynArrayFileName(const A,B): integer;
 
 {$ifndef NOVARIANTS}
 /// compare two "array of variant" elements, with case sensitivity
@@ -26901,16 +26911,23 @@ begin
     {$endif}
 end;
 
-function GetFileNameWithoutExt(const FileName: TFileName): TFileName;
+function GetFileNameWithoutExt(const FileName: TFileName;
+  Extension: PFileName): TFileName;
 var i, max: PtrInt;
 begin
   i := length(FileName);
-  max := i-8;
+  max := i-16;
   while (i>0) and not(cardinal(FileName[i]) in [ord('\'),ord('/'),ord('.')])
     and (i>=max) do dec(i);
-  if (i=0) or (FileName[i]<>'.') then
-    result := FileName else
-    SetString(result,PChar(pointer(FileName)),i-1);
+  if (i=0) or (FileName[i]<>'.') then begin
+    result := FileName;
+    if Extension<>nil then
+      Extension^ := '';
+  end else begin
+    result := copy(FileName,1,i-1);
+    if Extension<>nil then
+      Extension^ := copy(FileName,i,20);
+  end;
 end;
 
 function GetFileNameExtIndex(const FileName, CSVExt: TFileName): integer;
@@ -27152,7 +27169,7 @@ begin
       SetLength(result,n);
     end;
     if SortByName and (n>0) then
-      da.Sort(SortDynArrayStringI);
+      da.Sort(SortDynArrayFileName);
   end;
 end;
 
@@ -42457,6 +42474,16 @@ begin
   {$else}
   result := StrIComp(PUTF8Char(A),PUTF8Char(B));
   {$endif}
+end;
+
+function SortDynArrayFileName(const A,B): integer;
+var Aname, Aext, Bname, Bext: TFileName;
+begin // code below is not very fast, but is correct ;)
+  AName := GetFileNameWithoutExt(string(A),@Aext);
+  BName := GetFileNameWithoutExt(string(B),@Bext);
+  result := AnsiCompareFileName(Aext,Bext);
+  if result=0 then // if both extensions matches, compare by filename
+    result := AnsiCompareFileName(Aname,Bname);
 end;
 
 function SortDynArrayUnicodeString(const A,B): integer;
