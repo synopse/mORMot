@@ -53,6 +53,7 @@ type
       version: RawUTF8;
       mem: RawUTF8;
       clients: integer;
+      exceptions: TRawUTF8DynArray;
       lasttix: Int64;
     end;
     SavePrefix: TFileName;
@@ -172,6 +173,7 @@ begin
       if State.mem = '' then
         State.mem := KB(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10);
       State.clients := State.raw.I['clients'];
+      State.raw.GetAsDocVariantSafe('exception')^.ToRawUTF8DynArray(State.exceptions);
       State.lasttix := GetTickCount64;
     end;
     if Assigned(OnAfterGetState) then

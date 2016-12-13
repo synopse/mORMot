@@ -26869,6 +26869,10 @@ begin
     Fields[i] := FieldNames[i];
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+{$endif}
+
 function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   Occasion: TSQLOccasion; const UpdateIDFieldName: RawUTF8;
   BatchOptions: TSQLRestBatchOptions): RawUTF8;
@@ -26922,6 +26926,10 @@ begin
     W.Free;
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS ON} 
+{$endif}
 
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
 var F: integer;
