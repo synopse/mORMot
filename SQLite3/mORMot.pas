@@ -4292,6 +4292,7 @@ var
   // - you should not access this variable, but via inline methods
   ObjArraySerializers: TPointerClassHash;
 
+{$ifndef NOVARIANTS}
 /// fill a class instance from a TDocVariant object document properties
 // - returns FALSE if the variant is not a dvObject, TRUE otherwise
 function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
@@ -4305,7 +4306,7 @@ procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
 // - will always erase the T*ObjArray instance, and fill it from arr values
 procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
   objClass: PClassInstance); overload;
-
+{$endif}
 
 { ************ cross-cutting classes and types }
 
@@ -7441,9 +7442,11 @@ type
     // - see also TSQLRest.AppendListAsJsonArray for a high-level wrapper method
     procedure AppendFillAsJsonArray(const FieldName: RawUTF8;
        W: TJSONSerializer; Fields: TSQLFieldBits=[]);
+    {$ifndef NOVARIANTS}
     /// change TDocVariantData.Options for all variant published fields
     // - may be used to replace e.g. JSON_OPTIONS_FAST_EXTENDED by JSON_OPTIONS_FAST
     procedure ForceVariantFieldsOptions(aOptions: TDocVariantOptions=JSON_OPTIONS_FAST);
+    {$endif}
     /// write the field values into the binary buffer
     // - won't write the ID field (should be stored before, with the Count e.g.)
     procedure GetBinaryValues(W: TFileBufferWriter); overload;
@@ -16110,7 +16113,9 @@ type
     function GetCurrentSessionUserID: TID; override;
     // called by Stat() and Info() method-based services
     procedure InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter); virtual;
+    {$ifndef NOVARIANTS}
     procedure InternalInfo(var info: TDocVariantData); virtual;
+    {$endif}
     procedure SetStatUsage(usage: TSynMonitorUsage);
     function GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
     /// fast get the associated static server, if any
@@ -20229,6 +20234,8 @@ begin
     result := aTypeInfo^.SetEnumType^.GetSetNameCSV(integer(aValue));
 end;
 
+{$ifndef NOVARIANTS}
+
 function DocVariantToObject(var doc: TDocVariantData; obj: TObject): boolean;
 var p: integer;
     prop: PPropInfo;
@@ -20270,6 +20277,7 @@ begin
   end;
 end;
 
+{$endif}
 
 type // those classes will be used to register globally some classes for JSON
   TJSONSerializerRegisteredClassAbstract = class(TList)
@@ -40378,26 +40386,29 @@ begin
   _Json(FullStatsAsJson,result,JSON_OPTIONS_FAST);
 end;
 
+{$ifndef NOVARIANTS}
 procedure TSQLRestServer.InternalInfo(var info: TDocVariantData);
-var cpu,mem: RawUTF8;
+var cpu,mem,free: RawUTF8;
+    now: TTimeLogBits;
     m: TSynMonitorMemory;
 begin // called by root/TimeStamp/info REST method
   m := TSynMonitorMemory.Create;
   try
+    now.Value := ServerTimeStamp;
     cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
-    info.AddNameValuesToObject([
-      'timestamp',ServerTimeStamp, 'now',DateTimeToIso8601Text(ServerTimeStamp,' '),
-      'exe', ExeVersion.ProgramName, 'version',ExeVersion.Version.Detailed,
-      'started',Stats.StartDate,
-      'clients',Stats.ClientsCurrent, 'methods',Stats.ServiceMethod,
-      'interfaces',Stats.ServiceInterface, 'total',Stats.TaskCount,
-      'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
-      'cpu',cpu, 'mem',mem, 'memused', KB(m.AllocatedUsed.Bytes),
-      'memfree', FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text])]);
+    FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
+    info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
+      'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.Detailed,
+      'started',Stats.StartDate, 'clients',Stats.ClientsCurrent,
+      'methods',Stats.ServiceMethod, 'interfaces',Stats.ServiceInterface,
+      'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
+      'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
+      'exception',GetLastExceptions(10)]);
   finally
     m.Free;
   end;
 end;
+{$endif}
 
 procedure TSQLRestServer.InternalStat(Ctxt: TSQLRestServerURIContext; W: TTextWriter);
 const READWRITE: array[boolean] of string[9] = ('{"read":','{"write":');
@@ -40631,6 +40642,9 @@ begin
 end;
 
 procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
+{$ifdef NOVARIANTS}
+begin
+{$else}
 var
   info: TDocVariantData;
 begin
@@ -40639,6 +40653,7 @@ begin
     InternalInfo(info);
     Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
   end else
+{$endif}
     Ctxt.Returns(Int64ToUtf8(ServerTimeStamp),HTTP_SUCCESS,TEXT_CONTENT_TYPE_HEADER);
 end;
 
