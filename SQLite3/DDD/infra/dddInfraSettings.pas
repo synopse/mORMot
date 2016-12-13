@@ -58,6 +58,9 @@ unit dddInfraSettings;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
+  Windows, // for DeleteFile() inlining under Delphi 2006/2007
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,

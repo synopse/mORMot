@@ -2240,6 +2240,10 @@ begin
   result := '';
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+{$endif}
+
 function TECCCertificate.Encrypt(const Plain: RawByteString;
   Signature: TECCSignatureCertified; FileDateTime: TDateTime;
   const KDFSalt: RawUTF8; KDFRounds: integer;
@@ -2302,6 +2306,10 @@ begin
     FillZero(secret);
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS ON} // circument Delphi 2007 false positive warning
+{$endif}
 
 function TECCCertificate.EncryptFile(const FileToCrypt, DestFile: TFileName;
   const Salt: RawUTF8; SaltRounds: integer; Algo: TECIESAlgo; IncludeSignFile: boolean): boolean;

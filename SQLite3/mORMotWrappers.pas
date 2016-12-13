@@ -1217,6 +1217,10 @@ begin
     Render(ctxt,nil,nil,nil,true),DestFileName);
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+{$endif}
+
 function GenerateAsynchServices(const services: array of TGUID;
   const queries: array of TClass; const units: array of const;
   const additionalcontext: array of const; Template, FileName, ProjectName,
@@ -1286,6 +1290,9 @@ begin
   end;
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS ON} // circument Delphi 2007 false positive warning
+{$endif}
 
 end.
 

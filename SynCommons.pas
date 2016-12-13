@@ -56371,6 +56371,10 @@ begin
 end;
 {$endif}
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+{$endif}
+
 function TSynTableFieldProperties.GetValue(FieldBuffer: pointer): RawUTF8;
 var len: integer;
     PB: PByte absolute FieldBuffer;
@@ -56416,6 +56420,10 @@ begin
   // tftBlobExternal fields e.g. must be directly accessed
   end;
 end;
+
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS ON} // circument Delphi 2007 false positive warning
+{$endif}
 
 procedure TSynTableFieldProperties.OrderedIndexReverseSet(aOrderedIndex: integer);
 var nrev, ndx, n: PtrInt;
