@@ -201,11 +201,16 @@ end;
 
 function TDBFrame.NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
 var
-  cmd: string;
-  i: integer;
+  cmd, name, lastname: string;
+  i, ext, num: integer;
+  res: TDocVariantData;
+  sub, subpar, subarch: TMenuItem;
 begin
-  result := TMenuItem.Create(pmCmd);
-  result.Caption := c;
+  result := TMenuItem.Create(self);
+  if length(c) > 40 then
+    result.Caption := copy(c, 1, 37) + '...'
+  else
+    result.Caption := c;
   if NoCmdTrim then
     cmd := c
   else begin
@@ -221,7 +226,48 @@ begin
     end;
   end;
   result.Hint := cmd;
-  result.OnClick := btnExecClick;
+  if (cmd = '#log *') or (cmd = '#db *') then begin // log/db files in sub-menus
+    res.InitJSON(ExecSQL(StringToUTF8(cmd)), JSON_OPTIONS_FAST);
+    SetLength(cmd, length(cmd) - 1);
+    subpar := result;
+    subarch := nil;
+    if res.Kind = dvArray then
+      for i := 0 to res.Count - 1 do begin
+        name := res.Values[i].Name;
+        if name = lastname then
+          continue; // circumvent FindFiles() bug with *.dbs including *.dbsynlz
+        lastname := name;
+        case GetFileNameExtIndex(name, 'dbs,dbsynlz') of
+          0: begin // group sharded database files by 20 in sub-menus    
+            ext := Pos('.dbs', name);
+            if (ext > 4) and TryStrToInt(Copy(name, ext - 4, 4), num) then
+              if (subpar = result) or (num mod 20 = 0) then begin
+                subpar := NewCmdPopup(cmd + name + ' ...', true);
+                subpar.OnClick := nil;
+                result.Add(subpar);
+              end;
+          end;
+          1: begin // group database backup files in a dedicated sub-menu
+            if subarch = nil then begin
+              subarch := NewCmdPopup(cmd + '*.dbsynlz ...', true);
+              subarch.OnClick := nil;
+              result.Add(subarch);
+            end;
+            subpar := subarch;
+          end;
+          else
+            subpar := result;
+        end;
+        sub := NewCmdPopup(cmd + name, true);
+        if cmd = '#log ' then
+          sub.Caption := sub.Caption + '  ' + res.Values[i].TimeStamp
+        else
+          sub.Caption := format('%s  %s', [sub.Caption, KB(res.Values[i].Size)]);
+        subpar.Add(sub);
+      end;
+  end
+  else
+    result.OnClick := btnExecClick;
 end;
 
 procedure TDBFrame.btnExecClick(Sender: TObject);
@@ -240,7 +286,7 @@ begin
     mmo := TMenuItem(Sender).Hint;
     mmoSQL.Text := mmo;
     i := Pos('*', mmo);
-    if i > 0 then begin
+    if (i > 0) and (mmo[1] = '#') then begin
       mmoSQL.SelStart := i - 1;
       mmoSQL.SelLength := 1;
       mmoSQL.SetFocus;
@@ -274,7 +320,7 @@ begin
           else
             fJson := copy(exec.Content, i, maxInt);
         end
-        else 
+        else
         if (ctyp = '') or IdemPChar(pointer(ctyp), JSON_CONTENT_TYPE_UPPER) then
           fJson := exec.Content
         else

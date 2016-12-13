@@ -1852,7 +1852,7 @@ begin
         end;
       end else
         AdministrationExecuteGetFiles(ExtractFilePath(DB.FileName),
-          '*.db;*.db3;*.dbsynlz;*.dbs',fn,result);
+          '*.db;*.db3;*.dbs',fn,result); // *.dbs includes *.dbsynlz
     end;
     3: begin
       split(SQL,' ',cmd,fn);
