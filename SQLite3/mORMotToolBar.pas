@@ -260,7 +260,7 @@ type
 
   /// Vista-enabled TAdvToolBarForm descendant
   // - this form will have a button in the TaskBar
-  // - this form will hidde the default Delphi application virtual form
+  // - this form will hide the default Delphi application virtual form
   TSynForm = class(TAdvToolBarForm)
   protected
     procedure CreateParams(var Params: TCreateParams); override;

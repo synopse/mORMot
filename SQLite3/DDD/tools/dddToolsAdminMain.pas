@@ -83,7 +83,7 @@ type
     property ChatFrame: TLogFrame read fChatFrame;
   end;
 
-  TAdminForm = class(TForm)
+  TAdminForm = class(TSynForm)
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
   protected
