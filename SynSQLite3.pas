@@ -1447,7 +1447,7 @@ type
     // statements also cause sqlite3.stmt_readonly() to return true since, while
     // those statements change the configuration of a database connection, they
     // do not make changes to the content of the database files on disk.
-    stmt_readonly: function(S: TSQLite3Statement): boolean; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    stmt_readonly: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Evaluate An SQL Statement, returning a result status:
     // - SQLITE_BUSY means that the database engine was unable to acquire the database
@@ -2230,6 +2230,7 @@ function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 // - raise a ESQLite3Exception if the result state is an error
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8=''): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 var
   /// global access to linked SQLite3 library API calls
@@ -5252,7 +5253,7 @@ function TSQLRequest.GetReadOnly: Boolean;
 begin
   if Request=0 then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'IsReadOnly');
-  result := sqlite3.stmt_readonly(Request);
+  result := sqlite3.stmt_readonly(Request)<>0;
 end;
 
 procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
@@ -5766,11 +5767,8 @@ begin
       [LibraryName,SysErrorMessage(GetLastError)]);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
-    {$ifdef BSDNOTDARWIN}
-    P^[i] := dlsym(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
-    {$else}
-    P^[i] := GetProcAddress(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
-    {$endif}
+    P^[i] := {$ifdef BSDNOTDARWIN}dlsym{$else}GetProcAddress{$endif}(
+      fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
   if not Assigned(initialize) or not Assigned(libversion) or
      not Assigned(open) or not Assigned(close) or not Assigned(create_function) or
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin

@@ -674,13 +674,13 @@ function __imp__beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt name '_beginthreadex';
 procedure __imp__endthreadex(exitcode: dword); cdecl; external msvcrt name '_endthreadex';
 
-function __imp_TryEnterCriticalSection(lpCriticalSection:pointer):boolean; cdecl; external kernel name 'TryEnterCriticalSection';
+function __imp_TryEnterCriticalSection(lpCriticalSection:pointer): BOOL; cdecl; external kernel name 'TryEnterCriticalSection';
 procedure __imp_LeaveCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'LeaveCriticalSection';
 procedure __imp_EnterCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'EnterCriticalSection';
 procedure __imp_DeleteCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'DeleteCriticalSection';
 procedure __imp_InitializeCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'InitializeCriticalSection';
 function __imp_GetCurrentThreadId:dword; cdecl; external kernel name 'GetCurrentThreadId';
-function __imp_CloseHandle(hObject:THandle):boolean; cdecl; external kernel name 'CloseHandle';
+function __imp_CloseHandle(hObject:THandle): BOOL; cdecl; external kernel name 'CloseHandle';
 function __imp__localtime64(t: PCardinal): pointer; cdecl;
 begin
   result := localtime64(t^);
@@ -749,8 +749,7 @@ begin
   end;
 end;
 
-// XorOffset: fast and simple Cypher using Index (= offset in file)
-// -> not to be set as local proc for FPC
+// not to be defined as local procedure of XorOffset() for FPC
 // see http://bugs.freepascal.org/view.php?id=24061
 procedure Xor64(PI, P: PInt64Array; Count: cardinal); // fast xor
 {$ifdef PUREPASCAL}
@@ -780,24 +779,27 @@ asm // eax=PI edx=P ecx=bytes count
 end;
 {$endif}
 
-procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
+procedure XorOffset(P: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
 var i, Len, L: integer;
-begin
+begin // fast and simple Cypher using Index (= offset in file)
   if Count>0 then
   repeat
     Index := Index and (SQLEncryptTableSize-1);
     Len := SQLEncryptTableSize-Index;
     if cardinal(Len)>cardinal(Count) then
       Len := Count;
-    Xor64(@SQLEncryptTable^[Index],pointer(p),Len); // xor 8 bytes per loop
+    // xor 8 bytes per loop
+    Xor64(@SQLEncryptTable^[Index],pointer(P),Len);
     L := Len and (-8); // -8=$FFFFFFF8
-    inc(p,L);
+    inc(P,L);
     inc(Index,L);
-    for i := 1 to (Len and 7) do begin // xor 0..7 remaining bytes
-      p^ := p^ xor SQLEncryptTable^[Index];
-      inc(p); inc(Index);
+    // xor 0..7 remaining bytes (very unlikely)
+    for i := 1 to (Len and 7) do begin
+      P^ := P^ xor SQLEncryptTable^[Index];
+      inc(P);
+      inc(Index);
     end;
-    Dec(Count,Len);
+    dec(Count,Len);
   until Count=0;
 end;
 
@@ -986,7 +988,6 @@ const
   SQLITE_IOERR_SHORT_READ = $020A;
   SQLITE_IOERR_WRITE      = $030A;
 
-// note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 {$ifdef MSWINDOWS}
 function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
 {$else}
@@ -1220,7 +1221,7 @@ function sqlite3_prepare_v2(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
 function sqlite3_finalize(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_next_stmt(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_reset(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_stmt_readonly(S: TSQLite3Statement): boolean; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_stmt_readonly(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_step(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_column_count(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_column_type(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;

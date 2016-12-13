@@ -2306,7 +2306,9 @@ begin
       pInfo.aConstraintUsage[i].omit := Prepared^.Where[i].OmitCheck;
     end;
     Prepared^.WhereCount := n; // will match argc in vt_Filter()
-    pInfo.orderByConsumed := integer(Prepared^.OmitOrderBy);
+    if Prepared^.OmitOrderBy then
+      pInfo.orderByConsumed := 1 else
+      pInfo.orderByConsumed := 0;
     pInfo.estimatedCost := COST[Prepared^.EstimatedCost];
     if sqlite3.VersionNumber>=3008002000 then // starting with SQLite 3.8.2
       case Prepared^.EstimatedCost of
@@ -2392,7 +2394,9 @@ end;
 function vt_Eof(var pVtabCursor: TSQLite3VTabCursor): Integer;
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  result := integer(not TSQLVirtualTableCursor(pVtabCursor.pInstance).HasData);
+  if TSQLVirtualTableCursor(pVtabCursor.pInstance).HasData then
+    result := 0 else
+    result := 1; // reached actual EOF
 end;
 
 function vt_Column(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;
