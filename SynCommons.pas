@@ -10218,6 +10218,10 @@ type
     /// the logging level corresponding to this exception
     // - may be either sllException or sllExceptionOS
     ELevel: TSynLogInfo;
+    /// the timestamp of this exception, as number of seconds since UNIX Epoch
+    // - UnixTimeUTC is faster than NowUTC or GetSystemTime
+    // - use UnixTimeToDateTime() to convert it into a regular TDateTime
+    ETimeStamp: Cardinal;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog

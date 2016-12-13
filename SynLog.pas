@@ -1416,11 +1416,46 @@ var
   /// low-level variable used internaly by this unit
   // - do not access this variable in your code: defined here to allow inlining
   GlobalThreadLock: TRTLCriticalSection;
-  {$ifndef NOEXCEPTIONINTERCEPT}
+
+{$ifndef NOEXCEPTIONINTERCEPT}
   /// low-level variable used internaly by this unit
   // - do not access this variable in your code: defined here to allow inlining
   GlobalCurrentHandleExceptionSynLog: TSynLog;
-  {$endif}
+{$endif NOEXCEPTIONINTERCEPT}
+
+type
+  /// storage of the information associated with an intercepted exception
+  // - as returned by GetLastException() function
+  TSynLogExceptionInfo = record
+    /// low-level calling context
+    // - as used by TSynLogExceptionToStr callbacks
+    Context: TSynLogExceptionContext;
+    /// associated Exception.Message content (if any)
+    Message: string;
+  end;
+  /// storage of the information associated with one or several exceptions
+  // - as returned by GetLastExceptions() function
+  TSynLogExceptionInfoDynArray = array of TSynLogExceptionInfo;
+
+/// makes a thread-safe copy of the latest intercepted exception
+function GetLastException(out info: TSynLogExceptionInfo): boolean;
+
+/// returns some text about the latest intercepted exception
+function GetLastExceptionText: RawUTF8;
+
+/// makes a thread-safe copy of the latest intercepted exceptions
+procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
+  Depth: integer=0); overload;
+
+{$ifndef NOVARIANTS}
+/// returns a TDocVariant array of the latest intercepted exception texts
+// - runs ToText() over all information returned by overloaded GetLastExceptions
+function GetLastExceptions(Depth: integer=0): variant; overload;
+{$endif}
+
+/// convert low-level exception information into some human-friendly text
+function ToText(const info: TSynLogExceptionInfo): RawUTF8; overload;
+
 
 /// a TSynLogArchiveEvent handler which will delete older .log files
 function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName): boolean;
@@ -2140,10 +2175,114 @@ threadvar
 // - so default method using RTLUnwindProc should be prefered
 {.$define WITH_VECTOREXCEPT}
 
-{$ifndef NOEXCEPTIONINTERCEPT}
+function ToText(const info: TSynLogExceptionInfo): RawUTF8;
+begin
+  with info.Context do
+    if ELevel<>sllNone then
+      FormatUTF8('% % at %: % [%]',[ToCaption(ELevel),EClass,
+        GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
+        UnixTimeToDateTime(ETimeStamp),' '),info.Message],result) else
+      result := '';
+end;
 
+function GetLastExceptionText: RawUTF8;
+var info: TSynLogExceptionInfo;
+begin
+  if GetLastException(info) then
+    result := ToText(info) else
+    result := '';
+end;
+
+{$ifndef NOVARIANTS}
+function GetLastExceptions(Depth: integer): variant;
+var info: TSynLogExceptionInfoDynArray;
+    i: integer;
+begin
+  VarClear(result);
+  GetLastExceptions(info,Depth);
+  if info=nil then
+    exit;
+  TDocVariantData(result).InitFast(length(info),dvArray);
+  for i := 0 to high(info) do
+    TDocVariantData(result).AddItemFromText(ToText(info[i]));
+end;
+{$endif}
+
+{$ifdef NOEXCEPTIONINTERCEPT}
+
+function GetLastException(out info: TSynLogExceptionInfo): boolean;
+begin
+  result := false;
+end;
+
+procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
+  Depth: integer);
+begin
+end;
+
+{$else}
+
+const
+  MAX_EXCEPTHISTORY = 15;
+type
+  TSynLogExceptionInfos = array[0..MAX_EXCEPTHISTORY] of TSynLogExceptionInfo;
 var
   GlobalCurrentHandleExceptionHooked: boolean;
+  GlobalLastException: TSynLogExceptionInfos;
+  GlobalLastExceptionIndex: integer = -1;
+
+function GetLastException(out info: TSynLogExceptionInfo): boolean;
+begin
+  if GlobalLastExceptionIndex<0 then begin
+    result := false;
+    exit; // no exception intercepted yet
+  end;
+  EnterCriticalSection(GlobalThreadLock);
+  try
+    info := GlobalLastException[GlobalLastExceptionIndex];
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
+  info.Context.EInstance := nil; // avoid any GPF
+  info.Context.EStack := nil;
+  result := info.Context.ELevel<>sllNone;
+end;
+
+procedure GetLastExceptions(out result: TSynLogExceptionInfoDynArray;
+  Depth: integer);
+var infos: TSynLogExceptionInfos; // use thread-safe local copy
+    index,last,n,i: integer;
+begin
+  if GlobalLastExceptionIndex<0 then 
+    exit; // no exception intercepted yet
+  EnterCriticalSection(GlobalThreadLock);
+  try
+    infos := GlobalLastException;
+    index := GlobalLastExceptionIndex;
+  finally
+    LeaveCriticalSection(GlobalThreadLock);
+  end;
+  n := MAX_EXCEPTHISTORY+1;
+  if (Depth>0) and (n>Depth) then
+    n := Depth;
+  SetLength(result,n);
+  last := MAX_EXCEPTHISTORY;
+  for i := 0 to n-1 do begin
+    if i<=index then
+      result[i] := infos[index-i] else begin
+      result[i] := infos[last];
+      dec(last);
+    end;
+    with result[i].Context do
+      if ELevel=sllNone then begin
+        SetLength(result,i); // truncate to latest available exception
+        break;
+      end else begin
+        EInstance := nil; // avoid any GPF
+        EStack := nil;
+      end;
+  end;
+end;
 
 // this is the main entry point for all intercepted exceptions
 procedure SynLogException(const Ctxt: TSynLogExceptionContext);
@@ -2204,12 +2343,18 @@ begin
     exit;
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
-    repeat
-      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) and 
-         Ctxt.EInstance.InheritsFrom(ESynException) then begin
-        if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
-          break;
+    repeat // "repeat" not used as loop, but as alternative to goto
+      if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
+        GlobalLastExceptionIndex := 0 else
+        inc(GlobalLastExceptionIndex);
+      GlobalLastException[GlobalLastExceptionIndex].Context := Ctxt;
+      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
+        GlobalLastException[GlobalLastExceptionIndex].Message := Ctxt.EInstance.Message;
+        if Ctxt.EInstance.InheritsFrom(ESynException) then
+          if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
+            break;
       end else
+        GlobalLastException[GlobalLastExceptionIndex].Message := '';
       if Assigned(TSynLogExceptionToStrCustom) then begin
         if TSynLogExceptionToStrCustom(SynLog.fWriter,Ctxt) then
           break;
@@ -2387,10 +2532,11 @@ begin
             Ctxt.ELevel := sllException;
           end;
           Ctxt.EStack := nil;
+          Ctxt.ETimeStamp := UnixTimeUTC; // very fast API call
           SynLogException(Ctxt);
         end;
-        // (ExcRec^.Flags and Internal_excIsBeingHandled)<>0,
-        // (ExcRec^.Flags and Internal_excIsBeingReRaised)<>0);
+        // (ExcRec^.Flags and Internal_excIsBeingHandled)<>0)
+        // (ExcRec^.Flags and Internal_excIsBeingReRaised)<>0)
       end;
       Internal_UW_EXC_CLASS_BORLANDCPP: ; // not handled
       end;
@@ -2559,6 +2705,7 @@ begin
     Ctxt.EAddr := Exc.ExceptionAddress;
   end;
   Ctxt.EStack := stack;
+  Ctxt.ETimeStamp := UnixTimeUTC; // fast API call
   SynLogException(Ctxt);
   SetLastError(LastError); // code above could have changed this
 end;
