@@ -1595,6 +1595,9 @@ const
   /// HTTP header for MIME content type used for raw binary data
   BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+BINARY_CONTENT_TYPE;
 
+  /// MIME content type used for a JPEG picture
+  JPEG_CONTENT_TYPE = 'image/jpeg';
+
 var
   /// MIME content type used for JSON communication
   // - this global will be initialized with JSON_CONTENT_TYPE constant, to
@@ -33854,7 +33857,7 @@ begin
         $685A42: result := 'application/bzip2'; // 42 5A 68
         $088B1F: result := 'application/gzip'; // 1F 8B 08
         $492049: result := 'image/tiff'; // 49 20 49
-        $FFD8FF: result := 'image/jpeg'; // FF D8 FF DB/E0/E1/E2/E3/E8
+        $FFD8FF: result := JPEG_CONTENT_TYPE; // FF D8 FF DB/E0/E1/E2/E3/E8
         else
           case PWord(Content)^ of
             $4D42: result := 'image/bmp'; // 42 4D
@@ -33879,7 +33882,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       1:  result := 'image/png';
       5:  result := 'image/gif';
       9:  result := 'image/tiff';
-      14,18: result := 'image/jpeg';
+      14,18: result := JPEG_CONTENT_TYPE;
       23: result := 'image/bmp';
       27,91: result := 'application/msword';
       31,35: result := HTML_CONTENT_TYPE;
@@ -33955,7 +33958,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html
         $53575a, // zws/swf = 5A 57 53 [FWS]
         $564c46, // flv = 46 4C 56 [FLV]
         $685a42, // 'application/bzip2' = 42 5A 68
-        $ffd8ff: // 'image/jpeg' = FF D8 FF DB/E0/E1/E2/E3/E8
+        $ffd8ff: // JPEG_CONTENT_TYPE = FF D8 FF DB/E0/E1/E2/E3/E8
           result := true;
         else
         case PCardinalArray(Content)^[1] of // 4 byte offset
@@ -57961,13 +57964,14 @@ type
 
 function StreamSynLZComputeLen(P: PAnsiChar; Len, aMagic: cardinal): integer;
 begin
-  inc(P,Len);
-  with PSynLZTrailer(P-sizeof(TSynLZTrailer))^ do
-    if (Magic=aMagic) and (HeaderRelativeOffset<Len) and
-       (PSynLZHead(P-HeaderRelativeOffset)^.Magic=aMagic) then
-      // trim existing content
-      result := Len-HeaderRelativeOffset else
-      result := Len;
+  if (P=nil) or (Len<=sizeof(TSynLZTrailer)) then
+    result := 0 else
+    with PSynLZTrailer(P+Len-sizeof(TSynLZTrailer))^ do
+      if (Magic=aMagic) and (HeaderRelativeOffset<Len) and
+         (PSynLZHead(P-HeaderRelativeOffset)^.Magic=aMagic) then
+        // trim existing content
+        result := Len-HeaderRelativeOffset else
+        result := Len;
 end;
 
 function CompressSynLZ(var DataRawByteString; Compress: boolean): AnsiString;

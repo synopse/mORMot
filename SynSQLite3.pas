@@ -5273,7 +5273,7 @@ begin
           WR.WrBase64(sqlite3.column_blob(Request,i),
             sqlite3.column_bytes(Request,i),true); // withMagic=true
       SQLITE_NULL:
-        WR.AddNoJSONEscape(PAnsiChar('null'),4); // returned also for ""
+        WR.AddShort('null'); // returned also for ""
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request,i));
       SQLITE_FLOAT:
