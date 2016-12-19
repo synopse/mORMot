@@ -249,7 +249,7 @@ type
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
     procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal=0);
+      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -783,15 +783,20 @@ begin
 end;
 
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
-  ItemCount: integer; SizeInBytes: cardinal);
+  ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
 var Temp: TPrecisionTimer;
+    msg: string;
 begin
-  Temp := Owner.TestTimer;
-  fRunConsole := format('%s%d %s in %s i.e. %d/s, aver. %s',
-    [fRunConsole,ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),
-     Temp.ByCount(ItemCount)]);
+  if Timer=nil then
+    Temp := Owner.TestTimer else
+    Temp := Timer^;
+  msg := format('%d %s in %s i.e. %d/s, aver. %s',
+    [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
   if SizeInBytes>0 then
-    fRunConsole := format('%s, %s/s',[fRunConsole,KB(Temp.PerSec(SizeInBytes))]);
+    msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
+  if fRunConsole<>'' then
+    msg := #13#10'     '+msg;
+  fRunConsole := fRunConsole+msg;
 end;
 
 

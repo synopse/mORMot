@@ -9107,6 +9107,8 @@ var i: integer;
     j: TJWTAbstract;
     jwt: TJWTContent;
     secret: TECCCertificateSecret;
+    tim: TPrecisionTimer;
+    tok: RawUTF8;
 begin
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime],[],60));
   test(TJWTNone.Create([jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
@@ -9115,14 +9117,18 @@ begin
   test(TJWTHS256.Create('sec',200,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
   test(TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
   j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
-  jwt.result := jwtWrongFormat;
-  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
-    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
-    'ONFh7HgQ',jwt); // reference from jwt.io
-  check(jwt.result=jwtValid);
-  check(jwt.reg[jrcSubject]='1234567890');
-  check(jwt.data.U['name']='John Doe');
-  check(jwt.data.B['admin']);
+  tim.Start;
+  for i := 1 to 10000 do begin
+    jwt.result := jwtWrongFormat;
+    j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+      'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+      'ONFh7HgQ',jwt); // reference from jwt.io
+    check(jwt.result=jwtValid);
+    check(jwt.reg[jrcSubject]='1234567890');
+    check(jwt.data.U['name']='John Doe');
+    check(jwt.data.B['admin']);
+  end;
+  NotifyTestSpeed('HS256',10000,0,@tim);
   j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
     'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
     'ONFh7hgQ',jwt); // altered one char in signature
@@ -9133,6 +9139,22 @@ begin
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt],[],60));
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60));
+    secret.Free;
+  end;
+  secret := TECCCertificateSecret.CreateNew(nil);
+  j := TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60);
+  try
+    tok := j.Compute([],'myself');
+    tim.Start;
+    for i := 1 to 100 do begin
+      jwt.result := jwtWrongFormat;
+      j.Verify(tok, jwt);
+      check(jwt.result=jwtValid);
+      check(jwt.reg[jrcIssuer]='myself');
+    end;
+    NotifyTestSpeed('ES256',100,0,@tim);
+  finally
+    j.Free;
     secret.Free;
   end;
 end;
