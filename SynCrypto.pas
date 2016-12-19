@@ -1742,7 +1742,8 @@ type
   EJWTException = class(ESynException);
 
   /// TJWTContent.result codes after TJWTAbstract.Verify method call
-  TJWTResult = (jwtValid, jwtWrongFormat, jwtInvalidAlgorithm, jwtInvalidPayload,
+  TJWTResult = (jwtValid,
+    jwtNoToken, jwtWrongFormat, jwtInvalidAlgorithm, jwtInvalidPayload,
     jwtUnexpectedClaim, jwtMissingClaim, jwtUnknownAudience,
     jwtExpired, jwtNotBeforeFailed, jwtInvalidIssuedAt, jwtInvalidID,
     jwtInvalidSignature);
@@ -1809,6 +1810,7 @@ type
       ExpirationMinutes: cardinal): RawUTF8; virtual;
     procedure Parse(const Token: RawUTF8; var JWT: TJWTContent;
       out payload64: RawUTF8; out signature: RawByteString); virtual;
+    function CheckAgainstActualTimestamp(var JWT: TJWTContent): boolean;
     // abstract methods which should be overriden by inherited classes
     function ComputeSignature(const payload64: RawUTF8): RawUTF8; virtual; abstract;
     procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
@@ -1873,6 +1875,8 @@ type
     // - Verify() method will ensure all claims are defined in the payload,
     // then fill TJWTContent.reg[] with all corresponding values
     property Claims: TJWTClaims read fClaims;
+    /// the period, in seconds, for the "exp" claim 
+    property ExpirationSeconds: integer read fExpirationSeconds;
     /// the audience string values associated with this instance
     // - will be checked by Verify() method, and set in TJWTContent.audience
     property Audience: TRawUTF8DynArray read fAudience;
@@ -9567,6 +9571,10 @@ function TJWTAbstract.Compute(const DataNameValue: array of const;
   ExpirationMinutes: integer): RawUTF8;
 var payload: RawUTF8;
 begin
+  if self=nil then begin
+    result := '';
+    exit;
+  end;
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   payload := BinToBase64URI(payload);
   result := fHeaderB64+payload+'.'+ComputeSignature(payload);
@@ -9578,7 +9586,10 @@ function TJWTAbstract.ComputeAuthorizationHeader(const DataNameValue: array of c
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
   ExpirationMinutes: integer): RawUTF8;
 begin
-  result := 'Bearer '+Compute(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
+  if self=nil then
+    result := '' else
+    result := 'Bearer '+
+      Compute(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
 end;
 
 function TJWTAbstract.PayloadToJSON(const DataNameValue: array of const;
@@ -9633,8 +9644,7 @@ begin
 end;
 
 procedure TJWTAbstract.Verify(const Token: RawUTF8; out JWT: TJWTContent);
-var nowunix, unix: cardinal;
-    payload64: RawUTF8;
+var payload64: RawUTF8;
     signature: RawByteString;
     fromcache: boolean;
 begin
@@ -9645,31 +9655,37 @@ begin
   end;
   if not fromcache then
     Parse(Token,JWT,payload64,signature);
-  if JWT.result=jwtValid then begin
-    if [jrcExpirationTime,jrcNotBefore,jrcIssuedAt]*JWT.claims<>[] then begin
-      nowunix := UnixTimeUTC; // validate against actual timestamp 
-      if jrcExpirationTime in JWT.claims then
-        if not ToCardinal(JWT.reg[jrcExpirationTime],unix) or (nowunix>unix) then begin
-          JWT.result := jwtExpired;
-          exit;
-        end;
-      if jrcNotBefore in JWT.claims then
-        if not ToCardinal(JWT.reg[jrcNotBefore],unix) or (nowunix<unix) then begin
-          JWT.result := jwtNotBeforeFailed;
-          exit;
-        end;
-      if jrcIssuedAt in JWT.claims then
-        if not ToCardinal(JWT.reg[jrcIssuedAt],unix) or (unix>nowunix) then begin
-          JWT.result := jwtInvalidIssuedAt;
-          exit;
-        end;
-    end;
-    if not fromcache then begin
+  if JWT.result in [jwtValid,jwtNotBeforeFailed] then
+    if CheckAgainstActualTimestamp(JWT) and not fromcache then
       CheckSignature(JWT,payload64,signature); // depending on the algorithm used
-      if (fCache<>nil) and (JWT.result in fCacheResults) then
-        fCache.Add(Token,JWT);
-    end;
+  if not fromcache and (fCache<>nil) and (JWT.result in fCacheResults) then
+    fCache.Add(Token,JWT);
+end;
+
+function TJWTAbstract.CheckAgainstActualTimestamp(var JWT: TJWTContent): boolean;
+var nowunix, unix: cardinal;
+begin
+  if [jrcExpirationTime,jrcNotBefore,jrcIssuedAt]*JWT.claims<>[] then begin
+    result := false;
+    nowunix := UnixTimeUTC; // validate against actual timestamp
+    if jrcExpirationTime in JWT.claims then
+      if not ToCardinal(JWT.reg[jrcExpirationTime],unix) or (nowunix>unix) then begin
+        JWT.result := jwtExpired;
+        exit;
+      end;
+    if jrcNotBefore in JWT.claims then
+      if not ToCardinal(JWT.reg[jrcNotBefore],unix) or (nowunix<unix) then begin
+        JWT.result := jwtNotBeforeFailed;
+        exit;
+      end;
+    if jrcIssuedAt in JWT.claims then // allow 1 minute time lap between nodes
+      if not ToCardinal(JWT.reg[jrcIssuedAt],unix) or (unix>nowunix+60) then begin
+        JWT.result := jwtInvalidIssuedAt;
+        exit;
+      end;
   end;
+  result := true;
+  JWT.result := jwtValid;
 end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
@@ -9688,8 +9704,12 @@ begin
   JWT.data.InitFast(0,dvObject);
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
-  JWT.result := jwtInvalidAlgorithm;
   c := length(Token);
+  if c=0 then begin
+    JWT.result := jwtNoToken;
+    exit;
+  end;
+  JWT.result := jwtInvalidAlgorithm;
   if joHeaderParse in fOptions then begin
     len := PosEx('.',Token);
     if (len=0) or (len>512) then
@@ -9757,7 +9777,7 @@ begin
           jrcJwtID:
             if not(joNoJwtIDCheck in fOptions) then
               if not fIDGen.FromObfuscated(JWT.reg[jrcJwtID],id.Value) or
-                 (id.CreateTimeUnix<1481187020) then begin
+                 (id.CreateTimeUnix<UNIXTIME_MINIMAL) then begin
                 JWT.result := jwtInvalidID;
                 exit;
               end;
@@ -9882,7 +9902,7 @@ end;
 destructor TJWTHS256.Destroy;
 begin
   inherited Destroy;
-  FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret in heap
+  FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret on heap
 end;
 
 function ToText(res: TJWTResult): PShortString;

@@ -11745,6 +11745,12 @@ function DateTimeToUnixTime(const AValue: TDateTime): Int64;
 function UnixTimeUTC: cardinal;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
+const
+  /// a contemporary, but elapsed, second-based c-encoded time
+  // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
+  // - may be used to check for a valid just-generated Unix timestamp value
+  UNIXTIME_MINIMAL = 1481187020;
+
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixTime: Int64): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
