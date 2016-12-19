@@ -6206,6 +6206,10 @@ type
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUTF8 read GetUserAgent;
+    /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
+    // - typically returns a JWT for statelesss self-contained authentication,
+    // as expected by TJWTAbstract.Verify method  
+    function AuthenticationBearerToken: RawUTF8;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
     // set ckFramework on match
@@ -39736,6 +39740,11 @@ begin
     if fUserAgent='*' then
       result := '' else
       result := fUserAgent;
+end;
+
+function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
+begin
+  result := FindIniNameValue(pointer(Call.InHead),'AUTHORIZATION: BEARER ');
 end;
 
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;
