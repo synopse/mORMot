@@ -6210,8 +6210,16 @@ type
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
     function AuthenticationBearerToken: RawUTF8;
-    /// validate "Authorization: Bearer <JWT>" header from incoming HTTP headers
-    // - optionally returning the payload in res^ supplied variable
+    /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
+    // - returns jwtValid on success, optionally returning the payload in res^
+    // - returns jwtNoToken if jwt is nil
+    // - on failure (i.e. result <> jwtValid), will set the error context as
+    // 401 HTTP_UNAUTHORIZED so that you may directly write:
+    // ! procedure TMyDaemon.Files(Ctxt: TSQLRestServerURIContext);
+    // ! begin
+    // !   if Ctxt.AuthenticationCheck(fJWT)=jwtValid then
+    // !     Ctxt.ReturnFileFromFolder('c:\datafolder');
+    // ! end;
     function AuthenticationCheck(jwt: TJWTAbstract; res: PJWTContent=nil): TJWTResult;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
@@ -39756,8 +39764,13 @@ var tmp: TJWTContent;
 begin
   if res=nil then
     res := @tmp;
-  jwt.Verify(AuthenticationBearerToken,res^);
-  result := res^.result;
+  if jwt=nil then
+    result := jwtNoToken else begin
+    jwt.Verify(AuthenticationBearerToken,res^);
+    result := res^.result;
+  end;
+  if result<>jwtValid then
+    Error('Invalid Bearer [%]',[ToText(result)^],HTTP_UNAUTHORIZED);
 end;
 
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;

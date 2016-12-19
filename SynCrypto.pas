@@ -9652,7 +9652,7 @@ var payload64: RawUTF8;
     signature: RawByteString;
     fromcache: boolean;
 begin
-  if fCache=nil then
+  if (self=nil) or (fCache=nil) then
     fromcache := false else begin
     fromcache := fCache.FindAndCopy(Token,JWT);
     fCache.DeleteDeprecated;
@@ -9662,7 +9662,7 @@ begin
   if JWT.result in [jwtValid,jwtNotBeforeFailed] then
     if CheckAgainstActualTimestamp(JWT) and not fromcache then
       CheckSignature(JWT,payload64,signature); // depending on the algorithm used
-  if not fromcache and (fCache<>nil) and (JWT.result in fCacheResults) then
+  if not fromcache and (self<>nil) and (fCache<>nil) and (JWT.result in fCacheResults) then
     fCache.Add(Token,JWT);
 end;
 
@@ -9709,7 +9709,7 @@ begin
   byte(JWT.claims) := 0;
   word(JWT.audience) := 0;
   c := length(Token);
-  if c=0 then begin
+  if (c=0) or (self=nil) then begin
     JWT.result := jwtNoToken;
     exit;
   end;
