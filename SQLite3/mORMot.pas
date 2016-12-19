@@ -39662,7 +39662,7 @@ var n: integer;
     cn,cv: RawUTF8;
 begin
   fInputCookiesRetrieved := true;
-  P := pointer(GetInHeader('cookie'));
+  P := pointer(FindIniNameValue(pointer(Call.InHead),'COOKIE:'));
   n := 0;
   while P<>nil do begin
     GetNextItemTrimed(P,'=',cn);
@@ -39674,7 +39674,7 @@ begin
     fInputCookies[n].Value := cv;
     inc(n);
     if n>COOKIE_MAXCOUNT_DOSATTACK then
-      raise EParsingException.CreateUTF8('%.RetrieveCookies overflow',[self]);
+      raise EParsingException.CreateUTF8('%.RetrieveCookies overflow: DOS?',[self]);
   end;
 end;
 

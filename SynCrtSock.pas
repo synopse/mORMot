@@ -539,6 +539,15 @@ type
     // - 1 (true) will enable keep-alive packets for the connection
     // - see http://msdn.microsoft.com/en-us/library/windows/desktop/ee470551
     property KeepAlive: Integer index SO_KEEPALIVE write SetInt32OptionByIndex;
+    /// set the SO_LINGER option for the connection, to control its shutdown
+    // - by default (or Linger<0), Close will return immediately to the caller,
+    // and any pending data will be delivered if possible
+    // - Linger > 0  represents the time in seconds for the timeout period
+    // to be applied at Close; under Linux, will also set SO_REUSEADDR; under
+    // Darwin, set SO_NOSIGPIPE
+    // - Linger = 0 causes the connection to be aborted and any pending data
+    // is immediately discarded at Close
+    property Linger: Integer index SO_LINGER write SetInt32OptionByIndex;
     /// after CreateSockIn, use Readln(SockIn^,s) to read a line from the opened socket
     property SockIn: PTextFile read fSockIn;
     /// after CreateSockOut, use Writeln(SockOut^,s) to send a line to the opened socket
@@ -735,7 +744,7 @@ type
     function Request(const url, method: SockString; KeepAlive: cardinal;
       const header, Data, DataType: SockString; retry: boolean): integer; virtual;
 
-   /// after an Open(server,port), return 200 if OK, http status error otherwise - get
+    /// after an Open(server,port), return 200 if OK, http status error otherwise - get
     // the page data in Content
     function Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
@@ -1850,8 +1859,12 @@ type
 function Open(const aServer, aPort: SockString): TCrtSocket;
 
 /// create a THttpClientSocket, returning nil on error
-// (useful to easily catch socket error exception ECrtSocket)
-function OpenHttp(const aServer, aPort: SockString): THttpClientSocket;
+// - useful to easily catch socket error exception ECrtSocket
+function OpenHttp(const aServer, aPort: SockString): THttpClientSocket; overload;
+
+/// create a THttpClientSocket, returning nil on error
+// - useful to easily catch socket error exception ECrtSocket
+function OpenHttp(const aURI: SockString; aAddress: PSockString=nil): THttpClientSocket; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
@@ -2831,6 +2844,7 @@ end;
 
 var
   WsaDataOnce: TWSADATA;
+  SO_TRUE: integer = ord(true);
 
 function ResolveName(const Name: SockString;
   Family, SockProtocol, SockType: integer): SockString;
@@ -2848,13 +2862,15 @@ begin
 end;
 
 procedure SetInt32Option(Sock: TSocket; OptName, OptVal: integer);
-{$ifndef MSWINDOWS}
-var timeval: TTimeval;
-{$endif}
+var li: TLinger;
+    {$ifndef MSWINDOWS}
+    timeval: TTimeval;
+    {$endif}
 begin
   if Sock<=0 then
     raise ECrtSocket.CreateFmt('Unexpected SetOption(%d,%d)',[OptName,OptVal]);
-  if (OptName=SO_SNDTIMEO) or (OptName=SO_RCVTIMEO) then begin
+  case OptName of
+  SO_SNDTIMEO, SO_RCVTIMEO: begin
     {$ifndef MSWINDOWS} // POSIX expects a timeval parameter for time out values
     timeval.tv_sec := OptVal div 1000;
     timeval.tv_usec := (OptVal mod 1000)*1000;
@@ -2863,12 +2879,28 @@ begin
     if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
     {$endif}
       exit;
-  end else
-  if OptName=SO_KEEPALIVE then begin // boolean (0/1) value
+  end;
+  SO_KEEPALIVE: // boolean (0/1) value
     if SetSockOpt(Sock,SOL_SOCKET,OptName,pointer(@OptVal),sizeof(OptVal))=0 then
       exit;
-  end else
-  if OptName=TCP_NODELAY then begin // boolean (0/1) value
+  SO_LINGER: begin // not available on UDP
+    if OptVal<0 then
+      li.l_onoff := Ord(false) else begin
+      li.l_onoff := Ord(true);
+      li.l_linger := OptVal;
+    end;
+    SetSockOpt(Sock,SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
+    if OptVal>0 then begin
+      {$ifdef LINUX}
+      SetSockOpt(Sock,SOL_SOCKET, SO_REUSEADDR,@SO_TRUE,SizeOf(SO_TRUE));
+      {$endif}
+      {$ifdef BSD}
+      SetSockOpt(Sock,SOL_SOCKET,SO_NOSIGPIPE,@SO_TRUE,SizeOf(SO_TRUE));
+      {$endif}
+    end;
+    exit;
+  end;
+  TCP_NODELAY: // boolean (0/1) value
     if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
       exit;
   end;
@@ -2881,9 +2913,7 @@ function CallServer(const Server, Port: SockString; doBind: boolean;
 var Sin: TVarSin;
     IP: SockString;
     SOCK_TYPE, IPPROTO: integer;
-    li: TLinger;
     {$ifndef MSWINDOWS}
-    SO_True: integer;
     serveraddr: sockaddr;
     {$endif}
 begin
@@ -2914,7 +2944,6 @@ begin
         if (fpbind(result,@serveraddr,sizeof(serveraddr))<0) or
            (fplisten(result,SOMAXCONN)<0) then begin
         {$endif}
-          //close(sd);
           result := -1;
         end;
       end;
@@ -2935,18 +2964,8 @@ begin
   if result=-1 then
     exit;
   if doBind then begin
-    // Socket should remain open for 10 seconds after a closesocket() call
-    li.l_onoff := Ord(true);
-    li.l_linger := 10;
-    SetSockOpt(result, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
-    {$ifdef LINUX}
-    SO_True := 1;
-    SetSockOpt(result, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
-    {$endif}
-    {$ifdef BSD}
-    SO_True := 1;
-    SetSockOpt(result, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
-    {$endif}
+    // Socket should remain open for 5 seconds after a closesocket() call
+    SetInt32Option(result, SO_LINGER, 5);
     // bind and listen to this port
     if (Bind(result, Sin)<>0) or
        ((aLayer<>cslUDP) and (Listen(result, SOMAXCONN)<>0)) then begin
@@ -3722,6 +3741,18 @@ begin
   except
     on ECrtSocket do
       result := nil;
+  end;
+end;
+
+function OpenHttp(const aURI: SockString; aAddress: PSockString): THttpClientSocket;
+var URI: TURI;
+begin
+  result := nil;
+  if URI.From(aURI) then begin
+    if not URI.Https then
+      result := OpenHttp(URI.Server,URI.Port);
+    if aAddress <> nil then
+      aAddress^ := URI.Address;
   end;
 end;
 
@@ -4671,26 +4702,11 @@ begin
 end;
 
 procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
-var li: TLinger;
-    Name: TVarSin;
-    {$ifndef MSWINDOWS}
-    SO_True: integer;
-    {$endif}
+var Name: TVarSin;
 begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
-  // Socket should remain open for 5 seconds after a closesocket() call
-  li.l_onoff := Ord(true);
-  li.l_linger := 5;
-  SetSockOpt(aClientSock, SOL_SOCKET, SO_LINGER, @li, SizeOf(li));
-  {$ifndef MSWINDOWS}
-  SO_True := 1;
-  SetSockOpt(aClientSock, SOL_SOCKET, SO_REUSEADDR, @SO_True, SizeOf(SO_True));
-  {$endif}
-  {$ifdef BSD}
-  SO_True := 1;
-  SetSockOpt(aClientSock, SOL_SOCKET, SO_NOSIGPIPE, @SO_True, SizeOf(SO_True));
-  {$endif}
+  Linger := 5; // should remain open for 5 seconds after a closesocket() call
   if GetPeerName(aClientSock,Name)=0 then
     GetSinIPFromCache(Name,RemoteIP);
 end;
