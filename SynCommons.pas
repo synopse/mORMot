@@ -2781,7 +2781,7 @@ function ToInteger(const text: RawUTF8; out value: integer): boolean;
 
 /// get the unsigned 32-bit cardinal value stored in a RawUTF8 string
 // - returns TRUE if the supplied text was successfully converted into a cardinal
-function ToCardinal(const text: RawUTF8; out value: cardinal): boolean;
+function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal=0): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 64-bit integer value stored in a RawUTF8 string
@@ -11741,7 +11741,7 @@ function DateTimeToUnixTime(const AValue: TDateTime): Int64;
 
 /// returns the current UTC date/time as a second-based c-encoded time
 //  - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
-// - faster than NowUTC, on Windows or Unix platforms
+// - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
 function UnixTimeUTC: cardinal;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -28327,10 +28327,10 @@ begin
   result := err=0;
 end;
 
-function ToCardinal(const text: RawUTF8; out value: cardinal): boolean;
+function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal): boolean;
 begin
   value := GetCardinalDef(pointer(text),cardinal(-1));
-  result := value<>cardinal(-1);
+  result := (value<>cardinal(-1)) and (value>=minimal);
 end;
 
 function ToInt64(const text: RawUTF8; out value: Int64): boolean;
@@ -59866,7 +59866,7 @@ procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var currentTime: cardinal;
 begin
-  currentTime := UnixTimeUTC;
+  currentTime := UnixTimeUTC; // fast API (under Windows, faster than GetTickCount64)
   fSafe.Lock;
   try
     if currentTime>fUnixCreateTime then begin
@@ -59949,6 +59949,8 @@ end;
 destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
   fSafe.Done;
+  FillcharFast(fCrypto,sizeof(fCrypto),0);
+  fCryptoCRC := 0;
   inherited Destroy;
 end;
 
