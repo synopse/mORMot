@@ -8698,6 +8698,68 @@ Framework's HTTP server is able to handle returning a file as response to a meth
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTTP_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
 Another possibility may be to use the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method, which is able to efficiently return any file specified by its URI, from a local folder. It may be very handy to
 return some static web content from a {\i mORMot} HTTP server.
+:192 JSON Web Tokens (JWT)
+{\i JSON Web Token} ({\f1\fs20 @**JWT@}) is an open standard ({\i RFC 7519}) that defines a compact and self-contained way for securely transmitting information between parties as a JSON object. This information can be verified and trusted because it is digitally signed. JWTs can be signed using a secret (with the HMAC algorithm) or a public/private key pair using RSA or ECDSA.\line They can be used for:
+- @*Authentication@: including a {\f1\fs20 JWT} to any HTTP request allows {\i Single Sign On} user validation across different domains;
+- Secure Information Exchange: a small amount of data can be stored in the JWT payload, and is digitally signed to ensure its provenance and integrity.
+See @http://jwt.io for an introduction to {\i JSON Web Tokens}.
+Our framework implements {\f1\fs20 JWT}:
+- {\f1\fs20 HS256} (HMAC-SHA256) and {\f1\fs20 ES256} (256-bit ECDSA) algorithms (with the addition of the {\f1\fs20 "none"} weak algo);
+- Validates all claims (validation dates, audiences, JWT ID);
+- Thread-safe and high performance (2 us for a {\f1\fs20 HS256} verification under x64), with optional in-memory cache if needed (e.g. for slower {\f1\fs20 ES256});
+- Stand-alone and cross-platform code (no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@);
+- Enhanced security and strong design - per instance, it is by design immune from @https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries
+- Full integration with the framework.
+\graph HierTJWTNone TJWTAbstract classes hierarchy
+\TJWTES256\TJWTAbstract
+\TJWTHS256\TJWTAbstract
+\TJWTNone\TJWTAbstract
+\
+In {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas}, you will find:
+- {\f1\fs20 TJWTAbstract} as abstract parent class for implementing JSON Web Tokens;
+- {\f1\fs20 TJWTNone} implementing the {\f1\fs20 "none"} algorithm;
+- {\f1\fs20 TJWTHS256} implementing the {\f1\fs20 "HS256"} algorithm;
+- {\f1\fs20 TJWTES256} implementing the {\f1\fs20 "ES256"} algorithm.
+To generate JWT, you may use
+!var j: TJWTAbstract;
+!    jwt: TJWTContent;
+!...
+!j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
+!try
+!  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+!    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+!    'ONFh7HgQ',jwt); // reference from jwt.io
+!  check(jwt.result=jwtValid);
+!  check(jwt.reg[jrcSubject]='1234567890');
+!  check(jwt.data.U['name']='John Doe');
+!  check(jwt.data.B['admin']);
+!finally
+!  j.Free;
+!end;
+The {\f1\fs20 'eyJhbGciOiJIUzI1NiIsIn...'} token contains in fact the following, once {\i base-64} decoded:
+- header: {\f1\fs20 \{"alg":"HS256","typ":"JWT"\}}
+- payload: {\f1\fs20 \{"sub":"1234567890","name":"John Doe","admin":true\}}
+- signature: {\f1\fs20 HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), "secret")}
+It has a built-in support of claims, so you can write:
+!j := TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60);
+!token := one.Compute(['http://example.com/is_root',true],'joe');
+Now, the {\f1\fs20 token} variable contains e.g. as signed payload:
+${"http://example.com/is_root":true,"iss":"joe","iat":1482177879,"exp":1482181479,"jti":"1496DCE0676925DD33BB5A81"}
+Then you can decode such a token, and access its payload in a single method:
+!j.Verify(token,jwt);
+!assert(jwt.result=jwtValid);
+!assert(jwt.reg[jrcIssuer]='joe');
+Integration with method-based services is easy, using {\f1\fs20 Ctxt.AuthenticationCheck} method:
+!TMyDaemon = class(...
+!protected
+!  fJWT: TJWTAbstract;
+!  ....
+!procedure TMyDaemon.Files(Ctxt: TSQLRestServerURIContext);
+!begin
+!  if Ctxt.AuthenticationCheck(fJWT)=jwtValid then
+!    Ctxt.ReturnFileFromFolder('c:\datafolder');
+!end;
+The above method will define a method-based service returning the content of a local folder, only if a valid {\f1\fs20 JWT} is supplied within the HTTP headers of the incoming request.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.

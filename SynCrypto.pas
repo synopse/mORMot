@@ -1769,6 +1769,8 @@ type
     // $ {"sub": "1234567890","name": "John Doe","admin": true}
     data: TDocVariantData;
   end;
+  /// pointer to a JWT decoded content, as processed by TJWTAbstract
+  PJWTContent = ^TJWTContent;
   /// used to store a list of JWT decoded content
   // - as used e.g. by TJWTAbstract cache
   TJWTContentDynArray = array of TJWTContent;
@@ -1920,6 +1922,8 @@ type
 
   /// implements JSON Web Tokens using 'HS256' (HMAC SHA-256) algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
+  // - our HMAC SHA-256 implementation used is thread safe, and very fast
+  // (x86: 3us, x64: 2.5us) so cache is not needed
   TJWTHS256 = class(TJWTAbstract)
   protected
     fHmacPrepared: THMAC_SHA256;
