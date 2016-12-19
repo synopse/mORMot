@@ -1870,12 +1870,17 @@ function OpenHttp(const aURI: SockString; aAddress: PSockString=nil): THttpClien
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
 function HttpGet(const server, port: SockString; const url: SockString;
-  outHeaders: PSockString=nil): SockString; overload;
+  const inHeaders: SockString; outHeaders: PSockString=nil): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
-function HttpGet(const aURI: SockString;
+function HttpGet(const aURI: SockString; outHeaders: PSockString=nil): SockString; overload;
+
+/// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
+// - this method will use a low-level THttpClientSock socket: if you want
+// something able to use your computer proxy, take a look at TWinINet.Get()
+function HttpGet(const aURI: SockString; const inHeaders: SockString; 
   outHeaders: PSockString=nil): SockString; overload;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
@@ -3757,14 +3762,14 @@ begin
 end;
 
 function HttpGet(const server, port: SockString; const url: SockString;
-  outHeaders: PSockString): SockString;
+  const inHeaders: SockString; outHeaders: PSockString): SockString;
 var Http: THttpClientSocket;
 begin
   result := '';
   Http := OpenHttp(server,port);
   if Http<>nil then
   try
-    if Http.Get(url)=STATUS_SUCCESS then begin
+    if Http.Get(url,0,inHeaders)=STATUS_SUCCESS then begin
       result := Http.Content;
       if outHeaders<>nil then
         outHeaders^ := Http.HeaderGetText;
@@ -3775,20 +3780,25 @@ begin
 end;
 
 function HttpGet(const aURI: SockString; outHeaders: PSockString): SockString;
+begin
+  result := HttpGet(aURI,'',outHeaders);
+end;
+
+function HttpGet(const aURI: SockString; const inHeaders: SockString; outHeaders: PSockString): SockString;
 var URI: TURI;
 begin
   if URI.From(aURI) then
     if URI.Https then
       {$ifdef MSWINDOWS}
-      result := TWinHTTP.Get(aURI,'',true,outHeaders) else
+      result := TWinHTTP.Get(aURI,inHeaders,true,outHeaders) else
       {$else}
       {$ifdef USELIBCURL}
-      result := TCurlHTTP.Get(aURI,'',true,outHeaders) else
+      result := TCurlHTTP.Get(aURI,inHeaders,true,outHeaders) else
       {$else}
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
       {$endif}
-      result := HttpGet(URI.Server,URI.Port,URI.Address,outHeaders) else
+      result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders) else
     result := '';
   {$ifdef LINUX}
   if result='' then
