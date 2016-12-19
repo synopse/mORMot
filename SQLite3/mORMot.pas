@@ -6208,8 +6208,11 @@ type
     property UserAgent: RawUTF8 read GetUserAgent;
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
-    // as expected by TJWTAbstract.Verify method  
+    // as expected by TJWTAbstract.Verify method
     function AuthenticationBearerToken: RawUTF8;
+    /// validate "Authorization: Bearer <JWT>" header from incoming HTTP headers
+    // - optionally returning the payload in res^ supplied variable
+    function AuthenticationCheck(jwt: TJWTAbstract; res: PJWTContent=nil): TJWTResult;
     /// identify which kind of client is actually connected
     // - the "User-Agent" HTTP will be checked for 'mORMot' substring, and
     // set ckFramework on match
@@ -39745,6 +39748,16 @@ end;
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
   result := FindIniNameValue(pointer(Call.InHead),'AUTHORIZATION: BEARER ');
+end;
+
+function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract;
+  res: PJWTContent): TJWTResult;
+var tmp: TJWTContent;
+begin
+  if res=nil then
+    res := @tmp;
+  jwt.Verify(AuthenticationBearerToken,res^);
+  result := res^.result;
 end;
 
 function TSQLRestServerURIContext.ClientKind: TSQLRestServerURIContextClientKind;
