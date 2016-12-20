@@ -457,7 +457,7 @@ end;
 function TDBFrame.OnGridToCell(Sender: TSQLTable; Row, Field: integer): RawJSON;
 var
   methodName: RawUTF8;
-  s, m: integer;
+  serv, m: integer;
 begin
   if fGridToCellRow <> Row then begin
     Sender.ToDocVariant(Row, fGridToCellVariant, JSON_OPTIONS_FAST, true, true, true);
@@ -465,10 +465,10 @@ begin
     if AssociatedServices <> nil then
     with _Safe(fGridToCellVariant)^ do
       if GetAsRawUTF8('Method', methodName) then
-        for s := 0 to high(AssociatedServices) do begin
-          m := AssociatedServices[s].FindFullMethodIndex(methodName, true);
+        for serv := 0 to high(AssociatedServices) do begin
+          m := AssociatedServices[serv].FindFullMethodIndex(methodName, true);
           if m >= 0 then
-            with AssociatedServices[s].Methods[m] do begin
+            with AssociatedServices[serv].Methods[m] do begin
               ArgsAsDocVariantFix(GetAsDocVariantSafe('Input')^, true);
               ArgsAsDocVariantFix(GetAsDocVariantSafe('Output')^, false);
               break;
