@@ -74,32 +74,10 @@ unit SynSSPIAuth;
 interface
 
 uses
-  Windows, SysUtils, SynCommons;
-
-type
-  /// Windows Authentication context handle
-  TSecHandle = record
-    dwLower: PtrInt;
-    dwUpper: PtrInt;
-  end;
-  PSecHandle = ^TSecHandle;
-
-  /// Windows Authentication context
-  TSecContext = record
-    ID: Int64;
-    CredHandle: TSecHandle;
-    CtxHandle: TSecHandle;
-    CreatedTick64: Int64;
-  end;
-  PSecContext = ^TSecContext;
-
-  /// dynamic array of Windows Authentication contexts
-  // - used to hold information between calls to ServerSSPIAuth
-  TSecContextDynArray = array of TSecContext;
-
-
-/// Sets aSecHandle fields to empty state for a given connection ID
-procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
+  Windows,
+  SysUtils,
+  SynCommons,
+  SynSSPI;
 
 /// Client-side authentication procedure
 // - aSecContext holds information between function calls
@@ -147,23 +125,6 @@ procedure ServerSSPIAuthUser(var aSecContext: TSecContext; out aUserName: RawUTF
 // or ClientSSPIAuth
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 
-/// Encrypts a message
-// - aSecContext must be received from previos success call to ServerSSPIAuth
-// or ClientSSPIAuth
-// - aPlain contains data that must be encrypted
-// - returns encrypted message
-function SecEncrypt(var aSecContext: TSecContext; const aPlain: RawByteString): RawByteString;
-
-/// Decrypts  a message
-// - aSecContext must be received from previos success call to ServerSSPIAuth
-// or ClientSSPIAuth
-// - aEncrypted contains data that must be decrypted
-// - returns decrypted message
-function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: RawByteString): RawByteString;
-
-/// Free aSecContext on client or server side
-procedure FreeSecContext(var aSecContext: TSecContext);
-
 /// Force NTLM authentication instead of Negotiate for browser authenticaton.
 // Use case: SPNs not configured properly in domain
 // - see for details http://synopse.info/forum/viewtopic.php?id=931&p=3
@@ -181,137 +142,8 @@ var
   /// HTTP header pattern received for SSPI authentication 'AUTHORIZATION: NTLM ' or 'AUTHORIZATION: NEGOTIATE '
   SECPKGNAMEHTTPAUTHORIZATION: PAnsiChar;
 
+
 implementation
-
-type
-  TSecBuffer = record
-    cbBuffer: Cardinal;   // Size of the buffer, in bytes
-    BufferType: Cardinal; // Type of the buffer
-    pvBuffer: Pointer;    // Pointer to the buffer
-  end;
-  PSecBuffer = ^TSecBuffer;
-
-  TSecBufferDesc = record
-    ulVersion: Cardinal;  // Version number
-    cBuffers: Cardinal;   // Number of buffers
-    pBuffers: PSecBuffer; // Pointer to array of buffers
-  end;
-  PSecBufferDesc = ^TSecBufferDesc;
-
-  TSecPkgInfoW = record
-    fCapabilities: Cardinal; // Capability bitmask
-    wVersion: Word;       // Version of driver
-    wRPCID: Word;         // ID for RPC Runtime
-    cbMaxToken: Cardinal; // Size of authentication token (max)
-    Name: PWideChar;      // Text name
-    Comment: PWideChar;   // Comment
-  end;
-  PSecPkgInfoW = ^TSecPkgInfoW;
-
-  SecPkgContext_NegotiationInfo = record
-    PackageInfo: PSecPkgInfoW;
-    NegotiationState: Cardinal;
-  end;
-
-  SecPkgContext_Sizes = record
-    cbMaxToken: Cardinal;
-    cbMaxSignature: Cardinal;
-    cbBlockSize: Cardinal;
-    cbSecurityTrailer: Cardinal;
-  end;
-
-  TSecWinntAuthIdentityW = record
-    User: PWideChar;
-    UserLength: Cardinal;
-    Domain: PWideChar;
-    DomainLength: Cardinal;
-    Password: PWideChar;
-    PasswordLength: Cardinal;
-    Flags: Cardinal
-  end;
-  PSecWinntAuthIdentityW = ^TSecWinntAuthIdentityW;
-
-const
-  SECBUFFER_VERSION = 0;
-  SECBUFFER_DATA = 1;
-  SECBUFFER_TOKEN = 2;
-  SECPKG_CRED_INBOUND  = $00000001;
-  SECPKG_CRED_OUTBOUND = $00000002;
-  SECPKG_ATTR_SIZES = 0;
-  SECPKG_ATTR_NEGOTIATION_INFO = 12;
-  SECURITY_NETWORK_DREP = 0;
-  SECURITY_NATIVE_DREP = $10;
-  ISC_REQ_MUTUAL_AUTH = $00000002;
-  ISC_REQ_CONFIDENTIALITY = $00000010;
-  ISC_REQ_ALLOCATE_MEMORY = $00000100;
-  ASC_REQ_CONFIDENTIALITY = $00000010;
-  ASC_REQ_ALLOCATE_MEMORY = $00000100;
-  SEC_I_CONTINUE_NEEDED = $00090312;
-  SEC_I_COMPLETE_NEEDED = $00090313;
-  SEC_I_COMPLETE_AND_CONTINUE = $00090314;
-  SEC_WINNT_AUTH_IDENTITY_UNICODE = $02;
-
-  secur32 = 'secur32.dll';
-
-function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
-  var ppPackageInfo: PSecPkgInfoW): Integer; stdcall;
-  external secur32 name 'QuerySecurityPackageInfoW';
-
-function AcquireCredentialsHandleW(pszPrincipal, pszPackage: PWideChar;
-  fCredentialUse: Cardinal; pvLogonId: Pointer; pAuthData: PSecWinntAuthIdentityW;
-  pGetKeyFn: Pointer; pvGetKeyArgument: Pointer; phCredential: PSecHandle;
-  var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'AcquireCredentialsHandleW';
-
-function InitializeSecurityContextW(phCredential: PSecHandle; phContext: PSecHandle;
-  pszTargetName: PWideChar; fContextReq, Reserved1, TargetDataRep: Cardinal;
-  pInput: PSecBufferDesc; Reserved2: Cardinal; phNewContext: PSecHandle;
-  pOutput: PSecBufferDesc; var pfContextAttr: Cardinal; var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'InitializeSecurityContextW';
-
-function AcceptSecurityContext(phCredential: PSecHandle; phContext: PSecHandle;
-  pInput: PSecBufferDesc; fContextReq, TargetDataRep: Cardinal;
-  phNewContext: PSecHandle; pOutput: PSecBufferDesc; var pfContextAttr: Cardinal;
-  var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'AcceptSecurityContext';
-
-function CompleteAuthToken(phContext: PSecHandle; pToken: PSecBufferDesc): Integer; stdcall;
-  external secur32 name 'CompleteAuthToken';
-
-function QueryContextAttributesW(phContext: PSecHandle; ulAttribute: Cardinal;
-  pBuffer: Pointer): Integer; stdcall;
-  external secur32 name 'QueryContextAttributesW';
-
-function QuerySecurityContextToken(phContext: PSecHandle; var Token: THandle): Integer; stdcall;
-  external secur32 name 'QuerySecurityContextToken';
-
-function EncryptMessage(phContext: PSecHandle; fQOP: Cardinal;
-  pToken: PSecBufferDesc; MessageSeqNo: Cardinal): Integer; stdcall;
-  external secur32 name 'EncryptMessage';
-
-function DecryptMessage(phContext: PSecHandle; pToken: PSecBufferDesc;
-  MessageSeqNo: Cardinal; var fQOP: Cardinal): Integer; stdcall;
-  external secur32 name 'DecryptMessage';
-
-function FreeContextBuffer(pvContextBuffer: Pointer): Integer; stdcall;
-  external secur32 name 'FreeContextBuffer';
-
-function DeleteSecurityContext(phContext: PSecHandle): Integer; stdcall;
-  external secur32 name 'DeleteSecurityContext';
-
-function FreeCredentialsHandle(phCredential: PSecHandle): Integer; stdcall;
-  external secur32 name 'FreeCredentialsHandle';
-
-
-procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
-begin
-  aSecContext.ID := aConnectionID;
-  aSecContext.CredHandle.dwLower := -1;
-  aSecContext.CredHandle.dwUpper := -1;
-  aSecContext.CtxHandle.dwLower := -1;
-  aSecContext.CtxHandle.dwUpper := -1;
-  aSecContext.CreatedTick64 := 0;
-end;
 
 function ClientSSPIAuthWorker(var aSecContext: TSecContext;
     const aInData: RawByteString; pszTargetName: PWideChar;
@@ -449,7 +281,7 @@ begin
     end;
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-          RaiseLastOSError;
+        RaiseLastOSError;
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -489,7 +321,6 @@ var UserToken: THandle;
     DomainLen: Cardinal;
     NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
 begin
-  aUserName := '';
   if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
     RaiseLastOSError;
   try
@@ -499,14 +330,14 @@ begin
     try
       if not GetTokenInformation(Cardinal(UserToken), Windows.TokenUser, UserInfo, Size, Size) then
         RaiseLastOSError;
-      FillChar(NameBuf[0], SizeOf(NameBuf), 0);
+      FillCharFast(NameBuf[0], SizeOf(NameBuf), 0);
       NameLen := 256;
-      FillChar(DomainBuf[0], SizeOf(DomainBuf), 0);
+      FillCharFast(DomainBuf[0], SizeOf(DomainBuf), 0);
       DomainLen := 256;
       if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
         RaiseLastOSError;
       if NameType = SidTypeUser then
-        aUserName := FormatUTF8('%\%', [DomainBuf, NameBuf]);
+        FormatUTF8('%\%', [DomainBuf, NameBuf], aUserName);
     finally
       FreeMem(UserInfo);
     end;
@@ -516,120 +347,11 @@ begin
 end;
 
 function SecPackageName(var aSecContext: TSecContext): RawUTF8;
-var NegotiationInfo: SecPkgContext_NegotiationInfo;
+var NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
     RaiseLastOSError;
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name, StrLenW(NegotiationInfo.PackageInfo^.Name));
-end;
-
-function SecEncrypt(var aSecContext: TSecContext; const aPlain: RawByteString): RawByteString;
-var Sizes: SecPkgContext_Sizes;
-    SrcLen, EncLen: Cardinal;
-    EncBuffer: RawByteString;
-    InBuf: array[0..1] of TSecBuffer;
-    InDesc: TSecBufferDesc;
-    Status: Integer;
-    BufPtr: PByte;
-begin
-  // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
-  if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
-    RaiseLastOSError;
-
-  SrcLen := Length(aPlain);
-  EncLen := SizeOf(Cardinal) + Sizes.cbSecurityTrailer + SrcLen;
-  SetLength(Result, EncLen);
-
-  InBuf[0].BufferType := SECBUFFER_TOKEN;
-  InBuf[0].cbBuffer := Sizes.cbSecurityTrailer;
-  InBuf[0].pvBuffer := pointer(PtrInt(Result) + SizeOf(Cardinal));
-
-  // Encoding done in-place, so we copy the data
-  EncBuffer := aPlain;
-
-  InBuf[1].BufferType := SECBUFFER_DATA;
-  InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := UniqueRawUTF8(RawUTF8(EncBuffer));
-
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 2;
-  InDesc.pBuffers := @InBuf;
-
-  Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
-  if Status < 0 then
-      RaiseLastOSError;
-
-  // Encrypted data buffer structure:
-  //
-  //   4 bytes  SigLen bytes     Remaining bytes
-  // +--------+----------------+-----------------+
-  // | SigLen | Trailer        | Data            |
-  // +--------+----------------+-----------------+
-
-  BufPtr := PByte(Result);
-  PCardinal(BufPtr)^ := InBuf[0].cbBuffer;
-  Inc(BufPtr, SizeOf(Cardinal));
-  Inc(BufPtr, InBuf[0].cbBuffer);
-  Move(PByte(InBuf[1].pvBuffer)^, BufPtr^, SrcLen);
-  SetLength(Result, SizeOf(Cardinal) + InBuf[0].cbBuffer + SrcLen);
-end;
-
-function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: RawByteString): RawByteString;
-var EncLen, SigLen, SrcLen: Cardinal;
-    BufPtr: PByte;
-    InBuf: array [0..1] of TSecBuffer;
-    InDesc: TSecBufferDesc;
-    Status: Integer;
-    QOP: Cardinal;
-begin
-  EncLen := Length(aEncrypted);
-  BufPtr := PByte(aEncrypted);
-  if EncLen < SizeOf(Cardinal) then  begin
-    SetLastError(ERROR_INVALID_PARAMETER);
-    RaiseLastOSError;
-  end;
-
-  SigLen := PCardinal(BufPtr)^;
-  Inc(BufPtr, SizeOf(Cardinal));
-  if EncLen < (SizeOf(Cardinal) + SigLen) then begin
-    SetLastError(ERROR_INVALID_PARAMETER);
-    RaiseLastOSError;
-  end;
-
-  SrcLen := EncLen - SizeOf(Cardinal) - SigLen;
-  SetLength(Result, SrcLen);
-
-  InBuf[0].BufferType := SECBUFFER_TOKEN;
-  InBuf[0].cbBuffer := SigLen;
-  InBuf[0].pvBuffer := BufPtr;
-  Inc(BufPtr, SigLen);
-
-  Move(BufPtr^, PByte(Result)^, SrcLen);
-  InBuf[1].BufferType := SECBUFFER_DATA;
-  InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := PByte(Result);
-
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 2;
-  InDesc.pBuffers := @InBuf;
-
-  Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
-  if Status < 0 then
-    RaiseLastOSError;
-end;
-
-procedure FreeSecContext(var aSecContext: TSecContext);
-begin
-  if (aSecContext.CtxHandle.dwLower <> -1) or (aSecContext.CtxHandle.dwUpper <> -1) then begin
-    DeleteSecurityContext(@aSecContext.CtxHandle);
-    aSecContext.CtxHandle.dwLower := -1;
-    aSecContext.CtxHandle.dwUpper := -1;
-  end;
-  if (aSecContext.CredHandle.dwLower <> -1) or (aSecContext.CredHandle.dwUpper <> -1) then begin
-    FreeCredentialsHandle(@aSecContext.CredHandle);
-    aSecContext.CredHandle.dwLower := -1;
-    aSecContext.CredHandle.dwUpper := -1;
-  end;
 end;
 
 procedure ServerForceNTLM(IsNTLM: boolean);

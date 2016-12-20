@@ -1267,6 +1267,7 @@ uses
 {$endif LVCL}
   SysUtils,
 {$ifdef SSPIAUTH}
+  SynSSPI,
   SynSSPIAuth,
 {$endif}
   SynCommons,
