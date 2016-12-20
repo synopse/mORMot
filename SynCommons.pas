@@ -14100,10 +14100,15 @@ type
     function GetCapacity: integer;
       {$ifdef HASINLINE}inline;{$endif}
     // implement U[] I[] B[] D[] O[] O_[] A[] A_[] _[] properties
-    function GetOrAddValueIndex(const aName: RawUTF8): integer;
-    function GetVarDataByName(const aName: RawUTF8): PVariant;
+    function GetOrAddIndexByName(const aName: RawUTF8): integer;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetOrAddPVariantByName(const aName: RawUTF8): PVariant;
+      {$ifdef HASINLINE}inline;{$endif}
+    function GetPVariantByName(const aName: RawUTF8): PVariant;
     function GetRawUTF8ByName(const aName: RawUTF8): RawUTF8;
     procedure SetRawUTF8ByName(const aName, aValue: RawUTF8);
+    function GetStringByName(const aName: RawUTF8): string;
+    procedure SetStringByName(const aName: RawUTF8; const aValue: string);
     function GetInt64ByName(const aName: RawUTF8): Int64;
     procedure SetInt64ByName(const aName: RawUTF8; const aValue: Int64);
     function GetBooleanByName(const aName: RawUTF8): Boolean;
@@ -14808,8 +14813,16 @@ type
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
     // - use GetAsRawUTF8() if you want to check the availability of the field
-    // - U['prop'] := 'value' would add a new property, or overwrite an existing 
+    // - U['prop'] := 'value' would add a new property, or overwrite an existing
     property U[const aName: RawUTF8]: RawUTF8 read GetRawUTF8ByName write SetRawUTF8ByName;
+    /// direct string access to a dvObject UTF-8 stored property value from its name
+    // - just a wrapper around U[] property, to avoid a compilation warning when
+    // using plain string variables (internaly, RawUTF8 will be used for storage)
+    // - slightly faster than the variant-based Value[] default property
+    // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
+    // - use GetAsRawUTF8() if you want to check the availability of the field
+    // - S['prop'] := 'value' would add a new property, or overwrite an existing
+    property S[const aName: RawUTF8]: string read GetStringByName write SetStringByName;
     /// direct access to a dvObject Integer stored property value from its name
     // - slightly faster than the variant-based Value[] default property
     // - follows dvoNameCaseSensitive and dvoReturnNullForUnknownProperty options
@@ -40647,7 +40660,7 @@ function TDocVariantData.SearchItemByValue(const aValue: Variant;
   CaseInsensitive: boolean; StartIndex: integer): integer;
 begin
   for result := StartIndex to VCount-1 do
-  if SortDynArrayVariantComp(TVarData(VValue[result]),TVarData(aValue),CaseInsensitive)=0 then
+    if SortDynArrayVariantComp(TVarData(VValue[result]),TVarData(aValue),CaseInsensitive)=0 then
       exit;
   result := -1;
 end;
@@ -40695,6 +40708,8 @@ procedure TDocVariantData.ExchgValues(v1,v2: integer);
 var n: pointer;
     v: TVarData;
 begin
+  if v1=v2 then
+    exit;
   if VName<>nil then begin // VName=[] for dvArray
     n := pointer(VName[v2]);
     pointer(VName[v2]) := pointer(VName[v1]);
@@ -41569,14 +41584,23 @@ begin
   result := UrlEncodeJsonObject(UriRoot,Pointer(json),[]);
 end;
 
-function TDocVariantData.GetOrAddValueIndex(const aName: RawUTF8): integer;
+function TDocVariantData.GetOrAddIndexByName(const aName: RawUTF8): integer;
 begin
   result := GetValueIndex(aName);
   if result<0 then
     result := InternalAdd(aName);
 end;
 
-function TDocVariantData.GetVarDataByName(const aName: RawUTF8): PVariant;
+function TDocVariantData.GetOrAddPVariantByName(const aName: RawUTF8): PVariant;
+var ndx: integer;
+begin
+  ndx := GetValueIndex(aName);
+  if ndx<0 then
+    ndx := InternalAdd(aName);
+  result := @VValue[ndx];
+end;
+
+function TDocVariantData.GetPVariantByName(const aName: RawUTF8): PVariant;
 var ndx: Integer;
 begin
   ndx := GetValueIndex(aName);
@@ -41589,7 +41613,7 @@ end;
 
 function TDocVariantData.GetInt64ByName(const aName: RawUTF8): Int64;
 begin
-  if not VariantToInt64(GetVarDataByName(aName)^,result) then
+  if not VariantToInt64(GetPVariantByName(aName)^,result) then
     result := 0;
 end;
 
@@ -41597,44 +41621,54 @@ function TDocVariantData.GetRawUTF8ByName(const aName: RawUTF8): RawUTF8;
 var wasString: boolean;
     v: PVariant;
 begin
-  v := GetVarDataByName(aName);
-  if PVarData(v)^.VType<=varNull then
+  v := GetPVariantByName(aName);
+  if PVarData(v)^.VType<=varNull then // default VariantToUTF8(null)='null'
     result := '' else
     VariantToUTF8(v^,result,wasString);
+end;
+
+function TDocVariantData.GetStringByName(const aName: RawUTF8): string;
+begin
+  result := VariantToString(GetPVariantByName(aName)^);
 end;
 
 procedure TDocVariantData.SetInt64ByName(const aName: RawUTF8;
   const aValue: Int64);
 begin
-  VValue[GetOrAddValueIndex(aName)] := aValue;
+  GetOrAddPVariantByName(aName)^ := aValue;
 end;
 
 procedure TDocVariantData.SetRawUTF8ByName(const aName, aValue: RawUTF8);
 begin
-  RawUTF8ToVariant(aValue,VValue[GetOrAddValueIndex(aName)]);
+  RawUTF8ToVariant(aValue,GetOrAddPVariantByName(aName)^);
+end;
+
+procedure TDocVariantData.SetStringByName(const aName: RawUTF8; const aValue: string);
+begin
+  RawUTF8ToVariant(StringToUTF8(aValue),GetOrAddPVariantByName(aName)^);
 end;
 
 function TDocVariantData.GetBooleanByName(const aName: RawUTF8): Boolean;
 begin
-  if not VariantToBoolean(GetVarDataByName(aName)^,result) then
+  if not VariantToBoolean(GetPVariantByName(aName)^,result) then
     result := false;
 end;
 
 procedure TDocVariantData.SetBooleanByName(const aName: RawUTF8; aValue: Boolean);
 begin
-  VValue[GetOrAddValueIndex(aName)] := aValue;
+  GetOrAddPVariantByName(aName)^ := aValue;
 end;
 
 function TDocVariantData.GetDoubleByName(const aName: RawUTF8): Double;
 begin
-  if not VariantToDouble(GetVarDataByName(aName)^,result) then
+  if not VariantToDouble(GetPVariantByName(aName)^,result) then
     result := 0;
 end;
 
 procedure TDocVariantData.SetDoubleByName(const aName: RawUTF8;
   const aValue: Double);
 begin
-  VValue[GetOrAddValueIndex(aName)] := aValue;
+  GetOrAddPVariantByName(aName)^ := aValue;
 end;
 
 function TDocVariantData.GetDocVariantExistingByName(const aName: RawUTF8;
@@ -41649,7 +41683,7 @@ function TDocVariantData.GetDocVariantOrAddByName(const aName: RawUTF8;
   aKind: TDocVariantKind): PDocVariantData;
 var ndx: integer;
 begin
-  ndx := GetOrAddValueIndex(aName);
+  ndx := GetOrAddIndexByName(aName);
   result := _Safe(VValue[ndx]);
   if result^.Kind<>aKind then begin
     result := @VValue[ndx];
