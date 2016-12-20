@@ -12042,7 +12042,7 @@ type
     // - returns true for successfull {"method":"_free_".. call (aMethodIndex=-1)
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
     function InternalInstanceRetrieve(var Inst: TServiceFactoryServerInstance;
-      aMethodIndex: integer): boolean;
+      aMethodIndex: integer): integer;
     /// call a given method of this service provider
     // - here Ctxt.ServiceMethodIndex should be the index in fInterface.Methods[]
     // (i.e. excluding _free_/_contract_/_signature_ pseudo-methods)
@@ -56261,7 +56261,7 @@ begin
   sicPerThread: begin
     Inst.Instance := nil;
     Inst.InstanceID := PtrUInt(GetCurrentThreadId);
-    if not InternalInstanceRetrieve(Inst,0) and (Inst.Instance<>nil) then
+    if (InternalInstanceRetrieve(Inst,0)=0) and (Inst.Instance<>nil) then
       result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
   end;
   else begin // no user/group/session on pure server-side -> always sicSingle
@@ -56301,28 +56301,28 @@ begin
 end;
 
 function TServiceFactoryServer.InternalInstanceRetrieve(
-  var Inst: TServiceFactoryServerInstance; aMethodIndex: integer): boolean;
-procedure AddNew;
-var i: integer;
-    P: ^TServiceFactoryServerInstance;
-begin
-  Inst.Instance := CreateInstance(true);
-  if Inst.Instance=nil then
-    exit;
-  fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%)',
-    [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID],sllDebug);
-  P := pointer(fInstances);
-  for i := 1 to fInstancesCount do
-    if P^.InstanceID=0 then begin
-      P^ := Inst; // found an empty entry -> re-use it
+  var Inst: TServiceFactoryServerInstance; aMethodIndex: integer): integer;
+  procedure AddNew;
+  var i: integer;
+      P: ^TServiceFactoryServerInstance;
+  begin
+    Inst.Instance := CreateInstance(true);
+    if Inst.Instance=nil then
       exit;
-    end else
-    inc(P);
-  fInstance.Add(Inst); // append a new entry
-end;
+    fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%)',
+      [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID],sllDebug);
+    P := pointer(fInstances);
+    for i := 1 to fInstancesCount do
+      if P^.InstanceID=0 then begin
+        P^ := Inst; // found an empty entry -> re-use it
+        exit;
+      end else
+      inc(P);
+    fInstance.Add(Inst); // append a new entry
+  end;
 var i: integer;
 begin
-  result := false;
+  result := 0;
   if InstanceCreation<>sicPerThread then
     EnterCriticalSection(fInstanceLock);
   try
@@ -56356,7 +56356,7 @@ begin
           if aMethodIndex=SERVICE_METHODINDEX_FREEINSTANCE then begin
             // aMethodIndex=-1 for {"method":"_free_", "params":[], "id":1234}
             SafeFreeInstance(self);
-            result := true; // notify caller that successfully released instance
+            result := SERVICE_METHODINDEX_FREEINSTANCE; // notify caller 
             exit;
           end;
           LastAccess64 := Inst.LastAccess64;
@@ -56549,15 +56549,15 @@ begin
             exit;
           end;
       end;
-      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex) then begin
-        Ctxt.Success; // was SERVICE_METHODINDEX_FREEINSTANCE
-        exit;         // {"method":"_free_", "params":[], "id":1234}
+      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex)=SERVICE_METHODINDEX_FREEINSTANCE then begin
+        Ctxt.Success; // {"method":"_free_", "params":[], "id":1234}
+        exit;
       end;
     end;
   end;
   if Inst.Instance=nil then begin
-    Error('instance not found or deprecated',HTTP_BADREQUEST);
-    exit;
+    Error('instance not found or deprecated',HTTP_FORBIDDEN);
+    exit; // HTTP_FORBIDDEN will let TSQLRestClientURI.URI try to relog
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
