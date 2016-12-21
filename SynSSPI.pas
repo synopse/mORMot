@@ -97,18 +97,20 @@ type
   TSecContextDynArray = array of TSecContext;
 
   /// defines a SSPI buffer 
-  TSecBuffer = record
+  TSecBuffer = object
     cbBuffer: Cardinal;
     BufferType: Cardinal;
     pvBuffer: Pointer;
+    procedure Init(aType: cardinal; aData: pointer; aSize: cardinal);
   end;
   PSecBuffer = ^TSecBuffer;
 
-  /// describes a SSPI buffer 
-  TSecBufferDesc = record
+  /// describes a SSPI buffer
+  TSecBufferDesc = object
     ulVersion: Cardinal;
     cBuffers: Cardinal;
     pBuffers: PSecBuffer;
+    procedure Init(aVersion: cardinal; aBuffers: PSecBuffer; aBuffersCount: cardinal);
   end;
   PSecBufferDesc = ^TSecBufferDesc;
 
@@ -313,7 +315,7 @@ function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer)
 
 
 type
-  /// exception class raised durint TSynSSPI process
+  /// exception class raised durint SSPI/SChannel process
   ESynSSPI = class(Exception);
 
   /// the supported TLS modes
@@ -322,7 +324,10 @@ type
   /// set of supported TLS modes
   TSynSSPIModes = set of TSynSSPIMode;
 
-  /// abstract parent class for SSPI / SChannel process  
+  /// used for low-level logging
+  TSynSSPILog = procedure(const Fmt: TSSPIBuffer; const Args: array of const) of object;
+
+  /// abstract parent class for SSPI / SChannel process
   TSynSSPIAbstract = class
   protected
     fNewConversation: boolean;
@@ -349,81 +354,56 @@ type
 
 implementation
 
+
 (* ========================= Low-Level SSPI / SChannel API types ====== *)
 
 const
   secur32 = 'secur32.dll';
 
-function QuerySecurityPackageInfoW(pszPackageName: PWideChar;
-  var ppPackageInfo: PSecPkgInfoW): Integer; stdcall;
-  external secur32 name 'QuerySecurityPackageInfoW';
-
-function AcquireCredentialsHandleW(pszPrincipal, pszPackage: PWideChar;
-  fCredentialUse: Cardinal; pvLogonId: Pointer; pAuthData: PSecWinntAuthIdentityW;
-  pGetKeyFn: Pointer; pvGetKeyArgument: Pointer; phCredential: PSecHandle;
-  var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'AcquireCredentialsHandleW';
-
-function InitializeSecurityContextW(phCredential: PSecHandle; phContext: PSecHandle;
-  pszTargetName: PWideChar; fContextReq, Reserved1, TargetDataRep: Cardinal;
-  pInput: PSecBufferDesc; Reserved2: Cardinal; phNewContext: PSecHandle;
-  pOutput: PSecBufferDesc; var pfContextAttr: Cardinal; var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'InitializeSecurityContextW';
-
-function AcceptSecurityContext(phCredential: PSecHandle; phContext: PSecHandle;
-  pInput: PSecBufferDesc; fContextReq, TargetDataRep: Cardinal;
-  phNewContext: PSecHandle; pOutput: PSecBufferDesc; var pfContextAttr: Cardinal;
-  var ptsExpiry: LARGE_INTEGER): Integer; stdcall;
-  external secur32 name 'AcceptSecurityContext';
-
-function CompleteAuthToken(phContext: PSecHandle; pToken: PSecBufferDesc): Integer; stdcall;
-  external secur32 name 'CompleteAuthToken';
-
-function QueryContextAttributesW(phContext: PSecHandle; ulAttribute: Cardinal;
-  pBuffer: Pointer): Integer; stdcall;
-  external secur32 name 'QueryContextAttributesW';
-
-function QuerySecurityContextToken(phContext: PSecHandle; var Token: THandle): Integer; stdcall;
-  external secur32 name 'QuerySecurityContextToken';
-
-function EncryptMessage(phContext: PSecHandle; fQOP: Cardinal;
-  pToken: PSecBufferDesc; MessageSeqNo: Cardinal): Integer; stdcall;
-  external secur32 name 'EncryptMessage';
-
-function DecryptMessage(phContext: PSecHandle; pToken: PSecBufferDesc;
-  MessageSeqNo: Cardinal; var fQOP: Cardinal): Integer; stdcall;
-  external secur32 name 'DecryptMessage';
-
-function FreeContextBuffer(pvContextBuffer: Pointer): Integer; stdcall;
-  external secur32 name 'FreeContextBuffer';
-
-function DeleteSecurityContext(phContext: PSecHandle): Integer; stdcall;
-  external secur32 name 'DeleteSecurityContext';
-
-function FreeCredentialsHandle(phCredential: PSecHandle): Integer; stdcall;
-  external secur32 name 'FreeCredentialsHandle';
+function QuerySecurityPackageInfoW; external secur32;
+function AcquireCredentialsHandleW; external secur32;
+function InitializeSecurityContextW; external secur32;
+function AcceptSecurityContext; external secur32;
+function CompleteAuthToken; external secur32;
+function QueryContextAttributesW; external secur32;
+function QuerySecurityContextToken; external secur32;
+function EncryptMessage; external secur32;
+function DecryptMessage; external secur32;
+function FreeContextBuffer; external secur32;
+function DeleteSecurityContext; external secur32;
+function FreeCredentialsHandle; external secur32;
 
 const
   crypt32 = 'crypt32.dll';
 
-function CertOpenStore(lpszStoreProvider: PAnsiChar; dwEncodingType: DWORD;
-  hCryptProv: HCRYPTPROV; dwFlags: DWORD; pvPara: Pointer): HCERTSTORE; stdcall;
-  external crypt32 name 'CertOpenStore'
-
-function CertOpenSystemStoreW(hProv: HCRYPTPROV; szSubsystemProtocol: PWideChar): HCERTSTORE; stdcall;
-  external crypt32 name 'CertOpenSystemStoreW'
-
-function CertCloseStore(hCertStore: HCERTSTORE; dwFlags: DWORD): BOOL; stdcall;
-  external crypt32 name 'CertCloseStore'
-
-function CertFindCertificateInStore(hCertStore: HCERTSTORE;
-  dwCertEncodingType, dwFindFlags, dwFindType: DWORD; pvFindPara: Pointer;
-  pPrevCertContext: PCCERT_CONTEXT): PCCERT_CONTEXT; stdcall;
-  external crypt32 name 'CertFindCertificateInStore'
-
+function CertOpenStore; external crypt32;
+function CertOpenSystemStoreW; external crypt32;
+function CertCloseStore; external crypt32;
+function CertFindCertificateInStore; external crypt32;
 
 
 (* ========================= High-Level SSPI / SChannel API wrappers  === *)
+
+{ TSecBuffer }
+
+procedure TSecBuffer.Init(aType: cardinal; aData: pointer;
+  aSize: cardinal);
+begin
+  BufferType := aType;
+  pvBuffer := aData;
+  cbBuffer := aSize;
+end;
+
+{ TSecBufferDesc }
+
+procedure TSecBufferDesc.Init(aVersion: cardinal; aBuffers: PSecBuffer;
+  aBuffersCount: cardinal);
+begin
+  ulVersion := aVersion;
+  pBuffers := aBuffers;
+  cBuffers := aBuffersCount;
+end;
+
 
 procedure InvalidateSecContext(var aSecContext: TSecContext; aConnectionID: Int64);
 begin
@@ -475,21 +455,14 @@ begin
   SrcLen := Length(aPlain);
   EncLen := SizeOf(Cardinal) + Sizes.cbSecurityTrailer + SrcLen;
   SetLength(Result, EncLen);
-
-  InBuf[0].BufferType := SECBUFFER_TOKEN;
-  InBuf[0].cbBuffer := Sizes.cbSecurityTrailer;
-  InBuf[0].pvBuffer := pointer(LONG_PTR(Result) + SizeOf(Cardinal));
+  InBuf[0].Init(SECBUFFER_TOKEN, pointer(LONG_PTR(Result) + SizeOf(Cardinal)),
+    Sizes.cbSecurityTrailer);
 
   // Encoding done in-place, so we copy the data
   SetString(EncBuffer, PAnsiChar(pointer(aPlain)), SrcLen);
+  InBuf[1].Init(SECBUFFER_DATA, pointer(EncBuffer), SrcLen);
 
-  InBuf[1].BufferType := SECBUFFER_DATA;
-  InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := pointer(EncBuffer);
-
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 2;
-  InDesc.pBuffers := @InBuf;
+  InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
 
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
@@ -535,19 +508,13 @@ begin
   SrcLen := EncLen - SizeOf(Cardinal) - SigLen;
   SetLength(Result, SrcLen);
 
-  InBuf[0].BufferType := SECBUFFER_TOKEN;
-  InBuf[0].cbBuffer := SigLen;
-  InBuf[0].pvBuffer := BufPtr;
+  InBuf[0].Init(SECBUFFER_TOKEN, BufPtr, SigLen);
   Inc(BufPtr, SigLen);
 
   Move(BufPtr^, PByte(Result)^, SrcLen);
-  InBuf[1].BufferType := SECBUFFER_DATA;
-  InBuf[1].cbBuffer := SrcLen;
-  InBuf[1].pvBuffer := PByte(Result);
+  InBuf[1].Init(SECBUFFER_DATA, pointer(result), SrcLen);
 
-  InDesc.ulVersion := SECBUFFER_VERSION;
-  InDesc.cBuffers := 2;
-  InDesc.pBuffers := @InBuf;
+  InDesc.Init(SECBUFFER_VERSION, @InBuf, 2);
 
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
@@ -577,7 +544,6 @@ begin
   FreeSecurityContext(fContext.CtxHandle);
   FreeCredentialsContext(fContext.CredHandle);
 end;
-
 
 
 end.
