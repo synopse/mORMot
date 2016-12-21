@@ -1262,7 +1262,7 @@ uses
   SyncObjs, // for TEvent and TCriticalSection
   Contnrs,  // for TObjectList
   {$ifndef NOVARIANTS}
-    Variants,
+  Variants,
   {$endif}
 {$endif LVCL}
   SysUtils,
@@ -16653,9 +16653,11 @@ type
     // - if aRemoteRest is a TSQLRestClient, it should have been authenticated
     // to the remote TSQLRestServer, so that CRUD / ORM operations will pass
     // - this will enable easy creation of proxies, or local servers, with they
-    // own cache and data model - e.g. a branch office server which may server
-    // its local client over Ethernet, but communicating to a main mORMot
+    // own cache and data model - e.g. a branch office server which may serve
+    // its local clients over Ethernet, but communicating to a main mORMot
     // server via Internet, storing the corporate data in the main office server
+    // - you may also share some tables (e.g. TSQLAuthUser and TSQLAuthGroup)
+    // between TSQLRestServer instances in a single service
     function RemoteDataCreate(aClass: TSQLRecordClass; aRemoteRest: TSQLRest): TSQLRestStorageRemote; virtual;
     /// call this method when the internal DB content is known to be invalid
     // - by default, all REST/CRUD requests and direct SQL statements are
@@ -57004,7 +57006,9 @@ begin
   smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
-  smvRawJSON:    WR.AddNoJSONEscape(PPointer(V)^,length(PRawUTF8(V)^));
+  smvRawJSON:    if PPointer(V)^=nil then // null as default JSON value 
+                   WR.AddShort('null') else
+                   WR.AddNoJSONEscape(PPointer(V)^,length(PRawUTF8(V)^));
   smvString:     {$ifdef UNICODE}
                  WR.AddJSONEscapeW(pointer(PString(V)^));
                  {$else}
