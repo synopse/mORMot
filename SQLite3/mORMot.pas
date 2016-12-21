@@ -8988,7 +8988,8 @@ type
     fConnectionProperties: TObject;
     fTableName: RawUTF8;
     fRowIDFieldName: RawUTF8;
-    fFieldNames: TRawUTF8DynArray;
+    fExtFieldNames: TRawUTF8DynArray;
+    fExtFieldNamesUnQuotedSQL: TRawUTF8DynArray;
     fSQL: TSQLModelRecordPropertiesSQL;
     fFieldNamesMatchInternal: TSQLFieldBits;
     fOptions: TSQLRecordPropertiesMappingOptions;
@@ -9114,7 +9115,7 @@ type
     property RowIDFieldName: RawUTF8 read fRowIDFieldName;
     /// the external field names, following fProps.Props.Field[] order
     // - excluding ID/RowID field, which is stored in RowIDFieldName
-    property FieldNames: TRawUTF8DynArray read fFieldNames;
+    property ExtFieldNames: TRawUTF8DynArray read fExtFieldNames;
     /// each bit set, following fProps.Props.Field[]+1 order (i.e. 0=ID,
     // 1=Field[0], ...), indicates that this external field name
     // has not been mapped
@@ -31927,7 +31928,8 @@ begin
     fTableName := MappedTableName;
   fConnectionProperties := MappedConnection;
   fRowIDFieldName := 'ID';
-  fProps.Fields.NamesToRawUTF8DynArray(fFieldNames);
+  fProps.Fields.NamesToRawUTF8DynArray(fExtFieldNames);
+  fProps.Fields.NamesToRawUTF8DynArray(fExtFieldNamesUnQuotedSQL);
   FillcharFast(fFieldNamesMatchInternal,sizeof(fFieldNamesMatchInternal),255);
   fAutoComputeSQL := AutoComputeSQL;
   fMappingVersion := 1;
@@ -31954,8 +31956,9 @@ begin
         include(fFieldNamesMatchInternal,0) else     // [0]=ID
         exclude(fFieldNamesMatchInternal,0);
     end else begin
-      fFieldNames[int] := InternalExternalPairs[i*2+1];
-      if IdemPropNameU(fFieldNames[int],fProps.Fields.List[int].Name) then
+      fExtFieldNames[int] := InternalExternalPairs[i*2+1];
+      fExtFieldNamesUnQuotedSQL[int] := UnQuotedSQLSymbolName(fExtFieldNames[int]);
+      if IdemPropNameU(fExtFieldNames[int],fProps.Fields.List[int].Name) then
         include(fFieldNamesMatchInternal,int+1) else // [0]=ID  [1..n]=fields[i-1]
         exclude(fFieldNamesMatchInternal,int+1);
     end;
@@ -32008,18 +32011,18 @@ procedure TSQLRecordPropertiesMapping.ComputeSQL;
         if f in SimpleFieldsBits[soSelect] then begin
           if withTableName then
             W.AddStrings([TableName,'.']);
-          W.AddString(FieldNames[f]);
+          W.AddString(ExtFieldNames[f]);
           if not(f+1 in FieldNamesMatchInternal) then
             W.AddStrings([' as ',Name]); // to get expected JSON column name
           W.Add(',');
         end;
       UpdateSimple:
         if f in SimpleFieldsBits[soSelect] then
-          W.AddStrings([FieldNames[f],'=?,']);
+          W.AddStrings([ExtFieldNames[f],'=?,']);
       UpdateSetAll:
-        W.AddStrings([FieldNames[f],'=?,']);
+        W.AddStrings([ExtFieldNames[f],'=?,']);
       InsertAll:
-        W.AddStrings([FieldNames[f],',']);
+        W.AddStrings([ExtFieldNames[f],',']);
       end;
     W.CancelLastComma;
     W.SetText(result);
@@ -32050,7 +32053,7 @@ begin
   int := fProps.Fields.IndexByNameOrExcept(FieldName);
   if int<0 then
     result := RowIDFieldName else
-    result := fFieldNames[int];
+    result := fExtFieldNames[int];
 end;
 
 function TSQLRecordPropertiesMapping.InternalCSVToExternalCSV(
@@ -32077,7 +32080,7 @@ begin
       IntFieldIndex^[i] := ndx;
     if ndx<0 then
       result[i] := RowIDFieldName else
-      result[i] := fFieldNames[ndx];
+      result[i] := fExtFieldNames[ndx];
   end;
 end;
 
@@ -32112,18 +32115,18 @@ begin
   result := false; // success
   if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN then
     Text := Text+RowIDFieldName else
-  if cardinal(FieldIndex)>=cardinal(Length(FieldNames)) then
+  if cardinal(FieldIndex)>=cardinal(Length(ExtFieldNames)) then
     result := true else // FieldIndex out of range
-    Text := Text+FieldNames[FieldIndex];
+    Text := Text+ExtFieldNames[FieldIndex];
 end;
 
 function TSQLRecordPropertiesMapping.FieldNameByIndex(FieldIndex: Integer): RawUTF8;
 begin
   if FieldIndex=VIRTUAL_TABLE_ROWID_COLUMN then
     result := RowIDFieldName else
-  if cardinal(FieldIndex)>=cardinal(Length(FieldNames)) then
+  if cardinal(FieldIndex)>=cardinal(Length(ExtFieldNames)) then
     result := '' else // FieldIndex out of range
-    result := FieldNames[FieldIndex];
+    result := ExtFieldNames[FieldIndex];
 end;
 
 

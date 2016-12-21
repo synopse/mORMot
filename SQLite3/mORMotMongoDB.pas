@@ -136,7 +136,7 @@ type
       var Doc: TDocVariantData): TID;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
     function BSONProjectionSet(var Projection: variant; WithID: boolean;
-      const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+      const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
     function GetJSONValues(const Res: TBSONDocument;
       const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
     // overridden methods calling the MongoDB external server
@@ -408,7 +408,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
-  WithID: boolean; const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+  WithID: boolean; const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
 var i,n: integer;
     W: TBSONWriter;
 begin
@@ -421,22 +421,22 @@ begin
     W.BSONWrite(fStoredClassProps.ExternalDB.RowIDFieldName,result);
     for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
       if i in Fields then begin
-        W.BSONWrite(fStoredClassProps.ExternalDB.FieldNames[i],1);
+        W.BSONWrite(fStoredClassProps.ExternalDB.ExtFieldNames[i],1);
         inc(result);
       end;
     W.BSONDocumentEnd;
     W.ToBSONVariant(Projection);
-    if ExtFieldNames<>nil then
+    if BSONFieldNames<>nil then
     with fStoredClassProps.ExternalDB do begin
-      SetLength(ExtFieldNames^,result);
+      SetLength(BSONFieldNames^,result);
       if WithID then begin
-        ExtFieldNames^[0] := RowIDFieldName;
+        BSONFieldNames^[0] := RowIDFieldName;
         n := 1;
       end else
         n := 0;
       for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
         if i in Fields then begin
-          ExtFieldNames^[n] := FieldNames[i];
+          BSONFieldNames^[n] := ExtFieldNames[i];
           inc(n);
         end;
     end;
@@ -581,7 +581,7 @@ begin
       if ndx<0 then
         raise EORMMongoDBException.CreateUTF8(
           '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
-      doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
+      doc.Names[i] := fStoredClassProps.ExternalDB.ExtFieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
       V := @doc.Values[i];
       case V^.VType of
@@ -633,7 +633,7 @@ begin
       LeaveCriticalSection(fStorageCriticalSection);
     end;
   if fStoredClassRecordProps.RecordVersionField<>nil then begin
-    RecordVersionName := fStoredClassProps.ExternalDB.FieldNames[
+    RecordVersionName := fStoredClassProps.ExternalDB.ExtFieldNames[
       fStoredClassRecordProps.RecordVersionField.PropertyIndex];
     if doc.GetValueIndex(RecordVersionName)<0 then
       if Owner=nil then
@@ -800,7 +800,7 @@ begin
     if info.SQLFieldType=sftBlob then begin
       (info as TSQLPropInfoRTTIRawBlob).GetBlob(Value,blobRaw);
       BSONVariantType.FromBinary(blobRaw,bbtGeneric,blob);
-      update.AddValue(fStoredClassProps.ExternalDB.FieldNames[f],blob);
+      update.AddValue(fStoredClassProps.ExternalDB.ExtFieldNames[f],blob);
     end;
   end;
   if update.Count>0 then

@@ -688,7 +688,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
     n := length(fFieldsExternal);
     SetLength(fFieldsExternalToInternal,n);
     with StoredClassProps.ExternalDB do begin
-      SetLength(fFieldsInternalToExternal,length(FieldNames)+1);
+      SetLength(fFieldsInternalToExternal,length(ExtFieldNames)+1);
       for i := 0 to high(fFieldsInternalToExternal) do
         fFieldsInternalToExternal[i] := -1;
       for i := 0 to n-1 do begin
@@ -739,7 +739,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
       exit; // ignore unknown/virtual fields
     end;
     Column.DBType := mORMotType[Prop.SQLFieldTypeStored];
-    Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
+    Column.Name := StoredClassProps.ExternalDB.ExtFieldNames[Prop.PropertyIndex];
     if Column.DBType=ftUTF8 then
       Column.Width := Prop.FieldWidth else
       Column.Width := 0;
@@ -793,7 +793,7 @@ begin
   for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
     nfo := StoredClassRecordProps.Fields.List[f];
     if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
-      SQL := fStoredClassProps.ExternalDB.FieldNames[f];
+      SQL := fStoredClassProps.ExternalDB.ExtFieldNames[f];
       if fProperties.IsSQLKeyword(SQL) then begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
@@ -844,7 +844,7 @@ begin
     for f := 0 to Fields.Count-1 do
       if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
       /// real database columns exist for Simple + Blob fields (not Many)
-      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
+      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.ExtFieldNames[f])<0 then begin
         // add new missing Field
         Finalize(Field);
         FillcharFast(Field,sizeof(Field),0);
