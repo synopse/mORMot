@@ -8113,6 +8113,13 @@ type
     // - don't perform any conversion, but create a CSV from raw PUTF8Char data
     function GetRowValues(Field: integer; const Sep: RawUTF8=',';
       const Head: RawUTF8=''; const Trail: RawUTF8=''): RawUTF8; overload;
+    /// get all values lengths for a specified field into a PIntegerArray
+    // - returns the total length as result, and fill LenStore with all rows
+    // individual lengths using StrLen() - caller should eventually call
+    // LenStore.Done to release any temp memory
+    // - returns 0 if Field is invalid or no data is stored in this TSQLTable -
+    // don't call LenStore.Done in this case
+    function GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
     {$ifndef NOVARIANTS}
     /// retrieve a field value in a variant
     // - returns null if the row/field is incorrect
@@ -24826,7 +24833,7 @@ var i: integer;
     U: PPUTF8Char;
 begin
   Finalize(Values);
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) then
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
@@ -24841,12 +24848,30 @@ var i: integer;
     U: PPUTF8Char;
 begin
   Finalize(Values);
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) then
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
   SetLength(Values,fRowCount);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
   for i := 0 to fRowCount-1 do begin
     SetInt64(U^,Values[i]);
+    inc(U,FieldCount); // go to next row
+  end;
+end;
+
+function TSQLTable.GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
+var len: PInteger;
+    i: integer;
+    U: PPUTF8Char;
+begin
+  result := 0;
+  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
+    exit;
+  U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
+  len := LenStore.Init(fRowCount*sizeof(len^));
+  for i := 1 to fRowCount do begin
+    len^ := StrLen(U^);
+    inc(result,len^);
+    inc(len);
     inc(U,FieldCount); // go to next row
   end;
 end;
@@ -24858,40 +24883,28 @@ var i, L, SepLen: integer;
     len: PInteger;
     tmp: TSynTempBuffer;
 begin
-  result := '';
-  if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
+  L := GetRowLengths(Field,tmp);
+  if L=0 then begin
+    result := Head+Trail;
     exit;
+  end;
   SepLen := length(Sep);
-  L := length(Head)+SepLen*(fRowCount-1)+length(Trail);
+  inc(L,length(Head)+SepLen*(fRowCount-1)+length(Trail));
+  SetString(result,nil,L);
+  P := AppendRawUTF8ToBuffer(pointer(result),Head);
   U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-  len := tmp.Init(fRowCount*4);
-  for i := 1 to fRowCount do begin
-    len^ := StrLen(U^);
-    inc(L,len^);
+  len := tmp.buf;
+  for i := 2 to fRowCount do begin
+    MoveFast(U^^,P^,len^);
+    inc(P,len^);
+    MoveFast(pointer(Sep)^,P^,SepLen);
+    inc(P,SepLen);
     inc(len);
     inc(U,FieldCount); // go to next row
   end;
-  if L<>0 then begin
-    SetLength(result,L);
-    P := pointer(result);
-    if Head<>'' then begin
-      MoveFast(pointer(Head)^,P^,length(Head));
-      inc(P,length(Head));
-    end;
-    U := @fResults[FieldCount+Field]; // start reading after first Row (= Field Names)
-    len := tmp.buf;
-    for i := 2 to fRowCount do begin
-      MoveFast(U^^,P^,len^);
-      inc(P,len^);
-      MoveFast(pointer(Sep)^,P^,SepLen);
-      inc(P,SepLen);
-      inc(len);
-      inc(U,FieldCount); // go to next row
-    end;
-    MoveFast(U^^,P^,len^); // last row without Sep
-    if Trail<>'' then
-      MoveFast(pointer(Trail)^,P[len^],length(Trail));
-  end;
+  MoveFast(U^^,P^,len^); // last row without Sep
+  if Trail<>'' then
+    MoveFast(pointer(Trail)^,P[len^],length(Trail));
   tmp.Done;
 end;
 
