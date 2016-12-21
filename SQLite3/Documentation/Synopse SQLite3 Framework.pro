@@ -8704,12 +8704,13 @@ return some static web content from a {\i mORMot} HTTP server.
 - Secure Information Exchange: a small amount of data can be stored in the JWT payload, and is digitally signed to ensure its provenance and integrity.
 See @http://jwt.io for an introduction to {\i JSON Web Tokens}.
 Our framework implements {\f1\fs20 JWT}:
-- {\f1\fs20 HS256} (@*HMAC-SHA256@) and {\f1\fs20 ES256} (256-bit @*ECDSA@) algorithms (with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution);
-- Validates all claims (validation dates, audiences, JWT ID);
+- {\f1\fs20 "HS256"} (@*HMAC-SHA256@) and {\f1\fs20 "ES256"} (256-bit @*ECDSA@) algorithms - with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution;
+- Computes and validates all JWT {\i claims}: dates, audiences, JWT ID;
 - Thread-safe and high performance (2 us for a {\f1\fs20 HS256} verification under x64), with optional in-memory cache if needed (e.g. for slower {\f1\fs20 ES256});
-- Stand-alone and cross-platform code (no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@);
-- Enhanced security and strong design - per instance, it is by design immune from @https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries
+- Stand-alone and cross-platform code: no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@;
+- Enhanced security - it is by design immune from @https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries
 - Full integration with the framework.
+It is architectured around a set of classes, one per algorithm, following the least astonishment principle, and enhancing security:
 \graph HierTJWTNone TJWTAbstract classes hierarchy
 \TJWTES256\TJWTAbstract
 \TJWTHS256\TJWTAbstract
@@ -8741,9 +8742,9 @@ The {\f1\fs20 'eyJhbGciOiJIUzI1NiIsIn...'} token contains in fact the following,
 - payload: {\f1\fs20 \{"sub":"1234567890","name":"John Doe","admin":true\}}
 - signature: {\f1\fs20 HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), "secret")}
 The {\f1\fs20 TJWTAbstract} classes implement the logic from supplied security parameters about a given set of JWT, then you can use {\f1\fs20 TJWTAbstract.Verify} to decode and check the payload and signature of a {\f1\fs20 JWT} into a {\f1\fs20 TJWTContent} local variable. As you can see, {\f1\fs20 TJWTContent.result} contains the decoding status, {\f1\fs20 TJWTContent.reg[]} the decoded claims, and {\f1\fs20 TJWTContent.data} is a @80@ giving access to any stored private information.
-It has a built-in support of claims when tokens are generated, so you can write:
+It has a built-in support of JWT {\i claims} when tokens are generated, so you can write:
 !j := TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60);
-!token := one.Compute(['http://example.com/is_root',true],'joe');
+!token := j.Compute(['http://example.com/is_root',true],'joe');
 Now, the {\f1\fs20 token} variable contains e.g. as signed payload:
 ${"http://example.com/is_root":true,"iss":"joe","iat":1482177879,"exp":1482181479,"jti":"1496DCE0676925DD33BB5A81"}
 The issuer has been encoded as an expected {\f1\fs20 "iss":} field, {\f1\fs20 "iat"} and {\f1\fs20 "exp"} fields contain the issuing and expiration timestamps, and {\f1\fs20 "jti"} has been filled with an obfuscated {\f1\fs20 TSynUniqueIdentifier} as JWT ID. Since we use a {\f1\fs20 TJWTHS256} class, {\f1\fs20 @*HMAC-SHA256@} digital signature of the header and payload has then been appended - with a secret safely derivated from '{\f1\fs20 sec'} passphrase using 10 rounds of a {\f1\fs20 @*PBKDF2_HMAC_SHA256@} derivation (in practice, you may use a much higher number like 20,000).
@@ -8751,7 +8752,7 @@ Then you can decode such a token, and access its payload in a single method:
 !j.Verify(token,jwt);
 !assert(jwt.result=jwtValid);
 !assert(jwt.reg[jrcIssuer]='joe');
-Integration with method-based services is easy, using {\f1\fs20 Ctxt.AuthenticationCheck} method:
+Integration with method-based services is easy, using {\f1\fs20 TSQLRestServerURIContext.AuthenticationCheck} method:
 !TMyDaemon = class(...
 !protected
 !  fJWT: TJWTAbstract;

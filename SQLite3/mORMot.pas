@@ -2219,7 +2219,8 @@ function ObjectToJSONFile(Value: TObject; const JSONFile: TFileName;
 // class name and sets/enumerates as text
 // - could be used to create a TDocVariant object with full information
 // - wrapper around ObjectToJSON(Value,[woDontStoreDefault,woFullExpand])
-// also able to serialize plain Exception as a simple '{"Exception":"Message"}'
+// also able to serialize plain Exception as a simple '{"Exception":"Message"}',
+// and append .map/.mab source code line number for ESynException 
 function ObjectToJSONDebug(Value: TObject; Options: TTextWriterWriteObjectOptions=
   [woDontStoreDefault,woHumanReadable,woStoreClassName,woStorePointer]): RawUTF8;
 
@@ -46860,7 +46861,8 @@ end;
 
 type
   TJSONObject =
-    (oNone, oException, oList, oObjectList, {$ifndef LVCL}oCollection,{$endif}
+    (oNone, oException, oSynException, oList, oObjectList,
+     {$ifndef LVCL}oCollection,{$endif}
      oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
      oSynMonitor, oSQLTable, oCustom);
 
@@ -46873,8 +46875,8 @@ const
     TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
     TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List,TSQLTable
     {$ifndef LVCL},TCollection{$endif});
-  OBJ: array[0..MAX] of TJSONObject = (
-    oNone,oException,oPersistent,oList,oObjectList,oPersistent,
+  OBJ: array[0..MAX] of TJSONObject = ( // oPersistent = has published properties
+    oNone,oException,oSynException,oList,oObjectList,oPersistent,
     oPersistentPassword,oPersistent,oPersistent,
     oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs,oSQLTable
     {$ifndef LVCL},oCollection{$endif});
@@ -46884,7 +46886,7 @@ begin
     repeat // guess class type (faster than multiple InheritsFrom calls)
       aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
       if aCustomIndex>=0 then begin
-        result := oCustom; // found exact custom type (ignore inherited)
+        result := oCustom; // found custom type (may be as inherited)
         exit;
       end;
       i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
@@ -49473,8 +49475,7 @@ begin
     AddShort(PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^);
     Add('"',',');
   end;
-  if IsObj in [oSQLRecord,oSQLMany] then begin
-    // manual handling of TSQLRecord.ID property serialization
+  if IsObj in [oSQLRecord,oSQLMany] then begin // add TSQLRecord.ID property
     HR;
     AddPropName('ID');
     if woHumanReadable in Options then
@@ -49488,17 +49489,19 @@ begin
       Add('"',',');
     end;
   end else begin
-    if woStorePointer in Options then begin // "Address":"0431298a" field
+    if woStorePointer in Options then begin
       HR;
-      AddPropName('Address');
+      AddPropName('Address'); // "Address":"0431298a" field
       Add('"');
-      AddPointer(PtrUInt(Value));
+      if (IsObj=oSynException) and (ESynException(Value).RaisedAt<>nil) then
+        TSynMapFile.Log(self,PtrUInt(ESynException(Value).RaisedAt),false) else
+        AddPointer(PtrUInt(Value));
       Add('"',',');
     end;
     case IsObj of
     oException: begin
       HR;
-      AddPropName('Message');
+      AddPropName('Message'); // not published property -> manual serialization
       Add('"');
       AddJSONEscapeString(Exception(Value).Message);
       Add('"',',');
