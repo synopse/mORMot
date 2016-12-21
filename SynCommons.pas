@@ -7061,7 +7061,8 @@ type
   // class name, sets/enumerates as text, and reference pointer - as used by
   // TSynLog and ObjectToJSONFull()
   // - woStoreClassName will add a "ClassName":"TMyClass" field
-  // - woStorePointer will add a "Address":"0431298a" field
+  // - woStorePointer will add a "Address":"0431298A" field, and .map/.mab 
+  // source code line number corresponding to ESynException.RaisedAt
   // - woStoreStoredFalse will write the 'stored false' properties, even
   // if they are marked as such (used e.g. to persist all settings on file,
   // but disallow the sensitive - password - fields be logged)
@@ -10239,12 +10240,14 @@ type
   // so you could use ObjectToJSONDebug(anyESynException) to retrieve some
   // extended information
   ESynException = class(Exception)
+  protected
+    fRaisedAt: pointer;
   public
     /// constructor which will use FormatUTF8() instead of Format()
-    // - expect % as delimitor, so is less error prone than %s %d %g
+    // - expect % as delimiter, so is less error prone than %s %d %g
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
-    // pointer, or the JSON representation of the supplied variant
+    // pointer, or the JSON representation of any supplied TDocVariant
     constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
@@ -10255,6 +10258,14 @@ type
     // written (i.e. as for any TSynLogExceptionToStr callback)
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; virtual;
     {$endif}
+    /// the code location when this exception was triggered
+    // - populated by SynLog unit, during interception - so may be nil
+    // - you can use TSynMapFile.FindLocation(ESynException) class function to
+    // guess the corresponding source code line 
+    // - will be serialized as "Address": hexadecimal and source code location
+    // (using TSynMapFile .map/.mab information) in TJSONSerializer.WriteObject
+    // when woStorePointer option is defined - e.g. with ObjectToJSONDebug()
+    property RaisedAt: pointer read fRaisedAt write fRaisedAt;
   published
     property Message;
   end;

@@ -226,7 +226,10 @@ type
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
-    function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8;
+    function FindLocation(aAddressAbsolute: PtrUInt): RawUTF8; overload;
+    /// return the symbol location according to the supplied ESynException
+    // - i.e. unit name, symbol name and line number (if any), as plain text
+    class function FindLocation(exc: ESynException): RawUTF8; overload;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -2145,6 +2148,13 @@ begin
     result := result+' ('+UInt32ToUtf8(Line)+')';
 end;
 
+class function TSynMapFile.FindLocation(exc: ESynException): RawUTF8;
+begin
+  if (exc=nil) or (exc.RaisedAt=nil) then
+    result := '' else
+    result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
+end;
+
 
 { TSynLogFamily }
 
@@ -2325,6 +2335,7 @@ procedure SynLogException(const Ctxt: TSynLogExceptionContext);
     end;
   end;
 var SynLog: TSynLog;
+label adr,fin;
 begin
   {$ifdef CPU64DELPHI} // Delphi<XE6 in System.pas to retrieve x64 dll exit code
   {$ifndef ISDELPHIXE6}
@@ -2343,32 +2354,29 @@ begin
     exit;
   if SynLog.LogHeaderLock(Ctxt.ELevel,false) then
   try
-    repeat // "repeat" not used as loop, but as alternative to goto
-      if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
-        GlobalLastExceptionIndex := 0 else
-        inc(GlobalLastExceptionIndex);
-      GlobalLastException[GlobalLastExceptionIndex].Context := Ctxt;
-      if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
-        GlobalLastException[GlobalLastExceptionIndex].Message := Ctxt.EInstance.Message;
-        if Ctxt.EInstance.InheritsFrom(ESynException) then
-          if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
-            break;
-      end else
-        GlobalLastException[GlobalLastExceptionIndex].Message := '';
-      if Assigned(TSynLogExceptionToStrCustom) then begin
-        if TSynLogExceptionToStrCustom(SynLog.fWriter,Ctxt) then
-          break;
-      end else
-        if DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
-          break;
-      SynLog.fWriter.AddShort(' at ');
-      TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
-      {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
-      SynLog.AddStackTrace(Ctxt.EStack);
-      {$endif}
-      break;
-    until false;
-    SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
+    if GlobalLastExceptionIndex=MAX_EXCEPTHISTORY then
+      GlobalLastExceptionIndex := 0 else
+      inc(GlobalLastExceptionIndex);
+    GlobalLastException[GlobalLastExceptionIndex].Context := Ctxt;
+    if (Ctxt.ELevel=sllException) and (Ctxt.EInstance<>nil) then begin
+      GlobalLastException[GlobalLastExceptionIndex].Message := Ctxt.EInstance.Message;
+      if Ctxt.EInstance.InheritsFrom(ESynException) then begin
+        ESynException(Ctxt.EInstance).RaisedAt := pointer(Ctxt.EAddr);
+        if ESynException(Ctxt.EInstance).CustomLog(SynLog.fWriter,Ctxt) then
+          goto fin;
+        goto adr;
+      end;
+    end else
+      GlobalLastException[GlobalLastExceptionIndex].Message := '';
+    if Assigned(DefaultSynLogExceptionToStr) and
+       DefaultSynLogExceptionToStr(SynLog.fWriter,Ctxt) then
+      goto fin;
+adr:SynLog.fWriter.AddShort(' at ');
+    TSynMapFile.Log(SynLog.fWriter,Ctxt.EAddr,true);
+    {$ifndef WITH_VECTOREXCEPT} // stack frame OK for RTLUnwindProc by now
+    SynLog.AddStackTrace(Ctxt.EStack);
+    {$endif}
+fin:SynLog.fWriter.AddEndOfLine(SynLog.fCurrentLevel);
     SynLog.fWriter.FlushToStream; // we expect exceptions to be available on disk
   finally
     GlobalCurrentHandleExceptionSynLog := SynLog.fThreadHandleExceptionBackup;
