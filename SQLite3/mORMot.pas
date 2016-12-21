@@ -56320,15 +56320,21 @@ begin
   InstanceID := 0;
   Obj := Instance;
   Instance := nil;
-  {$ifndef LVCL}
-  if (optFreeInMainThread in Factory.fAnyOptions) and
-     (GetCurrentThreadID<>MainThreadID) then
-    BackgroundExecuteInstanceRelease(Obj,nil) else
-  {$endif}
-  if (optFreeInPerInterfaceThread in Factory.fAnyOptions) and
-     Assigned(Factory.fBackgroundThread) then
-    BackgroundExecuteInstanceRelease(Obj,Factory.fBackgroundThread) else
-    IInterface(Obj)._Release;
+  try
+    {$ifndef LVCL}
+    if (optFreeInMainThread in Factory.fAnyOptions) and
+       (GetCurrentThreadID<>MainThreadID) then
+      BackgroundExecuteInstanceRelease(Obj,nil) else
+    {$endif}
+    if (optFreeInPerInterfaceThread in Factory.fAnyOptions) and
+       Assigned(Factory.fBackgroundThread) then
+      BackgroundExecuteInstanceRelease(Obj,Factory.fBackgroundThread) else
+      IInterface(Obj)._Release;
+  except
+    on E: Exception do
+      Factory.fRest.Internallog('SafeFreeInstance: Ignored % exception '+
+        'during %._Release',[E.ClassType,Factory.InterfaceURI],sllDebug);
+  end;
 end;
 
 function TServiceFactoryServer.InternalInstanceRetrieve(
@@ -56365,17 +56371,17 @@ begin
       if InstanceID<>0 then
       if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
         // deprecated -> mark this entry as empty
-        fRest.InternalLog(
-          '%.InternalInstanceRetrieve: Deleted %(%) instance (id=%) after % ms timeout (max % ms)',
-          [ClassType,fInterfaceURI,pointer(Inst.Instance),InstanceID,Inst.LastAccess64-LastAccess64,fInstanceTimeOut],sllDebug);
+        fRest.InternalLog('%.InternalInstanceRetrieve: Delete %(%) instance '+
+          '(id=%) after % minutes timeout (max % minutes)',[ClassType,fInterfaceURI,
+           pointer(Inst.Instance),InstanceID,(Inst.LastAccess64-LastAccess64)div 60000,
+           fInstanceTimeOut div 60000],sllInfo);
         SafeFreeInstance(self);
       end;
     if Inst.InstanceID=0 then begin
-      // retrieve or initialize a sicClientDriven instance
+      // initialize a new sicClientDriven instance
       if (cardinal(aMethodIndex)>=fInterface.fMethodsCount) or
          (InstanceCreation<>sicClientDriven) then
         exit;
-      // initialize the new instance
       inc(fInstanceCurrentID);
       Inst.InstanceID := fInstanceCurrentID;
       AddNew;
@@ -56394,7 +56400,7 @@ begin
           Inst.Instance := Instance;
           exit;
         end;
-      // add any new session/user/group instance if necessary
+      // add any new session/user/group/thread instance if necessary
       if (InstanceCreation<>sicClientDriven) and
          (cardinal(aMethodIndex)<fInterface.fMethodsCount) then
         AddNew;
