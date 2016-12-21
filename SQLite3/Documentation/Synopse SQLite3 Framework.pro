@@ -7594,7 +7594,7 @@ Our {\i SynLZ} is efficient, especially on @*JSON@ content, and very fast on the
 You may include {\f1\fs20 hcDeflate} to the property, if you want to support this zip-derivated compression algorithm, e.g. from browsers or any HTTP library. In terms of CPU resources, {\f1\fs20 hcDeflate} will be more consumming than {\f1\fs20 hcSynLZ}, but will obtain a slightly better compression ratio.
 If both {\f1\fs20 [hcSynLZ,hcDeflate]} are defined, {\i mORMot} clients will use {\i SynLZ} compression, while other clients (e.g. browsers which do not know about the {\i SynLZ} encoding), will use the standard {\i deflate} compression.
 :151   AES encryption over HTTP
-In addition to regular HTTPS flow @**encryption@, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA256 and @**AES@256-CFB algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
+In addition to regular HTTPS flow @**encryption@, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on @*SHA256@ and @**AES@256-CFB algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
 Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCFB} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
 ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
@@ -8689,7 +8689,7 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 \page
 :96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
-In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
+In practice, result content will be hashed (using {\f1\fs20 @*crc32c@} algorithm, and fast SSE4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
 This @*stateless@ @9@ model will enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
@@ -8704,7 +8704,7 @@ return some static web content from a {\i mORMot} HTTP server.
 - Secure Information Exchange: a small amount of data can be stored in the JWT payload, and is digitally signed to ensure its provenance and integrity.
 See @http://jwt.io for an introduction to {\i JSON Web Tokens}.
 Our framework implements {\f1\fs20 JWT}:
-- {\f1\fs20 HS256} (HMAC-SHA256) and {\f1\fs20 ES256} (256-bit ECDSA) algorithms (with the addition of the {\f1\fs20 "none"} weak algo);
+- {\f1\fs20 HS256} (@*HMAC-SHA256@) and {\f1\fs20 ES256} (256-bit @*ECDSA@) algorithms (with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution);
 - Validates all claims (validation dates, audiences, JWT ID);
 - Thread-safe and high performance (2 us for a {\f1\fs20 HS256} verification under x64), with optional in-memory cache if needed (e.g. for slower {\f1\fs20 ES256});
 - Stand-alone and cross-platform code (no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@);
@@ -8720,7 +8720,7 @@ In {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas}, you will find:
 - {\f1\fs20 TJWTNone} implementing the {\f1\fs20 "none"} algorithm;
 - {\f1\fs20 TJWTHS256} implementing the {\f1\fs20 "HS256"} algorithm;
 - {\f1\fs20 TJWTES256} implementing the {\f1\fs20 "ES256"} algorithm.
-To generate JWT, you may use
+To work with JWT, you may write for instance:
 !var j: TJWTAbstract;
 !    jwt: TJWTContent;
 !...
@@ -8740,11 +8740,13 @@ The {\f1\fs20 'eyJhbGciOiJIUzI1NiIsIn...'} token contains in fact the following,
 - header: {\f1\fs20 \{"alg":"HS256","typ":"JWT"\}}
 - payload: {\f1\fs20 \{"sub":"1234567890","name":"John Doe","admin":true\}}
 - signature: {\f1\fs20 HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), "secret")}
-It has a built-in support of claims, so you can write:
+The {\f1\fs20 TJWTAbstract} classes implement the logic from supplied security parameters about a given set of JWT, then you can use {\f1\fs20 TJWTAbstract.Verify} to decode and check the payload and signature of a {\f1\fs20 JWT} into a {\f1\fs20 TJWTContent} local variable. As you can see, {\f1\fs20 TJWTContent.result} contains the decoding status, {\f1\fs20 TJWTContent.reg[]} the decoded claims, and {\f1\fs20 TJWTContent.data} is a @80@ giving access to any stored private information.
+It has a built-in support of claims when tokens are generated, so you can write:
 !j := TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60);
 !token := one.Compute(['http://example.com/is_root',true],'joe');
 Now, the {\f1\fs20 token} variable contains e.g. as signed payload:
 ${"http://example.com/is_root":true,"iss":"joe","iat":1482177879,"exp":1482181479,"jti":"1496DCE0676925DD33BB5A81"}
+The issuer has been encoded as an expected {\f1\fs20 "iss":} field, {\f1\fs20 "iat"} and {\f1\fs20 "exp"} fields contain the issuing and expiration timestamps, and {\f1\fs20 "jti"} has been filled with an obfuscated {\f1\fs20 TSynUniqueIdentifier} as JWT ID. Since we use a {\f1\fs20 TJWTHS256} class, {\f1\fs20 @*HMAC-SHA256@} digital signature of the header and payload has then been appended - with a secret safely derivated from '{\f1\fs20 sec'} passphrase using 10 rounds of a {\f1\fs20 @*PBKDF2_HMAC_SHA256@} derivation (in practice, you may use a much higher number like 20,000).
 Then you can decode such a token, and access its payload in a single method:
 !j.Verify(token,jwt);
 !assert(jwt.result=jwtValid);
@@ -8759,7 +8761,7 @@ Integration with method-based services is easy, using {\f1\fs20 Ctxt.Authenticat
 !  if Ctxt.AuthenticationCheck(fJWT)=jwtValid then
 !    Ctxt.ReturnFileFromFolder('c:\datafolder');
 !end;
-The above method will define a method-based service returning the content of a local folder, only if a valid {\f1\fs20 JWT} is supplied within the HTTP headers of the incoming request.
+The above method will define a method-based service returning the content of a local folder, only if a valid {\f1\fs20 JWT} is supplied within the HTTP headers of the incoming request. If {\f1\fs20 AuthenticationCheck} fails to validate the token supplied in the associated {\f1\fs20 Ctxt}, if will return {\f1\fs20 401 HTTP_UNAUTHORIZED} to the client, as expected.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.
@@ -11540,7 +11542,7 @@ The units are the following:
 |%37%63
 |\b Unit Name|Description\b0
 |{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, implementing secured ORM and SOA @*REST@ful client
-|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|@*SHA256@ and @*crc32@ algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Optimized JSON process (not used by {\i Smart})
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
@@ -13399,7 +13401,7 @@ The framework tries to implement @**security@ via:
 {\i Authentication} allows user identification:
 - Build-in optional @*authentication@ mechanism, implementing both {\i per-user @*session@s} and individual REST {\i @*Query Authentication@};
 - {\i Authentication groups} are used for proper authorization;
-- Several authentication schemes, from very secure SHA256 based challenging to weak but simple authentication;
+- Several authentication schemes, from very secure @*HMAC-SHA256@ based challenging to weak but simple authentication;
 - Class-based architecture, allowing custom extension.
 {\i Authorization} of a given process is based on the group policy, after proper authentication:
 - {\i Per-table access right} functionalities built-in at lowest level of the framework;
@@ -13444,7 +13446,7 @@ For instance, here is a generic URI sample from the link above:
 $ GET /object?apiKey=Qwerty2010
 should be transmitted as such:
 $ GET /object?timestamp=1261496500&apiKey=Qwerty2010&signature=abcdef0123456789
-The string being signed is "{\f1\fs20 /object?apikey=Qwerty2010&timestamp=1261496500}" and the signature is the {\i SHA256} hash of that string using the private component of the API key.
+The string being signed is "{\f1\fs20 /object?apikey=Qwerty2010&timestamp=1261496500}" and the signature is the {\i @*SHA256@} hash of that string using the private component of the API key.
 This technique is perhaps the more compatible with a Stateless architecture, and can also been implemented with a light @*session@ management.
 Server-side data caching is always available. In our framework, we cache the responses at the SQL level, not at the URI level (thanks to our optimized implementation of {\f1\fs20 GetJSONObjectAsSQL}, the URI to SQL conversion is very fast). So adding this extra parameter doesn't break the cache mechanism.
 :  Framework authentication
@@ -13480,7 +13482,7 @@ struct1 [label="ID : TID|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRight
 struct2 [label="AuthGroup"];
 struct1:f0 -> struct2;
 \
-Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a SHA256 hash of its registered password (with optional PBKDF2_HMAC_SHA256 derivation). A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
+Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a @*SHA256@ hash of its registered password (with optional {\f1\fs20 @*PBKDF2_HMAC_SHA256@} derivation). A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
 By default, the following security groups are created on a void database:
 |%14%12%14%11%11%12%12%12
 |\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
@@ -13539,7 +13541,7 @@ Authentication is implemented in {\i mORMot} via the following classes:
 In fact, you can use one of the following @*REST@ful authentication schemes:
 |%50%50
 |\b class|Scheme\b0
-|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication, as a proprietary dual-pass challenge and SHA256/PBKDF2_HMAC_SHA256 hashing
+|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication, as a proprietary dual-pass challenge and @*SHA256@/@*PBKDF2_HMAC_SHA256@ hashing
 |{\f1\fs20 TSQLRestServerAuthenticationSSPI}|@*Windows authentication@, via the logged user
 |{\f1\fs20 TSQLRestServerAuthenticationNone}|Weak but simple authentication, based on user name
 |{\f1\fs20 TSQLRestServerAuthenticationHttpBasic}|HTTP Basic authentication\line Warning: password is not encrypted
@@ -13571,7 +13573,7 @@ Here are the typical steps to be followed in order to create a new user session 
 In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32-bit cardinals:
 - The @*Session@ ID (to retrieve the private key used for the signature);
 - A Client Time Stamp (in 256 ms resolution) which must be greater or equal than the previous time stamp received;
-- The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i crc32} hashing algorithm.
+- The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i @*crc32@} hashing algorithm.
 Such a classical 3 points signature will avoid most {\i man-in-the-middle} (MITM) or {\i re-play} attacks.
 Here is typical signature to access the {\f1\fs20 root} URL
 $ root?session_signature=0000004C000F6BE365D8D454
@@ -13579,7 +13581,7 @@ In this case, {\f1\fs20 0000004C} is the Session ID, {\f1\fs20 000F6BE3} is the 
 !(crc32(crc32(fPrivateSaltHash,PTimeStamp,8),pointer(aURL),aURLlength)=aSignature);
 For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=6 will have the following URI:
 $ root/People/6?session_signature=0000004C000F6DD02E24541C
-For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA256 or PBKDF2_HMAC_SHA256, to enhance security with no performance penalty.
+For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) @*SHA256@. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i @*crc32@} will be enough for most common use. Note that the password hashing and the session opening will use @*SHA256@ or @*PBKDF2_HMAC_SHA256@, to enhance security with no performance penalty.
 In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a {\i Delphi} Client or from a @*AJAX@ / {\i JavaScript} client.
 On practice, this scheme is secure and very fast, perfect for a {\i Delphi} client, or an AJAX application.
 :121   Authentication using Windows credentials
@@ -13966,7 +13968,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :187Asymmetric Encryption
 %cartoon05.png
-As we have seen when dealing about @43@, the framework offers built-in @**encryption@ of the content transmitted between its @*REST@ client and server sides, especially via @188@, or @*HTTPS@. The later, when using TLS 1.2 and proven patterns, implements state-of-the-art security. But default {\i mORMot} encryption, even if using proven algorithms like @*AES@256-CFB and SHA256, uses symmetric keys, that is the same secret key is shared on both client and server sides.
+As we have seen when dealing about @43@, the framework offers built-in @**encryption@ of the content transmitted between its @*REST@ client and server sides, especially via @188@, or @*HTTPS@. The later, when using TLS 1.2 and proven patterns, implements state-of-the-art security. But default {\i mORMot} encryption, even if using proven algorithms like @*AES@256-CFB and @*SHA256@, uses symmetric keys, that is the same secret key is shared on both client and server sides.
 @**Asymmetric@ encryption, also known as @**public-key@ cryptography, uses pairs of keys:
 - {\i Public} keys that may be disseminated widely;
 - Paired with {\i private} keys which are known only to the owner.
@@ -14080,7 +14082,7 @@ In comparison to the RSA algorithm, ECC has some advantages:
 - Offers @*perfect forward secrecy@, since a fresh key is created for every encryption;
 - Potentially less patents infringement, in all its practical appliances;
 - Last but not least, it is one the strongest algorithms for the future of web.
-There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and established standards (like X509).\line To be fair, such libraries are complex and confusing, whereas we selected a set of future-proof algorithms (AES256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) to follow {\i mORMot}'s KISS and DRY principles, keep code maintainable and readable, and reduce risk assessment scope. We followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations. The last thing we want to do is to start mandating DLLs, which are perhaps deprecated/unsafe if part of the OS. Last but not least, it was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
+There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and established standards (like X509).\line To be fair, such libraries are complex and confusing, whereas we selected a set of future-proof algorithms (AES256 excluding ECB, @*HMAC-SHA256@, @*PBKDF2_HMAC_SHA256@, ECDSA, ECIES...) to follow {\i mORMot}'s KISS and DRY principles, keep code maintainable and readable, and reduce risk assessment scope. We followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations. The last thing we want to do is to start mandating DLLs, which are perhaps deprecated/unsafe if part of the OS. Last but not least, it was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
 ;- We did not start from scratch, since we used another proven Open Source library for the raw ECC computation, which was the most sensitive part;
 ;- Existing librairies have to deal with a lot of algorithms, options and old features: we wanted a reduced scope, to ease risk assessment - only well-known and future-proof algorithms were selected (AES256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) and default values are very aggressive (password strength, 60,000 PBKDF2 iterations...);
 ;- Existing libraries are so complex that interfacing with them makes the consuming code complex to write and maintain - {\f1\fs20 SynEcc} logic is implemented in a few dozen lines of code: most of the unit source is about wrapper methods and documentation, and an average programmer can understand and review it, even if he/she is no Delphi expert;
@@ -14097,7 +14099,7 @@ The {\i mORMot}'s {\f1\fs20 SynEcc.pas} unit implements full ECC computation, us
 All needed low-level asymmetric cryptography is available:
 - ECC key generation, using {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} as random seed;
 - ECDSA signature and verification of 256-bit hashes;
-- ECDSH shared secret computation - suitable for ECIES encryption, after PBKDF2_HMAC_SHA256 derivation.
+- ECDSH shared secret computation - suitable for ECIES encryption, after @*PBKDF2_HMAC_SHA256@ derivation.
 The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and structures, ready to implement:
 - Authority certificates - via public {\f1\fs20 TECCCertificate} and private {\f1\fs20 TECCCertificateSecret} classes, and full {\f1\fs20 PKI} chaining - see {\f1\fs20 TECCCertificateChain};
 - Digital signature of files or memory buffers - via {\f1\fs20 TECCSignatureCertified};
@@ -14291,7 +14293,7 @@ $ ],
 $ "Count": 2,
 $}
 In the above sample, we cut down the {\f1\fs20 "PublicBase64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored two times: once in {\f1\fs20 "PublicBase64"}, and another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items.
-An easy way of keys management is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.ca} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
+An easy way of keys management is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.ca} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a @*PBKDF2_HMAC_SHA256@ derived password, with a huge number of rounds (60000).
 Remember that often, the weakest link of the security chain is between the chair and the keyboard, not within the computer. Do not reuse passwords between keys, and remember you have a "{\f1\fs20 rekey}" command available on the {\f1\fs20 ECC} tool, so that you can change a private key password, without changing its content, nor re-publish its associated {\f1\fs20 .public} key:
 $>ecc rekey
 $Enter the first chars of the .private certificate file name.
@@ -14427,7 +14429,7 @@ $        "md5": "e80f2bf959c943e240f2c1f5efcf1e89",
 $        "sha256": "6bc2d25e9cc93201914e7c6588624696778de80c6f63a590262ccf610310ea0e",
 $        "sign": "AQA2AIvJAgHvVe409i26j+jPFNwas4OAAAAAAAAAA...."
 $}
-In additional to some general information (name, date, size), you have unsigned hashes ({\f1\fs20 "md5"} and {\f1\fs20 "sha256"}), and an ECC digital signature, stored as a base-64 encoded string in the {\f1\fs20 "sign":} field. This signature has been computed using the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key, and the SHA256 hash of the {\f1\fs20 test1.txt} file content. Note that you can add whatever JSON field you need to any {\f1\fs20 .sign} file, especially in the {\f1\fs20 "meta":} nested object, as soon as you don't modify the {\f1\fs20 size/md5/sha256/sign} values.
+In additional to some general information (name, date, size), you have unsigned hashes ({\f1\fs20 "md5"} and {\f1\fs20 "sha256"}), and an ECC digital signature, stored as a base-64 encoded string in the {\f1\fs20 "sign":} field. This signature has been computed using the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key, and the @*SHA256@ hash of the {\f1\fs20 test1.txt} file content. Note that you can add whatever JSON field you need to any {\f1\fs20 .sign} file, especially in the {\f1\fs20 "meta":} nested object, as soon as you don't modify the {\f1\fs20 size/md5/sha256/sign} values.
 To verify the file, ensure that both {\f1\fs20 test1.txt} and {\f1\fs20 test1.txt.sign} files are in the current directory, then run:
 $>ecc verify -file test1.txt
 $ test1.txt file verified as valid self signed.
@@ -14536,8 +14538,8 @@ $        "Signature": null
 $}
 As you can see, encryption is defined by its {\f1\fs20 "Algorithm":} field, and uses two additional properties:
 - {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending lots of money in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
-- {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. SHA256 in our case.
-In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using PBKDF2_HMAC_SHA256 as key derivation function, AES256-CFB as symmetric encryption scheme, and HMAC_SHA256 algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
+- {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. @*SHA256@ in our case.
+In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using @*PBKDF2_HMAC_SHA256@ as key derivation function, AES256-CFB as symmetric encryption scheme, and @*HMAC-SHA256@ algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
 {\f1\fs20 ECIES} provides semantic security against an adversary who is allowed to use chosen-plaintext and chosen-ciphertext attacks. In addition to the expected genuine secret and message authentication in {\f1\fs20 "RandomPublicKey"} and {\f1\fs20 "HMAC"} properties, {\f1\fs20 SynEcc} implementation allows to customize the default "salt" value, to add a password protection for each {\f1\fs20 .synecc} encrypted file.
 Decryption is pretty straightforward:
 $>ecc decrypt -file test1.txt.synecc
@@ -14575,7 +14577,7 @@ $05/09/2016  10:37            72 209 test2.txt.2
 $24/09/2016  17:13            15 220 test2.txt.synecc
 The {\f1\fs20 *.2} decrypted files have the expect size (and content), after decompression. Even the file timestamp has been set to match the original.
 :189  Private Keys Passwords Cheat Mode
-In order to follow best practice, our {\f1\fs20 .private} key files are always protected by a password. A random value with enough length and entropy is always proposed by the {\f1\fs20 ECC} tool when a key pair is generated, and could be used directly. It is always preferred to trust a computer to create true randomness (and {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} was designed to be the best possible seed, using hardware entropy if available), than using our human brain, which could be defeated by dictionary-based password attacks. Brute force cracking would be almost impossible, since {\f1\fs20 PBKDF2_HMAC_SHA256} Password-Based Key Derivation Function with 60,000 rounds is used, so rainbow tables (i.e. pre-computed passwords list) will be inoperative, and each password trial would take more time than with a regular Key Derivation Function.
+In order to follow best practice, our {\f1\fs20 .private} key files are always protected by a password. A random value with enough length and entropy is always proposed by the {\f1\fs20 ECC} tool when a key pair is generated, and could be used directly. It is always preferred to trust a computer to create true randomness (and {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} was designed to be the best possible seed, using hardware entropy if available), than using our human brain, which could be defeated by dictionary-based password attacks. Brute force cracking would be almost impossible, since {\f1\fs20 @**PBKDF2_HMAC_SHA256@} Password-Based Key Derivation Function with 60,000 rounds is used, so rainbow tables (i.e. pre-computed passwords list) will be inoperative, and each password trial would take more time than with a regular Key Derivation Function.
 The issue with strong passwords is that they are difficult to remember. If you use not pure random passwords, but some easier to remember values with good entropy, you may try some tools like @https://xkpasswd.net/s which returns values like {\f1\fs20 $$19*wrong*DRIVE*read*61$$}. But even then, you will be able to remember only a dozen of such passwords. In a typical public key infrastructure, you may create hundredths of keys, so remembering all passwords is no option for an average human being as you and me.
 At the end, you end up with using a tool to store all your passwords (last trend is to use an online service with browser integration), or - admit it - store them in an {\f1\fs20 Excel} document protected by a password. Most IT people - and even security specialists - end with using such a mean of storage, just because they need it.\line The weaknesses of such solutions can be listed:
 - How could we trust closed source software and third-party online services?
@@ -16051,7 +16053,7 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatform.inc}|Includes cross-platform and cross-compiler conditionals
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for {\i Delphi} and FPC
 |{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client
-|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|@*SHA256@ and @*crc32@ algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
 See @86@ for more information.
@@ -16934,7 +16936,7 @@ Then we are able to use this code as such, for instance in a {\i Smart} console 
 The {\f1\fs20 InitCrc32Tab} shall be called only once, at application startup. Its execution is immediate. It won't delay your application display.
 :  SHA256
 The well-known @*SHA256@ algorithm is a proven way of creating an unique identifier from any data input. You can use it for instance to sign any content, or store efficiently a password. It is mathematically proven to be impossible to find out the input data from its hashed reduction (at least for the next decade of computer power). And it has a very low potential of "collision" (i.e. two diverse data having the same resulting hash). It is "Top Secret" enabled - U.S. National Institute of Standards and Technology says, "Federal agencies must use the SHA-2 family of hash functions for applications  that require collision resistance after 2010". This is the hashing pattern used within {\i mORMot}.
-But it is also more complex than the {\i crc32} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
+But it is also more complex than the {\i @*crc32@} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
 You have an optimized implementation in the {\f1\fs20 SynCrypto.pas} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
 First of all, we'll define a {\f1\fs20 record} type. We may have used a {\f1\fs20 class}, but since we have an extended {\f1\fs20 record} type at hand with {\i DWS} (including properties and methods), we will stay to it.
 !type
@@ -18351,7 +18353,7 @@ A typical {\f1\fs20 SynEcc} implementation may use, as algorithms:
 - {\f1\fs20 KDF} = HMAC-SHA256 ("salt" and "hmac" values may be customized, but known on both sides);
 - {\f1\fs20 EF} = AES128-CFB or any AES mode excluding ECB, potentially in 256-bit;
 - {\f1\fs20 MAC} = HMAC-SHA256 (safest), HMAC-CRC256C (fast), or combined with {\f1\fs20 EF}.
-By default, the {\f1\fs20 TECDHEProtocol} class will use {\f1\fs20 kdfHmacSha256} as {\f1\fs20 KDF}, and {\f1\fs20 efAesCrc128} (i.e. AES128-CFB with combined {\f1\fs20 EF} and {\f1\fs20 MAC}), for best performance (around 700MB/s messages process thanks to hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions).
+By default, the {\f1\fs20 TECDHEProtocol} class will use {\f1\fs20 kdfHmacSha256} as {\f1\fs20 KDF}, and {\f1\fs20 efAesCrc128} (i.e. AES128-CFB with combined {\f1\fs20 EF} and {\f1\fs20 MAC}), for best performance (around 700MB/s messages process thanks to hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 @*crc32c@} instructions).
 Note that encryption is not handled at this level, since all conservative protocol implementations do not enable compression, to avoid security exploit as occured for TLS with CRIME. It is up to the application layer to process the data using e.g. {\f1\fs20 deflate} or our {\f1\fs20 @*SynLZ@} algorithm.
 : Unilateral Authentication
 For server-side only authentication - as is most currently implemented in regular TLS/HTTPS communications, the handshaking process is slightly reduced:
