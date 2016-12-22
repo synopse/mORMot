@@ -8226,8 +8226,8 @@ function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer
 begin
   // safe seed for plain text crc, before AES encryption
   // from TECDHEProtocol.SetKey, aKey is a CTR to avoid replay attacks
-  fMACKey.plain := THash128Rec(aKey).Lo;
-  XorBlock16(@fMACKey.plain,@THash128Rec(aKey).Hi);
+  fMACKey.plain := THash256Rec(aKey).Lo;
+  XorBlock16(@fMACKey.plain,@THash256Rec(aKey).Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
   if (aAssociated<>nil) and (aAssociatedLen>0) then
     crc128c(aAssociated,aAssociatedLen,fMACKey.encrypted) else
@@ -8238,9 +8238,9 @@ end;
 function TAESAbstractAEAD.MACGetLast(out aCRC: THash256): boolean;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
-  AES.Encrypt(fMAC.plain,THash128Rec(aCRC).Lo);
+  AES.Encrypt(fMAC.plain,THash256Rec(aCRC).Lo);
   // store the encrypted text crc, to check for errors, with no compromission
-  THash128Rec(aCRC).Hi := fMAC.encrypted;
+  THash256Rec(aCRC).Hi := fMAC.encrypted;
   result := true;
 end;
 

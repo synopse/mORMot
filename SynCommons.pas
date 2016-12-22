@@ -10800,12 +10800,20 @@ type
 
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
-  /// map a 256-bit hash as an array of two 128-bit hash values
+  /// map a 128-bit hash as an array of two 64-bit hash values
   THash128Rec = packed record
-    Lo,Hi: THash128
+  case integer of
+  0: (Lo,Hi: Int64);
+  1: (i0,i1,i2,i3: integer);
+  end;
+  /// pointer to an array of two 64-bit hash values
+  PHash128Rec = ^THash128Rec;
+  /// map a 256-bit hash as an array of two 128-bit hash values
+  THash256Rec = packed record
+    Lo,Hi: THash128;
   end;
   /// pointer to an array of two 128-bit hash values
-  PHash128Rec = ^THash128Rec;
+  PHash256Rec = ^THash256Rec;
   /// map an infinite array of 128-bit hash values
   THash128Array = array[0..(maxInt div sizeof(THash128))-1] of THash128;
   /// pointer to an infinite array of 128-bit hash values
@@ -11753,6 +11761,8 @@ function DateTimeToUnixTime(const AValue: TDateTime): Int64;
 /// returns the current UTC date/time as a second-based c-encoded time
 //  - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
+// - returns a 32-bit unsigned value, so is "Year2038bug" free, but you may
+// consider using Int64 if your unsigned value may be converted to signed
 function UnixTimeUTC: cardinal;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -31916,7 +31926,7 @@ begin
   {$ifdef FPC}
   UniqueString(data); // @data[1] won't call UniqueString() under FPC :(
   {$endif}
-  d := pointer(data);
+  d := @data[1];
   len := length(data);
   key := key xor cardinal(len);
   for i := 0 to (len shr 2)-1 do begin

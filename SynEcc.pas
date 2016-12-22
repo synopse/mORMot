@@ -3068,14 +3068,16 @@ begin
 end;
 
 function TECCCertificateChain.IndexBySerial(const Serial: TECCCertificateID): integer;
-type TLH = packed record lo,hi: Int64; end;
-     PLH = ^TLH;
-var ser: TLH absolute Serial;
+var ser: THash128Rec absolute Serial;
 begin
-  if (self<>nil) and not IsZero(THash128(Serial)) then begin
+  if (self<>nil) and ((ser.Lo<>0) or (ser.Hi<>0)) then begin
     for result := 0 to length(fItems)-1 do
-      with PLH(@fItems[result].Signed.Serial)^ do
-        if (lo=ser.lo) and (hi=ser.hi) then
+      with PHash128Rec(@fItems[result].Signed.Serial)^ do
+        {$ifdef CPU64}
+        if (ser.Lo=Lo) and (ser.Hi=Hi) then
+        {$else}
+        if (ser.i0=i0) and (ser.i1=i1) and (ser.i2=i2) and (ser.i3=i3) then
+        {$endif}
           exit;
   end;
   result := -1;
