@@ -4825,15 +4825,15 @@ var v: Variant;
     nt: TNullableUTF8Text;
 begin
   t := nil; // makes the compiler happy
-  ValueVarToVariant(nil,sftBoolean,TVarData(v),false,t);
+  ValueVarToVariant(nil,sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('0',sftBoolean,TVarData(v),false,t);
+  ValueVarToVariant('0',sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('false',sftBoolean,TVarData(v),false,t);
+  ValueVarToVariant('false',sftBoolean,vd,false,t);
   Check(not boolean(v));
-  ValueVarToVariant('1',sftBoolean,TVarData(v),false,t);
+  ValueVarToVariant('1',sftBoolean,vd,false,t);
   Check(boolean(v));
-  ValueVarToVariant('true',sftBoolean,TVarData(v),false,t);
+  ValueVarToVariant('true',sftBoolean,vd,false,t);
   Check(boolean(v));
   GetVariantFromJSON('0',False,v,nil);
   Check(vd.VType=varInteger);
@@ -7432,6 +7432,16 @@ begin
   check(Doc.FlattenAsNestedObject('p'));
   check(Doc.ToJSON='{"p":{"a1":5,"a2":"dfasdfa"}}');
   check(not Doc.FlattenAsNestedObject('p'));
+  s := '[{"Val1":"blabla","Val2":"bleble"},{"Val1":"blibli","Val2":"bloblo"}]';
+  v := _Json(s);
+  v1 := _Copy(v._(0)); // expect a true instance for v1.Val1 := ... below
+  check(v1.val1='blabla');
+  v2 := _Obj([]); // or TDocVariant.New(v2);
+  v2.Val1 := 'blublu';
+  v2.Val2 := 'blybly';
+  v1.Val1 := v2.Val1;
+  v1.Val2 := v2.Val2;
+  check(VariantSaveJSON(v1)=VariantSaveJSON(v2));
 end;
 
 {$endif LVCL}

@@ -13990,6 +13990,8 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// initialize a variant instance to store some document-based object content
     // from a supplied existing TDocVariant instance
+    // - use it on a value returned as varByRef (e.g. by _() pseudo-method),
+    // to ensure the returned variant will behave as a stand-alone value
     // - for instance, the following:
     // !  oSeasons := TDocVariant.NewUnique(o.Seasons);
     // is the same as:
@@ -15116,7 +15118,8 @@ procedure _UniqueFast(var DocVariant: variant);
 // ! TDocVariant.NewUnique(DocVariant,JSON_OPTIONS[false])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
-// arrays were created with
+// arrays were created with: to be used on a value returned as varByRef
+// (e.g. by _() pseudo-method)
 // - for huge document with a big depth of nested objects or arrays, a full
 // per-value copy may be time and resource consuming, but will be also safe
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
@@ -15129,7 +15132,8 @@ function _Copy(const DocVariant: variant): variant;
 // ! TDocVariant.NewUnique(DocVariant,JSON_OPTIONS[true])
 // - you can use this function to ensure that all internal properties of this
 // variant will be copied per-value whatever options the nested objects or
-// arrays were created with
+// arrays were created with: to be used on a value returned as varByRef
+// (e.g. by _() pseudo-method)
 // - for huge document with a big depth of nested objects or arrays, a full
 // per-value copy may be time and resource consuming, but will be also safe
 // - will raise an EDocVariant if the supplied variant is not a TDocVariant or
