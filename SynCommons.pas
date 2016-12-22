@@ -13743,15 +13743,25 @@ function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind=twJ
 /// low-level function to set a variant from an unescaped JSON number or string
 // - expect the JSON input buffer to be already unescaped, e.g. by GetJSONField()
 // - is called e.g. by function VariantLoadJSON()
-// - will instantiate either an Integer, Int64, currency, double (if AllowDouble
-// is true or dvoAllowDoubleValue is in TryCustomVariants^) or string value (as
-// RawUTF8), guessing the best numeric type according to the textual content,
+// - will instantiate either a null, boolean, Integer, Int64, currency, double
+// (if AllowDouble is true or dvoAllowDoubleValue is in TryCustomVariants^) or
+// string value (as RawUTF8), guessing the best numeric type according to the textual content,
 // and string in all other cases, except if TryCustomVariants points to some
 // options (e.g. @JSON_OPTIONS[true] for fast instance) and input is a known
 // object or array, either encoded as strict-JSON (i.e. {..} or [..]),
 // or with some extended (e.g. BSON) syntax
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean; var Value: variant;
   TryCustomVariants: PDocVariantOptions=nil; AllowDouble: boolean=false);
+
+/// low-level function to set a variant from an unescaped JSON non string
+// - expect the JSON input buffer to be already unescaped, e.g. by GetJSONField(),
+// and having returned wasString=TRUE (i.e. not surrounded by double quotes)
+// - is called e.g. by function GetVariantFromJSON()
+// - will recognize null, boolean, Integer, Int64, currency, double
+// (if AllowDouble is true) input, then set Value and return TRUE
+// - returns FALSE if the supplied input has no expected JSON format
+function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
+  AllowDouble: boolean): boolean;
 
 /// identify either varInt64, varDouble, varCurrency types following JSON format
 // - any non valid number is returned as varString
@@ -38102,12 +38112,12 @@ var EndOfObject: AnsiChar;
       exit;
     end;
     ptArray:
-    if PInteger(P)^=NULL_LOW then begin // null -> void array
+    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin 
       P := GotoNextNotSpace(P+4);
       EndOfObject := P^;
       if P^<>#0 then //if P^=',' then
         inc(P);
-      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
+      Prop.FinalizeNestedArray(PPtrUInt(Data)^); // null -> void array
     end else begin
       if P^<>'[' then
         exit; // we expect a true array here
@@ -38233,8 +38243,8 @@ begin
   if P=nil then
     exit;
   P := GotoNextNotSpace(P);
-  if PInteger(P)^=NULL_LOW then begin // a record stored as null
-    P := GotoNextNotSpace(P+4);
+  if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
+    P := GotoNextNotSpace(P+4); // a record stored as null
     inc(Data,fDataSize);
     result := true;
     exit;
@@ -39759,13 +39769,37 @@ dbl:  VDouble := GetExtended(JSON,err);
   result := false;
 end;
 
+function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
+  AllowDouble: boolean): boolean;
+begin
+  if (JSON<>nil) and (JSON^ in [#1..' ']) then
+    repeat inc(JSON) until not(JSON^ in [#1..' ']);
+  if (JSON=nil) or
+     ((PInteger(JSON)^=NULL_LOW) and (JSON[4] in EndOfJSONValueField)) then
+    Value.VType := varNull else
+  if (PInteger(JSON)^=FALSE_LOW) and (JSON[4]='e') and
+     (JSON[5] in EndOfJSONValueField) then begin
+    Value.VType := varBoolean;
+    Value.VBoolean := false;
+  end else
+  if (PInteger(JSON)^=TRUE_LOW) and (JSON[4] in EndOfJSONValueField) then begin
+    Value.VType := varBoolean;
+    Value.VBoolean := true;
+  end else
+    if not GetNumericVariantFromJSON(JSON,Value,AllowDouble) then begin
+      result := false;
+      exit;
+    end;
+  result := true;
+end;
+
 procedure GetVariantFromJSON(JSON: PUTF8Char; wasString: Boolean; var Value: variant;
   TryCustomVariants: PDocVariantOptions; AllowDouble: boolean);
 begin
   // first handle any strict-JSON syntax objects or arrays into custom variants
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
   if (TryCustomVariants<>nil) and (JSON<>nil) then
-    if JSON^ in ['{','['] then begin
+    if GotoNextNotSpace(JSON)^ in ['{','['] then begin
       GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants,false);
       exit;
     end else
@@ -39775,23 +39809,8 @@ begin
     if VType and VTYPE_STATIC=0 then
       VType := varEmpty else
       VarClear(Value);
-    if (JSON=nil) or ((PInteger(JSON)^=NULL_LOW) and not wasString) then begin
-      VType := varNull;
-      exit;
-    end else
-    if (PInteger(JSON)^=FALSE_LOW) and (JSON[4]='e') and
-       (JSON[5] in EndOfJSONValueField) then begin
-      VType := varBoolean;
-      VBoolean := false;
-      exit;
-    end else
-    if (PInteger(JSON)^=TRUE_LOW) and (JSON[4] in EndOfJSONValueField) then begin
-      VType := varBoolean;
-      VBoolean := true;
-      exit;
-    end else
-    if not wasString then
-      if GetNumericVariantFromJSON(JSON,TVarData(Value),AllowDouble) then
+    if (JSON=nil) or not wasString then
+      if GetVariantFromNotStringJSON(JSON,TVarData(Value),AllowDouble) then
         exit;
     // found no numerical value -> return a string in the expected format
     VType := varString;
