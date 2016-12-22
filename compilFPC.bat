@@ -11,9 +11,11 @@ echo.
 cd \dev\lib\SQLite3
 echo Compiling...
 
-c:\NewPascal\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O2 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -Fu%lib%\kylix -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
+@rem   -O2 makes GPF during DDD tests... :(
 
-rem C:\development\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O2 -XX -ve -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilation
+c:\NewPascal\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O1 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -Fu%lib%\kylix -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
+
+rem C:\development\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O1 -XX -ve -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilation
 
 del %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.mdb > nul
 
