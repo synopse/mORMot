@@ -256,6 +256,7 @@ type
       var result: variant);
     /// convert a JSON content into a TBSONVariant of kind betDoc or betArray
     // - warning: the supplied JSON buffer will be modified in-place
+    // - will create a plain variant value if the JSON doesn't start with [ or {
     procedure FromJSON(json: PUTF8Char; var result: variant);
     /// returns TRUE if the supplied variant stores the supplied BSON kind of value
     function IsOfKind(const V: variant; Kind: TBSONElementType): boolean;
@@ -2708,7 +2709,7 @@ begin
     FromVariant(aName,PVariant(aVarData.VPointer)^,aTemp);
     exit;
   end;
-  FillChar(self,sizeof(self),0);
+  FillCharFast(self,sizeof(self),0);
   Name := pointer(aName);
   NameLen := length(aName);
   case aVarData.VType of
@@ -2773,7 +2774,13 @@ str:Kind := betString;
       VarCastError;
   end else
   if aVarData.VType=DocVariantType.VarType then begin
-    aTemp := BSON(TDocVariantData(aValue));
+    with TBSONWriter.Create(TRawByteStringStream) do // inlined BSON()   
+    try
+      BSONWriteDoc(aDoc);
+      ToBSONDocument(aTemp);
+    finally
+      Free;
+    end;
     case aDoc.Kind of
     dvObject: Kind := betDoc;
     dvArray:  Kind := betArray;
@@ -2789,7 +2796,7 @@ end;
 function TBSONElement.FromDocument(const doc: TBSONDocument): boolean;
 var n: Integer;
 begin
-  FillChar(self,sizeof(self),0);
+  FillCharFast(self,sizeof(self),0);
   n := length(doc);
   if (n>=4) and (PInteger(doc)^=n) then begin
     Kind := betDoc;
@@ -2800,9 +2807,6 @@ begin
 end;
 
 const
-  NULL_LOW = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
-  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
-  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
   NULCHAR: AnsiChar = #0;
 
 procedure TBSONElement.FromBSON(bson: PByte);
@@ -2896,7 +2900,7 @@ end;
 function TBSONIterator.Init(const doc: TBSONDocument; kind: TBSONElementType): boolean;
 var n: integer;
 begin
-  FillChar(self,sizeof(self),0);
+  FillCharFast(self,sizeof(self),0);
   n := length(doc);
   if (kind in [betDoc,betArray]) and (n>=4) and (PInteger(doc)^=n) then begin
     Item.Kind := kind;
@@ -3289,9 +3293,32 @@ begin
 end;
 
 procedure TBSONWriter.BSONWriteVariant(const name: RawUTF8; const value: variant);
-var temp: RawUTF8;
-    JSON: PUTF8Char;
-    dt: TDateTime;
+  procedure WriteComplex;
+  var temp: RawUTF8;
+      JSON: PUTF8Char;
+  begin
+    with TVarData(value) do
+    case VType of
+    {$ifdef HASVARUSTRING}
+    varUString: begin
+      RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),temp);
+      BSONWrite(Name,temp);
+    end;
+    {$endif}
+    varOleStr: begin
+      RawUnicodeToUtf8(VAny,length(WideString(VAny)),temp);
+      BSONWrite(Name,temp);
+    end;
+    else begin
+      VariantSaveJSON(value,twJSONEscape,temp);
+      JSON := pointer(temp);
+      BSONWriteFromJSON(name,JSON,nil);
+      if JSON=nil then
+        raise EBSONException.CreateUTF8('%.BSONWriteVariant(VType=%)',[self,VType]);
+    end;
+    end;
+  end;
+var dt: TDateTime;
 begin
   with TVarData(value) do begin
     case VType of
@@ -3318,29 +3345,14 @@ begin
         // recognized TTextWriter.AddDateTime(woDateTimeWithMagic) ISO-8601 format
         BSONWriteDateTime(Name,dt) else
         BSONWrite(Name,RawUTF8(VAny)); // expect UTF-8 content
-    {$ifdef HASVARUSTRING}
-    varUString: begin
-      RawUnicodeToUtf8(VAny,length(UnicodeString(VAny)),temp);
-      BSONWrite(Name,temp);
-    end;
-    {$endif}
-    varOleStr: begin
-      RawUnicodeToUtf8(VAny,length(WideString(VAny)),temp);
-      BSONWrite(Name,temp);
-    end;
     else
     if VType=varByRef or varVariant then
       BSONWriteVariant(name,PVariant(VPointer)^) else
     if VType=BSONVariantType.VarType then
       BSONWrite(name,TBSONVariantData(value)) else
     if VType=DocVariantType.VarType then
-      BSONWrite(name,TDocVariantData(value)) else begin
-      VariantSaveJSON(value,twJSONEscape,temp);
-      JSON := pointer(temp);
-      BSONWriteFromJSON(name,JSON,nil);
-      if JSON=nil then
-        raise EBSONException.CreateUTF8('%.BSONWriteVariant(VType=%)',[self,VType]);
-    end;
+      BSONWrite(name,TDocVariantData(value)) else
+      WriteComplex;
     end;
   end;
 end;
@@ -3489,15 +3501,16 @@ end;
 
 procedure TBSONWriter.BSONWriteFromJSON(const name: RawUTF8; var JSON: PUTF8Char;
   EndOfObject: PUTF8Char; DoNotTryExtendedMongoSyntax: boolean);
-var tmp: variant; // we use a local variant for only BSONVariant values
+var tmp: variant;
     blob: RawByteString;
     wasString: boolean;
-    err: integer;
-    Value, Dot: PUTF8Char;
+    Value: PUTF8Char;
     ValueLen: integer;
-    ValueDateTime: TDateTime;
     VDouble: double;
+    ValueDateTime: TDateTime absolute VDouble;
+    VInt64: Int64 absolute VDouble;
     Kind: TBSONElementType;
+label dbl;
 begin
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   if not DoNotTryExtendedMongoSyntax and
@@ -3522,42 +3535,12 @@ begin
       Value := GetJSONField(JSON,JSON,@wasString,EndOfObject,@ValueLen);
       if JSON=nil then
         JSON := @NULCHAR;
-      if Value=nil then begin
-        BSONWrite(name,betNull);
-        exit;
-      end;
-      if not wasString then begin // try if not a number
-        if PInteger(Value)^=NULL_LOW then begin
-          BSONWrite(name,betNull);
-          exit;
-        end else
-        if PInteger(Value)^=FALSE_LOW then begin
-          BSONWrite(name,false);
-          exit;
-        end else
-        if PInteger(Value)^=TRUE_LOW then begin
-          BSONWrite(name,true);
+      if (Value=nil) or not wasString then
+        if GetVariantFromNotStringJSON(Value,TVarData(tmp),true) then begin
+          BSONWriteVariant(name,tmp); // null,boolean,Int64,double
           exit;
         end;
-        Dot := Value;
-        repeat
-          case Dot^ of
-          '0'..'9','+','-':
-            inc(Dot);
-          #0: begin // integer number
-            BSONWrite(name,GetInt64(Value));
-            exit;
-          end;
-          else break;
-          end;
-        until false;
-        VDouble := GetExtended(Value,err);
-        if err=0 then begin // floating-point number
-          BSONWrite(name,VDouble);
-          exit;
-        end;
-      end;
-      // found no numerical value -> check text value
+      // found no simple value -> check text value
       if Base64MagicCheckAndDecode(Value,ValueLen,blob) then
         // recognized '\uFFF0base64encodedbinary' pattern
         BSONWrite(name,pointer(blob),length(blob)) else
@@ -3618,8 +3601,8 @@ begin
       until EndOfObject='}';
   end;
   'n','N':
-    if IdemPChar(JSON+1,'ULL') then begin
-      Kind := betNull;
+    if IdemPChar(JSON+1,'ULL') then begin // append null as {}
+      Kind := betDoc;
       BSONDocumentBegin;
       inc(JSON,4);
     end else
@@ -3846,13 +3829,18 @@ end;
 
 procedure TBSONVariant.FromJSON(json: PUTF8Char; var result: variant);
 begin
-  with TBSONVariantData(result) do begin
-    if VType and VTYPE_STATIC<>0 then
-      VarClear(result);
-    VType := VarType;
-    VBlob := nil; // avoid GPF here below
-    VKind := JSONBufferToBSONDocument(json,TBSONDocument(VBlob));
-  end;
+  if TVarData(result).VType and VTYPE_STATIC<>0 then
+    VarClear(result);
+  if json=nil then
+    exit;
+  if json^ in [#1..' '] then repeat inc(json) until not(json^ in [#1..' ']);
+  if json^ in ['{','['] then
+    with TBSONVariantData(result) do begin
+      VType := VarType;
+      VBlob := nil; // avoid GPF here below
+      VKind := JSONBufferToBSONDocument(json,TBSONDocument(VBlob));
+    end else
+      VariantLoadJSON(result,json);
 end;
 
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
@@ -5130,7 +5118,7 @@ var Header: TMongoReplyHeader;
 begin
   if self=nil then
     raise EMongoRequestException.Create('Connection=nil',self,Request);
-  fillchar(Header,sizeof(Header),0);
+  FillCharFast(Header,sizeof(Header),0);
   try
     Lock;
     if Send(Request) then
