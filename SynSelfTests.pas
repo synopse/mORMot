@@ -6743,6 +6743,7 @@ var o,od,o2,value: variant;
     name,u,u2,u3: RawUTF8;
     arr: TRawUTF8DynArray;
     st: string;
+    timer: TPrecisionTimer;
 procedure CheckElemIsBsonArray;
 var b: PByte;
 begin
@@ -6788,16 +6789,23 @@ begin
   Check(Abs(NowUTC-TDateTime(o))<0.1);
   oid.FromText(string(o));
   Check(Abs(NowUTC-oid.CreateDateTime)<0.1);
-  Check(oid.ProcessID=word(GetCurrentThreadId)); // word for Linux
+  oid2.ComputeNew;
+  Check(oid.MachineID.b1=oid2.MachineID.b1);
+  Check(oid.MachineID.b2=oid2.MachineID.b2);
+  Check(oid.MachineID.b3=oid2.MachineID.b3);
+  Check(oid.ProcessID=oid2.ProcessID);
   o2 := ObjectID;
   Check(TDateTime(o2)>=TDateTime(o),o);
   oid2.ComputeNew;
-  for i := 1 to 100000 do begin
+  j := 100000;
+  timer.Start;
+  for i := 1 to j do begin
     oid.ComputeNew;
     Check(not oid.Equal(oid2));
     oid2 := oid;
     Check(oid.Equal(oid2));
   end;
+  NotifyTestSpeed('TBSONObjectID.ComputeNew',j,0,@timer);
   SetLength(oids,300);
   for i := 0 to high(oids) do begin
     oids[i].ComputeNew;

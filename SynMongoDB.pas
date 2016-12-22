@@ -120,11 +120,19 @@ type
     bbtGeneric, bbtFunction, bbtOldBinary, bbtOldUUID, bbtUUID, bbtMD5,
     bbtUser = $80);
 
+  /// 24-bit storage, mapped as a 3 bytes buffer
+  // - as used fo TBSONObjectID.MachineID and TBSONObjectID.Counter
+  TBSON24 = record
+    b1,b2,b3: byte;
+  end;
+  /// points to 24-bit storage, mapped as a 3 bytes buffer
+  PBSON24 = ^TBSON24;
+
   /// BSON ObjectID internal binary representation
   // - in MongoDB, documents stored in a collection require a unique _id field
   // that acts as a primary key: by default, it uses such a 12-byte ObjectID
   // - by design, sorting by _id: ObjectID is roughly equivalent to sorting by
-  // creation time
+  // creation time, so ease sharding and BTREE storage 
   {$A-}
   {$ifndef UNICODE}
   TBSONObjectID = object
@@ -135,13 +143,16 @@ type
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     UnixCreateTime: cardinal;
     /// 3-byte machine identifier
-    MachineID: array[0..2] of byte;
+    // - ComputeNew will use a hash of ExeVersion.Host and ExeVersion.User
+    MachineID: TBSON24;
     /// 2-byte process id
+    // - ComputeNew will derivate it from MainThreadID
     ProcessID: word;
     /// 3-byte counter, starting with a random value
-    Counter: array[0..2] of byte;
+    // - used to avoid collision 
+    Counter: TBSON24;
     /// ObjectID content be filled with some unique values
-    // - this implementation is thread-safe, since we use ProcessID=ThreadID
+    // - this implementation is thread-safe
     procedure ComputeNew;
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
@@ -3622,77 +3633,65 @@ end;
 { TBSONObjectID }
 
 var
-  /// first 12 bytes map TBSONObjectID
-  GlobalBSONObjectID: packed record
-    // bswap32-encoded
-    UnixCreateTime: cardinal;
-    // from COMPUTERNAME
-    MachineID: array[0..2] of byte;
-    // we use the Thread ID, so that ComputeNew will be thread-safe
-    ProcessID: word;
-    // bswap24-encoded (ending the ObjectID 12 bytes)
-    Counter: integer;
-    // naive but very efficient UnixCreateTime cache
-    LastTick: cardinal;
-    // this will handle any potential collision (24 bit Counter overflow)
-    FirstCounter: integer;
-    LatestCounterOverflowUnixCreateTime: cardinal;
-    CollisionCount: integer;
+  GlobalBSONObjectID: record
+    Section: TRTLCriticalSection;
+    Default: packed record
+      MachineID: TBSON24;
+      ProcessID: word;
+      Counter: cardinal;
+    end;
+    LastCreateTime: cardinal;
+    LastCounter: cardinal;
   end;
 
-function bswap24(a: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
+procedure InitBSONObjectIDComputeNew;
 begin
-  result := ((a and $ff)shl 16) or ((a and $ff0000)shr 16) or (a and $ff00);
+  InitializeCriticalSection(GlobalBSONObjectID.Section);
+  with GlobalBSONObjectID.Default do begin
+    with ExeVersion do
+      PCardinal(@MachineID)^ := crc32c(crc32c(0,pointer(Host),length(Host)),
+        pointer(User),length(User));
+    ProcessID := (ProcessID shl 8) xor {$ifdef BSD}Cardinal{$endif}(MainThreadID);
+    TAESPRNG.Main.FillRandom(@Counter,3);
+  end;
 end;
 
 procedure TBSONObjectID.ComputeNew;
-var Tick, CurrentTime: cardinal;
-begin // this is a bit complex, but we have to avoid any collision
+var now, count: cardinal;
+begin
   with GlobalBSONObjectID do begin
-    Tick := GetTickCount shr 8;
-    if LastTick<>Tick then begin
-      LastTick := Tick; // huge speed improvement when caching time
-      CurrentTime := bswap32(UnixTimeUTC);
-      if CurrentTime<>UnixCreateTime then begin
-        UnixCreateTime := CurrentTime;
-        LatestCounterOverflowUnixCreateTime := UnixCreateTime;
-        if CollisionCount>0 then begin
-          ProcessID := PtrUInt(GetCurrentThreadId);
-          CollisionCount := 0;
-        end;
-      end;
-    end;
-    if ProcessID=0 then begin
-      with ExeVersion do
-        PCardinal(@MachineID)^ := crc32c(crc32c({$ifdef BSD}Cardinal{$endif}(MainThreadID),
-          pointer(Host),length(Host)),pointer(User),length(User));
-      ProcessID := PtrUInt(GetCurrentThreadId);
-      TAESPRNG.Main.FillRandom(@FirstCounter,3);
-      Counter := FirstCounter;
-      LatestCounterOverflowUnixCreateTime := UnixCreateTime;
+    EnterCriticalSection(Section);
+    now := UnixTimeUTC; // fast API call (no need of cache)
+    if now>LastCreateTime then begin
+      LastCreateTime := now;
+      count := Default.Counter; // reset
     end else begin
-      Counter := bswap24(Counter)+1;
-      if Counter and $ffffff=FirstCounter then begin
-        Counter := FirstCounter;
-        if UnixCreateTime=LatestCounterOverflowUnixCreateTime then begin
-          inc(ProcessID); // force no collision
-          inc(CollisionCount);
-          if CollisionCount>=high(word) then
-            raise EBSONException.Create('ObjectID collision');
-        end;
-        LatestCounterOverflowUnixCreateTime := UnixCreateTime;
+      count := LastCounter+1;
+      if count and $ffffff=Default.Counter then begin
+        count := Default.Counter; // collision -> cheat on timestamp
+        inc(LastCreateTime);
       end;
     end;
-    Counter := bswap24(Counter);
+    Counter.b1 := count shr 16; // stored as bigendian
+    Counter.b2 := count shr 8;
+    Counter.b3 := count;
+    LastCounter := count;
+    UnixCreateTime := bswap32(LastCreateTime);
+    MachineID := Default.MachineID;
+    ProcessID := Default.ProcessID;
+    LeaveCriticalSection(Section);
   end;
-  self := PBSONObjectID(@GlobalBSONObjectID)^;
 end;
 
 function TBSONObjectID.Equal(const Another: TBSONObjectID): boolean;
 begin
   result := (PIntegerArray(@Self)[2]=PIntegerArray(@Another)[2]) and
+    {$ifdef CPU64}
+    (PInt64(@Self)^=PInt64(@Another)^);
+    {$else}
     (PIntegerArray(@Self)[1]=PIntegerArray(@Another)[1]) and
     (PIntegerArray(@Self)[0]=PIntegerArray(@Another)[0]);
+    {$endif}
 end;
 
 function TBSONObjectID.CreateDateTime: TDateTime;
@@ -6094,7 +6093,7 @@ begin
 end;
 
 
-begin
+initialization
   Assert(ord(betEof)=$00);
   Assert(ord(betInt64)=$12);
   Assert(ord(bbtGeneric)=$00);
@@ -6107,6 +6106,10 @@ begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
+  InitBSONObjectIDComputeNew;
+
+finalization
+  DeleteCriticalSection(GlobalBSONObjectID.Section);
 end.
 
 
