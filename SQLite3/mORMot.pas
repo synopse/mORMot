@@ -37112,6 +37112,7 @@ begin
   end;
   fExportServerNamedPipeThread := TSQLRestServerNamedPipe.Create(self, PipeName);
   NoAJAXJSON := true; // use smaller JSON size in this not HTTP use (never AJAX)
+  sleep(10); // allow the background thread to start
   result := true; // success
 end;
 
@@ -42299,14 +42300,14 @@ var TokenUserSize: DWORD;
 begin
   result := false;
   if not OpenThreadToken(GetCurrentThread,TOKEN_QUERY,True,Token) then
-    if (GetLastError <> ERROR_NO_TOKEN) or
+    if (GetLastError<>ERROR_NO_TOKEN) or
        not OpenProcessToken(GetCurrentProcess,TOKEN_QUERY,Token) then
       exit;
   TokenUserP := nil;
   TokenUserSize := 0;
   try
     if not GetTokenInformation(Token,TokenUser,nil,0,TokenUserSize) and
-       (GetLastError <> ERROR_INSUFFICIENT_BUFFER) then
+       (GetLastError<>ERROR_INSUFFICIENT_BUFFER) then
       exit;
     TokenUserP := AllocMem(TokenUserSize);
     if not GetTokenInformation(Token,TokenUser,TokenUserP,TokenUserSize,TokenUserSize) then

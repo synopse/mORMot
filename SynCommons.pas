@@ -10250,6 +10250,13 @@ type
     // appending class name for any class or object, the hexa value for a
     // pointer, or the JSON representation of any supplied TDocVariant
     constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
+    /// constructor appending some FormatUTF8() content to the GetLastError
+    // - message will contain GetLastError value followed by the formatted text   
+    // - expect % as delimiter, so is less error prone than %s %d %g
+    // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
+    // appending class name for any class or object, the hexa value for a
+    // pointer, or the JSON representation of any supplied TDocVariant
+    constructor CreateLastOSError(const Format: RawUTF8; const Args: array of const);
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// can be used to customize how the exception is logged
     // - this default implementation will call the DefaultSynLogExceptionToStr()
@@ -58608,6 +58615,15 @@ end;
 constructor ESynException.CreateUTF8(const Format: RawUTF8; const Args: array of const);
 begin
   inherited Create(UTF8ToString(FormatUTF8(Format,Args)));
+end;
+
+constructor ESynException.CreateLastOSError(const Format: RawUTF8; const Args: array of const);
+var tmp: RawUTF8;
+    error: integer;
+begin
+  error := GetLastError;
+  FormatUTF8(Format,Args,tmp);
+  CreateUTF8('OSError % [%] %',[error,SysErrorMessage(error),tmp]);
 end;
 
 {$ifndef NOEXCEPTIONINTERCEPT}

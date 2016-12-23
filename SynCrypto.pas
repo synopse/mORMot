@@ -8658,7 +8658,7 @@ begin
       if not CryptoAPI.AcquireContextA(CryptoAPIAESProvider,nil,nil,PROV_RSA_AES,0) then
         if (HRESULT(GetLastError)<>NTE_BAD_KEYSET) or not CryptoAPI.AcquireContextA(
            CryptoAPIAESProvider,nil,nil,PROV_RSA_AES,CRYPT_NEWKEYSET) then
-          RaiseLastOSError;
+          raise ESynCrypto.CreateLastOSError('in AcquireContext',[]);
     end;
   end;
 end;
@@ -8702,20 +8702,20 @@ begin
   end;
   if not CryptoAPI.ImportKey(CryptoAPIAESProvider,
      @fKeyHeader,sizeof(fKeyHeader)+fKeySizeBytes,nil,0,fKeyCryptoAPI) then
-    raise ESynCrypto.CreateFmt('Error $%x in CryptImportKey',[GetLastError]);
+    raise ESynCrypto.CreateLastOSError('in CryptImportKey for %',[self]);
   if not CryptoAPI.SetKeyParam(fKeyCryptoAPI,KP_IV,@fIV,0) then
-    raise ESynCrypto.CreateFmt('Error $%x in CryptSetKeyParam(KP_IV)',[GetLastError]);
+    raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_IV) for %',[self]);
   if not CryptoAPI.SetKeyParam(fKeyCryptoAPI,KP_MODE,@fInternalMode,0) then
-    raise ESynCrypto.CreateFmt('Error $%x in CryptSetKeyParam(KP_MODE,%d)',[GetLastError,fInternalMode]);
+    raise ESynCrypto.CreateLastOSError('in CryptSetKeyParam(KP_MODE,%) for %',[fInternalMode,self]);
   if BufOut<>BufIn then
     MoveFast(BufIn^,BufOut^,Count);
   n := Count and not AESBlockMod;
   if DoEncrypt then begin
     if not CryptoAPI.Encrypt(fKeyCryptoAPI,nil,false,0,BufOut,n,Count) then
-      raise ESynCrypto.CreateFmt('Error $%x in CryptEncrypt() for %s',[GetLastError,ClassName]);
+      raise ESynCrypto.CreateLastOSError('in Encrypt() for %',[self]);
   end else
     if not CryptoAPI.Decrypt(fKeyCryptoAPI,nil,false,0,BufOut,n) then
-      raise ESynCrypto.CreateFmt('Error $%x in CryptDecrypt() for %s',[GetLastError,ClassName]);
+      raise ESynCrypto.CreateLastOSError('in Decrypt() for %',[self]);
   dec(Count,n);
   if Count>0 then // remaining bytes will be XORed with the supplied IV
     XorBlockN(@PByteArray(BufIn)[n],@PByteArray(BufOut)[n],@fIV,Count);
@@ -9232,7 +9232,7 @@ var i,k: integer;
     j,tmp: byte;
 begin
   if aKeyLen<=0 then
-    raise ESynCrypto.CreateFmt('TRC4.Init(invalid aKeyLen=%d)',[aKeyLen]);
+    raise ESynCrypto.CreateUTF8('TRC4.Init(invalid aKeyLen=%)',[aKeyLen]);
   dec(aKeyLen);
   for i := 0 to high(key) do
     key[i] := i;
