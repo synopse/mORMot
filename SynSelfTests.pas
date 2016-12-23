@@ -1360,24 +1360,24 @@ begin
   for i := 0 to high(Bits)*8+7 do
     Check(not GetBit(Bits,i));
   for i := 0 to 63 do
-    Check(not GetBit64(Bits,i));
+    Check(not GetBit64(Bits64,i));
   RandSeed := 10;
   for i := 1 to 30 do begin
     Si := Random(63);
     SetBit64(Bits64,Si);
-    Check(GetBit64(Bits,Si));
+    Check(GetBit64(Bits64,Si));
   end;
   RandSeed := 10;
   for i := 1 to 30 do
-    Check(GetBit64(Bits,Random(63)));
+    Check(GetBit64(Bits64,Random(63)));
   RandSeed := 10;
   for i := 1 to 30 do begin
     Si := Random(63);
     UnSetBit64(Bits64,Si);
-    Check(not GetBit64(Bits,Si));
+    Check(not GetBit64(Bits64,Si));
   end;
   for i := 0 to 63 do
-    Check(not GetBit64(Bits,i));
+    Check(not GetBit64(Bits64,i));
   c := 1;
   for i := 1 to 32 do begin
     Check(GetAllBits($ffffffff,i));

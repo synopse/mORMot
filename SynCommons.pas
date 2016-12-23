@@ -1181,6 +1181,7 @@ type
   TGUIDDynArray = array of TGUID;
 
   PInt64Rec = ^Int64Rec;
+
   {$ifndef DELPHI5OROLDER}
   PIInterface = ^IInterface;
   {$endif}
@@ -10993,17 +10994,22 @@ const
 function GetAllBits(Bits: Cardinal; BitCount: Integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// used by GetBit64/SetBit64/UnSetBit64 for fast access to Int64 bits
+  // - the compiler will generate bt/btr/bts opcodes
+  TBits64 = set of 0..63;
+
 /// retrieve a particular bit status from a Int64 bit array (max aIndex is 63)
-function GetBit64(const Bits; aIndex: PtrInt): boolean;
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// set a particular bit into a Int64 bit array (max aIndex is 63)
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// unset/clear a particular bit into a Int64 bit array (max aIndex is 63)
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
-  {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// logical OR of two memory buffers
 procedure OrMemory(Dest,Source: PByteArray; size: integer);
@@ -30812,72 +30818,20 @@ asm
 end;
 {$endif}
 
-function GetBit64(const Bits; aIndex: PtrInt): boolean;
-{$ifdef PUREPASCAL}
+function GetBit64(const Bits: Int64; aIndex: PtrInt): boolean;
 begin
-  if PtrUInt(aIndex)>63 then
-    result := false else
-{$ifdef CPU64}
-    result := PInt64(@Bits)^ and (Int64(1) shl (aIndex and 63)) <> 0;
-{$else}
-    result := PIntegerArray(@Bits)^[aIndex shr 5] and (1 shl (aIndex and 31)) <> 0;
-{$endif}
+  result := aIndex in TBits64(Bits);
 end;
-{$else}
-asm
-    cmp edx,64
-    jae @z
-    bt [eax],edx  // use very fast i386 bit statement
-    sbb eax,eax
-    and eax,1
-    ret
-@z: xor eax,eax
-end;
-{$endif}
 
 procedure SetBit64(var Bits: Int64; aIndex: PtrInt);
-{$ifdef PUREPASCAL}
 begin
-  if PtrUInt(aIndex)<=63 then
-{$ifdef CPU64}
-    PInt64Array(@Bits)^[aIndex shr 6] := PInt64Array(@Bits)^[aIndex shr 6]
-      or (Int64(1) shl (aIndex and 63));
-{$else}
-    PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
-      or (1 shl (aIndex and 31));
-{$endif}
+  include(TBits64(Bits),aIndex);
 end;
-{$else}
-asm
-        cmp     edx, 64
-        jae     @z
-        bts     [eax], edx  // use very fast i386 bit statement
-        ret
-@z:     db      $f3 // rep ret
-end;
-{$endif}
 
 procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
-{$ifdef PUREPASCAL}
 begin
-  if PtrUInt(aIndex)<=63 then
-{$ifdef CPU64}
-    PInt64Array(@Bits)^[aIndex shr 6] := PInt64Array(@Bits)^[aIndex shr 6]
-      and not(Int64(1) shl (aIndex and 63));
-{$else}
-    PIntegerArray(@Bits)^[aIndex shr 5] := PIntegerArray(@Bits)^[aIndex shr 5]
-      and not (1 shl (aIndex and 31));
-{$endif}
+  exclude(TBits64(Bits),aIndex);
 end;
-{$else}
-asm
-        cmp     edx, 64
-        jae     @z
-        btr     [eax], edx  // use very fast i386 bit statement
-        ret
-@z:     db      $f3 // rep ret
-end;
-{$endif}
 
 function GetBitsCount(const Bits; Count: PtrInt): integer;
 {$ifdef PUREPASCAL}
