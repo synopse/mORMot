@@ -749,56 +749,18 @@ begin
   end;
 end;
 
-// not to be defined as local procedure of XorOffset() for FPC
-// see http://bugs.freepascal.org/view.php?id=24061
-procedure Xor64(PI, P: PInt64Array; Count: cardinal); // fast xor
-{$ifdef PUREPASCAL}
-var i: integer;
-begin
-  for i := 0 to (Count shr 3)-1 do
-    P^[i] := P^[i] xor PI^[i]; // this will compile fine on all CPUs
-end;
-{$else}
-asm // eax=PI edx=P ecx=bytes count
-  push ebx
-  push esi
-  shr ecx,3 // 64 bits = 8 bytes per loop
-  jz @z
-@1:
-  mov ebx,[eax]    // fast CPU-pipelined optimized loop
-  mov esi,[eax+4]
-  xor [edx],ebx
-  xor [edx+4],esi
-  dec ecx
-  lea eax,[eax+8]
-  lea edx,[edx+8]
-  jnz @1
-@z:
-  pop esi
-  pop ebx
-end;
-{$endif}
-
-procedure XorOffset(P: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
-var i, Len, L: integer;
+procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
+var Len: cardinal;
 begin // fast and simple Cypher using Index (= offset in file)
   if Count>0 then
   repeat
     Index := Index and (SQLEncryptTableSize-1);
     Len := SQLEncryptTableSize-Index;
-    if cardinal(Len)>cardinal(Count) then
+    if Len>Count then
       Len := Count;
-    // xor 8 bytes per loop
-    Xor64(@SQLEncryptTable^[Index],pointer(P),Len);
-    L := Len and (-8); // -8=$FFFFFFF8
-    inc(P,L);
-    inc(Index,L);
-    // xor 0..7 remaining bytes (very unlikely)
-    for i := 1 to (Len and 7) do begin
-      P^ := P^ xor SQLEncryptTable^[Index];
-      inc(P);
-      inc(Index);
-    end;
+    XorMemory(pointer(P),@SQLEncryptTable^[Index],Len);
+    inc(P,Len);
+    inc(Index,Len);
     dec(Count,Len);
   until Count=0;
 end;
@@ -1013,6 +975,7 @@ var n, i, written: integer;
     off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
+    h: THandle;
     b: PByte;
     {$ifdef MSWINDOWS}
     ol: TOverlapped;
@@ -1052,13 +1015,15 @@ begin
   {$endif}
   EncryptTable := nil; // mark no encryption
   if CypherCount>0 then
-    if (off64.Lo>=1024) or (off64.Hi<>0) then // crypt content after first page
-    for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-      if Cyphers[i].Handle=F.h then begin
-        EncryptTable := Pointer(Cyphers[i].CypherBuf);
-        XorOffset(buf,off64.Lo,buflen,EncryptTable);
-        break;
-      end;
+    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // crypt after first page
+      h := F.h;
+      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
+        if Cyphers[i].Handle=h then begin
+          EncryptTable := Pointer(Cyphers[i].CypherBuf);
+          XorOffset(buf,off64.Lo,buflen,EncryptTable);
+          break;
+        end;
+    end;
   b := buf;
   n := buflen;
   while n>0 do begin
@@ -1117,6 +1082,7 @@ var off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
+    h: THandle;
     i,n,read: integer;
     {$ifdef MSWINDOWS}
     ol: TOverlapped;
@@ -1181,12 +1147,14 @@ begin
   until n=0;
   {$endif}
   if CypherCount>0 then
-  if (off64.Lo>=1024) or (off64.Hi<>0) then // uncrypt after first page
-    for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-      if Cyphers[i].Handle=F.h then begin
-        XorOffset(buf,off64.Lo,buflen,pointer(Cyphers[i].CypherBuf));
-        break;
-      end;
+    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // uncrypt after first page
+      h := F.h;
+      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
+        if Cyphers[i].Handle=h then begin
+          XorOffset(buf,off64.Lo,buflen,pointer(Cyphers[i].CypherBuf));
+          break;
+        end;
+    end;
   if n>0 then begin // remaining bytes are set to 0
     FillcharFast(b^,n,0);
     result := SQLITE_IOERR_SHORT_READ;

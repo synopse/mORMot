@@ -1576,7 +1576,7 @@ procedure XorBlock(p: PIntegerArray; Count, Cod: integer);
 // compress (e.g. as outStream for TAESWriteStream)
 // - Stream compatible (with updated Index)
 // - used in AES() and TAESWriteStream
-procedure XorOffset(p: pByte; Index,Count: integer);
+procedure XorOffset(P: PByteArray; Index,Count: integer);
 
 /// fast XOR Cypher changing by Count value
 // - Compression compatible, since the XOR value is always the same, the
@@ -6560,32 +6560,10 @@ begin
   end;
 end;
 
-{$ifndef PUREPASCAL} // should be put outside XorOffset() for FPC :(
-procedure Xor64(PI: PIntegerArray; P: pByte; Count: integer);
-asm // eax=PI edx=P ecx=Count64
-  push ebx
-  push esi
-  shr ecx,3
-  jz @z
-@1:
-  mov ebx,[eax]
-  mov esi,[eax+4]
-  xor [edx],ebx
-  xor [edx+4],esi
-  dec ecx
-  lea eax,[eax+8]
-  lea edx,[edx+8]
-  jnz @1
-@z:
-  pop esi
-  pop ebx
-end;
-{$endif PUREPASCAL}
-
-procedure XorOffset(p: pByte; Index,Count: integer);
+procedure XorOffset(P: PByteArray; Index,Count: integer);
 // XorOffset: fast and simple Cypher using Index (=Position in Dest Stream):
 // Compression not OK -> apply after compress (e.g. TBZCompressor.withXor=true)
-var i, Len: integer;
+var Len: integer;
 begin
   if Count>0 then
   repeat
@@ -6593,26 +6571,15 @@ begin
     Len := $2000-Index;
     if Len>Count then
       Len := Count;
-    {$ifdef PUREPASCAL}
-    for i := 1 to Len do begin
-      p^ := p^ xor Xor32Byte[Index];
-      inc(p); inc(Index);
-    end;
-    {$else}
-    Xor64(@Xor32Byte[Index],p,Len);
-    inc(p,Len and -8); // -8=$FFFFFFF8
-    inc(Index,Len and -8);
-    for i := 1 to Len and 7 do begin
-      p^ := p^ xor Xor32Byte[Index];
-      inc(p); inc(Index);
-    end;
-    {$endif}
+    XorMemory(P,@Xor32Byte[Index],Len);
+    inc(P,Len);
+    inc(Index,Len);
     Dec(Count,Len);
   until Count=0;
 end;
 
 
-procedure XorConst(p: PIntegerArray; Count: integer);
+procedure XorConst(P: PIntegerArray; Count: integer);
 // XorConst: fast Cypher changing by Count value
 // (compression OK):
 var i: integer;
@@ -6620,14 +6587,14 @@ var i: integer;
 begin // 1 to 3 bytes may stay unencrypted: not relevant
   Code := integer(Td0[Count and $3FF]);
   for i := 1 to (Count shr 4) do begin
-     p^[0] := p^[0] xor Code;
-     p^[1] := p^[1] xor Code;
-     p^[2] := p^[2] xor Code;
-     p^[3] := p^[3] xor Code;
-     inc(PtrUInt(p),16);
+     P^[0] := P^[0] xor Code;
+     P^[1] := P^[1] xor Code;
+     P^[2] := P^[2] xor Code;
+     P^[3] := P^[3] xor Code;
+     inc(PtrUInt(P),16);
   end;
   for i := 0 to ((Count and 15)shr 2)-1 do // last 4 bytes blocs
-    p^[i] := p^[i] xor Code;
+    P^[i] := P^[i] xor Code;
 end;
 
 
