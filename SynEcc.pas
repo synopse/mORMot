@@ -2589,14 +2589,14 @@ var salt,decrypted: RawByteString;
 begin
   result := false;
   dec(Len,PRIVKEY_SALTSIZE);
-  if (self=nil) or (Len<=sizeof(PRIVKEY_MAGIC)+AESBlockSize) then
+  if (self=nil) or (Len<=sizeof(PRIVKEY_MAGIC)+sizeof(TAESBlock)) then
     exit;
   if IsEqual(THash128(PRIVKEY_MAGIC),PHash128(Data)^) then begin
     dec(len,16);
     head := 16;
   end else
     head := 0; // was with NoHeader=true (e.g. SaveToSource)
-  if Len and (AESBlockSize-1)<>0 then
+  if Len and AESBlockMod<>0 then
     exit;
   SetString(salt,PAnsiChar(Data)+head,PRIVKEY_SALTSIZE);
   try

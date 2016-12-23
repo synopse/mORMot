@@ -8793,7 +8793,7 @@ begin
         A.DecryptInit(Key,ks);
         A.Decrypt(b,p);
         A.Done;
-        Check(CompareMem(@p,@s,AESBLockSize));
+        Check(CompareMem(@p,@s,sizeof(p)));
         Check(IsEqual(p,s));
         Timer[noaesni].Resume;
         Check(SynCrypto.AES(Key,ks,SynCrypto.AES(Key,ks,st,true),false)=st);

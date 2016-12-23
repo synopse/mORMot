@@ -10352,6 +10352,7 @@ var
   // - used e.g. by HexToBin() function
   // - is defined globally, since may be used from an inlined function 
   ConvertHexToBin: array[byte] of byte;
+
   /// naive but efficient cache to avoid string memory allocation for
   // 0..999 small numbers by Int32ToUTF8/UInt32ToUTF8
   // - use around 16KB of heap (since each item consumes 16 bytes), but increase
@@ -10790,27 +10791,35 @@ function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
 type
   /// store a 128-bit hash value
-  // - e.g. a MD5 digest, an AES block, or array[0..3] of cardinal
+  // - e.g. a MD5 digest, or array[0..3] of cardinal (TBlock128)
   THash128 = array[0..15] of byte;
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
   THash256 = array[0..31] of byte;
   /// store a 128-bit buffer
+  // - e.g. an AES block
   TBlock128 = array[0..3] of cardinal;
 
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
-  /// map a 128-bit hash as an array of two 64-bit hash values
+  /// map a 128-bit hash as an array of lower bit size values
   THash128Rec = packed record
   case integer of
   0: (Lo,Hi: Int64);
   1: (i0,i1,i2,i3: integer);
+  2: (c: TBlock128);
+  3: (b: THash128);
   end;
   /// pointer to an array of two 64-bit hash values
   PHash128Rec = ^THash128Rec;
-  /// map a 256-bit hash as an array of two 128-bit hash values
+  /// map a 256-bit hash as an array of lower bit size values
   THash256Rec = packed record
-    Lo,Hi: THash128;
+  case integer of
+  0: (Lo,Hi: THash128);
+  1: (d0,d1,d2,d3: Int64);
+  2: (i0,i1,i2,i3,i4,i5,i6,i7: integer);
+  3: (c0,c1: TBlock128);
+  4: (b: THash256);
   end;
   /// pointer to an array of two 128-bit hash values
   PHash256Rec = ^THash256Rec;
@@ -31839,16 +31848,16 @@ begin
 end;
 
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
-var h: array[0..3] of cardinal absolute crc;
+var h: THash128Rec absolute crc;
     h1,h2: cardinal;
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
   assert(sizeof(h)=sizeof(crc));
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
-  h[0] := h1; inc(h1,h2);
-  h[1] := h1; inc(h1,h2);
-  h[2] := h1; inc(h1,h2);
-  h[3] := h1;
+  h.i0 := h1; inc(h1,h2);
+  h.i1 := h1; inc(h1,h2);
+  h.i2 := h1; inc(h1,h2);
+  h.i3 := h1;
 end;
 
 function IsZero(const dig: THash128): boolean;
@@ -31873,20 +31882,19 @@ begin
 end;
 
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
-var h: array[0..7] of cardinal absolute crc;
+var h: THash256Rec absolute crc;
     h1,h2: cardinal;
 begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
-  assert(sizeof(h)=sizeof(crc));
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
-  h[0] := h1; inc(h1,h2);
-  h[1] := h1; inc(h1,h2);
-  h[2] := h1; inc(h1,h2);
-  h[3] := h1; inc(h1,h2);
-  h[4] := h1; inc(h1,h2);
-  h[5] := h1; inc(h1,h2);
-  h[6] := h1; inc(h1,h2);
-  h[7] := h1;
+  h.i0 := h1; inc(h1,h2);
+  h.i1 := h1; inc(h1,h2);
+  h.i2 := h1; inc(h1,h2);
+  h.i3 := h1; inc(h1,h2);
+  h.i4 := h1; inc(h1,h2);
+  h.i5 := h1; inc(h1,h2);
+  h.i6 := h1; inc(h1,h2);
+  h.i7 := h1;
 end;
 
 function IsZero(const dig: THash256): boolean;
@@ -33454,21 +33462,24 @@ begin
   end;
 end;
 
-procedure Curr64ToStr(const Value: Int64; var result: RawUTF8); overload;
+procedure Curr64ToStr(const Value: Int64; var result: RawUTF8);
 var tmp: array[0..31] of AnsiChar;
     P: PAnsiChar;
     Decim, L: Cardinal;
 begin
-  P := StrCurr64(@tmp[31],Value);
-  L := @tmp[31]-P;
-  if L>4 then begin
-    Decim := PCardinal(P+L-sizeof(cardinal))^; // 4 last digits = 4 decimals
-    if Decim=ord('0')+ord('0')shl 8+ord('0')shl 16+ord('0')shl 24 then
-      dec(L,5) else // no decimal
-    if Decim and $ffff0000=ord('0')shl 16+ord('0')shl 24 then
-      dec(L,2); // 2 decimals
+  if Value=0 then
+    result := SmallUInt32UTF8[0] else begin
+    P := StrCurr64(@tmp[31],Value);
+    L := @tmp[31]-P;
+    if L>4 then begin
+      Decim := PCardinal(P+L-sizeof(cardinal))^; // 4 last digits = 4 decimals
+      if Decim=ord('0')+ord('0')shl 8+ord('0')shl 16+ord('0')shl 24 then
+        dec(L,5) else // no decimal
+      if Decim and $ffff0000=ord('0')shl 16+ord('0')shl 24 then
+        dec(L,2); // 2 decimals
+    end;
+    SetRawUTF8(result,P,L);
   end;
-  SetRawUTF8(result,P,L);
 end;
 
 function Curr64ToStr(const Value: Int64): RawUTF8;
@@ -61584,6 +61595,9 @@ initialization
   Assert((MAX_SQLFIELDS>=64)and(MAX_SQLFIELDS<=256));
   {$warnings ON}
   Assert(sizeof(TSynUniqueIdentifierBits)=sizeof(TSynUniqueIdentifier));
+  Assert(sizeof(THash128Rec)=sizeof(THash128));
+  Assert(sizeof(THash256Rec)=sizeof(THash256));
+  Assert(sizeof(TBlock128)=sizeof(THash128));
 {  TypeInfoSaveRegisterKnown([
     TypeInfo(boolean),TypeInfo(byte),TypeInfo(word),TypeInfo(cardinal),TypeInfo(Int64),
     TypeInfo(single),TypeInfo(double),TypeInfo(currency),TypeInfo(extended),TypeInfo(TDateTime),
