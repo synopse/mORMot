@@ -316,7 +316,10 @@ function SecDecrypt(var aSecContext: TSecContext; const aEncrypted: TSSPIBuffer)
 
 type
   /// exception class raised durint SSPI/SChannel process
-  ESynSSPI = class(Exception);
+  ESynSSPI = class(Exception)
+  public
+    constructor CreateLastOSError(const aContext: TSecContext);
+  end;
 
   /// the supported TLS modes
   // - unsafe deprecated modes (e.g. SSL) are not defined at all
@@ -450,7 +453,7 @@ var Sizes: TSecPkgContext_Sizes;
 begin
   // Sizes.cbSecurityTrailer is size of the trailer (signature + padding) block
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_SIZES, @Sizes) <> 0 then
-    RaiseLastOSError;
+    ESynSSPI.CreateLastOSError(aSecContext);
 
   SrcLen := Length(aPlain);
   EncLen := SizeOf(Cardinal) + Sizes.cbSecurityTrailer + SrcLen;
@@ -466,7 +469,7 @@ begin
 
   Status := EncryptMessage(@aSecContext.CtxHandle, 0, @InDesc, 0);
   if Status < 0 then
-    RaiseLastOSError;
+    ESynSSPI.CreateLastOSError(aSecContext);
 
   // Encrypted data buffer structure:
   //
@@ -495,14 +498,14 @@ begin
   BufPtr := PByte(aEncrypted);
   if EncLen < SizeOf(Cardinal) then  begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    RaiseLastOSError;
+    ESynSSPI.CreateLastOSError(aSecContext);
   end;
 
   SigLen := PCardinal(BufPtr)^;
   Inc(BufPtr, SizeOf(Cardinal));
   if EncLen < (SizeOf(Cardinal) + SigLen) then begin
     SetLastError(ERROR_INVALID_PARAMETER);
-    RaiseLastOSError;
+    ESynSSPI.CreateLastOSError(aSecContext);
   end;
 
   SrcLen := EncLen - SizeOf(Cardinal) - SigLen;
@@ -518,7 +521,18 @@ begin
 
   Status := DecryptMessage(@aSecContext.CtxHandle, @InDesc, 0, QOP);
   if Status < 0 then
-    RaiseLastOSError;
+    ESynSSPI.CreateLastOSError(aSecContext);
+end;
+
+
+{ ESynSSPI }
+
+constructor ESynSSPI.CreateLastOSError(const aContext: TSecContext);
+var error: integer;
+begin
+  error := GetLastError;
+  CreateFmt('API Error %d [%s] for ConnectionID=%d',
+    [error,SysErrorMessage(error),aContext.ID]);
 end;
 
 
@@ -536,7 +550,7 @@ procedure TSynSSPIAbstract.EnsureStreamSizes;
 begin
   if fStreamSizes.cbHeader=0 then
     if QueryContextAttributesW(@fContext.CtxHandle,SECPKG_ATTR_STREAM_SIZES,@fStreamSizes) <> 0 then
-      RaiseLastOSError;
+      ESynSSPI.CreateLastOSError(fContext);
 end;
 
 procedure TSynSSPIAbstract.DeleteContext;
