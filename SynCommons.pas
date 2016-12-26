@@ -389,7 +389,7 @@ unit SynCommons;
   - RawByteString is now defined as "= type AnsiString" under non Unicode Delphi
     so that it would be recognized with its own encoding (pseudo code page 65535)
   - Delphi XE4/XE5/XE6/XE7/XE8/10/10.1 compatibility (Win32/Win64 target
-    platforms only for the SynCommons and mORMot* units, but SynCrossPlatform* 
+    platforms only for the SynCommons and mORMot* units, but SynCrossPlatform*
     supports clients on all other targets, including OSX and NextGen compilers)
   - unit fixed and tested with Delphi XE2 (and up) 64-bit compiler under Windows
   - now all variants created within our units will create string instances of
@@ -402,7 +402,7 @@ unit SynCommons;
     UnicodeCharToUTF8/NextUTF8Char are renamed WideCharToUTF8/NextUTF8UCS4 and
     new UTF16CharToUTF8/UCS4ToUTF8 functions have been introduced
   - added ToUTF8() overloaded functions, which could be used on most simple types
-  - introducing TSynTimeZone class, for cross-platform local time handling 
+  - introducing TSynTimeZone class, for cross-platform local time handling
   - added TextColor() and TextBackground() functions - will initialize internal
     console process after any manual AllocConsole call
   - added ConsoleWaitForEnterKey function, able to handle Synchronize() calls
@@ -737,7 +737,7 @@ unit SynCommons;
     and a more complete SYNOPSE_FRAMEWORK_FULLVERSION constant has been added
   - added x64 support for TSynFPUException class
   - fixed [63aa36f485] memory corruption in TSynAnsiConvert.AnsiToUnicodeString
-    
+
 *)
 
 
@@ -1143,7 +1143,7 @@ type
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
 
   PBooleanArray = ^TBooleanArray;
-  TBooleanArray = array[0..MaxInt-1] of Boolean; 
+  TBooleanArray = array[0..MaxInt-1] of Boolean;
 
   TWordArray  = array[0..MaxInt div SizeOf(word)-1] of word;
   PWordArray = ^TWordArray;
@@ -1980,7 +1980,7 @@ function ToUTF8(const Text: string): RawUTF8; overload;
 
 /// convert any UTF-8 encoded shortstring Text into an UTF-8 encoded String
 // - expects the supplied content to be already ASCII-7 or UTF-8 encoded, e.g.
-// a RTTI type or property name: it won't work with Ansi-encoded strings 
+// a RTTI type or property name: it won't work with Ansi-encoded strings
 function ToUTF8(const Ansi7Text: ShortString): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2252,7 +2252,7 @@ type
 // encoded text, using a specified temporary buffer
 // - this function would allocate a RawUTF8 in tmpStr only if needed,
 // but use the supplied Res.Temp[] buffer for numbers to text conversion
-// - it would return the number of UTF-8 bytes, i.e. Res.Len 
+// - it would return the number of UTF-8 bytes, i.e. Res.Len
 // - note that cardinal values should be type-casted to Int64() (otherwise
 // the signed integer mapped value will be transmitted, therefore wrongly)
 // - any supplied TObject instance will be written as their class name
@@ -2480,7 +2480,7 @@ type
   TSynExtended = extended;
   {$endif}
   {$endif}
-  /// the non-number values potentially stored in an IEEE floating point 
+  /// the non-number values potentially stored in an IEEE floating point
   TSynExtendedNan = (seNumber, seNan, seInf, seNegInf);
 
 const
@@ -2496,7 +2496,7 @@ function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: in
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned by ExtendedToString() textual conversion
-// - such values do appear as IEEE floating points, but are not defined in JSON 
+// - such values do appear as IEEE floating points, but are not defined in JSON
 function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -2923,7 +2923,7 @@ function JsonPropNameValid(P: PUTF8Char): boolean;
 
 /// returns TRUE if the given text buffers would be escaped when written as JSON
 // - e.g. if contains " or \ characters, as defined by
-// http://www.ietf.org/rfc/rfc4627.txt 
+// http://www.ietf.org/rfc/rfc4627.txt
 function NeedsJsonEscape(const Text: RawUTF8): boolean;
 
 /// case unsensitive test of P1 and P2 content
@@ -3539,7 +3539,7 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
-function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer; 
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -4061,7 +4061,7 @@ function GetMimeContentTypeFromBuffer(Content: Pointer; Len: integer;
 // 'application/extension' if FileName was specified
 // - see @http://en.wikipedia.org/wiki/Internet_media_type for most common values
 function GetMimeContentType(Content: Pointer; Len: integer;
-   const FileName: TFileName=''): RawUTF8; 
+   const FileName: TFileName=''): RawUTF8;
 
 /// retrieve the HTTP header for MIME content type from a supplied binary buffer
 // - just append HEADER_CONTENT_TYPE and GetMimeContentType() result
@@ -4245,7 +4245,7 @@ function PtrUIntScanIndex(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): PtrI
 // - returns false if Value was not found
 function PtrUIntScanExists(P: PPtrUIntArray; Count: PtrInt; Value: PtrUInt): boolean;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
-  
+
 /// fast search of an unsigned Word value position in a Word array
 // - Count is the number of Word entries in P^
 // - return index of P^[index]=Value
@@ -4418,7 +4418,7 @@ function Int64DynArrayToCSV(const Values: TInt64DynArray;
 /// quick helper to initialize a dynamic array of integer from some constants
 // - can be used e.g. as:
 // ! MyArray := TIntegerDynArrayFrom([1,2,3]);
-function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray; 
+function TIntegerDynArrayFrom(const Values: array of integer): TIntegerDynArray;
 
 /// quick helper to initialize a dynamic array of integer from 64-bit integers
 // - will raise a ESynException if any Value[] can not fit into 32-bit, unless
@@ -5258,12 +5258,12 @@ type
     /// alternative event-oriented Hash function for ReHash
     // - this object-oriented callback will be used instead of HashElement
     // on each dynamic array entries - HashElement will still be used on
-    // const Elem values, since they may be just a sub part of the stored entry  
+    // const Elem values, since they may be just a sub part of the stored entry
     property EventHash: TEventDynArrayHashOne read fEventHash write fEventHash;
     /// after how many items the hashing take place
     // - for smallest arrays, O(n) seach if faster than O(1) hashing, since
     // maintaining the fHashs[] lookup has some CPU and memory costs
-    // - equals 32 by default 
+    // - equals 32 by default
     property HashCountTrigger: integer read fHashCountTrigger write fHashCountTrigger;
     {$ifdef DYNARRAYHASHCOLLISIONCOUNT}
     /// access to the internal collision of HashFind()
@@ -5801,7 +5801,7 @@ type
     // as RawUTF8, and returning TRUE if the supplied content is correct
     // - warning: the supplied JSON buffer will be decoded and modified in-place
     function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
-    /// reset content, then add all name, value pairs 
+    /// reset content, then add all name, value pairs
     // - will first call Init(false) to initialize the internal array
     procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
     /// search for a Name, return the index in List
@@ -6141,7 +6141,8 @@ function RawUTF8ToGUID(const text: RawByteString): TGUID;
 // string types properties
 // - will use binary-level comparison: it could fail to match two floating-point
 // values because of rounding issues (Currency won't have this problem)
-function RecordEquals(const RecA, RecB; TypeInfo: pointer): boolean;
+function RecordEquals(const RecA, RecB; TypeInfo: pointer;
+  PRecSize: PInteger=nil): boolean;
 
 /// save a record content into a RawByteString
 // - will handle packed records, with binaries (byte, word, integer...) and
@@ -6157,6 +6158,21 @@ function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 
 /// save a record content into a destination memory buffer
 // - Dest must be at least RecordSaveLength() bytes long
+// - will return the Rec size, in bytes, into Len reference variable
+// - will handle packed records, with binaries (byte, word, integer...) and
+// string types properties (but not with internal raw pointers, of course)
+// - will use a proprietary binary format, with some variable-length encoding
+// of the string length
+// - warning: will encode generic string fields as AnsiString (one byte per char)
+// prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
+// 2009: if you want to use this function between UNICODE and NOT UNICODE
+// versions of Delphi, you should use some explicit types like RawUTF8,
+// WinAnsiString, SynUnicode or even RawUnicode/WideString
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
+  out Len: integer): PAnsiChar; overload;
+
+/// save a record content into a destination memory buffer
+// - Dest must be at least RecordSaveLength() bytes long
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties (but not with internal raw pointers, of course)
 // - will use a proprietary binary format, with some variable-length encoding
@@ -6167,6 +6183,7 @@ function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 // versions of Delphi, you should use some explicit types like RawUTF8,
 // WinAnsiString, SynUnicode or even RawUnicode/WideString
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// save a record content into a Base-64 encoded UTF-8 text content
 // - will use RecordSave() format, with a left-sided binary CRC
@@ -6176,7 +6193,7 @@ function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=f
 // using the RecordSave() function
 // - will return 0 in case of an invalid (not handled) record type (e.g. if
 // it contains an unknown variant)
-function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
+function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger=nil): integer;
 
 /// save record into its JSON serialization as saved by TTextWriter.AddRecordJSON
 // - will use default Base64 encoding over RecordSave() binary - or custom true
@@ -6189,9 +6206,11 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 
 /// fill a record content from a memory buffer as saved by RecordSave()
 // - return nil if the Source buffer is incorrect
+// - will return the Rec size, in bytes, into Len reference variable
 // - in case of success, return the memory buffer pointer just after the
 // read content
-function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
+  Len: PInteger=nil): PAnsiChar;
 
 /// read a record content from a Base-64 encoded content
 // - expects RecordSaveBase64() format, with a left-sided binary CRC
@@ -7062,7 +7081,7 @@ type
   // class name, sets/enumerates as text, and reference pointer - as used by
   // TSynLog and ObjectToJSONFull()
   // - woStoreClassName will add a "ClassName":"TMyClass" field
-  // - woStorePointer will add a "Address":"0431298A" field, and .map/.mab 
+  // - woStorePointer will add a "Address":"0431298A" field, and .map/.mab
   // source code line number corresponding to ESynException.RaisedAt
   // - woStoreStoredFalse will write the 'stored false' properties, even
   // if they are marked as such (used e.g. to persist all settings on file,
@@ -7081,7 +7100,7 @@ type
   // - TTimeLog would be serialized as Int64, unless woTimeLogAsText is defined
   // - since TSQLRecord.ID could be huge Int64 numbers, they may be truncated
   // on client side, e.g. to 53-bit range in JavaScript: you could define
-  // woIDAsIDstr to append an additional "ID_str":"##########" field 
+  // woIDAsIDstr to append an additional "ID_str":"##########" field
   // - by default, TSQLRawBlob properties are serialized as null, unless
   // woSQLRawBlobAsBase64 is defined
   // - if woHideSynPersistentPassword is set, TSynPersistentWithPassword.Password
@@ -7114,7 +7133,7 @@ type
   // the property name and the ending ',' character), and doesn't need to be
   // processed with the default RTTI-based serializer
   TOnTextWriterObjectProp = function(Sender: TTextWriter; Value: TObject;
-    PropInfo: pointer; Options: TTextWriterWriteObjectOptions): boolean of object;    
+    PropInfo: pointer; Options: TTextWriterWriteObjectOptions): boolean of object;
 
   /// class of our simple writer to a Stream, specialized for the TEXT format
   TTextWriterClass = class of TTextWriter;
@@ -7166,7 +7185,7 @@ type
   // twoForceJSONStandard is defined
   // - when enumerates and sets are serialized as text into JSON, you may force
   // the identifiers to be left-trimed for all their lowercase characters
-  // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option 
+  // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
   // would default to the global TTextWriter.SetDefaultEnumTrim setting
   // - twoEndOfLineCRLF would reflect the TTextWriter.EndOfLineCRLF property
   TTextWriterOption = (
@@ -7181,7 +7200,7 @@ type
     twoEndOfLineCRLF);
   /// options set for a TTextWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
-  // or set global process customization for a TTextWriter 
+  // or set global process customization for a TTextWriter
   TTextWriterOptions = set of TTextWriterOption;
 
   /// simple writer to a Stream, specialized for the TEXT format
@@ -7192,7 +7211,7 @@ type
     B, BEnd: PUTF8Char;
     fStream: TStream;
     fInitialStreamPosition: cardinal;
-    fTotalFileSize: cardinal;                               
+    fTotalFileSize: cardinal;
     fCustomOptions: TTextWriterOptions;
     // internal temporary buffer
     fTempBufSize: Integer;
@@ -7243,7 +7262,7 @@ type
     // compatibility purposes for the whole process
     // - you may change the default behavior by setting twoTrimLeftEnumSets
     // in the TTextWriter.CustomOptions property of a given serializer
-    // - note that unserialization process would recognize both formats 
+    // - note that unserialization process would recognize both formats
     class procedure SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);
 
     /// retrieve the data as a string
@@ -7327,7 +7346,7 @@ type
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     // - is used when the input comes from a third-party source with no regular
-    // output, e.g. a database driver 
+    // output, e.g. a database driver
     procedure AddFloatStr(P: PUTF8Char);
     /// append strings or integers with a specified format
     // - % = #37 marks a string, integer, floating-point, or class parameter
@@ -7465,7 +7484,7 @@ type
     // - the codepage should be specified, e.g. CP_UTF8, CP_RAWBYTESTRING,
     // CODEPAGE_US, or any version supported by the Operating System
     // - if codepage is 0, the current CurrentAnsiConvert.CodePage would be used
-    // - will use TSynAnsiConvert to perform the conversion to UTF-8 
+    // - will use TSynAnsiConvert to perform the conversion to UTF-8
     procedure AddAnyAnsiBuffer(P: PAnsiChar; Len: integer;
       Escape: TTextWriterKind; CodePage: Integer);
     /// append some UTF-8 chars to the buffer
@@ -8135,7 +8154,7 @@ type
     destructor Destroy; override;
     /// find a Key in the cache entries
     // - return '' if nothing found: you may call Add() just after to insert
-    // the expected value in the cache 
+    // the expected value in the cache
     // - return the associated Value otherwise, and the associated integer tag
     // if aResultTag address is supplied
     // - this method is not thread-safe, unless you call Safe.Lock before
@@ -8161,7 +8180,7 @@ type
     /// number of entries in the cache
     function Count: integer;
     /// access to the internal locker, for thread-safe process
-    // - Find/Add methods calls should be protected as such: 
+    // - Find/Add methods calls should be protected as such:
     // ! cache.Safe.Lock;
     // ! try
     // !   ... cache.Find/cache.Add ...
@@ -8508,7 +8527,7 @@ type
     // - and all internal objects stored, if was created with Create(true)
     destructor Destroy; override;
     /// thread-safe adding of an item to the list
-    // - will just call Add() within Safe.Lock/Unlock 
+    // - will just call Add() within Safe.Lock/Unlock
     // - you may use SafePop to handle a thread-safe FIFO
     procedure SafePush(const aValue: RawUTF8);
     /// thread-safe retrieving of an item to the list
@@ -8579,8 +8598,8 @@ type
     /// add a RawUTF8 item in the stored Strings[] list
     // - just a wrapper over Add() using Safe.Lock/Unlock
     // - warning: this method WON'T update the internal hash array: use
-    // AddIfNotExisting/AddObjectIfNotExisting() methods instead 
-    function LockedAdd(const aText: RawUTF8): PtrInt; virtual; 
+    // AddIfNotExisting/AddObjectIfNotExisting() methods instead
+    function LockedAdd(const aText: RawUTF8): PtrInt; virtual;
     /// find a RawUTF8 item in the stored Strings[] list
     // - just a wrapper over IndexOf() using Safe.Lock/Unlock
     function IndexOf(const aText: RawUTF8): PtrInt; override;
@@ -9465,7 +9484,7 @@ procedure JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUTF8); overload;
 
 /// encode as JSON {"name":value} object, from a potential SQL quoted value
-// - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON() 
+// - will unquote the SQLValue using TTextWriter.AddQuotedStringAsJSON()
 procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUTF8);
 
 /// decode the supplied UTF-8 JSON content for the supplied names
@@ -9666,7 +9685,7 @@ function GotoNextJSONObjectOrArrayMax(P,PMax: PUTF8Char): PUTF8Char;
 // - incoming P^ should point to the first char AFTER the initial '[' (which
 // may be a closing ']')
 // - returns -1 if the supplied input is invalid, or the number of identified
-// items in the JSON array buffer 
+// items in the JSON array buffer
 function JSONArrayCount(P: PUTF8Char): integer; overload;
 
 /// compute the number of elements of a JSON array
@@ -10251,7 +10270,7 @@ type
     // pointer, or the JSON representation of any supplied TDocVariant
     constructor CreateUTF8(const Format: RawUTF8; const Args: array of const);
     /// constructor appending some FormatUTF8() content to the GetLastError
-    // - message will contain GetLastError value followed by the formatted text   
+    // - message will contain GetLastError value followed by the formatted text
     // - expect % as delimiter, so is less error prone than %s %d %g
     // - will handle vtPointer/vtClass/vtObject/vtVariant kind of arguments,
     // appending class name for any class or object, the hexa value for a
@@ -10269,7 +10288,7 @@ type
     /// the code location when this exception was triggered
     // - populated by SynLog unit, during interception - so may be nil
     // - you can use TSynMapFile.FindLocation(ESynException) class function to
-    // guess the corresponding source code line 
+    // guess the corresponding source code line
     // - will be serialized as "Address": hexadecimal and source code location
     // (using TSynMapFile .map/.mab information) in TJSONSerializer.WriteObject
     // when woStorePointer option is defined - e.g. with ObjectToJSONDebug()
@@ -10358,7 +10377,7 @@ var
   /// a conversion table from hexa chars into binary data
   // - returns 255 for any character out of 0..9,A..Z,a..z range
   // - used e.g. by HexToBin() function
-  // - is defined globally, since may be used from an inlined function 
+  // - is defined globally, since may be used from an inlined function
   ConvertHexToBin: array[byte] of byte;
 
   /// naive but efficient cache to avoid string memory allocation for
@@ -10367,7 +10386,7 @@ var
   // overall performance and reduce memory allocation (and fragmentation),
   // especially during multi-threaded execution
   // - noticeable when strings are used as array indexes (e.g. in SynMongoDB BSON)
-  // - is defined globally, since may be used from an inlined function 
+  // - is defined globally, since may be used from an inlined function
   SmallUInt32UTF8: array[0..999] of RawUTF8;
 
 
@@ -10394,7 +10413,7 @@ function HexToChar(Hex: PAnsiChar; Bin: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// fast conversion from two hexa bytes into a 16 bit UTF-16 WideChar
-// - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar) 
+// - similar to HexToBin(Hex,@wordvar,2) + bswap(wordvar)
 function HexToWideChar(Hex: PAnsiChar): cardinal;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11021,7 +11040,7 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
 /// logical OR of two memory buffers
 procedure OrMemory(Dest,Source: PByteArray; size: integer);
   {$ifdef HASINLINE}inline;{$endif}
-  
+
 /// logical XOR of two memory buffers
 procedure XorMemory(Dest,Source: PByteArray; size: integer); overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -11114,7 +11133,7 @@ var
   /// is overriden e.g. by mORMot.pas to log the thread name
   SetThreadNameInternal: procedure(ThreadID: TThreadID; const Name: RawUTF8) = SetThreadNameDefault;
 
-  
+
 {$ifndef LVCL} // LVCL does not implement TEvent
 
 type
@@ -11318,7 +11337,7 @@ type
   protected
     fMethod: TSynParallelProcessMethod;
     fIndexStart, fIndexStop: integer;
-    procedure Start(Method: TSynParallelProcessMethod; IndexStart,IndexStop: integer); 
+    procedure Start(Method: TSynParallelProcessMethod; IndexStart,IndexStop: integer);
     /// executes fMethod(fIndexStart,fIndexStop)
     procedure Process; override;
   public
@@ -11356,7 +11375,7 @@ type
     // exception would be raised by this method
     procedure ParallelRunAndWait(Method: TSynParallelProcessMethod; MethodCount: integer);
   published
-    /// how many threads have been activated  
+    /// how many threads have been activated
     property ParallelRunCount: integer read fParallelRunCount;
     /// how many threads are currently in this instance thread pool
     property ThreadPoolCount: integer read fThreadPoolCount;
@@ -11425,7 +11444,7 @@ function MultiEventFind(const EventList; const Event: TMethod): integer;
 /// low-level wrapper to add one or several callbacks from another list of events
 // - all events of the ToBeAddedList would be added to DestList
 // - the list is not checked for duplicates
-procedure MultiEventMerge(var DestList; const ToBeAddedList); 
+procedure MultiEventMerge(var DestList; const ToBeAddedList);
 
 
 
@@ -11835,7 +11854,7 @@ type
   end;
   PTimeZoneInfo = ^TTimeZoneInfo;
 
-  /// text identifier of a Time Zone, following Microsoft Windows naming 
+  /// text identifier of a Time Zone, following Microsoft Windows naming
   TTimeZoneID = type RawUTF8;
 
   /// used to store Time Zone information for a single area in TSynTimeZone
@@ -11853,10 +11872,10 @@ type
   TTimeZoneDataDynArray = array of TTimeZoneData;
   {$A+}
 
-  /// handle cross-platform time conversions, following Microsoft time zones 
+  /// handle cross-platform time conversions, following Microsoft time zones
   // - is able to retrieve accurate information from the Windows registry,
   // or from a binary compressed file on other platforms (which should have been
-  // saved from a Windows system first) 
+  // saved from a Windows system first)
   // - each time zone will be idendified by its TzId string, as defined by
   // Microsoft for its Windows Operating system
   TSynTimeZone = class
@@ -12106,7 +12125,7 @@ type
     /// returns the version information of a specified exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
-    class function GetVersionInfo(const aFileName: TFileName): RawUTF8; 
+    class function GetVersionInfo(const aFileName: TFileName): RawUTF8;
   published
     /// version info of the exe file as '3.1.0.123'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
@@ -12325,7 +12344,7 @@ type
     /// the current computer user name
     User: RawUTF8;
   end;
-  
+
 var
   /// global information about the current executable and computer
   // - this structure is initialized in this unit's initialization block below
@@ -13343,7 +13362,7 @@ const
   // - used mainly in low-level code similar to the folllowing:
   // !  if TVarData(aVariant).VType and VTYPE_STATIC<>0 then
   // !    VarClear(aVariant);
-  // - equals private constant varDeepData in Variants.pas 
+  // - equals private constant varDeepData in Variants.pas
   VTYPE_STATIC = $BFE8;
 
 /// same as Dest := TVarData(Source) for simple values
@@ -13395,8 +13414,8 @@ function VarDataIsEmptyOrNull(VarData: pointer): Boolean;
 /// fastcheck if a variant hold a value
 // - varEmpty, varNull or a '' string would be considered as void
 // - varBoolean=false or varDate=0 would be considered as void
-// - a TDocVariantData with Count=0 would be considered as void 
-// - any other value (e.g. integer) would be considered as not void  
+// - a TDocVariantData with Count=0 would be considered as void
+// - any other value (e.g. integer) would be considered as not void
 function VarIsVoid(const V: Variant): boolean;
 
 type
@@ -13557,7 +13576,7 @@ type
   // NOT recognized by most JSON clients, like AJAX/JavaScript or C#/Java
   // - by default, only integer/Int64/currency number values are allowed, unless
   // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
-  // with potential loss of precision during the conversion 
+  // with potential loss of precision during the conversion
   TDocVariantOption =
     (dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
      dvoReturnNullForUnknownProperty,
@@ -13575,7 +13594,7 @@ type
   PDocVariantOptions = ^TDocVariantOptions;
 
 const
-  /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference] 
+  /// some convenient TDocVariant options, as JSON_OPTIONS[CopiedByReference]
   // - JSON_OPTIONS[false] is e.g. _Json() and _JsonFmt() functions default
   // - JSON_OPTIONS[true] are used e.g. by _JsonFast() and _JsonFastFmt() functions
   JSON_OPTIONS: array[Boolean] of TDocVariantOptions = (
@@ -13805,7 +13824,7 @@ function TextToVariantNumberType(JSON: PUTF8Char): word;
 // - this version won't return varDouble, i.e. won't handle more than 4 exact
 // decimals (as varCurrency), nor scientific notation with exponent (1.314e10)
 // - this will ensure that any incoming JSON will converted back with its exact
-// textual representation, without digit truncation due to limited precision 
+// textual representation, without digit truncation due to limited precision
 // - any non valid number is returned as varString
 // - is used e.g. by GetVariantFromJSON() to guess the destination variant type
 // - warning: supplied JSON is expected to be not nil
@@ -14322,7 +14341,7 @@ type
     procedure InitCopy(const SourceDocVariant: variant; aOptions: TDocVariantOptions);
     /// initialize a variant instance to store some document-based object content
     // from a supplied CSV UTF-8 encoded text
-    // - the supplied content may have been generated by ToTextPairs() method 
+    // - the supplied content may have been generated by ToTextPairs() method
     // - if you call Init*() methods in a row, ensure you call Clear in-between
     procedure InitCSV(CSV: PUTF8Char; aOptions: TDocVariantOptions;
       NameValueSep: AnsiChar='='; ItemSep: AnsiChar=#10; DoTrim: boolean=true); overload;
@@ -14373,7 +14392,7 @@ type
     // $ {"fieldCount":3,"values":["ID","FirstName","LastName",...']}
     // - will write '' if Kind is dvUndefined or dvObject
     // - will raise an exception if the array document is not an array of
-    // objects with identical field names 
+    // objects with identical field names
     function ToNonExpandedJSON: RawUTF8;
     /// save a document as an array of UTF-8 encoded JSON
     // - will expect the document to be a dvArray - otherwise, will raise a
@@ -14565,7 +14584,7 @@ type
     // - if the supplied aPath does not match any object, it will return nil
     // unless addIfNotExisting=true and it would add the new object
     // - if aPath is found (or added), it will return a pointer to the
-    // corresponding value  
+    // corresponding value
     function GetPVariantByPath(const aPath: RawUTF8; addIfNotExisting: boolean=false): PVariant;
     /// retrieve an dvObject, from a property name in the dvArray document
     // - returns false if no object in the dvArray contains the supplied
@@ -15069,7 +15088,7 @@ function _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
 /// initialize a variant instance to store some document-based content
 // from a supplied (extended) JSON content, with parameters formating
 // - this overload function will set directly a local variant variable,
-// and would be used by inlined _JsonFmt/_JsonFastFmt functions 
+// and would be used by inlined _JsonFmt/_JsonFastFmt functions
 procedure _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
   Options: TDocVariantOptions; out result: variant); overload;
 
@@ -15392,7 +15411,7 @@ type
   // - TSynMonitorUsage.Track() would use MonitorPropUsageValue() to guess
   // the tracked properties type from class RTTI
   TSynMonitorType = (
-    smvUndefined, smvOneMicroSec, smvOneBytes, smvOneCount, smvBytesPerSec, 
+    smvUndefined, smvOneMicroSec, smvOneBytes, smvOneCount, smvBytesPerSec,
     smvMicroSec, smvBytes, smvCount, smvCount64);
   /// value types as stored in TSynMonitor / TSynMonitorUsage
   TSynMonitorTypes = set of TSynMonitorType;
@@ -16177,7 +16196,7 @@ type
     // !  end; // local hidden IUnknown will release the lock for the method
     // !end;
     function ProtectMethod: IUnknown;
-    /// gives an access to the internal low-level TSynLocker instance used 
+    /// gives an access to the internal low-level TSynLocker instance used
     function Safe: PSynLocker;
   end;
 
@@ -16277,7 +16296,7 @@ type
     /// finalize the instance
     destructor Destroy; override;
     /// called to wait for NotifyFinished() to be called, or trigger timeout
-    // - returns the final state of the process, i.e. evRaised or evTimeOut 
+    // - returns the final state of the process, i.e. evRaised or evTimeOut
     function WaitFor: TBlockingEvent; reintroduce; overload; virtual;
     /// called to wait for NotifyFinished() to be called, or trigger timeout
     // - returns the final state of the process, i.e. evRaised or evTimeOut
@@ -16463,7 +16482,7 @@ type
     /// check and return a given property by name
     function Exists(const Name: RawUTF8; out Value: Variant): boolean;
     /// check and return a given property by name
-    // - this version 
+    // - this version
     function ExistsOrLock(const Name: RawUTF8; out Value: Variant): boolean;
     /// set a value by property name, and set a local copy
     procedure ReplaceAndUnlock(const Name: RawUTF8; const Value: Variant; out LocalValue: Variant);
@@ -16508,7 +16527,7 @@ type
   TSynBackgroundThreadProcess = class;
 
   /// event callback executed periodically by TSynBackgroundThreadProcess
-  // - Event is wrTimeout after the OnProcessMS waiting period 
+  // - Event is wrTimeout after the OnProcessMS waiting period
   // - Event is wrSignaled if ProcessEvent.SetEvent has been called
   TOnSynBackgroundThreadProcess = procedure(Sender: TSynBackgroundThreadProcess;
     Event: TWaitResult) of object;
@@ -16517,7 +16536,7 @@ type
   TSynBackgroundThreadProcess = class(TSynBackgroundThreadAbstract)
   protected
     fOnProcess: TOnSynBackgroundThreadProcess;
-    fOnException: TNotifyEvent; 
+    fOnException: TNotifyEvent;
     fOnProcessMS: cardinal;
     fStats: TSynMonitor;
     procedure ExecuteLoop; override;
@@ -16548,9 +16567,9 @@ type
   end;
 
   TSynBackgroundTimer = class;
-  
+
   /// event callback executed periodically by TSynBackgroundThreadProcess
-  // - Event is wrTimeout after the OnProcessMS waiting period 
+  // - Event is wrTimeout after the OnProcessMS waiting period
   // - Event is wrSignaled if ProcessEvent.SetEvent has been called
   // - Msg is '' if there is no pending message in this task FIFO
   // - Msg is set for each pending message in this task FIFO
@@ -16912,10 +16931,10 @@ type
     procedure FromDateTime(aDateTime: TDateTime);
   end;
   {$A+}
-  
+
   /// points to a 64-bit integer identifier, as computed by TSynUniqueIdentifierGenerator
   // - may be used to access the identifier internals, from its stored
-  // Int64 or TSynUniqueIdentifier value 
+  // Int64 or TSynUniqueIdentifier value
   PSynUniqueIdentifierBits = ^TSynUniqueIdentifierBits;
 
   /// a 24 chars cyphered hexadecimal string, mapping a TSynUniqueIdentifier
@@ -16974,9 +16993,9 @@ type
       out aIdentifier: TSynUniqueIdentifier): boolean;
     /// some 32-bit value, derivated from aSharedObfuscationKey as supplied
     // to the class constructor
-    // - may be used e.g. as system-depending salt 
+    // - may be used e.g. as system-depending salt
     property CryptoCRC: cardinal read fCryptoCRC;
-    /// direct access to the associated mutex 
+    /// direct access to the associated mutex
     property Safe: TSynLocker read fSafe;
   published
     /// the process identifier, associated with this generator
@@ -16984,7 +17003,7 @@ type
     /// how many times ComputeNew method has been called
     property ComputedCount: Int64 read GetComputedCount;
   end;
-  
+
 
 /// convert a size to a human readable value
 // - append TB, GB, MB, KB or B symbol
@@ -17412,7 +17431,7 @@ var tmp: TSynTempBuffer;
 begin
   if SourceChars=0 then
     result := '' else begin
-    tmp.Init(SourceChars*2+1); // max dest size in bytes (including trailing #0 widechar) 
+    tmp.Init(SourceChars*2+1); // max dest size in bytes (including trailing #0 widechar)
     U := AnsiBufferToUnicode(tmp.buf,Source,SourceChars);
     SetString(result,PWideChar(tmp.buf),(PtrUInt(U)-PtrUInt(tmp.buf))shr 1);
     tmp.Done;
@@ -18041,7 +18060,7 @@ end;
 procedure TSynAnsiUTF8.InternalAppendUTF8(Source: PAnsiChar; SourceChars: Cardinal;
   DestTextWriter: TObject; Escape: TTextWriterKind);
 begin
-  TTextWriter(DestTextWriter).Add(PUTF8Char(Source),SourceChars,Escape); 
+  TTextWriter(DestTextWriter).Add(PUTF8Char(Source),SourceChars,Escape);
 end;
 
 function TSynAnsiUTF8.AnsiToRawUnicode(Source: PAnsiChar;
@@ -19487,7 +19506,7 @@ begin
     vtPointer:
       PointerToHex(VPointer,result);
     vtClass:
-      if VClass<>nil then                                          
+      if VClass<>nil then
         result := PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^ else
         result := '';
     vtObject:
@@ -20593,7 +20612,7 @@ var k: TTypeKind;
         tmp.wrw(TypeInfoSave(rttitypes,nfo)+2) else begin
         tmp.wrw(1); // would be recognized by name
         with PTypeInfo(nfo)^ do
-          tmp.wr(kind,NameLen+2); // match FindKnownTypeInfoIndex() 
+          tmp.wr(kind,NameLen+2); // match FindKnownTypeInfoIndex()
       end;
     end;
   end;
@@ -20689,7 +20708,7 @@ var rtti: PTypeInfo;
     tmp: TSynTempWriter;
     i,t,j,pcount: integer;
     offs: PtrUInt;
-    stored: boolean; 
+    stored: boolean;
     k: TTypeKind;
     n: PAnsiChar;
     types: array of array of packed record
@@ -21403,7 +21422,7 @@ begin
   case TVarData(V).VType of
   varBoolean:
     Value := TVarData(V).VBoolean;
-  varInteger: // coming e.g. from GetJsonField() 
+  varInteger: // coming e.g. from GetJsonField()
     Value := TVarData(V).VInteger=1;
   else
     if SetVariantUnRefSimpleValue(V,tmp) then
@@ -21733,7 +21752,7 @@ begin
     if handler=nil then
       if (V^.VType and varByRef=0) and
          FindCustomVariantType(V^.VType,handler) then
-        handler.Clear(V^) else 
+        handler.Clear(V^) else
         VarClear(variant(V^)) else
       if V^.VType=handler.VarType then
         handler.Clear(V^) else
@@ -21861,7 +21880,7 @@ asm
   mov eax,ecx
   {$else}
   mov eax,edi
-  {$endif win64} 
+  {$endif win64}
   bswap eax
 end;
 {$endif CPUX64}
@@ -24371,7 +24390,7 @@ function FileOpenSequentialRead(const FileName: string): Integer;
 begin
   {$ifdef MSWINDOWS}
   result := CreateFile(pointer(FileName),GENERIC_READ,
-    FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone 
+    FILE_SHARE_READ or FILE_SHARE_WRITE,nil, // same as fmShareDenyNone
     OPEN_EXISTING,FILE_FLAG_SEQUENTIAL_SCAN,0);
   {$else}
   result := FileOpen(FileName,fmOpenRead or fmShareDenyNone);
@@ -26076,7 +26095,7 @@ type TWordRec = packed record YDiv100, YMod100: byte; end;
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
 function Div100(Y: word): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result.YDiv100 := Y div 100;  
+  result.YDiv100 := Y div 100;
   result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
 end;
 {$else}
@@ -27040,7 +27059,7 @@ begin // 5 times faster than CreateFile, GetFileSizeEx, CloseHandle
     PInt64Rec(@result)^.Hi := FA.nFileSizeHigh;
   end else
     result := 0;
-end;          
+end;
 {$else}
 var f: THandle;
     res: Int64Rec absolute result;
@@ -30515,7 +30534,7 @@ begin
     end;
   result := '';
 end;
-      
+
 function IsZero(P: pointer; Length: integer): boolean;
 var i: integer;
 begin
@@ -31134,7 +31153,7 @@ asm
         lea     rsi, [r10-10H]
         lea     ebx, [r8+24234428H]
         lea     edi, [r8-7A143589H]
-        lea     eax, [r8+61C8864FH]                     
+        lea     eax, [r8+61C8864FH]
 @1:     imul    r9d, dword ptr [rcx], -2048144777
         add     rcx, 16
         imul    r11d, dword ptr [rcx-0CH], -2048144777
@@ -34232,7 +34251,7 @@ end;
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 var L,i,cmp: PtrInt;
-begin // fast binary search 
+begin // fast binary search
   if not Assigned(Compare) or (R<0) then
     result := 0 else begin
     L := 0;
@@ -34718,7 +34737,7 @@ function SHGetFolderPath(hwnd: HWND; csidl: Integer; hToken: THandle;
 
 var
   _SystemPath: array[TSystemPath] of TFileName;
-  
+
 function GetSystemPath(kind: TSystemPath): TFileName;
 const
   CSIDL_PERSONAL = $0005;
@@ -35439,26 +35458,289 @@ end;
 
 {$endif FPC}
 
-function RecordEquals(const RecA, RecB; TypeInfo: pointer): boolean;
+function ManagedTypeCompare(A,B: PAnsiChar; info: PTypeInfo): integer;
+// returns -1 if info was not handled, 0 if A^<>B^, or sizeof(A^) if A^=B^
+var i: integer;
+    itemtype: PTypeInfo;
+{$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
+   DynA, DynB: TDynArray;
+{$endif}
+begin // info is expected to come from a DeRef() if retrieved from RTTI
+  result := 0; // A^<>B^
+  case info^.Kind of
+  tkLString{$ifdef FPC},tkLStringOld{$endif}:
+    if PAnsiString(A)^=PAnsiString(B)^ then
+      result := sizeof(pointer);
+  tkWString:
+    if PWideString(A)^=PWideString(B)^ then
+      result := sizeof(pointer);
+  {$ifdef HASVARUSTRING}
+  tkUString:
+    if PUnicodeString(A)^=PUnicodeString(B)^ then
+      result := sizeof(pointer);
+  {$endif}
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    if not RecordEquals(A^,B^,info,@result) then
+      result := 0; // A^<>B^
+  {$ifndef NOVARIANTS}
+  tkVariant: // slightly more optimized than PVariant(A)^=PVariant(B)^
+    if SortDynArrayVariantComp(PVarData(A)^,PVarData(B)^,false)=0 then
+      result := sizeof(variant);
+  {$endif}
+  {$ifndef DELPHI5OROLDER}
+  tkDynArray: begin
+    DynA.Init(info,A^);
+    DynB.Init(info,B^);
+    if DynA.Equals(DynB) then
+      result := sizeof(pointer);
+  end;
+  {$endif}
+  tkInterface:
+    if PPointer(A)^=PPointer(B)^ then
+      result := sizeof(pointer);
+  tkArray: begin
+    info := GetTypeInfo(info,tkArray);
+    if (info=nil) or (info^.dimCount<>1) then
+      result := -1 else begin
+      itemtype := DeRef(info^.arrayType);
+      if itemtype=nil then
+        if CompareMem(A,B,info^.arraySize) then
+          result := info^.arraySize else
+          result := 0 else begin
+        for i := 1 to info^.elCount do begin
+          result := ManagedTypeCompare(A,B,itemtype);
+          if result<=0 then
+            exit;
+          inc(A,result);
+          inc(B,result);
+        end;
+        result := info^.arraySize;
+      end;
+    end;
+  end;
+  else
+    result := -1;
+  end;
+end;
+
+function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
+  out len: integer): integer;
+var DynArray: TDynArray;
+    itemtype: PTypeInfo;
+    itemsize,size,i: integer;
+    P: PPtrUInt absolute data;
+begin
+  case info^.Kind of
+  tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}: begin
+    len := sizeof(pointer); // length stored within WideString is in bytes
+    if P^=0 then
+      result := 1 else
+      result := ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length);
+  end;
+  {$ifdef HASVARUSTRING}
+  tkUString: begin
+    len := sizeof(pointer);
+    if P^=0 then
+      result := 1 else
+      result := ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2);
+  end;
+  {$endif}
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    result := RecordSaveLength(data^,info,@len);
+  tkArray: begin
+    info := GetTypeInfo(info,tkArray);
+    if (info=nil) or (info^.dimCount<>1) then
+      result := 0 else begin
+      len := info^.arraySize;
+      itemtype := DeRef(info^.arrayType);
+      if itemtype=nil then
+        result := len else begin
+        size := 0;
+        for i := 1 to info^.elCount do begin
+          inc(size,ManagedTypeSaveLength(data,itemtype,itemsize));
+          inc(data,itemsize);
+        end;
+        result := size;
+      end;
+    end;
+  end;
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    len := sizeof(variant);
+    result := VariantSaveLength(PVariant(data)^);
+  end;
+  {$endif}
+  tkDynArray: begin
+    DynArray.Init(info,data^);
+    len := sizeof(pointer);
+    result := DynArray.SaveToLength;
+  end;
+  else
+    result := 0; // invalid/unhandled record content
+  end;
+end;
+
+function ManagedTypeSave(data, dest: PAnsiChar; info: PTypeInfo;
+  out len: integer): PAnsiChar;
+var DynArray: TDynArray;
+    itemtype: PTypeInfo;
+    itemsize,i: integer;
+    P: PPtrUInt absolute data;
+begin
+  case info^.Kind of
+    tkDynArray: begin
+      DynArray.Init(info,data^);
+      result := DynArray.SaveTo(dest);
+      len := sizeof(PtrUInt); // size of tkDynArray in record
+    end;
+    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
+    {$ifdef FPC}, tkLStringOld{$endif}: begin
+      if P^=0 then
+        itemsize := 0 else
+        itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
+      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
+      if info^.Kind=tkUString then
+        itemsize := itemsize*2;
+      {$endif}
+      result := pointer(ToVarUInt32(itemsize,pointer(dest)));
+      if itemsize>0 then begin
+        MoveFast(pointer(P^)^,result^,itemsize);
+        inc(result,itemsize);
+      end;
+      len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
+    end;
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      result := RecordSave(data^,dest,info,len);
+    tkArray: begin
+      info := GetTypeInfo(info,tkArray);
+      if (info=nil) or (info^.dimCount<>1) then
+        result := nil else begin // supports single dimension static array only
+        len := info^.arraySize;
+        itemtype := DeRef(info^.arrayType);
+        if itemtype=nil then begin
+          MoveFast(data^,dest^,len);
+          result := dest+len;
+        end else begin
+          for i := 1 to info^.elCount do begin
+            dest := ManagedTypeSave(data,dest,itemtype,itemsize);
+            if dest=nil then
+              break; // invalid/unhandled content
+            {$ifdef FPC}
+            if itemsize=-1 then begin
+              result := nil;
+              exit;
+            end;
+            {$endif}
+            inc(data,itemsize)
+          end;
+          result := dest;
+        end;
+      end;
+    end;
+    {$ifndef NOVARIANTS}
+    tkVariant: begin
+      result := VariantSave(PVariant(data)^,dest);
+      len := sizeof(Variant); // size of tkVariant in record
+    end;
+    {$endif}
+    else begin
+      {$ifdef FPC}
+      len := -1; // FPC generates RTTI for such unmanaged fields
+      result := dest;
+      {$else}
+      result := nil;
+      {$endif}
+    end;
+    end;
+end;
+
+function ManagedTypeLoad(data: PAnsiChar; var source: PAnsiChar; info: PTypeInfo): integer;
+var DynArray: TDynArray;
+    itemtype: PTypeInfo;
+    itemsize,i: integer;
+begin
+  case info^.Kind of
+  tkDynArray: begin
+    DynArray.Init(info,data^);
+    source := DynArray.LoadFrom(source);
+    result := sizeof(PtrUInt); // size of tkDynArray in record
+  end;
+  tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
+  {$ifdef FPC}, tkLStringOld{$endif}: begin
+    itemsize := FromVarUInt32(PByte(source));
+    case info^.Kind of
+      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
+        SetString(PRawByteString(data)^,source,itemsize);
+        {$ifdef HASCODEPAGE}
+        { Delphi 2009+: set Code page for this AnsiString }
+        if itemsize<>0 then
+          SetCodePage(PRawByteString(data)^,
+            PWord(PtrUInt(info)+info^.NameLen+2)^,false);
+        {$endif}
+      end;
+      tkWString:
+        SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
+      {$ifdef HASVARUSTRING}
+      tkUString:
+        SetString(PString(data)^,PWideChar(source),itemsize shr 1);
+      {$endif}
+    end;
+    inc(source,itemsize);
+    result := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
+  end;
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    source := RecordLoad(data^,source,info,@result);
+  tkArray: begin
+    info := GetTypeInfo(info,tkArray);
+    if (info=nil) or (info^.dimCount<>1) then
+      result := 0 else begin // supports single dimension static array only
+      result := info^.arraySize;
+      itemtype := DeRef(info^.arrayType);
+      if itemtype=nil then begin
+        MoveFast(source^,data^,result);
+        inc(source,result);
+      end else
+        for i := 1 to info^.elCount do begin
+          itemsize := ManagedTypeLoad(data,source,itemtype);
+          if itemsize<=0 then begin
+            result := 0;
+            exit;
+          end else
+            inc(data,itemsize);
+        end;
+    end;
+  end;
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    source := VariantLoad(PVariant(data)^,source,@JSON_OPTIONS[true]);
+    result := sizeof(Variant); // size of tkVariant in record
+  end;
+  {$endif}
+  else
+    result := -1;
+  end;
+end;
+
+function RecordEquals(const RecA, RecB; TypeInfo: pointer;
+  PRecSize: PInteger): boolean;
 var info: PTypeInfo;
     F: integer;
     Field: ^TFieldInfo;
     Diff: cardinal;
     A, B: PAnsiChar;
-    {$ifndef DELPHI5OROLDER}
-    DynA, DynB: TDynArray;
-    {$endif}
 begin
   A := @RecA;
   B := @RecB;
-  if A=B then begin // both nil or same pointer
-    result := true;
-    exit;
-  end;
   result := false;
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
   if info=nil then
     exit; // raise Exception.CreateUTF8('% is not a record',[Typ^.Name]);
+  if PRecSize<>nil then
+    PRecSize^ := info^.recSize;
+  if A=B then begin // both nil or same pointer
+    result := true;
+    exit;
+  end;
   Field := @info^.ManagedFields[0];
   Diff := 0;
   for F := 1 to info^.ManagedCount do begin
@@ -35469,49 +35751,14 @@ begin
       inc(A,Diff);
       inc(B,Diff);
     end;
-    case Field^.TypeInfo^.Kind of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}:
-        if PAnsiString(A)^=PAnsiString(B)^ then
-          Diff := sizeof(pointer) else
-          exit;
-      tkWString:
-        if PWideString(A)^=PWideString(B)^ then
-          Diff := sizeof(pointer) else
-          exit;
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        if PUnicodeString(A)^=PUnicodeString(B)^ then
-          Diff := sizeof(pointer) else
-          exit;
-      {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        if RecordEquals(A^,B^,Field^.TypeInfo{$ifndef HASDIRECTTYPEINFO}^{$endif}) then
-          Diff := RecordTypeInfoSize(Field^.TypeInfo{$ifndef HASDIRECTTYPEINFO}^{$endif}) else
-          exit;
-      {$ifndef NOVARIANTS}
-      tkVariant:
-        if PVariant(A)^=PVariant(B)^ then
-          Diff := sizeof(variant) else
-          exit;
-      {$endif}
-      {$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
-      tkDynArray: begin
-        DynA.Init(Deref(Field^.TypeInfo),A^);
-        DynB.Init(Deref(Field^.TypeInfo),B^);
-        if DynA.Equals(DynB) then
-          Diff := sizeof(pointer) else
-          exit;
-      end;
-      {$endif}
-      tkInterface:
-        if PPointer(A)^=PPointer(B)^ then
-          Diff := sizeof(pointer) else
-          exit;
+    Diff := ManagedTypeCompare(A,B,DeRef(Field^.TypeInfo));
+    if integer(Diff)<=0 then
+      if Diff=0 then // A^<>B^
+        exit else    // Diff=-1 for unexpected type
       {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-      else
         if Field^.TypeInfo^.Kind in tkManagedTypes then
-          raise ESynException.CreateUTF8('RecordEquals(kind=%)',
-            [ord(Field^.TypeInfo^.Kind)]) else begin
+          raise ESynException.CreateUTF8('RecordEquals: % is managed',
+            [ToText(Field^.TypeInfo^.Kind)^]) else begin
           if F=info^.ManagedCount then
             Diff := info^.recSize-Field^.Offset else
             Diff := info^.ManagedFields[F].Offset-Field^.Offset;
@@ -35519,10 +35766,9 @@ begin
             exit; // binary block not equal
         end;
       {$else}
-      else raise ESynException.CreateUTF8('RecordEquals(kind=%)',
-        [ord(Field^.TypeInfo^.Kind)]);
+      raise ESynException.CreateUTF8('RecordEquals: % not supported',
+        [ToText(Field^.TypeInfo^.Kind)^]);
       {$endif}
-    end;
     inc(A,Diff);
     inc(B,Diff);
     inc(Diff,Field^.Offset);
@@ -35532,13 +35778,11 @@ begin
     result := true;
 end;
 
-function RecordSaveLength(const Rec; TypeInfo: pointer): integer;
-var info, infoNested: PTypeInfo;
-    F, Len: integer;
+function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
+var info: PTypeInfo;
+    F, recsize,saved: integer;
     Field: ^TFieldInfo;
-    P: PPtrUInt;
     R: PAnsiChar;
-    DynArray: TDynArray;
 begin
   R := @Rec;
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
@@ -35548,68 +35792,31 @@ begin
   end;
   Field := @info^.ManagedFields[0];
   result := info^.recSize;
+  if Len<>nil then
+    Len^ := result;
   for F := 1 to info^.ManagedCount do begin
-    P := pointer(R+Field^.Offset);
-    case Field^.TypeInfo^.Kind of
-      tkDynArray: begin
-        DynArray.Init(Deref(Field^.TypeInfo),P^);
-        inc(result,DynArray.SaveToLength-sizeof(PtrUInt));
-      end;
-      tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
-        // length stored within WideString is in bytes
-        if P^=0 then
-          dec(result,sizeof(PtrUInt)-1) else
-          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length)-sizeof(PtrUInt));
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        if P^=0 then
-          dec(result,sizeof(PtrUInt)-1) else
-          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(P^-STRRECSIZE))^.length*2)-sizeof(PtrUInt));
-      {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}: begin
-        infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
-        Len := RecordSaveLength(P^,infoNested);
-        if Len=0 then begin
-          result := 0;
-          exit; // invalid/unhandled nested record content
-        end;
-        inc(result,Len);
-        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-        infoNested := GetFPCAlignPtr(infoNested);
-        {$else}
-        inc(PtrUInt(infoNested),infoNested^.NameLen);
-        {$endif}
-        dec(result,infoNested^.recSize);
-      end;
-      {$ifndef NOVARIANTS}
-      tkVariant: begin
-        Len := VariantSaveLength(PVariant(P)^);
-        if Len=0 then begin
-          result := 0;
-          exit; // invalid/unhandled variant content
-        end;
-        inc(result,Len-sizeof(variant));
-      end;
-      {$endif}
-      {$ifndef FPC} // FPC does include RTTI for unmanaged fields! :)
-      else begin
-        result := 0;
-        exit; // invalid/unhandled record content
-      end;
-      {$endif}
+    saved := ManagedTypeSaveLength(R+Field^.Offset,Deref(Field^.TypeInfo),recsize);
+    {$ifdef FPC}
+    if saved>0 then // FPC has RTTI for unmanaged fields -> ignore
+      inc(result,saved-recsize);
+    {$else}
+    if saved=0 then begin
+      result := 0; // invalid type
+      exit;
     end;
+    inc(result,saved-recsize);
+    {$endif}
     inc(Field);
   end;
 end;
 
-function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar; overload;
-var info, infoNested: PTypeInfo;
-    F, LenBytes: integer;
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
+  out Len: integer): PAnsiChar; 
+var info: PTypeInfo;
+    F: integer;
     Diff: cardinal;
     Field: ^TFieldInfo;
     R: PAnsiChar;
-    Kind: TTypeKind;
-    DynArray: TDynArray;
 begin
   R := @Rec;
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
@@ -35617,6 +35824,7 @@ begin
     result := nil; // should have been checked before
     exit;
   end;
+  Len := info^.recSize;
   Field := @info^.ManagedFields[0];
   Diff := 0;
   for F := 1 to info^.ManagedCount do begin
@@ -35626,77 +35834,31 @@ begin
       inc(R,Diff);
       inc(Dest,Diff);
     end;
-    Kind := Field^.TypeInfo^.Kind;
-    case Kind of
-    tkDynArray: begin
-      DynArray.Init(Deref(Field^.TypeInfo),R^);
-      Dest := DynArray.SaveTo(Dest);
-      Diff := sizeof(PtrUInt); // size of tkDynArray in record
+    Dest := ManagedTypeSave(R,Dest,Deref(Field^.TypeInfo),integer(Diff));
+    if Dest=nil then begin
+      result := nil; // invalid/unhandled record content
+      exit;
     end;
-    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-    {$ifdef FPC}, tkLStringOld{$endif}: begin
-      if PPtrUInt(R)^=0 then
-        LenBytes := 0 else
-        LenBytes := PStrRec(Pointer(PPtrUInt(R)^-STRRECSIZE))^.length;
-      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
-      if Kind=tkUString then
-        LenBytes := LenBytes*2;
-      {$endif}
-      Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
-      if LenBytes>0 then begin
-        MoveFast(pointer(PPtrUInt(R)^)^,Dest^,LenBytes);
-        inc(Dest,LenBytes);
-      end;
-      Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
-    end;
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
-      Dest := RecordSave(R^,Dest,infoNested);
-      if Dest=nil then begin
-        result := nil; // invalid/unhandled record content
-        exit;
-      end;
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      infoNested := GetFPCAlignPtr(infoNested);
-      {$else}
-      inc(PtrUInt(infoNested),infoNested^.NameLen);
-      {$endif}
-      Diff := infoNested^.recSize;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant: begin
-      Dest := VariantSave(PVariant(R)^,Dest);
-      if Dest=nil then begin
-        result := nil; // invalid/unhandled variant content
-        exit;
-      end;
-      Diff := sizeof(Variant); // size of tkVariant in record
-    end;
-    {$endif}
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-      else
-        if Field^.TypeInfo^.Kind in tkManagedTypes then
-          raise ESynException.CreateUTF8('RecordSave(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
-          if F=info^.ManagedCount then
-            Diff := info^.recSize-Field^.Offset else
-            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
-          MoveFast(R^,Dest^,Diff);
-          inc(Dest,Diff);
-        end;
-    {$else}
-    else begin
-      result := nil;
-      exit; // invalid/unhandled record content
+    if integer(Diff)=-1 then begin
+      if info^.Kind in tkManagedTypes then
+        raise ESynException.CreateUTF8('ManagedTypeSave: % not supported',
+          [ToText(info^.Kind)^]) else begin
+        if F=info^.ManagedCount then
+          Diff := info^.recSize-Field^.Offset else
+          Diff := info^.ManagedFields[F].Offset-Field^.Offset;
+        MoveFast(R^,Dest^,Diff);
+        inc(Dest,Diff);
+      end;
     end;
     {$endif}
-    end;
     inc(R,Diff);
     inc(Diff,Field.Offset);
     inc(Field);
   end;
   Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
-    raise ESynException.Create('RecordSave diff') else
+    raise ESynException.Create('RecordSave diff<0') else
   if Diff<>0 then begin
     MoveFast(R^,Dest^,Diff);
     result := Dest+Diff;
@@ -35704,7 +35866,13 @@ begin
     result := Dest;
 end;
 
-function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
+function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer): PAnsiChar;
+var dummylen: integer;
+begin
+  result := RecordSave(Rec,Dest,TypeInfo,dummylen);
+end;
+
+function RecordSave(const Rec; TypeInfo: pointer): RawByteString;
 var Len: integer;
 begin
   Len := RecordSaveLength(Rec,TypeInfo);
@@ -35807,28 +35975,27 @@ asm
 end;
 {$endif FPC}
 
-function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
-var info, infoNested: PTypeInfo;
-    F, LenBytes: integer;
+function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
+  Len: PInteger): PAnsiChar;
+var info: PTypeInfo;
+    F: integer;
     Diff: cardinal;
     Field: ^TFieldInfo;
     R: PAnsiChar;
-    Kind: TTypeKind;
-    DynArray: TDynArray;
 begin
+  result := nil; // indicates error
   R := @Rec;
   info := GetTypeInfo(TypeInfo,tkRecordTypeOrSet);
-  if (R=nil) or (info=nil) then begin
-    result := nil; // should have been checked before
+  if (R=nil) or (info=nil) then // should have been checked before
     exit;
-  end;
+  if Len<>nil then
+    Len^ := info^.recSize;
   Field := @info^.ManagedFields[0];
   if Source=nil then begin  // inline RecordClear() function
     for F := 1 to  info^.ManagedCount do begin
       _Finalize(R+Field^.Offset,Deref(Field^.TypeInfo));
       inc(Field);
     end;
-    result := nil;
     exit;
   end;
   Diff := 0;
@@ -35839,78 +36006,29 @@ begin
       inc(Source,Diff);
       inc(R,Diff);
     end;
-    Kind := Field^.TypeInfo^.Kind;
-    case Kind of
-    tkDynArray: begin
-      DynArray.Init(Deref(Field^.TypeInfo),R^);
-      Source := DynArray.LoadFrom(Source);
-      Diff := sizeof(PtrUInt); // size of tkDynArray in record
-    end;
-    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-    {$ifdef FPC}, tkLStringOld{$endif}: begin
-      LenBytes := FromVarUInt32(PByte(Source));
-      case Kind of
-        tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
-          SetString(PRawByteString(R)^,Source,LenBytes);
-          {$ifdef HASCODEPAGE}
-          { Delphi 2009+: set Code page for this AnsiString }
-          if LenBytes<>0 then begin
-            infoNested := Deref(Field^.TypeInfo); 
-            SetCodePage(PRawByteString(R)^,
-              PWord(PtrUInt(infoNested)+infoNested^.NameLen+2)^,false);
-          end;
-          {$endif}
-        end;
-        tkWString:
-          SetString(PWideString(R)^,PWideChar(Source),LenBytes shr 1);
-        {$ifdef HASVARUSTRING}
-        tkUString:
-          SetString(PString(R)^,PWideChar(Source),LenBytes shr 1);
-        {$endif}
-      end;
-      inc(Source,LenBytes);
-      Diff := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
-    end;
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := Deref(Field^.TypeInfo); // inlined GetTypeInfo()
-      Source := RecordLoad(R^,Source,infoNested);
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      infoNested := GetFPCAlignPtr(infoNested);
-      {$else}
-      inc(PtrUInt(infoNested),infoNested^.NameLen);
-      {$endif}
-      Diff := infoNested^.recSize;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant: begin
-      Source := VariantLoad(PVariant(R)^,Source,@JSON_OPTIONS[true]);
-      Diff := sizeof(Variant); // size of tkVariant in record
-    end;
-    {$endif}
+    Diff := ManagedTypeLoad(R,Source,DeRef(Field^.TypeInfo));
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-      else
-        if Field^.TypeInfo^.Kind in tkManagedTypes then
-          raise ESynException.CreateUTF8('RecordLoad(kind=%)',[ord(Field^.TypeInfo^.Kind)]) else begin
-          if F=info^.ManagedCount then
-            Diff := info^.recSize-Field^.Offset else
-            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
-          MoveFast(Source^,R^,Diff);
-          inc(Source,Diff);
-        end;
-    {$else}
-    else begin
-      result := nil;
-      exit; // invalid/unhandled record content
-    end;
+    if integer(Diff)<0 then begin
+      if Field^.TypeInfo^.Kind in tkManagedTypes then
+        raise ESynException.CreateUTF8('RecordLoad: % is not supported',
+          [ToText(Field^.TypeInfo^.Kind)^]) else begin
+        if F=info^.ManagedCount then
+          Diff := info^.recSize-Field^.Offset else
+          Diff := info^.ManagedFields[F].Offset-Field^.Offset;
+        MoveFast(Source^,R^,Diff);
+        inc(Source,Diff);
+      end;
+    end else
     {$endif}
-    end;
+    if Diff=0 then
+      exit; // error at loading
     inc(R,Diff);
-    inc(Diff,Field.Offset);
+    inc(Diff,Field^.Offset);
     inc(Field);
   end;
   Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
-    raise ESynException.Create('RecordLoad diff') else
+    raise ESynException.Create('RecordLoad diff<0') else
   if Diff<>0 then begin
     MoveFast(Source^,R^,Diff);
     result := Source+Diff;
@@ -37098,7 +37216,7 @@ type
       Reader: TDynArrayJSONCustomReader;
       Writer: TDynArrayJSONCustomWriter;
     end;
-    function VariantSearch(aClass: TCustomVariantType): integer; 
+    function VariantSearch(aClass: TCustomVariantType): integer;
     procedure VariantWrite(aClass: TCustomVariantType;
       aWriter: TTextWriter; const aValue: variant; Escape: TTextWriterKind);
     {$endif}
@@ -37334,8 +37452,8 @@ begin
     Reg.RecordTypeInfo := aTypeInfo;
     result := RecordSearch(Reg.RecordTypeInfo,false);
   end;
-  else raise ESynException.CreateUTF8('%.Search(kind=%) not DynArray or Record',
-    [self,PByte(aTypeInfo)^]);
+  else raise ESynException.CreateUTF8('%.Search: % not DynArray or Record',
+    [self,ToText(PTypeKind(aTypeInfo)^)^]);
   end;
   if not AddIfNotExisting then
     exit;
@@ -37466,7 +37584,7 @@ begin // code below must match TTextWriter.AddRecordJSON
   if PCardinal(JSON)^=JSON_BASE64_MAGIC_QUOTE then begin
     if not (PTypeKind(TypeInfo)^ in tkRecordTypes) then
       raise ESynException.CreateUTF8('RecordLoadJSON(%/%)',
-        [PShortString(@PTypeInfo(TypeInfo).NameLen)^,PByte(TypeInfo)^]);
+        [PShortString(@PTypeInfo(TypeInfo).NameLen)^,ToText(PTypeKind(TypeInfo)^)^]);
     Val := GetJSONField(JSON,JSON,@wasString,@EndOfObj);
     if (Val=nil) or not wasString or
        (PInteger(Val)^ and $00ffffff<>JSON_BASE64_MAGIC) or
@@ -37554,9 +37672,8 @@ begin
     end;
     tkArray: begin
       if info^.dimCount<>1 then
-        raise ESynException.CreateUTF8(
-          '%.Create("%") supports only one dimension static array)',
-          [self,fCustomTypeName]);
+        raise ESynException.CreateUTF8('%.Create("%") supports only single '+
+          'dimension static array)',[self,fCustomTypeName]);
       fKnownType := ktStaticArray;
       fDataSize := info^.arraySize;
       fFixedSize := fDataSize div info^.elCount;
@@ -37605,10 +37722,10 @@ begin
     aWriter.CancelLastComma;
     aWriter.Add(']');
   end;
-  ktEnumeration, ktSet: 
+  ktEnumeration, ktSet:
     aWriter.AddTypedJSON(fCustomTypeInfo,aValue);
   ktDynamicArray:
-    raise ESynException.CreateUTF8('%.CustomWriter("%"): Unsupported',
+    raise ESynException.CreateUTF8('%.CustomWriter("%"): unsupported',
         [self,fCustomTypeName]);
   else begin // encoded as JSON strings
     aWriter.Add('"');
@@ -37651,7 +37768,7 @@ begin
     result := P;
   end;
   ktDynamicArray:
-    raise ESynException.CreateUTF8('%.CustomReader("%"): Unsupported',
+    raise ESynException.CreateUTF8('%.CustomReader("%"): unsupported',
         [self,fCustomTypeName]);
   ktSet: begin
     i32 := GetSetNameValue(fCustomTypeInfo,P,EndOfObject);
@@ -38094,7 +38211,7 @@ var EndOfObject: AnsiChar;
       exit;
     end;
     ptArray:
-    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin 
+    if (PInteger(P)^=NULL_LOW) and (P[4] in EndOfJSONValueField) then begin
       P := GotoNextNotSpace(P+4);
       EndOfObject := P^;
       if P^<>#0 then //if P^=',' then
@@ -38165,7 +38282,7 @@ Error:      Prop.FinalizeNestedArray(PPtrUInt(Data)^);
       if P^<>#0 then //if P^=',' then
         inc(P);
     end;
-    ptCustom: begin                                  
+    ptCustom: begin
       ptr := TJSONCustomParserCustom(Prop).CustomReader(P,Data^,EndOfObject);
       if ptr=nil then
         exit;
@@ -39049,7 +39166,7 @@ end;
 
 function VariantSaveLength(const Value: variant): integer;
 var tmp: TVarData;
-begin // match VariantSave() storage 
+begin // match VariantSave() storage
   with TVarData(Value) do
     if VType and varByRef<>0 then
       if VType=varVariant or varByRef then begin
@@ -40347,7 +40464,7 @@ begin
       SetLength(VName,n);
       repeat
         if VCount>=n then
-          exit; // unexpected object size means invalid JSON 
+          exit; // unexpected object size means invalid JSON
         // see http://docs.mongodb.org/manual/reference/mongodb-extended-json
         Name := GetJSONPropName(JSON,@NameLen);
         if Name=nil then
@@ -40384,7 +40501,7 @@ function TDocVariantData.InitJSON(const JSON: RawUTF8;
   aOptions: TDocVariantOptions): boolean;
 var tmp: TSynTempBuffer;
 begin
-  if JSON='' then 
+  if JSON='' then
     result := false else begin
     tmp.Init(JSON);
     try
@@ -42861,8 +42978,6 @@ end;
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
 var i, n, LenBytes: integer;
     P: PAnsiChar;
-    nested: PTypeInfo;
-    NestedArray: TDynArray;
 begin
   if fValue=nil then begin
     result := Dest;
@@ -42894,64 +43009,18 @@ begin
       MoveFast(P^,Dest^,n);
       inc(Dest,n);
     end else
-    case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-    {$ifdef FPC}, tkLStringOld{$endif}: begin
-      for i := 1 to n do begin
-        if PPtrUInt(P)^=0 then
-          LenBytes := 0 else begin
-          LenBytes := PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length;
-          {$ifdef HASVARUSTRING} // WideString length in bytes, UnicodeString in WideChars
-          if PTypeKind(ElemType)^=tkUString then
-            LenBytes := LenBytes*2;
-          {$endif}
-        end;
-        Dest := pointer(ToVarUInt32(LenBytes,pointer(Dest)));
-        if LenBytes>0 then begin
-          MoveFast(pointer(PPtrUInt(P)^)^,Dest^,LenBytes);
-          inc(Dest,LenBytes);
-        end;
-        inc(P,sizeof(PtrUInt));
+    for i := 1 to n do begin
+      Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
+      if Dest=nil then
+        break;
+      {$ifdef FPC}
+      if LenBytes=-1 then begin
+        result := nil;
+        exit;
       end;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      for i := 0 to n-1 do begin
-        Dest := VariantSave(PVariantArray(P)^[i],Dest);
-        if Dest=nil then
-          break; // invalid/unhandled variant content
-      end;
-    {$endif}
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      nested := ElemType; // inlined GetTypeInfo()
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      nested := GetFPCAlignPtr(nested);
-      {$else}
-      inc(PtrUInt(nested),nested^.NameLen);
       {$endif}
-      if nested^.ManagedCount=0 then begin
-        {$ifndef LVCL}
-        assert(nested^.recSize=ElemSize);
-        {$endif}
-        n := n*integer(ElemSize);
-        MoveFast(P^,Dest^,n);
-        inc(Dest,n);
-      end else begin
-        for i := 1 to n do begin
-          Dest := RecordSave(P^,Dest,ElemType);
-          if Dest=nil then
-            break; // invalid record type (wrong field type)
-          inc(P,ElemSize);
-        end;
-      end;
+      inc(P,LenBytes);
     end;
-    tkDynArray:
-      for i := 1 to n do begin
-        NestedArray.Init(ElemType,P^);
-        Dest := NestedArray.SaveTo(Dest);
-        inc(P,ElemSize);
-      end;
-  end;
   // store Hash32 checksum
   if Dest<>nil then  // may be nil if RecordSave() failed
     PCardinal(result-sizeof(Cardinal))^ := Hash32(result,Dest-result);
@@ -42959,9 +43028,8 @@ begin
 end;
 
 function TDynArray.SaveToLength: integer;
-var i,n,L: integer;
+var i,n,L,size: integer;
     P: PAnsiChar;
-    NestedArray: TDynArray;
 begin
   if fValue=nil then begin
     result := 0;
@@ -42977,46 +43045,13 @@ begin
         [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
-    case PTypeKind(ElemType)^ of
-    tkLString, tkWString{$ifdef FPC}, tkLStringOld{$endif}:
-      for i := 1 to n do begin
-        if PPtrUInt(P)^=0 then
-          inc(result) else
-          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length));
-        inc(P,sizeof(PtrUInt));
-      end;
-    {$ifdef HASVARUSTRING}
-    tkUString: // WideString has length in bytes, UnicodeString in WideChars
-      for i := 1 to n do begin
-        if PPtrUInt(P)^=0 then
-          inc(result) else
-          inc(result,ToVarUInt32LengthWithData(PStrRec(Pointer(PPtrUInt(P)^-STRRECSIZE))^.length*2));
-        inc(P,sizeof(PtrUInt));
-      end;
-    {$endif}
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      for i := 0 to n-1 do begin
-        L := VariantSaveLength(PVariantArray(P)^[i]);
-        if L=0 then
-          break; // invalid/unhandled variant content
-        inc(result,L);
-      end;
-    {$endif}
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      for i := 1 to n do begin
-        L := RecordSaveLength(P^,ElemType);
-        if L=0 then
-          break; // invalid record type (wrong field type)
-        inc(result,L);
-        inc(P,ElemSize);
-      end;
-    tkDynArray:
-      for i := 1 to n do begin
-        NestedArray.Init(ElemType,P^);
-        inc(result,NestedArray.SaveToLength);
-        inc(P,ElemSize);
-      end;
+    for i := 1 to n do begin
+      L := ManagedTypeSaveLength(P,ElemType,size);
+      assert(size=integer(ElemSize));
+      if L=0 then
+        break; // invalid record type (wrong field type)
+      inc(result,L);
+      inc(P,size);
     end;
   end;
   inc(result,sizeof(Cardinal)); // Hash32 checksum
@@ -43595,7 +43630,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         if (Val=nil) or (wasString<>expectedString) then
           exit;
         case T of
-        djBoolean:  PBooleanArray(fValue^)^[i] := GetBoolean(Val); 
+        djBoolean:  PBooleanArray(fValue^)^[i] := GetBoolean(Val);
         djByte:     PByteArray(fValue^)^[i] := GetCardinal(Val);
         djWord:     PWordArray(fValue^)^[i] := GetCardinal(Val);
         djInteger:  PIntegerArray(fValue^)^[i] := GetInteger(Val);
@@ -43687,11 +43722,9 @@ begin
 end;
 
 function TDynArray.LoadFrom(Source: PAnsiChar): PAnsiChar;
-var i, n, LenBytes: integer;
+var i, n: integer;
     P: PAnsiChar;
-    infoNested: PTypeInfo;
     Hash: PCardinalArray;
-    NestedArray: TDynArray;
 begin
   // check stored element size+type
   if Source=nil then begin
@@ -43722,79 +43755,19 @@ begin
   // retrieve dynamic array elements content
   P := fValue^;
   if ElemType=nil then
-  if GetIsObjArray then
-    raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
-      [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
-    // binary type was stored as once
-    n := n*integer(ElemSize);
-    MoveFast(Source^,P^,n);
-    inc(Source,n);
-  end else
-  case PTypeKind(ElemType)^ of
-    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-    {$ifdef FPC}, tkLStringOld{$endif}:
+    if GetIsObjArray then
+      raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
+        [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
+      // binary type was stored directly
+      n := n*integer(ElemSize);
+      MoveFast(Source^,P^,n);
+      inc(Source,n);
+    end else
     for i := 1 to n do begin
-      LenBytes := FromVarUInt32(PByte(Source));
-      case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
-        SetString(PRawByteString(P)^,Source,LenBytes);
-        {$ifdef HASCODEPAGE}
-        { Delphi 2009+: set Code page for this AnsiString }
-        if LenBytes<>0 then
-          SetCodePage(PRawByteString(P)^,PWord(PtrUInt(ElemType)+
-            PTypeInfo(ElemType)^.NameLen+2)^,false);
-        {$endif}
-      end;
-      tkWString:
-        SetString(PWideString(P)^,PWideChar(Source),LenBytes shr 1);
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        SetString(PString(P)^,PWideChar(Source),LenBytes shr 1);
-      {$endif}
-      end;
-      inc(Source,LenBytes);
-      inc(P,sizeof(PtrUInt));
+      inc(P,ManagedTypeLoad(P,Source,ElemType));
+      if Source=nil then
+         break;
     end;
-    tkRecord{$ifdef FPC},tkObject{$endif}: begin
-      infoNested := ElemType; // inlined GetTypeInfo()
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      infoNested := GetFPCAlignPtr(infoNested);
-      {$else}
-      inc(PtrUInt(infoNested),infoNested^.NameLen);
-      {$endif}
-      if infoNested^.ManagedCount=0 then begin
-        {$ifndef LVCL}
-        assert(infoNested^.recSize=ElemSize);
-        {$endif}
-        n := n*integer(ElemSize);
-        MoveFast(Source^,P^,n);
-        inc(Source,n);
-      end else begin
-        for i := 1 to n do begin
-          Source := RecordLoad(P^,Source,ElemType);
-          if Source=nil then
-            break; // invalid content (e.g. wrong field type)
-          inc(P,ElemSize);
-        end;
-      end;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      for i := 0 to n-1 do begin
-        Source := VariantLoad(PVariantArray(P)^[i],Source,@JSON_OPTIONS[true]);
-        if Source=nil then
-          break; // invalid/unhandled variant content
-      end;
-    {$endif}
-    tkDynArray:
-      for i := 1 to n do begin
-        NestedArray.Init(ElemType,P^);
-        Source := NestedArray.LoadFrom(Source);
-        if Source=nil then
-          break; // invalid content (e.g. wrong field type)
-        inc(P,ElemSize);
-      end;
-  end;
   // check security checksum
   if (Source=nil) or (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))<>Hash[0]) then
     result := nil else
@@ -44035,7 +44008,7 @@ begin
             tmp := PPointer(IP)^;
             PPointer(IP)^ := PPointer(JP)^;
             PPointer(JP)^ := tmp;
-          end else 
+          end else
             // generic exchange of row element data
             Exchg(IP,JP,ElemSize);
         if P = I then P := J else
@@ -44154,7 +44127,7 @@ var i, n: integer;
 begin
   result := false;
   if ArrayType<>B.ArrayType then
-    exit; // array types shall match
+    exit; // array types should match exactly
   n := Count;
   if n<>B.Count then
     exit;
@@ -44171,14 +44144,7 @@ begin
     result := CompareMem(P1,P2,ElemSize*cardinal(n));
     exit;
   end else
-  case PTypeKind(ElemType)^ of
-  tkRecord{$ifdef FPC},tkObject{$endif}:
-    for i := 1 to n do
-      if not RecordEquals(P1^,P2^,ElemType) then
-        exit else begin
-        inc(P1,ElemSize);
-        inc(P2,ElemSize);
-      end;
+  case PTypeKind(ElemType)^ of // some optimized versions for most used types
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
     for i := 0 to n-1 do
       if AnsiString(A1^[i])<>AnsiString(A2^[i]) then
@@ -44193,16 +44159,20 @@ begin
       if UnicodeString(A1^[i])<>UnicodeString(A2^[i]) then
         exit;
   {$endif}
-  tkInterface:
-    if not CompareMem(P1,P2,SizeOf(pointer)*cardinal(n)) then
-      exit;
-  {$ifndef NOVARIANTS}
-  tkVariant:
-    for i := 0 to n-1 do
-      if PVariantArray(P1)^[i]<>PVariantArray(P2)^[i] then
-        exit;
-  {$endif}
-  else exit;
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    for i := 1 to n do
+      if not RecordEquals(P1^,P2^,ElemType) then
+        exit else begin
+        inc(P1,ElemSize);
+        inc(P2,ElemSize);
+      end;
+  else // generic TypeInfoCompare() use
+    for i := 1 to n do
+      if ManagedTypeCompare(P1,P2,ElemType)<=0 then
+        exit else begin // A^<>B^ or unexpected type
+        inc(P1,ElemSize);
+        inc(P2,ElemSize);
+      end;
   end;
   result := true;
 end;
@@ -44324,7 +44294,7 @@ begin
   fSorted := false;
   fKnownType := djNone;
   fIsObjArray := oaUnknown;
-end;                
+end;
 
 procedure TDynArray.InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
   aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
@@ -44393,7 +44363,7 @@ procedure TDynArray.SetIsObjArray(aValue: boolean);
 begin
   if aValue then
     fIsObjArray := oaTrue else
-    fIsObjArray := oaFalse; 
+    fIsObjArray := oaFalse;
 end;
 
 procedure TDynArray.InternalSetLength(NewLength: PtrUInt);
@@ -45457,7 +45427,7 @@ begin
       aHashCode := HASH_ONVOIDCOLISION; // 0 means void slot in the loop below
     ndx := HashFindAndCompare(aHashCode,P^);
     if ndx<0 then
-      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore 
+      // >=0 means found exact duplicate of P^: shouldn't happen -> ignore
       with fHashs[-ndx-1] do begin
         Hash := aHashCode;
         Index := i;
@@ -48664,7 +48634,7 @@ end;
 procedure TTextWriter.SetEndOfLineCRLF(aEndOfLineCRLF: boolean);
 begin
   Include(fCustomOptions,twoEndOfLineCRLF);
-end;    
+end;
 
 function TTextWriter.GetLength: cardinal;
 begin
@@ -49376,7 +49346,7 @@ begin  // should match GotoNextJSONObjectOrArray() and JsonPropNameValid()
   if P=nil then
     exit;
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-  Name := P; // put here to please some versions of Delphi compiler 
+  Name := P; // put here to please some versions of Delphi compiler
   case P^ of
   '_','A'..'Z','a'..'z','0'..'9','$': begin // e.g. '{age:{$gt:18}}'
     repeat
@@ -51459,7 +51429,7 @@ begin
   for i := 0 to Count-1 do
     TPointerDynArray(ObjArr)[i] := Create;
 end;
-                       
+
 procedure TSynMonitor.ProcessError(const info: variant);
 begin
   EnterCriticalSection(fLock);
@@ -52441,7 +52411,7 @@ end;
 
 function GetDelphiCompilerVersion: RawUTF8;
 begin
-  result :=   
+  result :=
 {$ifdef FPC}
   'Free Pascal'
   {$ifdef VER2_6_4}+' 2.6.4'{$endif}
@@ -52567,7 +52537,7 @@ begin
   try
     ResetIfNeeded;
     ndx := fNameValue.fDynArray.FindHashedForAdding(aKey,result);
-    with fNameValue.List[ndx] do begin 
+    with fNameValue.List[ndx] do begin
       Name := aKey;
       dec(fRamUsed,length(Value));
       Value := aValue;
@@ -59382,7 +59352,7 @@ procedure TSynNameValue.InitFromIniSection(Section: PUTF8Char;
 var s: RawUTF8;
     i: integer;
 begin
-  Init(false);                         
+  Init(false);
   fOnAdd := OnAdd;
   while (Section<>nil) and (Section^<>'[') do begin
     s := GetNextLine(Section,Section);
@@ -59926,7 +59896,7 @@ end;
 
 const // fSafe.Padding[] slots
   SYNUNIQUEGEN_COMPUTECOUNT = 0;
-  
+
 procedure TSynUniqueIdentifierGenerator.ComputeNew(
   out result: TSynUniqueIdentifierBits);
 var currentTime: cardinal;
@@ -60008,7 +59978,7 @@ begin
   // due to the weakness of the hash algorithms used, this approach is a bit
   // naive and would be broken easily with brute force - but point here is to
   // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
-  // not implement strong security, so it sounds good enough for our purpose 
+  // not implement strong security, so it sounds good enough for our purpose
 end;
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
@@ -60567,7 +60537,7 @@ end;
 
 const
   TIXPRECISION = 32; // GetTickCount64 resolution (for aOnProcessSecs=1)
-  
+
 procedure TSynBackgroundTimer.EverySecond(
   Sender: TSynBackgroundThreadProcess; Event: TWaitResult);
 var tix: Int64;
@@ -60594,7 +60564,7 @@ begin
   finally
     fTaskLock.UnLock;
   end;
-  for i := 0 to n-1 do 
+  for i := 0 to n-1 do
     with todo[i] do
       if FIFO<>nil then
         for f := 0 to length(FIFO)-1 do
@@ -61221,7 +61191,7 @@ begin
       someWaiting := true;
     end;
   if someWaiting then
-    sleep(10); // propagate the pending evTimeOut to the WaitFor threads  
+    sleep(10); // propagate the pending evTimeOut to the WaitFor threads
   fPool.Free;
   inherited;
 end;
