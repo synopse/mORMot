@@ -4964,23 +4964,22 @@ type
     procedure ElemClear(var Elem);
     /// will copy one element content
     procedure ElemCopy(const A; var B);
-    /// save an array element into a serialized buffer
+    /// save an array element into a serialized binary content
+    // - use the same layout as TDynArray.SaveTo, but for a single item
     // - you can use ElemLoad method later to retrieve its content
     // - warning: Elem must be of the same exact type than the dynamic array,
-    // and must be a reference to a variable (you can't write Find(i+10) e.g.)
+    // and must be a reference to a variable (you can't write ElemSave(i+10) e.g.)
     function ElemSave(const Elem): RawByteString;
-    /// load an array element as saved by the ElemSave method
+    /// load an array element as saved by the ElemSave method into Elem variable
     // - warning: Elem must be of the same exact type than the dynamic array,
-    // and must be a reference to a variable (you can't write Find(i+10) e.g.)
+    // and must be a reference to a variable (you can't write ElemLoad(P,i+10) e.g.)
     procedure ElemLoad(Source: PAnsiChar; var Elem); overload;
     /// load an array element as saved by the ElemSave method
-    // - this overloaded method will retrieve the element as a memory buffer
-    // and caller MUST call ElemLoadClear() method to finalize its content
+    // - this overloaded method will retrieve the element as a memory buffer,
+    // which should be cleared by ElemClear() before release
     function ElemLoad(Source: PAnsiChar): RawByteString; overload;
-    /// release memory allocated by ElemLoad(): RawByteString
-    procedure ElemLoadClear(var ElemLoaded: RawByteString);
     /// search for an array element as saved by the ElemSave method
-    // - same as ElemLoad() + Find()/IndexOf() + ElemLoadClear()
+    // - same as ElemLoad() + Find()/IndexOf() + ElemClear()
     // - will call Find() method if Compare property is set
     // - will call generic IndexOf() method if no Compare property is set
     function ElemLoadFind(Source: PAnsiChar): integer;
@@ -44226,38 +44225,24 @@ end;
 
 procedure TDynArray.ElemCopy(const A; var B);
 begin
-  if ElemType=nil then begin
-    MoveFast(A,B,ElemSize);
-    exit;
-  end else begin
+  if ElemType=nil then
+    MoveFast(A,B,ElemSize) else
     case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
+      tkLString{$ifdef FPC},tkLStringOld{$endif}:
         RawByteString(B) := RawByteString(A);
-        exit;
-      end;
-      tkWString: begin
+      tkWString:
         WideString(B) := WideString(A);
-        exit;
-      end;
-      tkInterface: begin
+      tkInterface:
         IUnknown(B) := IUnknown(A);
-        exit;
-      end;
       {$ifdef HASVARUSTRING}
-      tkUString: begin
+      tkUString:
         UnicodeString(B) := UnicodeString(A);
-        exit;
-      end;
       {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}: begin
+      tkRecord{$ifdef FPC},tkObject{$endif}:
         RecordCopy(B,A,ElemType);
-        exit;
-      end;
       {$ifndef NOVARIANTS}
-      tkVariant: begin
+      tkVariant:
         variant(B) := variant(A);
-        exit;
-      end;
       {$endif}
       else begin
         {$ifdef FPC}
@@ -44267,10 +44252,8 @@ begin
         {$else}
         CopyArray(@B,@A,ElemType,1);
         {$endif}
-        exit;
       end;
     end;
-  end;
 end;
 
 function TDynArray.ElemLoad(Source: PAnsiChar): RawByteString;
@@ -44285,104 +44268,21 @@ end;
 
 procedure TDynArray.ElemLoad(Source: PAnsiChar; var Elem);
 begin
-  if Source=nil then
-    exit; // avoid GPF
-  if ElemType=nil then
-    MoveFast(Source^,Elem,ElemSize) else
-    case PTypeKind(ElemType)^ of
-    tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
-      SetString(RawByteString(Elem),Source+4,PInteger(Source)^);
-      {$ifdef HASCODEPAGE}
-      { Delphi 2009+: set Code page for this AnsiString }
-      if PPtrUInt(@Elem)^<>0 then
-        SetCodePage(RawByteString(Elem),PWord(PtrUInt(ElemType)+
-          PTypeInfo(ElemType)^.NameLen+2)^,false);
-      {$endif}
-    end;
-    tkWString: // WideString internal length is in bytes
-      SetString(WideString(Elem),PWideChar(Source+4),PInteger(Source)^ shr 1);
-    {$ifdef HASVARUSTRING}
-    tkUString:
-      SetString(UnicodeString(Elem),PWideChar(Source+4),PInteger(Source)^);
-    {$endif}
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      VariantLoad(variant(Elem),Source,@JSON_OPTIONS[true]);
-    {$endif}
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      RecordLoad(Elem,Source,ElemType);
-    end;
-end;
-
-procedure TDynArray.ElemLoadClear(var ElemLoaded: RawByteString);
-begin
-  if (ElemType<>nil) and (length(ElemLoaded)=integer(ElemSize)) then
-  case PTypeKind(ElemType)^ of
-    tkLString{$ifdef FPC},tkLStringOld{$endif}:
-      PRawByteString(pointer(ElemLoaded))^ := '';
-    tkWString:
-      PWideString(pointer(ElemLoaded))^ := '';
-    {$ifdef HASVARUSTRING}
-    tkUString:
-      PUnicodeString(pointer(ElemLoaded))^ := '';
-    {$endif}
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      VarClear(PVariant(pointer(ElemLoaded))^);
-    {$endif}
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      RecordClear(pointer(ElemLoaded)^,ElemType);
-  end;
-  ElemLoaded := '';
+  if Source<>nil then // avoid GPF
+    if ElemType=nil then
+      MoveFast(Source^,Elem,ElemSize) else
+      ManagedTypeLoad(@Elem,Source,ElemType);
 end;
 
 function TDynArray.ElemSave(const Elem): RawByteString;
-{$ifdef FPC}
-var LenBytes: integer;
-{$endif}
+var itemsize: integer;
 begin
   if ElemType=nil then
-    SetString(result,PAnsiChar(@Elem),ElemSize) else
-    case PTypeKind(ElemType)^ of
-      {$ifdef FPC}
-      tkLString, tkWString, tkLStringOld:
-        if PPtrInt(@Elem)^=0 then
-          SetString(result,PAnsiChar(@Elem),4) else begin
-          LenBytes := PStrRec(Pointer(PPtrInt(@Elem)^-STRRECSIZE))^.length;
-          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes+sizeof(integer));
-          PInteger(result)^ := LenBytes;
-        end;
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        if PPtrInt(@Elem)^=0 then
-          SetString(result,PAnsiChar(@Elem),4) else begin
-          LenBytes := PStrRec(Pointer(PPtrInt(@Elem)^-STRRECSIZE))^.length;
-          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),LenBytes*2+sizeof(integer));
-          PInteger(result)^ := LenBytes;
-        end;
-      {$endif}
-      {$else FPC}
-      tkLString, tkWString: // WideString internal length is in bytes
-        if PPtrInt(@Elem)^=0 then
-          SetString(result,PAnsiChar(@Elem),4) else
-          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),
-            PInteger(PPtrInt(@Elem)^-sizeof(integer))^+sizeof(integer));
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        if PPtrInt(@Elem)^=0 then
-          SetString(result,PAnsiChar(@Elem),4) else
-          SetString(result,PAnsiChar(PPtrInt(@Elem)^-sizeof(integer)),
-            PInteger(PPtrInt(@Elem)^-sizeof(integer))^*2+sizeof(integer));
-      {$endif}
-      {$endif FPC}
-      {$ifndef NOVARIANTS}
-      tkVariant:
-        result := VariantSave(variant(Elem));
-      {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        result := RecordSave(Elem,ElemType);
-      else result := '';
-    end;
+    SetString(result,PAnsiChar(@Elem),ElemSize) else begin
+    SetString(result,nil,ManagedTypeSaveLength(@Elem,ElemType,itemsize));
+    if result<>'' then
+      ManagedTypeSave(@Elem,pointer(result),ElemType,itemsize);
+  end;
 end;
 
 function TDynArray.ElemLoadFind(Source: PAnsiChar): integer;
@@ -44396,7 +44296,7 @@ begin
         result := IndexOf(pointer(tmp)^) else
         result := Find(pointer(tmp)^);
     finally
-      ElemLoadClear(tmp);
+      ElemClear(pointer(tmp)^);
     end;
 end;
 
