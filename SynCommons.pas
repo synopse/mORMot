@@ -35670,24 +35670,23 @@ var DynArray: TDynArray;
     itemsize,i: integer;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
-  tkDynArray: begin
-    DynArray.Init(info,data^);
-    source := DynArray.LoadFrom(source);
-    result := sizeof(PtrUInt); // size of tkDynArray in record
-  end;
   tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
   {$ifdef FPC}, tkLStringOld{$endif}: begin
     itemsize := FromVarUInt32(PByte(source));
     case info^.Kind of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}: begin
+      tkLString: begin
         SetString(PRawByteString(data)^,source,itemsize);
         {$ifdef HASCODEPAGE}
-        { Delphi 2009+: set Code page for this AnsiString }
         if itemsize<>0 then
-          SetCodePage(PRawByteString(data)^,
-            PWord(PtrUInt(info)+info^.NameLen+2)^,false);
+          SetCodePage(PRawByteString(data)^,PWord(
+            {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}GetFPCTypeData(info)
+            {$else}PtrUInt(info)+info^.NameLen+2{$endif})^,false);
         {$endif}
       end;
+      {$ifdef FPC}
+      tkLStringOld:
+        SetString(PRawByteString(data)^,source,itemsize);
+      {$endif}
       tkWString:
         SetString(PWideString(data)^,PWideChar(source),itemsize shr 1);
       {$ifdef HASVARUSTRING}
@@ -35726,6 +35725,11 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     result := sizeof(Variant); // size of tkVariant in record
   end;
   {$endif}
+  tkDynArray: begin
+    DynArray.Init(info,data^);
+    source := DynArray.LoadFrom(source);
+    result := sizeof(PtrUInt); // size of tkDynArray in record
+  end;
   else begin
     source := nil;
     result := 0;
