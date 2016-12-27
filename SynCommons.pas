@@ -956,6 +956,13 @@ type
   /// a pointer to a variant array
   PVariantArray = ^TVariantArray;
 
+  /// a TVarData values array
+  // - is not called TVarDataArray to avoid confusion with the corresponding
+  // type already defined in Variants.pas, and used for custom late-binding
+  TVarDataStaticArray = array[0..MaxInt div SizeOf(TVarData)-1] of TVarData;
+  /// a pointer to a TVarData array
+  PVarDataStaticArray = ^TVarDataStaticArray;
+
   /// a dynamic array of variant values
   TVariantDynArray = array of variant;
 {$endif}
@@ -4715,13 +4722,6 @@ type
     // - the deleted element is finalized if necessary
     // - this method will recognize T*ObjArray types and free all instances
     procedure Delete(aIndex: Integer);
-    /// returns a pointer to an element of the array
-    // - returns nil if aIndex is out of range
-    // - since TDynArray is just a wrapper around an existing array, you should
-    // better use direct access to its wrapped variable, and not using this
-    // slower and more error prone method (such pointer access lacks of strong
-    // typing abilities), which was designed for TDynArray internal use
-    function ElemPtr(aIndex: integer): pointer;
     /// search for an element value inside the dynamic array
     // - return the index found (0..Count-1), or -1 if Elem was not found
     // - will search for all properties content of the eLement: TList.IndexOf()
@@ -4793,8 +4793,7 @@ type
     /// search for an element value, then update the item if match
     // - this method will use the Compare property function for the search,
     // or the supplied indexed lookup table and its associated compare function
-    // - if Elem content matches, this item will be updated with the supplied
-    // value
+    // - if Elem content matches, this item will be updated with the supplied value
     // - can be used e.g. as a simple dictionary: if Compare will match e.g. the
     // first string field (i.e. set to SortDynArrayString), you can fill the
     // first string field with the searched value (if returned index is >= 0)
@@ -4956,6 +4955,21 @@ type
     // - both must be of the same exact type
     procedure CopyFrom(const Source; MaxElem: integer);
     {$endif}
+    /// returns a pointer to an element of the array
+    // - returns nil if aIndex is out of range
+    // - since TDynArray is just a wrapper around an existing array, you should
+    // better use direct access to its wrapped variable, and not using this
+    // slower and more error prone method (such pointer access lacks of strong
+    // typing abilities), which was designed for TDynArray internal use
+    function ElemPtr(aIndex: integer): pointer;
+    /// will copy one element content from its index into another variable
+    // - do nothing if index is out of range
+    procedure ElemCopyAt(index: integer; var Dest);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// will copy one variable content into an indexed element 
+    // - do nothing if index is out of range
+    procedure ElemCopyFrom(const Source; index: integer);
+      {$ifdef HASINLINE}inline;{$endif}
     /// compare the content of two elements, returning TRUE if both values equal
     // - this method compares first using any supplied Compare property,
     // then by content using the RTTI element description of the whole record
@@ -21575,11 +21589,11 @@ begin
   end;
   varString: begin
     wasString := true;
-  {$ifdef HASCODEPAGE}
+    {$ifdef HASCODEPAGE}
     AnyAnsiToUTF8(RawByteString(VString),result);
-  {$else}
+    {$else}
     result := RawUTF8(VString);
-  {$endif}
+    {$endif}
   end;
   {$ifdef HASVARUSTRING}
   varUString: begin
@@ -35358,7 +35372,6 @@ end;
 
 { ************ low-level RTTI types and conversion routines }
 
-
 {$ifdef FPC}
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
@@ -35381,15 +35394,12 @@ begin
   end;
 end;
 
-function RTTIUnmanagedFieldSize(Index: integer; Field: PFieldInfo;
-  Info: PTypeInfo): integer; inline;
+function RTTIFirstManagedFieldIndex(info: PTypeInfo): integer;
 begin
-  if Info^.Kind in tkManagedTypes then
-    raise ESynException.CreateUTF8('RTTIUnmanagedFieldSize: % not supported',
-      [ToText(Info^.Kind)^]);
-  if Index=Info^.ManagedCount then
-    result := Info^.recSize-Field^.Offset else
-    result := Info^.ManagedFields[Index].Offset-Field^.Offset;
+  for result := 0 to info^.ManagedCount-1 do
+    if DeRef(info^.ManagedFields[result].TypeInfo)^.Kind in tkManagedTypes then
+      exit;
+  result := -1;
 end;
 
 procedure RecordClear(var Dest; TypeInfo: pointer);
@@ -35540,6 +35550,30 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   end;
 end;
 
+procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
+{$ifdef FPC}
+  [external name 'FPC_DYNARRAY_CLEAR'];
+{$else}
+asm
+{$ifdef CPU64}
+  .NOFRAME
+{$endif}
+  jmp System.@DynArrayClear
+end;
+{$endif}
+
+procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
+{$ifdef FPC}
+  [external name 'FPC_FINALIZE_ARRAY'];
+{$else}
+asm
+{$ifdef CPU64}
+  .NOFRAME
+{$endif}
+  jmp System.@FinalizeArray
+end;
+{$endif}
+
 function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
   out len: integer): integer;
 // returns 0 on error, or saved bytes + len=data^ length
@@ -35664,7 +35698,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
 end;
 
 function ManagedTypeLoad(data: PAnsiChar; var source: PAnsiChar; info: PTypeInfo): integer;
-// returns source=nil on error, or final source + result=data^ length 
+// returns source=nil on error, or final source + result=data^ length
 var DynArray: TDynArray;
     itemtype: PTypeInfo;
     itemsize,i: integer;
@@ -35733,7 +35767,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   else begin
     source := nil;
     result := 0;
-  end; 
+  end;
   end;
 end;
 
@@ -39193,13 +39227,13 @@ begin // match VariantSave() storage
       result := 1+sizeof(VType) else
       result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length)
         +sizeof(VType);
-   {$ifdef HASVARUSTRING}
-   varUString:
+  {$ifdef HASVARUSTRING}
+  varUString:
     if PtrUInt(VAny)=0 then // stored length is in bytes, not (wide)chars
       result := 1+sizeof(VType) else
       result := ToVarUInt32LengthWithData(PStrRec(Pointer(PtrUInt(VAny)-STRRECSIZE))^.length*2)
         +sizeof(VType);
-    {$endif}
+  {$endif}
   else
     try // complex types will be stored as JSON
       result := ToVarUInt32LengthWithData(VariantSaveJSONLength(Value))+sizeof(VType);
@@ -42760,6 +42794,9 @@ end;
 
 {$endif NOVARIANTS}
 
+
+{ TDynArray }
+
 function TDynArray.Add(const Elem): integer;
 begin
   result := Count;
@@ -42789,7 +42826,7 @@ begin
     P := pointer(PtrUInt(fValue^)+PtrUInt(Index)*ElemSize);
     MoveFast(P[0],P[ElemSize],cardinal(n-Index)*ElemSize);
     if ElemType<>nil then
-      FillcharFast(P[0],ElemSize,0); // avoid GPF in ElemCopy() below
+      FillcharFast(P^,ElemSize,0); // avoid GPF in ElemCopy() below
   end else
     // Index>=Count -> add at the end
     P := pointer(PtrUInt(fValue^)+PtrUInt(n)*ElemSize);
@@ -42846,7 +42883,7 @@ begin
   result := nil;
   if (fValue=nil) or (fValue^=nil) then
     exit;
-  if fCountP<>nil then begin
+  if fCountP<>nil then begin // inlined cardinal(aIndex)>=cardinal(GetCount)
     if cardinal(aIndex)>=PCardinal(fCountP)^ then
       exit;
   end else
@@ -42857,6 +42894,18 @@ begin
     {$endif}
       exit;
   result := pointer(PtrUInt(fValue^)+PtrUInt(aIndex)*ElemSize);
+end;
+
+procedure TDynArray.ElemCopyAt(index: integer; var Dest);
+begin
+  if cardinal(index)<cardinal(GetCount) then
+    ElemCopy(pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^,Dest);
+end;
+
+procedure TDynArray.ElemCopyFrom(const Source; index: integer);
+begin
+  if cardinal(index)<cardinal(GetCount) then
+    ElemCopy(Source,pointer(PtrUInt(fValue^)+PtrUInt(index)*ElemSize)^);
 end;
 
 function TDynArray.GetCount: integer;
@@ -43093,6 +43142,9 @@ end;
 
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
 var nested: PTypeInfo;
+    {$ifdef FPC}
+    f: integer;
+    {$endif}
 label Bin, Rec;
 begin
   if fKnownType<>djNone then begin
@@ -43158,37 +43210,31 @@ rec:    nested := GetFPCAlignPtr(nested);
         {$else}
 rec:    inc(PtrUInt(nested),(nested^.NameLen));
         {$endif}
+        {$ifdef FPC}
+        f := RTTIFirstManagedFieldIndex(nested);
+        if f<0 then
+          goto Bin;
+        with nested^.ManagedFields[f] do
+        {$else}
         if nested^.ManagedCount=0 then // only binary content -> full content
           goto Bin;
         with nested^.ManagedFields[0] do
+        {$endif}
         case Offset of
-        0: case TypeInfo^.Kind of
-            tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
-            tkWString: fKnownType := djWideString;
-            {$ifdef UNICODE}
-            tkUString: fKnownType := djString;
-            {$endif}
-            tkRecord{$ifdef FPC},tkObject{$endif}: begin
-              nested := Deref(TypeInfo);
-              goto Rec;
-            end;
-            {$ifndef NOVARIANTS}
-            tkVariant: fKnownType := djVariant;
-            {$endif}
-            else begin
-              {$ifdef FPC} // unmanaged fields have RTTI in newest FPC! :)
-              if (nested^.ManagedCount<>1) and // emulate Delphi behavior
-                 (nested^.ManagedFields[1].TypeInfo^.Kind in tkManagedTypes) then
-              case nested^.ManagedFields[1].Offset of
-                1: fKnownType := djByte;
-                2: fKnownType := djWord;
-                4: fKnownType := djInteger;
-                8: fKnownType := djInt64;
-                else fKnownSize := nested^.ManagedFields[1].Offset;
-              end else
-              {$endif}
-              goto bin;
-            end;
+        0: case DeRef(TypeInfo)^.Kind of
+           tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
+           tkWString: fKnownType := djWideString;
+           {$ifdef UNICODE}
+           tkUString: fKnownType := djString;
+           {$endif}
+           tkRecord{$ifdef FPC},tkObject{$endif}: begin
+             nested := DeRef(TypeInfo);
+             goto Rec;
+           end;
+           {$ifndef NOVARIANTS}
+           tkVariant: fKnownType := djVariant;
+           {$endif}
+           else goto bin;
            end;
         1: fKnownType := djByte;
         2: fKnownType := djWord;
@@ -43839,6 +43885,7 @@ end;
 
 function TDynArray.IndexOf(const Elem): integer;
 var P: pointer;
+    PP: PPointerArray absolute P;
     max: integer;
 begin
   if fValue=nil then begin
@@ -43863,34 +43910,40 @@ begin
     for result := 0 to max do
       if CompareMem(P,@Elem,ElemSize) then
         exit else
-        inc(PtrUInt(P),ElemSize);
+        inc(PByte(P),ElemSize);
   end else
   case PTypeKind(ElemType)^ of
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
     for result := 0 to max do
-      if AnsiString(PPtrIntArray(P)^[result])=AnsiString(Elem) then exit;
+      if AnsiString(PP^[result])=AnsiString(Elem) then exit;
   tkWString:
     for result := 0 to max do
-      if WideString(PPtrIntArray(P)^[result])=WideString(Elem) then exit;
+      if WideString(PP^[result])=WideString(Elem) then exit;
   {$ifdef HASVARUSTRING}
   tkUString:
     for result := 0 to max do
-      if UnicodeString(PPtrIntArray(P)^[result])=UnicodeString(Elem) then exit;
+      if UnicodeString(PP^[result])=UnicodeString(Elem) then exit;
   {$endif}
   {$ifndef NOVARIANTS}
   tkVariant:
     for result := 0 to max do
-      if PVariantArray(P)^[result]=variant(Elem) then exit;
+      if SortDynArrayVariantComp(PVarDataStaticArray(P)^[result],
+        TVarData(Elem),false)=0 then exit;
   {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}:
     // RecordEquals() works with packed records containing binary and string types
     for result := 0 to max do
       if RecordEquals(P^,Elem,ElemType) then
         exit else
-        inc(PtrUInt(P),ElemSize);
+        inc(PByte(P),ElemSize);
   tkInterface:
     for result := 0 to max do
-      if PPtrIntArray(P)^[result]=PtrInt(Elem) then exit;
+      if PP^[result]=pointer(Elem) then exit;
+  else
+    for result := 0 to max do
+      if ManagedTypeCompare(P,@Elem,ElemType)>0 then
+        exit else
+        inc(PByte(P),ElemSize);
   end;
   result := -1;
 end;
@@ -43960,30 +44013,6 @@ function TDynArray.IsVoid: boolean;
 begin
   result := fValue=nil;
 end;
-
-procedure _DynArrayClear(var a: Pointer; typeInfo: Pointer);
-{$ifdef FPC}
-  [external name 'FPC_DYNARRAY_CLEAR'];
-{$else}
-asm
-{$ifdef CPU64}
-  .NOFRAME
-{$endif}
-  jmp System.@DynArrayClear
-end;
-{$endif}
-
-procedure _FinalizeArray(p: Pointer; typeInfo: Pointer; elemCount: PtrUInt);
-{$ifdef FPC}
-  [external name 'FPC_FINALIZE_ARRAY'];
-{$else}
-asm
-{$ifdef CPU64}
-  .NOFRAME
-{$endif}
-  jmp System.@FinalizeArray
-end;
-{$endif}
 
 function TDynArray.GetIsObjArray: boolean;
 begin
@@ -44055,7 +44084,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     if ElemType<>nil then begin
       pp := pa+Sizeof(TDynArrayRec);
       FillcharFast(pp^,minLength*elemSize,0);
-      CopyArray(pp,fValue^,ElemType,minLength)
+      CopyArray(pp,fValue^,ElemType,minLength);
     end else
       MoveFast(fValue^,pa[Sizeof(TDynArrayRec)],minLength*elemSize);
   end;
@@ -44202,62 +44231,25 @@ end;
 
 procedure TDynArray.ElemClear(var Elem);
 begin
+  if @Elem=nil then
+    exit; // avoid GPF
   if ElemType<>nil then
-    case PTypeKind(ElemType)^ of // release reference counted
-      tkLString{$ifdef FPC},tkLStringOld{$endif}:
-        RawByteString(Elem) := '';
-      tkWString:
-        WideString(Elem) := '';
-      tkInterface:
-        IUnknown(Elem) := nil;
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        UnicodeString(Elem) := '';
-      {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        RecordClear(Elem,ElemType);
-      tkDynArray:
-        _DynArrayClear(pointer(Elem),ElemType);
-      {$ifndef NOVARIANTS}
-      tkVariant:
-        VarClear(Variant(Elem));
-      {$endif}
-      else exit;
-    end;
+    _FinalizeArray(@Elem,ElemType,1);
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
 end;
 
 procedure TDynArray.ElemCopy(const A; var B);
 begin
   if ElemType=nil then
-    MoveFast(A,B,ElemSize) else
-    case PTypeKind(ElemType)^ of
-      tkLString{$ifdef FPC},tkLStringOld{$endif}:
-        RawByteString(B) := RawByteString(A);
-      tkWString:
-        WideString(B) := WideString(A);
-      tkInterface:
-        IUnknown(B) := IUnknown(A);
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        UnicodeString(B) := UnicodeString(A);
-      {$endif}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        RecordCopy(B,A,ElemType);
-      {$ifndef NOVARIANTS}
-      tkVariant:
-        variant(B) := variant(A);
-      {$endif}
-      else begin
-        {$ifdef FPC}
-        RecordClear(B,ElemType); // inlined CopyArray()
-        MoveFast(A,B,RTTIManagedSize(ElemType));
-        RecordAddRef(B,ElemType);
-        {$else}
-        CopyArray(@B,@A,ElemType,1);
-        {$endif}
-      end;
-    end;
+    MoveFast(A,B,ElemSize) else begin
+    {$ifdef FPC}
+    RecordClear(B,ElemType); // inlined CopyArray()
+    MoveFast(A,B,ElemSize);
+    RecordAddRef(B,ElemType);
+    {$else}
+    CopyArray(@B,@A,ElemType,1);
+    {$endif}
+  end;
 end;
 
 function TDynArray.ElemLoad(Source: PAnsiChar): RawByteString;
@@ -53619,7 +53611,7 @@ begin
     result := fKeys.FindHashedForAdding(aKey,added);
     if added then begin
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
-        ElemCopy(aKey,ElemPtr(result)^); // fKey[result] := aKey;
+        ElemCopyFrom(aKey,result); // fKey[result] := aKey;
       if fValues.Add(aValue)<>result then
         raise ESynException.CreateUTF8('%.Add fValues.Add',[self]);
       if fSafe.Padding[DIC_TIMESEC].VInteger>0 then begin
@@ -53645,13 +53637,13 @@ begin
       tim := 0;
     if added then begin
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
-        ElemCopy(aKey,ElemPtr(result)^); // fKey[result] := aKey;
+        ElemCopyFrom(aKey,result); // fKey[result] := aKey;
       if fValues.Add(aValue)<>result then
         raise ESynException.CreateUTF8('%.AddOrUpdate fValues.Add',[self]);
       if tim<>0 then
         fTimeOuts.Add(tim);
     end else begin
-      fValues.ElemCopy(aValue,fValues.ElemPtr(result)^);
+      fValues.ElemCopyFrom(aValue,result);
       if tim<>0 then
         fTimeOut[result] := tim;
     end;
@@ -53758,7 +53750,7 @@ begin
   try
     ndx := fKeys.FindHashed(aKey);
     if ndx>=0 then begin
-      fValues.ElemCopy(fValues.ElemPtr(ndx)^,aValue);
+      fValues.ElemCopyAt(ndx,aValue);
       if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
         fTimeout[ndx] := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger;
       result := true;
