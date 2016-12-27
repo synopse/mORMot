@@ -20214,7 +20214,7 @@ type
     tkHelper,tkFile,tkClassRef,tkPointer);
 
 const
-   // all potentially managed types
+   // all potentially managed types - should match ManagedType*() functions
    tkManagedTypes = [tkLStringOld,tkLString,tkWstring,tkUstring,tkArray,
                      tkObject,tkRecord,tkDynArray,tkInterface,tkVariant];
    // maps record or object types
@@ -20351,6 +20351,7 @@ type
     Offset: PtrUInt;
     {$endif FPC}
   end;
+  PFieldInfo = ^TFieldInfo;
   {$ifdef ISDELPHI2010}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
   TEnhancedFieldInfo = packed record
@@ -20499,6 +20500,11 @@ const
 function ToText(k: TTypeKind): PShortString; overload;
 begin
   result := GetEnumName(TypeInfo(TTypeKind),ord(k));
+end;
+
+function ToText(k: TDynArrayKind): PShortString; overload; 
+begin
+  result := GetEnumName(TypeInfo(TDynArrayKind),ord(k));
 end;
 
 type
@@ -35357,7 +35363,7 @@ end;
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
-  case PTypeKind(typeInfo)^ of
+  case PTypeKind(typeInfo)^ of // match tkManagedTypes
     tkLString,tkLStringOld,tkWString,tkUString,
     tkInterface,tkDynarray:
       result := sizeof(Pointer);
@@ -35366,14 +35372,24 @@ begin
       result := sizeof(TVarData);
     {$endif}
     tkArray:
-      with GetTypeInfo(typeInfo,tkArray)^ do
-        result := arraySize;
-        //result := (arraySize and $7FFFFFFF) * ElCount; // to be validated
+      result := GetTypeInfo(typeInfo,tkArray)^.arraySize and $7fffffff;
     tkObject,tkRecord:
       result := GetTypeInfo(typeInfo,PTypeKind(typeInfo)^)^.recSize;
   else
-    raise ESynException.CreateUTF8('RTTIManagedSize(%)',[PByte(typeInfo)^]);
+    raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
+      [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
   end;
+end;
+
+function RTTIUnmanagedFieldSize(Index: integer; Field: PFieldInfo;
+  Info: PTypeInfo): integer; inline;
+begin
+  if Info^.Kind in tkManagedTypes then
+    raise ESynException.CreateUTF8('RTTIUnmanagedFieldSize: % not supported',
+      [ToText(Info^.Kind)^]);
+  if Index=Info^.ManagedCount then
+    result := Info^.recSize-Field^.Offset else
+    result := Info^.ManagedFields[Index].Offset-Field^.Offset;
 end;
 
 procedure RecordClear(var Dest; TypeInfo: pointer);
@@ -35467,7 +35483,7 @@ var i: integer;
 {$endif}
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   result := 0; // A^<>B^
-  case info^.Kind of
+  case info^.Kind of // should match tkManagedTypes
   tkLString{$ifdef FPC},tkLStringOld{$endif}:
     if PAnsiString(A)^=PAnsiString(B)^ then
       result := sizeof(pointer);
@@ -35503,14 +35519,15 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if (info=nil) or (info^.dimCount<>1) then
       result := -1 else begin
       itemtype := DeRef(info^.arrayType);
-      if itemtype=nil then
+      if (itemtype=nil)
+        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then
         if CompareMem(A,B,info^.arraySize) then
           result := info^.arraySize else
           result := 0 else begin
         for i := 1 to info^.elCount do begin
           result := ManagedTypeCompare(A,B,itemtype);
           if result<=0 then
-            exit;
+            exit; // invalid (-1) or not equals (0)
           inc(A,result);
           inc(B,result);
         end;
@@ -35519,18 +35536,19 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     end;
   end;
   else
-    result := -1;
+    result := -1; // Unhandled field
   end;
 end;
 
 function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
   out len: integer): integer;
+// returns 0 on error, or saved bytes + len=data^ length
 var DynArray: TDynArray;
     itemtype: PTypeInfo;
     itemsize,size,i: integer;
     P: PPtrUInt absolute data;
-begin
-  case info^.Kind of
+begin // info is expected to come from a DeRef() if retrieved from RTTI
+  case info^.Kind of // should match tkManagedTypes
   tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}: begin
     len := sizeof(pointer); // length stored within WideString is in bytes
     if P^=0 then
@@ -35553,7 +35571,8 @@ begin
       result := 0 else begin
       len := info^.arraySize;
       itemtype := DeRef(info^.arrayType);
-      if itemtype=nil then
+      if (itemtype=nil)
+        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then
         result := len else begin
         size := 0;
         for i := 1 to info^.elCount do begin
@@ -35582,83 +35601,74 @@ end;
 
 function ManagedTypeSave(data, dest: PAnsiChar; info: PTypeInfo;
   out len: integer): PAnsiChar;
+// returns nil on error, or final dest + len=data^ length
 var DynArray: TDynArray;
     itemtype: PTypeInfo;
     itemsize,i: integer;
     P: PPtrUInt absolute data;
-begin
+begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
-    tkDynArray: begin
-      DynArray.Init(info,data^);
-      result := DynArray.SaveTo(dest);
-      len := sizeof(PtrUInt); // size of tkDynArray in record
-    end;
-    tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-    {$ifdef FPC}, tkLStringOld{$endif}: begin
-      if P^=0 then
-        itemsize := 0 else
-        itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
-      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
-      if info^.Kind=tkUString then
-        itemsize := itemsize*2;
-      {$endif}
-      result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-      if itemsize>0 then begin
-        MoveFast(pointer(P^)^,result^,itemsize);
-        inc(result,itemsize);
-      end;
-      len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
-    end;
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      result := RecordSave(data^,dest,info,len);
-    tkArray: begin
-      info := GetTypeInfo(info,tkArray);
-      if (info=nil) or (info^.dimCount<>1) then
-        result := nil else begin // supports single dimension static array only
-        len := info^.arraySize;
-        itemtype := DeRef(info^.arrayType);
-        if itemtype=nil then begin
-          MoveFast(data^,dest^,len);
-          result := dest+len;
-        end else begin
-          for i := 1 to info^.elCount do begin
-            dest := ManagedTypeSave(data,dest,itemtype,itemsize);
-            if dest=nil then
-              break; // invalid/unhandled content
-            {$ifdef FPC}
-            if itemsize=-1 then begin
-              result := nil;
-              exit;
-            end;
-            {$endif}
-            inc(data,itemsize)
-          end;
-          result := dest;
-        end;
-      end;
-    end;
-    {$ifndef NOVARIANTS}
-    tkVariant: begin
-      result := VariantSave(PVariant(data)^,dest);
-      len := sizeof(Variant); // size of tkVariant in record
-    end;
+  tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
+  {$ifdef FPC}, tkLStringOld{$endif}: begin
+    if P^=0 then
+      itemsize := 0 else
+      itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
+    {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
+    if info^.Kind=tkUString then
+      itemsize := itemsize*2;
     {$endif}
-    else begin
-      {$ifdef FPC}
-      len := -1; // FPC generates RTTI for such unmanaged fields
-      result := dest;
-      {$else}
-      result := nil;
-      {$endif}
+    result := pointer(ToVarUInt32(itemsize,pointer(dest)));
+    if itemsize>0 then begin
+      MoveFast(pointer(P^)^,result^,itemsize);
+      inc(result,itemsize);
     end;
+    len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
+  end;
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    result := RecordSave(data^,dest,info,len);
+  tkArray: begin
+    info := GetTypeInfo(info,tkArray);
+    if (info=nil) or (info^.dimCount<>1) then
+      result := nil else begin // supports single dimension static array only
+      len := info^.arraySize;
+      itemtype := DeRef(info^.arrayType);
+      if (itemtype=nil)
+        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then begin
+        MoveFast(data^,dest^,len);
+        result := dest+len;
+      end else begin
+        for i := 1 to info^.elCount do begin
+          dest := ManagedTypeSave(data,dest,itemtype,itemsize);
+          if dest=nil then
+            break; // invalid/unhandled content
+          inc(data,itemsize)
+        end;
+        result := dest;
+      end;
     end;
+  end;
+  {$ifndef NOVARIANTS}
+  tkVariant: begin
+    result := VariantSave(PVariant(data)^,dest);
+    len := sizeof(Variant); // size of tkVariant in record
+  end;
+  {$endif}
+  tkDynArray: begin
+    DynArray.Init(info,data^);
+    result := DynArray.SaveTo(dest);
+    len := sizeof(PtrUInt); // size of tkDynArray in record
+  end;
+  else
+    result := nil; // invalid/unhandled record content
+  end;
 end;
 
 function ManagedTypeLoad(data: PAnsiChar; var source: PAnsiChar; info: PTypeInfo): integer;
+// returns source=nil on error, or final source + result=data^ length 
 var DynArray: TDynArray;
     itemtype: PTypeInfo;
     itemsize,i: integer;
-begin
+begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
   tkDynArray: begin
     DynArray.Init(info,data^);
@@ -35692,21 +35702,21 @@ begin
     source := RecordLoad(data^,source,info,@result);
   tkArray: begin
     info := GetTypeInfo(info,tkArray);
-    if (info=nil) or (info^.dimCount<>1) then
-      result := 0 else begin // supports single dimension static array only
+    if (info=nil) or (info^.dimCount<>1) then begin
+      source := nil; // supports single dimension static array only
+      result := 0;
+    end else begin
       result := info^.arraySize;
       itemtype := DeRef(info^.arrayType);
-      if itemtype=nil then begin
+      if (itemtype=nil)
+        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then begin
         MoveFast(source^,data^,result);
         inc(source,result);
       end else
         for i := 1 to info^.elCount do begin
-          itemsize := ManagedTypeLoad(data,source,itemtype);
-          if itemsize<=0 then begin
-            result := 0;
+          inc(data,ManagedTypeLoad(data,source,itemtype));
+          if source=nil then
             exit;
-          end else
-            inc(data,itemsize);
         end;
     end;
   end;
@@ -35716,16 +35726,18 @@ begin
     result := sizeof(Variant); // size of tkVariant in record
   end;
   {$endif}
-  else
-    result := -1;
+  else begin
+    source := nil;
+    result := 0;
+  end; 
   end;
 end;
 
 function RecordEquals(const RecA, RecB; TypeInfo: pointer;
   PRecSize: PInteger): boolean;
-var info: PTypeInfo;
+var info,fieldinfo: PTypeInfo;
     F: integer;
-    Field: ^TFieldInfo;
+    Field: PFieldInfo;
     Diff: cardinal;
     A, B: PAnsiChar;
 begin
@@ -35744,6 +35756,13 @@ begin
   Field := @info^.ManagedFields[0];
   Diff := 0;
   for F := 1 to info^.ManagedCount do begin
+    fieldinfo := DeRef(Field^.TypeInfo);
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    if not (fieldinfo^.Kind in tkManagedTypes) then begin
+      inc(Field);
+      continue;
+    end;
+    {$endif};
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       if not CompareMem(A,B,Diff) then
@@ -35751,24 +35770,12 @@ begin
       inc(A,Diff);
       inc(B,Diff);
     end;
-    Diff := ManagedTypeCompare(A,B,DeRef(Field^.TypeInfo));
+    Diff := ManagedTypeCompare(A,B,fieldinfo);
     if integer(Diff)<=0 then
       if Diff=0 then // A^<>B^
         exit else    // Diff=-1 for unexpected type
-      {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-        if Field^.TypeInfo^.Kind in tkManagedTypes then
-          raise ESynException.CreateUTF8('RecordEquals: % is managed',
-            [ToText(Field^.TypeInfo^.Kind)^]) else begin
-          if F=info^.ManagedCount then
-            Diff := info^.recSize-Field^.Offset else
-            Diff := info^.ManagedFields[F].Offset-Field^.Offset;
-          if not CompareMem(A,B,Diff) then
-            exit; // binary block not equal
-        end;
-      {$else}
-      raise ESynException.CreateUTF8('RecordEquals: % not supported',
-        [ToText(Field^.TypeInfo^.Kind)^]);
-      {$endif}
+        raise ESynException.CreateUTF8('RecordEquals: unexpected %',
+          [ToText(fieldinfo^.Kind)^]);
     inc(A,Diff);
     inc(B,Diff);
     inc(Diff,Field^.Offset);
@@ -35779,9 +35786,9 @@ begin
 end;
 
 function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
-var info: PTypeInfo;
+var info,fieldinfo: PTypeInfo;
     F, recsize,saved: integer;
-    Field: ^TFieldInfo;
+    Field: PFieldInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
@@ -35795,27 +35802,29 @@ begin
   if Len<>nil then
     Len^ := result;
   for F := 1 to info^.ManagedCount do begin
-    saved := ManagedTypeSaveLength(R+Field^.Offset,Deref(Field^.TypeInfo),recsize);
-    {$ifdef FPC}
-    if saved>0 then // FPC has RTTI for unmanaged fields -> ignore
-      inc(result,saved-recsize);
-    {$else}
+    fieldinfo := DeRef(Field^.TypeInfo);
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    if not (fieldinfo^.Kind in tkManagedTypes) then begin
+      inc(Field);
+      continue;
+    end;
+    {$endif};
+    saved := ManagedTypeSaveLength(R+Field^.Offset,fieldinfo,recsize);
     if saved=0 then begin
       result := 0; // invalid type
       exit;
     end;
-    inc(result,saved-recsize);
-    {$endif}
+    inc(result,saved-recsize); // extract recsize from info^.recSize
     inc(Field);
   end;
 end;
 
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
   out Len: integer): PAnsiChar; 
-var info: PTypeInfo;
+var info,fieldinfo: PTypeInfo;
     F: integer;
     Diff: cardinal;
-    Field: ^TFieldInfo;
+    Field: PFieldInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
@@ -35828,30 +35837,24 @@ begin
   Field := @info^.ManagedFields[0];
   Diff := 0;
   for F := 1 to info^.ManagedCount do begin
+    fieldinfo := DeRef(Field^.TypeInfo);
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    if not (fieldinfo^.Kind in tkManagedTypes) then begin
+      inc(Field);
+      continue;
+    end;
+    {$endif};
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(R^,Dest^,Diff);
       inc(R,Diff);
       inc(Dest,Diff);
     end;
-    Dest := ManagedTypeSave(R,Dest,Deref(Field^.TypeInfo),integer(Diff));
+    Dest := ManagedTypeSave(R,Dest,fieldinfo,integer(Diff));
     if Dest=nil then begin
       result := nil; // invalid/unhandled record content
       exit;
     end;
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-    if integer(Diff)=-1 then begin
-      if info^.Kind in tkManagedTypes then
-        raise ESynException.CreateUTF8('ManagedTypeSave: % not supported',
-          [ToText(info^.Kind)^]) else begin
-        if F=info^.ManagedCount then
-          Diff := info^.recSize-Field^.Offset else
-          Diff := info^.ManagedFields[F].Offset-Field^.Offset;
-        MoveFast(R^,Dest^,Diff);
-        inc(Dest,Diff);
-      end;
-    end;
-    {$endif}
     inc(R,Diff);
     inc(Diff,Field.Offset);
     inc(Field);
@@ -35977,10 +35980,10 @@ end;
 
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger): PAnsiChar;
-var info: PTypeInfo;
+var info,fieldinfo: PTypeInfo;
     F: integer;
     Diff: cardinal;
-    Field: ^TFieldInfo;
+    Field: PFieldInfo;
     R: PAnsiChar;
 begin
   result := nil; // indicates error
@@ -36000,27 +36003,21 @@ begin
   end;
   Diff := 0;
   for F := 1 to info^.ManagedCount do begin
+    fieldinfo := DeRef(Field^.TypeInfo);
+    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    if not (fieldinfo^.Kind in tkManagedTypes) then begin
+      inc(Field);
+      continue;
+    end;
+    {$endif};
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(Source^,R^,Diff);
       inc(Source,Diff);
       inc(R,Diff);
     end;
-    Diff := ManagedTypeLoad(R,Source,DeRef(Field^.TypeInfo));
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
-    if integer(Diff)<0 then begin
-      if Field^.TypeInfo^.Kind in tkManagedTypes then
-        raise ESynException.CreateUTF8('RecordLoad: % is not supported',
-          [ToText(Field^.TypeInfo^.Kind)^]) else begin
-        if F=info^.ManagedCount then
-          Diff := info^.recSize-Field^.Offset else
-          Diff := info^.ManagedFields[F].Offset-Field^.Offset;
-        MoveFast(Source^,R^,Diff);
-        inc(Source,Diff);
-      end;
-    end else
-    {$endif}
-    if Diff=0 then
+    Diff := ManagedTypeLoad(R,Source,fieldinfo);
+    if Source=nil then
       exit; // error at loading
     inc(R,Diff);
     inc(Diff,Field^.Offset);
@@ -43000,7 +42997,7 @@ begin
   result := Dest;
   // store dynamic array elements content
   P := fValue^;
-  if ElemType=nil then
+  if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveTo(%) is a T*ObjArray',
         [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
@@ -43013,12 +43010,7 @@ begin
       Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
       if Dest=nil then
         break;
-      {$ifdef FPC}
-      if LenBytes=-1 then begin
-        result := nil;
-        exit;
-      end;
-      {$endif}
+      assert(LenBytes=integer(ElemSize));
       inc(P,LenBytes);
     end;
   // store Hash32 checksum
@@ -43039,7 +43031,7 @@ begin
   result := ToVarUInt32Length(ElemSize)+ToVarUInt32Length(n)+1;
   if n=0 then
     exit;
-  if ElemType=nil then
+  if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.SaveToLength(%) is a T*ObjArray',
         [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
@@ -43047,9 +43039,9 @@ begin
     P := fValue^;
     for i := 1 to n do begin
       L := ManagedTypeSaveLength(P,ElemType,size);
-      assert(size=integer(ElemSize));
       if L=0 then
         break; // invalid record type (wrong field type)
+      assert(size=integer(ElemSize));
       inc(result,L);
       inc(P,size);
     end;
@@ -43649,7 +43641,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(fValue^)^[i]));
         djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(fValue^)^[i]));
         djSynUnicode: UTF8ToSynUnicode(Val,ValLen,SynUnicode(PPointerArray(fValue^)^[i]));
-        djInterface: raise ESynException.Create('djInterface not readable');
+        else raise ESynException.CreateUTF8('% not readable',[ToText(T)^]);
         end;
       end;
     end;
@@ -43754,7 +43746,7 @@ begin
   inc(Source,sizeof(cardinal));
   // retrieve dynamic array elements content
   P := fValue^;
-  if ElemType=nil then
+  if ElemType=nil then // FPC: nil also if not Kind in tkManagedTypes
     if GetIsObjArray then
       raise ESynException.CreateUTF8('TDynArray.LoadFrom(%) is a T*ObjArray',
         [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else begin
@@ -44095,27 +44087,11 @@ begin
         2: result := word(A)=word(B);
         4: result := cardinal(A)=cardinal(B);
         8: result := Int64(A)=Int64(B);
-      else result := CompareMem(@A,@B,ElemSize); // generic comparison
+      else result := CompareMem(@A,@B,ElemSize); // binary comparison
       end else
-    case PTypeKind(ElemType)^ of
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      result := RecordEquals(A,B,ElemType);
-    tkLString{$ifdef FPC},tkLStringOld{$endif}:
-      result := AnsiString(A)=AnsiString(B);
-    tkWString:
-      result := WideString(A)=WideString(B);
-    {$ifdef HASVARUSTRING}
-    tkUString:
-      result := UnicodeString(A)=UnicodeString(B);
-    {$endif}
-    tkInterface:
-      result := pointer(A)=pointer(B);
-    {$ifndef NOVARIANTS}
-    tkVariant:
-      result := Variant(A)=Variant(B);
-    {$endif}
-    else result := false;
-    end;
+      if PTypeKind(ElemType)^ in tkRecordTypes then // most likely
+        result := RecordEquals(A,B,ElemType) else
+        result := ManagedTypeCompare(@A,@B,ElemType)>0; // other complex types
 end;
 
 {$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
@@ -44279,7 +44255,7 @@ begin
     // revision seems older than June 2016
     // -> enable HASDIRECTTYPEINFO conditional below $ifdef VER3_1 in Synopse.inc
     // or in your project's options
-    fElemType := PPointer(fElemType)^;
+    fElemType := PPointer(fElemType)^; // inlined DeRef()
     {$endif}
     {$ifdef FPC}
     if not (PTypeKind(fElemType)^ in tkManagedTypes) then
@@ -44304,7 +44280,7 @@ begin
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   if @Comp=nil then
     raise ESynException.CreateUTF8('TDynArray.InitSpecific(%) wrong aKind=%',
-      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ord(aKind)]);
+      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ToText(aKind)^]);
   fCompare := Comp;
   fKnownType := aKind;
   fKnownSize := KNOWNTYPE_SIZE[aKind];
@@ -45217,7 +45193,8 @@ begin
   Comp := DYNARRAY_SORTFIRSTFIELD[aCaseInsensitive,aKind];
   Hasher := DYNARRAY_HASHFIRSTFIELD[aCaseInsensitive,aKind];
   if (@Hasher=nil) or (@Comp=nil) then
-    raise ESynException.Create('TDynArrayHashed.InitSpecific wrong aKind');
+    raise ESynException.CreateUTF8('TDynArrayHashed.InitSpecific unsupported %',
+      [ToText(aKind)^]);
   Init(aTypeInfo,aValue,Hasher,Comp,nil,aCountPointer,aCaseInsensitive);
   {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif} begin
     fKnownType := aKind;
@@ -47352,6 +47329,7 @@ begin // code below must match TDynArray.LoadFromJSON
       djInt64:    Add(PInt64Array(P)^[i]);
       djDouble:   AddDouble(PDoubleArray(P)^[i]);
       djCurrency: AddCurr64(PInt64Array(P)^[i]);
+      else raise ESynException.CreateUTF8('AddDynArrayJSON unsupported %',[ToText(T)^]);
       end;
       Add(',');
     end;
