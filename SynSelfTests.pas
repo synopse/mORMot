@@ -2085,9 +2085,7 @@ begin
     Check(AUP.IndexOf(U)=i);
   end;
   Test := AUP.SaveTo;
-  {$ifndef FPC} // low-level elType.Kind does not match
   Check(Hash32(@Test[2],length(Test)-1)=$D9359F89); // trim Test[1]=ElemSize
-  {$endif}
   for i := 0 to 1000 do begin
     U := Int32ToUtf8(i+1000);
     Check(RawUTF8DynArrayLoadFromContains(pointer(Test),pointer(U),length(U),false)=i);
@@ -2261,10 +2259,8 @@ begin
     Check(AFP.IndexOf(F)=i);
   end;
   Test := AFP.SaveTo;
-  {$ifndef FPC} // low-level elType.Kind does not match
   Check(Hash32(Test)={$ifdef CPU64}$A29C10E{$else}
     {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif});
-  {$endif}
   for i := 0 to 1000 do begin
     Fill(F,i);
     AFP.ElemCopy(F,F1);

@@ -20222,6 +20222,7 @@ const
    tkRecordTypeOrSet = [tkObject,tkRecord];
 
 type
+  // as defined in Delphi 6 and up
   TDelphiTypeKind = (dkUnknown, dkInteger, dkChar, dkEnumeration, dkFloat,
     dkString, dkSet, dkClass, dkMethod, dkWChar, dkLString, dkWString,
     dkVariant, dkArray, dkRecord, dkInterface, dkInt64, dkDynArray,
@@ -42984,7 +42985,11 @@ begin
   Dest := pointer(ToVarUInt32(ElemSize,pointer(Dest)));
   if ElemType=nil then
     Dest^ := #0 else
+    {$ifdef FPC}
+    Dest^ := AnsiChar(FPCTODELPHI[PTypeKind(ElemType)^]);
+    {$else}
     Dest^ := PAnsiChar(ElemType)^;
+    {$endif}
   inc(Dest);
   // then store dynamic array count
   n := Count;
@@ -43010,11 +43015,11 @@ begin
       Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
       if Dest=nil then
         break;
-      assert(LenBytes=integer(ElemSize));
+//      assert(LenBytes=integer(ElemSize));
       inc(P,LenBytes);
     end;
   // store Hash32 checksum
-  if Dest<>nil then  // may be nil if RecordSave() failed
+  if Dest<>nil then  // may be nil if RecordSave/ManagedTypeSave failed
     PCardinal(result-sizeof(Cardinal))^ := Hash32(result,Dest-result);
   result := Dest;
 end;
@@ -43041,7 +43046,7 @@ begin
       L := ManagedTypeSaveLength(P,ElemType,size);
       if L=0 then
         break; // invalid record type (wrong field type)
-      assert(size=integer(ElemSize));
+//      assert(size=integer(ElemSize));
       inc(result,L);
       inc(P,size);
     end;
@@ -43069,356 +43074,6 @@ begin
     SetText(result);
   finally
     Free;
-  end;
-end;
-
-function JSONArrayCount(P: PUTF8Char): integer;
-var n: integer;
-begin
-  result := -1;
-  n := 0;
-  P := GotoNextNotSpace(P);
-  if P^<>']' then
-  repeat
-    case P^ of
-    '"': begin
-      P := GotoEndOfJSONString(P);
-      if P^<>'"' then
-        exit;
-      inc(P);
-    end;
-    '{','[': begin
-      P := GotoNextJSONObjectOrArray(P);
-      if P=nil then
-        exit; // invalid content
-    end;
-    end;
-    while not (P^ in [#0,',',']']) do inc(P);
-    inc(n);
-    if P^<>',' then break;
-    repeat inc(P) until not(P^ in [#1..' ']);
-  until false;
-  if P^=']' then
-    result := n;
-end;
-
-function JSONArrayDecode(P: PUTF8Char; out Values: TPUTF8CharDynArray): boolean;
-var n,max: integer;
-begin
-  result := false;
-  max := 0;
-  n := 0;
-  P := GotoNextNotSpace(P);
-  if P^<>']' then
-  repeat
-    if max=n then begin
-      inc(max,max shr 3+16);
-      SetLength(Values,max);
-    end;
-    Values[n] := P;
-    case P^ of
-    '"': begin
-      P := GotoEndOfJSONString(P);
-      if P^<>'"' then
-        exit;
-      inc(P);
-    end;
-    '{','[': begin
-      P := GotoNextJSONObjectOrArray(P);
-      if P=nil then
-        exit; // invalid content
-    end;
-    end;
-    while not (P^ in [#0,',',']']) do inc(P);
-    inc(n);
-    if P^<>',' then break;
-    repeat inc(P) until not(P^ in [#1..' ']);
-  until false;
-  if P^=']' then begin
-    SetLength(Values,n);
-    result := true;
-  end else
-    Values := nil;
-end;
-
-function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
-begin
-  if P<>nil then begin
-    P := GotoNextNotSpace(P);
-    if P^='[' then begin
-      P := GotoNextNotSpace(P+1);
-      if P^<>']' then
-      repeat
-        if Index<=0 then begin
-          result := P;
-          exit;
-        end;
-        case P^ of
-        '"': begin
-          P := GotoEndOfJSONString(P);
-          if P^<>'"' then
-            break; // invalid content
-          inc(P);
-        end;
-        '{','[': begin
-          P := GotoNextJSONObjectOrArray(P);
-          if P=nil then
-            break; // invalid content
-        end;
-        end;
-        while not (P^ in [#0,',',']']) do inc(P);
-        if P^<>',' then break;
-        repeat inc(P) until not(P^ in [#1..' ']);
-        dec(Index);
-      until false;
-    end;
-  end;
-  result := nil;
-end;
-
-function JSONArrayCount(P,PMax: PUTF8Char): integer;
-var n: integer;
-begin
-  result := -1;
-  n := 0;
-  P := GotoNextNotSpace(P);
-  if P^<>']' then
-  while P<PMax do begin
-    case P^ of
-    '"': begin
-      P := GotoEndOfJSONString(P);
-      if P^<>'"' then
-        exit;
-      inc(P);
-    end;
-    '{','[': begin
-      P := GotoNextJSONObjectOrArrayMax(P,PMax);
-      if P=nil then
-        exit; // invalid content or PMax reached
-      end;
-    end;
-    while not (P^ in [#0,',',']']) do inc(P);
-    inc(n);
-    if P^<>',' then break;
-    repeat inc(P) until not(P^ in [#1..' ']);
-  end;
-  if P^=']' then
-    result := n;
-end;
-
-function JSONObjectPropCount(P: PUTF8Char): integer;
-var n: integer;
-begin
-  result := -1;
-  n := 0;
-  P := GotoNextNotSpace(P);
-  if P^<>'}' then
-  repeat
-    P := GotoNextJSONPropName(P);
-    if P=nil then
-      exit;
-    case P^ of
-    '"': begin
-      P := GotoEndOfJSONString(P);
-      if P^<>'"' then
-        exit;
-      inc(P);
-    end;
-    '{','[': begin
-      P := GotoNextJSONObjectOrArray(P);
-      if P=nil then
-        exit; // invalid content
-    end;
-    end;
-    while not (P^ in [#0,',','}']) do inc(P);
-    inc(n);
-    if P^<>',' then break;
-    repeat inc(P) until not(P^ in [#1..' ']);
-  until false;
-  if P^='}' then
-    result := n;
-end;
-
-function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8;
-  PropNameFound: PRawUTF8): PUTF8Char;
-var name: shortstring; // no memory allocation nor P^ modification
-    PropNameLen: integer;
-    PropNameUpper: array[byte] of AnsiChar;
-begin
-  if P<>nil then begin
-    P := GotoNextNotSpace(P);
-    PropNameLen := length(PropName);
-    if PropNameLen<>0 then begin
-      if PropName[PropNameLen]='*' then begin
-        UpperCopy255Buf(PropNameUpper,pointer(PropName),PropNameLen-1)^ := #0;
-        PropNameLen := 0;
-      end;
-      if P^='{' then
-        P := GotoNextNotSpace(P+1);
-      if P^<>'}' then
-      repeat
-        GetJSONPropName(P,name);
-        if (name[0]=#0) or (name[0]>#200) then
-          break;
-        if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-        if PropNameLen=0 then begin
-          name[ord(name[0])+1] := #0; // make ASCIIZ
-          if IdemPChar(@name[1],PropNameUpper) then begin
-            if PropNameFound<>nil then
-              SetString(PropNameFound^,PAnsiChar(@name[1]),ord(name[0]));
-            result := P;
-            exit;
-          end;
-        end else
-        if IdemPropName(name,pointer(PropName),PropNameLen) then begin
-          result := P;
-          exit;
-        end;
-        case P^ of
-        '"': begin
-          P := GotoEndOfJSONString(P);
-          if P^<>'"' then
-            break; // invalid content
-          inc(P);
-        end;
-        '{','[': begin
-          P := GotoNextJSONObjectOrArray(P);
-          if P=nil then
-            break; // invalid content
-        end;
-        end;
-        while not (P^ in [#0,',','}']) do inc(P);
-        if P^<>',' then break;
-        repeat inc(P) until not(P^ in [#1..' ']);
-      until false;
-    end;
-  end;
-  result := nil;
-end;
-
-function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
-var objName: RawUTF8;
-begin
-  result := nil;
-  if (JsonObject=nil) or (PropPath=nil) then
-    exit;
-  repeat
-    objName := GetNextItem(PropPath,'.');
-    if objName='' then
-      exit;
-    JsonObject := JsonObjectItem(JsonObject,objName);
-    if JsonObject=nil then
-      exit;
-  until PropPath=nil; // found full name scope
-  result := JsonObject;
-end;
-
-function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
-var itemName,objName,propNameFound,objPath: RawUTF8;
-    start,ending,obj: PUTF8Char;
-    WR: TTextWriter;
-  procedure AddFromStart(const name: RaWUTF8);
-  begin
-    start := GotoNextNotSpace(start);
-    ending := GotoEndJSONItem(start);
-    if ending=nil then
-      exit;
-    if WR=nil then begin
-      WR := TTextWriter.CreateOwnedStream;
-      WR.Add('{');
-    end else
-      WR.Add(',');
-    WR.AddFieldName(name);
-    while (ending>start) and (ending[-1]<=' ') do dec(ending); // trim right
-    WR.AddNoJSONEscape(start,ending-start);
-  end;
-begin
-  result := '';
-  if (JsonObject=nil) or (PropPath=nil) then
-    exit;
-  WR := nil;
-  try
-    repeat
-      itemName := GetNextItem(PropPath,',');
-      if itemName='' then
-        break;
-      if itemName[length(itemName)]<>'*' then begin
-        start := JsonObjectByPath(JsonObject,pointer(itemName));
-        if start<>nil then
-          AddFromStart(itemName);
-      end else begin
-        objPath := '';
-        obj := pointer(itemName);
-        repeat
-          objName := GetNextItem(obj,'.');
-          if objName='' then
-            exit;
-          propNameFound := '';
-          JsonObject := JsonObjectItem(JsonObject,objName,@propNameFound);
-          if JsonObject=nil then
-            exit;
-          if obj=nil then begin // found full name scope
-            start := JsonObject;
-            repeat
-              AddFromStart(objPath+propNameFound);
-              ending := GotoNextNotSpace(ending);
-              if ending^<>',' then
-                break;
-              propNameFound := '';
-              start := JsonObjectItem(GotoNextNotSpace(ending+1),objName,@propNameFound);
-            until start=nil;
-            break;
-          end else
-            objPath := objPath+objName+'.';
-        until false;
-      end;
-    until PropPath=nil;
-    if WR<>nil then begin
-      WR.Add('}');
-      WR.SetText(result);
-    end;
-  finally
-    WR.Free;
-  end;
-end;
-
-function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
-var wk,wv: TTextWriter;
-    kb,ke,vb,ve: PUTF8Char;
-begin
-  result := false;
-  if (JSON=nil) or (JSON^<>'{') then
-    exit;
-  wk := TTextWriter.CreateOwnedStream(8192);
-  wv := TTextWriter.CreateOwnedStream(8192);
-  try
-    wk.Add('[');
-    wv.Add('[');
-    kb := JSON+1;
-    repeat
-      ke := GotoEndJSONItem(kb);
-      if (ke=nil) or (ke^<>':') then
-        exit; // invalid input content
-      vb := ke+1;
-      ve := GotoEndJSONItem(vb);
-      if (ve=nil) or not(ve^ in [',','}']) then
-        exit;
-      wk.AddNoJSONEscape(kb,ke-kb);
-      wk.Add(',');
-      wv.AddNoJSONEscape(vb,ve-vb);
-      wv.Add(',');
-      kb := ve+1;
-    until ve^='}';
-    wk.CancelLastComma;
-    wk.Add(']');
-    wk.SetText(keys);
-    wv.CancelLastComma;
-    wv.Add(']');
-    wv.SetText(values);
-    result := true;
-  finally
-    wv.Free;
-    wk.Free;
   end;
 end;
 
@@ -43692,8 +43347,8 @@ function RawUTF8DynArrayLoadFromContains(Source: PAnsiChar;
 var Count, Len: integer;
 begin
   if (Value=nil) or (ValueLen=0) or
-     (Source=nil) or (Source[0]<>AnsiChar(sizeof(PtrInt))) or
-     (Source[1]<>AnsiChar(tkLString)) then begin
+     (Source=nil) or (Source[0]<>AnsiChar(sizeof(PtrInt)))
+     {$ifndef FPC}or (Source[1]<>AnsiChar(tkLString)){$endif} then begin
     result := -1;
     exit; // invalid Source or Value content
   end;
@@ -43728,8 +43383,10 @@ begin
   if (fValue=nil) or
      //((ElemSize<>sizeof(pointer)) and (StoredElemSize<>ElemSize)) or
      ((ElemType=nil) and (Source^<>#0) or
-     ((ElemType<>nil) and (Source^=#0{<>PAnsiChar(ElemType)^}))) then begin
-     // ignore ElemType^ to be cross-FPC/Delphi compatible
+     ((ElemType<>nil) and (Source^<>
+      {$ifdef FPC} // cross-FPC/Delphi compatible
+      AnsiChar(FPCTODELPHI[PTypeKind(ElemType)^]){$else}
+      PAnsiChar(ElemType)^{$endif}))) then begin
     result := nil; // invalid Source content
     exit;
   end;
@@ -43767,7 +43424,7 @@ begin
 end;
 
 function TDynArray.Find(const Elem; const aIndex: TIntegerDynArray;
-      aCompare: TDynArraySortCompare): integer;
+  aCompare: TDynArraySortCompare): integer;
 var n, L, cmp: integer;
     P: PAnsiChar;
 begin
@@ -49768,6 +49425,356 @@ begin // should match GetJSONPropName()
   end;
   repeat inc(P) until not(P^ in [#1..' ']);
   result := GotoNextJSONObjectOrArrayInternal(P,PMax,EndChar);
+end;
+
+function JSONArrayCount(P: PUTF8Char): integer;
+var n: integer;
+begin
+  result := -1;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+  repeat
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArray(P);
+      if P=nil then
+        exit; // invalid content
+    end;
+    end;
+    while not (P^ in [#0,',',']']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  until false;
+  if P^=']' then
+    result := n;
+end;
+
+function JSONArrayDecode(P: PUTF8Char; out Values: TPUTF8CharDynArray): boolean;
+var n,max: integer;
+begin
+  result := false;
+  max := 0;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+  repeat
+    if max=n then begin
+      inc(max,max shr 3+16);
+      SetLength(Values,max);
+    end;
+    Values[n] := P;
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArray(P);
+      if P=nil then
+        exit; // invalid content
+    end;
+    end;
+    while not (P^ in [#0,',',']']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  until false;
+  if P^=']' then begin
+    SetLength(Values,n);
+    result := true;
+  end else
+    Values := nil;
+end;
+
+function JSONArrayItem(P: PUTF8Char; Index: integer): PUTF8Char;
+begin
+  if P<>nil then begin
+    P := GotoNextNotSpace(P);
+    if P^='[' then begin
+      P := GotoNextNotSpace(P+1);
+      if P^<>']' then
+      repeat
+        if Index<=0 then begin
+          result := P;
+          exit;
+        end;
+        case P^ of
+        '"': begin
+          P := GotoEndOfJSONString(P);
+          if P^<>'"' then
+            break; // invalid content
+          inc(P);
+        end;
+        '{','[': begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P=nil then
+            break; // invalid content
+        end;
+        end;
+        while not (P^ in [#0,',',']']) do inc(P);
+        if P^<>',' then break;
+        repeat inc(P) until not(P^ in [#1..' ']);
+        dec(Index);
+      until false;
+    end;
+  end;
+  result := nil;
+end;
+
+function JSONArrayCount(P,PMax: PUTF8Char): integer;
+var n: integer;
+begin
+  result := -1;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>']' then
+  while P<PMax do begin
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArrayMax(P,PMax);
+      if P=nil then
+        exit; // invalid content or PMax reached
+      end;
+    end;
+    while not (P^ in [#0,',',']']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  end;
+  if P^=']' then
+    result := n;
+end;
+
+function JSONObjectPropCount(P: PUTF8Char): integer;
+var n: integer;
+begin
+  result := -1;
+  n := 0;
+  P := GotoNextNotSpace(P);
+  if P^<>'}' then
+  repeat
+    P := GotoNextJSONPropName(P);
+    if P=nil then
+      exit;
+    case P^ of
+    '"': begin
+      P := GotoEndOfJSONString(P);
+      if P^<>'"' then
+        exit;
+      inc(P);
+    end;
+    '{','[': begin
+      P := GotoNextJSONObjectOrArray(P);
+      if P=nil then
+        exit; // invalid content
+    end;
+    end;
+    while not (P^ in [#0,',','}']) do inc(P);
+    inc(n);
+    if P^<>',' then break;
+    repeat inc(P) until not(P^ in [#1..' ']);
+  until false;
+  if P^='}' then
+    result := n;
+end;
+
+function JsonObjectItem(P: PUTF8Char; const PropName: RawUTF8;
+  PropNameFound: PRawUTF8): PUTF8Char;
+var name: shortstring; // no memory allocation nor P^ modification
+    PropNameLen: integer;
+    PropNameUpper: array[byte] of AnsiChar;
+begin
+  if P<>nil then begin
+    P := GotoNextNotSpace(P);
+    PropNameLen := length(PropName);
+    if PropNameLen<>0 then begin
+      if PropName[PropNameLen]='*' then begin
+        UpperCopy255Buf(PropNameUpper,pointer(PropName),PropNameLen-1)^ := #0;
+        PropNameLen := 0;
+      end;
+      if P^='{' then
+        P := GotoNextNotSpace(P+1);
+      if P^<>'}' then
+      repeat
+        GetJSONPropName(P,name);
+        if (name[0]=#0) or (name[0]>#200) then
+          break;
+        if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+        if PropNameLen=0 then begin
+          name[ord(name[0])+1] := #0; // make ASCIIZ
+          if IdemPChar(@name[1],PropNameUpper) then begin
+            if PropNameFound<>nil then
+              SetString(PropNameFound^,PAnsiChar(@name[1]),ord(name[0]));
+            result := P;
+            exit;
+          end;
+        end else
+        if IdemPropName(name,pointer(PropName),PropNameLen) then begin
+          result := P;
+          exit;
+        end;
+        case P^ of
+        '"': begin
+          P := GotoEndOfJSONString(P);
+          if P^<>'"' then
+            break; // invalid content
+          inc(P);
+        end;
+        '{','[': begin
+          P := GotoNextJSONObjectOrArray(P);
+          if P=nil then
+            break; // invalid content
+        end;
+        end;
+        while not (P^ in [#0,',','}']) do inc(P);
+        if P^<>',' then break;
+        repeat inc(P) until not(P^ in [#1..' ']);
+      until false;
+    end;
+  end;
+  result := nil;
+end;
+
+function JsonObjectByPath(JsonObject,PropPath: PUTF8Char): PUTF8Char;
+var objName: RawUTF8;
+begin
+  result := nil;
+  if (JsonObject=nil) or (PropPath=nil) then
+    exit;
+  repeat
+    objName := GetNextItem(PropPath,'.');
+    if objName='' then
+      exit;
+    JsonObject := JsonObjectItem(JsonObject,objName);
+    if JsonObject=nil then
+      exit;
+  until PropPath=nil; // found full name scope
+  result := JsonObject;
+end;
+
+function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
+var itemName,objName,propNameFound,objPath: RawUTF8;
+    start,ending,obj: PUTF8Char;
+    WR: TTextWriter;
+  procedure AddFromStart(const name: RaWUTF8);
+  begin
+    start := GotoNextNotSpace(start);
+    ending := GotoEndJSONItem(start);
+    if ending=nil then
+      exit;
+    if WR=nil then begin
+      WR := TTextWriter.CreateOwnedStream;
+      WR.Add('{');
+    end else
+      WR.Add(',');
+    WR.AddFieldName(name);
+    while (ending>start) and (ending[-1]<=' ') do dec(ending); // trim right
+    WR.AddNoJSONEscape(start,ending-start);
+  end;
+begin
+  result := '';
+  if (JsonObject=nil) or (PropPath=nil) then
+    exit;
+  WR := nil;
+  try
+    repeat
+      itemName := GetNextItem(PropPath,',');
+      if itemName='' then
+        break;
+      if itemName[length(itemName)]<>'*' then begin
+        start := JsonObjectByPath(JsonObject,pointer(itemName));
+        if start<>nil then
+          AddFromStart(itemName);
+      end else begin
+        objPath := '';
+        obj := pointer(itemName);
+        repeat
+          objName := GetNextItem(obj,'.');
+          if objName='' then
+            exit;
+          propNameFound := '';
+          JsonObject := JsonObjectItem(JsonObject,objName,@propNameFound);
+          if JsonObject=nil then
+            exit;
+          if obj=nil then begin // found full name scope
+            start := JsonObject;
+            repeat
+              AddFromStart(objPath+propNameFound);
+              ending := GotoNextNotSpace(ending);
+              if ending^<>',' then
+                break;
+              propNameFound := '';
+              start := JsonObjectItem(GotoNextNotSpace(ending+1),objName,@propNameFound);
+            until start=nil;
+            break;
+          end else
+            objPath := objPath+objName+'.';
+        until false;
+      end;
+    until PropPath=nil;
+    if WR<>nil then begin
+      WR.Add('}');
+      WR.SetText(result);
+    end;
+  finally
+    WR.Free;
+  end;
+end;
+
+function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
+var wk,wv: TTextWriter;
+    kb,ke,vb,ve: PUTF8Char;
+begin
+  result := false;
+  if (JSON=nil) or (JSON^<>'{') then
+    exit;
+  wk := TTextWriter.CreateOwnedStream(8192);
+  wv := TTextWriter.CreateOwnedStream(8192);
+  try
+    wk.Add('[');
+    wv.Add('[');
+    kb := JSON+1;
+    repeat
+      ke := GotoEndJSONItem(kb);
+      if (ke=nil) or (ke^<>':') then
+        exit; // invalid input content
+      vb := ke+1;
+      ve := GotoEndJSONItem(vb);
+      if (ve=nil) or not(ve^ in [',','}']) then
+        exit;
+      wk.AddNoJSONEscape(kb,ke-kb);
+      wk.Add(',');
+      wv.AddNoJSONEscape(vb,ve-vb);
+      wv.Add(',');
+      kb := ve+1;
+    until ve^='}';
+    wk.CancelLastComma;
+    wk.Add(']');
+    wk.SetText(keys);
+    wv.CancelLastComma;
+    wv.Add(']');
+    wv.SetText(values);
+    result := true;
+  finally
+    wv.Free;
+    wk.Free;
+  end;
 end;
 
 procedure RemoveCommentsFromJSON(P: PUTF8Char);
