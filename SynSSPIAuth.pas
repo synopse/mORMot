@@ -168,10 +168,10 @@ begin
   if (aSecContext.CredHandle.dwLower = -1) and (aSecContext.CredHandle.dwUpper = -1) then begin
     aSecContext.CreatedTick64 := GetTickCount64();
     if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-      ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSSPI.CreateLastOSError(aSecContext);
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_OUTBOUND, nil, pAuthData, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -206,7 +206,7 @@ begin
   if (Status = SEC_I_COMPLETE_NEEDED) or (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
 
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
@@ -274,14 +274,14 @@ begin
     aSecContext.CreatedTick64 := GetTickCount64();
     if IdemPChar(Pointer(aInData), 'NTLMSSP') then begin
       if QuerySecurityPackageInfoW(SECPKGNAMENTLM, SecPkgInfo) <> 0 then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
     end else begin
       if QuerySecurityPackageInfoW(SECPKGNAMENEGOTIATE, SecPkgInfo) <> 0 then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
     end;
     try
       if AcquireCredentialsHandleW(nil, SecPkgInfo^.Name, SECPKG_CRED_INBOUND, nil, nil, nil, nil, @aSecContext.CredHandle, Expiry) <> 0 then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
     finally
       FreeContextBuffer(SecPkgInfo);
     end;
@@ -305,7 +305,7 @@ begin
   if (Status = SEC_I_COMPLETE_NEEDED) or (Status = SEC_I_COMPLETE_AND_CONTINUE) then
     Status := CompleteAuthToken(@aSecContext.CtxHandle, @OutDesc);
   if Status < 0 then
-      ESynSSPI.CreateLastOSError(aSecContext);
+      raise ESynSSPI.CreateLastOSError(aSecContext);
 
   SetString(aOutData, PAnsiChar(OutBuf.pvBuffer), OutBuf.cbBuffer);
   FreeContextBuffer(OutBuf.pvBuffer);
@@ -322,20 +322,20 @@ var UserToken: THandle;
     NameType: {$ifdef FPC}SID_NAME_USE{$else}Cardinal{$endif};
 begin
   if QuerySecurityContextToken(@aSecContext.CtxHandle, UserToken) <> 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
   try
     Size := 0;
     GetTokenInformation(UserToken, TokenUser, nil, 0, Size);
     UserInfo := AllocMem(Size);
     try
       if not GetTokenInformation(Cardinal(UserToken), Windows.TokenUser, UserInfo, Size, Size) then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
       FillCharFast(NameBuf[0], SizeOf(NameBuf), 0);
       NameLen := SizeOf(NameBuf);
       FillCharFast(DomainBuf[0], SizeOf(DomainBuf), 0);
       DomainLen := SizeOf(DomainBuf);
       if not LookupAccountSid(nil, UserInfo^.Sid, NameBuf, NameLen, DomainBuf, DomainLen, NameType) then
-        ESynSSPI.CreateLastOSError(aSecContext);
+        raise ESynSSPI.CreateLastOSError(aSecContext);
       if NameType = SidTypeUser then
         FormatUTF8('%\%', [DomainBuf, NameBuf], aUserName);
     finally
@@ -350,7 +350,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 var NegotiationInfo: TSecPkgContext_NegotiationInfo;
 begin
   if QueryContextAttributesW(@aSecContext.CtxHandle, SECPKG_ATTR_NEGOTIATION_INFO, @NegotiationInfo) <> 0 then
-    ESynSSPI.CreateLastOSError(aSecContext);
+    raise ESynSSPI.CreateLastOSError(aSecContext);
   Result := RawUnicodeToUtf8(NegotiationInfo.PackageInfo^.Name, StrLenW(NegotiationInfo.PackageInfo^.Name));
 end;
 
