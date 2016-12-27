@@ -21040,14 +21040,15 @@ function GetTypeInfo(aTypeInfo: pointer; const aExpectedKind: TTypeKinds): PType
 {$ifdef HASINLINE} inline;
 begin
   result := aTypeInfo;
-  if (result<>nil) and (result^.Kind in aExpectedKind) then
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := GetFPCAlignPtr(result)
-    {$else}
-    inc(PtrUInt(result),result^.NameLen)
-    {$endif}
-  else
-    result := nil;
+  if result<>nil then
+    if result^.Kind in aExpectedKind then
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      result := GetFPCAlignPtr(result)
+      {$else}
+      inc(PtrUInt(result),result^.NameLen)
+      {$endif}
+    else
+      result := nil;
 end;
 {$else}
 asm // eax=aTypeInfo edx=aExpectedKind
@@ -21060,6 +21061,22 @@ asm // eax=aTypeInfo edx=aExpectedKind
         add     eax, ecx
         ret
 @n:     xor     eax, eax
+end;
+{$endif}
+
+function GetTypeInfo(aTypeInfo: pointer): PTypeInfo; overload;
+{$ifdef HASINLINE} inline;
+begin
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  result := GetFPCAlignPtr(aTypeInfo);
+  {$else}
+  result := @PAnsiChar(aTypeInfo)[PTypeInfo(aTypeInfo)^.NameLen];
+  {$endif}
+end;
+{$else}
+asm
+        movzx   ecx, byte ptr[eax + TTypeInfo.NameLen]
+        add     eax, ecx
 end;
 {$endif}
 
@@ -21094,7 +21111,7 @@ begin
     SetRawUTF8(result,PAnsiChar(@PTypeInfo(aTypeInfo)^.NameLen)+1,
       PTypeInfo(aTypeInfo)^.NameLen);
     if PTypeInfo(aTypeInfo)^.Kind=tkClass then begin
-      with GetTypeInfo(aTypeInfo,PTypeKind(aTypeInfo)^)^ do
+      with GetTypeInfo(aTypeInfo)^ do
         SetRawUTF8(unitname,PAnsiChar(@UnitNameLen)+1,UnitNameLen);
       result := unitname+'.'+result;
     end;
@@ -35375,6 +35392,15 @@ end;
 {$ifdef FPC}
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
+  function rtti(info: pointer): PTypeInfo; inline;
+  begin
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    result := GetFPCAlignPtr(info);
+    {$else}
+    result := info;
+    inc(PtrUInt(result),result^.NameLen);
+    {$endif}
+  end;
 begin
   case PTypeKind(typeInfo)^ of // match tkManagedTypes
     tkLString,tkLStringOld,tkWString,tkUString,
@@ -35385,12 +35411,12 @@ begin
       result := sizeof(TVarData);
     {$endif}
     tkArray:
-      result := GetTypeInfo(typeInfo,tkArray)^.arraySize and $7fffffff;
+      result := rtti(typeInfo)^.arraySize and $7fffffff;
     tkObject,tkRecord:
-      result := GetTypeInfo(typeInfo,PTypeKind(typeInfo)^)^.recSize;
-  else
-    raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
-      [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
+      result := rtti(typeInfo)^.recSize;
+    else
+      raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
+        [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
   end;
 end;
 
@@ -35525,7 +35551,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if PPointer(A)^=PPointer(B)^ then
       result := sizeof(pointer);
   tkArray: begin
-    info := GetTypeInfo(info,tkArray);
+    info := GetTypeInfo(info);
     if (info=nil) or (info^.dimCount<>1) then
       result := -1 else begin
       itemtype := DeRef(info^.arrayType);
@@ -35600,7 +35626,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSaveLength(data^,info,@len);
   tkArray: begin
-    info := GetTypeInfo(info,tkArray);
+    info := GetTypeInfo(info);
     if (info=nil) or (info^.dimCount<>1) then
       result := 0 else begin
       len := info^.arraySize;
@@ -35661,7 +35687,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSave(data^,dest,info,len);
   tkArray: begin
-    info := GetTypeInfo(info,tkArray);
+    info := GetTypeInfo(info);
     if (info=nil) or (info^.dimCount<>1) then
       result := nil else begin // supports single dimension static array only
       len := info^.arraySize;
@@ -35734,7 +35760,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     source := RecordLoad(data^,source,info,@result);
   tkArray: begin
-    info := GetTypeInfo(info,tkArray);
+    info := GetTypeInfo(info);
     if (info=nil) or (info^.dimCount<>1) then begin
       source := nil; // supports single dimension static array only
       result := 0;
@@ -38024,7 +38050,7 @@ begin
   tkWChar: result := ptWord;
   tkClass, tkMethod, tkInterface: result := ptPtrInt;
   tkInteger, tkSet:
-    case GetTypeInfo(Info,[tkInteger,tkSet])^.IntegerType of
+    case GetTypeInfo(Info)^.IntegerType of
     otSByte,otUByte: result := ptByte;
     otSWord,otUWord: result := ptWord;
     otSLong: result := ptInteger;
@@ -38040,7 +38066,7 @@ begin
       // other enumerates will use TJSONCustomParserCustomSimple below
   {$endif}
   tkFloat:
-    case GetTypeInfo(Info,tkFloat)^.FloatType of
+    case GetTypeInfo(Info)^.FloatType of
     ftSingle:   result := ptSingle;
     ftDoub:     result := ptDouble;
     ftCurr:     result := ptCurrency;
@@ -43208,7 +43234,7 @@ Bin:  case ElemSize of
         {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 rec:    nested := GetFPCAlignPtr(nested);
         {$else}
-rec:    inc(PtrUInt(nested),(nested^.NameLen));
+rec:    inc(PtrUInt(nested),nested^.NameLen);
         {$endif}
         {$ifdef FPC}
         f := RTTIFirstManagedFieldIndex(nested);
@@ -43953,8 +43979,8 @@ begin
   fValue := @aValue;
   fTypeInfo := aTypeInfo;
   if PTypeKind(aTypeInfo)^<>tkDynArray then // inlined GetTypeInfo()
-    raise ESynException.CreateUTF8('TDynArray.Init(%): not a dynamic array',
-      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^]);
+    raise ESynException.CreateUTF8('TDynArray.Init: % is %, expected tkDynArray',
+      [PShortString(@PTypeInfo(aTypeInfo)^.NameLen)^,ToText(PTypeKind(aTypeInfo)^)^]);
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   aTypeInfo := GetFPCAlignPtr(aTypeInfo);
   {$else}
@@ -44234,7 +44260,9 @@ begin
   if @Elem=nil then
     exit; // avoid GPF
   if ElemType<>nil then
-    _FinalizeArray(@Elem,ElemType,1);
+    _FinalizeArray(@Elem,ElemType,1) else
+    if GetIsObjArray then
+      TObject(Elem).Free;
   FillcharFast(Elem,ElemSize,0); // always fill with zero binary content
 end;
 
