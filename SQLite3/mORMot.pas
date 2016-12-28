@@ -29223,7 +29223,7 @@ end;
 function TTypeInfo.FloatType: TFloatType;
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := PFloatType(GetTypeData(@self))^;
+  result := PFloatType(GetFPCTypeData(@self))^;
   {$else}
   result := TFloatType(PByte(@Name[ord(Name[0])+1])^);
   {$endif}
@@ -29232,7 +29232,7 @@ end;
 function TTypeInfo.OrdType: TOrdType;
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  result := POrdType(GetTypeData(@self))^;
+  result := POrdType(GetFPCTypeData(@self))^;
   {$else}
   result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
   {$endif}
@@ -29240,8 +29240,12 @@ end;
 
 function TTypeInfo.EnumBaseType: PEnumType;
 {$ifdef FPC}
+var base: PPTypeInfo;
 begin
   result := PEnumType(GetFPCTypeData(@self));
+  base := result^.BaseType;
+  if base<>nil then // no redirection if already the base type
+    result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
 {$else}
 {$ifdef HASINLINE}
 begin
@@ -29264,7 +29268,7 @@ var p: pointer;
 begin
   if (@self=nil) or (Kind<>tkSet) then
     result := nil else begin
-    p := GetTypeData(@self);
+    p := GetFPCTypeData(@self);
     inc(PtrInt(p),sizeof(TOrdType));
     p := PPointer(AlignToPtr(p))^; // p = info^.SetBaseType
     if p=nil then
@@ -29301,7 +29305,7 @@ begin
     result := CP_SQLRAWBLOB else
     if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      result := PWord(GetTypeData(@self))^ else
+      result := PWord(GetFPCTypeData(@self))^ else
       {$else}
       result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
       {$endif}
@@ -29327,7 +29331,7 @@ function TTypeInfo.InterfaceGUID: PGUID;
 begin
   if (@self=nil) or (Kind<>tkInterface) then result := nil else
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
-    td := GetTypeData(@self);
+    td := GetFPCTypeData(@self);
     result := @td^.GUID;
   end; {$else}
     result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfGuid;
@@ -29340,7 +29344,7 @@ begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
-    td := GetTypeData(@self);
+    td := GetFPCTypeData(@self);
     result := @td^.IntfUnit;
   end; {$else}
     result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfUnit;
@@ -29352,7 +29356,7 @@ begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    with PInterfaceTypeData(GetTypeData(@self))^ do
+    with PInterfaceTypeData(GetFPCTypeData(@self))^ do
     {$else}
     with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
     {$endif}
@@ -29371,7 +29375,7 @@ begin
     exit;
   n := 0;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  typ := PInterfaceTypeData(GetTypeData(@self));
+  typ := PInterfaceTypeData(GetFPCTypeData(@self));
   {$else}
   typ := @Name[ord(Name[0])+1];
   {$endif}
@@ -29382,7 +29386,7 @@ begin
     if nfo=TypeInfo(IInterface) then
       exit;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    typ := PInterfaceTypeData(GetTypeData(pointer(nfo)));
+    typ := PInterfaceTypeData(GetFPCTypeData(pointer(nfo)));
     {$else}
     typ := @nfo^.Name[ord(nfo^.Name[0])+1];
     {$endif}

@@ -3042,10 +3042,6 @@ function FindNextUTF8WordBegin(U: PUTF8Char): PUTF8Char;
 // - up^ must be already Upper
 function ContainsUTF8(p, up: PUTF8Char): boolean;
 
-const
-  /// used e.g. by inlined function GetLineContains()
-  ANSICHARNOT01310: set of AnsiChar = [#1..#9,#11,#12,#14..#255];
-
 /// returns TRUE if the supplied uppercased text is contained in the text buffer
 function GetLineContains(p,pEnd, up: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -12066,16 +12062,45 @@ var
   TwoDigitLookupW: packed array[0..99] of word absolute TwoDigitLookup;
 
 const
-  /// used internaly for fast word recognition (32 bytes const)
+{$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
+  ANSICHARNOT01310: set of AnsiChar = [#1..#9,#11,#12,#14..#255];
   IsWord: set of byte =
+    [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
+  IsIdentifier: set of byte =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
+  IsJsonIdentifierFirstChar: set of byte =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
+  IsJsonIdentifier: set of byte =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
+     ord('.'),ord('['),ord(']')];
+{$else}
+  /// used e.g. by inlined function GetLineContains()
+  ANSICHARNOT01310 = [#1..#9,#11,#12,#14..#255];
+
+  /// used internaly for fast word recognition (32 bytes const)
+  IsWord =
     [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
 
   /// used internaly for fast identifier recognition (32 bytes const)
   // - can be used e.g. for field or table name
   // - this char set matches the classical pascal definition of identifiers
   // - see also PropNameValid()
-  IsIdentifier: set of byte =
+  IsIdentifier =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
+
+  /// used internaly for fast extended JSON property name recognition (32 bytes const)
+  // - can be used e.g. for extended JSON object field
+  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
+  IsJsonIdentifierFirstChar =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
+
+  /// used internaly for fast extended JSON property name recognition (32 bytes const)
+  // - can be used e.g. for extended JSON object field
+  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
+  IsJsonIdentifier =
+    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
+     ord('.'),ord('['),ord(']')];
+{$endif OPT4AMD}
 
   /// used internaly for fast URI "unreserved" characters identifier
   // - defined as unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
@@ -12083,19 +12108,6 @@ const
   IsURIUnreserved: set of byte =
     [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
      ord('-'),ord('.'),ord('_'),ord('~')];
-
-  /// used internaly for fast extended JSON property name recognition (32 bytes const)
-  // - can be used e.g. for extended JSON object field
-  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
-  IsJsonIdentifierFirstChar: set of byte =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),ord('$')];
-
-  /// used internaly for fast extended JSON property name recognition (32 bytes const)
-  // - can be used e.g. for extended JSON object field
-  // - follow JsonPropNameValid, GetJSONPropName and GotoNextJSONObjectOrArray
-  IsJsonIdentifier: set of byte =
-    [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
-     ord('.'),ord('['),ord(']')];
 
 {$M+} // to have existing RTTI for published properties
 type
@@ -21145,7 +21157,7 @@ var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkEnumeration);
   if info<>nil then begin
-    {$ifdef FPC}
+    {$ifdef FPC} // no redirection if aTypeInfo is already the base type
     if info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil then
     {$endif}
       info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
@@ -47235,7 +47247,8 @@ begin
 end;
 
 procedure TTextWriter.AddXmlEscape(Text: PUTF8Char);
-const XML_ESCAPE: set of byte = [0..31,ord('<'),ord('>'),ord('&'),ord('"'),ord('''')];
+const XML_ESCAPE: set of byte =
+  [0..31,ord('<'),ord('>'),ord('&'),ord('"'),ord('''')];
 var i,beg: PtrInt;
 begin
   if Text=nil then
@@ -47494,8 +47507,14 @@ begin
   end;
 end;
 
-const // see http://www.ietf.org/rfc/rfc4627.txt
+const
+{$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
   JSON_ESCAPE: set of byte = [0..31,ord('\'),ord('"')];
+{$else}
+  // see http://www.ietf.org/rfc/rfc4627.txt
+  JSON_ESCAPE = [0..31,ord('\'),ord('"')];
+  // "set of byte" uses BT[mem] opcode which is actually slower than three SUB
+{$endif}
 
 function NeedsJsonEscape(const Text: RawUTF8): boolean;
 var i: integer;
