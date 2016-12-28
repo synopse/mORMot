@@ -2250,7 +2250,7 @@ begin
 end;
 
 function GetNextItemUInt64(var P: PAnsiChar): Int64;
-var c: PtrUInt;
+var c: PtrInt;
 begin
   if P=nil then begin
     result := 0;

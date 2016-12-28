@@ -29115,7 +29115,7 @@ begin
       c := PPtrUIntArray(source)^[i];
       d := c or $8080808080808080;
       PPtrUIntArray(dest)^[i] :=
-        c-((d-$6161616161616161) and not(d-$7b7b7b7b7b7b7b7b)) and
+        c-((d-PtrUInt($6161616161616161)) and not(d-PtrUInt($7b7b7b7b7b7b7b7b))) and
         ((not c) and $8080808080808080)shr 2;
     end;
     {$else}       // unbranched uppercase conversion of 4 chars blocks
@@ -30086,49 +30086,49 @@ begin
 end;
 
 function UrlEncode(Text: PUTF8Char): RawUTF8;
-function Enc(s, p: PUTF8Char): PUTF8Char;
-var c: PtrInt;
-begin
-  repeat
-    c := ord(s^);
-    case c of
-    0: break;
-    ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
-    ord('_'),ord('-'),ord('.'),ord('~'): begin
-      // cf. rfc3986 2.3. Unreserved Characters
-      p^ := AnsiChar(c);
-      inc(p);
-      inc(s);
-      continue;
-    end;
-    ord(' '): p^ := '+';
-    else begin
-      p^ := '%'; inc(p);
-      PWord(p)^ := TwoDigitsHexWB[c]; inc(p);
-    end;
-    end; // case c of
-    inc(p);
-    inc(s);
-  until false;
-  result := p;
-end;
-function Size(s: PUTF8Char): PtrInt;
-begin
-  result := 0;
-  if s<>nil then
-  repeat
-    case s^ of
-      #0: exit;
-      '0'..'9','a'..'z','A'..'Z','_','-','.','~',' ': begin
-        inc(result);
+  function Enc(s, p: PUTF8Char): PUTF8Char;
+  var c: PtrInt;
+  begin
+    repeat
+      c := ord(s^);
+      case c of
+      0: break;
+      ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
+      ord('_'),ord('-'),ord('.'),ord('~'): begin
+        // cf. rfc3986 2.3. Unreserved Characters
+        p^ := AnsiChar(c);
+        inc(p);
         inc(s);
         continue;
       end;
-      else inc(result,3);
-    end;
-    inc(s);
-  until false;
-end;
+      ord(' '): p^ := '+';
+      else begin
+        p^ := '%'; inc(p);
+        PWord(p)^ := TwoDigitsHexWB[c]; inc(p);
+      end;
+      end; // case c of
+      inc(p);
+      inc(s);
+    until false;
+    result := p;
+  end;
+  function Size(s: PUTF8Char): PtrInt;
+  begin
+    result := 0;
+    if s<>nil then
+    repeat
+      case s^ of
+        #0: exit;
+        '0'..'9','a'..'z','A'..'Z','_','-','.','~',' ': begin
+          inc(result);
+          inc(s);
+          continue;
+        end;
+        else inc(result,3);
+      end;
+      inc(s);
+    until false;
+  end;
 begin
   result := '';
   if Text=nil then
@@ -35503,8 +35503,8 @@ function ManagedTypeCompare(A,B: PAnsiChar; info: PTypeInfo): integer;
 var i,arraysize: integer;
     itemtype: PTypeInfo;
     {$ifndef DELPHI5OROLDER} // do not know why this compiler does not like it
-   DynA, DynB: TDynArray;
-{$endif}
+    DynA, DynB: TDynArray;
+    {$endif}
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   result := 0; // A^<>B^
   case info^.Kind of // should match tkManagedTypes
@@ -35625,7 +35625,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
           inc(result,size);
           inc(data,itemsize);
         end;
-    end;
+  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     len := sizeof(variant);
@@ -35686,7 +35686,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         end;
         result := dest;
       end;
-    end;
+  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     result := VariantSave(PVariant(data)^,dest);
@@ -35755,7 +35755,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
           if source=nil then
             exit;
         end;
-    end;
+  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     source := VariantLoad(PVariant(data)^,source,@JSON_OPTIONS[true]);
@@ -51007,8 +51007,8 @@ begin
       exit;
     end;
   end;
-  iTime := ((iStop-iStart)*QWord(1000*1000))div iFreq;
-  iLastTime := ((iStop-iLast)*QWord(1000*1000))div iFreq;
+  iTime := ((iStop-iStart)*Int64(1000*1000))div iFreq;
+  iLastTime := ((iStop-iLast)*Int64(1000*1000))div iFreq;
 end;
 
 procedure TPrecisionTimer.FromExternalMicroSeconds(const MicroSeconds: QWord);
@@ -51025,7 +51025,7 @@ begin // very close to ComputeTime
   end;
   if iFreq=0 then
     iLastTime := 0 else
-    FromExternalMicroSeconds((CounterDiff*QWord(1000*1000))div iFreq);
+    FromExternalMicroSeconds((Int64(CounterDiff)*Int64(1000*1000))div iFreq);
   result := iLastTime;
 end;
 
@@ -59588,8 +59588,8 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  fTokenSeed := GetTickCount64*PtrUInt(self)*Random(maxInt);
-  fSessionGenerator := abs(fTokenSeed*PtrUInt(ClassType));
+  FillRandom(@fTokenSeed,1);
+  fSessionGenerator := abs(fTokenSeed*PtrInt(ClassType));
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;

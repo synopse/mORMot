@@ -1122,8 +1122,10 @@ begin
   dst_beg := dst;
   {$endif}
   src_end := src+size;
+  {$ifndef ISDELPHI102}
   {$ifndef CPU64}
   t := 0; // make compiler happy
+  {$endif}
   {$endif}
   // 1. retrieve out_len
   result := PWord(src)^;

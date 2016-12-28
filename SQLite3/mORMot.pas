@@ -44142,7 +44142,7 @@ begin
       lastID := 0;
       for i := 0 to -n-1 do begin
         aRecord := fStoredClass.Create;
-        newID := lastID+R.ReadVarUInt64;
+        newID := lastID+Int64(R.ReadVarUInt64);
         aRecord.fID := newID;
         lastID := newID;
         fValue.List[i] := aRecord;
@@ -51918,9 +51918,9 @@ begin
     if ValueType>smvSelf then begin
       {$ifdef HAS_FPREG} // x64, arm, aarch64
       if FPRegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*(FPRegisterIdent-1))) else
+        V := Pointer((PtrUInt(@aCall.FPRegs[FPREG_FIRST])+Sizeof(Double)*PtrUInt(FPRegisterIdent-1))) else
       if RegisterIdent>0 then
-        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+Sizeof(pointer)*(RegisterIdent-1))) else
+        V := Pointer((PtrUInt(@aCall.ParamRegs[PARAMREG_FIRST])+Sizeof(pointer)*PtrUInt(RegisterIdent-1))) else
       {$endif}
         V := nil;
       {$ifndef CPUAARCH64} // on aarch64, reference result can be in PARAMREG_FIRST
