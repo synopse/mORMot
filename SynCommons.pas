@@ -20429,7 +20429,7 @@ type
     );
     tkArray: (
       {$ifdef FPC}
-      // and $7FFFFFFF needed ?
+      // warning: in VER2_6, this is the element size, not full array size 
       arraySize: SizeInt;
       // product of lengths of all dimensions
       elCount: SizeInt;
@@ -22349,9 +22349,6 @@ asm     // eax=P1 edx=P2 ecx=Length
 @setsml:setz    al
 end;
 
-{$ifndef ISDELPHI2007ANDUP}
-{$endif ISDELPHI2007ANDUP}
-
 {$endif LVCL}
 {$endif PUREPASCAL}
 
@@ -22576,7 +22573,7 @@ end;
 
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
-  procedure Process(j: integer);
+  procedure Process(found: integer);
   var oldlen,newlen,i,last,posCount,sharedlen: integer;
       pos: TIntegerDynArray;
       src,dst: PAnsiChar;
@@ -22584,13 +22581,13 @@ function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
     oldlen := length(OldPattern);
     newlen := length(NewPattern);
     SetLength(pos,64);
-    pos[0] := j;
+    pos[0] := found;
     posCount := 1;
     repeat
-      j := PosEx(OldPattern,S,j+oldlen);
-      if j=0 then
+      found := PosEx(OldPattern,S,found+oldlen);
+      if found=0 then
         break;
-      AddInteger(pos,posCount,j);
+      AddInteger(pos,posCount,found);
     until false;
     SetString(result,nil,Length(S)+(newlen-oldlen)*posCount);
     last := 1;
@@ -22774,7 +22771,6 @@ begin
   end;
   result := nil;
 end;
-
 
 function PosIU(substr: PUTF8Char; const str: RawUTF8): Integer;
 var p: PUTF8Char;
@@ -23253,7 +23249,6 @@ begin
     // result<>nil only if value content in P^
     result := P+2;
 end;
-
 
 function ExtractInlineParameters(const SQL: RawUTF8;
   var Types: TSQLParamTypeDynArray; var Values: TRawUTF8DynArray;
@@ -26213,7 +26208,6 @@ begin
     Value := 99;
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
-
 
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var AbsA,AbsB: double;
@@ -30465,7 +30459,6 @@ begin
     Next^ := nil else
     Next^ := U+1; // jump '&'
 end;
-
 
 function UrlDecodeInt64(U: PUTF8Char; Upper: PAnsiChar;
   var Value: Int64; Next: PPUTF8Char=nil): boolean;
@@ -35407,7 +35400,12 @@ begin
       result := sizeof(TVarData);
     {$endif}
     tkArray:
+      {$ifdef VER2_6} 
+      with GetTypeInfo(typeInfo)^ do
+        result := arraySize*elCount;
+      {$else}
       result := GetTypeInfo(typeInfo)^.arraySize;
+      {$endif}
     tkObject,tkRecord:
       result := GetTypeInfo(typeInfo)^.recSize;
     else
@@ -35433,53 +35431,12 @@ procedure RecordClear(var Dest; TypeInfo: pointer);
 procedure RecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
 
-{$ifndef USEFPCCOPY}
-
 procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
 begin // external name 'FPC_COPY' does not work as we need
   RecordClear(Dest,TypeInfo);
   MoveFast(Source,Dest,RTTIManagedSize(TypeInfo));
   RecordAddRef(Dest,TypeInfo);
 end;
-
-{$else USEFPCCOPY}
-// in theory, this should (must) work, but it does not !! :-(
-{$ifdef fpc}
-function fpc_Copy_internal (Src, Dest, TypeInfo : Pointer) : SizeInt;[external name 'FPC_COPY'];
-procedure RecordCopy(const Dest; const Source; TypeInfo: pointer);assembler;nostackframe;
-// swap Dest and Source using assembler
-asm
- {$ifdef CPUX86}
- xchg eax, edx
- {$endif CPUX86}
- {$ifdef CPUX64}
- {$ifdef LINUX}
- xchg rdi, rsi
- {$else LINUX}
- xchg rcx, rdx
- {$endif LINUX}
- {$endif CPUX64}
- {$ifdef CPUARM}
- eor r0, r0, r1 ; r0 <-- r0 xor r1
- eor r1, r0, r1 ; r1 <-- (r0 xor r1) xor r1 = r0
- eor r0, r0, r1 ; r0 <-- (r0 xor r1) xor r0 = r1
- {$endif CPUARM}
- {$ifdef CPUAARCH64}
- eor x0, x0, x1 ; x0 <-- x0 xor x1
- eor x1, x0, x1 ; x1 <-- (x0 xor x1) xor x1 = x0
- eor x0, x0, x1 ; x0 <-- (x0 xor x1) xor x0 = x1
-{$endif CPUAARCH64}
- jmp fpc_Copy_internal
-end;
-{$else}
-//procedure RecordCopy(const dest, source, typeinfo: ptypeinfo);
-procedure RecordCopy(const Dest; Source; TypeInfo: pointer);
-asm
- jmp System.@CopyRecord
-end;
-{$endif}
-
-{$endif USEFPCCOPY}
 
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 var i, size: SizeInt;
@@ -35509,7 +35466,7 @@ end;
 
 {$endif FPC}
 
-function ArrayItemType(var info: PTypeInfo): PTypeInfo;
+function ArrayItemType(var info: PTypeInfo; out len: integer): PTypeInfo;
   {$ifdef HASINLINE}inline;{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // inlined info := GetTypeInfo(info)
@@ -35518,8 +35475,15 @@ begin
   info := @PAnsiChar(info)[info^.NameLen];
   {$endif}
   result := nil;
-  if (info=nil) or (info^.dimCount<>1) then
-    info := nil else begin // supports single dimension static array only
+  if (info=nil) or (info^.dimCount<>1) then begin
+    len := 0;
+    info := nil; // supports single dimension static array only
+  end else begin
+    {$ifdef VER2_6} // full size = arraySize*elCount, not arraySize
+    len := info^.arraySize*info^.elCount;
+    {$else}
+    len := info^.arraySize;
+    {$endif}
     {$ifdef HASDIRECTTYPEINFO} // inlined result := DeRef(info^.arrayType)
     result := info^.arrayType;
     {$else}
@@ -35536,9 +35500,9 @@ end;
 
 function ManagedTypeCompare(A,B: PAnsiChar; info: PTypeInfo): integer;
 // returns -1 if info was not handled, 0 if A^<>B^, or sizeof(A^) if A^=B^
-var i: integer;
+var i,arraysize: integer;
     itemtype: PTypeInfo;
-{$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
+    {$ifndef DELPHI5OROLDER} // do not know why this compiler does not like it
    DynA, DynB: TDynArray;
 {$endif}
 begin // info is expected to come from a DeRef() if retrieved from RTTI
@@ -35575,12 +35539,12 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if PPointer(A)^=PPointer(B)^ then
       result := sizeof(pointer);
   tkArray: begin
-    itemtype := ArrayItemType(info);
+    itemtype := ArrayItemType(info,arraysize);
     if info=nil then
       result := -1 else
       if itemtype=nil then
-        if CompareMem(A,B,info^.arraySize) then
-          result := info^.arraySize else
+        if CompareMem(A,B,arraysize) then
+          result := arraysize else
           result := 0 else begin
         for i := 1 to info^.elCount do begin
           result := ManagedTypeCompare(A,B,itemtype);
@@ -35589,7 +35553,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
           inc(A,result);
           inc(B,result);
         end;
-        result := info^.arraySize;
+        result := arraysize;
       end;
   end;
   else
@@ -35647,10 +35611,9 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSaveLength(data^,info,@len);
   tkArray: begin
-    itemtype := ArrayItemType(info);
+    itemtype := ArrayItemType(info,len);
     result := 0;
-    if info<>nil then begin
-      len := info^.arraySize;
+    if info<>nil then
       if itemtype=nil then
         result := len else
         for i := 1 to info^.elCount do begin
@@ -35663,7 +35626,6 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
           inc(data,itemsize);
         end;
     end;
-  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     len := sizeof(variant);
@@ -35709,10 +35671,9 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSave(data^,dest,info,len);
   tkArray: begin
-    itemtype := ArrayItemType(info);
+    itemtype := ArrayItemType(info,len);
     if info=nil then
-      result := nil else begin
-      len := info^.arraySize;
+      result := nil else
       if itemtype=nil then begin
         MoveFast(data^,dest^,len);
         result := dest+len;
@@ -35726,7 +35687,6 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         result := dest;
       end;
     end;
-  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     result := VariantSave(PVariant(data)^,dest);
@@ -35783,12 +35743,9 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     source := RecordLoad(data^,source,info,@result);
   tkArray: begin
-    itemtype := ArrayItemType(info);
-    if info=nil then begin
-      result := 0;
-      source := nil; 
-    end else begin
-      result := info^.arraySize;
+    itemtype := ArrayItemType(info,result);
+    if info=nil then
+      source := nil else
       if itemtype=nil then begin
         MoveFast(source^,data^,result);
         inc(source,result);
@@ -35799,7 +35756,6 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
             exit;
         end;
     end;
-  end;
   {$ifndef NOVARIANTS}
   tkVariant: begin
     source := VariantLoad(PVariant(data)^,source,@JSON_OPTIONS[true]);
@@ -37757,8 +37713,13 @@ begin
         raise ESynException.CreateUTF8('%.Create("%") supports only single '+
           'dimension static array)',[self,fCustomTypeName]);
       fKnownType := ktStaticArray;
+      {$ifdef VER2_6}
+      fFixedSize := info^.arraySize; // is elSize in fact
+      fDataSize := fFixedSize*info^.elCount;
+      {$else}
       fDataSize := info^.arraySize;
       fFixedSize := fDataSize div info^.elCount;
+      {$endif}
       fNestedArray := TJSONCustomParserRTTI.CreateFromRTTI(
         '',Deref(info^.arrayType),fFixedSize);
       exit; // success
