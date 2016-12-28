@@ -20424,7 +20424,7 @@ type
     );
     tkArray: (
       {$ifdef FPC}
-      // and $7FFFFFFF needed
+      // and $7FFFFFFF needed ?
       arraySize: SizeInt;
       // product of lengths of all dimensions
       elCount: SizeInt;
@@ -29728,7 +29728,7 @@ begin // CSVOfValue('?',3)='?,?,?'
     inc(P,SepLen);
     inc(i);
   until false;
-  assert(P-pointer(result)=length(result));
+//  assert(P-pointer(result)=length(result));
 end;
 
 procedure SetBitCSV(var Bits; BitsCount: integer; var P: PUTF8Char);
@@ -30008,7 +30008,7 @@ begin
     end;
     inc(i);
   until false;
-  Assert(P-pointer(result)=len);
+//  Assert(P-pointer(result)=len);
 end;
 
 function RawUTF8ArrayToQuotedCSV(const Values: array of RawUTF8; const Sep: RawUTF8=',';
@@ -35392,15 +35392,6 @@ end;
 {$ifdef FPC}
 
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
-  function rtti(info: pointer): PTypeInfo; inline;
-  begin
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    result := GetFPCAlignPtr(info);
-    {$else}
-    result := info;
-    inc(PtrUInt(result),result^.NameLen);
-    {$endif}
-  end;
 begin
   case PTypeKind(typeInfo)^ of // match tkManagedTypes
     tkLString,tkLStringOld,tkWString,tkUString,
@@ -35411,9 +35402,9 @@ begin
       result := sizeof(TVarData);
     {$endif}
     tkArray:
-      result := rtti(typeInfo)^.arraySize and $7fffffff;
+      result := GetTypeInfo(typeInfo)^.arraySize;
     tkObject,tkRecord:
-      result := rtti(typeInfo)^.recSize;
+      result := GetTypeInfo(typeInfo)^.recSize;
     else
       raise ESynException.CreateUTF8('RTTIManagedSize unhandled % (%)',
         [ToText(PTypeKind(typeInfo)^)^,PByte(typeInfo)^]);
@@ -35421,10 +35412,13 @@ begin
 end;
 
 function RTTIFirstManagedFieldIndex(info: PTypeInfo): integer;
+var fieldtype: PTypeInfo;
 begin
-  for result := 0 to info^.ManagedCount-1 do
-    if DeRef(info^.ManagedFields[result].TypeInfo)^.Kind in tkManagedTypes then
+  for result := 0 to info^.ManagedCount-1 do begin
+    fieldtype := DeRef(info^.ManagedFields[result].TypeInfo);
+    if (fieldtype<>nil) and (fieldtype^.Kind in tkManagedTypes) then
       exit;
+  end;
   result := -1;
 end;
 
@@ -35510,6 +35504,31 @@ end;
 
 {$endif FPC}
 
+function ArrayItemType(var info: PTypeInfo): PTypeInfo;
+  {$ifdef HASINLINE}inline;{$endif}
+begin
+  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} // inlined info := GetTypeInfo(info)
+  info := GetFPCAlignPtr(info);
+  {$else}
+  info := @PAnsiChar(info)[info^.NameLen];
+  {$endif}
+  result := nil;
+  if (info=nil) or (info^.dimCount<>1) then
+    info := nil else begin // supports single dimension static array only
+    {$ifdef HASDIRECTTYPEINFO} // inlined result := DeRef(info^.arrayType)
+    result := info^.arrayType;
+    {$else}
+    if info^.arrayType=nil then
+      exit;
+    result := info^.arrayType^;
+    {$endif}
+    {$ifdef FPC}
+    if (result<>nil) and not(result^.Kind in tkManagedTypes) then
+      result := nil; // as with Delphi
+    {$endif}
+  end;
+end;
+
 function ManagedTypeCompare(A,B: PAnsiChar; info: PTypeInfo): integer;
 // returns -1 if info was not handled, 0 if A^<>B^, or sizeof(A^) if A^=B^
 var i: integer;
@@ -35551,12 +35570,10 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     if PPointer(A)^=PPointer(B)^ then
       result := sizeof(pointer);
   tkArray: begin
-    info := GetTypeInfo(info);
-    if (info=nil) or (info^.dimCount<>1) then
-      result := -1 else begin
-      itemtype := DeRef(info^.arrayType);
-      if (itemtype=nil)
-        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then
+    itemtype := ArrayItemType(info);
+    if info=nil then
+      result := -1 else
+      if itemtype=nil then
         if CompareMem(A,B,info^.arraySize) then
           result := info^.arraySize else
           result := 0 else begin
@@ -35569,7 +35586,6 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         end;
         result := info^.arraySize;
       end;
-    end;
   end;
   else
     result := -1; // Unhandled field
@@ -35626,21 +35642,21 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSaveLength(data^,info,@len);
   tkArray: begin
-    info := GetTypeInfo(info);
-    if (info=nil) or (info^.dimCount<>1) then
-      result := 0 else begin
+    itemtype := ArrayItemType(info);
+    result := 0;
+    if info<>nil then begin
       len := info^.arraySize;
-      itemtype := DeRef(info^.arrayType);
-      if (itemtype=nil)
-        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then
-        result := len else begin
-        size := 0;
+      if itemtype=nil then
+        result := len else
         for i := 1 to info^.elCount do begin
-          inc(size,ManagedTypeSaveLength(data,itemtype,itemsize));
+          size := ManagedTypeSaveLength(data,itemtype,itemsize);
+          if size=0 then begin
+            result := 0;
+            exit;
+          end;
+          inc(result,size);
           inc(data,itemsize);
         end;
-        result := size;
-      end;
     end;
   end;
   {$ifndef NOVARIANTS}
@@ -35669,31 +35685,30 @@ var DynArray: TDynArray;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
   tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
-  {$ifdef FPC}, tkLStringOld{$endif}: begin
-    if P^=0 then
-      itemsize := 0 else
+  {$ifdef FPC}, tkLStringOld{$endif}:
+    if P^=0 then begin
+      dest^ := #0;
+      result := dest+1;
+      len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
+    end else begin
       itemsize := PStrRec(Pointer(P^-STRRECSIZE))^.length;
-    {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
-    if info^.Kind=tkUString then
-      itemsize := itemsize*2;
-    {$endif}
-    result := pointer(ToVarUInt32(itemsize,pointer(dest)));
-    if itemsize>0 then begin
+      {$ifdef HASVARUSTRING} // WideString has length in bytes, UnicodeString in WideChars
+      if info^.Kind=tkUString then
+        itemsize := itemsize*2;
+      {$endif}
+      result := pointer(ToVarUInt32(itemsize,pointer(dest)));
       MoveFast(pointer(P^)^,result^,itemsize);
       inc(result,itemsize);
+      len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
     end;
-    len := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
-  end;
   tkRecord{$ifdef FPC},tkObject{$endif}:
     result := RecordSave(data^,dest,info,len);
   tkArray: begin
-    info := GetTypeInfo(info);
-    if (info=nil) or (info^.dimCount<>1) then
-      result := nil else begin // supports single dimension static array only
+    itemtype := ArrayItemType(info);
+    if info=nil then
+      result := nil else begin
       len := info^.arraySize;
-      itemtype := DeRef(info^.arrayType);
-      if (itemtype=nil)
-        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then begin
+      if itemtype=nil then begin
         MoveFast(data^,dest^,len);
         result := dest+len;
       end else begin
@@ -35730,19 +35745,22 @@ var DynArray: TDynArray;
     itemsize,i: integer;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
   case info^.Kind of
-  tkLString, tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
+  tkLString: begin // most used type of string
+    itemsize := FromVarUInt32(PByte(source));
+    SetString(PRawByteString(data)^,source,itemsize);
+    {$ifdef HASCODEPAGE}
+    if itemsize<>0 then
+      SetCodePage(PRawByteString(data)^,PWord(
+        {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}GetFPCTypeData(pointer(info))
+        {$else}PtrUInt(info)+info^.NameLen+2{$endif})^,false);
+    {$endif}
+    inc(source,itemsize);
+    result := sizeof(PtrUInt); // size of tkLString
+  end;
+  tkWString {$ifdef HASVARUSTRING}, tkUString{$endif}
   {$ifdef FPC}, tkLStringOld{$endif}: begin
     itemsize := FromVarUInt32(PByte(source));
     case info^.Kind of
-      tkLString: begin
-        SetString(PRawByteString(data)^,source,itemsize);
-        {$ifdef HASCODEPAGE}
-        if itemsize<>0 then
-          SetCodePage(PRawByteString(data)^,PWord(
-            {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}GetFPCTypeData(info)
-            {$else}PtrUInt(info)+info^.NameLen+2{$endif})^,false);
-        {$endif}
-      end;
       {$ifdef FPC}
       tkLStringOld:
         SetString(PRawByteString(data)^,source,itemsize);
@@ -35755,20 +35773,18 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
       {$endif}
     end;
     inc(source,itemsize);
-    result := sizeof(PtrUInt); // size of tkLString+tkWString+tkUString in record
+    result := sizeof(PtrUInt); // size of tkWString+tkUString in record
   end;
   tkRecord{$ifdef FPC},tkObject{$endif}:
     source := RecordLoad(data^,source,info,@result);
   tkArray: begin
-    info := GetTypeInfo(info);
-    if (info=nil) or (info^.dimCount<>1) then begin
-      source := nil; // supports single dimension static array only
+    itemtype := ArrayItemType(info);
+    if info=nil then begin
       result := 0;
+      source := nil; 
     end else begin
       result := info^.arraySize;
-      itemtype := DeRef(info^.arrayType);
-      if (itemtype=nil)
-        {$ifdef FPC}or not(itemtype^.Kind in tkManagedTypes){$endif} then begin
+      if itemtype=nil then begin
         MoveFast(source^,data^,result);
         inc(source,result);
       end else
@@ -35824,7 +35840,7 @@ begin
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
-      continue;
+      continue; // as with Delphi
     end;
     {$endif};
     Diff := Field^.Offset-Diff;
@@ -35870,7 +35886,7 @@ begin
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
-      continue;
+      continue; // as with Delphi
     end;
     {$endif};
     saved := ManagedTypeSaveLength(R+Field^.Offset,fieldinfo,recsize);
@@ -35905,7 +35921,7 @@ begin
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
-      continue;
+      continue; // as with Delphi
     end;
     {$endif};
     Diff := Field^.Offset-Diff;
@@ -36071,7 +36087,7 @@ begin
     {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
-      continue;
+      continue; // as with Delphi
     end;
     {$endif};
     Diff := Field^.Offset-Diff;
@@ -43093,7 +43109,6 @@ begin
       Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
       if Dest=nil then
         break;
-//      assert(LenBytes=integer(ElemSize));
       inc(P,LenBytes);
     end;
   // store Hash32 checksum
@@ -43124,7 +43139,6 @@ begin
       L := ManagedTypeSaveLength(P,ElemType,size);
       if L=0 then
         break; // invalid record type (wrong field type)
-//      assert(size=integer(ElemSize));
       inc(result,L);
       inc(P,size);
     end;
@@ -44543,7 +44557,6 @@ begin
       inc(j);
     until added;
   end;
-  assert(ndx=Count-1);
   result := PAnsiChar(fValue^)+cardinal(ndx)*ElemSize;
   PRawUTF8(result)^ := aName; // store unique name at 1st elem position
 end;
@@ -44555,7 +44568,6 @@ var ndx: integer;
 begin
   ndx := FindHashedForAdding(aName,added);
   if added then begin
-    assert(ndx=Count-1);
     result := PAnsiChar(fValue^)+cardinal(ndx)*ElemSize;
     PRawUTF8(result)^ := aName; // store unique name at 1st elem position
   end else
@@ -55219,7 +55231,8 @@ begin
       inc(PI);
     end;
   until count<=0;
-  assert((count=0)and(PI=@Values[result]));
+  if (count>0) or (PI<>@Values[result]) then
+    raise ESynException.Create('TFileBufferReader.ReadVarUInt64Array');
 end;
 
 function TFileBufferReader.ReadRawUTF8List(List: TRawUTF8List): boolean;

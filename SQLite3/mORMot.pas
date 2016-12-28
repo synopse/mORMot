@@ -39636,32 +39636,27 @@ function TSQLRestServerURIContext.GetInputAsTDocVariant: variant;
 var ndx: integer;
     v: variant;
     MultiPart: TMultiPartDynArray;
+    res: TDocVariantData absolute result;
 begin
   VarClear(result);
+  res.InitFast;
   FillInput;
-  if fInput<>nil then begin
-    with TDocVariantData(result) do begin
-      InitFast;
-      for ndx := 0 to (length(fInput) shr 1)-1 do begin
-        GetVariantFromJSON(pointer(fInput[ndx*2+1]),false,v,@JSON_OPTIONS[true]);
-        AddValue(fInput[ndx*2],v);
-      end;
-    end;
-  end else
+  if fInput<>nil then
+    for ndx := 0 to (length(fInput) shr 1)-1 do begin
+      GetVariantFromJSON(pointer(fInput[ndx*2+1]),false,v,@JSON_OPTIONS[true]);
+      res.AddValue(fInput[ndx*2],v);
+    end else
   if InputAsMultiPart(MultiPart) then
-    with TDocVariantData(result) do begin
-      InitFast;
-      for ndx := 0 to high(MultiPart) do
-        with MultiPart[ndx] do
-          if ContentType=TEXT_CONTENT_TYPE then begin
-            // append as regular "Name":"TextValue" field
-            RawUTF8ToVariant(Content,v);
-            AddValue(Name,v);
-          end else
-            // append binary file as an object, with Base64-encoded data
-            AddValue(Name,_ObjFast(['data',BinToBase64(Content),
-              'filename',FileName,'contenttype',ContentType]));
-    end;
+    for ndx := 0 to high(MultiPart) do
+      with MultiPart[ndx] do
+        if ContentType=TEXT_CONTENT_TYPE then begin
+          // append as regular "Name":"TextValue" field
+          RawUTF8ToVariant(Content,v);
+          res.AddValue(Name,v);
+        end else
+          // append binary file as an object, with Base64-encoded data
+          res.AddValue(Name,_ObjFast(['data',BinToBase64(Content),
+            'filename',FileName,'contenttype',ContentType]));
 end;
 
 {$endif NOVARIANTS}
