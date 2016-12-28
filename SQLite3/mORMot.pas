@@ -2444,6 +2444,8 @@ type
   {$else}
   PPTypeInfo = ^PTypeInfo;
   {$endif}
+  POrdType = ^TOrdType;
+  PFloatType = ^TFloatType;
 
   PTypeInfoDynArray = array of PTypeInfo;
 
@@ -19878,7 +19880,7 @@ type
     /// = $ff for a field address, or =$fe for a virtual method
     Kind: byte;
   end;
-  /// no Rtti alignment under Delphi
+  /// no RTTI alignment under Delphi
   AlignToPtr = pointer;
   UnalignToDouble = Double;
 
@@ -19987,7 +19989,7 @@ end;
 function InternalClassProp(ClassType: TClass): PClassProp;
 {$ifdef FPC}
 begin
-  with GetFPCTypeData(ClassType.ClassInfo)^ do
+  with GetFPCTypeData(pointer(ClassType.ClassInfo))^ do
     result := AlignToPtr(@UnitName[ord(UnitName[0])+1]);
 {$else}
 {$ifdef PUREPASCAL}
@@ -29058,25 +29060,6 @@ begin
     result := sftUnknown;
 end;
 
-function TTypeInfo.EnumBaseType: PEnumType;
-{$ifdef HASINLINE}
-begin
-{$ifdef FPC}
-  result := pointer(GetFPCTypeData(@Self));
-{$else}
-  with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
-    result := @Name[ord(Name[0])+1];
-{$endif}
-{$else}
-asm     // very fast code
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        mov     eax, [eax + edx].TTypeInfo.Name[1].TEnumType.BaseType
-        mov     eax, [eax]
-        movzx   edx, byte ptr[eax].TTypeInfo.Name
-        lea     eax, [eax + edx].TTypeInfo.Name[1]
-{$endif}
-end;
-
 function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
 {$ifdef FPC_OR_PUREPASCAL}
 var CT: PClassType;
@@ -29238,31 +29221,41 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
 end;
 
 function TTypeInfo.FloatType: TFloatType;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td: PTypeData;
-{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  td := GetTypeData(@Self);
-  result := TFloatType(PByte(td)^);
+  result := PFloatType(GetTypeData(@self))^;
   {$else}
   result := TFloatType(PByte(@Name[ord(Name[0])+1])^);
   {$endif}
 end;
 
 function TTypeInfo.OrdType: TOrdType;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td: PTypeData;
-{$endif}
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  td := GetTypeData(@Self);
-  result := TOrdType(PByte(td)^);
+  result := POrdType(GetTypeData(@self))^;
   {$else}
   result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
   {$endif}
+end;
+
+function TTypeInfo.EnumBaseType: PEnumType;
+{$ifdef FPC}
+begin
+  result := PEnumType(GetFPCTypeData(@self));
+{$else}
+{$ifdef HASINLINE}
+begin
+  with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
+    result := @Name[ord(Name[0])+1];
+{$else}
+asm     // very fast code
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        mov     eax, [eax + edx].TTypeInfo.Name[1].TEnumType.BaseType
+        mov     eax, [eax]
+        movzx   edx, byte ptr[eax].TTypeInfo.Name
+        lea     eax, [eax + edx].TTypeInfo.Name[1]
+{$endif}
+{$endif}
 end;
 
 function TTypeInfo.SetEnumType: PEnumType;
@@ -29271,10 +29264,12 @@ var p: pointer;
 begin
   if (@self=nil) or (Kind<>tkSet) then
     result := nil else begin
-    p := pointer(GetTypeData(@Self));
-    inc(p,sizeof(TOrdType));
-    p := AlignToPtr(p);
-    result := PPTypeInfo(PPointer(p)^)^.EnumBaseType;
+    p := GetTypeData(@self);
+    inc(PtrInt(p),sizeof(TOrdType));
+    p := PPointer(AlignToPtr(p))^; // p = info^.SetBaseType
+    if p=nil then
+      result := nil else
+      result := DeRef(p)^.EnumBaseType;
   end;
 {$else}
 begin
@@ -29300,23 +29295,16 @@ begin
 end;
 
 function TTypeInfo.AnsiStringCodePage: integer;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td: PTypeData;
-{$endif}
 begin
   {$ifdef HASCODEPAGE}
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
     if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    begin
-      td := GetTypeData(@Self);
-      result := PWORD(td)^;
-    end else
-    {$else}
+      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      result := PWord(GetTypeData(@self))^ else
+      {$else}
       result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
-    {$endif}
+      {$endif}
   {$else}
   if @self=TypeInfo(RawUTF8) then
     result := CP_UTF8 else
@@ -29335,58 +29323,40 @@ begin
 end;
 
 function TTypeInfo.InterfaceGUID: PGUID;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td:PTypeData;
-{$endif}
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} var td: PTypeData; {$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then result := nil else
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  begin
-    td := GetTypeData(@Self);
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
+    td := GetTypeData(@self);
     result := @td^.GUID;
-  end;
-  {$else}
+  end; {$else}
     result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfGuid;
-  {$endif}
+{$endif}
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var
-  td: PTypeData;
-{$endif}
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} var td: PTypeData; {$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    begin
-      td := GetTypeData(@Self);
-      result := @td^.IntfUnit;
-    end;
-    {$else}
-      result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfUnit;
-    {$endif}
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
+    td := GetTypeData(@self);
+    result := @td^.IntfUnit;
+  end; {$else}
+    result := @PInterfaceTypeData(@Name[ord(Name[0])+1])^.IntfUnit;
+{$endif}
 end;
 
 function TTypeInfo.InterfaceAncestor: PTypeInfo;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-var td: PInterfaceTypeData;
-{$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    begin
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      td := PInterfaceTypeData(pointer(GetTypeData(@Self)));
-      with td^ do
-      {$else}
-      with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
-      {$endif}
-      if IntfParent=nil then
-        result := nil else
-          result := mORMot.PTypeInfo(Deref(IntfParent));
-    end;
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    with PInterfaceTypeData(GetTypeData(@self))^ do
+    {$else}
+    with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
+    {$endif}
+      result := mORMot.PTypeInfo(Deref(IntfParent));
 end;
 
 procedure TTypeInfo.InterfaceAncestors(out Ancestors: PTypeInfoDynArray;
@@ -29401,7 +29371,7 @@ begin
     exit;
   n := 0;
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-  typ := PInterfaceTypeData(GetTypeData(@Self));
+  typ := PInterfaceTypeData(GetTypeData(@self));
   {$else}
   typ := @Name[ord(Name[0])+1];
   {$endif}
@@ -29412,7 +29382,7 @@ begin
     if nfo=TypeInfo(IInterface) then
       exit;
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-    typ := AlignToPtr(@nfo^.Name[ord(nfo^.Name[0])+1]);
+    typ := PInterfaceTypeData(GetTypeData(pointer(nfo)));
     {$else}
     typ := @nfo^.Name[ord(nfo^.Name[0])+1];
     {$endif}

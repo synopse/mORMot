@@ -20449,6 +20449,7 @@ type
       recInitTable: PPRecordInitTable;
       {$endif FPC_HAS_MANAGEMENT_OPERATORS}
       ManagedCount: longint;
+      // note: FPC generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
     {$else}
     tkRecord: (
       recSize: cardinal;
@@ -21147,7 +21148,7 @@ begin
     {$ifdef FPC}
     if info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil then
     {$endif}
-      info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType),tkEnumeration);
+      info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
     Names := @info.NameList;
     result := true;
@@ -21183,11 +21184,7 @@ var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkSet);
   if info<>nil then
-    {$ifdef FPC}
-    if info^.SetBaseType=nil then
-      result := GetEnumInfo(aTypeInfo,MaxValue,Names) else
-    {$endif}
-      result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
+    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
     result := false;
 end;
 
