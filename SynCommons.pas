@@ -4990,13 +4990,18 @@ type
     procedure ElemLoad(Source: PAnsiChar; var Elem); overload;
     /// load an array element as saved by the ElemSave method
     // - this overloaded method will retrieve the element as a memory buffer,
-    // which should be cleared by ElemClear() before release
+    // which should be cleared by ElemLoadClear() before release
     function ElemLoad(Source: PAnsiChar): RawByteString; overload;
     /// search for an array element as saved by the ElemSave method
-    // - same as ElemLoad() + Find()/IndexOf() + ElemClear()
+    // - same as ElemLoad() + Find()/IndexOf() + ElemLoadClear()
     // - will call Find() method if Compare property is set
     // - will call generic IndexOf() method if no Compare property is set
     function ElemLoadFind(Source: PAnsiChar): integer;
+    /// finalize a temporary buffer used to store an element via ElemLoad()
+    // - will release any managed type referenced inside the RawByteString,
+    // then void the variable
+    // - is just a wrapper around ElemClear(pointer(ElemTemp)) + ElemTemp := ''
+    procedure ElemLoadClear(var ElemTemp: RawByteString);
 
     /// retrieve or set the number of elements of the dynamic array
     // - same as length(DynArray) or SetLenght(DynArray)
@@ -44304,6 +44309,12 @@ begin
   end;
 end;
 
+procedure TDynArray.ElemLoadClear(var ElemTemp: RawByteString);
+begin
+  ElemClear(pointer(ElemTemp));
+  ElemTemp := '';
+end;
+
 procedure TDynArray.ElemLoad(Source: PAnsiChar; var Elem);
 begin
   if Source<>nil then // avoid GPF
@@ -44324,18 +44335,28 @@ begin
 end;
 
 function TDynArray.ElemLoadFind(Source: PAnsiChar): integer;
-var tmp: RawByteString;
+var tmp: array[0..2047] of byte;
+    data: pointer;
 begin
-  tmp := ElemLoad(Source);
-  if tmp='' then
-    result := -1 else
-    try
-      if @fCompare=nil then
-        result := IndexOf(pointer(tmp)^) else
-        result := Find(pointer(tmp)^);
-    finally
-      ElemClear(pointer(tmp)^);
-    end;
+  result := -1;
+  if (Source=nil) or (ElemSize>sizeof(tmp)) then
+    exit;
+  if ElemType=nil then
+    data := Source else begin
+    FillCharFast(tmp,ElemSize,0);
+    ManagedTypeLoad(@tmp,Source,ElemType);
+    if Source=nil then
+      exit;
+    data := @tmp;
+  end;
+  try
+    if @fCompare=nil then
+      result := IndexOf(data^) else
+      result := Find(data^);
+  finally
+    if ElemType<>nil then
+      _FinalizeArray(data,ElemType,1) else
+  end;
 end;
 
 function DynArray(aTypeInfo: pointer; var aValue; aCountPointer: PInteger=nil): TDynArray;
