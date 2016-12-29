@@ -20047,11 +20047,11 @@ end;
 
 const
   // see https://en.wikipedia.org/wiki/Baudot_code
-  B2A: array[0..63] of AnsiChar =
+  Baudot2Char: array[0..63] of AnsiChar =
    #0'e'#10'a siu'#13'drjnfcktzlwhypqobg'#254'mxv'#255+
    #0'3'#10'- ''87'#13#0'4'#0',!:(5+)2$6019?@'#254'./;'#255;
 var
-  A2B: array[AnsiChar] of byte;
+  Char2Baudot: array[AnsiChar] of byte;
 
 function AsciiToBaudot(const Text: RawUTF8): RawByteString;
 begin
@@ -20072,7 +20072,7 @@ begin
   d := 0;
   bits := 0;
   for i := 0 to len-1 do begin
-    c := A2B[P[i]];
+    c := Char2Baudot[P[i]];
     if c>32 then begin
       if not shift then begin
         d := (d shl 5) or 27;
@@ -20136,7 +20136,7 @@ begin
             shift := 0 else
             exit;
       else begin
-        c := ord(B2A[c+shift]);
+        c := ord(Baudot2Char[c+shift]);
         if c=0 then
           if Baudot[i+1]=0 then // allow triming of last 5 bits
             break else
@@ -31925,8 +31925,8 @@ function IsZero(const dig: THash256): boolean;
 var a: TPtrIntArray absolute dig;
 begin
   result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0)
-    {$ifndef CPU64} and (a[4]=0) and (a[5]=0)
-                    and (a[6]=0) and (a[7]=0){$endif};
+     {$ifndef CPU64} and (a[4]=0) and (a[5]=0)
+                     and (a[6]=0) and (a[7]=0){$endif};
 end;
 
 function IsEqual(const A,B: THash256): boolean;
@@ -31934,8 +31934,8 @@ var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
 begin
   result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
-    {$ifndef CPU64} and (a_[4]=b_[4]) and (a_[5]=b_[5])
-                    and (a_[6]=b_[6]) and (a_[7]=b_[7]){$endif};
+          {$ifndef CPU64} and (a_[4]=b_[4]) and (a_[5]=b_[5])
+                          and (a_[6]=b_[6]) and (a_[7]=b_[7]){$endif};
 end;
 
 procedure FillZero(out dig: THash256);
@@ -61364,11 +61364,11 @@ begin
   for i := 0 to high(b64enc) do
     ConvertBase64ToBin[b64enc[i]] := i;
   ConvertBase64ToBin['='] := -2; // special value for '='
-  for i := high(B2A) downto 0 do
-    if B2A[i]<#128 then
-      A2B[B2A[i]] := i;
+  for i := high(Baudot2Char) downto 0 do
+    if Baudot2Char[i]<#128 then
+      Char2Baudot[Baudot2Char[i]] := i;
   for i := ord('a') to ord('z') do
-    A2B[AnsiChar(i-32)] := A2B[AnsiChar(i)]; // A-Z -> a-z
+    Char2Baudot[AnsiChar(i-32)] := Char2Baudot[AnsiChar(i)]; // A-Z -> a-z
   // initialize our internaly used TSynAnsiConvert engines
   TSynAnsiConvert.Engine(0);
   // initialize tables for crc32cfast() and SymmetricEncrypt/FillRandom

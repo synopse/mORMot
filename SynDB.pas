@@ -386,6 +386,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
+    // - may be -1 if the metadata SQL statement returned NULL 
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -449,6 +450,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
+    // - may be -1 if the metadata SQL statement returned NULL 
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -629,6 +631,8 @@ type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
+    /// returns TRUE if the column contains NULL
+    function ColumnNull(Col: integer): boolean; 
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -5178,7 +5182,9 @@ begin
         F.ColumnTypeNative := trim(ColumnUTF8(1));
         F.ColumnLength := ColumnInt(2);
         F.ColumnPrecision := ColumnInt(3);
-        F.ColumnScale := ColumnInt(4);
+        if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
+          F.ColumnScale := -1 else
+          F.ColumnScale := ColumnInt(4);
         F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
         if ColumnInt(5)>0 then
           F.ColumnIndexed := true;
@@ -5252,7 +5258,9 @@ begin
       F.ColumnTypeNative := trim(ColumnUTF8(1));
       F.ColumnLength := ColumnInt(2);
       F.ColumnPrecision := ColumnInt(3);
-      F.ColumnScale := ColumnInt(4);
+      if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
+        F.ColumnScale := -1 else
+        F.ColumnScale := ColumnInt(4);
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
       case FindCSVIndex('IN,OUT,INOUT',ColumnUTF8(5),',',false) of
         0: F.ColumnParamType := paramIn;
