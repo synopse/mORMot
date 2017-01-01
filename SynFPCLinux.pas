@@ -4,7 +4,7 @@ unit SynFPCLinux;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
@@ -23,7 +23,7 @@ unit SynFPCLinux;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):

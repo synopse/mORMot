@@ -171,7 +171,7 @@ begin
     info.Title := 'mORMot BLOG';
     info.Language := 'en';
     info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
-    info.Copyright := '&copy;2016 <a href=http://synopse.info>Synopse Informatique</a>';
+    info.Copyright := '&copy;2017 <a href=http://synopse.info>Synopse Informatique</a>';
     info.About := TSynTestCase.RandomTextParagraph(30,'!');
     RestModel.Add(info,true);
   end;

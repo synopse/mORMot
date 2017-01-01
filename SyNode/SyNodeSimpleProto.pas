@@ -8,7 +8,7 @@ unit SyNodeSimpleProto;
     Synopse framework. Copyright (C) 2014 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2016 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
