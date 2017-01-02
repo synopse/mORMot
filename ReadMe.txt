@@ -2,7 +2,7 @@
   Synopse mORMot framework
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2016 Synopse Informatique
+ (c) 2008-2017 Synopse Informatique
   http://synopse.info
   http://mormot.net
 
