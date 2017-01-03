@@ -139,11 +139,18 @@ type
     /// values of this jvObject or jvArray
     Values: TVariantDynArray;
     /// initialize the low-level memory structure
+    // - you should call Clear before calling overloaded Init several times
     procedure Init; overload;
     /// initialize the low-level memory structure with a given JSON content
+    // - you should call Clear before calling overloaded Init several times
     procedure Init(const JSON: string); overload;
     /// initialize the low-level memory structure with a given array of variant
+    // - you should call Clear before calling overloaded Init several times
     procedure InitFrom(const aValues: TVariantDynArray); overload;
+    /// delete all internal stored data
+    // - basically the same as Finalize(aJsonVariantData) + aJsonVariantData.Init
+    // - you should call this method before calling overloaded Init several times
+    procedure Clear;
     /// access to a nested TJSONVariantData item
     // - returns nil if aName was not found, or not a true TJSONVariantData item
     function Data(const aName: string): PJSONVariantData;
@@ -1650,11 +1657,19 @@ begin
     Init; // we expect a true JSON array or object here
 end;
 
-procedure TJSONVariantData.InitFrom(const aValues: TVariantDynArray); 
+procedure TJSONVariantData.InitFrom(const aValues: TVariantDynArray);
 begin
   Init;
   VKind := jvArray;
   Values := aValues;
+  VCount := Length(aValues);
+end;
+
+procedure TJSONVariantData.Clear;
+begin
+  Names := nil;
+  Values := nil;
+  Init;
 end;
 
 procedure TJSONVariantData.AddNameValue(const aName: string;
