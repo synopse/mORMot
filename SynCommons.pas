@@ -12179,6 +12179,7 @@ const
   MinsPerDay    = HoursPerDay * MinsPerHour;
   SecsPerDay    = MinsPerDay * SecsPerMin;
   MSecsPerDay   = SecsPerDay * MSecsPerSec;
+  DateDelta     = 693594;
   UnixDateDelta = 25569;
 
 /// GetFileVersion returns the most significant 32 bits of a file's binary
@@ -31982,21 +31983,19 @@ end;
 
 const
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
+  DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
 function UnixTimeUTC: cardinal;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
-{$ifdef CPU64}
-    nano100: Int64;
+    nano100: Int64{$ifndef CPU64} absolute ft{$endif};
 begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
-  result := (nano100-UnixFileTimeDelta) div 10000000;
-{$else}
-begin
-  GetSystemTimeAsFileTime(ft);
-  result := (Int64(ft)-UnixFileTimeDelta) div 10000000;
-{$endif}
+  {$endif}
+  dec(nano100,UnixFileTimeDelta);
+  result := nano100 div 10000000;
 // assert(Round((NowUTC-UnixDateDelta)*SecsPerDay)-result<2);
 end;
 {$else}
@@ -32017,19 +32016,19 @@ end;
 
 function NowUTC: TDateTime;
 {$ifdef MSWINDOWS}
-var SystemTime: TSystemTime;
-    time: TDateTime;
+var ft: TFileTime;
+    nano100: Int64{$ifndef CPU64} absolute ft{$endif};
 begin
-  GetSystemTime(SystemTime);
-  with SystemTime do
-    if TryEncodeDate(wYear,wMonth,wDay,result) and
-       TryEncodeTime(wHour,wMinute,wSecond,wMilliseconds,time) then
-      result := result+time else
-      result := 0;
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  {$ifdef CPU64}
+  FileTimeToInt64(ft,nano100);
+  {$endif}
+  dec(nano100,DateFileTimeDelta);
+  result := nano100/(10000000.0*SecsPerDay);
 end;
 {$else}
 begin
-  Result := GetNowUTC;
+  result := GetNowUTC;
 end;
 {$endif}
 
