@@ -1,4 +1,4 @@
-/// SQLite3 3.16.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.16.2 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.16.0 engine
+    Statically linked SQLite3 3.16.2 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -75,7 +75,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.16.0
+  - updated SQLite3 engine to latest version 3.16.2
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -1280,7 +1280,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.16.0';
+  EXPECTED_SQLITE3_VERSION = '3.16.2';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
