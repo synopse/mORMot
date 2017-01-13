@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2016 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2017 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -18161,7 +18161,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2016 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2017 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -18174,7 +18174,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
