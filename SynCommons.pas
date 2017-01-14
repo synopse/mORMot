@@ -10243,12 +10243,23 @@ type
   // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
   // - is stored as 64-bit value, so that it won't be affected by the
   // "Year 2038" overflow issue
-  // - also one of the encoding supported by SQLite3 date/time functions 
+  // - use UnixTimeToDateTime/DateTimeToUnixTime functions to convert it to/from
+  // a regular TDateTime
+  // - use UnixTimeUTC to return the current timestamp, using fast OS API calls 
+  // - also one of the encoding supported by SQLite3 date/time functions
   TUnixTime = type Int64;
 
   /// timestamp stored as millisecond-based Unix Time
   // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
+  // to/from a regular TDateTime
   TUnixMSTime = type Int64;
+
+  /// pointer to a timestamp stored as second-based Unix Time
+  PUnixTime = ^TUnixTime;
+
+  /// pointer to a timestamp stored as millisecond-based Unix Time
+  PUnixMSTime = ^TUnixMSTime;
 
   /// calling context of TSynLogExceptionToStr callbacks
   TSynLogExceptionContext = record

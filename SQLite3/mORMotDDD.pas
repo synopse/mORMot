@@ -1339,7 +1339,8 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'TCreateTime',     // sftCreateTime
     '',                // sftTID
     'TRecordVersion',  // sftRecordVersion = TRecordVersion
-    'TSessionUserID'); // sftSessionUserID
+    'TSessionUserID',  // sftSessionUserID
+    '');               // sftUnixTime
 var hier: TClassDynArray;
     a,i,f: integer;
     code,aggname,recname,parentrecname: RawUTF8;
@@ -1374,9 +1375,9 @@ begin
               if InheritsFrom(TSQLPropInfo) then
                 with TSQLPropInfoRTTI(map.List[f]).PropType^ do
                   if (Kind=tkInteger) and (OrdType<>otULong) then
-                    rectypes[f] := 'integer'; // only cardinal -> Int64
+                    rectypes[f] := 'integer'; // cardinal -> Int64
             end else
-              rectypes[f]:= SQLFieldRTTITypeName;
+              rectypes[f] := SQLFieldRTTITypeName;
           code := FormatUTF8('%    f%: %; // %'#13#10,
             [code,Name,rectypes[f],SQLFieldRTTITypeName]);
         end;

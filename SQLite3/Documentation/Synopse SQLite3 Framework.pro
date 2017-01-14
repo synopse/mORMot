@@ -1869,7 +1869,15 @@ Due to compiler limitation in older versions of {\i Delphi}, direct typecast of 
 ! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 ! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
 ! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
-See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} types.
+See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 @*TModTime@} and {\f1\fs20 @*TCreateTime@} types.
+As an alternative, you may use the {\f1\fs20 @**TUnixTime@} type, which is a 64-bit encoded number of seconds since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC:
+!type
+!  TUnixTime = type Int64;
+You can convert such values:
+- to/from {\f1\fs20 TTimeLog} values using {\f1\fs20 TTimeLogBits.ToUnixTime} and {\f1\fs20 TTimeLogBits.FromUnixTime} methods;
+- to/from {\f1\fs20 TDateTime} values using {\f1\fs20 UnixTimeToDateTime}/{\f1\fs20 DateTimeToUnixTime} functions;
+- using {\f1\fs20 UnixTimeUTC} to return the current timestamp, calling very fast OS API.
+You may consider using {\f1\fs20 TUnixTime} especially if the timestamp is likely to be handled in third-party clients following this encoding. In the Delphi world, {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} types could be preferred.
 :176  Time Zones
 One common problem when handling dates and times, is that common time is shown and entered as {\i local}, whereas the computer should better use non-geographic information - especially on a Client-Server architecture, where both ends may not be on the same physical region.
 A {\i @**time zone@} is a region that observes a uniform standard time for legal, commercial, and social purposes. Time zones tend to follow the boundaries of countries and their subdivisions because it is convenient for areas in close commercial or other communication to keep the same time. Most of the time zones on land are offset from {\i Coordinated Universal Time} (@**UTC@) by a whole number of hours, or minutes. Even worse, some countries use daylight saving time for part of the year, typically by changing clocks by an hour, twice every year.
@@ -2206,8 +2214,9 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 string}|TEXT|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time
 |{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
-|{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TModTime@}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TCreateTime@}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TUnixTime@}|INTEGER|timestamp stored as second-based Unix Time (i.e. the 64-bit number of seconds since 1970-01-01 00:00:00 UTC)
 |{\f1\fs20 @*TSQLRecord@}|INTEGER|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64-bit under {\i Win64}
 |{\f1\fs20 @*TID@}|INTEGER|64-bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
@@ -2274,9 +2283,10 @@ Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are no
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :174  Date and time fields
 {\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database. See @175@ for details about this text encoding.
-As alternatives,  {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
+As alternatives, {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 This format will be very fast for comparing dates or convert into/from text, and will be stored as INTEGER in the database, therefore more efficiently than plain ISO 8601 text as for {\f1\fs20 TDateTime} fields.
 In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}. They are just handled with a special care by the ORM, so that their associated field value will be updated with the current UTC timestamp, for every {\f1\fs20 TSQLRecord} modification (for {\f1\fs20 TModTime}), or at entry creation (for {\f1\fs20 TCreateTime}). The time value stored is in fact the UTC timestamp, as returned from the current REST Server: in fact, when any REST client perform a connection, it will retrieve any time offset from the REST Server, which will be used to store a consistent time value across all Clients.
+You may also define a {\f1\fs20 @*TUnixTime@} property, which will store the number of seconds since 1970-01-01 00:00:00 UTC as INTEGER in the database, and serialized as 64-bit JSON number. This encoding has the benefit of being handled by {\i SQlite3} date/time functions, and interoperable with most third-party languages.
 :  TSessionUserID field
 If you define a {\f1\fs20 @**TSessionUserID@} published property, this field will be automatically filled at creation or modification of the {\f1\fs20 TSQLRecord} with the current {\f1\fs20 TSQLAuthUser.ID} value of the active session. If no session has been initialized from the client side, {\f1\fs20 0} will be stored.
 By design, and similar to {\f1\fs20 @*TModTime@} fields, you should use the @*ORM@ PUT/POST @*CRUD@ methods to compute this field value: manual SQL statements (like {\f1\fs20 UPDATE Table SET Column=0}) won't set its content. Also, it is up to the client to fill the {\f1\fs20 TSessionUserID} fields before sending their content to the server - the Delphi and cross-platform ORM clients will perform this assignment.
@@ -2543,7 +2553,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
-For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
+For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@ / @*TUnixTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
 Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 :  Introducing TSQLTableJSON
@@ -4018,7 +4028,7 @@ This framework uses a compiled version of the official {\i SQLite3} library sour
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
-- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@});
+- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} or {\f1\fs20 @*TUnixTime@});
 - {\i SQLite3} library unit was compiled including @*RTREE@ extension for doing very fast range queries;
 - It can include @*FTS@3/FTS4 @*full text@ search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
@@ -6496,8 +6506,9 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 string}|UTF-8|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
 |{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
 |{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
-|{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TModTime@}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TCreateTime@}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TUnixTime@}|datetime|seconds since Unix epoch
 |{\f1\fs20 @*TSQLRecord@}|int32|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64-bit on {\i Win64}
 |{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64-bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
@@ -6941,7 +6952,7 @@ The following types are handled by this feature:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Serialized as JSON boolean
-|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@}|Serialized as JSON number
+|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@ @*TUnixTime@}|Serialized as JSON number
 |{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
 |{\f1\fs20 DateTime @*TTimeLog@}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
@@ -11557,7 +11568,7 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - @*Batch@ process - see @28@ - for transactional and high-speed writes;
 - @49@ with parameters marshalling;
 - @63@ with parameters marshalling and instance-life time;
-- Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
+- Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 @*TModTime@}/{\f1\fs20 @*TCreateTime@} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
 - Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server - see @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
@@ -16688,7 +16699,7 @@ Report header is written using the following methods:
 - {\f1\fs20 AddColumns}, with parameters set as percentages, will initialize a table with the first column content defined as bold ({\f1\fs20 SetColumnBold(0)});
 - {\f1\fs20 DrawTextAcrossCols} and {\f1\fs20 DrawTextAcrossColsFromCSV} will fill a table row according to the text specified, one string per column;
 - {\f1\fs20 DrawBMP} will draw a bitmap to the report, which content is loaded using the generic {\f1\fs20 LoadFromRawByteString} function implemented in @!Lib\SynGdiPlus.pas@;
-- {\f1\fs20 U2S} and {\f1\fs20 Iso2S} function, as defined in @!Iso2S,U2S!Lib\SQLite3\mORMoti18n.pas@, are used for conversion of some text or {\f1\fs20 @*TTimeLog@} into a text formated with the current language settings (@*i18n@).
+- {\f1\fs20 U2S} and {\f1\fs20 Iso2S} function, as defined in @!Iso2S,U2S!Lib\SQLite3\mORMoti18n.pas@, are used for conversion of some text or {\f1\fs20 @*TTimeLog@/@*TUnixTime@} into a text formated with the current language settings (@*i18n@).
 !    // write report content
 !    DrawTitle(sContent,true);
 !    SaveLayout;

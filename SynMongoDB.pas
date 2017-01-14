@@ -2537,7 +2537,7 @@ begin
   betBoolean:
     res.VBoolean := PBoolean(Element)^;
   betDateTime:
-    res.VDate := UnixMSTimeToDateTime(PInt64(Element)^);
+    res.VDate := UnixMSTimeToDateTime(PUnixMSTime(Element)^);
   betInt32:
     res.VInteger := PInteger(Element)^;
   betInt64:
@@ -2686,7 +2686,7 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     W.Add(PBoolean(Element)^);
   betDateTime: begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
-    W.AddDateTime(UnixMSTimeToDateTime(PInt64(Element)^));
+    W.AddDateTime(UnixMSTimeToDateTime(PUnixMSTime(Element)^));
     W.AddShort(BSON_JSON_DATE[Mode,true]);
   end;
   betNull:
@@ -2731,7 +2731,7 @@ begin
     betFloat:
       PDouble(Element)^ := double(aValue);
     betDateTime:
-      PInt64(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
+      PUnixMSTime(Element)^ := DateTimeToUnixMSTime(aVarData.VDate);
     betBoolean:
       PBoolean(Element)^ := aVarData.VBoolean;
     betInt32:
@@ -3164,7 +3164,7 @@ begin
 end;
 
 procedure TBSONWriter.BSONWriteDateTime(const name: RawUTF8; const value: TDateTime);
-var UnixTime: Int64;
+var UnixTime: TUnixMSTime;
 begin
   UnixTime := DateTimeToUnixMSTime(value);
   BSONWrite(name,betDateTime);

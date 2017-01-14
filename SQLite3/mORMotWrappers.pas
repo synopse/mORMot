@@ -248,8 +248,8 @@ const
     cpkDefault, cpkVariant, cpkVariant,  cpkBlob, cpkDefault,      cpkDefault,
  // sftUTF8Custom,sftMany, sftModTime, sftCreateTime, sftTID,   sftRecordVersion
     cpkRecord,  cpkDefault,cpkModTime, cpkCreateTime, cpkDefault, cpkDefault,
- // sftSessionUserID
-    cpkDefault);
+ // sftSessionUserID, sftUnixTime
+    cpkDefault, cpkDefault);
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer','byte','word','integer','integer','int64','int64','int64','int64');
@@ -316,7 +316,8 @@ const
      wCreateTime,     // sftCreateTime
      wID,             // sftID
      wRecordVersion,  // sftRecordVersion
-     wID);            // sftSessionUserID
+     wID,             // sftSessionUserID
+     wUnknown);       // sftUnixTime
 
   TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
   //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,

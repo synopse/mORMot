@@ -1538,6 +1538,9 @@ type
   // statements (like 'UPDATE Table SET Column=0') won't change its content;
   // this is automated on Delphi client side, so only within TSQLRecord ORM use
   // (a pure AJAX application should fill such fields explicitely before sending)
+  // - sftUnixTime is an INTEGER field for coding a date and time  as second-based
+  // Unix Time (SQLite3 compatible), which should be defined as TUnixTime=Int64
+  // Delphi property
   TSQLFieldType = (
     sftUnknown,
     sftAnsiText,
@@ -1566,7 +1569,8 @@ type
     sftCreateTime,
     sftTID,
     sftRecordVersion,
-    sftSessionUserID);
+    sftSessionUserID,
+    sftUnixTime);
 
   /// set of available SQL field property types
   TSQLFieldTypes = set of TSQLFieldType;
@@ -2115,7 +2119,8 @@ function GetTableNamesFromSQLSelect(const SQL: RawUTF8): TRawUTF8DynArray;
 // declared as sftCurrency type
 // - sftInteger is returned for any INTEGER stored value, even if it was declared
 // as sftEnumerate, sftSet, sftID, sftTID, sftRecord, sftRecordVersion,
-// sftSessionUserID, sftBoolean or sftModTime / sftCreateTime / sftTimeLog type
+// sftSessionUserID, sftBoolean, sftModTime/sftCreateTime/sftTimeLog or
+// sftUnixTime type
 function UTF8ContentType(P: PUTF8Char): TSQLFieldType;
 
 /// guess the number type of an UTF-8 encoded field value, as used in TSQLTable.Get()
@@ -3480,6 +3485,10 @@ type
   /// information about a TTimeLog published property
   // - stored as an Int64, but with a specific class
   TSQLPropInfoRTTITimeLog = class(TSQLPropInfoRTTIInt64);
+
+  /// information about a TUnixTime published property
+  // - stored as an Int64, but with a specific class
+  TSQLPropInfoRTTIUnixTime = class(TSQLPropInfoRTTIInt64);
 
   /// information about a floating-point Double published property
   TSQLPropInfoRTTIDouble = class(TSQLPropInfoRTTI)
@@ -8032,9 +8041,10 @@ type
     // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
     // encoded as a TTimeLog Int64 value - as sftInteger may have been
     // identified by TSQLTable.InitFieldTypes
-    // - for sftTimeLog, sftModTime, sftCreateTime fields, you may have to force
-    // the column type, since it may be identified as sftInteger or sftCurrency
-    // by default from its JSON number content, e.g. via:
+    // - sftUnixTime field will call UnixTimeToDateTime 
+    // - for sftTimeLog, sftModTime, sftCreateTime or sftUnixTime fields, you
+    // may have to force the column type, since it may be identified as sftInteger
+    // or sftCurrency by default from its JSON number content, e.g. via:
     // ! aTable.SetFieldType('FieldName',sftModTime);
     // - sftCurrency,sftFloat will return the corresponding double value
     // - any other types will try to convert ISO-8601 text }
@@ -8075,8 +8085,8 @@ type
     // - Client is one TSQLClient instance (used to display TRecordReference via
     // the associated TSQLModel)
     // - returns the Field Type
-    // - return generic string Text, i.e. UnicodeString for Delphi 2009+,
-    // ready to be displayed to the VCL, for sftEnumerate, sftTimeLog
+    // - return generic string Text, i.e. UnicodeString for Delphi 2009+, ready
+    // to be displayed to the VCL, for sftEnumerate, sftTimeLog, sftUnixTime
     // and sftRecord/sftRecordVersion/sftID/sftTID
     // - returns '' as string Text, if text can by displayed directly
     // with Get*() methods above
@@ -8087,7 +8097,8 @@ type
     // or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for sftFloat
     // and sftCurrency columns (instead of plain JSON float value), or
     // date/time format as expected by FormatDateTime() for all date time kind
-    // of fields (as sftDateTime, sftTimeLog, sftModTime, sftCreateTime)
+    // of fields (as sftDateTime, sftTimeLog, sftModTime, sftCreateTime,
+    // sftUnixTime)
     function ExpandAsString(Row,Field: integer; Client: TObject; out Text: string;
       const CustomFormat: string=''): TSQLFieldType;
     /// read-only access to a particular field value, as VCL text
@@ -19461,8 +19472,8 @@ function UTF8CompareBoolean(P1,P2: PUTF8Char): PtrInt;
 function UTF8CompareUInt32(P1,P2: PUTF8Char): PtrInt;
 
 /// special comparaison function for sorting sftInteger, sftTID, sftRecordVersion
-// or sftTimeLog / sftModTime / sftCreateTime UTF-8 encoded values in the SQLite3
-// database or JSON content
+// sftTimeLog/sftModTime/sftCreateTime or sftUnixTime UTF-8 encoded values in
+// the SQLite3 database or JSON content
 function UTF8CompareInt64(P1,P2: PUTF8Char): PtrInt;
 
 /// special comparaison function for sorting sftCurrency
@@ -20438,7 +20449,8 @@ const
      ftInt64,     // sftCreateTime
      ftInt64,     // sftTID
      ftInt64,     // sftRecordVersion = TRecordVersion
-     ftInt64);    // sftSessionUserID
+     ftInt64,     // sftSessionUserID
+     ftInt64);    // sftUnixTime = TUnixTime
 
 function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType; aTypeInfo: pointer): TSQLDBFieldType;
   {$ifdef HASINLINE}inline;{$endif}
@@ -20574,8 +20586,8 @@ const
     varNull,{$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
- // sftRecordVersion, sftSessionUserID
-    varInt64, varInt64);
+ // sftRecordVersion, sftSessionUserID, sftUnixTime
+    varInt64, varInt64, varInt64);
 var err: integer;
     tmp: TSynTempBuffer;
 begin
@@ -20601,7 +20613,7 @@ begin
   sftEnumerate:
     result.VInteger := GetInteger(Value);
   sftInteger, sftID, sftTID, sftRecord, sftSet, sftRecordVersion, sftSessionUserID,
-  sftTimeLog, sftModTime, sftCreateTime:
+  sftTimeLog, sftModTime, sftCreateTime, sftUnixTime:
     SetInt64(Value,result.VInt64);
   sftAnsiText, sftUTF8Text:
     SetString(RawUTF8(result.VAny),Value,StrLen(Value));
@@ -20765,6 +20777,8 @@ begin
         C := TSQLPropInfoRTTIEnum;
       sftTimeLog, sftModTime, sftCreateTime: // specific class for further use
         C := TSQLPropInfoRTTITimeLog;
+      sftUnixTime: // specific class for further use
+        C := TSQLPropInfoRTTIUnixTime;
       sftCurrency:
         C := TSQLPropInfoRTTICurrency;
       sftDateTime:
@@ -24272,8 +24286,11 @@ begin
         exit;
       end;
     end else
-    if expandTimeLogAsText and (ContentType in [sftTimeLog,sftModTime,sftCreateTime]) then begin
+    if expandTimeLogAsText and
+       (ContentType in [sftTimeLog,sftModTime,sftCreateTime,sftUnixTime]) then begin
       SetInt64(V,t.Value);
+      if ContentType=sftUnixTime then
+        t.FromUnixTime(t.Value);
       value := _ObjFast(['Time',t.Text(true),'Value',PInt64(@t)^]);
       exit;
     end;
@@ -24632,6 +24649,8 @@ begin
   sftInteger, // TSQLTable.InitFieldTypes may have recognized an integer
   sftTimeLog, sftModTime, sftCreateTime:
     result := TimeLogToDateTime(GetInt64(P));
+  sftUnixTime:
+    result := UnixTimeToDateTime(GetInt64(P));
   else // sftDateTime and any other kind will try from ISO-8601 text
     result := Iso8601ToDateTimePUTF8Char(P);
   end;
@@ -25503,7 +25522,8 @@ var
     UTF8CompareInt64,    // TCreateTime
     UTF8CompareInt64,    // TID
     UTF8CompareInt64,    // TRecordVersion
-    UTF8CompareInt64);   // TSessionUserID
+    UTF8CompareInt64,    // TSessionUserID
+    UTF8CompareInt64);   // TUnixTime
 
 type
   /// a static object is used for smaller recursive stack size and faster code
@@ -26302,6 +26322,7 @@ var U: PPUTF8Char;
     UpperUnicodeLen: integer;
     EnumType: PEnumType;
     Val64: Int64;
+    ValTimeLog: TTimelogBits absolute Val64;
     i,err: integer;
     EnumValue: RawUTF8;
     s: string;
@@ -26361,11 +26382,13 @@ begin
     exit;
   end;
   // special cases: conversion from INTEGER to text before search
-  if Kind in [sftTimeLog,sftModTime,sftCreateTime] then
+  if Kind in [sftTimeLog,sftModTime,sftCreateTime,sftUnixTime] then
     while cardinal(result)<=cardinal(fRowCount) do begin
       SetInt64(U^,Val64);
       if Val64<>0 then begin
-        tmp[TTimeLogBits(Val64).Text(tmp,true,' ')] := #0;
+        if Kind=sftUnixTime  then
+          ValTimeLog.FromUnixTime(Val64);
+        tmp[ValTimeLog.Text(tmp,true,' ')] := #0;
         if FindAnsi(tmp,Search) then
           exit;
       end;
@@ -26512,6 +26535,7 @@ function TSQLTable.ExpandAsString(Row, Field: integer; Client: TObject;
 var EnumType: PEnumType;
     err: integer;
     Value: Int64;
+    ValueTimeLog: TTimeLogBits absolute Value;
     Ref: RecordRef absolute Value;
 label IsDateTime;
 begin // Text was already forced to '' because was defined as "out" parameter
@@ -26528,12 +26552,12 @@ IsDateTime:
     if Value<>0 then begin
       {$ifndef LVCL}
       if CustomFormat<>'' then begin
-        Text := FormatDateTime(CustomFormat,TTimeLogBits(Value).ToDateTime);
+        Text := FormatDateTime(CustomFormat,ValueTimeLog.ToDateTime);
         if Text<>CustomFormat then
           exit; // valid conversion
       end;
       {$endif LVCL}
-      Text := TTimeLogBits(Value).i18nText;
+      Text := ValueTimeLog.i18nText;
       exit;
     end;
   end;
@@ -26566,7 +26590,7 @@ IsDateTime:
         Text := '';
     end;
   sftEnumerate, sftSet, sftRecord, sftID, sftTID, sftRecordVersion, sftSessionUserID,
-  sftTimeLog, sftModTime, sftCreateTime: begin
+  sftTimeLog, sftModTime, sftCreateTime, sftUnixTime: begin
     Value := GetInt64(Get(Row,Field),err);
     if err<>0 then
       // not an integer -> to be displayed as sftUTF8Text
@@ -26578,6 +26602,10 @@ IsDateTime:
       end;
       sftTimeLog, sftModTime, sftCreateTime:
         goto IsDateTime;
+      sftUnixTime: begin
+        ValueTimeLog.FromUnixTime(Value);
+        goto IsDateTime;
+      end;
 {      sftID, sftTID, sftSet, sftRecordVersion:
         result := sftUTF8Text; // will display INTEGER field as number }
       sftRecord:
@@ -29115,6 +29143,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end else
       if @self=TypeInfo(TTimeLog) then begin
         result := sftTimeLog;
+        exit;
+      end else
+      if @self=TypeInfo(TUnixTime) then begin
+        result := sftUnixTime;
         exit;
       end else
       if @self=TypeInfo(TID) then begin
@@ -48746,7 +48778,8 @@ const
     ' INTEGER, ',                    // sftCreateTime
     ' INTEGER, ',                    // sftTID
     ' INTEGER, ',                    // sftRecordVersion
-    ' INTEGER, ');                   // sftSessionUserID
+    ' INTEGER, ',                    // sftSessionUserID
+    ' INTEGER, ');                   // sftUnixTime
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then
     result := '' else
@@ -49502,13 +49535,21 @@ begin
           V64 := P^.GetInt64Prop(Value);
           if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
             HR(P);
-            if (woTimeLogAsText in Options) and (P^.PropType^.GetSQLFieldType
-                in [sftTimeLog,sftModTime,sftCreateTime]) then begin
-              Add('"');
-              AddTimeLog(@V64);
-              Add('"');
-            end else
-              Add(V64);
+            if woTimeLogAsText in Options then
+              case P^.PropType^.GetSQLFieldType of
+              sftTimeLog,sftModTime,sftCreateTime: begin
+                Add('"');
+                AddTimeLog(@V64);
+                Add('"');
+              end;
+              sftUnixTime: begin
+                Add('"');
+                AddDateTime(UnixTimeToDateTime(V64));
+                Add('"');
+              end;
+              else Add(V64);
+              end
+            else Add(V64);
           end;
         end;
         {$ifdef FPC} tkBool, {$endif}

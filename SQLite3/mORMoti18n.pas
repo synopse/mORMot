@@ -592,7 +592,7 @@ type
     /// convert a TSQLRecord published property value into ready to be displayed text
     // - will convert any sftUTF8Text/sftAnsiText into ready to be displayed text
     // - will convert any sftInteger/sftFloat/sftCurrency into its textual value
-    // - will convert any sftBoolean, sftEnumerate, sftDateTime or
+    // - will convert any sftBoolean, sftEnumerate, sftDateTime, sftUnixTime or
     // sftTimeLog/sftModTime/sftCreateTime into the corresponding text, depending
     // on the current language
     // - will convert a sftSet property value to a list of all set enumerates,
@@ -1984,6 +1984,10 @@ begin
     sftTimeLog, sftModTime, sftCreateTime: begin
       // need temp Iso to avoid URW699 with Delphi 6
       Time.Value := GetInt64(pointer(Value));
+      result := DateTimeToText(Time);
+    end;
+    sftUnixTime: begin
+      Time.FromUnixTime(GetInt64(pointer(Value)));
       result := DateTimeToText(Time);
     end;
     sftBoolean:

@@ -219,7 +219,7 @@ begin
   // create corresponding Reference field
   FreeAndNil(Reference);
   case FieldType of
-    sftDateTime, sftTimeLog, sftModTime, sftCreateTime: begin
+    sftDateTime, sftTimeLog, sftModTime, sftCreateTime, sftUnixTime: begin
       Reference := TDateTimePicker.Create(self);
       Reference.Parent := self;
     end;
@@ -275,6 +275,8 @@ begin
           Ref := DateTimeToIso8601(DateTime,false);
         sftTimeLog, sftModTime, sftCreateTime:
           Ref := IntToStr(TimeLogFromDateTime(DateTime));
+        sftUnixTime:
+          Ref := IntToStr(DateTimeToUnixTime(DateTime));
       end;
     Ref := Trim(Ref);
     if Ref='' then begin

@@ -585,10 +585,21 @@ begin
       info := fStoredClassProps.Props.Fields.List[ndx];
       V := @doc.Values[i];
       case V^.VType of
-      varInteger: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
+      varInteger:
       case info.SQLFieldType of
-        sftBoolean:
+        sftBoolean: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
           Variant(V^) := boolean(V^.VInteger); // store true boolean BSON
+        sftUnixTime: begin
+          V^.VDate := UnixTimeToDateTime(V^.VInteger); // as MongoDB date/time
+          V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+        end;
+      end;
+      varInt64:
+      case info.SQLFieldType of
+        sftUnixTime: begin
+          V^.VDate := UnixTimeToDateTime(V^.VInt64); // as MongoDB date/time
+          V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+        end;
       end;
       varString: // handle some TEXT values
       case info.SQLFieldType of
