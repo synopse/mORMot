@@ -25985,7 +25985,7 @@ function TSQLTable.ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): bo
 var R: TSQLRecord;
     Row: PPUtf8Char;
     i: integer;
-    arr: array of TSQLRecord absolute ObjArray;
+    arr: TSQLRecordObjArray absolute ObjArray;
 begin
   result := false;
   ObjArrayClear(ObjArray);
@@ -44118,8 +44118,8 @@ begin
     if n<0 then begin // was wkFakeMarker -> TID were stored as VarUInt64
       lastID := 0;
       for i := 0 to -n-1 do begin
-        aRecord := fStoredClass.Create;
-        newID := lastID+Int64(R.ReadVarUInt64);
+        aRecord := fStoredClass.Create;  // avoid URW699 with Delphi6/Kylix
+        newID := lastID+{$ifdef FPC_OR_UNICODE}TID{$endif}(R.ReadVarUInt64);
         aRecord.fID := newID;
         lastID := newID;
         fValue.List[i] := aRecord;
@@ -46916,10 +46916,10 @@ function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): PUTF8Char;
 var P: PPropInfo;
     Value: TObject absolute ObjectInstance;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     Coll: TCollection absolute ObjectInstance;
     CollItem: TObject;
-{$endif}
+    {$endif}
     Str: TStrings absolute ObjectInstance;
     Utf: TRawUTF8List absolute ObjectInstance;
     Lst: TObjectList absolute ObjectInstance;
@@ -49338,9 +49338,9 @@ var P: PPropInfo;
     V64: Int64;
     Obj: TObject;
     List: TList absolute Value;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     Coll: TCollection absolute Value;
-{$endif}
+    {$endif}
     Str: TStrings absolute Value;
     Utf: TRawUTF8List absolute Value;
     Table: TSQLTable absolute Value;
@@ -59426,4 +59426,5 @@ initialization
 finalization
   FinalizeGlobalInterfaceResolution;
 end.
+
 

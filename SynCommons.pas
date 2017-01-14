@@ -31998,14 +31998,15 @@ const
 function UnixTimeUTC: TUnixTime;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
-    nano100: Int64{$ifndef CPU64} absolute ft{$endif};
+    {$ifdef CPU64}nano100: Int64;{$endif}
 begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
+  result := (nano100-UnixFileTimeDelta) div 10000000;
+  {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
+  result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000000;
   {$endif}
-  dec(nano100,UnixFileTimeDelta);
-  result := nano100 div 10000000;
 // assert(Round((NowUTC-UnixDateDelta)*SecsPerDay)-result<2);
 end;
 {$else}
@@ -32027,14 +32028,16 @@ end;
 function NowUTC: TDateTime;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
-    nano100: Int64{$ifndef CPU64} absolute ft{$endif};
+    {$ifdef CPU64}nano100: Int64;{$endif}
 begin
   GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
   {$ifdef CPU64}
   FileTimeToInt64(ft,nano100);
+  result := (nano100-DateFileTimeDelta)/(10000000.0*SecsPerDay);
+  {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
+  dec(PInt64(@ft)^,DateFileTimeDelta);
+  result := PInt64(@ft)^/(10000000.0*SecsPerDay);
   {$endif}
-  dec(nano100,DateFileTimeDelta);
-  result := nano100/(10000000.0*SecsPerDay);
 end;
 {$else}
 begin
