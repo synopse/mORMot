@@ -128,7 +128,7 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 function GetNowUTC: TDateTime;
 
 /// returns the current UTC time, as Unix Epoch seconds
-function GetUnixUTC: cardinal;
+function GetUnixUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
@@ -233,7 +233,7 @@ begin
   result.MilliSecond := tz.tv_usec div 1000;
 end;
 
-function GetUnixUTC: cardinal;
+function GetUnixUTC: Int64;
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);

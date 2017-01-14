@@ -10239,6 +10239,17 @@ type
 { ************ some other common types and conversion routines ************** }
 
 type
+  /// timestamp stored as second-based Unix Time
+  // - i.e. the number of seconds since 1970-01-01 00:00:00 UTC
+  // - is stored as 64-bit value, so that it won't be affected by the
+  // "Year 2038" overflow issue
+  // - also one of the encoding supported by SQLite3 date/time functions 
+  TUnixTime = type Int64;
+
+  /// timestamp stored as millisecond-based Unix Time
+  // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
+  TUnixMSTime = type Int64;
+
   /// calling context of TSynLogExceptionToStr callbacks
   TSynLogExceptionContext = record
     /// the raised exception class
@@ -10259,7 +10270,7 @@ type
     /// the timestamp of this exception, as number of seconds since UNIX Epoch
     // - UnixTimeUTC is faster than NowUTC or GetSystemTime
     // - use UnixTimeToDateTime() to convert it into a regular TDateTime
-    ETimeStamp: Cardinal;
+    ETimeStamp: TUnixTime;
   end;
 
   /// global hook callback to customize exceptions logged by TSynLog
@@ -11523,9 +11534,9 @@ type
     // - will return 0 if the stored value is not a valid date
     function ToDateTime: TDateTime;
     /// convert to a second-based c-encoded time (from Unix epoch 1/1/1970)
-    function ToUnixTime: Int64;
+    function ToUnixTime: TUnixTime;
     /// convert to a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
-    function ToUnixMSTime: Int64;
+    function ToUnixMSTime: TUnixMSTime;
     /// fill Value from specified Date and Time
     procedure From(Y,M,D, HH,MM,SS: cardinal); overload;
     /// fill Value from specified TDateTime
@@ -11539,9 +11550,9 @@ type
     /// fill Value from specified Date/Time individual fields
     procedure From(const Time: TSystemTime); overload;
     /// fill Value from second-based c-encoded time (from Unix epoch 1/1/1970)
-    procedure FromUnixTime(const UnixTime: Int64);
+    procedure FromUnixTime(const UnixTime: TUnixTime);
     /// fill Value from millisecond-based c-encoded time (from Unix epoch 1/1/1970)
-    procedure FromUnixMSTime(const UnixMSTime: Int64);
+    procedure FromUnixMSTime(const UnixMSTime: TUnixMSTime);
     /// fill Value from current local system Date and Time
     procedure FromNow;
     /// fill Value from current UTC system Date and Time
@@ -11805,34 +11816,33 @@ function TimeToString: RawUTF8;
 
 /// convert a second-based c-encoded time as TDateTime
 //  - i.e. number of seconds elapsed since Unix epoch 1/1/1970 into TDateTime
-function UnixTimeToDateTime(const UnixTime: Int64): TDateTime;
+function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TDateTime into a second-based c-encoded time
 //  - i.e. TDateTime into number of seconds elapsed since Unix epoch 1/1/1970
-function DateTimeToUnixTime(const AValue: TDateTime): Int64;
+function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the current UTC date/time as a second-based c-encoded time
 //  - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
-// - returns a 32-bit unsigned value, so is "Year2038bug" free, but you may
-// consider using Int64 if your unsigned value may be converted to signed
-function UnixTimeUTC: cardinal;
+// - returns a 64-bit unsigned value, so is "Year2038bug" free
+function UnixTimeUTC: TUnixTime;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 const
-  /// a contemporary, but elapsed, second-based c-encoded time
+  /// a contemporary, but elapsed, TUnixTime second-based value
   // - corresponds to Thu, 08 Dec 2016 08:50:20 GMT
   // - may be used to check for a valid just-generated Unix timestamp value
   UNIXTIME_MINIMAL = 1481187020;
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
-function UnixMSTimeToDateTime(const UnixTime: Int64): TDateTime;
+function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a TDateTime into a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
-function DateTimeToUnixMSTime(const AValue: TDateTime): Int64;
+function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the current UTC system date and time
@@ -16923,7 +16933,7 @@ type
     /// low-endian 4-byte value representing the seconds since the Unix epoch
     // - time is expressed in Coordinated Universal Time (UTC), not local time
     // - it uses in fact a 33-bit resolution, so is "Year 2038" bug-free
-    function CreateTimeUnix: cardinal;
+    function CreateTimeUnix: TUnixTime;
       {$ifdef HASINLINE}inline;{$endif}
     /// fill this unique identifier structure from its TSynUniqueIdentifier value
     // - is just a wrapper around PInt64(@self)^
@@ -17007,10 +17017,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// return an unique ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
-    procedure ComputeFromDateTime(aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
+    procedure ComputeFromDateTime(const aDateTime: TDateTime; out result: TSynUniqueIdentifierBits);
     /// return an unique ID matching this generator pattern, at a given timestamp
     // - may be used e.g. to limit database queries on a particular time range
-    procedure ComputeFromUnixTime(aUnixTime: Int64; out result: TSynUniqueIdentifierBits);
+    procedure ComputeFromUnixTime(const aUnixTime: TUnixTime; out result: TSynUniqueIdentifierBits);
     /// map a TSynUniqueIdentifier as 24 chars cyphered hexadecimal text
     // - cyphering includes simple key-based encryption and a CRC-32 digital signature
     function ToObfuscated(const aIdentifier: TSynUniqueIdentifier): TSynUniqueIdentifierObfuscated;
@@ -31971,12 +31981,12 @@ begin
     PByteArray(d)^[i] := PByteArray(d)^[i] xor key xor crc32ctab[0,17 shl i];
 end;
 
-function UnixTimeToDateTime(const UnixTime: Int64): TDateTime;
+function UnixTimeToDateTime(const UnixTime: TUnixTime): TDateTime;
 begin
   result := (UnixTime / SecsPerDay + UnixDateDelta);
 end;
 
-function DateTimeToUnixTime(const AValue: TDateTime): Int64;
+function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
 begin
   result := Round((AValue - UnixDateDelta) * SecsPerDay);
 end;
@@ -31985,7 +31995,7 @@ const
   UnixFileTimeDelta = 116444736000000000; // from year 1601 to 1970
   DateFileTimeDelta =  94353120000000000; // from year 1601 to 1899
 
-function UnixTimeUTC: cardinal;
+function UnixTimeUTC: TUnixTime;
 {$ifdef MSWINDOWS}
 var ft: TFileTime;
     nano100: Int64{$ifndef CPU64} absolute ft{$endif};
@@ -32004,12 +32014,12 @@ begin
 end;
 {$endif}
 
-function UnixMSTimeToDateTime(const UnixTime: Int64): TDateTime;
+function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
-  result := (UnixTime / MSecsPerDay + UnixDateDelta);
+  result := (UnixMSTime / MSecsPerDay + UnixDateDelta);
 end;
 
-function DateTimeToUnixMSTime(const AValue: TDateTime): Int64;
+function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 begin
   result := Round((AValue - UnixDateDelta) * MSecsPerDay);
 end;
@@ -32542,12 +32552,12 @@ begin
     Value := SS+MM shl 6+Int64(V) shl 12;
 end;
 
-procedure TTimeLogBits.FromUnixTime(const UnixTime: Int64);
+procedure TTimeLogBits.FromUnixTime(const UnixTime: TUnixTime);
 begin
   From(UnixTimeToDateTime(UnixTime));
 end;
 
-procedure TTimeLogBits.FromUnixMSTime(const UnixMSTime: Int64);
+procedure TTimeLogBits.FromUnixMSTime(const UnixMSTime: TUnixMSTime);
 begin
   From(UnixMSTimeToDateTime(UnixMSTime));
 end;
@@ -32684,12 +32694,12 @@ begin
   result := Int64Rec(Value).Lo and 63;
 end;
 
-function TTimeLogBits.ToUnixTime: Int64;
+function TTimeLogBits.ToUnixTime: TUnixTime;
 begin
   result := DateTimeToUnixTime(ToDateTime);
 end;
 
-function TTimeLogBits.ToUnixMSTime: Int64;
+function TTimeLogBits.ToUnixMSTime: TUnixMSTime;
 begin
   result := DateTimeToUnixMSTime(ToDateTime);
 end;
@@ -32812,7 +32822,7 @@ begin
   DecodeDate(UTCDateTime,Y,M,D);
   DecodeTime(UTCDateTime,HH,MM,SS,MS);
   FormatUTF8('%, % % % %:%:% GMT', [HTML_WEEK_DAYS[DayOfWeek(UTCDateTime)],
-    UInt2DigitsToShort(D), HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
+    UInt2DigitsToShort(D),HTML_MONTH_NAMES[M],UInt4DigitsToShort(Y),
     UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
     UInt2DigitsToShort(SS)], result);
 end;
@@ -59033,7 +59043,7 @@ begin
     fSnapShotAfterMinutes := 30;
     fSnapshotTimeStamp := 0;
     fSnapshotInsertCount := 0;
-    fRevision := Int64(UnixTimeUTC) shl 31;
+    fRevision := UnixTimeUTC shl 31;
     fKnownRevision := 0;
     fKnownStore := '';
   finally
@@ -59759,7 +59769,7 @@ begin
   result := (PCardinal(@Value)^ shr 15) and $ffff;
 end;
 
-function TSynUniqueIdentifierBits.CreateTimeUnix: cardinal;
+function TSynUniqueIdentifierBits.CreateTimeUnix: TUnixTime;
 begin
   result := Value shr 31;
 end;
@@ -59856,13 +59866,13 @@ begin
   {$endif}
 end;
 
-procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(aDateTime: TDateTime;
+procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(const aDateTime: TDateTime;
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
   result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
 end;
 
-procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(aUnixTime: Int64;
+procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(const aUnixTime: TUnixTime;
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
   result.Value := (aUnixTime shl 31) or fIdentifierShifted;
