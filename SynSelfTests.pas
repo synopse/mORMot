@@ -9874,7 +9874,7 @@ begin
         if CheckFailed(i<>0)then exit;
         FillCharFast(s[i],32,32);
         H := Hash32(s);
-        Check(H=3564778312);
+        Check(H=1030733677);
       end;
     finally
       Free;
