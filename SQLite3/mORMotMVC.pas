@@ -914,9 +914,9 @@ begin
         i := Rec^.GetValueIndex(Field.Name);
         if i<0 then
           continue;
-        if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,
-           sftInteger,sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,
-           sftDateTime,sftBoolean,sftEnumerate,sftSet]) then
+        if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,sftInteger,
+           sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,sftDateTime,
+           sftDateTimeMS,sftUnixTime,sftBoolean,sftEnumerate,sftSet]) then
           continue;
         HtmlTableStyle.BeforeFieldName(W);
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
@@ -929,10 +929,15 @@ begin
         sftTimeLog,sftModTime,sftCreateTime:
           if VariantToInt64(Rec^.Values[i],timelog.Value) then
             W.AddHtmlEscapeString(timeLog.i18nText);
-        sftDateTime: begin
+        sftDateTime, sftDateTimeMS: begin
           timelog.From(utf8);
           W.AddHtmlEscapeString(timeLog.i18nText);
         end;
+        sftUnixTime:
+          if VariantToInt64(Rec^.Values[i],timelog.Value) then begin
+            timelog.FromUnixTime(timelog.Value);
+            W.AddHtmlEscapeString(timeLog.i18nText);
+          end;
         sftBoolean,sftEnumerate:
           if Field.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
             caption := TSQLPropInfoRTTIEnum(Field).GetCaption(utf8,int);

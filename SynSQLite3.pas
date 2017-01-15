@@ -3414,10 +3414,10 @@ begin
     Iso8601ToDateTimePUTF8CharVar(s2,s2Len,V2);
     if (V1=0) or (V2=0) then // any invalid date -> compare as UTF-8 strings
       result := UTF8ILComp(s1,s2,s1Len,s2Len) else
-      if V1<V2 then
-        result := -1 else
-        if V1=V2 then
-          result := 0 else
+      if SameValue(V1,V2,1/MSecsPerDay) then
+        result := 0 else
+        if V1<V2 then
+          result := -1 else
           result := +1;
   end;
 end;

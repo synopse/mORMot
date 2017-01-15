@@ -3536,12 +3536,12 @@ begin
     Check(length(s)=15);
   if Expanded then begin
     Check(Iso8601CheckAndDecode(Pointer(s),length(s),E));
-    Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
+    Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   end;
   E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
+  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   E := Iso8601ToDateTime(s+'Z');
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 999 ms error
+  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 999 ms error
   I.From(D);
   Check(Iso8601ToTimeLog(s)=I.Value);
   I.From(s);
@@ -3553,16 +3553,16 @@ begin
   Check(Int64(I)=Int64(J));
   s := TimeToIso8601(D,Expanded);
   Check(PosEx('.',s)=0);
-  Check(abs(frac(D)-Iso8601ToDateTime(s))<1000/MSecsPerDay);
+  Check(abs(frac(D)-Iso8601ToDateTime(s))<1/SecsPerDay);
   s := TimeToIso8601(D,Expanded,'T',true);
   Check(PosEx('.',s)>0);
   F := Iso8601ToDateTime(s);
   Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
   s := DateToIso8601(D,Expanded);
   Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
-  Check(Abs(D-I.ToDateTime)<(1000/MSecsPerDay));
+  Check(Abs(D-I.ToDateTime)<(1/SecsPerDay));
   E := TimeLogToDateTime(I.Value);
-  Check(Abs(D-E)<(1000/MSecsPerDay));
+  Check(Abs(D-E)<(1/SecsPerDay));
   s := DateTimeToIso8601(D,Expanded,#0);
   if Expanded then
     Check(length(s)=18) else

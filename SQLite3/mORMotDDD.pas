@@ -1325,6 +1325,7 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'boolean',         // sftBoolean
     'double',          // sftFloat
     'TDateTime',       // sftDateTime
+    'TDateTimeMS',     // sftDateTimeMS
     'TTimeLog',        // sftTimeLog
     'currency',        // sftCurrency
     '',                // sftObject

@@ -545,10 +545,13 @@ begin
   case fGrid.Table.FieldType(Col,nil) of
   sftAnsiText, sftUTF8Text, sftObject:
     result := QuotedStr(result);
-  sftDateTime:
+  sftDateTime, sftDateTimeMS:
     result := Props.SQLIso8601ToDate(result);
   sftTimeLog, sftModTime, sftCreateTime:
     result := Props.SQLIso8601ToDate(fGrid.Table.GetTimeLog(Row,Col,true,' '));
+  sftUnixTime:
+    result := Props.SQLIso8601ToDate(DateTimeToIso8601Text(UnixTimeToDateTime(
+      GetInt64(pointer(result)))));
   sftBlob, sftBlobDynArray:
     result := ''; // BLOB won't work in SQL without parameter binding
   end;

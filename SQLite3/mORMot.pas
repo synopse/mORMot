@@ -1453,6 +1453,10 @@ type
   // - sftDateTime is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
   // corresponding to a TDateTime Delphi property: a ISO8601 collation is
   // forced for such column, for proper date/time sorting and searching
+  // - sftDateTimeMS is a ISO 8601 encoded (SQLite3 compatible) TEXT field,
+  // corresponding to a TDateTimeMS Delphi property, i.e. a TDateTime with
+  // millisecond resolution, serialized with '.sss' suffix: a ISO8601 collation
+  // is forced for such column, for proper date/time sorting and searching
   // - sftTimeLog is an INTEGER field for coding a date and time (not SQLite3
   // compatible), which should be defined as TTimeLog=Int64 Delphi property,
   // ready to be typecasted to the TTimeLogBits optimized type for efficient
@@ -1553,6 +1557,7 @@ type
     sftBoolean,
     sftFloat,
     sftDateTime,
+    sftDateTimeMS,
     sftTimeLog,
     sftCurrency,
     sftObject,
@@ -8037,7 +8042,7 @@ type
     function GetAsFloat(Row: integer; const FieldName: RawUTF8): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
     /// read-only access to a particular field value, as TDateTime value
-    // - explicit sftDateTime will be converted from ISO-8601 text
+    // - sftDateTime/sftDateTimeMS will be converted from ISO-8601 text
     // - sftTimeLog, sftModTime, sftCreateTime will expect the content to be
     // encoded as a TTimeLog Int64 value - as sftInteger may have been
     // identified by TSQLTable.InitFieldTypes
@@ -8097,8 +8102,8 @@ type
     // or complex FormatFloat()/FormatCurr() syntax (as '#,##0.00') for sftFloat
     // and sftCurrency columns (instead of plain JSON float value), or
     // date/time format as expected by FormatDateTime() for all date time kind
-    // of fields (as sftDateTime, sftTimeLog, sftModTime, sftCreateTime,
-    // sftUnixTime)
+    // of fields (as sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime,
+    // sftCreateTime, sftUnixTime)
     function ExpandAsString(Row,Field: integer; Client: TObject; out Text: string;
       const CustomFormat: string=''): TSQLFieldType;
     /// read-only access to a particular field value, as VCL text
@@ -19484,7 +19489,7 @@ function UTF8CompareCurr64(P1,P2: PUTF8Char): PtrInt;
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareDouble(P1,P2: PUTF8Char): PtrInt;
 
-/// special comparaison function for sorting sftDateTime
+/// special comparaison function for sorting sftDateTime or sftDateTimeMS
 // UTF-8 encoded values in the SQLite3 database or JSON content
 function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
 
@@ -20433,13 +20438,14 @@ const
      ftInt64,     // sftBoolean
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
+     ftDate,      // sftDateTimeMS
      ftInt64,     // sftTimeLog
      ftCurrency,  // sftCurrency
      ftUTF8,      // sftObject
-{$ifndef NOVARIANTS}
+     {$ifndef NOVARIANTS}
      ftUTF8,      // sftVariant
      ftNull,      // sftNullable
-{$endif}
+     {$endif}
      ftBlob,      // sftBlob
      ftBlob,      // sftBlobDynArray
      ftBlob,      // sftBlobCustom
@@ -20580,10 +20586,12 @@ const
   SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
- // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftTimeLog, sftCurrency,
-    varInt64,varInt64,varBoolean, varDouble, varDate,    varInt64,   varCurrency,
- //sftObject,{$NOVARIANTS}sftVariant,sftNullable{$endif} sftBlob,sftBlobDynArray,
-    varNull,{$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
+ // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftDateTimeMS,
+    varInt64,varInt64,varBoolean, varDouble, varDate,    varDate,
+ //  sftTimeLog, sftCurrency,  sftObject,
+    varInt64,   varCurrency,   varNull,
+ //                   sftVariant, sftNullable       sftBlob,sftBlobDynArray,
+    {$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
  // sftRecordVersion, sftSessionUserID, sftUnixTime
@@ -20605,8 +20613,8 @@ begin
       SetString(RawUTF8(result.VAny),Value,StrLen(Value));
     end;
   end;
-  sftDateTime:
-    result.VDate := Iso8601ToDateTimePUTF8Char(Value,0);
+  sftDateTime, sftDateTimeMS:
+    Iso8601ToDateTimePUTF8CharVar(Value,0,result.VDate);
   sftBoolean:
     result.VBoolean :=
       not((Value=nil) or (PWord(Value)^=ord('0')) or (PInteger(Value)^=FALSE_LOW));
@@ -20781,7 +20789,7 @@ begin
         C := TSQLPropInfoRTTIUnixTime;
       sftCurrency:
         C := TSQLPropInfoRTTICurrency;
-      sftDateTime:
+      sftDateTime, sftDateTimeMS:
         C := TSQLPropInfoRTTIDateTime;
       sftID: // = TSQLRecord(aID)
         C := TSQLPropInfoRTTIID;
@@ -21408,22 +21416,27 @@ end;
 procedure TSQLPropInfoRTTIDateTime.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
   W.Add('"');
-  W.AddDateTime(fPropInfo.GetDoubleProp(Instance));
+  W.AddDateTime(fPropInfo.GetDoubleProp(Instance),fSQLFieldType=sftDateTimeMS);
   W.Add('"');
 end;
 
 function TSQLPropInfoRTTIDateTime.CompareValue(Item1,Item2: TObject; CaseInsensitive: boolean): PtrInt;
-var Date1,Date2: TTimeLogBits;
-begin // force second resolution, as in our JSON content
+const PRECISION: array[boolean] of double = (1/SecsPerDay, 1/MSecsPerDay);
+var V1, V2: double;
+begin
   if Item1=Item2 then
     result := 0 else
   if Item1=nil then
     result := -1 else
   if Item2=nil then
     result := 1 else begin
-    Date1.From(fPropInfo.GetDoubleProp(Item1));
-    Date2.From(fPropInfo.GetDoubleProp(Item2));
-    result := Date1.Value-Date2.Value;
+    V1 := fPropInfo.GetDoubleProp(Item1);
+    V2 := fPropInfo.GetDoubleProp(Item2);
+    if SynCommons.SameValue(V1,V2,PRECISION[fSQLFieldType=sftDateTimeMS]) then
+      result := 0 else
+    if V1>V2 then
+      result := 1 else
+      result := -1;
   end;
 end;
 
@@ -21432,12 +21445,13 @@ procedure TSQLPropInfoRTTIDateTime.GetValueVar(Instance: TObject;
 begin
   if wasSQLString<>nil then
     wasSQLString^ := true;
-  DateTimeToIso8601TextVar(fPropInfo.GetDoubleProp(Instance),'T',result);
+  DateTimeToIso8601TextVar(fPropInfo.GetDoubleProp(Instance),
+    'T',result,fSQLFieldType=sftDateTimeMS);
 end;
 
 procedure TSQLPropInfoRTTIDateTime.NormalizeValue(var Value: RawUTF8);
 begin
-  DateTimeToIso8601TextVar(Iso8601ToDateTime(Value),'T',Value);
+  DateTimeToIso8601TextVar(Iso8601ToDateTime(Value),'T',Value,fSQLFieldType=sftDateTimeMS);
 end;
 
 procedure TSQLPropInfoRTTIDateTime.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -25469,20 +25483,20 @@ er: result := UTF8IComp(P1,P2);
 end;
 
 function UTF8CompareISO8601(P1,P2: PUTF8Char): PtrInt;
-var V1,V2: Int64; // faster than Iso8601ToDateTimePUTF8Char: uses integer math
+var V1,V2: TDateTime;
 begin
   if P1=P2 then begin
     result := 0;
     exit;
   end;
-  V1 := Iso8601ToTimeLogPUTF8Char(P1,0);
-  V2 := Iso8601ToTimeLogPUTF8Char(P2,0);
+  Iso8601ToDateTimePUTF8CharVar(P1,0,V1);
+  Iso8601ToDateTimePUTF8CharVar(P2,0,V2);
   if (V1=0) or (V2=0) then // any invalid date -> compare as strings
-    result := UTF8IComp(P1,P2) else
-    if V1<V2 then
-      result := -1 else
-      if V1=V2 then
-        result := 0 else
+    result := StrComp(P1,P2) else
+    if SameValue(V1,V2,1/MSecsPerDay) then
+      result := 0 else
+      if V1<V2 then
+        result := -1 else
         result := +1;
 end;
 
@@ -25506,6 +25520,7 @@ var
     UTF8CompareBoolean,  // Boolean
     UTF8CompareDouble,   // Float
     UTF8CompareISO8601,  // TDateTime
+    UTF8CompareISO8601,  // TDateTimeMS
     UTF8CompareInt64,    // TTimeLog
     UTF8CompareCurr64,   // Currency
     nil,                 // Object (TEXT serialization)
@@ -26546,7 +26561,7 @@ begin // Text was already forced to '' because was defined as "out" parameter
   end;
   result := FieldType(Field,@EnumType);
   case result of
-  sftDateTime: begin
+  sftDateTime, sftDateTimeMS: begin
    Value := Iso8601ToTimeLogPUTF8Char(Get(Row,Field),0);
 IsDateTime:
     if Value<>0 then begin
@@ -29201,6 +29216,10 @@ begin // very fast, thanks to the TypeInfo() compiler-generated function
       end else
       if @self=TypeInfo(TDateTime) then begin
         result := sftDateTime;
+        exit;
+      end else
+      if @self=TypeInfo(TDateTimeMS) then begin
+        result := sftDateTimeMS;
         exit;
       end else begin
         result := sftFloat;
@@ -48762,6 +48781,7 @@ const
     ' INTEGER, ',                    // sftBoolean
     ' FLOAT, ',                      // sftFloat
     ' TEXT COLLATE ISO8601, ',       // sftDateTime
+    ' TEXT COLLATE ISO8601, ',       // sftDateTimeMS
     ' INTEGER, ',                    // sftTimeLog
     ' FLOAT, ',                      // sftCurrency
     ' TEXT COLLATE BINARY, ',        // sftObject

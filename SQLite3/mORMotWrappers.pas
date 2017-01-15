@@ -242,8 +242,10 @@ const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,    sftInteger,
     cpkDefault, cpkDefault,  cpkDefault,  cpkDefault,   cpkDefault,cpkDefault,
- // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,sftTimeLog,sftCurrency,
-    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkTimeLog,cpkDefault,
+ // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,sftDateTimeMS,
+    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkDateTime,
+ // sftTimeLog,sftCurrency,
+    cpkTimeLog,cpkDefault,
  // sftObject,  sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
     cpkDefault, cpkVariant, cpkVariant,  cpkBlob, cpkDefault,      cpkDefault,
  // sftUTF8Custom,sftMany, sftModTime, sftCreateTime, sftTID,   sftRecordVersion
@@ -302,6 +304,7 @@ const
      wBoolean,        // sftBoolean
      wUnknown,        // sftFloat - wUnknown to force exact type
      wDateTime,       // sftDateTime
+     wDateTime,       // sftDateTimeMS
      wTimeLog,        // sftTimeLog
      wCurrency,       // sftCurrency
      wObject,         // sftObject

@@ -354,7 +354,7 @@ type
     /// set individual column custom format
     // - as handled by TSQLTable.ExpandAsString() method, i.e. Format() or
     // FormatFloat()/FormatCurrency() mask for sftFloat or sftCurrency, or
-    // FormatDateTime() mask for sftDateTime, sftDateTime, sftTimeLog, sftModTime,
+    // FormatDateTime() mask for sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime,
     // sftCreateTime, sftUnixTime)
     property CustomFormat[aCol: cardinal]: string read GetCustomFormat write SetCustomFormat;
     /// set a custom format for all columns of a given type
@@ -1197,7 +1197,7 @@ begin
         DrawCheckBox(TDrawGrid(Owner).Handle, Handle, Rect,
           PWord(Table.Get(ARow,ACol))^<>ord('0')); // fast StrComp(,'0')
       sftInteger, sftFloat, sftCurrency,
-      sftEnumerate, sftTimeLog, sftRecord, sftDateTime, sftUnixTime:
+      sftEnumerate, sftTimeLog, sftRecord, sftDateTime, sftDateTimeMS, sftUnixTime:
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
           length(StringValue), nil); // translated short text
       //sftID,sftTID:

@@ -148,7 +148,7 @@ begin
     if List.Items.Count<>0 then begin
       n := List.Items.Count-1; // select the last entered item by default
       if SelectedNodeObjectOnShow<>nil then begin
-        Name := CaptionName(OnCaptionName,nil,SelectedNodeObjectOnShow);
+        Name := CaptionName(OnCaptionName,'',SelectedNodeObjectOnShow);
         for i := 0 to n do
           if SameText(List.Items[i].Text,Name) then begin
             n := i;
@@ -212,7 +212,7 @@ begin
     Parent := Scroll;
     Scroll.Tag := Scroll.Tag+4;
     SetBounds(AddEditorsX,Scroll.Tag,140,20);
-    Caption := CaptionName(OnCaptionName,nil,Obj,Index);
+    Caption := CaptionName(OnCaptionName,'',Obj,Index);
     Tag := PtrInt(AddEditors(result,Obj,Caption,SubCaption));
     OnClick := SubButtonClick;
     Scroll.Tag := Scroll.Tag+24;
@@ -228,7 +228,7 @@ begin
   Scroll.Anchors := [akLeft,akTop,akRight,akBottom];
   CW := Scroll.ClientWidth;
   if aCustomCaption='' then
-    CustomCaption := CaptionName(OnCaptionName,nil,Obj) else
+    CustomCaption := CaptionName(OnCaptionName,'',Obj) else
     CustomCaption := aCustomCaption;
   if Node=nil then
     SubCaption := '' else
@@ -259,7 +259,7 @@ begin
     (aClassType<>TObject) do begin // TObject don't have any published properties
     for i := 1 to InternalClassPropInfo(aClassType,P) do
     if P^.Name[1]<>'_' then begin // ignore properties which name starts by _
-      aCaption := CaptionName(OnCaptionName,@P^.Name);
+      aCaption := CaptionName(OnCaptionName,ShortStringToUTF8(P^.Name));
       if not Assigned(OnComponentCreate) then
         C := nil else
         C := OnComponentCreate(Obj,P,Scroll);

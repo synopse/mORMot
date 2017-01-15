@@ -270,7 +270,7 @@ begin
       case SQLType of
       sftBoolean:
         DBType := ftBoolean;
-      sftInteger, sftID, sftTID:
+      sftInteger, sftID, sftTID, sftSessionUserID:
         DBType := ftLargeint; // LargeInt=Int64
       sftFloat, sftCurrency:
         DBType := ftFloat;
@@ -280,7 +280,7 @@ begin
           DBType := fDefaultStringType;
       sftRecord:
         DBType := fDefaultStringType;
-      sftDateTime, sftTimeLog, sftModTime, sftCreateTime:
+      sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
         DBType := ftDateTime;
       sftBlob: begin
         DBType := ftBlob;
@@ -329,7 +329,7 @@ begin
       case Columns[F].SQLType of
       sftBoolean:
         Field.AsBoolean := aTable.GetAsInteger(i,F)<>0;
-      sftInteger, sftID, sftTID:
+      sftInteger, sftID, sftTID, sftSessionUserID:
         if Field.DataType=ftLargeInt then // handle Int64 values directly
           TLargeintField(Field).Value := aTable.GetAsInt64(i,F) else
           Field.AsInteger := aTable.GetAsInteger(i,F);
@@ -339,8 +339,10 @@ begin
         if EnumType=nil then
           Field.AsInteger := aTable.GetAsInteger(i,F) else
           Field.AsString := aTable.GetString(i,F);
-      sftDateTime:
+      sftDateTime, sftDateTimeMS:
         Field.AsDateTime := Iso8601ToDateTimePUTF8Char(aTable.Get(i,F),0);
+      sftUnixTime:
+        Field.AsDateTime := UnixTimeToDateTime(aTable.GetAsInt64(i,F));
       sftTimeLog, sftModTime, sftCreateTime:
         Field.AsDateTime := TimeLogToDateTime(aTable.GetAsInt64(i,F));
       sftBlob: begin

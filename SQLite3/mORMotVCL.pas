@@ -314,10 +314,12 @@ begin
     if EnumType=nil then
       fTemp64 := GetInt64(P) else
       goto Txt;
-  sftDateTime:
+  sftDateTime, sftDateTimeMS:
     PDouble(@fTemp64)^ := Iso8601ToDateTimePUTF8Char(P,0);
   sftTimeLog, sftModTime, sftCreateTime:
     PDouble(@fTemp64)^ := TimeLogToDateTime(GetInt64(P));
+  sftUnixTime:
+    PDouble(@fTemp64)^ := UnixTimeToDateTime(GetInt64(P));
   sftBlob: begin
     fTempBlob := BlobToTSQLRawBlob(P);
     result := pointer(fTempBlob);
@@ -357,7 +359,7 @@ begin
         DataSize := 64;
         DBType := ftDefaultVCLString;
       end;
-    sftDateTime, sftTimeLog, sftModTime, sftCreateTime:
+    sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
       DBType := ftDateTime;
     sftBlob: begin
         DataSize := (fTable.FieldLengthMax(F,true)*3) shr 2;

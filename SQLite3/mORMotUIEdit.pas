@@ -331,18 +331,20 @@ begin
         C := OnComponentCreate(aRecord,P,Scroll);
       if C=nil then begin
         // default creation from RTTI, if not handled by OnComponentCreate()
-        aValue := P.GetValue(aRecord,false);
+        P.GetValueVar(aRecord,false,aValue,nil);
         aFieldType := Fields.List[i].SQLFieldType;
         case aFieldType of
-          sftDateTime: begin
+          sftDateTime, sftDateTimeMS: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             CD.DateTime := Iso8601ToDateTime(aValue);
           end;
-          sftTimeLog: begin
+          sftTimeLog, sftUnixTime: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             TimeLog.Value := GetInt64(pointer(aValue));
+            if aFieldType=sftUnixTime then
+              TimeLog.FromUnixTime(TimeLog.Value);
             CD.DateTime := TimeLog.ToDateTime;
           end;
           sftModTime, sftCreateTime:
@@ -645,12 +647,14 @@ begin
          fFieldComponentsTwin[FieldIndex].InheritsFrom(TDateTimePicker) then
           D := D+frac(TDateTimePicker(fFieldComponentsTwin[FieldIndex]).Time);
       case P.SQLFieldType of
-        sftDateTime:
-          P.SetValue(Rec,pointer(DateTimeToIso(D,false)),true);
+        sftDateTime, sftDateTimeMS:
+          P.SetValue(Rec,pointer(DateTimeToIso8601Text(D,'T',true)),true);
         sftTimeLog, sftModTime: begin
           TimeLog.From(D);
           P.SetValue(Rec,pointer(Int64ToUtf8(TimeLog.Value)),false);
         end;
+        sftUnixTime:
+          P.SetValue(Rec,pointer(Int64ToUtf8(DateTimeToUnixTime(D))),false);
       end;
     end;
   end;

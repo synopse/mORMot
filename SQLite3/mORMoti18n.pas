@@ -610,13 +610,15 @@ type
     /// convert a date into a ready to be displayed text on the screen
     function DateToText(const Time: TTimeLog): string; overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a date and time into a ready to be displayed text on the screen
-    function DateTimeToText(const DateTime: TDateTime): string; overload; {$ifdef HASINLINE}inline;{$endif}
+    function DateTimeToText(const DateTime: TDateTime): string;
+      overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a date and time into a ready to be displayed text on the screen
     function DateTimeToText(const Time: TTimeLogBits): string; overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a date and time into a ready to be displayed text on the screen
     function DateTimeToText(const Time: TTimeLog): string; overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a time into a ready to be displayed text on the screen
-    function TimeToText(const DateTime: TDateTime): string; overload; {$ifdef HASINLINE}inline;{$endif}
+    function TimeToText(const DateTime: TDateTime): string;
+      overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a time into a ready to be displayed text on the screen
     function TimeToText(const Time: TTimeLogBits): string; overload; {$ifdef HASINLINE}inline;{$endif}
     /// convert a time into a ready to be displayed text on the screen
@@ -1979,7 +1981,7 @@ begin
   case Prop.SQLFieldType of
     sftInteger, sftCurrency, sftFloat, sftUTF8Text, sftAnsiText:
       result := UTF8ToString(Value);
-    sftDateTime:
+    sftDateTime, sftDateTimeMS:
       result := DateTimeToText(Iso8601ToDateTime(Value));
     sftTimeLog, sftModTime, sftCreateTime: begin
       // need temp Iso to avoid URW699 with Delphi 6

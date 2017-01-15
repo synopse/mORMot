@@ -219,7 +219,7 @@ begin
   // create corresponding Reference field
   FreeAndNil(Reference);
   case FieldType of
-    sftDateTime, sftTimeLog, sftModTime, sftCreateTime, sftUnixTime: begin
+    sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime, sftCreateTime, sftUnixTime: begin
       Reference := TDateTimePicker.Create(self);
       Reference.Parent := self;
     end;
@@ -266,17 +266,17 @@ begin
       i := TComboBox(Reference).ItemIndex;
       if i<0 then
         Exit; // avoid out of range error
-      Ref := IntToStr(Integer(TComboBox(Reference).Items.Objects[i]));
+      Int32ToUtf8(Integer(TComboBox(Reference).Items.Objects[i]),Ref);
     end else
     if Reference.InheritsFrom(TDateTimePicker) then
       with TDateTimePicker(Reference) do
       case FieldType of
-        sftDateTime:
-          Ref := DateTimeToIso8601(DateTime,false);
+        sftDateTime, sftDateTimeMS:
+          Ref := DateTimeToIso8601(DateTime,false,'T',FieldType=sftDateTimeMS);
         sftTimeLog, sftModTime, sftCreateTime:
-          Ref := IntToStr(TimeLogFromDateTime(DateTime));
+          Int64ToUtf8(TimeLogFromDateTime(DateTime),Ref);
         sftUnixTime:
-          Ref := IntToStr(DateTimeToUnixTime(DateTime));
+          Int64ToUtf8(DateTimeToUnixTime(DateTime),Ref);
       end;
     Ref := Trim(Ref);
     if Ref='' then begin

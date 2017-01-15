@@ -1170,13 +1170,16 @@ type
   TSingleArray = array[0..MaxInt div SizeOf(Single)-1] of Single;
   PSingleArray = ^TSingleArray;
 
-  TDoubleArray = array[0..MaxInt div SizeOf(double)-1] of double;
+  TDoubleArray = array[0..MaxInt div SizeOf(Double)-1] of Double;
   PDoubleArray = ^TDoubleArray;
+
+  TDateTimeArray = array[0..MaxInt div SizeOf(TDateTime)-1] of TDateTime;
+  PDateTimeArray = ^TDateTimeArray;
 
   TRawByteStringArray = array[0..MaxInt div SizeOf(RawByteString)-1] of RawByteString;
   PRawByteStringArray = ^TRawByteStringArray;
 
-  PointerArray = array [0..MaxInt div SizeOf(pointer)-1] of Pointer;
+  PointerArray = array [0..MaxInt div SizeOf(Pointer)-1] of Pointer;
   PPointerArray = ^PointerArray;
 
   TObjectArray = array [0..MaxInt div SizeOf(TObject)-1] of TObject;
@@ -32323,7 +32326,7 @@ end;
 
 function Iso8601ToDateTime(const S: RawByteString): TDateTime;
 begin
-  Iso8601ToDateTimePUTF8CharVar(pointer(S),length(S),result);
+  result := Iso8601ToDateTimePUTF8Char(pointer(S),length(S));
 end;
 
 function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime;
@@ -43442,13 +43445,13 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         djInt64:    SetInt64(Val,PInt64Array(fValue^)^[i]);
         djTimeLog:  PInt64Array(fValue^)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
         djDateTime, djDateTimeMS:
-          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,TDateTime(PDoubleArray(fValue^)^[i]));
+          Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(fValue^)^[i]);
         djDouble:   PDoubleArray(fValue^)^[i] := GetExtended(Val);
         djCurrency: PInt64Array(fValue^)^[i] := StrToCurr64(Val);
-        djRawUTF8:  SetString(RawUTF8(PPointerArray(fValue^)^[i]),Val,ValLen);
+        djRawUTF8:  SetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
         djRawByteString:
           if not Base64MagicCheckAndDecode(Val,ValLen,PRawByteStringArray(fValue^)^[i]) then
-            SetString(RawUTF8(PPointerArray(fValue^)^[i]),Val,ValLen);
+            SetString(PRawUTF8Array(fValue^)^[i],Val,ValLen);
         djWinAnsi:  WinAnsiConvert.UTF8BufferToAnsi(Val,ValLen,PRawByteStringArray(fValue^)^[i]);
         djString:   UTF8DecodeToString(Val,ValLen,string(PPointerArray(fValue^)^[i]));
         djWideString: UTF8ToWideString(Val,ValLen,WideString(PPointerArray(fValue^)^[i]));

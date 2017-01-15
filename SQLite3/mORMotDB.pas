@@ -716,6 +716,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftUnknown,   // sftBoolean
        ftDouble,    // sftFloat
        ftDate,      // sftDateTime
+       ftDate,      // sftDateTimeMS
        ftInt64,     // sftTimeLog
        ftCurrency,  // sftCurrency
        ftUTF8,      // sftObject
@@ -1678,7 +1679,8 @@ begin
        [self,StoredClass]);
     for f := 0 to ParamsCount-1 do
       if ParamsMatchCopiableFields and
-         (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored=sftDateTime) and
+         (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored in
+           [sftDateTime,sftDateTimeMS]) and
          (Params[f].VType=ftUTF8) then
         Query.BindDateTime(f+1,Iso8601ToDateTimePUTF8Char(Params[f].VText)) else
         Query.Bind(f+1,Params[f]);
