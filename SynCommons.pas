@@ -45979,7 +45979,7 @@ procedure TTextWriter.AddDateTime(const Value: TDateTime; WithMS: boolean=false)
 begin
   if Value=0 then
     exit;
-  if BEnd-B<=19 then
+  if BEnd-B<=23 then
     FlushToStream;
   inc(B);
   if trunc(Value)<>0 then begin

@@ -1840,7 +1840,13 @@ We are pretty convinced that when you will start playing with {\f1\fs20 TDocVari
 :175  Iso8601 time and date
 For date/time storage as text, the framework will use {\i @**ISO 8601@} encoding. Dates could be encoded as {\f1\fs20 YYYY-MM-DD} or {\f1\fs20 YYYYMMDD}, time as {\f1\fs20 hh:mm:ss} or {\f1\fs20 hhmmss}, and combined date and time representations as {\f1\fs20 <date>T<time>}, i.e. {\f1\fs20 YYYY-MM-DDThh:mm:ss} or {\f1\fs20 YYYYMMDDThhmmss}.
 The {\i lexicographical order} of the representation thus corresponds to chronological order, except for date representations involving negative years. This allows dates to be naturally sorted by, for example, file systems, or grid lists.
-The {\f1\fs20 SynCommons.pas} unit defines some functions able to convert to/from regular {\f1\fs20 TDateTime} values, or from a dedicated {\f1\fs20 @**TTimeLog@} type:
+:   TDateTime and TDateTimeMS
+In addition to the default {\f1\fs20 @**TDateTime@} type, which will be serialized with a second resolution, you may use {\f1\fs20 @**TDateTimeMS@}, which will include the milliseconds, i.e. {\f1\fs20 YYYY-MM-DDThh:mm:ss.sss} or {\f1\fs20 YYYYMMDDThhmmss.sss}:
+!type
+!  TDateTimeMS = type TDateTime;
+This {\f1\fs20 TDateTimeMS} type is handled both during {\f1\fs20 record} - see @51@ - and dynamic array - see @53@ - JSON serialization, and by the framework {\f1\fs20 @*ORM@}.
+:   TTimeLog
+The {\f1\fs20 SynCommons.pas} unit also defines a {\f1\fs20 @**TTimeLog@} type, and some functions able to convert to/from regular {\f1\fs20 TDateTime} values:
 !type
 !  TTimeLog = type Int64;
 This integer storage is encoded as a series of bits, which will map the {\f1\fs20 @**TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
@@ -1851,7 +1857,7 @@ The resolution of such values is one second. In fact, it uses internally for com
 - 17..21 bits will map {\i days} (minus one),
 - 22..25 bits will map {\i months} (minus one),
 - 26..38 bits will map {\i years}.
-The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and an integer storage, so is not able to handle such resolution.
+The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and a 64-bit integer storage, so is not able to handle such precision. You could use {\f1\fs20 @*TDateTimeMS@} values instead, if milliseconds are required.
 Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimeStamp} property is computed:
 !function TSQLRest.GetServerTimeStamp: TTimeLog;
 !begin
@@ -1863,13 +1869,14 @@ Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i
 !  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
 !end;
 But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
-Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you will have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
+Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could lead to an internal compiler error. In order to circumvent this bug, you will have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
 ! function TimeLogNow: TTimeLog;
 ! function TimeLogNowUTC: TTimeLog;
 ! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 ! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
 ! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
 See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 @*TModTime@} and {\f1\fs20 @*TCreateTime@} types.
+:   TUnixTime
 As an alternative, you may use the {\f1\fs20 @**TUnixTime@} type, which is a 64-bit encoded number of seconds since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC:
 !type
 !  TUnixTime = type Int64;
@@ -2212,7 +2219,8 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*WideString@}|TEXT|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
 |{\f1\fs20 @*SynUnicode@}|TEXT|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|TEXT|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
-|{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time
+|{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time, with second resolution
+|{\f1\fs20 @*TDateTimeMS@}|TEXT|@*ISO 8601@ encoded date time, with millisecond resolution
 |{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 @*TModTime@}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TCreateTime@}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
@@ -2282,7 +2290,7 @@ Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are no
 \
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :174  Date and time fields
-{\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database. See @175@ for details about this text encoding.
+{\i Delphi} {\f1\fs20 @*TDateTime@} and {\f1\fs20 @*TDateTimeMS@} properties will be stored as @*ISO 8601@ text in the database, with seconds and milliseconds resolution. See @175@ for details about this text encoding.
 As alternatives, {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 This format will be very fast for comparing dates or convert into/from text, and will be stored as INTEGER in the database, therefore more efficiently than plain ISO 8601 text as for {\f1\fs20 TDateTime} fields.
 In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}. They are just handled with a special care by the ORM, so that their associated field value will be updated with the current UTC timestamp, for every {\f1\fs20 TSQLRecord} modification (for {\f1\fs20 TModTime}), or at entry creation (for {\f1\fs20 TCreateTime}). The time value stored is in fact the UTC timestamp, as returned from the current REST Server: in fact, when any REST client perform a connection, it will retrieve any time offset from the REST Server, which will be used to store a consistent time value across all Clients.
@@ -4560,7 +4568,7 @@ In the {\i mORMot} ORM, we defined some additional kind of collations, via some 
 |{\f1\fs20 sftAnsiText}|NOCASE
 |{\f1\fs20 sftUTF8Text}|SYSTEMNOCASE, i.e. using {\f1\fs20 UTF8ILComp()}, which will ignore {\i Win-1252} Latin accents
 |{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftTID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
-|{\f1\fs20 {\f1\fs20 sftDateTime}}|ISO8601, i.e. decoding the text into a date/time value before comparison
+|{\f1\fs20 sftDateTime\line ftDateTimeMS}|ISO8601, i.e. decoding the text into a date/time value before comparison
 |{\f1\fs20 sftObject\line sftVariant}|BINARY, since it is stored as plain JSON content
 |{\f1\fs20 sftBlob\line sftBlobDynArray\line sftBlobCustom}|BINARY
 ;|{\f1\fs20 sftUTF8Custom}|NOCASE by default
@@ -6504,7 +6512,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
 |{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|UTF-8|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
-|{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
+|{\f1\fs20 @*TDateTime@\line @*TDateTimeMS@}|datetime|@*ISO 8601@ encoded date time
 |{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
 |{\f1\fs20 @*TModTime@}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
 |{\f1\fs20 @*TCreateTime@}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
@@ -9797,7 +9805,7 @@ Handled types of parameters are:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Transmitted as @*JSON@ true/false
-|{\f1\fs20 integer cardinal Int64 double currency TDateTime}|Transmitted as JSON numbers
+|{\f1\fs20 integer cardinal Int64 double currency @*TDateTime@ @*TDateTimeMS@}|Transmitted as JSON numbers
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
@@ -12611,7 +12619,7 @@ For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
 This will define two {\i Expression Helpers} for the specified table:
 - Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag will read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
-- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
+- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 @*TDateTime@}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
 :    Internationalization
 You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
 By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
@@ -17965,7 +17973,7 @@ For instance, here is how the @!TSQLLister.Create!Lib\SQLite3\mORMotToolBar.pas@
 !  TableToGrid.OnSelectCell := OnSelectCell;
 !  (...)
 All the process will be done in an automated manner, using the methods of the {\f1\fs20 TDrawGrid} component.
-The current implementation is very fast, since the data is taken directly from the {\f1\fs20 TSQLTable} content. A grid with more than 200,000 rows is displayed with no delay. All content is converted into pure text, according to the @*RTTI@ information associated with the {\f1\fs20 TSQLTable} columns. If it was created as a {\f1\fs20 TSQLTableJSON}, from an @*ORM@ call of the framework, it will contain the RTTI information for each column. For instance, time and date will be displayed with the current internationalization settings, from either @*ISO 8601@ encoded text (for {\f1\fs20 @*TDateTime@} published property) or our optimized {\f1\fs20 Int64} format (for {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} published property).
+The current implementation is very fast, since the data is taken directly from the {\f1\fs20 TSQLTable} content. A grid with more than 200,000 rows is displayed with no delay. All content is converted into pure text, according to the @*RTTI@ information associated with the {\f1\fs20 TSQLTable} columns. If it was created as a {\f1\fs20 TSQLTableJSON}, from an @*ORM@ call of the framework, it will contain the RTTI information for each column. For instance, time and date will be displayed with the current internationalization settings, from either @*ISO 8601@ encoded text (for {\f1\fs20 @*TDateTime@} or @*TDateTimeMS@ published property) or our optimized {\f1\fs20 Int64} format (for {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} published property).
 
 [SDD-DI-2.3.1.2]
 ; SRS-DI-2.3.1.2 - Toolbar creation from code, using RTTI
