@@ -49544,7 +49544,7 @@ begin
               end;
               sftUnixTime: begin
                 Add('"');
-                AddDateTime(UnixTimeToDateTime(V64));
+                AddUnixTime(@V64);
                 Add('"');
               end;
               else Add(V64);

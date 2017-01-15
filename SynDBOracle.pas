@@ -532,7 +532,7 @@ begin
     aIso8601 := '' else begin
     DateToIso8601PChar(tmp,true,(Cent-100)*100+Year-100,Month,Day);
     if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
-      TimeToIso8601PChar(@tmp[10],true,Hour-1,Min-1,Sec-1,'T');
+      TimeToIso8601PChar(@tmp[10],true,Hour-1,Min-1,Sec-1,0,'T');
       SetString(aIso8601,tmp,19); // we use 'T' as TTextWriter.AddDateTime
     end else
       SetString(aIso8601,tmp,10); // only date
@@ -551,7 +551,7 @@ begin
       result := 2 else begin
       DateToIso8601PChar(Dest+1,true,Y,Month,Day);
       if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
-        TimeToIso8601PChar(Dest+11,true,Hour-1,Min-1,Sec-1,'T');
+        TimeToIso8601PChar(Dest+11,true,Hour-1,Min-1,Sec-1,0,'T');
         result := 21; // we use 'T' as TTextWriter.AddDateTime
       end else
         result := 12; // only date

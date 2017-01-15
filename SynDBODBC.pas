@@ -718,7 +718,8 @@ type
     // - depending on the column data type specified, it will return either an
     // ISO-8601 date (for SQL_TYPE_DATE), either a time (for SQL_TYPE_TIME),
     // either a full date+time ISO-8601 content (for SQL_TYPE_TIMESTAMP)
-    function ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint): integer;
+    function ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+      WithMS: boolean=false): integer;
     /// convert a TDateTime into ODBC date or timestamp
     // - returns the corresponding C type, i.e. either SQL_C_TYPE_DATE,
     // either SQL_C_TYPE_TIMESTAMP and the corresponding size in bytes
@@ -2222,11 +2223,14 @@ function SQL_TIMESTAMP_STRUCT.From(DateTime: TDateTime; var ColumnSize: SqlULen)
 var Y,MS: word;
 begin
   DecodeDate(DateTime,Y,Month,Day);
-  if frac(DateTime)=0 then
-    PInt64(@Hour)^ := 0 else
-    DecodeTime(DateTime,Hour,Minute,Second,MS);
   Year := Y;
-  Fraction := 0;
+  if frac(DateTime)=0 then begin
+    PInt64(@Hour)^ := 0;
+    Fraction := 0;
+  end else begin
+    DecodeTime(DateTime,Hour,Minute,Second,MS);
+    Fraction := SqlUInteger(MS)*1000000;
+  end;
   if PInt64(@Hour)^=0 then begin
     result := SQL_C_TYPE_DATE;
     ColumnSize := SizeOf(SqlUSmallint)*3;
@@ -2243,11 +2247,12 @@ begin
     result := 0 else
     result := EncodeDate(Year,Month,Day);
   if (DataType<>SQL_TYPE_DATE) and (PInt64(@Hour)^<>0) and
-     TryEncodeTime(Hour,Minute,Second,0,time) then
+     TryEncodeTime(Hour,Minute,Second,Fraction div 1000000,time) then
     result := result+time;
 end;
 
-function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint): integer;
+function SQL_TIMESTAMP_STRUCT.ToIso8601(Dest: PUTF8Char; DataType: SqlSmallint;
+  WithMS: boolean=false): integer;
 begin
   Dest^ := '"';
   inc(Dest);
@@ -2256,10 +2261,15 @@ begin
     inc(Dest,10);
   end;
   if (DataType<>SQL_TYPE_DATE) and (PInt64(@Hour)^<>0) and (Hour<24) and
-     (Minute<60) and (Second<60) then begin
-    TimeToIso8601PChar(Dest,true,Hour,Minute,Second,'T');
-    inc(Dest,9);
-    result := 21; // we use 'T' as TTextWriter.AddDateTime
+     (Minute<60) and (Second<60) then begin // we use 'T' as TTextWriter.AddDateTime
+    TimeToIso8601PChar(Dest,true,Hour,Minute,Second,Fraction div 1000000,'T',WithMS);
+    if WithMS then begin
+      inc(Dest,13);
+      result := 25;
+    end else begin
+      inc(Dest,9);
+      result := 21; 
+    end;
   end else
     result := 12; // only date
   Dest^ := '"';

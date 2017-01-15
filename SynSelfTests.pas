@@ -3527,7 +3527,7 @@ end;
 procedure TTestLowLevelCommon.Iso8601DateAndTime;
 procedure Test(D: TDateTime; Expanded: boolean);
 var s,t: RawUTF8;
-    E: TDateTime;
+    E,F: TDateTime;
     I,J: TTimeLogBits;
 begin
   s := DateTimeToIso8601(D,Expanded);
@@ -3552,7 +3552,12 @@ begin
   J.From(E);
   Check(Int64(I)=Int64(J));
   s := TimeToIso8601(D,Expanded);
+  Check(PosEx('.',s)=0);
   Check(abs(frac(D)-Iso8601ToDateTime(s))<1000/MSecsPerDay);
+  s := TimeToIso8601(D,Expanded,'T',true);
+  Check(PosEx('.',s)>0);
+  F := Iso8601ToDateTime(s);
+  Check(abs(frac(D)-F)<1/MSecsPerDay,'withms1');
   s := DateToIso8601(D,Expanded);
   Check(trunc(D)=trunc(Iso8601ToDateTime(s)));
   Check(Abs(D-I.ToDateTime)<(1000/MSecsPerDay));
@@ -3562,6 +3567,18 @@ begin
   if Expanded then
     Check(length(s)=18) else
     Check(length(s)=14);
+  s := DateTimeToIso8601(D,Expanded,'T',true);
+  Check(PosEx('.',s)>0);
+  if Expanded then
+    Check(length(s)=23) else
+    Check(length(s)=19);
+  F := Iso8601ToDateTime(s);
+  Check(abs(D-F)<1/MSecsPerDay,'withms2');
+  if Expanded then begin
+    F := 0;
+    Check(Iso8601CheckAndDecode(pointer(s),length(s),F));
+    Check(abs(D-F)<1/MSecsPerDay,'withms3');
+  end;
 end;
 var i: integer;
     D: TDateTime;
