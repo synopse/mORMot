@@ -3402,7 +3402,7 @@ end;
 
 function Utf8SQLDateTime(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-var V1,V2: Int64; // faster than Iso8601ToDateTimePChar: uses integer math
+var V1,V2: TDateTime; // will handle up to .sss milliseconds resolution
 begin
   if s1Len<=0 then // see WladiD note above
     s1 := nil;
@@ -3410,8 +3410,8 @@ begin
     s2 := nil;
   if s1=s2 then
     result := 0 else begin
-    V1 := Iso8601ToTimeLogPUTF8Char(s1,s1Len);
-    V2 := Iso8601ToTimeLogPUTF8Char(s2,s2Len);
+    Iso8601ToDateTimePUTF8CharVar(s1,s1Len,V1);
+    Iso8601ToDateTimePUTF8CharVar(s2,s2Len,V2);
     if (V1=0) or (V2=0) then // any invalid date -> compare as UTF-8 strings
       result := UTF8ILComp(s1,s2,s1Len,s2Len) else
       if V1<V2 then

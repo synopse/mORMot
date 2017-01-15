@@ -324,8 +324,10 @@ const
     wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,  wDouble,
   //ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     wInt64,  wInteger,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
-  //ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
-    wSingle,  wString,  wRawUTF8,     wDateTime,  wGUID,  wID, wTimeLog,
+  //ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
+    wSingle,  wString,  wRawUTF8,     wDateTime,  wDateTime,
+  //ptGUID, ptID, ptTimeLog,
+    wGUID,  wID, wTimeLog,
   //ptVariant, ptWideString, ptWord, ptCustom
     wVariant,  wRawUTF8,     wWord,  wUnknown);
 

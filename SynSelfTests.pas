@@ -6526,7 +6526,7 @@ begin
   Check(length(Parser.Root.NestedProperty[5].NestedProperty)=1);
   Check(Parser.Root.NestedProperty[5].NestedProperty[0].PropertyType=ptString);
   Parser := TJSONRecordTextDefinition.FromCache(nil,
-    'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime}E2 double]');
+    'A,B,C integer D RawUTF8 E[E1:{E1A:integer E1B:tdatetime E1C TDatetimeMS}E2 double]');
   Check(Length(Parser.Root.NestedProperty)=5);
   ABCD;
   with Parser.Root.NestedProperty[4] do begin
@@ -6536,11 +6536,13 @@ begin
     Check(NestedProperty[0].PropertyName='E1');
     Check(NestedProperty[0].PropertyType=ptRecord);
     with NestedProperty[0] do begin
-      Check(length(NestedProperty)=2);
+      Check(length(NestedProperty)=3);
       Check(NestedProperty[0].PropertyName='E1A');
       Check(NestedProperty[0].PropertyType=ptInteger);
       Check(NestedProperty[1].PropertyName='E1B');
       Check(NestedProperty[1].PropertyType=ptDateTime);
+      Check(NestedProperty[2].PropertyName='E1C');
+      Check(NestedProperty[2].PropertyType=ptDateTimeMS);
     end;
     Check(NestedProperty[1].PropertyName='E2');
     Check(NestedProperty[1].PropertyType=ptDouble);
