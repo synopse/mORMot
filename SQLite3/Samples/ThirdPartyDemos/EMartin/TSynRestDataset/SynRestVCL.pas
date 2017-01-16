@@ -213,7 +213,9 @@ const
      SynCommons.ftInt64,     // sftCreateTime
      SynCommons.ftInt64,     // sftTID
      SynCommons.ftInt64,     // sftRecordVersion = TRecordVersion
-     SynCommons.ftInt64);    // sftSessionUserID
+     SynCommons.ftInt64,     // sftSessionUserID
+     SynCommons.ftDate,      // sftDateTimeMS
+     SynCommons.ftInt64);    // sftUnixTime
 
   SQLFieldTypeToVCLDB: array[TSQLFieldType] of TFieldType =
     (DB.ftUnknown,           // sftUnknown
@@ -243,7 +245,9 @@ const
      DB.ftLargeInt,          // sftCreateTime
      DB.ftLargeInt,          // sftTID
      DB.ftLargeInt,          // sftRecordVersion = TRecordVersion
-     DB.ftLargeInt);         // sftSessionUserID
+     DB.ftLargeInt,          // sftSessionUserID
+     DB.ftDateTime,          // sftDateTime
+     DB.ftLargeInt);         // sftUnixTime
 
   VCLDBFieldTypeSQLDB: array[0..23] of TSQLFieldType =
     (sftUnknown,        // ftUnknown

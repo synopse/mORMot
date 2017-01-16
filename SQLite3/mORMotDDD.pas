@@ -1325,12 +1325,11 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'boolean',         // sftBoolean
     'double',          // sftFloat
     'TDateTime',       // sftDateTime
-    'TDateTimeMS',     // sftDateTimeMS
     'TTimeLog',        // sftTimeLog
     'currency',        // sftCurrency
     '',                // sftObject
     'variant',         // sftVariant
-    '',                // sftNullable 
+    '',                // sftNullable
     'TSQLRawBlob',     // sftBlob
     'variant',         // sftBlobDynArray T*ObjArray=JSON=variant (RawUTF8?)
     '',                // sftBlobCustom
@@ -1341,6 +1340,7 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     '',                // sftTID
     'TRecordVersion',  // sftRecordVersion = TRecordVersion
     'TSessionUserID',  // sftSessionUserID
+    '',                // sftDateTimeMS
     '');               // sftUnixTime
 var hier: TClassDynArray;
     a,i,f: integer;

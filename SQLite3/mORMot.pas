@@ -1557,7 +1557,6 @@ type
     sftBoolean,
     sftFloat,
     sftDateTime,
-    sftDateTimeMS,
     sftTimeLog,
     sftCurrency,
     sftObject,
@@ -1575,6 +1574,7 @@ type
     sftTID,
     sftRecordVersion,
     sftSessionUserID,
+    sftDateTimeMS,
     sftUnixTime);
 
   /// set of available SQL field property types
@@ -20438,7 +20438,6 @@ const
      ftInt64,     // sftBoolean
      ftDouble,    // sftFloat
      ftDate,      // sftDateTime
-     ftDate,      // sftDateTimeMS
      ftInt64,     // sftTimeLog
      ftCurrency,  // sftCurrency
      ftUTF8,      // sftObject
@@ -20456,6 +20455,7 @@ const
      ftInt64,     // sftTID
      ftInt64,     // sftRecordVersion = TRecordVersion
      ftInt64,     // sftSessionUserID
+     ftDate,      // sftDateTimeMS
      ftInt64);    // sftUnixTime = TUnixTime
 
 function SQLFieldTypeToDBField(aSQLFieldType: TSQLFieldType; aTypeInfo: pointer): TSQLDBFieldType;
@@ -20586,16 +20586,16 @@ const
   SQL_ELEMENTTYPES: array[TSQLFieldType] of word = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,   sftInteger,
     varEmpty,    varString,  varString,   varInteger,   varInt64, varInt64,
- // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime, sftDateTimeMS,
-    varInt64,varInt64,varBoolean, varDouble, varDate,    varDate,
+ // sftID, sftRecord, sftBoolean, sftFloat, sftDateTime,
+    varInt64,varInt64,varBoolean, varDouble, varDate,
  //  sftTimeLog, sftCurrency,  sftObject,
     varInt64,   varCurrency,   varNull,
  //                   sftVariant, sftNullable       sftBlob,sftBlobDynArray,
     {$ifndef NOVARIANTS} varNull, varNull, {$endif} varString, varNull,
  // sftBlobCustom, sftUTF8Custom, sftMany, sftModTime, sftCreateTime, sftTID,
     varString,      varString,    varEmpty, varInt64,  varInt64,     varInt64,
- // sftRecordVersion, sftSessionUserID, sftUnixTime
-    varInt64, varInt64, varInt64);
+ // sftRecordVersion, sftSessionUserID, sftDateTimeMS, sftUnixTime
+    varInt64, varInt64, varDate, varInt64);
 var err: integer;
     tmp: TSynTempBuffer;
 begin
@@ -25520,7 +25520,6 @@ var
     UTF8CompareBoolean,  // Boolean
     UTF8CompareDouble,   // Float
     UTF8CompareISO8601,  // TDateTime
-    UTF8CompareISO8601,  // TDateTimeMS
     UTF8CompareInt64,    // TTimeLog
     UTF8CompareCurr64,   // Currency
     nil,                 // Object (TEXT serialization)
@@ -25538,6 +25537,7 @@ var
     UTF8CompareInt64,    // TID
     UTF8CompareInt64,    // TRecordVersion
     UTF8CompareInt64,    // TSessionUserID
+    UTF8CompareISO8601,  // TDateTimeMS
     UTF8CompareInt64);   // TUnixTime
 
 type
@@ -48781,7 +48781,6 @@ const
     ' INTEGER, ',                    // sftBoolean
     ' FLOAT, ',                      // sftFloat
     ' TEXT COLLATE ISO8601, ',       // sftDateTime
-    ' TEXT COLLATE ISO8601, ',       // sftDateTimeMS
     ' INTEGER, ',                    // sftTimeLog
     ' FLOAT, ',                      // sftCurrency
     ' TEXT COLLATE BINARY, ',        // sftObject
@@ -48799,6 +48798,7 @@ const
     ' INTEGER, ',                    // sftTID
     ' INTEGER, ',                    // sftRecordVersion
     ' INTEGER, ',                    // sftSessionUserID
+    ' TEXT COLLATE ISO8601, ',       // sftDateTimeMS
     ' INTEGER, ');                   // sftUnixTime
 begin
   if (self=nil) or (cardinal(FieldIndex)>=cardinal(Fields.Count)) then
