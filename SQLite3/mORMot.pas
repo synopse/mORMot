@@ -1545,6 +1545,8 @@ type
   // - sftUnixTime is an INTEGER field for coding a date and time  as second-based
   // Unix Time (SQLite3 compatible), which should be defined as TUnixTime=Int64
   // Delphi property
+  // - WARNING: do not change the order of items below, otherwise some methods
+  // (like TSQLRecordProperties.CheckBinaryHeader) may be broken and fail
   TSQLFieldType = (
     sftUnknown,
     sftAnsiText,

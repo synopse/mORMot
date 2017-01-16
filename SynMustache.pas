@@ -1173,7 +1173,7 @@ var tmp: TVarData;
 begin
   if (ValueName='') or (ValueName[1] in ['0'..'9','"','{','[']) or
      (ValueName='true') or (ValueName='false') or (ValueName='null') then
-    VariantLoadJSON(result,pointer(ValueName),nil,@JSON_OPTIONS[true]) else begin
+    VariantLoadJSON(result,ValueName,@JSON_OPTIONS[true]) else begin
     GetValueFromContext(ValueName,tmp);
     SetVariantByValue(variant(tmp),result); // copy value
   end;
