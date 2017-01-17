@@ -6719,10 +6719,10 @@ begin
     Check(Disco.releases[0].id=2);
   end;
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomDiscogs),'');
-  SetString(U,PAnsiChar('true'#0'footer'),11);
+  SetString(U,PAnsiChar('true'#0'footer,'),12);
   Check(IdemPChar(GetJSONField(pointer(U),P),'TRUE'));
   Check(P=nil);
-  Check(U='true'#0'footer','3cce80e8df');
+  Check(U='true'#0'footer,','3cce80e8df');
 end;
 
 

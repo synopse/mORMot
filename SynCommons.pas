@@ -48839,7 +48839,7 @@ begin
       result := nil; // null -> returns nil and wasString=false
       if Len<>nil then
         Len^ := 0; // when result is converted to string
-      inc(P,3);
+      inc(P,4);
     end else
       exit; // PDest=nil to indicate error
   'f':
@@ -48848,7 +48848,7 @@ begin
       result := P; // false -> returns 'false' and wasString=false
       if Len<>nil then
         Len^ := 5;
-      inc(P,4);
+      inc(P,5);
     end else
       exit; // PDest=nil to indicate error
   't':
@@ -48856,7 +48856,7 @@ begin
       result := P; // true -> returns 'true' and wasString=false
       if Len<>nil then
         Len^ := 4;
-      inc(P,3);
+      inc(P,4);
     end else
       exit; // PDest=nil to indicate error
   '"': begin
