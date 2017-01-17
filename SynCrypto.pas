@@ -2154,11 +2154,11 @@ var
   Td0, Td1, Td2, Td3, Te0, Te1, Te2, Te3: array[byte] of cardinal;
   Xor32Byte: TByteArray absolute Td0;  // 2^13=$2000=8192 bytes of XOR tables ;)
 
-procedure ComputeAesStaticTables; // will compute 4.5 KB of constant tables
+procedure ComputeAesStaticTables;
 var i, x,y: byte;
     pow,log: array[byte] of byte;
     c: cardinal;
-begin
+begin // 835 bytes of code to compute 4.5 KB of tables
   x := 1;
   for i := 0 to 255 do begin
     pow[i] := x;
@@ -2256,10 +2256,10 @@ asm // rcx=s, rdx=d
   mov rcx,rdi
   {$endif win64}
   mov eax,[rcx]; mov r8d,[rcx+4]; mov r9d,[rcx+8]; mov r10d,[rcx+12]
-  bswap eax;     bswap r8d;       bswap r9d;       bswap r10d
+  bswap eax; bswap r8d; bswap r9d; bswap r10d
   mov [rdx],eax; mov [rdx+4],r8d; mov [rdx+8],r9d; mov [rdx+12],r10d
   mov eax,[rcx+16]; mov r8d,[rcx+20]; mov r9d,[rcx+24]; mov r10d,[rcx+28]
-  bswap eax;        bswap r8d;        bswap r9d;        bswap r10d
+  bswap eax; bswap r8d; bswap r9d; bswap r10d
   mov [rdx+16],eax; mov [rdx+20],r8d; mov [rdx+24],r9d; mov [rdx+28],r10d
 end;
 
@@ -2286,6 +2286,16 @@ end;
 
 procedure bswap256(s,d: PIntegerArray);
 begin
+  {$ifdef FPC} // use fast platform-specific function
+  d[0] := SwapEndian(s[0]);
+  d[1] := SwapEndian(s[1]);
+  d[2] := SwapEndian(s[2]);
+  d[3] := SwapEndian(s[3]);
+  d[4] := SwapEndian(s[4]);
+  d[5] := SwapEndian(s[5]);
+  d[6] := SwapEndian(s[6]);
+  d[7] := SwapEndian(s[7]);
+  {$else}
   d[0] := bswap32(s[0]);
   d[1] := bswap32(s[1]);
   d[2] := bswap32(s[2]);
@@ -2294,15 +2304,24 @@ begin
   d[5] := bswap32(s[5]);
   d[6] := bswap32(s[6]);
   d[7] := bswap32(s[7]);
+  {$endif FPC}
 end;
 
 procedure bswap160(s,d: PIntegerArray);
 begin
+  {$ifdef FPC} // use fast platform-specific function
+  d[0] := SwapEndian(s[0]);
+  d[1] := SwapEndian(s[1]);
+  d[2] := SwapEndian(s[2]);
+  d[3] := SwapEndian(s[3]);
+  d[4] := SwapEndian(s[4]);
+  {$else}
   d[0] := bswap32(s[0]);
   d[1] := bswap32(s[1]);
   d[2] := bswap32(s[2]);
   d[3] := bswap32(s[3]);
   d[4] := bswap32(s[4]);
+  {$endif FPC}
 end;
 
 {$endif CPUINTEL}
@@ -4642,8 +4661,9 @@ procedure Sha256ExpandMessageBlocks(W, Buf: PIntegerArray);
 {$ifdef AES_PASCAL}
 var i: integer;
 begin
-  for i := 0 to 15 do
-    W[i]:= bswap32(Buf[i]);
+  // bswap256() instead of "for i := 0 to 15 do W[i]:= bswap32(Buf[i]);"
+  bswap256(@Buf[0],@W[0]);
+  bswap256(@Buf[8],@W[8]);
   for i := 16 to 63 do
     W[i] := (((W[i-2]shr 17)or(W[i-2]shl 15))xor((W[i-2]shr 19)or(W[i-2]shl 13))
       xor (W[i-2]shr 10))+W[i-7]+(((W[i-15]shr 7)or(W[i-15]shl 25))

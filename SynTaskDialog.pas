@@ -116,6 +116,45 @@ var
   TaskDialogIndirect: function(AConfig: pointer; Res: PInteger;
     ResRadio: PInteger; VerifyFlag: PBOOL): HRESULT; stdcall;
 
+const
+  /// match the 1st custom button ID 
+  mrBtn1 = 100;
+  /// match the 2nd custom button ID
+  mrBtn2 = 101;
+  /// match the 3rd custom button ID
+  mrBtn3 = 102;
+  /// match the 4th custom button ID
+  mrBtn4 = 103;
+  /// match the 5th custom button ID
+  mrBtn5 = 104;
+  /// match the 6th custom button ID
+  mrBtn6 = 105;
+  /// match the 7th custom button ID
+  mrBtn7 = 106;
+  /// match the 8th custom button ID
+  mrBtn8 = 107;
+  /// match the 9th custom button ID
+  mrBtn9 = 108;
+
+  /// match the 1st custom radio ID
+  mrRad1 = 200;
+  /// match the 2nd custom radio ID
+  mrRad2 = 201;
+  /// match the 3rd custom radio ID
+  mrRad3 = 202;
+  /// match the 4th custom radio ID
+  mrRad4 = 203;
+  /// match the 5th custom radio ID
+  mrRad5 = 204;
+  /// match the 6th custom radio ID
+  mrRad6 = 205;
+  /// match the 7th custom radio ID
+  mrRad7 = 206;
+  /// match the 8th custom radio ID
+  mrRad8 = 207;
+  /// match the 9th custom radio ID
+  mrRad9 = 208;
+
 type
   /// the standard kind of common buttons handled by the Task Dialog
   TCommonButton = (
@@ -216,8 +255,8 @@ type
   // !  Task.Verify := 'Do no ask for this setting next time';
   // !  Task.VerifyChecked := true;
   // !  Task.Footer := 'XML file is perhaps a better choice';
-  // !  Task.Execute([],0,[],tiQuestion,tfiInformation,200);
-  // !  ShowMessage(IntToStr(Task.RadioRes)); // 200=Registry, 201=XML
+  // !  Task.Execute([],0,[],tiQuestion,tfiInformation,mrRad1);
+  // !  ShowMessage(IntToStr(Task.RadioRes)); // mrRad1=Registry, mrRad2=XML
   // !  if Task.VerifyChecked then
   // !    ShowMessage(Task.Verify);
   // !end;
@@ -237,7 +276,8 @@ type
     // - any '\n' will be converted into a line feed
     Content: string;
     /// a #13#10 or #10 separated list of custom buttons
-    // - they will be identified with an ID number starting at 100
+    // - they will be identified with an ID number starting at 100 (so you
+    // may use mrBtn1, mrBtn2, mrBtn3... mrBtn9 constants)
     // - by default, the buttons will be created at the dialog bottom, just
     // like the common buttons
     // - if tdfUseCommandLinks flag is set, the custom buttons will be created
@@ -247,7 +287,8 @@ type
     // - see the AddButton() wrapper method for an easy access
     Buttons: string;
     /// a #13#10 or #10 separated list of custom radio buttons
-    // - they will be identified with an ID number starting at 200
+    // - they will be identified with an ID number starting at 200 (so you
+    // may use mrRad1, mrRad2, mrRad3... mrRad9 constants)
     // - aRadioDef parameter can be set to define the default selected value
     // - '\n' will be converted as note text (shown with smaller text under
     // native Vista/Seven TaskDialog, or as popup hint within Delphi emulation)
@@ -297,7 +338,7 @@ type
     // - in emulation mode, aFlags will handle only tdfUseCommandLinks,
     // tdfUseCommandLinksNoIcon, and tdfQuery options
     // - will return 0 on error, or the Button ID (e.g. mrOk for the OK button
-    // or 100 for the first custom button defined in Buttons string)
+    // or mrBtn1/100 for the first custom button defined in Buttons string)
     // - if Buttons was defined, aButtonDef can set the selected Button ID
     // - if Radios was defined, aRadioDef can set the selected Radio ID
     // - aDialogIcon and aFooterIcon are used to specify the displayed icons
@@ -813,8 +854,8 @@ begin
     Config.pszMainInstruction := pointer(N(Inst));
     Config.pszContent := pointer(N(Content));
     RUCount := 0;
-    AddRU(Buttons,Config.cButtons,100);
-    AddRU(Radios,Config.cRadioButtons,200);
+    AddRU(Buttons,Config.cButtons,mrBtn1);
+    AddRU(Radios,Config.cRadioButtons,mrRad1);
     if Config.cButtons>0 then
       Config.pButtons := @But[0];
     if Config.cRadioButtons>0 then
@@ -925,7 +966,7 @@ begin
               Hint := aHint; // note shown as Hint
             end;
             inc(Y,Height+2);
-            ModalResult := i+100;
+            ModalResult := i+mrBtn1;
             OnClick := Dialog.Form.HandleEmulatedButtonClicked;
             if ModalResult=aButtonDef then
               Dialog.Form.ActiveControl := CommandLink;
@@ -967,7 +1008,7 @@ begin
               Hint := aHint; // note shown as Hint
             end;
             inc(Y,Height);
-            if (i=0) or (i+200=aRadioDef) then
+            if (i=0) or (i+mrRad1=aRadioDef) then
               Checked := true;
           end;
         end;
@@ -1022,7 +1063,7 @@ begin
         try
           Text := SysUtils.trim(Buttons);
           for i := Count-1 downto 0 do
-            AddBtn(Strings[i],i+100);
+            AddBtn(Strings[i],i+mrBtn1);
         finally
           Free;
         end;
@@ -1089,7 +1130,7 @@ begin
     RadioRes := 0;
     for i := 0 to high(Rad) do
       if Rad[i].Checked then
-        RadioRes := i+200;
+        RadioRes := i+mrRad1;
   finally
     FreeAndNil(Dialog.Form);
   end;
