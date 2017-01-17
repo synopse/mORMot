@@ -31,6 +31,7 @@ unit SynCommons;
   Contributor(s):
    - Aleksandr (sha)
    - Alfred Glaenzer (alf)
+   - Chaa
    - BigStar
    - itSDS
    - Johan Bontes
@@ -48992,7 +48993,7 @@ slash:inc(P);
   '0':
     if P[1] in ['0'..'9'] then // 0123 excluded by JSON!
       exit else // leave PDest=nil for unexpected end
-      goto num;
+      goto num; // may be 0.123
   '-','1'..'9': begin // numerical field: all chars before end of field
 num:result := P;
     repeat
@@ -49002,20 +49003,19 @@ num:result := P;
     until false;
     if P^=#0 then
       exit;
-    if P^<=' ' then
-      P^ := #0; // force numerical field with no trailing ' '
     if Len<>nil then
       Len^ := P-result;
+    if P^<=' ' then begin
+      P^ := #0; // force numerical field with no trailing ' '
+      inc(P);
+    end;
   end;
   else exit; // PDest=nil to indicate error
   end;
-  if not (P^ in EndOfJSONField) then begin
+  while not (P^ in EndOfJSONField) do begin
+    if P^=#0 then
+      exit; // leave PDest=nil for unexpected end
     inc(P);
-    while not (P^ in EndOfJSONField) do begin
-      inc(P);
-      if P^=#0 then
-        exit; // leave PDest=nil for unexpected end
-    end;
   end;
   if EndOfObject<>nil then
     EndOfObject^ := P^;

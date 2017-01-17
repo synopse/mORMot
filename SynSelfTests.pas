@@ -5478,6 +5478,7 @@ const // convention may be to use __ before the type name
 
 procedure TTestLowLevelTypes.EncodeDecodeJSON;
 var J,U: RawUTF8;
+    P: PUTF8Char;
     binary,zendframeworkJson,discogsJson: RawByteString;
     V: TPUtf8CharDynArray;
     i, a, err: integer;
@@ -5730,9 +5731,6 @@ end;
 var O,O2: TPersistentToJSON;
     E: TSynBackgroundThreadProcessStep;
     EndOfObject: AnsiChar;
-    {$ifndef LVCL}
-    P: PUTF8Char;
-    {$endif}
 {$endif}
 {$ifndef NOVARIANTS}
 var Va, Vb: Variant;
@@ -6721,6 +6719,10 @@ begin
     Check(Disco.releases[0].id=2);
   end;
   TTextWriter.RegisterCustomJSONSerializerFromText(TypeInfo(TTestCustomDiscogs),'');
+  SetString(U,PAnsiChar('true'#0'footer'),11);
+  Check(IdemPChar(GetJSONField(pointer(U),P),'TRUE'));
+  Check(P=nil);
+  Check(U='true'#0'footer','3cce80e8df');
 end;
 
 
