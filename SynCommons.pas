@@ -2309,6 +2309,7 @@ type
 
 /// convert the endianness of a given unsigned 32 bit integer into BigEndian
 function bswap32(a: cardinal): cardinal;
+  {$ifdef FPC}inline;{$endif}
 
 {$ifndef ISDELPHI2007ANDUP}
 type
@@ -21983,21 +21984,16 @@ end;
 
 {$endif UNICODE}
 
-{$ifdef PUREPASCAL}
-function bswap32(a: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
+{$ifdef FPC}
+function bswap32(a: cardinal): cardinal; inline;
 begin
-  result := ((a and $ff)shl 24)or((a and $ff00)shl 8)or
-            ((a and $ff0000)shr 8)or((a and $ff000000)shr 24);
+  result := SwapEndian(a); // use fast platform-specific function
 end;
 {$else}
 {$ifdef CPUX64}
 function bswap32(a: cardinal): cardinal;
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
 asm
   .NOFRAME // ecx=a (Linux: edi)
-{$endif FPC}
   {$ifdef win64}
   mov eax,ecx
   {$else}
@@ -22005,14 +22001,22 @@ asm
   {$endif win64}
   bswap eax
 end;
-{$endif CPUX64}
+{$else}
 {$ifdef CPUX86}
 function bswap32(a: cardinal): cardinal;
 asm
   bswap eax
 end;
+{$else}
+function bswap32(a: cardinal): cardinal; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := ((a and $ff)shl 24)or((a and $ff00)shl 8)or
+            ((a and $ff0000)shr 8)or((a and $ff000000)shr 24);
+end;
 {$endif CPUX86}
-{$endif PUREPASCAL}
+{$endif CPUX64}
+{$endif FPC}
+
 
 {$ifndef PUREPASCAL} { these functions are implemented in asm }
 {$ifndef LVCL}       { don't define these functions twice }
