@@ -53,7 +53,7 @@ var
   
 resourcestring
   sSelectAConnection = 'Select a connection';
-  sNew = 'New connection';
+  sNew = 'New Connection';
   sNewOne = 'New';
   sConnectionHints = 'Display name|Database type|Server name '+
     '(for "Generic OLEDB", use ADO-like connection string, and ignore other fields; '+
@@ -255,7 +255,7 @@ begin
           msg := Task.Verify;
         end else
           TryConnect(TSQLConnection(Conns[Task.SelectionRes]),false);
-      100: begin
+      mrBtn1: begin
         C := TSQLConnection.Create;
         msg := sNew;
       end;
@@ -267,12 +267,13 @@ begin
           SetRecord(nil,C,nil,nil,sConnectionHints,0,msg);
           if ShowModal=mrOk then begin
             C.Password := Crypt(C.Password);
-            if TryConnect(C,true) and (res=100) then
+            if TryConnect(C,true) and (res=mrBtn1) then
               Conns.AddOne(C,false,'') else
-              if res=100 then
+              if res=mrBtn1 then
                 FreeAndNil(C);
           end else
-            FreeAndNil(C);
+            if res=mrBtn1 then
+              FreeAndNil(C);
         finally
           Free;
         end;
