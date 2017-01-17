@@ -410,6 +410,8 @@ type
     function GetTransparent: Boolean; override;
     procedure SetTransparent(Value: Boolean); override;
     {$endif}
+    function SaveAsIStream(out Stream: IStream; Format: TGDIPPictureType;
+      CompressionQuality: integer=80; IfBitmapSetResolution: single=0): TGdipStatus;
   public
     constructor CreateFromFile(const FileName: string);
     destructor Destroy; override;
@@ -686,6 +688,17 @@ procedure SaveAsRawByteString(Graphic: TPersistent;
   out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
   Format: TGDIPPictureType; CompressionQuality: integer=80;
   MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0);
+
+/// helper to save a specified TBitmap into GIF/PNG/JPG/TIFF format
+// - CompressionQuality is only used for gptJPG format saving
+// and is expected to be from 0 to 100
+// - if MaxPixelsForBiggestSide is set to something else than 0, the resulting
+// picture biggest side won't exceed this pixel number
+// - this method is thread-safe (using GdipLock/GdipUnlock globals)
+function BitmapToRawByteString(Bitmap: TBitmap;
+  out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
+  Format: TGDIPPictureType; CompressionQuality: integer=80;
+  MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0): TGdipStatus;
 
 /// helper to load a specified graphic from GIF/PNG/JPG/TIFF format content
 // - this method is thread-safe (using GdipLock/GdipUnlock globals)
@@ -1462,16 +1475,12 @@ const
   EncoderQuality: TGUID = '{1d5be4b5-fa4a-452d-9cdd-5db35105e7eb}';
   EncoderCompression: TGUID = '{e09d739d-ccd4-44ee-8eba-3fbf8be4fc58}';
 
-function TSynPicture.SaveAs(Stream: TStream; Format: TGDIPPictureType;
+function TSynPicture.SaveAsIStream(out Stream: IStream; Format: TGDIPPictureType;
   CompressionQuality: integer; IfBitmapSetResolution: single): TGdipStatus;
-var fStream: IStream;
-    Len,Dummy: {$ifdef FPC}QWord;{$else}{$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};{$endif}
-    tmp: pointer;
-    Params: TEncoderParameters;
+var Params: TEncoderParameters;
     PParams: pointer;
-    MS: TMemoryStream absolute Stream;
 begin
-  if not Gdip.Exists or (Stream=nil) or (fImage=0) then begin
+  if not Gdip.Exists or (fImage=0) then begin
     result := stInvalidParameter;
     exit;
   end;
@@ -1497,22 +1506,30 @@ begin
     PParams := @Params;
   end;
   end;
-  CreateStreamOnHGlobal(0,true,fStream); // fDeleteOnRelease=true
+  CreateStreamOnHGlobal(0,true,Stream); // fDeleteOnRelease=true
+  result := Gdip.SaveImageToStream(fImage,Stream,@Encoders[Format],PParams);
+end;
+
+function TSynPicture.SaveAs(Stream: TStream; Format: TGDIPPictureType;
+  CompressionQuality: integer; IfBitmapSetResolution: single): TGdipStatus;
+var fStream: IStream;
+    Len,Dummy: {$ifdef FPC}QWord;{$else}{$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};{$endif}
+    tmp: pointer;
+begin
+  if Stream=nil then
+    result := stInvalidParameter else
+    result := SaveAsIStream(fStream, Format, CompressionQuality, IfBitmapSetResolution);
+  if result<>stOk then
+    exit;
+  fStream.Seek(0,STREAM_SEEK_END,Len);
+  fStream.Seek(0,STREAM_SEEK_SET,Dummy);
+  Getmem(tmp,Len);
   try
-    result := Gdip.SaveImageToStream(fImage,fStream,@Encoders[Format],PParams);
-    if result<>stOk then
-      exit;
-    fStream.Seek(0,STREAM_SEEK_END,Len);
-    fStream.Seek(0,STREAM_SEEK_SET,Dummy);
-    Getmem(tmp,Len);
-    try
-      fStream.Read(tmp,Len,nil);
-      Stream.Write(tmp^,Len);
-    finally
-      Freemem(tmp);
-    end;
+    fStream.Read(tmp,Len,nil);
+    fStream := nil; // release ASAP
+    Stream.Write(tmp^,Len);
   finally
-    fStream := nil; // release memory
+    Freemem(tmp);
   end;
 end;
 
@@ -1729,6 +1746,45 @@ begin
   finally
     GdipUnlock;
     Stream.Free;
+  end;
+end;
+
+function BitmapToRawByteString(Bitmap: TBitmap;
+  out DataRawByteString{$ifdef HASCODEPAGE}: RawByteString{$endif};
+  Format: TGDIPPictureType; CompressionQuality: integer=80;
+  MaxPixelsForBiggestSide: cardinal=0; BitmapSetResolution: single=0): TGdipStatus;
+var Pic: TSynPicture;
+    fStream: IStream;
+    Len,Dummy: {$ifdef FPC}QWord;{$else}{$ifdef ISDELPHIXE8}LargeUInt{$else}Int64{$endif};{$endif}
+begin
+  if Bitmap=nil then begin
+    result := stInvalidParameter;
+    exit;
+  end;
+  GdipLock;
+  try
+    if Gdip = nil then
+      Gdip := TGDIPlus.Create('gdiplus.dll');
+    Pic := TSynPicture.Create;
+    try
+      Pic.Assign(Bitmap); // will do the conversion
+      result := Pic.SaveAsIStream(fStream,Format,CompressionQuality,BitmapSetResolution);
+      if result<>stOk then
+        exit;
+      fStream.Seek(0,STREAM_SEEK_END,Len);
+      fStream.Seek(0,STREAM_SEEK_SET,Dummy);
+      {$ifdef HASCODEPAGE}
+      SetLength(DataRawByteString,Len);
+      {$else}
+      SetLength(AnsiString(DataRawByteString),Len);
+      {$endif}
+      fStream.Read(pointer(DataRawByteString),Len,nil);
+      fStream := nil; // release ASAP
+    finally
+      Pic.Free;
+    end;
+  finally
+    GdipUnlock;
   end;
 end;
 

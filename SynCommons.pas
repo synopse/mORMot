@@ -24324,7 +24324,7 @@ end;
 procedure FileTimeToInt64(const FT: TFileTime; out I64: Int64);
   {$ifdef HASINLINE}inline;{$endif}
 begin
-  {$ifdef CPU64} // as recommended by MSDN to avoid align issue
+  {$ifdef CPU64} // as recommended by MSDN to avoid dword alignment issue
   PInt64Rec(@I64)^.Lo := FT.dwLowDateTime;
   PInt64Rec(@I64)^.Hi := FT.dwHighDateTime;
   {$else}
