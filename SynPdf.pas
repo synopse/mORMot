@@ -1359,6 +1359,7 @@ type
     FFontList: TList;
     FObjectList: TList;
     FOutlineRoot: TPdfOutlineRoot;
+    FStructTree: TPdfDictionary;
     FXObjectList: TPdfArray;
     FDefaultPageWidth: cardinal;
     FDefaultPageHeight: Cardinal;
@@ -6089,6 +6090,8 @@ begin
     FMetaData.FFilter := '';
     CatalogDictionary.AddItem('MarkInfo',TPdfRawText.Create('<</Marked true>>'));
     CatalogDictionary.AddItem('Metadata',FMetadata);
+    FStructTree := TPdfDictionary.Create(FXRef);
+    FRoot.Data.AddItem('StructTreeRoot',FStructTree);
     NeedFileID := true;
   end;
   if NeedFileID then begin
