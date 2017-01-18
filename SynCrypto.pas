@@ -9108,7 +9108,7 @@ begin
         haspunct := true;
       result[i] := CHARS[j];
     end;
-  until haspunct and (LowerCase(result)<>result);
+  until (Len<=2) or (haspunct and (LowerCase(result)<>result));
 end;
 
 class function TAESPRNG.Main: TAESPRNG;
