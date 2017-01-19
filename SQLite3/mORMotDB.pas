@@ -30,6 +30,7 @@ unit mORMotDB;
 
   Contributor(s):
   - Maciej Izak (hnb)
+  - yoanq
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -664,9 +665,9 @@ begin
     try // aDefinition.Kind was a TSQLDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,aDefinition.DatabaseName,
         aDefinition.User,aDefinition.PassWordPlain);
+      VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
-      VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions);
     except
       FreeAndNil(result);
       props.Free;  // avoid memory leak
