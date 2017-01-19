@@ -792,9 +792,7 @@ begin
           TextColor(ccLightGray);
           {$ifdef WITHLOG}
           case cmd of
-            cConsole:
-              SQLite3Log.Family.EchoToConsole := LOG_STACKTRACE + [sllDDDInfo];
-            cVerbose:
+            cVerbose: // leave as in settings for -c (cConsole)
               SQLite3Log.Family.EchoToConsole := LOG_VERBOSE;
           end;
           {$endif}
