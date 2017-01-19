@@ -7,7 +7,7 @@ unit mORMot;
     This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -1215,7 +1215,7 @@ unit mORMot;
   // named pipe on a remote computer.
   // - I tried to implement the code as detailed in this Microsoft article:
   // http://support.microsoft.com/kb/813414 but it didn't work as
-  // expected: see our forum http://synopse.info/forum/viewtopic.php?id=43
+  // expected: see our forum https://synopse.info/forum/viewtopic.php?id=43
   // - don't define it, because it's still buggy, and consider using HTTP
   // connection for remote access over the network
     {$define NOSECURITYFORNAMEDPIPECLIENTS}
@@ -8215,16 +8215,16 @@ type
       AddBOM: boolean=false; RowFirst: integer=0; RowLast: integer=0): RawUTF8; overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
     // - this format is used by ADODB.recordset, easily consummed by MS apps
-    // - see @http://synopse.info/forum/viewtopic.php?pid=11691#p11691
+    // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
     procedure GetMSRowSetValues(Dest: TStream; RowFirst,RowLast: integer); overload;
     /// save the table in 'schemas-microsoft-com:rowset' XML format
     // - this format is used by ADODB.recordset, easily consummed by MS apps
-    // - see @http://synopse.info/forum/viewtopic.php?pid=11691#p11691
+    // - see @https://synopse.info/forum/viewtopic.php?pid=11691#p11691
     function GetMSRowSetValues: RawUTF8; overload;
     /// save the table in Open Document Spreadsheet compressed format
     // - this is a set of XML files compressed in a zip container
     // - this method will return the raw binary buffer of the file
-    // - see @http://synopse.info/forum/viewtopic.php?id=2133
+    // - see @https://synopse.info/forum/viewtopic.php?id=2133
     function GetODSDocument(withColumnTypes: boolean=false): RawByteString;
     /// append the table content as a HTML <table> ... </table>
     procedure GetHtmlTable(Dest: TTextWriter); overload;

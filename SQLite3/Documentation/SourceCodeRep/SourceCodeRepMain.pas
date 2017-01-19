@@ -287,7 +287,7 @@ begin
   inc(i, 10);
   while (i < length(status)) and (status[i] <= ' ') do
     inc(i);
-  Clipboard.AsText := 'http://synopse.info/fossil/info/' + copy(status, i, 10);
+  Clipboard.AsText := 'https://synopse.info/fossil/info/' + copy(status, i, 10);
 end;
 
 end.

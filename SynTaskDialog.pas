@@ -7,7 +7,7 @@ unit SynTaskDialog;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -53,7 +53,7 @@ unit SynTaskDialog;
 
   Version 1.16
   - fixed issue when changing the current application with Alt+Tab - see
-    http://synopse.info/fossil/tktview?name=01395e5932
+    https://synopse.info/fossil/tktview?name=01395e5932
   - fixed compiler error when using the unit with runtime packages enabled
     (known compiler issue about string resources, referenced as E2201)
   - default modal dialog parent changed into any current active form
@@ -346,7 +346,7 @@ type
     // - aParent can be set to any HWND - by default, Application.DialogHandle
     // - if aNonNative is TRUE, the Delphi emulation code will always be used
     // - aEmulateClassicStyle can be set to enforce conformity with the non themed
-    // user interface - see @http://synopse.info/forum/viewtopic.php?pid=2867#p2867
+    // user interface - see @https://synopse.info/forum/viewtopic.php?pid=2867#p2867
     // - aOnButtonClicked can be set to a callback triggerred when a button is
     // clicked
     function Execute(aCommonButtons: TCommonButtons=[];

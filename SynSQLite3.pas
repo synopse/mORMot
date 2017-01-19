@@ -7,7 +7,7 @@ unit SynSQLite3;
     This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -277,7 +277,7 @@ type
 const
   {$ifdef MSWINDOWS}
   {$ifdef CPU64}
-  // see http://synopse.info/files/SQLite3-64.7z
+  // see https://synopse.info/files/SQLite3-64.7z
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
   {$else}
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';

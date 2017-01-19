@@ -7,7 +7,7 @@
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   Using secp256r1 curve from "simple and secure ECDH and ECDSA library"
   Copyright (c) 2013, Kenneth MacKay - BSD 2-clause license

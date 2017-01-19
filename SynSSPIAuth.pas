@@ -6,7 +6,7 @@ unit SynSSPIAuth;
     This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -46,7 +46,7 @@ unit SynSSPIAuth;
 
 
   This unit has been contributed by Chaa.
-  See http://synopse.info/forum/viewtopic.php?pid=5619#p5619
+  See https://synopse.info/forum/viewtopic.php?pid=5619#p5619
 
   Thanks A LOT for this great contribution to the framework!
 
@@ -127,7 +127,7 @@ function SecPackageName(var aSecContext: TSecContext): RawUTF8;
 
 /// Force NTLM authentication instead of Negotiate for browser authenticaton.
 // Use case: SPNs not configured properly in domain
-// - see for details http://synopse.info/forum/viewtopic.php?id=931&p=3
+// - see for details https://synopse.info/forum/viewtopic.php?id=931&p=3
 procedure ServerForceNTLM(IsNTLM: boolean);
 
 const

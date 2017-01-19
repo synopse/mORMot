@@ -7,7 +7,7 @@ unit SynCommons;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -839,7 +839,7 @@ type
   /// a CPU-dependent unsigned integer type cast of a pointer / register
   // - used for 64 bits compatibility, native under Free Pascal Compiler
 {$ifdef ISDELPHI2009}
-  PtrUInt = cardinal; { see http://synopse.info/forum/viewtopic.php?id=136 }
+  PtrUInt = cardinal; { see https://synopse.info/forum/viewtopic.php?id=136 }
 {$else}
   {$ifdef UNICODE}
   PtrUInt = NativeUInt;
@@ -23530,7 +23530,7 @@ begin
 var i: integer;
 {$endif}
 begin
-  // use ffGeneral: see http://synopse.info/forum/viewtopic.php?pid=442#p442
+  // use ffGeneral: see https://synopse.info/forum/viewtopic.php?pid=442#p442
   result := FloatToText(PChar(@S[1]), Value, fvExtended, ffGeneral,
     Precision, 0, SettingsUS);
   {$ifdef UNICODE} // FloatToText(PWideChar) is faster than FloatToText(PAnsiChar)

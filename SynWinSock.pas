@@ -7,7 +7,7 @@ unit SynWinSock;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -52,7 +52,7 @@ unit SynWinSock;
     *************************************
 
   Contributor(s):
-   - Arnaud Bouchez, Jan 2009, for SynCrtSock: see http://synopse.info
+   - Arnaud Bouchez, Jan 2009, for SynCrtSock: see https://synopse.info
      Delphi 2009/2010 compatibility (Jan 2010): the WinSock library
        expects Ansi encoded parameters
 

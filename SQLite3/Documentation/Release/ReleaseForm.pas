@@ -88,7 +88,7 @@ var SearchVersion, Text, Head: string;
                 ']': begin
                   if l-k-1>9 then begin
                     Insert('>'+copy(s,k+1,l-k-1)+'</a>',s,l);
-                    Insert('<a href=http://synopse.info/fossil/info/',s,k+1);
+                    Insert('<a href=https://synopse.info/fossil/info/',s,k+1);
                   end;
                   k := l;
                 end;
@@ -128,7 +128,7 @@ begin
   Search(ExtractFilePath(paramstr(0))+'..\..\..\SynDBDataSet\'); 
   Search(ExtractFilePath(paramstr(0))+'..\..\');    // D:\Dev\Lib\SQLite3
   Head[length(Head)-5] := '.';
-  Text := '<p>Our Open Source <a href=http://synopse.info/fossil/wiki?name=SQLite3+Framework>'+
+  Text := '<p>Our Open Source <a href=https://synopse.info/fossil/wiki?name=SQLite3+Framework>'+
     '<i>mORMot</i> framework</a> is now available in revision '+
     SearchVersion+'.</p>'#13#10#13#10+
     '<p>The main new features are the following:<ul><li>...</li></ul></p>'#13#10+
@@ -138,13 +138,13 @@ begin
     ' release of <i>mORMot</i>:</p>'#13#10'<ul>'+
     Head+'</ul><p>Changes in details:<br />'#13#10+Text+#13#10'<p><br />'+
     '<a name=Download><h2>Synopse mORMot download</h2></a>'+
-    'To get it, go to <a href="http://synopse.info/fossil/wiki?name=Downloads">this '+
-    'download page</a>, or <a href="http://synopse.info/fossil">use the '+
+    'To get it, go to <a href="https://synopse.info/fossil/wiki?name=Downloads">this '+
+    'download page</a>, or <a href="https://synopse.info/fossil">use the '+
     'source</a>...<p>Do not forget to get and read the '+
     'full reference documentation available there (mainly the <a href='+
-    'http://synopse.info/files/pdf/Synopse%20mORMot%20Framework%20SAD%20'+SearchVersion+
+    'https://synopse.info/files/pdf/Synopse%20mORMot%20Framework%20SAD%20'+SearchVersion+
     '.pdf>"SAD" - Software Architecture Design</a> - document).</p>'#13#10+
-    '<p>Feedback and questions are <a href="http://synopse.info/forum/viewtopic.php?id=449">welcome in our forum</a>, just '+
+    '<p>Feedback and questions are <a href="https://synopse.info/forum/viewtopic.php?id=449">welcome in our forum</a>, just '+
     'as usual.</p>';
   Memo1.Text := Text;
 end;

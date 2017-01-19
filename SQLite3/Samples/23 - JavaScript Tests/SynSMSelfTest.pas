@@ -5,7 +5,7 @@
 unit SynSMSelfTest;
 {
     Synopse framework. Copyright (C) 2013 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
     Scripting support MORmot (Monkey On Rails) Copyright (C) 2013 Pavel Mashlyakovsky
       pavel.mash at gmail.com

@@ -112,7 +112,7 @@ begin
 
       W.AddShort('</strong></i> - '+
 
-        'see <a href=http://synopse.info>http://synopse.info</a></p></body></html>');
+        'see <a href=https://synopse.info>https://synopse.info</a></p></body></html>');
       Ctxt.OutContent := W.Text;
       Ctxt.OutContentType := HTML_CONTENT_TYPE;
       result := 200;

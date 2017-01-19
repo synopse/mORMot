@@ -3,7 +3,7 @@
   <ProjectSession>
     <PathDelim Value="\"/>
     <Version Value="9"/>
-    <BuildModes Count="4" Active="linux">
+    <BuildModes Count="4" Active="linuxarm">
       <Item1 Name="void">
         <CompilerOptions>
           <Version Value="11"/>
@@ -120,111 +120,110 @@
       <Unit0>
         <Filename Value="TestSQL3.dpr"/>
         <IsPartOfProject Value="True"/>
-        <TopLine Value="104"/>
-        <CursorPos X="7" Y="108"/>
+        <IsVisibleTab Value="True"/>
+        <TopLine Value="151"/>
+        <CursorPos Y="203"/>
         <UsageCount Value="471"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit0>
       <Unit1>
         <Filename Value="..\SynSelfTests.pas"/>
-        <UnitName Value="SynSelfTests"/>
-        <EditorIndex Value="11"/>
+        <EditorIndex Value="10"/>
         <TopLine Value="8423"/>
         <CursorPos Y="8446"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit1>
       <Unit2>
         <Filename Value="mORMotMongoDB.pas"/>
-        <UnitName Value="mORMotMongoDB"/>
-        <EditorIndex Value="10"/>
+        <EditorIndex Value="9"/>
         <TopLine Value="82"/>
         <CursorPos X="33" Y="117"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit2>
       <Unit3>
         <Filename Value="mORMot.pas"/>
-        <UnitName Value="mORMot"/>
-        <EditorIndex Value="6"/>
+        <EditorIndex Value="5"/>
         <TopLine Value="26093"/>
         <CursorPos X="38" Y="26116"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit3>
       <Unit4>
         <Filename Value="..\SynCrtSock.pas"/>
-        <UnitName Value="SynCrtSock"/>
-        <EditorIndex Value="7"/>
+        <EditorIndex Value="6"/>
         <TopLine Value="2143"/>
         <CursorPos X="14" Y="2133"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit4>
       <Unit5>
         <Filename Value="..\SynFPCSock.pas"/>
-        <UnitName Value="SynFPCSock"/>
-        <EditorIndex Value="9"/>
+        <EditorIndex Value="8"/>
         <TopLine Value="508"/>
         <CursorPos X="28" Y="541"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit5>
       <Unit6>
         <Filename Value="mORMotSelfTests.pas"/>
-        <UnitName Value="mORMotSelfTests"/>
         <EditorIndex Value="3"/>
         <TopLine Value="34"/>
         <CursorPos X="3" Y="87"/>
         <UsageCount Value="235"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit6>
       <Unit7>
         <Filename Value="mORMotHttpClient.pas"/>
-        <UnitName Value="mORMotHttpClient"/>
-        <EditorIndex Value="8"/>
+        <EditorIndex Value="7"/>
         <TopLine Value="434"/>
         <CursorPos Y="464"/>
         <UsageCount Value="230"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit7>
       <Unit8>
         <Filename Value="..\SynCommons.pas"/>
-        <UnitName Value="SynCommons"/>
-        <IsVisibleTab Value="True"/>
         <EditorIndex Value="1"/>
-        <TopLine Value="35546"/>
-        <CursorPos Y="35556"/>
+        <TopLine Value="21381"/>
+        <CursorPos Y="21407"/>
         <UsageCount Value="228"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit8>
       <Unit9>
         <Filename Value="..\SynDBRemote.pas"/>
-        <UnitName Value="SynDBRemote"/>
         <EditorIndex Value="2"/>
         <UsageCount Value="129"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit9>
       <Unit10>
         <Filename Value="..\SynLog.pas"/>
-        <UnitName Value="SynLog"/>
-        <EditorIndex Value="5"/>
+        <EditorIndex Value="4"/>
         <TopLine Value="3777"/>
         <CursorPos X="11" Y="3836"/>
         <UsageCount Value="10"/>
         <Loaded Value="True"/>
+        <DefaultSyntaxHighlighter Value="Delphi"/>
       </Unit10>
       <Unit11>
         <Filename Value="..\SynTest.pas"/>
-        <UnitName Value="SynTest"/>
-        <EditorIndex Value="4"/>
+        <EditorIndex Value="-1"/>
         <TopLine Value="703"/>
         <CursorPos X="24" Y="743"/>
         <UsageCount Value="10"/>
-        <Loaded Value="True"/>
       </Unit11>
     </Units>
-    <JumpHistory Count="30" HistoryIndex="29">
+    <JumpHistory Count="18" HistoryIndex="17">
       <Position1>
         <Filename Value="..\SynCommons.pas"/>
         <Caret Line="382" TopLine="331"/>
@@ -276,89 +275,27 @@
         <Caret Line="7122" Column="79" TopLine="7070"/>
       </Position13>
       <Position14>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="56" TopLine="4"/>
-      </Position14>
-      <Position15>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="755" Column="13" TopLine="725"/>
-      </Position15>
-      <Position16>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="757" Column="27" TopLine="725"/>
-      </Position16>
-      <Position17>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="271" Column="25" TopLine="241"/>
-      </Position17>
-      <Position18>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="755" Column="22" TopLine="725"/>
-      </Position18>
-      <Position19>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="271" Column="18" TopLine="241"/>
-      </Position19>
-      <Position20>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="755" Column="21" TopLine="725"/>
-      </Position20>
-      <Position21>
-        <Filename Value="..\SynTest.pas"/>
-      </Position21>
-      <Position22>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="746" Column="39" TopLine="694"/>
-      </Position22>
-      <Position23>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="755" Column="21" TopLine="703"/>
-      </Position23>
-      <Position24>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="762" Column="14" TopLine="710"/>
-      </Position24>
-      <Position25>
         <Filename Value="..\SynCommons.pas"/>
         <Caret Line="7142" TopLine="7096"/>
-      </Position25>
-      <Position26>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="889" Column="14" TopLine="837"/>
-      </Position26>
-      <Position27>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="756" Column="41" TopLine="725"/>
-      </Position27>
-      <Position28>
-        <Filename Value="..\SynTest.pas"/>
-      </Position28>
-      <Position29>
-        <Filename Value="..\SynTest.pas"/>
-        <Caret Line="746" Column="67" TopLine="694"/>
-      </Position29>
-      <Position30>
+      </Position14>
+      <Position15>
         <Filename Value="..\SynCommons.pas"/>
-      </Position30>
+      </Position15>
+      <Position16>
+        <Filename Value="..\SynCommons.pas"/>
+        <Caret Line="35556" TopLine="35546"/>
+      </Position16>
+      <Position17>
+        <Filename Value="TestSQL3.dpr"/>
+        <Caret Line="203" TopLine="151"/>
+      </Position17>
+      <Position18>
+        <Filename Value="..\SynCommons.pas"/>
+        <Caret Line="21407" TopLine="21381"/>
+      </Position18>
     </JumpHistory>
   </ProjectSession>
   <Debugging>
-    <BreakPoints Count="2">
-      <Item1>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\SynFPCSock.pas"/>
-        <Line Value="544"/>
-      </Item1>
-      <Item2>
-        <Kind Value="bpkSource"/>
-        <WatchScope Value="wpsLocal"/>
-        <WatchKind Value="wpkWrite"/>
-        <Source Value="..\SynFPCSock.pas"/>
-        <Line Value="534"/>
-      </Item2>
-    </BreakPoints>
     <Watches Count="1">
       <Item1>
         <Expression Value="result"/>

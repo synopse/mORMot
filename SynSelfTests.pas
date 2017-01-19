@@ -7,7 +7,7 @@ unit SynSelfTests;
     This file is part of Synopse mORMot framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -2371,7 +2371,7 @@ begin
   Check(AFP.LoadFrom(pointer(Test))<>nil);
   Check(AFP.Count=1001);
   TestAF2;
-  // validate http://synopse.info/forum/viewtopic.php?pid=16581#p16581
+  // validate https://synopse.info/forum/viewtopic.php?pid=16581#p16581
   DP.Modified := Now;
   DP.Data := '1';
   dyn1.Init(TypeInfo(TDataItems),dyn1Array);
@@ -3261,9 +3261,9 @@ begin
   b := b+#0#0#0;
   u := BaudotToAscii(b);
   check(u='mormot.net');
-  b := AsciiToBaudot('http://synopse.info');
+  b := AsciiToBaudot('https://synopse.info');
   u := BaudotToAscii(b);
-  check(u='http://synopse.info');
+  check(u='https://synopse.info');
   b := AsciiToBaudot('abcdef 1234 5678'#13#10'ABCD;/23u'#13#10'op @toto.#com');
   check(b<>'');
   u := BaudotToAscii(b);

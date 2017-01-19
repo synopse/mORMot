@@ -7,7 +7,7 @@ unit mORMotFastCgiServer;
     This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -443,7 +443,7 @@ begin
       call.OutHead := call.OutHead+#13#10;
     call.OutHead := FormatUTF8(
       '%Status: %'#13#10'Server-InternalState: %'#13#10+
-      'X-Powered-By: mORMotFastCGIServer http://synopse.info'#13#10+
+      'X-Powered-By: mORMotFastCGIServer https://synopse.info'#13#10+
       'Content-Length: %'#13#10,
       [call.OutHead,call.OutStatus,call.OutInternalState,ContentLength]);
     // send the answer back to the HTTP server
@@ -645,7 +645,7 @@ begin
     fResponseContent := OutBody;
     fResponseHeaders := FormatUTF8(
       'Status: %'#13#10'Server-InternalState: %'#13#10+
-      'X-Powered-By: mORMot http://synopse.info'#13#10+
+      'X-Powered-By: mORMot https://synopse.info'#13#10+
       JSON_CONTENT_TYPE_HEADER+#13#10+
       'Content-Length: %'#13#10+
       '%', // a void line will be appened in SendResponse() method

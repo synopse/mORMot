@@ -640,7 +640,7 @@ procedure TDBExplorerFrame.ImageLogoClick(Sender: TObject);
 begin
 {$WARNINGS OFF}
   if DebugHook=0 then
-    ShellExecute(0,nil,'http://synopse.info',nil,nil,SW_SHOWNORMAL);
+    ShellExecute(0,nil,'https://synopse.info',nil,nil,SW_SHOWNORMAL);
 {$WARNINGS ON}
 end;
 

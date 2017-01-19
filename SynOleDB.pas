@@ -7,7 +7,7 @@ unit SynOleDB;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -72,7 +72,7 @@ unit SynOleDB;
     methods - able to use faster direct SQL retrieval (e.g. for Oracle / MS SQL)
 
   Version 1.16
-  - add some reference to http://synopse.info/fossil/tktview?name=213544b2f5
+  - add some reference to https://synopse.info/fossil/tktview?name=213544b2f5
     in case of wrong implementation of multi-thread connection (within the
     THttpServerGeneric mORMot server, for instance)
 

@@ -6,7 +6,7 @@ unit SynSMAPI;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
     Scripting support for mORMot Copyright (C) 2017 Pavel Mashlyakovsky
       pavel.mash at gmail.com
@@ -51,7 +51,7 @@ unit SynSMAPI;
   ***** END LICENSE BLOCK *****
 
   ---------------------------------------------------------------------------
-   Download the SpiderMonkey library at http://synopse.info/files/synsm.7z !
+   Download the SpiderMonkey library at https://synopse.info/files/synsm.7z !
   ---------------------------------------------------------------------------
 
   Version 1.18

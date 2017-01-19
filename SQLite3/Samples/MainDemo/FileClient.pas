@@ -119,7 +119,7 @@ begin
     Font.Size := 9;
     AddPagesToFooterAt(sPageN,LeftMargin);
     TextAlign := taRight;
-    AddTextToFooterAt('SynFile  http://synopse.info - '+Caption,RightMarginPos);
+    AddTextToFooterAt('SynFile  https://synopse.info - '+Caption,RightMarginPos);
     RestoreSavedLayout;
     // write global header at the beginning of the report
     DrawTitle(P.Table.CaptionName+' : '+Caption,true);
@@ -172,7 +172,7 @@ begin
     end;
     RestoreSavedLayout;
     // set custom report parameters
-    ExportPDFApplication := 'SynFile  http://synopse.info';
+    ExportPDFApplication := 'SynFile  https://synopse.info';
     ExportPDFForceJPEGCompression := 80;
   end;
 end;

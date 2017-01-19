@@ -3,7 +3,7 @@ program Project14ServerExternal;
 { this sample will create the main SQLite3 DB as in-memory, but will define all
   tables as external, in the same .db file than Project14Server
   -> just to demonstrate VirtualTableExternalRegisterAll() function and
-  reproduce the http://synopse.info/forum/viewtopic.php?id=1008 issue }
+  reproduce the https://synopse.info/forum/viewtopic.php?id=1008 issue }
 
 {$APPTYPE CONSOLE}
 

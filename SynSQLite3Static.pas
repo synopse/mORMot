@@ -7,7 +7,7 @@ unit SynSQLite3Static;
     This file is part of Synopse mORMot framework.
 
     Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -81,7 +81,7 @@ unit SynSQLite3Static;
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
   - under Win64, expects an external sqlite3-64.dll file to be available, which
-    may be downloaded from http://synopse.info/files/SQLite3-64.7z
+    may be downloaded from https://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
   - added sqlite3.db_config() support
@@ -210,7 +210,7 @@ const
  - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
     gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 sqlite3.c
     and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
-    For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
+    For CentOS 7.0, take a look at https://synopse.info/forum/viewtopic.php?pid=13193#p13193
 
 and, in the sqlite3.c source file, the following functions are made external
 in order to allow our proprietary but simple and efficient encryption system:
@@ -1394,7 +1394,7 @@ begin
   FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
-    'from http://synopse.info/files/sqlite3obj.7z',
+    'from https://synopse.info/files/sqlite3obj.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization

@@ -8,7 +8,7 @@ unit TestSQL3FPCInterfaces;
     Any manual modification of this file may be lost after regeneration.
 
   Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
-    Synopse Informatique - http://synopse.info
+    Synopse Informatique - https://synopse.info
 
   This unit is released under a MPL/GPL/LGPL tri-license,
   and therefore may be freely included in any application.

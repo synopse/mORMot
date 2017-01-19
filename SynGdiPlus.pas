@@ -10,7 +10,7 @@ unit SynGdiPlus;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -50,7 +50,7 @@ unit SynGdiPlus;
   ***** END LICENSE BLOCK *****
 
   Version 1.6a
-   - first public release on http://synopse.info blog
+   - first public release on https://synopse.info blog
 
   Version 1.6b
    - new TGDIPlusFull with most useful GDI+ primitives (ancestor TGDIPLus only

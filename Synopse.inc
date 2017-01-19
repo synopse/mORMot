@@ -2,7 +2,7 @@
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2011 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -68,7 +68,7 @@
   Version 1.18
   - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
-    http://synopse.info/forum/viewtopic.php?id=1394
+    https://synopse.info/forum/viewtopic.php?id=1394
   - enhanced FPC compatibility
   - now handles Delphi XE3, XE4, XE5, XE6, XE7 and XE8 (32 and 64 bit)
 
@@ -216,7 +216,7 @@
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
   // -> enabled to support static-linked SQLite3 engine, after retrieval of
-  // the needed .o files from http://synopse.info/files/sqlite3fpc.7z
+  // the needed .o files from https://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
   // -> only available for Win32 and Linux32 platforms by now
 
@@ -489,7 +489,7 @@
   {$WARN UNIT_PLATFORM OFF}
 {$endif}
 
-// see http://synopse.info/fossil/tktview?name=6593f0fbd1
+// see https://synopse.info/fossil/tktview?name=6593f0fbd1
 {$ifndef WITHUXTHEME}
   {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
 {$endif}

@@ -7,7 +7,7 @@ unit SynCrtSock;
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -117,7 +117,7 @@ unit SynCrtSock;
     any process in the thread context, when it is terminated (to call e.g.
     TSQLDBConnectionPropertiesThreadSafe.EndCurrentThread in order to call
     CoUnInitialize from thread in which CoInitialize was initialy made) - see
-    http://synopse.info/fossil/tktview?name=213544b2f5
+    https://synopse.info/fossil/tktview?name=213544b2f5
 
   Version 1.17
   - replaced TSockData string type to the generic RawByteString type (and

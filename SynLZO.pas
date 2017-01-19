@@ -6,7 +6,7 @@ unit SynLZO;
     This file is part of Synopse LZO Compression.
 
     Synopse LZO Compression. Copyright (C) 2017 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1

@@ -2,7 +2,7 @@
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2013 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
     Scripting support for mORMot Copyright (C) 2013 Pavel Mashlyakovsky
       pavel.mash at gmail.com
@@ -71,7 +71,7 @@
 
 {$ifndef FPC}
 {$if CompilerVersion = 24.0}
-  // see http://synopse.info/forum/viewtopic.php?pid=12598#p12598
+  // see https://synopse.info/forum/viewtopic.php?pid=12598#p12598
   {$define FIXBUGXE3}
 {$ifend}
 {$endif}

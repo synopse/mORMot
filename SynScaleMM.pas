@@ -25,7 +25,7 @@ unit SynScaleMM;
    SynScaleMM - fast scaling memory manager for Delphi
   -----------------------------------------------------
 
-  Modifications/fork to SynScaleMM by A.Bouchez - http://synopse.info:
+  Modifications/fork to SynScaleMM by A.Bouchez - https://synopse.info:
   - Synchronized with r19 revision, from Dec 6, 2010;
   - Compiles from Delphi 6 up to Delphi XE;
   - Some pascal code converted to faster asm;
@@ -53,7 +53,7 @@ unit SynScaleMM;
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
-  - Arnaud Bouchez http://synopse.info
+  - Arnaud Bouchez https://synopse.info
   Portions created by each contributor are Copyright (C) 2017
   each contributor. All Rights Reserved.
 
@@ -493,7 +493,7 @@ end;
 function CAS1(const oldValue: pointer; newValue: pointer; var destination): boolean;
 // - if failed, try to Switch to next OS thread, or Sleep 1 ms if it no next thread
 // (this 1 ms sleep is necessary to avoid race condition - see
-//  http://synopse.info/forum/viewtopic.php?pid=914#p914 )
+//  https://synopse.info/forum/viewtopic.php?pid=914#p914 )
 asm // eax=oldValue, edx=newValue, ecx=Destination
   lock cmpxchg dword ptr [Destination],newValue
   // will compile as "lock cmpxchg dword ptr [ecx],edx" under Win32 e.g.

@@ -610,7 +610,7 @@ begin
         for i := 0 to Stat.fNumberOfElements-1 do begin
           ValueLastName[i] := Int32ToUtf8(i+1);
           {$ifndef UNIK}
-          if i<>100 then // test http://synopse.info/fossil/info/e8c211062e
+          if i<>100 then // test https://synopse.info/fossil/info/e8c211062e
           {$endif}
             ValueFirstName[i] := U+ValueLastName[i];
         end;

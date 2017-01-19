@@ -811,7 +811,7 @@ begin
   {$WARNINGS OFF}
   if DebugHook=0 then
 {$endif}
-    ShellExecute(0,'open','http://synopse.info',nil,nil,SW_SHOWNORMAL);
+    ShellExecute(0,'open','https://synopse.info',nil,nil,SW_SHOWNORMAL);
 {$WARNINGS ON}
 end;
 

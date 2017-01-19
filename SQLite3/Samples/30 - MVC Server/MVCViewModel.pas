@@ -171,7 +171,7 @@ begin
     info.Title := 'mORMot BLOG';
     info.Language := 'en';
     info.Description := 'Sample Blog Web Application using Synopse mORMot MVC';
-    info.Copyright := '&copy;2017 <a href=http://synopse.info>Synopse Informatique</a>';
+    info.Copyright := '&copy;2017 <a href=https://synopse.info>Synopse Informatique</a>';
     info.About := TSynTestCase.RandomTextParagraph(30,'!');
     RestModel.Add(info,true);
   end;
@@ -198,7 +198,7 @@ begin
       article.PublishedMonth := 2014*12+(n div 10);
       article.Title := TSynTestCase.RandomTextParagraph(5,' ');
       article.Abstract := TSynTestCase.RandomTextParagraph(30,'!');
-      article.Content := TSynTestCase.RandomTextParagraph(200,'.','http://synopse.info');
+      article.Content := TSynTestCase.RandomTextParagraph(200,'.','https://synopse.info');
       article.Tags := nil;
       for t := 1 to Random(6) do
         article.TagsAddOrdered(tags[random(length(tags))],fTagsLookup);
