@@ -20504,10 +20504,7 @@ begin
         {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
     W.Add('"');
   end else
-    if PtrUInt(tmp)=0 then
-      W.AddShort('null') else
-      W.AddNoJSONEscape(pointer(tmp),
-        {$ifdef FPC}length(tmp){$else}PInteger(PtrUInt(tmp)-4)^{$endif});
+    W.AddRawJSON(tmp);
 end;
 
 function TSQLPropInfo.GetValue(Instance: TObject; ToSQL: boolean;
@@ -57067,9 +57064,7 @@ begin
   smvDouble, smvDateTime: WR.AddDouble(PDouble(V)^);
   smvCurrency:   WR.AddCurr64(PInt64(V)^);
   smvRawUTF8:    WR.AddJSONEscape(PPointer(V)^);
-  smvRawJSON:    if PPointer(V)^=nil then // null as default JSON value 
-                   WR.AddShort('null') else
-                   WR.AddNoJSONEscape(PPointer(V)^,length(PRawUTF8(V)^));
+  smvRawJSON:    WR.AddRawJSON(PRawJSON(V)^);
   smvString:     {$ifdef UNICODE}
                  WR.AddJSONEscapeW(pointer(PString(V)^));
                  {$else}

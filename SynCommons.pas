@@ -7536,6 +7536,9 @@ type
     // - may be used with InternalJSONWriter, as a faster alternative to
     // ! AddNoJSONEscapeUTF8(Source.Text);
     procedure AddNoJSONEscape(Source: TTextWriter); overload;
+    /// append some UTF-8 chars to the buffer
+    // - if supplied json is '', will write 'null'
+    procedure AddRawJSON(const json: RawJSON);
     /// append some chars, quoting all " chars
     // - same algorithm than AddString(QuotedStr()) - without memory allocation
     // - this function implements what is specified in the official SQLite3
@@ -38599,12 +38602,9 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     {$ifndef NOVARIANTS}
     ptVariant:   aWriter.AddVariant(PVariant(Value)^,twJSONEscape);
     {$endif}
+    ptRawJSON:   aWriter.AddRawJSON(PRawJSON(Value)^);
     ptRawByteString:
       aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
-    ptRawJSON:
-      if PPointer(Value)^=nil then // null as default JSON value
-        aWriter.AddShort('null') else
-        aWriter.AddNoJSONEscape(PPointer(Value)^,length(PRawJSON(Value)^));
     ptRawUTF8, ptString, ptSynUnicode,
     ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
       aWriter.Add('"');
@@ -46436,6 +46436,13 @@ begin
   if Source.fTotalFileSize=0 then
     AddNoJSONEscape(Source.fTempBuf,Source.B-Source.fTempBuf+1) else
     AddNoJSONEscapeUTF8(Source.Text);
+end;
+
+procedure TTextWriter.AddRawJSON(const json: RawJSON);
+begin
+  if json='' then
+    AddShort('null') else
+    AddNoJSONEscape(pointer(json),length(json));
 end;
 
 procedure TTextWriter.WriteObjectAsString(Value: TObject;

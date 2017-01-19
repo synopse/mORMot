@@ -3,7 +3,7 @@
 
 An Open Source Client-Server ORM/SOA framework
  (c) 2008-2017 Synopse Informatique
-  http://synopse.info
+  https://synopse.info
   http://mormot.net
 
 Contributors
@@ -62,6 +62,7 @@ Contributors
   Win2014
   Wloochacz
   Wolfgang Ehrhardt
+  Yoanq
   Zed
 
 [See below if you upgrade from 1.17 revision]
@@ -176,26 +177,26 @@ Main project page:
 http://mORMot.net
 
 Documentation:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
 
 Installation:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
 
 FAQ:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
 
 How to get the source:
-http://synopse.info/fossil/wiki?name=Get+the+source
+https://synopse.info/fossil/wiki?name=Get+the+source
 
 A forum is dedicated to support:
-http://synopse.info
+https://synopse.info
 
 A blog is available:
 http://blog.synopse.info
 
 Issues and feature requests can be posted (take a look at the forums
 and latest unstable version first!):
-http://synopse.info/fossil/reportlist
+https://synopse.info/fossil/reportlist
 
 You can also monitor/fork our projects on GitHub:
 https://github.com/synopse/mORMot
