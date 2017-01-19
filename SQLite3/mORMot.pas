@@ -52362,7 +52362,7 @@ begin
   tkSet:
     result := smvSet;
   tkFloat:
-    if P=TypeInfo(TDateTime) then
+    if (P=TypeInfo(TDateTime)) or (P=TypeInfo(TDateTimeMS)) then
       result := smvDateTime else
     case P^.FloatType of
       ftCurr: result := smvCurrency;
