@@ -2910,6 +2910,11 @@ function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 // - returns nil if there was no name=... pattern in U
 function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 
+/// checks if the supplied text don't need URI encoding
+// - returns TRUE if all its chars are plain ASCII-7 RFC compatible identifiers
+// (0..9a..zA..Z_.~)
+function IsUrlValid(P: PUTF8Char): boolean;
+
 /// encode name/value pairs into CSV/INI raw format
 function CSVEncode(const NameValuePairs: array of const;
   const KeySeparator: RawUTF8='='; const ValueSeparator: RawUTF8=#13#10): RawUTF8;
@@ -12148,6 +12153,9 @@ const
   IsJsonIdentifier: set of byte =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
      ord('.'),ord('['),ord(']')];
+  IsURIUnreserved: set of byte =
+    [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
+     ord('-'),ord('.'),ord('_'),ord('~')];
 {$else}
   /// used e.g. by inlined function GetLineContains()
   ANSICHARNOT01310 = [#1..#9,#11,#12,#14..#255];
@@ -12175,14 +12183,15 @@ const
   IsJsonIdentifier =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z'),
      ord('.'),ord('['),ord(']')];
-{$endif OPT4AMD}
 
   /// used internaly for fast URI "unreserved" characters identifier
   // - defined as unreserved  = ALPHA / DIGIT / "-" / "." / "_" / "~"
   // in @http://tools.ietf.org/html/rfc3986#section-2.3
-  IsURIUnreserved: set of byte =
+  IsURIUnreserved =
     [ord('a')..ord('z'),ord('A')..ord('Z'),ord('0')..ord('9'),
      ord('-'),ord('.'),ord('_'),ord('~')];
+
+{$endif OPT4AMD}
 
 {$M+} // to have existing RTTI for published properties
 type
@@ -30229,25 +30238,13 @@ function UrlEncode(const NameValuePairs: array of const): RawUTF8;
 // (['select','*','where','ID=12','offset',23,'object',aObject]);
 var A, n: PtrInt;
     name, value: RawUTF8;
-  function Invalid(P: PAnsiChar): boolean;
-  begin
-    result := true;
-    if P<>nil then begin
-      repeat // cf. rfc3986 2.3. Unreserved Characters
-        if not (P^ in ['a'..'z','A'..'Z','0'..'9','_','.','~']) then
-          exit else
-          inc(P);
-      until P^=#0;
-      result := false;
-    end;
-  end;
 begin
   result := '';
   n := high(NameValuePairs);
   if n>0 then begin
     for A := 0 to n shr 1 do begin
       VarRecToUTF8(NameValuePairs[A*2],name);
-      if Invalid(pointer(name)) then
+      if not IsUrlValid(pointer(name)) then
         continue; // just skip invalid names
       with NameValuePairs[A*2+1] do
         if VType=vtObject then
@@ -30256,6 +30253,19 @@ begin
       result := result+'&'+name+'='+UrlEncode(value);
     end;
     result[1] := '?';
+  end;
+end;
+
+function IsUrlValid(P: PUTF8Char): boolean;
+begin
+  result := false;
+  if P<>nil then begin
+    repeat // cf. rfc3986 2.3. Unreserved Characters
+      if ord(P^) in IsURIUnreserved then
+        inc(P) else
+        exit;
+    until P^=#0;
+    result := true;
   end;
 end;
 

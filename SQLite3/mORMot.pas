@@ -9266,6 +9266,7 @@ type
     // TSQLRestServer.AfterDeleteForceCoherency
     fRecordReferences: array of TSQLModelRecordReference;
     fIDGenerator: array of TSynUniqueIdentifierGenerator;
+    procedure SetRoot(const aRoot: RawUTF8);
     procedure SetTableProps(aIndex: integer);
     function GetTableIndexSafe(aTable: TSQLRecordClass;
       RaiseExceptionIfNotExisting: boolean): integer;
@@ -9529,7 +9530,11 @@ type
     {$endif}
   published
     /// the Root URI path of this Database Model
-    property Root: RawUTF8 read fRoot write fRoot;
+    // - this textual value will be used directly to compute the URI for REST
+    // routing, so it should contain only URI-friendly characters,
+    // i.e. only alphanumerical characters, excluding e.g. space or '+',
+    // otherwise an EModelException is raised   
+    property Root: RawUTF8 read fRoot write SetRoot;
     /// the associated ORM information about all handled TSQLRecord class properties
     // - this TableProps[] array will map the Tables[] array, and will allow
     // fast direct access to the Tables[].RecordProps values
@@ -32486,6 +32491,15 @@ begin
   raise EModelException.CreateUTF8('Plain %.Create is not allowed: use overloaded Create()',[self]);
 end;
 
+procedure TSQLModel.SetRoot(const aRoot: RawUTF8);
+begin
+  if (aRoot<>'') and (aRoot[length(aRoot)]='/') then
+    fRoot := copy(aRoot,1,Length(aRoot)-1) else
+    fRoot := aRoot;
+  if not IsUrlValid(pointer(fRoot)) then
+    raise EModelException.CreateUTF8('%.Root="%" contains URI unfriendly chars',[self,fRoot]);
+end;
+
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8);
 var N, i: integer;
 begin
@@ -32509,9 +32523,7 @@ begin
   QuickSortRawUTF8(fSortedTablesName,fTablesMax+1,@fSortedTablesNameIndex,@StrIComp);
   // set the optional Root URI path of this Model
   if aRoot<>'' then
-    if aRoot[length(aRoot)]='/' then
-      fRoot := copy(aRoot,1,Length(aRoot)-1) else
-      fRoot := aRoot;
+    SetRoot(aRoot);
 end;
 
 function TSQLModel.GetIsUnique(aTable: TSQLRecordClass; aFieldIndex: integer): boolean;
