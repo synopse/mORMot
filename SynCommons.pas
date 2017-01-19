@@ -38601,11 +38601,14 @@ procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte
     {$endif}
     ptRawByteString:
       aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
-    ptRawJSON, ptRawUTF8, ptString, ptSynUnicode,
+    ptRawJSON:
+      if PPointer(Value)^=nil then // null as default JSON value
+        aWriter.AddShort('null') else
+        aWriter.AddNoJSONEscape(PPointer(Value)^,length(PRawJSON(Value)^));
+    ptRawUTF8, ptString, ptSynUnicode,
     ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
       aWriter.Add('"');
       case Prop.PropertyType of
-      ptRawJSON:       aWriter.AddNoJSONEscape(PPointer(Value)^,length(PRawJSON(Value)^));
       ptRawUTF8:       aWriter.AddJSONEscape(PPointer(Value)^);
       ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
       ptSynUnicode,
