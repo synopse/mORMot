@@ -32467,7 +32467,7 @@ begin
   fTablesMax := CloneFrom.fTablesMax;
   if fTablesMax<>High(fTables) then
     raise EModelException.CreateUTF8('%.Create: incorrect CloneFrom.TableMax',[self]);
-  fRoot := CloneFrom.fRoot;
+  SetRoot(CloneFrom.fRoot);
   fActions := CloneFrom.fActions;
   fEvents := CloneFrom.fEvents;
   fRestOwner := CloneFrom.fRestOwner;
@@ -32511,12 +32511,15 @@ begin
 end;
 
 procedure TSQLModel.SetRoot(const aRoot: RawUTF8);
+var i: integer;
 begin
+  for i := 1 to length(aRoot) do // allow RFC URI + '/' for URI-fragment
+    if not (aRoot[i] in ['0'..'9','a'..'z','A'..'Z','_','-','.','~',' ','/']) then
+      raise EModelException.CreateUTF8('%.Root="%" contains URI unfriendly chars',[self,aRoot]);
   if (aRoot<>'') and (aRoot[length(aRoot)]='/') then
     fRoot := copy(aRoot,1,Length(aRoot)-1) else
     fRoot := aRoot;
-  if not IsUrlValid(pointer(fRoot)) then
-    raise EModelException.CreateUTF8('%.Root="%" contains URI unfriendly chars',[self,fRoot]);
+  UpperCaseCopy(fRoot,fRootUpper);
 end;
 
 constructor TSQLModel.Create(const Tables: array of TSQLRecordClass; const aRoot: RawUTF8);
@@ -32768,8 +32771,6 @@ begin
   result := rmNoMatch;
   if (self=nil) or (fRoot='') or (URI='') then
     exit;
-  if fRootUpper='' then
-    UpperCaseCopy(fRoot,fRootUpper);
   if IdemPChar(pointer(URI),pointer(fRootUpper)) then begin
     URILen := length(fRoot);
     if URI[URILen+1] in [#0,'/','?'] then
