@@ -1483,6 +1483,7 @@ type
     // - equals nil if len=0
     buf: pointer;
     /// initialize a temporary copy of the supplied text supplied as RawByteString
+    // - will also allocate and copy the ending #0
     procedure Init(const Source: RawByteString); overload;
     /// initialize a temporary copy of the supplied text buffer, ending with #0
     function Init(Source: PUTF8Char): PUTF8Char; overload;
@@ -40421,8 +40422,10 @@ begin
   if (n=0) or (VKind=dvArray) then
     exit; // nothing to add
   VKind := dvObject;
-  SetLength(VValue,VCount+n);
-  SetLength(VName,VCount+n);
+  if length(VValue)<VCount+n then begin
+    SetLength(VValue,VCount+n);
+    SetLength(VName,VCount+n);
+  end;
   for arg := 0 to n-1 do begin
     VarRecToUTF8(NameValuePairs[arg*2],VName[arg+VCount]);
     if dvoValueCopiedByReference in VOptions then

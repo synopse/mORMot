@@ -6284,7 +6284,8 @@ type
     // - expects Status to be either HTTP_SUCCESS or HTTP_CREATED
     // - caller can set Handle304NotModified=TRUE for Status=HTTP_SUCCESS
     procedure Returns(const NameValuePairs: array of const; Status: integer=HTTP_SUCCESS;
-      Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false); overload;
+      Handle304NotModified: boolean=false; HandleErrorAsRegularResult: boolean=false;
+       const CustomHeader: RawUTF8=''); overload;
     /// use this method to send back any object as JSON document to the caller
     // - this method will call ObjectToJson() to compute the returned content
     // - you can customize SQLRecordOptions, to force the returned JSON
@@ -6292,12 +6293,13 @@ type
     // arrays or objects, or add an "ID_str" string field for JavaScript
     procedure Returns(Value: TObject; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false;
-      SQLRecordOptions: TJSONSerializerSQLRecordOptions=[]); overload;
+      SQLRecordOptions: TJSONSerializerSQLRecordOptions=[];
+       const CustomHeader: RawUTF8=''); overload;
     /// use this method to send back any variant as JSON to the caller
     // - this method will call VariantSaveJSON() to compute the returned content
     procedure ReturnsJson(const Value: variant; Status: integer=HTTP_SUCCESS;
       Handle304NotModified: boolean=false; Escape: TTextWriterKind=twJSONEscape;
-      MakeHumanReadable: boolean=false);
+      MakeHumanReadable: boolean=false; const CustomHeader: RawUTF8='');
     /// uses this method to send back directly any binary content to the caller
     // - the exact MIME type will be retrieved using GetMimeContentTypeHeader(),
     // from the supplied Blob binary buffer, and optional a file name
@@ -15120,6 +15122,9 @@ type
     // - on failure, will call TSQLRestServerURIContext.AuthenticationFailed()
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(Ctxt: TSQLRestServerURIContext; var User: TSQLAuthUser); virtual;
+    /// Ctxt.Returns(['result',result,....[,'data',data]],200,header);
+    procedure SessionCreateReturns(Ctxt: TSQLRestServerURIContext;
+      Session: TAuthSession; const result, data, header: RawUTF8);
     /// abstract method which will be called by ClientSetUser() to process the
     // authentication step on the client side
     // - at call, a TSQLAuthUser instance will be supplied, with LogonName set
@@ -18229,6 +18234,7 @@ type
     fSessionServer: RawUTF8;
     fSessionVersion: RawUTF8;
     fSessionData: RawByteString;
+    fSessionServerTimeout: integer;
     /// used to make the internal client-side process reintrant
     fSafe: IAutoLocker;
     fRemoteLogClass: TSynLog;
@@ -18705,6 +18711,9 @@ type
     property SessionServer: RawUTF8 read fSessionServer;
     /// the remote server version, as retrieved after a SetUser() success
     property SessionVersion: RawUTF8 read fSessionVersion;
+    /// the remote server session tiemout in minutes, as retrieved after
+    // a SetUser() success
+    property SessionServerTimeout: integer read fSessionServerTimeout;
   public
     /// the current user as set by SetUser() method
     // - contans nil if no User is currently authenticated
@@ -36298,7 +36307,9 @@ begin
     fSessionAuthentication := nil;
     fSessionServer := '';
     fSessionVersion := '';
+    FillZero(fSessionData);
     fSessionData := '';
+    fSessionServerTimeout := 0;
     FreeAndNil(fSessionUser);
   end;
 end;
@@ -39902,25 +39913,29 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Returns(Value: TObject; Status: integer;
-  Handle304NotModified: boolean; SQLRecordOptions: TJSONSerializerSQLRecordOptions);
+  Handle304NotModified: boolean; SQLRecordOptions: TJSONSerializerSQLRecordOptions;
+  const CustomHeader: RawUTF8);
 var json: RawUTF8;
 begin
   if Value.InheritsFrom(TSQLRecord) then
     json := TSQLRecord(Value).GetJSONValues(true,true,soSelect,nil,SQLRecordOptions) else
     json := ObjectToJSON(Value);
-  Returns(json,Status,'',Handle304NotModified);
+  Returns(json,Status,CustomHeader,Handle304NotModified);
 end;
 
 procedure TSQLRestServerURIContext.ReturnsJson(const Value: Variant; Status: integer;
-  Handle304NotModified: boolean; Escape: TTextWriterKind; MakeHumanReadable: boolean);
-var json,tmp: RawUTF8;
+  Handle304NotModified: boolean; Escape: TTextWriterKind; MakeHumanReadable: boolean;
+  const CustomHeader: RawUTF8);
+var json: RawUTF8;
+    tmp: TSynTempBuffer;
 begin
   VariantSaveJSON(Value,Escape,json);
   if MakeHumanReadable and (json<>'') and (json[1] in ['{','[']) then begin
-    tmp := json;
-    JSONBufferReformat(pointer(tmp),json);
+    tmp.Init(json);
+    JSONBufferReformat(tmp.buf,json);
+    tmp.Done;
   end;
-  Returns(json,Status,'',Handle304NotModified);
+  Returns(json,Status,CustomHeader,Handle304NotModified);
 end;
 
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
@@ -39998,9 +40013,10 @@ begin
 end;
 
 procedure TSQLRestServerURIContext.Returns(const NameValuePairs: array of const;
-  Status: integer; Handle304NotModified,HandleErrorAsRegularResult: boolean);
+  Status: integer; Handle304NotModified,HandleErrorAsRegularResult: boolean;
+  const CustomHeader: RawUTF8);
 begin
-  Returns(JSONEncode(NameValuePairs),Status,'',Handle304NotModified,
+  Returns(JSONEncode(NameValuePairs),Status,CustomHeader,Handle304NotModified,
     HandleErrorAsRegularResult);
 end;
 
@@ -50698,13 +50714,28 @@ begin
   try // now client is authenticated -> create a session
     fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
     if Session<>nil then
-      with Session.User do
-      Ctxt.Returns(['result',Session.fPrivateSalt,'logonid',IDValue,
-        'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
-        'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
+      SessionCreateReturns(Ctxt,Session,Session.fPrivateSalt,'','');
   finally
     User.Free;
   end;
+end;
+
+procedure TSQLRestServerAuthentication.SessionCreateReturns(
+  Ctxt: TSQLRestServerURIContext; Session: TAuthSession; const result, data, header: RawUTF8);
+var body: TDocVariantData;
+begin
+  body.InitFast(9,dvObject);
+  if result='' then
+    body.AddValue('result',Session.IDCardinal) else
+    body.AddValue('result',RawUTF8ToVariant(result));
+  if data<>'' then
+    body.AddValue('data',RawUTF8ToVariant(data));
+  with Session.User do
+    body.AddNameValuesToObject(['logonid',IDValue,'logonname',LogonName,
+      'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
+      'timeout',GroupRights.SessionTimeout,
+      'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
+  Ctxt.ReturnsJson(variant(body),HTTP_SUCCESS,false,twJSONEscape,false,header);
 end;
 
 class function TSQLRestServerAuthentication.ClientGetSessionKey(
@@ -50714,18 +50745,19 @@ var resp: RawUTF8;
 begin
   if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTTP_SUCCESS) or
      (JSONDecode(pointer(resp),['result','data','server','version',
-       'logonid','logonname','logondisplay','logongroup'],values)=nil) then begin
-    Sender.fSessionData := '';
+       'logonid','logonname','logondisplay','logongroup','timeout'],values)=nil) then begin
+    Sender.fSessionData := ''; // reset temporary 'data' field
     result := '';
   end else begin
     SetString(result,values[0],StrLen(values[0]));
     Base64ToBin(PAnsiChar(values[1]),StrLen(values[1]),Sender.fSessionData);
-    Sender.fSessionServer := values[2];
-    Sender.fSessionVersion := values[3];
+    SetString(Sender.fSessionServer,values[2],StrLen(values[2]));
+    SetString(Sender.fSessionVersion,values[3],StrLen(values[3]));
     SetID(values[4],User.fID);
     User.LogonName := values[5]; // set/fix using values from server
     User.DisplayName := values[6];
     User.GroupRights := pointer(GetInteger(values[7]));
+    Sender.fSessionServerTimeout := GetInteger(values[8]);
   end;
 end;
 
@@ -51109,10 +51141,7 @@ begin
           Ctxt.SetOutSetCookie((COOKIE_SESSION+'=')+CardinalToHex(Session.IDCardinal));
           if (rsoRedirectForbiddenToAuth in fServer.Options) and (Ctxt.ClientKind=ckAjax) then
             Ctxt.Redirect(fServer.Model.Root) else
-            with Session.User do
-            Ctxt.Returns(['result',Session.IDCardinal,'logonid',IDValue,
-              'logonname',LogonName,'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
-              'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
+            SessionCreateReturns(Ctxt,Session,'','','');
           exit; // success
         end;
       end else
@@ -51219,18 +51248,13 @@ begin
       User.PasswordHashHexa := ''; // override with context
       fServer.SessionCreate(User,Ctxt,Session); // call Ctxt.AuthenticationFailed on error
       if Session<>nil then
-        with Session.User do
-        if BrowserAuth then
-          Ctxt.Returns(JSONEncode(['result',Session.fPrivateSalt,
-            'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
-            'logongroup',GroupRights.IDValue,
-            'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]),
-            HTTP_SUCCESS,(SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
-          Ctxt.Returns([
-            'result',BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
-            'logonid',IDValue,'logonname',LogonName,'logondisplay',DisplayName,
-            'logongroup',GroupRights.ID,'server',ExeVersion.ProgramName,
-            'version',ExeVersion.Version.Detailed,'data',BinToBase64(OutData)]);
+        with Session.User do 
+          if BrowserAuth then
+            SessionCreateReturns(Ctxt,Session,Session.fPrivateSalt,'',
+              (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData)) else
+            SessionCreateReturns(Ctxt,Session,
+              BinToBase64(SecEncrypt(fSSPIAuthContexts[SecCtxIdx],Session.fPrivateSalt)),
+              BinToBase64(OutData),'');
     finally
       User.Free;
     end else
