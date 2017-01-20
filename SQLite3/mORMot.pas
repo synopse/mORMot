@@ -17102,9 +17102,11 @@ type
     // table cache
     // - GET ModelRoot/CacheFlush/TableName/TableID URI will flush the content
     // of the specified record
-    // - in addition, POST ModelRoot/CacheFlush/_callback_ URI will be called
-    // automatically by the client, to notify the server that an interface
-    // callback instance has been released
+    // - POST ModelRoot/CacheFlush/_callback_ URI will be called by the client
+    // to notify the server that an interface callback instance has been released
+    // - POST ModelRoot/CacheFlush/_ping_ URI will be called by the client after
+    // every half session timeout (or at least every hour) to notify the server
+    // that the connection is still alive
     procedure CacheFlush(Ctxt: TSQLRestServerURIContext);
     /// REST service accessible from the ModelRoot/Batch URI
     // - will execute a set of RESTful commands, in a single step, with optional
@@ -18272,6 +18274,8 @@ type
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
       var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
+    procedure SessionRenewEvent(Sender: TSynBackgroundTimer; Event: TWaitResult;
+      const Msg: RawUTF8);
     /// abstract method to be implemented with a local, piped or HTTP/1.1 provider
     // - you can specify some POST/PUT data in Call.OutBody (leave '' otherwise)
     // - return the execution result in Call.OutStatus
@@ -18713,6 +18717,9 @@ type
     property SessionVersion: RawUTF8 read fSessionVersion;
     /// the remote server session tiemout in minutes, as retrieved after
     // a SetUser() success
+    // - will be used to call SessionRenewEvent every half period, so that
+    // the session will be maintained on the server side as long as the
+    // client connection stands 
     property SessionServerTimeout: integer read fSessionServerTimeout;
   public
     /// the current user as set by SetUser() method
@@ -19591,12 +19598,15 @@ var
   AuthAdminGroupDefaultTimeout: integer = 10;
   /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Supervisor' group
   // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthSupervisorGroupDefaultTimeout: integer = 60;
   /// default timeout period set by TSQLAuthGroup.InitializeTable for 'User' group
   // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthUserGroupDefaultTimeout: integer = 60;
   /// default timeout period set by TSQLAuthGroup.InitializeTable for 'Guest' group
   // - you can override this value to follow your own application expectations
+  // - note that clients will maintain the session alive using CacheFlush/_ping_
   AuthGuestGroupDefaultTimeout: integer = 60;
 
   /// default hashed password set by TSQLAuthGroup.InitializeTable for 'Admin' user
@@ -36292,12 +36302,46 @@ begin
   result.fInternalState := InternalState;
 end;
 
+procedure TSQLRestClientURI.SessionRenewEvent(Sender: TSynBackgroundTimer;
+  Event: TWaitResult; const Msg: RawUTF8);
+var resp: RawUTF8;
+     status: integer;
+begin
+  status := CallBack(mPOST,'CacheFlush/_ping_','',resp);
+  InternalLog('SessionRenewEvent(%) received % from % % (timeout=% min)',
+    [Model.Root,status,SessionServer,SessionVersion,fSessionServerTimeout],sllUserAuth);
+end;
+
+function TSQLRestClientURI.SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
+  var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
+var period: integer;
+begin
+  result := false;
+  fSessionID := GetCardinal(pointer(aSessionKey));
+  if fSessionID=0 then
+    exit;
+  fSessionIDHexa8 := CardinalToHex(fSessionID);
+  fSessionPrivateKey := crc32(crc32(0,Pointer(aSessionKey),length(aSessionKey)),
+    pointer(aUser.PasswordHashHexa),length(aUser.PasswordHashHexa));
+  fSessionUser := aUser;
+  fSessionAuthentication := aAuth;
+  aUser := nil; // now owned by this instance
+  if fSessionServerTimeout>0 then begin // call _ping_ every half timeout period
+    period := fSessionServerTimeout*(60 div 2);
+    if period>3600 then
+      period := 3600; // REST heartbeat at least every hour
+    TimerEnable(SessionRenewEvent,period);
+  end;
+  result := true;
+end;
+
 procedure TSQLRestClientURI.SessionClose;
 var tmp: RawUTF8;
 begin
   if (self<>nil) and (fSessionUser<>nil) and
      (fSessionID<>CONST_AUTHENTICATION_SESSION_NOT_STARTED) then
   try
+    TimerDisable(SessionRenewEvent);
     // notify session closed to server
     CallBackGet('Auth',['UserName',fSessionUser.LogonName,'Session',fSessionID],tmp);
   finally
@@ -36312,22 +36356,6 @@ begin
     fSessionServerTimeout := 0;
     FreeAndNil(fSessionUser);
   end;
-end;
-
-function TSQLRestClientURI.SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
-  var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
-begin
-  result := false;
-  fSessionID := GetCardinal(pointer(aSessionKey));
-  if fSessionID=0 then
-    exit;
-  fSessionIDHexa8 := CardinalToHex(fSessionID);
-  fSessionPrivateKey := crc32(crc32(0,Pointer(aSessionKey),length(aSessionKey)),
-    pointer(aUser.PasswordHashHexa),length(aUser.PasswordHashHexa));
-  fSessionUser := aUser;
-  fSessionAuthentication := aAuth;
-  aUser := nil; // now owned by this instance
-  result := true;
 end;
 
 function TSQLRestClientURI.GetCurrentSessionUserID: TID;
@@ -40766,8 +40794,7 @@ procedure TSQLRestServer.TimeStamp(Ctxt: TSQLRestServerURIContext);
 {$ifdef NOVARIANTS}
 begin
 {$else}
-var
-  info: TDocVariantData;
+var info: TDocVariantData;
 begin
   if IdemPropNameU(Ctxt.URIBlobFieldName,'info') then begin
     info.InitFast;
@@ -40791,7 +40818,13 @@ begin
   end;
   mPOST:
     if Ctxt.URIBlobFieldName='_callback_' then
-      (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt);
+      // as called from TSQLHttpClientWebsockets.FakeCallbackUnregister
+      (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt) else
+    if Ctxt.URIBlobFieldName='_ping_' then begin
+      InternalLog('Renew % authenticated session % from %',
+        [Model.Root,Ctxt.Session,Ctxt.SessionRemoteIP],sllUserAuth);
+      Ctxt.Success;
+    end;
   end;
 end;
 

@@ -741,7 +741,8 @@ begin
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   head := 'Sec-WebSocket-REST: NonBlocking';
-  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTTP_SUCCESS;
+  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head) in
+    [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
