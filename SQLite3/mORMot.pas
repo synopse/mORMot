@@ -39836,7 +39836,7 @@ begin
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
   if StrPosI('; PATH=',pointer(aOutSetCookie))=nil then
-    FormatUTF8('%; Path=%%',[aOutSetCookie,Server.Model.Root,
+    FormatUTF8('%; Path=/%%',[aOutSetCookie,Server.Model.Root,
       HTTPONLY[rsoCookieHttpOnlyFlagDisable in Server.fOptions]],fOutSetCookie) else
     fOutSetCookie := aOutSetCookie;
 end;

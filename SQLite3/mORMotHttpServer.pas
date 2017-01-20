@@ -644,7 +644,7 @@ procedure TSQLHttpServer.DomainHostRedirect(const aDomain,aURI: RawUTF8);
 begin
   if aURI='' then
     fHosts.Delete(aDomain) else
-    fHosts.Add(aDomain,aURI);
+    fHosts.Add(aDomain,aURI); // e.g. Add('project1.com','root1')
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
@@ -871,9 +871,9 @@ end;
 
 function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
-    i,len: integer;
+    i,hostlen: integer;
     P: PUTF8Char;
-    host,redirect: RawUTF8;
+    hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
@@ -905,19 +905,19 @@ begin
           include(call.LowLevelFlags,llfSecured);
     end;
     if fHosts.Count>0 then begin
-      host := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
-      i := PosEx(':',host);
+      hostroot := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
+      i := PosEx(':',hostroot);
       if i>0 then
-        SetLength(host,i-1); // trim any port
-      if host<>'' then
-        host := fHosts.Value(host);
+        SetLength(hostroot,i-1); // trim any port
+      if hostroot<>'' then // e.g. 'Host: project1.com' -> 'root1'
+        hostroot := fHosts.Value(hostroot);
     end;
-    if host<>'' then
+    if hostroot<>'' then
       if (Ctxt.URL='') or (Ctxt.URL='/') then
-        call.Url := host else
+        call.Url := hostroot else
         if Ctxt.URL[1]='/' then
-          call.Url := host+Ctxt.URL else
-          call.Url := host+'/'+Ctxt.URL else
+          call.Url := hostroot+Ctxt.URL else
+          call.Url := hostroot+'/'+Ctxt.URL else
       if Ctxt.URL[1]='/' then
         call.Url := copy(Ctxt.URL,2,maxInt) else
         call.Url := Ctxt.URL;
@@ -954,15 +954,19 @@ begin
       end else
         // default content type is JSON
         Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-      // handle HTTP redirection over virtual hosts
-      if (host<>'') and
-         ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
-        redirect := FindIniNameValue(P,'LOCATION: ');
-        len := length(host);
-        if (length(redirect)>len) and (redirect[len+1]='/') and
-           IdemPropNameU(host,pointer(redirect),len) then
-          // host/method -> method on same domain
-          call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
+      // handle HTTP redirection and cookies over virtual hosts
+      if hostroot<>'' then begin
+        if ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
+          redirect := FindIniNameValue(P,'LOCATION: ');
+          hostlen := length(hostroot);
+          if (length(redirect)>hostlen) and (redirect[hostlen+1]='/') and
+             IdemPropNameU(hostroot,pointer(redirect),hostlen) then
+            // hostroot/method -> method on same domain
+            call.OutHead := 'Location: '+copy(redirect,hostlen+1,maxInt);
+        end else
+        if ExistsIniName(P,'SET-COOKIE:') then
+          Call.OutHead := StringReplaceAll(
+            Call.OutHead,'; Path=/'+Server.Model.Root,'; Path=/')
       end;
       Ctxt.OutCustomHeaders := Trim(call.OutHead)+
         #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
