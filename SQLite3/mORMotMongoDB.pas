@@ -696,9 +696,9 @@ begin
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
     try
-      DocFromJSON(SentData,soUpdate,Doc);
+      DocFromJSON(SentData,soUpdate,doc);
       query := BSONVariant(['_id',ID]);
-      update := BSONVariant(['$set',variant(Doc)]);
+      update := BSONVariant(['$set',variant(doc)]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
         Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
@@ -909,7 +909,7 @@ begin
   if (fCollection=nil) or (ID<=0) then
     exit;
   doc := fCollection.FindDoc(BSONVariant(['_id',ID]),fBSONProjectionSimpleFields,1);
-  JSONFromDoc(TDocVariantData(doc),result);
+  JSONFromDoc(_Safe(doc)^,result);
 end;
 
 function TSQLRestStorageMongoDB.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -924,8 +924,7 @@ begin
     try
       FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
       doc := fCollection.FindDoc(BSONVariant(['_id',aID]),BSONVariant([FieldName,1]),1);
-      if DocVariantType.IsOfType(doc) and
-         DocVariantData(doc)^.GetVarData(FieldName,data) then
+      if _Safe(doc)^.GetVarData(FieldName,data) then
         BSONVariantType.ToBlob(variant(data),RawByteString(BlobData));
       result := true;
     except
@@ -949,9 +948,12 @@ begin
     exit;
   try
     doc := fCollection.FindDoc(BSONVariant(['_id',aID]),fBSONProjectionBlobFields,1);
-    docv := DocVariantData(doc);
+    docv := _Safe(doc);
+    if docv^.Kind<>dvObject then
+      exit; // not found
     for f := 0 to high(fStoredClassRecordProps.BlobFields) do begin
-      if docv^.Names[f]=fBSONProjectionBlobFieldsNames[f] then
+      if (f<docv^.Count) and // optimistic O(1) search
+         IdemPropNameU(docv^.Names[f],fBSONProjectionBlobFieldsNames[f]) then
         BSONVariantType.ToBlob(docv^.Values[f],blobRaw) else
       if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f],blob) then
         BSONVariantType.ToBlob(variant(blob),blobRaw) else
