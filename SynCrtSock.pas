@@ -744,9 +744,13 @@ type
     function Request(const url, method: SockString; KeepAlive: cardinal;
       const header, Data, DataType: SockString; retry: boolean): integer; virtual;
 
-    /// after an Open(server,port), return 200 if OK, http status error otherwise - get
-    // the page data in Content
+    /// after an Open(server,port), return 200 if OK, http status error otherwise
+    // - get the page data in Content
     function Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
+    /// after an Open(server,port), return 200 if OK, http status error otherwise
+    // - get the page data in Content
+    // - if AuthToken<>'', will add an header with 'Authorization: Bearer '+AuthToken
+    function GetAuth(const url, AuthToken: SockString; KeepAlive: cardinal=0): integer;
     /// after an Open(server,port), return 200 if OK, http status error otherwise - only
     // header is read from server: Content is always '', but Headers are set
     function Head(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
@@ -3605,6 +3609,13 @@ end;
 function THttpClientSocket.Get(const url: SockString; KeepAlive: cardinal=0; const header: SockString=''): integer;
 begin
   result := Request(url,'GET',KeepAlive,header,'','',false);
+end;
+
+function THttpClientSocket.GetAuth(const url, AuthToken: SockString; KeepAlive: cardinal=0): integer;
+begin
+  if AuthToken='' then
+    result := Get(url,KeepAlive) else
+    result := Get(url,KeepAlive,'Authorization: Bearer '+AuthToken);
 end;
 
 function THttpClientSocket.Head(const url: SockString; KeepAlive: cardinal;

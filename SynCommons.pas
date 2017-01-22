@@ -17002,6 +17002,7 @@ type
   {$endif}
   public
     /// the actual 64-bit storage value
+    // - in practice, only first 63 bits are used 
     Value: TSynUniqueIdentifier;
     /// 15-bit counter (0..32767), starting with a random value
     function Counter: word;
@@ -17064,7 +17065,8 @@ type
 
   /// thread-safe 64-bit integer unique identifier computation
   // - may be used on client side for something similar to a MongoDB ObjectID,
-  // but compatible with TSQLRecord.ID: TID properties
+  // but compatible with TSQLRecord.ID: TID properties, since it will contain
+  // a 63-bit unsigned integer, following our ORM expectations
   // - each identifier would contain a 16-bit process identifier, which is
   // supplied by the application, and should be unique for this process at a
   // given time
@@ -17114,6 +17116,8 @@ type
       out aIdentifier: TSynUniqueIdentifier): boolean;
     /// some 32-bit value, derivated from aSharedObfuscationKey as supplied
     // to the class constructor
+    // - FromObfuscated and ToObfuscated methods will validate their hexadecimal
+    // content with this value to secure the associated CRC 
     // - may be used e.g. as system-depending salt
     property CryptoCRC: cardinal read fCryptoCRC;
     /// direct access to the associated mutex
