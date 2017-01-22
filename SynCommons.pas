@@ -27446,7 +27446,7 @@ begin // fast cross-platform implementation
   random[0] := #8;
   repeat
     rnd := InterlockedIncrement(TemporaryFileNameRandom); // thread-safe :)
-    BinToHex(@rnd,@random[1],sizeof(rnd));
+    SynCommons.BinToHex(@rnd,@random[1],sizeof(rnd));
     result := format('%s%s_%s.tmp',[GetSystemPath(spTempFolder),ExeVersion.ProgramName,random]);
   until not FileExists(result);
 end;
