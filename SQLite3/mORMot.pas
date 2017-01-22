@@ -5472,6 +5472,7 @@ type
     /// list of all sftBlobDynArray fields of this TSQLRecord
     property DynArrayFields: TSQLPropInfoRTTIDynArrayObjArray read fDynArrayFields;
     /// TRUE if any of the sftBlobDynArray fields of this TSQLRecord is a T*ObjArray
+    // - used e.g. by TSQLRecord.Destroy to release all owned nested instances
     property DynArrayFieldsHasObjArray: boolean read fDynArrayFieldsHasObjArray;
     /// list of all sftBlobCustom fields of this TSQLRecord
     // - have been defined e.g. as TSQLPropInfoCustom custom definition
@@ -22330,7 +22331,7 @@ begin
   inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
   fObjArray := aPropInfo^.DynArrayIsObjArrayInstance;
   if fGetterIsFieldPropOffset=0 then
-    raise EORMException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
+    raise EModelException.CreateUTF8('%.Create(%) getter!',[self,fPropType^.Name]);
 end;
 
 function TSQLPropInfoRTTIDynArray.GetDynArray(Instance: TObject): TDynArray;
@@ -22869,7 +22870,7 @@ begin
   fOffset := PtrUInt(aProperty);
   if (Assigned(aData2Text) and not Assigned(aText2Data)) or
      (Assigned(aText2Data) and not Assigned(aData2Text)) then
-    raise EORMException.CreateUTF8(
+    raise EModelException.CreateUTF8(
       'Invalid %.Create: expecting both Data2Text/Text2Data',[self]);
   fData2Text := aData2Text;
   fText2Data := aText2Data;
@@ -32454,7 +32455,7 @@ begin
   ndx := GetTableIndexInheritsFrom(aTable);
   if ndx<0 then
     if not AddTable(aTable,@ndx) then
-      raise EORMException.CreateUTF8('%.AddTableInherited(%)',[self,aTable]);
+      raise EModelException.CreateUTF8('%.AddTableInherited(%)',[self,aTable]);
   result := Tables[ndx];
 end;
 
@@ -48658,10 +48659,10 @@ begin
     F := Fields.List[i];
     // check field name
     if IsRowID(pointer(F.Name)) then
-      raise EORMException.CreateUTF8('ID is already defined in TSQLRecord: '+
+      raise EModelException.CreateUTF8('ID is already defined in TSQLRecord: '+
         '%.% field name is not allowed as published property',[Table,F.Name]);
     if PosEx(' '+LowerCase(F.Name)+' ',SQLITE3_KEYWORDS)>0 then
-      raise EORMException.CreateUTF8('%.% field name conflicts with a SQL keyword',[Table,F.Name]);
+      raise EModelException.CreateUTF8('%.% field name conflicts with a SQL keyword',[Table,F.Name]);
     //  handle unique fields, i.e. if marked as "stored false"
     if aIsUnique in F.Attributes then begin
       include(IsUniqueFieldsBits,i);
