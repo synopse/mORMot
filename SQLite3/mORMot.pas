@@ -5889,6 +5889,7 @@ type
     fInHeaderLastValue: RawUTF8;
     fOutSetCookie: RawUTF8;
     fUserAgent: RawUTF8;
+    fAuthenticationBearerToken: RawUTF8;
     fAuthSession: TAuthSession;
     fServiceListInterfaceMethodIndex: integer;
     fClientKind: TSQLRestServerURIContextClientKind;
@@ -39843,22 +39844,27 @@ begin
     fOutSetCookie := aOutSetCookie;
 end;
 
+function HeaderOnce(call: PSQLRestURIParams; var store: RawUTF8; upper: PAnsiChar): RawUTF8;
+begin
+  if store='' then begin
+    result := FindIniNameValue(pointer(call^.InHead),upper);
+    if result='' then
+      store := '*' else // ensure header is parsed only once
+      store := result;
+  end else
+    if store='*' then
+      result := '' else
+      result := store;
+end;
+ 
 function TSQLRestServerURIContext.GetUserAgent: RawUTF8;
 begin
-  if fUserAgent='' then begin
-    result := FindIniNameValue(pointer(Call.InHead),'USER-AGENT: ');
-    if result='' then
-      fUserAgent := '*' else // ensure header is parsed only once
-      fUserAgent := result;
-  end else
-    if fUserAgent='*' then
-      result := '' else
-      result := fUserAgent;
+  result := HeaderOnce(Call,fUserAgent,'USER-AGENT: ');
 end;
 
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
-  result := FindIniNameValue(pointer(Call.InHead),'AUTHORIZATION: BEARER ');
+  result := HeaderOnce(Call,fAuthenticationBearerToken,'AUTHORIZATION: BEARER ');
 end;
 
 function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract;

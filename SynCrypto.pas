@@ -1949,6 +1949,7 @@ const
     'iss','sub','aud','exp','nbf','iat','jti');
 
 function ToText(res: TJWTResult): PShortString; overload;
+function ToCaption(res: TJWTResult): string; overload;
 
 {$endif NOVARIANTS}
 
@@ -9893,6 +9894,11 @@ end;
 function ToText(res: TJWTResult): PShortString;
 begin
   result := GetEnumName(TypeInfo(TJWTResult),ord(res));
+end;
+
+function ToCaption(res: TJWTResult): string;
+begin
+  result := GetCaptionFromEnum(TypeInfo(TJWTResult),ord(res));
 end;
 
 {$endif NOVARIANTS}
