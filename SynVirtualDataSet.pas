@@ -61,7 +61,9 @@ interface
 uses
   SysUtils,
   Classes,
+  {$ifndef FPC}
   Contnrs,
+  {$endif}
   {$ifndef NOVARIANTS}
   Variants,
   {$endif}
@@ -78,6 +80,7 @@ type
   {$ifndef UNICODE} // defined as TRecordBuffer = PByte in newer DB.pas
   TRecordBuffer = PChar;
   {$endif}
+  PDateTimeRec = ^TDateTimeRec;
 
   /// read-only virtual TDataSet able to access any content
   TSynVirtualDataSet = class(TDataSet)
@@ -380,17 +383,18 @@ begin
   result := false; // we define a READ-ONLY TDataSet
 end;
 
-procedure DateTimeToNative(DataType: TFieldType; Data: TDateTime; var Output);
-  {$ifdef HASINLINE}inline;{$endif}
+procedure DateTimeToNative(DataType: TFieldType; Data: TDateTime;
+  var result: TDateTimeRec); {$ifdef HASINLINE}inline;{$endif}
 var TimeStamp: TTimeStamp;
-    result: TDateTimeRec absolute Output;
 begin
-  TimeStamp := DateTimeToTimeStamp(Data);
-  case DataType of
-    ftDate: result.Date := TimeStamp.Date;
-    ftTime: result.Time := TimeStamp.Time;
-    else    result.DateTime := TimeStampToMSecs(TimeStamp);
-  end;
+  if DataType in [ftDate,ftTime] then begin
+    TimeStamp := DateTimeToTimeStamp(Data);
+    case DataType of
+      ftDate: result.Date := TimeStamp.Date;
+      ftTime: result.Time := TimeStamp.Time;
+    end;
+  end else
+    result.DateTime := Data;
 end;
 
 {$ifndef UNICODE}
@@ -435,7 +439,7 @@ begin
   ftLargeint, ftFloat:
     PInt64(Dest)^ := PInt64(Data)^;
   ftDate,ftTime,ftDateTime:
-    DateTimeToNative(Field.DataType,PDateTime(Data)^,Dest^);
+    DateTimeToNative(Field.DataType,PDateTime(Data)^,PDateTimeRec(Dest)^);
   ftString: begin
     if DataLen<>0 then begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);

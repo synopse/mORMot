@@ -63,19 +63,21 @@ uses
   Classes,
   {$ifndef DELPHI5OROLDER}
   Variants,
-  {$ifdef MSWINDOWS}
   {$ifndef FPC}
+  {$ifdef MSWINDOWS}
   MidasLib,
   {$endif}
   {$endif}
   {$endif}
-  SynCommons, mORmot,
-  DB
+  SynCommons,
+  mORmot,
+  DB,
+  mORMotVCL, // for GetDBField()
   {$ifdef FPC}
-  ,BufDataset
+  BufDataset
   {$else}
-  ,Contnrs
-  ,DBClient
+  Contnrs,
+  DBClient
   {$endif}
   ;
 
@@ -210,14 +212,9 @@ function ToClientDataSet(aDataSet: TClientDataSet; aTable: TSQLTable; aClient: T
   aMode: TClientDataSetMode=cdsReplace; aLogChange: boolean=false
   {$ifndef UNICODE}; aForceWideString: boolean=false{$endif}): boolean; overload;
 var F,i: integer;
-    fDefaultStringType: TFieldType;
     Columns: array of record
-      FieldName: string;
+      Def: TDBFieldDef;
       Field: TField;
-      DBType: TFieldType;
-      DBSize: integer;
-      SQLType: TSQLFieldType;
-      EnumType: Pointer;
       WasReadOnly: boolean;
       OnChange: TFieldNotifyEvent;
     end;
@@ -227,13 +224,11 @@ var F,i: integer;
       LogChanges: Boolean;
       AfterScroll: TDataSetNotifyEvent;
     end;
-    SourceStream,DestStream: TStream;
-    blob: TSQLRawBlob;
 begin
   result := false;
   if (aDataSet=nil) or (aTable=nil) then
     exit;
-  fillchar(Previous,sizeof(Previous),0);
+  FillcharFast(Previous,sizeof(Previous),0);
   if aDataSet.Active then begin
     Previous.Active := true;
     {$ifndef FPC}
@@ -257,56 +252,20 @@ begin
     {$endif}
   end;
   // handle columns
-  {$ifndef UNICODE}
-  if not aForceWideString then
-    fDefaultStringType := ftString else
-  {$endif}
-    fDefaultStringType := ftWideString; // means UnicodeString for Delphi 2009+
   SetLength(Columns,aTable.FieldCount);
-  for F := 0 to aTable.FieldCount-1 do begin
-    with Columns[F] do begin
-      FieldName := aTable.GetString(0,F);
-      SQLType := aTable.FieldType(F,@EnumType);
-      case SQLType of
-      sftBoolean:
-        DBType := ftBoolean;
-      sftInteger, sftID, sftTID, sftSessionUserID:
-        DBType := ftLargeint; // LargeInt=Int64
-      sftFloat, sftCurrency:
-        DBType := ftFloat;
-      sftEnumerate, sftSet:
-        if EnumType=nil then
-          DBType := ftInteger else
-          DBType := fDefaultStringType;
-      sftRecord:
-        DBType := fDefaultStringType;
-      sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
-        DBType := ftDateTime;
-      sftBlob: begin
-        DBType := ftBlob;
-        DBSize := (aTable.FieldLengthMax(F,true)*3) shr 2;
-      end;
-      sftUTF8Text: begin
-        DBSize := aTable.FieldLengthMax(F,true);
-        DBType := fDefaultStringType;
-      end else
-        DBType := fDefaultStringType;
-      end;
-      if (DBSize=0) and (DBType=fDefaultStringType) then
-        DBSize := 64;
-    end;
-  end;
+  for F := 0 to aTable.FieldCount-1 do
+    GetDBFieldDef(aTable,F,Columns[f].Def{$ifndef UNICODE},aForceWideString{$endif});
   if aMode=cdsNew then begin
     for f := 0 to high(Columns) do
-      with Columns[f] do
+      with Columns[f].Def do
         aDataSet.FieldDefs.Add(FieldName,DBType,DBSize);
     aDataSet.CreateDataSet;
     for f := 0 to high(Columns) do
-      Columns[f].Field := aDataSet.FieldByName(Columns[f].FieldName);
+      Columns[f].Field := aDataSet.FieldByName(Columns[f].Def.FieldName);
   end else
     for f := 0 to high(Columns) do
     with Columns[f] do begin
-      Field := aDataSet.FieldByName(Columns[f].FieldName);
+      Field := aDataSet.FieldByName(Columns[f].Def.FieldName);
       if Field.ReadOnly then begin
         WasReadOnly := true;
         Field.ReadOnly := false;
@@ -323,52 +282,7 @@ begin
       aDataSet.Append;
       for F := 0 to high(Columns) do
       with Columns[F] do
-      if Field<>nil then
-      if aTable.Get(i,F)=nil then
-        Field.Clear else
-      case Columns[F].SQLType of
-      sftBoolean:
-        Field.AsBoolean := aTable.GetAsInteger(i,F)<>0;
-      sftInteger, sftID, sftTID, sftSessionUserID:
-        if Field.DataType=ftLargeInt then // handle Int64 values directly
-          TLargeintField(Field).Value := aTable.GetAsInt64(i,F) else
-          Field.AsInteger := aTable.GetAsInteger(i,F);
-      sftFloat, sftCurrency:
-        Field.AsFloat := GetExtended(aTable.Get(i,F));
-      sftEnumerate, sftSet:
-        if EnumType=nil then
-          Field.AsInteger := aTable.GetAsInteger(i,F) else
-          Field.AsString := aTable.GetString(i,F);
-      sftDateTime, sftDateTimeMS:
-        Field.AsDateTime := Iso8601ToDateTimePUTF8Char(aTable.Get(i,F),0);
-      sftUnixTime:
-        Field.AsDateTime := UnixTimeToDateTime(aTable.GetAsInt64(i,F));
-      sftTimeLog, sftModTime, sftCreateTime:
-        Field.AsDateTime := TimeLogToDateTime(aTable.GetAsInt64(i,F));
-      sftBlob: begin
-        blob := aTable.GetBlob(i,F);
-        if blob='' then
-          Field.Clear else begin
-          SourceStream := TRawByteStringStream.Create(blob);
-          try
-            DestStream := aDataSet.CreateBlobStream(Field,bmWrite);
-            try
-              DestStream.CopyFrom(SourceStream,0);
-            finally
-              DestStream.Free;
-            end;
-          finally
-            SourceStream.Free;
-          end;
-        end;
-      end;
-      sftUTF8Text:
-        if Field.DataType=ftWideString then
-          TWideStringField(Field).Value := aTable.GetSynUnicode(i,F) else
-          Field.AsString := aTable.GetString(i,F);
-      else
-        Field.AsVariant := aTable.GetVariant(i,F,aClient);
-      end;
+        GetDBFieldValue(aTable,i,Field,aDataSet,Def);
       aDataSet.Post;
     end;
     aDataSet.First;

@@ -7999,14 +7999,14 @@ type
     // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
     // in a sftVariant column) - so you should better set the exact field types
     // (e.g. from ORM) before calling this method
-    function GetVariant(Row,Field: integer; Client: TObject): variant; overload;
+    function GetVariant(Row,Field: integer): variant; overload;
     /// read-only access to a particular field value, as a Variant
     // - text will be stored as RawUTF8 (as varString type)
     // - will try to use the most approriate Variant type for conversion (will
     // use e.g. TDateTime for sftDateTime, or a TDocVariant for JSON objects
     // in a sftVariant column) - so you should better set the exact field types
     // (e.g. from ORM) before calling this method
-    procedure GetVariant(Row,Field: integer; Client: TObject; var result: variant); overload;
+    procedure GetVariant(Row,Field: integer; var result: variant); overload;
     /// read-only access to a particular field, via a lookup field name
     // - will call GetVariant() on the corresponding field
     // - returns null if the lookup did not have any match
@@ -26160,7 +26160,7 @@ begin
   if (fStepRow=0) or (fStepRow>fRowCount) then
     raise ESQLTableException.CreateUTF8('%.Field(%): no previous Step',
       [self,FieldIndex]);
-  GetVariant(fStepRow,FieldIndex,nil,result);
+  GetVariant(fStepRow,FieldIndex,result);
 end;
 
 function TSQLTable.Field(const FieldName: RawUTF8): variant;
@@ -26539,12 +26539,12 @@ end;
 
 {$ifndef NOVARIANTS}
 
-function TSQLTable.GetVariant(Row, Field: integer; Client: TObject): Variant;
+function TSQLTable.GetVariant(Row, Field: integer): Variant;
 begin
-  GetVariant(Row,Field,Client,result);
+  GetVariant(Row,Field,result);
 end;
 
-procedure TSQLTable.GetVariant(Row,Field: integer; Client: TObject; var result: variant);
+procedure TSQLTable.GetVariant(Row,Field: integer; var result: variant);
 var aType: TSQLFieldType;
     aTypeInfo: pointer;
 begin
@@ -26565,7 +26565,7 @@ begin
     exit;
   r := SearchFieldEquals(aLookupValue,f);
   if r>0 then
-    GetVariant(r,v,nil,Result);
+    GetVariant(r,v,Result);
 end;
 
 {$endif NOVARIANTS}
@@ -26696,7 +26696,7 @@ begin
   f := TSQLTableRowVariantData(V).VTable.FieldIndex(PUTF8Char(Name));
   if cardinal(f)>=cardinal(TSQLTableRowVariantData(V).VTable.fFieldCount) then
     raise ESQLTableException.CreateUTF8('%.%: unknown field',[self,Name]);
-  TSQLTableRowVariantData(V).VTable.GetVariant(r,f,nil,Variant(Dest));
+  TSQLTableRowVariantData(V).VTable.GetVariant(r,f,Variant(Dest));
 end;
 
 procedure TSQLTableRowVariant.IntSet(const V, Value: TVarData; Name: PAnsiChar);

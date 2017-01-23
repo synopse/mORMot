@@ -64,7 +64,9 @@ interface
 uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
+  {$ifndef FPC}
   Contnrs,
+  {$endif}
   DB,
   SynVirtualDataSet,
   SynCommons, mORMot;
@@ -93,14 +95,14 @@ type
     // all the time the returned TSynSQLTableDataSet instance is used, unless
     // the TableShouldBeFreed property is set to true or CreateOwnedTable()
     // constructor is used instead
-    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
     constructor Create(Owner: TComponent; Table: TSQLTable
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce;
     /// initialize the virtual TDataSet owning a TSQLTable
     // - this constructor will set TableShouldBeFreed to TRUE
-    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
     constructor CreateOwnedTable(Owner: TComponent; Table: TSQLTable
@@ -109,7 +111,7 @@ type
     // - this constructor will parse the supplied JSON content and create
     // an internal TSQLTableJSON instance to process the data, guessing the
     // column types from the JSON content
-    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8
@@ -118,17 +120,17 @@ type
     // - you can set the expected column types matching the results column layout
     // - this constructor will parse the supplied JSON content and create
     // an internal TSQLTableJSON instance to process the data
-    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
       const ColumnTypes: array of TSQLFieldType
       {$ifndef UNICODE}; ForceWideString: boolean=false{$endif}); reintroduce; overload;
     /// initialize the virtual TDataSet from a supplied JSON ORM result
-    // - you can set the TSQLRecord classes to retrieve the expected column types 
+    // - you can set the TSQLRecord classes to retrieve the expected column types
     // - this constructor will parse the supplied JSON content and create
     // an internal TSQLTableJSON instance to process the data
-    // - with non-Unicode version of Delphi, you can set aForceWideString to
+    // - with non-Unicode version of Delphi, you can set ForceWideString to
     // force the use of WideString fields instead of AnsiString, if needed
     // - the TDataSet will be opened once created
     constructor CreateFromJSON(Owner: TComponent; const JSON: RawUTF8;
@@ -150,6 +152,27 @@ type
     property Table: TSQLTable read fTable write fTable;
   end;
 
+  /// store low-level DB.pas field information
+  // - as used by GetDBFieldDef and GetDBFieldValue
+  TDBFieldDef = record
+    FieldName: string;
+    DBType: TFieldType;
+    DBSize: Integer;
+    SQLType: TSQLFieldType;
+    SQLIndex: integer;
+    EnumType: Pointer;
+  end;
+
+/// get low-level DB.pas field information
+// - ready to be added to a TDataset as:
+// !  aDataSet.FieldDefs.Add(FieldName,DBType,DBSize);
+procedure GetDBFieldDef(aTable: TSQLTable; aField: integer;
+  out DBFieldDef: TDBFieldDef{$ifndef UNICODE}; aForceWideString: boolean=false{$endif});
+
+/// fill a DB.pas field content
+// - used e.g. by mORMotMidasVCL.ToClientDataSet
+procedure GetDBFieldValue(aTable: TSQLTable; aRow: integer; aField: TField;
+  aDataSet: TDataSet; const DBFieldDef: TDBFieldDef);
 
 /// convert a JSON result into a VCL DataSet, guessing the field types from the JSON
 // - this function is just a wrapper around TSynSQLTableDataSet.CreateFromJSON()
@@ -332,53 +355,123 @@ Txt:result := P;
   end;
 end;
 
+procedure GetDBFieldValue(aTable: TSQLTable; aRow: integer; aField: TField;
+  aDataSet: TDataSet; const DBFieldDef: TDBFieldDef);
+var blob: TSQLRawBlob;
+    sstream,dstream: TStream;
+    P: PUTF8Char;
+begin
+  if (aField<>nil) and (aRow>0) then
+  with DBFieldDef do begin
+    P := aTable.Get(aRow,SQLIndex);
+    if P=nil then
+      aField.Clear else
+    case SQLType of
+    sftBoolean:
+      aField.AsBoolean := GetInt64(P)<>0;
+    sftInteger, sftID, sftTID, sftSessionUserID:
+      if aField.DataType=ftLargeInt then // handle Int64 values directly
+        TLargeintField(aField).Value := GetInt64(P) else
+        aField.AsInteger := GetInteger(P);
+    sftFloat, sftCurrency:
+      aField.AsFloat := GetExtended(P);
+    sftEnumerate, sftSet:
+      if EnumType=nil then
+        aField.AsInteger := GetInteger(P) else
+        aField.AsString := aTable.GetString(aRow,SQLIndex);
+    sftDateTime, sftDateTimeMS:
+      aField.AsDateTime := Iso8601ToDateTimePUTF8Char(P,0);
+    sftUnixTime:
+      aField.AsDateTime := UnixTimeToDateTime(GetInt64(P));
+    sftTimeLog, sftModTime, sftCreateTime:
+      aField.AsDateTime := TimeLogToDateTime(GetInt64(P));
+    sftBlob: begin
+      blob := BlobToTSQLRawBlob(P);
+      if (blob='') or (aDataSet=nil) then
+        aField.Clear else begin
+        sstream := TRawByteStringStream.Create(blob);
+        try
+          dstream := aDataSet.CreateBlobStream(aField,bmWrite);
+          try
+            dstream.CopyFrom(sstream,0);
+          finally
+            dstream.Free;
+          end;
+        finally
+          sstream.Free;
+        end;
+      end;
+    end;
+    sftUTF8Text:
+      if aField.DataType=ftWideString then
+        TWideStringField(aField).Value := aTable.GetSynUnicode(aRow,SQLIndex) else
+        aField.AsString := aTable.GetString(aRow,SQLIndex);
+    else
+      aField.AsVariant := aTable.GetVariant(aRow,SQLIndex);
+    end;
+  end;
+end;
+
+procedure GetDBFieldDef(aTable: TSQLTable; aField: integer;
+  out DBFieldDef: TDBFieldDef{$ifndef UNICODE}; aForceWideString: boolean=false{$endif});
+begin
+  with DBFieldDef do begin
+    DBSize := 0;
+    SQLIndex := aField;
+    FieldName := aTable.GetString(0,aField);
+    if FieldName='' then begin
+      DBType := DB.ftUnknown;
+      SQLType := sftUnknown;
+    end else begin
+      SQLType := aTable.FieldType(aField,@EnumType);
+      case SQLType of
+      sftBoolean:
+        DBType := ftBoolean;
+      sftInteger, sftID, sftTID:
+        DBType := ftLargeint; // LargeInt=Int64
+      sftFloat, sftCurrency:
+        DBType := ftFloat;
+      sftEnumerate, sftSet:
+        if EnumType=nil then
+          DBType := ftInteger else begin
+          DBSize := 64;
+          DBType := ftDefaultVCLString;
+        end;
+      sftRecord: begin
+          DBSize := 64;
+          DBType := ftDefaultVCLString;
+        end;
+      sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
+        DBType := ftDateTime;
+      sftBlob: begin
+          DBSize := (aTable.FieldLengthMax(aField,true)*3) shr 2;
+          DBType := DB.ftBlob;
+        end;
+      sftUTF8Text: begin
+        DBSize := aTable.FieldLengthMax(aField,true);
+        {$ifndef UNICODE} // for Delphi 2009+ TWideStringField = UnicodeString!
+        if aForceWideString then
+          DBType := ftWideString else
+        {$endif}
+          DBType := ftDefaultVCLString;
+      end;
+      else begin
+        DBType := ftDefaultVCLString;
+        DBSize := aTable.FieldLengthMax(aField,true);
+      end;
+      end;
+    end;
+  end;
+end;
+
 procedure TSynSQLTableDataSet.InternalInitFieldDefs;
-var F, DataSize: Integer;
-    SQLType: TSQLFieldType;
-    DBType: TFieldType;
-    EnumType: Pointer;
+var F: Integer;
+    Def: TDBFieldDef;
 begin
   FieldDefs.Clear;
   for F := 0 to fTable.FieldCount-1 do begin
-    SQLType := fTable.FieldType(F,@EnumType);
-    DataSize := 0;
-    case SQLType of
-    sftBoolean:
-      DBType := ftBoolean;
-    sftInteger, sftID, sftTID:
-      DBType := ftLargeint; // LargeInt=Int64
-    sftFloat, sftCurrency:
-      DBType := ftFloat;
-    sftEnumerate, sftSet:
-      if EnumType=nil then
-        DBType := ftInteger else begin
-        DataSize := 64;
-        DBType := ftDefaultVCLString;
-      end;
-    sftRecord: begin
-        DataSize := 64;
-        DBType := ftDefaultVCLString;
-      end;
-    sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
-      DBType := ftDateTime;
-    sftBlob: begin
-        DataSize := (fTable.FieldLengthMax(F,true)*3) shr 2;
-        DBType := DB.ftBlob;
-      end;
-    sftUTF8Text: begin
-      DataSize := fTable.FieldLengthMax(F,true);
-      {$ifndef UNICODE} // for Delphi 2009+ TWideStringField = UnicodeString!
-      if fForceWideString then
-        DBType := ftWideString else
-      {$endif}
-        DBType := ftDefaultVCLString;
-    end;
-    else begin
-      DBType := ftDefaultVCLString;
-      DataSize := fTable.FieldLengthMax(F,true);
-    end;
-    end;
-    FieldDefs.Add(fTable.GetString(0,F),DBType,DataSize);
+    GetDBFieldDef(fTable,F,Def{$ifndef UNICODE},fForceWideString{$endif});
+    FieldDefs.Add(Def.FieldName,Def.DBType,Def.DBSize);
   end;
 end;
 

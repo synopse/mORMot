@@ -288,7 +288,8 @@ begin
         DBType := ftWideString; // means UnicodeString for Delphi 2009+
     SynCommons.ftBlob:  DBType := ftBlob;
     SynCommons.ftDouble, SynCommons.ftCurrency: DBType := ftFloat;
-    else raise EDatabaseError.CreateFmt('GetFieldData ColumnType=%d',[ord(ColumnType)]);
+    else raise EDatabaseError.CreateFmt(
+      'GetFieldData ColumnType=%s',[TSQLDBFieldTypeToString(ColumnType)]);
     end;
     FieldDefs.Add(UTF8ToString(ColumnName),DBType,ColumnDataSize);
   end;
