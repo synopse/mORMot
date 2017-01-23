@@ -50799,6 +50799,8 @@ begin
     User.DisplayName := values[6];
     User.GroupRights := pointer(GetInteger(values[7]));
     Sender.fSessionServerTimeout := GetInteger(values[8]);
+    if Sender.fSessionServerTimeout=0 then
+      Sender.fSessionServerTimeout := 60; // default 1 hour if not suppplied
   end;
 end;
 
