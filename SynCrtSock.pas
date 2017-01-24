@@ -1884,8 +1884,13 @@ function HttpGet(const aURI: SockString; outHeaders: PSockString=nil): SockStrin
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
 // - this method will use a low-level THttpClientSock socket: if you want
 // something able to use your computer proxy, take a look at TWinINet.Get()
-function HttpGet(const aURI: SockString; const inHeaders: SockString; 
+function HttpGet(const aURI: SockString; const inHeaders: SockString;
   outHeaders: PSockString=nil): SockString; overload;
+
+/// retrieve the content of a web page, using HTTP/1.1 GET method and a token
+// - this method will use a low-level THttpClientSock socket and its GetAuth method
+// - if AuthToken<>'', will add an header with 'Authorization: Bearer '+AuthToken
+function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
@@ -3611,11 +3616,16 @@ begin
   result := Request(url,'GET',KeepAlive,header,'','',false);
 end;
 
-function THttpClientSocket.GetAuth(const url, AuthToken: SockString; KeepAlive: cardinal=0): integer;
+function AuthorizationBearer(const AuthToken: SockString): SockString;
 begin
   if AuthToken='' then
-    result := Get(url,KeepAlive) else
-    result := Get(url,KeepAlive,'Authorization: Bearer '+AuthToken);
+    result := '' else
+    result := 'Authorization: Bearer '+AuthToken;
+end;
+
+function THttpClientSocket.GetAuth(const url, AuthToken: SockString; KeepAlive: cardinal=0): integer;
+begin
+  result := Get(url,KeepAlive,AuthorizationBearer(AuthToken));
 end;
 
 function THttpClientSocket.Head(const url: SockString; KeepAlive: cardinal;
@@ -3815,6 +3825,21 @@ begin
   if result='' then
     writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
   {$endif}
+end;
+
+function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
+var url: SockString;
+    http: THttpClientSocket;
+begin
+  result := '';
+  http := OpenHttp(aURI,@url);
+  if http<>nil then
+    try
+      if http.GetAuth(url,aAuthToken)=STATUS_SUCCESS then
+        result := http.Content;
+    finally
+      http.Free;
+    end;
 end;
 
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
