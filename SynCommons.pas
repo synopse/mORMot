@@ -21267,7 +21267,8 @@ begin
   info := GetTypeInfo(aTypeInfo,tkEnumeration);
   if info<>nil then begin
     {$ifdef FPC} // no redirection if aTypeInfo is already the base type
-    if info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil then
+    if (info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>nil) and
+       (info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType<>aTypeInfo) then
     {$endif}
       info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;

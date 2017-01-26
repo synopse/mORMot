@@ -29325,8 +29325,10 @@ function TTypeInfo.EnumBaseType: PEnumType;
 var base: PPTypeInfo;
 begin
   result := PEnumType(GetFPCTypeData(@self));
+  if Kind=tkBool then
+    exit; // circumvent weird RTTI issue
   base := result^.BaseType;
-  if base<>nil then // no redirection if already the base type
+  if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
 {$else}
 {$ifdef HASINLINE}
