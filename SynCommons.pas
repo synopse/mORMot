@@ -18992,6 +18992,7 @@ begin
     exit; // nothing to truncate
   end;
   while (maxUTF8>0) and (ord(Text[maxUTF8]) and $c0=$80) do dec(maxUTF8);
+  if (maxUTF8>0) and (ord(Text[maxUTF8]) and $80<>0) then dec(maxUTF8);
   SetLength(text,maxUTF8);
   result := true;
 end;
