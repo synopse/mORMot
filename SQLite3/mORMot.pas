@@ -6231,6 +6231,9 @@ type
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
+    // - as an alternative, a non-standard and slightly unsafer way of transmitting
+    // the token may be to encode its value as ?authenticationbearer=.... URI
+    // parameter (may be convenient when embedding resources in HTML DOM)
     function AuthenticationBearerToken: RawUTF8;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - returns jwtValid on success, optionally returning the payload in res^
@@ -39873,6 +39876,9 @@ end;
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
   result := HeaderOnce(Call,fAuthenticationBearerToken,'AUTHORIZATION: BEARER ');
+  if result<>'' then
+    exit;
+  result := GetInputUTF8OrVoid('authenticationbearer');
 end;
 
 function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract;
