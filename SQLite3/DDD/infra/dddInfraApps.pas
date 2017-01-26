@@ -667,6 +667,9 @@ begin
       HttpServerFullWebSocketsLog := true;
       HttpClientFullWebSocketsLog := true;
     end;
+  {$ifdef MSWINDOWS} // Windows 7+ 
+  SetAppUserModelID(fSettings.AppUserModelID);
+  {$endif}
   result := nil;
 end;
 

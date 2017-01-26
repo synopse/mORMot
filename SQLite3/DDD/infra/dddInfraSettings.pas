@@ -375,11 +375,12 @@ type
     FServiceDisplayName: string;
     FServiceName: string;
     FServiceAutoStart: boolean;
+    FAppUserModelID: string;
   public
     /// to be called when the application starts, to initialize settings
     // - you can specify default Description and Service identifiers
     procedure Initialize(
-      const aDescription,aServiceName,aServiceDisplayName: string); reintroduce; virtual;
+      const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string); reintroduce; virtual;
   published
     /// define how this administrated service/daemon is accessed via REST
     property RemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings read FRemoteAdmin;
@@ -390,6 +391,13 @@ type
     /// under Windows, will define if the Service should auto-start at boot
     // - FALSE means that it should be started on demand
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
+    /// under Windows 7 and later, will set an unique application-defined
+    // Application User Model ID (AppUserModelID) that identifies the current
+    // process to the taskbar
+    // - this identifier allows an application to group its associated processes
+    // and windows under a single taskbar button
+    // - should follow SetAppUserModelID() expectations, i.e. 'Company.Product'
+    property AppUserModelID: string read FAppUserModelID write FAppUserModelID;
   end;
 
   /// a Factory event allowing to customize/mock a socket connection
@@ -715,13 +723,15 @@ end;
 { TDDDAdministratedDaemonSettings }
 
 procedure TDDDAdministratedDaemonSettings.Initialize(
-  const aDescription,aServiceName,aServiceDisplayName: string);
+  const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string);
 begin
   inherited Initialize(aDescription);
   if FServiceName='' then
     FServiceName := aServiceName;
   if FServiceDisplayName='' then
     FServiceDisplayName := aServiceDisplayName;
+  if FAppUserModelID='' then
+    FAppUserModelID := aAppUserModelID;
 end;
 
 

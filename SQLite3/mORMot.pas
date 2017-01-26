@@ -8131,9 +8131,11 @@ type
     function LengthW(Row,Field: integer): integer;
     /// get all values for a specified field into a dynamic RawUTF8 array
     // - don't perform any conversion, but just create an array of raw PUTF8Char data
-    procedure GetRowValues(Field: integer; out Values: TRawUTF8DynArray); overload;
+    // - returns the number of rows in Values[]
+    function GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer; overload;
     /// get all values for a specified field into a dynamic Integer array
-    procedure GetRowValues(Field: integer; out Values: TInt64DynArray); overload;
+    // - returns the number of rows in Values[]
+    function GetRowValues(Field: integer; out Values: TInt64DynArray): integer; overload;
     /// get all values for a specified field as CSV
     // - don't perform any conversion, but create a CSV from raw PUTF8Char data
     function GetRowValues(Field: integer; const Sep: RawUTF8=',';
@@ -24890,10 +24892,11 @@ asm
 end;
 {$endif}
 
-procedure TSQLTable.GetRowValues(Field: integer; out Values: TRawUTF8DynArray);
+function TSQLTable.GetRowValues(Field: integer; out Values: TRawUTF8DynArray): integer;
 var i: integer;
     U: PPUTF8Char;
 begin
+  result := 0;
   Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
@@ -24903,12 +24906,14 @@ begin
     SetString(Values[i],PAnsiChar(U^),StrLen(U^));
     inc(U,FieldCount); // go to next row
   end;
+  result := fRowCount;
 end;
 
-procedure TSQLTable.GetRowValues(Field: integer; out Values: TInt64DynArray);
+function TSQLTable.GetRowValues(Field: integer; out Values: TInt64DynArray): integer;
 var i: integer;
     U: PPUTF8Char;
 begin
+  result := 0;
   Finalize(Values);
   if (self=nil) or (cardinal(Field)>cardinal(FieldCount)) or (fRowCount=0) then
     exit;
@@ -24918,6 +24923,7 @@ begin
     SetInt64(U^,Values[i]);
     inc(U,FieldCount); // go to next row
   end;
+  result := fRowCount;
 end;
 
 function TSQLTable.GetRowLengths(Field: integer; var LenStore: TSynTempBuffer): integer;
