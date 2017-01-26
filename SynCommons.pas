@@ -2127,6 +2127,7 @@ function StringToRawUnicode(const S: string): RawUnicode; overload;
 // current RTL codepage, as with WideString conversion (but without slow
 // WideString usage)
 function StringToSynUnicode(const S: string): SynUnicode;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// convert any generic VCL Text into a Raw Unicode encoded String
 // - it's prefered to use TLanguageFile.StringToUTF8() method in mORMoti18n,
@@ -12356,6 +12357,19 @@ function CreateInternalWindow(const aWindowName: string; aObject: TObject): HWND
 // - both parameter values are then reset to ''/0
 function ReleaseInternalWindow(var aWindowName: string; var aWindow: HWND): boolean;
 
+/// under Windows 7 and later, will set an unique application-defined
+// Application User Model ID (AppUserModelID) that identifies the current
+// process to the taskbar
+// - this identifier allows an application to group its associated processes
+// and windows under a single taskbar button
+// - value can have no more than 128 characters, cannot contain spaces, and
+// each section should be camel-cased, as such:
+// $ CompanyName.ProductName.SubProduct.VersionInformation
+// CompanyName and ProductName should always be used, while the SubProduct and
+// VersionInformation portions are optional and depend on the application's requirements
+// - if the supplied text does not contain an '.', 'ID.ID' will be used
+function SetAppUserModelID(const AppUserModelID: string): boolean;
+
 var
   /// the number of milliseconds that have elapsed since the system was started
   // - compatibility function, to be implemented according to the running OS
@@ -17322,7 +17336,7 @@ uses
   Linux,SysCall,
   {$endif}
   {$endif}
-  SynFPCTypInfo, TypInfo; // small wrapper unit around FPC's TypInfo.pp
+  SynFPCTypInfo, TypInfo, StrUtils; // small wrapper unit around FPC's TypInfo.pp
 {$endif}
 
 
@@ -34659,6 +34673,8 @@ end;
 
 {$ifdef MSWINDOWS}
 
+// wrapper around some low-level Windows-specific API
+
 {$ifdef DELPHI6OROLDER}
 function GetFileVersion(const FileName: TFileName): cardinal;
 var Size, Size2: DWord;
@@ -34747,7 +34763,38 @@ begin
     result := false;
 end;
 
+var
+  LastAppUserModelID: string;
+
+function SetAppUserModelID(const AppUserModelID: string): boolean;
+var shell32: THandle;
+    id: SynUnicode;
+    SetCurrentProcessExplicitAppUserModelID: function(appID: PWidechar): HResult; stdcall;
+begin
+  if AppUserModelID=LastAppUserModelID then begin
+    result := true;
+    exit; // nothing to set
+  end;
+  result := false;
+  shell32 := GetModuleHandle('shell32.dll');
+  if shell32=0 then
+    exit;
+  SetCurrentProcessExplicitAppUserModelID := GetProcAddress(
+    shell32,'SetCurrentProcessExplicitAppUserModelID');
+  if not Assigned(SetCurrentProcessExplicitAppUserModelID) then
+    exit; // API available since Windows Seven / Server 2008 R2
+  id := StringToSynUnicode(AppUserModelID);
+  if Pos('.',AppUserModelID)=0 then
+    id := id+'.'+id; // at least CompanyName.ProductName
+  if SetCurrentProcessExplicitAppUserModelID(pointer(id))<>S_OK then
+    exit;
+  result := true;
+  LastAppUserModelID := AppUserModelID;
+end;
+
 {$else}
+
+// wrapper around some low-level OS (non Windows) specific API
 
 const
   _SC_PAGE_SIZE = $1000;
