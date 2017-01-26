@@ -10890,17 +10890,21 @@ function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 type
   /// store a 128-bit hash value
   // - e.g. a MD5 digest, or array[0..3] of cardinal (TBlock128)
+  // - consumes 16 bytes of memory
   THash128 = array[0..15] of byte;
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
+  // - consumes 32 bytes of memory
   THash256 = array[0..31] of byte;
   /// store a 128-bit buffer
   // - e.g. an AES block
+  // - consumes 16 bytes of memory
   TBlock128 = array[0..3] of cardinal;
 
   /// pointer to a 128-bit hash value
   PHash128 = ^THash128;
   /// map a 128-bit hash as an array of lower bit size values
+  // - consumes 16 bytes of memory
   THash128Rec = packed record
   case integer of
   0: (Lo,Hi: Int64);
@@ -10911,6 +10915,7 @@ type
   /// pointer to an array of two 64-bit hash values
   PHash128Rec = ^THash128Rec;
   /// map a 256-bit hash as an array of lower bit size values
+  // - consumes 32 bytes of memory
   THash256Rec = packed record
   case integer of
   0: (Lo,Hi: THash128);
@@ -10922,6 +10927,7 @@ type
   /// pointer to an array of two 128-bit hash values
   PHash256Rec = ^THash256Rec;
   /// map an infinite array of 128-bit hash values
+  // - each item consumes 16 bytes of memory
   THash128Array = array[0..(maxInt div sizeof(THash128))-1] of THash128;
   /// pointer to an infinite array of 128-bit hash values
   PHash128Array = ^THash128Array;
