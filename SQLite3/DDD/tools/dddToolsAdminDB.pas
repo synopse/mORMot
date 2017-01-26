@@ -25,6 +25,9 @@ uses
   SynMustache;
 
 type
+  TDBFrame = class;
+  TOnExecute = procedure(Sender: TDBFrame; const SQL, Content: RawUTF8) of object;
+  
   TDBFrame = class(TFrame)
     pnlRight: TPanel;
     pnlTop: TPanel;
@@ -53,7 +56,6 @@ type
     fJson: RawJSON;
     fSQL, fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
-    function NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
     function ExecSQL(const SQL: RawUTF8): RawUTF8;
     procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
@@ -73,17 +75,19 @@ type
     Tables: TStringList;
     AssociatedModel: TSQLModel;
     AssociatedServices: TInterfaceFactoryObjArray;
+    // Add(cmdline/table,nestedobject,-1=text/0..N=nestedarray#)
     CommandsToGrid: TSynNameValue;
     TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
     SavePrefix: TFileName;
-    OnAfterExecute: TNotifyEvent;
+    OnAfterExecute: TOnExecute;
     constructor Create(AOwner: TComponent); override;
     procedure EnableChkTables(const aCaption: string);
     procedure Open; virtual;
     procedure FillTables(const customcode: string); virtual;
     procedure AddSQL(SQL: string; AndExec: boolean);
+    function NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
     destructor Destroy; override;
   end;
 
@@ -382,7 +386,7 @@ begin
           res := fJson;
       end;
     if Assigned(OnAfterExecute) then
-      OnAfterExecute(self);
+      OnAfterExecute(self,fSQL,res);
     SetResult(res);
   end
   else begin
@@ -397,6 +401,8 @@ begin
       tables := AssociatedModel.Tables;
     if cmdToGrid >= 0 then begin
       GridLastTableName := CommandsToGrid.List[cmdToGrid].Name;
+      if isSelect(pointer(GridLastTableName)) then
+        GridLastTableName := GetTableNameFromSQLSelect(GridLastTableName,false);
       if CommandsToGrid.List[cmdToGrid].Value <> '' then begin
         // display a nested object in the grid
         P := JsonObjectItem(pointer(fJson), CommandsToGrid.List[cmdToGrid].Value);
@@ -416,7 +422,7 @@ begin
     Grid.OnValueText := OnText;
     Grid.Table.OnExportValue := OnGridToCell;
     if Assigned(OnAfterExecute) then
-      OnAfterExecute(self);
+      OnAfterExecute(self, fSQL, fJSON);
     drwgrdResult.Options := drwgrdResult.Options - [goRowSelect];
     drwgrdResult.Show;
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;

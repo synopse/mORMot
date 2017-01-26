@@ -57,7 +57,7 @@ type
       lasttix: Int64;
     end;
     SavePrefix: TFileName;
-    OnAfterExecute: TNotifyEvent;
+    OnAfterExecute: TOnExecute;
     OnAfterGetState: TNotifyEvent;
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
