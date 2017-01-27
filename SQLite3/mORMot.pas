@@ -6231,9 +6231,9 @@ type
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
-    // - as an alternative, a non-standard and slightly unsafer way of transmitting
-    // the token may be to encode its value as ?authenticationbearer=.... URI
-    // parameter (may be convenient when embedding resources in HTML DOM)
+    // - as an alternative, a non-standard and slightly less safe way of
+    // token transmission may be to encode its value as ?authenticationbearer=....
+    // URI parameter (may be convenient when embedding resources in HTML DOM)
     function AuthenticationBearerToken: RawUTF8;
     /// validate "Authorization: Bearer <JWT>" content from incoming HTTP headers
     // - returns jwtValid on success, optionally returning the payload in res^
@@ -16089,6 +16089,9 @@ type
   // - by default, cookies will contain only 'Path=/Model.Root', but
   // '; Path=/' may be also added setting rsoCookieIncludeRootPath
   // - you can disable the 'HttpOnly' flag via rsoCookieHttpOnlyFlagDisable
+  // - TSQLRestServerURIContext.AuthenticationBearerToken will return the
+  // ?authenticationbearer=... URI parameter value alternatively to the HTTP
+  // header unless rsoAuthenticationURIDisable is set (for security reasons)
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16099,7 +16102,8 @@ type
     rsoComputeFieldsBeforeWriteOnServerSide,
     rsoSecureConnectionRequired,
     rsoCookieIncludeRootPath,
-    rsoCookieHttpOnlyFlagDisable);
+    rsoCookieHttpOnlyFlagDisable,
+    rsoAuthenticationURIDisable);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -39876,9 +39880,11 @@ end;
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
   result := HeaderOnce(Call,fAuthenticationBearerToken,'AUTHORIZATION: BEARER ');
-  if result<>'' then
-    exit;
-  result := GetInputUTF8OrVoid('authenticationbearer');
+  if (result='') and not(rsoAuthenticationURIDisable in Server.Options) then begin
+    result := GetInputUTF8OrVoid('authenticationbearer');
+    if result<>'' then
+      fAuthenticationBearerToken := result;
+  end;
 end;
 
 function TSQLRestServerURIContext.AuthenticationCheck(jwt: TJWTAbstract;
