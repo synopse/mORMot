@@ -212,6 +212,13 @@
   {$define HASINTERFACEASTOBJECT}
   {$define FPC_OR_UNICODE}
   {$define FPC_ENUMHASINNER}
+  {$if FPC_FULLVERSION>30100}
+    {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+    {$define FPC_NEWRTTI}
+  {$else}
+    {$define DELPHI_OR_FPC_OLDRTTI}
+    {$define FPC_OLDRTTI}
+  {$endif}
 
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -323,6 +330,7 @@
 
 {$else FPC}
 
+  {$define DELPHI_OR_FPC_OLDRTTI}
   {$ifndef PUREPASCAL}
     {$define CPUINTEL} // Delphi only for Intel by now
   {$endif}
@@ -395,6 +403,7 @@
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
       {$define ISDELPHI2010}
+      {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
