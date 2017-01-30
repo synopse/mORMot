@@ -43,6 +43,7 @@ unit SynPdf;
    Marsh
    MChaos
    Mehrdad Momeni (nosa)
+   mogulza
    Nzsolt
    Ondrej (reddwarf)
    Pierre le Riche
@@ -578,7 +579,7 @@ type
 
   /// available known paper size (psA4 is the default on TPdfDocument creation)
   TPDFPaperSize = (
-    psA4, psA5, psA3, psLetter, psLegal, psUserDefined);
+    psA4, psA5, psA3, psA2, psA1, psA0, psLetter, psLegal, psUserDefined);
 
   /// define if streams must be compressed
   TPdfCompressionMethod = (
@@ -6393,8 +6394,9 @@ end;
 
 procedure TPdfDocument.SetDefaultPaperSize(const Value: TPDFPaperSize);
 const PAPERSIZE: array[TPDFPaperSize] of array[0..1] of integer =
-  ( (595,842), (419,595), (842,1190), (612,792), (612,1008), (0,0) );
-begin // psA4, psA5, psA3, psLetter, psLegal, psUserDefined
+  ( (595,842), (419,595), (842,1190), (1190,1683), (1683,2382), (2382,3369),
+    (612,792), (612,1008), (0,0) );
+begin // psA4, psA5, psA3, psA2, psA1, psA0, psLetter, psLegal, psUserDefined
   FDefaultPaperSize := Value;
   if Value<>psUserDefined then begin
     FDefaultPageWidth := PAPERSIZE[Value,0];
