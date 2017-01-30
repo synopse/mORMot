@@ -2697,6 +2697,9 @@ type
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
+    {$ifdef FPC_NEWRTTI}
+    RecInitInfo: Pointer;
+    {$endif}
     Size: cardinal;
     Count: integer;
     Fields: array[word] of TRecordField;
@@ -53514,6 +53517,12 @@ begin
         end;
         if pfSelf in f then
           ParamName := @CONST_PSEUDO_SELF_NAME else
+        if pfResult in f then begin
+          if (a <> n-1) or (High(Args) <> a+1) then
+            RaiseError('%: % internal FPC RTTI low level problem',[ParamName^,ArgTypeName^]);
+          Args[a]:=Args[a+1];
+          SetLength(Args,n);
+        end else
           ParamName := @VMP^.Name;
         P := AlignToPtr(PByte(@VMP^.Name[0])+SizeOf(VMP^.Name[0])+Length(VMP^.Name));
         Inc(PParameterLocation(P),PParameterLocations(P).Count);
