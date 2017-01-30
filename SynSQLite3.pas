@@ -3438,7 +3438,7 @@ begin
     ftCurrency:
       sqlite3.result_double(Context,Res.VCurrency);
     ftDate: begin
-      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp);
+      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp,'T',svoDateWithMS in Res.Options);
       sqlite3.result_text(Context,tmp,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
     end;
     // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
@@ -3464,6 +3464,7 @@ end;
 procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
 var ValueType: Integer;
 begin
+  Res.Options := [];
   ValueType := sqlite3.value_type(Value);
   case ValueType of
   SQLITE_NULL:

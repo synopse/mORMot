@@ -603,7 +603,7 @@ begin
       end;
       varString: // handle some TEXT values
       case info.SQLFieldType of
-        sftDateTime,sftDateTimeMS: begin // ISO-8601 text as MongoDB date/time
+        sftDateTime, sftDateTimeMS: begin // ISO-8601 text as MongoDB date/time
           Iso8601ToDateTimePUTF8CharVar(V^.VAny,length(RawByteString(V^.VAny)),dt);
           RawByteString(V^.VAny) := '';
           V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
