@@ -52672,7 +52672,6 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
-    {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI}+' ERTTI'{$endif}
     {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}
