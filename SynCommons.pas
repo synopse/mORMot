@@ -46086,9 +46086,9 @@ begin
     end;
     if frac(Value^)<>0 then begin
       TimeToIso8601PChar(Value^,B,true,FirstChar,WithMS);
-      inc(B,9);
       if WithMS then
-        inc(B,4);
+        inc(B,13) else
+        inc(B,9);
     end;
     dec(B);
   end;
@@ -46111,7 +46111,9 @@ begin
   end;
   if frac(Value)<>0 then begin
     TimeToIso8601PChar(Value,B,true,'T',WithMS);
-    inc(B,9);
+    if WithMS then
+      inc(B,13) else
+      inc(B,9);
   end;
   dec(B);
 end;
