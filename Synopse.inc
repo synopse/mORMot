@@ -274,7 +274,7 @@
 
   // FPC has its own RTTI layout only since late 3.x
   // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated branch conditional
+  {$ifdef FPC_NEWRTTI} // use dedicated branch conditional
     {$ifdef CPUINTEL}
       {$define HASINTERFACERTTI}
     {$endif}
@@ -284,7 +284,7 @@
     {$ifdef CPUAARCH64}
       {$define HASINTERFACERTTI}
     {$endif}
-  {$endif FPC_HAS_EXTENDEDINTERFACERTTI}
+  {$endif FPC_NEWRTTI}
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
