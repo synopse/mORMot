@@ -7365,6 +7365,8 @@ type
     procedure AddTimeLog(Value: PInt64);
     /// append a TUnixTime value, expanded as Iso-8601 encoded text
     procedure AddUnixTime(Value: PInt64);
+    /// append a TUnixMSTime value, expanded as Iso-8601 encoded text
+    procedure AddUnixMSTime(Value: PInt64; WithMS: boolean=false);
     /// append a TDateTime value, expanded as Iso-8601 encoded text
     // - use 'YYYY-MM-DDThh:mm:ss' format (with FirstChar='T')
     // - if WithMS is TRUE, will append '.sss' for milliseconds resolution
@@ -46076,7 +46078,12 @@ end;
 
 procedure TTextWriter.AddUnixTime(Value: PInt64);
 begin // inlined UnixTimeToDateTime()
-  AddDateTime(Value^ / SecsPerDay + UnixDateDelta);
+  AddDateTime(Value^/SecsPerDay+UnixDateDelta);
+end;
+
+procedure TTextWriter.AddUnixMSTime(Value: PInt64; WithMS: boolean);
+begin // inlined UnixMSTimeToDateTime()
+  AddDateTime(Value^/MSecsPerDay+UnixDateDelta,WithMS);
 end;
 
 procedure TTextWriter.AddDateTime(Value: PDateTime; FirstChar: AnsiChar;

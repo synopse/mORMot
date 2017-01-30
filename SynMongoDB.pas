@@ -2686,7 +2686,7 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     W.Add(PBoolean(Element)^);
   betDateTime: begin
     W.AddShort(BSON_JSON_DATE[Mode,false]);
-    W.AddDateTime(UnixMSTimeToDateTime(PUnixMSTime(Element)^));
+    W.AddUnixMSTime(Element,false);
     W.AddShort(BSON_JSON_DATE[Mode,true]);
   end;
   betNull:
@@ -3636,9 +3636,9 @@ var
   GlobalBSONObjectID: record
     Section: TRTLCriticalSection;
     Default: packed record
+      Counter: cardinal;
       MachineID: TBSON24;
       ProcessID: word;
-      Counter: cardinal;
     end;
     LastCreateTime: cardinal;
     LastCounter: cardinal;
@@ -3648,11 +3648,11 @@ procedure InitBSONObjectIDComputeNew;
 begin
   InitializeCriticalSection(GlobalBSONObjectID.Section);
   with GlobalBSONObjectID.Default do begin
+    TAESPRNG.Main.FillRandom(@Counter,3);
     with ExeVersion do
       PCardinal(@MachineID)^ := crc32c(crc32c(0,pointer(Host),length(Host)),
         pointer(User),length(User));
     ProcessID := (ProcessID shl 8) xor {$ifdef BSD}Cardinal{$endif}(MainThreadID);
-    TAESPRNG.Main.FillRandom(@Counter,3);
   end;
 end;
 
