@@ -8794,6 +8794,12 @@ type
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - will update the associated timeout value of the entry, if applying
     function FindAndCopy(const aKey; out aValue): boolean;
+    /// search of a stored value by its primary key, then delete and return it
+    // - returns TRUE if aKey was found, fill aValue with its content,
+    // and delete the entry in the internal storage
+    // - so this method is thread-safe
+    // - returns FALSE if no match exists
+    function FindAndExtract(const aKey; out aValue): boolean;
     /// search for a primary key presence
     // - returns TRUE if aKey was found, FALSE if no match exists
     // - this method is thread-safe
@@ -13744,6 +13750,8 @@ type
   TDocVariantOptions = set of TDocVariantOption;
 
   /// pointer to a set of options for a TDocVariant storage
+  // - you may use e.g. @JSON_OPTIONS[true], @JSON_OPTIONS[false],
+  // @JSON_OPTIONS_FAST_STRICTJSON or @JSON_OPTIONS_FAST_EXTENDED
   PDocVariantOptions = ^TDocVariantOptions;
 
 const
@@ -54056,6 +54064,25 @@ begin
       fValues.ElemCopyAt(ndx,aValue);
       if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
         fTimeout[ndx] := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger;
+      result := true;
+    end else
+      result := false;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TSynDictionary.FindAndExtract(const aKey; out aValue): boolean;
+var ndx: integer;
+begin
+  fSafe.Lock;
+  try
+    ndx := fKeys.FindHashedAndDelete(aKey);
+    if ndx>=0 then begin
+      fValues.ElemCopyAt(ndx,aValue);
+      fValues.Delete(ndx);
+      if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
+        fTimeOuts.Delete(ndx);
       result := true;
     end else
       result := false;

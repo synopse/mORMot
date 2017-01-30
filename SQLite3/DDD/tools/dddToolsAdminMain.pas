@@ -345,8 +345,8 @@ begin
   fPages[n] := result;
 end;
 
-function TAdminControl.AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
-  TDBFrameClass): TDBFrame;
+function TAdminControl.AddDBFrame(const aCaption, aDatabaseName: RawUTF8;
+  aClass: TDBFrameClass): TDBFrame;
 var
   page: TSynPage;
   n: integer;
