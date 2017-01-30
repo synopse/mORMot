@@ -1594,6 +1594,8 @@ begin
     exit;
   try
     result := fProperties.PrepareInlined(aSQL,true);
+    if (result<>nil) and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      result.ForceDateWithMS := true;
   except
     on Exception do
       result := nil;
@@ -1602,6 +1604,7 @@ end;
 
 function TSQLRestStorageExternal.ExecuteInlined(const aSQL: RawUTF8;
   ExpectResults: Boolean): ISQLDBRows;
+var stmt: ISQLDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self=nil then
@@ -1609,7 +1612,13 @@ begin
   if not ExpectResults and (Owner<>nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   try
-    result := fProperties.ExecuteInlined(aSQL,ExpectResults);
+    stmt := fProperties.PrepareInlined(aSQL,ExpectResults);
+    if stmt=nil then
+      exit;
+    if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      stmt.ForceDateWithMS := true;
+    stmt.ExecutePrepared;
+    result := stmt;
   except
     on Exception do
       result := nil;
@@ -1633,6 +1642,8 @@ begin
   if Query<>nil then
   try
     Query.Bind(Params);
+    if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
+      Query.ForceDateWithMS := true;
     result := Query;
   except
     on Exception do
@@ -1653,6 +1664,8 @@ begin
   if Query<>nil then
   try
     Query.Bind(Params);
+    if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      Query.ForceDateWithMS := true;
     Query.ExecutePrepared;
     result := Query;
   except
@@ -1782,7 +1795,7 @@ begin
     end;
   end;
   if not (fProperties.DBMS in DB_HANDLEINDEXONBLOBS) then
-    // BLOB fields cannot be indexed (only in SQLite3)
+    // BLOB fields cannot be indexed (only in SQLite3+PostgreSQL)
     for i := 0 to n-1 do begin
       extfield := fFieldsInternalToExternal[IntFieldIndex[i]+1];
       if (extfield>=0) and
@@ -2040,6 +2053,8 @@ begin
     try
       fStatement := fProperties.NewThreadSafeStatementPrepared(fSQL,true);
       if fStatement<>nil then begin
+        if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
+          fStatement.ForceDateWithMS := true;
         for i := 1 to Prepared.WhereCount do
           fStatement.Bind(i,Prepared.Where[i-1].Value);
         fStatement.ExecutePrepared;
