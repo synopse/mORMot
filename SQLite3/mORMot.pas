@@ -12018,6 +12018,8 @@ type
     /// GetTickCount64() time stamp corresponding to the last access of
     // this instance
     LastAccess64: Int64;
+    /// the associated client session
+    Session: cardinal;
     /// the implementation instance itself
     Instance: TInterfacedObject;
     /// used to release the implementation instance
@@ -12055,7 +12057,8 @@ type
   protected
     fInstances: TServiceFactoryServerInstanceDynArray;
     fInstance: TDynArray;
-    fInstancesCount: integer;
+    fInstanceCapacity: integer;
+    fInstanceCount: integer;
     fInstanceCurrentID: TID;
     fInstanceTimeOut: cardinal;
     fInstanceLock: TRTLCriticalSection;
@@ -12081,12 +12084,14 @@ type
     procedure SetTimeoutSecInt(value: cardinal);
     function GetTimeoutSec: cardinal;
     function GetStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
+    // from client CacheFlush/_ping_
+    function RenewSession(aSession: cardinal): integer;
     /// get an implementation Inst.Instance for the given Inst.InstanceID
     // - is called by ExecuteMethod() in sicClientDrive mode
     // - returns true for successfull {"method":"_free_".. call (aMethodIndex=-1)
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
     function InternalInstanceRetrieve(var Inst: TServiceFactoryServerInstance;
-      aMethodIndex: integer): integer;
+      aMethodIndex,aSession: integer): integer;
     /// call a given method of this service provider
     // - here Ctxt.ServiceMethodIndex should be the index in fInterface.Methods[]
     // (i.e. excluding _free_/_contract_/_signature_ pseudo-methods)
@@ -18248,6 +18253,7 @@ type
     fSessionVersion: RawUTF8;
     fSessionData: RawByteString;
     fSessionServerTimeout: integer;
+    fSessionHeartbeatSeconds: integer;
     /// used to make the internal client-side process reintrant
     fSafe: IAutoLocker;
     fRemoteLogClass: TSynLog;
@@ -18278,6 +18284,7 @@ type
     constructor RegisteredClassCreateFrom(aModel: TSQLModel;
       aDefinition: TSynConnectionDefinition); override;
     function GetCurrentSessionUserID: TID; override;
+    procedure SetSessionHeartbeatSeconds(timeout: integer);
     function InternalRemoteLogSend(const aText: RawUTF8): boolean;
     procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTTP_BADREQUEST;
@@ -18728,10 +18735,17 @@ type
     property SessionVersion: RawUTF8 read fSessionVersion;
     /// the remote server session tiemout in minutes, as retrieved after
     // a SetUser() success
-    // - will be used to call SessionRenewEvent every half period, so that
-    // the session will be maintained on the server side as long as the
-    // client connection stands 
+    // - will be used to set SessionHeartbeatSeconds default
     property SessionServerTimeout: integer read fSessionServerTimeout;
+    /// frequency of Callback/_ping_ calls to maintain session and services
+    // - will be used to call SessionRenewEvent at the specified period, so that
+    // the session and all sicClientDriven instances will be maintained on the
+    // server side as long as the client connection stands
+    // - equals half SessionServerTimeout or 25 minutes (if lower) by default -
+    // 25 minutes matches the default service timeout of 30 minutes
+    // - you may set 0 to disable this SOA-level heartbeat feature
+    property SessionHeartbeatSeconds: integer read fSessionHeartbeatSeconds
+      write SetSessionHeartbeatSeconds;
   public
     /// the current user as set by SetUser() method
     // - contans nil if no User is currently authenticated
@@ -36346,8 +36360,17 @@ var resp: RawUTF8;
      status: integer;
 begin
   status := CallBack(mPOST,'CacheFlush/_ping_','',resp);
-  InternalLog('SessionRenewEvent(%) received % from % % (timeout=% min)',
-    [Model.Root,status,SessionServer,SessionVersion,fSessionServerTimeout],sllUserAuth);
+  InternalLog('SessionRenewEvent(%) received status=% count=% from % % (timeout=% min)',
+    [Model.Root,status,JSONDecode(resp,'count'),
+     SessionServer,SessionVersion,fSessionServerTimeout],sllUserAuth);
+end;
+
+procedure TSQLRestClientURI.SetSessionHeartbeatSeconds(timeout: integer);
+begin
+  if (timeout<0) or (timeout=fSessionHeartbeatSeconds) then
+    exit;
+  fSessionHeartbeatSeconds := timeout;
+  TimerEnable(SessionRenewEvent,timeout);
 end;
 
 function TSQLRestClientURI.SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
@@ -36366,9 +36389,9 @@ begin
   aUser := nil; // now owned by this instance
   if fSessionServerTimeout>0 then begin // call _ping_ every half timeout period
     period := fSessionServerTimeout*(60 div 2);
-    if period>3600 then
-      period := 3600; // REST heartbeat at least every hour
-    TimerEnable(SessionRenewEvent,period);
+    if period>25*60 then
+      period := 25*60; // default REST heartbeat at least every 25 minutes
+    SetSessionHeartbeatSeconds(period);
   end;
   result := true;
 end;
@@ -40854,6 +40877,7 @@ begin
 end;
 
 procedure TSQLRestServer.CacheFlush(Ctxt: TSQLRestServerURIContext);
+var i,count: integer;
 begin
   case Ctxt.Method of
   mGET: begin
@@ -40869,9 +40893,14 @@ begin
       // as called from TSQLHttpClientWebsockets.FakeCallbackUnregister
       (Services as TServiceContainerServer).FakeCallbackRelease(Ctxt) else
     if Ctxt.URIBlobFieldName='_ping_' then begin
-      InternalLog('Renew % authenticated session % from %',
-        [Model.Root,Ctxt.Session,Ctxt.SessionRemoteIP],sllUserAuth);
-      Ctxt.Success;
+      count := 0;
+      if Ctxt.Session>CONST_AUTHENTICATION_NOT_USED then
+        for i := 0 to Services.Count-1 do
+          inc(count,TServiceFactoryServer(Services.fList.Objects[i]).
+            RenewSession(Ctxt.Session));
+      InternalLog('Renew % authenticated session % from %: count=%',
+        [Model.Root,Ctxt.Session,Ctxt.SessionRemoteIP,count],sllUserAuth);
+      Ctxt.Returns(['count',count]);
     end;
   end;
 end;
@@ -41000,8 +41029,8 @@ procedure TSQLRestServer.SessionDelete(aSessionIndex: integer;
 begin
   if (self<>nil) and (cardinal(aSessionIndex)<cardinal(fSessions.Count)) then
   with TAuthSession(fSessions.List[aSessionIndex]) do begin
-    if Services is TServiceContainerServer then
-      TServiceContainerServer(Services).OnCloseSession(IDCardinal);
+    if Services<>nil then
+      (Services as TServiceContainerServer).OnCloseSession(IDCardinal);
     if Ctxt=nil then
       InternalLog('Deleted session %:%/%',
         [User.LogonName,IDCardinal,fSessions.Count],sllUserAuth) else
@@ -41229,7 +41258,7 @@ begin
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
-        InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE);
+        InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE,0);
   end;
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>nil then  // e.g. if length(TSQLHttpServer.fDBServers)>1
@@ -55728,14 +55757,34 @@ begin
 end;
 
 procedure TServiceContainerServer.OnCloseSession(aSessionID: cardinal);
-var i: Integer;
-    Inst: TServiceFactoryServerInstance;
+var i,j: Integer;
+    P: ^TServiceFactoryServerInstance;
+    fact: TServiceFactoryServer;
+    inst: TServiceFactoryServerInstance;
 begin
-  Inst.InstanceID := aSessionID;
-  for i := 0 to Count-1 do
-    with TServiceFactoryServer(Index(i)) do
-    if InstanceCreation=sicPerSession then
-      InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE);
+  for i := 0 to Count-1 do begin
+    fact := TServiceFactoryServer(fList.Objects[i]);
+    if fact.fInstanceCount>0 then
+    case fact.InstanceCreation of
+    sicPerSession: begin
+      inst.InstanceID := aSessionID;
+      fact.InternalInstanceRetrieve(inst,SERVICE_METHODINDEX_FREEINSTANCE,aSessionID);
+    end;
+    sicClientDriven: begin // release ASAP if was not notified by client
+      EnterCriticalSection(fact.fInstanceLock);
+      try
+        P := pointer(fact.fInstances);
+        for j := 1 to fact.fInstanceCapacity do begin
+          if P^.Session=aSessionID then
+            P^.SafeFreeInstance(fact);
+          inc(P);
+        end;
+      finally
+        LeaveCriticalSection(fact.fInstanceLock);
+      end;
+    end;
+    end;
+  end;
 end;
 
 constructor TServiceContainerServer.Create(aRest: TSQLRest);
@@ -56331,8 +56380,7 @@ constructor TServiceFactoryServer.Create(aRestServer: TSQLRestServer;
   aTimeOutSec: cardinal; aSharedInstance: TInterfacedObject);
 begin
   // extract RTTI from the interface
-  if aInstanceCreation<>sicPerThread then
-    InitializeCriticalSection(fInstanceLock);
+  InitializeCriticalSection(fInstanceLock);
   inherited Create(aRestServer,aInterface,aInstanceCreation,aContractExpected);
   if fRest.MethodAddress(ShortString(InterfaceURI))<>nil then
     raise EServiceException.CreateUTF8('%.Create: I% already exposed as % published method',
@@ -56387,7 +56435,7 @@ begin
       fInstanceCreation := sicSingle else begin
       // only instances list is protected, since client calls shall be pipelined
       fInstance.InitSpecific(TypeInfo(TServiceFactoryServerInstanceDynArray),
-        fInstances,djCardinal,@fInstancesCount); // sort by InstanceID: cardinal
+        fInstances,djCardinal,@fInstanceCapacity); // sort by InstanceID: cardinal
       fInstanceTimeOut := aTimeOutSec*1000;
     end;
   end;
@@ -56419,6 +56467,9 @@ end;
 destructor TServiceFactoryServer.Destroy;
 var i: integer;
 begin
+  if fInstanceCount>0 then
+    Rest.InternalLog('%.Destroy for I% %: fInstanceCount=%',[ClassType,fInterfaceURI,
+      ToText(InstanceCreation)^,fInstanceCount],sllDebug);
   try
     for i := 0 to High(fLogRestBatch) do begin
       with fLogRestBatch[i] do begin
@@ -56432,11 +56483,10 @@ begin
       end;
       FreeAndNil(fLogRestBatch[i]);
     end;
-    if InstanceCreation<>sicPerThread then
-      EnterCriticalSection(fInstanceLock);
+    EnterCriticalSection(fInstanceLock);
     try // release any internal instance (should have been done by client)
       try
-        for i := 0 to fInstancesCount-1 do
+        for i := 0 to fInstanceCapacity-1 do
           if fInstances[i].Instance<>nil then
             fInstances[i].SafeFreeInstance(self);
       finally
@@ -56448,13 +56498,11 @@ begin
       ; // better ignore any error in business logic code
     end;
   finally
-    if InstanceCreation<>sicPerThread then
-      LeaveCriticalSection(fInstanceLock);
+    LeaveCriticalSection(fInstanceLock);
   end;
-  if InstanceCreation<>sicPerThread then
-    DeleteCriticalSection(fInstanceLock);
+  DeleteCriticalSection(fInstanceLock);
   ObjArrayClear(fStats);
-  inherited;
+  inherited Destroy;
 end;
 
 function TServiceFactoryServer.Get(out Obj): Boolean;
@@ -56472,7 +56520,7 @@ begin
   sicPerThread: begin
     Inst.Instance := nil;
     Inst.InstanceID := PtrUInt(GetCurrentThreadId);
-    if (InternalInstanceRetrieve(Inst,0)=0) and (Inst.Instance<>nil) then
+    if (InternalInstanceRetrieve(Inst,0,0)=0) and (Inst.Instance<>nil) then
       result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
   end;
   else begin // no user/group/session on pure server-side -> always sicSingle
@@ -56494,10 +56542,39 @@ begin
     result := Contract; // just return the current value
 end;
 
+function TServiceFactoryServer.RenewSession(aSession: cardinal): integer;
+var tix: Int64;
+    i: integer;
+    P: ^TServiceFactoryServerInstance;
+begin
+  result := 0;
+  if (self=nil) or (fInstanceCount=0) or (aSession<=CONST_AUTHENTICATION_NOT_USED) or
+     not(fInstanceCreation in [sicClientDriven,sicPerSession]) then
+    exit;
+  tix := GetTickCount64;
+  EnterCriticalSection(fInstanceLock);
+  try
+    P := pointer(fInstances);
+    for i := 1 to fInstanceCapacity do begin
+      if P^.Session=aSession then begin
+        P^.LastAccess64 := tix;
+        inc(result);
+      end;
+      inc(P);
+    end;
+  finally
+    LeaveCriticalSection(fInstanceLock);
+  end;
+end;
+
 procedure TServiceFactoryServerInstance.SafeFreeInstance(Factory: TServiceFactoryServer);
 var Obj: TInterfacedObject;
 begin
+  if Instance=nil then
+    exit; // nothing to release
+  dec(Factory.fInstanceCount);
   InstanceID := 0;
+  Session := 0;
   Obj := Instance;
   Instance := nil;
   try
@@ -56518,45 +56595,49 @@ begin
 end;
 
 function TServiceFactoryServer.InternalInstanceRetrieve(
-  var Inst: TServiceFactoryServerInstance; aMethodIndex: integer): integer;
+  var Inst: TServiceFactoryServerInstance; aMethodIndex,aSession: integer): integer;
   procedure AddNew;
   var i: integer;
       P: ^TServiceFactoryServerInstance;
   begin
+    Inst.Session := aSession;
     Inst.Instance := CreateInstance(true);
     if Inst.Instance=nil then
       exit;
-    fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%)',
-      [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID],sllDebug);
+    inc(fInstanceCount);
+    fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%) count=%',
+      [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID,fInstanceCount],sllDebug);
     P := pointer(fInstances);
-    for i := 1 to fInstancesCount do
+    for i := 1 to fInstanceCapacity do
       if P^.InstanceID=0 then begin
         P^ := Inst; // found an empty entry -> re-use it
         exit;
       end else
-      inc(P);
+        inc(P);
     fInstance.Add(Inst); // append a new entry
   end;
 var i: integer;
+    P: ^TServiceFactoryServerInstance;
 begin
   result := 0;
-  if InstanceCreation<>sicPerThread then
-    EnterCriticalSection(fInstanceLock);
+  EnterCriticalSection(fInstanceLock);
   try
     Inst.LastAccess64 := GetTickCount64;
     // first release any deprecated instances
-    if fInstanceTimeout<>0 then
-    for i := fInstancesCount-1 downto 0 do
-      with fInstances[i] do
-      if InstanceID<>0 then
-      if Inst.LastAccess64>LastAccess64+fInstanceTimeout then begin
-        // deprecated -> mark this entry as empty
-        fRest.InternalLog('%.InternalInstanceRetrieve: Delete %(%) instance '+
-          '(id=%) after % minutes timeout (max % minutes)',[ClassType,fInterfaceURI,
-           pointer(Inst.Instance),InstanceID,(Inst.LastAccess64-LastAccess64)div 60000,
-           fInstanceTimeOut div 60000],sllInfo);
-        SafeFreeInstance(self);
+    if (fInstanceTimeout<>0) and (fInstanceCount>0) then begin
+      P := pointer(fInstances);
+      for i := 1 to fInstanceCapacity do begin
+        if (P^.InstanceID<>0) and
+           (Inst.LastAccess64>P^.LastAccess64+fInstanceTimeOut) then begin
+          fRest.InternalLog('%.InternalInstanceRetrieve: Delete %(%) instance '+
+            '(id=%) after % minutes timeout (max % minutes)',[ClassType,fInterfaceURI,
+             pointer(Inst.Instance),P^.InstanceID,(Inst.LastAccess64-P^.LastAccess64)div 60000,
+             fInstanceTimeOut div 60000],sllInfo);
+          P^.SafeFreeInstance(self);
+        end;
+        inc(P);
       end;
+    end;
     if Inst.InstanceID=0 then begin
       // initialize a new sicClientDriven instance
       if (cardinal(aMethodIndex)>=fInterface.fMethodsCount) or
@@ -56567,27 +56648,29 @@ begin
       AddNew;
     end else begin
       // search the instance corresponding to Inst.InstanceID
-      for i := 0 to fInstancesCount-1 do
-        with fInstances[i] do
-        if InstanceID=Inst.InstanceID then begin
-          if aMethodIndex=SERVICE_METHODINDEX_FREEINSTANCE then begin
-            // aMethodIndex=-1 for {"method":"_free_", "params":[], "id":1234}
-            SafeFreeInstance(self);
-            result := SERVICE_METHODINDEX_FREEINSTANCE; // notify caller 
+      if fInstanceCount>0 then begin
+        P := pointer(fInstances);
+        for i := 1 to fInstanceCapacity do
+          if P^.InstanceID=Inst.InstanceID then begin
+            if aMethodIndex=SERVICE_METHODINDEX_FREEINSTANCE then begin
+              // aMethodIndex=-1 for {"method":"_free_", "params":[], "id":1234}
+              P^.SafeFreeInstance(self);
+              result := SERVICE_METHODINDEX_FREEINSTANCE; // notify caller
+              exit;
+            end;
+            P^.LastAccess64 := Inst.LastAccess64;
+            Inst.Instance := P^.Instance;
             exit;
-          end;
-          LastAccess64 := Inst.LastAccess64;
-          Inst.Instance := Instance;
-          exit;
-        end;
+          end else
+            inc(P);
+      end;
       // add any new session/user/group/thread instance if necessary
       if (InstanceCreation<>sicClientDriven) and
          (cardinal(aMethodIndex)<fInterface.fMethodsCount) then
         AddNew;
     end;
   finally
-    if InstanceCreation<>sicPerThread then
-      LeaveCriticalSection(fInstanceLock);
+    LeaveCriticalSection(fInstanceLock);
   end;
 end;
 
@@ -56766,7 +56849,7 @@ begin
             exit;
           end;
       end;
-      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex)=SERVICE_METHODINDEX_FREEINSTANCE then begin
+      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex,Ctxt.Session)=SERVICE_METHODINDEX_FREEINSTANCE then begin
         Ctxt.Success; // {"method":"_free_", "params":[], "id":1234}
         exit;
       end;
