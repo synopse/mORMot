@@ -533,7 +533,7 @@ begin
           WR.AddCurr64(TField(ColumnAttr).AsCurrency);
       SynCommons.ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(TField(ColumnAttr).AsDateTime);
+        WR.AddDateTime(TField(ColumnAttr).AsDateTime,fForceDateWithMS);
         WR.Add('"');
       end;
       SynCommons.ftUTF8: begin

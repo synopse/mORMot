@@ -951,12 +951,20 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8);
+
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
     /// if set, any BLOB field won't be retrieved, and forced to be null
     // - this may be used to speed up fetching the results for SQL requests
     // with * statements
     property ForceBlobAsNull: boolean read GetForceBlobAsNull write SetForceBlobAsNull;
+    function GetForceDateWithMS: boolean;
+    procedure SetForceDateWithMS(value: boolean);
+    /// if set, any ftDate field will contain the milliseconds information
+    // when serialized into ISO-8601 text
+    // - this setting is private to each statement, since may vary depending
+    // on data definition (e.g. ORM TDateTime/TDateTimeMS)
+    property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: Integer;
   end;
@@ -1863,10 +1871,13 @@ type
     fCurrentRow: Integer;
     fSQLWithInlinedParams: RawUTF8;
     fForceBlobAsNull: boolean;
+    fForceDateWithMS: boolean;
     fDBMS: TSQLDBDefinition;
     function GetSQLWithInlinedParams: RawUTF8;
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
+    function GetForceDateWithMS: boolean;
+    procedure SetForceDateWithMS(value: boolean);
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
@@ -2671,8 +2682,8 @@ type
     Params: TSQLDBParamDynArray;
     /// if input parameters expected BindArray() process
     ArrayCount: integer;
-    /// if set, any BLOB field won't be retrieved, and forced to be null
-    ForceBlobAsNull: boolean;
+    /// match ForceBlobAsNull and ForceDateWithMS properties
+    Force: set of (fBlobAsNull, fDateWithMS);
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -4543,8 +4554,10 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       RecordLoad(InputExecute,O,TypeInfo(TSQLDBProxyConnectionCommandExecute));
       ExecuteWithResults := header.Command<>cExecute;
       Stmt := NewStatementPrepared(InputExecute.SQL,ExecuteWithResults,true);
-      if InputExecute.ForceBlobAsNull then
+      if fBlobAsNull in InputExecute.Force then
         Stmt.ForceBlobAsNull := true;
+      if fDateWithMS in InputExecute.Force then
+        Stmt.ForceDateWithMS := true;
       for i := 1 to Length(InputExecute.Params) do
       with InputExecute.Params[i-1] do
       if InputExecute.ArrayCount=0 then
@@ -6730,6 +6743,16 @@ begin
   fForceBlobAsNull := value;
 end;
 
+function TSQLDBStatement.GetForceDateWithMS: boolean;
+begin
+  result := fForceDateWithMS;
+end;
+
+procedure TSQLDBStatement.SetForceDateWithMS(value: boolean);
+begin
+  fForceDateWithMS := value;
+end;
+
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
 begin
   // SynDBLog.Enter(self);
@@ -6836,7 +6859,7 @@ begin
       ftCurrency: WR.AddCurr64(ColumnCurrency(col));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(ColumnDateTime(col));
+        WR.AddDateTime(ColumnDateTime(col),fForceDateWithMS);
         WR.Add('"');
       end;
       ftUTF8: begin
@@ -6863,6 +6886,7 @@ end;
 procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
   var Temp: RawByteString);
 begin
+  Value.Options := [];
   if ColumnNull(Col) then // will call GetCol() to check Col
     Value.VType := ftNull else
     Value.VType := ColumnType(Col);
@@ -7021,7 +7045,7 @@ begin
           ftDate: begin
             if not Tab then
               W.Add('"');
-            W.AddDateTime(V.VDateTime);
+            W.AddDateTime(V.VDateTime,svoDateWithMS in V.Options);
             if not Tab then
               W.Add('"');
           end;
@@ -8481,7 +8505,11 @@ begin
     SetLength(fParams,fParamCount);
   Input.Params := fParams;
   Input.ArrayCount := fParamsArrayCount;
-  Input.ForceBlobAsNull := fForceBlobAsNull;
+  if fForceBlobAsNull then
+    Input.Force := [fBlobAsNull] else
+    Input.Force := [];
+  if fForceDateWithMS then
+    include(Input.Force,fDateWithMS);
 end;
 
 procedure TSQLDBProxyStatement.ExecutePrepared;

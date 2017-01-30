@@ -1275,7 +1275,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           WR.AddCurr64(fResultSet.GetCurrency(col+FirstDbcIndex));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex));
+        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex),fForceDateWithMS);
         WR.Add('"');
       end;
       ftUTF8: begin

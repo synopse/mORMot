@@ -2364,6 +2364,7 @@ var C: PSQLDBColumnProperty;
     V: pointer;
     NoDecimal: boolean;
 begin // dedicated version to avoid as much memory allocation than possible
+  Value.Options := [];
   V := GetCol(Col,C);
   if V=nil then
     Value.VType := ftNull else

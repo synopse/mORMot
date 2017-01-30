@@ -1712,7 +1712,7 @@ Write:case ColumnType of
         ftCurrency: WR.AddCurr64(V^.Int64);
         ftDate: begin
           WR.Add('"');
-          WR.AddDateTime(@V^.Double);
+          WR.AddDateTime(@V^.Double,'T',#0,fForceDateWithMS);
           WR.Add('"');
         end;
         ftUTF8: begin

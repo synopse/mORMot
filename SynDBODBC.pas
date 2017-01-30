@@ -1562,8 +1562,8 @@ begin
       ftDouble, ftCurrency:
         WR.AddFloatStr(Pointer(fColData[Col]));      // already as SQL_C_CHAR
       ftDate:
-        WR.AddNoJSONEscape(@tmp,
-          PSQL_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.ToIso8601(tmp,ColumnValueDBType));
+        WR.AddNoJSONEscape(@tmp,PSQL_TIMESTAMP_STRUCT(Pointer(fColData[Col]))^.
+          ToIso8601(tmp,ColumnValueDBType,fForceDateWithMS));
       ftUTF8: begin
         WR.Add('"');
         if ColumnDataSize>1 then
