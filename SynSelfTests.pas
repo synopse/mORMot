@@ -10208,7 +10208,7 @@ begin
   n := 0;
   s3 := Demo.ExecuteJSON('select * from test where level=2',False,@n);
   Check(n=1);
-  Check(s3='{"fieldCount":3,"values":["DateTime","Level","Content",40640.5028826852,'+
+  Check(s3='{"fieldCount":3,"values":["DateTime","Level","Content","2011-04-07T12:04:09.064",'+
     '2,"20110407 12040904 debug {\"TObjectList(00AF8D00)\":[\"TObjectList(00AF8D20)\",'+
     '\"TObjectList(00AF8D60)\",\"TFileVersion(00ADC0B0)\",\"TSynMapFile(00ACC990)\"]}"],'+
     '"rowCount":1}'#$A);

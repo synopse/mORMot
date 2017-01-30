@@ -19305,6 +19305,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     procedure SetColumnBlob(var aResult: TSQLVar; aValue: pointer; aValueLength: integer);
       {$ifdef HASINLINE}inline;{$endif}
+    procedure SetColumnDate(var aResult: TSQLVar; const aValue: TDateTime;
+      aWithMS: boolean); {$ifdef HASINLINE}inline;{$endif}
+    procedure SetColumnCurr64(var aResult: TSQLVar; aValue64: PInt64);
+      {$ifdef HASINLINE}inline;{$endif}
   public
     /// create the cursor instance
     // - it will be destroyed when by the DB engine (e.g. via xClose in SQLite3)
@@ -20562,6 +20566,7 @@ procedure TSQLPropInfo.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
   GetValueVar(Instance,true,RawUTF8(temp),nil);
+  aValue.Options := [];
   aValue.VType := fSQLDBFieldType;
   case aValue.VType of
     ftInt64:
@@ -20594,7 +20599,8 @@ begin
     ftDouble:
       SetValueVar(Instance,DoubleToStr(aValue.VDouble),false);
     ftDate:
-      SetValueVar(Instance,DateTimeToIso8601Text(aValue.VDateTime),true);
+      SetValueVar(Instance,DateTimeToIso8601Text(
+        aValue.VDateTime,'T',svoDateWithMS in aValue.Options),true);
     ftBlob:
       SetValueVar(Instance,TSQLRawBlobToBlob(aValue.VBlob,aValue.VBlobLen),true);
     ftUTF8:
@@ -21013,6 +21019,7 @@ end;
 procedure TSQLPropInfoRTTIInt32.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
+  aValue.Options := [];
   aValue.VType := ftInt64;
   aValue.VInt64 := fPropInfo.GetOrdProp(Instance);
 end;
@@ -21238,6 +21245,7 @@ end;
 procedure TSQLPropInfoRTTIInt64.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
+  aValue.Options := [];
   aValue.VType := ftInt64;
   aValue.VInt64 := fPropInfo.GetInt64Prop(Instance);
 end;
@@ -21349,6 +21357,7 @@ end;
 procedure TSQLPropInfoRTTIDouble.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
+  aValue.Options := [];
   aValue.VType := ftDouble;
   aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
 end;
@@ -21407,6 +21416,7 @@ end;
 procedure TSQLPropInfoRTTICurrency.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
+  aValue.Options := [];
   aValue.VType := ftCurrency;
   aValue.VCurrency := fPropInfo.GetCurrencyProp(Instance);
 end;
@@ -21499,6 +21509,9 @@ end;
 procedure TSQLPropInfoRTTIDateTime.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
 begin
+  if fSQLFieldType=sftDateTimeMS then
+    aValue.Options := [svoDateWithMS] else
+    aValue.Options := [];
   aValue.VType := ftDate;
   aValue.VDouble := fPropInfo.GetDoubleProp(Instance);
 end;
@@ -21805,6 +21818,7 @@ procedure TSQLPropInfoRTTIAnsi.GetFieldSQLVar(Instance: TObject; var aValue: TSQ
 begin
   fPropInfo.GetLongStrProp(Instance,temp);
   temp := fEngine.AnsiToUTF8(temp);
+  aValue.Options := [];
   aValue.VType := ftUTF8;
   aValue.VText := pointer(temp);
 end;
@@ -21876,6 +21890,7 @@ procedure TSQLPropInfoRTTIRawUTF8.GetFieldSQLVar(Instance: TObject; var aValue: 
   var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance,temp);
+  aValue.Options := [];
   aValue.VType := ftUTF8;
   aValue.VText := Pointer(temp);
 end;
@@ -22085,6 +22100,7 @@ procedure TSQLPropInfoRTTIRawBlob.GetFieldSQLVar(Instance: TObject; var aValue: 
   var temp: RawByteString);
 begin
   fPropInfo.GetLongStrProp(Instance,temp);
+  aValue.Options := [];
   if temp='' then
     aValue.VType := ftNull else begin
     aValue.VType := ftBlob;
@@ -22292,6 +22308,7 @@ procedure TSQLPropInfoRTTIUnicode.GetFieldSQLVar(Instance: TObject; var aValue: 
   var temp: RawByteString);
 begin
   temp := UnicodeStringToUtf8(fPropInfo.GetUnicodeStrProp(Instance));
+  aValue.Options := [];
   aValue.VType := ftUTF8;
   aValue.VText := Pointer(temp);
 end;
@@ -22505,6 +22522,7 @@ procedure TSQLPropInfoRTTIDynArray.GetFieldSQLVar(Instance: TObject;
   var aValue: TSQLVar; var temp: RawByteString);
 begin
   Serialize(Instance,temp,false);
+  aValue.Options := [];
   if fObjArray<>nil then begin
     aValue.VType := ftUTF8; // JSON
     aValue.VText := pointer(temp);
@@ -23004,6 +23022,7 @@ procedure TSQLPropInfoRecordRTTI.GetFieldSQLVar(Instance: TObject; var aValue: T
   var temp: RawByteString);
 begin
   temp := RecordSave(GetFieldAddr(Instance)^,fTypeInfo);
+  aValue.Options := [];
   aValue.VType := ftBlob;
   aValue.VBlob := pointer(temp);
   aValue.VBlobLen := length(temp);
@@ -23135,6 +23154,7 @@ procedure TSQLPropInfoRecordFixedSize.GetFieldSQLVar(Instance: TObject; var aVal
   var temp: RawByteString);
 begin
   SetString(temp,PAnsiChar(GetFieldAddr(Instance)),fRecordSize);
+  aValue.Options := [];
   aValue.VType := ftBlob;
   aValue.VBlob := pointer(temp);
   aValue.VBlobLen := length(temp);
@@ -50019,18 +50039,21 @@ end;
 
 procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar; aValue: Int64);
 begin
+  aResult.Options := [];
   aResult.VType := ftInt64;
   aResult.VInt64 := aValue;
 end;
 
 procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar; const aValue: double);
 begin
+  aResult.Options := [];
   aResult.VType := ftDouble;
   aResult.VDouble := aValue;
 end;
 
 procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar; const aValue: RawUTF8);
 begin
+  aResult.Options := [];
   aResult.VType := ftUTF8;
   fColumnTemp := aValue; // temporary copy available until next Column() call
   aResult.VText := pointer(fColumnTemp);
@@ -50039,6 +50062,7 @@ end;
 procedure TSQLVirtualTableCursor.SetColumn(var aResult: TSQLVar;
   aValue: PUTF8Char; aValueLength: integer);
 begin
+  aResult.Options := [];
   aResult.VType := ftUTF8;
   SetString(fColumnTemp,PAnsiChar(aValue),aValueLength); // temporary copy
   aResult.VText := pointer(fColumnTemp);
@@ -50047,10 +50071,28 @@ end;
 procedure TSQLVirtualTableCursor.SetColumnBlob(var aResult: TSQLVar;
   aValue: pointer; aValueLength: integer);
 begin
+  aResult.Options := [];
   aResult.VType := ftBlob;
   SetString(fColumnTemp,PAnsiChar(aValue),aValueLength); // temporary copy
   aResult.VBlob := pointer(fColumnTemp);
   aResult.VBlobLen := aValueLength;
+end;
+
+procedure TSQLVirtualTableCursor.SetColumnDate(var aResult: TSQLVar; const aValue: TDateTime;
+  aWithMS: boolean);
+begin
+  if aWithMS then
+    aResult.Options := [svoDateWithMS] else
+    aResult.Options := [];
+  aResult.VType := ftDate;
+  aResult.VDateTime := aValue;
+end;
+
+procedure TSQLVirtualTableCursor.SetColumnCurr64(var aResult: TSQLVar; aValue64: PInt64);
+begin
+  aResult.Options := [];
+  aResult.VType := ftCurrency;
+  PInt64(@aResult.VCurrency)^ := aValue64^; 
 end;
 
 
@@ -50333,7 +50375,7 @@ begin
     exit;
   case aColumn of
    -1: SetColumn(aResult,fCurrent+1); // ID = row index + 1
-    0: SetColumn(aResult,LogFile.EventDateTime(fCurrent));
+    0: SetColumnDate(aResult,LogFile.EventDateTime(fCurrent),true);
     1: SetColumn(aResult,ord(LogFile.EventLevel[fCurrent]));
     2: SetColumn(aResult,LogFile.LinePointers[fCurrent],LogFile.LineSize(fCurrent));
     else exit;

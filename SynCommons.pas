@@ -6635,6 +6635,13 @@ type
   // - this array as a fixed size, ready to handle up to MAX_SQLFIELDS items
   TSQLDBFieldTypeArray = array[0..MAX_SQLFIELDS-1] of TSQLDBFieldType;
 
+  /// how TSQLVar may be processed
+  // - by default, ftDate will use seconds resolution unless svoDateWithMS is set
+  TSQLVarOption = (svoDateWithMS);
+
+  /// defines how TSQLVar may be processed
+  TSQLVarOptions = set of TSQLVarOption;
+
   /// memory structure used for database values by reference storage
   // - used mainly by SynDB, mORMot, mORMotDB and mORMotSQLite3 units
   // - defines only TSQLDBFieldType data types (similar to those handled by
@@ -6644,9 +6651,13 @@ type
   // - variable-length data (e.g. UTF-8 text or binary BLOB) are never stored
   // within this record, but VText/VBlob will point to an external (temporary)
   // memory buffer
-  // - date/time is stored as ISO-8601 text, and currency as double or
-  // BCD in most databases
+  // - date/time is stored as ISO-8601 text (with milliseconds if svoDateWithMS
+  // option is set and the database supports it), and currency as double or BCD
+  // in most databases
   TSQLVar = record
+    /// how this value should be processed
+    Options: TSQLVarOptions;
+    /// the type of the value stored
     case VType: TSQLDBFieldType of
     ftInt64: (
       VInt64: Int64);
@@ -21845,6 +21856,7 @@ procedure VariantToSQLVar(const Input: variant; var temp: RawByteString;
   var Output: TSQLVar);
 var wasString: boolean;
 begin
+  Output.Options := [];
   with TVarData(Input) do
   if VType=varVariant or varByRef then
     VariantToSQLVar(PVariant(VPointer)^,temp,Output) else
