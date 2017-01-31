@@ -9327,6 +9327,9 @@ type
     // inherited, so that could be used for further instance creation:
     // ! fSQLAuthUserClass := Model.AddTableInherited(TSQLAuthUser);
     function AddTableInherited(aTable: TSQLRecordClass): pointer;
+    /// return any class inheriting from the given table in the model
+    // - if the model does not contain such table, supplied aTable is returned
+    function GetTableInherited(aTable: TSQLRecordClass): TSQLRecordClass;
     /// get the index of aTable in Tables[]
     // - returns -1 if the table is not in the model
     function GetTableIndex(aTable: TSQLRecordClass): integer; overload;
@@ -14894,10 +14897,6 @@ type
     property AccessRights: RawUTF8 index 1600 read fAccessRights write fAccessRights;
   end;
 
-  /// class-reference type (metaclass) of the table containing the available
-  // user access rights for authentication, defined as a group
-  TSQLAuthGroupClass = class of TSQLAuthGroup;
-
   /// table containing the Users registered for authentication
   // - this class should be added to the TSQLModel, together with TSQLAuthGroup,
   // to allow authentication support
@@ -14969,11 +14968,6 @@ type
     // application
     property Data: TSQLRawBlob read fData write fData;
   end;
-
-  /// class-reference type (metaclass) of a table containing the Users
-  // registered for authentication
-  // - see also TSQLRestServer.OnAuthenticationUserRetrieve custom event
-  TSQLAuthUserClass = class of TSQLAuthUser;
 
   /// class used to maintain in-memory sessions
   // - this is not a TSQLRecord table so won't be remotely accessible, for
@@ -16060,6 +16054,15 @@ type
     property TimeOut: integer read fTimeOut write fTimeOut;
   end;
 
+  /// class-reference type (metaclass) of a table containing the Users
+  // registered for authentication
+  // - see also TSQLRestServer.OnAuthenticationUserRetrieve custom event
+  TSQLAuthUserClass = class of TSQLAuthUser;
+
+  /// class-reference type (metaclass) of the table containing the available
+  // user access rights for authentication, defined as a group
+  TSQLAuthGroupClass = class of TSQLAuthGroup;
+
   /// class-reference type (metaclass) of a REST server
   TSQLRestServerClass = class of TSQLRestServer;
 
@@ -16123,11 +16126,11 @@ type
     fVirtualTableDirect: boolean;
     fHandleAuthentication: boolean;
     fBypassORMAuthentication: TSQLURIMethods;
-    fAfterCreation: boolean;
-    fOptions: TSQLRestServerOptions;
     /// the TSQLAuthUser and TSQLAuthGroup classes, as defined in model
     fSQLAuthUserClass: TSQLAuthUserClass;
     fSQLAuthGroupClass: TSQLAuthGroupClass;
+    fAfterCreation: boolean;
+    fOptions: TSQLRestServerOptions;
     /// how in-memory sessions are handled
     fSessionClass: TAuthSessionClass;
     /// will contain the in-memory representation of some static tables
@@ -17057,15 +17060,6 @@ type
     // (should not to be used normaly, because it will add unnecessary overhead)
     property StaticVirtualTableDirect: boolean read fVirtualTableDirect
       write fVirtualTableDirect;
-    /// the class inheriting from TSQLAuthUser, as defined in the model
-    // - during authentication, this class will be used for every TSQLAuthUser
-    // table access
-    // - see also the OnAuthenticationUserRetrieve optional event handler
-    property SQLAuthUserClass: TSQLAuthUserClass read fSQLAuthUserClass;
-    /// the class inheriting from TSQLAuthGroup, as defined in the model
-    // - during authentication, this class will be used for every TSQLAuthGroup
-    // table access
-    property SQLAuthGroupClass: TSQLAuthGroupClass read fSQLAuthGroupClass;
     /// the class inheriting from TSQLRecordTableDeleted, as defined in the model
     // - during authentication, this class will be used for storing a trace of
     // every deletion of table rows containing a TRecordVersion published field
@@ -17075,6 +17069,15 @@ type
     // - since all sessions data remain in memory, ensure they are not taking
     // too much resource (memory or process time)
     property SessionClass: TAuthSessionClass read fSessionClass write fSessionClass;
+    /// the class inheriting from TSQLAuthUser, as defined in the model
+    // - during authentication, this class will be used for every TSQLAuthUser
+    // table access
+    // - see also the OnAuthenticationUserRetrieve optional event handler
+    property SQLAuthUserClass: TSQLAuthUserClass read fSQLAuthUserClass;
+    /// the class inheriting from TSQLAuthGroup, as defined in the model
+    // - during authentication, this class will be used for every TSQLAuthGroup
+    // table access
+    property SQLAuthGroupClass: TSQLAuthGroupClass read fSQLAuthGroupClass;
   published { standard method-based services }
     /// REST service accessible from ModelRoot/Stat URI to gather detailed information
     // - returns the current execution statistics of this server, as a JSON object
@@ -32509,6 +32512,15 @@ begin
   result := Tables[ndx];
 end;
 
+function TSQLModel.GetTableInherited(aTable: TSQLRecordClass): TSQLRecordClass;
+var ndx: integer;
+begin
+  ndx := GetTableIndexInheritsFrom(aTable);
+  if ndx<0 then
+    result := aTable else
+    result := Tables[ndx];
+end;
+
 constructor TSQLModel.Create(CloneFrom: TSQLModel);
 var i: integer;
 begin
@@ -37483,9 +37495,9 @@ begin
   fStatLevels := SERVERDEFAULTMONITORLEVELS;
   fVirtualTableDirect := true; // faster direct Static call by default
   fSessions := TObjectListLocked.Create; // needed by AuthenticationRegister() below
-  fModel := aModel;
   fSQLAuthUserClass := TSQLAuthUser;
   fSQLAuthGroupClass := TSQLAuthGroup;
+  fModel := aModel;
   fSQLRecordVersionDeleteTable := TSQLRecordTableDeleted;
   for t := 0 to high(Model.Tables) do
   if fModel.Tables[t].RecordProps.RecordVersionField<>nil then begin
@@ -50906,7 +50918,7 @@ begin
     exit;
   try
     Sender.SessionClose;  // ensure Sender.SessionUser=nil
-    U := TSQLAuthUser.Create;
+    U := TSQLAuthUser(Sender.Model.GetTableInherited(TSQLAuthUser).Create);
     try
       U.LogonName := trim(aUserName);
       U.DisplayName := U.LogonName;
@@ -51162,7 +51174,7 @@ begin
   try // inherited ClientSetUser() won't fit with Auth() method below
     ClientSetUserHttpOnly(Sender,aUserName,aPassword);
     Sender.fSessionAuthentication := self; // to enable ClientSessionSign()
-    U := TSQLAuthUser.Create;
+    U := TSQLAuthUser(Sender.Model.GetTableInherited(TSQLAuthUser).Create);
     try
       U.LogonName := trim(aUserName);
       res := ClientGetSessionKey(Sender,U,[]);
