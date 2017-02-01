@@ -3312,6 +3312,11 @@ function Split(const Str, SepStr: RawUTF8; StartPos: integer=1): RawUTF8; overlo
 procedure Split(const Str: RawUTF8; const SepStr: array of RawUTF8;
   const DestPtr: array of PRawUTF8); overload;
 
+/// returns the last occurence of the given SepChar separated context
+// - e.g. SplitRight('01/2/34','/')='34'
+// - if SepChar doesn't appear, will return Str, e.g. SplitRight('123','/')='123'
+function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
+
 /// fast version of StringReplace(S, OldPattern, NewPattern,[rfReplaceAll]);
 function StringReplaceAll(const S, OldPattern, NewPattern: RawUTF8): RawUTF8;
 
@@ -22658,6 +22663,17 @@ asm     // eax=SubStr, edx=S, ecx=Offset
         lea     eax, [edx + ecx + 1]
 end;
 {$endif PUREPASCAL}
+
+function SplitRight(const Str: RawUTF8; SepChar: AnsiChar): RawUTF8;
+var i: integer;
+begin
+  for i := length(Str) downto 1 do
+    if Str[i]=SepChar then begin
+      result := copy(Str,i+1,maxInt);
+      exit;
+    end;
+  result := Str;
+end;
 
 function Split(const Str, SepStr: RawUTF8; StartPos: integer): RawUTF8;
 var i: integer;
