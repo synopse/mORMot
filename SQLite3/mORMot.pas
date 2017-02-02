@@ -10506,7 +10506,6 @@ type
   // - as used by TServiceFactoryClient.SendNotifications
   TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
 
-
   TServiceMethodExecute = class;
 
   /// the current step of a TServiceMethodExecute.OnExecute call
@@ -12078,6 +12077,7 @@ type
     fResultAsXMLObject: boolean;
     fResultAsJSONObjectIfAccept: boolean;
     fResultAsXMLObjectNameSpace: RawUTF8;
+    fExcludeServiceLogCustomAnswer: boolean;
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: array of TServiceMethodExecuteEvent;
@@ -12354,6 +12354,10 @@ type
     // </content> around the generated XML data
     property ResultAsXMLObjectNameSpace: RawUTF8
       read fResultAsXMLObjectNameSpace write fResultAsXMLObjectNameSpace;
+    /// disable base64-encoded TSQLRecordServiceLog.Output for methods
+    // returning TServiceCustomAnswer record (to reduce storage size)
+    property ExcludeServiceLogCustomAnswer: boolean read fExcludeServiceLogCustomAnswer
+      write fExcludeServiceLogCustomAnswer;
   end;
 
   /// a service provider implemented on the client side
@@ -56742,7 +56746,7 @@ begin
       W.AddString(InterfaceDotMethodName);
       W.AddShort('",Input:{'); // as TSQLPropInfoRTTIVariant.GetJSONValues
       if optNoLogInput in Sender.fOptions then
-        W.AddShort('optNoLogInput:true') else
+        W.AddShort('optNoLog:true') else
         for a := ArgsInFirst to ArgsInLast do
         with Args[a] do
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
@@ -56754,8 +56758,12 @@ begin
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
+      if fExcludeServiceLogCustomAnswer and ArgsResultIsServiceCustomAnswer then begin
+        W.AddShort('customanswerlen:');
+        W.Add(length(PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^.Content));
+      end else
       if optNoLogOutput in Sender.fOptions then
-        W.AddShort('optNoLogOutput:true') else
+        W.AddShort('optNoLog:true') else
         for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
