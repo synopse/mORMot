@@ -39613,11 +39613,11 @@ begin
       JSON := GotoNextNotSpace(JSON);
       if JSON^='"' then begin
         Val := GetJSONField(result,result,@wasString,EndOfObject);
-        GetJSONToAnyVariant(Value,Val,EndOfObject,TryCustomVariants,false);
+        GetJSONToAnyVariant(Value,Val,EndOfObject,TryCustomVariants,AllowDouble);
       end else
-        GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,false);
+        GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,AllowDouble);
     end else
-      GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,false);
+      GetJSONToAnyVariant(Value,result,EndOfObject,TryCustomVariants,AllowDouble);
   end else begin
     Val := GetJSONField(result,result,@wasString,EndOfObject);
     GetVariantFromJSON(Val,wasString,Value,nil,AllowDouble);
@@ -39989,6 +39989,8 @@ var i: integer;
 begin
   if TVarData(Value).VType and VTYPE_STATIC<>0 then
     VarClear(Value);
+  if (Options<>nil) and (dvoAllowDoubleValue in Options^) then
+    AllowDouble := true; // for ProcessSimple() above
   if EndOfObject<>nil then
     EndOfObject^ := ' ';
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
@@ -39996,8 +39998,6 @@ begin
     ProcessSimple(GetJSONField(JSON,JSON,@wasString,EndOfObject));
     exit;
   end;
-  if dvoAllowDoubleValue in Options^ then
-    AllowDouble := true; // for ProcessSimple() above
   if JSON^='"' then
     if dvoJSONObjectParseWithinString in Options^ then begin
       ToBeParsed := GetJSONField(JSON,JSON,@wasString,EndOfObject);
@@ -40204,7 +40204,7 @@ begin
   // (e.g. when called directly from TSQLPropInfoRTTIVariant.SetValue)
   if (TryCustomVariants<>nil) and (JSON<>nil) then
     if GotoNextNotSpace(JSON)^ in ['{','['] then begin
-      GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants,false);
+      GetJSONToAnyVariant(Value,JSON,nil,TryCustomVariants,AllowDouble);
       exit;
     end else
     AllowDouble := dvoAllowDoubleValue in TryCustomVariants^;

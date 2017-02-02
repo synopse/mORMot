@@ -562,7 +562,7 @@ var i, ndx: integer;
     MissingID: boolean;
     V: PVarData;
 begin
-  doc.InitJSON(JSON,[dvoValueCopiedByReference]);
+  doc.InitJSON(JSON,[dvoValueCopiedByReference,dvoAllowDoubleValue]);
   if (doc.Kind<>dvObject) and (Occasion<>soInsert) then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: invalid JSON context',[self]);
   if not (Occasion in [soInsert,soUpdate]) then
@@ -587,8 +587,12 @@ begin
       case V^.VType of
       varInteger:
       case info.SQLFieldType of
-        sftBoolean: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
-          Variant(V^) := boolean(V^.VInteger); // store true boolean BSON
+        sftBoolean: begin // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
+          if V^.VInteger=0 then // normalize to boolean BSON
+            V^.VBoolean := false else
+            V^.VBoolean := true;
+          V^.VType := varBoolean;
+        end;
         sftUnixTime: begin
           V^.VDate := UnixTimeToDateTime(V^.VInteger); // as MongoDB date/time
           V^.VType := varDate; // direct set to avoid unexpected EInvalidOp

@@ -3567,7 +3567,7 @@ begin
     end;
   end;
   if TotalWritten>BSON_MAXDOCUMENTSIZE then
-    raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=%>max %)',
+    raise EBSONException.CreateUTF8('%.BSONWriteDoc(size=% > max=%)',
       [self,TotalWritten,BSON_MAXDOCUMENTSIZE]);
 end;
 
