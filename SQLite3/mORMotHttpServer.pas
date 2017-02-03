@@ -762,10 +762,14 @@ begin
 end;
 
 destructor TSQLHttpServer.Destroy;
+var i: integer;
 begin
   fLog.Enter(self);
   fLog.Add.Log(sllHttp,'% finalized for % server%',
     [fHttpServer,length(fDBServers),PLURAL_FORM[length(fDBServers)>1]],self);
+  for i := 0 to high(fDBServers) do
+    if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
+      fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;

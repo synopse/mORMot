@@ -230,6 +230,10 @@ type
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
   published
+    /// the Server IP address
+    property Server: AnsiString read fServer;
+    /// the Server IP port
+    property Port: AnsiString read fPort;
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -237,7 +241,7 @@ type
     /// the compression algorithms usable with this client
     // - equals [hcSynLZ] by default, since our SynLZ algorithm provides a good
     // compression, with very low CPU use on server side
-    // - you may include hcDeflate, which will have a better compression ratio, 
+    // - you may include hcDeflate, which will have a better compression ratio,
     // be recognized by all browsers and libraries, but would consumme much
     // more CPU resources than hcSynLZ
     // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
@@ -247,10 +251,6 @@ type
     // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
     // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
-    /// the Server IP address
-    property Server: AnsiString read fServer;
-    /// the Server IP port
-    property Port: AnsiString read fPort;
   end;
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
