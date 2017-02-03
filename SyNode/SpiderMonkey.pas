@@ -1860,6 +1860,8 @@ type
   public
     /// constructor which will create JavaScript exception with JS stack trace
     constructor CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer; AMessage: string; const AStackTrace: SynUnicode);
+    /// Custmize SM exception log output
+    function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
   published
     property ErrorNum: integer read FJSErrorNum;
     property Stack: SynUnicode read FJSStackTrace;
@@ -4479,6 +4481,18 @@ begin
   FLineNum := ALineNum;
   FJSStackTrace := AStackTrace;
 end;
+
+function ESMException.CustomLog(
+  WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
+begin
+  with Context.EInstance as ESMException do begin
+    WR.AddJSONEscapeString(FileName); WR.Add(':'); WR.Add(Line); WR.AddShort('\r\rError: ');
+    WR.AddJSONEscapeString(Message); WR.AddShort('\n');
+    WR.AddJSONEscapeString(Stack);
+  end;
+  result := true; // do not append a address
+end;
+
 { JSArgRec }
 
 function JSArgRec.getArgv: PjsvalVector;

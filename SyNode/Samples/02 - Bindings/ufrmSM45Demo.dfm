@@ -1,9 +1,9 @@
 object frmSM45Demo: TfrmSM45Demo
   Left = 362
   Top = 176
+  Width = 771
+  Height = 516
   Caption = 'SyNode (Synopse SpiderMonkey with NodeJS modules) demo'
-  ClientHeight = 477
-  ClientWidth = 738
   Color = clBtnFace
   Font.Charset = DEFAULT_CHARSET
   Font.Color = clWindowText
@@ -60,7 +60,23 @@ object frmSM45Demo: TfrmSM45Demo
       'mainForm.toLog('#39'PI='#39' + mathModule.pi);'
       'mainForm.toLog(`(1+ 2)=${mathModule.add(1, 2)}`);'
       'mainForm.toLog(`16/3=${mathModule.div(16, 3)}`);'
-      '*/')
+      '*/'
+      ''
+      'const http = require('#39'http'#39');'
+      'const assert = require('#39'assert'#39');'
+      '// set global proxy settings if client is behind a proxy'
+      
+        '// http.setGlobalProxyConfiguration('#39'proxy.main:3249'#39', '#39'localhos' +
+        't'#39');'
+      
+        'let resp = http.get('#39'https://synopse.info/fossil/wiki/Synopse+Op' +
+        'enSource'#39');'
+      '// check we are actually behind a proxy'
+      
+        '// assert.ok(resp.headers('#39'via'#39').startsWith('#39'1.1 proxy.main'#39'), '#39 +
+        'proxy used'#39');'
+      'let index = resp.read();'
+      'mainForm.toLog(index);')
     TabOrder = 0
     WordWrap = False
   end

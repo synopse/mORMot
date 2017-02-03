@@ -9,8 +9,11 @@ interface
 {$UNDEF HASINLINE}
 implementation
 uses
-  SysUtils, Windows,
-  SynCommons, SyNode, SpiderMonkey;
+  SysUtils,
+  Windows,
+  SynCommons,
+  SyNode,
+  SpiderMonkey;
 
 //const
 //  BUFFER_PROTO_SLOT = JSCLASS_GLOBAL_SLOT_COUNT + 1;
@@ -141,7 +144,6 @@ begin
         if length >= 1 then begin
           PByte(p)^ := PByte(p)^ and $7F;
           Inc(p,1);
-          dec(length, 1);
         end;
 
         vp.rval := JS_NewStringCopyN(cx, Pointer(tmp_str), System.length(tmp_str)).ToJSVal;
@@ -209,7 +211,6 @@ var
   base64TmpRes: RawByteString;
   i: Integer;
   ch: PAnsiChar;
-  UnicodeBuf: SynUnicode;
 begin
   if isLatin1 then
     strLenInBytes := strLen
@@ -525,7 +526,6 @@ function setupBufferJS(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; 
 var
   in_argv: PjsvalVector;
   proto: PJSRootedObject;
-  TypedArrayProto: PJSRootedObject;
 const
   sInvalidCall = 'ussage: setupBufferJS(proto: Object);';
   props = JSPROP_ENUMERATE or JSPROP_ENUMERATE or JSPROP_PERMANENT;
@@ -543,15 +543,6 @@ begin
 
     try
       //set_buffer_prototype_object
-//      TypedArrayProto := cx.NewRootedObject(cx.CurrentGlobalOrNull.ReservedSlot[TypedArraySlotIndex].asObject);
-//      try
-//        if TypedArrayProto.ptr.SetPrototype(cx, proto.ptr) then
-//          argc := 1
-//        else
-//          argc := 2;
-//      finally
-//        cx.FreeRootedObject(TypedArrayProto);
-//      end;
       vp.thisObject[cx].ReservedSlot[0] := proto.ptr.ToJSValue;
       proto.ptr.DefineFunction(cx, 'asciiSlice', asciiSlice, 2, props);
       proto.ptr.DefineFunction(cx, 'base64Slice', base64Slice, 2, props);

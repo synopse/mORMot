@@ -19,6 +19,7 @@ type
     FIsInDestroyState: Boolean;
     function getOldErrorReporterForCurrentThread: JSErrorReporter;
     function getCurrentWorkerThreadIndex: integer;
+    function getCurrentWorkerID: integer;
     function getWorkerThreadIndexByID(ID: Integer): integer;
     function GetDoInteruptInOwnThreadhandlerForCurThread: TThreadMethod;
   public
@@ -31,7 +32,7 @@ type
     function DequeueOutMessageFromThread(aID: Integer; out mess: RawUTF8): Boolean;
     procedure EnqueueInMessageToThread(const mess: RawUTF8; aID: Integer);
     function DequeueInMessageFromCurrentThread(out mess: RawUTF8): Boolean;
-    procedure TerminateThread(aThreadID: TThreadID; aNeedCancelExecution: Boolean = false);
+    procedure TerminateThread(aID: Integer; aNeedCancelExecution: Boolean = false);
     property OldErrorReporterForCurrentThread: JSErrorReporter read getOldErrorReporterForCurrentThread;
     property DoInteruptInOwnThreadhandlerForCurThread: TThreadMethod read GetDoInteruptInOwnThreadhandlerForCurThread;
   end;
@@ -124,9 +125,12 @@ end;
 
 /// Terminate worker from thread. aviable only in worker thread
 function fromWorker_terminate(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  fManager: TJSWorkersManager;
 begin
   try
-    TSMEngine(cx.PrivateData).Manager.WorkersManager.TerminateThread(GetCurrentThreadId);
+    fManager := TSMEngine(cx.PrivateData).Manager.WorkersManager;
+    fManager.TerminateThread(fManager.getCurrentWorkerID);
     Result := True;
   except
     on E: Exception do
@@ -144,7 +148,8 @@ var
 begin
   if cx.GetPendingException(exc) then
     cx.CurrentGlobalOrNull.SetProperty(cx, LAST_ERROR_PROP_NAME, exc);
-  TSMEngine(cx.PrivateData).Manager.WorkersManager.OldErrorReporterForCurrentThread(cx, _message, report);
+  if not TSMEngine(cx.PrivateData).Manager.WorkersManager.FIsInDestroyState then
+    TSMEngine(cx.PrivateData).Manager.WorkersManager.OldErrorReporterForCurrentThread(cx, _message, report);
 end;
 
 procedure TJSWorkerThread.Execute;
@@ -311,7 +316,7 @@ begin
   FPool.Safe.Lock;
   try
     for i := 0 to FPool.Count - 1 do begin
-      TerminateThread(TJSWorkerThread(FPool[i]).ThreadID, True);
+      TerminateThread(TJSWorkerThread(FPool[i]).FID, True);
     end;
   finally
     FPool.Safe.UnLock;
@@ -357,6 +362,21 @@ begin
   end;
 end;
 
+function TJSWorkersManager.getCurrentWorkerID: integer;
+var
+  i: Integer;
+  curThreadID: TThreadID;
+begin
+  Result := -1;
+  curThreadID := GetCurrentThreadId;
+  for i := 0 to FPool.Count - 1 do begin
+    if TJSWorkerThread(FPool[i]).ThreadID = curThreadID then begin
+      Result := TJSWorkerThread(FPool[i]).fID;
+      Exit;
+    end;
+  end;
+end;
+
 function TJSWorkersManager.getCurrentWorkerThreadIndex: integer;
 var
   i: Integer;
@@ -392,6 +412,10 @@ var
   curThreadIndex: Integer;
 begin
   Result := nil;
+  if FIsInDestroyState then begin
+    Result := nil;
+    Exit;
+  end;
   FPool.Safe.Lock;
   try
     curThreadIndex := getCurrentWorkerThreadIndex;
@@ -430,17 +454,17 @@ begin
   end;
 end;
 
-procedure TJSWorkersManager.TerminateThread(aThreadID: TThreadID; aNeedCancelExecution: Boolean = false);
+procedure TJSWorkersManager.TerminateThread(aID: Integer; aNeedCancelExecution: Boolean = false);
 var
   ThreadIndex: Integer;
   thread: TJSWorkerThread;
 begin
   FPool.Safe.Lock;
   try
-    ThreadIndex := getWorkerThreadIndexByID(aThreadID);
+    ThreadIndex := getWorkerThreadIndexByID(aID);
     if ThreadIndex <> -1 then begin
       thread := TJSWorkerThread(FPool[ThreadIndex]);
-      if aNeedCancelExecution then
+      if aNeedCancelExecution and (thread.FEng <> nil) then
         thread.FEng.CancelExecution(False);
       thread.Terminate;
       thread.Suspended := False;

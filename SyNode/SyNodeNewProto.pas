@@ -5,7 +5,7 @@ unit SyNodeNewProto;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
     SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
@@ -29,7 +29,7 @@ unit SyNodeNewProto;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):

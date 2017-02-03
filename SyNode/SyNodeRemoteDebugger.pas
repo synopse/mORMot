@@ -5,7 +5,7 @@ unit SyNodeRemoteDebugger;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
     SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
@@ -595,7 +595,6 @@ end;
 
 function doInterupt(cx: PJSContext): Boolean; cdecl;
 var
-  msg: RawUTF8;
   cmpDbg: PJSCompartment;
   debugger: TSMDebugger;
   engine: TSMEngine;
@@ -609,11 +608,7 @@ begin
       try
         dbgObject := cx.NewRootedObject(engine.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
         try
-          while debugger.fLogQueue.PopFirst(msg) do
-            engine.CallObjectFunction(dbgObject, 'newConsoleMessage', [cx.NewJSString(msg).ToJSVal]);
-
-          while debugger.fMessagesQueue.PopFirst(msg) do
-            engine.CallObjectFunction(dbgObject, 'newMessage', [cx.NewJSString(msg).ToJSVal]);
+          engine.CallObjectFunction(dbgObject, 'doInterupt', []);
         finally
           cx.FreeRootedObject(dbgObject);
         end;
@@ -718,11 +713,17 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
+  Queue: TRawUTF8ListHashedLocked;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  while (debugger.fMessagesQueue <> nil) and (not debugger.fMessagesQueue.PopFirst(msg)) do
+  if (argc = 0) or vp.argv[0].asBoolean then
+    Queue := debugger.fMessagesQueue
+  else
+    Queue := debugger.fLogQueue;
+  msg := '';
+  while ((Queue <> nil) and (not Queue.PopFirst(msg))) and (argc = 0) do
     SleepHiRes(10);
-  result :=  debugger.fMessagesQueue <> nil;
+  result :=  Queue <> nil;
   if Result then
     vp.rval := SimpleVariantToJSval(cx, msg)
   else

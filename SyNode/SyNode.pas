@@ -6,7 +6,7 @@ unit SyNode;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
     SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
@@ -30,7 +30,7 @@ unit SyNode;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -573,7 +573,7 @@ begin
               FBindingObject.ptr.DefineUCProperty(cx, bindingNS, res);
             end;
           end else
-            raise ESMException.Create('Invalid binding namespace ' + bindingNS);
+            raise ESMException.CreateFmt('Invalid binding namespace "%s"',[bindingNS]);
         end;
       end else
         res.SetNull;
@@ -710,6 +710,9 @@ begin
     process.ptr.defineProperty(cx, 'binPath', cx.NewJSString(ExeVersion.ProgramFilePath).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
 
+    process.ptr.defineProperty(cx, 'execPath', cx.NewJSString(ExeVersion.ProgramFileName).ToJSVal,
+      JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
+
     FStartupPath := GetCurrentDir + '\';
     if FStartupPath = '' then
       FStartupPath := ExeVersion.ProgramFilePath;
@@ -747,6 +750,11 @@ begin
     process.ptr.defineProperty(cx, 'platform', cx.NewJSString('win32').ToJSVal);
     {$ELSE}
     process.ptr.defineProperty(cx, 'platform', cx.NewJSString('nix').ToJSVal);
+    {$ENDIF}
+    {$IFDEF CPU64}
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x64').ToJSVal);
+    {$ELSE}
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x32').ToJSVal);
     {$ENDIF}
     with ExeVersion.Version do
       process.ptr.DefineProperty(cx, 'version',
@@ -1250,30 +1258,36 @@ end;
 function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
 var
   aBase, aTail: PChar;
+  localBase, localTail: TFileName;
 begin
   if AFileName <> '' then begin
     if PathIsRelative(PChar(AFileName)) then begin
-      aTail := PChar(AFileName);
-      aBase := PChar(ABaseDir);
+      localTail := AFileName;
+      localBase := ABaseDir;
     end else begin
-      aTail := nil;
-      aBase := PChar(AFileName);
+      localTail := '';
+      localBase := AFileName;
     end;
   end else begin
-    aTail := nil;
-    aBase := PChar(ABaseDir);
+    localTail := '';
+    localBase := ABaseDir;
   end;
+  localBase := StringReplaceChars(localBase, '/', '\');;
+  localTail := StringReplaceChars(localTail, '/', '\');
+  aBase := PChar(LocalBase);
+  aTail := PChar(localTail);
 
   SetLength(Result, MAX_PATH);
+  // PathCombine do not understand '/', so we raplace '/' -> '\' above
   if PathCombine(@Result[1], aBase, aTail) = nil then
     Result := ''
   else
     SetLength(Result, {$ifdef UNICODE}StrLenW{$else}StrLen{$endif}(@Result[1]));
 
-  Result := StringReplaceChars(Result, '/', '\');
+
   if ACheckResultInsideBase and
      ((length(Result) < length(ABaseDir)) or (length(ABaseDir)=0) or
-      (StrLIComp(PChar(@Result[1]), @ABaseDir[1], length(ABaseDir)) <> 0)) then
+      (StrLIComp(PChar(@Result[1]), @localBase[1], length(localBase)) <> 0)) then
     Result := ''
 end;
 
@@ -1296,6 +1310,20 @@ begin
   Result := not fTimedOut;
 end;
 
+// Remove #13 characters from script(change it to #32)
+// Spidermonkey debugger crashes when `...`(new ES6 strings) contains #13#10
+procedure remChar13FromScript(const Script: SynUnicode); {$ifdef HASINLINE} inline; {$endif}
+var c: PWideChar;
+    i: Integer;
+begin
+  c := pointer(script);
+  for I := 1 to Length(script) do begin
+    if (c^ = #13) then
+        c^ := ' ';
+    Inc(c);
+  end;
+end;
+
 procedure TSMEngine.Evaluate(const script: SynUnicode;
   const scriptName: RawUTF8; lineNo: Cardinal; out result: jsval);
 var r: Boolean;
@@ -1309,6 +1337,8 @@ begin
   isFirst := not cx.IsRunning;
   opts := cx.NewCompileOptions;
   opts.filename := Pointer(scriptName);
+
+  remChar13FromScript(script);
   r := cx.EvaluateUCScript(
       opts, pointer(script), length(script), result);
   cx.FreeCompileOptions(opts);
@@ -1340,14 +1370,22 @@ function TSMEngine.CallObjectFunction(obj: PJSRootedObject; funcName: PCChar;
 var r: Boolean;
     isFirst: Boolean;
     rval: jsval;
+    global: PJSRootedObject;
 begin
   TSynFPUException.ForLibraryCode;
   ClearLastError;
   ScheduleWatchdog(fTimeoutValue);
   isFirst := not cx.IsRunning;
   r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-  if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
-    r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+  if r and isFirst then begin
+    global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
+    try
+      if global.ptr.HasProperty(cx, '_timerLoop') then
+        r := global.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    finally
+      cx.FreeRootedObject(global);
+    end;
+  end;
   ScheduleWatchdog(-1);
   CheckJSError(r);
 end;
@@ -1616,6 +1654,8 @@ begin
     try
       opts := cx.NewCompileOptions;
       opts.filename := Pointer(FileName);
+
+      remChar13FromScript(Script);
       Result := cx.EvaluateUCScript(opts, Pointer(Script), Length(Script), res);
       cx.FreeCompileOptions(opts);
       if Result then

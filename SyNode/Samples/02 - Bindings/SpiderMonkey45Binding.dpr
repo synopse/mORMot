@@ -8,6 +8,7 @@ uses
   SpiderMonkey in '..\..\SpiderMonkey.pas',
   SyNode in '..\..\SyNode.pas',
   SyNodeBinding_fs in '..\..\SyNodeBinding_fs.pas',
+  SyNodeBinding_HTTPClient  in '..\..\SyNodeBinding_HTTPClient.pas',
   SyNodeProto in '..\..\SyNodeProto.pas',
   SyNodeRemoteDebugger in '..\..\SyNodeRemoteDebugger.pas',
   SyNodeSimpleProto in '..\..\SyNodeSimpleProto.pas';

@@ -5,7 +5,7 @@ unit SyNodeProto;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
     SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
@@ -121,8 +121,8 @@ type
   TSMCustomProtoObject = class;
   TSMCustomProtoObjectClass = class of TSMCustomProtoObject;
 
- PSMInstanceRecord = ^TSMInstanceRecord;
- TFreeInstanceRecord = procedure (aInstanceRecord: PSMInstanceRecord);
+  PSMInstanceRecord = ^TSMInstanceRecord;
+  TFreeInstanceRecord = procedure (aInstanceRecord: PSMInstanceRecord);
  {$ifdef UNICODE}
   TSMInstanceRecord = record
   {$else}
@@ -161,7 +161,7 @@ type
     FMethodsDA: TDynArrayHashed;
     function GetJSClass: JSClass; virtual;
     procedure InitObject(aParent: PJSRootedObject); virtual;
-    /// Add method to internal FMethods array for futude define it into JS prototype
+    /// Add method to internal FMethods array for future define it into JS prototype
     // to be called only inside InitObject method!
     procedure definePrototypeMethod(const ajsName: SynUnicode; const aCall: JSNative; aNargs: uintN; aFlags: TJSPropertyAttrs);
     property SlotIndex: integer read fSlotIndex;
