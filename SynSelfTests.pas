@@ -6204,9 +6204,9 @@ begin
       P := VariantLoadJSON(Va,P);
       Check(P<>nil);
       Check(Va=a);
-      P := VariantLoadJSON(Va,P);
+      P := VariantLoadJSON(Va,P,nil,nil,true);
       Check(P<>nil);
-      CheckSame(Va,r);
+      CheckSame(VariantToDoubleDef(Va),r);
       P := VariantLoadJSON(Va,P);
       Check(P<>nil);
       Check(Va=c);

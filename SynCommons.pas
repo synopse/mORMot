@@ -2091,6 +2091,9 @@ function VariantToInt64Def(const V: Variant; DefaultValue: Int64): Int64;
 /// convert any numerical Variant into a floating point value
 function VariantToDouble(const V: Variant; var Value: double): boolean;
 
+/// convert any numerical Variant into a floating point value
+function VariantToDoubleDef(const V: Variant; const default: double=0): double; 
+
 /// convert any numerical Variant into a fixed decimals floating point value
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
 
@@ -21598,6 +21601,12 @@ begin
       result := VariantToDouble(variant(tmp),Value) else
       result := false;
   end;
+end;
+
+function VariantToDoubleDef(const V: Variant; const default: double=0): double;
+begin
+  if not VariantToDouble(V,result) then
+    result := default;
 end;
 
 function VariantToCurrency(const V: Variant; var Value: currency): boolean;
