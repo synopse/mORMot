@@ -15471,6 +15471,12 @@ type
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// returns a command line switch value as enumeration ordinal
+    // - RTTI will be used to check for the enumeration text, or plain integer
+    // value will be returned as ordinal value
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+      const Prompt: string): integer;
     /// returns all command line values as an array of UTF-8 text
     // - i.e. won't interpret the various switches in the input parameters
     // - as created e.g. by TCommandLine.CreateAsArray constructor
@@ -15533,6 +15539,12 @@ type
     // - here dates are expected to be encoded with ISO-8601, i.e. YYYY-MM-DD
     // - you can specify a prompt text, when asking for any missing switch
     function AsDate(const Switch: RawUTF8; Default: TDateTime; const Prompt: string): TDateTime;
+    /// returns a command line switch value as enumeration ordinal
+    // - RTTI will be used to check for the enumeration text, or plain integer
+    // value will be returned as ordinal value
+    // - you can specify a prompt text, when asking for any missing switch
+    function AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+      const Prompt: string): integer;
     /// returns all command line values as an array of UTF-8 text
     // - i.e. won't interpret the various switches in the input parameters
     // - as created e.g. by TCommandLine.CreateAsArray constructor
@@ -51131,12 +51143,8 @@ begin
     fValues.Delete(i);
     exit;
   end;
-  if fNoPrompt then begin
-    result := Default;
-    exit;
-  end;
-  result := '';
-  if Prompt='' then
+  result := Default;
+  if fNoPrompt or (Prompt='') then
     exit;
   TextColor(ccLightGray);
   {$I-}
@@ -51179,6 +51187,15 @@ begin
   result := Iso8601ToDateTime(res);
   if result=0 then
     result := Default;
+end;
+
+function TCommandLine.AsEnum(const Switch, Default: RawUTF8; TypeInfo: pointer;
+  const Prompt: string): integer;
+var res: RawUTF8;
+begin
+  res := AsUTF8(Switch, Default, Prompt);
+  if not ToInteger(res,result) then
+    result := GetEnumNameValue(TypeInfo,pointer(res),length(res),true);
 end;
 
 function TCommandLine.AsArray: TRawUTF8DynArray;
