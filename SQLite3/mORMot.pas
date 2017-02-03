@@ -53525,15 +53525,17 @@ begin
         end else
           ParamName := @VMP^.Name;
         P := AlignToPtr(PByte(@VMP^.Name[0])+SizeOf(VMP^.Name[0])+Length(VMP^.Name));
-        Inc(PParameterLocation(P),PParameterLocations(P).Count);
-        Inc(PParameterLocations(P));
-        P:=AlignToPtr(P);
+        P := PByte(AlignToPtr(PByte(@PParameterLocations(P).Count)
+               + SizeOf(PParameterLocations(P).Count)))
+               + SizeOf(TParameterLocation) * PParameterLocations(P).Count;
+        P := AlignToPtr(P);
       end;
       if aResultType<>nil then
       begin
-        Inc(PParameterLocation(P),PParameterLocations(P).Count);
-        Inc(PParameterLocations(P));
-        P:=AlignToPtr(P);
+        P := PByte(AlignToPtr(PByte(@PParameterLocations(P).Count)
+               + SizeOf(PParameterLocations(P).Count)))
+               + SizeOf(TParameterLocation) * PParameterLocations(P).Count;
+        P := AlignToPtr(P);
       end;
       {$else FPC} // Delphi code
       with Args[a] do begin
