@@ -909,10 +909,10 @@ begin
   result := '*'; // no frame URI by default
 end;
 
-function TWebSocketProtocol.ProcessHandshake(const ExtIn: TRawUTF8DynArray; out ExtOut: RawUTF8;
-  ErrorMsg: PRawUTF8): boolean;
+function TWebSocketProtocol.ProcessHandshake(const ExtIn: TRawUTF8DynArray;
+  out ExtOut: RawUTF8; ErrorMsg: PRawUTF8): boolean;
 begin
-  result := false; // abort negotiation in case of any extension
+  result := true; // just ignore any unknown extension
 end;
 
 function TWebSocketProtocol.SendFrames(Owner: TWebSocketProcess;
@@ -1558,7 +1558,7 @@ var res: TProtocolResult;
     synhk: boolean;
     i: integer;
 begin
-  result := inherited ProcessHandshake(ExtIn,ExtOut,ErrorMsg);
+  result := false;
   if fEncryption=nil then
     exit;
   synhk := false;
@@ -1581,11 +1581,12 @@ begin
     exit;
   end;
   sprUnsupported:
-    if not synhk then
+    if not synhk then begin
+      result := true; // try to continue execution
       exit;
+    end;
   end;
   WebSocketLog.Add.Log(sllWarning,'ProcessHandshake=% In=[%]',[ToText(res)^,msgin],self);
-  result := false;
   if ErrorMsg<>nil then
     ErrorMsg^ := FormatUTF8('%: %',[ErrorMsg^,
       GetCaptionFromEnum(TypeInfo(TProtocolResult),ord(res))]);
@@ -2577,7 +2578,7 @@ begin
         'Upgrade: websocket'#13#10'Sec-WebSocket-Key: ',bin1,#13#10+
         'Sec-WebSocket-Protocol: ',protocol.GetSubprotocols,#13#10+
         'Sec-WebSocket-Version: 13']);
-      if protocol.ProcessHandshake(nil,extout,nil) then
+      if protocol.ProcessHandshake(nil,extout,nil) and (extout<>'') then
         SockSend(['Sec-WebSocket-Extensions: ',extout]);
       SockSend;
       SockSendFlush;
