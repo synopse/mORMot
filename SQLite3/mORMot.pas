@@ -14939,6 +14939,7 @@ type
     /// able to set the PasswordHashHexa field from a plain password content
     // - in fact, PasswordHashHexa := SHA256('salt'+PasswordPlain) in UTF-8
     // - use SetPassword() method if you want to customize the hash salt value
+    // and use the much safer PBKDF2_HMAC_SHA256 algorithm
     property PasswordPlain: RawUTF8 write SetPasswordPlain;
     /// set the PasswordHashHexa field from a plain password content and salt
     // - use this method to specify aHashSalt/aHashRound values, enabling
@@ -40950,13 +40951,26 @@ begin
   Ctxt.Call.OutBody := '["OK"]';  // to save bandwith if no adding
 end;
 
+var
+  ServerNonceHmac: THMAC_SHA256;
+
 function ServerNonce(Previous: boolean): RawUTF8;
 var Ticks: cardinal;
+    rnd: THash128;
+    hmac: THMAC_SHA256;
+    res: THash256;
 begin
-  Ticks := GetTickCount64 div (1000*60*5); // valid for 5*60*1000 ms = 5 minutes
+  Ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
   if Previous then
     dec(Ticks);
-  result := SHA256(@Ticks,sizeof(Ticks)); // naive but sufficient nonce
+  while PInteger(@ServerNonceHmac)^=0 do begin
+    TAESPRNG.Main.Fill(rnd); // ensure unpredictable nonce
+    ServerNonceHmac.Init(@rnd,sizeof(rnd));
+  end;
+  hmac := ServerNonceHmac;
+  hmac.Update(@Ticks,sizeof(Ticks));
+  hmac.Done(res,true);
+  result := SHA256DigestToString(res);
 end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
