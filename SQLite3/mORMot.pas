@@ -4191,6 +4191,9 @@ const
     Size: sizeof(TGUID);
     Count: 0);
 
+/// returns the interface name of a registered GUID, or its hexadecimal value
+function ToText(const aGUID: TGUID): TGUIDShortString; overload;
+
 /// retrieve a Field property RTTI information from a Property Name
 function ClassFieldProp(ClassType: TClass; const PropName: shortstring): PPropInfo;
 
@@ -52667,6 +52670,15 @@ begin
     InterfaceFactoryCache.Safe.UnLock;
   end;
   result := nil;
+end;
+
+function ToText(const aGUID: TGUID): TGUIDShortString;
+var fact: TInterfaceFactory;
+begin
+  fact := TInterfaceFactory.Get(aGUID);
+  if fact=nil then
+    GUIDToShort(aGUID,result) else
+    result := fact.fInterfaceTypeInfo^.Name;
 end;
 
 class procedure TInterfaceFactory.AddToObjArray(var Obj: TInterfaceFactoryObjArray;
