@@ -6148,7 +6148,14 @@ const
 // - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
 // - using a shortstring will allow fast allocation on the stack, so is
 // preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
-function GUIDToShort(const guid: TGUID): TGUIDShortString;
+function GUIDToShort(const guid: TGUID): TGUIDShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TGUID into text
+// - will return e.g. '{3F2504E0-4F89-11D3-9A0C-0305E82C3301}' (with the {})
+// - using a shortstring will allow fast allocation on the stack, so is
+// preferred e.g. when providing a GUID to a ESynException.CreateUTF8()
+procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString); overload;
 
 /// convert some text into its TGUID binary value
 // - expect e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301' (without any {})
@@ -33517,10 +33524,15 @@ end;
 
 function GUIDToShort(const guid: TGUID): TGUIDShortString;
 begin
-  result[0] := #38;
-  result[1] := '{';
-  result[38] := '}';
-  GUIDToText(@result[2],@guid);
+  GUIDToShort(guid,result);
+end;
+
+procedure GUIDToShort(const guid: TGUID; out dest: TGUIDShortString); 
+begin
+  dest[0] := #38;
+  dest[1] := '{';
+  dest[38] := '}';
+  GUIDToText(@dest[2],@guid);
 end;
 
 function GUIDToString(const guid: TGUID): string;
