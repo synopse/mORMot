@@ -533,7 +533,7 @@ type
     function StatsAsJson: RawUTF8;
     /// will pause any communication with the associated socket
     // - could be used before stopping the service for cleaner shutdown
-    procedure Shutdown;
+    procedure Shutdown(andTerminate: boolean); virtual;
     /// the parameters used to setup this thread process
     property Settings: TDDDSocketThreadSettings read fSettings;
   published
@@ -1244,12 +1244,16 @@ begin // CachedMemory method will also purge any outdated cached entries
   fPreviousMonitorTix := GetTickCount64;
 end;
 
-procedure TDDDSocketThread.Shutdown;
+procedure TDDDSocketThread.Shutdown(andTerminate: boolean);
 begin
   if (self <> nil) and not fSocketDisable then begin
     fSocketDisable := true;
     fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
       'with %:%', [ClassType, fHost, fPort], self);
+    if andTerminate then begin
+      sleep(100);
+      Terminate;
+    end;
   end;
 end;
 
