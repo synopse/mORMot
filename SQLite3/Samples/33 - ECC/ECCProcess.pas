@@ -449,6 +449,7 @@ var issuer, authpass, savepass, constname, comment: RawUTF8;
     authrounds, days, saverounds, splitfiles: integer;
     msg: string;
     origfile,auth,newfile: TFileName;
+    algo: TECIESAlgo;
     decrypt: TECCDecrypt;
     decryptsign: TECCSignatureCertifiedContent;
 begin
@@ -604,13 +605,15 @@ begin
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for encryption.');
       authrounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
-      ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds);
+      algo := TECIESAlgo(sw.AsEnum('Algo', '0', TypeInfo(TECIESAlgo), ''));
+      ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds,algo);
     end;
     ecInfoCrypt: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the encrypted file.');
       until FileExists(origfile) or sw.NoPrompt;
-      sw.Text('%',[JSONReformat(ECIESHeaderText(origfile))]);
+      newfile := sw.AsString('RawFile','','');
+      sw.Text('%',[JSONReformat(ECIESHeaderText(origfile,newfile))]);
     end;
     ecDecrypt: begin
       repeat

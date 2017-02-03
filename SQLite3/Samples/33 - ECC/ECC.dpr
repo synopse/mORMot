@@ -72,12 +72,12 @@ begin
       ' chainall');
     writeln(ExeVersion.ProgramName,
       ' crypt -file some.doc -out some.doc.synecc -auth key.public'#13#10+
-      '      -saltpass salt -saltrounds 60000');
+      '      -saltpass salt -saltrounds 60000 [-algo 0]');
     writeln(ExeVersion.ProgramName,
       ' decrypt -file some.doc.synecc -out some.doc -auth key.private'#13#10+
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' infocrypt -file some.doc.synecc');
+      ' infocrypt -file some.doc.synecc [-rawfile some.doc.raw]');
     writeln(ExeVersion.ProgramName,
       ' cheatinit -newpass MasterP@ssw0RD@ -newrounds 100000');
     writeln(ExeVersion.ProgramName,
