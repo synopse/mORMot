@@ -10547,6 +10547,11 @@ procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
 /// fast conversion from binary data into hexa chars, ready to be displayed
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+type
+  /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
+  // - such result type would avoid a string allocation on heap
+  TShort16 = string[16];
+
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function PointerToHex(aPointer: Pointer): RawUTF8; overload;
@@ -10555,10 +10560,20 @@ function PointerToHex(aPointer: Pointer): RawUTF8; overload;
 // - use internally BinToHexDisplay()
 procedure PointerToHex(aPointer: Pointer; var result: RawUTF8); overload;
 
+/// fast conversion from a pointer data into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+// - such result type would avoid a string allocation on heap
+function PointerToHexShort(aPointer: Pointer): TShort16; overload;
+
 /// fast conversion from a Cardinal value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToCardinal()
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
+
+/// fast conversion from a Cardinal value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+// - such result type would avoid a string allocation on heap
+function CardinalToHexShort(aCardinal: Cardinal): TShort16;
 
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
@@ -10569,6 +10584,11 @@ function Int64ToHex(aInt64: Int64): RawUTF8; overload;
 // - use internally BinToHexDisplay()
 // - reverse function of HexDisplayToInt64()
 procedure Int64ToHex(aInt64: Int64; var result: RawUTF8); overload;
+
+/// fast conversion from a Int64 value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+// - such result type would avoid a string allocation on heap
+function Int64ToHexShort(aInt64: Int64): TShort16;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -10823,24 +10843,24 @@ function UInt4DigitsToUTF8(Value: Cardinal): RawUTF8;
 type
   /// used e.g. by UInt4DigitsToShort/UInt3DigitsToShort/UInt2DigitsToShort
   // - such result type would avoid a string allocation on heap
-  Short4 = string[4];
+  TShort4 = string[4];
 
 /// creates a 4 digits short string from a 0..9999 value
-// - using Short4 as returned string would avoid a string allocation on heap
+// - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
-function UInt4DigitsToShort(Value: Cardinal): Short4;
+function UInt4DigitsToShort(Value: Cardinal): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 3 digits short string from a 0..999 value
-// - using Short4 as returned string would avoid a string allocation on heap
+// - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
-function UInt3DigitsToShort(Value: Cardinal): Short4;
+function UInt3DigitsToShort(Value: Cardinal): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// creates a 2 digits short string from a 0..99 value
-// - using Short4 as returned string would avoid a string allocation on heap
+// - using TShort4 as returned string would avoid a string allocation on heap
 // - could be used e.g. as parameter to FormatUTF8()
-function UInt2DigitsToShort(Value: byte): Short4;
+function UInt2DigitsToShort(Value: byte): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// compare to floating point values, with IEEE 754 double precision
@@ -26300,26 +26320,44 @@ end;
 
 function PointerToHex(aPointer: Pointer): RawUTF8;
 begin
-  FastNewRawUTF8(result,sizeof(Pointer)*2);
-  BinToHexDisplay(aPointer,pointer(result),sizeof(Pointer));
+  FastNewRawUTF8(result,sizeof(aPointer)*2);
+  BinToHexDisplay(aPointer,pointer(result),sizeof(aPointer));
 end;
 
 function CardinalToHex(aCardinal: Cardinal): RawUTF8;
 begin
-  FastNewRawUTF8(result,sizeof(Cardinal)*2);
-  BinToHexDisplay(@aCardinal,pointer(result),sizeof(Cardinal));
+  FastNewRawUTF8(result,sizeof(aCardinal)*2);
+  BinToHexDisplay(@aCardinal,pointer(result),sizeof(aCardinal));
 end;
 
 function Int64ToHex(aInt64: Int64): RawUTF8;
 begin
   FastNewRawUTF8(result,sizeof(Int64)*2);
-  BinToHexDisplay(@AInt64,pointer(result),sizeof(Int64));
+  BinToHexDisplay(@aInt64,pointer(result),sizeof(Int64));
 end;
 
 procedure Int64ToHex(aInt64: Int64; var result: RawUTF8);
 begin
   FastNewRawUTF8(result,sizeof(Int64)*2);
-  BinToHexDisplay(@AInt64,pointer(result),sizeof(Int64));
+  BinToHexDisplay(@aInt64,pointer(result),sizeof(Int64));
+end;
+
+function PointerToHexShort(aPointer: Pointer): TShort16;
+begin
+  result[0] := AnsiChar(sizeof(aPointer)*2);
+  BinToHexDisplay(@aPointer,@result[1],sizeof(aPointer));
+end;
+
+function CardinalToHexShort(aCardinal: Cardinal): TShort16;
+begin
+  result[0] := AnsiChar(sizeof(aCardinal)*2);
+  BinToHexDisplay(@aCardinal,@result[1],sizeof(aCardinal));
+end;
+
+function Int64ToHexShort(aInt64: Int64): TShort16;
+begin
+  result[0] := AnsiChar(sizeof(aInt64)*2);
+  BinToHexDisplay(@aInt64,@result[1],sizeof(aInt64));
 end;
 
 type TWordRec = packed record YDiv100, YMod100: byte; end;
@@ -26384,19 +26422,19 @@ begin
   YearToPChar(Value,pointer(result));
 end;
 
-function UInt4DigitsToShort(Value: Cardinal): Short4;
+function UInt4DigitsToShort(Value: Cardinal): TShort4;
 begin
   result[0] := #4;
   YearToPChar(Value,@result[1]);
 end;
 
-function UInt3DigitsToShort(Value: Cardinal): Short4;
+function UInt3DigitsToShort(Value: Cardinal): TShort4;
 begin
   YearToPChar(Value,@result[0]);
   result[0] := #3; // override first digit
 end;
 
-function UInt2DigitsToShort(Value: byte): Short4;
+function UInt2DigitsToShort(Value: byte): TShort4;
 begin
   result[0] := #2;
   if Value>99 then
