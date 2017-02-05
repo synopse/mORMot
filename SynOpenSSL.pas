@@ -83,10 +83,8 @@ const
   SSL_ERROR_ZERO_RETURN = 6;
   SSL_ERROR_WANT_CONNECT = 7;
   SSL_ERROR_WANT_ACCEPT = 8;
-
-  SSL_ERROR_NOT_FATAL = [SSL_ERROR_NONE,
-    SSL_ERROR_WANT_READ, SSL_ERROR_WANT_WRITE,
-		SSL_ERROR_WANT_CONNECT, SSL_ERROR_WANT_ACCEPT];
+  SSL_ERROR_NOT_FATAL =[SSL_ERROR_NONE, SSL_ERROR_WANT_READ,
+    SSL_ERROR_WANT_WRITE, SSL_ERROR_WANT_CONNECT, SSL_ERROR_WANT_ACCEPT];
 
   SSL_ST_CONNECT = $1000;
   SSL_ST_ACCEPT = $2000;
@@ -100,18 +98,17 @@ const
   SSL_OP_NO_SSLv2 = $01000000;
   SSL_OP_NO_SSLv3 = $02000000;
   SSL_OP_NO_COMPRESSION = $00020000;
-
   SSL_OP_DONT_INSERT_EMPTY_FRAGMENTS = $00000800;
 
   BIO_CTRL_INFO = 3;
   BIO_CTRL_PENDING = 10;
   SSL_CTRL_OPTIONS = 32;
   SSL_VERIFY_NONE = $00;
-
   CRYPTO_LOCK = 1;
   CRYPTO_UNLOCK = 2;
   CRYPTO_READ = 4;
   CRYPTO_WRITE = 8;
+  EVP_OK = 1;
 
   BIO_FLAGS_READ = 1;
   BIO_FLAGS_WRITE = 2;
@@ -121,8 +118,6 @@ const
   BIO_NOCLOSE = 0;
   BIO_CLOSE = 1;
 
-  EVP_OK = 1;
-
 type
   {$ifdef CPU64}
   size_t = UInt64;
@@ -130,41 +125,19 @@ type
   size_t = cardinal;
   {$endif}
 
-  TSSL_METHOD = packed record
-  end;
-  PSSL_METHOD = ^TSSL_METHOD;
-
-  TSSL_CTX = packed record
-  end;
-  PSSL_CTX = ^TSSL_CTX;
-
-  TBIO = packed record
-  end;
-  PBIO = ^TBIO;
+  PSSL_METHOD = type pointer;
+  PSSL_CTX = type pointer;
+  PBIO = type pointer;
   PPBIO = ^PBIO;
-
-  TSSL = packed record
-  end;
-  PSSL = ^TSSL;
-
-  TX509_STORE = packed record
-  end;
-  PX509_STORE = ^TX509_STORE;
-
-  TEVP_PKEY = packed record
-  end;
-  PEVP_PKEY = ^TEVP_PKEY;
+  PSSL = type pointer;
+  PX509_STORE = type pointer;
+  PEVP_PKEY = type pointer;
   PPEVP_PKEY = ^PEVP_PKEY;
-  PEVP_PKEY_CTX = pointer;
-
-  PEVP_MD_CTX = pointer;
-  PEVP_MD = pointer;
-
-  ENGINE = pointer;
-
-  TX509 = packed record
-  end;
-  PX509 = ^TX509;
+  PEVP_PKEY_CTX = type pointer;
+  PEVP_MD_CTX = type pointer;
+  PEVP_MD = type pointer;
+  ENGINE = type pointer;
+  PX509 = type pointer;
   PPX509 = ^PX509;
 
   TASN1_STRING = record
@@ -174,16 +147,16 @@ type
     flags: Longword;
   end;
   PASN1_STRING = ^TASN1_STRING;
+
   TASN1_OCTET_STRING = TASN1_STRING;
   PASN1_OCTET_STRING = ^TASN1_OCTET_STRING;
+
   TASN1_BIT_STRING = TASN1_STRING;
   PASN1_BIT_STRING = ^TASN1_BIT_STRING;
 
   TSetVerify_cb = function(Ok: integer; StoreCtx: PX509_STORE): integer; cdecl;
 
-  TCRYPTO_THREADID = packed record
-  end;
-  PCRYPTO_THREADID = ^TCRYPTO_THREADID;
+  PCRYPTO_THREADID = type pointer;
 
   TCRYPTO_dynlock_value = record
     Mutex: TRTLCriticalSection;
@@ -191,32 +164,24 @@ type
     _padding: array[0..95] of Byte;
   end;
   PCRYPTO_dynlock_value = ^TCRYPTO_dynlock_value;
-  CRYPTO_dynlock_value  = TCRYPTO_dynlock_value;
 
-  TBIO_METHOD = packed record
-  end;
-  PBIO_METHOD = ^TBIO_METHOD;
+  PBIO_METHOD = type pointer;
+  PX509_NAME = type pointer;
+  PSTACK = type pointer;
+  PASN1_OBJECT = type pointer;
 
-  TX509_NAME = packed record
-  end;
-  PX509_NAME = ^TX509_NAME;
-
-  TSTACK = packed record
-  end;
-  PSTACK = ^TSTACK;
-
-  TASN1_OBJECT = packed record
-  end;
-  PASN1_OBJECT = ^TASN1_OBJECT;
-
-  TStatLockLockCallback = procedure(Mode: integer; N: integer; _file: PAnsiChar; Line: integer); cdecl;
+  TStatLockLockCallback = procedure(Mode: integer; N: integer; _file: PAnsiChar;
+    Line: integer); cdecl;
   TStatLockIDCallback = function: Longword; cdecl;
   TCryptoThreadIDCallback = procedure(ID: PCRYPTO_THREADID); cdecl;
-
-  TDynLockCreateCallback = function(_file: PAnsiChar; Line: integer): PCRYPTO_dynlock_value; cdecl;
-  TDynLockLockCallback = procedure(Mode: integer; L: PCRYPTO_dynlock_value; _file: PAnsiChar; Line: integer); cdecl;
-  TDynLockDestroyCallback = procedure(L: PCRYPTO_dynlock_value; _file: PAnsiChar; Line: integer); cdecl;
-  pem_password_cb = function(buf: pointer; size: integer; rwflag: integer; userdata: pointer): integer; cdecl;
+  TDynLockCreateCallback = function(_file: PAnsiChar; Line: integer):
+    PCRYPTO_dynlock_value; cdecl;
+  TDynLockLockCallback = procedure(Mode: integer; L: PCRYPTO_dynlock_value;
+    _file: PAnsiChar; Line: integer); cdecl;
+  TDynLockDestroyCallback = procedure(L: PCRYPTO_dynlock_value; _file: PAnsiChar;
+    Line: integer); cdecl;
+  pem_password_cb = function(buf: pointer; size: integer; rwflag: integer;
+    userdata: pointer): integer; cdecl;
 
 type
   /// low-level exception raised during OpenSSL library access
@@ -228,7 +193,8 @@ type
   TOpenSSLBytes = AnsiString;
   {$endif}
 
-  /// direct access to the OpenSSL library
+  {$M+}
+  /// direct access to the OpenSSL API
   // - this wrapper will initialize both libcrypto and libssl libraries
   TOpenSSLLib = class
   public
@@ -327,7 +293,7 @@ type
     SSL_state: function(s: PSSL): integer; cdecl;
     SSL_pending: function(s: PSSL): integer; cdecl;
     SSL_set_cipher_list: function(s: PSSL; ciphers: PAnsiChar): integer; cdecl;
-    SSL_get0_alpn_selected: procedure (s: PSSL; out data: PAnsiChar; out len: integer); cdecl;
+    SSL_get0_alpn_selected: procedure(s: PSSL; out data: PAnsiChar; out len: integer); cdecl;
     SSL_clear: function(s: PSSL): integer; cdecl;
     // aliases
     EVP_DigestVerifyUpdate: function(ctx: PEVP_MD_CTX; d: pointer; cnt: cardinal): integer; cdecl;
@@ -336,7 +302,8 @@ type
     sk_GENERAL_NAME_pop: function(stack: PSTACK): pointer; cdecl; // = sk_pop
     // helper functions
     function BIO_pending(bp: PBIO): integer; {$ifdef HASINLINE}inline;{$endif}
-    function BIO_get_mem_data(bp: PBIO; parg: pointer): integer; {$ifdef HASINLINE}inline;{$endif}
+    function BIO_get_mem_data(bp: PBIO; parg: pointer): integer;
+      {$ifdef HASINLINE}inline;{$endif}
     function BIO_get_flags(b: PBIO): integer; {$ifdef HASINLINE}inline;{$endif}
     function BIO_should_retry(b: PBIO): boolean; {$ifdef HASINLINE}inline;{$endif}
     function SSL_CTX_set_options(ctx: pointer; op: integer): integer;
@@ -351,8 +318,8 @@ type
       certlen, privlen: integer; const password: string = ''); overload;
     function EVP_sha256_sign(msg, privkey: pointer; msglen, privkeylen: integer;
       const password: string = ''): TOpenSSLBytes;
-    function EVP_sha256_verify(msg, pubkey, sign: pointer;
-      msglen, pubkeylen, signlen: integer; const password: string = ''): boolean;
+    function EVP_sha256_verify(msg, pubkey, sign: pointer; msglen, pubkeylen, signlen: integer;
+      const password: string = ''): boolean;
   public
     /// load the OpenSSL libraries
     // - and retrieve all needed procedure addresses for libcrypto/libssl
@@ -364,7 +331,7 @@ type
     property LibCrypto: HMODULE read fLibCrypto write fLibCrypto;
     /// the associated libssl library handle
     property LibSSL: HMODULE read fLibSSL write fLibSSL;
-    /// we allow some APLN-related missing entries in the loaded API 
+    /// we allow some APLN-related missing entries in the loaded API
     property APLNNotSupported: boolean read fAPLNNotSupported;
   published
     /// the version information about the loaded library
@@ -372,6 +339,7 @@ type
     /// the loaded libray path name
     property LibPath: TFileName read fLibPath;
   end;
+  {$M-}
 
 var
   /// global expected location of the OpenSSL .dll / .so files
@@ -393,7 +361,7 @@ procedure TryLoadOpenSSL;
 /// access to a shared OpenSSL library functions
 // - will load and initialize it, if necessary, looking in the OpenSSLFolderName
 // - raises a EOpenSSL if the library is not available
-function OpenSSL: TOpenSSLLib; {$ifdef HASINLINE}inline;{$endif}
+function OpenSSL: TOpenSSLLib; {$ifdef HASINLINE} inline;{$endif}
 
 /// return TRUE if a shared OpenSSL library functions is available
 // - will load and initialize it, if necessary, looking in the OpenSSLFolderName
@@ -402,6 +370,71 @@ function OpenSSLAvailable: boolean;
 
 { -------------- TOpenSSL* high-level wrapper classes and types }
 
+type
+  {$M+}
+  TOpenSSLConnectionClient = class;
+  {$M-}
+
+  /// the actual state of a TOpenSSLConnectionClient instance
+  TOpenSSLConnectionState = (
+    ocsConnecting, ocsHandshake, ocsConnected, ocsDisconnecting, ocsDisconnected);
+
+  /// defines the states of a TOpenSSLConnectionClient instance
+  TOpenSSLConnectionStates = set of TOpenSSLConnectionState;
+
+  /// event raised when an Open SSL connection state changed
+  TOnOpenSSLNotify = procedure(Sender: TOpenSSLConnectionClient) of object;
+
+  /// event raised when reading or writing some data over an Open SSL connection
+  // - Sender will actually be a TOpenSSLConnectionClient instance, but is 
+  // defined as a TObject so that it may be implemented on a class without any
+  // dependency to the SynOpenSSL unit
+  TOnOpenSSLData = procedure(Sender: TObject; Buffer: pointer; Len: integer) of object;
+
+  /// the minimum TLS connection level expected at connection
+  TOpenSSLConnectionLevel = (ssl23, tls10, tls11, tls12, tls12_h2);
+
+  TOpenSSLConnectionOption = (ocoNoCertificateValidation);
+  TOpenSSLConnectionOptions = set of TOpenSSLConnectionOption;
+
+  /// implements a TLS secure client connection
+  TOpenSSLConnectionClient = class
+  protected
+    fState: TOpenSSLConnectionState;
+    fLevel: TOpenSSLConnectionLevel;
+    fOptions: TOpenSSLConnectionOptions;
+    fOnNotifyStates: TOpenSSLConnectionStates;
+    fOnNotify: TOnOpenSSLNotify;
+    fOnRead: TOnOpenSSLData;
+    fOnWrite: TOnOpenSSLData;
+    fSSL_CTXT: PSSL_CTX;
+    fSSL: PSSL;
+    procedure SetState(State: TOpenSSLConnectionState); virtual;
+  public
+    /// the specified event will be notified according to a set of connection state
+    // - if States is [], all states will be notified
+    procedure SetNotify(States: TOpenSSLConnectionStates; const OnNotify: TOnOpenSSLNotify);
+    /// initiates a client TLS connection
+    // - Read/Write callbacks will be used to actually receive/send data from
+    // a server socket
+    // - by default, a TLS 1.0 minimum level is defined, since SSL 2/3 are unsafe
+    function Connect(const Read, Write: TOnOpenSSLData; Level: TOpenSSLConnectionLevel = tls10;
+      Options: TOpenSSLConnectionOptions = []): boolean;
+    /// read some data from the secured SSL connection 
+    procedure SecureRead(Buffer: pointer; Len: integer);
+    /// write some data to the secured SSL connection 
+    function SecureWrite(Buffer: pointer; Len: integer): boolean;
+    /// closes a client TSL connection
+    procedure Disconnect;
+  published
+    /// the current state of this connection
+    property State: TOpenSSLConnectionState read fState;
+    /// the TLS level specified to the Connect method
+    // - actual connection level may be of higher level
+    property Level: TOpenSSLConnectionLevel read fLevel;
+    /// the TLS options specified to the Connect method
+    property Options: TOpenSSLConnectionOptions read fOptions;
+  end;
 
 
 implementation
@@ -411,25 +444,26 @@ implementation
 procedure TryLoadOpenSSL;
 begin
   case TryLoadOpenSSLState of
-  ossNotTested: begin
-    TryLoadOpenSSLState := ossNotAvailable;
-    SharedOpenSSL := TOpenSSLLib.Create(OpenSSLFolderName);
-    TryLoadOpenSSLState := ossAvailable;
-  end;
-  ossNotAvailable:
-    raise EOpenSSL.Create('No OpenSSL available'); // test once
+    ossNotTested:
+      begin
+        TryLoadOpenSSLState := ossNotAvailable;
+        SharedOpenSSL := TOpenSSLLib.Create(OpenSSLFolderName);
+        TryLoadOpenSSLState := ossAvailable;
+      end;
+    ossNotAvailable:
+      raise EOpenSSL.Create('No OpenSSL available'); // test once
   end;
 end;
 
 function OpenSSLAvailable: boolean;
 begin
   if TryLoadOpenSSLState = ossNotTested then
-    try
-      TryLoadOpenSSL;
-      result := true;
-    except
-      result := false;
-    end
+  try
+    TryLoadOpenSSL;
+    result := true;
+  except
+    result := false;
+  end
   else
     result := TryLoadOpenSSLState = ossAvailable;
 end;
@@ -450,49 +484,49 @@ const
   LIBCRYPTO_NAME = 'libcrypto.so.1.0.0';
   {$endif}
 
-  LIBCRYPTO_ENTRIES: array[0..50] of PChar =
-    ('CRYPTO_num_locks', 'CRYPTO_set_locking_callback', 'CRYPTO_set_dynlock_create_callback',
-     'CRYPTO_set_dynlock_lock_callback', 'CRYPTO_set_dynlock_destroy_callback',
-     'CRYPTO_cleanup_all_ex_data', 'ERR_remove_state', 'ERR_free_strings',
-     'ERR_error_string_n', 'ERR_get_error', 'ERR_remove_thread_state', 'ERR_load_BIO_strings',
-     'EVP_cleanup', 'EVP_PKEY_free', 'BIO_new', 'BIO_ctrl', 'BIO_set_flags', 'BIO_test_flags',
-     'BIO_clear_flags', 'BIO_new_mem_buf', 'BIO_free', 'BIO_s_mem', 'BIO_read', 'BIO_write',
-     'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name', 'X509_free',
-     'X509_NAME_print_ex', 'sk_num', 'sk_pop', 'ASN1_BIT_STRING_get_bit',
-     'OBJ_obj2nid', 'OBJ_nid2sn', 'ASN1_STRING_data', 'PEM_read_bio_X509',
-     'PEM_read_bio_PrivateKey', 'PEM_read_bio_RSAPrivateKey', 'PEM_read_bio_PUBKEY',
-     'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
-     'EVP_sha256', 'EVP_PKEY_size', 'EVP_DigestSignInit',
-     'EVP_DigestUpdate', 'EVP_DigestSignFinal', 'EVP_DigestVerifyInit',
-     'EVP_DigestVerifyFinal', 'CRYPTO_malloc', 'CRYPTO_free', 'SSLeay_version');
-  LIBSSL_ENTRIES: array[0..37] of PChar =
-    ('SSL_library_init', 'SSL_load_error_strings', 'SSLv3_method', 'SSLv23_method',
-     'TLSv1_method', 'TLSv1_1_method', 'TLSv1_2_method', 'SSL_CTX_new',
-     'SSL_CTX_free', 'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey',
-     'SSL_CTX_use_RSAPrivateKey', 'SSL_CTX_use_certificate',
-     'SSL_CTX_check_private_key', 'SSL_CTX_use_certificate_file',
-     'SSL_CTX_use_RSAPrivateKey_file', 'SSL_CTX_get_cert_store',
-     'SSL_CTX_ctrl', 'SSL_CTX_load_verify_locations',
-     'SSL_CTX_use_certificate_chain_file', 'SSL_CTX_set_alpn_protos',
-     'SSL_new', 'SSL_get_version', 'SSL_set_bio',
-     'SSL_get_peer_certificate', 'SSL_get_error', 'SSL_shutdown',
-     'SSL_free', 'SSL_connect', 'SSL_set_connect_state', 'SSL_set_accept_state',
-     'SSL_read', 'SSL_write', 'SSL_state', 'SSL_pending', 'SSL_set_cipher_list',
-     'SSL_get0_alpn_selected', 'SSL_clear');
+  LIBCRYPTO_ENTRIES: array[0..50] of PChar = ('CRYPTO_num_locks',
+    'CRYPTO_set_locking_callback', 'CRYPTO_set_dynlock_create_callback',
+    'CRYPTO_set_dynlock_lock_callback', 'CRYPTO_set_dynlock_destroy_callback',
+    'CRYPTO_cleanup_all_ex_data', 'ERR_remove_state', 'ERR_free_strings',
+    'ERR_error_string_n', 'ERR_get_error', 'ERR_remove_thread_state',
+    'ERR_load_BIO_strings', 'EVP_cleanup', 'EVP_PKEY_free', 'BIO_new',
+    'BIO_ctrl', 'BIO_set_flags', 'BIO_test_flags', 'BIO_clear_flags',
+    'BIO_new_mem_buf', 'BIO_free', 'BIO_s_mem', 'BIO_read', 'BIO_write',
+    'BIO_new_socket', 'X509_get_issuer_name', 'X509_get_subject_name',
+    'X509_free', 'X509_NAME_print_ex', 'sk_num', 'sk_pop',
+    'ASN1_BIT_STRING_get_bit', 'OBJ_obj2nid', 'OBJ_nid2sn', 'ASN1_STRING_data',
+    'PEM_read_bio_X509', 'PEM_read_bio_PrivateKey', 'PEM_read_bio_RSAPrivateKey',
+    'PEM_read_bio_PUBKEY', 'EVP_MD_CTX_create', 'EVP_MD_CTX_destroy',
+    'EVP_sha256', 'EVP_PKEY_size', 'EVP_DigestSignInit', 'EVP_DigestUpdate',
+    'EVP_DigestSignFinal', 'EVP_DigestVerifyInit', 'EVP_DigestVerifyFinal',
+    'CRYPTO_malloc', 'CRYPTO_free', 'SSLeay_version');
+  LIBSSL_ENTRIES: array[0..37] of PChar = ('SSL_library_init',
+    'SSL_load_error_strings', 'SSLv3_method', 'SSLv23_method', 'TLSv1_method',
+    'TLSv1_1_method', 'TLSv1_2_method', 'SSL_CTX_new', 'SSL_CTX_free',
+    'SSL_CTX_set_verify', 'SSL_CTX_use_PrivateKey', 'SSL_CTX_use_RSAPrivateKey',
+    'SSL_CTX_use_certificate', 'SSL_CTX_check_private_key',
+    'SSL_CTX_use_certificate_file', 'SSL_CTX_use_RSAPrivateKey_file',
+    'SSL_CTX_get_cert_store', 'SSL_CTX_ctrl', 'SSL_CTX_load_verify_locations',
+    'SSL_CTX_use_certificate_chain_file', 'SSL_CTX_set_alpn_protos', 'SSL_new',
+    'SSL_get_version', 'SSL_set_bio', 'SSL_get_peer_certificate',
+    'SSL_get_error', 'SSL_shutdown', 'SSL_free', 'SSL_connect',
+    'SSL_set_connect_state', 'SSL_set_accept_state', 'SSL_read', 'SSL_write',
+    'SSL_state', 'SSL_pending', 'SSL_set_cipher_list', 'SSL_get0_alpn_selected',
+    'SSL_clear');
 
 var
   SharedMutex: array of TCRYPTO_dynlock_value;
 
 procedure ssl_lock_callback(Mode, N: Integer; _file: PAnsiChar; Line: Integer); cdecl;
 begin
-	if Mode and CRYPTO_LOCK <> 0 then
+  if Mode and CRYPTO_LOCK <> 0 then
     EnterCriticalSection(SharedMutex[N].Mutex)
-	else
+  else
     LeaveCriticalSection(SharedMutex[N].Mutex);
 end;
 
-procedure ssl_lock_dyn_callback(Mode: Integer; L: PCRYPTO_dynlock_value;
-  _file: PAnsiChar; Line: Integer); cdecl;
+procedure ssl_lock_dyn_callback(Mode: Integer; L: PCRYPTO_dynlock_value; _file:
+  PAnsiChar; Line: Integer); cdecl;
 begin
   if Mode and CRYPTO_LOCK <> 0 then
     EnterCriticalSection(L^.Mutex)
@@ -500,14 +534,15 @@ begin
     LeaveCriticalSection(L^.Mutex)
 end;
 
-function ssl_lock_dyn_create_callback(_file: PAnsiChar; Line: Integer): PCRYPTO_dynlock_value; cdecl;
+function ssl_lock_dyn_create_callback(_file: PAnsiChar; Line: Integer):
+  PCRYPTO_dynlock_value; cdecl;
 begin
   Getmem(result, sizeof(result^));
   InitializeCriticalSection(result^.Mutex);
 end;
 
-procedure ssl_lock_dyn_destroy_callback(L: PCRYPTO_dynlock_value;
-  _file: PAnsiChar; Line: Integer); cdecl;
+procedure ssl_lock_dyn_destroy_callback(L: PCRYPTO_dynlock_value; _file:
+  PAnsiChar; Line: Integer); cdecl;
 begin
   DeleteCriticalSection(L^.Mutex);
   Freemem(L);
@@ -518,9 +553,9 @@ end;
 
 constructor TOpenSSLLib.Create(const aFolderName: TFileName);
 
-  function LoadLib(api,name: PPointer; last: integer; var h: HMODULE;
-    const lib: TFileName): TFileName;
-  var i: integer;
+  function LoadLib(api, name: PPointer; last: integer; var h: HMODULE; const lib: TFileName): TFileName;
+  var
+    i: integer;
   begin
     if aFolderName <> '' then
       result := IncludeTrailingPathDelimiter(aFolderName) + lib
@@ -530,7 +565,7 @@ constructor TOpenSSLLib.Create(const aFolderName: TFileName);
     if h = 0 then
       raise EOpenSSL.CreateFmt('%s not found', [result]);
     for i := 0 to last do begin
-      api^ := GetProcAddress(h, name^);
+      api^ := GetProcAddress(h, PAnsiChar(name^));
       if api^ = nil then
         if (api = @@SSL_CTX_set_alpn_protos) or (api = @@SSL_get0_alpn_selected) then
           fAPLNNotSupported := true
@@ -548,7 +583,8 @@ constructor TOpenSSLLib.Create(const aFolderName: TFileName);
     end;
   end;
 
-var i: integer;
+var
+  i: integer;
 begin
   LoadLib(@@CRYPTO_num_locks, @LIBCRYPTO_ENTRIES, high(LIBCRYPTO_ENTRIES),
     fLibCrypto, LIBCRYPTO_NAME);
@@ -563,9 +599,9 @@ begin
     for i := 0 to high(SharedMutex) do
       InitializeCriticalSection(SharedMutex[i].Mutex);
   end;
-	CRYPTO_set_locking_callback(ssl_lock_callback);
+  CRYPTO_set_locking_callback(ssl_lock_callback);
   CRYPTO_set_dynlock_create_callback(ssl_lock_dyn_create_callback);
-	CRYPTO_set_dynlock_lock_callback(ssl_lock_dyn_callback);
+  CRYPTO_set_dynlock_lock_callback(ssl_lock_dyn_callback);
   CRYPTO_set_dynlock_destroy_callback(ssl_lock_dyn_destroy_callback);
   SSL_load_error_strings;
   SSL_library_init;
@@ -574,9 +610,10 @@ begin
 end;
 
 destructor TOpenSSLLib.Destroy;
-var i: integer;
+var
+  i: integer;
 begin
-  if fLibCrypto<>0 then begin
+  if fLibCrypto <> 0 then begin
     CRYPTO_set_locking_callback(nil);
     CRYPTO_set_dynlock_create_callback(nil);
     CRYPTO_set_dynlock_lock_callback(nil);
@@ -620,15 +657,16 @@ begin
 end;
 
 function TOpenSSLLib.ERR_error_string(err: cardinal): string;
-var tmp: array[0..511] of AnsiChar;
+var
+  tmp: array[0..511] of AnsiChar;
 begin
   ERR_error_string_n(err, @tmp, sizeof(tmp));
   result := string(tmp);
 end;
 
-function TOpenSSLLib.SSL_error(ssl: PSSL; ret_code: integer;
-  out errormsg: string): integer;
-var err: cardinal;
+function TOpenSSLLib.SSL_error(ssl: PSSL; ret_code: integer; out errormsg: string): integer;
+var
+  err: cardinal;
 begin
   err := SSL_get_error(ssl, ret_code);
   result := err;
@@ -641,7 +679,8 @@ end;
 
 function TOpenSSLLib.SSL_is_fatal_error(s: PSSL; ret_code: integer;
   raiseexception: boolean; last_err: PCardinal): boolean;
-var err: cardinal;
+var
+  err: cardinal;
 begin
   if ret_code >= 0 then
     result := false
@@ -665,9 +704,10 @@ end;
 
 procedure TOpenSSLLib.SetCertificate(ctx: PSSL_CTX; certificate, privatekey: pointer;
   certlen, privlen: integer; const password: string);
-var cert, priv: PBIO;
-    x509: PX509;
-    pkey: PEVP_PKEY;
+var
+  cert, priv: PBIO;
+  x509: PX509;
+  pkey: PEVP_PKEY;
 begin
   cert := BIO_new_mem_buf(certificate, certlen);
   x509 := PEM_read_bio_X509(cert, nil, nil, nil);
@@ -686,19 +726,20 @@ begin
   end;
 end;
 
-procedure TOpenSSLLib.SetCertificate(ctx: PSSL_CTX;
-  const certificate, privatekey: TOpenSSLBytes; const password: string);
+procedure TOpenSSLLib.SetCertificate(ctx: PSSL_CTX; const certificate, privatekey: TOpenSSLBytes;
+  const password: string);
 begin
-  SetCertificate(ctx, pointer(certificate), pointer(privatekey),
-    length(certificate), length(privatekey), password);
+  SetCertificate(ctx, pointer(certificate), pointer(privatekey), length(certificate),
+    length(privatekey), password);
 end;
 
 function TOpenSSLLib.EVP_sha256_sign(msg, privkey: pointer; msglen, privkeylen: integer;
   const password: string): TOpenSSLBytes;
-var priv: PBIO;
-    pkey: PEVP_PKEY;
-    ctx: PEVP_MD_CTX;
-    size: cardinal;
+var
+  priv: PBIO;
+  pkey: PEVP_PKEY;
+  ctx: PEVP_MD_CTX;
+  size: cardinal;
 begin
   result := '';
   if (privkey = nil) or (privkeylen = 0) then begin
@@ -709,20 +750,17 @@ begin
     priv := BIO_new_mem_buf(privkey, privkeylen);
     pkey := PEM_read_bio_PrivateKey(priv, nil, nil, pointer(AnsiString(password)));
   end;
+  ctx := EVP_MD_CTX_create;
   try
-    ctx := EVP_MD_CTX_create;
-    try
-      if EVP_DigestSignInit(ctx, nil, EVP_sha256, nil, pkey) = EVP_OK then
-        if EVP_DigestUpdate(ctx, msg, msglen) = EVP_OK then
-          if EVP_DigestSignFinal(ctx, nil, size) = EVP_OK then begin
-            SetLength(result, size);
-            if EVP_DigestSignFinal(ctx, pointer(result), size) <> EVP_OK then
-              result := '';
-          end;
-    finally
-      EVP_MD_CTX_destroy(ctx);
-    end;
+    if EVP_DigestSignInit(ctx, nil, EVP_sha256, nil, pkey) = EVP_OK then
+      if EVP_DigestUpdate(ctx, msg, msglen) = EVP_OK then
+        if EVP_DigestSignFinal(ctx, nil, size) = EVP_OK then begin
+          SetLength(result, size);
+          if EVP_DigestSignFinal(ctx, pointer(result), size) <> EVP_OK then
+            result := '';
+        end;
   finally
+    EVP_MD_CTX_destroy(ctx);
     if pkey <> nil then
       EVP_PKEY_free(pkey);
     if priv <> nil then
@@ -732,9 +770,10 @@ end;
 
 function TOpenSSLLib.EVP_sha256_verify(msg, pubkey, sign: pointer;
   msglen, pubkeylen, signlen: integer; const password: string): boolean;
-var pub: PBIO;
-    pkey: PEVP_PKEY;
-    ctx: PEVP_MD_CTX;
+var
+  pub: PBIO;
+  pkey: PEVP_PKEY;
+  ctx: PEVP_MD_CTX;
 begin
   result := false;
   if (pubkey = nil) or (pubkeylen <= 0) or (sign = nil) or (signlen <= 0) then
@@ -748,9 +787,7 @@ begin
         result := EVP_DigestVerifyFinal(ctx, sign, signlen) = EVP_OK;
   finally
     EVP_MD_CTX_destroy(ctx);
-  end;
-  if pkey <> nil then begin
-  	EVP_PKEY_free(pkey);
+    EVP_PKEY_free(pkey);
     BIO_free(pub);
   end;
 end;
@@ -758,9 +795,52 @@ end;
 
 { -------------- TOpenSSL* high-level wrapper classes and types }
 
+{ TOpenSSLConnectionClient }
+
+function TOpenSSLConnectionClient.Connect(const Read, Write: TOnOpenSSLData;
+  Level: TOpenSSLConnectionLevel; Options: TOpenSSLConnectionOptions): boolean;
+begin
+
+end;
+
+procedure TOpenSSLConnectionClient.Disconnect;
+begin
+
+end;
+
+procedure TOpenSSLConnectionClient.SecureRead(Buffer: pointer; Len: integer);
+begin
+
+end;
+
+function TOpenSSLConnectionClient.SecureWrite(Buffer: pointer; Len: integer): boolean;
+begin
+
+end;
+
+procedure TOpenSSLConnectionClient.SetNotify(States: TOpenSSLConnectionStates;
+  const OnNotify: TOnOpenSSLNotify);
+begin
+  if States = [] then
+    fOnNotifyStates := [low(TOpenSSLConnectionState) .. high(TOpenSSLConnectionState)]
+  else
+    fOnNotifyStates := States;
+  fOnNotify := OnNotify;
+end;
+
+procedure TOpenSSLConnectionClient.SetState(State: TOpenSSLConnectionState);
+begin
+  if fState = State then
+    exit;
+  fState := State;
+  if Assigned(fOnNotify) and (State in fOnNotifyStates) then
+    fOnNotify(self);
+end;
 
 initialization
 
 finalization
   SharedOpenSSL.Free;
+
 end.
+
