@@ -6593,7 +6593,7 @@ type
   // - INITIALIZETABLE_NOINDEX constant contain all itoNoIndex* items
   TSQLInitializeTableOption = (
     itoNoAutoCreateGroups, itoNoAutoCreateUsers,
-    itoNoCreateMissingField, 
+    itoNoCreateMissingField,
     itoNoIndex4ID, itoNoIndex4UniqueField,
     itoNoIndex4NestedRecord, itoNoIndex4RecordReference,
     itoNoIndex4TID, itoNoIndex4RecordVersion);
@@ -9187,6 +9187,10 @@ type
     SQL: TSQLModelRecordPropertiesSQL;
     /// allow SQL process for one external TSQLRecord in this model
     ExternalDB: TSQLRecordPropertiesMapping;
+    /// will by-pass automated table and field creation for this TSQLRecord
+    // - may be used e.g. when the TSQLRecord is in fact mapped into a View,
+    // and not a table
+    NoCreateMissingTable: boolean;
 
     /// initialize the ORM properties from the TSQLRecord RTTI and the supplied
     // TSQLModel

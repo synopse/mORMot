@@ -1030,13 +1030,14 @@ begin
       if ((fStaticData=nil) or (fStaticData[t]=nil)) then
       // this table is not static -> check if already existing, create if necessary
       with Model.TableProps[t], Props do
+      if not NoCreateMissingTable then
       if FastFindPUTF8CharSorted(pointer(TableNamesAtCreation),nt-1,pointer(SQLTableName),@StrIComp)<0 then begin
         if not DB.TransactionActive then
           DB.TransactionBegin; // make initialization faster by using transaction
         DB.Execute(Model.GetSQLCreate(t)); // don't catch exception in constructor
         include(TableJustCreated,t);       // mark to be initialized below
       end else
-      if not (itoNoCreateMissingField in Options) then begin
+      if not(itoNoCreateMissingField in Options) then begin
         // this table is existing: check that all fields exist -> create if necessary
         DB.GetFieldNames(aFields,SQLTableName);
         nf := length(aFields);
