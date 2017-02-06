@@ -257,7 +257,8 @@ begin
     try
       result := ecvUnknownAuthority;
       if auth.FromAuth('','',cert.AuthoritySerial) then
-        result := cert.Verify(auth,pointer(content),length(content));
+        result := cert.Verify(auth,pointer(content),length(content)) else
+        result := ecvUnknownAuthority;
     finally
       auth.Free;
     end;
@@ -277,9 +278,10 @@ begin
     raise EECCException.CreateUTF8('File not found: %',[FileToCrypt]);
   auth := TECCCertificate.Create;
   try
-    if auth.FromAuth(AuthPubKey,AuthBase64,AuthSerial) then begin
-      auth.EncryptFile(FileToCrypt,DestFile,Password,PasswordRounds,Algo,true);
-    end;
+    if not auth.FromAuth(AuthPubKey,AuthBase64,AuthSerial) then
+      raise EECCException.Create('No public key');
+    if not auth.EncryptFile(FileToCrypt,DestFile,Password,PasswordRounds,Algo,true) then
+      raise EECCException.CreateUTF8('EncryptFile failed for %',[FileToCrypt]);
   finally
     auth.Free;
     FillZero(content);
@@ -303,7 +305,7 @@ begin
         exit;
       priv := UTF8ToString(ECCText(head.recid));
       if not ECCKeyFileFind(priv,true) then
-        exit;
+        exit; // not found local .private from header 
     end;
     if not auth.LoadFromSecureFile(priv,AuthPassword,AuthPasswordRounds) then
       exit;
