@@ -167,7 +167,7 @@ type
   // - you have to manage instance lifetime of these inherited classes with a
   // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
   TDDDAppSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
-    IAutoCreateFieldsResolve)
+    IAutoCreateFieldsResolve, IDDDSettingsStorable)
   protected
     fAllProps: PPropInfoDynArray;
     fDescription: string;
@@ -184,7 +184,8 @@ type
     // - it will set the global SQLite3Log.Family according to Log values
     procedure Initialize(const aDescription: string); virtual;
     /// persist the settings if needed
-    // - will call the virtual InternalPersist method
+    // - just a wrapper around Storage.Store(AsJson)
+    // - implements IDDDSettingsStorable for "#settings save" admin command
     procedure StoreIfUpdated; virtual;
     /// serialize the settings as JSON
     // - any enumerated or set published property will be commented with their

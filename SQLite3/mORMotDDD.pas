@@ -267,6 +267,14 @@ type
     function StartProxy(const aDDDRestClientSettings: variant): TCQRSResult;
   end;
 
+  /// allow persistence of any TObject settings storage
+  IDDDSettingsStorable = interface
+    ['{713A9C16-4BBD-4FB6-A7A6-566162767622}']
+    /// persist the settings if needed
+    // - will call the virtual InternalPersist method
+    procedure StoreIfUpdated;
+  end;
+
 
 
 { *********** Cross-Cutting Layer Implementation}
@@ -2544,6 +2552,7 @@ var rest: TSQLRest;
     status: variant;
     res: TCQRSResult;
     cmd: integer;
+    store: IDDDSettingsStorable;
 begin
   result.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   result.Status := HTTP_SUCCESS;
@@ -2569,7 +2578,16 @@ begin
               doc.InitObjectFromPath(name,status);
               JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
             end;
-          end else 
+          end else
+          if IdemPropName(name,'save') then begin
+            if fInternalSettings.GetInterface(IDDDSettingsStorable,store) then begin
+              store.StoreIfUpdated;
+              result.Content := FormatUTF8('"% saved"',[fInternalSettings.ClassType]);
+            end else
+              result.Content := FormatUTF8('"% does not implement IDDDSettingsStorable"',
+                [fInternalSettings.ClassType]);
+            exit;
+          end else
           if fInternalSettingsFolder<>'' then begin
             AdministrationExecuteGetFiles(fInternalSettingsFolder,
               '*.config;*.settings',name,result);
@@ -2639,7 +2657,7 @@ begin
     end;
     9:
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings [full.path=value/*/filename]|#version|#computer|#log [*/filename]|'+
+        '|#state|#settings [full.path=value/*/save/filename]|#version|#computer|#log [*/filename]|'+
         '#startdaemon|#stopdaemon|#restartdaemon|#help"';
     10: begin
       result.Content := JSONEncode(['daemon',DaemonName]);
