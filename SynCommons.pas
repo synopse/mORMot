@@ -11024,6 +11024,7 @@ function IsZero(const dig: THash128): boolean; overload;
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
+// - this function is not sensitive to any timing attack
 function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11045,6 +11046,7 @@ function IsZero(const dig: THash256): boolean; overload;
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TECCSignature result
+// - this function is not sensitive to any timing attack
 function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -17138,7 +17140,12 @@ type
     // timestamp
     // - may be used e.g. to limit database queries on a particular time range
     // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
-    procedure FromDateTime(aDateTime: TDateTime);
+    procedure FromDateTime(const aDateTime: TDateTime);
+    /// fill this unique identifier with a fake value corresponding to a given
+    // timestamp
+    // - may be used e.g. to limit database queries on a particular time range
+    // - bits 0..30 would be 0, i.e. would set Counter = 0 and ProcessID = 0
+    procedure FromUnixTime(const aUnixTime: TUnixTime);
   end;
   {$A+}
 
@@ -32137,8 +32144,8 @@ function IsEqual(const A,B: THash128): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
 begin
-  result := (a_[0]=b_[0]) and (a_[1]=b_[1])
-    {$ifndef CPU64} and (a_[2]=b_[2]) and (a_[3]=b_[3]){$endif};
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1])
+    {$ifndef CPU64} or (a_[2] xor b_[2]) or (a_[3] xor b_[3]){$endif})=0;
 end;
 
 procedure FillZero(out dig: THash128);
@@ -32175,9 +32182,10 @@ function IsEqual(const A,B: THash256): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
 begin
-  result := (a_[0]=b_[0]) and (a_[1]=b_[1]) and (a_[2]=b_[2]) and (a_[3]=b_[3])
-          {$ifndef CPU64} and (a_[4]=b_[4]) and (a_[5]=b_[5])
-                          and (a_[6]=b_[6]) and (a_[7]=b_[7]){$endif};
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or
+             (a_[2] xor b_[2]) or (a_[3] xor b_[3])
+    {$ifndef CPU64} or (a_[4] xor b_[4]) or (a_[5] xor b_[5])
+                    or (a_[6] xor b_[6]) or (a_[7] xor b_[7]) {$endif})=0;
 end;
 
 procedure FillZero(out dig: THash256);
@@ -60190,9 +60198,14 @@ begin
   result := (Length(hexa)=16) and HexDisplayToBin(pointer(hexa),@Value,sizeof(Value));
 end;
 
-procedure TSynUniqueIdentifierBits.FromDateTime(aDateTime: TDateTime);
+procedure TSynUniqueIdentifierBits.FromDateTime(const aDateTime: TDateTime);
 begin
   Value := DateTimeToUnixTime(aDateTime) shl 31;
+end;
+
+procedure TSynUniqueIdentifierBits.FromUnixTime(const aUnixTime: TUnixTime);
+begin
+  Value := aUnixTime shl 31;
 end;
 
 
@@ -60244,13 +60257,15 @@ end;
 procedure TSynUniqueIdentifierGenerator.ComputeFromDateTime(const aDateTime: TDateTime;
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
-  result.Value := (DateTimeToUnixTime(aDateTime) shl 31) or fIdentifierShifted;
+  ComputeFromUnixTime(DateTimeToUnixTime(aDateTime),result);
 end;
 
 procedure TSynUniqueIdentifierGenerator.ComputeFromUnixTime(const aUnixTime: TUnixTime;
   out result: TSynUniqueIdentifierBits);
 begin // assume fLastCounter=0
-  result.Value := (aUnixTime shl 31) or fIdentifierShifted;
+  result.Value := aUnixTime shl 31;
+  if self<>nil then
+    result.Value := result.Value or fIdentifierShifted;
 end;
 
 constructor TSynUniqueIdentifierGenerator.Create(aIdentifier: TSynUniqueIdentifierProcess;
