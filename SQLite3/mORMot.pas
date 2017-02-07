@@ -40523,17 +40523,19 @@ begin
          not (llfSecured in Call.LowLevelFlags) then
         Ctxt.AuthenticationFailed(afSecureConnectionRequired) else
       if not Ctxt.Authenticate then
-        if (fJWTForUnauthenticatedRequest<>nil) and
-           (not(llfSecured in Call.LowLevelFlags) or
-            (llfHttps in Call.LowLevelFlags)) and // HTTPS does not authenticate
-           (fJWTForUnauthenticatedRequest.Verify(Ctxt.AuthenticationBearerToken)<>jwtValid) then
-          Ctxt.AuthenticationFailed(afJWTRequired) else
-          Ctxt.AuthenticationFailed(afInvalidSignature) else
+        Ctxt.AuthenticationFailed(afInvalidSignature) else
       if (Ctxt.Service<>nil) and
           not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
         if (rsoRedirectForbiddenToAuth in Options) and (Ctxt.ClientKind=ckAjax) then
           Ctxt.Redirect(Model.Root+'/auth') else
           Ctxt.AuthenticationFailed(afRemoteServiceExecutionNotAllowed) else
+      if (Ctxt.Session=CONST_AUTHENTICATION_NOT_USED) and
+         (fJWTForUnauthenticatedRequest<>nil) and
+         (Ctxt.MethodIndex<>fPublishedMethodTimeStampIndex) and
+         (not(llfSecured in Call.LowLevelFlags) or
+             (llfHttps in Call.LowLevelFlags)) and // HTTPS does not authenticate
+          (fJWTForUnauthenticatedRequest.Verify(Ctxt.AuthenticationBearerToken)<>jwtValid) then
+        Ctxt.AuthenticationFailed(afJWTRequired) else
       // 3. call appropriate ORM / SOA commands in fAcquireExecution[] context
       try
         if Ctxt.MethodIndex>=0 then

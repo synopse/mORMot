@@ -9886,7 +9886,7 @@ end;
 procedure TJWTHS256.ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
   out aHMACSecret: THash256);
 begin
-  if (self<>nil) and (aSecretPBKDF2Rounds>0) then
+  if (self<>nil) and (aSecret<>'') and (aSecretPBKDF2Rounds>0) then
     PBKDF2_HMAC_SHA256(aSecret,fHeaderB64,aSecretPBKDF2Rounds,aHMACSecret) else
     FillZero(aHMACSecret);
 end;
