@@ -5664,7 +5664,7 @@ type
    afInvalidSignature,afRemoteServiceExecutionNotAllowed,
    afUnknownUser,afInvalidPassword,
    afSessionAlreadyStartedForThisUser,afSessionCreationAborted,
-   afSecureConnectionRequired);
+   afSecureConnectionRequired, afJWTRequired);
 
   /// will identify the currently running service on the server side
   // - is the type of the global ServiceContext threadvar
@@ -16104,8 +16104,9 @@ type
   // unless you set rsoComputeFieldsBeforeWriteOnServerSide so that AJAX requests
   // will set the fields on the server side by calling the TSQLRecord
   // ComputeFieldsBeforeWrite virtual method, before writing to the database
-  // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured -
-  // with the only exception of the Timestamp method-based service
+  // - rsoSecureConnectionRequired will ensure Call is flagged as llfSecured
+  // (i.e. in-process, HTTPS, or encrypted WebSockets) - with the only exception
+  // of the Timestamp method-based service (for monitoring purposes)
   // - by default, cookies will contain only 'Path=/Model.Root', but
   // '; Path=/' may be also added setting rsoCookieIncludeRootPath
   // - you can disable the 'HttpOnly' flag via rsoCookieHttpOnlyFlagDisable
@@ -16143,6 +16144,7 @@ type
     fSQLAuthGroupClass: TSQLAuthGroupClass;
     fAfterCreation: boolean;
     fOptions: TSQLRestServerOptions;
+    fJWTForUnauthenticatedRequest: TJWTAbstract;
     /// how in-memory sessions are handled
     fSessionClass: TAuthSessionClass;
     /// will contain the in-memory representation of some static tables
@@ -16173,6 +16175,7 @@ type
     fPublishedMethod: TSQLRestServerMethods;
     fPublishedMethods: TDynArrayHashed;
     fPublishedMethodTimeStampIndex: integer;
+    fPublishedMethodAuthIndex: integer;
     fPublishedMethodBatchIndex: integer;
     fPublicURI: TSQLRestServerURI;
     fAssociatedServices: TServicesPublishedInterfacesList;
@@ -16978,6 +16981,11 @@ type
     /// how many authentication methods are registered in AuthenticationSchemes
     property AuthenticationSchemesCount: integer
       read GetAuthenticationSchemesCount;
+    /// define if unsecure connections (i.e. not in-process, HTTPS or encrypted
+    // WebSockets) require a JWT for authentication
+    // - once set, this instance will be owned by the TSQLRestServer 
+    property JWTForUnauthenticatedRequest: TJWTAbstract
+      read fJWTForUnauthenticatedRequest write fJWTForUnauthenticatedRequest;
     /// retrieve the TSQLRestStorage instance used to store and manage
     // a specified TSQLRecordClass in memory
     // - has been associated by the StaticDataCreate method
@@ -37540,7 +37548,7 @@ begin
   fPublishedMethods.InitSpecific(TypeInfo(TSQLRestServerMethods),
     fPublishedMethod,djRawUTF8,nil,true);
   ServiceMethodRegisterPublishedMethods('',self);
-  ServiceMethodByPassAuthentication('Auth');
+  fPublishedMethodAuthIndex := ServiceMethodByPassAuthentication('Auth');
   fPublishedMethodTimeStampIndex := ServiceMethodByPassAuthentication('TimeStamp');
   tmp := 'Batch';
   fPublishedMethodBatchIndex := fPublishedMethods.FindHashed(tmp);
@@ -37625,6 +37633,7 @@ begin
   FreeAndNil(fAssociatedServices);
   ObjArrayClear(fSessionAuthentication);
   inherited Destroy; // calls fServices.Free which will update fStats
+  fJWTForUnauthenticatedRequest.Free;
   FreeAndNil(fStats);
 end;
 
@@ -40514,7 +40523,12 @@ begin
          not (llfSecured in Call.LowLevelFlags) then
         Ctxt.AuthenticationFailed(afSecureConnectionRequired) else
       if not Ctxt.Authenticate then
-        Ctxt.AuthenticationFailed(afInvalidSignature) else
+        if (fJWTForUnauthenticatedRequest<>nil) and
+           (not(llfSecured in Call.LowLevelFlags) or
+            (llfHttps in Call.LowLevelFlags)) and // HTTPS does not authenticate
+           (fJWTForUnauthenticatedRequest.Verify(Ctxt.AuthenticationBearerToken)<>jwtValid) then
+          Ctxt.AuthenticationFailed(afJWTRequired) else
+          Ctxt.AuthenticationFailed(afInvalidSignature) else
       if (Ctxt.Service<>nil) and
           not (reService in Call.RestAccessRights^.AllowRemoteExecute) then
         if (rsoRedirectForbiddenToAuth in Options) and (Ctxt.ClientKind=ckAjax) then
@@ -57860,11 +57874,13 @@ end;
 procedure TRawUTF8ObjectCacheList.Log(const TextFmt: RawUTF8; const TextArgs: array of const;
   Level: TSynLogInfo);
 begin
+  {$ifdef WITHLOG}
   if (self=nil) or (fLog=nil) then
     exit;
   if Level=sllNone then
     Level := fLogEvent;
   fLog.SynLog.Log(Level, TextFmt, TextArgs, self);
+  {$endif}
 end;
 
 function TRawUTF8ObjectCacheList.NewObjectCache(const Key: RawUTF8): TRawUTF8ObjectCache;
