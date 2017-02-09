@@ -40104,7 +40104,7 @@ begin
     Call.OutStatus := HTTP_SUCCESS;
     if Handle304NotModified then begin
       clientHash := FindIniNameValue(pointer(Call.InHead),'IF-NONE-MATCH: ');
-      serverHash := '"'+DateTimeToIso8601(FileTime,false)+'"';
+      serverHash := '"'+DateTimeToIso8601(FileTime,false,'T',true)+'"';
       Call.OutHead := Call.OutHead+#13#10'ETag: '+serverHash;
       if clientHash=serverHash then begin
         Call.OutStatus := HTTP_NOTMODIFIED;

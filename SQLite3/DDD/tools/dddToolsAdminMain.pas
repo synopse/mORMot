@@ -82,6 +82,7 @@ type
     property DBFrame: TDBFrameDynArray read fDBFrame;
     property ChatPage: TSynPage read fChatPage;
     property ChatFrame: TLogFrame read fChatFrame;
+    property Admin: IAdministratedDaemon read fAdmin;
   end;
 
   TAdminForm = class(TSynForm)
