@@ -103,8 +103,19 @@ end;
 
 function TfrmSM45Demo.toLog(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;
 begin
-  mResult.lines.add(vp.argv[0].asJSString.ToString(cx));
-  result :=  true;
+  try
+    if (vp.argv[0].isString) then
+      mResult.lines.add(vp.argv[0].asJSString.ToString(cx))
+    else
+      raise ESMException.Create('toLog accept only String type of arg');
+    result :=  true;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      JSError(cx, E);
+    end;
+  end;
 end;
 
 type
