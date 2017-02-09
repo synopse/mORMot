@@ -1509,6 +1509,9 @@ type
     function URI: SockString;
     /// the server port, as integer value
     function PortInt: integer;
+    /// compute the root resource Address, without any URI-encoded parameter 
+    // - e.g. '/category/name/10'
+    function Root: SockString;
   end;
 
   /// the supported authentication schemes which may be used by HTTP clients
@@ -1950,6 +1953,8 @@ const
   STATUS_CREATED = 201;
   /// HTTP Status Code for "No Content"
   STATUS_NOCONTENT = 204;
+  /// HTTP Status Code for "Not Modified"
+  STATUS_NOTMODIFIED = 304;
   /// HTTP Status Code for "Bad Request"
   STATUS_BADREQUEST = 400;
   /// HTTP Status Code for "Unauthorized"
@@ -2851,6 +2856,15 @@ begin
   Val(string(Port),result,err);
   if err<>0 then
     result := 0;
+end;
+
+function TURI.Root: SockString;
+var i: integer;
+begin
+  i := Pos('?',Address);
+  if i=0 then
+    Root := Address else
+    Root := copy(Address,1,i-1);
 end;
 
 
