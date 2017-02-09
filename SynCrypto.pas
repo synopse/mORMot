@@ -9874,7 +9874,7 @@ constructor TJWTHS256.Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: intege
 var secret: THash256;
 begin
   inherited Create('HS256',aClaims,aAudience,aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
-  if aSecretPBKDF2Rounds>0 then begin
+  if (aSecret<>'') and (aSecretPBKDF2Rounds>0) then begin
     ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,secret);
     fHmacPrepared.Init(@secret,sizeof(secret));
     FillZero(secret);

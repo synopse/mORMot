@@ -414,6 +414,7 @@ type
       CompressionQuality: integer=80; IfBitmapSetResolution: single=0): TGdipStatus;
   public
     constructor CreateFromFile(const FileName: string);
+    constructor CreateFromBuffer(Buffer: pointer; Len: integer);
     destructor Destroy; override;
     {$ifdef FPC}
     procedure Clear; override;
@@ -1224,6 +1225,12 @@ constructor TSynPicture.CreateFromFile(const FileName: string);
 begin
   inherited Create;
   LoadFromFile(FileName);
+end;
+
+constructor TSynPicture.CreateFromBuffer(Buffer: pointer; Len: integer);
+begin
+  inherited Create;
+  LoadFromBuffer(Buffer,Len);
 end;
 
 destructor TSynPicture.Destroy;
