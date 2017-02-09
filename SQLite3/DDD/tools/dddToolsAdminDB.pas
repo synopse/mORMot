@@ -172,8 +172,8 @@ begin
   if sql='' then
     sql := '*';
   sql := 'select '+sql+' from ' + table;
-  if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and (Pos
-    (table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
+  if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and
+     (Pos(table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
     sql := sql + ' order by id desc';
   sql := sql + ' limit 1000';
   AddSQL(sql, true);

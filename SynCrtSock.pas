@@ -2861,7 +2861,7 @@ end;
 function TURI.Root: SockString;
 var i: integer;
 begin
-  i := Pos('?',Address);
+  i := Pos({$ifdef HASCODEPAGE}SockString{$endif}('?'),Address);
   if i=0 then
     Root := Address else
     Root := copy(Address,1,i-1);
