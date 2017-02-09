@@ -36,6 +36,7 @@ unit SynCommons;
    - itSDS
    - Johan Bontes
    - kevinday
+   - Maciej Izak (hnb)
    - Marius Maximus (mariuszekpl)
    - mazinsw
    - mingda
@@ -20481,7 +20482,8 @@ const
 {$endif}
 
 type
-  TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong);
+  TOrdType = (otSByte,otUByte,otSWord,otUWord,otSLong,otULong,
+    {$ifdef FPC_NEWRTTI}otSQWord,otUQWord{$endif});
   TFloatType = (ftSingle,ftDoub,ftExtended,ftComp,ftCurr);
   TTypeKinds = set of TTypeKind;
   PTypeKind = ^TTypeKind;
@@ -20560,6 +20562,33 @@ type
   PTypeInfoStored = ^PTypeInfo;
   {$endif}
 
+  {$ifdef FPC_NEWRTTI}
+  PInitManagedField = ^TInitManagedField;
+  TInitManagedField =
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  packed
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+  record
+    TypeInfo: PTypeInfoStored;
+    Offset: sizeint;
+  end;
+
+  PRecInitData = ^TRecInitData;
+  TRecInitData =
+  {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
+  packed
+  {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+  record
+    Terminator: Pointer;
+    Size: Integer;
+    {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+    ManagementOp: Pointer;
+    {$endif}
+    ManagedFieldCount: Integer;
+    ManagedFields: array[0..0] of TInitManagedField;
+  end;
+  {$endif}
+
   /// map the Delphi/FPC record field RTTI
   TFieldInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -20574,32 +20603,18 @@ type
     {$endif FPC}
   end;
   PFieldInfo = ^TFieldInfo;
-  {$ifdef ISDELPHI2010}
+  {$ifdef ISDELPHI2010_OR_FPC_NEWRTTI}
   /// map the Delphi record field enhanced RTTI (available since Delphi 2010)
   TEnhancedFieldInfo = packed record
     TypeInfo: PTypeInfoStored;
     Offset: PtrUInt;
+    {$ifdef ISDELPHI2010}
     Flags: Byte;
     NameLen: byte; // = Name[0] = length(Name)
+    {$ENDIF}
   end;
   PEnhancedFieldInfo = ^TEnhancedFieldInfo;
   {$endif}
-
-  /// map the Delphi/FPC RTTI content
-  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
-  PPRecordInitTable = ^PRecordInitTable;
-  PRecordInitTable = ^TRecordInitTable;
-  TRecordInitTable =
-    {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-    packed
-    {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-    record
-      recSize: longint;
-      Terminator: Pointer;
-      recManagementOperators: Pointer;
-      ManagedCount: longint;
-    end;
-  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
 
   TTypeInfo =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -20647,18 +20662,27 @@ type
     );
     {$ifdef FPC}
     tkRecord, tkObject:(
+      {$ifdef FPC_NEWRTTI}
+      RecInitInfo: Pointer;
+      {$endif}
       recSize: longint;
-      {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
-      recInitTable: PPRecordInitTable;
-      {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+      {$ifdef FPC_NEWRTTI}
+      TotalFieldCount: longint;
+      // note: for FPC 3.1.x and never ManagedCount is deprecated
+      {$else}
       ManagedCount: longint;
-      // note: FPC generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
+      // note: FPC for 3.0.x and previous generates RTTI for unmanaged fields (as in TEnhancedFieldInfo)
+      {$endif}
     {$else}
     tkRecord: (
       recSize: cardinal;
       ManagedCount: integer;
     {$endif FPC}
+    {$ifdef DELPHI_OR_FPC_OLDRTTI}
       ManagedFields: array[0..0] of TFieldInfo;
+    {$else}
+      AllFields: array[0..0] of TEnhancedFieldInfo;
+    {$endif}
       {$ifdef ISDELPHI2010} // enhanced RTTI containing info about all fields
       NumOps: Byte;
       //RecOps: array[0..0] of Pointer;
@@ -35727,7 +35751,9 @@ end;
 { ************ low-level RTTI types and conversion routines }
 
 {$ifdef FPC}
-
+procedure RecordClear(var Dest; TypeInfo: pointer);
+  [external name 'FPC_FINALIZE'];
+{$ifdef FPC_OLDRTTI}
 function RTTIManagedSize(typeInfo: Pointer): SizeInt; inline;
 begin
   case PTypeKind(typeInfo)^ of // match tkManagedTypes
@@ -35764,9 +35790,6 @@ begin
   result := -1;
 end;
 
-procedure RecordClear(var Dest; TypeInfo: pointer);
-  [external name 'FPC_FINALIZE'];
-
 procedure RecordAddRef(var Data; TypeInfo : pointer);
   [external name 'FPC_ADDREF'];
 
@@ -35790,8 +35813,12 @@ begin
       inc(PByte(dest),size);
     end;
 end;
+{$else FPC_OLDRTTI}
+procedure RecordCopy(var Dest; const Source; TypeInfo: pointer);
+  [external name 'FPC_COPY'];
+{$endif FPC_OLDRTTI}
 
-{$else}
+{$else FPC}
 
 procedure CopyArray(dest, source, typeInfo: Pointer; cnt: PtrUInt);
 asm
@@ -36116,6 +36143,9 @@ end;
 function RecordEquals(const RecA, RecB; TypeInfo: pointer;
   PRecSize: PInteger): boolean;
 var info,fieldinfo: PTypeInfo;
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$endif}
     F: integer;
     Field: PFieldInfo;
     Diff: cardinal;
@@ -36133,16 +36163,22 @@ begin
     result := true;
     exit;
   end;
-  Field := @info^.ManagedFields[0];
   Diff := 0;
+  {$ifdef FPC_NEWRTTI}
+  recInitData := GetFPCRecInitData(PByte(info)+2);
+  Field := @recInitData^.ManagedFields[0];
+  for F := 1 to recInitData^.ManagedFieldCount do begin
+  {$else}
+  Field := @info^.ManagedFields[0];
   for F := 1 to info^.ManagedCount do begin
+  {$endif}
     fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
       continue; // as with Delphi
     end;
-    {$endif};
+    {$endif}
     Diff := Field^.Offset-Diff;
     if Diff<>0 then begin
       if not CompareMem(A,B,Diff) then
@@ -36167,6 +36203,9 @@ end;
 
 function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger): integer;
 var info,fieldinfo: PTypeInfo;
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$endif}
     F, recsize,saved: integer;
     Field: PFieldInfo;
     R: PAnsiChar;
@@ -36177,13 +36216,22 @@ begin
     result := 0; // should have been checked before
     exit;
   end;
+  {$ifdef FPC_NEWRTTI}
+  recInitData := GetFPCRecInitData(PByte(info)+2);
+  Field := @recInitData^.ManagedFields[0];
+  {$else}
   Field := @info^.ManagedFields[0];
+  {$endif}
   result := info^.recSize;
   if Len<>nil then
     Len^ := result;
+  {$ifdef FPC_NEWRTTI}
+  for F := 1 to recInitData^.ManagedFieldCount do begin
+  {$else}
   for F := 1 to info^.ManagedCount do begin
+  {$endif}
     fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
       continue; // as with Delphi
@@ -36202,6 +36250,9 @@ end;
 function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
   out Len: integer): PAnsiChar; 
 var info,fieldinfo: PTypeInfo;
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$endif}
     F: integer;
     Diff: cardinal;
     Field: PFieldInfo;
@@ -36214,11 +36265,17 @@ begin
     exit;
   end;
   Len := info^.recSize;
-  Field := @info^.ManagedFields[0];
   Diff := 0;
+  {$ifdef FPC_NEWRTTI}
+  recInitData := GetFPCRecInitData(PByte(info)+2);
+  Field := @recInitData^.ManagedFields[0];
+  for F := 1 to recInitData^.ManagedFieldCount do begin
+  {$else}
+  Field := @info^.ManagedFields[0];
   for F := 1 to info^.ManagedCount do begin
+  {$endif}
     fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
       continue; // as with Delphi
@@ -36361,6 +36418,9 @@ end;
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger): PAnsiChar;
 var info,fieldinfo: PTypeInfo;
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$endif}
     F: integer;
     Diff: cardinal;
     Field: PFieldInfo;
@@ -36373,18 +36433,31 @@ begin
     exit;
   if Len<>nil then
     Len^ := info^.recSize;
+  {$ifdef FPC_NEWRTTI}
+  recInitData := GetFPCRecInitData(PByte(info)+2);
+  Field := @recInitData^.ManagedFields[0];
+  {$else}
   Field := @info^.ManagedFields[0];
+  {$endif}
   if Source=nil then begin  // inline RecordClear() function
-    for F := 1 to  info^.ManagedCount do begin
+    {$ifdef FPC_NEWRTTI}
+    for F := 1 to recInitData^.ManagedFieldCount do begin
+    {$else}
+    for F := 1 to info^.ManagedCount do begin
+    {$endif}
       _Finalize(R+Field^.Offset,Deref(Field^.TypeInfo));
       inc(Field);
     end;
     exit;
   end;
   Diff := 0;
+  {$ifdef FPC_NEWRTTI}
+  for F := 1 to recInitData^.ManagedFieldCount do begin
+  {$else}
   for F := 1 to info^.ManagedCount do begin
+  {$endif}
     fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC} // FPC does include RTTI for unmanaged fields! :)
+    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
       inc(Field);
       continue; // as with Delphi
@@ -38041,6 +38114,9 @@ begin
         otSByte,otUByte: fDataSize := 1;
         otSWord,otUWord: fDataSize := 2;
         otSLong,otULong: fDataSize := 4;
+        {$ifdef FPC_NEWRTTI}
+        otSQWord,otUQWord: fDataSize := 8;
+        {$endif}
       end;
       if kind=tkEnumeration then
         fKnownType := ktEnumeration else
@@ -38376,6 +38452,9 @@ begin
     otSWord,otUWord: result := ptWord;
     otSLong: result := ptInteger;
     otULong: result := ptCardinal;
+    {$ifdef FPC_NEWRTTI}
+    otSQWord,otUQWord: result := ptInt64;
+    {$endif}
     end;
   tkInt64: result := ptInt64;
   {$ifdef FPC}
@@ -43491,7 +43570,11 @@ end;
 function TDynArray.ToKnownType(exactType: boolean): TDynArrayKind;
 var nested: PTypeInfo;
     {$ifdef FPC}
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$else}
     f: integer;
+    {$endif}
     {$endif}
 label Bin, Rec;
 begin
@@ -43560,16 +43643,23 @@ rec:    nested := GetFPCAlignPtr(nested);
         {$else}
 rec:    inc(PtrUInt(nested),nested^.NameLen);
         {$endif}
-        {$ifdef FPC}
+        {$ifdef FPC_OLDRTTI}
         f := RTTIFirstManagedFieldIndex(nested);
         if f<0 then
           goto Bin;
         with nested^.ManagedFields[f] do
-        {$else}
+        {$else FPC_OLDRTTI}
+        {$ifdef FPC_NEWRTTI}
+        recInitData := GetFPCRecInitData(PByte(nested)+2);
+        if recInitData^.ManagedFieldCount=0 then // only binary content -> full content
+          goto Bin;
+        with recInitData^.ManagedFields[0] do
+        {$else FPC_NEWRTTI}
         if nested^.ManagedCount=0 then // only binary content -> full content
           goto Bin;
         with nested^.ManagedFields[0] do
-        {$endif}
+        {$endif FPC_NEWRTTI}
+        {$endif FPC_OLDRTTI}
         case Offset of
         0: case DeRef(TypeInfo)^.Kind of
            tkLString{$ifdef FPC},tkLStringOld{$endif}: fKnownType := djRawUTF8;
@@ -44595,7 +44685,7 @@ procedure TDynArray.ElemCopy(const A; var B);
 begin
   if ElemType=nil then
     MoveFast(A,B,ElemSize) else begin
-    {$ifdef FPC}
+    {$ifdef FPC_OLDRTTI}
     RecordClear(B,ElemType); // inlined CopyArray()
     MoveFast(A,B,ElemSize);
     RecordAddRef(B,ElemType);
@@ -52711,7 +52801,6 @@ begin
   {$ifdef VER3_0_1}+' 3.0.1'{$endif}
   {$ifdef VER3_0_2}+' 3.0.2'{$endif}
   {$ifdef VER3_1_1}+' 3.1.1'{$endif}
-    {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI}+' ERTTI'{$endif}
     {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}+' MOP'{$endif}
 {$else}
   {$ifdef VER130} 'Delphi 5'{$endif}

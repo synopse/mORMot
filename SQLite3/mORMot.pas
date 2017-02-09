@@ -2697,6 +2697,9 @@ type
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
+    {$ifdef FPC_NEWRTTI}
+    RecInitInfo: Pointer;
+    {$endif}
     Size: cardinal;
     Count: integer;
     Fields: array[word] of TRecordField;
@@ -3081,11 +3084,23 @@ type
   /// the available methods calling conventions
   // - this is by design only relevant to the x86 model
   // - Win64 has one unique calling convention
-  TCallingConvention = (ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
+  TCallingConvention = (
+    ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall
+    {$ifdef FPC},
+    ccCppdecl, ccFar16,
+    ccOldFPCCall, ccInternProc, ccSysCall, ccSoftFloat, ccMWPascal
+    {$endif});
 
   /// the available kind of method parameters
   TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut,
-    {$ifdef FPC}pfConstRef{$else}pfResult{$endif});
+    {$ifdef FPC}
+    pfConstRef,
+    {$ifdef FPC_NEWRTTI}
+    pfHidden,pfHigh,pfSelf,pfVmt,pfResult
+    {$endif}
+    {$else}
+    pfResult
+    {$endif});
 
   /// a set of kind of method parameters
   TParamFlags = set of TParamFlag;
@@ -29107,22 +29122,24 @@ type
 
 
   TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
-    mkClassProcedure, mkClassFunction, { Obsolete } mkSafeProcedure, mkSafeFunction);
+    mkClassProcedure, mkClassFunction, mkClassConstructor, mkClassDestructor,
+    mkOperatorOverload{$ifndef FPC},{ Obsolete } mkSafeProcedure, mkSafeFunction{$endif});
 
   TIntfMethodEntryTail =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
-    {$ifdef FPC}
-    Version: Byte; // alwyas 3 at the moment
+    {$ifdef FPC_NEWRTTI}
+    ResultType: PPTypeInfo;
+    CC: TCallingConvention;
+    Kind: TMethodKind;
+    ParamCount: Word;
+    StackSize: SizeInt;
+    Name: ShortString;
     {$else}
     Kind: TMethodKind;
-    {$endif}
     CC: TCallingConvention;
-    {$ifdef FPC}
-    ResultType: PTypeInfo;
-    StackSize: Word;
-    {$endif}
     ParamCount: Byte;
     {Params: array[0..ParamCount - 1] of TVmtMethodParam;}
+    {$endif}
   end;
 
 { TTypeInfo }
@@ -53511,6 +53528,7 @@ var P: Pointer;
     PI: PInterfaceTypeData absolute P;
     {$ifdef FPC}
     PIR: PRawInterfaceTypeData absolute P;
+    VMP: PVmtMethodParam absolute P;
     {$endif}
     PW: PWord absolute P;
     PS: PShortString absolute P;
@@ -53521,9 +53539,8 @@ var P: Pointer;
     {$ifdef FPC}
     propCount: integer;
     aResultType: PTypeInfo;
-    {$else}
-    Kind: TMethodKind;
     {$endif}
+    Kind: TMethodKind;
     f: TParamFlags;
     m,a: integer;
     n: cardinal;
@@ -53568,42 +53585,49 @@ begin
   p := aligntoptr(p);
   for m := fMethodsCount to fMethodsCount+n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
+    {$ifdef FPC_NEWRTTI}
+    aURI := PME^.Name;
+    {$else}
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
+    {$endif}
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       HierarchyLevel := fAddMethodsLevel;
-      {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
-      inc(PB,ord(PS^[0])+1);
-      inc(PB); // skip Version field (always 3)
-      {$ifdef CPUINTEL}
-      if PCallingConvention(P)^<>ccRegister then
-         RaiseError('method shall use register calling convention',[]);
-      {$endif CPUINTEL}
-      inc(PB,sizeOf(TCallingConvention));
-      P := AlignToPtr(P);// new Alignment
-      aResultType := DeRef(PP^);
-      inc(PP);
-      inc(PW); // skip StackSize
-      n := PB^;
-      inc(PB);
-      P := AlignToPtr(P);// new Alignment
-      if aResultType<>nil then  // we have a function
+      {$ifdef FPC}
+      aResultType := DeRef(PME^.ResultType);
+      {$else}
+      PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // method name in Delphi
+      {$endif}
+      Kind := PME^.Kind;
+      if PME^.CC<>ccRegister then
+        RaiseError('method shall use register calling convention',[]);
+      // retrieve method call arguments from RTTI
+      n := PME^.ParamCount;
+      {$ifdef FPC}
+      P := AlignToPtr(PByte(@PME^.Name[0])+SizeOf(PME^.Name[0])+Length(PME^.Name));
+      {$else}
+      inc(PME);
+      {$endif}
+      if Kind=mkFunction then
         SetLength(Args,n+1) else
         SetLength(Args,n);
       if length(Args)>MAX_METHOD_ARGS then
-         RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
+        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
+      {$ifdef FPC}
       if aResultType<>nil then
-      with Args[n] do begin
-        ParamName := @CONST_PSEUDO_RESULT_NAME;
-        ValueDirection := smdResult;
-        ArgTypeInfo := aResultType;
-        if ArgTypeInfo=TypeInfo(Integer) then // under FPC integer->'longint'
-          ArgTypeName := @CONST_INTEGER_NAME else
-          ArgTypeName := @ArgTypeInfo^.Name;
-      end;
+        with Args[n] do begin
+          ParamName := @CONST_PSEUDO_RESULT_NAME;
+          ValueDirection := smdResult;
+          ArgTypeInfo := aResultType;
+          if ArgTypeInfo=TypeInfo(Integer) then // under FPC integer->'longint'
+            ArgTypeName := @CONST_INTEGER_NAME else
+            ArgTypeName := @ArgTypeInfo^.Name;
+        end;
+      {$endif}
       for a := 0 to n-1 do
-      with Args[a],PVmtMethodParam(P)^ do begin
-        f := mORMot.TParamFlags(Flags);
+      {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
+      with Args[a] do begin
+        f := mORMot.TParamFlags(VMP^.Flags);
         if pfVar in f then
           ValueDirection := smdVar else
         if pfOut in f then
@@ -53611,7 +53635,7 @@ begin
         ArgsNotResultLast := a;
         if ValueDirection<>smdConst then
           ArgsOutNotResultLast := a;
-          ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(ParamType)));
+        ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(VMP^.ParamType)));
         ArgTypeName := @ArgTypeInfo^.Name;
         if a>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
@@ -53624,25 +53648,29 @@ begin
              RaiseError('%: % parameter should be declared as const',
                [ParamName^,ArgTypeName^]);
         end;
-        if Name='$self' then
+        if pfSelf in f then
           ParamName := @CONST_PSEUDO_SELF_NAME else
-          ParamName := @Name;
-        P := AlignToPtr(@Name[ord(Name[0])+1]);
+        if pfResult in f then begin
+          if (a <> n-1) or (High(Args) <> a+1) then
+            RaiseError('%: % internal FPC RTTI low level problem',[ParamName^,ArgTypeName^]);
+          Args[a]:=Args[a+1];
+          SetLength(Args,n);
+        end else
+          ParamName := @VMP^.Name;
+        P := AlignToPtr(PByte(@VMP^.Name[0])+SizeOf(VMP^.Name[0])+Length(VMP^.Name));
+        P := PByte(AlignToPtr(PByte(@PParameterLocations(P).Count)
+               + SizeOf(PParameterLocations(P).Count)))
+               + SizeOf(TParameterLocation) * PParameterLocations(P).Count;
+        P := AlignToPtr(P);
+      end;
+      if aResultType<>nil then
+      begin
+        P := PByte(AlignToPtr(PByte(@PParameterLocations(P).Count)
+               + SizeOf(PParameterLocations(P).Count)))
+               + SizeOf(TParameterLocation) * PParameterLocations(P).Count;
+        P := AlignToPtr(P);
       end;
       {$else FPC} // Delphi code
-      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-      Kind := PME^.Kind;
-      if PME^.CC<>ccRegister then
-        RaiseError('method shall use register calling convention',[]);
-      // retrieve method call arguments from RTTI
-      n := PME^.ParamCount;
-      inc(PME);
-      if Kind=mkFunction then
-        SetLength(Args,n+1) else
-        SetLength(Args,n);
-      if length(Args)>MAX_METHOD_ARGS then
-        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
-      for a := 0 to n-1 do
       with Args[a] do begin
         f := PF^;
         inc(PF);
