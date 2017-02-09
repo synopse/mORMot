@@ -65,7 +65,7 @@ begin
       ' source -auth key.private -pass P@ssW0rd -rounds 60000'#13#10+
       '      -const MY_PRIVKEY -comment "My Private Key"');
     writeln(ExeVersion.ProgramName,
-      ' infopriv -auth key.private -pass P@ssW0rd -rounds 60000');
+      ' infopriv -auth key.private -pass P@ssW0rd -rounds 60000 [-json key.json]');
     writeln(ExeVersion.ProgramName,
       ' chain file1.public file2.public file3.public ...');
     writeln(ExeVersion.ProgramName,
@@ -77,7 +77,7 @@ begin
       ' decrypt -file some.doc.synecc -out some.doc -auth key.private'#13#10+
       '      -authpass P@ssW0rd -authrounds 60000 -saltpass salt -saltrounds 60000');
     writeln(ExeVersion.ProgramName,
-      ' infocrypt -file some.doc.synecc [-rawfile some.doc.raw]');
+      ' infocrypt -file some.doc.synecc [-rawfile some.raw][-json some.json]');
     writeln(ExeVersion.ProgramName,
       ' cheatinit -newpass MasterP@ssw0RD@ -newrounds 100000');
     writeln(ExeVersion.ProgramName,

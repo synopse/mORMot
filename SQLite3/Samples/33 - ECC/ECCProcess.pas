@@ -446,11 +446,11 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
     sw.Text('',[]);
   end;
 
-var issuer, authpass, savepass, constname, comment: RawUTF8;
+var issuer, authpass, savepass, constname, comment, json: RawUTF8;
     start: TDateTime;
     authrounds, days, saverounds, splitfiles: integer;
     msg: string;
-    origfile,auth,newfile: TFileName;
+    origfile,auth,newfile,jsonfile: TFileName;
     algo: TECIESAlgo;
     decrypt: TECCDecrypt;
     decryptsign: TECCSignatureCertifiedContent;
@@ -584,7 +584,11 @@ begin
         'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
-      sw.Text('%',[ECCCommandInfoPrivFile(auth,authpass,authrounds)]);
+      json := ECCCommandInfoPrivFile(auth,authpass,authrounds);
+      sw.Text('%',[json]);
+      jsonfile := sw.AsString('Json','','');
+      if jsonfile <> '' then
+        FileFromString(json,jsonfile);
       if not sw.NoPrompt then
         WritePassword(auth,authpass,authrounds);
     end;
@@ -615,7 +619,11 @@ begin
         origfile := sw.AsString('File','','Enter the name of the encrypted file.');
       until FileExists(origfile) or sw.NoPrompt;
       newfile := sw.AsString('RawFile','','');
-      sw.Text('%',[JSONReformat(ECIESHeaderText(origfile,newfile))]);
+      json := JSONReformat(ECIESHeaderText(origfile,newfile));
+      sw.Text('%',[json]);
+      jsonfile := sw.AsString('Json','','');
+      if jsonfile <> '' then
+        FileFromString(json,jsonfile);
     end;
     ecDecrypt: begin
       repeat
@@ -692,7 +700,7 @@ begin
       FillcharFast(pointer(savepass)^,length(savepass),0);
     end;
   end;
-  if (newfile<>'') and (result=eccSuccess) then
+  if (newfile<>'') and (result=eccSuccess) and not(cmd in [ecInfoCrypt]) then
     sw.Text(' % file created.',[newfile],ccWhite);
   sw.TextColor(ccLightGray);
 end;
