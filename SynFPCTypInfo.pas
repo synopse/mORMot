@@ -52,12 +52,7 @@ unit SynFPCTypInfo;
 
 interface
 
-{$MODE objfpc}
-{$MODESWITCH AdvancedRecords}
-{$inline on}
-{$h+}
-{$r-} 
-{$q-} 
+{$I Synopse.inc}
 
 uses
   SysUtils,
@@ -81,6 +76,9 @@ function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inli
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
+{$ifdef FPC_NEWRTTI}
+function GetFPCRecInitData(TypeData: Pointer): Pointer; inline;
+{$endif}
 
 
 implementation
@@ -195,5 +193,15 @@ function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
   result := typinfo.GetPropInfo(AClass,PropName);
 end;
+
+{$ifdef FPC_NEWRTTI}
+function GetFPCRecInitData(TypeData: Pointer): Pointer;
+begin
+  if PTypeData(TypeData)^.RecInitInfo = nil then
+    result := TypeData
+  else
+    result := PTypeData(TypeData)^.RecInitData;
+end;
+{$endif}
 
 end.
