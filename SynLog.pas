@@ -495,9 +495,10 @@ type
     // - creates the TSynLog if not already existing for this current thread
     function SynLog: TSynLog;
     /// register one object and one echo callback for remote logging
-    // - aClient is typically a mORMot's TSQLHttpClient
+    // - aClient is typically a mORMot's TSQLHttpClient or a TSynLogCallbacks
+    // instance as defined in this unit
     // - if aClientOwnedByFamily is TRUE, its life time will be manage by this
-    // TSynLogFamily: it will staty alive until this TSynLogFamily is destroyed,
+    // TSynLogFamily: it will stay alive until this TSynLogFamily is destroyed,
     // or the EchoRemoteStop() method called
     // - aClientEvent should be able to send the log row to the remote server
     procedure EchoRemoteStart(aClient: TObject; const aClientEvent: TOnTextWriterEcho;
@@ -1332,6 +1333,14 @@ type
     lfNone,lfAll,lfErrors,lfExceptions,lfProfile,lfDatabase,lfClientServer,
     lfDebug,lfCustom,lfDDD);
 
+  /// syslog message facilities as defined by RFC 3164
+  TSyslogFacility = (sfKern, sfUser, sfMail, sfDaemon, sfAuth, sfSyslog, sfLpr,
+    sfNews, sfUucp, sfClock, sfAuthpriv, sfFtp, sfNtp, sfAudit, sfAlert, sfCron,
+    sfLocal0, sfLocal1, sfLocal2, sfLocal3, sfLocal4, sfLocal5, sfLocal6, sfLocal7);
+
+  /// syslog message severities as defined by RFC 5424
+  TSyslogSeverity = (ssEmerg, ssAlert, ssCrit, ssErr, ssWarn, ssNotice, ssInfo, ssDebug);
+
 const
   /// up to 16 TSynLogFamily, i.e. TSynLog children classes can be defined
   MAX_SYNLOGFAMILY = 15;
@@ -1391,6 +1400,24 @@ const
   /// may be used to log as Debug or Error event, depending on an Error: boolean
   LOG_DEBUGERROR: array[boolean] of TSynLogInfo = (sllDebug, sllError);
 
+  /// used to convert a TSynLog event level into a syslog message severity
+  LOG_TO_SYSLOG: array[TSynLogInfo] of TSyslogSeverity = (
+   ssDebug, ssInfo, ssDebug, ssDebug, ssNotice, ssWarn,
+  // sllNone, sllInfo, sllDebug, sllTrace, sllWarning, sllError,
+   ssDebug, ssDebug,
+  // sllEnter, sllLeave,
+  ssWarn, ssErr, ssErr, ssDebug, ssDebug,
+  // sllLastError, sllException, sllExceptionOS, sllMemory, sllStackTrace,
+  ssNotice, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug, ssDebug,
+  // sllFail, sllSQL, sllCache, sllResult, sllDB, sllHTTP, sllClient, sllServer,
+  ssDebug, ssDebug, ssDebug, 
+  // sllServiceCall, sllServiceReturn, sllUserAuth,
+  ssDebug, ssDebug, ssDebug, ssDebug, ssNotice,
+  // sllCustom1, sllCustom2, sllCustom3, sllCustom4, sllNewRun,
+  ssWarn, ssInfo, ssDebug);
+  // sllDDDError, sllDDDInfo, sllMonitoring);
+
+  
 /// returns the trimmed text value of a logging level
 // - i.e. 'Warning' for sllWarning
 function ToText(event: TSynLogInfo): RawUTF8; overload;
@@ -1463,6 +1490,14 @@ function EventArchiveDelete(const aOldLogFileName, aDestinationPath: TFileName):
 // - use UnSynLZ.dpr tool to uncompress it into .log textual file
 // - SynLZ is much faster than zip for compression content, but proprietary
 function EventArchiveSynLZ(const aOldLogFileName, aDestinationPath: TFileName): boolean;
+
+/// append some information to a syslog message memory buffer
+// - following https://tools.ietf.org/html/rfc5424 specifications
+// - ready to be sent via UDP to a syslog remote server
+// - returns the number of bytes written to destbuffer
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
+  trimmsgfromlog: boolean): integer;
 
 
 implementation
@@ -2194,6 +2229,88 @@ begin
   if GetLastException(info) then
     result := ToText(info) else
     result := '';
+end;
+
+function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
+  const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
+  trimmsgfromlog: boolean): integer;
+  procedure PrintUSAscii(const text: RawUTF8);
+    function IsPrintUSAscii(const text: RawUTF8): boolean;
+    var i: integer;
+    begin
+      result := false;
+      if text='' then
+        exit;
+      for i := 1 to length(text) do
+        if not (ord(text[i]) in [33..126]) then
+          exit;
+      result := true;
+    end;
+  begin
+    destbuffer^ := ' ';
+    inc(destbuffer);
+    if IsPrintUSAscii(text) then
+      destbuffer := AppendRawUTF8ToBuffer(destbuffer,text) else begin
+      destbuffer^ := '-'; // NILVALUE
+      inc(destbuffer);
+    end;
+  end;
+var tmp: array[0..15] of AnsiChar;
+    P: PAnsiChar;
+    start: PUTF8Char;
+    D: TDateTime;
+    len: integer;
+begin
+  result := 0;
+  if destsize<127 then
+    exit;
+  start := destbuffer;
+  destbuffer^ := '<';
+  inc(destbuffer);
+  P := StrUInt32(@tmp[15],ord(severity)+ord(facility) shl 3);
+  len := @tmp[15]-P;
+  MoveFast(P^,destbuffer^,len);
+  inc(destbuffer,len);
+  PInteger(destbuffer)^ := ord('>')+ord('1')shl 8+ord(' ')shl 16; // VERSION=1
+  inc(destbuffer,3);
+  D := NowUTC;
+  DateToIso8601PChar(D,destbuffer,true);
+  TimeToIso8601PChar(D,destbuffer+10,True,'T',true);
+  destbuffer[23] := 'Z';
+  inc(destbuffer,24);
+  if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
+    (destbuffer-start)+15>destsize then
+    exit; // avoid buffer overflow
+  PrintUSAscii(ExeVersion.Host); // HOST
+  PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
+  PrintUSAscii(procid); // PROCID
+  PrintUSAscii(msgid); // MSGID
+  PrintUSAscii(''); // no STRUCTURED-DATA
+  destbuffer^ := ' ';
+  inc(destbuffer);
+  len := length(msg);
+  P := pointer(msg);
+  if trimmsgfromlog and (len>27) then 
+    if (P[0]='2') and (P[8]=' ') then begin
+      inc(P,27); // trim e.g. '20160607 06442255  ! trace '
+      dec(len,27);
+    end else
+    if HexToBin(P,nil,8) then begin
+      inc(P,25); // trim e.g. '00000000089E5A13  " info '
+      dec(len,25);
+    end;
+  while (len>0) and (P^<=' ') do begin
+    inc(P);
+    dec(len);
+  end;
+  len := Utf8TruncatedLength(P,len,destsize-(destbuffer-start)-3);
+  if not IsAnsiCompatible(P,len) then begin
+    PInteger(destbuffer)^ := $bfbbef; // UTF-8 BOM
+    inc(destbuffer,3);
+  end;
+  result := destbuffer-start;
+  MoveFast(P^,destbuffer^,len);
+  inc(result,len);
 end;
 
 {$ifndef NOVARIANTS}
