@@ -1841,6 +1841,20 @@ function Utf8TruncateToUnicodeLength(var text: RawUTF8; maxUtf16: integer): bool
 // - returns FALSE if text was not truncated, TRUE otherwise
 function Utf8TruncateToLength(var text: RawUTF8; maxUTF8: cardinal): boolean;
 
+/// compute the truncated length of the supplied UTF-8 value if it exceeds the
+// specified UTF-8 Unicode characters count
+// - this function will ensure that the returned content will contain only valid
+// UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
+// - returns maxUTF8 if text was not truncated, or the number of fitting bytes
+function Utf8TruncatedLength(const text: RawUTF8; maxUTF8: cardinal): integer; overload;
+
+/// compute the truncated length of the supplied UTF-8 value if it exceeds the
+// specified UTF-8 Unicode characters count
+// - this function will ensure that the returned content will contain only valid
+// UTF-8 sequence, i.e. will trim the whole trailing UTF-8 sequence
+// - returns maxUTF8 if text was not truncated, or the number of fitting bytes
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxUTF8: cardinal): integer; overload;
+
 /// calculate the UTF-16 Unicode characters count of the UTF-8 encoded first line
 // - count may not match the UCS4 glyphs number, in case of UTF-16 surrogates
 // - end the parsing at first #13 or #10 character
@@ -11582,7 +11596,9 @@ function MultiEventFind(const EventList; const Event: TMethod): integer;
 // - the list is not checked for duplicates
 procedure MultiEventMerge(var DestList; const ToBeAddedList);
 
-
+/// compare two TMethod instances
+function EventEquals(const eventA,eventB): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
 
 { ************ fast ISO-8601 types and conversion routines ***************** }
 
@@ -19075,10 +19091,31 @@ begin
     result := false;
     exit; // nothing to truncate
   end;
-  while (maxUTF8>0) and (ord(Text[maxUTF8]) and $c0=$80) do dec(maxUTF8);
-  if (maxUTF8>0) and (ord(Text[maxUTF8]) and $80<>0) then dec(maxUTF8);
+  while (maxUTF8>0) and (ord(text[maxUTF8]) and $c0=$80) do dec(maxUTF8);
+  if (maxUTF8>0) and (ord(text[maxUTF8]) and $80<>0) then dec(maxUTF8);
   SetLength(text,maxUTF8);
   result := true;
+end;
+
+function Utf8TruncatedLength(const text: RawUTF8; maxUTF8: cardinal): integer;
+begin
+  result := length(text);
+  if cardinal(result)<maxUTF8 then
+    exit;
+  result := maxUTF8;
+  while (result>0) and (ord(text[result]) and $c0=$80) do dec(result);
+  if (result>0) and (ord(text[result]) and $80<>0) then dec(result);
+end;
+
+function Utf8TruncatedLength(text: PAnsiChar; textlen,maxUTF8: cardinal): integer;
+begin
+  if textlen<maxUTF8 then begin
+    result := textlen;
+    exit;
+  end;
+  result := maxUTF8;
+  while (result>0) and (ord(text[result]) and $c0=$80) do dec(result);
+  if (result>0) and (ord(text[result]) and $80<>0) then dec(result);
 end;
 
 function Utf8FirstLineToUnicodeLength(source: PUTF8Char): PtrInt;
@@ -48818,7 +48855,7 @@ begin
   P := @PByteArray(fTempBuf)[fEchoStart];
   while (L>0) and (P[L-1] in [10,13]) do // trim right CR/LF chars
     dec(L);
-  LI := length(fEchoBuf); // faster append to fEchoBuf
+  LI := length(fEchoBuf); // fast append to fEchoBuf
   SetLength(fEchoBuf,LI+L);
   MoveFast(P^,PByteArray(fEchoBuf)[LI],L);
 end;
@@ -61739,6 +61776,13 @@ begin
     exit;
   SetLength(Dest,d+n);
   MoveFast(New[0],Dest[d],n*sizeof(TMethod));
+end;
+
+function EventEquals(const eventA,eventB): boolean;
+var A: TMethod absolute eventA;
+    B: TMethod absolute eventB;
+begin
+  result := (A.Code=B.Code) and (A.Data=B.Data); 
 end;
 
 var
