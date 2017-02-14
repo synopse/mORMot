@@ -169,7 +169,6 @@ uses
   mORMotMVC,
   {$endif}
   SynBidirSock,
-  SynOpenSSL,
   mORMotDDD,
   dddDomUserTypes,
   dddDomUserInterfaces,
