@@ -205,7 +205,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.16.2
+    - updated SQLite3 engine to latest version 3.17.0
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB

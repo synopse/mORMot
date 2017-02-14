@@ -90,6 +90,9 @@ type
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
+    fSyslogLevels: TSynLogInfos;
+    fSyslogFacility: TSyslogFacility;
+    fSyslogServer: RawUTF8;
   public
     /// initialize the settings to their (TSynLogFamily) default values
     constructor Create; override;
@@ -132,7 +135,22 @@ type
     /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)
     property RotateFileSizeKB: cardinal read fRotateFileSize write fRotateFileSize;
     /// fixed hour of the day where logging files rotation should be performed
-   property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+    property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+    /// the optional log levels to be used for remote UDP syslog server sending
+    // - works in conjunction with SyslogServer property
+    // - default will transmit all warnings, errors and exceptions
+    property SyslogLevels: TSynLogInfos read fSyslogLevels write fSyslogLevels;
+    /// the optional log levels to be used for remote UDP syslog server sending
+    // - works in conjunction with SyslogServer/SyslogLevels properties
+    // - default is sfLocal0
+    property SyslogFacility: TSyslogFacility read fSyslogFacility write fSyslogFacility;
+    /// the optional remote UDP syslog server
+    // - expecting https://tools.ietf.org/html/rfc5424 messages over UDP
+    // - e.g. '1.2.3.4' to connect to UDP server 1.2.3.4 using default port 514 -
+    // but you can specify an alternative port as '1.2.3.4:2514'
+    // - works in conjunction with SyslogLevels/SyslogFacility properties
+    // - default is '' to disable syslog remote logging
+    property SyslogServer: RawUTF8 read fSyslogServer write fSyslogServer;
   end;
 
   TDDDAppSettingsAbstract = class;
@@ -172,8 +190,12 @@ type
     fAllProps: PPropInfoDynArray;
     fDescription: string;
     fLog: TDDDLogSettings;
+    fSyslog: TCrtSocket;
+    fSyslogProcID: RawUTF8;
     fStorage: TDDDAppSettingsStorageAbstract;
     procedure SetProperties(Instance: TObject); virtual;
+    function SyslogEvent(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean;
   public
     /// initialize the settings, with a corresponding storage process
     constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;  
@@ -194,6 +216,8 @@ type
     function AsJson: RawUTF8; virtual;
     /// access to the associated settings storage
     property Storage: TDDDAppSettingsStorageAbstract read fStorage;
+    /// transmitted as PROCID as part of any Log.SyslogServer message
+    property SyslogProcID: RawUTF8 read fSyslogProcID write fSyslogProcID;
   published
     /// some text which will be used to describe this application
     property Description: string read FDescription write FDescription;
@@ -519,6 +543,8 @@ implementation
 { TDDDAppSettingsAbstract }
 
 procedure TDDDAppSettingsAbstract.Initialize(const aDescription: string);
+var
+  uri: TURI;
 begin
   {$ifdef WITHLOG}
   with SQLite3Log.Family do begin
@@ -539,10 +565,37 @@ begin
     {$ifdef MSWINDOWS}
     AutoFlushTimeOut := Log.AutoFlushTimeOut;
     {$endif}
+    if (Log.SyslogServer<>'') and (Log.SyslogServer[1]<>'?') and
+       not Assigned(EchoCustom) and (fSyslog=nil) and (Log.SyslogLevels<>[]) and
+       uri.From(Log.SyslogServer,'514') then
+      try
+        fSyslog := TCrtSocket.Open(uri.Server,uri.Port,cslUDP,2000);
+        EchoCustom := SyslogEvent;
+      except
+        fSyslog := nil;
+      end;
   end;
   {$endif}
   if fDescription='' then
     fDescription := aDescription;
+end;
+
+function TDDDAppSettingsAbstract.SyslogEvent(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
+var
+  buf: array[0..511] of AnsiChar; // 512 bytes for fast unfragmented UDP packet
+  len: integer;
+begin
+  result := false;
+  if (fSyslog=nil) or not (Level in Log.SyslogLevels) then
+    exit;
+  len := SyslogMessage(Log.SyslogFacility,LOG_TO_SYSLOG[Level],Text,
+    fSyslogProcID,ToText(Level),@buf,sizeof(buf),true);
+  if len<>0 then
+    if fSyslog.TrySndLow(@buf,len) then // works even if no server is available
+      result := true else
+      raise ESynException.CreateUTF8('%.SyslogEvent failed for %:% as error %',
+        [self,fSyslog.Server,fSyslog.Port,fSyslog.LastLowSocketError]);
 end;
 
 procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
@@ -555,6 +608,12 @@ begin
   StoreIfUpdated;
   inherited Destroy;
   fStorage.Free;
+  if fSyslog<>nil then begin
+    {$ifdef WITHLOG}
+    SQLite3Log.Family.EchoCustom := nil;
+    {$endif}
+    FreeAndNil(fSyslog);
+  end;   
 end;
 
 function TDDDAppSettingsAbstract.AsJson: RawUTF8;
@@ -591,6 +650,9 @@ begin
   fRotateFileCount := 20;
   fRotateFileSize := 128*1024; // 128 MB per rotation log by default
   fAutoFlush := 5;
+  fSyslogLevels := [sllWarning,sllLastError,sllError,
+    sllException,sllExceptionOS,sllDDDError];
+  fSyslogFacility := sfLocal0;
 end;
 
 
@@ -881,6 +943,5 @@ begin
   inherited Create;
   fSMTP := SMTP_DEFAULT;
 end;
-
 
 end.

@@ -4301,7 +4301,23 @@ begin
     L.Free;
   end;
 end;
+var tmp: array[0..512] of AnsiChar;
+    msg: RawUTF8;
+    len: integer;
 begin
+  FillcharFast(tmp,sizeof(tmp),1);
+  len := SyslogMessage(sfAuth,ssCrit,'test','','',tmp,sizeof(tmp),false);
+  Check(len=65);
+  tmp[len] := #0;
+  Check(IdemPChar(tmp,'<34>1 '));
+  Check(PosEx(' - - - test',tmp)=len-10);
+  msg := StringOfChar('+',300);
+  len := SyslogMessage(sfLocal4,ssNotice,msg,'proc','msg',tmp,300,false);
+  Check(IdemPChar(tmp,'<165>1 '));
+  Check(PosEx(' proc msg - ++++',tmp)=56);
+  Check(len<300,'truncated to avoid buffer overflow');
+  Check(tmp[len-1]='+');
+  Check(tmp[len]=#1);
   Test('D:\Dev\lib\SQLite3\exe\TestSQL3.exe 1.2.3.4 (2011-04-07 11:09:06)'#13#10+
     'Host=MyPC User=MySelf CPU=2*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545 '+
     'Instance=D:\Dev\MyLibrary.dll'#13#10+
