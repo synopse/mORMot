@@ -1504,7 +1504,7 @@ type
     // - e.g. '/category/name/10?param=1'
     Address: SockString;
     /// fill the members from a supplied URI
-    function From(aURI: SockString): boolean;
+    function From(aURI: SockString; const DefaultPort: SockString=''): boolean;
     /// compute the whole normalized URI
     function URI: SockString;
     /// the server port, as integer value
@@ -2809,7 +2809,7 @@ const
 const
   DEFAULT_PORT: array[boolean] of SockString = ('80','443');
 
-function TURI.From(aURI: SockString): boolean;
+function TURI.From(aURI: SockString; const DefaultPort: SockString): boolean;
 var P,S: PAnsiChar;
 begin
   Https := false;
@@ -2834,7 +2834,9 @@ begin
     while not (S^ in [#0,'/']) do inc(S);
     SetString(Port,P,S-P);
   end else
-    Port := DEFAULT_PORT[Https];
+    if DefaultPort<>'' then
+      Port := DefaultPort else
+      Port := DEFAULT_PORT[Https];
   if S^<>#0 then // ':' or '/'
     inc(S);
   Address := S;
