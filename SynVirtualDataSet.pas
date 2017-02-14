@@ -137,8 +137,8 @@ type
     // - handle ftBlob,ftMemo,ftWideMemo via GetRowFieldData()
     function GetBlobStream(Field: TField; RowIndex: integer): TStream;
     /// get column data for the current active row
-    // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftDate,ftTime,ftDateTime,
-    // ftString,ftWideString kind of fields via GetRowFieldData()
+    // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftCurrency,ftDate,ftTime,
+    // ftDateTime,ftString,ftWideString kind of fields via GetRowFieldData()
     {$ifdef ISDELPHIXE3}
     {$ifdef ISDELPHIXE4}
     function GetFieldData(Field: TField; var Buffer: TValueBuffer): Boolean; override;
@@ -383,20 +383,6 @@ begin
   result := false; // we define a READ-ONLY TDataSet
 end;
 
-procedure DateTimeToNative(DataType: TFieldType; Data: TDateTime;
-  var result: TDateTimeRec); {$ifdef HASINLINE}inline;{$endif}
-var TimeStamp: TTimeStamp;
-begin
-  if DataType in [ftDate,ftTime] then begin
-    TimeStamp := DateTimeToTimeStamp(Data);
-    case DataType of
-      ftDate: result.Date := TimeStamp.Date;
-      ftTime: result.Time := TimeStamp.Time;
-    end;
-  end else
-    result.DateTime := Data;
-end;
-
 {$ifndef UNICODE}
 function TSynVirtualDataSet.GetFieldData(Field: TField; Buffer: Pointer;
   NativeFormat: Boolean): Boolean;
@@ -420,6 +406,7 @@ var Data, Dest: pointer;
     RowIndex, DataLen, MaxLen: integer;
     Temp: RawByteString;
     OnlyTestForNull: boolean;
+    TS: TTimeStamp;
 begin
   result := false;
   OnlyTestForNull := (Buffer=nil);
@@ -436,10 +423,21 @@ begin
     PWORDBOOL(Dest)^ := PBoolean(Data)^;
   ftInteger:
     PInteger(Dest)^ := PInteger(Data)^;
-  ftLargeint, ftFloat:
+  ftLargeint, ftFloat, ftCurrency:
     PInt64(Dest)^ := PInt64(Data)^;
-  ftDate,ftTime,ftDateTime:
-    DateTimeToNative(Field.DataType,PDateTime(Data)^,PDateTimeRec(Dest)^);
+  ftDate, ftTime:
+    if PDateTime(Data)^=0 then
+      result := false else begin
+      TS := DateTimeToTimeStamp(PDateTime(Data)^);
+      if (TS.Time<0) or (TS.Date<=0) then
+        result := false else // matches ValidateTimeStamp() expectations
+        case Field.DataType of
+        ftDate: PDateTimeRec(Dest)^.Date := TS.Date;
+        ftTime: PDateTimeRec(Dest)^.Time := TS.Time;
+        end;
+    end;
+  ftDateTime:
+    PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
   ftString: begin
     if DataLen<>0 then begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
