@@ -1014,8 +1014,11 @@ var
   require: PJSRootedObject;
   __filename: PWideChar;
   __dirname: PWideChar;
-
-  fHandle: HMODULE;
+  {$ifdef FPC}
+  fHandle: TLibHandle;
+  {$else}
+  fHandle: THandle;
+  {$endif}
   ModuleRec: PDllModuleRec;
 
 const

@@ -157,6 +157,7 @@
   {$define UNDIRECTDYNARRAY}
 {$endif}
 
+
 {$define INCLUDE_FTS3}
 // define this if you want to include the FTS3/FTS4 feature into the library
 // - FTS3 is an SQLite module implementing full-text search
@@ -212,6 +213,15 @@
   {$define HASINTERFACEASTOBJECT}
   {$define FPC_OR_UNICODE}
   {$define FPC_ENUMHASINNER}
+  {$ifdef VER3_1_1} // if FPC_FULLVERSION>30100 ... ifend is not Delphi 5 compatible :(
+    {$define FPC_NEWRTTI} // RTTI has been enhanced in latest trunk 
+  {$endif}
+  {$ifdef FPC_NEWRTTI}
+    {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+  {$else}
+    {$define DELPHI_OR_FPC_OLDRTTI}
+    {$define FPC_OLDRTTI}
+  {$endif}
 
   {.$define FPCSQLITE3STATIC}
   // allow static linking of the SQlite3 engine (including crypto) to the project
@@ -234,7 +244,10 @@
     {$ifdef CPUX64}
       {$define FPCSQLITE3STATIC} // we supply Linux 64-bit x86_64 .o
     {$endif}
-  {$endif} 
+    {$ifdef CPUARM}
+      {$define FPCSQLITE3STATIC} // we supply Linux 32-bit ARM .o
+    {$endif}
+  {$endif}
 
   {$ifdef ANDROID}
     {$define LINUX}
@@ -244,7 +257,9 @@
     // this includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system
     {$define PUREPASCAL} // e.g. low-level stack layout differs
-    {$ifndef DARWIN}
+    {$ifdef DARWIN}
+      {$define FPCSQLITE3STATIC} // we supply Darwin static libs
+    {$else}
       {$define BSDNOTDARWIN}
     {$endif}
   {$endif}
@@ -267,7 +282,7 @@
 
   // FPC has its own RTTI layout only since late 3.x
   // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated branch conditional
+  {$ifdef FPC_NEWRTTI} // use dedicated branch conditional
     {$ifdef CPUINTEL}
       {$define HASINTERFACERTTI}
     {$endif}
@@ -277,7 +292,7 @@
     {$ifdef CPUAARCH64}
       {$define HASINTERFACERTTI}
     {$endif}
-  {$endif FPC_HAS_EXTENDEDINTERFACERTTI}
+  {$endif FPC_NEWRTTI}
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -323,6 +338,7 @@
 
 {$else FPC}
 
+  {$define DELPHI_OR_FPC_OLDRTTI}
   {$ifndef PUREPASCAL}
     {$define CPUINTEL} // Delphi only for Intel by now
   {$endif}
@@ -395,6 +411,7 @@
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
       {$define ISDELPHI2010}
+      {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
@@ -527,15 +544,11 @@
     {$define NOSQLITE3STATIC}
   {$endif}
 {$endif}
-{$ifndef CPUINTEL}
-  {$define NOSQLITE3STATIC}
-{$endif}
 {$ifdef ANDROID}
   {$define NOSQLITE3STATIC}
 {$endif}
 {$ifdef BSD}
   {$ifdef Darwin}
-    {$define NOSQLITE3STATIC}
   {$else}
     // not yet sure if needed, but it works !
     {$define NOSQLITE3STATIC}

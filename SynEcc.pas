@@ -105,15 +105,16 @@ uses
 
 {$ifdef CPUINTEL}
 
+  {$ifndef BSD}
   {$define ECC_AVAILABLE}
+  {$endif}
 
   {$ifdef CPUX86}
     {$ifdef KYLIX3}
       {$define ECC_32ASM}     // gcc -g -O1 -c ecc.c
     {$else}
       {$ifdef BSD}
-        // just to let it compile ... does not work yet !
-        {$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
+        {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
       {$else}
         {.$define ECC_32ASM}    // gcc -g -O1 -c ecc.c
         {.$define ECC_O1}       // gcc -g -O1 -c ecc.c

@@ -266,12 +266,13 @@ type
   ISynLog = interface(IUnknown)
     ['{527AC81F-BC41-4717-B089-3F74DE56F1AE}']
     /// call this method to add some information to the log at a specified level
-    // - see the format in TSynLog.Log() method description
-    // (not compatible with default SysUtils.Format function)
-    // - if Instance is set, it will log the corresponding class name and address
-    // (to be used if you didn't call TSynLog.Enter() method first)
+    // - will use TTextWriter.Add(...,twOnSameLine) to append its content
+    // - % = #37 indicates a string, integer, floating-point, class parameter
+    // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
+    // - if Instance is set, it will log the corresponding class name and address
+    // (to be used if you didn't call TSynLog.Enter() method first)
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;
       Instance: TObject=nil); overload;
     /// call this method to add some information to the log at a specified level
@@ -918,17 +919,9 @@ type
     class procedure DebuggerNotify(Level: TSynLogInfo;
       const Format: RawUTF8; const Args: array of const);
     /// call this method to add some information to the log at the specified level
-    // - % = #37 indicates a string, integer, floating-point, or class parameter
-    // to be appended as text (e.g. class name)
-    // - $ = #36 indicates an integer to be written with 2 digits and a comma
-    // - £ = #163 indicates an integer to be written with 4 digits and a comma
-    // - µ = #181 indicates an integer to be written with 3 digits without any comma
-    // - ¤ = #164 indicates CR+LF chars
-    // - CR = #13 indicates CR+LF chars
-    // - § = #167 indicates to trim last comma
-    // - since some of this characters above are > #127, they are not UTF-8
-    // ready, so we expect the input format to be WinAnsi, i.e. mostly English
-    // text (with chars < #128) with some values to be inserted inside
+    // - will use TTextWriter.Add(...,twOnSameLine) to append its content
+    // - % = #37 indicates a string, integer, floating-point, class parameter
+    // to be appended as text (e.g. class name), any variant as JSON...
     // - note that cardinal values should be type-casted to Int64() (otherwise
     // the integer mapped value will be transmitted, therefore wrongly)
     procedure Log(Level: TSynLogInfo; const TextFmt: RawUTF8; const TextArgs: array of const;

@@ -2063,8 +2063,8 @@ type
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
   TSQLite3LibraryDynamic = class(TSQLite3Library)
   protected
-    {$ifdef BSDNOTDARWIN}
-    fHandle: pointer;
+    {$ifdef FPC}
+    fHandle: TLibHandle;
     {$else}
     fHandle: THandle;
     {$endif}

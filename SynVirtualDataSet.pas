@@ -33,6 +33,7 @@ unit SynVirtualDataSet;
   - Esteban Martin (EMartin)
   - mingda
   - Murat Ak
+  - Valentin (StxLog)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or

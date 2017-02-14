@@ -257,8 +257,7 @@ begin
     try
       result := ecvUnknownAuthority;
       if auth.FromAuth('','',cert.AuthoritySerial) then
-        result := cert.Verify(auth,pointer(content),length(content)) else
-        result := ecvUnknownAuthority;
+        result := cert.Verify(auth,pointer(content),length(content));
     finally
       auth.Free;
     end;

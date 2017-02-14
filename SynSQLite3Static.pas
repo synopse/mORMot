@@ -264,28 +264,69 @@ extern int unixWrite(
       const LOGFUNCLINKNAME = '_log';
     {$endif CPU64}
   {$else}
-    {$ifndef FPC_CROSSCOMPILING}
-      {$linklib gcc.a}
-    {$endif}
-    {$ifdef CPU64}
-      {$L fpc-linux64\sqlite3-64.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib fpc-linux64\gcc.a}
+    {$ifdef Darwin}
+      {$ifdef CPU64}
+        {$linklib .\..\fpc-darwin64\libsqlite3.a}
+      {$else}
+        {$linklib .\..\fpc-darwin32\libsqlite3.a}
       {$endif}
       const LOGFUNCLINKNAME = 'log';
-    {$else}
-      {$L fpc-linux32\sqlite3.o}
-      {$ifdef FPC_CROSSCOMPILING}
-        {$linklib fpc-linux32\gcc.a}
+    {$else Darwin}
+      {$ifndef FPC_CROSSCOMPILING}
+        {$linklib gcc.a}
       {$endif}
-      const LOGFUNCLINKNAME = 'log';
-    {$endif CPU64}
+      {$ifdef CPUARM}
+        {$L fpc-linuxarm\sqlite3.o}
+        {$ifdef FPC_CROSSCOMPILING}
+          {$linklib fpc-linuxarm\gcc.a}
+          {$L libgcc_s.so.1}
+        {$else}
+          {$linklib gcc_s.so.1}
+        {$endif}
+        const LOGFUNCLINKNAME = 'log';
+      {$endif}
+      {$ifdef CPUINTEL}
+        {$ifdef CPU64}
+          {$L fpc-linux64\sqlite3-64.o}
+          {$ifdef FPC_CROSSCOMPILING}
+            {$linklib fpc-linux64\gcc.a}
+          {$endif}
+          const LOGFUNCLINKNAME = 'log';
+        {$else}
+          {$L fpc-linux32\sqlite3.o}
+          {$ifdef FPC_CROSSCOMPILING}
+            {$linklib fpc-linux32\gcc.a}
+          {$endif}
+          const LOGFUNCLINKNAME = 'log';
+        {$endif CPU64}
+      {$endif CPUINTEL}
+    {$endif Darwin}
   {$endif MSWINDOWS}
 
 function log(x: double): double; cdecl; public name LOGFUNCLINKNAME; export;
 begin
   result := ln(x);
 end;
+
+{$ifdef Darwin}
+function moddi3(num,den:int64):int64; cdecl; [public, alias: '___moddi3'];
+begin
+ result := num mod den;
+end;
+function umoddi3(num,den:uint64):uint64; cdecl; [public, alias: '___umoddi3'];
+begin
+ result := num mod den;
+end;
+function divdi3(num,den:int64):int64; cdecl; [public, alias: '___divdi3'];
+begin
+ result := num div den;
+end;
+function udivdi3(num,den:uint64):uint64; cdecl; [public, alias: '___udivdi3'];
+begin
+ result := num div den;
+end;
+
+{$endif}
 
 {$else}
 
@@ -965,7 +1006,11 @@ function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
       '_winWrite';
       {$endif}
     {$else}
+    {$ifdef Darwin}
+    '_unixWrite'; export;
+    {$else}
     'unixWrite'; export;
+    {$endif}
     {$endif}
   {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
@@ -1073,7 +1118,11 @@ function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
       '_winRead';
       {$endif}
     {$else}
-      'unixRead'; export;
+    {$ifdef Darwin}
+    '_unixRead'; export;
+    {$else}
+    'unixRead'; export;
+    {$endif}
     {$endif}
   {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success

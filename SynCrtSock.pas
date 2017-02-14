@@ -7603,7 +7603,7 @@ end;
 { ************ libcurl implementation }
 
 const
-  LIBCURL_DLL = {$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF};
+  LIBCURL_DLL = {$IFDEF Darwin} 'libcurl.dylib' {$ELSE}{$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF}{$ENDIF};
 
 type
   TCurlOption = (
@@ -7817,7 +7817,11 @@ type
 
 var
   curl: packed record
+    {$ifdef FPC}
+    Module: TLibHandle;
+    {$else}
     Module: THandle;
+    {$endif}
     global_init: function(flags: TCurlGlobalInit): TCurlResult; cdecl;
     global_cleanup: procedure; cdecl;
     version_info: function(age: TCurlVersion): PCurlVersionInfo; cdecl;
@@ -7847,9 +7851,18 @@ begin
   if curl.Module=0 then
   try
     curl.Module := LoadLibrary(LIBCURL_DLL);
+    {$ifdef Darwin}
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl.3.dylib');
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl.4.dylib');
+    {$else}
     {$ifdef LINUX}
     if curl.Module=0 then
       curl.Module := LoadLibrary('libcurl.so.3');
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl.so.4');
+    {$endif}
     {$endif}
     if curl.Module=0 then
       raise ECrtSocket.CreateFmt('Unable to find %s'{$ifdef LINUX}

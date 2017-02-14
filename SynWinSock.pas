@@ -777,8 +777,13 @@ implementation
 
 var
   SynSockCount: Integer = 0;
+  {$ifdef FPC}
+  LibHandle: TLibHandle = 0;
+  Libwship6Handle: TLibHandle = 0;
+  {$else}
   LibHandle: THandle = 0;
   Libwship6Handle: THandle = 0;
+  {$endif}
 
 function IN6_IS_ADDR_UNSPECIFIED(const a: PInAddr6): boolean;
 begin

@@ -169,6 +169,7 @@ uses
   mORMotMVC,
   {$endif}
   SynBidirSock,
+  SynOpenSSL,
   mORMotDDD,
   dddDomUserTypes,
   dddDomUserInterfaces,
@@ -2201,7 +2202,7 @@ begin
   W.CancelAll;
   W.AddDynArrayJSON(ARP);
   U := W.Text;
-  Check(Hash32(U)={$ifdef CPUARM}$9F98936D{$else}{$ifdef CPU64}$9F98936D{$else}$54659D65{$endif}{$endif});
+  Check(Hash32(U)={$ifdef Darwin}$54659D65{$else}{$ifdef CPUARM}$9F98936D{$else}{$ifdef CPU64}$9F98936D{$else}$54659D65{$endif}{$endif}{$endif});
   P := pointer(U);
   JSON_BASE64_MAGIC_UTF8 := RawUnicodeToUtf8(@MAGIC,2);
   U2 := RawUTF8('[')+JSON_BASE64_MAGIC_UTF8+RawUTF8(BinToBase64(ARP.SaveTo))+RawUTF8('"]');
@@ -2259,7 +2260,7 @@ begin
     Check(AFP.IndexOf(F)=i);
   end;
   Test := AFP.SaveTo;
-  Check(Hash32(Test)={$ifdef CPU64}$A29C10E{$else}
+  Check(Hash32(Test)={$ifdef CPU64}{$ifdef Darwin}$3DE22166{$else}$A29C10E{$endif}{$else}
     {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif});
   for i := 0 to 1000 do begin
     Fill(F,i);
@@ -9169,6 +9170,8 @@ begin
     'ONFh7hgQ',jwt); // altered one char in signature
   check(jwt.result=jwtInvalidSignature);
   j.Free;
+  if not ecc_available then 
+    exit;
   for i := 1 to 10 do begin
     secret := TECCCertificateSecret.CreateNew(nil); // self-signed certificate
     test(TJWTES256.Create(secret,[jrcIssuer,jrcExpirationTime],[],60));
@@ -14408,6 +14411,12 @@ end;
 procedure TTestServiceOrientedArchitecture.ClientSideRESTServiceLogToDB;
 var Log: TSQLRestServerDB;
 begin
+  {$ifdef Darwin}
+  // due to a very strange error during prepare_v2, this does not (yet) work on Darwin.
+  // at least on my Darwin with sqlite 3.7.13 (Alfred note)
+  Check(1=0,'Not (yet) supported on Darwin !!');
+  exit;
+  {$endif}
   DeleteFile('servicelog.db');
   Log := TSQLRestServerDB.CreateWithOwnModel([TSQLRecordServiceLog],'servicelog.db');
   try

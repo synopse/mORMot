@@ -2552,6 +2552,9 @@ type
     /// specify ordinal storage size and sign
     // - is prefered to MaxValue to identify the number of stored bytes
     OrdType: TOrdType;
+    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    Dummy: DWORD; // needed on ARM for correct alignment !!??
+    {$endif}
     { this seemingly extraneous inner record is here for alignment purposes, so
     that its data gets aligned properly (if FPC_REQUIRES_PROPER_ALIGNMENT is set) }
     {$ifdef FPC_ENUMHASINNER}
@@ -2697,6 +2700,9 @@ type
     packed
     {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
     record
+    {$ifdef FPC_NEWRTTI}
+    RecInitInfo: Pointer;
+    {$endif}
     Size: cardinal;
     Count: integer;
     Fields: array[word] of TRecordField;
@@ -3081,11 +3087,23 @@ type
   /// the available methods calling conventions
   // - this is by design only relevant to the x86 model
   // - Win64 has one unique calling convention
-  TCallingConvention = (ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall);
+  TCallingConvention = (
+    ccRegister, ccCdecl, ccPascal, ccStdCall, ccSafeCall
+    {$ifdef FPC},
+    ccCppdecl, ccFar16,
+    ccOldFPCCall, ccInternProc, ccSysCall, ccSoftFloat, ccMWPascal
+    {$endif});
 
   /// the available kind of method parameters
-  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut,
-    {$ifdef FPC}pfConstRef{$else}pfResult{$endif});
+  TParamFlag = (pfVar, pfConst, pfArray, pfAddress, pfReference, pfOut
+    {$ifdef FPC}
+    ,pfConstRef
+    {$ifdef FPC_NEWRTTI}
+    ,pfHidden,pfHigh,pfSelf,pfVmt,pfResult
+    {$endif}
+    {$else}
+    ,pfResult
+    {$endif});
 
   /// a set of kind of method parameters
   TParamFlags = set of TParamFlag;
@@ -19976,6 +19994,7 @@ type
   end;
   /// no RTTI alignment under Delphi
   AlignToPtr = pointer;
+  AlignTypeData = pointer;
   UnalignToDouble = Double;
 
 const
@@ -27923,6 +27942,13 @@ procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
     if cp=CP_SQLRAWBLOB then
       tmp := BlobToTSQLRawBlob(Value) else
       tmp := TSynAnsiConvert.Engine(cp).UTF8ToAnsi(Value);
+    {$ifdef FPC}
+    // an FPC quirck ... and Alf work-around ... ;-)
+    if cp=CP_UTF16 then begin
+      Setlength(tmp,length(tmp)+1);
+      tmp[length(tmp)]:=#0;
+    end;
+    {$endif}
     SetLongStrProp(Instance,tmp);
   end;
   {$ifdef HASVARUSTRING}
@@ -29107,22 +29133,24 @@ type
 
 
   TMethodKind = (mkProcedure, mkFunction, mkConstructor, mkDestructor,
-    mkClassProcedure, mkClassFunction, { Obsolete } mkSafeProcedure, mkSafeFunction);
+    mkClassProcedure, mkClassFunction, mkClassConstructor, mkClassDestructor,
+    mkOperatorOverload{$ifndef FPC},{ Obsolete } mkSafeProcedure, mkSafeFunction{$endif});
 
   TIntfMethodEntryTail =
     {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}packed{$endif} record
-    {$ifdef FPC}
-    Version: Byte; // alwyas 3 at the moment
+    {$ifdef FPC_NEWRTTI}
+    ResultType: PPTypeInfo;
+    CC: TCallingConvention;
+    Kind: TMethodKind;
+    ParamCount: Word;
+    StackSize: SizeInt;
+    Name: ShortString;
     {$else}
     Kind: TMethodKind;
-    {$endif}
     CC: TCallingConvention;
-    {$ifdef FPC}
-    ResultType: PTypeInfo;
-    StackSize: Word;
-    {$endif}
     ParamCount: Byte;
     {Params: array[0..ParamCount - 1] of TVmtMethodParam;}
+    {$endif}
   end;
 
 { TTypeInfo }
@@ -29130,7 +29158,7 @@ type
 {$ifdef HASINLINE}
 function TTypeInfo.ClassType: PClassType;
 begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
+  result := AlignTypeData(@Name[ord(Name[0])+1]);
 end;
 {$else}
 function TTypeInfo.ClassType: PClassType;
@@ -29150,7 +29178,7 @@ end;
 function TTypeInfo.RecordType: PRecordType;
 {$ifdef HASINLINE}
 begin
-  result := AlignToPtr(@Name[ord(Name[0])+1]);
+  result := AlignTypeData(@Name[ord(Name[0])+1]);
 {$else}
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
@@ -29167,7 +29195,7 @@ function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
     C,C2: TClass;
 begin
-  CT := AlignToPtr(@Name[ord(Name[0])+1]); // inlined ClassType
+  CT := AlignTypeData(@Name[ord(Name[0])+1]); // inlined ClassType
   C := CT^.ClassType;
   C2 := C;
   while true do // unrolled several InheritsFrom() calls
@@ -29177,7 +29205,7 @@ begin
        (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
       if CT^.ParentInfo<>nil then begin
         with Deref(CT^.ParentInfo)^ do
-          CT := AlignToPtr(@Name[ord(Name[0])+1]); // get parent ClassType
+          CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
         if C<>TObject then
           continue else
@@ -29368,7 +29396,7 @@ end;
 
 function TTypeInfo.FloatType: TFloatType;
 begin
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$ifdef FPC}
   result := PFloatType(GetFPCTypeData(@self))^;
   {$else}
   result := TFloatType(PByte(@Name[ord(Name[0])+1])^);
@@ -29377,7 +29405,7 @@ end;
 
 function TTypeInfo.OrdType: TOrdType;
 begin
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$ifdef FPC}
   result := POrdType(GetFPCTypeData(@self))^;
   {$else}
   result := TOrdType(PByte(@Name[ord(Name[0])+1])^);
@@ -29411,17 +29439,21 @@ asm     // very fast code
 end;
 
 function TTypeInfo.SetEnumType: PEnumType;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+{$ifdef FPC}
 var p: pointer;
+    aTest: TYPINFO.PTypeInfo;
 begin
   if (@self=nil) or (Kind<>tkSet) then
     result := nil else begin
     p := GetFPCTypeData(@self);
-    inc(PtrInt(p),sizeof(TOrdType));
-    p := PPointer(AlignToPtr(p))^; // p = info^.SetBaseType
-    if p=nil then
+    {$ifdef FPC_NEWRTTI}
+    aTest := TYPINFO.PTypeData(p)^.CompTypeRef^;
+    {$else}
+    aTest := TYPINFO.PTypeData(p)^.CompType;
+    {$endif}
+    if aTest=nil then
       result := nil else
-      result := DeRef(p)^.EnumBaseType;
+      result := PTypeInfo(aTest)^.EnumBaseType;
   end;
 {$else}
 begin
@@ -29452,7 +29484,7 @@ begin
   if @self=TypeInfo(TSQLRawBlob) then
     result := CP_SQLRAWBLOB else
     if Kind in [{$ifdef FPC}tkAString,{$endif} tkLString] then
-      {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+      {$ifdef FPC}
       result := PWord(GetFPCTypeData(@self))^ else
       {$else}
       result := PWord(@Name[ord(Name[0])+1])^ else // from RTTI
@@ -29475,10 +29507,10 @@ begin
 end;
 
 function TTypeInfo.InterfaceGUID: PGUID;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} var td: PTypeData; {$endif}
+{$ifdef FPC} var td: PTypeData; {$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then result := nil else
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
+{$ifdef FPC} begin
     td := GetFPCTypeData(@self);
     result := @td^.GUID;
   end; {$else}
@@ -29487,11 +29519,11 @@ begin
 end;
 
 function TTypeInfo.InterfaceUnitName: PShortString;
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} var td: PTypeData; {$endif}
+{$ifdef FPC} var td: PTypeData; {$endif}
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := @NULL_SHORTSTRING else
-{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT} begin
+{$ifdef FPC} begin
     td := GetFPCTypeData(@self);
     result := @td^.IntfUnit;
   end; {$else}
@@ -29503,7 +29535,7 @@ function TTypeInfo.InterfaceAncestor: PTypeInfo;
 begin
   if (@self=nil) or (Kind<>tkInterface) then
     result := nil else
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$ifdef FPC}
     with PInterfaceTypeData(GetFPCTypeData(@self))^ do
     {$else}
     with PInterfaceTypeData(@Name[ord(Name[0])+1])^ do
@@ -29522,7 +29554,7 @@ begin
   if (@self=nil) or (Kind<>tkInterface) then
     exit;
   n := 0;
-  {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+  {$ifdef FPC}
   typ := PInterfaceTypeData(GetFPCTypeData(@self));
   {$else}
   typ := @Name[ord(Name[0])+1];
@@ -29533,7 +29565,7 @@ begin
     nfo := Deref(typ^.IntfParent);
     if nfo=TypeInfo(IInterface) then
       exit;
-    {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+    {$ifdef FPC}
     typ := PInterfaceTypeData(GetFPCTypeData(pointer(nfo)));
     {$else}
     typ := @nfo^.Name[ord(nfo^.Name[0])+1];
@@ -42348,7 +42380,11 @@ end;
 
 constructor TSQLRestClientURIDll.Create(aModel: TSQLModel; const DllName: TFileName);
 var aRequest: TURIMapRequest;
-    aDLL: cardinal;
+    {$ifdef FPC}
+    aDLL: TLibHandle;
+    {$else}
+    aDLL: THandle;
+    {$endif}
 begin
   {$ifdef KYLIX3}
   aDLL := LoadLibrary(pointer(DllName));
@@ -44830,6 +44866,7 @@ end;
 procedure TSQLRestStorageInMemory.UpdateFile;
 var F: TFileStream;
     Timer: TPrecisionTimer;
+    ErrorMsg: string;
 begin
   if (self=nil) or not Modified or (FileName='') then
     exit;
@@ -44838,7 +44875,28 @@ begin
   try
     if fValue.Count=0 then
       DeleteFile(FileName) else begin
-      F := TFileStream.Create(FileName,fmCreate);
+      try
+        if FileExists(FileName) then begin
+          {$ifdef CPUARM}
+          // on ARM, we have to do something special unfortunately ...
+          ErrorMsg := 'Deleting and again creating existing file';
+          DeleteFile(FileName);
+          F := TFileStream.Create(FileName,fmCreate);
+          {$else}
+          ErrorMsg := 'Open existing file';
+          F := TFileStream.Create(FileName,fmOpenWrite);
+          F.Seek(0,soFromBeginning);
+          {$endif}
+        end else
+        begin
+          ErrorMsg := 'Create new file';
+          F := TFileStream.Create(FileName,fmCreate);
+        end;
+      except
+        on E: Exception do
+          raise EORMException.CreateUTF8('% error. Failure in %.UpdateFile(%) due to %',
+           [ErrorMsg,self,FileName,E]);
+      end;
       try
         if BinaryFile then
           SaveToBinary(F) else
@@ -49940,7 +49998,7 @@ begin
     info := PPointer(PPtrInt(Instance)^+vmtTypeInfo)^;
     if info<>nil then begin // avoid GPF if not RTTI for this class
       with info^ do
-        AddShort(PClassType(AlignToPtr(@Name[ord(Name[0])+1]))^.UnitName);
+        AddShort(PClassType(AlignTypeData(@Name[ord(Name[0])+1]))^.UnitName);
       Add('.');
     end;
   end;
@@ -52780,7 +52838,11 @@ var m,a,reg: integer;
     fpreg: integer;
     {$endif}
     {$endif}
-label error;
+  procedure RaiseError(const Args: array of const);
+  begin
+    raise EInterfaceFactoryException.CreateUTF8(
+     '%.Create: %.% "%" parameter has unexpected type %%',Args);
+  end;
 begin
   if aInterface=nil then
     raise EInterfaceFactoryException.CreateUTF8('%.Create(nil)',[self]);
@@ -52852,19 +52914,17 @@ begin
         tkInteger: ErrorMsg := ' - use integer/cardinal instead';
         tkFloat:   ErrorMsg := ' - use double/currency instead';
         end;
-error:  raise EInterfaceFactoryException.CreateUTF8(
-          '%.Create: %.% "%" parameter has unexpected type %%',
-          [self,aInterface^.Name,URI,ParamName^,ArgTypeInfo^.Name,ErrorMsg]);
+        RaiseError([self,aInterface^.Name,URI,ParamName^,ArgTypeInfo^.Name,ErrorMsg]);
       end;
       smvObject:
         if ValueDirection=smdResult then begin
           ErrorMsg := ' - class not allowed as function result: use a var/out parameter';
-          goto error;
+          RaiseError([self,aInterface^.Name,URI,ParamName^,ArgTypeInfo^.Name,ErrorMsg]);
         end;
       smvInterface:
         if ValueDirection in [smdVar,smdOut,smdResult] then begin
           ErrorMsg := ' - interface not allowed as output: use a const parameter';
-          goto error;
+          RaiseError([self,aInterface^.Name,URI,ParamName^,ArgTypeInfo^.Name,ErrorMsg]);
         end;
       end;
       if ValueDirection=smdResult then
@@ -53488,7 +53548,11 @@ begin
           PByte(P)^ := $e8; inc(PByte(P));         // call FakeCall
           P^ := PtrUInt(@TInterfacedObjectFake.FakeCall)-PtrUInt(P)-4; inc(P);
           P^ := $c25dec89; inc(P);                 // mov esp,ebp; pop ebp
+          {$ifdef Darwin}
+          P^ := $900000;  // ret; nop
+          {$else}
           P^ := fMethods[i].ArgsSizeInStack or $900000;  // ret {StackSize}; nop
+          {$endif}
           inc(PByte(P),3);
           {$endif CPUX86}
         end;
@@ -53506,26 +53570,35 @@ end;
 { TInterfaceFactoryRTTI }
 
 procedure TInterfaceFactoryRTTI.AddMethodsFromTypeInfo(aInterface: PTypeInfo);
+const
+  {$if defined(CPUI386) or defined(CPUI8086) or defined(CPUX86_64) or defined(CPUM68K)}
+  DEFCC = ccRegister;
+  {$else}
+  DEFCC = ccStdCall;
+  {$ifend}
 var P: Pointer;
-    PB: PByte absolute P;
-    PI: PInterfaceTypeData absolute P;
     {$ifdef FPC}
-    PIR: PRawInterfaceTypeData absolute P;
-    {$endif}
-    PW: PWord absolute P;
+    PI: TYPINFO.PInterfaceData;
+    VMP: PVmtMethodParam;
+    methtable: PIntfMethodTable;
+    PME: PIntfMethodEntry;
+    PW: PWord;
+    aResultType: PTypeInfo;
+    methodindex,argsindex: word;
+    {$else}
+    PI: PInterfaceTypeData absolute P;
+    PB: PByte absolute P;
     PS: PShortString absolute P;
     PME: ^TIntfMethodEntryTail absolute P;
     PF: ^TParamFlags absolute P;
     PP: ^PPTypeInfo absolute P;
-    Ancestor: PTypeInfo;
-    {$ifdef FPC}
-    propCount: integer;
-    aResultType: PTypeInfo;
-    {$else}
-    Kind: TMethodKind;
+    PW: PWord absolute P;
     {$endif}
+    Ancestor: PTypeInfo;
+    Kind: TMethodKind;
     f: TParamFlags;
-    m,a: integer;
+    m: integer;
+    paramcounter: word;
     n: cardinal;
     aURI: RawUTF8;
 
@@ -53539,59 +53612,73 @@ var P: Pointer;
 begin
   // handle interface inheritance via recursive calls
   P := aInterface^.ClassType;
+  {$ifdef FPC}
+  PI := TYPINFO.PInterfaceData(GetFPCTypeData(pointer(aInterface)));
+  if PI^.Parent<>nil then
+    Ancestor := Deref(MORMOT.PPTypeInfo(PI^.Parent)) else
+  {$else}
   if PI^.IntfParent<>nil then
     Ancestor := Deref(PI^.IntfParent) else
+  {$endif}
     Ancestor := nil;
   if Ancestor<>nil then begin
     AddMethodsFromTypeInfo(Ancestor);
     inc(fAddMethodsLevel);
   end;
-  // retrieve methods for this interface level
   {$ifdef FPC}
-  if PI^.IntfUnit='System' then
+  if PI^.UnitName='System' then
     exit;
-  if aInterface^.Kind=tkInterface then
-    P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]) else
-    P := AlignToPtr(@PIR^.IIDStr[ord(PIR^.IIDStr[0])+1]);
-  propCount := PSmallInt(P)^; // FPC add property information -> ignore now
-  inc(P,sizeOf(SmallInt));
-  P := AlignToPtr(P);
-  for a := 0 to propCount-1 do
-    P := AlignToPtr(@PPropInfo(P)^.Name[ord(PPropInfo(P)^.Name[0])+1]);
+  // retrieve methods for this interface level
+  methtable := PI^.MethodTable;
+  n:= methtable^.Count;
+  PW := @methtable^.RttiCount;
   {$else}
   P := AlignToPtr(@PI^.IntfUnit[ord(PI^.IntfUnit[0])+1]);
-  {$endif}
   n := PW^; inc(PW);
+  {$endif}
   if (PW^=$ffff) or (n=0) then
     exit; // no RTTI or no method at this level of interface
+  {$ifdef FPC}
+  methodindex:=0;
+  {$else}
   inc(PW);
   p := aligntoptr(p);
+  {$endif}
   for m := fMethodsCount to fMethodsCount+n-1 do begin
     // retrieve method name, and add to the methods list (with hashing)
+    {$ifdef FPC_NEWRTTI}
+    PME := methtable^.Method[methodindex];
+    Inc(methodindex);
+    aURI := PME^.Name;
+    {$else}
     SetString(aURI,PAnsiChar(@PS^[1]),ord(PS^[0]));
+    {$endif}
     with PServiceMethod(fMethod.AddUniqueName(aURI,
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       HierarchyLevel := fAddMethodsLevel;
-      {$ifdef FPC} // FPC has its own RTTI layout only since late 3.x
-      inc(PB,ord(PS^[0])+1);
-      inc(PB); // skip Version field (always 3)
-      {$ifdef CPUINTEL}
-      if PCallingConvention(P)^<>ccRegister then
+      {$ifdef FPC}
+      aResultType := Deref(MORMOT.PPTypeInfo(PME^.ResultType));
+      Kind := MORMOT.TMethodKind(PME^.Kind);
+      if TCallingConvention(PME^.CC)<>DEFCC then
+        RaiseError('method uses wrong calling convention',[]);
+      {$else}
+      PS := AlignToPtr(@PS^[ord(PS^[0])+1]); // skip method name in Delphi
+      Kind := PME^.Kind;
+      if PME^.CC<>ccRegister then
          RaiseError('method shall use register calling convention',[]);
-      {$endif CPUINTEL}
-      inc(PB,sizeOf(TCallingConvention));
-      P := AlignToPtr(P);// new Alignment
-      aResultType := DeRef(PP^);
-      inc(PP);
-      inc(PW); // skip StackSize
-      n := PB^;
-      inc(PB);
-      P := AlignToPtr(P);// new Alignment
-      if aResultType<>nil then  // we have a function
+      {$endif}
+      // retrieve method call arguments from RTTI
+      n := PME^.ParamCount;
+      {$ifndef FPC}
+       // skip ParamCount in Delphi
+      inc(PME);
+      {$endif}
+      if Kind=mkFunction then
         SetLength(Args,n+1) else
         SetLength(Args,n);
       if length(Args)>MAX_METHOD_ARGS then
          RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
+      {$ifdef FPC}
       if aResultType<>nil then
       with Args[n] do begin
         ParamName := @CONST_PSEUDO_RESULT_NAME;
@@ -53601,19 +53688,25 @@ begin
           ArgTypeName := @CONST_INTEGER_NAME else
           ArgTypeName := @ArgTypeInfo^.Name;
       end;
-      for a := 0 to n-1 do
-      with Args[a],PVmtMethodParam(P)^ do begin
-        f := mORMot.TParamFlags(Flags);
+      argsindex:=0;
+      {$endif}
+      paramcounter:=0;
+      while paramcounter < n do
+      {$ifdef FPC} // FPC has its own RTTI layout
+      begin
+        VMP:=PME^.Param[paramcounter];
+        f := mORMot.TParamFlags(VMP^.Flags);
+        with Args[argsindex] do begin
         if pfVar in f then
           ValueDirection := smdVar else
         if pfOut in f then
           ValueDirection := smdOut;
-        ArgsNotResultLast := a;
+          ArgsNotResultLast := argsindex;
         if ValueDirection<>smdConst then
-          ArgsOutNotResultLast := a;
-          ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(ParamType)));
+            ArgsOutNotResultLast := argsindex;
+        ArgTypeInfo := mORMot.PTypeInfo(Deref(mORMot.PPTypeInfo(VMP^.ParamType)));
         ArgTypeName := @ArgTypeInfo^.Name;
-        if a>0 then
+        if paramcounter>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
         smvRecord,smvDynArray:
           if f*[pfConst,pfVar,pfOut{$IFDEF FPC_HAS_CONSTREF},pfConstRef{$endif}]=[] then
@@ -53624,42 +53717,42 @@ begin
              RaiseError('%: % parameter should be declared as const',
                [ParamName^,ArgTypeName^]);
         end;
-        if Name='$self' then
-          ParamName := @CONST_PSEUDO_SELF_NAME else
-          ParamName := @Name;
-        P := AlignToPtr(@Name[ord(Name[0])+1]);
+        if pfSelf in f then
+            ParamName := @CONST_PSEUDO_SELF_NAME else
+          if pfResult in f then begin
+            if (paramcounter <> n-1) or (High(Args) <> paramcounter+1) then begin
+              // at least on ARM, function (result) is on paramcounter different position than on x86
+              // so, cleanup and re-use array for next param entry
+              FillcharFast(Args[argsindex],SizeOf(TServiceMethodArgument),0);
+              // needed for re-use due to following Inc(argsindex) ... see below
+              Dec(argsindex);
+            end;
+            Args[n-1]:=Args[n];
+            SetLength(Args,n);
+          end else
+            ParamName := @VMP^.Name;
+        end;
+        Inc(paramcounter);
+        Inc(argsindex);
       end;
       {$else FPC} // Delphi code
-      PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
-      Kind := PME^.Kind;
-      if PME^.CC<>ccRegister then
-        RaiseError('method shall use register calling convention',[]);
-      // retrieve method call arguments from RTTI
-      n := PME^.ParamCount;
-      inc(PME);
-      if Kind=mkFunction then
-        SetLength(Args,n+1) else
-        SetLength(Args,n);
-      if length(Args)>MAX_METHOD_ARGS then
-        RaiseError('method has too many parameters: %>%',[Length(Args),MAX_METHOD_ARGS]);
-      for a := 0 to n-1 do
-      with Args[a] do begin
+      with Args[paramcounter] do begin
         f := PF^;
         inc(PF);
         if pfVar in f then
           ValueDirection := smdVar else
         if pfOut in f then
           ValueDirection := smdOut;
-        ArgsNotResultLast := a;
+        ArgsNotResultLast := paramcounter;
         if ValueDirection<>smdConst then
-          ArgsOutNotResultLast := a;
+          ArgsOutNotResultLast := paramcounter;
         ParamName := PS;
         PS := AlignToPtr(@PS^[ord(PS^[0])+1]);
         SetFromRTTI(PB);
         {$ifdef ISDELPHIXE}
         inc(PB,PW^); // skip custom attributes
         {$endif}
-        if a>0 then
+        if paramcounter>0 then
         case TypeInfoToMethodValueType(ArgTypeInfo) of
         smvRecord,smvDynArray:
           if f*[pfConst,pfVar,pfOut]=[] then
@@ -53670,6 +53763,7 @@ begin
             RaiseError('%: % parameter should be declared as const',
               [ParamName^,ArgTypeName^]);
         end;
+        Inc(paramcounter);
       end;
       // add a pseudo argument after all arguments for functions
       if Kind=mkFunction then
