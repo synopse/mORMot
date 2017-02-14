@@ -480,7 +480,9 @@ type
     {$endif}
     procedure SetDestinationPath(const value: TFileName);
     procedure SetLevel(aLevel: TSynLogInfos);
+    procedure SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
     procedure SetEchoToConsole(aEnabled: TSynLogInfos);
+    procedure SetEchoCustom(const aEvent: TOnTextWriterEcho);
     function GetSynLogClassName: string;
   public
     /// intialize for a TSynLog class family
@@ -547,7 +549,7 @@ type
     // - could be used with a third-party logging system
     // - EchoToConsole or EchoCustom can be activated separately
     // - you may even disable the integrated file output, via NoFile := true
-    property EchoCustom: TOnTextWriterEcho read fEchoCustom write fEchoCustom;
+    property EchoCustom: TOnTextWriterEcho read fEchoCustom write SetEchoCustom;
     /// the associated TSynLog class
     property SynLogClass: TSynLogClass read fSynLogClass;
   published
@@ -1383,7 +1385,6 @@ const
      $FFFFFF,$FFFFFF,$000000,$FFFFFF,$000000,$000000,$000000,$000000,
      $000000,$000000,$000000,
      $000000,$000000,$000000,$000000,$000000,$FFFFFF,$000000,$000000));
-
 
   /// how TLogFilter map TSynLogInfo events
   LOG_FILTER: array[TSynLogFilter] of TSynLogInfos = (
@@ -3125,26 +3126,44 @@ begin
   {$endif}
 end;
 
-procedure TSynLogFamily.EchoRemoteStart(aClient: TObject;
-  const aClientEvent: TOnTextWriterEcho; aClientOwnedByFamily: boolean);
+procedure TSynLogFamily.SynLogFileListEcho(const aEvent: TOnTextWriterEcho; aEventAdd: boolean);
 var i: integer;
 begin
-  EchoRemoteStop;
-  fEchoRemoteClient := aClient;
-  fEchoRemoteEvent := aClientEvent;
-  fEchoRemoteClientOwned := aClientOwnedByFamily;
+  if (self=nil) or (SynLogFileList=nil) or not Assigned(aEvent) then
+    exit;
   SynLogFileList.Safe.Lock;
   try
     for i := 0 to SynLogFileList.Count-1 do
       if TSynLog(SynLogFileList.List[i]).fFamily=self then
-        TSynLog(SynLogFileList.List[i]).fWriter.EchoAdd(fEchoRemoteEvent);
+        with TSynLog(SynLogFileList.List[i]).fWriter do
+          if aEventAdd then
+            EchoAdd(aEvent) else
+            EchoRemove(aEvent);
   finally
     SynLogFileList.Safe.UnLock;
   end;
 end;
 
+procedure TSynLogFamily.SetEchoCustom(const aEvent: TOnTextWriterEcho);
+begin
+  if self=nil then
+    exit;
+  SynLogFileListEcho(fEchoCustom,false); // unsubscribe any previous
+  fEchoCustom := aEvent;
+  SynLogFileListEcho(aEvent,true); // subscribe new
+end;
+
+procedure TSynLogFamily.EchoRemoteStart(aClient: TObject;
+  const aClientEvent: TOnTextWriterEcho; aClientOwnedByFamily: boolean);
+begin
+  EchoRemoteStop;
+  fEchoRemoteClient := aClient;
+  fEchoRemoteEvent := aClientEvent;
+  fEchoRemoteClientOwned := aClientOwnedByFamily;
+  SynLogFileListEcho(fEchoRemoteEvent,true); // subscribe
+end;
+
 procedure TSynLogFamily.EchoRemoteStop;
-var i: integer;
 begin
   if fEchoRemoteClient=nil then
     exit;
@@ -3155,22 +3174,12 @@ begin
           FormatUTF8('%00%    Remote Client % Disconnected',
             [NowToString(false),LOG_LEVEL_TEXT[sllClient],self]));
       finally
-        FreeAndNil(fEchoRemoteClient);
+        fEchoRemoteClient.Free;
       end;
     except
       on Exception do ;
-    end else
-    fEchoRemoteClient := nil;
-  if SynLogFileList<>nil then begin
-    SynLogFileList.Safe.Lock;
-    try
-      for i := 0 to SynLogFileList.Count-1 do
-        if TSynLog(SynLogFileList.List[i]).fFamily=self then
-          TSynLog(SynLogFileList.List[i]).fWriter.EchoRemove(fEchoRemoteEvent);
-    finally
-      SynLogFileList.Safe.UnLock;
     end;
-  end;
+  SynLogFileListEcho(fEchoRemoteEvent,false); // unsubscribe
   fEchoRemoteEvent := nil;
 end;
 
@@ -3191,7 +3200,7 @@ begin
       if SynLogFileList.Count=1 then begin
         log := SynLogFileList.List[0];
         if log.fFamily<>self then
-          continue; 
+          continue;
         EnterCriticalSection(GlobalThreadLock);
         try
           log.Writer.FlushToStream;
@@ -3833,7 +3842,7 @@ begin
       fWriter.EchoRemove(fFamily.fEchoRemoteEvent);
     end;
   end else begin
-    // fDisableRemoteLog=true -> already within the mutex
+    // fDisableRemoteLog=true -> add to events, already within the global mutex
     fDisableRemoteLog := false;
     fWriter.EchoAdd(fFamily.fEchoRemoteEvent);
     LeaveCriticalSection(GlobalThreadLock);
@@ -5611,6 +5620,8 @@ const
   _TSynMapUnit = 'Symbol:TSynMapSymbol FileName:RawUTF8 Line,Addr:TIntegerDynArray';
 
 initialization
+  assert(ord(sfLocal7)=23);
+  assert(ord(ssDebug)=7);
   InitializeCriticalSection(GlobalThreadLock); // will be deleted with the process
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
