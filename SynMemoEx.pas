@@ -4958,7 +4958,8 @@ var
     Result := '';
     if P < 1 then
       exit;
-    if {$ifdef UNICODE} (S[P] < #255) and {$endif} (AnsiChar(S[P]) in Separators) and ((P < 1) or ({$ifdef UNICODE}(S[P - 1] < #255) and {$endif} (AnsiChar(S[P - 1]) in Separators))) then
+    if {$ifdef UNICODE} (S[P] < #255) and {$endif} (AnsiChar(S[P]) in Separators) and
+      ((P < 1) or ({$ifdef UNICODE}(S[P - 1] < #255) and {$endif} (AnsiChar(S[P - 1]) in Separators))) then
       inc(P);
     iBeg := P;
     while iBeg >= 1 do

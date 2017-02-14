@@ -1386,7 +1386,10 @@ type
     procedure Init(key: pointer; keylen: integer);
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
-    procedure Update(msg: pointer; msglen: integer);
+    procedure Update(msg: pointer; msglen: integer); overload;
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
+    procedure Update(const msg: RawByteString); overload;
     /// computes the HMAC of all supplied message according to the key
     function Done: cardinal;
     /// computes the HMAC of the supplied message according to the key
@@ -2703,6 +2706,11 @@ end;
 procedure THMAC_CRC32C.Update(msg: pointer; msglen: integer);
 begin
   seed := crc32c(seed,msg,msglen);
+end;
+
+procedure THMAC_CRC32C.Update(const msg: RawByteString);
+begin
+  seed := crc32c(seed,pointer(msg),length(msg));
 end;
 
 function THMAC_CRC32C.Done: cardinal;

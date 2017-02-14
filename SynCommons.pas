@@ -6787,6 +6787,8 @@ type
   // to avoid memory allocations, BUT it may break internal process if you change
   // some values in place (since VValue/VName and VCount won't match) - as such,
   // if you set this option, ensure that you use the content as read-only
+  // - you may use TTextWriter.RegisterCustomJSONSerializerSetOptions() class
+  // method to customize the serialization for a given type
   TJSONCustomParserSerializationOptions = set of TJSONCustomParserSerializationOption;
 
   TJSONCustomParserRTTI = class;
