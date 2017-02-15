@@ -2296,7 +2296,7 @@ begin
       inc(P,27); // trim e.g. '20160607 06442255  ! trace '
       dec(len,27);
     end else
-    if HexToBin(P,nil,8) then begin
+    if SynCommons.HexToBin(P,nil,8) then begin
       inc(P,25); // trim e.g. '00000000089E5A13  " info '
       dec(len,25);
     end;
