@@ -1734,7 +1734,7 @@ var
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableInteger = type variant variant: use this
+// direct transtyping from a TNullableInteger = type variant variable: use this
 // function to circumvent those limitations
 function NullableIntegerIsEmptyOrNull(const V: TNullableInteger): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1780,7 +1780,7 @@ function NullableFloat(const Value: double): TNullableFloat;
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableFloat = type variant variant: use this
+// direct transtyping from a TNullableFloat = type variant variable: use this
 // function to circumvent those limitations
 function NullableFloatIsEmptyOrNull(const V: TNullableFloat): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1803,7 +1803,7 @@ function NullableCurrency(const Value: currency): TNullableCurrency;
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableCurrency = type variant variant: use this
+// direct transtyping from a TNullableCurrency = type variant variable: use this
 // function to circumvent those limitations
 function NullableCurrencyIsEmptyOrNull(const V: TNullableCurrency): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1826,7 +1826,7 @@ function NullableDateTime(const Value: TDateTime): TNullableDateTime;
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableDateTime = type variant variant: use this
+// direct transtyping from a TNullableDateTime = type variant variable: use this
 // function to circumvent those limitations
 function NullableDateTimeIsEmptyOrNull(const V: TNullableDateTime): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1849,7 +1849,7 @@ function NullableTimeLog(const Value: TTimeLog): TNullableTimeLog;
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableTimeLog = type variant variant: use this
+// direct transtyping from a TNullableTimeLog = type variant variable: use this
 // function to circumvent those limitations
 function NullableTimeLogIsEmptyOrNull(const V: TNullableTimeLog): Boolean;
   {$ifdef HASINLINE}inline;{$endif}
@@ -1872,7 +1872,7 @@ function NullableUTF8Text(const Value: RawUTF8): TNullableUTF8Text;
 
 /// same as VarIsEmpty(V) or VarIsEmpty(V), but faster
 // - FPC VarIsNull() seems buggy with varByRef variants, and does not allow
-// direct transtyping from a TNullableUTF8Text = type variant variant: use this
+// direct transtyping from a TNullableUTF8Text = type variant variable: use this
 // function to circumvent those limitations
 function NullableUTF8TextIsEmptyOrNull(const V: TNullableUTF8Text): Boolean;
   {$ifdef HASINLINE}inline;{$endif}

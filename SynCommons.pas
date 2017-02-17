@@ -12308,16 +12308,32 @@ type
     /// version info of the exe file as '3.1'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
     Main: string;
-    /// Properties below are extracted form a string version resources
-    // for a first available locale. '' under Linux
+    /// associated CompanyName string version resource
+    // - only available on Windows - contains '' under Linux
     CompanyName: RawUTF8;
+    /// associated FileDescription string version resource
+    // - only available on Windows - contains '' under Linux
     FileDescription: RawUTF8;
+    /// associated FileVersion string version resource
+    // - only available on Windows - contains '' under Linux
     FileVersion: RawUTF8;
+    /// associated InternalName string version resource
+    // - only available on Windows - contains '' under Linux
     InternalName: RawUTF8;
+    /// associated LegalCopyright string version resource
+    // - only available on Windows - contains '' under Linux
     LegalCopyright: RawUTF8;
+    /// associated OriginalFileName string version resource
+    // - only available on Windows - contains '' under Linux
     OriginalFilename: RawUTF8;
+    /// associated ProductName string version resource
+    // - only available on Windows - contains '' under Linux
     ProductName: RawUTF8;
+    /// associated ProductVersion string version resource
+    // - only available on Windows - contains '' under Linux
     ProductVersion: RawUTF8;
+    /// associated Comments string version resource
+    // - only available on Windows - contains '' under Linux
     Comments: RawUTF8;
     /// retrieve application version from exe file name
     // - DefaultVersion32 is used if no information Version was included into
@@ -35036,13 +35052,12 @@ var M,D: word;
     FileTime: TFILETIME;
     SystemTime: TSYSTEMTIME;
     tmp: TFileName;
-
     function ReadResourceByName(const From: RawUTF8): RawUTF8;
     var sz: DWord;
     begin
-      VerQueryValueA(Pt, PAnsiChar('\StringFileInfo\'+LanguageInfo+'\'+From),
-        StrValPt, sz);
-      if sz > 0 then SetRawUTF8(Result, StrValPt, sz)
+      VerQueryValueA(Pt,PAnsiChar('\StringFileInfo\'+LanguageInfo+'\'+From),StrValPt,sz);
+      if sz>0 then
+        SetRawUTF8(Result,StrValPt,sz)
     end;
 {$endif}
 begin
@@ -35074,7 +35089,6 @@ begin
               SystemTime.wYear,SystemTime.wMonth,SystemTime.wDay);
           end;
         end;
-
         VerQueryValue(Pt, '\VarFileInfo\Translation', StrPt, Size2);
         if Size2 >= 4 then begin
           LanguageInfo := BinToHexDisplay(PAnsiChar(StrPt), 2) + BinToHexDisplay(PAnsiChar(StrPt)+2, 2);
