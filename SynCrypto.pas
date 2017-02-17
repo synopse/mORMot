@@ -928,6 +928,9 @@ type
     /// returns a binary buffer filled with some pseudorandom data
     // - this method is thread-safe
     function FillRandomBytes(Len: integer): TBytes;
+    /// returns an hexa-encoded binary buffer filled with some pseudorandom data
+    // - this method is thread-safe
+    function FillRandomHex(Len: integer): RawUTF8; 
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
@@ -9115,6 +9118,17 @@ function TAESPRNG.FillRandomBytes(Len: integer): TBytes;
 begin
   SetLength(result,Len);
   FillRandom(pointer(result),Len);
+end;
+
+function TAESPRNG.FillRandomHex(Len: integer): RawUTF8;
+var bin: pointer;
+begin
+  SetString(result,nil,Len*2);
+  if Len=0 then
+    exit;
+  bin := @PByteArray(result)[Len]; // temporary store random bytes at the end 
+  FillRandom(bin,Len);
+  SynCommons.BinToHex(bin,pointer(result),Len);
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;

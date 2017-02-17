@@ -4311,7 +4311,7 @@ begin
   tmp[len] := #0;
   Check(IdemPChar(tmp,'<34>1 '));
   Check(PosEx(' - - - test',tmp)=len-10);
-  msg := StringOfChar('+',300);
+  msg := RawUTF8(StringOfChar('+',300));
   len := SyslogMessage(sfLocal4,ssNotice,msg,'proc','msg',tmp,300,false);
   Check(IdemPChar(tmp,'<165>1 '));
   Check(PosEx(' proc msg - ++++',tmp)=56);
@@ -9088,6 +9088,7 @@ begin
     Check(not IsEqual(b1,b2));
     Check(not CompareMem(@b1,@b2,sizeof(b1)));
     Check(a1.FillRandom(0)='');
+    Check(a1.FillRandomHex(0)='');
     for i := 1 to 2000 do begin
       s1 := a1.FillRandom(i);
       s2 := a2.FillRandom(i);
@@ -9098,6 +9099,9 @@ begin
       // compress the output to validate (somehow) its randomness
       check(length(SynLZCompress(s1))>i,'random should not compress');
       check(length(SynLZCompress(s2))>i,'random should not compress');
+      s1 := a1.FillRandomHex(i);
+      check(length(s1)=i*2);
+      check(SynCommons.HexToBin(pointer(s1),nil,i));
     end;
   finally
     a1.Free;
