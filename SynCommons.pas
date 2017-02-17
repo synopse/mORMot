@@ -739,6 +739,8 @@ unit SynCommons;
     and a more complete SYNOPSE_FRAMEWORK_FULLVERSION constant has been added
   - added x64 support for TSynFPUException class
   - fixed [63aa36f485] memory corruption in TSynAnsiConvert.AnsiToUnicodeString
+  - extend TFileVersion by version resources stored in strings in the
+    first locale section. Windows only
 
 *)
 
@@ -12306,6 +12308,17 @@ type
     /// version info of the exe file as '3.1'
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
     Main: string;
+    /// Properties below are extracted form a string version resources
+    // for a first available locale. '' under Linux
+    CompanyName: RawUTF8;
+    FileDescription: RawUTF8;
+    FileVersion: RawUTF8;
+    InternalName: RawUTF8;
+    LegalCopyright: RawUTF8;
+    OriginalFilename: RawUTF8;
+    ProductName: RawUTF8;
+    ProductVersion: RawUTF8;
+    Comments: RawUTF8;
     /// retrieve application version from exe file name
     // - DefaultVersion32 is used if no information Version was included into
     // the executable resources (on compilation time)
@@ -35017,11 +35030,20 @@ constructor TFileVersion.Create(const aFileName: TFileName;
 var M,D: word;
 {$ifdef MSWINDOWS}
     Size, Size2: DWord;
-    Pt: Pointer;
+    Pt, StrPt, StrValPt: Pointer;
+    LanguageInfo: RawUTF8;
     Info: ^TVSFixedFileInfo;
     FileTime: TFILETIME;
     SystemTime: TSYSTEMTIME;
     tmp: TFileName;
+
+    function ReadResourceByName(const From: RawUTF8): RawUTF8;
+    var sz: DWord;
+    begin
+      VerQueryValueA(Pt, PAnsiChar('\StringFileInfo\'+LanguageInfo+'\'+From),
+        StrValPt, sz);
+      if sz > 0 then SetRawUTF8(Result, StrValPt, sz)
+    end;
 {$endif}
 begin
   fFileName := aFileName;
@@ -35052,6 +35074,20 @@ begin
               SystemTime.wYear,SystemTime.wMonth,SystemTime.wDay);
           end;
         end;
+
+        VerQueryValue(Pt, '\VarFileInfo\Translation', StrPt, Size2);
+        if Size2 >= 4 then begin
+          LanguageInfo := BinToHexDisplay(PAnsiChar(StrPt), 2) + BinToHexDisplay(PAnsiChar(StrPt)+2, 2);
+          CompanyName := ReadResourceByName('CompanyName');
+          FileDescription := ReadResourceByName('FileDescription');
+          FileVersion := ReadResourceByName('FileVersion');
+          InternalName := ReadResourceByName('InternalName');
+          LegalCopyright := ReadResourceByName('LegalCopyright');
+          OriginalFilename := ReadResourceByName('OriginalFilename');
+          ProductName := ReadResourceByName('ProductName');
+          ProductVersion := ReadResourceByName('ProductVersion');
+          Comments := ReadResourceByName('Comments');
+        end
       finally
         Freemem(Pt);
       end;
