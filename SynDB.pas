@@ -327,8 +327,10 @@ uses
   {$endif}
   {$ifdef FPC}
   SynFPCLinux,
-  dynlibs,
   {$endif}
+  {$endif}
+  {$ifdef FPC}
+  dynlibs,
   {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,

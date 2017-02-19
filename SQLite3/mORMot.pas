@@ -19915,13 +19915,13 @@ var
 implementation
 
 {$ifdef FPC}
-{$ifndef MSWINDOWS}
 uses
+  {$ifndef MSWINDOWS}
   SynFPCLinux,
   BaseUnix,
   Unix,
+  {$endif}
   dynlibs;
-{$endif}
 {$endif}
 
 // ************ some RTTI and SQL mapping routines
@@ -42389,7 +42389,7 @@ begin
   {$ifdef KYLIX3}
   aDLL := LoadLibrary(pointer(DllName));
   {$else}
-  {$ifndef MSWINDOWS}
+  {$ifdef FPC}
   aDLL := LoadLibrary(DllName);
   {$else}
   aDLL := LoadLibrary(pointer(DllName));
@@ -44877,8 +44877,8 @@ begin
       DeleteFile(FileName) else begin
       try
         if FileExists(FileName) then begin
-          {$ifdef CPUARM}
-          // on ARM, we have to do something special unfortunately ...
+          {$ifdef Linux}
+          // on Linux, we have to do something special unfortunately ...
           ErrorMsg := 'Deleting and again creating existing file';
           DeleteFile(FileName);
           F := TFileStream.Create(FileName,fmCreate);

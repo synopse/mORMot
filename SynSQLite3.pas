@@ -197,6 +197,9 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$ifdef FPC}
+  dynlibs,
+  {$endif}
   {$else}
   {$ifdef KYLIX3}
   LibC,
@@ -3263,8 +3266,6 @@ const
 
 
 implementation
-
-
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
 

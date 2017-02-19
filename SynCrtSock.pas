@@ -7864,6 +7864,11 @@ begin
       curl.Module := LoadLibrary('libcurl.so.3');
     if curl.Module=0 then
       curl.Module := LoadLibrary('libcurl.so.4');
+    // for latest Linux Mint and other similar distros
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl-gnutls.so.3');
+    if curl.Module=0 then
+      curl.Module := LoadLibrary('libcurl-gnutls.so.4');
     {$endif}
     {$endif}
     if curl.Module=0 then

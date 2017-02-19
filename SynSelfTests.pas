@@ -2259,7 +2259,7 @@ begin
     Check(AFP.IndexOf(F)=i);
   end;
   Test := AFP.SaveTo;
-  Check(Hash32(Test)={$ifdef CPU64}{$ifdef Darwin}$3DE22166{$else}$A29C10E{$endif}{$else}
+  Check(Hash32(Test)={$ifdef CPU64}{$ifdef FPC}$3DE22166{$else}$A29C10E{$endif}{$else}
     {$ifdef UNICODE}$62F9C106{$else}$6AA2215E{$endif}{$endif});
   for i := 0 to 1000 do begin
     Fill(F,i);
@@ -4307,14 +4307,14 @@ var tmp: array[0..512] of AnsiChar;
 begin
   FillcharFast(tmp,sizeof(tmp),1);
   len := SyslogMessage(sfAuth,ssCrit,'test','','',tmp,sizeof(tmp),false);
-  Check(len=65);
+  // Check(len=65); // <-- different for every PC, due to PC name differences
   tmp[len] := #0;
   Check(IdemPChar(tmp,'<34>1 '));
   Check(PosEx(' - - - test',tmp)=len-10);
   msg := RawUTF8(StringOfChar('+',300));
   len := SyslogMessage(sfLocal4,ssNotice,msg,'proc','msg',tmp,300,false);
   Check(IdemPChar(tmp,'<165>1 '));
-  Check(PosEx(' proc msg - ++++',tmp)=56);
+  Check(PosEx(' proc msg - ++++',tmp)>1);
   Check(len<300,'truncated to avoid buffer overflow');
   Check(tmp[len-1]='+');
   Check(tmp[len]=#1);
