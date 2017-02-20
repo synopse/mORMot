@@ -1556,7 +1556,7 @@ Here are the main features of this custom variant type:
 - Perfect storage for dynamic value-objects content, with a {\i schema-less} approach (as you may be used to in scripting languages like {\i Python} or {\i JavaScript});
 - Allow nested documents, with no depth limitation but the available memory;
 - Assignment can be either {\i per-value} (default, safest but slower when containing a lot of nested data), or {\i per-reference} (immediate reference-counted assignment);
-- Very fast JSON serialization / un-serialization with support of {\i MongoDB}-like extended syntax;
+- Very fast JSON serialization / un-serialization with support of {\i MongoDB}-like @*extended syntax@;
 - Access to properties in code, via @*late-binding@ (including almost no speed penalty due to our VCL hack as detailed in @SDD-DI-2.2.3@);
 - Direct access to the internal variant {\i names} and {\i values} arrays from code, by trans-typing into a {\f1\fs20 TDocVariantData record};
 - Instance life-time is managed by the compiler (like any other {\f1\fs20 variant} type), without the need to use {\f1\fs20 interfaces} or explicit {\f1\fs20 try..finally} blocks;
@@ -1569,7 +1569,7 @@ Here are the main features of this custom variant type:
 To create instances of such {\f1\fs20 variant}, you can use some easy-to-remember functions:
 - {\f1\fs20 _Obj() _ObjFast()} global functions to create a {\f1\fs20 variant} {\i object} document;
 - {\f1\fs20 _Arr() _ArrFast()} global functions to create a {\f1\fs20 variant} {\i array} document;
-- {\f1\fs20 _Json() _JsonFast() _JsonFmt() _JsonFastFmt()} global functions to create any {\f1\fs20 variant} {\i object} or {\i array} document from JSON, supplied either with standard or {\i @*MongoDB@}-extended syntax.
+- {\f1\fs20 _Json() _JsonFast() _JsonFmt() _JsonFastFmt()} global functions to create any {\f1\fs20 variant} {\i object} or {\i array} document from JSON, supplied either with standard or {\i @*MongoDB@}-@*extended syntax@.
 You have two non excluding ways of using the {\f1\fs20 TDocVariant} storage:
 - As regular {\f1\fs20 variant} variables, then using either late-binding or faster {\f1\fs20 _Safe()} to access its data;
 - Directly as {\f1\fs20 TDocVariantData} variables, then later on returing a {\f1\fs20 variant} instance using {\f1\fs20 variant(aDocVariantData)}.
@@ -1760,7 +1760,7 @@ With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i 
 !  writeln(VariantSaveJSON(V3));
 !  // all commands will write '{"name":"john","year":1982}'
 Of course, you can nest objects or arrays as parameters to the {\f1\fs20 _JsonFmt()} function.
-The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} extended syntax, i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
+The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} @*extended syntax,@ i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
 Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
 As a with any {\i object} or {\i array} document, the {\i Delphi} IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
 :   Per-value or per-reference
@@ -1804,7 +1804,7 @@ When working with complex documents, e.g. with @*BSON@ / {\i @*MongoDB@} documen
 :   Number values options
 By default, {\f1\fs20 TDocVariantData} will only recognize {\f1\fs20 integer}, {\f1\fs20 Int64} and {\f1\fs20 currency} - see @33@ - as number values. Any floating point value which may not be translated to/from @*JSON@ textual representation safely will be stored as a JSON string, i.e. if it does match an integer or up to 4 fixed decimals, with 64-bit precision.
 You can set the {\f1\fs20 dvoAllowDoubleValue} option to {\f1\fs20 TDocVariantData}, so that such numbers will be recognized and stored. In this case, only {\f1\fs20 varDouble} storage will be used for the {\f1\fs20 variant} values, i.e. 32-bit IEEE storage, handling 5.0 x 10^-324 .. 1.7 x 10^308 range. With such floating-point values, you may loose precision and digits during the JSON serialization process. This is why it is not enabled by default.
-Also note that some JSON engines do not support 64-bit integer numbers. For instance, {\f1\fs20 @*JavaScript@} engines only store up to 53-bit of information without precision loss, due to their internal storage as a 8 bytes IEEE 754 container. In some cases, it is safest to use JSON string representation of such numbers, as is done with the {\f1\fs20 woIDAsIDstr} value of {\f1\fs20 TTextWriterWriteObjectOption} for safe serialization of {\f1\fs20 TSQLRecord.ID} ORM values.
+Also note that some JSON engines do not support 64-bit integer numbers. For instance, {\f1\fs20 @*JavaScript@} engines only store up to @*53-bit@ of information without precision loss, due to their internal storage as a 8 bytes IEEE 754 container. In some cases, it is safest to use JSON string representation of such numbers, as is done with the {\f1\fs20 woIDAsIDstr} value of {\f1\fs20 TTextWriterWriteObjectOption} for safe serialization of {\f1\fs20 TSQLRecord.ID} ORM values.
 :   Object or array document creation options
 As stated above, a {\f1\fs20 TDocVariantOptions} parameter enables to define the behavior of a {\f1\fs20 TDocVariant} custom type for a given instance. Please refer to the documentation of this set of options to find out the available settings. Some are related to the memory model, other to case-sensitivity of the property names, other to the behavior expected in case of non-existing property, and so on...
 Note that this setting is {\i local} to the given {\f1\fs20 variant} instance.
@@ -2369,7 +2369,7 @@ It is worth saying that this deletion tracking is not defined at RDBMS level, bu
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
-- If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with extended syntax, if applying);
+- If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with @*extended syntax@, if applying);
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
 - It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 @*double@}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
@@ -6189,7 +6189,7 @@ It gives access to any @**BSON@ data, including documents, arrays, and {\i Mongo
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
 - A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
 - Interaction with the {\f1\fs20 SynCommons.pas}' @80@ as document storage and late-binding access;
-- Marshalling BSON to and from @*JSON@, with the {\i MongoDB} extended syntax for handling its custom types.
+- Marshalling BSON to and from @*JSON@, with the {\i MongoDB} @*extended syntax@ for handling its custom types.
 This unit defines some objects able to connect and manage databases and collections of documents on any {\i MongoDB} servers farm:
 - Connection to one or several servers, including secondary hosts, via the {\f1\fs20 TMongoClient} class;
 - Access to any database instance, via the {\f1\fs20 TMongoDatabase} class;
@@ -6758,8 +6758,13 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 - The JSON format is simple, and specified in a short and clean RFC document;
 - The default text encoding for both JSON and {\i @*SQLite3@} is UTF-8, which allows the full Unicode char-set to be stored and communicated;
 - It is the default data format used by ASP.NET AJAX services created in Windows Communication Foundation (WCF) since .NET framework 3.5; so it's Microsoft officially "ready";
-- For binary @*BLOB@ transmission, we simply encode the binary data as {\i @*Base64@}; please note that, by default, BLOB fields are not transmitted with other fields in JSON objects, see @1@ (only exception are {\i @*dynamic array@} fields, which are transmittest within the other fields).
-JSON @**serialization@ will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
+- For binary @*BLOB@ transmission, we simply encode the binary data as {\i @*Base64@}; please note that, by default, BLOB fields are not transmitted over REST with other fields in JSON objects, see @1@ (only exception are {\i @*dynamic array@} fields, which are transmittest within the other fields).
+REST JSON @**serialization@ will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
+In the framework, the whole @http://json.org standard is implemented, with some exceptions/extensions:
+- {\f1\fs20 #0} characters will indicate the end of input, as with almost all JSON libraries - so if your text input contains a {\f1\fs20 #0} char, please handle it as binary (note that other control chars are escaped as expected);
+- You may use an "@**extended syntax@" (used e.g. by {\f1\fs20 @*MongoDB@}) by unquoting ASCII-only property names;
+- Floating point numbers are sometimes limited to {\f1\fs20 @*currency@} (i.e. 4 decimals), to ensure serialization/unserialization won't loose precision; but in such cases, it can be extended to the {\f1\fs20 double} precision via a set of options;
+- There is no @*53-bit@ limitation for integers, as with @*JavaScript@: the framework handle 64-bit integer values - when using a JavaScript back-end, you may have to transmit huge values as text.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
 Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 @*double@} values are stored as their corresponding floating-point representation.
@@ -12524,7 +12529,7 @@ If you want to supply the context data as JSON, then render it, you may write:
 !    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
 !  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
 !  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
+Note that here, the JSON is supplied with an @*extended syntax@ (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
 As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into @*UTF-8@):
 !  mustache := TSynMustache.Parse(
 !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
