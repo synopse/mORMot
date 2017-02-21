@@ -169,11 +169,11 @@ unit SynCrtSock;
   - added EWinHTTP exception, raised when TWinHttp client fails to connect
   - added aTimeOut optional parameter to TCrtSocket.Open() constructor
   - added function HtmlEncode()
-  - some code cleaning about 64 bit compilation (including [540628f498])
+  - some code cleaning about 64-bit compilation (including [540628f498])
   - refactored HTTP_DATA_CHUNK record definition into HTTP_DATA_CHUNK_* records
     to circumvent XE3 alignemnt issue
   - WinSock-based THttpServer will avoid creating a thread per connection,
-    when the maximum of 64 threads is reached in the pool, with an exception
+    when the maximum of 256 threads is reached in the pool, with an exception
     of kept-alife or huge body requets (avoiding DoS attacks by limiting the
     total number of created threads)
   - allow WinSock-based THttpServer to set a server address ('1.2.3.4:1234')
@@ -334,7 +334,7 @@ type
 {$endif}
 
 {$ifndef FPC}
-  /// FPC 64 compatibility integer type
+  /// FPC 64-bit compatibility integer type
   {$ifdef UNICODE}
   PtrInt = NativeInt;
   PtrUInt = NativeUInt;
@@ -342,7 +342,7 @@ type
   PtrInt = integer;
   PtrUInt = cardinal;
   {$endif}
-  /// FPC 64 compatibility pointer type
+  /// FPC 64-bit compatibility pointer type
   PPtrInt = ^PtrInt;
   PPtrUInt = ^PtrUInt;
 {$endif}
@@ -891,16 +891,15 @@ type
   TSynThreadPool = class
   protected
     FRequestQueue: THandle;
-    FThread: TObjectList; // of TSynThreadPoolSubThread
-    FThreadID: array[0..63] of THandle; // WaitForMultipleObjects() limit=64
-    FGeneratedThreadCount: integer;
+    FSubThreadCount: integer; // TSynThreadPoolSubThread count = NumberOfThreads
+    FWorkThreadCount: integer;
     FOnHttpThreadTerminate: TNotifyThreadEvent;
     /// process to be executed after notification
     procedure Task(aCaller: TSynThreadPoolSubThread; aContext: Pointer); virtual; abstract;
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
-    // - up to 64 threads can be associated to a Thread Pool
+    // - up to 256 threads can be associated to a Thread Pool
     constructor Create(NumberOfThreads: Integer=32);
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
@@ -916,7 +915,7 @@ type
   public
     /// initialize a thread pool with the supplied number of threads
     // - Task() overridden method processs the HTTP request set by Push()
-    // - up to 64 threads can be associated to a Thread Pool
+    // - up to 256 threads can be associated to a Thread Pool
     constructor Create(Server: THttpServer; NumberOfThreads: Integer=32); reintroduce;
     /// add an incoming HTTP request to the Thread Pool
     // - matches TOnThreadPoolSocketPush event handler signature
@@ -1445,7 +1444,7 @@ type
     // optionally specify a server address to bind to, e.g. '1.2.3.4:1234'
     // - you can specify a number of threads to be initialized to handle
     // incoming connections (default is 32, which may be sufficient for most
-    // cases, maximum is 64) - if you set 0, the thread pool will be disabled
+    // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString {$ifdef USETHREADPOOL};
@@ -1783,7 +1782,7 @@ type
   // you can run either:
   // $ proxycfg -u
   // $ netsh winhttp import proxy source=ie
-  // to use the current user's proxy settings for Internet Explorer (under 64 bit
+  // to use the current user's proxy settings for Internet Explorer (under 64-bit
   // Vista/Seven, to configure applications using the 32 bit WinHttp settings,
   // call netsh or proxycfg bits from %SystemRoot%\SysWOW64 folder explicitely)
   // - Microsoft Windows HTTP Services (WinHTTP) is targeted at middle-tier and
@@ -1818,7 +1817,7 @@ type
   // like OpenSSL) may not be installed - you can add it via your package
   // manager, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3
-  // - under a 64 bit Linux system, you should install the 32 bit flavor of
+  // - under a 64-bit Linux system, you should install the 32-bit flavor of
   // libcurl, e.g. on Ubuntu:
   // $ sudo apt-get install libcurl3:i386
   // - will use in fact libcurl.so, so either libcurl.so.3 or libcurl.so.4,
@@ -3435,7 +3434,7 @@ begin
     exit;
   if (Buffer<>nil) and (Length>0) then begin
     endtime := GetTickCount+TimeOut;
-    repeat                                         
+    repeat
       Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
       if Size<=0 then begin
@@ -4428,7 +4427,7 @@ procedure THttpServerResp.Execute;
   begin
     {$ifdef USETHREADPOOL}
     if fThreadPool<>nil then
-      InterlockedIncrement(fThreadPool.FGeneratedThreadCount);
+      InterlockedIncrement(fThreadPool.FWorkThreadCount);
     {$endif}
     try
     try
@@ -4469,7 +4468,7 @@ procedure THttpServerResp.Execute;
     finally
       {$ifdef USETHREADPOOL}
       if fThreadPool<>nil then
-        InterlockedDecrement(fThreadPool.FGeneratedThreadCount);
+        InterlockedDecrement(fThreadPool.FWorkThreadCount);
       {$endif}
     end;
     except
@@ -4851,59 +4850,58 @@ end;
 { TSynThreadPool }
 
 const
+  // up to 256 * 2MB = 512MB of RAM for the TSynThreadPoolSubThread stack
+  THREADPOOL_MAXSUBTHREADS = 256;
+
+  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
+  // - each thread reserves 2 MB of memory so it may break the server
+  // - keep the value to a decent number, to let resources be constrained up to 1GB
+  THREADPOOL_MAXWORKTHREADS = 512;
+
+  // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp
+  THREADPOOL_BIGBODYSIZE = 1024*1024;
+
   // Posted to the completion port when shutting down
   SHUTDOWN_FLAG = POverlapped(-1);
 
 constructor TSynThreadPool.Create(NumberOfThreads: Integer);
 var i: integer;
-    Thread: TSynThreadPoolSubThread;
 begin
   if NumberOfThreads=0 then
     NumberOfThreads := 1 else
-  if cardinal(NumberOfThreads)>cardinal(length(FThreadID)) then
-    NumberOfThreads := length(FThreadID); // maximum count for WaitForMultipleObjects()
-  // Create IO completion port to queue the HTTP requests
+  if cardinal(NumberOfThreads)>THREADPOOL_MAXSUBTHREADS then
+    NumberOfThreads := THREADPOOL_MAXSUBTHREADS;
+  // create IO completion port to queue the HTTP requests
   FRequestQueue := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
   if FRequestQueue=INVALID_HANDLE_VALUE then begin
     FRequestQueue := 0;
     exit;
   end;
-  // Now create the worker threads
-  FThread := TObjectList.Create;
-  for i := 0 to NumberOfThreads-1 do begin
-    Thread := TSynThreadPoolSubThread.Create(Self);
-    FThread.Add(Thread);
-    FThreadID[i] := Thread.ThreadID;
-  end;
-  FGeneratedThreadCount := NumberOfThreads;
+  // now create the worker threads
+  for i := 1 to NumberOfThreads do
+    TSynThreadPoolSubThread.Create(Self);
 end;
 
 destructor TSynThreadPool.Destroy;
 var i: integer;
+    endtime: cardinal;
 begin
   if FRequestQueue<>0 then begin
-    // Tell the threads we're shutting down
-    for i := 1 to fThread.Count do
+    // tell the threads we're shutting down
+    for i := 1 to FSubThreadCount do
       PostQueuedCompletionStatus(FRequestQueue, 0, 0, SHUTDOWN_FLAG);
-    // Wait for threads to finish, with 30 seconds TimeOut
-    WaitForMultipleObjects(FThread.Count,@FThreadID,True,30000);
-    // Close the request queue handle
+    // wait for threads to finish, with 30 seconds TimeOut
+    endtime := GetTickCount+30000;
+    repeat
+      Sleep(10);
+    until (FSubThreadCount=0) or (GetTickCount>endtime);
+    // close the request queue handle
     CloseHandle(FRequestQueue);
     FRequestQueue := 0;
   end;
-  FreeAndNil(fThread);
 end;
 
 { TSynThreadPoolSubThread }
-
-const
-  // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp
-  THREADPOOL_BIGBODYSIZE = 1024*1024;
-
-  // kept-alive or big HTTP requests will create a dedicated THttpServerResp
-  // - each thread reserves 2 MB of memory so it may break the server
-  // - keep the value to a decent number, to let resources be constrained
-  THREADPOOL_MAXCREATEDTHREADS = 100;
 
 constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
@@ -4922,17 +4920,21 @@ var Context: pointer;
     Key: PtrUInt;
     Overlapped: POverlapped;
 begin
-  if fOwner=nil then
-    exit;
-  while GetQueuedCompletionStatus(fOwner.FRequestQueue,Context,Key,OverLapped,INFINITE) do
+  if fOwner<>nil then
   try
-    if OverLapped=SHUTDOWN_FLAG then
-      break; // exit thread
-    if Context<>nil then
-      fOwner.Task(Self,Context);
-  except
-    on Exception do
-      ; // we should handle all exceptions in this loop
+    InterlockedIncrement(fOwner.FSubThreadCount);
+    while GetQueuedCompletionStatus(fOwner.FRequestQueue,Context,Key,OverLapped,INFINITE) do
+    try
+      if OverLapped=SHUTDOWN_FLAG then
+        break; // exit thread
+      if Context<>nil then
+        fOwner.Task(Self,Context);
+    except
+      on Exception do
+        ; // we should handle all exceptions in this loop
+    end;
+  finally
+    InterlockedDecrement(fOwner.FSubThreadCount);
   end;
 end;
 
@@ -4963,11 +4965,11 @@ begin
     // get Header of incoming request
     if ServerSock.GetRequest(false) then
       // connection and header seem valid -> process request further
-      if (FGeneratedThreadCount<THREADPOOL_MAXCREATEDTHREADS) and
+      if (FWorkThreadCount<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
         // HTTP/1.1 Keep Alive -> process in background thread
-        // or posted data > 1 MB -> get Body in background thread
+        // or posted data > 1 MB -> process in dedicated background thread
         fServer.fThreadRespClass.Create(ServerSock,fServer,self);
         ServerSock := nil; // THttpServerResp will do ServerSock.Free
       end else begin
