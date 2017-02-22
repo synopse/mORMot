@@ -5762,6 +5762,17 @@ type
   // unless you know what you are doing)
   TServiceMethodOptions = set of TServiceMethodOption;
 
+  /// class-reference type (metaclass) for storing interface-based service
+  // execution statistics
+  // - you could inherit from TSQLRecordServiceLog, and specify additional
+  // fields corresponding to the execution context
+  TSQLRecordServiceLogClass = class of TSQLRecordServiceLog;
+
+  /// class-reference type (metaclass) for storing interface-based service
+  // execution statistics used for DB-based asynchronous notifications
+  // - as used by TServiceFactoryClient.SendNotifications
+  TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
+
   /// internal per-method list of execution context as hold in TServiceFactory
   TServiceFactoryExecution = record
     /// the list of denied TSQLAuthGroup ID(s)
@@ -5775,10 +5786,7 @@ type
     /// where execution information should be written as TSQLRecordServiceLog
     LogRest: TSQLRest;
     /// the TSQLRecordServiceLog class to use, as defined in LogRest.Model
-    LogClassModelIndex: integer;
-    /// curent BATCH instance used to write on LogRest
-    // - points to a TServiceFactoryServer.fLogRestBatch[] instance
-    LogRestBatch: TSQLRestBatchLocked;
+    LogClass: TSQLRecordServiceLogClass;
   end;
   /// points to the execution context of one method within TServiceFactory
   PServiceFactoryExecution = ^TServiceFactoryExecution;
@@ -6847,10 +6855,12 @@ type
     function RawAppend(FullRow: boolean=true): TTextWriter;
     /// allow to append some JSON content to the internal raw buffer for a POST
     // - could be used to emulate Add() with an already pre-computed JSON object
-    procedure RawAdd(const SentData: RawUTF8);
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    function RawAdd(const SentData: RawUTF8): integer;
     /// allow to append some JSON content to the internal raw buffer for a PUT
     // - could be used to emulate Update() with an already pre-computed JSON object
-    procedure RawUpdate(const SentData: RawUTF8; ID: TID);
+    // - returns the corresponding index in the current BATCH sequence, -1 on error
+    function RawUpdate(const SentData: RawUTF8; ID: TID): integer;
     /// close a BATCH sequence started by Start method
     // - Data is ready to be supplied to TSQLRest.BatchSend() overloaded method
     // - will also notify the TSQLRest.Cache for all deleted IDs
@@ -10520,17 +10530,6 @@ type
     property Sent: TTimeLog read fSent write fSent;
   end;
 
-  /// class-reference type (metaclass) for storing interface-based service
-  // execution statistics
-  // - you could inherit from TSQLRecordServiceLog, and specify additional
-  // fields corresponding to the execution context
-  TSQLRecordServiceLogClass = class of TSQLRecordServiceLog;
-
-  /// class-reference type (metaclass) for storing interface-based service
-  // execution statistics used for DB-based asynchronous notifications
-  // - as used by TServiceFactoryClient.SendNotifications
-  TSQLRecordServiceNotificationsClass = class of TSQLRecordServiceNotifications;
-
   TServiceMethodExecute = class;
 
   /// the current step of a TServiceMethodExecute.OnExecute call
@@ -12106,7 +12105,6 @@ type
     fBackgroundThread: TSynBackgroundThreadMethod;
     fOnMethodExecute: TOnServiceCanExecute;
     fOnExecute: array of TServiceMethodExecuteEvent;
-    fLogRestBatch: array of TSQLRestBatchLocked; // store one BATCH per Rest
     procedure SetServiceLogByIndex(const aMethods: TInterfaceFactoryMethodBits;
       aLogRest: TSQLRest; aLogClass: TSQLRecordServiceLogClass);
     procedure SetTimeoutSecInt(value: cardinal);
@@ -13201,8 +13199,11 @@ type
   protected
     fRest: TSQLRest;
     fName: RawUTF8;
-    fBackgroundBatch: TSQLRestBatchLocked;
+    fBackgroundBatch: array of TSQLRestBatchLocked;
     // used by AsynchRedirect() and AsynchBatch()
+    function AsynchBatchIndex(aTable: TSQLRecordClass): integer;
+    function AsynchBatchLocked(aTable: TSQLRecordClass; out aBatch: TSQLRestBatchLocked): boolean;
+    procedure AsynchBatchUnLock(aBatch: TSQLRestBatchLocked);
     procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
     procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
@@ -13257,7 +13258,7 @@ type
     // or the TSQLRestBatch.Count threshold to call BatchSend
     // - actual REST/CRUD commands will take place via AsynchBatchAdd,
     // AsynchBatchUpdate and AsynchBatchDelete methods
-    // - only a single AsynchBatch() call is allowed at a time, unless
+    // - only a single AsynchBatch() call per Table is allowed at a time, unless
     // AsynchBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast bacgkround
     // asynchronous process of ORM methods, sufficient for most use cases
@@ -13266,15 +13267,30 @@ type
       Options: TSQLRestBatchOptions=[boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
-    function AsynchBatchStop: boolean;
+    // - Table=nil will release all existing batch instances
+    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
-    // - is a wrapper around the TSQLRestBatch.Add() sent in the Timer thread,
+    // - is a wrapper around TSQLRestBatch.Add() sent in the Timer thread,
     // so will return the index in the BATCH rows, not the created TID
     // - this method is thread-safe
     function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
       ForceID: boolean=false; const CustomFields: TSQLFieldBits=[];
       DoNotAutoComputeFields: boolean=false): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object
+    // - is a wrapper around TSQLRestBatch.RawAdd() sent in the Timer thread,
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object, as stored in a TTextWriter instance
+    // - is a wrapper around TSQLRestBatch.RawAppend.AddNoJSONEscape(SentData) 
+    // in the Timer thread
+    // - this method is thread-safe
+    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around the TSQLRestBatch.Update() sent in the Timer thread
@@ -14457,7 +14473,7 @@ type
     // or the TSQLRestBatch.Count threshold to call BatchSend
     // - actual REST/CRUD commands will take place via AsynchBatchAdd,
     // AsynchBatchUpdate and AsynchBatchDelete methods
-    // - only a single AsynchBatch() call is allowed at a time, unless
+    // - only a single AsynchBatch() call per Table is allowed at a time, unless
     // AsynchBatchStop method is used to flush the current asynchronous BATCH
     // - using a BATCH in a dedicated thread will allow very fast bacgkround
     // asynchronous process of ORM methods, sufficient for most use cases
@@ -14467,8 +14483,9 @@ type
       Options: TSQLRestBatchOptions=[boExtendedJSON]): boolean;
     /// finalize asynchronous ORM BATCH process, executed in a background thread
     // - should have been preceded by a call to AsynchBatch(), or returns false
+    // - Table=nil will release all existing batch instances
     // - is a wrapper around BackgroundTimer.AsynchBatchStop()
-    function AsynchBatchStop: boolean;
+    function AsynchBatchStop(Table: TSQLRecordClass): boolean;
     /// create a new ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around BackgroundTimer.AsynchBatchAdd(),
@@ -14477,6 +14494,19 @@ type
     function AsynchBatchAdd(Value: TSQLRecord; SendData: boolean;
       ForceID: boolean=false; const CustomFields: TSQLFieldBits=[];
       DoNotAutoComputeFields: boolean=false): integer;
+    /// append some JSON content in a BATCH to be written in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object
+    // - is a wrapper around BackgroundTimer.AsynchBatchRawAdd(),
+    // so will return the index in the BATCH rows, not the created TID
+    // - this method is thread-safe
+    function AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+    /// append some JSON content in a BATCH to be writen in a background thread
+    // - could be used to emulate AsynchBatchAdd() with an already pre-computed
+    // JSON object, as stored in a TTextWriter instance
+    // - is a wrapper around BackgroundTimer.AsynchBatchRawAppend()
+    // - this method is thread-safe
+    procedure AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
     /// update an ORM member in a BATCH to be written in a background thread
     // - should have been preceded by a call to AsynchBatchStart(), or returns -1
     // - is a wrapper around BackgroundTimer.AsynchBatchUpdate()
@@ -33307,18 +33337,19 @@ begin
   result := fBatch;
 end;
 
-procedure TSQLRestBatch.RawAdd(const SentData: RawUTF8);
+function TSQLRestBatch.RawAdd(const SentData: RawUTF8): integer;
 begin // '{"Table":[...,"POST",{object},...]}'
   if (fBatch=nil) or (fTable=nil) then
     raise EORMException.CreateUTF8('%.RawAdd %',[self,SentData]);
   fBatch.AddShort('"POST",');
   fBatch.AddString(SentData);
   fBatch.Add(',');
+  result := fBatchCount;
   inc(fBatchCount);
   inc(fAddCount);
 end;
 
-procedure TSQLRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID);
+function  TSQLRestBatch.RawUpdate(const SentData: RawUTF8; ID: TID): integer;
 var sentID: TID;
 begin // '{"Table":[...,"PUT",{object},...]}'
   if (fBatch=nil) or (fTable=nil) then
@@ -33330,6 +33361,7 @@ begin // '{"Table":[...,"PUT",{object},...]}'
   fBatch.Add(',');
   fBatch.AddStringCopy(SentData,2,maxInt shr 2);
   fBatch.Add(',');
+  result := fBatchCount;
   inc(fBatchCount);
   inc(fUpdateCount);
 end;
@@ -33572,7 +33604,7 @@ begin
   {$ifndef FPC} // serialization during destruction seems unsafe under FPC
   InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
   {$endif}
-  AsynchBatchStop;
+  AsynchBatchStop(nil);
   FreeAndNil(fServices);
   FreeAndNil(fCache);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
@@ -33777,11 +33809,11 @@ begin
       Table,SendSeconds,PendingRowThreshold,AutomaticTransactionPerRow,Options);
 end;
 
-function TSQLRest.AsynchBatchStop: boolean;
+function TSQLRest.AsynchBatchStop(Table: TSQLRecordClass): boolean;
 begin
   if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
     result := false else
-    result := fBackgroundTimer.AsynchBatchStop;
+    result := fBackgroundTimer.AsynchBatchStop(Table);
 end;
 
 function TSQLRest.AsynchBatchAdd(Value: TSQLRecord; SendData,ForceID: boolean;
@@ -33793,13 +33825,25 @@ begin
       Value,SendData,ForceID,CustomFields,DoNotAutoComputeFields);
 end;
 
+function TSQLRest.AsynchBatchRawAdd(Table: TSQLRecordClass; const SentData: RawUTF8): integer;
+begin
+  if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
+    result := -1 else
+    result := fBackgroundTimer.AsynchBatchRawAdd(Table,SentData);
+end;
+
+procedure TSQLRest.AsynchBatchRawAppend(Table: TSQLRecordClass; SentData: TTextWriter);
+begin
+  if (self<>nil) and (fBackgroundTimer<>nil) and (fBackgroundTimer.fBackgroundBatch<>nil) then
+    fBackgroundTimer.AsynchBatchRawAppend(Table,SentData);
+end;
+
 function TSQLRest.AsynchBatchUpdate(Value: TSQLRecord;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
 begin
   if (self=nil) or (fBackgroundTimer=nil) or (fBackgroundTimer.fBackgroundBatch=nil) then
     result := -1 else
-    result := fBackgroundTimer.AsynchBatchUpdate(
-      Value,CustomFields,DoNotAutoComputeFields);
+    result := fBackgroundTimer.AsynchBatchUpdate(Value,CustomFields,DoNotAutoComputeFields);
 end;
 
 function TSQLRest.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
@@ -34512,9 +34556,9 @@ begin
 end;
 
 function TSQLRest.BatchSend(Batch: TSQLRestBatch): integer;
-var Res: TIDDynArray;
+var DummyRes: TIDDynArray;
 begin
-  result := BatchSend(Batch,Res);
+  result := BatchSend(Batch,DummyRes);
 end;
 
 function TSQLRest.RecordCanBeUpdated(Table: TSQLRecordClass; ID: TID;
@@ -53944,48 +53988,100 @@ end;
 
 destructor TSQLRestBackgroundTimer.Destroy;
 begin
+  AsynchBatchStop(nil);
   inherited Destroy;
-  fBackgroundBatch.Free;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchIndex(aTable: TSQLRecordClass): integer;
+begin
+  if (self=nil) or (fBackgroundBatch=nil) then
+    result := -1 else begin
+    result := fRest.Model.GetTableIndexExisting(aTable);
+    if (result>=length(fBackgroundBatch)) or (fBackgroundBatch[result]=nil) then
+      result := -1;
+  end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchLocked(aTable: TSQLRecordClass;
+  out aBatch: TSQLRestBatchLocked): boolean;
+var b: integer;
+begin
+  b := AsynchBatchIndex(aTable);
+  if b>=0 then begin
+    aBatch := fBackgroundBatch[b];
+    aBatch.Safe.Lock;
+    result := true;
+  end else
+    result := false;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchUnLock(aBatch: TSQLRestBatchLocked);
+begin
+  try
+    if aBatch.Count>=aBatch.Threshold then
+      ExecuteNow(AsynchBatchExecute);
+  finally
+    aBatch.Safe.UnLock;
+  end;
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchBatchExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
-var data: RawUTF8;
+var data, tablename: RawUTF8;
     table: TSQLRecordClass;
-    count, status: integer;
+    batch: TSQLRestBatchLocked;
+    b, count, status: integer;
     res: TIDDynArray;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
 begin
-  if fBackgroundBatch<>nil then
   try
-    fBackgroundBatch.Safe.Lock;
-    try
-      table := fBackgroundBatch.Table;
-      count := fBackgroundBatch.Count;
-      if count>0 then
+    // send any pending data
+    for b := 0 to high(fBackgroundBatch) do begin
+      batch := fBackgroundBatch[b];
+      if batch.Count=0 then
+        continue;
+      batch.Safe.Lock;
       try
-        {$ifdef WITHLOG}
-        log := fRest.LogClass.Enter('AsynchBatchExecute [%] % count=%',
-          [fName,table,count],self);
-        {$endif}
-        fBackgroundBatch.PrepareForSending(data);
+        table := batch.Table;
+        count := batch.Count;
+        if count>0 then
+        try
+          {$ifdef WITHLOG}
+          if log=nil then
+            log := fRest.LogClass.Enter('AsynchBatchExecute % count=%',
+              [table,count],self);
+          {$endif}
+          batch.PrepareForSending(data);
+        finally
+          batch.Reset;
+        end;
       finally
-        fBackgroundBatch.Reset;
+        batch.Safe.UnLock;
       end;
-    finally
-      fBackgroundBatch.Safe.UnLock;
-    end;
-    // inlined TSQLRest.BatchSend for lower contention
-    if data<>'' then begin
-      status := fRest.EngineBatchSend(table,data,res,count); // may take a while
-      fRest.InternalLog('AsynchBatchExecute [%] EngineBatchSend=%',[fName,status]);
+      // inlined TSQLRest.BatchSend for lower contention
+      if data<>'' then
+      try
+        status := fRest.EngineBatchSend(table,data,res,count); // may take a while
+        fRest.InternalLog('AsynchBatchExecute % EngineBatchSend=%',[table,status]);
+      except
+        on E: Exception do
+          fRest.InternalLog('% during AsynchBatchExecute %',[E.ClassType,table],sllWarning);
+      end;
     end;
   finally
-    if Msg='free' then begin
-      fRest.InternalLog('AsynchBatchExecute [%] "free"',[fName]);
-      FreeAndNil(fBackgroundBatch);
+    if IdemPChar(pointer(Msg),'FREE@') then begin // from AsynchBatchStop()
+      fRest.InternalLog('AsynchBatchExecute %',[Msg]);
+      tablename := copy(Msg,6,127);
+      if tablename='' then
+        // AsynchBatchStop(nil)
+        ObjArrayClear(fBackgroundBatch,true) else begin
+        // AsynchBatchStop(table)
+        b := fRest.Model.GetTableIndex(tablename);
+        if b<length(fBackgroundBatch) then
+          FreeAndNil(fBackgroundBatch[b]);
+      end;
     end;
   end;
 end;
@@ -53993,21 +54089,27 @@ end;
 function TSQLRestBackgroundTimer.AsynchBatchStart(Table: TSQLRecordClass;
   SendSeconds, PendingRowThreshold, AutomaticTransactionPerRow: integer;
   Options: TSQLRestBatchOptions): boolean;
+var b: Integer;
 begin
   result := false;
-  if (self=nil) or (fBackgroundBatch<>nil) or (SendSeconds<=0) then
+  if (self=nil) or (SendSeconds<=0) then
     exit;
-  fRest.InternalLog('AsynchBatchStart(%,%,%) on [%] using %',
-    [Table,SendSeconds,PendingRowThreshold,fName,self],sllDebug);
+  b := fRest.Model.GetTableIndexExisting(Table);
+  if (fBackgroundBatch<>nil) and (fBackgroundBatch[b]<>nil) then
+    exit; // already defined for this Table
+  fRest.InternalLog('AsynchBatchStart(%,%,%)',[Table,SendSeconds,PendingRowThreshold],sllDebug);
   Enable(AsynchBatchExecute,SendSeconds);
-  fBackgroundBatch := TSQLRestBatchLocked.Create(
+  if fBackgroundBatch=nil then
+    SetLength(fBackgroundBatch,fRest.Model.TablesMax+1);
+  fBackgroundBatch[b] := TSQLRestBatchLocked.Create(
     fRest,Table,AutomaticTransactionPerRow,Options);
-  fBackgroundBatch.Threshold := PendingRowThreshold;
+  fBackgroundBatch[b].Threshold := PendingRowThreshold;
   result := true;
 end;
 
-function TSQLRestBackgroundTimer.AsynchBatchStop: boolean;
-var timeout: Int64;
+function TSQLRestBackgroundTimer.AsynchBatchStop(Table: TSQLRecordClass): boolean;
+var b: integer;
+    timeout: Int64;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
@@ -54016,66 +54118,108 @@ begin
   if (self=nil) or (fBackgroundBatch=nil) then
     exit;
   {$ifdef WITHLOG}
-  log := fRest.LogClass.Enter('AsynchBatchStop(%) on [%]',[fBackgroundBatch.Table,fName],self);
+  log := fRest.LogClass.Enter('AsynchBatchStop(%)',[Table],self);
   {$endif}
-  if not EnQueue(AsynchBatchExecute,'free',true) then
-    exit;
   timeout := GetTickCount64+5000;
-  repeat
-    sleep(1); // wait for all pending rows to be sent
-  until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
-  result := Disable(AsynchBatchExecute);
+  if Table=nil then begin // e.g. from TSQLRest.Destroy
+    if not EnQueue(AsynchBatchExecute,'free@',true) then
+      exit;
+    repeat
+      sleep(1); // wait for all batchs to be released
+    until (fBackgroundBatch=nil) or (GetTickCount64>timeout);
+    result := Disable(AsynchBatchExecute);
+  end else begin
+    b := AsynchBatchIndex(Table);
+    if (b<0) or not EnQueue(AsynchBatchExecute,'free@'+Table.SQLTableName,true) then
+      exit;
+    repeat
+      sleep(1); // wait for all pending rows to be sent
+    until (fBackgroundBatch[b]=nil) or (GetTickCount64>timeout);
+    if ObjArrayCount(fBackgroundBatch)>0 then
+      result := true else begin
+      result := Disable(AsynchBatchExecute);
+      if result then
+        ObjArrayClear(fBackgroundBatch,true);
+    end;
+  end;
 end;
 
 function TSQLRestBackgroundTimer.AsynchBatchAdd(Value: TSQLRecord; SendData,ForceID: boolean;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+var b: TSQLRestBatchLocked;
 begin
   result := -1;
-  if (self=nil) or (fBackgroundBatch=nil) then
+  if (self=nil) or (fBackgroundBatch=nil) or (Value=nil) then
     exit;
   fRest.InternalLog('AsynchBatchAdd %',[Value],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Add(
-      Value,SendData,ForceID,CustomFields,DoNotAutoComputeFields);
-    if result>=fBackgroundBatch.Threshold then
-      ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
+  if AsynchBatchLocked(Value.RecordClass,b) then
+    try
+      result := b.Add(Value,SendData,ForceID,CustomFields,DoNotAutoComputeFields);
+    finally
+      AsynchBatchUnLock(b);
+    end;
+end;
+
+function TSQLRestBackgroundTimer.AsynchBatchRawAdd(Table: TSQLRecordClass;
+  const SentData: RawUTF8): integer;
+var b: TSQLRestBatchLocked;
+begin
+  result := -1;
+  if (self=nil) or (fBackgroundBatch=nil) or (Table=nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchRawAdd % %',[Table,SentData],sllDebug);
+  if AsynchBatchLocked(Table,b) then
+    try
+      result := b.RawAdd(SentData);
+    finally
+      AsynchBatchUnLock(b);
+    end;
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBatchRawAppend(Table: TSQLRecordClass;
+  SentData: TTextWriter);
+var b: TSQLRestBatchLocked;
+begin
+  if (self=nil) or (fBackgroundBatch=nil) or (Table=nil) or (SentData=nil) then
+    exit;
+  fRest.InternalLog('AsynchBatchRawAppend %',[Table],sllDebug);
+  if AsynchBatchLocked(Table,b) then
+    try
+      b.RawAppend.AddNoJSONEscape(SentData);
+    finally
+      AsynchBatchUnLock(b);
+    end;
 end;
 
 function TSQLRestBackgroundTimer.AsynchBatchUpdate(Value: TSQLRecord;
   const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+var b: TSQLRestBatchLocked;
 begin
   result := -1;
-  if (self=nil) or (fBackgroundBatch=nil) then
+  if (self=nil) or (fBackgroundBatch=nil) or (Value=nil) then
     exit;
   fRest.InternalLog('AsynchBatchUpdate %',[Value],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Update(Value,CustomFields,DoNotAutoComputeFields);
-    if result>=fBackgroundBatch.Threshold then
-      ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
+  if AsynchBatchLocked(Value.RecordClass,b) then
+    try
+      result := b.Update(Value,CustomFields,DoNotAutoComputeFields);
+    finally
+      AsynchBatchUnLock(b);
+    end;
 end;
 
 function TSQLRestBackgroundTimer.AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+var b: TSQLRestBatchLocked;
 begin
   result := -1;
   if (self=nil) or (fBackgroundBatch=nil) then
     exit;
   fRest.InternalLog('AsynchBatchDelete % %',[Table,ID],sllDebug);
-  fBackgroundBatch.Safe.Lock;
-  try
-    result := fBackgroundBatch.Delete(Table,ID);
-    if result>=fBackgroundBatch.Threshold then
-      ExecuteNow(AsynchBatchExecute);
-  finally
-    fBackgroundBatch.Safe.UnLock;
-  end;
+  if AsynchBatchLocked(Table,b) then
+    try
+      result := b.Delete(Table,ID);
+    finally
+      AsynchBatchUnLock(b);
+    end;
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
@@ -56627,18 +56771,6 @@ begin
     Rest.InternalLog('%.Destroy for I% %: fInstanceCount=%',[ClassType,fInterfaceURI,
       ToText(InstanceCreation)^,fInstanceCount],sllDebug);
   try
-    for i := 0 to High(fLogRestBatch) do begin
-      with fLogRestBatch[i] do begin
-        Safe.Lock;
-        try
-          if Count>0 then
-            Rest.BatchSend(fLogRestBatch[i]);
-        finally
-          Safe.Unlock;
-        end;
-      end;
-      FreeAndNil(fLogRestBatch[i]);
-    end;
     EnterCriticalSection(fInstanceLock);
     try // release any internal instance (should have been done by client)
       try
@@ -56950,7 +57082,6 @@ var Inst: TServiceFactoryServerInstance;
   end;
   procedure FinalizeLogRest;
   var W: TTextWriter;
-      context: PServiceRunningContext;
   begin
     W := exec.TempTextWriter;
     if exec.CurrentStep<smsBefore then begin
@@ -56962,23 +57093,7 @@ var Inst: TServiceFactoryServerInstance;
     W.Add('},Session:%,User:%,Time:%,MicroSec:%},',
       [integer(Ctxt.Session),Ctxt.SessionUser,TimeLogNowUTC,timeEnd]);
     with Ctxt.ServiceExecution^ do
-    try
-      LogRestBatch.Safe.Lock;
-      LogRestBatch.RawAppend.AddNoJSONEscape(W);
-      if (LogRestBatch.Count>=500) or // write every second or after 500 rows
-         (GetTickCount64-LogRestBatch.ResetTix>1000) then begin
-        context := @ServiceContext;
-        context^.Request := nil; // avoid IsNotAllowed unexpected failure
-        try
-          LogRest.BatchSend(LogRestBatch);
-          LogRestBatch.Reset;
-        finally
-          context^.Request := Ctxt;
-        end;
-      end;
-    finally
-      LogRestBatch.Safe.UnLock;
-    end;
+      LogRest.AsynchBatchRawAppend(LogClass,W);
   end;
 
 begin
@@ -57049,32 +57164,32 @@ begin
       end;
       instancePtr := PAnsiChar(Inst.Instance)+entry^.IOffset;
     end;
-    if optExecInPerInterfaceThread in Ctxt.ServiceExecution.Options then
+    if optExecInPerInterfaceThread in Ctxt.ServiceExecution^.Options then
       if fBackgroundThread=nil then
         fBackgroundThread := Rest.NewBackgroundThreadMethod(
           '% %',[self,fInterface.fInterfaceName]);
     WR := TJSONSerializer.CreateOwnedStream;
     try
       Ctxt.fThreadServer^.Factory := self;
-      if not(optForceStandardJSON in Ctxt.ServiceExecution.Options) and
+      if not(optForceStandardJSON in Ctxt.ServiceExecution^.Options) and
          ((Ctxt.Call.InHead='') or (Ctxt.ClientKind=ckFramework)) then
         include(WR.fCustomOptions,twoForceJSONExtended) else
         include(WR.fCustomOptions,twoForceJSONStandard); // AJAX
       // root/calculator {"method":"add","params":[1,2]} -> {"result":[3],"id":0}
       Ctxt.ServiceResultStart(WR);
-      dolock := optExecLockedPerInterface in Ctxt.ServiceExecution.Options;
+      dolock := optExecLockedPerInterface in Ctxt.ServiceExecution^.Options;
       if dolock then
         EnterCriticalSection(fInstanceLock);
       exec := TServiceMethodExecute.Create(@fInterface.fMethods[Ctxt.ServiceMethodIndex]);
       try
-        exec.fOptions := Ctxt.ServiceExecution.Options;
+        exec.fOptions := Ctxt.ServiceExecution^.Options;
         {$ifndef LVCL}
         exec.fBackgroundExecutionThread := fBackgroundThread;
         {$endif}
         exec.fOnCallback := Ctxt.ExecuteCallback;
         if fOnExecute<>nil then
           MultiEventMerge(exec.fOnExecute,fOnExecute);
-        if Ctxt.ServiceExecution.LogRest<>nil then
+        if Ctxt.ServiceExecution^.LogRest<>nil then
           exec.AddInterceptor(OnLogRestExecuteMethod);
         if (fImplementationClassKind=ickFake) and
            ((Ctxt.ServiceParameters=nil) or (Ctxt.ServiceParameters^='[')) and
@@ -57135,7 +57250,7 @@ begin
         timeEnd := 0;
     finally
       if exec<>nil then begin
-        if Ctxt.ServiceExecution.LogRest<>nil then
+        if Ctxt.ServiceExecution^.LogRest<>nil then
           FinalizeLogRest;
         exec.Free;
       end;
@@ -57318,43 +57433,22 @@ end;
 procedure TServiceFactoryServer.SetServiceLogByIndex(
   const aMethods: TInterfaceFactoryMethodBits; aLogRest: TSQLRest;
   aLogClass: TSQLRecordServiceLogClass);
-  procedure SetEntry(i,ndx: integer);
-  var j: integer;
-  begin
-    with fExecution[i] do begin
-      if LogRestBatch.Count>0 then begin
-        LogRest.BatchSend(LogRestBatch);
-        LogRestBatch.Reset;
-      end;
-      LogRest := aLogRest;
-      LogClassModelIndex := ndx;
-      if LogRest=nil then
-        exit;
-      for j := 0 to High(fLogRestBatch) do
-        if fLogRestBatch[j].Rest=LogRest then begin
-          LogRestBatch := fLogRestBatch[j];
-          exit; // already assigned to the very same TSQLRest instance
-        end;
-      LogRestBatch := TSQLRestBatchLocked.Create(LogRest,
-        LogRest.Model.Tables[ndx],10000);
-      ObjArrayAdd(fLogRestBatch,LogRestBatch);
-    end;
-  end;
-var i,ndx: integer;
+var m: integer;
 begin
   if aLogRest=nil then
-    ndx := -1 else
-    with aLogRest.Model do
-      if aLogClass=nil then begin
-        ndx := GetTableIndexInheritsFrom(TSQLRecordServiceLog);
-        if ndx<0 then
-          raise EModelException.CreateUTF8('%.SetServiceLog: Missing '+
-            'TSQLRecordServiceLog class in %.Model',[self,aLogRest]);
-      end else
-        ndx := GetTableIndexExisting(aLogClass);
-  for i := 0 to fInterface.fMethodsCount-1 do
-    if i in aMethods then
-      SetEntry(i,ndx);
+    aLogClass := nil else begin
+    if aLogClass=nil then
+      aLogClass := TSQLRecordServiceLog;
+    aLogRest.Model.GetTableIndexExisting(aLogClass);
+  end;
+  for m := 0 to fInterface.fMethodsCount-1 do
+    if m in aMethods then
+    with fExecution[m] do begin
+      LogRest := aLogRest;
+      LogClass := aLogClass;
+    end;
+  if aLogRest<>nil then // write every second or after 500 rows in background
+    aLogRest.AsynchBatchStart(aLogClass,1,500,1000); // do nothing if already set
 end;
 
 procedure TServiceFactoryServer.AddInterceptor(const Hook: TServiceMethodExecuteEvent);
