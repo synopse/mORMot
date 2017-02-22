@@ -9222,10 +9222,10 @@ const
   STOCKPENCOLOR: array[WHITE_PEN..BLACK_PEN] of cardinal = (
     clWhite, clBlack);
 
-function CenterPoint(const Rect: TRect): TPoint;
+function CenterPoint(const Rect: TRect): TPoint; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result.X := (Rect.Right-Rect.Left) div 2+Rect.Left;
-  result.Y := (Rect.Bottom-Rect.Top) div 2+Rect.Top;
+  result.X := (Rect.Right+Rect.Left) div 2;
+  result.Y := (Rect.Bottom+Rect.Top) div 2;
 end;
 
 /// EMF enumeration callback function, called from GDI
