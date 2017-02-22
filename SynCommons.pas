@@ -5990,6 +5990,10 @@ procedure ObjArraySetLength(var aObjArray; aLength: integer);
 function ObjArrayFind(const aObjArray; aItem: TObject): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to count all not nil items in a T*ObjArray dynamic array storage
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+function ObjArrayCount(const aObjArray): integer;
+
 /// wrapper to delete an item in a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - do nothing if the index is out of range in the dynamic array
@@ -45670,6 +45674,16 @@ function ObjArrayFind(const aObjArray; aItem: TObject): integer;
 begin
   result := PtrUIntScanIndex(pointer(aObjArray),
     length(TObjectDynArray(aObjArray)),PtrUInt(aItem));
+end;
+
+function ObjArrayCount(const aObjArray): integer;
+var i: integer;
+    a: TObjectDynArray absolute aObjArray;
+begin
+  result := 0;
+  for i := 0 to length(a)-1 do
+    if a[i]<>nil then
+      inc(result);
 end;
 
 procedure ObjArrayDelete(var aObjArray; aItemIndex: integer;
