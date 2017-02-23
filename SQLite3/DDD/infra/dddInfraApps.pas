@@ -639,8 +639,10 @@ var log: ISynLog;
     res: TCQRSResult;
 begin
   {$ifdef WITHLOG}
-  log := SQLite3Log.Enter('DoStart % on %',
-    [fSettings.ServiceName, ExeVersion.Version.VersionInfo],self);
+  log := SQLite3Log.Enter(self);
+  with ExeVersion do
+    log.Log(sllNewRun, 'Daemon Start svc=% ver=% usr=%',
+      [fSettings.ServiceName, Version.Detailed, User], self);
   {$endif}
   fDaemon := NewDaemon;
   res := fDaemon.Start;
@@ -651,8 +653,9 @@ end;
 procedure TDDDDaemon.DoStop(Sender: TService);
 begin
   {$ifdef WITHLOG}
-  SQLite3Log.Enter('DoStop % on %',
-    [fSettings.ServiceName, ExeVersion.Version.VersionInfo],self);
+  SQLite3Log.Enter(self).
+    Log(sllNewRun, 'Daemon Stop svc=% ver=% usr=%',
+      [fSettings.ServiceName, ExeVersion.Version.Detailed, ExeVersion.User], self);
   {$endif}
   fDaemon := nil; // will stop the daemon
 end;

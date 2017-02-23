@@ -651,7 +651,7 @@ begin
   fRotateFileSize := 128*1024; // 128 MB per rotation log by default
   fAutoFlush := 5;
   fSyslogLevels := [sllWarning,sllLastError,sllError,
-    sllException,sllExceptionOS,sllDDDError];
+    sllException,sllExceptionOS,sllNewRun,sllDDDError];
   fSyslogFacility := sfLocal0;
 end;
 

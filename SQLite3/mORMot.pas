@@ -16161,6 +16161,7 @@ type
   // - TSQLRestServerURIContext.AuthenticationBearerToken will return the
   // ?authenticationbearer=... URI parameter value alternatively to the HTTP
   // header unless rsoAuthenticationURIDisable is set (for security reasons)
+  // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable 
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16172,7 +16173,8 @@ type
     rsoSecureConnectionRequired,
     rsoCookieIncludeRootPath,
     rsoCookieHttpOnlyFlagDisable,
-    rsoAuthenticationURIDisable);
+    rsoAuthenticationURIDisable,
+    rsoTimeStampInfoURIDisable);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -40983,7 +40985,8 @@ begin
 {$else}
 var info: TDocVariantData;
 begin
-  if IdemPropNameU(Ctxt.URIBlobFieldName,'info') then begin
+  if IdemPropNameU(Ctxt.URIBlobFieldName,'info') and
+     not (rsoTimeStampInfoURIDisable in fOptions) then begin
     info.InitFast;
     InternalInfo(info);
     Ctxt.Returns(info.ToJSON('','',jsonHumanReadable));
