@@ -10745,7 +10745,7 @@ function Base64ToBinLength(sp: PAnsiChar; len: PtrInt): PtrInt;
 function Base64ToBinLengthSafe(sp: PAnsiChar; len: PtrInt): PtrInt;
 
 /// direct low-level decoding of a Base64 encoded buffer
-// - here len is the number of 16 bytes chunks in sp
+// - here len is the number of 4 chars chunks in sp input
 // - you should better not use this, but Base64ToBin() overloaded functions
 procedure Base64Decode(sp,rp: PAnsiChar; len: PtrInt);
 
