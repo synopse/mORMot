@@ -3459,8 +3459,11 @@ begin
   end;
   opContains: begin // http://docs.mongodb.org/manual/reference/operator/query/in
     BSONDocumentBegin(name);
-    BSONWrite(QUERY_OPS[opIn],betArray);
-    BSONWriteArray([Value]);
+    if _Safe(Value)^.Kind=dvArray then
+      BSONWriteVariant(QUERY_OPS[opIn],Value) else begin
+      BSONWrite(QUERY_OPS[opIn],betArray);
+      BSONWriteArray([Value]);
+    end;
     BSONDocumentEnd;
   end;
   else

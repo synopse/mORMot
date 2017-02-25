@@ -1330,7 +1330,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             MS.Free;
           end;
           if TextOrderByField<>'' then
-            // $orderby is case sensitive with MongoDB -> manual ordering
+            // $orderby is case sensitive with MongoDB -> client-side sort
             with TSQLTableJSON.CreateFromTables(
               [fStoredClass],SQL,pointer(result),length(result)) do
             try

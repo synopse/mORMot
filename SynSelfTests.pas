@@ -466,6 +466,8 @@ type
   /// this test case will test most functions, classes and types defined and
   // implemented in the SynCrypto unit
   TTestCryptographicRoutines = class(TSynTestCase)
+  public
+    procedure CryptDataForCurrentUser(aes: boolean);
   published
     /// Adler32 hashing functions
     procedure _Adler32;
@@ -485,6 +487,10 @@ type
     procedure _CompressShaAes;
     /// AES-based pseudorandom number generator
     procedure _TAESPNRG;
+    /// CryptDataForCurrentUser() function
+    procedure _CryptDataForCurrentUser;
+    /// CryptDataForCurrentUserAES() function
+    procedure _CryptDataForCurrentUserAES;
     {$ifndef NOVARIANTS}
     /// JWT classes
     procedure _JWT;
@@ -9116,6 +9122,35 @@ begin
       check(CompareMem(pointer(s1),pointer(s2),i));
     end;
   check(PosEx(s1,split)=0);
+end;
+
+procedure TTestCryptographicRoutines._CryptDataForCurrentUser;
+begin
+  CryptDataForCurrentUser(false);
+end;
+
+procedure TTestCryptographicRoutines._CryptDataForCurrentUserAES;
+begin
+  CryptDataForCurrentUser(true);
+end;
+
+procedure TTestCryptographicRoutines.CryptDataForCurrentUser(aes: boolean);
+var i: integer;
+    plain,enc,test: RawByteString;
+    func: function(const Data: RawByteString; Encrypt: boolean): RawByteString;
+begin
+  if aes then
+    func := SynCrypto.CryptDataForCurrentUserAES else
+    func := SynCrypto.CryptDataForCurrentUser;
+  for i := 0 to 1000 do begin
+    plain := TAESPRNG.Main.FillRandom(i);
+    check(length(plain)=i);
+    enc := func(plain,true);
+    assert(length(enc)>=length(plain));
+    test := func(enc,false);
+    check(length(test)=i);
+    check(test=plain);
+  end;
 end;
 
 {$ifndef NOVARIANTS}
