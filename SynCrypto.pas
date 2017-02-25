@@ -273,20 +273,21 @@ uses
 {$ifdef MSWINDOWS}
   Windows,
 {$else}
-{$ifdef KYLIX3}
+  {$ifdef KYLIX3}
   LibC,
   SynKylix,
-{$endif}
-{$ifdef FPC}
+  {$endif}
+  {$ifdef FPC}
+  BaseUnix,
   SynFPCLinux,
-{$endif FPC}
-{$endif}
+  {$endif FPC}
+  {$endif MSWINDOWS}
   SysUtils,
 {$ifndef LVCL}
   {$ifndef DELPHI5OROLDER}
   RTLConsts,
   {$endif}
-{$endif}
+{$endif LVCL}
   Classes,
   SynLZ, // already included in SynCommons, and used by CompressShaAes()
   SynCommons;
@@ -455,9 +456,14 @@ type
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
     constructor Create(const aKey; aKeySize: cardinal); virtual;
-    /// Initialize AES contexts for cypher
+    /// Initialize AES contexts for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
-    constructor CreateFromSha256(const aKey: RawUTF8); virtual;
+    constructor CreateFromSha256(const aKey: RawUTF8);
+    /// Initialize AES contexts for cypher, from PBKDF2_HMAC_SHA256 derivation
+    // - here the Key is supplied as a string, and will be hashed using
+    // PBKDF2_HMAC_SHA256 with the specified salt and rounds
+    constructor CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawByteString;
+      aRounds: Integer);
     /// compute a class instance similar to this one
     function Clone: TAESAbstract; virtual;
     /// compute a class instance similar to this one, for performing the
@@ -1472,6 +1478,26 @@ function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteS
 // - outStream will be larger/smaller than Len: this is a full AES version with
 // a triming TAESFullHeader at the beginning
 procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream; const Password: RawByteString; Encrypt: boolean); overload;
+
+var
+  /// custom salt for CryptDataForCurrentUser/CryptDataForCurrentUserAES functions
+  // - is filled with some random bytes by default, but you may override
+  // it for all processes using CryptProtectData/CryptProtectDataAES
+  CryptProtectDataEntropy: THash256 = (
+    $19,$8E,$BA,$52,$FA,$D6,$56,$99,$7B,$73,$1B,$D0,$8B,$3A,$95,$AB,
+    $94,$63,$C2,$C0,$78,$05,$9C,$8B,$85,$B7,$A1,$E3,$ED,$93,$27,$18);
+
+/// protect some data using a secret known by the current user only
+// - will use CryptProtectData API under Windows, or a cyphered using a random
+// secret key stored in $HOME/synecc file (with chmod 400 if created)
+function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
+
+/// protect some data using a secret known by the current user only
+// - won't use CryptProtectData API under Windows, but a cyphered using a random
+// secret key stored in a GetSystemPath(spUserData)+'synopsesecure' file
+// - this function is 30 times faster than the Windows CryptProtectData API,
+// and uses very safe AES-256-CFB encryption
+function CryptDataForCurrentUserAES(const Data: RawByteString; Encrypt: boolean): RawByteString;
 
 const
   SHA1DIGESTSTRLEN = sizeof(TSHA1Digest)*2;
@@ -7767,6 +7793,14 @@ begin
   Create(Digest,256);
 end;
 
+constructor TAESAbstract.CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawByteString;
+  aRounds: Integer);
+var Digest: TSHA256Digest;
+begin
+  PBKDF2_HMAC_SHA256(aKey,aSalt,aRounds,Digest,RawUTF8(ClassName));
+  Create(Digest,256);
+end;
+
 destructor TAESAbstract.Destroy;
 begin
   inherited Destroy;
@@ -8232,11 +8266,12 @@ end;
 
 function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer;
   aAssociatedLen: integer): boolean;
+var rec: THash256Rec absolute aKey;
 begin
   // safe seed for plain text crc, before AES encryption
   // from TECDHEProtocol.SetKey, aKey is a CTR to avoid replay attacks
-  fMACKey.plain := THash256Rec(aKey).Lo;
-  XorBlock16(@fMACKey.plain,@THash256Rec(aKey).Hi);
+  fMACKey.plain := rec.Lo;
+  XorBlock16(@fMACKey.plain,@rec.Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
   if (aAssociated<>nil) and (aAssociatedLen>0) then
     crc128c(aAssociated,aAssociatedLen,fMACKey.encrypted) else
@@ -8245,11 +8280,12 @@ begin
 end;
 
 function TAESAbstractAEAD.MACGetLast(out aCRC: THash256): boolean;
+var rec: THash256Rec absolute aCRC;
 begin
   // encrypt the plain text crc, to perform message authentication and integrity
-  AES.Encrypt(fMAC.plain,THash256Rec(aCRC).Lo);
+  AES.Encrypt(fMAC.plain,rec.Lo);
   // store the encrypted text crc, to check for errors, with no compromission
-  THash256Rec(aCRC).Hi := fMAC.encrypted;
+  rec.Hi := fMAC.encrypted;
   result := true;
 end;
 
@@ -9456,6 +9492,114 @@ begin
     inc(Count);
 end;
 
+{$ifdef MSWINDOWS}
+type
+  DATA_BLOB = record
+    cbData: DWORD;
+    pbData: PAnsiChar;
+  end;
+  PDATA_BLOB = ^DATA_BLOB;
+const
+  CRYPTPROTECT_UI_FORBIDDEN = $1;
+  CRYPTDLL = 'Crypt32.dll';
+
+function CryptProtectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  var DataOut: DATA_BLOB): BOOL; stdcall; external CRYPTDLL name 'CryptProtectData';
+function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
+  OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
+  var DataOut: DATA_BLOB): Bool; stdcall; external CRYPTDLL name 'CryptUnprotectData';
+
+function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
+var src,dst,ent: DATA_BLOB;
+    ok: boolean;
+begin
+  src.pbData := pointer(Data);
+  src.cbData := length(Data);
+  ent.pbData := @CryptProtectDataEntropy;
+  ent.cbData := sizeof(CryptProtectDataEntropy);
+  if Encrypt then
+    ok := CryptProtectData(src,nil,@ent,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst) else
+    ok := CryptUnprotectData(src,nil,@ent,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst);
+  if ok then begin
+    SetString(result,dst.pbData,dst.cbData);
+    LocalFree(HLOCAL(dst.pbData));
+  end else
+    result := '';
+end;
+{$else}
+function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
+begin
+  result := CryptDataForCurrentUserAES(Data,Encrypt);
+end;
+{$endif}
+
+var
+  __h: THash256;
+
+procedure read__h;
+var keyfile: TFileName;
+    key: RawByteString;
+begin
+  keyfile := GetSystemPath(spUserData)+'synopsesecure';
+  key := StringFromFile(keyfile);
+  if (key<>'') and TAESPRNG.AFUnsplit(key,__h,sizeof(__h)) then
+    exit;
+  if FileExists(keyfile) then // allow rewrite of invalid local file
+    {$ifdef MSWINDOWS}
+    SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_NORMAL);
+    {$else}
+    {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR or S_IWUSR);
+    {$endif}
+  TAESPRNG.Main.FillRandom(__h);
+  key := TAESPRNG.Main.AFSplit(__h,sizeof(__h),127); // 4KB local file
+  FileFromString(key,keyfile);
+  FillZero(key);
+  {$ifdef MSWINDOWS}
+  SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
+  {$else}
+  {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR);
+  {$endif}
+end;
+
+function CryptDataForCurrentUserAES(const Data: RawByteString; Encrypt: boolean): RawByteString;
+type
+  TCryptData = packed record
+    nonce,mac: THash256;
+    data: RawByteString;
+  end;
+var aes: TAESCFBCRC;
+    rec: TCryptData;
+    secret,mac: THash256;
+begin
+  if IsZero(__h) then
+    read__h;
+  XorMemory(@secret,@__h,@CryptProtectDataEntropy,sizeof(secret));
+  aes := TAESCFBCRC.Create(secret,256);
+  try
+    FillZero(secret);
+    if Encrypt then begin
+      TAESPRNG.Main.FillRandom(rec.nonce);
+      aes.MACSetNonce(rec.nonce);
+      rec.Data := aes.EncryptPKCS7(Data,true);
+      aes.MACGetLast(rec.mac);
+      result := RecordSave(rec,TypeInfo(TCryptData));
+    end else begin
+      result := '';
+      if RecordLoad(rec,Pointer(Data),TypeInfo(TCryptData))=nil then
+        exit;
+      aes.MACSetNonce(rec.nonce);
+      result := aes.DecryptPKCS7(rec.Data,true);
+      if result<>'' then
+        if not aes.MACGetLast(mac) or not IsEqual(mac,rec.mac) then
+          FillZero(result);
+    end;
+  finally
+    FillZero(rec.data);
+    aes.Free;
+  end;
+end;
+
 
 { TProtocolNone }
 
@@ -9974,6 +10118,7 @@ finalization
   if PadLockLibHandle<>0 then
     FreeLibrary(PadLockLibHandle); // same on Win+Linux, thanks to SysUtils
 {$endif}
+  FillZero(__h);
 {$ifdef MSWINDOWS}
   if CryptoAPI.Handle<>0 then begin
     {$ifdef USE_PROV_RSA_AES}
