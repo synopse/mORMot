@@ -8092,6 +8092,8 @@ type
     function GetPassWordPlain: RawUTF8;
     procedure SetPassWordPlain(const Value: RawUTF8);
   public
+    /// finalize the instance
+    destructor Destroy; override;
     /// this class method could be used to compute the encrypted password,
     // ready to be stored as JSON, according to a given private key
     class function ComputePassword(const PlainPassword: RawUTF8;
@@ -8172,6 +8174,14 @@ type
     // - use the PassWordPlain property to access to its uncyphered value
     property Password: RawUTF8 read fPassword write fPassword;
   end;
+
+var
+  /// function prototype to customize TSynPersistent class password storage
+  // - is called when 'user1:base64pass1,user2:base64pass2' layout is found,
+  // and the current user logged on the system is user1 or user2
+  // - you should not call this low-level method, but let SynCrypto assign
+  // CryptDataForCurrentUser() function on it
+  TSynPersistentWithPasswordUserCrypt: function(const Data: RawByteString; Encrypt: boolean): RawByteString;
 
 /// will serialize any TObject into its UTF-8 JSON representation
 /// - serialize as JSON the published integer, Int64, floating point values,
@@ -11194,18 +11204,26 @@ procedure UnSetBit64(var Bits: Int64; aIndex: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical OR of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] or Source[i];
 procedure OrMemory(Dest,Source: PByteArray; size: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] xor Source[i];
 procedure XorMemory(Dest,Source: PByteArray; size: integer); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical XOR of two memory buffers into a third
+// - will perform on all buffer bytes:
+// ! Dest[i] := Source1[i] xor Source2[i];
 procedure XorMemory(Dest,Source1,Source2: PByteArray; size: integer); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// logical AND of two memory buffers
+// - will perform on all buffer bytes:
+// ! Dest[i] := Dest[i] and Source[i];
 procedure AndMemory(Dest,Source: PByteArray; size: integer);
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -12612,7 +12630,7 @@ type
   /// identify an operating system folder
   TSystemPath = (
     spCommonData, spUserData, spCommonDocuments, spUserDocuments, spTempFolder);
-
+                             
 /// returns an operating system folder
 // - will return the full path of a given kind of private or shared folder,
 // depending on the underlying operating system
@@ -36433,7 +36451,7 @@ begin
   Len := RecordSaveLength(Rec,TypeInfo);
   SetString(result,nil,Len);
   if Len<>0 then
-    RecordSave(Rec,pointer(result),TypeInfo);
+    RecordSave(Rec,pointer(result),TypeInfo,Len);
 end;
 
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
@@ -50446,6 +50464,12 @@ end;
 
 { TSynPersistentWithPassword }
 
+destructor TSynPersistentWithPassword.Destroy;
+begin
+  FillZero(RawByteString(fPassword));
+  inherited Destroy;
+end;
+
 class function TSynPersistentWithPassword.ComputePassword(const PlainPassword: RawUTF8;
   CustomKey: cardinal): RawUTF8;
 var instance: TSynPersistentWithPassword;
@@ -50487,24 +50511,43 @@ begin
 end;
 
 function TSynPersistentWithPassword.GetPassWordPlain: RawUTF8;
+var value,pass: RawByteString;
+    usr: RawUTF8;
+    i,j: integer;
 begin
+  result := '';
   if (self=nil) or (fPassWord='') then
-    result := '' else begin
-    result := Base64ToBin(fPassWord);
-    SymmetricEncrypt(GetKey,RawByteString(result));
+    exit;
+  if Assigned(TSynPersistentWithPasswordUserCrypt) then begin
+    usr := ExeVersion.User+':';
+    i := PosEx(usr,fPassword);
+    if (i=1) or ((i>0) and (fPassword[i-1]=',')) then begin
+      inc(i,length(usr));
+      j := PosEx(',',fPassword,i);
+      if j>0 then begin
+        Base64ToBin(@fPassword[i],j-i,pass);
+        if pass<>'' then
+          result := TSynPersistentWithPasswordUserCrypt(pass,false);
+      end;
+    end;
+  end;
+  if result='' then begin
+    value := Base64ToBin(fPassWord);
+    SymmetricEncrypt(GetKey,value);
+    result := value;
   end;
 end;
 
-procedure TSynPersistentWithPassword.SetPassWordPlain(const Value: RawUTF8);
+procedure TSynPersistentWithPassword.SetPassWordPlain(const value: RawUTF8);
 var tmp: RawByteString;
 begin
   if self=nil then
     exit;
-  if Value='' then begin
+  if value='' then begin
     fPassWord := '';
     exit;
   end;
-  SetString(tmp,PAnsiChar(Value),Length(Value)); // private copy
+  SetString(tmp,PAnsiChar(value),Length(value)); // private copy
   SymmetricEncrypt(GetKey,tmp);
   fPassWord := BinToBase64(tmp);
 end;
@@ -50841,9 +50884,9 @@ begin
   Create(FormatUTF8(Format,Args,Params,true));
 end;
 
-procedure TSynFilterOrValidate.SetParameters(const Value: RawUTF8);
+procedure TSynFilterOrValidate.SetParameters(const value: RawUTF8);
 begin
-  fParameters := Value;
+  fParameters := value;
 end;
 
 function TSynFilterOrValidate.AddOnce(var aObjArray: TSynFilterOrValidateObjArray;
@@ -50867,80 +50910,80 @@ end;
 
 { TSynFilterUpperCase }
 
-procedure TSynFilterUpperCase.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterUpperCase.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  Value := SynCommons.UpperCase(Value);
+  value := SynCommons.UpperCase(value);
 end;
 
 
 { TSynFilterUpperCaseU }
 
-procedure TSynFilterUpperCaseU.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterUpperCaseU.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  Value := UpperCaseU(Value);
+  value := UpperCaseU(value);
 end;
 
 
 { TSynFilterLowerCase }
 
-procedure TSynFilterLowerCase.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterLowerCase.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  Value := LowerCase(Value);
+  value := LowerCase(value);
 end;
 
 
 { TSynFilterLowerCaseU }
 
-procedure TSynFilterLowerCaseU.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterLowerCaseU.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  Value := LowerCaseU(Value);
+  value := LowerCaseU(value);
 end;
 
 
 { TSynFilterTrim }
 
-procedure TSynFilterTrim.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterTrim.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
-  Value := Trim(Value);
+  value := Trim(value);
 end;
 
 
 { TSynFilterTruncate}
 
-procedure TSynFilterTruncate.SetParameters(const Value: RawUTF8);
+procedure TSynFilterTruncate.SetParameters(const value: RawUTF8);
 var V: TPUtf8CharDynArray;
     tmp: TSynTempBuffer;
 begin
-  tmp.Init(Value);
+  tmp.Init(value);
   JSONDecode(tmp.buf,['MaxLength','UTF8Length'],V);
   fMaxLength := GetCardinalDef(V[0],0);
   fUTF8Length := IdemPChar(V[1],'1') or IdemPChar(V[1],'TRUE');
   tmp.Done;
 end;
 
-procedure TSynFilterTruncate.Process(aFieldIndex: integer; var Value: RawUTF8);
+procedure TSynFilterTruncate.Process(aFieldIndex: integer; var value: RawUTF8);
 begin
   if fMaxLength-1<cardinal(maxInt) then
     if fUTF8Length then
-      Utf8TruncateToLength(Value,fMaxLength) else
-      Utf8TruncateToUnicodeLength(Value,fMaxLength);
+      Utf8TruncateToLength(value,fMaxLength) else
+      Utf8TruncateToUnicodeLength(value,fMaxLength);
 end;
 
 
 { TSynValidateIPAddress }
 
-function TSynValidateIPAddress.Process(aFieldIndex: integer; const Value: RawUTF8;
+function TSynValidateIPAddress.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
 begin
-  result := IsValidIP4Address(pointer(Value));
+  result := IsValidIP4Address(pointer(value));
   if not result then
-    ErrorMsg := Format(sInvalidIPAddress,[UTF8ToString(Value)]);
+    ErrorMsg := Format(sInvalidIPAddress,[UTF8ToString(value)]);
 end;
 
 
 { TSynValidateEmail }
 
-function TSynValidateEmail.Process(aFieldIndex: integer; const Value: RawUTF8;
+function TSynValidateEmail.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
 var TLD,DOM: RawUTF8;
     i: integer;
@@ -50949,16 +50992,16 @@ const TopLevelTLD: array[0..19] of PUTF8Char = (
   'aero','asia','biz','cat','com','coop','edu','gov','info','int','jobs',
   'mil','mobi','museum','name','net','org','pro','tel','travel'); // no xxx !
 begin
-  if IsValidEmail(pointer(Value)) then
+  if IsValidEmail(pointer(value)) then
   repeat
-    DOM := lowercase(copy(Value,PosEx('@',Value)+1,100));
+    DOM := lowercase(copy(value,PosEx('@',value)+1,100));
     if length(DOM)>63 then
       break; // exceeded 63-character limit of a DNS name
     if (ForbiddenDomains<>'') and (FindCSVIndex(pointer(ForbiddenDomains),DOM)>=0) then
       break;
-    i := length(Value);
-    while (i>0) and (Value[i]<>'.') do dec(i);
-    TLD := lowercase(copy(Value,i+1,100));
+    i := length(value);
+    while (i>0) and (value[i]<>'.') do dec(i);
+    TLD := lowercase(copy(value,i+1,100));
     if (AllowedTLD<>'') and (FindCSVIndex(pointer(AllowedTLD),TLD)<0) then
       break;
     if (ForbiddenTLD<>'') and (FindCSVIndex(pointer(ForbiddenTLD),TLD)>=0) then
@@ -50970,16 +51013,16 @@ begin
     result := true;
     exit;
   until true;
-  ErrorMsg := Format(sInvalidEmailAddress,[UTF8ToString(Value)]);
+  ErrorMsg := Format(sInvalidEmailAddress,[UTF8ToString(value)]);
   result := false;
 end;
 
-procedure TSynValidateEmail.SetParameters(const Value: RawUTF8);
+procedure TSynValidateEmail.SetParameters(const value: RawUTF8);
 var V: TPUtf8CharDynArray;
     tmp: TSynTempBuffer;
 begin
   inherited;
-  tmp.Init(Value);
+  tmp.Init(value);
   JSONDecode(tmp.buf,['AllowedTLD','ForbiddenTLD','ForbiddenDomains','AnyTLD'],V);
   LowerCaseCopy(V[0],StrLen(V[0]),fAllowedTLD);
   LowerCaseCopy(V[1],StrLen(V[1]),fForbiddenTLD);
@@ -50991,12 +51034,12 @@ end;
 
 { TSynValidatePattern }
 
-function TSynValidatePattern.Process(aFieldIndex: integer; const Value: RawUTF8;
+function TSynValidatePattern.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
 begin
-  result := IsMatch(fParameters,Value,ClassType=TSynValidatePatternI);
+  result := IsMatch(fParameters,value,ClassType=TSynValidatePatternI);
   if not result then
-    ErrorMsg := Format(sInvalidPattern,[UTF8ToString(Value)]);
+    ErrorMsg := Format(sInvalidPattern,[UTF8ToString(value)]);
 end;
 
 
@@ -51016,10 +51059,10 @@ begin
   result := Format(sInvalidTextLengthMin,[min,Character01n(min)]);
 end;
 
-function TSynValidateNonVoidText.Process(aFieldIndex: integer; const Value: RawUTF8;
+function TSynValidateNonVoidText.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
 begin
-  if Value='' then begin
+  if value='' then begin
     InvalidTextLengthMin(1,ErrorMsg);
     result := false;
   end else
@@ -51041,23 +51084,23 @@ begin
        Character01n(fProps[fPropsIndex])]);
 end;
 
-function TSynValidateText.Process(aFieldIndex: integer; const Value: RawUTF8;
+function TSynValidateText.Process(aFieldIndex: integer; const value: RawUTF8;
   var ErrorMsg: string): boolean;
 var i, L: cardinal;
     Min: array[2..7] of cardinal;
 begin
   result := false;
   if fUTF8Length then
-    L := length(Value) else
-    L := Utf8ToUnicodeLength(pointer(Value));
+    L := length(value) else
+    L := Utf8ToUnicodeLength(pointer(value));
   if L<MinLength then
     InvalidTextLengthMin(MinLength,ErrorMsg) else
   if L>MaxLength then
     ErrorMsg := Format(sInvalidTextLengthMax,[MaxLength,Character01n(MaxLength)]) else begin
     FillcharFast(Min,sizeof(Min),0);
-    L := length(Value);
+    L := length(value);
     for i := 1 to L do
-    case Value[i] of
+    case value[i] of
       ' ':
         inc(Min[7]);
       'a'..'z': begin
@@ -51083,11 +51126,11 @@ begin
         SetErrorMsg(i+8,i,1,ErrorMsg);
         exit;
       end;
-    if Value<>'' then begin
+    if value<>'' then begin
       if MaxLeftTrimCount<cardinal(maxInt) then begin
         // if MaxLeftTrimCount is set, check against Value
         i := 0;
-        while (i<L) and (Value[i+1]=' ') do inc(i);
+        while (i<L) and (value[i+1]=' ') do inc(i);
         if i>MaxLeftTrimCount then begin
           SetErrorMsg(0,0,8,ErrorMsg);
           exit;
@@ -51096,7 +51139,7 @@ begin
       if MaxRightTrimCount<cardinal(maxInt) then begin
         // if MaxRightTrimCount is set, check against Value
         i := 0;
-        while (i<L) and (Value[L-i]=' ') do dec(i);
+        while (i<L) and (value[L-i]=' ') do dec(i);
         if i>MaxRightTrimCount then begin
           SetErrorMsg(0,0,9,ErrorMsg);
           exit;
@@ -51107,7 +51150,7 @@ begin
   end;
 end;
 
-procedure TSynValidateText.SetParameters(const Value: RawUTF8);
+procedure TSynValidateText.SetParameters(const value: RawUTF8);
 var V: TPUtf8CharDynArray;
     i: integer;
     tmp: TSynTempBuffer;
@@ -51116,10 +51159,10 @@ const DEFAULT: TSynValidateTextProps = (
 begin
   if (MinLength=0) and (MaxLength=0) then  // if not previously set
     fProps := DEFAULT;
-  inherited SetParameters(Value);
-  if Value='' then
+  inherited SetParameters(value);
+  if value='' then
     exit;
-  tmp.Init(Value);
+  tmp.Init(value);
   try
     JSONDecode(tmp.buf,['MinLength','MaxLength',
       'MinAlphaCount','MinDigitCount','MinPunctCount',
@@ -51142,7 +51185,7 @@ end;
 
 { TSynValidatePassWord }
 
-procedure TSynValidatePassWord.SetParameters(const Value: RawUTF8);
+procedure TSynValidatePassWord.SetParameters(const value: RawUTF8);
 const DEFAULT: TSynValidateTextProps = (
   5,20,1,1,1,1,1,0,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,maxInt,0);
 begin

@@ -2300,7 +2300,7 @@ begin
       inc(P,25); // trim e.g. '00000000089E5A13  " info '
       dec(len,25);
     end;
-  while (len>0) and (P^<=' ') do begin
+  while (len>0) and (P^<=' ') do begin // trim left spaces
     inc(P);
     dec(len);
   end;

@@ -77,6 +77,11 @@ unit SynEcc;
   Version 1.18
   - first public release, corresponding to mORMot Framework 1.18
 
+  TODO:
+  - secure sign-then-crypt by signing the destination name with the plain content
+    to avoid "Surreptitious Forwarding" (reuse of the plain content to another
+    recipier) - see http://world.std.com/~dtd/sign_encrypt/sign_encrypt7.html
+
 *)
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -881,7 +886,8 @@ type
     // - may be used to integrate some private keys within an executable
     // - if ConstName='', _HEXASERIAL will be used, from 24 first chars of Serial
     // - the password may also be included as ConstName_PASS associated constant,
-    // and as ConstName_CYPH in TSynPersistentWithPassword encrypted format
+    // and as ConstName_CYPH in TSynPersistentWithPassword/TECCCertificateSecretSetting
+    // encrypted format
     function SaveToSource(const ConstName, Comment, PassWord: RawUTF8;
       IncludePassword: boolean=true; AFStripes: integer=0; PBKDF2Rounds: integer=100;
       AES: TAESAbstractClass=nil; IncludeRaw: boolean=true): RawUTF8;
@@ -2334,10 +2340,10 @@ begin
     end else
       dec := Plain;
     head.Algo := Algo;
-    enc := ECIES_AES[Algo].SimpleEncrypt(
+    enc := ECIES_AES[Algo].SimpleEncrypt( // encrypt with PKCS7 padding
       dec,aeskey,ECIES_AESSIZE[Algo],true,true);
     PBKDF2_HMAC_SHA256(secret,MACSalt,MACRounds,mackey,'hmac');
-    HMAC_SHA256(mackey,enc,head.hmac);
+    HMAC_SHA256(mackey,enc,head.hmac); // HMAC of the encrypted content
     head.crc := crc32c(PCardinal(@head.hmac)^,@head,sizeof(head)-sizeof(head.crc));
     SetLength(result,sizeof(head)+length(enc));
     PECIESHeader(result)^ := head;
