@@ -989,7 +989,12 @@ type
     // TAESPRNG instance to gather randomness
     // - for reference, see TKS1 as used for LUKS and defined in
     // @https://gitlab.com/cryptsetup/cryptsetup/wikis/TKS1-draft.pdf
-    function AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
+    function AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString; overload;
+    /// create an anti-forensic representation of a key for safe storage
+    // - a binary buffer will be split into StripesCount items, ready to be
+    // saved on disk; returned length is BufferBytes*(StripesCount+1) bytes
+    // - jsut a wrapper around the other overloaded AFSplit() funtion
+    function AFSplit(const Buffer: RawByteString; StripesCount: integer): RawByteString; overload;
     /// retrieve a key from its anti-forensic representation
     // - is the reverse function of AFSplit() method
     // - returns TRUE if the input buffer matches BufferBytes value
@@ -9243,6 +9248,11 @@ begin
   XorBlockN(@Buffer,dst,pointer(tmp),BufferBytes); // B[i] := A[i] xor C[i];
 end;
 
+function TAESPRNG.AFSplit(const Buffer: RawByteString; StripesCount: integer): RawByteString;
+begin
+  result := AFSplit(pointer(Buffer)^,length(Buffer),StripesCount);
+end;
+
 class function TAESPRNG.AFUnsplit(const Split: RawByteString;
   out Buffer; BufferBytes: integer): boolean;
 var len: cardinal;
@@ -9271,7 +9281,7 @@ begin
   len := length(Split);
   if (len=0) or (len mod cardinal(StripesCount+1)<>0) then
     exit;
-  len := len div cardinal(StripesCount);
+  len := len div cardinal(StripesCount+1);
   SetLength(result,len);
   if not AFUnsplit(Split,pointer(result)^,len) then
     result := '';
