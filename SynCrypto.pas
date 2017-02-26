@@ -1485,24 +1485,40 @@ function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteS
 procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream; const Password: RawByteString; Encrypt: boolean); overload;
 
 var
-  /// custom salt for CryptDataForCurrentUser/CryptDataForCurrentUserAES functions
+  /// salt for CryptDataForCurrentUser function
   // - is filled with some random bytes by default, but you may override
-  // it for all processes using CryptProtectData/CryptProtectDataAES
+  // it for a set of custom processes calling CryptDataForCurrentUser
   CryptProtectDataEntropy: THash256 = (
     $19,$8E,$BA,$52,$FA,$D6,$56,$99,$7B,$73,$1B,$D0,$8B,$3A,$95,$AB,
     $94,$63,$C2,$C0,$78,$05,$9C,$8B,$85,$B7,$A1,$E3,$ED,$93,$27,$18);
 
-/// protect some data using a secret known by the current user only
-// - will use CryptProtectData API under Windows, or a cyphered using a random
-// secret key stored in $HOME/synecc file (with chmod 400 if created)
-function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
+{$ifdef MSWINDOWS}
+/// protect some data for the current user, using Windows DPAPI
+// - the application can specify a secret salt text, which should reflect the
+// current execution context, to ensure nobody could decrypt the data without
+// knowing this application-specific value 
+// - will use CryptProtectData DPAPI function call under Windows
+// - see https://msdn.microsoft.com/en-us/library/ms995355
+// - this function is Windows-only, could be slow, and you don't know which
+// algorithm is really used on your system, so using CryptDataForCurrentUser()
+// may be a better (and cross-platform) alternative
+// - also note that DPAPI has been closely reverse engineered - see e.g.
+// https://www.passcape.com/index.php?section=docsys&cmd=details&id=28
+function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
+{$endif}
 
-/// protect some data using a secret known by the current user only
-// - won't use CryptProtectData API under Windows, but a cyphered using a random
-// secret key stored in a GetSystemPath(spUserData)+'synopsesecure' file
-// - this function is 30 times faster than the Windows CryptProtectData API,
-// and uses very safe AES-256-CFB encryption
-function CryptDataForCurrentUserAES(const Data: RawByteString; Encrypt: boolean): RawByteString;
+/// protect some data via AES-256-CFB and a secret known by the current user only
+// - the application can specify a secret salt text, which should reflect the
+// current execution context, to ensure nobody could decrypt the data without
+// knowing this application-specific value 
+// - here data is cyphered using a random secret key, stored in a file located in
+// GetSystemPath(spUserData)+'_synmaster'
+// - under Windows, it will encode the '_synmaster' file via CryptProtectData DPAPI
+// - under Linux/POSIX, access to the $HOME user's folder and '_synmaster'
+// file (with chmod 400) is considered to be a safe enough approach
+// - calling this function is up to 50 times faster than CryptDataForCurrentUserDPAPI,
+// and consistent on all Operating Systems
+function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 
 const
   SHA1DIGESTSTRLEN = sizeof(TSHA1Digest)*2;
@@ -9520,27 +9536,27 @@ function CryptUnprotectData(const DataIn: DATA_BLOB; szDataDescr: PWideChar;
   OptionalEntropy: PDATA_BLOB; Reserved, PromptStruct: Pointer; dwFlags: DWORD;
   var DataOut: DATA_BLOB): Bool; stdcall; external CRYPTDLL name 'CryptUnprotectData';
 
-function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
+function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 var src,dst,ent: DATA_BLOB;
+    e: PDATA_BLOB;
     ok: boolean;
 begin
   src.pbData := pointer(Data);
   src.cbData := length(Data);
-  ent.pbData := @CryptProtectDataEntropy;
-  ent.cbData := sizeof(CryptProtectDataEntropy);
+  if AppSecret<>'' then begin
+    ent.pbData := pointer(AppSecret);
+    ent.cbData := length(AppSecret);
+    e := @ent;
+  end else
+    e := nil;
   if Encrypt then
-    ok := CryptProtectData(src,nil,@ent,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst) else
-    ok := CryptUnprotectData(src,nil,@ent,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst);
+    ok := CryptProtectData(src,nil,e,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst) else
+    ok := CryptUnprotectData(src,nil,e,nil,nil,CRYPTPROTECT_UI_FORBIDDEN,dst);
   if ok then begin
     SetString(result,dst.pbData,dst.cbData);
     LocalFree(HLOCAL(dst.pbData));
   end else
     result := '';
-end;
-{$else}
-function CryptDataForCurrentUser(const Data: RawByteString; Encrypt: boolean): RawByteString;
-begin
-  result := CryptDataForCurrentUserAES(Data,Encrypt);
 end;
 {$endif}
 
@@ -9549,12 +9565,22 @@ var
 
 procedure read__h;
 var keyfile: TFileName;
-    key: RawByteString;
+    key{$ifdef MSWINDOWS},key2{$endif}: RawByteString;
 begin
-  keyfile := GetSystemPath(spUserData)+'synopsesecure';
+  keyfile := GetSystemPath(spUserData)+'_synmaster';
   key := StringFromFile(keyfile);
-  if (key<>'') and TAESPRNG.AFUnsplit(key,__h,sizeof(__h)) then
-    exit;
+  if key<>'' then begin
+    {$ifdef MSWINDOWS}
+    key2 := TAESPRNG.AFUnsplit(key,1);
+    FillZero(key);
+    key := CryptDataForCurrentUserDPAPI(key2,StringToUTF8(keyfile),false);
+    FillZero(key2);
+    {$endif}
+    if TAESPRNG.AFUnsplit(key,__h,sizeof(__h)) then begin
+      FillZero(key);
+      exit; // successfully extracted secret key in __h
+    end;
+  end;
   if FileExists(keyfile) then // allow rewrite of invalid local file
     {$ifdef MSWINDOWS}
     SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_NORMAL);
@@ -9563,7 +9589,14 @@ begin
     {$endif}
   TAESPRNG.Main.FillRandom(__h);
   key := TAESPRNG.Main.AFSplit(__h,sizeof(__h),127); // 4KB local file
-  FileFromString(key,keyfile);
+  {$ifdef MSWINDOWS} // 8KB local file, with no DPAPI layout
+  key2 := CryptDataForCurrentUserDPAPI(key,StringToUTF8(keyfile),true);
+  FillZero(key);
+  key := TAESPRNG.Main.AFSplit(key2,1);
+  FillZero(key2);
+  {$endif}
+  if not FileFromString(key,keyfile) then
+    ESynCrypto.CreateUTF8('Unable to write %',[keyfile]);
   FillZero(key);
   {$ifdef MSWINDOWS}
   SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
@@ -9572,19 +9605,27 @@ begin
   {$endif}
 end;
 
-function CryptDataForCurrentUserAES(const Data: RawByteString; Encrypt: boolean): RawByteString;
+function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 type
   TCryptData = packed record
     nonce,mac: THash256;
+    crc: cardinal;
     data: RawByteString;
   end;
+  PCryptData = ^TCryptData;
+const
+  VERSION = 1;
 var aes: TAESCFBCRC;
     rec: TCryptData;
+    hmac: THMAC_SHA256;
     secret,mac: THash256;
 begin
   if IsZero(__h) then
     read__h;
-  XorMemory(@secret,@__h,@CryptProtectDataEntropy,sizeof(secret));
+  hmac.Init(@CryptProtectDataEntropy,sizeof(CryptProtectDataEntropy));
+  hmac.Update(AppSecret);
+  hmac.Update(__h);
+  hmac.Done(secret);
   aes := TAESCFBCRC.Create(secret,256);
   try
     FillZero(secret);
@@ -9593,16 +9634,21 @@ begin
       aes.MACSetNonce(rec.nonce);
       rec.Data := aes.EncryptPKCS7(Data,true);
       aes.MACGetLast(rec.mac);
+      rec.crc := crc32c(VERSION,@rec.nonce,64);
       result := RecordSave(rec,TypeInfo(TCryptData));
     end else begin
       result := '';
-      if RecordLoad(rec,Pointer(Data),TypeInfo(TCryptData))=nil then
+      if (length(Data)<68) or
+         (PCryptData(Data)^.crc<>crc32c(VERSION,pointer(data),64)) or
+         (RecordLoad(rec,Pointer(Data),TypeInfo(TCryptData))=nil) then
         exit;
       aes.MACSetNonce(rec.nonce);
       result := aes.DecryptPKCS7(rec.Data,true);
       if result<>'' then
-        if not aes.MACGetLast(mac) or not IsEqual(mac,rec.mac) then
+        if not aes.MACGetLast(mac) or not IsEqual(mac,rec.mac) then begin
           FillZero(result);
+          result := '';
+        end;
     end;
   finally
     FillZero(rec.data);

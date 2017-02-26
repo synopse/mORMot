@@ -36455,7 +36455,7 @@ begin
 end;
 
 function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean): RawUTF8;
-var len: integer;
+var len,dummy: integer;
     data: RawByteString;
     dat: PAnsiChar;
 begin
@@ -36465,7 +36465,7 @@ begin
     exit;
   SetLength(data,len+4);
   dat := PAnsiChar(pointer(data))+4;
-  RecordSave(Rec,dat,TypeInfo);
+  RecordSave(Rec,dat,TypeInfo,dummy);
   PCardinal(data)^ := crc32c(0,dat,len);
   result := BinToBase64(data);
   if UriCompatible then
