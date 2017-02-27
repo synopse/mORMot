@@ -1507,7 +1507,7 @@ var
 /// protect some data for the current user, using Windows DPAPI
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
-// knowing this application-specific value 
+// knowing this application-specific AppSecret value 
 // - will use CryptProtectData DPAPI function call under Windows
 // - see https://msdn.microsoft.com/en-us/library/ms995355
 // - this function is Windows-only, could be slow, and you don't know which
@@ -1521,13 +1521,14 @@ function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encry
 /// protect some data via AES-256-CFB and a secret known by the current user only
 // - the application can specify a secret salt text, which should reflect the
 // current execution context, to ensure nobody could decrypt the data without
-// knowing this application-specific value 
+// knowing this application-specific AppSecret value 
 // - here data is cyphered using a random secret key, stored in a file located in
-// GetSystemPath(spUserData)+'_synmaster'
-// - under Windows, it will encode the '_synmaster' file via CryptProtectData DPAPI
-// - under Linux/POSIX, access to the $HOME user's folder and '_synmaster'
-// file (with chmod 400) is considered to be a safe enough approach
-// - calling this function is up to 50 times faster than CryptDataForCurrentUserDPAPI,
+// ! GetSystemPath(spUserData)+'_'+PBKDF2_HMAC_SHA256(CryptProtectDataEntropy,User)
+// - under Windows, it will encode the secret file via CryptProtectData DPAPI,
+// so has the same security level than plain CryptDataForCurrentUserDPAPI()
+// - under Linux/POSIX, access to the $HOME user's secret file with chmod 400
+// is considered to be a safe enough approach
+// - this function is more than 50 times faster than CryptDataForCurrentUserDPAPI,
 // and consistent on all Operating Systems
 function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 
@@ -9592,44 +9593,59 @@ var
 
 procedure read__h;
 var keyfile: TFileName;
-    key{$ifdef MSWINDOWS},key2{$endif}: RawByteString;
+    instance: THash256;
+    key,key2,appsec: RawByteString;
 begin
-  keyfile := GetSystemPath(spUserData)+'_synmaster';
-  key := StringFromFile(keyfile);
-  if key<>'' then begin
-    {$ifdef MSWINDOWS}
-    key2 := TAESPRNG.AFUnsplit(key,1);
-    FillZero(key);
-    key := CryptDataForCurrentUserDPAPI(key2,StringToUTF8(keyfile),false);
-    FillZero(key2);
-    {$endif}
-    if TAESPRNG.AFUnsplit(key,__h,sizeof(__h)) then begin
+  SetString(appsec,PAnsiChar(@CryptProtectDataEntropy),32);
+  PBKDF2_HMAC_SHA256(appsec,ExeVersion.User,100,instance);
+  FillZero(appsec);
+  appsec := BinToBase64URI(@instance,15); // local file has 21 chars length
+  keyfile := format('%s_%s',[GetSystemPath(spUserData),appsec]);
+  SetString(appsec,PAnsiChar(@instance[15]),17); // use remaining bytes as key
+  try
+    key := StringFromFile(keyfile);
+    if key<>'' then begin
+      try
+        key2 := TAESCFB.SimpleEncrypt(key,appsec,false,true);
+      except
+        key2 := ''; // handle decryption error
+      end;
       FillZero(key);
-      exit; // successfully extracted secret key in __h
+      {$ifdef MSWINDOWS}
+      key := CryptDataForCurrentUserDPAPI(key2,appsec,false);
+      {$else}
+      key := key2;
+      {$endif}
+      if TAESPRNG.AFUnsplit(key,__h,sizeof(__h)) then
+        exit; // successfully extracted secret key in __h
     end;
-  end;
-  if FileExists(keyfile) then // allow rewrite of invalid local file
-    {$ifdef MSWINDOWS}
-    SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_NORMAL);
-    {$else}
-    {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR or S_IWUSR);
+    if FileExists(keyfile) then // allow rewrite of invalid local file
+      {$ifdef MSWINDOWS}
+      SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_NORMAL);
+      {$else}
+      {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR or S_IWUSR);
+      {$endif}
+    TAESPRNG.Main.FillRandom(__h);
+    key := TAESPRNG.Main.AFSplit(__h,sizeof(__h),126);
+    {$ifdef MSWINDOWS} // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
+    key2 := CryptDataForCurrentUserDPAPI(key,appsec,true);
+    FillZero(key);
+    {$else} // 4KB local chmod 400 file in $HOME folder under Linux/POSIX
+    key2 := key;
     {$endif}
-  TAESPRNG.Main.FillRandom(__h);
-  key := TAESPRNG.Main.AFSplit(__h,sizeof(__h),127); // 4KB local file
-  {$ifdef MSWINDOWS} // 8KB local file, with no DPAPI layout
-  key2 := CryptDataForCurrentUserDPAPI(key,StringToUTF8(keyfile),true);
-  FillZero(key);
-  key := TAESPRNG.Main.AFSplit(key2,1);
-  FillZero(key2);
-  {$endif}
-  if not FileFromString(key,keyfile) then
-    ESynCrypto.CreateUTF8('Unable to write %',[keyfile]);
-  FillZero(key);
-  {$ifdef MSWINDOWS}
-  SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
-  {$else}
-  {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR);
-  {$endif}
+    key := TAESCFB.SimpleEncrypt(key2,appsec,true,true);
+    if not FileFromString(key,keyfile) then
+      ESynCrypto.CreateUTF8('Unable to write %',[keyfile]);
+    {$ifdef MSWINDOWS}
+    SetFileAttributes(pointer(keyfile),FILE_ATTRIBUTE_HIDDEN or FILE_ATTRIBUTE_READONLY);
+    {$else}
+    {$ifdef FPC}fpchmod{$else}chmod{$endif}(pointer(keyfile),S_IRUSR);
+    {$endif}
+  finally
+    FillZero(key);
+    FillZero(key2);
+    FillZero(appsec);
+  end;
 end;
 
 function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
@@ -9645,15 +9661,18 @@ const
 var aes: TAESCFBCRC;
     rec: TCryptData;
     hmac: THMAC_SHA256;
-    secret,mac: THash256;
+    secret: THash256;
 begin
+  result := '';
+  if Data='' then
+    exit;
   if IsZero(__h) then
     read__h;
   hmac.Init(@CryptProtectDataEntropy,sizeof(CryptProtectDataEntropy));
   hmac.Update(AppSecret);
   hmac.Update(__h);
   hmac.Done(secret);
-  aes := TAESCFBCRC.Create(secret,256);
+  aes := TAESCFBCRC.Create(secret);
   try
     FillZero(secret);
     if Encrypt then begin
@@ -9664,7 +9683,6 @@ begin
       rec.crc := crc32c(VERSION,@rec.nonce,64);
       result := RecordSave(rec,TypeInfo(TCryptData));
     end else begin
-      result := '';
       if (length(Data)<68) or
          (PCryptData(Data)^.crc<>crc32c(VERSION,pointer(data),64)) or
          (RecordLoad(rec,Pointer(Data),TypeInfo(TCryptData))=nil) then
@@ -9672,7 +9690,7 @@ begin
       aes.MACSetNonce(rec.nonce);
       result := aes.DecryptPKCS7(rec.Data,true);
       if result<>'' then
-        if not aes.MACGetLast(mac) or not IsEqual(mac,rec.mac) then begin
+        if not aes.MACEquals(rec.mac) then begin
           FillZero(result);
           result := '';
         end;

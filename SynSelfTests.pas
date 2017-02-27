@@ -9135,6 +9135,7 @@ begin
     func := CryptDataForCurrentUserDPAPI else
   {$endif}
     func := CryptDataForCurrentUser;
+  func('warmup','sec',true);
   size := 0;
   tim.Start;
   for i := 0 to MAX-1 do begin
@@ -9146,7 +9147,7 @@ begin
     test := func(enc,sec,false);
     check(length(test)=i);
     check(test=plain);
-    inc(size,i*2);
+    inc(size,i+length(enc));
   end;
   if dpapi then
     NotifyTestSpeed('DPAPI',MAX,size,@tim) else
