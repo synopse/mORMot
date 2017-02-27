@@ -10979,6 +10979,9 @@ type
   // - e.g. a MD5 digest, or array[0..3] of cardinal (TBlock128)
   // - consumes 16 bytes of memory
   THash128 = array[0..15] of byte;
+  /// store a 192-bit hash value
+  // - consumes 24 bytes of memory
+  THash192 = array[0..23] of byte;
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory

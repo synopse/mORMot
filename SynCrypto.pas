@@ -455,7 +455,15 @@ type
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
-    constructor Create(const aKey; aKeySize: cardinal); virtual;
+    constructor Create(const aKey; aKeySize: cardinal); overload; virtual;
+    /// Initialize AES contexts for AES-128 cypher
+    // - first method to call before using this class
+    // - just a wrapper around Create(aKey,128);
+    constructor Create(const aKey: THash128); overload;
+    /// Initialize AES contexts for AES-256 cypher
+    // - first method to call before using this class
+    // - just a wrapper around Create(aKey,256);
+    constructor Create(const aKey: THash256); overload;
     /// Initialize AES contexts for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
     constructor CreateFromSha256(const aKey: RawUTF8);
@@ -560,7 +568,10 @@ type
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes
     // - default implementation, for a non AEAD protocol, returns false
     function MACGetLast(out aCRC: THash256): boolean; virtual;
-    /// validate if an encrypted buffer matches the stored MAC
+    /// validate if the computed AEAD MAC matches the expected supplied value
+    // - is just a wrapper around MACGetLast() and IsEqual() functions
+    function MACEquals(const aCRC: THash256): boolean; virtual;
+    /// validate if an encrypted buffer matches the stored AEAD MAC
     // - expects the 256-bit MAC, as returned by MACGetLast, to be stored after
     // the encrypted data
     // - default implementation, for a non AEAD protocol, returns false
@@ -7807,6 +7818,16 @@ begin
   fIVCtr.magic := crc32c($aba5aba5,@blockmode^[2],6); // TAESECB_API -> 'AESECB'
 end;
 
+constructor TAESAbstract.Create(const aKey: THash128);
+begin
+  Create(aKey,128);
+end;
+
+constructor TAESAbstract.Create(const aKey: THash256);
+begin
+  Create(aKey,256);
+end;
+
 constructor TAESAbstract.CreateFromSha256(const aKey: RawUTF8);
 var Digest: TSHA256Digest;
 begin
@@ -7971,6 +7992,12 @@ end;
 function TAESAbstract.MACGetLast(out aCRC: THash256): boolean;
 begin
   result := false;
+end;
+
+function TAESAbstract.MACEquals(const aCRC: THash256): boolean;
+var mac: THash256;
+begin
+  result := MACGetLast(mac) and IsEqual(mac,aCRC);
 end;
 
 function TAESAbstract.MACCheckError(aEncrypted: pointer; Count: cardinal): boolean;
