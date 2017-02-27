@@ -1354,11 +1354,13 @@ type
       const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
-    // then bound inlined parameters as :(1234): and call its Execute method
+    // then bound inlined parameters as :(1234): and return the resulting statement
     // - raise an exception on error
+    // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
+    // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const SQLFormat: RawUTF8; const Args: array of const;
       ExpectResults: Boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
