@@ -48106,7 +48106,8 @@ begin
         inc(P);
         dec(Len);
       until (Len=0) or (P^>=#127);
-    Add(B,P-B,Escape);
+    if P<>pointer(B) then
+      Add(B,P-B,Escape);
     if Len=0 then
       exit;
     // rely on explicit conversion for all remaining ASCII characters
