@@ -2536,7 +2536,7 @@ begin
     try
       if SaveToStream(st) then begin
         PBKDF2_HMAC_SHA256(PassWord,salt,PBKDF2Rounds,aeskey);
-        a := AES.Create(aeskey,256);
+        a := AES.Create(aeskey);
         try
           enc := a.EncryptPKCS7(st.DataString,true);
           // result := PRIVKEY_MAGIC+salt+enc; fails under FPC :(
@@ -2656,7 +2656,7 @@ begin
     PBKDF2_HMAC_SHA256(PassWord,salt,PBKDF2Rounds,aeskey);
     if AES=nil then
       AES := TAESCFB;
-    a := AES.Create(aeskey,256);
+    a := AES.Create(aeskey);
     try
       decrypted := a.DecryptPKCS7Buffer(PAnsiChar(Data)+head+PRIVKEY_SALTSIZE,Len,true);
       if decrypted='' then

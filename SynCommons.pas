@@ -8090,6 +8090,7 @@ type
     function GetKey: cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     function GetPassWordPlain: RawUTF8;
+    function GetPassWordPlainInternal(AppSecret: RawUTF8): RawUTF8;
     procedure SetPassWordPlain(const Value: RawUTF8);
   public
     /// finalize the instance
@@ -8101,7 +8102,7 @@ type
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
     class function ComputePlainPassword(const CypheredPassword: RawUTF8;
-      CustomKey: cardinal=0): RawUTF8;
+      CustomKey: cardinal=0; const AppSecret: RawUTF8=''): RawUTF8;
     /// low-level function used to identify if a given field is a Password
     // - this method is used e.g. by TJSONSerializer.WriteObject to identify the
     // password field, since its published name is set by the inherited classes
@@ -8179,9 +8180,10 @@ var
   /// function prototype to customize TSynPersistent class password storage
   // - is called when 'user1:base64pass1,user2:base64pass2' layout is found,
   // and the current user logged on the system is user1 or user2
-  // - you should not call this low-level method, but let SynCrypto assign
-  // CryptDataForCurrentUser() function on it
-  TSynPersistentWithPasswordUserCrypt: function(const Data: RawByteString; Encrypt: boolean): RawByteString;
+  // - you should not call this low-level method, but assign e.g. from SynCrypto:
+  // $ TSynPersistentWithPasswordUserCrypt := CryptDataForCurrentUser;
+  TSynPersistentWithPasswordUserCrypt:
+    function(const Data,AppServer: RawByteString; Encrypt: boolean): RawByteString;
 
 /// will serialize any TObject into its UTF-8 JSON representation
 /// - serialize as JSON the published integer, Int64, floating point values,
@@ -48109,10 +48111,10 @@ begin
         dec(Len,4);
       until Len<4;
     if (Len>0) and (P^<#128)  then
-      repeat
-        inc(P);
-        dec(Len);
-      until (Len=0) or (P^>=#127);
+    repeat
+      inc(P);
+      dec(Len);
+    until (Len=0) or (P^>=#127);
     if P<>pointer(B) then
       Add(B,P-B,Escape);
     if Len=0 then
@@ -50497,14 +50499,14 @@ begin
 end;
 
 class function TSynPersistentWithPassword.ComputePlainPassword(const CypheredPassword: RawUTF8;
-  CustomKey: cardinal): RawUTF8;
+  CustomKey: cardinal; const AppSecret: RawUTF8): RawUTF8;
 var instance: TSynPersistentWithPassword;
 begin
   instance := TSynPersistentWithPassword.Create;
   try
     instance.Key := CustomKey;
     instance.fPassWord := CypheredPassword;
-    result := instance.GetPassWordPlain;
+    result := instance.GetPassWordPlainInternal(AppSecret);
   finally
     instance.Free;
   end;
@@ -50523,6 +50525,11 @@ begin
 end;
 
 function TSynPersistentWithPassword.GetPassWordPlain: RawUTF8;
+begin
+  result := GetPassWordPlainInternal('');
+end;
+
+function TSynPersistentWithPassword.GetPassWordPlainInternal(AppSecret: RawUTF8): RawUTF8;
 var value,pass: RawByteString;
     usr: RawUTF8;
     i,j: integer;
@@ -50531,16 +50538,18 @@ begin
   if (self=nil) or (fPassWord='') then
     exit;
   if Assigned(TSynPersistentWithPasswordUserCrypt) then begin
+    if AppSecret='' then
+      AppSecret := RawUTF8(ClassName);
     usr := ExeVersion.User+':';
     i := PosEx(usr,fPassword);
     if (i=1) or ((i>0) and (fPassword[i-1]=',')) then begin
       inc(i,length(usr));
       j := PosEx(',',fPassword,i);
-      if j>0 then begin
-        Base64ToBin(@fPassword[i],j-i,pass);
-        if pass<>'' then
-          result := TSynPersistentWithPasswordUserCrypt(pass,false);
-      end;
+      if j=0 then
+        j := length(fPassword)+1;
+      Base64ToBin(@fPassword[i],j-i,pass);
+      if pass<>'' then
+        result := TSynPersistentWithPasswordUserCrypt(pass,AppSecret,false);
     end;
   end;
   if result='' then begin

@@ -4230,9 +4230,18 @@ function ClassFieldInstance(Instance: TObject; const PropName: shortstring;
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
   PropNameLen: integer): PPropInfo;
 
-/// retrieve a Field property RTTI information searching for a Property class type
+/// retrieve a Field property RTTI information searching for an exact Property class type
 // - this special version also search into parent properties
 function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+
+/// retrieve a Field property RTTI information searching for an inherited Property class type
+// - this special version also search into parent properties
+function ClassFieldPropWithParentsInheritsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+
+/// retrieve a Field property RTTI information searching for an exact Property offset address
+// - this special version also search into parent properties
+function ClassFieldPropWithParentsFromClassOffset(aClassType: TClass;
+  aSearchedOffset: pointer): PPropInfo;
 
 /// retrieve a class Field property instance from a Property class type
 // - this version also search into parent properties
@@ -20319,12 +20328,15 @@ end;
 
 function ClassFieldPropWithParentsFromUTF8(aClassType: TClass; PropName: PUTF8Char;
   PropNameLen: integer): PPropInfo;
-{$ifndef FPC}
+{$ifdef FPC}
+var name: AnsiString;
+{$else}
 var i: integer;
 {$endif}
 begin
   {$ifdef FPC}
-  result := pointer(GetFPCPropInfo(aClassType,PropName));
+  SetString(name,PAnsiChar(PropName),PropNameLen);
+  result := pointer(GetFPCPropInfo(aClassType,name));
   {$else}
   while (PropNameLen<>0) and (aClassType<>nil) do begin
     for i := 1 to InternalClassPropInfo(aClassType,result) do
@@ -20341,14 +20353,43 @@ function ClassFieldPropWithParentsFromClassType(aClassType,aSearchedClassType: T
 var i: integer;
 begin
   if aSearchedClassType<>nil then
-  while aClassType<>nil do begin
-    for i := 1 to InternalClassPropInfo(aClassType,result) do
-      if (result^.PropType^.Kind=tkClass) and
-         (result^.PropType^.ClassType^.ClassType=aSearchedClassType) then
-        exit else
-        result := result^.Next;
-    aClassType := aClassType.ClassParent;
-  end;
+    while aClassType<>nil do begin
+      for i := 1 to InternalClassPropInfo(aClassType,result) do
+        if (result^.PropType^.Kind=tkClass) and
+           (result^.PropType^.ClassType^.ClassType=aSearchedClassType) then
+          exit else
+          result := result^.Next;
+      aClassType := aClassType.ClassParent;
+    end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsInheritsFromClassType(aClassType,aSearchedClassType: TClass): PPropInfo;
+var i: integer;
+begin
+  if aSearchedClassType<>nil then
+    while aClassType<>nil do begin
+      for i := 1 to InternalClassPropInfo(aClassType,result) do
+        if (result^.PropType^.Kind=tkClass) and
+           (result^.PropType^.InheritsFrom(aSearchedClassType)) then
+          exit else
+          result := result^.Next;
+      aClassType := aClassType.ClassParent;
+    end;
+  result := nil;
+end;
+
+function ClassFieldPropWithParentsFromClassOffset(aClassType: TClass; aSearchedOffset: pointer): PPropInfo;
+var i: integer;
+begin
+  if aSearchedOffset<>nil then
+    while aClassType<>nil do begin
+      for i := 1 to InternalClassPropInfo(aClassType,result) do
+        if result^.GetFieldAddr(nil)=aSearchedOffset then
+          exit else
+          result := result^.Next;
+      aClassType := aClassType.ClassParent;
+    end;
   result := nil;
 end;
 
