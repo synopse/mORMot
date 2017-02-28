@@ -50477,6 +50477,7 @@ end;
 
 destructor TSynPersistentWithPassword.Destroy;
 begin
+  UniqueRawUTF8(fPassword);
   FillZero(RawByteString(fPassword));
   inherited Destroy;
 end;
