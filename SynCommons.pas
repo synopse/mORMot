@@ -35250,11 +35250,12 @@ begin
 end;
 
 procedure SetExecutableVersion(aMajor,aMinor,aRelease,aBuild: integer);
-var i: integer;
-{$ifdef MSWINDOWS}
-    Tmp: array[byte] of WideChar;
-    TmpSize: cardinal;
-{$endif}
+var {$ifdef MSWINDOWS}
+    tmp: array[byte] of WideChar;
+    tmpsize: cardinal;
+    {$else}
+    tmp: string;
+    {$endif}
 begin
   with ExeVersion do begin
     if Version=nil then begin
@@ -35269,26 +35270,26 @@ begin
       if IsLibrary then
         InstanceFileName := GetModuleName(HInstance) else
         InstanceFileName := ProgramFileName;
-      ProgramName := StringToUTF8(ExtractFileName(ProgramFileName));
-      i := length(ProgramName);
-      while i>0 do
-        if ProgramName[i]='.' then begin
-          SetLength(ProgramName,i-1);
-          break;
-        end else
-        dec(i);
+      ProgramName := Split(StringToUTF8(ExtractFileName(ProgramFileName)),'.');
       {$ifdef MSWINDOWS}
-      TmpSize := sizeof(Tmp);
-      GetComputerNameW(Tmp,TmpSize);
-      RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),Host);
-      TmpSize := sizeof(Tmp);
-      GetUserNameW(Tmp,TmpSize);
-      RawUnicodeToUtf8(@Tmp,StrLenW(Tmp),User);
+      tmpsize := sizeof(tmp);
+      GetComputerNameW(tmp,tmpsize);
+      RawUnicodeToUtf8(@tmp,StrLenW(tmp),Host);
+      tmpsize := sizeof(tmp);
+      GetUserNameW(tmp,tmpsize);
+      RawUnicodeToUtf8(@tmp,StrLenW(tmp),User);
       {$else}
-      Host := GetHostName;
+      StringToUTF8(GetHostName,Host);
+      if Host='' then
+        StringToUTF8(GetEnvironmentVariable('HOSTNAME'),Host);
+      tmp := GetEnvironmentVariable('LOGNAME'); // POSIX
+      if tmp='' then
+        tmp := GetEnvironmentVariable('USER');
       {$ifdef KYLIX3}
-      User := LibC.getpwuid(LibC.getuid)^.pw_name;
+      if tmp='' then
+        User := LibC.getpwuid(LibC.getuid)^.pw_name else
       {$endif}
+        StringToUTF8(tmp,User);
       {$endif}
       if Host='' then
         Host := 'unknown';
@@ -35348,7 +35349,7 @@ function GetSystemPath(kind: TSystemPath): TFileName;
 begin
   if kind=spTempFolder then begin
     if _TempPath='' then begin
-      _TempPath := GetEnvironmentVariable('TMPDIR');
+      _TempPath := GetEnvironmentVariable('TMPDIR'); // POSIX
       if _TempPath='' then
         _TempPath := GetEnvironmentVariable('TMP');
       if _TempPath='' then
@@ -35359,7 +35360,7 @@ begin
     end;
     result := _TempPath;
   end else begin
-    if _HomePath='' then
+    if _HomePath='' then // POSIX requires a value for $HOME 
       _HomePath := IncludeTrailingPathDelimiter(GetEnvironmentVariable('HOME'));
     result := _HomePath;
   end;
@@ -35368,11 +35369,11 @@ end;
 
 {$ifdef BSD}
 function mprotect(Addr: Pointer; Len: size_t; Prot: Integer): Integer;
-{$ifdef Darwin}
+  {$ifdef Darwin}
   cdecl external 'libc.dylib' name 'mprotect';
-{$else}
+  {$else}
   cdecl external 'libc.so' name 'mprotect';
-{$endif}
+  {$endif}
   {$define USEMPROTECT}
 {$endif}
 {$ifdef KYLIX3}
@@ -35404,7 +35405,7 @@ var PageSize, AlignedAddr: PtrInt;
     i: integer;
 begin
   if Backup<>nil then
-    for i := 0 to Size-1 do  // do not use Move() here
+    for i := 0 to Size-1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := _SC_PAGE_SIZE;
   AlignedAddr := PtrInt(Old) and not (PageSize - 1);
@@ -35416,7 +35417,7 @@ begin
   Do_SysCall(syscall_nr_mprotect,PtrUInt(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC);
   {$endif}
     try
-      for i := 0 to Size-1 do    // do not use Move() here
+      for i := 0 to Size-1 do // do not use Move() here
         PByteArray(Old)^[i] := PByteArray(New)^[i];
     except
     end;

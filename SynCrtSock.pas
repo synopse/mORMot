@@ -1879,13 +1879,13 @@ function HttpGet(const server, port: SockString; const url: SockString;
   const inHeaders: SockString; outHeaders: PSockString=nil): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
-// - this method will use a low-level THttpClientSock socket: if you want
-// something able to use your computer proxy, take a look at TWinINet.Get()
+// - this method will use a low-level THttpClientSock socket for plain http URI,
+// or TWinHTTP/TCurlHTTP for any https URI
 function HttpGet(const aURI: SockString; outHeaders: PSockString=nil): SockString; overload;
 
 /// retrieve the content of a web page, using the HTTP/1.1 protocol and GET method
-// - this method will use a low-level THttpClientSock socket: if you want
-// something able to use your computer proxy, take a look at TWinINet.Get()
+// - this method will use a low-level THttpClientSock socket for plain http URI,
+// or TWinHTTP/TCurlHTTP for any https URI
 function HttpGet(const aURI: SockString; const inHeaders: SockString;
   outHeaders: PSockString=nil): SockString; overload;
 
@@ -3836,7 +3836,7 @@ begin
       {$endif}
       result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders) else
     result := '';
-  {$ifdef LINUX}
+  {$ifdef LINUX}      
   if result='' then
     writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
   {$endif}
