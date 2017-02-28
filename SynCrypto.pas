@@ -1408,15 +1408,21 @@ type
   public
     /// prepare the HMAC authentication with the supplied key
     // - consider using Compute to re-use a prepared HMAC instance 
-    procedure Init(key: pointer; keylen: integer);
+    procedure Init(key: pointer; keylen: integer); overload;
+    /// prepare the HMAC authentication with the supplied key
+    // - consider using Compute to re-use a prepared HMAC instance 
+    procedure Init(const key: RawByteString); overload;
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// call this method for each continuous message block
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: RawByteString); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// computes the HMAC of all supplied message according to the key
-    function Done: cardinal;
+    function Done(NoInit: boolean=false): cardinal;
+      {$ifdef HASINLINE}inline;{$endif}
     /// computes the HMAC of the supplied message according to the key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
     // - this method is thread-safe
@@ -2749,6 +2755,11 @@ end;
 
 { THMAC_CRC32C }
 
+procedure THMAC_CRC32C.Init(const key: RawByteString);
+begin
+  Init(pointer(key),length(key));
+end;
+
 procedure THMAC_CRC32C.Init(key: pointer; keylen: integer);
 var i: integer;
     k0,k0xorIpad: TByte64;
@@ -2776,10 +2787,11 @@ begin
   seed := crc32c(seed,pointer(msg),length(msg));
 end;
 
-function THMAC_CRC32C.Done: cardinal;
+function THMAC_CRC32C.Done(NoInit: boolean): cardinal;
 begin
   result := crc32c(seed,@step7data,sizeof(step7data));
-  FillcharFast(self,sizeof(self),0);
+  if not NoInit then
+    FillcharFast(self,sizeof(self),0);
 end;
 
 function THMAC_CRC32C.Compute(msg: pointer; msglen: integer): cardinal;
