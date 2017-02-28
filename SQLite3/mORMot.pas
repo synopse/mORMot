@@ -31061,11 +31061,11 @@ begin
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
           result := result+Name+',';
-      if InheritsFrom(TSQLRecordFTS3Porter) or
-         InheritsFrom(TSQLRecordFTS4Porter) then
+      if Self.InheritsFrom(TSQLRecordFTS3Porter) or
+         Self.InheritsFrom(TSQLRecordFTS4Porter) then
         result := result+' tokenize=porter)' else
-      if InheritsFrom(TSQLRecordFTS3Unicode61) or
-         InheritsFrom(TSQLRecordFTS4Unicode61) then
+      if Self.InheritsFrom(TSQLRecordFTS3Unicode61) or
+         Self.InheritsFrom(TSQLRecordFTS4Unicode61) then
         result := result+' tokenize=unicode61)' else
         result := result+' tokenize=simple)';
     end;
