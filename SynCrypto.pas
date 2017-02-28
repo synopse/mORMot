@@ -7840,7 +7840,7 @@ constructor TAESAbstract.CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawB
   aRounds: Integer);
 var Digest: TSHA256Digest;
 begin
-  PBKDF2_HMAC_SHA256(aKey,aSalt,aRounds,Digest,RawUTF8(ClassName));
+  PBKDF2_HMAC_SHA256(aKey,aSalt,aRounds,Digest,ToText(ClassType));
   Create(Digest,256);
 end;
 

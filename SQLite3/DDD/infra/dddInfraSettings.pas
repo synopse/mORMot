@@ -683,7 +683,7 @@ class function TDDDAppSettingsAbstract.PasswordFields: RawUTF8;
           if CT.InheritsFrom(TSynPersistentWithPassword) then begin
             PP := ClassFieldPropWithParentsFromClassOffset(CT,offset);
             if PP<>nil then
-              AddRawUTF8(res,FormatUTF8('%@%%', [CT.ClassName, p, PP^.Name]));
+              AddRawUTF8(res,FormatUTF8('%@%%', [ClassNameShort(CT)^, p, PP^.Name]));
           end;
           InternalAdd(p,CT,res); // recursive search of all password fields
         end;

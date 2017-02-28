@@ -23730,7 +23730,7 @@ function TSynMonitorUsage.Track(Instance: TObject; const Name: RawUTF8): integer
           p^.Kind := k;
           ShortStringToAnsi7String(nfo^.Name,p^.Name);
           if (parent<>nil) and (FindPropName(['Bytes','MicroSec'],p^.Name)>=0) then
-            p^.Name := RawUTF8(parent.ClassName); // meaningful property name
+            ToText(parent,p^.Name); // meaningful property name
           for g := low(p^.Values) to high(p^.Values) do
             SetLength(p^.Values[g],USAGE_VALUE_LEN[g]);
           if k in SYNMONITORVALUE_CUMULATIVE then
@@ -23753,7 +23753,7 @@ begin
     instanceName := TSynMonitor(Instance).Name else
     instanceName := Name;
   if instanceName='' then
-    instanceName := RawUTF8(Instance.ClassName);
+    ToText(instance.ClassType,instanceName);
   fSafe.Lock;
   try
     n := length(fTracked);
@@ -27768,7 +27768,7 @@ begin
     if WithSection then
       // new TObject.ClassName is UnicodeString (Delphi 20009) -> inline code with
       // vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-      Add(#13'[%]'#13,[PShortString(PPointer(PPtrInt(Value)^+vmtClassName)^)^]);
+      Add(#13'[%]'#13,[ClassNameShort(Value)^]);
     for i := 1 to InternalClassPropInfo(Value.ClassType,P) do begin
       case P^.PropType^.Kind of
         tkInt64{$ifdef FPC}, tkQWord{$endif}:
@@ -45828,7 +45828,7 @@ function TSQLRestStorage.GetStoredClassName: RawUTF8;
 begin
   if self=nil then
     result := '' else
-    ShortStringToAnsi7String(PShortString(PPointer(PtrInt(fStoredClass)+vmtClassName)^)^,result);
+    ToText(fStoredClass,result);
 end;
 
 
@@ -45942,7 +45942,7 @@ begin
   if aStream=nil then
     exit;
   if fBinaryFile then begin
-      if ReadStringFromStream(aStream)=RawUTF8(ClassName)+'00' then
+      if ReadStringFromStream(aStream)=ToText(ClassType)+'00' then
       repeat
         t := Model.GetTableIndex(ReadStringFromStream(aStream));
       until (t<0) or
@@ -46007,7 +46007,7 @@ begin
   S := TFileStream.Create(FileName,fmCreate);
   try
     if fBinaryFile then begin
-      WriteStringToStream(S,RawUTF8(ClassName)+'00');
+      WriteStringToStream(S,ToText(ClassType)+'00');
       for t := 0 to fStaticDataCount-1 do
       with TSQLRestStorageInMemory(fStaticData[t]) do begin
         WriteStringToStream(S,fStoredClassRecordProps.SQLTableName);
@@ -47845,8 +47845,7 @@ var source: PUTF8Char;
 begin
   if Value=nil then
     exit; // avoid GPF
-  PWord(UpperCopyShort(UpperSection,PShortString(PPointer(
-    PPtrInt(Value)^+vmtClassName)^)^))^ := ord(']');
+  PWord(UpperCopyShort(UpperSection,ClassNameShort(Value)^))^ := ord(']');
   source := pointer(FromContent);
   if FindSectionFirstLine(source,UpperSection) then
     ReadObject(Value,source,SubCompName);
@@ -48208,7 +48207,7 @@ begin
   i := PosEx(RawUTF8('/'),fSignature,1);
   if i=0 then
     exit;
-  tmp := TTimeLogBits(fSignatureTime).Text(false)+RawUTF8(ClassName)+copy(fSignature,1,i-1);
+  tmp := TTimeLogBits(fSignatureTime).Text(false)+ToText(ClassType)+copy(fSignature,1,i-1);
   SHA.Init;
   SHA.Update(pointer(tmp),length(tmp));
   SHA.Update(pointer(Content),length(Content)); // hash in place: no Content copy
@@ -48230,7 +48229,7 @@ begin
     fSignatureTime := ForcedSignatureTime else
     fSignatureTime := TimeLogNow;
   { content is hashed with User Name value }
-  tmp := TTimeLogBits(fSignatureTime).Text(false)+RawUTF8(ClassName)+UserName;
+  tmp := TTimeLogBits(fSignatureTime).Text(false)+ToText(ClassType)+UserName;
   SHA.Init;
   SHA.Update(pointer(tmp),length(tmp));
   SHA.Update(pointer(Content),length(Content)); // hash in place: no Content copy
@@ -50232,7 +50231,7 @@ const LEN: array[-1..2] of byte = (1,16,11,4);
 begin
   if self=nil then
     result := '' else begin
-    result := RawUTF8(ClassName);
+    ToText(self,result);
     system.delete(result,1,LEN[IdemPCharArray(pointer(result),
       ['TSQLVIRTUALTABLE','TSQLVIRTUAL','TSQL'])]);
   end;
@@ -54563,7 +54562,7 @@ begin
     isReturns:
       Values := '['+AValues+']';
     isFails:
-      Values := RawUTF8(Sender.ClassName)+' returned error: '+aValues;
+      Values := ToText(Sender.ClassType)+' returned error: '+aValues;
     else
       Values := aValues;
     end;
@@ -56291,7 +56290,7 @@ begin
   if instance=nil then
     result := false else begin
     if callbacktext<>nil then
-      Append(callbacktext^,PShortString(PPointer(PPtrInt(instance)^+vmtClassName)^)^);
+      Append(callbacktext^,ClassNameShort(instance)^);
     result := (instance.ClassType=TInterfacedObjectFakeServer) and
               TInterfacedObjectFakeServer(instance).fReleasedOnClientSide;
   end;

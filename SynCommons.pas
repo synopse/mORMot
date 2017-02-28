@@ -1212,6 +1212,7 @@ type
   TInterfacedObjectClass = class of TInterfacedObject;
 
   PObject = ^TObject;
+  PClass = ^TClass;
 
 
 { ************ fast UTF-8 / Unicode / Ansi types and conversion routines **** }
@@ -4058,6 +4059,22 @@ function GetCaptionFromClass(C: TClass): string;
 
 /// UnCamelCase and translate the enumeration item
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
+
+/// just a wrapper around vmtClassName to avoid a string conversion
+function ClassNameShort(C: TClass): PShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtClassName to avoid a string conversion
+function ClassNameShort(Instance: TObject): PShortString; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtClassName to avoid a string/RawUTF8 conversion
+function ToText(C: TClass): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// just a wrapper around vmtClassName to avoid a string/RawUTF8 conversion
+procedure ToText(C: TClass; var result: RawUTF8); overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 {$ifdef LINUX}
 const
@@ -8080,6 +8097,9 @@ type
   /// abstract TSynPersistent class allowing safe storage of a password
   // - the associated Password, e.g. for storage or transmission encryption
   // will be persisted encrypted with a private key (which can be customized)
+  // - if default simple symmetric encryption is not enough, you may define
+  // a custom TSynPersistentWithPasswordUserCrypt callback, e.g. to
+  // SynCrypto's CryptDataForCurrentUser, for hardened password storage
   // - a published property should be defined as such in inherited class:
   // ! property PasswordPropertyName: RawUTF8 read fPassword write fPassword;
   // - use the PassWordPlain property to access to its uncyphered value
@@ -8101,6 +8121,9 @@ type
       CustomKey: cardinal=0): RawUTF8;
     /// this class method could be used to decrypt a password, stored as JSON,
     // according to a given private key
+    // - may trigger a ESynException if the password was stored using a custom
+    // TSynPersistentWithPasswordUserCrypt callback, and the current user
+    // doesn't match the expected user stored in the field
     class function ComputePlainPassword(const CypheredPassword: RawUTF8;
       CustomKey: cardinal=0; const AppSecret: RawUTF8=''): RawUTF8;
     /// low-level function used to identify if a given field is a Password
@@ -8112,6 +8135,9 @@ type
     // - application can override the default 0 value at runtime
     property Key: cardinal read GetKey write fKey;
     /// access to the associated unencrypted Password value
+    // - read may trigger a ESynException if the password was stored using a
+    // custom TSynPersistentWithPasswordUserCrypt callback, and the current user
+    // doesn't match the expected user stored in the field
     property PasswordPlain: RawUTF8 read GetPassWordPlain write SetPassWordPlain;
   end;
 
@@ -19827,16 +19853,16 @@ begin
       PointerToHex(VPointer,result);
     vtClass:
       if VClass<>nil then
-        result := PShortString(PPointer(PtrInt(VClass)+vmtClassName)^)^ else
+        ToText(VClass,result) else
         result := '';
     vtObject:
-       if VObject<>nil then
-         result := PShortString(PPointer(PPtrInt(VObject)^+vmtClassName)^)^ else
-         result := '';
+      if VObject<>nil then
+        ToText(PClass(VObject)^,result) else
+        result := '';
     vtInterface:
       {$ifdef HASINTERFACEASTOBJECT}
       if VInterface<>nil then
-        result := PShortString(PPointer(PPtrInt(IInterface(VInterface) as TObject)^+vmtClassName)^)^ else
+        ToText((IInterface(VInterface) as TObject).ClassType,result) else
         result := '';
       {$else}
       PointerToHex(VInterface,result);
@@ -21536,8 +21562,10 @@ begin
     result := false;
 end;
 
+const
+  NULL_SHORTSTRING: string[1] = '';
+
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
-const NULL_SHORTSTRING: string[1] = '';
 {$ifdef HASINLINE}
 var MaxValue: integer;
 begin
@@ -30469,7 +30497,7 @@ begin
     if Values[i]<>nil then begin
       if i<n then
         AddFieldName(Names[i]) else
-        AddPropName(PShortString(PPointer(PPtrInt(Values[i])^+vmtClassName)^)^);
+        AddPropName(ClassNameShort(Values[i])^);
       WriteObject(Values[i],Options);
       Add(',');
     end;
@@ -34220,9 +34248,7 @@ begin
     result := '';
     exit;
   end;
-  // new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
-  // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
-  DelphiName := PPointer(PtrInt(C)+vmtClassName)^;
+  DelphiName := ClassNameShort(C);
   TrimLeft := 0;
   if DelphiName^[0]>#4 then
     case PInteger(@DelphiName^[1])^ and $DFDFDFDF of
@@ -34242,13 +34268,45 @@ begin
   SetString(result,PAnsiChar(@DelphiName^[TrimLeft+1]),ord(DelphiName^[0])-TrimLeft);
 end;
 
+function ClassNameShort(C: TClass): PShortString;
+// new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
+// with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
+begin
+  result := PPointer(PtrInt(C)+vmtClassName)^;
+end;
+
+function ClassNameShort(Instance: TObject): PShortString;
+begin
+  result := PPointer(PPtrInt(Instance)^+vmtClassName)^;
+end;
+
+function ToText(C: TClass): RawUTF8;
+var P: PShortString;
+begin
+  if C=nil then
+    result := '' else begin
+    P := PPointer(PtrInt(C)+vmtClassName)^;
+    SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
+  end;
+end;
+
+procedure ToText(C: TClass; var result: RawUTF8);
+var P: PShortString;
+begin
+  if C=nil then
+    result := '' else begin
+    P := PPointer(PtrInt(C)+vmtClassName)^;
+    SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
+  end;
+end;
+
 function GetCaptionFromClass(C: TClass): string;
 var tmp: RawUTF8;
     P: PUTF8Char;
 begin
   if C=nil then
     result := '' else begin
-    tmp := RawUTF8(C.ClassName);
+    ToText(C,tmp);
     P := pointer(tmp);
     if IdemPChar(P,'TSQL') or IdemPChar(P,'TSYN') then
       inc(P,4) else
@@ -50539,7 +50597,7 @@ begin
     exit;
   if Assigned(TSynPersistentWithPasswordUserCrypt) then begin
     if AppSecret='' then
-      AppSecret := RawUTF8(ClassName);
+      ToText(ClassType,AppSecret);
     usr := ExeVersion.User+':';
     i := PosEx(usr,fPassword);
     if (i=1) or ((i>0) and (fPassword[i-1]=',')) then begin
@@ -50550,6 +50608,12 @@ begin
       Base64ToBin(@fPassword[i],j-i,pass);
       if pass<>'' then
         result := TSynPersistentWithPasswordUserCrypt(pass,AppSecret,false);
+    end else begin
+      i := PosEx(':',fPassword);
+      if i>0 then
+        raise ESynException.CreateUTF8('%.GetPassWordPlain unable to retrieve the '+
+          'stored value: current user is "%", but password in % was encoded for "%"',
+          [self,ExeVersion.User,AppSecret,copy(fPassword,1,i-1)]); 
     end;
   end;
   if result='' then begin
