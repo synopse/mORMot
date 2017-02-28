@@ -9739,6 +9739,8 @@ type
   // ! var IDs: TIDDynArray;
   // ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
   // !  //  you have all matching IDs in IDs[]
+  // - by convention, inherited class name should begin with "TSQLRecordFTS3",
+  // and remaining chars will be used as TSQLRecordFTS3Porter -> tokenize=porter
   TSQLRecordFTS3 = class(TSQLRecordVirtual)
   public
      /// optimize the FTS3 virtual table
@@ -9759,17 +9761,13 @@ type
 
   /// this base class will create a FTS3 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
+  // - will generate tokenize=porter by convention from the class name
   TSQLRecordFTS3Porter = class(TSQLRecordFTS3);
 
   /// this base class will create a FTS3 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
+  // - will generate tokenize=unicode64 by convention from the class name
   TSQLRecordFTS3Unicode61 = class(TSQLRecordFTS3);
-
-  /// class-reference type (metaclass) of a FTS3/FTS4 virtual table
-  TSQLRecordFTS3Class = class of TSQLRecordFTS3;
-
-  /// class-reference type (metaclass) of a RTREE virtual table
-  TSQLRecordRTreeClass = class of TSQLRecordRTree;
 
   /// a base record, corresdonding to a FTS4 table, which is an enhancement to FTS3
   // - FTS3 and FTS4 are nearly identical. They share most of their code in common,
@@ -9782,6 +9780,8 @@ type
   // usage or compatibility with older versions of SQLite are important, then
   // TSQLRecordFTS3 will usually serve just as well.
   // - see http:// sqlite.org/fts3.html#section_1_1
+  // - by convention, inherited class name should begin with "TSQLRecordFTS4",
+  // and remaining chars will be used as TSQLRecordFTS4Porter -> tokenize=porter
   TSQLRecordFTS4 = class(TSQLRecordFTS3)
   public
     /// this overriden method will create TRIGGERs for FTSWithoutContent()
@@ -9791,11 +9791,19 @@ type
 
   /// this base class will create a FTS4 table using the Porter Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
+  // - will generate tokenize=porter by convention from the class name
   TSQLRecordFTS4Porter = class(TSQLRecordFTS4);
 
   /// this base class will create a FTS4 table using the Unicode61 Stemming algorithm
   // - see http://sqlite.org/fts3.html#tokenizer
+  // - will generate tokenize=unicode64 by convention from the class name
   TSQLRecordFTS4Unicode61 = class(TSQLRecordFTS4);
+
+  /// class-reference type (metaclass) of a FTS3/FTS4 virtual table
+  TSQLRecordFTS3Class = class of TSQLRecordFTS3;
+
+  /// class-reference type (metaclass) of a RTREE virtual table
+  TSQLRecordRTreeClass = class of TSQLRecordRTree;
 
   /// the kind of fields to be available in a Table resulting of
   // a TSQLRecordMany.DestGetJoinedTable() method call
@@ -31019,9 +31027,10 @@ end;
 class function TSQLRecord.GetSQLCreate(aModel: TSQLModel): RawUTF8;
 // not implemented in TSQLRecordProperties since has been made virtual
 var i: integer;
-    SQL: RawUTF8;
+    SQL, tokenizer: RawUTF8;
     M: TSQLVirtualTableClass;
     Props: TSQLModelRecordProperties;
+    fields: TSQLPropInfoList;
 begin
   if aModel=nil then
     raise EModelException.CreateUTF8('Invalid %.GetSQLCreate(nil) call',[self]);
@@ -31046,36 +31055,35 @@ begin
       result := result+GetVirtualTableSQLCreate(Props.Props);
     end;
     end;
-    with Props.Props.Fields do
+    fields := Props.Props.Fields;
     case Props.Kind of
     rFTS3, rFTS4: begin
       if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then
         result := result+'content="'+aModel.Tables[Props.fFTSWithoutContentTableIndex].
           SQLTableName+'",';
-      if Count=0 then
+      if fields.Count=0 then
         raise EModelException.CreateUTF8(
           'Virtual FTS class % should have published properties',[self]);
-      for i := 0 to Count-1 do
-        with List[i] do
+      for i := 0 to fields.Count-1 do
+        with fields.List[i] do
         if SQLFieldTypeStored<>sftUTF8Text then
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
           result := result+Name+',';
-      if Self.InheritsFrom(TSQLRecordFTS3Porter) or
-         Self.InheritsFrom(TSQLRecordFTS4Porter) then
-        result := result+' tokenize=porter)' else
-      if Self.InheritsFrom(TSQLRecordFTS3Unicode61) or
-         Self.InheritsFrom(TSQLRecordFTS4Unicode61) then
-        result := result+' tokenize=unicode61)' else
-        result := result+' tokenize=simple)';
+      ToText(self,tokenizer);
+      if IdemPChar(pointer(tokenizer),'TSQLRECORDFTS') and
+         (tokenizer[14] in ['3','4']) then
+        delete(tokenizer,1,14) else // e.g. TSQLRecordFTS3Porter -> 'Porter'
+        tokenizer := 'simple';  
+      result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
     rRTree: begin
-      if (Count<2) or (Count>RTREE_MAX_DIMENSION*2) or
-         (Count and 2<>0) then
+      if (fields.Count<2) or (fields.Count>RTREE_MAX_DIMENSION*2) or
+         (fields.Count and 2<>0) then
         raise EModelException.CreateUTF8('% has % fields: RTREE expects 2,4,6..%',
-          [self,Count,RTREE_MAX_DIMENSION*2]);
-      for i := 0 to Count-1 do
-        with List[i] do
+          [self,fields.Count,RTREE_MAX_DIMENSION*2]);
+      for i := 0 to fields.Count-1 do
+        with fields.List[i] do
         if SQLFieldTypeStored<>sftFloat then
           raise EModelException.CreateUTF8('%.%: RTREE field must be double',[self,Name]) else
           result := result+Name+',';
