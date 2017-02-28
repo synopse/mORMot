@@ -14596,8 +14596,11 @@ type
     function InitJSON(const JSON: RawUTF8; aOptions: TDocVariantOptions=[]): boolean;
     /// initialize a variant instance to store some document-based object content
     // from a JSON array of JSON object content, stored in a file
+    // - any kind of file encoding will be handled, via AnyTextFileToRawUTF8()
+    // - you can optionally remove any comment from the file content
     // - if you call Init*() methods in a row, ensure you call Clear in-between
-    function InitJSONFromFile(const JsonFile: TFileName; aOptions: TDocVariantOptions=[]): boolean;
+    function InitJSONFromFile(const JsonFile: TFileName; aOptions: TDocVariantOptions=[];
+      RemoveComments: boolean=false): boolean;
     /// ensure a document-based variant instance will have one unique options set
     // - this will create a copy of the supplied TDocVariant instance, forcing
     // all nested events to have the same set of Options
@@ -41114,9 +41117,13 @@ begin
 end;
 
 function TDocVariantData.InitJSONFromFile(const JsonFile: TFileName;
-  aOptions: TDocVariantOptions): boolean;
+  aOptions: TDocVariantOptions; RemoveComments: boolean): boolean;
+var content: RawUTF8;
 begin
-  result := InitJSONInPlace(pointer(AnyTextFileToRawUTF8(JsonFile,true)),aOptions)<>nil;
+  content := AnyTextFileToRawUTF8(JsonFile,true);
+  if RemoveComments then
+    RemoveCommentsFromJSON(pointer(content));
+  result := InitJSONInPlace(pointer(content),aOptions)<>nil;
 end;
 
 procedure TDocVariantData.InitCSV(CSV: PUTF8Char; aOptions: TDocVariantOptions;
