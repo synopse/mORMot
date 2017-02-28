@@ -9125,7 +9125,7 @@ end;
 procedure TTestCryptographicRoutines.CryptData(dpapi: boolean);
 var i,size: integer;
     plain,enc,test: RawByteString;
-    sec: RawUTF8;
+    appsec: RawUTF8;
     func: function(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
     tim: TPrecisionTimer;
 const MAX = 1000;
@@ -9135,23 +9135,23 @@ begin
     func := CryptDataForCurrentUserDPAPI else
   {$endif}
     func := CryptDataForCurrentUser;
-  func('warmup','sec',true);
+  func('warmup','appsec',true);
   size := 0;
   tim.Start;
   for i := 0 to MAX-1 do begin
     plain := TAESPRNG.Main.FillRandom(i);
     check(length(plain)=i);
-    UInt32ToUtf8(i,sec);
-    enc := func(plain,sec,true);
+    UInt32ToUtf8(i,appsec);
+    enc := func(plain,appsec,true);
     assert(length(enc)>=length(plain));
-    test := func(enc,sec,false);
+    test := func(enc,appsec,false);
     check(length(test)=i);
     check(test=plain);
     inc(size,i+length(enc));
   end;
   if dpapi then
-    NotifyTestSpeed('DPAPI',MAX,size,@tim) else
-    NotifyTestSpeed('AES-CFB',MAX,size,@tim);
+    NotifyTestSpeed('DPAPI',MAX*2,size,@tim) else
+    NotifyTestSpeed('AES-CFB',MAX*2,size,@tim);
 end;
 
 procedure TTestCryptographicRoutines._CryptDataForCurrentUser;

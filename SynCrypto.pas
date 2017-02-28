@@ -1523,11 +1523,12 @@ function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encry
 // current execution context, to ensure nobody could decrypt the data without
 // knowing this application-specific AppSecret value 
 // - here data is cyphered using a random secret key, stored in a file located in
-// ! GetSystemPath(spUserData)+'_'+PBKDF2_HMAC_SHA256(CryptProtectDataEntropy,User)
+// ! GetSystemPath(spUserData)+sep+PBKDF2_HMAC_SHA256(CryptProtectDataEntropy,User)
+// with sep='_' under Windows, and sep='.syn-' under Linux/Posix
 // - under Windows, it will encode the secret file via CryptProtectData DPAPI,
 // so has the same security level than plain CryptDataForCurrentUserDPAPI()
-// - under Linux/POSIX, access to the $HOME user's secret file with chmod 400
-// is considered to be a safe enough approach
+// - under Linux/POSIX, access to the $HOME user's .xxxxxxxxxxx secret file with
+// chmod 400 is considered to be a safe enough approach
 // - this function is more than 50 times faster than CryptDataForCurrentUserDPAPI,
 // and consistent on all Operating Systems
 function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
@@ -7806,7 +7807,6 @@ begin
 end;
 
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
-var blockmode: PShortString;
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
     raise ESynCrypto.CreateUTF8(
@@ -7815,8 +7815,7 @@ begin
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey,fKey,fKeySizeBytes);
   TAESPRNG.Main.FillRandom(TAESBLock(fIVCTR)); // set nonce + ctr
-  blockmode := PPointer(PPtrInt(self)^+vmtClassName)^;
-  fIVCtr.magic := crc32c($aba5aba5,@blockmode^[2],6); // TAESECB_API -> 'AESECB'
+  fIVCtr.magic := crc32c($aba5aba5,@ClassNameShort(self)^[2],6); // TAESECB_API -> 'AESECB'
 end;
 
 constructor TAESAbstract.Create(const aKey: THash128);
@@ -9600,7 +9599,8 @@ begin
   PBKDF2_HMAC_SHA256(appsec,ExeVersion.User,100,instance);
   FillZero(appsec);
   appsec := BinToBase64URI(@instance,15); // local file has 21 chars length
-  keyfile := format('%s_%s',[GetSystemPath(spUserData),appsec]);
+  keyfile := format({$ifdef MSWINDOWS}'%s_%s'{$else}'%s.syn-%s'{$endif},
+    [GetSystemPath(spUserData),appsec]); // .* files are hidden under Linux 
   SetString(appsec,PAnsiChar(@instance[15]),17); // use remaining bytes as key
   try
     key := StringFromFile(keyfile);
@@ -9630,7 +9630,7 @@ begin
     {$ifdef MSWINDOWS} // 4KB local file, DPAPI-cyphered but with no DPAPI BLOB layout
     key2 := CryptDataForCurrentUserDPAPI(key,appsec,true);
     FillZero(key);
-    {$else} // 4KB local chmod 400 file in $HOME folder under Linux/POSIX
+    {$else} // 4KB local chmod 400 hidden file in $HOME folder under Linux/POSIX
     key2 := key;
     {$endif}
     key := TAESCFB.SimpleEncrypt(key2,appsec,true,true);
