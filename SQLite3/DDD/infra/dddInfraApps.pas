@@ -72,6 +72,7 @@ uses
   Variants,
   SynCommons,
   SynLog,
+  SynCrypto,
   SynEcc,
   mORMot,
   mORMotDDD,
@@ -100,7 +101,7 @@ type
     /// this abstract method should be overriden to return a new service/daemon
     // instance, using the (inherited) fSettings as parameters
     function NewDaemon: TDDDAdministratedDaemon; virtual;
-    /// returns some text to be supplied to the console for /help
+    /// returns some text to be supplied to the console for /help - '' by default
     function CustomHelp: string; virtual;
     {$ifdef MSWINDOWS} // to support Windows Services
     procedure DoStart(Sender: TService);
@@ -672,7 +673,7 @@ begin
       HttpServerFullWebSocketsLog := true;
       HttpClientFullWebSocketsLog := true;
     end;
-  {$ifdef MSWINDOWS} // Windows 7+ 
+  {$ifdef MSWINDOWS} // Windows 7+
   SetAppUserModelID(fSettings.AppUserModelID);
   {$endif}
   result := nil;
@@ -689,11 +690,12 @@ end;
 
 type
   TExecuteCommandLineCmd = (cNone, cInstall, cUninstall, cStart, cStop, cState,
-    cVersion, cVerbose, cHelp, cConsole, cDaemon);
+    cVersion, cVerbose, cHelp, cHardenPasswords, cPlainPasswords, cConsole, cDaemon);
 
 procedure TDDDDaemon.ExecuteCommandLine(ForceRun: boolean);
 var
   name, param: RawUTF8;
+  passwords: RawByteString;
   cmd: TExecuteCommandLineCmd;
   daemon: TDDDAdministratedDaemon;
   {$ifdef MSWINDOWS}
@@ -707,6 +709,70 @@ var
   function cmdText: RawUTF8;
   begin
     result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), cmd);
+  end;
+
+  procedure HardenSettings(const folder: TFileName; P: PUTF8Char);
+  var B: PUTF8Char;
+      fn, bak: TFileName;
+      pass, appsec, plain, new: RawUTF8;
+      doc: TDocVariantData;
+      modified, any: boolean;
+      v: PVariant;
+  begin
+    TextColor(ccLightCyan);
+    writeln('Executing /', cmdText, ' with User "', ExeVersion.User, '"'#13#10);
+    any := false;
+    repeat
+      B := pointer(GetNextLine(P,P));
+      if B=nil then
+        exit;
+      fn := format('%s%s.settings', [folder, GetNextItem(B, '=')]);
+      doc.InitJSONFromFile(fn, JSON_OPTIONS_FAST, true);
+      modified := false;
+      if doc.Count > 0 then
+        while B <> nil do begin
+          appsec := GetNextItem(B, '@');
+          v := doc.GetPVariantByPath(GetNextItem(B));
+          if v = nil then
+            continue;
+          if VariantToUTF8(v^, pass) and (pass <> '') then begin
+            plain := TSynPersistentWithPassword.ComputePlainPassword(pass, 0, appsec);
+            if plain = '' then
+              continue; // may occur with unexpected user
+            case cmd of
+            cHardenPasswords:
+              new := FormatUTF8('%:%', [ExeVersion.User,
+                BinToBase64(CryptDataForCurrentUser(plain, appsec, true))]);
+            cPlainPasswords:
+              new := TSynPersistentWithPassword.ComputePassword(plain);
+            else
+              exit;
+            end;
+            FillZero(RawByteString(plain));
+            if new <> pass then begin
+              RawUTF8ToVariant(new, v^); // replace
+              modified := true;
+            end;
+          end;
+        end;
+      if modified then begin
+        bak := ChangeFileExt(fn, '.bak');
+        DeleteFile(bak);
+        RenameFile(fn, bak);
+        FileFromString(doc.ToJSON('', '', jsonHumanReadable), fn);
+        any := true;
+        TextColor(ccLightCyan);
+      end
+      else
+        TextColor(ccDarkGray);
+      writeln('  ', fn);
+      doc.Clear;
+    until P=nil;
+    if any and (cmd = cHardenPasswords) then begin
+      TextColor(ccYellow);
+      writeln(#13#10' Warning:'#13#10' /', cmdText,
+        ' new .settings will work only with user "', ExeVersion.User, '"');
+    end;
   end;
 
   procedure Show(Success: Boolean);
@@ -733,13 +799,17 @@ var
   end;
 
   procedure Syntax;
+  var spaces: string;
   begin
     writeln('Try with one of the switches:');
     writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
       ' /console -c /verbose /daemon -d /help -h /version');
+    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 2);
     {$ifdef MSWINDOWS}
-    writeln(ExeVersion.ProgramName, ' /install /uninstall /start /stop /state');
+    writeln(spaces, '/install /uninstall /start /stop /state');
     {$endif}
+    if passwords <> '' then
+      writeln(spaces, '/hardenpasswords /plainpasswords');
     writeln(CustomHelp);
   end;
 
@@ -749,6 +819,7 @@ begin
       fDaemon := NewDaemon; // should initialize the default .settings
       fDaemon := nil;
     end;
+    ResourceSynLZToRawByteString('passwords', passwords);
     TextColor(ccLightGreen);
     name := StringToUTF8(fSettings.ServiceDisplayName);
     if name = '' then // perhaps the settings file is still void
@@ -775,11 +846,10 @@ begin
           cmd := cConsole;
         'd', 'D':
           cmd := cDaemon;
-        'h', 'H':
-          cmd := cHelp;
       else
         byte(cmd) := 1 + IdemPCharArray(@param[2],
-          ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB']);
+          ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
+           'HARDEN', 'PLAIN']);
       end;
     case cmd of
       cHelp:
@@ -821,6 +891,14 @@ begin
             fDaemon := nil; // will stop the daemon
           end;
         end;
+      cHardenPasswords, cPlainPasswords:
+        if passwords <> ''  then
+          HardenSettings(IncludeTrailingPathDelimiter(fSettings.SettingsFolder),
+            pointer(passwords))
+        else begin
+          TextColor(ccLightRed);
+          writeln('No "passwords" resource bound to ', ExeVersion.ProgramFullSpec);
+        end;
     else
     {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
       with fSettings do
@@ -829,7 +907,7 @@ begin
             Syntax
           else begin
             TextColor(ccLightRed);
-            writeln('No ServiceName specified - please fix the setttings');
+            writeln('No ServiceName specified - please fix the settings');
           end
         else
           case cmd of
