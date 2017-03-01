@@ -741,6 +741,7 @@ unit SynCommons;
   - fixed [63aa36f485] memory corruption in TSynAnsiConvert.AnsiToUnicodeString
   - extend TFileVersion by version resources stored in strings in the
     first locale section. Windows only
+  - added Latin-1  ISO/IEC 8859-1 Code Page support to TSynAnsiConvert
 
 *)
 
@@ -821,6 +822,9 @@ const
 
   /// US English Windows Code Page, i.e. WinAnsi standard character encoding
   CODEPAGE_US = 1252;
+
+  /// Latin-1 ISO/IEC 8859-1 Code Page http://ascii-table.com/codepage.php?819
+  CODEPAGE_LATIN1 = 819;
 
 {$ifndef MSWINDOWS}
   /// estimate the system code page is WinAnsi
@@ -17799,7 +17803,8 @@ end;
 
 function IsFixedWidthCodePage(aCodePage: cardinal): boolean;
 begin
-  result := (aCodePage>=1250) and (aCodePage<=1258);
+  // LATIN1 is also fixed width
+  result := ((aCodePage>=1250) and (aCodePage<=1258)) or (aCodePage=CODEPAGE_LATIN1);
 end;
 
 class function TSynAnsiConvert.Engine(aCodePage: cardinal): TSynAnsiConvert;
@@ -18141,9 +18146,10 @@ begin
       [ClassName,fCodePage]);
   // create internal look-up tables
   SetLength(fAnsiToWide,256);
-  if aCodePage=CODEPAGE_US then begin // do not trust the Windows API :(
+  if (aCodePage=CODEPAGE_US) or (aCodePage=CODEPAGE_LATIN1) then begin // do not trust the Windows API :(
     for i := 0 to 255 do
       fAnsiToWide[i] := i;
+    if (aCodePage=CODEPAGE_US) then
     for i := low(WinAnsiUnicodeChars) to high(WinAnsiUnicodeChars) do
       fAnsiToWide[i] := WinAnsiUnicodeChars[i];
   end else begin // from Operating System returned values
