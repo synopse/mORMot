@@ -9628,6 +9628,7 @@ begin
         check(length(U['RandomPublicKey'])=sizeof(TECCPublicKey)*2);
         check(U['Algorithm']=ShortStringToAnsi7String(ToText(ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ)^));
         check(O['Signature']^.VarType=varNull,'not signed');
+        check(not B['Meta']);
       end;
       plainfn := 'plain-'+test;
       Exec(['file',crypt,'out',plainfn,'auth',priv,'authpass',pass,
@@ -9645,6 +9646,7 @@ begin
         check(U['Algorithm']='ecaPBKDF2_HMAC_SHA256_AES128_CTR');
         check(O['Signature']^.I['Version']=1,'signed');
         check(O['Signature']^.U['AuthoritySerial']=id);
+        check(B['Meta']);
       end;
       check(PosEx(StringFromFile(rawfn),StringFromFile(crypt))=sizeof(TECIESHeader)+1);
       DeleteFile(plainfn);

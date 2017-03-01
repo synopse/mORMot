@@ -65,7 +65,7 @@ procedure ECCCommandCryptFile(const FileToCrypt, DestFile, AuthPubKey: TFileName
 function ECCCommandDecryptFile(const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUTF8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent): TECCDecrypt;
+  Signature: PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
 
 /// end-user command to verify a .synecc file signature, after decryption
 // - as used in the ECC.dpr command-line sample project
@@ -290,7 +290,7 @@ end;
 function ECCCommandDecryptFile(const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUTF8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent): TECCDecrypt;
+  Signature: PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
 var auth: TECCCertificateSecret;
     head: TECIESHeader;
     priv: TFileName;
@@ -309,7 +309,7 @@ begin
     if not auth.LoadFromSecureFile(priv,AuthPassword,AuthPasswordRounds) then
       exit;
     result := auth.DecryptFile(FileToDecrypt,DestFile,
-      DecryptPassword,DecryptPasswordRounds,Signature);
+      DecryptPassword,DecryptPasswordRounds,Signature,MetaData);
   finally
     auth.Free;
   end;
@@ -446,6 +446,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
   end;
 
 var issuer, authpass, savepass, constname, comment, json: RawUTF8;
+    meta: RawJSON;
     start: TDateTime;
     authrounds, days, saverounds, splitfiles: integer;
     msg: string;
@@ -639,11 +640,13 @@ begin
       savepass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for decryption.');
       saverounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
       decrypt := ECCCommandDecryptFile(origfile,newfile,
-        sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign);
+        sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign,@meta);
       msg := SysUtils.LowerCase(GetCaptionFromEnum(TypeInfo(TECCDecrypt),ord(decrypt)));
       if decrypt in ECC_VALIDDECRYPT then begin
         if decrypt=ecdDecryptedWithSignature then
           WriteVerif(ECCCommandVerifyDecryptedFile(newfile,decryptsign),newfile,sw);
+        if meta<>'' then
+          sw.Text(' % file meta = %',[origfile,meta],ccGreen);
         sw.Text(' % file %.',[origfile,msg],ccLightGreen);
       end else begin
         sw.Text(' % file decryption failure: % (%).',[origfile,msg,ord(decrypt)],ccLightRed);
