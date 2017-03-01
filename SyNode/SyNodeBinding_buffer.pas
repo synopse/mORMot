@@ -7,6 +7,11 @@ interface
 {$I Synopse.inc}
 {$I SyNode.inc}
 {$UNDEF HASINLINE}
+type
+  TEncoding = (ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER);
+  TEndianness = (kLittleEndian, kBigEndian);
+// BINARY is a deprecated alias of LATIN1.
+const  LATIN1 = BINARY;
 implementation
 uses
   SysUtils,
@@ -17,12 +22,7 @@ uses
 
 //const
 //  BUFFER_PROTO_SLOT = JSCLASS_GLOBAL_SLOT_COUNT + 1;
-// BINARY is a deprecated alias of LATIN1.
-type
-  TEncoding = (ASCII, UTF8, BASE64, UCS2, BINARY, HEX, BUFFER);
-  TEndianness = (kLittleEndian, kBigEndian);
 
-const  LATIN1 = BINARY;
 
 const
   _Endianness: record
@@ -251,7 +251,7 @@ begin
 //        SetLength(UnicodeBuf, Result shr 1);
 //        WinAnsiConvert.AnsiBufferToUnicode(Pointer(UnicodeBuf), str, Result shr 1);
 //        MoveFast(Pointer(UnicodeBuf)^, bufData^, Result);
-        WinAnsiConvert.AnsiBufferToUnicode(bufData, str, Result shr 1, true);
+        Latin1AnsiConvert.AnsiBufferToUnicode(bufData, str, Result shr 1, true);
       end else begin
         Result := Result and (not 1);
         MoveFast(str^, bufData^, Result);
@@ -285,7 +285,32 @@ begin
           Result := max_length;
         MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
       end else begin
-        raise ESMException.Create(NOT_BASE64);
+        strLenInBytes := strLenInBytes shr 1;
+        SetLength(base64Tmp, strLenInBytes + 3);
+        ch := pointer(base64Tmp);
+        for i := 1 to strLenInBytes do begin
+          if PAnsiChar(str)[2*i-1] = #0 then
+            case PAnsiChar(str)[2*i-2] of
+              '-': begin ch^ := '+'; inc(ch); end;
+              '_': begin ch^ := '/'; inc(ch); end;
+              'A'..'Z','a'..'z','0'..'9','+','/','=': begin ch^ := PAnsiChar(str)[2*i-2]; inc(ch); end;
+            end;
+        end;
+        strLenInBytes := ch - pointer(base64Tmp);
+        case strLenInBytes and 3 of
+          0: ;
+          1: if ((ch[-1] = '='))then Dec(strLenInBytes) else begin ch^ := '='; ch[1] := '='; ch[2] := '='; Inc(strLenInBytes,3); end;
+          2: if ((ch[-1] = '=') and (ch[-2] = '=')) then Dec(strLenInBytes, 2) else begin ch^ := '='; ch[1] := '='; Inc(strLenInBytes, 2) end;
+          3: if ((ch[-1] = '=') and (ch[-2] = '=')and (ch[-3] = '=')) then Dec(strLenInBytes, 3) else begin ch^ := '='; Inc(strLenInBytes) end;
+        end;
+        str := pointer(base64Tmp);
+        Result := Base64ToBinLength(str, strLenInBytes);
+        SetLength(base64TmpRes, Result);
+        if not Base64ToBin(str, Pointer(base64TmpRes), strLenInBytes, Result, false) then
+          Result := 0;
+        if Result > max_length then
+          Result := max_length;
+        MoveFast(Pointer(base64TmpRes)^, bufData^, Result);
       end;
     end;
     HEX: begin
@@ -981,7 +1006,7 @@ begin
         end;
         UCS2: begin
           if isLatin1 then begin
-            WinAnsiConvert.AnsiBufferToUnicode(Pointer(UIntPtr(targetData) + _start), str_data, str_lengthInBytes shr 1);
+            Latin1AnsiConvert.AnsiBufferToUnicode(Pointer(UIntPtr(targetData) + _start), str_data, str_lengthInBytes shr 1);
           end else
             MoveFast(str_data^, Pointer(UIntPtr(targetData) + _start)^, str_lengthInBytes);
         end;

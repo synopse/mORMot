@@ -2986,6 +2986,12 @@ procedure JS_SetModuleResolveHook(cx: PJSContext; var hook: PJSFunction); cdecl;
 type
   pjsval = ^jsval;
 
+var
+  /// global TSynAnsiConvert instance to handle LATIN1(ISO/IEC 8859-1) encoding
+  // - this instance is global and instantied during the whole program life time
+  // - Spidermonkey internal encoding is LATIN1 or UTF-16
+  Latin1AnsiConvert: TSynAnsiConvert;
+
 implementation
 
 uses
@@ -3114,7 +3120,7 @@ begin
     {$ifdef UNICODE}
       SetString(Result, str8, strL);
     {$else}
-      Result := CurrentAnsiConvert.AnsiToUnicodeString(str8, strL);
+      Result := Latin1AnsiConvert.AnsiToUnicodeString(str8, strL);
     {$endif}
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
@@ -3130,7 +3136,7 @@ var
 begin
   if JS_StringHasLatin1Chars(@self) then begin
     str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
-    Result := CurrentAnsiConvert.AnsiToUnicodeString(str8, strL);
+    Result := Latin1AnsiConvert.AnsiToUnicodeString(str8, strL);
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
     SetString(Result, str16, strL);
@@ -3150,7 +3156,7 @@ var
 begin
   if JS_StringHasLatin1Chars(@self) then begin
     str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
-    result := WinAnsiConvert.AnsiBufferToRawUTF8(str8, strL);
+    result := Latin1AnsiConvert.AnsiBufferToRawUTF8(str8, strL);
   end else begin
     str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
     RawUnicodeToUTF8(str16,strL,result, [ccfNoTrailingZero, ccfReplacementCharacterForUnmatchedSurrogate]);
@@ -3183,7 +3189,7 @@ begin
     VAny := nil; // avoid GPF below
     if JS_StringHasLatin1Chars(@self) then begin
       str8 := JS_GetLatin1StringCharsAndLength(cx, @nullPtr, @self, @strL);
-      SynUnicode(VAny) := CurrentAnsiConvert.AnsiToUnicodeString(str8, strL);
+      SynUnicode(VAny) := Latin1AnsiConvert.AnsiToUnicodeString(str8, strL);
     end else begin
       str16 := JS_GetTwoByteStringCharsAndLength(cx, @nullPtr, @self, @strL);
       SetString(SynUnicode(VAny), str16, strL);
@@ -3205,7 +3211,7 @@ begin
     if strL>=SizeOf(tmpU8)div 3 then
       Getmem(U8,strL*3+1) else
       U8 := @tmpU8;
-    strL := CurrentAnsiConvert.AnsiBufferToUTF8(U8,pointer(str8),strL)-U8;
+    strL := Latin1AnsiConvert.AnsiBufferToUTF8(U8,pointer(str8),strL)-U8;
     W.AddNoJSONEscape(pointer(U8), strL);
     if U8<>@tmpU8 then
       FreeMem(U8);
@@ -5116,5 +5122,7 @@ begin
   Result.asSimpleVariant[cx] := val;
 end;
 
+initialization
+  Latin1AnsiConvert := TSynAnsiConvert.Engine(CODEPAGE_LATIN1);
 end.
 
