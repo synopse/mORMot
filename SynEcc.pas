@@ -2032,8 +2032,8 @@ begin
 end;
 
 const
-  ECIES_MAGIC:    array[0..15] of AnsiChar = 'SynEccEncrypted'#26;
-  ECIES_MAGIC_01: array[0..15] of AnsiChar = 'SynEccEncrypt01'#26; // with meta
+  ECIES_MAGIC: array[0..1] of array[0..15] of AnsiChar =
+    ('SynEccEncrypted'#26, 'SynEccEncrypt01'#26); 
   ECIES_NOSYNLZ: array[ecaPBKDF2_HMAC_SHA256_AES256_CFB_SYNLZ..
     ecaPBKDF2_HMAC_SHA256_AES128_CTR_SYNLZ] of TECIESAlgo = (
       ecaPBKDF2_HMAC_SHA256_AES256_CFB, ecaPBKDF2_HMAC_SHA256_AES256_CBC,
@@ -2051,18 +2051,27 @@ const
 type
   TECIESFeatures = set of (efMetaData);
 
-function ECIESFeatures(const head: TECIESHeader): TECIESFeatures;
+function ECIESLevel(const head: TECIESHeader): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 begin
+  for result := 0 to high(ECIES_MAGIC) do
+    if IsEqual(head.magic,THash128(ECIES_MAGIC[result])) then
+      exit;
+  result := -1;
+end;
+
+function ECIESFeatures(const head: TECIESHeader): TECIESFeatures;
+var level: integer;
+begin
+  level := ECIESLevel(head);
   byte(result) := 0;
-  if IsEqual(head.magic,THash128(ECIES_MAGIC_01)) then
+  if level>0 then
     include(result,efMetaData);
 end;
 
 function ECIESHeader(const head: TECIESHeader): boolean;
 begin
-  result := (IsEqual(head.magic,THash128(ECIES_MAGIC)) or
-     IsEqual(head.magic,THash128(ECIES_MAGIC_01))) and
-    (head.Algo in [Low(ECIES_AES)..High(ECIES_AES)]) and
+  result := (ECIESLevel(head)>=0) and (head.Algo in [Low(ECIES_AES)..High(ECIES_AES)]) and
     (head.crc=crc32c(PCardinal(@head.hmac)^,@head,sizeof(head)-sizeof(head.crc)));
 end;
 
@@ -2415,7 +2424,7 @@ begin
   if not (Algo in [Low(ECIES_AES)..High(ECIES_AES)]) then
     raise EECCException.CreateUTF8('%.Encrypt: unsupported %',[self,ToText(Algo)^]);
   try
-    head.magic := THash128(ECIES_MAGIC);
+    head.magic := THash128(ECIES_MAGIC[0]);
     head.rec := fContent.Signed.Issuer;
     head.recid := fContent.Signed.Serial;
     head.size := length(Plain);
@@ -2428,7 +2437,7 @@ begin
       if Signature.InheritsFrom(TECCSignatureCertifiedFile) then
         with _Safe(TECCSignatureCertifiedFile(Signature).MetaData)^ do
           if (Kind=dvObject) and (Count>0) then begin
-            head.magic := THash128(ECIES_MAGIC_01);
+            head.magic := THash128(ECIES_MAGIC[1]); // indicates efMetaData
             content := ToJSON('','',jsonUnquotedPropNameCompact)+#0+content;
           end; // new format storing {metadata}+#0+plain
       {$endif}
