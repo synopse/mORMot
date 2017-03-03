@@ -1079,7 +1079,9 @@ type
     /// initialize SHA1 context for hashing
     procedure Init;
     /// update the SHA1 context with some data
-    procedure Update(Buffer: pointer; Len: integer);
+    procedure Update(Buffer: pointer; Len: integer); overload;
+    /// update the SHA1 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
     /// finalize and compute the resulting SHA1 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
@@ -1104,7 +1106,9 @@ type
     /// initialize SHA256 context for hashing
     procedure Init;
     /// update the SHA256 context with some data
-    procedure Update(Buffer: pointer; Len: integer);
+    procedure Update(Buffer: pointer; Len: integer); overload;
+    /// update the SHA256 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
     /// finalize and compute the resulting SHA256 hash Digest of all data
     // affected to Update() method
     procedure Final(out Digest: TSHA256Digest; NoInit: boolean=false);
@@ -1116,7 +1120,7 @@ type
 
   /// 64 bytes buffer, used internally during HMAC process
   TByte64 = array[0..15] of cardinal;
-  
+
   TMD5In = array[0..15] of cardinal;
   PMD5In = ^TMD5In;
   /// 128 bits memory block for MD5 hash digest storage
@@ -1135,7 +1139,9 @@ type
     /// initialize MD5 context for hashing
     procedure Init;
     /// update the MD5 context with some data
-    procedure Update(const buffer; Len: cardinal);
+    procedure Update(const buffer; Len: cardinal); overload;
+    /// update the MD5 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
     /// finalize the MD5 hash process
     // - the resulting hash digest would be stored in buf public variable
     procedure Finalize;
@@ -6060,6 +6066,11 @@ begin
   end;
 end;
 
+procedure TSHA256.Update(const Buffer: RawByteString);
+begin
+  Update(pointer(Buffer),length(Buffer));
+end;
+
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 var L: integer;
     SHA: TSHA256;
@@ -7458,6 +7469,11 @@ begin
   MoveFast(p^,in_,len and 63);
 end;
 
+procedure TMD5.Update(const Buffer: RawByteString);
+begin
+  Update(pointer(Buffer),length(Buffer));
+end;
+
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
 var MD5: TMD5;
 begin
@@ -7744,6 +7760,11 @@ begin
       break;
     end;
   end;
+end;
+
+procedure TSHA1.Update(const Buffer: RawByteString);
+begin
+  Update(pointer(Buffer),length(Buffer));
 end;
 
 

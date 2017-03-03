@@ -10071,6 +10071,7 @@ type
     fSignatureTime: TTimeLog;
     /// hashed signature
     fSignature: RawUTF8;
+    function ComputeSignature(const UserName,Content: RawByteString): RawUTF8;
   public
     /// time and date of signature
     // - if the signature is invalid, this field will contain numerical 1 value
@@ -10080,16 +10081,16 @@ type
     property SignatureTime: TTimeLog read fSignatureTime write fSignatureTime;
     /// as the Content of this record is added to the database,
     // its value is hashed and stored as 'UserName/03A35C92....' into this property
-    // - very secured SHA-256 hashing is used internaly
+    // - secured SHA-256 hashing is used internaly
     // - digital signature is allowed only once: this property is written only once
     // - this property is defined here to allow inherited to just declared the name
     // in its published section:
-    // ! property SignatureTime;
+    // ! property Signature;
     property Signature: RawUTF8 read fSignature write fSignature;
   public
     /// use this procedure to sign the supplied Content of this record for a
-    // specified UserName, with the current Date and Time  (SHA-256 hashing is used
-    // internaly)
+    // specified UserName, with the current Date and Time
+    // - SHA-256 hashing is used internaly
     // - returns true if signed successfully (not already signed)
     function SetAndSignContent(const UserName: RawUTF8;
       const Content: RawByteString; ForcedSignatureTime: Int64=0): boolean;
@@ -13215,7 +13216,6 @@ type
   TSQLRestBackgroundTimer = class(TSynBackgroundTimer)
   protected
     fRest: TSQLRest;
-    fName: RawUTF8;
     fBackgroundBatch: array of TSQLRestBatchLocked;
     // used by AsynchRedirect() and AsynchBatch()
     function AsynchBatchIndex(aTable: TSQLRecordClass): integer;
@@ -13321,7 +13321,7 @@ type
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
   published
     /// the identifier of the thread, as logged
-    property Name: RawUTF8 read fName;
+    property Name: RawUTF8 read fThreadName;
   end;
 
   /// a generic REpresentational State Transfer (REST) client/server class
@@ -45950,11 +45950,11 @@ begin
   if aStream=nil then
     exit;
   if fBinaryFile then begin
-      if ReadStringFromStream(aStream)=ToText(ClassType)+'00' then
-      repeat
-        t := Model.GetTableIndex(ReadStringFromStream(aStream));
-      until (t<0) or
-        not TSQLRestStorageInMemory(fStaticData[t]).LoadFromBinary(aStream);
+    if ReadStringFromStream(aStream)=ToText(ClassType)+'00' then
+    repeat
+      t := Model.GetTableIndex(ReadStringFromStream(aStream));
+    until (t<0) or
+      not TSQLRestStorageInMemory(fStaticData[t]).LoadFromBinary(aStream);
   end else begin // [{"AuthUser":[{....},{...}]},{"AuthGroup":[{...},{...}]}]
     JSON := StreamToRawByteString(aStream); // assume UTF-8 content
     if JSON='' then
@@ -48202,33 +48202,38 @@ end;
 {$endif}
 
 
-
 { TSQLRecordSigned }
 
-function TSQLRecordSigned.CheckSignature(const Content: RawByteString): boolean;
-var tmp: RawUTF8;
-    i: integer;
-    SHA: TSHA256;
+function TSQLRecordSigned.ComputeSignature(const UserName,Content: RawByteString): RawUTF8;
+var SHA: TSHA256;
     Digest: TSHA256Digest;
 begin
+  SHA.Init;
+  SHA.Update(TTimeLogBits(fSignatureTime).Text(false));
+  SHA.Update(ToText(ClassType));
+  SHA.Update(UserName);
+  SHA.Update(Content);
+  SHA.Final(Digest);
+  result := SHA256DigestToString(Digest);
+end;
+
+function TSQLRecordSigned.CheckSignature(const Content: RawByteString): boolean;
+var i: integer;
+    sign: RawUTF8;
+begin
   result := false;
+  if self=nil then
+    exit;
   i := PosEx(RawUTF8('/'),fSignature,1);
   if i=0 then
     exit;
-  tmp := TTimeLogBits(fSignatureTime).Text(false)+ToText(ClassType)+copy(fSignature,1,i-1);
-  SHA.Init;
-  SHA.Update(pointer(tmp),length(tmp));
-  SHA.Update(pointer(Content),length(Content)); // hash in place: no Content copy
-  SHA.Final(Digest);
-  if SHA256DigestToString(Digest)=copy(fSignature,i+1,sizeof(Digest)*2) then
+  sign := ComputeSignature(copy(fSignature,1,i-1),Content);
+  if IdemPropNameU(sign,copy(fSignature,i+1,sizeof(TSHA256Digest)*2)) then
     result := true;
 end;
 
 function TSQLRecordSigned.SetAndSignContent(const UserName: RawUTF8;
   const Content: RawByteString; ForcedSignatureTime: Int64): boolean;
-var tmp: RawUTF8;
-    SHA: TSHA256;
-    Digest: TSHA256Digest;
 begin
   result := (fSignature='') and (fSignatureTime=0);
   if not result then
@@ -48236,19 +48241,15 @@ begin
   if ForcedSignatureTime<>0 then
     fSignatureTime := ForcedSignatureTime else
     fSignatureTime := TimeLogNow;
-  { content is hashed with User Name value }
-  tmp := TTimeLogBits(fSignatureTime).Text(false)+ToText(ClassType)+UserName;
-  SHA.Init;
-  SHA.Update(pointer(tmp),length(tmp));
-  SHA.Update(pointer(Content),length(Content)); // hash in place: no Content copy
-  SHA.Final(Digest);
-  fSignature := UserName+'/'+SHA256DigestToString(Digest);
+  fSignature := UserName+'/'+ComputeSignature(UserName,Content);
 end;
 
 function TSQLRecordSigned.SignedBy: RawUTF8;
 var i: integer;
 begin
-  i := PosEx(RawUTF8('/'),fSignature,1);
+  if self=nil then
+    i := 0 else
+    i := PosEx(RawUTF8('/'),fSignature,1);
   if i=0 then
     result := '' else
     result := copy(fSignature,1,i-1);
@@ -53999,7 +54000,7 @@ constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
 begin
   fTimer := aTimer;
   fRest := fTimer.fRest;
-  fName := fTimer.fName;
+  fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
   inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
   Get(aCallbackInterface);
@@ -54027,14 +54028,15 @@ end;
 
 constructor TSQLRestBackgroundTimer.Create(aRest: TSQLRest;
   const aThreadName: RawUTF8; aStats: TSynMonitorClass);
+var aName: RawUTF8;
 begin
   if aRest=nil then
     raise EORMException.CreateUTF8('%.Create(nil,"%")',[self,aThreadName]);
   fRest := aRest;
-  if aThreadName<>'' then
-    fName := aThreadName else
-    FormatUTF8('% % Timer',[self,fRest.Model.Root],fName);
-  inherited Create(fName,fRest.BeginCurrentThread,fRest.EndCurrentThread,aStats);
+  if aThreadName='' then
+    aName := aThreadName else
+    FormatUTF8('% % Timer',[self,fRest.Model.Root],aName);
+  inherited Create(aName,fRest.BeginCurrentThread,fRest.EndCurrentThread,aStats);
 end;
 
 destructor TSQLRestBackgroundTimer.Destroy;
@@ -54321,7 +54323,7 @@ begin
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect(nil)',[self]);
   if not aDestinationInstance.GetInterface(aGUID,dest) then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
-      [self,fName,aDestinationInstance.ClassType,GUIDToShort(aGUID)]);
+      [self,fThreadName,aDestinationInstance,GUIDToShort(aGUID)]);
   AsynchRedirect(aGUID,dest,aCallbackInterface);
 end;
 
@@ -54407,7 +54409,7 @@ begin
     raise EInterfaceFactoryException.CreateUTF8('%.Redirect(nil)',[self]);
   if not aCallback.GetInterface(fFakeCallback.fFactory.fInterfaceIID,dest) then
     raise EInterfaceFactoryException.CreateUTF8('%.Redirect [%]: % is not a %',
-      [self,fFakeCallback.fName,aCallback.ClassType,fFakeCallback.fFactory.fInterfaceName]);
+      [self,fFakeCallback.fName,aCallback,fFakeCallback.fFactory.fInterfaceName]);
   Redirect(dest,aMethodsNames,aSubscribe);
 end;
 
