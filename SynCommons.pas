@@ -31,6 +31,7 @@ unit SynCommons;
   Contributor(s):
    - Aleksandr (sha)
    - Alfred Glaenzer (alf)
+   - ASiwon
    - Chaa
    - BigStar
    - itSDS
@@ -58241,7 +58242,7 @@ var v: TSynTableStatementWhereDynArray;
     tmp: RawUTF8;
 begin
   result := false;
-  if Where.ValueSQLLen<2 then
+  if Where.ValueSQLLen<=2 then
     exit;
   SetString(tmp,PAnsiChar(Where.ValueSQL)+1,Where.ValueSQLLen-2);
   P := pointer(tmp); // parse again the IN (...,...,... ) expression
