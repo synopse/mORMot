@@ -7819,7 +7819,7 @@ begin
 end;
 
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
-var Shortname: PShortString;
+var tmp: PShortString; // temp variable to circumvent FPC bug
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
     raise ESynCrypto.CreateUTF8(
@@ -7828,8 +7828,8 @@ begin
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey,fKey,fKeySizeBytes);
   TAESPRNG.Main.FillRandom(TAESBLock(fIVCTR)); // set nonce + ctr
-  Shortname:= ClassNameShort(self);
-  fIVCtr.magic := crc32c($aba5aba5,@Shortname^[2],6); // TAESECB_API -> 'AESECB'
+  tmp := ClassNameShort(self);
+  fIVCtr.magic := crc32c($aba5aba5,@tmp^[2],6); // TAESECB_API -> 'AESECB'
 end;
 
 constructor TAESAbstract.Create(const aKey: THash128);

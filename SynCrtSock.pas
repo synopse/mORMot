@@ -4907,6 +4907,7 @@ constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
   fOnTerminate := Owner.FOnHttpThreadTerminate;
+  FreeOnTerminate := true;
   inherited Create(false);
 end;
 
