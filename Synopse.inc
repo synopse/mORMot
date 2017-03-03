@@ -568,12 +568,6 @@
   /// define this to publish TWinINet / TWinHttp / TWinHttpAPI classes
   // and TSQLHttpClientWinINet / TSQLHttpClientWinHTTP classes 
   {$define USEWININET}
-  // our current IOCP pattern is Windows-specific:
-  //  with Thread Pool: 3394 requests / second (each request with 4 KB of data)
-  //  without the Pool: 140/s in the IDE (i.e. one core), 2637/s on a dual core
-  // but less needed under Linux, since thread creation sounds much cheaper
-  // see http://www.akkadia.org/drepper/nptl-design.pdf
-  {$define USETHREADPOOL}
   {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
   {.$define USELIBCURL}     // for testing under Windows (no benefit vs WinHTTP)
 {$else}

@@ -609,8 +609,7 @@ type
     fProcess: TWebSocketProcessServer;
   public
     /// initialize the context, associated to a HTTP/WebSockets server instance
-    constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
-       {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif}); override;
+    constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer); override;
     /// push a notification to the client
     function NotifyCallback(Ctxt: THttpServerRequest; aMode: TWebSocketProcessNotifyCallback): cardinal; virtual;
     /// the Sec-WebSocket-Protocol application protocol currently involved
@@ -651,7 +650,7 @@ type
     // - in the current implementation, the ServerThreadPoolCount parameter will
     // be ignored by this class, and one thread will be maintained per client
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer=0{$endif}); override;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=0); override;
     /// close the server
     destructor Destroy; override;
     /// access to the protocol list handled by this server
@@ -2223,7 +2222,7 @@ end;
 { TWebSocketServer }
 
 constructor TWebSocketServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
+  const ProcessName: SockString; ServerThreadPoolCount: integer);
 begin
   fThreadRespClass := TWebSocketServerResp;
   fWebSocketConnections := TObjectListLocked.Create(false);
@@ -2231,7 +2230,7 @@ begin
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
-  inherited Create(aPort,OnStart,OnStop,ProcessName{$ifdef USETHREADPOOL},0{$endif}); // NO thread pool
+  inherited Create(aPort,OnStart,OnStop,ProcessName,0); // NO thread pool
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
@@ -2427,11 +2426,11 @@ end;
 { TWebSocketServerResp }
 
 constructor TWebSocketServerResp.Create(aServerSock: THttpServerSocket;
-  aServer: THttpServer {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
+  aServer: THttpServer);
 begin
   if not aServer.InheritsFrom(TWebSocketServer) then
     raise ESynBidirSocket.CreateUTF8('%.Create(%: TWebSocketServer?)',[self,aServer]);
-  inherited Create(aServerSock,aServer{$ifdef USETHREADPOOL},aThreadPool{$endif});
+  inherited Create(aServerSock,aServer);
 end;
 
 function TWebSocketServerResp.NotifyCallback(Ctxt: THttpServerRequest;

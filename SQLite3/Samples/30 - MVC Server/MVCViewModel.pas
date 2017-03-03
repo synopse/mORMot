@@ -1,7 +1,7 @@
 /// ViewModel/Control interfaces for the MVCServer BLOG sample
 unit MVCViewModel;
 
-{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 
 interface
 

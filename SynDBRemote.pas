@@ -509,10 +509,12 @@ constructor TSQLDBServerSockets.Create(aProperties: TSQLDBConnectionProperties;
   const aDatabaseName, aPort, aUserName, aPassword: RawUTF8;
   aHttps: boolean; aThreadPoolCount: integer; aProtocol: TSQLDBProxyConnectionProtocolClass;
   aThreadMode: TSQLDBConnectionPropertiesThreadSafeThreadingMode);
+var
+  ident: RawUTF8;
 begin
   inherited;
-  fServer := THttpServer.Create(aPort,nil,nil,FormatUTF8('DBRemote %',[aDatabaseName])
-    {$ifdef USETHREADPOOL},fThreadPoolCount{$endif});
+  FormatUTF8('DBRemote %',[aDatabaseName],ident);
+  fServer := THttpServer.Create(aPort,nil,nil,ident,fThreadPoolCount);
   fServer.OnRequest := Process;
 end;
 

@@ -185,7 +185,7 @@ interface
   - not defined by default - should be set globally to the project conditionals,
   to be defined in both mORMotHttpClient and mORMotHttpServer units }
 
-{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 
 
 uses
@@ -720,9 +720,8 @@ begin
     if aHttpServerKind=useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
-      fHttpServer := THttpServer.Create(
-        fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames
-        {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
+      fHttpServer := THttpServer.Create(fPort,HttpThreadStart,HttpThreadTerminate,
+        GetDBServerNames,ServerThreadPoolCount);
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}

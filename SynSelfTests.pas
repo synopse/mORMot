@@ -15350,22 +15350,12 @@ end;
 
 procedure TTestMultiThreadProcess.SocketAPI;
 begin
-  {$WARN SYMBOL_PLATFORM OFF}
-  {$ifndef FPC}
-  //if DebugHook=0 then
-  {$endif}
-    Test(TSQLHttpClientWinSock,useHttpSocket);
-  {$WARN SYMBOL_PLATFORM ON}
+  Test(TSQLHttpClientWinSock,useHttpSocket);
 end;
 
 procedure TTestMultiThreadProcess.Websockets;
 begin
-  {$WARN SYMBOL_PLATFORM OFF}
-  {$ifndef FPC}
-  //if DebugHook=0 then
-  {$endif}
-    Test(TSQLHttpClientWebsockets,useBidirSocket);
-  {$WARN SYMBOL_PLATFORM ON}
+  Test(TSQLHttpClientWebsockets,useBidirSocket);
 end;
 
 {$ifdef USELIBCURL}

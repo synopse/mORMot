@@ -1259,7 +1259,7 @@ uses
   {$endif}
 {$endif}
 {$ifndef LVCL}
-  SyncObjs, // for TEvent and TCriticalSection
+  SyncObjs, // for TEvent
   Contnrs,  // for TObjectList
   {$ifndef NOVARIANTS}
   Variants,

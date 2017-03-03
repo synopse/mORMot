@@ -254,6 +254,7 @@ uses
 {$endif MSWINDOWS}
 {$ifndef LVCL}
   Contnrs,
+  SyncObjs, // for TEvent (in Classes.pas for LVCL)
 {$endif}
   SysUtils,
   Classes;
@@ -261,6 +262,8 @@ uses
 const
   /// the full text of the current Synopse mORMot framework version
   // - match the value defined in SynCommons.pas and SynopseCommit.inc
+  // - we don't supply full version number with build revision, to reduce
+  // potential attack surface
   XPOWEREDPROGRAM = 'mORMot 1.18';
 
   /// the running Operating System
@@ -805,7 +808,7 @@ type
     {$endif}
   public
     /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: Boolean); reintroduce; virtual;
+    constructor Create(CreateSuspended: boolean); reintroduce; virtual;
     {$ifndef HASTTHREADSTART}
     /// method to be called when the thread was created as suspended
     // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
@@ -824,10 +827,6 @@ type
   end;
   {$M-}
 
-  {$ifdef USETHREADPOOL}
-  TSynThreadPoolTHttpServer = class;
-  {$endif}
-
   /// HTTP response Thread as used by THttpServer Socket API based class
   // - Execute procedure get the request and calculate the answer
   // - you don't have to overload the protected THttpServerResp Execute method:
@@ -837,9 +836,6 @@ type
   protected
     fServer: THttpServer;
     fServerSock: THttpServerSocket;
-    {$ifdef USETHREADPOOL}
-    fThreadPool: TSynThreadPoolTHttpServer;
-    {$endif}
     fClientSock: TSocket;
     fConnectionID: integer;
     /// main thread loop: read request from socket, send back answer
@@ -847,11 +843,10 @@ type
   public
     /// initialize the response thread for the corresponding incoming socket
     // - this version will get the request directly from an incoming socket
-    constructor Create(aSock: TSocket; aServer: THttpServer); reintroduce; overload; 
+    constructor Create(aSock: TSocket; aServer: THttpServer); reintroduce; overload;
     /// initialize the response thread for the corresponding incoming socket
     // - this version will handle KeepAlive, for such an incoming request
-    constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer
-      {$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
+    constructor Create(aServerSock: THttpServerSocket; aServer: THttpServer);
       reintroduce; overload; virtual;
     /// the associated socket to communicate with the client
     property ServerSock: THttpServerSocket read fServerSock;
@@ -863,11 +858,11 @@ type
 
   THttpServerRespClass = class of THttpServerResp;
 
-  /// an event handler for implementing a socked-based Thread Pool
-  // - matches TSynThreadPoolTHttpServer.Push method signature
-  TOnThreadPoolSocketPush = function(aClientSock: TSocket): boolean of object; 
-
-{$ifdef USETHREADPOOL} { currently only available under Windows } 
+  {$ifdef MSWINDOWS}
+    // I/O completion ports API is the best option under Windows
+    // under Linux/POSIX, we fallback to a classical event-driven pool
+    {$define USE_WINIOCP}
+  {$endif}
 
   TSynThreadPool = class;
 
@@ -875,27 +870,36 @@ type
   TSynThreadPoolSubThread = class(TSynThread)
   protected
     fOwner: TSynThreadPool;
+    fProcessingContext: pointer;
+    fProcessingContextCS: TRTLCriticalSection;
+    {$ifndef USE_WINIOCP}
+    fEvent: TEvent;
+    function AssignProcess(aContext: pointer): boolean;
+    {$endif}
   public
     /// initialize the thread
     constructor Create(Owner: TSynThreadPool); reintroduce;
+    /// finalize the thread
+    destructor Destroy; override;
     /// will loop for any pending IOCP commands, and execute fOwner.Task()
     procedure Execute; override;
   end;
 
-  /// a simple Thread Pool, used for fast handling HTTP requests
-  // - will handle multi-connection with less overhead than creating a thread
-  // for each incoming request
-  // - this Thread Pool is implemented over I/O Completion Ports, which is a faster
-  // method than keeping a TThread list, and resume them on request: I/O completion
-  // just has the thread running while there is pending tasks, with no pause/resume
+  /// a simple Thread Pool, used e.g. for fast handling HTTP requests
+  // - implemented over I/O Completion Ports under Windows, or a classical
+  // Event-driven approach under Linux/POSIX 
   TSynThreadPool = class
   protected
-    FRequestQueue: THandle;
-    FSubThreadCount: integer; // TSynThreadPoolSubThread count = NumberOfThreads
-    FWorkThreadCount: integer;
-    FOnHttpThreadTerminate: TNotifyThreadEvent;
+    {$ifdef USE_WINIOCP}
+    fRequestQueue: THandle;
+    {$endif}
+    fSubThread: TObjectList; // holds TSynThreadPoolSubThread
+    fSubThreadRunning: integer;
+    fExceptionsCount: integer;
+    fOnHttpThreadTerminate: TNotifyThreadEvent;
+    fTerminated: boolean;
     /// process to be executed after notification
-    procedure Task(aCaller: TSynThreadPoolSubThread; aContext: Pointer); virtual; abstract;
+    procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
   public
     /// initialize a thread pool with the supplied number of threads
     // - abstract Task() virtual method will be called by one of the threads
@@ -903,26 +907,29 @@ type
     constructor Create(NumberOfThreads: Integer=32);
     /// shut down the Thread pool, releasing all associated threads
     destructor Destroy; override;
+    /// add an incoming HTTP request to the Thread Pool
+    // - returns false if there is no thread available in the pool
+    // - matches TOnThreadPoolSocketPush event handler signature
+    // - here aContext parameter will be a pointer(TSocket=THandle) value
+    function Push(aContext: pointer): boolean;
   end;
 
   /// a simple Thread Pool, used for fast handling HTTP requests of a THttpServer
+  // - will handle multi-connection with less overhead than creating a thread
+  // for each incoming request
   // - will create a THttpServerResp response thread, if the incoming request
   // is identified as HTTP/1.1 keep alive
   TSynThreadPoolTHttpServer = class(TSynThreadPool)
   protected
     fServer: THttpServer;
-    procedure Task(aCaller: TSynThreadPoolSubThread; aContext: Pointer); override;
+    // here aContext is a pointer(TSocket=THandle) value
+    procedure Task(aCaller: TSynThread; aContext: Pointer); override;
   public
     /// initialize a thread pool with the supplied number of threads
     // - Task() overridden method processs the HTTP request set by Push()
     // - up to 256 threads can be associated to a Thread Pool
     constructor Create(Server: THttpServer; NumberOfThreads: Integer=32); reintroduce;
-    /// add an incoming HTTP request to the Thread Pool
-    // - matches TOnThreadPoolSocketPush event handler signature
-    function Push(aClientSock: TSocket): Boolean;
   end;
-
-{$endif USETHREADPOOL}
 
 {$M+} // to have existing RTTI for published properties
   THttpServerGeneric = class;
@@ -1045,7 +1052,7 @@ type
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
-    constructor Create(CreateSuspended: Boolean; OnStart,OnStop: TNotifyThreadEvent;
+    constructor Create(CreateSuspended: boolean; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString); reintroduce;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
@@ -1221,7 +1228,7 @@ type
     // - if you will call AddUrl() methods later, set CreateSuspended to TRUE,
     // then call explicitely the Resume method, after all AddUrl() calls, in
     // order to start the server
-    constructor Create(CreateSuspended: Boolean; QueueName: SynUnicode='';
+    constructor Create(CreateSuspended: boolean; QueueName: SynUnicode='';
       OnStart: TNotifyThreadEvent=nil; OnStop: TNotifyThreadEvent=nil;
       const ProcessName: SockString=''); reintroduce;
     /// release all associated memory and handles
@@ -1397,6 +1404,11 @@ type
   end;
   {$endif MSWINDOWS}
 
+  /// an event handler for implementing a socked-based Thread Pool
+  // - matches TSynThreadPool.Push method signature
+  // - uses pointer instead of TSocket=THandle to be implementation neutral
+  // - should return false if there is no thread available in the pool
+  TOnThreadPoolSocketPush = function(aClientSock: pointer): boolean of object;
 
   /// main HTTP server Thread using the standard Sockets API (e.g. WinSock)
   // - bind to a port and listen to incoming requests
@@ -1415,9 +1427,7 @@ type
     fThreadPoolPush: TOnThreadPoolSocketPush;
     fThreadPoolContentionCount: cardinal;
     fThreadPoolContentionAbortCount: cardinal;
-    {$ifdef USETHREADPOOL}
     fThreadPool: TSynThreadPoolTHttpServer;
-    {$endif}
     fInternalHttpServerRespList: TList;
     fServerConnectionCount: cardinal;
     fServerKeepAliveTimeOut: cardinal;
@@ -1447,8 +1457,7 @@ type
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString {$ifdef USETHREADPOOL};
-        ServerThreadPoolCount: integer=32{$endif});
+      const ProcessName: SockString; ServerThreadPoolCount: integer=32);
       reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
@@ -1523,7 +1532,7 @@ type
   THttpRequestExtendedOptions = record
     /// let HTTPS be less paranoid about SSL certificates
     // - IgnoreSSLCertificateErrors is handled by TWinHttp and TCurlHTTP
-    IgnoreSSLCertificateErrors: Boolean;
+    IgnoreSSLCertificateErrors: boolean;
     /// allow HTTP authentication to take place at connection
     // - Auth.Scheme and UserName/Password properties are handled
     // by the TWinHttp class only by now
@@ -1597,7 +1606,7 @@ type
     // THttpRequest.Get() but either TWinHTTP.Get(), TWinINet.Get() or
     // TCurlHTTP.Get() methods
     class function Get(const aURI: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: Boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
     /// wrapper method to create a resource via an HTTP POST
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1608,7 +1617,7 @@ type
     // THttpRequest.Post() but either TWinHTTP.Post(), TWinINet.Post() or
     // TCurlHTTP.Post() methods
     class function Post(const aURI, aData: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: Boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
     /// wrapper method to update a resource via an HTTP PUT
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1619,7 +1628,7 @@ type
     // THttpRequest.Put() but either TWinHTTP.Put(), TWinINet.Put() or
     // TCurlHTTP.Put() methods
     class function Put(const aURI, aData: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: Boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
     /// wrapper method to delete a resource via an HTTP DELETE
     // - will parse the supplied URI to check for the http protocol (HTTP/HTTPS),
     // server name and port, and resource name
@@ -1628,7 +1637,7 @@ type
     // THttpRequest.Delete() but either TWinHTTP.Delete(), TWinINet.Delete() or
     // TCurlHTTP.Delete() methods
     class function Delete(const aURI: SockString; const aHeader: SockString='';
-      aIgnoreSSLCertificateErrors: Boolean=true; outHeaders: PSockString=nil): SockString;
+      aIgnoreSSLCertificateErrors: boolean=true; outHeaders: PSockString=nil): SockString;
 
     /// will register a compression algorithm
     // - used e.g. to compress on the fly the data, with standard gzip/deflate
@@ -4023,7 +4032,7 @@ end;
 
 { THttpServerGeneric }
 
-constructor THttpServerGeneric.Create(CreateSuspended: Boolean;
+constructor THttpServerGeneric.Create(CreateSuspended: boolean;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 begin
   fProcessName := ProcessName;
@@ -4082,7 +4091,7 @@ end;
 { THttpServer }
 
 constructor THttpServer.Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-  const ProcessName: SockString {$ifdef USETHREADPOOL}; ServerThreadPoolCount: integer{$endif});
+  const ProcessName: SockString; ServerThreadPoolCount: integer);
 begin
   InitializeCriticalSection(fProcessCS);
   fSock := TCrtSocket.Bind(aPort); // BIND + LISTEN
@@ -4090,12 +4099,10 @@ begin
   fInternalHttpServerRespList := TList.Create;
   if fThreadRespClass=nil then
     fThreadRespClass := THttpServerResp;
-  {$ifdef USETHREADPOOL}
   if ServerThreadPoolCount>0 then begin
     fThreadPool := TSynThreadPoolTHttpServer.Create(self,ServerThreadPoolCount);
     fThreadPoolPush := fThreadPool.Push;
   end;
-  {$endif}
   inherited Create(false,OnStart,OnStop,ProcessName);
 end;
 
@@ -4126,9 +4133,7 @@ begin
   end;
   LeaveCriticalSection(fProcessCS);
   fThreadPoolPush := nil;
-  {$ifdef USETHREADPOOL}
   FreeAndNil(fThreadPool); // release all associated threads and I/O completion
-  {$endif}
   {$ifdef LINUX}
   {$ifdef FPC}
   KillThread(ThreadID);  // manualy do it here
@@ -4186,18 +4191,19 @@ abort:  Shutdown(ClientSock,1);
       end;
       {$else}
       if Assigned(fThreadPoolPush) then begin
-        if not fThreadPoolPush(ClientSock) then begin
+        if not fThreadPoolPush(pointer(ClientSock)) then begin
+          // returned false if there is no idle thread in the pool
           for i := 1 to 1500 do begin
             inc(fThreadPoolContentionCount);
             SleepHiRes(20); // wait a little until a thread is available
             if Terminated then
               break;
-            if fThreadPoolPush(ClientSock) then
+            if fThreadPoolPush(pointer(ClientSock)) then
               exit; // the thread pool acquired the client sock
           end;
           inc(fThreadPoolContentionAbortCount);
           goto abort; // 1500*20 = 30 seconds timeout
-        end
+        end;
       end else
         // default implementation creates one thread for each incoming socket
         fThreadRespClass.Create(ClientSock, self);
@@ -4328,7 +4334,7 @@ end;
 
 { TSynThread }
 
-constructor TSynThread.Create(CreateSuspended: Boolean);
+constructor TSynThread.Create(CreateSuspended: boolean);
 begin
   {$ifdef FPC}
   inherited Create(CreateSuspended,512*1024); // DefaultSizeStack=512KB
@@ -4396,17 +4402,13 @@ end;
 constructor THttpServerResp.Create(aSock: TSocket; aServer: THttpServer);
 begin
   fClientSock := aSock; // ensure it is set ASAP: on Linux, Execute raises immediately
-  Create(THttpServerSocket.Create(aServer),aServer{$ifdef USETHREADPOOL},nil{$endif});
+  Create(THttpServerSocket.Create(aServer),aServer);
 end;
 
-constructor THttpServerResp.Create(aServerSock: THttpServerSocket;
-  aServer: THttpServer{$ifdef USETHREADPOOL}; aThreadPool: TSynThreadPoolTHttpServer{$endif});
+constructor THttpServerResp.Create(aServerSock: THttpServerSocket; aServer: THttpServer);
 begin
   fServer := aServer;
   fServerSock := aServerSock;
-  {$ifdef USETHREADPOOL}
-  fThreadPool := aThreadPool;
-  {$endif}
   fOnTerminate := fServer.fOnTerminate;
   EnterCriticalSection(fServer.fProcessCS);
   try
@@ -4425,11 +4427,6 @@ procedure THttpServerResp.Execute;
   var StartTick, StopTick, Tick: cardinal;
       pending: TCrtSocketPending;
   begin
-    {$ifdef USETHREADPOOL}
-    if fThreadPool<>nil then
-      InterlockedIncrement(fThreadPool.FWorkThreadCount);
-    {$endif}
-    try
     try
       repeat
         StartTick := GetTickCount;
@@ -4465,12 +4462,6 @@ procedure THttpServerResp.Execute;
           end;
          until false;
       until false;
-    finally
-      {$ifdef USETHREADPOOL}
-      if fThreadPool<>nil then
-        InterlockedDecrement(fThreadPool.FWorkThreadCount);
-      {$endif}
-    end;
     except
       on E: Exception do
         ; // any exception will silently disconnect the client
@@ -4845,8 +4836,6 @@ begin
 end;
 
 
-{$ifdef USETHREADPOOL}
-
 { TSynThreadPool }
 
 const
@@ -4861,81 +4850,158 @@ const
   // if HTTP body length is bigger than 1 MB, creates a dedicated THttpServerResp
   THREADPOOL_BIGBODYSIZE = 1024*1024;
 
-  // Posted to the completion port when shutting down
-  SHUTDOWN_FLAG = POverlapped(-1);
-
 constructor TSynThreadPool.Create(NumberOfThreads: Integer);
 var i: integer;
 begin
   if NumberOfThreads=0 then
     NumberOfThreads := 1 else
-  if cardinal(NumberOfThreads)>THREADPOOL_MAXSUBTHREADS then
-    NumberOfThreads := THREADPOOL_MAXSUBTHREADS;
+    if cardinal(NumberOfThreads)>THREADPOOL_MAXSUBTHREADS then
+      NumberOfThreads := THREADPOOL_MAXSUBTHREADS;
   // create IO completion port to queue the HTTP requests
-  FRequestQueue := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
-  if FRequestQueue=INVALID_HANDLE_VALUE then begin
-    FRequestQueue := 0;
+  {$ifdef USE_WINIOCP}
+  fRequestQueue := CreateIoCompletionPort(INVALID_HANDLE_VALUE, 0, 0, NumberOfThreads);
+  if fRequestQueue=INVALID_HANDLE_VALUE then begin
+    fRequestQueue := 0;
     exit;
   end;
+  {$endif}
   // now create the worker threads
+  fSubThread := TObjectList.Create(true);
   for i := 1 to NumberOfThreads do
-    TSynThreadPoolSubThread.Create(Self);
+    fSubThread.Add(TSynThreadPoolSubThread.Create(Self));
 end;
 
 destructor TSynThreadPool.Destroy;
 var i: integer;
     endtime: cardinal;
 begin
-  if FRequestQueue<>0 then begin
-    // tell the threads we're shutting down
-    for i := 1 to FSubThreadCount do
-      PostQueuedCompletionStatus(FRequestQueue, 0, 0, SHUTDOWN_FLAG);
+  fTerminated := true;
+  try
+    // notify the threads we are shutting down
+    for i := 0 to fSubThread.Count-1 do
+      {$ifdef USE_WINIOCP}
+      PostQueuedCompletionStatus(fRequestQueue,0,0,nil);
+      {$else}
+      TSynThreadPoolSubThread(fSubThread.Items[i]).fEvent.SetEvent;
+      {$endif}
     // wait for threads to finish, with 30 seconds TimeOut
     endtime := GetTickCount+30000;
-    repeat
-      Sleep(10);
-    until (FSubThreadCount=0) or (GetTickCount>endtime);
-    // close the request queue handle
-    CloseHandle(FRequestQueue);
-    FRequestQueue := 0;
+    while (fSubThreadRunning>0) and (GetTickCount<endtime) do
+      Sleep(5);
+    fSubThread.Free;
+  finally
+    {$ifdef USE_WINIOCP}
+    CloseHandle(fRequestQueue);
+    {$endif}
   end;
+  inherited Destroy;
 end;
+
+function TSynThreadPool.Push(aContext: pointer): boolean;
+{$ifndef USE_WINIOCP}
+var i: integer;
+    thread: ^TSynThreadPoolSubThread;
+{$endif}
+begin
+  result := false;
+  if (self=nil) or fTerminated then
+    exit;
+  {$ifdef USE_WINIOCP}
+  result := PostQueuedCompletionStatus(fRequestQueue,0,0,aContext);
+  {$else}
+  thread := pointer(fSubThread.List);
+  for i := 1 to fSubThread.Count do
+    if (thread^.fProcessingContext=nil) and thread^.AssignProcess(aContext) then begin
+      result := true;
+      exit;
+    end else
+      inc(thread);
+  {$endif}
+end;
+
 
 { TSynThreadPoolSubThread }
 
 constructor TSynThreadPoolSubThread.Create(Owner: TSynThreadPool);
 begin
   fOwner := Owner; // ensure it is set ASAP: on Linux, Execute raises immediately
-  fOnTerminate := Owner.FOnHttpThreadTerminate;
-  FreeOnTerminate := true;
+  fOnTerminate := Owner.fOnHttpThreadTerminate;
+  InitializeCriticalSection(fProcessingContextCS);
+  {$ifndef USE_WINIOCP}
+  fEvent := TEvent.Create(nil,false,false,'');
+  {$endif}
   inherited Create(false);
 end;
 
+destructor TSynThreadPoolSubThread.Destroy;
+begin
+  inherited Destroy;
+  DeleteCriticalSection(fProcessingContextCS);
+  {$ifndef USE_WINIOCP}
+  fEvent.Free;
+  {$endif}
+end;
+
+{$ifdef USE_WINIOCP}
 function GetQueuedCompletionStatus(CompletionPort: THandle;
-  var lpNumberOfBytesTransferred: pointer; var lpCompletionKey: PtrUInt;
-  var lpOverlapped: POverlapped; dwMilliseconds: DWORD): BOOL; stdcall;
+  var lpNumberOfBytesTransferred: DWORD; var lpCompletionKey: PtrUInt;
+  var lpOverlapped: pointer; dwMilliseconds: DWORD): BOOL; stdcall;
   external kernel32; // redefine with an unique signature for all Delphi/FPC
+{$else}
+function TSynThreadPoolSubThread.AssignProcess(aContext: pointer): boolean;
+begin
+  result := false;
+  EnterCriticalSection(fProcessingContextCS);
+  try
+    if fProcessingContext=nil then begin
+      fProcessingContext := aContext;
+      fEvent.SetEvent;
+      result := true; // successfully sent to an idle thread
+    end;
+  finally
+    LeaveCriticalSection(fProcessingContextCS);
+  end;
+end;
+{$endif}
 
 procedure TSynThreadPoolSubThread.Execute;
 var Context: pointer;
-    Key: PtrUInt;
-    Overlapped: POverlapped;
+    {$ifdef USE_WINIOCP}
+    Dummy1: DWORD;
+    Dummy2: PtrUInt;
+    {$endif}
 begin
   if fOwner<>nil then
   try
-    InterlockedIncrement(fOwner.FSubThreadCount);
-    while GetQueuedCompletionStatus(fOwner.FRequestQueue,Context,Key,OverLapped,INFINITE) do
-    try
-      if OverLapped=SHUTDOWN_FLAG then
-        break; // exit thread
+    InterlockedIncrement(fOwner.fSubThreadRunning);
+    repeat
+      {$ifdef USE_WINIOCP}
+      if not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) then
+        break;
+      {$else}
+      fEvent.WaitFor(INFINITE);
+      if fOwner.fTerminated then
+        break;
+      EnterCriticalSection(fProcessingContextCS);
+      Context := fProcessingContext;
+      LeaveCriticalSection(fProcessingContextCS);
+      {$endif}
       if Context<>nil then
-        fOwner.Task(Self,Context);
-    except
-      on Exception do
-        ; // we should handle all exceptions in this loop
-    end;
+        try
+          try
+            fOwner.Task(Self,Context);
+          finally
+            EnterCriticalSection(fProcessingContextCS);
+            fProcessingContext := nil;
+            LeaveCriticalSection(fProcessingContextCS);
+          end;
+        except
+          on Exception do  // we should handle all exceptions in this loop
+            inc(fOwner.fExceptionsCount);
+        end;
+    until fOwner.fTerminated;
   finally
-    InterlockedDecrement(fOwner.FSubThreadCount);
+    InterlockedDecrement(fOwner.fSubThreadRunning);
   end;
 end;
 
@@ -4948,35 +5014,29 @@ begin
   fServer := Server;
 end;
 
-function TSynThreadPoolTHttpServer.Push(aClientSock: TSocket): boolean;
-begin
-  result := false;
-  if (Self=nil) or (FRequestQueue=0) then
-    exit;
-  result := PostQueuedCompletionStatus(FRequestQueue,PtrUInt(aClientSock),0,nil);
-end;
-
-procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThreadPoolSubThread;
-  aContext: Pointer);
+procedure TSynThreadPoolTHttpServer.Task(aCaller: TSynThread; aContext: Pointer);
 var ServerSock: THttpServerSocket;
 begin
+  if fServer.Terminated then
+    exit;
   ServerSock := THttpServerSocket.Create(fServer);
   try
     ServerSock.InitRequest(TSocket(aContext));
     // get Header of incoming request
     if ServerSock.GetRequest(false) then
       // connection and header seem valid -> process request further
-      if (FWorkThreadCount<THREADPOOL_MAXWORKTHREADS) and
+      if (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
         // HTTP/1.1 Keep Alive -> process in background thread
         // or posted data > 1 MB -> process in dedicated background thread
-        fServer.fThreadRespClass.Create(ServerSock,fServer,self);
+        fServer.fThreadRespClass.Create(ServerSock,fServer);
         ServerSock := nil; // THttpServerResp will do ServerSock.Free
       end else begin
         // no Keep Alive = multi-connection -> process in the Thread Pool
         ServerSock.GetBody; // we need to get it now
-        fServer.Process(ServerSock,0,aCaller); // multi-connection -> ID=0
+        // multi-connection -> ID=0
+        fServer.Process(ServerSock,0,aCaller);
         fServer.OnDisconnect;
         // no Shutdown here: will be done client-side
       end;
@@ -4985,7 +5045,6 @@ begin
   end;
 end;
 
-{$endif USETHREADPOOL}
 
 {$ifdef MSWINDOWS}
 
@@ -5474,7 +5533,7 @@ type
 
   HTTP_LISTEN_ENDPOINT_INFO = record
     Flags: HTTP_PROPERTY_FLAGS;
-    EnableSharing: BOOLEAN;
+    EnableSharing: boolean;
   end;
   PHTTP_LISTEN_ENDPOINT_INFO = ^HTTP_LISTEN_ENDPOINT_INFO;
 
@@ -6219,7 +6278,7 @@ begin
       THttpApiServer(Clones[i]).OnHttpThreadTerminate := Event;
 end;
 
-constructor THttpApiServer.Create(CreateSuspended: Boolean; QueueName: SynUnicode;
+constructor THttpApiServer.Create(CreateSuspended: boolean; QueueName: SynUnicode;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 var bindInfo: HTTP_BINDING_INFO;
 begin
@@ -6996,7 +7055,8 @@ end;
 const
   HTTP_LOG_FIELD_TEST_SUB_STATUS: THttpApiLogFields = [hlfSubStatus];
 
-{$endif MSWINDOWS}
+{$endif MSWINDOWS} // encapsulate whole http.sys / HTTP API process
+
 
 { THttpRequest }
 
@@ -7030,7 +7090,7 @@ begin
 end;
 
 class function THttpRequest.InternalREST(const url,method,data,header: SockString;
-  aIgnoreSSLCertificateErrors: Boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 var URI: TURI;
     oh: SockString;
 begin
@@ -7053,25 +7113,25 @@ begin
 end;
 
 class function THttpRequest.Get(const aURI,aHeader: SockString;
-  aIgnoreSSLCertificateErrors: Boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 begin
   result := InternalREST(aURI,'GET','',aHeader,aIgnoreSSLCertificateErrors,outHeaders);
 end;
 
 class function THttpRequest.Post(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: Boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 begin
   result := InternalREST(aURI,'POST',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders);
 end;
 
 class function THttpRequest.Put(const aURI, aData, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: Boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 begin
   result := InternalREST(aURI,'PUT',aData,aHeader,aIgnoreSSLCertificateErrors,outHeaders);
 end;
 
 class function THttpRequest.Delete(const aURI, aHeader: SockString;
-  aIgnoreSSLCertificateErrors: Boolean; outHeaders: PSockString): SockString;
+  aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 begin
   result := InternalREST(aURI,'DELETE','',aHeader,aIgnoreSSLCertificateErrors,outHeaders);
 end;
@@ -8087,7 +8147,6 @@ begin
   fIn.DataOffset := 0;
   Finalize(fOut);
 end;
-
 
 {$endif USELIBCURL}
 
