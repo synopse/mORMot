@@ -6625,13 +6625,27 @@ const
   /// maximum number of fields in a database Table
   // - is included in SynCommons so that all DB-related work will be able to
   // share the same low-level types and functions (e.g. TSQLFieldBits,
-  // TJSONWriter, TSynTableStatement, TSynTable)
+  // TJSONWriter, TSynTableStatement, TSynTable, TSQLRecordProperties)
   // - default is 64, but can be set to any value (64, 128, 192 and 256 optimized)
+  // changing the source below or using MAX_SQLFIELDS_128, MAX_SQLFIELDS_192 or
+  // MAX_SQLFIELDS_256 conditional directives for your project
   // - this constant is used internaly to optimize memory usage in the
   // generated asm code, and statically allocate some arrays for better speed
   // - note that due to Delphi compiler restriction, 256 is the maximum value
   // (this is the maximum number of items in a Delphi set)
+  {$ifdef MAX_SQLFIELDS_128}
+  MAX_SQLFIELDS = 128;
+  {$else}
+  {$ifdef MAX_SQLFIELDS_192}
+  MAX_SQLFIELDS = 192;
+  {$else}
+  {$ifdef MAX_SQLFIELDS_256}
+  MAX_SQLFIELDS = 256;
+  {$else}
   MAX_SQLFIELDS = 64;
+  {$endif}
+  {$endif}
+  {$endif}
 
   /// sometimes, the ID field is included in a bits set
   MAX_SQLFIELDS_INCLUDINGID = MAX_SQLFIELDS+1;
@@ -31117,23 +31131,6 @@ begin
     result := CompareMem(@A,@B,sizeof(TSQLFieldBits))
 end;
 
-procedure FillZero(var Values: TRawUTF8DynArray);
-var i: integer;
-begin
-  for i := 0 to length(Values)-1 do
-    Values[i] := '';
-end;
-
-procedure FillZero(var Values: TIntegerDynArray);
-begin
-  FillCharFast(Values[0],length(Values)*SizeOf(integer),0);
-end;
-
-procedure FillZero(var Values: TInt64DynArray); overload;
-begin
-  FillCharFast(Values[0],length(Values)*SizeOf(Int64),0);
-end;
-
 procedure FillZero(var Fields: TSQLFieldBits);
 begin
   if MAX_SQLFIELDS=64 then
@@ -31157,6 +31154,23 @@ begin
 end;
 
 {$WARNINGS ON}
+
+procedure FillZero(var Values: TRawUTF8DynArray);
+var i: integer;
+begin
+  for i := 0 to length(Values)-1 do
+    Values[i] := '';
+end;
+
+procedure FillZero(var Values: TIntegerDynArray);
+begin
+  FillCharFast(Values[0],length(Values)*SizeOf(integer),0);
+end;
+
+procedure FillZero(var Values: TInt64DynArray); overload;
+begin
+  FillCharFast(Values[0],length(Values)*SizeOf(Int64),0);
+end;
 
 procedure FieldBitsToIndex(const Fields: TSQLFieldBits; var Index: TSQLFieldIndexDynArray;
   MaxLength,IndexStart: integer);
