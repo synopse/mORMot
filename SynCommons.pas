@@ -11388,7 +11388,6 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadAbstract = class(TThread)
   protected
-    fPendingProcessLock: TRTLCriticalSection;
     fProcessEvent: TEvent;
     fOnBeforeExecute: TNotifyThreadEvent;
     fOnAfterExecute: TNotifyThreadEvent;
@@ -11429,7 +11428,6 @@ type
   // TSynBackgroundThreadMethod and provide a much more convenient callback
   TSynBackgroundThreadMethodAbstract = class(TSynBackgroundThreadAbstract)
   protected
-    fPendingProcessFlag: TSynBackgroundThreadProcessStep;
     fCallerEvent: TEvent;
     fParam: pointer;
     fCallerThreadID: TThreadID;
@@ -11437,6 +11435,8 @@ type
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnBeforeProcess: TNotifyThreadEvent;
     fOnAfterProcess: TNotifyThreadEvent;
+    fPendingProcessFlag: TSynBackgroundThreadProcessStep;
+    fPendingProcessLock: TSynLocker;
     procedure ExecuteLoop; override;
     function OnIdleProcessNotify(start: Int64): integer;
     function GetOnIdleBackgroundThreadActive: boolean;
@@ -11673,6 +11673,7 @@ procedure MultiEventMerge(var DestList; const ToBeAddedList);
 function EventEquals(const eventA,eventB): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+  
 { ************ fast ISO-8601 types and conversion routines ***************** }
 
 type
@@ -60757,14 +60758,14 @@ var s: RawByteString;
 begin
   {$ifdef FPC}
   exit;
-  {$endif}
+  {$endif FPC}
   {$ifdef NOSETTHREADNAME}
   exit;
-  {$endif}
+  {$endif NOSETTHREADNAME}
   {$ifdef MSWINDOWS}
   if not IsDebuggerPresent then
     exit;
-  {$endif}
+  {$endif MSWINDOWS}
   s := CurrentAnsiConvert.UTF8ToAnsi(Name);
   {$ifdef ISDELPHIXE2}
   TThread.NameThreadForDebugging(s,ThreadID);
@@ -60777,8 +60778,8 @@ begin
   try
     RaiseException($406D1388,0,SizeOf(info) div SizeOf(LongWord),@info);
   except {ignore} end;
-  {$endif}
-  {$endif}
+  {$endif MSWINDOWS}
+  {$endif ISDELPHIXE2}
 end;
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
@@ -60788,13 +60789,12 @@ begin
   fThreadName := aThreadName;
   fOnBeforeExecute := OnBeforeExecute;
   fOnAfterExecute := OnAfterExecute;
-  InitializeCriticalSection(fPendingProcessLock);
   inherited Create(false{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
 end;
 
 {$ifdef KYLIX3}
 type
-  // see http://stackoverflow.com/a/3085509/458259 about the Kylix only bug
+  // see http://stackoverflow.com/a/3085509/458259 about this known Kylix bug
   TEventHack = class(THandleObject) // should match EXACTLY SyncObjs.pas source!
   private
     FEvent: TSemaphore;
@@ -60803,16 +60803,16 @@ type
 
 function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
 var E: TEventHack absolute Event;
-procedure SetResult(res: integer);
-begin
-  if res=0 then
-    result := wrSignaled else
-  if errno in [EAGAIN,ETIMEDOUT] then
-    result := wrTimeOut else begin
-    write(TimeOut,':',errno,' ');
-    result := wrError;
+  procedure SetResult(res: integer);
+  begin
+    if res=0 then
+      result := wrSignaled else
+    if errno in [EAGAIN,ETIMEDOUT] then
+      result := wrTimeOut else begin
+      write(TimeOut,':',errno,' ');
+      result := wrError;
+    end;
   end;
-end;
 {.$define USESEMTRYWAIT}
 // sem_timedwait() is slower than sem_trywait(), but consuming much less CPU
 {$ifdef USESEMTRYWAIT}
@@ -60865,7 +60865,7 @@ begin
   end;
 end;
 
-{$else KYLIX3} // original FPC or Windows is OK:
+{$else KYLIX3} // original FPC or Windows implementation is OK:
 
 function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
 begin
@@ -60882,7 +60882,6 @@ end;
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
   FreeAndNil(fProcessEvent);
-  DeleteCriticalSection(fPendingProcessLock);
   inherited Destroy;
 end;
 
@@ -60914,6 +60913,7 @@ constructor TSynBackgroundThreadMethodAbstract.Create(aOnIdle: TOnIdleSynBackgro
 begin
   fOnIdle := aOnIdle; // cross-platform may run Execute as soon as Create is called
   fCallerEvent := TEvent.Create(nil,false,false,'');
+  fPendingProcessLock.Init;
   inherited Create(aThreadName,OnBeforeExecute,OnAfterExecute);
 end;
 
@@ -60921,23 +60921,24 @@ destructor TSynBackgroundThreadMethodAbstract.Destroy;
 begin
   SetPendingProcess(flagDestroying);
   fProcessEvent.SetEvent;  // notify terminated
-  FixedWaitForever(fCallerEvent);
+  FixedWaitForever(fCallerEvent); // wait for actual termination
   FreeAndNil(fCallerEvent);
   inherited Destroy;
+  fPendingProcessLock.Done;
 end;
 
 function TSynBackgroundThreadMethodAbstract.GetPendingProcess: TSynBackgroundThreadProcessStep;
 begin
-  EnterCriticalSection(fPendingProcessLock);
+  fPendingProcessLock.Lock;
   result := fPendingProcessFlag;
-  LeaveCriticalSection(fPendingProcessLock);
+  fPendingProcessLock.UnLock;
 end;
 
 procedure TSynBackgroundThreadMethodAbstract.SetPendingProcess(State: TSynBackgroundThreadProcessStep);
 begin
-  EnterCriticalSection(fPendingProcessLock);
+  fPendingProcessLock.Lock;
   fPendingProcessFlag := State;
-  LeaveCriticalSection(fPendingProcessLock);
+  fPendingProcessLock.UnLock;
 end;
 
 procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
@@ -60980,26 +60981,9 @@ begin
   end;
 end;
 
-
-{ TSynBackgroundThreadEvent }
-
-constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
-  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
-begin
-  inherited Create(aOnIdle,aThreadName);
-  fOnProcess := aOnProcess;
-end;
-
-procedure TSynBackgroundThreadEvent.Process;
-begin
-  if not Assigned(fOnProcess) then
-    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
-  fOnProcess(self,fParam);
-end;
-
 function TSynBackgroundThreadMethodAbstract.AcquireThread: TSynBackgroundThreadProcessStep;
 begin
-  EnterCriticalSection(fPendingProcessLock);
+  fPendingProcessLock.Lock;
   try
     result := fPendingProcessFlag;
     if result=flagIdle then begin // we just acquired the thread! congrats!
@@ -61007,7 +60991,7 @@ begin
       fCallerThreadID := {$ifdef BSD}Cardinal{$endif}(ThreadID);
     end;
   finally
-    LeaveCriticalSection(fPendingProcessLock);
+    fPendingProcessLock.UnLock;
   end;
 end;
 
@@ -61087,6 +61071,23 @@ end;
 function TSynBackgroundThreadMethodAbstract.GetOnIdleBackgroundThreadActive: boolean;
 begin
   result := (self<>nil) and Assigned(fOnIdle) and (GetPendingProcess<>flagIdle);
+end;
+
+
+{ TSynBackgroundThreadEvent }
+
+constructor TSynBackgroundThreadEvent.Create(aOnProcess: TOnProcessSynBackgroundThread;
+  aOnIdle: TOnIdleSynBackgroundThread; const aThreadName: RawUTF8);
+begin
+  inherited Create(aOnIdle,aThreadName);
+  fOnProcess := aOnProcess;
+end;
+
+procedure TSynBackgroundThreadEvent.Process;
+begin
+  if not Assigned(fOnProcess) then
+    raise ESynException.CreateUTF8('Invalid %.RunAndWait() call',[self]);
+  fOnProcess(self,fParam);
 end;
 
 
