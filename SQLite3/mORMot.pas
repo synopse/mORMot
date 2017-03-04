@@ -8491,20 +8491,21 @@ type
     /// delete the specified data Row from the Table
     // - only overwrite the internal fResults[] pointers, don't free any memory,
     // nor modify the internal DataSet
-    procedure DeleteRow(Row: integer);
+    function DeleteRow(Row: integer): boolean;
     /// delete the specified Column text from the Table
     // - don't delete the Column: only delete UTF-8 text in all rows for this field
-    procedure DeleteColumnValues(Field: integer);
+    function DeleteColumnValues(Field: integer): boolean;
 
     /// retrieve QueryTables[0], if existing
     function QueryRecordType: TSQLRecordClass;
 
     /// create a new TSQLRecord instance for a specific Table
+    // - a void TSQLRecord instance is created, ready to be filled 
     // - use the specified TSQLRecord class or create one instance
     // of the first associated record class (from internal QueryTables[])
-    // - use this method to create a working copy of a table's record, e.g.
-    // - the record will be freed when the TSQLTable will be destroyed:
-    // you don't need to make a Try..Finally..Free..end block with it
+    // - the returned records will be managed by this TSQLTable: they will be
+    // freed when the TSQLTable is destroyed: you don't need to make a
+    // try..finally..Free..end block with them
     function NewRecord(RecordType: TSQLRecordClass=nil): TSQLRecord;
     /// create a TObjectList with TSQLRecord instances corresponding to this
     // TSQLTable result set
@@ -8532,7 +8533,7 @@ type
     // - returns TRUE on success (even if ObjArray=[]), FALSE on error
     function ToObjArray(var ObjArray; RecordType: TSQLRecordClass=nil): boolean;
 
-    /// After a TSQLTable has been initialized, this method can be called
+    /// after a TSQLTable has been initialized, this method can be called
     // one or more times to iterate through all data rows
     // - you shall call this method before calling FieldBuffer()/Field() methods
     // - return TRUE on success, with data ready to be retrieved by Field*()
@@ -24433,10 +24434,12 @@ begin
     result := fRowCount; // not found -> return last row index
 end;
 
-procedure TSQLTable.DeleteRow(Row: integer);
+function TSQLTable.DeleteRow(Row: integer): boolean;
 begin
-  if (self=nil) or (Row<1) or (Row>fRowCount) then
+  if (self=nil) or (Row<1) or (Row>fRowCount) then begin
+    result := false;
     exit; // out of range
+  end;
   if Assigned(fIDColumn) then
     if Row<fRowCount then
       MoveFast(fIDColumn[Row+1],fIDColumn[Row],(fRowCount-Row)*sizeof(PUTF8Char));
@@ -24445,6 +24448,7 @@ begin
     MoveFast(fResults[Row+FieldCount],fResults[Row],(fRowCount*FieldCount-Row)*sizeof(pointer));
   end;
   dec(fRowCount);
+  result := true;
 end;
 
 procedure TSQLTable.InitFieldNames;
@@ -24552,17 +24556,20 @@ end;
 
 {$endif NOVARIANTS}
 
-procedure TSQLTable.DeleteColumnValues(Field: integer);
+function TSQLTable.DeleteColumnValues(Field: integer): boolean;
 var i: integer;
     U: PPUTF8Char;
 begin
-  if cardinal(Field)>=cardinal(FieldCount) then
+  if cardinal(Field)>=cardinal(FieldCount) then begin
+    result := false;
     exit; // out of range
+  end;
   U := @fResults[Field+FieldCount];  // U^ = column UTF-8 content for this field
   for i := 1 to fRowCount do begin
     U^ := nil; // just void UTF-8 content text
     inc(U,FieldCount);
   end;
+  result := true;
 end;
 
 function TSQLTable.GetQueryTableNameFromSQL: RawUTF8;
@@ -26203,7 +26210,7 @@ begin
   try
     R.FillPrepare(self);
     DestList.Count := fRowCount;       // faster than manual Add()
-    Row := @fResults[FieldCount];     // Row^ points to first row of data
+    Row := @fResults[FieldCount];      // Row^ points to first row of data
     for i := 0 to fRowCount-1 do begin // TObjectList will free each instance
       DestList.List[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),TSQLRecord(DestList.List[i]));
