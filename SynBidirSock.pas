@@ -105,6 +105,65 @@ type
   ESynBidirSocket = class(ESynException);
 
 
+{ -------------- high-level SynCrtSock classes depending on SynCommons }
+
+type
+  /// in-memory storage of one THttpRequestCached entry
+  THttpRequestCache = record
+    Tag: RawUTF8;
+    Content: RawByteString;
+  end;
+  /// in-memory storage of all THttpRequestCached entries
+  THttpRequestCacheDynArray = array of THttpRequestCache;
+
+  /// handles cached HTTP connection to a remote server
+  // - use in-memory cached content when HTTP_NOTMODIFIED (304) is returned
+  // for an already known ETAG header value
+  THttpRequestCached = class(TSynPersistent)
+  protected
+    fURI: TURI;
+    fHttp: THttpRequest; // either fHttp or fSocket is used
+    fSocket: THttpClientSocket;
+    fKeepAlive: integer;
+    fTokenHeader: RawUTF8;
+    fCache: TSynDictionary;
+  public
+    /// initialize the cache for a given server
+    // - once set, you can change the request URI using the Address property
+    // - aKeepAliveSeconds = 0 will force "Connection: Close" HTTP/1.0 requests
+    // - an internal cache will be maintained, and entries will be flushed after
+    // aTimeoutSeconds - i.e. 15 minutes per default
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    constructor Create(const aURI: RawUTF8; aKeepAliveSeconds: integer=30;
+      aTimeoutSeconds: integer=15*60; const aToken: RawUTF8='';
+      aHttpClass: THttpRequestClass=nil); reintroduce;
+    /// finalize the current connnection and flush its in-memory cache
+    // - you may use LoadFromURI() to connect to a new server
+    procedure Clear;
+    /// connect to a new server
+    // - aToken is an optional token which will be transmitted as HTTP header:
+    // $ Authorization: Bearer <aToken>
+    // - TWinHttp will be used by default under Windows, unless you specify
+    // another class
+    function LoadFromURI(const aURI: RawUTF8; const aToken: RawUTF8='';
+      aHttpClass: THttpRequestClass=nil): boolean;
+    /// finalize the cache
+    destructor Destroy; override;
+    /// retrieve a resource from the server, or internal cache
+    // - aModified^ = true if server returned a HTTP_SUCCESS (200) with some new
+    // content, or aModified^ = false if HTTP_NOTMODIFIED (304) was returned
+    function Get(const aAddress: SockString; aModified: PBoolean=nil;
+      aStatus: PInteger=nil): SockString;
+    /// erase one resource from internal cache
+    function Flush(const aAddress: SockString): boolean;
+    /// read-only access to the connected server
+    property URI: TURI read fURI;
+  end;
+
+
 { -------------- WebSockets shared classes for bidirectional remote access }
 
 type
@@ -809,7 +868,7 @@ var
 
   /// number of bytes above which SynLZ compression may be done
   // - when working with TWebSocketProtocolBinary
-  // - it is useless to compress smaller frames, which fits in network MTU 
+  // - it is useless to compress smaller frames, which fits in network MTU
   WebSocketsBinarySynLzThreshold: integer = 450;
 
   /// how replay attacks will be handled in TWebSocketProtocolBinary encryption
@@ -818,7 +877,117 @@ var
   /// the allowed maximum size, in MB, of a WebSockets frame
   WebSocketsMaxFrameMB: cardinal = 256;
 
+
+
 implementation
+
+{ -------------- high-level SynCrtSock classes depending on SynCommons }
+
+
+{ THttpRequestCached }
+
+constructor THttpRequestCached.Create(const aURI: RawUTF8;
+  aKeepAliveSeconds, aTimeoutSeconds: integer; const aToken: RawUTF8;
+  aHttpClass: THttpRequestClass);
+begin
+  inherited Create;
+  fKeepAlive := aKeepAliveSeconds*1000;
+  fCache := TSynDictionary.Create(TypeInfo(TRawUTF8DynArray),
+    TypeInfo(THttpRequestCacheDynArray),true,aTimeoutSeconds);
+  if not LoadFromURI(aURI,aToken,aHttpClass) then
+    raise ESynException.CreateUTF8('%.Create: invalid aURI=%',[self,aURI]);
+end;
+
+procedure THttpRequestCached.Clear;
+begin
+  FreeAndNil(fHttp); // either fHttp or fSocket is used
+  FreeAndNil(fSocket);
+  fCache.DeleteAll;
+  fURI.Clear;
+  fTokenHeader := '';
+end;
+
+destructor THttpRequestCached.Destroy;
+begin
+  fCache.Free;
+  fHttp.Free;
+  fSocket.Free;
+  inherited Destroy;
+end;
+
+function THttpRequestCached.Get(const aAddress: SockString;
+  aModified: PBoolean; aStatus: PInteger): SockString;
+var cache: THttpRequestCache;
+    headin, headout: SockString;
+    status: integer;
+    modified: boolean;
+begin
+  result := '';
+  if (fHttp=nil) and (fSocket=nil) then // either fHttp or fSocket is used
+    exit;
+  if fCache.FindAndCopy(aAddress,cache) then
+    headin := FormatUTF8('If-None-Match: %',[cache.Tag]);
+  if fTokenHeader<>'' then begin
+    if headin<>'' then
+      headin := headin+#13#10;
+    headin := headin+fTokenHeader;
+  end;
+  if fSocket<>nil then
+    status := fSocket.Get(aAddress,fKeepAlive,headin) else
+    status := fHttp.Request(aAddress,'GET',fKeepAlive,headin,'','',headout,result);
+  modified := true;
+  case status of
+  STATUS_SUCCESS: begin
+    if fHttp<>nil then
+      cache.Tag := trim(FindIniNameValue(pointer(headout),'ETAG:')) else begin
+      cache.Tag := fSocket.HeaderValue('ETAG');
+      result := fSocket.Content;
+    end;
+    if cache.Tag <> '' then begin
+      cache.Content := result;
+      fCache.AddOrUpdate(aAddress,cache);
+    end;
+  end;
+  STATUS_NOTMODIFIED: begin
+    result := cache.Content;
+    modified := false;
+  end;
+  end;
+  if aModified<>nil then
+    aModified^ := modified;
+  if aStatus<>nil then
+    aStatus^ := status;
+end;
+
+function THttpRequestCached.LoadFromURI(const aURI, aToken: RawUTF8;
+  aHttpClass: THttpRequestClass): boolean;
+begin
+  result := false;
+  if (self=nil) or (fHttp<>nil) or (fSocket<>nil) or not fURI.From(aURI) then
+    exit;
+  if aToken <> '' then
+    FormatUTF8('Authorization: Bearer %',[aToken],fTokenHeader);
+  if aHttpClass=nil then begin
+    {$ifdef MSWINDOWS}
+    aHttpClass := TWinHTTP;
+    {$else}
+    {$ifdef USELIBCURL}
+    if fURI.Https then
+      aHttpClass := TCurlHTTP;
+    {$endif}
+    {$endif}
+  end;
+  if aHttpClass=nil then
+    fSocket := THttpClientSocket.Open(fURI.Server,fURI.Port) else
+    fHttp := aHttpClass.Create(fURI.Server,fURI.Port,fURI.Https);
+  result := true;
+end;
+
+function THttpRequestCached.Flush(const aAddress: SockString): boolean;
+begin
+  result := fCache.Delete(aAddress)>=0;
+end;
+
 
 
 { -------------- WebSockets shared classes for bidirectional remote access }
