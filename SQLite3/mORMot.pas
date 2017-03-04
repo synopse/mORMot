@@ -8484,8 +8484,9 @@ type
     /// get the Row index corresponding to a specified ID
     // - return the Row number, from 1 to RowCount
     // - return RowCount (last row index) if this ID was not found or no
-    // ID field is available
-    function RowFromID(aID: TID): integer;
+    // ID field is available, unless aNotFoundMinusOne is set, and then -1 is
+    // returned
+    function RowFromID(aID: TID; aNotFoundMinusOne: boolean=false): integer;
 
     /// delete the specified data Row from the Table
     // - only overwrite the internal fResults[] pointers, don't free any memory,
@@ -24400,7 +24401,7 @@ begin
   assert(comparemem(@AllID[0],@IDs[0],length(AllID)*sizeof(TID))); }
 end;
 
-function TSQLTable.RowFromID(aID: TID): integer;
+function TSQLTable.RowFromID(aID: TID; aNotFoundMinusOne: boolean): integer;
 var ID: RawUTF8;
     FID: integer;
     U: PPUTF8Char;
@@ -24427,7 +24428,9 @@ begin
       end;
     end;
   end;
-  result := fRowCount; // not found -> return last row index
+  if aNotFoundMinusOne then
+    result := -1 else
+    result := fRowCount; // not found -> return last row index
 end;
 
 procedure TSQLTable.DeleteRow(Row: integer);
