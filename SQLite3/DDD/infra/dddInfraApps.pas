@@ -345,6 +345,9 @@ type
     // - returns false on any error, true on success
     // - call e.g. TCrtSocket.TrySndLow() method
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
+    /// returns the low-level handle of this connection
+    // - is e.g. the socket file description
+    function Handle: integer;
   end;
 
   /// implements IDDDSocket using a SynCrtSock.TCrtSocket instance
@@ -376,6 +379,8 @@ type
     function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
     /// call TCrtSocket.TrySndLow() method
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
+    /// returns TCrtsocket.Sock
+    function Handle: integer;
     /// read-only access to the associated processing thread
     // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
     // would point to this instance
@@ -483,6 +488,8 @@ type
     // - returns false on any error, true on success
     // - then MockDataOut could be used to retrieve the sent data
     function DataOut(Content: PAnsiChar; ContentLength: integer): boolean;
+    /// returns 0 (no associated file descriptor)
+    function Handle: integer;
     /// read-only access to the associated processing thread
     // - not published, to avoid stack overflow since TDDDSocketThreadMonitoring
     // would point to this instance
@@ -1457,6 +1464,11 @@ begin
     StringToUTF8(SocketErrorMessage(fSocket.LastLowSocketError),result);
 end;
 
+function TDDDSynCrtSocket.Handle: integer;
+begin
+  result := fSocket.Sock;
+end;
+
 
 { TDDDMockedSocket }
 
@@ -1664,6 +1676,10 @@ begin
   fSafe.UnLock;
 end;
 
+function TDDDMockedSocket.Handle: integer;
+begin
+  result := 0;
+end;
 
 
 { ----- Implements ORM/SOA REST Client access }
