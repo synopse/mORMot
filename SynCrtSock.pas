@@ -1541,6 +1541,8 @@ type
     /// compute the root resource Address, without any URI-encoded parameter 
     // - e.g. '/category/name/10'
     function Root: SockString;
+    /// reset all stored information
+    procedure Clear;
   end;
 
   /// the supported authentication schemes which may be used by HTTP clients
@@ -1615,6 +1617,7 @@ type
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
     // http status error otherwise
+    // - KeepAlive is in milliseconds, 0 for "Connection: Close" HTTP/1.0 requests
     function Request(const url, method: SockString; KeepAlive: cardinal;
       const InHeader, InData, InDataType: SockString;
       out OutHeader, OutData: SockString): integer; virtual;
@@ -2838,11 +2841,16 @@ const
 const
   DEFAULT_PORT: array[boolean] of SockString = ('80','443');
 
-function TURI.From(aURI: SockString; const DefaultPort: SockString): boolean;
-var P,S: PAnsiChar;
+procedure TURI.Clear;
 begin
   Https := false;
   Finalize(self);
+end;
+
+function TURI.From(aURI: SockString; const DefaultPort: SockString): boolean;
+var P,S: PAnsiChar;
+begin
+  Clear;
   result := false;
   aURI := Trim(aURI);
   if aURI='' then
