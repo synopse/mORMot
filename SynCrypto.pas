@@ -1541,8 +1541,24 @@ function CryptDataForCurrentUserDPAPI(const Data,AppSecret: RawByteString; Encry
 // so has the same security level than plain CryptDataForCurrentUserDPAPI()
 // - under Linux/POSIX, access to the $HOME user's .xxxxxxxxxxx secret file with
 // chmod 400 is considered to be a safe enough approach
-// - this function is more than 50 times faster than CryptDataForCurrentUserDPAPI,
-// and consistent on all Operating Systems
+// - this function is up to 100 times faster than CryptDataForCurrentUserDPAPI,
+// generates smaller results, and is consistent on all Operating Systems
+// - you can use this function over a specified variable, to cypher it in place,
+// with try ... finally block to protect memory access of the plain data:
+// !  constructor TMyClass.Create;
+// !  ...
+// !    fSecret := CryptDataForCurrentUser('Some Secret Value','appsalt',true);
+// !  ...
+// !  procedure TMyClass.DoSomething;
+// !  var plain: RawByteString;
+// !  begin
+// !    plain := CryptDataForCurrentUser(fSecret,'appsalt',false);
+// !    try
+// !      // here plain = 'Some Secret Value'
+// !    finally
+// !      FillZero(plain); // safely erase uncyphered content from heap
+// !    end;
+// !  end;
 function CryptDataForCurrentUser(const Data,AppSecret: RawByteString; Encrypt: boolean): RawByteString;
 
 const

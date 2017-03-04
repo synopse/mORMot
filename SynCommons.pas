@@ -11393,7 +11393,7 @@ type
     fOnBeforeExecute: TNotifyThreadEvent;
     fOnAfterExecute: TNotifyThreadEvent;
     fThreadName: RawUTF8;
-    fExecuteFinished: boolean;
+    fExecute: (exCreated,exRun,exFinished);
     /// where the main process takes place
     procedure Execute; override;
     procedure ExecuteLoop; virtual; abstract;
@@ -60895,6 +60895,7 @@ begin
     if Assigned(fOnBeforeExecute) then
       fOnBeforeExecute(self);
     try
+      fExecute := exRun;
       while not Terminated do
         ExecuteLoop;
     finally
@@ -60902,7 +60903,7 @@ begin
         fOnAfterExecute(self);
     end;
   finally
-    fExecuteFinished := true;
+    fExecute := exFinished;
   end;
 end;
 
@@ -61166,11 +61167,13 @@ begin
 end;
 
 destructor TSynBackgroundThreadProcess.Destroy;
+var timeout: Int64;
 begin
-  if not fExecuteFinished then begin
+  if fExecute=exRun then begin
     Terminate;
     fProcessEvent.SetEvent;  // notify terminated
-    while not fExecuteFinished do
+    timeout := GetTickCount64+10000; // never wait forever
+    while (timeout<GetTickCount64) and (fExecute=exRun) do
       Sleep(1);
   end;
   inherited Destroy;
