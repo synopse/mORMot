@@ -795,6 +795,8 @@ type
   { TSynThread }
 
   {$M+}
+  TSynThreadPool = class;
+
   TSynThread = class(TThread)
   protected
     // ensure fOnTerminate is called only if NotifyThreadStart has been done
@@ -864,8 +866,6 @@ type
     {$define USE_WINIOCP}
   {$endif}
 
-  TSynThreadPool = class;
-
   /// defines the sub-threads used by TSynThreadPool
   TSynThreadPoolSubThread = class(TSynThread)
   protected
@@ -885,7 +885,6 @@ type
     procedure Execute; override;
   end;
 
-  {$M+} // to have existing RTTI for published properties
   /// a simple Thread Pool, used e.g. for fast handling HTTP requests
   // - implemented over I/O Completion Ports under Windows, or a classical
   // Event-driven approach under Linux/POSIX
@@ -917,7 +916,6 @@ type
     /// how many threads are currently running in this thread pool
     property RunningThreads: integer read fRunningThreads;
   end;
-  {$M-} 
 
   /// a simple Thread Pool, used for fast handling HTTP requests of a THttpServer
   // - will handle multi-connection with less overhead than creating a thread

@@ -2052,7 +2052,7 @@ type
   TECIESFeatures = set of (efMetaData);
 
 function ECIESLevel(const head: TECIESHeader): integer;
-  {$ifdef HASINLINE}inline;{$endif}
+  // inline; defeats Delphi optimizer for IsEqual()
 begin
   for result := 0 to high(ECIES_MAGIC) do
     if IsEqual(head.magic,THash128(ECIES_MAGIC[result])) then
@@ -2063,8 +2063,8 @@ end;
 function ECIESFeatures(const head: TECIESHeader): TECIESFeatures;
 var level: integer;
 begin
-  level := ECIESLevel(head);
   byte(result) := 0;
+  level := ECIESLevel(head);
   if level>0 then
     include(result,efMetaData);
 end;
