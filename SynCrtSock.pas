@@ -455,11 +455,11 @@ type
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - if SockIn is available, it first check from any data in SockIn^.Buffer,
     // then call InputSock to try to receive any pending data
-    // - will wait up to the specified aTimeOut value (in milliseconds) for
+    // - will wait up to the specified aTimeOutMS value (in milliseconds) for
     // incoming data
     // - returns -1 in case of a socket error (e.g. broken connection); you
     // can raise a ECrtSocket exception to propagate the error
-    function SockInPending(aTimeOut: integer): integer;
+    function SockInPending(aTimeOutMS: integer): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..)
@@ -481,7 +481,7 @@ type
     // - raise ECrtSocket exception on socket error
     procedure SockRecv(Buffer: pointer; Length: integer);
     /// check if there are some pending bytes in the input sockets API buffer
-    function SockReceivePending(TimeOut: cardinal): TCrtSocketPending;
+    function SockReceivePending(TimeOutMS: cardinal): TCrtSocketPending;
     /// returns the socket input stream as a string
     function SockReceiveString: SockString;
     /// fill the Buffer with Length bytes
@@ -3350,19 +3350,22 @@ begin
   end;
 end;
 
-function TCrtSocket.SockInPending(aTimeOut: integer): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
 var backup: cardinal;
 begin
   if SockIn=nil then
     raise ECrtSocket.Create('SockInPending without SockIn');
+  if aTimeOutMS<0 then
+    raise ECrtSocket.Create('SockInPending(aTimeOutMS<0)');
   with PTextRec(SockIn)^ do begin
     result := BufEnd-BufPos;
     if result=0 then
       // no data in SockIn^.Buffer, but some at socket level -> retrieve now
-      case SockReceivePending(aTimeOut) of
+      case SockReceivePending(aTimeOutMS) of
       cspDataAvailable: begin
         backup := TimeOut;
         fTimeOut := 0;
+        // call InputSock() to actually retrieve any pending data
         if InputSock(PTextRec(SockIn)^)=NO_ERROR then
           result := BufEnd-BufPos else
           result := -1; // indicates broken socket
@@ -3490,21 +3493,28 @@ begin
   result := true;
 end;
 
-function TCrtSocket.SockReceivePending(TimeOut: cardinal): TCrtSocketPending;
-var tv: TTimeVal;
+function TCrtSocket.SockReceivePending(TimeOutMS: cardinal): TCrtSocketPending;
+var {$ifdef MSWINDOWS}
+    tv: TTimeVal;
     fdset: TFDSet;
+    {$else}
+    p: TPollFD; // TFDSet limited to 1024 total sockets in Linux -> use poll()
+    {$endif}
     res: integer;
 begin
   {$ifdef MSWINDOWS}
   fdset.fd_array[0] := Sock;
   fdset.fd_count := 1;
-  {$else}
-  FD_ZERO(fdset);
-  FD_SET(sock,fdset);
-  {$endif}
-  tv.tv_usec := TimeOut*1000;
+  tv.tv_usec := TimeOutMS*1000;
   tv.tv_sec := 0;
   res := Select(Sock+1,@fdset,nil,nil,@tv);
+  {$else}
+  // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
+  p.fd := Sock;
+  p.events := POLLIN;
+  p.revents := 0;
+  res := poll(@p,1,TimeOutMS);
+  {$endif}
   if res=0 then
     result := cspNoData else
   if res>0 then

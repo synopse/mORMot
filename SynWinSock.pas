@@ -634,7 +634,8 @@ type
   TPollFDDynArray = array of TPollFD;
 
 /// Poll the file descriptors described by the NFDS structures starting at fds
-// - under Windows, will call WSAPoll() emulation API
+// - under Windows, will call WSAPoll() emulation API - see
+// https://blogs.msdn.microsoft.com/wndp/2006/10/26
 // - if TIMEOUT is nonzero and not -1, allow TIMEOUT milliseconds for
 // an event to occur; if TIMEOUT is -1, block until an event occurs
 // - returns the number of file descriptors with events, zero if timed out,
@@ -738,48 +739,48 @@ type
     stdcall;
 
 var
-  WSAStartup: TWSAStartup = nil;
-  WSACleanup: TWSACleanup = nil;
-  WSAGetLastError: TWSAGetLastError = nil;
-  GetServByName: TGetServByName = nil;
-  GetServByPort: TGetServByPort = nil;
-  GetProtoByName: TGetProtoByName = nil;
-  GetProtoByNumber: TGetProtoByNumber = nil;
-  GetHostByName: TGetHostByName = nil;
-  GetHostByAddr: TGetHostByAddr = nil;
-  ssGetHostName: TGetHostName = nil;
-  Shutdown: TShutdown = nil;
-  SetSockOpt: TSetSockOpt = nil;
-  GetSockOpt: TGetSockOpt = nil;
-  SendTo: TSendTo = nil;
-  Send: TSend = nil;
-  Recv: TRecv = nil;
-  RecvFrom: TRecvFrom = nil;
-  ntohs: Tntohs = nil;
-  ntohl: Tntohl = nil;
-  Listen: TListen = nil;
-  IoctlSocket: TIoctlSocket = nil;
-  Inet_ntoa: TInet_ntoa = nil;
-  Inet_addr: TInet_addr = nil;
-  htons: Thtons = nil;
-  htonl: Thtonl = nil;
-  ssGetSockName: TGetSockName = nil;
-  ssGetPeerName: TGetPeerName = nil;
-  ssConnect: TConnect = nil;
-  CloseSocket: TCloseSocket = nil;
-  ssBind: TBind = nil;
-  ssAccept: TAccept = nil;
-  Socket: TTSocket = nil;
-  Select: TSelect = nil;
+  WSAStartup: TWSAStartup;
+  WSACleanup: TWSACleanup;
+  WSAGetLastError: TWSAGetLastError;
+  GetServByName: TGetServByName;
+  GetServByPort: TGetServByPort;
+  GetProtoByName: TGetProtoByName;
+  GetProtoByNumber: TGetProtoByNumber;
+  GetHostByName: TGetHostByName;
+  GetHostByAddr: TGetHostByAddr;
+  ssGetHostName: TGetHostName;
+  Shutdown: TShutdown;
+  SetSockOpt: TSetSockOpt;
+  GetSockOpt: TGetSockOpt;
+  SendTo: TSendTo;
+  Send: TSend;
+  Recv: TRecv;
+  RecvFrom: TRecvFrom;
+  ntohs: Tntohs;
+  ntohl: Tntohl;
+  Listen: TListen;
+  IoctlSocket: TIoctlSocket;
+  Inet_ntoa: TInet_ntoa;
+  Inet_addr: TInet_addr;
+  htons: Thtons;
+  htonl: Thtonl;
+  ssGetSockName: TGetSockName;
+  ssGetPeerName: TGetPeerName;
+  ssConnect: TConnect;
+  CloseSocket: TCloseSocket;
+  ssBind: TBind;
+  ssAccept: TAccept;
+  Socket: TTSocket;
+  Select: TSelect;
 
-  GetAddrInfo: TGetAddrInfo = nil;
-  FreeAddrInfo: TFreeAddrInfo = nil;
-  GetNameInfo: TGetNameInfo = nil;
+  GetAddrInfo: TGetAddrInfo;
+  FreeAddrInfo: TFreeAddrInfo;
+  GetNameInfo: TGetNameInfo;
 
-  __WSAFDIsSet: T__WSAFDIsSet = nil;
+  __WSAFDIsSet: T__WSAFDIsSet;
 
-  WSAIoctl: TWSAIoctl = nil;
-  WSAPoll: TWSAPoll = nil;
+  WSAIoctl: TWSAIoctl;
+  WSAPoll: TWSAPoll;
 
 var
   SynSockCS: TRTLCriticalSection;
@@ -904,10 +905,10 @@ end;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 begin
   if not FD_ISSET(Socket, FDSet) then
-  if FDSet.fd_count < FD_SETSIZE then begin
-    FDSet.fd_array[FDSet.fd_count] := Socket;
-    Inc(FDSet.fd_count);
-  end;
+    if FDSet.fd_count < FD_SETSIZE then begin
+      FDSet.fd_array[FDSet.fd_count] := Socket;
+      Inc(FDSet.fd_count);
+    end;
 end;
 
 procedure FD_ZERO(var FDSet: TFDSet);
@@ -1378,7 +1379,7 @@ begin
         GetServByName := GetProcAddress(LibHandle, 'getservbyname');
         GetServByPort := GetProcAddress(LibHandle, 'getservbyport');
         ssGetHostName := GetProcAddress(LibHandle, 'gethostname');
-{$IFNDEF FORCEOLDAPI}
+        {$ifndef FORCEOLDAPI}
         GetAddrInfo := GetProcAddress(LibHandle, 'getaddrinfo');
         FreeAddrInfo := GetProcAddress(LibHandle, 'freeaddrinfo');
         GetNameInfo := GetProcAddress(LibHandle, 'getnameinfo');
@@ -1394,7 +1395,8 @@ begin
               and Assigned(GetNameInfo);
           end;
         end;
-{$ENDIF}Result := True;
+        {$endif}
+        Result := True;
       end;
     end
     else Result := True;

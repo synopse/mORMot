@@ -104,7 +104,9 @@ uses
   SynKylix,
   {$endif}
   {$endif}
-  SyncObjs, SysUtils, Classes;
+  SyncObjs,
+  SysUtils,
+  Classes;
 
 const
   InitSocketInterface = true;
@@ -520,8 +522,9 @@ const
   // hang up happened on the associated file descriptor
   EPOLLHUP = $10;
   // sets the One-Shot behaviour for the associated file descriptor
+  // - i.e. after an event is pulled out, the file descriptor is disabled
   EPOLLONESHOT = $40000000;
-  // sets the Edge Triggered (ET) behaviour  for  the  associated file descriptor
+  // sets the Edge-Triggered (ET) behaviour  for  the  associated file descriptor
   EPOLLET  = $80000000;
 
   EPOLL_CTL_ADD = 1;
@@ -560,6 +563,9 @@ function epoll_ctl(epfd, op, fd: integer; event: PEPollEvent): integer;
 function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: integer): integer;
   {$ifdef FPC}inline;{$endif} {$ifdef KYLIX3}cdecl;{$endif}
 
+/// finalize an epoll file descriptor
+// - call fpclose/libc.close
+function epoll_close(epfd: integer): integer;
 {$endif Linux}
 
 
@@ -1228,12 +1234,22 @@ function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: inte
 begin
   result := Linux.epoll_wait(epfd, pointer(events), maxevents, timeout);
 end;
+
+function epoll_close(epfd: integer): integer;
+begin
+  result := fpClose(epfd);
+end;
 {$endif}
 
 {$ifdef KYLIX3} // use libc.so wrappers
 function epoll_create; external libcmodulename name 'epoll_create';
 function epoll_ctl; external libcmodulename name 'epoll_ctl';
 function epoll_wait; external libcmodulename name 'epoll_wait';
+
+function epoll_close(epfd: integer): integer;
+begin
+  result := __close(epfd);
+end;
 {$endif}
 
 {$endif Linux}
