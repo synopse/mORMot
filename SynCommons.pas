@@ -35341,7 +35341,7 @@ begin
       if IsLibrary then
         InstanceFileName := GetModuleName(HInstance) else
         InstanceFileName := ProgramFileName;
-      ProgramName := Split(StringToUTF8(ExtractFileName(ProgramFileName)),'.');
+      ProgramName := StringToUTF8(GetFileNameWithoutExt(ExtractFileName(ProgramFileName)));
       {$ifdef MSWINDOWS}
       tmpsize := sizeof(tmp);
       GetComputerNameW(tmp,tmpsize);
