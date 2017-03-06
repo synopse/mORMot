@@ -1,0 +1,108 @@
+object MainForm: TMainForm
+  Left = 214
+  Height = 443
+  Top = 193
+  Width = 595
+  Caption = ' External DB performance tests - Synopse mORMot'
+  ClientHeight = 443
+  ClientWidth = 595
+  Color = clBtnFace
+  DesignTimePPI = 120
+  Font.Color = clWindowText
+  Font.Height = -11
+  Font.Name = 'Tahoma'
+  OnCreate = FormCreate
+  OnDestroy = FormDestroy
+  OnShow = FormShow
+  LCLVersion = '1.7'
+  object Label1: TLabel
+    Left = 32
+    Height = 13
+    Top = 32
+    Width = 51
+    Caption = 'Oracle DB:'
+    ParentColor = False
+  end
+  object Label2: TLabel
+    Left = 88
+    Height = 13
+    Top = 56
+    Width = 329
+    AutoSize = False
+    Caption = 'If no Oracle DB is set, it won''t use it'
+    Font.Color = clWindowText
+    Font.Height = -11
+    Font.Name = 'Tahoma'
+    Font.Style = [fsItalic]
+    ParentColor = False
+    ParentFont = False
+  end
+  object Label3: TLabel
+    Left = 240
+    Height = 1
+    Top = 96
+    Width = 1
+    ParentColor = False
+  end
+  object LogMemo: TMemo
+    Left = 0
+    Height = 300
+    Top = 143
+    Width = 595
+    Align = alBottom
+    Anchors = [akTop, akLeft, akRight, akBottom]
+    Constraints.MinHeight = 200
+    ReadOnly = True
+    ScrollBars = ssVertical
+    TabOrder = 1
+  end
+  object OraTNSName: TEdit
+    Left = 88
+    Height = 21
+    Hint = 'TNS name'
+    Top = 32
+    Width = 121
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 2
+  end
+  object OraUser: TEdit
+    Left = 224
+    Height = 21
+    Hint = 'User name'
+    Top = 32
+    Width = 121
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 3
+  end
+  object OraPass: TEdit
+    Left = 352
+    Height = 21
+    Hint = 'Password'
+    Top = 32
+    Width = 121
+    ParentShowHint = False
+    ShowHint = True
+    TabOrder = 4
+  end
+  object BtnRunTests: TButton
+    Left = 32
+    Height = 41
+    Top = 88
+    Width = 185
+    Caption = 'Run tests'
+    Default = True
+    OnClick = BtnRunTestsClick
+    TabOrder = 0
+  end
+  object btnReport: TButton
+    Left = 462
+    Height = 25
+    Top = 112
+    Width = 75
+    Caption = 'Report'
+    OnClick = btnReportClick
+    TabOrder = 5
+  end
+end
