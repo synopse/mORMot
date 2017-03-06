@@ -919,7 +919,7 @@ begin
           continue;
         if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,sftInteger,
            sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,sftDateTime,
-           sftDateTimeMS,sftUnixTime,sftBoolean,sftEnumerate,sftSet]) then
+           sftDateTimeMS,sftUnixTime,sftUnixMSTime,sftBoolean,sftEnumerate,sftSet]) then
           continue;
         HtmlTableStyle.BeforeFieldName(W);
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
@@ -936,9 +936,11 @@ begin
           timelog.From(utf8);
           W.AddHtmlEscapeString(timeLog.i18nText);
         end;
-        sftUnixTime:
+        sftUnixTime, sftUnixMSTime:
           if VariantToInt64(Rec^.Values[i],timelog.Value) then begin
-            timelog.FromUnixTime(timelog.Value);
+            if Field.SQLFieldType=sftUnixTime then
+              timelog.FromUnixTime(timelog.Value) else
+              timelog.FromUnixMSTime(timelog.Value);
             W.AddHtmlEscapeString(timeLog.i18nText);
           end;
         sftBoolean,sftEnumerate:

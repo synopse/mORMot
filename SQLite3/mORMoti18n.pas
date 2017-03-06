@@ -671,7 +671,7 @@ procedure ExtractAllResources(const EnumTypeInfo: array of pointer;
 /// our hooked procedure for reading a string resource
 // - the default one in System.pas unit is replaced by this one
 // - this function add caching and on the fly translation (if LoadResStringTranslate
-// is defined in mORMot.pas unit)
+// is defined in SynCommons.pas unit)
 // - use "string" type, i.e. UnicodeString for Delphi 2009 and up
 function LoadResString(ResStringRec: PResStringRec): string;
 {$endif}
@@ -688,9 +688,14 @@ function U2S(const Text: RawUTF8): string;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// convert a custom date/time into a VCL-ready string
-// - this function must be assigned to i18nDateText global var of mORMot.pas unit
-// - wrapper to Language.DateTimeToText method
-function Iso2S(Iso: TTimeLog): string;
+// - this function must be assigned to i18nDateText global var of SynCommons.pas
+// - wrapper to Language.DateTimeToText(Iso) method
+function Iso2S(const Iso: TTimeLog): string;
+
+/// convert a custom date/time into a VCL-ready string
+// - this function must be assigned to i18nDateTimeText global var of SynCommons.pas
+// - wrapper to Language.DateTimeToText(DateTime) method
+function DateTime2S(const DateTime: TDateTime): string;
 
 
 implementation
@@ -1947,7 +1952,7 @@ begin
   {$endif}
 end;
 
-function Iso2S(Iso: TTimeLog): string;
+function Iso2S(const Iso: TTimeLog): string;
 begin
   if Iso=0 then
     result := '' else
@@ -1956,6 +1961,13 @@ begin
   if Iso shr (6+6+5)=0 then
     result := Language.TimeToText(Iso) else
     result := Language.DateTimeToText(Iso);
+end;
+
+function DateTime2S(const DateTime: TDateTime): string;
+begin
+  if DateTime=0 then
+    result := '' else
+    result := Language.DateTimeToText(DateTime);
 end;
 
 function TLanguageFile.BooleanToString(Value: boolean): string;
@@ -1992,16 +2004,19 @@ begin
       Time.FromUnixTime(GetInt64(pointer(Value)));
       result := DateTimeToText(Time);
     end;
+    sftUnixMSTime:
+      result := DateTimeToText(UnixMSTimeToDateTime(GetInt64(pointer(Value))));
     sftBoolean:
       result := BooleanToString(boolean(GetInteger(pointer(Value))));
     sftEnumerate:
       result := (Prop as TSQLPropInfoRTTIEnum).EnumType^.GetCaption(Value);
     sftSet:
       result := (Prop as TSQLPropInfoRTTISet).SetEnumType^.GetCaptionStrings(@Value);
-    sftID: if Client<>nil then
-      result := UTF8ToString(Client.MainFieldValue(
-        TSQLRecordClass((Prop as TSQLPropInfoRTTIID).ObjectClass),
-        GetInt64(pointer(Value)),true));
+    sftID:
+      if Client<>nil then
+        result := UTF8ToString(Client.MainFieldValue(
+          TSQLRecordClass((Prop as TSQLPropInfoRTTIID).ObjectClass),
+          GetInt64(pointer(Value)),true));
     sftRecord: if Client<>nil then begin
       SetID(pointer(Value),ref.Value);
       result := UTF8ToString(Client.MainFieldValue(ref.Table(Client.Model),ref.ID,true));
@@ -2554,7 +2569,8 @@ initialization
 {$endif}
 {$ifndef NOI18N}
   LangInit; // do redirection + init user default locale (from Win32 or registry)
-  i18nDateText :=  Iso2S; // for mORMot.pas unit
+  i18nDateText :=  Iso2S; // for SynCommons.pas unit
+  i18nDateTimeText := DateTime2S;
 {$endif}
 
 finalization

@@ -547,11 +547,9 @@ begin
     result := QuotedStr(result);
   sftDateTime, sftDateTimeMS:
     result := Props.SQLIso8601ToDate(result);
-  sftTimeLog, sftModTime, sftCreateTime:
-    result := Props.SQLIso8601ToDate(fGrid.Table.GetTimeLog(Row,Col,true,' '));
-  sftUnixTime:
-    result := Props.SQLIso8601ToDate(DateTimeToIso8601Text(UnixTimeToDateTime(
-      GetInt64(pointer(result)))));
+  sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
+    result := Props.SQLIso8601ToDate(DateTimeToIso8601Text(
+      fGrid.Table.GetAsDateTime(Row,Col)));
   sftBlob, sftBlobDynArray:
     result := ''; // BLOB won't work in SQL without parameter binding
   end;

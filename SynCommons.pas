@@ -10400,6 +10400,7 @@ type
   // - i.e. the number of milliseconds since 1970-01-01 00:00:00 UTC
   // - use UnixMSTimeToDateTime/DateTimeToUnixMSTime functions to convert it
   // to/from a regular TDateTime
+  // - also one of the JavaScript date encodings
   TUnixMSTime = type Int64;
 
   /// pointer to a timestamp stored as second-based Unix Time
@@ -11746,6 +11747,7 @@ type
     /// convert to a second-based c-encoded time (from Unix epoch 1/1/1970)
     function ToUnixTime: TUnixTime;
     /// convert to a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
+    // - of course, milliseconds will be 0 due to TTimeLog second resolution
     function ToUnixMSTime: TUnixMSTime;
     /// fill Value from specified Date and Time
     procedure From(Y,M,D, HH,MM,SS: cardinal); overload;
@@ -11762,6 +11764,7 @@ type
     /// fill Value from second-based c-encoded time (from Unix epoch 1/1/1970)
     procedure FromUnixTime(const UnixTime: TUnixTime);
     /// fill Value from millisecond-based c-encoded time (from Unix epoch 1/1/1970)
+    // - of course, millisecond resolution will be lost during conversion
     procedure FromUnixMSTime(const UnixMSTime: TUnixMSTime);
     /// fill Value from current local system Date and Time
     procedure FromNow;
@@ -12004,6 +12007,27 @@ procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: cardinal
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
   FirstChar: AnsiChar = 'T'; WithMS: boolean=false); overload;
 
+var
+  /// custom TTimeLog date to ready to be displayed text function
+  // - you can override this pointer in order to display the text according
+  // to your expected i18n settings
+  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // - used e.g. by TTimeLogBits.i18nText and by TSQLTable.ExpandAsString()
+  // methods, i.e. TSQLTableToGrid.DrawCell()
+  i18nDateText: function(const Iso: TTimeLog): string = nil;
+  /// custom date to ready to be displayed text function
+  // - you can override this pointer in order to display the text according
+  // to your expected i18n settings
+  // - this callback will therefore be set by the mORMoti18n.pas unit
+  // - used e.g. by TSQLTable.ExpandAsString() method,
+  // i.e. TSQLTableToGrid.DrawCell()
+  i18nDateTimeText: function(const DateTime: TDateTime): string = nil;
+
+/// wrapper calling global i18nDateTimeText() callback if set,
+// or returning ISO-8601 standard layout on default
+function DateTimeToi18n(const DateTime: TDateTime): string;
+
+
 /// fast conversion of 2 digit characters into a 0..99 value
 // - returns FALSE on success, TRUE if P^ is not correct
 function Char2ToByte(P: PUTF8Char; out Value: Cardinal): Boolean;
@@ -12068,6 +12092,13 @@ function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
 function UnixTimeUTC: TUnixTime;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
+/// convert some second-based c-encoded time (from Unix epoch 1/1/1970) to
+// the ISO 8601 text layout
+// - use 'YYYYMMDDThhmmss' format if not Expanded
+// - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
+function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
+  FirstTimeChar: AnsiChar='T'): RawUTF8;
+
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
   {$ifdef HASINLINE}inline;{$endif}
@@ -12075,6 +12106,13 @@ function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 /// convert a TDateTime into a millisecond-based c-encoded time (from Unix epoch 1/1/1970)
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// convert some millisecond-based c-encoded time (from Unix epoch 1/1/1970) to
+// the ISO 8601 text layout, including milliseconds
+// - i.e. 'YYYY-MM-DDThh:mm:ss.sssZ' or 'YYYYMMDDThhmmss.sssZ' format
+// - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
+function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean=true;
+  FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
 
 /// returns the current UTC system date and time
 // - SysUtils.Now returns local time: this function returns the system time
@@ -12211,16 +12249,6 @@ type
     // - order in Displays[] array follows the Zone[].display information
     function Displays: TStrings;
   end;
-
-var
-  /// custom date to ready to be displayed text function
-  // - you can override this pointer in order to display the text according
-  // to your expected i18n settings
-  // - this callback will therefore be set by the mORMoti18n.pas unit
-  // - used by TTimeLogBits.i18nText and by TSQLTable.ExpandAsString() method,
-  // i.e. TSQLTableToGrid.DrawCell()
-  i18nDateText: function(Iso: TTimeLog): string = nil;
-
 
 {$ifndef ENHANCEDRTL}
 {$ifndef LVCL} { don't define these twice }
@@ -32447,6 +32475,13 @@ begin
 end;
 {$endif}
 
+function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
+  FirstTimeChar: AnsiChar): RawUTF8;
+begin // inlined UnixTimeToDateTime
+  result := DateTimeToIso8601(UnixTime/SecsPerDay+UnixDateDelta,Expanded,
+    FirstTimeChar,false);
+end;
+
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
   result := (UnixMSTime / MSecsPerDay + UnixDateDelta);
@@ -32455,6 +32490,13 @@ end;
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 begin
   result := Round((AValue - UnixDateDelta) * MSecsPerDay);
+end;
+
+function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+begin // inlined UnixMSTimeToDateTime()
+  result := DateTimeMSToString(UnixMSTime/MSecsPerDay+UnixDateDelta,Expanded,
+    FirstTimeChar,TZD);
 end;
 
 function NowUTC: TDateTime;
@@ -32932,6 +32974,13 @@ asm
 @1: jmp Iso8601ToTimeLogPUTF8Char
 end;
 {$endif}
+
+function DateTimeToi18n(const DateTime: TDateTime): string;
+begin
+  if Assigned(i18nDateTimeText) then
+    result := i18nDateTimeText(DateTime) else
+    result := {$ifdef UNICODE}Ansi7ToString{$endif}(DateTimeToIso8601(DateTime,true,' ',true));
+end;
 
 
 { TTimeLogBits }

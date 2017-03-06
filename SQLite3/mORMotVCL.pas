@@ -343,6 +343,8 @@ begin
     PDouble(@fTemp64)^ := TimeLogToDateTime(GetInt64(P));
   sftUnixTime:
     PDouble(@fTemp64)^ := UnixTimeToDateTime(GetInt64(P));
+  sftUnixMSTime:
+    PDouble(@fTemp64)^ := UnixMSTimeToDateTime(GetInt64(P));
   sftBlob: begin
     fTempBlob := BlobToTSQLRawBlob(P);
     result := pointer(fTempBlob);
@@ -383,6 +385,8 @@ begin
       aField.AsDateTime := Iso8601ToDateTimePUTF8Char(P,0);
     sftUnixTime:
       aField.AsDateTime := UnixTimeToDateTime(GetInt64(P));
+    sftUnixMSTime:
+      aField.AsDateTime := UnixMSTimeToDateTime(GetInt64(P));
     sftTimeLog, sftModTime, sftCreateTime:
       aField.AsDateTime := TimeLogToDateTime(GetInt64(P));
     sftBlob: begin
@@ -441,7 +445,8 @@ begin
           DBSize := 64;
           DBType := ftDefaultVCLString;
         end;
-      sftDateTime, sftDateTimeMS, sftUnixTime, sftTimeLog, sftModTime, sftCreateTime:
+      sftDateTime, sftDateTimeMS, sftUnixTime, sftUnixMSTime,
+      sftTimeLog, sftModTime, sftCreateTime:
         DBType := ftDateTime;
       sftBlob: begin
           DBSize := (aTable.FieldLengthMax(aField,true)*3) shr 2;
