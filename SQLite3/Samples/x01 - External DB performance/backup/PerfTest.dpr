@@ -4,17 +4,16 @@ program PerfTest;
 uses
   {$I SynDprUses.inc}
   // SynFastWideString, // still works with fast WideString, and slightly faster
-  Forms,
+  Forms, zcomponent, zcore, zdbc, zparsesql, zplain,
   {$ifdef FPC}
   Interfaces,
   {$endif}
   PerfMain in 'PerfMain.pas' {MainForm};
 
-{$ifndef FPC}
 {$R *.res}
-{$endif}
 
 begin
+    RequireDerivedFormResource:=True;
   Application.Initialize;
   Application.CreateForm(TMainForm, MainForm);
   Application.Run;

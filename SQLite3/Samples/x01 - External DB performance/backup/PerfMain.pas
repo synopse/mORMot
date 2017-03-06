@@ -10,7 +10,7 @@ interface
 {.$define USENEXUSDB}
 {.$define USEBDE}
 {.$define USEUNIDAC}
-{.$define USEZEOS}
+{$define USEZEOS}
 {.$define USEFIREDAC}
 
 // enable/disable database engines
@@ -20,7 +20,7 @@ interface
 {.$define USELOCALDBMSSQLEXPRESS}  // SQL Server 2012 LocalDB edition
 {.$define USELOCALDB2}
 {.$define USELOCALPOSTGRESQL}
-{.$define USELOCALMYSQL}
+{$define USELOCALMYSQL}
 {.$define USEMONGODB}
 
 {$ifdef CPU64}
@@ -28,8 +28,10 @@ interface
   {$undef USEJET}     // MS Access / JET is not available under Win64
 {$endif}
 
+{$I Zeos.inc}
+
 uses
-  LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  {LCLIntf, LCLType, LMessages, }Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls, Contnrs,
   SynCommons,
   mORMot, mORMotSQLite3, mORMotDB,
@@ -391,13 +393,13 @@ begin
     // warning: connector 5.2.6 and 5.3.1 are dead slow in ODBC.FreeHandle()
     // seems not to be tied to SynDB: it is visible on ODBC Data Source tool
     // -> use ZEOS/ZDBC instead until fixed
-    Test(TODBCConnectionProperties,'','Driver=MySQL ODBC 5.3 UNICODE Driver;Database=test;'+
-      'Server=localhost;Port=3306;UID=root;Pwd=','','',' MySQL',false);
+//    Test(TODBCConnectionProperties,'','Driver=MySQL ODBC 5.3 UNICODE Driver;Database=test;'+
+//      'Server=localhost;Port=3306;UID=root;Pwd=','','',' MySQL',false);
     {$ifdef USEZEOS}
     // direct ZDBC driver needs only libmysql.dll downloaded e.g. from
     // http://cdn.mysql.com/Downloads/Connector-C/mysql-connector-c-*-win32.zip
     Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(
-      dMySQL,'localhost:3306'),'test','root','',' MySQL',false);
+      dMySQL,'localhost:3306'),'test','root','as',' MySQL',false);
     {$endif}
     {$ifdef USEFIREDAC}
     {$ifdef CPU64} // 64-bit server installed locally

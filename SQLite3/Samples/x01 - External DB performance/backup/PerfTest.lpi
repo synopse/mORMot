@@ -7,6 +7,7 @@
       <SessionStorage Value="InProjectDir"/>
       <MainUnit Value="0"/>
       <Title Value="PerfTest"/>
+      <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
       <UseXPManifest Value="True"/>
     </General>
@@ -21,10 +22,25 @@
         <FormatVersion Value="1"/>
       </local>
     </RunParams>
-    <RequiredPackages Count="1">
+    <RequiredPackages Count="6">
       <Item1>
-        <PackageName Value="LCL"/>
+        <PackageName Value="zplain"/>
       </Item1>
+      <Item2>
+        <PackageName Value="zparsesql"/>
+      </Item2>
+      <Item3>
+        <PackageName Value="zdbc"/>
+      </Item3>
+      <Item4>
+        <PackageName Value="zcore"/>
+      </Item4>
+      <Item5>
+        <PackageName Value="zcomponent"/>
+      </Item5>
+      <Item6>
+        <PackageName Value="LCL"/>
+      </Item6>
     </RequiredPackages>
     <Units Count="2">
       <Unit0>
@@ -47,8 +63,9 @@
       <Filename Value="PerfTest"/>
     </Target>
     <SearchPaths>
-      <IncludeFiles Value="$(ProjOutDir);..\..;..\..\.."/>
-      <OtherUnitFiles Value="..\..;..\..\.."/>
+      <IncludeFiles Value="$(ProjOutDir);..\..;..\..\..;..\..\..\..\ZeosLib\trunk\src"/>
+      <Libraries Value="..\..\..\fpc-win32"/>
+      <OtherUnitFiles Value="..\..;..\..\..;..\..\..\..\ZeosLib\trunk\src;..\..\..\..\ZeosLib\trunk\src\component;..\..\..\..\ZeosLib\trunk\src\core;..\..\..\..\ZeosLib\trunk\src\dbc;..\..\..\..\ZeosLib\trunk\src\parsesql;..\..\..\..\ZeosLib\trunk\src\plain"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
     <Parsing>
@@ -56,9 +73,6 @@
         <SyntaxMode Value="Delphi"/>
       </SyntaxOptions>
     </Parsing>
-    <CodeGeneration>
-      <TargetOS Value="win32"/>
-    </CodeGeneration>
     <Linking>
       <Options>
         <Win32>
@@ -66,6 +80,13 @@
         </Win32>
       </Options>
     </Linking>
+    <Other>
+      <CustomOptions Value="-dZEOS72UP"/>
+      <OtherDefines Count="2">
+        <Define0 Value="ZEOS72UP"/>
+        <Define1 Value="ENABLE_*"/>
+      </OtherDefines>
+    </Other>
   </CompilerOptions>
   <Debugging>
     <Exceptions Count="5">
