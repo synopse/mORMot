@@ -1,4 +1,4 @@
-/// low level access to network Sockets for FPC cross-platform
+/// low level access to network Sockets for FPC (and Kylix) POSIX cross-platform
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynFPCSock;
@@ -50,6 +50,7 @@ unit SynFPCSock;
      Low level access to network Sockets
     *************************************
 
+  Shared by Kylix and FPC for all POSIX systems.
 
   Version 1.18
   - initial release
@@ -88,6 +89,9 @@ uses
   {$ifdef FPC}
   BaseUnix,
   Unix,
+  {$ifdef Linux}
+  Linux, // for epoll support
+  {$endif}
   termio,
   netdb,
   Sockets,
@@ -384,10 +388,10 @@ var
 
 {$ifdef FPC}
 
-procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
-function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
-procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
-procedure FD_ZERO(var FDSet: TFDSet);
+procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet); inline;
+function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean; inline;
+procedure FD_SET(Socket: TSocket; var FDSet: TFDSet); inline;
+procedure FD_ZERO(var FDSet: TFDSet); inline;
 
 function ResolveIPToName(const IP: string; Family,SockProtocol,SockType: integer): string;
 function ResolvePort(const Port: string; Family,SockProtocol,SockType: integer): Word;
@@ -456,6 +460,107 @@ function GetSinIP(const Sin: TVarSin): string;
 function GetSinPort(const Sin: TVarSin): Integer;
 procedure ResolveNameToIP(const Name: string;  Family,SockProtocol,SockType: integer;
   IPList: TStrings);
+
+const
+  // poll() flag when there is data to read
+  POLLIN       = $001;
+  // poll() flag when there is urgent data to read
+  POLLPRI      = $002;
+  // poll() flag when writing now will not block
+  POLLOUT      = $004;
+  // poll() flag error condition (always implicitly polled for)
+  POLLERR      = $008;
+  // poll() flag hung up (always implicitly polled for)
+  POLLHUP      = $010;
+  // poll() flag invalid polling request (always implicitly polled for)
+  POLLNVAL     = $020;
+  // poll() flag when normal data may be read
+  POLLRDNORM   = $040;
+  // poll() flag when priority data may be read
+  POLLRDBAND   = $080;
+  // poll() flag when writing now will not block
+  POLLWRNORM   = $100;
+  // poll() flag when priority data may be written
+  POLLWRBAND   = $200;
+  // poll() flag extension for Linux
+  POLLMSG      = $400;
+
+type
+  /// polling request data structure for poll()
+  TPollFD = packed record
+    /// file descriptor to poll
+    fd: integer;
+    /// types of events poller cares about
+    // - mainly POLLIN and/or POLLOUT
+    events: Smallint;
+    /// types of events that actually occurred
+    // - caller could just reset revents := 0 to reuse the structure
+    revents: Smallint;
+  end;
+  PPollFD = ^TPollFD;
+  TPollFDDynArray = array of TPollFD;
+
+/// Poll the file descriptors described by the nfds structures starting at fds
+// - if TIMEOUT is nonzero and not -1, allow TIMEOUT milliseconds for
+// an event to occur; if TIMEOUT is -1, block until an event occurs
+// - returns the number of file descriptors with events, zero if timed out,
+// or -1 for errors
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
+
+{$ifdef Linux}
+const
+  // associated file is available for read operations
+  EPOLLIN  = $01;
+  // urgent data available for read operations
+  EPOLLPRI = $02;
+  // associated file is available for write operations
+  EPOLLOUT = $04;
+  // error condition happened on the associated file descriptor
+  EPOLLERR = $08;
+  // hang up happened on the associated file descriptor
+  EPOLLHUP = $10;
+  // sets the One-Shot behaviour for the associated file descriptor
+  EPOLLONESHOT = $40000000;
+  // sets the Edge Triggered (ET) behaviour  for  the  associated file descriptor
+  EPOLLET  = $80000000;
+
+  EPOLL_CTL_ADD = 1;
+  EPOLL_CTL_DEL = 2;
+  EPOLL_CTL_MOD = 3;
+
+type
+  /// application-level data structure for epoll
+  TEPollData = record
+    case integer of
+      0: (ptr: pointer);
+      1: (fd: integer);
+      2: (u32: cardinal);
+      3: (u64: Int64);
+      4: (obj: TObject);
+  end;
+  PEPollData = ^TEPollData;
+
+  /// epoll descriptor data structure
+  TEPollEvent = packed record
+    events: cardinal;
+    data: TEpollData;
+  end;
+  PEPollEvent = ^TEPollEvent;
+  TEPollEventDynArray = array of TEPollEvent;
+
+/// open an epoll file descriptor
+function epoll_create(size: integer): integer;
+  {$ifdef FPC}inline;{$endif} {$ifdef KYLIX3}cdecl;{$endif}
+
+/// control interface for an epoll descriptor
+function epoll_ctl(epfd, op, fd: integer; event: PEPollEvent): integer;
+  {$ifdef FPC}inline;{$endif} {$ifdef KYLIX3}cdecl;{$endif}
+
+/// wait for an I/O event on an epoll file descriptor
+function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: integer): integer;
+  {$ifdef FPC}inline;{$endif} {$ifdef KYLIX3}cdecl;{$endif}
+
+{$endif Linux}
 
 
 implementation
@@ -762,7 +867,7 @@ begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htons(Hostshort);
 end;
 
-function  htonl(hostlong: longword): longword;
+function htonl(hostlong: longword): longword;
 begin
   result := {$ifdef KYLIX3}LibC{$else}sockets{$endif}.htonl(HostLong);
 end;
@@ -810,6 +915,15 @@ begin
   if (Sin.sin_family=AF_INET6) then
     result := ntohs(Sin.sin6_port) else
     result := ntohs(Sin.sin_port);
+end;
+
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
+begin
+  {$ifdef KYLIX3}
+  result := libc.poll(pointer(fds),nfds,timeout);
+  {$else}
+  result := fppoll(pointer(fds),nfds,timeout);
+  {$endif}
 end;
 
 {$ifdef KYLIX3} // those functions only use the new API
@@ -1096,6 +1210,33 @@ begin
 end;
 
 {$endif KYLIX3}
+
+{$ifdef Linux} // epoll is Linux-specific
+
+{$ifdef FPC} // use Linux.pas wrappers
+function epoll_create(size: integer): integer;
+begin
+  result := Linux.epoll_create(size);
+end;
+
+function epoll_ctl(epfd, op, fd: integer; event: PEPollEvent): integer;
+begin
+  result := Linux.epoll_ctl(epfd, op, fd, pointer(event));
+end;
+
+function epoll_wait(epfd: integer; events: PEPollEvent; maxevents, timeout: integer): integer;
+begin
+  result := Linux.epoll_wait(epfd, pointer(events), maxevents, timeout);
+end;
+{$endif}
+
+{$ifdef KYLIX3} // use libc.so wrappers
+function epoll_create; external libcmodulename name 'epoll_create';
+function epoll_ctl; external libcmodulename name 'epoll_ctl';
+function epoll_wait; external libcmodulename name 'epoll_wait';
+{$endif}
+
+{$endif Linux}
 
 procedure DestroySocketInterface;
 begin

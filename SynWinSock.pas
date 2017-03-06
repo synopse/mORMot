@@ -594,6 +594,54 @@ function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 procedure FD_ZERO(var FDSet: TFDSet);
 
+// poll() emulation via WSAPoll() extension API available since Vista
+
+const
+  // poll/WSAPoll flag when normal data may be read
+  POLLRDNORM  = $0100;
+  // poll/WSAPoll flag when priority data may be read
+  POLLRDBAND  = $0200;
+  // poll/WSAPoll flag when there is data to read
+  POLLIN       = POLLRDNORM or POLLRDBAND;
+  // poll/WSAPoll flag when there is urgent data to read
+  POLLPRI      = $0400;
+  // poll/WSAPoll flag when writing now will not block
+  POLLOUT      = $0010;
+  // poll/WSAPoll flag error condition (always implicitly polled for)
+  POLLERR      = $0001;
+  // poll/WSAPoll flag hung up (always implicitly polled for)
+  POLLHUP      = $0002;
+  // poll/WSAPoll flag invalid polling request (always implicitly polled for)
+  POLLNVAL     = $0004;
+  // poll/WSAPoll flag when writing now will not block
+  POLLWRNORM   = $0010;
+  // poll/WSAPoll flag when priority data may be written
+  POLLWRBAND   = $0020;
+
+type
+  /// polling request data structure for poll/WSAPoll
+  TPollFD = record
+    /// file descriptor to poll
+    fd: TSocket;
+    /// types of events poller cares about
+    // - mainly POLLIN and/or POLLOUT
+    events: SHORT;
+    /// types of events that actually occurred
+    // - caller could just reset revents := 0 to reuse the structure
+    revents: SHORT;
+  end;
+  PPollFD = ^TPollFD;
+  TPollFDDynArray = array of TPollFD;
+
+/// Poll the file descriptors described by the NFDS structures starting at fds
+// - under Windows, will call WSAPoll() emulation API
+// - if TIMEOUT is nonzero and not -1, allow TIMEOUT milliseconds for
+// an event to occur; if TIMEOUT is -1, block until an event occurs
+// - returns the number of file descriptors with events, zero if timed out,
+// or -1 for errors
+// - before Vista, will return -1 since the API extension was not yet defined
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
+
 
 type
   TWSAStartup = function(wVersionRequired: Word; var WSData: TWSAData): Integer;
@@ -686,6 +734,9 @@ type
     lpCompletionRoutine: pointer): u_int;
     stdcall;
 
+  TWSAPoll = function(fds: PPollFD; nfds, timeout: integer): integer;
+    stdcall;
+
 var
   WSAStartup: TWSAStartup = nil;
   WSACleanup: TWSACleanup = nil;
@@ -728,6 +779,7 @@ var
   __WSAFDIsSet: T__WSAFDIsSet = nil;
 
   WSAIoctl: TWSAIoctl = nil;
+  WSAPoll: TWSAPoll = nil;
 
 var
   SynSockCS: TRTLCriticalSection;
@@ -1270,6 +1322,13 @@ begin
   end;
 end;
 
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
+begin
+  if Assigned(WSAPoll) then
+    result := WSAPoll(fds,nfds,timeout) else
+    result := -1; // not available on XP/2K
+end;
+
 function InitSocketInterface(const Stack: TFileName= ''): Boolean;
 begin
   Result := False;
@@ -1283,6 +1342,7 @@ begin
         LibHandle := LoadLibrary(DLLStackName) else
         LibHandle := LoadLibrary(pointer(Stack));
       if LibHandle <> 0 then begin
+        WSAPoll := GetProcAddress(LibHandle, 'WSAPoll');
         WSAIoctl := GetProcAddress(LibHandle, 'WSAIoctl');
         __WSAFDIsSet := GetProcAddress(LibHandle, '__WSAFDIsSet');
         CloseSocket := GetProcAddress(LibHandle, 'closesocket');
@@ -1357,6 +1417,7 @@ begin
         FreeLibrary(libHandle);
         LibHandle := 0;
         // HH reset routine pointers to avoid jumping into limbo
+        WSAPoll := nil;
         WSAIoctl := nil;
         __WSAFDIsSet := nil;
         CloseSocket := nil;
