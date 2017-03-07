@@ -564,7 +564,9 @@ const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
 
+  SHUT_RD = 0;
   SHUT_WR = 1;
+  SHUT_RDWR = 2;
 
 type
   PWSAData = ^TWSAData;
