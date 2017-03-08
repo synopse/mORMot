@@ -1349,7 +1349,8 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'TRecordVersion',  // sftRecordVersion = TRecordVersion
     'TSessionUserID',  // sftSessionUserID
     '',                // sftDateTimeMS
-    '');               // sftUnixTime
+    '',                // sftUnixTime
+    '');               // sftUnixMSTime
 var hier: TClassDynArray;
     a,i,f: integer;
     code,aggname,recname,parentrecname: RawUTF8;

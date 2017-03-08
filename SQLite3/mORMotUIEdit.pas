@@ -339,12 +339,16 @@ begin
             CD.Kind := dtkDate;
             CD.DateTime := Iso8601ToDateTime(aValue);
           end;
-          sftTimeLog, sftUnixTime: begin
+          sftTimeLog, sftUnixTime, sftUnixMSTime: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             TimeLog.Value := GetInt64(pointer(aValue));
-            if aFieldType=sftUnixTime then
+            case aFieldType of
+            sftUnixTime:
               TimeLog.FromUnixTime(TimeLog.Value);
+            sftUnixMSTime:
+              TimeLog.FromUnixMSTime(TimeLog.Value);
+            end;
             CD.DateTime := TimeLog.ToDateTime;
           end;
           sftModTime, sftCreateTime:
@@ -655,6 +659,8 @@ begin
         end;
         sftUnixTime:
           P.SetValue(Rec,pointer(Int64ToUtf8(DateTimeToUnixTime(D))),false);
+        sftUnixMSTime:
+          P.SetValue(Rec,pointer(Int64ToUtf8(DateTimeToUnixMSTime(D))),false);
       end;
     end;
   end;

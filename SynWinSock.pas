@@ -564,7 +564,9 @@ const
   WSADESCRIPTION_LEN     =   256;
   WSASYS_STATUS_LEN      =   128;
 
+  SHUT_RD = 0;
   SHUT_WR = 1;
+  SHUT_RDWR = 2;
 
 type
   PWSAData = ^TWSAData;
@@ -593,6 +595,55 @@ procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
 function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 procedure FD_ZERO(var FDSet: TFDSet);
+
+// poll() emulation via WSAPoll() extension API available since Vista
+
+const
+  // poll/WSAPoll flag when normal data may be read
+  POLLRDNORM  = $0100;
+  // poll/WSAPoll flag when priority data may be read
+  POLLRDBAND  = $0200;
+  // poll/WSAPoll flag when there is data to read
+  POLLIN       = POLLRDNORM or POLLRDBAND;
+  // poll/WSAPoll flag when there is urgent data to read
+  POLLPRI      = $0400;
+  // poll/WSAPoll flag when writing now will not block
+  POLLOUT      = $0010;
+  // poll/WSAPoll flag error condition (always implicitly polled for)
+  POLLERR      = $0001;
+  // poll/WSAPoll flag hung up (always implicitly polled for)
+  POLLHUP      = $0002;
+  // poll/WSAPoll flag invalid polling request (always implicitly polled for)
+  POLLNVAL     = $0004;
+  // poll/WSAPoll flag when writing now will not block
+  POLLWRNORM   = $0010;
+  // poll/WSAPoll flag when priority data may be written
+  POLLWRBAND   = $0020;
+
+type
+  /// polling request data structure for poll/WSAPoll
+  TPollFD = record
+    /// file descriptor to poll
+    fd: TSocket;
+    /// types of events poller cares about
+    // - mainly POLLIN and/or POLLOUT
+    events: SHORT;
+    /// types of events that actually occurred
+    // - caller could just reset revents := 0 to reuse the structure
+    revents: SHORT;
+  end;
+  PPollFD = ^TPollFD;
+  TPollFDDynArray = array of TPollFD;
+
+/// Poll the file descriptors described by the NFDS structures starting at fds
+// - under Windows, will call WSAPoll() emulation API - see
+// https://blogs.msdn.microsoft.com/wndp/2006/10/26
+// - if TIMEOUT is nonzero and not -1, allow TIMEOUT milliseconds for
+// an event to occur; if TIMEOUT is -1, block until an event occurs
+// - returns the number of file descriptors with events, zero if timed out,
+// or -1 for errors
+// - before Vista, will return -1 since the API extension was not yet defined
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
 
 
 type
@@ -686,48 +737,52 @@ type
     lpCompletionRoutine: pointer): u_int;
     stdcall;
 
+  TWSAPoll = function(fds: PPollFD; nfds, timeout: integer): integer;
+    stdcall;
+
 var
-  WSAStartup: TWSAStartup = nil;
-  WSACleanup: TWSACleanup = nil;
-  WSAGetLastError: TWSAGetLastError = nil;
-  GetServByName: TGetServByName = nil;
-  GetServByPort: TGetServByPort = nil;
-  GetProtoByName: TGetProtoByName = nil;
-  GetProtoByNumber: TGetProtoByNumber = nil;
-  GetHostByName: TGetHostByName = nil;
-  GetHostByAddr: TGetHostByAddr = nil;
-  ssGetHostName: TGetHostName = nil;
-  Shutdown: TShutdown = nil;
-  SetSockOpt: TSetSockOpt = nil;
-  GetSockOpt: TGetSockOpt = nil;
-  SendTo: TSendTo = nil;
-  Send: TSend = nil;
-  Recv: TRecv = nil;
-  RecvFrom: TRecvFrom = nil;
-  ntohs: Tntohs = nil;
-  ntohl: Tntohl = nil;
-  Listen: TListen = nil;
-  IoctlSocket: TIoctlSocket = nil;
-  Inet_ntoa: TInet_ntoa = nil;
-  Inet_addr: TInet_addr = nil;
-  htons: Thtons = nil;
-  htonl: Thtonl = nil;
-  ssGetSockName: TGetSockName = nil;
-  ssGetPeerName: TGetPeerName = nil;
-  ssConnect: TConnect = nil;
-  CloseSocket: TCloseSocket = nil;
-  ssBind: TBind = nil;
-  ssAccept: TAccept = nil;
-  Socket: TTSocket = nil;
-  Select: TSelect = nil;
+  WSAStartup: TWSAStartup;
+  WSACleanup: TWSACleanup;
+  WSAGetLastError: TWSAGetLastError;
+  GetServByName: TGetServByName;
+  GetServByPort: TGetServByPort;
+  GetProtoByName: TGetProtoByName;
+  GetProtoByNumber: TGetProtoByNumber;
+  GetHostByName: TGetHostByName;
+  GetHostByAddr: TGetHostByAddr;
+  ssGetHostName: TGetHostName;
+  Shutdown: TShutdown;
+  SetSockOpt: TSetSockOpt;
+  GetSockOpt: TGetSockOpt;
+  SendTo: TSendTo;
+  Send: TSend;
+  Recv: TRecv;
+  RecvFrom: TRecvFrom;
+  ntohs: Tntohs;
+  ntohl: Tntohl;
+  Listen: TListen;
+  IoctlSocket: TIoctlSocket;
+  Inet_ntoa: TInet_ntoa;
+  Inet_addr: TInet_addr;
+  htons: Thtons;
+  htonl: Thtonl;
+  ssGetSockName: TGetSockName;
+  ssGetPeerName: TGetPeerName;
+  ssConnect: TConnect;
+  CloseSocket: TCloseSocket;
+  ssBind: TBind;
+  ssAccept: TAccept;
+  Socket: TTSocket;
+  Select: TSelect;
 
-  GetAddrInfo: TGetAddrInfo = nil;
-  FreeAddrInfo: TFreeAddrInfo = nil;
-  GetNameInfo: TGetNameInfo = nil;
+  GetAddrInfo: TGetAddrInfo;
+  FreeAddrInfo: TFreeAddrInfo;
+  GetNameInfo: TGetNameInfo;
 
-  __WSAFDIsSet: T__WSAFDIsSet = nil;
+  __WSAFDIsSet: T__WSAFDIsSet;
 
-  WSAIoctl: TWSAIoctl = nil;
+  WSAIoctl: TWSAIoctl;
+  WSAPoll: TWSAPoll;
 
 var
   SynSockCS: TRTLCriticalSection;
@@ -852,10 +907,10 @@ end;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 begin
   if not FD_ISSET(Socket, FDSet) then
-  if FDSet.fd_count < FD_SETSIZE then begin
-    FDSet.fd_array[FDSet.fd_count] := Socket;
-    Inc(FDSet.fd_count);
-  end;
+    if FDSet.fd_count < FD_SETSIZE then begin
+      FDSet.fd_array[FDSet.fd_count] := Socket;
+      Inc(FDSet.fd_count);
+    end;
 end;
 
 procedure FD_ZERO(var FDSet: TFDSet);
@@ -1270,6 +1325,13 @@ begin
   end;
 end;
 
+function poll(fds: PPollFD; nfds, timeout: integer): integer;
+begin
+  if Assigned(WSAPoll) then
+    result := WSAPoll(fds,nfds,timeout) else
+    result := -1; // not available on XP/2K
+end;
+
 function InitSocketInterface(const Stack: TFileName= ''): Boolean;
 begin
   Result := False;
@@ -1283,6 +1345,7 @@ begin
         LibHandle := LoadLibrary(DLLStackName) else
         LibHandle := LoadLibrary(pointer(Stack));
       if LibHandle <> 0 then begin
+        WSAPoll := GetProcAddress(LibHandle, 'WSAPoll');
         WSAIoctl := GetProcAddress(LibHandle, 'WSAIoctl');
         __WSAFDIsSet := GetProcAddress(LibHandle, '__WSAFDIsSet');
         CloseSocket := GetProcAddress(LibHandle, 'closesocket');
@@ -1318,7 +1381,7 @@ begin
         GetServByName := GetProcAddress(LibHandle, 'getservbyname');
         GetServByPort := GetProcAddress(LibHandle, 'getservbyport');
         ssGetHostName := GetProcAddress(LibHandle, 'gethostname');
-{$IFNDEF FORCEOLDAPI}
+        {$ifndef FORCEOLDAPI}
         GetAddrInfo := GetProcAddress(LibHandle, 'getaddrinfo');
         FreeAddrInfo := GetProcAddress(LibHandle, 'freeaddrinfo');
         GetNameInfo := GetProcAddress(LibHandle, 'getnameinfo');
@@ -1334,7 +1397,8 @@ begin
               and Assigned(GetNameInfo);
           end;
         end;
-{$ENDIF}Result := True;
+        {$endif}
+        Result := True;
       end;
     end
     else Result := True;
@@ -1357,6 +1421,7 @@ begin
         FreeLibrary(libHandle);
         LibHandle := 0;
         // HH reset routine pointers to avoid jumping into limbo
+        WSAPoll := nil;
         WSAIoctl := nil;
         __WSAFDIsSet := nil;
         CloseSocket := nil;

@@ -13,6 +13,7 @@ interface
 
 // enable/disable database engines
 {.$define USEJET}
+{.$define USEFIREBIRDEMB}
 {.$define ODBCSQLITEFIREBIRD}
 {.$define USELOCALMSSQLEXPRESS}    // SQL Server 2008 R2 Express locally
 {.$define USELOCALDBMSSQLEXPRESS}  // SQL Server 2012 LocalDB edition
@@ -230,6 +231,7 @@ begin
     //*)
 
     // -------- Firebird embedded
+    {$ifdef USEFIREBIRDEMB}
     //Test(TSQLDBFirebirdEmbeddedConnectionProperties,'','','','','',false);
     {$ifdef USEZEOS} // Test() will use ZDBC to create the DB for ODBC Firebird
     // expects Firebird_ODBC_*_Win32.exe from http://www.firebirdsql.org/en/odbc-driver
@@ -250,6 +252,7 @@ begin
     {$ifdef USEUNIDAC}
     Test(TSQLDBUniDACConnectionProperties,TSQLDBUniDACConnectionProperties.URI(
       dFirebird,'',FIREBIRD_LIB),'','','',' Firebird',true);
+    {$endif}
     {$endif}
 
     // -------- JET / MS Access
@@ -486,6 +489,7 @@ var aUseBatch, aUseTransactions, aUseDirect: boolean;
   end;
 begin
   U := 'Namee ';
+  UniqueRawUTF8(U); // FPC does not call it
   PWord(@U[4])^ := $a9c3;  // some 'e'acute to test UTF-8 encoding
   Stat := TStat.Create;
   Stat.fEngine := PropsClass.EngineName;

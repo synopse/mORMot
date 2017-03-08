@@ -597,12 +597,20 @@ begin
           V^.VDate := UnixTimeToDateTime(V^.VInteger); // as MongoDB date/time
           V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
         end;
+        sftUnixMSTime: begin
+          V^.VDate := UnixMSTimeToDateTime(V^.VInteger); // as MongoDB date/time
+          V^.VType := varDate;
+        end;
       end;
       varInt64:
       case info.SQLFieldType of
         sftUnixTime: begin
           V^.VDate := UnixTimeToDateTime(V^.VInt64); // as MongoDB date/time
           V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+        end;
+        sftUnixMSTime: begin
+          V^.VDate := UnixMSTimeToDateTime(V^.VInt64); // as MongoDB date/time
+          V^.VType := varDate;
         end;
       end;
       varString: // handle some TEXT values
