@@ -1033,7 +1033,7 @@ begin
     result.WebSocketsEnable(aWebSocketsURI,aWebSocketsEncryptionKey,
       aWebSocketsAJAX,aWebSocketsCompressed);
   end else
-    raise ESynBidirSocket.CreateUTF8(
+    raise EWebSockets.CreateUTF8(
       '%.WebSocketEnable(%): expected useBidirSocket',
       [self,GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(fHttpServerKind))^]);
 end;
@@ -1043,7 +1043,7 @@ function TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
   aWebSocketsAJAX,aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
   if (aServer=nil) or (DBServerFind(aServer)<0) then
-    raise ESynBidirSocket.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
+    raise EWebSockets.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
   result := WebSocketsEnable(aServer.Model.Root,
     aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
 end;
