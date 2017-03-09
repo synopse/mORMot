@@ -2812,7 +2812,7 @@ function UTF8ToInteger(const value: RawUTF8; Default: PtrInt=0): PtrInt; overloa
 /// get and check range of a signed 32-bit integer stored in a RawUTF8 string
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-function UTF8ToInteger(const value: RawUTF8; Min,Max: PtrInt; Default: PtrInt=0): PtrInt; overload;
+function UTF8ToInteger(const value: RawUTF8; Min,max: PtrInt; Default: PtrInt=0): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// get the signed 32-bit integer value stored in a RawUTF8 string
@@ -3585,7 +3585,7 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
-function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const names: array of RawUTF8; const Name: RawUTF8): integer;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -5879,7 +5879,7 @@ type
     function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
     /// reset content, then add all name, value pairs
     // - will first call Init(false) to initialize the internal array
-    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
+    procedure InitFromNamesValues(const names, Values: array of RawUTF8);
     /// search for a Name, return the index in List
     // - using fast O(1) hash algoritm
     function Find(const aName: RawUTF8): integer;
@@ -5915,7 +5915,7 @@ type
     /// returns all values as a JSON object of string fields
     function AsJSON: RawUTF8;
     /// fill the supplied two arrays of RawUTF8 with the stored values
-    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
+    procedure AsNameValues(out names,Values: TRawUTF8DynArray);
     {$ifndef NOVARIANTS}
     /// search for a Name, return the associated Value as variant
     // - returns null if the name was not found
@@ -6102,6 +6102,10 @@ function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
 // - if P^ contains ['*'], would fill all bits
 function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
   out EndOfObject: AnsiChar): cardinal;
+
+/// helper to retrieve the CSV text of all enumerate items defined in a set
+// - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
+function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
 
 /// fast search of an exact case-insensitive match of a RTTI's PShortString array
 function FindShortStringListExact(List: PShortString; MaxValue: integer;
@@ -8249,7 +8253,7 @@ function ObjectToJSON(Value: TObject;
 /// will serialize set of TObject into its UTF-8 JSON representation
 // - follows ObjectToJSON()/TTextWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
-function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
+function ObjectsToJSON(const names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 {$ifndef NOVARIANTS}
@@ -8402,8 +8406,8 @@ type
     function IndexOf(aObject: TObject): integer; override;
   end;
 
-  /// function prototype used to retrieve the hashed property of a
-  // TObjectListPropertyHashed list
+  /// function prototype used to retrieve a pointer to the hashed property
+  // value of a TObjectListPropertyHashed list
   TObjectListPropertyHashedAccessProp = function(aObject: TObject): pointer;
 
   /// this class will hash and search for a sub property of the stored objects
@@ -8652,7 +8656,7 @@ type
     // - default is TRUE
     property CaseSensitive: boolean read fCaseSensitive write SetCaseSensitive;
     /// retrieve the corresponding Name when stored as 'Name=Value' pairs
-    property Names[Index: PtrInt]: RawUTF8 read GetName;
+    property names[Index: PtrInt]: RawUTF8 read GetName;
     /// access to the corresponding 'Name=Value' pairs
     // - search on Name is case-insensitive with 'Name=Value' pairs
     property Values[const Name: RawUTF8]: RawUTF8 read GetValue write SetValue;
@@ -9660,7 +9664,7 @@ procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUT
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
 // just like '{"name":'"John","year":1972}'
 procedure JSONDecode(var JSON: RawUTF8;
-  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
+  const names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
@@ -9703,7 +9707,7 @@ function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
 // - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
 // JSON arrays or objects
 // - returns a pointer to the next content item in the JSON buffer
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
+function JSONDecode(P: PUTF8Char; const names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content for the one supplied name
@@ -10627,6 +10631,9 @@ procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer); overload;
 
 /// fast conversion from binary data into hexa chars, ready to be displayed
 function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
+
+/// append one byte as hexadecimal char pairs, into a text buffer
+function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
@@ -11553,6 +11560,9 @@ type
     property OnProcess: TOnProcessSynBackgroundThreadProc read fOnProcess write fOnProcess;
   end;
 
+  /// an exception which would be raised by TSynParallelProcess
+  ESynParallelProcess = class(ESynException);
+
   /// callback implementing some parallelized process for TSynParallelProcess
   // - if 0<=IndexStart<=IndexStop, it should execute some process
   TSynParallelProcessMethod = procedure(IndexStart, IndexStop: integer) of object;
@@ -11567,9 +11577,6 @@ type
     procedure Process; override;
   public
   end;
-
-  /// an exception which would be raised by TSynParallelProcess
-  ESynParallelProcess = class(ESynException);
 
   /// allow parallel execution of an index-based process in a thread pool
   // - will create its own thread pool, then execute any method by spliting the
@@ -15177,7 +15184,7 @@ type
     // ! with TDocVariantData(aVariantObject) do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
-    property Names: TRawUTF8DynArray read VName;
+    property names: TRawUTF8DynArray read VName;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if aNameOrIndex is neither an integer nor a string
     // - raise an EDocVariant if Kind is dvArray and aNameOrIndex is a string
@@ -21562,7 +21569,7 @@ begin
 end;
 
 function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;
+  out names: PShortString): boolean;
 {$ifdef HASINLINE} inline;
 var info: PTypeInfo;
 begin
@@ -21574,7 +21581,7 @@ begin
     {$endif}
       info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
-    Names := @info.NameList;
+    names := @info.NameList;
     result := true;
   end else
     result := false;
@@ -21603,12 +21610,12 @@ end;
 {$endif}
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out Names: PShortString): boolean;
+  out names: PShortString): boolean;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkSet);
   if info<>nil then
-    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
+    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,names) else
     result := false;
 end;
 
@@ -21732,15 +21739,30 @@ begin
     AlsoTrimLowerCase);
 end;
 
+function GetSetName(aTypeInfo: pointer; const value): RawUTF8;
+var PS: PShortString;
+    i,max: integer;
+begin
+  result := '';
+  if GetSetInfo(aTypeInfo,max,PS) then
+    for i := 0 to max do begin
+      if GetBit(value,i) then
+        result := FormatUTF8('%%,',[result,PS^]);
+      inc(PByte(PS),ord(PS^[0])+1); // next short string
+    end;
+  if result<>'' then
+    SetLength(result,length(result)-1); // trim last comma
+end;
+
 function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
   out EndOfObject: AnsiChar): cardinal;
-var Names: PShortString;
+var names: PShortString;
     Text: PUTF8Char;
     wasString: boolean;
     MaxValue, TextLen, i: integer;
 begin
   result := 0;
-  if (P<>nil) and GetSetInfo(aTypeInfo,MaxValue,Names) then begin
+  if (P<>nil) and GetSetInfo(aTypeInfo,MaxValue,names) then begin
     P := GotoNextNotSpace(P);
     if P^='[' then begin
       P := GotoNextNotSpace(P+1);
@@ -21761,10 +21783,10 @@ begin
           exit;
         end;
         if Text^ in ['a'..'z'] then
-          i := FindShortStringListExact(Names,MaxValue,Text,TextLen) else
+          i := FindShortStringListExact(names,MaxValue,Text,TextLen) else
           i := -1;
         if i<0 then
-          i := FindShortStringListTrimLowerCase(Names,MaxValue,Text,TextLen);
+          i := FindShortStringListTrimLowerCase(names,MaxValue,Text,TextLen);
         if i>=0 then
           SetBit(result,i);
         // unknown enum names (i=-1) would just be ignored
@@ -26526,6 +26548,12 @@ begin
     result := '';
 end;
 
+function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
+begin
+  PWord(P)^ := TwoDigitsHexWB[Value];
+  result := P+2;
+end;
+
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: integer;
 begin
@@ -26742,21 +26770,21 @@ begin
   result := -1;
 end;
 
-function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const names: array of RawUTF8; const Name: RawUTF8): integer;
 {$ifdef HASINLINE}
 var NameLen: integer;
 begin
   NameLen := Length(Name);
-  for result := 0 to high(Names) do
-    if (Length(Names[result])=NameLen) and
-       IdemPropNameUSameLen(pointer(Names[result]),pointer(Name),NameLen) then
+  for result := 0 to high(names) do
+    if (Length(names[result])=NameLen) and
+       IdemPropNameUSameLen(pointer(names[result]),pointer(Name),NameLen) then
       exit;
   result := -1;
 end;
 {$else}
 begin
-  for result := 0 to high(Names) do
-    if IdemPropNameU(Names[result],Name) then
+  for result := 0 to high(names) do
+    if IdemPropNameU(names[result],Name) then
       exit;
   result := -1;
 end;
@@ -28922,11 +28950,11 @@ begin
     result := Default;
 end;
 
-function UTF8ToInteger(const value: RawUTF8; Min,Max: PtrInt; Default: PtrInt=0): PtrInt;
+function UTF8ToInteger(const value: RawUTF8; Min,max: PtrInt; Default: PtrInt=0): PtrInt;
 var err: integer;
 begin
   result := GetInteger(pointer(value),err);
-  if (err<>0) or (result<Min) or (result>Max) then
+  if (err<>0) or (result<Min) or (result>max) then
     result := Default;
 end;
 
@@ -30535,18 +30563,18 @@ begin
     end;
 end;
 
-function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
+function ObjectsToJSON(const names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 var i,n: integer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
-    n := length(Names);
+    n := length(names);
     Add('{');
     for i := 0 to high(Values) do
     if Values[i]<>nil then begin
       if i<n then
-        AddFieldName(Names[i]) else
+        AddFieldName(names[i]) else
         AddPropName(ClassNameShort(Values[i])^);
       WriteObject(Values[i],Options);
       Add(',');
@@ -41030,7 +41058,7 @@ begin
   new := _Safe(NewValues);
   if (VKind<>dvArray) and (new^.VKind<>dvArray) then
     for n := 0 to new^.Count-1 do
-      AddOrUpdateValue(new^.Names[n],new^.Values[n],nil,OnlyAddMissing);
+      AddOrUpdateValue(new^.names[n],new^.Values[n],nil,OnlyAddMissing);
 end;
 
 procedure TDocVariantData.InitArray(const Items: array of const;
@@ -41808,7 +41836,7 @@ begin
     exit;
   UpperCopy255Buf(upname,aStartName,aStartNameLen)^ := #0;
   for ndx := Count-1 downto 0 do
-    if IdemPChar(pointer(Names[ndx]),upname) then begin
+    if IdemPChar(pointer(names[ndx]),upname) then begin
       Delete(ndx);
       inc(result);
     end;
@@ -49311,13 +49339,13 @@ begin
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
-procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
+procedure JSONDecode(var JSON: RawUTF8; const names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
 begin
-  JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
+  JSONDecode(UniqueRawUTF8(JSON),names,Values,HandleValuesAsObjectOrArray);
 end;
 
-function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
+function JSONDecode(P: PUTF8Char; const names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
 var n, i: integer;
     Name, Value: PUTF8Char;
@@ -49325,7 +49353,7 @@ var n, i: integer;
     NewValues: boolean;
 begin
   result := nil;
-  n := length(Names);
+  n := length(names);
   NewValues := pointer(Values)=nil;
   SetLength(Values,n);
   if not NewValues then
@@ -49346,7 +49374,7 @@ begin
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if StrIComp(Name,Names[i])=0 then begin
+      if StrIComp(Name,names[i])=0 then begin
         Values[i] := Value;
         break;
       end;
@@ -60104,15 +60132,15 @@ begin
   end;
 end;
 
-procedure TSynNameValue.InitFromNamesValues(const Names, Values: array of RawUTF8);
+procedure TSynNameValue.InitFromNamesValues(const names, Values: array of RawUTF8);
 var i: integer;
 begin
   Init(false);
-  if high(Names)<>high(Values) then
+  if high(names)<>high(Values) then
     exit;
-  fDynArray.SetCapacity(length(Names));
-  for i := 0 to high(Names) do
-    Add(Names[i],Values[i]);
+  fDynArray.SetCapacity(length(names));
+  for i := 0 to high(names) do
+    Add(names[i],Values[i]);
 end;
 
 function TSynNameValue.InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean): boolean;
@@ -60330,13 +60358,13 @@ begin
   end;
 end;
 
-procedure TSynNameValue.AsNameValues(out Names,Values: TRawUTF8DynArray);
+procedure TSynNameValue.AsNameValues(out names,Values: TRawUTF8DynArray);
 var i: integer;
 begin
-  SetLength(Names,Count);
+  SetLength(names,Count);
   SetLength(Values,Count);
   for i := 0 to Count-1 do begin
-    Names[i] := List[i].Name;
+    names[i] := List[i].Name;
     Values[i] := List[i].Value;
   end;
 end;
