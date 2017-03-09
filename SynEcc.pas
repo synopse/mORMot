@@ -755,6 +755,10 @@ type
     /// returns a TDocVariant object of all published properties of this instance
     // - excludes the Base64 property content if withBase64 is set to false
     function ToVariant(withBase64: boolean=true): variant;
+    /// save the public key as a .public json file
+    // - i.e. a json containing all published properties of this instance
+    // - persist ToVariant() as an human-readable JSON file
+    function ToFile(const filename: TFileName): boolean;
     {$endif}
     /// low-level access to the binary buffer used ECC secp256r1 cryptography
     // - you should not use this property, but other methods
@@ -2527,6 +2531,13 @@ begin
     'IsSelfSigned',IsSelfSigned]);
   if withBase64 then
     TDocVariantData(result).AddValue('Base64',RawUTF8ToVariant(ToBase64));
+end;
+
+function TECCCertificate.ToFile(const filename: TFileName): boolean;
+begin
+  if CheckCRC then
+   result := JSONReformatToFile(VariantSaveJSON(ToVariant),filename) else
+   result := false;
 end;
 {$endif}
 
