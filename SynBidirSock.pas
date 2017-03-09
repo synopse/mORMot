@@ -161,6 +161,19 @@ type
     property URI: TURI read fURI;
   end;
 
+const
+  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
+  LOGESCAPELEN = 200;
+type
+  /// buffer to be allocated on stack when using LogEscape()
+  TLogEscape = array[0..LOGESCAPELEN*3+3] of AnsiChar;
+
+/// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
+// - up to LOGESCAPELEN (i.e. 200) bytes will be appended
+// - used e.g. to implement logBinaryFrameContent option
+procedure LogEscape(source, dest: PAnsiChar; sourcelen: integer);
+
+
 
 { -------------- WebSockets shared classes for bidirectional remote access }
 
@@ -2335,33 +2348,33 @@ begin
   Safe.UnLock;
 end;
 
-procedure LogEscape(const s: RawUTF8; var result: RawUTF8);
-var i,L: integer;
-const MAXLEN = 200;
+procedure LogEscape(source, dest: PAnsiChar; sourcelen: integer);
+var i: integer;
 begin
-  with TTextWriter.CreateOwnedStream(MAXLEN*3) do
-  try
-    L := length(s);
-    if L>MAXLEN then
-      L := MAXLEN;
-    for i := 1 to L do
-      if s[i] in [' '..#126] then
-        Add(s[i]) else begin
-        Add('$');
-        AddByteToHex(ord(s[i]));
-      end;
-    if L=MAXLEN then
-      AddShort('...');
-    SetText(result);
-  finally
-    Free;
+  if sourcelen>LOGESCAPELEN then
+    sourcelen := LOGESCAPELEN;
+  dest^ := ' ';
+  inc(dest);
+  for i := 1 to sourcelen do begin
+    if source^ in [' '..#126] then begin
+      dest^ := source^;
+      inc(dest);
+    end else begin
+      dest^ := '$';
+      dest := ByteToHex(dest+1,ord(source^));
+    end;
+    inc(source);
   end;
+  if sourcelen=LOGESCAPELEN then
+    PCardinal(dest)^ := ord('.')+ord('.')shl 8+ord('.')shl 16 else
+    dest^ := #0;
 end;
 
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
   const aMethodName: RawUTF8; aEvent: TSynLogInfo; DisableRemoteLog: Boolean);
-var content: RawUTF8;
+var tmp: TLogEscape;
     log: TSynLog;
+    len: integer;
 begin
   if WebSocketLog<>nil then
   with WebSocketLog.Family do
@@ -2375,10 +2388,12 @@ begin
          (logTextFrameContent in fSettings.LogDetails) then
         log.Log(aEvent,'% % focText %',[aMethodName,
           Protocol.FrameType(frame),frame.PayLoad],self) else begin
+        len := length(frame.PayLoad);
         if logBinaryFrameContent in fSettings.LogDetails then
-          LogEscape(frame.PayLoad,content);
-        log.Log(aEvent,'% % % len=% %',[aMethodName,Protocol.FrameType(frame),
-          ToText(frame.opcode)^,length(frame.PayLoad),content],self);
+          LogEscape(pointer(frame.PayLoad),@tmp,len) else
+          tmp[0] := #0;
+        log.Log(aEvent,'% % % len=%%',[aMethodName,Protocol.FrameType(frame),
+          ToText(frame.opcode)^,len,PAnsiChar(@tmp)],self);
       end;
     finally
       log.DisableRemoteLog(false);
