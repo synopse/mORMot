@@ -27444,8 +27444,8 @@ begin
     while P^<>'[' do if P^=#0 then exit else inc(P); // need an array of objects
     repeat inc(P); if P^=#0 then exit; until P^='{'; // go to object begining
   end;
-  GetJSONPropName(P); // ignore field name
-  result := GetJSONField(P,P); // get field value
+  if GetJSONPropName(P)<>nil then // ignore field name
+    result := GetJSONField(P,P); // get field value
 end;
 
 function IsNotAjaxJSON(P: PUTF8Char): Boolean;
@@ -47602,7 +47602,7 @@ begin
     wasString := false;
     result := From;
     PropName := GetJSONPropName(From,@PropNameLen);  // get property name
-    if (From=nil) or (PropNameLen=0) then
+    if (From=nil) or (PropName=nil) then
       exit; // invalid JSON content
     if IdemPropName('ClassName',PropName,PropNameLen) then begin
       // WriteObject() was called with woStoreClassName option -> ignore it
