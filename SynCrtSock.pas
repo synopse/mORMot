@@ -360,6 +360,8 @@ type
     constructor Create(const Msg: string); overload;
     /// will concat the message with the supplied WSAGetLastError information
     constructor Create(const Msg: string; Error: integer); overload;
+    /// will concat the message with the supplied WSAGetLastError information
+    constructor CreateFmt(const Msg: string; const Args: array of const; Error: integer); overload;
   published
     /// the associated WSAGetLastError value
     property LastError: integer read fLastError;
@@ -410,8 +412,6 @@ type
     fSndBufLen: integer;
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TSockAddr;
-    /// close and shutdown the connection (called from Destroy)
-    procedure Close;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer); virtual;
   public
     /// common initialization of all constructors
@@ -441,6 +441,8 @@ type
     // - use rather SockSend() + SockSendFlush to send headers at once e.g.
     // since writeln(SockOut^,..) flush buffer each time
     procedure CreateSockOut(OutputBufferSize: Integer=1024);
+    /// close and shutdown the connection (called from Destroy)
+    procedure Close;
     /// close the opened socket, and corresponding SockIn/SockOut
     destructor Destroy; override;
     /// read Length bytes from SockIn buffer + Sock if necessary
@@ -1046,10 +1048,25 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
-  {$M+} { to have existing RTTI for published properties }
+  {$M+}
+  /// abstract class to implement a server thread
+  // - do not use this class, but rather the THttpServer, THttpApiServer
+  // or TAsynchFrameServer (as defined in SynBidirSock)
+  TServerGeneric = class(TSynThread)
+  protected
+    fProcessName: SockString;
+    fOnHttpThreadStart: TNotifyThreadEvent;
+    procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
+    procedure NotifyThreadStart(Sender: TSynThread);
+  public
+    /// initialize the server instance, in non suspended state
+    constructor Create(CreateSuspended: boolean; OnStart,OnStop: TNotifyThreadEvent;
+      const ProcessName: SockString); reintroduce; virtual;
+  end;
+
   /// abstract class to implement a HTTP server
   // - do not use this class, but rather the THttpServer or THttpApiServer
-  THttpServerGeneric = class(TSynThread)
+  THttpServerGeneric = class(TServerGeneric)
   protected
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
@@ -1057,20 +1074,16 @@ type
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
     fCompressAcceptEncoding: SockString;
-    fOnHttpThreadStart: TNotifyThreadEvent;
     fServerName: SockString;
-    fProcessName: SockString;
     fCurrentConnectionID: integer;
     fCanNotifyCallback: boolean;
-    procedure SetOnTerminate(const Event: TNotifyThreadEvent); virtual;
     function GetAPIVersion: string; virtual; abstract;
-    procedure NotifyThreadStart(Sender: TSynThread);
     procedure SetServerName(const aName: SockString); virtual;
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
     constructor Create(CreateSuspended: boolean; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString); reintroduce;
+      const ProcessName: SockString); override;
     /// override this function to customize your http server
     // - InURL/InMethod/InContent properties are input parameters
     // - OutContent/OutContentType/OutCustomHeader are output parameters
@@ -2041,7 +2054,8 @@ function GetIPAddressesText(const Sep: SockString = ' '): SockString;
 {$endif MSWINDOWS}
 
 /// low-level text description of  Socket error code
-function SocketErrorMessage(Error: integer): string;
+// - if Error is -1, will call WSAGetLastError to retrieve the last error code
+function SocketErrorMessage(Error: integer=-1): string;
 
 /// low-level direct write to the socket recv() function
 // - by-pass overriden blocking recv() e.g. in SynFPCSock
@@ -2050,6 +2064,10 @@ function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
 /// low-level direct write to the socket send() function
 // - by-pass overriden blocking send() e.g. in SynFPCSock
 function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
+
+/// low-level direct creation of a TSocket handle for TCP, UDP or UNIX layers
+function CallServer(const Server, Port: SockString; doBind: boolean;
+  aLayer: TCrtSocketLayer; ConnectTimeout: DWORD): TSocket;
 
 
 { ************ socket polling for optimized multiple connections }
@@ -3307,15 +3325,14 @@ begin
     if SetSockOpt(Sock,IPPROTO_TCP,OptName,@OptVal,sizeof(OptVal))=0 then
       exit;
   end;
-  raise ECrtSocket.CreateFmt('Error %d for SetOption(%d,%d)',
-    [WSAGetLastError,OptName,OptVal]);
+  raise ECrtSocket.CreateFmt('SetOption(%d,%d)',[OptName,OptVal],-1);
 end;
 
 function CallServer(const Server, Port: SockString; doBind: boolean;
    aLayer: TCrtSocketLayer; ConnectTimeout: DWORD): TSocket;
 var Sin: TVarSin;
     IP: SockString;
-    SOCK_TYPE, IPPROTO: integer;
+    socktype, ipproto: integer;
     {$ifndef MSWINDOWS}
     serveraddr: sockaddr;
     {$endif}
@@ -3323,18 +3340,20 @@ begin
   result := -1;
   case aLayer of
     cslTCP: begin
-      SOCK_TYPE := SOCK_STREAM;
+      socktype := SOCK_STREAM;
       IPPROTO := IPPROTO_TCP;
     end;
     cslUDP: begin
-      SOCK_TYPE := SOCK_DGRAM;
+      socktype := SOCK_DGRAM;
       IPPROTO := IPPROTO_UDP;
     end;
     cslUNIX: begin
       {$ifdef MSWINDOWS}
       exit; // not handled under Win32
       {$else} // special version for UNIX sockets
-      result := socket(AF_UNIX,SOCK_STREAM,0);
+      socktype := SOCK_STREAM;
+      ipproto := 0;
+      result := socket(AF_UNIX,socktype,ipproto);
       if result<0 then
         exit;
       if doBind then begin
@@ -3353,32 +3372,32 @@ begin
       exit;
       {$endif}
     end;
-    else exit; // make this stupid compiler happy
+    else exit;
   end;
   {$ifndef MSWINDOWS}
   if (Server='') and not doBind then
     IP := cLocalHost else
   {$endif}
-    IP := ResolveName(Server, AF_INET, IPPROTO, SOCK_TYPE);
+    IP := ResolveName(Server,AF_INET,ipproto,socktype);
   // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
-  if SetVarSin(Sin, IP, Port, AF_INET, IPPROTO, SOCK_TYPE, false)<>0 then
+  if SetVarSin(sin,IP,Port,AF_INET,ipproto,socktype,false)<>0 then
     exit;
-  result := Socket(integer(Sin.AddressFamily), SOCK_TYPE, IPPROTO);
+  result := Socket(integer(sin.AddressFamily),socktype,ipproto);
   if result=-1 then
     exit;
   if doBind then begin
     // Socket should remain open for 5 seconds after a closesocket() call
-    SetInt32Option(result, SO_LINGER, 5);
+    SetInt32Option(result,SO_LINGER,5);
     // bind and listen to this port
-    if (Bind(result, Sin)<>0) or
-       ((aLayer<>cslUDP) and (Listen(result, SOMAXCONN)<>0)) then begin
+    if (Bind(result,sin)<>0) or
+       ((aLayer<>cslUDP) and (Listen(result,SOMAXCONN)<>0)) then begin
       CloseSocket(result);
       result := -1;
     end;
   end else begin
     if ConnectTimeout>0 then begin
-      SetInt32Option(result, SO_RCVTIMEO, ConnectTimeout);
-      SetInt32Option(result, SO_SNDTIMEO, ConnectTimeout);
+      SetInt32Option(result,SO_RCVTIMEO,ConnectTimeout);
+      SetInt32Option(result,SO_SNDTIMEO,ConnectTimeout);
     end;
     if Connect(result,Sin)<>0 then begin
        CloseSocket(result);
@@ -3529,7 +3548,7 @@ begin
     end;
   end;
   if Sock=-1 then
-    exit; // no opened connection to close
+    exit; // no opened connection, or Close already executed
   Shutdown(Sock,SHUT_WR);
   CloseSocket(Sock); // SO_LINGER usually set to 5 or 10 seconds
   fSock := -1; // don't change Server or Port, since may try to reconnect
@@ -3557,8 +3576,7 @@ begin
     fServer := aServer;
     fSock := CallServer(aServer,Port,doBind,aLayer,Timeout); // OPEN or BIND
     if fSock<0 then
-      raise ECrtSocket.CreateFmt('Socket %s creation error on %s:%s (%d)',
-        [BINDTXT[doBind],aServer,Port,WSAGetLastError]);
+      raise ECrtSocket.CreateFmt('OpenBind(%s:%s,%s)',[aServer,Port,BINDTXT[doBind]],-1);
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
@@ -3679,7 +3697,7 @@ begin
         break;
       res := InputSock(PTextRec(SockIn)^);
       if res<0 then
-        raise ECrtSocket.CreateFmt('SockInRead InputSock=%d',[res]);
+        raise ECrtSocket.CreateFmt('SockInRead InputSock=%d',[res],-1);
     until Timeout=0;
   // direct receiving of the remaining bytes from socket
   if Length>0 then begin
@@ -4407,9 +4425,9 @@ begin
 end;
 
 
-{ THttpServerGeneric }
+{ TServerGeneric }
 
-constructor THttpServerGeneric.Create(CreateSuspended: boolean;
+constructor TServerGeneric.Create(CreateSuspended: boolean;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 begin
   fProcessName := ProcessName;
@@ -4417,6 +4435,31 @@ begin
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
   inherited Create(CreateSuspended);
+end;
+
+procedure TServerGeneric.NotifyThreadStart(Sender: TSynThread);
+begin
+  if Sender=nil then
+    raise ECrtSocket.Create('NotifyThreadStart(nil)');
+  if Assigned(fOnHttpThreadStart) and not Assigned(Sender.fStartNotified) then begin
+    fOnHttpThreadStart(Sender);
+    Sender.fStartNotified := self;
+  end;
+end;
+
+procedure TServerGeneric.SetOnTerminate(const Event: TNotifyThreadEvent);
+begin
+  fOnTerminate := Event;
+end;
+
+
+{ THttpServerGeneric }
+
+constructor THttpServerGeneric.Create(CreateSuspended: boolean;
+  OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
+begin
+  SetServerName('mORMot ('+XPOWEREDOS+')');
+  inherited Create(CreateSuspended,OnStart,OnStop,ProcessName);
 end;
 
 procedure THttpServerGeneric.RegisterCompress(aFunction: THttpSocketCompress;
@@ -4437,21 +4480,6 @@ function THttpServerGeneric.Callback(Ctxt: THttpServerRequest; aNonBlocking: boo
 begin
   raise ECrtSocket.CreateFmt('%s.Callback is not implemented: try to use '+
     'another communication protocol, e.g. WebSockets',[ClassName]);
-end;
-
-procedure THttpServerGeneric.NotifyThreadStart(Sender: TSynThread);
-begin
-  if Sender=nil then
-    raise ECrtSocket.Create('NotifyThreadStart(nil)');
-  if Assigned(fOnHttpThreadStart) and not Assigned(Sender.fStartNotified) then begin
-    fOnHttpThreadStart(Sender);
-    Sender.fStartNotified := self;
-  end;
-end;
-
-procedure THttpServerGeneric.SetOnTerminate(const Event: TNotifyThreadEvent);
-begin
-  fOnTerminate := Event;
 end;
 
 procedure THttpServerGeneric.SetServerName(const aName: SockString);
@@ -5213,6 +5241,8 @@ end;
 
 function SocketErrorMessage(Error: integer): string;
 begin
+  if Error=-1 then
+   Error := WSAGetLastError;
   case Error of
   WSAETIMEDOUT:    result := 'WSAETIMEDOUT';
   WSAENETDOWN:     result := 'WSAENETDOWN';
@@ -5225,7 +5255,7 @@ begin
 end;
 constructor ECrtSocket.Create(const Msg: string);
 begin
-  Create(Msg,WSAGetLastError());
+  Create(Msg,WSAGetLastError);
 end;
 
 constructor ECrtSocket.Create(const Msg: string; Error: integer);
@@ -5234,6 +5264,13 @@ begin
     fLastError := WSAEWOULDBLOCK else // if unknown, probably a timeout
     fLastError := abs(Error);
   inherited Create(Msg+' '+SocketErrorMessage(fLastError));
+end;
+
+constructor ECrtSocket.CreateFmt(const Msg: string; const Args: array of const; Error: integer);
+begin
+  if Error<0 then
+    Error := WSAGetLastError;
+  Create(Format(Msg,Args),Error);
 end;
 
 
