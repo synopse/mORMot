@@ -1550,7 +1550,7 @@ type
     function URI: SockString;
     /// the server port, as integer value
     function PortInt: integer;
-    /// compute the root resource Address, without any URI-encoded parameter 
+    /// compute the root resource Address, without any URI-encoded parameter
     // - e.g. '/category/name/10'
     function Root: SockString;
     /// reset all stored information
@@ -2047,7 +2047,7 @@ function GetRemoteMacAddress(const IP: SockString): SockString;
 // - may be used to enumerate all adapters
 function GetIPAddresses: TSockStringDynArray;
 
-/// returns all IP addresses of the current computer as a single CSV text 
+/// returns all IP addresses of the current computer as a single CSV text
 // - may be used to enumerate all adapters
 function GetIPAddressesText(const Sep: SockString = ' '): SockString;
 
@@ -2074,7 +2074,7 @@ function CallServer(const Server, Port: SockString; doBind: boolean;
 
 type
   /// the events monitored by TPollSocketAbstract classes
-  // - we don't make any difference between urgent or normal read/write events  
+  // - we don't make any difference between urgent or normal read/write events
   TPollSocketEvent = (pseRead, pseWrite, pseError, pseClosed);
   /// set of events monitored by TPollSocketAbstract classes
   TPollSocketEvents = set of TPollSocketEvent;
@@ -2273,7 +2273,7 @@ type
     /// initialize the sockets polling
     // - you can specify the TPollSocketAbsract class to be used, if the
     // default is not the one expected
-    constructor Create(aPollClass: TPollSocketClass=nil); 
+    constructor Create(aPollClass: TPollSocketClass=nil);
     /// finalize the sockets polling, and release all used memory
     destructor Destroy; override;
     /// track modifications on one specified TSocket and tag
@@ -2286,8 +2286,6 @@ type
       events: TPollSocketEvents): boolean; virtual;
     /// stop status modifications tracking on one specified TSocket and tag
     // - the socket should have been monitored by a previous call to Subscribe()
-    // - the supplied tag value - maybe a PtrInt(aObject) - will not be used
-    // by TPollSocketAbsract instances, but by inherited implementations
     // - this method is thread-safe
     function Unsubscribe(socket: TSocket; tag: TPollSocketTag): boolean; virtual;
     /// retrieve the next pending notification
@@ -2295,78 +2293,83 @@ type
     // timeoutMS milliseconds for pending data
     // - returns true and set notif.events/tag with the corresponding notification
     // - returns false if no pending event was handled within the timeoutMS period
-    // - this method is thread-safe, and is aimed to be called from a thread pool
+    // - this method is thread-safe, and could be called from several threads
     function GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean; virtual;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate;
+    /// set to true by the Terminate method
+    property Terminated: boolean read fTerminated;
   published
     /// how many sockets are currently tracked
     property Count: integer read fCount;
   end;
   {$M-}
 
-  /// store thread-safe buffer content of one TPollSocketsBuffer 
-  TPollSocketsBufferSlot = record
-    /// the current data buffer of this slot
-    buffer: SockString;
-    /// slot thread acquisition (lighter than a TRTLCriticalSection)
-    threadcounter: integer;
+  /// store thread-safe information of one TPollAsynchSockets connection
+  TPollSocketsSlot = {$ifdef UNICODE}record{$else}object{$endif}
+    /// the associated TCP connection
+    socket: TSocket;
+    /// Lock/Unlock thread acquisition (lighter than a TRTLCriticalSection)
+    lockcounter: integer;
+    /// the current read data buffer of this slot
+    readbuf: SockString;
+    /// the current write data buffer of this slot
+    writebuf: SockString;
+    /// acquire an exclusive access to this connection
+    // - returns true if slot has been acquired
+    // - returns false if it is used by another thread
+    // - warning: this method is not re-entrant
+    function Lock: boolean;
+    /// try to acquire an exclusive access to this connection
+    // - returns true if slot has been acquired
+    // - returns false if it is used by another thread, after the timeoutMS period
+    // - warning: this method is not re-entrant
+    function TryLock(timeoutMS: cardinal): boolean;
+    /// release exclusive access to this connection
+    procedure UnLock;
   end;
+  /// points to thread-safe information of one TPollAsynchSockets connection
+  PPollSocketsSlot = ^TPollSocketsSlot;
 
-  /// buffer-oriented efficient polling of multiple sockets
-  // - to be used e.g. for stream protocols (e.g. WebSockets or IoT communication)
-  TPollSocketsBuffer = class(TPollSockets)
-  protected
-    fData: array of TPollSocketsBufferSlot;
-    fDataTag: array of TPollSocketTag;
-    fDataSize: integer;
-    fDataLock: TRTLCriticalSection;
-    fEvent: TPollSocketEvent;
-    // returns nil if some other thread is already working on it
-    function DataLock(tag: TPollSocketTag; out slot: integer): PSockString;
-    function TryDataLock(tag: TPollSocketTag; out slot: integer;
-      timeoutMS: cardinal): PSockString;
-    procedure DataUnlock(tag: TPollSocketTag; slot: integer);
-    function DataDelete(tag: TPollSocketTag): integer;
-    procedure DataRelease(slot: integer);
-  public
-    /// initialize the buffer-oriented sockets polling
-    // - TPollSocketsBuffer are expected to track either pseRead or pseWrite
-    // events, and maintain input or output data buffer
-    constructor Create(aEvent: TPollSocketEvent); reintroduce;
-    /// finalize buffer-oriented sockets polling, and release all used memory
-    destructor Destroy; override;
-    /// stop status modifications tracking on one specified TSocket and tag
-    // - this overriden method will delete any data associated with the socket
-    // - this method is thread-safe
-    function Unsubscribe(socket: TSocket; tag: TPollSocketTag): boolean; override;
-  published
-    /// the kind of event tracked by this instance
-    property Event: TPollSocketEvent read fEvent;
-  end;
+  /// possible options for TPollAsynchSockets process
+  // - by default, TPollAsynchSockets.Write will first try to send the data
+  // using Send() in non-blocking mode, unless paoWritePollOnly is defined,
+  // and fWrite will be used to poll output state and send it asynchronously
+  TPollAsynchSocketsOptions = set of (paoWritePollOnly);
 
+  {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
   // - to be used e.g. for stream protocols (e.g. WebSockets or IoT communication)
   // - assigned sockets will be set in non-blocking mode, so that polling will
   // work as expected: you should then never use direclty the socket (e.g. via
   // blocking TCrtSocket), but rely on this class for asynchronous process:
-  // OnRead virtual method will receive all incoming data from input buffer,
+  // OnRead overriden method will receive all incoming data from input buffer,
   // and Write() should be called to add some data to asynchronous output buffer
-  // - connections are identified as TObject instances
-  // - ProcessRead/ProcessWrite methods are to be run for actual communication
+  // - connections are identified as TObject instances, which should hold a
+  // TPollSocketsSlot record as private values for the polling process
+  // - ProcessRead/ProcessWrite methods are to be run for actual communication:
+  // either you call those methods from multiple threads, or you run them in
+  // loop from a single thread, then define a TSynThreadPool for running any
+  // blocking process (e.g. computing requests answers) from OnRead callbacks
+  // - inherited classes should override abstract OnRead, OnClose, OnError and
+  // SlotFromConnection methods according to the actual connection class
   TPollAsynchSockets = class
   protected
-    fRead: TPollSocketsBuffer;
-    fWrite: TPollSocketsBuffer;
-    // extract frames from received data, and handle them - false to close socket
-    function OnRead(connection: TObject; var received: SockString): boolean; virtual; abstract;
-    // should free the associated object - socket will be released by this class
+    fRead: TPollSockets;
+    fWrite: TPollSockets;
+    fReadBytes: Int64;
+    fWriteBytes: Int64;
+    fProcessing: integer;
+    fOptions: TPollAsynchSocketsOptions;
+    function GetCount: integer;
+    // extract frames from slot.readbuf, and handle them - false to close socket
+    function OnRead(connection: TObject): boolean; virtual; abstract;
+    // pseClosed: should do connection.free - Stop() has been called (socket=0)
     procedure OnClose(connection: TObject); virtual; abstract;
-    // return false to close socket and connection
-    function OnError(sender: TPollSocketsBuffer; connection: TObject;
-      events: TPollSocketEvents): boolean; virtual; abstract;
-    // low-level extract of the socket from connection properties 
-    function SocketFromConnection(connection: TObject): TSocket; virtual; abstract;
+    // pseError: return false to close socket and connection (calling OnClose)
+    function OnError(connection: TObject; events: TPollSocketEvents): boolean; virtual; abstract;
+    // return low-level socket information from connection instance
+    function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -2375,28 +2378,47 @@ type
     /// finalize buffer-oriented sockets polling, and release all used memory
     destructor Destroy; override;
     /// assign a new connection to the internal poll
-    // - the TSocket handle will be retrieved via SocketFromConnection,
-    // and set in non-blocking mode from now on - it is not recommended to
-    // access it directly
+    // - the TSocket handle will be retrieved via SlotFromConnection, and
+    // set in non-blocking mode from now on - it is not recommended to access
+    // it directly any more, but use Write() and handle OnRead() callback
     // - fRead will poll incoming packets, then call OnRead to handle them,
     // or Unsubscribe and delete the socket when pseClosed is notified
-    // - fWrite will poll for outgoing packets as specified by Write(),
-    // then send any pending data once the socket is ready
-    function Subscribe(connection: TObject): boolean; virtual;
+    // - fWrite will poll for outgoing packets as specified by Write(), then
+    // send any pending data once the socket is ready
+    function Start(connection: TObject): boolean; virtual;
+    /// remove a connection from the internal poll, and shutdown its socket
+    // - most of the time, the connection is released by OnClose when the other
+    // end shutdown the socket; but you can explicitely call this method when
+    // the connection (and its socket) is to be shutdown
+    // - this method won't call OnClose, since it is initiated by the class
+    function Stop(connection: TObject): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
-    function Write(connection: TObject; const data: SockString): boolean; overload;
+    function Write(connection: TObject; const data; datalen: integer): boolean; virtual;
     /// add some data to the asynchronous output buffer of a given connection
-    function Write(connection: TObject; const data; datalen: integer): boolean; overload; virtual;
+    function WriteString(connection: TObject; const data: SockString): boolean;
     /// one or several threads should execute this method
-    // - it will handle any incoming packets
+    // - thread-safe handle of any incoming packets
+    // - if this method is called from a single thread, you should use
+    // a TSynThreadPool for any blocking process of OnRead events
+    // - otherwise, this method is thread-safe, and incoming packets may be
+    // consummed from a set of threads, and call OnRead with newly received data
     procedure ProcessRead(timeoutMS: integer);
     /// one or several threads should execute this method
-    // - it will handle any ougoing packets
+    // - thread-safe handle of any outgoing packets
     procedure ProcessWrite(timeoutMS: integer);
     /// notify internal socket polls to stop their polling loop ASAP
-    procedure Terminate;
+    procedure Terminate(waitforMS: integer);
+    /// some processing options
+    property Options: TPollAsynchSocketsOptions read fOptions write fOptions;
+  published
+    /// how many clients are currently managed by this instance
+    property Count: integer read GetCount;
+    /// how many data bytes have been received by this instance
+    property ReadBytes: Int64 read fReadBytes;
+    /// how many data bytes have been sent by this instance
+    property WriteBytes: Int64 write fWriteBytes;
   end;
-
+  {$M-}
 
 
 implementation
@@ -3055,7 +3077,7 @@ begin
       compressible := true else
     if IdemPChar(OutContentTypeP,'IMAGE/') then
       compressible := IdemPCharArray(OutContentTypeP+6,['SVG','X-ICO'])>=0 else
-    if IdemPChar(OutContentTypeP,'APPLICATION/') then 
+    if IdemPChar(OutContentTypeP,'APPLICATION/') then
       compressible := IdemPCharArray(OutContentTypeP+12,['JSON','XML','JAVASCRIPT'])>=0 else
       compressible := false;
     for i := 0 to high(Handled) do
@@ -3165,7 +3187,7 @@ end;
 var
   // should not change during process livetime
   IPAddressesText: SockString;
-  
+
 function GetIPAddressesText(const Sep: SockString = ' '): SockString;
 var ip: TSockStringDynArray;
     i: integer;
@@ -3330,7 +3352,7 @@ end;
 
 function CallServer(const Server, Port: SockString; doBind: boolean;
    aLayer: TCrtSocketLayer; ConnectTimeout: DWORD): TSocket;
-var Sin: TVarSin;
+var sin: TVarSin;
     IP: SockString;
     socktype, ipproto: integer;
     {$ifndef MSWINDOWS}
@@ -3341,11 +3363,11 @@ begin
   case aLayer of
     cslTCP: begin
       socktype := SOCK_STREAM;
-      IPPROTO := IPPROTO_TCP;
+      ipproto := IPPROTO_TCP;
     end;
     cslUDP: begin
       socktype := SOCK_DGRAM;
-      IPPROTO := IPPROTO_UDP;
+      ipproto := IPPROTO_UDP;
     end;
     cslUNIX: begin
       {$ifdef MSWINDOWS}
@@ -3399,7 +3421,7 @@ begin
       SetInt32Option(result,SO_RCVTIMEO,ConnectTimeout);
       SetInt32Option(result,SO_SNDTIMEO,ConnectTimeout);
     end;
-    if Connect(result,Sin)<>0 then begin
+    if Connect(result,sin)<>0 then begin
        CloseSocket(result);
        result := -1;
     end;
@@ -3454,8 +3476,8 @@ begin
     Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, @Sock.fPeerAddr, @iSize);
     {$else}
     Size := RecvFrom(Sock.Sock, F.BufPtr, Size, 0, sin);
-    Sock.fPeerAddr.sin_port := Sin.sin_port;
-    Sock.fPeerAddr.sin_addr := Sin.sin_addr;
+    Sock.fPeerAddr.sin_port := sin.sin_port;
+    Sock.fPeerAddr.sin_addr := sin.sin_addr;
     {$endif}
   end;
   end;
@@ -3580,7 +3602,7 @@ begin
   end else
     fSock := aSock; // ACCEPT mode -> socket is already created by caller
   if TimeOut>0 then begin // set timout values for both directions
-    ReceiveTimeout := TimeOut;           
+    ReceiveTimeout := TimeOut;
     SendTimeout := TimeOut;
   end;
   if aLayer = cslTCP then begin
@@ -3960,9 +3982,9 @@ begin
 end;
 
 function TCrtSocket.SockConnected: boolean;
-var Sin: TVarSin;
+var sin: TVarSin;
 begin
-  result := GetPeerName(Sock,Sin)=0;
+  result := GetPeerName(Sock,sin)=0;
 end;
 
 function TCrtSocket.PeerAddress: SockString;
@@ -4240,7 +4262,7 @@ begin
       {$endif}
       result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders) else
     result := '';
-  {$ifdef LINUX}      
+  {$ifdef LINUX}
   if result='' then
     writeln('HttpGet returned VOID for ',URI.server,':',URI.Port,' ',URI.Address);
   {$endif}
@@ -4431,7 +4453,6 @@ constructor TServerGeneric.Create(CreateSuspended: boolean;
   OnStart,OnStop: TNotifyThreadEvent; const ProcessName: SockString);
 begin
   fProcessName := ProcessName;
-  SetServerName('mORMot ('+XPOWEREDOS+')');
   fOnHttpThreadStart := OnStart;
   SetOnTerminate(OnStop);
   inherited Create(CreateSuspended);
@@ -4571,9 +4592,9 @@ begin
       if ClientSock<0 then
         if Terminated then
           break else begin
-        SleepHiRes(0);
-        continue;
-      end;
+          SleepHiRes(0);
+          continue;
+        end;
       if Terminated or (Sock=nil) then begin
 abort:  Shutdown(ClientSock,SHUT_WR);
         CloseSocket(ClientSock);
@@ -5135,11 +5156,11 @@ begin
     SockSend(['Content-Type: ',OutContentType]);
 end;
 
-procedure GetSinIPFromCache(const Sin: TVarSin; var result: SockString);
+procedure GetSinIPFromCache(const sin: TVarSin; var result: SockString);
 begin
-  if Sin.sin_family=AF_INET then
-    IP4Text(Sin.sin_addr,result) else begin
-    result := GetSinIP(Sin); // AF_INET6 may be optimized in a future revision
+  if sin.sin_family=AF_INET then
+    IP4Text(sin.sin_addr,result) else begin
+    result := GetSinIP(sin); // AF_INET6 may be optimized in a future revision
     if result='::1' then
       result := '127.0.0.1'; // IP6 localhost loopback benefits of matching IP4
   end;
@@ -7661,7 +7682,7 @@ begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTT
           break;
         inc(Read,Bytes);
         if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
-          break; // returned false = aborted 
+          break; // returned false = aborted
         if Assigned(fOnProgress) then
           fOnProgress(self,Read,ContentLength);
       until false;
@@ -8967,6 +8988,9 @@ begin
   result := false;
   EnterCriticalSection(fLock);
   try
+    for p := fPendingIndex to high(fPending) do
+      if fPending[p].tag=tag then
+        byte(fPending[p].events) := 0; // tag to be ignored in future GetOne
     for p := 0 to high(fPoll) do
       if fPoll[p].Unsubscribe(socket) then begin
         dec(fCount);
@@ -8994,7 +9018,7 @@ function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): 
           fPending := nil;
           fPendingIndex := 0;
         end;
-        if byte(notif.events)<>0 then begin // should always be not void
+        if byte(notif.events)<>0 then begin // void e.g. after Unsubscribe()
           result := true;
           exit;
         end;
@@ -9013,23 +9037,23 @@ function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): 
     end else
       result := false;
   end;
-var p: integer;
+var p,n: integer;
     tix,start,endtix: cardinal;
 begin
   result := false;
   byte(notif.events) := 0;
-  if (TimeoutMS<0) or fTerminated or (fPoll=nil) then
+  if (timeoutMS<0) or fTerminated or (fPoll=nil) then
     exit;
-  // TODO: if length(fPoll)=1, don't use sleep but WaitForModified timeout?
   start := GetTickCount;
-  endtix := start+cardinal(TimeoutMS);
+  endtix := start+cardinal(timeoutMS);
   repeat
     // non-blocking search within fLock
     EnterCriticalSection(fLock);
     try
       if SearchWithinPending then
         exit; // found some in fPending[] from fPoll[fPendingPoll]
-      for p := fPendingPoll+1 to high(fPoll) do
+      n := length(fPoll);
+      for p := fPendingPoll+1 to n-1 do
         if PollAndSearchWithinPending(p) then
           exit;
       for p := 0 to fPendingPoll do // finally retry on fPendingPoll
@@ -9040,9 +9064,9 @@ begin
       result := byte(notif.events)<>0;
     end;
     // wait a little for something to happen
-    if fTerminated or (TimeoutMS=0) then
+    if fTerminated or (timeoutMS=0) then
       exit;
-    tix := GetTickCount;
+    tix := GetTickCount; // allow multi-threaded process
     if (tix<start) or (tix>=endtix) then
       exit;
     dec(tix,start);
@@ -9061,169 +9085,129 @@ begin
 end;
 
 
-{ TPollSocketsBuffer }
+{ TPollSocketsSlot }
 
-constructor TPollSocketsBuffer.Create(aEvent: TPollSocketEvent);
-var c: TPollSocketClass;
+function TPollSocketsSlot.Lock: boolean;
 begin
-  case aEvent of
-    {$ifdef Linux}
-    pseWrite: c := TPollSocketPoll; // epoll is overkill for short-living writes
-    {$else}
-    pseWrite,
-    {$endif}
-    pseRead:  c := PollSocketClass;
-    else raise ECrtSocket.CreateFmt('TPollSocketsBuffer.Create(%d)',[ord(aEvent)]);
-  end;
-  inherited Create(c);
-  fEvent := aEvent;
-  InitializeCriticalSection(fDataLock);
+  result := InterlockedIncrement(lockcounter)=1;
+  if not result then
+    InterlockedDecrement(lockcounter);
 end;
 
-destructor TPollSocketsBuffer.Destroy;
+procedure TPollSocketsSlot.Unlock;
 begin
-  inherited Destroy;
-  DeleteCriticalSection(fDataLock);
+  if @self<>nil then
+    InterlockedDecrement(lockcounter);
 end;
 
-function GetBufferData(var data: TPollSocketsBufferSlot): PSockString;
-begin
-  if InterlockedIncrement(data.threadcounter)=1 then // did we acquire the slot?
-    result := @data.buffer else begin
-    InterlockedDecrement(data.threadcounter);
-    result := nil; // slot already processed in another thread
-  end;
-end;
-
-function TPollSocketsBuffer.DataLock(tag: TPollSocketTag;
-  out slot: integer): PSockString;
-var void,i: integer;
-    t: ^TPollSocketTag;
-begin
-  void := -1;
-  EnterCriticalSection(fDataLock);
-  try
-    t := pointer(fDataTag);
-    for i := 0 to fDataSize-1 do
-      if t^=tag then begin
-        slot := i;
-        result := GetBufferData(fData[i]);
-        exit;
-      end else begin
-        if (t^=0) and (void<0) then
-          void := i;
-        inc(t);
-      end;
-    if void>=0 then
-      slot := void else begin
-      slot := fDataSize;
-      if slot=length(fData) then begin
-        SetLength(fData,slot+128+slot shr 3);
-        SetLength(fDataTag,length(fData));
-      end;
-      inc(fDataSize);
-    end;
-    fDataTag[slot] := tag;
-    result := GetBufferData(fData[slot]);
-  finally
-    LeaveCriticalSection(fDataLock);
-  end;
-end;
-
-function TPollSocketsBuffer.TryDataLock(tag: TPollSocketTag;
-  out slot: integer; timeoutMS: cardinal): PSockString;
+function TPollSocketsSlot.TryLock(timeoutMS: cardinal): boolean;
 var tix,starttix,endtix: cardinal;
 begin
   starttix := GetTickCount;
   endtix := starttix+timeoutMS; // never wait forever
   repeat
-    result := DataLock(tag,slot);
-    if result<>nil then
+    result := Lock;
+    if result then
       exit; // we acquired the slot
     sleep(1);
     tix := GetTickCount;
   until (tix>=endtix) or (tix<starttix);
 end;
 
-procedure TPollSocketsBuffer.DataUnlock(tag: TPollSocketTag; slot: integer);
-begin
-  if cardinal(slot)>=cardinal(fDataSize) then
-    exit;
-  EnterCriticalSection(fDataLock);
-  try
-    if fDataTag[slot]=tag then // not reused by another thread or DataRelease
-      InterlockedDecrement(fData[slot].threadcounter);
-  finally
-    LeaveCriticalSection(fDataLock);
-  end;
-end;
-
-function TPollSocketsBuffer.DataDelete(tag: TPollSocketTag): integer;
-begin
-  if TryDataLock(tag,result,5000)=nil then 
-    result := -1 else // unknown or timeout
-    DataRelease(result);
-end;
-
-procedure TPollSocketsBuffer.DataRelease(slot: integer);
-begin
-  EnterCriticalSection(fDataLock);
-  try
-    fDataTag[slot] := 0; // mark void/reusable entry
-    fData[slot].buffer := '';
-    fData[slot].threadcounter := 0; // will also unlock the slot
-  finally
-    LeaveCriticalSection(fDataLock);
-  end;
-end;
-
-function TPollSocketsBuffer.Unsubscribe(socket: TSocket;
-  tag: TPollSocketTag): boolean;
-begin
-  result := inherited Unsubscribe(socket,tag);
-  DataDelete(tag); // always delete from fData[] even if failed in poll API
-end;
-
-
 
 { TPollAsynchSockets }
 
 constructor TPollAsynchSockets.Create;
+var c: TPollSocketClass;
 begin
   inherited Create;
-  fRead := TPollSocketsBuffer.Create(pseRead);
-  fWrite := TPollSocketsBuffer.Create(pseWrite);
+  c := PollSocketClass;
+  fRead := TPollSockets.Create(c);
+  {$ifdef Linux}
+  c := TPollSocketPoll; // epoll is overkill for short-living writes
+  {$endif}
+  fWrite := TPollSockets.Create(c);
 end;
 
 destructor TPollAsynchSockets.Destroy;
 begin
+  if not fRead.Terminated then
+    Terminate(5000);
   inherited Destroy;
   fRead.Free;
   fWrite.Free;
 end;
 
-function TPollAsynchSockets.Subscribe(connection: TObject): boolean;
-var socket: TSocket;
+function TPollAsynchSockets.Start(connection: TObject): boolean;
+var slot: PPollSocketsSlot;
     nonblocking: integer;
 begin
   result := false;
-  socket := SocketFromConnection(connection);
-  if socket=0 then
+  if fRead.Terminated then
     exit;
-  nonblocking := 1; // for both Windows and POSIX
-  if IoctlSocket(socket,FIONBIO,nonblocking)<>0 then
-    exit; // we expect non-blocking mode on a real working socket
-  result := fRead.Subscribe(socket,TPollSocketTag(connection),[pseRead]);
-  // now, ProcessRead will handle pseRead + pseError/pseClosed on this socket
+  InterlockedIncrement(fProcessing);
+  try
+    slot := SlotFromConnection(connection);
+    if (slot=nil) or (slot.socket=0) then
+      exit;
+    nonblocking := 1; // for both Windows and POSIX
+    if IoctlSocket(slot.socket,FIONBIO,nonblocking)<>0 then
+      exit; // we expect non-blocking mode on a real working socket
+    result := fRead.Subscribe(slot.socket,TPollSocketTag(connection),[pseRead]);
+    // now, ProcessRead will handle pseRead + pseError/pseClosed on this socket
+  finally
+    InterlockedDecrement(fProcessing);
+  end;
 end;
 
-procedure TPollAsynchSockets.Terminate;
+function TPollAsynchSockets.GetCount: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := fRead.Count;
+end;
+
+function TPollAsynchSockets.Stop(connection: TObject): boolean;
+var slot: PPollSocketsSlot;
+begin
+  result := false;
+  if fRead.Terminated then
+    exit;
+  InterlockedIncrement(fProcessing);
+  try
+    slot := SlotFromConnection(connection);
+    if (slot<>nil) and (slot.socket<>0) then
+      try
+        fRead.Unsubscribe(slot.socket,TPollSocketTag(connection));
+        fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
+        result := true;
+      finally
+        Shutdown(slot.socket,SHUT_WR);
+        CloseSocket(slot.socket);
+        slot.socket := 0;
+      end;
+  finally
+    InterlockedDecrement(fProcessing);
+  end;
+end;
+
+procedure TPollAsynchSockets.Terminate(waitforMS: integer);
+var starttix,endtix: cardinal;
 begin
   fRead.Terminate;
   fWrite.Terminate;
+  if waitforMS<=0 then
+    exit;
+  starttix := GetTickCount;
+  endtix := starttix+cardinal(waitforMS);
+  repeat
+    sleep(1);
+    if fProcessing=0 then
+      break;
+  until (GetTickCount>endtix) or (GetTickCount<starttix);
 end;
 
-function TPollAsynchSockets.Write(connection: TObject;
+function TPollAsynchSockets.WriteString(connection: TObject;
   const data: SockString): boolean;
 begin
   result := Write(connection,pointer(data)^,length(data));
@@ -9241,146 +9225,156 @@ end;
 
 function TPollAsynchSockets.Write(connection: TObject; const data;
   datalen: integer): boolean;
-var buf: PSockString;
-    tag: TPollSocketTag;
-    socket: TSocket;
+var tag: TPollSocketTag;
+    slot: PPollSocketsSlot;
     P: PByte;
-    res,slot,previous: integer;
+    res,previous: integer;
 begin
   result := false;
-  if (datalen<=0) or (connection=nil) or fWrite.fTerminated then
+  if (datalen<=0) or (connection=nil) or fWrite.Terminated then
     exit;
-  socket := SocketFromConnection(connection);
-  if socket=0 then
-    exit;
-  tag := TPollSocketTag(connection);
-  buf := fWrite.TryDataLock(tag,slot,5000);
-  if buf<>nil then
-    try // we acquired this write slot
-      P := @data;
-      previous := length(buf^);
-      if previous=0 then begin
-        // try to send now in non-blocking mode (works most of the time)
-        res := AsynchSend(socket,P,datalen);
-        if res>0 then begin
-          if res=datalen then begin
-            fWrite.DataRelease(slot);
-            slot := -1; // for DataUnlock below
-            result := true; 
-            exit;
-          end;
-          inc(P,res);
-          dec(datalen,res);
-        end;
-      end;
-      // use fWrite output polling for the remaining data
-      AppendData(buf^,P^,datalen);
-      if previous>0 then // already subscribed
-        result := true else
-        if fWrite.Subscribe(socket,tag,[pseWrite]) then
+  InterlockedIncrement(fProcessing);
+  try
+    tag := TPollSocketTag(connection);
+    slot := SlotFromConnection(connection);
+    if (slot=nil) or (slot.socket=0) then
+      exit;
+    if slot.TryLock(5000) then // try for 5 seconds for ProcessRead/Write to finish
+      try
+        P := @data;
+        previous := length(slot.writebuf);
+        if (previous=0) and not (paoWritePollOnly in fOptions) then
+          repeat
+            if fWrite.Terminated then
+              exit;
+            // try to send now in non-blocking mode (works most of the time)
+            res := AsynchSend(slot.socket,P,datalen);
+            if res<=0 then
+              break;
+            dec(datalen,res);
+            if datalen=0 then begin
+              result := true;
+              exit;
+            end;
+            inc(P,res);
+          until false;
+        // use fWrite output polling for the remaining data
+        AppendData(slot.writebuf,P^,datalen);
+        if previous>0 then // already subscribed
           result := true else
-          fWrite.DataRelease(slot); // subscription error -> reset slot
-    finally
-      fWrite.DataUnlock(tag,slot);
-    end;
+          if fWrite.Subscribe(slot.socket,tag,[pseWrite]) then
+            result := true else
+            slot.writebuf := ''; // subscription error -> abort
+      finally
+        slot.UnLock;
+      end;
+  finally
+    InterlockedDecrement(fProcessing);
+  end;
 end;
 
 procedure TPollAsynchSockets.ProcessRead(timeoutMS: integer);
 var notif: TPollSocketResult;
     connection: TObject;
-    socket: TSocket;
-    buf: PSockString;
-    slot,res,added: integer;
-    temp: array[0..8191] of byte;
+    slot: PPollSocketsSlot;
+    res,added: integer;
+    temp: array[0..$7fff] of byte; // read up to 32KB chunks
   procedure CloseConnection;
   begin
-    try
-      fRead.Unsubscribe(socket,notif.tag);
-      fWrite.Unsubscribe(socket,notif.tag);
-      OnClose(connection); // connection.Free
-    finally
-      Shutdown(socket,SHUT_WR);
-      CloseSocket(socket);
-    end;
+    Stop(connection); // will shutdown the socket
+    OnClose(connection); // do connection.Free
+    slot := nil; // ignore pseClosed
   end;
 begin
-  if (self=nil) or fRead.fTerminated or not fRead.GetOne(timeoutMS,notif) then
+  if (self=nil) or fRead.Terminated then
     exit;
-  connection := TObject(notif.tag);
-  socket := SocketFromConnection(connection);
-  if socket=0 then
-    exit;
-  if pseClosed in notif.events then begin
-    CloseConnection;
-    exit;
-  end;
-  if pseError in notif.events then
-    if OnError(fRead,connection,notif.events) then begin
+  InterlockedIncrement(fProcessing);
+  try
+    if not fRead.GetOne(timeoutMS,notif) then
+      exit;
+    connection := TObject(notif.tag);
+    slot := SlotFromConnection(connection);
+    if (slot=nil) or (slot.socket=0) then
+      exit;
+    if pseError in notif.events then
+      if not OnError(connection,notif.events) then begin // false = shutdown
+        CloseConnection;
+        exit;
+      end;
+    if pseRead in notif.events then begin
+      if slot.Lock then // ensure read slot not already processed in another thread
+        try
+          added := 0;
+          repeat
+            if fRead.Terminated then
+              exit;
+            res := AsynchRecv(slot.socket,@temp,sizeof(temp));
+            if res<=0 then
+              break;
+            AppendData(slot.readbuf,temp,res);
+            inc(added,res);
+          until false;
+          if (added>0) and not OnRead(connection) then // false=close
+            CloseConnection;
+        finally
+          slot.UnLock;
+        end;
+    end;
+    if (slot<>nil) and (pseClosed in notif.events) then begin
       CloseConnection;
       exit;
     end;
-  if pseRead in notif.events then begin
-    buf := fRead.DataLock(notif.tag,slot);
-    if buf<>nil then // ensure read slot not already processed in another thread
-      try
-        added := 0;
-        repeat
-          res := AsynchRecv(socket,@temp,sizeof(temp));
-          if res<=0 then
-            break;
-          AppendData(buf^,temp,res);
-          inc(added,res);
-        until false;
-        if (added>0) and not OnRead(connection,buf^) then begin // false=close 
-          fRead.DataUnlock(notif.tag,slot);
-          slot := -1; // no fRead.DataUnlock() below
-          CloseConnection;
-        end;
-      finally
-        fRead.DataUnlock(notif.tag,slot);
-      end;
+  finally
+    InterlockedDecrement(fProcessing);
   end;
 end;
 
 procedure TPollAsynchSockets.ProcessWrite(timeoutMS: integer);
 var notif: TPollSocketResult;
     connection: TObject;
-    socket: TSocket;
-    buf: PSockString;
-    bufpos,buflen,slot,res,sent: integer;
+    slot: PPollSocketsSlot;
+    buf: PByte;
+    buflen,res,sent: integer;
 begin
-  if (self=nil) or fWrite.fTerminated or not fWrite.GetOne(timeoutMS,notif) then
+  if (self=nil) or fWrite.Terminated then
     exit;
-  if notif.events<>[pseWrite] then
-    exit; // only try if we are sure the socket is writable and safe
-  connection := TObject(notif.tag);
-  socket := SocketFromConnection(connection);
-  if socket=0 then
-    exit;
-  buf := fWrite.DataLock(notif.tag,slot);
-  if buf<>nil then // ensure write slot not already processed in another thread
-    try
-      if buf^<>'' then begin
-        bufpos := 0;
-        buflen := length(buf^);
-        sent := 0;
-        repeat
-          res := AsynchSend(socket,PAnsiChar(buf)+bufpos,buflen);
-          if res<=0 then
-            break;
-          inc(sent,res);
-          inc(bufpos,res);
-          dec(buflen,res);
-        until buflen=0;
-        delete(buf^,1,sent);
+  InterlockedIncrement(fProcessing);
+  try
+    if not fWrite.GetOne(timeoutMS,notif) then
+      exit;
+    if notif.events<>[pseWrite] then
+      exit; // only try if we are sure the socket is writable and safe
+    connection := TObject(notif.tag);
+    slot := SlotFromConnection(connection);
+    if (slot=nil) or (slot.socket=0) then
+      exit;
+    if slot.Lock then // ensure write slot not already processed in another thread
+      try
+        if slot.writebuf<>'' then begin
+          buflen := length(slot.writebuf);
+          buf := pointer(slot.writebuf);
+          inc(buf,buflen);
+          sent := 0;
+          repeat
+            if fWrite.Terminated then
+              exit;
+            res := AsynchSend(slot.socket,buf,buflen);
+            if res<=0 then
+              break;
+            inc(sent,res);
+            inc(buf,res);
+            dec(buflen,res);
+          until buflen=0;
+          delete(slot.writebuf,1,sent);
+        end;
+        if slot.writebuf='' then // no data any more to be sent
+          fWrite.Unsubscribe(slot.socket,notif.tag);
+      finally
+        slot.UnLock;
       end;
-      if buf^='' then // no data any more to be sent
-        buf := nil; // indicates Unsubscribe below
-    finally
-      fWrite.DataUnlock(notif.tag,slot);
-      if buf=nil then
-        fWrite.Unsubscribe(socket,notif.tag);
-    end;
+  finally
+    InterlockedDecrement(fProcessing);
+  end;
 end;
 
 
