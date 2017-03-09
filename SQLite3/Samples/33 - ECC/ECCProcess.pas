@@ -164,7 +164,7 @@ begin
       CreateCheatFile(new,SavePassword,SavePassordRounds);
       // save public key as .public JSON file
       result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
-      JSONReformatToFile(VariantSaveJSON(new.ToVariant),result);
+      new.ToFile(result);
     finally
       new.Free;
     end;

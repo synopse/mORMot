@@ -578,6 +578,10 @@ function ECCID(const Text: RawUTF8; out ID: TECCCertificateID): boolean;
 // perform any ECC signature: use TECCCertificateChain.IsValid instead
 function ECCCheck(const content: TECCCertificateContent): boolean; overload;
 
+/// fast check of the dates stored in a certificate binary buffer
+// - could be validated against ECCCheck()
+function ECCCheckDate(const content: TECCCertificateContent): boolean;
+
 /// fast check if the binary buffer storage of a certificate was self-signed
 // - a self-signed certificate will have its AuthoritySerial/AuthorityIssuer
 // fields matching Serial/Issuer
@@ -2803,7 +2807,7 @@ begin
     st := TRawByteStringStream.Create(decrypted);
     try
       if LoadFromStream(st) then
-        result := not IsZero(THash256(fPrivateKey));
+        result := ECCCheck(fContent) and not IsZero(THash256(fPrivateKey));
     finally
       st.Free;
     end;
