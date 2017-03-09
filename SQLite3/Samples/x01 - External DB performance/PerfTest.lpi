@@ -9,7 +9,6 @@
       <Title Value="PerfTest"/>
       <UseAppBundle Value="False"/>
       <ResourceType Value="res"/>
-      <UseXPManifest Value="True"/>
     </General>
     <BuildModes Count="1">
       <Item1 Name="Default" Default="True"/>
@@ -22,11 +21,6 @@
         <FormatVersion Value="1"/>
       </local>
     </RunParams>
-    <RequiredPackages Count="1">
-      <Item1>
-        <PackageName Value="LCL"/>
-      </Item1>
-    </RequiredPackages>
     <Units Count="2">
       <Unit0>
         <Filename Value="PerfTest.dpr"/>
@@ -49,7 +43,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="$(ProjOutDir);..\..;..\..\..;..\..\..\..\ZeosLib\trunk\src"/>
-      <Libraries Value="..\..\..\fpc-win32"/>
+      <Libraries Value="..\..;..\..\.."/>
       <OtherUnitFiles Value="..\..;..\..\..;..\..\..\..\ZeosLib\trunk\src;..\..\..\..\ZeosLib\trunk\src\component;..\..\..\..\ZeosLib\trunk\src\core;..\..\..\..\ZeosLib\trunk\src\dbc;..\..\..\..\ZeosLib\trunk\src\parsesql;..\..\..\..\ZeosLib\trunk\src\plain"/>
       <UnitOutputDirectory Value="lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>
@@ -58,13 +52,10 @@
         <SyntaxMode Value="Delphi"/>
       </SyntaxOptions>
     </Parsing>
-    <Linking>
-      <Options>
-        <Win32>
-          <GraphicApplication Value="True"/>
-        </Win32>
-      </Options>
-    </Linking>
+    <CodeGeneration>
+      <TargetCPU Value="x86_64"/>
+      <TargetOS Value="linux"/>
+    </CodeGeneration>
     <Other>
       <CustomOptions Value="-dZEOS72UP"/>
       <OtherDefines Count="2">

@@ -31,11 +31,17 @@ interface
 {$I Zeos.inc}
 
 uses
-  {LCLIntf, LCLType, LMessages, }Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Dialogs, StdCtrls, Contnrs,
+  {LCLIntf, LCLType, LMessages, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  Dialogs, StdCtrls, Contnrs,   }
+  SysUtils, Contnrs, Classes,
+  {$ifdef MSWINDOWS}
+  Windows, // for AllocConsole
+  {$endif}
   SynCommons,
   mORMot, mORMotSQLite3, mORMotDB,
-  SynDB, SynDBSQLite3, SynDBOracle, SynOleDB, SynDBODBC, SynDBDataset,
+  SynDB, SynDBSQLite3, SynDBOracle,
+  //SynOleDB,
+  SynDBODBC, SynDBDataset,
   {$ifdef USENEXUSDB}
     SynDBNexusDB,
   {$endif}
@@ -67,16 +73,7 @@ uses
   SynDBRemote;
 
 type
-  TMainForm = class(TForm)
-    LogMemo: TMemo;
-    OraTNSName: TEdit;
-    OraUser: TEdit;
-    OraPass: TEdit;
-    Label1: TLabel;
-    BtnRunTests: TButton;
-    Label2: TLabel;
-    Label3: TLabel;
-    btnReport: TButton;
+  TMainForm = class
     procedure FormCreate(Sender: TObject);
     procedure BtnRunTestsClick(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
@@ -95,11 +92,12 @@ type
 var
   MainForm: TMainForm;
 
+  procedure PerfConsoleTest;
+
 implementation
 
 uses DateUtils;
 
-{$R *.lfm}
 
 // if defined, will create two "stored false" properties, to test UNIQUE columns
 {.$define UNIK}
@@ -154,12 +152,32 @@ type
     property ClientCloseTime: RawUTF8 read fClientCloseTime;
   end;
 
+procedure PerfConsoleTest;
+begin
+  {$ifdef MSWINDOWS}
+  AllocConsole;
+  {$endif}
+
+  MainForm:= TMainForm.Create;
+  MainForm.FormCreate(nil);
+  MainForm.BtnRunTestsClick(nil);
+  MainForm.FormDestroy(nil);
+  MainForm.Free;
+
+  {$ifndef LINUX}
+  WriteLn(#13#10'Done - Press ENTER to Exit');
+  ReadLn;
+  {$endif}
+end;
+
 procedure TMainForm.FormCreate(Sender: TObject);
 begin
   Ini := StringFromFile(ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
+{
   OraTNSName.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','TNSName'));
   OraUser.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','User'));
   OraPass.Text := UTF8ToString(FindIniEntry(Ini,'Oracle','Password'));
+}
   Stats := TObjectList.Create;
 end;
 
@@ -172,14 +190,15 @@ var T,U,P: RawUTF8;
     server: TSQLDBServerAbstract;
 begin
   //SynDBLog.Family.Level := LOG_VERBOSE;  // for debugging
+{
   T := StringToUTF8(OraTNSName.Text);
   U := StringToUTF8(OraUser.Text);
   P := StringToUTF8(OraPass.Text);
+}
   UpdateIniEntry(Ini,'Oracle','TNSName',T);
   UpdateIniEntry(Ini,'Oracle','User',U);
   UpdateIniEntry(Ini,'Oracle','Password',P);
   FileFromString(Ini,ChangeFileExt(ExeVersion.ProgramFileName,'.ini'));
-  LogMemo.Clear;
 {  FreeAndNil(sqlite3); sqlite3 := TSQLite3LibraryDynamic.Create('sqlite3.dll'); }
   // if false then
   try
@@ -196,6 +215,7 @@ begin
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off)',true,smOff);
     Test(TSQLDBSQLite3ConnectionProperties,'','','','',' (ext off exc)',true,smOff,lmExclusive);
     Test(TSQLDBSQLite3ConnectionProperties,SQLITE_MEMORY_DATABASE_NAME,'','','',' (ext mem)',true);
+(*
     DeleteFile('SQLite3 (http).db3');
     props := TSQLDBSQLite3ConnectionProperties.Create('sqlite3 (http).db3','','','');
     server := {TSQLDBServerSockets}TSQLDBServerHttpApi.Create(props,'root','888','user','password');
@@ -210,6 +230,7 @@ begin
       server.Free;
       props.Free;
     end;
+*)
     //*)
     {$ifdef USEMONGODB}
     Test(nil,'MongoDB','','','','MongoDB (ack)',false);
@@ -242,8 +263,7 @@ begin
     Test(TODBCConnectionProperties,'','DRIVER=Firebird/InterBase(r) driver;CHARSET=UTF8;'+
       'CLIENT='+FIREBIRD_LIB,'','',' Firebird',true);
     {$endif}
-    Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(dFirebird,'',
-      FIREBIRD_LIB),'','','',' Firebird',true);
+//    Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(dFirebird,'', FIREBIRD_LIB),'','','',' Firebird',true);
     {$endif}
     //(*
     {$ifdef USEFIREDAC}
@@ -399,7 +419,7 @@ begin
     // direct ZDBC driver needs only libmysql.dll downloaded e.g. from
     // http://cdn.mysql.com/Downloads/Connector-C/mysql-connector-c-*-win32.zip
     Test(TSQLDBZEOSConnectionProperties,TSQLDBZEOSConnectionProperties.URI(
-      dMySQL,'localhost:3306'),'test','root','as',' MySQL',false);
+      dMySQL,'10.0.2.2:3306'),'test','root','as',' MySQL',false);
     {$endif}
     {$ifdef USEFIREDAC}
     {$ifdef CPU64} // 64-bit server installed locally
@@ -418,10 +438,11 @@ begin
     //*)
   except
     on E: Exception do
-      LogMemo.Lines.Add(E.Message);
+        Writeln(E.Message);
+    LogMemo.Lines.Add(E.Message);
   end;
   finally
-    Label3.Caption := '';
+//    Label3.Caption := '';
     T := ObjectToJSON(Stats,[woHumanReadable]);
     FileFromString(T,ChangeFileExt(ExeVersion.ProgramFileName,'.stats'));
     FileFromString(T,Ansi7ToString(NowToString(false))+'.log');
@@ -502,8 +523,9 @@ begin
   for aUseTransactions := false to true do
   for aUseBatch := false to true do begin
     // open connection and initialize mORMot Client-Server instance
-    Label3.Caption := Format('Running tests phase #%s on %s...',[Num,Stat.fEngine]);
-    Application.ProcessMessages;
+    Writeln(Format('Running tests phase #%s on %s...',[Num,Stat.fEngine]));
+
+    //Application.ProcessMessages;
     DBName := aDatabaseName;
     if (aServerName='') and ((PropsClass=nil) or
        (DBIsFile or not PropsClass.InheritsFrom(TODBCConnectionProperties))) then begin
@@ -513,7 +535,7 @@ begin
         Server := StringToUTF8(ExpandFileName(UTF8ToString(Server)));
         DBName := DBName+';DBNAME='+Server;
         {$ifdef USEZEOS} // ODBC is not able to create the DB file :(
-        DeleteFile(UTF8ToString(Server));
+        DeleteFile(PChar(UTF8ToString(Server)));
         with TSQLDBZEOSConnectionProperties.Create(TSQLDBZEOSConnectionProperties.URI(
           dFirebird,'',FIREBIRD_LIB),Server,'','') do
         try
@@ -534,16 +556,16 @@ begin
       if PosEx('SQLite3 ODBC',DBName)>0 then begin
         Server := StringToUTF8(ExpandFileName(UTF8ToString(Server)));
         DBName := DBName+';DATABASE='+Server;
-        DeleteFile(UTF8ToString(Server));
+        DeleteFile(PChar(UTF8ToString(Server)));
         Server := '';
       end else
-        DeleteFile(UTF8ToString(Server)) else
-        DeleteFile(UTF8ToString(Server));
+        DeleteFile(PChar(UTF8ToString(Server))) else
+        DeleteFile(PChar(UTF8ToString(Server)));
     end else begin
       Server := aServerName;
       if DBIsFile and (DBName='') then begin
         DBName := LowerCaseU(Stat.Engine)+'.'+Num;
-        DeleteFile(UTF8ToString(DBName));
+        DeleteFile(PChar(UTF8ToString(DBName)));
       end;
     end;
     if PropsClass<>nil then begin
@@ -668,8 +690,7 @@ begin
         '4': begin
           Stat.fInsertBatchTransactionTime := Time;
           Stat.fInsertBatchTransactionRate := Rate;
-          Label3.Caption := Format('Running reading tests on %s...',[Stat.fEngine]);
-          Application.ProcessMessages;
+//          Label3.Caption := Format('Running reading tests on %s...',[Stat.fEngine]);
           // one by one retrieve values from server
           Timer.Start;
           for i := 0 to Stat.fNumberOfElements-1 do begin
@@ -753,7 +774,6 @@ begin
   Stats.Add(Stat);
   Model.Free;
   Value.Free;
-  LogMemo.Lines.Add(UTF8ToString(ObjectToJSON(Stat,[woHumanReadable])));
 end;
 
 procedure TMainForm.FormDestroy(Sender: TObject);
@@ -936,19 +956,19 @@ procedure TMainForm.FormShow(Sender: TObject);
 var Valid: boolean;
     S: RawUTF8;
 begin
-  btnReport.Visible := true;
+//  btnReport.Visible := true;
   exit;
   S := StringFromFile('PerfTestBlog.stats');
   JSONToObject(Stats,pointer(S),Valid,TStat);
   if Valid then
     SaveStats;
-  Close;
+//  Close;
 end;
 
 
 procedure TMainForm.btnReportClick(Sender: TObject);
 begin
-   OpenDocument((ChangeFileExt(ExeVersion.ProgramFileName,'.htm'))); { *Converted from ShellExecute* }
+   //OpenDocument((ChangeFileExt(ExeVersion.ProgramFileName,'.htm'))); { *Converted from ShellExecute* }
 end;
 
 end.

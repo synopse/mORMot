@@ -1,20 +1,25 @@
 program PerfTest;
 
 //   first line of uses clause must be   {$I SynDprUses.inc}
+{$ifdef Linux}
+  {$ifdef FPC_CROSSCOMPILING}
+    {$linklib libc_nonshared.a}
+  {$endif}
+{$endif}
+
 uses
   {$I SynDprUses.inc}
   // SynFastWideString, // still works with fast WideString, and slightly faster
-  Forms, zcomponent, zcore, zdbc, zparsesql, zplain,
+//  Forms,
   {$ifdef FPC}
-  Interfaces,
+//  Interfaces,
   {$endif}
   PerfMain in 'PerfMain.pas' {MainForm};
 
-{$R *.res}
-
 begin
-    RequireDerivedFormResource:=True;
-  Application.Initialize;
-  Application.CreateForm(TMainForm, MainForm);
-  Application.Run;
+//    RequireDerivedFormResource:=True;
+    PerfConsoleTest;
+//  Application.Initialize;
+//  Application.CreateForm(TMainForm, MainForm);
+//  Application.Run;
 end.
