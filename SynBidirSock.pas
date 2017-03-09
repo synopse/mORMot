@@ -100,9 +100,7 @@ uses
   {$endif}
 {$endif}
 
-type
-  /// Exception raised from this unit
-  ESynBidirSocket = class(ESynException);
+
 
 
 { -------------- high-level SynCrtSock classes depending on SynCommons }
@@ -167,6 +165,9 @@ type
 { -------------- WebSockets shared classes for bidirectional remote access }
 
 type
+  /// Exception raised when processing WebSockets
+  EWebSockets = class(ESynException);
+
   /// defines the interpretation of the WebSockets frame data
   // - match order expected by the WebSockets RFC
   TWebSocketFrameOpCode = (
@@ -1252,9 +1253,9 @@ begin
     Ctxt := Sender.ComputeContext(onRequest);
     try
       if (Ctxt=nil) or not Assigned(onRequest) then
-        raise ESynBidirSocket.CreateUTF8('%.ProcessOne: onRequest=nil',[self]);
+        raise EWebSockets.CreateUTF8('%.ProcessOne: onRequest=nil',[self]);
       if (head='') or not FrameToInput(request,noAnswer,Ctxt) then
-        raise ESynBidirSocket.CreateUTF8('%.ProcessOne: invalid frame',[self]);
+        raise EWebSockets.CreateUTF8('%.ProcessOne: invalid frame',[self]);
       request.payload := ''; // release memory ASAP
       if info<>'' then
         Ctxt.AddInHeader(info);
@@ -1609,7 +1610,7 @@ begin
     if fEncryption<>nil then begin
       res := fEncryption.Decrypt(frame.payload,value);
       if res<>sprSuccess then
-        raise ESynBidirSocket.CreateUTF8('%.AfterGetFrame: encryption error %',
+        raise EWebSockets.CreateUTF8('%.AfterGetFrame: encryption error %',
           [self,ToText(res)^]);
      end else
       value := frame.payload;
@@ -1665,7 +1666,7 @@ begin
     for i := 0 to FramesCount do
       if Frames[i].opcode=focBinary then
         W.Write(Frames[i].payload) else
-        raise ESynBidirSocket.CreateUTF8('%.SendFrames[%]: Unexpected opcode=%',
+        raise EWebSockets.CreateUTF8('%.SendFrames[%]: Unexpected opcode=%',
           [self,i,ord(Frames[i].opcode)]);
     W.Flush;
     jumboFrame.payload := TRawByteStringStream(W.Stream).DataString;
@@ -1995,7 +1996,7 @@ var hdr: TFrameHeader;
     masked: boolean;
 
   procedure GetHeader;
-  begin // SockInRead() below raise a ESynBidirSocket error on failure
+  begin // SockInRead() below raise a EWebSockets error on failure
     FillCharFast(hdr,sizeof(hdr),0);
     fSocket.SockInRead(@hdr.first,2,false);
     opcode := TWebSocketFrameOpCode(hdr.first and 15);
@@ -2014,7 +2015,7 @@ var hdr: TFrameHeader;
         hdr.len32 := maxInt else
         hdr.len32 := bswap32(hdr.len64);
       if hdr.len32>WebSocketsMaxFrameMB shl 20 then
-        raise ESynBidirSocket.CreateUTF8('%.GetFrame: length should be < % MB',
+        raise EWebSockets.CreateUTF8('%.GetFrame: length should be < % MB',
           [self,WebSocketsMaxFrameMB]);
     end;
     if masked then
@@ -2039,7 +2040,7 @@ begin
     if pending<0 then
       if IgnoreExceptions then
         exit else
-        raise ESynBidirSocket.CreateUTF8('SockInPending() Error % on %:%',
+        raise EWebSockets.CreateUTF8('SockInPending() Error % on %:%',
           [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port]);
     if pending<2 then
       exit; // not enough data available
@@ -2052,7 +2053,7 @@ begin
       if (opcode<>focContinuation) and (opcode<>Frame.opcode) then
         if IgnoreExceptions then
           exit else
-          raise ESynBidirSocket.CreateUTF8('%.GetFrame: received %, expected %',
+          raise EWebSockets.CreateUTF8('%.GetFrame: received %, expected %',
             [self,ToText(opcode)^,ToText(Frame.opcode)^]);
       GetData(data);
       Frame.payload := Frame.payload+data;
@@ -2598,7 +2599,7 @@ constructor TWebSocketServerResp.Create(aServerSock: THttpServerSocket;
   aServer: THttpServer);
 begin
   if not aServer.InheritsFrom(TWebSocketServer) then
-    raise ESynBidirSocket.CreateUTF8('%.Create(%: TWebSocketServer?)',[self,aServer]);
+    raise EWebSockets.CreateUTF8('%.Create(%: TWebSocketServer?)',[self,aServer]);
   inherited Create(aServerSock,aServer);
 end;
 
