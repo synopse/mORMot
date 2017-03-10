@@ -14907,6 +14907,10 @@ type
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
   // content has already been set as expected by the client
   TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean of object;
+  {$ifndef NOVARIANTS}
+  /// callback allowing to customize the information returned by root/pcmman/info
+  TOnInternalInfo = procedure(Sender: TSQLRestServer; var info: TDocVariantData) of object;
+  {$endif}
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
@@ -16481,6 +16485,12 @@ type
     // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
     // content has already been set as expected by the client
     OnErrorURI: TNotifyErrorURI;
+    {$ifndef NOVARIANTS}
+    /// event to customize the information returned by root/pcmman/info
+    // - called by TSQLRestServer.InternalInfo method
+    // - you can add some application-level information for monitoring
+    OnInternalInfo: TOnInternalInfo;
+    {$endif}
     /// event trigerred when URI() is called, and at least 128 ms is elapsed
     // - could be used to execute some additional process after a period of time
     // - note that if TSQLRestServer.URI is not called by any client, this
@@ -40844,6 +40854,8 @@ begin // called by root/TimeStamp/info REST method
       'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
       'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
       'exception',GetLastExceptions(10)]);
+    if assigned(OnInternalInfo) then
+      OnInternalInfo(self,info);
   finally
     m.Free;
   end;
