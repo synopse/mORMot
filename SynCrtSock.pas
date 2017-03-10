@@ -268,7 +268,7 @@ const
 
   /// the running Operating System
   XPOWEREDOS = {$ifdef MSWINDOWS} 'Windows' {$else}
-                 {$ifdef LINUX} 'Linux' {$else} 'Posix' {$endif LINUX}
+                 {$ifdef LINUXNOTBSD} 'Linux' {$else} 'Posix' {$endif LINUXNOTBSD}
                {$endif MSWINDOWS};
 
   /// used by THttpApiServer.Request for http.sys to send a static file
@@ -520,9 +520,9 @@ type
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: SockString);
-    /// remote IP address of the last packet received, set only for SocketLayer=slUDP
+    /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress: SockString;
-    /// remote IP port of the last packet received, set only for SocketLayer=slUDP
+    /// remote IP port of the last packet received (SocketLayer=slUDP only)
     function PeerPort: integer;
     /// set the TCP_NODELAY option for the connection
     // - default 1 (true) will disable the Nagle buffering algorithm; it should
@@ -2045,11 +2045,12 @@ function GetRemoteMacAddress(const IP: SockString): SockString;
 
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
-function GetIPAddresses: TSockStringDynArray;
+function GetIPAddresses(PublicOnly: boolean = false): TSockStringDynArray;
 
 /// returns all IP addresses of the current computer as a single CSV text
 // - may be used to enumerate all adapters
-function GetIPAddressesText(const Sep: SockString = ' '): SockString;
+function GetIPAddressesText(const Sep: SockString = ' ';
+  PublicOnly: boolean = false): SockString;
 
 {$endif MSWINDOWS}
 
@@ -2057,20 +2058,27 @@ function GetIPAddressesText(const Sep: SockString = ' '): SockString;
 // - if Error is -1, will call WSAGetLastError to retrieve the last error code
 function SocketErrorMessage(Error: integer=-1): string;
 
-/// low-level direct write to the socket recv() function
-// - by-pass overriden blocking recv() e.g. in SynFPCSock
-function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
-
-/// low-level direct write to the socket send() function
-// - by-pass overriden blocking send() e.g. in SynFPCSock
-function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
-
 /// low-level direct creation of a TSocket handle for TCP, UDP or UNIX layers
+// - doBind=true will call Bind() to create a server socket instance
+// - doBind=false will call Connect() to create a client socket instance
 function CallServer(const Server, Port: SockString; doBind: boolean;
   aLayer: TCrtSocketLayer; ConnectTimeout: DWORD): TSocket;
 
+/// retrieve the text-converted remote IP address of a client socket
+function GetRemoteIP(aClientSock: TSocket): SockString;
 
-{ ************ socket polling for optimized multiple connections }
+/// low-level direct write to the socket recv() function
+// - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work
+// if the socket is in non-blocking mode, as with TPollAsynchSockets 
+function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
+
+/// low-level direct write to the socket send() function
+// - by-pass overriden blocking send() e.g. in SynFPCSock, so will work
+// if the socket is in non-blocking mode, as with TPollAsynchSockets 
+function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
+
+
+{ ************ socket polling optimized for multiple connections }
 
 type
   /// the events monitored by TPollSocketAbstract classes
@@ -2215,8 +2223,9 @@ type
       timeoutMS: integer): integer; override;
   end;
 
-{$ifdef Linux}
+{$ifdef LINUXNOTBSD}
   /// socket polling via Linux epoll optimized API
+  // - not available under Windows or BSD/Darwin
   // - direct call of the epoll API in level-triggered (LT) mode
   // - only available on Linux - use TPollSocketPoll for using cross-plaform
   // poll/WSAPoll API
@@ -2250,7 +2259,7 @@ type
     /// read-only access to the low-level epoll_create file descriptor
     property EPFD: integer read fEPFD;
   end;
-{$endif Linux}
+{$endif LINUXNOTBSD}
 
 type
   {$M+}
@@ -3093,54 +3102,44 @@ begin
   result := '';
 end;
 
-procedure IP4Text(addr: TInAddr; var result: SockString);
-var b: array[0..3] of byte absolute addr;
+procedure IP4Text(const ip4addr; var result: SockString);
+var b: array[0..3] of byte absolute ip4addr;
 begin
-  if cardinal(addr)=0 then
+  if cardinal(ip4addr)=0 then
     result := '' else
-  if cardinal(addr)=$0100007f then
+  if cardinal(ip4addr)=$0100007f then
     result := '127.0.0.1' else
     result := SockString(Format('%d.%d.%d.%d',[b[0],b[1],b[2],b[3]]))
 end;
 
 {$ifdef MSWINDOWS}
 
+function SendARP(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer;
+  PhyAddrLen: Pointer): DWORD; stdcall; external 'iphlpapi.dll';
+
 function GetRemoteMacAddress(const IP: SockString): SockString;
 // implements http://msdn.microsoft.com/en-us/library/aa366358
-type
-  TSendARP = function(DestIp: DWORD; srcIP: DWORD; pMacAddr: pointer; PhyAddrLen: Pointer): DWORD; stdcall;
 var dwRemoteIP: DWORD;
     PhyAddrLen: Longword;
     pMacAddr: array [0..7] of byte;
     I: integer;
     P: PAnsiChar;
-    SendARPLibHandle: THandle;
-    SendARP: TSendARP;
 begin
   result := '';
-  SendARPLibHandle := LoadLibrary('iphlpapi.dll');
-  if SendARPLibHandle<>0 then
-  try
-    SendARP := TSendARP(GetProcAddress(SendARPLibHandle,'SendARP'));
-    if @SendARP=nil then
-      exit; // we are not under 2K or later
-    dwremoteIP := inet_addr(pointer(IP));
-    if dwremoteIP<>0 then begin
-      PhyAddrLen := 8;
-      if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen)=NO_ERROR then begin
-        if PhyAddrLen=6 then begin
-          SetLength(result,12);
-          P := pointer(result);
-          for i := 0 to 5 do begin
-            P[0] := HexChars[pMacAddr[i] shr 4];
-            P[1] := HexChars[pMacAddr[i] and $F];
-            inc(P,2);
-          end;
+  dwremoteIP := inet_addr(pointer(IP));
+  if dwremoteIP<>0 then begin
+    PhyAddrLen := 8;
+    if SendARP(dwremoteIP, 0, @pMacAddr, @PhyAddrLen)=NO_ERROR then begin
+      if PhyAddrLen=6 then begin
+        SetLength(result,12);
+        P := pointer(result);
+        for i := 0 to 5 do begin
+          P[0] := HexChars[pMacAddr[i] shr 4];
+          P[1] := HexChars[pMacAddr[i] and $F];
+          inc(P,2);
         end;
       end;
     end;
-  finally
-    FreeLibrary(SendARPLibHandle);
   end;
 end;
 
@@ -3162,7 +3161,7 @@ type
 function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
   var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external 'iphlpapi.dll';
 
-function GetIPAddresses: TSockStringDynArray;
+function GetIPAddresses(PublicOnly: boolean): TSockStringDynArray;
 var Table: MIB_IPADDRTABLE;
     Size: DWORD;
     i: integer;
@@ -3176,8 +3175,14 @@ begin
   n := 0;
   for i := 0 to Table.dwNumEntries-1 do
     with Table.ip[i] do
-    if (dwAddr <> $0100007f) and (dwAddr <> 0) then begin
-      IP4Text(TInAddr(dwAddr),result[n]);
+    if (dwAddr<>$0100007f) and (dwAddr<>0) then begin
+      if PublicOnly then
+        case dwAddr and 255 of // ignore IANA private IP4 address spaces
+        10: continue;
+        172: if ((dwAddr shr 8) and 255) in [16..31] then continue;
+        192: if (dwAddr shr 8) and 255=168 then continue;
+        end;
+      IP4Text(dwAddr,result[n]);
       inc(n);
     end;
   if n<>Table.dwNumEntries then
@@ -3186,22 +3191,25 @@ end;
 
 var
   // should not change during process livetime
-  IPAddressesText: SockString;
+  IPAddressesText: array[boolean] of SockString;
 
-function GetIPAddressesText(const Sep: SockString = ' '): SockString;
+function GetIPAddressesText(const Sep: SockString; PublicOnly: boolean): SockString;
 var ip: TSockStringDynArray;
     i: integer;
 begin
-  result := IPAddressesText;
+  if Sep=' ' then
+    result := IPAddressesText[PublicOnly] else
+    result := '';
   if result<>'' then
     exit;
-  ip := GetIPAddresses;
+  ip := GetIPAddresses(PublicOnly);
   if ip=nil then
     exit;
   result := ip[0];
   for i := 1 to high(ip) do
     result := result+Sep+ip[i];
-  IPAddressesText := result;
+  if Sep=' ' then
+    IPAddressesText[PublicOnly] := result;
 end;
 
 {$endif MSWINDOWS}
@@ -3878,7 +3886,7 @@ var {$ifdef MSWINDOWS}
     tv: TTimeVal;
     fdset: TFDSet;
     {$else}
-    p: TPollFD; // TFDSet limited to 1024 total sockets in Linux -> use poll()
+    p: TPollFD; // TFDSet limited to 1024 total sockets in POSIX -> use poll()
     {$endif}
     res: integer;
 begin
@@ -5180,13 +5188,11 @@ begin
 end;
 
 procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
-var Name: TVarSin;
 begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  if GetPeerName(aClientSock,Name)=0 then
-    GetSinIPFromCache(Name,RemoteIP);
+  RemoteIP := GetRemoteIP(aClientSock);
 end;
 
 function THttpServerSocket.HeaderGetText: SockString;
@@ -5259,6 +5265,14 @@ end;
 
 
 { ECrtSocket }
+
+function GetRemoteIP(aClientSock: TSocket): SockString;
+var Name: TVarSin;
+begin
+  if GetPeerName(aClientSock,Name)=0 then
+    GetSinIPFromCache(Name,result) else
+    result := '';
+end;
 
 function SocketErrorMessage(Error: integer): string;
 begin
@@ -8132,7 +8146,8 @@ end;
 { ************ libcurl implementation }
 
 const
-  LIBCURL_DLL = {$IFDEF Darwin} 'libcurl.dylib' {$ELSE}{$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF}{$ENDIF};
+  LIBCURL_DLL = {$IFDEF Darwin} 'libcurl.dylib' {$ELSE}
+    {$IFDEF LINUX} 'libcurl.so' {$ELSE} 'libcurl.dll' {$ENDIF}{$ENDIF};
 
 type
   TCurlOption = (
@@ -8621,15 +8636,15 @@ end;
 
 function PollSocketClass: TPollSocketClass;
 begin
-  {$ifdef Linux}
-  result := TPollSocketEpoll;
+  {$ifdef LINUXNOTBSD}
+  result := TPollSocketEpoll; // the preferred way for our purpose
   {$else}
   {$ifdef MSWINDOWS}
   if Win32MajorVersion<6 then // WSAPoll() not available before Vista
     result := TPollSocketSelect else
   {$endif}
     result := TPollSocketPoll; // available on all POSIX systems
-  {$endif}
+  {$endif LINUXNOTBSD}
 end;
 
 constructor TPollSocketAbstract.Create;
@@ -8846,7 +8861,7 @@ begin
 end;
 
 
-{$ifdef Linux}
+{$ifdef LINUXNOTBSD}
 
 { TPollSocketEpoll }
 
@@ -8929,7 +8944,7 @@ begin
   end;
 end;
 
-{$endif Linux}
+{$endif LINUXNOTBSD}
 
 
 { TPollSockets }
@@ -9123,7 +9138,7 @@ begin
   inherited Create;
   c := PollSocketClass;
   fRead := TPollSockets.Create(c);
-  {$ifdef Linux}
+  {$ifdef LINUXNOTBSD}
   c := TPollSocketPoll; // epoll is overkill for short-living writes
   {$endif}
   fWrite := TPollSockets.Create(c);
