@@ -603,6 +603,57 @@ function ToText(st: TDDDSocketThreadState): PShortString; overload;
 function ToText(exc: TDDDMockedSocketException): PShortString; overload;
 
 
+{ ----- Applications Securization }
+
+type
+  /// result codes of the ECCAuthorize() function
+  TECCAuthorize = (eaSuccess, eaInvalidSecret, eaMissingUnlockFile, 
+    eaInvalidUnlockFile, eaInvalidJson);
+
+/// any sensitive, or licensed program, could call this method to check for
+// authorized execution for a given user on a given computer, using very secure
+// asymmetric ECC cryptography
+// - applock.public/.private keys pair should have been generated, applock.public
+// stored as aAppLockPublic64 in the executables, and applock.private kept secret
+// - will search for encrypted authorization in a local user@host.unlock file
+// - if no user@host.unlock file is found, will create local user@host.public
+// and user@host.secret files and return eaMissingUnlockFile: user should then send
+// user@host.public to the product support to receive its user@host.unlock file
+// (a dedicated UI may be developped, or an uncrypted email can be used for
+// transfer with the support team, thanks to asymmetric cryptography)
+// - local user@host.secret file is encrypted via DPAPI/CryptDataForCurrentUser
+// for the specific computer and user (to avoid .unlock reuse on another PC)
+// - support team should create a user@host.json file matching aContent: TObject
+// published properties, containing all application-specific settings and
+// authorization scope; then it could create the unlock file using e.g. an
+// unlock.bat file running the ECC tool over secret applock.private keys:
+// $ @echo off
+// $ echo Usage:  unlock user@host
+// $ echo.
+// $ ecc sign -file %1.json -auth applock -pass applockprivatepassword -rounds 60000
+// $ ecc crypt -file %1.json -out %1.unlock -auth %1 -saltpass decryptsalt -saltrounds 10000
+// $ del %1.json.sign
+// - returns eaInvalidUnlockFile if the local user@host.unlock file is not
+// correctly signed and encrypted for this user (e.g. corrupted or deprecated)
+// - eaInvalidJson will indicate some error in the .json created by support team,
+// i.e. if it does not match aContent: TObject published properties
+// - eaSuccess should let the application execute, on the returned scope
+// - returns eaSuccess if a local user@host.unlock file has been successfully
+// decrypted and validated (using ECDSA over aAppLockPublic64) and successfully
+// unserialized from JSON into aContent object instance
+// - user@host.* files are searched in the executable folder if aSearchFolder='',
+// but you may specify a custom location, e.g. use ECCKeyFileFolder
+// - will use the supplied parameters to restrict this authorization to
+// a specific product, using dedicated applock.public/.private keys pair
+// - aSecretInfo^ could be set to retrieve the user@host.secret information
+// (e.g. validity dates), and aLocalFile^ the'<fullpath>user@host' file prefix 
+function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
+  aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName = '';
+  aSecretInfo: PECCCertificateSigned = nil; aLocalFile: PFileName = nil): TECCAuthorize;
+
+function ToText(auth: TECCAuthorize): PShortString; overload;
+
+
 implementation
 
 { ----- Implements Service/Daemon Applications }
@@ -1957,12 +2008,103 @@ begin
         result.AdministrationServer, AuthHttp);
 end;
 
+
+{ ----- Applications Securization }
+
+function ToText(auth: TECCAuthorize): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TECCAuthorize), ord(auth));
+end;
+
+function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
+ aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName;
+  aSecretInfo: PECCCertificateSigned; aLocalFile: PFileName): TECCAuthorize;
+var
+  fileroot, fileunlock, filesecret, filepublic: TFileName;
+  priv, new: TECCCertificateSecret;
+  auth: TECCCertificate;
+  signature: TECCSignatureCertifiedContent;
+  unlock, secret, temp, json: RawByteString;
+  decrypt: TECCDecrypt;
+  hash: THash256;
+  valid: TECCValidity;
+  privok, jsonok: boolean;
+begin
+  with ExeVersion do
+    fileroot := SysUtils.LowerCase(format('%s@%s', [User, Host]));
+  if aSearchFolder = '' then
+    fileroot := ExeVersion.ProgramFilePath + fileroot else
+    fileroot := IncludeTrailingPathDelimiter(aSearchFolder) + fileroot;
+  if aLocalFile <> nil then
+    aLocalFile^ := fileroot;
+  fileunlock := fileroot + '.unlock';
+  filepublic := fileroot + ECCCERTIFICATEPUBLIC_FILEEXT;
+  filesecret := fileroot + '.secret'; // DPAPI-encrypted .private file
+  try
+    unlock := StringFromFile(fileunlock);
+    secret := StringFromFile(filesecret);
+    temp := CryptDataForCurrentUser(secret, aDPAPI, false);
+    priv := TECCCertificateSecret.Create;
+    try
+      privok := priv.LoadFromSecureBinary(temp, aSecretPass, 100);
+      if aSecretInfo <> nil then
+        aSecretInfo^ := priv.Content.Signed;
+      if not privok or not ECCCheckDate(priv.Content) then begin
+        new := TECCCertificateSecret.CreateNew(nil, ExeVersion.User, aSecretDays);
+        try
+          new.ToFile(filepublic);
+          temp := new.SaveToSecureBinary(aSecretPass, 7, 100);
+          secret := CryptDataForCurrentUser(temp, aDPAPI, true);
+          FileFromString(secret, filesecret);
+        finally
+          new.Free;
+        end;
+        result := eaInvalidSecret;
+        exit;
+      end;
+      result := eaMissingUnlockFile;
+      if unlock = '' then
+        exit;
+      result := eaInvalidUnlockFile;
+      decrypt := priv.Decrypt(unlock, json, @signature, nil, nil, aDecryptSalt, 10000);
+      if decrypt <> ecdDecryptedWithSignature then
+        exit;
+      auth := TECCCertificate.CreateFromBase64(aAppLockPublic64);
+      try
+        hash := SHA256Digest(pointer(json), length(json));
+        valid := ECCVerify(signature, hash, auth.Content);
+        if not (valid in ECC_VALIDSIGN) then
+          exit;
+      finally
+        auth.Free;
+      end;
+    finally
+      priv.Free;
+    end;
+    RemoveCommentsFromJSON(pointer(json));
+    JSONToObject(aContent, pointer(json), jsonok, nil, JSONTOOBJECT_TOLERANTOPTIONS);
+    if jsonok then
+      result := eaSuccess
+    else
+      result := eaInvalidJson;
+  finally
+    FillZero(hash);
+    FillZero(json);
+    FillZero(unlock);
+    FillZero(temp);
+    FillZero(secret);
+  end;
+end;
+
+
 initialization
   TJSONSerializer.RegisterObjArrayForJSON(
     [TypeInfo(TECCCertificateObjArray),TECCCertificate]);
+  {$ifdef DEBUG}
   {$ifdef EnableMemoryLeakReporting}
   {$ifdef HASFASTMM4} // FastMM4 integrated in Delphi 2006 (and up)
   ReportMemoryLeaksOnShutdown := True;
+  {$endif}
   {$endif}
   {$endif}
 end.

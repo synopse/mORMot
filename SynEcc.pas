@@ -305,6 +305,8 @@ type
     // - may be used later on for signing or key derivation
     PublicKey: TECCPublicKey;
   end;
+  /// points to certification information of a TECCCertificate
+  PECCCertificateSigned = ^TECCCertificateSigned;
 
   /// store a TECCCertificate binary buffer for ECC secp256r1 cryptography
   // - i.e. a certificate public key, with its ECDSA signature 
@@ -850,7 +852,7 @@ type
     constructor CreateFromSecureFile(const FolderName: TFileName;
       const Serial, PassWord: RawUTF8; PBKDF2Rounds: integer=DEFAULT_ECCROUNDS;
       AES: TAESAbstractClass=nil); overload;
-    /// finalize the instance
+    /// finalize the instance, and safe erase fPrivateKey stored buffer
     destructor Destroy; override;
     /// returns TRUE if the private secret key is not filled with zeros
     function HasSecret: boolean;
@@ -1688,8 +1690,6 @@ function ToText(algo: TECDHEMAC): PShortString; overload;
 
 implementation
 
-uses Math;
-
 
 { *********** low-level ECC secp256r1 ECDSA and ECDH functions *********** }
 
@@ -2188,7 +2188,6 @@ function ToText(algo: TECDHEMAC): PShortString;
 begin
   result := GetEnumName(TypeInfo(TECDHEMAC),ord(algo));
 end;
-
 
 var
   _ECCKeyFileFolder: TFileName;
@@ -4263,7 +4262,6 @@ begin
 end;
 
 {$endif NOVARIANTS}
-
 
 initialization
   assert(sizeof(TECCCertificateContent)=173); // on all platforms and compilers
