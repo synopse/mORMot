@@ -1511,13 +1511,24 @@ uses
   {$endif} ;
 {$endif}
 
-function ToText(event: TSynLogInfo): RawUTF8;
+var
+  LogInfoText: array[TSynLogInfo] of RawUTF8;
+  LogInfoCaptions: array[TSynLogInfo] of string;
+
+procedure ComputeLogInfoText;
+var
+  E: TSynLogInfo;
 begin
-  result := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(event)));
+  for E := low(E) to high(E) do
+    LogInfoText[E] := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(E)));
 end;
 
-var
-  LogInfoCaptions: array[TSynLogInfo] of string;
+function ToText(event: TSynLogInfo): RawUTF8;
+begin
+  if LogInfoText[low(event)]='' then
+    ComputeLogInfoText;
+  result := LogInfoText[event];
+end;
 
 function ToCaption(event: TSynLogInfo): string;
 var
