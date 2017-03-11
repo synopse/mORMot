@@ -5502,8 +5502,8 @@ begin
       if (fServer.fInternalHttpServerRespList.Count<THREADPOOL_MAXWORKTHREADS) and
          (ServerSock.KeepAliveClient or
           (ServerSock.ContentLength>THREADPOOL_BIGBODYSIZE)) then begin
-        // HTTP/1.1 Keep Alive -> process in background thread
-        // or posted data > 1 MB -> process in dedicated background thread
+        // HTTP/1.1 Keep Alive (including WebSockets) or posted data > 1 MB
+        // -> process in dedicated background thread
         fServer.fThreadRespClass.Create(ServerSock,fServer);
         ServerSock := nil; // THttpServerResp will do ServerSock.Free
         InterlockedIncrement(fBodyOwnThreads);

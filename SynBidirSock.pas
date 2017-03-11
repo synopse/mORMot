@@ -908,7 +908,9 @@ type
     // - note that this constructor will not register any protocol, so is
     // useless until you execute Protocols.Add()
     // - in the current implementation, the ServerThreadPoolCount parameter will
-    // be ignored by this class, and one thread will be maintained per client
+    // be ignored, and two threads will handle shortliving HTTP/1.0
+    // "connection: close" requests, and one thread will be maintained per
+    // keep-alive/websockets client
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       const ProcessName: SockString; ServerThreadPoolCount: integer=0); override;
     /// close the server
@@ -2607,7 +2609,7 @@ begin
   fSettings.SetDefaults;
   fSettings.HeartbeatDelay := 20000;
   fCanNotifyCallback := true;
-  inherited Create(aPort,OnStart,OnStop,ProcessName,0); // NO thread pool
+  inherited Create(aPort,OnStart,OnStop,ProcessName,2); // 2 threads for HTTP/1.0
 end;
 
 function TWebSocketServer.WebSocketProcessUpgrade(ClientSock: THttpServerSocket;
