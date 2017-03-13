@@ -9038,6 +9038,7 @@ const
     ($94,$E4,$A9,$D9,$05,$31,$23,$1D,$BE,$D8,$7E,$D2,$E4,$F3,$5E,$4A,
      $0B,$F4,$B3,$BC,$CE,$EB,$17,$16,$D5,$77,$B1,$E0,$8B,$A9,$BA,$A3);
 var Digest: TSHA256Digest;
+    Digests: THash256DynArray;
 begin
   SingleTest('abc',D1);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
@@ -9050,6 +9051,14 @@ begin
   PBKDF2_HMAC_SHA256('password','salt',2,Digest);
   check(SHA256DigestToString(Digest)=
    'ae4d0c95af6b46d32d0adff928f06dd02a303f8ef3c251dfd6e2d85a95474c43');
+  SetLength(Digests,2);
+  check(IsZero(Digests[0]));
+  check(IsZero(Digests[1]));
+  PBKDF2_HMAC_SHA256('password','salt',2,Digests);
+  check(IsEqual(Digests[0],Digest));
+  check(not IsEqual(Digests[1],Digest));
+  check(SHA256DigestToString(Digests[1])=
+    '830651afcb5c862f0b249bd031f7a67520d136470f5ec271ece91c07773253d9');
   PBKDF2_HMAC_SHA256('password','salt',4096,Digest);
   check(SHA256DigestToString(Digest)=
     'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a');

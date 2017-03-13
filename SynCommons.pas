@@ -11034,6 +11034,8 @@ type
   // - e.g. a MD5 digest, or array[0..3] of cardinal (TBlock128)
   // - consumes 16 bytes of memory
   THash128 = array[0..15] of byte;
+  /// pointer to a 128-bit hash value
+  PHash128 = ^THash128;
   /// store a 192-bit hash value
   // - consumes 24 bytes of memory
   THash192 = array[0..23] of byte;
@@ -11041,13 +11043,24 @@ type
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory
   THash256 = array[0..31] of byte;
+  /// pointer to a 256-bit hash value
+  PHash256 = ^THash256;
   /// store a 128-bit buffer
   // - e.g. an AES block
   // - consumes 16 bytes of memory
   TBlock128 = array[0..3] of cardinal;
+  /// pointer to a 128-bit buffer
+  PBlock128 = ^TBlock128;
 
-  /// pointer to a 128-bit hash value
-  PHash128 = ^THash128;
+  /// map an infinite array of 128-bit hash values
+  // - each item consumes 16 bytes of memory
+  THash128Array = array[0..(maxInt div sizeof(THash128))-1] of THash128;
+  /// pointer to an infinite array of 128-bit hash values
+  PHash128Array = ^THash128Array;
+  /// store several 128-bit hash values
+  // - e.g. MD5 digests
+  // - consumes 16 bytes of memory per item
+  THash128DynArray = array of THash128;
   /// map a 128-bit hash as an array of lower bit size values
   // - consumes 16 bytes of memory
   THash128Rec = packed record
@@ -11059,6 +11072,16 @@ type
   end;
   /// pointer to an array of two 64-bit hash values
   PHash128Rec = ^THash128Rec;
+
+  /// map an infinite array of 256-bit hash values
+  // - each item consumes 32 bytes of memory
+  THash256Array = array[0..(maxInt div sizeof(THash256))-1] of THash256;
+  /// pointer to an infinite array of 256-bit hash values
+  PHash256Array = ^THash256Array;
+  /// store several 256-bit hash values
+  // - e.g. SHA-256 digests, TECCSignature results, or array[0..7] of cardinal
+  // - consumes 32 bytes of memory per item
+  THash256DynArray = array of THash256;
   /// map a 256-bit hash as an array of lower bit size values
   // - consumes 32 bytes of memory
   THash256Rec = packed record
@@ -11071,15 +11094,6 @@ type
   end;
   /// pointer to an array of two 128-bit hash values
   PHash256Rec = ^THash256Rec;
-  /// map an infinite array of 128-bit hash values
-  // - each item consumes 16 bytes of memory
-  THash128Array = array[0..(maxInt div sizeof(THash128))-1] of THash128;
-  /// pointer to an infinite array of 128-bit hash values
-  PHash128Array = ^THash128Array;
-  /// pointer to a 256-bit hash value
-  PHash256 = ^THash256;
-  /// pointer to a 128-bit buffer
-  PBlock128 = ^TBlock128;
 
 /// compute a 128-bit checksum on the supplied buffer, cascading two crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -15999,7 +16013,7 @@ type
   end;
 
   /// able to serialize any cumulative size as bytes number
-  // - "cumulative" time would add each process value, e.g. global IO
+  // - "cumulative" time would add each process value, e.g. global IO consumption
   TSynMonitorSize = class
   protected
     fBytes: TSynMonitorTotalBytes;

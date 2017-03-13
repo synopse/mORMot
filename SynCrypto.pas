@@ -1381,7 +1381,15 @@ procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA
 /// compute the PBKDF2 derivation of a password using HMAC over SHA256
 // - this function expect the resulting key length to match SHA256 digest size
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
-  out result: TSHA256Digest; const saltdefault: RawByteString='');
+  out result: TSHA256Digest; const saltdefault: RawByteString=''); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA256, into
+// several 256-bit items, so can be used to return any size of output key
+// - this function expect the result array to have the expected output length
+// - allows resulting key length to be more than one SHA256 digest size, e.g.
+// to be used for both Encryption and MAC
+procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
+  var result: THash256DynArray; const saltdefault: RawByteString=''); overload;
 
 /// compute the HMAC message authentication code using crc256c as hash function
 // - HMAC over a non cryptographic hash function like crc256c is known to be
@@ -2699,6 +2707,34 @@ begin
   FillcharFast(first,sizeof(first),0);
   FillcharFast(mac,sizeof(mac),0);
   FillZero(tmp);
+end;
+
+procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
+  var result: THash256DynArray; const saltdefault: RawByteString);
+var n,i: integer;
+    iter: RawByteString;
+    tmp: TSHA256Digest;
+    mac: THMAC_SHA256;
+    first: THMAC_SHA256;
+begin
+  first.Init(pointer(password),length(password));
+  SetLength(iter,sizeof(integer));
+  for n := 0 to high(result) do begin
+    PInteger(iter)^ := bswap32(n+1); // U1 = PRF(Password, Salt || INT_32_BE(i))
+    if salt='' then
+      HMAC_SHA256(password,saltdefault+iter,result[n]) else
+      HMAC_SHA256(password,salt+iter,result[n]);
+    tmp := result[n];
+    for i := 2 to count do begin
+      mac := first; // re-use the very same SHA-256 context for best performance
+      mac.sha.Update(@tmp,sizeof(tmp));
+      mac.Done(tmp,true);
+      XorMemory(@result[n],@tmp,sizeof(result[n]));
+    end;
+  end;
+  FillZero(tmp);
+  FillcharFast(mac,sizeof(mac),0);
+  FillcharFast(first,sizeof(first),0);
 end;
 
 function SHA256(const s: RawByteString): RawUTF8;
