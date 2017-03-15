@@ -12493,6 +12493,9 @@ type
     function Version32: integer;
     /// build date and time of this exe file, as plain text
     function BuildDateTimeString: string;
+    /// version info of the exe file as '3.1.0.123' or ''
+    // - this method returns '' if Detailed is '0.0.0.0'
+    function DetailedOrVoid: string;
     /// returns the version information of this exe file as text
     // - includes FileName (without path), Detailed and BuildDateTime properties
     // - e.g. 'myprogram.exe 3.1.0.123 2016-06-14 19:07:55'
@@ -12506,6 +12509,7 @@ type
     // - return "string" type, i.e. UnicodeString for Delphi 2009+
     // - under Linux, always return '0.0.0.0' if no custom version number
     // has been defined
+    // - consider using DetailedOrVoid method if '0.0.0.0' is not expected
     property Detailed: string read fDetailed write fDetailed;
     /// build date and time of this exe file
     property BuildDateTime: TDateTime read fBuildDateTime write fBuildDateTime;
@@ -35360,6 +35364,13 @@ begin
   DateTimeToIso8601StringVar(fBuildDateTime,' ',result);
 end;
 
+function TFileVersion.DetailedOrVoid: string;
+begin
+  if (self=nil) or (fDetailed='0.0.0.0') then
+    result := '' else
+    result := fDetailed;
+end;
+
 function TFileVersion.VersionInfo: RawUTF8;
 begin
   FormatUTF8('% % %',[ExtractFileName(fFileName),fDetailed,BuildDateTimeString],result);
@@ -54539,7 +54550,6 @@ begin
       tim := GetTimeOut;
       if tim>0 then
         fTimeOuts.Add(tim);
-      end;
     end else
       result := -1;
   finally
