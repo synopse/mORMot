@@ -44813,8 +44813,7 @@ begin // this method is faster than default System.DynArraySetLength() function
     end;
     {$endif}
     if GetIsObjArray then
-      for i := 0 to Count-1 do
-        PObjectArray(fValue^)^[i].Free;
+      ObjArrayClear(fValue^);
     _DynArrayClear(fValue^,ArrayType);
     exit;
   end;
@@ -44837,9 +44836,11 @@ begin // this method is faster than default System.DynArraySetLength() function
     if NewLength<OldLength then
       if ElemType<>nil then
         _FinalizeArray(pa+NeededSize,ElemType,OldLength-NewLength) else
-        if GetIsObjArray then
+        if GetIsObjArray then begin // FreeAndNil() of resized objects list
           for i := NewLength to OldLength-1 do
             PObjectArray(fValue^)^[i].Free;
+          FillCharFast(pa[NeededSize],(OldLength-NewLength) shl POINTERSHR,0);
+        end;
     ReallocMem(p,neededSize);
   end else begin
     InterlockedDecrement(PInteger(@p^.refCnt)^); // FPC has refCnt: PtrInt
@@ -44903,7 +44904,7 @@ begin
           aCount := fCountP^ else
           aCount := capa;
       end else
-      if aCount>0 then // aCount=0 should release memory (e.g. TDynArray.Clear)
+      if (aCount>0) and not GetIsObjArray then // SetCount(0) from TDynArray.Clear
         // size-down -> only if worth it (for faster Delete)
         if (capa<=MINIMUM_SIZE) or (capa-aCount<capa shr 3) then
           exit;
