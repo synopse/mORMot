@@ -6038,7 +6038,15 @@ procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 // e.g. in the owner class destructor
 // - will also set the dynamic array length to 0, so could be used to re-use
 // an existing T*ObjArray
-procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean=false);
+procedure ObjArrayClear(var aObjArray); overload;
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
+// - as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean); overload; 
 
 /// wrapper to release all items stored in an array of T*ObjArray dynamic array
 // - e.g. aObjArray may be defined as "array of array of TSynFilter"
@@ -7369,8 +7377,8 @@ type
     destructor Destroy; override;
     /// you can use this method to override the default JSON serialization class
     // - if only SynCommons.pas is used, it will be TTextWriter
-    // - but mORMot.pas will call it to use the TJSONSerializer instead, which
-    // is able to serialize any class as JSON
+    // - but mORMot.pas initialization will call it to use the TJSONSerializer
+    // instead, which is able to serialize any class as JSON
     class procedure SetDefaultJSONClass(aClass: TTextWriterClass);
     /// allow to override the default JSON serialization of enumerations and
     // sets as text, which would write the whole identifier (e.g. 'sllError')
@@ -45928,22 +45936,40 @@ begin
   end;
 end;
 
-procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
+procedure RawObjectsClear(o: PObject; n: integer);
 var i: integer;
+begin
+  for i := 1 to n do begin
+    if o^<>nil then // inlined o^.Free
+      o^.Destroy;
+    inc(o);
+  end;
+end;
+
+procedure ObjArrayClear(var aObjArray);
+begin
+  if pointer(aObjArray)=nil then
+    exit;
+  RawObjectsClear(pointer(aObjArray),length(TObjectDynArray(aObjArray)));
+  TObjectDynArray(aObjArray) := nil;
+end;
+
+procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
+var n,i: integer;
     a: TObjectDynArray absolute aObjArray;
 begin
-  if a<>nil then begin
-    if aContinueOnException then
-      for i := 0 to length(a)-1 do
-      try
-        a[i].Free
-      except
-      end
-    else
-      for i := 0 to length(a)-1 do
-        a[i].Free;
-    a := nil;
-  end;
+  n := length(a);
+  if n=0 then
+    exit;
+  if aContinueOnException then
+    for i := 0 to n-1 do
+    try
+      a[i].Free;
+    except
+    end
+  else
+    RawObjectsClear(pointer(a),n);
+  a := nil;
 end;
 
 function ObjArrayToJSON(const aObjArray; Options: TTextWriterWriteObjectOptions): RawUTF8;
