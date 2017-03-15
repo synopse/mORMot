@@ -4345,7 +4345,8 @@ begin
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
-    fWriterClass := TTextWriter;
+    // set to TTextWriter or TJSONSerializer if mORMot.pas is linked
+    fWriterClass := TTextWriter.GetDefaultJSONClass;
   if fWriter=nil then begin
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions+[twoEnumSetsAsTextInRecord,twoFullSetsAsStar];

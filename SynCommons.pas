@@ -7380,6 +7380,11 @@ type
     // - but mORMot.pas initialization will call it to use the TJSONSerializer
     // instead, which is able to serialize any class as JSON
     class procedure SetDefaultJSONClass(aClass: TTextWriterClass);
+    /// you can use this method to retireve the default JSON serialization class
+    // - if only SynCommons.pas is used, it will be TTextWriter
+    // - but mORMot.pas initialization will call SetDefaultJSONClass to define
+    // TJSONSerializer instead, which is able to serialize any class as JSON
+    class function GetDefaultJSONClass: TTextWriterClass;
     /// allow to override the default JSON serialization of enumerations and
     // sets as text, which would write the whole identifier (e.g. 'sllError')
     // - calling SetDefaultEnumTrim(true) would force the enumerations to
@@ -48970,6 +48975,11 @@ end;
 class procedure TTextWriter.SetDefaultJSONClass(aClass: TTextWriterClass);
 begin
   DefaultTextWriterJSONClass := aClass;
+end;
+
+class function TTextWriter.GetDefaultJSONClass: TTextWriterClass;
+begin
+  result := DefaultTextWriterJSONClass;
 end;
 
 class procedure TTextWriter.SetDefaultEnumTrim(aShouldTrimEnumsAsText: boolean);

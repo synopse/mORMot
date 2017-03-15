@@ -19964,10 +19964,7 @@ type
   // - is the default logging family used by the mORMot framework
   // - mORMotDB.pas unit will set SynDBLog := TSQLLog
   // - mORMotSQLite3.pas unit will set SynSQLite3Log := TSQLLog
-  TSQLLog = class(TSynLog)
-  protected
-    procedure CreateLogWriter; override;
-  end;
+  TSQLLog = TSynLog;
 
 {$ifdef WITHLOG}
 var
@@ -50418,14 +50415,6 @@ begin
   PInt64(@aResult.VCurrency)^ := aValue64^; 
 end;
 
-
-{ TSQLLog }
-
-procedure TSQLLog.CreateLogWriter;
-begin
-  fWriterClass := TJSONSerializer;
-  inherited CreateLogWriter;
-end;
 
 
 { TSQLVirtualTableCursorIndex }
