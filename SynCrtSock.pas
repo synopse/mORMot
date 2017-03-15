@@ -2071,14 +2071,21 @@ function CallServer(const Server, Port: SockString; doBind: boolean;
 /// retrieve the text-converted remote IP address of a client socket
 function GetRemoteIP(aClientSock: TSocket): SockString;
 
+/// low-level direct shutdown of a given socket
+procedure DirectShutdown(sock: TSocket);
+
+/// low-level change of a socket to be in non-blocking mode
+// - used e.g. by TPollAsynchSockets.Start
+function AsynchSocket(sock: TSocket): boolean;
+
 /// low-level direct write to the socket recv() function
 // - by-pass overriden blocking recv() e.g. in SynFPCSock, so will work
-// if the socket is in non-blocking mode, as with TPollAsynchSockets 
+// the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
 
 /// low-level direct write to the socket send() function
-// - by-pass overriden blocking send() e.g. in SynFPCSock, so will work
-// if the socket is in non-blocking mode, as with TPollAsynchSockets 
+// - by-pass overriden blocking send() e.g. in SynFPCSock, so will work if
+// the socket is in non-blocking mode, as with AsynchSocket/TPollAsynchSockets
 function AsynchSend(sock: TSocket; buf: pointer; buflen: integer): integer;
 
 
@@ -3581,10 +3588,9 @@ begin
       PTextRec(SockIn)^.BufEnd := 0;
     end;
   end;
-  if Sock=-1 then
+  if Sock<0 then
     exit; // no opened connection, or Close already executed
-  Shutdown(Sock,SHUT_WR);
-  CloseSocket(Sock); // SO_LINGER usually set to 5 or 10 seconds
+  DirectShutdown(fSock);
   fSock := -1; // don't change Server or Port, since may try to reconnect
 end;
 
@@ -4608,8 +4614,7 @@ begin
           continue;
         end;
       if Terminated or (Sock=nil) then begin
-abort:  Shutdown(ClientSock,SHUT_WR);
-        CloseSocket(ClientSock);
+abort:  DirectShutdown(ClientSock);
         break; // don't accept input if server is down
       end;
       OnConnect;
@@ -4620,8 +4625,7 @@ abort:  Shutdown(ClientSock,SHUT_WR);
         if ClientCrtSock.GetRequest then
           Process(ClientCrtSock,self);
         OnDisconnect;
-        Shutdown(ClientSock,SHUT_WR);
-        CloseSocket(ClientSock)
+        DirectShutdown(ClientSock);
       finally
         ClientCrtSock.Free;
       end;
@@ -4944,11 +4948,8 @@ begin
         end;
       finally
         FreeAndNil(fServerSock);
-        if fClientSock<>0 then begin
           // if Destroy happens before fServerSock.GetRequest() in Execute below
-          Shutdown(fClientSock,SHUT_WR);
-          CloseSocket(fClientSock);
-        end;
+        DirectShutdown(fClientSock);
       end;
     end;
   except
@@ -5240,6 +5241,20 @@ begin
   end;
 end;
 
+procedure DirectShutdown(sock: TSocket);
+begin
+  if sock<=0 then
+    exit;
+  Shutdown(sock,SHUT_WR);
+  CloseSocket(sock); // SO_LINGER usually set to 5 or 10 seconds
+end;
+
+function AsynchSocket(sock: TSocket): boolean;
+var nonblocking: integer;
+begin
+  nonblocking := 1; // for both Windows and POSIX
+  result := IoctlSocket(sock,FIONBIO,nonblocking)=0;
+end;
 
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
 begin
