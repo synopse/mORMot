@@ -8853,6 +8853,7 @@ type
     fTimeOuts: TDynArray;
     function InArray(const aKey,aArrayValue; aAction: TSynDictionaryInArray): boolean;
     procedure SetTimeouts;
+    function GetTimeOut: cardinal; 
   public
     /// initialize the dictionary storage, for a given dynamic array value
     // - aKeyTypeInfo should be a dynamic array TypeInfo() RTTI pointer, which
@@ -8901,6 +8902,16 @@ type
     // - if you want to access the value, you should use fSafe.Lock/Unlock:
     // consider using Exists or FindAndCopy thread-safe methods instead
     function Find(const aKey): integer;
+    /// search of a primary key within the internal hashed dictionary
+    // - returns a pointer to the matching item, nil if aKey was not found
+    // - if you want to access the value, you should use fSafe.Lock/Unlock:
+    // consider using Exists or FindAndCopy thread-safe methods instead
+    function FindValue(const aKey): pointer;
+    /// search of a primary key within the internal hashed dictionary
+    // - returns a pointer to the matching or already existing item
+    // - if you want to access the value, you should use fSafe.Lock/Unlock:
+    // consider using Exists or FindAndCopy thread-safe methods instead
+    function FindValueOrAdd(const aKey; var added: boolean): pointer;
     /// search of a stored value by its primary key, and return a local copy
     // - so this method is thread-safe
     // - returns TRUE if aKey was found, FALSE if no match exists
@@ -54447,6 +54458,13 @@ begin
   fSafe.Padding[DIC_TIMESEC].VInteger := aTimeoutSeconds;
 end;
 
+function TSynDictionary.GetTimeOut: cardinal;
+begin
+  result := fSafe.Padding[DIC_TIMESEC].VInteger;
+  if result<>0 then
+    result := GetTickCount64 shr 10+result;
+end;
+
 procedure TSynDictionary.SetTimeouts;
 var i: integer;
     timeout: cardinal;
@@ -54454,7 +54472,7 @@ begin
   if fSafe.Padding[DIC_TIMESEC].VInteger=0 then
     exit;
   fTimeOuts.SetCount(fSafe.Padding[DIC_KEYCOUNT].VInteger);
-  timeout := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger;
+  timeout := GetTimeout;
   for i := 0 to fSafe.Padding[DIC_TIMECOUNT].VInteger-1 do
     fTimeOut[i] := timeout;
 end;
@@ -54518,8 +54536,8 @@ begin
         ElemCopyFrom(aKey,result); // fKey[result] := aKey;
       if fValues.Add(aValue)<>result then
         raise ESynException.CreateUTF8('%.Add fValues.Add',[self]);
-      if fSafe.Padding[DIC_TIMESEC].VInteger>0 then begin
-        tim := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger;
+      tim := GetTimeOut;
+      if tim>0 then
         fTimeOuts.Add(tim);
       end;
     end else
@@ -54535,13 +54553,11 @@ var added: boolean;
 begin
   fSafe.Lock;
   try
+    tim := GetTimeout;
     result := fKeys.FindHashedForAdding(aKey,added);
-    if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
-      tim := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger else
-      tim := 0;
     if added then begin
       with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
-        ElemCopyFrom(aKey,result); // fKey[result] := aKey;
+        ElemCopyFrom(aKey,result); // fKey[result] := aKey
       if fValues.Add(aValue)<>result then
         raise ESynException.CreateUTF8('%.AddOrUpdate fValues.Add',[self]);
       if tim<>0 then
@@ -54647,6 +54663,33 @@ begin // caller is expected to call fSafe.Lock/Unlock
   result := fKeys.FindHashed(aKey);
 end;
 
+function TSynDictionary.FindValue(const aKey): pointer;
+var ndx: integer;
+begin
+  ndx := fKeys.FindHashed(aKey);
+  if ndx<0 then
+    result := nil else
+    result := fValues.ElemPtr(ndx);
+end;
+
+function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean): pointer;
+var ndx: integer;
+    tim: cardinal;
+begin
+  tim := GetTimeout;
+  ndx := fKeys.FindHashedForAdding(aKey,added);
+  if added then begin
+    with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do
+      ElemCopyFrom(aKey,ndx); // fKey[i] := aKey
+    fValues.SetCount(ndx+1); // reserve new place for associated value
+    if tim>0 then
+      fTimeOuts.Add(tim);
+  end else
+    if tim>0 then
+      fTimeOut[ndx] := tim;
+  result := fValues.ElemPtr(ndx);
+end;
+
 function TSynDictionary.FindAndCopy(const aKey; out aValue): boolean;
 var ndx: integer;
 begin
@@ -54656,7 +54699,7 @@ begin
     if ndx>=0 then begin
       fValues.ElemCopyAt(ndx,aValue);
       if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
-        fTimeout[ndx] := GetTickCount64 shr 10+fSafe.Padding[DIC_TIMESEC].VInteger;
+        fTimeout[ndx] := GetTimeOut;
       result := true;
     end else
       result := false;
@@ -54848,9 +54891,11 @@ var tmp: TSynTempBuffer;
 begin
   fSafe.Lock;
   try
+    result := '';
+    if fSafe.Padding[DIC_KEYCOUNT].VInteger = 0 then
+      exit;
     tmp.Init(fKeys.SaveToLength+fValues.SaveToLength);
-    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf<>tmp.len then
-      result := '' else
+    if fValues.SaveTo(fKeys.SaveTo(tmp.buf))-tmp.buf=tmp.len then
       SynLZCompress(tmp.buf,tmp.len,result);
     tmp.Done;
   finally
@@ -60063,7 +60108,7 @@ begin
   fSafe.Lock;
   try
     if fTasks.FastLocateSorted(item,ndx) then
-      inc(ndx); // always insert just after an existing timestamp
+      inc(ndx); // always insert just after any existing timestamp
     fTasks.FastAddSorted(ndx,item);
   finally
     fSafe.UnLock;
@@ -60085,7 +60130,7 @@ begin
       inc(item.TimeStamp,aMilliSecondsDelays[i]);
       item.Task := aTasks[i];
       if fTasks.FastLocateSorted(item,ndx) then
-        inc(ndx); // always insert just after an existing timestamp
+        inc(ndx); // always insert just after any existing timestamp
       fTasks.FastAddSorted(ndx,item);
     end;
   finally
