@@ -559,7 +559,7 @@ type
     property SockOut: PTextFile read fSockOut;
   published
     /// low-level socket handle, initialized after Open() with socket
-    property Sock: TSocket read fSock;
+    property Sock: TSocket read fSock write fSock;
     /// low-level socket type, initialized after Open() with socket
     property SocketLayer: TCrtSocketLayer read fSocketLayer;
     /// IP address, initialized after Open() with Server name
@@ -686,20 +686,12 @@ type
 
   /// Socket API based HTTP/1.1 server class used by THttpServer Threads
   THttpServerSocket = class(THttpSocket)
-  private
+  protected
+    fMethod: SockString;
+    fURL: SockString;
+    fKeepAliveClient: boolean;
+    fRemoteIP: SockString;
   public
-    /// contains the method ('GET','POST'.. e.g.) after GetRequest()
-    Method: SockString;
-    /// contains the URL ('/' e.g.) after GetRequest()
-    URL: SockString;
-    /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
-    // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
-    // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
-    // support persistent connections MUST include the "close" connection option
-    // in every message"
-    KeepAliveClient: boolean;
-    /// the recognized client IP, after a call to InitRequest()
-    RemoteIP: SockString;
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
     constructor Create(aServer: THttpServer); reintroduce;
@@ -717,6 +709,18 @@ type
     /// get all Header values at once, as CRLF delimited text
     // - this overridden version will add the 'RemoteIP: 1.2.3.4' header
     function HeaderGetText: SockString; override;
+    /// contains the method ('GET','POST'.. e.g.) after GetRequest()
+    property Method: SockString read fMethod;
+    /// contains the URL ('/' e.g.) after GetRequest()
+    property URL: SockString read fURL;
+    /// true if the client is HTTP/1.1 and 'Connection: Close' is not set
+    // - default HTTP/1.1 behavior is "keep alive", unless 'Connection: Close'
+    // is specified, cf. RFC 2068 page 108: "HTTP/1.1 applications that do not
+    // support persistent connections MUST include the "close" connection option
+    // in every message"
+    property KeepAliveClient: boolean read fKeepAliveClient write fKeepAliveClient;
+    /// the recognized client IP, after a call to InitRequest()
+    property RemoteIP: SockString read fRemoteIP;
   end;
 
   /// Socket API based REST and HTTP/1.1 compatible client class
@@ -5192,7 +5196,7 @@ begin
   CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
   Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  RemoteIP := GetRemoteIP(aClientSock);
+  fRemoteIP := GetRemoteIP(aClientSock);
 end;
 
 function THttpServerSocket.HeaderGetText: SockString;
@@ -5217,14 +5221,14 @@ begin
       end else
       SockRecvLn(Command);
     P := pointer(Command);
-    Method := GetNextItem(P,' '); // 'GET'
-    URL := GetNextItem(P,' ');    // '/path'
-    KeepAliveClient := IdemPChar(P,'HTTP/1.1');
+    fMethod := GetNextItem(P,' '); // 'GET'
+    fURL := GetNextItem(P,' ');    // '/path'
+    fKeepAliveClient := IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content
     GetHeader;
     if ConnectionClose then
-      KeepAliveClient := false;
+      fKeepAliveClient := false;
     if (ContentLength<0) and KeepAliveClient then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     result := GetTickCount<maxtix; // time wrap after 49.7 days -> accepted
