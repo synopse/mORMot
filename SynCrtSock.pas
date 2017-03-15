@@ -2281,14 +2281,15 @@ type
   // - call GetOne from any consumming threads to process new events
   TPollSockets = class
   protected
-    fLock: TRTLCriticalSection;
     fPollClass: TPollSocketClass;
     fPoll: array of TPollSocketAbstract;
+    fPollIndex: integer;
     fPending: TPollSocketResults;
     fPendingIndex: integer;
-    fPendingPoll: integer;
     fTerminated: boolean;
     fCount: integer;
+    fPollLock: TRTLCriticalSection;
+    fPendingLock: TRTLCriticalSection;
   public
     /// initialize the sockets polling
     // - you can specify the TPollSocketAbsract class to be used, if the
@@ -2308,13 +2309,18 @@ type
     // - the socket should have been monitored by a previous call to Subscribe()
     // - this method is thread-safe
     function Unsubscribe(socket: TSocket; tag: TPollSocketTag): boolean; virtual;
-    /// retrieve the next pending notification
+    /// retrieve the next pending notification, or let the poll wait for new
     // - if there is no pending notification, will poll and wait up to
     // timeoutMS milliseconds for pending data
     // - returns true and set notif.events/tag with the corresponding notification
     // - returns false if no pending event was handled within the timeoutMS period
     // - this method is thread-safe, and could be called from several threads
     function GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean; virtual;
+    /// retrieve the next pending notification
+    // - returns true and set notif.events/tag with the corresponding notification
+    // - returns false if no pending event is available
+    // - this method is thread-safe, and could be called from several threads
+    function GetOneWithinPending(out notif: TPollSocketResult): boolean;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate;
     /// set to true by the Terminate method
@@ -2689,6 +2695,27 @@ begin
      P := S+1 else
      P := nil;
   end;
+end;
+
+function SameText(const a,b: SockString): boolean;
+var n,i: integer;
+    c,d: AnsiChar;
+begin
+  result := false;
+  n := length(a);
+  if length(b)<>n then
+    exit;
+  for i := 1 to n do begin
+    c := a[i];
+    if c in ['a'..'z'] then 
+      dec(c,32);
+    d := b[i];
+    if d in ['a'..'z'] then
+      dec(d,32);
+    if c<>d then
+      exit;
+  end;
+  result := true;
 end;
 
 function GetNextItemUInt64(var P: PAnsiChar): Int64;
@@ -3415,10 +3442,10 @@ begin
     end;
     else exit;
   end;
-  {$ifndef MSWINDOWS}
-  if (Server='') and not doBind then
+
+  if SameText(Server,'localhost')
+    {$ifndef MSWINDOWS}or ((Server='') and not doBind){$endif} then
     IP := cLocalHost else
-  {$endif}
     IP := ResolveName(Server,AF_INET,ipproto,socktype);
   // use AF_INET instead of AF_UNSPEC: IP6 is buggy!
   if SetVarSin(sin,IP,Port,AF_INET,ipproto,socktype,false)<>0 then
@@ -4948,7 +4975,7 @@ begin
         end;
       finally
         FreeAndNil(fServerSock);
-          // if Destroy happens before fServerSock.GetRequest() in Execute below
+        // if Destroy happens before fServerSock.GetRequest() in Execute below
         DirectShutdown(fClientSock);
       end;
     end;
@@ -8971,7 +8998,8 @@ end;
 constructor TPollSockets.Create(aPollClass: TPollSocketClass=nil);
 begin
   inherited Create;
-  InitializeCriticalSection(fLock);
+  InitializeCriticalSection(fPendingLock);
+  InitializeCriticalSection(fPollLock);
   if aPollClass=nil then
     fPollClass := PollSocketClass else
     fPollClass := aPollClass;
@@ -8982,7 +9010,8 @@ var p: integer;
 begin
   for p := 0 to high(fPoll) do
     fPoll[p].Free;
-  DeleteCriticalSection(fLock);
+  DeleteCriticalSection(fPendingLock);
+  DeleteCriticalSection(fPollLock);
   inherited Destroy;
 end;
 
@@ -8994,7 +9023,7 @@ begin
   result := false;
   if (self=nil) or (socket=0) or (events=[]) then
     exit;
-  EnterCriticalSection(fLock);
+  EnterCriticalSection(fPollLock);
   try
     poll := nil;
     n := length(fPoll);
@@ -9012,7 +9041,7 @@ begin
     if result then
       inc(fCount);
   finally
-    LeaveCriticalSection(fLock);
+    LeaveCriticalSection(fPollLock);
   end;
 end;
 
@@ -9020,11 +9049,16 @@ function TPollSockets.Unsubscribe(socket: TSocket; tag: TPollSocketTag): boolean
 var p: integer;
 begin
   result := false;
-  EnterCriticalSection(fLock);
+  EnterCriticalSection(fPollLock);
   try
-    for p := fPendingIndex to high(fPending) do
-      if fPending[p].tag=tag then
-        byte(fPending[p].events) := 0; // tag to be ignored in future GetOne
+    EnterCriticalSection(fPendingLock);
+    try
+      for p := fPendingIndex to high(fPending) do
+        if fPending[p].tag=tag then
+          byte(fPending[p].events) := 0; // tag to be ignored in future GetOne
+    finally
+      LeaveCriticalSection(fPendingLock);
+    end;
     for p := 0 to high(fPoll) do
       if fPoll[p].Unsubscribe(socket) then begin
         dec(fCount);
@@ -9032,42 +9066,48 @@ begin
         exit;
       end;
   finally
-    LeaveCriticalSection(fLock);
+    LeaveCriticalSection(fPollLock);
+  end;
+end;
+
+function TPollSockets.GetOneWithinPending(out notif: TPollSocketResult): boolean;
+var last,index: integer;
+begin
+  result := false;
+  if fTerminated then
+    exit;
+  EnterCriticalSection(fPendingLock);
+  try
+    index := fPendingIndex;
+    last := high(fPending);
+    while index<=last do begin
+      notif := fPending[index]; // return notified events
+      if index<last then begin
+        inc(index);
+        fPendingIndex := index;
+      end else begin
+        fPending := nil;
+        fPendingIndex := 0;
+      end;
+      if byte(notif.events)<>0 then begin // void e.g. after Unsubscribe()
+        result := true;
+        exit;
+      end;
+      if fPending=nil then
+        break; // end of list
+    end;
+  finally
+    LeaveCriticalSection(fPendingLock);
   end;
 end;
 
 function TPollSockets.GetOne(timeoutMS: integer; out notif: TPollSocketResult): boolean;
-  function SearchWithinPending: boolean;
-  var last,index: integer;
-  begin
-    if not fTerminated then begin
-      index := fPendingIndex;
-      last := high(fPending);
-      while index<=last do begin
-        notif := fPending[index]; // return notified events
-        if index<last then begin
-          inc(index);
-          fPendingIndex := index;
-        end else begin
-          fPending := nil;
-          fPendingIndex := 0;
-        end;
-        if byte(notif.events)<>0 then begin // void e.g. after Unsubscribe()
-          result := true;
-          exit;
-        end;
-        if fPending=nil then
-          break; // end of list
-      end;
-    end;
-    result := false;
-  end;
   function PollAndSearchWithinPending(p: integer): boolean;
   begin
     if not fTerminated and (fPoll[p].WaitForModified(fPending,0)>0) then begin
-      result := SearchWithinPending;
+      result := GetOneWithinPending(notif);
       if result then
-        fPendingPoll := p; // continue getting data from fPoll[fPendingPoll]
+        fPollIndex := p; // continue getting data from fPoll[fPendingPoll]
     end else
       result := false;
   end;
@@ -9076,25 +9116,27 @@ var p,n: integer;
 begin
   result := false;
   byte(notif.events) := 0;
-  if (timeoutMS<0) or fTerminated or (fPoll=nil) then
+  if (timeoutMS<0) or fTerminated then
     exit;
   start := GetTickCount;
   endtix := start+cardinal(timeoutMS);
   repeat
-    // non-blocking search within fLock
-    EnterCriticalSection(fLock);
+    // non-blocking search within fPollLock
+    EnterCriticalSection(fPollLock);
     try
-      if SearchWithinPending then
+      if GetOneWithinPending(notif) then
         exit; // found some in fPending[] from fPoll[fPendingPoll]
       n := length(fPoll);
-      for p := fPendingPoll+1 to n-1 do
-        if PollAndSearchWithinPending(p) then
-          exit;
-      for p := 0 to fPendingPoll do // finally retry on fPendingPoll
-        if PollAndSearchWithinPending(p) then
-          exit;
+      if n>0 then begin
+        for p := fPollIndex+1 to n-1 do
+          if PollAndSearchWithinPending(p) then
+            exit;
+        for p := 0 to fPollIndex do // finally retry on fPendingPoll
+          if PollAndSearchWithinPending(p) then
+            exit;
+      end;
     finally
-      LeaveCriticalSection(fLock);
+      LeaveCriticalSection(fPollLock);
       result := byte(notif.events)<>0;
     end;
     // wait a little for something to happen
@@ -9174,18 +9216,16 @@ end;
 
 function TPollAsynchSockets.Start(connection: TObject): boolean;
 var slot: PPollSocketsSlot;
-    nonblocking: integer;
 begin
   result := false;
-  if fRead.Terminated then
+  if (fRead.Terminated) or (connection=nil) then
     exit;
   InterlockedIncrement(fProcessing);
   try
     slot := SlotFromConnection(connection);
     if (slot=nil) or (slot.socket=0) then
       exit;
-    nonblocking := 1; // for both Windows and POSIX
-    if IoctlSocket(slot.socket,FIONBIO,nonblocking)<>0 then
+    if not AsynchSocket(slot.socket) then
       exit; // we expect non-blocking mode on a real working socket
     result := fRead.Subscribe(slot.socket,TPollSocketTag(connection),[pseRead]);
     // now, ProcessRead will handle pseRead + pseError/pseClosed on this socket
@@ -9194,18 +9234,11 @@ begin
   end;
 end;
 
-function TPollAsynchSockets.GetCount: integer;
-begin
-  if self=nil then
-    result := 0 else
-    result := fRead.Count;
-end;
-
 function TPollAsynchSockets.Stop(connection: TObject): boolean;
 var slot: PPollSocketsSlot;
 begin
   result := false;
-  if fRead.Terminated then
+  if (fRead.Terminated) or (connection=nil) then
     exit;
   InterlockedIncrement(fProcessing);
   try
@@ -9223,6 +9256,13 @@ begin
   finally
     InterlockedDecrement(fProcessing);
   end;
+end;
+
+function TPollAsynchSockets.GetCount: integer;
+begin
+  if self=nil then
+    result := 0 else
+    result := fRead.Count;
 end;
 
 procedure TPollAsynchSockets.Terminate(waitforMS: integer);
