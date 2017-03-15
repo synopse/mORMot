@@ -57,6 +57,7 @@ type
       lasttix: Int64;
     end;
     SavePrefix: TFileName;
+    OnBeforeExecute: TOnExecute;
     OnAfterExecute: TOnExecute;
     OnAfterGetState: TNotifyEvent;
     destructor Destroy; override;
@@ -348,6 +349,7 @@ begin
   result.Client := fClient;
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
+  result.OnBeforeExecute := OnBeforeExecute;
   result.OnAfterExecute := OnAfterExecute;
   result.SavePrefix := SavePrefix;
   fDBFrame[n] := result;
