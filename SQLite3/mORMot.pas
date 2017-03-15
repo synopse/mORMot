@@ -7942,10 +7942,11 @@ type
 
   /// allow on-the-fly translation of a TSQLTable grid value
   // - should return valid JSON value of the given cell (i.e. quoted strings,
-  // or valid JSON object/array)
+  // or valid JSON object/array) unless HumanFriendly is defined
   // - e.g. TSQLTable.OnExportValue property will customize TSQLTable's
   // GetJSONValues, GetHtmlTable, and GetCSVValues methods returned content
-  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer): RawJSON of object;
+  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer;
+    HumanFriendly: boolean): RawJSON of object;
 
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
   // - contain all result in memory, until destroyed
@@ -24521,14 +24522,19 @@ begin
     case ContentType of
     sftTimeLog,sftModTime,sftCreateTime,sftUnixTime: begin
       SetInt64(V,t.Value);
-      if ContentType=sftUnixTime then
-        t.FromUnixTime(t.Value);
-      value := _ObjFast(['Time',t.Text(true),'Value',t.Value]);
+      if t.Value=0 then
+        value := 0 else begin
+        if ContentType=sftUnixTime then
+          t.FromUnixTime(t.Value);
+        value := _ObjFast(['Time',t.Text(true),'Value',t.Value]);
+      end;
       exit;
     end;
     sftUnixMSTime: begin // no TTimeLog use for milliseconds resolution
       SetInt64(V,t.Value);
-      value := _ObjFast(['Time',UnixMSTimeToString(t.Value),'Value',t.Value]);
+      if t.Value=0 then
+        value := 0 else
+        value := _ObjFast(['Time',UnixMSTimeToString(t.Value),'Value',t.Value]);
       exit;
     end;
     end;
@@ -25223,7 +25229,7 @@ begin
         if Expand then
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,R,F)) else
+          W.AddString(OnExportValue(self,R,F,false)) else
         if U^=nil then
           W.AddShort('null') else
         // IsStringJSON() is fast and safe: no need to guess exact value type
@@ -25283,7 +25289,7 @@ begin
     for R := RowFirst to RowLast do
       for F := 0 to FMax do begin
         if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,R,F)) else
+          W.AddString(OnExportValue(self,R,F,false)) else
         if Tab or not IsStringJSON(U^) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
@@ -25485,16 +25491,18 @@ begin
                   W.AddShort('string');
                 end;
                 W.AddShort('"><text:p>');
-                if fieldType[F] in [ftUTF8, ftBlob] then
+                if fieldType[F] in [ftUnknown, ftUTF8, ftBlob] then
                   W.AddXmlEscape(U^);
                 W.AddShort('</text:p></table:table-cell>');
                 inc(U); // points to next value
               end;
-            end else begin
-              W.AddShort('<table:table-cell office:value-type="string"><text:p>');
-              W.AddXmlEscape(U^);
-              W.AddShort('</text:p></table:table-cell>');
-            end;
+            end else
+              for F := 0 to FieldCount-1 do begin
+                W.AddShort('<table:table-cell office:value-type="string"><text:p>');
+                W.AddXmlEscape(U^);
+                W.AddShort('</text:p></table:table-cell>');
+                inc(U);
+              end;
             W.AddShort('</table:table-row>');
           end;
         end;
@@ -25538,7 +25546,7 @@ begin
         Dest.AddShort('<th>') else
         Dest.AddShort('<td>');
       if Assigned(OnExportValue) and (R>0) then
-        Dest.AddHtmlEscapeUTF8(OnExportValue(self,R,F),hfOutsideAttributes) else
+        Dest.AddHtmlEscapeUTF8(OnExportValue(self,R,F,true),hfOutsideAttributes) else
         Dest.AddHtmlEscape(U^,hfOutsideAttributes);
       if R=0 then
         Dest.AddShort('</th>') else
