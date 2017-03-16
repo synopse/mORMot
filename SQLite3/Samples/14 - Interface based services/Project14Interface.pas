@@ -11,7 +11,7 @@ type
 
 const
   ROOT_NAME = 'root';
-  PORT_NAME = '888';
+  PORT_NAME = '8888';
   APPLICATION_NAME = 'RestService';
 
 implementation
