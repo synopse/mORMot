@@ -12757,6 +12757,11 @@ type
     Host: RawUTF8;
     /// the current computer user name
     User: RawUTF8;
+    /// some hash compression of this information
+    // - the very same executable on the very same computer run by the very
+    // same user will always have the same Hash value 
+    // - may be used as an entropy seed 
+    Hash: THash128Rec;
   end;
 
 var
@@ -35546,6 +35551,14 @@ begin
       Version.SetVersion(aMajor,aMinor,aRelease,aBuild);
     FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
+    Hash.c0 := Version.Version32;
+    {$ifdef CPUINTEL}
+    Hash.c0 := crc32c(Hash.c0,@CpuFeatures,sizeof(CpuFeatures));
+    {$endif}
+    Hash.c0 := crc32c(Hash.c0,pointer(Host),length(Host));
+    Hash.c1 := crc32c(Hash.c0,pointer(User),length(User));
+    Hash.c2 := crc32c(Hash.c1,pointer(ProgramFullSpec),length(ProgramFullSpec));
+    Hash.c3 := crc32c(Hash.c2,pointer(InstanceFileName),length(InstanceFileName));
   end;
 end;
 
@@ -36934,16 +36947,16 @@ end;
 {$ifndef FPC}
 
   {$ifdef USEPACKAGES}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifdef DELPHI5OROLDER}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifdef PUREPASCAL}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifndef DOPATCHTRTL}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
 
 {$ifdef EXPECTSDELPHIRTLRECORDCOPYCLEAR}
@@ -37023,7 +37036,7 @@ asm // faster version by AB
 @ptr:   dec     edi
         mov     dword ptr[eax], 0 // pointer initialization
         jg      @loop
-@end:  pop     edi
+@end:   pop     edi
         pop     esi
         pop     ebx
         ret
