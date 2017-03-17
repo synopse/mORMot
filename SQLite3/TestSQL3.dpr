@@ -179,6 +179,7 @@ uses
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   SynZip in '..\SynZip.pas',
+  SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
   SynSelfTests in '..\SynSelfTests.pas',
   mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}
