@@ -2453,10 +2453,10 @@ begin
     end else
       FillcharFast(head.sign,sizeof(head.sign),255); // Version=255=not signed
     if not ecc_make_key(head.rndpub,rndpriv) then
-      raise EECCException.CreateUTF8('%.Encrypt: ecc_make_key failure',[self]);
+      raise EECCException.CreateUTF8('%.Encrypt: ecc_make_key?',[self]);
     SetLength(secret,sizeof(TECCSecretKey));
     if not ecdh_shared_secret(fContent.Signed.PublicKey,rndpriv,PECCSecretKey(secret)^) then
-      raise EECCException.CreateUTF8('%.Encrypt: ecdh_shared_secret failure',[self]);
+      raise EECCException.CreateUTF8('%.Encrypt: ecdh_shared_secret?',[self]);
     PBKDF2_HMAC_SHA256(secret,KDFSalt,KDFRounds,aeskey,'salt');
     if Algo in [low(ECIES_NOSYNLZ)..high(ECIES_NOSYNLZ)] then begin
       dec := SynLZCompress(content);
@@ -2557,7 +2557,6 @@ var priv: TECCPrivateKey;
     hash: TSHA256Digest;
 begin
   Create;
-  if ecc_available then
   try
     now := NowECCDate;
     with fContent.Signed do begin
@@ -4048,7 +4047,7 @@ begin
   dec(len,sizeof(TECCSignature)); // Sign at the latest position
   sha.Full(frame,len,hash);
   if not ecdsa_sign(fPrivate.fPrivateKey,hash,PECCSignature(@frame[len])^) then
-    raise EECCException.CreateUTF8('%.Sign: ecdsa_sign',[self]);
+    raise EECCException.CreateUTF8('%.Sign: ecdsa_sign?',[self]);
 end;
 
 function TECDHEProtocol.Clone: IProtocol;
@@ -4259,7 +4258,7 @@ begin
       'a private key',[self,fCertificate,fCertificate.Serial]);
   sha.Full(pointer(payload64),length(payload64),hash);
   if not ecdsa_sign(TECCCertificateSecret(fCertificate).fPrivateKey,hash,sign) then
-    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign failed',[self]);
+    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign?',[self]);
   result := BinToBase64URI(@sign,sizeof(sign));
 end;
 
