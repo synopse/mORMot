@@ -38,6 +38,7 @@ unit mORMot;
     Esmond
     Goran Despalatovic (gigo)
     Jordi Tudela
+    Jean-Baptiste Roussia (jbroussia)
     Maciej Izak (hnb)
     Martin Suer
     MilesYou
@@ -7941,10 +7942,11 @@ type
 
   /// allow on-the-fly translation of a TSQLTable grid value
   // - should return valid JSON value of the given cell (i.e. quoted strings,
-  // or valid JSON object/array)
+  // or valid JSON object/array) unless HumanFriendly is defined
   // - e.g. TSQLTable.OnExportValue property will customize TSQLTable's
   // GetJSONValues, GetHtmlTable, and GetCSVValues methods returned content
-  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer): RawJSON of object;
+  TOnSQLTableGetValue = function(Sender: TSQLTable; Row, Field: integer;
+    HumanFriendly: boolean): RawJSON of object;
 
   /// wrapper to an ORM result table, staticaly stored as UTF-8 text
   // - contain all result in memory, until destroyed
@@ -14907,6 +14909,10 @@ type
   // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
   // content has already been set as expected by the client
   TNotifyErrorURI = function(Ctxt: TSQLRestServerURIContext; E: Exception): boolean of object;
+  {$ifndef NOVARIANTS}
+  /// callback allowing to customize the information returned by root/pcmman/info
+  TOnInternalInfo = procedure(Sender: TSQLRestServer; var info: TDocVariantData) of object;
+  {$endif}
 
   TSQLRestStorageInMemory = class;
   TSQLVirtualTableModule = class;
@@ -16481,6 +16487,12 @@ type
     // - should return TRUE to execute Ctxt.Error(E,...), FALSE if returned
     // content has already been set as expected by the client
     OnErrorURI: TNotifyErrorURI;
+    {$ifndef NOVARIANTS}
+    /// event to customize the information returned by root/pcmman/info
+    // - called by TSQLRestServer.InternalInfo method
+    // - you can add some application-level information for monitoring
+    OnInternalInfo: TOnInternalInfo;
+    {$endif}
     /// event trigerred when URI() is called, and at least 128 ms is elapsed
     // - could be used to execute some additional process after a period of time
     // - note that if TSQLRestServer.URI is not called by any client, this
@@ -18369,7 +18381,7 @@ type
     fBackgroundThread: TSynBackgroundThreadEvent;
     fOnIdle: TOnIdleSynBackgroundThread;
     fOnFailed: TOnClientFailed;
-    fInternalOpen: set of (ioOpened, ioNoOpen);
+    fInternalState: set of (isOpened, isDestroying, isInAuth);
     fRemoteLogThread: TObject; // private TRemoteLogThread
     fFakeCallbacks: TSQLRestClientCallbacks;
     function FakeCallbackRegister(Sender: TServiceFactoryClient;
@@ -18816,7 +18828,7 @@ type
     property LastErrorException: ExceptClass read fLastErrorException;
 
     /// maximum additional retry occurence
-    // - defaut is 0, i.e. will retry once
+    // - defaut is 1, i.e. will retry once
     // - set OnAuthentificationFailed to nil in order to avoid any retry
     property MaximumAuthentificationRetry: Integer
       read fMaximumAuthentificationRetry write fMaximumAuthentificationRetry;
@@ -19953,10 +19965,7 @@ type
   // - is the default logging family used by the mORMot framework
   // - mORMotDB.pas unit will set SynDBLog := TSQLLog
   // - mORMotSQLite3.pas unit will set SynSQLite3Log := TSQLLog
-  TSQLLog = class(TSynLog)
-  protected
-    procedure CreateLogWriter; override;
-  end;
+  TSQLLog = TSynLog;
 
 {$ifdef WITHLOG}
 var
@@ -24513,14 +24522,19 @@ begin
     case ContentType of
     sftTimeLog,sftModTime,sftCreateTime,sftUnixTime: begin
       SetInt64(V,t.Value);
-      if ContentType=sftUnixTime then
-        t.FromUnixTime(t.Value);
-      value := _ObjFast(['Time',t.Text(true),'Value',t.Value]);
+      if t.Value=0 then
+        value := 0 else begin
+        if ContentType=sftUnixTime then
+          t.FromUnixTime(t.Value);
+        value := _ObjFast(['Time',t.Text(true),'Value',t.Value]);
+      end;
       exit;
     end;
     sftUnixMSTime: begin // no TTimeLog use for milliseconds resolution
       SetInt64(V,t.Value);
-      value := _ObjFast(['Time',UnixMSTimeToString(t.Value),'Value',t.Value]);
+      if t.Value=0 then
+        value := 0 else
+        value := _ObjFast(['Time',UnixMSTimeToString(t.Value),'Value',t.Value]);
       exit;
     end;
     end;
@@ -25215,7 +25229,7 @@ begin
         if Expand then
           W.AddString(W.ColNames[F]); // '"'+ColNames[]+'":'
         if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,R,F)) else
+          W.AddString(OnExportValue(self,R,F,false)) else
         if U^=nil then
           W.AddShort('null') else
         // IsStringJSON() is fast and safe: no need to guess exact value type
@@ -25275,7 +25289,7 @@ begin
     for R := RowFirst to RowLast do
       for F := 0 to FMax do begin
         if Assigned(OnExportValue) then
-          W.AddString(OnExportValue(self,R,F)) else
+          W.AddString(OnExportValue(self,R,F,false)) else
         if Tab or not IsStringJSON(U^) then
           W.AddNoJSONEscape(U^,StrLen(U^)) else begin
           W.Add('"');
@@ -25477,16 +25491,18 @@ begin
                   W.AddShort('string');
                 end;
                 W.AddShort('"><text:p>');
-                if fieldType[F] in [ftUTF8, ftBlob] then
+                if fieldType[F] in [ftUnknown, ftUTF8, ftBlob] then
                   W.AddXmlEscape(U^);
                 W.AddShort('</text:p></table:table-cell>');
                 inc(U); // points to next value
               end;
-            end else begin
-              W.AddShort('<table:table-cell office:value-type="string"><text:p>');
-              W.AddXmlEscape(U^);
-              W.AddShort('</text:p></table:table-cell>');
-            end;
+            end else
+              for F := 0 to FieldCount-1 do begin
+                W.AddShort('<table:table-cell office:value-type="string"><text:p>');
+                W.AddXmlEscape(U^);
+                W.AddShort('</text:p></table:table-cell>');
+                inc(U);
+              end;
             W.AddShort('</table:table-row>');
           end;
         end;
@@ -25530,7 +25546,7 @@ begin
         Dest.AddShort('<th>') else
         Dest.AddShort('<td>');
       if Assigned(OnExportValue) and (R>0) then
-        Dest.AddHtmlEscapeUTF8(OnExportValue(self,R,F),hfOutsideAttributes) else
+        Dest.AddHtmlEscapeUTF8(OnExportValue(self,R,F,true),hfOutsideAttributes) else
         Dest.AddHtmlEscape(U^,hfOutsideAttributes);
       if R=0 then
         Dest.AddShort('</th>') else
@@ -27444,8 +27460,8 @@ begin
     while P^<>'[' do if P^=#0 then exit else inc(P); // need an array of objects
     repeat inc(P); if P^=#0 then exit; until P^='{'; // go to object begining
   end;
-  GetJSONPropName(P); // ignore field name
-  result := GetJSONField(P,P); // get field value
+  if GetJSONPropName(P)<>nil then // ignore field name
+    result := GetJSONField(P,P); // get field value
 end;
 
 function IsNotAjaxJSON(P: PUTF8Char): Boolean;
@@ -36641,6 +36657,7 @@ end;
 constructor TSQLRestClientURI.Create(aModel: TSQLModel);
 begin
   inherited Create(aModel);
+  fMaximumAuthentificationRetry := 1;
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
   {$ifdef USELOCKERDEBUG}
@@ -36655,7 +36672,7 @@ var t,i: integer;
     aID: TID;
     Table: TSQLRecordClass;
 begin
-  include(fInternalOpen,ioNoOpen);
+  include(fInternalState,isDestroying);
   {$ifdef MSWINDOWS}
   fServiceNotificationMethodViaMessages.Wnd := 0; // disable notification
   {$endif}
@@ -36850,15 +36867,15 @@ begin
   if Call=nil then
     exit;
   InternalURI(Call^);
-  if OnIdleBackgroundThreadActive and not(ioNoOpen in fInternalOpen) then
-    if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (ioOpened in fInternalOpen) then begin
+  if OnIdleBackgroundThreadActive and not(isDestroying in fInternalState) then
+    if (Call^.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
       // InternalCheckOpen failed -> force recreate connection
       InternalClose;
-      Exclude(fInternalOpen,ioOpened);
+      Exclude(fInternalState,isOpened);
       if OnIdleBackgroundThreadActive then
         InternalURI(Call^); // try request again
     end else
-      Include(fInternalOpen,ioOpened);
+      Include(fInternalState,isOpened);
 end;
 
 function TSQLRestClientURI.GetOnIdleBackgroundThreadActive: boolean;
@@ -36889,57 +36906,38 @@ end;
 
 function TSQLRestClientURI.URI(const url, method: RawUTF8;
   Resp, Head, SendData: PRawUTF8): Int64Rec;
-var Retry: integer;
+var retry: Integer;
     aUserName, aPassword: string;
     StatusMsg: RawUTF8;
     Call: TSQLRestURIParams;
-    aRetryOnceOnTimeout, aPasswordHashed: boolean;
-label DoRetry;
-begin
-  if self=nil then begin
-    Int64(result) := HTTP_UNAVAILABLE;
-    SetLastException(nil,HTTP_UNAVAILABLE);
-    exit;
-  end;
-  aRetryOnceOnTimeout := RetryOnceOnTimeout;
-  fLastErrorMessage := '';
-  fLastErrorException := nil;
-  if fServerTimeStampOffset=0 then
-    if not ServerTimeStampSynchronize then begin
-      Int64(result) := HTTP_UNAVAILABLE;
-      exit; // if /TimeStamp is not available, server is down!
-    end;
-  Call.Init;
-  if (Head<>nil) and (Head^<>'') then
-    Call.InHead := Head^;
-  if fSessionHttpHeader<>'' then
-    Call.InHead := Trim(Call.InHead+#13#10+fSessionHttpHeader);
-  for Retry := -1 to MaximumAuthentificationRetry do
-  try
-DoRetry:
+    aPasswordHashed: Boolean;
+
+  procedure CallInternalURI;
+  begin
     Call.Url := url;
     if fSessionAuthentication<>nil then
-      fSessionAuthentication.ClientSessionSign(self,Call);
+      fSessionAuthentication.ClientSessionSign(Self,Call);
     Call.Method := method;
     if SendData<>nil then
       Call.InBody := SendData^;
-{$ifndef LVCL}
+    {$ifndef LVCL}
     if Assigned(fOnIdle) then begin
       if fBackgroundThread=nil then
         fBackgroundThread := TSynBackgroundThreadEvent.Create(OnBackgroundProcess,
-          OnIdle,FormatUTF8('% "%" background',[self,Model.Root]));
+          OnIdle,FormatUTF8('% "%" background',[Self,Model.Root]));
       if not fBackgroundThread.RunAndWait(@Call) then
         Call.OutStatus := HTTP_UNAVAILABLE;
     end else
-{$endif} begin
+    {$endif} 
+    begin
       InternalURI(Call);
-      if not(ioNoOpen in fInternalOpen) then
-        if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (ioOpened in fInternalOpen) then begin
+      if not(isDestroying in fInternalState) then
+        if (Call.OutStatus=HTTP_NOTIMPLEMENTED) and (isOpened in fInternalState) then begin
           InternalClose;     // force recreate connection
-          Exclude(fInternalOpen,ioOpened);
+          Exclude(fInternalState,isOpened);
           InternalURI(Call); // try request again
         end else
-          Include(fInternalOpen,ioOpened);
+          Include(fInternalState,isOpened);
     end;
     result.Lo := Call.OutStatus;
     result.Hi := Call.OutInternalState;
@@ -36948,11 +36946,50 @@ DoRetry:
     if Resp<>nil then
       Resp^ := Call.OutBody;
     fLastErrorCode := Call.OutStatus;
-    if (Call.OutStatus=HTTP_TIMEOUT) and aRetryOnceOnTimeout then begin
-      aRetryOnceOnTimeout := false;
-      InternalLog('% % returned "408 Request Timeout" -> RETRY',[method,url],sllError);
-      goto DoRetry;
+  end;
+
+begin
+  if Self=nil then begin
+    Int64(result) := HTTP_UNAVAILABLE;
+    SetLastException(nil,HTTP_UNAVAILABLE);
+    exit;
+  end;
+  fLastErrorMessage := '';
+  fLastErrorException := nil;
+  if fServerTimeStampOffset=0 then begin
+    if not ServerTimeStampSynchronize then begin
+      Int64(result) := HTTP_UNAVAILABLE;
+      exit; // if TimeStamp is not available,server is down!
     end;
+  end;
+  Call.Init;
+  if (Head<>nil) and (Head^<>'') then
+    Call.InHead := Head^;
+  if fSessionHttpHeader<>'' then
+    Call.InHead := Trim(Call.InHead + #13#10 + fSessionHttpHeader);
+  try
+    CallInternalURI;
+    if (Call.OutStatus=HTTP_TIMEOUT) and RetryOnceOnTimeout then begin
+      InternalLog('% % returned "408 Request Timeout" -> RETRY',[method,url],sllError);
+      CallInternalURI;
+    end else
+    if (Call.OutStatus=HTTP_FORBIDDEN) and (MaximumAuthentificationRetry>0) and
+       Assigned(OnAuthentificationFailed) and not(isInAuth in fInternalState) then
+      try
+        Include(fInternalState,isInAuth);
+        retry := 1;
+        while retry<=MaximumAuthentificationRetry do begin
+          // "403 Forbidden" in case of authentication failure -> try relog
+          if OnAuthentificationFailed(retry,aUserName,aPassword,aPasswordHashed) and
+             SetUser(StringToUTF8(aUserName),StringToUTF8(aPassword),aPasswordHashed) then begin
+            CallInternalURI;
+            break;
+          end;
+          Inc(retry);
+        end;
+      finally
+        Exclude(fInternalState,isInAuth);
+      end;
     if not StatusCodeIsSuccess(Call.OutStatus) then begin
       StatusCodeToErrorMsg(Call.OutStatus,StatusMsg);
       if Call.OutBody='' then
@@ -36961,14 +36998,8 @@ DoRetry:
       InternalLog('% % returned % (%) with message  %',
         [method,url,Call.OutStatus,StatusMsg,fLastErrorMessage],sllError);
       if Assigned(fOnFailed) then
-        fOnFailed(self,nil,@Call);
+        fOnFailed(Self,nil,@Call);
     end;
-    if (Call.OutStatus<>HTTP_FORBIDDEN) or not Assigned(OnAuthentificationFailed) then
-      break;
-    // "403 Forbidden" in case of authentication failure -> try relog
-    if not OnAuthentificationFailed(Retry+2,aUserName,aPassword,aPasswordHashed) or
-       not SetUser(StringToUTF8(aUserName),StringToUTF8(aPassword),aPasswordHashed) then
-      break;
   except
     on E: Exception do begin
       Int64(result) := HTTP_NOTIMPLEMENTED; // 501
@@ -40844,6 +40875,8 @@ begin // called by root/TimeStamp/info REST method
       'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
       'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
       'exception',GetLastExceptions(10)]);
+    if assigned(OnInternalInfo) then
+      OnInternalInfo(self,info);
   finally
     m.Free;
   end;
@@ -47602,7 +47635,7 @@ begin
     wasString := false;
     result := From;
     PropName := GetJSONPropName(From,@PropNameLen);  // get property name
-    if (From=nil) or (PropNameLen=0) then
+    if (From=nil) or (PropName=nil) then
       exit; // invalid JSON content
     if IdemPropName('ClassName',PropName,PropNameLen) then begin
       // WriteObject() was called with woStoreClassName option -> ignore it
@@ -50390,14 +50423,6 @@ begin
   PInt64(@aResult.VCurrency)^ := aValue64^; 
 end;
 
-
-{ TSQLLog }
-
-procedure TSQLLog.CreateLogWriter;
-begin
-  fWriterClass := TJSONSerializer;
-  inherited CreateLogWriter;
-end;
 
 
 { TSQLVirtualTableCursorIndex }

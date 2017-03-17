@@ -57,9 +57,9 @@ type
       lasttix: Int64;
     end;
     SavePrefix: TFileName;
+    OnBeforeExecute: TOnExecute;
     OnAfterExecute: TOnExecute;
     OnAfterGetState: TNotifyEvent;
-    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil): boolean; virtual;
     procedure Show; virtual;
@@ -233,19 +233,6 @@ begin
   end;
 end;
 
-constructor TAdminControl.Create(AOwner: TComponent);
-begin
-  inherited;
-  fDlgSave := TSaveDialog.Create(AOwner);
-  fDlgSave.Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist,
-    ofEnableSizing];
-  fDlgSave.Filter :=
-    'JSON (human readable)|*.json|JSON (small)|*.json|CSV (text)|*.txt|Excel/Office (.ods)|*.ods|HTML|*.html';
-  fDlgSave.DefaultExt := '.html';
-  fDlgSave.FilterIndex := 5;
-  fDlgSave.InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
-end;
-
 destructor TAdminControl.Destroy;
 var
   i: integer;
@@ -362,6 +349,7 @@ begin
   result.Client := fClient;
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
+  result.OnBeforeExecute := OnBeforeExecute;
   result.OnAfterExecute := OnAfterExecute;
   result.SavePrefix := SavePrefix;
   fDBFrame[n] := result;
@@ -441,6 +429,16 @@ begin
   if (grid = nil) or (grid.RowCount = 0) then
     exit;
   if Fmt = expSaveGrid then begin
+    if fDlgSave = nil then begin
+      fDlgSave := TSaveDialog.Create(Owner);
+      fDlgSave.Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist,
+        ofEnableSizing];
+      fDlgSave.Filter :=
+        'JSON (human readable)|*.json|JSON (small)|*.json|CSV (text)|*.txt|Excel/Office (.ods)|*.ods|HTML|*.html';
+      fDlgSave.DefaultExt := '.html';
+      fDlgSave.FilterIndex := 5;
+      fDlgSave.InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
+    end;
     if PropNameValid(pointer(db.GridLastTableName)) then
       name := db.GridLastTableName;
     fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s',

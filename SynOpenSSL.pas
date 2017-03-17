@@ -83,7 +83,7 @@ const
   SSL_ERROR_ZERO_RETURN = 6;
   SSL_ERROR_WANT_CONNECT = 7;
   SSL_ERROR_WANT_ACCEPT = 8;
-  SSL_ERROR_NOT_FATAL =[SSL_ERROR_NONE, SSL_ERROR_WANT_READ,
+  SSL_ERROR_NOT_FATAL = [SSL_ERROR_NONE, SSL_ERROR_WANT_READ,
     SSL_ERROR_WANT_WRITE, SSL_ERROR_WANT_CONNECT, SSL_ERROR_WANT_ACCEPT];
 
   SSL_ST_CONNECT = $1000;
@@ -394,7 +394,18 @@ type
   /// the minimum TLS connection level expected at connection
   TOpenSSLConnectionLevel = (ssl23, tls10, tls11, tls12, tls12_h2);
 
-  TOpenSSLConnectionOption = (ocoNoCertificateValidation);
+  /// allows tuning of a particular TLS connection
+  // - define ocoNoCertificateValidation to disable certifications checking
+  // (e.g. for self-signed or debug/test certificates)
+  // - if you work with a lot of concurrent long-living connections (e.g. when
+  // implementing a server), you may dramatically reduce the memory consumption
+  // (to the prive of a slight performance degradation) by setting
+  // ocoNoReleaseBuffers - see http://stackoverflow.com/a/19294527/458259
+  // - for security reasons (i.e. to prevent BREACH and CRIME vulnerabilities),
+  // and also to reduce memory consumption, TLS compression is disabled by
+  // default: set ocoEnabledCompression to enable this unsafe feature
+  TOpenSSLConnectionOption = (ocoNoCertificateValidation, ocoNoReleaseBuffers,
+    ocoEnabledCompression);
   TOpenSSLConnectionOptions = set of TOpenSSLConnectionOption;
 
   /// implements a TLS secure client connection

@@ -376,9 +376,10 @@ type
     // transmission definition; other parameters would be the standard one
     // - only the supplied aDefinition.Authentication will be defined
     // - under Windows, will use http.sys with automatic URI registration, unless
-    // aDefinition.WebSocketPassword is set, and then binary WebSockets would
-    // be expected with the corresponding encryption
-    constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition); reintroduce; overload;
+    // aDefinition.WebSocketPassword is set (and then binary WebSockets would be
+    // expected with the corresponding encryption), or aForcedKind is overriden
+    constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition;
+      aForcedKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -1033,7 +1034,7 @@ begin
     result.WebSocketsEnable(aWebSocketsURI,aWebSocketsEncryptionKey,
       aWebSocketsAJAX,aWebSocketsCompressed);
   end else
-    raise ESynBidirSocket.CreateUTF8(
+    raise EWebSockets.CreateUTF8(
       '%.WebSocketEnable(%): expected useBidirSocket',
       [self,GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(fHttpServerKind))^]);
 end;
@@ -1043,7 +1044,7 @@ function TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
   aWebSocketsAJAX,aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
   if (aServer=nil) or (DBServerFind(aServer)<0) then
-    raise ESynBidirSocket.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
+    raise EWebSockets.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
   result := WebSocketsEnable(aServer.Model.Root,
     aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
 end;
@@ -1087,26 +1088,24 @@ begin
 end;
 
 constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
-  aDefinition: TSQLHttpServerDefinition);
+  aDefinition: TSQLHttpServerDefinition; aForcedKind: TSQLHttpServerOptions);
 const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticationClass = (
   // adDefault, adHttpBasic, adWeak, adSSPI
   TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
   TSQLRestServerAuthenticationNone,
   {$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
 var a: TSQLHttpServerRestAuthentication;
-    kind: TSQLHttpServerOptions;
     thrdCnt: integer;
     websock: TWebSocketServerRest;
 begin
   if aDefinition=nil then
     raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
-  if aDefinition.WebSocketPassword='' then
-    kind := HTTP_DEFAULT_MODE else
-    kind := useBidirSocket;
+  if aDefinition.WebSocketPassword<>'' then
+    aForcedKind := useBidirSocket;
   if aDefinition.ThreadCount=0 then
     thrdCnt := 32 else
     thrdCnt := aDefinition.ThreadCount;
-  Create(aDefinition.BindPort,aServer,'+',kind,nil,thrdCnt,
+  Create(aDefinition.BindPort,aServer,'+',aForcedKind,nil,thrdCnt,
     HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
   if aDefinition.EnableCORS then
     AccessControlAllowOrigin := '*';

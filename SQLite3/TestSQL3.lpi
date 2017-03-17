@@ -227,6 +227,7 @@
     </Target>
     <SearchPaths>
       <IncludeFiles Value="..;$(ProjOutDir)"/>
+      <Libraries Value="..\fpc-$(TargetOS)"/>
       <OtherUnitFiles Value="..;DDD\dom;DDD\infra;Samples\33 - ECC"/>
       <UnitOutputDirectory Value="fpc\lib\$(TargetCPU)-$(TargetOS)"/>
     </SearchPaths>

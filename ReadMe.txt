@@ -31,6 +31,7 @@ Contributors
   Esteban Martin (EMartin)
   Eva Freimann (EVaF)
   Goran Despalatovic (gigo)
+  Jean-Baptiste Roussia (jbroussia)
   Joe (jokusoft)
   Johan Bontes
   Jordi Tudela

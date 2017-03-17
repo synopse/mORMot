@@ -1511,13 +1511,24 @@ uses
   {$endif} ;
 {$endif}
 
-function ToText(event: TSynLogInfo): RawUTF8;
+var
+  LogInfoText: array[TSynLogInfo] of RawUTF8;
+  LogInfoCaptions: array[TSynLogInfo] of string;
+
+procedure ComputeLogInfoText;
+var
+  E: TSynLogInfo;
 begin
-  result := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(event)));
+  for E := low(E) to high(E) do
+    LogInfoText[E] := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(E)));
 end;
 
-var
-  LogInfoCaptions: array[TSynLogInfo] of string;
+function ToText(event: TSynLogInfo): RawUTF8;
+begin
+  if LogInfoText[low(event)]='' then
+    ComputeLogInfoText;
+  result := LogInfoText[event];
+end;
 
 function ToCaption(event: TSynLogInfo): string;
 var
@@ -4334,7 +4345,8 @@ begin
       fWriterStream.Seek(0,soFromEnd); // in rotation mode, append at the end
   end;
   if fWriterClass=nil then
-    fWriterClass := TTextWriter;
+    // set to TTextWriter or TJSONSerializer if mORMot.pas is linked
+    fWriterClass := TTextWriter.GetDefaultJSONClass;
   if fWriter=nil then begin
     fWriter := fWriterClass.Create(fWriterStream,fFamily.BufferSize);
     fWriter.CustomOptions := fWriter.CustomOptions+[twoEnumSetsAsTextInRecord,twoFullSetsAsStar];

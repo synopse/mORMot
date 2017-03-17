@@ -262,6 +262,10 @@
     {$else}
       {$define BSDNOTDARWIN}
     {$endif}
+  {$else}
+    {$ifdef LINUX}
+      {$define LINUXNOTBSD} // e.g. to disable epoll API
+    {$endif}
   {$endif}
 
   {$ifdef CPU64}

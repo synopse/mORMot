@@ -627,7 +627,7 @@ end;
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
 begin
   result := fSocket<>nil;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
@@ -692,7 +692,7 @@ end;
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
   result := WebSocketsConnected;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit; // already connected
   fSafe.Enter;
   try
@@ -864,7 +864,7 @@ end;
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
   result := fRequest<>nil;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
