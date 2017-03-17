@@ -1184,7 +1184,7 @@ begin
   if aToken <> '' then
     FormatUTF8('Authorization: Bearer %',[aToken],fTokenHeader);
   if aHttpClass=nil then begin
-    {$ifdef MSWINDOWS}
+    {$ifdef USEWININET}
     aHttpClass := TWinHTTP;
     {$else}
     {$ifdef USELIBCURL}
@@ -3144,7 +3144,7 @@ end;
 function TAsynchConnectionsSockets.SlotFromConnection(connection: TObject): PPollSocketsSlot;
 begin
   if (connection as TAsynchConnection).Handle=0 then begin
-    fOwner.fLog.Add.Log(sllWarning,'SlotFromConnection() with dangling pointer',self);
+    fOwner.fLog.Add.Log(sllStackTrace,'SlotFromConnection() with dangling pointer',self);
     result := nil;
   end else
     result := @TAsynchConnection(connection).fSlot;
@@ -3257,7 +3257,7 @@ begin
   fLog.Enter('Destroy %',[self],self);
   Terminate;
   for i := 0 to high(fThreads) do
-    fThreads[i].Terminate; // stop ProcessRead/ProcessWrite
+    fThreads[i].Terminate; // stop ProcessRead/ProcessWrite when polling stops
   FreeAndNil(fClients); // stop polling
   ObjArrayClear(fThreads);
   inherited Destroy;

@@ -35920,10 +35920,12 @@ destructor TSQLRestThread.Destroy;
 begin
   inherited Destroy;
   if fOwnRest and (fRest<>nil) then begin
+    {$ifdef WITHLOG}
     if GetCurrentThreadId=ThreadID then begin
       fRest.fLogFamily := nil; // no log after fRest.EndCurrentThread(self)
       fRest.fLogClass := nil;
     end;
+    {$endif}
     FreeAndNil(fRest);
   end;
   fSafe.Done;

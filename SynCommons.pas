@@ -11173,7 +11173,8 @@ function IsZero(const dig: THash128): boolean; overload;
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
-// - this function is not sensitive to any timing attack
+// - this function is not sensitive to any timing attack, so is designed 
+// for cryptographic purpose
 function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11195,7 +11196,8 @@ function IsZero(const dig: THash256): boolean; overload;
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TECCSignature result
-// - this function is not sensitive to any timing attack
+// - this function is not sensitive to any timing attack, so is designed 
+// for cryptographic purpose
 function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -32467,7 +32469,7 @@ end;
 function IsEqual(const A,B: THash128): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
-begin
+begin // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1])
     {$ifndef CPU64} or (a_[2] xor b_[2]) or (a_[3] xor b_[3]){$endif})=0;
 end;
@@ -32505,7 +32507,7 @@ end;
 function IsEqual(const A,B: THash256): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
-begin
+begin // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or
              (a_[2] xor b_[2]) or (a_[3] xor b_[3])
     {$ifndef CPU64} or (a_[4] xor b_[4]) or (a_[5] xor b_[5])
@@ -34062,15 +34064,17 @@ begin
     lecuyer := @_Lecuyer;
   QueryPerformanceCounter(timenow);
   c := crc32c(ExeVersion.Hash.c3,@timenow,sizeof(timenow));
-  for i := 0 to CardinalCount-1 do begin
-    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023];
-    {$ifdef CPUINTEL}
-    if lecuyer=nil then
-      c := c xor RdRand32 else
-    {$endif}
+  {$ifdef CPUINTEL}
+  if lecuyer=nil then
+    for i := 0 to CardinalCount-1 do begin
+      c := c xor RdRand32 xor crc32ctab[0,(c+cardinal(i)) and 1023];
+      Dest^[i] := Dest^[i] xor c;
+    end else
+  {$endif}
+    for i := 0 to CardinalCount-1 do begin
       c := c xor lecuyer^.Next;
-    Dest^[i] := Dest^[i] xor c;
-  end;
+      Dest^[i] := Dest^[i] xor c;
+    end;
 end;
 
 function RandomGUID: TGUID;
