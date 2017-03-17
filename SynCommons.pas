@@ -22506,7 +22506,7 @@ asm // eax=Value, edx=@result
         push    esi
         mov     ebx, eax                // value
         sar     ebx, 31                 // 0 for +ve value or -1 for -ve value
-        XOR     eax, ebx
+        xor     eax, ebx
         sub     eax, ebx                // abs(value)
         mov     esi, 10                 // max dig in result
         mov     edi, edx                // @result
@@ -34047,7 +34047,7 @@ end;
 {$endif}
 
 type
-  TLecuyer = packed object
+  TLecuyer = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     rs1, rs2, rs3: cardinal;
     count: cardinal;
     procedure Seed(entropy: PByteArray; entropylen: integer);
