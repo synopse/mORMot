@@ -413,6 +413,7 @@ type
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TSockAddr;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer); virtual;
+    procedure AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
   public
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
@@ -520,6 +521,13 @@ type
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: SockString);
+    /// direct accept an new incoming connection on a bound socket
+    // - instance should have been setup as a server via a previous Bind() call
+    // - returns nil on error or a ResultClass instance on success
+    // - if ResultClass is nil, will return a plain TCrtSocket, but you may
+    // specify e.g. THttpServerSocket if you expect incoming HTTP requests  
+    function AcceptIncoming(RemoteIP: PSockString=nil;
+      ResultClass: TCrtSocketClass=nil): TCrtSocket;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress: SockString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
@@ -625,10 +633,6 @@ type
     /// same as HeaderValue('Content-Encoding'), but retrieved during Request
     // and mapped into the fCompress[] array
     fContentCompress: integer;
-    /// retrieve the HTTP headers into Headers[] and fill most properties below
-    procedure GetHeader;
-    /// retrieve the HTTP body (after uncompression if necessary) into Content
-    procedure GetBody;
     /// compress the data, adding corresponding headers via SockSend()
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
@@ -661,6 +665,10 @@ type
     ConnectionClose: boolean;
     /// same as HeaderValue('Connection')='Upgrade', but retrieved during Request
     ConnectionUpgrade: boolean;
+    /// retrieve the HTTP headers into Headers[] and fill most properties below
+    procedure GetHeader;
+    /// retrieve the HTTP body (after uncompression if necessary) into Content
+    procedure GetBody;
     /// add an header entry, returning the just entered entry index in Headers[]
     function HeaderAdd(const aValue: SockString): integer;
     /// set all Header values at once, from CRLF delimited text
@@ -3631,6 +3639,15 @@ begin
   SetInt32Option(Sock,OptName,OptVal);
 end;
 
+procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
+begin
+  CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
+  Linger := 5; // should remain open for 5 seconds after a closesocket() call
+  if aRemoteIP<>nil then
+    aRemoteIP^ := GetRemoteIP(aClientSock);
+end;
+
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
 const BINDTXT: array[boolean] of string = ('open','bind');
@@ -3734,6 +3751,23 @@ end;
 procedure TCrtSocket.Write(const Data: SockString);
 begin
   SndLow(pointer(Data),length(Data));
+end;
+
+function TCrtSocket.AcceptIncoming(RemoteIP: PSockString;
+  ResultClass: TCrtSocketClass): TCrtSocket;
+var client: TSocket;
+    sin: TVarSin;
+begin
+  result := nil;
+  if (self=nil) or (Sock<=0) then
+    exit;
+  client := Accept(Sock,sin);
+  if client<=0 then
+    exit;
+  if ResultClass=nil then
+    ResultClass := TCrtSocket;
+  result := ResultClass.Create;
+  result.AcceptRequest(client,RemoteIP);
 end;
 
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
@@ -4296,7 +4330,7 @@ var URI: TURI;
 begin
   if URI.From(aURI) then
     if URI.Https then
-      {$ifdef MSWINDOWS}
+      {$ifdef USEWININET}
       result := TWinHTTP.Get(aURI,inHeaders,true,outHeaders) else
       {$else}
       {$ifdef USELIBCURL}
@@ -4304,7 +4338,7 @@ begin
       {$else}
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
-      {$endif}
+      {$endif USEWININET}
       result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders) else
     result := '';
   {$ifdef LINUX}
@@ -5221,10 +5255,7 @@ end;
 
 procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
 begin
-  CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
-  Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  fRemoteIP := GetRemoteIP(aClientSock);
+  AcceptRequest(aClientSock, @fRemoteIP);
 end;
 
 function THttpServerSocket.HeaderGetText: SockString;
