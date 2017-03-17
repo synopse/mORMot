@@ -9475,8 +9475,13 @@ begin
               break;
             dec(datalen,res);
             if datalen=0 then begin
-              AfterWrite(connection);
-              result := true;
+              try // notify everything written
+                AfterWrite(connection);
+                result := true;
+                exit;
+              except
+                result := false;
+              end;
               exit;
             end;
             inc(P,res);
@@ -9504,8 +9509,14 @@ var notif: TPollSocketResult;
     temp: array[0..$7fff] of byte; // read up to 32KB chunks
   procedure CloseConnection;
   begin
+    if connection=nil then
+      exit;
     Stop(connection); // will shutdown the socket
-    OnClose(connection); // do connection.Free
+    try
+      OnClose(connection); // do connection.Free
+    except
+      connection := nil;
+    end;
     slot := nil; // ignore pseClosed
   end;
 begin
@@ -9541,8 +9552,13 @@ begin
             AppendData(slot.readbuf,temp,res);
             inc(added,res);
           until false;
-          if (added>0) and (OnRead(connection)=sorClose) then 
-            CloseConnection;
+          if added>0 then
+            try
+              if OnRead(connection)=sorClose then
+                CloseConnection;
+            except
+              CloseConnection; // any exception will force socket shutdown
+            end;
         finally
           slot.UnLock;
         end;
@@ -9596,7 +9612,10 @@ begin
         end;
         if slot.writebuf='' then begin // no data any more to be sent
           fWrite.Unsubscribe(slot.socket,notif.tag);
-          AfterWrite(connection);
+          try
+            AfterWrite(connection);
+          except
+          end;
         end;
       finally
         slot.UnLock;

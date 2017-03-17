@@ -296,14 +296,13 @@ type
     function ClientAddSocket(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
     function ClientAddConnection(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
     function ClientFindIndex(aHandle: TAsynchConnectionHandle): integer;
-    function ClientDelete(aHandle: TAsynchConnectionHandle): boolean; virtual;
     procedure ThreadClientsConnect; // from fThreadClients
   public
     /// initialize the multiple connections
-    // - warning: currently reliable only with aThreadPoolCount=1 
+    // - warning: currently reliable only with aThreadPoolCount=1
     constructor Create(OnStart,OnStop: TNotifyThreadEvent;
       aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
-      aLog: TSynLogClass; aThreadPoolCount: integer); reintroduce; virtual;
+      aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer); reintroduce; virtual;
     /// shut down the instance, releasing all associated threads and sockets
     destructor Destroy; override;
     /// high-level access to a connection instance, from its handle
@@ -315,6 +314,8 @@ type
     procedure Lock;
     /// just a wrapper around fConnectionLock.UnLock
     procedure Unlock;
+    /// remove an handle from the internal list, and close its connection
+    function ClientDelete(aHandle: TAsynchConnectionHandle): boolean; virtual;
     /// log some binary data with proper escape
     // - can be executed from an TAsynchConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
@@ -345,7 +346,7 @@ type
   published
     /// access to the TCP client sockets poll
     // - TAsynchConnection.OnRead could use Clients.Write to send answers
-    // or Clients.LogVerbose() to log some escaped data 
+    // or Clients.LogVerbose() to log some escaped data
     property Clients: TAsynchConnectionsSockets read fClients;
   end;
 
@@ -360,7 +361,7 @@ type
     /// run the TCP server, listening on a supplied IP port
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
       aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
-      aLog: TSynLogClass; aThreadPoolCount: integer=1); reintroduce; virtual;
+      aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer=1); reintroduce; virtual;
     /// shut down the server, releasing all associated threads and sockets
     destructor Destroy; override;
   published
@@ -380,7 +381,7 @@ type
     constructor Create(const aServer,aPort: SockString;
       aClientsCount,aClientsTimeoutSecs: integer; OnStart,OnStop: TNotifyThreadEvent;
       aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
-      aLog: TSynLogClass; aThreadPoolCount: integer=1); reintroduce; virtual;
+      aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer=1); reintroduce; virtual;
   published
     /// server IP address
     property Server: SockString read fThreadClients.Address;
@@ -3167,6 +3168,7 @@ end;
 procedure TAsynchConnectionsThread.Execute;
 var idletix: Int64;
 begin
+  SetCurrentThreadName('% % %',[self,fOwner.fProcessName,ToText(fProcess)^]);
   fOwner.NotifyThreadStart(self);
   try
     idletix := GetTickCount64+1000;
@@ -3208,7 +3210,7 @@ end;
 
 constructor TAsynchConnections.Create(OnStart, OnStop: TNotifyThreadEvent;
   aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
-  aLog: TSynLogClass; aThreadPoolCount: integer);
+  aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 var i: integer;
 begin
   aLog.Enter('Create(%,%,%)',[aStreamClass,ProcessName,aThreadPoolCount],self);
@@ -3225,6 +3227,7 @@ begin
   fClients := TAsynchConnectionsSockets.Create;
   fClients.fOwner := self;
   fTempConnection := fStreamClass.Create;
+  fOptions := aOptions;
   inherited Create(false,OnStart,OnStop,ProcessName);
   SetLength(fThreads,aThreadPoolCount+1);
   fThreads[0] := TAsynchConnectionsThread.Create(self,pseWrite);
@@ -3301,7 +3304,7 @@ function TAsynchConnections.ClientDelete(aHandle: TAsynchConnectionHandle): bool
 var i: integer;
 begin
   result := false;
-  if Terminated then
+  if Terminated or (aHandle<=0) then
     exit;
   fConnectionLock.Lock;
   try
@@ -3404,10 +3407,11 @@ end;
 
 constructor TAsynchServer.Create(const aPort: SockString; OnStart,
   OnStop: TNotifyThreadEvent; aStreamClass: TAsynchConnectionClass;
-  const ProcessName: SockString; aLog: TSynLogClass; aThreadPoolCount: integer);
+  const ProcessName: SockString; aLog: TSynLogClass;
+  aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 begin
   fServer := TCrtSocket.Bind(aPort);
-  inherited Create(OnStart,OnStop,aStreamClass,ProcessName,aLog,aThreadPoolCount);
+  inherited Create(OnStart,OnStop,aStreamClass,ProcessName,aLog,aOptions,aThreadPoolCount);
 end;
 
 destructor TAsynchServer.Destroy;
@@ -3423,6 +3427,7 @@ var client: TSocket;
     connection: TAsynchConnection;
     sin: TVarSin;
 begin
+  SetCurrentThreadName('% % Accept',[self,fProcessName]);
   NotifyThreadStart(self);
   if fServer.Sock<>0 then
   try
@@ -3464,17 +3469,18 @@ end;
 constructor TAsynchClient.Create(const aServer, aPort: SockString;
   aClientsCount,aClientsTimeoutSecs: integer; OnStart, OnStop: TNotifyThreadEvent;
   aStreamClass: TAsynchConnectionClass; const ProcessName: SockString;
-  aLog: TSynLogClass; aThreadPoolCount: integer);
+  aLog: TSynLogClass; aOptions: TAsynchConnectionsOptions; aThreadPoolCount: integer);
 begin
   fThreadClients.Count := aClientsCount;
   fThreadClients.Timeout := aClientsTimeoutSecs*1000;
   fThreadClients.Address := aServer;
   fThreadClients.Port := aPort;
-  inherited Create(OnStart,OnStop,aStreamClass,ProcessName,aLog,aThreadPoolCount);
+  inherited Create(OnStart,OnStop,aStreamClass,ProcessName,aLog,aOptions,aThreadPoolCount);
 end;
 
 procedure TAsynchClient.Execute;
 begin
+  SetCurrentThreadName('% % Startup',[self,fProcessName]);
   NotifyThreadStart(self);
   while InterlockedDecrement(fThreadClients.Count)>=0 do
     ThreadClientsConnect; // will connect some clients in this main thread

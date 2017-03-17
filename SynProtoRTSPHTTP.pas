@@ -93,6 +93,8 @@ type
     fRtspTag: TPollSocketTag;
     // redirect the POST base-64 encoded command to the RTSP socket
     function OnRead(Sender: TAsynchConnections): TPollAsynchSocketOnRead; override;
+    // will release the associated TRtspConnection instance
+    procedure BeforeDestroy(Sender: TAsynchConnections); override;
   end;
 
   /// holds a RTSP connection for RTSP over HTTP proxy
@@ -120,7 +122,8 @@ type
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: SockString;
-      aLog: TSynLogClass; aOnStart, aOnStop: TNotifyThreadEvent); reintroduce;
+      aLog: TSynLogClass; aOnStart, aOnStop: TNotifyThreadEvent;
+      aOptions: TAsynchConnectionsOptions = []); reintroduce;
     /// shutdown and finalize the server
     destructor Destroy; override;
     /// perform some basic regression and benchmark testing on a running server
@@ -137,11 +140,12 @@ function TRtspConnection.OnRead(Sender: TAsynchConnections): TPollAsynchSocketOn
 begin
   if acoVerboseLog in Sender.Options then
     Sender.LogVerbose(self, 'Frame forwarded', fSlot.readbuf);
-  fGetBlocking.Write(fSlot.readbuf); // synch sending to the HTTP GET client
+  result := sorContinue; // synch sending to the HTTP GET client
+  if not fGetBlocking.TrySndLow(pointer(fSlot.readbuf), length(fSlot.readbuf)) then
+    result := sorClose;
   Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
     [Handle, length(fSlot.readbuf)], self);
   fSlot.readbuf := '';
-  result := sorContinue;
 end;
 
 procedure TRtspConnection.BeforeDestroy(Sender: TAsynchConnections);
@@ -179,17 +183,24 @@ begin
   end;
 end;
 
+procedure TPostConnection.BeforeDestroy(Sender: TAsynchConnections);
+begin
+  // Sender.ClientDelete(fRtspTag); // TODO: fixme
+  inherited BeforeDestroy(Sender);
+end;
+
 
 { TRTSPOverHTTPServer }
 
 constructor TRTSPOverHTTPServer.Create(const aRtspServer, aRtspPort, aHttpPort: SockString;
-  aLog: TSynLogClass; aOnStart, aOnStop: TNotifyThreadEvent);
+  aLog: TSynLogClass; aOnStart, aOnStop: TNotifyThreadEvent; aOptions: TAsynchConnectionsOptions);
 begin
   fLog := aLog;
   fRtspServer := aRtspServer;
   fRtspPort := aRtspPort;
   fPendingGet := TRawUTF8ListLocked.Create(true);
-  inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection, 'RTSP/HTTP', aLog);
+  inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection,
+    'RTSP/HTTP', aLog, aOptions);
 end;
 
 destructor TRTSPOverHTTPServer.Destroy;
