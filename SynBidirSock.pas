@@ -193,6 +193,7 @@ type
     // - this is where the input should be parsed and extracted according to
     // the implemented procotol
     // - Sender.Clients.Write() could be used for asynchronous answer sending
+    // - Sender.Clients.LogVerbose() allows logging of escaped data 
     // - could return sorClose to shutdown the socket, e.g. on parsing error
     function OnRead(Sender: TAsynchConnections): TPollAsynchSocketOnRead; virtual; abstract;
     /// this method is called when some data has been written to the socket 
@@ -231,10 +232,10 @@ type
     procedure OnClose(connection: TObject); override;
     function OnError(connection: TObject; events: TPollSocketEvents): boolean; override;
     function GetTotal: integer;
-    procedure ReadVerboseParsedLog(connection: TObject; frame: pointer; framelen: integer);
   public
     /// add some data to the asynchronous output buffer of a given connection
     // - this overriden method will refresh TAsynchConnection.LastOperation
+    // - can be executed from an TAsynchConnection.OnRead method
     function Write(connection: TObject; const data; datalen: integer): boolean; override;
   published
     /// how many clients have been handled by the poll, from the beginning
@@ -292,8 +293,8 @@ type
     end;
     fConnectionLock: TSynLocker;
     procedure IdleEverySecond;
-    function ClientAdd(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
-    function ClientAddExisting(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
+    function ClientAddSocket(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
+    function ClientAddConnection(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
     function ClientFindIndex(aHandle: TAsynchConnectionHandle): integer;
     function ClientDelete(aHandle: TAsynchConnectionHandle): boolean; virtual;
     procedure ThreadClientsConnect; // from fThreadClients
@@ -331,6 +332,8 @@ type
       write fLastOperationIdleSeconds;
     /// allow to customize low-level options for processing
     property Options: TAsynchConnectionsOptions read fOptions write fOptions;
+    /// access to the associated log class
+    property Log: TSynLogClass read fLog;
     /// low-level unsafe direct access to the connection instances
     // - ensure this property is used in a thread-safe manner, i.e. via
     // ! Lock; try ... finally UnLock; end;
@@ -3085,7 +3088,7 @@ end;
 
 procedure TAsynchConnection.BeforeDestroy(Sender: TAsynchConnections);
 begin
-  fHandle := 0; // will detect a dangling pointer
+  fHandle := 0; // to detect any dangling pointer
 end;
 
 
@@ -3109,7 +3112,7 @@ function TAsynchConnectionsSockets.OnRead(connection: TObject): TPollAsynchSocke
 var ac: TAsynchConnection;
 begin
   ac := connection as TAsynchConnection;
-  if not (acoNoLogRead in fOwner.Options) then
+  if not(acoNoLogRead in fOwner.Options) then
     fOwner.fLog.Add.Log(sllTrace,'OnRead% len=%',[ac,length(ac.fSlot.readbuf)],self);
   result := ac.OnRead(fOwner);
   if not (acoLastOperationNoRead in fOwner.Options) then
@@ -3239,10 +3242,12 @@ begin
   FreeAndNil(fClients); // stop polling
   ObjArrayClear(fThreads);
   inherited Destroy;
-  for i := 0 to fConnectionCount-1 do begin
-    fConnection[i].BeforeDestroy(self);
-    fConnection[i].Free;
-  end;
+  for i := 0 to fConnectionCount-1 do
+    try
+      fConnection[i].BeforeDestroy(self);
+      fConnection[i].Free;
+    finally
+    end;
   fConnectionLock.Done;
   fTempConnection.Free;
 end;
@@ -3257,21 +3262,21 @@ begin
     raise ECrtSocket.CreateFmt('%s: %s:%s connection failure',
       [ClassName,fThreadClients.Address,fThreadClients.Port],-1);
   connection := nil;
-  if not ClientAdd(client,connection) then
+  if not ClientAddSocket(client,connection) then
     DirectShutdown(client);
 end;
 
-function TAsynchConnections.ClientAdd(aSocket: TSocket;
+function TAsynchConnections.ClientAddSocket(aSocket: TSocket;
   out aConnection: TAsynchConnection): boolean;
-begin // you can override this class then call ClientAddExisting
+begin // you can override this class then call ClientAddConnection
   if Terminated then
     result := false else begin
     aConnection := fStreamClass.Create;
-    result := ClientAddExisting(aSocket, aConnection);
+    result := ClientAddConnection(aSocket, aConnection);
   end;
 end;
 
-function TAsynchConnections.ClientAddExisting(aSocket: TSocket;
+function TAsynchConnections.ClientAddConnection(aSocket: TSocket;
   aConnection: TAsynchConnection): boolean;
 begin
   result := false; // caller should release aSocket
@@ -3282,7 +3287,7 @@ begin
   try
     inc(fLastHandle);
     aConnection.fHandle := fLastHandle;
-    fLog.Add.Log(sllTrace,'ClientAdd%',[aConnection],self);
+    fLog.Add.Log(sllTrace,'ClientAddSocket%',[aConnection],self);
     fConnections.Add(aConnection);
     fConnections.Sorted := true; // handles are increasing
   finally
@@ -3302,11 +3307,14 @@ begin
   try
     i := ClientFindIndex(aHandle);
     if i>=0 then begin // don't call fClients.Stop() here
-      fLog.Add.Log(sllTrace,'ClientDelete %.Handle=%',[fConnection[i].ClassType,
-        aHandle],self);
-      fConnection[i].BeforeDestroy(self);
-      fConnection[i].Free;
-      fConnections.FastDeleteSorted(i);
+      fLog.Add.Log(sllTrace,'ClientDelete %.Handle=%',
+        [fConnection[i].ClassType,aHandle],self);
+      try
+        fConnection[i].BeforeDestroy(self);
+        fConnection[i].Free;
+      finally
+        fConnections.FastDeleteSorted(i);
+      end;
       result := true;
     end else
       fLog.Add.Log(sllTrace,'ClientDelete(%)=false',[aHandle],self);
@@ -3435,7 +3443,7 @@ begin
         CloseSocket(client);
         break;
       end else
-        if ClientAdd(client,connection) then
+        if ClientAddSocket(client,connection) then
           if fClients.Start(connection) then
             fLog.Add.Log(sllTrace,'Execute: Accept()=% from %',
               [client,GetSinIP(sin)], self) else

@@ -90,6 +90,7 @@ begin
   server := TRTSPOverHTTPServer.Create('127.0.0.1', '4999', '4998', TSynLog, nil, nil);
   try
     //server.Clients.Options := [paoWritePollOnly];
+    //server.Options := [acoVerboseLog];
     writeln(server.ClassName, ' running');
     writeln('  performing tests with ', clients, ' concurrent streams using ',
       server.Clients.PollRead.PollClass.ClassName, #10);

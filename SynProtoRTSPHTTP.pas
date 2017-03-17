@@ -116,7 +116,7 @@ type
     fRtspServer, fRtspPort: SockString;
     fPendingGet: TRawUTF8ListLocked;
     // creates TPostConnection and TRtspConnection instances for a given stream
-    function ClientAdd(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; override;
+    function ClientAddSocket(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; override;
   public
     /// initialize the proxy HTTP server forwarding specified RTSP server:port
     constructor Create(const aRtspServer, aRtspPort, aHttpPort: SockString;
@@ -135,8 +135,10 @@ implementation
 
 function TRtspConnection.OnRead(Sender: TAsynchConnections): TPollAsynchSocketOnRead;
 begin
+  if acoVerboseLog in Sender.Options then
+    Sender.LogVerbose(self, 'Frame forwarded', fSlot.readbuf);
   fGetBlocking.Write(fSlot.readbuf); // synch sending to the HTTP GET client
-  TSynLog.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
+  Sender.Log.Add.Log(sllDebug, 'OnRead % RTSP forwarded % bytes to GET',
     [Handle, length(fSlot.readbuf)], self);
   fSlot.readbuf := '';
   result := sorContinue;
@@ -165,13 +167,13 @@ begin
   if rtsp <> nil then
   try
     Sender.Clients.WriteString(rtsp, decoded); // asynch sending to RTSP server
-    TSynLog.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
+    Sender.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
     Sender.Unlock;
   end
   else begin
-    TSynLog.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
+    Sender.Log.Add.Log(sllDebug, 'OnRead % POST found no rtsp=%',
       [Handle, fRtspTag], self);
     result := sorClose;
   end;
@@ -207,7 +209,7 @@ type
     property RemoteIP;
   end;
 
-function TRTSPOverHTTPServer.ClientAdd(aSocket: TSocket;
+function TRTSPOverHTTPServer.ClientAddSocket(aSocket: TSocket;
   out aConnection: TAsynchConnection): boolean;
 var
   log: ISynLog;
@@ -221,7 +223,7 @@ var
 
   procedure PendingDelete(i: integer; const reason: RawUTF8);
   begin
-    log.Log(sllDebug, 'ClientAdd rejected %', [reason], self);
+    log.Log(sllDebug, 'ClientAddSocket rejected %', [reason], self);
     fPendingGet.Delete(i);
   end;
 
@@ -229,14 +231,15 @@ begin
   aConnection := nil;
   get := nil;
   result := false;
-  log := fLog.Enter('ClientAdd(%)', [aSocket], self);
+  log := fLog.Enter('ClientAddSocket(%)', [aSocket], self);
   try
     sock := TProxySocket.Create(nil);
     try
       sock.InitRequest(aSocket);
       if sock.GetRequest(false) and (sock.URL <> '') then begin
-        log.Log(sllTrace, 'ClientAdd received % % %', [sock.Method, sock.URL,
-          sock.HeaderGetText], self);
+        if log<>nil then
+          log.Log(sllTrace, 'ClientAddSocket received % % %', [sock.Method, sock.URL,
+            sock.HeaderGetText], self);
         cookie := sock.HeaderValue('x-sessioncookie');
         if cookie = '' then
           exit;
@@ -246,7 +249,8 @@ begin
           for i := fPendingGet.Count - 1 downto 0 do begin
             old := fPendingGet.ObjectPtr[i];
             if now > old.fExpires then begin
-              log.Log(sllTrace, 'ClientAdd deletes deprecated %', [old], self);
+              if log<>nil then
+                log.Log(sllTrace, 'ClientAddSocket deletes deprecated %', [old], self);
               fPendingGet.Delete(i);
             end;
           end;
@@ -271,9 +275,10 @@ begin
             end;
           end
           else if IdemPropNameU(sock.Method, 'POST') then begin
-            if i < 0 then
-              log.Log(sllDebug, 'ClientAdd rejected on unknonwn %', [sock], self)
-            else if not IdemPropNameU(sock.ContentType,
+            if i < 0 then begin
+              if log<>nil then
+                log.Log(sllDebug, 'ClientAddSocket rejected on unknonwn %', [sock], self)
+            end else if not IdemPropNameU(sock.ContentType,
               'application/x-rtsp-tunnelled') then
               PendingDelete(i, sock.ContentType)
             else begin
@@ -287,15 +292,16 @@ begin
           fPendingGet.Safe.UnLock;
         end;
       end
-      else
-        log.Log(sllDebug, 'ClientAdd: ignored invalid %', [sock], self);
+      else if log<>nil then
+        log.Log(sllDebug, 'ClientAddSocket: ignored invalid %', [sock], self);
     finally
       sock.Free;
     end;
     if get = nil then
       exit;
     if not get.SockConnected then begin
-      log.Log(sllDebug, 'ClientAdd: GET disconnected %', [get.Sock], self);
+      if log<>nil then
+        log.Log(sllDebug, 'ClientAddSocket: GET disconnected %', [get.Sock], self);
       exit;
     end;
     rtsp := CallServer(fRtspServer, fRtspPort, false, cslTCP, 1000);
@@ -303,9 +309,9 @@ begin
       raise ECrtSocket.CreateFmt('No RTSP server on %s:%s', [fRtspServer, fRtspPort], -1);
     postconn := TPostConnection.Create;
     rtspconn := TRtspConnection.Create;
-    if not inherited ClientAddExisting(aSocket, postconn) or
-       not inherited ClientAddExisting(rtsp, rtspconn) then
-      raise EAsynchConnections.CreateUTF8('inherited %.ClientAdd(%) % failed',
+    if not inherited ClientAddConnection(aSocket, postconn) or
+       not inherited ClientAddConnection(rtsp, rtspconn) then
+      raise EAsynchConnections.CreateUTF8('inherited %.ClientAddConnection(%) % failed',
         [self, aSocket, cookie]);
     aConnection := postconn;
     postconn.fRtspTag := rtspconn.Handle;
@@ -314,11 +320,13 @@ begin
       exit;
     get := nil;
     result := true;
-    log.Log(sllTrace, 'ClientAdd added get=% post=%/% and rtsp=%/%',
-      [rtspconn.fGetBlocking.Sock, aSocket, aConnection.Handle,
-       rtsp, rtspconn.Handle], self);
+    if log<>nil then
+      log.Log(sllTrace, 'ClientAddSocket added get=% post=%/% and rtsp=%/% for %',
+        [rtspconn.fGetBlocking.Sock, aSocket, aConnection.Handle,
+         rtsp, rtspconn.Handle, cookie], self);
   except
-    log.Log(sllDebug, 'ClientAdd(%) failed', [aSocket], self);
+    if log<>nil then
+      log.Log(sllDebug, 'ClientAddSocket(%) failed', [aSocket], self);
     get.Free;
   end;
 end;
@@ -347,7 +355,8 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
     rmax := clientcount - 1;
     streamer := TCrtSocket.Bind(fRtspPort);
     try
-      log.Log(sllCustom1, 'RegressionTests % GET', [clientcount], self);
+      if log<>nil then
+        log.Log(sllCustom1, 'RegressionTests % GET', [clientcount], self);
       SetLength(req, clientcount);
       for r := 0 to rmax do
       with req[r] do begin
@@ -367,7 +376,8 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         test.Check(get.SockConnected);
         test.Check(get.ContentType = 'application/x-rtsp-tunnelled');
       end;
-      log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], self);
+      if log<>nil then
+        log.Log(sllCustom1, 'RegressionTests % POST', [clientcount], self);
       for r := 0 to rmax do
       with req[r] do begin
         post := TCrtSocket.Open('localhost', fServer.Port);
@@ -389,7 +399,8 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         test.Check(post.SockConnected);
       end;
       for i := 0 to 10 do begin
-        log.Log(sllCustom1, 'RegressionTests % RUN #%', [clientcount, i], self);
+        if log<>nil then
+          log.Log(sllCustom1, 'RegressionTests % RUN #%', [clientcount, i], self);
         // send a RTSP command once in a while to the POST request
         if i and 7 = 0 then begin
           for r := 0 to rmax do
@@ -414,7 +425,8 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
           with req[r] do
             test.check(get.SockReceiveString = session);
       end;
-      log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], self);
+      if log<>nil then
+        log.Log(sllCustom1, 'RegressionTests % SHUTDOWN', [clientcount], self);
     finally
       for r := 0 to rmax do
       with req[r] do begin
