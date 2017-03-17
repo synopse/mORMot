@@ -1187,13 +1187,15 @@ end;
 { TMVCSessionWithCookies }
 
 constructor TMVCSessionWithCookies.Create;
-var rnd: TByte64;
+var rnd: THash128;
 begin
   inherited Create;
   fContext.CookieName := 'mORMot';
-  TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt)); // temporary encryption
-  TAESPRNG.Main.FillRandom(@fContext.CryptNonce,sizeof(fContext.CryptNonce));
-  TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
+  with TAESPRNG.Main do begin
+    FillRandom(@fContext.Crypt,sizeof(fContext.Crypt)); // temporary encryption
+    FillRandom(@fContext.CryptNonce,sizeof(fContext.CryptNonce));
+    FillRandom(rnd);
+  end;
   fContext.Secret.Init(@rnd,sizeof(rnd)); // temporary secret for HMAC-CRC32C
 end;
 

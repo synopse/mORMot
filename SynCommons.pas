@@ -6181,6 +6181,22 @@ function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString(const guid: TGUID): string;
 
+/// fast compute of some 32-bit random value
+// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
+// generator by Pierre L'Ecuyer (period is 2^88, i.e. about 10^26)
+// - will fast generate some random-like 32-bit output
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+function Random32: cardinal;
+
+/// seed the gsl_rng_taus2 Random32 generator
+// - do nothing if RDRAND Intel x86/x64 opcode is available
+// - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
+// often than the Pierre L'Ecuyer's algorithm period of 2^88
+// - you can specify some additional entropy buffer
+// - thread-specific function: each thread will maintain its own seed table
+procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
+
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
 // - use internally crc32c() with some rough entropy source, and Random32
@@ -11094,8 +11110,9 @@ type
   case integer of
   0: (Lo,Hi: Int64);
   1: (i0,i1,i2,i3: integer);
-  2: (c: TBlock128);
-  3: (b: THash128);
+  2: (c0,c1,c2,c3: cardinal);
+  3: (c: TBlock128);
+  4: (b: THash128);
   end;
   /// pointer to an array of two 64-bit hash values
   PHash128Rec = ^THash128Rec;
@@ -12603,7 +12620,8 @@ var
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
   /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)'
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 
+  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
@@ -27881,7 +27899,7 @@ var random: string[8];
     rnd: cardinal;
 begin // fast cross-platform implementation
   if TemporaryFileNameRandom=0 then
-    FillRandom(@TemporaryFileNameRandom,1);
+    TemporaryFileNameRandom := Random32;
   random[0] := #8;
   repeat
     rnd := InterlockedIncrement(TemporaryFileNameRandom); // thread-safe :)
@@ -32300,8 +32318,7 @@ asm
         pop     ebx
         not     eax
 end;
-{$endif PUREPASCAL}
-{$ifdef CPU386}
+{$ifdef CPUX86}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
         push    esi
@@ -32400,7 +32417,8 @@ asm // eax=crc, edx=buf, ecx=len
         {$endif}
 @0:     not     eax
 end;
-{$endif CPU386}
+{$endif CPUX86}
+{$endif PUREPASCAL}
 
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
@@ -33962,21 +33980,90 @@ asm
 end;
 {$endif}
 
+type
+  TLecuyer = packed object
+    rs1, rs2, rs3: cardinal;
+    count: cardinal;
+    procedure Seed(entropy: PByteArray; entropylen: integer);
+    function Next: cardinal;
+  end;
+
+threadvar
+  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
+
+procedure TLecuyer.Seed(entropy: PByteArray; entropylen: integer);
+var time, crc: THash128Rec;
+    i: integer;
+begin
+  repeat
+    QueryPerformanceCounter(time.Lo);
+    time.i2 := UnixTimeUTC;
+    time.i3 := integer(GetCurrentThreadID);
+    crcblock(@crc.b,@time.b);
+    crcblock(@crc.b,@ExeVersion.Hash.b);
+    if entropy<>nil then
+      for i := 0 to entropylen do
+        crc.b[i and 15] := crc.b[i and 15] xor entropy^[i];
+    rs1 := rs1 xor crc.c0;
+    rs2 := rs2 xor crc.c1;
+    rs3 := rs3 xor crc.c2;
+  until (rs1>1) and (rs2>7) and (rs3>15);
+  count := 1;
+  for i := 1 to crc.i3 and 15 do
+    Next; // warm up
+end;
+
+function TLecuyer.Next: cardinal;
+begin
+  if word(count)=0 then // reseed after 256KB of output
+    Seed(nil,0) else
+    inc(count);
+  result := rs1;
+  rs1 := ((result and -2)shl 12) xor (((result shl 13)xor result)shr 19);
+  result := rs2;
+  rs2 := ((result and -8)shl 4) xor (((result shl 2)xor result)shr 25);
+  result := rs3;
+  rs3 := ((result and -16)shl 17) xor (((result shl 3)xor result)shr 11);
+  result := rs1 xor rs2 xor result;
+end;
+
+procedure Random32Seed(entropy: pointer; entropylen: integer);
+begin
+  {$ifdef CPUINTEL}
+  if not (cfRAND in CpuFeatures) then
+  {$endif}
+    _Lecuyer.Seed(entropy,entropylen);
+end;
+
+function Random32: cardinal;
+begin
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+    result := RdRand32 else
+  {$endif}
+    result := _Lecuyer.Next;
+end;
+
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 var i: integer;
     c: cardinal;
     timenow: Int64;
+    lecuyer: ^TLecuyer;
 begin
-  c := GetTickCount64+Random(maxInt)+{$ifdef BSD}Cardinal{$endif}(GetCurrentThreadID);
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+    lecuyer := nil else
+  {$endif}
+    lecuyer := @_Lecuyer;
   QueryPerformanceCounter(timenow);
-  c := c xor crc32c(c,@timenow,sizeof(timenow));
+  c := crc32c(ExeVersion.Hash.c3,@timenow,sizeof(timenow));
   for i := 0 to CardinalCount-1 do begin
-    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023]
-           xor crc32c(c,pointer(Dest),CardinalCount*4);
+    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023];
     {$ifdef CPUINTEL}
-    if cfRAND in CpuFeatures then
-      c := c xor RdRand32;
-    {$endif};
+    if lecuyer=nil then
+      c := c xor RdRand32 else
+    {$endif}
+      c := c xor lecuyer^.Next;
     Dest^[i] := Dest^[i] xor c;
   end;
 end;
@@ -37934,9 +38021,7 @@ begin
   FillcharFast := @FillCharSSE2;
   //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
   {$else}
-  {$ifdef PUREPASCAL}
-  Pointer(@FillCharFast) := SystemFillCharAddress;
-  {$else}
+  {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
@@ -37947,7 +38032,9 @@ begin
     FillcharFast := @FillCharX87;
   end;
   MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
-  {$endif PUREPASCAL}
+  {$else}
+  Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
@@ -60555,7 +60642,7 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  FillRandom(@fTokenSeed,1);
+  fTokenSeed := Random32;
   fSessionGenerator := abs(fTokenSeed*PtrInt(ClassType));
 end;
 

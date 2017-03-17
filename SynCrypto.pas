@@ -1685,11 +1685,6 @@ procedure XorOffset(P: PByteArray; Index,Count: integer);
 // compression rate will not change a lot
 procedure XorConst(p: PIntegerArray; Count: integer);
 
-/// fast compute of some 32-bit random value
-// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
-// generator by P. L'Ecuyer (period=2^88, i.e. about 10^26)
-function Random32: cardinal;
-
 var
   /// the encryption key used by CompressShaAes() global function
   // - the key is global to the whole process
@@ -9011,52 +9006,8 @@ begin
   Seed;
 end;
 
-{$ifdef CPUINTEL}
-/// get 32-bit value from NIST SP 800-90A compliant RDRAND Intel x86/x64 opcode
-function RdRand32: cardinal;
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
-asm
-  .noframe
-{$endif FPC}
-{$endif CPU64}
-{$ifdef CPU32}
-asm
-{$endif}
-  // rdrand eax: same opcodes for x86 and x64
-  db $0f,$c7,$f0
-  // returns in eax, ignore carry flag (eax=0 won't hurt)
-end;
-// https://software.intel.com/en-us/articles/intel-digital-random-number-generator-drng-software-implementation-guide
-{$endif}
-
-var
-  rs1: cardinal = 2654435761;
-  rs2: cardinal = 668265263;
-  rs3: cardinal = 3266489917;
-
-function Random32: cardinal;
-begin
-  {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then begin
-    result := RdRand32;
-    exit;
-  end;
-  {$endif}
-  result := rs1;
-  rs1 := ((result and -2)shl 12) xor (((result shl 13)xor result)shr 19);
-  result := rs2;
-  rs2 := ((result and -8)shl 4) xor (((result shl 2)xor result)shr 25);
-  result := rs3;
-  rs3 := ((result and -16)shl 17) xor (((result shl 3)xor result)shr 11);
-  result := rs1 xor rs2 xor result;
-end;
-
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 var fromos: boolean;
-    g: array[0..63] of byte;
     i: integer;
     {$ifdef LINUX}
     dev: integer;
@@ -9064,6 +9015,7 @@ var fromos: boolean;
     {$ifdef MSWINDOWS}
     prov: HCRYPTPROV;
     {$endif}
+    tmp: array[byte] of byte;
 begin
   fromos := false;
   {$ifdef LINUX}
@@ -9090,20 +9042,15 @@ begin
   {$endif}
   if fromos then
     exit;
-  {$ifdef CPUINTEL}
-  if cfRAND in CpuFeatures then
-    for i := 0 to (Len shr 2)-1 do
-      PCardinalArray(Buffer)^[i] := PCardinalArray(Buffer)^[i] xor RdRand32;
-  {$endif}
   i := Len;
   repeat
-    SynCommons.FillRandom(@g,sizeof(g) shr 2); // SynCommons used as fallback
-    if i<=SizeOf(g) then begin
-      XorMemory(@Buffer^[Len-i],@g,i);
+    SynCommons.FillRandom(@tmp,SizeOf(tmp) shr 2); // SynCommons as fallback
+    if i<=SizeOf(tmp) then begin
+      XorMemory(@Buffer^[Len-i],@tmp,i);
       break;
     end;
-    XorMemory(@Buffer^[Len-i],@g,SizeOf(g));
-    dec(i,SizeOf(g));
+    XorMemory(@Buffer^[Len-i],@tmp,SizeOf(tmp));
+    dec(i,SizeOf(tmp));
   until false;
 end;
 
@@ -9118,31 +9065,28 @@ var time: Int64;
     threads: array[0..2] of TThreadID;
     version: RawByteString;
     hmac: THMAC_SHA256;
-    entropy: array[0..3] of TSHA256Digest; // 128 bytes
+    entropy: array[0..3] of THash256; // 128 bytes
     paranoid: cardinal;
     p: PByteArray;
     i: integer;
   procedure hmacInit;
   var timenow: Int64;
       g: TGUID;
-      i {$ifdef CPUINTEL}, val{$endif}: cardinal;
+      i, val: cardinal;
   begin
     hmac.Init(@entropy,sizeof(entropy)); // bytes on CPU stack
     hmac.Update(@time,sizeof(time));
+    hmac.Update(ExeVersion.Hash.b);
     QueryPerformanceCounter(timenow);
     hmac.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
     for i := 0 to timenow and 3 do begin
       CreateGUID(g); // not random, but genuine
       hmac.Update(@g,sizeof(g));
     end;
-    {$ifdef CPUINTEL}
-    hmac.Update(@CpuFeatures,sizeof(CpuFeatures));
-    if cfRAND in CpuFeatures then
-      for i := 1 to (PCardinal(@entropy[3])^ and 15)+2 do begin
-        val := RdRand32;
-        hmac.Update(@val,sizeof(val));
-      end;
-    {$endif}
+    for i := 1 to (Random32 and 15)+2 do begin
+      val := Random32;
+      hmac.Update(@val,sizeof(val));
+    end;
   end;
 begin
   QueryPerformanceCounter(time);
@@ -9178,17 +9122,7 @@ begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
-  {$ifdef CPUINTEL}
-  if not (cfRAND in CpuFeatures) then
-  {$endif}
-    repeat // seed Random32 function above
-      QueryPerformanceCounter(time);
-      rs1 := rs1 xor time xor PCardinal(@entropy[0])^;
-      rs2 := rs2 xor time xor PCardinal(@entropy[1])^;
-      rs3 := rs3 xor time xor PCardinal(@entropy[2])^;
-    until (rs1>1) and (rs2>7) and (rs3>15);
-  for i := 1 to PCardinal(@entropy[3])^ and 15 do
-    Random32; // warm up
+  Random32Seed(@entropy[3],sizeof(entropy[3]));
 end;
 
 procedure TAESPRNG.Seed;
