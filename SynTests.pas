@@ -225,21 +225,16 @@ type
     procedure CheckLogTime(condition: boolean;
       const msg: RawUTF8; const args: array of const; level: TSynLogInfo=sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomString(CharCount: Integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomUTF8(CharCount: Integer): RawUTF8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomUnicode(CharCount: Integer): SynUnicode;
     /// create a temporary string random content, using ASCII 7 bit content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomIdentifier(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
@@ -649,62 +644,41 @@ begin
 end;
 
 class function TSynTestCase.RandomString(CharCount: Integer): RawByteString;
-var V: cardinal;
-    P: PAnsiChar;
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  P := pointer(Result);
-  while CharCount>0 do begin
-    if CharCount>5 then begin
-      V := Random(maxInt); // fast: one random compute per 5 chars
-      P[0] := AnsiChar(32+V and 127); V := V shr 7;
-      P[1] := AnsiChar(32+V and 127); V := V shr 7;
-      P[2] := AnsiChar(32+V and 127); V := V shr 7;
-      P[3] := AnsiChar(32+V and 127); V := V shr 7;
-      P[4] := AnsiChar(65+V);
-      Inc(P,5);
-      dec(CharCount,5);
-    end else begin
-      P^ := AnsiChar(32+Random(224));
-      inc(P);
-      dec(CharCount);
-    end;
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := 32+R[i] and 127;
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomAnsi7(CharCount: Integer): RawByteString;
-var V: cardinal;
-    P: PAnsiChar;
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  P := pointer(Result);
-  while CharCount>0 do begin
-    if CharCount>=5 then begin
-      V := Random(maxInt); // fast: one random compute per 5 chars
-      P[0] := AnsiChar(32+V mod 94); V := V div 94;
-      P[1] := AnsiChar(32+V mod 94); V := V div 94;
-      P[2] := AnsiChar(32+V mod 94); V := V div 94;
-      P[3] := AnsiChar(32+V mod 94); V := V div 94;
-      P[4] := AnsiChar(32+V mod 94);
-      Inc(P,5);
-      dec(CharCount,5);
-    end else begin
-      P^ := AnsiChar(32+Random(94));
-      inc(P);
-      dec(CharCount);
-    end;
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := 32+R[i] mod 94;
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
-const CHARS: array[0..36] of AnsiChar =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+const CHARS: array[0..63] of AnsiChar =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  while CharCount>0 do begin
-    dec(CharCount);
-    PAnsiChar(Pointer(result))[CharCount] := CHARS[Random(High(CHARS)+1)];
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := ord(CHARS[integer(R[i]) and 63]);
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomUTF8(CharCount: Integer): RawUTF8;
