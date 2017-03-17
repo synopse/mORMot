@@ -161,18 +161,6 @@ type
     property URI: TURI read fURI;
   end;
 
-const
-  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
-  LOGESCAPELEN = 200;
-type
-  /// buffer to be allocated on stack when using LogEscape()
-  TLogEscape = array[0..LOGESCAPELEN*3+3] of AnsiChar;
-
-/// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
-// - up to LOGESCAPELEN (i.e. 200) bytes will be appended
-// - used e.g. to implement logBinaryFrameContent option
-procedure LogEscape(source, dest: PAnsiChar; sourcelen: integer);
-
 
 { ------------ client or server asynchronous process of multiple connections }
 
@@ -326,6 +314,16 @@ type
     procedure Lock;
     /// just a wrapper around fConnectionLock.UnLock
     procedure Unlock;
+    /// log some binary data with proper escape
+    // - can be executed from an TAsynchConnection.OnRead method to track content:
+    // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
+    procedure LogVerbose(connection: TAsynchConnection; const ident: RawUTF8;
+      frame: pointer; framelen: integer); overload;
+    /// log some binary data with proper escape
+    // - can be executed from an TAsynchConnection.OnRead method to track content:
+    // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(...);
+    procedure LogVerbose(connection: TAsynchConnection; const ident: RawUTF8;
+      const frame: RawByteString); overload;
     /// will execute TAsynchConnection.OnLastOperationIdle after an idle period
     // - could be used to send heartbeats after read/write inactivity
     // - equals 0 (i.e. disabled) by default
@@ -344,6 +342,7 @@ type
   published
     /// access to the TCP client sockets poll
     // - TAsynchConnection.OnRead could use Clients.Write to send answers
+    // or Clients.LogVerbose() to log some escaped data 
     property Clients: TAsynchConnectionsSockets read fClients;
   end;
 
@@ -2567,28 +2566,6 @@ begin
   Safe.UnLock;
 end;
 
-procedure LogEscape(source, dest: PAnsiChar; sourcelen: integer);
-var i: integer;
-begin
-  if sourcelen>LOGESCAPELEN then
-    sourcelen := LOGESCAPELEN;
-  dest^ := ' ';
-  inc(dest);
-  for i := 1 to sourcelen do begin
-    if source^ in [' '..#126] then begin
-      dest^ := source^;
-      inc(dest);
-    end else begin
-      dest^ := '$';
-      dest := ByteToHex(dest+1,ord(source^));
-    end;
-    inc(source);
-  end;
-  if sourcelen=LOGESCAPELEN then
-    PCardinal(dest)^ := ord('.')+ord('.')shl 8+ord('.')shl 16 else
-    dest^ := #0;
-end;
-
 procedure TWebSocketProcess.Log(const frame: TWebSocketFrame;
   const aMethodName: RawUTF8; aEvent: TSynLogInfo; DisableRemoteLog: Boolean);
 var tmp: TLogEscape;
@@ -2608,11 +2585,9 @@ begin
         log.Log(aEvent,'% % focText %',[aMethodName,
           Protocol.FrameType(frame),frame.PayLoad],self) else begin
         len := length(frame.PayLoad);
-        if logBinaryFrameContent in fSettings.LogDetails then
-          LogEscape(pointer(frame.PayLoad),@tmp,len) else
-          tmp[0] := #0;
         log.Log(aEvent,'% % % len=%%',[aMethodName,Protocol.FrameType(frame),
-          ToText(frame.opcode)^,len,PAnsiChar(@tmp)],self);
+          ToText(frame.opcode)^,len,LogEscape(pointer(frame.PayLoad),len,tmp,
+          logBinaryFrameContent in fSettings.LogDetails)],self);
       end;
     finally
       log.DisableRemoteLog(false);
@@ -3141,16 +3116,6 @@ begin
     ac.fLastOperation := UnixTimeUTC;
 end;
 
-procedure TAsynchConnectionsSockets.ReadVerboseParsedLog(connection: TObject;
-  frame: pointer; framelen: integer);
-var tmp: TLogEscape;
-begin // sender should have checked: if acoVerboseLog in fOwner.Options then...
-  if acoNoLogRead in fOwner.Options then
-    exit;
-  LogEscape(frame,@tmp,framelen);
-  fOwner.fLog.Add.Log(sllTrace,'Read% parsed len=%%',[connection,framelen,PAnsiChar(@tmp)],self);
-end;
-
 function TAsynchConnectionsSockets.SlotFromConnection(connection: TObject): PPollSocketsSlot;
 begin
   if not connection.InheritsFrom(TAsynchConnection) or
@@ -3168,13 +3133,10 @@ begin
   result := inherited Write(connection,data,datalen);
   if result and not (acoLastOperationNoWrite in fOwner.Options) then
     (connection as TAsynchConnection).fLastOperation := UnixTimeUTC;
-  if not (acoNoLogWrite in fOwner.Options) then begin
-    if acoVerboseLog in fOwner.Options then
-      LogEscape(@data,@tmp,datalen) else
-      tmp[0] := #0;
+  if (fOwner.fLog<>nil) and not(acoNoLogWrite in fOwner.Options) then
     fOwner.fLog.Add.Log(sllTrace,'Write%=% len=%%',
-      [connection,BOOL_STR[result],datalen,PAnsiChar(@tmp)],self);
-  end;
+      [connection,BOOL_STR[result],datalen,LogEscape(@data,datalen,tmp,
+       acoVerboseLog in fOwner.Options)],self);
 end;
 
 procedure TAsynchConnectionsSockets.AfterWrite(connection: TObject);
@@ -3385,6 +3347,21 @@ end;
 procedure TAsynchConnections.Unlock;
 begin
   fConnectionLock.UnLock;
+end;
+
+procedure TAsynchConnections.LogVerbose(connection: TAsynchConnection;
+  const ident: RawUTF8; frame: pointer; framelen: integer);
+var tmp: TLogEscape;
+begin
+  if not(acoNoLogRead in Options) and (acoVerboseLog in Options) and (fLog<>nil) then
+    fLog.Add.Log(sllTrace,'% len=%%',[ident,framelen,
+      LogEscape(frame,framelen,tmp)],connection);
+end;
+
+procedure TAsynchConnections.LogVerbose(connection: TAsynchConnection;
+  const ident: RawUTF8; const frame: RawByteString);
+begin
+  LogVerbose(connection,ident,pointer(frame),length(frame));
 end;
 
 procedure TAsynchConnections.IdleEverySecond;

@@ -10678,6 +10678,32 @@ function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 /// append one byte as hexadecimal char pairs, into a text buffer
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 
+/// fast conversion from binary data to escaped text
+// - non printable characters will be written as $xx hexadecimal codes
+// - will be #0 terminated, with '...' characters trailing on overflow
+// - ensure the destination buffer contains at least max*3+3 bytes, which is
+// always the case when using LogEscape() and its local TLogEscape variable
+procedure EscapeBuffer(s,d: PAnsiChar; len,max: integer);
+
+const
+  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
+  LOGESCAPELEN = 200;
+type
+  /// buffer to be allocated on stack when using LogEscape()
+  TLogEscape = array[0..LOGESCAPELEN*3+3] of AnsiChar;
+
+/// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
+// - up to LOGESCAPELEN (i.e. 200) bytes will be escaped and appended to a
+// Local temp: TLogEscape variable, using the EscapeBuffer() low-level function
+// - you can then log the resulting escaped text by passing the returned
+// PAnsiChar as % parameter to a TSynLog.Log() method
+// - the "enabled" parameter can be assigned from a process option, avoiding to
+// process the escape if verbose logs are disabled
+// - used e.g. to implement logBinaryFrameContent option for WebSockets
+function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+  enabled: boolean=true): PAnsiChar;
+  {$ifdef HASINLINE}inline;{$endif}
+  
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
   // - such result type would avoid a string allocation on heap
@@ -26629,6 +26655,39 @@ function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 begin
   PWord(P)^ := TwoDigitsHexWB[Value];
   result := P+2;
+end;
+
+procedure EscapeBuffer(s,d: PAnsiChar; len,max: integer);
+var i: integer;
+begin
+  if len>max then
+    len := max;
+  d^ := ' ';
+  inc(d);
+  for i := 1 to len do begin
+    if s^ in [' '..#126] then begin
+      d^ := s^;
+      inc(d);
+    end else begin
+      d^ := '$';
+      inc(d);
+      PWord(d)^ := TwoDigitsHexWB[ord(s^)];
+      inc(d,2);
+    end;
+    inc(s);
+  end;
+  if len=max then
+    PCardinal(d)^ := ord('.')+ord('.')shl 8+ord('.')shl 16 else
+    d^ := #0;
+end;
+
+function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+  enabled: boolean): PAnsiChar;
+begin
+  if enabled then
+    EscapeBuffer(source,@temp,sourcelen,LOGESCAPELEN) else
+    temp[0] := #0;
+  result := @temp;
 end;
 
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
