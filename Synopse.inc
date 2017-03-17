@@ -367,6 +367,7 @@
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
+        {$define LINUXNOTBSD}     // e.g. to disable epoll API
       {$else}
       Kylix1/2 or Delphi Tokyo/ARC are unsupported
       {$ifend}

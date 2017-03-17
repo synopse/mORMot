@@ -220,13 +220,6 @@ unit SynCrtSock;
 
 interface
 
-{.$define DEBUGAPI}
-{.$define DEBUG23}
-{$ifdef DEBUG2}
-{.$define DEBUG}
-{$endif}
-
-
 uses
 {$ifdef MSWINDOWS}
   Windows,
@@ -2408,13 +2401,16 @@ type
   // and fWrite will be used to poll output state and send it asynchronously
   TPollAsynchSocketsOptions = set of (paoWritePollOnly);
 
+  /// let TPollAsynchSockets.OnRead shutdown the socket if needed
+  TPollAsynchSocketOnRead = (sorContinue, sorClose);
+
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
   // - to be used e.g. for stream protocols (e.g. WebSockets or IoT communication)
   // - assigned sockets will be set in non-blocking mode, so that polling will
   // work as expected: you should then never use direclty the socket (e.g. via
   // blocking TCrtSocket), but rely on this class for asynchronous process:
-  // OnRead overriden method will receive all incoming data from input buffer,
+  // OnRead() overriden method will receive all incoming data from input buffer,
   // and Write() should be called to add some data to asynchronous output buffer
   // - connections are identified as TObject instances, which should hold a
   // TPollSocketsSlot record as private values for the polling process
@@ -2433,14 +2429,16 @@ type
     fProcessing: integer;
     fOptions: TPollAsynchSocketsOptions;
     function GetCount: integer;
-    // extract frames from slot.readbuf, and handle them - false to close socket
-    function OnRead(connection: TObject): boolean; virtual; abstract;
+    // return low-level socket information from connection instance
+    function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
+    // extract frames from slot.readbuf, and handle them
+    function OnRead(connection: TObject): TPollAsynchSocketOnRead; virtual; abstract;
+    // called when slot.writebuf has been sent through the socket
+    procedure AfterWrite(connection: TObject); virtual; abstract;
     // pseClosed: should do connection.free - Stop() has been called (socket=0)
     procedure OnClose(connection: TObject); virtual; abstract;
     // pseError: return false to close socket and connection (calling OnClose)
     function OnError(connection: TObject; events: TPollSocketEvents): boolean; virtual; abstract;
-    // return low-level socket information from connection instance
-    function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -4355,8 +4353,6 @@ begin
     GetHeader; // read all other headers
     if not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
-{$ifdef DEBUGAPI}writeln('? ',Command,' ContentLength=',length(Content));
-    if result<>STATUS_SUCCESS then writeln('? ',Content,#13#10,HeaderGetText); {$endif}
   except
     on Exception do
       DoRetry(STATUS_NOTFOUND);
@@ -5125,7 +5121,6 @@ var Line: SockString; // 32 bits chunk length in hexa
     Len, LContent, Error: integer;
 begin
   fBodyRetrieved := true;
-{$ifdef DEBUG23}system.writeln('GetBody ContentLength=',ContentLength);{$endif}
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
@@ -5203,7 +5198,6 @@ begin
       SetLength(Headers,n+10);
     Headers[n] := s;
     inc(n);
-    {$ifdef DEBUG23}system.Writeln(ClassName,'.HeaderIn ',s);{$endif}
     P := pointer(s);
     if IdemPChar(P,'CONTENT-') then begin
       if IdemPChar(P+8,'LENGTH:') then
@@ -5358,8 +5352,8 @@ end;
 function THttpServerSocket.HeaderGetText: SockString;
 begin
   result := inherited HeaderGetText;
-  if RemoteIP<>'' then
-    result := result+'RemoteIP: '+RemoteIP+#13#10;
+  if fRemoteIP<>'' then
+    result := result+'RemoteIP: '+fRemoteIP+#13#10;
 end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
@@ -5458,6 +5452,7 @@ begin
   WSAEWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
   WSAECONNABORTED: result := 'WSAECONNABORTED';
   WSAECONNRESET:   result := 'WSAECONNRESET';
+  WSAEMFILE:       result := 'WSAEMFILE';
   else result := '';
   end;
   result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
@@ -8809,7 +8804,7 @@ end;
 { TPollSocketAbstract }
 
 {.$define USEWSAPOLL}
-// you may try it - but seems SLOWER under Windows 7
+// you may try it - but seems slightly SLOWER under Windows 7
 
 function PollSocketClass: TPollSocketClass;
 begin
@@ -8939,7 +8934,11 @@ end;
 constructor TPollSocketPoll.Create;
 begin
   inherited Create;
-  fMaxSockets := 1024; // some arbitrary value
+  {$ifdef MSWINDOWS} // some practical values
+  fMaxSockets := 1024;
+  {$else}
+  fMaxSockets := 20000;
+  {$endif}
 end;
 
 function TPollSocketPoll.Subscribe(socket: TSocket;
@@ -9110,9 +9109,7 @@ end;
 
 function TPollSocketEpoll.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
-var s: ^TEPollEvent;
-    d: ^TPollSocketResult;
-    e: TPollSocketEvents;
+var e: TPollSocketEvents;
     i, ev: integer;
 begin
   result := -1; // error
@@ -9122,10 +9119,8 @@ begin
   if result<=0 then
     exit;
   SetLength(results,result);
-  s := pointer(fResults);
-  d := pointer(results);
-  for i := 1 to result do begin
-    ev := s^.events;
+  for i := 0 to result-1 do begin
+    ev := fResults[i].events;
     byte(e) := 0;
     if ev and EPOLLIN<>0 then
       include(e,pseRead);
@@ -9135,10 +9130,8 @@ begin
       include(e,pseError);
     if ev and EPOLLHUP<>0 then
       include(e,pseClosed);
-    d^.events := e;
-    d^.tag := TPollSocketTag(s^.data.ptr);
-    inc(s);
-    inc(d);
+    results[i].events := e;
+    results[i].tag := TPollSocketTag(fResults[i].data.ptr);
   end;
 end;
 
@@ -9155,6 +9148,9 @@ begin
   if aPollClass=nil then
     fPollClass := PollSocketClass else
     fPollClass := aPollClass;
+  {$ifndef MSWINDOWS}
+  SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
+  {$endif MSWINDOWS}
 end;
 
 destructor TPollSockets.Destroy;
@@ -9479,6 +9475,7 @@ begin
               break;
             dec(datalen,res);
             if datalen=0 then begin
+              AfterWrite(connection);
               result := true;
               exit;
             end;
@@ -9544,7 +9541,7 @@ begin
             AppendData(slot.readbuf,temp,res);
             inc(added,res);
           until false;
-          if (added>0) and not OnRead(connection) then // false=close
+          if (added>0) and (OnRead(connection)=sorClose) then 
             CloseConnection;
         finally
           slot.UnLock;
@@ -9597,8 +9594,10 @@ begin
           until buflen=0;
           delete(slot.writebuf,1,sent);
         end;
-        if slot.writebuf='' then // no data any more to be sent
+        if slot.writebuf='' then begin // no data any more to be sent
           fWrite.Unsubscribe(slot.socket,notif.tag);
+          AfterWrite(connection);
+        end;
       finally
         slot.UnLock;
       end;
@@ -9609,7 +9608,6 @@ end;
 
 
 initialization
-  {$ifdef DEBUGAPI}{$ifdef MSWINDOWS}AllocConsole;{$endif}{$endif}
   {$ifdef MSWINDOWS}
   Assert(
     {$ifdef CPU64}
@@ -9640,6 +9638,12 @@ initialization
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
 
 finalization
+  {$ifdef USELIBCURL}
+  if curl.Module<>0 then begin
+    curl.global_cleanup;
+    FreeLibrary(curl.Module);
+  end;
+  {$endif USELIBCURL}
   if WsaDataOnce.wVersion<>0 then
   try
     {$ifdef MSWINDOWS}
@@ -9656,10 +9660,4 @@ finalization
   end;
   {$endif}
   DestroySocketInterface;
-  {$ifdef USELIBCURL}
-  if curl.Module<>0 then begin
-    curl.global_cleanup;
-    FreeLibrary(curl.Module);
-  end;
-  {$endif USELIBCURL}
 end.
