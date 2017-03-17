@@ -443,6 +443,16 @@ type
     // - use rather SockSend() + SockSendFlush to send headers at once e.g.
     // since writeln(SockOut^,..) flush buffer each time
     procedure CreateSockOut(OutputBufferSize: Integer=1024);
+    /// finalize SockIn receiving buffer
+    // - you may call this method when you are sure that you don't need the
+    // input buffering feature on this connection any more (e.g. after having
+    // parsed the HTTP header, then rely on direct socket comunication)
+    procedure CloseSockIn;
+    /// finalize SockOut receiving buffer
+    // - you may call this method when you are sure that you don't need the
+    // output buffering feature on this connection any more (e.g. after having
+    // parsed the HTTP header, then rely on direct socket comunication)
+    procedure CloseSockOut;
     /// close and shutdown the connection (called from Destroy)
     procedure Close;
     /// close the opened socket, and corresponding SockIn/SockOut
@@ -3910,10 +3920,8 @@ end;
 destructor TCrtSocket.Destroy;
 begin
   Close;
-  if SockIn<>nil then
-    Freemem(SockIn);
-  if SockOut<>nil then
-    Freemem(SockOut);
+  CloseSockIn;
+  CloseSockOut;
   inherited;
 end;
 
@@ -3986,6 +3994,22 @@ begin
   SetLineBreakStyle(SockOut^,tlbsCRLF); // force e.g. for Linux platforms
   {$endif}
   Rewrite(SockOut^);
+end;
+
+procedure TCrtSocket.CloseSockIn;
+begin
+  if (self<>nil) and (fSockIn<>nil) then begin
+    Freemem(fSockIn);
+    fSockIn := nil;
+  end;
+end;
+
+procedure TCrtSocket.CloseSockOut;
+begin
+  if (self<>nil) and (fSockOut<>nil) then begin
+    Freemem(fSockOut);
+    fSockOut := nil;
+  end;
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
