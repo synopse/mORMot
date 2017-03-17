@@ -1500,6 +1500,9 @@ type
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
     function Init(SourceLen: integer): pointer; overload;
+    /// initialize a new temporary buffer of a given number of random bytes
+    // - will fill the buffer via FillRandom() calls
+    function InitRandom(RandomLen: integer): pointer;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -6180,8 +6183,8 @@ function GUIDToString(const guid: TGUID): string;
 
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
-// - use internally crc32c() hashing with some rough entropy source, and
-// hardware RDRAND Intel x86/x64 opcode if available
+// - use internally crc32c() with some rough entropy source, and Random32
+// gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
@@ -18643,6 +18646,13 @@ begin
       buf := @tmp else
       GetMem(buf,len+1); // +1 to include trailing #0
   result := buf;
+end;
+
+function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
+begin
+  result := Init(RandomLen+3);
+  if RandomLen>0 then
+    FillRandom(result,(RandomLen shr 2)+1);
 end;
 
 procedure TSynTempBuffer.Done;
