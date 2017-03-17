@@ -99,7 +99,7 @@ const
 type
   u_char = AnsiChar;
   u_short = Word;
-  u_int = Integer;
+  u_int = integer;
   u_long = Longint;
   pu_long = ^u_long;
   pu_short = ^u_short;
@@ -176,7 +176,7 @@ type
 
   PSockAddrIn = ^TSockAddrIn;
   TSockAddrIn = packed record
-    case Integer of
+    case integer of
       0: (sin_family: u_short;
           sin_port: u_short;
           sin_addr: TInAddr;
@@ -591,10 +591,11 @@ type
 var
   in6addr_any, in6addr_loopback : TInAddr6;
 
+function FD_ISSET(Socket: TSocket; const FDSet: TFDSet): boolean;
 procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
-function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
 procedure FD_ZERO(var FDSet: TFDSet);
+
 
 // poll() emulation via WSAPoll() extension API available since Vista
 
@@ -643,55 +644,56 @@ type
 // - returns the number of file descriptors with events, zero if timed out,
 // or -1 for errors
 // - before Vista, will return -1 since the API extension was not yet defined
+// - in practice, this API is actually slightly SLOWER than optimized Select() :(
 function poll(fds: PPollFD; nfds, timeout: integer): integer;
 
 
 type
-  TWSAStartup = function(wVersionRequired: Word; var WSData: TWSAData): Integer;
+  TWSAStartup = function(wVersionRequired: Word; var WSData: TWSAData): integer;
     stdcall;
-  TWSACleanup = function: Integer;
+  TWSACleanup = function: integer;
     stdcall;
-  TWSAGetLastError = function: Integer;
+  TWSAGetLastError = function: integer;
     stdcall;
   TGetServByName = function(name, proto: PAnsiChar): PServEnt;
     stdcall;
-  TGetServByPort = function(port: Integer; proto: PAnsiChar): PServEnt;
+  TGetServByPort = function(port: integer; proto: PAnsiChar): PServEnt;
     stdcall;
   TGetProtoByName = function(name: PAnsiChar): PProtoEnt;
     stdcall;
-  TGetProtoByNumber = function(proto: Integer): PProtoEnt;
+  TGetProtoByNumber = function(proto: integer): PProtoEnt;
     stdcall;
   TGetHostByName = function(name: PAnsiChar): PHostEnt;
     stdcall;
-  TGetHostByAddr = function(addr: Pointer; len, Struc: Integer): PHostEnt;
+  TGetHostByAddr = function(addr: Pointer; len, Struc: integer): PHostEnt;
     stdcall;
-  TGetHostName = function(name: PAnsiChar; len: Integer): Integer;
+  TGetHostName = function(name: PAnsiChar; len: integer): integer;
     stdcall;
-  TShutdown = function(s: TSocket; how: Integer): Integer;
+  TShutdown = function(s: TSocket; how: integer): integer;
     stdcall;
-  TSetSockOpt = function(s: TSocket; level, optname: Integer; optval: PAnsiChar;
-    optlen: Integer): Integer;
+  TSetSockOpt = function(s: TSocket; level, optname: integer; optval: PAnsiChar;
+    optlen: integer): integer;
     stdcall;
-  TGetSockOpt = function(s: TSocket; level, optname: Integer; optval: PAnsiChar;
-    var optlen: Integer): Integer;
+  TGetSockOpt = function(s: TSocket; level, optname: integer; optval: PAnsiChar;
+    var optlen: integer): integer;
     stdcall;
-  TSendTo = function(s: TSocket; Buf: pointer; len, flags: Integer; addrto: PSockAddr;
-    tolen: Integer): Integer;
+  TSendTo = function(s: TSocket; Buf: pointer; len, flags: integer; addrto: PSockAddr;
+    tolen: integer): integer;
     stdcall;
-  TSend = function(s: TSocket; Buf: pointer; len, flags: Integer): Integer;
+  TSend = function(s: TSocket; Buf: pointer; len, flags: integer): integer;
     stdcall;
-  TRecv = function(s: TSocket; Buf: pointer; len, flags: Integer): Integer;
+  TRecv = function(s: TSocket; Buf: pointer; len, flags: integer): integer;
     stdcall;
-  TRecvFrom = function(s: TSocket; Buf: pointer; len, flags: Integer; from: PSockAddr;
-    fromlen: PInteger): Integer;
+  TRecvFrom = function(s: TSocket; Buf: pointer; len, flags: integer; from: PSockAddr;
+    fromlen: PInteger): integer;
     stdcall;
   Tntohs = function(netshort: u_short): u_short;
     stdcall;
   Tntohl = function(netlong: u_long): u_long;
     stdcall;
-  TListen = function(s: TSocket; backlog: Integer): Integer;
+  TListen = function(s: TSocket; backlog: integer): integer;
     stdcall;
-  TIoctlSocket = function(s: TSocket; cmd: DWORD; var arg: Integer): Integer;
+  TIoctlSocket = function(s: TSocket; cmd: DWORD; var arg: integer): integer;
     stdcall;
   TInet_ntoa = function(inaddr: TInAddr): PAnsiChar;
     stdcall;
@@ -701,21 +703,21 @@ type
     stdcall;
   Thtonl = function(hostlong: u_long): u_long;
     stdcall;
-  TGetSockName = function(s: TSocket; name: PSockAddr; var namelen: Integer): Integer;
+  TGetSockName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer;
     stdcall;
-  TGetPeerName = function(s: TSocket; name: PSockAddr; var namelen: Integer): Integer;
+  TGetPeerName = function(s: TSocket; name: PSockAddr; var namelen: integer): integer;
     stdcall;
-  TConnect = function(s: TSocket; name: PSockAddr; namelen: Integer): Integer;
+  TConnect = function(s: TSocket; name: PSockAddr; namelen: integer): integer;
     stdcall;
-  TCloseSocket = function(s: TSocket): Integer;
+  TCloseSocket = function(s: TSocket): integer;
     stdcall;
-  TBind = function(s: TSocket; addr: PSockAddr; namelen: Integer): Integer;
+  TBind = function(s: TSocket; addr: PSockAddr; namelen: integer): integer;
     stdcall;
-  TAccept = function(s: TSocket; addr: PSockAddr; var addrlen: Integer): TSocket;
+  TAccept = function(s: TSocket; addr: PSockAddr; var addrlen: integer): TSocket;
     stdcall;
-  TTSocket = function(af, Struc, Protocol: Integer): TSocket;
+  TTSocket = function(af, Struc, Protocol: integer): TSocket;
     stdcall;
-  TSelect = function(nfds: Integer; readfds, writefds, exceptfds: PFDSet;
+  TSelect = function(nfds: integer; readfds, writefds, exceptfds: PFDSet;
     timeout: PTimeVal): Longint;
     stdcall;
 
@@ -724,7 +726,7 @@ type
     stdcall;
   TFreeAddrInfo = procedure(ai: PAddrInfo);
     stdcall;
-  TGetNameInfo = function( addr: PSockAddr; namelen: Integer; host: PAnsiChar;
+  TGetNameInfo = function( addr: PSockAddr; namelen: integer; host: PAnsiChar;
     hostlen: DWORD; serv: PAnsiChar; servlen: DWORD; flags: integer): integer;
     stdcall;
 
@@ -809,11 +811,11 @@ type
 function SizeOfVarSin(const sin: TVarSin): integer;
  {$ifdef UNICODE}inline;{$endif}
 
-function GetSockName(s: TSocket; var name: TVarSin): Integer;
-function GetPeerName(s: TSocket; var name: TVarSin): Integer;
+function GetSockName(s: TSocket; var name: TVarSin): integer;
+function GetPeerName(s: TSocket; var name: TVarSin): integer;
 function GetHostName: AnsiString;
-function Bind(s: TSocket; const addr: TVarSin): Integer;
-function Connect(s: TSocket; const name: TVarSin): Integer;
+function Bind(s: TSocket; const addr: TVarSin): integer;
+function Connect(s: TSocket; const name: TVarSin): integer;
 function Accept(s: TSocket; var addr: TVarSin): TSocket;
 
 function IsNewApi(Family: integer): Boolean;
@@ -821,7 +823,7 @@ function IsNewApi(Family: integer): Boolean;
 function SetVarSin(var Sin: TVarSin; const IP, Port: AnsiString; Family, SockProtocol, SockType: integer; PreferIP4: Boolean): integer;
 function GetSinIP(const Sin: TVarSin): AnsiString;
 procedure GetSinIPShort(const Sin: TVarSin; var result: shortstring);
-function GetSinPort(const Sin: TVarSin): Integer;
+function GetSinPort(const Sin: TVarSin): integer;
 procedure ResolveNameToIP(const Name: AnsiString; Family, SockProtocol, SockType: integer;
   IPList: TStrings; WillClearIPList: boolean = true);
 function ResolveIPToName(const IP: AnsiString; Family, SockProtocol, SockType: integer): AnsiString;
@@ -831,7 +833,7 @@ function ResolvePort(const Port: AnsiString; Family, SockProtocol, SockType: int
 implementation
 
 var
-  SynSockCount: Integer = 0;
+  SynSockCount: integer = 0;
   LibHandle: THandle = 0;
   Libwship6Handle: THandle = 0;
 
@@ -880,37 +882,40 @@ begin
   a^.u6_addr8[15] := 1;
 end;
 
+// faster purepascal versions of FD_ISSET/FD_CLR/FD_SET/FD_ZERO API functions
 
-
-procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
-var I: Integer;
+function FD_ISSET(Socket: TSocket; const FDSet: TFDSet): boolean;
+var i: integer;
 begin
-  I := 0;
-  while I < FDSet.fd_count do begin
-    if FDSet.fd_array[I] = Socket then begin
-      while I < FDSet.fd_count - 1 do begin
-        FDSet.fd_array[I] := FDSet.fd_array[I + 1];
-        Inc(I);
-      end;
-      Dec(FDSet.fd_count);
-      Break;
-    end;
-    Inc(I);
-  end;
+  result := true;
+  for i := 0 to FDSet.fd_count - 1 do
+    if FDSet.fd_array[i] = Socket then
+      exit; // found item
+  result := false;
 end;
 
-function FD_ISSET(Socket: TSocket; var FDSet: TFDSet): Boolean;
+procedure FD_CLR(Socket: TSocket; var FDSet: TFDSet);
+var i: integer;
 begin
-  Result := __WSAFDIsSet(Socket, FDSet);
+  for i := 0 to FDSet.fd_count - 1 do
+    if FDSet.fd_array[i] = Socket then begin
+      dec(FDSet.fd_count);
+      if i < FDSet.fd_count then
+        move(FDSet.fd_array[i + 1], FDSet.fd_array[i], (FDSet.fd_count - i) * sizeof(TSocket));
+      break;
+    end;
 end;
 
 procedure FD_SET(Socket: TSocket; var FDSet: TFDSet);
+var i: integer;
 begin
-  if not FD_ISSET(Socket, FDSet) then
-    if FDSet.fd_count < FD_SETSIZE then begin
-      FDSet.fd_array[FDSet.fd_count] := Socket;
-      Inc(FDSet.fd_count);
-    end;
+  if FDSet.fd_count >= FD_SETSIZE then
+    exit;
+  for i := 0 to FDSet.fd_count - 1 do
+    if FDSet.fd_array[i] = Socket then
+      exit; // already set
+  FDSet.fd_array[FDSet.fd_count] := Socket;
+  inc(FDSet.fd_count);
 end;
 
 procedure FD_ZERO(var FDSet: TFDSet);
@@ -927,7 +932,7 @@ begin
   end;
 end;
 
-function GetSockName(s: TSocket; var name: TVarSin): Integer;
+function GetSockName(s: TSocket; var name: TVarSin): integer;
 var len: integer;
 begin
   len := SizeOf(name);
@@ -935,7 +940,7 @@ begin
   Result := ssGetSockName(s, @name, Len);
 end;
 
-function GetPeerName(s: TSocket; var name: TVarSin): Integer;
+function GetPeerName(s: TSocket; var name: TVarSin): integer;
 var len: integer;
 begin
   len := SizeOf(name);
@@ -957,12 +962,12 @@ begin
   Result := ssAccept(s, @addr, x);
 end;
 
-function Bind(s: TSocket; const addr: TVarSin): Integer;
+function Bind(s: TSocket; const addr: TVarSin): integer;
 begin
   Result := ssBind(s, @addr, SizeOfVarSin(addr));
 end;
 
-function Connect(s: TSocket; const name: TVarSin): Integer;
+function Connect(s: TSocket; const name: TVarSin): integer;
 begin
   Result := ssConnect(s, @name, SizeOfVarSin(name));
 end;
@@ -1152,7 +1157,7 @@ begin
   end;
 end;
 
-function GetSinPort(const Sin: TVarSin): Integer;
+function GetSinPort(const Sin: TVarSin): integer;
 begin
   if (Sin.sin_family = AF_INET6) then
     result := ntohs(Sin.sin6_port) else
@@ -1175,7 +1180,7 @@ var
   RemoteHost: PHostEnt;
   IP: u_long;
   PAdrPtr: PaPInAddr;
-  i: Integer;
+  i: integer;
   InAddr: TInAddr;
 begin
   if (WillClearIPList) then IPList.Clear;
