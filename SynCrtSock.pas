@@ -2179,21 +2179,23 @@ type
 function PollSocketClass: TPollSocketClass;
 
 type
-{$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   /// socket polling via Windows' Select() API
   // - under Windows, Select() handles up to 64 TSocket, and is available
   // in Windows XP, whereas WSAPoll() is available only since Vista
   // - under Linux, select() is very limited, so poll/epoll APIs are to be used
-  // - you shoud not use this class, which can be very slow when tracking
-  // a lot of connections
+  // - in practice, TPollSocketSelect is slighlty FASTER than TPollSocketPoll
+  // when tracking a lot of connections (at least under Windows): WSAPoll()
+  // seems to be just an emulation API - very disapointing :(
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
-    fSubscription: array of record
+    fHighestSocket: integer;
+    fRead: TFDSet;
+    fWrite: TFDSet;
+    fTag: array[0..FD_SETSIZE-1] of record
       socket: TSocket;
       tag: TPollSocketTag;
-      events: TPollSocketEvents;
     end;
-    fHighestSocket: integer;
   public
     /// initialize the polling via creating an epoll file descriptor
     constructor Create; override;
@@ -2213,15 +2215,16 @@ type
     function WaitForModified(out results: TPollSocketResults;
       timeoutMS: integer): integer; override;
   end;
-{$endif MSWINDOWS}
+  {$endif MSWINDOWS}
 
   /// socket polling via poll/WSAPoll API
   // - direct call of the Linux/POSIX poll() API, or Windows WSAPoll() API
   TPollSocketPoll = class(TPollSocketAbstract)
   protected
-    fFD: TPollFDDynArray;
+    fFD: TPollFDDynArray; // fd=-1 for ignored fields
     fTags: array of TPollSocketTag;
-    fFDCount: integer; // socket := -1 for ignored fields
+    fFDCount: integer;
+    procedure FDVacuum;
   public
     /// initialize the polling using poll/WSAPoll API
     constructor Create; override;
@@ -2242,7 +2245,7 @@ type
       timeoutMS: integer): integer; override;
   end;
 
-{$ifdef LINUXNOTBSD}
+  {$ifdef LINUXNOTBSD}
   /// socket polling via Linux epoll optimized API
   // - not available under Windows or BSD/Darwin
   // - direct call of the epoll API in level-triggered (LT) mode
@@ -2278,7 +2281,7 @@ type
     /// read-only access to the low-level epoll_create file descriptor
     property EPFD: integer read fEPFD;
   end;
-{$endif LINUXNOTBSD}
+  {$endif LINUXNOTBSD}
 
 type
   {$M+}
@@ -2331,6 +2334,8 @@ type
     function GetOneWithinPending(out notif: TPollSocketResult): boolean;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate;
+    /// the actual polling class used to track socket state changes 
+    property PollClass: TPollSocketClass read fPollClass;
     /// set to true by the Terminate method
     property Terminated: boolean read fTerminated;
   published
@@ -2442,6 +2447,10 @@ type
     procedure ProcessWrite(timeoutMS: integer);
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
+    /// low-level access to the polling class used for incoming data
+    property PollRead: TPollSockets read fRead;
+    /// low-level access to the polling class used for outgoind data
+    property PollWrite: TPollSockets write fWrite;
     /// some processing options
     property Options: TPollAsynchSocketsOptions read fOptions write fOptions;
   published
@@ -8711,17 +8720,24 @@ end;
 
 { TPollSocketAbstract }
 
+{.$define USEWSAPOLL}
+// you may try it - but seems SLOWER under Windows 7
+
 function PollSocketClass: TPollSocketClass;
 begin
-  {$ifdef LINUXNOTBSD}
+{$ifdef LINUXNOTBSD}
   result := TPollSocketEpoll; // the preferred way for our purpose
-  {$else}
+{$else}
   {$ifdef MSWINDOWS}
-  if Win32MajorVersion<6 then // WSAPoll() not available before Vista
-    result := TPollSocketSelect else
-  {$endif}
-    result := TPollSocketPoll; // available on all POSIX systems
-  {$endif LINUXNOTBSD}
+  {$ifdef USEWSAPOLL}
+  if Win32MajorVersion>=6 then // WSAPoll() not available before Vista
+    result := TPollSocketPoll else
+  {$endif USEWSAPOLL}
+    result := TPollSocketSelect; // Select() is FASTER than WSAPoll() :(
+  {$else}
+  result := TPollSocketPoll; // available on all POSIX systems
+  {$endif MSWINDOWS}
+{$endif LINUXNOTBSD}
 end;
 
 constructor TPollSocketAbstract.Create;
@@ -8751,11 +8767,12 @@ begin
   result := false;
   if (self=nil) or (socket=0) or (byte(events)=0) or (fCount=fMaxSockets) then
     exit;
-  if fSubscription=nil then
-    SetLength(fSubscription,fMaxSockets);
-  fSubscription[fCount].socket := socket;
-  fSubscription[fCount].events := events;
-  fSubscription[fCount].tag := tag;
+  if pseRead in events then
+    FD_SET(socket, fRead);
+  if pseWrite in events then
+    FD_SET(socket, fWrite);
+  fTag[fCount].socket := socket;
+  fTag[fCount].tag := tag;
   inc(fCount);
   if socket>fHighestSocket then
     fHighestSocket := socket;
@@ -8768,10 +8785,14 @@ begin
   result := false;
   if (self<>nil) and (socket<>0) then
     for i := 0 to fCount-1 do
-      if fSubscription[i].socket=socket then begin
+      if fTag[i].socket=socket then begin
+        FD_CLR(socket,fRead);
+        FD_CLR(socket,fWrite);
         dec(fCount);
         if i<fCount then
-          move(fSubscription[i+1],fSubscription[i],(fCount-i)*sizeof(fSubscription[i]));
+          move(fTag[i+1],fTag[i],(fCount-i)*sizeof(fTag[i]));
+        if fCount=0 then
+          fHighestSocket := 0;
         result := true;
         exit;
       end;
@@ -8780,59 +8801,46 @@ end;
 function TPollSocketSelect.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
 var tv: TTimeVal;
-    timeout: PTimeVal;
-    rd,wr,er: TFDSet;
-    rdp,wrp,erp: PFDSet;
+    rd,wr: TFDSet;
+    rdp,wrp: PFDSet;
     ev: TPollSocketEvents;
     i: integer;
-  procedure Add(out s: TFDSet; ev: TPollSocketEvents; out p: PFDSet);
-  var i: integer;
-  begin
-    p := nil;
-    s.fd_count := 0;
-    for i := 0 to fCount-1 do
-      with fSubscription[i] do
-      if byte(events) and byte(ev)<>0 then begin
-        s.fd_array[s.fd_count] := socket;
-        inc(s.fd_count);
-        p := @s;
-      end;
-  end;
+    tmp: array[0..FD_SETSIZE-1] of TPollSocketResult;
 begin
   result := -1; // error
   if (self=nil) or (fCount=0) then
     exit;
-  Add(rd,[pseRead],rdp);
-  Add(wr,[pseWrite],wrp);
-  Add(er,[pseError,pseClosed],erp);
-  if timeoutMS=0 then
-    timeout := nil else begin
-    tv.tv_usec := timeoutMS*1000;
-    tv.tv_sec := 0;
-    timeout := @tv;
-  end;
-  result := Select(fHighestSocket+1,rdp,wrp,erp,timeout);
+  if fRead.fd_count>0 then begin
+    rd := fRead;
+    rdp := @rd;
+  end else
+    rdp := nil;
+  if fWrite.fd_count>0 then begin
+    wr := fWrite;
+    wrp := @wr;
+  end else
+    wrp := nil;
+  tv.tv_usec := timeoutMS*1000;
+  tv.tv_sec := 0;
+  result := Select(fHighestSocket+1,rdp,wrp,nil,@tv);
   if result<=0 then
     exit;
   result := 0;
-  SetLength(results,fCount);
-  for i := 0 to fCount-1 do
-    with fSubscription[i] do begin
+  for i := 0 to fCount-1 do 
+    with fTag[i] do begin
       byte(ev) := 0;
       if (rdp<>nil) and FD_ISSET(socket,rd) then
         include(ev,pseRead);
       if (wrp<>nil) and FD_ISSET(socket,wr) then
         include(ev,pseWrite);
-      if (erp<>nil) and FD_ISSET(socket,er) then begin
-        include(ev,pseError);
-      end;
       if byte(ev)<>0 then begin
-        results[result].events := ev;
-        results[result].tag := tag;
+        tmp[result].events := ev;
+        tmp[result].tag := tag;
         inc(result);
       end;
     end;
   SetLength(results,result);
+  move(tmp,results[0],result*sizeof(tmp[0]));
 end;
 
 {$endif MSWINDOWS}
@@ -8843,13 +8851,12 @@ end;
 constructor TPollSocketPoll.Create;
 begin
   inherited Create;
-  fMaxSockets := 5000; // some arbitrary value
+  fMaxSockets := 1024; // some arbitrary value
 end;
 
 function TPollSocketPoll.Subscribe(socket: TSocket;
   events: TPollSocketEvents; tag: TPollSocketTag): boolean;
-var i, n, e: integer;
-    P: ^TPollFD;
+var i, n, e, fd: integer;
 begin
   result := false;
   if (self=nil) or (socket=0) or (byte(events)=0) or (fCount=fMaxSockets) then
@@ -8859,53 +8866,78 @@ begin
     e := 0;
   if pseWrite in events then
     e := e or POLLOUT;
-  P := pointer(fFD);
-  for i := 1 to fCount do
-    if P^.fd=socket then // already subscribed
+  if fFDCount=fCount then begin // no void entry
+    for i := 0 to fFDCount-1 do
+      if fFD[i].fd=socket then  // already subscribed
+        exit;
+  end else
+  for i := 0 to fFDCount-1 do begin
+    fd := fFD[i].fd;
+    if fd=socket then  // already subscribed
       exit else
-    if P^.fd<0 then begin // found void entry
-      P^.fd := socket;
-      P^.events := e;
+    if fd<0 then begin // found void entry
+      with fFD[i] do begin
+        fd := socket;
+        events := e;
+        revents := 0;
+      end;
       inc(fCount);
       result := true;
       exit;
-    end else
-    inc(P);
+    end;
+  end;
   if fFDCount=length(fFD) then begin // add new entry to the array
     n := fFDCount+128+fFDCount shr 3;
+    if n>fMaxSockets then
+      n := fMaxSockets;
     SetLength(fFD,n);
     SetLength(fTags,n);
   end;
-  fFD[fFDCount].fd := socket;
-  fFD[fFDCount].events := e;
+  with fFD[fFDCount] do begin
+    fd := socket;
+    events := e;
+    revents := 0;
+  end;
   fTags[fFDCount] := tag;
   inc(fFDCount);
   inc(fCount);
   result := true;
 end;
 
+procedure TPollSocketPoll.FDVacuum;
+var n, i: integer;
+begin
+  n := 0;
+  for i := 0 to fFDCount-1 do
+    if fFD[i].fd>0 then begin
+      if i<>n then begin
+        fFD[n] := fFD[i];
+        fTags[n] := fTags[i];
+      end;
+      inc(n);
+    end;
+  fFDCount := n;
+end;
+
 function TPollSocketPoll.Unsubscribe(socket: TSocket): boolean;
 var i: integer;
-    P: ^TPollFD;
 begin
-  P := pointer(fFD);
   for i := 0 to fFDCount-1 do
-    if P^.fd=socket then  begin
-      P^.fd := -1; // mark entry as void
+    if fFD[i].fd=socket then  begin
+      fFD[i].fd := -1; // mark entry as void
       dec(fCount);
+      if fCount<=fFDCount shr 1 then
+        FDVacuum; // avoid too many void entries
       result := true;
       exit;
-    end else
-    inc(P);
+    end;
   result := false;
 end;
 
 function TPollSocketPoll.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
-var s: ^TPollFD;
-    d: ^TPollSocketResult;
-    e: TPollSocketEvents;
-    i, ev: integer;
+var e: TPollSocketEvents;
+    i, ev, d: integer;
 begin
   result := -1; // error
   if (self=nil) or (fCount=0) then
@@ -8914,10 +8946,10 @@ begin
   if result<=0 then
     exit;
   SetLength(results,result);
-  s := pointer(fFD);
-  d := pointer(results);
-  for i := 0 to result-1 do begin
-    ev := s^.revents;
+  d := 0;
+  for i := 0 to fFDCount-1 do
+  if fFD[i].fd>0 then begin
+    ev := fFD[i].revents;
     if ev<>0 then begin
       byte(e) := 0;
       if ev and POLLIN<>0 then
@@ -8928,13 +8960,14 @@ begin
         include(e,pseError);
       if ev and POLLHUP<>0 then
         include(e,pseClosed);
-      d^.events := e;
-      d^.tag := fTags[i];
+      results[d].events := e;
+      results[d].tag := fTags[i];
       inc(d);
-      s^.revents := 0; // reset result flags for reuse
+      fFD[i].revents := 0; // reset result flags for reuse
     end;
-    inc(s);
   end;
+  if d<>result then
+    raise ECrtSocket.CreateFmt('TPollSocketPoll: result=%d d=%d',[result,d]);
 end;
 
 
@@ -9414,8 +9447,12 @@ begin
             if fRead.Terminated then
               exit;
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
-            if res<=0 then
+            if res<0 then       // error - probably "may block"
               break;
+            if res=0 then begin // socket closed
+              CloseConnection;
+              exit;
+            end;
             AppendData(slot.readbuf,temp,res);
             inc(added,res);
           until false;
