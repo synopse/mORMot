@@ -240,14 +240,15 @@ uses
   Sockets,
   SynFPCSock,
   SynFPCLinux,
+  BaseUnix, // for fpgetrlimit/fpsetrlimit
   {$else}
   {$ifndef DELPHI5OROLDER}
   Types,
   {$endif}
   {$endif}
   {$ifdef KYLIX3}
-  LibC,
   KernelIoctl, // for IoctlSocket/ioctl FION* constants
+  LibC,
   SynFPCSock,  // shared with Kylix
   SynKylix,
   {$endif}
@@ -2064,6 +2065,22 @@ function GetIPAddresses(PublicOnly: boolean = false): TSockStringDynArray;
 function GetIPAddressesText(const Sep: SockString = ' ';
   PublicOnly: boolean = false): SockString;
 
+{$else}
+
+/// returns how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit, false for the current process
+// - returns -1 if the getrlimit() API call failed
+function GetFileOpenLimit(hard: boolean=false): integer;
+
+/// changes how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit (requires root priviledges),
+// false for the current process
+// - returns the new value set (may not match the expected max value on error)
+// - returns -1 if the getrlimit().setrlimit() API calls failed
+// - for instance, to set the limit of the current process to its highest value:
+// ! SetFileOpenLimit(GetFileOpenLimit(true));
+function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
+
 {$endif MSWINDOWS}
 
 /// low-level text description of  Socket error code
@@ -2305,6 +2322,11 @@ type
     /// initialize the sockets polling
     // - you can specify the TPollSocketAbsract class to be used, if the
     // default is not the one expected
+    // - under Linux/POSIX, will set the open files maximum number for the
+    // current process to match the system hard limit: if your system has a
+    // low "ulimit -H -n" value, you may add the following line in your
+    // /etc/limits.conf or /etc/security/limits.conf file:
+    // $ * hard nofile 65535
     constructor Create(aPollClass: TPollSocketClass=nil);
     /// finalize the sockets polling, and release all used memory
     destructor Destroy; override;
@@ -3265,6 +3287,48 @@ begin
     result := result+Sep+ip[i];
   if Sep=' ' then
     IPAddressesText[PublicOnly] := result;
+end;
+
+{$else}
+
+function GetFileOpenLimit(hard: boolean=false): integer;
+var limit: RLIMIT;
+begin
+  {$ifdef FPC}
+  if fpgetrlimit(RLIMIT_NOFILE,@limit)=0 then
+  {$else}
+  if getrlimit(RLIMIT_NOFILE,limit)=0 then
+  {$endif}
+    if hard then
+      result := limit.rlim_max else
+      result := limit.rlim_cur else
+    result := -1;
+end;
+
+function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
+var limit: RLIMIT;
+begin
+  result := -1;
+  {$ifdef FPC}
+  if fpgetrlimit(RLIMIT_NOFILE,@limit)<>0 then
+  {$else}
+  if getrlimit(RLIMIT_NOFILE,limit)<>0 then
+  {$endif}
+    exit;
+  if (hard and (integer(limit.rlim_max)=max)) or
+     (not hard and (integer(limit.rlim_cur)=max)) then begin
+    result := max; // already to the expected value
+    exit;
+  end;
+  if hard then
+    limit.rlim_max := max else
+    limit.rlim_cur := max;
+  {$ifdef FPC}
+  if fpsetrlimit(RLIMIT_NOFILE,@limit)=0 then
+  {$else}
+  if setrlimit(RLIMIT_NOFILE,limit)=0 then
+  {$endif}
+    result := GetFileOpenLimit(hard);
 end;
 
 {$endif MSWINDOWS}
