@@ -14719,6 +14719,130 @@ As reference, here is how the encryption is implemented in the {\f1\fs20 ECC} to
 !  end;
 !end;
 You may note here the use of {\f1\fs20 FillZero()} in the {\f1\fs20 finally} block of the function, which is a common - and strongly encouraged - way of protecting your sensitive data from remaining in RAM, after use. Both {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas} code has been checked to follow similar safety patterns, and not leave any sensitive information in the program stack or heap.
+:193 Application Locking
+A common feature request for professional software is to prevent abuse of published applications. For licensing or security reasons, you may be requested to "lock" the execution of programs, maybe tools or services.
+{\i mORMot} can use @*Asymmetric@ Cryptography to safely ensure that only allowed users could run some executables, optionally with dedicated settings, on a given computer.
+The {\f1\fs20 dddInfraApps.pas} unit publishes the following {\f1\fs20 @*ECCAuthorize@} function and type:
+!type
+!  TECCAuthorize = (eaSuccess, eaInvalidSecret, eaMissingUnlockFile,
+!    eaInvalidUnlockFile, eaInvalidJson);
+!
+!function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
+!  aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName = '';
+!  aSecretInfo: PECCCertificateSigned = nil; aLocalFile: PFileName = nil): TECCAuthorize;
+This function will use several asymmetric key sets:
+- A {\i main key set}, named e.g. {\f1\fs20 applock.public} and {\f1\fs20 applock.private}, shared for all users of the system;
+- Several {\i user-specific key sets}, named e.g. {\f1\fs20 user@host.public} and {\f1\fs20 user@host.secret}, one for each {\f1\fs20 user} and associated computer {\f1\fs20 host} name.
+When the {\f1\fs20 ECCAuthorize} function is executed, it will search for a local {\f1\fs20 user@host.unlock} file, named after the current logged user and the computer host name. Of course, the first time the application is launched for this user, there will be no such file. It will create two local {\f1\fs20 user@host.public} and {\f1\fs20 user@host.secret} files and return {\f1\fs20 eaMissingUnlockFile}.
+The {\i main key set} will be used to digitally {\i sign} the {\f1\fs20 unlock} file:
+- {\f1\fs20 applock.public} will be stored as plain base64-encoded {\f1\fs20 aAppLockPublic64} text parameter in the executables;
+- On the contrary, {\f1\fs20 applock.private} will be kept secret - with its associated secret password.
+{\i User-specific key sets} will be used to {\i encrypt} the {\f1\fs20 unlock} file:
+- The {\f1\fs20 user@host.secret} file contains in fact a genuine private key, encrypted using {\f1\fs20 CryptDataForCurrentUser} (i.e. {\f1\fs20 DPAPI} under {\i Windows}) for the specific computer and user: this will avoid {\f1\fs20 user@host.unlock} reuse on another computer, even if the user and host names are identical, and the {\f1\fs20 user@host.secret} file is copied. This file should remain local, and doesn't need to be transmitted.
+- The {\f1\fs20 user@host.public} file will be sent to the product support team, e.g. by email - but you may setup an automated server, if needed. The support team will create a {\f1\fs20 user@host.unlock} matching this {\f1\fs20 user@host.public} key, which will unlock the application for the given user.
+On the support team side, a {\f1\fs20 user@host.json} file is created for the given user, and will contain the @*JSON@ serialization of the {\f1\fs20 aContent: TObject} parameter of the {\f1\fs20 ECCAuthorize} function. This object may contain any published properties, matching the security expectations for this user, e.g. the available features or resource access.
+:  From the User perspective
+The resulting process is therefore the following:
+\graph ECCAuthorizeWorkflow1 Application Unlocking via Asymmetric Cryptography
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\user1@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\applock.public
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.public\ user1@pc1.public\email
+\user1@pc1.json\ user1@pc1.unlock\encrypt
+\applock.private\ user1@pc1.unlock\sign
+\ user1@pc1.public\ user1@pc1.unlock
+\ user1@pc1.unlock\user1@pc1.unlock\email
+}
+\
+In short, every user/computer combination will have its own set of {\f1\fs20 public/secret/unlock} files.
+- In practice, {\f1\fs20 applock.public} could be hardcoded as plain base64-encoded {\f1\fs20 aAppLockPublic64} constant {\f1\fs20 string} in the Application code - of course, the executable should be signed with a proper authority, to ensure this constant is not replaced by a fake value;
+- The location of those local {\f1\fs20 user@host.*} files is by default the executable folder, but may be specified via the {\f1\fs20 aSearchFolder} parameter - especially if this folder is read-only (e.g. due to Windows UAC), or if you use some custom GUI for the user interactivity;
+- The {\f1\fs20 user@host.json} will be signed using {\f1\fs20 applock.private} secret key, to testify that the resulting {\f1\fs20 user@host.unlock} file was indeed provided by the Support Team;
+- The {\f1\fs20 user@host.json} will be encrypted using the {\f1\fs20 user@host.public} key received by email, so will be specific to a single user/computer combination.
+If two users share the application on the very same computer, another set of files will appear:
+\graph ECCAuthorizeWorkflow2 Application Unlocking on Two Computers
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\user1@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\applock.public
+}
+subgraph cluster_1 {
+label="PC2 Computer";
+\ Application\user2@pc2.secret
+\ Application\user2@pc2.public
+\ Application\user2@pc2.unlock
+\ Application\ applock.public
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.public\ user1@pc1.public\email
+\ user1@pc1.public\ user1@pc1.unlock\encrypt
+\user1@pc1.json\ user1@pc1.unlock
+\applock.private\ user1@pc1.unlock\sign
+\user2@pc2.public\ user2@pc2.public\email
+\user2@pc2.json\ user2@pc2.unlock\encrypt
+\applock.private\ user2@pc2.unlock\sign
+\ user1@pc1.unlock\user1@pc1.unlock\email
+\ user2@pc2.public\ user2@pc2.unlock
+\ user2@pc2.unlock\user2@pc2.unlock\email
+}
+\
+Several users on the same computer will be handled as such:
+\graph ECCAuthorizeWorkflow3 Application Unlocking for Two Users
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\applock.public
+\Application\user2@pc1.public
+\Application\user2@pc1.unlock
+\Application\user2@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\user1@pc1.secret
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.json\ user1@pc1.unlock\encrypt
+\user1@pc1.public\ user1@pc1.public\email
+\ user1@pc1.public\ user1@pc1.unlock
+\ user1@pc1.unlock\user1@pc1.unlock\email
+\applock.private\ user1@pc1.unlock\sign
+\user2@pc1.json\ user2@pc1.unlock
+\user2@pc1.public\ user2@pc1.public\email
+\ user2@pc1.public\ user2@pc1.unlock\encrypt
+\ user2@pc1.unlock\user2@pc1.unlock
+\applock.private\ user2@pc1.unlock\sign
+}
+\
+From the User point of view, he/she will transmit its {\f1\fs20 user@host.public} file, then receives a corresponding {\f1\fs20 user@host.unlock} file, which will unlock the application. Pretty easy to understand - even if some complex asymmetric encryption is involved behind the scene.
+:  From the Support Team perspective
+The Support Team will maintain a list of {\f1\fs20 user@host.public} and {\f1\fs20 user@host.json} files, one per user/computer. Both files have small JSON content, so may be stored in a dedicated folder of the project source code repository - or in a dedicated repository. The use of a source code repository allows to track user management information between several support people, including history and audit trail of this sensitive information. For safety, the {\f1\fs20 applock.private} file may not be archived in the source code repository, but copied on purpose on each support people's (or developer's) computer. A separated, and dedicated computer, may be used, for additional safety.
+In fact, even developers may define their own set of {\f1\fs20 .unlock} files. For local test builds, they may use their own {\f1\fs20 applock.public} and {\f1\fs20 applock.private} key pairs, diverse from the main content.
+The content of each {\f1\fs20 user@host.json} may be easily derivated from a set of reference {\f1\fs20 .json} files, acting like templates of group of users. Or an existing file may be used as source for a new user. The ability to use JSON and a text editor, with customizable object and arrays fields, allows any needed kind of licensing or security scope, depending on the application.\line Since the {\f1\fs20 user@host.json} is a serialized {\f1\fs20 aContent: TObject}, you can define enumerates properties, or even schema-less structures as {\f1\fs20 @*TDocVariant@} - see @80@ - to refine the authorization scope.
+The {\f1\fs20 user@host.json} file is encrypted using the genuine {\f1\fs20 user@host.public} key, and its associated {\f1\fs20 user@host.secret} is strongly encrypted for the given PC and logged user: therefore, only the application is able to decipher the {\f1\fs20 user@host.unlock} content. You can let those files be transmitted via an unsafe mean of transport, e.g. plain email, with no compromising risk. Last but not least, passwords or IP addresses can be safely stored in its content, as part of the security policy of your project.
+In practice, the team may use a {\f1\fs20 unlock.bat} file running the ECC tool over secret {\f1\fs20 applock.private} keys, containing the secret:
+$ @echo off
+$ echo Usage:  unlock user@host
+$ echo.
+$ ecc sign -file %1.json -auth applock -pass applockprivatepassword -rounds 60000
+$ ecc crypt -file %1.json -out %1.unlock -auth %1 -saltpass decryptsalt -saltrounds 10000
+$ del %1.json.sign
+For safety, you may not include the {\f1\fs20 -pass applockprivatepassword} value in this {\f1\fs20 unlock.bat} file. Removing this {\f1\fs20 -pass} command-line switch will let the {\f1\fs20 ecc} tool prompt for the password secret key on the console:
+$ ecc sign -file %1.json -auth applock -rounds 60000
+Also note that you can use the {\f1\fs20 ecc rekey} command to customize the password of a given {\f1\fs20 applock.private} file: each support team member may have his/her custom password to run the {\i sign-then-encrypt} process.
+Of course, if you need to create a lot of {\f1\fs20 .unlock} files, you may want to automate this process, e.g. in a server or a GUI tool, using {\f1\fs20 SynEcc.pas} classes.
+:  Benefits of Asymmetric Encryption for License management
+In most licensing systems, the weak point is the transmission of the licensing file. Thanks to Asymmetric Encryption, both {\f1\fs20 user@host.public} and {\f1\fs20 user@host.unlock} files can be transmitted as plain emails, without any possibility of compromising.
+The {\f1\fs20 applock.private} secret key and its associated password are used to digitally sign (using ECDSA) the plain content of the {\f1\fs20 user@host.unlock} file. This {\i sign-then-encrypt} pattern will ensure that only your support team will be able to generate the proper {\f1\fs20 .unlock} files for a given application. The {\f1\fs20 applock.private/public} keys could have their own deprecation date.
+As we have seen, the {\f1\fs20 user@host.unlock} file is encrypted, so you can use it to transmit sensitive information. Its associated {\f1\fs20 user@host.secret} key has been generated locally with an expiration date - see the {\f1\fs20 aSecretDays} parameter of the {\f1\fs20 ECCAuthorize} function. It will ensure that the registering process should be performed regularly, if the licensing or security policy expect it.
+The security of this system does not rely on code obfuscation, but on proven safety of asymmetric encryption. Even if the executable is modified in-place to by-pass the license check, the fact that the application expects some additional information to be provided within the {\f1\fs20 user@host.unlock} file will make it much more difficult to hack.\line As always with Open Source, any feedback is welcome, in order to enhance the safety of this system. The fact that the code is available - so that the algorithms could be proven - make it safer than any proprietary solution developed in-door.
 :68Domain-Driven-Design
 %cartoon06.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
