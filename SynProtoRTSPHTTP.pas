@@ -127,7 +127,7 @@ type
     /// shutdown and finalize the server
     destructor Destroy; override;
     /// perform some basic regression and benchmark testing on a running server
-    procedure RegressionTests(test: TSynTestCase; clientcount: integer);
+    procedure RegressionTests(test: TSynTestCase; clientcount, steps: integer);
   end;
 
 
@@ -175,7 +175,7 @@ begin
   rtsp := Sender.ConnectionFindLocked(fRtspTag);
   if rtsp <> nil then
   try
-    Sender.Clients.WriteString(rtsp, decoded); // asynch sending to RTSP server
+    Sender.Write(rtsp, decoded); // asynch sending to RTSP server
     Sender.Log.Add.Log(sllDebug, 'OnRead % POST forwarded RTSP command [%]',
       [Handle, decoded], self);
   finally
@@ -204,7 +204,7 @@ begin
   fRtspPort := aRtspPort;
   fPendingGet := TRawUTF8ListLocked.Create(true);
   inherited Create(aHttpPort, aOnStart, aOnStop, TPostConnection,
-    'RTSP/HTTP', aLog, aOptions);
+    'rtsp/http', aLog, aOptions);
 end;
 
 destructor TRTSPOverHTTPServer.Destroy;
@@ -347,7 +347,7 @@ begin
 end;
 
 procedure TRTSPOverHTTPServer.RegressionTests(test: TSynTestCase;
-  clientcount: integer);
+  clientcount, steps: integer);
 type
   TReq = record
     get: THttpSocket;
@@ -413,7 +413,7 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         test.Check(get.SockConnected);
         test.Check(post.SockConnected);
       end;
-      for i := 0 to 10 do begin
+      for i := 0 to steps do begin
         if log<>nil then
           log.Log(sllCustom1, 'RegressionTests % RUN #%', [clientcount, i], self);
         // send a RTSP command once in a while to the POST request
@@ -456,9 +456,6 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
       sleep(10);
       for r := 1 to rmax do
         req[r].stream.Free;
-      repeat
-        sleep(10);
-      until fClients.Count = 0;
       streamer.Free;
     end;
   except

@@ -16082,7 +16082,7 @@ var proxy: TRTSPOverHTTPServer;
 begin
   proxy := TRTSPOverHTTPServer.Create('127.0.0.1','3999','3998',TSynLog,nil,nil);
   try
-    proxy.RegressionTests(self,100);
+    proxy.RegressionTests(self,100,10);
   finally
     proxy.Free;
   end;

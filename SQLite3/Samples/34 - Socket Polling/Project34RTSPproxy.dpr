@@ -48,23 +48,36 @@ const
 {
   Some rough numbers, on various Operating Systems:
 
-  CONCURRENT  OS             API      Time      Sockets  Polled
-  100         Windows XP     select   190 ms    300      200
-  100         Windows Seven  select   190 ms    300      200
-  100         Linux          poll     200 ms    300      200
-  100         Linux          epoll    190 ms    300      200
-  500         Windows XP     select   544 ms    1500     1000
-  500         Windows Seven  select   990 ms    1500     1000
-  500         Linux          poll     380 ms    1500     1000
-  500         Linux          epoll    370 ms    1500     1000
+  CONCURRENT  OS             API      Time      Sockets  Polled   Steps
+  100         Windows XP     select   190 ms    300      200      10
+  100         Windows Seven  select   190 ms    300      200      10
+  100         Linux          poll     200 ms    300      200      10
+  100         Linux          epoll    190 ms    300      200      10
+  500         Windows XP     select   544 ms    1500     1000     10
+  500         Windows Seven  select   990 ms    1500     1000     10
+  500         Linux          poll     380 ms    1500     1000     10
+  500         Linux          epoll    344 ms    1500     1000     10
   5000        Windows XP               N/A
-  5000        Windows Seven  select   27.61 s   15000    10000
-  5000        Windows Seven  WSAPoll  33.70 s   15000    10000
-  5000        Linux          epoll    2.71 s    15000    10000
+  5000        Windows Seven  select   27.61 s   15000    10000    10
+  5000        Windows Seven  WSAPoll  33.70 s   15000    10000    10
+  5000        Linux          poll     2.70 s    15000    10000    10
+  5000        Linux          epoll    2.59 s    15000    10000    10
   10000       Windows XP               N/A
-  10000       Windows Seven  select   116.32 s  30000    20000
-  10000       Windows Seven  WSAPoll  118.23 s  30000    20000
-  10000       Linux          epoll    9.42 s    30000    20000
+  10000       Windows Seven  select   116.32 s  30000    20000    10
+  10000       Windows Seven  WSAPoll  118.23 s  30000    20000    10
+  10000       Linux          poll     9.48 s    30000    20000    10
+  10000       Linux          epoll    9.33 s    30000    20000    10
+  10000       Linux          epoll    65.1 s    30000    20000    100
+  10000       Linux          epoll    10 min    30000    20000    1000
+  10000       Linux          epoll    20 min    30000    20000    2000
+
+  Purpose of this test is to create a given number of concurrent GET/POST HTTP
+  requests, creating one RTSP connection each. Then we run POST and GET small
+  operations on all connections, in a loop, and check the proper RTSP transfer.
+  So here polling will have most of the sockets notified with a few pending
+  bytes proxied during each loop, which is probably the worse case possible.
+  Above numbers are published to give a performance idea of this micro-benchmark
+  testing, on various systems and APIs.
 
   All process did take place with logs enabled, on the same physical PC.
   Note that the Windows Seven native system (not a VM) may be slow down by its
@@ -73,19 +86,28 @@ const
   In the future, we will eventually uses the IOCP API on Windows, which is told
   to be much faster (but also much more difficult to implement).
   Memory consumption was similar on all OS and API methods.
-  In all cases, the Linux VM with epoll did show much better scaling abilities.
+
+  In all cases, the Linux VM with poll/epoll did show the best scaling abilities.
+  The latest test case, creating a lot of traffic, was very stable about its
+  CPU and memory consumption (most time spent in the kernel), and reported
+  "reads=22,520,000 (1 GB) writes=2,510,000 (426 MB)" impressive statistics. 
 }
 
 var
   server: TRTSPOverHTTPServer;
   timer: TPrecisionTimer;
-  clients: integer;
+  clients, steps: integer;
 begin
   if (paramcount = 0) or not TryStrToInt(paramstr(1), clients) then
-    clients := CONCURRENT;
+    clients := CONCURRENT
+  else if (paramcount = 1) or not TryStrToInt(paramstr(2), steps) then
+    steps := 10;
   TSynLog.Family.HighResolutionTimeStamp := true;
   TSynLog.Family.PerThreadLog := ptIdentifiedInOnFile;
-  TSynLog.Family.Level := LOG_VERBOSE;
+  if steps<200 then
+    TSynLog.Family.Level := LOG_VERBOSE
+  else
+    TSynLog.Family.Level := LOG_STACKTRACE + [sllCustom1];
   TSynLog.Family.EchoToConsole := LOG_STACKTRACE + [sllCustom1];
   server := TRTSPOverHTTPServer.Create('127.0.0.1', '4999', '4998', TSynLog, nil, nil);
   try
@@ -95,7 +117,7 @@ begin
     writeln('  performing tests with ', clients, ' concurrent streams using ',
       server.Clients.PollRead.PollClass.ClassName, #10);
     timer.Start;
-    server.RegressionTests(nil, clients);
+    server.RegressionTests(nil, clients, steps);
     writeln(#10'  tests finished in ', timer.Stop);
     {$ifdef MSWINDOWS}
     writeln('Press [Enter] to close server.');
