@@ -17,7 +17,7 @@ program Project34RTSPproxy;
  virtual full-duplex connection.
 
  See https://goo.gl/CX6VA3 for reference material about this horrible, but
- widely acceptted, Apple's hack.
+ widely accepted, Apple's hack.
 
 
   Version 1.18
