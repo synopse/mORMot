@@ -293,9 +293,10 @@ type
     end;
     fConnectionLock: TSynLocker;
     procedure IdleEverySecond;
-    function ClientAddSocket(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
-    function ClientAddConnection(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
-    function ClientFindIndex(aHandle: TAsynchConnectionHandle): integer;
+    function ConnectionCreate(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; virtual;
+    function ConnectionAdd(aSocket: TSocket; aConnection: TAsynchConnection): boolean; virtual;
+    function ConnectionDelete(aHandle: TAsynchConnectionHandle): boolean; overload; virtual;
+    function ConnectionDelete(aConnection: TAsynchConnection; aIndex: integer): boolean; overload;
     procedure ThreadClientsConnect; // from fThreadClients
   public
     /// initialize the multiple connections
@@ -309,13 +310,14 @@ type
     // - returns nil if the handle was not found
     // - returns the maching instance, and caller should release the lock as:
     // ! try ... finally UnLock; end;
-    function ClientFindLocked(aHandle: TAsynchConnectionHandle): TAsynchConnection;
+    function ConnectionFindLocked(aHandle: TAsynchConnectionHandle;
+      aIndex: PInteger=nil): TAsynchConnection;
     /// just a wrapper around fConnectionLock.Lock
     procedure Lock;
     /// just a wrapper around fConnectionLock.UnLock
     procedure Unlock;
     /// remove an handle from the internal list, and close its connection
-    function ClientDelete(aHandle: TAsynchConnectionHandle): boolean; virtual;
+    function ConnectionRemove(aHandle: TAsynchConnectionHandle): boolean;
     /// log some binary data with proper escape
     // - can be executed from an TAsynchConnection.OnRead method to track content:
     // $ if acoVerboseLog in Sender.Options then Sender.LogVerbose(self,...);
@@ -3097,8 +3099,9 @@ end;
 
 procedure TAsynchConnectionsSockets.OnClose(connection: TObject);
 begin
+  // caller did call Stop() before calling OnClose (socket=0)
   fOwner.fLog.Add.Log(sllTrace,'OnClose%',[connection],self);
-  fOwner.ClientDelete((connection as TAsynchConnection).Handle); // do connection.Free
+  fOwner.ConnectionDelete((connection as TAsynchConnection).Handle); // do connection.Free
 end;
 
 function TAsynchConnectionsSockets.OnError(connection: TObject;
@@ -3265,21 +3268,21 @@ begin
     raise ECrtSocket.CreateFmt('%s: %s:%s connection failure',
       [ClassName,fThreadClients.Address,fThreadClients.Port],-1);
   connection := nil;
-  if not ClientAddSocket(client,connection) then
+  if not ConnectionCreate(client,connection) then
     DirectShutdown(client);
 end;
 
-function TAsynchConnections.ClientAddSocket(aSocket: TSocket;
+function TAsynchConnections.ConnectionCreate(aSocket: TSocket;
   out aConnection: TAsynchConnection): boolean;
-begin // you can override this class then call ClientAddConnection
+begin // you can override this class then call ConnectionAdd
   if Terminated then
     result := false else begin
     aConnection := fStreamClass.Create;
-    result := ClientAddConnection(aSocket, aConnection);
+    result := ConnectionAdd(aSocket, aConnection);
   end;
 end;
 
-function TAsynchConnections.ClientAddConnection(aSocket: TSocket;
+function TAsynchConnections.ConnectionAdd(aSocket: TSocket;
   aConnection: TAsynchConnection): boolean;
 begin
   result := false; // caller should release aSocket
@@ -3290,7 +3293,7 @@ begin
   try
     inc(fLastHandle);
     aConnection.fHandle := fLastHandle;
-    fLog.Add.Log(sllTrace,'ClientAddSocket%',[aConnection],self);
+    fLog.Add.Log(sllTrace,'ConnectionCreate%',[aConnection],self);
     fConnections.Add(aConnection);
     fConnections.Sorted := true; // handles are increasing
   finally
@@ -3300,54 +3303,78 @@ begin
   result := true; // indicates aSocket owned by the pool
 end;
 
-function TAsynchConnections.ClientDelete(aHandle: TAsynchConnectionHandle): boolean;
+function TAsynchConnections.ConnectionDelete(
+  aConnection: TAsynchConnection; aIndex: integer): boolean;
+begin // caller should have done fConnectionLock.Lock
+  fLog.Add.Log(sllTrace,'ConnectionDelete %.Handle=%',[aConnection.ClassType,
+    aConnection.Handle],self);
+  try
+    aConnection.BeforeDestroy(self);
+    aConnection.Free;
+  finally
+    fConnections.FastDeleteSorted(aIndex);
+  end;
+  result := true;
+end;
+
+function TAsynchConnections.ConnectionDelete(aHandle: TAsynchConnectionHandle): boolean;
+var i: integer;
+    conn: TAsynchConnection;
+begin // don't call fClients.Stop() here - see ConnectionRemove()
+  result := false;
+  if Terminated or (aHandle<=0) then
+    exit;
+  conn := ConnectionFindLocked(aHandle,@i);
+  if conn<>nil then
+  try
+    result := ConnectionDelete(conn,i);
+  finally
+    fConnectionLock.UnLock;
+  end else
+    fLog.Add.Log(sllTrace,'ConnectionDelete(%)=false',[aHandle],self);
+end;
+
+function TAsynchConnections.ConnectionFindLocked(aHandle: TAsynchConnectionHandle;
+  aIndex: PInteger): TAsynchConnection;
 var i: integer;
 begin
-  result := false;
+  result := nil;
   if Terminated or (aHandle<=0) then
     exit;
   fConnectionLock.Lock;
   try
-    i := ClientFindIndex(aHandle);
-    if i>=0 then begin // don't call fClients.Stop() here
-      fLog.Add.Log(sllTrace,'ClientDelete %.Handle=%',
-        [fConnection[i].ClassType,aHandle],self);
-      try
-        fConnection[i].BeforeDestroy(self);
-        fConnection[i].Free;
-      finally
-        fConnections.FastDeleteSorted(i);
-      end;
-      result := true;
-    end else
-      fLog.Add.Log(sllTrace,'ClientDelete(%)=false',[aHandle],self);
-  finally
-    fConnectionLock.UnLock;
-  end;
-end;
-
-function TAsynchConnections.ClientFindIndex(aHandle: TAsynchConnectionHandle): integer;
-begin // caller should have made fConnectionLock.Lock
-  fTempConnection.fHandle := aHandle;
-  result := fConnections.Find(fTempConnection); // fast binary search
-end;
-
-function TAsynchConnections.ClientFindLocked(aHandle: TAsynchConnectionHandle): TAsynchConnection;
-var i: integer;
-begin
-  result := nil;
-  if Terminated then
-    exit;
-  fConnectionLock.Lock;
-  try
-    i := ClientFindIndex(aHandle);
-    if i>=0 then
+    fTempConnection.fHandle := aHandle;
+    i := fConnections.Find(fTempConnection); // fast binary search
+    if i>=0 then begin
       result := fConnection[i];
-    fLog.Add.Log(sllTrace,'ClientFindLocked(%)=%',[aHandle,result],self);
+      if aIndex<>nil then
+        aIndex^ := i;
+    end;
+    fLog.Add.Log(sllTrace,'ConnectionFindLocked(%)=%',[aHandle,result],self);
   finally
     if result=nil then
       fConnectionLock.UnLock;
   end;
+end;
+
+function TAsynchConnections.ConnectionRemove(aHandle: TAsynchConnectionHandle): boolean;
+var i: integer;
+    conn: TAsynchConnection;
+begin
+  result := false;
+  if Terminated or (aHandle<=0) then
+    exit;
+  conn := ConnectionFindLocked(aHandle,@i);
+  if conn<>nil then
+    try
+      if not fClients.Stop(conn) then
+        fLog.Add.Log(sllDebug,'ConnectionRemove: Stop=false for %',[conn],self);
+      result := ConnectionDelete(conn,i);
+    finally
+      fConnectionLock.UnLock;
+    end;
+  if not result then
+    fLog.Add.Log(sllTrace,'ConnectionRemove(%)=false',[aHandle],self);
 end;
 
 procedure TAsynchConnections.Lock;
@@ -3448,7 +3475,7 @@ begin
         CloseSocket(client);
         break;
       end else
-        if ClientAddSocket(client,connection) then
+        if ConnectionCreate(client,connection) then
           if fClients.Start(connection) then
             fLog.Add.Log(sllTrace,'Execute: Accept()=% from %',
               [client,GetSinIP(sin)], self) else

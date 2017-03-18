@@ -2484,7 +2484,7 @@ type
     /// some processing options
     property Options: TPollAsynchSocketsOptions read fOptions write fOptions;
   published
-    /// how many clients are currently managed by this instance
+    /// how many connections are currently managed by this instance
     property Count: integer read GetCount;
     /// how many data bytes have been received by this instance
     property ReadBytes: Int64 read fReadBytes;
