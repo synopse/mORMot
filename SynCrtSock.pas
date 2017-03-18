@@ -2424,6 +2424,8 @@ type
   protected
     fRead: TPollSockets;
     fWrite: TPollSockets;
+    fReadCount: integer;
+    fWriteCount: integer;
     fReadBytes: Int64;
     fWriteBytes: Int64;
     fProcessing: integer;
@@ -2486,10 +2488,14 @@ type
   published
     /// how many connections are currently managed by this instance
     property Count: integer read GetCount;
+    /// how many times data has been received by this instance
+    property ReadCount: integer read fReadCount;
+    /// how many times data has been sent by this instance
+    property WriteCount: integer read fWriteCount;
     /// how many data bytes have been received by this instance
     property ReadBytes: Int64 read fReadBytes;
     /// how many data bytes have been sent by this instance
-    property WriteBytes: Int64 write fWriteBytes;
+    property WriteBytes: Int64 read fWriteBytes;
   end;
   {$M-}
 
@@ -4752,7 +4758,6 @@ var ClientSock: TSocket;
     ClientCrtSock: THttpServerSocket;
     {$endif}
     i: integer;
-label abort;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   NotifyThreadStart(self);
@@ -4768,7 +4773,7 @@ begin
           continue;
         end;
       if Terminated or (Sock=nil) then begin
-abort:  DirectShutdown(ClientSock);
+        DirectShutdown(ClientSock);
         break; // don't accept input if server is down
       end;
       OnConnect;
@@ -4797,7 +4802,7 @@ abort:  DirectShutdown(ClientSock);
               exit; // the thread pool acquired the client sock
           end;
           inc(fThreadPoolContentionAbortCount);
-          goto abort; // 1500*20 = 30 seconds timeout
+          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -9397,8 +9402,7 @@ begin
         fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
         result := true;
       finally
-        Shutdown(slot.socket,SHUT_WR);
-        CloseSocket(slot.socket);
+        DirectShutdown(slot.socket);
         slot.socket := 0;
       end;
   finally
@@ -9432,7 +9436,9 @@ end;
 function TPollAsynchSockets.WriteString(connection: TObject;
   const data: SockString): boolean;
 begin
-  result := Write(connection,pointer(data)^,length(data));
+  if self=nil then
+    result := false else
+    result := Write(connection,pointer(data)^,length(data));
 end;
 
 procedure AppendData(var buf: SockString; const data; datalen: integer);
@@ -9473,6 +9479,8 @@ begin
             res := AsynchSend(slot.socket,P,datalen);
             if res<=0 then
               break;
+            inc(fWriteCount);
+            inc(fWriteBytes,res);
             dec(datalen,res);
             if datalen=0 then begin
               try // notify everything written
@@ -9545,7 +9553,7 @@ begin
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
             if res<0 then       // error - probably "may block"
               break;
-            if res=0 then begin // socket closed
+            if res=0 then begin // socket closed -> abort
               CloseConnection;
               exit;
             end;
@@ -9554,6 +9562,8 @@ begin
           until false;
           if added>0 then
             try
+              inc(fReadCount);
+              inc(fReadBytes,added);
               if OnRead(connection)=sorClose then
                 CloseConnection;
             except
@@ -9604,10 +9614,12 @@ begin
             res := AsynchSend(slot.socket,buf,buflen);
             if res<=0 then
               break;
+            inc(fWriteCount);
             inc(sent,res);
             inc(buf,res);
             dec(buflen,res);
           until buflen=0;
+          inc(fWriteBytes,sent);
           delete(slot.writebuf,1,sent);
         end;
         if slot.writebuf='' then begin // no data any more to be sent
