@@ -157,7 +157,6 @@
   {$define UNDIRECTDYNARRAY}
 {$endif}
 
-
 {$define INCLUDE_FTS3}
 // define this if you want to include the FTS3/FTS4 feature into the library
 // - FTS3 is an SQLite module implementing full-text search
@@ -464,6 +463,10 @@
     {$if CompilerVersion >= 32.0}
       {$define ISDELPHI102}
     {$ifend}
+    {$ifopt O-} // if we don't expect fast code, don't optimize the framework
+      {$undef ENHANCEDRTL}
+      {$undef DOPATCHTRTL}
+    {$endif}
   {$ELSE}
     // Delphi 5 or older
     {$define DELPHI6OROLDER}
