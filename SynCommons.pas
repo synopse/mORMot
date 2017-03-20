@@ -2493,6 +2493,15 @@ function DoubleToString(Value: Double): string;
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToString(Value: Int64): string;
 
+type
+  /// used to store a set of 8-bit encoded characters
+  TSynAnsicharSet = set of AnsiChar;
+
+/// returns the supplied text content, without any control char
+// - a control char has an ASCII code #0 .. #32, i.e. text[]<=' '
+// - you can specify a custom char set to be excluded, if needed
+function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet=[#0..' ']): RawUTF8;
+
 var
   /// best possible precision when rendering a "single" kind of float
   // - can be used as parameter for ExtendedToString/ExtendedToStr
@@ -12425,7 +12434,7 @@ var
 
 const
 {$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
-  ANSICHARNOT01310: set of AnsiChar = [#1..#9,#11,#12,#14..#255];
+  ANSICHARNOT01310: TSynAnsicharSet = [#1..#9,#11,#12,#14..#255];
   IsWord: set of byte =
     [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
   IsIdentifier: set of byte =
@@ -20624,6 +20633,28 @@ begin
     end;
   end;
   tmp.Done(dest,result);
+end;
+
+function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet): RawUTF8;
+var len,i,j,n: integer;
+    P: PAnsiChar;
+begin
+  len := length(text);
+  for i := 1 to len do
+    if text[i] in controls then begin
+      n := i-1;
+      SetString(result,nil,len);
+      P := pointer(result);
+      MoveFast(pointer(text)^,P^,n);
+      for j := i+1 to len do
+        if not(text[j] in controls) then begin
+          P[n] := text[j];
+          inc(n);
+        end;
+      SetLength(result, n);
+      exit;
+    end;
+  result := text; // no control char found
 end;
 
 {$ifdef CPU64}
@@ -51041,13 +51072,13 @@ function IsValidEmail(P: PUTF8Char): boolean;
 // http://www.howtodothings.com/computers/a1169-validating-email-addresses-in-delphi.html
 const
   // Valid characters in an "atom"
-  atom_chars: set of AnsiChar = [#33..#255] -
+  atom_chars: TSynAnsicharSet = [#33..#255] -
      ['(', ')', '<', '>', '@', ',', ';', ':', '\', '/', '"', '.', '[', ']', #127];
   // Valid characters in a "quoted-string"
-  quoted_string_chars: set of AnsiChar = [#0..#255] - ['"', #13, '\'];
+  quoted_string_chars: TSynAnsicharSet = [#0..#255] - ['"', #13, '\'];
   // Valid characters in a subdomain
-  letters: set of AnsiChar = ['A'..'Z', 'a'..'z'];
-  letters_digits: set of AnsiChar = ['0'..'9', 'A'..'Z', 'a'..'z'];
+  letters: TSynAnsicharSet = ['A'..'Z', 'a'..'z'];
+  letters_digits: TSynAnsicharSet = ['0'..'9', 'A'..'Z', 'a'..'z'];
 type
   States = (STATE_BEGIN, STATE_ATOM, STATE_QTEXT, STATE_QCHAR,
     STATE_QUOTE, STATE_LOCAL_PERIOD, STATE_EXPECTING_SUBDOMAIN,
