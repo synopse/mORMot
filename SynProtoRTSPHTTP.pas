@@ -168,7 +168,7 @@ var
   rtsp: TAsynchConnection;
 begin
   result := sorContinue;
-  decoded := Base64ToBinSafe(fSlot.readbuf);
+  decoded := Base64ToBinSafe(TrimControlChars(' '+fSlot.readbuf+' '));
   if decoded = '' then
     exit; // maybe some pending command chars
   fSlot.readbuf := '';
