@@ -21015,7 +21015,7 @@ begin
       sftUTF8Custom: // will happen only for DELPHI XE5 and up
         result := TSQLPropInfoCustomJSON.Create(aPropInfo,aPropIndex);
       else
-      case aType^.Kind of // retrieve exact type at binary level
+      case aType^.Kind of // retrieve matched type from RTTI binary level
         tkInteger:
           C := TSQLPropInfoRTTIInt32;
         tkSet:

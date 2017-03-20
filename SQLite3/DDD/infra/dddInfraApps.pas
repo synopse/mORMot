@@ -2054,7 +2054,7 @@ begin
       {$endif} {$endif}
       ECCIssuer(ExeVersion.User,Issuer);
       privok := priv.LoadFromSecureBinary(temp, aSecretPass, 100) and
-         IsEqual(THash128(priv.Content.Signed.Issuer), THash128(Issuer));
+        IsEqual(priv.Content.Signed.Issuer, Issuer);
       if aSecretInfo <> nil then
         aSecretInfo^ := priv.Content.Signed;
       if not privok or not ECCCheckDate(priv.Content) then begin
