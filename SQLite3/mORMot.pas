@@ -58914,29 +58914,33 @@ begin
       '[': // input arguments as a JSON array , e.g. '[1,2,"three"]' (default)
         inc(Par);
       '{': begin // retrieve parameters values from JSON object
-        inc(Par);
-        ParObjValuesUsed := true;
-        FillCharFast(ParObjValues,(ArgsInLast+1)*sizeof(pointer),0); // := nil
-        a1 := ArgsInFirst;
-        repeat
-          Name := GetJSONPropName(Par,@NameLen);
-          if Name=nil then
-            exit; // invalid JSON object in input
-          Val := Par;
-          Par := GotoNextJSONItem(Par,1,@EndOfObject);
-          for a := a1 to ArgsInLast do
-          with Args[a] do
-          if ValueDirection<>smdOut then
-            if IdemPropName(ParamName^,Name,NameLen) then begin
-              ParObjValues[a] := Val; // fast redirection, without allocation
-              if a=a1 then
-                inc(a1); // enable optimistic O(1) search for in-order input
-              break;
-            end;
-        until (Par=nil) or (EndOfObject='}');
+        repeat inc(Par) until not(Par^ in [#1..' ']);
+        if Par<>'}' then begin
+          ParObjValuesUsed := true;
+          FillCharFast(ParObjValues,(ArgsInLast+1)*sizeof(pointer),0); // := nil
+          a1 := ArgsInFirst;
+          repeat
+            Name := GetJSONPropName(Par,@NameLen);
+            if Name=nil then
+              exit; // invalid JSON object in input
+            Val := Par;
+            Par := GotoNextJSONItem(Par,1,@EndOfObject);
+            for a := a1 to ArgsInLast do
+            with Args[a] do
+            if ValueDirection<>smdOut then
+              if IdemPropName(ParamName^,Name,NameLen) then begin
+                ParObjValues[a] := Val; // fast redirection, without allocation
+                if a=a1 then
+                  inc(a1); // enable optimistic O(1) search for in-order input
+                break;
+              end;
+          until (Par=nil) or (EndOfObject='}');
+        end;
         Par := nil;
       end;
-      else exit; // only support JSON array or JSON object as input
+      else if PInteger(Par)^=NULL_LOW then
+        Par := nil else
+        exit; // only support JSON array or JSON object as input
       end;
     end;
     // decode input parameters (if any) in f*[]
