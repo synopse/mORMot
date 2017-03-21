@@ -1956,7 +1956,8 @@ function HttpGet(const aURI: SockString; const inHeaders: SockString;
 function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
-function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString=nil): boolean;
 
 const
   /// the layout of TSMTPConnection.FromText method
@@ -4461,7 +4462,8 @@ begin
     end;
 end;
 
-function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString): boolean;
 var Http: THttpClientSocket;
 begin
   result := false;
@@ -4470,6 +4472,8 @@ begin
   try
     result := Http.Post(url,Data,DataType) in
       [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
+    if outdata<>nil then
+      outdata^ := Http.Content;
   finally
     Http.Free;
   end;
