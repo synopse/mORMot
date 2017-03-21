@@ -117,6 +117,7 @@ type
   protected
     fRtspServer, fRtspPort: SockString;
     fPendingGet: TRawUTF8ListLocked;
+    function GetHttpPort: SockString;
     // creates TPostConnection and TRtspConnection instances for a given stream
     function ConnectionCreate(aSocket: TSocket; out aConnection: TAsynchConnection): boolean; override;
   public
@@ -126,8 +127,20 @@ type
       aOptions: TAsynchConnectionsOptions = []); reintroduce;
     /// shutdown and finalize the server
     destructor Destroy; override;
+    /// convert a rtsp://.... URI into a http://... proxy URI
+    // - will reuse the rtsp public server name, but change protocol to http://
+    // and set the port to RtspPort
+    function RtspToHttp(const RtspURI: RawUTF8): RawUTF8;
+    /// convert a http://... proxy URI into a rtsp://.... URI
+    function HttpToRtsp(const HttpURI: RawUTF8): RawUTF8;
     /// perform some basic regression and benchmark testing on a running server
     procedure RegressionTests(test: TSynTestCase; clientcount, steps: integer);
+    /// the associated RTSP server address
+    property RtspServer: SockString read fRtspServer;
+    /// the associated RTSP server port
+    property RtspPort: SockString read fRtspPort;
+    /// the bound HTTP port
+    property HttpPort: SockString read GetHttpPort;
   end;
 
 
@@ -420,9 +433,9 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
         if i and 7 = 0 then begin
           for r := 0 to rmax do
             req[r].post.Write(
-              'REVTQ1JJQkUgcnRzcDovL3R1Y2tydS5hcHBsZS5jb20vc3cubW92IFJUU1AvMS4w' +
-              'DQpDU2VxOiAxDQpBY2NlcHQ6IGFwcGxpY2F0aW9uL3NkcA0KQmFuZHdpZHRoOiAx' +
-              'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg' +
+              'REVTQ1JJQkUgcnRzcDovL3R1Y2tydS5hcHBsZS5jb20vc3cubW92IFJUU1AvMS4w'#13#10 +
+              'DQpDU2VxOiAxDQpBY2NlcHQ6IGFwcGxpY2F0aW9uL3NkcA0KQmFuZHdpZHRoOiAx'#13#10 +
+              'NTAwMDAwDQpBY2NlcHQtTGFuZ3VhZ2U6IGVuLVVTDQpVc2VyLUFnZW50OiBRVFMg'#13#10 +
               'KHF0dmVyPTQuMTtjcHU9UFBDO29zPU1hYyA4LjYpDQoNCg==');
           for r := 0 to rmax do
             test.check(req[r].stream.SockReceiveString =
@@ -464,7 +477,36 @@ begin // here we follow the steps and content stated by https://goo.gl/CX6VA3
   end;
 end;
 
+function TRTSPOverHTTPServer.GetHttpPort: SockString;
+begin
+  if self <> nil then
+    result := fServer.Port
+  else
+    result := '';
+end;
 
+function TRTSPOverHTTPServer.RtspToHttp(const RtspURI: RawUTF8): RawUTF8;
+var
+  uri: TUri;
+begin
+  if (self <> nil) and IdemPChar(pointer(RtspURI), 'RTSP://') and
+     uri.From(copy(RtspURI, 8, maxInt), fRtspPort) and
+     IdemPropNameU(uri.Port, fRtspPort) then
+    FormatUTF8('http://%:%/%', [uri.Server, fServer.Port, uri.Address], result)
+  else
+    result := RtspURI;
+end;
+
+function TRTSPOverHTTPServer.HttpToRtsp(const HttpURI: RawUTF8): RawUTF8;
+var
+  uri: TUri;
+begin
+  if (self <> nil) and uri.From(HttpURI, fServer.Port) and
+     IdemPropNameU(uri.Port, fServer.Port) then
+    FormatUTF8('rtsp://%:%/%', [uri.Server, fRtspPort, uri.Address], result)
+  else
+    result := HttpURI;
+end;
 
 end.
 
