@@ -868,7 +868,7 @@ var
     {$endif}
     if passwords <> '' then
       writeln(spaces, '/hardenpasswords /plainpasswords');
-    writeln(CustomHelp);
+    writeln(spaces, CustomHelp);
   end;
 
 begin
