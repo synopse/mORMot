@@ -558,6 +558,22 @@ function ECCToDateTime(ECCDate: TECCDate): TDateTime;
 function ECCText(ECCDate: TECCDate; Expanded: boolean=true): RawUTF8; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// compare two TECCCertificateIssuer binary buffer values
+function IsEqual(const issuer1,issuer2: TECCCertificateIssuer): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two TECCCertificateID binary buffer values
+function IsEqual(const id1,id2: TECCCertificateID): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// ensure a TECCCertificateIssuer binary buffer is not void, i.e. filled with 0
+function IsZero(const issuer: TECCCertificateIssuer): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// ensure a TECCCertificateID binary buffer is not void, i.e. filled with 0
+function IsZero(const id: TECCCertificateID): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// convert a supplied TECCCertificateIssuer binary buffer into proper text
 // - returns Ascii-7 text if was stored using Baudot encoding
 // - or returns hexadecimal values, if it was 16 bytes of random binary
@@ -1924,7 +1940,7 @@ end;
 function ECCText(const Issuer: TECCCertificateIssuer): RawUTF8;
 var tmp: array[0..sizeof(Issuer)] of byte;
 begin
-  if IsZero(THash128(Issuer)) then
+  if IsZero(Issuer) then
     result := '' else begin
     PAESBlock(@tmp)^ := TAESBlock(Issuer);
     tmp[sizeof(Issuer)] := 0; // add a trailing #0 as expected for trailing bits
@@ -1949,7 +1965,7 @@ end;
 
 function ECCText(const ID: TECCCertificateID): RawUTF8;
 begin
-  if IsZero(THash128(ID)) then
+  if IsZero(ID) then
     result := '' else
     result := AESBlockToString(TAESBlock(ID));
 end;
@@ -1964,9 +1980,8 @@ end;
 function ECCCheck(const content: TECCCertificateContent): boolean;
 begin
   with content.Signed do
-    if (IssueDate=0) or (IssueDate=65535) or
-       IsZero(THash128(Serial)) or IsZero(THash128(Issuer)) or
-       IsZero(THash128(AuthoritySerial)) or IsZero(THash128(AuthorityIssuer)) or
+    if (IssueDate=0) or (IssueDate=65535) or IsZero(Serial) or IsZero(Issuer) or
+       IsZero(AuthoritySerial) or IsZero(AuthorityIssuer) or
        IsZero(@PublicKey,sizeof(PublicKey)) or
        IsZero(@content.Signature,sizeof(content.Signature)) then
       result := false else
@@ -1984,19 +1999,47 @@ begin
               ((ValidityEnd=0) or (ValidityEnd>=now));
 end;
 
+function IsEqual(const issuer1,issuer2: TECCCertificateIssuer): boolean; overload;
+var a: TPtrIntArray absolute issuer1;
+    b: TPtrIntArray absolute issuer2;
+begin
+  result := (a[0]=b[0]) and (a[1]=b[1])
+    {$ifndef CPU64} and (a[2]=b[2]) and (a[3]=b[3]){$endif};
+end;
+
+function IsEqual(const id1,id2: TECCCertificateID): boolean; overload;
+var a: TPtrIntArray absolute id1;
+    b: TPtrIntArray absolute id2;
+begin
+  result := (a[0]=b[0]) and (a[1]=b[1])
+    {$ifndef CPU64} and (a[2]=b[2]) and (a[3]=b[3]){$endif};
+end;
+
+function IsZero(const issuer: TECCCertificateIssuer): boolean;
+var a: TPtrIntArray absolute issuer;
+begin
+  result := (a[0]=0) and (a[1]=0)
+     {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
+end;
+
+function IsZero(const id: TECCCertificateID): boolean;
+var a: TPtrIntArray absolute id;
+begin
+  result := (a[0]=0) and (a[1]=0)
+     {$ifndef CPU64} and (a[2]=0) and (a[3]=0){$endif};
+end;
+
 function ECCSelfSigned(const content: TECCCertificateContent): boolean;
 begin
   with content.Signed do
-    result := IsEqual(THash128(AuthoritySerial),THash128(Serial)) and
-              IsEqual(THash128(AuthorityIssuer),THash128(Issuer)) and
-              not IsZero(THash128(Serial));
+    result := IsEqual(AuthoritySerial,Serial) and not IsZero(Serial) and
+              IsEqual(AuthorityIssuer,Issuer);
 end;
 
 function ECCCheck(const content: TECCSignatureCertifiedContent): boolean;
 begin
   result := (content.Version in [1]) and (content.Date<>0) and
-    not IsZero(THash128(content.AuthoritySerial)) and
-    not IsZero(THash128(content.AuthorityIssuer)) and
+    not IsZero(content.AuthoritySerial) and not IsZero(content.AuthorityIssuer) and
     not IsZero(@content.Signature,sizeof(content.Signature));
 end;
 
@@ -2453,10 +2496,10 @@ begin
     end else
       FillcharFast(head.sign,sizeof(head.sign),255); // Version=255=not signed
     if not ecc_make_key(head.rndpub,rndpriv) then
-      raise EECCException.CreateUTF8('%.Encrypt: ecc_make_key failure',[self]);
+      raise EECCException.CreateUTF8('%.Encrypt: ecc_make_key?',[self]);
     SetLength(secret,sizeof(TECCSecretKey));
     if not ecdh_shared_secret(fContent.Signed.PublicKey,rndpriv,PECCSecretKey(secret)^) then
-      raise EECCException.CreateUTF8('%.Encrypt: ecdh_shared_secret failure',[self]);
+      raise EECCException.CreateUTF8('%.Encrypt: ecdh_shared_secret?',[self]);
     PBKDF2_HMAC_SHA256(secret,KDFSalt,KDFRounds,aeskey,'salt');
     if Algo in [low(ECIES_NOSYNLZ)..high(ECIES_NOSYNLZ)] then begin
       dec := SynLZCompress(content);
@@ -2557,7 +2600,6 @@ var priv: TECCPrivateKey;
     hash: TSHA256Digest;
 begin
   Create;
-  if ecc_available then
   try
     now := NowECCDate;
     with fContent.Signed do begin
@@ -2922,7 +2964,7 @@ begin
   data := @PByteArray(Encrypted)[sizeof(TECIESHeader)];
   if CheckCRC and HasSecret then
   try
-    if not IsEqual(THash128(head.recid),THash128(fContent.Signed.Serial)) then begin
+    if not IsEqual(head.recid,fContent.Signed.Serial) then begin
       result := ecdInvalidSerial;
       exit;
     end;
@@ -3485,7 +3527,7 @@ function TECCCertificateChain.IsAuthorized(
 var content: TECCCertificateContent;
 begin
   result := GetBySerial(sign.AuthoritySerial, content) and
-    IsEqual(THash128(content.Signed.AuthorityIssuer), THash128(sign.AuthorityIssuer));
+    IsEqual(content.Signed.AuthorityIssuer, sign.AuthorityIssuer);
 end;
 
 function TECCCertificateChain.IsAuthorized(const base64sign: RawUTF8): boolean;
@@ -4048,7 +4090,7 @@ begin
   dec(len,sizeof(TECCSignature)); // Sign at the latest position
   sha.Full(frame,len,hash);
   if not ecdsa_sign(fPrivate.fPrivateKey,hash,PECCSignature(@frame[len])^) then
-    raise EECCException.CreateUTF8('%.Sign: ecdsa_sign',[self]);
+    raise EECCException.CreateUTF8('%.Sign: ecdsa_sign?',[self]);
 end;
 
 function TECDHEProtocol.Clone: IProtocol;
@@ -4259,7 +4301,7 @@ begin
       'a private key',[self,fCertificate,fCertificate.Serial]);
   sha.Full(pointer(payload64),length(payload64),hash);
   if not ecdsa_sign(TECCCertificateSecret(fCertificate).fPrivateKey,hash,sign) then
-    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign failed',[self]);
+    raise EECCException.CreateUTF8('%.ComputeSignature: ecdsa_sign?',[self]);
   result := BinToBase64URI(@sign,sizeof(sign));
 end;
 

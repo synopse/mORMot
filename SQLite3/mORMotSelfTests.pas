@@ -130,7 +130,8 @@ begin
     {$ifndef BSD} // todo: proper ECC support for BSD/Darwin
     TTestECCCryptography,
     {$endif}
-    TTestCompression
+    TTestCompression,
+    TTestProtocols
    ]);
 end;
 

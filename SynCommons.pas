@@ -1500,6 +1500,9 @@ type
     procedure Init(Source: pointer; SourceLen: integer); overload;
     /// initialize a new temporary buffer of a given number of bytes
     function Init(SourceLen: integer): pointer; overload;
+    /// initialize a new temporary buffer of a given number of random bytes
+    // - will fill the buffer via FillRandom() calls
+    function InitRandom(RandomLen: integer): pointer;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -2489,6 +2492,15 @@ function DoubleToString(Value: Double): string;
 // its numerical text equivalency
 // - decimals are joined by 2 (no decimal, 2 decimals, 4 decimals)
 function Curr64ToString(Value: Int64): string;
+
+type
+  /// used to store a set of 8-bit encoded characters
+  TSynAnsicharSet = set of AnsiChar;
+
+/// returns the supplied text content, without any control char
+// - a control char has an ASCII code #0 .. #32, i.e. text[]<=' '
+// - you can specify a custom char set to be excluded, if needed
+function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet=[#0..' ']): RawUTF8;
 
 var
   /// best possible precision when rendering a "single" kind of float
@@ -6178,10 +6190,26 @@ function GUIDToRawUTF8(const guid: TGUID): RawUTF8;
 // - this version is faster than the one supplied by SysUtils
 function GUIDToString(const guid: TGUID): string;
 
+/// fast compute of some 32-bit random value
+// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
+// generator by Pierre L'Ecuyer (period is 2^88, i.e. about 10^26)
+// - will fast generate some random-like 32-bit output
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+function Random32: cardinal;
+
+/// seed the gsl_rng_taus2 Random32 generator
+// - do nothing if RDRAND Intel x86/x64 opcode is available
+// - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
+// often than the Pierre L'Ecuyer's algorithm period of 2^88
+// - you can specify some additional entropy buffer
+// - thread-specific function: each thread will maintain its own seed table
+procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
+
 /// fill some memory buffer with random values
 // - the destination buffer is expected to be allocated as 32 bit items
-// - use internally crc32c() hashing with some rough entropy source, and
-// hardware RDRAND Intel x86/x64 opcode if available
+// - use internally crc32c() with some rough entropy source, and Random32
+// gsl_rng_taus2 generator or hardware RDRAND Intel x86/x64 opcode if available
 // - consider using instead the cryptographic secure TAESPRNG.Main.FillRandom()
 // method from the SynCrypto unit
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
@@ -10659,6 +10687,32 @@ function BinToHexDisplay(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 /// append one byte as hexadecimal char pairs, into a text buffer
 function ByteToHex(P: PAnsiChar; Value: byte): PAnsiChar;
 
+/// fast conversion from binary data to escaped text
+// - non printable characters will be written as $xx hexadecimal codes
+// - will be #0 terminated, with '...' characters trailing on overflow
+// - ensure the destination buffer contains at least max*3+3 bytes, which is
+// always the case when using LogEscape() and its local TLogEscape variable
+procedure EscapeBuffer(s,d: PAnsiChar; len,max: integer);
+
+const
+  /// maximum size, in bytes, of a TLogEscape / LogEscape() buffer
+  LOGESCAPELEN = 200;
+type
+  /// buffer to be allocated on stack when using LogEscape()
+  TLogEscape = array[0..LOGESCAPELEN*3+3] of AnsiChar;
+
+/// fill TLogEscape stack buffer with the (hexadecimal) chars of the input binary
+// - up to LOGESCAPELEN (i.e. 200) bytes will be escaped and appended to a
+// Local temp: TLogEscape variable, using the EscapeBuffer() low-level function
+// - you can then log the resulting escaped text by passing the returned
+// PAnsiChar as % parameter to a TSynLog.Log() method
+// - the "enabled" parameter can be assigned from a process option, avoiding to
+// process the escape if verbose logs are disabled
+// - used e.g. to implement logBinaryFrameContent option for WebSockets
+function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+  enabled: boolean=true): PAnsiChar;
+  {$ifdef HASINLINE}inline;{$endif}
+  
 type
   /// used e.g. by PointerToHexShort/CardinalToHexShort/Int64ToHexShort
   // - such result type would avoid a string allocation on heap
@@ -11091,8 +11145,9 @@ type
   case integer of
   0: (Lo,Hi: Int64);
   1: (i0,i1,i2,i3: integer);
-  2: (c: TBlock128);
-  3: (b: THash128);
+  2: (c0,c1,c2,c3: cardinal);
+  3: (c: TBlock128);
+  4: (b: THash128);
   end;
   /// pointer to an array of two 64-bit hash values
   PHash128Rec = ^THash128Rec;
@@ -11153,7 +11208,8 @@ function IsZero(const dig: THash128): boolean; overload;
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
-// - this function is not sensitive to any timing attack
+// - this function is not sensitive to any timing attack, so is designed 
+// for cryptographic purpose
 function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -11175,7 +11231,8 @@ function IsZero(const dig: THash256): boolean; overload;
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TECCSignature result
-// - this function is not sensitive to any timing attack
+// - this function is not sensitive to any timing attack, so is designed 
+// for cryptographic purpose
 function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -12377,7 +12434,7 @@ var
 
 const
 {$ifdef OPT4AMD} // circumvent Delphi 5 and Delphi 6 compilation issues :(
-  ANSICHARNOT01310: set of AnsiChar = [#1..#9,#11,#12,#14..#255];
+  ANSICHARNOT01310: TSynAnsicharSet = [#1..#9,#11,#12,#14..#255];
   IsWord: set of byte =
     [ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
   IsIdentifier: set of byte =
@@ -12600,7 +12657,8 @@ var
   /// the current Operating System version, as retrieved for the current process
   OSVersion: TWindowsVersion;
   /// the current Operating System version, as retrieved for the current process
-  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)'
+  // - contains e.g. 'Windows Seven 64 SP1 (6.1.7601)' or 
+  // 'Linux 3.13.0 110 generic#157 Ubuntu SMP Mon Feb 20 11:55:25 UTC 2017'
   OSVersionText: RawUTF8;
 
 /// this function can be used to create a GDI compatible window, able to
@@ -12736,6 +12794,11 @@ type
     Host: RawUTF8;
     /// the current computer user name
     User: RawUTF8;
+    /// some hash compression of this information
+    // - the very same executable on the very same computer run by the very
+    // same user will always have the same Hash value 
+    // - may be used as an entropy seed 
+    Hash: THash128Rec;
   end;
 
 var
@@ -17081,6 +17144,16 @@ type
   // unless BackgroundExecute is run from a VCL timer
   TOnSystemUseMeasured = procedure(ProcessID: integer; const Data: TSystemUseData) of object;
 
+  /// internal storage of CPU and RAM usage for none process
+  TSystemUseProcess = record
+    ID: integer;
+    Data: TSystemUseDataDynArray;
+    PrevKernel: Int64;
+    PrevUser: Int64;
+  end;
+  /// internal storage of CPU and RAM usage for a set of processes
+  TSystemUseProcessDynArray = array of TSystemUseProcess;
+
   /// monitor CPU and RAM usage of one or several processes
   // - you should execute BackgroundExecute on a regular pace (e.g. every second)
   // to gather low-level CPU and RAM information for the given set of processes
@@ -17088,19 +17161,17 @@ type
   // - use Current class function to access a process-wide instance
   TSystemUse = class(TSynPersistent)
   protected
-    fProcess: array of record
-      ID: integer;
-      PrevKernel: Int64;
-      PrevUser: Int64;
-      Data: TSystemUseDataDynArray;
-    end;
+    fProcess: TSystemUseProcessDynArray;
+    fProcesses: TDynArray;
     fDataIndex: integer;
     fSysPrevKernel: Int64;
     fSysPrevUser: Int64;
+    fOpenProcessFlags: integer;
     fSafe: TAutoLocker;
     fHistoryDepth: integer;
     fOnMeasured: TOnSystemUseMeasured;
     fTimer: TSynBackgroundTimer;
+    fUnsubscribeProcessOnAccessError: boolean;
     function ProcessIndex(aProcessID: integer): integer;
   public
     /// a TSynBackgroundThreadProcess compatible event
@@ -17128,40 +17199,44 @@ type
     constructor Create(aHistoryDepth: integer=60); reintroduce; overload; virtual;
     /// finalize all internal data information
     destructor Destroy; override;
+    /// add a Process ID to the internal tracking list
+    procedure Subscribe(aProcessID: integer);
+    /// remove a Process ID from the internal tracking list
+    function Unsubscribe(aProcessID: integer): boolean;
     /// returns the total (Kernel+User) CPU usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns -1 if the Process ID was not registered as Create() parameter
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
     function Percent(aProcessID: integer=0): single; overload;
     /// returns the Kernel-space CPU usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns -1 if the Process ID was not registered as Create() parameter
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
     function PercentKernel(aProcessID: integer=0): single; overload;
     /// returns the User-space CPU usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns -1 if the Process ID was not registered as Create() parameter
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
     function PercentUser(aProcessID: integer=0): single; overload;
     /// returns the total (Work+Paged) RAM use of the supplied process, in KB
     // - aProcessID=0 will return information from the current process
-    // - returns 0 if the Process ID was not registered as Create() parameter
+    // - returns 0 if the Process ID was not registered via Create/Subscribe
     function KB(aProcessID: integer=0): cardinal; overload;
     /// returns the detailed CPU and RAM usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns -1 if the Process ID was not registered as Create() parameter
+    // - returns -1 if the Process ID was not registered via Create/Subscribe
     function Data(out aData: TSystemUseData; aProcessID: integer=0): boolean; overload;
     /// returns the detailed CPU and RAM usage percent of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns TimeStamp=0 if the Process ID was not registered as Create() parameter
+    // - returns TimeStamp=0 if the Process ID was not registered via Create/Subscribe
     function Data(aProcessID: integer=0): TSystemUseData; overload;
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns nil if the Process ID was not registered as Create() parameter
+    // - returns nil if the Process ID was not registered via Create/Subscribe
     // - returns the sample values as an array, starting from the last to the oldest
     // - you can customize the maximum depth, with aDepth < HistoryDepth
     function History(aProcessID: integer=0; aDepth: integer=0): TSingleDynArray; overload;
     /// returns total (Kernel+User) CPU usage percent history of the supplied
     // process, as a string of two digits values
     // - aProcessID=0 will return information from the current process
-    // - returns '' if the Process ID was not registered as Create() parameter
+    // - returns '' if the Process ID was not registered via Create/Subscribe
     // - you can customize the maximum depth, with aDepth < HistoryDepth
     // - the memory history (in MB) can be optionally returned in aDestMemoryMB
     function HistoryText(aProcessID: integer=0; aDepth: integer=0;
@@ -17169,7 +17244,7 @@ type
     {$ifndef NOVARIANTS}
     /// returns total (Kernel+User) CPU usage percent history of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns null if the Process ID was not registered as Create() parameter
+    // - returns null if the Process ID was not registered via Create/Subscribe
     // - returns the sample values as a TDocVariant array, starting from the
     // last to the oldest, with two digits precision (as currency values)
     // - you can customize the maximum depth, with aDepth < HistoryDepth
@@ -17180,10 +17255,14 @@ type
     class function Current(aCreateIfNone: boolean=true): TSystemUse;
     /// returns detailed CPU and RAM usage history of the supplied process
     // - aProcessID=0 will return information from the current process
-    // - returns nil if the Process ID was not registered as Create() parameter
+    // - returns nil if the Process ID was not registered via Create/Subscribe
     // - returns the sample values as an array, starting from the last to the oldest
     // - you can customize the maximum depth, with aDepth < HistoryDepth
     function HistoryData(aProcessID: integer=0; aDepth: integer=0): TSystemUseDataDynArray; overload;
+    /// if any unexisting (e.g. closed/killed) process should be unregistered 
+    // - e.g. if OpenProcess() API call fails
+    property UnsubscribeProcessOnAccessError: boolean
+      read fUnsubscribeProcessOnAccessError write fUnsubscribeProcessOnAccessError;
     /// how many items are stored internally, and returned by the History() method
     property HistoryDepth: integer read fHistoryDepth;
     /// executed when TSystemUse.BackgroundExecute finished its measurement
@@ -18643,6 +18722,13 @@ begin
       buf := @tmp else
       GetMem(buf,len+1); // +1 to include trailing #0
   result := buf;
+end;
+
+function TSynTempBuffer.InitRandom(RandomLen: integer): pointer;
+begin
+  result := Init(RandomLen+3);
+  if RandomLen>0 then
+    FillRandom(result,(RandomLen shr 2)+1);
 end;
 
 procedure TSynTempBuffer.Done;
@@ -20565,6 +20651,28 @@ begin
   tmp.Done(dest,result);
 end;
 
+function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet): RawUTF8;
+var len,i,j,n: integer;
+    P: PAnsiChar;
+begin
+  len := length(text);
+  for i := 1 to len do
+    if text[i] in controls then begin
+      n := i-1;
+      SetString(result,nil,len);
+      P := pointer(result);
+      MoveFast(pointer(text)^,P^,n);
+      for j := i+1 to len do
+        if not(text[j] in controls) then begin
+          P[n] := text[j];
+          inc(n);
+        end;
+      SetLength(result, n);
+      exit;
+    end;
+  result := text; // no control char found
+end;
+
 {$ifdef CPU64}
 procedure Exchg16(P1,P2: PInt64Array);
 var c: Int64;
@@ -22445,7 +22553,7 @@ asm // eax=Value, edx=@result
         push    esi
         mov     ebx, eax                // value
         sar     ebx, 31                 // 0 for +ve value or -1 for -ve value
-        XOR     eax, ebx
+        xor     eax, ebx
         sub     eax, ebx                // abs(value)
         mov     esi, 10                 // max dig in result
         mov     edi, edx                // @result
@@ -26596,6 +26704,39 @@ begin
   result := P+2;
 end;
 
+procedure EscapeBuffer(s,d: PAnsiChar; len,max: integer);
+var i: integer;
+begin
+  if len>max then
+    len := max;
+  d^ := ' ';
+  inc(d);
+  for i := 1 to len do begin
+    if s^ in [' '..#126] then begin
+      d^ := s^;
+      inc(d);
+    end else begin
+      d^ := '$';
+      inc(d);
+      PWord(d)^ := TwoDigitsHexWB[ord(s^)];
+      inc(d,2);
+    end;
+    inc(s);
+  end;
+  if len=max then
+    PCardinal(d)^ := ord('.')+ord('.')shl 8+ord('.')shl 16 else
+    d^ := #0;
+end;
+
+function LogEscape(source: PAnsiChar; sourcelen: integer; var temp: TLogEscape;
+  enabled: boolean): PAnsiChar;
+begin
+  if enabled then
+    EscapeBuffer(source,@temp,sourcelen,LOGESCAPELEN) else
+    temp[0] := #0;
+  result := @temp;
+end;
+
 procedure BinToHexDisplay(Bin, Hex: PAnsiChar; BinBytes: integer);
 var j: integer;
 begin
@@ -27871,7 +28012,7 @@ var random: string[8];
     rnd: cardinal;
 begin // fast cross-platform implementation
   if TemporaryFileNameRandom=0 then
-    FillRandom(@TemporaryFileNameRandom,1);
+    TemporaryFileNameRandom := Random32;
   random[0] := #8;
   repeat
     rnd := InterlockedIncrement(TemporaryFileNameRandom); // thread-safe :)
@@ -32290,8 +32431,7 @@ asm
         pop     ebx
         not     eax
 end;
-{$endif PUREPASCAL}
-{$ifdef CPU386}
+{$ifdef CPUX86}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
         push    esi
@@ -32390,7 +32530,8 @@ asm // eax=crc, edx=buf, ecx=len
         {$endif}
 @0:     not     eax
 end;
-{$endif CPU386}
+{$endif CPUX86}
+{$endif PUREPASCAL}
 
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 begin
@@ -32434,7 +32575,7 @@ end;
 function IsEqual(const A,B: THash128): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
-begin
+begin // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1])
     {$ifndef CPU64} or (a_[2] xor b_[2]) or (a_[3] xor b_[3]){$endif})=0;
 end;
@@ -32472,7 +32613,7 @@ end;
 function IsEqual(const A,B: THash256): boolean;
 var a_: TPtrIntArray absolute A;
     b_: TPtrIntArray absolute B;
-begin
+begin // uses anti-forensic time constant "xor/or" pattern
   result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or
              (a_[2] xor b_[2]) or (a_[3] xor b_[3])
     {$ifndef CPU64} or (a_[4] xor b_[4]) or (a_[5] xor b_[5])
@@ -33952,23 +34093,94 @@ asm
 end;
 {$endif}
 
+type
+  TLecuyer = {$ifndef ISDELPHI2010}object{$else}record{$endif}
+    rs1, rs2, rs3: cardinal;
+    count: cardinal;
+    procedure Seed(entropy: PByteArray; entropylen: integer);
+    function Next: cardinal;
+  end;
+
+threadvar
+  _Lecuyer: TLecuyer; // uses only 16 bytes per thread
+
+procedure TLecuyer.Seed(entropy: PByteArray; entropylen: integer);
+var time, crc: THash128Rec;
+    i: integer;
+begin
+  repeat
+    QueryPerformanceCounter(time.Lo);
+    time.i2 := UnixTimeUTC;
+    time.i3 := integer(GetCurrentThreadID);
+    crcblock(@crc.b,@time.b);
+    crcblock(@crc.b,@ExeVersion.Hash.b);
+    if entropy<>nil then
+      for i := 0 to entropylen do
+        crc.b[i and 15] := crc.b[i and 15] xor entropy^[i];
+    rs1 := rs1 xor crc.c0;
+    rs2 := rs2 xor crc.c1;
+    rs3 := rs3 xor crc.c2;
+  until (rs1>1) and (rs2>7) and (rs3>15);
+  count := 1;
+  for i := 1 to crc.i3 and 15 do
+    Next; // warm up
+end;
+
+function TLecuyer.Next: cardinal;
+begin
+  if word(count)=0 then // reseed after 256KB of output
+    Seed(nil,0) else
+    inc(count);
+  result := rs1;
+  rs1 := ((result and -2)shl 12) xor (((result shl 13)xor result)shr 19);
+  result := rs2;
+  rs2 := ((result and -8)shl 4) xor (((result shl 2)xor result)shr 25);
+  result := rs3;
+  rs3 := ((result and -16)shl 17) xor (((result shl 3)xor result)shr 11);
+  result := rs1 xor rs2 xor result;
+end;
+
+procedure Random32Seed(entropy: pointer; entropylen: integer);
+begin
+  {$ifdef CPUINTEL}
+  if not (cfRAND in CpuFeatures) then
+  {$endif}
+    _Lecuyer.Seed(entropy,entropylen);
+end;
+
+function Random32: cardinal;
+begin
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+    result := RdRand32 else
+  {$endif}
+    result := _Lecuyer.Next;
+end;
+
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
 var i: integer;
     c: cardinal;
     timenow: Int64;
+    lecuyer: ^TLecuyer;
 begin
-  c := GetTickCount64+Random(maxInt)+{$ifdef BSD}Cardinal{$endif}(GetCurrentThreadID);
+  {$ifdef CPUINTEL}
+  if cfRAND in CpuFeatures then
+    lecuyer := nil else
+  {$endif}
+    lecuyer := @_Lecuyer;
   QueryPerformanceCounter(timenow);
-  c := c xor crc32c(c,@timenow,sizeof(timenow));
-  for i := 0 to CardinalCount-1 do begin
-    c := c xor crc32ctab[0,(c+cardinal(i)) and 1023]
-           xor crc32c(c,pointer(Dest),CardinalCount*4);
-    {$ifdef CPUINTEL}
-    if cfRAND in CpuFeatures then
-      c := c xor RdRand32;
-    {$endif};
-    Dest^[i] := Dest^[i] xor c;
-  end;
+  c := crc32c(ExeVersion.Hash.c3,@timenow,sizeof(timenow));
+  {$ifdef CPUINTEL}
+  if lecuyer=nil then
+    for i := 0 to CardinalCount-1 do begin
+      c := c xor RdRand32 xor crc32ctab[0,(c+cardinal(i)) and 1023];
+      Dest^[i] := Dest^[i] xor c;
+    end else
+  {$endif}
+    for i := 0 to CardinalCount-1 do begin
+      c := c xor lecuyer^.Next;
+      Dest^[i] := Dest^[i] xor c;
+    end;
 end;
 
 function RandomGUID: TGUID;
@@ -35449,6 +35661,14 @@ begin
       Version.SetVersion(aMajor,aMinor,aRelease,aBuild);
     FormatUTF8('% % (%)',[ProgramFileName,Version.Detailed,
       DateTimeToIso8601(Version.BuildDateTime,True,' ')],ProgramFullSpec);
+    Hash.c0 := Version.Version32;
+    {$ifdef CPUINTEL}
+    Hash.c0 := crc32c(Hash.c0,@CpuFeatures,sizeof(CpuFeatures));
+    {$endif}
+    Hash.c0 := crc32c(Hash.c0,pointer(Host),length(Host));
+    Hash.c1 := crc32c(Hash.c0,pointer(User),length(User));
+    Hash.c2 := crc32c(Hash.c1,pointer(ProgramFullSpec),length(ProgramFullSpec));
+    Hash.c3 := crc32c(Hash.c2,pointer(InstanceFileName),length(InstanceFileName));
   end;
 end;
 
@@ -36837,16 +37057,16 @@ end;
 {$ifndef FPC}
 
   {$ifdef USEPACKAGES}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifdef DELPHI5OROLDER}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifdef PUREPASCAL}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
   {$ifndef DOPATCHTRTL}
-  {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
+    {$define EXPECTSDELPHIRTLRECORDCOPYCLEAR}
   {$endif}
 
 {$ifdef EXPECTSDELPHIRTLRECORDCOPYCLEAR}
@@ -36926,7 +37146,7 @@ asm // faster version by AB
 @ptr:   dec     edi
         mov     dword ptr[eax], 0 // pointer initialization
         jg      @loop
-@end:  pop     edi
+@end:   pop     edi
         pop     esi
         pop     ebx
         ret
@@ -37924,9 +38144,7 @@ begin
   FillcharFast := @FillCharSSE2;
   //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
   {$else}
-  {$ifdef PUREPASCAL}
-  Pointer(@FillCharFast) := SystemFillCharAddress;
-  {$else}
+  {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
     if cfSSE42 in CpuFeatures then
       StrLen := @StrLenSSE42 else
@@ -37937,7 +38155,9 @@ begin
     FillcharFast := @FillCharX87;
   end;
   MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
-  {$endif PUREPASCAL}
+  {$else}
+  Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
   // do redirection from RTL to our fastest version
@@ -50868,13 +51088,13 @@ function IsValidEmail(P: PUTF8Char): boolean;
 // http://www.howtodothings.com/computers/a1169-validating-email-addresses-in-delphi.html
 const
   // Valid characters in an "atom"
-  atom_chars: set of AnsiChar = [#33..#255] -
+  atom_chars: TSynAnsicharSet = [#33..#255] -
      ['(', ')', '<', '>', '@', ',', ';', ':', '\', '/', '"', '.', '[', ']', #127];
   // Valid characters in a "quoted-string"
-  quoted_string_chars: set of AnsiChar = [#0..#255] - ['"', #13, '\'];
+  quoted_string_chars: TSynAnsicharSet = [#0..#255] - ['"', #13, '\'];
   // Valid characters in a subdomain
-  letters: set of AnsiChar = ['A'..'Z', 'a'..'z'];
-  letters_digits: set of AnsiChar = ['0'..'9', 'A'..'Z', 'a'..'z'];
+  letters: TSynAnsicharSet = ['A'..'Z', 'a'..'z'];
+  letters_digits: TSynAnsicharSet = ['0'..'9', 'A'..'Z', 'a'..'z'];
 type
   States = (STATE_BEGIN, STATE_ATOM, STATE_QTEXT, STATE_QCHAR,
     STATE_QUOTE, STATE_LOCAL_PERIOD, STATE_EXPECTING_SUBDOMAIN,
@@ -60545,7 +60765,7 @@ end;
 constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
-  FillRandom(@fTokenSeed,1);
+  fTokenSeed := Random32;
   fSessionGenerator := abs(fTokenSeed*PtrInt(ClassType));
 end;
 
@@ -61565,6 +61785,8 @@ type
     PagefileUsage: PtrUInt;
     PeakPagefileUsage: PtrUInt;
   end;
+const
+  PROCESS_QUERY_LIMITED_INFORMATION = $1000;
 
 var
   hsapi: HMODULE;
@@ -61597,9 +61819,10 @@ begin
     difftot := (skrn-fSysPrevKernel)+(susr-fSysPrevUser);
     fSysPrevKernel := skrn;
     fSysPrevUser := susr;
-    for i := 0 to high(fProcess) do
+    for i := high(fProcess) downto 0 do // backwards for fProcesses.Delete(i)
     with fProcess[i] do begin
-      hnd := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ,false,ID);
+      hnd := OpenProcess(fOpenProcessFlags,false,ID);
+      if hnd<>0 then
       try
         if GetProcessTimes(hnd,ftp,fte,ftkrn,ftusr) then begin
           FileTimeToInt64(ftkrn,pkrn);
@@ -61630,7 +61853,10 @@ begin
         end;
       finally
         CloseHandle(hnd);
-      end;
+      end else
+        if UnsubscribeProcessOnAccessError then
+          // if GetLastError=ERROR_INVALID_PARAMETER then
+          fProcesses.Delete(i);
     end;
   finally
     fSafe.Leave;
@@ -61659,6 +61885,8 @@ var i: integer;
     {$endif}
 begin
   inherited Create;
+  fSafe := TAutoLocker.Create;
+  fProcesses.Init(TypeInfo(TSystemUseProcessDynArray),fProcess);
   {$ifdef MSWINDOWS}
   if not Assigned(GetSystemTimes) then begin
     h := GetModuleHandle(kernel32);
@@ -61670,24 +61898,24 @@ begin
        not Assigned(GetProcessMemoryInfo) then
       exit; // no system monitoring API under oldest Windows
   end;
+  if OSVersion<wVista then
+    fOpenProcessFlags := PROCESS_QUERY_INFORMATION else
+    fOpenProcessFlags := PROCESS_QUERY_LIMITED_INFORMATION;
   {$else}
   exit; // not implemented yet
   {$endif}
-  fSafe := TAutoLocker.Create;
   if aHistoryDepth<=0 then
     aHistoryDepth := 1;
   fHistoryDepth := aHistoryDepth;
   SetLength(fProcess,length(aProcessID));
-  if fProcess=nil then
-    Create([0]) else
-    for i := 0 to high(aProcessID) do begin
-      {$ifdef MSWINDOWS}
-      if aProcessID[i]=0 then
-        fProcess[i].ID := GetCurrentProcessID else
-      {$endif}
-        fProcess[i].ID := aProcessID[i];
-      SetLength(fProcess[i].Data,fHistoryDepth);
-    end;
+  for i := 0 to high(aProcessID) do begin
+    {$ifdef MSWINDOWS}
+    if aProcessID[i]=0 then
+      fProcess[i].ID := GetCurrentProcessID else
+    {$endif}
+      fProcess[i].ID := aProcessID[i];
+    SetLength(fProcess[i].Data,fHistoryDepth);
+  end;
 end;
 
 constructor TSystemUse.Create(aHistoryDepth: integer);
@@ -61701,8 +61929,45 @@ begin
   fSafe.Free;
 end;
 
-function TSystemUse.ProcessIndex(aProcessID: integer): integer;
+procedure TSystemUse.Subscribe(aProcessID: integer);
+var i,n: integer;
 begin
+  {$ifdef MSWINDOWS}
+  if aProcessID=0 then
+    aProcessID := GetCurrentProcessID;
+  {$endif}
+  fSafe.Enter;
+  try
+    n := length(fProcess);
+    for i := 0 to n-1 do
+      if fProcess[i].ID=aProcessID then
+        exit; // already subscribed
+    SetLength(fProcess,n+1);
+    fProcess[n].ID := aProcessID;
+    SetLength(fProcess[n].Data,fHistoryDepth);
+  finally
+    fSafe.Leave;
+  end;
+end;
+
+function TSystemUse.Unsubscribe(aProcessID: integer): boolean;
+var i: integer;
+begin
+  fSafe.Enter;
+  try
+    i := ProcessIndex(aProcessID);
+    if i>=0 then begin
+      fProcesses.Delete(i);
+      result := true;
+    end else
+      result := false;
+  finally
+    fSafe.Leave;
+  end;
+end;
+
+function TSystemUse.ProcessIndex(aProcessID: integer): integer;
+begin // caller should have made fSafe.Enter
   {$ifdef MSWINDOWS}
   if aProcessID=0 then
     aProcessID := GetCurrentProcessID;
@@ -61717,19 +61982,19 @@ end;
 function TSystemUse.Data(out aData: TSystemUseData; aProcessID: integer=0): boolean;
 var i: integer;
 begin
-  i := ProcessIndex(aProcessID);
-  if i>=0 then begin
-    fSafe.Enter;
-    try
+  fSafe.Enter;
+  try
+    i := ProcessIndex(aProcessID);
+    if i>=0 then begin
       with fProcess[i] do
         aData := Data[fDataIndex];
-    finally
-      fSafe.Leave;
+      result := aData.TimeStamp<>0;
+    end else begin
+      FillCharFast(aData,SizeOf(aData),0);
+      result := false;
     end;
-    result := aData.TimeStamp<>0;
-  end else begin
-    FillCharFast(aData,SizeOf(aData),0);
-    result := false;
+  finally
+    fSafe.Leave;
   end;
 end;
 
@@ -61763,10 +62028,10 @@ end;
 function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
 var i,n,last: integer;
 begin
-  i := ProcessIndex(aProcessID);
-  if i>=0 then begin
-    fSafe.Enter;
-    try
+  fSafe.Enter;
+  try
+    i := ProcessIndex(aProcessID);
+    if i>=0 then
       with fProcess[i] do begin
         n := length(Data);
         last := n-1;
@@ -61784,12 +62049,12 @@ begin
             break;
           end;
         end;
-      end;
-    finally
-      fSafe.Leave;
-    end;
-  end else
-    result := nil;
+      end
+    else
+      result := nil;
+  finally
+    fSafe.Leave;
+  end;
 end;
 
 function TSystemUse.History(aProcessID,aDepth: integer): TSingleDynArray;

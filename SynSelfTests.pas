@@ -179,6 +179,7 @@ uses
   dddInfraRepoUser,
   ECCProcess,
 {$endif DELPHI5OROLDER}
+  SynProtoRTSPHTTP,
 {$ifdef TEST_REGEXP}
   SynSQLite3RegEx,
 {$endif TEST_REGEXP}
@@ -524,6 +525,12 @@ type
     procedure ECDHEStreamProtocol;
   end;
 
+  /// this test case will validate several low-level protocols
+  TTestProtocols = class(TSynTestCase)
+  published
+    /// RTSP over HTTP, as implemented in SynProtoRTSPHTTP unit
+    procedure RTSPOverHTTP;
+  end;
 
 {$ifdef MSWINDOWS}
 {$ifndef LVCL}
@@ -16068,6 +16075,18 @@ end;
 
 {$endif DELPHI5OROLDER}
 
+{ TTestProtocols }
+
+procedure TTestProtocols.RTSPOverHTTP;
+var proxy: TRTSPOverHTTPServer;
+begin
+  proxy := TRTSPOverHTTPServer.Create('127.0.0.1','3999','3998',TSynLog,nil,nil);
+  try
+    proxy.RegressionTests(self,100,10);
+  finally
+    proxy.Free;
+  end;
+end;
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);

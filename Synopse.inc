@@ -70,7 +70,7 @@
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
     https://synopse.info/forum/viewtopic.php?id=1394
   - enhanced FPC compatibility
-  - now handles Delphi XE3, XE4, XE5, XE6, XE7 and XE8 (32 and 64 bit)
+  - now handles Delphi XE3 and up (32 and 64 bit)
 
 }
 
@@ -127,12 +127,12 @@
 // thread name: to be defined if you have issues when debugging your application
 
 {.$define USELOCKERDEBUG}
-// by default, some IAutoLocker instances would use TAutoLocker, unless this 
+// by default, some IAutoLocker instances would use TAutoLocker, unless this
 // conditional is defined to use more verbose TAutoLockerDebug
 // (may be used for race condition debugging, in multi-threaded apps)
 
 {.$define OLDTEXTWRITERFORMAT}
-// force TTextWriter.Add(Format) to handle the alternate $ % tags
+// force TTextWriter.Add(Format) to handle the alternate deprecated $ % tags
 
 {.$define OPT4AMD}
 // you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
@@ -156,7 +156,6 @@
     http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
   {$define UNDIRECTDYNARRAY}
 {$endif}
-
 
 {$define INCLUDE_FTS3}
 // define this if you want to include the FTS3/FTS4 feature into the library
@@ -223,13 +222,9 @@
     {$define FPC_OLDRTTI}
   {$endif}
 
-  {.$define FPCSQLITE3STATIC}
-  // allow static linking of the SQlite3 engine (including crypto) to the project
-  // -> enabled to support static-linked SQLite3 engine, after retrieval of
-  // the needed .o files from https://synopse.info/files/sqlite3fpc.7z
+  // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
+  // -> expect *.o files download from https://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
-  // -> only available for Win32 and Linux32 platforms by now
-
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
     {$define FPCSQLITE3STATIC} // we supply Win32 .obj
@@ -250,7 +245,7 @@
   {$endif}
 
   {$ifdef ANDROID}
-    {$define LINUX}
+    {$define LINUX} // a Linux-based system
   {$endif}
 
   {$ifdef BSD}
@@ -371,8 +366,9 @@
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
+        {$define LINUXNOTBSD}     // e.g. to disable epoll API
       {$else}
-      Kylix1/2 are unsupported
+      Kylix1/2 or Delphi Tokyo/ARC are unsupported
       {$ifend}
     {$else}
       {$ifdef VER140}
@@ -387,6 +383,9 @@
         {$warn UNSAFE_TYPE OFF}
         {$warn UNSAFE_CAST OFF}
         {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
+      {$endif}
+      {$ifdef USEPACKAGES}
+        {$undef DOPATCHTRTL}
       {$endif}
     {$endif LINUX}
     {$if CompilerVersion >= 17}
@@ -464,6 +463,10 @@
     {$if CompilerVersion >= 32.0}
       {$define ISDELPHI102}
     {$ifend}
+    {$ifopt O-} // if we don't expect fast code, don't optimize the framework
+      {$undef ENHANCEDRTL}
+      {$undef DOPATCHTRTL}
+    {$endif}
   {$ELSE}
     // Delphi 5 or older
     {$define DELPHI6OROLDER}
@@ -532,29 +535,19 @@
   {$define SQLITE3_FASTCALL}
   {$endif}
 {$else}
+  {.$define SQLITE3_FASTCALL}
   // undefined by default: BCC32 -pr fastcall (=Delphi resgister) is broken
   // because of issues with BCC32 itself, or some obfuscated calls in source?
   // -> allow to use external SQlite3 libraries in addition to static version
-  {.$define SQLITE3_FASTCALL}
 {$endif}
 
 {$ifdef FPC}
-  {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional
+  {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
-  // Only Win32+Linux32 do support static linked library yet with Delphi
+  // Only Win32+Linux32 do support static linked library yet with Delphi/Kylix
   {$ifdef CPU64}
-    {$define NOSQLITE3STATIC}
-  {$endif}
-{$endif}
-{$ifdef ANDROID}
-  {$define NOSQLITE3STATIC}
-{$endif}
-{$ifdef BSD}
-  {$ifdef Darwin}
-  {$else}
-    // not yet sure if needed, but it works !
     {$define NOSQLITE3STATIC}
   {$endif}
 {$endif}
@@ -569,17 +562,14 @@
 // -> to be used only for internal debugging
 
 {$ifdef MSWINDOWS}
-  /// define this to publish TWinINet / TWinHttp / TWinHttpAPI classes
-  // and TSQLHttpClientWinINet / TSQLHttpClientWinHTTP classes 
-  {$define USEWININET}
+  {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
   {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
-  {.$define USELIBCURL}     // for testing under Windows (no benefit vs WinHTTP)
+  {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
 {$else}
-  // http.sys server is Windows-specific
-  {$define ONLYUSEHTTPSOCKET}
+  {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
   {$ifndef ANDROID}
-  // cross-platform libcurl has a great API -> TCurlHttp and TSQLHttpClientCurl
-  {$define USELIBCURL}
+    // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
+    {$define USELIBCURL}
   {$endif}
 {$endif}
 

@@ -2028,6 +2028,7 @@ var
   decrypt: TECCDecrypt;
   hash: THash256;
   valid: TECCValidity;
+  issuer: TECCCertificateIssuer;
   privok, jsonok: boolean;
 begin
   with ExeVersion do
@@ -2046,7 +2047,14 @@ begin
     temp := CryptDataForCurrentUser(secret, aDPAPI, false);
     priv := TECCCertificateSecret.Create;
     try
-      privok := priv.LoadFromSecureBinary(temp, aSecretPass, 100);
+      result := eaInvalidSecret;      
+      {$ifdef ENHANCEDRTL} {$ifdef VER150}
+      if crc32c($D26BE33F,@ECCAuthorize,14)<>$29743A4B then
+        exit; // avoid stubbing (Delphi 7 ERTL only - just to show how it works)
+      {$endif} {$endif}
+      ECCIssuer(ExeVersion.User,Issuer);
+      privok := priv.LoadFromSecureBinary(temp, aSecretPass, 100) and
+        IsEqual(priv.Content.Signed.Issuer, Issuer);
       if aSecretInfo <> nil then
         aSecretInfo^ := priv.Content.Signed;
       if not privok or not ECCCheckDate(priv.Content) then begin
@@ -2059,7 +2067,6 @@ begin
         finally
           new.Free;
         end;
-        result := eaInvalidSecret;
         exit;
       end;
       result := eaMissingUnlockFile;

@@ -220,13 +220,6 @@ unit SynCrtSock;
 
 interface
 
-{.$define DEBUGAPI}
-{.$define DEBUG23}
-{$ifdef DEBUG2}
-{.$define DEBUG}
-{$endif}
-
-
 uses
 {$ifdef MSWINDOWS}
   Windows,
@@ -240,14 +233,15 @@ uses
   Sockets,
   SynFPCSock,
   SynFPCLinux,
+  BaseUnix, // for fpgetrlimit/fpsetrlimit
   {$else}
   {$ifndef DELPHI5OROLDER}
   Types,
   {$endif}
   {$endif}
   {$ifdef KYLIX3}
-  LibC,
   KernelIoctl, // for IoctlSocket/ioctl FION* constants
+  LibC,
   SynFPCSock,  // shared with Kylix
   SynKylix,
   {$endif}
@@ -413,6 +407,7 @@ type
     // updated during UDP connection, accessed via PeerAddress/PeerPort
     fPeerAddr: TSockAddr;
     procedure SetInt32OptionByIndex(OptName, OptVal: integer); virtual;
+    procedure AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
   public
     /// common initialization of all constructors
     // - do not call directly, but use Open / Bind constructors instead
@@ -441,6 +436,16 @@ type
     // - use rather SockSend() + SockSendFlush to send headers at once e.g.
     // since writeln(SockOut^,..) flush buffer each time
     procedure CreateSockOut(OutputBufferSize: Integer=1024);
+    /// finalize SockIn receiving buffer
+    // - you may call this method when you are sure that you don't need the
+    // input buffering feature on this connection any more (e.g. after having
+    // parsed the HTTP header, then rely on direct socket comunication)
+    procedure CloseSockIn;
+    /// finalize SockOut receiving buffer
+    // - you may call this method when you are sure that you don't need the
+    // output buffering feature on this connection any more (e.g. after having
+    // parsed the HTTP header, then rely on direct socket comunication)
+    procedure CloseSockOut;
     /// close and shutdown the connection (called from Destroy)
     procedure Close;
     /// close the opened socket, and corresponding SockIn/SockOut
@@ -520,6 +525,13 @@ type
     // - bypass the SndBuf or SockOut^ buffers
     // - raw Data is sent directly to OS: no CR/CRLF is appened to the block
     procedure Write(const Data: SockString);
+    /// direct accept an new incoming connection on a bound socket
+    // - instance should have been setup as a server via a previous Bind() call
+    // - returns nil on error or a ResultClass instance on success
+    // - if ResultClass is nil, will return a plain TCrtSocket, but you may
+    // specify e.g. THttpServerSocket if you expect incoming HTTP requests  
+    function AcceptIncoming(RemoteIP: PSockString=nil;
+      ResultClass: TCrtSocketClass=nil): TCrtSocket;
     /// remote IP address of the last packet received (SocketLayer=slUDP only)
     function PeerAddress: SockString;
     /// remote IP port of the last packet received (SocketLayer=slUDP only)
@@ -625,10 +637,6 @@ type
     /// same as HeaderValue('Content-Encoding'), but retrieved during Request
     // and mapped into the fCompress[] array
     fContentCompress: integer;
-    /// retrieve the HTTP headers into Headers[] and fill most properties below
-    procedure GetHeader;
-    /// retrieve the HTTP body (after uncompression if necessary) into Content
-    procedure GetBody;
     /// compress the data, adding corresponding headers via SockSend()
     // - always add a 'Content-Length: ' header entry (even if length=0)
     // - e.g. 'Content-Encoding: synlz' header if compressed using synlz
@@ -661,6 +669,10 @@ type
     ConnectionClose: boolean;
     /// same as HeaderValue('Connection')='Upgrade', but retrieved during Request
     ConnectionUpgrade: boolean;
+    /// retrieve the HTTP headers into Headers[] and fill most properties below
+    procedure GetHeader;
+    /// retrieve the HTTP body (after uncompression if necessary) into Content
+    procedure GetBody;
     /// add an header entry, returning the just entered entry index in Headers[]
     function HeaderAdd(const aValue: SockString): integer;
     /// set all Header values at once, from CRLF delimited text
@@ -1944,7 +1956,8 @@ function HttpGet(const aURI: SockString; const inHeaders: SockString;
 function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString=nil): SockString;
 
 /// send some data to a remote web server, using the HTTP/1.1 protocol and POST method
-function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString=nil): boolean;
 
 const
   /// the layout of TSMTPConnection.FromText method
@@ -2055,6 +2068,22 @@ function GetIPAddresses(PublicOnly: boolean = false): TSockStringDynArray;
 // - may be used to enumerate all adapters
 function GetIPAddressesText(const Sep: SockString = ' ';
   PublicOnly: boolean = false): SockString;
+
+{$else}
+
+/// returns how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit, false for the current process
+// - returns -1 if the getrlimit() API call failed
+function GetFileOpenLimit(hard: boolean=false): integer;
+
+/// changes how many files could be opened at once on this POSIX system
+// - hard=true is for the maximum allowed limit (requires root priviledges),
+// false for the current process
+// - returns the new value set (may not match the expected max value on error)
+// - returns -1 if the getrlimit().setrlimit() API calls failed
+// - for instance, to set the limit of the current process to its highest value:
+// ! SetFileOpenLimit(GetFileOpenLimit(true));
+function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
 
 {$endif MSWINDOWS}
 
@@ -2171,21 +2200,23 @@ type
 function PollSocketClass: TPollSocketClass;
 
 type
-{$ifdef MSWINDOWS}
+  {$ifdef MSWINDOWS}
   /// socket polling via Windows' Select() API
   // - under Windows, Select() handles up to 64 TSocket, and is available
   // in Windows XP, whereas WSAPoll() is available only since Vista
   // - under Linux, select() is very limited, so poll/epoll APIs are to be used
-  // - you shoud not use this class, which can be very slow when tracking
-  // a lot of connections
+  // - in practice, TPollSocketSelect is slighlty FASTER than TPollSocketPoll
+  // when tracking a lot of connections (at least under Windows): WSAPoll()
+  // seems to be just an emulation API - very disapointing :(
   TPollSocketSelect = class(TPollSocketAbstract)
   protected
-    fSubscription: array of record
+    fHighestSocket: integer;
+    fRead: TFDSet;
+    fWrite: TFDSet;
+    fTag: array[0..FD_SETSIZE-1] of record
       socket: TSocket;
       tag: TPollSocketTag;
-      events: TPollSocketEvents;
     end;
-    fHighestSocket: integer;
   public
     /// initialize the polling via creating an epoll file descriptor
     constructor Create; override;
@@ -2205,15 +2236,16 @@ type
     function WaitForModified(out results: TPollSocketResults;
       timeoutMS: integer): integer; override;
   end;
-{$endif MSWINDOWS}
+  {$endif MSWINDOWS}
 
   /// socket polling via poll/WSAPoll API
   // - direct call of the Linux/POSIX poll() API, or Windows WSAPoll() API
   TPollSocketPoll = class(TPollSocketAbstract)
   protected
-    fFD: TPollFDDynArray;
+    fFD: TPollFDDynArray; // fd=-1 for ignored fields
     fTags: array of TPollSocketTag;
-    fFDCount: integer; // socket := -1 for ignored fields
+    fFDCount: integer;
+    procedure FDVacuum;
   public
     /// initialize the polling using poll/WSAPoll API
     constructor Create; override;
@@ -2234,7 +2266,7 @@ type
       timeoutMS: integer): integer; override;
   end;
 
-{$ifdef LINUXNOTBSD}
+  {$ifdef LINUXNOTBSD}
   /// socket polling via Linux epoll optimized API
   // - not available under Windows or BSD/Darwin
   // - direct call of the epoll API in level-triggered (LT) mode
@@ -2270,7 +2302,7 @@ type
     /// read-only access to the low-level epoll_create file descriptor
     property EPFD: integer read fEPFD;
   end;
-{$endif LINUXNOTBSD}
+  {$endif LINUXNOTBSD}
 
 type
   {$M+}
@@ -2294,6 +2326,11 @@ type
     /// initialize the sockets polling
     // - you can specify the TPollSocketAbsract class to be used, if the
     // default is not the one expected
+    // - under Linux/POSIX, will set the open files maximum number for the
+    // current process to match the system hard limit: if your system has a
+    // low "ulimit -H -n" value, you may add the following line in your
+    // /etc/limits.conf or /etc/security/limits.conf file:
+    // $ * hard nofile 65535
     constructor Create(aPollClass: TPollSocketClass=nil);
     /// finalize the sockets polling, and release all used memory
     destructor Destroy; override;
@@ -2323,6 +2360,8 @@ type
     function GetOneWithinPending(out notif: TPollSocketResult): boolean;
     /// notify any GetOne waiting method to stop its polling loop
     procedure Terminate;
+    /// the actual polling class used to track socket state changes 
+    property PollClass: TPollSocketClass read fPollClass;
     /// set to true by the Terminate method
     property Terminated: boolean read fTerminated;
   published
@@ -2363,13 +2402,16 @@ type
   // and fWrite will be used to poll output state and send it asynchronously
   TPollAsynchSocketsOptions = set of (paoWritePollOnly);
 
+  /// let TPollAsynchSockets.OnRead shutdown the socket if needed
+  TPollAsynchSocketOnRead = (sorContinue, sorClose);
+
   {$M+}
   /// read/write buffer-oriented process of multiple non-blocking connections
   // - to be used e.g. for stream protocols (e.g. WebSockets or IoT communication)
   // - assigned sockets will be set in non-blocking mode, so that polling will
   // work as expected: you should then never use direclty the socket (e.g. via
   // blocking TCrtSocket), but rely on this class for asynchronous process:
-  // OnRead overriden method will receive all incoming data from input buffer,
+  // OnRead() overriden method will receive all incoming data from input buffer,
   // and Write() should be called to add some data to asynchronous output buffer
   // - connections are identified as TObject instances, which should hold a
   // TPollSocketsSlot record as private values for the polling process
@@ -2383,19 +2425,23 @@ type
   protected
     fRead: TPollSockets;
     fWrite: TPollSockets;
+    fReadCount: integer;
+    fWriteCount: integer;
     fReadBytes: Int64;
     fWriteBytes: Int64;
     fProcessing: integer;
     fOptions: TPollAsynchSocketsOptions;
     function GetCount: integer;
-    // extract frames from slot.readbuf, and handle them - false to close socket
-    function OnRead(connection: TObject): boolean; virtual; abstract;
+    // return low-level socket information from connection instance
+    function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
+    // extract frames from slot.readbuf, and handle them
+    function OnRead(connection: TObject): TPollAsynchSocketOnRead; virtual; abstract;
+    // called when slot.writebuf has been sent through the socket
+    procedure AfterWrite(connection: TObject); virtual; abstract;
     // pseClosed: should do connection.free - Stop() has been called (socket=0)
     procedure OnClose(connection: TObject); virtual; abstract;
     // pseError: return false to close socket and connection (calling OnClose)
     function OnError(connection: TObject; events: TPollSocketEvents): boolean; virtual; abstract;
-    // return low-level socket information from connection instance
-    function SlotFromConnection(connection: TObject): PPollSocketsSlot; virtual; abstract;
   public
     /// initialize the read/write sockets polling
     // - fRead and fWrite TPollSocketsBuffer instances will track pseRead or
@@ -2434,15 +2480,23 @@ type
     procedure ProcessWrite(timeoutMS: integer);
     /// notify internal socket polls to stop their polling loop ASAP
     procedure Terminate(waitforMS: integer);
+    /// low-level access to the polling class used for incoming data
+    property PollRead: TPollSockets read fRead;
+    /// low-level access to the polling class used for outgoind data
+    property PollWrite: TPollSockets write fWrite;
     /// some processing options
     property Options: TPollAsynchSocketsOptions read fOptions write fOptions;
   published
-    /// how many clients are currently managed by this instance
+    /// how many connections are currently managed by this instance
     property Count: integer read GetCount;
+    /// how many times data has been received by this instance
+    property ReadCount: integer read fReadCount;
+    /// how many times data has been sent by this instance
+    property WriteCount: integer read fWriteCount;
     /// how many data bytes have been received by this instance
     property ReadBytes: Int64 read fReadBytes;
     /// how many data bytes have been sent by this instance
-    property WriteBytes: Int64 write fWriteBytes;
+    property WriteBytes: Int64 read fWriteBytes;
   end;
   {$M-}
 
@@ -3250,6 +3304,48 @@ begin
     IPAddressesText[PublicOnly] := result;
 end;
 
+{$else}
+
+function GetFileOpenLimit(hard: boolean=false): integer;
+var limit: RLIMIT;
+begin
+  {$ifdef FPC}
+  if fpgetrlimit(RLIMIT_NOFILE,@limit)=0 then
+  {$else}
+  if getrlimit(RLIMIT_NOFILE,limit)=0 then
+  {$endif}
+    if hard then
+      result := limit.rlim_max else
+      result := limit.rlim_cur else
+    result := -1;
+end;
+
+function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
+var limit: RLIMIT;
+begin
+  result := -1;
+  {$ifdef FPC}
+  if fpgetrlimit(RLIMIT_NOFILE,@limit)<>0 then
+  {$else}
+  if getrlimit(RLIMIT_NOFILE,limit)<>0 then
+  {$endif}
+    exit;
+  if (hard and (integer(limit.rlim_max)=max)) or
+     (not hard and (integer(limit.rlim_cur)=max)) then begin
+    result := max; // already to the expected value
+    exit;
+  end;
+  if hard then
+    limit.rlim_max := max else
+    limit.rlim_cur := max;
+  {$ifdef FPC}
+  if fpsetrlimit(RLIMIT_NOFILE,@limit)=0 then
+  {$else}
+  if setrlimit(RLIMIT_NOFILE,limit)=0 then
+  {$endif}
+    result := GetFileOpenLimit(hard);
+end;
+
 {$endif MSWINDOWS}
 
 {$ifndef NOXPOWEREDNAME}
@@ -3631,6 +3727,15 @@ begin
   SetInt32Option(Sock,OptName,OptVal);
 end;
 
+procedure TCrtSocket.AcceptRequest(aClientSock: TSocket; aRemoteIP: PSockString);
+begin
+  CreateSockIn; // use SockIn by default if not already initialized: 2x faster
+  OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
+  Linger := 5; // should remain open for 5 seconds after a closesocket() call
+  if aRemoteIP<>nil then
+    aRemoteIP^ := GetRemoteIP(aClientSock);
+end;
+
 procedure TCrtSocket.OpenBind(const aServer, aPort: SockString;
   doBind: boolean; aSock: integer=-1; aLayer: TCrtSocketLayer=cslTCP);
 const BINDTXT: array[boolean] of string = ('open','bind');
@@ -3736,6 +3841,23 @@ begin
   SndLow(pointer(Data),length(Data));
 end;
 
+function TCrtSocket.AcceptIncoming(RemoteIP: PSockString;
+  ResultClass: TCrtSocketClass): TCrtSocket;
+var client: TSocket;
+    sin: TVarSin;
+begin
+  result := nil;
+  if (self=nil) or (Sock<=0) then
+    exit;
+  client := Accept(Sock,sin);
+  if client<=0 then
+    exit;
+  if ResultClass=nil then
+    ResultClass := TCrtSocket;
+  result := ResultClass.Create;
+  result.AcceptRequest(client,RemoteIP);
+end;
+
 function TCrtSocket.SockInRead(Content: PAnsiChar; Length: integer;
   UseOnlySockIn: boolean): integer;
 var len,res: integer;
@@ -3803,10 +3925,8 @@ end;
 destructor TCrtSocket.Destroy;
 begin
   Close;
-  if SockIn<>nil then
-    Freemem(SockIn);
-  if SockOut<>nil then
-    Freemem(SockOut);
+  CloseSockIn;
+  CloseSockOut;
   inherited;
 end;
 
@@ -3879,6 +3999,22 @@ begin
   SetLineBreakStyle(SockOut^,tlbsCRLF); // force e.g. for Linux platforms
   {$endif}
   Rewrite(SockOut^);
+end;
+
+procedure TCrtSocket.CloseSockIn;
+begin
+  if (self<>nil) and (fSockIn<>nil) then begin
+    Freemem(fSockIn);
+    fSockIn := nil;
+  end;
+end;
+
+procedure TCrtSocket.CloseSockOut;
+begin
+  if (self<>nil) and (fSockOut<>nil) then begin
+    Freemem(fSockOut);
+    fSockOut := nil;
+  end;
 end;
 
 procedure TCrtSocket.SockRecv(Buffer: pointer; Length: integer);
@@ -4224,8 +4360,6 @@ begin
     GetHeader; // read all other headers
     if not IdemPChar(pointer(method),'HEAD') then
       GetBody; // get content if necessary (not HEAD method)
-{$ifdef DEBUGAPI}writeln('? ',Command,' ContentLength=',length(Content));
-    if result<>STATUS_SUCCESS then writeln('? ',Content,#13#10,HeaderGetText); {$endif}
   except
     on Exception do
       DoRetry(STATUS_NOTFOUND);
@@ -4296,7 +4430,7 @@ var URI: TURI;
 begin
   if URI.From(aURI) then
     if URI.Https then
-      {$ifdef MSWINDOWS}
+      {$ifdef USEWININET}
       result := TWinHTTP.Get(aURI,inHeaders,true,outHeaders) else
       {$else}
       {$ifdef USELIBCURL}
@@ -4304,7 +4438,7 @@ begin
       {$else}
       raise ECrtSocket.CreateFmt('https is not supported by HttpGet(%s)',[aURI]) else
       {$endif}
-      {$endif}
+      {$endif USEWININET}
       result := HttpGet(URI.Server,URI.Port,URI.Address,inHeaders,outHeaders) else
     result := '';
   {$ifdef LINUX}
@@ -4328,7 +4462,8 @@ begin
     end;
 end;
 
-function HttpPost(const server, port: SockString; const url, Data, DataType: SockString): boolean;
+function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
+  outData: PSockString): boolean;
 var Http: THttpClientSocket;
 begin
   result := false;
@@ -4337,6 +4472,8 @@ begin
   try
     result := Http.Post(url,Data,DataType) in
       [STATUS_SUCCESS,STATUS_CREATED,STATUS_NOCONTENT];
+    if outdata<>nil then
+      outdata^ := Http.Content;
   finally
     Http.Free;
   end;
@@ -4625,7 +4762,6 @@ var ClientSock: TSocket;
     ClientCrtSock: THttpServerSocket;
     {$endif}
     i: integer;
-label abort;
 begin
   // THttpServerGeneric thread preparation: launch any OnHttpThreadStart event
   NotifyThreadStart(self);
@@ -4641,7 +4777,7 @@ begin
           continue;
         end;
       if Terminated or (Sock=nil) then begin
-abort:  DirectShutdown(ClientSock);
+        DirectShutdown(ClientSock);
         break; // don't accept input if server is down
       end;
       OnConnect;
@@ -4670,7 +4806,7 @@ abort:  DirectShutdown(ClientSock);
               exit; // the thread pool acquired the client sock
           end;
           inc(fThreadPoolContentionAbortCount);
-          goto abort; // 1500*20 = 30 seconds timeout
+          DirectShutdown(ClientSock); // 1500*20 = 30 seconds timeout
         end;
       end else
         // default implementation creates one thread for each incoming socket
@@ -4994,7 +5130,6 @@ var Line: SockString; // 32 bits chunk length in hexa
     Len, LContent, Error: integer;
 begin
   fBodyRetrieved := true;
-{$ifdef DEBUG23}system.writeln('GetBody ContentLength=',ContentLength);{$endif}
   Content := '';
   {$I-}
   // direct read bytes, as indicated by Content-Length or Chunked
@@ -5072,7 +5207,6 @@ begin
       SetLength(Headers,n+10);
     Headers[n] := s;
     inc(n);
-    {$ifdef DEBUG23}system.Writeln(ClassName,'.HeaderIn ',s);{$endif}
     P := pointer(s);
     if IdemPChar(P,'CONTENT-') then begin
       if IdemPChar(P+8,'LENGTH:') then
@@ -5221,17 +5355,14 @@ end;
 
 procedure THttpServerSocket.InitRequest(aClientSock: TSocket);
 begin
-  CreateSockIn; // use SockIn by default if not already initialized: 2x faster
-  OpenBind('','',false,aClientSock); // set the ACCEPTed aClientSock
-  Linger := 5; // should remain open for 5 seconds after a closesocket() call
-  fRemoteIP := GetRemoteIP(aClientSock);
+  AcceptRequest(aClientSock, @fRemoteIP);
 end;
 
 function THttpServerSocket.HeaderGetText: SockString;
 begin
   result := inherited HeaderGetText;
-  if RemoteIP<>'' then
-    result := result+'RemoteIP: '+RemoteIP+#13#10;
+  if fRemoteIP<>'' then
+    result := result+'RemoteIP: '+fRemoteIP+#13#10;
 end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
@@ -5330,6 +5461,7 @@ begin
   WSAEWOULDBLOCK:  result := 'WSAEWOULDBLOCK';
   WSAECONNABORTED: result := 'WSAECONNABORTED';
   WSAECONNRESET:   result := 'WSAECONNRESET';
+  WSAEMFILE:       result := 'WSAEMFILE';
   else result := '';
   end;
   result := Format('%d %s [%s]',[Error,result,SysErrorMessage(Error)]);
@@ -8680,17 +8812,24 @@ end;
 
 { TPollSocketAbstract }
 
+{.$define USEWSAPOLL}
+// you may try it - but seems slightly SLOWER under Windows 7
+
 function PollSocketClass: TPollSocketClass;
 begin
-  {$ifdef LINUXNOTBSD}
+{$ifdef LINUXNOTBSD}
   result := TPollSocketEpoll; // the preferred way for our purpose
-  {$else}
+{$else}
   {$ifdef MSWINDOWS}
-  if Win32MajorVersion<6 then // WSAPoll() not available before Vista
-    result := TPollSocketSelect else
-  {$endif}
-    result := TPollSocketPoll; // available on all POSIX systems
-  {$endif LINUXNOTBSD}
+  {$ifdef USEWSAPOLL}
+  if Win32MajorVersion>=6 then // WSAPoll() not available before Vista
+    result := TPollSocketPoll else
+  {$endif USEWSAPOLL}
+    result := TPollSocketSelect; // Select() is FASTER than WSAPoll() :(
+  {$else}
+  result := TPollSocketPoll; // available on all POSIX systems
+  {$endif MSWINDOWS}
+{$endif LINUXNOTBSD}
 end;
 
 constructor TPollSocketAbstract.Create;
@@ -8720,11 +8859,12 @@ begin
   result := false;
   if (self=nil) or (socket=0) or (byte(events)=0) or (fCount=fMaxSockets) then
     exit;
-  if fSubscription=nil then
-    SetLength(fSubscription,fMaxSockets);
-  fSubscription[fCount].socket := socket;
-  fSubscription[fCount].events := events;
-  fSubscription[fCount].tag := tag;
+  if pseRead in events then
+    FD_SET(socket, fRead);
+  if pseWrite in events then
+    FD_SET(socket, fWrite);
+  fTag[fCount].socket := socket;
+  fTag[fCount].tag := tag;
   inc(fCount);
   if socket>fHighestSocket then
     fHighestSocket := socket;
@@ -8737,10 +8877,14 @@ begin
   result := false;
   if (self<>nil) and (socket<>0) then
     for i := 0 to fCount-1 do
-      if fSubscription[i].socket=socket then begin
+      if fTag[i].socket=socket then begin
+        FD_CLR(socket,fRead);
+        FD_CLR(socket,fWrite);
         dec(fCount);
         if i<fCount then
-          move(fSubscription[i+1],fSubscription[i],(fCount-i)*sizeof(fSubscription[i]));
+          move(fTag[i+1],fTag[i],(fCount-i)*sizeof(fTag[i]));
+        if fCount=0 then
+          fHighestSocket := 0;
         result := true;
         exit;
       end;
@@ -8749,59 +8893,46 @@ end;
 function TPollSocketSelect.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
 var tv: TTimeVal;
-    timeout: PTimeVal;
-    rd,wr,er: TFDSet;
-    rdp,wrp,erp: PFDSet;
+    rd,wr: TFDSet;
+    rdp,wrp: PFDSet;
     ev: TPollSocketEvents;
     i: integer;
-  procedure Add(out s: TFDSet; ev: TPollSocketEvents; out p: PFDSet);
-  var i: integer;
-  begin
-    p := nil;
-    s.fd_count := 0;
-    for i := 0 to fCount-1 do
-      with fSubscription[i] do
-      if byte(events) and byte(ev)<>0 then begin
-        s.fd_array[s.fd_count] := socket;
-        inc(s.fd_count);
-        p := @s;
-      end;
-  end;
+    tmp: array[0..FD_SETSIZE-1] of TPollSocketResult;
 begin
   result := -1; // error
   if (self=nil) or (fCount=0) then
     exit;
-  Add(rd,[pseRead],rdp);
-  Add(wr,[pseWrite],wrp);
-  Add(er,[pseError,pseClosed],erp);
-  if timeoutMS=0 then
-    timeout := nil else begin
-    tv.tv_usec := timeoutMS*1000;
-    tv.tv_sec := 0;
-    timeout := @tv;
-  end;
-  result := Select(fHighestSocket+1,rdp,wrp,erp,timeout);
+  if fRead.fd_count>0 then begin
+    rd := fRead;
+    rdp := @rd;
+  end else
+    rdp := nil;
+  if fWrite.fd_count>0 then begin
+    wr := fWrite;
+    wrp := @wr;
+  end else
+    wrp := nil;
+  tv.tv_usec := timeoutMS*1000;
+  tv.tv_sec := 0;
+  result := Select(fHighestSocket+1,rdp,wrp,nil,@tv);
   if result<=0 then
     exit;
   result := 0;
-  SetLength(results,fCount);
-  for i := 0 to fCount-1 do
-    with fSubscription[i] do begin
+  for i := 0 to fCount-1 do 
+    with fTag[i] do begin
       byte(ev) := 0;
       if (rdp<>nil) and FD_ISSET(socket,rd) then
         include(ev,pseRead);
       if (wrp<>nil) and FD_ISSET(socket,wr) then
         include(ev,pseWrite);
-      if (erp<>nil) and FD_ISSET(socket,er) then begin
-        include(ev,pseError);
-      end;
       if byte(ev)<>0 then begin
-        results[result].events := ev;
-        results[result].tag := tag;
+        tmp[result].events := ev;
+        tmp[result].tag := tag;
         inc(result);
       end;
     end;
   SetLength(results,result);
+  move(tmp,results[0],result*sizeof(tmp[0]));
 end;
 
 {$endif MSWINDOWS}
@@ -8812,13 +8943,16 @@ end;
 constructor TPollSocketPoll.Create;
 begin
   inherited Create;
-  fMaxSockets := 5000; // some arbitrary value
+  {$ifdef MSWINDOWS} // some practical values
+  fMaxSockets := 1024;
+  {$else}
+  fMaxSockets := 20000;
+  {$endif}
 end;
 
 function TPollSocketPoll.Subscribe(socket: TSocket;
   events: TPollSocketEvents; tag: TPollSocketTag): boolean;
-var i, n, e: integer;
-    P: ^TPollFD;
+var i, n, e, fd: integer;
 begin
   result := false;
   if (self=nil) or (socket=0) or (byte(events)=0) or (fCount=fMaxSockets) then
@@ -8828,53 +8962,78 @@ begin
     e := 0;
   if pseWrite in events then
     e := e or POLLOUT;
-  P := pointer(fFD);
-  for i := 1 to fCount do
-    if P^.fd=socket then // already subscribed
+  if fFDCount=fCount then begin // no void entry
+    for i := 0 to fFDCount-1 do
+      if fFD[i].fd=socket then  // already subscribed
+        exit;
+  end else
+  for i := 0 to fFDCount-1 do begin
+    fd := fFD[i].fd;
+    if fd=socket then  // already subscribed
       exit else
-    if P^.fd<0 then begin // found void entry
-      P^.fd := socket;
-      P^.events := e;
+    if fd<0 then begin // found void entry
+      with fFD[i] do begin
+        fd := socket;
+        events := e;
+        revents := 0;
+      end;
       inc(fCount);
       result := true;
       exit;
-    end else
-    inc(P);
+    end;
+  end;
   if fFDCount=length(fFD) then begin // add new entry to the array
     n := fFDCount+128+fFDCount shr 3;
+    if n>fMaxSockets then
+      n := fMaxSockets;
     SetLength(fFD,n);
     SetLength(fTags,n);
   end;
-  fFD[fFDCount].fd := socket;
-  fFD[fFDCount].events := e;
+  with fFD[fFDCount] do begin
+    fd := socket;
+    events := e;
+    revents := 0;
+  end;
   fTags[fFDCount] := tag;
   inc(fFDCount);
   inc(fCount);
   result := true;
 end;
 
+procedure TPollSocketPoll.FDVacuum;
+var n, i: integer;
+begin
+  n := 0;
+  for i := 0 to fFDCount-1 do
+    if fFD[i].fd>0 then begin
+      if i<>n then begin
+        fFD[n] := fFD[i];
+        fTags[n] := fTags[i];
+      end;
+      inc(n);
+    end;
+  fFDCount := n;
+end;
+
 function TPollSocketPoll.Unsubscribe(socket: TSocket): boolean;
 var i: integer;
-    P: ^TPollFD;
 begin
-  P := pointer(fFD);
   for i := 0 to fFDCount-1 do
-    if P^.fd=socket then  begin
-      P^.fd := -1; // mark entry as void
+    if fFD[i].fd=socket then  begin
+      fFD[i].fd := -1; // mark entry as void
       dec(fCount);
+      if fCount<=fFDCount shr 1 then
+        FDVacuum; // avoid too many void entries
       result := true;
       exit;
-    end else
-    inc(P);
+    end;
   result := false;
 end;
 
 function TPollSocketPoll.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
-var s: ^TPollFD;
-    d: ^TPollSocketResult;
-    e: TPollSocketEvents;
-    i, ev: integer;
+var e: TPollSocketEvents;
+    i, ev, d: integer;
 begin
   result := -1; // error
   if (self=nil) or (fCount=0) then
@@ -8883,10 +9042,10 @@ begin
   if result<=0 then
     exit;
   SetLength(results,result);
-  s := pointer(fFD);
-  d := pointer(results);
-  for i := 0 to result-1 do begin
-    ev := s^.revents;
+  d := 0;
+  for i := 0 to fFDCount-1 do
+  if fFD[i].fd>0 then begin
+    ev := fFD[i].revents;
     if ev<>0 then begin
       byte(e) := 0;
       if ev and POLLIN<>0 then
@@ -8897,13 +9056,14 @@ begin
         include(e,pseError);
       if ev and POLLHUP<>0 then
         include(e,pseClosed);
-      d^.events := e;
-      d^.tag := fTags[i];
+      results[d].events := e;
+      results[d].tag := fTags[i];
       inc(d);
-      s^.revents := 0; // reset result flags for reuse
+      fFD[i].revents := 0; // reset result flags for reuse
     end;
-    inc(s);
   end;
+  if d<>result then
+    raise ECrtSocket.CreateFmt('TPollSocketPoll: result=%d d=%d',[result,d]);
 end;
 
 
@@ -8958,9 +9118,7 @@ end;
 
 function TPollSocketEpoll.WaitForModified(out results: TPollSocketResults;
   timeoutMS: integer): integer;
-var s: ^TEPollEvent;
-    d: ^TPollSocketResult;
-    e: TPollSocketEvents;
+var e: TPollSocketEvents;
     i, ev: integer;
 begin
   result := -1; // error
@@ -8970,10 +9128,8 @@ begin
   if result<=0 then
     exit;
   SetLength(results,result);
-  s := pointer(fResults);
-  d := pointer(results);
-  for i := 1 to result do begin
-    ev := s^.events;
+  for i := 0 to result-1 do begin
+    ev := fResults[i].events;
     byte(e) := 0;
     if ev and EPOLLIN<>0 then
       include(e,pseRead);
@@ -8983,10 +9139,8 @@ begin
       include(e,pseError);
     if ev and EPOLLHUP<>0 then
       include(e,pseClosed);
-    d^.events := e;
-    d^.tag := TPollSocketTag(s^.data.ptr);
-    inc(s);
-    inc(d);
+    results[i].events := e;
+    results[i].tag := TPollSocketTag(fResults[i].data.ptr);
   end;
 end;
 
@@ -9003,6 +9157,9 @@ begin
   if aPollClass=nil then
     fPollClass := PollSocketClass else
     fPollClass := aPollClass;
+  {$ifndef MSWINDOWS}
+  SetFileOpenLimit(GetFileOpenLimit(true)); // set soft limit to hard value
+  {$endif MSWINDOWS}
 end;
 
 destructor TPollSockets.Destroy;
@@ -9249,8 +9406,7 @@ begin
         fWrite.Unsubscribe(slot.socket,TPollSocketTag(connection));
         result := true;
       finally
-        Shutdown(slot.socket,SHUT_WR);
-        CloseSocket(slot.socket);
+        DirectShutdown(slot.socket);
         slot.socket := 0;
       end;
   finally
@@ -9284,7 +9440,9 @@ end;
 function TPollAsynchSockets.WriteString(connection: TObject;
   const data: SockString): boolean;
 begin
-  result := Write(connection,pointer(data)^,length(data));
+  if self=nil then
+    result := false else
+    result := Write(connection,pointer(data)^,length(data));
 end;
 
 procedure AppendData(var buf: SockString; const data; datalen: integer);
@@ -9325,9 +9483,17 @@ begin
             res := AsynchSend(slot.socket,P,datalen);
             if res<=0 then
               break;
+            inc(fWriteCount);
+            inc(fWriteBytes,res);
             dec(datalen,res);
             if datalen=0 then begin
-              result := true;
+              try // notify everything written
+                AfterWrite(connection);
+                result := true;
+                exit;
+              except
+                result := false;
+              end;
               exit;
             end;
             inc(P,res);
@@ -9355,8 +9521,14 @@ var notif: TPollSocketResult;
     temp: array[0..$7fff] of byte; // read up to 32KB chunks
   procedure CloseConnection;
   begin
+    if connection=nil then
+      exit;
     Stop(connection); // will shutdown the socket
-    OnClose(connection); // do connection.Free
+    try
+      OnClose(connection); // do connection.Free
+    except
+      connection := nil;
+    end;
     slot := nil; // ignore pseClosed
   end;
 begin
@@ -9383,13 +9555,24 @@ begin
             if fRead.Terminated then
               exit;
             res := AsynchRecv(slot.socket,@temp,sizeof(temp));
-            if res<=0 then
+            if res<0 then       // error - probably "may block"
               break;
+            if res=0 then begin // socket closed -> abort
+              CloseConnection;
+              exit;
+            end;
             AppendData(slot.readbuf,temp,res);
             inc(added,res);
           until false;
-          if (added>0) and not OnRead(connection) then // false=close
-            CloseConnection;
+          if added>0 then
+            try
+              inc(fReadCount);
+              inc(fReadBytes,added);
+              if OnRead(connection)=sorClose then
+                CloseConnection;
+            except
+              CloseConnection; // any exception will force socket shutdown
+            end;
         finally
           slot.UnLock;
         end;
@@ -9435,14 +9618,21 @@ begin
             res := AsynchSend(slot.socket,buf,buflen);
             if res<=0 then
               break;
+            inc(fWriteCount);
             inc(sent,res);
             inc(buf,res);
             dec(buflen,res);
           until buflen=0;
+          inc(fWriteBytes,sent);
           delete(slot.writebuf,1,sent);
         end;
-        if slot.writebuf='' then // no data any more to be sent
+        if slot.writebuf='' then begin // no data any more to be sent
           fWrite.Unsubscribe(slot.socket,notif.tag);
+          try
+            AfterWrite(connection);
+          except
+          end;
+        end;
       finally
         slot.UnLock;
       end;
@@ -9453,7 +9643,6 @@ end;
 
 
 initialization
-  {$ifdef DEBUGAPI}{$ifdef MSWINDOWS}AllocConsole;{$endif}{$endif}
   {$ifdef MSWINDOWS}
   Assert(
     {$ifdef CPU64}
@@ -9484,6 +9673,12 @@ initialization
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
 
 finalization
+  {$ifdef USELIBCURL}
+  if curl.Module<>0 then begin
+    curl.global_cleanup;
+    FreeLibrary(curl.Module);
+  end;
+  {$endif USELIBCURL}
   if WsaDataOnce.wVersion<>0 then
   try
     {$ifdef MSWINDOWS}
@@ -9500,10 +9695,4 @@ finalization
   end;
   {$endif}
   DestroySocketInterface;
-  {$ifdef USELIBCURL}
-  if curl.Module<>0 then begin
-    curl.global_cleanup;
-    FreeLibrary(curl.Module);
-  end;
-  {$endif USELIBCURL}
 end.
