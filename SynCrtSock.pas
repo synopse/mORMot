@@ -3307,7 +3307,7 @@ end;
 {$else}
 
 function GetFileOpenLimit(hard: boolean=false): integer;
-var limit: PRLIMIT;
+var limit: TRLIMIT;
 begin
   {$ifdef FPC}
   if fpgetrlimit(RLIMIT_NOFILE,@limit)=0 then
@@ -3321,7 +3321,7 @@ begin
 end;
 
 function SetFileOpenLimit(max: integer; hard: boolean=false): integer;
-var limit: PRLIMIT;
+var limit: TRLIMIT;
 begin
   result := -1;
   {$ifdef FPC}
