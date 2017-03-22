@@ -61347,6 +61347,9 @@ begin
 end;
 
 procedure TSynBackgroundThreadMethodAbstract.ExecuteLoop;
+{$ifndef DELPHI5OROLDER}
+var E: TObject;
+{$endif}
 begin
   case FixedWaitFor(fProcessEvent,INFINITE) of
     wrSignaled:
@@ -61375,7 +61378,9 @@ begin
             fBackgroundException := ESynException.CreateUTF8(
               'Redirected %: "%"',[E,E.Message]);
           {$else}
-          fBackgroundException := AcquireExceptionObject;
+          E := AcquireExceptionObject;
+          if E.InheritsFrom(Exception) then
+            fBackgroundException := Exception(E);
           {$endif}
         end;
       finally

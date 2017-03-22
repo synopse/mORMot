@@ -13918,7 +13918,7 @@ var s: RawUTF8;
 {$endif}
 begin
   Check(Inst.I.Add(1,2)=3);
-  Check(Inst.I.Multiply($1111333344445555,$2222666677778888)=$e26accccbf257d28);
+  Check(Inst.I.Multiply($1111333,$222266667)=$24693E8DB170B85);
   Check(Inst.I.StackIntMultiply(1,2,3,4,5,6,7,8,9,10)=3628800);
   Check(Inst.I.StackFloatMultiply(1,2,3,4,5,6,7,8,9,10)=3628800);
   CheckSame(Inst.I.Subtract(23,20),3);
