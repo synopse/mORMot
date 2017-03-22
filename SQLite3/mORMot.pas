@@ -58956,7 +58956,9 @@ begin
             if optErrorOnMissingParam in Options then
               exit else     
               continue else // ignore and leave void value by default
-            Par := ParObjValues[a]; // value is to be retrieved from JSON object
+            Par := ParObjValues[a] else // value to be retrieved from JSON object
+          if Par=nil then
+            break; // premature end of ..] (ParObjValuesUsed=false)
         case ValueType of
         smvObject: begin
           Par := JSONToObject(fObjects[IndexVar],Par,valid,nil,JSONTOOBJECT_TOLERANTOPTIONS);
@@ -58985,7 +58987,7 @@ begin
         smvBoolean..smvWideString: begin
           Val := GetJSONField(Par,Par,@wasString,@EndOfObject,@ValLen);
           if (Val=nil) and (Par=nil) and (EndOfObject<>'}') then
-            exit;  // 'null' will set Val=nil and Par<>nil
+            exit;  // 'null': Val=nil and Par<>nil
           if (Val<>nil) and (wasString and not (vIsString in ValueKindAsm)) then
             exit;
           case ValueType of
