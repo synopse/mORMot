@@ -1,5 +1,13 @@
 program Project14Client;
 
+{$ifdef Linux}
+  {$ifdef FPC_CROSSCOMPILING}
+    {$linklib libc_nonshared.a}
+  {$endif}
+{$endif}
+
+{$I Synopse.inc}
+
 uses
   {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   Forms,
