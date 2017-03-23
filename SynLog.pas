@@ -978,7 +978,7 @@ type
     /// allows to identify the current thread with a textual representation
     // - would append an sllInfo entry with "SetThreadName ThreadID=Name" text
     // - entry would also be replicated at the begining of any rotated log file
-    procedure LogThreadName(const Name: RawUTF8);
+    procedure LogThreadName(const Name: RawUTF8; IgnoreIfAlreadySet: boolean=false);
     /// call this method to add some multi-line information to the log at a
     // specified level
     // - LinesToLog content will be added, one line per one line, delimited by
@@ -3821,11 +3821,13 @@ begin
     DoLog(LinesToLog);
 end;
 
-procedure TSynLog.LogThreadName(const Name: RawUTF8);
+procedure TSynLog.LogThreadName(const Name: RawUTF8; IgnoreIfAlreadySet: boolean);
 begin
   if (self<>nil) and (sllInfo in fFamily.fLevel) then
     if LogHeaderLock(sllInfo,false) then // inlined LogInternal
     try
+      if IgnoreIfAlreadySet and (fThreadContext^.ThreadName<>'') then
+        exit;
       fWriter.Add('SetThreadName %=%',[pointer(fThreadID),Name],twOnSameLine);
       fThreadContext^.ThreadName := Name;
     finally
