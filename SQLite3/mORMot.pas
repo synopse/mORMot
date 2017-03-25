@@ -4388,20 +4388,26 @@ type
   /// class-reference type (metaclass) of a TInterfacedCollection kind
   TInterfacedCollectionClass = class of TInterfacedCollection;
 
-  /// abstract TCollectionItem class, which will instantiate all its nested
-  // TPersistent/TSynPersistent class published properties, then release them when freed
+  /// abstract TCollectionItem class, which will instantiate all its nested class
+  // published properties, then release them (and any T*ObjArray) when freed
   // - could be used for gathering of TCollectionItem properties, e.g. for
   // Domain objects in DDD, especially for list of value objects
-  // - note that non published properties won't be instantiated
-  // - please take care that you will not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
+  // - consider using T*ObjArray dynamic array published properties in your
+  // value types instead of TCollection storage: T*ObjArray have a lower overhead
+  // and are easier to work with, once TJSONSerializer.RegisterObjArrayForJSON
+  // is called to register the T*ObjArray type 
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
   // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
   TCollectionItemAutoCreateFields = class(TCollectionItem)
   public
     /// this overriden constructor will instantiate all its nested
-    // TPersistent class published properties
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
     constructor Create(Collection: TCollection); override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
@@ -4411,44 +4417,51 @@ type
 
   /// abstract TPersistent class, which will instantiate all its nested TPersistent
   // class published properties, then release them (and any T*ObjArray) when freed
-  // - TSynAutoCreateFields is to be preferred in most cases, due to its lower overhead
-  // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you will not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
+  // - TSynAutoCreateFields is to be preferred in most cases, thanks to its
+  // lower overhead
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
   // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
   TPersistentAutoCreateFields = class(TPersistentWithCustomCreate)
   public
     /// this overriden constructor will instantiate all its nested
-    // TPersistent class published properties
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
     constructor Create; override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
   end;
 
   /// our own empowered TPersistentAutoCreateFields-like parent class
-  // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
-  // due a giant lock introduced to manage property name fixup resolution
-  // (which we won't use outside the VCL)
-  // - abstract class able with a virtual constructor, RTTI for published
-  // properties, and automatic memory management of all nested class
-  // published properties
+  // - this class is a perfect parent to store any data by value, e.g. DDD Value
+  // Objects, Entities or Aggregates
+  // - is defined as an abstract class able with a virtual constructor, RTTI
+  // for published properties, and automatic memory management of all nested
+  // class published properties: any class defined as a published property will
+  // be owned by this instance - i.e. with strong reference
   // - will also release any T*ObjArray dynamic array storage of persistents,
   // previously registered via TJSONSerializer.RegisterObjArrayForJSON()
-  // - this class is a perfect parent for any class storing data by value, e.g.
-  // DDD Value Objects, Entities or Aggregates
-  // - note that non published (e.g. public) properties won't be instantiated
-  // - please take care that you will not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
+  // - nested published classes (or T*ObjArray) don't need to inherit from
+  // TSynAutoCreateFields: they may be from any TPersistent/TSynPersistent type
+  // - note that non published (e.g. public) properties won't be instantiated,
+  // serialized, nor released - but may contain weak references to other classes
+  // - please take care that you will not create any endless recursion: you should
+  // ensure that at one level, nested published properties won't have any class
+  // instance refering to its owner (there is no weak reference - remember!)
   // - since the destructor will release all nested properties, you should
   // never store a reference to any of those nested instances if this owner
   // may be freed before
+  // - TPersistent/TPersistentAutoCreateFields have an unexpected speed overhead
+  // due a giant lock introduced to manage property name fixup resolution
+  // (which we won't use outside the VCL) - this class is definitively faster
   TSynAutoCreateFields = class(TSynPersistent)
   public
     /// this overriden constructor will instantiate all its nested
-    // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    // TPersistent/TSynPersistent/TSynAutoCreateFields published properties
     {$ifdef FPC_OR_PUREPASCAL}
     constructor Create; override;
     {$else}
@@ -4478,18 +4491,22 @@ type
 
   /// abstract TInterfacedObject class, which will instantiate all its nested
   // TPersistent/TSynPersistent published properties, then release them when freed
+  // - will handle automatic memory management of all nested class and T*ObjArray
+  // published properties: any class or T*ObjArray defined as a published
+  // property will be owned by this instance - i.e. with strong reference
+  // - non published properties (e.g. public) won't be instantiated, so may
+  // store weak class references
   // - could be used for gathering of TCollectionItem properties, e.g. for
-  // Domain objects in DDD, especially for list of value objects
-  // - note that non published properties won't be instantiated
-  // - please take care that you will not create any endless recursion: you
-  // should ensure that at one level, nested published properties won't have any
-  // class instance matching its parent type
+  // Domain objects in DDD, especially for list of value objects, with some
+  // additional methods defined by an Interface
   // - since the destructor will release all nested properties, you should
-  // never store a reference of any of those nested instances outside
+  // never store a reference to any of those nested instances if this owner
+  // may be freed before
   TInterfacedObjectAutoCreateFields = class(TInterfacedObjectWithCustomCreate)
   public
     /// this overriden constructor will instantiate all its nested
-    // TPersistent/TSynPersistent/TSynAutoCreateFields class published properties
+    // TPersistent/TSynPersistent/TSynAutoCreateFields class and T*ObjArray
+    // published properties
     constructor Create; override;
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
