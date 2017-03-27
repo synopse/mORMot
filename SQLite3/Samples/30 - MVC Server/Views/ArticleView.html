@@ -31,7 +31,7 @@
 		  {{/Comments}}
 		  {{^Comments}}<blockquote>No comment yet.</blockquote>{{/Comments}}
 		  <p><a href="ArticleView?id={{Article.ID}}#comments" class="btn btn-primary btn-sm">Hide Comments</a></p>
-		  {{#main.session.AuthorRights.canComment}}
+		  {{#main.session.AuthorRights.Comment}}
 		  <a name="addComment"></a>
           <form class="form-horizontal" action="ArticleComment#addComment" method="post">
 			<div class="form-group">
@@ -42,7 +42,7 @@
 				<button type="submit" class="btn btn-primary btn-sm">Add Comment</a>
 			</div>
 		  </form>
-		  {{/main.session.AuthorRights.canComment}}
+		  {{/main.session.AuthorRights.Comment}}
 		  </p>
 		  {{/WithComments}}
 		  {{^WithComments}}
