@@ -1157,6 +1157,7 @@ type
   PFileNameDynArray = ^TFileNameDynArray;
   TBooleanDynArray = array of boolean;
   PBooleanDynArray = ^TBooleanDynArray;
+  TClassDynArray = array of TClass;
 
   PByteArray = ^TByteArray;
   TByteArray = array[0..MaxInt-1] of Byte; // redefine here with {$R-}
@@ -44175,6 +44176,9 @@ begin
       fKnownType := djRawByteString else
     if fTypeInfo=TypeInfo(TSynUnicodeDynArray) then
       fKnownType := djSynUnicode else
+    if (fTypeInfo=TypeInfo(TClassDynArray)) or
+       (fTypeInfo=TypeInfo(TPointerDynArray)) then
+      fKnownType := djPointer else
     {$ifndef DELPHI5OROLDER}
     if fTypeInfo=TypeInfo(TInterfaceDynArray) then
       fKnownType := djInterface
@@ -45443,18 +45447,27 @@ end;
 
 function TDynArrayHashed.Scan(const Elem): integer;
 var P: PAnsiChar;
+    n: integer;
 begin
-  P := fValue^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
-  if Assigned(fEventCompare) then begin
-    for result := 0 to Count-1 do
-      if fEventCompare(P^,Elem)=0 then
-        exit else
-        inc(P,ElemSize);
-  end else
-    for result := 0 to Count-1 do
-      if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then
-        exit else
-        inc(P,ElemSize);
+  n := Count;
+  if n>0 then begin
+    P := fValue^; // Count<fHashCountTrigger -> O(n) is faster than O(1)
+    if Assigned(fEventCompare) then begin
+      for result := 0 to n-1 do
+        if fEventCompare(P^,Elem)=0 then
+          exit else
+          inc(P,ElemSize);
+    end else
+      if @{$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare=
+         @DYNARRAY_SORTFIRSTFIELD[false,djPointer] then begin
+        result := PtrUIntScanIndex(pointer(P),n,PtrUInt(Elem));
+        exit; // optimized for TObject/TClass/pointer arrays
+      end else
+      for result := 0 to n-1 do
+        if {$ifdef UNDIRECTDYNARRAY}InternalDynArray.{$endif}fCompare(P^,Elem)=0 then
+          exit else
+          inc(P,ElemSize);
+  end;
   result := -1;
 end;
 
@@ -54909,7 +54922,9 @@ function TSynDictionary.FindValueOrAdd(const aKey; var added: boolean): pointer;
 var ndx: integer;
     tim: cardinal;
 begin
-  tim := GetTimeout;
+  tim := fSafe.Padding[DIC_TIMESEC].VInteger; // inlined tim := GetTimeout
+  if tim<>0 then
+    tim := GetTickCount64 shr 10+tim;
   ndx := fKeys.FindHashedForAdding(aKey,added);
   if added then begin
     with fKeys{$ifdef UNDIRECTDYNARRAY}.InternalDynArray{$endif} do

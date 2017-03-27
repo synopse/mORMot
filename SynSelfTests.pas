@@ -5560,8 +5560,8 @@ begin
     Check(Valid);
     Check(CA.One.Color=2);
     Check(CA.One.Name='test2');
-    Check(CA.Coll.Count=1);
-    Check(CA.Coll[0].Name='test');
+    if not CheckFailed(CA.Coll.Count=1) then
+      Check(CA.Coll[0].Name='test');
     Check(CA.One.Length=10);
     Check(CA.Str.Count=10000);
     for i := 1 to CA.Str.Count do
