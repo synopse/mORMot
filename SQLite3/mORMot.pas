@@ -47051,8 +47051,9 @@ begin
 end;
 
 var
+  JSONCustomParsersCount: integer;
+  JSONCustomParsersClass: array of TClass;
   JSONCustomParsers: array of record
-    Kind: TClass;
     Reader: TJSONSerializerCustomReader;
     Writer: TJSONSerializerCustomWriter;
   end;
@@ -47061,33 +47062,20 @@ type
   TJSONCustomParserExpectedDirection = (cpRead, cpWrite);
   TJSONCustomParserExpectedDirections = set of TJSONCustomParserExpectedDirection;
 
-function JSONCustomParsersIndex(aClass: TClass;
-  aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): integer;
-  {$ifdef HASINLINE}inline;{$endif}
-begin
-  if JSONCustomParsers<>nil then
-    for result := 0 to length(JSONCustomParsers)-1 do
-      with JSONCustomParsers[result] do
-      if Kind=aClass then
-        if ((cpRead in aExpectedReadWriteTypes) and not Assigned(Reader)) or
-           ((cpWrite in aExpectedReadWriteTypes) and not Assigned(Writer)) then
-          break // any (un)serializer callbacks missing
-        else
-          exit; // found with appropriate (un)serializers callbacks
-  result := -1;
-end;
-
 class procedure TJSONSerializer.RegisterCustomSerializer(aClass: TClass;
   aReader: TJSONSerializerCustomReader; aWriter: TJSONSerializerCustomWriter);
 var i: integer;
 begin
-  i := JSONCustomParsersIndex(aClass,[]);
+  i := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
+    JSONCustomParsersCount,PtrUInt(aClass));
   if i<0 then begin
-    i := length(JSONCustomParsers);
+    i := JSONCustomParsersCount;
+    inc(JSONCustomParsersCount);
     SetLength(JSONCustomParsers,i+1);
+    SetLength(JSONCustomParsersClass,i+1);
+    JSONCustomParsersClass[i] := aClass;
   end;
   with JSONCustomParsers[i] do begin
-    Kind := aClass;
     Writer := aWriter;
     Reader := aReader;
   end;
@@ -47360,11 +47348,16 @@ var i: integer;
 begin
   if aClassType<>nil then begin
     repeat // guess class type (faster than multiple InheritsFrom calls)
-      aCustomIndex := JSONCustomParsersIndex(aClassType,aExpectedReadWriteTypes);
-      if aCustomIndex>=0 then begin
-        result := oCustom; // found custom type (may be as inherited)
-        exit;
-      end;
+      aCustomIndex := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
+        JSONCustomParsersCount,PtrUInt(aClassType));
+      if aCustomIndex>=0 then
+        with JSONCustomParsers[aCustomIndex] do
+        // ensure no expected (un)serializer callbacks missing
+        if (((cpRead in aExpectedReadWriteTypes) and Assigned(Reader)) or
+            ((cpWrite in aExpectedReadWriteTypes) and Assigned(Writer))) then begin
+          result := oCustom; // found for aExpectedReadWriteTypes (may be as inherited)
+          exit;
+        end;
       i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
       if i>=0 then begin
         result := OBJ[i];
@@ -47379,6 +47372,7 @@ begin
       {$endif}
     until aClassType=nil;
   end;
+  aCustomIndex := -1;
   result := oNone;
 end;
 
