@@ -6509,15 +6509,35 @@ begin
     TFileVersionTest(true);
     TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
     TFileVersionTest(false);
-    TJSONSerializer.RegisterCustomSerializerFieldNames(
-      TCollTest,['name','length'],['n','len']);
-    J := ObjectToJSON(C2);
-    Check(Hash32(J)=$FFBC77A,'RegisterCustomSerializerFieldNames');
-    TCollTstDynArrayTest;
-    TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
-    J := ObjectToJSON(C2);
-    Check(Hash32(J)=$41281936,'unRegisterCustomSerializerFieldNames');
-    TCollTstDynArrayTest;
+    MyItem := TCollTest.Create(nil);
+    try
+      MyItem.Length := 10;
+      MyItem.Color := 20;
+      MyItem.Name := 'ABC';
+      J := ObjectToJSON(MyItem);
+      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+      TJSONSerializer.RegisterCustomSerializerFieldNames(
+        TCollTest,['name','length'],['n','len']);
+      J := ObjectToJSON(MyItem);
+      Check(J='{"Color":20,"len":10,"n":"ABC"}');
+      J := ObjectToJSON(C2);
+      Check(Hash32(J)=$FFBC77A,'RegisterCustomSerializerFieldNames');
+      TCollTstDynArrayTest;
+      TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
+      J := ObjectToJSON(MyItem);
+      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+      J := ObjectToJSON(C2);
+      Check(Hash32(J)=$41281936,'unRegisterCustomSerializerFieldNames');
+      TCollTstDynArrayTest;
+      TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,['length'],['']);
+      J := ObjectToJSON(MyItem);
+      Check(J='{"Color":20,"Name":"ABC"}','remove field');
+      TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
+      J := ObjectToJSON(MyItem);
+      Check(J='{"Color":20,"Length":10,"Name":"ABC"}');
+    finally
+      MyItem.Free;
+    end;
   finally
     C2.Free;
     Coll.Free;

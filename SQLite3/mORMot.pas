@@ -47074,18 +47074,13 @@ var
   end;
 
 type
-  TJSONCustomParserExpectedDirection = (cpRead, cpWrite);
-  TJSONCustomParserExpectedDirections = set of TJSONCustomParserExpectedDirection;
-
-type
   TJSONObject =
     (oNone, oException, oSynException, oList, oObjectList,
      {$ifndef LVCL}oCollection,{$endif}
      oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
-     oSynMonitor, oSQLTable, oCustom);
+     oSynMonitor, oSQLTable, oCustomReaderWriter, oCustomPropName);
 
-function JSONObjectFromClass(aClassType: TClass; out aCustomIndex: integer;
-  aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
+function JSONObjectFromClass(aClassType: TClass; out aCustomIndex: integer): TJSONObject;
 const
   MAX = {$ifdef LVCL}14{$else}15{$endif};
   TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
@@ -47103,18 +47098,20 @@ begin
   aCustomIndex := -1;
   if aClassType<>nil then begin
     repeat // guess class type (faster than multiple InheritsFrom calls)
-      i := PtrUIntScanIndex(pointer(JSONCustomParsersClass),JSONCustomParsersCount,
-        PtrUInt(aClassType));
-      if i>=0 then begin
-        aCustomIndex := i;
+      i := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
+        JSONCustomParsersCount,PtrUInt(aClassType));
+      if i>=0 then
         with JSONCustomParsers[i] do
-        // ensure no expected (un)serializer callbacks missing
-        if (((cpRead in aExpectedReadWriteTypes) and Assigned(Reader)) or
-            ((cpWrite in aExpectedReadWriteTypes) and Assigned(Writer))) then begin
-          result := oCustom; // found for aExpectedReadWriteTypes (may be as inherited)
+        if Assigned(Reader) or Assigned(Writer) then begin
+          aCustomIndex := i;
+          result := oCustomReaderWriter;
           exit;
-        end;
-      end;
+        end else
+        if Props<>nil then begin
+          aCustomIndex := i;
+          result := oCustomPropName;
+          exit;
+        end; // unregistered custom entry -> handle with default serialization
       i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
       if i>=0 then begin
         result := OBJ[i];
@@ -47134,8 +47131,8 @@ end;
 
 function FindOrAddJSONCustomParsers(aClass: TClass): integer;
 begin
-  result := PtrUIntScanIndex(pointer(JSONCustomParsersClass),JSONCustomParsersCount,
-    PtrUInt(aClass));
+  result := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
+    JSONCustomParsersCount,PtrUInt(aClass));
   if result>=0 then
     exit;
   result := JSONCustomParsersCount;
@@ -47183,7 +47180,7 @@ begin
   if high(aClassFields)<>high(aJsonFields) then
     raise EParsingException.CreateUTF8('RegisterCustomSerializerFieldNames(%,%,%)'+
       ' fields count mismatch', [aClass,high(aClassFields),high(aJsonFields)]);
-  if JSONObjectFromClass(aClass,n,[]) in [oSQLMany,oSQLRecord] then
+  if JSONObjectFromClass(aClass,n) in [oSQLMany,oSQLRecord] then
     raise EParsingException.CreateUTF8('RegisterCustomSerializerFieldNames(%)'+
       ' not allowed on ORM class', [aClass]);
   prop := ClassFieldAllProps(aClass,[low(TTypeKind)..high(TTypeKind)]);
@@ -47513,7 +47510,7 @@ var P: PPropInfo;
     Kind: TTypeKind;
     wasString, NestedValid: boolean;
     IsObj: TJSONObject;
-    IsObjCustomIndex: integer;
+    CustomIndex: integer;
     s: string;
     WS: WideString;
     U: RawUTF8;
@@ -47528,7 +47525,7 @@ begin
   if Value=nil then
     exit;
   ValueClass := Value.ClassType;
-  IsObj := JSONObjectFromClass(ValueClass,IsObjCustomIndex,[cpRead]);
+  IsObj := JSONObjectFromClass(ValueClass,CustomIndex);
   if From=nil then begin
     case IsObj of // handle '' as Clear for arrays
 {$ifndef LVCL}
@@ -47541,9 +47538,10 @@ begin
     exit;
   end;
   if PInteger(From)^=NULL_LOW then begin
-    if (IsObj=oCustom) and Assigned(JSONCustomParsers[IsObjCustomIndex].Reader) then
+    if (IsObj=oCustomReaderWriter) and
+       Assigned(JSONCustomParsers[CustomIndex].Reader) then
       // custom JSON reader expects to be executed even if value is null
-      result := JSONCustomParsers[IsObjCustomIndex].Reader(Value,From,Valid,Options) else begin
+      result := JSONCustomParsers[CustomIndex].Reader(Value,From,Valid,Options) else begin
       FreeAndNil(Value);
       result := From+4;
       Valid := true; // null is a valid JSON object
@@ -47551,8 +47549,8 @@ begin
     exit;
   end;
   while From^ in [#1..' '] do inc(From);
-  if IsObj=oCustom then
-    with JSONCustomParsers[IsObjCustomIndex] do begin
+  if IsObj=oCustomReaderWriter then // may be serialized as [array] or {object}
+    with JSONCustomParsers[CustomIndex] do begin
       if Assigned(Reader) then // leave Valid=false if Reader=nil
         result := Reader(Value,From,Valid,Options);
       exit;
@@ -47749,8 +47747,8 @@ begin
         SetID(PropValue,TSQLRecord(Value).fID);
         continue;
       end;
-    if IsObjCustomIndex>=0 then
-      P := JSONCustomParsersFieldProp(IsObjCustomIndex,PropName,PropNameLen) else
+    if IsObj=oCustomPropName then
+      P := JSONCustomParsersFieldProp(CustomIndex,PropName,PropNameLen) else
       P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,PropNameLen);
     if P=nil then // unknown property
       if j2oIgnoreUnknownProperty in Options then begin
@@ -48102,18 +48100,18 @@ begin
     if C<>TPersistentWithCustomCreate then
     if C<>TSynPersistent then
     if C<>TComponent then
-  {$ifndef LVCL}
+    {$ifndef LVCL}
     if C<>TInterfacedCollection then
     if C<>TCollection then
     if C<>TCollectionItem then
-  {$endif}
-  {$ifdef FPC}
+    {$endif}
+    {$ifdef FPC}
     if C.ClassParent<>nil then begin
       C := C.ClassParent;
-  {$else}
+    {$else}
     if PPointer(PtrInt(C)+vmtParent)^<>nil then begin
       C := PPointer(PPointer(PtrInt(C)+vmtParent)^)^;
-  {$endif}
+    {$endif}
       if C<>nil then
         continue else begin
         ItemCreate := cicTObject;
@@ -48123,7 +48121,8 @@ begin
       ItemCreate := cicTObject;
       exit;
     end else
-  {$ifndef LVCL} begin
+    {$ifndef LVCL}
+    begin
       ItemCreate := cicTCollectionItem;
       exit;
     end else begin // plain TCollection shall have been registered
@@ -48138,7 +48137,8 @@ begin
       ItemCreate := cicTInterfacedCollection;
       exit;
     end else
-  {$endif} begin
+    {$endif}
+    begin
       ItemCreate := cicTComponent;
       exit;
     end else begin
@@ -49904,7 +49904,7 @@ var Added: boolean;
     CustomComment: RawUTF8;
     CustomPropName: PShortString;
     IsObj: TJSONObject;
-    IsObjCustomIndex: integer;
+    CustomIndex: integer;
     WS: WideString;
     {$ifdef HASVARUSTRING}
     US: UnicodeString;
@@ -50171,7 +50171,7 @@ begin
   end;
   CustomPropName := nil;
   aClassType := PClass(Value)^;
-  IsObj := JSONObjectFromClass(aClassType,IsObjCustomIndex,[cpWrite]);
+  IsObj := JSONObjectFromClass(aClassType,CustomIndex);
   if woFullExpand in Options then
     if IsObj=oSynMonitor then begin // nested values do not need extended info
       exclude(Options,woFullExpand);
@@ -50182,8 +50182,8 @@ begin
     end;
   case IsObj of
   // handle custom class serialization
-  oCustom:
-    with JSONCustomParsers[IsObjCustomIndex] do begin
+  oCustomReaderWriter:
+    with JSONCustomParsers[CustomIndex] do begin
       if Assigned(Writer) then
         Writer(self,Value,Options);
       exit;
@@ -50286,8 +50286,8 @@ begin
     end;
     end;
   end;
-  if IsObjCustomIndex>=0 then begin // use RegisterCustomSerializerFieldNames()
-    with JSONCustomParsers[IsObjCustomIndex] do
+  if CustomIndex>=0 then begin // handle oCustomPropName
+    with JSONCustomParsers[CustomIndex] do
       if Props=nil then // has been unregistered
         WritePropsFromRTTI(aClassType) else
         if woDontStoreInherited in Options then
@@ -52923,7 +52923,7 @@ end;
 { TInterfaceFactory }
 
 function TypeInfoToMethodValueType(P: PTypeInfo): TServiceMethodValueType;
-var IsObjCustomIndex: integer;
+var CustomIndex: integer;
 begin
   result := smvNone;
   if P<>nil then
@@ -52977,10 +52977,10 @@ begin
     result := smvWideString;
   tkClass:
     with P^.ClassType^ do
-    if ClassHasPublishedFields(ClassType) or
-       (JSONObjectFromClass(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
+    if ClassHasPublishedFields(ClassType) or // = oPersistent or oCustomPropName
+       (JSONObjectFromClass(ClassType,CustomIndex) in // serialized w/o RTTI ? 
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
-          oException,oCustom]) then
+          oException,oCustomReaderWriter]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
   {$ifdef FPC}tkObject,{$endif} tkRecord:
     // Base64 encoding of our RecordLoad / RecordSave binary format

@@ -7087,6 +7087,7 @@ Classes with {\f1\fs20 published} properties, i.e. every class inheriting from {
 List of {\i Delphi} strings, i.e. {\f1\fs20 @*TStrings@} kind of classes will be serialized as a JSON array of strings. This is the reason why we also introduced a dedicated {\f1\fs20 @**TRawUTF8List@} class, for direct @*UTF-8@ content storage, via our dedicated {\f1\fs20 RawUTF8} type, reducing the need of encoding conversion, therefore increasing process speed.
 :52  TObject serialization
 In fact, any {\f1\fs20 @*TObject@} can be serialized as @*JSON@ in the whole framework: not only for the ORM part (for {\f1\fs20 published} properties), but also for SOA (as parameters of interface-based service methods). All JSON @**serialization@ is centralized in {\f1\fs20 ObjectToJSON()} and {\f1\fs20 JSONToObject()} (aka {\f1\fs20 TJSONSerializer.WriteObject}) functions.
+:   Custom class serialization
 In some cases, it may be handy to have a custom serialization, for instance if you want to manage some third-party classes, or to adapt the serialization scheme to a particular purpose, at runtime.
 You can add a customized serialization of any {\f1\fs20 class}, by calling the {\f1\fs20 TJSONSerializer. @**RegisterCustomSerializer@} class method. Two callbacks are to be defined for a specific class type, and will be used to serialize or un-serialize the object instance. The callbacks are class methods ({\f1\fs20 procedure() of object}), and not plain functions (for some evolved objects, it may have sense to use a context during serialization).
 In the current implementation of this feature, callbacks expect low-level implementation. That is, their implementation code shall follow function {\f1\fs20 JSONToObject()} patterns, i.e. calling low-level {\f1\fs20 GetJSONField()} function to decode the JSON content, and follow function {\f1\fs20 TJSONSerializer.WriteObject()} patterns, i.e. {\f1\fs20 aSerializer.Add/AddInstanceName/AddJSONEscapeString} to encode the class instance as JSON.
@@ -7148,7 +7149,48 @@ If you want to disable the custom serialization, you may call the same method as
 !  TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
 This will reset the JSON serialization of the specified class to the default serializer (i.e. writing of {\f1\fs20 published} properties).
 The above code uses some low-level functions of the framework (i.e. {\f1\fs20 AddJSONEscape} and {\f1\fs20 JSONDecode}) to implement serialization as a JSON object, but you may use any other serialization scheme, on need. That is, you may serialize the whole class instance just as one JSON string or numerical value, or even a JSON array. It will depend of the implementation of the {\i Reader} and {\i Writer} registered callbacks.
-:71  TObjectList serialization
+:   Custom field names serialization
+If your customization just expect changing some property names, you may use {\f1\fs20 TJSONSerializer.RegisterCustomSerializerFieldNames} class method.
+For instance, given the following class:
+!type
+!  TMyClass = class(TSynPersistent)
+!  private
+!    FLength: Integer;
+!    FColor: Integer;
+!    FName: RawUTF8;
+!  published
+!    property Color: Integer read FColor write FColor;
+!    property Length: Integer read FLength write FLength;
+!    property Name: RawUTF8 read FName write FName;
+!  end;
+You may use default serialization as such:
+!var
+!  O: TMyClass;
+!  json: RawUTF8;
+!begin
+!  O := TMyClass.Create;
+!  O.Color := 10;
+!  O.Length := 20;
+!  O.Name := 'one';
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Length":20,"Name":"one"}
+Then switch to customized serialization:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ['name','length'], ['n','len']);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"len":20,"n":"one"}
+And back to normal/default serialization:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, [], []);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Length":20,"Name":"one"}
+You could ignore some fields, by setting the destination name to {\f1\fs20 ''}:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ['length'], ['']);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Name":"one"}
+!  O.Free;
+!end;
+This method may therefore help working with pre-existing JSON objects, for instance retrieved from a third-party @*REST@ server.
+Note that the {\f1\fs20 TJSONSerializer.RegisterCustomSerializerFieldNames} method won't accept {\f1\fs20 TSQLRecord} classes, since {\f1\fs20 ORM} serialization is handled in its own (optimized) set - and you could use ORM-level mapping if needed - see @120@.
+:71   TObjectList serialization
 You can even serialize {\f1\fs20 @**TObjectList@} instances as a valid JSON array, with the ability to store each instance class name, so allowing the storage of non uniformous lists of objects.\line Calling {\f1\fs20 TJSONSerializer.RegisterClassForJSON()} is just needed to register each {\f1\fs20 TObject} class in its internal tables, and be able to create instances from a {\f1\fs20 class} name serialized in each JSON object.
 In fact, if {\f1\fs20 ObjectToJSON()} or {\f1\fs20 TJSONWriter.WriteObject()} have their {\f1\fs20 woStoreClassName} option defined, a new {\f1\fs20 "ClassName":} field will be written as first field of the serialized JSON object.
 This new {\f1\fs20 "ClassName"} field will be recognized:
@@ -7169,7 +7211,7 @@ As a consequence, this kind of code can now work:
 !CheckSame(Comp.Imaginary,7.92);
 !// do not forget to free the memory (Comp can be nill if JSON was not valid)
 !Comp.Free;
-Internal {\f1\fs20 TObjectList} process will therefore rely on a similar process, creating the proper class instances on the fly. You can even have several classes appearing in one {\f1\fs20 TObjectList}: the only prerequisite is that all class types shall have been previously registered on both sides, by a call to {\f1\fs20 TJSONSerializer. RegisterClassForJSON()}.
+Internal {\f1\fs20 TObjectList} process will therefore rely on a similar process, creating the proper class instances on the fly. You can even have several classes appearing in one {\f1\fs20 TObjectList}: the only prerequisite is that all class types shall have been previously registered on both sides, by a call to {\f1\fs20 TJSONSerializer.RegisterClassForJSON()}.
 \page
 :9 REST
 :  What is REST?
