@@ -33751,9 +33751,7 @@ destructor TSQLRest.Destroy;
 var cmd: TSQLRestServerURIContextCommand;
     i: integer;
 begin
-  {$ifndef FPC} // serialization during destruction seems unsafe under FPC
-  InternalLog('%.Destroy -> %',[ClassType,self],sllInfo);
-  {$endif}
+  InternalLog('%.Destroy',[ClassType],sllInfo); // don't include self (->GPF)
   AsynchBatchStop(nil);
   FreeAndNil(fServices);
   FreeAndNil(fCache);
