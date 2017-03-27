@@ -2399,6 +2399,8 @@ type
     procedure Init(C: TClass);
     /// create a new instance of the registered class
     function CreateNew: TObject;
+    /// compute the custom JSON commentary corresponding to this class
+    procedure SetCustomComment(var CustomComment: RawUTF8);
   end;
   /// points to information about a class, able to create new instances
   PClassInstance = ^TClassInstance;
@@ -4153,6 +4155,17 @@ type
     // - note that any inherited classes will be serialized as the parent class
     class procedure RegisterCustomSerializer(aClass: TClass;
       aReader: TJSONSerializerCustomReader; aWriter: TJSONSerializerCustomWriter);
+    /// define custom serialization of field names for a given class
+    // - any aClassField[] property name will be serialized using aJsonFields[]
+    // - if any aJsonFields[] equals '', this published property will be
+    // excluded from the serialization object
+    // - setting both aClassField=aJsonFields=[] will return back to the default
+    // class serialization (i.e. serialization with published properties names)
+    // - by design, this customization excludes RegisterCustomSerializer() with
+    // custom reader/writer callbacks
+    // - note that any inherited classes will be serialized as the parent class
+    class procedure RegisterCustomSerializerFieldNames(aClass: TClass;
+      const aClassFields, aJsonFields: array of ShortString);
     /// let a given class be recognized by JSONToObject() from "ClassName":".."
     // - TObjectList item instances will be created corresponding to the
     // serialized class name field specified, and JSONToNewObject() can create a
@@ -47056,28 +47069,151 @@ var
   JSONCustomParsers: array of record
     Reader: TJSONSerializerCustomReader;
     Writer: TJSONSerializerCustomWriter;
+    Props: PPropInfoDynArray;
+    Fields: PShortStringDynArray; // match Props[] order
   end;
 
 type
   TJSONCustomParserExpectedDirection = (cpRead, cpWrite);
   TJSONCustomParserExpectedDirections = set of TJSONCustomParserExpectedDirection;
 
-class procedure TJSONSerializer.RegisterCustomSerializer(aClass: TClass;
-  aReader: TJSONSerializerCustomReader; aWriter: TJSONSerializerCustomWriter);
+type
+  TJSONObject =
+    (oNone, oException, oSynException, oList, oObjectList,
+     {$ifndef LVCL}oCollection,{$endif}
+     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
+     oSynMonitor, oSQLTable, oCustom);
+
+function JSONObjectFromClass(aClassType: TClass; out aCustomIndex: integer;
+  aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
+const
+  MAX = {$ifdef LVCL}14{$else}15{$endif};
+  TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
+    TObject,Exception,ESynException,TList,TObjectList,TPersistent,
+    TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
+    TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List,TSQLTable
+    {$ifndef LVCL},TCollection{$endif});
+  OBJ: array[0..MAX] of TJSONObject = ( // oPersistent = has published properties
+    oNone,oException,oSynException,oList,oObjectList,oPersistent,
+    oPersistentPassword,oPersistent,oPersistent,
+    oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs,oSQLTable
+    {$ifndef LVCL},oCollection{$endif});
 var i: integer;
 begin
-  i := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
-    JSONCustomParsersCount,PtrUInt(aClass));
-  if i<0 then begin
-    i := JSONCustomParsersCount;
-    inc(JSONCustomParsersCount);
-    SetLength(JSONCustomParsers,i+1);
-    SetLength(JSONCustomParsersClass,i+1);
-    JSONCustomParsersClass[i] := aClass;
+  aCustomIndex := -1;
+  if aClassType<>nil then begin
+    repeat // guess class type (faster than multiple InheritsFrom calls)
+      i := PtrUIntScanIndex(pointer(JSONCustomParsersClass),JSONCustomParsersCount,
+        PtrUInt(aClassType));
+      if i>=0 then begin
+        aCustomIndex := i;
+        with JSONCustomParsers[i] do
+        // ensure no expected (un)serializer callbacks missing
+        if (((cpRead in aExpectedReadWriteTypes) and Assigned(Reader)) or
+            ((cpWrite in aExpectedReadWriteTypes) and Assigned(Writer))) then begin
+          result := oCustom; // found for aExpectedReadWriteTypes (may be as inherited)
+          exit;
+        end;
+      end;
+      i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
+      if i>=0 then begin
+        result := OBJ[i];
+        exit;
+      end;
+      {$ifdef FPC}
+      aClassType := aClassType.ClassParent;
+      {$else}
+      if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
+        aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
+        break;
+      {$endif}
+    until aClassType=nil;
   end;
-  with JSONCustomParsers[i] do begin
+  result := oNone;
+end;
+
+function FindOrAddJSONCustomParsers(aClass: TClass): integer;
+begin
+  result := PtrUIntScanIndex(pointer(JSONCustomParsersClass),JSONCustomParsersCount,
+    PtrUInt(aClass));
+  if result>=0 then
+    exit;
+  result := JSONCustomParsersCount;
+  inc(JSONCustomParsersCount);
+  SetLength(JSONCustomParsers,result+1);
+  SetLength(JSONCustomParsersClass,result+1);
+  JSONCustomParsersClass[result] := aClass;
+end;
+
+class procedure TJSONSerializer.RegisterCustomSerializer(aClass: TClass;
+  aReader: TJSONSerializerCustomReader; aWriter: TJSONSerializerCustomWriter);
+begin
+  with JSONCustomParsers[FindOrAddJSONCustomParsers(aClass)] do begin
     Writer := aWriter;
     Reader := aReader;
+    Props := nil; // exclusive
+    Fields := nil;
+  end;
+end;
+
+function JSONCustomParsersFieldProp(aIndex: integer; PropName: PUTF8Char;
+  PropNameLen: integer): PPropInfo;
+var i: integer;
+begin
+  with JSONCustomParsers[aIndex] do
+    if Props<>nil then begin // search from RegisterCustomSerializerFieldNames()
+      for i := 0 to length(Fields)-1 do
+        if IdemPropNameU(Fields[i]^,PropName,PropNameLen) then begin
+          result := Props[i];
+          exit;
+        end;
+      result := nil;
+    end else // a previous RegisterCustomSerializerFieldNames() was unregistered
+      result := ClassFieldPropWithParentsFromUTF8(
+        JSONCustomParsersClass[aIndex],PropName,PropNameLen);
+end;
+
+class procedure TJSONSerializer.RegisterCustomSerializerFieldNames(aClass: TClass;
+  const aClassFields, aJsonFields: array of ShortString);
+var prop: PPropInfoDynArray;
+    field: PShortStringDynArray;
+    n,p,f: integer;
+    found: boolean;
+begin
+  if high(aClassFields)<>high(aJsonFields) then
+    raise EParsingException.CreateUTF8('RegisterCustomSerializerFieldNames(%,%,%)'+
+      ' fields count mismatch', [aClass,high(aClassFields),high(aJsonFields)]);
+  if JSONObjectFromClass(aClass,n,[]) in [oSQLMany,oSQLRecord] then
+    raise EParsingException.CreateUTF8('RegisterCustomSerializerFieldNames(%)'+
+      ' not allowed on ORM class', [aClass]);
+  prop := ClassFieldAllProps(aClass,[low(TTypeKind)..high(TTypeKind)]);
+  SetLength(field,length(prop));
+  n := 0;
+  for p := 0 to high(prop) do begin
+    found := false;
+    for f := 0 to high(aClassFields) do // check customized field name
+      if IdemPropName(prop[p].Name,aClassFields[f]) then begin
+        if aJsonFields[f]<>'' then begin // '' to ignore this property
+          field[n] := @aJsonFields[f];
+          prop[n] := prop[p];
+          inc(n);
+        end;
+        found := true;
+        break;
+      end;
+    if not found then begin // default serialization of published property
+      field[n] := @prop[p].Name;
+      prop[n] := prop[p];
+      inc(n);
+    end;
+  end;
+  SetLength(prop,n);
+  SetLength(field,n);
+  with JSONCustomParsers[FindOrAddJSONCustomParsers(aClass)] do begin
+    Writer := nil; // exclusive
+    Reader := nil;
+    Props := prop;
+    Fields := field;
   end;
 end;
 
@@ -47323,59 +47459,6 @@ begin
     FreeAndNil(result); // avoid memory leak
 end;
 
-type
-  TJSONObject =
-    (oNone, oException, oSynException, oList, oObjectList,
-     {$ifndef LVCL}oCollection,{$endif}
-     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
-     oSynMonitor, oSQLTable, oCustom);
-
-function JSONObject(aClassType: TClass; out aCustomIndex: integer;
-  aExpectedReadWriteTypes: TJSONCustomParserExpectedDirections): TJSONObject;
-const
-  MAX = {$ifdef LVCL}14{$else}15{$endif};
-  TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
-    TObject,Exception,ESynException,TList,TObjectList,TPersistent,
-    TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
-    TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List,TSQLTable
-    {$ifndef LVCL},TCollection{$endif});
-  OBJ: array[0..MAX] of TJSONObject = ( // oPersistent = has published properties
-    oNone,oException,oSynException,oList,oObjectList,oPersistent,
-    oPersistentPassword,oPersistent,oPersistent,
-    oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs,oSQLTable
-    {$ifndef LVCL},oCollection{$endif});
-var i: integer;
-begin
-  if aClassType<>nil then begin
-    repeat // guess class type (faster than multiple InheritsFrom calls)
-      aCustomIndex := PtrUIntScanIndex(pointer(JSONCustomParsersClass),
-        JSONCustomParsersCount,PtrUInt(aClassType));
-      if aCustomIndex>=0 then
-        with JSONCustomParsers[aCustomIndex] do
-        // ensure no expected (un)serializer callbacks missing
-        if (((cpRead in aExpectedReadWriteTypes) and Assigned(Reader)) or
-            ((cpWrite in aExpectedReadWriteTypes) and Assigned(Writer))) then begin
-          result := oCustom; // found for aExpectedReadWriteTypes (may be as inherited)
-          exit;
-        end;
-      i := PtrUIntScanIndex(@TYP,MAX+1,PtrUInt(aClassType));
-      if i>=0 then begin
-        result := OBJ[i];
-        exit;
-      end;
-      {$ifdef FPC}
-      aClassType := aClassType.ClassParent;
-      {$else}
-      if PPointer(PtrInt(aClassType)+vmtParent)^<>nil then
-        aClassType := PPointer(PPointer(PtrInt(aClassType)+vmtParent)^)^ else
-        break;
-      {$endif}
-    until aClassType=nil;
-  end;
-  aCustomIndex := -1;
-  result := oNone;
-end;
-
 function PropIsIDTypeCastedField(Prop: PPropInfo; IsObj: TJSONObject;
   Value: TObject): boolean; // see [22ce911c715]
 begin
@@ -47445,7 +47528,7 @@ begin
   if Value=nil then
     exit;
   ValueClass := Value.ClassType;
-  IsObj := JSONObject(ValueClass,IsObjCustomIndex,[cpRead]);
+  IsObj := JSONObjectFromClass(ValueClass,IsObjCustomIndex,[cpRead]);
   if From=nil then begin
     case IsObj of // handle '' as Clear for arrays
 {$ifndef LVCL}
@@ -47469,11 +47552,11 @@ begin
   end;
   while From^ in [#1..' '] do inc(From);
   if IsObj=oCustom then
-  with JSONCustomParsers[IsObjCustomIndex] do begin
-    if Assigned(Reader) then // leave Valid=false if Reader=nil
-      result := Reader(Value,From,Valid,Options);
-    exit;
-  end;
+    with JSONCustomParsers[IsObjCustomIndex] do begin
+      if Assigned(Reader) then // leave Valid=false if Reader=nil
+        result := Reader(Value,From,Valid,Options);
+      exit;
+    end;
   if From^='[' then begin
     // nested array = TObjectList, TCollection, TRawUTF8List or TStrings
     inc(From);
@@ -47655,17 +47738,20 @@ begin
       PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
       if (PropValue=nil) or not wasString or not (EndOfObject in ['}',',']) then
         exit; // invalid JSON content
-      continue; 
-    end;
-    if (IsObj in [oSQLRecord,oSQLMany]) and IsRowID(PropName) then begin
-      // manual handling of TSQLRecord.ID property unserialization
-      PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
-      if (PropValue=nil) or wasString or not (EndOfObject in ['}',',']) then
-        exit; // invalid JSON content
-      SetID(PropValue,TSQLRecord(Value).fID);
       continue;
     end;
-    P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,PropNameLen);
+    if IsObj in [oSQLRecord,oSQLMany] then
+      if IsRowID(PropName) then begin
+        // manual handling of TSQLRecord.ID property unserialization
+        PropValue := GetJSONField(From,From,@wasString,@EndOfObject);
+        if (PropValue=nil) or wasString or not (EndOfObject in ['}',',']) then
+          exit; // invalid JSON content
+        SetID(PropValue,TSQLRecord(Value).fID);
+        continue;
+      end;
+    if IsObjCustomIndex>=0 then
+      P := JSONCustomParsersFieldProp(IsObjCustomIndex,PropName,PropNameLen) else
+      P := ClassFieldPropWithParentsFromUTF8(ValueClass,PropName,PropNameLen);
     if P=nil then // unknown property
       if j2oIgnoreUnknownProperty in Options then begin
         From := GotoNextJSONItem(From,1,@EndOfObject);
@@ -48135,6 +48221,11 @@ begin
   end;
 end;
 
+procedure TClassInstance.SetCustomComment(var CustomComment: RawUTF8);
+begin
+  FormatUTF8('array of {%}',[ClassFieldNamesAllPropsAsText(ItemClass,true)],
+    CustomComment)
+end;
 
 {$ifdef MSWINDOWS}
 
@@ -49811,6 +49902,17 @@ end;
 procedure TJSONSerializer.WriteObject(Value: TObject; Options: TTextWriterWriteObjectOptions);
 var Added: boolean;
     CustomComment: RawUTF8;
+    CustomPropName: PShortString;
+    IsObj: TJSONObject;
+    IsObjCustomIndex: integer;
+    WS: WideString;
+    {$ifdef HASVARUSTRING}
+    US: UnicodeString;
+    {$endif}
+    tmp: RawByteString;
+    {$ifndef NOVARIANTS}
+    VVariant: variant;
+    {$endif}
 
   procedure HR(P: PPropInfo=nil);
   begin
@@ -49824,16 +49926,232 @@ var Added: boolean;
     end;
     if P=nil then
       exit;
-    AddPropName(P^.Name); // will handle twoForceJSONExtended in CustomOptions
+    if CustomPropName<>nil then
+      AddPropName(CustomPropName^) else
+      AddPropName(P^.Name); // handle twoForceJSONExtended in CustomOptions
     if woHumanReadable in Options then
       Add(' ');
     Added := true;
   end;
+  procedure WriteProp(P: PPropInfo);
+  var V64: Int64;
+      Obj: TObject;
+      V, c, codepage: integer;
+      Kind: TTypeKind;
+      PS: PShortString;
+      dyn: TDynArray;
+      dynObjArray: PClassInstance;
+  begin
+    if Assigned(OnWriteObject) and OnWriteObject(self,Value,P,Options) then
+      exit;
+    if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
+      if IsRowIDShort(P^.Name) then
+        exit; // should not happen
+    end else
+      if not (woStoreStoredFalse in Options) and
+         not P^.IsStored(Value) then
+        exit; // ignore regular "stored false" attribute
+    Added := false;  // HR(P) will write field name and set Added := true
+    Kind := P^.PropType^.Kind;
+    case Kind of
+      tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
+        V64 := P^.GetInt64Prop(Value);
+        if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
+          HR(P);
+          if woTimeLogAsText in Options then
+            case P^.PropType^.GetSQLFieldType of
+            sftTimeLog,sftModTime,sftCreateTime: begin
+              Add('"');
+              AddTimeLog(@V64);
+              Add('"');
+            end;
+            sftUnixTime: begin
+              Add('"');
+              AddUnixTime(@V64);
+              Add('"');
+            end;
+            sftUnixMSTime: begin
+              Add('"');
+              AddUnixMSTime(@V64);
+              Add('"');
+            end;
+            else Add(V64);
+            end
+          else Add(V64);
+        end;
+      end;
+      {$ifdef FPC} tkBool, {$endif}
+      tkEnumeration, tkInteger, tkSet: begin
+        V := P^.GetOrdProp(Value);
+        if (V<>P^.Default) or not (woDontStoreDefault in Options) then begin
+          HR(P);
+          if {$ifdef FPC}(Kind=tkBool) or{$endif}
+             ((Kind=tkEnumeration) and (P^.TypeInfo=TypeInfo(boolean))) then
+            Add(boolean(V)) else
+            if (woFullExpand in Options) or (woHumanReadable in Options) or
+               (woEnumSetsAsText in Options) or
+               (twoEnumSetsAsTextInRecord in CustomOptions) then
+            case Kind of
+            tkEnumeration:
+            with P^.PropType^.EnumBaseType^ do begin
+              Add('"');
+              PS := GetEnumNameOrd(V);
+              if twoTrimLeftEnumSets in CustomOptions then
+                AddTrimLeftLowerCase(PS) else
+                AddShort(PS^);
+              Add('"');
+              if woHumanReadableEnumSetAsComment in Options then
+                GetEnumNameAll(CustomComment,'',true);
+            end;
+            tkSet:
+            with P^.PropType^.SetEnumType^ do begin
+              GetSetNameCSV(self,V,',',woHumanReadableFullSetsAsStar in Options);
+              if woHumanReadableEnumSetAsComment in Options then
+                GetEnumNameAll(CustomComment,'"*" or a set of ',true);
+            end;
+            else
+              Add(V);
+            end else
+              Add(V); // typecast enums and sets as plain integer by default
+        end;
+      end;
+      {$ifdef FPC}tkAString,{$endif} tkLString: begin
+        codepage := P^.PropType^.AnsiStringCodePage;
+        if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then begin
+          if not (woDontStoreEmptyString in Options) then begin
+            HR(P);
+            AddShort('""');
+          end;
+        end else begin
+          P^.GetLongStrProp(Value,tmp);
+          if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
+            HR(P);
+            Add('"');
+            if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
+               ((woHideSynPersistentPassword in Options) or
+                (woFullExpand in Options)) and
+               P^.GetterIsField and (P^.GetterAddr(Value)=
+                 TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
+              if tmp<>'' then
+                AddShort('***');
+            end else
+              AddAnyAnsiString(tmp,twJSONEscape,codepage);
+            Add('"');
+          end;
+        end;
+      end;
+      tkFloat: begin
+        HR(P);
+        if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then
+          AddCurr64(PInt64(P^.GetterAddr(Value))^) else
+        if P^.TypeInfo=TypeInfo(TDateTime) then begin
+          if woDateTimeWithMagic in Options then
+            AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
+            Add('"');
+          AddDateTime(P^.GetDoubleProp(Value));
+          if woDateTimeWithZSuffix in Options then
+            Add('Z');
+          Add('"');
+        end else
+          Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
+      end;
+      {$ifdef HASVARUSTRING}
+      tkUString: begin // write converted to UTF-8
+        US := P^.GetUnicodeStrProp(Value);
+        if (US<>'') or not (woDontStoreEmptyString in Options) then begin
+          HR(P);
+          Add('"');
+          AddJSONEscapeW(pointer(US));
+          Add('"');
+        end;
+      end;
+      {$endif}
+      tkWString: begin // write converted to UTF-8
+        P^.GetWideStrProp(Value,WS);
+        if (WS<>'') or not (woDontStoreEmptyString in Options) then begin
+          HR(P);
+          Add('"');
+          AddJSONEscapeW(pointer(WS));
+          Add('"');
+        end;
+      end;
+      tkDynArray: begin
+        HR(P);
+        P^.GetDynArray(Value,dyn);
+        dynObjArray := P^.DynArrayIsObjArrayInstance;
+        if dynObjArray<>nil then begin
+          if dyn.Count=0 then begin
+            if woHumanReadableEnumSetAsComment in Options then
+              dynObjArray^.SetCustomComment(CustomComment);
+            Add('[',']');
+          end else begin // do not use AddDynArrayJSON to support HR
+            inc(fHumanReadableLevel);
+            Add('[');
+            for c := 0 to dyn.Count-1 do begin
+              WriteObject(PPointerArray(dyn.Value^)^[c],Options);
+              Add(',');
+            end;
+            CancelLastComma;
+            dec(fHumanReadableLevel);
+            HR;
+            Add(']');
+          end;
+        end else
+          AddDynArrayJSON(dyn);
+      end;
+      {$ifdef PUBLISHRECORD}
+      tkRecord{$ifdef FPC},tkObject{$endif}: begin
+        HR(P);
+        AddRecordJSON(P^.GetFieldAddr(Value)^,P^.PropType^);
+      end;
+      {$endif}
+      {$ifndef NOVARIANTS}
+      tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
+        HR(P);
+        P^.GetVariantProp(Value,VVariant);
+        AddVariant(VVariant,twJSONEscape);
+      end;
+      {$endif}
+      tkClass: begin
+        Obj := P^.GetObjProp(Value);
+        case IsObj of
+        oSQLRecord,oSQLMany: // TSQLRecord or inherited
+          if PropIsIDTypeCastedField(P,IsObj,Value) then begin
+            HR(P);
+            Add(PtrInt(Obj)); // not true instances, but ID
+          end else
+          if Obj<>nil then begin
+            HR(P);
+            WriteObject(Obj,Options);
+          end;
+        else // TPersistent or any class defined with $M+
+          if Obj<>nil then begin
+            HR(P);
+            WriteObject(Obj,Options);
+          end;
+        end;
+      end;
+      // tkString (shortstring) and tkInterface is not handled
+    end;
+    if Added then
+      Add(',');
+  end;
+  procedure WritePropsFromRTTI(aClassType: TClass);
+  var i: integer;
+      P: PPropInfo;
+  begin
+    repeat
+      for i := 1 to InternalClassPropInfo(aClassType,P) do begin
+        WriteProp(P);
+        P := P^.Next;
+      end;
+      if woDontStoreInherited in Options then
+        break;
+      aClassType := aClassType.ClassParent;
+    until aClassType=nil;
+  end;
 
-var P: PPropInfo;
-    i, V, c, codepage: integer;
-    V64: Int64;
-    Obj: TObject;
+var i, c: integer;
     List: TList absolute Value;
     {$ifndef LVCL}
     Coll: TCollection absolute Value;
@@ -49842,21 +50160,7 @@ var P: PPropInfo;
     Utf: TRawUTF8List absolute Value;
     Table: TSQLTable absolute Value;
     aClassType: TClass;
-    Kind: TTypeKind;
     UtfP: PPUtf8CharArray;
-    IsObj: TJSONObject;
-    IsObjCustomIndex: integer;
-    PS: PShortString;
-    WS: WideString;
-    {$ifdef HASVARUSTRING}
-    US: UnicodeString;
-    {$endif}
-    tmp: RawByteString;
-    dyn: TDynArray;
-    dynObjArray: PClassInstance;
-    {$ifndef NOVARIANTS}
-    VVariant: variant;
-    {$endif}
 label next;
 begin
   if not (woHumanReadable in Options) or (fHumanReadableLevel<0) then
@@ -49865,8 +50169,9 @@ begin
     AddShort('null'); // return void object
     exit;
   end;
+  CustomPropName := nil;
   aClassType := PClass(Value)^;
-  IsObj := JSONObject(aClassType,IsObjCustomIndex,[cpWrite]);
+  IsObj := JSONObjectFromClass(aClassType,IsObjCustomIndex,[cpWrite]);
   if woFullExpand in Options then
     if IsObj=oSynMonitor then begin // nested values do not need extended info
       exclude(Options,woFullExpand);
@@ -49981,208 +50286,19 @@ begin
     end;
     end;
   end;
-  repeat
-    for i := 1 to InternalClassPropInfo(aClassType,P) do begin
-      if Assigned(OnWriteObject) and OnWriteObject(self,Value,P,Options) then
-        goto next else
-      if IsObj in [oSQLRecord,oSQLMany] then begin // ignore "stored AS_UNIQUE"
-        if IsRowIDShort(P^.Name) then
-          goto next; // should not happen
-      end else
-        if not (woStoreStoredFalse in Options) and
-           not P^.IsStored(Value) then
-          goto next; // ignore regular "stored false" attribute
-      Added := false;  // HR(P) will write field name and set Added := true
-      Kind := P^.PropType^.Kind;
-      case Kind of
-        tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
-          V64 := P^.GetInt64Prop(Value);
-          if not ((woDontStoreDefault in Options) and (V64=Int64(P^.Default))) then begin
-            HR(P);
-            if woTimeLogAsText in Options then
-              case P^.PropType^.GetSQLFieldType of
-              sftTimeLog,sftModTime,sftCreateTime: begin
-                Add('"');
-                AddTimeLog(@V64);
-                Add('"');
-              end;
-              sftUnixTime: begin
-                Add('"');
-                AddUnixTime(@V64);
-                Add('"');
-              end;
-              sftUnixMSTime: begin
-                Add('"');
-                AddUnixMSTime(@V64);
-                Add('"');
-              end;
-              else Add(V64);
-              end
-            else Add(V64);
+  if IsObjCustomIndex>=0 then begin // use RegisterCustomSerializerFieldNames()
+    with JSONCustomParsers[IsObjCustomIndex] do
+      if Props=nil then // has been unregistered
+        WritePropsFromRTTI(aClassType) else
+        if woDontStoreInherited in Options then
+          raise EParsingException.CreateUTF8('%.WriteObject woDontStoreInherited '+
+            'after RegisterCustomSerializerFieldNames(%)', [self,aClassType]) else
+          for i := 0 to length(Props)-1 do begin
+            CustomPropName := Fields[i];
+            WriteProp(Props[i]);
           end;
-        end;
-        {$ifdef FPC} tkBool, {$endif}
-        tkEnumeration, tkInteger, tkSet: begin
-          V := P^.GetOrdProp(Value);
-          if (V<>P^.Default) or not (woDontStoreDefault in Options) then begin
-            HR(P);
-            if {$ifdef FPC}(Kind=tkBool) or{$endif}
-               ((Kind=tkEnumeration) and (P^.TypeInfo=TypeInfo(boolean))) then
-              Add(boolean(V)) else
-              if (woFullExpand in Options) or (woHumanReadable in Options) or
-                 (woEnumSetsAsText in Options) or
-                 (twoEnumSetsAsTextInRecord in CustomOptions) then
-              case Kind of
-              tkEnumeration:
-              with P^.PropType^.EnumBaseType^ do begin
-                Add('"');
-                PS := GetEnumNameOrd(V);
-                if twoTrimLeftEnumSets in CustomOptions then
-                  AddTrimLeftLowerCase(PS) else
-                  AddShort(PS^);
-                Add('"');
-                if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameAll(CustomComment,'',true);
-              end;
-              tkSet:
-              with P^.PropType^.SetEnumType^ do begin
-                GetSetNameCSV(self,V,',',woHumanReadableFullSetsAsStar in Options);
-                if woHumanReadableEnumSetAsComment in Options then
-                  GetEnumNameAll(CustomComment,'"*" or a set of ',true);
-              end;
-              else
-                Add(V);
-              end else
-                Add(V); // typecast enums and sets as plain integer by default
-          end;
-        end;
-        {$ifdef FPC}tkAString,{$endif} tkLString: begin
-          codepage := P^.PropType^.AnsiStringCodePage;
-          if (codepage=CP_SQLRAWBLOB) and not (woSQLRawBlobAsBase64 in Options) then begin
-            if not (woDontStoreEmptyString in Options) then begin
-              HR(P);
-              AddShort('""');
-            end;
-          end else begin
-            P^.GetLongStrProp(Value,tmp);
-            if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
-              HR(P);
-              Add('"');
-              if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
-                 ((woHideSynPersistentPassword in Options) or
-                  (woFullExpand in Options)) and
-                 P^.GetterIsField and (P^.GetterAddr(Value)=
-                   TSynPersistentWithPassword(Value).GetPasswordFieldAddress) then begin
-                if tmp<>'' then
-                  AddShort('***')
-              end else
-                AddAnyAnsiString(tmp,twJSONEscape,codepage);
-              Add('"');
-            end;
-          end;
-        end;
-        tkFloat: begin
-          HR(P);
-          if (P^.TypeInfo=TypeInfo(Currency)) and P^.GetterIsField then
-            AddCurr64(PInt64(P^.GetterAddr(Value))^) else
-          if P^.TypeInfo=TypeInfo(TDateTime) then begin
-            if woDateTimeWithMagic in Options then
-              AddNoJSONEscape(@JSON_SQLDATE_MAGIC_QUOTE_VAR,4) else
-              Add('"');
-            AddDateTime(P^.GetDoubleProp(Value));
-            if woDateTimeWithZSuffix in Options then
-              Add('Z');
-            Add('"');
-          end else
-            Add(P^.GetFloatProp(Value),DOUBLE_PRECISION);
-        end;
-        {$ifdef HASVARUSTRING}
-        tkUString: begin // write converted to UTF-8
-          US := P^.GetUnicodeStrProp(Value);
-          if (US<>'') or not (woDontStoreEmptyString in Options) then begin
-            HR(P);
-            Add('"');
-            AddJSONEscapeW(pointer(US));
-            Add('"');
-          end;
-        end;
-        {$endif}
-        tkWString: begin // write converted to UTF-8
-          P^.GetWideStrProp(Value,WS);
-          if (WS<>'') or not (woDontStoreEmptyString in Options) then begin
-            HR(P);
-            Add('"');
-            AddJSONEscapeW(pointer(WS));
-            Add('"');
-          end;
-        end;
-        tkDynArray: begin
-          HR(P);
-          P^.GetDynArray(Value,dyn);
-          dynObjArray := P^.DynArrayIsObjArrayInstance;
-          if dynObjArray<>nil then begin
-            if dyn.Count=0 then begin
-              if woHumanReadableEnumSetAsComment in Options then
-                CustomComment := FormatUTF8('array of {%}',[
-                  ClassFieldNamesAllPropsAsText(dynObjArray^.ItemClass,true)]);
-              Add('[',']');
-            end else begin // do not use AddDynArrayJSON to support HR
-              inc(fHumanReadableLevel);
-              Add('[');
-              for c := 0 to dyn.Count-1 do begin
-                WriteObject(PPointerArray(dyn.Value^)^[c],Options);
-                Add(',');
-              end;
-              CancelLastComma;
-              dec(fHumanReadableLevel);
-              HR;
-              Add(']');
-            end;
-          end else
-            AddDynArrayJSON(dyn);
-        end;
-        {$ifdef PUBLISHRECORD}
-        tkRecord{$ifdef FPC},tkObject{$endif}: begin
-          HR(P);
-          AddRecordJSON(P^.GetFieldAddr(Value)^,P^.PropType^);
-        end;
-        {$endif}
-        {$ifndef NOVARIANTS}
-        tkVariant: begin // stored as JSON, e.g. '1.234' or '"text"'
-          HR(P);
-          P^.GetVariantProp(Value,VVariant);
-          AddVariant(VVariant,twJSONEscape);
-        end;
-        {$endif}
-        tkClass: begin
-          Obj := P^.GetObjProp(Value);
-          case IsObj of
-          oSQLRecord,oSQLMany: // TSQLRecord or inherited
-            if PropIsIDTypeCastedField(P,IsObj,Value) then begin
-              HR(P);
-              Add(PtrInt(Obj)); // not true instances, but ID
-            end else
-            if Obj<>nil then begin
-              HR(P);
-              WriteObject(Obj,Options);
-            end;
-          else // TPersistent or any class defined with $M+
-            if Obj<>nil then begin
-              HR(P);
-              WriteObject(Obj,Options);
-            end;
-          end;
-        end;
-        // tkString (shortstring) and tkInterface is not handled
-      end;
-      if Added then
-        Add(',');
-next: P := P^.Next;
-    end;
-    if woDontStoreInherited in Options then
-      break;
-    aClassType := aClassType.ClassParent;
-  until aClassType=nil;
+  end else
+    WritePropsFromRTTI(aClassType);
   CancelLastComma;
   dec(fHumanReadableLevel);
   HR;
@@ -52862,7 +52978,7 @@ begin
   tkClass:
     with P^.ClassType^ do
     if ClassHasPublishedFields(ClassType) or
-       (JSONObject(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
+       (JSONObjectFromClass(ClassType,IsObjCustomIndex,[cpRead,cpWrite]) in
          [{$ifndef LVCL}oCollection,{$endif}oObjectList,oUtfs,oStrings,
           oException,oCustom]) then
       result := smvObject; // JSONToObject/ObjectToJSON types

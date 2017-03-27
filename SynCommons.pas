@@ -1104,6 +1104,9 @@ type
   TStringDynArray = array of string;
   PStringDynArray = ^TStringDynArray;
 
+  /// a dynamic array of pointers to shortstring values
+  PShortStringDynArray = array of PShortString;
+
   /// a dynamic array of TDateTime values
   TDateTimeDynArray = array of TDateTime;
   PDateTimeDynArray = ^TDateTimeDynArray;

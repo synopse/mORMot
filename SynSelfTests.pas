@@ -5558,6 +5558,11 @@ begin
     tmp := J;
     Check(JSONToObject(CA,UniqueRawUTF8(RawUTF8(tmp)),Valid)=nil);
     Check(Valid);
+    Check(CA.One.Color=2);
+    Check(CA.One.Name='test2');
+    Check(CA.Coll.Count=1);
+    Check(CA.Coll[0].Name='test');
+    Check(CA.One.Length=10);
     Check(CA.Str.Count=10000);
     for i := 1 to CA.Str.Count do
       Check(CA.Str[i-1]=IntToStr(i));
@@ -6328,183 +6333,195 @@ begin
     O2.Free;
     O.Free;
   end;
-   U := '"filters":[{"name":"name1","value":"value1","comparetype":">"},'+
-     '{"name":"name2","value":"value2","comparetype":"="}], "Limit":100}';
-   P := UniqueRawUTF8(U);
-   Check(GetJSONPropName(P)='filters');
-   Check((P<>nil)and(P^='['));
-   P := GotoNextJSONItem(P,1,@EndOfObject);
-   Check(EndOfObject=',');
-   Check(GetJSONPropName(P)='Limit');
-   Check((P<>nil)and(P^='1'));
-   P := GotoNextJSONItem(P,1,@EndOfObject);
-   Check(P<>nil);
-   Check(EndOfObject='}');
+  U := '"filters":[{"name":"name1","value":"value1","comparetype":">"},'+
+    '{"name":"name2","value":"value2","comparetype":"="}], "Limit":100}';
+  P := UniqueRawUTF8(U);
+  Check(GetJSONPropName(P)='filters');
+  Check((P<>nil)and(P^='['));
+  P := GotoNextJSONItem(P,1,@EndOfObject);
+  Check(EndOfObject=',');
+  Check(GetJSONPropName(P)='Limit');
+  Check((P<>nil)and(P^='1'));
+  P := GotoNextJSONItem(P,1,@EndOfObject);
+  Check(P<>nil);
+  Check(EndOfObject='}');
 {$ifndef LVCL}
   C2 := TCollTst.Create;
   Coll := TCollTst.Create;
   try
-     U := ObjectToJSON(Coll);
-     Check(Hash32(U)=$95B54414);
-     Check(ObjectToJSON(C2)=U);
-     Coll.One.Name := 'test"\2';
-     Coll.One.Color := 1;
-     U := ObjectToJSON(Coll);
-     Check(Hash32(U)=$CE2C2DED);
-     Check(JSONToObject(C2,pointer(U),Valid)=nil);
-     Check(Valid);
-     U := ObjectToJSON(C2);
-     Check(Hash32(U)=$CE2C2DED);
-     Coll.Coll.Add.Color := 10;
-     Coll.Coll.Add.Name := 'name';
-     Check(Coll.Coll.Count=2);
-     U := ObjectToJSON(Coll);
-     Check(Hash32(U)=$36B02F0E);
-     Check(JSONToObject(C2,pointer(U),Valid)=nil);
-     Check(Valid);
-     Check(C2.Coll.Count=2);
-     U := ObjectToJSON(C2);
-     Check(Hash32(U)=$36B02F0E);
-     J := ObjectToJSON(Coll,[woHumanReadable]);
-     Check(Hash32(J)=$9FAFF11F);
-     Check(JSONReformat(J,jsonCompact)=U);
-     Check(JSONReformat('{ "empty": {} }')='{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
-     U := ObjectToJSON(Coll,[woStoreClassName]);
-     Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
-       '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+
-       '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}]}');
-     C2.Coll.Clear;
-     Check(JSONToObject(C2,pointer(U),Valid)=nil);
-     Check(Valid);
-     Check(C2.Coll.Count=2);
-     U := ObjectToJSON(C2);
-     Check(Hash32(U)=$36B02F0E);
-     TJSONSerializer.RegisterClassForJSON([TComplexNumber,TCollTst]);
-     J := '{"ClassName":"TComplexNumber", "Real": 10.3, "Imaginary": 7.92 }';
-     P := UniqueRawUTF8(J); // make local copy of constant
-     Comp := TComplexNumber(JSONToNewObject(P,Valid));
-     if not CheckFailed(Comp<>nil) then begin
-       Check(Valid);
-       Check(Comp.ClassType=TComplexNumber);
-       CheckSame(Comp.Real,10.3);
-       CheckSame(Comp.Imaginary,7.92);
-       U := ObjectToJSON(Comp,[woStoreClassName]);
-       Check(U='{"ClassName":"TComplexNumber","Real":10.3,"Imaginary":7.92}');
-       Comp.Free;
-     end;
-     TJSONSerializer.RegisterCollectionForJSON(TMyCollection,TCollTest);
-     TestMyColl(TMyCollection.Create(TCollTest));
-     Instance.Init(TMyCollection);
-     TestMyColl(Instance.CreateNew as TMyCollection);
-     C2.Coll.Clear;
-     U := ObjectToJSON(C2);
-     Check(Hash32(U)=$CE2C2DED);
-     Coll.Coll.BeginUpdate;
-     for i := 1 to 10000 do
-       with Coll.Coll.Add do begin
-         Color := i*3;
-         Length := i*5;
-         Name := Int32ToUtf8(i);
-       end;
-     Coll.Coll.EndUpdate;
-     U := ObjectToJSON(Coll.Coll);
-     Check(Hash32(U)=$DB782098);
-     C2.Coll.Clear;
-     Check(JSONToObject(C2.fColl,pointer(U),Valid)=nil);
-     Check(Valid);
-     Check(C2.Coll.Count=Coll.Coll.Count);
-     for i := 1 to C2.Coll.Count-2 do
-       with C2.Coll[i+1] do begin
-         Check(Color=i*3);
-         Check(Length=i*5);
-         Check(Name=Int32ToUtf8(i));
-       end;
-     U := ObjectToJSON(Coll);
-     Check(length(U)=443103);
-     Check(Hash32(U)=$7EACF12A);
-     C2.One.Name := '';
-     C2.Coll.Clear;
-     Check(JSONToObject(C2,pointer(U),Valid)=nil);
-     Check(Valid);
-     Check(C2.Coll.Count=Coll.Coll.Count);
-     U := ObjectToJSON(C2);
-     Check(length(U)=443103);
-     Check(Hash32(U)=$7EACF12A);
-     for i := 1 to C2.Coll.Count-2 do
-       with C2.Coll[i+1] do begin
-         Check(Color=i*3);
-         Check(Length=i*5);
-         Check(Name=Int32ToUtf8(i));
-       end;
-     Coll.Coll.Clear;
-     Coll.Str := TStringList.Create;
-     Coll.Str.BeginUpdate;
-     for i := 1 to 10000 do
-       Check(Coll.Str.Add(IntToStr(i))=i-1);
-     Coll.Str.EndUpdate;
-     U := ObjectToJSON(Coll);
-     Check(Hash32(U)=$85926050);
-     J := ObjectToJSON(Coll,[woHumanReadable]);
-     U2 := JSONReformat(J,jsonCompact);
-     Check(U2=U);
-     C2.Str := TStringList.Create;
-     Check(JSONToObject(C2,pointer(U),Valid)=nil);
-     Check(Valid);
-     Check(C2.Str.Count=Coll.Str.Count);
-     for i := 1 to C2.Str.Count do
-       Check(C2.Str[i-1]=IntToStr(i));
-     J := ObjectToJSON(C2);
-     Check(Hash32(J)=$85926050);
-     C2.One.Color := 0;
-     C2.One.Name := '';
-     U := '{"One":{"Color":1,"Length":0,"Name":"test","Unknown":123},"Coll":[]}';
-     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
-     Check(Valid);
-     Check(C2.One.Color=1);
-     Check(C2.One.Name='test');
-     C2.One.Color := 0;
-     C2.One.Name := '';
-     U := '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
-     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
-     Check(Valid);
-     Check(C2.One.Color=1);
-     Check(C2.One.Name='test');
-     U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2},"Coll":[]}';
-     Check(IdemPChar(JSONToObject(C2,UniqueRawUTF8(U),Valid),'"TEST'),'invalid JSON');
-     Check(not Valid);
-     U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil);
-     Check(not Valid);
-     U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
-     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil,'invalid JSON');
-     Check(not Valid);
-     U := '{"Coll":[{"Color":1,"Length":0,"Name":"test"}],'+
-       '"One":{"Color":2,"Length":0,"Name":"test2"}}';
-     Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
-     Check(Valid);
-     Check(C2.One.Color=2);
-     Check(C2.One.Name='test2');
-     Check(C2.Coll.Count=1);
-     Check(C2.Coll[0].Name='test');
+    U := ObjectToJSON(Coll);
+    Check(Hash32(U)=$95B54414);
+    Check(ObjectToJSON(C2)=U);
+    Coll.One.Name := 'test"\2';
+    Coll.One.Color := 1;
+    U := ObjectToJSON(Coll);
+    Check(Hash32(U)=$CE2C2DED);
+    Check(JSONToObject(C2,pointer(U),Valid)=nil);
+    Check(Valid);
+    U := ObjectToJSON(C2);
+    Check(Hash32(U)=$CE2C2DED);
+    Coll.Coll.Add.Color := 10;
+    Coll.Coll.Add.Name := 'name';
+    Check(Coll.Coll.Count=2);
+    U := ObjectToJSON(Coll);
+    Check(Hash32(U)=$36B02F0E);
+    Check(JSONToObject(C2,pointer(U),Valid)=nil);
+    Check(Valid);
+    Check(C2.Coll.Count=2);
+    U := ObjectToJSON(C2);
+    Check(Hash32(U)=$36B02F0E);
+    J := ObjectToJSON(Coll,[woHumanReadable]);
+    Check(Hash32(J)=$9FAFF11F);
+    Check(JSONReformat(J,jsonCompact)=U);
+    Check(JSONReformat('{ "empty": {} }')='{'#$D#$A#9'"empty": {'#$D#$A#9#9'}'#$D#$A'}');
+    U := ObjectToJSON(Coll,[woStoreClassName]);
+    Check(U='{"ClassName":"TCollTst","One":{"ClassName":"TCollTest","Color":1,'+
+      '"Length":0,"Name":"test\"\\2"},"Coll":[{"ClassName":"TCollTest","Color":10,'+
+      '"Length":0,"Name":""},{"ClassName":"TCollTest","Color":0,"Length":0,"Name":"name"}]}');
+    C2.Coll.Clear;
+    Check(JSONToObject(C2,pointer(U),Valid)=nil);
+    Check(Valid);
+    Check(C2.Coll.Count=2);
+    U := ObjectToJSON(C2);
+    Check(Hash32(U)=$36B02F0E);
+    TJSONSerializer.RegisterClassForJSON([TComplexNumber,TCollTst]);
+    J := '{"ClassName":"TComplexNumber", "Real": 10.3, "Imaginary": 7.92 }';
+    P := UniqueRawUTF8(J); // make local copy of constant
+    Comp := TComplexNumber(JSONToNewObject(P,Valid));
+    if not CheckFailed(Comp<>nil) then begin
+      Check(Valid);
+      Check(Comp.ClassType=TComplexNumber);
+      CheckSame(Comp.Real,10.3);
+      CheckSame(Comp.Imaginary,7.92);
+      U := ObjectToJSON(Comp,[woStoreClassName]);
+      Check(U='{"ClassName":"TComplexNumber","Real":10.3,"Imaginary":7.92}');
+      Comp.Free;
+    end;
+    TJSONSerializer.RegisterCollectionForJSON(TMyCollection,TCollTest);
+    TestMyColl(TMyCollection.Create(TCollTest));
+    Instance.Init(TMyCollection);
+    TestMyColl(Instance.CreateNew as TMyCollection);
+    C2.Coll.Clear;
+    U := ObjectToJSON(C2);
+    Check(Hash32(U)=$CE2C2DED);
+    Coll.Coll.BeginUpdate;
+    for i := 1 to 10000 do
+      with Coll.Coll.Add do begin
+        Color := i*3;
+        Length := i*5;
+        Name := Int32ToUtf8(i);
+      end;
+    Coll.Coll.EndUpdate;
+    U := ObjectToJSON(Coll.Coll);
+    Check(Hash32(U)=$DB782098);
+    C2.Coll.Clear;
+    Check(JSONToObject(C2.fColl,pointer(U),Valid)=nil);
+    Check(Valid);
+    Check(C2.Coll.Count=Coll.Coll.Count);
+    for i := 1 to C2.Coll.Count-2 do
+      with C2.Coll[i+1] do begin
+        Check(Color=i*3);
+        Check(Length=i*5);
+        Check(Name=Int32ToUtf8(i));
+      end;
+    U := ObjectToJSON(Coll);
+    Check(length(U)=443103);
+    Check(Hash32(U)=$7EACF12A);
+    C2.One.Name := '';
+    C2.Coll.Clear;
+    Check(JSONToObject(C2,pointer(U),Valid)=nil);
+    Check(Valid);
+    Check(C2.Coll.Count=Coll.Coll.Count);
+    U := ObjectToJSON(C2);
+    Check(length(U)=443103);
+    Check(Hash32(U)=$7EACF12A);
+    for i := 1 to C2.Coll.Count-2 do
+      with C2.Coll[i+1] do begin
+        Check(Color=i*3);
+        Check(Length=i*5);
+        Check(Name=Int32ToUtf8(i));
+      end;
+    Coll.Coll.Clear;
+    Coll.Str := TStringList.Create;
+    Coll.Str.BeginUpdate;
+    for i := 1 to 10000 do
+      Check(Coll.Str.Add(IntToStr(i))=i-1);
+    Coll.Str.EndUpdate;
+    U := ObjectToJSON(Coll);
+    Check(Hash32(U)=$85926050);
+    J := ObjectToJSON(Coll,[woHumanReadable]);
+    U2 := JSONReformat(J,jsonCompact);
+    Check(U2=U);
+    C2.Str := TStringList.Create;
+    Check(JSONToObject(C2,pointer(U),Valid)=nil);
+    Check(Valid);
+    Check(C2.Str.Count=Coll.Str.Count);
+    for i := 1 to C2.Str.Count do
+      Check(C2.Str[i-1]=IntToStr(i));
+    J := ObjectToJSON(C2);
+    Check(Hash32(J)=$85926050);
+    C2.One.Color := 0;
+    C2.One.Name := '';
+    U := '{"One":{"Color":1,"Length":0,"Name":"test","Unknown":123},"Coll":[]}';
+    Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+    Check(Valid);
+    Check(C2.One.Color=1);
+    Check(C2.One.Name='test');
+    C2.One.Color := 0;
+    C2.One.Name := '';
+    U := '{"One":{"Color":1,"Length":0,"wtf":{"one":1},"Name":"test","Unknown":123},"dummy":null,"Coll":[]}';
+    Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+    Check(Valid);
+    Check(C2.One.Color=1);
+    Check(C2.One.Name='test');
+    U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2},"Coll":[]}';
+    Check(IdemPChar(JSONToObject(C2,UniqueRawUTF8(U),Valid),'"TEST'),'invalid JSON');
+    Check(not Valid);
+    U := '{"One":{"Color":1,"Length":0,"Name":"test\"\\2"},"Coll":[]';
+    Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil);
+    Check(not Valid);
+    U := '{"One":{"Color":,"Length":0,"Name":"test\"\\2"},"Coll":[]';
+    Check(JSONToObject(C2,UniqueRawUTF8(U),Valid)<>nil,'invalid JSON');
+    Check(not Valid);
+    U := '{"Coll":[{"Color":1,"Length":0,"Name":"test"}],'+
+      '"One":{"Color":2,"Length":0,"Name":"test2"}}';
+    Check(JSONToObject(C2,UniqueRawUTF8(U),Valid,nil,[j2oIgnoreUnknownProperty])=nil,'Ignore unknown');
+    Check(Valid);
+    Check(C2.One.Color=2);
+    Check(C2.One.Name='test2');
+    Check(C2.Coll.Count=1);
+    Check(C2.Coll[0].Name='test');
+    C2.One.Length := 10;
+    J := ObjectToJSON(C2);
+    Check(Hash32(J)=$41281936);
+    // (custom) dynamic array serialization
+    TCollTstDynArrayTest;
+    TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
+      TCollTstDynArray.FVReader,TCollTstDynArray.FVWriter);
+    TCollTstDynArrayTest;
+    TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
+      TCollTstDynArray.FVReader2,TCollTstDynArray.FVWriter2);
+    TCollTstDynArrayTest;
+    // (custom) class serialization
+    TFileVersionTest(false);
+    TJSONSerializer.RegisterCustomSerializer(TFileVersion,
+      TCollTstDynArray.FVClassReader,TCollTstDynArray.FVClassWriter);
+    TFileVersionTest(true);
+    TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
+    TFileVersionTest(false);
+    TJSONSerializer.RegisterCustomSerializerFieldNames(
+      TCollTest,['name','length'],['n','len']);
+    J := ObjectToJSON(C2);
+    Check(Hash32(J)=$FFBC77A,'RegisterCustomSerializerFieldNames');
+    TCollTstDynArrayTest;
+    TJSONSerializer.RegisterCustomSerializerFieldNames(TCollTest,[],[]);
+    J := ObjectToJSON(C2);
+    Check(Hash32(J)=$41281936,'unRegisterCustomSerializerFieldNames');
+    TCollTstDynArrayTest;
   finally
     C2.Free;
     Coll.Free;
   end;
-  // (custom) dynamic array serialization
-  TCollTstDynArrayTest;
-  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
-    TCollTstDynArray.FVReader,TCollTstDynArray.FVWriter);
-  TCollTstDynArrayTest;
-  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TFVs),
-    TCollTstDynArray.FVReader2,TCollTstDynArray.FVWriter2);
-  TCollTstDynArrayTest;
-  // (custom) class serialization
-  TFileVersionTest(false);
-  TJSONSerializer.RegisterCustomSerializer(TFileVersion,
-    TCollTstDynArray.FVClassReader,TCollTstDynArray.FVClassWriter);
-  TFileVersionTest(true);
-  TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
-  TFileVersionTest(false);
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   // test TJSONRecordTextDefinition parsing
