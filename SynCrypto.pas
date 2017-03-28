@@ -9072,27 +9072,29 @@ var time: Int64;
   procedure hmacInit;
   var timenow: Int64;
       g: TGUID;
-      i, val: cardinal;
+      i,val: cardinal;
   begin
     hmac.Init(@entropy,sizeof(entropy)); // bytes on CPU stack
     hmac.Update(@time,sizeof(time));
     hmac.Update(ExeVersion.Hash.b);
     QueryPerformanceCounter(timenow);
     hmac.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
+    val := UnixTimeUTC;
+    hmac.Update(@val,sizeof(val));
     for i := 0 to timenow and 3 do begin
       CreateGUID(g); // not random, but genuine
       hmac.Update(@g,sizeof(g));
     end;
     for i := 1 to (Random32 and 15)+2 do begin
-      val := Random32;
+      val := Random32; // RDRAND Intel x86/x64 opcode or gsl_rng_taus2()
       hmac.Update(@val,sizeof(val));
     end;
   end;
 begin
   QueryPerformanceCounter(time);
+  // retrieve some initial entropy from OS
   SetLength(result,Len);
   p := pointer(result);
-  // retrieve some initial entropy from OS
   FillSystemRandom(p,len,true);
   // always xor some explicit entropy - it won't hurt
   hmacInit;
@@ -9122,7 +9124,6 @@ begin
     paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
     p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
   end;
-  Random32Seed(@entropy[3],sizeof(entropy[3]));
 end;
 
 procedure TAESPRNG.Seed;
