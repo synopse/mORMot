@@ -341,6 +341,8 @@ type
     procedure NumericalConversions;
     /// test crc32c in both software and hardware (SSE4.2) implementations
     procedure _crc32c;
+    /// test RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
+    procedure _Random32;
     /// test TSynBloomFilter class
     procedure BloomFilters;
     /// the new fast Currency to/from string conversion
@@ -2728,6 +2730,22 @@ begin
     Check(IsMatch('[A-Za-z0-9]?[A-Za-z0-9]',V)=(i in IsWord));
     Check(IsMatch('[A-Za-z0-9]*',V)=(i in IsWord));
   end;
+end;
+
+procedure TTestLowLevelCommon._Random32;
+var i: integer;
+    c: array[0..1000] of cardinal;
+begin
+  for i := 0 to high(c) do
+    c[i] := Random32;
+  QuickSortInteger(@c,0,high(c));
+  for i := 1 to high(c) do
+    Check(c[i+1]<>c[i],'unique Random32');
+  Check(Random32(0)=0);
+  for i := 1 to 100000 do
+    Check(Random32(i)<cardinal(i));
+  for i := 0 to 100000 do
+    Check(Random32(maxInt-i)<cardinal(maxInt-i));
 end;
 
 function kr32reference(buf: PAnsiChar; len: cardinal): cardinal;

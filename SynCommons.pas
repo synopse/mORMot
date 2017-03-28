@@ -6200,13 +6200,24 @@ function GUIDToString(const guid: TGUID): string;
 // - will fast generate some random-like 32-bit output
 // - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
 // - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
-function Random32: cardinal;
+function Random32: cardinal; overload;
+
+/// fast compute of some 32-bit random value, with a maximum (excluded) upper value
+// - i.e. returns a value in range [0..max-1]
+// - will use RDRAND Intel x86/x64 opcode if available, or fast gsl_rng_taus2
+// generator by Pierre L'Ecuyer (period is 2^88, i.e. about 10^26)
+// - will fast generate some random-like 32-bit output
+// - use rather TAESPRNG.Main.FillRandom() for cryptographic-level randomness
+// - thread-safe function: each thread will maintain its own gsl_rng_taus2 table
+function Random32(max: cardinal): cardinal; overload;
 
 /// seed the gsl_rng_taus2 Random32 generator
 // - do nothing if RDRAND Intel x86/x64 opcode is available
 // - by default, gsl_rng_taus2 generator is re-seeded every 256KB, much more
 // often than the Pierre L'Ecuyer's algorithm period of 2^88
-// - you can specify some additional entropy buffer
+// - you can specify some additional entropy buffer; note that calling this
+// function with the same entropy again WON'T seed the generator with the same
+// sequence (as with RTL's RandomSeed function), but initiate a new one
 // - thread-specific function: each thread will maintain its own seed table
 procedure Random32Seed(entropy: pointer=nil; entropylen: integer=0);
 
@@ -34100,7 +34111,7 @@ end;
 type
   TLecuyer = {$ifndef ISDELPHI2010}object{$else}record{$endif}
     rs1, rs2, rs3: cardinal;
-    count: cardinal;
+    seedcount: cardinal;
     procedure Seed(entropy: PByteArray; entropylen: integer);
     function Next: cardinal;
   end;
@@ -34125,16 +34136,16 @@ begin
     rs2 := rs2 xor crc.c1;
     rs3 := rs3 xor crc.c2;
   until (rs1>1) and (rs2>7) and (rs3>15);
-  count := 1;
+  seedcount := 1;
   for i := 1 to crc.i3 and 15 do
     Next; // warm up
 end;
 
 function TLecuyer.Next: cardinal;
 begin
-  if word(count)=0 then // reseed after 256KB of output
+  if word(seedcount)=0 then // reseed after 256KB of output
     Seed(nil,0) else
-    inc(count);
+    inc(seedcount);
   result := rs1;
   rs1 := ((result and -2)shl 12) xor (((result shl 13)xor result)shr 19);
   result := rs2;
@@ -34159,6 +34170,11 @@ begin
     result := RdRand32 else
   {$endif}
     result := _Lecuyer.Next;
+end;
+
+function Random32(max: cardinal): cardinal; 
+begin
+  result := (Int64(Random32)*max)shr 32;
 end;
 
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
@@ -38474,7 +38490,7 @@ begin
     Reg.RecordTypeInfo := aTypeInfo;
     result := RecordSearch(Reg.RecordTypeInfo,false);
   end;
-  else raise ESynException.CreateUTF8('%.Search: % not DynArray or Record',
+  else raise ESynException.CreateUTF8('%.Search: % not a tkDynArray/tkRecord',
     [self,ToText(PTypeKind(aTypeInfo)^)^]);
   end;
   if not AddIfNotExisting then
