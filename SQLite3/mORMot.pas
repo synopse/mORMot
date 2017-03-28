@@ -4151,6 +4151,7 @@ type
     // - setting both aReader=aWriter=nil will return back to the default class
     // serialization (i.e. published properties serialization)
     // - note that any inherited classes will be serialized as the parent class
+    // - this method is thread-safe, but should be called before any serialization
     class procedure RegisterCustomSerializer(aClass: TClass;
       aReader: TJSONSerializerCustomReader; aWriter: TJSONSerializerCustomWriter);
     /// define custom serialization of field names for a given class
@@ -4162,6 +4163,7 @@ type
     // - by design, this customization excludes RegisterCustomSerializer() with
     // custom reader/writer callbacks
     // - note that any inherited classes will be serialized as the parent class
+    // - this method is thread-safe, but should be called before any serialization
     class procedure RegisterCustomSerializerFieldNames(aClass: TClass;
       const aClassFields, aJsonFields: array of ShortString);
     /// let a given class be recognized by JSONToObject() from "ClassName":".."
@@ -4170,6 +4172,7 @@ type
     // new instance using the "ClassName":"..." field to identify the class type
     // - by default, all referenced TSQLRecord classes will be globally
     // registered when TSQLRecordProperties information is retrieved
+    // - this method is thread-safe, but should be called before any serialization
     class procedure RegisterClassForJSON(aItemClass: TClass); overload;
     /// let a given class be recognized by JSONToObject() from "ClassName":".."
     // - TObjectList item instances will be created corresponding to the
@@ -4177,6 +4180,7 @@ type
     // new instance using the "ClassName":"..." field to identify the class type
     // - by default, all referenced TSQLRecord classes will be globally
     // registered when TSQLRecordProperties information is retrieved
+    // - this method is thread-safe, but should be called before any serialization
     class procedure RegisterClassForJSON(const aItemClass: array of TClass); overload;
     {$ifndef LVCL}
     /// let a given TCollection be recognized during JSON serialization
@@ -4188,6 +4192,7 @@ type
     // without defining a new method and inherits from TInterfacedCollection
     // - note that both supplied classes will be registered for the internal
     // "ClassName":"..." RegisterClassForJSON() process
+    // - this method is thread-safe, but should be called before any serialization
     class procedure RegisterCollectionForJSON(aCollection: TCollectionClass;
       aItem: TCollectionItemClass);
     {$endif}

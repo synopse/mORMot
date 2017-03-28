@@ -13005,7 +13005,7 @@ begin
       TestClientDist(TSQLRestClientURINamedPipe.Create(ModelC,'Test'));
       {$endif}
       // check custom properties content
-{$ifndef LVCL}
+      {$ifndef LVCL}
       if Client.TransactionBegin(TSQLRecordPeopleObject) then
       try
         V2.FillPrepare(Client,'LastName=:("Morse"):');
@@ -13031,14 +13031,14 @@ begin
       except
         Client.RollBack;
       end;
-{$endif}
+      {$endif}
       // test backup API
       BackupFN := Format('backupbackground%s.dbsynlz',[ClassName]);
       deleteFile(BackupFN);
       BackupTimer.Start;
       Check(Client.DB.BackupBackground(BackupFN,1024,0,OnBackupProgress,true));
       // test per-one and batch requests
-      if ClassType=TTestMemoryBased then begin // this is a bit time consuming, so do it once
+      if ClassType=TTestMemoryBased then begin // time consuming, so do it once
         Server := TSQLRestServerTest.Create(TSQLModel.Create([TSQLRecordPeople]),false);
         try
           Server.Model.Owner := Server; // we just use TSQLRecordPeople here

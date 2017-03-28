@@ -39018,7 +39018,7 @@ begin
   tkChar: result := ptByte;
   tkWChar: result := ptWord;
   tkClass, tkMethod, tkInterface: result := ptPtrInt;
-  tkInteger, tkSet:
+  tkInteger:
     case GetTypeInfo(Info)^.IntegerType of
     otSByte,otUByte: result := ptByte;
     otSWord,otUWord: result := ptWord;
@@ -39035,7 +39035,7 @@ begin
   tkEnumeration:
     if Info=TypeInfo(boolean) then
       result := ptBoolean;
-      // other enumerates will use TJSONCustomParserCustomSimple below
+      // other enumerates (or tkSet) will use TJSONCustomParserCustomSimple
   {$endif}
   tkFloat:
     case GetTypeInfo(Info)^.FloatType of
@@ -39061,15 +39061,15 @@ begin
     if ItemType=ptCustom then
       ItemType := TypeInfoToSimpleRTTIType(Info,ItemSize);
     if ItemType=ptCustom then
-      if Item^.kind in [tkEnumeration,tkArray,tkDynArray] then
+      if Item^.kind in [tkEnumeration,tkArray,tkDynArray,tkSet] then
         result := TJSONCustomParserCustomSimple.Create(
           PropertyName,ItemTypeName,Item) else begin
         ndx := GlobalJSONCustomParsers.RecordSearch(Item);
         if ndx<0 then
           ndx := GlobalJSONCustomParsers.RecordSearch(ItemTypeName);
         if ndx<0 then
-          raise ESynException.CreateUTF8('%.CreateFromRTTI("%")',
-            [self,ItemTypeName]);
+          raise ESynException.CreateUTF8('%.CreateFromRTTI("%") unsupported %',
+            [self,ItemTypeName,ToText(Item^.kind)^]);
         result := TJSONCustomParserCustomRecord.Create(PropertyName,ndx);
       end else
       result := TJSONCustomParserRTTI.Create(PropertyName,ItemType);
