@@ -60,6 +60,7 @@ uses
   {$else}
   {$ifdef FPC}
   dynlibs,
+  SynFPCLinux,
   {$endif}
   {$ifdef KYLIX3}
   LibC,
