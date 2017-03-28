@@ -285,6 +285,7 @@ type
   // and they are encrypted with a temporary key - this secret keys is tied to
   // the TMVCSessionWithCookies instance lifetime, so new cookies are generated
   // after server restart, unless they are persisted via LoadContext/SaveContext
+  // - signature and encryption are weak, but very fast, to avoid DDOS attacks
   TMVCSessionWithCookies = class(TMVCSessionAbstract)
   protected
     fContext: TMVCSessionWithCookiesContext;
@@ -1187,16 +1188,16 @@ end;
 { TMVCSessionWithCookies }
 
 constructor TMVCSessionWithCookies.Create;
-var rnd: THash128;
+var rnd: TByte64;
 begin
   inherited Create;
   fContext.CookieName := 'mORMot';
-  with TAESPRNG.Main do begin
-    FillRandom(@fContext.Crypt,sizeof(fContext.Crypt)); // temporary encryption
-    FillRandom(@fContext.CryptNonce,sizeof(fContext.CryptNonce));
-    FillRandom(rnd);
-  end;
-  fContext.Secret.Init(@rnd,sizeof(rnd)); // temporary secret for HMAC-CRC32C
+  // temporary secret for encryption
+  fContext.CryptNonce := Random32;
+  TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt));
+  // temporary secret for HMAC-CRC32C
+  TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
+  fContext.Secret.Init(@rnd,sizeof(rnd));
 end;
 
 procedure XorMemoryCTR(Data,Key: PByteArray; size: integer; var ctr: cardinal);
@@ -1223,7 +1224,7 @@ var chunk: integer;
 begin
   ctr := fContext.CryptNonce;
   while bytes>0 do begin
-    if bytes>sizeof(fContext.Crypt) then
+    if bytes>sizeof(fContext.Crypt) then // encrypt by 256 bytes chunks
       chunk := sizeof(fContext.Crypt) else
       chunk := bytes;
     XorMemoryCTR(P,@fContext.Crypt,chunk,ctr);
