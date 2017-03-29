@@ -20550,7 +20550,7 @@ begin
   if objClass=nil then
     exit;
   ObjArrayClear(obj);
-  if (arr.Kind<>dvArray) or (arr.Count=0) then
+  if not(dvoIsArray in arr.Options) or (arr.Count=0) then
     exit;
   SetLength(obj,arr.Count);
   for i := 0 to arr.Count-1 do begin
@@ -24035,7 +24035,7 @@ begin // fValues[] variants -> fTracked[].Props[].Values[]
       for p := 0 to length(Track.Props)-1 do
         with Track.Props[p] do
         if val^.GetAsDocVariant(Name,int) and
-           (int^.Count>0) and (int^.Kind=dvArray) then begin
+           (int^.Count>0) and (dvoIsArray in int^.Options) then begin
           for v := 0 to length(Values[g])-1 do
             if v<int^.Count then
               Values[g][v] := VariantToInt64Def(int^.Values[v],0);
@@ -57966,7 +57966,7 @@ procedure TServiceMethodArgument.AddAsVariant(var Dest: TDocVariantData; V: poin
 var tmp: variant;
 begin
   AsVariant(tmp,V,Dest.Options);
-  if Dest.Kind=dvArray then
+  if dvoIsArray in Dest.Options then
     Dest.AddItem(tmp) else
     Dest.AddValue(ShortStringToAnsi7String(ParamName^),tmp);
 end;

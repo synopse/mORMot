@@ -14015,6 +14015,8 @@ function SynRegisterCustomVariantType(aClass: TSynInvokeableVariantTypeClass): T
 
 type
   /// possible options for a TDocVariant JSON/BSON document storage
+  // - dvoIsArray and dvoIsObject will store the "Kind: TDocVariantKind" state -
+  // you should never have to define these two options directly
   // - dvoNameCaseSensitive will be used for every name lookup - here
   // case-insensitivity is restricted to a-z A-Z 0-9 and _ characters
   // - dvoCheckForDuplicatedNames will be used for method
@@ -14050,7 +14052,8 @@ type
   // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
   // with potential loss of precision during the conversion
   TDocVariantOption =
-    (dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
+    (dvoIsArray, dvoIsObject,
+     dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
      dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
      dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
@@ -14060,6 +14063,8 @@ type
   // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
   // local document as with _ObjFast/_ArrFast/_JsonFast - i.e.
   // [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]
+  // - when specifying the options, you should not include dvoIsArray nor
+  // dvoIsObject directly in the set, but explicitly define TDocVariantDataKind
   TDocVariantOptions = set of TDocVariantOption;
 
   /// pointer to a set of options for a TDocVariant storage
@@ -14636,7 +14641,6 @@ type
   {$endif}
     VType: TVarType;
     VOptions: TDocVariantOptions;
-    VKind: TDocVariantKind;
     (* this structure uses all TVarData available space: no filler needed!
     {$HINTS OFF} // does not complain if Filler is declared but never used
     Filler: array[1..SizeOf(TVarData)-SizeOf(TVarType)-SizeOf(TDocVariantOptions)-
@@ -14649,6 +14653,10 @@ type
     // retrieve the value as varByRef
     function GetValueOrItem(const aNameOrIndex: variant): variant;
     procedure SetValueOrItem(const aNameOrIndex, aValue: variant);
+    function GetKind: TDocVariantKind;
+      {$ifdef HASINLINE}inline;{$endif}
+    procedure SetOptions(const opt: TDocVariantOptions); // keep dvoIsObject/Array
+      {$ifdef HASINLINE}inline;{$endif}
     procedure SetCapacity(aValue: integer);
     function GetCapacity: integer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -14849,16 +14857,19 @@ type
     procedure Clear;
     /// delete all internal stored values
     // - like Clear + Init() with the same options
+    // - will reset Kind to dvUndefined
     procedure Reset;
-    /// force a number of items
+    /// low-level method to force a number of items
     // - could be used to fast add items to the internal Values[]/Names[] arrays
-    // - just set VCount, do not resize the arrays: caller should ensure that
-    // Capacity is big enough
+    // - just set protected VCount field, do not resize the arrays: caller
+    // should ensure that Capacity is big enough
     procedure SetCount(aCount: integer);
-    /// low-level method called internally
+    /// low-level method called internally to reserve place for new values
+    // - returns the index of the newly created item in Values[]/Names[] arrays
     // - you should not have to use it, unless you want to add some items
     // directly within the Values[]/Names[] arrays, using e.g.
     // InitFast(InitialCapacity) to initialize the document
+    // - if aName='', append a dvArray item, otherwise append a dvObject field
     function InternalAdd(const aName: RawUTF8): integer;
 
     /// save a document as UTF-8 encoded JSON
@@ -15136,17 +15147,17 @@ type
       AllowVarDouble: boolean=false): integer;
     /// add some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
-    // - caller should ensure that VKind=dvObject, otherwise it won't do anything
+    // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be duplicated
     procedure AddNameValuesToObject(const NameValuePairs: array of const);
     /// merge some properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
-    // - caller should ensure that VKind=dvObject, otherwise it won't do anything
+    // - caller should ensure that Kind=dvObject, otherwise it won't do anything
     // - any existing Name would be updated with the new Value
     procedure AddOrUpdateNameValuesToObject(const NameValuePairs: array of const);
     /// merge some TDocVariantData dvObject properties to a TDocVariantData dvObject
     // - data is supplied two by two, as Name,Value pairs
-    // - caller should ensure that both variants have VKind=dvObject, otherwise
+    // - caller should ensure that both variants have Kind=dvObject, otherwise
     // it won't do anything
     // - any existing Name would be updated with the new Value, unless
     // OnlyAddMissing is set to TRUE, in which case existing values would remain
@@ -15273,14 +15284,17 @@ type
 
     /// how this document will behave
     // - those options are set when creating the instance
-    property Options: TDocVariantOptions read VOptions write VOptions;
-    /// returns the instance internal layout
+    // - dvoArray and dvoObject are not options, but define the document Kind,
+    // so those items are ignored when assigned to this property
+    property Options: TDocVariantOptions read VOptions write SetOptions;
+    /// returns the document internal layout
     // - just after initialization, it will return dvUndefined
     // - most of the time, you will add named values with AddValue() or by
     // setting the variant properties: it will return dvObject
     // - but is you use AddItem(), values will have no associated names: the
     // document will be a dvArray
-    property Kind: TDocVariantKind read VKind;
+    // - value computed from the dvoArray and dvoObject presence in Options
+    property Kind: TDocVariantKind read GetKind;
     /// return the custom variant type identifier, i.e. DocVariantType.VarType
     property VarType: word read VType;
     /// number of items stored in this document
@@ -15430,7 +15444,8 @@ type
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
 
-
+/// retrieve the text representation of a TDocVairnatKind
+function ToText(kind: TDocVariantKind): PShortString; overload;
 
 /// direct access to a TDocVariantData from a given variant instance
 // - return a pointer to the TDocVariantData corresponding to the variant
@@ -15445,7 +15460,7 @@ function DocVariantData(const DocVariant: variant): PDocVariantData;
 const
   /// constant used e.g. by _Safe() overloaded functions
   // - will be in code section of the exe, so will be read-only by design
-  // - would have VKind=dvUndefined and VCount=0, so _Safe() would return
+  // - would have Kind=dvUndefined and Count=0, so _Safe() would return
   // a valid, but void document
   // - its VType is varNull, so would be viewed as a null variant
   // - dvoReturnNullForUnknownProperty is defined, so that U[]/I[]... methods
@@ -32451,6 +32466,7 @@ asm
         pop     ebx
         not     eax
 end;
+
 {$ifdef CPUX86}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 asm
@@ -41278,14 +41294,31 @@ end;
 
 { TDocVariantData }
 
+function TDocVariantData.GetKind: TDocVariantKind;
+begin
+  if dvoIsArray in VOptions then
+    result := dvArray else
+  if dvoIsObject in VOptions then
+    result := dvObject else
+    result := dvUndefined;
+end;
+
+procedure TDocVariantData.SetOptions(const opt: TDocVariantOptions);
+begin
+  VOptions := (opt-[dvoIsArray,dvoIsObject])+(VOptions*[dvoIsArray,dvoIsObject]);
+end;
+
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
   if DocVariantType=nil then
     DocVariantType := SynRegisterCustomVariantType(TDocVariant);
   ZeroFill(@self);
   VType := DocVariantVType;
-  VOptions := aOptions;
-  VKind := aKind;
+  VOptions := aOptions-[dvoIsArray,dvoIsObject];
+  case aKind of
+    dvArray:  include(VOptions,dvoIsArray);
+    dvObject: include(VOptions,dvoIsObject);
+  end;
 end;
 
 procedure TDocVariantData.InitFast;
@@ -41300,7 +41333,10 @@ end;
 procedure TDocVariantData.InitFast(InitialCapacity: integer; aKind: TDocVariantKind);
 begin
   InitFast;
-  VKind := aKind;
+  case aKind of
+    dvArray:  include(VOptions,dvoIsArray);
+    dvObject: include(VOptions,dvoIsObject);
+  end;
   if aKind=dvObject then
     SetLength(VName,InitialCapacity);
   SetLength(VValue,InitialCapacity);
@@ -41318,9 +41354,9 @@ var n,arg: integer;
     tmp: variant;
 begin
   n := length(NameValuePairs) shr 1;
-  if (n=0) or (VKind=dvArray) then
+  if (n=0) or (dvoIsArray in VOptions) then
     exit; // nothing to add
-  VKind := dvObject;
+  include(VOptions,dvoIsObject);
   if length(VValue)<VCount+n then begin
     SetLength(VValue,VCount+n);
     SetLength(VName,VCount+n);
@@ -41342,7 +41378,7 @@ var n,arg: integer;
     v: Variant;
 begin
   n := length(NameValuePairs) shr 1;
-  if (n=0) or (VKind=dvArray) then
+  if (n=0) or (dvoIsArray in VOptions) then
     exit; // nothing to add
   for arg := 0 to n-1 do begin
     VarRecToUTF8(NameValuePairs[arg*2],n2);
@@ -41357,7 +41393,7 @@ var n: integer;
     new: PDocVariantData;
 begin
   new := _Safe(NewValues);
-  if (VKind<>dvArray) and (new^.VKind<>dvArray) then
+  if not(dvoIsArray in VOptions) and not(dvoIsArray in new^.VOptions) then
     for n := 0 to new^.Count-1 do
       AddOrUpdateValue(new^.names[n],new^.Values[n],nil,OnlyAddMissing);
 end;
@@ -41502,7 +41538,7 @@ begin
     n := JSONArrayCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
-    VKind := dvArray;
+    include(VOptions,dvoIsArray);
     if n>0 then begin
       SetLength(VValue,n);
       repeat
@@ -41523,7 +41559,7 @@ begin
     n := JSONObjectPropCount(JSON); // may be slow if JSON is huge (not very common)
     if n<0 then
       exit; // invalid content
-    VKind := dvObject;
+    include(VOptions,dvoIsObject);
     if n>0 then begin
       SetLength(VValue,n);
       SetLength(VName,n);
@@ -41547,7 +41583,7 @@ begin
   end;
   'n','N': begin
     if IdemPChar(JSON+1,'ULL') then begin
-      VKind := dvObject;
+      include(VOptions,dvoIsObject);
       result := GotoNextNotSpace(JSON+4);
     end;
     exit;
@@ -41629,13 +41665,19 @@ begin
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
     VType := DocVariantVType;
-    VKind := Source^.Kind;
+    VOptions := aOptions-[dvoIsArray,dvoIsObject]; // may not be same as Source
+    if dvoIsArray in Source^.VOptions then
+      include(VOptions,dvoIsArray) else
+    if dvoIsObject in Source^.VOptions then
+      include(VOptions,dvoIsObject);
     VCount := Source^.VCount;
     pointer(VName) := nil;  // avoid GPF
     VName := Source^.VName;
     pointer(VValue) := nil;
-  end else
+  end else begin
+    SetOptions(aOptions);
     VariantDynArrayClear(VValue); // force re-create full copy of all values
+  end;
   if VCount>0 then begin
     SetLength(VValue,VCount);
     for ndx := 0 to VCount-1 do begin
@@ -41656,7 +41698,6 @@ begin
     end;
   end;
   VariantDynArrayClear(SourceVValue); // faster alternative
-  VOptions := aOptions; // may not be the same as in Source
 end;
 
 procedure TDocVariantData.Clear;
@@ -41667,12 +41708,12 @@ begin
 end;
 
 procedure TDocVariantData.Reset;
-var opt: TDocVariantOptions;
+var backup: TDocVariantOptions;
 begin
-  opt := VOptions;
+  backup := VOptions-[dvoIsArray,dvoIsObject];
   DocVariantType.Clear(TVarData(self));
   VType := DocVariantVType;
-  VOptions := opt;
+  VOptions := backup;
 end;
 
 procedure TDocVariantData.SetCount(aCount: integer);
@@ -41683,28 +41724,26 @@ end;
 function TDocVariantData.InternalAdd(const aName: RawUTF8): integer;
 var len: integer;
 begin
-  if aName<>'' then
-    case Kind of // aName is set for an object
-      dvUndefined: begin
-        VType := DocVariantVType; // may not be set yet
-        VKind := dvObject;
-      end;
-      dvArray:
-        raise EDocVariant.CreateUTF8('Unexpected "%" property name in an array',[aName]);
-    end else
-    case Kind of // aName is not set for an array
-      dvUndefined: begin
-        VType := DocVariantVType; // may not be set yet
-        VKind := dvArray;
-      end;
-      dvObject:
-        raise EDocVariant.Create('Unexpected array item added to an object');
+  if aName<>'' then begin
+    if dvoIsArray in VOptions then
+      raise EDocVariant.CreateUTF8('Unexpected "%" property name in an array',[aName]);
+    if not(dvoIsObject in VOptions) then begin
+      VType := DocVariantVType; // may not be set yet
+      include(VOptions,dvoIsObject);
     end;
+  end else begin
+    if dvoIsObject in VOptions then
+      raise EDocVariant.Create('Unexpected array item added to an object');
+    if not(dvoIsArray in VOptions) then begin
+      VType := DocVariantVType; // may not be set yet
+      include(VOptions,dvoIsArray);
+    end;
+  end;
   if VValue=nil then
     SetLength(VValue,16) else
-  if VCount>=length(VValue) then
-    SetLength(VValue,VCount+VCount shr 3+32);
-  if VKind=dvObject then begin
+    if VCount>=length(VValue) then
+      SetLength(VValue,VCount+VCount shr 3+32);
+  if aName<>'' then begin
     len := length(VValue);
     if Length(VName)<>len then
       SetLength(VName,len);
@@ -41716,7 +41755,7 @@ end;
 
 procedure TDocVariantData.SetCapacity(aValue: integer);
 begin
-  if VKind=dvObject then
+  if dvoIsObject in VOptions then
     SetLength(VName,aValue);
   SetLength(VValue,aValue);
 end;
@@ -41767,7 +41806,8 @@ procedure TDocVariantData.AddByPath(const aSource: TDocVariantData; const aPaths
 var p,added: integer;
     v: TVarData;
 begin
-  if (aSource.Count=0) or (aSource.VKind<>dvObject) or (VKind=dvArray) then
+  if (aSource.Count=0) or not(dvoIsObject in aSource.VOptions) or
+     (dvoIsArray in VOptions) then
     exit;
   for p := 0 to High(aPaths) do begin
     DocVariantType.Lookup(v,TVarData(aSource),pointer(aPaths[p]));
@@ -41785,11 +41825,15 @@ begin
   source := _Safe(aDocVariant);
   if source^.Count=0 then
     exit; // nothing to add
-  if (VKind<>dvUndefined) and (VKind<>source^.VKind) then
-    exit; // types should match
-  if source^.VKind=dvArray then
+  if dvoIsArray in source^.VOptions then
+    // add array items
+    if dvoIsObject in VOptions then // types should match
+      exit else
     for ndx := 0 to source^.Count-1 do
       AddItem(source^.VValue[ndx]) else
+    // add object items
+    if dvoIsArray in VOptions then // types should match
+      exit else
     for ndx := 0 to source^.Count-1 do
       AddValue(source^.VName[ndx],source^.VValue[ndx]);
 end;
@@ -41824,10 +41868,10 @@ var ndx: integer;
     wasString: boolean;
     v: PVarData;
 begin
-  if VKind=dvArray then
+  if dvoIsArray in VOptions then
     for result := 0 to VCount-1 do
       with _Safe(VValue[result])^ do
-        if VKind=dvObject then begin
+        if dvoIsObject in VOptions then begin
           ndx := GetValueIndex(aPropName);
           if ndx>=0 then begin
             v := @VValue[ndx];
@@ -41898,7 +41942,7 @@ end;
 
 procedure TDocVariantData.SortByName(Compare: TUTF8Compare=nil);
 begin
-  if (VKind<>dvObject) or (VCount=0) then
+  if not(dvoIsObject in VOptions) or (VCount=0) then
     exit;
   if not Assigned(Compare) then
     Compare := @StrIComp;
@@ -41955,7 +41999,7 @@ end;
 procedure TDocVariantData.Reverse;
 var arr: TDynArray;
 begin
-  if (VKind=dvUndefined) or (VCount=0) then
+  if VCount=0 then
     exit;
   if VName<>nil then begin
     SetLength(VName,VCount);
@@ -41984,8 +42028,7 @@ begin
   result.InitFast;
   if (VCount=0) or (high(aPropNames)<0) then
     exit;
-  case VKind of
-  dvObject:
+  if dvoIsObject in VOptions then begin
     if aCaseSensitive then begin
       for j := 0 to high(aPropNames) do
         for ndx := 0 to VCount-1 do
@@ -42002,13 +42045,13 @@ begin
               result.AddValue(VName[ndx],VValue[ndx]);
             break;
           end;
-  dvArray:
+  end else
+  if dvoIsArray in VOptions then
     for ndx := 0 to VCount-1 do begin
       _Safe(VValue[ndx])^.Reduce(aPropNames,aCaseSensitive,reduced,aDoNotAddVoidProp);
-      if reduced.VKind=dvObject then
+      if dvoIsObject in reduced.VOptions then
         result.AddItem(variant(reduced));
     end;
-  end;
 end;
 
 function TDocVariantData.ReduceAsArray(const aPropName: RawUTF8;
@@ -42024,7 +42067,7 @@ var ndx,j: integer;
     item: PDocVariantData;
 begin
   result.InitFast;
-  if (VCount=0) or (aPropName='') or (VKind<>dvArray) then
+  if (VCount=0) or (aPropName='') or not(dvoIsArray in VOptions) then
     exit;
   for ndx := 0 to VCount-1 do begin
     item := _Safe(VValue[ndx]);
@@ -42049,7 +42092,7 @@ var ndx,j: integer;
     v: PVariant;
 begin
   result.InitFast;
-  if (VCount=0) or (aPropName='') or (VKind<>dvArray) then
+  if (VCount=0) or (aPropName='') or not(dvoIsArray in VOptions) then
     exit;
   for ndx := 0 to VCount-1 do begin
     item := _Safe(VValue[ndx]);
@@ -42068,7 +42111,7 @@ var ndx,len: integer;
     nested: TDocVariantData;
 begin // {"p.a1":5,"p.a2":"dfasdfa"} -> {"p":{"a1":5,"a2":"dfasdfa"}}
   result := false;
-  if (VCount=0) or (aObjectPropName='') or (VKind<>dvObject) then
+  if (VCount=0) or (aObjectPropName='') or not(dvoIsObject in VOptions) then
     exit;
   PWord(UpperCopy255(Up,aObjectPropName))^ := ord('.'); // e.g. 'P.'
   for ndx := 0 to Count-1 do
@@ -42133,7 +42176,7 @@ begin
   result := 0;
   if aStartNameLen=0 then
     aStartNameLen := StrLen(aStartName);
-  if (VCount=0) or (VKind<>dvObject) or (aStartNameLen=0) then
+  if (VCount=0) or not(dvoIsObject in VOptions) or (aStartNameLen=0) then
     exit;
   UpperCopy255Buf(upname,aStartName,aStartNameLen)^ := #0;
   for ndx := Count-1 downto 0 do
@@ -42147,8 +42190,8 @@ function TDocVariantData.GetValueIndex(aName: PUTF8Char; aNameLen: integer;
   aCaseSensitive: boolean): integer;
 var err: integer;
 begin
-  if VType=DocVariantVType then begin
-    if Kind=dvArray then begin
+  if (VType=DocVariantVType) and (VCount>0) then begin
+    if dvoIsArray in VOptions then begin
       result := GetInteger(aName,err);
       if err<>0 then
         raise EDocVariant.CreateUTF8('Impossible to find "%" property in an array',[aName]);
@@ -42174,8 +42217,8 @@ end;
 function TDocVariantData.GetValueIndex(const aName: RawUTF8): integer;
 begin
   {$ifndef HASINLINE}
-  if not(dvoNameCaseSensitive in VOptions) and (Kind=dvObject) and
-     (VTYpe=DocVariantVType) then begin
+  if not(dvoNameCaseSensitive in VOptions) and (dvoIsObject in VOptions) and
+     (VType=DocVariantVType) then begin
     for result := 0 to VCount-1 do
       if IdemPropNameU(VName[result],aName) then
         exit;
@@ -42195,7 +42238,7 @@ function TDocVariantData.GetValueOrDefault(const aName: RawUTF8;
   const aDefault: variant): variant;
 var ndx: integer;
 begin
-  if (VType<>DocVariantVType) or (Kind<>dvObject) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) then
     result := aDefault else begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
@@ -42207,7 +42250,7 @@ end;
 function TDocVariantData.GetValueOrNull(const aName: RawUTF8): variant;
 var ndx: integer;
 begin
-  if (VType<>DocVariantVType) or (Kind<>dvObject) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) then
     SetVariantNull(result) else begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
@@ -42220,7 +42263,7 @@ function TDocVariantData.GetValueOrEmpty(const aName: RawUTF8): variant;
 var ndx: integer;
 begin
   VarClear(result);
-  if (VType=DocVariantVType) and (Kind=dvObject) then begin
+  if (VType=DocVariantVType) and (dvoIsObject in VOptions) then begin
     ndx := GetValueIndex(aName);
     if ndx>=0 then
       result := VValue[ndx];
@@ -42344,7 +42387,7 @@ function TDocVariantData.GetVarData(const aName: RawUTF8;
   aSortedCompare: TUTF8Compare): PVarData;
 var ndx: Integer;
 begin
-  if (VType<>DocVariantVType) or (Kind<>dvObject) or (VCount=0) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) or (VCount=0) then
     result := nil else begin
     if Assigned(aSortedCompare) then
       ndx := FastFindPUTF8CharSorted(pointer(VName),VCount-1,pointer(aName),aSortedCompare) else
@@ -42359,7 +42402,7 @@ function TDocVariantData.GetValueByPath(const aPath: RawUTF8): variant;
 var Dest: TVarData;
 begin
   VarClear(result);
-  if (VType<>DocVariantVType) or (Kind<>dvObject) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) then
     exit;
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
   if Dest.VType>=varNull then
@@ -42370,7 +42413,7 @@ function TDocVariantData.GetValueByPath(const aPath: RawUTF8; out aValue: varian
 var Dest: TVarData;
 begin
   result := false;
-  if (VType<>DocVariantVType) or (Kind<>dvObject) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) then
     exit;
   DocVariantType.Lookup(Dest,TVarData(self),pointer(aPath));
   if Dest.VType=varEmpty then
@@ -42391,7 +42434,7 @@ begin
   CSVToRawUTF8DynArray(pointer(aPath),path,'.');
   par := @self;
 //  ppar := -1;
-  if (Kind=dvObject) and (Count>0) then
+  if (dvoIsObject in VOptions) and (Count>0) then
     for p := 0 to length(path)-1 do begin
       if _Safe(par^).GetAsPVariant(path[p],result) then
         par := result else begin
@@ -42415,7 +42458,8 @@ var found,res: PVarData;
     P: integer;
 begin
   VarClear(result);
-  if (VType<>DocVariantVType) or (Kind<>dvObject) or (high(aDocVariantPath)<0) then
+  if (VType<>DocVariantVType) or not(dvoIsObject in VOptions) or
+     (high(aDocVariantPath)<0) then
     exit;
   found := @self;
   P := 0;
@@ -42472,7 +42516,7 @@ var Up: array[byte] of AnsiChar;
     ndx: integer;
     W: TTextWriter;
 begin
-  if (Kind<>dvObject) or (VCount=0) then begin
+  if not(dvoIsObject in VOptions) or (VCount=0) then begin
     result := NULL_STR_VAR;
     exit;
   end;
@@ -42512,7 +42556,7 @@ begin
     result := Variant(self);
     exit;
   end;
-  if (Kind<>dvObject) or (VCount=0) then begin
+  if not(dvoIsObject in VOptions) or (VCount=0) then begin
     SetVariantNull(result);
     exit;
   end;
@@ -42578,7 +42622,7 @@ function TDocVariantData.GetValueOrItem(const aNameOrIndex: Variant): Variant;
 var wasString: boolean;
     Name: RawUTF8;
 begin
-  if VKind=dvArray then // fast index lookup e.g. for Value[1]
+  if dvoIsArray in VOptions then // fast index lookup e.g. for Value[1]
     RetrieveValueOrRaiseException(VariantToIntegerDef(aNameOrIndex,-1),result,true) else begin
     VariantToUTF8(aNameOrIndex,Name,wasString); // by name lookup e.g. for Value['abc']
     if wasString then
@@ -42593,7 +42637,7 @@ var wasString: boolean;
     ndx: integer;
     Name: RawUTF8;
 begin
-  if VKind=dvArray then // fast index lookup e.g. for Value[1]
+  if dvoIsArray in VOptions then // fast index lookup e.g. for Value[1]
     SetValueOrRaiseException(VariantToIntegerDef(aNameOrIndex,-1),aValue) else begin
     VariantToUTF8(aNameOrIndex,Name,wasString); // by name lookup e.g. for Value['abc']
     if wasString then begin
@@ -42609,7 +42653,7 @@ end;
 function TDocVariantData.AddOrUpdateValue(const aName: RawUTF8;
   const aValue: variant; wasAdded: PBoolean; OnlyAddMissing: boolean): integer;
 begin
-  if VKind=dvArray then
+  if dvoIsArray in VOptions then 
     raise EDocVariant.CreateUTF8('AddOrUpdateValue("%") on an array',[aName]);
   result := GetValueIndex(aName);
   if result<0 then begin
@@ -42654,7 +42698,7 @@ var fields: TRawUTF8DynArray;
 begin
   fields := nil; // to please Kylix
   fieldsCount := 0;
-  if VKind<>dvArray then begin
+  if not(dvoIsArray in VOptions) then begin
     result := '';
     exit;
   end;
@@ -42663,7 +42707,7 @@ begin
     exit;
   end;
   with _Safe(VValue[0])^ do
-    if VKind=dvObject then begin
+    if dvoIsObject in VOptions then begin
       fields := VName;
       fieldsCount := VCount;
     end;
@@ -42679,7 +42723,7 @@ begin
     end;
     for r := 0 to VCount-1 do begin
       row := _Safe(VValue[r]);
-      if (r>0) and ((row^.VKind<>dvObject) or (row^.VCount<>fieldsCount)) then
+      if (r>0) and (not(dvoIsObject in row^.VOptions) or (row^.VCount<>fieldsCount)) then
         raise EDocVariant.CreateUTF8('ToNonExpandedJSON: Value[%] not object',[r]);
       for f := 0 to fieldsCount-1 do
         if (r>0) and not IdemPropNameU(row^.VName[f],fields[f]) then
@@ -42701,14 +42745,13 @@ procedure TDocVariantData.ToRawUTF8DynArray(out Result: TRawUTF8DynArray);
 var ndx: integer;
     wasString: boolean;
 begin
-  case VKind of
-  dvUndefined: exit; // leave Result=[]
-  dvArray: ;
-  else raise EDocVariant.Create('ToRawUTF8DynArray expects a dvArray');
+  if dvoIsObject in VOptions then
+    raise EDocVariant.Create('ToRawUTF8DynArray expects a dvArray');
+  if dvoIsArray in VOptions then begin
+    SetLength(Result,VCount);
+    for ndx := 0 to VCount-1 do
+      VariantToUTF8(VValue[ndx],Result[ndx],wasString);
   end;
-  SetLength(Result,VCount);
-  for ndx := 0 to VCount-1 do
-    VariantToUTF8(VValue[ndx],Result[ndx],wasString);
 end;
 
 function TDocVariantData.ToRawUTF8DynArray: TRawUTF8DynArray;
@@ -42727,29 +42770,25 @@ procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
   const NameValueSep, ItemSep: RawUTF8; escape: TTextWriterKind);
 var ndx: integer;
 begin
-  case VKind of
-  dvUndefined: exit; // leave result=''
-  dvObject: ;
-  else raise EDocVariant.Create('ToTextPairs expects a dvObject');
-  end;
-  if VCount=0 then
-    exit;
-  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
-  try
-    ndx := 0;
-    repeat
-      AddString(VName[ndx]);
-      AddString(NameValueSep);
-      AddVariant(VValue[ndx],escape);
-      inc(ndx);
-      if ndx=VCount then
-        break;
-      AddString(ItemSep);
-    until false;
-    SetText(result);
-  finally
-    Free;
-  end;
+  if dvoIsArray in VOptions then
+    raise EDocVariant.Create('ToTextPairs expects a dvObject');
+  if (VCount>0) and (dvoIsObject in VOptions) then
+    with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+    try
+      ndx := 0;
+      repeat
+        AddString(VName[ndx]);
+        AddString(NameValueSep);
+        AddVariant(VValue[ndx],escape);
+        inc(ndx);
+        if ndx=VCount then
+          break;
+        AddString(ItemSep);
+      until false;
+      SetText(result);
+    finally
+      Free;
+    end;
 end;
 
 function TDocVariantData.ToTextPairs(const NameValueSep: RawUTF8='=';
@@ -42761,15 +42800,14 @@ end;
 procedure TDocVariantData.ToArrayOfConst(out Result: TTVarRecDynArray);
 var ndx: integer;
 begin
-  case VKind of
-  dvUndefined: exit; // leave Result=[]
-  dvArray: ;
-  else raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
-  end;
-  SetLength(Result,VCount);
-  for ndx := 0 to VCount-1 do begin
-    Result[ndx].VType := vtVariant;
-    Result[ndx].VVariant := @VValue[ndx];
+  if dvoIsObject in VOptions then
+    raise EDocVariant.Create('ToArrayOfConst expects a dvArray');
+  if dvoIsArray in VOptions then begin
+    SetLength(Result,VCount);
+    for ndx := 0 to VCount-1 do begin
+      Result[ndx].VType := vtVariant;
+      Result[ndx].VVariant := @VValue[ndx];
+    end;
   end;
 end;
 
@@ -42958,7 +42996,7 @@ var ndx: Integer;
     aName: RawUTF8;
     Data: TDocVariantData absolute V;
 begin
-  if (Data.Kind=dvArray) and (PWord(Name)^=ord('_')) then begin
+  if (dvoIsArray in Data.VOptions) and (PWord(Name)^=ord('_')) then begin
     ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
     SetVariantByValue(variant(Value),Data.VValue[ndx]);
     exit;
@@ -42973,15 +43011,15 @@ end;
 function TDocVariant.IterateCount(const V: TVarData): integer;
 var Data: TDocVariantData absolute V;
 begin
-  if Data.Kind<>dvArray then
-    result := -1 else
-    result := Data.VCount;
+  if dvoIsArray in Data.VOptions then
+    result := Data.VCount else
+    result := -1;
 end;
 
 procedure TDocVariant.Iterate(var Dest: TVarData; const V: TVarData; Index: integer);
 var Data: TDocVariantData absolute V;
 begin
-  if (Data.Kind=dvArray) and (cardinal(Index)<cardinal(Data.VCount)) then
+  if (dvoIsArray in Data.VOptions) and (cardinal(Index)<cardinal(Data.VCount)) then
     Dest := TVarData(Data.VValue[Index]) else
     Dest.VType := varEmpty;
 end;
@@ -42989,7 +43027,7 @@ end;
 function TDocVariant.DoFunction(var Dest: TVarData; const V: TVarData;
   const Name: string; const Arguments: TVarDataArray): boolean;
 var ndx: integer;
-    Data: TDocVariantData absolute V;
+    Data: PDocVariantData;
     temp: RawUTF8;
   procedure SetTempFromFirstArgument;
   var wasString: boolean;
@@ -42998,53 +43036,54 @@ var ndx: integer;
   end;
 begin
   result := true;
+  Data := @V; // Data=V is const so should not be modified - but we need it
   case length(Arguments) of
   0:if SameText(Name,'Clear') then begin
-      PDocVariantData(@V)^.VCount := 0;
-      PDocVariantData(@V)^.VKind := dvUndefined;
+      Data^.VCount := 0;
+      Data^.VOptions := Data^.VOptions-[dvoIsObject,dvoIsArray];
       exit;
     end;
   1:if SameText(Name,'Add') then begin
-      ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
-      SetVariantByValue(variant(Arguments[0]),Data.VValue[ndx]);
+      ndx := Data^.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+      SetVariantByValue(variant(Arguments[0]),Data^.VValue[ndx]);
       exit;
     end else
     if SameText(Name,'Delete') then begin
       SetTempFromFirstArgument;
-      Data.Delete(Data.GetValueIndex(temp));
+      Data^.Delete(Data^.GetValueIndex(temp));
       exit;
     end else
     if SameText(Name,'Exists') then begin
       SetTempFromFirstArgument;
-      variant(Dest) := Data.GetValueIndex(temp)>=0;
+      variant(Dest) := Data^.GetValueIndex(temp)>=0;
       exit;
     end else
     if SameText(Name,'NameIndex') then begin
       SetTempFromFirstArgument;
-      variant(Dest) := Data.GetValueIndex(temp);
+      variant(Dest) := Data^.GetValueIndex(temp);
       exit;
     end else
     if VariantToInteger(variant(Arguments[0]),ndx) then begin
       if (Name='_') or SameText(Name,'Value') then begin
-        Data.RetrieveValueOrRaiseException(ndx,variant(Dest),true);
+        Data^.RetrieveValueOrRaiseException(ndx,variant(Dest),true);
         exit;
       end else
       if SameText(Name,'Name') then begin
-        Data.RetrieveNameOrRaiseException(ndx,temp);
+        Data^.RetrieveNameOrRaiseException(ndx,temp);
         RawUTF8ToVariant(temp,variant(Dest));
         exit;
       end;
     end else
     if (Name='_') or SameText(Name,'Value') then begin
       SetTempFromFirstArgument;
-      Data.RetrieveValueOrRaiseException(pointer(temp),length(temp),
-        dvoNameCaseSensitive in Data.VOptions,variant(Dest),true);
+      Data^.RetrieveValueOrRaiseException(pointer(temp),length(temp),
+        dvoNameCaseSensitive in Data^.VOptions,variant(Dest),true);
       exit;
     end;
   2:if SameText(Name,'Add') then begin
       SetTempFromFirstArgument;
-      ndx := Data.InternalAdd(temp); // FPC does not allow VValue[InternalAdd(aName)]
-      SetVariantByValue(variant(Arguments[1]),Data.VValue[ndx]);
+      ndx := Data^.InternalAdd(temp); // FPC does not allow VValue[InternalAdd(aName)]
+      SetVariantByValue(variant(Arguments[1]),Data^.VValue[ndx]);
       exit;
     end;
   end;
@@ -43060,41 +43099,38 @@ begin
   with TDocVariantData(Value) do
   if integer(VType)>varNull then
   if integer(VType)=DocVariantVType then
-  if VKind=dvUndefined then
-      W.AddShort('null') else begin
-      backup := W.fCustomOptions;
-      if [twoForceJSONExtended,twoForceJSONStandard]*backup=[] then
-        if dvoSerializeAsExtendedJson in VOptions then
-          include(W.fCustomOptions,twoForceJSONExtended) else
-          include(W.fCustomOptions,twoForceJSONStandard);
-      case VKind of
-      dvObject: begin
-        checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
-        W.Add('{');
-        for ndx := 0 to VCount-1 do begin
-          if checkExtendedPropName and JsonPropNameValid(pointer(VName[ndx])) then begin
-            W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
-          end else begin
-            W.Add('"');
-            W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
-            W.Add('"');
-          end;
-          W.Add(':');
-          W.AddVariant(VValue[ndx],twJSONEscape);
-          W.Add(',');
+  if [dvoIsArray,dvoIsObject]*VOptions=[] then
+    W.AddShort('null') else begin
+    backup := W.fCustomOptions;
+    if [twoForceJSONExtended,twoForceJSONStandard]*backup=[] then
+      if dvoSerializeAsExtendedJson in VOptions then
+        include(W.fCustomOptions,twoForceJSONExtended) else
+        include(W.fCustomOptions,twoForceJSONStandard);
+    if dvoIsObject in VOptions then begin
+      checkExtendedPropName := twoForceJSONExtended in W.CustomOptions;
+      W.Add('{');
+      for ndx := 0 to VCount-1 do begin
+        if checkExtendedPropName and JsonPropNameValid(pointer(VName[ndx])) then begin
+          W.AddNoJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+        end else begin
+          W.Add('"');
+          W.AddJSONEscape(pointer(VName[ndx]),Length(VName[ndx]));
+          W.Add('"');
         end;
-        W.CancelLastComma;
-        W.Add('}');
+        W.Add(':');
+        W.AddVariant(VValue[ndx],twJSONEscape);
+        W.Add(',');
       end;
-      dvArray: begin
-        W.Add('[');
-        for ndx := 0 to VCount-1 do begin
-          W.AddVariant(VValue[ndx],twJSONEscape);
-          W.Add(',');
-        end;
-        W.CancelLastComma;
-        W.Add(']');
+      W.CancelLastComma;
+      W.Add('}');
+    end else begin
+      W.Add('[');
+      for ndx := 0 to VCount-1 do begin
+        W.AddVariant(VValue[ndx],twJSONEscape);
+        W.Add(',');
       end;
+      W.CancelLastComma;
+      W.Add(']');
     end;
     W.fCustomOptions := backup;
   end else
@@ -43135,8 +43171,7 @@ begin
   if Dest.VType and VTYPE_STATIC<>0 then
     VarClear(variant(Dest)); // Dest may be a complex type
   D.VType := S.VType;
-  D.VOptions := S.VOptions;
-  D.VKind := S.VKind;
+  D.VOptions := S.VOptions; // copies also Kind
   D.VCount := S.VCount;
   pointer(D.VName) := nil; // avoid GPF
   pointer(D.VValue) := nil;
@@ -43271,10 +43306,15 @@ begin
   if TVarData(DocVariantArray).VType=varByRef or varVariant then
     GetSingleOrDefault(PVariant(TVarData(DocVariantArray).VPointer)^,default,result) else
   if (TVarData(DocVariantArray).VType<>DocVariantVType) or
-     (TDocVariantData(DocVariantArray).Kind<>dvArray) or
-     (TDocVariantData(DocVariantArray).Count<>1) then
+     (TDocVariantData(DocVariantArray).Count<>1) or
+     not(dvoIsArray in TDocVariantData(DocVariantArray).VOptions) then
     result := default else
     result := TDocVariantData(DocVariantArray).Values[0];
+end;
+
+function ToText(kind: TDocVariantKind): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TDocVariantKind),ord(kind));
 end;
 
 function DocVariantData(const DocVariant: variant): PDocVariantData;
@@ -43348,11 +43388,11 @@ procedure _ObjAddProps(const NameValuePairs: array of const; var Obj: variant);
 var o: PDocVariantData;
 begin
   o := _Safe(Obj);
-  if o^.VKind<>dvObject then begin
+  if not(dvoIsObject in o^.VOptions) then begin // create new object
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
       VarClear(Obj);
     TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
-  end else begin
+  end else begin // append new names/values to existing object
     TVarData(Obj) := PVarData(o)^; // ensure not stored by reference
     o^.AddNameValuesToObject(NameValuePairs);
   end;
@@ -43364,8 +43404,8 @@ var ndx: integer;
 begin
   d := _Safe(Document);
   o := _Safe(Obj);
-  if d.VKind=dvObject then
-    if o.Kind<>dvObject then
+  if dvoIsObject in d.VOptions then
+    if not(dvoIsObject in o.VOptions) then
       Obj := Document else
       for ndx := 0 to d^.VCount-1 do
         o^.AddOrUpdateValue(d^.VName[ndx],d^.VValue[ndx]);
@@ -43411,10 +43451,11 @@ begin
 end;
 
 procedure _JsonFmt(const Format: RawUTF8; const Args,Params: array of const;
-  Options: TDocVariantOptions; out result: variant); overload;
+  Options: TDocVariantOptions; out result: variant);
+var temp: RawUTF8;
 begin
-  if TDocVariantData(result).InitJSONInPlace(
-     pointer(FormatUTF8(Format,Args,Params,true)),Options)=nil then
+  temp := FormatUTF8(Format,Args,Params,true);
+  if TDocVariantData(result).InitJSONInPlace(pointer(temp),Options)=nil then
     TDocVariantData(result).Clear;
 end;
 
@@ -43460,14 +43501,14 @@ begin
   if TVarData(result).VType and VTYPE_STATIC<>0 then
     VarClear(result);
   TDocVariantData(result) := _Safe(DocVariant)^; // fast byref copy
-  TDocVariantData(result).Options := Options;
+  TDocVariantData(result).SetOptions(Options);
 end;
 
 procedure _ByRef(const DocVariant: variant; out Dest: variant;
   Options: TDocVariantOptions);
 begin
   TDocVariantData(Dest) := _Safe(DocVariant)^; // fast byref copy
-  TDocVariantData(Dest).Options := Options;
+  TDocVariantData(Dest).SetOptions(Options);
 end;
 
 {$endif NOVARIANTS}
@@ -48898,8 +48939,10 @@ end;
 
 {$ifndef NOVARIANTS}
 procedure TTextWriter.AddJSON(const Format: RawUTF8; const Args,Params: array of const);
+var temp: variant;
 begin
-  AddVariant(_JsonFastFmt(Format,Args,Params),twJSONEscape);
+  _JsonFmt(Format,Args,Params,JSON_OPTIONS_FAST,temp);
+  AddVariant(temp,twJSONEscape);
 end;
 {$endif}
 
