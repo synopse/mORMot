@@ -49563,9 +49563,16 @@ begin
   L := length(PropName);
   if (L=0) or (self=nil) then
     result := false else
-    if (PropName[L]=')') and
-       (IdemPCharArray(pointer(PropName),['MAX(','MIN(','AVG(','SUM('])>=0) then
-      result := IsFieldName(copy(PropName,5,L-5)) else
+    if PropName[L]=')' then
+      case IdemPCharArray(pointer(PropName),['MAX(','MIN(','AVG(','SUM(',
+         'JSONGET(','JSONHAS(']) of
+      0..3:
+        result := IsFieldName(copy(PropName,5,L-5));
+      4..5:
+        result := IsFieldName(copy(PropName,9,PosEx(',',PropName)-9));
+      else
+        result := IsFieldName(PropName);
+      end else
       result := IsFieldName(PropName);
 end;
 
