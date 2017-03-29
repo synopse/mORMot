@@ -1641,8 +1641,6 @@ var
   /// can be used to avoid a memory allocation for res := 'null'
   NULL_STR_VAR: RawUTF8;
 
-
-
 /// faster equivalence to SetString() function for a RawUTF8
 // - will reallocate the content in-place if the string refcount is 1
 // - to be used instead of SetString() for "var" RawUTF8 parameters
@@ -5238,10 +5236,10 @@ type
       aHasher: THasher=nil; aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts to specify how both hashing and comparison should
-    // occur, using TDynArrayKind  kind of first field
+    // occur, setting the TDynArrayKind kind of first/hashed field
     // - djNone and djCustom are too vague, and will raise an exception
     // - no RTTI check is made over the corresponding array layout: you shall
-    // ensure that the aKind parameter matches the dynamic array element definition
+    // ensure that aKind matches the dynamic array element definition
     // - aCaseInsensitive will be used for djRawUTF8..djSynUnicode comparison
     procedure InitSpecific(aTypeInfo: pointer; var aValue; aKind: TDynArrayKind;
       aCountPointer: PInteger=nil; aCaseInsensitive: boolean=false);
@@ -5828,6 +5826,90 @@ type
     // - items are stored in increasing TimeStamp, i.e. the first item is
     // the next one which would be returned by the NextPendingTask method
     property Task: TPendingTaskListItemDynArray read fTask;
+  end;
+
+  /// used to store one list of hashed RawUTF8 in TRawUTF8Interning pool
+  TRawUTF8InterningSlot = object
+    /// actual RawUTF8 storage
+    Value: TRawUTF8DynArray;
+    /// hashed access to the Value[] list
+    Values: TDynArrayHashed;
+    /// associated mutex for thread-safe process
+    Safe: TSynLocker;
+    /// initialize the RawUTF8 slot
+    procedure Init;
+    /// finalize the RawUTF8 slot
+    procedure Done;
+    /// returns the interned RawUTF8 value
+    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
+    /// reclaim any unique RawUTF8 values
+    function Clean: integer;
+    /// how many items are currently stored in Value[]
+    function Count: integer;
+  end;
+
+  /// allow to store only one copy of distinct RawUTF8 values
+  // - thanks to the Copy-On-Write feature of string variables, this may
+  // reduce a lot the memory overhead of duplicated text content
+  // - this class is thread-safe and optimized for performance
+  TRawUTF8Interning = class(TSynPersistent)
+  protected
+    fPool: array of TRawUTF8InterningSlot;
+    fPoolLast: integer;
+  public
+    /// initialize the storage and its internal hash pools
+    // - aHashTables is the pool size, and should be a power of two <= 512
+    constructor Create(aHashTables: integer=4); reintroduce;
+    /// finalize the storage
+    destructor Destroy; override;
+    /// return a RawUTF8 variable stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    function Unique(const aText: RawUTF8): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return a RawUTF8 variable stored within this class from a text buffer
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    function Unique(aText: PUTF8Char; aTextLen: integer): RawUTF8; overload;
+    /// return a RawUTF8 variable stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure Unique(var aResult: RawUTF8; const aText: RawUTF8); overload;
+    /// return a RawUTF8 variable stored within this class from a text buffer
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, return the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure Unique(var aResult: RawUTF8; aText: PUTF8Char; aTextLen: integer); overload;
+    {$ifndef NOVARIANTS}
+    /// return a variant containing a RawUTF8 stored within this class
+    // - similar to RawUTF8ToVariant(), but with string interning
+    procedure UniqueVariant(var aResult: variant; const aText: RawUTF8); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// return a variant containing a RawUTF8 stored within this class
+    // - similar to RawUTF8ToVariant(StringToUTF8()), but with string interning
+    // - this method expects the text to be supplied as a VCL string, which will
+    // be converted into a variant containing a RawUTF8 varString instance
+    procedure UniqueVariantString(var aResult: variant; const aText: string);
+    /// return a variant, may be containing a RawUTF8 stored within this class
+    // - similar to TextToVariant(), but with string interning
+    // - first try with GetNumericVariantFromJSON(), then fallback to
+    // RawUTF8ToVariant() with string variable interning
+    procedure UniqueVariant(var aResult: variant; aText: PUTF8Char; aTextLen: integer;
+      aAllowVarDouble: boolean=false); overload;
+    {$endif NOVARIANTS}
+    /// delete any previous storage popl
+    procedure Clear;
+    /// reclaim any unique RawUTF8 values
+    // - i.e. run a garbage collection process of all values with RefCount=1
+    // - returns the number of unique RawUTF8 cleaned from the internal pool
+    // - to be executed on a regular basis - but not too often, since the
+    // process can be time consumming, and void the benefit of interning
+    function Clean: integer;
+    /// how many items are currently stored in this instance
+    function Count: integer;
   end;
 
   /// store one Name/Value pair, as used by TSynNameValue class
@@ -18855,6 +18937,205 @@ begin
   inc(pos,count);
 end;
 
+{ TRawUTF8InterningSlot }
+
+procedure TRawUTF8InterningSlot.Init;
+begin
+  Safe.Init;
+  {$ifndef NOVARIANTS}
+  Safe.LockedInt64[0] := 0;
+  {$endif}
+  Values.Init(TypeInfo(TRawUTF8DynArray),Value,HashAnsiString,
+    SortDynArrayAnsiString,crc32c,@Safe.Padding[0].VInteger,false);
+end;
+
+procedure TRawUTF8InterningSlot.Done;
+begin
+  Safe.Done;
+end;
+
+function TRawUTF8InterningSlot.Count: integer;
+begin
+  {$ifdef NOVARIANTS}
+  result := Safe.Padding[0].VInteger;
+  {$else}
+  result := Safe.LockedInt64[0];
+  {$endif}
+end;
+
+procedure TRawUTF8InterningSlot.Unique(var aResult: RawUTF8;
+  const aText: RawUTF8; aTextHash: cardinal);
+var i: integer;
+    added: boolean;
+begin
+  EnterCriticalSection(Safe.fSection);
+  try
+    i := Values.FindHashedForAdding(aText,added,aTextHash);
+    if added then begin
+      Value[i] := aText;   // copy new value to the pool
+      aResult := aText;
+     end else
+      aResult := Value[i]; // return unified string instance
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
+function TRawUTF8InterningSlot.Clean: integer;
+var i: integer;
+    s,d: PPtrUInt; // points to RawUTF8 values
+begin
+  result := 0;
+  Safe.Lock;
+  try
+    if Safe.Padding[0].VInteger=0 then
+      exit;
+    s := pointer(Value);
+    d := s;
+    for i := 1 to Safe.Padding[0].VInteger do begin
+      {$ifdef FPC}
+      if StringRefCount(PAnsiString(s)^)=1 then begin
+      {$else}
+      if PInteger(s^-8)^=1 then begin
+      {$endif}
+        inc(result);
+        PRawUTF8(s)^ := '';
+      end else begin
+        if s<>d then begin
+          d^ := s^;
+          s^ := 0; // avoid GPF
+        end;
+        inc(d);
+      end;
+      inc(s);
+    end;
+    if result>0 then begin
+      Values.SetCount((PtrUInt(d)-PtrUInt(Value))div sizeof(RawUTF8));
+      Values.ReHash;
+    end;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+
+{ TRawUTF8Interning }
+
+constructor TRawUTF8Interning.Create(aHashTables: integer);
+var p,i: integer;
+begin
+  for p := 0 to 9 do
+    if aHashTables=1 shl p then begin
+      SetLength(fPool,aHashTables);
+      fPoolLast := aHashTables-1;
+      for i := 0 to fPoolLast do
+        fPool[i].Init;
+      exit;
+    end;
+  raise ESynException.CreateUTF8('%.Create(%) not allowed',[self,aHashTables]);
+end;
+
+destructor TRawUTF8Interning.Destroy;
+var i: integer;
+begin
+  for i := 0 to fPoolLast do
+    fPool[i].Done;
+  inherited Destroy;
+end;
+
+procedure TRawUTF8Interning.Clear;
+var i: integer;
+begin
+  if self<>nil then
+    for i := 0 to fPoolLast do
+      with fPool[i] do begin
+        Safe.Lock;
+        try
+          Values.Clear;
+          Values.Rehash;
+        finally
+          Safe.Unlock;
+        end;
+      end;
+end;
+
+function TRawUTF8Interning.Clean: integer;
+var i: integer;
+begin
+  result := 0;
+  if self<>nil then
+    for i := 0 to fPoolLast do
+      inc(result,fPool[i].Clean);
+end;
+
+function TRawUTF8Interning.Count: integer;
+var i: integer;
+begin
+  result := 0;
+  if self<>nil then
+    for i := 0 to fPoolLast do
+      inc(result,fPool[i].Count);
+end;
+
+procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; const aText: RawUTF8);
+var hash: cardinal;
+begin
+  if aText='' then
+    aResult := '' else begin
+    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    fPool[hash and fPoolLast].Unique(aResult,aText,hash);
+  end;
+end;
+
+function TRawUTF8Interning.Unique(const aText: RawUTF8): RawUTF8;
+begin
+  Unique(result,aText);
+end;
+
+function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: integer): RawUTF8;
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(aText),aTextLen);
+  Unique(result,tmp);
+end;
+
+procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; aText: PUTF8Char;
+  aTextLen: integer);
+var tmp: RawUTF8;
+begin
+  SetString(tmp,PAnsiChar(aText),aTextLen);
+  Unique(aResult,tmp);
+end;
+
+{$ifndef NOVARIANTS}
+
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: RawUTF8);
+begin
+  if TVarData(aResult).VType and VTYPE_STATIC<>0 then
+    VarClear(aResult);
+  TVarData(aResult).VAny := nil;
+  Unique(RawUTF8(TVarData(aResult).VAny),aText);
+end;
+
+procedure TRawUTF8Interning.UniqueVariantString(var aResult: variant;
+  const aText: string);
+var tmp: RawUTF8;
+begin
+  StringToUTF8(aText,tmp);
+  UniqueVariant(aResult,tmp);
+end;
+
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant;
+  aText: PUTF8Char; aTextLen: integer; aAllowVarDouble: boolean);
+var tmp: RawUTF8;
+begin
+  if not GetNumericVariantFromJSON(aText,TVarData(aResult),aAllowVarDouble) then begin
+    SetString(tmp,PAnsiChar(aText),aTextLen);
+    UniqueVariant(aResult,tmp);
+  end;
+end;
+
+{$endif NOVARIANTS}
 
 function WideCharToUtf8(Dest: PUTF8Char; aWideChar: PtrUInt): integer;
 begin
@@ -40134,7 +40415,7 @@ begin
     end;
     RawByteString(VAny) := Txt;
     {$ifdef HASCODEPAGE}
-    if (Txt<>'') and  (StringCodePage(Txt)=CP_RAWBYTESTRING) then
+    if (Txt<>'') and (StringCodePage(Txt)=CP_RAWBYTESTRING) then
       SetCodePage(RawByteString(VAny),CP_UTF8,false); // force explicit UTF-8
     {$endif}
   end;

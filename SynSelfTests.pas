@@ -317,6 +317,8 @@ type
     procedure _TObjectListHashed;
     /// test TSynNameValue class
     procedure _TSynNameValue;
+    /// test TRawUTF8Interning process
+    procedure _TRawUTF8Interning;
     {$ifndef DELPHI5OROLDER}
     /// test TObjectDynArrayWrapper class
     procedure _TObjectDynArrayWrapper;
@@ -2746,6 +2748,94 @@ begin
     Check(Random32(i)<cardinal(i));
   for i := 0 to 100000 do
     Check(Random32(maxInt-i)<cardinal(maxInt-i));
+end;
+
+procedure TTestLowLevelCommon._TRawUTF8Interning;
+var int: TRawUTF8Interning;
+    i,v: integer;
+    tmp: RawUTF8;
+    vs: TRawUTF8DynArray;
+    timer: TPrecisionTimer;
+const MAX=500000;
+      DIRSIZE = 16*(MAX+1); // assume each SmallUInt32UTF8[] uses 16 heap bytes 
+      INTSIZE = 512*16;
+begin
+  {$ifndef HASINLINE} // inlining induces optimizations which trigger Clean
+  int := TRawUTF8Interning.Create(1);
+  try
+    check(int.Count=0);
+    check(int.Unique('test')='test');
+    check(int.Count=1);
+    check(int.Unique('test')='test');
+    check(int.Count=1);
+    check(int.Clean=0);
+    check(int.Unique('single')='single');
+    check(int.Count=2);
+    check(int.Clean=1);
+    check(int.Count=1);
+    check(int.Clean=0);
+    check(int.Count=1);
+    check(int.Unique('single1')='single1');
+    check(int.Count=2);
+    check(int.Unique('test2')='test2');
+    check(int.Count=3);
+    check(int.Unique('test2')='test2');
+    check(int.Count=3);
+    check(int.Unique('single2')='single2');
+    check(int.Count=4);
+    check(int.Clean=2);
+    check(int.Count=2);
+    int.Clear;
+    check(int.Count=0);
+    check(int.Clean=0);
+    check(int.Count=0);
+  finally
+    int.Free;
+  end;
+  {$endif HASINLINE}
+  int := TRawUTF8Interning.Create(16);
+  try
+    for i := 0 to MAX do begin
+      v := i and 511;
+      int.Unique(tmp,SmallUInt32UTF8[v]);
+      check(UTF8ToInteger(tmp)=v);
+    end;
+    check(int.Count=512);
+    check(int.Clean=0);
+    check(int.Count=512);
+  finally
+    int.Free;
+  end;
+  int := TRawUTF8Interning.Create(4);
+  try
+    SetLength(vs,MAX+1);
+    timer.Start;
+    for i := 0 to MAX do begin
+      v := i and 511;
+      check(vs[i]='');
+      int.Unique(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
+      check(UTF8ToInteger(vs[i])=v);
+    end;
+    NotifyTestSpeed(Format('interning %s',[KB(INTSIZE)]),MAX,DIRSIZE,@timer);
+    check(int.Count=512);
+    check(int.Clean=0);
+    check(int.Count=512);
+    vs := nil;
+    check(int.Count=512);
+    check(int.Clean=512);
+    check(int.Count=0);
+  finally
+    int.Free;
+  end;
+  SetLength(vs,MAX+1);
+  timer.Start;
+  for i := 0 to MAX do begin
+    v := i and 511;
+    check(vs[i]='');
+    SetString(vs[i],PAnsiChar(pointer(SmallUInt32UTF8[v])),length(SmallUInt32UTF8[v]));
+    check(UTF8ToInteger(vs[i])=v);
+  end;
+  NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
 end;
 
 function kr32reference(buf: PAnsiChar; len: cardinal): cardinal;
