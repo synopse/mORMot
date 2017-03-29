@@ -2736,7 +2736,7 @@ type
     /// the declared name of the type ('String','Word','RawUnicode'...)
     Name: ShortString;
     /// get the class type information
-    function ClassType: PClassType; {$ifdef HASINLINE}inline;{$endif}
+    function ClassType: PClassType; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// create an instance of the corresponding class
     // - will call TObject.Create, or TSQLRecord.Create virtual constructor
     // - will raise EParsingException if class cannot be constructed on the fly,
@@ -2761,14 +2761,14 @@ type
     /// fast and easy find if a class type inherits from a specific class type
     function InheritsFrom(AClass: TClass): boolean;
     /// get the enumeration type information
-    function EnumBaseType: PEnumType; {$ifdef HASINLINE}inline;{$endif}
+    function EnumBaseType: PEnumType; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the record type information
-    function RecordType: PRecordType; {$ifdef HASINLINE}inline;{$endif}
+    function RecordType: PRecordType; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the dynamic array type information of the stored item
     function DynArrayItemType(aDataSize: PInteger=nil): PTypeInfo;
       {$ifdef HASINLINE}inline;{$endif}
     /// get the dynamic array size (in bytes) of the stored item
-    function DynArrayItemSize: integer; {$ifdef HASINLINE}inline;{$endif}
+    function DynArrayItemSize: integer; {$ifdef HASINLINENOTX86}inline;{$endif}
     /// recognize most used string types, returning their code page
     // - will recognize TSQLRawBlob as the fake CP_SQLRAWBLOB code page
     // - will return the exact code page since Delphi 2009, from RTTI
@@ -20028,7 +20028,7 @@ uses
 // ************ some RTTI and SQL mapping routines
 
 procedure SetID(P: PUTF8Char; var result: TID);
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 {$ifdef CPU64}
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
@@ -20047,7 +20047,7 @@ asm
 end;
 
 procedure SetID(const U: RawByteString; var result: TID); overload;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 {$ifdef CPU64}
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(pointer(U));
@@ -20058,7 +20058,7 @@ begin
 {$else}
 asm
         jmp     SynCommons.SetInt64
-{$endif}
+{$endif HASINLINENOTX86}
 end;
 
 {$ifdef HASDIRECTTYPEINFO}
@@ -20066,7 +20066,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PPTypeInfo): PTypeInfo;
-{$ifdef HASINLINE} inline;
+{$ifdef HASINLINENOTX86} inline;
 begin
   if Info=nil then
     result := pointer(Info) else
@@ -20080,7 +20080,7 @@ asm     // Delphi is so bad at compiling above code...
         ret
 @z:     db      $f3 // rep ret
 end;
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif HASDIRECTTYPEINFO}
 
 
@@ -28604,7 +28604,7 @@ begin
 end;
 
 function TPropInfo.GetterAddr(Instance: pointer): pointer;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   result := Pointer(PtrInt(Instance)+GetProc{$ifndef FPC} and $00FFFFFF{$endif});
 end;
@@ -28622,7 +28622,7 @@ begin
 end;
 
 function TPropInfo.TypeInfo: PTypeInfo;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   {$ifndef HASDIRECTTYPEINFO}
   if PropType<>nil then
@@ -29334,7 +29334,7 @@ type
 
 { TTypeInfo }
 
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 function TTypeInfo.ClassType: PClassType;
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
@@ -29355,7 +29355,7 @@ begin
 end;
 
 function TTypeInfo.RecordType: PRecordType;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
 {$else}
@@ -29606,7 +29606,7 @@ begin
   if (base<>nil) and (base<>@self) then // no redirection if already the base type
     result := PEnumType(GetFPCTypeData(pointer(DeRef(base))));
 {$else}
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   with PEnumType(@Name[ord(Name[0])+1])^.BaseType^^ do
     result := @Name[ord(Name[0])+1];

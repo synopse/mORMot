@@ -120,9 +120,9 @@ uses
 {$ifndef LVCL}
   SyncObjs, // for TEvent
   Contnrs,  // for TObjectList
-{$ifdef HASINLINE}
+  {$ifdef HASINLINENOTX86}
   Types,
-{$endif}
+  {$endif}
 {$endif}
 {$ifndef NOVARIANTS}
   Variants,
@@ -782,7 +782,7 @@ type
      aTypeInfo: pointer; var aValue; Instance: TObject=nil); overload;
     // any call to this method MUST call LogTrailerUnLock
     function LogHeaderLock(Level: TSynLogInfo; AlreadyLocked: boolean): boolean;
-    procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINE}inline;{$endif}
+    procedure LogTrailerUnLock(Level: TSynLogInfo); {$ifdef HASINLINENOTX86}inline;{$endif}
     procedure LogCurrentTime;
     procedure LogFileInit; virtual;
     procedure LogFileHeader; virtual;
@@ -795,7 +795,7 @@ type
     function GetFileSize: Int64; virtual;
     procedure PerformRotation; virtual;
     procedure AddRecursion(aIndex: integer; aLevel: TSynLogInfo);
-    procedure LockAndGetThreadContext; {$ifdef HASINLINE}inline;{$endif}
+    procedure LockAndGetThreadContext; {$ifdef HASINLINENOTX86}inline;{$endif}
     procedure GetThreadContextInternal;
     procedure ThreadContextRehash;
     function Instance: TSynLog;
@@ -909,10 +909,10 @@ type
     // - is just a wrapper around Family.SynLog - the same code will work:
     // ! TSynLogDB.Family.SynLog.Log(llError,'The % statement didn't work',[SQL]);
     class function Add: TSynLog;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINENOTX86}inline;{$endif}
     /// retrieve the family of this TSynLog class type
     class function Family: TSynLogFamily; overload;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINENOTX86}inline;{$endif}
     /// returns a logging class which will never log anything
     // - i.e. a TSynLog sub-class with Family.Level := []
     class function Void: TSynLogClass;
@@ -998,7 +998,7 @@ type
     procedure DisableRemoteLog(value: boolean);
     /// the associated TSynLog class
     function LogClass: TSynLogClass;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINENOTX86}inline;{$endif}
     /// direct access to the low-level writing content
     // - should usually not be used directly, unless you ensure it is safe
     property Writer: TTextWriter read fWriter;
@@ -1675,7 +1675,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
         if GetCode(Sym.Start) then begin
           while (P<PEnd) and (P^=' ') do inc(P);
           Beg := pointer(P);
-          {$ifdef HASINLINE}
+          {$ifdef ISDELPHI2005ANDUP}
           // trim left 'UnitName.' for each symbol (since Delphi 2005)
           case PWord(P)^ of // ignore RTL namespaces
           ord('S')+ord('y') shl 8:
@@ -1703,7 +1703,7 @@ constructor TSynMapFile.Create(const aExeName: TFileName=''; MabCreate: boolean=
             Beg := pointer(P);
           end else
             P := pointer(Beg); // no '.' found
-          {$endif}
+          {$endif ISDELPHI2005ANDUP}
           while (P<PEnd) and (P^>' ') do inc(P);
           SetString(Sym.Name,Beg,P-Beg);
           if (Sym.Name<>'') and not (Sym.Name[1] in ['$','?']) then
@@ -3557,7 +3557,7 @@ begin
 end;
 
 class function TSynLog.Add: TSynLog;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 var f: TSynLogFamily;
 begin
   if Self<>nil then begin // inlined TSynLog.Family (Add is already inlined)
@@ -3693,7 +3693,7 @@ begin // private sub function makes the code faster in most case
   end;
 end;
 
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 class function TSynLog.Family: TSynLogFamily;
 begin
   if Self<>nil then begin

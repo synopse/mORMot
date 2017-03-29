@@ -3601,7 +3601,7 @@ function FindRawUTF8(const Values: array of RawUTF8; const Value: RawUTF8;
 
 /// return the index of Value in Values[], -1 if not found
 // - here name search would use fast IdemPropNameU() function
-function FindPropName(const names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
 
 /// true if Value was added successfully in Values[]
 function AddRawUTF8(var Values: TRawUTF8DynArray; const Value: RawUTF8;
@@ -5895,7 +5895,7 @@ type
     function InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean=false): boolean;
     /// reset content, then add all name, value pairs
     // - will first call Init(false) to initialize the internal array
-    procedure InitFromNamesValues(const names, Values: array of RawUTF8);
+    procedure InitFromNamesValues(const Names, Values: array of RawUTF8);
     /// search for a Name, return the index in List
     // - using fast O(1) hash algoritm
     function Find(const aName: RawUTF8): integer;
@@ -5931,7 +5931,7 @@ type
     /// returns all values as a JSON object of string fields
     function AsJSON: RawUTF8;
     /// fill the supplied two arrays of RawUTF8 with the stored values
-    procedure AsNameValues(out names,Values: TRawUTF8DynArray);
+    procedure AsNameValues(out Names,Values: TRawUTF8DynArray);
     {$ifndef NOVARIANTS}
     /// search for a Name, return the associated Value as variant
     // - returns null if the name was not found
@@ -8309,7 +8309,7 @@ function ObjectToJSON(Value: TObject;
 /// will serialize set of TObject into its UTF-8 JSON representation
 // - follows ObjectToJSON()/TTextWriter.WriterObject() functions output
 // - if Names is not supplied, the corresponding class names would be used
-function ObjectsToJSON(const names: array of RawUTF8; const Values: array of TObject;
+function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 {$ifndef NOVARIANTS}
@@ -9731,7 +9731,7 @@ procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8; var result: RawUT
 // - support enhanced JSON syntax, e.g. '{name:'"John",year:1972}' is decoded
 // just like '{"name":'"John","year":1972}'
 procedure JSONDecode(var JSON: RawUTF8;
-  const names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
+  const Names: array of PUTF8Char; var Values: TPUtf8CharDynArray;
   HandleValuesAsObjectOrArray: Boolean=false); overload;
 
 /// wrapper to serialize a T*ObjArray dynamic array as JSON
@@ -9774,7 +9774,7 @@ function JSONDecode(P: PUTF8Char; out Values: TNameValuePUTF8CharDynArray;
 // - if HandleValuesAsObjectOrArray is TRUE, then this procedure will handle
 // JSON arrays or objects
 // - returns a pointer to the next content item in the JSON buffer
-function JSONDecode(P: PUTF8Char; const names: array of PUTF8Char;
+function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean=false): PUTF8Char; overload;
 
 /// decode the supplied UTF-8 JSON content for the one supplied name
@@ -15323,7 +15323,7 @@ type
     // ! with TDocVariantData(aVariantObject) do
     // !   for i := 0 to Count-1 do
     // !     writeln(Names[i],'=',Values[i]);
-    property names: TRawUTF8DynArray read VName;
+    property Names: TRawUTF8DynArray read VName;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if aNameOrIndex is neither an integer nor a string
     // - raise an EDocVariant if Kind is dvArray and aNameOrIndex is a string
@@ -21183,7 +21183,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PTypeInfoStored): PTypeInfo;
-{$ifdef HASINLINE} inline;
+{$ifdef HASINLINENOTX86} inline;
 begin
   if Info=nil then
     result := pointer(Info) else
@@ -21197,7 +21197,7 @@ asm // Delphi is so bad at compiling above code...
         ret
 @z:     db      $f3 // rep ret
 end;
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif HASDIRECTTYPEINFO}
 
 /// add some TypeInfo() RTTI for TypeInfoSave/TypeInfoLoad function
@@ -21632,7 +21632,7 @@ begin
 end;
 
 function GetTypeInfo(aTypeInfo: pointer; aExpectedKind: TTypeKind): PTypeInfo; overload;
-{$ifdef HASINLINE} inline;
+{$ifdef HASINLINENOTX86} inline;
 begin
   if (aTypeInfo<>nil) and (PTypeKind(aTypeInfo)^=aExpectedKind) then begin
     {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
@@ -21658,7 +21658,7 @@ end;
 {$endif}
 
 function GetTypeInfo(aTypeInfo: pointer; const aExpectedKind: TTypeKinds): PTypeInfo; overload;
-{$ifdef HASINLINE} inline;
+{$ifdef HASINLINENOTX86} inline;
 begin
   result := aTypeInfo;
   if result<>nil then
@@ -21686,7 +21686,7 @@ end;
 {$endif}
 
 function GetTypeInfo(aTypeInfo: pointer): PTypeInfo; overload;
-{$ifdef HASINLINE} inline;
+{$ifdef HASINLINENOTX86} inline;
 begin
   {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
   result := GetFPCAlignPtr(aTypeInfo);
@@ -21754,8 +21754,8 @@ begin
 end;
 
 function GetEnumInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out names: PShortString): boolean;
-{$ifdef HASINLINE} inline;
+  out Names: PShortString): boolean;
+{$ifdef HASINLINENOTX86} inline;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkEnumeration);
@@ -21766,7 +21766,7 @@ begin
     {$endif}
       info := GetTypeInfo(Deref(info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}EnumBaseType));
     MaxValue := info^.{$ifdef FPC_ENUMHASINNER}inner.{$endif}MaxValue;
-    names := @info.NameList;
+    Names := @info.NameList;
     result := true;
   end else
     result := false;
@@ -21795,12 +21795,12 @@ end;
 {$endif}
 
 function GetSetInfo(aTypeInfo: pointer; out MaxValue: Integer;
-  out names: PShortString): boolean;
+  out Names: PShortString): boolean;
 var info: PTypeInfo;
 begin
   info := GetTypeInfo(aTypeInfo,tkSet);
   if info<>nil then
-    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,names) else
+    result := GetEnumInfo(Deref(info^.SetBaseType),MaxValue,Names) else
     result := false;
 end;
 
@@ -21808,7 +21808,7 @@ const
   NULL_SHORTSTRING: string[1] = '';
 
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 var MaxValue: integer;
 begin
   if GetEnumInfo(aTypeInfo,MaxValue,result) and
@@ -26988,14 +26988,14 @@ begin
   result := -1;
 end;
 
-function FindPropName(const names: array of RawUTF8; const Name: RawUTF8): integer;
+function FindPropName(const Names: array of RawUTF8; const Name: RawUTF8): integer;
 {$ifdef HASINLINE}
 var NameLen: integer;
 begin
   NameLen := Length(Name);
-  for result := 0 to high(names) do
-    if (Length(names[result])=NameLen) and
-       IdemPropNameUSameLen(pointer(names[result]),pointer(Name),NameLen) then
+  for result := 0 to high(Names) do
+    if (Length(Names[result])=NameLen) and
+       IdemPropNameUSameLen(pointer(Names[result]),pointer(Name),NameLen) then
       exit;
   result := -1;
 end;
@@ -30781,18 +30781,18 @@ begin
     end;
 end;
 
-function ObjectsToJSON(const names: array of RawUTF8; const Values: array of TObject;
+function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 var i,n: integer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream do
   try
-    n := length(names);
+    n := length(Names);
     Add('{');
     for i := 0 to high(Values) do
     if Values[i]<>nil then begin
       if i<n then
-        AddFieldName(names[i]) else
+        AddFieldName(Names[i]) else
         AddPropName(ClassNameShort(Values[i])^);
       WriteObject(Values[i],Options);
       Add(',');
@@ -32003,7 +32003,7 @@ begin
   result := RolDWord(value, 13);
 end;
 {$else}
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 function RolDWord(value: cardinal; count: integer): cardinal; inline;
 begin
   result := (value shl count) or (value shr (32-count));
@@ -32024,7 +32024,7 @@ function Rol13(value: cardinal): cardinal;
 asm
       rol     eax, 13
 end;
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif FPC}
 
 function xxHash32(crc: cardinal; P: PAnsiChar; len: integer): cardinal;
@@ -43328,7 +43328,7 @@ begin
 end;
 
 function _Safe(const DocVariant: variant): PDocVariantData;
-{$ifndef HASINLINE}
+{$ifndef HASINLINENOTX86}
 asm
       mov   ecx,DocVariantVType
       movzx edx,word ptr [eax].TVarData.VType
@@ -49719,13 +49719,13 @@ begin
     result := '{"'+Name+'":'+SQLValue+'}';
 end;
 
-procedure JSONDecode(var JSON: RawUTF8; const names: array of PUTF8Char;
+procedure JSONDecode(var JSON: RawUTF8; const Names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean);
 begin
-  JSONDecode(UniqueRawUTF8(JSON),names,Values,HandleValuesAsObjectOrArray);
+  JSONDecode(UniqueRawUTF8(JSON),Names,Values,HandleValuesAsObjectOrArray);
 end;
 
-function JSONDecode(P: PUTF8Char; const names: array of PUTF8Char;
+function JSONDecode(P: PUTF8Char; const Names: array of PUTF8Char;
   var Values: TPUtf8CharDynArray; HandleValuesAsObjectOrArray: Boolean): PUTF8Char;
 var n, i: integer;
     Name, Value: PUTF8Char;
@@ -49733,7 +49733,7 @@ var n, i: integer;
     NewValues: boolean;
 begin
   result := nil;
-  n := length(names);
+  n := length(Names);
   NewValues := pointer(Values)=nil;
   SetLength(Values,n);
   if not NewValues then
@@ -49754,7 +49754,7 @@ begin
     if not(EndOfObject in [',','}']) then
       exit; // invalid item separator
     for i := 0 to n do
-      if StrIComp(Name,names[i])=0 then begin
+      if StrIComp(Name,Names[i])=0 then begin
         Values[i] := Value;
         break;
       end;
@@ -56835,7 +56835,7 @@ begin
 end;
 
 function JsonPropNameValid(P: PUTF8Char): boolean;
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   if (P<>nil) and (ord(P^) in IsJsonIdentifierFirstChar) then begin
     repeat
@@ -60547,15 +60547,15 @@ begin
   end;
 end;
 
-procedure TSynNameValue.InitFromNamesValues(const names, Values: array of RawUTF8);
+procedure TSynNameValue.InitFromNamesValues(const Names, Values: array of RawUTF8);
 var i: integer;
 begin
   Init(false);
-  if high(names)<>high(Values) then
+  if high(Names)<>high(Values) then
     exit;
-  fDynArray.SetCapacity(length(names));
-  for i := 0 to high(names) do
-    Add(names[i],Values[i]);
+  fDynArray.SetCapacity(length(Names));
+  for i := 0 to high(Names) do
+    Add(Names[i],Values[i]);
 end;
 
 function TSynNameValue.InitFromJSON(JSON: PUTF8Char; aCaseSensitive: boolean): boolean;
@@ -60773,13 +60773,13 @@ begin
   end;
 end;
 
-procedure TSynNameValue.AsNameValues(out names,Values: TRawUTF8DynArray);
+procedure TSynNameValue.AsNameValues(out Names,Values: TRawUTF8DynArray);
 var i: integer;
 begin
-  SetLength(names,Count);
+  SetLength(Names,Count);
   SetLength(Values,Count);
   for i := 0 to Count-1 do begin
-    names[i] := List[i].Name;
+    Names[i] := List[i].Name;
     Values[i] := List[i].Value;
   end;
 end;

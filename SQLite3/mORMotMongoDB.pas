@@ -77,7 +77,7 @@ uses
   {$ifdef KYLIX3}
   LibC,
   {$endif}
-  {$ifdef HASINLINE}
+  {$ifdef HASINLINENOTX86}
   Contnrs,
   {$endif}
   SysUtils,
