@@ -14311,6 +14311,11 @@ function TextToVariantNumberTypeNoDouble(JSON: PUTF8Char): word;
 function GetNumericVariantFromJSON(JSON: PUTF8Char; var Value: TVarData;
   AllowVarDouble: boolean): boolean;
 
+/// convert an UTF-8 encoded text buffer into a variant number or RawUTF8 varString
+// - first try with GetNumericVariantFromJSON(), then fallback to RawUTF8ToVariant
+procedure TextToVariant(const aValue: RawUTF8; AllowVarDouble: boolean;
+  out aDest: variant);
+
 /// convert an UTF-8 encoded text buffer into a variant RawUTF8 varString
 procedure RawUTF8ToVariant(Txt: PUTF8Char; TxtLen: integer; var Value: variant); overload;
 
@@ -40917,6 +40922,13 @@ dbl:  VDouble := GetExtended(JSON,err);
     end;
   end;
   result := false;
+end;
+
+procedure TextToVariant(const aValue: RawUTF8; AllowVarDouble: boolean;
+  out aDest: variant);
+begin
+  if not GetNumericVariantFromJSON(pointer(aValue),TVarData(aDest),AllowVarDouble) then
+    RawUTF8ToVariant(aValue,aDest);
 end;
 
 function GetVariantFromNotStringJSON(JSON: PUTF8Char; var Value: TVarData;
