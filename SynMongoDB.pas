@@ -296,8 +296,11 @@ type
   // - asDocVariantPerReference will set JSON_OPTIONS[true]/JSON_OPTIONS_FAST
   // settings:
   // ! [dvoValueCopiedByReference,dvoReturnNullForUnknownProperty]
+  // - asDocVariantInternNamesPerValue and asDocVariantInternNamesPerReference
+  // will include dvoInternalNames to the TDocVariant.Options 
   TBSONDocArrayConversion = (
-    asBSONVariant, asDocVariantPerValue, asDocVariantPerReference);
+    asBSONVariant, asDocVariantPerValue, asDocVariantPerReference,
+    asDocVariantInternNamesPerValue, asDocVariantInternNamesPerReference);
 
   /// how TBSONElement.AddMongoJSON() method and AddMongoJSON() and
   // VariantSaveMongoJSON() functions will render their JSON content
@@ -2438,16 +2441,23 @@ procedure BSONItemsToDocVariant(Kind: TBSONElementType; BSON: PByte;
   var Doc: TDocVariantData; Option: TBSONDocArrayConversion);
 const OPTIONS: array[TBSONDocArrayConversion] of TDocVariantOptions =
     ([],[dvoReturnNullForUnknownProperty],
-        [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
+        [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference],
+        [dvoReturnNullForUnknownProperty,dvoInternNames],
+        [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference,dvoInternNames]);
 var k: TDocVariantKind;
     i,n,cap: integer;
+    intnames: TRawUTF8Interning;
     items: array[0..63] of TBSONElement;
 begin // very fast optimized code
   if BSON=nil then
     TVarData(Doc).VType := varNull else begin
+    intnames := nil;
     case Kind of
-    betDoc:
+    betDoc: begin
       k := dvObject;
+      if dvoInternNames in Doc.Options then
+        intnames := DocVariantType.InternNames;
+    end;
     betArray:
       k := dvArray;
     else exit; // leave Doc=varEmpty
@@ -2470,7 +2480,9 @@ begin // very fast optimized code
           Doc.Capacity := cap+cap shr 3; // faster for huge arrays
       for i := 0 to n-1 do begin
         if Kind=betDoc then
-          SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
+          if intnames<>nil then
+            intnames.Unique(Doc.Names[i+Doc.Count],items[i].Name,items[i].NameLen) else
+            SetString(Doc.Names[i+Doc.Count],PAnsiChar(items[i].Name),items[i].NameLen);
         items[i].ToVariant(Doc.Values[i+Doc.Count],Option);
       end;
       Doc.SetCount(Doc.Count+n);
@@ -6116,7 +6128,7 @@ initialization
   Assert(sizeof(TMongoReplyHeader)=36);
   // ensure TDocVariant and TBSONVariant custom types are registered
   if DocVariantType=nil then
-    DocVariantType := SynRegisterCustomVariantType(TDocVariant);
+    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
   InitBSONObjectIDComputeNew;
 

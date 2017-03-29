@@ -5842,6 +5842,8 @@ type
     procedure Done;
     /// returns the interned RawUTF8 value
     procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
+    /// ensure the supplied RawUTF8 value is interned
+    procedure UniqueText(var aText: RawUTF8; aTextHash: cardinal);
     /// reclaim any unique RawUTF8 values
     function Clean: integer;
     /// how many items are currently stored in Value[]
@@ -5883,6 +5885,11 @@ type
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
     procedure Unique(var aResult: RawUTF8; aText: PUTF8Char; aTextLen: integer); overload;
+    /// ensure a RawUTF8 variable is stored within this class
+    // - if aText occurs for the first time, add it to the internal string pool
+    // - if aText does exist in the internal string pool, set the shared
+    // instance (with its reference counter increased), to reduce memory usage
+    procedure UniqueText(var aText: RawUTF8); 
     {$ifndef NOVARIANTS}
     /// return a variant containing a RawUTF8 stored within this class
     // - similar to RawUTF8ToVariant(), but with string interning
@@ -5899,6 +5906,9 @@ type
     // RawUTF8ToVariant() with string variable interning
     procedure UniqueVariant(var aResult: variant; aText: PUTF8Char; aTextLen: integer;
       aAllowVarDouble: boolean=false); overload;
+    /// ensure a variant contains only RawUTF8 stored within this class
+    // - supplied variant should be a varString containing a RawUTF8 value
+    procedure UniqueVariant(var aResult: variant); overload;
     {$endif NOVARIANTS}
     /// delete any previous storage popl
     procedure Clear;
@@ -14133,13 +14143,16 @@ type
   // - by default, only integer/Int64/currency number values are allowed, unless
   // dvoAllowDoubleValue is set and 32-bit floating-point conversion is tried,
   // with potential loss of precision during the conversion
+  // - dvoInternNames and dvoInternValues will use shared TRawUTF8Interning
+  // instances to maintain a list of RawUTF8 names/values for all TDocVariant,
+  // so that redundant text content will be allocated only once on heap
   TDocVariantOption =
     (dvoIsArray, dvoIsObject,
      dvoNameCaseSensitive, dvoCheckForDuplicatedNames,
      dvoReturnNullForUnknownProperty,
      dvoValueCopiedByReference, dvoJSONParseDoNotTryCustomVariants,
      dvoJSONObjectParseWithinString, dvoSerializeAsExtendedJson,
-     dvoAllowDoubleValue);
+     dvoAllowDoubleValue, dvoInternNames, dvoInternValues);
 
   /// set of options for a TDocVariant storage
   // - you can use JSON_OPTIONS[true] if you want to create a fast by-reference
@@ -14456,13 +14469,6 @@ function ValuesToVariantDynArray(const items: array of const): TVariantDynArray;
 /// guess the correct TSQLDBFieldType from a variant value
 function VariantTypeToSQLDBFieldType(const V: Variant): TSQLDBFieldType;
 
-var
-  /// the internal custom variant type used to register TDocVariant
-  DocVariantType: TSynInvokeableVariantType = nil;
-  /// copy of DocVariantType.VarType
-  // - as used by inlined functions of TDocVariantData
-  DocVariantVType: integer = -1;
-
 
 type
   /// pointer to a TDocVariant storage
@@ -14504,6 +14510,8 @@ type
   // ! assert(_Json('["one",2,3]')='["one",2,3]');
   TDocVariant = class(TSynInvokeableVariantType)
   protected
+    fInternNames: TRawUTF8Interning;
+    fInternValues: TRawUTF8Interning;
     /// fast getter/setter implementation
     procedure IntGet(var Dest: TVarData; const V: TVarData; Name: PAnsiChar); override;
     procedure IntSet(const V, Value: TVarData; Name: PAnsiChar); override;
@@ -14636,6 +14644,14 @@ type
     class procedure GetSingleOrDefault(const docVariantArray, default: variant;
       var result: variant);
 
+    /// finalize the stored information
+    destructor Destroy; override;
+    /// used by dvoInternNames for string interning of all Names[] values
+    function InternNames: TRawUTF8Interning;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// used by dvoInternValues for string interning of all RawUTF8 Values[]
+    function InternValues: TRawUTF8Interning;
+      {$ifdef HASINLINE}inline;{$endif}
     // this implementation will write the content as JSON object or array
     procedure ToJSON(W: TTextWriter; const Value: variant; Escape: TTextWriterKind); override;
     /// will check if the value is an array, and return the number of items
@@ -15525,6 +15541,13 @@ type
     property _[aIndex: integer]: PDocVariantData read GetAsDocVariantByIndex;
   end;
   {$A+} { packet object not allowed since Delphi 2009 :( }
+
+var
+  /// the internal custom variant type used to register TDocVariant
+  DocVariantType: TDocVariant = nil;
+  /// copy of DocVariantType.VarType
+  // - as used by inlined functions of TDocVariantData
+  DocVariantVType: integer = -1;
 
 /// retrieve the text representation of a TDocVairnatKind
 function ToText(kind: TDocVariantKind): PShortString; overload;
@@ -18981,6 +19004,21 @@ begin
   end;
 end;
 
+procedure TRawUTF8InterningSlot.UniqueText(var aText: RawUTF8; aTextHash: cardinal);
+var i: integer;
+    added: boolean;
+begin
+  EnterCriticalSection(Safe.fSection);
+  try
+    i := Values.FindHashedForAdding(aText,added,aTextHash);
+    if added then
+      Value[i] := aText else  // copy new value to the pool
+      aText := Value[i];      // return unified string instance
+  finally
+    LeaveCriticalSection(Safe.fSection);
+  end;
+end;
+
 function TRawUTF8InterningSlot.Clean: integer;
 var i: integer;
     s,d: PPtrUInt; // points to RawUTF8 values
@@ -19087,24 +19125,31 @@ begin
   end;
 end;
 
+procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
+var hash: cardinal;
+begin
+  if aText<>'' then begin
+    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    fPool[hash and fPoolLast].UniqueText(aText,hash);
+  end;
+end;
+
 function TRawUTF8Interning.Unique(const aText: RawUTF8): RawUTF8;
 begin
   Unique(result,aText);
 end;
 
 function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: integer): RawUTF8;
-var tmp: RawUTF8;
 begin
-  SetString(tmp,PAnsiChar(aText),aTextLen);
-  Unique(result,tmp);
+  SetString(result,PAnsiChar(aText),aTextLen);
+  UniqueText(result);
 end;
 
 procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; aText: PUTF8Char;
   aTextLen: integer);
-var tmp: RawUTF8;
 begin
-  SetString(tmp,PAnsiChar(aText),aTextLen);
-  Unique(aResult,tmp);
+  SetString(aResult,PAnsiChar(aText),aTextLen);
+  UniqueText(aResult);
 end;
 
 {$ifndef NOVARIANTS}
@@ -19113,6 +19158,7 @@ procedure TRawUTF8Interning.UniqueVariant(var aResult: variant; const aText: Raw
 begin
   if TVarData(aResult).VType and VTYPE_STATIC<>0 then
     VarClear(aResult);
+  TVarData(aResult).VType := varString;
   TVarData(aResult).VAny := nil;
   Unique(RawUTF8(TVarData(aResult).VAny),aText);
 end;
@@ -19133,6 +19179,17 @@ begin
     SetString(tmp,PAnsiChar(aText),aTextLen);
     UniqueVariant(aResult,tmp);
   end;
+end;
+
+procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
+begin
+  with TVarData(aresult) do
+    if VType=varString then
+      UniqueText(RawUTF8(VAny)) else
+    if VType=varVariant or varByRef then
+      UniqueVariant(PVariant(VPointer)^) else
+    if VType=varString or varByRef then
+      UniqueText(PRawUTF8(VAny)^);
 end;
 
 {$endif NOVARIANTS}
@@ -41592,7 +41649,7 @@ end;
 procedure TDocVariantData.Init(aOptions: TDocVariantOptions; aKind: TDocVariantKind);
 begin
   if DocVariantType=nil then
-    DocVariantType := SynRegisterCustomVariantType(TDocVariant);
+    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := aOptions-[dvoIsArray,dvoIsObject];
@@ -41605,7 +41662,7 @@ end;
 procedure TDocVariantData.InitFast;
 begin
   if DocVariantType=nil then
-    DocVariantType := SynRegisterCustomVariantType(TDocVariant);
+    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
   ZeroFill(@self);
   VType := DocVariantVType;
   VOptions := JSON_OPTIONS_FAST;
@@ -41644,11 +41701,15 @@ begin
   end;
   for arg := 0 to n-1 do begin
     VarRecToUTF8(NameValuePairs[arg*2],VName[arg+VCount]);
+    if dvoInternNames in VOptions then
+      DocVariantType.InternNames.UniqueText(VName[arg+VCount]);
     if dvoValueCopiedByReference in VOptions then
       VarRecToVariant(NameValuePairs[arg*2+1],VValue[arg+VCount]) else begin
       VarRecToVariant(NameValuePairs[arg*2+1],tmp);
       SetVariantByValue(tmp,VValue[arg+VCount]);
     end;
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(VValue[arg+VCount]);
   end;
   inc(VCount,n);
 end;
@@ -41807,11 +41868,15 @@ function TDocVariantData.InitJSONInPlace(JSON: PUTF8Char;
 var EndOfObject: AnsiChar;
     Name: PUTF8Char;
     NameLen, n: integer;
+    intnames, intvalues: TRawUTF8Interning;
 begin
   Init(aOptions);
   result := nil;
   if JSON=nil then
     exit;
+  if dvoInternValues in VOptions then
+    intvalues := DocVariantType.InternValues else
+    intvalues := nil;
   if JSON^ in [#1..' '] then repeat inc(JSON) until not(JSON^ in [#1..' ']);
   case JSON^ of
   '[': begin
@@ -41828,6 +41893,8 @@ begin
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
           exit;
+        if intvalues<>nil then
+          intvalues.UniqueVariant(VValue[VCount]);
         inc(VCount);
       until EndOfObject=']';
     end else
@@ -41841,6 +41908,9 @@ begin
     if n<0 then
       exit; // invalid content
     include(VOptions,dvoIsObject);
+    if dvoInternNames in VOptions then
+      intnames := DocVariantType.InternNames else
+      intnames := nil;
     if n>0 then begin
       SetLength(VValue,n);
       SetLength(VName,n);
@@ -41851,10 +41921,14 @@ begin
         Name := GetJSONPropName(JSON,@NameLen);
         if Name=nil then
           exit;
-        SetString(VName[VCount],PAnsiChar(Name),NameLen);
+        if intnames<>nil then
+          intnames.Unique(VName[VCount],Name,NameLen) else
+          SetString(VName[VCount],PAnsiChar(Name),NameLen);
         GetJSONToAnyVariant(VValue[VCount],JSON,@EndOfObject,@VOptions,false);
         if JSON=nil then
           exit;
+        if intvalues<>nil then
+          intvalues.UniqueVariant(VValue[VCount]);
         inc(VCount);
       until EndOfObject='}';
     end else
@@ -42028,7 +42102,12 @@ begin
     len := length(VValue);
     if Length(VName)<>len then
       SetLength(VName,len);
-    VName[VCount] := aName;
+    if dvoInternNames in VOptions then begin // inlined InternNames method
+      if DocVariantType.fInternNames=nil then
+        DocVariantType.fInternNames := TRawUTF8Interning.Create;
+      DocVariantType.fInternNames.Unique(VName[VCount],aName);
+    end else
+      VName[VCount] := aName;
   end;
   result := VCount;
   inc(VCount);
@@ -42056,6 +42135,8 @@ begin
   end;
   result := InternalAdd(aName); // FPC does not allow VValue[InternalAdd(aName)]
   SetVariantByValue(aValue,VValue[result]);
+  if dvoInternValues in VOptions then
+    DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
 function TDocVariantData.AddValue(aName: PUTF8Char; aNameLen: integer; const aValue: variant): integer;
@@ -42080,10 +42161,13 @@ begin
   VarClear(VValue[result]);
   if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result]),
       AllowVarDouble) then
-    RawUTF8ToVariant(aValue,VValue[result]);
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
+      RawUTF8ToVariant(aValue,VValue[result]);
 end;
 
-procedure TDocVariantData.AddByPath(const aSource: TDocVariantData; const aPaths: array of RawUTF8);
+procedure TDocVariantData.AddByPath(const aSource: TDocVariantData;
+  const aPaths: array of RawUTF8);
 var p,added: integer;
     v: TVarData;
 begin
@@ -42096,6 +42180,8 @@ begin
       continue; // path not found
     added := InternalAdd(aPaths[p]);
     PVarData(@VValue[added])^ := v;
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(VValue[added]);
   end;
 end;
 
@@ -42123,6 +42209,8 @@ function TDocVariantData.AddItem(const aValue: variant): integer;
 begin
   result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
   SetVariantByValue(aValue,VValue[result]);
+  if dvoInternValues in VOptions then
+    DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
 function TDocVariantData.AddItemFromText(const aValue: RawUTF8;
@@ -42130,7 +42218,9 @@ function TDocVariantData.AddItemFromText(const aValue: RawUTF8;
 begin
   result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
   if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result]),AllowVarDouble) then
-    RawUTF8ToVariant(aValue,VValue[result]);
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
+      RawUTF8ToVariant(aValue,VValue[result]);
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
@@ -42139,6 +42229,8 @@ begin
   for ndx := 0 to high(aValue) do begin
     added := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
     VarRecToVariant(aValue[ndx],VValue[added]);
+    if dvoInternValues in VOptions then
+      DocVariantType.InternValues.UniqueVariant(VValue[added]);
   end;
 end;
 
@@ -42926,6 +43018,8 @@ begin
       if ndx<0 then
         ndx := InternalAdd(Name);
       SetVariantByValue(aValue,VValue[ndx]);
+      if dvoInternValues in VOptions then
+        DocVariantType.InternValues.UniqueVariant(VValue[ndx]);
     end else
       SetValueOrRaiseException(VariantToIntegerDef(aNameOrIndex,-1),aValue);
   end;
@@ -42948,6 +43042,8 @@ begin
       exit;
   end;
   SetVariantByValue(aValue,VValue[result]);
+  if dvoInternValues in VOptions then
+    DocVariantType.InternValues.UniqueVariant(VValue[result]);
 end;
 
 function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8;
@@ -43244,6 +43340,27 @@ end;
 
 { TDocVariant }
 
+function TDocVariant.InternNames: TRawUTF8Interning;
+begin
+  if fInternNames=nil then
+    fInternNames := TRawUTF8Interning.Create;
+  result := fInternNames;
+end;
+
+function TDocVariant.InternValues: TRawUTF8Interning;
+begin
+  if fInternValues=nil then
+    fInternValues := TRawUTF8Interning.Create;
+  result := fInternValues;
+end;
+
+destructor TDocVariant.Destroy;
+begin
+  inherited Destroy;
+  fInternNames.Free;
+  fInternValues.Free;
+end;
+
 procedure TDocVariant.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
 procedure Execute(ndx: integer;
@@ -43280,6 +43397,8 @@ begin
   if (dvoIsArray in Data.VOptions) and (PWord(Name)^=ord('_')) then begin
     ndx := Data.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
     SetVariantByValue(variant(Value),Data.VValue[ndx]);
+    if dvoInternValues in Data.VOptions then
+      DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
     exit;
   end;
   SetString(aName,Name,StrLen(PUTF8Char(Name)));
@@ -43287,6 +43406,8 @@ begin
   if ndx<0 then
     ndx := Data.InternalAdd(aName);
   SetVariantByValue(variant(Value),Data.VValue[ndx]);
+  if dvoInternValues in Data.VOptions then
+    DocVariantType.InternValues.UniqueVariant(Data.VValue[ndx]);
 end;
 
 function TDocVariant.IterateCount(const V: TVarData): integer;
@@ -43327,6 +43448,8 @@ begin
   1:if SameText(Name,'Add') then begin
       ndx := Data^.InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
       SetVariantByValue(variant(Arguments[0]),Data^.VValue[ndx]);
+      if dvoInternValues in Data^.VOptions then
+        DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
       exit;
     end else
     if SameText(Name,'Delete') then begin
@@ -43365,6 +43488,8 @@ begin
       SetTempFromFirstArgument;
       ndx := Data^.InternalAdd(temp); // FPC does not allow VValue[InternalAdd(aName)]
       SetVariantByValue(variant(Arguments[1]),Data^.VValue[ndx]);
+      if dvoInternValues in Data^.VOptions then
+        DocVariantType.InternValues.UniqueVariant(Data^.VValue[ndx]);
       exit;
     end;
   end;
@@ -61086,7 +61211,7 @@ begin
     SetLength(VName,VCount);
     SetLength(VValue,VCount);
     for ndx := 0 to VCount-1 do begin
-      VName[ndx] := List[ndx].Name;
+      VName[ndx] := List[ndx].Name;      
       if ValueAsString or not GetNumericVariantFromJSON(pointer(List[ndx].Value),
           TVarData(VValue[ndx]),AllowVarDouble) then
         RawUTF8ToVariant(List[ndx].Value,VValue[ndx]);
@@ -61105,11 +61230,15 @@ function TSynNameValue.MergeDocVariant(var DocVariant: variant;
 var DV: TDocVariantData absolute DocVariant;
     i,ndx: integer;
     v: variant;
+    intvalues: TRawUTF8Interning;
 begin
   if DV.VType<>DocVariantVType then
     TDocVariant.New(DocVariant,JSON_OPTIONS_NAMEVALUE[ExtendedJson]);
   if ChangedProps<>nil then
     TDocVariant.New(ChangedProps^,DV.Options);
+  if dvoInternValues in DV.Options then
+    intvalues := DocVariantType.InternValues else
+    intvalues := nil;
   result := 0; // returns number of changed values
   for i := 0 to Count-1 do begin
     VarClear(v);
@@ -61124,6 +61253,8 @@ begin
     if ChangedProps<>nil then
       PDocVariantData(ChangedProps)^.AddValue(List[i].Name,v);
     SetVariantByValue(v,DV.VValue[ndx]);
+    if intvalues<>nil then
+      intvalues.UniqueVariant(DV.VValue[ndx]);
     inc(result);
   end;
 end;

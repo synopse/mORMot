@@ -2812,14 +2812,16 @@ begin
     timer.Start;
     for i := 0 to MAX do begin
       v := i and 511;
-      check(vs[i]='');
       int.Unique(vs[i],pointer(SmallUInt32UTF8[v]),length(SmallUInt32UTF8[v]));
-      check(UTF8ToInteger(vs[i])=v);
     end;
     NotifyTestSpeed(Format('interning %s',[KB(INTSIZE)]),MAX,DIRSIZE,@timer);
+    for i := 0 to MAX do
+      check(UTF8ToInteger(vs[i])=i and 511);
     check(int.Count=512);
     check(int.Clean=0);
     check(int.Count=512);
+    for i := 0 to MAX do
+      check(UTF8ToInteger(vs[i])=i and 511);
     vs := nil;
     check(int.Count=512);
     check(int.Clean=512);
@@ -2831,11 +2833,11 @@ begin
   timer.Start;
   for i := 0 to MAX do begin
     v := i and 511;
-    check(vs[i]='');
     SetString(vs[i],PAnsiChar(pointer(SmallUInt32UTF8[v])),length(SmallUInt32UTF8[v]));
-    check(UTF8ToInteger(vs[i])=v);
   end;
   NotifyTestSpeed(Format('direct %s',[KB(DIRSIZE)]),MAX,DIRSIZE,@timer);
+  for i := 0 to MAX do
+    check(UTF8ToInteger(vs[i])=i and 511);
 end;
 
 function kr32reference(buf: PAnsiChar; len: cardinal): cardinal;

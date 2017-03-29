@@ -31899,8 +31899,9 @@ end;
 
 procedure TSQLRecord.GetAsDocVariant(withID: boolean;
   const withFields: TSQLFieldBits; var result: variant; options: PDocVariantOptions);
-var f: integer;
+var f,i: integer;
     Fields: TSQLPropInfoList;
+    intvalues: TRawUTF8Interning;
     doc: TDocVariantData absolute result;
 begin
   VarClear(result);
@@ -31908,13 +31909,21 @@ begin
     exit;
   Fields := RecordProps.Fields;
   doc.InitFast(Fields.Count+1,dvObject);
-  if options<>nil then // force options
+  intvalues := nil;
+  if options<>nil then begin // force options
     PDocVariantData(@result)^.Options := options^;
+    if dvoInternValues in options^ then
+      intvalues := DocVariantType.InternValues;
+  end;
   if withID then
     doc.Values[doc.InternalAdd('RowID')] := fID;
   for f := 0 to Fields.Count-1 do
-  if f in withFields then
-    Fields.List[f].GetVariant(self,doc.Values[doc.InternalAdd(Fields.List[f].Name)]);
+  if f in withFields then begin
+    i := doc.InternalAdd(Fields.List[f].Name);
+    Fields.List[f].GetVariant(self,doc.Values[i]);
+    if intvalues<>nil then
+      intvalues.UniqueVariant(doc.Values[i]);
+  end;
 end;
 
 function TSQLRecord.GetSimpleFieldsAsDocVariant(withID: boolean;
