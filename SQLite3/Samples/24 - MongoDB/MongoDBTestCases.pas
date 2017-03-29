@@ -7,7 +7,7 @@ interface
 // if defined, will test with 5000 records instead of the default 100 records
 {.$define ADD5000}
 
-// if defined, will create the DB with one "toto" user, to validate authentication 
+// if defined, will create the DB with one "toto" user, to validate authentication
 {.$define TESTMONGOAUTH}
 
 uses

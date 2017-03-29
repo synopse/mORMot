@@ -719,6 +719,9 @@ var
   // will be registered, since they are needed for any MongoDB / BSON process
   BSONVariantType: TBSONVariant;
 
+/// ready-to-be displayed text of a TBSONElementType value
+function ToText(kind: TBSONElementType): PShortString; overload;
+
 /// create a TBSONVariant custom variant type containing a BSON Object ID
 // - will be filled with some unique values, ready to create a new document key
 // - will store a BSON element of betObjectID kind
@@ -2736,10 +2739,10 @@ begin
       PBoolean(Element)^ := aVarData.VBoolean;
     betInt32:
       if not VariantToInteger(aValue,PInteger(Element)^) then
-        VarCastError;
+        raise EBSONException.Create('TBSONElement.FromVariant(betInt32)');
     betInt64:
       if not VariantToInt64(aValue,PInt64(Element)^) then
-        VarCastError;
+        raise EBSONException.Create('TBSONElement.FromVariant(betInt64)');
     end;
     ElementBytes := BSON_ELEMENTSIZE[Kind];
   end;
@@ -2782,7 +2785,7 @@ str:Kind := betString;
     else         FromBSON(aBson.VBlob);
     end;
     if ElementBytes<0 then
-      VarCastError;
+      raise EBSONException.CreateUTF8('TBSONElement.FromVariant(bson,%)',[ToText(Kind)^]);
   end else
   if aVarData.VType=DocVariantType.VarType then begin
     with TBSONWriter.Create(TRawByteStringStream) do // inlined BSON()   
@@ -2792,15 +2795,16 @@ str:Kind := betString;
     finally
       Free;
     end;
-    case aDoc.Kind of
-    dvObject: Kind := betDoc;
-    dvArray:  Kind := betArray;
-    else VarCastError;
-    end;
+    if dvoIsObject in aDoc.Options then
+      Kind := betDoc else
+    if dvoIsArray in aDoc.Options then
+      Kind := betArray else
+      raise EBSONException.CreateUTF8('TBSONElement.FromVariant(doc,%)',[ToText(aDoc.Kind)^]);
     FromBSON(pointer(aTemp));
     if ElementBytes<0 then
-      VarCastError;
-  end else VarCastError;
+      raise EBSONException.CreateUTF8('TBSONElement.FromVariant(docbson,%)',[ToText(Kind)^]);
+  end else
+    raise EBSONException.CreateUTF8('TBSONElement.FromVariant(VType=%)',[aVarData.VType]);
   end;
 end;
 
@@ -3201,11 +3205,11 @@ end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const doc: TDocVariantData);
 begin
-  case doc.Kind of
-  dvObject:    BSONWrite(name,betDoc);
-  dvArray:     BSONWrite(name,betArray);
-  dvUndefined: raise EBSONException.Create('Undefined nested document');
-  end;
+  if dvoIsObject in doc.Options then
+    BSONWrite(name,betDoc) else
+  if dvoIsArray in doc.Options then
+    BSONWrite(name,betArray) else
+    raise EBSONException.Create('Undefined nested document');
   BSONWriteDoc(doc);
 end;
 
@@ -4075,6 +4079,11 @@ end;
 
 
 { main BSON* functions }
+
+function ToText(kind: TBSONElementType): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TBSONElementType),ord(kind));
+end;
 
 function ObjectID: variant;
 var ID: TBSONObjectID;
