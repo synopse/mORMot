@@ -2,23 +2,31 @@
 
 set lib=d:\dev\lib
 set bin=z:\tempbuild\fpc
+set fpc=c:\fpcupdeluxe\fpc\bin\i386-win32\fpc.exe
 
-cd \dev\lib
-if not exist %bin% mkdir %bin%
-del %bin%\*.exe %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.map %bin%\*.db3 %bin%\*.ini %bin%\*.data %bin%\*.mdb %bin%\TestSQL3.* > nul 2> nul
-echo.
+if exist %fpc% (
 
-cd \dev\lib\SQLite3
-echo Compiling...
+	cd \dev\lib
+	if not exist %bin% mkdir %bin%
+	del %bin%\*.exe %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.map %bin%\*.db3 %bin%\*.ini %bin%\*.data %bin%\*.mdb %bin%\TestSQL3.* > nul 2> nul
+	echo.
 
-@rem   -O2 makes GPF during DDD tests... :(
+	cd \dev\lib\SQLite3
+	echo Compiling using %fpc%...
 
-c:\NewPascal\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O1 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -Fu%lib%\kylix -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
+	@rem   -O2  don't make GPF during DDD tests any more...
 
-rem C:\development\fpc\bin\i386-win32\fpc.exe -B -MObjFPC -Scgi -CX -O1 -XX -ve -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilation
+	%fpc% -B -MObjFPC -Scgi -CX -O2 -XX -ve -dFPCSQLITE3STATIC -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -Fu%lib%\kylix -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilMsg
 
-del %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.mdb > nul
+	rem %fpc% -B -MObjFPC -Scgi -CX -O1 -XX -ve -Fi%lib% -Fu%lib% -Fu%lib%\SQLite3 -l -Fl%lib%\fpc-win32 -FE%bin% TestSQL3.dpr >%bin%\compilation
 
-%bin%\TestSQL3
+	del %bin%\*.o %bin%\*.a %bin%\*.ppu %bin%\*.mdb > nul
+
+	%bin%\TestSQL3
+
+) else (
+
+	echo !!!! %fpc% not found !!!!
+)
 
 pause
