@@ -577,7 +577,7 @@ constructor TOpenSSLLib.Create(const aFolderName: TFileName);
     if h = 0 then
       raise EOpenSSL.CreateFmt('%s not found', [result]);
     for i := 0 to last do begin
-      api^ := GetProcAddress(h, PAnsiChar(name^));
+      api^ := GetProcAddress(h, PChar(name^));
       if api^ = nil then
         if (api = @@SSL_CTX_set_alpn_protos) or (api = @@SSL_get0_alpn_selected) then
           fAPLNNotSupported := true
@@ -588,7 +588,7 @@ constructor TOpenSSLLib.Create(const aFolderName: TFileName);
             FreeLibrary(fLibCrypto);
             fLibCrypto := 0;
           end;
-          raise EOpenSSL.CreateFmt('Missing %s in %s', [PAnsiChar(name^), result]);
+          raise EOpenSSL.CreateFmt('Missing %s in %s', [PChar(name^), result]);
         end;
       inc(api);
       inc(name);
