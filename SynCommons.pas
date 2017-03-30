@@ -19056,7 +19056,7 @@ end;
 
 function TRawUTF8InterningSlot.Clean(aMaxRefCount: integer): integer;
 var i: integer;
-    s,d: PPtrUInt; // points to RawUTF8 values
+    s,d: PPtrUInt; // points to RawUTF8 values (bypass COW assignments)
 begin
   result := 0;
   Safe.Lock;
@@ -19083,7 +19083,7 @@ begin
       inc(s);
     end;
     if result>0 then begin
-      Values.SetCount((PtrUInt(d)-PtrUInt(Value))div sizeof(RawUTF8));
+      Values.SetCount((PtrUInt(d)-PtrUInt(Value))div sizeof(d^));
       Values.ReHash;
     end;
   finally
@@ -33904,7 +33904,7 @@ begin
 end;
 
 const
-  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%:%:%:%.%%');
+  DTMS_FMT: array[boolean] of RawUTF8 = ('%%%%%%%%%', '%-%-%%%:%:%.%%');
 
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
