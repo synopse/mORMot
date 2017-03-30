@@ -81,6 +81,16 @@ class Actor {
             }
             return (new ObjectActor(value, this))._resp;
         }
+        if (type === "symbol") {
+            let form = {
+                type: "symbol"
+            };
+            let name = getSymbolName(value);
+            if (name !== undefined) {
+                form.name = this.getGrip(name);
+            }
+            return form;
+        }
         throw new Error('getGrip failed: ' + type + ' : ' + value);
         //return null;
     }
@@ -97,6 +107,12 @@ class Actor {
         }
         return protoValue;
     }
+}
+
+const symbolProtoToString = Symbol.prototype.toString;
+function getSymbolName(symbol) {
+  const name = symbolProtoToString.call(symbol).slice("Symbol(".length, -1);
+  return name || undefined;
 }
 
 class ConsoleActor extends Actor {
@@ -798,6 +814,9 @@ class ThreadActor extends Actor {
         do {
             msg = dbg_binding.read();
             newMessage(msg);
+            while (msg = dbg_binding.read(false)) {
+                newConsoleMessage(msg);
+            }
         } while (dbg_binding.paused);
         return undefined;
     }
@@ -1682,9 +1701,22 @@ export function setConsoleMessageResolver(aResolver) {
     consoleMessageResolver = aResolver;
 }
 
+
+export function doInterupt() {
+    let msg;
+    while (msg = dbg_binding.read(true)) {
+        newMessage(msg);
+        while (msg = dbg_binding.read(false)) {
+            newConsoleMessage(msg);
+        }
+    };
+    while (msg = dbg_binding.read(false)) {
+        newConsoleMessage(msg);
+    }
+}
+
 process.dbg = {
-    newMessage: newMessage,
-    newConsoleMessage: newConsoleMessage,
+    doInterupt: doInterupt,
     init: init,
     uninit: uninit
 };

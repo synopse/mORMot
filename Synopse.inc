@@ -2,7 +2,7 @@
     This file is part of Synopse framework.
 
     Synopse framework. Copyright (C) 2011 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -20,7 +20,7 @@
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -68,9 +68,9 @@
   Version 1.18
   - added SQLITE3_FASTCALL conditional (shared by SQLite3 related units)
   - added NEWRTTINOTUSED conditional (unset by default, for compatibility) - see
-    http://synopse.info/forum/viewtopic.php?id=1394
+    https://synopse.info/forum/viewtopic.php?id=1394
   - enhanced FPC compatibility
-  - now handles Delphi XE3, XE4, XE5, XE6, XE7 and XE8 (32 and 64 bit)
+  - now handles Delphi XE3 and up (32 and 64 bit)
 
 }
 
@@ -127,12 +127,17 @@
 // thread name: to be defined if you have issues when debugging your application
 
 {.$define USELOCKERDEBUG}
-// by default, some IAutoLocker instances would use TAutoLocker, unless this 
+// by default, some IAutoLocker instances would use TAutoLocker, unless this
 // conditional is defined to use more verbose TAutoLockerDebug
 // (may be used for race condition debugging, in multi-threaded apps)
 
 {.$define OLDTEXTWRITERFORMAT}
-// force TTextWriter.Add(Format) to handle the alternate $ % tags
+// force TTextWriter.Add(Format) to handle the alternate deprecated $ % tags
+
+{.$define OPT4AMD}
+// you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
+// which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
+// (with the Delphi x86 compiler, may not be the case for LLVM or FPC) 
 
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL
@@ -145,12 +150,12 @@
   {$undef ENHANCEDRTL} // Delphi 2009 and up don't have our Enhanced Runtime library
   {$define HASVARUSTRING}
   {$define HASCODEPAGE}
+  {$define FPC_OR_UNICODE}
   { due to a bug in Delphi 2009+, we need to fake inheritance of record,
     since TDynArrayHashed = object(TDynArray) fails to initialize
     http://blog.synopse.info/post/2011/01/29/record-and-object-issue-in-Delphi-2010 }
   {$define UNDIRECTDYNARRAY}
 {$endif}
-
 
 {$define INCLUDE_FTS3}
 // define this if you want to include the FTS3/FTS4 feature into the library
@@ -201,20 +206,26 @@
   {$define DELPHI5ORFPC}
   {$define USETYPEINFO}  // will use SynFPCTypInfo.pas wrapper
   {$define HASINLINE}
+  {$define HASINLINENOTX86}
   {$define NODELPHIASM}   // ignore low-level System.@LStrFromPCharLen calls
   {$define HASAESNI}
   {$define HASTTHREADSTART}
   {$define HASINTERFACEASTOBJECT}
   {$define FPC_OR_UNICODE}
   {$define FPC_ENUMHASINNER}
+  {$ifdef VER3_1_1} // if FPC_FULLVERSION>30100 ... ifend is not Delphi 5 compatible :(
+    {$define FPC_NEWRTTI} // RTTI has been enhanced in latest trunk 
+  {$endif}
+  {$ifdef FPC_NEWRTTI}
+    {$define ISDELPHI2010_OR_FPC_NEWRTTI}
+  {$else}
+    {$define DELPHI_OR_FPC_OLDRTTI}
+    {$define FPC_OLDRTTI}
+  {$endif}
 
-  {.$define FPCSQLITE3STATIC}
-  // allow static linking of the SQlite3 engine (including crypto) to the project
-  // -> enabled to support static-linked SQLite3 engine, after retrieval of
-  // the needed .o files from http://synopse.info/files/sqlite3fpc.7z
+  // define FPCSQLITE3STATIC to enable static-linked SQLite3 engine for FPC
+  // -> expect *.o files download from https://synopse.info/files/sqlite3fpc.7z
   // -> could be disabled to force external .so/.dll linking
-  // -> only available for Win32 and Linux32 platforms by now
-
   {$ifdef MSWINDOWS}
   {$ifdef CPUX86}
     {$define FPCSQLITE3STATIC} // we supply Win32 .obj
@@ -225,16 +236,32 @@
   {$ifdef LINUX}
     {$ifdef CPUX86}
       {$define FPCSQLITE3STATIC} // we supply Linux 32-bit x86 .o
-    {$endif} 
-  {$endif} 
-
-  {$ifdef ANDROID}
-    {$define LINUX}
+    {$endif}
+    {$ifdef CPUX64}
+      {$define FPCSQLITE3STATIC} // we supply Linux 64-bit x86_64 .o
+    {$endif}
+    {$ifdef CPUARM}
+      {$define FPCSQLITE3STATIC} // we supply Linux 32-bit ARM .o
+    {$endif}
   {$endif}
 
-  {$ifdef DARWIN}
+  {$ifdef ANDROID}
+    {$define LINUX} // a Linux-based system
+  {$endif}
+
+  {$ifdef BSD}
+    // this includes Darwin and BSD family like FreeBSD
     {$define LINUX} // not true, but a POSIX/BSD system
     {$define PUREPASCAL} // e.g. low-level stack layout differs
+    {$ifdef DARWIN}
+      {$define FPCSQLITE3STATIC} // we supply Darwin static libs
+    {$else}
+      {$define BSDNOTDARWIN}
+    {$endif}
+  {$else}
+    {$ifdef LINUX}
+      {$define LINUXNOTBSD} // e.g. to disable epoll API
+    {$endif}
   {$endif}
 
   {$ifdef CPU64}
@@ -255,7 +282,7 @@
 
   // FPC has its own RTTI layout only since late 3.x
   // when http://bugs.freepascal.org/view.php?id=26774 has been fixed
-  {$ifdef FPC_HAS_EXTENDEDINTERFACERTTI} // use dedicated branch conditional
+  {$ifdef FPC_NEWRTTI} // use dedicated branch conditional
     {$ifdef CPUINTEL}
       {$define HASINTERFACERTTI}
     {$endif}
@@ -265,7 +292,7 @@
     {$ifdef CPUAARCH64}
       {$define HASINTERFACERTTI}
     {$endif}
-  {$endif FPC_HAS_EXTENDEDINTERFACERTTI}
+  {$endif FPC_NEWRTTI}
 
   {$define FPC_OR_PUREPASCAL}
   {$define FPC_OR_KYLIX}
@@ -305,10 +332,15 @@
     {$define FPC_ENUMHASINNER}
   {$endif}
 
+  {$ifdef FPC_HAS_MANAGEMENT_OPERATORS}
+    {$define ISDELPHI2006ANDUP}
+  {$endif FPC_HAS_MANAGEMENT_OPERATORS}
+
 {$else FPC}
 
-  {$ifndef PUREPASCAL} // if PUREPASCAL is forced, ignore any x86/x64 asm
-    {$define CPUINTEL} // no NextGen support yet
+  {$define DELPHI_OR_FPC_OLDRTTI}
+  {$ifndef PUREPASCAL}
+    {$define CPUINTEL} // Delphi only for Intel by now
   {$endif}
   {$ifdef CPUX64}
     {$define CPU64} // Delphi compiler for 64 bit CPU
@@ -335,8 +367,9 @@
         {$define DOPATCHTRTL}  // nice speed up for server apps
         {$define NOVARCOPYPROC}
         {$define NOSQLITE3STATIC} // Kylix will use external sqlite3.so
+        {$define LINUXNOTBSD}     // e.g. to disable epoll API
       {$else}
-      Kylix1/2 are unsupported
+      Kylix1/2 or Delphi Tokyo/ARC are unsupported
       {$ifend}
     {$else}
       {$ifdef VER140}
@@ -352,13 +385,18 @@
         {$warn UNSAFE_CAST OFF}
         {$warn DUPLICATE_CTOR_DTOR OFF} // avoid W1029 unneeded hints
       {$endif}
+      {$ifdef USEPACKAGES}
+        {$undef DOPATCHTRTL}
+      {$endif}
     {$endif LINUX}
     {$if CompilerVersion >= 17}
+      {$define ISDELPHI2005ANDUP} // Delphi 2005 or newer
     {$ifend}
     {$if CompilerVersion >= 18}
       {$define ISDELPHI2006ANDUP} // Delphi 2006 or newer
       {$define HASNEWFILEAGE}
       {$define HASINLINE}
+      {$define HASINLINENOTX86}
       {$define HASREGION}
       {$define HASFASTMM4}
     {$ifend}
@@ -379,6 +417,7 @@
     {$if CompilerVersion >= 21.0}
       // Delphi 2010/XE: Reduce EXE size by disabling much RTTI
       {$define ISDELPHI2010}
+      {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
       {$define HASINTERFACEASTOBJECT}
@@ -426,7 +465,17 @@
     {$ifend}
     {$if CompilerVersion >= 32.0}
       {$define ISDELPHI102}
+      {$ifdef CPUX64}
+      {$ifdef VER320}
+        {$undef HASINLINE} // circumvent Delphi 10.2 Tokyo Win64 compiler bug
+        {$define HASINLINENOTX86}
+      {$endif}
+      {$endif}
     {$ifend}
+    {$ifopt O-} // if we don't expect fast code, don't optimize the framework
+      {$undef ENHANCEDRTL}
+      {$undef DOPATCHTRTL}
+    {$endif}
   {$ELSE}
     // Delphi 5 or older
     {$define DELPHI6OROLDER}
@@ -473,7 +522,7 @@
   {$WARN UNIT_PLATFORM OFF}
 {$endif}
 
-// see http://synopse.info/fossil/tktview?name=6593f0fbd1
+// see https://synopse.info/fossil/tktview?name=6593f0fbd1
 {$ifndef WITHUXTHEME}
   {$define EXTENDEDTOSTRING_USESTR} // no TFormatSettings before Delphi 6
 {$endif}
@@ -495,30 +544,21 @@
   {$define SQLITE3_FASTCALL}
   {$endif}
 {$else}
+  {.$define SQLITE3_FASTCALL}
   // undefined by default: BCC32 -pr fastcall (=Delphi resgister) is broken
   // because of issues with BCC32 itself, or some obfuscated calls in source?
   // -> allow to use external SQlite3 libraries in addition to static version
-  {.$define SQLITE3_FASTCALL}
 {$endif}
 
 {$ifdef FPC}
-  {$ifndef FPCSQLITE3STATIC} // see above to enable this conditional 
+  {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
     {$define NOSQLITE3STATIC}
   {$endif}
 {$else}
-  // Only Win32+Linux32 do support static linked library yet with Delphi
+  // Only Win32+Linux32 do support static linked library yet with Delphi/Kylix
   {$ifdef CPU64}
     {$define NOSQLITE3STATIC}
   {$endif}
-{$endif}
-{$ifndef CPUINTEL}
-  {$define NOSQLITE3STATIC}
-{$endif}
-{$ifdef ANDROID}
-  {$define NOSQLITE3STATIC}
-{$endif}
-{$ifdef DARWIN}
-  {$define NOSQLITE3STATIC}
 {$endif}
 
 {$ifdef NOSQLITE3STATIC}
@@ -531,23 +571,14 @@
 // -> to be used only for internal debugging
 
 {$ifdef MSWINDOWS}
-  /// define this to publish TWinINet / TWinHttp / TWinHttpAPI classes
-  // and TSQLHttpClientWinINet / TSQLHttpClientWinHTTP classes 
-  {$define USEWININET}
-  // our current IOCP pattern is Windows-specific:
-  //  with Thread Pool: 3394 requests / second (each request with 4 KB of data)
-  //  without the Pool: 140/s in the IDE (i.e. one core), 2637/s on a dual core
-  // but less needed under Linux, since thread creation sounds much cheaper
-  // see http://www.akkadia.org/drepper/nptl-design.pdf
-  {$define USETHREADPOOL}
+  {$define USEWININET}         // publish TWinINet/TWinHttp/TWinHttpAPI classes
   {.$define ONLYUSEHTTPSOCKET} // for testing (no benefit vs http.sys)
-  {.$define USELIBCURL}     // for testing under Windows (no benefit vs WinHTTP)
+  {.$define USELIBCURL}        // for testing (no benefit vs WinHTTP)
 {$else}
-  // http.sys server is Windows-specific
-  {$define ONLYUSEHTTPSOCKET}
+  {$define ONLYUSEHTTPSOCKET}  // http.sys server is Windows-specific
   {$ifndef ANDROID}
-  // cross-platform libcurl has a great API -> TCurlHttp and TSQLHttpClientCurl
-  {$define USELIBCURL}
+    // cross-platform libcurl for https -> TCurlHttp and TSQLHttpClientCurl
+    {$define USELIBCURL}
   {$endif}
 {$endif}
 

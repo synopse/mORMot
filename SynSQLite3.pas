@@ -6,8 +6,8 @@ unit SynSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.15.0 database engine
+       SQLite3 3.17.0 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -136,7 +136,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.15.0
+  - updated SQLite3 engine to latest version 3.17.0
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -197,6 +197,9 @@ interface
 uses
   {$ifdef MSWINDOWS}
   Windows,
+  {$ifdef FPC}
+  dynlibs,
+  {$endif}
   {$else}
   {$ifdef KYLIX3}
   LibC,
@@ -206,7 +209,11 @@ uses
   {$ifdef FPC}
   {$ifdef Linux}
   SynFPCLinux,
+  {$ifdef BSDNOTDARWIN}
+  dl,
+  {$else}
   DynLibs,
+  {$endif}
   {$endif}
   {$endif}
   {$endif}
@@ -273,7 +280,7 @@ type
 const
   {$ifdef MSWINDOWS}
   {$ifdef CPU64}
-  // see http://synopse.info/files/SQLite3-64.7z
+  // see https://synopse.info/files/SQLite3-64.7z
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3-64.dll';
   {$else}
   SQLITE_LIBRARY_DEFAULT_NAME = 'sqlite3.dll';
@@ -1284,7 +1291,7 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.15.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.17.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -1443,7 +1450,7 @@ type
     // statements also cause sqlite3.stmt_readonly() to return true since, while
     // those statements change the configuration of a database connection, they
     // do not make changes to the content of the database files on disk.
-    stmt_readonly: function(S: TSQLite3Statement): boolean; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
+    stmt_readonly: function(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Evaluate An SQL Statement, returning a result status:
     // - SQLITE_BUSY means that the database engine was unable to acquire the database
@@ -2059,7 +2066,11 @@ type
   // ! sqlite3 := TSQLite3LibraryDynamic.Create;
   TSQLite3LibraryDynamic = class(TSQLite3Library)
   protected
+    {$ifdef FPC}
+    fHandle: TLibHandle;
+    {$else}
     fHandle: THandle;
+    {$endif}
     fLibraryName: TFileName;
   public
     /// initialize the specified external library
@@ -2222,6 +2233,7 @@ function ErrorCodeToText(err: TSQLite3ErrorCode): RawUTF8;
 // - raise a ESQLite3Exception if the result state is an error
 // - return the result state otherwise (SQLITE_OK,SQLITE_ROW,SQLITE_DONE e.g.)
 function sqlite3_check(DB: TSQLite3DB; aResult: integer; const SQL: RawUTF8=''): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 var
   /// global access to linked SQLite3 library API calls
@@ -2460,7 +2472,7 @@ type
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Value, with no memory
-    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable
     procedure Bind(Param: Integer; const Value: RawUTF8); overload;
     /// bind a generic VCL string to a parameter
     // - with versions prior to Delphi 2009, you may loose some content here:
@@ -2476,8 +2488,8 @@ type
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
     // - this function will use copy-on-write assignment of Data, with no memory
-    // allocation, then let sqlite3InternalFreeRawByteString release the variable 
-    procedure BindBlob(Param: Integer; const Data: RawByteString); 
+    // allocation, then let sqlite3InternalFreeRawByteString release the variable
+    procedure BindBlob(Param: Integer; const Data: RawByteString);
     /// bind a Blob TCustomMemoryStream buffer to a parameter
     // - the leftmost SQL parameter has an index of 1, but ?NNN may override it
     // - raise an ESQLite3Exception on any error
@@ -3129,7 +3141,7 @@ type
     /// the latest BackupBackground() process file name
     property BackupBackgroundLastFileName: TFileName read fBackupBackgroundLastFileName;
     /// the SQLite3 library which is currently running
-    // - part of TSQLDatabase published properties, to publish e.g. Version  
+    // - part of TSQLDatabase published properties, to publish e.g. Version
     property SQLite3Library: TSQLite3Library read GetSQLite3Library;
   end;
 
@@ -3254,8 +3266,6 @@ const
 
 
 implementation
-
-
 
 { ************ direct access to sqlite3.c / sqlite3.obj consts and functions }
 
@@ -3393,7 +3403,7 @@ end;
 
 function Utf8SQLDateTime(CollateParam: pointer; s1Len: integer; s1: pointer;
     s2Len: integer; s2: pointer) : integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
-var V1,V2: Int64; // faster than Iso8601ToDateTimePChar: uses integer math
+var V1,V2: TDateTime; // will handle up to .sss milliseconds resolution
 begin
   if s1Len<=0 then // see WladiD note above
     s1 := nil;
@@ -3401,14 +3411,14 @@ begin
     s2 := nil;
   if s1=s2 then
     result := 0 else begin
-    V1 := Iso8601ToTimeLogPUTF8Char(s1,s1Len);
-    V2 := Iso8601ToTimeLogPUTF8Char(s2,s2Len);
+    Iso8601ToDateTimePUTF8CharVar(s1,s1Len,V1);
+    Iso8601ToDateTimePUTF8CharVar(s2,s2Len,V2);
     if (V1=0) or (V2=0) then // any invalid date -> compare as UTF-8 strings
       result := UTF8ILComp(s1,s2,s1Len,s2Len) else
-      if V1<V2 then
-        result := -1 else
-        if V1=V2 then
-          result := 0 else
+      if SameValue(V1,V2,1/MSecsPerDay) then
+        result := 0 else
+        if V1<V2 then
+          result := -1 else
           result := +1;
   end;
 end;
@@ -3429,7 +3439,7 @@ begin
     ftCurrency:
       sqlite3.result_double(Context,Res.VCurrency);
     ftDate: begin
-      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp);
+      DateTimeToIso8601ExpandedPChar(Res.VDateTime,tmp,'T',svoDateWithMS in Res.Options);
       sqlite3.result_text(Context,tmp,-1,SQLITE_TRANSIENT_VIRTUALTABLE);
     end;
     // WARNING! use pointer(integer(-1)) instead of SQLITE_TRANSIENT=pointer(-1)
@@ -3455,6 +3465,7 @@ end;
 procedure SQlite3ValueToSQLVar(Value: TSQLite3Value; var Res: TSQLVar);
 var ValueType: Integer;
 begin
+  Res.Options := [];
   ValueType := sqlite3.value_type(Value);
   case ValueType of
   SQLITE_NULL:
@@ -5244,7 +5255,7 @@ function TSQLRequest.GetReadOnly: Boolean;
 begin
   if Request=0 then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'IsReadOnly');
-  result := sqlite3.stmt_readonly(Request);
+  result := sqlite3.stmt_readonly(Request)<>0;
 end;
 
 procedure TSQLRequest.FieldsToJSON(WR: TJSONWriter; DoNotFetchBlobs: boolean);
@@ -5264,7 +5275,7 @@ begin
           WR.WrBase64(sqlite3.column_blob(Request,i),
             sqlite3.column_bytes(Request,i),true); // withMagic=true
       SQLITE_NULL:
-        WR.AddNoJSONEscape(PAnsiChar('null'),4); // returned also for ""
+        WR.AddShort('null'); // returned also for ""
       SQLITE_INTEGER:
         WR.Add(sqlite3.column_int64(Request,i));
       SQLITE_FLOAT:
@@ -5741,23 +5752,35 @@ constructor TSQLite3LibraryDynamic.Create(const LibraryName: TFileName);
 var P: PPointerArray;
     i: integer;
 begin
+  fLibraryName := LibraryName;
   {$ifdef MSWINDOWS}
   fHandle := SafeLoadLibrary(LibraryName);
-  {$else}
-  fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
-  {$endif}
-  fLibraryName := LibraryName;
   if fHandle=0 then
+  {$else}
+    {$ifdef BSDNOTDARWIN}
+    fHandle := dlopen(PChar(LibraryName),0);
+    if fHandle=nil then
+    {$else}
+    fHandle := LoadLibrary({$ifndef FPC}pointer{$endif}(LibraryName));
+    if fHandle=0 then
+    {$endif}
+  {$endif MSWINDOWS}
     raise ESQLite3Exception.CreateFmt('Unable to load %s - %s',
       [LibraryName,SysErrorMessage(GetLastError)]);
   P := @@initialize;
   for i := 0 to High(SQLITE3_ENTRIES) do
-    P^[i] := GetProcAddress(fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
+    P^[i] := {$ifdef BSDNOTDARWIN}dlsym{$else}GetProcAddress{$endif}(
+      fHandle,PChar('sqlite3_'+SQLITE3_ENTRIES[i]));
   if not Assigned(initialize) or not Assigned(libversion) or
      not Assigned(open) or not Assigned(close) or not Assigned(create_function) or
      not Assigned(prepare_v2) or not Assigned(create_module_v2) then begin
+    {$ifdef BSDNOTDARWIN}
+    dlclose(fHandle);
+    fHandle := nil;
+    {$else}
     FreeLibrary(fHandle);
     fHandle := 0;
+    {$endif}
     raise ESQLite3Exception.CreateFmt('TOO OLD %s - need 3.7 at least!',[LibraryName]);
   end; // some APIs like config() key() or trace() may not be available
   inherited Create; // set fVersionNumber/fVersionText
@@ -5768,8 +5791,13 @@ end;
 
 destructor TSQLite3LibraryDynamic.Destroy;
 begin
+  {$ifdef BSDNOTDARWIN}
+  if fHandle<>nil then
+    dlclose(fHandle);
+  {$else}
   if fHandle<>0 then
     FreeLibrary(fHandle);
+  {$endif}
   inherited;
 end;
 

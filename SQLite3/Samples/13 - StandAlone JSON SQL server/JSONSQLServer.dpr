@@ -30,7 +30,7 @@ program JSONSQLServer;
   Using SynDB classes instead of directly SynSQLite3 will allow to use any other DB,
   not only SQlite3.
 
-  see http://synopse.info/forum/viewtopic.php?id=607 for the initial request
+  see https://synopse.info/forum/viewtopic.php?id=607 for the initial request
   
 }
 

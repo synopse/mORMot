@@ -6,8 +6,8 @@ unit mORMotUILogin;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotUILogin;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -86,16 +86,29 @@ interface
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64
 
 uses
-  Windows, PsAPI, Messages, SysUtils, Classes, Graphics,
-  {$ifndef FPC}
-  Consts,
+  {$IFDEF FPC}
+  //LCLProc, LCLIntf, LCLType,
+  LCLType, LCLIntf,
+  {$ENDIF}
+  {$IFDEF MSWINDOWS}
+  Windows, CommCtrl,
+  {$ENDIF}
+  {$ifdef FPC}
+  LResources,
+  {$else}
+  Consts, PsAPI,
   {$endif}
+  Messages, SysUtils, Classes, Graphics,
   Controls, Forms, StdCtrls, ExtCtrls, Buttons,
 {$ifdef USETMSPACK}
   AdvGlowButton, TaskDialog, TaskDialogEx, AdvToolBarStylers, AdvToolBar,
 {$endif USETMSPACK}
-  SynTaskDialog, SynGdiPlus, SynCommons, mORMot, mORMotUI;
-
+  {$ifdef FPC}
+  SynTaskDialog in '.\Samples\ThirdPartyDemos\Ondrej\SynTaskDialog4Lazarus\SynTaskDialog.pas',
+  {$else}
+  SynTaskDialog,
+  {$endif}
+  SynGdiPlus, SynCommons, mORMot, mORMotUI;
 
 type
   /// Form used to Log User and enter its password
@@ -260,8 +273,11 @@ function CreateTempForm(const aCaption: string;
 
 implementation
 
-
+{$ifdef FPC}
+{$R *.lfm}
+{$else}
 {$R *.dfm}
+{$endif}
 
 {$R SQLite3UILogin.res}
 
@@ -669,27 +685,51 @@ begin
 {$endif}
 end;
 
+{$ifdef Crazy}
+function FileNameFromWndMatch(const Wnd: HWnd; const AppFileName: string): boolean;
+var ProcessID: DWORD;
+    hProc: THandle;
+    tmp: array[0..MAX_PATH] of char;
+begin
+  GetWindowThreadProcessId(Wnd, @ProcessId);
+  hProc := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, false, ProcessId);
+  if hProc <> 0 then begin
+    {$ifdef FPC}
+    if GetModuleFileName(hProc, tmp, MAX_PATH) = 0 then
+    {$else}
+    if GetModuleFileNameEx(hProc, 0, tmp, MAX_PATH) = 0 then
+    {$endif}
+      tmp[0] := #0;
+    CloseHandle(hProc);
+    result := ExtractFileName(string(tmp)) = AppFileName;
+  end else
+    result := false;
+end;
+{$endif Crazy}
+
 procedure EnsureSingleInstance;
 var Wnd: HWnd;
     ToFindClass, WndClass, AppFileName: string;
     tmp: array[byte] of char;
-
-  function FileNameFromWndMatch: boolean;
-  var ProcessID: DWORD;
-      hProc: THandle;
-      tmp: array[0..MAX_PATH] of char;
-  begin
-    GetWindowThreadProcessId(Wnd, @ProcessId);
-    hProc := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, false, ProcessId);
-    if hProc <> 0 then begin
-      if GetModuleFileNameEx(hProc, 0, tmp, MAX_PATH) = 0 then
-        tmp[0] := #0;
-      CloseHandle(hProc);
-      result := ExtractFileName(string(tmp)) = AppFileName;
-    end else
-      result := false;
-  end;
-
+    function FileNameFromWndMatch: boolean;
+    var ProcessID: DWORD;
+        hProc: THandle;
+        tmp: array[0..MAX_PATH] of char;
+    begin
+      GetWindowThreadProcessId(Wnd, @ProcessId);
+      hProc := OpenProcess(PROCESS_QUERY_INFORMATION or PROCESS_VM_READ, false, ProcessId);
+      if hProc <> 0 then begin
+        {$ifdef FPC}
+        if GetModuleFileName(hProc, tmp, MAX_PATH) = 0 then
+        {$else}
+        if GetModuleFileNameEx(hProc, 0, tmp, MAX_PATH) = 0 then
+        {$endif}
+          tmp[0] := #0;
+        CloseHandle(hProc);
+        result := ExtractFileName(string(tmp)) = AppFileName;
+      end else
+        result := false;
+    end;
 begin
   if Application = nil then
     exit;
@@ -700,13 +740,13 @@ begin
   AppFileName := ExtractFileName(ExeVersion.ProgramFileName);
   if (CreateSemaphore(nil, 0, 1, Pointer(AppFileName)) <> 0) and
      (GetLastError = ERROR_ALREADY_EXISTS) then begin
-    if GetClassName(Application.Handle, tmp, high(tmp)) = 0 then
+    if GetClassName({$ifdef FPC}Application.MainFormHandle{$else}Application.Handle{$endif}, tmp, high(tmp)) = 0 then
       exit;
     ToFindClass := tmp;
-    Wnd := GetWindow(Application.Handle, GW_HWNDFIRST);
+    Wnd := GetWindow({$ifdef FPC}Application.MainFormHandle{$else}Application.Handle{$endif}, GW_HWNDFIRST);
     while Wnd <> 0 do begin
       { Look for the other TApplication window out there }
-      if Wnd <> Application.Handle then begin
+      if Wnd <> {$ifdef FPC}Application.MainFormHandle{$else}Application.Handle{$endif} then begin
         { Check if got the same class and filename }
         if GetClassName(Wnd, tmp, high(tmp)) = 0 then
           tmp[0] := #0;
@@ -793,7 +833,12 @@ begin
         ItemIndex := Items.IndexOf(aUserName);
       end;
     end;
+    {$ifdef FPC}
+    // strange, but needed
+    Edit.SetBounds(104,Height-Edit2.Height-84,193,22);
+    {$else}
     Edit.SetBounds(104,Edit2.Top-32,193,22);
+    {$endif}
     Edit.Anchors := [akLeft,akBottom];
     Edit.Enabled := AllowUserNameChange;
     Edit2.Text := '';
@@ -899,7 +944,7 @@ begin
       CL := PPointer(C)^;
       while (CL<>nil) and (CL<>TComponent) and (CL<>TObject) do begin
         for f := 1 to InternalClassPropInfo(CL,P) do begin
-          with P^.PropType^^ do
+          with P^.PropType^{$ifndef HASDIRECTTYPEINFO}^{$endif} do
           if (Kind=tkClass) and ClassType^.InheritsFrom(TFont) then begin
             Obj := pointer(P^.GetOrdValue(C));
             if Obj<>nil then

@@ -6,8 +6,8 @@ unit SynVirtualDataSet;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynVirtualDataSet;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -33,6 +33,7 @@ unit SynVirtualDataSet;
   - Esteban Martin (EMartin)
   - mingda
   - Murat Ak
+  - Valentin (StxLog)
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -61,8 +62,10 @@ interface
 uses
   SysUtils,
   Classes,
+  {$ifndef FPC}
   Contnrs,
-  {$ifndef DELPHI5OROLDER}
+  {$endif}
+  {$ifndef NOVARIANTS}
   Variants,
   {$endif}
   SynCommons,
@@ -78,6 +81,7 @@ type
   {$ifndef UNICODE} // defined as TRecordBuffer = PByte in newer DB.pas
   TRecordBuffer = PChar;
   {$endif}
+  PDateTimeRec = ^TDateTimeRec;
 
   /// read-only virtual TDataSet able to access any content
   TSynVirtualDataSet = class(TDataSet)
@@ -119,6 +123,11 @@ type
     // - to search for a field, returning RecNo (0 = not found by default)
     function SearchForField(const aLookupFieldName: RawUTF8; const aLookupValue: variant;
       aOptions: TLocateOptions): integer; virtual;
+    {$ifndef NOVARIANTS}
+    // used to serialize TBCDVariant as JSON - BcdRead will always fail
+    class procedure BcdWrite(const aWriter: TTextWriter; const aValue);
+    //class function BcdRead(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
+    {$endif}
   public
     /// this overridden constructor will compute an unique Name property
     constructor Create(Owner: TComponent); override;
@@ -129,8 +138,8 @@ type
     // - handle ftBlob,ftMemo,ftWideMemo via GetRowFieldData()
     function GetBlobStream(Field: TField; RowIndex: integer): TStream;
     /// get column data for the current active row
-    // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftDate,ftTime,ftDateTime,
-    // ftString,ftWideString kind of fields via GetRowFieldData()
+    // - handle ftBoolean,ftInteger,ftLargeint,ftFloat,ftCurrency,ftDate,ftTime,
+    // ftDateTime,ftString,ftWideString kind of fields via GetRowFieldData()
     {$ifdef ISDELPHIXE3}
     {$ifdef ISDELPHIXE4}
     function GetFieldData(Field: TField; var Buffer: TValueBuffer): Boolean; override;
@@ -173,6 +182,7 @@ type
     property OnPostError;
   end;
 
+  {$ifndef NOVARIANTS}
   /// read-only virtual TDataSet able to access a dynamic array of TDocVariant
   // - could be used e.g. from the result of TMongoCollection.FindDocs() to
   // avoid most temporary conversion into JSON or TClientDataSet buffers
@@ -200,6 +210,7 @@ type
     constructor Create(Owner: TComponent; const Data: TVariantDynArray;
       const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType); reintroduce;
   end;
+  {$endif}
 
 const
   /// map the VCL string type, depending on the Delphi compiler version
@@ -237,11 +248,13 @@ function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 // - will work for any kind of TDataSet
 function DataSetToJSON(Data: TDataSet): RawUTF8;
 
+{$ifndef NOVARIANTS}
 /// convert a dynamic array of TDocVariant result into a VCL DataSet
 // - this function is just a wrapper around TDocVariantArrayDataSet.Create()
 // - the TDataSet will be opened once created
 function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
   const ColumnNames: array of RawUTF8; const ColumnTypes: array of TSQLDBFieldType): TDocVariantArrayDataSet; overload;
+{$endif}
 
 
 implementation
@@ -371,19 +384,6 @@ begin
   result := false; // we define a READ-ONLY TDataSet
 end;
 
-procedure DateTimeToNative(DataType: TFieldType; Data: TDateTime; var Output);
-  {$ifdef HASINLINE}inline;{$endif}
-var TimeStamp: TTimeStamp;
-    result: TDateTimeRec absolute Output;
-begin
-  TimeStamp := DateTimeToTimeStamp(Data);
-  case DataType of
-    ftDate: result.Date := TimeStamp.Date;
-    ftTime: result.Time := TimeStamp.Time;
-    else    result.DateTime := TimeStampToMSecs(TimeStamp);
-  end;
-end;
-
 {$ifndef UNICODE}
 function TSynVirtualDataSet.GetFieldData(Field: TField; Buffer: Pointer;
   NativeFormat: Boolean): Boolean;
@@ -407,6 +407,7 @@ var Data, Dest: pointer;
     RowIndex, DataLen, MaxLen: integer;
     Temp: RawByteString;
     OnlyTestForNull: boolean;
+    TS: TTimeStamp;
 begin
   result := false;
   OnlyTestForNull := (Buffer=nil);
@@ -423,10 +424,21 @@ begin
     PWORDBOOL(Dest)^ := PBoolean(Data)^;
   ftInteger:
     PInteger(Dest)^ := PInteger(Data)^;
-  ftLargeint, ftFloat:
+  ftLargeint, ftFloat, ftCurrency:
     PInt64(Dest)^ := PInt64(Data)^;
-  ftDate,ftTime,ftDateTime:
-    DateTimeToNative(Field.DataType,PDateTime(Data)^,Dest^);
+  ftDate, ftTime:
+    if PDateTime(Data)^=0 then
+      result := false else begin
+      TS := DateTimeToTimeStamp(PDateTime(Data)^);
+      if (TS.Time<0) or (TS.Date<=0) then
+        result := false else // matches ValidateTimeStamp() expectations
+        case Field.DataType of
+        ftDate: PDateTimeRec(Dest)^.Date := TS.Date;
+        ftTime: PDateTimeRec(Dest)^.Time := TS.Time;
+        end;
+    end;
+  ftDateTime:
+    PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
   ftString: begin
     if DataLen<>0 then begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
@@ -670,6 +682,25 @@ begin
   result := false;
 end;
 
+{$ifndef NOVARIANTS}
+type // as in FMTBcd.pas
+  TFMTBcdData = class(TPersistent)
+  private
+    FBcd: TBcd;
+  end;
+  TFMTBcdVarData = packed record
+    VType: TVarType;
+    Reserved1, Reserved2, Reserved3: Word;
+    VBcd: TFMTBcdData;
+    Reserved4: LongWord;
+  end;
+
+class procedure TSynVirtualDataSet.BcdWrite(const aWriter: TTextWriter; const aValue);
+begin
+  AddBCD(aWriter,TFMTBcdVarData(aValue).VBcd.FBcd);
+end;
+{$endif NOVARIANTS}
+
 
 function DataSetToJSON(Data: TDataSet): RawUTF8;
 var W: TJSONWriter;
@@ -906,4 +937,9 @@ begin
   result.Open;
 end;
 
+initialization
+  {$ifndef NOVARIANTS}
+  TTextWriter.RegisterCustomJSONSerializerForVariantByType(
+    VarFMTBcd,nil,TSynVirtualDataSet.BcdWrite);
+  {$endif}
 end.

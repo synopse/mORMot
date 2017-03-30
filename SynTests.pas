@@ -6,8 +6,8 @@ unit SynTests;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -101,7 +101,7 @@ type
   // if no identifier was defined
   // - sample code about how to use this test framework is available in
   // the "Sample\07 - SynTest" folder
-  // - see @http://synopse.info/forum/viewtopic.php?pid=277
+  // - see @https://synopse.info/forum/viewtopic.php?pid=277
   TSynTest = class
   protected
     fTests: array of record
@@ -225,21 +225,16 @@ type
     procedure CheckLogTime(condition: boolean;
       const msg: RawUTF8; const args: array of const; level: TSynLogInfo=sllTrace);
     /// create a temporary string random content, WinAnsi (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomString(CharCount: Integer): RawByteString;
     /// create a temporary UTF-8 string random content, using WinAnsi
     // (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomUTF8(CharCount: Integer): RawUTF8;
     /// create a temporary UTF-16 string random content, using WinAnsi
     // (code page 1252) content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomUnicode(CharCount: Integer): SynUnicode;
     /// create a temporary string random content, using ASCII 7 bit content
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomAnsi7(CharCount: Integer): RawByteString;
     /// create a temporary string random content, using A..Z,_,0..9 chars only
-    // - it somewhat faster if CharCount is a multiple of 5
     class function RandomIdentifier(CharCount: Integer): RawByteString;
     /// create a temporary string, containing some fake text, with paragraphs
     class function RandomTextParagraph(WordCount: Integer;
@@ -249,7 +244,7 @@ type
     /// will add to the console a message with a speed estimation
     // - speed is computed from the method start
     procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
-      SizeInBytes: cardinal=0);
+      SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -649,62 +644,41 @@ begin
 end;
 
 class function TSynTestCase.RandomString(CharCount: Integer): RawByteString;
-var V: cardinal;
-    P: PAnsiChar;
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  P := pointer(Result);
-  while CharCount>0 do begin
-    if CharCount>5 then begin
-      V := Random(maxInt); // fast: one random compute per 5 chars
-      P[0] := AnsiChar(32+V and 127); V := V shr 7;
-      P[1] := AnsiChar(32+V and 127); V := V shr 7;
-      P[2] := AnsiChar(32+V and 127); V := V shr 7;
-      P[3] := AnsiChar(32+V and 127); V := V shr 7;
-      P[4] := AnsiChar(65+V);
-      Inc(P,5);
-      dec(CharCount,5);
-    end else begin
-      P^ := AnsiChar(32+Random(224));
-      inc(P);
-      dec(CharCount);
-    end;
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := 32+R[i] and 127;
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomAnsi7(CharCount: Integer): RawByteString;
-var V: cardinal;
-    P: PAnsiChar;
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  P := pointer(Result);
-  while CharCount>0 do begin
-    if CharCount>=5 then begin
-      V := Random(maxInt); // fast: one random compute per 5 chars
-      P[0] := AnsiChar(32+V mod 94); V := V div 94;
-      P[1] := AnsiChar(32+V mod 94); V := V div 94;
-      P[2] := AnsiChar(32+V mod 94); V := V div 94;
-      P[3] := AnsiChar(32+V mod 94); V := V div 94;
-      P[4] := AnsiChar(32+V mod 94);
-      Inc(P,5);
-      dec(CharCount,5);
-    end else begin
-      P^ := AnsiChar(32+Random(94));
-      inc(P);
-      dec(CharCount);
-    end;
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := 32+R[i] mod 94;
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomIdentifier(CharCount: Integer): RawByteString;
-const CHARS: array[0..36] of AnsiChar =
-  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_';
+const CHARS: array[0..63] of AnsiChar =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ_';
+var i: integer;
+    R: PByteArray;
+    tmp: TSynTempBuffer;
 begin
+  R := tmp.InitRandom(CharCount);
   SetString(result,nil,CharCount);
-  while CharCount>0 do begin
-    dec(CharCount);
-    PAnsiChar(Pointer(result))[CharCount] := CHARS[Random(High(CHARS)+1)];
-  end;
+  for i := 0 to CharCount-1 do
+    PByteArray(result)[i] := ord(CHARS[integer(R[i]) and 63]);
+  tmp.Done;
 end;
 
 class function TSynTestCase.RandomUTF8(CharCount: Integer): RawUTF8;
@@ -783,15 +757,20 @@ begin
 end;
 
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
-  ItemCount: integer; SizeInBytes: cardinal);
+  ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
 var Temp: TPrecisionTimer;
+    msg: string;
 begin
-  Temp := Owner.TestTimer;
-  fRunConsole := format('%s%d %s in %s i.e. %d/s, aver. %s',
-    [fRunConsole,ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),
-     Temp.ByCount(ItemCount)]);
+  if Timer=nil then
+    Temp := Owner.TestTimer else
+    Temp := Timer^;
+  msg := format('%d %s in %s i.e. %d/s, aver. %s',
+    [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
   if SizeInBytes>0 then
-    fRunConsole := format('%s, %s/s',[fRunConsole,KB(Temp.PerSec(SizeInBytes))]);
+    msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
+  if fRunConsole<>'' then
+    msg := #13#10'     '+msg;
+  fRunConsole := fRunConsole+msg;
 end;
 
 

@@ -6,8 +6,8 @@ unit SynDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -33,6 +33,7 @@ unit SynDB;
   - Alexander (volax)
   - Alfred Glaenzer (alf)
   - delphinium
+  - dominikcz
   - Esteban Martin (EMartin)
   - Joe (at jokusoftware)
   - Maciej Izak (hnb)
@@ -298,6 +299,7 @@ unit SynDB;
   - added error codes in TSQLDBConnectionProperties.ExceptionIsAboutConnection for dOracle
   - avoid GPI in TSQLDBConnection.GetLastErrorWasAboutConnection when fErrorMessage is empty
   - added support for dMySQL in TSQLDBConnectionProperties.ExceptionIsAboutConnection
+  - added property stripSemicolon to strip last semicolon in query (default = true)
 }
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
@@ -325,8 +327,10 @@ uses
   {$endif}
   {$ifdef FPC}
   SynFPCLinux,
-  dynlibs,
   {$endif}
+  {$endif}
+  {$ifdef FPC}
+  dynlibs,
   {$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
@@ -384,6 +388,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
+    // - may be -1 if the metadata SQL statement returned NULL 
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -447,6 +452,7 @@ type
     ColumnPrecision: PtrInt;
     /// the Column data scale
     // - used e.g. for numerical values
+    // - may be -1 if the metadata SQL statement returned NULL 
     ColumnScale: PtrInt;
     /// the Column type, as recognized by our SynDB classes
     // - should not be ftUnknown nor ftNull
@@ -627,6 +633,8 @@ type
     // - FieldSize can be set to store the size in chars of a ftUTF8 column
     // (0 means BLOB kind of TEXT column)
     function ColumnType(Col: integer; FieldSize: PInteger=nil): TSQLDBFieldType;
+    /// returns TRUE if the column contains NULL
+    function ColumnNull(Col: integer): boolean; 
     /// return a Column integer value of the current Row, first Col is 0
     function ColumnInt(Col: integer): Int64; overload;
     /// return a Column floating point value of the current Row, first Col is 0
@@ -945,12 +953,20 @@ type
     // - BLOB field value is saved as Base64, in the '"\uFFF0base64encodedbinary"'
     // format and contains true BLOB data
     procedure ExecutePreparedAndFetchAllAsJSON(Expanded: boolean; out JSON: RawUTF8);
+
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
     /// if set, any BLOB field won't be retrieved, and forced to be null
     // - this may be used to speed up fetching the results for SQL requests
     // with * statements
     property ForceBlobAsNull: boolean read GetForceBlobAsNull write SetForceBlobAsNull;
+    function GetForceDateWithMS: boolean;
+    procedure SetForceDateWithMS(value: boolean);
+    /// if set, any ftDate field will contain the milliseconds information
+    // when serialized into ISO-8601 text
+    // - this setting is private to each statement, since may vary depending
+    // on data definition (e.g. ORM TDateTime/TDateTimeMS)
+    property ForceDateWithMS: boolean read GetForceDateWithMS write SetForceDateWithMS;
     /// gets a number of updates made by latest executed statement
     function UpdateCount: Integer;
   end;
@@ -1338,11 +1354,13 @@ type
       const Args: array of const; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
-    // then bound inlined parameters as :(1234): and call its Execute method
+    // then bound inlined parameters as :(1234): and return the resulting statement
     // - raise an exception on error
+    // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const aSQL: RawUTF8; ExpectResults: Boolean): ISQLDBStatement; overload;
     /// create, prepare and bound inlined parameters to a thread-safe statement
     // - overloaded method using FormatUTF8() and inlined parameters
+    // - consider using ExecuteInlined() for direct execution
     function PrepareInlined(const SQLFormat: RawUTF8; const Args: array of const;
       ExpectResults: Boolean): ISQLDBStatement; overload;
     /// execute a SQL query, returning a statement interface instance to retrieve
@@ -1847,6 +1865,7 @@ type
   // and Column*() methods
   TSQLDBStatement = class(TInterfacedObject, ISQLDBRows, ISQLDBStatement)
   protected
+    fStripSemicolon: boolean;
     fConnection: TSQLDBConnection;
     fSQL: RawUTF8;
     fExpectResults: boolean;
@@ -1856,10 +1875,13 @@ type
     fCurrentRow: Integer;
     fSQLWithInlinedParams: RawUTF8;
     fForceBlobAsNull: boolean;
+    fForceDateWithMS: boolean;
     fDBMS: TSQLDBDefinition;
     function GetSQLWithInlinedParams: RawUTF8;
     function GetForceBlobAsNull: boolean;
     procedure SetForceBlobAsNull(value: boolean);
+    function GetForceDateWithMS: boolean;
+    procedure SetForceDateWithMS(value: boolean);
     /// raise an exception if Col is out of range according to fColumnCount
     procedure CheckCol(Col: integer); {$ifdef HASINLINE}inline;{$endif}
     /// will set a Int64/Double/Currency/TDateTime/RawUTF8/TBlobData Dest variable
@@ -2330,6 +2352,10 @@ type
     property TotalRowsRetrieved: Integer read fTotalRowsRetrieved;
     /// the associated database connection
     property Connection: TSQLDBConnection read fConnection;
+    /// strip last semicolon in query
+    // - expectation may vary, depending on the SQL statement and the engine
+    // - default is true
+    property StripSemicolon: boolean read fStripSemicolon write fStripSemicolon;
   end;
 
   /// abstract connection created from TSQLDBConnectionProperties
@@ -2660,8 +2686,8 @@ type
     Params: TSQLDBParamDynArray;
     /// if input parameters expected BindArray() process
     ArrayCount: integer;
-    /// if set, any BLOB field won't be retrieved, and forced to be null
-    ForceBlobAsNull: boolean;
+    /// match ForceBlobAsNull and ForceDateWithMS properties
+    Force: set of (fBlobAsNull, fDateWithMS);
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -2958,7 +2984,11 @@ type
   // or by SynDBODBC to access the ODBC library
   TSQLDBLib = class
   protected
+    {$ifdef FPC}
+    fHandle: TLibHandle;
+    {$else}
     fHandle: HMODULE;
+    {$endif}
   public
     /// release associated memory and linked library
     destructor Destroy; override;
@@ -2994,7 +3024,7 @@ type
   // dynamic array (and our TDynArrayHashed wrapper) for fast property name
   // handling (via name hashing) and pre-allocation
   // - it is based on an internal Variant to store the parameter or column value
-  TQueryValue = {$ifndef UNICODE}object{$else}record{$endif}
+  TQueryValue = {$ifndef FPC_OR_UNICODE}object{$else}record{$endif}
   private
     /// fName should be the first property, i.e. the searched hashed value
     fName: string;
@@ -4532,8 +4562,10 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
       RecordLoad(InputExecute,O,TypeInfo(TSQLDBProxyConnectionCommandExecute));
       ExecuteWithResults := header.Command<>cExecute;
       Stmt := NewStatementPrepared(InputExecute.SQL,ExecuteWithResults,true);
-      if InputExecute.ForceBlobAsNull then
+      if fBlobAsNull in InputExecute.Force then
         Stmt.ForceBlobAsNull := true;
+      if fDateWithMS in InputExecute.Force then
+        Stmt.ForceDateWithMS := true;
       for i := 1 to Length(InputExecute.Params) do
       with InputExecute.Params[i-1] do
       if InputExecute.ArrayCount=0 then
@@ -5171,7 +5203,9 @@ begin
         F.ColumnTypeNative := trim(ColumnUTF8(1));
         F.ColumnLength := ColumnInt(2);
         F.ColumnPrecision := ColumnInt(3);
-        F.ColumnScale := ColumnInt(4);
+        if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
+          F.ColumnScale := -1 else
+          F.ColumnScale := ColumnInt(4);
         F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
         if ColumnInt(5)>0 then
           F.ColumnIndexed := true;
@@ -5245,7 +5279,9 @@ begin
       F.ColumnTypeNative := trim(ColumnUTF8(1));
       F.ColumnLength := ColumnInt(2);
       F.ColumnPrecision := ColumnInt(3);
-      F.ColumnScale := ColumnInt(4);
+      if ColumnNull(4) then // e.g. for plain NUMERIC in Oracle
+        F.ColumnScale := -1 else
+        F.ColumnScale := ColumnInt(4);
       F.ColumnType := ColumnTypeNativeToDB(F.ColumnTypeNative,F.ColumnScale);
       case FindCSVIndex('IN,OUT,INOUT',ColumnUTF8(5),',',false) of
         0: F.ColumnParamType := paramIn;
@@ -6381,7 +6417,7 @@ function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Inte
 var ID: TThreadID;
 begin
   if self<>nil then begin
-    ID := GetCurrentThreadId;
+    ID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
     result := fLatestConnectionRetrievedInPool;
     if (result>=0) and
        (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID) then
@@ -6438,7 +6474,7 @@ begin
           exit;
       end;
       result := NewConnection;
-      (result as TSQLDBConnectionThreadSafe).fThreadID := GetCurrentThreadId;
+      (result as TSQLDBConnectionThreadSafe).fThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
       LeaveCriticalSection(fConnectionCS);
@@ -6715,11 +6751,22 @@ begin
   fForceBlobAsNull := value;
 end;
 
+function TSQLDBStatement.GetForceDateWithMS: boolean;
+begin
+  result := fForceDateWithMS;
+end;
+
+procedure TSQLDBStatement.SetForceDateWithMS(value: boolean);
+begin
+  fForceDateWithMS := value;
+end;
+
 constructor TSQLDBStatement.Create(aConnection: TSQLDBConnection);
 begin
   // SynDBLog.Enter(self);
   inherited Create;
   fConnection := aConnection;
+  fStripSemicolon := true;
   if aConnection<>nil then
     fDBMS := aConnection.fProperties.DBMS;
 end;
@@ -6820,7 +6867,7 @@ begin
       ftCurrency: WR.AddCurr64(ColumnCurrency(col));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(ColumnDateTime(col));
+        WR.AddDateTime(ColumnDateTime(col),fForceDateWithMS);
         WR.Add('"');
       end;
       ftUTF8: begin
@@ -6847,6 +6894,7 @@ end;
 procedure TSQLDBStatement.ColumnToSQLVar(Col: Integer; var Value: TSQLVar;
   var Temp: RawByteString);
 begin
+  Value.Options := [];
   if ColumnNull(Col) then // will call GetCol() to check Col
     Value.VType := ftNull else
     Value.VType := ColumnType(Col);
@@ -7005,7 +7053,7 @@ begin
           ftDate: begin
             if not Tab then
               W.Add('"');
-            W.AddDateTime(V.VDateTime);
+            W.AddDateTime(V.VDateTime,svoDateWithMS in V.Options);
             if not Tab then
               W.Add('"');
           end;
@@ -7442,10 +7490,11 @@ begin
   Connection.InternalProcess(speActive);
   try
     L := length(aSQL);
-    if (L>5) and (aSQL[L]=';') and // avoid syntax error for some drivers
-       not IdemPChar(@aSQL[L-4],' END') then
-      fSQL := copy(aSQL,1,L-1) else
-      fSQL := aSQL;
+    if StripSemicolon then
+      if (L>5) and (aSQL[L]=';') and // avoid syntax error for some drivers
+         not IdemPChar(@aSQL[L-4],' END') then
+        fSQL := copy(aSQL,1,L-1) else
+        fSQL := aSQL;
     fExpectResults := ExpectResults;
     if not fConnection.IsConnected then
       fConnection.Connect;
@@ -8464,7 +8513,11 @@ begin
     SetLength(fParams,fParamCount);
   Input.Params := fParams;
   Input.ArrayCount := fParamsArrayCount;
-  Input.ForceBlobAsNull := fForceBlobAsNull;
+  if fForceBlobAsNull then
+    Input.Force := [fBlobAsNull] else
+    Input.Force := [];
+  if fForceDateWithMS then
+    include(Input.Force,fDateWithMS);
 end;
 
 procedure TSQLDBProxyStatement.ExecutePrepared;

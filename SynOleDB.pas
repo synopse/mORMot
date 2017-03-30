@@ -6,8 +6,8 @@ unit SynOleDB;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynOleDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -72,7 +72,7 @@ unit SynOleDB;
     methods - able to use faster direct SQL retrieval (e.g. for Oracle / MS SQL)
 
   Version 1.16
-  - add some reference to http://synopse.info/fossil/tktview?name=213544b2f5
+  - add some reference to https://synopse.info/fossil/tktview?name=213544b2f5
     in case of wrong implementation of multi-thread connection (within the
     THttpServerGeneric mORMot server, for instance)
 
@@ -541,7 +541,7 @@ type
   end;
 
   ISSCommandWithParameters = interface(ICommandWithParameters)
-  ['{EEC30162-6087-467C-B995-7C523CE96561}']
+    ['{EEC30162-6087-467C-B995-7C523CE96561}']
     function GetParameterProperties(var pcParams: PtrUInt; var prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
     function SetParameterProperties (cParams: PtrUInt; prgParamProperties: PSSPARAMPROPS): HResult; stdcall;
   end;
@@ -1712,7 +1712,7 @@ Write:case ColumnType of
         ftCurrency: WR.AddCurr64(V^.Int64);
         ftDate: begin
           WR.Add('"');
-          WR.AddDateTime(@V^.Double);
+          WR.AddDateTime(@V^.Double,'T',#0,fForceDateWithMS);
           WR.Add('"');
         end;
         ftUTF8: begin
@@ -1805,8 +1805,9 @@ begin
       CreateCommand(nil,IID_ICommandText,ICommand(fCommand)));
   end;
   L := Length(fSQL);
-  while (L>0) and (fSQL[L] in [#1..' ',';']) do
-    dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
+  if StripSemicolon then
+    while (L>0) and (fSQL[L] in [#1..' ',';']) do
+      dec(L); // trim ' ' or ';' right (last ';' could be found incorrect)
   SetLength(SQLW,L*2+1);
   UTF8ToWideChar(pointer(SQLW),pointer(fSQL),L);
   fCommand.SetCommandText(DBGUID_DEFAULT,pointer(SQLW));
@@ -1953,7 +1954,7 @@ begin
         end;
         if not OleDBConnection.OleDBProperties.fSupportsOnlyIRowset then begin
           OleDBConnection.OleDBCheck(self,
-            (fCommand as ISSCommandWithParameters).SetParameterInfo(
+            (fCommand as ICommandWithParameters).SetParameterInfo(
               fParamCount, pointer(fParamOrdinals), pointer(fParamBindInfo)));
           if ssParamPropsCount>0 then
             OleDBConnection.OleDBCheck(self,

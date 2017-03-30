@@ -6,10 +6,10 @@ unit SyNode;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2016 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -30,7 +30,7 @@ unit SyNode;
 
   The Initial Developer of the Original Code is
   Pavel Mashlyakovsky.
-  Portions created by the Initial Developer are Copyright (C) 2014
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -55,12 +55,21 @@ unit SyNode;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
   Version 1.18
   - initial release. Use SpiderMonkey 45
+  - x64 support added
+  - move a Worker classes from UnityBase to SyNode
+    Allow to create and communicate with a threads from JavaScript
+  - implement nodeJS Buffer
+  - improved compartibility with nodeJS utils
+  - add a `process.version`
+  - implement a setTimeout/setInverval/setImmediate etc.
 
 }
 
@@ -89,7 +98,8 @@ uses
   {$ifdef BRANCH_WIN_WEB_SOCKET}
   SynCrtCommons,
   {$endif}
-  SynCrtSock;
+  SynCrtSock,
+  SyNodeBinding_worker;
 
 const
   /// default stack growning size
@@ -349,6 +359,8 @@ type
     /// Path to core modules
     FCoreModulesPath: RawUTF8;
     FEngineExpireTimeOutTicks: Int64;
+    FWorkersManager: TJSWorkersManager;
+
     function GetEngineExpireTimeOutMinutes: cardinal;
     procedure SetEngineExpireTimeOutMinutes(const minutes: cardinal);
     procedure SetMaxPerEngineMemory(AMaxMem: Cardinal);
@@ -372,7 +384,7 @@ type
     procedure setPauseDebuggerOnFirstStep(const Value: boolean);
 
     function evalDllModule(cx: PJSContext; module: PJSRootedObject; const filename: RawUTF8): TDllModuleUnInitProc;
-    /// Get handler oà process.binding
+    /// Get handler of process.binding
     function GetBinding(const Name: RawUTF8): TSMProcessBindingHandler;
   public
     /// initialize the SpiderMonkey scripting engine
@@ -421,7 +433,10 @@ type
     procedure debuggerLog(const Text: RawUTF8);
     /// when debugger connected to new engine this Engine must pause on first step
     property pauseDebuggerOnFirstStep: boolean read getPauseDebuggerOnFirstStep write setPauseDebuggerOnFirstStep;
-
+    /// Workers manager
+    property WorkersManager: TJSWorkersManager read FWorkersManager;
+    /// Delete all started worker threads
+    procedure ClearWorkers;
   published
     /// max amount of memory (in bytes) for a single SpiderMonkey instance
     // - this parameter will be set only at Engine start, i.e. it  must be set
@@ -485,12 +500,18 @@ var
 
   /// check is AFileName is relative path, and if true - transform it to absolute from ABaseDir
   //  if ACheckResultInsideBase = true the perform check of result path is under ABaseDir. If not - return '';
+  //  In any case will concatenates any relative path elements and replace '/' by '\' under Windows
   function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
 
 implementation
 
 uses
-  Math, SyNodeRemoteDebugger, SyNodeBinding_fs {used by other core modules};
+  Math,
+  SyNodeRemoteDebugger,
+  SyNodeBinding_fs {used by other core modules},
+  SyNodeBinding_buffer,
+  SyNodeBinding_util,
+  SyNodeBinding_uv;
 
 const
   jsglobal_class: JSClass = (name: 'global';
@@ -552,7 +573,7 @@ begin
               FBindingObject.ptr.DefineUCProperty(cx, bindingNS, res);
             end;
           end else
-            raise ESMException.Create('Invalid binding namespace ' + bindingNS);
+            raise ESMException.CreateFmt('Invalid binding namespace "%s"',[bindingNS]);
         end;
       end else
         res.SetNull;
@@ -577,6 +598,7 @@ const
 var
   rOpts: PJSRuntimeOptions;
 begin
+  TSynFPUException.ForLibraryCode;
   if aManager = nil then
     raise ESMException.Create('No manager provided');
   FCreatedAtTick := GetTickCount64;
@@ -593,7 +615,7 @@ begin
   fRt.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;
 // MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
 //TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
-  if (FManager.MaxPerEngineMemory > 512 * 1024 * 1024) then begin
+  if (FManager.MaxPerEngineMemory >= 512 * 1024 * 1024) then begin
     fRt.GCParameter[JSGC_MAX_MALLOC_BYTES] :=  96 * 1024 * 1024;
     fRt.GCParameter[JSGC_SLICE_TIME_BUDGET] :=  30;
     fRt.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1000;
@@ -688,6 +710,9 @@ begin
     process.ptr.defineProperty(cx, 'binPath', cx.NewJSString(ExeVersion.ProgramFilePath).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
 
+    process.ptr.defineProperty(cx, 'execPath', cx.NewJSString(ExeVersion.ProgramFileName).ToJSVal,
+      JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
+
     FStartupPath := GetCurrentDir + '\';
     if FStartupPath = '' then
       FStartupPath := ExeVersion.ProgramFilePath;
@@ -726,6 +751,14 @@ begin
     {$ELSE}
     process.ptr.defineProperty(cx, 'platform', cx.NewJSString('nix').ToJSVal);
     {$ENDIF}
+    {$IFDEF CPU64}
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x64').ToJSVal);
+    {$ELSE}
+      process.ptr.defineProperty(cx, 'arch', cx.NewJSString('x32').ToJSVal);
+    {$ENDIF}
+    with ExeVersion.Version do
+      process.ptr.DefineProperty(cx, 'version',
+        cx.NewJSString('v' + IntToString(Major)+'.'+IntToString(Minor) + '.' + IntToString(Release)).ToJSVal);
 
   finally
     cx.FreeRootedObject(env);
@@ -871,6 +904,12 @@ begin
   result := fEngineExpireTimeOutTicks div 60000;
 end;
 
+procedure TSMEngineManager.ClearWorkers;
+begin
+  FWorkersManager.Free;
+  FWorkersManager := TJSWorkersManager.Create;
+end;
+
 constructor TSMEngineManager.Create(const aCoreModulesPath: RawUTF8; aEngineClass: TSMEngineClass = nil);
 begin
   FMaxPerEngineMemory := 32*1024*1024;
@@ -885,6 +924,7 @@ begin
   {$endif}
   FDllModules := TRawUTF8ListHashedLocked.Create();
   FCoreModulesPath := aCoreModulesPath;
+  FWorkersManager := TJSWorkersManager.Create;
 end;
 
 procedure TSMEngineManager.SetMaxPerEngineMemory(AMaxMem: Cardinal);
@@ -920,6 +960,8 @@ var
   dllModule: PDllModuleRec;
   i: Integer;
 begin
+  FWorkersManager.free;
+  FWorkersManager := nil;
   stopDebugger;
   if FEnginePool.Count>0 then
     raise ESMException.Create('There are unreleased engines');
@@ -972,8 +1014,11 @@ var
   require: PJSRootedObject;
   __filename: PWideChar;
   __dirname: PWideChar;
-
-  fHandle: HMODULE;
+  {$ifdef FPC}
+  fHandle: TLibHandle;
+  {$else}
+  fHandle: THandle;
+  {$endif}
   ModuleRec: PDllModuleRec;
 
 const
@@ -1102,7 +1147,10 @@ begin
     Result := FEngineClass.Create(Self);
     if (pThreadData <> nil) then
       Result.SetThreadData(pThreadData);
-    if Assigned(OnGetName) then
+
+    if WorkersManager.curThreadIsWorker then
+      Result.fnameForDebug := WorkersManager.getCurrentWorkerThreadName
+    else if Assigned(OnGetName) then
       Result.fnameForDebug := OnGetName(Result);
 
     result.fThreadID := ThreadID;
@@ -1113,6 +1161,8 @@ begin
 
   if FRemoteDebuggerThread <> nil then
     TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(result);
+  if WorkersManager.curThreadIsWorker then
+    Result.doInteruptInOwnThread := WorkersManager.DoInteruptInOwnThreadhandlerForCurThread;
 
   DoOnNewEngine(Result);
 end;
@@ -1191,19 +1241,56 @@ begin
   end;
 end;
 
-function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
+function StringReplaceChars(const Source: String; OldChar, NewChar: Char): String;
+var i,j,n: integer;
 begin
-  if PathIsRelative(PChar(AFileName)) then begin
-    SetLength(Result, MAX_PATH);
-    if PathCombine(@Result[1], PChar(ABaseDir), PChar(AFileName)) = nil then
-      Result := ''
-    else
-      SetLength(Result, {$ifdef UNICODE}StrLenW{$else}StrLen{$endif}(@Result[1]));
-  end else
-    Result := AFileName;
+  if (OldChar<>NewChar) and (Source<>'') then begin
+    n := length(Source);
+    for i := 0 to n-1 do
+      if PChar(pointer(Source))[i]=OldChar then begin
+        SetString(result,PChar(pointer(Source)),n);
+        for j := i to n-1 do
+          if PChar(pointer(result))[j]=OldChar then
+            PChar(pointer(result))[j] := NewChar;
+        exit;
+      end;
+  end;
+  result := Source;
+end;
+
+function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
+var
+  aBase, aTail: PChar;
+  localBase, localTail: TFileName;
+begin
+  if AFileName <> '' then begin
+    if PathIsRelative(PChar(AFileName)) then begin
+      localTail := AFileName;
+      localBase := ABaseDir;
+    end else begin
+      localTail := '';
+      localBase := AFileName;
+    end;
+  end else begin
+    localTail := '';
+    localBase := ABaseDir;
+  end;
+  localBase := StringReplaceChars(localBase, '/', '\');;
+  localTail := StringReplaceChars(localTail, '/', '\');
+  aBase := PChar(LocalBase);
+  aTail := PChar(localTail);
+
+  SetLength(Result, MAX_PATH);
+  // PathCombine do not understand '/', so we raplace '/' -> '\' above
+  if PathCombine(@Result[1], aBase, aTail) = nil then
+    Result := ''
+  else
+    SetLength(Result, {$ifdef UNICODE}StrLenW{$else}StrLen{$endif}(@Result[1]));
+
+
   if ACheckResultInsideBase and
      ((length(Result) < length(ABaseDir)) or (length(ABaseDir)=0) or
-      (StrLIComp(PChar(@Result[1]), @ABaseDir[1], length(ABaseDir)) <> 0)) then
+      (StrLIComp(PChar(@Result[1]), @localBase[1], length(localBase)) <> 0)) then
     Result := ''
 end;
 
@@ -1226,20 +1313,40 @@ begin
   Result := not fTimedOut;
 end;
 
+// Remove #13 characters from script(change it to #32)
+// Spidermonkey debugger crashes when `...`(new ES6 strings) contains #13#10
+procedure remChar13FromScript(const Script: SynUnicode); {$ifdef HASINLINE} inline; {$endif}
+var c: PWideChar;
+    i: Integer;
+begin
+  c := pointer(script);
+  for I := 1 to Length(script) do begin
+    if (c^ = #13) then
+        c^ := ' ';
+    Inc(c);
+  end;
+end;
+
 procedure TSMEngine.Evaluate(const script: SynUnicode;
   const scriptName: RawUTF8; lineNo: Cardinal; out result: jsval);
 var r: Boolean;
     opts: PJSCompileOptions;
+    isFirst: Boolean;
+    rval: jsval;
 begin
   TSynFPUException.ForLibraryCode;
   ClearLastError;
   ScheduleWatchdog(fTimeoutValue);
-
+  isFirst := not cx.IsRunning;
   opts := cx.NewCompileOptions;
   opts.filename := Pointer(scriptName);
+
+  remChar13FromScript(script);
   r := cx.EvaluateUCScript(
       opts, pointer(script), length(script), result);
   cx.FreeCompileOptions(opts);
+  if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+    r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
   if not r then
     r := false;
   ScheduleWatchdog(-1);
@@ -1264,11 +1371,24 @@ end;
 function TSMEngine.CallObjectFunction(obj: PJSRootedObject; funcName: PCChar;
   const args: array of jsval): jsval;
 var r: Boolean;
+    isFirst: Boolean;
+    rval: jsval;
+    global: PJSRootedObject;
 begin
   TSynFPUException.ForLibraryCode;
   ClearLastError;
   ScheduleWatchdog(fTimeoutValue);
+  isFirst := not cx.IsRunning;
   r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
+  if r and isFirst then begin
+    global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
+    try
+      if global.ptr.HasProperty(cx, '_timerLoop') then
+        r := global.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    finally
+      cx.FreeRootedObject(global);
+    end;
+  end;
   ScheduleWatchdog(-1);
   CheckJSError(r);
 end;
@@ -1537,6 +1657,8 @@ begin
     try
       opts := cx.NewCompileOptions;
       opts.filename := Pointer(FileName);
+
+      remChar13FromScript(Script);
       Result := cx.EvaluateUCScript(opts, Pointer(Script), Length(Script), res);
       cx.FreeCompileOptions(opts);
       if Result then
@@ -1615,14 +1737,58 @@ begin
   end;
 end;
 
+/// sleep X ms
+function synode_sleep(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  interval: int64;
+  engine: TSMEngine;
+const
+  USAGE = 'usage: sleep(module: Number)';
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 1) or not in_argv[0].isNumber then
+      raise ESMException.Create(USAGE);
+    engine := TSMEngine(cx.PrivateData);
+    if in_argv[0].isInteger then
+      interval := in_argv[0].asInteger
+    else
+      interval := Trunc(in_argv[0].asDouble);
+    while not engine.TimeOutAborted and (interval > 0) do
+    begin
+      Sleep(100);
+      interval := interval - 100;
+    end;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+function SyNodeBinding_syNode(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
+var
+  obj: PJSRootedObject;
+  cx: PJSContext;
+begin
+  cx := Engine.cx;
+  obj := cx.NewRootedObject(cx.NewObject(nil));
+  try
+    obj.ptr.DefineFunction(cx, 'sleep', synode_sleep, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    Result := obj.ptr.ToJSValue;
+  finally
+    cx.FreeRootedObject(obj);
+  end;
+end;
+
 initialization
   TSMEngineManager.RegisterBinding('modules', SyNodeBinding_modules);
-  // we need to register `fs` binding here and not in the
-  // SyNodeBinding_fs initialization part, because `fs` module is
-  // used inside ModuleLoader. Normally all bindings are registered
-  // in the binding unit initialization
-  TSMEngineManager.RegisterBinding('fs', SyNodeBindingProc_fs);
-
+  TSMEngineManager.RegisterBinding('syNode', SyNodeBinding_syNode);
 finalization
   FreeAndNil(GlobalSyNodeBindingHandlers);
 

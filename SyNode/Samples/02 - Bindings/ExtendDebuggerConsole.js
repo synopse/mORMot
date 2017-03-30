@@ -5,7 +5,7 @@ let dbg_binding = process.binding('debugger'),
 setConsoleCommands({
     help: () => 'Welcome to SyNode console.',
     '$cwd': {
-        command: () => {return process.cwd(); },
+        command: () => {return global.process.cwd(); },
 	description: 'Show current working dir'
     },
     '$mormot': {

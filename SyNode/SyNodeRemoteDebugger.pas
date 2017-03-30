@@ -5,10 +5,10 @@ unit SyNodeRemoteDebugger;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2016 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -54,7 +54,9 @@ unit SyNodeRemoteDebugger;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
@@ -199,7 +201,6 @@ end;
 
 procedure TSMRemoteDebuggerThread.doLog(const Text: RawUTF8);
 var
-  i: Integer;
   Debugger: TSMDebugger;
   eng: TSMEngine;
   curThreadID: TThreadID;
@@ -207,18 +208,8 @@ begin
   curThreadID := GetCurrentThreadId;
   eng := fManager.EngineForThread(curThreadID);
   if eng<>nil then begin
-    fDebuggers.Safe.Lock;
-    try
-      for I := 0 to fDebuggers.Count - 1 do begin
-        if TSMDebugger(fDebuggers[i]).fSmThreadID = curThreadID then begin
-          Debugger := TSMDebugger(fDebuggers[i]);
-          Debugger.fLogQueue.LockedAdd(Text);
-          break;
-        end;
-      end;
-    finally
-      fDebuggers.Safe.UnLock;
-    end;
+    Debugger := eng.PrivateDataForDebugger;
+    Debugger.fLogQueue.LockedAdd(Text);
 
     if eng.cx.IsRunning then
       eng.rt.RequestInterruptCallback
@@ -604,7 +595,6 @@ end;
 
 function doInterupt(cx: PJSContext): Boolean; cdecl;
 var
-  msg: RawUTF8;
   cmpDbg: PJSCompartment;
   debugger: TSMDebugger;
   engine: TSMEngine;
@@ -618,11 +608,7 @@ begin
       try
         dbgObject := cx.NewRootedObject(engine.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
         try
-          while debugger.fLogQueue.PopFirst(msg) do
-            engine.CallObjectFunction(dbgObject, 'newConsoleMessage', [cx.NewJSString(msg).ToJSVal]);
-
-          while debugger.fMessagesQueue.PopFirst(msg) do
-            engine.CallObjectFunction(dbgObject, 'newMessage', [cx.NewJSString(msg).ToJSVal]);
+          engine.CallObjectFunction(dbgObject, 'doInterupt', []);
         finally
           cx.FreeRootedObject(dbgObject);
         end;
@@ -727,11 +713,17 @@ function debugger_read(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; 
 var
   debugger: TSMDebugger;
   msg: RawUTF8;
+  Queue: TRawUTF8ListHashedLocked;
 begin
   debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
-  while (debugger.fMessagesQueue <> nil) and (not debugger.fMessagesQueue.PopFirst(msg)) do
+  if (argc = 0) or vp.argv[0].asBoolean then
+    Queue := debugger.fMessagesQueue
+  else
+    Queue := debugger.fLogQueue;
+  msg := '';
+  while ((Queue <> nil) and (not Queue.PopFirst(msg))) and (argc = 0) do
     SleepHiRes(10);
-  result :=  debugger.fMessagesQueue <> nil;
+  result :=  Queue <> nil;
   if Result then
     vp.rval := SimpleVariantToJSval(cx, msg)
   else

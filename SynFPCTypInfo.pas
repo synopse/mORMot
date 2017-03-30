@@ -4,8 +4,8 @@ unit SynFPCTypInfo;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -23,7 +23,7 @@ unit SynFPCTypInfo;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -52,10 +52,7 @@ unit SynFPCTypInfo;
 
 interface
 
-{$MODE objfpc}
-{$MODESWITCH AdvancedRecords}
-{$inline on}
-{$h+}
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 uses
   SysUtils,
@@ -77,8 +74,12 @@ type
 
 function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
+Function AlignTypeData(p : Pointer) : Pointer;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
+{$ifdef FPC_NEWRTTI}
+function GetFPCRecInitData(TypeData: Pointer): Pointer; inline;
+{$endif}
 
 
 implementation
@@ -142,16 +143,38 @@ begin
   end;
 end;
 
+Function AlignTypeData(p : Pointer) : Pointer;
+{$push}
+{$packrecords c}
+  type
+    TAlignCheck = record
+      b : byte;
+      q : qword;
+    end;
+{$pop}
+begin
+{$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
+{$ifdef VER3_0}
+  Result:=Pointer(align(p,SizeOf(Pointer)));
+{$else VER3_0}
+  Result:=Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
+{$endif VER3_0}
+{$else FPC_REQUIRES_PROPER_ALIGNMENT}
+  Result:=p;
+{$endif FPC_REQUIRES_PROPER_ALIGNMENT}
+end;
+
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData;
 begin
-  result := PTypeData(AlignToPtr(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
+  result := PTypeData(AlignTypeData(PTypeData(pointer(TypeInfo)+2+PByte(pointer(TypeInfo)+1)^)));
 end;
 
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 
 function GetFPCAlignPtr(P: pointer): pointer;
 begin
-  result := AlignToPtr(P-SizeOf(Pointer)+2+PByte(P)[1]);
+  result := AlignTypeData(P+2+Length(PTypeInfo(P)^.Name));
+  Dec(PtrUInt(result),SizeOf(pointer));
 end;
 
 {$endif}
@@ -193,5 +216,15 @@ function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
   result := typinfo.GetPropInfo(AClass,PropName);
 end;
+
+{$ifdef FPC_NEWRTTI}
+function GetFPCRecInitData(TypeData: Pointer): Pointer;
+begin
+  if PTypeData(TypeData)^.RecInitInfo = nil then
+    result := TypeData
+  else
+    result := AlignTypeData(pointer(PTypeData(TypeData)^.RecInitData));
+end;
+{$endif}
 
 end.

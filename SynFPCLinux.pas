@@ -4,8 +4,8 @@ unit SynFPCLinux;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -23,7 +23,7 @@ unit SynFPCLinux;
 
   The Initial Developer of the Original Code is Alfred Glaenzer.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -61,7 +61,7 @@ interface
 {$ifdef ANDROID}
   {$define LINUX}
 {$endif}
-{$ifdef Darwin}
+{$ifdef BSD}
   {$define LINUX}
 {$endif}
 
@@ -88,7 +88,7 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifdef Linux}
 
-{$ifndef DARWIN}
+{$ifndef BSD}
 const
   CLOCK_MONOTONIC = 1;
   CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
@@ -127,6 +127,9 @@ function CompareStringW(GetThreadLocale: DWORD; dwCmpFlags: DWORD; lpString1: Pw
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
 
+/// returns the current UTC time, as Unix Epoch seconds
+function GetUnixUTC: Int64;
+
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
@@ -155,7 +158,7 @@ implementation
 
 {$ifdef Linux}
 uses
-  Classes, Unix, BaseUnix, {$ifndef Darwin}linux,{$endif} dynlibs;
+  Classes, Unix, BaseUnix, {$ifndef BSD}linux,{$endif} dynlibs;
 {$endif}
 
 procedure InitializeCriticalSection(var cs : TRTLCriticalSection);
@@ -165,7 +168,9 @@ end;
 
 procedure DeleteCriticalSection(var cs : TRTLCriticalSection);
 begin
-  if cs.__m_kind<>0 then 
+  {$ifndef BSD}
+  if cs.__m_kind<>0 then
+  {$endif}
     DoneCriticalSection(cs);
 end;
 
@@ -202,14 +207,14 @@ begin
   Year := YYear+(JulianDN*100);
 end;
 
-procedure EpochToLocal(epoch: integer; out year,month,day,hour,minute,second: Word);
+procedure EpochToLocal(epoch: cardinal; out year,month,day,hour,minute,second: Word);
 begin
-  JulianToGregorian((Epoch div SecsPerDay)+c1970,year,month,day);
-  Epoch := abs(Epoch mod SecsPerDay);
-  Hour := Epoch div SecsPerHour;
-  Epoch := Epoch mod SecsPerHour;
-  Minute := Epoch div SecsPerMin;
-  Second := Epoch mod SecsPerMin;
+  JulianToGregorian((epoch div SecsPerDay)+C1970,year,month,day);
+  epoch := abs(epoch mod SecsPerDay);
+  Hour := epoch div SecsPerHour;
+  epoch := epoch mod SecsPerHour;
+  Minute := epoch div SecsPerMin;
+  Second := epoch mod SecsPerMin;
 end;
 
 function GetNowUTC: TDateTime;
@@ -223,8 +228,16 @@ procedure GetNowUTCSystem(var result: TSystemTime);
 var tz: timeval;
 begin
   fpgettimeofday(@tz,nil);
-  EpochToLocal(tz.tv_sec,result.year,result.month,result.day,result.hour,result.Minute,result.Second);
+  EpochToLocal(tz.tv_sec,
+    result.year,result.month,result.day,result.hour,result.Minute,result.Second);
   result.MilliSecond := tz.tv_usec div 1000;
+end;
+
+function GetUnixUTC: Int64;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  result := tz.tv_sec;
 end;
 
 function GetTickCount: cardinal;
@@ -237,7 +250,7 @@ const
   C_MILLION  = Int64(C_THOUSAND * C_THOUSAND);
   C_BILLION  = Int64(C_THOUSAND * C_THOUSAND * C_THOUSAND);
 
-{$ifdef DARWIN}
+{$ifdef Darwin}
 // clock_gettime() is not implemented: http://stackoverflow.com/a/5167506/458259
 
 type
@@ -251,17 +264,20 @@ function mach_absolute_time: UInt64;
 function mach_timebase_info(var TimebaseInfoData: TTimebaseInfoData): Integer;
   cdecl external 'libc.dylib' name 'mach_timebase_info';
 
+var
+  mach_timeinfo: TTimebaseInfoData;
+  mach_timecoeff: double;
+
 procedure QueryPerformanceCounter(var Value: Int64);
-var info: TTimebaseInfoData;
 begin // returns time in nano second resolution
-  mach_timebase_info(info);
-  if info.Denom=1 then
-    if info.Numer=1 then
+  Value := mach_absolute_time;
+  if mach_timeinfo.Denom=1 then
+    if mach_timeinfo.Numer=1 then
       // seems to be the case on Intel CPUs
-      Value := mach_absolute_time else
-      Value := mach_absolute_time*info.Numer else
+      exit else
+      Value := Value*mach_timeinfo.Numer else
     // use floating point to avoid potential overflow
-    Value := round(mach_absolute_time*(info.Numer/info.Denom));
+    Value := round(Value*mach_timecoeff);
 end;
 
 function QueryPerformanceFrequency(var Value: Int64):boolean;
@@ -278,6 +294,17 @@ end;
 
 {$else}
 
+{$ifdef BSD}
+function clock_gettime(ID: cardinal; r: ptimespec): Integer;
+  cdecl external 'libc.so' name 'clock_gettime';
+function clock_getres(ID: cardinal; r: ptimespec): Integer;
+  cdecl external 'libc.so' name 'clock_getres';
+const
+  CLOCK_MONOTONIC = 4;
+  CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
+  CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
+{$endif}
+
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
@@ -292,7 +319,7 @@ begin
   value := r.tv_nsec+r.tv_sec*C_BILLION;
 end;
 
-function QueryPerformanceFrequency(var Value: Int64):boolean;
+function QueryPerformanceFrequency(var Value: Int64): boolean;
 var r : TTimeSpec;
     FIsHighResolution : boolean;
 begin
@@ -303,7 +330,7 @@ begin
   result := FIsHighResolution;
 end;
 
-{$endif DARWIN}
+{$endif Darwin}
 
 function SetFilePointer(hFile: cInt; lDistanceToMove: TOff;
   lpDistanceToMoveHigh: Pointer; dwMoveMethod: cint): TOff;
@@ -360,8 +387,6 @@ begin
   SysUtils.Sleep(ms);
 end;
 
-{$ifndef DARWIN}
-
 procedure GetKernelRevision;
 var uts: UtsName;
     P: PAnsiChar;
@@ -380,16 +405,22 @@ var uts: UtsName;
       inc(P);
   end;
 begin
-  fpuname(uts);
-  P := @uts.release;
-  KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-  if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+  if fpuname(uts)=0 then begin
+    P := @uts.release;
+    KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
+    {$ifndef BSD}
+    if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
+      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
+      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+    {$endif BSD}
+  end;
+  {$ifdef Darwin}
+  mach_timebase_info(mach_timeinfo);
+  mach_timecoeff := mach_timeinfo.Numer/mach_timeinfo.Denom;
+  {$endif}
 end;
 
 initialization
   GetKernelRevision;
-{$endif DARWIN}
 {$endif Linux}
 end.

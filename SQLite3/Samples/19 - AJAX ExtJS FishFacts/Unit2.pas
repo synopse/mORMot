@@ -73,7 +73,7 @@ begin
   Model := TSQLModel.Create([TSQLBiolife]);
   fDatabaseFileName := ChangeFileExt(paramstr(0),'.db3');
   if not FileExists(fDatabaseFileName) then begin
-    download := TWinINet.Get('http://synopse.info/files/samples/Project19Server.zip');
+    download := TWinINet.Get('https://synopse.info/files/samples/Project19Server.zip');
     if download<>'' then
       with TZipRead.Create(pointer(download),length(download)) do
       try
@@ -83,7 +83,7 @@ begin
       end;
     if not FileExists(fDatabaseFileName) then begin
       ShowMessage('Impossible to find '+fDatabaseFileName+
-        #13#13'Please download it from http://synopse.info/files/samples/Project19Server.zip');
+        #13#13'Please download it from https://synopse.info/files/samples/Project19Server.zip');
       exit;
     end;
   end;

@@ -13,8 +13,6 @@ uses
   SpiderMonkey,
   SyNode;
 
-function SyNodeBindingProc_fs(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
-
 implementation
 
 uses
@@ -57,7 +55,7 @@ end;
 /// call RelToAbs
 function fs_relToAbs(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 const
-  USAGE = 'usage: relToAbs(ABaseDir, AFileName: string;)';
+  USAGE = 'usage: relToAbs(ABase, ATail: string;)';
 var
   in_argv: PjsvalVector;
   baseDir, fileName, resPath: TFileName;
@@ -230,6 +228,80 @@ begin
   end;
 end;
 
+/// Used to speed up module loading.  Returns the contents of the file as
+// a string or undefined when the file cannot be opened.  The speedup
+// comes from not creating Error objects on failure.
+function fs_internalModuleReadFile(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+const
+  USAGE = 'usage: internalModuleReadFile(filePath: string;)';
+var
+  in_argv: PjsvalVector;
+  filePath: string;
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 1) or not in_argv[0].isString then
+      raise ESMException.Create(USAGE);
+    filePath := in_argv[0].asJSString.ToString(cx);
+    if FileExists(filePath) then
+      vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(filePath, true)).ToJSVal
+    else
+      vp.rval := JSVAL_VOID;
+
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
+/// Used to speed up module loading.  Returns 0 if the path refers to
+// a file, 1 when it's a directory or < 0 on error (usually -ENOENT.)
+// The speedup comes from not creating thousands of Stat and Error objects.
+function fs_internalModuleStat(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+const
+  USAGE = 'usage: internalModuleStat(filePath: string;)';
+var
+  in_argv: PjsvalVector;
+  fn: TFileName;
+  Code: Integer;
+  val: jsval;
+begin
+  try
+    in_argv := vp.argv;
+    if (argc < 1) or not in_argv[0].isString then
+      raise ESMException.Create(USAGE);
+    try
+      fn := in_argv[0].asJSString.ToSynUnicode(cx);
+    except
+      raise
+    end;
+
+    Code := GetFileAttributes(PChar(fn));
+    if Code <> -1 then
+      if Code and FILE_ATTRIBUTE_DIRECTORY = 0 then
+        Code := 0
+      else
+        Code := 1;
+
+    val.asInteger := Code;
+    vp.rval := val;
+
+    Result := True;
+  except
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 var
@@ -244,11 +316,16 @@ begin
     obj.ptr.DefineFunction(cx, 'fileStat', fs_fileStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'directoryExists', fs_directoryExists, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'fileExists', fs_fileExists, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
 
     Result := obj.ptr.ToJSValue;
   finally
     cx.FreeRootedObject(obj);
   end;
 end;
+
+initialization
+  TSMEngineManager.RegisterBinding('fs', SyNodeBindingProc_fs);
 
 end.

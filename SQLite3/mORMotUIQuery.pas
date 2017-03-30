@@ -6,8 +6,8 @@ unit mORMotUIQuery;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotUIQuery;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -219,7 +219,8 @@ begin
   // create corresponding Reference field
   FreeAndNil(Reference);
   case FieldType of
-    sftDateTime, sftTimeLog, sftModTime, sftCreateTime: begin
+    sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime, sftCreateTime,
+    sftUnixTime, sftUnixMSTime: begin
       Reference := TDateTimePicker.Create(self);
       Reference.Parent := self;
     end;
@@ -266,15 +267,19 @@ begin
       i := TComboBox(Reference).ItemIndex;
       if i<0 then
         Exit; // avoid out of range error
-      Ref := IntToStr(Integer(TComboBox(Reference).Items.Objects[i]));
+      Int32ToUtf8(Integer(TComboBox(Reference).Items.Objects[i]),Ref);
     end else
     if Reference.InheritsFrom(TDateTimePicker) then
       with TDateTimePicker(Reference) do
       case FieldType of
-        sftDateTime:
-          Ref := DateTimeToIso8601(DateTime,false);
+        sftDateTime, sftDateTimeMS:
+          Ref := DateTimeToIso8601(DateTime,false,'T',FieldType=sftDateTimeMS);
         sftTimeLog, sftModTime, sftCreateTime:
-          Ref := IntToStr(TimeLogFromDateTime(DateTime));
+          Int64ToUtf8(TimeLogFromDateTime(DateTime),Ref);
+        sftUnixTime:
+          Int64ToUtf8(DateTimeToUnixTime(DateTime),Ref);
+        sftUnixMSTime:
+          Int64ToUtf8(DateTimeToUnixMSTime(DateTime),Ref);
       end;
     Ref := Trim(Ref);
     if Ref='' then begin

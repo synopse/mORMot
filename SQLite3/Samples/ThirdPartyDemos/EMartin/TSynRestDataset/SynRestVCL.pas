@@ -6,8 +6,8 @@ unit SynRestVCL;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynRestVCL;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -213,7 +213,10 @@ const
      SynCommons.ftInt64,     // sftCreateTime
      SynCommons.ftInt64,     // sftTID
      SynCommons.ftInt64,     // sftRecordVersion = TRecordVersion
-     SynCommons.ftInt64);    // sftSessionUserID
+     SynCommons.ftInt64,     // sftSessionUserID
+     SynCommons.ftDate,      // sftDateTimeMS
+     SynCommons.ftInt64,     // sftUnixTime
+     SynCommons.ftInt64);    // sftUnixMSTime
 
   SQLFieldTypeToVCLDB: array[TSQLFieldType] of TFieldType =
     (DB.ftUnknown,           // sftUnknown
@@ -243,7 +246,10 @@ const
      DB.ftLargeInt,          // sftCreateTime
      DB.ftLargeInt,          // sftTID
      DB.ftLargeInt,          // sftRecordVersion = TRecordVersion
-     DB.ftLargeInt);         // sftSessionUserID
+     DB.ftLargeInt,          // sftSessionUserID
+     DB.ftDateTime,          // sftDateTime
+     DB.ftLargeInt,          // sftUnixTime
+     DB.ftLargeInt);         // sftUnixMSTime
 
   VCLDBFieldTypeSQLDB: array[0..23] of TSQLFieldType =
     (sftUnknown,        // ftUnknown

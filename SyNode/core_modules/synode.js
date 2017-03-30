@@ -1,13 +1,19 @@
 /* This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
- * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
+ * file, You can obtain one at http://mozilla.org/MPL/2.0/. 
+*/
 
 let {coreModulesPath, runInThisContext} = process.binding('modules'),
     {relToAbs,loadFile} = process.binding('fs'),
     Module;
 
 
-// process & module function is documented inside _UBCommonGlobals.js
+/**
+* @namespace process
+* @property {string} startupPath Use a process.cwd() instead
+* @property {string} execPath The main executable full path (including .exe file name)
+*/
+
 function startup() {
     /**
      * Current working directory
@@ -22,12 +28,6 @@ function startup() {
      * @type {Array<string>}
      */
     process.moduleLoadList = [];
-    /**
-     * The main executable full path (excluding .exe file name)
-     * @type {String}
-     * @readonly
-     */
-    process.execPath = process.binPath;
 
     Module = NativeModule.require('module');
     Module.call(global, ['.']);
@@ -35,21 +35,10 @@ function startup() {
 
 //noinspection JSUndeclaredVariable
     /**
-     * Load a module. Acts like a <a href="http://nodejs.org/api/modules.html">Node JS</a> require, with 4 difference:
+     * Load a module. Acts like a <a href="http://nodejs.org/api/modules.html">Node JS</a> require, with 1 difference:
      *
-     *   - **Core modules** form NODE_CORE_MODULES always loaded from `coreModulesPath\node_modules` folder
-     *   - In case of `moduleName` is **RELATIVE** (not start from `./` `../` or `X:\` where X is drive letter) lookup order is:
-     *      - `currentModulePath + \modules`
-     *      - `currentModulePath + \node_modules`
-     *      - process.execPath + 'node_modules'
-     *	    - process.startupPath + 'node_modules'
      *   - in case we run in production mode (`!process.isDebug`) and minimized version of main module exists, it will be loaded.
      *     By "minimized version" we mean package.json `main` entry with `.min.js` extension <br>
-     *   - `require` know about UnityBase **models**. In **server thread** context, in case `moduleName` start from `models/ModelName` require search for module inside `ModelName.path` folder:
-     *
-     *          require('models/UBS/public/UBReport');
-     *
-     *     will search in domain config (ubConfig.json) path for `UBS` model and perform request relative to this folder, i.e. load `D:\projects\UnityBase\models\UBS\public\UBReport.js` in my case.
      *
      *  *In case you need to debug from there module is loaded set OS Environment variable*
      *  `>SET NODE_DEBUG=modules` *and restart server - require will put to debug log all information about how module are loaded.* Do not do this on production, of course :)
@@ -60,6 +49,87 @@ function startup() {
      * @returns {*}
      */
     global.require = Module.prototype.require;
+    global.Buffer = NativeModule.require('buffer').Buffer;
+    //global.clearTimeout = function() {};
+
+    /**
+     * Block thread for a specified number of milliseconds
+     * @param {Number} ms millisecond to sleep
+     * @global	
+     */
+    global.sleep = process.binding('syNode').sleep;
+
+    const WindowTimer =  NativeModule.require('polyfill/WindowTimer');
+    global._timerLoop = WindowTimer.makeWindowTimer(global, function (ms) { global.sleep(ms); });
+    /**
+     * This function is just to be compatible with node.js
+     * @param {Function} callback Callback (called immediately in SyNode)
+     */
+    process.nextTick = function(callback, arg1, arg2, arg3){
+		if (typeof callback !== 'function') {
+			throw new TypeError('"callback" argument must be a function');
+		}
+        // on the way out, don't bother. it won't get fired anyway.
+        if (process._exiting)
+            return;
+
+        var i, args;
+
+		switch (arguments.length) {
+		// fast cases
+		case 1:
+		  break;
+		case 2:
+		  args = [arg1];
+		  break;
+		case 3:
+		  args = [arg1, arg2];
+		  break;
+		default:
+		  args = [arg1, arg2, arg3];
+		  for (i = 4; i < arguments.length; i++)
+			args[i - 1] = arguments[i];
+		  break;
+		}
+        global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, -1].concat(args));
+    };
+
+    /**
+     * This function is  to be compatible with node.js
+     * @global		
+     * @param {Function} callback
+     * @param {...*} arg
+     * @return {Number} immediateId	
+     */
+    global.setImmediate = function(callback, arg1, arg2, arg3){
+	  if (typeof callback !== 'function') {
+		throw new TypeError('"callback" argument must be a function');
+	  }
+      // on the way out, don't bother. it won't get fired anyway.
+      if (process._exiting)
+          return;
+
+	  var i, args;
+
+	  switch (arguments.length) {
+		// fast cases
+		case 1:
+		  break;
+		case 2:
+		  args = [arg1];
+		  break;
+		case 3:
+		  args = [arg1, arg2];
+		  break;
+		default:
+		  args = [arg1, arg2, arg3];
+		  for (i = 4; i < arguments.length; i++)
+			args[i - 1] = arguments[i];
+		  break;
+	  }
+      global._timerLoop.setTimeoutWithPriority.apply(undefined, [callback, 0, 1].concat(args));
+    };
+
 }
 
 
@@ -70,8 +140,12 @@ function NativeModule(id) {
     this.loaded = false;
 }
 
-const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 'events',
- 'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process']; 
+const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 'events','vm',
+ 'net', 'os', 'punycode', 'querystring', 'timers', 'tty', 'url', 'child_process', 'http', 'https',
+ 'crypto', 'zlib', //fake modules
+ 'buffer', 'string_decoder', 'internal/util', 'internal/module', 'stream', '_stream_readable', '_stream_writable', 
+ 'internal/streams/BufferList', '_stream_duplex', '_stream_transform', '_stream_passthrough',
+ 'polyfill/WindowTimer']; 
 
 NativeModule._source = {};
 NODE_CORE_MODULES.forEach( (module_name) => { 
@@ -115,6 +189,28 @@ NativeModule.getCached = function (id) {
 NativeModule.exists = function (id) {
     return NativeModule._source.hasOwnProperty(id);
 };
+
+const EXPOSE_INTERNALS = false;
+/* MPV
+const EXPOSE_INTERNALS = process.execArgv.some(function(arg) {
+    return arg.match(/^--expose[-_]internals$/);
+  });
+*/
+  if (EXPOSE_INTERNALS) {
+    NativeModule.nonInternalExists = NativeModule.exists;
+
+    NativeModule.isInternal = function(id) {
+      return false;
+    };
+  } else {
+    NativeModule.nonInternalExists = function(id) {
+      return NativeModule.exists(id) && !NativeModule.isInternal(id);
+    };
+
+    NativeModule.isInternal = function(id) {
+      return id.startsWith('internal/');
+    };
+  }
 
 NativeModule.getSource = function (id) {
     return loadFile(NativeModule._source[id]);

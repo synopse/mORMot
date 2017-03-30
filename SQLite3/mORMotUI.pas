@@ -6,8 +6,8 @@ unit mORMotUI;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotUI;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -354,8 +354,8 @@ type
     /// set individual column custom format
     // - as handled by TSQLTable.ExpandAsString() method, i.e. Format() or
     // FormatFloat()/FormatCurrency() mask for sftFloat or sftCurrency, or
-    // FormatDateTime() mask for sftDateTime, sftDateTime, sftTimeLog, sftModTime,
-    // sftCreateTime)
+    // FormatDateTime() mask for sftDateTime, sftDateTimeMS, sftTimeLog, sftModTime,
+    // sftCreateTime, sftUnixTime, sftUnixMSTime)
     property CustomFormat[aCol: cardinal]: string read GetCustomFormat write SetCustomFormat;
     /// set a custom format for all columns of a given type
     // - a faster overload to CustomFormat[] property
@@ -1197,9 +1197,10 @@ begin
         DrawCheckBox(TDrawGrid(Owner).Handle, Handle, Rect,
           PWord(Table.Get(ARow,ACol))^<>ord('0')); // fast StrComp(,'0')
       sftInteger, sftFloat, sftCurrency,
-      sftEnumerate, sftTimeLog, sftRecord, sftDateTime:
+      sftEnumerate, sftTimeLog, sftRecord,
+      sftDateTime, sftDateTimeMS, sftUnixTime, sftUnixMSTime:
         ExtTextOut(Handle, Rect.Left+XInc, Rect.Top+2, Options, @Rect, pointer(StringValue),
-          length(StringValue), nil); // translated text
+          length(StringValue), nil); // translated short text
       //sftID,sftTID:
       // proposal: display ID as TSQLRecord content? better compute it in SELECT
       else begin

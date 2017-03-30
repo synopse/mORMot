@@ -1,4 +1,4 @@
-/// SQLite3 3.15.0 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.17.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -6,8 +6,8 @@ unit SynSQLite3Static;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynSQLite3Static;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.15.0 engine
+    Statically linked SQLite3 3.17.0 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -75,16 +75,18 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.15.0
+  - updated SQLite3 engine to latest version 3.17.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
   - Memory-Mapped I/O support - see http://www.sqlite.org/mmap.html
   - under Win64, expects an external sqlite3-64.dll file to be available, which
-    may be downloaded from http://synopse.info/files/SQLite3-64.7z
+    may be downloaded from https://synopse.info/files/SQLite3-64.7z
   - added sqlite3.backup_*() Online Backup API functions
   - added missing function sqlite3_column_text16() - fixed ticket [25d8d1f47a]
   - added sqlite3.db_config() support
+  - enabled FTS5 and RBU support
+  - added FPC cross-platform support, statically linked for Win32/Win64
 
 }
 
@@ -92,7 +94,7 @@ unit SynSQLite3Static;
 
 interface
 
-{$ifdef NOSQLITE3STATIC}
+{$ifdef NOSQLITE3STATIC} // conditional defined -> auto-load local .dll/.so
 uses
   SysUtils,
   SynSQLite3;
@@ -101,7 +103,6 @@ implementation
 
 uses
   SynCommons;
-
 
 procedure DoInitialization;
 begin
@@ -209,7 +210,7 @@ const
  - to compile for FPC using gcc under Linux: run c-fpcgcclin.sh
     gcc -O2 -c -lpthread -ldl -DSQLITE_ENABLE_FTS3 sqlite3.c
     and copy the libgcc.a and sqlite3.o (and libc.a if needed) into the linuxlibrary folder and off you go
-    For CentOS 7.0, take a look at http://synopse.info/forum/viewtopic.php?pid=13193#p13193
+    For CentOS 7.0, take a look at https://synopse.info/forum/viewtopic.php?pid=13193#p13193
 
 and, in the sqlite3.c source file, the following functions are made external
 in order to allow our proprietary but simple and efficient encryption system:
@@ -254,62 +255,100 @@ extern int unixWrite(
       {$linklib fpc-win64\libkernel32.a}
       {$linklib fpc-win64\libgcc.a}
       {$linklib fpc-win64\libmsvcrt.a}
+      const LOGFUNCLINKNAME = 'log';
     {$else}
       {$L fpc-win32\sqlite3.o}
       {$linklib fpc-win32\libkernel32.a}
       {$linklib fpc-win32\libgcc.a}
       {$linklib fpc-win32\libmsvcrt.a}
+      const LOGFUNCLINKNAME = '_log';
     {$endif CPU64}
   {$else}
-    {$ifdef CPU64}
-      {$L fpc-linux64\sqlite3-64.o}
-      {$linklib fpc-linux64\gcc.a}
-    {$else}
-      {$L fpc-linux32\sqlite3.o}
-      {$linklib fpc-linux32\gcc.a}
-    {$endif CPU64}
-
-    function newstat64(path: pchar; buf: PStat): cint; cdecl;
-      public name 'stat64'; export;
-    begin
-      result := fpstat(path,buf^);
-    end;
-
-    function newfstat64(fd: cint; buf: PStat): cint; cdecl;
-      public name 'fstat64'; export;
-    begin
-      result := fpfstat(fd,buf^);
-    end;
-
-    function newlstat64(path: pchar; buf: PStat): cint; cdecl;
-      public name 'lstat64'; export;
-    begin
-      result := fplstat(path,buf^);
-    end;
-
+    {$ifdef Darwin}
+      {$ifdef CPU64}
+        {$linklib .\..\fpc-darwin64\libsqlite3.a}
+      {$else}
+        {$linklib .\..\fpc-darwin32\libsqlite3.a}
+      {$endif}
+      const LOGFUNCLINKNAME = 'log';
+    {$else Darwin}
+      {$ifndef FPC_CROSSCOMPILING}
+        {$linklib gcc.a}
+      {$endif}
+      {$ifdef CPUARM}
+        {$L fpc-linuxarm\sqlite3.o}
+        {$ifdef FPC_CROSSCOMPILING}
+          {$linklib fpc-linuxarm\gcc.a}
+          {$L libgcc_s.so.1}
+        {$else}
+          {$linklib gcc_s.so.1}
+        {$endif}
+        const LOGFUNCLINKNAME = 'log';
+      {$endif}
+      {$ifdef CPUINTEL}
+        {$ifdef CPU64}
+          {$L fpc-linux64\sqlite3-64.o}
+          {$ifdef FPC_CROSSCOMPILING}
+            {$linklib fpc-linux64\gcc.a}
+          {$endif}
+          const LOGFUNCLINKNAME = 'log';
+        {$else}
+          {$L fpc-linux32\sqlite3.o}
+          {$ifdef FPC_CROSSCOMPILING}
+            {$linklib fpc-linux32\gcc.a}
+          {$endif}
+          const LOGFUNCLINKNAME = 'log';
+        {$endif CPU64}
+      {$endif CPUINTEL}
+    {$endif Darwin}
   {$endif MSWINDOWS}
+
+function log(x: double): double; cdecl; public name LOGFUNCLINKNAME; export;
+begin
+  result := ln(x);
+end;
+
+{$ifdef Darwin}
+function moddi3(num,den:int64):int64; cdecl; [public, alias: '___moddi3'];
+begin
+ result := num mod den;
+end;
+function umoddi3(num,den:uint64):uint64; cdecl; [public, alias: '___umoddi3'];
+begin
+ result := num mod den;
+end;
+function divdi3(num,den:int64):int64; cdecl; [public, alias: '___divdi3'];
+begin
+ result := num div den;
+end;
+function udivdi3(num,den:uint64):uint64; cdecl; [public, alias: '___udivdi3'];
+begin
+ result := num div den;
+end;
+
+{$endif}
 
 {$else}
 
   // Delphi has a more complex linking strategy, since $linklib doesn't exist :(
   {$ifdef MSWINDOWS}
     {$ifdef CPU64}
-      {$L sqlite3.o} // compiled with bcc64 via c64.bat
+      {$L fpc-win64\sqlite3-64.o} // compiled with gcc for FPC ... try
     {$else}
       {$ifdef INCLUDE_FTS3}
-      {$L sqlite3fts3.obj}   // link SQlite3 database engine with FTS3/FTS4 + TRACE
+      {$L sqlite3fts3.obj}   // link SQlite3 with FTS3/FTS4/FTS5 + TRACE
       {$else}
       {$L sqlite3.obj}       // link SQlite3 database engine
       {$endif INCLUDE_FTS3}
     {$endif}
   {$else}
-  {$ifdef KYLIX3}
-  {$L kylix/sqlite3/sqlite3.o}
-  {$L kylix/sqlite3/_divdi3.o}
-  {$L kylix/sqlite3/_moddi3.o}
-  {$L kylix/sqlite3/_udivdi3.o}
-  {$L kylix/sqlite3/_umoddi3.o}
-  {$L kylix/sqlite3/_cmpdi2.o}
+  {$ifdef KYLIX3} // in practice, failed to compile SQLite3 with gcc 2 :(
+    {$L kylix/sqlite3/sqlite3.o}
+    {$L kylix/sqlite3/_divdi3.o}
+    {$L kylix/sqlite3/_moddi3.o}
+    {$L kylix/sqlite3/_udivdi3.o}
+    {$L kylix/sqlite3/_umoddi3.o}
+    {$L kylix/sqlite3/_cmpdi2.o}
   {$endif KYLIX3}
   {$endif MSWINDOWS}
 
@@ -335,6 +374,16 @@ function realloc(P: Pointer; Size: Integer): Pointer; cdecl; { always cdecl }
 begin
   result := P;
   ReallocMem(result,Size);
+end;
+
+function rename(oldname, newname: PUTF8Char): integer; cdecl; { always cdecl }
+  {$ifdef FPC}public name{$ifdef CPU64}'rename'{$else}'_rename'{$endif};{$endif}
+// the SQLite3 database engine will use the FastMM4/SynScaleMM fast heap manager
+begin
+  if RenameFile(UTF8DecodeToString(oldname,StrLen(oldname)),
+                UTF8DecodeToString(newname,StrLen(newname))) then
+    result := 0 else
+    result := -1;
 end;
 
 {$ifdef MSWINDOWS}
@@ -413,6 +462,15 @@ end;
 procedure _llushr;
 asm
   jmp System.@_llushr
+end;
+
+function log(const val: extended): extended;
+asm
+  fld val
+  fldln2
+  fxch
+  fyl2x
+  fwait
 end;
 
 {$endif CPU32}
@@ -644,12 +702,35 @@ end;
 
 const
   msvcrt = 'msvcrt.dll';
+  kernel = 'kernel32.dll';
 
 function _beginthreadex(security: pointer; stksize: dword;
   start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt;
 procedure _endthreadex(exitcode: dword); cdecl; external msvcrt;
 
 {$ifdef CPU64}
+
+// first try for static on Win64 with Delphi
+function __imp__beginthreadex(security: pointer; stksize: dword;
+  start,arg: pointer; flags: dword; var threadid: dword): THandle; cdecl; external msvcrt name '_beginthreadex';
+procedure __imp__endthreadex(exitcode: dword); cdecl; external msvcrt name '_endthreadex';
+
+function __imp_TryEnterCriticalSection(lpCriticalSection:pointer): BOOL; cdecl; external kernel name 'TryEnterCriticalSection';
+procedure __imp_LeaveCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'LeaveCriticalSection';
+procedure __imp_EnterCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'EnterCriticalSection';
+procedure __imp_DeleteCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'DeleteCriticalSection';
+procedure __imp_InitializeCriticalSection(lpCriticalSection:pointer); cdecl; external kernel name 'InitializeCriticalSection';
+function __imp_GetCurrentThreadId:dword; cdecl; external kernel name 'GetCurrentThreadId';
+function __imp_CloseHandle(hObject:THandle): BOOL; cdecl; external kernel name 'CloseHandle';
+function __imp__localtime64(t: PCardinal): pointer; cdecl;
+begin
+  result := localtime64(t^);
+end;
+function log(x: double): double; cdecl; export;
+begin
+  result := ln(x);
+end;
+// try ends here
 
 procedure __chkstk;
 begin
@@ -709,55 +790,19 @@ begin
   end;
 end;
 
-// XorOffset: fast and simple Cypher using Index (= offset in file)
-// -> not to be set as local proc for FPC
-// see http://bugs.freepascal.org/view.php?id=24061
-procedure Xor64(PI, P: PPtrIntArray; Count: cardinal); // fast xor
-{$ifdef PUREPASCAL}
-var i: cardinal;
-begin
-  for i := 0 to (Count div sizeof(PtrInt))-1 do
-    P^[i] := P^[i] xor PI^[i]; // this will compile fine for 64 bit CPU
-end;
-{$else}
-asm // eax=PI edx=P ecx=bytes count
-  push ebx
-  push esi
-  shr ecx,3 // 64 bits = 8 bytes per loop
-  jz @z
-@1:
-  mov ebx,[eax]    // fast CPU-pipelined optimized loop
-  mov esi,[eax+4]
-  xor [edx],ebx
-  xor [edx+4],esi
-  dec ecx
-  lea eax,[eax+8]
-  lea edx,[edx+8]
-  jnz @1
-@z:
-  pop esi
-  pop ebx
-end;
-{$endif}
-
-procedure XorOffset(p: pByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
-var i, Len, L: integer;
-begin
+procedure XorOffset(P: PByte; Index, Count: cardinal; SQLEncryptTable: PByteArray);
+var Len: cardinal;
+begin // fast and simple Cypher using Index (= offset in file)
   if Count>0 then
   repeat
     Index := Index and (SQLEncryptTableSize-1);
     Len := SQLEncryptTableSize-Index;
-    if cardinal(Len)>cardinal(Count) then
+    if Len>Count then
       Len := Count;
-    Xor64(@SQLEncryptTable^[Index],pointer(p),Len); // xor 8 bytes per loop
-    L := Len and (-8); // -8=$FFFFFFF8
-    inc(p,L);
-    inc(Index,L);
-    for i := 1 to (Len and 7) do begin // xor 0..7 remaining bytes
-      p^ := p^ xor SQLEncryptTable^[Index];
-      inc(p); inc(Index);
-    end;
-    Dec(Count,Len);
+    XorMemory(pointer(P),@SQLEncryptTable^[Index],Len);
+    inc(P,Len);
+    inc(Index,Len);
+    dec(Count,Len);
   until Count=0;
 end;
 
@@ -824,15 +869,15 @@ type
     pMethods: pointer;     // sqlite3.io_methods_ptr
     pVfs: pointer;         // The VFS used to open this file (new in version 3.7)
     h: THandle;            // Handle for accessing the file
-    locktype:byte;         // Type of lock currently held on this file */
-    sharedLockByte:word;   // Randomly chosen byte used as a shared lock */
-    ctrlFlags:byte;        // Flags.  See WINFILE_* below */
+    locktype: byte;        // Type of lock currently held on this file */
+    sharedLockByte: word;  // Randomly chosen byte used as a shared lock */
+    ctrlFlags: byte;       // Flags.  See WINFILE_* below */
     lastErrno: cardinal;   // The Windows errno from the last I/O error
     // asm code generated from c is [esi+20] for lastErrNo -> OK
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
     zPath: PAnsiChar;
     szChunk, nFetchOut: integer;
-    hMap: THANDLE;
+    hMap: THandle;
     pMapRegion: PAnsiChar;
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
@@ -845,8 +890,8 @@ type
     eFileLock: cuchar;          // The type of lock held on this fd
     ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
     lastErrno: cint;            // The unix errno from the last I/O error
-    lockingContext : PAnsiChar; // Locking style specific state
-    UnixUnusedFd : pointer;     // unused
+    lockingContext: PAnsiChar; // Locking style specific state
+    UnixUnusedFd: pointer;     // unused
     zPath: PAnsiChar;           // Name of the file
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
     szChunk: cint;
@@ -915,10 +960,8 @@ begin
   SetLength(buf,SQLEncryptTableSize);
   CreateSQLEncryptTableBytes(pass,pointer(buf));
   Cyph.Handle := PSQLDBStruct(DB)^.DB0^.Btree^.pBt^.pPager^.fd^.h;
-  if Cyphers=nil then begin
-    Cypher.Init(TypeInfo(TSQLCypherDynArray),Cyphers,@CypherCount);
-    Cypher.Compare := SortDynArrayPointer;
-  end;
+  if Cyphers=nil then
+    Cypher.InitSpecific(TypeInfo(TSQLCypherDynArray),Cyphers,djCardinal,@CypherCount);
   if Cypher.Find(Cyph.Handle)>=0 then
     raise ESQLite3Exception.Create('Invalid call to sqlite3_key() with no previous sqlite3_close()');
   Cyph.CypherBuf := buf;
@@ -948,7 +991,6 @@ const
   SQLITE_IOERR_SHORT_READ = $020A;
   SQLITE_IOERR_WRITE      = $030A;
 
-// note that we do not use OVERLAPPED (as introduced by 3.7.12) here yet
 {$ifdef MSWINDOWS}
 function WinWrite(FP: pointer; buf: PByte; buflen: cardinal; off: Int64): integer;
 {$else}
@@ -964,28 +1006,36 @@ function unixWrite(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
       '_winWrite';
       {$endif}
     {$else}
+    {$ifdef Darwin}
+    '_unixWrite'; export;
+    {$else}
     'unixWrite'; export;
+    {$endif}
     {$endif}
   {$endif}
 // Write data from a buffer into a file.  Return SQLITE_OK on success
 // or some other error code on failure
 var n, i, written: integer;
     EncryptTable: PByteArray;
-    offset: Int64Rec absolute off;
+    off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
+    h: THandle;
     b: PByte;
-label err;
+    {$ifdef MSWINDOWS}
+    ol: TOverlapped;
+    ol64: Int64;
+    {$endif}
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(buf^,F.pMapRegion[offset.Lo],bufLen);
+        MoveFast(buf^,F.pMapRegion[off64.Lo],bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
-        nCopy := F.mmapSize.Lo-offset.Lo;
-        MoveFast(buf^,F.pMapRegion[offset.Lo],nCopy);
+        nCopy := F.mmapSize.Lo-off64.Lo;
+        MoveFast(buf^,F.pMapRegion[off64.Lo],nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -994,7 +1044,11 @@ begin
         'sqlite3_key(%) expects PRAGMA mmap_size=0 write(off=% mmapSize=% buflen=%)',
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinWrite % off=% len=%',[F.h,off,buflen]);
-  offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS}
+  FillCharFast(ol,sizeof(ol),0);
+  ol64 := off;
+  {$else}
   if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -1003,30 +1057,41 @@ begin
       exit;
     end;
   end;
+  {$endif}
   EncryptTable := nil; // mark no encryption
   if CypherCount>0 then
-    if (offset.Lo>=1024) or (offset.Hi<>0) then // crypt content after first page
-    for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-      if Cyphers[i].Handle=F.h then begin
-        EncryptTable := Pointer(Cyphers[i].CypherBuf);
-        XorOffset(buf,offset.Lo,buflen,EncryptTable);
-        break;
-      end;
+    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // crypt after first page
+      h := F.h;
+      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
+        if Cyphers[i].Handle=h then begin
+          EncryptTable := Pointer(Cyphers[i].CypherBuf);
+          XorOffset(buf,off64.Lo,buflen,EncryptTable);
+          break;
+        end;
+    end;
   b := buf;
   n := buflen;
   while n>0 do begin
+    {$ifdef MSWINDOWS}
+    ol.Offset := Int64Rec(ol64).Lo;
+    ol.OffsetHigh := Int64Rec(ol64).Hi;
+    if WriteFile(F.h,b^,n,cardinal(written),@ol) then
+      inc(ol64,written) else
+      written := -1;
+    {$else}
     written := FileWrite(F.h,b^,n);
+    {$endif}
     if written=0 then
       break;
     if written=-1 then begin
-err:  F.lastErrno := GetLastError;
+      F.lastErrno := GetLastError;
       {$ifdef MSWINDOWS}
       if not (F.lastErrno in [ERROR_HANDLE_DISK_FULL,ERROR_DISK_FULL]) then
         result := SQLITE_IOERR_WRITE else
       {$endif}
         result := SQLITE_FULL;
       if EncryptTable<>nil then // restore buf content
-        XorOffset(buf,offset.Lo,buflen,EncryptTable);
+        XorOffset(buf,off64.Lo,buflen,EncryptTable);
       exit;
     end;
     dec(n,written);
@@ -1034,7 +1099,7 @@ err:  F.lastErrno := GetLastError;
   end;
   result := SQLITE_OK;
   if EncryptTable<>nil then // restore buf content
-    XorOffset(buf,offset.Lo,buflen,EncryptTable);
+    XorOffset(buf,off64.Lo,buflen,EncryptTable);
 end;
 
 
@@ -1053,26 +1118,34 @@ function unixRead(FP: pointer; buf: PByte; buflen: cint; off: Int64): integer;
       '_winRead';
       {$endif}
     {$else}
-      'unixRead'; export;
+    {$ifdef Darwin}
+    '_unixRead'; export;
+    {$else}
+    'unixRead'; export;
+    {$endif}
     {$endif}
   {$endif}
 // Read data from a file into a buffer.  Return SQLITE_OK on success
 // or some other error code on failure
-var offset: Int64Rec absolute off;
+var off64: Int64Rec absolute off;
     F: PSQLFile absolute FP;
     nCopy: cardinal;
     b: PByte;
+    h: THandle;
     i,n,read: integer;
+    {$ifdef MSWINDOWS}
+    ol: TOverlapped;
+    {$endif}
 begin
   if off<Int64(F.mmapSize) then // handle memory mapping (SQLite3>=3.7.17)
     if CypherCount=0 then
       if off+buflen<=Int64(F.mmapSize) then begin
-        MoveFast(F.pMapRegion[offset.Lo],buf^,bufLen);
+        MoveFast(F.pMapRegion[off64.Lo],buf^,bufLen);
         result := SQLITE_OK;
         exit;
       end else begin
-        nCopy := F.mmapSize.Lo-offset.Lo;
-        MoveFast(F.pMapRegion[offset.Lo],buf^,nCopy);
+        nCopy := F.mmapSize.Lo-off64.Lo;
+        MoveFast(F.pMapRegion[off64.Lo],buf^,nCopy);
         inc(buf,nCopy);
         dec(buflen,nCopy);
         inc(off,nCopy);
@@ -1081,7 +1154,24 @@ begin
         'sqlite3_key(%) expects PRAGMA mmap_size=0 read(off=% mmapSize=% buflen=%)',
         [F.zPath,off,Int64(F.mmapSize),bufLen]);
   //SynSQLite3Log.Add.Log(sllCustom2,'WinRead % off=% len=%',[F.h,off,buflen]);
-  offset.Hi := offset.Hi and $7fffffff; // offset must be positive (u64)
+  {$ifdef MSWINDOWS} // read chunk in one single API call
+  FillCharFast(ol,sizeof(ol),0);
+  ol.Offset := off64.Lo;
+  ol.OffsetHigh := off64.Hi and $7fffffff;
+  b := buf;
+  n := buflen;
+  if not ReadFile(F.h,b^,n,cardinal(read),@ol) then begin
+    i := GetLastError;
+    if i<>ERROR_HANDLE_EOF then begin
+      F.lastErrno := i;
+      result := SQLITE_IOERR_READ;
+      exit;
+    end;
+  end;
+  inc(b,read);
+  dec(n,read);
+  {$else} // use standard cross-platform FPC/Delphi RTL calls
+  off64.Hi := off64.Hi and $7fffffff; // offset must be positive (u64)
   if FileSeek64(F.h,off,soFromBeginning)=-1 then begin
     result := GetLastError;
     if result<>NO_ERROR then begin
@@ -1104,13 +1194,16 @@ begin
     inc(b,read);
     dec(n,read);
   until n=0;
+  {$endif}
   if CypherCount>0 then
-  if (offset.Lo>=1024) or (offset.Hi<>0) then // uncrypt after first page
-    for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
-      if Cyphers[i].Handle=F.h then begin
-        XorOffset(buf,offset.Lo,buflen,pointer(Cyphers[i].CypherBuf));
-        break;
-      end;
+    if (off64.Lo>=1024) or (off64.Hi<>0) then begin // uncrypt after first page
+      h := F.h;
+      for i := 0 to CypherCount-1 do // (a bit) faster than Cypher.Find(F.h)
+        if Cyphers[i].Handle=h then begin
+          XorOffset(buf,off64.Lo,buflen,pointer(Cyphers[i].CypherBuf));
+          break;
+        end;
+    end;
   if n>0 then begin // remaining bytes are set to 0
     FillcharFast(b^,n,0);
     result := SQLITE_IOERR_SHORT_READ;
@@ -1145,7 +1238,7 @@ function sqlite3_prepare_v2(DB: TSQLite3DB; SQL: PUTF8Char; SQL_bytes: integer;
 function sqlite3_finalize(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_next_stmt(DB: TSQLite3DB; S: TSQLite3Statement): TSQLite3Statement; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_reset(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
-function sqlite3_stmt_readonly(S: TSQLite3Statement): boolean; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
+function sqlite3_stmt_readonly(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_step(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_column_count(S: TSQLite3Statement): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
 function sqlite3_column_type(S: TSQLite3Statement; Col: integer): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif} external;
@@ -1236,7 +1329,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.15.0';
+  EXPECTED_SQLITE3_VERSION = '3.17.0';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
@@ -1350,7 +1443,7 @@ begin
   FormatUTF8('Static sqlite3.obj as included within % is outdated!'#13+
     'Linked version is % whereas the current/expected is '+EXPECTED_SQLITE3_VERSION+'.'#13#13+
     'Please download latest SQLite3 '+EXPECTED_SQLITE3_VERSION+' revision'#13+
-    'from http://synopse.info/files/sqlite3obj.7z',
+    'from https://synopse.info/files/sqlite3obj.7z',
     [ExeVersion.ProgramName,fVersionText],error);
   LogToTextFile(error); // annoyning enough on all platforms
   // SynSQLite3Log.Add.Log() would do nothing: we are in .exe initialization

@@ -6,8 +6,8 @@ unit mORMotHttpClient;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotHttpClient;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -230,6 +230,10 @@ type
     // to store the extended options as an URL-encoded string
     procedure DefinitionTo(Definition: TSynConnectionDefinition); override;
   published
+    /// the Server IP address
+    property Server: AnsiString read fServer;
+    /// the Server IP port
+    property Port: AnsiString read fPort;
     /// the time (in milliseconds) to keep the connection alive with the
     // TSQLHttpServer
     // - default is 20000, i.e. 20 seconds
@@ -237,7 +241,7 @@ type
     /// the compression algorithms usable with this client
     // - equals [hcSynLZ] by default, since our SynLZ algorithm provides a good
     // compression, with very low CPU use on server side
-    // - you may include hcDeflate, which will have a better compression ratio, 
+    // - you may include hcDeflate, which will have a better compression ratio,
     // be recognized by all browsers and libraries, but would consumme much
     // more CPU resources than hcSynLZ
     // - if you include hcSynShaAes, it will use SHA-256/AES-256-CFB to encrypt
@@ -247,10 +251,6 @@ type
     // using TSQLHttpClientWebSockets, leaving hcDeflate for AJAX or non mORMot
     // clients, and hcSynLZ if you expect to use http.sys with a mORMot client
     property Compression: TSQLHttpCompressions read fCompression write SetCompression;
-    /// the Server IP address
-    property Server: AnsiString read fServer;
-    /// the Server IP port
-    property Port: AnsiString read fPort;
   end;
 
   TSQLHttpClientGenericClass = class of TSQLHttpClientGeneric;
@@ -627,7 +627,7 @@ end;
 function TSQLHttpClientWinSock.InternalCheckOpen: boolean;
 begin
   result := fSocket<>nil;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try
@@ -692,7 +692,7 @@ end;
 function TSQLHttpClientWebsockets.InternalCheckOpen: boolean;
 begin
   result := WebSocketsConnected;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit; // already connected
   fSafe.Enter;
   try
@@ -741,7 +741,8 @@ begin
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
   body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
   head := 'Sec-WebSocket-REST: NonBlocking';
-  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head)=HTTP_SUCCESS;
+  result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head) in
+    [HTTP_SUCCESS,HTTP_NOCONTENT];
 end;
 
 function TSQLHttpClientWebsockets.CallbackRequest(Ctxt: THttpServerRequest): cardinal;
@@ -863,7 +864,7 @@ end;
 function TSQLHttpClientRequest.InternalCheckOpen: boolean;
 begin
   result := fRequest<>nil;
-  if result or (ioNoOpen in fInternalOpen) then
+  if result or (isDestroying in fInternalState) then
     exit;
   fSafe.Enter;
   try

@@ -9,8 +9,8 @@ interface
 
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -28,7 +28,7 @@ interface
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -260,7 +260,7 @@ type
 
   /// Vista-enabled TAdvToolBarForm descendant
   // - this form will have a button in the TaskBar
-  // - this form will hidde the default Delphi application virtual form
+  // - this form will hide the default Delphi application virtual form
   TSynForm = class(TAdvToolBarForm)
   protected
     procedure CreateParams(var Params: TCreateParams); override;

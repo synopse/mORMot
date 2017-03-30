@@ -4,8 +4,8 @@ unit SynKylix;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -23,7 +23,7 @@ unit SynKylix;
 
   The Initial Developer of the Original Code is Arnaud Bouchez
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -47,6 +47,8 @@ unit SynKylix;
   - initial revision, corresponding to functions not available in LibC.pas
 
 }
+
+{$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
 interface
 
@@ -118,6 +120,9 @@ function GetFileSize(hFile: THandle; lpFileSizeHigh: PDWORD): DWORD;
 
 /// returns the current UTC time
 function GetNowUTC: TDateTime;
+
+/// returns the current UTC time, as Unix Epoch seconds
+function GetUnixUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
@@ -270,6 +275,13 @@ var SystemTime: TSystemTime;
 begin
   GetNowUTCSystem(SystemTime);
   result := SystemTimeToDateTime(SystemTime);
+end;
+
+function GetUnixUTC: Int64;
+var tz: TTimeVal;
+begin
+  gettimeofday(tz,nil);
+  result := tz.tv_sec;
 end;
 
 procedure GetNowUTCSystem(var result: TSystemTime);

@@ -25,6 +25,9 @@ uses
   SynMustache;
 
 type
+  TDBFrame = class;
+  TOnExecute = function(Sender: TDBFrame; const SQL, Content: RawUTF8): boolean of object;
+  
   TDBFrame = class(TFrame)
     pnlRight: TPanel;
     pnlTop: TPanel;
@@ -57,7 +60,9 @@ type
     procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
       var Text: string): boolean;
-    function OnGridToCell(Sender: TSQLTable; Row, Field: integer): RawJSON;
+    procedure OnCommandsToGridAdd(const Item: TSynNameValueItem; Index: PtrInt);
+    function OnGridToCell(Sender: TSQLTable; Row, Field: integer;
+      HumanFriendly: boolean): RawJSON;
     procedure LogClick(Sender: TObject);
     procedure LogDblClick(Sender: TObject);
     procedure LogSearch(Sender: TObject);
@@ -71,15 +76,20 @@ type
     Tables: TStringList;
     AssociatedModel: TSQLModel;
     AssociatedServices: TInterfaceFactoryObjArray;
+    // Add(cmdline/table,nestedobject,-1=text/0..N=nestedarray#)
+    CommandsToGrid: TSynNameValue;
     TableDblClickSelect: TSynNameValue;
     TableDblClickOrderByIdDesc: boolean;
     TableDblClickOrderByIdDescCSV: string;
     SavePrefix: TFileName;
-    OnAfterExecute: TNotifyEvent;
+    OnBeforeExecute: TOnExecute;
+    OnAfterExecute: TOnExecute;
     constructor Create(AOwner: TComponent); override;
     procedure EnableChkTables(const aCaption: string);
     procedure Open; virtual;
+    procedure FillTables(const customcode: string); virtual;
     procedure AddSQL(SQL: string; AndExec: boolean);
+    function NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
     destructor Destroy; override;
   end;
 
@@ -121,9 +131,20 @@ begin
   pnlLeftTop.Height := 30;
   Tables := TStringList.Create;
   TableDblClickSelect.Init(false);
+  CommandsToGrid.Init(false);
+  CommandsToGrid.OnAfterAdd := OnCommandsToGridAdd;
 end;
 
 procedure TDBFrame.Open;
+begin
+  FillTables('');
+  edtLabelsChange(nil);
+  mmoSQL.Text := '#help';
+  btnExecClick(nil);
+  mmoSQL.Text := '';
+end;
+
+procedure TDBFrame.FillTables(const customcode: string);
 var
   i: integer;
   aTables: TRawUTF8DynArray;
@@ -131,31 +152,42 @@ begin
   drwgrdResult.Align := alClient;
   aTables := Admin.DatabaseTables(DatabaseName);
   Tables.Clear;
-  for i := 0 to high(aTables) do
-    Tables.Add(UTF8ToString(aTables[i]));
-  edtLabelsChange(nil);
-  mmoSQL.Text := '#help';
-  btnExecClick(nil);
-  mmoSQL.Text := '';
+  Tables.BeginUpdate;
+  try
+    for i := 0 to high(aTables) do
+      Tables.Add(UTF8ToString(aTables[i]));
+  finally
+    Tables.EndUpdate;
+  end;
 end;
 
 procedure TDBFrame.lstTablesDblClick(Sender: TObject);
 var
   i: integer;
-  table, sql: string;
+  table, fields, sql, orderby: string;
 begin
   i := lstTables.ItemIndex;
   if i < 0 then
     exit;
   table := lstTables.Items[i];
-  sql := string(TableDblClickSelect.Value(RawUTF8(table)));
-  if sql='' then
-    sql := '*';
-  sql := 'select '+sql+' from ' + table;
-  if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and (Pos
-    (table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
-    sql := sql + ' order by id desc';
-  sql := sql + ' limit 1000';
+  fields := string(TableDblClickSelect.Value(RawUTF8(table)));
+  if fields='' then
+    fields := '*' else begin
+    i := Pos(' order by ', fields);
+    if i > 0 then begin
+      orderby := copy(fields, i, maxInt);
+      Setlength(fields, i - 1);
+    end;
+  end;
+  sql := 'select '+fields+' from ' + table;
+  if orderby <> '' then
+    sql := sql + orderby
+  else begin
+    if TableDblClickOrderByIdDesc or ((TableDblClickOrderByIdDescCSV <> '') and
+       (Pos(table + ',', TableDblClickOrderByIdDescCSV + ',') > 0)) then
+      sql := sql + ' order by id desc';
+    sql := sql + ' limit 1000';
+  end;
   AddSQL(sql, true);
 end;
 
@@ -177,15 +209,27 @@ begin
   fJson := '';
 end;
 
-procedure TDBFrame.btnExecClick(Sender: TObject);
+procedure TDBFrame.OnCommandsToGridAdd(const Item: TSynNameValueItem;
+  Index: PtrInt);
+begin
+  pmCmd.Items.Insert(0, NewCmdPopup(UTF8ToString(Item.Name), true));
+end;
 
-  function NewPopup(const c: string): TMenuItem;
-  var
-    cmd: string;
-    i: integer;
-  begin
-    result := TMenuItem.Create(pmCmd);
+function TDBFrame.NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
+var
+  cmd, name, lastname: string;
+  i, ext, num: integer;
+  res: TDocVariantData;
+  sub, subpar, subarch: TMenuItem;
+begin
+  result := TMenuItem.Create(self);
+  if length(c) > 40 then
+    result.Caption := copy(c, 1, 37) + '...'
+  else
     result.Caption := c;
+  if NoCmdTrim then
+    cmd := c
+  else begin
     i := Pos(' ', c);
     if i > 0 then
       cmd := copy(c, 1, i) + '*'
@@ -196,14 +240,57 @@ procedure TDBFrame.btnExecClick(Sender: TObject);
       else
         cmd := c;
     end;
-    result.Hint := cmd;
-    result.OnClick := btnExecClick;
   end;
+  result.Hint := cmd;
+  if (cmd = '#log *') or (cmd = '#db *') then begin // log/db files in sub-menus
+    res.InitJSON(ExecSQL(StringToUTF8(cmd)), JSON_OPTIONS_FAST);
+    SetLength(cmd, length(cmd) - 1);
+    subpar := result;
+    subarch := nil;
+    if res.Kind = dvArray then
+      for i := 0 to res.Count - 1 do begin
+        name := res.Values[i].Name;
+        if name = lastname then
+          continue; // circumvent FindFiles() bug with *.dbs including *.dbsynlz
+        lastname := name;
+        case GetFileNameExtIndex(name, 'dbs,dbsynlz') of
+          0: begin // group sharded database files by 20 in sub-menus    
+            ext := Pos('.dbs', name);
+            if (ext > 4) and TryStrToInt(Copy(name, ext - 4, 4), num) then
+              if (subpar = result) or (num mod 20 = 0) then begin
+                subpar := NewCmdPopup(cmd + name + ' ...', true);
+                subpar.OnClick := nil;
+                result.Add(subpar);
+              end;
+          end;
+          1: begin // group database backup files in a dedicated sub-menu
+            if subarch = nil then begin
+              subarch := NewCmdPopup(cmd + '*.dbsynlz ...', true);
+              subarch.OnClick := nil;
+              result.Add(subarch);
+            end;
+            subpar := subarch;
+          end;
+          else
+            subpar := result;
+        end;
+        sub := NewCmdPopup(cmd + name, true);
+        if cmd = '#log ' then
+          sub.Caption := sub.Caption + '  ' + res.Values[i].TimeStamp
+        else
+          sub.Caption := format('%s  %s', [sub.Caption, KB(res.Values[i].Size)]);
+        subpar.Add(sub);
+      end;
+  end
+  else
+    result.OnClick := btnExecClick;
+end;
 
+procedure TDBFrame.btnExecClick(Sender: TObject);
 var
   res, ctyp, execTime: RawUTF8;
   mmo, cmd, fn, local: string;
-  SelStart, SelLength, i: integer;
+  SelStart, SelLength, cmdToGrid, i: integer;
   table: TSQLTable;
   tables: TSQLRecordClassDynArray;
   P: PUTF8Char;
@@ -215,7 +302,7 @@ begin
     mmo := TMenuItem(Sender).Hint;
     mmoSQL.Text := mmo;
     i := Pos('*', mmo);
-    if i > 0 then begin
+    if (i > 0) and (mmo[1] = '#') then begin
       mmoSQL.SelStart := i - 1;
       mmoSQL.SelLength := 1;
       mmoSQL.SetFocus;
@@ -234,6 +321,8 @@ begin
   if IdemPropNameU(fSQL, '#client') then begin
     fJson := ObjectToJSON(Client);
   end
+  else if Assigned(OnBeforeExecute) and not OnBeforeExecute(self, fSQL, '') then
+    fJson := '"You are not allowed to execute this command for security reasons"'
   else begin
     Screen.Cursor := crHourGlass;
     try
@@ -242,6 +331,14 @@ begin
         exec := Admin.DatabaseExecute(DatabaseName, fSQL);
         execTime := timer.Stop;
         ctyp := FindIniNameValue(pointer(exec.Header), HEADER_CONTENT_TYPE_UPPER);
+        if IdemPChar(pointer(exec.Content), '<HEAD>') then begin // HTML in disguise
+          i := PosI('<BODY>', exec.content);
+          if i = 0 then
+            fJson := exec.Content
+          else
+            fJson := copy(exec.Content, i, maxInt);
+        end
+        else
         if (ctyp = '') or IdemPChar(pointer(ctyp), JSON_CONTENT_TYPE_UPPER) then
           fJson := exec.Content
         else
@@ -264,7 +361,7 @@ begin
             'type', ctyp, 'localfile', local]);
         end
         else
-          fJson := '';
+          fJson := FormatUTF8('"Unknown content-type: %"', [ctyp]);
       except
         on E: Exception do
           fJson := ObjectToJSON(E);
@@ -276,7 +373,9 @@ begin
   FreeAndNil(Grid);
   GridLastTableName := '';
   fGridToCellRow := 0;
-  if fSQL[1] = '#' then begin
+  cmdToGrid := CommandsToGrid.Find(fSQL);
+  if (fSQL[1] = '#') and
+     ((cmdToGrid < 0) or (CommandsToGrid.List[cmdToGrid].Tag < 0))  then begin
     if fJson <> '' then
       if IdemPropNameU(fSQL, '#help') then begin
         fJson := Trim(UnQuoteSQLString(fJson)) + '|#client'#13#10;
@@ -286,7 +385,7 @@ begin
           while P <> nil do begin
             cmd := UTF8ToString(Trim(GetNextLine(P, P)));
             if (cmd <> '') and (cmd[1] = '#') then
-              pmCmd.Items.Add(NewPopup(cmd));
+              pmCmd.Items.Add(NewCmdPopup(cmd, false));
           end;
         end;
       end
@@ -295,14 +394,16 @@ begin
         res := TSynMustache.Parse(WRAPPER_TEMPLATE).Render(ctxt, nil,
           TSynMustache.HelpersGetStandardList, nil, true);
       end
-      else
+      else begin
         JSONBufferReformat(pointer(fJson), res, jsonUnquotedPropName);
+        if (res = '') or (res = 'null') then
+          res := fJson;
+      end;
     if Assigned(OnAfterExecute) then
-      OnAfterExecute(self);
+      OnAfterExecute(self,fSQL,res);
     SetResult(res);
   end
   else begin
-    GridLastTableName := GetTableNameFromSQLSelect(fSQL, false);
     mmoResult.Text := '';
     mmoResult.SetCaret(0, 0);
     mmoResult.TopRow := 0;
@@ -312,6 +413,21 @@ begin
     mmoResult.Height := 100;
     if AssociatedModel <> nil then
       tables := AssociatedModel.Tables;
+    if cmdToGrid >= 0 then begin
+      GridLastTableName := CommandsToGrid.List[cmdToGrid].Name;
+      if isSelect(pointer(GridLastTableName)) then
+        GridLastTableName := GetTableNameFromSQLSelect(GridLastTableName,false);
+      if CommandsToGrid.List[cmdToGrid].Value <> '' then begin
+        // display a nested object in the grid
+        P := JsonObjectItem(pointer(fJson), CommandsToGrid.List[cmdToGrid].Value);
+        if CommandsToGrid.List[cmdToGrid].Tag > 0 then
+          P := JSONArrayItem(P, CommandsToGrid.List[cmdToGrid].Tag - 1);
+        if P <> nil then
+          GetJSONItemAsRawJSON(P, RawJSON(fJSON));
+      end;
+    end
+    else
+      GridLastTableName := GetTableNameFromSQLSelect(fSQL, false);
     table := TSQLTableJSON.CreateFromTables(tables, fSQL, pointer(fJson), length(fJson));
     Grid := TSQLTableToGrid.Create(drwgrdResult, table, nil);
     Grid.SetAlignedByType(sftCurrency, alRight);
@@ -320,7 +436,7 @@ begin
     Grid.OnValueText := OnText;
     Grid.Table.OnExportValue := OnGridToCell;
     if Assigned(OnAfterExecute) then
-      OnAfterExecute(self);
+      OnAfterExecute(self, fSQL, fJSON);
     drwgrdResult.Options := drwgrdResult.Options - [goRowSelect];
     drwgrdResult.Show;
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
@@ -358,10 +474,11 @@ begin
   end;
 end;
 
-function TDBFrame.OnGridToCell(Sender: TSQLTable; Row, Field: integer): RawJSON;
+function TDBFrame.OnGridToCell(Sender: TSQLTable; Row, Field: integer;
+  HumanFriendly: boolean): RawJSON;
 var
   methodName: RawUTF8;
-  s, m: integer;
+  serv, m: integer;
 begin
   if fGridToCellRow <> Row then begin
     Sender.ToDocVariant(Row, fGridToCellVariant, JSON_OPTIONS_FAST, true, true, true);
@@ -369,10 +486,10 @@ begin
     if AssociatedServices <> nil then
     with _Safe(fGridToCellVariant)^ do
       if GetAsRawUTF8('Method', methodName) then
-        for s := 0 to high(AssociatedServices) do begin
-          m := AssociatedServices[s].FindFullMethodIndex(methodName, true);
+        for serv := 0 to high(AssociatedServices) do begin
+          m := AssociatedServices[serv].FindFullMethodIndex(methodName, true);
           if m >= 0 then
-            with AssociatedServices[s].Methods[m] do begin
+            with AssociatedServices[serv].Methods[m] do begin
               ArgsAsDocVariantFix(GetAsDocVariantSafe('Input')^, true);
               ArgsAsDocVariantFix(GetAsDocVariantSafe('Output')^, false);
               break;
@@ -382,7 +499,10 @@ begin
   with _Safe(fGridToCellVariant)^ do
     if cardinal(Field)>=cardinal(Count) then
       result := '' else
-      result := VariantSaveJSON(Values[Field]);
+      if HumanFriendly and (_Safe(Values[Field])^.Kind = dvUndefined) then
+        VariantToUTF8(Values[field], RawUTF8(result))
+      else
+        result := VariantSaveJSON(Values[Field]);
 end;
 
 procedure TDBFrame.drwgrdResultClick(Sender: TObject);
@@ -392,7 +512,7 @@ var
 begin
   R := drwgrdResult.Row;
   if (R > 0) and (R <> fGridToCellRow) and (Grid <> nil) then begin
-    OnGridToCell(Grid.Table,R,0);
+    OnGridToCell(Grid.Table,R,0,false);
     JSONBufferReformat(pointer(VariantToUTF8(fGridToCellVariant)), json, jsonUnquotedPropNameCompact);
     mmoResult.OnGetLineAttr := mmoResult.JSONLineAttr;
     mmoResult.Text := UTF8ToString(json);
@@ -547,7 +667,11 @@ begin
   if i >= 0 then
     previous := lstTables.Items[i];
   index := -1;
-  match := SysUtils.UpperCase(edtLabels.Text);
+  match := SysUtils.Trim(SysUtils.UpperCase(edtLabels.Text));
+  if (length(match) > 5) and (match[1] = '%') then begin
+    FillTables(match);
+    match := '';
+  end;
   with lstTables.Items do
   try
     BeginUpdate;
@@ -564,6 +688,7 @@ begin
   if index >= 0 then
     lstTables.ItemIndex := index;
 end;
+
 
 end.
 

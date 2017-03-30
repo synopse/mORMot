@@ -6,8 +6,8 @@ unit SynDBOracle;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynDBOracle;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -532,7 +532,7 @@ begin
     aIso8601 := '' else begin
     DateToIso8601PChar(tmp,true,(Cent-100)*100+Year-100,Month,Day);
     if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
-      TimeToIso8601PChar(@tmp[10],true,Hour-1,Min-1,Sec-1,'T');
+      TimeToIso8601PChar(@tmp[10],true,Hour-1,Min-1,Sec-1,0,'T');
       SetString(aIso8601,tmp,19); // we use 'T' as TTextWriter.AddDateTime
     end else
       SetString(aIso8601,tmp,10); // only date
@@ -551,7 +551,7 @@ begin
       result := 2 else begin
       DateToIso8601PChar(Dest+1,true,Y,Month,Day);
       if (Hour<>0) or (Min<>0) or (Sec<>0) then begin
-        TimeToIso8601PChar(Dest+11,true,Hour-1,Min-1,Sec-1,'T');
+        TimeToIso8601PChar(Dest+11,true,Hour-1,Min-1,Sec-1,0,'T');
         result := 21; // we use 'T' as TTextWriter.AddDateTime
       end else
         result := 12; // only date
@@ -2364,6 +2364,7 @@ var C: PSQLDBColumnProperty;
     V: pointer;
     NoDecimal: boolean;
 begin // dedicated version to avoid as much memory allocation than possible
+  Value.Options := [];
   V := GetCol(Col,C);
   if V=nil then
     Value.VType := ftNull else

@@ -6,8 +6,8 @@ unit mORMotWrappers;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotWrappers;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s) (for this unit and the .mustache templates):
@@ -242,14 +242,16 @@ const
   CROSSPLATFORM_KIND: array[TSQLFieldType] of TCrossPlatformSQLFieldKind = (
  // sftUnknown, sftAnsiText, sftUTF8Text, sftEnumerate, sftSet,    sftInteger,
     cpkDefault, cpkDefault,  cpkDefault,  cpkDefault,   cpkDefault,cpkDefault,
- // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,sftTimeLog,sftCurrency,
-    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,cpkTimeLog,cpkDefault,
+ // sftID,     sftRecord, sftBoolean,sftFloat,  sftDateTime,
+    cpkDefault,cpkDefault,cpkDefault,cpkDefault,cpkDateTime,
+ // sftTimeLog,sftCurrency,
+    cpkTimeLog,cpkDefault,
  // sftObject,  sftVariant, sftNullable, sftBlob, sftBlobDynArray, sftBlobCustom,
     cpkDefault, cpkVariant, cpkVariant,  cpkBlob, cpkDefault,      cpkDefault,
  // sftUTF8Custom,sftMany, sftModTime, sftCreateTime, sftTID,   sftRecordVersion
     cpkRecord,  cpkDefault,cpkModTime, cpkCreateTime, cpkDefault, cpkDefault,
- // sftSessionUserID
-    cpkDefault);
+ // sftSessionUserID, sftDateTimeMS, sftUnixTime, sftUnixMStime
+    cpkDefault, cpkDateTime, cpkDefault, cpkDefault);
 
   SIZETODELPHI: array[0..8] of string[7] = (
     'integer','byte','word','integer','integer','int64','int64','int64','int64');
@@ -316,15 +318,20 @@ const
      wCreateTime,     // sftCreateTime
      wID,             // sftID
      wRecordVersion,  // sftRecordVersion
-     wID);            // sftSessionUserID
+     wID,             // sftSessionUserID
+     wDateTime,       // sftDateTimeMS
+     wUnknown,        // sftUnixTime
+     wUnknown);       // sftUnixMSTime
 
   TYPES_SIMPLE: array[TJSONCustomParserRTTIType] of TWrapperType = (
   //ptArray, ptBoolean, ptByte, ptCardinal, ptCurrency, ptDouble, ptExtended,
     wArray, wBoolean,   wByte,  wCardinal,  wCurrency,  wDouble,  wDouble,
   //ptInt64, ptInteger, ptRawByteString, ptRawJSON, ptRawUTF8, ptRecord,
     wInt64,  wInteger,  wBlob,           wRawJSON,  wRawUTF8,  wRecord,
-  //ptSingle, ptString, ptSynUnicode, ptDateTime, ptGUID, ptID, ptTimeLog,
-    wSingle,  wString,  wRawUTF8,     wDateTime,  wGUID,  wID, wTimeLog,
+  //ptSingle, ptString, ptSynUnicode, ptDateTime, ptDateTimeMS,
+    wSingle,  wString,  wRawUTF8,     wDateTime,  wDateTime,
+  //ptGUID, ptID, ptTimeLog,
+    wGUID,  wID, wTimeLog,
   //ptVariant, ptWideString, ptWord, ptCustom
     wVariant,  wRawUTF8,     wWord,  wUnknown);
 
@@ -1217,6 +1224,10 @@ begin
     Render(ctxt,nil,nil,nil,true),DestFileName);
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS OFF} // circument Delphi 2007 false positive warning
+{$endif}
+
 function GenerateAsynchServices(const services: array of TGUID;
   const queries: array of TClass; const units: array of const;
   const additionalcontext: array of const; Template, FileName, ProjectName,
@@ -1286,6 +1297,9 @@ begin
   end;
 end;
 
+{$ifdef ISDELPHI20062007}
+  {$WARNINGS ON} // circument Delphi 2007 false positive warning
+{$endif}
 
 end.
 

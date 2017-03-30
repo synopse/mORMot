@@ -6,8 +6,8 @@ unit dddInfraAuthRest;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit dddInfraAuthRest;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -274,7 +274,7 @@ var Factory: TDDDAuthenticationRestFactoryAbstract;
   procedure TestOne;
   const MAX=2000;
   var auth: IDomAuthCommand;
-      nonce: TAuthQueryNonce;
+      nonce,challenge: TAuthQueryNonce;
       log,pass: RawUTF8;
       info: TAuthInfo;
       i: integer;
@@ -294,8 +294,8 @@ var Factory: TDDDAuthenticationRestFactoryAbstract;
         UInt32ToUtf8(i*7,pass);
         nonce := auth.ChallengeSelectFirst(log);
         test.Check(nonce<>'');
-        test.Check(auth.ChallengeSelectFinal(
-          ClientComputeChallengedPassword(log,pass,nonce))=cqrsSuccess);
+        challenge := ClientComputeChallengedPassword(log,pass,nonce);
+        test.Check(auth.ChallengeSelectFinal(challenge)=cqrsSuccess);
         test.Check(auth.Get(info)=cqrsSuccess);
         test.Check(info.LogonName=log);
       end;

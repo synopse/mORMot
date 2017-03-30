@@ -2,7 +2,7 @@
 // with Cross-Platform wrappers
 program RESTserver_wrappers;
 
-// see http://synopse.info/forum/viewtopic.php?pid=10882#p10882
+// see https://synopse.info/forum/viewtopic.php?pid=10882#p10882
 
 {$APPTYPE CONSOLE}
 

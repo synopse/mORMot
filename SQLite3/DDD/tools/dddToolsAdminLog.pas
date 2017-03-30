@@ -156,8 +156,8 @@ begin
   btnStopLogClick(nil);
 end;
 
-constructor TLogFrame.CreateCustom(Owner: TComponent; const aAdmin:
-  IAdministratedDaemon; const aEvents, aPattern: RawUTF8);
+constructor TLogFrame.CreateCustom(Owner: TComponent;
+  const aAdmin: IAdministratedDaemon; const aEvents, aPattern: RawUTF8);
 var
   P: PUTF8Char;
   e: integer;

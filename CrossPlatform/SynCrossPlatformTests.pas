@@ -6,8 +6,8 @@ unit SynCrossPlatformTests;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynCrossPlatformTests;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -282,11 +282,11 @@ var E: TDateTime;
 begin
   s := DateTimeToIso8601(D);
   E := Iso8601ToDateTime(s);
-  Check(Abs(D-E)<(1000/MSecsPerDay)); // we allow 1 sec error
+  Check(Abs(D-E)<(1/SecsPerDay)); // we allow 1 sec error
   Check(DateTimeToJSON(D)='"'+s+'"');
   V := DateTimeToTTimeLog(D);
   E := TTimeLogToDateTime(V);
-  Check(Abs(D-E)<(1000/MSecsPerDay));
+  Check(Abs(D-E)<(1/SecsPerDay));
   Check(UrlDecode(UrlEncode(s))=s);
 end;
 begin
@@ -304,7 +304,7 @@ var D: TDateTime;
 begin
   s := '2014-06-28T11:50:22';
   D := Iso8601ToDateTime(s);
-  Check(Abs(D-41818.49331)<(1000/MSecsPerDay));
+  Check(Abs(D-41818.49331)<(1/SecsPerDay));
   Check(DateTimeToIso8601(D)=s);
   T := DateTimeToTTimeLog(D);
   Check(T=135181810838);

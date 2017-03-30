@@ -6,8 +6,8 @@ unit mORMotDDD;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotDDD;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -267,6 +267,14 @@ type
     function StartProxy(const aDDDRestClientSettings: variant): TCQRSResult;
   end;
 
+  /// allow persistence of any TObject settings storage
+  IDDDSettingsStorable = interface
+    ['{713A9C16-4BBD-4FB6-A7A6-566162767622}']
+    /// persist the settings if needed
+    // - will call the virtual InternalPersist method
+    procedure StoreIfUpdated;
+  end;
+
 
 
 { *********** Cross-Cutting Layer Implementation}
@@ -415,7 +423,7 @@ type
   public
     /// constructor like FormatUTF8() which will also serialize the caller info
     constructor CreateUTF8(Caller: TDDDRepositoryRestFactory;
-      Format: PUTF8Char; const Args: array of const);
+      const Format: RawUTF8; const Args: array of const);
   end;
 
   /// store reference of several factories, each with one mapping definition
@@ -610,7 +618,7 @@ type
     function CqrsBeginMethod(aAction: TCQRSQueryAction; var aResult: TCQRSResult;
       aError: TCQRSResult=cqrsUnspecifiedError): boolean; override;
     // one-by-one retrieval in local ORM: TSQLRecord
-    function ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
+    function ORMSelectOne(const ORMWhereClauseFmt: RawUTF8;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
     function ORMSelectID(const ID: TID; RetrieveRecord: boolean=true;
        ForcedBadRequest: boolean=false): TCQRSResult; overload;
@@ -618,11 +626,11 @@ type
        ForcedBadRequest: boolean=false): TCQRSResult; overload;
     function ORMGetAggregate(aAggregate: TObject): TCQRSResult;
     // list retrieval - using cursor-like access via ORM.FillOne
-    function ORMSelectAll(ORMWhereClauseFmt: PUTF8Char;
+    function ORMSelectAll(const ORMWhereClauseFmt: RawUTF8;
       const Bounds: array of const; ForcedBadRequest: boolean=false): TCQRSResult;
     function ORMGetNextAggregate(aAggregate: TObject; aRewind: boolean=false): TCQRSResult;
     function ORMGetAllAggregates(var aAggregateObjArray): TCQRSResult;
-    function ORMSelectCount(ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+    function ORMSelectCount(const ORMWhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
       out aResultCount: integer; ForcedBadRequest: boolean=false): TCQRSResult;
   public
     /// you should not have to use this constructor, since the instances would
@@ -1250,9 +1258,8 @@ end;
 
 { EDDDRepository }
 
-constructor EDDDRepository.CreateUTF8(
-  Caller: TDDDRepositoryRestFactory; Format: PUTF8Char;
-  const Args: array of const);
+constructor EDDDRepository.CreateUTF8(Caller: TDDDRepositoryRestFactory;
+  const Format: RawUTF8; const Args: array of const);
 begin
   if Caller=nil then
     inherited CreateUTF8(Format,Args) else
@@ -1330,7 +1337,7 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'currency',        // sftCurrency
     '',                // sftObject
     'variant',         // sftVariant
-    '',                // sftNullable 
+    '',                // sftNullable
     'TSQLRawBlob',     // sftBlob
     'variant',         // sftBlobDynArray T*ObjArray=JSON=variant (RawUTF8?)
     '',                // sftBlobCustom
@@ -1340,7 +1347,10 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     'TCreateTime',     // sftCreateTime
     '',                // sftTID
     'TRecordVersion',  // sftRecordVersion = TRecordVersion
-    'TSessionUserID'); // sftSessionUserID
+    'TSessionUserID',  // sftSessionUserID
+    '',                // sftDateTimeMS
+    '',                // sftUnixTime
+    '');               // sftUnixMSTime
 var hier: TClassDynArray;
     a,i,f: integer;
     code,aggname,recname,parentrecname: RawUTF8;
@@ -1375,9 +1385,9 @@ begin
               if InheritsFrom(TSQLPropInfo) then
                 with TSQLPropInfoRTTI(map.List[f]).PropType^ do
                   if (Kind=tkInteger) and (OrdType<>otULong) then
-                    rectypes[f] := 'integer'; // only cardinal -> Int64
+                    rectypes[f] := 'integer'; // cardinal -> Int64
             end else
-              rectypes[f]:= SQLFieldRTTITypeName;
+              rectypes[f] := SQLFieldRTTITypeName;
           code := FormatUTF8('%    f%: %; // %'#13#10,
             [code,Name,rectypes[f],SQLFieldRTTITypeName]);
         end;
@@ -1784,8 +1794,8 @@ begin
     fCurrentORMInstance.ClearProperties; // reset internal instance
 end;
 
-function TDDDRepositoryRestQuery.ORMSelectOne(ORMWhereClauseFmt: PUTF8Char;
-   const Bounds: array of const; ForcedBadRequest: boolean): TCQRSResult;
+function TDDDRepositoryRestQuery.ORMSelectOne(const ORMWhereClauseFmt: RawUTF8;
+  const Bounds: array of const; ForcedBadRequest: boolean): TCQRSResult;
 begin
   CqrsBeginMethod(qaSelect,result);
   if ForcedBadRequest then
@@ -1815,7 +1825,7 @@ begin
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectAll(
-  ORMWhereClauseFmt: PUTF8Char; const Bounds: array of const;
+  const ORMWhereClauseFmt: RawUTF8; const Bounds: array of const;
   ForcedBadRequest: boolean): TCQRSResult;
 begin
   CqrsBeginMethod(qaSelect,result);
@@ -1826,7 +1836,7 @@ begin
 end;
 
 function TDDDRepositoryRestQuery.ORMSelectCount(
-  ORMWhereClauseFmt: PUTF8Char; const Args,Bounds: array of const;
+  const ORMWhereClauseFmt: RawUTF8; const Args,Bounds: array of const;
   out aResultCount: integer; ForcedBadRequest: boolean): TCQRSResult;
 var tmp: Int64;
 begin
@@ -2543,6 +2553,7 @@ var rest: TSQLRest;
     status: variant;
     res: TCQRSResult;
     cmd: integer;
+    store: IDDDSettingsStorable;
 begin
   result.Header := JSON_CONTENT_TYPE_HEADER_VAR;
   result.Status := HTTP_SUCCESS;
@@ -2568,7 +2579,16 @@ begin
               doc.InitObjectFromPath(name,status);
               JsonToObject(fInternalSettings,pointer(doc.ToJSON),valid);
             end;
-          end else 
+          end else
+          if IdemPropName(name,'save') then begin
+            if fInternalSettings.GetInterface(IDDDSettingsStorable,store) then begin
+              store.StoreIfUpdated;
+              result.Content := FormatUTF8('"% saved"',[fInternalSettings.ClassType]);
+            end else
+              result.Content := FormatUTF8('"% does not implement IDDDSettingsStorable"',
+                [fInternalSettings.ClassType]);
+            exit;
+          end else
           if fInternalSettingsFolder<>'' then begin
             AdministrationExecuteGetFiles(fInternalSettingsFolder,
               '*.config;*.settings',name,result);
@@ -2638,7 +2658,7 @@ begin
     end;
     9:
       result.Content := '"Enter either a SQL request, or one of the following commands:|'+
-        '|#state|#settings [full.path=value/*/filename]|#version|#computer|#log [*/filename]|'+
+        '|#state|#settings [full.path=value/*/save/filename]|#version|#computer|#log [*/filename]|'+
         '#startdaemon|#stopdaemon|#restartdaemon|#help"';
     10: begin
       result.Content := JSONEncode(['daemon',DaemonName]);

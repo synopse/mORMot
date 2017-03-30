@@ -5,10 +5,10 @@ unit SyNodeProto;
 {
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2014 Arnaud Bouchez
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
       Synopse Informatique - http://synopse.info
 
-    SyNode for mORMot Copyright (C) 2016 Pavel Mashlyakovsky & Vadim Orel
+    SyNode for mORMot Copyright (C) 2017 Pavel Mashlyakovsky & Vadim Orel
       pavel.mash at gmail.com
 
     Some ideas taken from
@@ -54,7 +54,9 @@ unit SyNodeProto;
 
 
   ---------------------------------------------------------------------------
-   Download the mozjs-45 library at https://unitybase.info/downloads/mozjs-45.zip
+   Download the mozjs-45 library at
+     x32: https://unitybase.info/downloads/mozjs-45.zip
+     x64: https://unitybase.info/downloads/mozjs-45-x64.zip
   ---------------------------------------------------------------------------
 
 
@@ -119,8 +121,8 @@ type
   TSMCustomProtoObject = class;
   TSMCustomProtoObjectClass = class of TSMCustomProtoObject;
 
- PSMInstanceRecord = ^TSMInstanceRecord;
- TFreeInstanceRecord = procedure (aInstanceRecord: PSMInstanceRecord);
+  PSMInstanceRecord = ^TSMInstanceRecord;
+  TFreeInstanceRecord = procedure (aInstanceRecord: PSMInstanceRecord);
  {$ifdef UNICODE}
   TSMInstanceRecord = record
   {$else}
@@ -159,7 +161,7 @@ type
     FMethodsDA: TDynArrayHashed;
     function GetJSClass: JSClass; virtual;
     procedure InitObject(aParent: PJSRootedObject); virtual;
-    /// Add method to internal FMethods array for futude define it into JS prototype
+    /// Add method to internal FMethods array for future define it into JS prototype
     // to be called only inside InitObject method!
     procedure definePrototypeMethod(const ajsName: SynUnicode; const aCall: JSNative; aNargs: uintN; aFlags: TJSPropertyAttrs);
     property SlotIndex: integer read fSlotIndex;
@@ -561,7 +563,7 @@ begin
       for i := 0 to FMethodsDA.Count-1 do with FMethods[i] do begin
         obj.ReservedSlot[fFirstDeterministicSlotIndex + i + 1] :=
         obj.DefineUCFunction(cx, PCChar16(ujsName),
-          Length(ujsName), call, nargs, uintN(flags)).ToJSValue;
+          Length(ujsName), call, nargs, uint32(flags)).ToJSValue;
       end;
     new(ObjRec);
     ObjRec.init(otProto,self);

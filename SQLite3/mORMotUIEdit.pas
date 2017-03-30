@@ -6,8 +6,8 @@ unit mORMotUIEdit;
 (*
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotUIEdit;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -331,18 +331,24 @@ begin
         C := OnComponentCreate(aRecord,P,Scroll);
       if C=nil then begin
         // default creation from RTTI, if not handled by OnComponentCreate()
-        aValue := P.GetValue(aRecord,false);
+        P.GetValueVar(aRecord,false,aValue,nil);
         aFieldType := Fields.List[i].SQLFieldType;
         case aFieldType of
-          sftDateTime: begin
+          sftDateTime, sftDateTimeMS: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             CD.DateTime := Iso8601ToDateTime(aValue);
           end;
-          sftTimeLog: begin
+          sftTimeLog, sftUnixTime, sftUnixMSTime: begin
             CD := TDateTimePicker.Create(Scroll);
             CD.Kind := dtkDate;
             TimeLog.Value := GetInt64(pointer(aValue));
+            case aFieldType of
+            sftUnixTime:
+              TimeLog.FromUnixTime(TimeLog.Value);
+            sftUnixMSTime:
+              TimeLog.FromUnixMSTime(TimeLog.Value);
+            end;
             CD.DateTime := TimeLog.ToDateTime;
           end;
           sftModTime, sftCreateTime:
@@ -645,12 +651,16 @@ begin
          fFieldComponentsTwin[FieldIndex].InheritsFrom(TDateTimePicker) then
           D := D+frac(TDateTimePicker(fFieldComponentsTwin[FieldIndex]).Time);
       case P.SQLFieldType of
-        sftDateTime:
-          P.SetValue(Rec,pointer(DateTimeToIso(D,false)),true);
+        sftDateTime, sftDateTimeMS:
+          P.SetValue(Rec,pointer(DateTimeToIso8601Text(D,'T',true)),true);
         sftTimeLog, sftModTime: begin
           TimeLog.From(D);
           P.SetValue(Rec,pointer(Int64ToUtf8(TimeLog.Value)),false);
         end;
+        sftUnixTime:
+          P.SetValue(Rec,pointer(Int64ToUtf8(DateTimeToUnixTime(D))),false);
+        sftUnixMSTime:
+          P.SetValue(Rec,pointer(Int64ToUtf8(DateTimeToUnixMSTime(D))),false);
       end;
     end;
   end;

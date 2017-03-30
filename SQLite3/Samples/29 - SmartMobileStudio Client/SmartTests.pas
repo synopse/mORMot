@@ -24,7 +24,7 @@ uses
 
 const
   MSecsPerDay = 86400000;
-  OneSecDateTime = 1000/MSecsPerDay;
+  OneSecDateTime = 1/SecsPerDay;
 
 procedure TestsIso8601DateTime;
   procedure Test(D: TDateTime);

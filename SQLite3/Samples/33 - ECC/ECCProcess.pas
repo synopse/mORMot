@@ -65,7 +65,7 @@ procedure ECCCommandCryptFile(const FileToCrypt, DestFile, AuthPubKey: TFileName
 function ECCCommandDecryptFile(const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUTF8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent): TECCDecrypt;
+  Signature: PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
 
 /// end-user command to verify a .synecc file signature, after decryption
 // - as used in the ECC.dpr command-line sample project
@@ -114,7 +114,7 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
 
 const
   CHEAT_FILEEXT = '.cheat';
-  MASTERCHEAT_FILE = 'cheat';
+  CHEAT_FILEMASTER = 'cheat';
   CHEAT_ROUNDS = 100000;
   CHEAT_SPLIT = 100;
 
@@ -129,7 +129,7 @@ var json,bin: RawByteString;
 begin
   master := TECCCertificate.Create;
   try
-    if master.FromFile(MASTERCHEAT_FILE) then
+    if master.FromFile(CHEAT_FILEMASTER) then
       try
         if SavePasswordRounds=DEFAULT_ECCROUNDS then
           json := SavePassword else
@@ -164,7 +164,7 @@ begin
       CreateCheatFile(new,SavePassword,SavePassordRounds);
       // save public key as .public JSON file
       result := ChangeFileExt(new.SaveToSecureFileName,ECCCERTIFICATEPUBLIC_FILEEXT);
-      JSONReformatToFile(VariantSaveJSON(new.ToVariant),result);
+      new.ToFile(result);
     finally
       new.Free;
     end;
@@ -277,9 +277,10 @@ begin
     raise EECCException.CreateUTF8('File not found: %',[FileToCrypt]);
   auth := TECCCertificate.Create;
   try
-    if auth.FromAuth(AuthPubKey,AuthBase64,AuthSerial) then begin
-      auth.EncryptFile(FileToCrypt,DestFile,Password,PasswordRounds,Algo,true);
-    end;
+    if not auth.FromAuth(AuthPubKey,AuthBase64,AuthSerial) then
+      raise EECCException.Create('No public key');
+    if not auth.EncryptFile(FileToCrypt,DestFile,Password,PasswordRounds,Algo,true) then
+      raise EECCException.CreateUTF8('EncryptFile failed for %',[FileToCrypt]);
   finally
     auth.Free;
     FillZero(content);
@@ -289,7 +290,7 @@ end;
 function ECCCommandDecryptFile(const FileToDecrypt, DestFile, AuthPrivKey: TFileName;
   const AuthPassword: RawUTF8; AuthPasswordRounds: integer;
   const DecryptPassword: RawUTF8; DecryptPasswordRounds: integer;
-  Signature: PECCSignatureCertifiedContent): TECCDecrypt;
+  Signature: PECCSignatureCertifiedContent; MetaData: PRawJSON): TECCDecrypt;
 var auth: TECCCertificateSecret;
     head: TECIESHeader;
     priv: TFileName;
@@ -303,12 +304,12 @@ begin
         exit;
       priv := UTF8ToString(ECCText(head.recid));
       if not ECCKeyFileFind(priv,true) then
-        exit;
+        exit; // not found local .private from header 
     end;
     if not auth.LoadFromSecureFile(priv,AuthPassword,AuthPasswordRounds) then
       exit;
     result := auth.DecryptFile(FileToDecrypt,DestFile,
-      DecryptPassword,DecryptPasswordRounds,Signature);
+      DecryptPassword,DecryptPasswordRounds,Signature,MetaData);
   finally
     auth.Free;
   end;
@@ -364,17 +365,17 @@ function ECCCommandCheatInit(const Issuer, CheatPassword: RawUTF8;
 var new: TECCCertificateSecret;
     priv: RawByteString;
 begin
-  if FileExists(MASTERCHEAT_FILE+ECCCERTIFICATEPUBLIC_FILEEXT) or
-     FileExists(MASTERCHEAT_FILE+ECCCERTIFICATESECRET_FILEEXT) then
-    raise EECCException.Create(MASTERCHEAT_FILE+' file already exist');
+  if FileExists(CHEAT_FILEMASTER+ECCCERTIFICATEPUBLIC_FILEEXT) or
+     FileExists(CHEAT_FILEMASTER+ECCCERTIFICATESECRET_FILEEXT) then
+    raise EECCException.Create(CHEAT_FILEMASTER+' file already exist');
   // generate pair
   new := TECCCertificateSecret.CreateNew(nil,Issuer);
   try
     // save private key as cheat.private password-protected binary file
     priv := new.SaveToSecureBinary(CheatPassword,128,CheatRounds);
-    FileFromString(priv,MASTERCHEAT_FILE+ECCCERTIFICATESECRET_FILEEXT);
+    FileFromString(priv,CHEAT_FILEMASTER+ECCCERTIFICATESECRET_FILEEXT);
     // save public key as mastercheat.public JSON file
-    result := MASTERCHEAT_FILE+ECCCERTIFICATEPUBLIC_FILEEXT;
+    result := CHEAT_FILEMASTER+ECCCERTIFICATEPUBLIC_FILEEXT;
     JSONReformatToFile(VariantSaveJSON(new.ToVariant),result);
   finally
     new.Free;
@@ -395,7 +396,7 @@ begin
   if bin='' then
     raise EECCException.CreateUTF8('Unknown file %',[fn]);
   master := TECCCertificateSecret.CreateFromSecureFile(
-    MASTERCHEAT_FILE,CheatPassword,CheatRounds);
+    CHEAT_FILEMASTER,CheatPassword,CheatRounds);
   try
     res := master.Decrypt(bin,split);
     if res<>ecdDecrypted then
@@ -444,11 +445,13 @@ function ECCCommand(cmd: TECCCommand; const sw: ICommandLine): TECCCommandError;
     sw.Text('',[]);
   end;
 
-var issuer, authpass, savepass, constname, comment: RawUTF8;
+var issuer, authpass, savepass, constname, comment, json: RawUTF8;
+    meta: RawJSON;
     start: TDateTime;
     authrounds, days, saverounds, splitfiles: integer;
     msg: string;
-    origfile,auth,newfile: TFileName;
+    origfile,auth,newfile,jsonfile: TFileName;
+    algo: TECIESAlgo;
     decrypt: TECCDecrypt;
     decryptsign: TECCSignatureCertifiedContent;
 begin
@@ -500,8 +503,11 @@ begin
       newfile := EccCommandNew(
         auth,authpass,authrounds,issuer,start,days,savepass,saverounds,splitfiles);
       WritePassword(newfile,savepass,saverounds);
-      if newfile<>'' then
+      if newfile<>'' then begin
         newfile := newfile+'/.private';
+        if FileExists(ChangeFileExt(newfile, CHEAT_FILEEXT)) then
+          newfile := newfile+('/'+CHEAT_FILEEXT);
+      end;
     end;
     ecRekey: begin
       repeat
@@ -525,6 +531,8 @@ begin
       until (saverounds>=1000) or sw.NoPrompt;
       newfile := EccCommandRekey(auth,authpass,authrounds,savepass,saverounds);
       WritePassword(newfile,savepass,saverounds);
+      if FileExists(ChangeFileExt(newfile,CHEAT_FILEEXT)) then
+        newfile := newfile+('/'+CHEAT_FILEEXT);
     end;
     ecSign: begin
       repeat
@@ -576,7 +584,11 @@ begin
         'Enter the PassPhrase of this .private file.');
       authrounds := sw.AsInt('Rounds',DEFAULT_ECCROUNDS,
         'Enter the PassPhrase iteration rounds of this .private file.');
-      sw.Text('%',[ECCCommandInfoPrivFile(auth,authpass,authrounds)]);
+      json := ECCCommandInfoPrivFile(auth,authpass,authrounds);
+      sw.Text('%',[json]);
+      jsonfile := sw.AsString('Json','','');
+      if jsonfile <> '' then
+        FileFromString(json,jsonfile);
       if not sw.NoPrompt then
         WritePassword(auth,authpass,authrounds);
     end;
@@ -599,13 +611,19 @@ begin
       sw.Text('Will use: %'#13#10,[ExtractFileName(auth)]);
       authpass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for encryption.');
       authrounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
-      ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds);
+      algo := TECIESAlgo(sw.AsEnum('Algo', '0', TypeInfo(TECIESAlgo), ''));
+      ECCCommandCryptFile(origfile,newfile,auth,'','',authpass,authrounds,algo);
     end;
     ecInfoCrypt: begin
       repeat
         origfile := sw.AsString('File','','Enter the name of the encrypted file.');
       until FileExists(origfile) or sw.NoPrompt;
-      sw.Text('%',[JSONReformat(ECIESHeaderText(origfile))]);
+      newfile := sw.AsString('RawFile','','');
+      json := JSONReformat(ECIESHeaderText(origfile,newfile));
+      sw.Text('%',[json]);
+      jsonfile := sw.AsString('Json','','');
+      if jsonfile <> '' then
+        FileFromString(json,jsonfile);
     end;
     ecDecrypt: begin
       repeat
@@ -622,11 +640,13 @@ begin
       savepass := sw.AsUTF8('SaltPass','salt','Enter the optional PassPhrase to be used for decryption.');
       saverounds := sw.AsInt('SaltRounds',DEFAULT_ECCROUNDS, 'Enter the PassPhrase iteration rounds.');
       decrypt := ECCCommandDecryptFile(origfile,newfile,
-        sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign);
+        sw.AsString('Auth','',''),authpass,authrounds,savepass,saverounds,@decryptsign,@meta);
       msg := SysUtils.LowerCase(GetCaptionFromEnum(TypeInfo(TECCDecrypt),ord(decrypt)));
       if decrypt in ECC_VALIDDECRYPT then begin
         if decrypt=ecdDecryptedWithSignature then
           WriteVerif(ECCCommandVerifyDecryptedFile(newfile,decryptsign),newfile,sw);
+        if meta<>'' then
+          sw.Text(' % file meta = %',[origfile,meta],ccGreen);
         sw.Text(' % file %.',[origfile,msg],ccLightGreen);
       end else begin
         sw.Text(' % file decryption failure: % (%).',[origfile,msg,ord(decrypt)],ccLightRed);
@@ -682,7 +702,7 @@ begin
       FillcharFast(pointer(savepass)^,length(savepass),0);
     end;
   end;
-  if (newfile<>'') and (result=eccSuccess) then
+  if (newfile<>'') and (result=eccSuccess) and not(cmd in [ecInfoCrypt]) then
     sw.Text(' % file created.',[newfile],ccWhite);
   sw.TextColor(ccLightGray);
 end;

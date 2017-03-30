@@ -53,12 +53,13 @@ type
       version: RawUTF8;
       mem: RawUTF8;
       clients: integer;
+      exceptions: TRawUTF8DynArray;
       lasttix: Int64;
     end;
     SavePrefix: TFileName;
-    OnAfterExecute: TNotifyEvent;
+    OnBeforeExecute: TOnExecute;
+    OnAfterExecute: TOnExecute;
     OnAfterGetState: TNotifyEvent;
-    constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     function Open(Definition: TDDDRestClientSettings; Model: TSQLModel = nil): boolean; virtual;
     procedure Show; virtual;
@@ -81,9 +82,10 @@ type
     property DBFrame: TDBFrameDynArray read fDBFrame;
     property ChatPage: TSynPage read fChatPage;
     property ChatFrame: TLogFrame read fChatFrame;
+    property Admin: IAdministratedDaemon read fAdmin;
   end;
 
-  TAdminForm = class(TForm)
+  TAdminForm = class(TSynForm)
     procedure FormCreate(Sender: TObject);
     procedure FormShow(Sender: TObject);
   protected
@@ -172,6 +174,7 @@ begin
       if State.mem = '' then
         State.mem := KB(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10);
       State.clients := State.raw.I['clients'];
+      State.raw.GetAsDocVariantSafe('exception')^.ToRawUTF8DynArray(State.exceptions);
       State.lasttix := GetTickCount64;
     end;
     if Assigned(OnAfterGetState) then
@@ -228,19 +231,6 @@ begin
   finally
     Screen.Cursor := crDefault;
   end;
-end;
-
-constructor TAdminControl.Create(AOwner: TComponent);
-begin
-  inherited;
-  fDlgSave := TSaveDialog.Create(AOwner);
-  fDlgSave.Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist,
-    ofEnableSizing];
-  fDlgSave.Filter :=
-    'JSON (human readable)|*.json|JSON (small)|*.json|CSV (text)|*.txt|Excel/Office (.ods)|*.ods|HTML|*.html';
-  fDlgSave.DefaultExt := '.html';
-  fDlgSave.FilterIndex := 5;
-  fDlgSave.InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
 end;
 
 destructor TAdminControl.Destroy;
@@ -343,8 +333,8 @@ begin
   fPages[n] := result;
 end;
 
-function TAdminControl.AddDBFrame(const aCaption, aDatabaseName: RawUTF8; aClass:
-  TDBFrameClass): TDBFrame;
+function TAdminControl.AddDBFrame(const aCaption, aDatabaseName: RawUTF8;
+  aClass: TDBFrameClass): TDBFrame;
 var
   page: TSynPage;
   n: integer;
@@ -359,6 +349,7 @@ begin
   result.Client := fClient;
   result.Admin := fAdmin;
   result.DatabaseName := aDatabaseName;
+  result.OnBeforeExecute := OnBeforeExecute;
   result.OnAfterExecute := OnAfterExecute;
   result.SavePrefix := SavePrefix;
   fDBFrame[n] := result;
@@ -428,7 +419,7 @@ procedure TAdminControl.SaveOrExport(Fmt: TAdminSaveOrExport;
 var
   grid: TSQLTable;
   row: integer;
-  table: RawUTF8;
+  name, table: RawUTF8;
 begin
   if DB = nil then
     DB := CurrentDBFrame;
@@ -438,12 +429,24 @@ begin
   if (grid = nil) or (grid.RowCount = 0) then
     exit;
   if Fmt = expSaveGrid then begin
+    if fDlgSave = nil then begin
+      fDlgSave := TSaveDialog.Create(Owner);
+      fDlgSave.Options := [ofOverwritePrompt, ofHideReadOnly, ofPathMustExist,
+        ofEnableSizing];
+      fDlgSave.Filter :=
+        'JSON (human readable)|*.json|JSON (small)|*.json|CSV (text)|*.txt|Excel/Office (.ods)|*.ods|HTML|*.html';
+      fDlgSave.DefaultExt := '.html';
+      fDlgSave.FilterIndex := 5;
+      fDlgSave.InitialDir := GetShellFolderPath(CSIDL_DOCUMENTS);
+    end;
+    if PropNameValid(pointer(db.GridLastTableName)) then
+      name := db.GridLastTableName;
     fDlgSave.FileName := SysUtils.Trim(Format('%s %s %s',
-      [ContextName, db.GridLastTableName, NowToString(false)]));
+      [ContextName, name, NowToString(false)]));
     if not fDlgSave.Execute then
       exit;
     case fDlgSave.FilterIndex of
-      1:                  
+      1:
         JSONBufferReformat(pointer(grid.GetJSONValues(true)), table);
       2:
         table := grid.GetJSONValues(true);

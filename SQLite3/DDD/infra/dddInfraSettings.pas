@@ -6,8 +6,8 @@ unit dddInfraSettings;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit dddInfraSettings;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -58,10 +58,14 @@ unit dddInfraSettings;
 interface
 
 uses
+  {$ifdef MSWINDOWS}
+  Windows, // for DeleteFile() inlining under Delphi 2006/2007
+  {$endif}
   SysUtils,
   Classes,
   SynCommons,
   SynLog,
+  SynCrypto,
   mORMot,
   mORMotDDD,
   SynCrtSock,
@@ -87,6 +91,9 @@ type
     fRotateFileCount: cardinal;
     fRotateFileSize: cardinal;
     fRotateFileAtHour: integer;
+    fSyslogLevels: TSynLogInfos;
+    fSyslogFacility: TSyslogFacility;
+    fSyslogServer: RawUTF8;
   public
     /// initialize the settings to their (TSynLogFamily) default values
     constructor Create; override;
@@ -129,7 +136,22 @@ type
     /// maximum size of auto-rotated logging files, in kilo-bytes (per 1024 bytes)
     property RotateFileSizeKB: cardinal read fRotateFileSize write fRotateFileSize;
     /// fixed hour of the day where logging files rotation should be performed
-   property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+    property RotateFileDailyAtHour: integer read fRotateFileAtHour write fRotateFileAtHour;
+    /// the optional log levels to be used for remote UDP syslog server sending
+    // - works in conjunction with SyslogServer property
+    // - default will transmit all warnings, errors and exceptions
+    property SyslogLevels: TSynLogInfos read fSyslogLevels write fSyslogLevels;
+    /// the optional log levels to be used for remote UDP syslog server sending
+    // - works in conjunction with SyslogServer/SyslogLevels properties
+    // - default is sfLocal0
+    property SyslogFacility: TSyslogFacility read fSyslogFacility write fSyslogFacility;
+    /// the optional remote UDP syslog server
+    // - expecting https://tools.ietf.org/html/rfc5424 messages over UDP
+    // - e.g. '1.2.3.4' to connect to UDP server 1.2.3.4 using default port 514 -
+    // but you can specify an alternative port as '1.2.3.4:2514'
+    // - works in conjunction with SyslogLevels/SyslogFacility properties
+    // - default is '' to disable syslog remote logging
+    property SyslogServer: RawUTF8 read fSyslogServer write fSyslogServer;
   end;
 
   TDDDAppSettingsAbstract = class;
@@ -164,16 +186,20 @@ type
   // - you have to manage instance lifetime of these inherited classes with a
   // local IAutoCreateFieldsResolve variable, just like any TInterfaceObject
   TDDDAppSettingsAbstract = class(TInterfacedObjectAutoCreateFields,
-    IAutoCreateFieldsResolve)
+    IAutoCreateFieldsResolve, IDDDSettingsStorable)
   protected
     fAllProps: PPropInfoDynArray;
     fDescription: string;
     fLog: TDDDLogSettings;
+    fSyslog: TCrtSocket;
+    fSyslogProcID: RawUTF8;
     fStorage: TDDDAppSettingsStorageAbstract;
     procedure SetProperties(Instance: TObject); virtual;
+    function SyslogEvent(Sender: TTextWriter; Level: TSynLogInfo;
+      const Text: RawUTF8): boolean;
   public
     /// initialize the settings, with a corresponding storage process
-    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;  
+    constructor Create(aStorage: TDDDAppSettingsStorageAbstract); reintroduce;
     /// persist if needed, and finalize the settings
     destructor Destroy; override;
     /// to be called when the application starts, to initialize settings
@@ -181,15 +207,35 @@ type
     // - it will set the global SQLite3Log.Family according to Log values
     procedure Initialize(const aDescription: string); virtual;
     /// persist the settings if needed
-    // - will call the virtual InternalPersist method
+    // - just a wrapper around Storage.Store(AsJson)
+    // - implements IDDDSettingsStorable for "#settings save" admin command
     procedure StoreIfUpdated; virtual;
     /// serialize the settings as JSON
     // - any enumerated or set published property will be commented with their
     // textual values, and 'stored false' properties would be included
     // - returns the new JSON content corresponding to the updated settings
     function AsJson: RawUTF8; virtual;
+    /// low-level method returning all TSynPersistentPassword full paths
+    // of all previously created TDDDAppSettingsStorageFile .settings
+    // - as settingsfile=class1@full.path.to.pass1,class2@full.path.to.pass2,...
+    // - you may use this method to create a 'passwords' resource for
+    // /HardenPasswords command line switch as implemented in dddInfraSettings.pas:
+    // ! passwords := SynLZCompress(TDDDAppSettingsAbstract.PasswordFields);
+    // ! FileFromString(passwords, 'passwords.data');
+    // then create e.g. a passwords.rc file as such:
+    // $ passwords 10 "passwords.data"
+    // compile this resource:
+    // $ brcc32 passwords.rc
+    // and link the resulting .res file to your daemon executable:
+    // ! {$R passwords.res}
+    // then /HardenPasswords and /PlainPasswords command line switchs will
+    // cypher/uncypher all TSynPersistentPassword protected fields using safe
+    // per-user CryptDataForCurrentUser() encryption
+    class function PasswordFields: RawUTF8;
     /// access to the associated settings storage
     property Storage: TDDDAppSettingsStorageAbstract read fStorage;
+    /// transmitted as PROCID as part of any Log.SyslogServer message
+    property SyslogProcID: RawUTF8 read fSyslogProcID write fSyslogProcID;
   published
     /// some text which will be used to describe this application
     property Description: string read FDescription write FDescription;
@@ -197,7 +243,7 @@ type
     property Log: TDDDLogSettings read fLog;
   end;
 
-  /// class type used for storing application settings 
+  /// class type used for storing application settings
   TDDDAppSettingsAbstractClass = class of TDDDAppSettingsAbstract;
 
   /// class used for storing application settings as a JSON file
@@ -372,11 +418,14 @@ type
     FServiceDisplayName: string;
     FServiceName: string;
     FServiceAutoStart: boolean;
+    FAppUserModelID: string;
   public
     /// to be called when the application starts, to initialize settings
     // - you can specify default Description and Service identifiers
     procedure Initialize(
-      const aDescription,aServiceName,aServiceDisplayName: string); reintroduce; virtual;
+      const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string); reintroduce; virtual;
+    /// returns the folder containing .settings files - .exe folder by default
+    function SettingsFolder: TFileName; virtual;
   published
     /// define how this administrated service/daemon is accessed via REST
     property RemoteAdmin: TDDDAdministratedDaemonRemoteAdminSettings read FRemoteAdmin;
@@ -387,6 +436,13 @@ type
     /// under Windows, will define if the Service should auto-start at boot
     // - FALSE means that it should be started on demand
     property ServiceAutoStart: boolean read FServiceAutoStart write FServiceAutoStart;
+    /// under Windows 7 and later, will set an unique application-defined
+    // Application User Model ID (AppUserModelID) that identifies the current
+    // process to the taskbar
+    // - this identifier allows an application to group its associated processes
+    // and windows under a single taskbar button
+    // - should follow SetAppUserModelID() expectations, i.e. 'Company.Product'
+    property AppUserModelID: string read FAppUserModelID write FAppUserModelID;
   end;
 
   /// a Factory event allowing to customize/mock a socket connection
@@ -507,6 +563,8 @@ implementation
 { TDDDAppSettingsAbstract }
 
 procedure TDDDAppSettingsAbstract.Initialize(const aDescription: string);
+var
+  uri: TURI;
 begin
   {$ifdef WITHLOG}
   with SQLite3Log.Family do begin
@@ -527,10 +585,37 @@ begin
     {$ifdef MSWINDOWS}
     AutoFlushTimeOut := Log.AutoFlushTimeOut;
     {$endif}
+    if (Log.SyslogServer<>'') and (Log.SyslogServer[1]<>'?') and
+       not Assigned(EchoCustom) and (fSyslog=nil) and (Log.SyslogLevels<>[]) and
+       uri.From(Log.SyslogServer,'514') then
+      try
+        fSyslog := TCrtSocket.Open(uri.Server,uri.Port,cslUDP,2000);
+        EchoCustom := SyslogEvent;
+      except
+        fSyslog := nil;
+      end;
   end;
   {$endif}
   if fDescription='' then
     fDescription := aDescription;
+end;
+
+function TDDDAppSettingsAbstract.SyslogEvent(Sender: TTextWriter; Level: TSynLogInfo;
+  const Text: RawUTF8): boolean;
+var
+  buf: array[0..511] of AnsiChar; // 512 bytes for fast unfragmented UDP packet
+  len: integer;
+begin
+  result := false;
+  if (fSyslog=nil) or not (Level in Log.SyslogLevels) then
+    exit;
+  len := SyslogMessage(Log.SyslogFacility,LOG_TO_SYSLOG[Level],Text,
+    fSyslogProcID,ToText(Level),@buf,sizeof(buf),true);
+  if len<>0 then
+    if fSyslog.TrySndLow(@buf,len) then // works even if no server is available
+      result := true else
+      raise ESynException.CreateUTF8('%.SyslogEvent failed for %:% as error %',
+        [self,fSyslog.Server,fSyslog.Port,fSyslog.LastLowSocketError]);
 end;
 
 procedure TDDDAppSettingsAbstract.SetProperties(Instance: TObject);
@@ -543,6 +628,12 @@ begin
   StoreIfUpdated;
   inherited Destroy;
   fStorage.Free;
+  if fSyslog<>nil then begin
+    {$ifdef WITHLOG}
+    SQLite3Log.Family.EchoCustom := nil;
+    {$endif}
+    FreeAndNil(fSyslog);
+  end;
 end;
 
 function TDDDAppSettingsAbstract.AsJson: RawUTF8;
@@ -551,22 +642,72 @@ begin
     woHumanReadableFullSetsAsStar,woHumanReadableEnumSetAsComment]);
 end;
 
-constructor TDDDAppSettingsAbstract.Create(
-  aStorage: TDDDAppSettingsStorageAbstract);
-begin
-  inherited Create;
-  if aStorage=nil then
-    aStorage := TDDDAppSettingsStorageFile.Create;
-  fStorage := aStorage;
-  fStorage.SetOwner(self);
-end;
-
 procedure TDDDAppSettingsAbstract.StoreIfUpdated;
 begin
   if fStorage<>nil then
     fStorage.Store(AsJson);
 end;
 
+var
+  TDDDAppSettingsAbstractFiles: TRawUTF8List;
+
+constructor TDDDAppSettingsAbstract.Create(aStorage: TDDDAppSettingsStorageAbstract);
+begin
+  inherited Create;
+  if aStorage=nil then
+    aStorage := TDDDAppSettingsStorageFile.Create;
+  fStorage := aStorage;
+  fStorage.SetOwner(self);
+  if aStorage.InheritsFrom(TDDDAppSettingsStorageFile) then begin
+    if TDDDAppSettingsAbstractFiles=nil then
+      GarbageCollectorFreeAndNil(TDDDAppSettingsAbstractFiles,TRawUTF8List.Create);
+    TDDDAppSettingsAbstractFiles.AddObject(StringToUTF8(ExtractFileName(
+      TDDDAppSettingsStorageFile(aStorage).fSettingsJsonFileName)),pointer(ClassType));
+  end;
+end;
+
+class function TDDDAppSettingsAbstract.PasswordFields: RawUTF8;
+  procedure InternalAdd(const path: RawUTF8; C: TClass; var res: TRawUTF8DynArray);
+  var PI,PP: PPropInfo;
+      CT: TClass;
+      p: RawUTF8;
+      i: integer;
+      offset: pointer;
+  begin
+    offset := TSynPersistentWithPassword(nil).GetPasswordFieldAddress;
+    while C<>nil do begin
+      for i := 1 to InternalClassPropInfo(C,PI) do begin
+        if PI^.PropType^.Kind=tkClass then begin
+          FormatUTF8('%%.',[path,PI^.Name],p);
+          CT := PI^.PropType^.ClassType^.ClassType;
+          if CT.InheritsFrom(TSynPersistentWithPassword) then begin
+            PP := ClassFieldPropWithParentsFromClassOffset(CT,offset);
+            if PP<>nil then
+              AddRawUTF8(res,FormatUTF8('%@%%', [ClassNameShort(CT)^, p, PP^.Name]));
+          end;
+          InternalAdd(p,CT,res); // recursive search of all password fields
+        end;
+        PI := PI^.Next;
+      end;
+      C := C.ClassParent;
+    end;
+  end;
+var i: integer;
+    fn: RawUTF8;
+    res: TRawUTF8DynArray;
+    cl: TDDDAppSettingsAbstractClass;
+begin
+  result := '';
+  if TDDDAppSettingsAbstractFiles<>nil then
+    for i := 0 to TDDDAppSettingsAbstractFiles.Count-1 do begin
+      fn := Split(TDDDAppSettingsAbstractFiles.Strings[i],'.');
+      cl := pointer(TDDDAppSettingsAbstractFiles.Objects[i]);
+      res := nil;
+      InternalAdd('',cl,res);
+      if res<>nil then
+        result := FormatUTF8('%%=%'#13#10,[result,fn,RawUTF8ArrayToCSV(res)]);
+    end;
+end;
 
 
 { TDDDLogSettings }
@@ -579,6 +720,9 @@ begin
   fRotateFileCount := 20;
   fRotateFileSize := 128*1024; // 128 MB per rotation log by default
   fAutoFlush := 5;
+  fSyslogLevels := [sllWarning,sllLastError,sllError,
+    sllException,sllExceptionOS,sllNewRun,sllDDDError];
+  fSyslogFacility := sfLocal0;
 end;
 
 
@@ -712,13 +856,23 @@ end;
 { TDDDAdministratedDaemonSettings }
 
 procedure TDDDAdministratedDaemonSettings.Initialize(
-  const aDescription,aServiceName,aServiceDisplayName: string);
+  const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string);
 begin
   inherited Initialize(aDescription);
   if FServiceName='' then
     FServiceName := aServiceName;
   if FServiceDisplayName='' then
     FServiceDisplayName := aServiceDisplayName;
+  if FAppUserModelID='' then
+    FAppUserModelID := aAppUserModelID;
+end;
+
+function TDDDAdministratedDaemonSettings.SettingsFolder: TFileName;
+begin
+  if fStorage.InheritsFrom(TDDDAppSettingsStorageFile) then
+    result := ExtractFilePath(TDDDAppSettingsStorageFile(fStorage).fSettingsJsonFileName)
+  else
+    result := ExeVersion.ProgramFilePath;
 end;
 
 
@@ -868,5 +1022,7 @@ begin
   fSMTP := SMTP_DEFAULT;
 end;
 
+initialization
+  TSynPersistentWithPasswordUserCrypt := CryptDataForCurrentUser;
 
 end.

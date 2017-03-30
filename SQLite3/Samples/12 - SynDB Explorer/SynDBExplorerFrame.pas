@@ -263,7 +263,7 @@ procedure TDBExplorerFrame.BtnExecClick(Sender: TObject);
 var SQL, Stop: RawUTF8;
     Table: TSQLTable;
     Timer: TPrecisionTimer;
-    SelStart, SelLength, RowsCount, Kind: integer;
+    SelStart, SelLength, RowsCount, Kind, i: integer;
     Rows: ISQLDBRows;
     RowsSize: Int64;
     FN: TFileName;
@@ -277,6 +277,9 @@ begin
   if SelLength>10 then
     SQL := Trim(S2U(MemoSQL.SelText)) else
     SQL := Trim(S2U(MemoSQL.Lines.Text));
+  for i := 1 to length(SQL) do
+    if SQL[i]<' ' then
+      SQL[i] := ' '; // some engines (e.g. MSSQL) don't like line feeds
   Frame := self;
   Screen.Cursor := crSQLWait;
   Timer.Start;
@@ -542,10 +545,11 @@ begin
   case fGrid.Table.FieldType(Col,nil) of
   sftAnsiText, sftUTF8Text, sftObject:
     result := QuotedStr(result);
-  sftDateTime:
+  sftDateTime, sftDateTimeMS:
     result := Props.SQLIso8601ToDate(result);
-  sftTimeLog, sftModTime, sftCreateTime:
-    result := Props.SQLIso8601ToDate(fGrid.Table.GetTimeLog(Row,Col,true,' '));
+  sftTimeLog, sftModTime, sftCreateTime, sftUnixTime, sftUnixMSTime:
+    result := Props.SQLIso8601ToDate(DateTimeToIso8601Text(
+      fGrid.Table.GetAsDateTime(Row,Col)));
   sftBlob, sftBlobDynArray:
     result := ''; // BLOB won't work in SQL without parameter binding
   end;
@@ -634,7 +638,7 @@ procedure TDBExplorerFrame.ImageLogoClick(Sender: TObject);
 begin
 {$WARNINGS OFF}
   if DebugHook=0 then
-    ShellExecute(0,nil,'http://synopse.info',nil,nil,SW_SHOWNORMAL);
+    ShellExecute(0,nil,'https://synopse.info',nil,nil,SW_SHOWNORMAL);
 {$WARNINGS ON}
 end;
 

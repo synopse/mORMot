@@ -6,8 +6,8 @@ unit SynDBZeos;
 {
   This file is part of Synopse framework.
 
-  Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-  Synopse Informatique - http://synopse.info
+  Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+  Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynDBZeos;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -111,7 +111,7 @@ begin
 end;
 
  ... but you should better upgrade to the latest Zeos 7.2 revision! :)
-    See http://synopse.info/forum/viewtopic.php?pid=9146#p9146
+    See https://synopse.info/forum/viewtopic.php?pid=9146#p9146
 
 *)
 
@@ -525,7 +525,7 @@ begin // return e.g. mysql://192.168.2.60:3306/world?username=root;password=dev
     //fStatementParams.Add('preferprepared=True');
   end;
   dPostgreSQL: begin
-    // see http://synopse.info/forum/viewtopic.php?pid=13260#p13260
+    // see https://synopse.info/forum/viewtopic.php?pid=13260#p13260
     fURL.Properties.Add('NoTableInfoCache=true');
   end;
   dMSSQL: begin
@@ -729,7 +729,7 @@ begin
   fDatabase := DriverManager.GetConnectionWithParams(
     (fProperties as TSQLDBZEOSConnectionProperties).fURL.URL,nil);
   fDatabase.SetReadOnly(false);
-  // about transactions, see http://synopse.info/forum/viewtopic.php?id=2209
+  // about transactions, see https://synopse.info/forum/viewtopic.php?id=2209
   fDatabase.SetAutoCommit(true);
   fDatabase.SetTransactionIsolation(tiReadCommitted);
 end;
@@ -820,7 +820,7 @@ begin
 end;
 
 {$ifdef ZEOS72UP}
-type // see http://synopse.info/forum/viewtopic.php?pid=11946#p11946
+type // see https://synopse.info/forum/viewtopic.php?pid=11946#p11946
   TZeosArrayBinding = class
   protected
     // ZDBC uses pointer references to arrays -> allocated with the class
@@ -1275,7 +1275,7 @@ begin // take care of the layout of internal ZDBC buffers for each provider
           WR.AddCurr64(fResultSet.GetCurrency(col+FirstDbcIndex));
       ftDate: begin
         WR.Add('"');
-        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex));
+        WR.AddDateTime(fResultSet.GetTimeStamp(col+FirstDbcIndex),fForceDateWithMS);
         WR.Add('"');
       end;
       ftUTF8: begin

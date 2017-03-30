@@ -6,8 +6,8 @@ unit mORMotSQLite3;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotSQLite3;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -205,7 +205,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.15.0
+    - updated SQLite3 engine to latest version 3.17.0
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -1030,13 +1030,14 @@ begin
       if ((fStaticData=nil) or (fStaticData[t]=nil)) then
       // this table is not static -> check if already existing, create if necessary
       with Model.TableProps[t], Props do
+      if not NoCreateMissingTable then
       if FastFindPUTF8CharSorted(pointer(TableNamesAtCreation),nt-1,pointer(SQLTableName),@StrIComp)<0 then begin
         if not DB.TransactionActive then
           DB.TransactionBegin; // make initialization faster by using transaction
         DB.Execute(Model.GetSQLCreate(t)); // don't catch exception in constructor
         include(TableJustCreated,t);       // mark to be initialized below
       end else
-      if not (itoNoCreateMissingField in Options) then begin
+      if not(itoNoCreateMissingField in Options) then begin
         // this table is existing: check that all fields exist -> create if necessary
         DB.GetFieldNames(aFields,SQLTableName);
         nf := length(aFields);
@@ -1852,7 +1853,7 @@ begin
         end;
       end else
         AdministrationExecuteGetFiles(ExtractFilePath(DB.FileName),
-          '*.db;*.db3;*.dbsynlz;*.dbs',fn,result);
+          '*.db;*.db3;*.dbs',fn,result); // *.dbs includes *.dbsynlz
     end;
     3: begin
       split(SQL,' ',cmd,fn);
@@ -2306,7 +2307,9 @@ begin
       pInfo.aConstraintUsage[i].omit := Prepared^.Where[i].OmitCheck;
     end;
     Prepared^.WhereCount := n; // will match argc in vt_Filter()
-    pInfo.orderByConsumed := integer(Prepared^.OmitOrderBy);
+    if Prepared^.OmitOrderBy then
+      pInfo.orderByConsumed := 1 else
+      pInfo.orderByConsumed := 0;
     pInfo.estimatedCost := COST[Prepared^.EstimatedCost];
     if sqlite3.VersionNumber>=3008002000 then // starting with SQLite 3.8.2
       case Prepared^.EstimatedCost of
@@ -2392,7 +2395,9 @@ end;
 function vt_Eof(var pVtabCursor: TSQLite3VTabCursor): Integer;
   {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 begin
-  result := integer(not TSQLVirtualTableCursor(pVtabCursor.pInstance).HasData);
+  if TSQLVirtualTableCursor(pVtabCursor.pInstance).HasData then
+    result := 0 else
+    result := 1; // reached actual EOF
 end;
 
 function vt_Column(var pVtabCursor: TSQLite3VTabCursor; sContext: TSQLite3FunctionContext;

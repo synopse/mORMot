@@ -6,8 +6,8 @@ unit SynCrossPlatformSpecific;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit SynCrossPlatformSpecific;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -411,7 +411,7 @@ uses
   // for SSL support with iOS and Android client, please follow instructions at
   // http://blog.marcocantu.com/blog/using_ssl_delphi_ios.html and you may
   // download the *.a files from http://indy.fulgan.com/SSL/OpenSSLStaticLibs.7z
-  // see also http://synopse.info/forum/viewtopic.php?id=2325
+  // see also https://synopse.info/forum/viewtopic.php?id=2325
 {$endif}
 
 {$ifdef USESYNCRT}
@@ -632,7 +632,7 @@ begin
     fConnection.Request.RawHeaders.Text := Call.InHead;
     Auth := fConnection.Request.RawHeaders.Values['Authorization'];
     if (Auth<>'') and SameText(Copy(Auth,1,6),'Basic ') then begin
-      // see http://synopse.info/forum/viewtopic.php?pid=11761#p11761
+      // see https://synopse.info/forum/viewtopic.php?pid=11761#p11761
       with TIdDecoderMIME.Create do
       try
         Auth := DecodeString(copy(Auth,7,maxInt));

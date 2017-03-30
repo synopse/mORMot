@@ -6,8 +6,8 @@ unit mORMotMVC;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotMVC;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -82,10 +82,9 @@ uses
   mORMot,
   mORMotWrappers;
 
+{ ====== Views ====== }
+
 type
-
-  { ====== Views ====== }
-
   /// define a particular rendered View
   // - as rendered by TMVCViewsAbtract.Render() method
   TMVCView = record
@@ -211,10 +210,24 @@ type
   end;
 
 
-  { ====== Sessions ====== }
+{ ====== Sessions ====== }
 
+type
   /// an abstract class able to implement ViewModel/Controller sessions
   // - see TMVCSessionWithCookies to implement cookie-based sessions
+  // - this kind of ViewModel will implement client side storage of sessions,
+  // storing any (simple) record content on the browser client side
+  // - at login, a record containing session-related information (session ID,
+  // display and login name, preferences, rights...) can be computed only once
+  // on the server side from the Model, then stored on the client side (typically
+  // in a cookie): later on, session information can be retrieved by the server
+  // logic (via CheckAndRetrieve - note that any security attribute should be
+  // verified against the Model), then the renderer (CheckAndRetrieveInfo
+  // returning the record as TDocVariant in the data context "Session" field) -
+  // such a pattern is very efficient and allows good scaling
+  // - session are expected to be tied to the TMVCSessionAbstract instance
+  // lifetime, so are lost after server restart, unless they are persisted
+  // via LoadContext/SaveContext methods
   TMVCSessionAbstract = class
   public
     /// create an instance of this ViewModel implementation class
@@ -224,7 +237,7 @@ type
     // - you can supply a time period, after which the session will expire -
     // default is 1 hour - note that overriden methods may not implement it
     function Initialize(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil;
-      SessionTimeOut: TDateTime=1/24): integer; virtual; abstract;
+      SessionTimeOutMinutes: cardinal=60): integer; virtual; abstract;
     /// fast check if there is a session associated to the current context
     function Exists: boolean; virtual; abstract;
     /// retrieve the current session ID
@@ -233,41 +246,88 @@ type
     /// retrieve the session information as a JSON object
     // - returned as a TDocVariant, including any associated record Data
     // - will call CheckAndRetrieve() then RecordSaveJSON() and _JsonFast()
-    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual; 
+    function CheckAndRetrieveInfo(PRecordDataTypeInfo: pointer): variant; virtual;
     /// clear the session
     procedure Finalize; virtual; abstract;
+    /// return all session generation information as ready-to-be stored string
+    // - to be retrieved via LoadContext, e.g. after restart
+    function SaveContext: RawUTF8; virtual; abstract;
+    /// restore session generation information from SaveContext format
+    // - returns TRUE on success
+    function LoadContext(const Saved: RawUTF8): boolean; virtual; abstract;
+  end;
+
+  /// information used by TMVCSessionWithCookies for cookie generation
+  // - i.e. the session ID, cookie name, encryption and HMAC secret keys
+  // - this data can be persisted so that the very same cookie information
+  // are available after server restart
+  TMVCSessionWithCookiesContext = packed record
+    /// the cookie name, used for storage on the client side
+    CookieName: RawUTF8;
+    /// an increasing counter, to implement unique session ID
+    SessionCount: integer;
+    /// secret information, used for HMAC digital signature of cookie content
+    Secret: THMAC_CRC32C;
+    /// random IV used as CTR on Crypt[] secret key
+    CryptNonce: Cardinal;
+    /// secret information, used for encryption of the cookie content
+    Crypt: array[byte] of byte;
   end;
 
   /// a class able to implement ViewModel/Controller sessions with cookies
   // - this kind of ViewModel will implement cookie-based sessions, able to
   // store any (simple) record content in the cookie, on the browser client side
-  // - record content will be stored in raw binary format (using RecordSave),
-  // and base64 encoded: at login, session-related information can be retrieved
-  // only once on the server side, then stored on the client side and used by
-  // the renderer - such a pattern is very efficient and allows easy scaling
+  // - those cookies have the same feature set than JWT, but with a lower
+  // payload (thanks to binary serialization), and cookie safety (not accessible
+  // from JavaScript): they are digitally signed (with HMAC-CRC32C and a
+  // temporary secret key), they include an unique session identifier (like
+  // "jti" claim), issue and expiration dates (like "iat" and "exp" claims),
+  // and they are encrypted with a temporary key - this secret keys is tied to
+  // the TMVCSessionWithCookies instance lifetime, so new cookies are generated
+  // after server restart, unless they are persisted via LoadContext/SaveContext
+  // - signature and encryption are weak, but very fast, to avoid DDOS attacks
   TMVCSessionWithCookies = class(TMVCSessionAbstract)
   protected
-    fSessionCount: integer;
-    fCookieName: RawUTF8;
+    fContext: TMVCSessionWithCookiesContext;
     function GetCookie: RawUTF8; virtual; abstract;
     procedure SetCookie(const cookie: RawUTF8); virtual; abstract;
+    procedure Crypt(P: PByteArray; bytes: integer);
   public
     /// create an instance of this ViewModel implementation class
     constructor Create; override;
     /// will initialize the session cookie
     // - setting an optional record data, which will be stored Base64-encoded
-    // - will return the internal session ID
+    // - will return the 32-bit internal session ID
     // - you can supply a time period, after which the session will expire -
     // default is 1 hour
     function Initialize(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil;
-      SessionTimeOut: TDateTime=1/24): integer; override;
+      SessionTimeOutMinutes: cardinal=60): integer; override;
     /// fast check if there is a cookie session associated to the current context
     function Exists: boolean; override;
     /// retrieve the session ID from the current cookie
     // - can optionally retrieve the record Data parameter stored in the cookie
+    // - will return the 32-bit internal session ID, or 0 if the cookie is invalid
     function CheckAndRetrieve(PRecordData: pointer=nil; PRecordTypeInfo: pointer=nil): integer; override;
     /// clear the session
+    // - by deleting the cookie on the client side
     procedure Finalize; override;
+    /// return all cookie generation information as base64 encoded text 
+    // - to be retrieved via LoadContext
+    function SaveContext: RawUTF8; override;
+    /// restore cookie generation information from SaveContext text format
+    // - returns TRUE after checking the crc and unserializing the supplied data
+    // - WARNING: if the unerlying record type structure changed (i.e. any
+    // field is modified or added), restoration will lead to data corruption of
+    // low-level binary content, then trigger unexpected GPF: if you change the
+    // record type definition, do NOT use LoadContext - and reset all cookies
+    function LoadContext(const Saved: RawUTF8): boolean; override;
+    /// direct access to the low-level information used for cookies generation
+    // - use SaveContext and LoadContext methods to persist this information
+    // before server shutdown, so that the cookies can be re-used after restart
+    property Context: TMVCSessionWithCookiesContext read fContext write fContext;
+    /// you can customize the cookie name
+    // - default is 'mORMot', and cookie is restricted to Path=/RestRoot
+    property CookieName: RawUTF8 read fContext.CookieName write fContext.CookieName;
   end;
 
   /// implement a ViewModel/Controller sessions in a TSQLRestServer instance
@@ -287,6 +347,7 @@ type
     function GetCookie: RawUTF8; override;
     procedure SetCookie(const cookie: RawUTF8); override;
   end;
+
 
   { ====== Application Run ====== }
 
@@ -668,8 +729,8 @@ const
   '<html><head><title>{{Name}} Information</title></head><body '+
   'style="font-family:Verdana;"><h1>{{Name}} mORMotMVC Information</h1>'+
   '<p><strong>Generated by a <i>mORMot</i> {{mORMot}} server</strong><br>'+
-  '<small>&copy;Synopse Informatique - <a href=http://synopse.info>'+
-  'http://synopse.info</a></small></p><h2>Controller Definition</h2>'+
+  '<small>&copy;Synopse Informatique - <a href=https://synopse.info>'+
+  'https://synopse.info</a></small></p><h2>Controller Definition</h2>'+
   '<p>Registered interface is:</p><pre>'#13#10+
   '  I{{name}} = interface(IInvokable)'#13#10'{{#methods}}'#13#10+
   '    {{>method}}'#13#10'{{/methods}}'#13#10'  end;'#13#10+
@@ -857,9 +918,9 @@ begin
         i := Rec^.GetValueIndex(Field.Name);
         if i<0 then
           continue;
-        if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,
-           sftInteger,sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,
-           sftDateTime,sftBoolean,sftEnumerate,sftSet]) then
+        if not (Field.SQLFieldType in [sftAnsiText,sftUTF8Text,sftInteger,
+           sftFloat,sftCurrency,sftTimeLog,sftModTime,sftCreateTime,sftDateTime,
+           sftDateTimeMS,sftUnixTime,sftUnixMSTime,sftBoolean,sftEnumerate,sftSet]) then
           continue;
         HtmlTableStyle.BeforeFieldName(W);
         GetCaptionFromPCharLen(TrimLeftLowerCase(Field.Name),caption);
@@ -872,10 +933,17 @@ begin
         sftTimeLog,sftModTime,sftCreateTime:
           if VariantToInt64(Rec^.Values[i],timelog.Value) then
             W.AddHtmlEscapeString(timeLog.i18nText);
-        sftDateTime: begin
+        sftDateTime, sftDateTimeMS: begin
           timelog.From(utf8);
           W.AddHtmlEscapeString(timeLog.i18nText);
         end;
+        sftUnixTime, sftUnixMSTime:
+          if VariantToInt64(Rec^.Values[i],timelog.Value) then begin
+            if Field.SQLFieldType=sftUnixTime then
+              timelog.FromUnixTime(timelog.Value) else
+              timelog.FromUnixMSTime(timelog.Value);
+            W.AddHtmlEscapeString(timeLog.i18nText);
+          end;
         sftBoolean,sftEnumerate:
           if Field.InheritsFrom(TSQLPropInfoRTTIEnum) then begin
             caption := TSQLPropInfoRTTIEnum(Field).GetCaption(utf8,int);
@@ -1105,7 +1173,8 @@ begin
     if sessionID=0 then
       exit;
     if rec<>nil then begin
-      recJSON := RecordSaveJSON(pointer(rec)^,PRecordDataTypeInfo);
+      SaveJSON(pointer(rec)^,PRecordDataTypeInfo,
+        [twoEnumSetsAsBooleanInRecord,twoTrimLeftEnumSets],recJSON);
       _Json(recJSON,result,JSON_OPTIONS_FAST);
     end;
     _ObjAddProps(['id',sessionID],result);
@@ -1119,10 +1188,49 @@ end;
 { TMVCSessionWithCookies }
 
 constructor TMVCSessionWithCookies.Create;
+var rnd: TByte64;
 begin
   inherited Create;
-  fCookieName := 'mORMot'+copy(SHA256(
-    FormatUTF8('%%%',[self,GetTickCount64,MainThreadID])),1,14);
+  fContext.CookieName := 'mORMot';
+  // temporary secret for encryption
+  fContext.CryptNonce := Random32;
+  TAESPRNG.Main.FillRandom(@fContext.Crypt,sizeof(fContext.Crypt));
+  // temporary secret for HMAC-CRC32C
+  TAESPRNG.Main.FillRandom(@rnd,sizeof(rnd));
+  fContext.Secret.Init(@rnd,sizeof(rnd));
+end;
+
+procedure XorMemoryCTR(Data,Key: PByteArray; size: integer; var ctr: cardinal);
+begin
+  while size>=sizeof(Cardinal) do begin
+    dec(size,sizeof(Cardinal));
+    PCardinal(Data)^ := PCardinal(Data)^ xor PCardinal(Key)^ xor ctr;
+    inc(PCardinal(Data));
+    inc(PCardinal(Key));
+    inc(ctr);
+  end;
+  if size=0 then
+    exit; // no padding
+  repeat
+    dec(size);
+    Data[size] := Data[size] xor Key[size] xor PByteArray(@ctr)^[size];
+  until size=0;
+  inc(ctr);
+end;
+
+procedure TMVCSessionWithCookies.Crypt(P: PByteArray; bytes: integer);
+var chunk: integer;
+    ctr: cardinal;
+begin
+  ctr := fContext.CryptNonce;
+  while bytes>0 do begin
+    if bytes>sizeof(fContext.Crypt) then // encrypt by 256 bytes chunks
+      chunk := sizeof(fContext.Crypt) else
+      chunk := bytes;
+    XorMemoryCTR(P,@fContext.Crypt,chunk,ctr);
+    inc(PByte(P),chunk);
+    dec(bytes,chunk);
+  end;
 end;
 
 function TMVCSessionWithCookies.Exists: boolean;
@@ -1130,45 +1238,72 @@ begin
   result := GetCookie<>'';
 end;
 
-// Cookie is session_expires_________optionalrecord___crc_____
-//           UInt32  TTimeLog        ..base64..       UInt32
-//           1       9               25               len-8
+type
+  TCookieContent = packed record
+    head: packed record
+      hmac: cardinal;    // = signature
+      session: integer;  // = jti claim
+      issued: cardinal;  // = iat claim
+      expires: cardinal; // = exp claim
+    end;
+    data: array[0..2048-1] of byte; // binary serialization of record value
+  end;
+  PCookieContent = ^TCookieContent;
 
 function TMVCSessionWithCookies.CheckAndRetrieve(
   PRecordData,PRecordTypeInfo: pointer): integer;
 var cookie: RawUTF8;
-    cookieLen, crc, sessionID: cardinal;
-    Expires: TTimeLog;
+    len: integer;
+    now: cardinal;
+    tmp: TCookieContent;
 begin
+  result := 0;
   cookie := GetCookie;
-  cookieLen := length(cookie);
-  if (cookieLen>=32) and // check cookie standard info
-     HexDisplayToCardinal(@cookie[cookieLen-7],crc) and
-     (crc32c(PtrUInt(self),pointer(cookie),cookieLen-8)=crc) and
-     HexDisplayToCardinal(pointer(cookie),sessionID) and
-     (sessionID<=cardinal(fSessionCount)) and
-     HexDisplayToBin(@cookie[9],@Expires,sizeof(Expires)) and
-     (Expires>=TimeLogNowUTC) then
+  if cookie='' then
+    exit;
+  Base64FromURI(cookie);
+  len := Base64ToBinLengthSafe(pointer(cookie),length(cookie));
+  if (len>=sizeof(tmp.head)) and (len<=sizeof(tmp)) then begin
+    Base64Decode(pointer(cookie),@tmp,length(cookie) shr 2);
+    Crypt(@tmp,len);
+    now := UnixTimeUTC;
+    if (tmp.head.session<=fContext.SessionCount) and
+       (tmp.head.issued<=now) and
+       (tmp.head.expires>=now) and
+       (fContext.Secret.Compute(@tmp.head.session,len-4)=tmp.head.hmac) then
     if PRecordData=nil then
-      result := sessionID else
-      if (PRecordTypeInfo<>nil) and (cookieLen>32) and
-         RecordLoadBase64(@cookie[25],cookieLen-32,PRecordData^,PRecordTypeInfo,true) then
-        result := sessionID else
-        result := 0 else
-    result := 0;
+      result := tmp.head.session else
+      if (PRecordTypeInfo<>nil) and (len>sizeof(tmp.head)) and
+         (RecordLoad(PRecordData^,@tmp.data,PRecordTypeInfo)<>nil) then
+        result := tmp.head.session;
+  end;
+  if result=0 then
+    Finalize; // delete any invalid/expired cookie on server side
 end;
 
 function TMVCSessionWithCookies.Initialize(
-  PRecordData,PRecordTypeInfo: pointer; SessionTimeOut: TDateTime): integer;
-var Expires: TTimeLogBits;
-    cookie: RawUTF8;
+  PRecordData,PRecordTypeInfo: pointer; SessionTimeOutMinutes: cardinal): integer;
+var cookie: RawUTF8;
+    len: integer;
+    tmp: TCookieContent;
 begin
-  result := InterlockedIncrement(fSessionCount);
-  Expires.From(NowUTC+SessionTimeOut);
-  cookie := CardinalToHex(result)+Int64ToHex(Expires.Value);
   if (PRecordData<>nil) and (PRecordTypeInfo<>nil) then
-    cookie := cookie+RecordSaveBase64(PRecordData^,PRecordTypeInfo,true);
-  cookie := cookie+CardinalToHex(crc32c(PtrUInt(self),pointer(cookie),length(cookie)));
+    len := RecordSaveLength(PRecordData^,PRecordTypeInfo) else
+    len := 0;
+  if len>sizeof(tmp.data)-4 then // all cookies storage should be < 4K
+    raise EMVCApplication.CreateGotoError('Big Fat Cookie');
+  result := InterlockedIncrement(fContext.SessionCount);
+  tmp.head.session := result;
+  tmp.head.issued := UnixTimeUTC;
+  if SessionTimeOutMinutes=0 then
+    tmp.head.expires := $FFFFFFFF else
+    tmp.head.expires := tmp.head.issued+SessionTimeOutMinutes*60;
+  if len>0 then
+    RecordSave(PRecordData^,@tmp.data,PRecordTypeInfo);
+  inc(len,sizeof(tmp.head));
+  tmp.head.hmac := fContext.Secret.Compute(@tmp.head.session,len-4);
+  Crypt(@tmp,len);
+  cookie := BinToBase64URI(@tmp,len);
   SetCookie(cookie);
 end;
 
@@ -1177,18 +1312,31 @@ begin
   SetCookie(COOKIE_EXPIRED);
 end;
 
+function TMVCSessionWithCookies.LoadContext(const Saved: RawUTF8): boolean;
+begin
+  result := RecordLoadBase64(pointer(Saved),length(Saved),
+    fContext,TypeInfo(TMVCSessionWithCookiesContext));
+end;
+
+function TMVCSessionWithCookies.SaveContext: RawUTF8;
+begin
+  result := RecordSaveBase64(fContext,TypeInfo(TMVCSessionWithCookiesContext));
+end;
+
 
 { TMVCSessionWithRestServer }
 
 function TMVCSessionWithRestServer.GetCookie: RawUTF8;
 begin
-  result := ServiceContext.Request.InCookie[fCookieName];
+  result := ServiceContext.Request.InCookie[fContext.CookieName];
 end;
 
 procedure TMVCSessionWithRestServer.SetCookie(const cookie: RawUTF8);
 begin
-  ServiceContext.Request.OutSetCookie := fCookieName+'='+cookie;
-  ServiceContext.Request.InCookie[fCookieName] := cookie;
+  with ServiceContext.Request do begin
+    OutSetCookie := fContext.CookieName+'='+cookie;
+    InCookie[fContext.CookieName] := cookie;
+  end;
 end;
 
 

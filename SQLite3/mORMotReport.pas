@@ -6,8 +6,8 @@ unit mORMotReport;
 (*
     This file is part of Synopse framework.
 
-    Synopse framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -27,7 +27,7 @@ unit mORMotReport;
 
   Portions created by the Initial Developer are Copyright (C) 2003
   the Initial Developer. All Rights Reserved.
-  Portions created by Arnaud Bouchez for Synopse are Copyright (C) 2016
+  Portions created by Arnaud Bouchez for Synopse are Copyright (C) 2017
   Arnaud Bouchez. All Rights Reserved.
 
   Contributor(s):
@@ -111,7 +111,7 @@ unit mORMotReport;
   - full Unicode text process (even before Delphi 2009)
   - speed up and various bug fixes to work with Delphi 5 up to XE3
 
-  Modifications © 2009-2016 Arnaud Bouchez
+  Modifications © 2009-2017 Arnaud Bouchez
 
   Version 1.4 - February 8, 2010
   - whole Synopse SQLite3 database framework released under the GNU Lesser
@@ -144,7 +144,7 @@ unit mORMotReport;
 
   Version 1.11
   - fixed issue in TGDIPages.AppendRichEdit - see user feedback from
-    http://synopse.info/forum/viewtopic.php?pid=671#p671
+    https://synopse.info/forum/viewtopic.php?pid=671#p671
   - added Author, Subject and Keywords optional parameters to TGDIPages.ExportPDF
 
   Version 1.12

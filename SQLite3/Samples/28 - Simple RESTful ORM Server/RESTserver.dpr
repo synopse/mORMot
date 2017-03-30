@@ -1,7 +1,7 @@
 /// minimal REST server for a list of Persons stored on PostgreSQL
 program RESTserver;
 
-// see http://synopse.info/forum/viewtopic.php?pid=10882#p10882
+// see https://synopse.info/forum/viewtopic.php?pid=10882#p10882
 
 {$APPTYPE CONSOLE}
 

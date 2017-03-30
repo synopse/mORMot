@@ -258,7 +258,7 @@ procedure TMainForm.HelpClick(Sender: TObject);
 begin
   ShowMessage(format(sHelpN,[Caption,ExeVersion.Version.Detailed])+
     '\n\nSynopse mORMot '+SYNOPSE_FRAMEWORK_VERSION+
-    ' - http://synopse.info');
+    ' - https://synopse.info');
 end;
 
 function TMainForm.Edit(aRec: TSQLFile; const aTitle: string; aReadOnly: boolean): boolean;

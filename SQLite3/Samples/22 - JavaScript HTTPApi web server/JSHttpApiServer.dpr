@@ -4,7 +4,7 @@ program JSHttpApiServer;
 
 {
   ---------------------------------------------------------------------------
-   Download the SpiderMonkey library at http://synopse.info/files/synsm.7z
+   Download the SpiderMonkey library at https://synopse.info/files/synsm.7z
    and put mozjs-24.dll and libnspr4.dll files with your JSHttpApiServer.exe
   ---------------------------------------------------------------------------
 }

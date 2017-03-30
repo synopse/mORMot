@@ -6,8 +6,8 @@ unit mORMotDB;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,11 +25,12 @@ unit mORMotDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
   - Maciej Izak (hnb)
+  - yoanq
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -664,9 +665,9 @@ begin
     try // aDefinition.Kind was a TSQLDBConnectionProperties -> all external DB
       props := propsClass.Create(aDefinition.ServerName,aDefinition.DatabaseName,
         aDefinition.User,aDefinition.PassWordPlain);
+      VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions);
       result := TSQLRestServer.CreateInMemoryForAllVirtualTables(
         aModel,aHandleAuthentication);
-      VirtualTableExternalRegisterAll(aModel,props,aExternalDBOptions);
     except
       FreeAndNil(result);
       props.Free;  // avoid memory leak
@@ -688,7 +689,7 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
     n := length(fFieldsExternal);
     SetLength(fFieldsExternalToInternal,n);
     with StoredClassProps.ExternalDB do begin
-      SetLength(fFieldsInternalToExternal,length(FieldNames)+1);
+      SetLength(fFieldsInternalToExternal,length(ExtFieldNames)+1);
       for i := 0 to high(fFieldsInternalToExternal) do
         fFieldsInternalToExternal[i] := -1;
       for i := 0 to n-1 do begin
@@ -732,14 +733,17 @@ constructor TSQLRestStorageExternal.Create(aClass: TSQLRecordClass;
        ftInt64,     // sftCreateTime
        ftInt64,     // sftTID
        ftInt64,     // sftRecordVersion
-       ftInt64);    // sftSessionUserID
+       ftInt64,     // sftSessionUserID
+       ftDate,      // sftDateTimeMS
+       ftInt64,     // sftUnixTime
+       ftInt64);    // sftUnixMSTime
   begin
     if Prop.SQLFieldType in [sftUnknown,sftMany] then begin
       result := false;
       exit; // ignore unknown/virtual fields
     end;
     Column.DBType := mORMotType[Prop.SQLFieldTypeStored];
-    Column.Name := StoredClassProps.ExternalDB.FieldNames[Prop.PropertyIndex];
+    Column.Name := StoredClassProps.ExternalDB.ExtFieldNames[Prop.PropertyIndex];
     if Column.DBType=ftUTF8 then
       Column.Width := Prop.FieldWidth else
       Column.Width := 0;
@@ -793,7 +797,7 @@ begin
   for f := 0 to StoredClassRecordProps.Fields.Count-1 do begin
     nfo := StoredClassRecordProps.Fields.List[f];
     if nfo.SQLFieldType in COPIABLE_FIELDS then begin // ignore sftMany
-      SQL := fStoredClassProps.ExternalDB.FieldNames[f];
+      SQL := fStoredClassProps.ExternalDB.ExtFieldNames[f];
       if fProperties.IsSQLKeyword(SQL) then begin
         log.Log(sllWarning,'%.%: Field name "%" is not compatible with %',
           [fStoredClass,nfo.Name,SQL,fProperties.DBMSEngineName],self);
@@ -844,7 +848,7 @@ begin
     for f := 0 to Fields.Count-1 do
       if Fields.List[f].SQLFieldType in COPIABLE_FIELDS then // ignore sftMany
       /// real database columns exist for Simple + Blob fields (not Many)
-      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.FieldNames[f])<0 then begin
+      if FieldsExternalIndexOf(fStoredClassProps.ExternalDB.ExtFieldNames[f])<0 then begin
         // add new missing Field
         Finalize(Field);
         FillcharFast(Field,sizeof(Field),0);
@@ -1591,6 +1595,8 @@ begin
     exit;
   try
     result := fProperties.PrepareInlined(aSQL,true);
+    if (result<>nil) and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      result.ForceDateWithMS := true;
   except
     on Exception do
       result := nil;
@@ -1599,6 +1605,7 @@ end;
 
 function TSQLRestStorageExternal.ExecuteInlined(const aSQL: RawUTF8;
   ExpectResults: Boolean): ISQLDBRows;
+var stmt: ISQLDBStatement;
 begin
   result := nil; // returns nil interface on error
   if self=nil then
@@ -1606,7 +1613,13 @@ begin
   if not ExpectResults and (Owner<>nil) then
     Owner.FlushInternalDBCache; // add/update/delete should flush DB cache
   try
-    result := fProperties.ExecuteInlined(aSQL,ExpectResults);
+    stmt := fProperties.PrepareInlined(aSQL,ExpectResults);
+    if stmt=nil then
+      exit;
+    if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      stmt.ForceDateWithMS := true;
+    stmt.ExecutePrepared;
+    result := stmt;
   except
     on Exception do
       result := nil;
@@ -1630,6 +1643,8 @@ begin
   if Query<>nil then
   try
     Query.Bind(Params);
+    if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
+      Query.ForceDateWithMS := true;
     result := Query;
   except
     on Exception do
@@ -1650,6 +1665,8 @@ begin
   if Query<>nil then
   try
     Query.Bind(Params);
+    if ExpectResults and (sftDateTimeMS in fStoredClassRecordProps.HasTypeFields) then
+      Query.ForceDateWithMS := true;
     Query.ExecutePrepared;
     result := Query;
   except
@@ -1677,7 +1694,8 @@ begin
        [self,StoredClass]);
     for f := 0 to ParamsCount-1 do
       if ParamsMatchCopiableFields and
-         (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored=sftDateTime) and
+         (fStoredClassRecordProps.CopiableFields[f].SQLFieldTypeStored in
+           [sftDateTime,sftDateTimeMS]) and
          (Params[f].VType=ftUTF8) then
         Query.BindDateTime(f+1,Iso8601ToDateTimePUTF8Char(Params[f].VText)) else
         Query.Bind(f+1,Params[f]);
@@ -1778,7 +1796,7 @@ begin
     end;
   end;
   if not (fProperties.DBMS in DB_HANDLEINDEXONBLOBS) then
-    // BLOB fields cannot be indexed (only in SQLite3)
+    // BLOB fields cannot be indexed (only in SQLite3+PostgreSQL)
     for i := 0 to n-1 do begin
       extfield := fFieldsInternalToExternal[IntFieldIndex[i]+1];
       if (extfield>=0) and
@@ -2036,6 +2054,8 @@ begin
     try
       fStatement := fProperties.NewThreadSafeStatementPrepared(fSQL,true);
       if fStatement<>nil then begin
+        if sftDateTimeMS in fStoredClassRecordProps.HasTypeFields then
+          fStatement.ForceDateWithMS := true;
         for i := 1 to Prepared.WhereCount do
           fStatement.Bind(i,Prepared.Where[i-1].Value);
         fStatement.ExecutePrepared;

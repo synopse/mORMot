@@ -7,7 +7,7 @@ program TestSQL3;
     This file is part of Synopse mORMot database framework.
 
     Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -79,6 +79,11 @@ program TestSQL3;
   - first line of uses clause must be  {$I SynDprUses.inc}  to enable FastMM4
     on older versions of Delphi *)
 
+{$ifdef Linux}
+  {$ifdef FPC_CROSSCOMPILING}
+    {$linklib libc_nonshared.a}
+  {$endif}
+{$endif}
 
 {$I Synopse.inc} // define HASINLINE USETYPEINFO CPU32 CPU64 OWNNORMTOUPPER
 
@@ -111,6 +116,7 @@ uses
   {$ifndef NOVARIANTS}
   SynMustache in '..\SynMustache.pas',
   mORMotWrappers in 'mORMotWrappers.pas',
+  mORMotMVC in 'mORMotMVC.pas',
   mORMotDDD in 'mORMotDDD.pas',
   dddDomAuthInterfaces in 'DDD\dom\dddDomAuthInterfaces.pas',
   dddDomUserTypes in 'DDD\dom\dddDomUserTypes.pas',
@@ -173,6 +179,7 @@ uses
 {$endif DELPHI5OROLDER}
 {$endif LVCL}
   SynZip in '..\SynZip.pas',
+  SynProtoRTSPHTTP in '..\SynProtoRTSPHTTP.pas',
   SynSelfTests in '..\SynSelfTests.pas',
   mORMotSelfTests in 'mORMotSelfTests.pas';
 {$endif KYLIX3}

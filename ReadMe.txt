@@ -2,8 +2,8 @@
   Synopse mORMot framework
 
 An Open Source Client-Server ORM/SOA framework
- (c) 2008-2016 Synopse Informatique
-  http://synopse.info
+ (c) 2008-2017 Synopse Informatique
+  https://synopse.info
   http://mormot.net
 
 Contributors
@@ -12,6 +12,7 @@ Contributors
   AlexPirate
   Alfred Glaenzer (alf)
   Arnaud Bouchez
+  ASiwon
   Aweste
   Bas Schouten
   BigStar
@@ -22,6 +23,7 @@ Contributors
   David Mead (MDW)
   Delphinium (louisyeow)
   DigDiver
+  Dominikcz
   EgorovAlex
   Emanuele (lele9)
   Eric Grange
@@ -29,6 +31,7 @@ Contributors
   Esteban Martin (EMartin)
   Eva Freimann (EVaF)
   Goran Despalatovic (gigo)
+  Jean-Baptiste Roussia (jbroussia)
   Joe (jokusoft)
   Johan Bontes
   Jordi Tudela
@@ -61,13 +64,14 @@ Contributors
   Win2014
   Wloochacz
   Wolfgang Ehrhardt
+  Yoanq
   Zed
 
 [See below if you upgrade from 1.17 revision]
 
   
 Synopse mORMot is an Open Source Client-Server ORM SOA MVC framework
-for Delphi 6 up to Delphi 10.1 Berlin and FPC, targeting Windows/Linux
+for Delphi 6 up to Delphi 10.2 Tokyo and FPC, targeting Windows/Linux
 for servers, and any platform for clients (including mobile or AJAX).
 
 The main features of mORMot are therefore:
@@ -175,26 +179,26 @@ Main project page:
 http://mORMot.net
 
 Documentation:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html
 
 Installation:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_113
 
 FAQ:
-http://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
+https://synopse.info/files/html/Synopse%20mORMot%20Framework%20SAD%201.18.html#TITL_123
 
 How to get the source:
-http://synopse.info/fossil/wiki?name=Get+the+source
+https://synopse.info/fossil/wiki?name=Get+the+source
 
 A forum is dedicated to support:
-http://synopse.info
+https://synopse.info
 
 A blog is available:
 http://blog.synopse.info
 
 Issues and feature requests can be posted (take a look at the forums
 and latest unstable version first!):
-http://synopse.info/fossil/reportlist
+https://synopse.info/fossil/reportlist
 
 You can also monitor/fork our projects on GitHub:
 https://github.com/synopse/mORMot

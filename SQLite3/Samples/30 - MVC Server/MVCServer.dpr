@@ -13,7 +13,7 @@ program MVCServer;
 
 {$APPTYPE CONSOLE}
 
-{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 
 uses
   {$I SynDprUses.inc}    // will enable FastMM4 prior to Delphi 2006

@@ -6,8 +6,8 @@ unit mORMotHttpServer;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotHttpServer;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -185,7 +185,7 @@ interface
   - not defined by default - should be set globally to the project conditionals,
   to be defined in both mORMotHttpClient and mORMotHttpServer units }
 
-{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 
 
 uses
@@ -288,11 +288,13 @@ type
     fHosts: TSynNameValue;
     fAccessControlAllowOrigin: RawUTF8;
     fAccessControlAllowOriginHeader: RawUTF8;
+    fAccessControlAllowCredentials: boolean;
     fRootRedirectToURI: array[boolean] of RawUTF8;
     fRedirectServerRootUriForExactCase: boolean;
     fHttpServerKind: TSQLHttpServerOptions;
     fLog: TSynLogClass;
     procedure SetAccessControlAllowOrigin(const Value: RawUTF8);
+    procedure SetAccessControlAllowCredential(Value: boolean);
     // assigned to fHttpServer.OnHttpThreadStart/Terminate e.g. to handle connections
     procedure HttpThreadStart(Sender: TThread); virtual;
     procedure HttpThreadTerminate(Sender: TThread); virtual;
@@ -374,9 +376,10 @@ type
     // transmission definition; other parameters would be the standard one
     // - only the supplied aDefinition.Authentication will be defined
     // - under Windows, will use http.sys with automatic URI registration, unless
-    // aDefinition.WebSocketPassword is set, and then binary WebSockets would
-    // be expected with the corresponding encryption
-    constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition); reintroduce; overload;
+    // aDefinition.WebSocketPassword is set (and then binary WebSockets would be
+    // expected with the corresponding encryption), or aForcedKind is overriden
+    constructor Create(aServer: TSQLRestServer; aDefinition: TSQLHttpServerDefinition;
+      aForcedKind: TSQLHttpServerOptions=HTTP_DEFAULT_MODE); reintroduce; overload;
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
@@ -486,11 +489,20 @@ type
     property OnlyJSONRequests: boolean read fOnlyJSONRequests write fOnlyJSONRequests;
     /// enable cross-origin resource sharing (CORS) for proper AJAX process
     // - see @https://developer.mozilla.org/en-US/docs/HTTP/Access_control_CORS
-    // - can be set e.g. to '*' to allow requests from any sites
-    // - or specify an URI to be allowed as origin (e.g. 'http://foo.example')
+    // - can be set e.g. to '*' to allow requests from any site/domain; or
+    // specify an URI to be allowed as origin (e.g. 'http://foo.example')
     // - current implementation is pretty basic, and does not check the incoming
-    // "Origin: " header value
-    property AccessControlAllowOrigin: RawUTF8 read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
+    // "Origin: " header value,
+    // - see also AccessControlAllowCredential property
+    property AccessControlAllowOrigin: RawUTF8
+      read fAccessControlAllowOrigin write SetAccessControlAllowOrigin;
+    /// enable cookies, authorization headers or TLS client certificates CORS exposition
+    // - this option works with the AJAX XMLHttpRequest.withCredentials property
+    // on client/JavaScript side, as stated by
+    // @https://developer.mozilla.org/en-US/docs/Web/API/XMLHttpRequest/withCredentials
+    // - see @https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Access-Control-Allow-Credentials
+    property AccessControlAllowCredential: boolean
+      write SetAccessControlAllowCredential;
     /// enable redirectoin to fix any URI for a case-sensitive match of Model.Root
     // - by default, TSQLRestServer.Model.Root would be accepted with case
     // insensitivity; but it may induce errors for HTTP cookies, since they
@@ -633,7 +645,7 @@ procedure TSQLHttpServer.DomainHostRedirect(const aDomain,aURI: RawUTF8);
 begin
   if aURI='' then
     fHosts.Delete(aDomain) else
-    fHosts.Add(aDomain,aURI);
+    fHosts.Add(aDomain,aURI); // e.g. Add('project1.com','root1')
 end;
 
 constructor TSQLHttpServer.Create(const aPort: AnsiString;
@@ -709,9 +721,8 @@ begin
     if aHttpServerKind=useBidirSocket then
       fHttpServer := TWebSocketServerRest.Create(
         fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames) else
-      fHttpServer := THttpServer.Create(
-        fPort,HttpThreadStart,HttpThreadTerminate,GetDBServerNames
-        {$ifdef USETHREADPOOL},ServerThreadPoolCount{$endif});
+      fHttpServer := THttpServer.Create(fPort,HttpThreadStart,HttpThreadTerminate,
+        GetDBServerNames,ServerThreadPoolCount);
     {$ifdef USETCPPREFIX}
     THttpServer(fHttpServer).TCPPrefix := 'magic';
     {$endif}
@@ -751,10 +762,14 @@ begin
 end;
 
 destructor TSQLHttpServer.Destroy;
+var i: integer;
 begin
   fLog.Enter(self);
   fLog.Add.Log(sllHttp,'% finalized for % server%',
     [fHttpServer,length(fDBServers),PLURAL_FORM[length(fDBServers)>1]],self);
+  for i := 0 to high(fDBServers) do
+    if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
+      fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
@@ -860,9 +875,9 @@ end;
 
 function TSQLHttpServer.Request(Ctxt: THttpServerRequest): cardinal;
 var call: TSQLRestURIParams;
-    i,len: integer;
+    i,hostlen: integer;
     P: PUTF8Char;
-    host,redirect: RawUTF8;
+    hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
 begin
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
@@ -894,19 +909,19 @@ begin
           include(call.LowLevelFlags,llfSecured);
     end;
     if fHosts.Count>0 then begin
-      host := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
-      i := PosEx(':',host);
+      hostroot := FindIniNameValue(pointer(Ctxt.InHeaders),'HOST: ');
+      i := PosEx(':',hostroot);
       if i>0 then
-        SetLength(host,i-1); // trim any port
-      if host<>'' then
-        host := fHosts.Value(host);
+        SetLength(hostroot,i-1); // trim any port
+      if hostroot<>'' then // e.g. 'Host: project1.com' -> 'root1'
+        hostroot := fHosts.Value(hostroot);
     end;
-    if host<>'' then
+    if hostroot<>'' then
       if (Ctxt.URL='') or (Ctxt.URL='/') then
-        call.Url := host else
+        call.Url := hostroot else
         if Ctxt.URL[1]='/' then
-          call.Url := host+Ctxt.URL else
-          call.Url := host+'/'+Ctxt.URL else
+          call.Url := hostroot+Ctxt.URL else
+          call.Url := hostroot+'/'+Ctxt.URL else
       if Ctxt.URL[1]='/' then
         call.Url := copy(Ctxt.URL,2,maxInt) else
         call.Url := Ctxt.URL;
@@ -943,15 +958,19 @@ begin
       end else
         // default content type is JSON
         Ctxt.OutContentType := JSON_CONTENT_TYPE_VAR;
-      // handle HTTP redirection over virtual hosts
-      if (host<>'') and
-         ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
-        redirect := FindIniNameValue(P,'LOCATION: ');
-        len := length(host);
-        if (length(redirect)>len) and (redirect[len+1]='/') and
-           IdemPropNameU(host,pointer(redirect),len) then
-          // host/method -> method on same domain
-          call.OutHead := 'Location: '+copy(redirect,len+1,maxInt);
+      // handle HTTP redirection and cookies over virtual hosts
+      if hostroot<>'' then begin
+        if ((result=HTTP_MOVEDPERMANENTLY) or (result=HTTP_TEMPORARYREDIRECT)) then begin
+          redirect := FindIniNameValue(P,'LOCATION: ');
+          hostlen := length(hostroot);
+          if (length(redirect)>hostlen) and (redirect[hostlen+1]='/') and
+             IdemPropNameU(hostroot,pointer(redirect),hostlen) then
+            // hostroot/method -> method on same domain
+            call.OutHead := 'Location: '+copy(redirect,hostlen+1,maxInt);
+        end else
+        if ExistsIniName(P,'SET-COOKIE:') then
+          Call.OutHead := StringReplaceAll(
+            Call.OutHead,'; Path=/'+Server.Model.Root,'; Path=/')
       end;
       Ctxt.OutCustomHeaders := Trim(call.OutHead)+
         #13#10'Server-InternalState: '+Int32ToUtf8(call.OutInternalState);
@@ -982,18 +1001,28 @@ begin
     fDBServers[i].Server.BeginCurrentThread(Sender);
 end;
 
+procedure TSQLHttpServer.SetAccessControlAllowCredential(Value: boolean);
+begin
+  fAccessControlAllowCredentials := Value;
+  SetAccessControlAllowOrigin(fAccessControlAllowOrigin); // compute header
+end;
+
 procedure TSQLHttpServer.SetAccessControlAllowOrigin(const Value: RawUTF8);
 begin
   fAccessControlAllowOrigin := Value;
   if Value='' then
     fAccessControlAllowOriginHeader :=
-      #13#10'Access-Control-Allow-Origin: ' else
+      #13#10'Access-Control-Allow-Origin: ' else begin
     fAccessControlAllowOriginHeader :=
       #13#10'Access-Control-Allow-Methods: POST, PUT, GET, DELETE, LOCK, OPTIONS'+
       #13#10'Access-Control-Max-Age: 1728000'+
       // see http://blog.import.io/tech-blog/exposing-headers-over-cors-with-access-control-expose-headers
       #13#10'Access-Control-Expose-Headers: content-length,location,server-internalstate'+
       #13#10'Access-Control-Allow-Origin: '+Value;
+    if fAccessControlAllowCredentials then
+      fAccessControlAllowOriginHeader := fAccessControlAllowOriginHeader+
+        #13#10'Access-Control-Allow-Credentials: true';
+  end;
 end;
 
 function TSQLHttpServer.WebSocketsEnable(
@@ -1005,7 +1034,7 @@ begin
     result.WebSocketsEnable(aWebSocketsURI,aWebSocketsEncryptionKey,
       aWebSocketsAJAX,aWebSocketsCompressed);
   end else
-    raise ESynBidirSocket.CreateUTF8(
+    raise EWebSockets.CreateUTF8(
       '%.WebSocketEnable(%): expected useBidirSocket',
       [self,GetEnumName(TypeInfo(TSQLHttpServerOptions),ord(fHttpServerKind))^]);
 end;
@@ -1015,7 +1044,7 @@ function TSQLHttpServer.WebSocketsEnable(aServer: TSQLRestServer;
   aWebSocketsAJAX,aWebSocketsCompressed: boolean): TWebSocketServerRest;
 begin
   if (aServer=nil) or (DBServerFind(aServer)<0) then
-    raise ESynBidirSocket.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
+    raise EWebSockets.CreateUTF8('%.WebSocketEnable(aServer=%?)',[self,aServer]);
   result := WebSocketsEnable(aServer.Model.Root,
     aWebSocketsEncryptionKey,aWebSocketsAJAX,aWebSocketsCompressed);
 end;
@@ -1059,26 +1088,24 @@ begin
 end;
 
 constructor TSQLHttpServer.Create(aServer: TSQLRestServer;
-  aDefinition: TSQLHttpServerDefinition);
+  aDefinition: TSQLHttpServerDefinition; aForcedKind: TSQLHttpServerOptions);
 const AUTH: array[TSQLHttpServerRestAuthentication] of TSQLRestServerAuthenticationClass = (
   // adDefault, adHttpBasic, adWeak, adSSPI
   TSQLRestServerAuthenticationDefault, TSQLRestServerAuthenticationHttpBasic,
   TSQLRestServerAuthenticationNone,
   {$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI{$else}nil{$endif});
 var a: TSQLHttpServerRestAuthentication;
-    kind: TSQLHttpServerOptions;
     thrdCnt: integer;
     websock: TWebSocketServerRest;
 begin
   if aDefinition=nil then
     raise EHttpServerException.CreateUTF8('%.Create(aDefinition=nil)',[self]);
-  if aDefinition.WebSocketPassword='' then
-    kind := HTTP_DEFAULT_MODE else
-    kind := useBidirSocket;
+  if aDefinition.WebSocketPassword<>'' then
+    aForcedKind := useBidirSocket;
   if aDefinition.ThreadCount=0 then
     thrdCnt := 32 else
     thrdCnt := aDefinition.ThreadCount;
-  Create(aDefinition.BindPort,aServer,'+',kind,nil,thrdCnt,
+  Create(aDefinition.BindPort,aServer,'+',aForcedKind,nil,thrdCnt,
     HTTPS_SECURITY[aDefinition.Https],'',aDefinition.HttpSysQueueName);
   if aDefinition.EnableCORS then
     AccessControlAllowOrigin := '*';

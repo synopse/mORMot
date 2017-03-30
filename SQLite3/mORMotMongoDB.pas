@@ -6,8 +6,8 @@ unit mORMotMongoDB;
 {
     This file is part of Synopse mORMot framework.
 
-    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
-      Synopse Informatique - http://synopse.info
+    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
+      Synopse Informatique - https://synopse.info
 
   *** BEGIN LICENSE BLOCK *****
   Version: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -25,7 +25,7 @@ unit mORMotMongoDB;
 
   The Initial Developer of the Original Code is Arnaud Bouchez.
 
-  Portions created by the Initial Developer are Copyright (C) 2016
+  Portions created by the Initial Developer are Copyright (C) 2017
   the Initial Developer. All Rights Reserved.
 
   Contributor(s):
@@ -77,7 +77,7 @@ uses
   {$ifdef KYLIX3}
   LibC,
   {$endif}
-  {$ifdef HASINLINE}
+  {$ifdef HASINLINENOTX86}
   Contnrs,
   {$endif}
   SysUtils,
@@ -136,7 +136,7 @@ type
       var Doc: TDocVariantData): TID;
     procedure JSONFromDoc(var doc: TDocVariantData; var result: RawUTF8);
     function BSONProjectionSet(var Projection: variant; WithID: boolean;
-      const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+      const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
     function GetJSONValues(const Res: TBSONDocument;
       const extFieldNames: TRawUTF8DynArray; W: TJSONSerializer): integer;
     // overridden methods calling the MongoDB external server
@@ -408,7 +408,7 @@ begin
 end;
 
 function TSQLRestStorageMongoDB.BSONProjectionSet(var Projection: variant;
-  WithID: boolean; const Fields: TSQLFieldBits; ExtFieldNames: PRawUTF8DynArray): integer;
+  WithID: boolean; const Fields: TSQLFieldBits; BSONFieldNames: PRawUTF8DynArray): integer;
 var i,n: integer;
     W: TBSONWriter;
 begin
@@ -421,22 +421,22 @@ begin
     W.BSONWrite(fStoredClassProps.ExternalDB.RowIDFieldName,result);
     for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
       if i in Fields then begin
-        W.BSONWrite(fStoredClassProps.ExternalDB.FieldNames[i],1);
+        W.BSONWrite(fStoredClassProps.ExternalDB.ExtFieldNames[i],1);
         inc(result);
       end;
     W.BSONDocumentEnd;
     W.ToBSONVariant(Projection);
-    if ExtFieldNames<>nil then
+    if BSONFieldNames<>nil then
     with fStoredClassProps.ExternalDB do begin
-      SetLength(ExtFieldNames^,result);
+      SetLength(BSONFieldNames^,result);
       if WithID then begin
-        ExtFieldNames^[0] := RowIDFieldName;
+        BSONFieldNames^[0] := RowIDFieldName;
         n := 1;
       end else
         n := 0;
       for i := 0 to fStoredClassProps.Props.Fields.Count-1 do
         if i in Fields then begin
-          ExtFieldNames^[n] := FieldNames[i];
+          BSONFieldNames^[n] := ExtFieldNames[i];
           inc(n);
         end;
     end;
@@ -562,7 +562,7 @@ var i, ndx: integer;
     MissingID: boolean;
     V: PVarData;
 begin
-  doc.InitJSON(JSON,[dvoValueCopiedByReference]);
+  doc.InitJSON(JSON,[dvoValueCopiedByReference,dvoAllowDoubleValue]);
   if (doc.Kind<>dvObject) and (Occasion<>soInsert) then
     raise EORMMongoDBException.CreateUTF8('%.DocFromJSON: invalid JSON context',[self]);
   if not (Occasion in [soInsert,soUpdate]) then
@@ -581,19 +581,42 @@ begin
       if ndx<0 then
         raise EORMMongoDBException.CreateUTF8(
           '%.DocFromJSON: unkwnown field name "%"',[self,doc.Names[i]]);
-      doc.Names[i] := fStoredClassProps.ExternalDB.FieldNames[ndx];
+      doc.Names[i] := fStoredClassProps.ExternalDB.ExtFieldNames[ndx];
       info := fStoredClassProps.Props.Fields.List[ndx];
       V := @doc.Values[i];
       case V^.VType of
-      varInteger: // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
+      varInteger:
       case info.SQLFieldType of
-        sftBoolean:
-          Variant(V^) := boolean(V^.VInteger); // store true boolean BSON
+        sftBoolean: begin // doc.InitJSON/GetVariantFromJSON store 0,1 as varInteger
+          if V^.VInteger=0 then // normalize to boolean BSON
+            V^.VBoolean := false else
+            V^.VBoolean := true;
+          V^.VType := varBoolean;
+        end;
+        sftUnixTime: begin
+          V^.VDate := UnixTimeToDateTime(V^.VInteger); // as MongoDB date/time
+          V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+        end;
+        sftUnixMSTime: begin
+          V^.VDate := UnixMSTimeToDateTime(V^.VInteger); // as MongoDB date/time
+          V^.VType := varDate;
+        end;
+      end;
+      varInt64:
+      case info.SQLFieldType of
+        sftUnixTime: begin
+          V^.VDate := UnixTimeToDateTime(V^.VInt64); // as MongoDB date/time
+          V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
+        end;
+        sftUnixMSTime: begin
+          V^.VDate := UnixMSTimeToDateTime(V^.VInt64); // as MongoDB date/time
+          V^.VType := varDate;
+        end;
       end;
       varString: // handle some TEXT values
       case info.SQLFieldType of
-        sftDateTime: begin // store ISO-8601 text as MongoDB date/time
-          dt := Iso8601ToDateTime(RawByteString(V^.VAny));
+        sftDateTime, sftDateTimeMS: begin // ISO-8601 text as MongoDB date/time
+          Iso8601ToDateTimePUTF8CharVar(V^.VAny,length(RawByteString(V^.VAny)),dt);
           RawByteString(V^.VAny) := '';
           V^.VType := varDate; // direct set to avoid unexpected EInvalidOp
           V^.VDate := dt;
@@ -609,7 +632,7 @@ begin
             typenfo := (info as TSQLPropInfoRTTIDynArray).PropType;
             if (typenfo=TypeInfo(TByteDynArray)) or (typenfo=TypeInfo(TBytes)) then
               js := '' else // embedded BLOB type stored as BSON binary
-              js := DynArraySaveJSON(typenfo,blob);
+              js := DynArrayBlobSaveJSON(typenfo,pointer(blob));
             if (js<>'') and (PInteger(js)^ and $00ffffff<>JSON_BASE64_MAGIC) then
               BSONVariantType.FromJSON(pointer(js),Variant(V^)) else
               BSONVariantType.FromBinary(blob,bbtGeneric,Variant(V^));
@@ -633,7 +656,7 @@ begin
       LeaveCriticalSection(fStorageCriticalSection);
     end;
   if fStoredClassRecordProps.RecordVersionField<>nil then begin
-    RecordVersionName := fStoredClassProps.ExternalDB.FieldNames[
+    RecordVersionName := fStoredClassProps.ExternalDB.ExtFieldNames[
       fStoredClassRecordProps.RecordVersionField.PropertyIndex];
     if doc.GetValueIndex(RecordVersionName)<0 then
       if Owner=nil then
@@ -685,9 +708,9 @@ begin
      (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     result := false else
     try
-      DocFromJSON(SentData,soUpdate,Doc);
+      DocFromJSON(SentData,soUpdate,doc);
       query := BSONVariant(['_id',ID]);
-      update := BSONVariant(['$set',variant(Doc)]);
+      update := BSONVariant(['$set',variant(doc)]);
       fCollection.Update(query,update);
       if Owner<>nil then begin
         Owner.InternalUpdateEvent(seUpdate,TableModelIndex,ID,SentData,nil);
@@ -800,7 +823,7 @@ begin
     if info.SQLFieldType=sftBlob then begin
       (info as TSQLPropInfoRTTIRawBlob).GetBlob(Value,blobRaw);
       BSONVariantType.FromBinary(blobRaw,bbtGeneric,blob);
-      update.AddValue(fStoredClassProps.ExternalDB.FieldNames[f],blob);
+      update.AddValue(fStoredClassProps.ExternalDB.ExtFieldNames[f],blob);
     end;
   end;
   if update.Count>0 then
@@ -898,7 +921,7 @@ begin
   if (fCollection=nil) or (ID<=0) then
     exit;
   doc := fCollection.FindDoc(BSONVariant(['_id',ID]),fBSONProjectionSimpleFields,1);
-  JSONFromDoc(TDocVariantData(doc),result);
+  JSONFromDoc(_Safe(doc)^,result);
 end;
 
 function TSQLRestStorageMongoDB.EngineRetrieveBlob(TableModelIndex: integer; aID: TID;
@@ -913,8 +936,7 @@ begin
     try
       FieldName := fStoredClassProps.ExternalDB.InternalToExternal(BlobField^.Name);
       doc := fCollection.FindDoc(BSONVariant(['_id',aID]),BSONVariant([FieldName,1]),1);
-      if DocVariantType.IsOfType(doc) and
-         DocVariantData(doc)^.GetVarData(FieldName,data) then
+      if _Safe(doc)^.GetVarData(FieldName,data) then
         BSONVariantType.ToBlob(variant(data),RawByteString(BlobData));
       result := true;
     except
@@ -938,9 +960,12 @@ begin
     exit;
   try
     doc := fCollection.FindDoc(BSONVariant(['_id',aID]),fBSONProjectionBlobFields,1);
-    docv := DocVariantData(doc);
+    docv := _Safe(doc);
+    if docv^.Kind<>dvObject then
+      exit; // not found
     for f := 0 to high(fStoredClassRecordProps.BlobFields) do begin
-      if docv^.Names[f]=fBSONProjectionBlobFieldsNames[f] then
+      if (f<docv^.Count) and // optimistic O(1) search
+         IdemPropNameU(docv^.Names[f],fBSONProjectionBlobFieldsNames[f]) then
         BSONVariantType.ToBlob(docv^.Values[f],blobRaw) else
       if docv^.GetVarData(fBSONProjectionBlobFieldsNames[f],blob) then
         BSONVariantType.ToBlob(variant(blob),blobRaw) else
@@ -1313,7 +1338,7 @@ begin // same logic as in TSQLRestStorageInMemory.EngineList()
             MS.Free;
           end;
           if TextOrderByField<>'' then
-            // $orderby is case sensitive with MongoDB -> manual ordering
+            // $orderby is case sensitive with MongoDB -> client-side sort
             with TSQLTableJSON.CreateFromTables(
               [fStoredClass],SQL,pointer(result),length(result)) do
             try

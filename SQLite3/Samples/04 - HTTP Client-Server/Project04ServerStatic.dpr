@@ -11,7 +11,7 @@
    It is IMHO preferred and less-error prone to define a method-based service,
    then let the method return the file using Ctxt.ReturnFile() method.
    
-   See also http://synopse.info/forum/viewtopic.php?id=1896
+   See also https://synopse.info/forum/viewtopic.php?id=1896
 
    Version 1.18
   - added Project04ServerStatic.dpr program

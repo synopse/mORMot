@@ -12,7 +12,8 @@ unit Project14ClientMain;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  {$IFDEF WINDOWS}  Windows, Messages, {$ENDIF}
+  SysUtils, Variants, Classes, Graphics, Controls, Forms,
   Dialogs, StdCtrls,
   SynCommons, mORMot, mORMotHttpClient,
   Project14Interface;
@@ -74,8 +75,10 @@ begin
     if Model=nil then
       Model := TSQLModel.Create([],ROOT_NAME);
     case ComboProtocol.ItemIndex of
-    0,2: Client := TSQLHttpClient.Create('localhost','888',Model);
+    0,2: Client := TSQLHttpClient.Create('localhost', PORT_NAME,Model);
+    {$IFDEF WINDOWS}
     1: Client := TSQLRestClientURINamedPipe.Create(Model,APPLICATION_NAME);
+    {$ENDIF}
     else exit;
     end;
     if not Client.ServerTimeStampSynchronize then begin

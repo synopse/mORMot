@@ -28,7 +28,7 @@ HtmlSideBar=Overview/Meet the mORMot:SOURCE,Download/How to install:TITL_113,API
 ; the sidebar first links, for html export
 
 {\b Document License}
-{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2016 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
+{\i Synopse mORMot Framework Documentation}.\line Copyright (C) 2008-2017 Arnaud Bouchez.\line Synopse Informatique - @http://synopse.info
 The {\i Synopse mORMot Framework Source Code} is licensed under GPL / LGPL / MPL licensing terms, free to be included in any application.
 ;This documentation has been generated using {\i Synopse SynProject} - @http://synopse.info/fossil/wiki?name=SynProject
 ;This document is a free document; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
@@ -136,7 +136,7 @@ The main approach of this framework is to avoid @*RAD@ in the development of pro
 : Expected Use
 Any application which need moderate database usage (up to some GB of data) with easy setup and administration, together with a secure @*ACID@ behavior in a Client-Server environment should consider using the {\i Synopse mORMot Framework}.
 : Requirement Exceptions
-This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi 10.1 Berlin}.
+This framework was developed in order to run mainly under any {\i Delphi} compiler, from version {\i Delphi} 6 to version {\i Delphi 10.2 Tokyo}.
 On the {\i server side}, it targets both {\i Win32} and {\i Win64} platforms (using the 64-bit compiler included in latest {\i Delphi} XE2 and up).
 For clients, in addition to those {\i Win32} / {\i Win64} platforms, you have cross-platform code generation abilities, for any {\i Delphi} or {\i @*FreePascal@} target (including {\i @*OSX@} and mobile {\i iOS} or {\i Android}), or AJAX / HTML5 clients via {\i @*Smart Mobile Studio@} - see @90@.
 =[License]
@@ -464,7 +464,7 @@ The {\i Synopse mORMot Framework} shall provide User Interface and Report genera
 Such a ribbon-oriented interface shall be made available, in a per-table approach, and associated reports.
 Here is a sample of screen content, using proprietary TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin}:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo}:
 %synfilevcl.png
 
 [SRS-DI-2.3.1]
@@ -570,7 +570,7 @@ DisplayName=mORMot Framework Overview
 
 :Synopse mORMot Overview
 %IamLost.png
-{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to {\i Delphi 10.1 Berlin} and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
+{\i Synopse mORMot} is an Open Source @*Client-Server@ @*ORM@ @*SOA@ @*MVC@ framework for {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo} and @*FPC@, targeting {\i Win/@*Linux@} for the server, and any platform for clients (including mobile or AJAX).
 The main features of {\i mORMot} are therefore:
 - {\i ORM/ODM}: objects persistence on almost any database (SQL or NoSQL);
 - {\i SOA}: organize your business logic into @*REST@ services;
@@ -708,7 +708,7 @@ At first, some points can be highlighted, which make this framework distinct to 
 - More than 1800 pages of documentation;
 - {\i Delphi}, {\i FreePascal}, mobile and @*AJAX@ clients can share the same server, and ORM/SOA client access code can be generated on request for any kind of application - see @86@;
 - Full source code provided - so you can enhance it to fulfill any need;
-- Works from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin} and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
+- Works from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo} and FPC 2.6.4/2.7.1/3.1.1, truly Unicode (uses @*UTF-8@ encoding in its kernel, just like JSON), with any version of {\i Delphi} (no need to upgrade your IDE).
 \page
 : Benefits
 As you can see from the previous section, {\i mORMot} provides a comprehensive set of features that can help you to manage your crosscutting concerns though a reusable set of components and core functionality.
@@ -1359,7 +1359,7 @@ In the following next paragraphs, we'll comment some main features of the lowest
 - {\f1\fs20 @*TDocVariant@} custom {\f1\fs20 variant} type for dynamic schema-less {\i object} or {\i array} storage.
 Other shared features available in {\f1\fs20 SynTests.pas} and {\f1\fs20 SynLog.pas} will be detailed later, i.e. @*Test@ing and @*Log@ging - see @12@.
 :32 Unicode and UTF-8
-Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest {\i Delphi 10.1 Berlin} revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
+Our {\i mORMot} Framework has 100% UNICODE compatibility, that is compilation under {\i Delphi} 2009 and up (including latest {\i Delphi 10.2 Tokyo} revision). The code has been deeply rewritten and @*test@ed, in order to provide compatibility with the {\f1\fs20 String=UnicodeString} paradigm of these compilers.  But the code will also handle safely Unicode for older versions, i.e. from {\i Delphi} 6 up to {\i Delphi} 2007.
 Since our framework is natively @**UTF-8@ (this is the better character encoding for fast @*JSON@ streaming/parsing in a @*SAX@-like mode, and it is natively supported by the {\i @*SQLite3@} engine), we had to establish a secure way our framework used strings, in order to handle all versions of {\i Delphi} (even pre-Unicode versions, especially the {\i Delphi} 7 version we like so much), and provide compatibility with the {\i @*FreePascal@ Compiler}.
 Some string types have been defined, and used in the code for best cross-compiler efficiency (avoiding most conversion between formats):
 - {\f1\fs20 @**RawUTF8@} is used for every internal data usage, since both {\i SQLite3} and JSON do expect UTF-8 encoding;
@@ -1458,7 +1458,7 @@ Here is how those new methods work:
 !  if GroupA.Find(v)<0 then // fast binary search
 !    ShowMessage('Error: 1500 not found!');
 Some unique methods like {\f1\fs20 Slice, Reverse} or {\f1\fs20 AddArray} are also available, and mimic well-known Python methods.
-Still closer to the generic paradigm, working for {\i Delphi} 6 up to {\i Delphi 10.1 Berlin}, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
+Still closer to the generic paradigm, working for {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo}, without the need of the slow enhanced RTTI, nor the executable size overhead and compilation issues of generics...
 :  Capacity handling via an external Count
 One common speed issue with the default usage of {\f1\fs20 TDynArray} is that the internal memory buffer is reallocated when you change its length, just like a regular {\i Delphi} {\i dynamic array}.
 That is, whenever you call {\f1\fs20 Add} or {\f1\fs20 Delete} methods, an internal call to {\f1\fs20 SetLength(DynArrayVariable)} is performed. This could be slow, because it always executes some extra code, including a call to {\f1\fs20 ReallocMem}.
@@ -1556,7 +1556,7 @@ Here are the main features of this custom variant type:
 - Perfect storage for dynamic value-objects content, with a {\i schema-less} approach (as you may be used to in scripting languages like {\i Python} or {\i JavaScript});
 - Allow nested documents, with no depth limitation but the available memory;
 - Assignment can be either {\i per-value} (default, safest but slower when containing a lot of nested data), or {\i per-reference} (immediate reference-counted assignment);
-- Very fast JSON serialization / un-serialization with support of {\i MongoDB}-like extended syntax;
+- Very fast JSON serialization / un-serialization with support of {\i MongoDB}-like @*extended syntax@;
 - Access to properties in code, via @*late-binding@ (including almost no speed penalty due to our VCL hack as detailed in @SDD-DI-2.2.3@);
 - Direct access to the internal variant {\i names} and {\i values} arrays from code, by trans-typing into a {\f1\fs20 TDocVariantData record};
 - Instance life-time is managed by the compiler (like any other {\f1\fs20 variant} type), without the need to use {\f1\fs20 interfaces} or explicit {\f1\fs20 try..finally} blocks;
@@ -1569,7 +1569,7 @@ Here are the main features of this custom variant type:
 To create instances of such {\f1\fs20 variant}, you can use some easy-to-remember functions:
 - {\f1\fs20 _Obj() _ObjFast()} global functions to create a {\f1\fs20 variant} {\i object} document;
 - {\f1\fs20 _Arr() _ArrFast()} global functions to create a {\f1\fs20 variant} {\i array} document;
-- {\f1\fs20 _Json() _JsonFast() _JsonFmt() _JsonFastFmt()} global functions to create any {\f1\fs20 variant} {\i object} or {\i array} document from JSON, supplied either with standard or {\i @*MongoDB@}-extended syntax.
+- {\f1\fs20 _Json() _JsonFast() _JsonFmt() _JsonFastFmt()} global functions to create any {\f1\fs20 variant} {\i object} or {\i array} document from JSON, supplied either with standard or {\i @*MongoDB@}-@*extended syntax@.
 You have two non excluding ways of using the {\f1\fs20 TDocVariant} storage:
 - As regular {\f1\fs20 variant} variables, then using either late-binding or faster {\f1\fs20 _Safe()} to access its data;
 - Directly as {\f1\fs20 TDocVariantData} variables, then later on returing a {\f1\fs20 variant} instance using {\f1\fs20 variant(aDocVariantData)}.
@@ -1760,7 +1760,7 @@ With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i 
 !  writeln(VariantSaveJSON(V3));
 !  // all commands will write '{"name":"john","year":1982}'
 Of course, you can nest objects or arrays as parameters to the {\f1\fs20 _JsonFmt()} function.
-The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} extended syntax, i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
+The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} @*extended syntax,@ i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
 Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
 As a with any {\i object} or {\i array} document, the {\i Delphi} IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
 :   Per-value or per-reference
@@ -1801,6 +1801,10 @@ Note that a set of global functions have been defined, which allows direct creat
 !!    [dvoReturnNullForUnknownProperty,dvoValueCopiedByReference]);
 When working with complex documents, e.g. with @*BSON@ / {\i @*MongoDB@} documents, almost all content will be created in "fast" {\i per-reference} mode.
 :  Advanced TDocVariant process
+:   Number values options
+By default, {\f1\fs20 TDocVariantData} will only recognize {\f1\fs20 integer}, {\f1\fs20 Int64} and {\f1\fs20 currency} - see @33@ - as number values. Any floating point value which may not be translated to/from @*JSON@ textual representation safely will be stored as a JSON string, i.e. if it does match an integer or up to 4 fixed decimals, with 64-bit precision.
+You can set the {\f1\fs20 dvoAllowDoubleValue} option to {\f1\fs20 TDocVariantData}, so that such numbers will be recognized and stored. In this case, only {\f1\fs20 varDouble} storage will be used for the {\f1\fs20 variant} values, i.e. 32-bit IEEE storage, handling 5.0 x 10^-324 .. 1.7 x 10^308 range. With such floating-point values, you may loose precision and digits during the JSON serialization process. This is why it is not enabled by default.
+Also note that some JSON engines do not support 64-bit integer numbers. For instance, {\f1\fs20 @*JavaScript@} engines only store up to @*53-bit@ of information without precision loss, due to their internal storage as a 8 bytes IEEE 754 container. In some cases, it is safest to use JSON string representation of such numbers, as is done with the {\f1\fs20 woIDAsIDstr} value of {\f1\fs20 TTextWriterWriteObjectOption} for safe serialization of {\f1\fs20 TSQLRecord.ID} ORM values.
 :   Object or array document creation options
 As stated above, a {\f1\fs20 TDocVariantOptions} parameter enables to define the behavior of a {\f1\fs20 TDocVariant} custom type for a given instance. Please refer to the documentation of this set of options to find out the available settings. Some are related to the memory model, other to case-sensitivity of the property names, other to the behavior expected in case of non-existing property, and so on...
 Note that this setting is {\i local} to the given {\f1\fs20 variant} instance.
@@ -1836,7 +1840,13 @@ We are pretty convinced that when you will start playing with {\f1\fs20 TDocVari
 :175  Iso8601 time and date
 For date/time storage as text, the framework will use {\i @**ISO 8601@} encoding. Dates could be encoded as {\f1\fs20 YYYY-MM-DD} or {\f1\fs20 YYYYMMDD}, time as {\f1\fs20 hh:mm:ss} or {\f1\fs20 hhmmss}, and combined date and time representations as {\f1\fs20 <date>T<time>}, i.e. {\f1\fs20 YYYY-MM-DDThh:mm:ss} or {\f1\fs20 YYYYMMDDThhmmss}.
 The {\i lexicographical order} of the representation thus corresponds to chronological order, except for date representations involving negative years. This allows dates to be naturally sorted by, for example, file systems, or grid lists.
-The {\f1\fs20 SynCommons.pas} unit defines some functions able to convert to/from regular {\f1\fs20 TDateTime} values, or from a dedicated {\f1\fs20 @**TTimeLog@} type:
+:   TDateTime and TDateTimeMS
+In addition to the default {\f1\fs20 @**TDateTime@} type, which will be serialized with a second resolution, you may use {\f1\fs20 @**TDateTimeMS@}, which will include the milliseconds, i.e. {\f1\fs20 YYYY-MM-DDThh:mm:ss.sss} or {\f1\fs20 YYYYMMDDThhmmss.sss}:
+!type
+!  TDateTimeMS = type TDateTime;
+This {\f1\fs20 TDateTimeMS} type is handled both during {\f1\fs20 record} - see @51@ - and dynamic array - see @53@ - JSON serialization, and by the framework {\f1\fs20 @*ORM@}.
+:   TTimeLog
+The {\f1\fs20 SynCommons.pas} unit also defines a {\f1\fs20 @**TTimeLog@} type, and some functions able to convert to/from regular {\f1\fs20 TDateTime} values:
 !type
 !  TTimeLog = type Int64;
 This integer storage is encoded as a series of bits, which will map the {\f1\fs20 @**TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
@@ -1847,7 +1857,7 @@ The resolution of such values is one second. In fact, it uses internally for com
 - 17..21 bits will map {\i days} (minus one),
 - 22..25 bits will map {\i months} (minus one),
 - 26..38 bits will map {\i years}.
-The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and an integer storage, so is not able to handle such resolution.
+The {\i ISO 8601} standard allows millisecond resolution, encoded as {\f1\fs20 hh:mm:ss.sss} or {\f1\fs20 hhmmss.sss}. Our {\f1\fs20 TTimeLog}/{\f1\fs20 TTimeLogBits} integer encoding uses a second time resolution, and a 64-bit integer storage, so is not able to handle such precision. You could use {\f1\fs20 @*TDateTimeMS@} values instead, if milliseconds are required.
 Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i add} or {\i subtract} two {\f1\fs20 TTimeLog} values when doing such date/time computation: use a {\f1\fs20 TDateTime} temporary conversion in such case. See for instance how the {\f1\fs20 TSQLRest.ServerTimeStamp} property is computed:
 !function TSQLRest.GetServerTimeStamp: TTimeLog;
 !begin
@@ -1859,13 +1869,22 @@ Note that since {\f1\fs20 TTimeLog} type is bit-oriented, you can't just use {\i
 !  fServerTimeStampOffset := PTimeLogBits(@Value)^.ToDateTime-Now;
 !end;
 But if you simply want to {\i compare} {\f1\fs20 TTimeLog} kind of date/time, it is safe to directly compare their {\f1\fs20 Int64} underlying value, since timestamps will be stored in increasing order, with a resolution of one second.
-Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could create an internal compiler error. In order to circumvent this bug, you will have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
+Due to compiler limitation in older versions of {\i Delphi}, direct typecast of a {\f1\fs20 TTimeLog} or {\f1\fs20 Int64} variable into a {\f1\fs20 TTimeLogBits} record (as with {\f1\fs20 TTimeLogBits(aTimeLog).ToDateTime}) could lead to an internal compiler error. In order to circumvent this bug, you will have to use a {\f1\fs20 pointer} typecast, e.g. as in {\f1\fs20 TimeLogBits(@Value)^.ToDateTime} above.\line But in most case, you should better use the following functions to manage such timestamps:
 ! function TimeLogNow: TTimeLog;
 ! function TimeLogNowUTC: TTimeLog;
 ! function TimeLogFromDateTime(DateTime: TDateTime): TTimeLog;
 ! function TimeLogToDateTime(const TimeStamp: TTimeLog): TDateTime; overload;
 ! function Iso8601ToTimeLog(const S: RawByteString): TTimeLog;
-See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} types.
+See @174@ for additional information about this {\f1\fs20 TTimeLog} storage, and how it is handled by the framework @*ORM@, via the additional {\f1\fs20 @*TModTime@} and {\f1\fs20 @*TCreateTime@} types.
+:   TUnixTime
+As an alternative, you may use the {\f1\fs20 @**TUnixTime@} type, which is a 64-bit encoded number of seconds since the Unix Epoch, i.e. 1970-01-01 00:00:00 UTC:
+!type
+!  TUnixTime = type Int64;
+You can convert such values:
+- to/from {\f1\fs20 TTimeLog} values using {\f1\fs20 TTimeLogBits.ToUnixTime} and {\f1\fs20 TTimeLogBits.FromUnixTime} methods;
+- to/from {\f1\fs20 TDateTime} values using {\f1\fs20 UnixTimeToDateTime}/{\f1\fs20 DateTimeToUnixTime} functions;
+- using {\f1\fs20 UnixTimeUTC} to return the current timestamp, calling very fast OS API.
+You may consider using {\f1\fs20 TUnixTime} especially if the timestamp is likely to be handled in third-party clients following this encoding. In the Delphi world, {\f1\fs20 TDateTime} or {\f1\fs20 TTimeLog} types could be preferred.
 :176  Time Zones
 One common problem when handling dates and times, is that common time is shown and entered as {\i local}, whereas the computer should better use non-geographic information - especially on a Client-Server architecture, where both ends may not be on the same physical region.
 A {\i @**time zone@} is a region that observes a uniform standard time for legal, commercial, and social purposes. Time zones tend to follow the boundaries of countries and their subdivisions because it is convenient for areas in close commercial or other communication to keep the same time. Most of the time zones on land are offset from {\i Coordinated Universal Time} (@**UTC@) by a whole number of hours, or minutes. Even worse, some countries use daylight saving time for part of the year, typically by changing clocks by an hour, twice every year.
@@ -2200,10 +2219,12 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 @*WideString@}|TEXT|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
 |{\f1\fs20 @*SynUnicode@}|TEXT|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|TEXT|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
-|{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time
+|{\f1\fs20 @*TDateTime@}|TEXT|@*ISO 8601@ encoded date time, with second resolution
+|{\f1\fs20 @*TDateTimeMS@}|TEXT|@*ISO 8601@ encoded date time, with millisecond resolution
 |{\f1\fs20 @*TTimeLog@}|INTEGER|as proprietary fast {\f1\fs20 Int64} date time
-|{\f1\fs20 TModTime}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 TCreateTime}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TModTime@}|INTEGER|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TCreateTime@}|INTEGER|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TUnixTime@}|INTEGER|timestamp stored as second-based Unix Time (i.e. the 64-bit number of seconds since 1970-01-01 00:00:00 UTC)
 |{\f1\fs20 @*TSQLRecord@}|INTEGER|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - 64-bit under {\i Win64}
 |{\f1\fs20 @*TID@}|INTEGER|64-bit {\f1\fs20 RowID} pointing to another record, but without any information about the corresponding table
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; this is a particular case of {\f1\fs20 TSQLRecord}: it won't contain {\f1\fs20 pointer(RowID)}, but an instance)
@@ -2269,10 +2290,11 @@ Having such a dedicated {\f1\fs20 RawUTF8} type will also ensure that you are no
 \
 For additional information about @*UTF-8@ handling in the framework, see @32@.
 :174  Date and time fields
-{\i Delphi} {\f1\fs20 @**TDateTime@} properties will be stored as @*ISO 8601@ text in the database. See @175@ for details about this text encoding.
-As alternatives,  {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
+{\i Delphi} {\f1\fs20 @*TDateTime@} and {\f1\fs20 @*TDateTimeMS@} properties will be stored as @*ISO 8601@ text in the database, with seconds and milliseconds resolution. See @175@ for details about this text encoding.
+As alternatives, {\f1\fs20 @*TTimeLog@ / @**TModTime@ / @**TCreateTime@} offer a proprietary fast {\f1\fs20 Int64} date time format, which will map the {\f1\fs20 @*TTimeLogBits@} record type, as defined in {\f1\fs20 SynCommons.pas} unit.
 This format will be very fast for comparing dates or convert into/from text, and will be stored as INTEGER in the database, therefore more efficiently than plain ISO 8601 text as for {\f1\fs20 TDateTime} fields.
 In practice, {\f1\fs20 TModTime} and {\f1\fs20 TCreateTime} values are inter-exchangeable with {\f1\fs20 TTimeLog}. They are just handled with a special care by the ORM, so that their associated field value will be updated with the current UTC timestamp, for every {\f1\fs20 TSQLRecord} modification (for {\f1\fs20 TModTime}), or at entry creation (for {\f1\fs20 TCreateTime}). The time value stored is in fact the UTC timestamp, as returned from the current REST Server: in fact, when any REST client perform a connection, it will retrieve any time offset from the REST Server, which will be used to store a consistent time value across all Clients.
+You may also define a {\f1\fs20 @*TUnixTime@} property, which will store the number of seconds since 1970-01-01 00:00:00 UTC as INTEGER in the database, and serialized as 64-bit JSON number. This encoding has the benefit of being handled by {\i SQlite3} date/time functions, and interoperable with most third-party languages.
 :  TSessionUserID field
 If you define a {\f1\fs20 @**TSessionUserID@} published property, this field will be automatically filled at creation or modification of the {\f1\fs20 TSQLRecord} with the current {\f1\fs20 TSQLAuthUser.ID} value of the active session. If no session has been initialized from the client side, {\f1\fs20 0} will be stored.
 By design, and similar to {\f1\fs20 @*TModTime@} fields, you should use the @*ORM@ PUT/POST @*CRUD@ methods to compute this field value: manual SQL statements (like {\f1\fs20 UPDATE Table SET Column=0}) won't set its content. Also, it is up to the client to fill the {\f1\fs20 TSessionUserID} fields before sending their content to the server - the Delphi and cross-platform ORM clients will perform this assignment.
@@ -2347,7 +2369,7 @@ It is worth saying that this deletion tracking is not defined at RDBMS level, bu
 :  Variant fields
 The ORM will store {\f1\fs20 variant} fields as TEXT in the database, serialized as JSON.
 At loading, it will check their content:
-- If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with extended syntax, if applying);
+- If some custom {\f1\fs20 variant} types are registered (e.g. {\i @*MongoDB@} custom objects), they will be recognized as such (with @*extended syntax@, if applying);
 - It will create a @80@ instance if the stored TEXT is a JSON object or array;
 - It will create a numerical value ({\f1\fs20 integer} or {\f1\fs20 @*double@}) if the stored text has the corresponding layout;
 - Otherwise, it will create a {\f1\fs20 string} value.
@@ -2539,7 +2561,7 @@ Any {\f1\fs20 @*TDateTime@} bound parameter shall better be specified using {\f1
 ! aRec.CreateAndFillPrepare(Client,'Datum>=?',[DateToSQL(2012,5,4)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[DateTimeToSQL(Now)]);
 ! aRec.CreateAndFillPrepare(Client,'Datum<=?',[TimeLogToSQL(Client.ServerTimeStamp)]);
-For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
+For {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@ / @*TUnixTime@} kind of properties, please use the underlying {\f1\fs20 Int64} value as bound parameter.
 As stated previously, @*BLOB@ (i.e. {\f1\fs20 sftBlob} or {\f1\fs20 @*TSQLRawBlob@}) properties are handled separately, via dedicated {\f1\fs20 RetrieveBlob} and {\f1\fs20 UpdateBlob} method calls (or their global {\f1\fs20 RetrieveBlobFields} / {\f1\fs20 UpdateBlobFields} twins). In fact, BLOB data is expected to be potentially big (more than a few MB). But you can specify a small BLOB content using an explicit conversion to the corresponding TEXT format, by calling {\f1\fs20 @*BinToBase64WithMagic@()} overloaded functions when preparing an UPDATE query, or by defining a {\f1\fs20 TByteDynArray} published field instead of {\f1\fs20 TSQLRawBlob}.\line See also {\f1\fs20 @*ForceBlobTransfert@} and {\f1\fs20 ForceBlobTransfertTable[]} properties of {\f1\fs20 TSQLRestClientURI}.
 Note that there was a {\i breaking change} about the {\f1\fs20 TSQLRecord.Create / FillPrepare  / CreateAndFillPrepare} and {\f1\fs20 TSQLRest.OneFieldValue / MultiFieldValues} methods: for historical reasons, they expected parameters to be marked as {\f1\fs20 %} in the SQL WHERE clause, and inlined via {\f1\fs20 :(...):} as stated @61@ - since revision 1.17 of the framework, those methods expect parameters marked as {\f1\fs20 ?} and with no {\f1\fs20 :(...):}. Due to this {\i breaking change}, user code review is necessary if you want to upgrade the engine from 1.16 or previous. In all cases, using {\f1\fs20 ?} is less confusing for new users, and more close to the usual way of preparing database queries - e.g. as stated @27@. Both {\f1\fs20 TSQLRestClient.ExecuteFmt / ListFmt} methods are not affected by this change, since they are just wrappers to the {\f1\fs20 FormatUTF8()} function.
 :  Introducing TSQLTableJSON
@@ -2688,21 +2710,32 @@ It may also be useful for queries.\line Instead of writing:
 We may write:
 !var aMale: TSQLBaby;
 !...
-!  TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
-!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !  while aMale.FillOne do
 !    DoSomethingWith(aMale);
 Without the need to write the {\f1\fs20 try ... finally} block.
 See the {\f1\fs20 TSQLRecord.AutoFree()} overloaded methods in {\f1\fs20 mORMot.pas} for the several use cases, and the associated {\f1\fs20 TAutoFree} / {\f1\fs20 IAutoFree} types as defined in {\f1\fs20 SynCommons.pas}. Note that you can handle several local variables in a single {\f1\fs20 TSQLRecord.AutoFree()} or {\f1\fs20 TAutoFree.Create()} initialization.
 Be aware that it does not introduce some kind of magic @*garbage collector@, as available in C# or Java. It is not even similar to the {\f1\fs20 ARC} memory model used by {\i Apple} and the {\i Delphi} {\i NextGen} compiler. It is just some syntaxic sugar creating a local hidden {\f1\fs20 IAutoFree} interface, which will be released at the end of the local method by the compiler, and also release all associated class instances. So the local class instances should stay in the local scope, and should not be sent and stored in another process: in such cases, you may encounter access violation issues.
-Due to an issue in the @*FPC@ implementation of interfaces - see issue @http://bugs.freepascal.org/view.php?id=26602 - the above code will not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
+Due to an issue (feature?) in the @*FPC@ implementation of interfaces - see @http://bugs.freepascal.org/view.php?id=26602 - the above code will not work directly. You should assign the result of this method to a local {\f1\fs20 IAutoFree} variable, as such:
 !var aMale: TSQLBaby;
 !!    auto: IAutoFree;
 !...
-!  auto := TAutoFree.Create(aMale,TSQLBaby.CreateAndFillPrepare(Client,
-!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]));
+!  auto := TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]);
 !  while aMale.FillOne do
 !    DoSomethingWith(aMale);
+One alternative may be to use a {\f1\fs20 with} statement, which prevents the need of defining a local variable:
+!var aMale: TSQLBaby;
+!...
+!  with TAutoFree.One(aMale,TSQLBaby.CreateAndFillPrepare(Client,
+!    'Name LIKE ? AND Sex = ?',['A%',ord(sMale)])) do
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
+Or use one of the {\f1\fs20 TSQLRecord.AutoFree} overloaded {\f1\fs20 class} methods:
+!var aMale: TSQLBaby;
+!...
+!  with TSQLBaby.AutoFree(aMale,Client,'Name LIKE ? AND Sex = ?',['A%',ord(sMale)]) do
+!    while aMale.FillOne do
+!      DoSomethingWith(aMale);
 If you want your code to cross-compile with both Delphi and FPC, consider this expectation of the FPC compiler.
 : Objects relationship: cardinality
 All previous code is fine if your application requires "flat" data. But most of the time, you'll need to define master/child relationship, perhaps over several levels. In data modeling, the {\i @**cardinality@} of one data table with respect to another data table is a critical aspect of database design. Relationships between data tables define {\i cardinality} when explaining how each table links to another.
@@ -3549,7 +3582,7 @@ By default, change-tracking feature will be disabled, saving performance and dis
 This single line will let {\f1\fs20 aServer: TSQLRestServer} monitor all CRUD operations, and store all changes of the {\f1\fs20 TSQLInvoice} table within a {\f1\fs20 TSQLRecordHistory} table.
 Since all content changes will be stored in this single table by default (note that the {\f1\fs20 TrackChanges()} method accepts an {\i array of classes} as parameters, and can be called several times), it may be handy to define several tables for history storage. Later on, an external database engine may be defined to store history, e.g. on cheap hardware (and big hard drives), whereas your main database may be powered by high-end hardware (and smaller SSDs) - see @27@.\line To do so, you define your custom class for history storage, then supply it as parameter:
 !type
-!  TSQLRecordSecondaryHistory = class(TSQLRecord);
+!  TSQLRecordSecondaryHistory = class(TSQLRecordHistory);
 ! (...)
 ! aServer.TrackChanges([TSQLInvoice],TSQLRecordSecondaryHistory);
 Then, all history will be stored in this {\f1\fs20 TSQLRecordSecondaryHistory} class (in its own table named {\f1\fs20 SecondaryHistory}), and not the default {\f1\fs20 TSQLRecordHistory} class (in its {\f1\fs20 History} table).
@@ -4003,7 +4036,7 @@ This framework uses a compiled version of the official {\i SQLite3} library sour
 - Locking of the database at the record level ({\i SQLite3} only handles file-level locking);
 - Of course, the main enhancement added to the {\i SQLite3} engine is that it can be deployed in a @*stand-alone@ or @*Client-Server@ architecture, whereas the default {\i SQLite3} library works only in stand-alone mode.
 From the technical point of view, here are the current compilation options used for building the {\i SQLite3} engine:
-- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@});
+- Uses @*ISO 8601@:2004 format to properly handle date/time values in TEXT field, or in faster and smaller {\f1\fs20 Int64} custom types ({\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} or {\f1\fs20 @*TUnixTime@});
 - {\i SQLite3} library unit was compiled including @*RTREE@ extension for doing very fast range queries;
 - It can include @*FTS@3/FTS4 @*full text@ search engine (MATCH operator), with integrated @*SQL@ optimized ranking function;
 - The framework makes use only of newest API ({\f1\fs20 sqlite3_prepare_v2}) and follows latest {\i SQLite3} official documentation;
@@ -4535,7 +4568,7 @@ In the {\i mORMot} ORM, we defined some additional kind of collations, via some 
 |{\f1\fs20 sftAnsiText}|NOCASE
 |{\f1\fs20 sftUTF8Text}|SYSTEMNOCASE, i.e. using {\f1\fs20 UTF8ILComp()}, which will ignore {\i Win-1252} Latin accents
 |{\f1\fs20 sftEnumerate\line sftSet\line sftInteger\line sftID\line sftTID\line sftRecord\line sftBoolean\line sftFloat\line sftCurrency\line ftTimeLog\line sftModTime\line sftCreateTime}|BINARY is used for those numerical values
-|{\f1\fs20 {\f1\fs20 sftDateTime}}|ISO8601, i.e. decoding the text into a date/time value before comparison
+|{\f1\fs20 sftDateTime\line ftDateTimeMS}|ISO8601, i.e. decoding the text into a date/time value before comparison
 |{\f1\fs20 sftObject\line sftVariant}|BINARY, since it is stored as plain JSON content
 |{\f1\fs20 sftBlob\line sftBlobDynArray\line sftBlobCustom}|BINARY
 ;|{\f1\fs20 sftUTF8Custom}|NOCASE by default
@@ -6156,7 +6189,7 @@ It gives access to any @**BSON@ data, including documents, arrays, and {\i Mongo
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
 - A {\f1\fs20 @*TBSONVariant@} custom variant type, to store {\i MongoDB}'s custom type values;
 - Interaction with the {\f1\fs20 SynCommons.pas}' @80@ as document storage and late-binding access;
-- Marshalling BSON to and from @*JSON@, with the {\i MongoDB} extended syntax for handling its custom types.
+- Marshalling BSON to and from @*JSON@, with the {\i MongoDB} @*extended syntax@ for handling its custom types.
 This unit defines some objects able to connect and manage databases and collections of documents on any {\i MongoDB} servers farm:
 - Connection to one or several servers, including secondary hosts, via the {\f1\fs20 TMongoClient} class;
 - Access to any database instance, via the {\f1\fs20 TMongoDatabase} class;
@@ -6479,10 +6512,11 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*WideString@}|UTF-8|{\i UCS2} char-set, as COM BSTR type (Unicode in all version of {\i Delphi})
 |{\f1\fs20 @*SynUnicode@}|UTF-8|Will be either {\f1\fs20 WideString} before {\i Delphi} 2009, or {\f1\fs20 UnicodeString} later
 |{\f1\fs20 string}|UTF-8|Not to be used before {\i Delphi} 2009 (unless you may loose some data during conversion) - {\f1\fs20 RawUTF8} is preferred in all cases
-|{\f1\fs20 @*TDateTime@}|datetime|@*ISO 8601@ encoded date time
+|{\f1\fs20 @*TDateTime@\line @*TDateTimeMS@}|datetime|@*ISO 8601@ encoded date time
 |{\f1\fs20 @*TTimeLog@}|int64|as proprietary fast {\f1\fs20 Int64} date time
-|{\f1\fs20 TModTime}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
-|{\f1\fs20 TCreateTime}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TModTime@}|int64|the server date time will be stored when a record is modified (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TCreateTime@}|int64|the server date time will be stored when a record is created (as proprietary fast {\f1\fs20 Int64})
+|{\f1\fs20 @*TUnixTime@}|datetime|seconds since Unix epoch
 |{\f1\fs20 @*TSQLRecord@}|int32|32-bit {\f1\fs20 RowID} pointing to another record (warning: the field value contains {\f1\fs20 pointer(RowID)}, not a valid object instance - the record content must be retrieved with late-binding via its {\f1\fs20 ID} using a {\f1\fs20 PtrInt(Field)} typecast or the {\f1\fs20 Field.ID} method), or by using e.g. {\f1\fs20 @*CreateJoined@()} - is 64-bit on {\i Win64}
 |{\f1\fs20 @*TID@}|int32/int64|{\f1\fs20 RowID} pointing to another record - this kind of property is 64-bit compatible, so can handle values up to 9,223,372,036,854,775,808
 |{\f1\fs20 @*TSQLRecordMany@}|nothing|data is stored in a separate {\i pivot} table; for MongoDB, you should better use {\i data sharding}, and an embedded sub-document
@@ -6724,8 +6758,13 @@ Usage of this layout, instead of other like XML or any proprietary format, resul
 - The JSON format is simple, and specified in a short and clean RFC document;
 - The default text encoding for both JSON and {\i @*SQLite3@} is UTF-8, which allows the full Unicode char-set to be stored and communicated;
 - It is the default data format used by ASP.NET AJAX services created in Windows Communication Foundation (WCF) since .NET framework 3.5; so it's Microsoft officially "ready";
-- For binary @*BLOB@ transmission, we simply encode the binary data as {\i @*Base64@}; please note that, by default, BLOB fields are not transmitted with other fields in JSON objects, see @1@ (only exception are {\i @*dynamic array@} fields, which are transmittest within the other fields).
-JSON @**serialization@ will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
+- For binary @*BLOB@ transmission, we simply encode the binary data as {\i @*Base64@}; please note that, by default, BLOB fields are not transmitted over REST with other fields in JSON objects, see @1@ (only exception are {\i @*dynamic array@} fields, which are transmittest within the other fields).
+REST JSON @**serialization@ will indeed be used in our main @*ORM@ to process of any {\f1\fs20 TSQLRecord} published properties, and in the {\f1\fs20 interface}-based @*SOA@ architecture of the framework, for content transmission.
+In the framework, the whole @http://json.org standard is implemented, with some exceptions/extensions:
+- {\f1\fs20 #0} characters will indicate the end of input, as with almost all JSON libraries - so if your text input contains a {\f1\fs20 #0} char, please handle it as binary (note that other control chars are escaped as expected);
+- You may use an "@**extended syntax@" (used e.g. by {\f1\fs20 @*MongoDB@}) by unquoting ASCII-only property names;
+- Floating point numbers are sometimes limited to {\f1\fs20 @*currency@} (i.e. 4 decimals), to ensure serialization/unserialization won't loose precision; but in such cases, it can be extended to the {\f1\fs20 double} precision via a set of options;
+- There is no @*53-bit@ limitation for integers, as with @*JavaScript@: the framework handle 64-bit integer values - when using a JavaScript back-end, you may have to transmit huge values as text.
 In practice, JSON has been found out to be very easy to work with and stable. A binary format is not used for transmission yet, but is available at other level of the framework, e.g. as an possible file format for in-memory {\f1\fs20 TObjectList} database engine (with our @*SynLZ@ compression - see @20@).
 :  Values serialization
 Standard {\i Delphi} value types are serialized directly within the JSON content, in their textual representation. For instance, {\f1\fs20 integer} or {\f1\fs20 Int64} are stored as numbers, and {\f1\fs20 @*double@} values are stored as their corresponding floating-point representation.
@@ -6926,7 +6965,7 @@ The following types are handled by this feature:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Serialized as JSON boolean
-|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@}|Serialized as JSON number
+|{\f1\fs20 byte word integer cardinal Int64 single @*double@ @*currency@ @*TUnixTime@}|Serialized as JSON number
 |{\f1\fs20 string @*RawUTF8@ SynUnicode @*WideString@}|Serialized as JSON string
 |{\f1\fs20 DateTime @*TTimeLog@}|Serialized as JSON text, encoded as @*ISO 8601@
 |{\f1\fs20 RawByteString}|Serialized as JSON {\f1\fs20 null} or @*Base64@-encoded JSON string
@@ -7048,6 +7087,7 @@ Classes with {\f1\fs20 published} properties, i.e. every class inheriting from {
 List of {\i Delphi} strings, i.e. {\f1\fs20 @*TStrings@} kind of classes will be serialized as a JSON array of strings. This is the reason why we also introduced a dedicated {\f1\fs20 @**TRawUTF8List@} class, for direct @*UTF-8@ content storage, via our dedicated {\f1\fs20 RawUTF8} type, reducing the need of encoding conversion, therefore increasing process speed.
 :52  TObject serialization
 In fact, any {\f1\fs20 @*TObject@} can be serialized as @*JSON@ in the whole framework: not only for the ORM part (for {\f1\fs20 published} properties), but also for SOA (as parameters of interface-based service methods). All JSON @**serialization@ is centralized in {\f1\fs20 ObjectToJSON()} and {\f1\fs20 JSONToObject()} (aka {\f1\fs20 TJSONSerializer.WriteObject}) functions.
+:   Custom class serialization
 In some cases, it may be handy to have a custom serialization, for instance if you want to manage some third-party classes, or to adapt the serialization scheme to a particular purpose, at runtime.
 You can add a customized serialization of any {\f1\fs20 class}, by calling the {\f1\fs20 TJSONSerializer. @**RegisterCustomSerializer@} class method. Two callbacks are to be defined for a specific class type, and will be used to serialize or un-serialize the object instance. The callbacks are class methods ({\f1\fs20 procedure() of object}), and not plain functions (for some evolved objects, it may have sense to use a context during serialization).
 In the current implementation of this feature, callbacks expect low-level implementation. That is, their implementation code shall follow function {\f1\fs20 JSONToObject()} patterns, i.e. calling low-level {\f1\fs20 GetJSONField()} function to decode the JSON content, and follow function {\f1\fs20 TJSONSerializer.WriteObject()} patterns, i.e. {\f1\fs20 aSerializer.Add/AddInstanceName/AddJSONEscapeString} to encode the class instance as JSON.
@@ -7109,7 +7149,48 @@ If you want to disable the custom serialization, you may call the same method as
 !  TJSONSerializer.RegisterCustomSerializer(TFileVersion,nil,nil);
 This will reset the JSON serialization of the specified class to the default serializer (i.e. writing of {\f1\fs20 published} properties).
 The above code uses some low-level functions of the framework (i.e. {\f1\fs20 AddJSONEscape} and {\f1\fs20 JSONDecode}) to implement serialization as a JSON object, but you may use any other serialization scheme, on need. That is, you may serialize the whole class instance just as one JSON string or numerical value, or even a JSON array. It will depend of the implementation of the {\i Reader} and {\i Writer} registered callbacks.
-:71  TObjectList serialization
+:   Custom field names serialization
+If your customization just expect changing some property names, you may use {\f1\fs20 TJSONSerializer.RegisterCustomSerializerFieldNames} class method.
+For instance, given the following class:
+!type
+!  TMyClass = class(TSynPersistent)
+!  private
+!    FLength: Integer;
+!    FColor: Integer;
+!    FName: RawUTF8;
+!  published
+!    property Color: Integer read FColor write FColor;
+!    property Length: Integer read FLength write FLength;
+!    property Name: RawUTF8 read FName write FName;
+!  end;
+You may use default serialization as such:
+!var
+!  O: TMyClass;
+!  json: RawUTF8;
+!begin
+!  O := TMyClass.Create;
+!  O.Color := 10;
+!  O.Length := 20;
+!  O.Name := 'one';
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Length":20,"Name":"one"}
+Then switch to customized serialization:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ['name','length'], ['n','len']);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"len":20,"n":"one"}
+And back to normal/default serialization:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, [], []);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Length":20,"Name":"one"}
+You could ignore some fields, by setting the destination name to {\f1\fs20 ''}:
+!  TJSONSerializer.RegisterCustomSerializerFieldNames(TMyClass, ['length'], ['']);
+!  json := ObjectToJSON(O);
+!  writeln(json); // {"Color":10,"Name":"one"}
+!  O.Free;
+!end;
+This method may therefore help working with pre-existing JSON objects, for instance retrieved from a third-party @*REST@ server.
+Note that the {\f1\fs20 TJSONSerializer.RegisterCustomSerializerFieldNames} method won't accept {\f1\fs20 TSQLRecord} classes, since {\f1\fs20 ORM} serialization is handled in its own (optimized) set - and you could use ORM-level mapping if needed - see @120@.
+:71   TObjectList serialization
 You can even serialize {\f1\fs20 @**TObjectList@} instances as a valid JSON array, with the ability to store each instance class name, so allowing the storage of non uniformous lists of objects.\line Calling {\f1\fs20 TJSONSerializer.RegisterClassForJSON()} is just needed to register each {\f1\fs20 TObject} class in its internal tables, and be able to create instances from a {\f1\fs20 class} name serialized in each JSON object.
 In fact, if {\f1\fs20 ObjectToJSON()} or {\f1\fs20 TJSONWriter.WriteObject()} have their {\f1\fs20 woStoreClassName} option defined, a new {\f1\fs20 "ClassName":} field will be written as first field of the serialized JSON object.
 This new {\f1\fs20 "ClassName"} field will be recognized:
@@ -7130,7 +7211,7 @@ As a consequence, this kind of code can now work:
 !CheckSame(Comp.Imaginary,7.92);
 !// do not forget to free the memory (Comp can be nill if JSON was not valid)
 !Comp.Free;
-Internal {\f1\fs20 TObjectList} process will therefore rely on a similar process, creating the proper class instances on the fly. You can even have several classes appearing in one {\f1\fs20 TObjectList}: the only prerequisite is that all class types shall have been previously registered on both sides, by a call to {\f1\fs20 TJSONSerializer. RegisterClassForJSON()}.
+Internal {\f1\fs20 TObjectList} process will therefore rely on a similar process, creating the proper class instances on the fly. You can even have several classes appearing in one {\f1\fs20 TObjectList}: the only prerequisite is that all class types shall have been previously registered on both sides, by a call to {\f1\fs20 TJSONSerializer.RegisterClassForJSON()}.
 \page
 :9 REST
 :  What is REST?
@@ -7579,7 +7660,7 @@ Our {\i SynLZ} is efficient, especially on @*JSON@ content, and very fast on the
 You may include {\f1\fs20 hcDeflate} to the property, if you want to support this zip-derivated compression algorithm, e.g. from browsers or any HTTP library. In terms of CPU resources, {\f1\fs20 hcDeflate} will be more consumming than {\f1\fs20 hcSynLZ}, but will obtain a slightly better compression ratio.
 If both {\f1\fs20 [hcSynLZ,hcDeflate]} are defined, {\i mORMot} clients will use {\i SynLZ} compression, while other clients (e.g. browsers which do not know about the {\i SynLZ} encoding), will use the standard {\i deflate} compression.
 :151   AES encryption over HTTP
-In addition to regular HTTPS flow @**encryption@, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on SHA256 and @**AES@256-CFB algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
+In addition to regular HTTPS flow @**encryption@, which is not easy to setup due to the needed certificates, {\i mORMot} proposes a proprietary encryption scheme. It is based on @*SHA256@ and @**AES@256-CFB algorithms, so is known to be secure. You do not need to setup anything on the server or the client configuration, just run the {\f1\fs20 TSQLHttpClient} and {\f1\fs20 TSQLHttpServer} classes with the corresponding parameters.
 Note that this encryption uses a global key for the whole process, which should match on both Server and Client sides. You should better hard-code this public key in your Client and Server {\i Delphi} applications, with some variants depending on each end-user service. You can use {\f1\fs20 CompressShaAesSetKey()} as defined in {\f1\fs20 SynCrypto.pas} to set globally this Encryption Key, and an optional Initialization Vector. You can even customize the AES chaining mode, if the default {\f1\fs20 TAESCFB} mode is not what you expect.
 When the {\f1\fs20 aHttpServerSecurity} parameter is set to {\f1\fs20 secSynShaAes} for the {\f1\fs20 TSQLHttpServer.Create()} constructor, this proprietary encryption will be enabled on the server side. For instance:
 ! MyServer := TSQLHttpServer.Create('888',[DataBase],'+',useHttpApi,32,secSynShaAes);
@@ -8674,7 +8755,7 @@ In {\f1\fs20 Ctxt.Call^} member, you can access low-level communication content,
 \page
 :96 Browser speed-up for unmodified requests
 When used over a slow network (e.g. over the Internet), you can set the optional {\f1\fs20 Handle304NotModified} parameter of both {\f1\fs20 Ctxt.Returns()} and {\f1\fs20 Ctxt.Results()} methods to return the response body only if it has changed since last time.
-In practice, result content will be hashed (using {\f1\fs20 crc32c} algorithm, and fast SSE4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
+In practice, result content will be hashed (using {\f1\fs20 @*crc32c@} algorithm, and fast SSE4.2 hardware instruction, if available) and in case of no modification will return "{\i 304 Not Modified}" status to the browser, without the actual result content. Therefore, the response will be transmitted and received much faster, and will save a lot of bandwidth, especially in case of periodic server pooling (e.g. for client screen refresh).
 Note that in case of hash collision of the {\f1\fs20 crc32c} algorithm (we never did see it happen, but such a mathematical possibility exists), a false positive "not modified" status may be returned; this option is therefore unset by default, and should be enabled only if your client does not handle any sensitive accounting process, for instance.
 Be aware that you should {\i disable authentication} for the methods using this {\f1\fs20 Handle304NotModified} parameter, via a {\f1\fs20 TSQLRestServer.ServiceMethodByPassAuthentication()} call. In fact, our @*REST@ful authentication - see @18@ - uses a per-URI signature, which change very often (to avoid men-in-the-middle attacks). Therefore, any browser-side caching benefit will be voided if authentication is used: browser internal cache will tend to grow for nothing since the previous URIs are deprecated, and it will be a cache-miss most of the time. But when serving some static content (e.g. HTML content, fixed JSON values or even UI binaries), this browser-side caching can be very useful.
 This @*stateless@ @9@ model will enable several levels of caching, even using an external {\i Content Delivery Network} (@*CDN@) service. See @97@ for some potential hosting architectures, which may let your {\i mORMot} server scale to thousands of concurrent users, served around the world with the best responsiveness.
@@ -8683,6 +8764,71 @@ Framework's HTTP server is able to handle returning a file as response to a meth
 You can use the {\f1\fs20 Ctxt.ReturnFile()} method to return a file directly.\line This method is also able to guess the MIME type from the file extension, and handle {\f1\fs20 HTTP_NOTMODIFIED = 304} process, if {\f1\fs20 Handle304NotModified} parameter is {\f1\fs20 true}, using the file time stamp.
 Another possibility may be to use the {\f1\fs20 Ctxt.ReturnFileFromFolder()} method, which is able to efficiently return any file specified by its URI, from a local folder. It may be very handy to
 return some static web content from a {\i mORMot} HTTP server.
+:192 JSON Web Tokens (JWT)
+{\i JSON Web Token} ({\f1\fs20 @**JWT@}) is an open standard ({\i RFC 7519}) that defines a compact and self-contained way for securely transmitting information between parties as a JSON object. This information can be verified and trusted because it is digitally signed. JWTs can be signed using a secret (with the HMAC algorithm) or a public/private key pair using RSA or ECDSA.\line They can be used for:
+- @*Authentication@: including a {\f1\fs20 JWT} to any HTTP request allows {\i Single Sign On} user validation across different domains;
+- Secure Information Exchange: a small amount of data can be stored in the JWT payload, and is digitally signed to ensure its provenance and integrity.
+See @http://jwt.io for an introduction to {\i JSON Web Tokens}.
+Our framework implements {\f1\fs20 JWT}:
+- {\f1\fs20 "HS256"} (@*HMAC-SHA256@) and {\f1\fs20 "ES256"} (256-bit @*ECDSA@) algorithms - with the addition of the {\f1\fs20 "none"} weak algo, to be used with caution;
+- Computes and validates all JWT {\i claims}: dates, audiences, JWT ID;
+- Thread-safe and high performance (2 us for a {\f1\fs20 HS256} verification under x64), with optional in-memory cache if needed (e.g. for slower {\f1\fs20 ES256});
+- Stand-alone and cross-platform code: no external {\f1\fs20 dll}, works with @*Delphi@ or @*FPC@;
+- Enhanced security - it is by design immune from @https://auth0.com/blog/2015/03/31/critical-vulnerabilities-in-json-web-token-libraries
+- Full integration with the framework.
+It is architectured around a set of classes, one per algorithm, following the least astonishment principle, and enhancing security:
+\graph HierTJWTNone TJWTAbstract classes hierarchy
+\TJWTES256\TJWTAbstract
+\TJWTHS256\TJWTAbstract
+\TJWTNone\TJWTAbstract
+\
+In {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas}, you will find:
+- {\f1\fs20 TJWTAbstract} as abstract parent class for implementing JSON Web Tokens;
+- {\f1\fs20 TJWTNone} implementing the {\f1\fs20 "none"} algorithm;
+- {\f1\fs20 TJWTHS256} implementing the {\f1\fs20 "HS256"} algorithm;
+- {\f1\fs20 TJWTES256} implementing the {\f1\fs20 "ES256"} algorithm.
+To work with JWT, you may write for instance:
+!var j: TJWTAbstract;
+!    jwt: TJWTContent;
+!...
+!j := TJWTHS256.Create('secret',0,[jrcSubject],[]);
+!try
+!  j.Verify('eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibm'+
+!    'FtZSI6IkpvaG4gRG9lIiwiYWRtaW4iOnRydWV9.TJVA95OrM7E2cBab30RMHrHDcEfxjoYZgeF'+
+!    'ONFh7HgQ',jwt); // reference from jwt.io
+!  check(jwt.result=jwtValid);
+!  check(jwt.reg[jrcSubject]='1234567890');
+!  check(jwt.data.U['name']='John Doe');
+!  check(jwt.data.B['admin']);
+!finally
+!  j.Free;
+!end;
+The {\f1\fs20 'eyJhbGciOiJIUzI1NiIsIn...'} token contains in fact the following, once {\i base-64} decoded:
+- header: {\f1\fs20 \{"alg":"HS256","typ":"JWT"\}}
+- payload: {\f1\fs20 \{"sub":"1234567890","name":"John Doe","admin":true\}}
+- signature: {\f1\fs20 HMACSHA256(base64UrlEncode(header) + "." + base64UrlEncode(payload), "secret")}
+The {\f1\fs20 TJWTAbstract} classes implement the logic from supplied security parameters about a given set of JWT, then you can use {\f1\fs20 TJWTAbstract.Verify} to decode and check the payload and signature of a {\f1\fs20 JWT} into a {\f1\fs20 TJWTContent} local variable. As you can see, {\f1\fs20 TJWTContent.result} contains the decoding status, {\f1\fs20 TJWTContent.reg[]} the decoded claims, and {\f1\fs20 TJWTContent.data} is a @80@ giving access to any stored private information.
+It has a built-in support of JWT {\i claims} when tokens are generated, so you can write:
+!j := TJWTHS256.Create('sec',10,[jrcIssuer,jrcExpirationTime,jrcIssuedAt,jrcJWTID],[],60);
+!token := j.Compute(['http://example.com/is_root',true],'joe');
+Now, the {\f1\fs20 token} variable contains e.g. as signed payload:
+${"http://example.com/is_root":true,"iss":"joe","iat":1482177879,"exp":1482181479,"jti":"1496DCE0676925DD33BB5A81"}
+The issuer has been encoded as an expected {\f1\fs20 "iss":} field, {\f1\fs20 "iat"} and {\f1\fs20 "exp"} fields contain the issuing and expiration timestamps, and {\f1\fs20 "jti"} has been filled with an obfuscated {\f1\fs20 TSynUniqueIdentifier} as JWT ID. Since we use a {\f1\fs20 TJWTHS256} class, {\f1\fs20 @*HMAC-SHA256@} digital signature of the header and payload has then been appended - with a secret safely derivated from '{\f1\fs20 sec'} passphrase using 10 rounds of a {\f1\fs20 @*PBKDF2_HMAC_SHA256@} derivation (in practice, you may use a much higher number like 20,000).
+Then you can decode such a token, and access its payload in a single method:
+!j.Verify(token,jwt);
+!assert(jwt.result=jwtValid);
+!assert(jwt.reg[jrcIssuer]='joe');
+Integration with method-based services is easy, using {\f1\fs20 TSQLRestServerURIContext.AuthenticationCheck} method:
+!TMyDaemon = class(...
+!protected
+!  fJWT: TJWTAbstract;
+!  ....
+!procedure TMyDaemon.Files(Ctxt: TSQLRestServerURIContext);
+!begin
+!  if Ctxt.AuthenticationCheck(fJWT)=jwtValid then
+!    Ctxt.ReturnFileFromFolder('c:\datafolder');
+!end;
+The above method will define a method-based service returning the content of a local folder, only if a valid {\f1\fs20 JWT} is supplied within the HTTP headers of the incoming request. If {\f1\fs20 AuthenticationCheck} fails to validate the token supplied in the associated {\f1\fs20 Ctxt}, if will return {\f1\fs20 401 HTTP_UNAUTHORIZED} to the client, as expected.
 \page
 : Handling errors
 When using {\f1\fs20 Ctxt.Input*[]} properties, any missing parameter will raise an {\f1\fs20 EParsingException}. It will therefore be intercepted by the server process (as any other exception), and returned to the client with an error message containing the {\f1\fs20 Exception} class name and its associated message.
@@ -9438,7 +9584,7 @@ If you compare with existing mocking frameworks, even in other languages / platf
 - Most common parameters and results can be defined as simple {\f1\fs20 array of const} in the {\i Delphi} code, or by supplying JSON arrays (needed e.g. for more complex structures like {\f1\fs20 record} values);
 - Execution trace retrieval in easy to read or write text format (and not via complex "fluent" interface e.g. with {\f1\fs20 When} clauses);
 - Auto-release of the {\f1\fs20 TInterfaceStub TInterfaceMock TInterfaceMockSpy} generator instance, when the interface is no longer required, to minimize the code to type, and avoid potential memory leaks;
-- Works from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin} - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
+- Works from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo} - since no use of syntax sugar like generics, nor the {\f1\fs20 RTTI.pas} features;
 - Very good performance (the faster {\i Delphi} mocking framework, for sure), due to very low overhead and its reuse of {\i mORMot}'s low-level interface-based services kernel using JSON serialization, which does not rely on the slow and limited {\f1\fs20 TVirtualInterface}.
 :  Stubbing complex return values
 Just imagine that the {\f1\fs20 ForgotMyPassword} method does perform an internal test:
@@ -9651,7 +9797,7 @@ Here are the key features of the current implementation of services using interf
 |Server factory|You can get an implementation on the server side
 |Client factory|You can get a "fake" implementation on the client side, remotely calling the server to execute the process
 |Cross-platform clients|A {\i mORMot} server is able to generate cross-platform client code via a set of templates - see @86@
-|Auto marshalling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin}
+|Auto marshalling|The contract is transparently implemented: no additional code is needed e.g. on the client side, and will handle simple types (strings, numbers, dates, sets and enumerations) and high-level types (objects, collections, records, dynamic arrays, variants) from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo}
 |Flexible|Methods accept per-value or per-reference parameters
 |Instance lifetime|An implementation class can be:\line - Created on every call,\line - Shared among all calls,\line - Shared for a particular user or group,\line - Dedicated to the thread it runs on,\line - Alive as long as the client-side interface is not released,\line - Or as long as an @*authentication@ session exists
 |@*Stateless@|Following a standard request/reply pattern
@@ -9706,7 +9852,7 @@ Handled types of parameters are:
 |%30%70
 |\b Delphi type|Remarks\b0
 |{\f1\fs20 boolean}|Transmitted as @*JSON@ true/false
-|{\f1\fs20 integer cardinal Int64 double currency TDateTime}|Transmitted as JSON numbers
+|{\f1\fs20 integer cardinal Int64 double currency @*TDateTime@ @*TDateTimeMS@}|Transmitted as JSON numbers
 |enumerations|Transmitted as JSON number
 |set|Transmitted as JSON number - one bit per element (up to 32 elements)
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
@@ -10667,9 +10813,23 @@ Then you subscribe to your remote service as such:
 !      Service := nil;  // release the service local instance BEFORE Client.Free
 !    end;
 You could easily implement more complex {\i publish/subscribe} mechanisms, including filtering, time to live or tuned broadcasting, by storing some additional information to the {\f1\fs20 interface} instance (e.g. some value to filter, a timestamp). A dynamic array of dedicated {\f1\fs20 record}s - see @48@, or a list of {\f1\fs20 class} instances, may be used to store the {\i subscribers} expectations.
-:   Interacting with UI/VCL
+:   Subscriber multiple redirection
+Sometimes, in a complex business system, you will define several uncoupled parts of your code subscribing to the same service events. In a DDD architecture, it will be typically happen when several domain bounded contexts subscribe to a single event source, implemented in the infrastructure layer.
+The easiest implementation path is to have each part registering from its side. But it will induce some redundant traffic with the publisher. And it will most probably end-up with duplicated code on subscribers side.
+You may try {\f1\fs20 TSQLRest.MultiRedirect} and register once to a remote service, then use an internal registration mechanism to have every part of your business logic registering and consuming the events. The method returns an {\f1\fs20 IMultiCallbackRedirect} interface, allowing registration of sub-callbacks, with an optional set of method names, if only a sub-set of events are needed.
+Note that sub-callbacks do not need to inherit from the {\f1\fs20 TInterfacedCallback} type: a regular {\f1\fs20 TInterfacedObject} is enough. They will be automatically unregistered from the internal list, if they raise an exception.
+:   Proper threaded implementation
+A {\i mORMot} @*multi-thread@ed server will use critical sections to protect shared data, and avoid potential race conditions. But even on client side, callbacks will be executed in the context of the {\i @*WebSocket@} transmission thread. And in a typical micro-services or event-driven architecture, most nodes are clients and servers at the same time, creating a peer-to-peer mesh of services. So you should prevent any race conditions in each and every node, by protecting access to any shared data.
+Likewise, if your callback triggers another method which shares the same critical section in another thread, you may have a dead lock. If an event triggers a callback within a critical section used to protect a shared resource, and if this callback runs a blocking REST request, the REST answer will be received in the context of the transmission thread. If this answer tries to access the same shared resource, there will be a conflict with the main critical section lock, so the execution will lock.
+To implement proper thread-safety of your callback process you could follow some patterns.
+- Use several small critical sections, protecting any shared data, with the smallest granularity possible. You may use {\f1\fs20 TSynLocker} mutex or {\f1\fs20 TLockedDocVariant} schema-less storage.
+- In your regression tests, ensure you run multi-threaded scenarios, with parallel requests. You may find in {\f1\fs20 TSynParallelProcess} an easy way of running concurrent client/server tests. It will help finding out most obvious implementation issues.
+- By definition, most deadlocks are difficult to reproduce - they are some kind of "Heisenbugs". You may ensure proper logging of the callback process, so that you will be able to track for any deadlock which may occur on production.
+- A good idea may be to gather all non-blocking callback process in a background thread using {\f1\fs20 TSQLRest.AsynchRedirect}. This method will implement any interface via a fake class, which will redirect all methods calls into calls of another interface, but as a FIFO in a background thread. So you will ensure that all callback process will take place in a single thread, avoiding most concurrency issues. As a side effect, the internal FIFO will leverage other threads, so may help scaling your system. For a client application using some User Interface, see @191@ a lock-free alternative.
+Multi-threading is the key to performance. But it is also hard to properly implement. By following those simple rules, you may reduce the risk of concurrency issues.
+:191   Interacting with UI/VCL
 As we have stated, all callback notifications do take place in the transmission thread, i.e. in the {\f1\fs20 TWebSocketProcessClientThread} instance corresponding to each connected client.
-You may be tempted to use the VCL {\f1\fs20 @*Synchronize@()} method, as usual, to forward the notifications to the UI layer. Unfortunately, this may trigger some unexpected race conditions, e.g. when asynchronous notifications (e.g. {\f1\fs20 TChatCallback.NotifyBlaBla()}) are received during a blocking REST command (e.g. {\f1\fs20 Service.BlaBla()}). The {\f1\fs20 Synchronize} call within the blocking command will avoid any incoming asynchronous notification wait for the main thread to be available, and will block the reception of the answer of the pending REST command...\line If you experiment random hangouts of your User Interface, and {\f1\fs20 404 errors} corresponding to a low-level {\i WebSockets} timeout, even when closing the application, you have certainly hit such a race condition.
+You may be tempted to use the VCL {\f1\fs20 @*Synchronize@()} method, as usual, to forward the notifications to the UI layer. Unfortunately, this may trigger some unexpected concurrency issue, e.g. when asynchronous notifications (e.g. {\f1\fs20 TChatCallback.NotifyBlaBla()}) are received during a blocking REST command (e.g. {\f1\fs20 Service.BlaBla()}). The {\f1\fs20 Synchronize} call within the blocking command will avoid any incoming asynchronous notification wait for the main thread to be available, and will block the reception of the answer of the pending REST command...\line If you experiment random hangouts of your User Interface, and {\f1\fs20 404 errors} corresponding to a low-level {\i WebSockets} timeout, even when closing the application, you have certainly hit such a dead lock.
 Get rid of all your {\f1\fs20 Synchronize()} calls! Use {\i Windows} messages instead: they are safe, efficient and fast. The framework allows to forward all incoming notifications as a dedicated {\i Windows} message in a single line:
 ! Client.ServiceNotificationMethodViaMessages(MainForm.Handle,WM_SERVICENOTIFICATION);
 The {\f1\fs20 WM_SERVICENOTIFICATION} should have been defined as a custom user message:
@@ -10685,7 +10845,7 @@ Then, the {\f1\fs20 TFormMain} should execute the message, as a regular event ha
 !  TSQLRestClientURI.ServiceNotificationMethodExecute(Msg);
 !end;
 Thanks to these two lines, the callbacks will be executed asynchronously in the main UI thread, using the optimized {\i Message} queue of the Operating System, without any blocking execution, nor race condition.
-:  Benefits of interface callbacks instead of class messages
+:  Interface callbacks instead of class messages
 If you compare with existing client/server SOA solutions (in Delphi, Java, C# or even in Go or other frameworks), this {\f1\fs20 interface}-based callback mechanism sounds pretty unique and easy to work with.
 Most {\i Events Oriented} solutions do use a set of dedicated messages to propagate the events, with a centralized {\i Message Bus} (like {\i MSMQ} or {\i JMS}), or a P2P approach (see e.g. {\i ZeroMQ} or {\i NanoMsg}). In practice, you are expected to define one {\f1\fs20 class} per message, the {\f1\fs20 class} fields being the message values. You will define e.g. one {\f1\fs20 class} to notify a successful process, and another {\f1\fs20 class} to notify an error. @*SOA@ services will eventually tend to be defined by a huge number of individual classes, with the temptation of re-using existing classes in several contexts.
 Our {\f1\fs20 interface}-based approach allows to gather all messages:
@@ -10718,7 +10878,7 @@ For instance, you may define the following generic service and callback to retri
 !  end;
 Take a deep breath, and keep in mind those two type definitions as reference. In a single look, I guess you did get the expectation of the "Camera Service". We will now compare with a classical message-based pattern.
 :   Classical message(s) event
-With a {\f1\fs20 class}-based message kind of implementation, you may either have to define a single class, containing all potential information:
+With a {\f1\fs20 class}-based message kind of implementation, you will probably define a single {\f1\fs20 class}, containing all potential information:
 !type
 !  // a single class message will need a status
 !  TMyCameraCallbackState = (
@@ -10776,12 +10936,13 @@ In order to have an implementation closer to @47@, you may define a set of class
 !    property MessageText: RawUTF8 read fMessageText write fMessageText;
 !  end;
 Inheritance makes this class hierarchy not as verbose as it may have been with plain "flat" classes, but it is still much less readable than the {\f1\fs20 IMyCameraCallback} type definition.
-In both cases, such {\f1\fs20 class} definitions make it difficult to guess which message does match with a given service. You must be very careful and consistent about your naming conventions, and uncouple your service definitions in clear name spaces.
+In both cases, such {\f1\fs20 class} definitions make it difficult to guess to which message matches which service. You must be very careful and consistent about your naming conventions, and uncouple your service definitions in clear name spaces.
 When implementing @*SOA@ services, @*DDD@'s {\i @*Ubiquitous Language@} tends to be polluted by the {\f1\fs20 class} definition (getters and setters), and implementation details of the messages-based notification: your {\i Domain} code will be tied to the message oriented nature of the {\i Infrastructure} layer. We will see @172@ how {\f1\fs20 interface} callbacks will help implementing DDD's {\i @*Event-Driven@} pattern, in a cleaner way.
 :181   Workflow adaptation
-Sometimes, it may be necessary to react to some unexpected event. The consumer may be able to change the workflow of the producer, depending on some business rules, or user expectations. By definition, all message-based implementation are asynchronous: as a result, implementing "reverse" messaging tends to be difficult to write and debug.
-A common implementation is to have a dedicated set of "answer" messages, to notify the service providers of a state change - it comes with potential race conditions, or unexpected rebound phenomenons, for instance when you add a node to an existing event-driven system.
-Another solution may be to define explicit {\i rules} for service providers, e.g. when the service is called. You may define a set of workflows, injected to the provider service at runtime. It will definitively tend to break the @182@.
+Sometimes, it may be necessary to react to some unexpected event. The consumer may need to change the workflow of the producer, depending on some business rules, an unexpected error, or end-user interaction.
+By design, message-based implementations are asynchronous, and non-blocking: messages are sent and stored in a message broker/bus, and its internal processing loop propages the messages to all subscribers. In such an implementation, there is no natural place for "reverse" feedback messages.
+A common pattern is to have a dedicated set of "answer/feedback" messages, to notify the service providers of a state change - it comes with potential race conditions, or unexpected rebound phenomenons, for instance when you add a node to an existing event-driven system.
+Another solution may be to define explicit {\i rules} for service providers, e.g. when the service is called. You may define a set of workflows, injected to the provider/bus service at runtime. It will definitively tend to break the @182@, and put logic in the infrastructure layer.
 On the other hand, since {\i mORMot}'s callbacks are true {\f1\fs20 interface} methods, they may return some values (as a {\f1\fs20 function} result or a {\f1\fs20 var/out} parameter). On the server side, such callbacks will block and wait for the client end to respond.
 So by writing an additional method like:
 !  IMyCameraCallback = interface(IInvokable)
@@ -10793,6 +10954,7 @@ So by writing an additional method like:
 As an additional benefit, integration with the Delphi language is clearly implementation agnostic: you are not even tied to use the framework, when working with such {\f1\fs20 interface} type definitions. In fact, this is a good way of implementing callbacks conforming to @47@ on the server side, and let the {\i mORMot} framework publish this mechanism in a client/server way, by using {\i WebSockets}, only if necessary.
 The very same code could be used on the server side, with no transmission nor marshalling overhead (via direct {\f1\fs20 interface} instance calls), and over a network, with optimized use of resource and bandwidth (via "fake" {\f1\fs20 interface} calls, and binary/JSON marshalling over TCP/IP).
 On the server side, your code - especially your {\i Domain} code - may interact directly with the lower level services, defined in the {\i Domain} as {\f1\fs20 interface} types, and implemented in the {\i infrastructure} layer. You may host both {\i Domain} and {\i Infrastructure} code in a single server executable, with direct assignment of local {\f1\fs20 class} instance as callbacks. This will minimize the program resources, in both CPU and memory terms - which is always a very valuable goal, for any business system.
+You may be able to reuse your application and business logic in a stand-alone application, with similar direct calls from the UI to the application {\f1\fs20 interface}. On need, the {\f1\fs20 interface} variable may point to a remote {\i mORMot} server, without touching VCL/FMX code.
 Last but not least, using an {\f1\fs20 interface} will help implementing the whole callback mechanism using @166@, e.g. for easy unit testing via @180@.\line You may also write your unit tests with real local callback {\f1\fs20 class} instances, which will be much easier to debug than over the whole client/server stack. Once you identified a scenario which fails the system, you could reproduce it with a dedicated test, even in an aggressive multi-threaded way, then use the debugger to trace the execution and identify the root cause of the issue.
 \page
 : Implementation details
@@ -11447,7 +11609,7 @@ The units are the following:
 |%37%63
 |\b Unit Name|Description\b0
 |{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, implementing secured ORM and SOA @*REST@ful client
-|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|@*SHA256@ and @*crc32@ algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Optimized JSON process (not used by {\i Smart})
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
@@ -11461,7 +11623,7 @@ This set of units will provide a solid and shared ground for the any kind of cli
 - @*Batch@ process - see @28@ - for transactional and high-speed writes;
 - @49@ with parameters marshalling;
 - @63@ with parameters marshalling and instance-life time;
-- Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 TModTime}/{\f1\fs20 TCreateTime} - see @26@;
+- Mapping of most supported field types, including e.g. @*ISO 8601@ date/time encoding, @*BLOB@s and {\f1\fs20 @*TModTime@}/{\f1\fs20 @*TCreateTime@} - see @26@;
 - Complex {\f1\fs20 record} types are also exported and consumed via JSON, on all platforms (for both ORM and SOA methods);
 - Integrated debugging methods, used by both ORM and SOA process, able to log into a local file or to a remote server - see @103@;
 - Some cross-platform low-level functions and types definitions, to help share as much code as possible between your projects.
@@ -12409,7 +12571,7 @@ If you want to supply the context data as JSON, then render it, you may write:
 !    'Hello {{value.name}}'#13#10'You have just won {{value.value}} dollars!');
 !  html := mustache.RenderJSON('{value:{name:"Chris",value:10000}}');
 !  // now html='Hello Chris'#13#10'You have just won 10000 dollars!'
-Note that here, the JSON is supplied with an extended syntax (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
+Note that here, the JSON is supplied with an @*extended syntax@ (i.e. field names are unquoted), and that {\f1\fs20 TSynMustache} is able to identify a dotted-named variable within the execution context.
 As an alternative, you could use the following syntax to create the data context as JSON, with a set of parameters, therefore easier to work with in real code storing data in variables (for instance, any {\f1\fs20 string} variable is quoted as expected by JSON, and converted into @*UTF-8@):
 !  mustache := TSynMustache.Parse(
 !    'Hello {{name}}'#13#10'You have just won {{value}} dollars!');
@@ -12504,7 +12666,7 @@ For instance, you may write:
 ! aMVCMustacheView.RegisterExpressionHelpersForTables(aRestServer,[TSQLMyRecord]);
 This will define two {\i Expression Helpers} for the specified table:
 - Any {\f1\fs20 \{\{#TSQLMyRecord MyRecordID\}\}} ... {\f1\fs20 \{\{/TSQLMyRecord MyRecordID\}\}} {\i Mustache} tag will read a {\f1\fs20 TSQLMyRecord} from the supplied {\f1\fs20 ID} value and put its fields in the current rendering data context, ready to be displayed in the view.
-- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 TDateTime}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
+- Any {\f1\fs20 \{\{TSQLMyRecord.HtmlTable MyRecord\}\}} {\i Mustache} tag which will create a HTML table containing all information about the supplied {\f1\fs20 MyRecord} fields (from the current data context), with complex field handling (like {\f1\fs20 @*TDateTime@}, {\f1\fs20 @*TTimeLog@}, sets or enumerations), and proper display of the field names (and {\i @*i18n@}).
 :    Internationalization
 You can define {\f1\fs20 \{\{"some text\}\}} pseudo-variables in your templates, which text will be supplied to a callback, ready to be transformed on the fly: it may be convenient for @*i18n@ of web applications.
 By default, the text will be written directly to the output buffer, but you can define a callback which may be used e.g. for text translation:
@@ -12940,7 +13102,7 @@ A more tuned and safe implementation may be to use a {\f1\fs20 ILockedDocVariant
 Using {\f1\fs20 ILockedDocVariant} will ensure that only access to this resource will be locked (no giant lock any more), and that slow ORM process (like {\f1\fs20 RestModel.RetrieveDocVariantArray}) will take place lock-free, to maximize the resource usage.\line This is in fact the pattern used by the "{\i 30 - MVC Server}" sample. Even @63@ may benefit from this {\f1\fs20 @**TLockedDocVariant@} kind of storage, for efficient multi-thread process - see @72@.
 :  Web Sessions
 @*Sessions@ are usually implemented via cookies, in web sites. A login/logout procedure enhances security of the @*web application@, and User experience can be tuned via small persistence of client-driven data. The {\f1\fs20 TMVCApplication} class allows creating such sessions.
-You can store whatever information you need within the client-side cookie. You can define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name or its rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses a digital signature via a {\f1\fs20 crc32} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform the action.
+You can store whatever information you need within the client-side cookie. {\f1\fs20 TMVCSessionWithCookies} allows to define a {\f1\fs20 record}, which will be used to store the information as optimized binary, in the browser cache. You can use this cookie information as a cache to the current session, e.g. storing the logged user display name, his/her preferences or rights - avoiding a round trip to the database.\line Of course, you should never trust the cookie content (even if our format uses secure encryption, and a digital signature via a {\f1\fs20 HMAC-CRC32C} algorithm). But you can use it as a convenient cache, always checking the real data in the database when you are about to perform any security-related action. The cookie also stores an integer Session ID, and issuing and expiration dates: as such, it matches all {\f1\fs20 @*JWT@} ({\i Javascript Web Token}) - see @http://jwt.io - features, as signature, encryption, and {\i jwi/iat/exp} claims, with a smaller overhead, and without using unsafe Web Local Storage.
 For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1\fs20 record} in {\f1\fs20 MVCViewModel.pas}:
 !  TCookieData = packed record
 !    AuthorName: RawUTF8;
@@ -12948,10 +13110,10 @@ For our "{\i 30 - MVC Server}" sample application, we defined the following {\f1
 !    AuthorRights: TSQLAuthorRights;
 !  end;
 This record will be serialized in two ways:
-- As raw binary, without the field names, within the cookie, after Base64 encoding and digital signature;
-- As a JSON object, with explicit field names, when transmitted to the {\i Views}.
+- As raw binary, without the field names, within the cookie, after Base64 encoding of encrypted and digitally signed data;
+- As a JSON object, with explicit field names, when transmitted to the {\i Views} as {\f1\fs20 "Session"} data context.
 In order to have proper JSON serialization of the {\f1\fs20 record}, you will need to specify its structure, if you use a version of Delphi without the new RTII (i.e. before Delphi 2010) - see @51@.
-Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication:
+Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perform the authentication, after successful login:
 !function TBlogApplication.Login(const LogonName, PlainPassword: RawUTF8): TMVCAction;
 !var Author: TSQLAuthor;
 !!    SessionInfo: TCookieData;
@@ -12975,7 +13137,7 @@ Then we can use the {\f1\fs20 TMVCApplication.CurrentSession} property to perfor
 !  end;
 !end;
 As you can see, this {\f1\fs20 Login()} method will be triggered from @http://localhost:8092/blog/login with {\f1\fs20 LogonName=...&plainpassword=...} parameters. It will first check that there is no current session, retrieve the ORM {\f1\fs20 Author} corresponding to the {\f1\fs20 LogonName}, check the supplied password, and set the {\f1\fs20 SessionInfo: TCookieData} structure with the needed information.\line A call to {\f1\fs20 CurrentSession.Initialize()} will compute the cookie, then prepare to send it to the client browser.
-The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI will have been requested.
+The {\f1\fs20 Login()} method returns a {\f1\fs20 TMVCAction} structure. As a consequence, the call to {\f1\fs20 GotoDefault(result)} will let the {\f1\fs20 TMVCApplication} processor render the {\f1\fs20 Default()} method, as if the {\f1\fs20 /blog/default} URI will have been requested. On invalid credential, an error page is displayed instead.
 When a web page is computed, the following overridden method will be executed:
 !function TBlogApplication.GetViewInfo(MethodIndex: integer): variant;
 !begin
@@ -12999,23 +13161,56 @@ $!    "session": {
 !$      "AuthorName": "synopse",
 !$      "AuthorID": 1,
 !$      "AuthorRights": {
-!$        "canComment": true,
-!$        "canPost": true,
-!$        "canDelete": true,
-!$        "canAdministrate": true
+!$        "Comment": true,
+!$        "Post": true,
+!$        "Delete": true,
+!$        "Administrate": true
 !$      },
 $      "id": 1
 $    }
 $  }
 $}
-Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View}.
-When the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
+Here, the {\f1\fs20 session} object will contain the {\f1\fs20 TCookieData} information, ready to be processed by the {\i Mustache View} - e.g. as {\f1\fs20 session.AuthorName}. In addition, your view may include some buttons for logged-only features, like comments or content edition, using {\f1\fs20 boolean} fields defined in {\f1\fs20 session.AuthorRights}.
+For security reasons, before actually performing an action requiring a specific right, it is preferred to check from the Model if the user is effectively allowed. An attacker may have forged a fake cookie - even if it is very unlikely, since cookies are encrypted and signed. It is a good approach to treat all cookies information as an unsafe cache, acceptable for most operation, but which should always be dual-checked.\line So your server code will call {\f1\fs20 CurrentSession.CheckAndRetrieve} then access the data {\f1\fs20 RestModel} for verification before any sensitive action is performed. Defining a common method could be handy:
+!function TBlogApplication.GetLoggedAuthorID(Right: TSQLAuthorRight;
+!  ContentToFillAuthor: TSQLContent): TID;
+!var SessionInfo: TCookieData;
+!    author: TSQLAuthor;
+!begin
+!  result := 0;
+!!  if (CurrentSession.CheckAndRetrieve(@SessionInfo,TypeInfo(TCookieData))>0) and
+!!     (Right in SessionInfo.AuthorRights) then
+!!    with TSQLAuthor.AutoFree(author,RestModel,SessionInfo.AuthorID) do
+!!    if Right in author.Rights then begin
+!      result := SessionInfo.AuthorID;
+!      if ContentToFillAuthor<>nil then begin
+!        ContentToFillAuthor.Author := pointer(result);
+!        ContentToFillAuthor.AuthorName := author.LogonName;
+!      end;
+!    end;
+!end;
+It will be used as such, e.g. to verify if a user can comment an article:
+!function TBlogApplication.ArticleComment(ID: TID;
+!  const Title,Comment: RawUTF8): TMVCAction;
+!var comm: TSQLComment;
+!    AuthorID: TID;
+!    error: string;
+!begin
+!  with TSQLComment.AutoFree(comm) do begin
+!!    AuthorID := GetLoggedAuthorID(canComment,comm);
+!    if AuthorID=0 then begin
+!      GotoError(result,sErrorNeedValidAuthorSession);
+!      exit;
+!    end;
+!  ...
+Eventually, when the browser asks for the {\f1\fs20 /blog/logout} URI, the following method will be executed:
 !function TBlogApplication.Logout: TMVCAction;
 !begin
 !!  CurrentSession.Finalize;
 !  GotoDefault(result);
 !end;
 The session cookie will then be deleted on the browser side.
+Note that if any deprecated or invalid cookie is detected by the {\i mORMot} MVC server, it will also be automatically deleted on the browser side.
 : Writing the Views
 See @81@ for a description of how rendering take place in this MVC/MVVM application. You will find the @*Mustache@ templates in the "{\f1\fs20 Views}" sub-folder of the "{\i 30 - MVC Server}" sample application.
 You will find some {\f1\fs20 *.html} files, one per command expecting a {\f1\fs20 View}, and some {\f1\fs20 *.partial} files, which are some kind of re-usable sub-templates - we use them to easily compute the page header and footer, and to have a convenient way of gathering some piece of template code, to be re-used in several {\f1\fs20 *.html} views.
@@ -13273,7 +13468,7 @@ The framework tries to implement @**security@ via:
 {\i Authentication} allows user identification:
 - Build-in optional @*authentication@ mechanism, implementing both {\i per-user @*session@s} and individual REST {\i @*Query Authentication@};
 - {\i Authentication groups} are used for proper authorization;
-- Several authentication schemes, from very secure SHA256 based challenging to weak but simple authentication;
+- Several authentication schemes, from very secure @*HMAC-SHA256@ based challenging to weak but simple authentication;
 - Class-based architecture, allowing custom extension.
 {\i Authorization} of a given process is based on the group policy, after proper authentication:
 - {\i Per-table access right} functionalities built-in at lowest level of the framework;
@@ -13318,7 +13513,7 @@ For instance, here is a generic URI sample from the link above:
 $ GET /object?apiKey=Qwerty2010
 should be transmitted as such:
 $ GET /object?timestamp=1261496500&apiKey=Qwerty2010&signature=abcdef0123456789
-The string being signed is "{\f1\fs20 /object?apikey=Qwerty2010&timestamp=1261496500}" and the signature is the {\i SHA256} hash of that string using the private component of the API key.
+The string being signed is "{\f1\fs20 /object?apikey=Qwerty2010&timestamp=1261496500}" and the signature is the {\i @*SHA256@} hash of that string using the private component of the API key.
 This technique is perhaps the more compatible with a Stateless architecture, and can also been implemented with a light @*session@ management.
 Server-side data caching is always available. In our framework, we cache the responses at the SQL level, not at the URI level (thanks to our optimized implementation of {\f1\fs20 GetJSONObjectAsSQL}, the URI to SQL conversion is very fast). So adding this extra parameter doesn't break the cache mechanism.
 :  Framework authentication
@@ -13354,7 +13549,7 @@ struct1 [label="ID : TID|Data : TSQLRawBlob|DisplayName : RawUTF8|<f0>GroupRight
 struct2 [label="AuthGroup"];
 struct1:f0 -> struct2;
 \
-Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a SHA256 hash of its registered password (with optional PBKDF2_HMAC_SHA256 derivation). A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
+Each user has therefore its own associated {\f1\fs20 AuthGroup} table, a name to be entered at login, a name to be displayed on screen or reports, and a @*SHA256@ hash of its registered password (with optional {\f1\fs20 @*PBKDF2_HMAC_SHA256@} derivation). A custom {\f1\fs20 Data} BLOB field is specified for your own application use, but not accessed by the framework.
 By default, the following security groups are created on a void database:
 |%14%12%14%11%11%12%12%12
 |\b Group|POST SQL|SELECT SQL|Auth R|Auth W|Tables R|Tables W|Services\b0
@@ -13413,7 +13608,7 @@ Authentication is implemented in {\i mORMot} via the following classes:
 In fact, you can use one of the following @*REST@ful authentication schemes:
 |%50%50
 |\b class|Scheme\b0
-|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication, as a proprietary dual-pass challenge and SHA256/PBKDF2_HMAC_SHA256 hashing
+|{\f1\fs20 TSQLRestServerAuthenticationDefault}|{\i mORMot} secure authentication, as a proprietary dual-pass challenge and @*SHA256@/@*PBKDF2_HMAC_SHA256@ hashing
 |{\f1\fs20 TSQLRestServerAuthenticationSSPI}|@*Windows authentication@, via the logged user
 |{\f1\fs20 TSQLRestServerAuthenticationNone}|Weak but simple authentication, based on user name
 |{\f1\fs20 TSQLRestServerAuthenticationHttpBasic}|HTTP Basic authentication\line Warning: password is not encrypted
@@ -13445,7 +13640,7 @@ Here are the typical steps to be followed in order to create a new user session 
 In order to enhance security, the {\f1\fs20 session_signature} parameter will contain, encoded as 3 hexadecimal 32-bit cardinals:
 - The @*Session@ ID (to retrieve the private key used for the signature);
 - A Client Time Stamp (in 256 ms resolution) which must be greater or equal than the previous time stamp received;
-- The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i crc32} hashing algorithm.
+- The URI signature, using the session private key, the user hashed password, and the supplied Client Time Stamp as source for its {\i @*crc32@} hashing algorithm.
 Such a classical 3 points signature will avoid most {\i man-in-the-middle} (MITM) or {\i re-play} attacks.
 Here is typical signature to access the {\f1\fs20 root} URL
 $ root?session_signature=0000004C000F6BE365D8D454
@@ -13453,7 +13648,7 @@ In this case, {\f1\fs20 0000004C} is the Session ID, {\f1\fs20 000F6BE3} is the 
 !(crc32(crc32(fPrivateSaltHash,PTimeStamp,8),pointer(aURL),aURLlength)=aSignature);
 For instance, a RESTful GET of the {\f1\fs20 TSQLRecordPeople} table with RowID=6 will have the following URI:
 $ root/People/6?session_signature=0000004C000F6DD02E24541C
-For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) SHA256. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i crc32} will be enough for most common use. Note that the password hashing and the session opening will use SHA256 or PBKDF2_HMAC_SHA256, to enhance security with no performance penalty.
+For better Server-side performance, the URI signature will use fast {\i crc32} hashing method, and not the more secure (but much slower) @*SHA256@. Since our security model is not officially validated as a standard method (there is no standard for per URI authentication of RESTful applications), the better security will be handled by encrypting the whole transmission channel, using standard @*HTTPS@ with certificates signed by a trusted CA, validated for both client and server side. The security involved by using {\i @*crc32@} will be enough for most common use. Note that the password hashing and the session opening will use @*SHA256@ or @*PBKDF2_HMAC_SHA256@, to enhance security with no performance penalty.
 In our implementation, for better Server-side reaction, the {\f1\fs20 session_signature} parameter is appended at the end of the URI, and the URI parameters are not sorted alphabetically, as suggested by the reference article quoted above. This should not be a problem, either from a {\i Delphi} Client or from a @*AJAX@ / {\i JavaScript} client.
 On practice, this scheme is secure and very fast, perfect for a {\i Delphi} client, or an AJAX application.
 :121   Authentication using Windows credentials
@@ -13840,7 +14035,7 @@ Without late-binding, we may have written, accessing not the {\f1\fs20 Global TS
 It is up to you to choose which kind of code you prefer, but late-binding is worth considering.
 :187Asymmetric Encryption
 %cartoon05.png
-As we have seen when dealing about @43@, the framework offers built-in @**encryption@ of the content transmitted between its @*REST@ client and server sides, especially via @188@, or @*HTTPS@. The later, when using TLS 1.2 and proven patterns, implements state-of-the-art security. But default {\i mORMot} encryption, even if using proven algorithms like @*AES@256-CFB and SHA256, uses symmetric keys, that is the same secret key is shared on both client and server sides.
+As we have seen when dealing about @43@, the framework offers built-in @**encryption@ of the content transmitted between its @*REST@ client and server sides, especially via @188@, or @*HTTPS@. The later, when using TLS 1.2 and proven patterns, implements state-of-the-art security. But default {\i mORMot} encryption, even if using proven algorithms like @*AES@256-CFB and @*SHA256@, uses symmetric keys, that is the same secret key is shared on both client and server sides.
 @**Asymmetric@ encryption, also known as @**public-key@ cryptography, uses pairs of keys:
 - {\i Public} keys that may be disseminated widely;
 - Paired with {\i private} keys which are known only to the owner.
@@ -13954,7 +14149,7 @@ In comparison to the RSA algorithm, ECC has some advantages:
 - Offers @*perfect forward secrecy@, since a fresh key is created for every encryption;
 - Potentially less patents infringement, in all its practical appliances;
 - Last but not least, it is one the strongest algorithms for the future of web.
-There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and established standards (like X509).\line To be fair, such libraries are complex and confusing, whereas we selected a set of future-proof algorithms (AES256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) to follow {\i mORMot}'s KISS and DRY principles, keep code maintainable and readable, and reduce risk assessment scope. We followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations. The last thing we want to do is to start mandating DLLs, which are perhaps deprecated/unsafe if part of the OS. Last but not least, it was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
+There will no doubt be criticism of our decision to re-implement a whole public-key cryptography stack from scratch, with its own small choice of algorithms, instead of using an existing library (like OpenSSL), and established standards (like X509).\line To be fair, such libraries are complex and confusing, whereas we selected a set of future-proof algorithms (AES256 excluding ECB, @*HMAC-SHA256@, @*PBKDF2_HMAC_SHA256@, ECDSA, ECIES...) to follow {\i mORMot}'s KISS and DRY principles, keep code maintainable and readable, and reduce risk assessment scope. We followed all identified best practices, and tried to avoid, from the beginning, buffer overflows, weak protocols, low entropy, low default values, serial collision, forensic vulnerabilities, hidden memory copies, evil optimizations. The last thing we want to do is to start mandating DLLs, which are perhaps deprecated/unsafe if part of the OS. Last but not least, it was fun, we learned a lot, and we hope you will enjoy using it, and contribute to it!
 ;- We did not start from scratch, since we used another proven Open Source library for the raw ECC computation, which was the most sensitive part;
 ;- Existing librairies have to deal with a lot of algorithms, options and old features: we wanted a reduced scope, to ease risk assessment - only well-known and future-proof algorithms were selected (AES256 excluding ECB, HMAC_SHA256, PBKDF2_HMAC_SHA256, ECDSA, ECIES...) and default values are very aggressive (password strength, 60,000 PBKDF2 iterations...);
 ;- Existing libraries are so complex that interfacing with them makes the consuming code complex to write and maintain - {\f1\fs20 SynEcc} logic is implemented in a few dozen lines of code: most of the unit source is about wrapper methods and documentation, and an average programmer can understand and review it, even if he/she is no Delphi expert;
@@ -13971,7 +14166,7 @@ The {\i mORMot}'s {\f1\fs20 SynEcc.pas} unit implements full ECC computation, us
 All needed low-level asymmetric cryptography is available:
 - ECC key generation, using {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} as random seed;
 - ECDSA signature and verification of 256-bit hashes;
-- ECDSH shared secret computation - suitable for ECIES encryption, after PBKDF2_HMAC_SHA256 derivation.
+- ECDSH shared secret computation - suitable for ECIES encryption, after @*PBKDF2_HMAC_SHA256@ derivation.
 The very same {\f1\fs20 SynEcc.pas} unit defines some high-level classes and structures, ready to implement:
 - Authority certificates - via public {\f1\fs20 TECCCertificate} and private {\f1\fs20 TECCCertificateSecret} classes, and full {\f1\fs20 PKI} chaining - see {\f1\fs20 TECCCertificateChain};
 - Digital signature of files or memory buffers - via {\f1\fs20 TECCSignatureCertified};
@@ -14165,7 +14360,7 @@ $ ],
 $ "Count": 2,
 $}
 In the above sample, we cut down the {\f1\fs20 "PublicBase64"} values, to save some paper and trees. They map the content already shown in the {\f1\fs20 .public} JSON files. In fact, the same information is stored two times: once in {\f1\fs20 "PublicBase64"}, and another time in each individual properties ({\f1\fs20 "Version"}, {\f1\fs20 "Serial"}, {\f1\fs20 "Issuer"}...) of the {\f1\fs20 "Items"} items.
-An easy way of keys management is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.ca} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a PBKDF2_HMAC_SHA256 derived password, with a huge number of rounds (60000).
+An easy way of keys management is to keep a safe mean of storage (e.g. a pair of USB pen-drives, with at least one kept in a physical vault), then put all your certificate chains in dedicated folders. All public keys - i.e. {\f1\fs20 *.public} and {\f1\fs20 chain.ca} files - are meant to be public, so could be spread away everywhere. Just keep an eye on your {\f1\fs20 .private} files, and their associated passwords. A hardware-secured drive may be an overkill, since the {\f1\fs20 .private} files are already encrypted and password-protected with state-of-the-art software protection, i.e. {\f1\fs20 AFSplit} anti-forensic diffusion and AES256-CFB encryption on a @*PBKDF2_HMAC_SHA256@ derived password, with a huge number of rounds (60000).
 Remember that often, the weakest link of the security chain is between the chair and the keyboard, not within the computer. Do not reuse passwords between keys, and remember you have a "{\f1\fs20 rekey}" command available on the {\f1\fs20 ECC} tool, so that you can change a private key password, without changing its content, nor re-publish its associated {\f1\fs20 .public} key:
 $>ecc rekey
 $Enter the first chars of the .private certificate file name.
@@ -14301,7 +14496,7 @@ $        "md5": "e80f2bf959c943e240f2c1f5efcf1e89",
 $        "sha256": "6bc2d25e9cc93201914e7c6588624696778de80c6f63a590262ccf610310ea0e",
 $        "sign": "AQA2AIvJAgHvVe409i26j+jPFNwas4OAAAAAAAAAA...."
 $}
-In additional to some general information (name, date, size), you have unsigned hashes ({\f1\fs20 "md5"} and {\f1\fs20 "sha256"}), and an ECC digital signature, stored as a base-64 encoded string in the {\f1\fs20 "sign":} field. This signature has been computed using the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key, and the SHA256 hash of the {\f1\fs20 test1.txt} file content. Note that you can add whatever JSON field you need to any {\f1\fs20 .sign} file, especially in the {\f1\fs20 "meta":} nested object, as soon as you don't modify the {\f1\fs20 size/md5/sha256/sign} values.
+In additional to some general information (name, date, size), you have unsigned hashes ({\f1\fs20 "md5"} and {\f1\fs20 "sha256"}), and an ECC digital signature, stored as a base-64 encoded string in the {\f1\fs20 "sign":} field. This signature has been computed using the {\f1\fs20 8BC90201EF55EE34F62DBA8FE8CF14DC.private} key, and the @*SHA256@ hash of the {\f1\fs20 test1.txt} file content. Note that you can add whatever JSON field you need to any {\f1\fs20 .sign} file, especially in the {\f1\fs20 "meta":} nested object, as soon as you don't modify the {\f1\fs20 size/md5/sha256/sign} values.
 To verify the file, ensure that both {\f1\fs20 test1.txt} and {\f1\fs20 test1.txt.sign} files are in the current directory, then run:
 $>ecc verify -file test1.txt
 $ test1.txt file verified as valid self signed.
@@ -14358,7 +14553,7 @@ Verification can be done via the dedicated {\f1\fs20 TECCSignatureCertified} cla
 Here, the signing authority is supplied as a single {\f1\fs20 .public} local file, loaded in a {\f1\fs20 TECCCertificate} instance, but your projects may use {\f1\fs20 TECCCertificateChain} for a full {\f1\fs20 @*PKI@} authority chain.
 :190  File Encryption
 In order to encrypt out both test files, as proposed in @%%AsymmEncrypt@, we will run the following commands:
-$>ecc crypt -file test1.txt -auth 03 -salt pass monsecret -noprompt
+$>ecc crypt -file test1.txt -auth 03 -saltpass monsecret -noprompt
 $Will use: 03B8865C6B982A39E9EFB1DC1A95D227.public
 $
 $ test1.txt.synecc file created.
@@ -14409,9 +14604,9 @@ $        "HMAC": "07ddc90f7695fff8ca0683be98f7b1043e13a7bceb79f0d6a929069c5d9767
 $        "Signature": null
 $}
 As you can see, encryption is defined by its {\f1\fs20 "Algorithm":} field, and uses two additional properties:
-- {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending billions of dollars in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
-- {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. SHA256 in our case.
-In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using PBKDF2_HMAC_SHA256_AES256_CFB as key derivation function and symmetric encryption scheme and HMAC_SHA256 algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
+- {\f1\fs20 "RandomPublicKey"} which contains a genuine key generated by {\f1\fs20 ecc crypt}, allowing {\i @**perfect forward secrecy@}, meaning that a shared secret key is computed for every encryption: if someone achieves to break the AES256-CFB secret key used to encrypt a particular {\f1\fs20 .synecc} file (e.g. spending lots of money in brute force search), this secret key won't be reusable for any other file: each {\f1\fs20 "RandomPublicKey"} value above is indeed unique for each {\f1\fs20 .synecc} file;
+- {\f1\fs20 "HMAC":} which uses a safe way of message authentication - known as {\i keyed-hash message authentication code} (@*HMAC@) - stronger than the hashing algorithm it is based on, i.e. @*SHA256@ in our case.
+In practice, {\f1\fs20 SynEcc} implements state-of-the-art {\i Elliptic Curve Integrated Encryption Scheme} ({\f1\fs20 @*ECIES@}) using @*PBKDF2_HMAC_SHA256@ as key derivation function, AES256-CFB as symmetric encryption scheme, and @*HMAC-SHA256@ algorithm for message authentication.\line  See @https://en.wikipedia.org/wiki/Integrated_Encryption_Scheme
 {\f1\fs20 ECIES} provides semantic security against an adversary who is allowed to use chosen-plaintext and chosen-ciphertext attacks. In addition to the expected genuine secret and message authentication in {\f1\fs20 "RandomPublicKey"} and {\f1\fs20 "HMAC"} properties, {\f1\fs20 SynEcc} implementation allows to customize the default "salt" value, to add a password protection for each {\f1\fs20 .synecc} encrypted file.
 Decryption is pretty straightforward:
 $>ecc decrypt -file test1.txt.synecc
@@ -14449,7 +14644,7 @@ $05/09/2016  10:37            72 209 test2.txt.2
 $24/09/2016  17:13            15 220 test2.txt.synecc
 The {\f1\fs20 *.2} decrypted files have the expect size (and content), after decompression. Even the file timestamp has been set to match the original.
 :189  Private Keys Passwords Cheat Mode
-In order to follow best practice, our {\f1\fs20 .private} key files are always protected by a password. A random value with enough length and entropy is always proposed by the {\f1\fs20 ECC} tool when a key pair is generated, and could be used directly. It is always preferred to trust a computer to create true randomness (and {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} was designed to be the best possible seed, using hardware entropy if available), than using our human brain, which could be defeated by dictionary-based password attacks. Brute force cracking would be almost impossible, since {\f1\fs20 PBKDF2_HMAC_SHA256} Password-Based Key Derivation Function with 60,000 rounds is used, so rainbow tables (i.e. pre-computed passwords list) will be inoperative, and each password trial would take more time than with a regular Key Derivation Function.
+In order to follow best practice, our {\f1\fs20 .private} key files are always protected by a password. A random value with enough length and entropy is always proposed by the {\f1\fs20 ECC} tool when a key pair is generated, and could be used directly. It is always preferred to trust a computer to create true randomness (and {\f1\fs20 SynCrypto.pas}'s secure {\f1\fs20 TAESPRNG} was designed to be the best possible seed, using hardware entropy if available), than using our human brain, which could be defeated by dictionary-based password attacks. Brute force cracking would be almost impossible, since {\f1\fs20 @**PBKDF2_HMAC_SHA256@} Password-Based Key Derivation Function with 60,000 rounds is used, so rainbow tables (i.e. pre-computed passwords list) will be inoperative, and each password trial would take more time than with a regular Key Derivation Function.
 The issue with strong passwords is that they are difficult to remember. If you use not pure random passwords, but some easier to remember values with good entropy, you may try some tools like @https://xkpasswd.net/s which returns values like {\f1\fs20 $$19*wrong*DRIVE*read*61$$}. But even then, you will be able to remember only a dozen of such passwords. In a typical public key infrastructure, you may create hundredths of keys, so remembering all passwords is no option for an average human being as you and me.
 At the end, you end up with using a tool to store all your passwords (last trend is to use an online service with browser integration), or - admit it - store them in an {\f1\fs20 Excel} document protected by a password. Most IT people - and even security specialists - end with using such a mean of storage, just because they need it.\line The weaknesses of such solutions can be listed:
 - How could we trust closed source software and third-party online services?
@@ -14566,6 +14761,132 @@ As reference, here is how the encryption is implemented in the {\f1\fs20 ECC} to
 !  end;
 !end;
 You may note here the use of {\f1\fs20 FillZero()} in the {\f1\fs20 finally} block of the function, which is a common - and strongly encouraged - way of protecting your sensitive data from remaining in RAM, after use. Both {\f1\fs20 SynCrypto.pas} and {\f1\fs20 SynEcc.pas} code has been checked to follow similar safety patterns, and not leave any sensitive information in the program stack or heap.
+:193 Application Locking
+A common feature request for professional software is to prevent abuse of published applications. For licensing or security reasons, you may be requested to "lock" the execution of programs, maybe tools or services.
+{\i mORMot} can use @*Asymmetric@ Cryptography to ensure that only allowed users could run some executables, optionally with dedicated settings, on a given computer. The framework offers the first brick, on which you should build upon your dedicated system.
+The {\f1\fs20 dddInfraApps.pas} unit publishes the following {\f1\fs20 @*ECCAuthorize@} function and type:
+!type
+!  TECCAuthorize = (eaSuccess, eaInvalidSecret, eaMissingUnlockFile,
+!    eaInvalidUnlockFile, eaInvalidJson);
+!
+!function ECCAuthorize(aContent: TObject; aSecretDays: integer; const aSecretPass,
+!  aDPAPI, aDecryptSalt, aAppLockPublic64: RawUTF8; const aSearchFolder: TFileName = '';
+!  aSecretInfo: PECCCertificateSigned = nil; aLocalFile: PFileName = nil): TECCAuthorize;
+This function will use several asymmetric key sets:
+- A {\i main key set}, named e.g. {\f1\fs20 applock.public} and {\f1\fs20 applock.private}, shared for all users of the system;
+- Several {\i user-specific key sets}, named e.g. {\f1\fs20 user@host.public} and {\f1\fs20 user@host.secret}, one for each {\f1\fs20 user} and associated computer {\f1\fs20 host} name.
+When the {\f1\fs20 ECCAuthorize} function is executed, it will search for a local {\f1\fs20 user@host.unlock} file, named after the current logged user and the computer host name. Of course, the first time the application is launched for this user, there will be no such file. It will create two local {\f1\fs20 user@host.public} and {\f1\fs20 user@host.secret} files and return {\f1\fs20 eaMissingUnlockFile}.
+The {\i main key set} will be used to digitally {\i sign} the {\f1\fs20 unlock} file:
+- {\f1\fs20 applock.public} will be supplied as plain base64-encoded {\f1\fs20 aAppLockPublic64} text parameter in the executables - for safety, you should ensure its value is note replaced by a forged one by an attacker: the executable should be signed, or at least the constant value should be checked with a CRC for its content during the program execution;
+- On the contrary, {\f1\fs20 applock.private} will be kept secret - with its associated secret password.
+{\i User-specific key sets} will be used to {\i encrypt} the {\f1\fs20 unlock} file:
+- The {\f1\fs20 user@host.secret} file contains in fact a genuine private key, encrypted using {\f1\fs20 CryptDataForCurrentUser} (i.e. {\f1\fs20 DPAPI} under {\i Windows}) for the specific computer and user: this will avoid {\f1\fs20 user@host.unlock} reuse on another computer, even if the user and host names are identical, and the {\f1\fs20 user@host.secret} file is copied. This file should remain local, and doesn't need to be transmitted.
+- The {\f1\fs20 user@host.public} file will be sent to the product support team, e.g. by email - but you may setup an automated server, if needed. The support team will create a {\f1\fs20 user@host.unlock} matching this {\f1\fs20 user@host.public} key, which will unlock the application for the given user.
+On the support team side, a {\f1\fs20 user@host.json} file is created for the given user, and will contain the @*JSON@ serialization of the {\f1\fs20 aContent: TObject} parameter of the {\f1\fs20 ECCAuthorize} function. This object may contain any published properties, matching the security expectations for this user, e.g. the available features or resource access.
+:  From the User perspective
+The resulting process is therefore the following:
+\graph ECCAuthorizeWorkflow1 Application Unlocking via Asymmetric Cryptography
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\user1@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\applock.public
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.public\ user1@pc1.public\email
+\user1@pc1.json\ user1@pc1.unlock\encrypt
+\applock.private\ user1@pc1.unlock\sign
+\ user1@pc1.public\ user1@pc1.unlock
+\ user1@pc1.unlock\user1@pc1.unlock\email
+}
+\
+In short, every user/computer combination will have its own set of {\f1\fs20 public/secret/unlock} files.
+- In practice, {\f1\fs20 applock.public} could be hardcoded as plain base64-encoded {\f1\fs20 aAppLockPublic64} constant {\f1\fs20 string} in the Application code - of course, the executable should be signed with a proper authority, to ensure this constant is not replaced by a fake value;
+- The location of those local {\f1\fs20 user@host.*} files is by default the executable folder, but may be specified via the {\f1\fs20 aSearchFolder} parameter - especially if this folder is read-only (e.g. due to Windows UAC), or if you use some custom GUI for the user interactivity;
+- The {\f1\fs20 user@host.json} will be signed using {\f1\fs20 applock.private} secret key, to testify that the resulting {\f1\fs20 user@host.unlock} file was indeed provided by the Support Team;
+- The {\f1\fs20 user@host.json} will be encrypted using the {\f1\fs20 user@host.public} key received by email, so will be specific to a single user/computer combination.
+If two users share the application on the very same computer, another set of files will appear:
+\graph ECCAuthorizeWorkflow2 Application Unlocking on Two Computers
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\user1@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\applock.public
+}
+subgraph cluster_1 {
+label="PC2 Computer";
+\ Application\user2@pc2.secret
+\ Application\user2@pc2.public
+\ Application\user2@pc2.unlock
+\ Application\ applock.public
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.public\ user1@pc1.public\email
+\ user1@pc1.public\ user1@pc1.unlock\encrypt
+\user1@pc1.json\ user1@pc1.unlock
+\applock.private\ user1@pc1.unlock\sign
+\user2@pc2.public\ user2@pc2.public\email
+\user2@pc2.json\ user2@pc2.unlock\encrypt
+\applock.private\ user2@pc2.unlock\sign
+\ user1@pc1.unlock\user1@pc1.unlock\email
+\ user2@pc2.public\ user2@pc2.unlock
+\ user2@pc2.unlock\user2@pc2.unlock\email
+}
+\
+Several users on the same computer will be handled as such:
+\graph ECCAuthorizeWorkflow3 Application Unlocking for Two Users
+subgraph cluster_0 {
+label="PC1 Computer";
+\Application\applock.public
+\Application\user2@pc1.public
+\Application\user2@pc1.unlock
+\Application\user2@pc1.secret
+\Application\user1@pc1.public
+\Application\user1@pc1.unlock
+\Application\user1@pc1.secret
+}
+subgraph cluster_3 {
+label="Support Team";
+\user1@pc1.json\ user1@pc1.unlock\encrypt
+\user1@pc1.public\ user1@pc1.public\email
+\ user1@pc1.public\ user1@pc1.unlock
+\ user1@pc1.unlock\user1@pc1.unlock\email
+\applock.private\ user1@pc1.unlock\sign
+\user2@pc1.json\ user2@pc1.unlock
+\user2@pc1.public\ user2@pc1.public\email
+\ user2@pc1.public\ user2@pc1.unlock\encrypt
+\ user2@pc1.unlock\user2@pc1.unlock
+\applock.private\ user2@pc1.unlock\sign
+}
+\
+From the User point of view, he/she will transmit its {\f1\fs20 user@host.public} file, then receives a corresponding {\f1\fs20 user@host.unlock} file, which will unlock the application. Pretty easy to understand - even if some complex asymmetric encryption is involved behind the scene.
+:  From the Support Team perspective
+The Support Team will maintain a list of {\f1\fs20 user@host.public} and {\f1\fs20 user@host.json} files, one per user/computer. Both files have small JSON content, so may be stored in a dedicated folder of the project source code repository - or in a dedicated repository. The use of a source code repository allows to track user management information between several support people, including history and audit trail of this sensitive information. For safety, the {\f1\fs20 applock.private} file may not be archived in the source code repository, but copied on purpose on each support people's (or developer's) computer. A separated, and dedicated computer, may be used, for additional safety.
+In fact, even developers may define their own set of {\f1\fs20 .unlock} files. For local test builds, they may use their own {\f1\fs20 applock.public} and {\f1\fs20 applock.private} key pairs, diverse from the main content.
+The content of each {\f1\fs20 user@host.json} may be easily derivated from a set of reference {\f1\fs20 .json} files, acting like templates of group of users. Or an existing file may be used as source for a new user. The ability to use JSON and a text editor, with customizable object and arrays fields, allows any needed kind of licensing or security scope, depending on the application.\line Since the {\f1\fs20 user@host.json} is a serialized {\f1\fs20 aContent: TObject}, you can define enumerates properties, or even schema-less structures as {\f1\fs20 @*TDocVariant@} - see @80@ - to refine the authorization scope.
+The {\f1\fs20 user@host.json} file is encrypted using the genuine {\f1\fs20 user@host.public} key, and its associated {\f1\fs20 user@host.secret} is strongly encrypted for the given PC and logged user: therefore, only the application is able to decipher the {\f1\fs20 user@host.unlock} content. You can let those files be transmitted via an unsafe mean of transport, e.g. plain email, with no compromising risk. Last but not least, passwords or IP addresses can be safely stored in its content, as part of the security policy of your project.
+In practice, the team may use a {\f1\fs20 unlock.bat} file running the ECC tool over secret {\f1\fs20 applock.private} keys, containing the secret:
+$ @echo off
+$ echo Usage:  unlock user@host
+$ echo.
+$ ecc sign -file %1.json -auth applock -pass applockprivatepassword -rounds 60000
+$ ecc crypt -file %1.json -out %1.unlock -auth %1 -saltpass decryptsalt -saltrounds 10000
+$ del %1.json.sign
+For safety, you may not include the {\f1\fs20 -pass applockprivatepassword} value in this {\f1\fs20 unlock.bat} file. Removing this {\f1\fs20 -pass} command-line switch will let the {\f1\fs20 ecc} tool prompt for the password secret key on the console:
+$ ecc sign -file %1.json -auth applock -rounds 60000
+Also note that you can use the {\f1\fs20 ecc rekey} command to customize the password of a given {\f1\fs20 applock.private} file: each support team member may have his/her custom password to run the {\i sign-then-encrypt} process.
+Of course, if you need to create a lot of {\f1\fs20 .unlock} files, you may want to automate this process, e.g. in a server or a GUI tool, using {\f1\fs20 SynEcc.pas} classes.
+:  Benefits of Asymmetric Encryption for License management
+In most licensing systems, the weak point is the transmission of the licensing file. Thanks to Asymmetric Encryption, both {\f1\fs20 user@host.public} and {\f1\fs20 user@host.unlock} files can be transmitted as plain emails, without any possibility of compromising.
+The {\f1\fs20 applock.private} secret key and its associated password are used to digitally sign (using ECDSA) the plain content of the {\f1\fs20 user@host.unlock} file. This {\i sign-then-encrypt} pattern will ensure that only your support team will be able to generate the proper {\f1\fs20 .unlock} files for a given application. The {\f1\fs20 applock.private/public} keys could have their own deprecation date.
+As we have seen, the {\f1\fs20 user@host.unlock} file is encrypted, so you can use it to transmit sensitive information. Its associated {\f1\fs20 user@host.secret} key has been generated locally with an expiration date - see the {\f1\fs20 aSecretDays} parameter of the {\f1\fs20 ECCAuthorize} function. It will ensure that the registering process should be performed regularly, if the licensing or security policy expect it.
+Of course, any such system is as weak as its weakest point. In particular, under Windows the executable should be digitally signed (as any professional software). You could also ensure that the {\f1\fs20 aAppLockPublic64} public key has not been replaced by a fake value forged by an attacker - e.g. by checking its value by computing its CRC in several places of your application:
+! if crc32($1239438,pointer(AppLock64),length(AppLock64))<>$ae293c10 then Close;
+The security of this system does not rely on code obfuscation, but on proven safety of asymmetric encryption. Even if the executable is modified in-place to by-pass the license check, the fact that the application expects some additional information to be provided within the {\f1\fs20 user@host.unlock} file will make it much more difficult to hack.\line As always with Open Source, any feedback is welcome, in order to enhance the safety of this system. The fact that the code is available - so that the algorithms could be proven - make it safer than any proprietary solution developed in-door.
 :68Domain-Driven-Design
 %cartoon06.png
 We have now discovered how {\i mORMot} offers you some technical bricks to play with, but it is up to you to build the house (castle?), according to your customer needs.
@@ -15299,7 +15620,7 @@ And even better, testing-driven coding can be encouraged:
 It could sounds like a waste of time, but such coding improve your code quality a lot, and, at least, it help you write and optimize every implementation feature.
 The framework has been implemented using this approach, and provide all the tools to write tests. In addition to what other {\i Delphi} frameworks offer (e.g. {\i DUnit / DUnitX}), the {\f1\fs20 SynTests.pas} unit is very much integrated with other elements of the framework (like logging), is cross-platform and cross-compiler, and provides a complete {\i stubbing / mocking} mechanism to cover @62@.
 :  Involved classes in Unitary testing
-The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTests.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin} and FPC, no external dependency).
+The @!TSynTest,TSynTestCase,TSynTests!Lib\SynTests.pas@ unit defines two classes (both inheriting from {\f1\fs20 TSynTest}), implementing a complete Unitary testing mechanism similar to {\i DUnit}, with less code overhead, and direct interface with the framework units and requirements (@*UTF-8@ ready, code compilation from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo} and FPC, no external dependency).
 The following diagram defines this class hierarchy:
 \graph HierTSynTest TSynTest classes hierarchy
 \TSynTests\TSynTest
@@ -15417,6 +15738,7 @@ Before any release all unitary regression tests are performed with the following
 - {\i Delphi} XE7;
 - {\i Delphi} 10 Seattle;
 - {\i Delphi} 10.1 Berlin;
+- {\i Delphi} 10.2 Tokyo;
 - {\i @*CrossKylix@} 3.0;
 - {\i @*FPC@} 3.x.x / 3.1.1 (svn revision).
 Target platforms are {\i Win32} and {\i Win64} for {\i Delphi} and {\i FPC}, plus {\i Linux 32/64} for {\i FPC} and {\i CrossKylix}.
@@ -15442,7 +15764,8 @@ Here are some of its features:
 - Integrated log archival (in {\f1\fs20 .zip} or any other format, including our {\f1\fs20 .synlz});
 - Optional colored echo to a console window, for interactive debugging;
 - Fast log viewer tool available, including thread filtering and customer-side execution profiling;
-- Optional remote logging via HTTP - the log viewer can be used as server.
+- Optional remote logging via HTTP - the log viewer can be used as server;
+- Optional events transmission to a UDP {\f1\fs20 syslog} server.
 :  Setup logging
 Logging is defined mainly by a per-class approach. You usually define your logging expectations by using a {\f1\fs20 TSynLog} class, and setting its {\f1\fs20 Family} property. Note that it is perfectly feasible to use you own {\f1\fs20 TSynLog} class instance, with its own {\f1\fs20 TSynLog} family settings, injected at the {\f1\fs20 constructor} level; but in {\i mORMot}, we usually use the per-class approach, via {\f1\fs20 TSynLog}, {\f1\fs20 TSQLLog}, {\f1\fs20 SynDBLog} and {\f1\fs20 SQLite3Log} - see @73@.
 For sample code (and the associated log viewer tool), see "{\i 11 - Exception logging}" folder in "{\i Sqlite3\\Samples}".
@@ -15783,7 +16106,7 @@ Follow these steps:
 - Finally, click on the "{\i Zip Archive}" link, available at the end of the "{\i Overview}" header, right ahead to the "{\i Other Links}" title. This link will build a {\f1\fs20 .zip} archive of the complete source code and download it to your browser.
 :  Expected compilation platform
 The framework source code tree will compile and is tested for the following platforms:
-- {\i Delphi} 6 up to {\i Delphi 10.1 Berlin} compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
+- {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo} compiler and IDE, with @*FPC@ 2.7.1 / 3.1.1 support;
 - Server side on Windows 32-bit and @**64-bit@ platforms ({\i Delphi} XE2 and up is expected when targeting {\i Win64});
 - Preliminary {\i @*Linux@} platform for @*ORM@ servers using the FPC compiler - less stable and tested in production than the Windows port;
 - VCL client on Win32/Win64 - GUI may be compiled optionally with third-party non Open-Source @*TMS@ Components, instead of default VCL components - see @http://www.tmssoftware.com/site/tmspack.asp
@@ -15925,7 +16248,7 @@ In a {\f1\fs20 CrossPlatform} folder, some source code is available, to be used 
 |{\f1\fs20 SynCrossPlatform.inc}|Includes cross-platform and cross-compiler conditionals
 |{\f1\fs20 SynCrossPlatformJSON.pas}|Cross-platform @*JSON@ support for {\i Delphi} and FPC
 |{\f1\fs20 SynCrossPlatformREST.pas}|Main unit, handling secured ORM and SOA RESTful client
-|{\f1\fs20 SynCrossPlatformCrypto.pas}|SHA256 and crc32 algorithms, used for authentication
+|{\f1\fs20 SynCrossPlatformCrypto.pas}|@*SHA256@ and @*crc32@ algorithms, used for authentication
 |{\f1\fs20 SynCrossPlatformSpecific.pas}|System-specific functions, e.g. HTTP clients
 |%
 See @86@ for more information.
@@ -16351,7 +16674,7 @@ The {\i Office UI licensing program} was designed by {\i Microsoft} for software
 If you want to design your user interface using a Office 2007/2010 ribbon look, please take a look at those official guidelines: @http://msdn.microsoft.com/en-us/library/cc872782.aspx
 Here is the screen content, using the TMS components:
 %synfiletms.png
-And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to {\i Delphi 10.1 Berlin}:
+And here is the same application compiled using only VCL components, available from {\i Delphi} 6 up to {\i Delphi 10.2 Tokyo}:
 %synfilevcl.png
 We did not use yet the Ribbon component as was introduced in {\i Delphi} 2009. Its action-driven design won't make it easy to interface with the event-driven design of our User Interface handling, and we have to confess that this component has rather bad reputation (at least in the {\i Delphi} 2009 version). Feel free to adapt our Open Source code to use it - we'll be very pleased to release a new version supporting it, but we don't have time nor necessity to do it by ourself.
 :  Enumeration types
@@ -16559,7 +16882,7 @@ Report header is written using the following methods:
 - {\f1\fs20 AddColumns}, with parameters set as percentages, will initialize a table with the first column content defined as bold ({\f1\fs20 SetColumnBold(0)});
 - {\f1\fs20 DrawTextAcrossCols} and {\f1\fs20 DrawTextAcrossColsFromCSV} will fill a table row according to the text specified, one string per column;
 - {\f1\fs20 DrawBMP} will draw a bitmap to the report, which content is loaded using the generic {\f1\fs20 LoadFromRawByteString} function implemented in @!Lib\SynGdiPlus.pas@;
-- {\f1\fs20 U2S} and {\f1\fs20 Iso2S} function, as defined in @!Iso2S,U2S!Lib\SQLite3\mORMoti18n.pas@, are used for conversion of some text or {\f1\fs20 @*TTimeLog@} into a text formated with the current language settings (@*i18n@).
+- {\f1\fs20 U2S} and {\f1\fs20 Iso2S} function, as defined in @!Iso2S,U2S!Lib\SQLite3\mORMoti18n.pas@, are used for conversion of some text or {\f1\fs20 @*TTimeLog@/@*TUnixTime@} into a text formated with the current language settings (@*i18n@).
 !    // write report content
 !    DrawTitle(sContent,true);
 !    SaveLayout;
@@ -16808,7 +17131,7 @@ Then we are able to use this code as such, for instance in a {\i Smart} console 
 The {\f1\fs20 InitCrc32Tab} shall be called only once, at application startup. Its execution is immediate. It won't delay your application display.
 :  SHA256
 The well-known @*SHA256@ algorithm is a proven way of creating an unique identifier from any data input. You can use it for instance to sign any content, or store efficiently a password. It is mathematically proven to be impossible to find out the input data from its hashed reduction (at least for the next decade of computer power). And it has a very low potential of "collision" (i.e. two diverse data having the same resulting hash). It is "Top Secret" enabled - U.S. National Institute of Standards and Technology says, "Federal agencies must use the SHA-2 family of hash functions for applications  that require collision resistance after 2010". This is the hashing pattern used within {\i mORMot}.
-But it is also more complex than the {\i crc32} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
+But it is also more complex than the {\i @*crc32@} algorithm. See @http://en.wikipedia.org/wiki/SHA-2
 You have an optimized implementation in the {\f1\fs20 SynCrypto.pas} unit, with tuned {\i x86} assembler code, and provided regression tests. We'll implement a pure Object Pascal version, compatible with the {\i Smart / Delphi Web Script (DWS)} compiler.
 First of all, we'll define a {\f1\fs20 record} type. We may have used a {\f1\fs20 class}, but since we have an extended {\f1\fs20 record} type at hand with {\i DWS} (including properties and methods), we will stay to it.
 !type
@@ -17825,7 +18148,7 @@ For instance, here is how the @!TSQLLister.Create!Lib\SQLite3\mORMotToolBar.pas@
 !  TableToGrid.OnSelectCell := OnSelectCell;
 !  (...)
 All the process will be done in an automated manner, using the methods of the {\f1\fs20 TDrawGrid} component.
-The current implementation is very fast, since the data is taken directly from the {\f1\fs20 TSQLTable} content. A grid with more than 200,000 rows is displayed with no delay. All content is converted into pure text, according to the @*RTTI@ information associated with the {\f1\fs20 TSQLTable} columns. If it was created as a {\f1\fs20 TSQLTableJSON}, from an @*ORM@ call of the framework, it will contain the RTTI information for each column. For instance, time and date will be displayed with the current internationalization settings, from either @*ISO 8601@ encoded text (for {\f1\fs20 @*TDateTime@} published property) or our optimized {\f1\fs20 Int64} format (for {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} published property).
+The current implementation is very fast, since the data is taken directly from the {\f1\fs20 TSQLTable} content. A grid with more than 200,000 rows is displayed with no delay. All content is converted into pure text, according to the @*RTTI@ information associated with the {\f1\fs20 TSQLTable} columns. If it was created as a {\f1\fs20 TSQLTableJSON}, from an @*ORM@ call of the framework, it will contain the RTTI information for each column. For instance, time and date will be displayed with the current internationalization settings, from either @*ISO 8601@ encoded text (for {\f1\fs20 @*TDateTime@} or @*TDateTimeMS@ published property) or our optimized {\f1\fs20 Int64} format (for {\f1\fs20 @*TTimeLog@ / @*TModTime@ / @*TCreateTime@} published property).
 
 [SDD-DI-2.3.1.2]
 ; SRS-DI-2.3.1.2 - Toolbar creation from code, using RTTI
@@ -18032,7 +18355,7 @@ But please do not forget to put somewhere in your credit window or documentation
 For instance, if you select the MPL license, here are the requirements:
 - You accept the license terms with no restriction - see @http://www.mozilla.org/MPL/2.0/FAQ.html for additional information;
 - You have to publish any modified unit (e.g. {\f1\fs20 SynTaskDialog.pas}) in a public web site (e.g. {\f1\fs20 http://SoftwareCompany.com/MPL}), with a description of applied modifications, and no removal of the original license header in source code;
-- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2016 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
+- You make appear some notice available in the program (About box, documentation, online help), stating e.g.\line {\i This software uses some third-party code of the Synopse mORMot framework (C) 2017 Arnaud Bouchez - {\f1\fs20 http://synopse.info} - under Mozilla Public License 1.1; modified source code is available at {\f1\fs20 http://SoftwareCompany.com/MPL}.}
 : Derivate Open Source works
 If you want to include part of the framework source code in your own open-source project, you may publish it with a comment similar to this one (as included in the great {\i DelphiWebScript} project by Eric Grange - @http://code.google.com/p/dwscript ):
 ${
@@ -18045,7 +18368,7 @@ $
 $    Sample based on official mORMot's sample
 $    "SQLite3\Samples\09 - HttpApi web server\HttpApiServer.dpr"
 $
-$    Synopse mORMot framework. Copyright (C) 2016 Arnaud Bouchez
+$    Synopse mORMot framework. Copyright (C) 2017 Arnaud Bouchez
 $      Synopse Informatique - http://synopse.info
 $
 $    Original tri-license: MPL 1.1/GPL 2.0/LGPL 2.1
@@ -18225,7 +18548,7 @@ A typical {\f1\fs20 SynEcc} implementation may use, as algorithms:
 - {\f1\fs20 KDF} = HMAC-SHA256 ("salt" and "hmac" values may be customized, but known on both sides);
 - {\f1\fs20 EF} = AES128-CFB or any AES mode excluding ECB, potentially in 256-bit;
 - {\f1\fs20 MAC} = HMAC-SHA256 (safest), HMAC-CRC256C (fast), or combined with {\f1\fs20 EF}.
-By default, the {\f1\fs20 TECDHEProtocol} class will use {\f1\fs20 kdfHmacSha256} as {\f1\fs20 KDF}, and {\f1\fs20 efAesCrc128} (i.e. AES128-CFB with combined {\f1\fs20 EF} and {\f1\fs20 MAC}), for best performance (around 700MB/s messages process thanks to hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 crc32c} instructions).
+By default, the {\f1\fs20 TECDHEProtocol} class will use {\f1\fs20 kdfHmacSha256} as {\f1\fs20 KDF}, and {\f1\fs20 efAesCrc128} (i.e. AES128-CFB with combined {\f1\fs20 EF} and {\f1\fs20 MAC}), for best performance (around 700MB/s messages process thanks to hardware accelerated @*AES-NI@ and SSE4.2 {\f1\fs20 @*crc32c@} instructions).
 Note that encryption is not handled at this level, since all conservative protocol implementations do not enable compression, to avoid security exploit as occured for TLS with CRIME. It is up to the application layer to process the data using e.g. {\f1\fs20 deflate} or our {\f1\fs20 @*SynLZ@} algorithm.
 : Unilateral Authentication
 For server-side only authentication - as is most currently implemented in regular TLS/HTTPS communications, the handshaking process is slightly reduced:

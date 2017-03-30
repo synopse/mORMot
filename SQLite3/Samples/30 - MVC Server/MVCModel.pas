@@ -1,7 +1,7 @@
 /// database Model for the MVCServer BLOG sample
 unit MVCModel;
 
-{$I Synopse.inc} // define HASINLINE WITHLOG USETHREADPOOL ONLYUSEHTTPSOCKET
+{$I Synopse.inc} // define HASINLINE WITHLOG ONLYUSEHTTPSOCKET
 
 interface
 
@@ -241,15 +241,13 @@ begin
 end;
 
 procedure TSQLArticle.TagsAddOrdered(aTagID: Integer; var aTags: TSQLTags);
-var auto: IUnknown; // mandatory only for FPC
 begin
-  if aTagID>=length(aTags.Lookup) then
-    exit;
-  if not AddInteger(fTags,aTagID,true) then
-    exit; // already there
-  auto := aTags.Lock.ProtectMethod;
-  inc(aTags.Lookup[aTagID-1].Occurence);
-  aTags.SortTagsByIdent(fTags);
+  if (aTagID<length(aTags.Lookup)) and
+     AddInteger(fTags,aTagID,true) then
+    with aTags.Lock.ProtectMethod do begin
+      inc(aTags.Lookup[aTagID-1].Occurence);
+      aTags.SortTagsByIdent(fTags);
+    end;
 end;
 
 
@@ -264,10 +262,9 @@ end;
 
 function TSQLTags.GetAsDocVariantArray: Variant;
 var i,ndx: Integer;
-    auto: IUnknown; // mandatory only for FPC
 begin
-  auto := Lock.ProtectMethod;
   TDocVariant.NewFast(result);
+  with Lock.ProtectMethod do
   for i := 0 to length(OrderID)-1 do begin
     ndx := OrderID[i]-1;
     with Lookup[ndx] do
@@ -280,53 +277,51 @@ end;
 procedure TSQLTags.Init(aRest: TSQLRest);
 var tag: TSQLTag;
     ID,count,maxID: integer;
-    auto1,auto2: IUnknown; // mandatory only for FPC
 begin
   Finalize(Lookup);
   if Lock=nil then
     Lock := TAutoLocker.Create;
-  auto1 := Lock.ProtectMethod;
-  auto2 := TAutoFree.One(
-    tag,TSQLTag.CreateAndFillPrepare(aRest,'order by Ident','RowID,Ident,Occurence'));
-  count := tag.FillTable.RowCount;
-  if count=0 then
-    exit;
-  SetLength(OrderID,count);
-  count := 0;
-  maxID := 0;
-  while tag.FillOne do begin
-    ID := tag.ID;
-    OrderID[count] := ID;
-    inc(count);
-    if ID>maxID then
-      maxID := ID;
-  end;
-  SetLength(Lookup,maxID);
-  tag.FillRewind;
-  while tag.FillOne do
-  with Lookup[tag.ID-1] do begin
-    Ident := tag.Ident;
-    Occurence := tag.Occurence;
+  with Lock.ProtectMethod, TAutoFree.One(tag,TSQLTag.CreateAndFillPrepare(
+     aRest,'order by Ident','RowID,Ident,Occurence')) do begin
+    count := tag.FillTable.RowCount;
+    if count=0 then
+      exit;
+    SetLength(OrderID,count);
+    count := 0;
+    maxID := 0;
+    while tag.FillOne do begin
+      ID := tag.ID;
+      OrderID[count] := ID;
+      inc(count);
+      if ID>maxID then
+        maxID := ID;
+    end;
+    SetLength(Lookup,maxID);
+    tag.FillRewind;
+    while tag.FillOne do
+    with Lookup[tag.ID-1] do begin
+      Ident := tag.Ident;
+      Occurence := tag.Occurence;
+    end;
   end;
 end;
 
 procedure TSQLTags.SaveOccurence(aRest: TSQLRest);
 var tag: TSQLTag;
     batch: TSQLRestBatch;
-    auto1,auto2: IUnknown; // mandatory only for FPC
 begin
-  auto1 := Lock.ProtectMethod;
-  auto2 := TAutoFree.Several([
-    @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
-    @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]);
-  while tag.FillOne do begin
-    if tag.ID<=length(Lookup) then
-      if Lookup[tag.ID-1].Occurence<>tag.Occurence then begin
-        tag.Occurence := Lookup[tag.ID-1].Occurence;
-        batch.Update(tag); // will update only Occurence field
-      end;
+  with TAutoFree.Several([
+     @tag,TSQLTag.CreateAndFillPrepare(aRest,'','RowID,Occurence'),
+     @batch,TSQLRestBatch.Create(aRest,TSQLTag,1000)]), Lock.ProtectMethod do begin
+    while tag.FillOne do begin
+      if tag.ID<=length(Lookup) then
+        if Lookup[tag.ID-1].Occurence<>tag.Occurence then begin
+          tag.Occurence := Lookup[tag.ID-1].Occurence;
+          batch.Update(tag); // will update only Occurence field
+        end;
+    end;
+    aRest.BatchSend(batch);
   end;
-  aRest.BatchSend(batch);
 end;
 
 procedure TSQLTags.SortTagsByIdent(var Tags: TIntegerDynArray);

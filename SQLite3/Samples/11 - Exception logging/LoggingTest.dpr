@@ -10,19 +10,23 @@
   Version 1.0 - April 14, 2011
     - Initial Release
 
+  Version 1.18
+    - Kylix support
+
 }
 program LoggingTest;
 
 uses
   {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
+  {$ifdef MSWINDOWS}
   Windows,
-  SysUtils,
   ComObj,
-  //SynZip,
-{$ifdef CONDITIONALEXPRESSIONS}
+  {$endif}
+  SysUtils,
+  {$ifdef CONDITIONALEXPRESSIONS}
+  // mORMot.pas doesn't compile under Delphi 5
   mORMot,
-  SynSelfTests,
-{$endif}
+  {$endif}
   SynCommons,
   SynLog;
 
@@ -37,7 +41,20 @@ type
   // can be ignored on request
   ECustomException = class(Exception);
 
-{$ifndef CONDITIONALEXPRESSIONS}
+{$ifdef CONDITIONALEXPRESSIONS}
+  TSQLRecordPeople = class(TSQLRecord)
+  private
+    fFirstName: RawUTF8;
+    fLastName: RawUTF8;
+    fYearOfBirth: integer;
+    fYearOfDeath: word;
+  published
+    property FirstName: RawUTF8 read fFirstName write fFirstName;
+    property LastName: RawUTF8 read fLastName write fLastName;
+    property YearOfBirth: integer read fYearOfBirth write fYearOfBirth;
+    property YearOfDeath: word read fYearOfDeath write fYearOfDeath;
+  end;
+{$else}
   // mORMot.pas doesn't compile under Delphi 5 (yet)
   TSQLLog = TSynLog;
 {$endif}
@@ -73,7 +90,6 @@ end;
 procedure TestsLog;
 
 {$ifdef CONDITIONALEXPRESSIONS}
-  // mORMot.pas doesn't compile under Delphi 5 (yet)
   procedure TestPeopleProc;
   var People: TSQLRecordPeople;
       Log: ISynLog;
@@ -132,6 +148,7 @@ begin
     //OnArchive := EventArchiveZip;
     ArchiveAfterDays := 1; // archive after one day
   end;
+  TSQLLog.Add.Log(sllInfo,'Starting');
   // try some low-level common exceptions
   try
     dummy := 0;
@@ -188,6 +205,17 @@ begin
     on E: Exception do
       TSQLLog.Add.Log(sllInfo,'^^^^^^^^  Exception.Message=""',E);
   end;
+  // try an ESynException
+  try
+    raise ESynException.CreateUTF8('testing %.CreateUTF8',[ESynException]);
+  except
+    on E: ESynException do begin
+      TSQLLog.Add.Log(sllInfo,'^^^^^^^^  ESynException',E);
+      TSQLLog.Add.Log(sllDebug,'ObjectToJSONDebug(E) = %',[ObjectToJSONDebug(E)],E);
+      TSQLLog.Add.Log(sllDebug,'FindLocation(E) = %',[TSynMapFile.FindLocation(E)],E);
+    end;
+  end;
+  {$ifdef MSWINDOWS}
   // try a EOleSysError, as if it was triggered from the .Net CLR
   try
     raise EOleSysError.Create('Test',HRESULT($80004003),0);
@@ -195,6 +223,7 @@ begin
     on E: Exception do
       TSQLLog.Add.Log(sllInfo,'^^^^^^^^  should be recognized as NullReferenceException',E);
   end;
+  {$endif}
 end;
 
 begin
