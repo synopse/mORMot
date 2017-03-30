@@ -54594,17 +54594,21 @@ end;
 
 procedure TSQLRestBackgroundTimer.AsynchBackgroundInterning(
   Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
-var i, total: integer;
+var i, claimed, total: integer;
     timer: TPrecisionTimer;
 begin
   timer.Start;
-  total := 0;
+  claimed := 0;
   for i := 0 to high(fBackgroundInterning) do
-    inc(total,fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
-  if total>0 then
-    fRest.InternalLog('%.AsynchInterning: Clean(%) claimed % strings in % pools in %',
-      [ClassType,fBackgroundInterningMaxRefCount,total,
-       length(fBackgroundInterning),timer.Stop],sllDebug);
+    inc(claimed,fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
+  if claimed=0 then
+    exit; // nothing to collect
+  total := claimed;
+  for i := 0 to high(fBackgroundInterning) do
+    inc(total,fBackgroundInterning[i].Count);
+  fRest.InternalLog('%.AsynchInterning: Clean(%) claimed %/% strings from % pools in %',
+    [ClassType,fBackgroundInterningMaxRefCount,claimed,total,
+     length(fBackgroundInterning),timer.Stop],sllDebug);
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchInterning(Interning: TRawUTF8Interning;
