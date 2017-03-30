@@ -62381,7 +62381,7 @@ end;
 
 procedure TSystemUse.BackgroundExecute(Sender: TSynBackgroundTimer;
   Event: TWaitResult; const Msg: RawUTF8);
-begin // not implemented yet (using /proc ?)
+begin // not implemented yet (use /proc ?)
 end;
 
 {$endif MSWINDOWS}

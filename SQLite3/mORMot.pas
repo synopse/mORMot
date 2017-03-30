@@ -13262,13 +13262,17 @@ type
   protected
     fRest: TSQLRest;
     fBackgroundBatch: array of TSQLRestBatchLocked;
+    fBackgroundInterning: array of TRawUTF8Interning;
+    fBackgroundInterningMaxRefCount: integer;
     // used by AsynchRedirect() and AsynchBatch()
     function AsynchBatchIndex(aTable: TSQLRecordClass): integer;
     function AsynchBatchLocked(aTable: TSQLRecordClass; out aBatch: TSQLRestBatchLocked): boolean;
     procedure AsynchBatchUnLock(aBatch: TSQLRestBatchLocked);
+    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
+      Event: TWaitResult; const Msg: RawUTF8);
     procedure AsynchBackgroundExecute(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
-    procedure AsynchBatchExecute(Sender: TSynBackgroundTimer;
+    procedure AsynchBackgroundInterning(Sender: TSynBackgroundTimer;
       Event: TWaitResult; const Msg: RawUTF8);
   public
     /// initialize the thread for a periodic task processing
@@ -13364,6 +13368,11 @@ type
     // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// allows background garbage collection of specified RawUTF8 interning
+    // - will run Interning.Clean(2) every 5 minutes by default
+    // - set InterningMaxRefCount=0 to disable process of the Interning instance
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer=2; PeriodMinutes: integer=5);
   published
     /// the identifier of the thread, as logged
     property Name: RawUTF8 read fThreadName;
@@ -14580,6 +14589,16 @@ type
     // - is a wrapper around the TSQLRestBatch.Delete() sent in the Timer thread
     // - this method is thread-safe
     function AsynchBatchDelete(Table: TSQLRecordClass; ID: TID): integer;
+    /// allows background garbage collection of specified RawUTF8 interning
+    // - will run Interning.Clean(2) every 5 minutes by default
+    // - set InterningMaxRefCount=0 to disable process of the Interning instance
+    // - note that InterningMaxRefCount and PeriodMinutes parameters (if not 0),
+    // are common for all TRawUTF8Interning instances (the latest value wins)
+    // - you may e.g. run the following to clean up TDocVariant interned RawUTF8:
+    // ! aRest.AsynchInterning(DocVariantType.InternNames);
+    // ! aRest.AsynchInterning(DocVariantType.InternValues);
+    procedure AsynchInterning(Interning: TRawUTF8Interning;
+      InterningMaxRefCount: integer=2; PeriodMinutes: integer=5);
     /// define redirection of interface methods calls in one or several instances
     // - this class allows to implements any interface via a fake class, which
     // will redirect all methods calls to one or several other interfaces
@@ -14607,6 +14626,7 @@ type
     // the TSystemUse.Current class function
     // - do nothing if global TSystemUse.Current was already assigned
     function SystemUseTrack(periodSec: integer=10): TSystemUse;
+
     /// how this class execute its internal commands
     // - by default, TSQLRestServer.URI() will lock for Write ORM according to
     // AcquireWriteMode (i.e. AcquireExecutionMode[execORMWrite]=amLocked) and
@@ -34029,7 +34049,15 @@ begin
       aGUID,aDestinationInstance,aCallbackInterface);
 end;
 
-function TSQLRest.SystemUseTrack(periodSec: integer=10): TSystemUse;
+procedure TSQLRest.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if self<>nil then
+    EnsureBackgroundTimerExists.AsynchInterning(
+      Interning,InterningMaxRefCount,PeriodMinutes);
+end;
+
+function TSQLRest.SystemUseTrack(periodSec: integer): TSystemUse;
 begin
   result := nil;
   if self=nil then
@@ -54562,6 +54590,39 @@ begin
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
       [self,fThreadName,aDestinationInstance,GUIDToShort(aGUID)]);
   AsynchRedirect(aGUID,dest,aCallbackInterface);
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchBackgroundInterning(
+  Sender: TSynBackgroundTimer; Event: TWaitResult; const Msg: RawUTF8);
+var i, total: integer;
+    timer: TPrecisionTimer;
+begin
+  timer.Start;
+  total := 0;
+  for i := 0 to high(fBackgroundInterning) do
+    inc(total,fBackgroundInterning[i].Clean(fBackgroundInterningMaxRefCount));
+  if total>0 then
+    fRest.InternalLog('%.AsynchInterning: Clean(%) claimed % strings in % pools in %',
+      [ClassType,fBackgroundInterningMaxRefCount,total,
+       length(fBackgroundInterning),timer.Stop],sllDebug);
+end;
+
+procedure TSQLRestBackgroundTimer.AsynchInterning(Interning: TRawUTF8Interning;
+  InterningMaxRefCount, PeriodMinutes: integer);
+begin
+  if (self=nil) or (Interning=nil) then
+    exit;
+  fTaskLock.Lock;
+  try
+    if (InterningMaxRefCount<=0) or (PeriodMinutes<=0) then
+      ObjArrayDelete(fBackgroundInterning,Interning) else begin
+      fBackgroundInterningMaxRefCount := InterningMaxRefCount;
+      ObjArrayAddOnce(fBackgroundInterning,Interning);
+      Enable(AsynchBackgroundInterning,PeriodMinutes*60);
+    end;
+  finally
+    fTaskLock.UnLock;
+  end;
 end;
 
 
