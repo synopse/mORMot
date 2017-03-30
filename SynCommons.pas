@@ -5844,8 +5844,10 @@ type
     procedure Unique(var aResult: RawUTF8; const aText: RawUTF8; aTextHash: cardinal);
     /// ensure the supplied RawUTF8 value is interned
     procedure UniqueText(var aText: RawUTF8; aTextHash: cardinal);
+    /// delete all stored RawUTF8 values
+    procedure Clear;
     /// reclaim any unique RawUTF8 values
-    function Clean: integer;
+    function Clean(aMaxRefCount: integer): integer;
     /// how many items are currently stored in Value[]
     function Count: integer;
   end;
@@ -5910,14 +5912,17 @@ type
     // - supplied variant should be a varString containing a RawUTF8 value
     procedure UniqueVariant(var aResult: variant); overload;
     {$endif NOVARIANTS}
-    /// delete any previous storage popl
+    /// delete any previous storage pool
     procedure Clear;
     /// reclaim any unique RawUTF8 values
     // - i.e. run a garbage collection process of all values with RefCount=1
+    // by default, i.e. all string which are not used any more; you may set
+    // aMaxRefCount to a higher value, depending on your expecations, i.e. 2 to
+    // delete all string which are referenced only once outside of the pool
     // - returns the number of unique RawUTF8 cleaned from the internal pool
     // - to be executed on a regular basis - but not too often, since the
     // process can be time consumming, and void the benefit of interning
-    function Clean: integer;
+    function Clean(aMaxRefCount: integer=1): integer;
     /// how many items are currently stored in this instance
     function Count: integer;
   end;
@@ -19019,7 +19024,18 @@ begin
   end;
 end;
 
-function TRawUTF8InterningSlot.Clean: integer;
+procedure TRawUTF8InterningSlot.Clear;
+begin
+  Safe.Lock;
+  try
+    Values.Clear;
+    Values.Rehash;
+  finally
+    Safe.Unlock;
+  end;
+end;
+
+function TRawUTF8InterningSlot.Clean(aMaxRefCount: integer): integer;
 var i: integer;
     s,d: PPtrUInt; // points to RawUTF8 values
 begin
@@ -19032,9 +19048,9 @@ begin
     d := s;
     for i := 1 to Safe.Padding[0].VInteger do begin
       {$ifdef FPC}
-      if StringRefCount(PAnsiString(s)^)=1 then begin
+      if StringRefCount(PAnsiString(s)^)<=aMaxRefCount then begin
       {$else}
-      if PInteger(s^-8)^=1 then begin
+      if PInteger(s^-8)^<=aMaxRefCount then begin
       {$endif}
         inc(result);
         PRawUTF8(s)^ := '';
@@ -19086,24 +19102,16 @@ var i: integer;
 begin
   if self<>nil then
     for i := 0 to fPoolLast do
-      with fPool[i] do begin
-        Safe.Lock;
-        try
-          Values.Clear;
-          Values.Rehash;
-        finally
-          Safe.Unlock;
-        end;
-      end;
+      fPool[i].Clear;
 end;
 
-function TRawUTF8Interning.Clean: integer;
+function TRawUTF8Interning.Clean(aMaxRefCount: integer): integer;
 var i: integer;
 begin
   result := 0;
   if self<>nil then
     for i := 0 to fPoolLast do
-      inc(result,fPool[i].Clean);
+      inc(result,fPool[i].Clean(aMaxRefCount));
 end;
 
 function TRawUTF8Interning.Count: integer;
