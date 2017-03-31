@@ -8622,6 +8622,16 @@ type
     // - similar to GetAsFloat() method, but for the current Step
     function FieldAsFloat(const FieldName: RawUTF8): TSynExtended; overload;
       {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as RawUTF8
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetU() method, but for the current Step
+    function FieldAsRawUTF8(FieldIndex: Integer): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read-only access to a particular field value, as RawUTF8
+    // - raise an ESQLTableException if called outside valid Step() sequence
+    // - similar to GetU() method, but for the current Step
+    function FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
     {$ifndef NOVARIANTS}
     /// read-only access to a particular field value, as a variant
     // - raise an ESQLTableException if called outside valid Step() sequence
@@ -26430,6 +26440,20 @@ end;
 function TSQLTable.FieldAsFloat(const FieldName: RawUTF8): TSynExtended;
 begin
   result := GetExtended(FieldBuffer(FieldName));
+end;
+
+function TSQLTable.FieldAsRawUTF8(FieldIndex: Integer): RawUTF8;
+var buf: PUTF8Char;
+begin
+  buf := FieldBuffer(FieldIndex);
+  SetString(result,PAnsiChar(buf),StrLen(buf));
+end;
+
+function TSQLTable.FieldAsRawUTF8(const FieldName: RawUTF8): RawUTF8;
+var buf: PUTF8Char;
+begin
+  buf := FieldBuffer(FieldName);
+  SetString(result,PAnsiChar(buf),StrLen(buf));
 end;
 
 {$ifndef NOVARIANTS}

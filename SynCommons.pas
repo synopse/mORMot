@@ -19212,11 +19212,11 @@ procedure TRawUTF8Interning.UniqueVariant(var aResult: variant);
 begin
   with TVarData(aresult) do
     if VType=varString then
-      UniqueText(RawUTF8(VAny)) else
+      UniqueText(RawUTF8(VString)) else
     if VType=varVariant or varByRef then
       UniqueVariant(PVariant(VPointer)^) else
     if VType=varString or varByRef then
-      UniqueText(PRawUTF8(VAny)^);
+      UniqueText(PRawUTF8(VPointer)^);
 end;
 
 {$endif NOVARIANTS}
@@ -22686,7 +22686,7 @@ begin
     varEmpty,varNull:
       result := false;
     varString:
-      result := RawUTF8(VAny)=Str;
+      result := RawUTF8(VString)=Str;
     else
       result := Complex(V,Str);
   end;
@@ -40482,7 +40482,7 @@ begin
       VType := varString;
       VAny := nil; // avoid GPF below when assigning a string variable to VAny
     end;
-    SetRawUTF8(RawUTF8(VAny),Txt,TxtLen);
+    SetRawUTF8(RawUTF8(VString),Txt,TxtLen);
   end;
 end;
 
@@ -40694,7 +40694,7 @@ begin
       tmp.Len := FromVarUInt32(PByte(Source));
       case VType of
       varString:
-        SetString(RawUTF8(VAny),Source,tmp.Len); // explicit RawUTF8
+        SetString(RawUTF8(VString),Source,tmp.Len); // explicit RawUTF8
       varOleStr:
         SetString(WideString(VAny),PWideChar(Source),tmp.Len shr 1);
       {$ifdef HASVARUSTRING}
@@ -40869,8 +40869,8 @@ begin
     vtString, {$ifdef HASVARUSTRING}vtUnicodeString,{$endif}
     vtPChar, vtChar, vtWideChar, vtWideString, vtClass: begin
       VType := varString;
-      VAny := nil; // avoid GPF on next line
-      VarRecToUTF8(V,RawUTF8(VAny));
+      VString := nil; // avoid GPF on next line
+      VarRecToUTF8(V,RawUTF8(VString));
     end;
     vtObject: // class instance will be serialized as a TDocVariant
       ObjectToVariant(V.VObject,result,[woDontStoreDefault]);
@@ -41357,8 +41357,8 @@ begin
         exit;
     // found no numerical value -> return a string in the expected format
     VType := varString;
-    VAny := nil; // avoid GPF below when assigning a string variable to VAny
-    SetString(RawUTF8(VAny),PAnsiChar(JSON),StrLen(JSON));
+    VString := nil; // avoid GPF below when assigning a string variable to VAny
+    SetString(RawUTF8(VString),PAnsiChar(JSON),StrLen(JSON));
   end;
 end;
 
@@ -48062,7 +48062,7 @@ begin
     {$ifdef HASCODEPAGE}
     AddAnyAnsiString(RawByteString(VString),Escape);
     {$else}  // VString is expected to be a RawUTF8
-    Add(VAny,length(RawUTF8(VAny)),Escape);
+    Add(VString,length(RawUTF8(VString)),Escape);
     {$endif}
     if Escape=twJSONEscape then
       Add('"');
