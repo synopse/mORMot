@@ -12143,7 +12143,7 @@ type
   // - by default, all methods are allowed to execution: you can call AllowAll,
   // DenyAll, Allow or Deny in order to specify your exact security policy
   TServiceFactoryServer = class(TServiceFactory)
-  protected
+  protected                         
     fInstances: TServiceFactoryServerInstanceDynArray;
     fInstance: TDynArray;
     fInstanceCapacity: integer;
@@ -12409,6 +12409,7 @@ type
     // with no '{"result":{...}}' nesting
     // - could be used e.g. for plain non mORMot REST Client with in sicSingle
     // or sicShared mode kind of services
+    // - on client side, consider using TSQLRestClientURI.ServiceDefineSharedAPI
     property ResultAsJSONObjectWithoutResult: boolean
       read fResultAsJSONObjectWithoutResult write fResultAsJSONObjectWithoutResult;
     /// set to TRUE to return the interface's methods result as XML object
@@ -12554,17 +12555,6 @@ type
     // names as field names - may be useful e.g. when working with a non
     // mORMot server
     property ParamsAsJSONObject: boolean read fParamsAsJSONObject write fParamsAsJSONObject;
-    /// set to TRUE to expect the interface's methods result to be a JSON object
-    // without the {"result":... } nesting
-    // - by default (FALSE), any method execution will return a JSON array with
-    // all VAR/OUT parameters, within a {"result":...,id:...} layout
-    // - TRUE will expect a simple JSON object instead, with the VAR/OUT parameter
-    // names as field names (and "Result" for any function result) - may be
-    // useful e.g. when working with JavaScript clients
-    // - this value can be overridden by setting ForceServiceResultAsJSONObject
-    // for a given TSQLRestServerURIContext (e.g. for server-side JavaScript work)
-    property ResultAsJSONObjectWithoutResult: boolean read fResultAsJSONObject
-      write fResultAsJSONObject;
   end;
 
   /// used to lookup one method in a global list of interface-based services
@@ -18809,7 +18799,14 @@ type
     // - this method expects the interface(s) to have been registered previously:
     // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
     function ServiceDefineClientDriven(const aInterface: TGUID; out Obj;
-      const aContractExpected: RawUTF8=''): boolean; overload;
+      const aContractExpected: RawUTF8=''): boolean; 
+    /// register a sicShared Service instance communicating via JSON objects
+    // - will force SERVICE_CONTRACT_NONE_EXPECTED, and ParamsAsJSONObject=true
+    // - may be used e.g. for accessing a sessionless public REST/JSON API, i.e.
+    // ! TSQLRestServer.ServiceDefine(...).ResultAsJSONObjectWithoutResult := true
+    // - this method expects the interface(s) to have been registered previously:
+    // ! TInterfaceFactory.RegisterInterfaces([TypeInfo(IMyInterface),...]);
+    function ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
     /// allow to notify a server the services this client may be actually capable
     // - when this client will connect to a remote server to access its services,
     // it will register its own services, supplying its TSQLRestServer instance,
@@ -37179,6 +37176,12 @@ function TSQLRestClientURI.ServiceDefineClientDriven(const aInterface: TGUID;
 begin
   result := ServiceRegisterClientDriven(
     TInterfaceFactory.GUID2TypeInfo(aInterface),Obj,aContractExpected);
+end;
+
+function TSQLRestClientURI.ServiceDefineSharedAPI(const aInterface: TGUID): TServiceFactoryClient;
+begin
+  result := ServiceDefine(aInterface,sicShared,SERVICE_CONTRACT_NONE_EXPECTED);
+  result.ParamsAsJSONObject := true; // no contract -> explicit parameters
 end;
 
 procedure TSQLRestClientURI.ServicePublishOwnInterfaces(OwnServer: TSQLRestServer);
