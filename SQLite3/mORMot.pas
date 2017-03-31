@@ -4485,6 +4485,12 @@ type
     {$endif}
     /// finalize the instance, and release its published properties
     destructor Destroy; override;
+    /// virtual method allowing instance customization after initialization
+    // - called e.g. by JsonToObject, but may be executed after manual fields
+    // assignment
+    // - do nothing by default
+    // - may be overriden for string interning or content customization
+    procedure AfterLoad; virtual;
   end;
 
   /// adding locking methods to a TSynAutoCreateFields with virtual constructor
@@ -47147,8 +47153,9 @@ type
   TJSONObject =
     (oNone, oObject, oException, oSynException, oList, oObjectList,
      {$ifndef LVCL}oCollection,{$endif}
-     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oPersistentPassword,
-     oSynMonitor, oSQLTable, oCustomReaderWriter, oCustomPropName);
+     oUtfs, oStrings, oSQLRecord, oSQLMany, oPersistent, oSynAutoCreateFields,
+     oSynPersistentWithPassword, oSynMonitor, oSQLTable,
+     oCustomReaderWriter, oCustomPropName);
   TJSONCustomParser = record
     Reader: TJSONSerializerCustomReader;
     Writer: TJSONSerializerCustomWriter;
@@ -47164,15 +47171,15 @@ var
 
 function JSONObjectFromClass(aClassType: TClass; out aParser: PJSONCustomParser): TJSONObject;
 const
-  MAX = {$ifdef LVCL}14{$else}15{$endif};
+  MAX = {$ifdef LVCL}15{$else}16{$endif};
   TYP: array[0..MAX] of TClass = ( // all classes types gathered in CPU L1 cache
-    TObject,Exception,ESynException,TList,TObjectList,TPersistent,
+    TObject,Exception,ESynException,TList,TObjectList,TPersistent,TSynAutoCreateFields,
     TSynPersistentWithPassword,TSynPersistent,TInterfacedObjectWithCustomCreate,
     TSynMonitor,TSQLRecordMany,TSQLRecord,TStrings,TRawUTF8List,TSQLTable
     {$ifndef LVCL},TCollection{$endif});
   OBJ: array[0..MAX] of TJSONObject = ( // oPersistent = has published properties
-    oObject,oException,oSynException,oList,oObjectList,oPersistent,
-    oPersistentPassword,oPersistent,oPersistent,
+    oObject,oException,oSynException,oList,oObjectList,oPersistent,oSynAutoCreateFields,
+    oSynPersistentWithPassword,oPersistent,oPersistent,
     oSynMonitor,oSQLMany,oSQLRecord,oStrings,oUtfs,oSQLTable
     {$ifndef LVCL},oCollection{$endif});
 var P: PJSONCustomParser;
@@ -48005,6 +48012,8 @@ doProp: // normal property value
       end;
     end;
   until (From=nil) or (EndOfObject='}');
+  if IsObj=oSynAutoCreateFields then
+    TSynAutoCreateFields(Value).AfterLoad;
   if From<>nil then begin
     while From^ in [#1..' '] do inc(From);
     if From^=#0 then
@@ -50122,7 +50131,7 @@ var Added: boolean;
           if (tmp<>'') or not (woDontStoreEmptyString in Options) then begin
             HR(P);
             Add('"');
-            if (IsObj=oPersistentPassword) and (codepage=CP_UTF8) and
+            if (IsObj=oSynPersistentWithPassword) and (codepage=CP_UTF8) and
                ((woHideSynPersistentPassword in Options) or
                 (woFullExpand in Options)) and
                P^.GetterIsField and (P^.GetterAddr(Value)=
@@ -58294,6 +58303,10 @@ destructor TSynAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
+end;
+
+procedure TSynAutoCreateFields.AfterLoad;
+begin
 end;
 
 
