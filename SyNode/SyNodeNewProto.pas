@@ -140,7 +140,11 @@ procedure VarRecToJSVal(cx: PJSContext; const V: TVarRec; var result: jsval);
 
 
 // called when the interpreter destroys the object
+{$IFDEF SM52}
+procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
+{$ELSE}
 procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
+{$ENDIF}
 // called when the interpreter wants to create an object through a new TMyObject ()
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl;
 // called when reading an indexed property
@@ -157,15 +161,34 @@ implementation
 uses SyNode;
 
 const
+{$IFDEF SM52}
+  jsdef_classOps: JSClassOps = (
+    finalize: SMCustomObjectDestroy; // call then JS object GC}
+    construct: SMCustomObjectConstruct
+  );
+  jsidxobj_classOps: JSClassOps = (
+    getProperty: SMRTTIIdxPropRead;
+    finalize: SMCustomObjectDestroy
+  );
   jsdef_class: JSClass = (name: '';
-    flags: JSCLASS_HAS_PRIVATE ;
-    finalize: SMCustomObjectDestroy; // call then JS object GC
-    construct: SMCustomObjectConstruct;);
-
+    flags: uint32(JSCLASS_HAS_PRIVATE);
+    cOps: @jsdef_classOps
+    );
+  jsidxobj_class: JSClass = (name: 'idxPropReader';
+    flags: JSCLASS_HAS_PRIVATE;
+    cOps: @jsidxobj_classOps
+    );
+{$ELSE}
+  jsdef_class: JSClass = (name: '';
+    flags: uint32(JSCLASS_HAS_PRIVATE);
+    finalize: SMCustomObjectDestroy; // call then JS object GC}
+    construct: SMCustomObjectConstruct
+    );
   jsidxobj_class: JSClass = (name: 'idxPropReader';
     flags: JSCLASS_HAS_PRIVATE;
     getProperty: SMRTTIIdxPropRead;
     finalize: SMCustomObjectDestroy);
+{$ENDIF}
 
 
 {$REGION 'JS Call functions'}
@@ -550,7 +573,11 @@ begin
 end;
 
 // called when JS Object is destroyed
+{$IFDEF SM52}
+procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
+{$ELSE}
 procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
+{$ENDIF}
 var
   ObjRec: PSMObjectRecord;
   Inst: PSMInstanceRecord;
@@ -648,16 +675,27 @@ function GetPropCacheForWrite(cx: PJSContext; obj: PJSObject; id: jsid; var aObj
 var
   i: Integer;
   propName: AnsiString;
+  found: Boolean;
 begin
   if not IsInstanceObject(cx, obj, aObj) then
     raise ESMException.Create(SM_NOT_A_NATIVE_OBJECT);
   Result := nil;
   propName := PJSString(id).ToAnsi(cx);
-  for I := 0 to Length((AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache)-1 do
-    if (AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i].jsName = propName then begin
-      Result := @(AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
+  found := False;
+  for I := 0 to Length((AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache)-1 do begin
+    Result := @(AObj.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
+{$IFDEF SM52}
+    if strComparePropGetterSetter(propName, Result.jsName, false) then begin
+{$ELSE}
+    if Result.jsName = propName then begin
+{$ENDIF}
+      found := True;
       Break;
     end;
+  end;
+  if not found then
+    raise ESMException.CreateFmt('% not found', [propName]);
+
   if Result.isReadOnly then begin
 
     raise ESMException.CreateFmt('Property %s.%s is ReadOnly',
@@ -745,6 +783,7 @@ var
   i: Integer;
   id: PJSString;
   prop_name: AnsiString;
+  found: Boolean;
 begin
   Result := true;
   try
@@ -762,12 +801,20 @@ begin
       prop_name := ID.ToAnsi(cx);
     // cached prioperty
       pc := nil;
+      found := False;
       for i := 0 to Length((Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache)-1 do begin
-        if (Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i].jsName = prop_name then begin
-          pc := @(Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
-          Break;
+        pc := @(Instance.proto as TSMNewRTTIProtoObject).FRTTIPropsCache[i];
+{$IFDEF SM52}
+        if strComparePropGetterSetter(prop_name, pc.jsName, true) then begin
+{$ELSE}
+        if pc.jsName = prop_name then begin
+{$ENDIF}
+          found := True;
+          break;
         end;
       end;
+      if not found then
+        raise ESMException.CreateFmt('% not found', [prop_name]);
       if (pc.DeterministicIndex>=0) and (not this.ptr.ReservedSlot[pc.DeterministicIndex].isVoid) then
         rval := this.ptr.ReservedSlot[pc.DeterministicIndex]
       else begin

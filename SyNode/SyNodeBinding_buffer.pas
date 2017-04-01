@@ -102,7 +102,11 @@ begin
       cx.FreeRootedObject(this);
     end;
     if bufLen = 0 then begin
+{$IFDEF SM52}
+      vp.rval := cx.EmptyString.ToJSVal;
+{$ELSE}
       vp.rval := cx.rt.EmptyString.ToJSVal;
+{$ENDIF}
       Exit;
     end;
 

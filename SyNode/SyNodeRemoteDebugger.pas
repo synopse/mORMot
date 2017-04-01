@@ -106,6 +106,21 @@ type
     property NeedPauseOnFirstStep: boolean read FNeedPauseOnFirstStep write FNeedPauseOnFirstStep;
   end;
 
+  /// Fake class required by VSCode FireFox Debug extension
+  // https://github.com/hbenl/vscode-firefox-debug
+  // SyNode engine expose themself as a FireFox addons, in this case
+  // vscode-firefox-debug tyr to "install" a addon by senfing a commands to port 8888
+  // In this sace we do nothing - all out sources are already inside engine
+  TFakeXPIInstaller = class(TThread)
+  private
+    fPort: SockString;
+  protected
+    procedure Execute; override;
+  public
+    procedure SetTerminated;
+    constructor Create(const aPort: SockString = '8888');
+  end;
+
   function SyNodeBindingProc_debugger(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 
 implementation
@@ -142,7 +157,9 @@ type
     fIsPaused: boolean;
     fMessagesQueue: TRawUTF8ListHashedLocked;
     fLogQueue: TRawUTF8ListHashedLocked;
+    {$IFNDEF SM52}
     fOldInterruptCallback: JSInterruptCallback;
+    {$ENDIF}
     fSmThreadID: TThreadID;
     fNameForDebug: RawUTF8;
     fCommunicationThread: TSMRemoteDebuggerCommunicationThread;
@@ -212,9 +229,20 @@ begin
     Debugger.fLogQueue.LockedAdd(Text);
 
     if eng.cx.IsRunning then
+{$IFDEF SM52}
+      eng.cx.RequestInterruptCallback
+{$ELSE}
       eng.rt.RequestInterruptCallback
+{$ENDIF}
     else
+{$IFDEF SM52}
+    begin
+      eng.cx.RequestInterruptCallback;
+      eng.cx.CheckForInterrupt;
+    end;
+{$ELSE}
       eng.rt.InterruptCallback(eng.cx);
+{$ENDIF}
   end;
 end;
 
@@ -444,7 +472,9 @@ begin
         Writer.CancelLastComma;
         Writer.AddShort(']}');
       end else if request.type = 'listTabs' then begin
-        Writer.AddShort('{"from":"root","tabs":[],"selected":0}');
+        // VSCode FireFox Debug extension https://github.com/hbenl/vscode-firefox-debug
+        // require at last one tab
+        Writer.AddShort('{"from":"root","tabs":[{}],"selected":0}');
       end else
         exit;
       Send(Writer.Text);
@@ -482,7 +512,11 @@ begin
             raise ESMException.Create('not Assigned(engine.doInteruptInOwnThread)');
           engine.doInteruptInOwnThread;
         end;
+        {$IFDEF SM52}
+        engine.cx.RequestInterruptCallback;
+        {$ELSE}
         engine.rt.RequestInterruptCallback;
+        {$ENDIF}
       end;
     end;
   end;
@@ -617,7 +651,11 @@ begin
       end;
     end;
   finally
+  {$IFDEF SM52}
+    result := True;
+  {$ELSE}
     result := debugger.fOldInterruptCallback(cx);
+  {$ENDIF}
   end;
 end;
 
@@ -662,8 +700,12 @@ begin
       if Assigned(aEng.Manager.OnDebuggerInit) then
         aEng.Manager.OnDebuggerInit(aEng);
 
+{$IFDEF SM52}
+      aEng.cx.AddInterruptCallback(doInterupt);
+{$ELSE}
       foldInterruptCallback := aEng.rt.InterruptCallback;
       aEng.rt.InterruptCallback := doInterupt;
+{$ENDIF}
     end;
   finally
     cx.LeaveCompartment(cmpDbg);
@@ -786,6 +828,41 @@ begin
     cx.FreeRootedObject(obj);
   end;
 
+end;
+
+{ TFakeXPIInstaller }
+
+constructor TFakeXPIInstaller.Create(const aPort: SockString);
+begin
+  fPort := aPort;
+  FreeOnTerminate := true;
+  inherited Create(False);
+end;
+
+procedure TFakeXPIInstaller.Execute;
+var
+  ServerSock: TCrtSocket;
+  ClientSin: TVarSin;
+  AcceptedSocket: TSocket;
+begin
+  ServerSock := TCrtSocket.Bind(fPort);
+  try
+    repeat
+      AcceptedSocket := Accept(ServerSock.Sock, ClientSin);
+    until Terminated;
+  finally
+    ServerSock.Free;
+  end;
+end;
+
+procedure TFakeXPIInstaller.SetTerminated;
+var
+  socket: TCrtSocket;
+begin
+  Terminate;
+  socket := Open('127.0.0.1', fPort);
+  if socket<>nil then
+    socket.Free;
 end;
 
 initialization

@@ -220,17 +220,26 @@ function GetPropCacheForWrite(cx: PJSContext; obj: PJSObject; id: jsid; var aObj
 var
   i: Integer;
   propName: AnsiString;
+  found: boolean;
 begin
   Result := nil;
   if not IsInstanceObject(cx, obj, aObj) then
     raise ESMException.Create(SM_NOT_A_NATIVE_OBJECT);
   propName := PJSString(id).ToAnsi(cx);
-
-  for I := 0 to Length((AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache)-1 do
-    if (AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i].jsName = propName then begin
-      Result := @(AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
+  found := False;
+  for I := 0 to Length((AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache)-1 do begin
+    Result := @(AObj.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
+{$IFDEF SM52}
+    if strComparePropGetterSetter(propName, Result.jsName, false) then begin
+{$ELSE}
+    if Result.jsName = propName then begin
+{$ENDIF}
+      found := True;
       Break;
     end;
+  end;
+  if not found then
+    raise ESMException.CreateFmt('% not found', [propName]);
 
   if Result.isReadOnly then
     raise ESMException.CreateUtf8('Property %.% is ReadOnly', [aObj.proto.jsObjName, Result.jsName]);
@@ -278,6 +287,7 @@ var
   i: Integer;
   id: PJSString;
   prop_name: AnsiString;
+  found: Boolean;
 begin
   try
     this := vp.thisObject[cx];
@@ -295,12 +305,20 @@ begin
     prop_name := ID.ToAnsi(cx);
 
     propCache := nil;
+    found := false;
     for i := 0 to Length((Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache)-1 do begin
-      if (Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i].jsName = prop_name then begin
-        propCache := @(Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
+      propCache := @(Instance.proto as TSMSimpleRTTIProtoObject).FRTTIPropsCache[i];
+{$IFDEF SM52}
+      if strComparePropGetterSetter(prop_name, propCache.jsName, true) then begin
+{$ELSE}
+        if propCache.jsName = prop_name then begin
+{$ENDIF}
+        found := True;
         Break;
       end;
     end;
+    if not found then
+      raise ESMException.CreateFmt('% not found', [prop_name]);
 
     if (propCache.DeterministicIndex>=0) then
       storedVal := this.ReservedSlot[propCache.DeterministicIndex]

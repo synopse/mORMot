@@ -67,6 +67,7 @@ unit SyNodeProto;
 
 interface
 
+{$I Synopse.inc} // define HASINLINE
 {$I SyNode.inc}
 
 uses
@@ -192,7 +193,49 @@ function camelize(const S: AnsiString): AnsiString;
 const
   SM_NOT_A_NATIVE_OBJECT = 'Not a native object';
 
+function strComparePropGetterSetter(prop_name, jsName: AnsiString; isGetter: boolean): Boolean; {$ifdef HASINLINE}inline;{$endif}
+// for can make strComparePropGetterSetter inlined
+const prefix: array[boolean] of TShort4 = ('set ','get ');
+
 implementation
+
+function strComparePropGetterSetter(prop_name, jsName: AnsiString; isGetter: boolean): Boolean;
+var jsNameLen: integer;
+    ch1, ch2: PAnsiChar;
+begin
+  jsNameLen := Length(jsName);
+  Result := (jsNameLen > 0) and (Length(prop_name) = jsNameLen + 4) and
+            ((PInteger(@prop_name[1]))^ = (PInteger(@prefix[isGetter][1]))^);
+  if Result then begin
+    ch1 := @jsName[1];
+    ch2 := @prop_name[5];
+    while jsNameLen >= 4 do begin
+      if PInteger(ch1)^ <> PInteger(ch2)^ then begin
+        result := False;
+        exit;
+      end;
+      inc(ch1, 4);
+      inc(ch2, 4);
+      Dec(jsNameLen, 4);
+    end;
+    if jsNameLen >= 2 then begin
+      if PWord(ch1)^ <> PWord(ch2)^ then begin
+        result := False;
+        exit;
+      end;
+      inc(ch1, 2);
+      inc(ch2, 2);
+      Dec(jsNameLen, 2);
+    end;
+    if jsNameLen = 1 then begin
+      if ch1^ <> ch2^ then begin
+        result := False;
+        exit;
+      end;
+    end;
+  end;
+end;
+
 
 function camelize(const S: AnsiString): AnsiString;
 var
@@ -211,18 +254,31 @@ begin
 end;
 
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl; forward;
+{$IFDEF SM52}
+procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl; forward;
+{$ELSE}
 procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl; forward;
+{$ENDIF}
 
 const
 // Magic constant for TSMObjectRecord
   SMObjectRecordMagic: Word = 43857;
-
+{$IFDEF SM52}
+  jsdef_classOpts: JSClassOps = (
+    finalize: SMCustomObjectDestroy; // call then JS object GC}
+    construct: SMCustomObjectConstruct
+  );
+  jsdef_class: JSClass = (name: '';
+    flags: uint32(JSCLASS_HAS_PRIVATE);
+    cOps: @jsdef_classOpts
+    );
+{$ELSE}
   jsdef_class: JSClass = (name: '';
     flags: uint32(JSCLASS_HAS_PRIVATE);
     finalize: SMCustomObjectDestroy; // call then JS object GC}
     construct: SMCustomObjectConstruct
     );
-
+{$ENDIF}
 // create object var obj = new TMyObject();
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 var
@@ -246,7 +302,11 @@ begin
   end;
 end;
 
+{$IFDEF SM52}
+procedure SMCustomObjectDestroy(var fop: JSFreeOp;  obj: PJSObject); cdecl;
+{$ELSE}
 procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
+{$ENDIF}
 var
   ObjRec: PSMObjectRecord;
   Inst: PSMInstanceRecord;

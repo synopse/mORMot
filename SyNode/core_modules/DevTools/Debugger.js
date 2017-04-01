@@ -181,6 +181,32 @@ class ConsoleActor extends Actor {
             } else if ("throw" in evalResult) {
                 let error = evalResult.throw;
                 errorGrip = this.getGrip(error);
+				errorMessage = String(error); 
+				
+				if (typeof error === "object" && error !== null) {
+				  try {
+					errorMessage = DevToolsUtils.callPropertyOnObject(error, "toString");
+				  } catch (e) {
+					// If the debuggee is not allowed to access the "toString" property
+					// of the error object, calling this property from the debuggee's
+					// compartment will fail. The debugger should show the error object
+					// as it is seen by the debuggee, so this behavior is correct.
+					//
+					// Unfortunately, we have at least one test that assumes calling the
+					// "toString" property of an error object will succeed if the
+					// debugger is allowed to access it, regardless of whether the
+					// debuggee is allowed to access it or not.
+					//
+					// To accomodate these tests, if calling the "toString" property
+					// from the debuggee compartment fails, we rewrap the error object
+					// in the debugger's compartment, and then call the "toString"
+					// property from there.
+					if (typeof error.unsafeDereference === "function") {
+					  errorMessage = error.unsafeDereference().toString();
+					}
+				  }				
+				}  
+/*				
                 // XXXworkers: Calling unsafeDereference() returns an object with no
                 // toString method in workers. See Bug 1215120.
                 let unsafeDereference = error && (typeof error === "object") &&
@@ -188,6 +214,7 @@ class ConsoleActor extends Actor {
                 errorMessage = unsafeDereference && unsafeDereference.toString
                     ? unsafeDereference.toString()
                     : "" + error;
+*/	
             }
         }
 
@@ -825,18 +852,21 @@ class ThreadActor extends Actor {
 class SourcesActor extends Actor {
     constructor () {
         super('source');
+        this._sourcesMap = new Map()
+        this.scriptCounterID = 1
     }
     _addSource(source) {
-        if (this[source.canonicalId])
+        if (this._sourcesMap.get(source))
             return undefined;
         else
-            return (new SourceActor(source, this))._resp;
+            return new SourceActor(this.scriptCounterID++, source, this)._resp
     }
 }
 
 class SourceActor extends Actor {
-    constructor (source, parent) {
-        super(source.canonicalId, parent);
+    constructor (actorID, source, parent) {
+        super(actorID, parent);
+        parent._sourcesMap.set(source, this)
         this._source = source;
         this._breakpoints = {};
     }
@@ -1512,7 +1542,7 @@ class FrameActor extends Actor {
         if (this._frame.script) {
             let script = this._frame.script,
                 location = script.getOffsetLocation(this._frame.offset),
-                sourceResp = actorManager.getActor('source')[script.source.canonicalId]._resp;
+                sourceResp = actorManager.getActor('source')._sourcesMap.get(script.source)._resp;
             resp.where = {
                 source: sourceResp,
                 line: location.lineNumber,

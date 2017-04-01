@@ -92,7 +92,12 @@ end;
 
 procedure TfrmSM45Demo.cmd_Itenterupt(var aMessage: TMessage);
 begin
+{$IFDEF SM52}
+  FEngine.cx.RequestInterruptCallback;
+  FEngine.cx.CheckForInterrupt;
+{$ELSE}
   FEngine.rt.InterruptCallback(FEngine.cx);
+{$ENDIF}
 end;
 
 procedure TfrmSM45Demo.doInteruptInOwnThread;
@@ -126,21 +131,25 @@ type
 
 procedure TfrmSM45Demo.DoOnCreateNewEngine(const aEngine: TSMEngine);
 begin
-  aEngine.doInteruptInOwnThread := doInteruptInOwnThread;
-  // in XE actual class of TMemo.lines is TMemoStrings - let's force it to be a TStrings like
-  aEngine.defineClass(mSource.lines.ClassType, TStringsProto, aEngine.GlobalObject);
-  // define a propery mainForm in the JavaScript
-  aEngine.GlobalObject.ptr.DefineProperty(aEngine.cx, 'mainForm',
-    // proeprty value is a wrapper around the Self
-    CreateJSInstanceObjForSimpleRTTI(aEngine.cx, Self, aEngine.GlobalObject),
-    // we can enumerate this property, it read-only and can not be deleted
-    JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT
-  );
+  // for main thread only. Worker threads do not need this
+  if GetCurrentThreadId = MainThreadID then begin
+    aEngine.doInteruptInOwnThread := doInteruptInOwnThread;
+    // in XE actual class of TMemo.lines is TMemoStrings - let's force it to be a TStrings like
+    aEngine.defineClass(mSource.lines.ClassType, TStringsProto, aEngine.GlobalObject);
+    // define a propery mainForm in the JavaScript
+    aEngine.GlobalObject.ptr.DefineProperty(aEngine.cx, 'mainForm',
+      // proeprty value is a wrapper around the Self
+      CreateJSInstanceObjForSimpleRTTI(aEngine.cx, Self, aEngine.GlobalObject),
+      // we can enumerate this property, it read-only and can not be deleted
+      JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT
+    );
+  end;
 end;
 
 function TfrmSM45Demo.DoOnGetEngineName(const aEngine: TSMEngine): RawUTF8;
 begin
-  result := 'Form Engine';
+  if GetCurrentThreadId = MainThreadID then
+    result := 'Form Engine';
 end;
 
 procedure TfrmSM45Demo.DoOnJSDebuggerInit(const aEngine: TSMEngine);
