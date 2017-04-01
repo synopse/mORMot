@@ -5871,7 +5871,6 @@ type
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
     function Unique(const aText: RawUTF8): RawUTF8; overload;
-      {$ifdef HASINLINE}inline;{$endif}
     /// return a RawUTF8 variable stored within this class from a text buffer
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, return the shared
@@ -5887,6 +5886,7 @@ type
     // - if aText does exist in the internal string pool, return the shared
     // instance (with its reference counter increased), to reduce memory usage
     procedure Unique(var aResult: RawUTF8; aText: PUTF8Char; aTextLen: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
     /// ensure a RawUTF8 variable is stored within this class
     // - if aText occurs for the first time, add it to the internal string pool
     // - if aText does exist in the internal string pool, set the shared
@@ -19146,7 +19146,9 @@ procedure TRawUTF8Interning.Unique(var aResult: RawUTF8; const aText: RawUTF8);
 var hash: cardinal;
 begin
   if aText='' then
-    aResult := '' else begin
+    aResult := '' else
+  if self=nil then
+    aResult := aText else begin
     hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
     fPool[hash and fPoolLast].Unique(aResult,aText,hash);
   end;
@@ -19155,15 +19157,22 @@ end;
 procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
 var hash: cardinal;
 begin
-  if aText<>'' then begin
+  if (self<>nil) and (aText<>'') then begin
     hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
     fPool[hash and fPoolLast].UniqueText(aText,hash);
   end;
 end;
 
 function TRawUTF8Interning.Unique(const aText: RawUTF8): RawUTF8;
+var hash: cardinal;
 begin
-  Unique(result,aText);
+  if aText='' then
+    result := '' else
+  if self=nil then
+    result := aText else begin
+    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    fPool[hash and fPoolLast].Unique(result,aText,hash);
+  end;
 end;
 
 function TRawUTF8Interning.Unique(aText: PUTF8Char; aTextLen: integer): RawUTF8;
