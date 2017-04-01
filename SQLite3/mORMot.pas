@@ -2929,7 +2929,7 @@ type
     /// the type information of this property
     // - will de-reference the PropType pointer on Delphi and newer FPC compilers
     function TypeInfo: PTypeInfo;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINENOTX86}inline;{$endif}
     /// get the next property information
     // - no range check: use ClassProp()^.PropCount to determine the properties count
     // - get the first PPropInfo with ClassProp()^.PropList
@@ -3054,7 +3054,7 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// returns the low-level field read address, if GetterIsField is TRUE
     function GetterAddr(Instance: pointer): pointer;
-      {$ifdef HASINLINE}inline;{$endif}
+      {$ifdef HASINLINENOTX86}inline;{$endif}
     /// returns the low-level field write address, if SetterIsField is TRUE
     function SetterAddr(Instance: pointer): pointer;
       {$ifdef HASINLINE}inline;{$endif}
@@ -20075,37 +20075,37 @@ uses
 // ************ some RTTI and SQL mapping routines
 
 procedure SetID(P: PUTF8Char; var result: TID);
-{$ifdef HASINLINENOTX86}
 {$ifdef CPU64}
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 {$else}
+{$ifdef HASINLINE}
 begin
   {$ifdef VER3_0} // FPC issue woraround
   SetInt64(P,result);
   {$else}
   SetInt64(P,PInt64(@result)^);
   {$endif}
-{$endif}
 {$else}
 asm
         jmp     SynCommons.SetInt64
-{$endif}
+{$endif HASINLINE}
+{$endif CPU64}
 end;
 
 procedure SetID(const U: RawByteString; var result: TID); overload;
-{$ifdef HASINLINENOTX86}
 {$ifdef CPU64}
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(pointer(U));
 {$else}
+{$ifdef HASINLINE}
 begin
   SetID(pointer(U),result);
-{$endif}
 {$else}
 asm
         jmp     SynCommons.SetInt64
-{$endif HASINLINENOTX86}
+{$endif HASINLINE}
+{$endif CPU64}
 end;
 
 {$ifdef HASDIRECTTYPEINFO}
@@ -28186,7 +28186,7 @@ procedure TPropInfo.SetLongStrValue(Instance: TObject; const Value: RawUTF8);
     // an FPC quirck ... and Alf work-around ... ;-)
     if cp=CP_UTF16 then begin
       Setlength(tmp,length(tmp)+1);
-      tmp[length(tmp)]:=#0;
+      tmp[length(tmp)] := #0;
     end;
     {$endif}
     SetLongStrProp(Instance,tmp);
@@ -29395,18 +29395,16 @@ type
 
 { TTypeInfo }
 
-{$ifdef HASINLINENOTX86}
 function TTypeInfo.ClassType: PClassType;
+{$ifdef HASINLINENOTX86}
 begin
   result := AlignTypeData(@Name[ord(Name[0])+1]);
-end;
 {$else}
-function TTypeInfo.ClassType: PClassType;
 asm // very fast code
         movzx   edx, byte ptr[eax].TTypeInfo.Name
         lea     eax, [eax + edx].TTypeInfo.Name[1]
-end;
 {$endif}
+end;
 
 function TTypeInfo.ClassCreate: TObject;
 var instance: TClassInstance;
