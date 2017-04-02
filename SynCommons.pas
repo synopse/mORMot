@@ -4943,7 +4943,9 @@ type
     // - will handle array of binaries values (byte, word, integer...), array of
     // strings or array of packed records, with binaries and string properties
     // - will use a proprietary binary format, with some variable-length encoding
-    // of the string length
+    // of the string length - note that if you change the type definition, any
+    // previously-serialized content will fail, maybe triggering unexpected GPF:
+    // use SaveToTypeInfoHash if you share this binary data accross executables
     // - Stream position will be set just after the added data
     // - is optimized for memory streams, but will work with any kind of TStream
     procedure SaveToStream(Stream: TStream);
@@ -4952,21 +4954,42 @@ type
     // - will handle array of binaries values (byte, word, integer...), array of
     // strings or array of packed records, with binaries and string properties
     // - will use a proprietary binary format, with some variable-length encoding
-    // of the string length
+    // of the string length - note that if you change the type definition, any
+    // previously-serialized content will fail, maybe triggering unexpected GPF:
+    // use SaveToTypeInfoHash if you share this binary data accross executables
     procedure LoadFromStream(Stream: TCustomMemoryStream);
     /// save the dynamic array content into an allocated memory buffer
     // - Dest buffer must have been allocated to contain at least the number
     // of bytes returned by the SaveToLength method
     // - return a pointer at the end of the data written in Dest, nil in case
     // of an invalid input buffer
+    // - will use a proprietary binary format, with some variable-length encoding
+    // of the string length - note that if you change the type definition, any
+    // previously-serialized content will fail, maybe triggering unexpected GPF:
+    // use SaveToTypeInfoHash if you share this binary data accross executables
     // - this method will raise an ESynException for T*ObjArray types
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload;
-    /// compute the number of bytes needed to save a dynamic array content
+    /// compute the number of bytes needed by SaveTo() to persist a dynamic array
+    // - will use a proprietary binary format, with some variable-length encoding
+    // of the string length - note that if you change the type definition, any
+    // previously-serialized content will fail, maybe triggering unexpected GPF:
+    // use SaveToTypeInfoHash if you share this binary data accross executables
     // - this method will raise an ESynException for T*ObjArray types
     function SaveToLength: integer;
     /// save the dynamic array content into a RawByteString
+    // - will use a proprietary binary format, with some variable-length encoding
+    // of the string length - note that if you change the type definition, any
+    // previously-serialized content will fail, maybe triggering unexpected GPF:
+    // use SaveToTypeInfoHash if you share this binary data accross executables
     // - this method will raise an ESynException for T*ObjArray types
     function SaveTo: RawByteString; overload;
+    /// compute a crc32c-based hash of the RTTI for this dynamic array
+    // - can be used to ensure that the TDynArray.SaveTo binary layout
+    // is compatible accross executables
+    // - won't include the RTTI type kind, as TypeInfoToHash(), but only
+    // ElemSize or ElemType information, or any previously registered
+    // TTextWriter.RegisterCustomJSONSerializerFromText definition
+    function SaveToTypeInfoHash(crc: cardinal=0): cardinal;
     /// load the dynamic array content from a memory buffer
     // - return nil if the Source buffer is incorrect (invalid type or internal
     // checksum e.g.)
@@ -6248,6 +6271,14 @@ procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
 procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8='');
 
+/// compute a crc32c-based hash of the RTTI for a given type
+// - can be used to ensure that the RecordSave/TDynArray.SaveTo binary layout
+// is compatible accross executables
+// - will ignore the type names, but will check the RTTI type kind and any
+// nested fields (for records or arrays) - for a record/object type, will use
+// TTextWriter.RegisterCustomJSONSerializerFromText definition, if available  
+function TypeInfoToHash(aTypeInfo: pointer): cardinal;
+
 /// retrieve the record size from its low-level RTTI
 function RecordTypeInfoSize(aRecordTypeInfo: pointer): integer;
 
@@ -6387,7 +6418,9 @@ function RecordEquals(const RecA, RecB; TypeInfo: pointer;
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties (but not with internal raw pointers, of course)
 // - will use a proprietary binary format, with some variable-length encoding
-// of the string length
+// of the string length - note that if you change the type definition, any
+// previously-serialized content will fail, maybe triggering unexpected GPF: you
+// may use TypeInfoToHash() if you share this binary data accross executables  
 // - warning: will encode generic string fields as AnsiString (one byte per char)
 // prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
@@ -6401,7 +6434,9 @@ function RecordSave(const Rec; TypeInfo: pointer): RawByteString; overload;
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties (but not with internal raw pointers, of course)
 // - will use a proprietary binary format, with some variable-length encoding
-// of the string length
+// of the string length - note that if you change the type definition, any
+// previously-serialized content will fail, maybe triggering unexpected GPF: you
+// may use TypeInfoToHash() if you share this binary data accross executables  
 // - warning: will encode generic string fields as AnsiString (one byte per char)
 // prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
@@ -6415,7 +6450,9 @@ function RecordSave(const Rec; Dest: PAnsiChar; TypeInfo: pointer;
 // - will handle packed records, with binaries (byte, word, integer...) and
 // string types properties (but not with internal raw pointers, of course)
 // - will use a proprietary binary format, with some variable-length encoding
-// of the string length
+// of the string length - note that if you change the type definition, any
+// previously-serialized content will fail, maybe triggering unexpected GPF: you
+// may use TypeInfoToHash() if you share this binary data accross executables  
 // - warning: will encode generic string fields as AnsiString (one byte per char)
 // prior to Delphi 2009, and as UnicodeString (two bytes per char) since Delphi
 // 2009: if you want to use this function between UNICODE and NOT UNICODE
@@ -6432,6 +6469,7 @@ function RecordSaveBase64(const Rec; TypeInfo: pointer; UriCompatible: boolean=f
 // using the RecordSave() function
 // - will return 0 in case of an invalid (not handled) record type (e.g. if
 // it contains an unknown variant)
+// - optional Len parameter will contain the Rec memory buffer length, in bytes 
 function RecordSaveLength(const Rec; TypeInfo: pointer; Len: PInteger=nil): integer;
 
 /// save record into its JSON serialization as saved by TTextWriter.AddRecordJSON
@@ -6448,6 +6486,10 @@ function RecordSaveJSON(const Rec; TypeInfo: pointer;
 // - will return the Rec size, in bytes, into Len reference variable
 // - in case of success, return the memory buffer pointer just after the
 // read content
+// - will use a proprietary binary format, with some variable-length encoding
+// of the string length - note that if you change the type definition, any
+// previously-serialized content will fail, maybe triggering unexpected GPF: you
+// may use TypeInfoToHash() if you share this binary data accross executables
 function RecordLoad(var Rec; Source: PAnsiChar; TypeInfo: pointer;
   Len: PInteger=nil): PAnsiChar;
 
@@ -14282,7 +14324,7 @@ function VariantSaveLength(const Value: variant): integer;
 // - will handle standard Variant types and custom types (serialized as JSON)
 // - will return nil in case of an invalid (not handled) Variant type
 // - will use a proprietary binary format, with some variable-length encoding
-// of the string length (i.e. the RecordLoad/RecordSave layout)
+// of the string length  
 // - warning: will encode generic string fields as within the variant type
 // itself: using this function between UNICODE and NOT UNICODE
 // versions of Delphi, will propably fail - you have been warned!
@@ -36934,6 +36976,14 @@ asm
 end;
 {$endif}
 
+procedure ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal); forward;
+
+function TypeInfoToHash(aTypeInfo: pointer): cardinal;
+begin
+  result := 0;
+  ManagedTypeSaveRTTIHash(aTypeInfo,result);
+end;
+
 function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
   out len: integer): integer;
 // returns 0 on error, or saved bytes + len=data^ length
@@ -37130,7 +37180,7 @@ var info,fieldinfo: PTypeInfo;
     recInitData: PRecInitData;
     {$endif}
     F: integer;
-    Field: PFieldInfo;
+    field: PFieldInfo;
     Diff: cardinal;
     A, B: PAnsiChar;
 begin
@@ -37149,20 +37199,20 @@ begin
   Diff := 0;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  Field := @recInitData^.ManagedFields[0];
+  field := @recInitData^.ManagedFields[0];
   for F := 1 to recInitData^.ManagedFieldCount do begin
   {$else}
-  Field := @info^.ManagedFields[0];
+  field := @info^.ManagedFields[0];
   for F := 1 to info^.ManagedCount do begin
   {$endif}
-    fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields
+    fieldinfo := DeRef(field^.TypeInfo);
+    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
-      inc(Field);
+      inc(field);
       continue; // as with Delphi
     end;
     {$endif}
-    Diff := Field^.Offset-Diff;
+    Diff := field^.Offset-Diff;
     if Diff<>0 then begin
       if not CompareMem(A,B,Diff) then
         exit; // binary block not equal
@@ -37177,8 +37227,8 @@ begin
           [ToText(fieldinfo^.Kind)^]);
     inc(A,Diff);
     inc(B,Diff);
-    inc(Diff,Field^.Offset);
-    inc(Field);
+    inc(Diff,field^.Offset);
+    inc(field);
   end;
   if CompareMem(A,B,info^.recSize-Diff) then
     result := true;
@@ -37190,7 +37240,7 @@ var info,fieldinfo: PTypeInfo;
     recInitData: PRecInitData;
     {$endif}
     F, recsize,saved: integer;
-    Field: PFieldInfo;
+    field: PFieldInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
@@ -37201,9 +37251,9 @@ begin
   end;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  Field := @recInitData^.ManagedFields[0];
+  field := @recInitData^.ManagedFields[0];
   {$else}
-  Field := @info^.ManagedFields[0];
+  field := @info^.ManagedFields[0];
   {$endif}
   result := info^.recSize;
   if Len<>nil then
@@ -37213,20 +37263,20 @@ begin
   {$else}
   for F := 1 to info^.ManagedCount do begin
   {$endif}
-    fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
+    fieldinfo := DeRef(field^.TypeInfo);
+    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
-      inc(Field);
+      inc(field);
       continue; // as with Delphi
     end;
     {$endif};
-    saved := ManagedTypeSaveLength(R+Field^.Offset,fieldinfo,recsize);
+    saved := ManagedTypeSaveLength(R+field^.Offset,fieldinfo,recsize);
     if saved=0 then begin
       result := 0; // invalid type
       exit;
     end;
     inc(result,saved-recsize); // extract recsize from info^.recSize
-    inc(Field);
+    inc(field);
   end;
 end;
 
@@ -37238,7 +37288,7 @@ var info,fieldinfo: PTypeInfo;
     {$endif}
     F: integer;
     Diff: cardinal;
-    Field: PFieldInfo;
+    field: PFieldInfo;
     R: PAnsiChar;
 begin
   R := @Rec;
@@ -37251,20 +37301,20 @@ begin
   Diff := 0;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  Field := @recInitData^.ManagedFields[0];
+  field := @recInitData^.ManagedFields[0];
   for F := 1 to recInitData^.ManagedFieldCount do begin
   {$else}
-  Field := @info^.ManagedFields[0];
+  field := @info^.ManagedFields[0];
   for F := 1 to info^.ManagedCount do begin
   {$endif}
-    fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
+    fieldinfo := DeRef(field^.TypeInfo);
+    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
-      inc(Field);
+      inc(field);
       continue; // as with Delphi
     end;
     {$endif};
-    Diff := Field^.Offset-Diff;
+    Diff := field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(R^,Dest^,Diff);
       inc(R,Diff);
@@ -37276,8 +37326,8 @@ begin
       exit;
     end;
     inc(R,Diff);
-    inc(Diff,Field.Offset);
-    inc(Field);
+    inc(Diff,field.Offset);
+    inc(field);
   end;
   Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
@@ -37406,7 +37456,7 @@ var info,fieldinfo: PTypeInfo;
     {$endif}
     F: integer;
     Diff: cardinal;
-    Field: PFieldInfo;
+    field: PFieldInfo;
     R: PAnsiChar;
 begin
   result := nil; // indicates error
@@ -37418,9 +37468,9 @@ begin
     Len^ := info^.recSize;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
-  Field := @recInitData^.ManagedFields[0];
+  field := @recInitData^.ManagedFields[0];
   {$else}
-  Field := @info^.ManagedFields[0];
+  field := @info^.ManagedFields[0];
   {$endif}
   if Source=nil then begin  // inline RecordClear() function
     {$ifdef FPC_NEWRTTI}
@@ -37428,8 +37478,8 @@ begin
     {$else}
     for F := 1 to  info^.ManagedCount do begin
     {$endif}
-      _Finalize(R+Field^.Offset,Deref(Field^.TypeInfo));
-      inc(Field);
+      _Finalize(R+field^.Offset,Deref(field^.TypeInfo));
+      inc(field);
     end;
     exit;
   end;
@@ -37439,14 +37489,14 @@ begin
   {$else}
   for F := 1 to info^.ManagedCount do begin
   {$endif}
-    fieldinfo := DeRef(Field^.TypeInfo);
-    {$ifdef FPC_OLDRTTI} // FPC does include RTTI for unmanaged fields! :)
+    fieldinfo := DeRef(field^.TypeInfo);
+    {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields! :)
     if not (fieldinfo^.Kind in tkManagedTypes) then begin
-      inc(Field);
+      inc(field);
       continue; // as with Delphi
     end;
     {$endif};
-    Diff := Field^.Offset-Diff;
+    Diff := field^.Offset-Diff;
     if Diff<>0 then begin
       MoveFast(Source^,R^,Diff);
       inc(Source,Diff);
@@ -37456,8 +37506,8 @@ begin
     if Source=nil then
       exit; // error at loading
     inc(R,Diff);
-    inc(Diff,Field^.Offset);
-    inc(Field);
+    inc(Diff,field^.Offset);
+    inc(field);
   end;
   Diff := info^.recSize-Diff;
   if integer(Diff)<0 then
@@ -38623,6 +38673,7 @@ type
   /// information about one customized JSON serialization
   TJSONCustomParserRegistration = record
     RecordTypeName: RawUTF8;
+    RecordRTTITextDefinition: RawUTF8;
     DynArrayTypeInfo: pointer;
     RecordTypeInfo: pointer;
     Reader: TDynArrayJSONCustomReader;
@@ -38669,6 +38720,7 @@ type
     function RecordSearch(aRecordTypeInfo: pointer;
       out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean; overload;
     function RecordSearch(const aTypeName: RawUTF8): integer; overload;
+    function RecordRTTITextHash(aRecordTypeInfo: pointer; var crc: cardinal): boolean; 
   public
     constructor Create;
     procedure RegisterCallbacks(aTypeInfo: pointer;
@@ -38771,7 +38823,7 @@ begin
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(aDynArrayTypeInfo,aRecordTypeInfo);
     if result>=0 then
-      GlobalJSONCustomParsers.fLastRecordIndex := result;
+      fLastRecordIndex := result;
   end else
     result := -1;
 end;
@@ -38781,8 +38833,8 @@ function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: po
 var ndx: integer;
 begin
   ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Reader) then begin
-    Reader := GlobalJSONCustomParsers.fParser[ndx].Reader;
+  if (ndx>=0) and Assigned(fParser[ndx].Reader) then begin
+    Reader := fParser[ndx].Reader;
     result := true;
   end else
     result := false;
@@ -38793,10 +38845,10 @@ function TJSONCustomParsers.DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo: po
 var ndx: integer;
 begin
   ndx := DynArraySearch(aDynArrayTypeInfo,aRecordTypeInfo);
-  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Writer) then begin
-    Writer := GlobalJSONCustomParsers.fParser[ndx].Writer;
+  if (ndx>=0) and Assigned(fParser[ndx].Writer) then begin
+    Writer := fParser[ndx].Writer;
     if PParser<>nil then
-      PParser^ := GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser;
+      PParser^ := fParser[ndx].RecordCustomParser;
     result := true;
   end else
     result := false;
@@ -38823,7 +38875,7 @@ begin
   if AddIfNotExisting then begin
     result := TryToGetFromRTTI(nil,aRecordTypeInfo);
     if result>=0 then
-      GlobalJSONCustomParsers.fLastRecordIndex := result;
+      fLastRecordIndex := result;
   end else
     result := -1;
 end;
@@ -38846,11 +38898,28 @@ function TJSONCustomParsers.RecordSearch(aRecordTypeInfo: pointer;
 var ndx: integer;
 begin
   ndx := RecordSearch(aRecordTypeInfo);
-  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Reader) then begin
-    Reader := GlobalJSONCustomParsers.fParser[ndx].Reader;
+  if (ndx>=0) and Assigned(fParser[ndx].Reader) then begin
+    Reader := fParser[ndx].Reader;
     result := true;
   end else
     result := false;
+end;
+
+function TJSONCustomParsers.RecordRTTITextHash(aRecordTypeInfo: pointer;
+  var crc: cardinal): boolean;
+var ndx: integer;
+begin
+  if self <>nil then
+  for ndx := 0 to fParsersCount-1 do
+    with fParser[ndx] do
+    if RecordTypeInfo=aRecordTypeInfo then begin
+      if RecordRTTITextDefinition='' then
+        break;
+      crc := crc32c(crc,pointer(RecordRTTITextDefinition),length(RecordRTTITextDefinition));
+      result := true;
+      exit;
+    end;
+  result := false;
 end;
 
 function TJSONCustomParsers.RecordSearch(aRecordTypeInfo: pointer;
@@ -38859,10 +38928,10 @@ var ndx: integer;
 begin
   result := false;
   ndx := RecordSearch(aRecordTypeInfo);
-  if (ndx>=0) and Assigned(GlobalJSONCustomParsers.fParser[ndx].Writer) then begin
-    Writer := GlobalJSONCustomParsers.fParser[ndx].Writer;
+  if (ndx>=0) and Assigned(fParser[ndx].Writer) then begin
+    Writer := fParser[ndx].Writer;
     if PParser<>nil then
-      PParser^ := GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser;
+      PParser^ := fParser[ndx].RecordCustomParser;
     result := true;
   end;
 end;
@@ -38980,6 +39049,7 @@ begin
   ndx := Search(aTypeInfo,Reg,ForAdding);
   if ForAdding then begin
     result := TJSONRecordTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
+    Reg.RecordRTTITextDefinition := aRTTIDefinition;
     Reg.Reader := result.CustomReader;
     Reg.Writer := result.CustomWriter;
     Reg.RecordCustomParser := result;
@@ -38990,6 +39060,63 @@ begin
       fParsers.Delete(ndx);
       fParsers.ReHash;
     end;
+  end;
+end;
+
+procedure ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal);
+var itemtype: PTypeInfo;
+    itemsize, fieldcount, i: integer;
+    field: PFieldInfo;
+    {$ifdef FPC_NEWRTTI}
+    recInitData: PRecInitData;
+    {$endif}
+    dynarray: TDynArray;
+begin // info is expected to come from a DeRef() if retrieved from RTTI
+  if info=nil then
+    exit;
+  {$ifdef FPC} // storage binary layout is Delphi's
+  crc := crc32c(crc,@FPCTODELPHI[info^.Kind],1);
+  {$else}
+  crc := crc32c(crc,@info^.Kind,1); // hash RTTI kind, but not name
+  {$endif}
+  case info^.Kind of // handle nested RTTI
+  tkRecord{$ifdef FPC},tkObject{$endif}: // first search from custom RTTI text
+    if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc) then begin
+      itemtype := GetTypeInfo(info,tkRecordTypeOrSet);
+      if itemtype<>nil then begin
+        {$ifdef FPC_NEWRTTI}
+        recInitData := GetFPCRecInitData(AlignTypeData(PByte(itemtype)+2));
+        field := @recInitData^.ManagedFields[0];
+        fieldcount := recInitData^.ManagedFieldCount;
+        {$else}
+        field := @itemtype^.ManagedFields[0];
+        fieldcount := itemtype^.ManagedCount;
+        {$endif}
+        if fieldcount=0 then // hash recsize only if no pointer within
+          crc := crc32c(crc,@itemtype^.recsize,4) else
+          for i := 1 to fieldcount do begin
+            info := DeRef(field^.TypeInfo);
+            {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
+            if info^.Kind in tkManagedTypes then // as with Delphi
+            {$endif}
+            ManagedTypeSaveRTTIHash(info,crc);
+            inc(field);
+          end;
+      end;
+    end;
+  tkArray: begin
+    itemtype := ArrayItemType(info,itemsize);
+    if info=nil then
+      exit;
+    if (itemtype=nil) or (info^.elCount=0) then
+      crc := crc32c(crc,@itemsize,4) else
+      for i := 1 to info^.elCount do
+        ManagedTypeSaveRTTIHash(itemtype,crc);
+  end;
+  tkDynArray: begin
+    dynarray.Init(info,field); // fake void array pointer
+    crc := dynarray.SaveToTypeInfoHash(crc);
+  end;
   end;
 end;
 
@@ -44539,6 +44666,14 @@ var P: PAnsiChar;
 begin
   P := PAnsiChar(Stream.Memory)+Stream.Seek(0,soFromCurrent);
   Stream.Seek(LoadFrom(P)-P,soCurrent);
+end;
+
+function TDynArray.SaveToTypeInfoHash(crc: cardinal): cardinal;
+begin
+  result := crc;
+  if ElemType=nil then // hash fElemSize only if no pointer within
+    result := crc32cfast(result,@fElemSize,4) else
+    ManagedTypeSaveRTTIHash(ElemType,result);
 end;
 
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;

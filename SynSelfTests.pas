@@ -1840,7 +1840,7 @@ type
     Data: string;
   end;
   TDataItems = array of TDataItem;
-   
+
 function FVSort(const A,B): integer;
 begin
   result := SysUtils.StrComp(PChar(pointer(TFV(A).Detailed)),PChar(pointer(TFV(B).Detailed)));
@@ -1852,6 +1852,7 @@ var AI, AI2: TIntegerDynArray;
     AR: TRecs;
     AF: TFVs;
     AF2: TFV2s;
+    h: cardinal;
     i,j,k,Len, count,AIcount: integer;
     U,U2: RawUTF8;
     P: PUTF8Char;
@@ -1931,6 +1932,12 @@ begin
   end;
 end;
 begin
+  h := TypeInfoToHash(TypeInfo(TAmount));
+  Check(h=$6E58CD60,'TypeInfoToHash(TAmount)');
+  h := TypeInfoToHash(TypeInfo(TAmountCollection));
+  Check(h=$2ABEF63C,'TypeInfoToHash(TAmountCollection)');
+  h := TypeInfoToHash(TypeInfo(TAmountICollection));
+  Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
   W := TTextWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray),AB);
