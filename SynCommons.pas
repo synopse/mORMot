@@ -596,7 +596,7 @@ unit SynCommons;
   - expose all internal Hash*() functions (following TDynArrayHashOne prototype)
     in interface section of the unit
   - added crc32c() function using either optimized unrolled version, or SSE 4.2
-    instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
+    instruction: crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
   - added fnv32() function, slower than kr32, but with less collisions
   - added SynLZCompress/SynLZDecompress functions, using crc32c() for hashing
   - added SymmetricEncrypt() function
@@ -11206,7 +11206,7 @@ function crc16(Data: PAnsiChar; Len: integer): cardinal;
 // our custom hash function, specialized for Text comparaison
 // - has less colision than Adler32 for short strings
 // - is faster than CRC32 or Adler32, since use DQWord (128 bytes) aligned read:
-// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 3.7 GB/s (SSE4.2)
+// Hash32() is 2.5 GB/s, kr32() 0.9 GB/s, crc32c() 1.7 GB/s or 4.3 GB/s (SSE4.2)
 // - overloaded version for direct binary content hashing
 function Hash32(Data: pointer; Len: integer): cardinal; overload;
 
@@ -11219,7 +11219,7 @@ function Hash32(const Text: RawByteString): cardinal; overload;
 
 /// standard Kernighan & Ritchie hash from "The C programming Language", 3rd edition
 // - simple and efficient code, but too much collisions for THasher
-// - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 3.7 GB/s
+// - kr32() is 898.8 MB/s - crc32cfast() 1.7 GB/s, crc32csse42() 4.3 GB/s
 function kr32(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// simple FNV-1a hashing function
@@ -11244,7 +11244,8 @@ var
 /// compute CRC32C checksum on the supplied buffer using x86/x64 code
 // - result is compatible with SSE 4.2 based hardware accelerated instruction
 // - result is not compatible with zlib's crc32() - not the same polynom
-// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
+// - you should use crc32c() function instead of crc32cfast() or crc32csse42()
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 /// compute CRC64C checksum on the supplied buffer, cascading two crc32c
@@ -11440,7 +11441,8 @@ var
 // - use Intel Streaming SIMD Extensions 4.2 hardware accelerated instruction
 // - SSE 4.2 shall be available on the processor (i.e. cfSSE42 in CpuFeatures)
 // - result is not compatible with zlib's crc32() - not the same polynom
-// - crc32cfast() is 1.7 GB/s, crc32csse42() is 3.7 GB/s
+// - crc32cfast() is 1.7 GB/s, crc32csse42() is 4.3 GB/s
+// - you should use crc32c() function instead of crc32cfast() or crc32csse42()
 function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif CPUINTEL}
 
@@ -36976,14 +36978,6 @@ asm
 end;
 {$endif}
 
-procedure ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal); forward;
-
-function TypeInfoToHash(aTypeInfo: pointer): cardinal;
-begin
-  result := 0;
-  ManagedTypeSaveRTTIHash(aTypeInfo,result);
-end;
-
 function ManagedTypeSaveLength(data: PAnsiChar; info: PTypeInfo;
   out len: integer): integer;
 // returns 0 on error, or saved bytes + len=data^ length
@@ -38673,7 +38667,7 @@ type
   /// information about one customized JSON serialization
   TJSONCustomParserRegistration = record
     RecordTypeName: RawUTF8;
-    RecordRTTITextDefinition: RawUTF8;
+    RecordTextDefinition: RawUTF8;
     DynArrayTypeInfo: pointer;
     RecordTypeInfo: pointer;
     Reader: TDynArrayJSONCustomReader;
@@ -38909,13 +38903,13 @@ function TJSONCustomParsers.RecordRTTITextHash(aRecordTypeInfo: pointer;
   var crc: cardinal): boolean;
 var ndx: integer;
 begin
-  if self <>nil then
+  if (self<>nil) and (aRecordTypeInfo<>nil) then
   for ndx := 0 to fParsersCount-1 do
     with fParser[ndx] do
     if RecordTypeInfo=aRecordTypeInfo then begin
-      if RecordRTTITextDefinition='' then
+      if RecordTextDefinition='' then
         break;
-      crc := crc32c(crc,pointer(RecordRTTITextDefinition),length(RecordRTTITextDefinition));
+      crc := crc32c(crc,pointer(RecordTextDefinition),length(RecordTextDefinition));
       result := true;
       exit;
     end;
@@ -39049,7 +39043,7 @@ begin
   ndx := Search(aTypeInfo,Reg,ForAdding);
   if ForAdding then begin
     result := TJSONRecordTextDefinition.FromCache(aTypeInfo,aRTTIDefinition);
-    Reg.RecordRTTITextDefinition := aRTTIDefinition;
+    Reg.RecordTextDefinition := aRTTIDefinition;
     Reg.Reader := result.CustomReader;
     Reg.Writer := result.CustomWriter;
     Reg.RecordCustomParser := result;
@@ -39099,7 +39093,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
             {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
             if info^.Kind in tkManagedTypes then // as with Delphi
             {$endif}
-            ManagedTypeSaveRTTIHash(info,crc);
+            ManagedTypeSaveRTTIHash(info,crc); // only hash managed fields
             inc(field);
           end;
       end;
@@ -39110,7 +39104,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
       exit;
     if (itemtype=nil) or (info^.elCount=0) then
       crc := crc32c(crc,@itemsize,4) else
-      for i := 1 to info^.elCount do
+      for i := 1 to info^.elCount do  // only hash managed fields
         ManagedTypeSaveRTTIHash(itemtype,crc);
   end;
   tkDynArray: begin
@@ -39118,6 +39112,12 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
     crc := dynarray.SaveToTypeInfoHash(crc);
   end;
   end;
+end;
+
+function TypeInfoToHash(aTypeInfo: pointer): cardinal;
+begin
+  result := 0;
+  ManagedTypeSaveRTTIHash(aTypeInfo,result);
 end;
 
 function RecordSaveJSON(const Rec; TypeInfo: pointer; EnumSetsAsText: boolean): RawUTF8;
@@ -44672,8 +44672,8 @@ function TDynArray.SaveToTypeInfoHash(crc: cardinal): cardinal;
 begin
   result := crc;
   if ElemType=nil then // hash fElemSize only if no pointer within
-    result := crc32cfast(result,@fElemSize,4) else
-    ManagedTypeSaveRTTIHash(ElemType,result);
+    result := crc32c(result,@fElemSize,4) else
+    ManagedTypeSaveRTTIHash(ElemType,result);  // only hash managed fields
 end;
 
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
