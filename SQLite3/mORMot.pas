@@ -31231,8 +31231,10 @@ begin
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
           result := result+Name+',';
-      ToText(self,tokenizer);
-      if IdemPChar(pointer(tokenizer),'TSQLRECORDFTS') and
+      if self.InheritsFrom(TSQLRecord) then
+      ToText(self.ClassParent,tokenizer);
+      if (length(tokenizer) > 14) and // in case of something like: TSQLFTSTest = class(TSQLRecordFTS3)
+         IdemPChar(pointer(tokenizer),'TSQLRECORDFTS') and
          (tokenizer[14] in ['3','4']) then
         delete(tokenizer,1,14) else // e.g. TSQLRecordFTS3Porter -> 'Porter'
         tokenizer := 'simple';  
