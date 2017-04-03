@@ -2004,12 +2004,12 @@ type
 /// set the TID (=64 bits integer) value from the numerical text stored in P^
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(P: PUTF8Char; var result: TID); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINENOTX86}inline;{$endif}
 
 /// set the TID (=64 bits integer) value from the numerical text stored in U
 // - just a redirection to SynCommons.SetInt64()
 procedure SetID(const U: RawByteString; var result: TID); overload;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINENOTX86}inline;{$endif}
 
 /// decode JSON fields object into an UTF-8 encoded SQL-ready statement
 // - this function decodes in the P^ buffer memory itself (no memory allocation
@@ -2934,7 +2934,7 @@ type
     // - no range check: use ClassProp()^.PropCount to determine the properties count
     // - get the first PPropInfo with ClassProp()^.PropList
     function Next: PPropInfo;
-      {$ifdef FPC}inline;{$else}{$ifdef HASINLINE}inline;{$endif} {$endif}
+      {$ifdef FPC}inline;{$else}{$ifdef HASINLINENOTX86}inline;{$endif} {$endif}
     /// return FALSE (AS_UNIQUE) if was marked as "stored AS_UNIQUE"
     //  (i.e. "stored false"), or TRUE by default
     // - if Instance=nil, will work only at RTTI level, not with field or method
@@ -20079,7 +20079,7 @@ procedure SetID(P: PUTF8Char; var result: TID);
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(P);
 {$else}
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   {$ifdef VER3_0} // FPC issue woraround
   SetInt64(P,result);
@@ -20089,22 +20089,22 @@ begin
 {$else}
 asm
         jmp     SynCommons.SetInt64
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif CPU64}
 end;
 
-procedure SetID(const U: RawByteString; var result: TID); overload;
+procedure SetID(const U: RawByteString; var result: TID);
 {$ifdef CPU64}
 begin // PtrInt is already int64 -> call PtrInt version
   result := GetInteger(pointer(U));
 {$else}
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 begin
   SetID(pointer(U),result);
 {$else}
 asm
         jmp     SynCommons.SetInt64
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif CPU64}
 end;
 
@@ -28700,7 +28700,7 @@ asm // Delphi is so bad at compiling above code...
         ret
 @z:     db      $f3 // rep ret
 end;
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
       
 {$ifdef FPC_OR_PUREPASCAL}
 function TPropInfo.Next: PPropInfo;
@@ -28708,7 +28708,7 @@ begin
   result := AlignToPtr(@Name[ord(Name[0])+1]);
 end;
 {$else}
-{$ifdef HASINLINE}
+{$ifdef HASINLINENOTX86}
 function TPropInfo.Next: PPropInfo;
 begin
   result := @Name[ord(Name[0])+1];
@@ -28719,7 +28719,7 @@ asm     // very fast code
         movzx   edx, byte ptr[eax].TPropInfo.Name
         lea     eax, [eax + edx].TPropInfo.Name[1]
 end;
-{$endif HASINLINE}
+{$endif HASINLINENOTX86}
 {$endif FPC_OR_PUREPASCAL}
 
 {$ifdef USETYPEINFO}
@@ -29431,17 +29431,19 @@ end;
 
 function TTypeInfo.ClassSQLFieldType: TSQLFieldType;
 var CT: PClassType;
-    C,C2: TClass;
+    C: TClass;
 begin
   CT := AlignTypeData(@Name[ord(Name[0])+1]); // inlined ClassType
   C := CT^.ClassType;
-  C2 := C;
+  result := sftUnknown;
   while true do // unrolled several InheritsFrom() calls
     if C<>TSQLRecordMany then
     if C<>TSQLRecord then
     if (C<>TRawUTF8List) and (C<>TStrings) and
        (C<>TObjectList) {$ifndef LVCL}and (C<>TCollection){$endif} then
       if CT^.ParentInfo<>nil then begin
+        if CT^.PropCount>0 then
+          result := sftObject; // identify any class with published properties
         with Deref(CT^.ParentInfo)^ do
           CT := AlignTypeData(@Name[ord(Name[0])+1]); // get parent ClassType
         C := CT^.ClassType;
@@ -29450,18 +29452,15 @@ begin
           break;
       end else break
     else begin
-      result := sftObject; // TStrings, TRawUTF8List or TCollection
-      exit;
+      result := sftObject; // TStrings,TObjectList,TRawUTF8List or TCollection
+      break;
     end else begin
       result := sftID; // TSQLRecord field is pointer(RecordID), not an Instance
-      exit;
+      break;
     end else begin
       result := sftMany; // no data is stored here, but in a pivot table
-      exit;
+      break;
     end;
-  if ClassHasPublishedFields(C2) then
-    result := sftObject else // identify any class with published properties
-    result := sftUnknown;
 end;
 
 function TTypeInfo.InheritsFrom(AClass: TClass): boolean;
@@ -58235,7 +58234,7 @@ begin
 end;
 
 function AutoDestroyFields(self: TObject): TAutoCreateFields;
-  {$ifdef HASINLINE}inline;{$endif}
+  {$ifdef HASINLINENOTX86}inline;{$endif}
 var i: integer;
 begin
   result := PPointer(PPtrInt(self)^+vmtAutoTable)^;
@@ -60182,7 +60181,7 @@ begin
 end;
 
 function EnterWeakZeroClass(aObject: TObject; CreateIfNonExisting: boolean): TSetWeakZeroClass;
- {$ifdef HASINLINE}inline;{$endif}
+ {$ifdef HASINLINENOTX86}inline;{$endif}
 begin
   result := PPointer(PPtrInt(aObject)^+vmtAutoTable)^;
   if (result<>nil) and (TClass(PPointer(result)^)=TSQLRecordProperties) then
