@@ -4637,6 +4637,11 @@ type
   /// event oriented version of TDynArraySortCompare
   TEventDynArraySortCompare = function(const A,B): integer of object;
 
+  /// optional event called by TDynArray.LoadFrom method after each item load
+  // - could be used e.g. for string interning or some custom initialization process
+  // - won't be called if the dynamic array has ElemType=nil
+  TDynArrayAfterLoadFrom = procedure(var A) of object;
+
   /// internal enumeration used to specify some standard Delphi arrays
   // - will be used e.g. to match JSON serialization or TDynArray search
   // (see TDynArray and TDynArrayHash InitSpecific method)
@@ -4992,12 +4997,12 @@ type
     function SaveToTypeInfoHash(crc: cardinal=0): cardinal;
     /// load the dynamic array content from a memory buffer
     // - return nil if the Source buffer is incorrect (invalid type or internal
-    // checksum e.g.)
-    // - in case of success, return the memory buffer pointer just after the
+    // checksum e.g.), or return the memory buffer pointer just after the
     // read content
     // - this method will raise an ESynException for T*ObjArray types
-    // - return a pointer at the end of the data read from Source, nil on error
-    function LoadFrom(Source: PAnsiChar): PAnsiChar;
+    // - you can optionally call AfterEach callback for each row loaded
+    function LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom=nil;
+      NoCheckHash: boolean=false): PAnsiChar;
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
@@ -44714,11 +44719,19 @@ begin
       MoveFast(P^,Dest^,n);
       inc(Dest,n);
     end else
-    for i := 1 to n do begin
-      Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
-      if Dest=nil then
-        break;
-      inc(P,LenBytes);
+    case PTypeKind(ElemType)^ of
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      for i := 1 to n do begin
+        Dest := RecordSave(P^,Dest,ElemType,LenBytes);
+        inc(P,LenBytes);
+      end;
+    else
+      for i := 1 to n do begin
+        Dest := ManagedTypeSave(P,Dest,ElemType,LenBytes);
+        if Dest=nil then
+          break;
+        inc(P,LenBytes);
+      end;
     end;
   // store Hash32 checksum
   if Dest<>nil then  // may be nil if RecordSave/ManagedTypeSave failed
@@ -44744,12 +44757,27 @@ begin
         [PShortString(@PTypeInfo(ArrayType).NameLen)^]) else
       inc(result,integer(ElemSize)*n) else begin
     P := fValue^;
-    for i := 1 to n do begin
-      L := ManagedTypeSaveLength(P,ElemType,size);
-      if L=0 then
-        break; // invalid record type (wrong field type)
-      inc(result,L);
-      inc(P,size);
+    case PTypeKind(ElemType)^ of // inlined the most used kind of items
+    tkLString,tkWString{$ifdef FPC},tkLStringOld{$endif}:
+      for i := 1 to n do begin
+        if PPtrUInt(P)^=0 then
+          inc(result) else
+          inc(result,ToVarUInt32LengthWithData(PStrRec(PPtrUInt(P)^-STRRECSIZE)^.length));
+        inc(P,sizeof(pointer));
+      end;
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      for i := 1 to n do begin
+        inc(result,RecordSaveLength(P^,ElemType));
+        inc(P,ElemSize);
+      end;
+    else
+      for i := 1 to n do begin
+        L := ManagedTypeSaveLength(P,ElemType,size);
+        if L=0 then
+          break; // invalid record type (wrong field type)
+        inc(result,L);
+        inc(P,size);
+      end;
     end;
   end;
   inc(result,sizeof(Cardinal)); // Hash32 checksum
@@ -45083,7 +45111,8 @@ begin
   result := -1;
 end;
 
-function TDynArray.LoadFrom(Source: PAnsiChar): PAnsiChar;
+function TDynArray.LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom;
+  NoCheckHash: boolean): PAnsiChar;
 var i, n: integer;
     P: PAnsiChar;
     Hash: PCardinalArray;
@@ -45127,15 +45156,29 @@ begin
       MoveFast(Source^,P^,n);
       inc(Source,n);
     end else
-    for i := 1 to n do begin
-      inc(P,ManagedTypeLoad(P,Source,ElemType));
-      if Source=nil then
-         break;
+    case PTypeKind(ElemType)^ of
+    tkRecord{$ifdef FPC},tkObject{$endif}:
+      for i := 1 to n do begin
+        Source := RecordLoad(P^,Source,ElemType);
+        if Assigned(AfterEach) then
+          AfterEach(P^);
+        inc(P,ElemSize);
+      end;
+    else
+      for i := 1 to n do begin
+        ManagedTypeLoad(P,Source,ElemType);
+        if Source=nil then
+           break;
+        if Assigned(AfterEach) then
+          AfterEach(P^);
+        inc(P,ElemSize);
+      end;
     end;
   // check security checksum
-  if (Source=nil) or (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))<>Hash[0]) then
-    result := nil else
-    result := Source;
+  if NoCheckHash or (Source=nil) or
+     (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))=Hash[0]) then
+    result := Source else
+    result := nil;
 end;
 
 function TDynArray.Find(const Elem; const aIndex: TIntegerDynArray;
