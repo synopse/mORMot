@@ -52694,16 +52694,16 @@ begin
     end;
     Params.CancelLastComma;
     Params.SetText(ParamsJSON); // without [ ]
-    // call remote server or stub implementation
-    if method^.ArgsResultIsServiceCustomAnswer then
-      ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
-      ServiceCustomAnswerPoint := nil;
-    if not fInvoke(method^,ParamsJSON,
-       @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
-      RaiseError('''%''',[Error]);
   finally
     Params.Free;
   end;
+  // call remote server or stub implementation
+  if method^.ArgsResultIsServiceCustomAnswer then
+    ServiceCustomAnswerPoint := Value[method^.ArgsResultIndex] else
+    ServiceCustomAnswerPoint := nil;
+  if not fInvoke(method^,ParamsJSON,
+     @ResArray,@Error,@fClientDrivenID,ServiceCustomAnswerPoint) then
+    RaiseError('''%''',[Error]);
   // retrieve method result and var/out parameters content
   if ServiceCustomAnswerPoint=nil then
   if ResArray<>'' then begin
@@ -52849,8 +52849,8 @@ begin
   {$endif}
   if aCall.MethodIndex>=fFactory.fMethodsCount then
     raise EInterfaceFactoryException.CreateUTF8(
-      '%.FakeCall(%.%) failed: out of range method %>=%',
-      [self,fFactory.fInterfaceTypeInfo^.Name,aCall.MethodIndex,fFactory.fMethodsCount]);
+      '%.FakeCall(%.%) failed: out of range method %>=%',[self,
+      fFactory.fInterfaceTypeInfo^.Name,aCall.MethodIndex,fFactory.fMethodsCount]);
   method := @fFactory.fMethods[aCall.MethodIndex];
   if not Assigned(fInvoke)then
     RaiseError('fInvoke=nil',[]);
@@ -57433,9 +57433,12 @@ begin
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
-      if fExcludeServiceLogCustomAnswer and ArgsResultIsServiceCustomAnswer then begin
-        W.AddShort('customanswerlen:');
-        W.Add(length(PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^.Content));
+      if fExcludeServiceLogCustomAnswer and ArgsResultIsServiceCustomAnswer then
+      with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
+        W.AddShort('len:');
+        W.Add(length(Content));
+        W.AddShort(',status:');
+        W.Add(Status);
       end else
       if optNoLogOutput in Sender.fOptions then
         W.AddShort('optNoLog:true') else
