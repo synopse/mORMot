@@ -45314,8 +45314,12 @@ begin
       Index := 0 else
     if fSorted then begin
       P := fValue^;
-      Index := 0;
       dec(n);
+      if fCompare(P[cardinal(n)*ElemSize],Elem)<0 then begin // already sorted
+        Index := n+1; // returns false + last position index to insert
+        exit;
+      end;
+      Index := 0;
       while Index<=n do begin
         i := (Index+n) shr 1;
         cmp := fCompare(P[cardinal(i)*ElemSize],Elem);
@@ -45350,8 +45354,10 @@ function TDynArray.FastLocateOrAddSorted(const Elem; wasAdded: PBoolean): intege
 var toInsert: boolean;
 begin
   toInsert := not FastLocateSorted(Elem,result) and (result>=0);
-  if toInsert then
-    FastAddSorted(result,Elem);
+  if toInsert then begin
+    Insert(result,Elem);
+    fSorted := true; // Insert -> SetCount -> fSorted := false
+  end;
   if wasAdded<>nil then
     wasAdded^ := toInsert;
 end;
