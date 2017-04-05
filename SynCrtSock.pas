@@ -1084,6 +1084,7 @@ type
   // - do not use this class, but rather the THttpServer or THttpApiServer
   THttpServerGeneric = class(TServerGeneric)
   protected
+    fShutdownInProgress: boolean;
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
     /// list of all registered compression algorithms
@@ -1135,6 +1136,8 @@ type
     // - the first registered algorithm will be the prefered one for compression
     procedure RegisterCompress(aFunction: THttpSocketCompress;
       aCompressMinSize: integer=1024); virtual;
+    /// you can call this method to prepare the HTTP server for shutting down
+    procedure Shutdown;
     /// event handler called by the default implementation of the
     // virtual Request method
     // - warning: this process must be thread-safe (can be called by several
@@ -4671,12 +4674,21 @@ begin
   RegisterCompressFunc(fCompress,aFunction,fCompressAcceptEncoding,aCompressMinSize);
 end;
 
+procedure THttpServerGeneric.Shutdown;
+begin
+  if self<>nil then
+    fShutdownInProgress := true;
+end;
+
 function THttpServerGeneric.Request(Ctxt: THttpServerRequest): cardinal;
 begin
-  NotifyThreadStart(Ctxt.ConnectionThread);
-  if Assigned(OnRequest) then
-    result := OnRequest(Ctxt) else
-    result := STATUS_NOTFOUND;
+  if (self=nil) or fShutdownInProgress then
+    result := STATUS_NOTFOUND else begin
+    NotifyThreadStart(Ctxt.ConnectionThread);
+    if Assigned(OnRequest) then
+      result := OnRequest(Ctxt) else
+      result := STATUS_NOTFOUND;
+  end;
 end;
 
 function THttpServerGeneric.Callback(Ctxt: THttpServerRequest; aNonBlocking: boolean): cardinal;

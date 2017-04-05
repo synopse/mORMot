@@ -276,6 +276,7 @@ type
   TSQLHttpServer = class
   protected
     fOnlyJSONRequests: boolean;
+    fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: AnsiString;
     fPublicAddress, fPublicPort: RawUTF8;
@@ -383,10 +384,11 @@ type
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
-    // - it will call all associated TSQLRestServer.Shutdown methods
+    // - it will call all associated TSQLRestServer.Shutdown methods, unless
+    // noRestServerShutdown is true
     // - note that Destroy won't call this method on its own, since the
     // TSQLRestServer instances may have a life-time uncoupled from HTTP process
-    procedure Shutdown;
+    procedure Shutdown(noRestServerShutdown: boolean=false);
     /// try to register another TSQLRestServer instance to the HTTP server
     // - each TSQLRestServer class must have an unique Model.Root value, to
     // identify which instance must handle a particular request from its URI
@@ -762,24 +764,29 @@ begin
 end;
 
 destructor TSQLHttpServer.Destroy;
-var i: integer;
 begin
   fLog.Enter(self);
   fLog.Add.Log(sllHttp,'% finalized for % server%',
     [fHttpServer,length(fDBServers),PLURAL_FORM[length(fDBServers)>1]],self);
-  for i := 0 to high(fDBServers) do
-    if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
-      fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+  Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
 
-procedure TSQLHttpServer.Shutdown;
+procedure TSQLHttpServer.Shutdown(noRestServerShutdown: boolean);
 var i: integer;
 begin
-  if self<>nil then
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.Shutdown;
+  if (self<>nil) and not fShutdownInProgress then begin
+    fLog.Enter('Shutdown(%)',[BOOL_STR[noRestServerShutdown]],self);
+    fShutdownInProgress := true;
+    fHttpServer.Shutdown;
+    for i := 0 to high(fDBServers) do begin
+      if not noRestServerShutdown then
+        fDBServers[i].Server.Shutdown;
+      if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
+        fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+    end;
+  end;
 end;
 
 function TSQLHttpServer.GetDBServer(Index: Integer): TSQLRestServer;
@@ -880,6 +887,8 @@ var call: TSQLRestURIParams;
     hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
 begin
+  if (self=nil) or fShutdownInProgress then
+    result := HTTP_NOTFOUND else
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI[Ctxt.UseSSL]<>'' then begin
       Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI[Ctxt.UseSSL];
@@ -1056,7 +1065,7 @@ var ctxt: THttpServerRequest;
     status: cardinal;
 begin
   result := false;
-  if self<>nil then
+  if (self<>nil) and not fShutdownInProgress then
   try
     if fHttpServer<>nil then begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
