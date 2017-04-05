@@ -7027,7 +7027,7 @@ type
   /// how TJSONCustomParser would serialize/unserialize JSON content
   TJSONCustomParserSerializationOption = (
     soReadIgnoreUnknownFields, soWriteHumanReadable,
-    soCustomVariantCopiedByReference);
+    soCustomVariantCopiedByReference, soWriteIgnoreDefault);
 
   /// how TJSONCustomParser would serialize/unserialize JSON content
   // - by default, during reading any unexpected field will stop and fail the
@@ -7043,6 +7043,8 @@ type
   // to avoid memory allocations, BUT it may break internal process if you change
   // some values in place (since VValue/VName and VCount won't match) - as such,
   // if you set this option, ensure that you use the content as read-only
+  // - by default, all fields are persistented, unless soWriteIgnoreDefault is
+  // defined and void values (e.g. "" or 0) won't be written 
   // - you may use TTextWriter.RegisterCustomJSONSerializerSetOptions() class
   // method to customize the serialization for a given type
   TJSONCustomParserSerializationOptions = set of TJSONCustomParserSerializationOption;
@@ -7071,6 +7073,9 @@ type
     procedure FinalizeNestedArray(var Data: PtrUInt);
     procedure AllocateNestedArray(var Data: PtrUInt; NewLength: integer);
     procedure ReAllocateNestedArray(var Data: PtrUInt; NewLength: integer);
+    function IfDefaultSkipped(var Value: PByte): boolean;
+    procedure WriteOneSimpleValue(aWriter: TTextWriter; var Value: PByte;
+      Options: TJSONCustomParserSerializationOptions);
   public
     /// initialize the instance
     constructor Create(const aPropertyName: RawUTF8;
@@ -8143,7 +8148,15 @@ type
     // Delphi 2010), you would be able to customize the options of this type
     class function RegisterCustomJSONSerializerSetOptions(aTypeInfo: pointer;
       aOptions: TJSONCustomParserSerializationOptions;
-      aAddIfNotExisting: boolean=false): boolean;
+      aAddIfNotExisting: boolean=false): boolean; overload;
+    /// change options for custom serialization of dynamic arrays or records
+    // - will return TRUE if the options have been changed, FALSE if the
+    // supplied type info was not previously registered
+    // - if AddIfNotExisting is TRUE, and enhanced RTTI is available (since
+    // Delphi 2010), you would be able to customize the options of this type
+    class function RegisterCustomJSONSerializerSetOptions(
+      const aTypeInfo: array of pointer; aOptions: TJSONCustomParserSerializationOptions;
+      aAddIfNotExisting: boolean=false): boolean; overload;
     /// retrieve a previously registered custom parser instance from its type
     // - will return nil if the type info was not available, or defined just
     // with some callbacks
@@ -39696,7 +39709,7 @@ end;
 procedure TJSONCustomParserRTTI.FinalizeNestedRecord(var Data: PByte);
 var j: integer;
 begin
-  for j := 0 to high(NestedProperty) do begin
+  for j := 0 to length(NestedProperty)-1 do begin
     case NestedProperty[j].PropertyType of
     ptRawByteString,
     ptRawJSON,
@@ -39939,7 +39952,7 @@ begin
     EndOfObject := '}';
     inc(P);
   end else
-  for i := 0 to High(NestedProperty) do begin
+  for i := 0 to length(NestedProperty)-1 do begin
     ptr := P;
     GetJSONPropName(ptr,PropName);
     if PropName='' then
@@ -39950,14 +39963,14 @@ begin
       if not ProcessValue(NestedProperty[i],P,Data) then
         exit;
       if EndOfObject='}' then begin // ignore missing properties
-        for j := i+1 to high(NestedProperty) do
+        for j := i+1 to length(NestedProperty)-1 do
           inc(Data,NestedProperty[j].fDataSize);
         break;
       end;
     end else begin
       SetLength(Values,length(NestedProperty)); // pessimistic check through all properties
       repeat
-        for j := i to High(NestedProperty) do
+        for j := i to length(NestedProperty)-1 do
           if (Values[j]=nil) and
              IdemPropNameU(NestedProperty[j].PropertyName,@PropName[1],ord(PropName[0])) then begin
             Values[j] := P;
@@ -39977,7 +39990,7 @@ begin
           exit;  // invalid JSON content
         P := ptr;
       until false;
-      for j := i to high(NestedProperty) do
+      for j := i to length(NestedProperty)-1 do
         if Values[j]=nil then // ignore missing properties
           inc(Data,NestedProperty[j].fDataSize) else
           if not ProcessValue(NestedProperty[j],Values[j],Data) then
@@ -40006,74 +40019,100 @@ begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
     result := 'false';
 end;
 
+function TJSONCustomParserRTTI.IfDefaultSkipped(var Value: PByte): boolean;
+begin
+  case PropertyType of
+    ptBoolean:   result := not PBoolean(Value)^;
+    ptByte:      result := PByte(Value)^=0;
+    ptWord:      result := PWord(Value)^=0;
+    ptInteger,ptCardinal,ptSingle:
+                 result := PInteger(Value)^=0;
+    ptCurrency,ptDouble,ptInt64,ptID,ptTimeLog,ptDateTime,ptDateTimeMS:
+                 result := PInt64(Value)^=0;
+    ptExtended:  result := PExtended(Value)^=0;
+    {$ifndef NOVARIANTS}
+    ptVariant:   result := PVarData(Value)^.VType<=varNull;
+    {$endif}
+    ptRawJSON,ptRawByteString,ptRawUTF8,ptString,ptSynUnicode,ptWideString,ptArray:
+                 result := PPointer(Value)^=nil;
+    ptGUID:      result := IsNullGUID(PGUID(Value)^);
+    ptRecord:    result := IsZero(Value,fDataSize);
+    else         result := false;
+  end;
+  if result then
+    inc(Value,fDataSize);
+end;
+
+procedure TJSONCustomParserRTTI.WriteOneSimpleValue(aWriter: TTextWriter; var Value: PByte;
+  Options: TJSONCustomParserSerializationOptions);
+var DynArray: PByte;
+    j: integer;
+begin
+  case PropertyType of
+  ptBoolean:   aWriter.Add(PBoolean(Value)^);
+  ptByte:      aWriter.AddU(PByte(Value)^);
+  ptCardinal:  aWriter.AddU(PCardinal(Value)^);
+  ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
+  ptDouble:    aWriter.AddDouble(unaligned(PDouble(Value)^));
+  ptExtended:  aWriter.Add(PExtended(Value)^,EXTENDED_PRECISION);
+  ptInt64,ptID,ptTimeLog:
+               aWriter.Add(PInt64(Value)^);
+  ptInteger:   aWriter.Add(PInteger(Value)^);
+  ptSingle:    aWriter.AddSingle(PSingle(Value)^);
+  ptWord:      aWriter.AddU(PWord(Value)^);
+  {$ifndef NOVARIANTS}
+  ptVariant:   aWriter.AddVariant(PVariant(Value)^,twJSONEscape);
+  {$endif}
+  ptRawJSON:   aWriter.AddRawJSON(PRawJSON(Value)^);
+  ptRawByteString:
+    aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
+  ptRawUTF8, ptString, ptSynUnicode,
+  ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
+    aWriter.Add('"');
+    case PropertyType of
+    ptRawUTF8:       aWriter.AddJSONEscape(PPointer(Value)^);
+    ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
+    ptSynUnicode,
+    ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
+    ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^),false);
+    ptDateTimeMS:    aWriter.AddDateTime(unaligned(PDateTime(Value)^),true);
+    ptGUID:          aWriter.Add(PGUID(Value)^);
+    end;
+    aWriter.Add('"');
+  end;
+  ptArray: begin
+    aWriter.Add('[');
+    inc(aWriter.fHumanReadableLevel);
+    DynArray := PPointer(Value)^;
+    if DynArray<>nil then
+      for j := 1 to DynArrayLength(DynArray) do begin
+        if soWriteHumanReadable in Options then
+          aWriter.AddCRAndIndent;
+        if NestedProperty[0].PropertyName='' then  // array of simple
+          NestedProperty[0].WriteOneSimpleValue(aWriter,DynArray,Options) else
+          WriteOneLevel(aWriter,DynArray,Options); // array of record
+        aWriter.Add(',');
+        {$ifdef ALIGNCUSTOMREC}
+        if PtrUInt(DynArray)and 7<>0 then
+          inc(DynArray,8-(PtrUInt(DynArray)and 7));
+        {$endif}
+      end;
+    aWriter.CancelLastComma;
+    aWriter.Add(']');
+    dec(aWriter.fHumanReadableLevel);
+  end;
+  ptRecord: begin
+    WriteOneLevel(aWriter,Value,Options);
+    exit;
+  end;
+  ptCustom:
+    TJSONCustomParserCustom(self).CustomWriter(aWriter,Value^);
+  end;
+  inc(Value,fDataSize);
+end;
+
 procedure TJSONCustomParserRTTI.WriteOneLevel(aWriter: TTextWriter; var P: PByte;
   Options: TJSONCustomParserSerializationOptions);
-  procedure WriteOneValue(Prop: TJSONCustomParserRTTI; var Value: PByte);
-  var DynArray: PByte;
-      j: integer;
-  begin
-    case Prop.PropertyType of
-    ptBoolean:   aWriter.Add(PBoolean(Value)^);
-    ptByte:      aWriter.AddU(PByte(Value)^);
-    ptCardinal:  aWriter.AddU(PCardinal(Value)^);
-    ptCurrency:  aWriter.AddCurr64(PInt64(Value)^);
-    ptDouble:    aWriter.AddDouble(unaligned(PDouble(Value)^));
-    ptExtended:  aWriter.Add(PExtended(Value)^,EXTENDED_PRECISION);
-    ptInt64,ptID,ptTimeLog:
-                 aWriter.Add(PInt64(Value)^);
-    ptInteger:   aWriter.Add(PInteger(Value)^);
-    ptSingle:    aWriter.AddSingle(PSingle(Value)^);
-    ptWord:      aWriter.AddU(PWord(Value)^);
-    {$ifndef NOVARIANTS}
-    ptVariant:   aWriter.AddVariant(PVariant(Value)^,twJSONEscape);
-    {$endif}
-    ptRawJSON:   aWriter.AddRawJSON(PRawJSON(Value)^);
-    ptRawByteString:
-      aWriter.WrBase64(PPointer(Value)^,length(PRawByteString(Value)^),true);
-    ptRawUTF8, ptString, ptSynUnicode,
-    ptDateTime, ptDateTimeMS, ptGUID, ptWideString: begin
-      aWriter.Add('"');
-      case Prop.PropertyType of
-      ptRawUTF8:       aWriter.AddJSONEscape(PPointer(Value)^);
-      ptString:        aWriter.AddJSONEscapeString(PString(Value)^);
-      ptSynUnicode,
-      ptWideString:    aWriter.AddJSONEscapeW(PPointer(Value)^);
-      ptDateTime:      aWriter.AddDateTime(unaligned(PDateTime(Value)^),false);
-      ptDateTimeMS:    aWriter.AddDateTime(unaligned(PDateTime(Value)^),true);
-      ptGUID:          aWriter.Add(PGUID(Value)^);
-      end;
-      aWriter.Add('"');
-    end;
-    ptArray: begin
-      aWriter.Add('[');
-      inc(aWriter.fHumanReadableLevel);
-      DynArray := PPointer(Value)^;
-      if DynArray<>nil then
-        for j := 1 to DynArrayLength(DynArray) do begin
-          if soWriteHumanReadable in Options then
-            aWriter.AddCRAndIndent;
-          if Prop.NestedProperty[0].PropertyName='' then  // array of simple
-            WriteOneValue(Prop.NestedProperty[0],DynArray) else
-            Prop.WriteOneLevel(aWriter,DynArray,Options); // array of record
-          aWriter.Add(',');
-          {$ifdef ALIGNCUSTOMREC}
-          if PtrUInt(DynArray)and 7<>0 then
-            inc(DynArray,8-(PtrUInt(DynArray)and 7));
-          {$endif}
-        end;
-      aWriter.CancelLastComma;
-      aWriter.Add(']');
-      dec(aWriter.fHumanReadableLevel);
-    end;
-    ptRecord: begin
-      Prop.WriteOneLevel(aWriter,Value,Options);
-      exit;
-    end;
-    ptCustom:
-      TJSONCustomParserCustom(Prop).CustomWriter(aWriter,Value^);
-    end;
-    inc(Value,Prop.fDataSize);
-  end;
 var i: integer;
     SubProp: TJSONCustomParserRTTI;
 begin
@@ -40082,19 +40121,22 @@ begin
     exit;
   end;
   if not (PropertyType in [ptRecord,ptArray]) then begin
-    WriteOneValue(self,P);
+    WriteOneSimpleValue(aWriter,P,Options);
     exit;
   end;
   aWriter.Add('{');
   Inc(aWriter.fHumanReadableLevel);
-  for i := 0 to high(NestedProperty) do begin
+  for i := 0 to length(NestedProperty)-1 do begin
     SubProp := NestedProperty[i];
+    if soWriteIgnoreDefault in Options then
+      if SubProp.IfDefaultSkipped(P) then
+        continue;
     if soWriteHumanReadable in Options then
       aWriter.AddCRAndIndent;
     aWriter.AddFieldName(SubProp.PropertyName);
     if soWriteHumanReadable in Options then
       aWriter.Add(' ');
-    WriteOneValue(SubProp,P);
+    SubProp.WriteOneSimpleValue(aWriter,P,Options);
     aWriter.Add(',');
   end;
   aWriter.CancelLastComma;
@@ -48168,6 +48210,17 @@ begin
     GlobalJSONCustomParsers.fParser[ndx].RecordCustomParser.Options := aOptions;
     result := true;
   end;
+end;
+
+class function TTextWriter.RegisterCustomJSONSerializerSetOptions(
+  const aTypeInfo: array of pointer; aOptions: TJSONCustomParserSerializationOptions;
+  aAddIfNotExisting: boolean): boolean;
+var i: integer;
+begin
+  result := true;
+  for i := 0 to high(aTypeInfo) do
+    if not RegisterCustomJSONSerializerSetOptions(aTypeInfo[i],aOptions) then
+      result := false;
 end;
 
 class function TTextWriter.RegisterCustomJSONSerializerFindParser(
