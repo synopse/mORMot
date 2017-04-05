@@ -2017,6 +2017,8 @@ const
   STATUS_CREATED = 201;
   /// HTTP Status Code for "No Content"
   STATUS_NOCONTENT = 204;
+  /// HTTP Status Code for "Partial Content"
+  STATUS_PARTIALCONTENT = 206;
   /// HTTP Status Code for "Not Modified"
   STATUS_NOTMODIFIED = 304;
   /// HTTP Status Code for "Bad Request"
@@ -4409,7 +4411,7 @@ begin
   Http := OpenHttp(server,port);
   if Http<>nil then
   try
-    if Http.Get(url,0,inHeaders)=STATUS_SUCCESS then begin
+    if Http.Get(url,0,inHeaders) in [STATUS_SUCCESS..STATUS_PARTIALCONTENT] then begin
       result := Http.Content;
       if outHeaders<>nil then
         outHeaders^ := Http.HeaderGetText;
@@ -4454,7 +4456,7 @@ begin
   http := OpenHttp(aURI,@url);
   if http<>nil then
     try
-      if http.GetAuth(url,aAuthToken)=STATUS_SUCCESS then
+      if http.GetAuth(url,aAuthToken) in [STATUS_SUCCESS..STATUS_PARTIALCONTENT] then
         result := http.Content;
     finally
       http.Free;
@@ -7280,6 +7282,7 @@ begin
                       if RangeLength>=0 then // "bytes=0-499" -> start=0, len=500
                         DataChunkFile.ByteRange.Length := ULARGE_INTEGER(RangeLength);
                     end; // "bytes=1000-" -> start=1000, len=-1 (to eof)
+                    Resp^.SetStatus(STATUS_PARTIALCONTENT,OutStatus);
                   end;
                 end;
               Resp^.EntityChunkCount := 1;
