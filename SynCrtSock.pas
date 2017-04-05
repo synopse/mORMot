@@ -2524,6 +2524,7 @@ begin
     202: result := 'Accepted';
     203: result := 'Non-Authoritative Information';
     204: result := 'No Content';
+    206: result := 'Partial Content';
     207: result := 'Multi-Status';
     300: result := 'Multiple Choices';
     301: result := 'Moved Permanently';

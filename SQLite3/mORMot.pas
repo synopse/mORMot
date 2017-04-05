@@ -4747,6 +4747,11 @@ function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// computes an URI with optional jwt authentication parameter
+// - if AuthenticationBearer is set, will add its values as additional parameter:
+// $ URI?authenticationbearer=URIAuthenticationBearer
+function AuthURI(const URI, URIAuthenticationBearer: RawUTF8): RawUTF8;
+
 type
   /// the available HTTP methods transmitted between client and server
   // - some custom verbs are available in addition to standard REST commands
@@ -23773,6 +23778,15 @@ end;
 function StatusCodeIsSuccess(Code: integer): boolean;
 begin
   result := (Code>=HTTP_SUCCESS) and (Code<HTTP_BADREQUEST); // 200..399
+end;
+
+function AuthURI(const URI, URIAuthenticationBearer: RawUTF8): RawUTF8;
+begin
+  if URIAuthenticationBearer='' then
+    result := URI else
+    if PosEx('?',URI)=0 then
+      result := URI+'?authenticationbearer='+URIAuthenticationBearer else
+      result := URI+'&authenticationbearer='+URIAuthenticationBearer
 end;
 
 function StringToMethod(const method: RawUTF8): TSQLURIMethod;
