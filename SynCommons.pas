@@ -7195,8 +7195,6 @@ type
     fCustomTypeIndex: integer;
     function GetJSONCustomParserRegistration: pointer;
   public
-{    /// initialize the instance from the given RTTI name
-    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override; }
     /// initialize the instance from the given record custom serialization index
     constructor Create(const aPropertyName: RawUTF8;
       aCustomTypeIndex: integer); reintroduce; overload;
@@ -7212,26 +7210,6 @@ type
   TJSONCustomParserRTTIExpectedEnd = (eeNothing, eeSquare, eeCurly, eeEndKeyWord);
 
   TJSONRecordAbstract = class;
-
-(* /// implement a reference to a unregistered record type
-  // - i.e. ptCustom kind of property, not handled by the
-  // TTextWriter.RegisterCustomJSONSerializer*() internal list
-  TJSONCustomParserCustomRecord = class(TJSONCustomParserCustom)
-  protected
-    fCustomRecord: TJSONRecordAbstract;
-  public
-    /// initialize the instance from the given RTTI name
-    constructor Create(const aPropertyName, aCustomTypeName: RawUTF8); overload; override;
-    /// initialize the instance from the given record custom serialization index
-    constructor Create(const aPropertyName: RawUTF8;
-      aCustomTypeIndex: integer); reintroduce; overload;
-    /// method to write the instance as JSON
-    procedure CustomWriter(const aWriter: TTextWriter; const aValue); override;
-    /// method to read the instance from JSON
-    function CustomReader(P: PUTF8Char; var aValue; out EndOfObject: AnsiChar): PUTF8Char; override;
-    /// release any memory used by the instance
-    procedure FinalizeItem(Data: Pointer); override;
-  end; *)
 
   /// used to handle additional RTTI for JSON record serialization
   // - this class is used to define how a record is defined, and will work
@@ -7267,8 +7245,9 @@ type
     property Root: TJSONCustomParserRTTI read fRoot;
     /// how this class would serialize/unserialize JSON content
     // - by default, no option is defined
-    // - you can set the option with the instance returned by
-    // TTextWriter.RegisterCustomJSONSerializerFromText() method
+    // - you can customize the expected options with the instance returned by
+    // TTextWriter.RegisterCustomJSONSerializerFromText() method, or via the
+    // TTextWriter.RegisterCustomJSONSerializerSetOptions() overloaded methods
     property Options: TJSONCustomParserSerializationOptions read fOptions write fOptions;
   end;
 
@@ -8151,7 +8130,7 @@ type
       aAddIfNotExisting: boolean=false): boolean; overload;
     /// change options for custom serialization of dynamic arrays or records
     // - will return TRUE if the options have been changed, FALSE if the
-    // supplied type info was not previously registered
+    // supplied type info was not previously registered for at least one type
     // - if AddIfNotExisting is TRUE, and enhanced RTTI is available (since
     // Delphi 2010), you would be able to customize the options of this type
     class function RegisterCustomJSONSerializerSetOptions(
@@ -39391,24 +39370,6 @@ end;
 
 
 { TJSONCustomParserCustomRecord }
-
-{constructor TJSONCustomParserCustomRecord.Create(
-  const aPropertyName, aCustomTypeName: RawUTF8);
-begin
-  inherited Create(aPropertyName,aCustomTypeName);
-  fCustomTypeIndex := GlobalJSONCustomParsers.RecordSearch(aCustomTypeName);
-  if fCustomTypeIndex<0 then
-    raise ESynException.CreateUTF8('%.Create(unknown "%" type)',
-      [self,aCustomTypeName]);
-  with GlobalJSONCustomParsers.fParser[fCustomTypeIndex] do begin
-    fCustomTypeInfo := RecordTypeInfo;
-    fCustomTypeName := RecordTypeName;
-  end;
-  fDataSize := RecordTypeInfoSize(fCustomTypeInfo);
-  if fDataSize=0 then
-    raise ESynException.CreateUTF8('%.Create("%" non record type)',
-      [self,aCustomTypeName]);
-end;}
 
 constructor TJSONCustomParserCustomRecord.Create(
   const aPropertyName: RawUTF8; aCustomTypeIndex: integer);

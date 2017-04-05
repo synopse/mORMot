@@ -2776,21 +2776,17 @@ begin
 end;
 
 function GetNextItemUInt64(var P: PAnsiChar): Int64;
-var c: PtrInt;
+var c: PtrUInt;
 begin
-  if P=nil then begin
-    result := 0;
-    exit;
-  end;
-  result := byte(P^)-48;  // caller ensured that P^ in ['0'..'9']
-  inc(P);
-  repeat
-    c := byte(P^)-48;
-    if c>9 then
-      break else
-      result := result*10+c;
-    inc(P);
-  until false;
+  result := 0;
+  if P<>nil then
+    repeat
+      c := byte(P^)-48;
+      if c>9 then
+        break else
+        result := result*10+PtrInt(c);
+      inc(P);
+    until false;
 end; // P^ will point to the first non digit char
 
 function GetNextLine(var P: PAnsiChar): SockString;
