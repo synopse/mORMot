@@ -1204,6 +1204,7 @@ type
   TGUIDDynArray = array of TGUID;
 
   PInt64Rec = ^Int64Rec;
+  PPShortString = ^PShortString;
 
   {$ifndef DELPHI5OROLDER}
   PIInterface = ^IInterface;
@@ -6227,6 +6228,10 @@ procedure InterfaceArrayDelete(var aInterfaceArray; aItemIndex: integer); overlo
 /// helper to retrieve the text of an enumerate item
 // - you'd better use RTTI related classes of mORMot.pas unit, e.g. TEnumType
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
+
+/// helper to retrieve all texts of an enumerate
+// - may be used as cache for overloaded ToText() content
+procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
@@ -22221,6 +22226,18 @@ end;
 
 const
   NULL_SHORTSTRING: string[1] = '';
+
+procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
+var MaxValue, i: integer;
+    res: PShortString;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+    for i := 0 to MaxValue do begin
+      aDest^ := res;
+      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(aDest);
+    end;
+end;
 
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 {$ifdef HASINLINENOTX86}
