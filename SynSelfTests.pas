@@ -3080,6 +3080,8 @@ var i, j, b, err: integer;
     crc: cardinal;
     Timer: TPrecisionTimer;
 begin
+  Check(not SameValue(386.0, 386.1));
+  Check(not SameValue(386.0, 700, 2));
   Check(IntToThousandString(0)='0');
   Check(IntToThousandString(1)='1');
   Check(IntToThousandString(10)='10');
@@ -3289,6 +3291,7 @@ begin
     s := ExtendedToStr(d,DOUBLE_PRECISION);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d));
+    Check(not SameValue(e+1,d));
     u := DoubleToString(d);
     Check(Ansi7ToString(s)=u,u);
     PC := ToVarUInt32(juint,@varint);
@@ -4403,7 +4406,7 @@ begin
     if trunc(ExpectedDate)=40640 then
       Check(L.InstanceName='D:\Dev\MyLibrary.dll') else
       Check(L.InstanceName='');
-    CheckSame(L.ExecutableDate,ExpectedDate,1e-7);
+    CheckSame(L.ExecutableDate,ExpectedDate,1/SecsPerDay);
     Check(L.ComputerHost='MyPC');
     Check(L.LevelUsed=[sllEnter,sllLeave,sllDebug]);
     Check(L.RunningUser='MySelf');
@@ -4414,12 +4417,12 @@ begin
     Check(not L.Wow64);
     {$endif}
     Check(L.Freq=0);
-    CheckSame(L.StartDateTime,40640.502882,1E-10);
+    CheckSame(L.StartDateTime,40640.502882,1/SecsPerDay);
     if CheckFailed(L.Count=3) then
       exit;
     Check(L.EventLevel[0]=sllEnter);
     Check(L.EventLevel[1]=sllDebug);
-    CheckSame(L.EventDateTime(1),L.StartDateTime,1 / SecsPerDay);
+    CheckSame(L.EventDateTime(1),L.StartDateTime,1/SecsPerDay);
     Check(L.EventLevel[2]=sllLeave);
     if CheckFailed(L.LogProcCount=1) then
       exit;
@@ -14182,19 +14185,19 @@ begin
   end;
   n2 := Inst.CN.Imaginary;
   for c := 0 to Iterations shr 2 do begin
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     n1 := Random*1000;
     Inst.CN.Real := n1;
     CheckSame(Inst.CN.Real,n1);
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     n2 := Random*1000;
     Inst.CN.Imaginary := n2;
     CheckSame(Inst.CN.Real,n1);
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     Inst.CN.Add(1,2);
-    CheckSame(Inst.CN.Real,n1+1);
+    CheckSame(Inst.CN.Real,n1+1,1E-9);
     n2 := n2+2;
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
   end;
   {$endif}
   Inst.CN.Assign(3.14,1.05946);
@@ -15212,7 +15215,7 @@ begin
   Check(I.Multiply(10,30)=60);
   Check(I.Multiply(2,35)=70);
   for n := 1 to 10000 do
-    CheckSame(I.Subtract(n*10.5,n*0.5),n*10);
+    CheckSame(I.Subtract(n*10.5,n*0.5),n*10,1E-9);
   n := Assertions;
   I := nil; // release TInterfaceMock -> will check all expectations
   n := Assertions-n;
@@ -15255,7 +15258,7 @@ begin
      Raises('Add',[1,2],ESynException,'expected exception');
   {$ifndef NOVARIANTS}
   for n := 1 to 10000 do
-    CheckSame(I.Subtract(n*10.5,n*0.5),n*10);
+    CheckSame(I.Subtract(n*10.5,n*0.5),n*10,1E-9);
   {$endif}
   Check(I.Subtract(10,20)=3,'Explicit result');
   {$WARN SYMBOL_PLATFORM OFF}

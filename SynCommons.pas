@@ -15375,9 +15375,10 @@ type
     function DeleteByProp(const aPropName,aPropValue: RawUTF8;
       aPropValueCaseSensitive: boolean): boolean;
     /// delete one or several value/item in this document, from its value
-    // - return TRUE on success, FALSE if the supplied value does not exist
+    // - returns the number of deleted items
+    // - returns 0 if the document is not a dvObject, or if no match was found
     // - if the value exists several times, all occurences would be removed
-    function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): boolean;
+    function DeleteByValue(const aValue: Variant; CaseInsensitive: boolean=false): integer;
     /// delete all values matching the first characters of a property name
     // - returns the number of deleted items
     // - returns 0 if the document is not a dvObject, or if no match was found
@@ -27364,32 +27365,41 @@ begin
   PWord(@result[1])^ := TwoDigitLookupW[Value];
 end;
 
+const
+  DOUBLE_RESOLUTION = 1E-12; // also for TSynExtended (FPC uses 1E-4!)
+
 function SameValue(const A, B: Double; DoublePrec: double): Boolean;
 var AbsA,AbsB: double;
-begin // faster than the Math unit version
-  AbsA := Abs(A);
-  AbsB := Abs(B);
-  if AbsA<AbsB then
-    AbsA := AbsA*DoublePrec else
-    AbsA := AbsB*DoublePrec; // AbsA := Min(Abs(A),Abs(B))*DoublePrec
-  // AbsA is the allowed Epsilon value
-  if AbsA<DoublePrec then
-    Result := Abs(A-B)<=DoublePrec else
-    Result := Abs(A-B)<=AbsA;
+begin
+  if PInt64(@DoublePrec)^=0 then begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+    AbsA := Abs(A);
+    AbsB := Abs(B);
+    if AbsA<AbsB then
+      DoublePrec := AbsA*DOUBLE_RESOLUTION else
+      DoublePrec := AbsB*DOUBLE_RESOLUTION;
+    if DoublePrec<DOUBLE_RESOLUTION then
+      DoublePrec := DOUBLE_RESOLUTION;
+  end;
+  if A<B then
+    result := (B-A)<=DoublePrec else
+    result := (A-B)<=DoublePrec;
 end;
 
 function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended): Boolean;
 var AbsA,AbsB: TSynExtended;
-begin // faster than the Math unit version
-  AbsA := Abs(A);
-  AbsB := Abs(B);
-  if AbsA<AbsB then
-    AbsA := AbsA*DoublePrec else
-    AbsA := AbsB*DoublePrec; // AbsA := Min(Abs(A),Abs(B))*DoublePrec
-  // AbsA is the allowed Epsilon value
-  if AbsA<DoublePrec then
-    Result := Abs(A-B)<=DoublePrec else
-    Result := Abs(A-B)<=AbsA;
+begin
+  if DoublePrec=0 then begin // Max(Min(Abs(A),Abs(B))*1E-12,1E-12)
+    AbsA := Abs(A);
+    AbsB := Abs(B);
+    if AbsA<AbsB then
+      DoublePrec := AbsA*DOUBLE_RESOLUTION else
+      DoublePrec := AbsB*DOUBLE_RESOLUTION;
+    if DoublePrec<DOUBLE_RESOLUTION then
+      DoublePrec := DOUBLE_RESOLUTION;
+  end;
+  if A<B then
+    result := (B-A)<=DoublePrec else
+    result := (A-B)<=DoublePrec;
 end;
 
 /// return the index of Value in Values[], -1 if not found
@@ -42709,19 +42719,23 @@ end;
 
 function TDocVariantData.DeleteByProp(const aPropName,aPropValue: RawUTF8;
   aPropValueCaseSensitive: boolean): boolean;
+var ndx: integer;
 begin
-  result := Delete(SearchItemByProp(aPropName,aPropValue,aPropValueCaseSensitive));
+  ndx := SearchItemByProp(aPropName,aPropValue,aPropValueCaseSensitive);
+  if ndx<0 then
+    result := false else
+    result := Delete(ndx);
 end;
 
 function TDocVariantData.DeleteByValue(const aValue: Variant;
-  CaseInsensitive: boolean=false): boolean;
+  CaseInsensitive: boolean=false): integer;
 var ndx: integer;
 begin
-  result := false;
+  result := 0;
   for ndx := VCount-1 downto 0 do
   if SortDynArrayVariantComp(TVarData(VValue[ndx]),TVarData(aValue),CaseInsensitive)=0 then begin
     Delete(ndx);
-    result := true;
+    inc(result);
   end;
 end;
 
