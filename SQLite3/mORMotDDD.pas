@@ -1053,9 +1053,12 @@ implementation
 
 { *********** Persistence / Repository Interfaces }
 
+var
+  TCQRSResultText: array[TCQRSResult] of PShortString;
+
 function ToText(res: TCQRSResult): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TCQRSResult),ord(res));
+  result := TCQRSResultText[res];
 end;
 
 function ToText(res: TCQRSQueryState): PShortString; overload;
@@ -2788,7 +2791,7 @@ initialization
   TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TDDDAdministratedDaemonStatus));
   {$endif}
   {$endif}
-
+  GetEnumNames(TypeInfo(TCQRSResult), @TCQRSResultText);
   TInterfaceFactory.RegisterInterfaces([
     TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),
     TypeInfo(IAdministratedDaemon),TypeInfo(IAdministratedDaemonAsProxy)]);

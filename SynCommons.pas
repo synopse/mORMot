@@ -2069,9 +2069,12 @@ function VariantToUTF8(const V: Variant; var Text: RawUTF8): boolean; overload;
 // ISO-8601 parsing if possible
 function VariantToDateTime(const V: Variant; var Value: TDateTime): boolean;
 
-/// fast comparison of a Variant and UTF-8 encoded String
+/// fast comparison of a Variant and UTF-8 encoded String (or number)
 // - slightly faster than plain V=Str, which computes a temporary variant
-function VariantEquals(const V: Variant; const Str: RawUTF8): boolean; overload;
+// - here Str='' equals unassigned, null or false
+// - if CaseSensitive is false, will use IdemPropNameU() for comparison
+function VariantEquals(const V: Variant; const Str: RawUTF8;
+  CaseSensitive: boolean=true): boolean; overload;
 
 /// convert any Variant into a VCL string type
 // - expects any varString value to be stored as a RawUTF8
@@ -15247,21 +15250,20 @@ type
     // - if aPath is found (or added), it will return a pointer to the
     // corresponding value
     function GetPVariantByPath(const aPath: RawUTF8; addIfNotExisting: boolean=false): PVariant;
-    /// retrieve an dvObject, from a property name in the dvArray document
-    // - returns false if no object in the dvArray contains the supplied
-    // "aPropName":"aPropValue" property
-    // - returns true, and copy the corresponding VValue[] item into Dest
-    // if a match was found
+    /// retrieve a dvObject in the dvArray, from a property value
+    // - {aPropName:aPropValue} will be searched within the stored array,
+    // and the corresponding item will be copied into Dest, on match
+    // - returns FALSE if no match is found, TRUE if found and copied
     // - create a copy of the variant by default, unless DestByRef is TRUE
+    // - will call VariantEquals() for value comparison
     function GetItemByProp(const aPropName,aPropValue: RawUTF8;
-      aCaseSensitive: boolean; var Dest: variant; DestByRef: boolean=false): boolean;
-    /// retrieve an dvObject, from a property name in the dvArray document
-    // - returns false if no object in the dvArray contains the supplied
-    // "aPropName":"aPropValue" property
-    // - returns true, and create a reference to the VValue[] item into Dest
-    // if a match was found
+      aPropValueCaseSensitive: boolean; var Dest: variant; DestByRef: boolean=false): boolean;
+    /// retrieve a reference to a dvObject in the dvArray, from a property value  
+    // - {aPropName:aPropValue} will be searched within the stored array,
+    // and the corresponding item will be copied into Dest, on match
+    // - returns FALSE if no match is found, TRUE if found and copied by reference
     function GetDocVariantByProp(const aPropName,aPropValue: RawUTF8;
-      aCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
+      aPropValueCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
     /// find an item in this document, and returns its value
     // - raise an EDocVariant if not found and dvoReturnNullForUnknownProperty
     // is not set in Options (in this case, it will return Null)
@@ -15366,11 +15368,12 @@ type
     // - return TRUE on success, FALSE if the supplied name does not exist
     function Delete(const aName: RawUTF8): boolean; overload;
     /// delete a value in this document, by property name match
-    // - {aPropName:aPropValue} will be searched within the stored array,
-    // and the corresponding item will be deleted, on match
-    // - returns FALSE if no match is found, TRUE if as deleted
+    // - {aPropName:aPropValue} will be searched within the stored array or
+    // object, and the corresponding item will be deleted, on match
+    // - returns FALSE if no match is found, TRUE if found and deleted
+    // - will call VariantEquals() for value comparison
     function DeleteByProp(const aPropName,aPropValue: RawUTF8;
-      aCaseSensitive: boolean): boolean;
+      aPropValueCaseSensitive: boolean): boolean;
     /// delete one or several value/item in this document, from its value
     // - return TRUE on success, FALSE if the supplied value does not exist
     // - if the value exists several times, all occurences would be removed
@@ -15380,12 +15383,13 @@ type
     // - returns 0 if the document is not a dvObject, or if no match was found
     // - will use IdemPChar(), so search would be case-insensitive
     function DeleteByStartName(aStartName: PUTF8Char; aStartNameLen: integer): integer;
-    /// search a property match in this document, handled as array
-    // - {aPropName:aPropValue} will be searched within the stored array,
-    // and the corresponding item index will be returned, on match
+    /// search a property match in this document, handled as array or object
+    // - {aPropName:aPropValue} will be searched within the stored array or
+    // object, and the corresponding item index will be returned, on match
     // - returns -1 if no match is found
+    // - will call VariantEquals() for value comparison
     function SearchItemByProp(const aPropName,aPropValue: RawUTF8;
-      aCaseSensitive: boolean): integer;
+      aPropValueCaseSensitive: boolean): integer;
     /// search a value in this document, handled as array
     // - aValue will be searched within the stored array
     // and the corresponding item index will be returned, on match
@@ -22739,23 +22743,34 @@ begin
   VariantToUTF8(V,Text,result);
 end;
 
-function VariantEquals(const V: Variant; const Str: RawUTF8): boolean;
-  function Complex(const V: Variant; const Str: RawUTF8): boolean;
+function VariantEquals(const V: Variant; const Str: RawUTF8;
+   CaseSensitive: boolean): boolean;
+  function Complex: boolean;
   var wasString: boolean;
       tmp: RawUTF8;
   begin
     VariantToUTF8(V,tmp,wasString);
-    result := (tmp=Str);
+    if CaseSensitive then
+      result := (tmp=Str) else
+      result := IdemPropNameU(tmp,Str);
   end;
+var v1,v2: Int64;
 begin
   with TVarData(V) do
     case VType of
     varEmpty,varNull:
-      result := false;
+      result := Str='';
+    varBoolean:
+      result := VBoolean=(Str<>'');
     varString:
-      result := RawUTF8(VString)=Str;
-    else
-      result := Complex(V,Str);
+      if CaseSensitive then
+        result := RawUTF8(VString)=Str else
+        result := IdemPropNameU(RawUTF8(VString),Str);
+    else if VariantToInt64(V,v1) then begin
+      SetInt64(pointer(Str),v2);
+      result := v1=v2;
+     end else
+      result := Complex;
   end;
 end;
 
@@ -42423,42 +42438,22 @@ begin
 end;
 
 function TDocVariantData.SearchItemByProp(const aPropName,aPropValue: RawUTF8;
-  aCaseSensitive: boolean): integer;
+  aPropValueCaseSensitive: boolean): integer;
 var ndx: integer;
-    tmp: RawUTF8;
-    wasString: boolean;
-    v: PVarData;
 begin
+  if dvoIsObject in VOptions then begin
+    result := GetValueIndex(aPropName);
+    if (result>=0) and VariantEquals(VValue[result],aPropValue,aPropValueCaseSensitive) then
+      exit;
+  end else
   if dvoIsArray in VOptions then
     for result := 0 to VCount-1 do
       with _Safe(VValue[result])^ do
-        if dvoIsObject in VOptions then begin
-          ndx := GetValueIndex(aPropName);
-          if ndx>=0 then begin
-            v := @VValue[ndx];
-            case v^.VType of
-            varEmpty,varNull:
-              if aPropValue='' then
-                exit; // VariantToUTF8(null)='null'
-            varString:
-              if aCaseSensitive then begin
-                if RawUTF8(v^.VAny)=aPropValue then
-                  exit;
-              end else
-                if IdemPropNameU(RawUTF8(v^.VAny),aPropValue) then
-                  exit;
-            else begin
-              VariantToUTF8(PVariant(v)^,tmp,wasString);
-              if aCaseSensitive then begin
-                if tmp=aPropValue then
-                  exit;
-              end else
-                if IdemPropNameU(tmp,aPropValue) then
-                  exit;
-            end;
-            end;
-          end;
-        end;
+      if dvoIsObject in VOptions then begin
+        ndx := GetValueIndex(aPropName);
+        if (ndx>=0) and VariantEquals(VValue[ndx],aPropValue,aPropValueCaseSensitive) then
+          exit;
+      end;
   result := -1;
 end;
 
@@ -42713,9 +42708,9 @@ begin
 end;
 
 function TDocVariantData.DeleteByProp(const aPropName,aPropValue: RawUTF8;
-  aCaseSensitive: boolean): boolean;
+  aPropValueCaseSensitive: boolean): boolean;
 begin
-  result := Delete(SearchItemByProp(aPropName,aPropValue,aCaseSensitive));
+  result := Delete(SearchItemByProp(aPropName,aPropValue,aPropValueCaseSensitive));
 end;
 
 function TDocVariantData.DeleteByValue(const aValue: Variant;
@@ -43049,27 +43044,31 @@ begin
 end;
 
 function TDocVariantData.GetItemByProp(const aPropName,aPropValue: RawUTF8;
-  aCaseSensitive: boolean; var Dest: variant; DestByRef: boolean): boolean;
+  aPropValueCaseSensitive: boolean; var Dest: variant; DestByRef: boolean): boolean;
 var ndx: integer;
 begin
-  ndx := SearchItemByProp(aPropName,aPropValue,aCaseSensitive);
+  result := false;
+  if not(dvoIsArray in VOptions) then
+    exit;
+  ndx := SearchItemByProp(aPropName,aPropValue,aPropValueCaseSensitive);
   if ndx<0 then
-    result := false else begin
-    RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
-    result := true;
-  end;
+    exit;
+  RetrieveValueOrRaiseException(ndx,Dest,DestByRef);
+  result := true;
 end;
 
 function TDocVariantData.GetDocVariantByProp(const aPropName,aPropValue: RawUTF8;
-  aCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
+  aPropValueCaseSensitive: boolean; out Dest: PDocVariantData): boolean;
 var ndx: integer;
 begin
-  ndx := SearchItemByProp(aPropName,aPropValue,aCaseSensitive);
+  result := false;
+  if not(dvoIsArray in VOptions) then
+    exit;
+  ndx := SearchItemByProp(aPropName,aPropValue,aPropValueCaseSensitive);
   if ndx<0 then
-    result := false else begin
-    Dest := DocVariantData(VValue[ndx]);
-    result := true;
-  end;
+    exit;
+  Dest := _Safe(VValue[ndx]);
+  result := Dest^.VType=DocVariantVType;
 end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
@@ -48368,6 +48367,7 @@ end;
 procedure TTextWriter.AddTypedJSON(aTypeInfo: pointer; const aValue);
 var max, i: Integer;
     PS: PShortString;
+    customWriter: TDynArrayJSONCustomWriter;
   procedure AddPS; overload;
   begin
     Add('"');
@@ -48432,8 +48432,10 @@ begin
           AddU(cardinal(aValue)) else
           Add(Int64(aValue))
       else AddShort('null');
-    tkRecord{$ifdef FPC},tkObject{$endif}:
-      AddRecordJSON(aValue,aTypeInfo);
+    tkRecord{$ifdef FPC},tkObject{$endif}: // inlined AddRecordJSON()
+      if GlobalJSONCustomParsers.RecordSearch(aTypeInfo,customWriter,nil) then
+        customWriter(self,aValue) else
+        WrRecord(aValue,aTypeInfo);
     tkDynArray:
       AddDynArrayJSON(DynArray(aTypeInfo,(@aValue)^));
 {$ifndef NOVARIANTS}
