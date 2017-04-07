@@ -40998,7 +40998,7 @@ begin // called by root/TimeStamp/info REST method
     cpu := TSystemUse.Current(false).HistoryText(0,15,@mem);
     FormatUTF8('% / %',[m.PhysicalMemoryFree.Text,m.PhysicalMemoryTotal.Text],free);
     info.AddNameValuesToObject(['nowutc',now.Text(true,' ') , 'timestamp',now.Value,
-      'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.Detailed,
+      'exe',ExeVersion.ProgramName, 'version',ExeVersion.Version.DetailedOrVoid,
       'started',Stats.StartDate, 'clients',Stats.ClientsCurrent,
       'methods',Stats.ServiceMethod, 'interfaces',Stats.ServiceInterface,
       'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
@@ -51400,7 +51400,7 @@ begin
     body.AddNameValuesToObject(['logonid',IDValue,'logonname',LogonName,
       'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
       'timeout',GroupRights.SessionTimeout,
-      'server',ExeVersion.ProgramName,'version',ExeVersion.Version.Detailed]);
+      'server',ExeVersion.ProgramName,'version',ExeVersion.Version.DetailedOrVoid]);
   Ctxt.ReturnsJson(variant(body),HTTP_SUCCESS,false,twJSONEscape,false,header);
 end;
 
@@ -59928,6 +59928,8 @@ begin
   if not aRest.InheritsFrom(TSQLRestClientURI) then
     EServiceException.CreateUTF8('%.Create(): % interface needs a Client connection',
       [self,aInterface^.Name]);
+  if fClient=nil then
+    fClient := TSQLRestClientURI(aRest);
   inherited Create(aRest,aInterface,aInstanceCreation,aContractExpected);
   // initialize a shared instance (if needed)
   if fInstanceCreation in [sicShared,sicPerSession,sicPerUser,sicPerGroup,sicPerThread] then begin
@@ -59944,8 +59946,10 @@ begin
     if ('['+ContractExpected+']'<>RemoteContract) and
        ('{"contract":'+ContractExpected+'}'<>RemoteContract) then
       raise EServiceException.CreateUTF8('%.Create(): server''s I% contract '+
-        'differs from client''s: expected [%], received %',
-        [self,fInterfaceURI,ContractExpected,RemoteContract]);
+        'differs from client''s: expected [%], received % - you may need to '+
+        'upgrade your % client to match % server expectations',
+        [self,fInterfaceURI,ContractExpected,RemoteContract,
+         ExeVersion.Version.DetailedOrVoid,fClient.fSessionVersion]);
   end;
 end;
 
