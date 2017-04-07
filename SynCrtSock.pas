@@ -1174,11 +1174,12 @@ type
     property ProcessName: SockString read fProcessName write fProcessName;
   end;
 
-  {$ifdef MSWINDOWS}
-
   {$ifndef UNICODE}
   ULONGLONG = Int64;
   {$endif}
+
+  {$ifdef MSWINDOWS}
+
   HTTP_OPAQUE_ID = ULONGLONG;
   HTTP_URL_GROUP_ID = HTTP_OPAQUE_ID;
   HTTP_SERVER_SESSION_ID = HTTP_OPAQUE_ID;
