@@ -2961,6 +2961,9 @@ function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 // (0..9a..zA..Z_.~)
 function IsUrlValid(P: PUTF8Char): boolean;
 
+/// ensure the supplied URI contains a trailing '/' charater
+function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+
 /// encode name/value pairs into CSV/INI raw format
 function CSVEncode(const NameValuePairs: array of const;
   const KeySeparator: RawUTF8='='; const ValueSeparator: RawUTF8=#13#10): RawUTF8;
@@ -31354,6 +31357,13 @@ begin
     until P^=#0;
     result := true;
   end;
+end;
+
+function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
+begin
+  if (URI<>'') and (URI[length(URI)]<>'/') then
+    result := URI+'/' else
+    result := URI;
 end;
 
 function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
