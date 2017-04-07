@@ -4249,7 +4249,7 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
 
 /// retrieve the index where is located a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
-// - string comparison is case-sensitive (so will work with any PAnsiChar)
+// - string comparison will use the specified Compare function
 // - returns -1 if the specified Value was not found
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
@@ -35612,7 +35612,7 @@ end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
 begin
-  result := FastLocatePUTF8CharSorted(P,R,Value,@StrComp);
+  result := FastLocatePUTF8CharSorted(P,R,Value,TUTF8Compare(@StrComp));
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
@@ -35659,7 +35659,7 @@ end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
 begin
-  result := FastFindPUTF8CharSorted(P,R,Value,@StrComp);
+  result := FastFindPUTF8CharSorted(P,R,Value,TUTF8Compare(@StrComp));
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
@@ -35684,15 +35684,15 @@ begin // fast binary search
 end;
 
 function AddSortedRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
-  const Value: RawUTF8; CoValues: PIntegerDynArray=nil; ForcedIndex: PtrInt=-1;
-  Compare: TUTF8Compare=nil): PtrInt;
+  const Value: RawUTF8; CoValues: PIntegerDynArray; ForcedIndex: PtrInt;
+  Compare: TUTF8Compare): PtrInt;
 var n: PtrInt;
 begin
   if ForcedIndex>=0 then
     result := ForcedIndex else begin
-    if Assigned(Compare) then
-      result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value),Compare) else
-      result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value),@StrComp);
+    if not Assigned(Compare) then
+      Compare := @StrComp;
+    result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value),Compare);
     if result<0 then
       exit; // Value exists -> fails
   end;

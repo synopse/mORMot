@@ -1176,7 +1176,9 @@ type
 
   {$ifdef MSWINDOWS}
 
+  {$ifndef UNICODE}
   ULONGLONG = Int64;
+  {$endif}
   HTTP_OPAQUE_ID = ULONGLONG;
   HTTP_URL_GROUP_ID = HTTP_OPAQUE_ID;
   HTTP_SERVER_SESSION_ID = HTTP_OPAQUE_ID;
@@ -2781,7 +2783,7 @@ begin
   result := true;
 end;
 
-function GetNextItemUInt64(var P: PAnsiChar): LONGLONG;
+function GetNextItemUInt64(var P: PAnsiChar): ULONGLONG;
 var c: PtrUInt;
 begin
   result := 0;
@@ -2790,7 +2792,7 @@ begin
       c := byte(P^)-48;
       if c>9 then
         break else
-        result := result*10+LONGLONG(c);
+        result := result*10+ULONGLONG(c);
       inc(P);
     until false;
 end; // P^ will point to the first non digit char
@@ -7107,7 +7109,7 @@ var Req: PHTTP_REQUEST;
     Resp: PHTTP_RESPONSE;
     BufRead, R: PAnsiChar;
     Heads: HTTP_UNKNOWN_HEADERs;
-    RangeStart, RangeLength: LONGLONG;
+    RangeStart, RangeLength: ULONGLONG;
     OutContentLength: ULARGE_INTEGER;
     DataChunkInMemory: HTTP_DATA_CHUNK_INMEMORY;
     DataChunkFile: HTTP_DATA_CHUNK_FILEHANDLE;
