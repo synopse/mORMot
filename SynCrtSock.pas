@@ -2065,9 +2065,12 @@ function HtmlEncode(const s: SockString): SockString;
 // - return the MAC address as a 12 hexa chars ('0050C204C80A' e.g.)
 function GetRemoteMacAddress(const IP: SockString): SockString;
 
+type
+  TIPAddress = (tiaAny, tiaPublic, tiaPrivate);
+  
 /// enumerate all IP addresses of the current computer
 // - may be used to enumerate all adapters
-function GetIPAddresses(PublicOnly: boolean = false): TSockStringDynArray;
+function GetIPAddresses(Kind: TIPAddress = tiaAny): TSockStringDynArray;
 
 /// returns all IP addresses of the current computer as a single CSV text
 // - may be used to enumerate all adapters
@@ -3255,7 +3258,18 @@ type
 function GetIpAddrTable(pIpAddrTable: PMIB_IPADDRTABLE;
   var pdwSize: DWORD; bOrder: BOOL): DWORD; stdcall; external 'iphlpapi.dll';
 
-function GetIPAddresses(PublicOnly: boolean): TSockStringDynArray;
+function IsPublicIP(ip4: cardinal): boolean;
+begin
+  result := false;
+  case ip4 and 255 of // ignore IANA private IP4 address spaces
+    10: exit;
+    172: if ((ip4 shr 8) and 255) in [16..31] then exit;
+    192: if (ip4 shr 8) and 255=168 then exit;
+  end;
+  result := true;
+end;
+
+function GetIPAddresses(Kind: TIPAddress): TSockStringDynArray;
 var Table: MIB_IPADDRTABLE;
     Size: DWORD;
     i: integer;
@@ -3270,12 +3284,10 @@ begin
   for i := 0 to Table.dwNumEntries-1 do
     with Table.ip[i] do
     if (dwAddr<>$0100007f) and (dwAddr<>0) then begin
-      if PublicOnly then
-        case dwAddr and 255 of // ignore IANA private IP4 address spaces
-        10: continue;
-        172: if ((dwAddr shr 8) and 255) in [16..31] then continue;
-        192: if (dwAddr shr 8) and 255=168 then continue;
-        end;
+      case Kind of
+        tiaPublic: if not IsPublicIP(dwAddr) then continue;
+        tiaPrivate: if IsPublicIP(dwAddr) then continue;
+      end;
       IP4Text(dwAddr,result[n]);
       inc(n);
     end;
@@ -3296,7 +3308,9 @@ begin
     result := '';
   if result<>'' then
     exit;
-  ip := GetIPAddresses(PublicOnly);
+  if PublicOnly then
+    ip := GetIPAddresses(tiaPublic) else
+    ip := GetIPAddresses(tiaAny);
   if ip=nil then
     exit;
   result := ip[0];
@@ -7688,7 +7702,7 @@ var UnknownName: PAnsiChar;
 begin
   if ForceCustomHeader then
     i := -1 else
-  i := IdemPCharArray(P,KNOWNHEADERS);
+    i := IdemPCharArray(P,KNOWNHEADERS);
   if i>=0 then
   with Headers.KnownHeaders[THttpHeader(i)] do begin
     while P^<>':' do inc(P);
