@@ -3173,7 +3173,7 @@ begin
 end;
 
 function CompressDataAndGetHeaders(Accepted: THttpSocketCompressSet;
-  var Handled: THttpSocketCompressRecDynArray; const OutContentType: SockString;
+  const Handled: THttpSocketCompressRecDynArray; const OutContentType: SockString;
   var OutContent: SockString): SockString;
 var i, OutContentLen: integer;
     compressible: boolean;
@@ -3181,13 +3181,12 @@ var i, OutContentLen: integer;
 begin
   if (integer(Accepted)<>0) and (OutContentType<>'') and (Handled<>nil) then begin
     OutContentLen := length(OutContent);
-    if IdemPChar(OutContentTypeP,'TEXT/') then
-      compressible := true else
-    if IdemPChar(OutContentTypeP,'IMAGE/') then
-      compressible := IdemPCharArray(OutContentTypeP+6,['SVG','X-ICO'])>=0 else
-    if IdemPChar(OutContentTypeP,'APPLICATION/') then
-      compressible := IdemPCharArray(OutContentTypeP+12,['JSON','XML','JAVASCRIPT'])>=0 else
-      compressible := false;
+    case IdemPCharArray(OutContentTypeP,['TEXT/','IMAGE/','APPLICATION/']) of
+    0: compressible := true;
+    1: compressible := IdemPCharArray(OutContentTypeP+6,['SVG','X-ICO'])>=0;
+    2: compressible := IdemPCharArray(OutContentTypeP+12,['JSON','XML','JAVASCRIPT'])>=0;
+    else compressible := false;
+    end;
     for i := 0 to high(Handled) do
     if i in Accepted then
     with Handled[i] do
@@ -3967,9 +3966,9 @@ const
 procedure SetLineBreakStyle(var T: Text; Style: TTextLineBreakStyle);
 begin
   case Style Of
-    tlbsLF: TextRec(T).LineEnd := #10;
+    tlbsCR:   TextRec(T).LineEnd := #13;
+    tlbsLF:   TextRec(T).LineEnd := #10;
     tlbsCRLF: TextRec(T).LineEnd := #13#10;
-    tlbsCR: TextRec(T).LineEnd := #13;
   end;
 end;
 {$endif FPC}
@@ -4143,7 +4142,7 @@ end;
 var c: AnsiChar;
    Error: integer;
 begin
-  if CROnly then begin // slow but accurate version which expect #13 as line end
+  if CROnly then begin // slow but accurate version expecting #13 as line end
     // SockIn^ expect either #10, either #13#10 -> a dedicated version is needed
     repeat
       SockRecv(@c,1); // this is slow but works
@@ -5235,32 +5234,30 @@ begin
     Headers[n] := s;
     inc(n);
     P := pointer(s);
-    if IdemPChar(P,'CONTENT-') then begin
-      if IdemPChar(P+8,'LENGTH:') then
-        ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16)) else
-      if IdemPChar(P+8,'TYPE:') then
-        ContentType := trim(copy(s,14,128));
-    end else
-    if IdemPChar(P,'TRANSFER-ENCODING: CHUNKED') then
-      Chunked := true else
-    if IdemPChar(P,'CONNECTION: ') then
-       if IdemPChar(P+12,'CLOSE') then
-          ConnectionClose := true else
-       if IdemPChar(P+12,'UPGRADE') or IdemPChar(P+12,'KEEP-ALIVE, UPGRADE') then
-          ConnectionUpgrade := true;
-    if fCompress<>nil then
-      if IdemPChar(P,'ACCEPT-ENCODING:') then
-        fCompressHeader := ComputeContentEncoding(fCompress,P+16) else
-      if IdemPChar(P,'CONTENT-ENCODING: ') then begin
-        i := 18;
-        while s[i+1]=' ' do inc(i);
-        delete(s,1,i);
-        for i := 0 to high(fCompress) do
-          if fCompress[i].Name=s then begin
-            fContentCompress := i;
-            break;
-          end;
-      end;
+    case IdemPCharArray(P,['CONTENT-','TRANSFER-ENCODING: CHUNKED','CONNECTION: ',
+      'ACCEPT-ENCODING:','CONTENT-ENCODING: ']) of
+    0: case IdemPCharArray(P+8,['LENGTH:','TYPE:']) of
+       0: ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16));
+       1: ContentType := trim(copy(s,14,128));
+       end;
+    1: Chunked := true;
+    2: case IdemPCharArray(P+12,['CLOSE','UPGRADE','KEEP-ALIVE, UPGRADE']) of
+       0:   ConnectionClose := true;
+       1,2: ConnectionUpgrade := true;
+       end;
+    3: if fCompress<>nil then
+         fCompressHeader := ComputeContentEncoding(fCompress,P+16);
+    4: if fCompress<>nil then begin
+         i := 18;
+         while s[i+1]=' ' do inc(i);
+         delete(s,1,i);
+         for i := 0 to high(fCompress) do
+           if fCompress[i].Name=s then begin
+             fContentCompress := i;
+             break;
+           end;
+       end;
+    end;
   until false;
   SetLength(Headers,n);
 end;
@@ -7088,7 +7085,7 @@ end;
 
 procedure THttpApiServer.Execute;
 type
-  TVerbText = array[hvOPTIONS..hvSEARCH] of SockString;
+  TVerbText = array[hvOPTIONS..pred(hvMaximum)] of SockString;
 const
   VERB_TEXT: TVerbText = (
     'OPTIONS','GET','HEAD','POST','PUT','DELETE','TRACE','CONNECT','TRACK',
@@ -7280,9 +7277,9 @@ begin
           Resp^.SetHeaders(pointer(Context.OutCustomHeaders),Heads);
           if fCompressAcceptEncoding<>'' then
             Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads,false);
-          with Resp^.Headers.KnownHeaders[respServer], CurrentLog^ do begin
-            pRawValue := ServerName;
-            RawValueLength := ServerNameLength;
+          with Resp^.Headers.KnownHeaders[respServer] do begin
+            pRawValue := pointer(fServerName);
+            RawValueLength := length(fServerName);
           end;
           if Context.OutContentType=HTTP_RESP_STATICFILE then begin
             // response is file -> OutContent is UTF-8 file name to be served
@@ -7341,9 +7338,9 @@ begin
               FileClose(FileHandle);
             end;
           end else begin
+            // response is in OutContent -> send it from memory
             if Context.OutContentType=HTTP_RESP_NORESPONSE then
               Context.OutContentType := ''; // true HTTP always expects a response
-            // response is in OutContent -> send it from memory
             if fCompress<>nil then begin
               with Resp^.Headers.KnownHeaders[reqContentEncoding] do
               if RawValueLength=0 then begin
@@ -7605,11 +7602,13 @@ procedure THttpApiServer.SetServerName(const aName: SockString);
 var i: integer;
 begin
   inherited SetServerName(aName);
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.ServerNameLength := Length(fServerName);
-  PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^.ServerName := pointer(fServerName);
+  with PHTTP_LOG_FIELDS_DATA(fLogDataStorage)^ do begin
+    ServerName := pointer(aName);
+    ServerNameLength := Length(aName);
+  end;
   if fClones<>nil then // server name is shared by all clones
     for i := 0 to fClones.Count-1 do
-      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).ServerName := aName;
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetServerName(aName);
 end;
 
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
