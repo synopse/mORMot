@@ -2778,7 +2778,7 @@ begin
   result := true;
 end;
 
-function GetNextItemUInt64(var P: PAnsiChar): Int64;
+function GetNextItemUInt64(var P: PAnsiChar): LONGLONG;
 var c: PtrUInt;
 begin
   result := 0;
@@ -2787,7 +2787,7 @@ begin
       c := byte(P^)-48;
       if c>9 then
         break else
-        result := result*10+PtrInt(c);
+        result := result*10+LONGLONG(c);
       inc(P);
     until false;
 end; // P^ will point to the first non digit char
@@ -6109,7 +6109,8 @@ type
     /// add one header value to the internal headers
     // - SetHeaders() method should have been called before to initialize the
     // internal UnknownHeaders[] array
-    function AddCustomHeader(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs): PAnsiChar;
+    function AddCustomHeader(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs;
+      ForceCustomHeader: boolean): PAnsiChar;
   end;
   PHTTP_RESPONSE = ^HTTP_RESPONSE;
 
@@ -7056,6 +7057,18 @@ begin
    result := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(tmp);
 end;
 
+procedure AppendI64(value: Int64; var dest: shortstring);
+var temp: shortstring;
+begin
+  str(value,temp);
+  dest := dest+temp;
+end;
+
+procedure AppendChar(chr: AnsiChar; var dest: shortstring);
+begin
+  inc(dest[0]);
+  dest[ord(dest[0])] := chr;
+end;
 
 procedure THttpApiServer.Execute;
 type
@@ -7067,6 +7080,7 @@ const
 var Req: PHTTP_REQUEST;
     ReqID: HTTP_REQUEST_ID;
     ReqBuf, RespBuf, RemoteIP: SockString;
+    ContentRange: shortstring;
     i: integer;
     flags, bytesRead, bytesSent: cardinal;
     Err: HRESULT;
@@ -7079,7 +7093,8 @@ var Req: PHTTP_REQUEST;
     Resp: PHTTP_RESPONSE;
     BufRead, R: PAnsiChar;
     Heads: HTTP_UNKNOWN_HEADERs;
-    RangeStart, RangeLength: Int64;
+    RangeStart, RangeLength: LONGLONG;
+    OutContentLength: ULARGE_INTEGER;
     DataChunkInMemory: HTTP_DATA_CHUNK_INMEMORY;
     DataChunkFile: HTTP_DATA_CHUNK_FILEHANDLE;
     CurrentLog: PHTTP_LOG_FIELDS_DATA;
@@ -7248,7 +7263,7 @@ begin
           Resp^.Version := Req^.Version;
           Resp^.SetHeaders(pointer(Context.OutCustomHeaders),Heads);
           if fCompressAcceptEncoding<>'' then
-            Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads);
+            Resp^.AddCustomHeader(pointer(fCompressAcceptEncoding),Heads,false);
           with Resp^.Headers.KnownHeaders[respServer], CurrentLog^ do begin
             pRawValue := ServerName;
             RawValueLength := ServerNameLength;
@@ -7268,24 +7283,40 @@ begin
               flags := 0;
               DataChunkFile.ByteRange.StartingOffset.QuadPart := 0;
               Int64(DataChunkFile.ByteRange.Length.QuadPart) := -1; // to eof
-              with Req^.Headers.KnownHeaders[reqRange] do
+              with Req^.Headers.KnownHeaders[reqRange] do begin
                 if (RawValueLength>6) and IdemPChar(pRawValue,'BYTES=') and
                    (pRawValue[6] in ['0'..'9']) then begin
                   SetString(Range,pRawValue+6,RawValueLength-6); // need #0 end
                   R := pointer(Range);
                   RangeStart := GetNextItemUInt64(R);
                   if R^='-' then begin
+                    OutContentLength.LowPart := GetFileSize(FileHandle,@OutContentLength.HighPart);
+                    DataChunkFile.ByteRange.Length.QuadPart := OutContentLength.QuadPart-RangeStart;
                     inc(R);
                     flags := HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES;
-                    DataChunkFile.ByteRange.StartingOffset := ULARGE_INTEGER(RangeStart);
+                    DataChunkFile.ByteRange.StartingOffset.QuadPart := RangeStart;
                     if R^ in ['0'..'9'] then begin
                       RangeLength := GetNextItemUInt64(R)-RangeStart+1;
-                      if RangeLength>=0 then // "bytes=0-499" -> start=0, len=500
-                        DataChunkFile.ByteRange.Length := ULARGE_INTEGER(RangeLength);
-                    end; // "bytes=1000-" -> start=1000, len=-1 (to eof)
+                      if RangeLength<DataChunkFile.ByteRange.Length.QuadPart then
+                        // "bytes=0-499" -> start=0, len=500
+                        DataChunkFile.ByteRange.Length.QuadPart := RangeLength;
+                    end; // "bytes=1000-" -> start=1000, to eof)
+                    ContentRange := 'Content-Range: bytes ';
+                    AppendI64(RangeStart,ContentRange);
+                    AppendChar('-',ContentRange);
+                    AppendI64(RangeStart+DataChunkFile.ByteRange.Length.QuadPart-1,ContentRange);
+                    AppendChar('/',ContentRange);
+                    AppendI64(OutContentLength.QuadPart,ContentRange);
+                    AppendChar(#0,ContentRange);
+                    Resp^.AddCustomHeader(@ContentRange[1],Heads,false);
                     Resp^.SetStatus(STATUS_PARTIALCONTENT,OutStatus);
                   end;
                 end;
+                with Resp^.Headers.KnownHeaders[respAcceptRanges] do begin
+                   pRawValue := 'bytes';
+                   RawValueLength := 5;
+                end;
+              end;
               Resp^.EntityChunkCount := 1;
               Resp^.pEntityChunks := @DataChunkFile;
               Http.SendHttpResponse(fReqQueue,
@@ -7643,7 +7674,8 @@ begin
   Headers.KnownHeaders[reqContentType].pRawValue := pointer(ContentType);
 end;
 
-function HTTP_RESPONSE.AddCustomHeader(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs): PAnsiChar;
+function HTTP_RESPONSE.AddCustomHeader(P: PAnsiChar; var UnknownHeaders: HTTP_UNKNOWN_HEADERs;
+  ForceCustomHeader: boolean): PAnsiChar;
 const KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
     'CACHE-CONTROL:','CONNECTION:','DATE:','KEEP-ALIVE:','PRAGMA:','TRAILER:',
     'TRANSFER-ENCODING:','UPGRADE:','VIA:','WARNING:','ALLOW:','CONTENT-LENGTH:',
@@ -7654,6 +7686,8 @@ const KNOWNHEADERS: array[reqCacheControl..respWwwAuthenticate] of PAnsiChar = (
 var UnknownName: PAnsiChar;
     i: integer;
 begin
+  if ForceCustomHeader then
+    i := -1 else
   i := IdemPCharArray(P,KNOWNHEADERS);
   if i>=0 then
   with Headers.KnownHeaders[THttpHeader(i)] do begin
@@ -7708,7 +7742,7 @@ begin
     while P^ in [#13,#10] do inc(P);
     if P^=#0 then
       break;
-    P := AddCustomHeader(P,UnknownHeaders);
+    P := AddCustomHeader(P,UnknownHeaders,false);
   until false;
 end;
 
