@@ -2330,7 +2330,7 @@ const
 // will point in From at the syntax error place (e.g. on any unknown property name)
 // - caller should explicitely perform a SetDefaultValuesObject(Value) if
 // the default values are expected to be set before JSON parsing
-function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
+function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): PUTF8Char;
 
 /// read an object properties, as saved by ObjectToJSON function
@@ -3000,7 +3000,7 @@ type
     // - it will convert the property content into RawUTF8, for RawUnicode,
     // WinAnsiString, TSQLRawBlob and generic Delphi 6-2007 string property
     // - will set WideString and UnicodeString properties from UTF-8 content
-    procedure SetLongStrValue(Instance: TObject; const Value: RawUTF8);
+    procedure SetLongStrValue(Instance: TObject; const Value: RawUTF8); 
     /// low-level setter of the string property value of a given instance
     // - uses the generic string type: to be used within the VCL
     // - this method will check if the corresponding property is a Long String
@@ -47594,54 +47594,339 @@ begin
     end;
 end;
 
-function JSONToObject(var ObjectInstance; From: PUTF8Char; var Valid: boolean;
-  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): PUTF8Char;
-var P: PPropInfo;
-    Value: TObject absolute ObjectInstance;
-    {$ifndef LVCL}
-    Coll: TCollection absolute ObjectInstance;
-    CollItem: TObject;
-    {$endif}
-    Str: TStrings absolute ObjectInstance;
-    Utf: TRawUTF8List absolute ObjectInstance;
-    Lst: TObjectList absolute ObjectInstance;
-    Item: TObject;
-    ItemInstance: TClassInstance;
-    ValueClass, ItemClass: TClass;
-    V: PtrInt;
-    err: integer;
-    E: TSynExtended;
-    V64: Int64;
-    PropName, PropValue: PUTF8Char;
-    PropNameLen, PropValueLen: integer;
-    EndOfObject: AnsiChar;
-    Kind: TTypeKind;
-    wasString, NestedValid: boolean;
+type
+  /// wrapper class to ease JSONToObject() maintainability
+  TJSONToObject = {$ifdef UNICODE}record{$else}object{$endif}
+  public
+    // input parameters
+    From: PUTF8Char;
+    Value: TObject;
+    Options: TJSONToObjectOptions;
+    TObjectListItemClass: TClass;
+    // output parameters
+    Dest: PUTF8Char;
+    Valid: boolean;
+    procedure Parse;
+  private
+    ValueClass: TClass;
     IsObj: TJSONObject;
     parser: PJSONCustomParser;
-    s: string;
-    WS: WideString;
-    U: RawUTF8;
+    PropName, PropValue: PUTF8Char;
+    PropNameLen, PropValueLen: integer;
+    P: PPropInfo;
+    Kind: TTypeKind;
+    EndOfObject: AnsiChar;
+    NestedValid, wasString: boolean;
+    DynArray: TDynArray;
     {$ifndef NOVARIANTS}
-    VVariant: variant;
-    DocVariantOptionsSet: TDocVariantOptions;
-label doProp;
+    procedure HandleVariant;
     {$endif}
+    procedure HandleObjectList(Lst: TObjectList);
+    {$ifndef LVCL}
+    procedure HandleCollection(Coll: TCollection);
+    {$endif}
+    procedure HandleStrings(Str: TStrings);
+    procedure HandleUtfs(utf: TRawUTF8List);
+    procedure HandleProperty(var tmp: RawUTF8);
+  end;
+
+function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
+  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): PUTF8Char;
+var parser: TJSONToObject;
+begin
+  parser.From := From;
+  parser.Options := Options;
+  parser.TObjectListItemClass := TObjectListItemClass;
+  parser.Value := TObject(ObjectInstance);
+  parser.Parse;
+  Valid := parser.Valid;
+  result := parser.Dest;
+end;
+
+procedure TJSONToObject.HandleObjectList(Lst: TObjectList);
+var Item: TObject;
+    ItemClass: TClass;
+    ItemInstance: TClassInstance;
+begin
+  Lst.Clear;
+  ItemInstance.ItemClass := nil;
+  repeat
+    while From^ in [#1..' '] do inc(From);
+    case From^ of
+    #0: exit;
+    ']': begin
+      inc(From);
+      break;
+    end;
+    ',':
+      inc(From); // valid delimiter between objects
+    '{': begin
+      Dest := From;
+      if TObjectListItemClass=nil then begin // recognize "ClassName":...
+        ItemClass := JSONSerializerRegisteredClass.Find(From,true);
+        if ItemClass=nil then
+          exit; // unknown "ClassName":.. type
+      end else
+        ItemClass := TObjectListItemClass;
+      if ItemInstance.ItemClass<>ItemClass then
+        ItemInstance.Init(ItemClass);
+      Item := ItemInstance.CreateNew;
+      From := JSONToObject(Item,From,NestedValid,nil,Options);
+      if not NestedValid then begin
+        Dest := From;
+        exit;
+      end else
+      if From=nil then
+        exit;
+      Lst.Add(Item);
+    end;
+    else exit;
+    end;
+  until false;
+  // only way of being here is to have an ending ] at expected place
+  Valid := true;
+end;
+
+{$ifndef LVCL}
+procedure TJSONToObject.HandleCollection(Coll: TCollection);
+var CollItem: TObject;
+begin
+  Coll.BeginUpdate;
+  try
+    Coll.Clear;
+    repeat
+      while From^ in [#1..' '] do inc(From);
+      case From^ of
+      #0: exit;
+      ']': begin
+        inc(From);
+        break;
+      end;
+      ',':
+        inc(From); // valid delimiter between objects
+      '{': begin
+        Dest := From;
+        CollItem := Coll.Add;
+        From := JSONToObject(CollItem,From,NestedValid,nil,Options);
+        if not NestedValid then begin
+          Dest := From;
+          exit;
+        end else
+        if From=nil then
+          exit;
+      end;
+      else exit;
+      end;
+    until false;
+    // only way of being here is to have an ending ] at expected place
+    Valid := true;
+  finally
+    Coll.EndUpdate;
+  end;
+end;
+{$endif}
+
+procedure TJSONToObject.HandleStrings(Str: TStrings);
+var s: string;
+begin
+  {$ifndef LVCL}
+  Str.BeginUpdate; // Str: TStrings absolute Value
+  try
+  {$endif}
+    Str.Clear;
+    repeat
+      while From^ in [#1..' '] do inc(From);
+      case From^ of
+      #0: exit;
+      ']': begin
+        inc(From);
+        break;
+      end;
+      '"': begin
+        Dest := From;
+        PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
+        if (PropValue=nil) or not wasString then
+          exit;
+        UTF8DecodeToString(PropValue,PropValueLen,s);
+        Str.Add(s);
+        case EndOfObject of
+          ']': break;
+          ',': continue;
+          else exit;
+        end;
+      end;
+      else exit;
+      end;
+    until false;
+    Valid := true;
+  {$ifndef LVCL}
+  finally
+    Str.EndUpdate;
+  end;
+  {$endif}
+end;
+
+procedure TJSONToObject.HandleUtfs(utf: TRawUTF8List);
+var U: RawUTF8;
+begin
+  utf.BeginUpdate;
+  try
+    utf.Clear;
+    repeat
+      while From^ in [#1..' '] do inc(From);
+      case From^ of
+      #0: exit;
+      ']': begin
+        inc(From);
+        break;
+      end;
+      '"': begin
+        Dest := From;
+        PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
+        if (PropValue=nil) or not wasString then
+          exit;
+        SetString(U,PAnsiChar(PropValue),PropValueLen);
+        utf.Add(U);
+        case EndOfObject of
+          ']': break;
+          ',': if From=nil then exit else continue;
+          else exit;
+        end;
+      end;
+      else exit;
+      end;
+    until false;
+    Valid := true;
+  finally
+    utf.EndUpdate;
+  end;
+end;
+
+{$ifndef NOVARIANTS}
+procedure TJSONToObject.HandleVariant;
+var temp: variant;
+    opt: TDocVariantOptions;
+begin
+  if j2oHandleCustomVariants in Options then begin
+    if j2oHandleCustomVariantsWithinString in Options then
+      opt := [dvoValueCopiedByReference,dvoJSONObjectParseWithinString] else
+      opt := [dvoValueCopiedByReference];
+    GetVariantFromJSON(PropValue,wasString,temp,@opt,false);
+  end else
+    GetVariantFromJSON(PropValue,wasString,temp,nil,false);
+  P^.SetVariantProp(Value,temp);
+end;
+{$endif}
+
+procedure TJSONToObject.HandleProperty(var tmp: RawUTF8);
+var V: PtrInt;
+    V64: Int64;
+    E: TSynExtended;
+    err: integer;
+begin
+  PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject,
+    {$ifdef NOVARIANTS}false{$else}Kind=tkVariant{$endif},true,@PropValueLen);
+  if (PropValue=nil) or not (EndOfObject in ['}',',']) then
+    exit; // invalid JSON content (null has been handled above)
+  case Kind of
+  tkInt64{$ifdef FPC}, tkQWord{$endif}:
+    if wasString then
+      exit else begin
+      V64 := GetInt64(PropValue,err);
+      if err<>0 then
+        exit;
+      P^.SetInt64Prop(Value,V64);
+    end;
+  tkClass: begin
+    if wasString or (P^.PropType^.ClassSQLFieldType<>sftID) then
+      exit; // should have been handled above
+    V := GetInteger(PropValue,err);
+    if err<>0 then
+      exit; // invalid value
+    P^.SetOrdProp(Value,V);
+  end;
+  tkEnumeration: begin
+    if wasString then begin // in case enum stored as string
+      V := P^.PropType^.EnumBaseType^.GetEnumNameValue(PropValue,PropValueLen);
+      if V<0 then
+        if j2oIgnoreUnknownEnum in Options then
+          V := 0 else
+          exit;
+    end else begin
+      V := GetInteger(PropValue,err);
+      if err<>0 then
+        if j2oIgnoreUnknownEnum in Options then
+          V := 0 else
+          exit; // invalid value
+    end;
+    P^.SetOrdProp(Value,V);
+  end;
+  {$ifdef FPC} tkBool, {$endif}
+  tkInteger, tkSet:
+    if wasString then
+      exit else begin
+      // From='true' or From='false' were converted into '1 or '0'
+      V := GetInteger(PropValue,err);
+      if err<>0 then
+        exit; // invalid value
+      P^.SetOrdProp(Value,V);
+    end;
+  {$ifdef FPC}tkAString,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
+  tkLString,tkWString: // handle all string types from temporary RawUTF8
+    if wasString or (j2oIgnoreStringType in Options) then begin
+      SetString(tmp,PAnsiChar(PropValue),PropValueLen);
+      P^.SetLongStrValue(Value,tmp);
+    end else
+      exit;
+  {$ifdef PUBLISHRECORD}
+  tkRecord{$ifdef FPC},tkObject{$endif}:
+    RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.TypeInfo);
+  {$endif}
+  {$ifndef NOVARIANTS}
+  tkVariant:
+    HandleVariant;
+  {$endif}
+  tkFloat:
+    if P^.TypeInfo=TypeInfo(TDateTime) then
+      if wasString then begin
+        if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
+          inc(PropValue,3); // ignore U+FFF1 pattern
+        P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
+      end else
+        exit else
+    if wasString then
+      exit else
+    if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
+      PInt64(P^.SetterAddr(Value))^ := StrToCurr64(PropValue) else begin
+      E := GetExtended(pointer(PropValue),err);
+      if err<>0 then
+        exit else // invalid JSON content
+        P^.SetFloatProp(Value,E);
+    end;
+    else
+      exit; // unhandled type
+  end;
+  Dest := nil; // if we reached here, no error occured with this property
+end;
+
+procedure TJSONToObject.Parse;
+var V: PtrInt;
+    U: RawUTF8;
 begin
   Valid := false;
-  result := From;
+  Dest := From;
   if Value=nil then
     exit;
   ValueClass := Value.ClassType;
   IsObj := JSONObjectFromClass(ValueClass,parser);
   if From=nil then begin
     case IsObj of // handle '' as Clear for arrays
-{$ifndef LVCL}
-    oCollection: Coll.Clear;
-{$endif}
-    oStrings:    Str.Clear;
-    oUtfs:       Utf.Clear;
-    oObjectList: Lst.Clear;
+    {$ifndef LVCL}
+    oCollection: TCollection(Value).Clear;
+    {$endif}
+    oStrings:    TStrings(Value).Clear;
+    oUtfs:       TRawUTF8List(Value).Clear;
+    oObjectList: TObjectList(Value).Clear;
     end;
     exit;
   end;
@@ -47649,9 +47934,9 @@ begin
     if (IsObj=oCustomReaderWriter) and
        Assigned(parser^.Reader) then
       // custom JSON reader expects to be executed even if value is null
-      result := parser^.Reader(Value,From,Valid,Options) else begin
+      Dest := parser^.Reader(Value,From,Valid,Options) else begin
       FreeAndNil(Value);
-      result := From+4;
+      Dest := From+4;
       Valid := true; // null is a valid JSON object
     end;
     exit;
@@ -47659,158 +47944,23 @@ begin
   while From^ in [#1..' '] do inc(From);
   if IsObj=oCustomReaderWriter then begin // may be from [array] or {object}
     if Assigned(parser^.Reader) then // leave Valid=false if Reader=nil
-      result := parser^.Reader(Value,From,Valid,Options);
+      Dest := parser^.Reader(Value,From,Valid,Options);
     exit;
   end;
   if From^='[' then begin
     // nested array = TObjectList, TCollection, TRawUTF8List or TStrings
     inc(From);
     case IsObj of
-    oObjectList: begin // TList leaks memory, but TObjectList uses "ClassName":..
-      Lst.Clear;
-      ItemInstance.ItemClass := nil;
-      repeat
-        while From^ in [#1..' '] do inc(From);
-        case From^ of
-        #0: exit;
-        ']': begin
-          inc(From);
-          break;
-        end;
-        ',':
-          inc(From); // valid delimiter between objects
-        '{': begin
-          result := From;
-          if TObjectListItemClass=nil then begin // recognize "ClassName":...
-            ItemClass := JSONSerializerRegisteredClass.Find(From,true);
-            if ItemClass=nil then
-              exit; // unknown "ClassName":.. type
-          end else
-            ItemClass := TObjectListItemClass;
-          if ItemInstance.ItemClass<>ItemClass then
-            ItemInstance.Init(ItemClass);
-          Item := ItemInstance.CreateNew;
-          From := JSONToObject(Item,From,NestedValid,nil,Options);
-          if not NestedValid then begin
-            result := From;
-            exit;
-          end else
-          if From=nil then
-            exit;
-          Lst.Add(Item);
-        end;
-        else exit;
-        end;
-      until false;
-      // only way of being here is to have an ending ] at expected place
-      Valid := true;
-    end;
-{$ifndef LVCL}
-    oCollection: begin
-      Coll.BeginUpdate;  // Coll: TCollection absolute Value
-      try
-        Coll.Clear;
-        repeat
-          while From^ in [#1..' '] do inc(From);
-          case From^ of
-          #0: exit;
-          ']': begin
-            inc(From);
-            break;
-          end;
-          ',':
-            inc(From); // valid delimiter between objects
-          '{': begin
-            result := From;
-            CollItem := Coll.Add;
-            From := JSONToObject(CollItem,From,NestedValid,nil,Options);
-            if not NestedValid then begin
-              result := From;
-              exit;
-            end else
-            if From=nil then
-              exit;
-          end;
-          else exit;
-          end;
-        until false;
-        // only way of being here is to have an ending ] at expected place
-        Valid := true;
-      finally
-        Coll.EndUpdate;
-      end;
-    end;
-{$endif}
-    oStrings: begin
-{$ifndef LVCL}
-      Str.BeginUpdate; // Str: TStrings absolute Value
-      try
-{$endif}
-        Str.Clear;
-        repeat
-          while From^ in [#1..' '] do inc(From);
-          case From^ of
-          #0: exit;
-          ']': begin
-            inc(From);
-            break;
-          end;
-          '"': begin
-            result := From;
-            PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
-            if (PropValue=nil) or not wasString then
-              exit;
-            UTF8DecodeToString(PropValue,PropValueLen,s);
-            Str.Add(s);
-            case EndOfObject of
-              ']': break;
-              ',': continue;
-              else exit;
-            end;
-          end;
-          else exit;
-          end;
-        until false;
-        Valid := true;
-{$ifndef LVCL}
-      finally
-        Str.EndUpdate;
-      end;
-{$endif}
-    end;
-    oUtfs: begin
-      utf.BeginUpdate; // utf: TRawUTF8List absolute Value
-      try
-        utf.Clear;
-        repeat
-          while From^ in [#1..' '] do inc(From);
-          case From^ of
-          #0: exit;
-          ']': begin
-            inc(From);
-            break;
-          end;
-          '"': begin
-            result := From;
-            PropValue := GetJSONField(From,From,@wasString,@EndOfObject,@PropValueLen);
-            if (PropValue=nil) or not wasString then
-              exit;
-            SetString(U,PAnsiChar(PropValue),PropValueLen);
-            utf.Add(U);
-            case EndOfObject of
-              ']': break;
-              ',': if From=nil then exit else continue;
-              else exit;
-            end;
-          end;
-          else exit;
-          end;
-        until false;
-        Valid := true;
-      finally
-        utf.EndUpdate;
-      end;
-    end;
+    oObjectList: // TList leaks memory, but TObjectList uses "ClassName":..
+      HandleObjectList(TObjectList(Value));
+    {$ifndef LVCL}
+    oCollection:
+      HandleCollection(TCollection(Value));
+    {$endif}
+    oStrings:
+      HandleStrings(TStrings(Value));
+    oUtfs:
+      HandleUtfs(TRawUTF8List(Value));
     end; // case IsObj of
     // Valid=false if not TCollection, TRawUTF8List nor TStrings
     if Valid and (From<>nil) then begin
@@ -47818,11 +47968,11 @@ begin
       if From^=#0 then
         From := nil;
     end;
-    result := From;
+    Dest := From;
     exit; // a JSON array begin with [
-  end else
+  end;
   if From^<>'{' then begin
-    result := From;
+    Dest := From;
     exit; // a JSON object MUST begin with {
   end;
   repeat inc(From) until (From^=#0) or (From^>' ');
@@ -47832,9 +47982,10 @@ begin
     EndOfObject := '}';
     Inc(From);
   end else
+  // for each fields
   repeat
     wasString := false;
-    result := From;
+    Dest := From;
     PropName := GetJSONPropName(From,@PropNameLen);  // get property name
     if (From=nil) or (PropName=nil) then
       exit; // invalid JSON content
@@ -47865,11 +48016,11 @@ begin
         exit; // by default, abort
     Kind := P^.PropType^.Kind;
     while From^ in [#1..' '] do inc(From);
-    result := From;
+    Dest := From;
     if PInteger(From)^=NULL_LOW then begin
-      // null value should set the default value, or free nested object 
+      // null value should set the default value, or free nested object
       if (Kind=tkClass) and (IsObj in [oSQLRecord,oSQLMany]) then
-          exit; // null expects a plain TSynPersistent/TPersistent
+        exit; // null expects a plain TSynPersistent/TPersistent
       P^.SetDefaultValue(Value); // will set 0,'' or FreeAndNil(NestedObject)
       inc(From,4);
       while From^ in [#1..' '] do inc(From);
@@ -47877,17 +48028,13 @@ begin
       if From^ in EndOfJSONField then
         inc(From);
     end else
-    if From^ in ['[','{'] then begin
-      // nested array or object
+    if (From^ in ['[','{']) {$ifndef NOVARIANTS}and (Kind<>tkVariant){$endif} then begin
       if Kind=tkDynArray then begin
-        From := P^.GetDynArray(Value).LoadFromJSON(From);
+        P^.GetDynArray(Value,DynArray);
+        From := DynArray.LoadFromJSON(From);
         if From=nil then
           exit; // invalid '[dynamic array]' content
       end else
-      {$ifndef NOVARIANTS}
-      if Kind=tkVariant then
-        goto doProp else
-      {$endif}
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
         P^.SetOrdProp(Value,V);
@@ -47907,7 +48054,7 @@ begin
         // will handle '[TCollection...' '[TStrings...' '{TObject...'
         From := P^.ClassFromJSON(Value,From,NestedValid,Options);
         if not NestedValid then begin
-          result := From;
+          Dest := From;
           exit;
         end else
         if From=nil then
@@ -47918,109 +48065,9 @@ begin
       if From^ in EndOfJSONField then
         inc(From);
     end else begin
-doProp: // normal property value
-      PropValue := GetJSONFieldOrObjectOrArray(From,@wasString,@EndOfObject,
-        {$ifdef NOVARIANTS}false{$else}Kind=tkVariant{$endif},true,@PropValueLen);
-      if (PropValue=nil) or not (EndOfObject in ['}',',']) then
-        exit; // invalid JSON content (null has been handled above)
-      case Kind of
-      tkInt64{$ifdef FPC}, tkQWord{$endif}:
-        if wasString then
-          exit else begin
-          V64 := GetInt64(PropValue,err);
-          if err<>0 then
-            exit;
-          P^.SetInt64Prop(Value,V64);
-        end;
-      tkClass: begin
-        if wasString or (P^.PropType^.ClassSQLFieldType<>sftID) then
-          exit; // should have been handled above
-        V := GetInteger(PropValue,err);
-        if err<>0 then
-          exit; // invalid value
-        P^.SetOrdProp(Value,V);
-      end;
-      tkEnumeration: begin
-        if wasString then begin // in case enum stored as string
-          V := P^.PropType^.EnumBaseType^.GetEnumNameValue(PropValue,PropValueLen);
-          if V<0 then
-            if j2oIgnoreUnknownEnum in Options then
-              V := 0 else
-              exit;
-        end else begin
-          V := GetInteger(PropValue,err);
-          if err<>0 then
-            if j2oIgnoreUnknownEnum in Options then
-              V := 0 else
-              exit; // invalid value
-        end;
-        P^.SetOrdProp(Value,V);
-      end;
-      {$ifdef FPC} tkBool, {$endif}
-      tkInteger, tkSet:
-        if wasString then
-          exit else begin
-          // From='true' or From='false' were converted into '1 or '0'
-          V := GetInteger(PropValue,err);
-          if err<>0 then
-            exit; // invalid value
-          P^.SetOrdProp(Value,V);
-        end;
-      {$ifdef FPC}tkAString,{$endif} tkLString: 
-        if wasString or (j2oIgnoreStringType in Options) then begin
-          SetString(U,PAnsiChar(PropValue),PropValueLen);
-          P^.SetLongStrValue(Value,U);
-        end else
-          exit;
-      {$ifdef HASVARUSTRING}
-      tkUString:
-        if wasString or (j2oIgnoreStringType in Options) then
-          P^.SetUnicodeStrProp(Value,
-            UTF8DecodeToUnicodeString(PropValue,PropValueLen)) else
-          exit;
-      {$endif}
-      tkWString:
-        if wasString or (j2oIgnoreStringType in Options) then begin
-          UTF8ToWideString(PropValue,PropValueLen,WS);
-          P^.SetWideStrProp(Value,WS);
-        end else
-          exit;
-      {$ifdef PUBLISHRECORD}
-      tkRecord{$ifdef FPC},tkObject{$endif}:
-        if not wasString then
-          exit else
-          RecordLoadJSON(P^.GetFieldAddr(Value)^,PropValue,P^.TypeInfo);
-      {$endif}
-      {$ifndef NOVARIANTS}
-      tkVariant: begin
-        if j2oHandleCustomVariants in Options then begin
-          if j2oHandleCustomVariantsWithinString in Options then
-            DocVariantOptionsSet := [dvoValueCopiedByReference,dvoJSONObjectParseWithinString] else
-            DocVariantOptionsSet := [dvoValueCopiedByReference];
-          GetVariantFromJSON(PropValue,wasString,VVariant,@DocVariantOptionsSet);
-        end else
-          GetVariantFromJSON(PropValue,wasString,VVariant);
-        P^.SetVariantProp(Value,VVariant);
-      end;
-      {$endif}
-      tkFloat:
-        if P^.TypeInfo=TypeInfo(TDateTime) then
-          if wasString then begin
-            if PInteger(PropValue)^ and $ffffff=JSON_SQLDATE_MAGIC then
-              inc(PropValue,3); // ignore U+FFF1 pattern
-            P^.SetFloatProp(Value,Iso8601ToDateTimePUTF8Char(PropValue,PropValueLen));
-          end else
-            exit else
-        if wasString then
-          exit else
-        if (P^.TypeInfo=TypeInfo(Currency)) and P^.SetterIsField then
-          PInt64(P^.SetterAddr(Value))^ := StrToCurr64(PropValue) else begin
-          E := GetExtended(pointer(PropValue),err);
-          if err<>0 then
-            exit else // invalid JSON content
-            P^.SetFloatProp(Value,E);
-        end;
-      end;
+      HandleProperty(U);
+      if Dest<>nil then
+        exit; // an error occured
     end;
   until (From=nil) or (EndOfObject='}');
   if IsObj=oSynAutoCreateFields then
@@ -48031,7 +48078,7 @@ doProp: // normal property value
       From := nil;
   end;
   Valid := (EndOfObject='}'); // mark parsing success
-  result := From;
+  Dest := From;
 end;
 
 function UrlDecodeObject(U: PUTF8Char; Upper: PAnsiChar; var ObjectInstance;
