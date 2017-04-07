@@ -4224,9 +4224,10 @@ function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
-// - string comparison is case-sensitive (so will work with any PAnsiChar)
+// - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where to insert a PUTF8Char in a sorted PUTF8Char array
 // - this overloaded function accept a custom comparison function for sorting
@@ -4238,9 +4239,10 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 
 /// retrieve the index where is located a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
-// - string comparison is case-sensitive (so will work with any PAnsiChar)
+// - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was not found
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// retrieve the index where is located a PUTF8Char in a sorted PUTF8Char array
 // - R is the last index of available entries in P^ (i.e. Count-1)
@@ -35599,24 +35601,8 @@ begin
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
-var L,i,cmp: PtrInt;
-begin // fast binary search
-  if R<0 then
-    result := 0 else begin
-    L := 0;
-    result := -1; // return -1 if found
-    repeat
-      i := (L + R) shr 1;
-      cmp := StrComp(P^[i],Value);
-      if cmp=0 then
-        exit;
-      if cmp<0 then
-        L := i + 1 else
-        R := i - 1;
-    until (L > R);
-    while (i>=0) and (StrComp(P^[i],Value)>=0) do dec(i);
-    result := i+1; // return the index where to insert
-  end;
+begin
+  result := FastLocatePUTF8CharSorted(P,R,Value,@StrComp);
 end;
 
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
@@ -35624,21 +35610,23 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 var L,i,cmp: PtrInt;
 begin // fast binary search
   if not Assigned(Compare) or (R<0) then
-    result := 0 else begin
-    L := 0;
-    result := -1; // return -1 if found
-    repeat
-      i := (L + R) shr 1;
-      cmp := Compare(P^[i],Value);
-      if cmp=0 then
-        exit;
-      if cmp<0 then
-        L := i + 1 else
-        R := i - 1;
-    until (L > R);
-    while (i>=0) and (Compare(P^[i],Value)>=0) do dec(i);
-    result := i+1; // return the index where to insert
-  end;
+    result := 0 else
+    if Compare(P^[R],Value)<0 then // quick return if already sorted
+      result := R+1 else begin
+      L := 0;
+      result := -1; // return -1 if found
+      repeat
+        i := (L + R) shr 1;
+        cmp := Compare(P^[i],Value);
+        if cmp=0 then
+          exit;
+        if cmp<0 then
+          L := i + 1 else
+          R := i - 1;
+      until (L > R);
+      while (i>=0) and (Compare(P^[i],Value)>=0) do dec(i);
+      result := i+1; // return the index where to insert
+    end;
 end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
@@ -35647,33 +35635,21 @@ var L, cmp: PtrInt;
 begin // fast binary search
   L := 0;
   if Assigned(Compare) and (0<=R) then
-  repeat
-    result := (L + R) shr 1;
-    cmp := Compare(P^[result],Value);
-    if cmp=0 then
-      exit;
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
+    repeat
+      result := (L + R) shr 1;
+      cmp := Compare(P^[result],Value);
+      if cmp=0 then
+        exit;
+      if cmp<0 then
+        L := result + 1 else
+        R := result - 1;
+    until (L > R);
   result := -1;
 end;
 
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt;
-var L, cmp: PtrInt;
-begin// fast binary search
-  L := 0;
-  if 0<=R then
-  repeat
-    result := (L + R) shr 1;
-    cmp := StrComp(P^[result],Value);
-    if cmp=0 then
-      exit;
-    if cmp<0 then
-      L := result + 1 else
-      R := result - 1;
-  until (L > R);
-  result := -1;
+begin
+  result := FastFindPUTF8CharSorted(P,R,Value,@StrComp);
 end;
 
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
@@ -35706,7 +35682,7 @@ begin
     result := ForcedIndex else begin
     if Assigned(Compare) then
       result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value),Compare) else
-      result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value));
+      result := FastLocatePUTF8CharSorted(pointer(Values),ValuesCount-1,pointer(Value),@StrComp);
     if result<0 then
       exit; // Value exists -> fails
   end;
@@ -44340,14 +44316,30 @@ end;
 {$endif}
 
 function SortDynArrayAnsiStringI(const A,B): integer;
+{$ifdef PUREPASCAL}
 begin
   result := StrIComp(PUTF8Char(A),PUTF8Char(B));
 end;
+{$else}
+asm // avoid a call on the stack on x86 platform
+        mov     eax, [eax]
+        mov     edx, [edx]
+        jmp     StrIComp
+end;
+{$endif}
 
 function SortDynArrayPUTF8Char(const A,B): integer;
+{$ifdef PUREPASCAL}
 begin
   result := StrComp(pointer(A),pointer(B));
 end;
+{$else}
+asm // avoid a call on the stack on x86 platform
+        mov     eax, [eax]
+        mov     edx, [edx]
+        jmp     dword ptr[StrComp]
+end;
+{$endif}
 
 function SortDynArrayPUTF8CharI(const A,B): integer;
 begin
