@@ -757,6 +757,10 @@ procedure GdipLock;
 /// leave global critical section for safe use of SynGdiPlus from multiple threads
 procedure GdipUnlock;
 
+var
+  /// mutex used by GdipLock/GdipUnlock
+  GdipCS: TRTLCriticalSection;
+  
 
 implementation
 
@@ -2881,9 +2885,6 @@ begin
     end;
   Int64(aObjFont) := 0;
 end;
-
-var
-  GdipCS: TRTLCriticalSection;
 
 procedure GdipLock;
 begin
