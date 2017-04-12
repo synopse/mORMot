@@ -1866,6 +1866,8 @@ var AI, AI2: TIntegerDynArray;
     AV: TSynValidates;
     V: TSynValidate;
     AIP, AI2P, AUP, ARP, AFP, ACities, AVP, dyn1,dyn2: TDynArray;
+    dyniter: TDynArrayLoadFrom;
+    B: boolean;
     dp: TDataItem;
     dyn1Array,dyn2Array: TDataItems;
     Test, Test2: RawByteString;
@@ -1962,6 +1964,14 @@ begin
   Check(dyn1.Count=4);
   for i := 0 to 3 do
     Check(AB[i]=(i and 1=1));
+  Check(dyniter.Init(TypeInfo(TBooleanDynArray),pointer(test)));
+  Check(dyniter.Count=4);
+  for i := 0 to 3 do begin
+    Check(dyniter.Step(B));
+    Check(B=(i and 1=1));
+  end;
+  Check(not dyniter.Step(B));
+  Check(dyniter.CheckHash);
   // validate TIntegerDynArray
   Test64K;
   AIP.Init(TypeInfo(TIntegerDynArray),AI);
@@ -2137,6 +2147,16 @@ begin
   Check(P=nil);
   AUP.Clear;
   Check(AUP.LoadFrom(pointer(Test))-pointer(Test)=length(Test));
+  for i := 0 to 1000 do
+    Check(GetInteger(pointer(AU[i]))=i+1000);
+  Check(dyniter.Init(TypeInfo(TRawUTF8DynArray),pointer(test)));
+  Check(dyniter.Count=1001);
+  for i := 0 to 1000 do begin
+    Check(dyniter.Step(U2));
+    Check(GetInteger(pointer(U2))=i+1000);
+  end;
+  Check(not dyniter.Step(U2));
+  Check(dyniter.CheckHash);
   AUP.Clear;
   Check(AUP.LoadFromJSON(pointer(U))<>nil);
   for i := 0 to 1000 do
@@ -2311,6 +2331,15 @@ begin
     Fill(F,i);
     Check(AFP.IndexOf(F)=i);
   end;
+  Check(dyniter.Init(TypeInfo(TFVs),pointer(test)));
+  Check(dyniter.Count=1001);
+  for i := 0 to 1000 do begin
+    Check(dyniter.Step(F1));
+    Fill(F,i);
+    Check(AFP.ElemEquals(F,F1));
+  end;
+  Check(not dyniter.Step(F1));
+  Check(dyniter.CheckHash);
   ST := THeapMemoryStream.Create;
   AFP.SaveToStream(ST);
   AFP.Clear;

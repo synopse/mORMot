@@ -5158,6 +5158,36 @@ type
     property IsObjArray: boolean read GetIsObjArray write SetIsObjArray;
   end;
 
+  /// allows to iterate over a TDynArray.SaveTo binary buffer
+  // - may be used as alternative to TDynArray.LoadFrom, if you don't want
+  // to allocate all items at once, but just retrieve items one by one
+  TDynArrayLoadFrom = {$ifdef UNICODE}record{$else}object{$endif}
+  private
+    DynArray: TDynArray;
+    Hash: PCardinalArray;
+  public
+    /// how many items were saved in the TDynArray.SaveTo binary buffer
+    Count: integer;
+    /// the zero-based index of the current item pointed by next Step() call
+    // - is in range 0..Count-1 until Step() returns false 
+    Current: integer;
+    /// current position in the TDynArray.SaveTo binary buffer
+    // - after Step() returned false, points just after the binary buffer,
+    // like a regular TDynArray.LoadFrom
+    Position: PAnsiChar;
+    /// initialize iteration over a TDynArray.SaveTo binary buffer
+    // - returns true on success, with Count and Position being set
+    // - returns false if the supplied binary buffer is not correct
+    function Init(ArrayTypeInfo: pointer; Source: PAnsiChar): boolean;
+    /// iterate over the current stored item
+    // - returns true if Elem was filled with one value, or false if all
+    // items were read, and Position contains the end of the binary buffer
+    function Step(out Elem): boolean;
+    /// after all items are read by Step(), validate the stored hash
+    // - returns true if items hash is correct, false otherwise
+    function CheckHash: boolean;
+  end;
+
   /// function prototype to be used for hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
   // - a good candidate is our crc32() function in optimized asm in SynZip unit
@@ -45144,6 +45174,54 @@ begin
     inc(Source,Len);
   end;
   result := -1;
+end;
+
+function TDynArrayLoadFrom.Init(ArrayTypeInfo: pointer; Source: PAnsiChar): boolean;
+var fake: pointer;
+begin
+  result := false;
+  Position := nil; // force Step() to return false if called aterwards
+  if Source=nil then
+    exit;
+  DynArray.Init(ArrayTypeInfo,fake); // just to retrieve RTTI
+  FromVarUInt32(PByte(Source)); // ignore StoredElemSize to be Win32/64 compatible
+  if DynArray.ElemType=nil then begin
+    if (Source^<>#0) or DynArray.GetIsObjArray then
+      exit; // invalid Source, or unexpected T*ObjArray
+  end else
+  if Source^<>{$ifdef FPC} // cross-FPC/Delphi compatible
+      AnsiChar(FPCTODELPHI[PTypeKind(DynArray.ElemType)^]){$else}
+      PAnsiChar(DynArray.ElemType)^{$endif} then
+    exit; // invalid Source content
+  inc(Source);
+  Count := FromVarUInt32(PByte(Source));
+  Hash := pointer(Source);
+  Position := Source+sizeof(cardinal);
+  Current := 0;
+  result := true;
+end;
+
+function TDynArrayLoadFrom.Step(out Elem): boolean;
+begin
+  result := false;
+  if (Position<>nil) and (Current<Count) then begin
+    if DynArray.ElemType=nil then begin
+      MoveFast(Position^,Elem,DynArray.ElemSize);
+      inc(Position,DynArray.ElemSize);
+    end else begin
+      ManagedTypeLoad(@Elem,Position,DynArray.ElemType);
+      if Position=nil then
+         exit;
+    end;
+    inc(Current);
+    result := true;
+  end;
+end;
+
+function TDynArrayLoadFrom.CheckHash: boolean;
+begin
+  result := (Position<>nil) and
+     (Hash32(@Hash[1],Position-PAnsiChar(@Hash[1]))=Hash[0]);
 end;
 
 function TDynArray.LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom;
