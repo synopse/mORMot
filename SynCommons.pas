@@ -4727,6 +4727,7 @@ type
     procedure SetIsObjArray(aValue: boolean); {$ifdef HASINLINE}inline;{$endif}
     /// will set fKnownType and fKnownOffset/fKnownSize fields
     function ToKnownType(exactType: boolean=false): TDynArrayKind;
+    function LoadKnownType(Data,Source: PAnsiChar): boolean;
     /// faster than System.DynArraySetLength() function + handle T*ObjArray
     procedure InternalSetLength(NewLength: PtrUInt);
   public
@@ -4982,6 +4983,7 @@ type
     // previously-serialized content will fail, maybe triggering unexpected GPF:
     // use SaveToTypeInfoHash if you share this binary data accross executables
     // - this method will raise an ESynException for T*ObjArray types
+    // - use TDynArray.LoadFrom or TDynArrayLoadFrom to decode the saved buffer
     function SaveTo(Dest: PAnsiChar): PAnsiChar; overload;
     /// compute the number of bytes needed by SaveTo() to persist a dynamic array
     // - will use a proprietary binary format, with some variable-length encoding
@@ -4996,6 +4998,7 @@ type
     // previously-serialized content will fail, maybe triggering unexpected GPF:
     // use SaveToTypeInfoHash if you share this binary data accross executables
     // - this method will raise an ESynException for T*ObjArray types
+    // - use TDynArray.LoadFrom or TDynArrayLoadFrom to decode the saved buffer
     function SaveTo: RawByteString; overload;
     /// compute a crc32c-based hash of the RTTI for this dynamic array
     // - can be used to ensure that the TDynArray.SaveTo binary layout
@@ -5007,9 +5010,12 @@ type
     /// load the dynamic array content from a memory buffer
     // - return nil if the Source buffer is incorrect (invalid type or internal
     // checksum e.g.), or return the memory buffer pointer just after the
-    // read content
+    // content, as written by TDynArray.SaveTo 
     // - this method will raise an ESynException for T*ObjArray types
     // - you can optionally call AfterEach callback for each row loaded
+    // - if you don't want to allocate all items on memory, but just want to
+    // iterate over all items stored in a TDynArray.SaveTo memory buffer,
+    // consider using TDynArrayLoadFrom object
     function LoadFrom(Source: PAnsiChar; AfterEach: TDynArrayAfterLoadFrom=nil;
       NoCheckHash: boolean=false): PAnsiChar;
     /// serialize the dynamic array content as JSON
@@ -5087,6 +5093,10 @@ type
     procedure ElemClear(var Elem);
     /// will copy one element content
     procedure ElemCopy(const A; var B);
+    /// will copy the first field value of an array element
+    // - will use the array KnownType to guess the copy routine to use
+    // - returns false if the type information is not enough for a safe copy
+    function ElemCopyFirstField(Source,Dest: Pointer): boolean;
     /// save an array element into a serialized binary content
     // - use the same layout as TDynArray.SaveTo, but for a single item
     // - you can use ElemLoad method later to retrieve its content
@@ -5160,10 +5170,10 @@ type
 
   /// allows to iterate over a TDynArray.SaveTo binary buffer
   // - may be used as alternative to TDynArray.LoadFrom, if you don't want
-  // to allocate all items at once, but just retrieve items one by one
+  // to allocate all items at once, but retrieve items one by one
   TDynArrayLoadFrom = {$ifdef UNICODE}record{$else}object{$endif}
   private
-    DynArray: TDynArray;
+    DynArray: TDynArray; // used to access RTTI
     Hash: PCardinalArray;
   public
     /// how many items were saved in the TDynArray.SaveTo binary buffer
@@ -5180,9 +5190,17 @@ type
     // - returns false if the supplied binary buffer is not correct
     function Init(ArrayTypeInfo: pointer; Source: PAnsiChar): boolean;
     /// iterate over the current stored item
+    // - Elem should point to a variable of the exact item type stored in this
+    // dynamic array
     // - returns true if Elem was filled with one value, or false if all
     // items were read, and Position contains the end of the binary buffer
     function Step(out Elem): boolean;
+    /// extract the first field value of the current stored item
+    // - returns true if Field was filled with one value, or false if all
+    // items were read, and Position contains the end of the binary buffer
+    // - could be called before Step(), to pre-allocate a new item instance,
+    // or update an existing instance 
+    function FirstField(out Field): boolean;
     /// after all items are read by Step(), validate the stored hash
     // - returns true if items hash is correct, false otherwise
     function CheckHash: boolean;
@@ -44876,6 +44894,8 @@ const
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
     0, 1,1, 2, 4,4,4, 8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}sizeof(Variant),{$endif} 0);
+var
+  KINDTYPE_INFO: array[TDynArrayKind] of pointer;
 
 function TDynArray.GetArrayTypeName: RawUTF8;
 begin
@@ -45006,6 +45026,46 @@ rec:    inc(PtrUInt(nested),nested^.NameLen);
   if KNOWNTYPE_SIZE[fKnownType]<>0 then
     fKnownSize := KNOWNTYPE_SIZE[fKnownType];
   result := fKnownType;
+end;
+
+function TDynArray.ElemCopyFirstField(Source,Dest: Pointer): boolean;
+begin
+  if fKnownType=djNone then
+    ToKnownType(false);
+  case fKnownType of
+  djBoolean..djDateTimeMS: // no managed field
+    MoveFast(Source^,Dest^,fKnownSize);
+  djRawUTF8, djWinAnsi, djRawByteString:
+    PRawByteString(Dest)^ := PRawByteString(Source)^;
+  djSynUnicode:
+    PSynUnicode(Dest)^ := PSynUnicode(Source)^;
+  djString:
+    PString(Dest)^ := PString(Source)^;
+  djWideString:
+    PWideString(Dest)^ := PWideString(Source)^;
+  {$ifndef NOVARIANTS}djVariant: PVariant(Dest)^ := PVariant(Source)^;{$endif}
+  else begin // djNone, djInterface, djCustom
+    result := false;
+    exit;
+  end;
+  end;
+  result := true;
+end;
+
+function TDynArray.LoadKnownType(Data,Source: PAnsiChar): boolean;
+var info: PTypeInfo;
+begin
+  if fKnownType=djNone then
+    ToKnownType(false); // set fKnownType and fKnownSize
+  if fKnownType in [djBoolean..djDateTimeMS] then begin
+    MoveFast(Source^,Data^,fKnownSize);
+    result := true;
+  end else begin
+    info := KINDTYPE_INFO[fKnownType];
+    if info=nil then
+      result := false else
+      result := (ManagedTypeLoad(Data,Source,info)<>0) and (Source<>nil);
+  end;
 end;
 
 function TDynArray.LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
@@ -45218,6 +45278,13 @@ begin
   end;
 end;
 
+function TDynArrayLoadFrom.FirstField(out Field): boolean;
+begin
+  if (Position<>nil) and (Current<Count) then
+    result := DynArray.LoadKnownType(@Field,Position) else
+    result := false;
+end;
+
 function TDynArrayLoadFrom.CheckHash: boolean;
 begin
   result := (Position<>nil) and
@@ -45230,23 +45297,24 @@ var i, n: integer;
     P: PAnsiChar;
     Hash: PCardinalArray;
 begin
-  // check stored element size+type
+  // check context 
+  result := nil;
   if Source=nil then begin
     Clear;
-    result := nil;
     exit;
   end;
+  if fValue=nil then
+    exit;
+  // check stored element size+type
   FromVarUInt32(PByte(Source)); // ignore StoredElemSize to be Win32/64 compatible
-  if (fValue=nil) or
-     //((ElemSize<>sizeof(pointer)) and (StoredElemSize<>ElemSize)) or
-     ((ElemType=nil) and (Source^<>#0) or
-     ((ElemType<>nil) and (Source^<>
-      {$ifdef FPC} // cross-FPC/Delphi compatible
-      AnsiChar(FPCTODELPHI[PTypeKind(ElemType)^]){$else}
-      PAnsiChar(ElemType)^{$endif}))) then begin
-    result := nil; // invalid Source content
-    exit;
-  end;
+  if ElemType=nil then begin
+    if Source^<>#0 then
+      exit;
+  end else
+    if Source^<>{$ifdef FPC} // cross-FPC/Delphi compatible
+        AnsiChar(FPCTODELPHI[PTypeKind(ElemType)^]){$else}
+        PAnsiChar(ElemType)^{$endif} then
+      exit;
   inc(Source);
   // retrieve dynamic array count
   n := FromVarUInt32(PByte(Source));
@@ -45290,8 +45358,7 @@ begin
   // check security checksum
   if NoCheckHash or (Source=nil) or
      (Hash32(@Hash[1],Source-PAnsiChar(@Hash[1]))=Hash[0]) then
-    result := Source else
-    result := nil;
+    result := Source;
 end;
 
 function TDynArray.Find(const Elem; const aIndex: TIntegerDynArray;
@@ -63494,6 +63561,13 @@ begin
   {$endif CPUINTEL}
     crc32c := @crc32cfast;
   DefaultHasher := crc32c;
+  KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
+  KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
+  KINDTYPE_INFO[djString] := TypeInfo(String);
+  KINDTYPE_INFO[djRawByteString] := TypeInfo(RawByteString);
+  KINDTYPE_INFO[djWideString] := TypeInfo(WideString);
+  KINDTYPE_INFO[djSynUnicode] := TypeInfo(SynUnicode);
+  {$ifndef NOVARIANTS}KINDTYPE_INFO[djVariant] := TypeInfo(variant);{$endif}
 end;
 
 initialization

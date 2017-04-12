@@ -1967,10 +1967,14 @@ begin
   Check(dyniter.Init(TypeInfo(TBooleanDynArray),pointer(test)));
   Check(dyniter.Count=4);
   for i := 0 to 3 do begin
+    Check(dyniter.FirstField(B));
+    Check(B=(i and 1=1));
+    B := not B;
     Check(dyniter.Step(B));
     Check(B=(i and 1=1));
   end;
   Check(not dyniter.Step(B));
+  Check(not dyniter.FirstField(B));
   Check(dyniter.CheckHash);
   // validate TIntegerDynArray
   Test64K;
@@ -2152,10 +2156,14 @@ begin
   Check(dyniter.Init(TypeInfo(TRawUTF8DynArray),pointer(test)));
   Check(dyniter.Count=1001);
   for i := 0 to 1000 do begin
+    Check(dyniter.FirstField(U2));
+    Check(GetInteger(pointer(U2))=i+1000);
+    U2 := '';
     Check(dyniter.Step(U2));
     Check(GetInteger(pointer(U2))=i+1000);
   end;
   Check(not dyniter.Step(U2));
+  Check(not dyniter.FirstField(U2));
   Check(dyniter.CheckHash);
   AUP.Clear;
   Check(AUP.LoadFromJSON(pointer(U))<>nil);
