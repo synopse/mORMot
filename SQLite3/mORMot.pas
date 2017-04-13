@@ -2114,6 +2114,13 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 
+/// compute 'PropName in ("Values0","Values1",...)' text
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName="Values0"' or
+// 'PropName=:("Values0"):' if SingleValuePrepared is true
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8=''; SingleValuePrepared: boolean=false): RawUTF8;
+
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
   EnsureUniqueTableInFrom: boolean): RawUTF8;
@@ -30346,6 +30353,38 @@ begin
     result := 'SELECT '+SimpleFields  else
     result := 'SELECT '+Select;
   result := result+' FROM '+TableName+SQLFromWhere(Where);
+end;
+
+function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
+  const Suffix: RawUTF8; SingleValuePrepared: boolean): RawUTF8;
+var i: integer;
+begin
+  if high(Values)>=0 then
+    with TTextWriter.CreateOwnedStream do
+    try
+      AddString(PropName);
+      if high(Values)=0 then begin
+        if SingleValuePrepared then
+          AddShort('=:(') else
+          Add('=');
+        AddQuotedStr(pointer(Values[0]),'"');
+        if SingleValuePrepared then
+          AddShort('):');
+      end else begin
+        AddShort(' in (');
+        for i := 0 to high(Values) do begin
+          AddQuotedStr(pointer(Values[i]),'"');
+          Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end else
+    result := '';
 end;
 
 
