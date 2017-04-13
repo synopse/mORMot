@@ -2981,6 +2981,13 @@ function ArrayOfConstValueAsText(const NameValuePairs: array of const;
 function PropNameValid(P: PUTF8Char): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// returns TRUE if the given text buffers contains A..Z,0..9,_ characters
+// - use it with property names values (i.e. only including A..Z,0..9,_ chars)
+// - i.e. can be tested via IdemPropName*() functions
+// - first char must be alphabetical or '_', following chars can be
+// alphanumerical or '_'
+function PropNamesValid(const Values: array of RawUTF8): boolean;
+
 /// returns TRUE if the given text buffer contains simple characters as
 // recognized by JSON extended syntax
 // - follow GetJSONPropName and GotoNextJSONObjectOrArray expectations
@@ -7886,12 +7893,13 @@ type
     // - if supplied json is '', will write 'null'
     procedure AddRawJSON(const json: RawJSON);
     /// append some chars, quoting all " chars
-    // - same algorithm than AddString(QuotedStr()) - without memory allocation
+    // - same algorithm than AddString(QuotedStr()) - without memory allocation,
+    // and with an optional maximum text length (truncated with ending '...')
     // - this function implements what is specified in the official SQLite3
     // documentation: "A string constant is formed by enclosing the string in single
     // quotes ('). A single quote within the string can be encoded by putting two
     // single quotes in a row - as in Pascal."
-    procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar; TextLen: integer=0);
+    procedure AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar; TextMaxLen: integer=0);
     /// append some chars, escaping all HTML special chars as expected
     procedure AddHtmlEscape(Text: PUTF8Char; Fmt: TTextWriterHTMLFormat=hfAnyWhere); overload;
     /// append some chars, escaping all HTML special chars as expected
@@ -11297,6 +11305,8 @@ var
   // - created with a polynom diverse from zlib's crc32() algorithm, but
   // compatible with SSE 4.2 crc32 instruction
   // - tables content is created from code in initialization section below
+  // - will also be used internally by SymmetricEncrypt, FillRandom and
+  // TSynUniqueIdentifierGenerator as master/reference key tables
   crc32ctab: array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
 
 /// compute CRC32C checksum on the supplied buffer using x86/x64 code
@@ -11505,7 +11515,8 @@ function crc32csse42(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$endif CPUINTEL}
 
 /// naive symmetric encryption scheme using a 32 bit key
-// - fast, but not very secure (consider using SynCrypto instead)
+// - fast, but not very secure, since uses crc32ctab[] content as master cypher
+// key: consider using SynCrypto proven AES-based algorithms instead
 procedure SymmetricEncrypt(key: cardinal; var data: RawByteString);
 
 var
@@ -24214,21 +24225,24 @@ var from: PUTF8Char;
 begin
   if P<>nil then begin
     P := SQLBegin(P);
-    if IdemPChar(P,'SELECT') and (P[6]<=' ') then begin
-      if SelectClause<>nil then begin
-        inc(P,7);
-        from := StrPosI(' FROM ',P);
-        if from=nil then
-          SelectClause^ := '' else
-          SetString(SelectClause^,PAnsiChar(P),from-P);
-      end;
-      result := true;
-    end else
-    result := IdemPChar(P,'EXPLAIN ') or
-      ((IdemPChar(P,'VACUUM') or IdemPChar(P,'PRAGMA')) and (P[6] in [#0..' ',';'])) or
-      (((IdemPChar(P,'WITH') ) and (P[4] in [#0..' ',';'])) and
-        not (ContainsUTF8(P,'INSERT') or ContainsUTF8(P,'UPDATE') or
-             ContainsUTF8(P,'DELETE')));
+    case IdemPCharArray(P, ['SELECT','EXPLAIN ','VACUUM','PRAGMA','WITH']) of
+    0: if P[6]<=' ' then begin
+         if SelectClause<>nil then begin
+           inc(P,7);
+           from := StrPosI(' FROM ',P);
+           if from=nil then
+             SelectClause^ := '' else
+             SetString(SelectClause^,PAnsiChar(P),from-P);
+         end;
+         result := true;
+       end else
+         result := false;
+    1:   result := true;
+    2,3: result := P[6] in [#0..' ',';'];
+    4:   result := (P[4]<=' ') and not (ContainsUTF8(P+5,'INSERT') or
+           ContainsUTF8(P+5,'UPDATE') or ContainsUTF8(P+5,'DELETE'));
+    else result := false;
+    end;
   end else
     result := true; // assume '' statement is SELECT command
 end;
@@ -34739,7 +34753,7 @@ begin
       c := c xor lecuyer^.Next;
       Dest^[i] := Dest^[i] xor c;
     end;
-end;
+end;  
 
 function RandomGUID: TGUID;
 begin
@@ -49019,7 +49033,7 @@ begin
 end;
 
 procedure TTextWriter.AddQuotedStr(Text: PUTF8Char; Quote: AnsiChar;
-  TextLen: integer=0);
+  TextMaxLen: integer);
 var BMax: PUTF8Char;
 begin
   BMax := BEnd-3;
@@ -49034,15 +49048,15 @@ begin
       if B<BMax then begin
         if Text^=#0 then
           break;
-        if TextLen>0 then begin
-          if TextLen=3 then begin
+        if TextMaxLen>0 then begin
+          if TextMaxLen=3 then begin
             B[1] := '.'; // indicates truncated
             B[2] := '.';
             B[3] := '.';
             inc(B,3);
             break;
           end else
-            dec(TextLen);
+            dec(TextMaxLen);
         end;
         if Text^<>Quote then begin
           B[1] := Text^;
@@ -57654,6 +57668,16 @@ begin
   result := true;
 end;
 
+function PropNamesValid(const Values: array of RawUTF8): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 0 to high(Values) do
+    if not PropNameValid(pointer(Values[i])) then
+      exit;
+  result := true;
+end;
+
 function JsonPropNameValid(P: PUTF8Char): boolean;
 {$ifdef HASINLINENOTX86}
 begin
@@ -61982,7 +62006,7 @@ begin
   // naive and would be broken easily with brute force - but point here is to
   // hide/obfuscate public values at end-user level (e.g. when publishing URIs),
   // not implement strong security, so it sounds good enough for our purpose
-end;
+end;              
 
 destructor TSynUniqueIdentifierGenerator.Destroy;
 begin
