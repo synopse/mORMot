@@ -7391,13 +7391,21 @@ type
     constructor CreateAndFillPrepare(aClient: TSQLRest; const aIDs: array of Int64;
       const aCustomFieldsCSV: RawUTF8=''); overload;
     /// this constructor initializes the object, and prepares itself to loop
-    // through a specified JSON table
+    // through a specified JSON table, which will use a private copy
     // - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
     // then call FillPrepare - previous Create(aClient) methods retrieve only
     // one record, this one more multiple rows
     // - you should then loop for all rows using 'while Rec.FillOne do ...'
     // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
     constructor CreateAndFillPrepare(const aJSON: RawUTF8); overload;
+    /// this constructor initializes the object, and prepares itself to loop
+    // through a specified JSON table buffer, which will be modified in-place
+    // - this method creates a TSQLTableJSON, fill it with the supplied JSON buffer,
+    // then call FillPrepare - previous Create(aClient) methods retrieve only
+    // one record, this one more multiple rows
+    // - you should then loop for all rows using 'while Rec.FillOne do ...'
+    // - the TSQLTableJSON will be freed by TSQLRecord.Destroy
+    constructor CreateAndFillPrepare(aJSON: PUTF8Char; aJSONLen: integer); overload;
     /// this constructor initializes the object from its ID, including all
     // nested TSQLRecord properties, through a JOINed statement
     // - by default, Create(aClient,aID) will return only the one-to-one
@@ -14078,7 +14086,8 @@ type
     // - you should not have to use this method, but the ORM versions instead
     // - return a result set as JSON on success, '' on failure
     // - will call EngineList() abstract method to retrieve its JSON content
-    function ExecuteJson(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): RawJSON; virtual;
+    function ExecuteJson(const Tables: array of TSQLRecordClass; const SQL: RawUTF8;
+      ForceAJAX: Boolean=false; ReturnedRowCount: PPtrInt=nil): RawJSON; virtual;
     /// Execute directly a SQL statement, without any expected result
     // - implements POST SQL on ModelRoot URI
     // - return true on success
@@ -31614,6 +31623,15 @@ begin
   FillPrepare(aTable);
 end;
 
+constructor TSQLRecord.CreateAndFillPrepare(aJSON: PUTF8Char; aJSONLen: integer);
+var aTable: TSQLTable;
+begin
+  Create;
+  aTable := TSQLTableJSON.CreateFromTables([RecordClass],'',aJSON,aJSONLen);
+  aTable.OwnerMustFree := true;
+  FillPrepare(aTable);
+end;
+
 constructor TSQLRecord.CreateAndFillPrepareJoined(aClient: TSQLRest;
   const aFormatSQLJoin: RawUTF8; const aParamsSQLJoin, aBoundsSQLJoin: array of const);
 var i,n: integer;
@@ -35387,9 +35405,10 @@ begin
     result := nil;
 end;
 
-function TSQLRest.ExecuteJson(const Tables: array of TSQLRecordClass; const SQL: RawUTF8): RawJSON;
+function TSQLRest.ExecuteJson(const Tables: array of TSQLRecordClass;
+  const SQL: RawUTF8; ForceAJAX: Boolean; ReturnedRowCount: PPtrInt): RawJSON;
 begin
-  result := EngineList(SQL,false);
+  result := EngineList(SQL,ForceAjax,ReturnedRowCount);
 end;
 
 function TSQLRest.Execute(const aSQL: RawUTF8): boolean;
@@ -35452,8 +35471,8 @@ begin
     with Table.RecordProps do begin // request all Values[] IDs at once
       aMainField := MainField[false];
       if aMainField>=0 then
-        OneFieldValues(Table,'RowID',Fields.List[aMainField].Name+' in ('+
-          RawUTF8ArrayToQuotedCSV(Values)+')',TInt64DynArray(IDs));
+        OneFieldValues(Table,'RowID',
+          SelectInClause(Fields.List[aMainField].Name,Values),TInt64DynArray(IDs));
     end;
   result := IDs<>nil;
 end;
@@ -47619,20 +47638,6 @@ begin
     result := false; // assume true instance by default
 end;
 
-function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
-  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
-var tmp: TSynTempBuffer;
-begin
-  result := false;
-  tmp.Init(JSON);
-  if tmp.len<>0 then
-    try
-      JSONToObject(ObjectInstance,tmp.buf,result,TObjectListItemClass,Options);
-    finally
-      tmp.Done;
-    end;
-end;
-
 type
   /// wrapper class to ease JSONToObject() maintainability
   TJSONToObject = {$ifdef UNICODE}record{$else}object{$endif}
@@ -47656,7 +47661,6 @@ type
     Kind: TTypeKind;
     EndOfObject: AnsiChar;
     NestedValid, wasString: boolean;
-    DynArray: TDynArray;
     {$ifndef NOVARIANTS}
     procedure HandleVariant;
     {$endif}
@@ -47680,6 +47684,25 @@ begin
   parser.Parse;
   Valid := parser.Valid;
   result := parser.Dest;
+end;
+
+function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
+  TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
+var tmp: TSynTempBuffer;
+    parser: TJSONToObject;
+begin
+  tmp.Init(JSON);
+  if tmp.len<>0 then
+    try
+      parser.From := tmp.buf;
+      parser.Options := Options;
+      parser.Value := TObject(ObjectInstance);
+      parser.Parse;
+      result := parser.Valid;
+    finally
+      tmp.Done;
+    end else
+    result := false;
 end;
 
 procedure TJSONToObject.HandleObjectList(Lst: TObjectList);
@@ -47950,13 +47973,14 @@ end;
 
 procedure TJSONToObject.Parse;
 var V: PtrInt;
+    DynArray: TDynArray;
     U: RawUTF8;
 begin
   Valid := false;
   Dest := From;
   if Value=nil then
     exit;
-  ValueClass := Value.ClassType;
+  ValueClass := PClass(Value)^;
   IsObj := JSONObjectFromClass(ValueClass,parser);
   if From=nil then begin
     case IsObj of // handle '' as Clear for arrays
@@ -52727,8 +52751,9 @@ var Params: TJSONSerializer;
     arg, ValLen: integer;
     V: PPointer;
     R, Val: PUTF8Char;
-    valid, wasString, resultAsJSONObject: boolean;
+    wasString, resultAsJSONObject: boolean;
     ServiceCustomAnswerPoint: PServiceCustomAnswer;
+    parser: TJSONToObject;
     DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
     Value: array[0..MAX_METHOD_ARGS-1] of pointer;
     I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
@@ -52835,8 +52860,13 @@ begin
         smvObject: begin
           if PInteger(R)^=NULL_LOW then
             inc(R,4) else begin // null from TInterfacedStub -> stay untouched
-            R := JSONToObject(V^,R,valid);
-            if not valid then
+            parser.From := R;
+            parser.Options := [];
+            parser.TObjectListItemClass := nil;
+            parser.Value := PObject(V)^;
+            parser.Parse;
+            if parser.Valid then
+              R := parser.Dest else
               RaiseError('returned object',[]);
           end;
           IgnoreComma(R);
