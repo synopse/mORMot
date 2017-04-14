@@ -2114,12 +2114,16 @@ function SQLFromWhere(const Where: RawUTF8): RawUTF8;
 // ORDER/GROUP/LIMIT/OFFSET/JOIN keywords
 function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 
-/// compute 'PropName in ("Values0","Values1",...)' text
+/// compute 'PropName in (...)' where clause for a SQL statement
 // - if Values has no value, returns ''
-// - if Values has a single value, returns 'PropName="Values0"' or
-// 'PropName=:("Values0"):' if SingleValuePrepared is true
+// - if Values has a single value, returns 'PropName="Values0"' or inlined
+// 'PropName=:("Values0"):' if ValuesInlined is true
+// - if Values has more than one value, returns 'PropName in ("Values0","Values1",...)'
+// or 'PropName in (:("Values0"):,:("Values1"):,...)' if ValuesInlined is true
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
-  const Suffix: RawUTF8=''; SingleValuePrepared: boolean=false): RawUTF8;
+  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
@@ -30365,7 +30369,7 @@ begin
 end;
 
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
-  const Suffix: RawUTF8; SingleValuePrepared: boolean): RawUTF8;
+  const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
 var i: integer;
 begin
   if high(Values)>=0 then
@@ -30373,17 +30377,21 @@ begin
     try
       AddString(PropName);
       if high(Values)=0 then begin
-        if SingleValuePrepared then
+        if ValuesInlined then
           AddShort('=:(') else
           Add('=');
         AddQuotedStr(pointer(Values[0]),'"');
-        if SingleValuePrepared then
+        if ValuesInlined then
           AddShort('):');
       end else begin
         AddShort(' in (');
         for i := 0 to high(Values) do begin
+          if ValuesInlined then
+            Add(':','(');
           AddQuotedStr(pointer(Values[i]),'"');
-          Add(',');
+          if ValuesInlined then
+            AddShort('):,') else
+            Add(',');
         end;
         CancelLastComma;
         Add(')');
