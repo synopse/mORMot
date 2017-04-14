@@ -1047,8 +1047,8 @@ unit mORMot;
       to allow numerical or date/time format for a given column [749dfbdb6a]
     - added optional CustomCompare: TUTF8Compare param to TSQLTable.SortFields()
       to allow any kind of custom ordering - feature request [c6804d48a4]
-    - speed up of TSQLTable.FieldIndex() TSQLTable.FieldIndexExisting() methods
-      (using binary search)
+    - speed up of TSQLTable.FieldIndex() TSQLTable.FieldIndexExisting() methods,
+      using O(log(n)) binary search
     - added overloaded TSQLTable.FieldIndex() and TSQLTable.FieldIndexExisting()
       methods, to set several local field index integer variables at once
     - added TSQLTable.ToObjectList() and ToObjectList<T: TSQLRecord>() methods
@@ -8039,7 +8039,7 @@ type
     fFieldTypeAllRows: boolean;
     /// the field names
     fFieldNames: TRawUTF8DynArray;
-    /// used by FieldIndex() for fast binary search
+    /// used by FieldIndex() for fast O(log(n)) binary search
     fFieldNameOrder: TCardinalDynArray;
     /// contain the fResults[] pointers, after a IDColumnHide() call
     fIDColumn, fNotIDColumn: array of PUTF8Char;
@@ -9391,7 +9391,7 @@ type
     /// for every table, contains a locked record list
     // - very fast, thanks to the use of a dynamic array with one entry by table
     fLocks: TSQLLocksDynArray;
-    /// for fastest SQL Table name lookup via binary search
+    /// for fastest SQL Table name lookup via O(log(n)) binary search
     fSortedTablesName: TRawUTF8DynArray;
     fSortedTablesNameIndex: TIntegerDynArray;
     /// will contain the registered virtual table modules
@@ -17571,7 +17571,7 @@ type
     fValue: TObjectList;
     fFileName: TFileName;
     /// true if IDs are sorted (which is the default behavior of this class),
-    // for fastest ID2Index() by using a binary search algorithm
+    // for fastest ID2Index() by using O(log(n)) binary search algorithm
     fIDSorted: boolean;
     fCommitShouldNotUpdateFile: boolean;
     fBinaryFile: boolean;
@@ -17677,7 +17677,7 @@ type
     procedure ReloadFromFile;
     /// retrieve the index in Items[] of a particular ID
     // - return -1 if this ID was not found
-    // - use fast binary search algorithm (since Items[].ID should be increasing)
+    // - use fast O(log(n)) binary search algorithm (since Items[].ID are increasing)
     // - warning: this method should be protected via StorageLock/StorageUnlock
     function IDToIndex(ID: TID): integer;
     /// retrieve all IDs stored at once
@@ -23710,7 +23710,7 @@ function TSQLPropInfoList.IndexByNameOrExcept(const aName: RawUTF8): integer;
 begin
   if IsRowID(pointer(aName)) then
     result := -1 else begin
-    result := IndexByName(pointer(aName)); // fast binary search
+    result := IndexByName(pointer(aName)); // fast O(log(n)) binary search
     if result<0 then
       raise EORMException.CreateUTF8(
         '%.IndexByNameOrExcept(%): unkwnown field in %',[self,aName,fTable]);
@@ -23741,10 +23741,10 @@ function TSQLPropInfoList.IndexByNameUnflattenedOrExcept(const aName: RawUTF8): 
 begin
   if pilSubClassesFlattening in fOptions then begin
     for result := 0 to Count-1 do
-      if IdemPropNameU(List[result].NameUnflattened,aName) then
+      if IdemPropNameU(List[result].NameUnflattened,aName) then // O(n) iteration
         exit;
   end else begin
-    result := IndexByName(pointer(aName)); // faster binary search
+    result := IndexByName(pointer(aName)); // faster O(log(n)) binary search
     if result>=0 then
       exit;
   end;
@@ -24506,7 +24506,7 @@ begin
   FillcharFast(Bits,(RowCount shr 3)+1,0);
   if IDs=nil then
     exit; // no selected -> all bits left to 0
-  // we sort IDs to use FastFindIntegerSorted() and its fast binary search
+  // we sort IDs to use FastFindIntegerSorted() and its O(log(n)) binary search
   ID := @IDs[0];
   IDn := high(IDs);
   QuickSortInt64(ID,0,IDn);
@@ -33174,7 +33174,7 @@ end;
 function TSQLModel.GetTableIndex(const SQLTableName: RawUTF8): integer;
 begin
   if (self<>nil) and (SQLTableName<>'') then begin
-    // fast binary search
+    // fast O(log(n)) binary search
     result := FastFindPUTF8CharSorted(
       pointer(fSortedTablesName),fTablesMax,pointer(SQLTableName),@StrIComp);
     if result>=0 then
@@ -33186,7 +33186,7 @@ end;
 function TSQLModel.GetTableIndex(SQLTableName: PUTF8Char): integer;
 begin
   if (self<>nil) and (SQLTableName<>nil) then begin
-    // fast binary search
+    // fast O(log(n)) binary search
     result := FastFindPUTF8CharSorted(
       pointer(fSortedTablesName),fTablesMax,SQLTableName,@StrIComp);
     if result>=0 then
@@ -35742,7 +35742,7 @@ begin
   result := false;
   Mutex.Lock;
   try
-    i := Value.Find(aID); // fast binary search by first ID field
+    i := Value.Find(aID); // fast O(log(n)) binary search by first ID field
     if i>=0 then
       with Values[i] do
       if TimeStamp512<>0 then // 0 when there is no JSON value cached
@@ -44231,7 +44231,7 @@ begin
     if FoundOffset<=0 then begin // omit first FoundOffset rows
       i64 := GetInt64(pointer(WhereValue),err);
       if (err=0) and (i64>0) then begin
-        ndx := IDToIndex(i64); // use fast binary search
+        ndx := IDToIndex(i64); // use fast O(log(n)) binary search
         if ndx>=0 then begin
           if Assigned(OnFind) then
             OnFind(Dest,TSQLRecord(fValue.List[ndx]),ndx);
@@ -44492,7 +44492,7 @@ begin
   with fValue do begin
     R := Count-1;
     if fIDSorted and (R>=8) then begin
-      // IDs are sorted -> use fast binary search algorithm
+      // IDs are sorted -> use fast O(log(n)) binary search algorithm
       L := 0;
       repeat
         result := (L + R) shr 1;

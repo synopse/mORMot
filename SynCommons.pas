@@ -4234,6 +4234,7 @@ function MultiPartFormDataAddField(const FieldName, FieldValue: RawUTF8;
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+// - will use fast O(log(n)) binary search algorithm
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4242,6 +4243,7 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was found (i.e. adding will duplicate a value)
+// - will use fast O(log(n)) binary search algorithm
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 
@@ -4249,6 +4251,7 @@ function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Ch
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison is case-sensitive StrComp (so will work with any PAnsiChar)
 // - returns -1 if the specified Value was not found
+// - will use fast O(log(n)) binary search algorithm
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4256,10 +4259,12 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
 // - R is the last index of available entries in P^ (i.e. Count-1)
 // - string comparison will use the specified Compare function
 // - returns -1 if the specified Value was not found
+// - will use fast O(log(n)) binary search algorithm
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 
 /// retrieve the index of a PUTF8Char in a PUTF8Char array via a sort indexed
+// - will use fast O(log(n)) binary search algorithm
 function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
   var SortedIndexes: TCardinalDynArray; Value: PUTF8Char;
   ItemComp: TUTF8Compare): PtrInt;
@@ -4267,7 +4272,7 @@ function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
 /// add a RawUTF8 value in an alphaticaly sorted dynamic array of RawUTF8
 // - returns the index where the Value was added successfully in Values[]
 // - returns -1 if the specified Value was alredy present in Values[]
-//  (we must avoid any duplicate for binary search)
+//  (we must avoid any duplicate for O(log(n)) binary search)
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position - a typical usage of CoValues is to store
 // the corresponding ID to each RawUTF8 item
@@ -4292,7 +4297,7 @@ procedure QuickSortRawUTF8(var Values: TRawUTF8DynArray; ValuesCount: integer;
   CoValues: PIntegerDynArray=nil; Compare: TUTF8Compare=nil);
 
 /// sort a dynamic array of PUTF8Char items, via an external array of indexes
-// - you can use FastFindIndexedPUTF8Char() for fast binary search
+// - you can use FastFindIndexedPUTF8Char() for fast O(log(n)) binary search
 procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
   var SortedIndexes: TCardinalDynArray; CaseSensitive: boolean=false);
 
@@ -4369,18 +4374,18 @@ procedure CopyAndSortInteger(Values: PIntegerArray; ValuesCount: integer;
 procedure CopyAndSortInt64(Values: PInt64Array; ValuesCount: integer;
   var Dest: TInt64DynArray);
 
-/// fast binary search of an integer value in a sorted integer array
+/// fast O(log(n)) binary search of an integer value in a sorted integer array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
 function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): PtrInt; overload;
 
-/// fast binary search of an integer value in a sorted integer array
+/// fast O(log(n)) binary search of an integer value in a sorted integer array
 // - return index of Values[result]=Value
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
 
-/// fast binary search of a 64 bit integer value in a sorted array
+/// fast O(log(n)) binary search of a 64 bit integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
@@ -4390,7 +4395,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast binary search of a PtrInt value in a sorted array
+/// fast O(log(n)) binary search of a PtrInt value in a sorted array
 function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4398,7 +4403,7 @@ function FastFindPtrIntSorted(P: PPtrIntArray; R: PtrInt; Value: PtrInt): PtrInt
 procedure QuickSortPointer(P: PPointerArray; L, R: PtrInt);
   {$ifdef HASINLINE}inline;{$endif}
 
-/// fast binary search of a Pointer value in a sorted array
+/// fast O(log(n)) binary search of a Pointer value in a sorted array
 function FastFindPointerSorted(P: PPointerArray; R: PtrInt; Value: Pointer): PtrInt; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -4410,7 +4415,7 @@ function FastLocateIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): P
 /// add an integer value in a sorted dynamic array of integers
 // - returns the index where the Value was added successfully in Values[]
 // - returns -1 if the specified Value was already present in Values[]
-//  (we must avoid any duplicate for binary search)
+//  (we must avoid any duplicate for O(log(n)) binary search)
 // - if CoValues is set, its content will be moved to allow inserting a new
 // value at CoValues[result] position
 function AddSortedInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
@@ -4835,8 +4840,8 @@ type
     /// search for an element value inside the dynamic array
     // - this method will use the Compare property function for the search
     // - return the index found (0..Count-1), or -1 if Elem was not found
-    // - if the array is sorted, it will use fast binary search
-    // - if the array is not sorted, it will use slower iterating search
+    // - if the array is sorted, it will use fast O(log(n)) binary search
+    // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function Find(const Elem): integer; overload;
@@ -4847,9 +4852,9 @@ type
     // integer table, as created by the CreateOrderedIndex() method: it allows
     // multiple search orders in the same dynamic array content
     // - if an indexed lookup is supplied, it must already be sorted:
-    // this function will then use fast binary search
+    // this function will then use fast O(log(n)) binary search
     // - if an indexed lookup is not supplied (i.e aIndex=nil),
-    // this function will use slower but accurate iterating search
+    // this function will use slower but accurate O(n) iterating search
     // - warning; the lookup index should be synchronized if array content
     // is modified (in case of adding or deletion)
     function Find(const Elem; const aIndex: TIntegerDynArray;
@@ -4862,8 +4867,8 @@ type
     // first string field (i.e. set to SortDynArrayString), you can fill the
     // first string field with the searched value (if returned index is >= 0)
     // - return the index found (0..Count-1), or -1 if Elem was not found
-    // - if the array is sorted, it will use fast binary search
-    // - if the array is not sorted, it will use slower iterating search
+    // - if the array is sorted, it will use fast O(log(n)) binary search
+    // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndFill(var Elem; aIndex: PIntegerDynArray=nil;
@@ -4876,8 +4881,8 @@ type
     // first string field (i.e. set to SortDynArrayString), you can fill the
     // first string field with the searched value (if returned index is >= 0)
     // - return the index deleted (0..Count-1), or -1 if Elem was not found
-    // - if the array is sorted, it will use fast binary search
-    // - if the array is not sorted, it will use slower iterating search
+    // - if the array is sorted, it will use fast O(log(n)) binary search
+    // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndDelete(const Elem; aIndex: PIntegerDynArray=nil;
@@ -4890,8 +4895,8 @@ type
     // first string field (i.e. set to SortDynArrayString), you can fill the
     // first string field with the searched value (if returned index is >= 0)
     // - return the index found (0..Count-1), or -1 if Elem was not found
-    // - if the array is sorted, it will use fast binary search
-    // - if the array is not sorted, it will use slower iterating search
+    // - if the array is sorted, it will use fast O(log(n)) binary search
+    // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndUpdate(const Elem; aIndex: PIntegerDynArray=nil;
@@ -4905,8 +4910,8 @@ type
     // first string field with the searched value (if returned index is >= 0)
     // - return the index found (0..Count-1), or -1 if Elem was not found and
     // the supplied element has been succesfully added
-    // - if the array is sorted, it will use fast binary search
-    // - if the array is not sorted, it will use slower iterating search
+    // - if the array is sorted, it will use fast O(log(n)) binary search
+    // - if the array is not sorted, it will use slower O(n) iterating search
     // - warning: Elem must be of the same exact type than the dynamic array,
     // and must be a reference to a variable (you can't write Find(i+10) e.g.)
     function FindAndAddIfNotExisting(const Elem; aIndex: PIntegerDynArray=nil;
@@ -5154,8 +5159,8 @@ type
     // - Add/Delete/Insert/Load* methods will reset this property to false
     // - Sort method will set this property to true
     // - you MUST set this property to false if you modify the dynamic array
-    // content in your code, so that Find() won't try to use binary search in
-    // an usorted array, and miss its purpose
+    // content in your code, so that Find() won't try to wrongly use binary
+    // search in an unsorted array, and miss its purpose
     property Sorted: boolean read fSorted write fSorted;
     /// low-level direct access to the storage variable
     property Value: PPointer read fValue;
@@ -13568,8 +13573,8 @@ type
     function OrderedIndexUpdate(aOldIndex, aNewIndex: integer;
       aOldRecordData, aNewRecordData: pointer): boolean;
     /// retrieve one or more "physical" indexes matching a WHERE Statement
-    // - is faster than a GetIteraring(), because will use binary search using
-    // the OrderedIndex[] array
+    // - is faster than O(1) GetIteraring(), because will use O(log(n)) binary
+    // search using the OrderedIndex[] array
     // - returns the resulting indexes as a a sorted list in MatchIndex/MatchIndexCount
     // - if the indexes are already present in the list, won't duplicate them
     // - WhereSBFValue must be a valid SBF formated field buffer content
@@ -15221,8 +15226,8 @@ type
     /// find an item in this document, and returns its value as TVarData
     // - return false if aName is not found, or if the instance is not a TDocVariant
     // - return true if the name has been found, and aValue stores the value
-    // - will use simple loop lookup to identify the name, unless aSortedCompare
-    // is set, and would let use a faster binary search after a SortByName()
+    // - will use simple loop lookup to identify the name, unless aSortedCompare is
+    // set, and would let use a faster O(log(n)) binary search after a SortByName()
     function GetVarData(const aName: RawUTF8; var aValue: TVarData;
       aSortedCompare: TUTF8Compare=nil): boolean; overload;
       {$ifdef HASINLINE}inline;{$endif}
@@ -15465,7 +15470,7 @@ type
     // - will follow case-insensitive order (@StrIComp) by default, but you
     // can specify @StrComp as comparer function for case-sensitive ordering
     // - once sorted, you can use GetVarData(..,Compare) or GetAs*(..,Compare)
-    // methods for much faster binary search
+    // methods for much faster O(log(n)) binary search
     procedure SortByName(Compare: TUTF8Compare=nil);
     /// sort the document object values by value
     // - do nothing if the document is not a dvObject
@@ -35678,7 +35683,7 @@ end;
 function FastLocatePUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 var L,i,cmp: PtrInt;
-begin // fast binary search
+begin // fast O(log(n)) binary search
   if not Assigned(Compare) or (R<0) then
     result := 0 else
     if Compare(P^[R],Value)<0 then // quick return if already sorted
@@ -35702,7 +35707,7 @@ end;
 function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char;
   Compare: TUTF8Compare): PtrInt; overload;
 var L, cmp: PtrInt;
-begin // fast binary search
+begin // fast O(log(n)) binary search
   L := 0;
   if Assigned(Compare) and (0<=R) then
     repeat
@@ -35726,7 +35731,7 @@ function FastFindIndexedPUTF8Char(P: PPUTF8CharArray; R: PtrInt;
   var SortedIndexes: TCardinalDynArray; Value: PUTF8Char;
   ItemComp: TUTF8Compare): PtrInt;
 var L, cmp: PtrInt;
-begin // fast binary search
+begin // fast O(log(n)) binary search
   L := 0;
   if 0<=R then
   repeat
@@ -45383,7 +45388,7 @@ begin
     dec(n);
     P := fValue^;
     if (n>10) and (length(aIndex)>=n) then begin
-      // array should be sorted via aIndex[] -> use fast binary search
+      // array should be sorted via aIndex[] -> use fast O(log(n)) binary search
       L := 0;
       repeat
         result := (L+n) shr 1;
@@ -45397,7 +45402,7 @@ begin
           n := result-1;
       until L>n;
     end else
-      // array is not sorted, or aIndex=nil -> use iterating search
+      // array is not sorted, or aIndex=nil -> use O(n) iterating search
       for result := 0 to n do
         if aCompare(P^,Elem)=0 then
           exit else
@@ -45457,7 +45462,7 @@ begin
     dec(n);
     P := fValue^;
     if fSorted and (n>10) then begin
-      // array is sorted -> use fast binary search
+      // array is sorted -> use fast O(log(n)) binary search
       L := 0;
       repeat
         result := (L+n) shr 1;
@@ -45469,7 +45474,7 @@ begin
           n := result-1;
       until L>n;
     end else
-      // array is very small, or not sorted -> use iterating search
+      // array is very small, or not sorted -> use O(n) iterating search
       for result := 0 to n do
         if fCompare(P^,Elem)=0 then
           exit else
@@ -58605,7 +58610,7 @@ begin
   if i<0 then
     exit; // WHERE value not found
   if (tfoUnique in Options) or (Limit=1) then begin
-    // unique index: direct fastest binary search
+    // unique index: direct fastest O(log(n)) binary search
     AddSortedInteger(MatchIndex,MatchIndexCount,OrderedIndex[i]);
     // AddSortedInteger() will fail if OrderedIndex[i] already exists
   end else
