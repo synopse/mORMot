@@ -2983,9 +2983,7 @@ function PropNameValid(P: PUTF8Char): boolean;
 
 /// returns TRUE if the given text buffers contains A..Z,0..9,_ characters
 // - use it with property names values (i.e. only including A..Z,0..9,_ chars)
-// - i.e. can be tested via IdemPropName*() functions
-// - first char must be alphabetical or '_', following chars can be
-// alphanumerical or '_'
+// - this function won't check the first char the same way than PropNameValid()
 function PropNamesValid(const Values: array of RawUTF8): boolean;
 
 /// returns TRUE if the given text buffer contains simple characters as
@@ -12683,7 +12681,7 @@ const
   /// used internaly for fast identifier recognition (32 bytes const)
   // - can be used e.g. for field or table name
   // - this char set matches the classical pascal definition of identifiers
-  // - see also PropNameValid()
+  // - see also PropNameValid() and PropNamesValid()
   IsIdentifier =
     [ord('_'),ord('0')..ord('9'),ord('a')..ord('z'),ord('A')..ord('Z')];
 
@@ -57669,12 +57667,13 @@ begin
 end;
 
 function PropNamesValid(const Values: array of RawUTF8): boolean;
-var i: integer;
+var i,j: integer;
 begin
   result := false;
   for i := 0 to high(Values) do
-    if not PropNameValid(pointer(Values[i])) then
-      exit;
+    for j := 1 to length(Values[i]) do
+      if not (ord(Values[i][j]) in IsIdentifier) then
+        exit;
   result := true;
 end;
 
