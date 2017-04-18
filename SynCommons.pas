@@ -39183,19 +39183,16 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         field := @itemtype^.ManagedFields[0];
         fieldcount := itemtype^.ManagedCount;
         {$endif}
-        if fieldcount=0 then
-          crc := crc32c(crc,@itemtype^.recsize,4) else begin
-          unmanagedsize := itemtype^.recsize;
-          for i := 1 to fieldcount do begin
-            info := DeRef(field^.TypeInfo);
-            {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
-            if info^.Kind in tkManagedTypes then // as with Delphi
-            {$endif}
-              dec(unmanagedsize,ManagedTypeSaveRTTIHash(info,crc));
-            inc(field);
-          end;
-          crc := crc32c(crc,@unmanagedsize,4);
+        unmanagedsize := itemtype^.recsize;
+        for i := 1 to fieldcount do begin
+          info := DeRef(field^.TypeInfo);
+          {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
+          if info^.Kind in tkManagedTypes then // as with Delphi
+          {$endif}
+            dec(unmanagedsize,ManagedTypeSaveRTTIHash(info,crc));
+          inc(field);
         end;
+        crc := crc32c(crc,@unmanagedsize,4);
         result := itemtype^.recSize;
       end;
   end;
@@ -54410,7 +54407,7 @@ begin
     {$elseif defined(VER300)}'Delphi 10 Seattle'
     {$elseif defined(VER310)}'Delphi 10.1 Berlin'
     {$elseif defined(VER320)}'Delphi 10.2 Tokyo'
-    {$elseif defined(VER320)}'Delphi 10.3 Carnival'
+    {$elseif defined(VER330)}'Delphi 10.3 Carnival'
     {$ifend}
   {$endif CONDITIONALEXPRESSIONS}
 {$endif}
