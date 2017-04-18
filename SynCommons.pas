@@ -37029,7 +37029,7 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         if CompareMem(A,B,arraysize) then
           result := arraysize else
           result := 0 else begin
-        for i := 1 to info^.elCount do begin
+        for i := 1 to info^.elCount do begin // only compare managed fields
           result := ManagedTypeCompare(A,B,itemtype);
           if result<=0 then
             exit; // invalid (-1) or not equals (0)
@@ -38804,7 +38804,8 @@ type
     function RecordSearch(aRecordTypeInfo: pointer;
       out Writer: TDynArrayJSONCustomWriter; PParser: PTJSONCustomParserAbstract): boolean; overload;
     function RecordSearch(const aTypeName: RawUTF8): integer; overload;
-    function RecordRTTITextHash(aRecordTypeInfo: pointer; var crc: cardinal): boolean; 
+    function RecordRTTITextHash(aRecordTypeInfo: pointer; var crc: cardinal;
+      out recsize: integer): boolean;
   public
     constructor Create;
     procedure RegisterCallbacks(aTypeInfo: pointer;
@@ -38990,7 +38991,7 @@ begin
 end;
 
 function TJSONCustomParsers.RecordRTTITextHash(aRecordTypeInfo: pointer;
-  var crc: cardinal): boolean;
+  var crc: cardinal; out recsize: integer): boolean;
 var ndx: integer;
 begin
   if (self<>nil) and (aRecordTypeInfo<>nil) then
@@ -39000,6 +39001,7 @@ begin
       if RecordTextDefinition='' then
         break;
       crc := crc32c(crc,pointer(RecordTextDefinition),length(RecordTextDefinition));
+      recsize := RecordTypeInfoSize(aRecordTypeInfo);
       result := true;
       exit;
     end;
@@ -39147,9 +39149,9 @@ begin
   end;
 end;
 
-procedure ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal);
+function ManagedTypeSaveRTTIHash(info: PTypeInfo; var crc: cardinal): integer;
 var itemtype: PTypeInfo;
-    itemsize, fieldcount, i: integer;
+    i, fieldcount, unmanagedsize: integer;
     field: PFieldInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
@@ -39164,8 +39166,15 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
   crc := crc32c(crc,@info^.Kind,1); // hash RTTI kind, but not name
   {$endif}
   case info^.Kind of // handle nested RTTI
+  tkLString,{$ifdef FPC}tkLStringOld,{$endif}{$ifdef HASVARUSTRING}tkUString,{$endif}
+  tkWString,tkInterface:
+    result := sizeof(pointer);
+  {$ifndef NOVARIANTS}
+  tkVariant:
+    result := sizeof(variant);
+  {$endif}
   tkRecord{$ifdef FPC},tkObject{$endif}: // first search from custom RTTI text
-    if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc) then begin
+    if not GlobalJSONCustomParsers.RecordRTTITextHash(info,crc,result) then begin
       itemtype := GetTypeInfo(info,tkRecordTypeOrSet);
       if itemtype<>nil then begin
         {$ifdef FPC_NEWRTTI}
@@ -39176,30 +39185,36 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
         field := @itemtype^.ManagedFields[0];
         fieldcount := itemtype^.ManagedCount;
         {$endif}
-        if fieldcount=0 then // hash recsize only if no pointer within
-          crc := crc32c(crc,@itemtype^.recsize,4) else
+        if fieldcount=0 then
+          crc := crc32c(crc,@itemtype^.recsize,4) else begin
+          unmanagedsize := itemtype^.recsize;
           for i := 1 to fieldcount do begin
             info := DeRef(field^.TypeInfo);
             {$ifdef FPC_OLDRTTI} // FPC did include RTTI for unmanaged fields
             if info^.Kind in tkManagedTypes then // as with Delphi
             {$endif}
-            ManagedTypeSaveRTTIHash(info,crc); // only hash managed fields
+              dec(unmanagedsize,ManagedTypeSaveRTTIHash(info,crc));
             inc(field);
           end;
-      end;
-    end;
+          crc := crc32c(crc,@unmanagedsize,4);
+        end;
+        result := itemtype^.recSize;
+      end else
+        result := 0;
+  end;
   tkArray: begin
-    itemtype := ArrayItemType(info,itemsize);
+    itemtype := ArrayItemType(info,result);
     if info=nil then
       exit;
     if (itemtype=nil) or (info^.elCount=0) then
-      crc := crc32c(crc,@itemsize,4) else
-      for i := 1 to info^.elCount do  // only hash managed fields
+      crc := crc32c(crc,@result,4) else
+      for i := 1 to info^.elCount do  // hash managed fields
         ManagedTypeSaveRTTIHash(itemtype,crc);
   end;
   tkDynArray: begin
     dynarray.Init(info,field); // fake void array pointer
     crc := dynarray.SaveToTypeInfoHash(crc);
+    result := sizeof(pointer);
   end;
   end;
 end;
@@ -44778,7 +44793,7 @@ begin
   result := crc;
   if ElemType=nil then // hash fElemSize only if no pointer within
     result := crc32c(result,@fElemSize,4) else
-    ManagedTypeSaveRTTIHash(ElemType,result);  // only hash managed fields
+    ManagedTypeSaveRTTIHash(ElemType,result);  // hash managed fields
 end;
 
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
