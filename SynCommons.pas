@@ -9097,6 +9097,9 @@ type
   // is able to store both keys and values, and provide convenient methods to
   // access the stored data, including JSON serialization and binary storage
   TSynDictionary = class(TSynPersistentLocked)
+  private
+    function GetCapacity: integer;
+    procedure SetCapacity(const Value: integer);
   protected
     fKeys: TDynArrayHashed;
     fValues: TDynArray;
@@ -9263,6 +9266,8 @@ type
     /// direct access to the associated stored values
     // - if you want to access the values, you should use fSafe.Lock/Unlock
     property Values: TDynArray read fValues;
+    /// defines how many items are currently stored in Keys/Values internal arrays
+    property Capacity: integer read GetCapacity write SetCapacity;
   end;
 
   /// event signature to locate a service for a given string key
@@ -55629,6 +55634,23 @@ begin
   result := fSafe.Padding[DIC_TIMESEC].VInteger;
   if result<>0 then
     result := GetTickCount64 shr 10+result;
+end;
+
+function TSynDictionary.GetCapacity: integer;
+begin
+  fSafe.Lock;
+  result := fKeys.Capacity;
+  fSafe.UnLock;
+end;
+
+procedure TSynDictionary.SetCapacity(const Value: integer);
+begin
+  fSafe.Lock;
+  fKeys.Capacity := Value;
+  fValues.Capacity := Value;
+  if fSafe.Padding[DIC_TIMESEC].VInteger>0 then
+    fTimeOuts.Capacity := Value;
+  fSafe.UnLock;
 end;
 
 procedure TSynDictionary.SetTimeouts;

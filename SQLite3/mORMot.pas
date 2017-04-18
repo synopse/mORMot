@@ -42314,7 +42314,6 @@ function TSQLRestServer.EngineDelete(TableModelIndex: integer; ID: TID): boolean
 var Rest: TSQLRest;
 begin
   Rest := GetStaticTableIndex(TableModelIndex);
-  RecordVersionCurrent;
   if Rest=nil then
     result := MainEngineDelete(TableModelIndex,ID) else
     result := Rest.EngineDelete(TableModelIndex,ID);

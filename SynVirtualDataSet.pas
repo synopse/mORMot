@@ -426,7 +426,7 @@ begin
     PInteger(Dest)^ := PInteger(Data)^;
   ftLargeint, ftFloat, ftCurrency:
     PInt64(Dest)^ := PInt64(Data)^;
-  ftDate, ftTime, ftDateTime:
+  ftDate, ftTime:
     if PDateTime(Data)^=0 then
       result := false else begin
       TS := DateTimeToTimeStamp(PDateTime(Data)^);
@@ -435,9 +435,10 @@ begin
         case Field.DataType of
         ftDate: PDateTimeRec(Dest)^.Date := TS.Date;
         ftTime: PDateTimeRec(Dest)^.Time := TS.Time;
-        ftDateTime: PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
         end;
     end;
+  ftDateTime:
+    PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
   ftString: begin
     if DataLen<>0 then begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
