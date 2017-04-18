@@ -5206,14 +5206,14 @@ type
   TSQLPropInfoRTTIManyObjArray = array of TSQLPropInfoRTTIMany;
 
   /// the kind of SQlite3 (virtual) table
-  // - TSQLRecordFTS3 will be associated with vFTS3, TSQLRecordFTS4 with vFTS4,
+  // - TSQLRecordFTS3/4/5 will be associated with vFTS3/vFTS4/vFTS5 values,
   // TSQLRecordRTree with vRTree, any native SQlite3 table as vSQLite3, and
   // a TSQLRecordVirtualTable*ID with rCustomForcedID/rCustomAutoID
   // - a plain TSQLRecord class can be defined as rCustomForcedID (e.g. for
   // TSQLRecordMany) after registration for an external DB via a call to
   // VirtualTableExternalRegister() from mORMotDB unit
   TSQLRecordVirtualKind = (
-    rSQLite3, rFTS3, rFTS4, rRTree, rCustomForcedID, rCustomAutoID);
+    rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID, rCustomAutoID);
 
   /// kind of (static) database server implementation available
   // - sMainEngine will identify the default main SQlite3 engine
@@ -6874,7 +6874,7 @@ type
     // - if SendData is true, content of Value is sent to the server as JSON
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
-    // - if Value is TSQLRecordFTS3, Value.ID is stored to the virtual table
+    // - if Value is TSQLRecordFTS3/4/5, Value.ID is stored to the virtual table
     // - Value class MUST match the TSQLRecordClass used at BatchStart,
     // or may be of any kind if no class was specified
     // - BLOB fields are NEVER transmitted here, even if ForceBlobTransfert=TRUE
@@ -9347,7 +9347,7 @@ type
     /// the shared TSQLRecordProperties information of this TSQLRecord
     // - as retrieved from RTTI
     property Props: TSQLRecordProperties read fProps;
-    /// define if is a normal table (rSQLite3), an FTS3/FTS4/R-Tree virtual
+    /// define if is a normal table (rSQLite3), an FTS/R-Tree virtual
     // table or a custom TSQLVirtualTable*ID (rCustomForcedID/rCustomAutoID)
     // - when set, all internal SQL statements will be (re)created, depending of
     // the expected ID/RowID column name expected (i.e. SQLTableSimpleFields[]
@@ -9788,7 +9788,7 @@ type
   end;
 
   /// a base record, corresponding to a FTS3 table, i.e. implementing full-text
-  // - FTS3/FTS4 table are SQLite virtual tables which allow users to perform
+  // - FTS3/FTS4/FTS5 tables are SQLite virtual tables allowing users to perform
   // full-text searches on a set of documents. The most common (and effective)
   // way to describe full-text searches is "what Google, Yahoo and Altavista do
   // with documents placed on the World Wide Web". Users input a term, or
@@ -9816,16 +9816,18 @@ type
   // the Porter Stemming algorithm, or TSQLRecordFTS3Unicode61 for Unicode
   // support - see http:// sqlite.org/fts3.html#tokenizer
   // - you can select either the FTS3 engine, or the more efficient (and new)
-  // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4 type
-  // - in order to make FTS3/FTS4 queries, use the dedicated TSQLRest.FTSMatch
+  // FTS4 engine (available since version 3.7.4), by using the TSQLRecordFTS4
+  // type, or TSQLRecordFTS5 for the latest (and preferred) FTS5 engine
+  // - in order to make FTS queries, use the dedicated TSQLRest.FTSMatch
   // method, with the MATCH operator (you can use regular queries, but you must
   // specify 'RowID' instead of 'DocID' or 'ID' because of FTS3 Virtual
   // table specificity):
   // ! var IDs: TIDDynArray;
   // ! if FTSMatch(TSQLMyFTS3Table,'text MATCH "linu*"',IDs) then
   // !  //  you have all matching IDs in IDs[]
-  // - by convention, inherited class name should begin with "TSQLRecordFTS3",
-  // and remaining chars will be used as TSQLRecordFTS3Porter -> tokenize=porter
+  // - by convention, inherited class name could specify a custom stemming
+  // algorithm by starting with "TSQLRecordFTS3", and adding the algorithm name as
+  // suffix, e.g. TSQLRecordFTS3Porter will create a "tokenize=porter" virtual table
   TSQLRecordFTS3 = class(TSQLRecordVirtual)
   public
      /// optimize the FTS3 virtual table
@@ -9854,19 +9856,20 @@ type
   // - will generate tokenize=unicode64 by convention from the class name
   TSQLRecordFTS3Unicode61 = class(TSQLRecordFTS3);
 
-  /// a base record, corresdonding to a FTS4 table, which is an enhancement to FTS3
+  /// a base record, corresponding to a FTS4 table, which is an enhancement to FTS3
   // - FTS3 and FTS4 are nearly identical. They share most of their code in common,
   // and their interfaces are the same. The only difference is that FTS4 stores
   // some additional information about the document collection in two of new FTS
   // shadow tables. This additional information allows FTS4 to use certain
   // query performance optimizations that FTS3 cannot use. And the added information
   // permits some additional useful output options in the matchinfo() function.
-  // - For newer applications, TSQLRecordFTS4 is recommended; though if minimal disk
-  // usage or compatibility with older versions of SQLite are important, then
-  // TSQLRecordFTS3 will usually serve just as well.
+  // - for newer applications, TSQLRecordFTS5 is recommended; though if minimal
+  // disk usage or compatibility with older versions of SQLite are important,
+  // then TSQLRecordFTS3 will usually serve just as well
   // - see http:// sqlite.org/fts3.html#section_1_1
-  // - by convention, inherited class name should begin with "TSQLRecordFTS4",
-  // and remaining chars will be used as TSQLRecordFTS4Porter -> tokenize=porter
+  // - by convention, inherited class name could specify a custom stemming
+  // algorithm by starting with "TSQLRecordFTS4", and adding the algorithm name as
+  // suffix, e.g. TSQLRecordFTS'Porter will create a "tokenize=porter" virtual table
   TSQLRecordFTS4 = class(TSQLRecordFTS3)
   public
     /// this overriden method will create TRIGGERs for FTSWithoutContent()
@@ -9884,7 +9887,29 @@ type
   // - will generate tokenize=unicode64 by convention from the class name
   TSQLRecordFTS4Unicode61 = class(TSQLRecordFTS4);
 
-  /// class-reference type (metaclass) of a FTS3/FTS4 virtual table
+  /// a base record, corresponding to a FTS5 table, which is an enhancement to FTS4
+  // - FTS5 is a new version of FTS4 that includes various fixes and solutions for
+  // problems that could not be fixed in FTS4 without sacrificing backwards compatibility
+  // - for newer applications, TSQLRecordFTS5 is recommended; though if minimal
+  // disk usage or compatibility with older versions of SQLite are important,
+  // then TSQLRecordFTS3/TSQLRecordFTS4 will usually serve just as well
+  // - see https://sqlite.org/fts5.html#appendix_a
+  // - by convention, inherited class name could specify a custom stemming
+  // algorithm by starting with "TSQLRecordFTS5", and adding the algorithm name as
+  // suffix, e.g. TSQLRecordFTS5Porter will create a "tokenize=porter" virtual table
+  TSQLRecordFTS5 = class(TSQLRecordFTS4);
+
+  /// this base class will create a FTS5 table using the Porter Stemming algorithm
+  // - see https://sqlite.org/fts5.html#tokenizers
+  // - will generate tokenize=porter by convention from the class name
+  TSQLRecordFTS5Porter = class(TSQLRecordFTS5);
+
+  /// this base class will create a FTS5 table using the Unicode61 Stemming algorithm
+  // - see https://sqlite.org/fts5.html#tokenizers
+  // - will generate tokenize=unicode64 by convention from the class name
+  TSQLRecordFTS5Unicode61 = class(TSQLRecordFTS5);
+
+  /// class-reference type (metaclass) of a FTS3/FTS4/FTS5 virtual table
   TSQLRecordFTS3Class = class of TSQLRecordFTS3;
 
   /// class-reference type (metaclass) of a RTREE virtual table
@@ -13763,7 +13788,7 @@ type
     function OneFieldValues(Table: TSQLRecordClass; const FieldName: RawUTF8;
       const WhereClause: RawUTF8; var Data: TInt64DynArray; SQL: PRawUTF8=nil): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs
-    // - this method will work for both TSQLRecordFTS3 and TSQLRecordFTS4
+    // - this method works for TSQLRecordFTS3, TSQLRecordFTS4 and TSQLRecordFTS5
     // - this method expects the column/field names to be supplied in the MATCH
     // statement clause
     // - example of use:  FTSMatch(TSQLMessage,'Body MATCH :("linu*"):',IntResult)
@@ -13772,7 +13797,7 @@ type
       var DocID: TIDDynArray): boolean; overload;
     /// dedicated method used to retrieve free-text matching DocIDs with
     // enhanced ranking information
-    // - this method will work for both TSQLRecordFTS3 and TSQLRecordFTS4
+    // - this method works for TSQLRecordFTS3, TSQLRecordFTS4 and TSQLRecordFTS5
     // - this method will search in all FTS3 columns, and except some floating-point
     // constants for weigthing each column (there must be the same number of
     // PerFieldWeight parameters as there are columns in the TSQLRecordFTS3 table)
@@ -19793,15 +19818,15 @@ const
   /// if a TSQLVirtualTablePreparedConstraint.Column points to the RowID
   VIRTUAL_TABLE_ROWID_COLUMN = -1;
 
-  /// if the TSQLRecordVirtual table kind is a FTS3/FTS4 virtual table
-  IS_FTS = [rFTS3, rFTS4];
+  /// if the TSQLRecordVirtual table kind is a FTS virtual table
+  IS_FTS = [rFTS3, rFTS4, rFTS5];
 
   /// if the TSQLRecordVirtual table kind is not an embedded type
   // - can be set for a TSQLRecord after a VirtualTableExternalRegister call
   IS_CUSTOM_VIRTUAL = [rCustomForcedID, rCustomAutoID];
 
   /// if the TSQLRecordVirtual table kind expects the ID to be set on INSERT
-  INSERT_WITH_ID = [rFTS3, rFTS4, rRTree, rCustomForcedID];
+  INSERT_WITH_ID = [rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID];
 
   /// Supervisor Table access right, i.e. alllmighty over all fields
   ALL_ACCESS_RIGHTS = [0..MAX_SQLTABLES-1];
@@ -31257,7 +31282,8 @@ end;
 class function TSQLRecord.GetSQLCreate(aModel: TSQLModel): RawUTF8;
 // not implemented in TSQLRecordProperties since has been made virtual
 var i: integer;
-    SQL, tokenizer: RawUTF8;
+    c: TClass;
+    SQL, cname, tokenizer: RawUTF8;
     M: TSQLVirtualTableClass;
     Props: TSQLModelRecordProperties;
     fields: TSQLPropInfoList;
@@ -31269,10 +31295,9 @@ begin
     // create a FTS3/FTS4/RTREE virtual table
     result := 'CREATE VIRTUAL TABLE '+SQLTableName+' USING ';
     case Props.Kind of
-    rFTS3:
-      result := result+'fts3(';
-    rFTS4:
-      result := result+'fts4(';
+    rFTS3:  result := result+'fts3(';
+    rFTS4:  result := result+'fts4(';
+    rFTS5:  result := result+'fts5(';
     rRTree: result := result+'rtree(RowID,';
     rCustomForcedID, rCustomAutoID: begin
       M := aModel.VirtualTableModule(self);
@@ -31287,7 +31312,7 @@ begin
     end;
     fields := Props.Props.Fields;
     case Props.Kind of
-    rFTS3, rFTS4: begin
+    rFTS3, rFTS4, rFTS5: begin
       if (Props.fFTSWithoutContentFields<>'') and (Props.fFTSWithoutContentTableIndex>=0) then
         result := result+'content="'+aModel.Tables[Props.fFTSWithoutContentTableIndex].
           SQLTableName+'",';
@@ -31300,13 +31325,18 @@ begin
           raise EModelException.CreateUTF8('%.%: FTS3/FTS4 field must be RawUTF8',
             [self,Name]) else
           result := result+Name+',';
-      if self.InheritsFrom(TSQLRecord) then
-      ToText(self.ClassParent,tokenizer);
-      if (length(tokenizer) > 14) and // in case of something like: TSQLFTSTest = class(TSQLRecordFTS3)
-         IdemPChar(pointer(tokenizer),'TSQLRECORDFTS') and
-         (tokenizer[14] in ['3','4']) then
-        delete(tokenizer,1,14) else // e.g. TSQLRecordFTS3Porter -> 'Porter'
-        tokenizer := 'simple';  
+      tokenizer := 'simple';
+      c := self;
+      repeat
+        ToText(c,cname); // TSQLFTSTest = class(TSQLRecordFTS3Porter)
+        if IdemPChar(pointer(cname),'TSQLRECORDFTS') and
+           (cname[14] in ['3','4','5']) then begin
+          if length(cname)>14 then
+            tokenizer := copy(cname,15,100); // e.g. TSQLRecordFTS3Porter -> 'Porter'
+          break;
+        end;
+        c := c.ClassParent;
+      until c=TSQLRecord;
       result := FormatUTF8('% tokenize=%)',[result,LowerCaseU(tokenizer)]);
     end;
     rRTree: begin
@@ -32668,8 +32698,8 @@ end;
 procedure TSQLModelRecordProperties.SetKind(Value: TSQLRecordVirtualKind);
 function IntSQLTableSimpleFields(withID, withTableName: boolean): RawUTF8;
 const IDComma: array[TSQLRecordVirtualKind] of rawUTF8 =
-  ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,');
-// rSQLite3, rFTS3, rFTS4, rRTree, rCustomForcedID, rCustomAutoID
+  ('ID,','RowID,','RowID,','RowID,','RowID,','RowID,','RowID,');
+// rSQLite3, rFTS3, rFTS4, rFTS5, rRTree, rCustomForcedID, rCustomAutoID
 var TableName: RawUTF8;
     i: integer;
 begin
@@ -32714,8 +32744,8 @@ procedure TSQLModelRecordProperties.FTS4WithoutContent(ContentTable: TSQLRecordC
 var i: integer;
     field: RawUTF8;
 begin
-  if Kind<>rFTS4 then
-    raise EModelException.CreateUTF8('FTS4WithoutContent: % is not a FTS4 table',[Props.Table]);
+  if not(Kind in [rFTS4,rFTS5]) then
+    raise EModelException.CreateUTF8('FTS4WithoutContent: % is not a FTS4/5 table',[Props.Table]);
   fFTSWithoutContentTableIndex := fModel.GetTableIndexExisting(ContentTable);
   for i := 0 to Props.Fields.Count-1 do begin
     field := Props.Fields.List[i].Name;
@@ -32782,6 +32812,8 @@ begin
   if (cardinal(aIndex)>cardinal(fTablesMax)) or (fTableProps[aIndex]<>nil) then
     raise EModelException.Create('TSQLModel.SetTableProps');
   Table := fTables[aIndex];
+  if Table.InheritsFrom(TSQLRecordFTS5) then
+    Kind := rFTS5 else
   if Table.InheritsFrom(TSQLRecordFTS4) then
     Kind := rFTS4 else
   if Table.InheritsFrom(TSQLRecordFTS3) then
@@ -48758,7 +48790,7 @@ begin
     exit;
   main := Server.Model.Tables[Props.fFTSWithoutContentTableIndex].SQLTableName;
   if not Server.IsInternalSQLite3Table(Props.fFTSWithoutContentTableIndex) then begin
-    Server.InternalLog('% is an external content FTS4 table but source % is not '+
+    Server.InternalLog('% is an external content FTS4/5 table but source % is not '+
       'a local SQLite3 table: FTS search will be unavailable',[self,main],sllWarning);
     exit;
   end;
