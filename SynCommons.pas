@@ -6347,9 +6347,9 @@ procedure TypeInfoToName(aTypeInfo: pointer; var result: RawUTF8;
 procedure TypeInfoToQualifiedName(aTypeInfo: pointer; var result: RawUTF8;
   const default: RawUTF8='');
 
-/// compute a crc32c-based hash of the RTTI for a given type
+/// compute a crc32c-based hash of the RTTI for a managed given type
 // - can be used to ensure that the RecordSave/TDynArray.SaveTo binary layout
-// is compatible accross executables
+// is compatible accross executables, even between FPC and Delphi
 // - will ignore the type names, but will check the RTTI type kind and any
 // nested fields (for records or arrays) - for a record/object type, will use
 // TTextWriter.RegisterCustomJSONSerializerFromText definition, if available  
@@ -12469,9 +12469,9 @@ type
   /// used to store Time Zone bias in TSynTimeZone
   // - map how low-level information is stored in the Windows Registry
   TTimeZoneInfo = record
-    Bias: LongInt;
-    bias_std: LongInt;
-    bias_dlt: LongInt;
+    Bias: integer;
+    bias_std: integer;
+    bias_dlt: integer;
     change_time_std: TTimeZoneValue;
     change_time_dlt: TTimeZoneValue;
   end;
@@ -37263,9 +37263,8 @@ var info,fieldinfo: PTypeInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
     {$endif}
-    F: integer;
+    F, offset: integer;
     field: PFieldInfo;
-    Diff: cardinal;
     A, B: PAnsiChar;
 begin
   A := @RecA;
@@ -37280,7 +37279,7 @@ begin
     result := true;
     exit;
   end;
-  Diff := 0;
+  offset := 0;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
   field := @recInitData^.ManagedFields[0];
@@ -37296,25 +37295,25 @@ begin
       continue; // as with Delphi
     end;
     {$endif}
-    Diff := field^.Offset-Diff;
-    if Diff<>0 then begin
-      if not CompareMem(A,B,Diff) then
+    offset := integer(field^.Offset)-offset;
+    if offset<>0 then begin
+      if not CompareMem(A,B,offset) then
         exit; // binary block not equal
-      inc(A,Diff);
-      inc(B,Diff);
+      inc(A,offset);
+      inc(B,offset);
     end;
-    Diff := ManagedTypeCompare(A,B,fieldinfo);
-    if integer(Diff)<=0 then
-      if Diff=0 then // A^<>B^
+    offset := ManagedTypeCompare(A,B,fieldinfo);
+    if offset<=0 then
+      if offset=0 then // A^<>B^
         exit else    // Diff=-1 for unexpected type
         raise ESynException.CreateUTF8('RecordEquals: unexpected %',
           [ToText(fieldinfo^.Kind)^]);
-    inc(A,Diff);
-    inc(B,Diff);
-    inc(Diff,field^.Offset);
+    inc(A,offset);
+    inc(B,offset);
+    inc(offset,field^.Offset);
     inc(field);
   end;
-  if CompareMem(A,B,info^.recSize-Diff) then
+  if CompareMem(A,B,integer(info^.recSize)-offset) then
     result := true;
 end;
 
@@ -37370,8 +37369,7 @@ var info,fieldinfo: PTypeInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
     {$endif}
-    F: integer;
-    Diff: cardinal;
+    F, offset: integer;
     field: PFieldInfo;
     R: PAnsiChar;
 begin
@@ -37382,7 +37380,7 @@ begin
     exit;
   end;
   Len := info^.recSize;
-  Diff := 0;
+  offset := 0;
   {$ifdef FPC_NEWRTTI}
   recInitData := GetFPCRecInitData(AlignTypeData(PByte(info)+2));
   field := @recInitData^.ManagedFields[0];
@@ -37398,27 +37396,27 @@ begin
       continue; // as with Delphi
     end;
     {$endif};
-    Diff := field^.Offset-Diff;
-    if Diff<>0 then begin
-      MoveFast(R^,Dest^,Diff);
-      inc(R,Diff);
-      inc(Dest,Diff);
+    offset := integer(field^.Offset)-offset;
+    if offset>0 then begin
+      MoveFast(R^,Dest^,offset);
+      inc(R,offset);
+      inc(Dest,offset);
     end;
-    Dest := ManagedTypeSave(R,Dest,fieldinfo,integer(Diff));
+    Dest := ManagedTypeSave(R,Dest,fieldinfo,offset);
     if Dest=nil then begin
       result := nil; // invalid/unhandled record content
       exit;
     end;
-    inc(R,Diff);
-    inc(Diff,field.Offset);
+    inc(R,offset);
+    inc(offset,field.Offset);
     inc(field);
   end;
-  Diff := info^.recSize-Diff;
-  if integer(Diff)<0 then
-    raise ESynException.Create('RecordSave diff<0') else
-  if Diff<>0 then begin
-    MoveFast(R^,Dest^,Diff);
-    result := Dest+Diff;
+  offset := integer(info^.recSize)-offset;
+  if offset<0 then
+    raise ESynException.Create('RecordSave offset<0') else
+  if offset<>0 then begin
+    MoveFast(R^,Dest^,offset);
+    result := Dest+offset;
   end else
     result := Dest;
 end;
@@ -37538,8 +37536,7 @@ var info,fieldinfo: PTypeInfo;
     {$ifdef FPC_NEWRTTI}
     recInitData: PRecInitData;
     {$endif}
-    F: integer;
-    Diff: cardinal;
+    F, offset: integer;
     field: PFieldInfo;
     R: PAnsiChar;
 begin
@@ -37567,7 +37564,7 @@ begin
     end;
     exit;
   end;
-  Diff := 0;
+  offset := 0;
   {$ifdef FPC_NEWRTTI}
   for F := 1 to recInitData^.ManagedFieldCount do begin
   {$else}
@@ -37580,25 +37577,25 @@ begin
       continue; // as with Delphi
     end;
     {$endif};
-    Diff := field^.Offset-Diff;
-    if Diff<>0 then begin
-      MoveFast(Source^,R^,Diff);
-      inc(Source,Diff);
-      inc(R,Diff);
+    offset := integer(field^.Offset)-offset;
+    if offset<>0 then begin
+      MoveFast(Source^,R^,offset);
+      inc(Source,offset);
+      inc(R,offset);
     end;
-    Diff := ManagedTypeLoad(R,Source,fieldinfo);
+    offset := ManagedTypeLoad(R,Source,fieldinfo);
     if Source=nil then
       exit; // error at loading
-    inc(R,Diff);
-    inc(Diff,field^.Offset);
+    inc(R,offset);
+    inc(offset,field^.Offset);
     inc(field);
   end;
-  Diff := info^.recSize-Diff;
-  if integer(Diff)<0 then
-    raise ESynException.Create('RecordLoad diff<0') else
-  if Diff<>0 then begin
-    MoveFast(Source^,R^,Diff);
-    result := Source+Diff;
+  offset := integer(info^.recSize)-offset;
+  if offset<0 then
+    raise ESynException.Create('RecordLoad offset<0') else
+  if offset<>0 then begin
+    MoveFast(Source^,R^,offset);
+    result := Source+offset;
   end else
     result := Source;
 end;
@@ -39158,6 +39155,7 @@ var itemtype: PTypeInfo;
     {$endif}
     dynarray: TDynArray;
 begin // info is expected to come from a DeRef() if retrieved from RTTI
+  result := 0;
   if info=nil then
     exit;
   {$ifdef FPC} // storage binary layout is Delphi's
@@ -39199,17 +39197,17 @@ begin // info is expected to come from a DeRef() if retrieved from RTTI
           crc := crc32c(crc,@unmanagedsize,4);
         end;
         result := itemtype^.recSize;
-      end else
-        result := 0;
+      end;
   end;
   tkArray: begin
     itemtype := ArrayItemType(info,result);
     if info=nil then
       exit;
-    if (itemtype=nil) or (info^.elCount=0) then
-      crc := crc32c(crc,@result,4) else
-      for i := 1 to info^.elCount do  // hash managed fields
-        ManagedTypeSaveRTTIHash(itemtype,crc);
+    unmanagedsize := result;
+    if itemtype<>nil then
+      for i := 1 to info^.elCount do
+        dec(unmanagedsize,ManagedTypeSaveRTTIHash(itemtype,crc));
+    crc := crc32c(crc,@unmanagedsize,4);
   end;
   tkDynArray: begin
     dynarray.Init(info,field); // fake void array pointer
@@ -44790,10 +44788,11 @@ end;
 
 function TDynArray.SaveToTypeInfoHash(crc: cardinal): cardinal;
 begin
-  result := crc;
   if ElemType=nil then // hash fElemSize only if no pointer within
-    result := crc32c(result,@fElemSize,4) else
-    ManagedTypeSaveRTTIHash(ElemType,result);  // hash managed fields
+    result := crc32c(crc,@fElemSize,4) else begin
+    result := crc;
+    ManagedTypeSaveRTTIHash(ElemType,result);
+  end;
 end;
 
 function TDynArray.SaveTo(Dest: PAnsiChar): PAnsiChar;
@@ -54009,13 +54008,13 @@ end;
 function TSynFPUException.VirtualAddRef: integer;
 begin
   if fRefCount=0 then begin
-  {$ifndef CPU64}
+    {$ifndef CPU64}
     fSaved8087 := Get8087CW;
     Set8087CW(fExpected8087); // set FPU exceptions mask
-  {$else}
+    {$else}
     fSavedMXCSR := GetMXCSR;
     SetMXCSR(fExpectedMXCSR); // set FPU exceptions mask
-  {$endif}
+    {$endif}
   end;
   inc(fRefCount);
   result := 1; // should never be 0 (mark release of TSynFPUException instance)
@@ -54025,11 +54024,11 @@ function TSynFPUException.VirtualRelease: integer;
 begin
   dec(fRefCount);
   if fRefCount=0 then
-  {$ifndef CPU64}
+    {$ifndef CPU64}
     Set8087CW(fSaved8087);
-  {$else}
+    {$else}
     SetMXCSR(fSavedMXCSR);
-  {$endif}
+    {$endif}
   result := 1; // should never be 0 (mark release of TSynFPUException instance)
 end;
 
@@ -54057,11 +54056,11 @@ begin
   result := GlobalSynFPUExceptionLibrary;
   if result<>nil then
     exit;
-{$ifndef CPU64}
+  {$ifndef CPU64}
   obj := TSynFPUException.Create($137F);
-{$else}
+  {$else}
   obj := TSynFPUException.Create($1FA0);
-{$endif}
+  {$endif}
   GarbageCollector.Add(obj);
   GlobalSynFPUExceptionLibrary := obj;
   result := obj;
@@ -54073,11 +54072,11 @@ begin
   result := GlobalSynFPUExceptionDelphi;
   if result<>nil then
     exit;
-{$ifndef CPU64}
+  {$ifndef CPU64}
   obj := TSynFPUException.Create($1372);
-{$else}
+  {$else}
   obj := TSynFPUException.Create($1920);
-{$endif}
+  {$endif}
   GarbageCollector.Add(obj);
   GlobalSynFPUExceptionDelphi := obj;
   result := obj;
