@@ -1557,7 +1557,7 @@ begin
           [Props.SQLTableName,SetFieldName,SetValue,ID[0]]) else
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
           [Props.SQLTableName,SetFieldName,SetValue,
-           Props.RecordVersionField,RecordVersionCompute,ID[0]]) else begin
+           Props.RecordVersionField.Name,RecordVersionCompute,ID[0]]) else begin
       IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
       if Props.RecordVersionField=nil then
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
@@ -1565,7 +1565,7 @@ begin
         RecordVersion := RecordVersionCompute;
         result := ExecuteFmt('UPDATE % SET %=%,%=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,
-           Props.RecordVersionField,RecordVersion,IDs]);
+           Props.RecordVersionField.Name,RecordVersion,IDs]);
       end;
     end;
     if not result then
