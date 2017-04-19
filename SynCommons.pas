@@ -8964,9 +8964,10 @@ type
   end;
 
   /// a TRawUTF8List which will use an internal hash table for faster IndexOf()
-  // - this is a rather rough implementation: all values are re-hashed after
-  // change: but purpose of this class is to allow faster access of a static
-  // list of identifiers (e.g. service method names) which are fixed during run
+  // - purpose of this class is to allow faster access of a static list of RawUTF8
+  // values (e.g. service method names) which are somewhat fixed during run
+  // - uses a rather rough implementation: all values are re-hashed after change,
+  // just before IndexOf() call, or explicitly via the ReHash method
   TRawUTF8ListHashed = class(TRawUTF8List)
   protected
     fHash: TDynArrayHashed;
@@ -8999,7 +9000,14 @@ type
       wasAdded: PBoolean=nil): PtrInt; override;
     /// search in the low-level internal hashing table
     function HashFind(aHashCode: cardinal): integer; {$ifdef HASINLINE}inline;{$endif}
+    /// ensure all items are hashed if necessay
+    // - could be executed after several Add/AddObject calls to ensure the hash
+    // table is computed and this instance ready for the next IndexOf() call
+    // - will hash all items only if fChanged or aForceRehash is true
+    // - returns true if stored information has been re-hashed
+    function ReHash(aForceRehash: boolean=false): boolean;
     /// access to the low-level internal hashing table
+    // - could be used e.g. to retrieve Hash.IsHashElementWithoutCollision state
     property Hash: TDynArrayHashed read fHash;
   end;
 
@@ -55426,6 +55434,13 @@ end;
 function TRawUTF8ListHashed.HashFind(aHashCode: cardinal): integer;
 begin
   result := fHash.HashFind(aHashCode,false);
+end;
+
+function TRawUTF8ListHashed.ReHash(aForceRehash: boolean): boolean;
+begin
+  if fChanged or aForceRehash then
+    fChanged := not fHash.ReHash(aForceRehash);
+  result := not fChanged;
 end;
 
 
