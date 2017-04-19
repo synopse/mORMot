@@ -8793,7 +8793,7 @@ type
     property Safe: TSynLocker read fSafe;
   end;
 
-  /// This class is able to emulate a TStringList with our native UTF-8 string type
+  /// TStringList-class optimized to work with our native UTF-8 string type
   // - cross-compiler, from Delphi 6 and up, i.e is Unicode Ready for all
   TRawUTF8List = class
   protected
@@ -9005,15 +9005,16 @@ type
     // table is computed and this instance ready for the next IndexOf() call
     // - will hash all items only if fChanged or aForceRehash is true
     // - returns true if stored information has been re-hashed
-    function ReHash(aForceRehash: boolean=false): boolean;
+    function ReHash(aForceRehash: boolean=false): boolean; virtual;
     /// access to the low-level internal hashing table
     // - could be used e.g. to retrieve Hash.IsHashElementWithoutCollision state
     property Hash: TDynArrayHashed read fHash;
   end;
 
-  /// a TRawUTF8List with an internal hash, with locking methods
+  /// a TRawUTF8List with an internal hash, with thread-safe locking methods
   // - by default, inherited methods are not protected by the mutex: you have
-  // to explicitely call Lock/UnLock to enter or leave the critical section
+  // to explicitely call Safe.Lock/UnLock to enter or leave the critical section,
+  // or use the methods overriden at this class level
   TRawUTF8ListHashedLocked = class(TRawUTF8ListHashed)
   protected
     fSafe: TSynLocker;
@@ -9063,11 +9064,13 @@ type
     /// delete all RawUTF8 items in the list
     // - just a wrapper over inherited Clear using Safe.Lock/Unlock
     procedure Clear; override;
+    /// ensure all items are hashed if necessay
+    // - just a wrapper over inherited Rehash using Safe.Lock/Unlock
+    function ReHash(aForceRehash: boolean=false): boolean; override;
   end;
 
-  /// This class is able to emulate a TStringList with our native UTF-8 string
-  // type and storing TMethod callbacks
-  // - cross-compiler, from Delphi 6 and up, i.e is Unicode Ready for all
+  /// this class stores TMethod callbacks with an associated UTF-8 string
+  // - event names will be hashed for O(1) fast access
   TRawUTF8MethodList = class(TRawUTF8ListHashed)
   protected
     fEvents: TMethodDynArray;
@@ -55559,6 +55562,16 @@ begin
   fSafe.Lock;
   try
     inherited Clear;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TRawUTF8ListHashedLocked.ReHash(aForceRehash: boolean): boolean;
+begin
+  fSafe.Lock;
+  try
+    result := inherited Rehash(aForceRehash);
   finally
     fSafe.UnLock;
   end;
