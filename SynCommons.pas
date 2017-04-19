@@ -2956,10 +2956,15 @@ function UrlDecodeNextValue(U: PUTF8Char; out Value: RawUTF8): PUTF8Char;
 // - returns nil if there was no name=... pattern in U
 function UrlDecodeNextName(U: PUTF8Char; out Name: RawUTF8): PUTF8Char;
 
-/// checks if the supplied text don't need URI encoding
-// - returns TRUE if all its chars are plain ASCII-7 RFC compatible identifiers
-// (0..9a..zA..Z_.~)
+/// checks if the supplied UTF-8 text don't need URI encoding
+// - returns TRUE if all its chars are non-void plain ASCII-7 RFC compatible
+// identifiers (0..9a..zA..Z-_.~)
 function IsUrlValid(P: PUTF8Char): boolean;
+
+/// checks if the supplied UTF-8 text values don't need URI encoding
+// - returns TRUE if all its chars of all strings are non-void plain ASCII-7 RFC
+// compatible identifiers (0..9a..zA..Z-_.~)
+function AreUrlValid(const Url: array of RawUTF8): boolean;
 
 /// ensure the supplied URI contains a trailing '/' charater
 function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
@@ -31438,6 +31443,16 @@ begin
     until P^=#0;
     result := true;
   end;
+end;
+
+function AreUrlValid(const Url: array of RawUTF8): boolean;
+var i: integer;
+begin
+  result := false;
+  for i := 0 to high(Url) do
+    if not IsUrlValid(pointer(Url[i])) then
+      exit;
+  result := true;
 end;
 
 function IncludeTrailingURIDelimiter(const URI: RawByteString): RawByteString;
