@@ -22754,7 +22754,7 @@ begin
   {$endif}
   varByte,
   varBoolean:
-    UInt32ToUTF8(VByte,result);
+    result := SmallUInt32UTF8[VByte];
   varInteger:
     Int32ToUTF8(VInteger,result);
   varInt64,

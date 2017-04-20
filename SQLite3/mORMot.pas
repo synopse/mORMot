@@ -7002,6 +7002,7 @@ type
     function GetHasBlob: boolean;
     function GetSimpleFieldCount: integer;
     function GetFillCurrentRow: integer;
+    function GetFillReachedEnd: boolean;
     function GetTable: TSQLTable;
   protected
     fInternalState: cardinal;
@@ -7993,6 +7994,9 @@ type
     /// this property contains the current row number (beginning with 1),
     // initialized to 1 by FillPrepare(), which will be read by FillOne
     property FillCurrentRow: integer read GetFillCurrentRow;
+    /// this property is set to true, if all rows have been browsed after
+    // FillPrepare / while FillOne do ... 
+    property FillReachedEnd: boolean read GetFillReachedEnd;
     /// used internally by FillPrepare() and corresponding Fill*() methods
     property FillContext: TSQLRecordFill read fFill;
     /// this property contains the internal state counter of the server database
@@ -32028,6 +32032,12 @@ begin
   if (self=nil) or (fFill=nil) then
     result := 0 else
     result := fFill.FillCurrentRow;
+end;
+
+function TSQLRecord.GetFillReachedEnd: boolean;
+begin
+  result := (self=nil) or (fFill=nil) or (fFill.Table.fRowCount=0) or 
+   (cardinal(fFill.FillCurrentRow)>cardinal(fFill.Table.fRowCount));
 end;
 
 function TSQLRecord.GetTable: TSQLTable;
