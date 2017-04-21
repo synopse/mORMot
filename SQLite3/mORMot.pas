@@ -1594,6 +1594,7 @@ type
   // - FieldCount is 0 if was never sorted
   // - used to sort data again after a successfull data update with TSQLTableJSON.FillFrom()
   TSQLTableSortParams = record
+    Comp: TUTF8Compare;
     FieldCount, FieldIndex: integer;
     FieldType: TSQLFieldType;
     Asc: boolean;
@@ -8548,6 +8549,13 @@ type
     // - returns 0 if not found, or the matching Row number otherwise
     function SearchFieldIdemPChar(const aValue: RawUTF8; FieldIndex: integer;
       StartRow: integer=1): integer;
+    /// search for a value using O(log(n)) binary search of a sorted field
+    // - here the content should have been previously sorted via Sort(),
+    // or CustomCompare should be defined, otherwise the SearchFieldEquals()
+    // slower O(n) method is called
+    // - returns 0 if not found, or the matching Row number otherwise
+    function SearchFieldSorted(const aValue: RawUTF8; FieldIndex: integer;
+      CustomCompare: TUTF8Compare=nil): integer;
 
     /// if the ID column is available, hides it from fResults[]
     // - useful for simplier UI, with a hidden ID field
@@ -25941,7 +25949,6 @@ type
   TUTF8QuickSort = {$ifndef ISDELPHI2010}object{$else}record{$endif}
   public
     // sort parameters
-    fComp: TUTF8Compare;
     Results: PPUtf8CharArray;
     IDColumn: PPUtf8CharArray;
     Params: TSQLTableSortParams;
@@ -25979,7 +25986,7 @@ end;
 function TUTF8QuickSort.CompI: integer;
 var i64: Int64;
 begin
-  result := fComp(CI^,PP^);
+  result := Params.Comp(CI^,PP^);
   if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
@@ -25995,7 +26002,7 @@ end;
 function TUTF8QuickSort.CompJ: integer;
 var i64: Int64;
 begin
-  result := fComp(CJ^,PP^);
+  result := Params.Comp(CJ^,PP^);
   if result=0 then begin
     // same value -> sort by ID
     if Assigned(IDColumn) then
@@ -26055,7 +26062,7 @@ procedure TUTF8QuickSort.QuickSort(L, R: Integer);
 // code below is very fast and optimized
 var P: PtrInt;
 begin
-  if @fComp<>nil then
+  if @Params.Comp<>nil then
   repeat
     I := L;
     CI := @Results[I*Params.FieldCount+Params.FieldIndex];
@@ -26137,13 +26144,13 @@ begin
     exit;
   if FieldType=sftUnknown then // guess the field type from first row
     FieldType := self.FieldType(Field,nil);
+  // store sorting parameters for re-sort in TSQLTableJSON.FillFrom()
   if Assigned(CustomCompare) then
-    Sort.fComp := CustomCompare else begin
-    Sort.fComp := SQLFieldTypeComp[FieldType];
-    if @Sort.fComp=nil then
+    fSortParams.Comp := CustomCompare else begin
+    fSortParams.Comp := SQLFieldTypeComp[FieldType];
+    if @fSortParams.Comp=nil then
       exit;
   end;
-  // store sorting parameters for resort in TSQLTableJSON.FillFrom()
   fSortParams.FieldType := FieldType;
   fSortParams.FieldCount := FieldCount;
   fSortParams.FieldIndex := Field;
@@ -26164,6 +26171,33 @@ begin
     Sort.QuickSort(1,fRowCount); // ignore first row = field names -> (1,RowCount)
   if PCurrentRow<>nil then
     PCurrentRow^ := Sort.CurrentRow;
+end;
+
+function TSQLTable.SearchFieldSorted(const aValue: RawUTF8; FieldIndex: integer;
+  CustomCompare: TUTF8Compare): integer;
+var L,R,cmp: integer;
+begin
+  if (self<>nil) and (aValue<>'') and (fRowCount>1) and (FieldIndex<>fFieldIndexID) and
+     (cardinal(FieldIndex)<cardinal(fFieldCount)) then begin
+    if not Assigned(CustomCompare) then
+      CustomCompare := fSortParams.Comp;
+    if Assigned(CustomCompare) then begin // fast binary search
+      L := 1;
+      R := fRowCount;
+      repeat
+        result := (L+R) shr 1;
+        cmp := CustomCompare(@fResults[result*fFieldCount+FieldIndex],pointer(aValue));
+        if cmp=0 then
+          exit;
+        if cmp<0 then
+          L := result+1 else
+          R := result-1;
+      until L>R;
+      result := 0;
+    end else
+      result := SearchFieldEquals(aValue, FieldIndex);
+  end else
+    result := 0;
 end;
 
 type
