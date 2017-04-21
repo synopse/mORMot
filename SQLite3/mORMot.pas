@@ -1897,7 +1897,12 @@ function NullableUTF8TextToValue(const V: TNullableUTF8Text): RawUTF8;
 /// similar to AddInt64() function, but for a TIDDynArray
 // - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
 // with the Delphi Win64 compiler
-procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID);
+procedure AddID(var Values: TIDDynArray; var ValuesCount: integer; Value: TID); overload;
+
+/// similar to AddInt64() function, but for a TIDDynArray
+// - some random GPF were identified with AddInt64(TInt64DynArray(Values),...)
+// with the Delphi Win64 compiler
+procedure AddID(var Values: TIDDynArray; Value: TID); overload;
 
 type
   /// the available options for TSQLRest.BatchStart() process
@@ -33778,6 +33783,14 @@ begin
     SetLength(Values,ValuesCount+256+ValuesCount shr 3);
   Values[ValuesCount] := Value;
   inc(ValuesCount);
+end;
+
+procedure AddID(var Values: TIDDynArray; Value: TID);
+var n: integer;
+begin
+  n := length(Values);
+  SetLength(Values,n+1);
+  Values[n] := Value;
 end;
 
 function TSQLRestBatch.Delete(Table: TSQLRecordClass;
