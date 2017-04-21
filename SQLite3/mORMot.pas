@@ -17631,10 +17631,6 @@ type
     procedure SetBinaryFile(aBinary: boolean);
     procedure GetJSONValuesEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     procedure AddIntegerDynArrayEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
-    procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
-    procedure DoInstanceEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
-    procedure DoIndexEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
-    procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// used to create the JSON content from a SELECT parsed command
     // - WhereField index follows FindWhereEqual / TSynTableStatement.WhereField
     // - returns the number of data row added (excluding field names)
@@ -17833,9 +17829,17 @@ type
     // - will only handle integer/Int64 kind of column
     function FindMax(WhereField: integer; out max: Int64): boolean;
     /// execute a method on every TSQLRecord item
-    // - the loop execution will be protected via StorageLock/StorageUnlock 
+    // - the loop execution will be protected via StorageLock/StorageUnlock
     procedure ForEach(WillModifyContent: boolean;
       OnEachProcess: TFindWhereEqualEvent; Dest: pointer);
+    /// low-level TFindWhereEqualEvent callback doing nothing
+    class procedure DoNothingEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    /// low-level TFindWhereEqualEvent callback setting PPointer(aDest)^ := aRec
+    class procedure DoInstanceEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    /// low-level TFindWhereEqualEvent callback setting PInteger(aDest)^ := aIndex
+    class procedure DoIndexEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
+    /// low-level TFindWhereEqualEvent callback PPointer(aDest)^ := aRec.CreateCopy
+    class procedure DoCopyEvent(aDest: pointer; aRec: TSQLRecord; aIndex: integer);
     /// read-only access to the TSQLRecord values, storing the data
     // - this returns directly the item class instance stored in memory: if you
     // change the content, it will affect the internal data - so for instance
@@ -44211,7 +44215,7 @@ begin
   Ints.Add(pointer(aIndex));
 end;
 
-procedure TSQLRestStorageInMemory.DoNothingEvent(
+class procedure TSQLRestStorageInMemory.DoNothingEvent(
   aDest: pointer; aRec: TSQLRecord; aIndex: integer);
 begin
 end;
@@ -45470,7 +45474,7 @@ begin
   end;
 end;
 
-procedure TSQLRestStorageInMemory.DoCopyEvent(
+class procedure TSQLRestStorageInMemory.DoCopyEvent(
   aDest: pointer; aRec: TSQLRecord; aIndex: integer);
 begin
   if aDest<>nil then
@@ -45483,7 +45487,7 @@ begin
     result := nil;
 end;
 
-procedure TSQLRestStorageInMemory.DoInstanceEvent(aDest: pointer; aRec: TSQLRecord;
+class procedure TSQLRestStorageInMemory.DoInstanceEvent(aDest: pointer; aRec: TSQLRecord;
   aIndex: integer);
 begin
   if aDest<>nil then
@@ -45496,7 +45500,7 @@ begin
     result := nil;
 end;
 
-procedure TSQLRestStorageInMemory.DoIndexEvent(aDest: pointer; aRec: TSQLRecord;
+class procedure TSQLRestStorageInMemory.DoIndexEvent(aDest: pointer; aRec: TSQLRecord;
   aIndex: integer);
 begin
   if aDest<>nil then
