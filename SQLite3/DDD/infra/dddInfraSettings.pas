@@ -448,7 +448,7 @@ type
   /// a Factory event allowing to customize/mock a socket connection
   // - the supplied aOwner should be a TDDDSocketThread instance
   // - returns a IDDDSocket interface instance (e.g. a TDDDSynCrtSocket)
-  TOnIDDDSocketThreadCreate = procedure(aOwner: TObject; out Obj);
+  TOnIDDDSocketThreadCreate = procedure(aOwner: TObject; out Obj) of object;
 
   /// the settings of a TDDDThreadSocketProcess thread
   // - defines how to connect (and reconnect) to the associated TCP server
