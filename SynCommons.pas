@@ -35740,16 +35740,16 @@ function FastFindPUTF8CharSorted(P: PPUTF8CharArray; R: PtrInt; Value: PUTF8Char
 var L, cmp: PtrInt;
 begin // fast O(log(n)) binary search
   L := 0;
-  if Assigned(Compare) and (0<=R) then
+  if Assigned(Compare) and (R>=0) then
     repeat
-      result := (L + R) shr 1;
+      result := (L+R) shr 1;
       cmp := Compare(P^[result],Value);
       if cmp=0 then
         exit;
       if cmp<0 then
-        L := result + 1 else
-        R := result - 1;
-    until (L > R);
+        L := result+1 else
+        R := result-1;
+    until L>R;
   result := -1;
 end;
 
@@ -47258,7 +47258,7 @@ end;
 { TObjectHash }
 
 const
-  COUNT_TO_START_HASHING = 32;
+  COUNT_TO_START_HASHING = 16;
 
 function TObjectHash.Find(Item: TObject): integer;
 var n: integer;
