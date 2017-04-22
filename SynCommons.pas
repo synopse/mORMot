@@ -1558,6 +1558,13 @@ type
     function AsBinary: RawByteString;
   end;
 
+  /// function prototype to be used for hashing of an element
+  // - it must return a cardinal hash, with as less collision as possible
+  // - a good candidate is our crc32() function in optimized asm in SynZip unit
+  // - TDynArrayHashed.Init will use crc32c() if no custom function is supplied,
+  // which will run either as software or SSE4.2 hardware
+  THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+
 var
   /// global TSynAnsiConvert instance to handle WinAnsi encoding (code page 1252)
   // - this instance is global and instantied during the whole program life time
@@ -2102,7 +2109,9 @@ procedure VariantDynArrayClear(var Value: TVariantDynArray);
 /// crc32c-based hash of a variant value
 // - complex string types will make up to 255 uppercase characters conversion
 // if CaseInsensitive is true
-function VariantHash(const value: variant; CaseInsensitive: boolean): cardinal;
+// - you can specify your own hashing function if crc32c is not what you expect
+function VariantHash(const value: variant; CaseInsensitive: boolean;
+  Hasher: THasher=nil): cardinal;
 
 {$endif NOVARIANTS}
 
@@ -5225,13 +5234,6 @@ type
     // - returns true if items hash is correct, false otherwise
     function CheckHash: boolean;
   end;
-
-  /// function prototype to be used for hashing of an element
-  // - it must return a cardinal hash, with as less collision as possible
-  // - a good candidate is our crc32() function in optimized asm in SynZip unit
-  // - TDynArrayHashed.Init will use crc32c() if no custom function is supplied,
-  // which will run either as software or SSE4.2 hardware
-  THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
   /// function prototype to be used for hashing of a dynamic array element
   // - this function must use the supplied hasher on the Elem data
@@ -46675,87 +46677,78 @@ end;
 
 function HashByte(const Elem; Hasher: THasher): cardinal;
 begin
-  result := Byte(Elem);
+  result := Hasher(0,@Elem,sizeof(byte));
 end;
 
 function HashWord(const Elem; Hasher: THasher): cardinal;
 begin
-  result := Word(Elem);
+  result := Hasher(0,@Elem,sizeof(word));
 end;
 
 function HashInteger(const Elem; Hasher: THasher): cardinal;
 begin
-  result := Integer(Elem);
+  result := Hasher(0,@Elem,sizeof(integer));
 end;
 
 function HashCardinal(const Elem; Hasher: THasher): cardinal;
 begin
-  result := Cardinal(Elem);
+  result := Hasher(0,@Elem,sizeof(cardinal));
 end;
 
 function HashInt64(const Elem; Hasher: THasher): cardinal;
 begin
-  result := Hasher(0,@Elem,sizeof(Int64)); // better than Int64Rec.(Lo xor Hi)
+  result := Hasher(0,@Elem,sizeof(Int64));
 end;
 
 {$ifndef NOVARIANTS}
 
-function VariantHash(const value: variant; CaseInsensitive: boolean): cardinal;
+function VariantHash(const value: variant; CaseInsensitive: boolean;
+  Hasher: THasher): cardinal;
 var Up: array[byte] of AnsiChar; // avoid heap allocation
   procedure ComplexType;
   var tmp: RawUTF8;
   begin // slow but always working conversion to string
     VariantSaveJSON(value,twNone,tmp);
     if CaseInsensitive then
-      result := crc32c(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
-      result := crc32c(TVarData(value).VType,pointer(tmp),length(tmp));
+      result := Hasher(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
+      result := Hasher(TVarData(value).VType,pointer(tmp),length(tmp));
   end;
 begin
+  if not Assigned(Hasher) then
+    Hasher := @crc32c;
   with TVarData(value) do
   case VType of
     varNull, varEmpty:
       result := VType+2; // not 0 (HASH_VOID) nor 1 (HASH_ONVOIDCOLISION)
     varShortInt, varByte:
-      result := crc32c(VType,@VByte,1);
+      result := Hasher(VType,@VByte,1);
     varSmallint, varWord, varBoolean:
-      result := crc32c(VType,@VWord,2);
+      result := Hasher(VType,@VWord,2);
     varLongWord, varInteger, varSingle:
-      result := crc32c(VType,@VLongWord,4);
+      result := Hasher(VType,@VLongWord,4);
     varInt64, varDouble, varDate, varCurrency:
-      result := crc32c(VType,@VInt64,sizeof(Int64));
+      result := Hasher(VType,@VInt64,sizeof(Int64));
     varString:
       if CaseInsensitive then
-        result := crc32c(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
-        result := crc32c(0,VString,length(RawUTF8(VString)));
+        result := Hasher(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
+        result := Hasher(0,VString,length(RawUTF8(VString)));
     varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
       if CaseInsensitive then
-        result := crc32c(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
-        result := crc32c(0,VAny,StrLenW(VOleStr)*2);
+        result := Hasher(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
+        result := Hasher(0,VAny,StrLenW(VOleStr)*2);
   else
     ComplexType;
   end;
 end;
 
 function HashVariant(const Elem; Hasher: THasher): cardinal;
-var U: RawUTF8;
-    wasString: boolean;
 begin
-  VariantToUTF8(variant(Elem),U,wasString);
-  if PtrUInt(U)=0 then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,Pointer(PtrUInt(U)),
-      {$ifdef FPC}PStrRec(Pointer(PtrUInt(U)-STRRECSIZE))^.length
-      {$else}PInteger(PtrUInt(U)-sizeof(integer))^{$endif});
+  result := VariantHash(variant(Elem),false,Hasher);
 end;
 
 function HashVariantI(const Elem; Hasher: THasher): cardinal;
-var U: RawUTF8;
-    wasString: boolean;
 begin
-  VariantToUTF8(variant(Elem),U,wasString);
-  if pointer(U)=nil then
-    result := HASH_ONVOIDCOLISION else
-    result := Hasher(0,pointer(U),UpperCopy(pointer(U),U)-pointer(U));
+  result := VariantHash(variant(Elem),true,Hasher);
 end;
 
 {$endif NOVARIANTS}
