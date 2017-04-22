@@ -2204,7 +2204,7 @@ The following {\f1\fs20 @**published properties@} types are handled by the @*ORM
 |{\f1\fs20 byte}|INTEGER|
 |{\f1\fs20 word}|INTEGER|
 |{\f1\fs20 integer}|INTEGER|
-|{\f1\fs20 cardinal}|N/A|You should use {\f1\fs20 Int64} instead
+|{\f1\fs20 cardinal}|INTEGER|
 |{\f1\fs20 Int64}|INTEGER|
 |{\f1\fs20 boolean}|INTEGER|0 is {\f1\fs20 false}, anything else is {\f1\fs20 true}
 |enumeration|INTEGER|store the ordinal value of the @*enumerated@ item(i.e. starting at 0 for the first element)

@@ -1439,11 +1439,11 @@ type
   // displayed as an integer by default, sets with an enumeration type with
   // up to 64 elements is allowed yet (stored as an Int64)
   // - sftInteger is an INTEGER (Int64 precision, as expected by SQLite3) field
-  // - sftID is an INTEGER field pointing to the ID/ROWID of another record of
+  // - sftID is an INTEGER field pointing to the ID/RowID of another record of
   // a table, defined by the class type of the TSQLRecord inherited property;
   // coherency is always ensured: after a delete, all values pointing to
   // it is reset to 0
-  // - sftRecord is an INTEGER field pointing to the ID/ROWID of another
+  // - sftRecord is an INTEGER field pointing to the ID/RowID of another
   // record: TRecordReference=Int64 Delphi property which can be typecasted to
   // RecordRef; coherency is always ensured: after a delete, all values
   // pointing to it are reset to 0 by the ORM
@@ -2835,8 +2835,8 @@ type
   // - handle TDateTime properties as ISO-8061 encoded TEXT
   // - handle TTimeLog properties as properietary fast INTEGER date time
   // - handle Currency property as FLOAT (safely converted to/from currency)
-  // - handle TSQLRecord descendant properties as INTEGER ROWID index to another record
-  // (warning: the value contains pointer(ROWID), not a valid object memory - you
+  // - handle TSQLRecord descendant properties as INTEGER RowID index to another record
+  // (warning: the value contains pointer(RowID), not a valid object memory - you
   // have to manually retrieve the record, using a integer(IDField) typecast)
   // - handle TSQLRecordMany descendant properties as an "has many" instance (this
   // is a particular case of TSQLRecord: it won't contain pointer(ID), but an object)
@@ -3460,8 +3460,10 @@ type
   /// information about an ordinal Int32 published property
   TSQLPropInfoRTTIInt32 = class(TSQLPropInfoRTTI)
   protected
+    fUnsigned: boolean;
     procedure CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: TObject); override;
   public
+    constructor Create(aPropInfo: PPropInfo; aPropIndex: integer; aSQLFieldType: TSQLFieldType); override;
     procedure SetValue(Instance: TObject; Value: PUTF8Char; wasString: boolean); override;
     procedure GetValueVar(Instance: TObject; ToSQL: boolean;
       var result: RawUTF8; wasSQLString: PBoolean); override;
@@ -13586,7 +13588,7 @@ type
     // - implements REST POST collection
     // - SentData can contain the JSON object with field values to be added
     // - class is taken from Model.Tables[TableModelIndex]
-    // - returns the TSQLRecord ID/ROWID value, 0 on error
+    // - returns the TSQLRecord ID/RowID value, 0 on error
     // - if a "RowID":.. or "ID":.. member is set in SentData, it shall force
     // this value as insertion ID
     // - override this method for proper calling the database engine
@@ -14169,8 +14171,8 @@ type
     // request, otherwise record is created with default values
     // - if ForceID is true, client sends the Value.ID field to use this ID for
     // adding the record (instead of a database-generated ID)
-    // - on success, returns the new ROWID value; on error, returns 0
-    // - on success, Value.ID is updated with the new ROWID
+    // - on success, returns the new RowID value; on error, returns 0
+    // - on success, Value.ID is updated with the new RowID
     // - the TSQLRawBlob(BLOB) fields values are not set by this method, to
     // preserve bandwidth - see UpdateBlobFields() and AddWithBlobs() methods
     // - the TSQLRecordMany fields are not set either: they are separate
@@ -18275,8 +18277,8 @@ type
     // - server must return Status 201/HTTP_CREATED on success
     // - server must send on success an header entry with
     // $ Location: ModelRoot/TableName/TableID
-    // - on success, returns the new ROWID value; on error, returns 0
-    // - on success, Value.ID is updated with the new ROWID
+    // - on success, returns the new RowID value; on error, returns 0
+    // - on success, Value.ID is updated with the new RowID
     // - if aValue is TSQLRecordFTS3, Value.ID is stored to the virtual table
     // - this overridden method will send BLOB fields, if ForceBlobTransfert is set
     function InternalAdd(Value: TSQLRecord; SendData: boolean; CustomFields: PSQLFieldBits;
@@ -19283,7 +19285,7 @@ type
   TSQLVirtualTablePreparedConstraint = packed record
     /// Column on left-hand side of constraint
     // - The first column of the virtual table is column 0
-    // - The ROWID of the virtual table is column -1
+    // - The RowID of the virtual table is column -1
     // - Hidden columns are counted when determining the column index
     // - if this field contains VIRTUAL_TABLE_IGNORE_COLUMN (-2), TSQLVirtualTable.
     // Prepare() should ignore this entry
@@ -19314,7 +19316,7 @@ type
   TSQLVirtualTablePreparedOrderBy = record
     /// Column number
     // - The first column of the virtual table is column 0
-    // - The ROWID of the virtual table is column -1
+    // - The RowID of the virtual table is column -1
     // - Hidden columns are counted when determining the column index.
     Column: Integer;
     /// True for DESCending order, false for ASCending order.
@@ -20860,7 +20862,8 @@ begin
   GetValueVar(Instance,ToSQL,Result,wasSQLString);
 end;
 
-procedure TSQLPropInfo.SetValueVar(Instance: TObject; const Value: RawUTF8; wasString: boolean);
+procedure TSQLPropInfo.SetValueVar(Instance: TObject; const Value: RawUTF8;
+  wasString: boolean);
 begin
   SetValue(Instance,pointer(Value),wasString);
 end;
@@ -21255,6 +21258,13 @@ end;
 
 { TSQLPropInfoRTTIInt32 }
 
+constructor TSQLPropInfoRTTIInt32.Create(aPropInfo: PPropInfo; aPropIndex: integer;
+  aSQLFieldType: TSQLFieldType);
+begin
+  inherited Create(aPropInfo,aPropIndex,aSQLFieldType);
+  fUnsigned := fPropType^.OrdType in [otUByte,otUWord,otULong];
+end;
+
 procedure TSQLPropInfoRTTIInt32.CopySameClassProp(Source: TObject; DestInfo: TSQLPropInfo;
   Dest: TObject);
 begin
@@ -21267,30 +21277,42 @@ begin
 end;
 
 function TSQLPropInfoRTTIInt32.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
+var v: integer;
 begin
-  result := fPropInfo.GetOrdProp(Instance);
+  v := fPropInfo.GetOrdProp(Instance);
+  result := crc32c(0,@v,4); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetJSONValues(Instance: TObject; W: TJSONSerializer);
+var v: integer;
 begin
-  W.Add(fPropInfo.GetOrdProp(Instance));
+  v := fPropInfo.GetOrdProp(Instance);
+  if fUnsigned then
+    W.AddU(cardinal(v)) else
+    W.Add(v);
 end;
 
 procedure TSQLPropInfoRTTIInt32.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
+var v: integer;
 begin
   if wasSQLString<>nil then
     wasSQLString^ := false;
-  Int32ToUtf8(fPropInfo.GetOrdProp(Instance),result);
+  v := fPropInfo.GetOrdProp(Instance);
+  if fUnsigned then
+    UInt32ToUtf8(cardinal(v),result) else
+    Int32ToUtf8(v,result);
 end;
 
 procedure TSQLPropInfoRTTIInt32.NormalizeValue(var Value: RawUTF8);
-var err, VInt: integer;
+var err,v: integer;
 begin
-  VInt := GetInteger(pointer(Value),err);
+  v := GetInteger(pointer(Value),err);
   if err<>0 then
     Value := '' else
-    Int32ToUtf8(VInt,Value);
+    if fUnsigned then
+      UInt32ToUtf8(cardinal(v),Value) else
+      Int32ToUtf8(v,Value);
 end;
 
 function TSQLPropInfoRTTIInt32.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
@@ -21328,10 +21350,14 @@ end;
 
 procedure TSQLPropInfoRTTIInt32.GetFieldSQLVar(Instance: TObject; var aValue: TSQLVar;
   var temp: RawByteString);
+var v: integer;
 begin
   aValue.Options := [];
   aValue.VType := ftInt64;
-  aValue.VInt64 := fPropInfo.GetOrdProp(Instance);
+  v := fPropInfo.GetOrdProp(Instance);
+  if fUnsigned then
+    aValue.VInt64 := cardinal(v) else 
+    aValue.VInt64 := v;
 end;
 
 
@@ -21381,7 +21407,7 @@ begin
   i := fPropInfo.GetOrdProp(Instance);
   if (fSQLFieldType=sftBoolean) and not ToSQL then
     JSONBoolean(i<>0,result) else
-    Int32ToUtf8(i,result);
+    UInt32ToUtf8(i,result);
 end;
 
 procedure TSQLPropInfoRTTIEnum.NormalizeValue(var Value: RawUTF8);
@@ -21397,7 +21423,7 @@ begin
         i := 1;
   if cardinal(i)>cardinal(fEnumType^.MaxValue) then
     Value := '' else // only set a valid value
-    Int32ToUtf8(i,Value);
+    UInt32ToUtf8(i,Value);
 end;
 
 procedure TSQLPropInfoRTTIEnum.SetValue(Instance: TObject; Value: PUTF8Char;
@@ -21481,7 +21507,7 @@ begin
   if fPropInfo.GetterIsField then
     I64 := PInt64(fPropInfo.GetterAddr(Instance))^ else
     I64 := fPropInfo.GetInt64Prop(Instance);
-  result := Int64Rec(I64).Lo xor Int64Rec(I64).Hi;
+  result := crc32c(0,@I64,sizeof(I64)); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
@@ -31373,7 +31399,7 @@ begin
     result := 'CREATE TABLE '+SQLTableName+
       '(ID INTEGER PRIMARY KEY AUTOINCREMENT, ';
     // we always add an ID field which is an INTEGER PRIMARY KEY
-    // column, as it is always created (as hidden ROWID) by the SQLite3 engine
+    // column, as it is always created (as hidden RowID) by the SQLite3 engine
     with Props.Props do
     for i := 0 to Fields.Count-1 do
     with Fields.List[i] do begin
@@ -35161,14 +35187,14 @@ begin
   if SendData then
     GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,false,CustomFields,json) else
     json := '';
-  // on success, returns the new ROWID value; on error, returns 0
+  // on success, returns the new RowID value; on error, returns 0
   fAcquireExecution[execORMWrite].fSafe.Lock;
   try // may be within a batch in another thread
     result := EngineAdd(TableIndex,json); // will call static if necessary
   finally
     fAcquireExecution[execORMWrite].fSafe.Unlock;
   end;
-  // on success, Value.ID is updated with the new ROWID
+  // on success, Value.ID is updated with the new RowID
   Value.fID := result;
   if SendData and (result<>0) then
     fCache.Notify(PSQLRecordClass(Value)^,result,json,soInsert);
@@ -35226,14 +35252,14 @@ begin
   end;
   TableIndex := Model.GetTableIndexExisting(PSQLRecordClass(Value)^);
   GetJSONValuesForAdd(TableIndex,Value,ForceID,DoNotAutoComputeFields,true,nil,json);
-  // on success, returns the new ROWID value; on error, returns 0
+  // on success, returns the new RowID value; on error, returns 0
   fAcquireExecution[execORMWrite].fSafe.Lock;
   try // may be within a batch in another thread
     result := EngineAdd(TableIndex,json); // will call static if necessary
   finally
     fAcquireExecution[execORMWrite].fSafe.Unlock;
   end;
-  // on success, Value.ID is updated with the new ROWID
+  // on success, Value.ID is updated with the new RowID
   Value.fID := result;
   // here fCache.Notify is not called, since the JSONValues is verbose
 end;
