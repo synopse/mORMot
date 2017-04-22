@@ -2099,6 +2099,11 @@ function VariantToVariantUTF8(const V: Variant): variant;
 // - for instance, an array of TDocVariant will be optimized for speed
 procedure VariantDynArrayClear(var Value: TVariantDynArray);
 
+/// crc32c-based hash of a variant value
+// - complex string types will make up to 255 uppercase characters conversion
+// if CaseInsensitive is true
+function VariantHash(const value: variant; CaseInsensitive: boolean): cardinal;
+
 {$endif NOVARIANTS}
 
 { note: those VariantToInteger*() functions are expected to be there }
@@ -2659,7 +2664,7 @@ function StrCompFast(Str1, Str2: pointer): PtrInt;
 
 /// SSE 4.2 version of StrComp(), to be used with PUTF8Char/PAnsiChar
 // - please note that this optimized version may read up to 15 bytes
-// beyond the string; this is rarely a problem but it can in principle
+// beyond the string; this is rarely a problem but it may in principle
 // generate a protection violation (e.g. when used over mapped files) - in this
 // case, you can use the slightly slower StrCompFast() function instead
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
@@ -8526,6 +8531,7 @@ function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TOb
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 
 {$ifndef NOVARIANTS}
+
 /// will convert any TObject into a TDocVariant document instance
 // - a faster alternative to Dest := _JsonFast(ObjectToJSON(Value))
 // - this would convert the TObject by representation, using only serializable
@@ -46693,6 +46699,42 @@ begin
 end;
 
 {$ifndef NOVARIANTS}
+
+function VariantHash(const value: variant; CaseInsensitive: boolean): cardinal;
+var Up: array[byte] of AnsiChar; // avoid heap allocation
+  procedure ComplexType;
+  var tmp: RawUTF8;
+  begin // slow but always working conversion to string
+    VariantSaveJSON(value,twNone,tmp);
+    if CaseInsensitive then
+      result := crc32c(TVarData(value).VType,Up,UpperCopy255(Up,tmp)-Up) else
+      result := crc32c(TVarData(value).VType,pointer(tmp),length(tmp));
+  end;
+begin
+  with TVarData(value) do
+  case VType of
+    varNull, varEmpty:
+      result := VType+2; // not 0 (HASH_VOID) nor 1 (HASH_ONVOIDCOLISION)
+    varShortInt, varByte:
+      result := crc32c(VType,@VByte,1);
+    varSmallint, varWord, varBoolean:
+      result := crc32c(VType,@VWord,2);
+    varLongWord, varInteger, varSingle:
+      result := crc32c(VType,@VLongWord,4);
+    varInt64, varDouble, varDate, varCurrency:
+      result := crc32c(VType,@VInt64,sizeof(Int64));
+    varString:
+      if CaseInsensitive then
+        result := crc32c(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
+        result := crc32c(0,VString,length(RawUTF8(VString)));
+    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
+      if CaseInsensitive then
+        result := crc32c(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
+        result := crc32c(0,VAny,StrLenW(VOleStr)*2);
+  else
+    ComplexType;
+  end;
+end;
 
 function HashVariant(const Elem; Hasher: THasher): cardinal;
 var U: RawUTF8;
