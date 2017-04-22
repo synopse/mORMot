@@ -23039,41 +23039,10 @@ end;
 
 function TSQLPropInfoRTTIVariant.GetHash(Instance: TObject;
   CaseInsensitive: boolean): cardinal;
-var Up: array[byte] of AnsiChar; // avoid slow heap allocation
-    value: Variant;
-  procedure ComplexType;
-  var tmp: RawUTF8;
-  begin // slow but always working conversion to string
-    tmp := VariantSaveJSON(value,twNone);
-    if CaseInsensitive then
-      result := crc32c(0,Up,UpperCopy255(Up,tmp)-Up) else
-      result := crc32c(0,pointer(tmp),length(tmp));
-  end;
+var value: Variant;
 begin
   fPropInfo.GetVariantProp(Instance,value);
-  with TVarData(value) do
-  case VType of
-    varNull, varEmpty:
-      result := 0;
-    varSmallint, varWord, varBoolean:
-      result := VWord;
-    varShortInt, varByte:
-      result := VByte;
-    varLongWord, varInteger, varSingle:
-      result := varLongWord;
-    varInt64, varDouble, varDate, varCurrency:
-      result := crc32c(0,@VInt64,sizeof(Int64));
-    varString:
-      if CaseInsensitive then
-        result := crc32c(0,Up,UpperCopy255Buf(Up,VString,length(RawUTF8(VString)))-Up) else
-        result := crc32c(0,VString,length(RawUTF8(VString)));
-    varOleStr {$ifdef HASVARUSTRING}, varUString{$endif}:
-      if CaseInsensitive then
-        result := crc32c(0,Up,UpperCopy255W(Up,VOleStr,StrLenW(VOleStr))-Up) else
-        result := crc32c(0,VAny,StrLenW(VOleStr)*2);
-  else
-    ComplexType;
-  end;
+  result := VariantHash(value,CaseInsensitive);
 end;
 
 procedure TSQLPropInfoRTTIVariant.GetJSONValues(Instance: TObject;
