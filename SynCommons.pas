@@ -61073,7 +61073,7 @@ procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
 var h: integer;
     h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 begin
-  if (self=nil) or (aValueLen<=0) and (fBits=0) then
+  if (self=nil) or (aValueLen<=0) or (fBits=0) then
     exit;
   h1 := crc32c(0,aValue,aValueLen);
   if fHashFunctions=1 then
@@ -61111,7 +61111,7 @@ var h: integer;
     h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
 begin
   result := false;
-  if (self=nil) or (aValueLen<=0) and (fBits=0) then
+  if (self=nil) or (aValueLen<=0) or (fBits=0) then
     exit;
   h1 := crc32c(0,aValue,aValueLen);
   if fHashFunctions=1 then
