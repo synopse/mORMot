@@ -435,7 +435,7 @@ begin
         case Field.DataType of
         ftDate:     PDateTimeRec(Dest)^.Date := TS.Date;
         ftTime:     PDateTimeRec(Dest)^.Time := TS.Time;
-        ftDateTime: PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS)
+        ftDateTime: PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
         end;
     end;
   ftString: begin
