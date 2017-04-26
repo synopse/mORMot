@@ -54574,9 +54574,9 @@ begin
   if aRest=nil then
     raise EORMException.CreateUTF8('%.Create(nil,"%")',[self,aThreadName]);
   fRest := aRest;
-  if aThreadName='' then
+  if aThreadName<>'' then
     aName := aThreadName else
-    FormatUTF8('% % Timer',[self,fRest.Model.Root],aName);
+    FormatUTF8('% %',[self, fRest.Model.Root],aName);
   inherited Create(aName,fRest.BeginCurrentThread,fRest.EndCurrentThread,aStats);
 end;
 
