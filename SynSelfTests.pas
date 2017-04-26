@@ -1935,9 +1935,9 @@ begin
 end;
 begin
   h := TypeInfoToHash(TypeInfo(TAmount));
-  Check(h=$6E58CD60,'TypeInfoToHash(TAmount)');
+  Check(h=$9032161B,'TypeInfoToHash(TAmount)');
   h := TypeInfoToHash(TypeInfo(TAmountCollection));
-  Check(h=$2ABEF63C,'TypeInfoToHash(TAmountCollection)');
+  Check(h=$887ED692,'TypeInfoToHash(TAmountCollection)');
   h := TypeInfoToHash(TypeInfo(TAmountICollection));
   Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
   W := TTextWriter.CreateOwnedStream;
@@ -3117,6 +3117,11 @@ var i, j, b, err: integer;
     crc: cardinal;
     Timer: TPrecisionTimer;
 begin
+  Check(Plural('row',0)='0 row');
+  Check(Plural('row',1)='1 row');
+  Check(Plural('row',2)='2 rows');
+  Check(Plural('row',20)='20 rows');
+  Check(Plural('row',200000)='200000 rows');
   Check(not SameValue(386.0, 386.1));
   Check(not SameValue(386.0, 700, 2));
   Check(IntToThousandString(0)='0');

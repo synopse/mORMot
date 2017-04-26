@@ -14036,7 +14036,12 @@ const
   SYNTABLESTATEMENTWHEREID = 0;
 
   /// can be used to append to most English nouns to form a plural
+  // - see also the Plural function
   PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
+
+/// write count number and append 's' (if needed) to form a plural English noun
+// - for instance, Plural('row',100) returns '100 rows' with no heap allocation
+function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
 
 /// convert any AnsiString content into our SBF compact binary format storage
 procedure ToSBFStr(const Value: RawByteString; out Result: TSBFString);
@@ -40120,6 +40125,26 @@ begin // defined as a function and not an array[boolean] of RawUTF8 for FPC
   if value then
     result := 'true' else
     result := 'false';
+end;
+
+function Plural(const itemname: shortstring; itemcount: cardinal): shortstring;
+var P: PAnsiChar;
+    len: integer;
+begin
+  P := StrUInt32(@result[255],itemcount);
+  len := @result[255]-P;
+  MoveFast(P^,result[1],len);
+  inc(len);
+  result[len] := ' ';
+  if ord(itemname[0])<240 then begin // avoid buffer overflow
+    MoveFast(itemname[1],result[len+1],ord(itemname[0]));
+    inc(len,ord(itemname[0]));
+    if itemcount>1 then begin
+      inc(len);
+      result[len] := 's';
+    end;
+  end;
+  result[0] := AnsiChar(len);
 end;
 
 function TJSONCustomParserRTTI.IfDefaultSkipped(var Value: PByte): boolean;
