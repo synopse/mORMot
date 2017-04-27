@@ -26176,7 +26176,7 @@ function TSQLTable.SearchFieldSorted(const aValue: RawUTF8; FieldIndex: integer;
   CustomCompare: TUTF8Compare): integer;
 var L,R,cmp: integer;
 begin
-  if (self<>nil) and (aValue<>'') and (fRowCount>1) and (FieldIndex<>fFieldIndexID) and
+  if (self<>nil) and (aValue<>'') and (fRowCount>0) and (FieldIndex<>fFieldIndexID) and
      (cardinal(FieldIndex)<cardinal(fFieldCount)) then begin
     if not Assigned(CustomCompare) then
       CustomCompare := fSortParams.Comp;
@@ -26185,7 +26185,7 @@ begin
       R := fRowCount;
       repeat
         result := (L+R) shr 1;
-        cmp := CustomCompare(@fResults[result*fFieldCount+FieldIndex],pointer(aValue));
+        cmp := CustomCompare(fResults[result*fFieldCount+FieldIndex],pointer(aValue));
         if cmp=0 then
           exit;
         if cmp<0 then
