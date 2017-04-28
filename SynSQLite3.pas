@@ -3888,8 +3888,8 @@ begin
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
     raise ESQLite3Exception.CreateUTF8(
-      'Your % version of SQLite3 does not support custom OpenV2Flags',
-      [sqlite3.libversion]);
+      'Your % version of SQLite3 does not support custom OpenV2Flags=%',
+      [sqlite3.libversion,fOpenV2Flags]);
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
@@ -4489,7 +4489,7 @@ begin
   if not fIsMemory then begin
     if fPassword='' then
       PageSize := 4096 else
-      PageSize := 1024; // our encryption scheme expect a page size of 1024
+      PageSize := 1024; // our encryption scheme expects a page size of 1024
     CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
@@ -4533,7 +4533,7 @@ begin
     InternalRawUTF8DynArray,nil,nil);
   sqlite3.create_function(DB,'RAWUTF8DYNARRAYCONTAINSNOCASE',2,SQLITE_ANY,
     @UTF8ILComp,InternalRawUTF8DynArray,nil,nil);
-  // JSON related functions (ORM would store a variant as JSON UTF-8 text)
+  // JSON related functions (e.g. for ORM storing variants as JSON UTF-8 text)
   sqlite3.create_function(DB,'JSONGET',2,SQLITE_ANY,nil,InternalJsonGet,nil,nil);
   sqlite3.create_function(DB,'JSONHAS',2,SQLITE_ANY,nil,InternalJsonHas,nil,nil);
   {$ifndef NOVARIANTS}

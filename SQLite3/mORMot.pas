@@ -13744,6 +13744,10 @@ type
     // - call internaly ExecuteList() to get the value
     function OneFieldValue(Table: TSQLRecordClass;
       const FieldName, WhereClause: RawUTF8): RawUTF8; overload;
+    /// get the Int64 value of an unique field with a Where Clause
+    // - call internaly ExecuteList() to get the value
+    function OneFieldValueInt64(Table: TSQLRecordClass;
+      const FieldName, WhereClause: RawUTF8; Default: Int64=0): Int64;
     /// get the UTF-8 encoded value of an unique field with a Where Clause
     // - this overloaded function will call FormatUTF8 to create the Where Clause
     // from supplied parameters, binding all '?' chars with Args[] values
@@ -34338,6 +34342,15 @@ begin
     result := '';
 end;
 
+function TSQLRest.OneFieldValueInt64(Table: TSQLRecordClass; const FieldName,
+  WhereClause: RawUTF8; Default: Int64): Int64;
+var Res: array[0..0] of RawUTF8;
+begin
+  if not MultiFieldValue(Table,[FieldName],Res,WhereClause) or
+     not ToInt64(Res[0],result) then
+    result := Default;
+end;
+
 function TSQLRest.OneFieldValue(Table: TSQLRecordClass; const FieldName: RawUTF8;
   const FormatSQLWhere: RawUTF8; const BoundsSQLWhere: array of const): RawUTF8;
 begin
@@ -35157,8 +35170,10 @@ begin
   if Model.TableProps[TableIndex].Kind in INSERT_WITH_ID then
     ForceID := true;
   if (Model.fIDGenerator<>nil) and (Model.fIDGenerator[TableIndex]<>nil) then begin
-    Value.fID := Model.fIDGenerator[TableIndex].ComputeNew;
-    ForceID := true;
+    if (Value.fID=0) or not ForceID then begin
+      Value.fID := Model.fIDGenerator[TableIndex].ComputeNew;
+      ForceID := true;
+    end;
   end else
     if Value.fID=0 then
       ForceID := false;

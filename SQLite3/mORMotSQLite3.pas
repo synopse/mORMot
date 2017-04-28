@@ -464,6 +464,7 @@ type
     function BackupGZ(const DestFileName: TFileName;
       CompressionLevel: integer=2): boolean; deprecated;
     {$endif}
+
     /// restore a database content on the fly
     // - database is closed, source DB file is replaced by the supplied content,
     //   then reopened
@@ -1682,7 +1683,7 @@ begin
     try
       Closed := DB.DBClose=SQLITE_OK;
       // compress the database content file
-      Source := TFileStream.Create(DB.FileName,fmOpenRead or fmShareDenyNone);
+      Source := FileStreamSequentialRead(DB.FileName);
       try
         Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
         result := true;
