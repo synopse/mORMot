@@ -2859,8 +2859,13 @@ function ToCardinal(const text: RawUTF8; out value: cardinal; minimal: cardinal=
 
 /// get the signed 64-bit integer value stored in a RawUTF8 string
 // - returns TRUE if the supplied text was successfully converted into an Int64
-function ToInt64(const text: RawUTF8; out value: Int64): boolean;
+function ToInt64(const text: RawUTF8; out value: Int64): boolean; 
   {$ifdef HASINLINE}inline;{$endif}
+
+/// get the signed 64-bit integer value stored in a RawUTF8 string
+// - returns the default value if the supplied text was not successfully
+// converted into an Int64
+function UTF8ToInt64(const text: RawUTF8; const default: Int64=0): Int64;
 
 /// encode a string to be compatible with URI encoding
 function UrlEncode(const svar: RawUTF8): RawUTF8; overload;
@@ -29769,6 +29774,14 @@ begin
   result := err=0;
 end;
 
+function UTF8ToInt64(const text: RawUTF8; const default: Int64): Int64;
+var err: integer;
+begin
+  result := GetInt64(pointer(text),err);
+  if err<>0 then
+    result := default;
+end;
+
 function GetBoolean(P: PUTF8Char): boolean;
 begin
   if P<>nil then
@@ -35362,6 +35375,7 @@ begin
     $46445025: result := 'application/pdf'; //  25 50 44 46 2D 31 2E
     $21726152: result := 'application/x-rar-compressed'; // 52 61 72 21 1A 07 00
     $AFBC7A37: result := 'application/x-7z-compressed';  // 37 7A BC AF 27 1C
+    $694C5153: result := 'application/x-sqlite3'; // SQlite format 3 = 53 51 4C 69
     $75B22630: result := 'audio/x-ms-wma'; // 30 26 B2 75 8E 66
     $9AC6CDD7: result := 'video/x-ms-wmv'; // D7 CD C6 9A 00 00
     $474E5089: result := 'image/png'; // 89 50 4E 47 0D 0A 1A 0A
@@ -35426,8 +35440,10 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
     case PosEx(copy(result,2,4),
         'png,gif,tiff,jpg,jpeg,bmp,doc,htm,html,css,js,ico,wof,txt,svg,'+
       // 1   5   9    14  18   23  27  31  35   40  44 47  51  55  59
-        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,m2p,mp3,h264') of
-      // 63   68  72  76   81   86   91   96  100  105  110 114 118 122 126 130 134
+        'atom,rdf,rss,webp,appc,mani,docx,xml,json,woff,ogg,ogv,mp4,m2v,'+
+      // 63   68  72  76   81   86   91   96  100  105  110 114 118 122
+        'm2p,mp3,h264,gz') of
+      // 126 130 134  139
       1:  result := 'image/png';
       5:  result := 'image/gif';
       9:  result := 'image/tiff';
@@ -35451,6 +35467,7 @@ begin // see http://www.garykessler.net/library/file_sigs.html for magic numbers
       122,126: result := 'video/mp2';
       130: result := 'audio/mpeg';     // RFC 3003
       134: result := 'video/H264';     // RFC 6184
+      139: result := 'application/gzip';
       else
         if result<>'' then
           result := 'application/'+copy(result,2,10);
@@ -62825,7 +62842,7 @@ procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 var timeout: Int64;
 begin
   timeout := GetTickCount64+timeoutsecs*1000;
-  while not Processing and (GetTickcount64<timeout) do
+  while Processing and (GetTickcount64>timeout) do
     SleepHiRes(1);
 end;
 
