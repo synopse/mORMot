@@ -5633,6 +5633,9 @@ begin
         fOnProgress(self);
     end;
   end;
+  {$ifdef WITHLOG}
+  SynSQLite3Log.Add.NotifyThreadEnded;
+  {$endif}
 end;
 
 
