@@ -17437,6 +17437,10 @@ type
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
     function ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
+    /// returns true if there is currenly one task processed
+    function Processing: boolean;
+    /// wait until no background task is processed
+    procedure WaitUntilNotProcessing(timeoutsecs: integer=10);
     /// low-level access to the internal task list
     property Task: TSynBackgroundTimerTaskDynArray read fTask;
     /// low-level access to the internal task mutex
@@ -62717,6 +62721,7 @@ constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),fTask);
   fTaskLock.Init;
+  fTaskLock.LockedBool[0] := false;
   inherited Create(aThreadName,EverySecond,1000,aOnBeforeExecute,aOnAfterExecute,aStats);
 end;
 
@@ -62744,32 +62749,37 @@ begin
   n := 0;
   fTaskLock.Lock;
   try
-    for i := 0 to length(fTask)-1 do begin
-      t := @fTask[i];
-      if tix>=t^.NextTix then begin
-        SetLength(todo,n+1);
-        todo[n] := t^;
-        inc(n);
-        t^.FIFO := nil; // now owned by todo[n].FIFO
-        t^.NextTix := tix+((t^.Secs*1000)-TIXPRECISION);
-      end;
-    end;
-  finally
-    fTaskLock.UnLock;
-  end;
-  for i := 0 to n-1 do
-    with todo[i] do
-      if FIFO<>nil then
-        for f := 0 to length(FIFO)-1 do
-        try
-          OnProcess(self,Event,FIFO[f]);
-        except
-        end
-      else
-        try
-          OnProcess(self,Event,'');
-        except
+    variant(fTaskLock.Padding[0]) := true;
+    try
+      for i := 0 to length(fTask)-1 do begin
+        t := @fTask[i];
+        if tix>=t^.NextTix then begin
+          SetLength(todo,n+1);
+          todo[n] := t^;
+          inc(n);
+          t^.FIFO := nil; // now owned by todo[n].FIFO
+          t^.NextTix := tix+((t^.Secs*1000)-TIXPRECISION);
         end;
+      end;
+    finally
+      fTaskLock.UnLock;
+    end;
+    for i := 0 to n-1 do
+      with todo[i] do
+        if FIFO<>nil then
+          for f := 0 to length(FIFO)-1 do
+          try
+            OnProcess(self,Event,FIFO[f]);
+          except
+          end
+        else
+          try
+            OnProcess(self,Event,'');
+          except
+          end;
+  finally
+    fTaskLock.LockedBool[0] := false;
+  end;
 end;
 
 function TSynBackgroundTimer.Find(const aProcess: TMethod): integer;
@@ -62804,6 +62814,19 @@ begin
   finally
     fTaskLock.UnLock;
   end;
+end;
+
+function TSynBackgroundTimer.Processing: boolean;
+begin
+  result := fTaskLock.LockedBool[0];
+end;
+
+procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
+var timeout: Int64;
+begin
+  timeout := GetTickCount64+timeoutsecs*1000;
+  while not Processing and (GetTickcount64<timeout) do
+    SleepHiRes(1);
 end;
 
 function TSynBackgroundTimer.ExecuteNow(aOnProcess: TOnSynBackgroundTimerProcess): boolean;
