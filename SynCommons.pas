@@ -5695,6 +5695,8 @@ type
     procedure SetVariant(Index: integer; const Value: Variant);
     function GetInt64(Index: integer): Int64;
     procedure SetInt64(Index: integer; const Value: Int64);
+    function GetBool(Index: integer): boolean;
+    procedure SetBool(Index: integer; const Value: boolean);
     function GetUnlockedInt64(Index: integer): Int64;
     procedure SetUnlockedInt64(Index: integer; const Value: Int64);
     function GetPointer(Index: integer): Pointer;
@@ -5775,7 +5777,7 @@ type
     {$ifndef NOVARIANTS}
     /// safe locked access to a Variant value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // LockedPointer and LockedUTF8 array properties
+    // LockedBool, LockedInt64, LockedPointer and LockedUTF8 array properties
     // - returns null if the Index is out of range
     property Locked[Index: integer]: Variant read GetVariant write SetVariant;
     /// safe locked access to a Int64 value
@@ -5784,9 +5786,15 @@ type
     // - Int64s will be stored internally as a varInt64 variant
     // - returns nil if the Index is out of range, or does not store a Int64
     property LockedInt64[Index: integer]: Int64 read GetInt64 write SetInt64;
+    /// safe locked access to a boolean value
+    // - you may store up to 7 variables, using an 0..6 index, shared with
+    // Locked, LockedInt64, LockedPointer and LockedUTF8 array properties
+    // - value will be stored internally as a varBoolean variant
+    // - returns nil if the Index is out of range, or does not store a boolean
+    property LockedBool[Index: integer]: boolean read GetBool write SetBool;
     /// safe locked access to a pointer/TObject value
     // - you may store up to 7 variables, using an 0..6 index, shared with
-    // Locked and LockedUTF8 array properties
+    // Locked, LockedBool, LockedInt64 and LockedUTF8 array properties
     // - pointers will be stored internally as a varUnknown variant
     // - returns nil if the Index is out of range, or does not store a pointer
     property LockedPointer[Index: integer]: Pointer read GetPointer write SetPointer;
@@ -47550,15 +47558,25 @@ end;
 
 procedure TSynLocker.SetInt64(Index: integer; const Value: Int64);
 begin
-  if cardinal(Index)<=high(Padding) then
+  SetVariant(Index,Value);
+end;
+
+function TSynLocker.GetBool(Index: integer): boolean;
+begin
+  if (Index>=0) and (Index<=PaddingMaxUsedIndex) then
     try
       EnterCriticalSection(fSection);
-      if Index>PaddingMaxUsedIndex then
-        PaddingMaxUsedIndex := Index;
-      variant(Padding[Index]) := Value;
+      if not VariantToBoolean(variant(Padding[index]),result) then
+        result := false;
     finally
       LeaveCriticalSection(fSection);
-    end;
+    end else
+    result := false;
+end;
+
+procedure TSynLocker.SetBool(Index: integer; const Value: boolean);
+begin
+  SetVariant(Index,Value);
 end;
 
 function TSynLocker.GetUnLockedInt64(Index: integer): Int64;
