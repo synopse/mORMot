@@ -4487,10 +4487,13 @@ begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // tune up execution speed
   if not fIsMemory then begin
-    if fPassword='' then
-      PageSize := 4096 else
-      PageSize := 1024; // our encryption scheme expects a page size of 1024
-    CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
+    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then begin
+      if fPassword='' then
+        PageSize := 4096 else
+        PageSize := 1024; // our encryption scheme expects a page size of 1024
+    end;
+    if fFileDefaultCacheSize <> 0 then
+      CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
