@@ -486,10 +486,6 @@ const
   {$endif Linux}
   ZLIB_VERSION = '1.2.3';
 
-type
-  gzFile = pointer;
-
-
 const
   Z_NO_FLUSH = 0;
   Z_PARTIAL_FLUSH = 1;
