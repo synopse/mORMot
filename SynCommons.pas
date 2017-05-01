@@ -62842,7 +62842,7 @@ procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
 var timeout: Int64;
 begin
   timeout := GetTickCount64+timeoutsecs*1000;
-  while Processing and (GetTickcount64>timeout) do
+  while Processing and (GetTickcount64<timeout) do
     SleepHiRes(1);
 end;
 
