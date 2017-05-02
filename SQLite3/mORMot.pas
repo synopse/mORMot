@@ -36593,7 +36593,7 @@ var url,root,interfmethod,interf,id,method,frames: RawUTF8;
 begin
   Ctxt.OutStatus := HTTP_BADREQUEST;
   url := Ctxt.Url;
-  if url='' then
+  if (url='') or (isDestroying in fInternalState) then
     exit;
   if url[1]='/' then
     system.delete(url,1,1);
@@ -36974,7 +36974,7 @@ begin
     SetLogClass(nil);
   {$endif}
   fBatchCurrent.Free;
-  fFakeCallbacks.Free;
+  FreeAndNil(fFakeCallbacks);
   try
     // unlock all still locked records by this client
     if Model<>nil then
