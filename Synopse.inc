@@ -550,6 +550,14 @@
   // -> allow to use external SQlite3 libraries in addition to static version
 {$endif}
 
+{$ifdef CPUX86} // safest to reset x87 exceptions
+{$ifndef PUREPASCAL}
+{$ifndef DELPHI5OROLDER}
+  {$define RESETFPUEXCEPTION}
+{$endif}
+{$endif}
+{$endif}
+
 {$ifdef FPC}
   {$ifndef FPCSQLITE3STATIC} // see above about this FPC-specific conditional
     {$define NOSQLITE3STATIC}
