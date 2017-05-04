@@ -466,7 +466,7 @@
     {$if CompilerVersion >= 32.0}
       {$define ISDELPHI102}
       {$ifdef CPUX64}
-      {$ifdef VER320}
+      {$ifdef VER320withoutAprilUpdate}
         {$undef HASINLINE} // circumvent Delphi 10.2 Tokyo Win64 compiler bug
         {$define HASINLINENOTX86}
       {$endif}
