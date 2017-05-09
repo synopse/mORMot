@@ -158,7 +158,7 @@ type
     FileName: RawUTF8;
     /// list of all mapped source code lines of this unit
     Line: TIntegerDynArray;
-    /// start code address of each source code lin
+    /// start code address of each source code line
     Addr: TIntegerDynArray;
   end;
   /// a dynamic array of units, as decoded by TSynMapFile from a .map file
@@ -222,7 +222,10 @@ type
     function FindSymbol(aAddressOffset: integer): integer;
     /// retrieve an unit and source line, according to a relative code address
     // - use fast O(log n) binary search
-    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer;
+    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer; overload;
+    /// retrieve an unit information, according to the unit name
+    // - will search within Units array
+    function FindUnit(const aUnitName: RawUTF8): integer; overload;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
@@ -230,6 +233,9 @@ type
     /// return the symbol location according to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
     class function FindLocation(exc: ESynException): RawUTF8; overload;
+    /// returns the file name of
+    // - if unitname = '', returns the main file name of the current executable
+    class function FindFileName(const unitname: RawUTF8): TFileName;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -2193,6 +2199,32 @@ begin
   if (exc=nil) or (exc.RaisedAt=nil) then
     result := '' else
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
+end;
+
+function TSynMapFile.FindUnit(const aUnitName: RawUTF8): integer;
+begin
+  if (self<>nil) and (aUnitName<>'') then
+    for result := 0 to high(fUnit) do
+      if IdemPropNameU(fUnit[result].Symbol.Name,aUnitName) then
+        exit;
+  result := -1;
+end;
+
+class function TSynMapFile.FindFileName(const unitname: RawUTF8): TFileName;
+var map: TSynMapFile;
+    name: RawUTF8;
+    u: integer;
+begin
+  result := '';
+  map := GetInstanceMapFile;
+  if map = nil then
+    exit;
+  if unitname='' then
+    name := ExeVersion.ProgramName else
+    name := unitname;
+  u := map.FindUnit(name);
+  if u>=0 then
+    result := UTF8ToString(map.fUnit[u].FileName);
 end;
 
 

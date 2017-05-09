@@ -1054,7 +1054,7 @@ begin
   fNativeMethods.Init(TypeInfo(TSMEngineMethodEventDynArray),
     fNativeMethod,HashPointer,SortDynArrayPointer,nil,@fNativeMethodCount);
 
-  {$ifdef ResetFPUException}
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
   {$endif}
   FManager := aManager;
@@ -1104,7 +1104,7 @@ destructor TSMEngine.Destroy;
 begin
   inherited Destroy;
   VarClear(FGlobal);
-  {$ifdef ResetFPUException}
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
   {$endif}
   //JS_RemoveExternalStringFinalizer(ExternalStringFinalizer);
@@ -1319,7 +1319,7 @@ var engine: TSMEngine;
       [callee.ToNativeFunctionName(cx)]));
   end;
 begin
-  {$ifdef ResetFPUException}
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForDelphiCode; // ensure we are back in Delphi FPU mask
   {$endif}
   try
@@ -2052,7 +2052,7 @@ procedure TSMObject.Evaluate(const script: SynUnicode; const scriptName: RawUTF8
 var r: JSBool;
     eng: TSMEngine;
 begin
-  {$ifdef ResetFPUException}
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
   {$endif}
   eng := Engine;
@@ -2069,7 +2069,7 @@ procedure TSMObject.RunMethod(const methodName: AnsiString;
 var r: JSBool;
     eng: TSMEngine;
 begin
-  {$ifdef ResetFPUException}
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
   {$endif}
   eng := Engine;
