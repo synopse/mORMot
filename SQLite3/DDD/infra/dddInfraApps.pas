@@ -1150,7 +1150,7 @@ end;
 
 procedure TDDDRestHttpDaemon.WrapperGenerate(const DestFile, Template: TFileName);
 begin
-  Settings.Rest.WrapperGenerate(Rest, UTF8ToInteger(HttpServer.Port), DestFile, Template);
+  Settings.Rest.WrapperGenerate(Rest, GetInteger(pointer(HttpServer.Port)), DestFile, Template);
 end;
 
 
