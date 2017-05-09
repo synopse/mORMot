@@ -32672,14 +32672,12 @@ end;
 
 {$endif CPUINTEL}
 
-
-
-{$ifdef CPUINTEL}
 type
  TRegisters = record
    eax,ebx,ecx,edx: cardinal;
  end;
 
+{$ifdef CPUINTEL}
 {$ifdef CPU64}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
 {$ifdef FPC}nostackframe; assembler;

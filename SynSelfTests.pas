@@ -492,8 +492,12 @@ type
     procedure _CompressShaAes;
     /// AES-based pseudorandom number generator
     procedure _TAESPNRG;
-    /// CryptDataForCurrentUser()/CryptDataForCurrentUserDPAPI() functions
+    /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
+    {$ifdef MSWINDOWS}
+    /// CryptDataForCurrentUserAPI() function
+    procedure _CryptDataForCurrentUserAPI;
+    {$endif MSWINDOWS}
     {$ifndef NOVARIANTS}
     /// JWT classes
     procedure _JWT;
@@ -9358,7 +9362,8 @@ begin
     check(length(plain)=i);
     UInt32ToUtf8(i,appsec);
     enc := func(plain,appsec,true);
-    assert(length(enc)>=length(plain));
+    check((plain='') or (enc<>''));
+    check(length(enc)>=length(plain));
     test := func(enc,appsec,false);
     check(length(test)=i);
     check(test=plain);
@@ -9372,10 +9377,14 @@ end;
 procedure TTestCryptographicRoutines._CryptDataForCurrentUser;
 begin
   CryptData(false);
-  {$ifdef MSWINDOWS}
-  CryptData(true);
-  {$endif}
 end;
+
+{$ifdef MSWINDOWS}
+procedure TTestCryptographicRoutines._CryptDataForCurrentUserAPI;
+begin
+  CryptData(true);
+end;
+{$endif}
 
 {$ifndef NOVARIANTS}
 procedure TTestCryptographicRoutines._JWT;

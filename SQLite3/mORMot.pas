@@ -10737,12 +10737,13 @@ type
     // the JSON serialized exception
     function ExecuteJson(const Instances: array of pointer; Par: PUTF8Char;
       Res: TTextWriter; ResAsJSONObject: boolean=false): boolean;
-    /// execute the corresponding method of one weak IInvokable reference,
-    // with no output argument, i.e. no returned data
+    /// execute the corresponding method of one weak IInvokable reference
+    // - exepect no output argument, i.e. no returned data, unless output is set
     // - this version will identify TInterfacedObjectFake implementations,
     // and will call directly fInvoke() if possible, to avoid JSON marshalling
     // - expect params value to be without [ ], just like TOnFakeInstanceInvoke
-    function ExecuteJsonCallback(Instance: pointer; const params: RawUTF8): boolean;
+    function ExecuteJsonCallback(Instance: pointer; const params: RawUTF8;
+      output: PRawUTF8): boolean;
     /// execute directly TInterfacedObjectFake.fInvoke()
     // - expect params value to be with [ ], just like ExecuteJson
     function ExecuteJsonFake(Instance: pointer; params: PUTF8Char): boolean;
@@ -13340,6 +13341,12 @@ type
     destructor Destroy; override;
   end;
 
+  /// optionally called after TSQLRest.AsynchRedirect background execution
+  // - to retrieve any output result value, as JSON-encoded content
+  // - as used in TSQLRestBackgroundTimer.AsynchBackgroundExecute protected method
+  TOnAsynchRedirectResult = procedure(const aMethod: TServiceMethod;
+    const aInstance: IInvokable; const aParams, aResult: RawUTF8) of object;
+
   /// TThread able to run one or several tasks at a periodic pace, or do
   // asynchronous interface or batch execution, with proper TSQLRest integration
   // - used e.g. by TSQLRest.TimerEnable/AsynchRedirect/AsynchBatchStart methods
@@ -13385,7 +13392,8 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult=nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this method implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -13404,7 +13412,8 @@ type
     // to execute something in the context of the initial thread, protected
     // by a critical section (mutex)
     procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInstance: TInterfacedObject; out aCallbackInterface); overload;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult=nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
@@ -14617,7 +14626,8 @@ type
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsynchRedirect()
     procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInterface: IInvokable; out aCallbackInterface); overload;
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult=nil); overload;
     /// define asynchronous execution of interface methods in a background thread
     // - this class allows to implements any interface via a fake class, which will
     // redirect all methods calls into calls of another interface, but as a FIFO
@@ -14629,7 +14639,8 @@ type
     // by a critical section (mutex)
     // - is a wrapper around BackgroundTimer.AsynchRedirect()
     procedure AsynchRedirect(const aGUID: TGUID;
-      const aDestinationInstance: TInterfacedObject; out aCallbackInterface); overload;
+      const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult=nil); overload;
     /// prepare an asynchronous ORM BATCH process, executed in a background thread
     // - will initialize a TSQLRestBatch and call TimerEnable to initialize the
     // background thread, following the given processing period (in seconds),
@@ -34245,19 +34256,21 @@ begin
 end;
 
 procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInterface: IInvokable; out aCallbackInterface);
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
 begin
   if self<>nil then
     EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID,aDestinationInterface,aCallbackInterface);
+      aGUID,aDestinationInterface,aCallbackInterface,aOnResult);
 end;
 
 procedure TSQLRest.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInstance: TInterfacedObject; out aCallbackInterface);
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
 begin
   if self<>nil then
     EnsureBackgroundTimerExists.AsynchRedirect(
-      aGUID,aDestinationInstance,aCallbackInterface);
+      aGUID,aDestinationInstance,aCallbackInterface,aOnResult);
 end;
 
 procedure TSQLRest.AsynchInterning(Interning: TRawUTF8Interning;
@@ -54537,27 +54550,32 @@ type
   protected
     fTimer: TSQLRestBackgroundTimer;
     fDest: IInvokable;
+    fOnResult: TOnAsynchRedirectResult;
     function FakeInvoke(const aMethod: TServiceMethod; const aParams: RawUTF8;
       aResult, aErrorMsg: PRawUTF8; aClientDrivenID: PCardinal;
       aServiceCustomAnswer: PServiceCustomAnswer): boolean; override;
   public
     constructor Create(aTimer: TSQLRestBackgroundTimer; aFactory: TInterfaceFactory;
-      const aDestinationInterface: IInvokable; out aCallbackInterface);
+      const aDestinationInterface: IInvokable; out aCallbackInterface;
+      const aOnResult: TOnAsynchRedirectResult);
   end;
   TInterfacedObjectAsynchCall = packed record
     Method: PServiceMethod;
     Instance: pointer; // weak IInvokable reference
     Params: RawUTF8;
+    OnOutputParamsCopy: RawUTF8;
+    OnOutput: TOnAsynchRedirectResult;
   end;
 
 constructor TInterfacedObjectAsynch.Create(aTimer: TSQLRestBackgroundTimer;
   aFactory: TInterfaceFactory; const aDestinationInterface: IInvokable;
-  out aCallbackInterface);
+  out aCallbackInterface; const aOnResult: TOnAsynchRedirectResult);
 begin
   fTimer := aTimer;
   fRest := fTimer.fRest;
   fName := fTimer.fThreadName;
   fDest := aDestinationInterface;
+  fOnResult := aOnResult;
   inherited Create(aFactory,[ifoJsonAsExtended],FakeInvoke,nil);
   Get(aCallbackInterface);
 end;
@@ -54575,6 +54593,11 @@ begin
   call.Method := @aMethod;
   call.Instance := pointer(fDest);
   call.Params := aParams;
+  if Assigned(fOnResult) then begin
+    SetString(call.OnOutputParamsCopy,PAnsiChar(pointer(aParams)),length(aParams));
+    call.OnOutput := fOnResult;
+  end else
+    call.OnOutput := nil;
   msg := RecordSave(call,TypeInfo(TInterfacedObjectAsynchCall));
   result := fTimer.EnQueue(fTimer.AsynchBackgroundExecute,msg,true);
 end;
@@ -54835,6 +54858,8 @@ procedure TSQLRestBackgroundTimer.AsynchBackgroundExecute(Sender: TSynBackground
   Event: TWaitResult; const Msg: RawUTF8);
 var exec: TServiceMethodExecute;
     call: TInterfacedObjectAsynchCall;
+    o: PRawUTF8;
+    output: RawUTF8;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     {$endif}
@@ -54847,16 +54872,23 @@ begin
   {$endif}
   exec := TServiceMethodExecute.Create(call.Method);
   try
-    if not exec.ExecuteJsonCallback(call.Instance,call.Params) then
+    if Assigned(call.OnOutput) then
+      o := @output else
+      o := nil;
+    if not exec.ExecuteJsonCallback(call.Instance,call.Params, o) then
       fRest.InternalLog('%.AsynchBackgroundExecute %: ExecuteJsonCallback failed',
-        [ClassType,call.Method^.InterfaceDotMethodName],sllWarning);
+        [ClassType,call.Method^.InterfaceDotMethodName],sllWarning) else
+      if o<>nil then
+        call.OnOutput(call.Method^,IInvokable(call.Instance),
+          call.OnOutputParamsCopy,output);
   finally
     exec.Free;
   end;
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInterface: IInvokable; out aCallbackInterface);
+  const aDestinationInterface: IInvokable; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
 var factory: TInterfaceFactory;
 begin
   factory := TInterfaceFactory.Get(aGUID);
@@ -54868,11 +54900,12 @@ begin
   fRest.InternalLog('AsynchRedirect % to % using %',[factory.InterfaceName,
     ObjectFromInterface(aDestinationInterface),self]);
   Enable(AsynchBackgroundExecute,3600);
-  TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface);
+  TInterfacedObjectAsynch.Create(self,factory,aDestinationInterface,aCallbackInterface,aOnResult);
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchRedirect(const aGUID: TGUID;
-  const aDestinationInstance: TInterfacedObject; out aCallbackInterface);
+  const aDestinationInstance: TInterfacedObject; out aCallbackInterface;
+  const aOnResult: TOnAsynchRedirectResult);
 var dest: IInvokable;
 begin
   if aDestinationInstance=nil then
@@ -54880,7 +54913,7 @@ begin
   if not aDestinationInstance.GetInterface(aGUID,dest) then
     raise EInterfaceFactoryException.CreateUTF8('%.AsynchRedirect [%]: % is not a %',
       [self,fThreadName,aDestinationInstance,GUIDToShort(aGUID)]);
-  AsynchRedirect(aGUID,dest,aCallbackInterface);
+  AsynchRedirect(aGUID,dest,aCallbackInterface,aOnResult);
 end;
 
 procedure TSQLRestBackgroundTimer.AsynchBackgroundInterning(
@@ -59362,19 +59395,22 @@ begin
 end;
 
 function TServiceMethodExecute.ExecuteJsonCallback(Instance: pointer;
-  const params: RawUTF8): boolean;
+  const params: RawUTF8; output: PRawUTF8): boolean;
 var tmp: TSynTempBuffer;
     fake: TInterfacedObjectFake;
+    WR: TTextwriter;
     n: integer;
 begin
   result := false;
-  if (Instance=nil) or (fMethod^.ArgsOutputValuesCount>0) then
+  if Instance=nil then
     exit;
   if (PCardinal(PPointer(PPointer(Instance)^)^)^=
       PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^) then begin
     fake := TInterfacedObjectFake(Instance).SelfFromInterface;
     if Assigned(fake.fInvoke) then begin // bypass all JSON marshalling
-      result := fake.fInvoke(fMethod^,params,nil,nil,nil,nil);
+      if (output=nil) and (fMethod^.ArgsOutputValuesCount>0) then
+        exit; // ensure a function has a TOnAsynchRedirectResult callback
+      result := fake.fInvoke(fMethod^,params,output,nil,nil,nil);
       exit;
     end;
   end;
@@ -59383,7 +59419,16 @@ begin
   PAnsiChar(tmp.buf)[0] := '[';
   MoveFast(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
   PWord(PAnsiChar(tmp.buf)+n+1)^ := ord(']'); // ']'#0
-  result := ExecuteJson([Instance],tmp.buf,nil);
+  if output<>nil then begin
+    WR := TempTextWriter;
+    WR.CancelAll;
+  end else
+    if fMethod^.ArgsOutputValuesCount>0 then
+      exit else // ensure a function has a TOnAsynchRedirectResult callback
+      WR := nil;
+  result := ExecuteJson([Instance],tmp.buf,WR);
+  if WR<>nil then
+    WR.SetText(output^);
   tmp.Done;
 end;
 
