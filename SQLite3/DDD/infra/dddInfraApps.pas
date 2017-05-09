@@ -212,6 +212,9 @@ type
     // finalize HTTP Server and SOA log database
     procedure InternalStop; override;
   public
+    /// generate API documentation corresponding to REST SOA interfaces
+    procedure WrapperGenerate(const DestFile: TFileName;
+      const Template: TFileName = 'API.adoc.mustache');
     /// reference to the main HTTP server publishing this daemon Services
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
@@ -1144,6 +1147,12 @@ end;
 
 
 { ----- Implements Thread Processing to access a TCP server }
+
+procedure TDDDRestHttpDaemon.WrapperGenerate(const DestFile, Template: TFileName);
+begin
+  Settings.Rest.WrapperGenerate(Rest, UTF8ToInteger(HttpServer.Port), DestFile, Template);
+end;
+
 
 { TDDDSocketThreadMonitoring }
 
