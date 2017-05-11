@@ -17446,6 +17446,12 @@ type
     // - returns true on success, false if the supplied task was not registered
     function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean=false): boolean; overload;
+    /// remove a message from the processing list 
+    // - supplied message will be searched in the internal FIFO list associated
+    // with aOnProcess, then removed from the list if found
+    // - aOnProcess should have been registered by a previous call to Enable() method
+    // - returns true on success, false if the supplied message was not registered
+    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean; 
     /// execute a task without waiting for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
@@ -35936,7 +35942,6 @@ begin
     result := true;
   end;
 end;
-
 
 function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   Index: integer; CoValues: PIntegerDynArray=nil): boolean;
@@ -62445,7 +62450,7 @@ begin
       while not Terminated do
         if fExecuteLoopPause then
           sleep(1) else
-        ExecuteLoop;
+          ExecuteLoop;
     finally
       if Assigned(fOnAfterExecute) then
         fOnAfterExecute(self);
@@ -62505,35 +62510,35 @@ begin
         exit;
       end;
       flagStarted:
-      if not Terminated then
+        if not Terminated then
           if fExecuteLoopPause then // pause -> try again later
             fProcessEvent.SetEvent else
-      try
-        fBackgroundException := nil;
-        try
-          if Assigned(fOnBeforeProcess) then
-            fOnBeforeProcess(self);
-          try
-            Process;
-          finally
-            if Assigned(fOnAfterProcess) then
-              fOnAfterProcess(self);
-          end;
-        except
-          {$ifdef DELPHI5OROLDER}
-          on E: Exception do
-            fBackgroundException := ESynException.CreateUTF8(
-              'Redirected %: "%"',[E,E.Message]);
-          {$else}
-          E := AcquireExceptionObject;
-          if E.InheritsFrom(Exception) then
-            fBackgroundException := Exception(E);
-          {$endif}
-        end;
-      finally
-        SetPendingProcess(flagFinished);
-        fCallerEvent.SetEvent;
-      end;
+            try
+              fBackgroundException := nil;
+              try
+                if Assigned(fOnBeforeProcess) then
+                  fOnBeforeProcess(self);
+                try
+                  Process;
+                finally
+                  if Assigned(fOnAfterProcess) then
+                    fOnAfterProcess(self);
+                end;
+              except
+                {$ifdef DELPHI5OROLDER}
+                on E: Exception do
+                  fBackgroundException := ESynException.CreateUTF8(
+                    'Redirected %: "%"',[E,E.Message]);
+                {$else}
+                E := AcquireExceptionObject;
+                if E.InheritsFrom(Exception) then
+                  fBackgroundException := Exception(E);
+                {$endif}
+              end;
+            finally
+              SetPendingProcess(flagFinished);
+              fCallerEvent.SetEvent;
+            end;
      end;
   end;
 end;
@@ -62742,20 +62747,20 @@ begin
   if not Terminated and (wait in [wrSignaled,wrTimeout]) then
     if fExecuteLoopPause then // pause -> try again later
       fProcessEvent.SetEvent else
-    try
-      fStats.ProcessStartTask;
       try
-        fOnProcess(self,wait);
-      finally
-        fStats.ProcessEnd;
+        fStats.ProcessStartTask;
+        try
+          fOnProcess(self,wait);
+        finally
+          fStats.ProcessEnd;
+        end;
+      except
+        on E: Exception do begin
+          fStats.ProcessError({$ifdef NOVARIANTS}E.ClassName{$else}ObjectToVariant(E){$endif});
+          if Assigned(fOnException) then
+            fOnException(E);
+        end;
       end;
-    except
-      on E: Exception do begin
-        fStats.ProcessError({$ifdef NOVARIANTS}E.ClassName{$else}ObjectToVariant(E){$endif});
-        if Assigned(fOnException) then
-          fOnException(E);
-      end;
-    end;
 end;
 
 
@@ -62917,6 +62922,24 @@ begin
         ProcessEvent.SetEvent;
       result := true;
     end;
+  finally
+    fTaskLock.UnLock;
+  end;
+end;
+
+function TSynBackgroundTimer.DeQueue(aOnProcess: TOnSynBackgroundTimerProcess;
+  const aMsg: RawUTF8): boolean;
+var found: integer;
+begin
+  result := false;
+  if (self=nil) or Terminated or not Assigned(aOnProcess) then
+    exit;
+  fTaskLock.Lock;
+  try
+    found := Find(TMethod(aOnProcess));
+    if found>=0 then
+      with fTask[found] do
+        result := DeleteRawUTF8(FIFO,FindRawUTF8(FIFO,aMsg));
   finally
     fTaskLock.UnLock;
   end;
