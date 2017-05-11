@@ -618,7 +618,7 @@ type
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)
     property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
-    /// by default, time logging will use error-safe UTC as reference
+    /// by default, time logging will use error-safe UTC values as reference
     // - you may set this property to TRUE to store local time instead
     property LocalTimeStamp: boolean read fLocalTimeStamp write fLocalTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available

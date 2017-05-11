@@ -24757,7 +24757,7 @@ procedure FormatUTF8(const Format: RawUTF8; const Args: array of const;
 var i, blocksN, L, argN: PtrInt;
     tmpStr: TRawUTF8DynArray;
     F,FDeb: PUTF8Char;
-    blocks: array[0..49] of TTempUTF8;
+    blocks: array[0..63] of TTempUTF8;
 begin
   if (Format='') or (high(Args)<0) then begin
     result := Format; // no formatting to process
@@ -24768,8 +24768,8 @@ begin
     exit;
   end;
   result := '';
-  if length(Args)*2+1>high(blocks) then
-    raise ESynException.Create('FormatUTF8: too many args (max=25)!');
+  if length(Args)*2>=high(blocks) then
+    raise ESynException.Create('FormatUTF8: too many args (max=32)!');
   SetLength(tmpStr,length(Args));
   blocksN := 0;
   argN := 0;
@@ -25238,94 +25238,94 @@ const
 
 function StrCompSSE42(Str1, Str2: pointer): PtrInt;
 asm // warning: may read up to 15 bytes beyond the string itself
-      test      eax,edx
+      test      eax, edx
       jz        @n
-@ok:  sub       eax,edx
+@ok:  sub       eax, edx
       jz        @0
       {$ifdef HASAESNI}
-      movdqu    xmm0,dqword [edx]
-      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0, dqword [edx]
+      pcmpistri xmm0, dqword [edx + eax], EQUAL_EACH + NEGATIVE_POLARITY // result in ecx
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
       {$endif}
       ja        @1
       jc        @2
-      xor       eax,eax
+      xor       eax, eax
       ret
-@1:   add       edx,16
+@1:   add       edx, 16
       {$ifdef HASAESNI}
-      movdqu    xmm0,dqword [edx]
-      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0, dqword [edx]
+      pcmpistri xmm0, dqword [edx + eax], EQUAL_EACH + NEGATIVE_POLARITY // result in ecx
       {$else}
-      db $F3,$0F,$6F,$02
+      db $F3,$0F,$6F,$02                          
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
       {$endif}
       ja        @1
       jc        @2
-@0:   xor       eax,eax // Str1=Str2
+@0:   xor       eax, eax // Str1=Str2
       ret
-@n:   cmp       eax,edx
+@n:   cmp       eax, edx
       je        @0
-      test      eax,eax  // Str1='' ?
+      test      eax, eax  // Str1='' ?
       jz        @max
-      test      edx,edx  // Str2='' ?
+      test      edx, edx  // Str2='' ?
       jnz       @ok
-      mov       eax,1
+      mov       eax, 1
       ret
 @max: dec       eax
       ret
-@2:   add       eax,edx
-      movzx     eax,byte ptr [eax+ecx]
-      movzx     edx,byte ptr [edx+ecx]
-      sub       eax,edx
+@2:   add       eax, edx
+      movzx     eax, byte ptr [eax+ecx]
+      movzx     edx, byte ptr [edx+ecx]
+      sub       eax, edx
 end;
 
 function SortDynArrayAnsiStringSSE42(const A,B): integer;
 asm // warning: may read up to 15 bytes beyond the string itself
-      mov       eax,[eax]
-      mov       edx,[edx]
-      test      eax,edx
+      mov       eax, [eax]
+      mov       edx, [edx]
+      test      eax, edx
       jz        @n
-@ok:  sub       eax,edx
+@ok:  sub       eax, edx
       jz        @0
       {$ifdef HASAESNI}
-      movdqu    xmm0,dqword [edx]
-      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0, dqword [edx] // result in ecx
+      pcmpistri xmm0, dqword [edx+eax], EQUAL_EACH + NEGATIVE_POLARITY
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
       {$endif}
       ja        @1
       jc        @2
-      xor       eax,eax
+      xor       eax, eax
       ret
-@1:   add       edx,16
+@1:   add       edx, 16
       {$ifdef HASAESNI}
-      movdqu    xmm0,dqword [edx]
-      pcmpistri xmm0,dqword [edx+eax],EQUAL_EACH+NEGATIVE_POLARITY // result in ecx
+      movdqu    xmm0, dqword [edx] // result in ecx
+      pcmpistri xmm0, dqword [edx+eax], EQUAL_EACH + NEGATIVE_POLARITY
       {$else}
       db $F3,$0F,$6F,$02
       db $66,$0F,$3A,$63,$04,$10,EQUAL_EACH+NEGATIVE_POLARITY
       {$endif}
       ja        @1
       jc        @2
-@0:   xor       eax,eax // Str1=Str2
+@0:   xor       eax, eax // Str1=Str2
       ret
-@n:   cmp       eax,edx
+@n:   cmp       eax, edx
       je        @0
-      test      eax,eax  // Str1='' ?
+      test      eax, eax  // Str1='' ?
       jz        @max
-      test      edx,edx  // Str2='' ?
+      test      edx, edx  // Str2='' ?
       jnz       @ok
-      or        eax,-1
+      or        eax, -1
       ret
 @max: inc       eax
       ret
-@2:   add       eax,edx
-      movzx     eax,byte ptr [eax+ecx]
-      movzx     edx,byte ptr [edx+ecx]
-      sub       eax,edx
+@2:   add       eax, edx
+      movzx     eax, byte ptr [eax+ecx]
+      movzx     edx, byte ptr [edx+ecx]
+      sub       eax, edx
 end;
 
 {$endif PUREPASCAL}

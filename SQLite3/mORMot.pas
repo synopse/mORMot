@@ -54610,7 +54610,7 @@ constructor TSQLRestBackgroundTimer.Create(aRest: TSQLRest;
 var aName: RawUTF8;
 begin
   if aRest=nil then
-    raise EORMException.CreateUTF8('%.Create(nil,"%")',[self,aThreadName]);
+    raise EORMException.CreateUTF8('%.Create(aRest=nil,"%")',[self,aThreadName]);
   fRest := aRest;
   if aThreadName<>'' then
     aName := aThreadName else
