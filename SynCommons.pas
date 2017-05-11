@@ -4311,7 +4311,10 @@ function AddSortedRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer
 /// delete a RawUTF8 item in a dynamic array of RawUTF8
 // - if CoValues is set, the integer item at the same index is also deleted
 function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
-  Index: integer; CoValues: PIntegerDynArray=nil): boolean;
+  Index: integer; CoValues: PIntegerDynArray=nil): boolean; overload;
+
+/// delete a RawUTF8 item in a dynamic array of RawUTF8;
+function DeleteRawUTF8(var Values: TRawUTF8DynArray; Index: integer): boolean; overload;
 
 /// sort a dynamic array of RawUTF8 items
 // - if CoValues is set, the integer items are also synchronized
@@ -35911,6 +35914,22 @@ begin
     QS.CoValues := pointer(CoValues^);
   QS.Sort(0,ValuesCount-1);
 end;
+
+function DeleteRawUTF8(var Values: TRawUTF8DynArray; Index: integer): boolean;
+var n: integer;
+begin
+  n := length(Values);
+  if cardinal(Index)<cardinal(n) then begin
+    Values[Index] := ''; // avoid GPF
+    if n>Index then begin
+      MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*sizeof(pointer));
+      PtrUInt(Values[n]) := 0; // avoid GPF
+    end;
+    result := true;
+  end else
+    result := false;
+end;
+
 
 function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
   Index: integer; CoValues: PIntegerDynArray=nil): boolean;
