@@ -11770,6 +11770,7 @@ type
     fOnAfterExecute: TNotifyThreadEvent;
     fThreadName: RawUTF8;
     fExecute: (exCreated,exRun,exFinished);
+    fExecuteLoopPause: boolean;
     /// where the main process takes place
     procedure Execute; override;
     procedure ExecuteLoop; virtual; abstract;
@@ -11781,6 +11782,10 @@ type
       OnAfterExecute: TNotifyThreadEvent=nil); reintroduce;
     /// release used resources
     destructor Destroy; override;
+    /// temporary stop the execution of ExecuteLoop, until set back to false
+    // - may be used e.g. by TSynBackgroundTimer to delay the process of
+    // background tasks
+    property Pause: boolean read fExecuteLoopPause write fExecuteLoopPause;
     /// access to the low-level associated event used to notify task execution
     // to the background thread
     // - you may call ProcessEvent.SetEvent to trigger the internal process loop
@@ -35919,15 +35924,17 @@ function DeleteRawUTF8(var Values: TRawUTF8DynArray; Index: integer): boolean;
 var n: integer;
 begin
   n := length(Values);
-  if cardinal(Index)<cardinal(n) then begin
+  if cardinal(Index)>=cardinal(n) then
+    result := false else begin
+    dec(n);
     Values[Index] := ''; // avoid GPF
     if n>Index then begin
       MoveFast(pointer(Values[Index+1]),pointer(Values[Index]),(n-Index)*sizeof(pointer));
       PtrUInt(Values[n]) := 0; // avoid GPF
     end;
+    SetLength(Values,n);
     result := true;
-  end else
-    result := false;
+  end;
 end;
 
 
@@ -35936,7 +35943,7 @@ function DeleteRawUTF8(var Values: TRawUTF8DynArray; var ValuesCount: integer;
 var n: integer;
 begin
   n := ValuesCount;
-  if Cardinal(Index)>=Cardinal(n) then
+  if cardinal(Index)>=cardinal(n) then
     result := false else begin
     dec(n);
     ValuesCount := n;
@@ -62436,6 +62443,8 @@ begin
     try
       fExecute := exRun;
       while not Terminated do
+        if fExecuteLoopPause then
+          sleep(1) else
         ExecuteLoop;
     finally
       if Assigned(fOnAfterExecute) then
@@ -62497,6 +62506,8 @@ begin
       end;
       flagStarted:
       if not Terminated then
+          if fExecuteLoopPause then // pause -> try again later
+            fProcessEvent.SetEvent else
       try
         fBackgroundException := nil;
         try
@@ -62729,6 +62740,8 @@ var wait: TWaitResult;
 begin
   wait := FixedWaitFor(fProcessEvent,fOnProcessMS);
   if not Terminated and (wait in [wrSignaled,wrTimeout]) then
+    if fExecuteLoopPause then // pause -> try again later
+      fProcessEvent.SetEvent else
     try
       fStats.ProcessStartTask;
       try
