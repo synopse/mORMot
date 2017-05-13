@@ -6228,6 +6228,13 @@ function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
 function ObjArrayAdd(var aObjArray; aItem: TObject): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to add an item to a T*ObjArray dynamic array storage
+// - this overloaded function will use a separated variable to store the items
+// count, so will be slightly faster: but you should call SetLength() when done,
+// to have an array as expected by TJSONSerializer.RegisterObjArrayForJSON()
+// - return the index of the item in the dynamic array
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): integer;
+
 /// wrapper to add once an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - if the object is already in the array (searching by address/reference,
@@ -47183,6 +47190,16 @@ begin
   result := length(a);
   SetLength(a,result+1);
   a[result] := aItem;
+end;
+
+function ObjArrayAddCount(var aObjArray; aItem: TObject; var aObjArrayCount: integer): integer;
+var a: TObjectDynArray absolute aObjArray;
+begin
+  result := aObjArrayCount;
+  if result=length(a) then
+    SetLength(a,result+result shr 3+16);
+  a[result] := aItem;
+  inc(aObjArrayCount);
 end;
 
 procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
