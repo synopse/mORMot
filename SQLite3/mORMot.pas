@@ -16354,7 +16354,9 @@ type
   // - TSQLRestServerURIContext.AuthenticationBearerToken will return the
   // ?authenticationbearer=... URI parameter value alternatively to the HTTP
   // header unless rsoAuthenticationURIDisable is set (for security reasons)
-  // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable 
+  // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable
+  // - URI() header output will be sanitized for any EOL injection, unless
+  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?) 
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16367,7 +16369,8 @@ type
     rsoCookieIncludeRootPath,
     rsoCookieHttpOnlyFlagDisable,
     rsoAuthenticationURIDisable,
-    rsoTimeStampInfoURIDisable);
+    rsoTimeStampInfoURIDisable,
+    rsoHttpHeaderCheckDisable);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -41127,6 +41130,9 @@ begin
       if rsoCookieIncludeRootPath in fOptions then
         Call.OutHead := Call.OutHead+'; Path=/'; // case-sensitive Path=/ModelRoot
     end;
+    if not (rsoHttpHeaderCheckDisable in Options) and
+       IsInvalidHttpHeader(pointer(Call.OutHead), length(Call.OutHead)) then
+      Ctxt.Error('Unsafe HTTP header rejected', HTTP_SERVERERROR);
   finally
     QueryPerformanceCounter(timeEnd);
     Ctxt.MicroSecondsElapsed := fStats.FromExternalQueryPerformanceCounters(timeEnd-timeStart);
@@ -41150,10 +41156,10 @@ begin
     if fStatUsage<>nil then
       fStatUsage.Modified(fStats,[]);
     if Assigned(OnAfterURI) then
-    try
-      OnAfterURI(Ctxt);
-    except
-    end;
+      try
+        OnAfterURI(Ctxt);
+      except
+      end;
     Ctxt.Free;
   end;
   if safeid<>0 then
