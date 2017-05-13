@@ -4766,6 +4766,10 @@ function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
 function StatusCodeIsSuccess(Code: integer): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// check the supplied HTTP header to not contain more than one EOL
+// - to avoid unexpected HTTP body injection, e.g. from unsafe business code 
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: integer): boolean;
+
 /// computes an URI with optional jwt authentication parameter
 // - if AuthenticationBearer is set, will add its values as additional parameter:
 // $ URI?authenticationbearer=URIAuthenticationBearer
@@ -23881,6 +23885,16 @@ begin
   result := mNone;
 end;
 
+function IsInvalidHttpHeader(head: PUTF8Char; headlen: integer): boolean;
+var i: integer;
+begin
+  result := true;
+  for i := 0 to headlen-3 do
+    if (PInteger(head+i)^=$0a0d0a0d) or
+       (PWord(head+i)^=$0d0d) or (PWord(head+i)^=$0a0a) then
+      exit;
+  result := false;
+end;
 
 
 { ******************* process monitoring / statistics }
