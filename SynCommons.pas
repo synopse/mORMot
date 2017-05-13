@@ -1847,7 +1847,13 @@ function IsValidUTF8(source: PUTF8Char): Boolean;
 
 /// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #1..#31
 // control characters
-function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean;
+// - supplied input is a pointer to a #0 ended text buffer
+function IsValidUTF8WithoutControlChars(source: PUTF8Char): Boolean; overload;
+
+/// returns TRUE if the supplied buffer has valid UTF-8 encoding with no #0..#31
+// control characters
+// - supplied input is a RawUTF8 variable
+function IsValidUTF8WithoutControlChars(const source: RawUTF8): Boolean; overload;
 
 /// will truncate the supplied UTF-8 value if its length exceeds the specified
 // UTF-16 Unicode characters count
@@ -19889,13 +19895,37 @@ begin
       extra := UTF8_EXTRABYTES[c];
       if extra=0 then exit else // invalid leading byte
       for i := 1 to extra do
-        if byte(source^) and $c0<>$80 then
+        if byte(source^) and $c0<>$80 then // invalid UTF-8 encoding
           exit else
-          inc(source); // check valid UTF-8 content
+          inc(source);
     end;
   until false;
   result := true;
 end;
+
+function IsValidUTF8WithoutControlChars(const source: RawUTF8): Boolean;
+var s, extra, i, len: integer;
+    c: cardinal;
+begin
+  result := false;
+  s := 1;
+  len := length(source);
+  while s<=len do begin
+    c := byte(source[s]);
+    inc(s);
+    if c<32 then exit else // disallow #0..#31 control char
+    if c and $80<>0 then begin
+      extra := UTF8_EXTRABYTES[c];
+      if extra=0 then exit else // invalid leading byte
+      for i := 1 to extra do
+        if byte(source[s]) and $c0<>$80 then // reached #0 or invalid UTF-8
+          exit else
+          inc(s); 
+    end;
+  end;
+  result := true;
+end;
+
 
 function Utf8ToUnicodeLength(source: PUTF8Char): PtrUInt;
 var c: byte;

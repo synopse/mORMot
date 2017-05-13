@@ -40464,6 +40464,8 @@ begin
   if self=nil then
     exit;
   aOutSetCookie := Trim(aOutSetCookie);
+  if not IsValidUTF8WithoutControlChars(aOutSetCookie) then
+    raise EBusinessLayerException.CreateUTF8('Unsafe %.SetOutSetCookie',[self]);
   if PosEx('=',aOutSetCookie)<2 then
     raise EBusinessLayerException.CreateUTF8(
       '"name=value" expected for %.SetOutSetCookie("%")',[self,aOutSetCookie]);
