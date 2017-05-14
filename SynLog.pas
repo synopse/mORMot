@@ -2368,7 +2368,7 @@ begin
     exit;
   TDocVariantData(result).InitFast(length(info),dvArray);
   for i := 0 to high(info) do
-    TDocVariantData(result).AddItemFromText(ToText(info[i]));
+    TDocVariantData(result).AddItemText(ToText(info[i]));
 end;
 {$endif}
 

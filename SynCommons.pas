@@ -15484,6 +15484,10 @@ type
     // - returns the index of the corresponding newly added item
     function AddItemFromText(const aValue: RawUTF8;
       AllowVarDouble: boolean=false): integer;
+    /// add a RawUTF8 value to this document, handled as array
+    // - if instance's Kind is dvObject, it will raise an EDocVariant exception
+    // - returns the index of the corresponding newly added item
+    function AddItemText(const aValue: RawUTF8): integer;
     /// add one or several values to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     procedure AddItems(const aValue: array of const);
@@ -42593,8 +42597,7 @@ begin
   if result<0 then
     result := InternalAdd(aName);
   VarClear(VValue[result]);
-  if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result]),
-      AllowVarDouble) then
+  if not GetNumericVariantFromJSON(pointer(aValue),TVarData(VValue[result]),AllowVarDouble) then
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
       RawUTF8ToVariant(aValue,VValue[result]);
@@ -42655,6 +42658,14 @@ begin
     if dvoInternValues in VOptions then
       DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
       RawUTF8ToVariant(aValue,VValue[result]);
+end;
+
+function TDocVariantData.AddItemText(const aValue: RawUTF8): integer;
+begin
+  result := InternalAdd(''); // FPC does not allow VValue[InternalAdd(aName)]
+  if dvoInternValues in VOptions then
+    DocVariantType.InternValues.UniqueVariant(VValue[result],aValue) else
+    RawUTF8ToVariant(aValue,VValue[result]);
 end;
 
 procedure TDocVariantData.AddItems(const aValue: array of const);
