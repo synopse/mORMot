@@ -53219,8 +53219,8 @@ begin // here aClientDrivenID^ = FakeCall ID
     exit;
   end;
   if not Assigned(fServer.OnNotifyCallback) then
-    raise EServiceException.CreateUTF8('% does not implement callbacks for I%',
-      [fServer,aMethod.InterfaceDotMethodName]);
+    raise EServiceException.CreateUTF8('%(%) does not support callbacks for I%',
+      [fServer,fServer.Model.Root,aMethod.InterfaceDotMethodName]);
   if fReleasedOnClientSide then begin
     if not IdemPropName(fFactory.fInterfaceTypeInfo^.Name,'ISynLogCallback') then
       fServer.InternalLog('%.CallbackInvoke: % instance has been released on '+

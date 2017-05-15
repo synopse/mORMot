@@ -62939,7 +62939,7 @@ function TSynBackgroundTimer.Processing: boolean;
 begin
   {$ifdef NOVARIANTS}
   with fTaskLock.Padding[0] do
-     result := (VType=varBoolean) and VBoolean;
+    result := (VType=varBoolean) and VBoolean;
   {$else}
   result := fTaskLock.LockedBool[0];
   {$endif}

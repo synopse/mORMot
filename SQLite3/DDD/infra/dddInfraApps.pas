@@ -1403,6 +1403,7 @@ begin
     if andTerminate then begin
       sleep(100);
       Terminate;
+      WaitFor;
     end;
   end;
 end;
