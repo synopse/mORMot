@@ -62832,7 +62832,9 @@ constructor TSynBackgroundTimer.Create(const aThreadName: RawUTF8;
 begin
   fTasks.Init(TypeInfo(TSynBackgroundTimerTaskDynArray),fTask);
   fTaskLock.Init;
+  {$ifndef NOVARIANTS}
   fTaskLock.LockedBool[0] := false;
+  {$endif}
   inherited Create(aThreadName,EverySecond,1000,aOnBeforeExecute,aOnAfterExecute,aStats);
 end;
 
@@ -62889,7 +62891,13 @@ begin
           except
           end;
   finally
+    {$ifdef NOVARIANTS}
+    fTaskLock.Lock;
+    variant(fTaskLock.Padding[0]) := false;
+    fTaskLock.UnLock;
+    {$else}
     fTaskLock.LockedBool[0] := false;
+    {$endif}
   end;
 end;
 
@@ -62929,7 +62937,12 @@ end;
 
 function TSynBackgroundTimer.Processing: boolean;
 begin
+  {$ifdef NOVARIANTS}
+  with fTaskLock.Padding[0] do
+     result := (VType=varBoolean) and VBoolean;
+  {$else}
   result := fTaskLock.LockedBool[0];
+  {$endif}
 end;
 
 procedure TSynBackgroundTimer.WaitUntilNotProcessing(timeoutsecs: integer);
