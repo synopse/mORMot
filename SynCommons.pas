@@ -6290,6 +6290,14 @@ procedure ObjArraySort(var aObjArray; Compare: TDynArraySortCompare);
 procedure ObjArrayClear(var aObjArray); overload;
 
 /// wrapper to release all items stored in a T*ObjArray dynamic array
+// - this overloaded function will use the supplied array length as parameter
+// - you should always use ObjArrayClear() before the array storage is released,
+// e.g. in the owner class destructor
+// - will also set the dynamic array length to 0, so could be used to re-use
+// an existing T*ObjArray
+procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
+
+/// wrapper to release all items stored in a T*ObjArray dynamic array
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
 // - you should always use ObjArrayClear() before the array storage is released,
 // e.g. in the owner class destructor
@@ -47322,11 +47330,25 @@ begin
 end;
 
 procedure ObjArrayClear(var aObjArray);
+var a: TObjectDynArray absolute aObjArray;
 begin
-  if pointer(aObjArray)=nil then
+  if a=nil then
     exit;
-  RawObjectsClear(pointer(aObjArray),length(TObjectDynArray(aObjArray)));
-  TObjectDynArray(aObjArray) := nil;
+  RawObjectsClear(pointer(aObjArray),length(a));
+  a := nil;
+end;
+
+procedure ObjArrayClear(var aObjArray; aCount: integer); overload;
+var a: TObjectDynArray absolute aObjArray;
+    n: integer;
+begin
+  n := length(a);
+  if n=0 then
+    exit;
+  if n>aCount then
+    aCount := n;
+  RawObjectsClear(pointer(aObjArray),aCount);
+  a := nil;
 end;
 
 procedure ObjArrayClear(var aObjArray; aContinueOnException: boolean);
