@@ -1400,7 +1400,7 @@ begin
     fSocketDisable := true;
     fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
       'with %:%', [ClassType, fHost, fPort], self);
-    if andTerminate then begin
+    if andTerminate and not Terminated then begin
       sleep(100);
       Terminate;
       WaitFor;
