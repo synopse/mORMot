@@ -9300,24 +9300,29 @@ begin
   EMR_SETWORLDTRANSFORM:
     E.ScaleMatrix(@PEMRSetWorldTransform(R)^.xform, MWT_SET);
   EMR_CREATEPEN:
-    with PEMRCreatePen(R)^, E.obj[ihPen-1] do begin
-      kind := OBJ_PEN;
-      PenColor := lopn.lopnColor;
-      PenWidth := lopn.lopnWidth.X;
-      PenStyle := lopn.lopnStyle;
-    end;
+    with PEMRCreatePen(R)^ do
+    if ihPen<cardinal(length(E.Obj)) then
+      with E.obj[ihPen-1] do begin
+        kind := OBJ_PEN;
+        PenColor := lopn.lopnColor;
+        PenWidth := lopn.lopnWidth.X;
+        PenStyle := lopn.lopnStyle;
+      end;
   EMR_CREATEBRUSHINDIRECT:
-    with PEMRCreateBrushIndirect(R)^, E.obj[ihBrush-1] do begin
-      kind := OBJ_BRUSH;
-      BrushColor := lb.lbColor;
-      BrushNull := (lb.lbStyle=BS_NULL);
-      BrushStyle := lb.lbStyle;
-    end;
+    with PEMRCreateBrushIndirect(R)^ do
+    if ihBrush<cardinal(length(E.Obj)) then
+      with E.obj[ihBrush-1] do begin
+        kind := OBJ_BRUSH;
+        BrushColor := lb.lbColor;
+        BrushNull := (lb.lbStyle=BS_NULL);
+        BrushStyle := lb.lbStyle;
+      end;
   EMR_EXTCREATEFONTINDIRECTW:
     E.CreateFont(PEMRExtCreateFontIndirect(R));
   EMR_DELETEOBJECT:
-    if PEMRDeleteObject(R)^.ihObject-1<cardinal(length(E.Obj)) then // avoid GPF
-      E.obj[PEMRDeleteObject(R)^.ihObject-1].kind := 0;
+    with PEMRDeleteObject(R)^ do
+      if ihObject-1<cardinal(length(E.Obj)) then // avoid GPF
+        E.obj[ihObject-1].kind := 0;
   EMR_SELECTOBJECT:
     E.SelectObjectFromIndex(PEMRSelectObject(R)^.ihObject);
   EMR_MOVETOEX: begin
@@ -9426,14 +9431,21 @@ begin
       E.Canvas.MoveToI(PEMRPolyLine(R)^.aptl[0].X,PEMRPolyLine(R)^.aptl[0].Y);
       for i := 1 to PEMRPolyLine(R)^.cptl-1 do
         E.Canvas.LineToI(PEMRPolyLine(R)^.aptl[i].X,PEMRPolyLine(R)^.aptl[i].Y);
-      Position := PEMRPolyLine(R)^.aptl[PEMRPolyLine(R)^.cptl-1];
+      if PEMRPolyLine(R)^.cptl>0 then
+        Position := PEMRPolyLine(R)^.aptl[PEMRPolyLine(R)^.cptl-1] else
+        Position := PEMRPolyLine(R)^.aptl[0];
     end else begin
       E.Canvas.MoveToI(PEMRPolyLine16(R)^.apts[0].X,PEMRPolyLine16(R)^.apts[0].Y);
-      for i := 1 to PEMRPolyLine16(R)^.cpts-1 do
-        E.Canvas.LineToI(PEMRPolyLine16(R)^.apts[i].X,PEMRPolyLine16(R)^.apts[i].Y);
-      with PEMRPolyLine16(R)^.apts[PEMRPolyLine16(R)^.cpts-1] do begin
-        Position.X := X;
-        Position.Y := Y;
+      if PEMRPolyLine16(R)^.cpts>0 then begin
+        for i := 1 to PEMRPolyLine16(R)^.cpts-1 do
+          E.Canvas.LineToI(PEMRPolyLine16(R)^.apts[i].X,PEMRPolyLine16(R)^.apts[i].Y);
+        with PEMRPolyLine16(R)^.apts[PEMRPolyLine16(R)^.cpts-1] do begin
+          Position.X := X;
+          Position.Y := Y;
+        end;
+      end else begin
+        Position.X := PEMRPolyLine16(R)^.apts[0].X;
+        Position.Y := PEMRPolyLine16(R)^.apts[0].Y;
       end;
     end;
     Moved := false;
@@ -9455,7 +9467,9 @@ begin
       E.Canvas.CurveToCI(PEMRPolyBezier(R)^.aptl[i*3+1].X,PEMRPolyBezier(R)^.aptl[i*3+1].Y,
         PEMRPolyBezier(R)^.aptl[i*3+2].X,PEMRPolyBezier(R)^.aptl[i*3+2].Y,
         PEMRPolyBezier(R)^.aptl[i*3+3].X,PEMRPolyBezier(R)^.aptl[i*3+3].Y);
-    Position := PEMRPolyBezier(R)^.aptl[PEMRPolyBezier(R)^.cptl-1];
+    if PEMRPolyBezier(R)^.cptl>0 then
+      Position := PEMRPolyBezier(R)^.aptl[PEMRPolyBezier(R)^.cptl-1] else
+      Position := PEMRPolyBezier(R)^.aptl[0];
     Moved := false;
     if not E.Canvas.FNewPath then
       if not pen.null then
@@ -9466,13 +9480,18 @@ begin
     if not pen.null then
       E.NeedPen;
     E.Canvas.MoveToI(PEMRPolyBezier16(R)^.apts[0].X,PEMRPolyBezier16(R)^.apts[0].Y);
-    for i := 0 to (PEMRPolyBezier16(R)^.cpts div 3)-1 do
-      E.Canvas.CurveToCI(PEMRPolyBezier16(R)^.apts[i*3+1].X,PEMRPolyBezier16(R)^.apts[i*3+1].Y,
-        PEMRPolyBezier16(R)^.apts[i*3+2].X,PEMRPolyBezier16(R)^.apts[i*3+2].Y,
-        PEMRPolyBezier16(R)^.apts[i*3+3].X,PEMRPolyBezier16(R)^.apts[i*3+3].Y);
-    with PEMRPolyBezier16(R)^.apts[PEMRPolyBezier16(R)^.cpts-1] do begin
-      Position.X := X;
-      Position.Y := Y;
+    if PEMRPolyBezier16(R)^.cpts>0 then begin
+      for i := 0 to (PEMRPolyBezier16(R)^.cpts div 3)-1 do
+        E.Canvas.CurveToCI(PEMRPolyBezier16(R)^.apts[i*3+1].X,PEMRPolyBezier16(R)^.apts[i*3+1].Y,
+          PEMRPolyBezier16(R)^.apts[i*3+2].X,PEMRPolyBezier16(R)^.apts[i*3+2].Y,
+          PEMRPolyBezier16(R)^.apts[i*3+3].X,PEMRPolyBezier16(R)^.apts[i*3+3].Y);
+      with PEMRPolyBezier16(R)^.apts[PEMRPolyBezier16(R)^.cpts-1] do begin
+        Position.X := X;
+        Position.Y := Y;
+      end;
+    end else begin
+      Position.X := PEMRPolyBezier16(R)^.apts[0].X;
+      Position.Y := PEMRPolyBezier16(R)^.apts[0].Y;
     end;
     Moved := false;
     if not E.Canvas.FNewPath then
@@ -9486,11 +9505,13 @@ begin
     if not E.Canvas.FNewPath then
       if not Moved then
         E.Canvas.MoveToI(Position.X,Position.Y);
-    for i := 0 to (PEMRPolyBezierTo(R)^.cptl div 3)-1 do
-      E.Canvas.CurveToCI(PEMRPolyBezierTo(R)^.aptl[i*3].X,PEMRPolyBezierTo(R)^.aptl[i*3].Y,
-        PEMRPolyBezierTo(R)^.aptl[i*3+1].X,PEMRPolyBezierTo(R)^.aptl[i*3+1].Y,
-        PEMRPolyBezierTo(R)^.aptl[i*3+2].X,PEMRPolyBezierTo(R)^.aptl[i*3+2].Y);
-    Position := PEMRPolyBezierTo(R)^.aptl[PEMRPolyBezierTo(R)^.cptl-1];
+    if PEMRPolyBezierTo(R)^.cptl>0 then begin
+      for i := 0 to (PEMRPolyBezierTo(R)^.cptl div 3)-1 do
+        E.Canvas.CurveToCI(PEMRPolyBezierTo(R)^.aptl[i*3].X,PEMRPolyBezierTo(R)^.aptl[i*3].Y,
+          PEMRPolyBezierTo(R)^.aptl[i*3+1].X,PEMRPolyBezierTo(R)^.aptl[i*3+1].Y,
+          PEMRPolyBezierTo(R)^.aptl[i*3+2].X,PEMRPolyBezierTo(R)^.aptl[i*3+2].Y);
+      Position := PEMRPolyBezierTo(R)^.aptl[PEMRPolyBezierTo(R)^.cptl-1];
+    end;
     Moved := false;
     if not E.Canvas.FNewPath then
       if not pen.null then
@@ -9503,13 +9524,15 @@ begin
     if not E.Canvas.FNewPath then
       if not Moved then
         E.Canvas.MoveToI(Position.X,Position.Y);
-    for i := 0 to (PEMRPolyBezierTo16(R)^.cpts div 3)-1 do
-      E.Canvas.CurveToCI(PEMRPolyBezierTo16(R)^.apts[i*3].X,PEMRPolyBezierTo16(R)^.apts[i*3].Y,
-        PEMRPolyBezierTo16(R)^.apts[i*3+1].X,PEMRPolyBezierTo16(R)^.apts[i*3+1].Y,
-        PEMRPolyBezierTo16(R)^.apts[i*3+2].X,PEMRPolyBezierTo16(R)^.apts[i*3+2].Y);
-    with PEMRPolyBezierTo16(R)^.apts[PEMRPolyBezierTo16(R)^.cpts-1] do begin
-      Position.X := X;
-      Position.Y := Y;
+    if PEMRPolyBezierTo16(R)^.cpts>0 then begin
+      for i := 0 to (PEMRPolyBezierTo16(R)^.cpts div 3)-1 do
+        E.Canvas.CurveToCI(PEMRPolyBezierTo16(R)^.apts[i*3].X,PEMRPolyBezierTo16(R)^.apts[i*3].Y,
+          PEMRPolyBezierTo16(R)^.apts[i*3+1].X,PEMRPolyBezierTo16(R)^.apts[i*3+1].Y,
+          PEMRPolyBezierTo16(R)^.apts[i*3+2].X,PEMRPolyBezierTo16(R)^.apts[i*3+2].Y);
+      with PEMRPolyBezierTo16(R)^.apts[PEMRPolyBezierTo16(R)^.cpts-1] do begin
+        Position.X := X;
+        Position.Y := Y;
+      end;
     end;
     Moved := false;
     if not E.Canvas.FNewPath then
@@ -9526,10 +9549,13 @@ begin
         E.Canvas.MoveToI(Position.X,Position.Y);
     end;
     if R^.iType=EMR_POLYLINETO then begin
-      for i := 0 to PEMRPolyLineTo(R)^.cptl-1 do
-        E.Canvas.LineToI(PEMRPolyLineTo(R)^.aptl[i].X,PEMRPolyLineTo(R)^.aptl[i].Y);
-      Position := PEMRPolyLineTo(R)^.aptl[PEMRPolyLineTo(R)^.cptl-1];
-    end else begin // EMR_POLYLINETO16
+      if PEMRPolyLineTo(R)^.cptl>0 then begin
+        for i := 0 to PEMRPolyLineTo(R)^.cptl-1 do
+          E.Canvas.LineToI(PEMRPolyLineTo(R)^.aptl[i].X,PEMRPolyLineTo(R)^.aptl[i].Y);
+        Position := PEMRPolyLineTo(R)^.aptl[PEMRPolyLineTo(R)^.cptl-1];
+      end;
+    end else // EMR_POLYLINETO16
+    if PEMRPolyLineTo16(R)^.cpts>0 then begin
       for i := 0 to PEMRPolyLineTo16(R)^.cpts-1 do
         E.Canvas.LineToI(PEMRPolyLineTo16(R)^.apts[i].X,PEMRPolyLineTo16(R)^.apts[i].Y);
       with PEMRPolyLineTo16(R)^.apts[PEMRPolyLineTo16(R)^.cpts-1] do begin
@@ -9543,7 +9569,8 @@ begin
         E.Canvas.Stroke else
         E.Canvas.NewPath;
   end;
-  EMR_POLYDRAW: begin
+  EMR_POLYDRAW:
+  if PEMRPolyDraw(R)^.cptl>0 then begin
     if not pen.null then
       E.NeedPen;
     polytypes := @PEMRPolyDraw(R)^.aptl[PEMRPolyDraw(R)^.cptl];
@@ -9582,7 +9609,8 @@ begin
         E.Canvas.Stroke else
         E.Canvas.NewPath;
   end;
-  EMR_POLYDRAW16: begin
+  EMR_POLYDRAW16: 
+  if PEMRPolyDraw16(R)^.cpts>0 then begin
     if not pen.null then
       E.NeedPen;
     polytypes := @PEMRPolyDraw16(R)^.apts[PEMRPolyDraw16(R)^.cpts];
@@ -9684,12 +9712,14 @@ begin
     with PEMRModifyWorldTransform(R)^ do
       E.ScaleMatrix(@PEMRModifyWorldTransform(R)^.xform, iMode);
   EMR_EXTCREATEPEN: // approx. - fast solution
-    with PEMRExtCreatePen(R)^, E.obj[ihPen-1] do begin
-      kind := OBJ_PEN;
-      PenColor := elp.elpColor;
-      PenWidth := elp.elpWidth;
-      PenStyle := elp.elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
-    end;
+    with PEMRExtCreatePen(R)^ do
+    if ihPen<cardinal(length(E.Obj)) then
+      with E.obj[ihPen-1] do begin
+        kind := OBJ_PEN;
+        PenColor := elp.elpColor;
+        PenWidth := elp.elpWidth;
+        PenStyle := elp.elpPenStyle and (PS_STYLE_MASK or PS_ENDCAP_MASK);
+      end;
   EMR_SETMITERLIMIT:
     if PEMRSetMiterLimit(R)^.eMiterLimit>0.1 then
       E.Canvas.SetMiterLimit(PEMRSetMiterLimit(R)^.eMiterLimit);
@@ -9883,18 +9913,18 @@ begin
   GetTextMetrics(destDC,TM);
   SelectObject(destDC,Old);
   DeleteObject(HF);
-
-  with obj[aLogFont^.ihFont-1] do begin
-    kind := OBJ_FONT;
-    MoveFast(aLogFont^.elfw.elfLogFont,LogFont,sizeof(LogFont));
-    LogFont.lfPitchAndFamily := TM.tmPitchAndFamily;
-    if LogFont.lfOrientation<>0 then
-      FontSpec.angle := LogFont.lfOrientation div 10 else // -360..+360
-      FontSpec.angle := LogFont.lfEscapement div 10;
-    FontSpec.ascent := TM.tmAscent;
-    FontSpec.descent := TM.tmDescent;
-    FontSpec.cell := TM.tmHeight-TM.tmInternalLeading;
-  end;
+  if aLogFont^.ihFont<cardinal(length(obj)) then
+    with obj[aLogFont^.ihFont-1] do begin
+      kind := OBJ_FONT;
+      MoveFast(aLogFont^.elfw.elfLogFont,LogFont,sizeof(LogFont));
+      LogFont.lfPitchAndFamily := TM.tmPitchAndFamily;
+      if LogFont.lfOrientation<>0 then
+        FontSpec.angle := LogFont.lfOrientation div 10 else // -360..+360
+        FontSpec.angle := LogFont.lfEscapement div 10;
+      FontSpec.ascent := TM.tmAscent;
+      FontSpec.descent := TM.tmDescent;
+      FontSpec.cell := TM.tmHeight-TM.tmInternalLeading;
+    end;
 end;
 
 procedure TPdfEnum.DrawBitmap(xs, ys, ws, hs, xd, yd, wd, hd, usage: integer;
@@ -10119,7 +10149,7 @@ begin
         end;
       end;
     end else
-    if cardinal(iObject-1)<cardinal(length(Obj)) then // avoid GPF
+    if cardinal(iObject)<cardinal(length(Obj)) then // avoid GPF
       with Obj[iObject-1] do
       case Kind of // ignore any invalid reference
         OBJ_PEN: begin
