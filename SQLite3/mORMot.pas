@@ -60643,12 +60643,14 @@ procedure InterfaceArrayDeleteAfterException(var aInterfaceArray;
 begin
   try
     {$ifdef WITHLOG}
-    aLog.SynLog.Log(sllWarning,'InterfaceArrayDeleteAfterException %',[aLogMsg],aInstance);
+    aLog.SynLog.Log(sllWarning,'InterfaceArrayDeleteAfterException % (index=%)',
+      [aLogMsg,aItemIndex],aInstance);
     {$endif}
     InterfaceArrayDelete(aInterfaceArray,aItemIndex);
   except
     on E: Exception do
-      aLog.SynLog.Log(sllDebug,'Callback unstability at deletion: %',[E],aInstance);
+      aLog.SynLog.Log(sllDebug,'Callback % unstability at deletion: %',
+        [aLogMsg,E],aInstance);
   end;
 end;
 

@@ -3618,7 +3618,7 @@ begin
   F.BufPos := 0;
   result := -1; // on socket error -> raise ioresult error
   Sock := PCrtSocket(@F.UserData)^;
-  if (Sock=nil) or (Sock.Sock=-1) then
+  if (Sock=nil) or (Sock.Sock<=0) then
     exit; // file closed = no socket -> error
   if Sock.TimeOut<>0 then begin // will wait for pending data?
     IOCtlSocket(Sock.Sock, FIONREAD, Size); // get exact count
@@ -3729,7 +3729,7 @@ begin
       PTextRec(SockIn)^.BufEnd := 0;
     end;
   end;
-  if Sock<0 then
+  if fSock<=0 then
     exit; // no opened connection, or Close already executed
   DirectShutdown(fSock);
   fSock := -1; // don't change Server or Port, since may try to reconnect
@@ -3839,10 +3839,10 @@ function TCrtSocket.TrySndLow(P: pointer; Len: integer): boolean;
 var SentLen: integer;
 begin
   result := false;
-  if (self=nil) or (Sock=-1) or (Len<0) or (P=nil) then
+  if (self=nil) or (fSock<=0) or (Len<0) or (P=nil) then
     exit;
   repeat
-    SentLen := Send(Sock, P, Len, MSG_NOSIGNAL
+    SentLen := Send(fSock, P, Len, MSG_NOSIGNAL
       {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
     if SentLen<0 then
       exit;
@@ -3865,9 +3865,9 @@ var client: TSocket;
     sin: TVarSin;
 begin
   result := nil;
-  if (self=nil) or (Sock<=0) then
+  if (self=nil) or (fSock<=0) then
     exit;
-  client := Accept(Sock,sin);
+  client := Accept(fSock,sin);
   if client<=0 then
     exit;
   if ResultClass=nil then
@@ -4046,13 +4046,13 @@ var Size: PtrInt;
     starttix,endtix,tix: cardinal;
 begin
   result := false;
-  if self=nil then
+  if (self=nil) or (fSock<0) then
     exit;
   if (Buffer<>nil) and (Length>0) then begin
     starttix := GetTickCount;
     endtix := starttix+TimeOut;
     repeat
-      Size := Recv(Sock, Buffer, Length, MSG_NOSIGNAL
+      Size := Recv(fSock, Buffer, Length, MSG_NOSIGNAL
         {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
       if Size<=0 then begin
         if Size=0 then
@@ -4081,15 +4081,19 @@ var {$ifdef MSWINDOWS}
     {$endif}
     res: integer;
 begin
+  if (self=nil) or (fSock<=0) then begin
+    result := cspSocketError;
+    exit;
+  end;
   {$ifdef MSWINDOWS}
-  fdset.fd_array[0] := Sock;
+  fdset.fd_array[0] := fSock;
   fdset.fd_count := 1;
   tv.tv_usec := TimeOutMS*1000;
   tv.tv_sec := 0;
-  res := Select(Sock+1,@fdset,nil,nil,@tv);
+  res := Select(fSock+1,@fdset,nil,nil,@tv);
   {$else}
   // https://moythreads.com/wordpress/2009/12/22/select-system-call-limitation
-  p.fd := Sock;
+  p.fd := fSock;
   p.events := POLLIN;
   p.revents := 0;
   res := poll(@p,1,TimeOutMS);
@@ -4183,7 +4187,7 @@ end;
 function TCrtSocket.SockConnected: boolean;
 var sin: TVarSin;
 begin
-  result := GetPeerName(Sock,sin)=0;
+  result := (self<>nil) and (fSock>0) and (GetPeerName(fSock,sin)=0);
 end;
 
 function TCrtSocket.PeerAddress: SockString;
@@ -4210,12 +4214,12 @@ function TCrtSocket.SockReceiveString: SockString;
 var Size, L, Read: integer;
 begin
   result := '';
-  if self=nil then
+  if (self=nil) or (fSock<=0) then
     exit;
   L := 0;
   repeat
     SleepHiRes(0);
-    if IOCtlSocket(Sock, FIONREAD, Size)<>0 then // get exact count
+    if IOCtlSocket(fSock, FIONREAD, Size)<>0 then // get exact count
       exit;
     if Size=0 then // connection broken
       if result='' then begin // wait till something
@@ -4224,7 +4228,7 @@ begin
       end else
         break;
     SetLength(result,L+Size); // append to result
-    Read := recv(Sock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL
+    Read := recv(fSock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL
       {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
     if Read<0 then
       exit;
@@ -4289,7 +4293,7 @@ end;
 procedure THttpClientSocket.RequestSendHeader(const url, method: SockString);
 var aURL: SockString;
 begin
-  if Sock<0 then
+  if fSock<=0 then
     exit;
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
@@ -4327,7 +4331,7 @@ begin
   if SockIn=nil then // done once
     CreateSockIn; // use SockIn by default if not already initialized: 2x faster
   Content := '';
-  if Sock<0 then
+  if fSock<=0 then
     DoRetry(STATUS_NOTFOUND) else // socket closed (e.g. KeepAlive=0) -> reconnect
   try
   try
@@ -5436,7 +5440,9 @@ function AsynchSocket(sock: TSocket): boolean;
 var nonblocking: integer;
 begin
   nonblocking := 1; // for both Windows and POSIX
-  result := IoctlSocket(sock,FIONBIO,nonblocking)=0;
+  if sock<=0 then
+    result := false else
+    result := IoctlSocket(sock,FIONBIO,nonblocking)=0;
 end;
 
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
