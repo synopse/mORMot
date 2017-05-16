@@ -9301,7 +9301,7 @@ begin
     E.ScaleMatrix(@PEMRSetWorldTransform(R)^.xform, MWT_SET);
   EMR_CREATEPEN:
     with PEMRCreatePen(R)^ do
-    if ihPen<cardinal(length(E.Obj)) then
+    if ihPen-1<cardinal(length(E.Obj)) then
       with E.obj[ihPen-1] do begin
         kind := OBJ_PEN;
         PenColor := lopn.lopnColor;
@@ -9310,7 +9310,7 @@ begin
       end;
   EMR_CREATEBRUSHINDIRECT:
     with PEMRCreateBrushIndirect(R)^ do
-    if ihBrush<cardinal(length(E.Obj)) then
+    if ihBrush-1<cardinal(length(E.Obj)) then
       with E.obj[ihBrush-1] do begin
         kind := OBJ_BRUSH;
         BrushColor := lb.lbColor;
@@ -9713,7 +9713,7 @@ begin
       E.ScaleMatrix(@PEMRModifyWorldTransform(R)^.xform, iMode);
   EMR_EXTCREATEPEN: // approx. - fast solution
     with PEMRExtCreatePen(R)^ do
-    if ihPen<cardinal(length(E.Obj)) then
+    if ihPen-1<cardinal(length(E.Obj)) then
       with E.obj[ihPen-1] do begin
         kind := OBJ_PEN;
         PenColor := elp.elpColor;
@@ -9913,7 +9913,7 @@ begin
   GetTextMetrics(destDC,TM);
   SelectObject(destDC,Old);
   DeleteObject(HF);
-  if aLogFont^.ihFont<cardinal(length(obj)) then
+  if aLogFont^.ihFont-1<cardinal(length(obj)) then
     with obj[aLogFont^.ihFont-1] do begin
       kind := OBJ_FONT;
       MoveFast(aLogFont^.elfw.elfLogFont,LogFont,sizeof(LogFont));
@@ -10149,7 +10149,7 @@ begin
         end;
       end;
     end else
-    if cardinal(iObject)<cardinal(length(Obj)) then // avoid GPF
+    if cardinal(iObject-1)<cardinal(length(Obj)) then // avoid GPF
       with Obj[iObject-1] do
       case Kind of // ignore any invalid reference
         OBJ_PEN: begin
