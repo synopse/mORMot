@@ -802,6 +802,9 @@ type
   TNotifyThreadEvent = procedure(Sender: TThread) of object;
   {$endif}
 
+  {$M+}
+  TSynThreadPool = class;
+
   /// a simple TThread with a "Terminate" event run in the thread context
   // - the TThread.OnTerminate event is run within Synchronize() so did not
   // match our expectations to be able to release the resources in the thread
@@ -809,12 +812,6 @@ type
   // - used internally by THttpServerGeneric.NotifyThreadStart() - you should
   // not have to use the protected fOnTerminate event handler
   // - also define a Start method for compatibility with older versions of Delphi
-
-  { TSynThread }
-
-  {$M+}
-  TSynThreadPool = class;
-
   TSynThread = class(TThread)
   protected
     // ensure fOnTerminate is called only if NotifyThreadStart has been done

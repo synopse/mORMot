@@ -1460,7 +1460,11 @@ procedure TWebSocketProtocolChat.ProcessIncomingFrame(Sender: TWebSocketProcess;
 begin
   if Assigned(OnInComingFrame) and
      Sender.InheritsFrom(TWebSocketProcessServer) then
-    OnIncomingFrame(TWebSocketProcessServer(Sender).fServerResp,request);
+    try
+      OnIncomingFrame(TWebSocketProcessServer(Sender).fServerResp,request);
+    except
+      // ignore any exception in the callback
+    end;
 end;
 
 function TWebSocketProtocolChat.SendFrame(Sender: THttpServerResp;
@@ -3071,11 +3075,15 @@ begin
     fThreadState := sClosed else
     fThreadState := sFinished;
   WebSocketLog.Add.Log(sllDebug,'Execute finished: ThreadState=%',[ToText(fThreadState)^],self);
-  if (fProcess<>nil) and (fProcess.Socket<>nil) and
-     fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
-    with THttpClientWebSockets(fProcess.Socket) do
-      if Assigned(OnWebSocketsClosed) then
-        OnWebSocketsClosed(self);
+  try
+    if (fProcess<>nil) and (fProcess.Socket<>nil) and
+       fProcess.Socket.InheritsFrom(THttpClientWebSockets) then
+      with THttpClientWebSockets(fProcess.Socket) do
+        if Assigned(OnWebSocketsClosed) then
+          OnWebSocketsClosed(self);
+  except
+    // ignore any exception in the callback
+  end;
 end;
 
 
