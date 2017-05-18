@@ -34024,6 +34024,7 @@ var cmd: TSQLRestServerURIContextCommand;
 begin
   InternalLog('%.Destroy',[ClassType],sllInfo); // don't include self (->GPF)
   AsynchBatchStop(nil);
+  FreeAndNil(fBackgroundTimer);
   FreeAndNil(fServices);
   FreeAndNil(fCache);
   if (fModel<>nil) and (fModel.fRestOwner=self) then
@@ -34190,10 +34191,8 @@ end;
 
 function TSQLRest.EnsureBackgroundTimerExists: TSQLRestBackgroundTimer;
 begin
-  if fBackgroundTimer=nil then begin
+  if fBackgroundTimer=nil then
     fBackgroundTimer := TSQLRestBackgroundTimer.Create(self);
-    PrivateGarbageCollector.Add(fBackgroundTimer);
-  end;
   result := fBackgroundTimer;
 end;
 
