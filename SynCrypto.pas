@@ -2777,7 +2777,7 @@ end;
 { HMAC_CRC256C }
 
 procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
-begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+begin // see https://www.eecs.harvard.edu/~michaelm/postscripts/tr-02-05.pdf
   h^[0] := h1; inc(h1,h2);
   h^[1] := h1; inc(h1,h2);
   h^[2] := h1; inc(h1,h2);
