@@ -8100,6 +8100,7 @@ const
   winhttpdll = 'winhttp.dll';
 
   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0;
+  WINHTTP_ACCESS_TYPE_NO_PROXY = 1;
   WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
   WINHTTP_FLAG_REFRESH = $00000100;
   WINHTTP_FLAG_SECURE = $00800000;
@@ -8251,7 +8252,7 @@ procedure WinHTTPSecurityErrorCallback(hInternet: HINTERNET; dwContext: PDWORD;
   dwInternetStatus: DWORD; lpvStatusInformation: pointer; dwStatusInformationLength: DWORD); stdcall;
 begin
   // in case lpvStatusInformation^=-2147483648 this is attempt to connect to
-  // non-https socket wrong port - may be must be 443?
+  // non-https socket wrong port - perhaps must be 443?
   raise EWinHTTP.CreateFmt('WinHTTP security error. Status %d, statusInfo: %d',
     [dwInternetStatus, pdword(lpvStatusInformation)^]);
 end;
@@ -8262,7 +8263,8 @@ var OpenType: integer;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
 begin
   if fProxyName='' then
-    OpenType := WINHTTP_ACCESS_TYPE_DEFAULT_PROXY else
+    // add https://msdn.microsoft.com/en-us/library/windows/desktop/aa384122 ?
+    OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
   fSession := WinHttpOpen(pointer(Ansi7ToUnicode(fUserAgent)), OpenType,
     pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
