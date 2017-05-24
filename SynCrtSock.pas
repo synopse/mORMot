@@ -8340,6 +8340,9 @@ end;
 const
   // from http://www.tek-tips.com/faqs.cfm?fid=7493
   WINHTTP_OPTION_SECURITY_FLAGS = 31;
+  WINHTTP_OPTION_CLIENT_CERT_CONTEXT = $0000002F;
+  WINHTTP_NO_CLIENT_CERT_CONTEXT = $00000000;
+  ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED = $00002F0C;
   SECURITY_FLAG_IGNORE_UNKNOWN_CA = $00000100;
   SECURITY_FLAG_IGNORE_CERT_DATE_INVALID = $00002000; // expired X509 Cert.
   SECURITY_FLAG_IGNORE_CERT_CN_INVALID = $00001000; // bad common name in X509 Cert.
@@ -8379,11 +8382,24 @@ begin
        @SECURITY_FLAT_IGNORE_CERTIFICATES, SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
       RaiseLastModuleError(winhttpdll,EWinHTTP);
   L := length(aData);
-  if not WinHttpSendRequest(fRequest, nil, 0, pointer(aData), L, L, 0) or
-     not WinHttpReceiveResponse(fRequest,nil) then
-    RaiseLastModuleError(winhttpdll,EWinHTTP);
+  if not WinHttpSendRequest(fRequest,nil,0,pointer(aData),L,L,0) or
+     not WinHttpReceiveResponse(fRequest,nil) then begin
+    if not fHTTPS then
+      RaiseLastModuleError(winhttpdll,EWinHTTP);
+    if (GetLastError=ERROR_WINHTTP_CLIENT_AUTH_CERT_NEEDED) and
+       IgnoreSSLCertificateErrors then begin
+      if not WinHttpSetOption(fRequest,WINHTTP_OPTION_SECURITY_FLAGS,
+         @SECURITY_FLAT_IGNORE_CERTIFICATES,SizeOf(SECURITY_FLAT_IGNORE_CERTIFICATES)) then
+        RaiseLastModuleError(winhttpdll,EWinHTTP);
+      if not WinHttpSetOption(fRequest,WINHTTP_OPTION_CLIENT_CERT_CONTEXT,
+         pointer(WINHTTP_NO_CLIENT_CERT_CONTEXT),0) then
+        RaiseLastModuleError(winhttpdll,EWinHTTP);
+      if not WinHttpSendRequest(fRequest,nil,0,pointer(aData),L,L,0) or
+         not WinHttpReceiveResponse(fRequest,nil) then
+        RaiseLastModuleError(winhttpdll,EWinHTTP);
+    end;
+  end;
 end;
-
 {$endif USEWININET}
 
 {$ifdef USELIBCURL}
