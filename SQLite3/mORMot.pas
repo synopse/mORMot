@@ -40166,9 +40166,9 @@ begin
   max := 0;
   repeat
     if n>=max then begin
-      if n>=96 then // avoid DOS - see MAX_METHOD_ARGS for TInterfacedObjectFake
+      if n>=256 then // avoid DOS - see MAX_METHOD_ARGS for TInterfacedObjectFake
         raise EParsingException.CreateUTF8(
-          'Security Policy: Accept up to 48 parameters for %.FillInput',[self]);
+          'Security Policy: Accept up to 128 parameters for %.FillInput',[self]);
       inc(max,16);
       SetLength(fInput,max);
     end;
