@@ -4975,7 +4975,7 @@ function CompressStream(src: pointer; srcLen: integer;
   aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false): cardinal;
 var strm: TZStream;
     code: integer;
-    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
+    buf: array[0..32767] of cardinal; // IIS allows 256KB of stack size -> 128KB
   procedure FlushBuf;
   var Count: integer;
   begin
@@ -5046,7 +5046,7 @@ function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
 // result:=dstLen  checkCRC(<>nil)^:=crc32  (if aStream=nil -> fast crc calc)
 var strm: TZStream;
     code, Bits: integer;
-    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
+    buf: array[0..32767] of cardinal; // IIS allows 256KB of stack size -> 128KB
 procedure FlushBuf;
 var Count: integer;
 begin
