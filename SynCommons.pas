@@ -11009,6 +11009,8 @@ type
   // - such result type would avoid a string allocation on heap
   TShort16 = string[16];
 
+  TShort32 = string[32];
+
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function PointerToHex(aPointer: Pointer): RawUTF8; overload;
@@ -33258,7 +33260,7 @@ end;
 procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 var h: THash128Rec absolute crc;
     h1,h2: cardinal;
-begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+begin // see https://goo.gl/Pls5wi
   assert(sizeof(h)=sizeof(crc));
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
@@ -33292,7 +33294,7 @@ end;
 procedure crc256c(buf: PAnsiChar; len: cardinal; out crc: THash256);
 var h: THash256Rec absolute crc;
     h1,h2: cardinal;
-begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+begin // see https://goo.gl/Pls5wi
   h1 := crc32c(0,buf,len);
   h2 := crc32c(h1,buf,len);
   h.i0 := h1; inc(h1,h2);
@@ -61247,7 +61249,7 @@ end;
 
 procedure TSynBloomFilter.Insert(aValue: pointer; aValueLen: integer);
 var h: integer;
-    h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+    h1,h2: cardinal; // https://goo.gl/Pls5wi
 begin
   if (self=nil) or (aValueLen<=0) or (fBits=0) then
     exit;
@@ -61284,7 +61286,7 @@ end;
 
 function TSynBloomFilter.MayExist(aValue: pointer; aValueLen: integer): boolean;
 var h: integer;
-    h1,h2: cardinal; // http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+    h1,h2: cardinal; // https://goo.gl/Pls5wi
 begin
   result := false;
   if (self=nil) or (aValueLen<=0) or (fBits=0) then

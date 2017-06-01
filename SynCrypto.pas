@@ -1592,6 +1592,7 @@ const
   MD5DIGESTSTRLEN = sizeof(TMD5Digest)*2;
 
 type
+  /// 32-characters ASCII string, e.g. as returned by AESBlockToShortString()
   Short32 = string[32];
 
 /// compute the hexadecial representation of an AES 16-byte block
@@ -2777,7 +2778,7 @@ end;
 { HMAC_CRC256C }
 
 procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
-begin // see http://www.eecs.harvard.edu/~kirsch/pubs/bbbf/esa06.pdf
+begin // see https://goo.gl/Pls5wi
   h^[0] := h1; inc(h1,h2);
   h^[1] := h1; inc(h1,h2);
   h^[2] := h1; inc(h1,h2);
