@@ -62,6 +62,10 @@ unit SynFPCSock;
 {$MODE DELPHI}
 {$H+}
 
+{$ifdef ANDROID}
+  {$define LINUX} // a Linux-based system
+{$endif}
+
 // BSD definition of scoketaddr
 {$ifdef FREEBSD}
   {$DEFINE SOCK_HAS_SINLEN}
