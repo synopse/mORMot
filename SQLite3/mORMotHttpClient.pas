@@ -462,7 +462,9 @@ type
   {$ifdef USELIBCURL}
   TSQLHttpsClient = TSQLHttpClientCurl;
   {$else}
+  {$ifndef ANDROID}
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
+  {$endif}
   {$endif}
   {$else}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
