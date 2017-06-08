@@ -1094,7 +1094,7 @@ function TSQLRestServerDB.MainEngineDeleteWhere(TableModelIndex: Integer;
 var i: integer;
     aSQLWhere: RawUTF8;
 begin
-  if (TableModelIndex<0) or (SQLWhere='') or (IDs=nil) then
+  if (TableModelIndex<0) or (IDs=nil) then
     result := false else begin
     // notify BEFORE deletion
     for i := 0 to high(IDs) do

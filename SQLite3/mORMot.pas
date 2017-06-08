@@ -34537,35 +34537,36 @@ var T: TSQLTableJSON;
 begin
   Data := nil;
   // handle naive expressions like SELECT ID from Table where ID=10
-  if IsRowID(pointer(FieldName)) and (length(WhereClause)>2) then begin
-    P := pointer(WhereClause);
-    GetNextFieldProp(P,Prop);
-    if IsRowIDShort(Prop) then
-      case P^ of
-      '=': begin
-        inc(P);
-        if PWord(P)^=ord(':')+ord('(')shl 8 then
-          inc(P,2); // handle inlined parameters
-        SetInt64(P,V);
-        if V>0 then begin
-          SetLength(Data,1);
-          Data[0] := V;
-          result := true;
-          exit;
-        end;
-      end;
-      'i','I': if P[1] in ['n','N'] then begin
-        P := GotoNextNotSpace(P+2);
-        if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
-          CSVToInt64DynArray(P+1,Data);
-          if Data<>nil then begin
+  if IsRowID(pointer(FieldName)) then
+    if length(WhereClause)>2 then begin
+      P := pointer(WhereClause);
+      GetNextFieldProp(P,Prop);
+      if IsRowIDShort(Prop) then // SELECT RowID from Table where RowID=10
+        case P^ of
+        '=': begin
+          P := GotoNextNotSpace(P+1);
+          if PWord(P)^=ord(':')+ord('(')shl 8 then
+            inc(P,2); // handle inlined parameters
+          SetInt64(P,V);
+          if V>0 then begin
+            SetLength(Data,1);
+            Data[0] := V;
             result := true;
             exit;
           end;
         end;
-      end;
-      end;
-  end;
+        'i','I': if P[1] in ['n','N'] then begin
+          P := GotoNextNotSpace(P+2);
+          if (P^='(') and (GotoNextNotSpace(P+1)^ in ['0'..'9']) then begin
+            CSVToInt64DynArray(P+1,Data);
+            if Data<>nil then begin
+              result := true;
+              exit;
+            end;
+          end;
+        end;
+        end;
+    end;
   // retrieve the content from database
   result := false;
   T := MultiFieldValues(Table,FieldName,WhereClause);
@@ -35052,8 +35053,10 @@ end;
 
 function TSQLRest.Delete(Table: TSQLRecordClass; const FormatSQLWhere: RawUTF8;
   const BoundsSQLWhere: array of const): boolean;
+var where: RawUTF8;
 begin
-  result := Delete(Table,FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere));
+  where := FormatUTF8(FormatSQLWhere,[],BoundsSQLWhere);
+  result := Delete(Table,where);
 end;
 
 function TSQLRest.Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits;

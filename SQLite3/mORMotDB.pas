@@ -1319,8 +1319,7 @@ var i,n: integer;
     InClause: TIDDynArray;
 begin
   result := false;
-  if (IDs=nil) or (SQLWhere='') or
-     (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+  if (IDs=nil) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   if fBatchMethod<>mNone then
     if fBatchMethod<>mDELETE then
