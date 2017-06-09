@@ -37951,7 +37951,7 @@ asm // faster version by AB (direct call to finalization procedures)
         dd      @err
 {$else} dd      System.@VarClr
 {$endif}
-        dd      @ARRAY
+        dd      @array
         dd      RecordClear
         dd      System.@IntfClear
         dd      @err
@@ -47883,8 +47883,7 @@ begin // nothing to do by default - overridden constructor may add custom code
 end;
 
 procedure TSynPersistent.AssignError(Source: TSynPersistent);
-var
-  SourceName: string;
+var SourceName: string;
 begin
   if Source <> nil then
     SourceName := Source.ClassName else

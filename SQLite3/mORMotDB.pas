@@ -1346,11 +1346,10 @@ begin
             TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
       end;
-      exit;
     end else
-    if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
+    if ExecuteInlined('delete from %%',[fTableName,SQLFromWhere(SQLWhere)],false)=nil then
       exit;
-    if result and (Owner<>nil) then
+    if Owner<>nil then
       Owner.FlushInternalDBCache;
   end;
   result := true;

@@ -1105,8 +1105,8 @@ begin
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
       aSQLWhere := Int64DynArrayToCSV(TInt64DynArray(IDs),length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
-    result := ExecuteFmt('DELETE FROM % WHERE %',
-      [fModel.TableProps[TableModelIndex].Props.SQLTableName,aSQLWhere]);
+    result := ExecuteFmt('DELETE FROM %%',
+      [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLFromWhere(aSQLWhere)]);
   end;
 end;
 

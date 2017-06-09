@@ -58585,12 +58585,12 @@ asm
         mov     eax, [eax].vmtInstanceSize
         push    eax  // size
         call    System.@GetMem
-        pop     edx   // size
+        pop     edx  // size
         push    eax  // self
         mov     cl, 0
         call    dword ptr[FillcharFast]
-        pop     eax   // self
-        pop     edx   // class
+        pop     eax  // self
+        pop     edx  // class
         mov     [eax], edx // store VMT
         push    eax
         call    AutoCreateFields
