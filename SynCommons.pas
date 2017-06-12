@@ -44873,7 +44873,7 @@ begin
 end;
 
 procedure TDynArray.Reverse;
-var i, siz, n, tmp: integer;
+var siz, n, tmp: integer;
     P1, P2: PAnsiChar;
     c: AnsiChar;
     i64: Int64;
@@ -44886,7 +44886,7 @@ begin
     1: begin
       // optimized version for TByteDynArray and such
       P2 := P1+n;
-      for i := 1 to n shr 1 do begin
+      while P1<P2 do begin
         c := P1^;
         P1^ := P2^;
         P2^ := c;
@@ -44897,7 +44897,7 @@ begin
     4: begin
       // optimized version for TIntegerDynArray + TRawUTF8DynArray and such
       P2 := P1+n*sizeof(Integer);
-      for i := 1 to n shr 1 do begin
+      while P1<P2 do begin
         tmp := PInteger(P1)^;
         PInteger(P1)^ := PInteger(P2)^;
         PInteger(P2)^ := tmp;
@@ -44908,7 +44908,7 @@ begin
     8: begin
       // optimized version for TInt64DynArray + TDoubleDynArray and such
       P2 := P1+n*sizeof(Int64);
-      for i := 1 to n shr 1 do begin
+      while P1<P2 do begin
         i64 := PInt64(P1)^;
         PInt64(P1)^ := PInt64(P2)^;
         PInt64(P2)^ := i64;
@@ -44919,7 +44919,7 @@ begin
     16: begin
       // optimized version for TVariantDynArray and such
       P2 := P1+n*16;
-      for i := 1 to n shr 1 do begin
+      while P1<P2 do begin
         Exchg16(Pointer(P1),Pointer(P2));
         inc(P1,16);
         dec(P2,16);
@@ -44928,7 +44928,7 @@ begin
     else begin
       // generic version
       P2 := P1+n*siz;
-      for i := 1 to n shr 1 do begin
+      while P1<P2 do begin
         Exchg(P1,P2,siz);
         inc(P1,siz);
         dec(P2,siz);
