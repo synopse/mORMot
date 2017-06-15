@@ -3106,6 +3106,12 @@ function IdemPCharU(p, up: PUTF8Char): boolean;
 // - this version expects p^ to point to an Unicode char array
 function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 
+/// returns the index of a matching ending of p^ in upArray[]
+// - returns -1 if no item matched
+// - ignore case - upArray^ must be already Upper
+// - chars are compared as 7 bit Ansi only (no accentuated characters)
+function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): integer;
+
 /// returns true if the file name extension contained in p^ is the same same as extup^
 // - ignore case - extup^ must be already Upper
 // - chars are compared as WinAnsi (codepage 1252), not as UTF-8
@@ -30471,6 +30477,19 @@ begin
   end;
   result := true;
 end;
+
+function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): integer;
+var t,o: integer;
+begin
+  t := length(text);
+  if t>0 then
+    for result := 0 to high(upArray) do begin
+      o := t-length(UpArray[result]);
+      if (o>=0) and IdemPChar(PUTF8Char(pointer(text))+o,pointer(upArray[result])) then
+        exit;
+    end;
+  result := -1;
+end; 
 
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
@@ -61971,7 +61990,8 @@ begin
     intvalues := DocVariantType.InternValues else
     intvalues := nil;
   result := 0; // returns number of changed values
-  for i := 0 to Count-1 do begin
+  for i := 0 to Count-1 do
+  if List[i].Name<>'' then begin
     VarClear(v);
     if ValueAsString or not GetNumericVariantFromJSON(pointer(List[i].Value),
         TVarData(v),AllowVarDouble) then
