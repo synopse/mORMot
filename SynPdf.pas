@@ -35,6 +35,7 @@ unit SynPdf;
    CoMPi
    Damien (ddemars)
    David Mead (MDW)
+   David Heffernan
    FalconB
    Florian Grummel
    Harald Simon
@@ -9016,7 +9017,11 @@ end;
 function TPdfDocumentGDI.GetVCLCanvasSize: TSize;
 begin
   if (FCanvas<>nil) and (FCanvas.FPage<>nil) then
-    result := TPdfPageGdi(FCanvas.FPage).fVCLCanvasSize else
+  with TPdfPageGdi(FCanvas.FPage) do begin
+    if fVCLCurrentCanvas=nil then
+      CreateVCLCanvas;
+    result := fVCLCanvasSize;
+  end else
     Int64(result) := 0;
 end;
 
