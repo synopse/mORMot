@@ -6377,6 +6377,8 @@ function GetEnumNameValue(aTypeInfo: pointer; const aValue: RawUTF8;
 // - if supplied P^ is a JSON integer number, will read it directly
 // - if P^ maps some ["item1","item2"] content, would fill all matching bits
 // - if P^ contains ['*'], would fill all bits
+// - returns P=nil if reached prematurly the end of content, or returns
+// the value separator (e.g. , or }) in EndOfObject (like GetJsonField)
 function GetSetNameValue(aTypeInfo: pointer; var P: PUTF8Char;
   out EndOfObject: AnsiChar): cardinal;
 
@@ -22421,6 +22423,17 @@ begin
 end;
 
 const
+  NULL_LOW  = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
+  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
+  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
+  NULL_UPP  = ord('N')+ord('U')shl 8+ord('L')shl 16+ord('L')shl 24;
+
+  EndOfJSONValueField = [#0,#9,#10,#13,' ',',','}',']'];
+  EndOfJSONField = [',',']','}',':'];
+  DigitChars = ['-','+','0'..'9'];
+  DigitFirstChars = ['-','1'..'9']; // 0/- excluded by JSON!
+  DigitFloatChars = ['-','+','0'..'9','.','E','e'];
+
   NULL_SHORTSTRING: string[1] = '';
 
 procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
@@ -22579,31 +22592,38 @@ begin
     P := GotoNextNotSpace(P);
     if P^='[' then begin
       P := GotoNextNotSpace(P+1);
-      if P^=']' then begin
-        EndOfObject := ']';
-        P := GotoNextNotSpace(P+1);
-      end else
-      repeat
-        Text := GetJSONField(P,P,@wasString,@EndOfObject,@TextLen);
-        if (Text=nil) or not wasString then begin
+      if P^=']' then 
+        inc(P) else
+        repeat
+          Text := GetJSONField(P,P,@wasString,@EndOfObject,@TextLen);
+          if (Text=nil) or not wasString then begin
+            P := nil; // invalid input (expects a JSON array of strings)
+            exit;
+          end;
+          if Text^='*' then begin
+            if MaxValue<32 then
+              result := ALLBITS_CARDINAL[MaxValue+1] else
+              result := cardinal(-1);
+            break;
+          end;
+          if Text^ in ['a'..'z'] then
+            i := FindShortStringListExact(names,MaxValue,Text,TextLen) else
+            i := -1;
+          if i<0 then
+            i := FindShortStringListTrimLowerCase(names,MaxValue,Text,TextLen);
+          if i>=0 then
+            SetBit(result,i);
+          // unknown enum names (i=-1) would just be ignored
+        until EndOfObject=']';
+      while not (P^ in EndOfJSONField) do begin // mimics GetJSONField()
+        if P^=#0 then begin
           P := nil;
-          break;
+          exit; // unexpected end
         end;
-        if Text^='*' then begin
-          if MaxValue<32 then
-            result := ALLBITS_CARDINAL[MaxValue+1] else
-            result := cardinal(-1);
-          exit;
-        end;
-        if Text^ in ['a'..'z'] then
-          i := FindShortStringListExact(names,MaxValue,Text,TextLen) else
-          i := -1;
-        if i<0 then
-          i := FindShortStringListTrimLowerCase(names,MaxValue,Text,TextLen);
-        if i>=0 then
-          SetBit(result,i);
-        // unknown enum names (i=-1) would just be ignored
-      until EndOfObject=']';
+        inc(P);
+      end;
+      EndOfObject := P^;
+      P := GotoNextNotSpace(P+1);
     end else
       result := GetCardinal(GetJSONField(P,P,nil,@EndOfObject));
   end;
@@ -24455,19 +24475,6 @@ begin // '\uFFF0base64encodedbinary' checked and decode into binary
     result := true;
   end;
 end;
-
-const
-  NULL_LOW  = ord('n')+ord('u')shl 8+ord('l')shl 16+ord('l')shl 24;
-  FALSE_LOW = ord('f')+ord('a')shl 8+ord('l')shl 16+ord('s')shl 24;
-  TRUE_LOW  = ord('t')+ord('r')shl 8+ord('u')shl 16+ord('e')shl 24;
-  NULL_UPP  = ord('N')+ord('U')shl 8+ord('L')shl 16+ord('L')shl 24;
-
-  EndOfJSONValueField = [#0,#9,#10,#13,' ',',','}',']'];
-  EndOfJSONField = [',',']','}',':'];
-  DigitChars = ['-','+','0'..'9'];
-  DigitFirstChars = ['-','1'..'9']; // 0/- excluded by JSON!
-  DigitFloatChars = ['-','+','0'..'9','.','E','e'];
-
 
 function SQLParamContent(P: PUTF8Char; out ParamType: TSQLParamType; out ParamValue: RawUTF8;
   out wasNull: boolean): PUTF8Char;

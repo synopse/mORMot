@@ -48250,7 +48250,12 @@ begin
       end else
       if (Kind=tkSet) and (From^='[') then begin // set as string array
         V := GetSetNameValue(P^.TypeInfo,From,EndOfObject);
+        if From=nil then
+          exit; // invalid '["setone","settwo"]' content
         P^.SetOrdProp(Value,V);
+        if EndOfObject='}' then
+          break else
+          continue;
       end else
       if (Kind in tkRecordTypes) and (From^='{') then begin // from Delphi XE5+
         From := RecordLoadJSON(P^.GetFieldAddr(Value)^,From,P^.TypeInfo,@EndOfObject);

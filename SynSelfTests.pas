@@ -7738,10 +7738,11 @@ begin
             Check(tmp='["*"]');
         end else
         Check(GetCardinal(pointer(tmp))=cardinal(s));
+      tmp := tmp+','; // mimics GetJsonField layout
       P := pointer(tmp);
+      eoo := ' ';
       Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
-      if astext then
-        Check(eoo=']');
+      Check(eoo=',');
     end;
   end;
   Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
