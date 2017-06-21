@@ -15549,7 +15549,14 @@ type
     // - returns -1 if no match is found
     // - will call VariantEquals() for value comparison
     function SearchItemByProp(const aPropName,aPropValue: RawUTF8;
-      aPropValueCaseSensitive: boolean): integer;
+      aPropValueCaseSensitive: boolean): integer; overload;
+    /// search a property match in this document, handled as array or object
+    // - {aPropName:aPropValue} will be searched within the stored array or
+    // object, and the corresponding item index will be returned, on match
+    // - returns -1 if no match is found
+    // - will call VariantEquals() for value comparison
+    function SearchItemByProp(const aPropNameFmt: RawUTF8; const aPropNameArgs: array of const;
+      const aPropValue: RawUTF8; aPropValueCaseSensitive: boolean): integer; overload;
     /// search a value in this document, handled as array
     // - aValue will be searched within the stored array
     // and the corresponding item index will be returned, on match
@@ -42736,6 +42743,15 @@ begin
           exit;
       end;
   result := -1;
+end;
+
+function TDocVariantData.SearchItemByProp(const aPropNameFmt: RawUTF8;
+  const aPropNameArgs: array of const; const aPropValue: RawUTF8;
+  aPropValueCaseSensitive: boolean): integer;
+var name: RawUTF8;
+begin
+  FormatUTF8(aPropNameFmt,aPropNameArgs,name);
+  result := SearchItemByProp(name,aPropValue,aPropValueCaseSensitive);
 end;
 
 function TDocVariantData.SearchItemByValue(const aValue: Variant;
