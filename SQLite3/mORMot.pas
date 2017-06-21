@@ -26433,6 +26433,7 @@ begin
       Result.Add(Item);
     {$endif}
       R.fFill.Fill(pointer(Row),Item);
+      Item.fInternalState := Self.InternalState;   // Filling InternalState property    
       Inc(Row,FieldCount); // next data row
     end;
   finally
