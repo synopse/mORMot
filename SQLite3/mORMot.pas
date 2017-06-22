@@ -4253,6 +4253,13 @@ const
     Size: sizeof(TGUID);
     Count: 0);
 
+{$ifndef HASDIRECTTYPEINFO}
+{$ifdef HASINLINENOTX86}
+// declared in interface section to circumvent weird XE4/XE5 compiler issues
+function Deref(Info: PPTypeInfo): PTypeInfo; inline;
+{$endif HASINLINENOTX86}
+{$endif HASDIRECTTYPEINFO}
+
 /// returns the interface name of a registered GUID, or its hexadecimal value
 function ToText(const aGUID: TGUID): TGUIDShortString; overload;
 
@@ -14917,7 +14924,7 @@ type
     /// publishes the thread running state
     property Terminated;
   end;
-  {$M-} 
+  {$M-}
 
   /// event signature used to notify a client callback
   // - implemented e.g. by TSQLHttpServer.NotifyCallback
@@ -20208,7 +20215,7 @@ type
   Deref = PTypeInfo;
 {$else}
 function Deref(Info: PPTypeInfo): PTypeInfo;
-{$ifdef HASINLINENOTX86} inline;
+{$ifdef HASINLINENOTX86}
 begin
   if Info=nil then
     result := pointer(Info) else
