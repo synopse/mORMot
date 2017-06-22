@@ -26433,6 +26433,7 @@ begin
       Result.Add(Item);
     {$endif}
       R.fFill.Fill(pointer(Row),Item);
+      Item.fInternalState := Self.InternalState;   // Filling InternalState property    
       Inc(Row,FieldCount); // next data row
     end;
   finally
@@ -26464,6 +26465,7 @@ begin
     for i := 0 to fRowCount-1 do begin // TObjectList will free each instance
       DestList.List[i] := RecordType.Create;
       R.fFill.Fill(pointer(Row),TSQLRecord(DestList.List[i]));
+      TSQLRecord(DestList.List[i]).fInternalState := Self.InternalState;   // Filling InternalState property    
       Inc(Row,FieldCount); // next data row
     end;
   finally
