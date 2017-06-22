@@ -1,11 +1,11 @@
 unit Ffactwin;
 
 { This application shows how to display TSynRestDataset style memo and graphic
- fields in a form.
+  fields in a form.
 
- - This application use TWebBrowser for display the image from Project19Server.db3.
- - Removed display of image because is need convert the Project19Server.db3 field image to base64 or any suggest.
- - fixed memory leak (by houdw2006)
+  - This application use TWebBrowser for display the image from Project19Server.db3.
+  - Removed display of image because is need convert the Project19Server.db3 field image to base64 or any suggest.
+  - fixed memory leak (by houdw2006)
 }
 
 interface
@@ -18,29 +18,6 @@ uses
   SynGdiPlus;
 
 type
-  TSQLBiolife = class(TSQLRecord)
-  public
-    fSpecies_No: integer;
-    fCategory: RawUTF8;
-    fCommon_Name: RawUTF8;
-    fSpecies_Name: RawUTF8;
-    fLength_cm: double;
-    fLength_in: double;
-    fNotes: TSQLRawBlob;
-    fGraphic: TSQLRawBlob;
-    fSom: TSQLRawBlob;
-  published
-    property Species_No: Integer read fSpecies_No write fSpecies_No;
-    property Category: RawUTF8 index 15 read fCategory write fCategory;
-    property Common_Name: RawUTF8 index 30 read fCommon_Name write fCommon_Name;
-    property Species_Name: RawUTF8 index 40 read fSpecies_Name write fSpecies_Name;
-    property Length_cm: Double read fLength_Cm write fLength_Cm;
-    property Length_In: Double read fLength_In write fLength_In;
-    property Notes: TSQLRawBlob read fNotes write fNotes;
-    property Graphic: TSQLRawBlob read fGraphic write fGraphic;
-    property Som: TSQLRawBlob read fSom write fSom;
-  end;
-
   TForm1 = class(TForm)
     Panel1: TPanel;
     Label1: TLabel;
@@ -70,6 +47,8 @@ var
 implementation
 
 {$R *.dfm}
+
+uses SampleData;
 
 procedure TForm1.FormCreate(Sender: TObject);
 var

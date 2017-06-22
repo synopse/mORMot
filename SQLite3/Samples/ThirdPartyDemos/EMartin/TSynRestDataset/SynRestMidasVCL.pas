@@ -131,11 +131,11 @@ type
     function PSGetCommandText: string; override;
     {$endif}
     {$IFNDEF NEXTGEN}
-    {$ifdef ISDELPHIXE2}
+    {$ifdef ISDELPHIXE}
     procedure SetCommandText(Value: WideString); override;
-    {$else ISDELPHIXE2}
+    {$else ISDELPHIXE}
     procedure SetCommandText(Value: String); override;
-    {$endif ISDELPHIXE2}
+    {$endif ISDELPHIXE}
     {$ELSE}
     procedure SetCommandText(Value: String); override;
     {$ENDIF !NEXTGEN}
@@ -383,11 +383,11 @@ end;
 {$endif ISDELPHI2007ANDUP}
 
 {$IFNDEF NEXTGEN}
-{$ifdef ISDELPHIXE2}
+{$ifdef ISDELPHIXE}
 procedure TSynRestDataSet.SetCommandText(Value: WideString);
-{$else ISDELPHIXE2}
+{$else ISDELPHIXE}
 procedure TSynRestDataSet.SetCommandText(Value: String);
-{$endif ISDELPHIXE2}
+{$endif ISDELPHIXE}
 {$ELSE}
 procedure TSynRestDataSet.SetCommandText(Value: String);
 {$ENDIF !NEXTGEN}
