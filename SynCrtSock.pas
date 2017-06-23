@@ -332,7 +332,7 @@ type
 
 {$ifndef FPC}
   /// FPC 64-bit compatibility integer type
-  {$ifdef UNICODE}
+  {$ifdef CPU64}
   PtrInt = NativeInt;
   PtrUInt = NativeUInt;
   {$else}

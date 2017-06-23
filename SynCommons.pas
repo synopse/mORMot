@@ -841,6 +841,7 @@ type
   {$ifdef BSD}
   TThreadID = Cardinal;
   {$endif}
+  
 {$else FPC}
 
 type
