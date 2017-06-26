@@ -5842,7 +5842,9 @@ type
   // - if optNoLogInput/optNoLogOutput is set, TSynLog and ServiceLog() database
   // won't log any parameter values at input/output - this may be useful for
   // regulatory/safety purposes, e.g. to ensure that no sensitive information
-  // (like a credit card number or a password), is logged during process
+  // (like a credit card number or a password), is logged during process -
+  // consider using TInterfaceFactory.RegisterUnsafeSPIType() instead if you
+  // prefer a more tuned filtering, for specific high-level types
   // - when parameters are transmitted as JSON object, any missing parameter
   // will be replaced by their default value, unless optErrorOnMissingParam
   // is defined to reject the call
@@ -6149,6 +6151,10 @@ type
     /// the current execution context of an interface-based service
     // - maps to Service.fExecution[ServiceMethodIndex]
     ServiceExecution: PServiceFactoryExecution;
+    /// the current execution options of an interface-based service
+    // - contain Service.fExecution[ServiceMethodIndex].Options and may include
+    // optNoLogInput/optNoLogOutput in case of TInterfaceFactory.RegisterUnsafeSPIType
+    ServiceExecutionOptions: TServiceMethodOptions;
     /// force the interface-based service methods to return a JSON object
     // - default behavior is to follow Service.ResultAsJSONObject property value
     // (which own default is to return a more convenient JSON array)
@@ -10396,7 +10402,11 @@ type
     // (i.e. defined as var/out, or is a record or a reference-counted type result)
     // - vIsObjArray is set if the dynamic array is a T*ObjArray, so should be
     // cleared with ObjArrClear() and not TDynArray.Clear
-    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray);
+    // - vIsSPI indicates that the value contains some Sensitive Personal
+    // Information (e.g. a bank card number or a plain password), which type has
+    // been previously registered via TInterfaceFactory.RegisterUnsafeSPIType
+    // so that low-level logging won't include such values
+    ValueKindAsm: set of (vIsString, vPassedByReference, vIsObjArray, vIsSPI);
     /// byte offset in the CPU stack of this argument
     // - may be -1 if pure register parameter with no backup on stack (x86)
     InStackOffset: integer;
@@ -10510,6 +10520,8 @@ type
     ExecutionMethodIndex: byte;
     /// TRUE if the method is inherited from another parent interface
     IsInherited: boolean;
+    /// the directions of arguments with vIsSPI defined in Args[].ValueKindAsm
+    HasSPIParams: TServiceMethodValueDirections;
     /// is 0 for the root interface, 1..n for all inherited interfaces
     HierarchyLevel: byte;
     /// describe expected method arguments
@@ -11198,6 +11210,12 @@ type
     /// add some TInterfaceFactory instances from their GUID
     class procedure AddToObjArray(var Obj: TInterfaceFactoryObjArray;
        const aGUIDs: array of TGUID);
+    /// register some TypeInfo() containing unsafe parameter values
+    // - i.e. any RTTI type containing Sensitive Personal Information, e.g.
+    // a bank card number or a plain password
+    // - such values will force associated values to be ignored during loging,
+    // as a more tuned alternative to optNoLogInput or optNoLogOutput
+    class procedure RegisterUnsafeSPIType(const Types: array of pointer);
 
     /// initialize the internal properties from the supplied interface RTTI
     // - it will check and retrieve all methods of the supplied interface,
@@ -12600,7 +12618,8 @@ type
     /// define execution options for a given set of methods
     // - methods names should be specified as an array (e.g. ['Add','Multiply'])
     // - if no method name is given (i.e. []), option will be set for all methods
-    // - only supports optNoLogInput and optNoLogOutput on the client side
+    // - only supports optNoLogInput and optNoLogOutput on the client side,
+    // by design of "fake" interface remote execution
     procedure SetOptions(const aMethod: array of RawUTF8; aOptions: TServiceMethodOptions;
       aAction: TServiceMethodOptionsAction=moaReplace);
     /// persist all service calls into a database instead of calling the client 
@@ -17101,7 +17120,7 @@ type
     /// compute a JSON description of all available services, and its public URI
     // - the JSON object matches the TServicesPublishedInterfaces record type
     // - used by TSQLRestClientURI.ServicePublishOwnInterfaces to register all
-    // the services supportes by the client itself
+    // the services supported by the client itself
     // - warning: the public URI should have been set via SetPublicURI()
     function ServicesPublishedInterfaces: RawUTF8;
     /// the HTTP server should call this method so that ServicesPublishedInterfaces
@@ -39670,14 +39689,8 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
         Error('Not allowed to publish signature');
       exit;
     end;
-    else begin // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]:
+    else // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]
       dec(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
-      if cardinal(ServiceMethodIndex)>=Service.fInterface.fMethodsCount then begin
-        Error('Invalid ServiceMethodIndex');
-        exit;
-      end;
-      ServiceExecution := @Service.fExecution[ServiceMethodIndex];
-    end;
     end;
     if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceExecution<>nil) and
        (SessionGroup-1 in ServiceExecution.Denied) then begin
@@ -39691,17 +39704,31 @@ var xml: RawUTF8;
     m: integer;
 begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
   m := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
-  {$ifdef WITHLOG}
-  if sllServiceCall in Log.GenericFamily.Level then
-    if (m>=0) and (optNoLogInput in Service.fExecution[m].Options) then
-      Log.Log(sllServiceCall,'%{optNoLogInput}',[Service.InterfaceFactory.Methods[m].
-        InterfaceDotMethodName],Server) else
-      Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
-        ServiceMethodIndex),ServiceParameters],Server);
-  {$endif}
-  if Assigned(Service.OnMethodExecute) and (m>=0) then
-    if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[m]) then
-      exit; // execution aborted by OnMethodExecute() callback event
+  if m>=0 then begin
+    if cardinal(m)>=Service.fInterface.fMethodsCount then begin
+      Error('Invalid ServiceMethodIndex');
+      exit;
+    end;
+    ServiceExecution := @Service.fExecution[m];
+    ServiceExecutionOptions := ServiceExecution.Options;
+    with Service.fInterface.fMethods[m] do begin
+      if [smdConst,smdVar]*HasSPIParams<>[] then
+        include(ServiceExecutionOptions,optNoLogInput);
+      if [smdVar,smdOut,smdResult]*HasSPIParams<>[] then
+        include(ServiceExecutionOptions,optNoLogOutput);
+    end;
+    {$ifdef WITHLOG}
+    if sllServiceCall in Log.GenericFamily.Level then
+      if optNoLogInput in ServiceExecutionOptions then
+        Log.Log(sllServiceCall,'%{optNoLogInput}',[Service.InterfaceFactory.Methods[m].
+          InterfaceDotMethodName],Server) else
+        Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
+          ServiceMethodIndex),ServiceParameters],Server);
+    {$endif}
+    if Assigned(Service.OnMethodExecute) then
+      if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[m]) then
+        exit; // execution aborted by OnMethodExecute() callback event
+  end;
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
     xml := FindIniNameValue(pointer(Call^.InHead),'ACCEPT: ');
     if (xml='application/xml') or (xml='text/xml') then
@@ -41152,7 +41179,7 @@ begin
       [Ctxt.SessionUserName,Ctxt.SessionRemoteIP,Call.Method,Model.Root,Ctxt.URI,
       COMMANDTEXT[Ctxt.Command],Call.OutStatus,length(Call.OutBody),Ctxt.MicroSecondsElapsed],sllServer);
     if (Call.OutBody<>'') and (sllServiceReturn in fLogFamily.Level) then
-      if (Ctxt.ServiceExecution=nil) or not(optNoLogOutput in Ctxt.ServiceExecution^.Options) then
+      if not(optNoLogOutput in Ctxt.ServiceExecutionOptions) then
         if IsHTMLContentTypeTextual(pointer(Call.OutHead)) then
           fLogFamily.SynLog.Log(sllServiceReturn,Call.OutBody,self,MAX_SIZE_RESPONSE_LOG);
     {$endif}
@@ -53526,6 +53553,17 @@ begin
   result := InterfaceFactoryCache;
 end;
 
+var
+  GlobalUnsafeSPIType: array of PTypeInfo;
+  
+class procedure TInterfaceFactory.RegisterUnsafeSPIType(const Types: array of pointer);
+var a: integer;
+begin
+  for a := 0 to high(Types) do
+    if Types[a]<>nil then
+      PtrArrayAddOnce(GlobalUnsafeSPIType,Types[a])
+end;
+
 constructor TInterfaceFactory.Create(aInterface: PTypeInfo);
 var m,a,reg: integer;
     WR: TTextWriter;
@@ -53653,6 +53691,10 @@ begin
         if ArgsManagedFirst<0 then
           ArgsManagedFirst := a;
         ArgsManagedLast := a;
+      end;
+      if PtrArrayFind(GlobalUnsafeSPIType,ArgTypeInfo)>=0 then begin
+        include(ValueKindAsm,vIsSPI);
+        include(HasSPIParams,ValueDirection);
       end;
     end;
     if ArgsOutputValuesCount=0 then // plain procedure with no out param
@@ -54318,7 +54360,7 @@ begin
   {$ifdef FPC}
   PI := TYPINFO.PInterfaceData(GetFPCTypeData(pointer(aInterface)));
   if PI^.Parent<>nil then
-    Ancestor := Deref(MORMOT.PPTypeInfo(PI^.Parent)) else
+    Ancestor := Deref(mORMot.PPTypeInfo(PI^.Parent)) else
   {$else}
   if PI^.IntfParent<>nil then
     Ancestor := Deref(PI^.IntfParent) else
@@ -54360,8 +54402,8 @@ begin
       '%.% method: duplicated name for %',[fInterfaceTypeInfo^.Name,aURI,self]))^ do begin
       HierarchyLevel := fAddMethodsLevel;
       {$ifdef FPC}
-      aResultType := Deref(MORMOT.PPTypeInfo(PME^.ResultType));
-      Kind := MORMOT.TMethodKind(PME^.Kind);
+      aResultType := Deref(mORMot.PPTypeInfo(PME^.ResultType));
+      Kind := mORMot.TMethodKind(PME^.Kind);
       if TCallingConvention(PME^.CC)<>DEFCC then
         RaiseError('method uses wrong calling convention',[]);
       {$else}
@@ -56901,6 +56943,7 @@ begin
           // emulate a call to CallbackReleased(callback,'ICallbackName')
           Ctxt.ServiceMethodIndex := fake.fService.fInterface.MethodIndexCallbackReleased;
           Ctxt.ServiceExecution := @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
+          Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
           Ctxt.Service := fake.fService;
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
@@ -57741,27 +57784,31 @@ begin
         if (ValueDirection<>smdOut) and (ValueType<>smvInterface) then begin
           W.AddShort(ParamName^); // in JSON_OPTIONS_FAST_EXTENDED format
           W.Add(':');
-          AddJSON(W,Sender.Values[a]);
+          if vIsSPI in ValueKindAsm then
+            W.AddShort('"****",') else
+            AddJSON(W,Sender.Values[a]);
         end;
       W.CancelLastComma;
     end;
     smsAfter: begin
       W.AddShort('},Output:{');
       if fExcludeServiceLogCustomAnswer and ArgsResultIsServiceCustomAnswer then
-      with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
-        W.AddShort('len:');
-        W.Add(length(Content));
-        W.AddShort(',status:');
-        W.Add(Status);
-      end else
+        with PServiceCustomAnswer(Sender.Values[ArgsResultIndex])^ do begin
+          W.AddShort('len:');
+          W.Add(length(Content));
+          W.AddShort(',status:');
+          W.Add(Status);
+        end else
       if optNoLogOutput in Sender.fOptions then
         W.AddShort('optNoLog:true') else
         for a := ArgsOutFirst to ArgsOutLast do
         with Args[a] do
-        if ValueDirection in [smdVar,smdOut,smdResult] then begin
+        if (ValueDirection in [smdVar,smdOut,smdResult]) then begin
           W.AddShort(ParamName^);
           W.Add(':');
-          AddJSON(W,Sender.Values[a]);
+          if vIsSPI in ValueKindAsm then
+            W.AddShort('"****",') else
+            AddJSON(W,Sender.Values[a]);
         end;
       W.CancelLastComma;
     end;
@@ -60134,9 +60181,10 @@ begin
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   m := fInterface.FindMethodIndex(aMethod);
   {$ifdef WITHLOG}
-  if (m<0) or not (optNoLogInput in fExecution[m].Options) then
-    p := aParams else
-    p := 'optNoLogInput';
+  if (m>=0) and ((optNoLogInput in fExecution[m].Options) or
+     ([smdConst,smdVar]*fInterface.Methods[m].HasSPIParams<>[])) then
+    p := 'optNoLogInput' else
+    p := aParams;
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
     [fInterfaceURI,aMethod,p,clientDrivenID],self);
   {$endif}
@@ -60182,7 +60230,8 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if (m<0) or not (optNoLogOutput in fExecution[m].Options) then
+    if (m<0) or not((optNoLogOutput in fExecution[m].Options) or
+       ([smdVar,smdOut,smdResult]*fInterface.Methods[m].HasSPIParams<>[])) then
     with fRest.fLogFamily do
       if (sllServiceReturn in Level) and (resp<>'') then
         SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);
