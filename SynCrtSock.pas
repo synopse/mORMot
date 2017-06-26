@@ -331,6 +331,7 @@ type
 {$endif}
 
 {$ifndef FPC}
+
   /// FPC 64-bit compatibility integer type
   {$ifdef CPU64}
   PtrInt = NativeInt;
@@ -342,7 +343,8 @@ type
   /// FPC 64-bit compatibility pointer type
   PPtrInt = ^PtrInt;
   PPtrUInt = ^PtrUInt;
-{$endif}
+
+{$endif FPC}
 
   {$M+}
   /// exception thrown by the classes of this unit

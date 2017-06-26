@@ -132,6 +132,7 @@ uses
   {$endif}
   {$endif}
   Classes,
+  SynCrtSock,
 {$ifndef NOVARIANTS}
   SynMongoDB,
   SynMustache,
@@ -1326,12 +1327,10 @@ uses
 {$endif}
 {$endif}
 {$endif}
-  //mORMotUILogin,
   SynCrypto,
-  SynCrtSock,
-  SynLZ,
+  SynZip,
   SynLZO,
-  SynZip;
+  SynLZ;
 
 
 { TTestLowLevelCommon }
@@ -8973,13 +8972,13 @@ begin
   tmp := StringFromFile(ExeVersion.ProgramFileName);
   b64 := Base64Encode(tmp);
   Check(IsBase64(b64));
-  Check(Base64Decode(b64)=tmp);
+  Check(SynCrtSock.Base64Decode(b64)=tmp);
   Check(BinToBase64(tmp)=b64);
   Check(Base64ToBin(b64)=tmp);
   tmp := '';
   for i := 1 to 1998 do begin
     b64 := Base64Encode(tmp);
-    Check(Base64Decode(b64)=tmp);
+    Check(SynCrtSock.Base64Decode(b64)=tmp);
     Check((tmp='') or IsBase64(b64));
     Check(BinToBase64(tmp)=b64);
     Check(Base64ToBin(b64)=tmp);
@@ -10158,7 +10157,7 @@ begin
     inc(i,n);
   end;
   FileFromString(E,'test.pas');}
-  S := UncompressString(Base64Decode(EMF));
+  S := UncompressString(Base64ToBin(EMF));
   Check(Hash32(S)=$5BB4C8B1);
   MS := THeapMemoryStream.Create;
   try
