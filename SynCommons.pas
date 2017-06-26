@@ -6220,8 +6220,15 @@ type
 function PtrArrayAdd(var aPtrArray; aItem: pointer): integer;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// wrapper to add once an item to a array of pointer dynamic array storage
+procedure PtrArrayAddOnce(var aPtrArray; aItem: pointer);
+
 /// wrapper to delete an item from a array of pointer dynamic array storage
 function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
+
+/// wrapper to find an item to a array of pointer dynamic array storage
+function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
+  {$ifdef HASINLINE}inline;{$endif}
 
 /// wrapper to add an item to a T*ObjArray dynamic array storage
 // - as expected by TJSONSerializer.RegisterObjArrayForJSON()
@@ -47265,6 +47272,17 @@ begin
   a[result] := aItem;
 end;
 
+procedure PtrArrayAddOnce(var aPtrArray; aItem: pointer);
+var a: TPointerDynArray absolute aPtrArray;
+    n: integer;
+begin
+  n := length(a);
+  if not PtrUIntScanExists(pointer(a),n,PtrUInt(aItem)) then begin
+    SetLength(a,n+1);
+    a[n] := aItem;
+  end;
+end;
+
 function PtrArrayDelete(var aPtrArray; aItem: pointer): integer;
 var a: TPointerDynArray absolute aPtrArray;
     n: integer;
@@ -47277,6 +47295,12 @@ begin
   if n>result then
     MoveFast(a[result+1],a[result],(n-result)*sizeof(pointer));
   SetLength(a,n);
+end;
+
+function PtrArrayFind(var aPtrArray; aItem: pointer): integer;
+var a: TPointerDynArray absolute aPtrArray;
+begin
+  result := PtrUIntScanIndex(pointer(a),length(a),PtrUInt(aItem));
 end;
 
 { wrapper functions to T*ObjArr types }
@@ -47300,10 +47324,14 @@ begin
 end;
 
 procedure ObjArrayAddOnce(var aObjArray; aItem: TObject);
+var a: TObjectDynArray absolute aObjArray;
+    n: integer;
 begin
-  if not PtrUIntScanExists(pointer(aObjArray),
-     length(TObjectDynArray(aObjArray)),PtrUInt(aItem)) then
-    ObjArrayAdd(aObjArray,aItem);
+  n := length(a);
+  if not PtrUIntScanExists(pointer(a),n,PtrUInt(aItem)) then begin
+    SetLength(a,n+1);
+    a[n] := aItem;
+  end;
 end;
 
 procedure ObjArraySetLength(var aObjArray; aLength: integer);
