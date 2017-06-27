@@ -1193,12 +1193,10 @@ var i,helper: Integer;
       j,k,n: integer;
   begin
     nam := Copy(ValueName,i+1,maxInt);
-    if nam='' then
-      exit;
     valFree := false;
     if nam='.' then
       GetValueFromContext(nam,val) else
-    if (nam[1] in ['1'..'9','"','{','[']) or
+    if (nam<>'') and (nam[1] in ['1'..'9','"','{','[']) or
        (nam='true') or (nam='false') or (nam='null') then begin
       // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
       val.VType := varEmpty;
@@ -1277,6 +1275,15 @@ begin
           if Value.VType>=varNull then
             exit;
         end;
+
+  i := Length(ValueName);
+  helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),i);
+  if helper>=0 then begin
+    ProcessHelper;
+    result := msSinglePseudo;
+    exit;
+  end; // if helper not found, will return the unprocessed value
+
 end;
 
 procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUTF8;
