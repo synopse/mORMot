@@ -28716,16 +28716,14 @@ var
   TemporaryFileNameRandom: integer;
 
 function TemporaryFileName: TFileName;
-var random: string[8];
-    rnd: cardinal;
+var folder: TFileName;
 begin // fast cross-platform implementation
+  folder := GetSystemPath(spTempFolder);
   if TemporaryFileNameRandom=0 then
     TemporaryFileNameRandom := Random32;
-  random[0] := #8;
-  repeat
-    rnd := InterlockedIncrement(TemporaryFileNameRandom); // thread-safe :)
-    SynCommons.BinToHex(@rnd,@random[1],sizeof(rnd));
-    result := format('%s%s_%s.tmp',[GetSystemPath(spTempFolder),ExeVersion.ProgramName,random]);
+  repeat // thread-safe unique file name generation 
+    result := format('%s%s_%s.tmp',[folder,ExeVersion.ProgramName,
+      CardinalToHexShort(InterlockedIncrement(TemporaryFileNameRandom))]);
   until not FileExists(result);
 end;
 
