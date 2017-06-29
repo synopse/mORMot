@@ -2263,7 +2263,7 @@ begin
     if ELevel<>sllNone then
       FormatUTF8('% % at %: % [%]',[ToCaption(ELevel),EClass,
         GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
-        UnixTimeToDateTime(ETimeStamp),' '),info.Message],result) else
+        UnixTimeToDateTime(ETimeStamp),' '),StringToUTF8(info.Message)],result) else
       result := '';
 end;
 
