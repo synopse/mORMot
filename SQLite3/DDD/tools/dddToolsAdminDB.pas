@@ -57,7 +57,6 @@ type
     fSQL, fPreviousSQL: RawUTF8;
     fSQLLogFile: TFileName;
     function ExecSQL(const SQL: RawUTF8): RawUTF8;
-    procedure SetResult(const JSON: RawUTF8); virtual;
     function OnText(Sender: TSQLTable; FieldIndex, RowIndex: Integer;
       var Text: string): boolean;
     procedure OnCommandsToGridAdd(const Item: TSynNameValueItem; Index: PtrInt);
@@ -89,6 +88,7 @@ type
     procedure Open; virtual;
     procedure FillTables(const customcode: string); virtual;
     procedure AddSQL(SQL: string; AndExec: boolean);
+    procedure SetResult(const JSON: RawUTF8); virtual;
     function NewCmdPopup(const c: string; NoCmdTrim: boolean): TMenuItem;
     destructor Destroy; override;
   end;
@@ -142,6 +142,7 @@ begin
   mmoSQL.Text := '#help';
   btnExecClick(nil);
   mmoSQL.Text := '';
+  mmoResult.Text := '';
 end;
 
 procedure TDBFrame.FillTables(const customcode: string);
