@@ -6364,6 +6364,10 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // - may be used as cache for overloaded ToText() content
 procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 
+/// helper to retrieve all trimmed texts of an enumerate 
+// - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
 // - will search for the exact text and also trim the lowercase 'a'..'z' chars on
@@ -22458,6 +22462,18 @@ begin
   if GetEnumInfo(aTypeInfo,MaxValue,res) then
     for i := 0 to MaxValue do begin
       aDest^ := res;
+      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(aDest);
+    end;
+end;
+
+procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+var MaxValue, i: integer;
+    res: PShortString;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+    for i := 0 to MaxValue do begin
+      aDest^ := TrimLeftLowerCaseShort(res);
       inc(PByte(res),ord(res^[0])+1); // next short string
       inc(aDest);
     end;
@@ -51468,7 +51484,6 @@ begin
 end;
 
 function GotoEndJSONItem(P: PUTF8Char): PUTF8Char;
-label next;
 begin
   result := nil; // to notify unexpected end
   if P=nil then
@@ -51487,14 +51502,15 @@ begin
     if P=nil then
       exit;
     if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
-    goto next;
+    if P^<>#0 then
+      result := P;
+    exit;
   end;
   end;
   repeat // numeric or true/false/null or MongoDB extended {age:{$gt:18}}
     inc(P);
     if P^=#0 then exit; // unexpected end
   until P^ in [':',',',']','}'];
-next:
   if P^=#0 then
     exit;
   result := P;
@@ -64057,6 +64073,11 @@ initialization
   Assert(sizeof(THash128Rec)=sizeof(THash128));
   Assert(sizeof(THash256Rec)=sizeof(THash256));
   Assert(sizeof(TBlock128)=sizeof(THash128));
+  {$ifdef MSWINDOWS}
+  {$ifndef CPU64}
+  Assert(sizeof(TFileTime)=sizeof(Int64)); // see e.g. FileTimeToInt64
+  {$endif}
+  {$endif}
 {  TypeInfoSaveRegisterKnown([
     TypeInfo(boolean),TypeInfo(byte),TypeInfo(word),TypeInfo(cardinal),TypeInfo(Int64),
     TypeInfo(single),TypeInfo(double),TypeInfo(currency),TypeInfo(extended),TypeInfo(TDateTime),

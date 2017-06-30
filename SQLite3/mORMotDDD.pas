@@ -217,10 +217,11 @@ type
   /// generic interface, to manage a service/daemon instance from an executable
   // - in addition to Start/Stop methods, Halt would force the whole executable
   // to abort its execution, SubscribeLog allows log monitoring, and
-  // DatabaseList/DatabaseExecute remote SQL execution on one or several ORMs
-  // - those methods could be published as REST (e.g. over named pipe), so that
-  // a single administration daemon (installed e.g. as a Windows Service) would
-  // be able to launch and monitor child processes as individual executables
+  // DatabaseList/DatabaseExecute remote SQL/SOA execution on one or several
+  // logicial REST servers 
+  // - those methods would allow a single administration daemon (installed e.g.
+  // as a Windows Service) to be able to launch and monitor child processes as
+  // individual executables, or via a custom DDD's ToolsAdmin tool
   // - since SubscribeLog() uses a callback, this REST server should be
   // published via supported transmission protocol, e.g. WebSockets
   IAdministratedDaemon = interface(IMonitoredDaemon)
