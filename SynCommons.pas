@@ -6364,9 +6364,13 @@ function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 // - may be used as cache for overloaded ToText() content
 procedure GetEnumNames(aTypeInfo: pointer; aDest: PPShortString);
 
-/// helper to retrieve all trimmed texts of an enumerate 
+/// helper to retrieve all trimmed texts of an enumerate
 // - may be used as cache to retrieve UTF-8 text without lowercase 'a'..'z' chars
 procedure GetEnumTrimmedNames(aTypeInfo: pointer; aDest: PRawUTF8);
+
+/// helper to retrieve all (translated) caption texts of an enumerate
+// - may be used as cache for overloaded ToCaption() content
+procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
 
 /// helper to retrieve the index of an enumerate item from its text
 // - returns -1 if aValue was not found
@@ -22479,6 +22483,30 @@ begin
     end;
 end;
 
+procedure GetCaptionFromTrimmed(PS: PAnsiChar; var result: string);
+var tmp: array[byte] of AnsiChar;
+    L: integer;
+begin
+  L := ord(PS^);
+  inc(PS);
+  while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
+  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
+  MoveFast(PS^,tmp,L);
+  GetCaptionFromPCharLen(tmp,result);
+end;
+
+procedure GetEnumCaptions(aTypeInfo: pointer; aDest: PString);
+var MaxValue, i: integer;
+    res: PShortString;
+begin
+  if GetEnumInfo(aTypeInfo,MaxValue,res) then
+    for i := 0 to MaxValue do begin
+      GetCaptionFromTrimmed(pointer(res),aDest^);
+      inc(PByte(res),ord(res^[0])+1); // next short string
+      inc(aDest);
+    end;
+end;
+
 function GetEnumName(aTypeInfo: pointer; aIndex: integer): PShortString;
 {$ifdef HASINLINENOTX86}
 var MaxValue: integer;
@@ -35435,17 +35463,8 @@ begin
 end;
 
 function GetCaptionFromEnum(aTypeInfo: pointer; aIndex: integer): string;
-var PS: PUTF8Char;
-    tmp: array[byte] of AnsiChar;
-    L: integer;
 begin
-  PS := pointer(GetEnumName(aTypeInfo,aIndex));
-  L := ord(PS^);
-  inc(PS);
-  while (L>0) and (PS^ in ['a'..'z']) do begin inc(PS); dec(L); end;
-  tmp[L] := #0; // as expected by GetCaptionFromPCharLen/UnCamelCase
-  MoveFast(PS^,tmp,L);
-  GetCaptionFromPCharLen(tmp,result);
+  GetCaptionFromTrimmed(pointer(GetEnumName(aTypeInfo,aIndex)),result);
 end;
 
 function CharSetToCodePage(CharSet: integer): cardinal;

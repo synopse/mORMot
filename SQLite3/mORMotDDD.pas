@@ -2791,10 +2791,9 @@ end;
 initialization
   {$ifndef ISDELPHI2010}
   {$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSResult));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryAction));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryState));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TDDDAdministratedDaemonStatus));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType([
+    TypeInfo(TCQRSResult), TypeInfo(TCQRSQueryAction), TypeInfo(TCQRSQueryState),
+    TypeInfo(TDDDAdministratedDaemonStatus)]);
   {$endif}
   {$endif}
   GetEnumNames(TypeInfo(TCQRSResult), @TCQRSResultText);

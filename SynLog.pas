@@ -1501,7 +1501,8 @@ function EventArchiveSynLZ(const aOldLogFileName, aDestinationPath: TFileName): 
 /// append some information to a syslog message memory buffer
 // - following https://tools.ietf.org/html/rfc5424 specifications
 // - ready to be sent via UDP to a syslog remote server
-// - returns the number of bytes written to destbuffer
+// - returns the number of bytes written to destbuffer (which should have
+// destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
   trimmsgfromlog: boolean): integer;
@@ -1519,31 +1520,16 @@ uses
 
 var
   LogInfoText: array[TSynLogInfo] of RawUTF8;
-  LogInfoCaptions: array[TSynLogInfo] of string;
-
-procedure ComputeLogInfoText;
-var
-  E: TSynLogInfo;
-begin
-  for E := low(E) to high(E) do
-    LogInfoText[E] := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(E)));
-end;
+  LogInfoCaption: array[TSynLogInfo] of string;
 
 function ToText(event: TSynLogInfo): RawUTF8;
 begin
-  if LogInfoText[low(event)]='' then
-    ComputeLogInfoText;
   result := LogInfoText[event];
 end;
 
 function ToCaption(event: TSynLogInfo): string;
-var
-  E: TSynLogInfo;
 begin
-  if LogInfoCaptions[succ(sllNone)]='' then
-    for E := succ(sllNone) to high(E) do
-      LogInfoCaptions[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
-  result := LogInfoCaptions[event];
+  result := LogInfoCaption[event];
 end;
 
 function ToCaption(filter: TSynLogFilter): string;
@@ -2261,7 +2247,7 @@ function ToText(const info: TSynLogExceptionInfo): RawUTF8;
 begin
   with info.Context do
     if ELevel<>sllNone then
-      FormatUTF8('% % at %: % [%]',[ToCaption(ELevel),EClass,
+      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,
         GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
         UnixTimeToDateTime(ETimeStamp),' '),StringToUTF8(info.Message)],result) else
       result := '';
@@ -2323,13 +2309,13 @@ begin
   destbuffer[23] := 'Z';
   inc(destbuffer,24);
   if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
-    (destbuffer-start)+15>destsize then
+     (destbuffer-start)+15>destsize then
     exit; // avoid buffer overflow
   PrintUSAscii(ExeVersion.Host); // HOST
   PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
   PrintUSAscii(procid); // PROCID
-  PrintUSAscii(msgid); // MSGID
-  PrintUSAscii(''); // no STRUCTURED-DATA
+  PrintUSAscii(msgid);  // MSGID
+  PrintUSAscii('');     // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
@@ -5392,7 +5378,7 @@ begin
   if cardinal(aRow)<cardinal(fCount) then begin
     dt := EventDateTime(aRow);
     result := Format('%s %s'#9'%s'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
-      ToCaption(EventLevel[aRow])]);
+      LogInfoCaption[EventLevel[aRow]]]);
     if fThreads<>nil then
       result := result+IntToString(cardinal(fThreads[aRow]))+#9;
     result := result+EventString(aRow,'   ');
@@ -5408,7 +5394,7 @@ begin
       aRow := fSelected[aRow];
       case aCol of
       0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
-      1: result := ToCaption(EventLevel[aRow]);
+      1: result := LogInfoCaption[EventLevel[aRow]];
       2: if fThreads<>nil then
            result := IntToString(cardinal(fThreads[aRow]));
       3: result := EventString(aRow,'   ',MAXLOGLINES);
@@ -5672,6 +5658,9 @@ initialization
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
+  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@LogInfoText);
+  GetEnumCaptions(TypeInfo(TSynLogInfo),@LogInfoCaption);
+  LogInfoCaption[sllNone] := '';
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TSynMapSymbol),_TSynMapSymbol,
     TypeInfo(TSynMapUnit),_TSynMapUnit]);
