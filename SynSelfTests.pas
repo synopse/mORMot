@@ -11236,6 +11236,7 @@ end;
 procedure TTestClientServerAccess.DirectInProcessAccess;
 var stats: RawUTF8;
 begin
+  FreeAndNil(Client);
   Client := TSQLRestClientDB.Create(Model,
     TSQLModel.Create([TSQLRecordPeople],'root'),
     DataBase.DB,TSQLRestServerTest);
@@ -15483,8 +15484,10 @@ begin
       fDatabase.DB.Execute('delete from people');
     // 2.2. Launch the background client threads
     fTimer.Start;
-    for n := 0 to fRunningThreadCount-1 do
+    for n := 0 to fRunningThreadCount-1 do begin
       TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
+      sleep(10); // ensure thread process is actually started
+    end;
     // 2.3. Wait for the background client threads process to be finished
     repeat
       {$ifdef MSWINDOWS}
