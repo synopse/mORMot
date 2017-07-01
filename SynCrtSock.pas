@@ -5224,10 +5224,20 @@ begin
     inc(n);
     P := pointer(s);
     case IdemPCharArray(P,['CONTENT-','TRANSFER-ENCODING: CHUNKED','CONNECTION: ',
-      'ACCEPT-ENCODING:','CONTENT-ENCODING: ']) of
-    0: case IdemPCharArray(P+8,['LENGTH:','TYPE:']) of
+      'ACCEPT-ENCODING:']) of
+    0: case IdemPCharArray(P+8,['LENGTH:','TYPE:','ENCODING:']) of
        0: ContentLength := GetCardinal(pointer(PAnsiChar(pointer(s))+16));
        1: ContentType := trim(copy(s,14,128));
+       2: if fCompress<>nil then begin
+            i := 18;
+            while s[i+1]=' ' do inc(i);
+            delete(s,1,i);
+            for i := 0 to high(fCompress) do
+              if fCompress[i].Name=s then begin
+                fContentCompress := i;
+                break;
+              end;
+          end;
        end;
     1: Chunked := true;
     2: case IdemPCharArray(P+12,['CLOSE','UPGRADE','KEEP-ALIVE, UPGRADE']) of
@@ -5236,16 +5246,6 @@ begin
        end;
     3: if fCompress<>nil then
          fCompressHeader := ComputeContentEncoding(fCompress,P+16);
-    4: if fCompress<>nil then begin
-         i := 18;
-         while s[i+1]=' ' do inc(i);
-         delete(s,1,i);
-         for i := 0 to high(fCompress) do
-           if fCompress[i].Name=s then begin
-             fContentCompress := i;
-             break;
-           end;
-       end;
     end;
   until false;
   SetLength(Headers,n);
