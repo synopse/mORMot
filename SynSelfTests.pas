@@ -10133,7 +10133,7 @@ const
   'jz/dDXej3ZClzk14r9LVXTW1kca7FgzLrfNaWG5KyG/40tuNtM7LvavpM665+Q+G+dsXdVoc3x5vK5fK'+
   'WP0ebanRbmgol+oYnDQrW+6mTLl3Hln9FZS7n5W7K+Gi8ZIw3vqLIZ2yZd44wufWeWzS1Ebaxn17Dfzy'+
   'CW6jv67RdXcuf1/o69I+T+fTdim0j3Ry8TccmqZuqswsX2i+d/n7Qnv9f1RSHw29k+n/Bw==';
-  Hash: array[boolean] of Cardinal = (343869333,3715537523);
+  METAFILE_HASH: array[boolean] of Cardinal = ($212C0E5A,$FB81AAAD);
 var S: RawByteString;
     MS: THeapMemoryStream;
     MF: TMetaFile;
@@ -10194,7 +10194,7 @@ begin
         if CheckFailed(i<>0)then exit;
         FillCharFast(s[i],32,32);
         H := Hash32(s);
-        Check(H=1030733677);
+        Check(H=$FE2D27CA);
       end;
     finally
       Free;
@@ -10226,7 +10226,8 @@ begin
           MS.Clear;
           Doc.Canvas.RenderMetaFile(MF);
           Doc.SaveToStream(MS,FIXED_DATE);
-          Check(Hash32(MS.Memory,MS.Position)=Hash[orientation]);
+          H := Hash32(MS.Memory,MS.Position);
+          Check(H=METAFILE_HASH[orientation]);
         finally
           Doc.Free;
         end;

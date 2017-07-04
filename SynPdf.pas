@@ -40,6 +40,7 @@ unit SynPdf;
    Florian Grummel
    Harald Simon
    Josh Kelley (joshkel)
+   Karel (vandrovnik)
    LoukaO  
    Marsh
    MChaos
@@ -9237,9 +9238,9 @@ type
   end;
 
 const
-  STOCKBRUSHCOLOR: array[WHITE_BRUSH..BLACK_BRUSH] of cardinal = (
+  STOCKBRUSHCOLOR: array[WHITE_BRUSH..BLACK_BRUSH] of integer = (
     clWhite, $AAAAAA, $808080, $666666, clBlack);
-  STOCKPENCOLOR: array[WHITE_PEN..BLACK_PEN] of cardinal = (
+  STOCKPENCOLOR: array[WHITE_PEN..BLACK_PEN] of integer = (
     clWhite, clBlack);
 
 function CenterPoint(const Rect: TRect): TPoint; {$ifdef HASINLINE}inline;{$endif}
@@ -10145,10 +10146,20 @@ begin
           brush.null := false;
         end;
         NULL_PEN: begin
+          if fInLined and ((pen.style<>PS_NULL) or not pen.null) then begin
+            fInLined := False;
+            if not pen.null then
+              Canvas.Stroke;
+          end;
           pen.style := PS_NULL;
           pen.null := true;
         end;
         WHITE_PEN, BLACK_PEN: begin
+          if fInLined and ((pen.color<>STOCKPENCOLOR[iObject]) or not pen.null) then begin
+            fInLined := False;
+            if not pen.null then
+              Canvas.Stroke;
+          end;
           pen.color := STOCKPENCOLOR[iObject];
           pen.null := false;
         end;
