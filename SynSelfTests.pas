@@ -2630,7 +2630,7 @@ begin
 end;
 
 procedure TTestLowLevelCommon.UrlEncoding;
-var i: integer;
+var i,j: integer;
     s: RawByteString;
     name,value,utf: RawUTF8;
     P: PUTF8Char;
@@ -2680,7 +2680,8 @@ begin
   Check(name='name,complex');
   Check(value='value');
   for i := 0 to 100 do begin
-    s := RandomString(i*5);
+    j := i*5; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     Check(UrlDecode(UrlEncode(s))=s,string(s));
   end;
   utf := BinToBase64URI(@GUID,sizeof(GUID));
@@ -3083,7 +3084,8 @@ begin
   end;
   for i := 0 to High(crc) do
   with crc[i] do begin
-    s := RandomString(i shr 3+1);
+    j := i shr 3+1; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     crc := crc32creference(0,pointer(s),length(s));
     inc(totallen,length(s));
     c2 := HMAC_CRC32C(@c1,pointer(s),4,length(s));
@@ -3245,7 +3247,8 @@ begin
   for i := -10000 to 10000 do
     check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
-    s := RandomString(i shr 6);
+    j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     Check(kr32(0,pointer(s),length(s))=kr32reference(pointer(s),length(s)));
     Check(fnv32(0,pointer(s),length(s))=fnv32reference(0,pointer(s),length(s)));
     crc := crc32creference(0,pointer(s),length(s));
@@ -3456,35 +3459,35 @@ begin
 end;
 
 procedure TTestLowLevelCommon._UTF8;
-procedure Test(CP: cardinal; const W: WinAnsiString);
-var C: TSynAnsiConvert;
-    A: RawByteString;
-    U: RawUTF8;
-begin
-  C := TSynAnsiConvert.Engine(CP);
-  Check(C.CodePage=CP);
-  U := C.AnsiToUTF8(W);
-  A := C.UTF8ToAnsi(U);
-  if W='' then
-    exit;
-  {$ifdef HASCODEPAGE}
-  {$ifndef FPC}
-  Check(StringCodePage(W)=1252);
-  {$endif}
-  CP := StringCodePage(A);
-  Check(CP=C.CodePage);
-  {$endif}
-  if CP=CP_UTF16 then
-    exit;
-  Check(length(W)=length(A));
-  {$ifdef FPC}
-  Check(CompareMem(pointer(W),pointer(A),length(W)));
-  {$else}
-  Check(A=W);
-  Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
-  {$endif}
-end;
-var i, CP, L: integer;
+  procedure Test(CP: cardinal; const W: WinAnsiString);
+  var C: TSynAnsiConvert;
+      A: RawByteString;
+      U: RawUTF8;
+  begin
+    C := TSynAnsiConvert.Engine(CP);
+    Check(C.CodePage=CP);
+    U := C.AnsiToUTF8(W);
+    A := C.UTF8ToAnsi(U);
+    if W='' then
+      exit;
+    {$ifdef HASCODEPAGE}
+    {$ifndef FPC}
+    Check(StringCodePage(W)=1252);
+    {$endif}
+    CP := StringCodePage(A);
+    Check(CP=C.CodePage);
+    {$endif}
+    if CP=CP_UTF16 then
+      exit;
+    Check(length(W)=length(A));
+    {$ifdef FPC}
+    Check(CompareMem(pointer(W),pointer(A),length(W)));
+    {$else}
+    Check(A=W);
+    Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
+    {$endif}
+  end;
+var i, len, CP, L: integer;
     W: WinAnsiString;
     WS: WideString;
     SU: SynUnicode;
@@ -3528,8 +3531,9 @@ begin
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
   for i := 0 to 1000 do begin
-    W := RandomAnsi7(i*5);
-    Check(length(W)=i*5);
+    len := i*5;
+    W := RandomAnsi7(len);
+    Check(length(W)=len);
     for CP := 1250 to 1258 do
       Test(CP,W);
     Test(932,W);
@@ -3540,7 +3544,7 @@ begin
     if L and 1<>0 then
       SetLength(W,L-1); // force exact UTF-16 buffer length
     Test(CP_UTF16,W);
-    W := WinAnsiString(RandomString(i*5));
+    W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
