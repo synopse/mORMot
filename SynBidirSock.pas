@@ -3067,9 +3067,10 @@ end;
 
 procedure TWebSocketProcessClientThread.Execute;
 begin
-  SetCurrentThreadName('% % %',[self,fProcess.fProcessName,fProcess.Protocol.Name]);
+  if fProcess<>nil then // may happen when debugging under FPC (alf)
+    SetCurrentThreadName('% % %',[self,fProcess.fProcessName,fProcess.Protocol.Name]);
   fThreadState := sRun;
-  if not Terminated then
+  if not Terminated and (fProcess<>nil) then
     fProcess.ProcessLoop;
   if (fProcess<>nil) and (fProcess.fState=wpsClose) then
     fThreadState := sClosed else
