@@ -702,11 +702,13 @@ end;
 
 function TWrapperContext.ContextFromMethods(int: TInterfaceFactory): variant;
 var m: integer;
+    methods: TDocVariantData; // circumvent FPC -O2 memory leak
 begin
   AddUnit(int.InterfaceTypeInfo^.InterfaceUnitName^,nil);
-  TDocVariant.NewFast(result);
+  methods.InitFast;
   for m := 0 to int.MethodsCount-1 do
-    TDocVariantData(result).AddItem(ContextFromMethod(int.Methods[m]));
+    methods.AddItem(ContextFromMethod(int.Methods[m]));
+  result := variant(methods);
 end;
 
 function TWrapperContext.ContextOneProperty(prop: TJSONCustomParserRTTI): variant;
