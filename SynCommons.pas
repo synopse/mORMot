@@ -24945,8 +24945,7 @@ var i, tmpN, L, A, P, len: PtrInt;
     inlin: set of 0..255;
     F,FDeb: PUTF8Char;
     wasString: Boolean;
-const QUOTECHAR: array[boolean] of AnsiChar = ('''','"');
-      NOTTOQUOTE: array[boolean] of set of 0..31 = (
+const NOTTOQUOTE: array[boolean] of set of 0..31 = (
         [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended],
         [vtBoolean,vtInteger,vtInt64,vtCurrency,vtExtended,vtVariant]);
 label Txt;
@@ -35418,7 +35417,7 @@ function ClassNameShort(C: TClass): PShortString;
 // new TObject.ClassName is UnicodeString (since Delphi 2009) -> inline code
 // with vmtClassName = UTF-8 encoded text stored in a shortstring = -44
 begin
-  result := PPointer(PtrInt(C)+vmtClassName)^;
+  result := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
 end;
 
 function ClassNameShort(Instance: TObject): PShortString;
@@ -35431,7 +35430,7 @@ var P: PShortString;
 begin
   if C=nil then
     result := '' else begin
-    P := PPointer(PtrInt(C)+vmtClassName)^;
+    P := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
     SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
   end;
 end;
@@ -35441,7 +35440,7 @@ var P: PShortString;
 begin
   if C=nil then
     result := '' else begin
-    P := PPointer(PtrInt(C)+vmtClassName)^;
+    P := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
     SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
   end;
 end;
@@ -36589,7 +36588,7 @@ begin
     exit; // nothing to redirect to
   assert(sizeof(TPatchCode)=sizeof(NewJump));
   NewJump.Code := $e9;
-  NewJump.Distance := PtrInt(RedirectFunc)-PtrInt(Func)-sizeof(NewJump);
+  NewJump.Distance := integer(PtrUInt(RedirectFunc)-PtrUInt(Func)-sizeof(NewJump));
   PatchCode(Func,@NewJump,sizeof(NewJump),Backup);
   {$ifndef LVCL}
   assert(pByte(Func)^=$e9);
@@ -44192,7 +44191,9 @@ end;
 
 class function TDocVariant.New(Options: TDocVariantOptions): Variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).Init(Options);
 end;
@@ -44200,7 +44201,9 @@ end;
 class function TDocVariant.NewObject(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,Options);
 end;
@@ -44208,7 +44211,9 @@ end;
 class function TDocVariant.NewArray(const Items: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,Options);
 end;
@@ -44216,7 +44221,9 @@ end;
 class function TDocVariant.NewArray(const Items: TVariantDynArray;
   Options: TDocVariantOptions=[]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitArrayFromVariants(Items,Options);
 end;
@@ -44230,7 +44237,9 @@ end;
 class function TDocVariant.NewUnique(const SourceDocVariant: variant;
   Options: TDocVariantOptions=[dvoReturnNullForUnknownProperty]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitCopy(SourceDocVariant,Options);
 end;
@@ -44306,7 +44315,9 @@ end;
 function _Obj(const NameValuePairs: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,Options);
 end;
@@ -44314,7 +44325,9 @@ end;
 function _Arr(const Items: array of const;
   Options: TDocVariantOptions=[]): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,Options);
 end;
@@ -44324,7 +44337,9 @@ var o: PDocVariantData;
 begin
   o := _Safe(Obj);
   if not(dvoIsObject in o^.VOptions) then begin // create new object
+    {$ifndef FPC}
     if TVarData(Obj).VType and VTYPE_STATIC<>0 then
+    {$endif}
       VarClear(Obj);
     TDocVariantData(Obj).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
   end else begin // append new names/values to existing object
@@ -44348,14 +44363,18 @@ end;
 
 function _ObjFast(const NameValuePairs: array of const): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitObject(NameValuePairs,JSON_OPTIONS_FAST);
 end;
 
 function _ObjFast(aObject: TObject; aOptions: TTextWriterWriteObjectOptions): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   if TDocVariantData(result).InitJSONInPlace(
       pointer(ObjectToJson(aObject,aOptions)),JSON_OPTIONS_FAST)=nil then
@@ -44364,7 +44383,9 @@ end;
 
 function _ArrFast(const Items: array of const): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result).InitArray(Items,JSON_OPTIONS_FAST);
 end;
@@ -44433,7 +44454,9 @@ end;
 
 function _ByRef(const DocVariant: variant; Options: TDocVariantOptions): variant;
 begin
+  {$ifndef FPC}
   if TVarData(result).VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   TDocVariantData(result) := _Safe(DocVariant)^; // fast byref copy
   TDocVariantData(result).SetOptions(Options);
@@ -44937,7 +44960,7 @@ function TDynArray.GetCount: integer;
 begin
   if fValue<>nil then
     if fCountP=nil then
-      if PtrInt(fValue^)<>0 then begin
+      if PtrUInt(fValue^)<>0 then begin
         {$ifdef FPC}
         result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length;
         {$else}
@@ -46309,7 +46332,7 @@ begin
     if delta=0 then
       exit;
     fCountP^ := aCount;
-    if PtrInt(fValue^)=0 then begin
+    if PtrUInt(fValue^)=0 then begin
       // no capa yet
       if (delta>0) and (aCount<MINIMUM_SIZE) then
         aCount := MINIMUM_SIZE; // reserve some minimal space for Add()
@@ -46340,7 +46363,7 @@ end;
 
 function TDynArray.GetCapacity: integer;
 begin // capacity := length(DynArray)
-  if (fValue<>nil) and (PtrInt(fValue^)<>0) then
+  if (fValue<>nil) and (PtrUInt(fValue^)<>0) then
     result := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length else
     result := 0;
 end;
@@ -48443,7 +48466,7 @@ begin
     FlushToStream;
   with GlobalLogTime[LocalTime] do begin
     if Use16msCache then begin
-      Ticks := GetTickCount; // this call is very fast (just one integer mul)
+      Ticks := GetTickCount64; // this call is very fast (just one integer mul)
       if clock<>Ticks then begin // typically in range of 10-16 ms
         clock := Ticks;
         if LocalTime then
@@ -50281,7 +50304,7 @@ end;
 procedure TTextWriter.AddClassName(aClass: TClass);
 begin
   if aClass<>nil then
-    AddShort(PShortString(PPointer(PtrInt(aClass)+vmtClassName)^)^);
+    AddShort(PShortString(PPointer(PtrInt(PtrUInt(aClass))+vmtClassName)^)^);
 end;
 
 procedure TTextWriter.AddInstanceName(Instance: TObject; SepChar: AnsiChar);
@@ -50996,6 +51019,9 @@ var n: PtrInt;
     field: TNameValuePUTF8Char;
     EndOfObject: AnsiChar;
 begin
+  {$ifdef FPC}
+  Values := nil;
+  {$endif}
   result := nil;
   n := 0;
   if P<>nil then begin
@@ -51680,7 +51706,6 @@ Prop: if not (ord(P^) in IsJsonIdentifierFirstChar) then
 end;
 
 function GotoNextJSONObjectOrArray(P: PUTF8Char; EndChar: AnsiChar=#0): PUTF8Char;
-label Prop;
 begin // should match GetJSONPropName()
   result := nil; // mark error or unexpected end (#0)
   if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
@@ -52376,7 +52401,6 @@ const
   // Valid characters in a "quoted-string"
   quoted_string_chars: TSynAnsicharSet = [#0..#255] - ['"', #13, '\'];
   // Valid characters in a subdomain
-  letters: TSynAnsicharSet = ['A'..'Z', 'a'..'z'];
   letters_digits: TSynAnsicharSet = ['0'..'9', 'A'..'Z', 'a'..'z'];
 type
   States = (STATE_BEGIN, STATE_ATOM, STATE_QTEXT, STATE_QCHAR,
@@ -56575,7 +56599,10 @@ end;
 
 function TSynMemoryStream.Write(const Buffer; Count: Integer): Longint;
 begin
-  raise EStreamError.Create('TSynMemoryStream.Write');
+  {$ifdef FPC}
+  result := 0; // makes FPC compiler happy
+  {$endif}
+  raise EStreamError.CreateFmt('Unexpected %s.Write',[ClassNameShort(self)^]);
 end;
 
 
@@ -56861,8 +56888,8 @@ end;
 procedure TFileBufferWriter.WriteRawUTF8DynArray(const Values: TRawUTF8DynArray;
   ValuesCount: integer);
 var PI: PPtrUIntArray;
-    n, i, fixedsize: integer;
-    len: PtrUInt;
+    n, i: integer;
+    fixedsize, len: PtrUInt;
     P, PEnd: PByte;
     PBeg: PAnsiChar;
 begin
@@ -56875,7 +56902,7 @@ begin
     for i := 1 to ValuesCount-1 do
       if (PI^[i]=0) or
          ({$ifdef FPC}PStrRec(Pointer(PI^[i]-STRRECSIZE))^.length
-          {$else}PInteger(PI^[i]-sizeof(integer))^{$endif}<>fixedsize) then begin
+          {$else}PCardinal(PI^[i]-sizeof(integer))^{$endif}<>fixedsize) then begin
         fixedsize := 0;
         break;
       end;
@@ -56909,7 +56936,7 @@ begin
         end else
       // fixed size strings case
       for i := 0 to ValuesCount-1 do begin
-        if PtrInt(PEnd)-PtrInt(P)<=fixedsize then begin
+        if PtrUInt(PEnd)-PtrUInt(P)<=fixedsize then begin
           n := i;
           break; // avoid buffer overflow
         end;
@@ -58515,7 +58542,9 @@ var data: TSynTableData absolute result;
 begin
   if SynTableVariantType=nil then
     SynTableVariantType := SynRegisterCustomVariantType(TSynTableVariantType);
+  {$ifndef FPC}
   if data.VType and VTYPE_STATIC<>0 then
+  {$endif}
     VarClear(result);
   data.VType := SynTableVariantType.VarType;
   data.VID := aID;
@@ -62103,7 +62132,7 @@ constructor TSynAuthenticationAbstract.Create;
 begin
   fSafe.Init;
   fTokenSeed := Random32;
-  fSessionGenerator := abs(fTokenSeed*PtrInt(ClassType));
+  fSessionGenerator := abs(fTokenSeed*PPtrInt(self)^);
 end;
 
 destructor TSynAuthenticationAbstract.Destroy;
