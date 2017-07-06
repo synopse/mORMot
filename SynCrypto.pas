@@ -9613,11 +9613,17 @@ end;
 
 {$ifdef MSWINDOWS}
 type
+  {$ifdef FPC}
+  {$PACKRECORDS C} // mandatory under Win64
+  {$endif}
   DATA_BLOB = record
     cbData: DWORD;
     pbData: PAnsiChar;
   end;
   PDATA_BLOB = ^DATA_BLOB;
+  {$ifdef FPC}
+  {$PACKRECORDS DEFAULT}
+  {$endif}
 const
   CRYPTPROTECT_UI_FORBIDDEN = $1;
   CRYPTDLL = 'Crypt32.dll';
