@@ -305,7 +305,7 @@ const
   /// hide all SHA-1/SHA-2 Context complex code
   SHAContextSize = 108;
   /// hide all SHA-3 Context complex code
-  SHA3SpongeSize = 416;
+  SHA3ContextSize = 416;
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod
   AESBlockShift = 4;
@@ -1151,7 +1151,7 @@ type
   // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code
   TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
   private
-    Context: packed array[1..SHA3SpongeSize] of byte;
+    Context: packed array[1..SHA3ContextSize] of byte;
   public
     /// initialize SHA-3 context for hashing
     // - in practice, you may use SHA3_256 or SHA3_512 to return THash256
@@ -6266,8 +6266,8 @@ const
     QWord($8000000000008080), QWord($0000000080000001), QWord($8000000080008008));
 
 type
-  TSpongeState = object
-    StateB: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
+  TSHA3Context = object
+    State: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
     DataQueue: packed array[0..cKeccakMaximumRateInBytes-1] of byte;
     Algo: TSHA3Algo;
     Rate: integer;
@@ -6277,8 +6277,6 @@ type
     Squeezing: integer;
     procedure Init(aAlgo: TSHA3Algo);
     procedure InitSponge(aRate, aCapacity: integer);
-    procedure ExtractFromState(outp: Pointer; laneCount: integer);
-    procedure KeccakAbsorb(data: PQWord; laneCount: integer);
     procedure AbsorbQueue;
     procedure Absorb(data: PByteArray; databitlen: integer);
     procedure AbsorbFinal(data: PByteArray; databitlen: integer);
@@ -6287,7 +6285,7 @@ type
     procedure FinalBit_LSB(bits: byte; bitlen: integer;
       hashval: Pointer; numbits: integer);
   end;
-  PSpongeState = ^TSpongeState;
+  PSHA3Context = ^TSHA3Context;
 
 {$ifdef SHA3_PASCAL}
 
@@ -7045,7 +7043,28 @@ end;
 
 {$endif SHA3_PASCAL}
 
-procedure TSpongeState.InitSponge(aRate, aCapacity: integer);
+procedure TSHA3Context.Init(aAlgo: TSHA3Algo);
+begin
+  case aAlgo of
+    SHA3_224:
+      InitSponge(1152, 448);
+    SHA3_256:
+      InitSponge(1088, 512);
+    SHA3_384:
+      InitSponge(832, 768);
+    SHA3_512:
+      InitSponge(576, 1024);
+    SHAKE_128:
+      InitSponge(1344, 256);
+    SHAKE_256:
+      InitSponge(1088, 512);
+  else
+    raise ESynCrypto.CreateUTF8('Unexpected TSHA3Context.Init(%)', [ord(aAlgo)]);
+  end;
+  Algo := aAlgo;
+end;
+
+procedure TSHA3Context.InitSponge(aRate, aCapacity: integer);
 begin
   Assert(aRate + aCapacity = 1600, 'Rate+Capacity should be 1600');
   Assert((aRate > 0) and (aRate < 1600) and ((aRate and 63) = 0), 'Invalid Rate');
@@ -7054,46 +7073,27 @@ begin
   Capacity := aCapacity;
 end;
 
-procedure TSpongeState.ExtractFromState(outp: Pointer; laneCount: integer);
+procedure XorMemoryPtrInt(dest, source: PPtrIntArray; count: integer);
 var
-  pI, pS: PQWord;
   i: integer;
 begin
-  pI := outp;
-  pS := @StateB;
-  for i := 1 to laneCount do begin
-    pI^ := pS^;
-    inc(pI);
-    inc(pS);
-  end;
+  for i := 0 to count-1 do
+    dest^[i] := dest^[i] xor source^[i];
 end;
 
-procedure TSpongeState.KeccakAbsorb(data: PQWord; laneCount: integer);
-var
-  P: PQWord;
-  i: integer;
-begin
-  P := @StateB;
-  for i := 1 to laneCount do begin
-    P^ := P^ xor data^;
-    inc(data);
-    inc(P);
-  end;
-  KeccakPermutation(@StateB);
-end;
-
-procedure TSpongeState.AbsorbQueue;
+procedure TSHA3Context.AbsorbQueue;
 begin
   // BitsInQueue is assumed to be equal to Rate
-  KeccakAbsorb(@DataQueue, Rate shr 6);
+  XorMemoryPtrInt(@State, @DataQueue, Rate shr {$ifdef CPU32}5{$else}6{$endif});
+  KeccakPermutation(@State);
   BitsInQueue := 0;
 end;
 
-procedure TSpongeState.Absorb(data: PByteArray; databitlen: integer);
+procedure TSHA3Context.Absorb(data: PByteArray; databitlen: integer);
 var
   i, j, wholeBlocks, partialBlock: integer;
   partialByte: integer;
-  curData: PQWord;
+  curData: pointer;
 begin
   Assert(BitsInQueue and 7 = 0, 'Only the last call may contain a partial byte');
   Assert(Squeezing = 0, 'Too late for additional input');
@@ -7102,10 +7102,9 @@ begin
     if (BitsInQueue = 0) and (databitlen >= Rate) and (i <= (databitlen - Rate)) then begin
       wholeBlocks := (databitlen - i) div Rate;
       curData := @data^[i shr 3];
-      j := 0;
-      while j < wholeBlocks do begin
-        KeccakAbsorb(curData, Rate shr 6);
-        inc(j);
+      for j := 1 to wholeBlocks do begin
+        XorMemoryPtrInt(@State, curData, Rate shr {$ifdef CPU32}5{$else}6{$endif});
+        KeccakPermutation(@State);
         inc(PByte(curData), Rate shr 3);
       end;
       inc(i, wholeBlocks * Rate);
@@ -7131,28 +7130,7 @@ begin
   end;
 end;
 
-procedure TSpongeState.Init(aAlgo: TSHA3Algo);
-begin
-  case aAlgo of
-    SHA3_224:
-      InitSponge(1152, 448);
-    SHA3_256:
-      InitSponge(1088, 512);
-    SHA3_384:
-      InitSponge(832, 768);
-    SHA3_512:
-      InitSponge(576, 1024);
-    SHAKE_128:
-      InitSponge(1344, 256);
-    SHAKE_256:
-      InitSponge(1088, 512);
-  else
-    raise ESynCrypto.CreateUTF8('Unexpected TSpongeState.Init(%)', [ord(aAlgo)]);
-  end;
-  Algo := aAlgo;
-end;
-
-procedure TSpongeState.AbsorbFinal(data: PByteArray; databitlen: integer);
+procedure TSHA3Context.AbsorbFinal(data: PByteArray; databitlen: integer);
 var
   lastByte: byte;
 begin
@@ -7166,7 +7144,7 @@ begin
   end;
 end;
 
-procedure TSpongeState.PadAndSwitchToSqueezingPhase;
+procedure TSHA3Context.PadAndSwitchToSqueezingPhase;
 var
   i: integer;
 begin // note: the bits are numbered from 0=LSB to 7=MSB
@@ -7184,12 +7162,12 @@ begin // note: the bits are numbered from 0=LSB to 7=MSB
   i := (Rate - 1) shr 3;
   DataQueue[i] := DataQueue[i] or (1 shl ((Rate - 1) and 7));
   AbsorbQueue;
-  ExtractFromState(@DataQueue, Rate shr 6);
+  MoveFast(State, DataQueue, Rate shr 3);
   BitsAvailableForSqueezing := Rate;
   Squeezing := 1;
 end;
 
-procedure TSpongeState.Squeeze(output: PByteArray; outputLength: integer);
+procedure TSHA3Context.Squeeze(output: PByteArray; outputLength: integer);
 var
   i: integer;
   partialBlock: integer;
@@ -7200,8 +7178,8 @@ begin
   i := 0;
   while i < outputLength do begin
     if BitsAvailableForSqueezing = 0 then begin
-      KeccakPermutation(@StateB);
-      ExtractFromState(@DataQueue, Rate shr 6);
+      KeccakPermutation(@State);
+      MoveFast(State, DataQueue, Rate shr 3);
       BitsAvailableForSqueezing := Rate;
     end;
     partialBlock := BitsAvailableForSqueezing;
@@ -7214,7 +7192,7 @@ begin
   end;
 end;
 
-procedure TSpongeState.FinalBit_LSB(bits: byte; bitlen: integer;
+procedure TSHA3Context.FinalBit_LSB(bits: byte; bitlen: integer;
   hashval: Pointer; numbits: integer);
 var
   ll: integer;
@@ -7256,19 +7234,19 @@ end;
 
 procedure TSHA3.Init(Algo: TSHA3Algo);
 begin
-  PSpongeState(@Context)^.Init(Algo);
+  PSHA3Context(@Context)^.Init(Algo);
 end;
 
 procedure TSHA3.Update(const Buffer: RawByteString);
 begin
   if Buffer <> '' then
-    PSpongeState(@Context)^.Absorb(pointer(Buffer), Length(Buffer) shl 3);
+    PSHA3Context(@Context)^.Absorb(pointer(Buffer), Length(Buffer) shl 3);
 end;
 
 procedure TSHA3.Update(Buffer: pointer; Len: integer);
 begin
   if Len > 0 then
-    PSpongeState(@Context)^.Absorb(Buffer, Len shl 3);
+    PSHA3Context(@Context)^.Absorb(Buffer, Len shl 3);
 end;
 
 procedure TSHA3.Final(out Digest: THash256; NoInit: boolean);
@@ -7287,8 +7265,8 @@ const
 procedure TSHA3.Final(Digest: pointer; DigestBits: integer; NoInit: boolean);
 begin
   if DigestBits = 0 then
-    DigestBits := SHA3_DEF_LEN[PSpongeState(@Context)^.Algo];
-  PSpongeState(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
+    DigestBits := SHA3_DEF_LEN[PSHA3Context(@Context)^.Algo];
+  PSHA3Context(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
   if not NoInit then
     FillCharFast(Context, sizeof(Context), 0);
 end;
@@ -11465,7 +11443,7 @@ initialization
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
-  assert(sizeof(TSpongeState)=SHA3SpongeSize);
+  assert(sizeof(TSHA3Context)=SHA3ContextSize);
   assert(1 shl AESBlockShift=sizeof(TAESBlock));
   assert(sizeof(TAESFullHeader)=sizeof(TAESBlock));
   assert(sizeof(TAESIVCTR)=sizeof(TAESBlock));
