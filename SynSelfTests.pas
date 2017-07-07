@@ -483,6 +483,8 @@ type
     procedure _SHA1;
     /// SHA-256 hashing functions
     procedure _SHA256;
+    /// SHA-3 / Keccak hashing functions
+    procedure _SHA3;
     /// AES encryption/decryption functions
     procedure _AES256;
     /// RC4 encryption function
@@ -9297,6 +9299,42 @@ begin
   {$endif}
 end;
 
+procedure TTestCryptographicRoutines._SHA3;
+var
+  instance: TSHA3;
+  data: RawByteString;
+begin
+  // validate against official NIST vectors
+  // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
+  Check(instance.FullStr(SHA3_224, nil, 0) =
+    '6B4E03423667DBB73B6E15454F0EB1ABD4597F9A1B078E3F5B5A6BC7');
+  Check(instance.FullStr(SHA3_256, nil, 0) =
+    'A7FFC6F8BF1ED76651C14756A061D662F580FF4DE43B49FA82D80A4B80F8434A');
+  Check(instance.FullStr(SHA3_384, nil, 0) =
+    '0C63A75B845E4F7D01107D852E4C2485C51A50AAAA94FC61995E71BBEE983A2AC3713831264ADB47FB6BD1E058D5F004');
+  Check(instance.FullStr(SHA3_512, nil, 0) =
+    'A69F73CCA23A9AC5C8B567DC185A756E97C982164FE25859E0D1DCC1475C80A615B2123AF1F5F94C11E3E9402C3AC558F500199D95B6D3E301758586281DCD26');
+  Check(instance.FullStr(SHAKE_128, nil, 0) =
+    '7F9C2BA4E88F827D616045507605853ED73B8093F6EFBC88EB1A6EACFA66EF26');
+  Check(instance.FullStr(SHAKE_256, nil, 0) =
+    '46B9DD2B0BA88D13233B3FEB743EEB243FCD52EA62B81B82B50C27646ED5762FD75DC4DDD8C0F200CB05019D67B592F6FC821C49479AB48640292EACB3B7C4BE');
+  SetLength(data, 200);
+  FillCharFast(pointer(data)^, 200, $A3);
+  Check(instance.FullStr(SHA3_224, pointer(data), length(data)) =
+    '9376816ABA503F72F96CE7EB65AC095DEEE3BE4BF9BBC2A1CB7E11E0');
+  Check(instance.FullStr(SHA3_256, pointer(data), length(data)) =
+    '79F38ADEC5C20307A98EF76E8324AFBFD46CFD81B22E3973C65FA1BD9DE31787');
+  Check(instance.FullStr(SHA3_384, pointer(data), length(data)) =
+    '1881DE2CA7E41EF95DC4732B8F5F002B189CC1E42B74168ED1732649CE1DBCDD76197A31FD55EE989F2D7050DD473E8F');
+  Check(instance.FullStr(SHA3_512, pointer(data), length(data)) =
+    'E76DFAD22084A8B1467FCF2FFA58361BEC7628EDF5F3FDC0E4805DC48CAEECA81B7C13C30ADF52A3659584739A2DF46BE589C51CA1A4A8416DF6545A1CE8BA00');
+  // taken from https://en.wikipedia.org/wiki/SHA-3
+  Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dog') =
+    'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
+  Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dof') =
+    '853F4538BE0DB9621A6CEA659A06C1107B1F83F02B13D18297BD39D7411CF10C');
+end;
+
 procedure TTestCryptographicRoutines._TAESPNRG;
 var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
@@ -16303,6 +16341,7 @@ begin
     proxy.Free;
   end;
 end;
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);

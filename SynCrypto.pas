@@ -32,11 +32,12 @@ unit SynCrypto;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
+  - Eric Grange for SHA-3 MMX/x64 asm optimization
   - EvaF
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Johan Bontes
   - souchaud
-  - Wolfgang Ehrhardt under zlib license for AES "pure pascal" versions
+  - Wolfgang Ehrhardt under zlib license for SHA-3 and AES "pure pascal" code
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -301,8 +302,10 @@ var
 const
   /// hide all AES Context complex code
   AESContextSize = 276 {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
-  /// hide all SHA Context complex code
+  /// hide all SHA-1/SHA-2 Context complex code
   SHAContextSize = 108;
+  /// hide all SHA-3 Context complex code
+  SHA3SpongeSize = 416;
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod
   AESBlockShift = 4;
@@ -1135,6 +1138,58 @@ type
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
   end;
 
+  /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
+  TSHA3Algo = (SHA3_224, SHA3_256, SHA3_384, SHA3_512, SHAKE_128, SHAKE_256);
+
+  PSHA3 = ^TSHA3;
+  /// handle SHA-3 (Keccak) hashing
+  // - Keccak was the winner of the NIST hashing competition for a new hashing
+  // algorithm to provide an alternative to SHA-256. In became SHA-3 and was
+  // named by NIST a FIPS 180-4, then FIPS 202 hashing standard in 2015
+  // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
+  // since it already includes proper padding 
+  // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code
+  TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    Context: packed array[1..SHA3SpongeSize] of byte;
+  public
+    /// initialize SHA-3 context for hashing
+    // - in practice, you may use SHA3_256 or SHA3_512 to return THash256
+    // or THash512 digests
+    procedure Init(Algo: TSHA3Algo);
+    /// update the SHA-3 context with some data
+    procedure Update(Buffer: pointer; Len: integer); overload;
+    /// update the SHA-3 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
+    /// finalize and compute the resulting SHA-3 hash 256-bit Digest
+    procedure Final(out Digest: THash256; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-3 hash 512-bit Digest
+    procedure Final(out Digest: THash512; NoInit: boolean=false); overload;
+    /// finalize and compute the resulting SHA-3 hash Digest
+    // - Digest destination buffer must contain enough bytes
+    // - default DigestBits=0 will write the default number of bits to Digest
+    // output memory buffer, according to the current TSHA3Algo
+    procedure Final(Digest: pointer; DigestBits: integer=0; NoInit: boolean=false); overload;
+    /// compute a SHA-3 hash 256-bit Digest from a buffer, in one call
+    // - call Init, then Update(), then Final() using SHA3_256 into a THash256
+    procedure Full(Buffer: pointer; Len: integer; out Digest: THash256); overload;
+    /// compute a SHA-3 hash 512-bit Digest from a buffer, in one call
+    // - call Init, then Update(), then Final() using SHA3_512 into a THash512
+    procedure Full(Buffer: pointer; Len: integer; out Digest: THash512); overload;
+    /// compute a SHA-3 hash Digest from a buffer, in one call
+    // - call Init, then Update(), then Final() using the supplied algorithm
+    // - default DigestBits=0 will write the default number of bits to Digest
+    // output memory buffer, according to the specified TSHA3Algo
+    procedure Full(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
+      Digest: pointer; DigestBits: integer=0); overload;
+    /// compute a SHA-3 hash hexadecimal Digest from a buffer, in one call
+    // - call Init, then Update(), then Final() using the supplied algorithm
+    // - default DigestBits=0 will write the default number of bits to Digest
+    // output memory buffer, according to the specified TSHA3Algo
+    function FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
+      DigestBits: integer=0): RawUTF8;
+  end;
+
   /// 64 bytes buffer, used internally during HMAC process
   TByte64 = array[0..15] of cardinal;
 
@@ -1407,6 +1462,22 @@ procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
 // to be used for both Encryption and MAC
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   var result: THash256DynArray; const saltdefault: RawByteString=''); overload;
+
+/// direct SHA-3 hash calculation of some data (string-encoded)
+// - result is returned in hexadecimal format
+// - default DigestBits=0 will write the default number of bits to Digest
+// output memory buffer, according to the specified TSHA3Algo
+function SHA3(Algo: TSHA3Algo; const s: RawByteString;
+  DigestBits: integer=0): RawUTF8; overload;
+
+/// direct SHA-3 hash calculation of some binary buffer 
+// - result is returned in hexadecimal format
+// - default DigestBits=0 will write the default number of bits to Digest
+// output memory buffer, according to the specified TSHA3Algo
+function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
+  DigestBits: integer=0): RawUTF8; overload;
+
+
 
 /// compute the HMAC message authentication code using crc256c as hash function
 // - HMAC over a non cryptographic hash function like crc256c is known to be
@@ -2086,6 +2157,7 @@ function ToCaption(res: TJWTResult): string; overload;
 
 function ToText(chk: TAESIVReplayAttackCheck): PShortString; overload;
 function ToText(res: TProtocolResult): PShortString; overload;
+function ToText(algo: TSHA3Algo): PShortString; overload;
 
 
 implementation
@@ -2098,6 +2170,11 @@ end;
 function ToText(chk: TAESIVReplayAttackCheck): PShortString;
 begin
   result := GetEnumName(TypeInfo(TAESIVReplayAttackCheck),ord(chk));
+end;
+
+function ToText(algo: TSHA3Algo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSHA3Algo),ord(algo));
 end;
 
 
@@ -2965,6 +3042,7 @@ end;
 
 {$ifdef DELPHI5OROLDER}
   {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
+  {$define SHA3_PASCAL}
 {$else}
   {$ifdef CPUINTEL} // AES-NI supported for x86 and x64 under Windows
     {$ifdef CPU64}
@@ -2981,6 +3059,7 @@ end;
     {$endif}
   {$else}
     {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
+    {$define SHA3_PASCAL}
   {$endif CPUINTEL}
 {$endif}
 
@@ -6153,6 +6232,1111 @@ begin
     SHA.Full(p,L,Digest);
 end;
 
+{ TSHA3 }
+
+{ SHA-3 / Keccak original code (c) Wolfgang Ehrhardt under zlib license:
+ Permission is granted to anyone to use this software for any purpose,
+ including commercial applications, and to alter it and redistribute it
+ freely, subject to the following restrictions:
+ 1. The origin of this software must not be misrepresented; you must not
+    claim that you wrote the original software. If you use this software in
+    a product, an acknowledgment in the product documentation would be
+    appreciated but is not required.
+ 2. Altered source versions must be plainly marked as such, and must not be
+    misrepresented as being the original software.
+ 3. This notice may not be removed or altered from any source distribution. }
+
+{ MMX and x64 assembler versions based on optimized SHA-3 kernel by Eric Grange
+  https://www.delphitools.info/2016/04/19/new-sha-3-permutation-kernel }
+
+const
+  cKeccakPermutationSize = 1600;
+  cKeccakMaximumRate = 1536;
+  cKeccakPermutationSizeInBytes = cKeccakPermutationSize div 8;
+  cKeccakMaximumRateInBytes = cKeccakMaximumRate div 8;
+  cKeccakNumberOfRounds = 24;
+  cRoundConstants: array[0..cKeccakNumberOfRounds-1] of QWord = (
+    QWord($0000000000000001), QWord($0000000000008082), QWord($800000000000808A),
+    QWord($8000000080008000), QWord($000000000000808B), QWord($0000000080000001),
+    QWord($8000000080008081), QWord($8000000000008009), QWord($000000000000008A),
+    QWord($0000000000000088), QWord($0000000080008009), QWord($000000008000000A),
+    QWord($000000008000808B), QWord($800000000000008B), QWord($8000000000008089),
+    QWord($8000000000008003), QWord($8000000000008002), QWord($8000000000000080),
+    QWord($000000000000800A), QWord($800000008000000A), QWord($8000000080008081),
+    QWord($8000000000008080), QWord($0000000080000001), QWord($8000000080008008));
+
+type
+  TSpongeState = object
+    StateB: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
+    DataQueue: packed array[0..cKeccakMaximumRateInBytes-1] of byte;
+    Algo: TSHA3Algo;
+    Rate: integer;
+    Capacity: integer;
+    BitsInQueue: integer;
+    BitsAvailableForSqueezing: integer;
+    Squeezing: integer;
+    procedure Init(aAlgo: TSHA3Algo);
+    procedure InitSponge(aRate, aCapacity: integer);
+    procedure ExtractFromState(outp: Pointer; laneCount: integer);
+    procedure KeccakAbsorb(data: PQWord; laneCount: integer);
+    procedure AbsorbQueue;
+    procedure Absorb(data: PByteArray; databitlen: integer);
+    procedure AbsorbFinal(data: PByteArray; databitlen: integer);
+    procedure PadAndSwitchToSqueezingPhase;
+    procedure Squeeze(output: PByteArray; outputLength: integer);
+    procedure FinalBit_LSB(bits: byte; bitlen: integer;
+      hashval: Pointer; numbits: integer);
+  end;
+  PSpongeState = ^TSpongeState;
+
+{$ifdef SHA3_PASCAL}
+
+{$ifdef FPC} // RotL/RolQword is an intrinsic function under FPC :)
+
+function RotL(const x: QWord; c: integer): QWord; inline;
+begin
+  result := RolQword(x, c);
+end;
+
+function RotL1(const x: QWord): QWord; inline;
+begin
+  result := RolQword(x);
+end;
+
+{$else}
+
+function RotL(const x: QWord; c: integer): QWord; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (x shl c) or (x shr (64 - c));
+end;
+
+function RotL1(var x: QWord): QWord; {$ifdef HASINLINE}inline;{$endif}
+begin
+  result := (x shl 1) or (x shr (64 - 1));
+end;
+
+{$endif FPC}
+
+procedure KeccakPermutation(A: PQWordArray);
+var
+  B: array[0..24] of QWord;
+  C0, C1, C2, C3, C4, D0, D1, D2, D3, D4: QWord;
+  i: integer;
+begin
+  for i := 0 to 23 do begin
+    C0 := A[00] xor A[05] xor A[10] xor A[15] xor A[20];
+    C1 := A[01] xor A[06] xor A[11] xor A[16] xor A[21];
+    C2 := A[02] xor A[07] xor A[12] xor A[17] xor A[22];
+    C3 := A[03] xor A[08] xor A[13] xor A[18] xor A[23];
+    C4 := A[04] xor A[09] xor A[14] xor A[19] xor A[24];
+    D0 := RotL1(C0) xor C3;
+    D1 := RotL1(C1) xor C4;
+    D2 := RotL1(C2) xor C0;
+    D3 := RotL1(C3) xor C1;
+    D4 := RotL1(C4) xor C2;
+    B[00] := A[00] xor D1;
+    B[01] := RotL(A[06] xor D2, 44);
+    B[02] := RotL(A[12] xor D3, 43);
+    B[03] := RotL(A[18] xor D4, 21);
+    B[04] := RotL(A[24] xor D0, 14);
+    B[05] := RotL(A[03] xor D4, 28);
+    B[06] := RotL(A[09] xor D0, 20);
+    B[07] := RotL(A[10] xor D1, 3);
+    B[08] := RotL(A[16] xor D2, 45);
+    B[09] := RotL(A[22] xor D3, 61);
+    B[10] := RotL(A[01] xor D2, 1);
+    B[11] := RotL(A[07] xor D3, 6);
+    B[12] := RotL(A[13] xor D4, 25);
+    B[13] := RotL(A[19] xor D0, 8);
+    B[14] := RotL(A[20] xor D1, 18);
+    B[15] := RotL(A[04] xor D0, 27);
+    B[16] := RotL(A[05] xor D1, 36);
+    B[17] := RotL(A[11] xor D2, 10);
+    B[18] := RotL(A[17] xor D3, 15);
+    B[19] := RotL(A[23] xor D4, 56);
+    B[20] := RotL(A[02] xor D3, 62);
+    B[21] := RotL(A[08] xor D4, 55);
+    B[22] := RotL(A[14] xor D0, 39);
+    B[23] := RotL(A[15] xor D1, 41);
+    B[24] := RotL(A[21] xor D2, 2);
+    A[00] := B[00] xor ((not B[01]) and B[02]);
+    A[01] := B[01] xor ((not B[02]) and B[03]);
+    A[02] := B[02] xor ((not B[03]) and B[04]);
+    A[03] := B[03] xor ((not B[04]) and B[00]);
+    A[04] := B[04] xor ((not B[00]) and B[01]);
+    A[05] := B[05] xor ((not B[06]) and B[07]);
+    A[06] := B[06] xor ((not B[07]) and B[08]);
+    A[07] := B[07] xor ((not B[08]) and B[09]);
+    A[08] := B[08] xor ((not B[09]) and B[05]);
+    A[09] := B[09] xor ((not B[05]) and B[06]);
+    A[10] := B[10] xor ((not B[11]) and B[12]);
+    A[11] := B[11] xor ((not B[12]) and B[13]);
+    A[12] := B[12] xor ((not B[13]) and B[14]);
+    A[13] := B[13] xor ((not B[14]) and B[10]);
+    A[14] := B[14] xor ((not B[10]) and B[11]);
+    A[15] := B[15] xor ((not B[16]) and B[17]);
+    A[16] := B[16] xor ((not B[17]) and B[18]);
+    A[17] := B[17] xor ((not B[18]) and B[19]);
+    A[18] := B[18] xor ((not B[19]) and B[15]);
+    A[19] := B[19] xor ((not B[15]) and B[16]);
+    A[20] := B[20] xor ((not B[21]) and B[22]);
+    A[21] := B[21] xor ((not B[22]) and B[23]);
+    A[22] := B[22] xor ((not B[23]) and B[24]);
+    A[23] := B[23] xor ((not B[24]) and B[20]);
+    A[24] := B[24] xor ((not B[20]) and B[21]);
+    A[00] := A[00] xor cRoundConstants[i];
+  end;
+end;
+
+{$else SHA3_PASCAL}
+
+procedure KeccakPermutationKernel(B, A, C: Pointer);
+{$ifdef CPU32} // Eric Grange's MMX version
+asm
+        add     edx, 128
+        add     eax, 128
+        movq    mm1, [edx - 120]
+        movq    mm4, [edx - 96]
+        movq    mm3, [edx - 104]
+        pxor    mm1, [edx - 80]
+        movq    mm5, [edx + 16]
+        pxor    mm1, [edx]
+        movq    mm2, [edx - 112]
+        pxor    mm1, [edx + 40]
+        pxor    mm1, [edx - 40]
+        movq    mm0, [edx - 128]
+        movq    mm6, mm1
+        pxor    mm4, [edx - 56]
+        movq    [ecx + 8], mm1
+        psrlq   mm6, 63
+        pxor    mm4, [edx + 24]
+        pxor    mm4, [edx + 64]
+        pxor    mm4, [edx - 16]
+        psllq   mm1, 1
+        pxor    mm2, [edx + 48]
+        por     mm1, mm6
+        movq    mm6, [edx - 88]
+        pxor    mm1, mm4
+        pxor    mm2, [edx - 32]
+        pxor    mm2, [edx - 72]
+        pxor    mm6, mm1
+        movq    mm7, mm6
+        psrlq   mm7, 28
+        psllq   mm6, 36
+        por     mm6, mm7
+        pxor    mm2, [edx + 8]
+        movq    [eax], mm6
+        movq    mm6, [edx + 32]
+        movq    mm7, mm4
+        psrlq   mm7, 63
+        psllq   mm4, 1
+        pxor    mm0, mm6
+        por     mm4, mm7
+        pxor    mm4, mm2
+        pxor    mm5, mm4
+        movq    mm7, mm5
+        pxor    mm0, [edx - 8]
+        psllq   mm5, 21
+        psrlq   mm7, 43
+        pxor    mm6, mm1
+        por     mm5, mm7
+        movq    [eax - 104], mm5
+        movq    mm5, [edx - 48]
+        pxor    mm0, mm5
+        movq    mm7, mm6
+        psrlq   mm7, 46
+        psllq   mm6, 18
+        por     mm6, mm7
+        movq    [eax - 16], mm6
+        movq    mm6, [edx + 56]
+        pxor    mm5, mm1
+        movq    mm7, mm5
+        pxor    mm3, mm6
+        psllq   mm5, 3
+        psrlq   mm7, 61
+        pxor    mm3, [edx + 16]
+        pxor    mm3, [edx - 24]
+        por     mm5, mm7
+        pxor    mm6, mm4
+        pxor    mm0, [edx - 88]
+        movq    mm7, mm6
+        psrlq   mm7, 8
+        movq    [eax - 72], mm5
+        movq    mm5, mm2
+        psllq   mm2, 1
+        psllq   mm6, 56
+        psrlq   mm5, 63
+        por     mm6, mm7
+        por     mm2, mm5
+        pxor    mm2, mm0
+        movq    [eax + 24], mm6
+        movq    mm5, [edx - 120]
+        movq    mm6, mm0
+        psllq   mm0, 1
+        pxor    mm5, mm2
+        pxor    mm3, [edx - 64]
+        psrlq   mm6, 63
+        por     mm0, mm6
+        movq    mm6, [edx - 64]
+        movq    mm7, mm5
+        psllq   mm5, 1
+        psrlq   mm7, 63
+        pxor    mm6, mm4
+        por     mm5, mm7
+        pxor    mm0, mm3
+        movq    mm7, mm6
+        movq    [eax - 48], mm5
+        movq    mm5, [edx]
+        psllq   mm6, 55
+        psrlq   mm7, 9
+        por     mm6, mm7
+        movq    [eax + 40], mm6
+        movq    mm6, [edx - 40]
+        pxor    mm5, mm2
+        movq    mm7, mm5
+        psllq   mm5, 45
+        psrlq   mm7, 19
+        pxor    mm6, mm2
+        por     mm5, mm7
+        movq    [eax - 64], mm5
+        movq    mm5, [edx + 40]
+        movq    mm7, mm6
+        pxor    mm5, mm2
+        psllq   mm6, 10
+        psrlq   mm7, 54
+        por     mm6, mm7
+        movq    [eax + 8], mm6
+        movq    mm6, [edx - 96]
+        movq    mm7, mm3
+        psrlq   mm7, 63
+        psllq   mm3, 1
+        por     mm3, mm7
+        movq    mm7, mm5
+        psllq   mm5, 2
+        psrlq   mm7, 62
+        por     mm5, mm7
+        movq    [eax + 64], mm5
+        movq    mm5, [edx + 24]
+        pxor    mm6, mm0
+        movq    mm7, mm6
+        psrlq   mm7, 37
+        psllq   mm6, 27
+        por     mm6, mm7
+        movq    [eax - 8], mm6
+        pxor    mm5, mm0
+        movq    mm6, [edx - 16]
+        movq    mm7, mm5
+        psllq   mm5, 8
+        pxor    mm3, [ecx + 8]
+        psrlq   mm7, 56
+        pxor    mm6, mm0
+        por     mm5, mm7
+        movq    [eax - 24], mm5
+        movq    mm7, mm6
+        psllq   mm6, 39
+        movq    mm5, [edx - 112]
+        psrlq   mm7, 25
+        por     mm6, mm7
+        movq    [eax + 48], mm6
+        movq    mm6, [edx - 24]
+        pxor    mm5, mm3
+        movq    mm7, mm5
+        psrlq   mm7, 2
+        psllq   mm5, 62
+        por     mm5, mm7
+        movq    [eax + 32], mm5
+        movq    mm5, [edx - 104]
+        pxor    mm6, mm4
+        movq    mm7, mm6
+        psrlq   mm7, 39
+        psllq   mm6, 25
+        por     mm6, mm7
+        pxor    mm5, mm4
+        movq    [eax - 32], mm6
+        movq    mm6, [edx - 128]
+        pxor    mm6, mm1
+        movq    mm4, mm6
+        movq    [eax - 128], mm6
+        movq    mm4, mm6
+        movq    mm6, [edx - 8]
+        movq    mm7, mm5
+        psrlq   mm7, 36
+        psllq   mm5, 28
+        pxor    mm6, mm1
+        por     mm5, mm7
+        movq    mm7, mm6
+        psrlq   mm7, 23
+        movq    mm1, mm5
+        movq    [eax - 88], mm5
+        movq    mm5, [edx - 56]
+        pxor    mm5, mm0
+        psllq   mm6, 41
+        por     mm6, mm7
+        movq    [eax + 56], mm6
+        movq    mm6, [edx + 48]
+        pxor    mm6, mm3
+        movq    mm7, mm5
+        psrlq   mm7, 44
+        psllq   mm5, 20
+        por     mm5, mm7
+        movq    [eax - 80], mm5
+        pandn   mm1, mm5
+        movq    mm5, [edx - 32]
+        movq    mm7, mm6
+        psrlq   mm7, 3
+        psllq   mm6, 61
+        por     mm6, mm7
+        pxor    mm1, mm6
+        movq    [eax - 56], mm6
+        movq    mm6, [edx + 8]
+        movq    [edx - 56], mm1
+        movq    mm1, [eax - 112]
+        pxor    mm5, mm3
+        movq    mm7, mm5
+        psllq   mm5, 43
+        psrlq   mm7, 21
+        pxor    mm6, mm3
+        por     mm5, mm7
+        movq    mm1, mm5
+        movq    mm5, [edx - 80]
+        pxor    mm5, mm2
+        movq    mm2, [eax - 104]
+        movq    mm7, mm6
+        psrlq   mm7, 49
+        psllq   mm6, 15
+        por     mm6, mm7
+        movq    [eax + 16], mm6
+        movq    mm6, [edx + 64]
+        movq    [eax - 96], mm6
+        movq    mm7, mm5
+        psrlq   mm7, 20
+        psllq   mm5, 44
+        pxor    mm6, mm0
+        por     mm5, mm7
+        movq    mm7, mm6
+        psrlq   mm7, 50
+        psllq   mm6, 14
+        por     mm6, mm7
+        pandn   mm2, mm6
+        movq    mm0, mm5
+        pandn   mm0, mm1
+        pxor    mm2, mm1
+        pandn   mm1, [eax - 104]
+        movq    [edx - 112], mm2
+        pandn   mm4, mm5
+        pxor    mm1, mm5
+        movq    [eax - 120], mm5
+        movq    mm2, [eax - 40]
+        movq    [edx - 120], mm1
+        movq    mm5, [edx - 72]
+        movq    mm1, [eax - 64]
+        pxor    mm4, mm6
+        movq    [edx - 96], mm4
+        pxor    mm5, mm3
+        movq    mm4, [eax - 88]
+        movq    mm7, mm5
+        movq    mm3, mm6
+        pxor    mm0, [eax - 128]
+        movq    [edx - 128], mm0
+        movq    mm6, [eax - 72]
+        psllq   mm5, 6
+        psrlq   mm7, 58
+        movq    mm0, [eax - 56]
+        por     mm5, mm7
+        movq    mm2, mm5
+        movq    mm5, [eax - 80]
+        movq    mm7, mm1
+        pandn   mm7, mm0
+        pxor    mm7, mm6
+        movq    [edx - 72], mm7
+        movq    mm7, [eax - 72]
+        pandn   mm6, mm1
+        pxor    mm6, mm5
+        pandn   mm0, mm4
+        pandn   mm5, mm7
+        movq    mm7, [eax]
+        pxor    mm5, mm4
+        movq    mm4, [eax - 24]
+        movq    [edx - 80], mm6
+        movq    mm6, [eax - 48]
+        movq    [edx - 88], mm5
+        movq    mm5, mm1
+        movq    mm1, [eax - 16]
+        pxor    mm0, mm5
+        movq    mm5, mm1
+        pandn   mm3, [eax - 128]
+        pxor    mm3, [eax - 104]
+        movq    [edx - 64], mm0
+        movq    mm0, [eax + 8]
+        movq    [edx - 104], mm3
+        movq    mm3, [eax - 32]
+        pandn   mm6, mm2
+        pxor    mm6, mm5
+        movq    [edx - 16], mm6
+        movq    mm6, [eax + 56]
+        pandn   mm3, mm4
+        pxor    mm3, mm2
+        movq    [edx - 40], mm3
+        movq    mm3, [eax - 32]
+        pandn   mm5, [eax - 48]
+        pxor    mm5, mm4
+        movq    [edx - 24], mm5
+        pandn   mm7, mm0
+        movq    mm5, [eax + 16]
+        pandn   mm4, mm1
+        pxor    mm4, mm3
+        movq    [edx - 32], mm4
+        movq    mm4, [eax + 40]
+        movq    mm1, mm5
+        movq    mm5, [eax + 48]
+        pandn   mm5, mm6
+        pxor    mm5, mm4
+        pandn   mm2, mm3
+        movq    mm3, [eax - 8]
+        movq    [edx + 40], mm5
+        movq    mm5, [eax + 24]
+        pxor    mm7, mm3
+        movq    [edx - 8], mm7
+        movq    mm7, [eax + 64]
+        pxor    mm2, [eax - 48]
+        movq    [edx - 48], mm2
+        movq    mm2, mm5
+        pandn   mm2, mm3
+        pxor    mm2, mm1
+        movq    [edx + 16], mm2
+        pandn   mm3, [eax]
+        movq    mm2, mm5
+        movq    mm5, [eax + 48]
+        pandn   mm6, mm7
+        pxor    mm6, mm5
+        movq    [edx + 48], mm6
+        pandn   mm1, mm2
+        movq    mm6, [eax + 32]
+        pxor    mm1, mm0
+        pxor    mm3, mm2
+        movq    [edx + 24], mm3
+        pandn   mm0, [eax + 16]
+        pxor    mm0, [eax]
+        movq    mm3, mm4
+        movq    [edx + 8], mm1
+        movq    [edx], mm0
+        movq    mm0, mm6
+        movq    mm1, [eax + 56]
+        pandn   mm4, mm5
+        pxor    mm4, mm0
+        pandn   mm0, mm3
+        pxor    mm0, mm7
+        movq    [edx + 32], mm4
+        pandn   mm7, mm6
+        pxor    mm7, mm1
+        movq    [edx + 56], mm7
+        movq    [edx + 64], mm0
+{$else}
+{$ifdef FPC}nostackframe; assembler;
+asm
+{$else}
+asm // input: rcx=TAESContext, rdx=source, r8=dest
+        .noframe
+{$endif}{$ifndef win64}
+        mov     r8, rdx
+        mov     rdx, rsi
+        mov     rcx, rdi
+        {$endif win64}
+        // Eric Grange's x64 version
+        push    r12
+        push    r13
+        push    r14
+        add     rdx, 128
+        add     rcx, 128
+        // theta
+        mov     rax, [rdx - 128]
+        xor     rax, [rdx - 88]
+        xor     rax, [rdx - 48]
+        xor     rax, [rdx - 8]
+        xor     rax, [rdx + 32]
+        mov     [r8], rax
+        mov     rax, [rdx - 120]
+        xor     rax, [rdx - 80]
+        xor     rax, [rdx - 40]
+        xor     rax, [rdx]
+        xor     rax, [rdx + 40]
+        mov     [r8 + 8], rax
+        mov     rax, [rdx - 112]
+        xor     rax, [rdx - 72]
+        xor     rax, [rdx - 32]
+        xor     rax, [rdx + 8]
+        xor     rax, [rdx + 48]
+        mov     [r8 + 16], rax
+        mov     rax, [rdx - 104]
+        xor     rax, [rdx - 64]
+        xor     rax, [rdx - 24]
+        xor     rax, [rdx + 16]
+        xor     rax, [rdx + 56]
+        mov     [r8 + 24], rax
+        mov     rax, [rdx - 96]
+        xor     rax, [rdx - 56]
+        xor     rax, [rdx - 16]
+        xor     rax, [rdx + 24]
+        xor     rax, [rdx + 64]
+        mov     [r8 + 32], rax
+        mov     r10, [r8]
+        rol     r10, 1
+        xor     r10, [r8 + 24]
+        mov     r11, [r8 + 8]
+        rol     r11, 1
+        xor     r11, [r8 + 32]
+        mov     r12, [r8 + 16]
+        rol     r12, 1
+        xor     r12, [r8]
+        mov     r13, [r8 + 24]
+        rol     r13, 1
+        xor     r13, [r8 + 8]
+        mov     r14, [r8 + 32]
+        rol     r14, 1
+        xor     r14, [r8 + 16]
+        // rho pi
+        mov     rax, [rdx - 128]
+        xor     rax, r11
+        mov     [rcx - 128], rax
+        mov     rax, [rdx - 80]
+        xor     rax, r12
+        rol     rax, 44
+        mov     [rcx - 120], rax
+        mov     rax, [rdx - 32]
+        xor     rax, r13
+        rol     rax, 43
+        mov     [rcx - 112], rax
+        mov     rax, [rdx + 16]
+        xor     rax, r14
+        rol     rax, 21
+        mov     [rcx - 104], rax
+        mov     rax, [rdx + 64]
+        xor     rax, r10
+        rol     rax, 14
+        mov     [rcx - 96], rax
+        mov     rax, [rdx - 104]
+        xor     rax, r14
+        rol     rax, 28
+        mov     [rcx - 88], rax
+        mov     rax, [rdx - 56]
+        xor     rax, r10
+        rol     rax, 20
+        mov     [rcx - 80], rax
+        mov     rax, [rdx - 48]
+        xor     rax, r11
+        rol     rax, 3
+        mov     [rcx - 72], rax
+        mov     rax, [rdx]
+        xor     rax, r12
+        rol     rax, 45
+        mov     [rcx - 64], rax
+        mov     rax, [rdx + 48]
+        xor     rax, r13
+        rol     rax, 61
+        mov     [rcx - 56], rax
+        mov     rax, [rdx - 120]
+        xor     rax, r12
+        rol     rax, 1
+        mov     [rcx - 48], rax
+        mov     rax, [rdx - 72]
+        xor     rax, r13
+        rol     rax, 6
+        mov     [rcx - 40], rax
+        mov     rax, [rdx - 24]
+        xor     rax, r14
+        rol     rax, 25
+        mov     [rcx - 32], rax
+        mov     rax, [rdx + 24]
+        xor     rax, r10
+        rol     rax, 8
+        mov     [rcx - 24], rax
+        mov     rax, [rdx + 32]
+        xor     rax, r11
+        rol     rax, 18
+        mov     [rcx - 16], rax
+        mov     rax, [rdx - 96]
+        xor     rax, r10
+        rol     rax, 27
+        mov     [rcx - 8], rax
+        mov     rax, [rdx - 88]
+        xor     rax, r11
+        rol     rax, 36
+        mov     [rcx], rax
+        mov     rax, [rdx - 40]
+        xor     rax, r12
+        rol     rax, 10
+        mov     [rcx + 8], rax
+        mov     rax, [rdx + 8]
+        xor     rax, r13
+        rol     rax, 15
+        mov     [rcx + 16], rax
+        mov     rax, [rdx + 56]
+        xor     rax, r14
+        rol     rax, 56
+        mov     [rcx + 24], rax
+        mov     rax, [rdx - 112]
+        xor     rax, r13
+        rol     rax, 62
+        mov     [rcx + 32], rax
+        mov     rax, [rdx - 64]
+        xor     rax, r14
+        rol     rax, 55
+        mov     [rcx + 40], rax
+        mov     rax, [rdx - 16]
+        xor     rax, r10
+        rol     rax, 39
+        mov     [rcx + 48], rax
+        mov     rax, [rdx - 8]
+        xor     rax, r11
+        rol     rax, 41
+        mov     [rcx + 56], rax
+        mov     rax, [rdx + 40]
+        xor     rax, r12
+        rol     rax, 2
+        mov     [rcx + 64], rax
+        // chi
+        mov     rax, [rcx - 120]
+        not     rax
+        and     rax, [rcx - 112]
+        xor     rax, [rcx - 128]
+        mov     [rdx - 128], rax
+        mov     rax, [rcx - 112]
+        not     rax
+        and     rax, [rcx - 104]
+        xor     rax, [rcx - 120]
+        mov     [rdx - 120], rax
+        mov     rax, [rcx - 104]
+        not     rax
+        and     rax, [rcx - 96]
+        xor     rax, [rcx - 112]
+        mov     [rdx - 112], rax
+        mov     rax, [rcx - 96]
+        not     rax
+        and     rax, [rcx - 128]
+        xor     rax, [rcx - 104]
+        mov     [rdx - 104], rax
+        mov     rax, [rcx - 128]
+        not     rax
+        and     rax, [rcx - 120]
+        xor     rax, [rcx - 96]
+        mov     [rdx - 96], rax
+        mov     rax, [rcx - 80]
+        not     rax
+        and     rax, [rcx - 72]
+        xor     rax, [rcx - 88]
+        mov     [rdx - 88], rax
+        mov     rax, [rcx - 72]
+        not     rax
+        and     rax, [rcx - 64]
+        xor     rax, [rcx - 80]
+        mov     [rdx - 80], rax
+        mov     rax, [rcx - 64]
+        not     rax
+        and     rax, [rcx - 56]
+        xor     rax, [rcx - 72]
+        mov     [rdx - 72], rax
+        mov     rax, [rcx - 56]
+        not     rax
+        and     rax, [rcx - 88]
+        xor     rax, [rcx - 64]
+        mov     [rdx - 64], rax
+        mov     rax, [rcx - 88]
+        not     rax
+        and     rax, [rcx - 80]
+        xor     rax, [rcx - 56]
+        mov     [rdx - 56], rax
+        mov     rax, [rcx - 40]
+        not     rax
+        and     rax, [rcx - 32]
+        xor     rax, [rcx - 48]
+        mov     [rdx - 48], rax
+        mov     rax, [rcx - 32]
+        not     rax
+        and     rax, [rcx - 24]
+        xor     rax, [rcx - 40]
+        mov     [rdx - 40], rax
+        mov     rax, [rcx - 24]
+        not     rax
+        and     rax, [rcx - 16]
+        xor     rax, [rcx - 32]
+        mov     [rdx - 32], rax
+        mov     rax, [rcx - 16]
+        not     rax
+        and     rax, [rcx - 48]
+        xor     rax, [rcx - 24]
+        mov     [rdx - 24], rax
+        mov     rax, [rcx - 48]
+        not     rax
+        and     rax, [rcx - 40]
+        xor     rax, [rcx - 16]
+        mov     [rdx - 16], rax
+        mov     rax, [rcx]
+        not     rax
+        and     rax, [rcx + 8]
+        xor     rax, [rcx - 8]
+        mov     [rdx - 8], rax
+        mov     rax, [rcx + 8]
+        not     rax
+        and     rax, [rcx + 16]
+        xor     rax, [rcx]
+        mov     [rdx], rax
+        mov     rax, [rcx + 16]
+        not     rax
+        and     rax, [rcx + 24]
+        xor     rax, [rcx + 8]
+        mov     [rdx + 8], rax
+        mov     rax, [rcx + 24]
+        not     rax
+        and     rax, [rcx - 8]
+        xor     rax, [rcx + 16]
+        mov     [rdx + 16], rax
+        mov     rax, [rcx - 8]
+        not     rax
+        and     rax, [rcx]
+        xor     rax, [rcx + 24]
+        mov     [rdx + 24], rax
+        mov     rax, [rcx + 40]
+        not     rax
+        and     rax, [rcx + 48]
+        xor     rax, [rcx + 32]
+        mov     [rdx + 32], rax
+        mov     rax, [rcx + 48]
+        not     rax
+        and     rax, [rcx + 56]
+        xor     rax, [rcx + 40]
+        mov     [rdx + 40], rax
+        mov     rax, [rcx + 56]
+        not     rax
+        and     rax, [rcx + 64]
+        xor     rax, [rcx + 48]
+        mov     [rdx + 48], rax
+        mov     rax, [rcx + 64]
+        not     rax
+        and     rax, [rcx + 32]
+        xor     rax, [rcx + 56]
+        mov     [rdx + 56], rax
+        mov     rax, [rcx + 32]
+        not     rax
+        and     rax, [rcx + 40]
+        xor     rax, [rcx + 64]
+        mov     [rdx + 64], rax
+        pop     r14
+        pop     r13
+        pop     r12
+{$endif}
+end;
+
+procedure KeccakPermutation(A: PQWordArray);
+var
+  B: array[0..24] of QWord;
+  C: array[0..4] of QWord;
+  i: integer;
+begin
+  for i := 0 to 23 do begin
+    KeccakPermutationKernel(@B, A, @C);
+    A[00] := A[00] xor cRoundConstants[i];
+  end;
+ {$ifdef CPU32}
+  asm
+    emms // reset MMX after use
+  end;
+  {$endif}
+end;
+
+{$endif SHA3_PASCAL}
+
+procedure TSpongeState.InitSponge(aRate, aCapacity: integer);
+begin
+  Assert(aRate + aCapacity = 1600, 'Rate+Capacity should be 1600');
+  Assert((aRate > 0) and (aRate < 1600) and ((aRate and 63) = 0), 'Invalid Rate');
+  FillCharFast(self, sizeof(self), 0);
+  Rate := aRate;
+  Capacity := aCapacity;
+end;
+
+procedure TSpongeState.ExtractFromState(outp: Pointer; laneCount: integer);
+var
+  pI, pS: PQWord;
+  i: integer;
+begin
+  pI := outp;
+  pS := @StateB;
+  for i := 1 to laneCount do begin
+    pI^ := pS^;
+    inc(pI);
+    inc(pS);
+  end;
+end;
+
+procedure TSpongeState.KeccakAbsorb(data: PQWord; laneCount: integer);
+var
+  P: PQWord;
+  i: integer;
+begin
+  P := @StateB;
+  for i := 1 to laneCount do begin
+    P^ := P^ xor data^;
+    inc(data);
+    inc(P);
+  end;
+  KeccakPermutation(@StateB);
+end;
+
+procedure TSpongeState.AbsorbQueue;
+begin
+  // BitsInQueue is assumed to be equal to Rate
+  KeccakAbsorb(@DataQueue, Rate shr 6);
+  BitsInQueue := 0;
+end;
+
+procedure TSpongeState.Absorb(data: PByteArray; databitlen: integer);
+var
+  i, j, wholeBlocks, partialBlock: integer;
+  partialByte: integer;
+  curData: PQWord;
+begin
+  Assert(BitsInQueue and 7 = 0, 'Only the last call may contain a partial byte');
+  Assert(Squeezing = 0, 'Too late for additional input');
+  i := 0;
+  while i < databitlen do begin
+    if (BitsInQueue = 0) and (databitlen >= Rate) and (i <= (databitlen - Rate)) then begin
+      wholeBlocks := (databitlen - i) div Rate;
+      curData := @data^[i shr 3];
+      j := 0;
+      while j < wholeBlocks do begin
+        KeccakAbsorb(curData, Rate shr 6);
+        inc(j);
+        inc(PByte(curData), Rate shr 3);
+      end;
+      inc(i, wholeBlocks * Rate);
+    end
+    else begin
+      partialBlock := databitlen - i;
+      if partialBlock + BitsInQueue > Rate then begin
+        partialBlock := Rate - BitsInQueue;
+      end;
+      partialByte := partialBlock and 7;
+      dec(partialBlock, partialByte);
+      MoveFast(data^[i shr 3], DataQueue[BitsInQueue shr 3], partialBlock shr 3);
+      inc(BitsInQueue, partialBlock);
+      inc(i, partialBlock);
+      if BitsInQueue = Rate then
+        AbsorbQueue;
+      if partialByte > 0 then begin
+        DataQueue[BitsInQueue shr 3] := data^[i shr 3] and ((1 shl partialByte) - 1);
+        inc(BitsInQueue, partialByte);
+        inc(i, partialByte);
+      end;
+    end;
+  end;
+end;
+
+procedure TSpongeState.Init(aAlgo: TSHA3Algo);
+begin
+  case aAlgo of
+    SHA3_224:
+      InitSponge(1152, 448);
+    SHA3_256:
+      InitSponge(1088, 512);
+    SHA3_384:
+      InitSponge(832, 768);
+    SHA3_512:
+      InitSponge(576, 1024);
+    SHAKE_128:
+      InitSponge(1344, 256);
+    SHAKE_256:
+      InitSponge(1088, 512);
+  else
+    raise ESynCrypto.CreateUTF8('Unexpected TSpongeState.Init(%)', [ord(aAlgo)]);
+  end;
+  Algo := aAlgo;
+end;
+
+procedure TSpongeState.AbsorbFinal(data: PByteArray; databitlen: integer);
+var
+  lastByte: byte;
+begin
+  if databitlen and 7 = 0 then
+    Absorb(data, databitlen)
+  else begin
+    Absorb(data, databitlen - (databitlen and 7));
+    // Align the last partial byte to the least significant bits
+    lastByte := data^[databitlen shr 3] shr (8 - (databitlen and 7));
+    Absorb(@lastByte, databitlen and 7);
+  end;
+end;
+
+procedure TSpongeState.PadAndSwitchToSqueezingPhase;
+var
+  i: integer;
+begin // note: the bits are numbered from 0=LSB to 7=MSB
+  if BitsInQueue + 1 = Rate then begin
+    i := BitsInQueue shr 3;
+    DataQueue[i] := DataQueue[i] or (1 shl (BitsInQueue and 7));
+    AbsorbQueue;
+    FillCharFast(DataQueue, Rate shr 3, 0);
+  end
+  else begin
+    i := BitsInQueue shr 3;
+    FillCharFast(DataQueue[(BitsInQueue + 7) shr 3], Rate shr 3 - (BitsInQueue + 7) shr 3, 0);
+    DataQueue[i] := DataQueue[i] or (1 shl (BitsInQueue and 7));
+  end;
+  i := (Rate - 1) shr 3;
+  DataQueue[i] := DataQueue[i] or (1 shl ((Rate - 1) and 7));
+  AbsorbQueue;
+  ExtractFromState(@DataQueue, Rate shr 6);
+  BitsAvailableForSqueezing := Rate;
+  Squeezing := 1;
+end;
+
+procedure TSpongeState.Squeeze(output: PByteArray; outputLength: integer);
+var
+  i: integer;
+  partialBlock: integer;
+begin
+  if Squeezing = 0 then
+    PadAndSwitchToSqueezingPhase;
+  Assert(outputLength and 7 = 0, 'outputLength is not a multiple of 8 bits');
+  i := 0;
+  while i < outputLength do begin
+    if BitsAvailableForSqueezing = 0 then begin
+      KeccakPermutation(@StateB);
+      ExtractFromState(@DataQueue, Rate shr 6);
+      BitsAvailableForSqueezing := Rate;
+    end;
+    partialBlock := BitsAvailableForSqueezing;
+    if partialBlock > outputLength - i then
+      partialBlock := outputLength - i;
+    MoveFast(DataQueue[(Rate - BitsAvailableForSqueezing) shr 3],
+      output^[i shr 3], partialBlock shr 3);
+    dec(BitsAvailableForSqueezing, partialBlock);
+    inc(i, partialBlock);
+  end;
+end;
+
+procedure TSpongeState.FinalBit_LSB(bits: byte; bitlen: integer;
+  hashval: Pointer; numbits: integer);
+var
+  ll: integer;
+  lw: word;
+begin
+  bitlen := bitlen and 7;
+  if bitlen = 0 then
+    lw := 0
+  else
+    lw := bits and Pred(word(1) shl bitlen);
+  // 'append' (in LSB language) the domain separation bits
+  if Algo >= SHAKE_128 then begin
+    // SHAKE: append four bits 1111
+    lw := lw or (word($F) shl bitlen);
+    ll := bitlen + 4;
+  end
+  else begin
+    // SHA3: append two bits 01
+    lw := lw or (word($2) shl bitlen);
+    ll := bitlen + 2;
+  end;
+  // update state with final bits
+  if ll < 9 then begin // 0..8 bits, one call to update
+    lw := lw shl (8 - ll);
+    AbsorbFinal(@lw, ll);
+    // squeeze the digits from the sponge
+    Squeeze(hashval, numbits);
+  end
+  else begin
+    // more than 8 bits, first a regular update with low byte
+    AbsorbFinal(@lw, 8);
+    // finally update remaining last bits
+    dec(ll, 8);
+    lw := lw shr ll;
+    AbsorbFinal(@lw, ll);
+    Squeeze(hashval, numbits);
+  end;
+end;
+
+procedure TSHA3.Init(Algo: TSHA3Algo);
+begin
+  PSpongeState(@Context)^.Init(Algo);
+end;
+
+procedure TSHA3.Update(const Buffer: RawByteString);
+begin
+  if Buffer <> '' then
+    PSpongeState(@Context)^.Absorb(pointer(Buffer), Length(Buffer) shl 3);
+end;
+
+procedure TSHA3.Update(Buffer: pointer; Len: integer);
+begin
+  if Len > 0 then
+    PSpongeState(@Context)^.Absorb(Buffer, Len shl 3);
+end;
+
+procedure TSHA3.Final(out Digest: THash256; NoInit: boolean);
+begin
+  Final(@Digest, 256, NoInit);
+end;
+
+procedure TSHA3.Final(out Digest: THash512; NoInit: boolean);
+begin
+  Final(@Digest, 512, NoInit);
+end;
+
+const
+  SHA3_DEF_LEN: array[TSHA3Algo] of integer = (224, 256, 384, 512, 256, 512);
+
+procedure TSHA3.Final(Digest: pointer; DigestBits: integer; NoInit: boolean);
+begin
+  if DigestBits = 0 then
+    DigestBits := SHA3_DEF_LEN[PSpongeState(@Context)^.Algo];
+  PSpongeState(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
+  if not NoInit then
+    FillCharFast(Context, sizeof(Context), 0);
+end;
+
+procedure TSHA3.Full(Buffer: pointer; Len: integer; out Digest: THash256);
+begin
+  Full(SHA3_256, Buffer, Len, @Digest, 256);
+end;
+
+procedure TSHA3.Full(Buffer: pointer; Len: integer; out Digest: THash512);
+begin
+  Full(SHA3_512, Buffer, Len, @Digest, 512);
+end;
+
+procedure TSHA3.Full(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
+  Digest: pointer; DigestBits: integer);
+begin
+  Init(Algo);
+  Update(Buffer, Len);
+  Final(Digest, DigestBits);
+end;
+
+function TSHA3.FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
+  DigestBits: integer): RawUTF8;
+var
+  tmp: RawByteString;
+begin
+  if DigestBits = 0 then
+    DigestBits := SHA3_DEF_LEN[Algo];
+  SetLength(tmp, DigestBits shr 3);
+  Full(Algo, Buffer, Len, pointer(tmp), DigestBits);
+  result := SynCommons.BinToHex(tmp);
+  FillZero(tmp);
+end;
+
+function SHA3(Algo: TSHA3Algo; const s: RawByteString;
+  DigestBits: integer): RawUTF8;
+begin
+  result := SHA3(algo, pointer(s), length(s), DigestBits);
+end;
+
+function SHA3(Algo: TSHA3Algo; Buffer: pointer; Len, DigestBits: integer): RawUTF8;
+var
+  instance: TSHA3;
+begin
+  result := instance.FullStr(algo, Buffer, Len, DigestBits);
+end;
+
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: Integer; Encrypt: boolean);
 begin
   AES(Key,KeySize,buffer,buffer,Len,Encrypt);
@@ -6190,7 +7374,7 @@ begin
   // 3. Last block, just XORed from Key
 //  assert(KeySize div 8>=AESBlockSize);
   n := cardinal(Len) and AESBlockMod;
-  MoveFast(pIn^,pOut^,n); // pIn=pOut is tested in move()
+  MoveFast(pIn^,pOut^,n); // pIn=pOut is tested in MoveFast()
   XorOffset(pointer(pOut),Len-n,n);
   Crypt.Done;
 end;
@@ -6258,7 +7442,7 @@ function KeyFrom(const Key; KeySize: cardinal): cardinal;
 begin
   case KeySize div 8 of
   0:   result := 0;
-  1:   result := pByte(@Key)^;
+  1:   result := PByte(@Key)^;
   2,3: result := pWord(@Key)^;
   else result := PInteger(@Key)^;
   end;
@@ -6522,7 +7706,7 @@ begin
       n := Count else
       n := 5552;
     for i := 1 to n do begin
-      inc(s1,pByte(p)^);
+      inc(s1,PByte(p)^);
       inc(PtrUInt(p));
       inc(s2,s1);
     end;
@@ -6751,7 +7935,7 @@ begin
     inc(PtrUInt(p),4);
   end;
   for i := 1 to Count and 3 do begin
-    pByte(p)^ := pByte(p)^ xor byte(Cod);
+    PByte(p)^ := PByte(p)^ xor byte(Cod);
     inc(PtrUInt(p));
   end;
 end;
@@ -9334,7 +10518,7 @@ begin
   sha.Update(@iv,SizeOf(iv));
   sha.Update(buf,size);
   sha.Final(dig);
-  move(dig,buf^,size);
+  MoveFast(dig,buf^,size);
 end;
  
 function TAESPRNG.AFSplit(const Buffer; BufferBytes, StripesCount: integer): RawByteString;
@@ -10273,7 +11457,6 @@ end;
 
 {$endif NOVARIANTS}
 
-
 initialization
   ComputeAesStaticTables;
 {$ifdef USEPADLOCK}
@@ -10282,6 +11465,7 @@ initialization
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
   assert(sizeof(TSHAContext)=SHAContextSize);
+  assert(sizeof(TSpongeState)=SHA3SpongeSize);
   assert(1 shl AESBlockShift=sizeof(TAESBlock));
   assert(sizeof(TAESFullHeader)=sizeof(TAESBlock));
   assert(sizeof(TAESIVCTR)=sizeof(TAESBlock));
