@@ -11443,6 +11443,13 @@ type
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
   PHash256 = ^THash256;
+  /// store a 512-bit hash value
+  // - e.g. a SHA-512 digest, a TECCSignature result, or array[0..15] of cardinal
+  // - consumes 64 bytes of memory
+  THash512 = array[0..63] of byte;
+  /// pointer to a 512-bit hash value
+  PHash512 = ^THash512;
+
   /// store a 128-bit buffer
   // - e.g. an AES block
   // - consumes 16 bytes of memory
@@ -11469,7 +11476,7 @@ type
   3: (c: TBlock128);
   4: (b: THash128);
   end;
-  /// pointer to an array of two 64-bit hash values
+  /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
 
   /// map an infinite array of 256-bit hash values
@@ -11491,8 +11498,31 @@ type
   3: (c0,c1: TBlock128);
   4: (b: THash256);
   end;
-  /// pointer to an array of two 128-bit hash values
+  /// pointer to 256-bit hash map variable record
   PHash256Rec = ^THash256Rec;
+
+  /// map an infinite array of 512-bit hash values
+  // - each item consumes 64 bytes of memory
+  THash512Array = array[0..(maxInt div sizeof(THash512))-1] of THash512;
+  /// pointer to an infinite array of 512-bit hash values
+  PHash512Array = ^THash512Array;
+  /// store several 512-bit hash values
+  // - e.g. SHA-512 digests, or array[0..15] of cardinal
+  // - consumes 64 bytes of memory per item
+  THash512DynArray = array of THash512;
+  /// map a 512-bit hash as an array of lower bit size values
+  // - consumes 32 bytes of memory
+  THash512Rec = packed record
+  case integer of
+  0: (Lo,Hi: THash256);
+  1: (h0,h1,h2,h3: THash128);
+  2: (d0,d1,d2,d3,d4,d5,d6,d7: Int64);
+  3: (i0,i1,i2,i3,i4,i5,i6,i7,i8,i9,i10,i11,i12,i13,i14,i15: integer);
+  4: (c0,c1,c2,c3: TBlock128);
+  5: (b: THash512);
+  end;
+  /// pointer to 512-bit hash map variable record
+  PHash512Rec = ^THash512Rec;
 
 /// compute a 128-bit checksum on the supplied buffer, cascading two crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
@@ -11528,7 +11558,7 @@ function IsZero(const dig: THash128): boolean; overload;
 
 /// returns TRUE if all 16 bytes of both 128-bit buffers do match
 // - e.g. a MD5 digest, or an AES block
-// - this function is not sensitive to any timing attack, so is designed 
+// - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A,B: THash128): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -11551,7 +11581,7 @@ function IsZero(const dig: THash256): boolean; overload;
 
 /// returns TRUE if all 32 bytes of both 256-bit buffers do match
 // - e.g. a SHA-256 digest, or a TECCSignature result
-// - this function is not sensitive to any timing attack, so is designed 
+// - this function is not sensitive to any timing attack, so is designed
 // for cryptographic purpose
 function IsEqual(const A,B: THash256): boolean; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -11560,6 +11590,29 @@ function IsEqual(const A,B: THash256): boolean; overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash256); overload;
+
+/// returns TRUE if all 64 bytes of this 512-bit buffer equal zero
+// - e.g. a SHA-512 digest
+function IsZero(const dig: THash512): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if all 64 bytes of both 512-bit buffers do match
+// - e.g. two SHA-512 digests
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purpose
+function IsEqual(const A,B: THash512): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill all 64 bytes of this 512-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash512); overload;
+
+/// compute a 512-bit checksum on the supplied buffer using crc32c
+// - will use SSE 4.2 hardware accelerated instruction, if available
+// - will combine two crc32c() calls into a single THash512 result
+// - by design, such combined hashes cannot be cascaded
+procedure crc512c(buf: PAnsiChar; len: cardinal; out crc: THash512);
 
 /// fill all bytes of this memory buffer with zeros, i.e. 'toto' -> #0#0#0#0
 // - will write the memory buffer directly, so if this string instance is shared
@@ -32315,9 +32368,9 @@ begin
 end;
 {$else}
 asm
-  bt [eax],edx // use very fast i386 bit statement
-  sbb eax,eax
-  and eax,1
+        bt      [eax], edx // use very fast i386 bit statement
+        sbb     eax, eax
+        and     eax, 1
 end;
 {$endif}
 
@@ -33413,6 +33466,67 @@ begin
   PInt64Array(@dig)^[1] := 0;
   PInt64Array(@dig)^[2] := 0;
   PInt64Array(@dig)^[3] := 0;
+end;
+
+function IsZero(const dig: THash512): boolean;
+var a: TPtrIntArray absolute dig;
+begin
+  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and
+            (a[4]=0) and (a[5]=0) and (a[6]=0) and (a[7]=0)
+     {$ifndef CPU64} and (a[8]=0) and (a[9]=0)
+                     and (a[10]=0) and (a[11]=0)
+                     and (a[12]=0) and (a[13]=0)
+                     and (a[14]=0) and (a[15]=0){$endif};
+end;
+
+function IsEqual(const A,B: THash512): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
+begin // uses anti-forensic time constant "xor/or" pattern
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or
+             (a_[2] xor b_[2]) or (a_[3] xor b_[3]) or
+             (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
+             (a_[6] xor b_[6]) or (a_[7] xor b_[7])
+    {$ifndef CPU64} or (a_[8] xor b_[8]) or (a_[5] xor b_[5])
+                    or (a_[10] xor b_[10]) or (a_[11] xor b_[11])
+                    or (a_[12] xor b_[12]) or (a_[13] xor b_[13])
+                    or (a_[14] xor b_[14]) or (a_[15] xor b_[15]) {$endif})=0;
+end;
+
+procedure FillZero(out dig: THash512);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
+  PInt64Array(@dig)^[2] := 0;
+  PInt64Array(@dig)^[3] := 0;
+  PInt64Array(@dig)^[4] := 0;
+  PInt64Array(@dig)^[5] := 0;
+  PInt64Array(@dig)^[6] := 0;
+  PInt64Array(@dig)^[7] := 0;
+end;
+
+procedure crc512c(buf: PAnsiChar; len: cardinal; out crc: THash512);
+var h: THash512Rec absolute crc;
+    h1,h2: cardinal;
+begin // see https://goo.gl/Pls5wi
+  h1 := crc32c(0,buf,len);
+  h2 := crc32c(h1,buf,len);
+  h.i0 := h1; inc(h1,h2);
+  h.i1 := h1; inc(h1,h2);
+  h.i2 := h1; inc(h1,h2);
+  h.i3 := h1; inc(h1,h2);
+  h.i4 := h1; inc(h1,h2);
+  h.i5 := h1; inc(h1,h2);
+  h.i6 := h1; inc(h1,h2);
+  h.i7 := h1; inc(h1,h2);
+  h.i8 := h1; inc(h1,h2);
+  h.i9 := h1; inc(h1,h2);
+  h.i10 := h1; inc(h1,h2);
+  h.i11 := h1; inc(h1,h2);
+  h.i12 := h1; inc(h1,h2);
+  h.i13 := h1; inc(h1,h2);
+  h.i14 := h1; inc(h1,h2);
+  h.i15 := h1;
 end;
 
 procedure FillZero(var secret: RawByteString); overload;
