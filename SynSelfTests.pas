@@ -9302,7 +9302,9 @@ end;
 procedure TTestCryptographicRoutines._SHA3;
 var
   instance: TSHA3;
-  data: RawByteString;
+  secret, data, encrypted: RawByteString;
+  dig: THash256;
+  s, i: integer;
 begin
   // validate against official NIST vectors
   // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
@@ -9328,6 +9330,46 @@ begin
     '1881DE2CA7E41EF95DC4732B8F5F002B189CC1E42B74168ED1732649CE1DBCDD76197A31FD55EE989F2D7050DD473E8F');
   Check(instance.FullStr(SHA3_512, pointer(data), length(data)) =
     'E76DFAD22084A8B1467FCF2FFA58361BEC7628EDF5F3FDC0E4805DC48CAEECA81B7C13C30ADF52A3659584739A2DF46BE589C51CA1A4A8416DF6545A1CE8BA00');
+  instance.Init(SHA3_256);
+  for i := 1 to length(data) do
+    instance.Update(pointer(data), 1);
+  instance.Final(dig);
+  Check(SHA256DigestToString(dig) =
+    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  instance.Init(SHA3_256);
+  instance.Update(pointer(data), 100);
+  instance.Update(pointer(data), 50);
+  instance.Update(pointer(data), 20);
+  instance.Update(pointer(data), 10);
+  instance.Update(pointer(data), 10);
+  instance.Update(pointer(data), 5);
+  instance.Update(pointer(data), 5);
+  instance.Final(dig, true); // NoInit=true to check Extendable-Output Function
+  Check(SHA256DigestToString(dig) =
+    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  instance.Final(dig, true);
+  Check(SHA256DigestToString(dig) =
+    'f85500852a5b9bb4a35440e7e4b4dba9184477a4c97b97ab0b24b91a8b04d1c8');
+  for i := 1 to 200 do begin
+    FillZero(dig);
+    instance.Final(dig, true);
+    Check(not IsZero(dig));
+  end;
+  instance.Final(dig);
+  Check(SHA256DigestToString(dig) =
+    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
+  encrypted := instance.Cypher('secret', 'toto', true);
+  Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
+  for s := 0 to 3 do begin
+    secret := RandomString(s * 3);
+    Check(instance.Cypher(secret, '', true) = '');
+    for i := 1 to 1000 do begin
+      data := RandomString(i);
+      encrypted := instance.Cypher(secret, data, true);
+      Check(encrypted <> data);
+      Check(instance.Cypher(secret, encrypted, false) = data);
+    end;
+  end;
   // taken from https://en.wikipedia.org/wiki/SHA-3
   Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dog') =
     'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');

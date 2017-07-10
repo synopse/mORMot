@@ -305,7 +305,7 @@ const
   /// hide all SHA-1/SHA-2 Context complex code
   SHAContextSize = 108;
   /// hide all SHA-3 Context complex code
-  SHA3ContextSize = 416;
+  SHA3ContextSize = 412;
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod
   AESBlockShift = 4;
@@ -585,13 +585,15 @@ type
     // - use StringToUTF8() to define the Key parameter from a VCL string
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
+    // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean;
       IVAtBeginning: boolean=false): RawByteString; overload;
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
-    // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value 
+    // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
+    // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncrypt(const Input: RawByteString; const Key;
       KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false): RawByteString; overload;
     /// simple wrapper able to cypher/decypher any file content
@@ -599,14 +601,16 @@ type
     // - use StringToUTF8() to define the Key parameter from a VCL string
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
+    // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncryptFile(const InputFile, OutputFile: TFileName;
       const Key: RawByteString; Encrypt: boolean;
       IVAtBeginning: boolean=false): boolean; overload;
     /// simple wrapper able to cypher/decypher any file content
     // - just a wrapper around SimpleEncrypt() and StringFromFile/FileFromString
-    // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value 
+    // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value
     // - if IVAtBeginning is TRUE, a random Initialization Vector will be computed,
     // and stored at the beginning of the output binary buffer
+    // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncryptFile(const InputFile, Outputfile: TFileName; const Key;
       KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false): boolean; overload;
 
@@ -1147,7 +1151,7 @@ type
   // algorithm to provide an alternative to SHA-256. In became SHA-3 and was
   // named by NIST a FIPS 180-4, then FIPS 202 hashing standard in 2015
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
-  // since it already includes proper padding 
+  // since it already includes proper padding, so keys could be concatenated
   // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code
   TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
   private
@@ -1169,6 +1173,9 @@ type
     // - Digest destination buffer must contain enough bytes
     // - default DigestBits=0 will write the default number of bits to Digest
     // output memory buffer, according to the current TSHA3Algo
+    // - you can call this method several times, to use this SHA-3 hasher as
+    // "Extendable-Output Function", e.g. for stream encryption (ensure NoInit
+    // is set to true, to enable recall) 
     procedure Final(Digest: pointer; DigestBits: integer=0; NoInit: boolean=false); overload;
     /// compute a SHA-3 hash 256-bit Digest from a buffer, in one call
     // - call Init, then Update(), then Final() using SHA3_256 into a THash256
@@ -1188,6 +1195,22 @@ type
     // output memory buffer, according to the specified TSHA3Algo
     function FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
       DigestBits: integer=0): RawUTF8;
+    /// uses SHA-3 in "Extendable-Output Function" to cypher some content
+    // - use Encrypt=true to cypher plain Source into encrypted Dest, or
+    // Encrypt=false to uncypher encrypted Source into plain Dest
+    // - there is no MAC stored in the resulting binary
+    // - Source and Dest will have the very same DataLen size in bytes
+    // - by design, Source and Dest should point to two diverse buffers
+    // - for safety, the Key should be a secret value, pre-pended with a random
+    // salt/IV or a resource-specific identifier (e.g. a record ID or a S/N),
+    // to avoid reverse composition of the cypher from known content - note that
+    // concatenating keys with SHA-3 is as safe as computing a HMAC for SHA-2
+    procedure Cypher(Key, Source, Dest: pointer; KeyLen, DataLen: integer;
+      Encrypt: boolean; Algo: TSHA3Algo = SHAKE_256); overload;
+    /// uses SHA-3 in "Extendable-Output Function" to cypher some content
+    // - this overloaded function works with RawByteString content
+    function Cypher(const Key, Source: RawByteString; Encrypt: boolean;
+      Algo: TSHA3Algo = SHAKE_256): RawByteString; overload;
   end;
 
   /// 64 bytes buffer, used internally during HMAC process
@@ -6270,11 +6293,11 @@ type
     State: packed array[0..cKeccakPermutationSizeInBytes-1] of byte;
     DataQueue: packed array[0..cKeccakMaximumRateInBytes-1] of byte;
     Algo: TSHA3Algo;
+    Squeezing: boolean;
     Rate: integer;
     Capacity: integer;
     BitsInQueue: integer;
     BitsAvailableForSqueezing: integer;
-    Squeezing: integer;
     procedure Init(aAlgo: TSHA3Algo);
     procedure InitSponge(aRate, aCapacity: integer);
     procedure AbsorbQueue;
@@ -7083,10 +7106,8 @@ end;
 
 procedure TSHA3Context.AbsorbQueue;
 begin
-  // BitsInQueue is assumed to be equal to Rate
   XorMemoryPtrInt(@State, @DataQueue, Rate shr {$ifdef CPU32}5{$else}6{$endif});
   KeccakPermutation(@State);
-  BitsInQueue := 0;
 end;
 
 procedure TSHA3Context.Absorb(data: PByteArray; databitlen: integer);
@@ -7096,7 +7117,7 @@ var
   curData: pointer;
 begin
   Assert(BitsInQueue and 7 = 0, 'Only the last call may contain a partial byte');
-  Assert(Squeezing = 0, 'Too late for additional input');
+  Assert(not Squeezing, 'Too late for additional input');
   i := 0;
   while i < databitlen do begin
     if (BitsInQueue = 0) and (databitlen >= Rate) and (i <= (databitlen - Rate)) then begin
@@ -7111,16 +7132,17 @@ begin
     end
     else begin
       partialBlock := databitlen - i;
-      if partialBlock + BitsInQueue > Rate then begin
+      if partialBlock + BitsInQueue > Rate then
         partialBlock := Rate - BitsInQueue;
-      end;
       partialByte := partialBlock and 7;
       dec(partialBlock, partialByte);
       MoveFast(data^[i shr 3], DataQueue[BitsInQueue shr 3], partialBlock shr 3);
       inc(BitsInQueue, partialBlock);
       inc(i, partialBlock);
-      if BitsInQueue = Rate then
+      if BitsInQueue = Rate then begin
         AbsorbQueue;
+        BitsInQueue := 0;
+      end;
       if partialByte > 0 then begin
         DataQueue[BitsInQueue shr 3] := data^[i shr 3] and ((1 shl partialByte) - 1);
         inc(BitsInQueue, partialByte);
@@ -7164,7 +7186,7 @@ begin // note: the bits are numbered from 0=LSB to 7=MSB
   AbsorbQueue;
   MoveFast(State, DataQueue, Rate shr 3);
   BitsAvailableForSqueezing := Rate;
-  Squeezing := 1;
+  Squeezing := true;
 end;
 
 procedure TSHA3Context.Squeeze(output: PByteArray; outputLength: integer);
@@ -7172,7 +7194,7 @@ var
   i: integer;
   partialBlock: integer;
 begin
-  if Squeezing = 0 then
+  if not Squeezing then
     PadAndSwitchToSqueezingPhase;
   Assert(outputLength and 7 = 0, 'outputLength is not a multiple of 8 bits');
   i := 0;
@@ -7265,8 +7287,11 @@ const
 procedure TSHA3.Final(Digest: pointer; DigestBits: integer; NoInit: boolean);
 begin
   if DigestBits = 0 then
-    DigestBits := SHA3_DEF_LEN[PSHA3Context(@Context)^.Algo];
-  PSHA3Context(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
+    DigestBits := SHA3_DEF_LEN[TSHA3Context(Context).Algo];
+  if TSHA3Context(Context).Squeezing then // used as Extendable-Output Function
+    PSHA3Context(@Context)^.Squeeze(Digest, DigestBits)
+  else
+    PSHA3Context(@Context)^.FinalBit_LSB(0, 0, Digest, DigestBits);
   if not NoInit then
     FillCharFast(Context, sizeof(Context), 0);
 end;
@@ -7283,10 +7308,12 @@ end;
 
 procedure TSHA3.Full(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
   Digest: pointer; DigestBits: integer);
+var
+  instance: TSHA3;
 begin
-  Init(Algo);
-  Update(Buffer, Len);
-  Final(Digest, DigestBits);
+  instance.Init(Algo);
+  instance.Update(Buffer, Len);
+  instance.Final(Digest, DigestBits);
 end;
 
 function TSHA3.FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
@@ -7300,6 +7327,27 @@ begin
   Full(Algo, Buffer, Len, pointer(tmp), DigestBits);
   result := SynCommons.BinToHex(tmp);
   FillZero(tmp);
+end;
+
+procedure TSHA3.Cypher(Key, Source, Dest: pointer; KeyLen, DataLen: integer;
+  Encrypt: boolean; Algo: TSHA3Algo);
+begin
+  if DataLen <= 0 then
+    exit;
+  if Source = Dest then
+    raise ESynCrypto.Create('Unexpected TSHA3.Cypher(Source=Dest)');
+  Full(Algo, Key, KeyLen, Dest, DataLen shl 3);
+  XorMemory(Dest, Source, DataLen); // just as simple as that!
+end;
+
+function TSHA3.Cypher(const Key, Source: RawByteString; Encrypt: boolean;
+  Algo: TSHA3Algo): RawByteString;
+var
+  len: integer;
+begin
+  len := length(Source);
+  SetString(result, nil, len);
+  Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len, Encrypt);
 end;
 
 function SHA3(Algo: TSHA3Algo; const s: RawByteString;
