@@ -3110,6 +3110,13 @@ function IdemPCharU(p, up: PUTF8Char): boolean;
 // - this version expects p^ to point to an Unicode char array
 function IdemPCharW(p: PWideChar; up: PUTF8Char): boolean;
 
+/// check matching ending of p^ in upText
+// - returns true if the item matched
+// - ignore case - upText^ must be already Upper
+// - chars are compared as 7 bit Ansi only (no accentuated characters)
+function EndWith(const text, upText: RawUTF8): boolean;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// returns the index of a matching ending of p^ in upArray[]
 // - returns -1 if no item matched
 // - ignore case - upArray^ must be already Upper
@@ -30597,6 +30604,13 @@ begin
   result := true;
 end;
 
+function EndWith(const text, upText: RawUTF8): boolean;
+var o: integer;
+begin
+  o := length(text)-length(upText);
+  result := (o>=0) and IdemPChar(PUTF8Char(pointer(text))+o,pointer(upText));
+end;
+
 function EndWithArray(const text: RawUTF8; const upArray: array of RawUTF8): integer;
 var t,o: integer;
 begin
@@ -30608,7 +30622,7 @@ begin
         exit;
     end;
   result := -1;
-end; 
+end;
 
 function UpperCopy255(dest: PAnsiChar; const source: RawUTF8): PAnsiChar;
 begin
