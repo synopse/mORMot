@@ -1174,8 +1174,8 @@ type
     // - default DigestBits=0 will write the default number of bits to Digest
     // output memory buffer, according to the current TSHA3Algo
     // - you can call this method several times, to use this SHA-3 hasher as
-    // "Extendable-Output Function", e.g. for stream encryption (ensure NoInit
-    // is set to true, to enable recall) 
+    // "Extendable-Output Function" (XOF), e.g. for stream encryption (ensure
+    // NoInit is set to true, to enable recall) 
     procedure Final(Digest: pointer; DigestBits: integer=0; NoInit: boolean=false); overload;
     /// compute a SHA-3 hash 256-bit Digest from a buffer, in one call
     // - call Init, then Update(), then Final() using SHA3_256 into a THash256
@@ -1195,22 +1195,24 @@ type
     // output memory buffer, according to the specified TSHA3Algo
     function FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
       DigestBits: integer=0): RawUTF8;
-    /// uses SHA-3 in "Extendable-Output Function" to cypher some content
-    // - use Encrypt=true to cypher plain Source into encrypted Dest, or
-    // Encrypt=false to uncypher encrypted Source into plain Dest
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
     // - there is no MAC stored in the resulting binary
-    // - Source and Dest will have the very same DataLen size in bytes
-    // - by design, Source and Dest should point to two diverse buffers
+    // - Source and Dest will have the very same DataLen size in bytes,
+    // and Dest will be Source XORed with the XOF output, so encryption and
+    // decryption are just obtained by the same symmetric call
+    // - in this implementation, Source and Dest should point to two diverse buffers
     // - for safety, the Key should be a secret value, pre-pended with a random
     // salt/IV or a resource-specific identifier (e.g. a record ID or a S/N),
     // to avoid reverse composition of the cypher from known content - note that
     // concatenating keys with SHA-3 is as safe as computing a HMAC for SHA-2
     procedure Cypher(Key, Source, Dest: pointer; KeyLen, DataLen: integer;
-      Encrypt: boolean; Algo: TSHA3Algo = SHAKE_256); overload;
-    /// uses SHA-3 in "Extendable-Output Function" to cypher some content
+      Algo: TSHA3Algo = SHAKE_256); overload;
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
     // - this overloaded function works with RawByteString content
-    function Cypher(const Key, Source: RawByteString; Encrypt: boolean;
-      Algo: TSHA3Algo = SHAKE_256): RawByteString; overload;
+    // - resulting string will have the very same size than the Source
+    // - XOF is implemented as a symmetrical algorithm: use this Cypher()
+    // method for both encryption and decryption of any buffer
+    function Cypher(const Key, Source: RawByteString; Algo: TSHA3Algo = SHAKE_256): RawByteString; overload;
   end;
 
   /// 64 bytes buffer, used internally during HMAC process
@@ -1266,7 +1268,7 @@ type
     // - each call to this method shall be preceded with an Init() call,
     // or a RestoreKey() from a previous SaveKey(), since it will change
     // the internal key[] during its process
-    // - RC4 is a symetrical algorithm: use this Encrypt() method for both
+    // - RC4 is a symmetrical algorithm: use this Encrypt() method for both
     // encryption and decryption of any buffer
     procedure Encrypt(const BufIn; var BufOut; Count: cardinal);
     /// save the internal key computed by Init()
@@ -7308,12 +7310,10 @@ end;
 
 procedure TSHA3.Full(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
   Digest: pointer; DigestBits: integer);
-var
-  instance: TSHA3;
 begin
-  instance.Init(Algo);
-  instance.Update(Buffer, Len);
-  instance.Final(Digest, DigestBits);
+  Init(Algo);
+  Update(Buffer, Len);
+  Final(Digest, DigestBits);
 end;
 
 function TSHA3.FullStr(Algo: TSHA3Algo; Buffer: pointer; Len: integer;
@@ -7330,7 +7330,7 @@ begin
 end;
 
 procedure TSHA3.Cypher(Key, Source, Dest: pointer; KeyLen, DataLen: integer;
-  Encrypt: boolean; Algo: TSHA3Algo);
+  Algo: TSHA3Algo);
 begin
   if DataLen <= 0 then
     exit;
@@ -7340,14 +7340,13 @@ begin
   XorMemory(Dest, Source, DataLen); // just as simple as that!
 end;
 
-function TSHA3.Cypher(const Key, Source: RawByteString; Encrypt: boolean;
-  Algo: TSHA3Algo): RawByteString;
+function TSHA3.Cypher(const Key, Source: RawByteString; Algo: TSHA3Algo): RawByteString;
 var
   len: integer;
 begin
   len := length(Source);
   SetString(result, nil, len);
-  Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len, Encrypt);
+  Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len);
 end;
 
 function SHA3(Algo: TSHA3Algo; const s: RawByteString;

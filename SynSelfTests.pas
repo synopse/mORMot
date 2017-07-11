@@ -9387,16 +9387,16 @@ begin
   instance.Final(dig);
   Check(SHA256DigestToString(dig) =
     '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
-  encrypted := instance.Cypher('secret', 'toto', true);
+  encrypted := instance.Cypher('secret', 'toto');
   Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
   for s := 0 to 3 do begin
     secret := RandomString(s * 3);
-    Check(instance.Cypher(secret, '', true) = '');
+    Check(instance.Cypher(secret, '') = '');
     for i := 1 to 1000 do begin
       data := RandomString(i);
-      encrypted := instance.Cypher(secret, data, true);
+      encrypted := instance.Cypher(secret, data);
       Check(encrypted <> data);
-      Check(instance.Cypher(secret, encrypted, false) = data);
+      Check(instance.Cypher(secret, encrypted) = data);
     end;
   end;
   // taken from https://en.wikipedia.org/wiki/SHA-3
