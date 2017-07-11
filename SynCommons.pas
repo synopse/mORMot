@@ -30545,31 +30545,35 @@ function IdemPChar(p: PUTF8Char; up: PAnsiChar): boolean;
 // eax=p edx=up
 asm
         test    eax, eax
-        jz      @e // P=nil -> false
+        jz      @e            // P=nil -> false
         test    edx, edx
         push    ebx
-        jz      @t // up=nil -> true
-        mov     ecx, [edx] // cl=up^[0]
-        test    cl, cl
-        movzx   ebx, byte ptr[eax] // bl=p^[0]
-        jz      @t
-        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
-        jnz     @f // quick return in case of first invalid char
-        lea     eax, [eax + 1]
-        lea     edx, [edx + 1]
-        shr     ecx, 8 // cl=up^[1], ch=up^[2]
-@1:     mov     bl, [eax] // bl=p^[0]
-        test    cl, cl
-        jz      @t // up^[0]=#0 -> OK
-        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[0]]
-        mov     bl, [eax + 1] // bl=p^[1]
-        lea     eax, [eax + 2]
-        lea     edx, [edx + 2]
+        jz      @t            // up=nil -> true
+        mov     ecx, [edx]    // optimized for DWORD aligned read
+        xor     ebx, ebx
+@1:     test    cl, cl
+        mov     bl, [eax]
+        jz      @t            // up^[0]=#0 -> OK
+        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[0]]
+        mov     bl, [eax + 1]
         jne     @f
         test    ch, ch
-        jz      @t // up^[1]=#0 -> OK
-        cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // bl=NormToUpperAnsi7[p^[1]]
-        mov     ecx, [edx] // cl=up^[0] ch=up^[1]
+        jz      @t            // up^[1]=#0 -> OK
+        cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[1]]
+        jne     @f
+        shr     ecx, 16       // cl=up^[2] ch=up^[3]
+        mov     bl, [eax + 2]
+        test    cl, cl
+        jz      @t            // up^[2]=#0 -> OK
+        cmp     cl, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[2]]
+        mov     bl, [eax + 3]
+        jne     @f
+        test    ch, ch
+        lea     eax, [eax + 4]
+        lea     edx, [edx + 4]
+        jz      @t            // up^[3]=#0 -> OK
+        cmp     ch, byte ptr[ebx + NormToUpperAnsi7] // NormToUpperAnsi7[p^[3]]
+        mov     ecx, [edx]    // next DWORD from up^
         je      @1
 @f:     pop     ebx // NormToUpperAnsi7[p^]<>up^ -> FALSE
 @e:     xor     eax, eax
