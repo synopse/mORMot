@@ -245,6 +245,8 @@ type
     // - speed is computed from the method start
     procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
       SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
+    /// append some text to the current console
+    procedure AddConsole(const msg: string);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -756,6 +758,13 @@ begin
   InterlockedIncrement(fAssertionsFailed);
 end;
 
+procedure TSynTestCase.AddConsole(const msg: string);
+begin
+  if fRunConsole<>'' then
+    fRunConsole := fRunConsole+#13#10'     '+msg else
+    fRunConsole := fRunConsole+msg;
+end;
+
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
   ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
 var Temp: TPrecisionTimer;
@@ -768,9 +777,7 @@ begin
     [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
   if SizeInBytes>0 then
     msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
-  if fRunConsole<>'' then
-    msg := #13#10'     '+msg;
-  fRunConsole := fRunConsole+msg;
+  AddConsole(msg);
 end;
 
 

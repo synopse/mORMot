@@ -16422,7 +16422,7 @@ type
     procedure ComputeTime;
     /// stop the timer, returning the time elapsed as text with time resolution
     // (us,ms,s)
-    // - is just a wrapper around ComputeTime + GetTime
+    // - is just a wrapper around ComputeTime + Time
     function Stop: RawUTF8;
     /// stop the timer, ready to continue its time measurement via Resume
     procedure Pause;
@@ -23780,7 +23780,7 @@ var len, lenSub: PtrInt;
     p, pSub, pStart, pStop: PUTF8Char;
 label Loop0, Loop4, TestT, Test0, Test1, Test2, Test3, Test4,
       AfterTestT, AfterTest0, Ret, Exit;
-begin;
+begin
   pSub := pointer(SubStr);
   p := pointer(S);
   if (p=nil) or (pSub=nil) or (Offset<1) then begin
