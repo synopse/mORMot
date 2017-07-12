@@ -302,9 +302,9 @@ var
 const
   /// hide all AES Context complex code
   AESContextSize = 276 {$ifdef USEPADLOCK}+sizeof(pointer){$endif};
-  /// hide all SHA-1/SHA-2 Context complex code
+  /// hide all SHA-1/SHA-2 complex code by storing the context as buffer
   SHAContextSize = 108;
-  /// hide all SHA-3 Context complex code
+  /// hide all SHA-3 complex code by storing the Keccak Sponge as buffer 
   SHA3ContextSize = 412;
   /// power of two for a standard AES block size during cypher/uncypher
   // - to be used as 1 shl AESBlockShift or 1 shr AESBlockShift for fast div/mod

@@ -505,6 +505,7 @@ type
     /// JWT classes
     procedure _JWT;
     {$endif NOVARIANTS}
+    procedure Benchmark;
   end;
 
   /// this test case will test ECDH and ECDSA cryptography as implemented
@@ -9598,6 +9599,164 @@ begin
 end;
 {$endif NOVARIANTS}
 
+type
+  TBenchmark = (bCRC32c, bXXHash32, bMD5, bSHA1, bSHA256, bSHA3_256, bSHA3_512);
+
+procedure TTestCryptographicRoutines.Benchmark;
+const SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
+      COUNT = 1000;
+var b: TBenchmark;
+    s, i, size, n: integer;
+    data: RawByteString;
+    dig: THash512Rec;
+    MD5: TMD5;
+    SHA1: TSHA1;
+    SHA256: TSHA256;
+    SHA3: TSHA3;
+    timer: TPrecisionTimer;
+    time: array[TBenchmark] of Int64;
+begin
+  FillCharFast(time,sizeof(time),0);
+  size := 0;
+  n := 0;
+  for s := 0 to high(SIZ) do begin
+    data := RandomString(SIZ[s]);
+    for b := low(b) to high(b) do begin
+      timer.Start;
+      for i := 1 to COUNT do begin
+        dig.d0 := 0;
+        case b of
+        bCRC32c:   dig.d0 := crc32c(0,pointer(data),SIZ[s]);
+        bXXHash32: dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
+        bMD5:      MD5.Full(pointer(data),SIZ[s],dig.h0);
+        bSHA1:     SHA1.Full(pointer(data),SIZ[s],PSHA1Digest(@dig)^);
+        bSHA256:   SHA256.Full(pointer(data),SIZ[s],dig.Lo);
+        bSHA3_256: SHA3.Full(pointer(data),SIZ[s],dig.Lo);
+        bSHA3_512: SHA3.Full(pointer(data),SIZ[s],dig.b);
+        end;
+        Check(dig.d0<>0);
+      end;
+      if false then // if true then = detailed per block size information
+        NotifyTestSpeed(format('%s %s',[GetEnumNameTrimed(TypeInfo(TBenchMark), b),
+          KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
+      timer.ComputeTime;
+      inc(time[b],timer.LastTimeInMicroSec);
+    end;
+    inc(size,SIZ[s]*COUNT);
+    inc(n,COUNT);
+  end;
+  for b := low(b) to high(b) do
+    AddConsole(format('%d %s in %s i.e. %d/s or %s/s',
+      [n,GetEnumNameTrimed(TypeInfo(TBenchMark), b),MicroSecToString(time[b]),
+       (n*Int64(1000*1000)) div time[b],KB((size*Int64(1000*1000)) div time[b])]));
+end;
+
+{
+  some numbers, from a Core i7 notebook, with SSE4.2 enabled for crc32c:
+
+Delphi 7, Win32
+  - Benchmark: 350,000 assertions passed  3.41s
+     10000 CRC32c 8 B in 158us i.e. 63291139/s, aver. 0us, 482.8 MB/s
+     10000 XXHash32 8 B in 197us i.e. 50761421/s, aver. 0us, 387.2 MB/s
+     10000 MD5 8 B in 1.79ms i.e. 5567928/s, aver. 0us, 42.4 MB/s
+     10000 SHA1 8 B in 3.17ms i.e. 3149606/s, aver. 0us, 24 MB/s
+     10000 SHA256 8 B in 4.17ms i.e. 2397506/s, aver. 0us, 18.2 MB/s
+     10000 SHA3_256 8 B in 8.55ms i.e. 1168497/s, aver. 0us, 8.9 MB/s
+     10000 SHA3_512 8 B in 8.42ms i.e. 1186802/s, aver. 0us, 9 MB/s
+
+     10000 CRC32c 50 B in 137us i.e. 72992700/s, aver. 0us, 3.4 GB/s
+     10000 XXHash32 50 B in 208us i.e. 48076923/s, aver. 0us, 2.2 GB/s
+     10000 MD5 50 B in 1.46ms i.e. 6821282/s, aver. 0us, 325.2 MB/s
+     10000 SHA1 50 B in 3.31ms i.e. 3016591/s, aver. 0us, 143.8 MB/s
+     10000 SHA256 50 B in 4.22ms i.e. 2365744/s, aver. 0us, 112.8 MB/s
+     10000 SHA3_256 50 B in 8.55ms i.e. 1169453/s, aver. 0us, 55.7 MB/s
+     10000 SHA3_512 50 B in 10.47ms i.e. 954289/s, aver. 1us, 45.5 MB/s
+
+     10000 CRC32c 100 B in 166us i.e. 60240963/s, aver. 0us, 5.6 GB/s
+     10000 XXHash32 100 B in 318us i.e. 31446540/s, aver. 0us, 2.9 GB/s
+     10000 MD5 100 B in 2.76ms i.e. 3617945/s, aver. 0us, 345 MB/s
+     10000 SHA1 100 B in 6.26ms i.e. 1597188/s, aver. 0us, 152.3 MB/s
+     10000 SHA256 100 B in 8.26ms i.e. 1209774/s, aver. 0us, 115.3 MB/s
+     10000 SHA3_256 100 B in 8.56ms i.e. 1167951/s, aver. 0us, 111.3 MB/s
+     10000 SHA3_512 100 B in 15.77ms i.e. 633954/s, aver. 1us, 60.4 MB/s
+
+     10000 CRC32c 1000 B in 2.05ms i.e. 4856726/s, aver. 0us, 4.5 GB/s
+     10000 XXHash32 1000 B in 1.71ms i.e. 5824111/s, aver. 0us, 5.4 GB/s
+     10000 MD5 1000 B in 22.66ms i.e. 441189/s, aver. 2us, 420.7 MB/s
+     10000 SHA1 1000 B in 49.41ms i.e. 202388/s, aver. 4us, 193 MB/s
+     10000 SHA256 1000 B in 64.75ms i.e. 154432/s, aver. 6us, 147.2 MB/s
+     10000 SHA3_256 1000 B in 63.14ms i.e. 158360/s, aver. 6us, 151 MB/s
+     10000 SHA3_512 1000 B in 108.24ms i.e. 92386/s, aver. 10us, 88.1 MB/s
+
+     10000 CRC32c 9 KB in 22.84ms i.e. 437828/s, aver. 2us, 4 GB/s
+     10000 XXHash32 9 KB in 15.55ms i.e. 643045/s, aver. 1us, 5.9 GB/s
+     10000 MD5 9 KB in 216.51ms i.e. 46186/s, aver. 21us, 440.4 MB/s
+     10000 SHA1 9 KB in 492.66ms i.e. 20297/s, aver. 49us, 193.5 MB/s
+     10000 SHA256 9 KB in 639.86ms i.e. 15628/s, aver. 63us, 149 MB/s
+     10000 SHA3_256 9 KB in 565.57ms i.e. 17681/s, aver. 56us, 168.6 MB/s
+     10000 SHA3_512 9 KB in 1.05s i.e. 9513/s, aver. 105us, 90.7 MB/s
+
+     50000 CRC32c in 25.37ms i.e. 1970676/s or 4 GB/s
+     50000 XXHash32 in 18.00ms i.e. 2777777/s or 5.7 GB/s
+     50000 MD5 in 245.22ms i.e. 203896/s or 433.9 MB/s
+     50000 SHA1 in 554.83ms i.e. 90116/s or 191.7 MB/s
+     50000 SHA256 in 721.29ms i.e. 69319/s or 147.5 MB/s
+     50000 SHA3_256 in 654.41ms i.e. 76404/s or 162.6 MB/s
+     50000 SHA3_512 in 1.19s i.e. 41875/s or 89.1 MB/s
+  Total failed: 0 / 602,047  - Cryptographic routines PASSED  5.19s
+
+
+Delphi 10.2, Win64
+  - Benchmark: 350,000 assertions passed  3.00s
+     10000 CRC32c 8 B in 156us i.e. 64102564/s, aver. 0us, 489 MB/s
+     10000 XXHash32 8 B in 165us i.e. 60606060/s, aver. 0us, 462.3 MB/s
+     10000 MD5 8 B in 2.14ms i.e. 4668534/s, aver. 0us, 35.6 MB/s
+     10000 SHA1 8 B in 3.58ms i.e. 2792516/s, aver. 0us, 21.3 MB/s
+     10000 SHA256 8 B in 2.65ms i.e. 3770739/s, aver. 0us, 28.7 MB/s
+     10000 SHA3_256 8 B in 8.21ms i.e. 1217878/s, aver. 0us, 9.2 MB/s
+     10000 SHA3_512 8 B in 8.20ms i.e. 1218323/s, aver. 0us, 9.2 MB/s
+
+     10000 CRC32c 50 B in 122us i.e. 81967213/s, aver. 0us, 3.8 GB/s
+     10000 XXHash32 50 B in 179us i.e. 55865921/s, aver. 0us, 2.6 GB/s
+     10000 MD5 50 B in 1.73ms i.e. 5780346/s, aver. 0us, 275.6 MB/s
+     10000 SHA1 50 B in 3.57ms i.e. 2797985/s, aver. 0us, 133.4 MB/s
+     10000 SHA256 50 B in 2.55ms i.e. 3920031/s, aver. 0us, 186.9 MB/s
+     10000 SHA3_256 50 B in 8.64ms i.e. 1156203/s, aver. 0us, 55.1 MB/s
+     10000 SHA3_512 50 B in 8.13ms i.e. 1229709/s, aver. 0us, 58.6 MB/s
+
+     10000 CRC32c 100 B in 153us i.e. 65359477/s, aver. 0us, 6 GB/s
+     10000 XXHash32 100 B in 288us i.e. 34722222/s, aver. 0us, 3.2 GB/s
+     10000 MD5 100 B in 3.37ms i.e. 2967359/s, aver. 0us, 282.9 MB/s
+     10000 SHA1 100 B in 6.73ms i.e. 1485884/s, aver. 0us, 141.7 MB/s
+     10000 SHA256 100 B in 4.75ms i.e. 2101723/s, aver. 0us, 200.4 MB/s
+     10000 SHA3_256 100 B in 8.43ms i.e. 1185817/s, aver. 0us, 113 MB/s
+     10000 SHA3_512 100 B in 15.09ms i.e. 662646/s, aver. 1us, 63.1 MB/s
+
+     10000 CRC32c 1000 B in 2.11ms i.e. 4730368/s, aver. 0us, 4.4 GB/s
+     10000 XXHash32 1000 B in 1.67ms i.e. 5955926/s, aver. 0us, 5.5 GB/s
+     10000 MD5 1000 B in 27.37ms i.e. 365336/s, aver. 2us, 348.4 MB/s
+     10000 SHA1 1000 B in 51.49ms i.e. 194204/s, aver. 5us, 185.2 MB/s
+     10000 SHA256 1000 B in 35.57ms i.e. 281080/s, aver. 3us, 268 MB/s
+     10000 SHA3_256 1000 B in 57.31ms i.e. 174486/s, aver. 5us, 166.4 MB/s
+     10000 SHA3_512 1000 B in 99.21ms i.e. 100794/s, aver. 9us, 96.1 MB/s
+
+     10000 CRC32c 9 KB in 22.83ms i.e. 437924/s, aver. 2us, 4 GB/s
+     10000 XXHash32 9 KB in 15.49ms i.e. 645369/s, aver. 1us, 6 GB/s
+     10000 MD5 9 KB in 269.78ms i.e. 37067/s, aver. 26us, 353.5 MB/s
+     10000 SHA1 9 KB in 499.10ms i.e. 20035/s, aver. 49us, 191 MB/s
+     10000 SHA256 9 KB in 345.11ms i.e. 28975/s, aver. 34us, 276.3 MB/s
+     10000 SHA3_256 9 KB in 521.97ms i.e. 19157/s, aver. 52us, 182.7 MB/s
+     10000 SHA3_512 9 KB in 969.23ms i.e. 10317/s, aver. 96us, 98.3 MB/s
+
+     50000 CRC32c in 25.40ms i.e. 1968503/s or 4 GB/s
+     50000 XXHash32 in 17.82ms i.e. 2805836/s or 5.8 GB/s
+     50000 MD5 in 304.41ms i.e. 164249/s or 349.5 MB/s
+     50000 SHA1 in 564.50ms i.e. 88573/s or 188.5 MB/s
+     50000 SHA256 in 390.67ms i.e. 127983/s or 272.3 MB/s
+     50000 SHA3_256 in 604.60ms i.e. 82698/s or 176 MB/s
+     50000 SHA3_512 in 1.09s i.e. 45458/s or 96.7 MB/s
+  Total failed: 0 / 602,067  - Cryptographic routines PASSED  4.28s
+}
 
 { TTestECCCryptography }
 
