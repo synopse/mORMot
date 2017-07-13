@@ -9614,7 +9614,7 @@ type
 
 procedure TTestCryptographicRoutines.Benchmark;
 const SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
-      COUNT = 10000;
+      COUNT = 500;
       AESCLASS: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstractClass = (
         TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC,
         TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC);
