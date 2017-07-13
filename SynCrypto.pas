@@ -1213,6 +1213,39 @@ type
     // - XOF is implemented as a symmetrical algorithm: use this Cypher()
     // method for both encryption and decryption of any buffer
     function Cypher(const Key, Source: RawByteString; Algo: TSHA3Algo = SHAKE_256): RawByteString; overload;
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
+    // - prepare the instance to further Cypher() calls
+    // - you may reuse the very same TSHA3 instance by copying it to a local
+    // variable before calling this method (this copy is thread-safe)
+    // - works with RawByteString content
+    procedure InitCypher(Key: pointer; KeyLen: integer; Algo: TSHA3Algo = SHAKE_256); overload;
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
+    // - prepare the instance to further Cypher() calls
+    // - you may reuse the very same TSHA3 instance by copying it to a local
+    // variable before calling this method (this copy is thread-safe)
+    // - works with RawByteString content
+    procedure InitCypher(const Key: RawByteString; Algo: TSHA3Algo = SHAKE_256); overload;
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
+    // - this overloaded function expects the instance to have been prepared
+    // by previous InitCypher call
+    // - resulting Dest buffer will have the very same size than the Source
+    // - XOF is implemented as a symmetrical algorithm: use this Cypher()
+    // method for both encryption and decryption of any buffer
+    // - you can call this method several times, to work with a stream buffer;
+    // but for safety, you should eventually call Done
+    procedure Cypher(Source, Dest: pointer; DataLen: integer); overload;
+    /// uses SHA-3 in "Extendable-Output Function" (XOF) to cypher some content
+    // - this overloaded function expects the instance to have been prepared
+    // by previous InitCypher call
+    // - resulting string will have the very same size than the Source
+    // - XOF is implemented as a symmetrical algorithm: use this Cypher()
+    // method for both encryption and decryption of any buffer
+    // - you can call this method several times, to work with a stream buffer;
+    // but for safety, you should eventually call Done
+    function Cypher(const Source: RawByteString): RawByteString; overload;
+    /// fill all used memory context with zeros, for safety
+    // - is necessary only when NoInit is set to true (e.g. after InitCypher)  
+    procedure Done;
   end;
 
   /// 64 bytes buffer, used internally during HMAC process
@@ -7347,6 +7380,38 @@ begin
   len := length(Source);
   SetString(result, nil, len);
   Cypher(pointer(Key), pointer(Source), pointer(result), length(Key), len);
+end;
+
+procedure TSHA3.InitCypher(Key: pointer; KeyLen: integer; Algo: TSHA3Algo);
+begin
+  Init(Algo);
+  Update(Key, KeyLen);
+  PSHA3Context(@Context)^.FinalBit_LSB(0, 0, nil, 0);
+end;
+
+procedure TSHA3.InitCypher(const Key: RawByteString; Algo: TSHA3Algo);
+begin
+  InitCypher(pointer(Key), length(Key), Algo);
+end;
+
+procedure TSHA3.Cypher(Source, Dest: pointer; DataLen: integer);
+begin
+  Final(Dest, DataLen shl 3, true); // in XOF mode
+  XorMemory(Dest, Source, DataLen);
+end;
+
+function TSHA3.Cypher(const Source: RawByteString): RawByteString;
+var
+  len: integer;
+begin
+  len := length(Source);
+  SetString(result, nil, len);
+  Cypher(pointer(Source), pointer(result), len);
+end;
+
+procedure TSHA3.Done;
+begin
+  FillCharFast(self, sizeof(self), 0);
 end;
 
 function SHA3(Algo: TSHA3Algo; const s: RawByteString;
