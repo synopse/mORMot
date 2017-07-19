@@ -22301,11 +22301,10 @@ procedure UniqueRawUTF8ZeroToTilde(var UTF8: RawUTF8; MaxSize: integer);
 var i: integer;
 begin
   i := length(UTF8);
-  if i>MaxSize then begin
-    PByteArray(UTF8)[i] := 0;
+  if i>MaxSize then
+    PByteArray(UTF8)[MaxSize] := 0 else
     MaxSize := i;
-  end;
-  for i := 0 to maxSize-1 do
+  for i := 0 to MaxSize-1 do
     if PByteArray(UTF8)[i]=0 then
       PByteArray(UTF8)[i] := ord('~');
 end;
