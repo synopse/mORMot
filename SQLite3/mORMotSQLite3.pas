@@ -1921,12 +1921,12 @@ var ndx,f,r,prop,fieldCount,valuesCount,
     Decode: TJSONObjectDecoder;
     tmp: TSynTempBuffer;
 begin
+  if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
+    exit; // nothing to add
   if fBatchMethod<>mPOST then
     raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
       [self,ToText(fBatchMethod)^]);
   try
-    if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
-      exit; // nothing to add
     if fBatchValuesCount<>fBatchIDCount then
       raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
