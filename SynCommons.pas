@@ -13186,7 +13186,8 @@ type
     User: RawUTF8;
     /// some hash compression of this information
     // - the very same executable on the very same computer run by the very
-    // same user will always have the same Hash value 
+    // same user will always have the same Hash value
+    // - is computed from the crc32c of this TExeVersion fields 
     // - may be used as an entropy seed 
     Hash: THash128Rec;
   end;

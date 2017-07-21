@@ -984,10 +984,14 @@ type
     /// retrieve some entropy bytes from the Operating System
     // - entropy comes from CryptGenRandom API on Windows, and /dev/urandom or
     // /dev/random on Linux/POSIX
+    // - this system-supplied entropy is then XORed with the output of a SHA-3
+    // cryptographic SHAKE-256 generator in XOF mode, of several entropy sources
+    // (timestamp, thread and system information, Random32 function) unless
+    // SystemOnly is TRUE
     // - depending on the system, entropy may not be true randomness: if you need
     // some truly random values, use TAESPRNG.Main.FillRandom() or TAESPRNG.Fill()
     // methods, NOT this class function (which will be much slower, BTW)
-    class function GetEntropy(Len: integer): RawByteString; virtual;
+    class function GetEntropy(Len: integer; SystemOnly: boolean=false): RawByteString; virtual;
     /// returns a shared instance of a TAESPRNG instance
     // - if you need to generate some random content, just call the
     // TAESPRNG.Main.FillRandom() overloaded methods, or directly TAESPRNG.Fill()
@@ -1083,7 +1087,7 @@ var
 
 /// low-level function returning some random binary using standard API
 // - will call /dev/urandom under POSIX, and CryptGenRandom API on Windows,
-// and fallback to SynCommons.RandomGUID if the system is not supported
+// and fallback to SynCommons.FillRandom if the system is not supported
 // - you should not have to call this procedure, but faster and safer TAESPRNG
 procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: boolean);
 
@@ -7124,8 +7128,9 @@ end;
 
 procedure TSHA3Context.InitSponge(aRate, aCapacity: integer);
 begin
-  Assert(aRate + aCapacity = 1600, 'Rate+Capacity should be 1600');
-  Assert((aRate > 0) and (aRate < 1600) and ((aRate and 63) = 0), 'Invalid Rate');
+  if (aRate + aCapacity <> 1600) or (aRate <= 0) or (aRate >= 1600) or
+     ((aRate and 63) <> 0) then
+    raise ESynCrypto.CreateUTF8('Unexpected TSHA3Context.Init(%,%)', [aRate, aCapacity]);
   FillCharFast(self, sizeof(self), 0);
   Rate := aRate;
   Capacity := aCapacity;
@@ -7151,8 +7156,10 @@ var
   partialByte: integer;
   curData: pointer;
 begin
-  Assert(BitsInQueue and 7 = 0, 'Only the last call may contain a partial byte');
-  Assert(not Squeezing, 'Too late for additional input');
+  if BitsInQueue and 7 <> 0 then
+    raise ESynCrypto.Create('TSHA3Context.Absorb: only last may contain partial');
+  if Squeezing then
+    raise ESynCrypto.Create('TSHA3Context.Absorb: too late for additional input');
   i := 0;
   while i < databitlen do begin
     if (BitsInQueue = 0) and (databitlen >= Rate) and (i <= (databitlen - Rate)) then begin
@@ -7231,7 +7238,8 @@ var
 begin
   if not Squeezing then
     PadAndSwitchToSqueezingPhase;
-  Assert(outputLength and 7 = 0, 'outputLength is not a multiple of 8 bits');
+  if outputLength and 7 <> 0 then
+    raise ESynCrypto.CreateUTF8('TSHA3Context.Squeeze(%?)', [outputLength]);
   i := 0;
   while i < outputLength do begin
     if BitsAvailableForSqueezing = 0 then begin
@@ -10377,70 +10385,62 @@ function CreateGuid(out guid: TGUID): HResult; stdcall;
   external 'ole32.dll' name 'CoCreateGuid';
 {$endif}
 
-class function TAESPRNG.GetEntropy(Len: integer): RawByteString;
+class function TAESPRNG.GetEntropy(Len: integer; SystemOnly: boolean): RawByteString;
 var time: Int64;
     ext: TSynExtended;
-    threads: array[0..2] of TThreadID;
-    version: RawByteString;
-    hmac: THMAC_SHA256;
-    entropy: array[0..3] of THash256; // 128 bytes
-    paranoid: cardinal;
-    p: PByteArray;
-    i: integer;
-  procedure hmacInit;
+    data: THash128Rec;
+    fromos, version: RawByteString;
+    sha3: TSHA3;
+  procedure sha3update;
   var timenow: Int64;
       g: TGUID;
       i,val: cardinal;
   begin
-    hmac.Init(@entropy,sizeof(entropy)); // bytes on CPU stack
-    hmac.Update(@time,sizeof(time));
-    hmac.Update(ExeVersion.Hash.b);
+    sha3.Update(@time,sizeof(time));
+    sha3.Update(@data,sizeof(data)); // some bytes on stack
+    sha3.Update(@ExeVersion.Hash.b,sizeof(ExeVersion.Hash));
     QueryPerformanceCounter(timenow);
-    hmac.Update(@timenow,sizeof(timenow)); // include GetEntropy() execution time
-    val := UnixTimeUTC;
-    hmac.Update(@val,sizeof(val));
-    for i := 0 to timenow and 3 do begin
-      CreateGUID(g); // not random, but genuine
-      hmac.Update(@g,sizeof(g));
-    end;
+    sha3.Update(@timenow,sizeof(timenow)); // include previous execution time
+    CreateGUID(g); // not random, but genuine
+    sha3.Update(@g,sizeof(g));
     for i := 1 to (Random32 and 15)+2 do begin
       val := Random32; // RDRAND Intel x86/x64 opcode or gsl_rng_taus2()
-      hmac.Update(@val,sizeof(val));
+      sha3.Update(@val,sizeof(val));
     end;
   end;
 begin
   QueryPerformanceCounter(time);
-  // retrieve some initial entropy from OS
-  SetLength(result,Len);
-  p := pointer(result);
-  FillSystemRandom(p,len,true);
-  // always xor some explicit entropy - it won't hurt
-  hmacInit;
-  version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
-  hmac.Update(pointer(version),length(version)); // exe and host/user info
-  hmac.Done(entropy[3]);
-  hmacInit;
-  ext := NowUTC;
-  hmac.Update(@ext,sizeof(ext));
-  hmac.Done(entropy[2]);
-  hmacInit;
-  ext := Random;
-  hmac.Update(@ext,sizeof(ext));
-  threads[0] := TThreadID(HInstance);
-  threads[1] := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
-  threads[2] := {$ifdef BSD}Cardinal{$endif}(MainThreadID);
-  hmac.Update(@threads,sizeof(threads));
-  hmac.Done(entropy[1]);
-  hmacInit;
-  hmac.Update(@SystemInfo,sizeof(SystemInfo));
-  hmac.Update(pointer(OSVersionText),Length(OSVersionText));
-  SleepHiRes(0); // force non deterministic time shift
-  QueryPerformanceCounter(time);
-  hmac.Update(@time,sizeof(time)); // include GetEntropy() execution time
-  hmac.Done(entropy[0]);
-  for i := 0 to Len-1 do begin
-    paranoid := PByteArray(@entropy)^[i and (sizeof(entropy)-1)];
-    p^[i] := p^[i] xor Xor32Byte[(cardinal(p^[i]) shl 5) xor paranoid] xor paranoid;
+  try
+    // retrieve some initial entropy from OS
+    SetLength(fromos,Len);
+    FillSystemRandom(pointer(fromos),len,true);
+    if SystemOnly then begin
+      result := fromos;
+      fromos := '';
+      exit;
+    end;
+    // xor some explicit entropy - it won't hurt
+    sha3.Init(SHAKE_256); // used in XOF mode for variable-length output
+    sha3update;
+    version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
+    sha3.Update(pointer(version),length(version)); // exe and host/user info
+    ext := NowUTC;
+    sha3.Update(@ext,sizeof(ext));
+    sha3update;
+    ext := Random; // why not?
+    sha3.Update(@ext,sizeof(ext));
+    sha3.Update(pointer(OSVersionText),Length(OSVersionText));
+    data.c0 := cardinal(HInstance);
+    data.c1 := cardinal(GetCurrentThreadId);
+    data.c2 := cardinal(MainThreadID);
+    data.c3 := cardinal(UnixTimeUTC);
+    SleepHiRes(0); // force non deterministic time shift
+    sha3update;
+    sha3.Update(@SystemInfo,sizeof(SystemInfo));
+    result := sha3.Cypher(fromos); // = XOR entropy using SHA-3 in XOF mode
+  finally
+    sha3.Done;
+    FillZero(fromos);
   end;
 end;
 
