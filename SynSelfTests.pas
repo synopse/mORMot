@@ -9631,7 +9631,11 @@ var b: TBenchmark;
     timer: TPrecisionTimer;
     time: array[TBenchmark] of Int64;
     AES: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstract;
+    TXT: array[TBenchmark] of RawUTF8;
 begin
+  GetEnumTrimmedNames(TypeInfo(TBenchmark),@TXT);
+  for b := low(b) to high(b) do
+    TXT[b] := LowerCase(TXT[b]);
   for b := low(AES) to high(AES) do
     AES[b] := AESCLASS[b].Create(dig, AESBITS[b]);
   SHAKE128.InitCypher('secret', SHAKE_128);
@@ -9663,8 +9667,7 @@ begin
         Check((b >= bAES128CFB) or (dig.d0 <> 0));
       end;
       if false then // if true then = detailed per block size information
-        NotifyTestSpeed(format('%s %s',[GetEnumNameTrimed(TypeInfo(TBenchMark), b),
-          KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
+        NotifyTestSpeed(format('%s %s',[TXT[b], KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
       timer.ComputeTime;
       inc(time[b],timer.LastTimeInMicroSec);
     end;
@@ -9673,8 +9676,8 @@ begin
   end;
   for b := low(b) to high(b) do
     AddConsole(format('%d %s in %s i.e. %d/s or %s/s',
-      [n,GetEnumNameTrimed(TypeInfo(TBenchMark), b),MicroSecToString(time[b]),
-       (n*Int64(1000*1000)) div time[b],KB((size*Int64(1000*1000)) div time[b])]));
+      [n, TXT[b], MicroSecToString(time[b]), (n*Int64(1000*1000)) div time[b],
+       KB((size*Int64(1000*1000)) div time[b])]));
   for b := low(AES) to high(AES) do
     AES[b].Free;
 end;
