@@ -659,7 +659,7 @@ begin
         desc := desc+#13#10'----'; // code block should end the description
         withinCode := false;
       end;
-      typeName := GetNextItem(P,' ');
+      GetNextItem(P,' ',typeName);
       if P=nil then
         exit;
       if typeName<>'' then

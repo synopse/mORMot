@@ -794,7 +794,7 @@ var
       modified := false;
       if doc.Count > 0 then
         while B <> nil do begin
-          appsec := GetNextItem(B, '@');
+          GetNextItem(B, '@', appsec);
           v := doc.GetPVariantByPath(GetNextItem(B));
           if v = nil then
             continue;

@@ -37895,9 +37895,9 @@ begin
   // #1 is a field delimiter below, since Get*Item() functions return nil for #0
   Msg.Result := HTTP_SUCCESS; // Send something back
   call.Init;
-  call.Url := GetNextItem(P,#1);
-  call.Method := GetNextItem(P,#1);
-  call.InHead := GetNextItem(P,#1);
+  GetNextItem(P,#1,call.Url);
+  GetNextItem(P,#1,call.Method);
+  GetNextItem(P,#1,call.InHead);
   call.LowLevelConnectionID := Msg.From;
   Header := 'RemoteIP: 127.0.0.1';
   if call.InHead='' then
@@ -41453,7 +41453,7 @@ begin
       4: result.Content := SessionsAsJson;
       5,6: begin
         PrepareCall;
-        call.Method := GetNextItem(P,' '); // GET or POST
+        GetNextItem(P,' ',call.Method); // GET or POST
         if P<>nil then
           call.Url := call.Url+'/'+RawUTF8(P);
         URI(call);
@@ -44337,7 +44337,7 @@ begin
     exit;
   end;
   P := GotoNextNotSpace(P+6);
-  Prop := GetNextItem(P,'=');
+  GetNextItem(P,'=',Prop);
   if (P=nil) or (fStoredClassRecordProps.Fields.IndexByName(Prop)<0) then
     exit;
   if PWord(P)^=ord(':')+ord('(') shl 8 then
@@ -48755,7 +48755,7 @@ begin
       end;
       if Call.OutStatus=0 then
         Call.OutStatus := HTTP_NOTFOUND else begin
-        Call.OutHead := GetNextItem(P,#1);
+        GetNextItem(P,#1,Call.OutHead);
         if P<>nil then
           SetString(Call.OutBody,P,length(fCurrentResponse)-(P-pointer(fCurrentResponse)));
       end;
@@ -52474,7 +52474,7 @@ begin
       if fListInterfaceMethod[i].InterfaceMethodIndex<SERVICE_PSEUDO_METHOD_COUNT then
         include(bits,i);
   while MethodNamesCSV<>nil do begin
-    method := GetNextItem(MethodNamesCSV);
+    GetNextItem(MethodNamesCSV,',',method);
     if PosEx('.',method)=0 then begin
       for i := 0 to n-1 do
       with fListInterfaceMethod[i] do // O(n) search is fast enough here

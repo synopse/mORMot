@@ -4515,7 +4515,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
     cGetDBMS: begin
       session := 0;
       if (Protocol.Authenticate<>nil) and (Protocol.Authenticate.UsersCount>0) then begin
-        user := GetNextItem(PUTF8Char(O),#1);
+        GetNextItem(PUTF8Char(O),#1,user);
         session := Protocol.Authenticate.CreateSession(user,PCardinal(O)^);
         if session=0 then
           raise ESQLDBRemote.Create('Impossible to Open a Session - '+

@@ -3533,7 +3533,12 @@ function GetLineSizeSmallerThan(P,PEnd: PUTF8Char; aMinimalCount: integer): bool
 
 /// return next CSV string from P
 // - P=nil after call when end of text is reached
-function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8;
+function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// return next CSV string from P
+// - P=nil after call when end of text is reached
+procedure GetNextItem(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8); overload;
 
 /// return trimmed next CSV string from P
 // - P=nil after call when end of text is reached
@@ -20221,7 +20226,7 @@ begin
     // generic loop, handling one UCS4 char per iteration
     if (PtrInt(Dest)<DestLen) and (PtrInt(Source)<SourceLen) then
     repeat
-      // inlined UTF16CharToUtf8()
+      // inlined UTF16CharToUtf8() with bufferoverlow check and $FFFD on unmatch
       c := cardinal(Source^);
       inc(Source);
       case c of
@@ -31044,7 +31049,7 @@ begin
     result := IdemPChar(source,Pointer(searchUp));
     if result then begin
       inc(source,Length(searchUp));
-      Item := GetNextItem(source,Sep);
+      GetNextItem(source,Sep,Item);
     end;
   end;
 end;
@@ -31075,6 +31080,11 @@ begin
 end;
 
 function GetNextItem(var P: PUTF8Char; Sep: AnsiChar= ','): RawUTF8;
+begin
+  GetNextItem(P,Sep,result);
+end;
+
+procedure GetNextItem(var P: PUTF8Char; Sep: AnsiChar; var result: RawUTF8); overload;
 var S: PUTF8Char;
 begin
   if P=nil then
@@ -31414,7 +31424,7 @@ begin
   if P=nil then
     result := '' else
     for i := 0 to Index do
-      result := GetNextItem(P,Sep);
+      GetNextItem(P,Sep,result);
 end;
 
 function GetLastCSVItem(const CSV: RawUTF8; Sep: AnsiChar=','): RawUTF8;
@@ -31443,7 +31453,7 @@ var s: RawUTF8;
 begin
   result := 0;
   while CSV<>nil do begin
-    s := GetNextItem(CSV,Sep);
+    GetNextItem(CSV,Sep,s);
     if TrimValue then
       s := trim(s);
     if CaseSensitive then begin
@@ -31462,9 +31472,9 @@ procedure CSVToRawUTF8DynArray(CSV: PUTF8Char; var Result: TRawUTF8DynArray;
 var s: RawUTF8;
 begin
   while CSV<>nil do begin
-    s := GetNextItem(CSV,Sep);
     if TrimItems then
-      s := trim(s);
+      GetNextItemTrimed(CSV,Sep,s) else
+      GetNextItem(CSV,Sep,s);
     if s<>'' then begin
       SetLength(Result,length(Result)+1);
       Result[high(Result)] := s;
@@ -31495,12 +31505,12 @@ end;
 function AddPrefixToCSV(CSV: PUTF8Char; const Prefix: RawUTF8; Sep: AnsiChar = ','): RawUTF8;
 var s: RawUTF8;
 begin
-  result := GetNextItem(CSV,Sep);
+  GetNextItem(CSV,Sep,result);
   if result='' then
     exit;
   result := Prefix+result;
   while CSV<>nil do begin
-    s := GetNextItem(CSV,Sep);
+    GetNextItem(CSV,Sep,s);
     if s<>'' then
       result := result+','+Prefix+s;
   end;
@@ -41545,7 +41555,7 @@ begin
   while DestVar.VType=varByRef or varVariant do
     DestVar := PVarData(DestVar.VPointer)^;
   repeat
-    itemName := GetNextItem(FullName,'.');
+    GetNextItem(FullName,'.',itemName);
     if itemName='' then
       exit;
     if DestVar.VType=DocVariantVType then begin
@@ -52100,7 +52110,7 @@ begin
   if (JsonObject=nil) or (PropPath=nil) then
     exit;
   repeat
-    objName := GetNextItem(PropPath,'.');
+    GetNextItem(PropPath,'.',objName);
     if objName='' then
       exit;
     JsonObject := JsonObjectItem(JsonObject,objName);
@@ -52136,7 +52146,7 @@ begin
   WR := nil;
   try
     repeat
-      itemName := GetNextItem(PropPath,',');
+      GetNextItem(PropPath,',',itemName);
       if itemName='' then
         break;
       if itemName[length(itemName)]<>'*' then begin
@@ -52147,7 +52157,7 @@ begin
         objPath := '';
         obj := pointer(itemName);
         repeat
-          objName := GetNextItem(obj,'.');
+          GetNextItem(obj,'.',objName);
           if objName='' then
             exit;
           propNameFound := '';

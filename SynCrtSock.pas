@@ -2742,7 +2742,7 @@ begin
   result := -1;
 end;
 
-function GetNextItem(var P: PAnsiChar; Sep: AnsiChar = ','): SockString;
+procedure GetNextItem(var P: PAnsiChar; Sep: AnsiChar; var result: SockString);
 // return next CSV string in P, nil if no more
 var S: PAnsiChar;
 begin
@@ -4562,7 +4562,8 @@ begin
       Exec('HELO '+Server,'25');
     writeln(TCP.SockOut^,'MAIL FROM:<',From,'>'); Expect('250');
     repeat
-      rec := trim(GetNextItem(P));
+      GetNextItem(P,',',rec);
+      rec := Trim(rec);
       if rec='' then continue;
       if pos({$ifdef HASCODEPAGE}SockString{$endif}('<'),rec)=0 then
         rec := '<'+rec+'>';
@@ -5393,8 +5394,8 @@ begin
       end else
       SockRecvLn(Command);
     P := pointer(Command);
-    fMethod := GetNextItem(P,' '); // 'GET'
-    fURL := GetNextItem(P,' ');    // '/path'
+    GetNextItem(P,' ',fMethod); // 'GET'
+    GetNextItem(P,' ',fURL);    // '/path'
     fKeepAliveClient := IdemPChar(P,'HTTP/1.1');
     Content := '';
     // get headers and content

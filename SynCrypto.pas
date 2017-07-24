@@ -7550,7 +7550,7 @@ begin
   case KeySize div 8 of
   0:   result := 0;
   1:   result := PByte(@Key)^;
-  2,3: result := pWord(@Key)^;
+  2,3: result := PWord(@Key)^;
   else result := PInteger(@Key)^;
   end;
 end;
@@ -7821,7 +7821,7 @@ begin
     s2 := s2 mod 65521;
     dec(Count,n);
   end;
-  result := word(s1)+cardinal(word(s2)) shl 16;
+  result := (s1 and $ffff)+(s2 and $ffff) shl 16;
 end;
 
 function Adler32Asm(Adler: cardinal; p: pointer; Count: Integer): cardinal;
@@ -8022,7 +8022,6 @@ begin
   Dest.Write(Buffer,Count);
   inc(DestSize,Count);
 end;
-
 
 procedure XorBlock(p: PIntegerArray; Count, Cod: integer);
 // very fast Xor() according to Cod - not Compression or Stream compatible
@@ -9794,7 +9793,7 @@ function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer
 var rec: THash256Rec absolute aKey;
 begin
   // safe seed for plain text crc, before AES encryption
-  // from TECDHEProtocol.SetKey, aKey is a CTR to avoid replay attacks
+  // from TECDHEProtocol.SetKey, aKey is a public nonce to avoid replay attacks
   fMACKey.plain := rec.Lo;
   XorBlock16(@fMACKey.plain,@rec.Hi);
   // neutral seed for encrypted crc, to check for errors, with no compromission
