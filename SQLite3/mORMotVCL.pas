@@ -324,18 +324,18 @@ begin
   P := fTable.Get(RowIndex,F);
   if P=nil then // null field -> result := nil
     exit;
-  result := @fTemp64; // result should point to Int64,Double,Blob,UTF8 data
+  result := @fTemp64; // let result point to Int64, Double or TDatetime
   if OnlyCheckNull then
     exit;
   SQLType := fTable.FieldType(F,@EnumType);
   case SQLType of
   sftBoolean, sftInteger, sftID, sftTID:
-    fTemp64 := GetInt64(P);
+    SetInt64(P,fTemp64);
   sftFloat, sftCurrency:
     PDouble(@fTemp64)^ := GetExtended(P);
   sftEnumerate, sftSet:
     if EnumType=nil then
-      fTemp64 := GetInt64(P) else
+      SetInt64(P,fTemp64) else
       goto Txt;
   sftDateTime, sftDateTimeMS:
     PDouble(@fTemp64)^ := Iso8601ToDateTimePUTF8Char(P,0);

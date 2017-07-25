@@ -427,8 +427,8 @@ begin
   ftLargeint, ftFloat, ftCurrency:
     PInt64(Dest)^ := PInt64(Data)^;
   ftDate, ftTime, ftDateTime:
-    if PDateTime(Data)^=0 then
-      result := false else begin
+    if PDateTime(Data)^=0 then // handle 30/12/1899 date as NULL
+      result := false else begin  // inlined DataConvert(Field,Data,Dest,true)
       TS := DateTimeToTimeStamp(PDateTime(Data)^);
       if (TS.Time<0) or (TS.Date<=0) then
         result := false else // matches ValidateTimeStamp() expectations

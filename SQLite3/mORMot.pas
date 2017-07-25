@@ -25174,7 +25174,7 @@ begin
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
     // Base-64 encoded content ('\uFFF0base64encodedbinary')
-    result := Base64ToBin(@P[3],Len-3);
+    Base64ToBin(@P[3],Len-3,RawByteString(result));
     exit;
   end;
   // TEXT format
@@ -25200,7 +25200,7 @@ begin
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
     // Base-64 encoded content ('\uFFF0base64encodedbinary')
-    result := Base64ToBin(@P[3],Len-3);
+    Base64ToBin(@P[3],Len-3,RawByteString(result));
     exit;
   end;
   // TEXT format
@@ -53370,7 +53370,7 @@ begin
   {$ifdef FPC}tkAString,{$endif} tkLString:
     if P=TypeInfo(RawJSON) then
       result := smvRawJSON else
-    if P=TypeInfo(RawByteString) then
+    if (P=TypeInfo(RawByteString)) or (P=TypeInfo(TSQLRawBlob)) then
       result := smvRawByteString else
   {$ifndef UNICODE}
     if P=TypeInfo(AnsiString) then
