@@ -435,8 +435,8 @@ begin
         case Field.DataType of
         ftDate:     PDateTimeRec(Dest)^.Date := TS.Date;
         ftTime:     PDateTimeRec(Dest)^.Time := TS.Time;
-        ftDateTime: PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
-        end;
+        ftDateTime: PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
+        end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
     end;
   ftString: begin
     if DataLen<>0 then begin
