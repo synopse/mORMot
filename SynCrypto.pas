@@ -756,8 +756,13 @@ type
     procedure Decrypt(BufIn, BufOut: pointer; Count: cardinal); override;
   end;
 
+  /// internal 256-bit structure used for TAESAbstractAEAD MAC storage
   TAESMAC256 = record
+    /// the AES-encrypted MAC of the plain content
+    // - encrypt the plain text crc, to perform message authentication and integrity
     plain: THash128;
+    /// the plain MAC of the encrypted content
+    // - store the encrypted text crc, to check for errors, with no compromission
     encrypted: THash128;
   end;
   
@@ -772,6 +777,9 @@ type
   protected
     fMAC, fMACKey: TAESMAC256;
   public
+    /// release the used instance memory and resources
+    // - also fill the internal internal MAC hashes with zeros, for safety
+    destructor Destroy; override;
     /// initialize 256-bit MAC computation for next Encrypt/Decrypt call
     // - initialize the internal fMACKey property, and returns true
     // - only the plain text crc is seeded from aKey - encrypted message crc
@@ -9788,6 +9796,13 @@ end;
 
 { TAESAbstractAEAD }
 
+destructor TAESAbstractAEAD.Destroy;
+begin
+  inherited Destroy;
+  FillCharFast(fMacKey,sizeof(fMacKey),0);
+  FillCharFast(fMac,sizeof(fMac),0);
+end;
+
 function TAESAbstractAEAD.MACSetNonce(const aKey: THash256; aAssociated: pointer;
   aAssociatedLen: integer): boolean;
 var rec: THash256Rec absolute aKey;
@@ -11052,6 +11067,7 @@ begin
     FillZero(key);
     FillZero(key2);
     FillZero(appsec);
+    FillZero(instance);
   end;
 end;
 
