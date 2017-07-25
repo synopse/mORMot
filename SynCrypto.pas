@@ -10994,12 +10994,14 @@ end;
 
 var
   __h: THash256;
+  __hmac: THMAC_SHA256; // initialized from CryptProtectDataEntropy salt
 
-procedure read__h;
+procedure read__h__hmac;
 var keyfile: TFileName;
     instance: THash256;
     key,key2,appsec: RawByteString;
 begin
+  __hmac.Init(@CryptProtectDataEntropy,32);
   SetString(appsec,PAnsiChar(@CryptProtectDataEntropy),32);
   PBKDF2_HMAC_SHA256(appsec,ExeVersion.User,100,instance);
   FillZero(appsec);
@@ -11061,9 +11063,9 @@ begin
   if Data='' then
     exit;
   if IsZero(__h) then
-    read__h;
+    read__h__hmac;
   try
-    hmac.Init(@CryptProtectDataEntropy,sizeof(CryptProtectDataEntropy));
+    hmac := __hmac; // thread-safe reuse of CryptProtectDataEntropy salt
     hmac.Update(AppSecret);
     hmac.Update(__h);
     hmac.Done(secret);
