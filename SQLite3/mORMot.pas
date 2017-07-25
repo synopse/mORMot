@@ -36760,9 +36760,7 @@ procedure TRemoteLogThread.AddRow(const aText: RawUTF8);
 begin
   fSafe.Lock;
   try
-    if fPendingRows='' then
-      fPendingRows := aText else
-      fPendingRows := fPendingRows+#13#10+aText;
+    AddToCSV(aText,fPendingRows,#13#10);
   finally
     fSafe.UnLock;
   end;
@@ -37900,9 +37898,7 @@ begin
   GetNextItem(P,#1,call.InHead);
   call.LowLevelConnectionID := Msg.From;
   Header := 'RemoteIP: 127.0.0.1';
-  if call.InHead='' then
-    call.InHead := Header else
-    call.InHead := call.InHead+#13#10+Header;
+  AddToCSV(Header,call.InHead,#13#10);
   SetString(call.InBody,P,PtrInt(input^.cbData)-(P-input^.lpData));
   call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
   // note: it's up to URI overridden method to implement access rights
@@ -40654,11 +40650,8 @@ end;
 procedure TSQLRestServerURIContext.ReturnBlob(const Blob: RawByteString;
   Status: integer; Handle304NotModified: boolean; const FileName: TFileName);
 begin
-  if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then begin
-    if Call.OutHead<>'' then
-      Call.OutHead := Call.OutHead+#13#10;
-    Call.OutHead := Call.OutHead+GetMimeContentTypeHeader(Blob,FileName);
-  end;
+  if not ExistsIniName(pointer(Call.OutHead),HEADER_CONTENT_TYPE_UPPER) then
+    AddToCSV(GetMimeContentTypeHeader(Blob,FileName),Call.OutHead,#13#10);
   Returns(Blob,Status,Call.OutHead,Handle304NotModified);
 end;
 
@@ -43322,12 +43315,12 @@ procedure TSQLRestServerNamedPipeResponse.InternalExecute;
 var call: TSQLRestURIParams;
     Sleeper, Code: integer;
     Ticks64, ClientTimeOut64: Int64;
-    Header: RawUTF8;
+    RemoteIPHeader: RawUTF8;
     Available: cardinal;
 begin
   if (fPipe=0) or (fPipe=Cardinal(INVALID_HANDLE_VALUE)) or (fServer=nil) then
     exit;
-  Header := 'RemoteIP: 127.0.0.1';
+  RemoteIPHeader := 'RemoteIP: 127.0.0.1';
   call.Init;
   call.LowLevelConnectionID := fPipe;
   call.LowLevelFlags := [llfSecured]; // assume pipes communication is safe
@@ -43345,9 +43338,7 @@ begin
           call.Url := ReadString(fPipe);
           call.Method := ReadString(fPipe);
           call.InHead := ReadString(fPipe);
-          if call.InHead='' then
-            call.InHead := Header else
-            call.InHead := call.InHead+#13#10+Header;
+          AddToCSV(RemoteIPHeader,call.InHead,#13#10);
           call.InBody := ReadString(fPipe);
           call.RestAccessRights := @SUPERVISOR_ACCESS_RIGHTS;
           call.OutHead := ''; // may not be reset explicitly by fServer.URI()
