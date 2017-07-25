@@ -11707,6 +11707,11 @@ var
   // instructions are not available on this CPU
   DefaultHasher: THasher;
 
+  /// the hash function used by TRawUTF8Interning
+  // - is set to DefaultHasher by default, i.e. crc32c() function or xxHash32
+  // if SSE4.2 instructions are not available on this CPU
+  InterningHasher: THasher;
+
 /// retrieve a particular bit status from a bit array
 function GetBit(const Bits; aIndex: PtrInt): boolean;
   {$ifdef PUREPASCAL} {$ifdef HASINLINE}inline;{$endif} {$endif}
@@ -19306,6 +19311,7 @@ begin
   inc(pos,count);
 end;
 
+
 { TRawUTF8InterningSlot }
 
 procedure TRawUTF8InterningSlot.Init;
@@ -19316,6 +19322,7 @@ begin
   {$endif}
   Values.Init(TypeInfo(TRawUTF8DynArray),Value,HashAnsiString,
     SortDynArrayAnsiString,crc32c,@Safe.Padding[0].VInteger,false);
+  Values.fHasher := InterningHasher; // consistent with TRawUTF8Interning
 end;
 
 procedure TRawUTF8InterningSlot.Done;
@@ -19471,7 +19478,7 @@ begin
     aResult := '' else
   if self=nil then
     aResult := aText else begin
-    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    hash := InterningHasher(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
     fPool[hash and fPoolLast].Unique(aResult,aText,hash);
   end;
 end;
@@ -19480,7 +19487,7 @@ procedure TRawUTF8Interning.UniqueText(var aText: RawUTF8);
 var hash: cardinal;
 begin
   if (self<>nil) and (aText<>'') then begin
-    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    hash := InterningHasher(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
     fPool[hash and fPoolLast].UniqueText(aText,hash);
   end;
 end;
@@ -19492,7 +19499,7 @@ begin
     result := '' else
   if self=nil then
     result := aText else begin
-    hash := crc32c(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
+    hash := InterningHasher(0,pointer(aText),length(aText)); // = fPool[].Values.HashElement
     fPool[hash and fPoolLast].Unique(result,aText,hash);
   end;
 end;
@@ -19551,6 +19558,7 @@ begin
 end;
 
 {$endif NOVARIANTS}
+
 
 function WideCharToUtf8(Dest: PUTF8Char; aWideChar: PtrUInt): integer;
 begin
@@ -64247,6 +64255,7 @@ begin
     crc32c := @crc32cfast;
     DefaultHasher := @xxHash32; // faster than crc32cfast for small content
   end;
+  InterningHasher := DefaultHasher;
   KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
   KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
   KINDTYPE_INFO[djString] := TypeInfo(String);
