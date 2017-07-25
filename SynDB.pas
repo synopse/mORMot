@@ -6542,7 +6542,7 @@ begin
         BindDateTime(Param,Iso8601ToDateTime(tmp),IO);
       end;
       ftUTF8:
-        if fConnection.fProperties.StoreVoidStringAsNull and
+        if (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull and
            ((Value='') or // check if '' or '""' should be stored as null
            ((PInteger(Value)^ and $ffffff=$2727) and not ValueAlreadyUnquoted)) then
           BindNull(Param,IO,ftUTF8) else begin
@@ -6703,7 +6703,7 @@ procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param<=0) or (ParamType in [ftUnknown,ftNull]) or (ValuesCount<=0) or
-     (length(Values)<ValuesCount) or
+     (length(Values)<ValuesCount) or (fConnection=nil) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self,Param,ToText(ParamType)^]);
@@ -6820,7 +6820,7 @@ begin
             V.VBlobLen := StrLen(V.VText);
         end;
           {$ifndef UNICODE}
-          if not fConnection.Properties.VariantStringAsWideString then begin
+          if (fConnection<>nil) and not fConnection.Properties.VariantStringAsWideString then begin
             VType := varString;
             CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
           end else
@@ -7327,7 +7327,9 @@ begin
       result := fSQLWithInlinedParams; // already computed
       exit;
     end;
-    maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+    if fConnection=nil then
+      maxSize := 0 else
+      maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
     if integer(maxSize)<0 then begin
       result := fSQL; // -1 -> log statement without any parameter value (just ?)
       exit;
@@ -7496,7 +7498,7 @@ begin
         fSQL := copy(aSQL,1,L-1) else
         fSQL := aSQL;
     fExpectResults := ExpectResults;
-    if not fConnection.IsConnected then
+    if (fConnection<>nil) and not fConnection.IsConnected then
       fConnection.Connect;
   finally
     Connection.InternalProcess(speNonActive);
@@ -7505,7 +7507,8 @@ end;
 
 procedure TSQLDBStatement.ExecutePrepared;
 begin
-  fConnection.fLastAccessTicks := GetTickCount64;
+  if fConnection<>nil then
+    fConnection.fLastAccessTicks := GetTickCount64;
   // a do-nothing default method
 end;
 
@@ -7619,7 +7622,7 @@ function TSQLDBStatementWithParams.CheckParam(Param: Integer;
   NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam;
 begin
   result := CheckParam(Param,NewType,IO);
-  if (NewType in [ftUnknown,ftNull]) or
+  if (NewType in [ftUnknown,ftNull]) or (fConnection=nil) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self,Param,ToText(NewType)^]);
@@ -7679,7 +7682,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextS(Param: Integer;
   const Value: string; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := StringToUTF8(Value);
 end;
@@ -7687,7 +7690,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextU(Param: Integer;
   const Value: RawUTF8; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := Value;
 end;
@@ -7695,7 +7698,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextP(Param: Integer;
   Value: PUTF8Char; IO: TSQLDBParamInOutType);
 begin
-  if (Value=nil) and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value=nil) and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     SetString(CheckParam(Param,ftUTF8,IO)^.VData,PAnsiChar(Value),StrLen(Value));
 end;
@@ -7703,7 +7706,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextW(Param: Integer;
   const Value: WideString; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := RawUnicodeToUtf8(pointer(Value),length(Value));
 end;
@@ -7787,7 +7790,8 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
 var i: integer;
     StoreVoidStringAsNull: boolean;
 begin
-  StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
+  StoreVoidStringAsNull := (fConnection<>nil) and
+    fConnection.Properties.StoreVoidStringAsNull;
   with CheckParam(Param,ftUTF8,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and (Values[i]='') then
@@ -7839,7 +7843,7 @@ begin
         VarRecToUTF8(aValues[i],VArray[fParamsArrayCount]);
         case VType of
         ftUTF8:
-          if (VArray[fParamsArrayCount]='') and
+          if (VArray[fParamsArrayCount]='') and (fConnection<>nil) and 
              fConnection.Properties.StoreVoidStringAsNull then
           VArray[fParamsArrayCount] := 'null' else
           VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
@@ -7877,7 +7881,7 @@ begin
           VArray[fParamsArrayCount] := ''''+DateTimeToSQL(Rows.ColumnDateTime(F))+'''';
         ftUTF8: begin
           U := Rows.ColumnUTF8(F);
-          if (U='') and fConnection.Properties.StoreVoidStringAsNull then
+          if (U='') and (fConnection<>nil) and fConnection.Properties.StoreVoidStringAsNull then
             VArray[fParamsArrayCount] := 'null' else
             VArray[fParamsArrayCount] := QuotedStr(U,'''');
         end;
