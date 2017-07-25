@@ -3275,6 +3275,7 @@ begin
     Check(FormatUTF8('?%',[j])='?'+s);
     Check(FormatUTF8('?%?',[j])='?'+s+'?');
     Check(FormatUTF8('?%%?',[j])='?'+s+'?');
+    Check(FormatUTF8('?%?%  ',[j])='?'+s+'?  ');
     Check(FormatUTF8('?%',[],[j])=':('+s+'):');
     Check(FormatUTF8('%?',[j],[j])=s+':('+s+'):');
     Check(FormatUTF8('%?',[s],[s])=s+':('''+s+'''):');

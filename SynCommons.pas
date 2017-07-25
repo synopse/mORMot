@@ -24998,7 +24998,7 @@ begin
     if F^<>#0 then begin // no more available Args -> add all remaining text
       with blocks[blocksN] do begin
         Text := F;
-        Len := StrLen(F);
+        Len := length(Format)-(F-pointer(Format));
         inc(L,Len);
         inc(blocksN);
       end;
