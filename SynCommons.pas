@@ -11702,8 +11702,9 @@ var
 function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 
 var
-  /// the default hasher used by TDynArrayHashed()
-  // - is set to crc32c() function above by default
+  /// the default hasher used by TDynArrayHashed
+  // - is set to crc32c() function above by default, or xxHash32 if SSE4.2
+  // instructions are not available on this CPU
   DefaultHasher: THasher;
 
 /// retrieve a particular bit status from a bit array
@@ -64240,10 +64241,12 @@ begin
     UpperCopy255Buf := @UpperCopy255BufSSE42;
     {$endif}
     {$endif PUREPASCAL}
+    DefaultHasher := crc32c;
   end else
-  {$endif CPUINTEL}
+  {$endif CPUINTEL} begin
     crc32c := @crc32cfast;
-  DefaultHasher := crc32c;
+    DefaultHasher := @xxHash32; // faster than crc32cfast for small content
+  end;
   KINDTYPE_INFO[djRawUTF8] := TypeInfo(RawUTF8); // for TDynArray.LoadKnownType
   KINDTYPE_INFO[djWinAnsi] := TypeInfo(WinAnsiString);
   KINDTYPE_INFO[djString] := TypeInfo(String);
