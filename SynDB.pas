@@ -729,7 +729,9 @@ type
     /// create a TSQLDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
     // - this Variant will point to the corresponding TSQLDBStatement instance,
-    // so it's not necessary to retrieve its value for each row
+    // so it's not necessary to retrieve its value for each row; but once the
+    // associated ISQLDBRows instance is released, you won't be able to access
+    // its data - use RowDocVariant instead
     // - typical use is:
     // ! var Row: Variant;
     // ! (...)
@@ -739,8 +741,12 @@ type
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;
     function RowData: Variant;
-    {$endif}
-    {$endif}
+    /// create a TDocVariant custom variant containing all columns values
+    // - will create a "fast" TDocVariant object instance with all fields
+    procedure RowDocVariant(out aDocument: variant;
+      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST); 
+    {$endif DELPHI5OROLDER}
+    {$endif LVCL}
     /// return the associated statement instance
     function Instance: TSQLDBStatement;
     // return all rows content as a JSON string
@@ -2253,6 +2259,10 @@ type
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;
     function RowData: Variant; virtual;
+    /// create a TDocVariant custom variant containing all columns values
+    // - will create a "fast" TDocVariant object instance with all fields
+    procedure RowDocVariant(out aDocument: variant;
+      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST); virtual;
     {$endif}
     {$endif}
     /// return a special CURSOR Column content as a SynDB result set
@@ -6417,7 +6427,7 @@ function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Inte
 var ID: TThreadID;
 begin
   if self<>nil then begin
-    ID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+    ID := TThreadID(GetCurrentThreadId);
     result := fLatestConnectionRetrievedInPool;
     if (result>=0) and
        (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID) then
@@ -6474,7 +6484,7 @@ begin
           exit;
       end;
       result := NewConnection;
-      (result as TSQLDBConnectionThreadSafe).fThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+      (result as TSQLDBConnectionThreadSafe).fThreadID := TThreadID(GetCurrentThreadId);
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
       LeaveCriticalSection(fConnectionCS);
@@ -7482,6 +7492,23 @@ begin
     VPointer := self;
   end;
 end;
+
+procedure TSQLDBStatement.RowDocVariant(out aDocument: variant;
+  aOptions: TDocVariantOptions);
+var n,F: integer;
+    names: TRawUTF8DynArray;
+    values: TVariantDynArray;
+begin
+  n := ColumnCount;
+  SetLength(names,n); // faster to assign internal arrays per reference
+  SetLength(values,n);
+  for F := 0 to n-1 do begin
+    names[F] := ColumnName(F);
+    ColumnToVariant(F,values[F]);
+  end;
+  TDocVariantData(aDocument).InitObjectFromVariants(names,values,aOptions);
+end;
+
 {$endif}
 {$endif}
 

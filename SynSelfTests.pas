@@ -12382,7 +12382,7 @@ var res: ISQLDBRows;
     id,lastid,n,n1: integer;
     IDs: TIntegerDynArray;
     {$ifndef LVCL}
-    Row: variant;
+    Row,RowDoc: variant;
     {$endif}
 procedure DoInsert;
 var i: integer;
@@ -12431,6 +12431,9 @@ begin
     {$else}
     Check(Row.ID>0);
     Check(Row.YearOfDeath=1519);
+    res.RowDocVariant(RowDoc);
+    Check(RowDoc.ID=Row.ID);
+    Check(_Safe(RowDoc)^.I['YearOfDeath']=1519);
     {$endif}
     inc(n);
   until not res.Step;
