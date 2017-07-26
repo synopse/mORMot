@@ -41845,12 +41845,12 @@ var i, tc: integer;
     CurrentThreadId: TThreadID;
 begin
   tc := fStats.NotifyThreadCount(1);
-  CurrentThreadId := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+  CurrentThreadId := TThreadID(GetCurrentThreadId);
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.BeginCurrentThread(nil)',[self]);
   InternalLog('BeginCurrentThread(%) root=% ThreadID=% ThreadCount=%',
     [Sender.ClassType,Model.Root,pointer(CurrentThreadId),tc]);
-  if {$ifdef BSD}Cardinal{$endif}(Sender.ThreadID)<>CurrentThreadId then
+  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.BeginCurrentThread(Thread.ID=%) and CurrentThreadID=% should match',
       [self,Sender.ThreadID,CurrentThreadId]);
@@ -41872,12 +41872,12 @@ var i, tc: integer;
     Inst: TServiceFactoryServerInstance;
 begin
   tc := fStats.NotifyThreadCount(-1);
-  CurrentThreadId := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+  CurrentThreadId := TThreadID(GetCurrentThreadId);
   if Sender=nil then
     raise ECommunicationException.CreateUTF8('%.EndCurrentThread(nil)',[self]);
   InternalLog('EndCurrentThread(%) ThreadID=% ThreadCount=%',
     [Sender.ClassType,pointer(CurrentThreadId),tc]);
-  if {$ifdef BSD}Cardinal{$endif}(Sender.ThreadID)<>CurrentThreadId then
+  if TThreadID(Sender.ThreadID)<>CurrentThreadId then
     raise ECommunicationException.CreateUTF8(
       '%.EndCurrentThread(%.ID=%) should match CurrentThreadID=%',
       [self,Sender,Sender.ThreadID,CurrentThreadId]);
@@ -53395,7 +53395,7 @@ begin
           oException,oCustomReaderWriter]) then
       result := smvObject; // JSONToObject/ObjectToJSON types
   {$ifdef FPC}tkObject,{$endif} tkRecord:
-    // Base64 encoding of our RecordLoad / RecordSave binary format
+    // JSON or Base64 encoding of our RecordLoad / RecordSave binary format
     result := smvRecord;
   {$ifndef NOVARIANTS}
   tkVariant:
@@ -60713,7 +60713,7 @@ end;
 procedure SetThreadNameWithLog(ThreadID: TThreadID; const Name: RawUTF8);
 begin
   {$ifdef WITHLOG}
-  if (SetThreadNameLog<>nil) and (ThreadID={$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId)) then
+  if (SetThreadNameLog<>nil) and (ThreadID=TThreadID(GetCurrentThreadId)) then
     SetThreadNameLog.Add.LogThreadName(Name);
   {$endif}
   SetThreadNameDefault(ThreadID,Name);
@@ -60730,7 +60730,7 @@ initialization
   {$ifndef USENORMTOUPPER}
   pointer(@SQLFieldTypeComp[sftUTF8Text]) := @AnsiIComp;
   {$endif}
-  SetThreadNameDefault({$ifdef BSD}Cardinal{$endif}(GetCurrentThreadID),'Main Thread');
+  SetThreadNameDefault(TThreadID(GetCurrentThreadID),'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(
     TypeInfo(TClassDynArray),TypeInfo(TJSONCustomParsers)));

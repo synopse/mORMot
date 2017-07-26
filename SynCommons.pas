@@ -18225,8 +18225,10 @@ const
 
 { TSynAnsiConvert }
 
+{$ifdef MSWINDOWS}
 const
   DefaultCharVar: AnsiChar = '?';
+{$endif}
 
 function TSynAnsiConvert.AnsiBufferToUnicode(Dest: PWideChar;
   Source: PAnsiChar; SourceChars: Cardinal; NoTrailingZero: boolean): PWideChar;
@@ -36728,15 +36730,15 @@ begin
   end;
 end;
 {$else}
-var PageSize, AlignedAddr: PtrInt;
+var PageSize, AlignedAddr: PtrUInt;
     i: integer;
 begin
   if Backup<>nil then
     for i := 0 to Size-1 do // do not use Move() here
       PByteArray(Backup)^[i] := PByteArray(Old)^[i];
   PageSize := _SC_PAGE_SIZE;
-  AlignedAddr := PtrInt(Old) and not (PageSize - 1);
-  while PtrInt(Old) + Size >= AlignedAddr + PageSize do
+  AlignedAddr := PtrUInt(Old) and not (PageSize - 1);
+  while PtrUInt(Old) + PtrUInt(Size) >= AlignedAddr + PageSize do
     Inc(PageSize,_SC_PAGE_SIZE);
   {$ifdef USEMPROTECT}
   if mprotect(Pointer(AlignedAddr),PageSize,PROT_READ or PROT_WRITE or PROT_EXEC)=0 then
@@ -42690,7 +42692,7 @@ var n,v: RawUTF8;
 begin
   Init(aOptions,dvObject);
   while CSV<>nil do begin
-    GetNextItem(CSV,NameValueSep,v);
+    GetNextItem(CSV,NameValueSep,n);
     if ItemSep=#10 then
       GetNextItemTrimedCRLF(CSV,v) else
       GetNextItem(CSV,ItemSep,v);
@@ -54500,11 +54502,11 @@ procedure TSynMonitorDisk.RetrieveDiskInfo;
     fTotalSize.fBytes := fs.f_blocks*fs.f_bsize;
   {$endif}
   {$ifdef FPC}
-  var fs: pstatfs;
+  var fs: tstatfs;
   begin
     if fName='' then
       fName := '.';
-    fpStatFS(fName,fs);
+    fpStatFS(fName,@fs);
     fAvailableSize.fBytes := QWord(fs.bavail)*QWord(fs.bsize);
     fFreeSize.fBytes := fAvailableSize.fBytes;
     fTotalSize.fBytes := QWord(fs.blocks)*QWord(fs.bsize);
@@ -62687,7 +62689,7 @@ function IsDebuggerPresent: BOOL; stdcall; external kernel32; // since XP
 
 procedure SetCurrentThreadName(const Format: RawUTF8; const Args: array of const);
 begin
-  SetThreadName({$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId),Format,Args);
+  SetThreadName(TThreadID(GetCurrentThreadId),Format,Args);
 end;
 
 procedure SetThreadName(ThreadID: TThreadID; const Format: RawUTF8;
@@ -62699,6 +62701,9 @@ begin
 end;
 
 procedure SetThreadNameDefault(ThreadID: TThreadID; const Name: RawUTF8);
+{$ifdef FPC}
+begin // not implemented yet
+{$else}
 var s: RawByteString;
     {$ifndef ISDELPHIXE2}
     {$ifdef MSWINDOWS}
@@ -62711,9 +62716,6 @@ var s: RawByteString;
     {$endif}
     {$endif}
 begin
-  {$ifdef FPC}
-  exit;
-  {$endif FPC}
   {$ifdef NOSETTHREADNAME}
   exit;
   {$endif NOSETTHREADNAME}
@@ -62735,6 +62737,7 @@ begin
   except {ignore} end;
   {$endif MSWINDOWS}
   {$endif ISDELPHIXE2}
+{$endif FPC}
 end;
 
 constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
@@ -62953,7 +62956,7 @@ begin
     result := fPendingProcessFlag;
     if result=flagIdle then begin // we just acquired the thread! congrats!
       fPendingProcessFlag := flagStarted; // atomic set "started" flag
-      fCallerThreadID := {$ifdef BSD}Cardinal{$endif}(ThreadID);
+      fCallerThreadID := TThreadID(ThreadID);
     end;
   finally
     fPendingProcessLock.UnLock;
@@ -63004,7 +63007,7 @@ var start: Int64;
     ThreadID: TThreadID;
 begin
   result := false;
-  ThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+  ThreadID := TThreadID(GetCurrentThreadId);
   if (self=nil) or (ThreadID=fCallerThreadID) then
     // avoid endless loop when waiting in same thread (e.g. UI + OnIdle)
     exit;

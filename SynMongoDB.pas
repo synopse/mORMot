@@ -3671,7 +3671,7 @@ begin
     with ExeVersion do
       PCardinal(@MachineID)^ := crc32c(crc32c(0,pointer(Host),length(Host)),
         pointer(User),length(User));
-    ProcessID := (ProcessID shl 8) xor {$ifdef BSD}Cardinal{$endif}(MainThreadID);
+    ProcessID := (ProcessID shl 8) xor TThreadID(MainThreadID);
   end;
 end;
 
