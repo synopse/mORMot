@@ -21026,7 +21026,8 @@ begin
     SetString(RawUTF8(result.VAny),Value,StrLen(Value));
   sftBlobCustom, sftBlob:
     RawByteString(result.VAny) := BlobToTSQLRawBlob(Value);
-  sftBlobDynArray, sftObject, sftVariant, sftUTF8Custom, sftNullable: begin
+  {$ifndef NOVARIANTS}sftVariant, sftNullable,{$endif}
+  sftBlobDynArray, sftObject, sftUTF8Custom: begin
     if (fieldType=sftBlobDynArray) and (typeInfo<>nil) and
        (Value<>nil) and (Value^<>'[') and
        Base64MagicCheckAndDecode(Value,tmp) then
@@ -21087,7 +21088,17 @@ procedure TSQLPropInfo.CopyProp(Source: TObject; DestInfo: TSQLPropInfo; Dest: T
   procedure GenericCopy;
   var tmp: RawUTF8;
       wasString: boolean;
+      {$ifndef NOVARIANTS}
+      val: variant;
+      {$endif}
   begin
+    {$ifndef NOVARIANTS} // force JSON serialization, e.g. for dynamic arrays
+    if (DestInfo.SQLFieldType=sftVariant) or (SQLfieldType=sftVariant) then begin
+      GetVariant(Source,val);
+      DestInfo.SetVariant(Dest,val);
+      exit;
+    end;
+    {$endif}
     GetValueVar(Source,false,tmp,@wasString);
     DestInfo.SetValueVar(Dest,tmp,wasString);
   end;
@@ -24904,12 +24915,14 @@ begin
           ContentTypeInfo := PTypeInfo(FieldTypeInfo)^.SetEnumType;
       sftBlobDynArray:
         ContentTypeInfo := FieldTypeInfo;
+      {$ifndef NOVARIANTS}
       sftNullable: begin
         ContentTypeInfo := FieldTypeInfo;
         ContentType := NullableTypeToSQLFieldType(FieldTypeInfo);
         if ContentType=sftUnknown then
           ContentType := sftNullable;
       end;
+      {$endif}
       end;
     TableIndex := FieldTableIndex;
   end;
@@ -31275,6 +31288,7 @@ begin
     W.Add(',');
 end;
 
+{$ifndef NOVARIANTS}
 procedure TSQLRecord.ForceVariantFieldsOptions(aOptions: TDocVariantOptions);
 var i: integer;
 begin
@@ -31289,6 +31303,7 @@ begin
           if Count>0 then
             Options := aOptions;
 end;
+{$endif}
 
 procedure TSQLRecord.GetJSONValuesAndFree(JSON : TJSONSerializer);
 begin
