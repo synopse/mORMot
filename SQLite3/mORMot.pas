@@ -27223,10 +27223,14 @@ begin
     if Source.VType<>VarType then
       RaiseCastError;
     r := TSQLTableRowVariantData(Source).VRow;
-    if r<0 then
+    if r<0 then 
       r := TSQLTableRowVariantData(Source).VTable.fStepRow;
     TSQLTableRowVariantData(Source).VTable.ToDocVariant(r,tmp);
-    RawUTF8ToVariant(VariantSaveJSON(tmp),Dest,AVarType);
+    if AVarType=DocVariantVType then begin
+      VarClear(variant(Dest));
+      TDocVariantData(Dest) := TDocVariantData(tmp);
+    end else
+      RawUTF8ToVariant(VariantSaveJSON(tmp),Dest,AVarType);
   end;
 end;
 

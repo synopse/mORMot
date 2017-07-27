@@ -7614,17 +7614,19 @@ end;
 procedure TSQLDBRowVariantType.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
 var Rows: TSQLDBStatement;
+    col: RawUTF8;
 begin
   Rows := TSQLDBStatement(TVarData(V).VPointer);
   if Rows=nil then
-    raise ESQLDBException.Create('Invalid TSQLDBRowVariantType call');
-  Rows.ColumnToVariant(Rows.ColumnIndex(RawByteString(Name)),Variant(Dest));
+    raise ESQLDBException.CreateUTF8('Invalid % call',[self]);
+  SetString(col,Name,StrLen(Name));
+  Rows.ColumnToVariant(Rows.ColumnIndex(col),Variant(Dest));
 end;
 
 procedure TSQLDBRowVariantType.IntSet(const V, Value: TVarData;
   Name: PAnsiChar);
 begin
-  raise ESQLDBException.Create('TSQLDBRowVariantType is read-only');
+  raise ESQLDBException.CreateUTF8('% is read-only',[self]);
 end;
 
 {$endif}
