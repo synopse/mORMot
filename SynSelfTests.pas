@@ -3064,7 +3064,7 @@ begin
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
   FillZero(crc1);
-  crcblockpas(@crc1,PBlock128(PAnsiChar('0123456789012345')));
+  crcblockNoSSE42(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
   {$endif}
@@ -3078,7 +3078,7 @@ begin
     check(not IsZero(crc2));
     check(IsEqual(crc1,crc2));
     FillZero(crc2);
-    crcblockpas(@crc2,@digest);
+    crcblockNoSSE42(@crc2,@digest);
     check(not IsZero(crc2));
     check(IsEqual(crc1,crc2));
     {$endif}

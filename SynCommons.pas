@@ -11567,10 +11567,10 @@ procedure crcblock(crc128, data128: PBlock128);
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 
 {$ifdef CPUINTEL}
-/// pure pascal computation of our 128-bit CRC of a 128-bit binary buffer
+/// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
-procedure crcblockpas(crc128, data128: PBlock128);
+procedure crcblockNoSSE42(crc128, data128: PBlock128);
 {$endif}
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
@@ -33039,7 +33039,7 @@ begin
   {$else}
   {$ifdef CPUX86}
   if (cfSSE42 in CpuFeatures) and (count>0) then
-  asm
+  asm 
         mov     ecx, crc128
         mov     edx, data128
 @s:     mov     eax, dword ptr[ecx]
@@ -33059,7 +33059,7 @@ begin
         jnz     @s
   end else
   while count>0 do begin
-    crcblockpas(crc128,data128);
+    crcblockNoSSE42(crc128,data128); 
   {$else}
   while count>0 do begin
     crcblock(crc128,data128);
@@ -33071,7 +33071,7 @@ begin
 end;
 
 {$ifdef CPUINTEL}
-procedure crcblockpas(crc128, data128: PBlock128);
+procedure crcblockNoSSE42(crc128, data128: PBlock128);
 {$else}
 procedure crcblock(crc128, data128: PBlock128);
 {$endif CPUINTEL}
@@ -33161,7 +33161,7 @@ asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
         .NOFRAME
 {$endif FPC}
         test    byte ptr[rip + CpuFeatures + 6], $10 // cfSSE42 in CpuFeatures
-        jz      crcblockpas
+        jz      crcblockNoSSE42
         {$ifdef Linux}
         mov     rcx, rdi
         mov     rdx, rsi
@@ -33183,7 +33183,7 @@ end;
 asm // eax=crc128, edx=data128
         test    byte ptr[CpuFeatures + 6], $10 // cfSSE42 in CpuFeatures
         mov     ecx, eax
-        jz      crcblockpas
+        jz      crcblockNoSSE42
         {$ifdef ISDELPHI2010}
         mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
