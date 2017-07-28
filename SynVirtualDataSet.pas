@@ -232,12 +232,16 @@ const
 // - very optimized for speed
 procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
+type
+  /// a string buffer, used by InternalBCDToBuffer to store its output text
+  TBCDBuffer = array[0..66] of AnsiChar;
+  
 /// convert a TBcd value as text to the output buffer
 // - buffer is to be array[0..66] of AnsiChar
 // - returns the resulting text start in PBeg, and the length as function result
 // - does not handle negative sign and 0 value - see AddBcd() function use case
 // - very optimized for speed
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg: PAnsiChar): integer;
 
 /// convert a TBcd value into a currency
 // - purepascal version included in latest Delphi versions is slower than this
@@ -259,7 +263,7 @@ function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
 
 implementation
 
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg: PAnsiChar): integer;
 var i,DecimalPos: integer;
     P,Frac: PByte;
     PEnd: PAnsiChar;
@@ -268,7 +272,7 @@ begin
   if AValue.Precision=0 then
     exit;
   DecimalPos := AValue.Precision-(AValue.SignSpecialPlaces and $3F);
-  P := pointer(ADest);
+  P := @ADest;
   Frac := @Avalue.Fraction;
   for i := 0 to AValue.Precision-1 do begin
     if i=DecimalPos then
@@ -288,7 +292,7 @@ begin
   end;
   // remove trailing 0 after decimal
   if AValue.Precision>DecimalPos then begin
-    repeat dec(P) until (P^<>ord('0')) or (P=pointer(ADest));
+    repeat dec(P) until (P^<>ord('0')) or (P=@ADest);
     PEnd := pointer(P);
     if PEnd^<>'.' then
       inc(PEnd);
@@ -296,7 +300,7 @@ begin
     PEnd := pointer(P);
   PEnd^ := #0;
   // remove leading 0
-  PBeg := ADest;
+  PBeg := @ADest;
   while (PBeg[0]='0') and (PBeg[1] in ['0'..'9']) do inc(PBeg);
   result := PEnd-PBeg;
 end;
@@ -304,9 +308,9 @@ end;
 procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 var len: integer;
     PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
+    tmp: TBCDBuffer;
 begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
   if len<=0 then
     WR.Add('0') else begin
     if AValue.SignSpecialPlaces and $80=$80 then
@@ -318,9 +322,9 @@ end;
 function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 var len: integer;
     PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
+    tmp: TBCDBuffer;
 begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
   if len<=0 then
     Curr := 0 else begin
     PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
