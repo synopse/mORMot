@@ -2664,6 +2664,12 @@ procedure AppendBuffersToRawUTF8(var Text: RawUTF8; const Buffers: array of PUTF
 // you may encounter buffer overflows and random memory errors
 function AppendRawUTF8ToBuffer(Buffer: PUTF8Char; const Text: RawUTF8): PUTF8Char;
 
+/// fast add text conversion of a 32 bit signed integer value into a given buffer
+// - warning: the Buffer should contain enough space to store the text, otherwise
+// you may encounter buffer overflows and random memory errors
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
+
+
 {$ifdef PUREPASCAL}
 /// inlined StrComp(), to be used with PUTF8Char/PAnsiChar
 function StrComp(Str1, Str2: pointer): PtrInt;
@@ -24300,6 +24306,20 @@ begin
   result := Buffer;
 end;
 
+function AppendUInt32ToBuffer(Buffer: PUTF8Char; Value: cardinal): PUTF8Char;
+var L: integer;
+    tmp: array[0..15] of AnsiChar;
+    P: PAnsiChar;
+begin
+  if Value<=high(SmallUInt32UTF8) then
+    result := AppendRawUTF8ToBuffer(Buffer,SmallUInt32UTF8[Value]) else begin
+    P := StrUInt32(@tmp[15],Value);
+    L := @tmp[15]-P;
+    MoveFast(P^,Buffer^,L);
+    result := Buffer+L;
+  end;
+end;
+ 
 function QuotedStr(const S: RawUTF8; Quote: AnsiChar): RawUTF8;
 begin
   QuotedStr(Pointer(S),Quote,result);
