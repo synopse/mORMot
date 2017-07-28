@@ -89,6 +89,53 @@ uses
 { ************ BSON (Binary JSON) process }
 
 type
+  /// binary representation of a 128 bit decimal, stored as 16 bytes
+  // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
+  // BSON Decimal128 format
+  TDecimal128Bits = record
+    case integer of
+    0: (lo, hi: QWord);
+    1: (b: array[0..15] of byte);
+    2: (c: array[0..3] of cardinal);
+  end;
+  /// points to a 128 bit decimal binary
+  PDecimal128Bits = ^TDecimal128Bits;
+
+  /// maximum length of a decimal128 string
+  TDecimal128Str = array[0..42] of AnsiChar;
+
+  /// handles a 128 bit decimal value
+  // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
+  // BSON Decimal128 format
+  {$ifndef UNICODE}
+  TDecimal128 = object
+  {$else}
+  TDecimal128 = record
+  {$endif}
+  public
+    /// the raw binary storage
+    Bits: TDecimal128Bits;
+    /// fills with the supplied raw value
+    procedure SetHiLo(const h,l: Qword);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fills with the Zero value
+    procedure SetZero;
+    /// fills with the Nan pseudo-value
+    procedure SetNan;
+    /// fills with the Infinity pseudo-value
+    procedure SetInf(isNeg: boolean);
+    /// converts the value to its string representation
+    // - returns the number of AnsiChar written to Buffer
+    function ToText(out Buffer: TDecimal128Str): integer; overload;
+    /// converts the value to its string representation
+    function ToText: RawUTF8; overload;
+    /// converts the value to its string representation
+    procedure AddText(W: TTextWriter);
+  end;
+  /// points to a 128 bit decimal value
+  PDecimal128 = TDecimal128;
+
+type
   /// exception type used for BSON process
   EBSONException = class(ESynException);
 
@@ -105,7 +152,7 @@ type
     betEOF, betFloat, betString, betDoc, betArray, betBinary,
     betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
-    betJSScope, betInt32, betTimeStamp, betInt64);
+    betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128);
 
   { TODO: add betDecimal128 support, and $numberDecimal variant (MongoDB >= 3.4)
     https://github.com/mongodb/specifications/blob/master/source/bson-decimal128/decimal128.rst
@@ -194,6 +241,7 @@ type
   // - betJS and betDeprecatedSymbol will store the UTF-8 encoded string
   // as a RawUTF8
   // - betDeprecatedUndefined or betMinKey/betMaxKey do not contain any data
+  // - betDecimal128 will store the TDecimal128 16 bytes binary buffer 
   // - warning: VBlob/VText use should match BSON_ELEMENTVARIANTMANAGED constant
   TBSONVariantData = packed record
     /// the variant type
@@ -208,7 +256,7 @@ type
       VObjectID: TBSONObjectID
     );
     betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
-    betJSScope: (
+    betJSScope, betDecimal128: (
       /// store the raw binary content as a RawByteString (or TBSONDocument for
       // betDoc/betArray, i.e. the "int32 e_list #0" standard layout)
       // - you have to use RawByteString(VBlob) when accessing this field
@@ -398,7 +446,10 @@ type
       { map InternalStorage: Int64 }
       time_t: cardinal;
       ordinal: cardinal;
-    )
+    );
+    betDecimal128: (
+      Decimal: PDecimal128;
+    );
     end;
     /// fill a BSON Element structure from a variant content and associated name
     // - perform the reverse conversion as made with ToVariant()
@@ -1818,7 +1869,7 @@ type
     // ! 2040900 for MongoDB 2.4.9, or 2060000 for MongoDB 2.6, or
     // ! 3000300 for MongoDB 3.0.3
     // - this property is cached, so can be used to check for available
-    // features at runtime
+    // features at runtime, without any performance penalty
     property ServerBuildInfoNumber: cardinal read fServerBuildInfoNumber;
     /// define Read Preference mode to a MongoDB replica set
     // - see http://docs.mongodb.org/manual/core/read-preference
@@ -2503,8 +2554,8 @@ var
       0,                    sizeof(TBSONObjectID), 1, sizeof(Int64),
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
       0,        -1,           -1,             -1,        -1,
-    //betJSScope, betInt32, betTimeStamp, betInt64
-      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64));
+    //betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128
+      -1, sizeof(Integer), sizeof(Int64), SizeOf(Int64), Sizeof(TDecimal128));
 
   /// types which do not have an exact equivalency to a standard variant
   // type will be mapped as varUnknown - and will be changed into
@@ -2516,8 +2567,8 @@ var
     varEmpty, varUnknown, varBoolean, varDate,
     //betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     varNull, varUnknown, varUnknown, varUnknown, varUnknown,
-    //betJSScope, betInt32, betTimeStamp, betInt64
-    varUnknown, varInteger, varUnknown, varInt64);
+    //betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128
+    varUnknown, varInteger, varUnknown, varInt64, varUnknown);
 
 function TBSONElement.ToVariant(DocArrayConversion: TBSONDocArrayConversion): variant;
 begin
@@ -5484,12 +5535,13 @@ begin
   if (self=nil) or (UserName='') or (PassWord='') then
     raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
   result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
-  if result=nil then begin // not already opened -> try now from primary host
+  if result=nil then  // not already opened -> try now from primary host
+  try
     if not fConnections[0].Opened then
     try
-      fConnections[0].Open;
-      AfterOpen; // need ServerBuildInfoNumber just below
       digest := PasswordDigest(UserName,Password);
+      fConnections[0].Open; // socket connection
+      AfterOpen; // need ServerBuildInfoNumber just below
       if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin
         // MONGODB-CR
         // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
@@ -5562,6 +5614,8 @@ begin
     end;
     result := TMongoDatabase.Create(Self,DatabaseName);
     fDatabases.AddObject(DatabaseName,result);
+  finally
+    FillZero(RawByteString(digest));
   end;
 end;
 
@@ -6117,9 +6171,193 @@ begin
 end;
 
 
+{ TDecimal128 }
+
+// inspired by https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c
+
+procedure TDecimal128.SetHiLo(const h,l: Qword);
+begin
+  Bits.lo := l;
+  Bits.hi := h;
+end;
+
+procedure TDecimal128.SetZero;
+begin
+  Bits.lo := 0;
+  Bits.hi := 0;
+end;
+
+procedure TDecimal128.SetNan;
+begin
+  Bits.lo := 0;
+  Bits.hi := $7c00000000000000;
+end;
+
+procedure TDecimal128.SetInf(isNeg: boolean);
+begin
+  Bits.lo := 0;
+  if isNeg then
+    Bits.hi := $f800000000000000 else
+    Bits.hi := $7800000000000000;
+end;
+
+const
+  BSON_DECIMAL128_INF = 'Infinity';
+  BSON_DECIMAL128_NAN = 'NaN';
+
+function div128bits9digits(var value: THash128Rec): cardinal;
+var r64,fastmod: QWord;
+    i: integer;
+begin
+  r64 := 0;
+  for i := 0 to high(value.c) do begin
+    r64 := r64 shl 32;   // adjust remainder to match value of next dividend
+    inc(r64,value.c[i]); // add the divided to _rem
+    if r64=0 then
+      continue;
+    fastmod := r64; // to avoid two 64bit divisions
+    value.c[i] := r64 div 1000000000;
+    r64 := fastmod-value.c[i]*1000000000;
+  end;
+  result := r64;
+end;
+
+function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
+var dest: PUTF8Char;
+    exp, sciexp, signdig, radixpos: integer;
+    combi, biasedexp, signmsb, leastdig, fastdiv: cardinal;
+    digbuffer: array[0..35] of byte;
+    dig: PByte;
+    _128: THash128Rec;
+    j, k: integer;
+  procedure append(digits: integer);
+  var i: integer;
+  begin
+    for i := 0 to digits-1 do begin
+      dest^ := AnsiChar(dig^+ord('0'));
+      inc(dig);
+      inc(dest);
+    end;
+  end;
+begin
+  dest := @Buffer;
+  if Int64(Bits.hi)<0 then begin
+    dest^ := '-';
+    inc(dest);
+  end;
+  if (Bits.lo=0) and (Bits.hi=0) then begin
+    dest^ := '0';
+    result := 1;
+    exit;
+  end;
+  combi := (Bits.c[3] shr 26) and $1f;
+  if combi shr 3=3 then
+    case combi of
+    30: begin
+      result := AppendRawUTF8ToBuffer(dest,BSON_DECIMAL128_INF)-@Buffer;
+      exit;
+    end;
+    31: begin
+      result := AppendRawUTF8ToBuffer(@Buffer,BSON_DECIMAL128_NAN)-@Buffer;
+      exit;
+    end;
+    else begin
+      biasedexp := (Bits.c[3] shr 15) and $3fff;
+      signmsb := ((Bits.c[3] shr 14) and 1)+8;
+    end;
+    end
+  else begin
+    biasedexp := (Bits.c[3] shr 17) and $3fff;
+    signmsb := (Bits.c[3] shr 14) and 7;
+  end;
+  exp := biasedexp-6176;
+  _128.c[0] := (Bits.c[3] and $3fff)+((signmsb and $0f)shl 14);
+  _128.c[1] := Bits.c[2];
+  _128.c[2] := Bits.c[1];
+  _128.c[3] := Bits.c[0];
+  FillCharFast(digbuffer,sizeof(digbuffer),0);
+  dig := @digbuffer;
+  if ((_128.lo=0) and (_128.hi=0)) or (_128.c[0]>=1 shl 17) then
+    signdig := 1 // non-canonical or zero -> 0
+  else begin
+    for k := 3 downto 0 do begin
+      if (_128.lo=0) and (_128.hi=0) then
+        break;
+      leastdig := div128bits9digits(_128);
+      if leastdig=0 then
+        continue;
+      for j := 8 downto 0 do begin
+        fastdiv := leastdig;
+        leastdig := leastdig div 10;
+        digbuffer[k*9+j] := fastdiv-leastdig*10;
+        if leastdig=0 then
+          break;
+      end;
+    end;
+    signdig := 36;
+    while dig^=0 do begin
+      dec(signdig);
+      inc(dig);
+    end;
+  end;
+  sciexp := signdig-1+exp;
+  if (sciexp<-6) or (exp>0) then begin // scientific format
+    dest^ := AnsiChar(dig^+ord('0'));
+    inc(dig);
+    inc(dest);
+    dec(signdig);
+    if signdig<>0 then begin
+      dest^ := '.';
+      inc(dest);
+      append(signdig);
+    end;
+    if sciexp>0 then
+      PWord(dest)^ := ord('E')+ord('+')shl 8 else begin
+      PWord(dest)^ := ord('E')+ord('-')shl 8;
+      sciexp := -sciexp;
+    end;
+    dest := AppendUInt32ToBuffer(dest+2,sciexp)
+  end else begin
+    if exp>=0 then // Regular format with no decimal place
+      append(signdig)
+    else begin
+      radixpos := signdig+exp;
+      if radixpos>0 then // non-zero digits before radix
+        append(radixpos)
+      else begin
+        dest^ := '0'; // leading zero before radix point
+        inc(dest);
+      end;
+      dest^ := '.';   // radix char
+      inc(dest);
+      while radixpos<0 do begin // leading zeros after radix
+        dest^ := '0';
+        inc(dest);
+        inc(radixpos);
+      end;
+      append(signdig-radixpos);
+    end;
+  end;
+  result := dest-@Buffer;
+end;
+
+function TDecimal128.ToText: RawUTF8;
+var tmp: TDecimal128Str;
+begin
+  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+end;
+
+procedure TDecimal128.AddText(W: TTextWriter);
+var tmp: TDecimal128Str;
+begin
+  W.AddNoJSONEscape(@tmp,ToText(tmp));
+end;
+
 initialization
+  Assert(sizeof(TDecimal128)=16);
   Assert(ord(betEof)=$00);
   Assert(ord(betInt64)=$12);
+  Assert(ord(betDecimal128)=$13);
   Assert(ord(bbtGeneric)=$00);
   Assert(ord(bbtMD5)=$05);
   Assert(ord(bbtUser)=$80);
