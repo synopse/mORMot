@@ -247,6 +247,19 @@ function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg
 // - purepascal version included in latest Delphi versions is slower than this
 function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 
+/// convert a TBcd value into a RawUTF8 text
+// - will call fast InternalBCDToBuffer function
+procedure BCDToUTF8(const AValue: TBcd; var result: RawUTF8); overload;
+
+/// convert a TBcd value into a RawUTF8 text
+// - will call fast InternalBCDToBuffer function
+function BCDToUTF8(const AValue: TBcd): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TBcd value into a VCL string text
+// - will call fast InternalBCDToBuffer function
+function BCDToString(const AValue: TBcd): string;
+
 
 /// export all rows of a TDataSet into JSON
 // - will work for any kind of TDataSet
@@ -334,6 +347,28 @@ begin
   result := true;
 end;
 
+procedure BCDToUTF8(const AValue: TBcd; var result: RawUTF8);
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: TBCDBuffer;
+begin
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
+  SetString(result,PBeg,len);
+end;
+
+function BCDToUTF8(const AValue: TBcd): RawUTF8;
+begin
+  BCDToUTF8(AValue,result);
+end;
+
+function BCDToString(const AValue: TBcd): string;
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: TBCDBuffer;
+begin
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
+  Ansi7ToString(PWinAnsiChar(PBeg),len,result);
+end;
 
 
 var
