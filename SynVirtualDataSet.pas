@@ -430,13 +430,14 @@ begin
     if PDateTime(Data)^=0 then // handle 30/12/1899 date as NULL
       result := false else begin  // inlined DataConvert(Field,Data,Dest,true)
       TS := DateTimeToTimeStamp(PDateTime(Data)^);
-      if (TS.Time<0) or (TS.Date<=0) then
-        result := false else // matches ValidateTimeStamp() expectations
-        case Field.DataType of
-        ftDate:     PDateTimeRec(Dest)^.Date := TS.Date;
-        ftTime:     PDateTimeRec(Dest)^.Time := TS.Time;
-        ftDateTime: PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
-        end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
+      case Field.DataType of
+      ftDate:     PDateTimeRec(Dest)^.Date := TS.Date;
+      ftTime:     PDateTimeRec(Dest)^.Time := TS.Time;
+      ftDateTime:
+        if (TS.Time<0) or (TS.Date<=0) then
+          result := false else // matches ValidateTimeStamp() expectations
+          PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
+      end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
     end;
   ftString: begin
     if DataLen<>0 then begin
@@ -459,8 +460,8 @@ begin
     {$endif}
   end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
-  else raise EDatabaseError.CreateFmt('%s.GetFieldData DataType=%d',
-         [ClassName,ord(Field.DataType)]);
+  else raise EDatabaseError.CreateFmt('%s.GetFieldData unhandled DataType=%s (%d)',
+         [ClassName,GetEnumName(TypeInfo(TFieldType),ord(Field.DataType))^,ord(Field.DataType)]);
   end;
 end;
 
