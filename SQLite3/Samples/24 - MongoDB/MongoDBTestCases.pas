@@ -30,6 +30,7 @@ type
     fExpectedCount: integer;
     procedure CleanUp; override;
   published
+    procedure _Decimal128;
     procedure ConnectToLocalServer;
     procedure DropAndPrepareCollection;
     procedure FillCollection;
@@ -352,6 +353,73 @@ begin
     end;
 end;
 
+procedure TTestDirect._Decimal128;
+
+  procedure Special(special: TDecimal128SpecialValue; const expected: RawUTF8);
+  var v: TDecimal128;
+  begin
+    v.SetSpecial(dsvNan);
+    Check(v.ToText='NaN');
+    Check(v.IsSpecial=dsvNan);
+  end;
+  procedure Test(const hi,lo: Int64; const expected: RawUTF8);
+  var v: TDecimal128;
+  begin
+    v.Bits.hi := hi;
+    v.Bits.lo := lo;
+    Check(v.ToText=expected);
+  end;
+
+var v: TDecimal128;
+    s: TDecimal128SpecialValue;
+    i: integer;
+begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal128.c
+  for s := dsvNan to high(s) do begin
+    v.SetSpecial(s);
+    Check(v.ToText=DECIMAL128_SPECIAL_TEXT[s]);
+    Check(v.IsSpecial=s);
+  end;
+  v.SetZero;
+  Check(v.ToText='0');
+  Test(0,0,'0');
+  Test($3040000000000000,0,'0');
+  Test($3040000000000000,1,'1');
+  Test($3040000000000000,2,'2');
+  Test($b040000000000000,2,'-2');
+  Test($b040000000000000,1,'-1');
+  Test($b040000000000000,0,'-0');
+  Test($303e000000000000,1,'0.1');
+  Test($3034000000000000,$4d2,'0.001234');
+  Test($3040000000000000,$1cbe991a14,'123456789012');
+  Test($302a000000000000,$75aef40,'0.00123400000');
+  Test($2ffc3cde6fff9732,$de825cd07e96aff2,'0.1234567890123456789012345678901234');
+  Test($3040ffffffffffff,$ffffffffffffffff,'5192296858534827628530496329220095');
+  Test($5ffe314dc6448d93,$38c15b0a00000000,'1.000000000000000000000000000000000E+6144');
+  Test($000,$001,'1E-6176');
+  Test($8000000000000000,$001,'-1E-6176');
+  Test($3108000000000000,$000009184db63eb1,'9.999987654321E+112');
+  Test($5fffed09bead87c0,$378d8e63ffffffff,'9.999999999999999999999999999999999E+6144');
+  Test($0001ed09bead87c0,$378d8e63ffffffff,'9.999999999999999999999999999999999E-6143');
+  Test($dfffed09bead87c0,$378d8e63ffffffff,'-9.999999999999999999999999999999999E+6144');
+  Test($304c000000000000,$41a,'1.050E+9');
+  Test($3042000000000000,$41a,'1.050E+4');
+  Test($3040000000000000,$069,'105');
+  Test($3042000000000000,$069,'1.05E+3');
+  Test($3046000000000000,$001,'1E+3');
+  Test($3298000000000000,$000,'0E+300');
+  Test($2b90000000000000,$000,'0E-600');
+  v.SetZero;
+  for i := 0 to 2000 do begin
+    if i>1000 then
+      inc(v.Bits.c[0],i*7) else
+      v.Bits.c[0] := i;
+    Check(v.ToText=UInt32ToUTF8(v.Bits.c[0]));
+  end;
+  for i := -1000 to 100 do begin
+    v.FromInt32(i);
+    Check(v.ToText=Int32ToUTF8(i));
+  end;
+end;
 
 
 { TTestORM }

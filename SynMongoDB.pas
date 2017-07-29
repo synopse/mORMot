@@ -104,6 +104,12 @@ type
   /// maximum length of a decimal128 string
   TDecimal128Str = array[0..42] of AnsiChar;
 
+  /// some special 128 bit decimal values
+  // - see TDecimal128.Fill to set the corresponding value
+  // - dsvNone indicates that this is not a known special value, but some valid
+  // decimal number
+  TDecimal128SpecialValue = (dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax);
+
   /// handles a 128 bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format
@@ -115,15 +121,24 @@ type
   public
     /// the raw binary storage
     Bits: TDecimal128Bits;
-    /// fills with the supplied raw value
-    procedure SetHiLo(const h,l: Qword);
-      {$ifdef HASINLINE}inline;{$endif}
     /// fills with the Zero value
+    // - note: under IEEE 754, Zero can have sign and exponents, so is not Hi=Lo=0
+    // - is the same as Fill(dsvZero)
     procedure SetZero;
-    /// fills with the Nan pseudo-value
-    procedure SetNan;
-    /// fills with the Infinity pseudo-value
-    procedure SetInf(isNeg: boolean);
+    /// fills with a special value
+    // - dsvNone will set dsvNan
+    procedure SetSpecial(special: TDecimal128SpecialValue);
+    /// checks if the value matches one of the known special value
+    // - returns dsvNone
+    function IsSpecial: TDecimal128SpecialValue;
+    /// fills with a 32-bit signed value
+    procedure FromInt32(value: integer);
+    /// fills with a 32-bit unsigned value
+    procedure FromUInt32(value: cardinal);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// fast bit-per-bit value comparison
+    function Equals(const other: TDecimal128): boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// converts the value to its string representation
     // - returns the number of AnsiChar written to Buffer
     function ToText(out Buffer: TDecimal128Str): integer; overload;
@@ -134,6 +149,14 @@ type
   end;
   /// points to a 128 bit decimal value
   PDecimal128 = TDecimal128;
+
+const
+  /// the textual representation of the TDecimal128 special values
+  DECIMAL128_SPECIAL_TEXT: array[TDecimal128SpecialValue] of RawUTF8 = (
+    // dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
+    '', 'NaN', '0', 'Infinity', '-Infinity',
+    '-9.999999999999999999999999999999999E+6144',
+    '9.999999999999999999999999999999999E+6144');
 
 type
   /// exception type used for BSON process
@@ -1794,6 +1817,7 @@ type
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
     fConnectionTimeOut: Cardinal;
+    fGracefulReconnect: boolean;
     fLog: TSynLog;
     fLogRequestEvent: TSynLogInfo;
     fLogReplyEvent: TSynLogInfo;
@@ -1888,6 +1912,9 @@ type
     /// the connection time out, in milli seconds
     // - default value is 30000, i.e. 30 seconds
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
+    /// allow automatic reconnection (with authentication, if applying), if the
+    // socket is closed (e.g. was dropped from the server)
+    property GracefulReconnect: boolean read fGracefulReconnect write fGracefulReconnect;
     /// how may bytes this client did received, among all its connections
     property BytesReceived: Int64 read GetBytesReceived;
     /// how may bytes this client did received, among all its connections
@@ -6175,30 +6202,53 @@ end;
 
 // inspired by https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c
 
-procedure TDecimal128.SetHiLo(const h,l: Qword);
-begin
-  Bits.lo := l;
-  Bits.hi := h;
-end;
-
 procedure TDecimal128.SetZero;
 begin
   Bits.lo := 0;
-  Bits.hi := 0;
+  Bits.hi := $3040000000000000;
 end;
 
-procedure TDecimal128.SetNan;
+const
+  D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
+    // dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
+    (hi:$7c00000000000000), (hi:$7c00000000000000),
+    (hi:$3040000000000000), (hi:$7800000000000000),
+    (hi:$f800000000000000), (lo:$378d8e63ffffffff; hi:$dfffed09bead87c0),
+    (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
+
+procedure TDecimal128.SetSpecial(special: TDecimal128SpecialValue);
 begin
-  Bits.lo := 0;
-  Bits.hi := $7c00000000000000;
+  Bits := D128[special];
 end;
 
-procedure TDecimal128.SetInf(isNeg: boolean);
+function TDecimal128.IsSpecial: TDecimal128SpecialValue;
 begin
-  Bits.lo := 0;
-  if isNeg then
-    Bits.hi := $f800000000000000 else
-    Bits.hi := $7800000000000000;
+  for result := dsvNan to high(D128) do
+    if (D128[result].hi=Bits.hi) and (D128[result].lo=Bits.lo) then
+      exit;
+  result := dsvNone;
+end;
+
+procedure TDecimal128.FromInt32(value: integer);
+begin
+  if value>=0 then begin
+    Bits.lo := value;
+    Bits.hi := $3040000000000000;
+  end else begin
+    Bits.lo := -value;
+    Bits.hi := $b040000000000000;
+  end;
+end;
+
+procedure TDecimal128.FromUInt32(value: cardinal);
+begin
+  Bits.lo := value;
+  Bits.hi := $3040000000000000;
+end;
+
+function TDecimal128.Equals(const other: TDecimal128): boolean;
+begin
+  result := (Bits.lo=other.Bits.lo) and (Bits.hi=other.Bits.hi);
 end;
 
 const
