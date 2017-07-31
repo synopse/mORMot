@@ -11462,6 +11462,16 @@ function crc64c(buf: PAnsiChar; len: cardinal): Int64;
 function crc63c(buf: PAnsiChar; len: cardinal): Int64;
 
 type
+  /// binary access to an unsigned 64-bit value
+  TQWordRec = record
+    case integer of
+    0: (V: Qword);
+    1: (L,H: cardinal);
+    2: (B: array[0..3] of byte);
+  end;
+  /// points to the binary of an unsigned 64-bit value
+  PQWordRec = ^TQWordRec;
+
   /// store a 128-bit hash value
   // - e.g. a MD5 digest, or array[0..3] of cardinal (TBlock128)
   // - consumes 16 bytes of memory
@@ -11505,10 +11515,11 @@ type
   THash128Rec = packed record
   case integer of
   0: (Lo,Hi: Int64);
-  1: (i0,i1,i2,i3: integer);
-  2: (c0,c1,c2,c3: cardinal);
-  3: (c: TBlock128);
-  4: (b: THash128);
+  1: (L,H: QWord);
+  2: (i0,i1,i2,i3: integer);
+  3: (c0,c1,c2,c3: cardinal);
+  4: (c: TBlock128);
+  5: (b: THash128);
   end;
   /// pointer to 128-bit hash map variable record
   PHash128Rec = ^THash128Rec;
@@ -27656,15 +27667,17 @@ begin
   BinToHexDisplay(@aInt64,@result[1],sizeof(aInt64));
 end;
 
-type TWordRec = packed record YDiv100, YMod100: byte; end;
-
 {$ifdef FPC_OR_PUREPASCAL} // Alf reported asm below fails with FPC/Linux32
-function Div100(Y: word): TWordRec; {$ifdef HASINLINE}inline;{$endif}
+type TWordRec = packed record YDiv100, YMod100: cardinal; end;
+
+function Div100(Y: cardinal): TWordRec; {$ifdef HASINLINE}inline;{$endif}
 begin
-  result.YDiv100 := Y div 100;
-  result.YMod100 := Y-(result.YDiv100*100); // * is always faster than div
+  result.YDiv100 := Y div 100; // FPC will use fast reciprocal
+  result.YMod100 := Y-(result.YDiv100*100); // avoid div twice
 end;
 {$else}
+type TWordRec = packed record YDiv100, YMod100: byte; end;
+
 function Div100(Y: word): TWordRec;
 asm
         mov     cl, 100

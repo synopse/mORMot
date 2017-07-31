@@ -105,14 +105,20 @@ type
   TDecimal128Str = array[0..42] of AnsiChar;
 
   /// some special 128 bit decimal values
-  // - see TDecimal128.Fill to set the corresponding value
-  // - dsvNone indicates that this is not a known special value, but some valid
-  // decimal number
-  TDecimal128SpecialValue = (dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax);
+  // - see TDecimal128.SetSpecial to set the corresponding value
+  // - dsvError is returned by TDecimal128.FromText() on parsing error
+  // - dsvValue indicates that this is not a known "special" value, but some
+  // valid decimal number
+  TDecimal128SpecialValue = (
+    dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax);
 
   /// handles a 128 bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format
+  // - there is no mathematical operator/methods for Decimal128 Value Objects,
+  // as required by MongoDB specifications: any computation must be done
+  // explicitly on native language value representation (e.g. TBCD or any
+  // BigNumber library) - use ToText and FromText to make the conversion
   {$ifndef UNICODE}
   TDecimal128 = object
   {$else}
@@ -126,16 +132,43 @@ type
     // - is the same as Fill(dsvZero)
     procedure SetZero;
     /// fills with a special value
-    // - dsvNone will set dsvNan
+    // - dsvError or dsvValue will set dsvNan binary content
     procedure SetSpecial(special: TDecimal128SpecialValue);
-    /// checks if the value matches one of the known special value
-    // - returns dsvNone
+    /// checks if the value matches one of the known special values
+    // - will search for dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
     function IsSpecial: TDecimal128SpecialValue;
     /// fills with a 32-bit signed value
     procedure FromInt32(value: integer);
     /// fills with a 32-bit unsigned value
     procedure FromUInt32(value: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
+    /// fills with a native floating-point value
+    // - this method is just a wrapper around ExtendedToString and ToText
+    // - so you should provide the expected precision, from the actual storage
+    // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
+    // you don't use a double kind of value)   
+    function FromFloat(value: TSynExtended; precision: integer=0): boolean;
+    /// fills with a fixed decimal value, as stored in currency
+    // - will store the content with explictly four decimals, as in currency
+    // - by design, this method is very fast and accurate
+    procedure FromCurr(value: Currency);
+    /// fills from the text representation of a decimal value
+    // - returns dsvValue or one of the dsvNan, dsvZero, dsvPosInf, dsvNegInf
+    // special value indicator otherwise on succes
+    // - returns dsvError on parsing failure
+    function FromText(text: PUTF8Char; textlen: integer): TDecimal128SpecialValue; overload;
+    /// fills from the text representation of a decimal value
+    // - returns dsvValue or one of the dsvNan, dsvZero, dsvPosInf, dsvNegInf
+    // special value indicator otherwise on succes
+    // - returns dsvError on parsing failure
+    function FromText(const text: RawUTF8): TDecimal128SpecialValue; overload;
+    /// convert a variant into one Decimal128 value
+    // - will first check for a TBSONVariant containing a betDecimal128 (e.g.
+    // as retrieved via the ToVariant method)
+    // - then will try to convert the variant from its string value, expecting
+    // a floating-point text content
+    // - returns TRUE if conversion was made, FALSE on any error
+    function FromVariant(const value: variant): boolean;
     /// fast bit-per-bit value comparison
     function Equals(const other: TDecimal128): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -145,18 +178,31 @@ type
     /// converts the value to its string representation
     function ToText: RawUTF8; overload;
     /// converts the value to its string representation
+    procedure ToText(var result: RawUTF8); overload;
+    /// convert this Decimal128 value to its TBSONVariant custom variant value
+    function ToVariant: variant; overload;
+    /// convert this Decimal128 value to its TBSONVariant custom variant value
+    procedure ToVariant(out result: variant); overload;
+    /// converts this Decimal128 value to a floating-point value
+    // - by design, some information may be lost during conversion
+    function ToFloat: TSynExtended;
+    /// converts this Decimal128 value to a fixed decimal value
+    // - by design, some information may be lost during conversion,
+    // unless the value has been stored via the FromCurr() method
+    function ToCurr: currency;
+    /// converts the value to its string representation
     procedure AddText(W: TTextWriter);
   end;
   /// points to a 128 bit decimal value
-  PDecimal128 = TDecimal128;
+  PDecimal128 = ^TDecimal128;
 
 const
   /// the textual representation of the TDecimal128 special values
   DECIMAL128_SPECIAL_TEXT: array[TDecimal128SpecialValue] of RawUTF8 = (
-    // dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    '', 'NaN', '0', 'Infinity', '-Infinity',
+    // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
+    '', '', 'NaN', '0', 'Infinity', '-Infinity',
     '-9.999999999999999999999999999999999E+6144',
-    '9.999999999999999999999999999999999E+6144');
+     '9.999999999999999999999999999999999E+6144');
 
 type
   /// exception type used for BSON process
@@ -176,11 +222,6 @@ type
     betDeprecatedUndefined, betObjectID, betBoolean, betDateTime,
     betNull, betRegEx, betDeprecatedDbptr, betJS, betDeprecatedSymbol,
     betJSScope, betInt32, betTimeStamp, betInt64, betDecimal128);
-
-  { TODO: add betDecimal128 support, and $numberDecimal variant (MongoDB >= 3.4)
-    https://github.com/mongodb/specifications/blob/master/source/bson-decimal128/decimal128.rst
-    https://github.com/mongodb/mongo-csharp-driver/blob/master/src/MongoDB.Bson/ObjectModel/Decimal128.cs
-    https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c }
 
   /// points to an element type for BSON internal representation
   PBSONElementType = ^TBSONElementType;
@@ -230,7 +271,7 @@ type
     /// convert an hexadecimal string value into one ObjectID
     // - returns TRUE if conversion was made, FALSE on any error
     function FromText(Text: PUTF8Char): boolean; overload;
-    /// convert a varian t into one ObjectID
+    /// convert a variant into one ObjectID
     // - will first check for a TBSONVariant containing a betObjectID
     // - then will try to convert the variant from its string value, expecting
     // an hexadecimal text content
@@ -419,15 +460,15 @@ type
     // - is the raw value, without any parsing, e.g. points to a double value or
     // a document: "int32 e_list #0" standard layout (same as TBSONDocument)
     // - you may cast it for simple types:
-    // ! PDouble(Element)^   PBoolean(Element)^   PInteger(Element)^
-    // ! PInt64(Element)^    PBSONObjectID(Element)^
+    // ! PDouble(Element)^   PBoolean(Element)^        PInteger(Element)^
+    // ! PInt64(Element)^    PBSONObjectID(Element)^   PDecimal128(Element)^
     // - or use the nested Data variant record to access more complex content
     // - warning: equals nil for betString/betJS after FromVariant()
     Element: pointer;
-    /// depending on the Kind, will point to the sub-data
+    /// depending on the Kind, will point to parsed complex sub-data
     // - since variable records can't have properties, we nest this information
     // within this main Data variable record
-    // - not all Kind are handled here, only the complex data
+    // - not all Kind are handled here, only any complex data
     Data: record
     case TBSONElementType of
     betFloat, betBoolean, betInt32, betDateTime, betInt64: (
@@ -469,9 +510,6 @@ type
       { map InternalStorage: Int64 }
       time_t: cardinal;
       ordinal: cardinal;
-    );
-    betDecimal128: (
-      Decimal: PDecimal128;
     );
     end;
     /// fill a BSON Element structure from a variant content and associated name
@@ -642,6 +680,8 @@ type
     procedure BSONWrite(const name: RawUTF8; const bson: TBSONVariantData); overload;
     /// write a DocVariant instance value
     procedure BSONWrite(const name: RawUTF8; const doc: TDocVariantData); overload;
+    /// write a TDecimal128 value
+    procedure BSONWrite(const name: RawUTF8; const value: TDecimal128); overload;
     /// write a variant value
     // - handle simple types (numbers, strings...) and custom types (TDocVariant
     // and TBSONVariant, trying a translation to JSON for other custom types)
@@ -754,14 +794,14 @@ const
   // - i.e. TBSONVariantData.VBlob/VText field is to be managed
   BSON_ELEMENTVARIANTMANAGED =
    [betBinary, betDoc, betArray, betRegEx, betDeprecatedDbptr, betTimeStamp,
-    betJSScope, betJS, betDeprecatedSymbol];
+    betJSScope, betJS, betDeprecatedSymbol, betDecimal128];
 
   /// by definition, maximum MongoDB document size is 16 MB
   BSON_MAXDOCUMENTSIZE = 16*1024*1024;
 
   /// special JSON string content which will be used to store a betDeprecatedUndefined item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
-  BSON_JSON_UNDEFINED: array[boolean] of string[19] =
+  BSON_JSON_UNDEFINED: array[boolean] of string[23] =
     ('{"$undefined":true}','undefined');
   /// special JSON string content which will be used to store a betMinKey item
   // - *[false] is for strict JSON, *[true] for MongoDB Extended JSON
@@ -780,15 +820,19 @@ const
   /// special JSON string content which will be used to store a betDeprecatedDbptr
   // - *[false,*] is for strict JSON, *[true,*] for MongoDB Extended JSON
   // - (not used by now for this deprecated content)
-  BSON_JSON_DBREF: array[boolean,0..2] of string[11] = (
+  BSON_JSON_DBREF: array[boolean,0..2] of string[15] = (
     ('{"$ref":"','","$id":"','"}'),('DBRef("','","','")'));
   /// special JSON string content which will be used to store a betRegEx
   BSON_JSON_REGEX: array[0..2] of string[15] =
     ('{"$regex":"','","$options":"','"}');
   /// special JSON patterns which will be used to format a betDateTime item
   // - *[*,false] is to be written before the date value, *[*,true] after
-  BSON_JSON_DATE: array[TMongoJSONMode,boolean] of string[11] = (
+  BSON_JSON_DATE: array[TMongoJSONMode,boolean] of string[15] = (
     ('"','"'),('{"$date":"','"}'),('ISODate("','")'));
+  /// special JSON patterns which will be used to format a betDecimal128 item
+  // - *[false,*] is to be written before the decimal value, *[true,*] after
+  BSON_JSON_DECIMAL: array[boolean,TMongoJSONMode] of string[23] = (
+    ('"','{"$numberDecimal":"','NumberDecimal("'),('"','"}','")'));
 
 var
   /// global TCustomVariantType used to register BSON variant types
@@ -821,6 +865,17 @@ function JavaScript(const JS: RawUTF8): variant; overload;
 // from a supplied code and document
 // - will set a BSON element of betJSScope kind
 function JavaScript(const JS: RawUTF8; const Scope: TBSONDocument): variant; overload;
+
+/// create a TBSONVariant Decimal128 from some text corresponding to
+// a floating-point number
+// - will store internally a TDecimal128 storage
+function NumberDecimal(const Value: RawUTF8): variant; overload;
+
+/// create a TBSONVariant Decimal128 from a currency fixed decimal
+// - will store internally a TDecimal128 storage, with explictly 4 decimals
+// - if you want to store some floating-point value, don't use this method
+// but TDecimal128.FromFloat then TDecimal128.ToVariant
+function NumberDecimal(const Value: currency): variant; overload;
 
 /// store some object content into BSON encoded binary
 // - object will be initialized with data supplied two by two, as Name,Value
@@ -2623,7 +2678,7 @@ begin
       BSONItemsToDocVariant(Kind,Data.DocList,TDocVariantData(result),DocArrayConversion);
       exit;
     end;
-  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimeStamp:
+  betBinary, betRegEx, betDeprecatedDbptr, betJSScope, betTimeStamp, betDecimal128:
     SetString(RawByteString(resBSON.VBlob),PAnsiChar(Element),ElementBytes);
   betObjectID:
     resBSON.VObjectID := PBSONObjectID(Element)^;
@@ -2678,6 +2733,8 @@ begin
     Int32ToUtf8(PInteger(Element)^,result);
   betInt64:
     Int64ToUtf8(PInt64(Element)^,result);
+  betDecimal128:
+    PDecimal128(Element)^.ToText(result);
   else ComplexType;
   end;
 end;
@@ -2730,45 +2787,45 @@ begin
   betDeprecatedUndefined:
     W.AddShort(BSON_JSON_UNDEFINED[Mode=modMongoShell]);
   betBinary:
-  case Mode of
-  modNoMongo:
-    W.WrBase64(Data.Blob,Data.BlobLen,true);
-  modMongoStrict: begin
-    W.AddShort(BSON_JSON_BINARY[false,false]);
-    W.WrBase64(Data.Blob,Data.BlobLen,false);
-    W.AddShort(BSON_JSON_BINARY[false,true]);
-    W.AddBinToHex(@Data.BlobSubType,1);
-    W.AddShort('"}');
-  end;
-  modMongoShell: begin
-    W.AddShort(BSON_JSON_BINARY[true,false]);
-    W.AddBinToHex(@Data.BlobSubType,1);
-    W.AddShort(BSON_JSON_BINARY[true,true]);
-    W.WrBase64(Data.Blob,Data.BlobLen,false);
-    W.AddShort('")');
-  end;
-  end;
-  betRegEx:
-  case Mode of
-  modNoMongo:
-bin:W.WrBase64(Element,ElementBytes,true);
-  modMongoStrict:
-    goto regex;
-  modMongoShell:
-    if (PosChar(Data.RegEx,'/')=nil) and
-       (PosChar(Data.RegExOptions,'/')=nil) then begin
-      W.Add('/');
-      W.AddNoJSONEscape(Data.RegEx,Data.RegExLen);
-      W.Add('/');
-      W.AddNoJSONEscape(Data.RegExOptions,Data.RegExOptionsLen);
-    end else begin
-regex:W.AddShort(BSON_JSON_REGEX[0]);
-      W.AddJSONEscape(Data.RegEx,Data.RegExLen);
-      W.AddShort(BSON_JSON_REGEX[1]);
-      W.AddJSONEscape(Data.RegExOptions,Data.RegExOptionsLen);
-      W.AddShort(BSON_JSON_REGEX[2]);
+    case Mode of
+    modNoMongo:
+      W.WrBase64(Data.Blob,Data.BlobLen,true);
+    modMongoStrict: begin
+      W.AddShort(BSON_JSON_BINARY[false,false]);
+      W.WrBase64(Data.Blob,Data.BlobLen,false);
+      W.AddShort(BSON_JSON_BINARY[false,true]);
+      W.AddBinToHex(@Data.BlobSubType,1);
+      W.AddShort('"}');
     end;
-  end;
+    modMongoShell: begin
+      W.AddShort(BSON_JSON_BINARY[true,false]);
+      W.AddBinToHex(@Data.BlobSubType,1);
+      W.AddShort(BSON_JSON_BINARY[true,true]);
+      W.WrBase64(Data.Blob,Data.BlobLen,false);
+      W.AddShort('")');
+    end;
+    end;
+  betRegEx:
+    case Mode of
+    modNoMongo:
+bin:W.WrBase64(Element,ElementBytes,true);
+    modMongoStrict:
+      goto regex;
+    modMongoShell:
+      if (PosChar(Data.RegEx,'/')=nil) and
+         (PosChar(Data.RegExOptions,'/')=nil) then begin
+        W.Add('/');
+        W.AddNoJSONEscape(Data.RegEx,Data.RegExLen);
+        W.Add('/');
+        W.AddNoJSONEscape(Data.RegExOptions,Data.RegExOptionsLen);
+      end else begin
+regex:  W.AddShort(BSON_JSON_REGEX[0]);
+        W.AddJSONEscape(Data.RegEx,Data.RegExLen);
+        W.AddShort(BSON_JSON_REGEX[1]);
+        W.AddJSONEscape(Data.RegExOptions,Data.RegExOptionsLen);
+        W.AddShort(BSON_JSON_REGEX[2]);
+      end;
+    end;
   betDeprecatedDbptr:
     goto bin; // no specific JSON construct for this deprecated item
   betJSScope:
@@ -2788,6 +2845,11 @@ regex:W.AddShort(BSON_JSON_REGEX[0]);
     W.Add(PInteger(Element)^);
   betInt64:
     W.Add(PInt64(Element)^);
+  betDecimal128: begin
+    W.AddShort(BSON_JSON_DECIMAL[false,Mode]);
+    PDecimal128(Element)^.AddText(W);
+    W.AddShort(BSON_JSON_DECIMAL[true,Mode]);
+  end;
   else
   if Kind=betMinKey then
     W.AddShort(BSON_JSON_MINKEY[Mode=modMongoShell]) else
@@ -2871,8 +2933,8 @@ str:Kind := betString;
   if aVarData.VType=BSONVariantType.VarType then begin
     Kind := aBson.VKind;
     case Kind of
-    betObjectID: FromBSON(@aBson.VObjectID);
-    else         FromBSON(aBson.VBlob);
+    betObjectID: FromBSON(@aBson.VObjectID); // stored inlined 
+    else         FromBSON(aBson.VBlob); // complex type stored as a RawByteString
     end;
     if ElementBytes<0 then
       raise EBSONException.CreateUTF8('TBSONElement.FromVariant(bson,%)',[ToText(Kind)^]);
@@ -2917,7 +2979,7 @@ const
 procedure TBSONElement.FromBSON(bson: PByte);
 begin // see http://bsonspec.org/#/specification
   Element := bson;
-  case Kind of
+  case Kind of // handle variable-size storage
   betString, betJS, betDeprecatedSymbol: begin  // "\x02" e_name string
     ElementBytes := PInteger(bson)^+sizeof(integer); // int32 (byte*) "\x00"
     Data.TextLen := PInteger(bson)^-1;
@@ -2937,8 +2999,6 @@ begin // see http://bsonspec.org/#/specification
     inc(bson);
     Data.Blob := bson;
   end;
-  betObjectID:             // "\x07" e_name (byte*12)
-    ElementBytes := sizeof(TBSONObjectID);
   betRegEx: begin          // "\x0B" e_name cstring cstring
     Data.RegEx := Element;
     Data.RegExLen := StrLen(Data.RegEx);
@@ -2972,7 +3032,7 @@ begin
   case ord(Kind) of
   ord(betEOF):
     result := false;
-  ord(betFloat)..ord(betInt64),ord(betMinKey),ord(betMaxKey): begin
+  ord(betFloat)..ord(betDecimal128),ord(betMinKey),ord(betMaxKey): begin
     inc(BSON);
     Name := PUTF8Char(BSON);
     NameLen := StrLen(PUTF8Char(BSON));
@@ -3124,13 +3184,13 @@ begin
 end;
 
 procedure AddMongoJSON(const Value: variant; W: TTextWriter; Mode: TMongoJSONMode);
-procedure AddCustom;
-var item: TBSONElement;
-    temp: RawByteString;
-begin
-  item.FromVariant('',Value,temp);
-  item.AddMongoJSON(W,Mode);
-end;
+  procedure AddCustom;
+  var item: TBSONElement;
+      temp: RawByteString;
+  begin
+    item.FromVariant('',Value,temp);
+    item.AddMongoJSON(W,Mode);
+  end;
 begin
   if TVarData(Value).VType<$10F then
     W.AddVariant(Value,twJSONEscape) else
@@ -3213,6 +3273,12 @@ begin
   Write(@value,sizeof(value));
 end;
 
+procedure TBSONWriter.BSONWrite(const name: RawUTF8; const value: TDecimal128);
+begin
+  BSONWrite(name,betDecimal128);
+  Write(@value,sizeof(value));
+end;
+
 procedure TBSONWriter.BSONWriteRegEx(const name: RawUTF8;
   const RegEx,Options: RawByteString);
 begin
@@ -3286,10 +3352,13 @@ end;
 
 procedure TBSONWriter.BSONWrite(const name: RawUTF8; const bson: TBSONVariantData);
 begin
-  if bson.VKind=betObjectID then
-    BSONWrite(name,bson.VObjectID) else begin
+  case bson.VKind of
+  betObjectID:
+    BSONWrite(name,bson.VObjectID);
+  else begin
     BSONWrite(name,bson.VKind);
     WriteBinary(RawByteString(bson.VBlob));
+  end;
   end;
 end;
 
@@ -3827,12 +3896,12 @@ end;
 function TBSONObjectID.FromVariant(const value: variant): boolean;
 var txt: RawUTF8;
     wasString: boolean;
+    bson: TBSONVariantData absolute value;
 begin
   if TVarData(value).VType=varByRef or varVariant then
     result := FromVariant(PVariant(TVarData(value).VPointer)^) else
-  if (TBSONVariantData(value).VType=BSONVariantType.VarType) and
-     (TBSONVariantData(value).VKind=betObjectID) then begin
-    self := TBSONVariantData(value).VObjectID;
+  if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betObjectID) then begin
+    self := bson.VObjectID;
     result:= true;
   end else begin
     VariantToUTF8(value,txt,wasString);
@@ -3906,7 +3975,7 @@ begin // "\x05" e_name int32 subtype (byte*)
     SetLength(RawByteString(VBlob),Len+(sizeof(integer)+1));
     PInteger(VBlob)^ := Len;
     PByteArray(VBlob)^[sizeof(integer)] := ord(BinType);
-    move(pointer(Bin)^,PByteArray(VBlob)^[sizeof(integer)+1],Len);
+    MoveFast(pointer(Bin)^,PByteArray(VBlob)^[sizeof(integer)+1],Len);
   end;
 end;
 
@@ -3941,11 +4010,18 @@ end;
 
 function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
   var Value: variant; EndOfObject: PUTF8Char): boolean;
+var bsonvalue: TBSONVariantData absolute Value;
+    varvalue: TVarData absolute Value;
 // warning: code should NOT modify JSON buffer in-place, unless it returns true
   procedure Return(kind: TBSONElementType; P: PUTF8Char; GotoEndOfObject: AnsiChar='}');
   begin
     if GotoEndOfObject<>#0 then
-      while P^<>GotoEndOfObject do if P^=#0 then exit else inc(P);
+      while P^<>GotoEndOfObject do
+      if P^=#0 then begin
+        if kind in [betRegEx,betDecimal128] then
+          RawByteString(bsonvalue.VBlob) := ''; // avoid memory leak
+        exit;
+      end else inc(P);
     P := GotoNextNotSpace(P+1);
     if EndOfObject<>nil then
       EndOfObject^ := P^;
@@ -3953,12 +4029,12 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
       JSON := P+1 else
       JSON := P;
     case kind of
-    betObjectID, betRegEx: begin // should handle it in TBSONWriter.BSONWrite()
-      TVarData(Value).VType := VarType;
-      TBSONVariantData(Value).VKind := kind;
+    betObjectID, betRegEx, betDecimal128: begin // see TBSONWriter.BSONWrite()
+      bsonvalue.VType := VarType;
+      bsonvalue.VKind := kind;
     end;
     betDateTime:
-      TVarData(Value).VType := varDate;
+      varvalue.VType := varDate;
     end;
     result := true;
   end;
@@ -3968,13 +4044,13 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
     P := GotoNextNotSpace(P);
     if GotoEndOfObject=')' then
       if (P^=')') then begin // new date() constructor
-        TVarData(Value).VDate := NowUTC;
+        varvalue.VDate := NowUTC;
         Return(betDateTime,P,#0);
         exit;
       end else
       if P^ in ['0'..'9'] then begin
-        TVarData(Value).VDate := GetNextItemDouble(P,')');
-        if (TVarData(Value).VDate<>0) and (P<>nil) then begin
+        varvalue.VDate := GetNextItemDouble(P,')');
+        if (varvalue.VDate<>0) and (P<>nil) then begin
           Return(betDateTime,P-1,#0);
           exit;
         end;
@@ -3983,32 +4059,47 @@ function TBSONVariant.TryJSONToVariant(var JSON: PUTF8Char;
     if PCardinal(P)^=JSON_SQLDATE_MAGIC_QUOTE then
       inc(P,3); // ignore\uFFF1 code for DateTimeToSQL/TimeLogToSQL functions
     L := 1; while P[L]<>'"' do if P[L]<=' ' then exit else inc(L);
-    Iso8601ToDateTimePUTF8CharVar(P+1,L,TVarData(Value).VDate);
-    if TVarData(Value).VDate<>0 then
+    Iso8601ToDateTimePUTF8CharVar(P+1,L,varvalue.VDate);
+    if varvalue.VDate<>0 then
       Return(betDateTime,P+L+1,GotoEndOfObject);
   end;
   procedure TryObjectID(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   begin
     P := GotoNextNotSpace(P);
     if (GotoEndOfObject=')') and (P^=')') then begin // ObjectId() constructor
-      TBSONVariantData(Value).VObjectID.ComputeNew;
+      bsonvalue.VObjectID.ComputeNew;
       Return(betObjectID,P,#0);
       exit;
     end;
     if P^<>'"' then exit;
-    if TBSONVariantData(Value).VObjectID.FromText(P+1) then
+    if bsonvalue.VObjectID.FromText(P+1) then
       Return(betObjectID,P+25,GotoEndOfObject);
+  end;
+  procedure TryDecimal(P: PUTF8Char; GotoEndOfObject: AnsiChar);
+  var dec: TDecimal128;
+      L: integer;
+  begin
+    if P^<>'"' then exit;
+    inc(P);
+    L := 0;
+    while P[L]<>'"' do
+      if not(P[L] in ['0'..'9','e','E','+','-','.']) then exit else inc(L);
+    if dec.FromText(P,L)=dsvError then
+      exit;                             
+    bsonvalue.VBlob := nil; // avoid GPF
+    SetString(RawByteString(bsonvalue.VBlob),PAnsiChar(@dec),sizeof(TDecimal128));
+    Return(betDecimal128,P+L+1,GotoEndOfObject);
   end;
   var Reg,Opt: PUTF8Char;
       RegLen,OptLen: Integer;
   procedure ReturnRegEx(P: PUTF8Char; GotoEndOfObject: AnsiChar);
   var buf: PAnsiChar;
   begin
-    TBSONVariantData(Value).VBlob := nil; // avoid GPF
-    SetString(RawByteString(TBSONVariantData(Value).VBlob),nil,RegLen+OptLen+2);
-    buf := TBSONVariantData(Value).VBlob;
-    move(Reg^,buf^,RegLen); inc(buf,RegLen); buf^ := #0; inc(buf);
-    move(Opt^,buf^,OptLen); inc(buf,OptLen); buf^ := #0;
+    bsonvalue.VBlob := nil; // avoid GPF
+    SetString(RawByteString(bsonvalue.VBlob),nil,RegLen+OptLen+2);
+    buf := bsonvalue.VBlob;
+    MoveFast(Reg^,buf^,RegLen); inc(buf,RegLen); buf^ := #0; inc(buf);
+    MoveFast(Opt^,buf^,OptLen); inc(buf,OptLen); buf^ := #0;
     Return(betRegEx,P,GotoEndOfObject);
   end;
   procedure TryRegExShell(P: PUTF8Char);
@@ -4066,6 +4157,8 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
            TryDate(P+7,'}');
     'r': if CompareMem(P+2,@BSON_JSON_REGEX[0][5],6) then
            TryRegExStrict(P+8);
+    'n': if CompareMem(P+2,@BSON_JSON_DECIMAL[false,modMongoStrict][5],14) then
+           TryDecimal(P+16,'}');
     end;
   end;
   // MongoDB Shell Mode extended syntax
@@ -4078,7 +4171,9 @@ begin // here JSON does not start with " or 1..9 (obvious simple types)
   'O': if StrCompIL(JSON+1,@BSON_JSON_OBJECTID[false,modMongoShell][2],8)=0 then
          TryObjectID(JSON+9,')');
   'N': if StrCompIL(JSON+1,'ew Date(',8)=0 then
-          TryDate(JSON+9,')');
+          TryDate(JSON+9,')') else
+       if StrCompIL(JSON+1,@BSON_JSON_DECIMAL[false,modMongoShell][2],13)=0 then
+          TryDecimal(JSON+14,')');
   'I': if StrCompIL(JSON+1,@BSON_JSON_DATE[modMongoShell,false][2],7)=0 then
           TryDate(JSON+8,')');
   '/': TryRegExShell(JSON+1);
@@ -4222,9 +4317,24 @@ begin
     SetLength(RawByteString(VBlob),Len);
     PIntegerArray(VBlob)^[0] := Len;              // length:int32
     PIntegerArray(VBlob)^[1] := JSLen;            // string:int32
-    Move(pointer(JS)^,PAnsiChar(VBlob)[8],JSLen); // string:text#0
-    Move(pointer(Scope)^,PAnsiChar(VBlob)[8+JSLen],Length(Scope)); // document
+    MoveFast(pointer(JS)^,PAnsiChar(VBlob)[8],JSLen); // string:text#0
+    MoveFast(pointer(Scope)^,PAnsiChar(VBlob)[8+JSLen],Length(Scope)); // document
   end;
+end;
+
+function NumberDecimal(const Value: RawUTF8): variant;
+var dec: TDecimal128;
+begin
+  if dec.FromText(Value)=dsvError then
+    raise EBSONException.CreateUTF8('Invalid NumberDecimal("%")',[Value]);
+  dec.ToVariant(result);
+end;
+
+function NumberDecimal(const Value: currency): variant;
+var dec: TDecimal128;
+begin
+  dec.FromCurr(Value);
+  dec.ToVariant(result);
 end;
 
 function BSON(const doc: TDocVariantData): TBSONDocument;
@@ -4719,7 +4829,7 @@ begin
   Write4(n);
   SetLength(fCursors,n);
   n := n*sizeof(Int64);
-  move(CursorIDs[0],fCursors[0],n);
+  MoveFast(CursorIDs[0],fCursors[0],n);
   Write(pointer(fCursors),n);
 end;
 
@@ -6210,8 +6320,8 @@ end;
 
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
-    // dsvNone, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    (hi:$7c00000000000000), (hi:$7c00000000000000),
+    // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
+    (hi:$7c00000000000000), (hi:$7c00000000000000), (hi:$7c00000000000000),
     (hi:$3040000000000000), (hi:$7800000000000000),
     (hi:$f800000000000000), (lo:$378d8e63ffffffff; hi:$dfffed09bead87c0),
     (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
@@ -6226,7 +6336,7 @@ begin
   for result := dsvNan to high(D128) do
     if (D128[result].hi=Bits.hi) and (D128[result].lo=Bits.lo) then
       exit;
-  result := dsvNone;
+  result := dsvValue;
 end;
 
 procedure TDecimal128.FromInt32(value: integer);
@@ -6246,14 +6356,36 @@ begin
   Bits.hi := $3040000000000000;
 end;
 
+function TDecimal128.FromFloat(value: TSynExtended; precision: integer): boolean;
+var tmp: shortstring;
+begin
+  if precision<=0 then
+    precision := DOUBLE_PRECISION;
+  tmp[0] := AnsiChar(ExtendedToString(tmp,value,precision));
+  result := true;
+  case ExtendedToStringNan(tmp) of
+  seNan:    SetSpecial(dsvNan);
+  seInf:    SetSpecial(dsvPosInf);
+  seNegInf: SetSpecial(dsvNegInf);
+  else result := FromText(@tmp[1],ord(tmp[0]))<>dsvError;
+  end;
+end;
+
+procedure TDecimal128.FromCurr(value: Currency);
+begin // force exactly 4 decimals
+  if value<0 then begin
+    Bits.lo := -PInt64(@value)^;
+    Bits.hi := $b038000000000000;
+  end else begin
+    Bits.lo := PInt64(@value)^;
+    Bits.hi := $3038000000000000;
+  end;
+end;
+
 function TDecimal128.Equals(const other: TDecimal128): boolean;
 begin
   result := (Bits.lo=other.Bits.lo) and (Bits.hi=other.Bits.hi);
 end;
-
-const
-  BSON_DECIMAL128_INF = 'Infinity';
-  BSON_DECIMAL128_NAN = 'NaN';
 
 function div128bits9digits(var value: THash128Rec): cardinal;
 var r64,fastmod: QWord;
@@ -6271,6 +6403,30 @@ begin
   end;
   result := r64;
 end;
+
+{$ifdef CPU32DELPHI}
+function x86div10(value: cardinal): cardinal;
+asm // use fast reciprocal disivion for Delphi (FPC knows this optimization)
+      mov   ecx, edx
+      mov   edx, 3435973837
+      mul   edx
+      shr   edx, 3
+      mov   eax, edx
+end;
+
+procedure mul64(a,b: cardinal; out product64: QWord);
+asm // Delphi is not efficient for x86 target with QWord -> optimize
+      imul    edx
+      mov     [ecx], eax
+      mov     [ecx + 4], edx
+end;
+{$endif}
+
+const
+  BSON_DECIMAL128_EXPONENT_MAX=6111;
+  BSON_DECIMAL128_EXPONENT_MIN=-6176;
+  BSON_DECIMAL128_EXPONENT_BIAS=6176;
+  BSON_DECIMAL128_MAX_DIGITS=34;
 
 function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
 var dest: PUTF8Char;
@@ -6304,11 +6460,11 @@ begin
   if combi shr 3=3 then
     case combi of
     30: begin
-      result := AppendRawUTF8ToBuffer(dest,BSON_DECIMAL128_INF)-@Buffer;
+      result := AppendRawUTF8ToBuffer(dest,DECIMAL128_SPECIAL_TEXT[dsvPosInf])-@Buffer;
       exit;
     end;
     31: begin
-      result := AppendRawUTF8ToBuffer(@Buffer,BSON_DECIMAL128_NAN)-@Buffer;
+      result := AppendRawUTF8ToBuffer(@Buffer,DECIMAL128_SPECIAL_TEXT[dsvNan])-@Buffer;
       exit;
     end;
     else begin
@@ -6320,7 +6476,7 @@ begin
     biasedexp := (Bits.c[3] shr 17) and $3fff;
     signmsb := (Bits.c[3] shr 14) and 7;
   end;
-  exp := biasedexp-6176;
+  exp := biasedexp-BSON_DECIMAL128_EXPONENT_BIAS;
   _128.c[0] := (Bits.c[3] and $3fff)+((signmsb and $0f)shl 14);
   _128.c[1] := Bits.c[2];
   _128.c[2] := Bits.c[1];
@@ -6338,7 +6494,11 @@ begin
         continue;
       for j := 8 downto 0 do begin
         fastdiv := leastdig;
-        leastdig := leastdig div 10;
+        {$ifdef CPU32DELPHI}
+        leastdig := x86div10(leastdig); // Delphi compiler is not efficient
+        {$else}
+        leastdig := leastdig div 10; // FPC uses built-in reciprocal
+        {$endif}
         digbuffer[k*9+j] := fastdiv-leastdig*10;
         if leastdig=0 then
           break;
@@ -6397,10 +6557,314 @@ begin
   SetString(result,PAnsiChar(@tmp),ToText(tmp));
 end;
 
+procedure TDecimal128.ToText(var result: RawUTF8);
+var tmp: TDecimal128Str;
+begin
+  SetString(result,PAnsiChar(@tmp),ToText(tmp));
+end;
+
 procedure TDecimal128.AddText(W: TTextWriter);
 var tmp: TDecimal128Str;
 begin
   W.AddNoJSONEscape(@tmp,ToText(tmp));
+end;
+
+function TDecimal128.ToVariant: variant;
+begin
+  ToVariant(result);
+end;
+
+procedure TDecimal128.ToVariant(out result: variant);
+begin
+  with TBSONVariantData(result) do begin
+    VType := BSONVariantType.VarType;
+    VKind := betDecimal128;
+    VBlob := nil;
+    SetString(RawByteString(VBlob),PAnsiChar(@Bits),sizeof(TDecimal128));
+  end;
+end;
+
+function TDecimal128.ToFloat: TSynExtended;
+var tmp: TDecimal128Str;
+begin
+  tmp[ToText(tmp)] := #0; // makes ASCIIZ
+  result := GetExtended(@tmp);
+end;
+
+function TDecimal128.ToCurr: currency;
+var tmp: TDecimal128Str;
+    res64: Int64 absolute result;
+begin
+  if Bits.hi=$b038000000000000 then // fast direct conversion e.g. FromCurr
+    res64 := -Bits.lo else
+  if Bits.hi=$3038000000000000 then
+    res64 := Bits.lo else begin
+    tmp[ToText(tmp)] := #0; // makes ASCIIZ temporary text conversion
+    res64 := StrToCurr64(@tmp);
+  end;
+end;
+
+procedure mul64x64(const left, right: QWord; out product: THash128Rec);
+{$ifdef CPU32DELPHI}
+asm // taken from FPC compiler output, which is much better than Delphi's here
+        lea     esp, [esp-18H]
+        push    ebx
+        push    esi
+        mov     ecx, eax
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+10H]
+        mov     dword ptr [ebp-8H], eax
+        mov     dword ptr [ebp-4H], edx
+        mov     eax, dword ptr [ebp+8H]
+        mul     dword ptr [ebp+14H]
+        mov     esi, dword ptr [ebp-4H]
+        xor     ebx, ebx
+        add     eax, esi
+        adc     edx, ebx
+        mov     dword ptr [ebp-10H], eax
+        mov     dword ptr [ebp-0CH], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+10H]
+        mov     ebx, dword ptr [ebp-10H]
+        xor     esi, esi
+        add     eax, ebx
+        adc     edx, esi
+        mov     dword ptr [ebp-18H], eax
+        mov     dword ptr [ebp-14H], edx
+        mov     eax, dword ptr [ebp+0CH]
+        mul     dword ptr [ebp+14H]
+        mov     ebx, dword ptr [ebp-0CH]
+        xor     esi, esi
+        add     eax, ebx
+        adc     edx, esi
+        mov     ebx, dword ptr [ebp-14H]
+        xor     esi, esi
+        add     eax, ebx
+        adc     edx, esi
+        mov     dword ptr [ecx+8H], eax
+        mov     dword ptr [ecx+0CH], edx
+        mov     eax, dword ptr [ebp-18H]
+        mov     edx, dword ptr [ebp-14H]
+        xor     edx, edx
+        mov     ebx, dword ptr [ebp-8H]
+        xor     esi, esi
+        or      edx, ebx
+        or      eax, esi
+        mov     dword ptr [ecx], edx
+        mov     dword ptr [ecx+4H], eax
+        pop     esi
+        pop     ebx
+        mov     esp, ebp
+{$else}
+var l: TQWordRec absolute left;
+    r: TQWordRec absolute right;
+    t1,t2,t3: TQWordRec;
+begin
+  {$ifdef CPU32DELPHI}
+  mul64(l.L,r.L,t1.V);
+  mul64(l.H,r.L,t2.V);
+  inc(t2.V,t1.H);
+  mul64(l.L,r.H,t3.V);
+  inc(t3.V,t2.L);
+  mul64(l.H,r.H,product.H);
+  inc(product.H,t2.H+t3.H);
+  product.c0 := t1.L;
+  product.c1 := t3.V;
+  {$else}
+  t1.V := QWord(l.L)*r.L;
+  t2.V := QWord(l.H)*r.L+t1.H;
+  t3.V := QWord(l.L)*r.H+t2.L;
+  product.H := QWord(l.H)*r.H+t2.H+t3.H;
+  product.L := t3.V shl 32 or t1.L;
+  {$endif}
+{$endif}
+end;
+
+function TDecimal128.FromText(text: PUTF8Char; textlen: integer): TDecimal128SpecialValue;
+var P,PEnd: PUTF8Char;
+    c: AnsiChar;
+    flags: set of (negative, signed, radix, nonzero);
+    digits: array[0..BSON_DECIMAL128_MAX_DIGITS-1] of byte;
+    firstnon0, digread, digstored, digcount, radixpos,
+    digfirst, diglast, exp, signdig, i: integer;
+    signhi, signlo: QWord;
+    biasedexp: cardinal;
+    sign: THash128Rec;
+begin
+  for result := dsvNan to dsvNegInf do
+    if IdemPropNameU(DECIMAL128_SPECIAL_TEXT[result],text,textlen) then begin
+      Bits := D128[result];
+      exit; // fast recognition of special text values (including '0')
+    end;
+  Bits := D128[dsvError];
+  result := dsvError;
+  if (textlen=0) or (text=nil) then
+    exit;
+  P := text;
+  PEnd := text+textlen;
+  flags := [];
+  if P^ in ['+','-'] then begin
+    include(flags,signed);
+    if P^='-' then
+      include(flags,negative);
+    inc(P);
+  end;
+  digcount := 0;
+  digread := 0;
+  digstored := 0;
+  radixpos := 0;
+  firstnon0 := 0;
+  exp := 0;
+  while P<PEnd do begin
+    c := P^;
+    case c of
+    '.':
+      if radix in flags then // duplicated '.'
+        exit else begin
+        include(flags,radix);
+        inc(P);
+        continue;
+      end;
+    '0'..'9':
+      if digstored<BSON_DECIMAL128_MAX_DIGITS then
+        if (c>'0') or (nonzero in flags) then begin
+          if not(nonzero in flags) then begin
+            firstnon0 := digread;
+            include(flags,nonzero);
+          end;
+          digits[digstored] := ord(c)-ord('0');
+          inc(digstored);
+        end;
+    'E','e': begin
+      inc(P);
+      if P>=PEnd then
+        exit;
+      exp := GetInteger(P,PEnd);
+      break;
+    end;
+    else exit;
+    end;
+    if nonzero in flags then
+      inc(digcount);
+    if radix in flags then
+      inc(radixpos);
+    inc(digread);
+    inc(P);
+  end;
+  if digread=0 then
+    exit;
+  digfirst := 0;
+  if digstored=0 then begin // value is zero
+    diglast := 0;
+    digits[0] := 0;
+    digcount := 1;
+    digstored := 1;
+    signdig := 0;
+  end else begin
+    diglast := digstored-1;
+    signdig := digcount;
+    // handle trailing zeros as non-significant
+    while text[firstnon0+signdig-1+ord(radix in flags)+ord(signed in flags)]='0' do
+      dec(signdig);
+  end;
+  if (exp<=radixpos) and (radixpos-exp>1 shl 14) then
+    exp := BSON_DECIMAL128_EXPONENT_MIN else
+    dec(exp,radixpos);
+  while exp>BSON_DECIMAL128_EXPONENT_MAX do begin
+    inc(diglast);
+    digits[diglast] := 0;
+    if diglast-digfirst>BSON_DECIMAL128_MAX_DIGITS then
+      if signdig=0 then begin // zero clamping is allowed
+        exp := BSON_DECIMAL128_EXPONENT_MAX;
+        break;
+      end else
+        exit; // overflow is not permitted
+    dec(exp);
+  end;
+  while (exp<BSON_DECIMAL128_EXPONENT_MIN) or (digstored<digcount) do begin
+    if diglast=0 then
+      if signdig=0 then begin // zero clamping
+        exp := BSON_DECIMAL128_EXPONENT_MIN;
+        break;
+      end else
+        exit; // overflow
+    if digstored<digcount then
+      if (text[digcount-1+ord(signed in flags)+ord(radix in flags)]<>'0') and
+         (signdig<>0) then
+        exit else // overflow 
+        dec(digcount) else // adjust to non stored digits
+      if digits[diglast]<>0 then
+        exit else // inexact rounding
+        dec(diglast); // adjust to round
+    if exp<BSON_DECIMAL128_EXPONENT_MAX then
+      inc(exp) else
+      exit;
+  end;
+  if diglast-digfirst+1<signdig then
+    if text[firstnon0+diglast+ord(signed in flags)+ord(radix in flags)]<>'0' then
+      exit; // inexact rouding
+  signhi := 0;
+  signlo := 0;
+  if signdig<>0 then // if not zero
+    if diglast-digfirst<17 then
+      for i := digfirst to diglast do
+      {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower call _llmul
+        inc(signlo,signlo+signlo shl 3+digits[i]) else begin
+      for i := digfirst to diglast-17 do
+        inc(signhi,signhi+signhi shl 3+digits[i]);
+      for i := diglast-16 to diglast do
+        inc(signlo,signlo+signlo shl 3+digits[i]);
+      {$else}
+        signlo := signlo*10+digits[i] else begin
+      for i := digfirst to diglast-17 do
+        signhi := signhi*10+digits[i];
+      for i := diglast-16 to diglast do
+        signlo := signlo*10+digits[i];
+      {$else}      {$endif}
+    end;
+  if signhi=0 then begin
+    sign.L := signlo;
+    sign.H := 0;
+  end else begin
+    mul64x64(signhi,100000000000000000,sign);
+    inc(sign.L,signlo);
+    if (sign.c1<Int64Rec(signlo).Hi) or
+       ((sign.c1=Int64Rec(signlo).Hi) and
+        (sign.c0<Int64Rec(signlo).Lo)) then
+      // manual QWord "if significand.L<significand_low" for older compilers
+      inc(sign.H);
+  end;
+  biasedexp := exp+BSON_DECIMAL128_EXPONENT_BIAS;
+  if (sign.H shr 49)and 1<>0 then
+    Bits.hi := (3 shl 61) or (QWord(biasedexp and $3fff)shl 47) or
+      (sign.H and $7fffffffffff) else
+    Bits.hi := (QWord(biasedexp and $3fff)shl 49) or
+      (sign.H and $1ffffffffffff);
+  Bits.lo := sign.L;
+  if negative in flags then
+    Bits.c[3] := Bits.c[3] or $80000000;
+  result := dsvValue;
+end;
+
+function TDecimal128.FromText(const text: RawUTF8): TDecimal128SpecialValue;
+begin
+  result := FromText(pointer(text),length(text));
+end;
+
+function TDecimal128.FromVariant(const value: variant): boolean;
+var txt: RawUTF8;
+    wasString: boolean;
+    bson: TBSONVariantData absolute value;
+begin
+  if TVarData(value).VType=varByRef or varVariant then
+    result := FromVariant(PVariant(TVarData(value).VPointer)^) else
+  if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betDecimal128) then begin
+    Bits := PDecimal128(bson.VBlob)^.Bits;
+    result := true;
+  end else begin
+    VariantToUTF8(value,txt,wasString);
+    result := wasString and (FromText(txt)<>dsvError);
+  end;
 end;
 
 initialization

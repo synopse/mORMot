@@ -412,6 +412,8 @@ type
 {$ifndef LVCL}
     /// variant-based JSON/BSON document process
     procedure _TDocVariant;
+    /// low-level TDecimal128 decimal value process (as used in BSON)
+    procedure _TDecimal128;
     /// BSON process (using TDocVariant)
     procedure _BSON;
 {$endif LVCL}
@@ -6995,6 +6997,150 @@ end;
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
 
+procedure TTestLowLevelTypes._TDecimal128;
+
+  procedure Test(const hi,lo: QWord; const expected: RawUTF8;
+    special: TDecimal128SpecialValue=dsvValue);
+  var v,v2: TDecimal128;
+  begin
+    v.Bits.hi := hi;
+    v.Bits.lo := lo;
+    Check(v.ToText=expected);
+    v2.SetZero;
+    Check(v2.FromText(expected)=special);
+    if special<>dsvValue then
+      exit;
+    Check(v2.Equals(v));
+    Check(v2.ToText=expected);
+    v2.SetZero;
+    if expected[1]<>'-' then
+      Check(v2.FromText('000'+LowerCase(expected))=dsvValue) else
+      Check(v2.FromText(LowerCase(expected))=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  procedure Test2(const fromvalue, expected: RaWUTF8; h: QWord=0; l: QWord=0);
+  var v: TDecimal128;
+  begin
+    Check(v.FromText(fromvalue)=dsvValue);
+    Check(v.ToText=expected);
+    if (h=0) and (l=0) then
+      exit;
+    Check(v.Bits.lo=l);
+    Check(v.Bits.hi=h);
+  end;
+
+var v,v2: TDecimal128;
+    s: TDecimal128SpecialValue;
+    str: RawUTF8;
+    i: integer;
+    o: variant;
+begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal128.c
+  Check(v.FromText('')=dsvError);
+  Check(v.FromText('.')=dsvError);
+  Check(v.FromText('.e')=dsvError);
+  Check(v.FromText('i')=dsvError);
+  Check(v.FromText('invalid')=dsvError);
+  Check(v.FromText('1invalid')=dsvError);
+  Check(v.FromText('E02')=dsvError);
+  Check(v.FromText('E+02')=dsvError);
+  Check(v.FromText('e+02')=dsvError);
+  Check(v.FromText('1E02')=dsvValue);
+  Check(v.FromText('1invalidE02')=dsvError);
+  Check(v.FromText('..1')=dsvError);
+  Check(v.FromText('0')=dsvZero);
+  Check(v.ToText='0');
+  for s := dsvNan to high(s) do begin
+    v.SetSpecial(s);
+    Check(v.ToText=DECIMAL128_SPECIAL_TEXT[s]);
+    Check(v.IsSpecial=s);
+    if s<dsvMin then begin
+      v.SetZero;
+      Check(v.FromText(LowerCase(DECIMAL128_SPECIAL_TEXT[s]))=s);
+      Check(v.IsSpecial=s);
+    end;
+  end;
+  v.SetZero;
+  Check(v.ToText='0');
+  Test(0,0,'0',dsvZero);
+  Test($3040000000000000,0,'0',dsvZero);
+  Test($3040000000000000,1,'1');
+  Test($3040000000000000,2,'2');
+  Test($b040000000000000,2,'-2');
+  Test($b040000000000000,1,'-1');
+  Test($b040000000000000,0,'-0');
+  Test($303e000000000000,1,'0.1');
+  Test($3034000000000000,$4d2,'0.001234');
+  Test($3040000000000000,$1cbe991a14,'123456789012');
+  Test($302a000000000000,$75aef40,'0.00123400000');
+  Test($2ffc3cde6fff9732,$de825cd07e96aff2,'0.1234567890123456789012345678901234');
+  Test($3040ffffffffffff,$ffffffffffffffff,'5192296858534827628530496329220095');
+  Test($5ffe314dc6448d93,$38c15b0a00000000,'1.000000000000000000000000000000000E+6144');
+  Test($000,$001,'1E-6176');
+  Test($8000000000000000,$001,'-1E-6176');
+  Test($3108000000000000,$000009184db63eb1,'9.999987654321E+112');
+  Test($5fffed09bead87c0,$378d8e63ffffffff,DECIMAL128_SPECIAL_TEXT[dsvMax]);
+  Test($0001ed09bead87c0,$378d8e63ffffffff,'9.999999999999999999999999999999999E-6143');
+  Test($dfffed09bead87c0,$378d8e63ffffffff,DECIMAL128_SPECIAL_TEXT[dsvMin]);
+  Test($304c000000000000,$41a,'1.050E+9');
+  Test($3042000000000000,$41a,'1.050E+4');
+  Test($3040000000000000,$069,'105');
+  Test($3042000000000000,$069,'1.05E+3');
+  Test($3046000000000000,$001,'1E+3');
+  Test($3298000000000000,$000,'0E+300');
+  Test($2b90000000000000,$000,'0E-600');
+  Test2('10e0','10');
+  Test2('1e1','1E+1');
+  Test2('10e-1','1.0');
+  Test2('1000000000000000000000000000000000000000',
+    '1.000000000000000000000000000000000E+39',$304c314dc6448d93,$38c15b0a00000000);
+  Test2('10000000000000000000000000000000000','1.000000000000000000000000000000000E+34',
+    $3042314dc6448d93,$38c15b0a00000000);
+  Test2('1000000000000000000000000000000000','1000000000000000000000000000000000',
+    $3040314dc6448d93,$38c15b0a00000000);
+  Test2('12345678901234567e6111','1.2345678901234567E+6127',
+    $5ffe000000000000,12345678901234567);
+  Test2('-100E-10','-1.00E-8',$b02c000000000000,100);
+  v.SetZero;
+  for i := 0 to 4000 do begin
+    if i>1000 then
+      inc(v.Bits.c[0],i*7) else
+      v.Bits.c[0] := i;
+    str := v.ToText;
+    Check(str=UInt32ToUTF8(v.Bits.c[0]));
+    if i=0 then
+      continue;
+    Check(v2.FromText(str)=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  for i := -1000 to 100 do begin
+    v.FromInt32(i);
+    str := v.ToText;
+    Check(str=Int32ToUTF8(i));
+    if i=0 then
+      continue;
+    Check(v2.FromText(str)=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  v.FromCurr(0);
+  Check(v.ToText='0.0000');
+  Check(v.ToCurr=0);
+  v.FromCurr(3.14);
+  Check(v.ToText='3.1400');
+  for i := -160 to 160 do begin
+    v.FromFloat(i/4);
+    v.ToText(str);
+    Check(GetExtended(pointer(str))*4=i);
+    Check(v.ToFloat*4=i);
+    v.FromCurr(i/16);
+    v.ToText(str);
+    Check(StrToCurr64(pointer(str))=i*625);
+    Check(v.ToCurr*16=i);
+    o := NumberDecimal(i/8);
+    Check(v.FromVariant(o));
+    Check(v.ToCurr*8=i);
+  end;
+end;
+
 procedure TTestLowLevelTypes._BSON;
 const BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
       BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0+
@@ -7027,6 +7173,7 @@ var o,od,o2,value: variant;
     arr: TRawUTF8DynArray;
     st: string;
     timer: TPrecisionTimer;
+    dec: TDecimal128;
 procedure CheckElemIsBsonArray;
 var b: PByte;
 begin
@@ -7353,6 +7500,38 @@ begin
   Check(u='{"doc":{"name":"John","year":1982},"id":123}');
   u := BSONDocumentToJSON(BSON(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]));
   Check(u='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
+  o2 := NumberDecimal('123.5600');
+  u := VariantSaveJSON(o2);
+  Check(u='{"$numberDecimal":"123.5600"}');
+  o := _Json('{ num: '+u+'}');
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o := BSONVariant(['num',o2]);
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o := _ObjFast(['num',o2]);
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  o2 := _JsonFast(u);
+  check(o=o2,'o=o2');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o2 := _JsonFast(u);
+  check(o=o2,'o=o2');
+  b := pointer(BSON(u,[],[]));
+  u2 := BSONToJSON(b,betDoc,0,modMongoShell);
+  Check(u=u2);
+  u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
+  check(u2='{"num":{"$numberDecimal":"123.5600"}}');
+  check(dec.FromVariant(o2.num));
+  check(dec.ToText='123.5600');
+  o2 := dec.ToVariant;
+  u := VariantSaveJSON(o2);
+  check(u='{"$numberDecimal":"123.5600"}');;
 end;
 
 procedure TTestLowLevelTypes._TDocVariant;

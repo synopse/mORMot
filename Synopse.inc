@@ -349,6 +349,7 @@
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
+    {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
   {$endif CPUX64}
