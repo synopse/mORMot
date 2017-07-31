@@ -2786,8 +2786,14 @@ var
 /// get the signed 32-bit integer value stored in P^
 // - we use the PtrInt result type, even if expected to be 32-bit, to use
 // native CPU register size (don't want any 32-bit overflow here)
-// - it will stop the parsing when P^ does not contain numbers any more
+// - will end parsing when P^ does not contain any number (e.g. it reaches any
+// ending #0 char)
 function GetInteger(P: PUTF8Char): PtrInt; overload;
+
+/// get the signed 32-bit integer value stored in P^..PEnd^
+// - will end parsing when P^ does not contain any number (e.g. it reaches any
+// ending #0 char), or when P reached PEnd (avoiding any buffer overflow)
+function GetInteger(P,PEnd: PUTF8Char): PtrInt; overload;
 
 /// get the signed 32-bit integer value stored in P^
 // - if P if nil or not start with a valid numerical value, returns Default
@@ -29927,9 +29933,45 @@ begin
         result := result*10+PtrInt(c);
       inc(P);
     until false;
+    if minus then
+      result := -result;
   end;
-  if minus then
-    result := -result;
+end;
+
+function GetInteger(P,PEnd: PUTF8Char): PtrInt;
+var c: PtrUInt;
+    minus: boolean;
+begin
+  result := 0;
+  if (P=nil) or (P>=PEnd) then
+    exit;
+  while P^ in [#1..' '] do begin
+    inc(P);
+    if P=PEnd then
+      exit;
+  end;
+  if P^='-' then begin
+    minus := true;
+    repeat inc(P); if P=PEnd then exit; until P^<>' ';
+  end else begin
+    minus := false;
+    if P^='+' then
+      repeat inc(P); if P=PEnd then exit; until P^<>' ';
+  end;
+  c := byte(P^)-48;
+  if c<=9 then begin
+    result := c;
+    inc(P);
+    repeat
+      c := byte(P^)-48;
+      if c>9 then
+        break else
+        result := result*10+PtrInt(c);
+      inc(P);
+    until P=PEnd;
+    if minus then
+      result := -result;
+  end;
 end;
 
 function GetInteger(P: PUTF8Char; var err: integer): PtrInt;
