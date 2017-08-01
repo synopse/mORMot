@@ -59511,20 +59511,23 @@ begin
   end;
   n := length(params);
   tmp.Init(n+2);
-  PAnsiChar(tmp.buf)[0] := '[';
-  MoveFast(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
-  PWord(PAnsiChar(tmp.buf)+n+1)^ := ord(']'); // ']'#0
-  if output<>nil then begin
-    WR := TempTextWriter;
-    WR.CancelAll;
-  end else
-    if fMethod^.ArgsOutputValuesCount>0 then
-      exit else // ensure a function has a TOnAsynchRedirectResult callback
-      WR := nil;
-  result := ExecuteJson([Instance],tmp.buf,WR);
-  if WR<>nil then
-    WR.SetText(output^);
-  tmp.Done;
+  try
+    PAnsiChar(tmp.buf)[0] := '[';
+    MoveFast(pointer(params)^,PAnsiChar(tmp.buf)[1],n);
+    PWord(PAnsiChar(tmp.buf)+n+1)^ := ord(']'); // ']'#0
+    if output<>nil then begin
+      WR := TempTextWriter;
+      WR.CancelAll;
+    end else
+      if fMethod^.ArgsOutputValuesCount>0 then
+        exit else // ensure a function has a TOnAsynchRedirectResult callback
+        WR := nil;
+    result := ExecuteJson([Instance],tmp.buf,WR);
+    if WR<>nil then
+      WR.SetText(output^);
+  finally
+    tmp.Done;
+  end;
 end;
 
 function TServiceMethodExecute.ExecuteJsonFake(Instance: pointer; params: PUTF8Char): boolean;
