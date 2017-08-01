@@ -1561,7 +1561,7 @@ Here are the main features of this custom variant type:
 - Direct access to the internal variant {\i names} and {\i values} arrays from code, by trans-typing into a {\f1\fs20 TDocVariantData record};
 - Instance life-time is managed by the compiler (like any other {\f1\fs20 variant} type), without the need to use {\f1\fs20 interfaces} or explicit {\f1\fs20 try..finally} blocks;
 - Optimized to use as little memory and CPU resource as possible (in contrast to most other libraries, it does not allocate one {\f1\fs20 class} instance per node, but rely on pre-allocated arrays);
-- Opened to extension of any content storage - for instance, it will perfectly integrate with @*BSON@ serialization and custom {\i @*MongoDB@} types ({\i ObjectID, RegEx}...), to be used in conjunction with {\i MongoDB} servers;
+- Opened to extension of any content storage - for instance, it will perfectly integrate with @*BSON@ serialization and custom {\i @*MongoDB@} types ({\i ObjectID, Decimal128, RegEx}...), to be used in conjunction with {\i MongoDB} servers;
 - Perfectly integrated with our @48@ and its JSON serialization - see @53@, as with the {\f1\fs20 record} serialization - see @51@;
 - Designed to work with our {\i mORMot} @*ORM@: any {\f1\fs20 @*TSQLRecord@} instance containing such {\f1\fs20 variant} custom types as published properties will be recognized by the ORM core, and work as expected with any database back-end (storing the content as JSON in a TEXT column);
 - Designed to work with our {\i mORMot} @*SOA@: any {\f1\fs20 interface}-based service - see @63@ - is able to consume or publish such kind of content, as {\f1\fs20 variant} kind of parameters;
@@ -1761,7 +1761,7 @@ With {\f1\fs20 _Json()} or {\f1\fs20 _JsonFmt()}, either a {\i document} or {\i 
 !  // all commands will write '{"name":"john","year":1982}'
 Of course, you can nest objects or arrays as parameters to the {\f1\fs20 _JsonFmt()} function.
 The supplied JSON can be either in strict JSON syntax, or with the {\i @*MongoDB@} @*extended syntax,@ i.e. with unquoted property names. It could be pretty convenient and also less error-prone when typing in the {\i Delphi} code to forget about @*quotes@ around the property names of your JSON.
-Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
+Note that {\i TDocVariant} implements an open interface for adding any custom extensions to JSON: for instance, if the {\f1\fs20 SynMongoDB.pas} unit is defined in your application, you will be able to create any {\i MongoDB} specific types in your JSON, like {\f1\fs20 ObjectID()}, {\f1\fs20 NumberDecimal(""...")} ,{\f1\fs20 new Date()} or even {\f1\fs20 /regex/option}.
 As a with any {\i object} or {\i array} document, the {\i Delphi} IDE debugger is able to display such {\f1\fs20 variant} values as their JSON representation.
 :   Per-value or per-reference
 By default, the {\f1\fs20 variant} instance created by {\f1\fs20 _Obj() _Arr() _Json() _JsonFmt()} will use a {\i copy-@**by-value@} pattern. It means that when an instance is affected to another variable, a new {\f1\fs20 variant} document will be created, and all internal values will be copied. Just like a {\f1\fs20 record} type.
@@ -6183,7 +6183,7 @@ Integration is made at two levels:
 {\i MongoDB} eschews the traditional table-based relational database structure in favor of @*JSON@-like documents with dynamic schemas ({\i MongoDB} calls the format @*BSON@), which match perfectly {\i mORMot}'s @*REST@ful approach.
 : SynMongoDB client
 The {\f1\fs20 SynMongoDB.pas} unit features direct optimized access to a {\i MongoDB} server.
-It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex or {\i Javascript}):
+It gives access to any @**BSON@ data, including documents, arrays, and {\i MongoDB}'s custom types (like ObjectID, dates, binary, regex, Decimal128 or {\i Javascript}):
 - For instance, a {\f1\fs20 TBSONObjectID} can be used to create some genuine document identifiers on the client side ({\i MongoDB} does not generate the IDs for you: a common way is to generate unique IDs on the client side);
 - Generation of BSON content from any {\i Delphi} types (via {\f1\fs20 TBSONWriter});
 - Fast in-place parsing of the BSON stream, without any memory allocation (via {\f1\fs20 TBSONElement});
@@ -6530,7 +6530,7 @@ The property values will be stored in the native {\i MongoDB} layout, i.e. with 
 |{\f1\fs20 @*TSQLRawBlob@}|binary|This type is an alias to {\f1\fs20 @*RawByteString@} - those properties are not retrieved by default: you need to use {\f1\fs20 RetrieveBlobFields()} or set {\f1\fs20 ForceBlobTransfert} / {\f1\fs20 ForceBlobTransertTable[]} properties
 |{\f1\fs20 TByteDynArray}|binary|Used to embed a BLOB property stored as BSON binary within a document - so that {\f1\fs20 @*TSQLRawBlob@} may be restricted in the future to @*GridFS@ external content
 |{\i @*dynamic array@s}|array\line binary|if the dynamic array can be saved as true JSON, will be stored as BSON array - otherwise, will be stored in the {\f1\fs20 TDynArray.SaveTo} BSON binary format
-|{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID})
+|{\f1\fs20 variant}|value\line array\line object|BSON number, text, date, object or array, depending on @80@ - or {\f1\fs20 TBSONVariant} stored value (e.g. to store native {\i MongoDB} types like {\f1\fs20 ObjectID} or {\f1\fs20 Decimal128})
 |{\f1\fs20 record}|binary\line object|BSON as defined in code by overriding {\f1\fs20 TSQLRecord.InternalRegisterCustomProperties} to produce true JSON
 |%
 You can share the same {\f1\fs20 TSQLRecord} definition with {\i MongoDB} and other storage means, like external SQL databases. Unused information (like the {\f1\fs20 index} attribute) will just be ignored.

@@ -115,10 +115,16 @@ type
   /// handles a 128 bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format
+  // - the betFloat BSON format stores a 64-bit floating point value, which
+  // doesn't have exact decimals, so may suffer from rounding or approximation
+  // - for instance, if you work with Delphi currency values, you may store
+  // betDecimal128 values in MongoDB - the easiest way is to include it as a
+  // TBSONVariant instance, via the NumberDecimal() function
   // - there is no mathematical operator/methods for Decimal128 Value Objects,
   // as required by MongoDB specifications: any computation must be done
-  // explicitly on native language value representation (e.g. TBCD or any
-  // BigNumber library) - use ToText and FromText to make the conversion
+  // explicitly on native language value representation (e.g. currency, TBCD or
+  // any BigNumber library) - use ToCurr/FromCurr or ToText/FromText to make
+  // the appropriate safe conversions
   {$ifndef UNICODE}
   TDecimal128 = object
   {$else}
@@ -142,12 +148,6 @@ type
     /// fills with a 32-bit unsigned value
     procedure FromUInt32(value: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
-    /// fills with a native floating-point value
-    // - this method is just a wrapper around ExtendedToString and ToText
-    // - so you should provide the expected precision, from the actual storage
-    // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
-    // you don't use a double kind of value)   
-    function FromFloat(value: TSynExtended; precision: integer=0): boolean;
     /// fills with a fixed decimal value, as stored in currency
     // - will store the content with explictly four decimals, as in currency
     // - by design, this method is very fast and accurate
@@ -169,6 +169,14 @@ type
     // a floating-point text content
     // - returns TRUE if conversion was made, FALSE on any error
     function FromVariant(const value: variant): boolean;
+    /// fills with a native floating-point value
+    // - note that it doesn't make much sense to use this method: you should
+    // rather use the native betFloat BSON format, with native double precision
+    // - this method is just a wrapper around ExtendedToString and ToText,
+    // so you should provide the expected precision, from the actual storage
+    // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
+    // you don't use a double kind of value)
+    function FromFloat(value: TSynExtended; precision: integer=0): boolean;
     /// fast bit-per-bit value comparison
     function Equals(const other: TDecimal128): boolean;
       {$ifdef HASINLINE}inline;{$endif}
@@ -185,10 +193,13 @@ type
     procedure ToVariant(out result: variant); overload;
     /// converts this Decimal128 value to a floating-point value
     // - by design, some information may be lost during conversion
+    // - note that it doesn't make much sense to use this method: you should
+    // rather use the native betFloat BSON format, with native double precision
     function ToFloat: TSynExtended;
     /// converts this Decimal128 value to a fixed decimal value
-    // - by design, some information may be lost during conversion,
-    // unless the value has been stored via the FromCurr() method
+    // - by design, some information may be lost during conversion, unless the
+    // value has been stored previously via the FromCurr() method - in this
+    // case, conversion is immediate and accurate
     function ToCurr: currency;
     /// converts the value to its string representation
     procedure AddText(W: TTextWriter);
@@ -873,8 +884,7 @@ function NumberDecimal(const Value: RawUTF8): variant; overload;
 
 /// create a TBSONVariant Decimal128 from a currency fixed decimal
 // - will store internally a TDecimal128 storage, with explictly 4 decimals
-// - if you want to store some floating-point value, don't use this method
-// but TDecimal128.FromFloat then TDecimal128.ToVariant
+// - if you want to store some floating-point value, use plain BSON double format
 function NumberDecimal(const Value: currency): variant; overload;
 
 /// store some object content into BSON encoded binary
@@ -6310,7 +6320,7 @@ end;
 
 { TDecimal128 }
 
-// inspired by https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c
+// see https://github.com/mongodb/libbson/blob/master/src/bson/bson-decimal128.c
 
 procedure TDecimal128.SetZero;
 begin
@@ -6399,15 +6409,14 @@ begin
       continue;
     fastmod := r64; // to avoid two 64bit divisions
     value.c[i] := r64 div 1000000000;
-    r64 := fastmod-value.c[i]*1000000000;
+    r64 := fastmod-QWord(value.c[i])*1000000000;
   end;
   result := r64;
 end;
 
 {$ifdef CPU32DELPHI}
 function x86div10(value: cardinal): cardinal;
-asm // use fast reciprocal disivion for Delphi (FPC knows this optimization)
-      mov   ecx, edx
+asm // use fast reciprocal division for Delphi (FPC knows this optimization)
       mov   edx, 3435973837
       mul   edx
       shr   edx, 3
@@ -6497,7 +6506,7 @@ begin
         {$ifdef CPU32DELPHI}
         leastdig := x86div10(leastdig); // Delphi compiler is not efficient
         {$else}
-        leastdig := leastdig div 10; // FPC uses built-in reciprocal
+        leastdig := leastdig div 10; // FPC will use reciprocal division
         {$endif}
         digbuffer[k*9+j] := fastdiv-leastdig*10;
         if leastdig=0 then
@@ -6528,7 +6537,7 @@ begin
     end;
     dest := AppendUInt32ToBuffer(dest+2,sciexp)
   end else begin
-    if exp>=0 then // Regular format with no decimal place
+    if exp>=0 then // regular format with no decimal place
       append(signdig)
     else begin
       radixpos := signdig+exp;
@@ -6587,7 +6596,7 @@ end;
 function TDecimal128.ToFloat: TSynExtended;
 var tmp: TDecimal128Str;
 begin
-  tmp[ToText(tmp)] := #0; // makes ASCIIZ
+  tmp[ToText(tmp)] := #0; // makes ASCIIZ temporary text conversion
   result := GetExtended(@tmp);
 end;
 
@@ -6605,56 +6614,34 @@ begin
 end;
 
 procedure mul64x64(const left, right: QWord; out product: THash128Rec);
-{$ifdef CPU32DELPHI}
-asm // taken from FPC compiler output, which is much better than Delphi's here
-        lea     esp, [esp-18H]
-        push    ebx
-        push    esi
+{$ifdef CPUX86}
+asm // adapted from FPC compiler output, which is much better than Delphi's here
         mov     ecx, eax
         mov     eax, dword ptr [ebp+8H]
         mul     dword ptr [ebp+10H]
-        mov     dword ptr [ebp-8H], eax
+        mov     dword ptr [ecx], eax
         mov     dword ptr [ebp-4H], edx
         mov     eax, dword ptr [ebp+8H]
         mul     dword ptr [ebp+14H]
-        mov     esi, dword ptr [ebp-4H]
-        xor     ebx, ebx
-        add     eax, esi
-        adc     edx, ebx
+        add     eax, dword ptr [ebp-4H]
+        adc     edx, 0
         mov     dword ptr [ebp-10H], eax
         mov     dword ptr [ebp-0CH], edx
         mov     eax, dword ptr [ebp+0CH]
         mul     dword ptr [ebp+10H]
-        mov     ebx, dword ptr [ebp-10H]
-        xor     esi, esi
-        add     eax, ebx
-        adc     edx, esi
-        mov     dword ptr [ebp-18H], eax
+        add     eax, dword ptr [ebp-10H]
+        adc     edx, 0
+        mov     dword ptr [ecx+4H], eax
         mov     dword ptr [ebp-14H], edx
         mov     eax, dword ptr [ebp+0CH]
         mul     dword ptr [ebp+14H]
-        mov     ebx, dword ptr [ebp-0CH]
-        xor     esi, esi
-        add     eax, ebx
-        adc     edx, esi
-        mov     ebx, dword ptr [ebp-14H]
-        xor     esi, esi
-        add     eax, ebx
-        adc     edx, esi
+        add     eax, dword ptr [ebp-0CH]
+        adc     edx, 0
+        add     eax, dword ptr [ebp-14H]
+        adc     edx, 0
         mov     dword ptr [ecx+8H], eax
         mov     dword ptr [ecx+0CH], edx
-        mov     eax, dword ptr [ebp-18H]
-        mov     edx, dword ptr [ebp-14H]
-        xor     edx, edx
-        mov     ebx, dword ptr [ebp-8H]
-        xor     esi, esi
-        or      edx, ebx
-        or      eax, esi
-        mov     dword ptr [ecx], edx
-        mov     dword ptr [ecx+4H], eax
-        pop     esi
-        pop     ebx
-        mov     esp, ebp
+end;
 {$else}
 var l: TQWordRec absolute left;
     r: TQWordRec absolute right;
@@ -6677,8 +6664,8 @@ begin
   product.H := QWord(l.H)*r.H+t2.H+t3.H;
   product.L := t3.V shl 32 or t1.L;
   {$endif}
-{$endif}
 end;
+{$endif}
 
 function TDecimal128.FromText(text: PUTF8Char; textlen: integer): TDecimal128SpecialValue;
 var P,PEnd: PUTF8Char;
@@ -6808,7 +6795,7 @@ begin
   if signdig<>0 then // if not zero
     if diglast-digfirst<17 then
       for i := digfirst to diglast do
-      {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower call _llmul
+      {$ifdef CPU32DELPHI} // use "shl" under x86 to avoid slower "call _llmul"
         inc(signlo,signlo+signlo shl 3+digits[i]) else begin
       for i := digfirst to diglast-17 do
         inc(signhi,signhi+signhi shl 3+digits[i]);
@@ -6820,7 +6807,7 @@ begin
         signhi := signhi*10+digits[i];
       for i := diglast-16 to diglast do
         signlo := signlo*10+digits[i];
-      {$else}      {$endif}
+      {$endif}
     end;
   if signhi=0 then begin
     sign.L := signlo;

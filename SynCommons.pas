@@ -30280,7 +30280,11 @@ begin
           inc(err);
           if c>9 then
             exit else
-            result := result shl 3+result+result; // fast result := result*10
+            {$ifdef CPU32DELPHI}
+            result := result shl 3+result+result;
+            {$else}
+            result := result*10;
+            {$endif}
           inc(result,c);
           if result<0 then
             exit; // overflow (>$7FFFFFFFFFFFFFFF)
@@ -35204,7 +35208,7 @@ end;
 
 function Random32(max: cardinal): cardinal; 
 begin
-  result := (Int64(Random32)*max)shr 32;
+  result := (QWord(Random32)*max)shr 32;
 end;
 
 procedure FillRandom(Dest: PCardinalArray; CardinalCount: integer);
@@ -35414,10 +35418,10 @@ begin
       c := byte(P^)-48;
       if c>9 then
         break;
-      {$ifdef CPU64}
-      result := result*10;
-      {$else}
+      {$ifdef CPU32DELPHI}
       result := result shl 3+result+result;
+      {$else}
+      result := result*10;
       {$endif}
       inc(result,c);
       inc(P);
@@ -35441,14 +35445,14 @@ begin
   if Dec<>5 then // Dec=5 most of the time
   case Dec of
   0,1: result := result*10000;
-  {$ifdef CPU64}
-  2: result := result*1000;
-  3: result := result*100;
-  4: result := result*10;
-  {$else}
+  {$ifdef CPU32DELPHI}
   2: result := result shl 10-result shl 4-result shl 3;
   3: result := result shl 6+result shl 5+result shl 2;
   4: result := result shl 3+result+result;
+  {$else}
+  2: result := result*1000;
+  3: result := result*100;
+  4: result := result*10;
   {$endif}
   end;
   if minus then
