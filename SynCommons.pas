@@ -5382,6 +5382,7 @@ type
     function HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
     function GetHashFromIndex(aIndex: Integer): Cardinal;
     procedure HashInvalidate;
+    procedure RaiseFatalCollision(const caller: RawUTF8; aHashCode: cardinal);
   public
     /// initialize the wrapper with a one-dimension dynamic array
     // - this version accepts some hash-dedicated parameters: aHashElement to
@@ -47364,7 +47365,7 @@ begin
         last := first;
       end;
   until false;
-  raise ESynException.Create('HashFind fatal collision'); // should never be here
+  RaiseFatalCollision('HashFind',aHashCode);
 end;
 
 function TDynArrayHashed.HashFindAndCompare(aHashCode: cardinal; const Elem): integer;
@@ -47419,7 +47420,17 @@ begin
         last := first;
       end;
   until false;
-  raise ESynException.Create('HashFindAndCompare fatal collision');
+  RaiseFatalCollision('HashFindAndCompare',aHashCode);
+end;
+
+procedure TDynArrayHashed.RaiseFatalCollision(const caller: RawUTF8;
+  aHashCode: cardinal);
+begin
+  {$ifdef UNDIRECTDYNARRAY}with InternalDynArray do{$endif}
+  raise ESynException.CreateUTF8('TDynArrayHashed.% fatal collision: '+
+    'aHashCode=% fHashsCount=% Count=% Capacity=% ArrayType=% fKnownType=%',
+    [caller,CardinalToHexShort(aHashCode),fHashsCount,GetCount,GetCapacity,
+    PShortString(@PTypeInfo(ArrayType).NameLen)^,ToText(fKnownType)^]);
 end;
 
 function TDynArrayHashed.GetHashFromIndex(aIndex: Integer): Cardinal;
