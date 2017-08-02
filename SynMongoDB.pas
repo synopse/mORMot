@@ -114,7 +114,7 @@ type
 
   /// handles a 128 bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
-  // BSON Decimal128 format
+  // BSON Decimal128 format, i.e. betDecimal128 TBSONElementType
   // - the betFloat BSON format stores a 64-bit floating point value, which
   // doesn't have exact decimals, so may suffer from rounding or approximation
   // - for instance, if you work with Delphi currency values, you may store
@@ -148,10 +148,15 @@ type
     /// fills with a 32-bit unsigned value
     procedure FromUInt32(value: cardinal);
       {$ifdef HASINLINE}inline;{$endif}
+    /// fills with a 64-bit signed value
+    procedure FromInt64(value: Int64);
+    /// fills with a 64-bit unsigned value
+    procedure FromQWord(value: QWord);
+      {$ifdef HASINLINE}inline;{$endif}
     /// fills with a fixed decimal value, as stored in currency
     // - will store the content with explictly four decimals, as in currency
     // - by design, this method is very fast and accurate
-    procedure FromCurr(value: Currency);
+    procedure FromCurr(const value: Currency);
     /// fills from the text representation of a decimal value
     // - returns dsvValue or one of the dsvNan, dsvZero, dsvPosInf, dsvNegInf
     // special value indicator otherwise on succes
@@ -176,16 +181,16 @@ type
     // so you should provide the expected precision, from the actual storage
     // variable (you may specify e.g. SINGLE_PRECISION or EXTENDED_PRECISION if
     // you don't use a double kind of value)
-    function FromFloat(value: TSynExtended; precision: integer=0): boolean;
+    function FromFloat(const value: TSynExtended; precision: integer=0): boolean;
     /// fast bit-per-bit value comparison
     function Equals(const other: TDecimal128): boolean;
       {$ifdef HASINLINE}inline;{$endif}
     /// converts the value to its string representation
     // - returns the number of AnsiChar written to Buffer
     function ToText(out Buffer: TDecimal128Str): integer; overload;
-    /// converts the value to its string representation
+    /// converts this Decimal128 value to its string representation
     function ToText: RawUTF8; overload;
-    /// converts the value to its string representation
+    /// converts this Decimal128 value to its string representation
     procedure ToText(var result: RawUTF8); overload;
     /// convert this Decimal128 value to its TBSONVariant custom variant value
     function ToVariant: variant; overload;
@@ -200,8 +205,14 @@ type
     // - by design, some information may be lost during conversion, unless the
     // value has been stored previously via the FromCurr() method - in this
     // case, conversion is immediate and accurate
-    function ToCurr: currency;
-    /// converts the value to its string representation
+    function ToCurr: currency; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// converts this Decimal128 value to a fixed decimal value
+    // - by design, some information may be lost during conversion, unless the
+    // value has been stored previously via the FromCurr() method - in this
+    // case, conversion is immediate and accurate
+    procedure ToCurr(out result: currency); overload;
+    /// converts this Decimal128 value to its string representation
     procedure AddText(W: TTextWriter);
   end;
   /// points to a 128 bit decimal value
@@ -254,7 +265,8 @@ type
   // - in MongoDB, documents stored in a collection require a unique _id field
   // that acts as a primary key: by default, it uses such a 12-byte ObjectID
   // - by design, sorting by _id: ObjectID is roughly equivalent to sorting by
-  // creation time, so ease sharding and BTREE storage 
+  // creation time, so ease sharding and BTREE storage
+  // - match betObjectID TBSONElementType
   {$A-}
   {$ifndef UNICODE}
   TBSONObjectID = object
@@ -6366,7 +6378,24 @@ begin
   Bits.hi := $3040000000000000;
 end;
 
-function TDecimal128.FromFloat(value: TSynExtended; precision: integer): boolean;
+procedure TDecimal128.FromInt64(value: Int64);
+begin
+  if value>=0 then begin
+    Bits.lo := value;
+    Bits.hi := $3040000000000000;
+  end else begin
+    Bits.lo := -value;
+    Bits.hi := $b040000000000000;
+  end;
+end;
+
+procedure TDecimal128.FromQWord(value: QWord);
+begin
+  Bits.lo := value;
+  Bits.hi := $3040000000000000;
+end;
+
+function TDecimal128.FromFloat(const value: TSynExtended; precision: integer): boolean;
 var tmp: shortstring;
 begin
   if precision<=0 then
@@ -6381,7 +6410,7 @@ begin
   end;
 end;
 
-procedure TDecimal128.FromCurr(value: Currency);
+procedure TDecimal128.FromCurr(const value: Currency);
 begin // force exactly 4 decimals
   if value<0 then begin
     Bits.lo := -PInt64(@value)^;
@@ -6425,9 +6454,9 @@ end;
 
 procedure mul64(a,b: cardinal; out product64: QWord);
 asm // Delphi is not efficient for x86 target with QWord -> optimize
-      imul    edx
-      mov     [ecx], eax
-      mov     [ecx + 4], edx
+      imul  edx
+      mov   [ecx], eax
+      mov   [ecx + 4], edx
 end;
 {$endif}
 
@@ -6601,6 +6630,11 @@ begin
 end;
 
 function TDecimal128.ToCurr: currency;
+begin
+  ToCurr(result);
+end;
+
+procedure TDecimal128.ToCurr(out result: currency);
 var tmp: TDecimal128Str;
     res64: Int64 absolute result;
 begin
@@ -6815,10 +6849,12 @@ begin
   end else begin
     mul64x64(signhi,100000000000000000,sign);
     inc(sign.L,signlo);
-    if (sign.c1<Int64Rec(signlo).Hi) or
-       ((sign.c1=Int64Rec(signlo).Hi) and
-        (sign.c0<Int64Rec(signlo).Lo)) then
-      // manual QWord "if significand.L<significand_low" for older compilers
+    {$ifdef FPC}
+    if sign.L<signlo then
+    {$else} // manual QWord processs (for oldest Delphi compilers)
+    if (sign.c1<TQWordRec(signlo).H) or
+       ((sign.c1=TQWordRec(signlo).H) and (sign.c0<TQWordRec(signlo).L)) then
+    {$endif}
       inc(sign.H);
   end;
   biasedexp := exp+BSON_DECIMAL128_EXPONENT_BIAS;
