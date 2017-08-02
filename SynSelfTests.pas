@@ -5197,6 +5197,7 @@ var mustacheJson: RawByteString;
     mustacheJsonFileName: TFileName;
     doc: variant;
     html: RawUTF8;
+    guid: TGUID;
     spec,i: integer;
 begin
   // manual tests
@@ -5307,7 +5308,9 @@ begin
   check(html='1+3=4 - is it 4? yes!');
   html := mustache.RenderJSON('{tval:5}',nil,TSynMustache.HelpersGetStandardList);
   check(html='1+3=5 - is it 4?');
-
+  mustache := TSynMustache.Parse('{{newguid}}');
+  html := mustache.RenderJSON('{}',nil,TSynMustache.HelpersGetStandardList);
+  check((html<>'') and (TextToGUID(@html[2],@guid)<>nil));
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A+
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A+
