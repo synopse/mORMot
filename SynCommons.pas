@@ -1517,6 +1517,7 @@ type
     /// finalize the temporary storage, and create a RawUTF8 string from it
     procedure Done(EndBuf: pointer; var Dest: RawUTF8); overload; {$ifdef HASINLINE}inline;{$endif}
   private
+    // default 4KB buffer allocated on stack
     tmp: array[0..4095] of AnsiChar;
   end;
 

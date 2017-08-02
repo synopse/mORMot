@@ -1194,38 +1194,40 @@ var i,space,helper: Integer;
   begin
     valnam := Copy(ValueName,space+1,maxInt);
     valFree := false;
-    if valnam='.' then
-      GetValueFromContext(valnam,val) else
-    if ((valnam<>'') and (valnam[1] in ['1'..'9','"','{','['])) or
-       (valnam='true') or (valnam='false') or (valnam='null') then begin
-      // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
-      val.VType := varEmpty;
-      VariantLoadJson(variant(val),pointer(valnam),nil,@JSON_OPTIONS[true]);
-      valFree := true;
-    end else begin
-      for j := 1 to length(valnam) do
-        case valnam[j] of
-        ' ':  break; // allows {{helper1 helper2 value}} recursive calls
-        ',': begin // {{helper value,123,"constant"}}
-          CSVToRawUTF8DynArray(Pointer(valnam),names,',',true); // TODO: handle 123,"a,b,c"
-          valArr.InitFast;
-          for k := 0 to High(names) do
-            valArr.AddItem(GetValueCopyFromContext(names[k]));
-          valFree := true;
-          break;
-        end;
-        '<','>','=': begin // {{#if .=123}} -> {{#if .,"=",123}}
-          k := j+1;
-          if valnam[k] in ['=','>'] then
-            inc(k);
-          valArr.InitArray([GetValueCopyFromContext(Copy(valnam,1,j-1)),
-            Copy(valnam,j,k-j),GetValueCopyFromContext(Copy(valnam,k,maxInt))],JSON_OPTIONS[true]);
-          valFree := true;
-          break;
-        end;
-        end;
-      if not valFree then
-        GetValueFromContext(valnam,val);
+    if valnam<>'' then begin
+      if valnam='.' then
+        GetValueFromContext(valnam,val) else
+      if ((valnam<>'') and (valnam[1] in ['1'..'9','"','{','['])) or
+         (valnam='true') or (valnam='false') or (valnam='null') then begin
+        // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
+        val.VType := varEmpty;
+        VariantLoadJson(variant(val),pointer(valnam),nil,@JSON_OPTIONS[true]);
+        valFree := true;
+      end else begin
+        for j := 1 to length(valnam) do
+          case valnam[j] of
+          ' ':  break; // allows {{helper1 helper2 value}} recursive calls
+          ',': begin // {{helper value,123,"constant"}}
+            CSVToRawUTF8DynArray(Pointer(valnam),names,',',true); // TODO: handle 123,"a,b,c"
+            valArr.InitFast;
+            for k := 0 to High(names) do
+              valArr.AddItem(GetValueCopyFromContext(names[k]));
+            valFree := true;
+            break;
+          end;
+          '<','>','=': begin // {{#if .=123}} -> {{#if .,"=",123}}
+            k := j+1;
+            if valnam[k] in ['=','>'] then
+              inc(k);
+            valArr.InitArray([GetValueCopyFromContext(Copy(valnam,1,j-1)),
+              Copy(valnam,j,k-j),GetValueCopyFromContext(Copy(valnam,k,maxInt))],JSON_OPTIONS[true]);
+            valFree := true;
+            break;
+          end;
+          end;
+        if not valFree then
+          GetValueFromContext(valnam,val);
+      end;
     end;
     n := fContextCount+4;
     if length(fTempGetValueFromContextHelper)<n then
@@ -1263,7 +1265,7 @@ begin
           if Value.VType>=varNull then
             exit;
         end else
-        if IdemPChar(pointer(ValueName),'-INDEX') then begin // {{list-index}}
+        if IdemPChar(pointer(ValueName),'-INDEX') then begin // {{-index}}
           Value.VType := varInteger;
           if ValueName[7]='0' then
             Value.VInteger := ListCurrent else
@@ -1279,7 +1281,6 @@ begin
     space := length(ValueName); // {{helper}}
     helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space);
     if helper>=0 then begin
-      inc(space);
       ProcessHelper;
       result := msSinglePseudo;
     end;
