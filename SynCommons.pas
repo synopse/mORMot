@@ -23410,11 +23410,15 @@ asm
     bswap rax
     mov   qword ptr[rdx], rax
     dec   r8
+    lea   rcx, [rcx + 8]
+    lea   rdx, [rdx + 8]
     {$else}
     mov   rax, qword ptr[rdi]
     bswap rax
     mov   qword ptr[rsi], rax
     dec   rdx
+    lea   rdi, [rdi + 8]
+    lea   rsi, [rsi + 8]
     {$endif win64}
     jnz @1
 end;
