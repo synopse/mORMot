@@ -417,7 +417,7 @@ type
   // - memory size matches an TAESBlock on purpose, for direct encryption
   TAESIVCTR = packed record
     /// 8 bytes of random value
-    nonce: Int64;
+    nonce: QWord;
     /// contains the crc32c hash of the block cipher mode (e.g. 'AESCFB')
     // - when magic won't match (i.e. in case of mORMot revision < 3063), the
     // check won't be applied in DecryptPKCS7: this security feature is
@@ -959,7 +959,7 @@ type
     fBytesSinceSeed: integer;
     fSeedAfterBytes: integer;
     fSeedPBKDF2Rounds: integer;
-    fTotalBytes: Int64;
+    fTotalBytes: QWord;
     procedure IncrementCTR; {$ifdef HASINLINE}inline;{$endif}
   public
     /// initialize the internal secret key, using Operating System entropy
@@ -1069,7 +1069,7 @@ type
     // - default is 256 rounds, which is enough for entropy gathering
     property SeedPBKDF2Rounds: integer read fSeedPBKDF2Rounds;
     /// how many bytes this generator did compute
-    property TotalBytes: Int64 read fTotalBytes;
+    property TotalBytes: QWord read fTotalBytes;
   end;
 
   /// TAESPRNG-compatible class using Operating System pseudorandom source
@@ -1161,6 +1161,40 @@ type
     // - call Init, then Update(), then Final()
     // - only Full() is Padlock-implemented - use this rather than Update()
     procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA256Digest);
+  end;
+
+  PSHA512Digest = ^TSHA512Digest;
+  /// 512 bits (64 bytes) memory block for SHA512 hash digest storage
+  TSHA512Digest = THash512;
+
+  TSHA512Hash = record a, b, c, d, e, f, g, h: QWord; end;
+
+  PSHA512 = ^TSHA512;
+  /// handle SHA512 hashing
+  // - by design, this algorithm is much faster on 64-bit CPU, since all
+  // internal process involves QWord
+  TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    Hash: TSHA512Hash;
+    MLen: QWord;
+    Data: array[0..127] of byte;
+    Index: integer;
+    procedure Compress; // used by Update and Final
+  public
+    /// initialize SHA512 context for hashing
+    procedure Init;
+    /// update the SHA512 context with some data
+    procedure Update(Buffer: pointer; Len: integer); overload;
+    /// update the SHA512 context with some data
+    procedure Update(const Buffer: RawByteString); overload;
+    /// finalize and compute the resulting SHA512 hash Digest of all data
+    // affected to Update() method
+    // - will also call Init to reset all internal temporary context, for safety
+    procedure Final(out Digest: TSHA512Digest; NoInit: boolean=false);
+    /// one method to rule them all
+    // - call Init, then Update(), then Final()
+    // - only Full() is Padlock-implemented - use this rather than Update()
+    procedure Full(Buffer: pointer; Len: integer; out Digest: TSHA512Digest);
   end;
 
   /// SHA-3 instances, as defined by NIST Standard for Keccak sponge construction
@@ -1428,6 +1462,10 @@ function MD5(const s: RawByteString): RawUTF8;
 // - result is returned in hexadecimal format
 function SHA1(const s: RawByteString): RawUTF8;
 
+/// direct SHA512 hash calculation of some data (string-encoded)
+// - result is returned in hexadecimal format
+function SHA512(const s: RawByteString): RawUTF8;
+
 type
   /// compute the HMAC message authentication code using SHA1 as hash function
   // - you may use HMAC_SHA1() overloaded functions for one-step process
@@ -1465,6 +1503,44 @@ procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer;
 // - this function expect the resulting key length to match SHA1 digest size
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
   out result: TSHA1Digest);
+
+type
+  /// compute the HMAC message authentication code using SHA512 as hash function
+  // - you may use HMAC_SHA512() overloaded functions for one-step process
+  THMAC_SHA512 = {$ifndef UNICODE}object{$else}record{$endif}
+  private
+    step7data: array[0..31] of cardinal;
+    sha: TSHA512;
+  public
+    /// prepare the HMAC authentication with the supplied key
+    // - content of this record is stateless, so you can prepare a HMAC for a
+    // key using Init, then copy this THMAC_SHA512 instance to a local variable,
+    // and use this local thread-safe copy for actual HMAC computing
+    procedure Init(key: pointer; keylen: integer);
+    /// call this method for each continuous message block
+    // - iterate over all message blocks, then call Done to retrieve the HMAC
+    procedure Update(msg: pointer; msglen: integer);
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: TSHA512Digest; NoInit: boolean=false);
+  end;
+  /// points to a HMAC message authentication context using SHA512
+  PHMAC_SHA512 = ^THMAC_SHA512;
+
+/// compute the HMAC message authentication code using SHA512 as hash function
+procedure HMAC_SHA512(const key,msg: RawByteString; out result: TSHA512Digest); overload;
+
+/// compute the HMAC message authentication code using SHA512 as hash function
+procedure HMAC_SHA512(const key: TSHA512Digest; const msg: RawByteString;
+  out result: TSHA512Digest); overload;
+
+/// compute the HMAC message authentication code using SHA512 as hash function
+procedure HMAC_SHA512(key,msg: pointer; keylen,msglen: integer;
+  out result: TSHA512Digest); overload;
+
+/// compute the PBKDF2 derivation of a password using HMAC over SHA512
+// - this function expect the resulting key length to match SHA512 digest size
+procedure PBKDF2_HMAC_SHA512(const password,salt: RawByteString; count: Integer;
+  out result: TSHA512Digest);
 
 /// direct SHA256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -1771,6 +1847,9 @@ function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 // - returns true on success (i.e. Source has the expected size and characters)
 // - just a wrapper around SynCommons.HexToBin()
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
+
+/// compute the hexadecimal representation of a SHA512 digest
+function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 
 /// compute the hexadecimal representation of a MD5 digest
 function MD5DigestToString(const D: TMD5Digest): RawUTF8;
@@ -2496,7 +2575,7 @@ type
     // Working hash (TSHA256.Init expect this field to be the first)
     Hash: TSHAHash;
     // 64bit msg length
-    MLen: Int64;
+    MLen: QWord;
     // Block buffer
     Buffer: array[0..63] of byte;
     // Index in buffer
@@ -2686,6 +2765,15 @@ begin
   FillZero(Digest);
 end;
 
+function SHA512(const s: RawByteString): RawUTF8;
+var SHA: TSHA512;
+    Digest: TSHA512Digest;
+begin
+  SHA.Full(pointer(s),length(s),Digest);
+  result := SHA512DigestToString(Digest);
+  FillZero(Digest);
+end;
+
 
 { THMAC_SHA1 }
 
@@ -2740,19 +2828,13 @@ begin
 end;
 
 procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest);
-var mac: THMAC_SHA1;
 begin
-  mac.Init(Pointer(key),length(key));
-  mac.Update(pointer(msg),length(msg));
-  mac.Done(result);
+  HMAC_SHA1(pointer(key),pointer(msg),length(key),length(msg),result);
 end;
 
 procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString; out result: TSHA1Digest);
-var mac: THMAC_SHA1;
 begin
-  mac.Init(@key,sizeof(key));
-  mac.Update(pointer(msg),length(msg));
-  mac.Done(result);
+  HMAC_SHA1(@key,pointer(msg),sizeof(key),length(msg),result);
 end;
 
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
@@ -2838,19 +2920,13 @@ begin
 end;
 
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest);
-var mac: THMAC_SHA256;
 begin
-  mac.Init(Pointer(key),length(key));
-  mac.Update(pointer(msg),length(msg));
-  mac.Done(result);
+  HMAC_SHA256(pointer(key),pointer(msg),length(key),length(msg),result);
 end;
 
 procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString; out result: TSHA256Digest);
-var mac: THMAC_SHA256;
 begin
-  mac.Init(@key,sizeof(key));
-  mac.Update(pointer(msg),length(msg));
-  mac.Done(result);
+  HMAC_SHA256(@key,pointer(msg),sizeof(key),length(msg),result);
 end;
 
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
@@ -2931,6 +3007,82 @@ begin
 end;
 
 
+{ THMAC_SHA512 }
+
+procedure THMAC_SHA512.Init(key: pointer; keylen: integer);
+var i: integer;
+    k0,k0xorIpad: array[0..31] of cardinal;
+begin
+  FillCharFast(k0,sizeof(k0),0);
+  if keylen>sizeof(k0) then
+    sha.Full(key,keylen,PSHA512Digest(@k0)^) else
+    MoveFast(key^,k0,keylen);
+  for i := 0 to 31 do
+    k0xorIpad[i] := k0[i] xor $36363636;
+  for i := 0 to 31 do
+    step7data[i] := k0[i] xor $5c5c5c5c;
+  sha.Init;
+  sha.Update(@k0xorIpad,sizeof(k0xorIpad));
+  FillCharFast(k0,sizeof(k0),0);
+  FillCharFast(k0xorIpad,sizeof(k0xorIpad),0);
+end;
+
+procedure THMAC_SHA512.Update(msg: pointer; msglen: integer);
+begin
+  sha.Update(msg,msglen);
+end;
+
+procedure THMAC_SHA512.Done(out result: TSHA512Digest; NoInit: boolean);
+begin
+  sha.Final(result);
+  sha.Update(@step7data,sizeof(step7data));
+  sha.Update(@result,sizeof(result));
+  sha.Final(result,NoInit);
+  FillCharFast(step7data,sizeof(step7data),0);
+end;
+
+procedure HMAC_SHA512(key,msg: pointer; keylen,msglen: integer; out result: TSHA512Digest);
+var mac: THMAC_SHA512;
+begin
+  mac.Init(key,keylen);
+  mac.Update(msg,msglen);
+  mac.Done(result);
+end;
+
+procedure HMAC_SHA512(const key,msg: RawByteString; out result: TSHA512Digest);
+begin
+  HMAC_SHA512(pointer(key),pointer(msg),length(key),length(msg),result);
+end;
+
+procedure HMAC_SHA512(const key: TSHA512Digest; const msg: RawByteString; out result: TSHA512Digest);
+begin
+  HMAC_SHA512(@key,pointer(msg),sizeof(key),length(msg),result);
+end;
+
+procedure PBKDF2_HMAC_SHA512(const password,salt: RawByteString; count: Integer;
+  out result: TSHA512Digest);
+var i: integer;
+    tmp: TSHA512Digest;
+    mac: THMAC_SHA512;
+    first: THMAC_SHA512;
+begin
+  HMAC_SHA512(password,salt+#0#0#0#1,result);
+  if count<2 then
+    exit;
+  tmp := result;
+  first.Init(pointer(password),length(password));
+  for i := 2 to count do begin
+    mac := first; // re-use the very same SHA-1 context for best performance
+    mac.sha.Update(@tmp,sizeof(tmp));
+    mac.Done(tmp,true);
+    XorMemory(@result,@tmp,sizeof(result));
+  end;
+  FillcharFast(mac,sizeof(mac),0);
+  FillcharFast(first,sizeof(first),0);
+  FillZero(tmp);
+end;
+
+
 { HMAC_CRC256C }
 
 procedure crc256cmix(h1,h2: cardinal; h: PCardinalArray);
@@ -2976,7 +3128,7 @@ end;
 
 procedure HMAC_CRC256C(const key,msg: RawByteString; out result: THash256);
 begin
-  HMAC_CRC256C(Pointer(key),pointer(msg),length(key),length(msg),result);
+  HMAC_CRC256C(pointer(key),pointer(msg),length(key),length(msg),result);
 end;
 
 
@@ -3035,19 +3187,13 @@ begin
 end;
 
 function HMAC_CRC32C(const key: THash256; const msg: RawByteString): cardinal;
-var mac: THMAC_CRC32C;
 begin
-  mac.Init(@key,sizeof(key));
-  mac.Update(pointer(msg),length(msg));
-  result := mac.Done;
+  result := HMAC_CRC32C(@key,pointer(msg),SizeOf(key),length(msg));
 end;
 
 function HMAC_CRC32C(const key,msg: RawByteString): cardinal;
-var mac: THMAC_CRC32C;
 begin
-  mac.Init(pointer(key),length(key));
-  mac.Update(pointer(msg),length(msg));
-  result := mac.Done;
+  result := HMAC_CRC32C(pointer(key),pointer(msg),length(key),length(msg));
 end;
 
 
@@ -6225,8 +6371,8 @@ begin
   end;
   // write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
-  PInteger(@Data.Buffer[56])^ := bswap32(Int64Rec(Data.MLen).Hi);
-  PInteger(@Data.Buffer[60])^ := bswap32(Int64Rec(Data.MLen).Lo);
+  PInteger(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
+  PInteger(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
   Compress;
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
@@ -6272,7 +6418,7 @@ var Data: TSHAContext absolute Context;
     aLen: integer;
 begin
   if Buffer=nil then exit; // avoid GPF
-  inc(Data.MLen,Int64(cardinal(Len)) shl 3);
+  inc(Data.MLen,QWord(cardinal(Len)) shl 3);
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
@@ -6310,6 +6456,150 @@ begin
   end else
     SHA.Full(p,L,Digest);
 end;
+
+{ TSHA512 }
+
+const
+  SHA512K: array [0..79] of QWord = (
+    $428a2f98d728ae22, $7137449123ef65cd, $b5c0fbcfec4d3b2f, $e9b5dba58189dbbc,
+    $3956c25bf348b538, $59f111f1b605d019, $923f82a4af194f9b, $ab1c5ed5da6d8118,
+    $d807aa98a3030242, $12835b0145706fbe, $243185be4ee4b28c, $550c7dc3d5ffb4e2,
+    $72be5d74f27b896f, $80deb1fe3b1696b1, $9bdc06a725c71235, $c19bf174cf692694,
+    $e49b69c19ef14ad2, $efbe4786384f25e3, $0fc19dc68b8cd5b5, $240ca1cc77ac9c65,
+    $2de92c6f592b0275, $4a7484aa6ea6e483, $5cb0a9dcbd41fbd4, $76f988da831153b5,
+    $983e5152ee66dfab, $a831c66d2db43210, $b00327c898fb213f, $bf597fc7beef0ee4,
+    $c6e00bf33da88fc2, $d5a79147930aa725, $06ca6351e003826f, $142929670a0e6e70,
+    $27b70a8546d22ffc, $2e1b21385c26c926, $4d2c6dfc5ac42aed, $53380d139d95b3df,
+    $650a73548baf63de, $766a0abb3c77b2a8, $81c2c92e47edaee6, $92722c851482353b,
+    $a2bfe8a14cf10364, $a81a664bbc423001, $c24b8b70d0f89791, $c76c51a30654be30,
+    $d192e819d6ef5218, $d69906245565a910, $f40e35855771202a, $106aa07032bbd1b8,
+    $19a4c116b8d2d0c8, $1e376c085141ab53, $2748774cdf8eeb99, $34b0bcb5e19b48a8,
+    $391c0cb3c5c95a63, $4ed8aa4ae3418acb, $5b9cca4f7763e373, $682e6ff3d6b2b8a3,
+    $748f82ee5defb2fc, $78a5636f43172f60, $84c87814a1f0ab72, $8cc702081a6439ec,
+    $90befffa23631e28, $a4506cebde82bde9, $bef9a3f7b2c67915, $c67178f2e372532b,
+    $ca273eceea26619c, $d186b8c721c0c207, $eada7dd6cde0eb1e, $f57d4f7fee6ed178,
+    $06f067aa72176fba, $0a637dc5a2c898a6, $113f9804bef90dae, $1b710b35131c471b,
+    $28db77f523047d84, $32caab7b40c72493, $3c9ebe0a15c9bebc, $431d67c49c100d4c,
+    $4cc5d4becb3e42b6, $597f299cfc657e2a, $5fcb6fab3ad6faec, $6c44198c4a475817);
+
+procedure TSHA512.Compress;
+var a, b, c, d, e, f, g, h, temp1, temp2: QWord;
+    w: array[0..79] of QWord;
+    i: integer;
+begin
+  a := Hash.a;
+  b := Hash.b;
+  c := Hash.c;
+  d := Hash.d;
+  e := Hash.e;
+  f := Hash.f;
+  g := Hash.g;
+  h := Hash.h; 
+  bswap64array(@Data,@w,16);
+  for i := 16 to 79 do
+    {$ifdef FPC} // uses faster built-in right rotate intrinsic
+    w[i] := (RorQWord(w[i-2],19) xor RorQWord(w[i-2],61) xor (w[i-2] shr 6)) +
+      w[i-7] + (RorQWord(w[i-15],1) xor RorQWord(w[i-15],8) xor (w[i-15] shr 7)) + w[i-16];
+    {$else}
+    w[i] := (((w[i-2] shr 19) or (w[i-2] shl 45)) xor ((w[i-2] shr 61) or (w[i-2] shl 3)) xor
+      (w[i-2] shr 6)) + w[i-7] + (((w[i-15] shr 1) or (w[i-15] shl 63)) xor
+      ((w[i-15] shr 8) or (w[i-15] shl 56)) xor (w[i-15] shr 7)) + w[i-16];
+    {$endif}
+  for i := 0 to 79 do begin
+    {$ifdef FPC}
+    temp1 := h + (RorQWord(e,14) xor RorQWord(e,18) xor RorQWord(e,41)) +
+      ((e and f) xor (not e and g)) + SHA512K[i] + w[i];
+    temp2 := (RorQWord(a,28) xor RorQWord(a,34) xor RorQWord(a,39)) +
+      ((a and b) xor (a and c) xor (b and c));
+    {$else}
+    temp1 := h + (((e shr 14) or (e shl 50)) xor ((e shr 18) or (e shl 46)) xor
+      ((e shr 41) or (e shl 23))) + ((e and f) xor (not e and g)) + SHA512K[i] + w[i];
+    temp2 := (((a shr 28) or (a shl 36)) xor ((a shr 34) or (a shl 30)) xor
+      ((a shr 39) or (a shl 25))) + ((a and b) xor (a and c) xor (b and c));
+    {$endif}
+    h := g;
+    g := f;
+    f := e;
+    e := d + temp1;
+    d := c;
+    c := b;
+    b := a;
+    a := temp1 + temp2;
+  end;
+  inc(Hash.a,a);
+  inc(Hash.b,b);
+  inc(Hash.c,c);
+  inc(Hash.d,d);
+  inc(Hash.e,e);
+  inc(Hash.f,f);
+  inc(Hash.g,g);
+  inc(Hash.h,h);
+end;
+
+procedure TSHA512.Final(out Digest: TSHA512Digest; NoInit: boolean);
+begin
+  Data[Index]:= $80;
+  if Index>=112 then begin
+    Compress;
+    FillcharFast(Data,112,0);
+  end;
+  PQWord(@Data[112])^ := bswap64(MLen shr 61);
+  PQWord(@Data[120])^ := bswap64(MLen shl 3);
+  Compress;
+  bswap64array(@Hash,@Digest,8);
+  if not NoInit then
+    Init;
+end;
+
+procedure TSHA512.Full(Buffer: pointer; Len: integer; out Digest: TSHA512Digest);
+begin
+  Init;
+  Update(Buffer,Len);
+  Final(Digest);
+end;
+
+procedure TSHA512.Init;
+begin
+  Hash.a := $6a09e667f3bcc908;
+  Hash.b := $bb67ae8584caa73b;
+  Hash.c := $3c6ef372fe94f82b;
+  Hash.d := $a54ff53a5f1d36f1;
+  Hash.e := $510e527fade682d1;
+  Hash.f := $9b05688c2b3e6c1f;
+  Hash.g := $1f83d9abfb41bd6b;
+  Hash.h := $5be0cd19137e2179;
+  MLen := 0;
+  Index := 0;
+  FillcharFast(Data,sizeof(Data),0);
+end;
+
+procedure TSHA512.Update(Buffer: pointer; Len: integer);
+var aLen: integer;
+begin
+  if (Buffer=nil) or (Len<=0) then exit; // avoid GPF
+  inc(MLen,Len);
+  repeat
+    aLen := sizeof(Data)-Index;
+    if aLen<=Len then begin
+      MoveFast(Buffer^,Data[Index],aLen);
+      dec(Len,aLen);
+      inc(PtrUInt(Buffer),aLen);
+      Compress;
+      FillcharFast(Data,sizeof(Data),0);
+      Index := 0;
+    end else begin
+      MoveFast(Buffer^,Data[Index],Len);
+      inc(Index,Len);
+      break;
+    end;
+  until Len<=0;
+end;
+
+procedure TSHA512.Update(const Buffer: RawByteString);
+begin
+  Update(pointer(Buffer),length(Buffer));
+end;
+
 
 { TSHA3 }
 
@@ -8916,6 +9206,19 @@ begin
   result := SynCommons.HexToBin(pointer(Source), @Dest, sizeof(Dest));
 end;
 
+function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
+var P: PAnsiChar;
+    I: Integer;
+begin
+  SetString(result,nil,sizeof(D)*2);
+  P := pointer(result);
+  for I := 0 to sizeof(D)-1 do begin
+    P[0] := Digits[D[I] shr 4];
+    P[1] := Digits[D[I] and 15];
+    Inc(P,2);
+  end;
+end;
+
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
 // apache-compatible: agent007:download area:8364d0044ef57b3defcfa141e8f77b65
 //    hash=`echo -n "$user:$realm:$pass" | md5sum | cut -b -32`
@@ -9064,8 +9367,8 @@ begin
   end;
   // Write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
-  PInteger(@Data.Buffer[56])^ := bswap32(Int64Rec(Data.MLen).Hi);
-  PInteger(@Data.Buffer[60])^ := bswap32(Int64Rec(Data.MLen).Lo);
+  PCardinal(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
+  PCardinal(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
   Compress;
   // Hash -> Digest to little endian format
   bswap160(@Data.Hash,@Digest);
@@ -9108,7 +9411,7 @@ var Data: TSHAContext absolute Context;
     aLen: integer;
 begin
   if Buffer=nil then exit; // avoid GPF
-  inc(Data.MLen, Int64(Cardinal(Len)) shl 3);
+  inc(Data.MLen, QWord(Cardinal(Len)) shl 3);
   while Len > 0 do begin
     aLen := sizeof(Data.Buffer)-Data.Index;
     if aLen<=Len then begin
@@ -11620,3 +11923,7 @@ finalization
   end;
 {$endif}
 end.
+
+
+
+

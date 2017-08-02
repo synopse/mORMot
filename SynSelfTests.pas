@@ -485,6 +485,8 @@ type
     procedure _SHA1;
     /// SHA-256 hashing functions
     procedure _SHA256;
+    /// SHA-512 hashing functions
+    procedure _SHA512;
     /// SHA-3 / Keccak hashing functions
     procedure _SHA3;
     /// AES encryption/decryption functions
@@ -9465,6 +9467,9 @@ const
      $0B,$F4,$B3,$BC,$CE,$EB,$17,$16,$D5,$77,$B1,$E0,$8B,$A9,$BA,$A3);
 var Digest: TSHA256Digest;
     Digests: THash256DynArray;
+    c: AnsiChar;
+    i: integer;
+    sha: TSHA256;
 begin
   SingleTest('abc',D1);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
@@ -9488,6 +9493,13 @@ begin
   PBKDF2_HMAC_SHA256('password','salt',4096,Digest);
   check(SHA256DigestToString(Digest)=
     'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a');
+  c := 'a';
+  sha.Init;
+  for i := 1 to 1000000 do
+    sha.Update(@c,1);
+  sha.Final(Digest);
+  Check(SHA256DigestToString(Digest)=
+    'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
 end;
 begin
   DoTest;
@@ -9507,6 +9519,43 @@ begin
     Include(CpuFeatures,cfSSE41);
   end
   {$endif}
+end;
+
+procedure TTestCryptographicRoutines._SHA512;
+const FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
+var dig: TSHA512Digest;
+    i: integer;
+    sha: TSHA512;
+    c: AnsiChar;
+begin
+  Check(SHA512('')='cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d'+
+    '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
+  Check(SHA512(FOX)='07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785'+
+    '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  Check(SHA512(FOX+'.')='91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128'+
+    '90cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed');
+  sha.Init;
+  for i := 1 to length(FOX) do
+    sha.Update(@FOX[i],1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='07e547d9586f6a73f73fbac0435ed76951218fb7d0c'+
+    '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  c := 'a';
+  sha.Init;
+  for i := 1 to 1000000 do
+    sha.Update(@c,1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='e718483d0ce769644e2e42c7bc15b4638e1f98b13b2'+
+    '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
+  HMAC_SHA512('','',dig);
+  Check(SHA512DigestToString(dig)='b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a'+
+    '6ec66b70ab5b1f4ac6730c6c515421b327ec1d69402e53dfb49ad7381eb067b338fd7b0cb22247225d47');
+  HMAC_SHA512('key',FOX,dig);
+  Check(SHA512DigestToString(dig)= 'b42af09057bac1e2d41708e48a902e09b5ff7f12ab42'+
+    '8a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a');
+  HMAC_SHA512(FOX+FOX,FOX,dig);
+  Check(SHA512DigestToString(dig)='19e504ba787674baa63471436a4ec5a71ba359a0f2d375'+
+    '12edd4db69dce1ec6a0e48f0ae460fc9342fbb453cf2942a0e3fa512dd361e30f0e8b8fc8c7a4ece96');
 end;
 
 procedure TTestCryptographicRoutines._SHA3;
@@ -9785,7 +9834,8 @@ type
     // non cryptographic hashes
     bCRC32c, bXXHash32, 
     // cryptographic hashes
-    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA3_256, bSHA3_512,
+    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
+    bSHA3_256, bSHA3_512,
     // encryption
     bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC,
     bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC,
@@ -9807,6 +9857,7 @@ var b: TBenchmark;
     MD5: TMD5;
     SHA1: TSHA1;
     SHA256: TSHA256;
+    SHA512: TSHA512;
     SHA3, SHAKE128, SHAKE256: TSHA3;
     timer: TPrecisionTimer;
     time: array[TBenchmark] of Int64;
@@ -9830,6 +9881,7 @@ begin
       timer.Start;
       for i := 1 to COUNT do begin
         dig.d0 := 0;
+        dig.d1 := 0;
         case b of
         bXXHash32:   dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
         bCRC32c:     dig.d0 := crc32c(0,pointer(data),SIZ[s]);
@@ -9838,13 +9890,15 @@ begin
         bHMACSHA1:   HMAC_SHA1('secret',data,PSHA1Digest(@dig)^);
         bSHA256:     SHA256.Full(pointer(data),SIZ[s],dig.Lo);
         bHMACSHA256: HMAC_SHA256('secret',data,dig.Lo);
+        bSHA512:     SHA512.Full(pointer(data),SIZ[s],dig.b);
+        bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
         bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
         low(AES) .. high(AES): AES[b].EncryptPKCS7(Data, true);
         bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         end;
-        Check((b >= bAES128CFB) or (dig.d0 <> 0));
+        Check((b >= bAES128CFB) or (dig.d0 <> 0) or (dig.d1 <> 0));
       end;
       if false then // if true then = detailed per block size information
         NotifyTestSpeed(format('%s %s',[TXT[b], KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
