@@ -2373,6 +2373,14 @@ type
 function bswap32(a: cardinal): cardinal;
   {$ifdef FPC}inline;{$endif}
 
+/// convert the endianness of a given unsigned 64 bit integer into BigEndian
+function bswap64(const a: QWord): QWord;
+  {$ifdef FPC}inline;{$endif}
+
+/// convert the endianness of an array of unsigned 64 bit integer into BigEndian
+// - n is required to be > 0
+procedure bswap64array(a,b: PQWordArray; n: integer);
+
 {$ifndef ISDELPHI2007ANDUP}
 type
   TBytes = array of byte;
@@ -23370,27 +23378,95 @@ end;
 
 {$endif UNICODE}
 
+procedure bswap64array(a,b: PQWordArray; n: integer);
+{$ifdef CPUX86}
+asm
+    push  ebx
+@1: mov   ebx, dword ptr[eax]
+    bswap ebx
+    mov   dword ptr[edx + 4], ebx
+    mov   ebx, dword ptr[eax + 4]
+    bswap ebx
+    mov   dword ptr[edx], ebx
+    dec   ecx
+    lea   eax, [eax + 8]
+    lea   edx, [edx + 8]
+    jnz   @1
+    pop   ebx
+end;
+{$else}
+{$ifdef FPC}
+var i: integer;
+begin
+  for i := 0 to n-1 do
+    b^[i] := SwapEndian(a^[i]);
+end;
+{$else}
+asm
+    .NOFRAME // rcx=@a rdx=@b r8=n (Linux: rdi,rsi,rdx)
+@1: {$ifdef win64}
+    mov   rax, qword ptr[rcx]
+    bswap rax
+    mov   qword ptr[rdx], rax
+    dec   r8
+    {$else}
+    mov   rax, qword ptr[rdi]
+    bswap rax
+    mov   qword ptr[rsi], rax
+    dec   rdx
+    {$endif win64}
+    jnz @1
+end;
+{$endif}
+{$endif}
+
 {$ifdef FPC}
 function bswap32(a: cardinal): cardinal; inline;
 begin
   result := SwapEndian(a); // use fast platform-specific function
 end;
+
+function bswap64(const a: QWord): QWord;
+begin
+  result := SwapEndian(a); // use fast platform-specific function
+end;
+
 {$else}
 {$ifdef CPUX64}
 function bswap32(a: cardinal): cardinal;
 asm
   .NOFRAME // ecx=a (Linux: edi)
   {$ifdef win64}
-  mov eax,ecx
+  mov eax, ecx
   {$else}
-  mov eax,edi
+  mov eax, edi
   {$endif win64}
   bswap eax
 end;
+
+function bswap64(const a: QWord): QWord;
+asm
+  .NOFRAME // rcx=a (Linux: rdi)
+  {$ifdef win64}
+  mov rax, rcx
+  {$else}
+  mov rax, rdi
+  {$endif win64}
+  bswap rax
+end;
+
 {$else}
 {$ifdef CPUX86}
 function bswap32(a: cardinal): cardinal;
 asm
+  bswap eax
+end;
+
+function bswap64(const a: QWord): QWord;
+asm
+  mov edx, a.TQWordRec.L
+  bswap edx
+  mov eax, a.TQWordRec.H
   bswap eax
 end;
 {$else}
@@ -23399,10 +23475,15 @@ begin
   result := ((a and $ff)shl 24)or((a and $ff00)shl 8)or
             ((a and $ff0000)shr 8)or((a and $ff000000)shr 24);
 end;
+
+function bswap64(const a: QWord): QWord;
+begin
+  TQWordRec(result).L := bswap32(TQWordRec(a).H);
+  TQWordRec(result).H := bswap32(TQWordRec(a).L);
+end;
 {$endif CPUX86}
 {$endif CPUX64}
 {$endif FPC}
-
 
 {$ifndef PUREPASCAL} { these functions are implemented in asm }
 {$ifndef LVCL}       { don't define these functions twice }
