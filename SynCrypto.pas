@@ -1123,7 +1123,6 @@ type
   TSHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize div 4] of cardinal;
-    procedure Compress; // used by Update and Final
   public
     /// initialize SHA-1 context for hashing
     procedure Init;
@@ -1150,7 +1149,6 @@ type
   TSHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
-    procedure Compress; // used by Update and Final
   public
     /// initialize SHA-256 context for hashing
     procedure Init;
@@ -6265,7 +6263,7 @@ asm // rcx=input_data rdx=digest r8=num_blks (Linux: rdi,rsi,rdx)
 end;
 {$endif CPUX64}
 
-procedure TSHA256.Compress;
+procedure sha256Compress(var Hash: TSHAHash; Data: pointer);
 // Actual hashing function
 var H: TSHAHash;
     W: array[0..63] of cardinal;
@@ -6279,26 +6277,24 @@ begin
     if K256Aligned='' then
       SetString(K256Aligned,PAnsiChar(@K256),SizeOf(K256));
     if PtrUInt(K256ALigned)and 15=0 then begin
-      sha256_sse4(TSHAContext(Context).Buffer,TSHAContext(Context).Hash,1);
+      sha256_sse4(Data^,Hash,1);
       exit;
     end; // if K256Aligned[] is not properly aligned -> fallback to pascal
   end;
   {$endif CPUX64}
 
   // Calculate "expanded message blocks"
-  Sha256ExpandMessageBlocks(@W,@TSHAContext(Context).Buffer);
+  Sha256ExpandMessageBlocks(@W,Data);
 
   // Assign old working hash to local variables A..H
-  with TSHAContext(Context) do begin
-    H.A := Hash.A;
-    H.B := Hash.B;
-    H.C := Hash.C;
-    H.D := Hash.D;
-    H.E := Hash.E;
-    H.F := Hash.F;
-    H.G := Hash.G;
-    H.H := Hash.H;
-  end;
+  H.A := Hash.A;
+  H.B := Hash.B;
+  H.C := Hash.C;
+  H.D := Hash.D;
+  H.E := Hash.E;
+  H.F := Hash.F;
+  H.G := Hash.G;
+  H.H := Hash.H;
 
 {$ifdef PUREPASCAL}
   // SHA-256 compression function
@@ -6385,16 +6381,14 @@ begin
 {$endif PUREPASCAL}
 
   // Calculate new working hash
-  with TSHAContext(Context) do begin
-    inc(Hash.A,H.A);
-    inc(Hash.B,H.B);
-    inc(Hash.C,H.C);
-    inc(Hash.D,H.D);
-    inc(Hash.E,H.E);
-    inc(Hash.F,H.F);
-    inc(Hash.G,H.G);
-    inc(Hash.H,H.H);
-  end;
+  inc(Hash.A,H.A);
+  inc(Hash.B,H.B);
+  inc(Hash.C,H.C);
+  inc(Hash.D,H.D);
+  inc(Hash.E,H.E);
+  inc(Hash.F,H.F);
+  inc(Hash.G,H.G);
+  inc(Hash.H,H.H);
 end;
 
 procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
@@ -6406,14 +6400,14 @@ begin
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // compress if more than 448 bits (no space for 64 bit length storage)
   if Data.Index>=56 then begin
-    Compress;
+    sha256Compress(Data.Hash,@Data.Buffer);
     FillcharFast(Data.Buffer,56,0);
   end;
   // write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
   PInteger(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
   PInteger(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
-  Compress;
+  sha256Compress(Data.Hash,@Data.Buffer);
   // Hash -> Digest to little endian format
   bswap256(@Data.Hash,@Digest);
   // clear Data and internally stored Digest
@@ -6459,16 +6453,22 @@ var Data: TSHAContext absolute Context;
 begin
   if Buffer=nil then exit; // avoid GPF
   inc(Data.MLen,QWord(cardinal(Len)) shl 3);
+  if Data.Index=0 then
+    while Len>=64 do begin
+      sha256Compress(Data.Hash,Buffer);
+      dec(Len,64);
+      inc(PByte(Buffer),64);
+    end;
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
-      MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
+      MoveFast(Buffer^,Data.Buffer[Data.Index],aLen);
       dec(Len,aLen);
-      inc(PtrInt(buffer),aLen);
-      Compress;
+      inc(PtrInt(Buffer),aLen);
+      sha256Compress(Data.Hash,@Data.Buffer);
       Data.Index := 0;
     end else begin
-      MoveFast(buffer^,Data.Buffer[Data.Index],Len);
+      MoveFast(Buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
       break;
     end;
@@ -6522,7 +6522,7 @@ const
     QWord($28db77f523047d84),QWord($32caab7b40c72493),QWord($3c9ebe0a15c9bebc),QWord($431d67c49c100d4c),
     QWord($4cc5d4becb3e42b6),QWord($597f299cfc657e2a),QWord($5fcb6fab3ad6faec),QWord($6c44198c4a475817));
 
-procedure sha512_compresspas(Data: PQWordArray; var Hash: TSHA512Hash);
+procedure sha512_compresspas(var Hash: TSHA512Hash; Data: PQWordArray);
 var a,b,c,d,e,f,g,h, temp1,temp2: QWord; // to use registers on CPU64
     w: array[0..79] of QWord;
     i: integer;
@@ -6618,7 +6618,7 @@ begin
     if cfSSSE3 in CpuFeatures then
       sha512_compress(@Hash,@Data) else
     {$endif}
-      sha512_compresspas(@Data,Hash);
+      sha512_compresspas(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
@@ -6627,7 +6627,7 @@ begin
   if cfSSSE3 in CpuFeatures then
     sha512_compress(@Hash,@Data) else
   {$endif}
-    sha512_compresspas(@Data,Hash);
+    sha512_compresspas(Hash,@Data);
   bswap64array(@Hash,@Digest,8);
   if not NoInit then
     Init;
@@ -6660,6 +6660,16 @@ var aLen: integer;
 begin
   if (Buffer=nil) or (Len<=0) then exit; // avoid GPF
   inc(MLen,Len);
+  if Index=0 then
+    while Len>=sizeof(Data) do begin // avoid temporary copy of whole blocks
+      {$ifdef SHA512_X86}
+      if cfSSSE3 in CpuFeatures then
+        sha512_compress(@Hash,Buffer) else
+      {$endif}
+        sha512_compresspas(Hash,Buffer);
+      dec(Len,sizeof(Data));
+      inc(PByte(Buffer),sizeof(Data));
+    end;
   repeat
     aLen := sizeof(Data)-Index;
     if aLen<=Len then begin
@@ -6670,7 +6680,7 @@ begin
       if cfSSSE3 in CpuFeatures then
         sha512_compress(@Hash,@Data) else
       {$endif}
-        sha512_compresspas(@Data,Hash);
+        sha512_compresspas(Hash,@Data);
       Index := 0;
     end else begin
       MoveFast(Buffer^,Data[Index],Len);
@@ -9386,27 +9396,23 @@ end;
 { TSHA1 }
 
 // TSHAContext = Hash,MLen,Buffer,Index
-procedure TSHA1.Compress;
-var
-  A, B, C, D, E: cardinal;
-  X: cardinal;
-  W: array[0..79] of cardinal;
-  i: integer;
+procedure sha1Compress(var Hash: TSHAHash; Data: PByteArray);
+var A, B, C, D, E, X: cardinal;
+    W: array[0..79] of cardinal;
+    i: integer;
 begin
   // init W[] + A..E
-  bswap256(@TSHAContext(Context).Buffer[0],@W[0]);
-  bswap256(@TSHAContext(Context).Buffer[32],@W[8]);
+  bswap256(@Data[0],@W[0]);
+  bswap256(@Data[32],@W[8]);
   for i := 16 to 79 do begin
     X  := W[i-3] xor W[i-8] xor W[i-14] xor W[i-16];
     W[i] := (X shl 1) or (X shr 31);
   end;
-  with TSHAContext(Context) do begin
-    A := Hash.A;
-    B := Hash.B;
-    C := Hash.C;
-    D := Hash.D;
-    E := Hash.E;
-  end;
+  A := Hash.A;
+  B := Hash.B;
+  C := Hash.C;
+  D := Hash.D;
+  E := Hash.E;
   // unrolled loop -> all is computed in cpu registers
   // note: FPC detects "(A shl 5) or (A shr 27)" pattern into "RolDWord(A,5)" :)
   Inc(E,((A shl 5) or (A shr 27)) + (D xor (B and (C xor D))) + $5A827999 + W[ 0]); B:= (B shl 30) or (B shr 2);
@@ -9490,13 +9496,11 @@ begin
   Inc(B,((C shl 5) or (C shr 27)) + (D xor E xor A) + $CA62C1D6 + W[78]); D:= (D shl 30) or (D shr 2);
   Inc(A,((B shl 5) or (B shr 27)) + (C xor D xor E) + $CA62C1D6 + W[79]); C:= (C shl 30) or (C shr 2);
   // Calculate new working hash
-  with TSHAContext(Context) do begin
-    inc(Hash.A,A);
-    inc(Hash.B,B);
-    inc(Hash.C,C);
-    inc(Hash.D,D);
-    inc(Hash.E,E);
-  end;
+  inc(Hash.A,A);
+  inc(Hash.B,B);
+  inc(Hash.C,C);
+  inc(Hash.D,D);
+  inc(Hash.E,E);
 end;
 
 procedure TSHA1.Final(out Digest: TSHA1Digest; NoInit: boolean);
@@ -9507,14 +9511,14 @@ begin
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // 2. Compress if more than 448 bits, (no room for 64 bit length
   if Data.Index>=56 then begin
-    Compress;
+    sha1Compress(Data.Hash,@Data.Buffer);
     FillcharFast(Data.Buffer,56,0);
   end;
   // Write 64 bit Buffer length into the last bits of the last block
   // (in big endian format) and do a final compress
   PCardinal(@Data.Buffer[56])^ := bswap32(TQWordRec(Data.MLen).H);
   PCardinal(@Data.Buffer[60])^ := bswap32(TQWordRec(Data.MLen).L);
-  Compress;
+  sha1Compress(Data.Hash,@Data.Buffer);
   // Hash -> Digest to little endian format
   bswap160(@Data.Hash,@Digest);
   // Clear Data
@@ -9557,13 +9561,19 @@ var Data: TSHAContext absolute Context;
 begin
   if Buffer=nil then exit; // avoid GPF
   inc(Data.MLen, QWord(Cardinal(Len)) shl 3);
-  while Len > 0 do begin
+  if Data.Index=0 then
+    while Len>=64 do begin
+      sha1Compress(Data.Hash,Buffer);
+      dec(Len,64);
+      inc(PByte(Buffer),64);
+    end;
+  while Len>0 do begin
     aLen := sizeof(Data.Buffer)-Data.Index;
     if aLen<=Len then begin
       MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
       dec(Len,aLen);
       inc(PtrUInt(buffer),aLen);
-      Compress;
+      sha1Compress(Data.Hash,@Data.Buffer);
       Data.Index := 0;
     end else begin
       MoveFast(buffer^,Data.Buffer[Data.Index],Len);
