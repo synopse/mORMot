@@ -6356,7 +6356,7 @@ const
     // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
     (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN),
     (hi:BSON_DECIMAL128_HI_INT64POS), (hi:$7800000000000000),
-    (hi:$f800000000000000), (lo:$378d8e63ffffffff; hi:$dfffed09bead87c0),
+    (hi:QWord($f800000000000000)), (lo:$378d8e63ffffffff; hi:QWord($dfffed09bead87c0)),
     (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
 
 procedure TDecimal128.SetSpecial(special: TDecimal128SpecialValue);

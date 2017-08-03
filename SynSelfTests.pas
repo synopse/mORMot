@@ -9530,6 +9530,7 @@ var dig: TSHA512Digest;
     i: integer;
     sha: TSHA512;
     c: AnsiChar;
+    temp: RawByteString;
 begin
   Check(SHA512('')='cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d'+
     '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
@@ -9545,6 +9546,14 @@ begin
     '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
   c := 'a';
   sha.Init;
+  for i := 1 to 1000 do
+    sha.Update(@c,1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='67ba5535a46e3f86dbfbed8cbbaf0125c76ed549ff8'+
+    'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
+  SetLength(temp,1000);
+  FillCharFast(pointer(temp)^,1000,ord('a'));
+  Check(SHA512(temp)=SHA512DigestToString(dig));
   for i := 1 to 1000000 do
     sha.Update(@c,1);
   sha.Final(dig);

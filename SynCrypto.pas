@@ -1,5 +1,5 @@
 /// fast cryptographic routines (hashing and cypher)
-// - implements AES, XOR, ADLER32, MD5, RC4, SHA1, SHA256 algorithms
+// - implements AES, XOR, ADLER32, MD5, RC4, SHA1, SHA256, SHA512, SHA3 algorithms
 // - optimized for speed (tuned assembler and AES-NI / PADLOCK support)
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
@@ -37,6 +37,7 @@ unit SynCrypto;
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Johan Bontes
   - souchaud
+  - Project Nayuki (MIT License) for SHA-512 optimized x86 asm 
   - Wolfgang Ehrhardt under zlib license for SHA-3 and AES "pure pascal" code
 
   Alternatively, the contents of this file may be used under the terms of
@@ -64,8 +65,10 @@ unit SynCrypto;
     - RC4 Crypto - weak, but simple and standard (used e.g. by SynPdf)
     - ADLER32 - 32 bits fast Hash with optimized asm version
     - MD5 - standard fast 128 bits Hash
-    - SHA1 - 160 bits Secure Hash
-    - SHA256 - 256 bits Secure Hash with optimized asm version
+    - SHA-1 - 160 bits Secure Hash
+    - SHA-256 - 256 bits Secure Hash with optimized asm version
+    - SHA-512 - 512 bits Secure Hash with optimized asm version
+    - SHA-3 - 224/256/384/512/Shake algorithms based on Keccak permutation
     - hardware AES-NI and SHA-SSE4 support for latest CPU
     - VIA PADLOCK optional support - native .o code on linux or .dll (Win32)
      (tested on a Dedibox C7 (rev1) linux server - need validation for Win32)
@@ -75,8 +78,8 @@ unit SynCrypto;
       see http://www.mozilla.org/MPL/MPL-1.1.html
 
 
-    Benchmark on my AMD-64 TL-56 dualcore-CPU:
-    ==========================================
+    (old) Benchmark on my AMD-64 TL-56 dualcore-CPU:
+    ================================================
     Testing with blocks of 16KB each
            crc32  624 MB/s
      adler32 pas  571 MB/s              asm 1304 MB/s
@@ -125,8 +128,8 @@ unit SynCrypto;
        XorOffset 1292 MB/s
         XorConst 1479 MB/s
 
-   Benchmark on a C7 Dedibox (USEPADLOCK version):
-   ===============================================
+   (old) Benchmark on a C7 Dedibox (USEPADLOCK version):
+   =====================================================
    Testing with blocks of 16KB each
            crc32  402 MB/s
      adler32 pas  274 MB/s        asm  542 MB/s       libz.so 414 MB/s
@@ -170,7 +173,7 @@ unit SynCrypto;
    - USETHREADSFORBIGAESBLOCKS will help on modern multi-threaded CPU
    - AES speed: W.Ehrhardt's pascal is 55MB/s, A.Bouchez's asm is 84MB/s
    - AES-256 is faster than a simple XOR() on a dedibox with a C7 cpu ;)
-   - see below for benchmarks using AES-NI or SHA-256-SSE4, which induce
+   - see below for benchmarks using AES-NI, SHA-256-SSE4, which induce
      a huge performance boost
 
    Initial version (C) 2008-2009 Arnaud Bouchez http://bouchez.info
@@ -224,7 +227,7 @@ unit SynCrypto;
    - tested compilation for Win64 platform
    - run with FPC under Win32 and Linux (including AES-NI support), and Kylix
    - added Intel's SSE4 x64 optimized asm for SHA-256 on Win64
-   - added overloaded procedure TMD5.Final() and function SHA256()
+   - added overloaded procedure TMD5.Final() and function SHA-256()
    - introduce ESynCrypto exception class dedicated to this unit
    - added AES encryption using official Microsoft AES Cryptographic Provider
      (CryptoAPI) via TAESECB_API, TAESCBC_API, TAESCFB_API and TAESOFB_API -
@@ -234,7 +237,8 @@ unit SynCrypto;
    - added CompressShaAes() and global CompressShaAesKey and CompressShaAesClass
      variables to be used by THttpSocket.RegisterCompress
    - introduce new TRC4 object for RC4 encryption algorithm
-   - introducing HMAC_SHA1/SHA256 and PBKDF2_HMAC_SHA1/SHA256 functions
+   - introducing TSHA512 and TSHA512 objects for SHA-512 and SHA-3 algorithms
+   - new HMAC_SHA1/SHA256/SHA512 and PBKDF2_HMAC_SHA1/SHA256/SHA512 functions
    - removed several compilation hints when assertions are set to off
 
 *)
@@ -1111,23 +1115,23 @@ procedure FillSystemRandom(Buffer: PByteArray; Len: integer; AllowBlocking: bool
 
 type
   PSHA1Digest = ^TSHA1Digest;
-  /// 160 bits memory block for SHA1 hash digest storage
+  /// 160 bits memory block for SHA-1 hash digest storage
   TSHA1Digest   = packed array[0..19] of byte;
 
   PSHA1 = ^TSHA1;
-  /// handle SHA1 hashing
+  /// handle SHA-1 hashing
   TSHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize div 4] of cardinal;
     procedure Compress; // used by Update and Final
   public
-    /// initialize SHA1 context for hashing
+    /// initialize SHA-1 context for hashing
     procedure Init;
-    /// update the SHA1 context with some data
+    /// update the SHA-1 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA1 context with some data
+    /// update the SHA-1 context with some data
     procedure Update(const Buffer: RawByteString); overload;
-    /// finalize and compute the resulting SHA1 hash Digest of all data
+    /// finalize and compute the resulting SHA-1 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
     procedure Final(out Digest: TSHA1Digest; NoInit: boolean=false);
@@ -1138,23 +1142,23 @@ type
   end;
 
   PSHA256Digest = ^TSHA256Digest;
-  /// 256 bits (32 bytes) memory block for SHA256 hash digest storage
+  /// 256 bits (32 bytes) memory block for SHA-256 hash digest storage
   TSHA256Digest = THash256;
 
   PSHA256 = ^TSHA256;
-  /// handle SHA256 hashing
+  /// handle SHA-256 hashing
   TSHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
     procedure Compress; // used by Update and Final
   public
-    /// initialize SHA256 context for hashing
+    /// initialize SHA-256 context for hashing
     procedure Init;
-    /// update the SHA256 context with some data
+    /// update the SHA-256 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA256 context with some data
+    /// update the SHA-256 context with some data
     procedure Update(const Buffer: RawByteString); overload;
-    /// finalize and compute the resulting SHA256 hash Digest of all data
+    /// finalize and compute the resulting SHA-256 hash Digest of all data
     // affected to Update() method
     procedure Final(out Digest: TSHA256Digest; NoInit: boolean=false);
     /// one method to rule them all
@@ -1164,31 +1168,34 @@ type
   end;
 
   PSHA512Digest = ^TSHA512Digest;
-  /// 512 bits (64 bytes) memory block for SHA512 hash digest storage
+  /// 512 bits (64 bytes) memory block for SHA-512 hash digest storage
   TSHA512Digest = THash512;
 
   TSHA512Hash = record a, b, c, d, e, f, g, h: QWord; end;
 
   PSHA512 = ^TSHA512;
-  /// handle SHA512 hashing
-  // - by design, this algorithm is much faster on 64-bit CPU, since all
-  // internal process involves QWord - also notes that FPC generates better
-  // code than Delphi for such algorithms
+  /// handle SHA-512 hashing
+  // - by design, this algorithm is expected to be much faster on 64-bit CPU,
+  // since all internal process involves QWord - but we included a SSE3 asm
+  // optimized version on 32-bit CPU under Windows and Linux, which is almost
+  // as fast as on x64, and even faster than SHA-256 and SHA-3
+  // - under x86/Delphi, plain pascal is 40MB/s, SSE3 asm 180MB/s
+  // - on x64, pascal Delphi is 150MB/s, and FPC is 190MB/s (thanks to native
+  // RorQWord intrinsic compiler function)
   TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Hash: TSHA512Hash;
     MLen: QWord;
     Data: array[0..127] of byte;
     Index: integer;
-    procedure Compress; // used by Update and Final
   public
-    /// initialize SHA512 context for hashing
+    /// initialize SHA-512 context for hashing
     procedure Init;
-    /// update the SHA512 context with some data
+    /// update the SHA-512 context with some data
     procedure Update(Buffer: pointer; Len: integer); overload;
-    /// update the SHA512 context with some data
+    /// update the SHA-512 context with some data
     procedure Update(const Buffer: RawByteString); overload;
-    /// finalize and compute the resulting SHA512 hash Digest of all data
+    /// finalize and compute the resulting SHA-512 hash Digest of all data
     // affected to Update() method
     // - will also call Init to reset all internal temporary context, for safety
     procedure Final(out Digest: TSHA512Digest; NoInit: boolean=false);
@@ -1459,16 +1466,16 @@ function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;
 // - result is returned in hexadecimal format
 function MD5(const s: RawByteString): RawUTF8;
 
-/// direct SHA1 hash calculation of some data (string-encoded)
+/// direct SHA-1 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function SHA1(const s: RawByteString): RawUTF8;
 
-/// direct SHA512 hash calculation of some data (string-encoded)
+/// direct SHA-512 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function SHA512(const s: RawByteString): RawUTF8;
 
 type
-  /// compute the HMAC message authentication code using SHA1 as hash function
+  /// compute the HMAC message authentication code using SHA-1 as hash function
   // - you may use HMAC_SHA1() overloaded functions for one-step process
   THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
@@ -1486,27 +1493,27 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA1Digest; NoInit: boolean=false);
   end;
-  /// points to a HMAC message authentication context using SHA1
+  /// points to a HMAC message authentication context using SHA-1
   PHMAC_SHA1 = ^THMAC_SHA1;
 
-/// compute the HMAC message authentication code using SHA1 as hash function
+/// compute the HMAC message authentication code using SHA-1 as hash function
 procedure HMAC_SHA1(const key,msg: RawByteString; out result: TSHA1Digest); overload;
 
-/// compute the HMAC message authentication code using SHA1 as hash function
+/// compute the HMAC message authentication code using SHA-1 as hash function
 procedure HMAC_SHA1(const key: TSHA1Digest; const msg: RawByteString;
   out result: TSHA1Digest); overload;
 
-/// compute the HMAC message authentication code using SHA1 as hash function
+/// compute the HMAC message authentication code using SHA-1 as hash function
 procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer;
   out result: TSHA1Digest); overload;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA1
-// - this function expect the resulting key length to match SHA1 digest size
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-1
+// - this function expect the resulting key length to match SHA-1 digest size
 procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
   out result: TSHA1Digest);
 
 type
-  /// compute the HMAC message authentication code using SHA512 as hash function
+  /// compute the HMAC message authentication code using SHA-512 as hash function
   // - you may use HMAC_SHA512() overloaded functions for one-step process
   THMAC_SHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
@@ -1524,41 +1531,41 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA512Digest; NoInit: boolean=false);
   end;
-  /// points to a HMAC message authentication context using SHA512
+  /// points to a HMAC message authentication context using SHA-512
   PHMAC_SHA512 = ^THMAC_SHA512;
 
-/// compute the HMAC message authentication code using SHA512 as hash function
+/// compute the HMAC message authentication code using SHA-512 as hash function
 procedure HMAC_SHA512(const key,msg: RawByteString; out result: TSHA512Digest); overload;
 
-/// compute the HMAC message authentication code using SHA512 as hash function
+/// compute the HMAC message authentication code using SHA-512 as hash function
 procedure HMAC_SHA512(const key: TSHA512Digest; const msg: RawByteString;
   out result: TSHA512Digest); overload;
 
-/// compute the HMAC message authentication code using SHA512 as hash function
+/// compute the HMAC message authentication code using SHA-512 as hash function
 procedure HMAC_SHA512(key,msg: pointer; keylen,msglen: integer;
   out result: TSHA512Digest); overload;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA512
-// - this function expect the resulting key length to match SHA512 digest size
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-512
+// - this function expect the resulting key length to match SHA-512 digest size
 procedure PBKDF2_HMAC_SHA512(const password,salt: RawByteString; count: Integer;
   out result: TSHA512Digest);
 
-/// direct SHA256 hash calculation of some data (string-encoded)
+/// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 function SHA256(const s: RawByteString): RawUTF8; overload;
 
-/// direct SHA256 hash calculation of some binary data
+/// direct SHA-256 hash calculation of some binary data
 // - result is returned in hexadecimal format
 function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
 
-/// direct SHA256 hash calculation of some binary data
+/// direct SHA-256 hash calculation of some binary data
 // - result is returned in TSHA256Digest binary format
 // - since the result would be stored temporarly in the stack, it may be
 // safer to use an explicit TSHA256Digest variable, which would be filled
 // with zeros by a ... finally FillZero( 
 function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
 
-/// direct SHA256 hash calculation of some data (string-encoded)
+/// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
 // - this procedure has a weak password protection: small incoming data
 // is append to some salt, in order to have at least a 256 bytes long hash:
@@ -1566,7 +1573,7 @@ function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
 procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 
 type
-  /// compute the HMAC message authentication code using SHA256 as hash function
+  /// compute the HMAC message authentication code using SHA-256 as hash function
   // - you may use HMAC_SHA256() overloaded functions for one-step process
   THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
@@ -1593,28 +1600,28 @@ type
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA256Digest; NoInit: boolean=false);
   end;
-  /// points to a HMAC message authentication context using SHA256
+  /// points to a HMAC message authentication context using SHA-256
   PHMAC_SHA256 = ^THMAC_SHA256;
 
-/// compute the HMAC message authentication code using SHA256 as hash function
+/// compute the HMAC message authentication code using SHA-256 as hash function
 procedure HMAC_SHA256(const key,msg: RawByteString; out result: TSHA256Digest); overload;
 
-/// compute the HMAC message authentication code using SHA256 as hash function
+/// compute the HMAC message authentication code using SHA-256 as hash function
 procedure HMAC_SHA256(const key: TSHA256Digest; const msg: RawByteString;
   out result: TSHA256Digest); overload;
 
-/// compute the HMAC message authentication code using SHA256 as hash function
+/// compute the HMAC message authentication code using SHA-256 as hash function
 procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest); overload;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA256
-// - this function expect the resulting key length to match SHA256 digest size
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-256
+// - this function expect the resulting key length to match SHA-256 digest size
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   out result: TSHA256Digest; const saltdefault: RawByteString=''); overload;
 
-/// compute the PBKDF2 derivation of a password using HMAC over SHA256, into
+/// compute the PBKDF2 derivation of a password using HMAC over SHA-256, into
 // several 256-bit items, so can be used to return any size of output key
 // - this function expect the result array to have the expected output length
-// - allows resulting key length to be more than one SHA256 digest size, e.g.
+// - allows resulting key length to be more than one SHA-256 digest size, e.g.
 // to be used for both Encryption and MAC
 procedure PBKDF2_HMAC_SHA256(const password,salt: RawByteString; count: Integer;
   var result: THash256DynArray; const saltdefault: RawByteString=''); overload;
@@ -1742,19 +1749,19 @@ function AESFull(const Key; KeySize: cardinal; bIn, bOut: pointer; Len: Integer;
 // - if not KeySize in [128,192,256] -> use fast and efficient Xor Cypher
 function AESFullKeyOK(const Key; KeySize: cardinal; buff: pointer): boolean;
 
-/// AES encryption using the TAES format with a supplied SHA256 password
+/// AES encryption using the TAES format with a supplied SHA-256 password
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 procedure AESSHA256(Buffer: pointer; Len: integer; const Password: RawByteString; Encrypt: boolean); overload;
 
-/// AES encryption using the TAES format with a supplied SHA256 password
+/// AES encryption using the TAES format with a supplied SHA-256 password
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 procedure AESSHA256(bIn, bOut: pointer; Len: integer; const Password: RawByteString; Encrypt: boolean); overload;
 
-/// AES encryption using the TAES format with a supplied SHA256 password
+/// AES encryption using the TAES format with a supplied SHA-256 password
 // - last bytes (not part of 16 bytes blocks) are not crypted by AES, but with XOR
 function AESSHA256(const s, Password: RawByteString; Encrypt: boolean): RawByteString; overload;
 
-/// AES encryption using the TAESFull format with a supplied SHA256 password
+/// AES encryption using the TAESFull format with a supplied SHA-256 password
 // - outStream will be larger/smaller than Len: this is a full AES version with
 // a triming TAESFullHeader at the beginning
 procedure AESSHA256Full(bIn: pointer; Len: Integer; outStream: TStream; const Password: RawByteString; Encrypt: boolean); overload;
@@ -1833,7 +1840,7 @@ procedure AESBlockToShortString(const block: TAESBlock; out result: short32); ov
 /// compute the hexadecial representation of an AES 16-byte block
 function AESBlockToString(const block: TAESBlock): RawUTF8;
 
-/// compute the hexadecimal representation of a SHA1 digest
+/// compute the hexadecimal representation of a SHA-1 digest
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 
 /// compute the SHA-1 digest from its hexadecimal representation
@@ -1841,7 +1848,7 @@ function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
 // - just a wrapper around SynCommons.HexToBin()
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
 
-/// compute the hexadecimal representation of a SHA256 digest
+/// compute the hexadecimal representation of a SHA-256 digest
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 
 /// compute the SHA-256 digest from its hexadecimal representation
@@ -1849,7 +1856,7 @@ function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
 // - just a wrapper around SynCommons.HexToBin()
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
 
-/// compute the hexadecimal representation of a SHA512 digest
+/// compute the hexadecimal representation of a SHA-512 digest
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
 
 /// compute the hexadecimal representation of a MD5 digest
@@ -1878,10 +1885,10 @@ function Adler32SelfTest: boolean;
 /// self test of MD5 routines
 function MD5SelfTest: boolean;
 
-/// self test of SHA1 routines
+/// self test of SHA-1 routines
 function SHA1SelfTest: boolean;
 
-/// self test of SHA256 routines
+/// self test of SHA-256 routines
 function SHA256SelfTest: boolean;
 
 /// self test of AES routines
@@ -2225,7 +2232,7 @@ type
     /// delay of optional in-memory cache of Verify() TJWTContent
     // - equals 0 by default, i.e. cache is disabled
     // - may be useful if the signature process is very resource consumming
-    // (e.g. for TJWTES256 or even HMAC-SHA256) - see also CacheResults
+    // (e.g. for TJWTES256 or even HMAC-SHA-256) - see also CacheResults
     // - each time this property is assigned, internal cache content is flushed
     property CacheTimeoutSeconds: integer read fCacheTimeoutSeconds
       write SetCacheTimeoutSeconds;
@@ -3280,6 +3287,7 @@ end;
 {$ifdef DELPHI5OROLDER}
   {$define AES_PASCAL} // Delphi 5 internal asm is buggy :(
   {$define SHA3_PASCAL}
+  {$define SHA512_X86} // external sha512-x86.obj 
 {$else}
   {$ifdef CPUINTEL} // AES-NI supported for x86 and x64 under Windows
     {$ifdef CPU64}
@@ -3293,6 +3301,14 @@ end;
     {$else}
       {$define USEAESNI}
       {$define USEAESNI32}
+      {$ifdef MSWINDOWS}
+        {$define SHA512_X86} // external sha512-x86.obj/.o
+      {$endif}
+      {$ifdef FPC}
+        {$ifdef LINUX}
+          {$define SHA512_X86} // external linux32/sha512-x86.o
+        {$endif}
+      {$endif FPC}
     {$endif}
   {$else}
     {$define AES_PASCAL} // AES128 unrolled pascal(Delphi7)=57MB/s rolled asm=84MB/s :)
@@ -6285,7 +6301,7 @@ begin
   end;
 
 {$ifdef PUREPASCAL}
-  // SHA256 compression function
+  // SHA-256 compression function
   for i := 0 to high(W) do begin
     {$ifdef FPC} // uses faster built-in right rotate intrinsic
     t1 := H.H+(RorDWord(H.E,6) xor RorDWord(H.E,11) xor RorDWord(H.E,25))+
@@ -6302,7 +6318,7 @@ begin
     H.D := H.C; H.C := H.B; H.B := H.A; H.A := t1+t2;
   end;
 {$else}
-  // SHA256 compression function - optimized by A.B. for pipelined CPU
+  // SHA-256 compression function - optimized by A.B. for pipelined CPU
   asm
     push ebx
     push esi
@@ -6382,11 +6398,11 @@ begin
 end;
 
 procedure TSHA256.Final(out Digest: TSHA256Digest; NoInit: boolean);
-// finalize SHA256 calculation, clear context
+// finalize SHA-256 calculation, clear context
 var Data: TSHAContext absolute Context;
 begin
   // append bit '1' after Buffer
-  Data.Buffer[Data.Index]:= $80;
+  Data.Buffer[Data.Index] := $80;
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // compress if more than 448 bits (no space for 64 bit length storage)
   if Data.Index>=56 then begin
@@ -6485,33 +6501,33 @@ end;
 
 const
   SHA512K: array[0..79] of QWord = (
-    $428a2f98d728ae22, $7137449123ef65cd, $b5c0fbcfec4d3b2f, $e9b5dba58189dbbc,
-    $3956c25bf348b538, $59f111f1b605d019, $923f82a4af194f9b, $ab1c5ed5da6d8118,
-    $d807aa98a3030242, $12835b0145706fbe, $243185be4ee4b28c, $550c7dc3d5ffb4e2,
-    $72be5d74f27b896f, $80deb1fe3b1696b1, $9bdc06a725c71235, $c19bf174cf692694,
-    $e49b69c19ef14ad2, $efbe4786384f25e3, $0fc19dc68b8cd5b5, $240ca1cc77ac9c65,
-    $2de92c6f592b0275, $4a7484aa6ea6e483, $5cb0a9dcbd41fbd4, $76f988da831153b5,
-    $983e5152ee66dfab, $a831c66d2db43210, $b00327c898fb213f, $bf597fc7beef0ee4,
-    $c6e00bf33da88fc2, $d5a79147930aa725, $06ca6351e003826f, $142929670a0e6e70,
-    $27b70a8546d22ffc, $2e1b21385c26c926, $4d2c6dfc5ac42aed, $53380d139d95b3df,
-    $650a73548baf63de, $766a0abb3c77b2a8, $81c2c92e47edaee6, $92722c851482353b,
-    $a2bfe8a14cf10364, $a81a664bbc423001, $c24b8b70d0f89791, $c76c51a30654be30,
-    $d192e819d6ef5218, $d69906245565a910, $f40e35855771202a, $106aa07032bbd1b8,
-    $19a4c116b8d2d0c8, $1e376c085141ab53, $2748774cdf8eeb99, $34b0bcb5e19b48a8,
-    $391c0cb3c5c95a63, $4ed8aa4ae3418acb, $5b9cca4f7763e373, $682e6ff3d6b2b8a3,
-    $748f82ee5defb2fc, $78a5636f43172f60, $84c87814a1f0ab72, $8cc702081a6439ec,
-    $90befffa23631e28, $a4506cebde82bde9, $bef9a3f7b2c67915, $c67178f2e372532b,
-    $ca273eceea26619c, $d186b8c721c0c207, $eada7dd6cde0eb1e, $f57d4f7fee6ed178,
-    $06f067aa72176fba, $0a637dc5a2c898a6, $113f9804bef90dae, $1b710b35131c471b,
-    $28db77f523047d84, $32caab7b40c72493, $3c9ebe0a15c9bebc, $431d67c49c100d4c,
-    $4cc5d4becb3e42b6, $597f299cfc657e2a, $5fcb6fab3ad6faec, $6c44198c4a475817);
+    QWord($428a2f98d728ae22),QWord($7137449123ef65cd),QWord($b5c0fbcfec4d3b2f),QWord($e9b5dba58189dbbc),
+    QWord($3956c25bf348b538),QWord($59f111f1b605d019),QWord($923f82a4af194f9b),QWord($ab1c5ed5da6d8118),
+    QWord($d807aa98a3030242),QWord($12835b0145706fbe),QWord($243185be4ee4b28c),QWord($550c7dc3d5ffb4e2),
+    QWord($72be5d74f27b896f),QWord($80deb1fe3b1696b1),QWord($9bdc06a725c71235),QWord($c19bf174cf692694),
+    QWord($e49b69c19ef14ad2),QWord($efbe4786384f25e3),QWord($0fc19dc68b8cd5b5),QWord($240ca1cc77ac9c65),
+    QWord($2de92c6f592b0275),QWord($4a7484aa6ea6e483),QWord($5cb0a9dcbd41fbd4),QWord($76f988da831153b5),
+    QWord($983e5152ee66dfab),QWord($a831c66d2db43210),QWord($b00327c898fb213f),QWord($bf597fc7beef0ee4),
+    QWord($c6e00bf33da88fc2),QWord($d5a79147930aa725),QWord($06ca6351e003826f),QWord($142929670a0e6e70),
+    QWord($27b70a8546d22ffc),QWord($2e1b21385c26c926),QWord($4d2c6dfc5ac42aed),QWord($53380d139d95b3df),
+    QWord($650a73548baf63de),QWord($766a0abb3c77b2a8),QWord($81c2c92e47edaee6),QWord($92722c851482353b),
+    QWord($a2bfe8a14cf10364),QWord($a81a664bbc423001),QWord($c24b8b70d0f89791),QWord($c76c51a30654be30),
+    QWord($d192e819d6ef5218),QWord($d69906245565a910),QWord($f40e35855771202a),QWord($106aa07032bbd1b8),
+    QWord($19a4c116b8d2d0c8),QWord($1e376c085141ab53),QWord($2748774cdf8eeb99),QWord($34b0bcb5e19b48a8),
+    QWord($391c0cb3c5c95a63),QWord($4ed8aa4ae3418acb),QWord($5b9cca4f7763e373),QWord($682e6ff3d6b2b8a3),
+    QWord($748f82ee5defb2fc),QWord($78a5636f43172f60),QWord($84c87814a1f0ab72),QWord($8cc702081a6439ec),
+    QWord($90befffa23631e28),QWord($a4506cebde82bde9),QWord($bef9a3f7b2c67915),QWord($c67178f2e372532b),
+    QWord($ca273eceea26619c),QWord($d186b8c721c0c207),QWord($eada7dd6cde0eb1e),QWord($f57d4f7fee6ed178),
+    QWord($06f067aa72176fba),QWord($0a637dc5a2c898a6),QWord($113f9804bef90dae),QWord($1b710b35131c471b),
+    QWord($28db77f523047d84),QWord($32caab7b40c72493),QWord($3c9ebe0a15c9bebc),QWord($431d67c49c100d4c),
+    QWord($4cc5d4becb3e42b6),QWord($597f299cfc657e2a),QWord($5fcb6fab3ad6faec),QWord($6c44198c4a475817));
 
-procedure TSHA512.Compress;
+procedure sha512_compresspas(Data: PQWordArray; var Hash: TSHA512Hash);
 var a,b,c,d,e,f,g,h, temp1,temp2: QWord; // to use registers on CPU64
     w: array[0..79] of QWord;
     i: integer;
 begin
-  bswap64array(@Data,@w,16);
+  bswap64array(Data,@w,16);
   for i := 16 to 79 do
     {$ifdef FPC} // uses faster built-in right rotate intrinsic
     w[i] := (RorQWord(w[i-2],19) xor RorQWord(w[i-2],61) xor (w[i-2] shr 6)) +
@@ -6560,16 +6576,58 @@ begin
   inc(Hash.h,h);
 end;
 
+{$ifdef SHA512_X86} // optimized asm using SSE3 instructions for x86 32-bit
+{$ifdef FPC}
+  {$ifdef MSWINDOWS}
+    {$L fpc-win32\sha512-x86.o}
+  {$else}
+    {$L fpc-linux32/sha512-x86.o}
+  {$endif}
+{$else}
+  {$L sha512-x86.obj}
+{$endif}
+{
+  SHA-512 hash in x86 assembly
+  Copyright (c) 2014 Project Nayuki. (MIT License)
+  https://www.nayuki.io/page/fast-sha2-hashes-in-x86-assembly
+
+  Permission is hereby granted, free of charge, to any person obtaining a copy of
+  this software and associated documentation files (the "Software"), to deal in
+  the Software without restriction, including without limitation the rights to
+  use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+  the Software, and to permit persons to whom the Software is furnished to do so,
+  subject to the following conditions:
+  - The above copyright notice and this permission notice shall be included in
+  all copies or substantial portions of the Software.
+  - The Software is provided "as is", without warranty of any kind, express or
+  implied, including but not limited to the warranties of merchantability,
+  fitness for a particular purpose and noninfringement. In no event shall the
+  authors or copyright holders be liable for any claim, damages or other liability,
+  whether in an action of contract, tort or otherwise, arising from, out of or
+  in connection with the Software or the use or other dealings in the Software.
+}
+procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
+{$endif SHA512_X86}
+
 procedure TSHA512.Final(out Digest: TSHA512Digest; NoInit: boolean);
 begin
-  Data[Index]:= $80;
+  Data[Index] := $80;
+  FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    Compress;
+    {$ifdef SHA512_X86}
+    if cfSSSE3 in CpuFeatures then
+      sha512_compress(@Hash,@Data) else
+    {$endif}
+      sha512_compresspas(@Data,Hash);
     FillcharFast(Data,112,0);
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  Compress;
+  {$ifdef SHA512_X86}
+  if cfSSSE3 in CpuFeatures then
+    sha512_compress(@Hash,@Data) else
+  {$endif}
+    sha512_compresspas(@Data,Hash);
   bswap64array(@Hash,@Digest,8);
   if not NoInit then
     Init;
@@ -6578,18 +6636,18 @@ end;
 procedure TSHA512.Full(Buffer: pointer; Len: integer; out Digest: TSHA512Digest);
 begin
   Init;
-  Update(Buffer,Len);
+  Update(Buffer,Len); // final bytes
   Final(Digest);
 end;
 
 procedure TSHA512.Init;
 begin
   Hash.a := $6a09e667f3bcc908;
-  Hash.b := $bb67ae8584caa73b;
+  Hash.b := QWord($bb67ae8584caa73b);
   Hash.c := $3c6ef372fe94f82b;
-  Hash.d := $a54ff53a5f1d36f1;
+  Hash.d := QWord($a54ff53a5f1d36f1);
   Hash.e := $510e527fade682d1;
-  Hash.f := $9b05688c2b3e6c1f;
+  Hash.f := QWord($9b05688c2b3e6c1f);
   Hash.g := $1f83d9abfb41bd6b;
   Hash.h := $5be0cd19137e2179;
   MLen := 0;
@@ -6608,8 +6666,11 @@ begin
       MoveFast(Buffer^,Data[Index],aLen);
       dec(Len,aLen);
       inc(PtrUInt(Buffer),aLen);
-      Compress;
-      FillcharFast(Data,sizeof(Data),0);
+      {$ifdef SHA512_X86}
+      if cfSSSE3 in CpuFeatures then
+        sha512_compress(@Hash,@Data) else
+      {$endif}
+        sha512_compresspas(@Data,Hash);
       Index := 0;
     end else begin
       MoveFast(Buffer^,Data[Index],Len);
@@ -7598,7 +7659,7 @@ begin
     ll := bitlen + 4;
   end
   else begin
-    // SHA3: append two bits 01
+    // SHA-3: append two bits 01
     lw := lw or (word($2) shl bitlen);
     ll := bitlen + 2;
   end;
@@ -8101,7 +8162,7 @@ begin
 end;
 
 procedure AESSHA256(Buffer: pointer; Len: integer; const Password: RawByteString; Encrypt: boolean);
-// Encrypt/Decrypt Buffer with AES and SHA256 password
+// Encrypt/Decrypt Buffer with AES and SHA-256 password
 begin
   AESSHA256(Buffer,Buffer,Len,Password,Encrypt);
 end;
@@ -9442,7 +9503,7 @@ procedure TSHA1.Final(out Digest: TSHA1Digest; NoInit: boolean);
 var Data: TSHAContext absolute Context;
 begin
   // 1. append bit '1' after Buffer
-  Data.Buffer[Data.Index]:= $80;
+  Data.Buffer[Data.Index] := $80;
   FillcharFast(Data.Buffer[Data.Index+1],63-Data.Index,0);
   // 2. Compress if more than 448 bits, (no room for 64 bit length
   if Data.Index>=56 then begin
