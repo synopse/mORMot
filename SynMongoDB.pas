@@ -91,7 +91,7 @@ uses
 type
   /// binary representation of a 128 bit decimal, stored as 16 bytes
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
-  // BSON Decimal128 format
+  // BSON Decimal128 format, and processed by the TDecimal128 object
   TDecimal128Bits = record
     case integer of
     0: (lo, hi: QWord);
@@ -101,7 +101,7 @@ type
   /// points to a 128 bit decimal binary
   PDecimal128Bits = ^TDecimal128Bits;
 
-  /// maximum length of a decimal128 string
+  /// enough characters to contain any TDecimal128 text representation
   TDecimal128Str = array[0..42] of AnsiChar;
 
   /// some special 128 bit decimal values
@@ -225,6 +225,17 @@ const
     '', '', 'NaN', '0', 'Infinity', '-Infinity',
     '-9.999999999999999999999999999999999E+6144',
      '9.999999999999999999999999999999999E+6144');
+
+  BSON_DECIMAL128_HI_NAN        = $7c00000000000000;
+  BSON_DECIMAL128_HI_INT64POS   = $3040000000000000; // 0 fixed decimals
+  BSON_DECIMAL128_HI_INT64NEG   = $b040000000000000;
+  BSON_DECIMAL128_HI_CURRPOS    = $3038000000000000; // 4 fixed decimals
+  BSON_DECIMAL128_HI_CURRNEG    = $b038000000000000;
+  BSON_DECIMAL128_EXPONENT_MAX  = 6111;
+  BSON_DECIMAL128_EXPONENT_MIN  = -6176;
+  BSON_DECIMAL128_EXPONENT_BIAS = 6176;
+  BSON_DECIMAL128_MAX_DIGITS    = 34;
+
 
 type
   /// exception type used for BSON process
@@ -6337,14 +6348,14 @@ end;
 procedure TDecimal128.SetZero;
 begin
   Bits.lo := 0;
-  Bits.hi := $3040000000000000;
+  Bits.hi := BSON_DECIMAL128_HI_INT64POS;
 end;
 
 const
   D128: array[TDecimal128SpecialValue] of TDecimal128Bits = (
     // dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax
-    (hi:$7c00000000000000), (hi:$7c00000000000000), (hi:$7c00000000000000),
-    (hi:$3040000000000000), (hi:$7800000000000000),
+    (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN), (hi:BSON_DECIMAL128_HI_NAN),
+    (hi:BSON_DECIMAL128_HI_INT64POS), (hi:$7800000000000000),
     (hi:$f800000000000000), (lo:$378d8e63ffffffff; hi:$dfffed09bead87c0),
     (lo:$378d8e63ffffffff; hi:$5fffed09bead87c0) );
 
@@ -6365,34 +6376,34 @@ procedure TDecimal128.FromInt32(value: integer);
 begin
   if value>=0 then begin
     Bits.lo := value;
-    Bits.hi := $3040000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := $b040000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
   end;
 end;
 
 procedure TDecimal128.FromUInt32(value: cardinal);
 begin
   Bits.lo := value;
-  Bits.hi := $3040000000000000;
+  Bits.hi := BSON_DECIMAL128_HI_INT64POS;
 end;
 
 procedure TDecimal128.FromInt64(value: Int64);
 begin
   if value>=0 then begin
     Bits.lo := value;
-    Bits.hi := $3040000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_INT64POS;
   end else begin
     Bits.lo := -value;
-    Bits.hi := $b040000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_INT64NEG;
   end;
 end;
 
 procedure TDecimal128.FromQWord(value: QWord);
 begin
   Bits.lo := value;
-  Bits.hi := $3040000000000000;
+  Bits.hi := BSON_DECIMAL128_HI_INT64POS;
 end;
 
 function TDecimal128.FromFloat(const value: TSynExtended; precision: integer): boolean;
@@ -6414,10 +6425,10 @@ procedure TDecimal128.FromCurr(const value: Currency);
 begin // force exactly 4 decimals
   if value<0 then begin
     Bits.lo := -PInt64(@value)^;
-    Bits.hi := $b038000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_CURRNEG;
   end else begin
     Bits.lo := PInt64(@value)^;
-    Bits.hi := $3038000000000000;
+    Bits.hi := BSON_DECIMAL128_HI_CURRPOS;
   end;
 end;
 
@@ -6427,7 +6438,7 @@ begin
 end;
 
 function div128bits9digits(var value: THash128Rec): cardinal;
-var r64,fastmod: QWord;
+var r64: QWord;
     i: integer;
 begin
   r64 := 0;
@@ -6436,9 +6447,8 @@ begin
     inc(r64,value.c[i]); // add the divided to _rem
     if r64=0 then
       continue;
-    fastmod := r64; // to avoid two 64bit divisions
     value.c[i] := r64 div 1000000000;
-    r64 := fastmod-QWord(value.c[i])*1000000000;
+    dec(r64,QWord(value.c[i])*1000000000);
   end;
   result := r64;
 end;
@@ -6459,12 +6469,6 @@ asm // Delphi is not efficient for x86 target with QWord -> optimize
       mov   [ecx + 4], edx
 end;
 {$endif}
-
-const
-  BSON_DECIMAL128_EXPONENT_MAX=6111;
-  BSON_DECIMAL128_EXPONENT_MIN=-6176;
-  BSON_DECIMAL128_EXPONENT_BIAS=6176;
-  BSON_DECIMAL128_MAX_DIGITS=34;
 
 function TDecimal128.ToText(out Buffer: TDecimal128Str): integer;
 var dest: PUTF8Char;
@@ -6542,7 +6546,7 @@ begin
           break;
       end;
     end;
-    signdig := 36;
+    signdig := 36; // 4*9 = k*j loops above
     while dig^=0 do begin
       dec(signdig);
       inc(dig);
@@ -6638,9 +6642,9 @@ procedure TDecimal128.ToCurr(out result: currency);
 var tmp: TDecimal128Str;
     res64: Int64 absolute result;
 begin
-  if Bits.hi=$b038000000000000 then // fast direct conversion e.g. FromCurr
+  if Bits.hi=BSON_DECIMAL128_HI_CURRNEG then // fast direct conversion e.g. FromCurr
     res64 := -Bits.lo else
-  if Bits.hi=$3038000000000000 then
+  if Bits.hi=BSON_DECIMAL128_HI_CURRPOS then
     res64 := Bits.lo else begin
     tmp[ToText(tmp)] := #0; // makes ASCIIZ temporary text conversion
     res64 := StrToCurr64(@tmp);
