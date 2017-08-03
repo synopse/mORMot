@@ -7139,7 +7139,7 @@ type
   TSQLVarDynArray = array of TSQLVar;
 
   /// used to store bit set for all available fields in a Table
-  // - with current MAX_SQLFIELDS value, 256 bits uses 64 bytes of memory
+  // - with current MAX_SQLFIELDS value, 64 bits uses 8 bytes of memory
   // - see also IsZero() and IsEqual() functions
   // - you can also use ALL_FIELDS as defined in mORMot.pas
   TSQLFieldBits = set of 0..MAX_SQLFIELDS-1;
@@ -46678,15 +46678,15 @@ begin
   fSorted := false;
   if fValue=nil then
     exit; // avoid GPF if void
-  if fCountP<>nil then begin
+  if fCountP<>nil then begin // handle external capacity with separated Count
     delta := aCount-fCountP^;
     if delta=0 then
       exit;
-    fCountP^ := aCount;
+    fCountP^ := aCount; // store new length
     if PtrUInt(fValue^)=0 then begin
       // no capa yet
       if (delta>0) and (aCount<MINIMUM_SIZE) then
-        aCount := MINIMUM_SIZE; // reserve some minimal space for Add()
+        aCount := MINIMUM_SIZE; // reserve some minimal (64) items for Add()
     end else begin
       {$ifdef FPC}
       capa := PDynArrayRec(PtrUInt(fValue^)-SizeOf(TDynArrayRec))^.length;
@@ -46697,7 +46697,7 @@ begin
         // size-up -> grow by chunks
         if capa>=fCountP^ then
           exit; // no need to grow
-        inc(capa,capa shr 2);
+        inc(capa,capa shr 2); // growth factor = 1.5
         if capa<fCountP^ then
           aCount := fCountP^ else
           aCount := capa;

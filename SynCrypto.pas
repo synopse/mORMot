@@ -1172,7 +1172,8 @@ type
   PSHA512 = ^TSHA512;
   /// handle SHA512 hashing
   // - by design, this algorithm is much faster on 64-bit CPU, since all
-  // internal process involves QWord
+  // internal process involves QWord - also notes that FPC generates better
+  // code than Delphi for such algorithms
   TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Hash: TSHA512Hash;
@@ -1867,14 +1868,6 @@ procedure XorBlock16(A,B: {$ifdef CPU64}PInt64Array{$else}PCardinalArray{$endif}
 procedure XorBlock16(A,B,C: {$ifdef CPU64}PInt64Array{$else}PCardinalArray{$endif});
  {$ifdef HASINLINE}inline;{$endif} overload;
 
-/// apply the XOR operation to the supplied binary buffers
-procedure XorBlockN(A,B,C: PByteArray; Count: integer);
-  {$ifdef HASINLINE}inline;{$endif} overload;
-
-/// apply the XOR operation to the supplied binary buffers
-procedure XorBlockN(A,B: PByteArray; Count: integer);
-  {$ifdef HASINLINE}inline;{$endif} overload;
-
 /// compute the HTDigest for a user and a realm, according to a supplied password
 // - apache-compatible: 'agent007:download area:8364d0044ef57b3defcfa141e8f77b65'
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
@@ -2483,6 +2476,25 @@ end;
 {$endif USEPADLOCKDLL}
 {$endif USEPADLOCK}
 
+procedure XorMemoryPtrInt(dest, source: PPtrIntArray; count: integer);
+  {$ifdef HASINLINE}inline;{$endif}
+{$ifdef FPC}
+begin
+  while count>0 do begin
+    dec(count);
+    PPtrInt(dest)^ := PPtrInt(dest)^ xor PPtrInt(source)^;
+    inc(PPtrInt(dest));
+    inc(PPtrInt(source));
+  end;
+end;
+{$else}
+var i: integer;
+begin
+  for i := 0 to count-1 do
+    dest^[i] := dest^[i] xor source^[i];
+end;
+{$endif}
+
 const
   AESMaxRounds = 14;
 
@@ -2947,7 +2959,7 @@ begin
     mac := first; // re-use the very same SHA-256 context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
-    XorMemory(@result,@tmp,sizeof(result));
+    XorMemoryPtrInt(@result,@tmp,sizeof(result) shr {$ifdef CPU32}2{$else}3{$endif});
   end;
   FillcharFast(first,sizeof(first),0);
   FillcharFast(mac,sizeof(mac),0);
@@ -2974,7 +2986,7 @@ begin
       mac := first; // re-use the very same SHA-256 context for best performance
       mac.sha.Update(@tmp,sizeof(tmp));
       mac.Done(tmp,true);
-      XorMemory(@result[n],@tmp,sizeof(result[n]));
+      XorMemoryPtrInt(@result[n],@tmp,sizeof(result[n]) shr {$ifdef CPU32}2{$else}3{$endif});
     end;
   end;
   FillZero(tmp);
@@ -3075,7 +3087,7 @@ begin
     mac := first; // re-use the very same SHA-1 context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
-    XorMemory(@result,@tmp,sizeof(result));
+    XorMemoryPtrInt(@result,@tmp,sizeof(result) shr {$ifdef CPU32}2{$else}3{$endif});
   end;
   FillcharFast(mac,sizeof(mac),0);
   FillcharFast(first,sizeof(first),0);
@@ -5140,9 +5152,14 @@ begin
   bswap256(@Buf[0],@W[0]);
   bswap256(@Buf[8],@W[8]);
   for i := 16 to 63 do
+    {$ifdef FPC} // uses faster built-in right rotate intrinsic
+    W[i] := (RorDWord(W[i-2],17)xor RorDWord(W[i-2],19)xor(W[i-2]shr 10))+W[i-7]+
+      (RorDWord(W[i-15],7)xor RorDWord(W[i-15],18)xor(W[i-15]shr 3))+W[i-16];
+    {$else}
     W[i] := (((W[i-2]shr 17)or(W[i-2]shl 15))xor((W[i-2]shr 19)or(W[i-2]shl 13))
       xor (W[i-2]shr 10))+W[i-7]+(((W[i-15]shr 7)or(W[i-15]shl 25))
       xor ((W[i-15]shr 18)or(W[i-15]shl 14))xor(W[i-15]shr 3))+W[i-16];
+    {$endif}
 end;
 {$else}
 {$ifdef CPUX86}
@@ -6270,10 +6287,17 @@ begin
 {$ifdef PUREPASCAL}
   // SHA256 compression function
   for i := 0 to high(W) do begin
+    {$ifdef FPC} // uses faster built-in right rotate intrinsic
+    t1 := H.H+(RorDWord(H.E,6) xor RorDWord(H.E,11) xor RorDWord(H.E,25))+
+      ((H.E and H.F)xor(not H.E and H.G))+K256[i]+W[i];
+    t2 := (RorDWord(H.A,2) xor RorDWord(H.A,13) xor RorDWord(H.A,22))+
+      ((H.A and H.B)xor(H.A and H.C)xor(H.B and H.C));
+    {$else}
     t1 := H.H+(((H.E shr 6)or(H.E shl 26))xor((H.E shr 11)or(H.E shl 21))xor
       ((H.E shr 25)or(H.E shl 7)))+((H.E and H.F)xor(not H.E and H.G))+K256[i]+W[i];
     t2 := (((H.A shr 2)or(H.A shl 30))xor((H.A shr 13)or(H.A shl 19))xor
       ((H.A shr 22)xor(H.A shl 10)))+((H.A and H.B)xor(H.A and H.C)xor(H.B and H.C));
+    {$endif}
     H.H := H.G; H.G := H.F; H.F := H.E; H.E := H.D+t1;
     H.D := H.C; H.C := H.B; H.B := H.A; H.A := t1+t2;
   end;
@@ -6460,7 +6484,7 @@ end;
 { TSHA512 }
 
 const
-  SHA512K: array [0..79] of QWord = (
+  SHA512K: array[0..79] of QWord = (
     $428a2f98d728ae22, $7137449123ef65cd, $b5c0fbcfec4d3b2f, $e9b5dba58189dbbc,
     $3956c25bf348b538, $59f111f1b605d019, $923f82a4af194f9b, $ab1c5ed5da6d8118,
     $d807aa98a3030242, $12835b0145706fbe, $243185be4ee4b28c, $550c7dc3d5ffb4e2,
@@ -6483,18 +6507,10 @@ const
     $4cc5d4becb3e42b6, $597f299cfc657e2a, $5fcb6fab3ad6faec, $6c44198c4a475817);
 
 procedure TSHA512.Compress;
-var a, b, c, d, e, f, g, h, temp1, temp2: QWord;
+var a,b,c,d,e,f,g,h, temp1,temp2: QWord; // to use registers on CPU64
     w: array[0..79] of QWord;
     i: integer;
 begin
-  a := Hash.a;
-  b := Hash.b;
-  c := Hash.c;
-  d := Hash.d;
-  e := Hash.e;
-  f := Hash.f;
-  g := Hash.g;
-  h := Hash.h; 
   bswap64array(@Data,@w,16);
   for i := 16 to 79 do
     {$ifdef FPC} // uses faster built-in right rotate intrinsic
@@ -6505,6 +6521,14 @@ begin
       (w[i-2] shr 6)) + w[i-7] + (((w[i-15] shr 1) or (w[i-15] shl 63)) xor
       ((w[i-15] shr 8) or (w[i-15] shl 56)) xor (w[i-15] shr 7)) + w[i-16];
     {$endif}
+  a := Hash.a;
+  b := Hash.b;
+  c := Hash.c;
+  d := Hash.d;
+  e := Hash.e;
+  f := Hash.f;
+  g := Hash.g;
+  h := Hash.h;
   for i := 0 to 79 do begin
     {$ifdef FPC}
     temp1 := h + (RorQWord(e,14) xor RorQWord(e,18) xor RorQWord(e,41)) +
@@ -7102,7 +7126,7 @@ asm
 {$ifdef FPC}nostackframe; assembler;
 asm
 {$else}
-asm // input: rcx=TAESContext, rdx=source, r8=dest
+asm // input: rcx=TAESContext, rdx=source, r8=dest (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
         mov     r8, rdx
@@ -7441,14 +7465,6 @@ begin
   FillCharFast(self, sizeof(self), 0);
   Rate := aRate;
   Capacity := aCapacity;
-end;
-
-procedure XorMemoryPtrInt(dest, source: PPtrIntArray; count: integer);
-var
-  i: integer;
-begin
-  for i := 0 to count-1 do
-    dest^[i] := dest^[i] xor source^[i];
 end;
 
 procedure TSHA3Context.AbsorbQueue;
@@ -8393,6 +8409,72 @@ begin
   b := buf[1];
   c := buf[2];
   d := buf[3];
+  {$ifdef FPC} // uses faster built-in right rotate intrinsic
+  inc(a,in_[0]+$d76aa478+(d xor(b and(c xor d)))); a := RolDWord(a,7)+b;
+  inc(d,in_[1]+$e8c7b756+(c xor(a and(b xor c)))); d := RolDWord(d,12)+a;
+  inc(c,in_[2]+$242070db+(b xor(d and(a xor b)))); c := RolDWord(c,17)+d;
+  inc(b,in_[3]+$c1bdceee+(a xor(c and(d xor a)))); b := RolDWord(b,22)+c;
+  inc(a,in_[4]+$f57c0faf+(d xor(b and(c xor d)))); a := RolDWord(a,7)+b;
+  inc(d,in_[5]+$4787c62a+(c xor(a and(b xor c)))); d := RolDWord(d,12)+a;
+  inc(c,in_[6]+$a8304613+(b xor(d and(a xor b)))); c := RolDWord(c,17)+d;
+  inc(b,in_[7]+$fd469501+(a xor(c and(d xor a)))); b := RolDWord(b,22)+c;
+  inc(a,in_[8]+$698098d8+(d xor(b and(c xor d)))); a := RolDWord(a,7)+b;
+  inc(d,in_[9]+$8b44f7af+(c xor(a and(b xor c)))); d := RolDWord(d,12)+a;
+  inc(c,in_[10]+$ffff5bb1+(b xor(d and(a xor b)))); c := RolDWord(c,17)+d;
+  inc(b,in_[11]+$895cd7be+(a xor(c and(d xor a)))); b := RolDWord(b,22)+c;
+  inc(a,in_[12]+$6b901122+(d xor(b and(c xor d)))); a := RolDWord(a,7)+b;
+  inc(d,in_[13]+$fd987193+(c xor(a and(b xor c)))); d := RolDWord(d,12)+a;
+  inc(c,in_[14]+$a679438e+(b xor(d and(a xor b)))); c := RolDWord(c,17)+d;
+  inc(b,in_[15]+$49b40821+(a xor(c and(d xor a)))); b := RolDWord(b,22)+c;
+  inc(a,in_[1]+$f61e2562+(c xor(d and(b xor c))));  a := RolDWord(a,5)+b;
+  inc(d,in_[6]+$c040b340+(b xor(c and(a xor b))));  d := RolDWord(d,9)+a;
+  inc(c,in_[11]+$265e5a51+(a xor(b and(d xor a)))); c := RolDWord(c,14)+d;
+  inc(b,in_[0]+$e9b6c7aa+(d xor(a and(c xor d))));  b := RolDWord(b,20)+c;
+  inc(a,in_[5]+$d62f105d+(c xor(d and(b xor c))));  a := RolDWord(a,5)+b;
+  inc(d,in_[10]+$02441453+(b xor(c and(a xor b)))); d := RolDWord(d,9)+a;
+  inc(c,in_[15]+$d8a1e681+(a xor(b and(d xor a)))); c := RolDWord(c,14)+d;
+  inc(b,in_[4]+$e7d3fbc8+(d xor(a and(c xor d))));  b := RolDWord(b,20)+c;
+  inc(a,in_[9]+$21e1cde6+(c xor(d and(b xor c))));  a := RolDWord(a,5)+b;
+  inc(d,in_[14]+$c33707d6+(b xor(c and(a xor b)))); d := RolDWord(d,9)+a;
+  inc(c,in_[3]+$f4d50d87+(a xor(b and(d xor a))));  c := RolDWord(c,14)+d;
+  inc(b,in_[8]+$455a14ed+(d xor(a and(c xor d))));  b := RolDWord(b,20)+c;
+  inc(a,in_[13]+$a9e3e905+(c xor(d and(b xor c)))); a := RolDWord(a,5)+b;
+  inc(d,in_[2]+$fcefa3f8+(b xor(c and(a xor b))));  d := RolDWord(d,9)+a;
+  inc(c,in_[7]+$676f02d9+(a xor(b and(d xor a))));  c := RolDWord(c,14)+d;
+  inc(b,in_[12]+$8d2a4c8a+(d xor(a and(c xor d)))); b := RolDWord(b,20)+c;
+  inc(a,in_[5]+$fffa3942+(b xor c xor d));  a := RolDWord(a,4)+b;
+  inc(d,in_[8]+$8771f681+(a xor b xor c));  d := RolDWord(d,11)+a;
+  inc(c,in_[11]+$6d9d6122+(d xor a xor b)); c := RolDWord(c,16)+d;
+  inc(b,in_[14]+$fde5380c+(c xor d xor a)); b := RolDWord(b,23)+c;
+  inc(a,in_[1]+$a4beea44+(b xor c xor d));  a := RolDWord(a,4)+b;
+  inc(d,in_[4]+$4bdecfa9+(a xor b xor c));  d := RolDWord(d,11)+a;
+  inc(c,in_[7]+$f6bb4b60+(d xor a xor b));  c := RolDWord(c,16)+d;
+  inc(b,in_[10]+$bebfbc70+(c xor d xor a)); b := RolDWord(b,23)+c;
+  inc(a,in_[13]+$289b7ec6+(b xor c xor d)); a := RolDWord(a,4)+b;
+  inc(d,in_[0]+$eaa127fa+(a xor b xor c));  d := RolDWord(d,11)+a;
+  inc(c,in_[3]+$d4ef3085+(d xor a xor b));  c := RolDWord(c,16)+d;
+  inc(b,in_[6]+$04881d05+(c xor d xor a));  b := RolDWord(b,23)+c;
+  inc(a,in_[9]+$d9d4d039+(b xor c xor d));  a := RolDWord(a,4)+b;
+  inc(d,in_[12]+$e6db99e5+(a xor b xor c)); d := RolDWord(d,11)+a;
+  inc(c,in_[15]+$1fa27cf8+(d xor a xor b)); c := RolDWord(c,16)+d;
+  inc(b,in_[2]+$c4ac5665+(c xor d xor a));   b := RolDWord(b,23)+c;
+  inc(a,in_[0]+$f4292244+(c xor(b or(not d))));  a := RolDWord(a,6)+b;
+  inc(d,in_[7]+$432aff97+(b xor(a or(not c))));  d := RolDWord(d,10)+a;
+  inc(c,in_[14]+$ab9423a7+(a xor(d or(not b)))); c := RolDWord(c,15)+d;
+  inc(b,in_[5]+$fc93a039+(d xor(c or(not a))));  b := RolDWord(b,21)+c;
+  inc(a,in_[12]+$655b59c3+(c xor(b or(not d)))); a := RolDWord(a,6)+b;
+  inc(d,in_[3]+$8f0ccc92+(b xor(a or(not c))));  d := RolDWord(d,10)+a;
+  inc(c,in_[10]+$ffeff47d+(a xor(d or(not b)))); c := RolDWord(c,15)+d;
+  inc(b,in_[1]+$85845dd1+(d xor(c or(not a))));  b := RolDWord(b,21)+c;
+  inc(a,in_[8]+$6fa87e4f+(c xor(b or(not d))));  a := RolDWord(a,6)+b;
+  inc(d,in_[15]+$fe2ce6e0+(b xor(a or(not c)))); d := RolDWord(d,10)+a;
+  inc(c,in_[6]+$a3014314+(a xor(d or(not b))));  c := RolDWord(c,15)+d;
+  inc(b,in_[13]+$4e0811a1+(d xor(c or(not a)))); b := RolDWord(b,21)+c;
+  inc(a,in_[4]+$f7537e82+(c xor(b or(not d))));  a := RolDWord(a,6)+b;
+  inc(d,in_[11]+$bd3af235+(b xor(a or(not c)))); d := RolDWord(d,10)+a;
+  inc(c,in_[2]+$2ad7d2bb+(a xor(d or(not b))));  c := RolDWord(c,15)+d;
+  inc(b,in_[9]+$eb86d391+(d xor(c or(not a))));  b := RolDWord(b,21)+c;
+  {$else}
   inc(a,in_[0]+$d76aa478+(d xor(b and(c xor d)))); a := ((a shl 7)or(a shr(32-7)))+b;
   inc(d,in_[1]+$e8c7b756+(c xor(a and(b xor c)))); d := ((d shl 12)or(d shr(32-12)))+a;
   inc(c,in_[2]+$242070db+(b xor(d and(a xor b)))); c := ((c shl 17)or(c shr(32-17)))+d;
@@ -8457,6 +8539,7 @@ begin
   inc(d,in_[11]+$bd3af235+(b xor(a or(not c)))); d := ((d shl 10)or(d shr(32-10)))+a;
   inc(c,in_[2]+$2ad7d2bb+(a xor(d or(not b))));  c := ((c shl 15)or(c shr(32-15)))+d;
   inc(b,in_[9]+$eb86d391+(d xor(c or(not a))));  b := ((b shl 21)or(b shr(32-21)))+c;
+  {$endif}
   inc(buf[0],a);
   inc(buf[1],b);
   inc(buf[2],c);
@@ -9254,7 +9337,7 @@ begin
   bswap256(@TSHAContext(Context).Buffer[32],@W[8]);
   for i := 16 to 79 do begin
     X  := W[i-3] xor W[i-8] xor W[i-14] xor W[i-16];
-    W[i]:= (X shl 1) or (X shr 31);
+    W[i] := (X shl 1) or (X shr 31);
   end;
   with TSHAContext(Context) do begin
     A := Hash.A;
@@ -9264,6 +9347,7 @@ begin
     E := Hash.E;
   end;
   // unrolled loop -> all is computed in cpu registers
+  // note: FPC detects "(A shl 5) or (A shr 27)" pattern into "RolDWord(A,5)" :)
   Inc(E,((A shl 5) or (A shr 27)) + (D xor (B and (C xor D))) + $5A827999 + W[ 0]); B:= (B shl 30) or (B shr 2);
   Inc(D,((E shl 5) or (E shr 27)) + (C xor (A and (B xor C))) + $5A827999 + W[ 1]); A:= (A shl 30) or (A shr 2);
   Inc(C,((D shl 5) or (D shr 27)) + (B xor (E and (A xor B))) + $5A827999 + W[ 2]); E:= (E shl 30) or (E shr 2);
@@ -9465,21 +9549,6 @@ begin
   B[3] := A[3] xor C[3];
 end;
 {$endif}
-
-procedure XorBlockN(A,B,C: PByteArray; Count: integer);
-var i: integer;
-begin
-  for i := 0 to Count-1 do
-    B[i] := A[i] xor C[i];
-end;
-
-procedure XorBlockN(A,B: PByteArray; Count: integer);
-var i: integer;
-begin
-  for i := 0 to Count-1 do
-    A[i] := A[i] xor B[i];
-end;
-
 
 const
   sAESException = 'AES engine initialization failure';
@@ -9882,7 +9951,7 @@ begin
       AesNiEncrypt(AES.Context,fCV,fCV) else
     {$endif USEAESNI64}
       AES.Encrypt(fCV,fCV);
-    XorBlockN(pointer(fIn),pointer(fOut),@fCV,fCount);
+    XorMemory(pointer(fOut),pointer(fIn),@fCV,fCount);
   end;
 end;
 
@@ -9983,7 +10052,7 @@ asm // eax=TAESContext ecx=len xmm7=CV esi=BufIn edi=BufOut
     movdqu [edx],xmm7
     cld
 @s: lodsb
-    xor    al,[edx] // = XorBlockN(pointer(fIn),pointer(fOut),@fCV,len);
+    xor    al,[edx] // = XorMemory(pointer(fOut),pointer(fIn),@fCV,len);
     inc    edx
     stosb
     loop   @s
@@ -10482,7 +10551,7 @@ begin
       AesNiEncrypt(AES.Context,fCV,tmp) else
     {$endif USEAESNI64}
       AES.Encrypt(fCV,tmp);
-    XorBlockN(pointer(fIn),pointer(fOut),@tmp,Count);
+    XorMemory(pointer(fOut),pointer(fIn),@tmp,Count);
   end;
 end;
 
@@ -10644,7 +10713,7 @@ begin
       raise ESynCrypto.CreateLastOSError('in Decrypt() for %',[self]);
   dec(Count,n);
   if Count>0 then // remaining bytes will be XORed with the supplied IV
-    XorBlockN(@PByteArray(BufIn)[n],@PByteArray(BufOut)[n],@fIV,Count);
+    XorMemory(@PByteArray(BufOut)[n],@PByteArray(BufIn)[n],@fIV,Count);
 end;
 
 procedure TAESAbstract_API.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
@@ -10761,7 +10830,7 @@ begin
       XorMemory(@Buffer^[Len-i],@tmp,i);
       break;
     end;
-    XorMemory(@Buffer^[Len-i],@tmp,SizeOf(tmp));
+    XorMemoryPtrInt(@Buffer^[Len-i],@tmp,SizeOf(tmp) shr {$ifdef CPU32}2{$else}3{$endif});
     dec(i,SizeOf(tmp));
   until false;
 end;
@@ -11005,7 +11074,7 @@ begin
     _afdiffusesha256(pointer(tmp),dst,BufferBytes);
     inc(PByte(dst),BufferBytes);
   end;
-  XorBlockN(@Buffer,dst,pointer(tmp),BufferBytes); // B[i] := A[i] xor C[i];
+  XorMemory(dst,@Buffer,pointer(tmp),BufferBytes); 
 end;
 
 function TAESPRNG.AFSplit(const Buffer: RawByteString; StripesCount: integer): RawByteString;
@@ -11030,7 +11099,7 @@ begin
     _afdiffusesha256(pointer(tmp),src,BufferBytes);
     inc(PByte(src),BufferBytes);
   end;
-  XorBlockN(src,@Buffer,pointer(tmp),BufferBytes);
+  XorMemory(@Buffer,src,pointer(tmp),BufferBytes);
 end;
 
 class function TAESPRNG.AFUnsplit(const Split: RawByteString;
