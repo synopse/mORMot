@@ -6433,7 +6433,6 @@ begin
 end;
 
 procedure TSHA256.Init;
-// initialize context
 var Data: TSHAContext absolute Context;
 begin
   Data.Hash.A := $6a09e667;
@@ -6453,20 +6452,17 @@ var Data: TSHAContext absolute Context;
 begin
   if Buffer=nil then exit; // avoid GPF
   inc(Data.MLen,QWord(cardinal(Len)) shl 3);
-  if Data.Index=0 then
-    while Len>=64 do begin
-      sha256Compress(Data.Hash,Buffer);
-      dec(Len,64);
-      inc(PByte(Buffer),64);
-    end;
   while Len>0 do begin
     aLen := 64-Data.Index;
     if aLen<=Len then begin
-      MoveFast(Buffer^,Data.Buffer[Data.Index],aLen);
+      if Data.Index<>0 then begin
+        MoveFast(Buffer^,Data.Buffer[Data.Index],aLen);
+        sha256Compress(Data.Hash,@Data.Buffer);
+        Data.Index := 0;
+      end else
+        sha256Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
       inc(PtrInt(Buffer),aLen);
-      sha256Compress(Data.Hash,@Data.Buffer);
-      Data.Index := 0;
     end else begin
       MoveFast(Buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);
@@ -6660,28 +6656,25 @@ var aLen: integer;
 begin
   if (Buffer=nil) or (Len<=0) then exit; // avoid GPF
   inc(MLen,Len);
-  if Index=0 then
-    while Len>=sizeof(Data) do begin // avoid temporary copy of whole blocks
-      {$ifdef SHA512_X86}
-      if cfSSSE3 in CpuFeatures then
-        sha512_compress(@Hash,Buffer) else
-      {$endif}
-        sha512_compresspas(Hash,Buffer);
-      dec(Len,sizeof(Data));
-      inc(PByte(Buffer),sizeof(Data));
-    end;
   repeat
     aLen := sizeof(Data)-Index;
     if aLen<=Len then begin
-      MoveFast(Buffer^,Data[Index],aLen);
+      if Index<>0 then begin
+        MoveFast(Buffer^,Data[Index],aLen);
+        {$ifdef SHA512_X86}
+        if cfSSSE3 in CpuFeatures then
+          sha512_compress(@Hash,@Data) else
+        {$endif}
+          sha512_compresspas(Hash,@Data);
+        Index := 0;
+      end else // avoid temporary copy
+        {$ifdef SHA512_X86}
+        if cfSSSE3 in CpuFeatures then
+          sha512_compress(@Hash,Buffer) else
+        {$endif}
+          sha512_compresspas(Hash,Buffer);
       dec(Len,aLen);
       inc(PtrUInt(Buffer),aLen);
-      {$ifdef SHA512_X86}
-      if cfSSSE3 in CpuFeatures then
-        sha512_compress(@Hash,@Data) else
-      {$endif}
-        sha512_compresspas(Hash,@Data);
-      Index := 0;
     end else begin
       MoveFast(Buffer^,Data[Index],Len);
       inc(Index,Len);
@@ -7828,6 +7821,7 @@ var
 begin
   result := instance.FullStr(algo, Buffer, Len, DigestBits);
 end;
+
 
 procedure AES(const Key; KeySize: cardinal; buffer: pointer; Len: Integer; Encrypt: boolean);
 begin
@@ -9287,8 +9281,6 @@ begin
   MD5.Full(@Buffer,Len,result);
 end;
 
-const Digits: array[0..15] of AnsiChar = '0123456789abcdef';
-
 function AESBlockToShortString(const block: TAESBlock): short32;
 begin
   AESBlockToShortString(block,result);
@@ -9306,17 +9298,23 @@ begin
   SynCommons.BinToHex(@block,pointer(result),16);
 end;
 
-function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+procedure HexLowerCase(digest: PByteArray; bytes: integer; var result: RawUTF8);
+const LOWHEX: array[0..15] of AnsiChar = '0123456789abcdef';
 var P: PAnsiChar;
-    I: Integer;
+    i: Integer;
 begin
-  SetString(result,nil,sizeof(D)*2);
+  SetString(result,nil,bytes*2);
   P := pointer(result);
-  for I := 0 to sizeof(D)-1 do begin
-    P[0] := Digits[D[I] shr 4];
-    P[1] := Digits[D[I] and 15];
-    Inc(P,2);
+  for i := 0 to bytes-1 do begin
+    P[0] := LOWHEX[digest[i] shr 4];
+    P[1] := LOWHEX[digest[i] and 15];
+    inc(P,2);
   end;
+end;
+
+function MD5DigestToString(const D: TMD5Digest): RawUTF8;
+begin
+  HexLowerCase(@D,sizeof(D),result);
 end;
 
 function MD5StringToDigest(const Source: RawUTF8; out Dest: TMD5Digest): boolean;
@@ -9325,16 +9323,8 @@ begin
 end;
 
 function SHA1DigestToString(const D: TSHA1Digest): RawUTF8;
-var P: PAnsiChar;
-    I: Integer;
 begin
-  SetString(result,nil,sizeof(D)*2);
-  P := pointer(result);
-  for I := 0 to sizeof(D)-1 do begin
-    P[0] := Digits[D[I] shr 4];
-    P[1] := Digits[D[I] and 15];
-    Inc(P,2);
-  end;
+  HexLowerCase(@D,sizeof(D),result);
 end;
 
 function SHA1StringToDigest(const Source: RawUTF8; out Dest: TSHA1Digest): boolean;
@@ -9343,16 +9333,8 @@ begin
 end;
 
 function SHA256DigestToString(const D: TSHA256Digest): RawUTF8;
-var P: PAnsiChar;
-    I: Integer;
 begin
-  SetString(result,nil,sizeof(D)*2);
-  P := pointer(result);
-  for I := 0 to sizeof(D)-1 do begin
-    P[0] := Digits[D[I] shr 4];
-    P[1] := Digits[D[I] and 15];
-    Inc(P,2);
-  end;
+  HexLowerCase(@D,sizeof(D),result);
 end;
 
 function SHA256StringToDigest(const Source: RawUTF8; out Dest: TSHA256Digest): boolean;
@@ -9361,16 +9343,8 @@ begin
 end;
 
 function SHA512DigestToString(const D: TSHA512Digest): RawUTF8;
-var P: PAnsiChar;
-    I: Integer;
 begin
-  SetString(result,nil,sizeof(D)*2);
-  P := pointer(result);
-  for I := 0 to sizeof(D)-1 do begin
-    P[0] := Digits[D[I] shr 4];
-    P[1] := Digits[D[I] and 15];
-    Inc(P,2);
-  end;
+  HexLowerCase(@D, sizeof(D), result);
 end;
 
 function htdigest(const user, realm, pass: RawByteString): RawUTF8;
@@ -9544,15 +9518,14 @@ begin
 end;
 
 procedure TSHA1.Init;
-// initialize context
 var Data: TSHAContext absolute Context;
 begin
-  FillcharFast(Data,sizeof(Data),0);
   Data.Hash.A := $67452301;
   Data.Hash.B := $EFCDAB89;
   Data.Hash.C := $98BADCFE;
   Data.Hash.D := $10325476;
   Data.Hash.E := $C3D2E1F0;
+  FillcharFast(Data.MLen,sizeof(Data)-sizeof(Data.Hash),0);
 end;
 
 procedure TSHA1.Update(Buffer: pointer; Len: integer);
@@ -9560,21 +9533,18 @@ var Data: TSHAContext absolute Context;
     aLen: integer;
 begin
   if Buffer=nil then exit; // avoid GPF
-  inc(Data.MLen, QWord(Cardinal(Len)) shl 3);
-  if Data.Index=0 then
-    while Len>=64 do begin
-      sha1Compress(Data.Hash,Buffer);
-      dec(Len,64);
-      inc(PByte(Buffer),64);
-    end;
+  inc(Data.MLen,QWord(Cardinal(Len)) shl 3);
   while Len>0 do begin
     aLen := sizeof(Data.Buffer)-Data.Index;
     if aLen<=Len then begin
-      MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
+      if Data.Index<>0 then begin
+        MoveFast(buffer^,Data.Buffer[Data.Index],aLen);
+        sha1Compress(Data.Hash,@Data.Buffer);
+        Data.Index := 0;
+      end else
+        sha1Compress(Data.Hash,Buffer); // avoid temporary copy
       dec(Len,aLen);
       inc(PtrUInt(buffer),aLen);
-      sha1Compress(Data.Hash,@Data.Buffer);
-      Data.Index := 0;
     end else begin
       MoveFast(buffer^,Data.Buffer[Data.Index],Len);
       inc(Data.Index,Len);

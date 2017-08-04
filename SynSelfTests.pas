@@ -9916,6 +9916,7 @@ begin
         NotifyTestSpeed(format('%s %s',[TXT[b], KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
       timer.ComputeTime;
       inc(time[b],timer.LastTimeInMicroSec);
+      //if b in [bSHA3_512,high(b)] then AddConsole('');
     end;
     inc(size,SIZ[s]*COUNT);
     inc(n,COUNT);
@@ -9929,265 +9930,289 @@ begin
 end;
 
 {
-  some numbers, from a Core i7 notebook, with SSE4.2 enabled for crc32c:
+  some numbers, from a Core i7 (SSE4.2) notebook, with SynCrypto 1.18.3772:
 
 Delphi 7, Win32
-  - Benchmark: 950,000 assertions passed  7.52s
-     10000 CRC32c 8 B in 168us i.e. 59523809/s, aver. 0us, 454.1 MB/s
-     10000 XXHash32 8 B in 185us i.e. 54054054/s, aver. 0us, 412.4 MB/s
-     10000 MD5 8 B in 1.70ms i.e. 5865102/s, aver. 0us, 44.7 MB/s
-     10000 SHA1 8 B in 3.26ms i.e. 3061849/s, aver. 0us, 23.3 MB/s
-     10000 HMACSHA1 8 B in 12.73ms i.e. 785545/s, aver. 1us, 5.9 MB/s
-     10000 SHA256 8 B in 4.19ms i.e. 2383222/s, aver. 0us, 18.1 MB/s
-     10000 HMACSHA256 8 B in 17.35ms i.e. 576269/s, aver. 1us, 4.3 MB/s
-     10000 SHA3_256 8 B in 8.51ms i.e. 1174398/s, aver. 0us, 8.9 MB/s
-     10000 SHA3_512 8 B in 8.40ms i.e. 1189202/s, aver. 0us, 9 MB/s
+  - Benchmark: 1,050,000 assertions passed  8.62s
+     10000 crc32c 8 B in 161us i.e. 62111801/s, aver. 0us, 473.8 MB/s
+     10000 xxhash32 8 B in 185us i.e. 54054054/s, aver. 0us, 412.4 MB/s
+     10000 md5 8 B in 1.68ms i.e. 5948839/s, aver. 0us, 45.3 MB/s
+     10000 sha1 8 B in 3.01ms i.e. 3312355/s, aver. 0us, 25.2 MB/s
+     10000 hmacsha1 8 B in 11.97ms i.e. 835421/s, aver. 1us, 6.3 MB/s
+     10000 sha256 8 B in 4.07ms i.e. 2451581/s, aver. 0us, 18.7 MB/s
+     10000 hmacsha256 8 B in 16.15ms i.e. 619041/s, aver. 1us, 4.7 MB/s
+     10000 sha512 8 B in 6.66ms i.e. 1500375/s, aver. 0us, 11.4 MB/s
+     10000 hmacsha512 8 B in 29.67ms i.e. 336961/s, aver. 2us, 2.5 MB/s
+     10000 sha3_256 8 B in 8.45ms i.e. 1182312/s, aver. 0us, 9 MB/s
+     10000 sha3_512 8 B in 8.49ms i.e. 1177856/s, aver. 0us, 8.9 MB/s
 
-     10000 AES128CFB 8 B in 1.00ms i.e. 9960159/s, aver. 0us, 75.9 MB/s
-     10000 AES128OFB 8 B in 936us i.e. 10683760/s, aver. 0us, 81.5 MB/s
-     10000 AES128CFBCRC 8 B in 1.23ms i.e. 8116883/s, aver. 0us, 61.9 MB/s
-     10000 AES128OFBCRC 8 B in 1.17ms i.e. 8496176/s, aver. 0us, 64.8 MB/s
-     10000 AES256CFB 8 B in 1.69ms i.e. 5885815/s, aver. 0us, 44.9 MB/s
-     10000 AES256OFB 8 B in 1.05ms i.e. 9505703/s, aver. 0us, 72.5 MB/s
-     10000 AES256CFBCRC 8 B in 1.27ms i.e. 7818608/s, aver. 0us, 59.6 MB/s
-     10000 AES256OFBCRC 8 B in 1.32ms i.e. 7541478/s, aver. 0us, 57.5 MB/s
-     10000 SHAKE128 8 B in 597us i.e. 16750418/s, aver. 0us, 127.7 MB/s
-     10000 SHAKE256 8 B in 632us i.e. 15822784/s, aver. 0us, 120.7 MB/s
+     10000 aes128cfb 8 B in 996us i.e. 10040160/s, aver. 0us, 76.6 MB/s
+     10000 aes128ofb 8 B in 903us i.e. 11074197/s, aver. 0us, 84.4 MB/s
+     10000 aes128cfbcrc 8 B in 1.14ms i.e. 8726003/s, aver. 0us, 66.5 MB/s
+     10000 aes128ofbcrc 8 B in 1.18ms i.e. 8460236/s, aver. 0us, 64.5 MB/s
+     10000 aes256cfb 8 B in 1.55ms i.e. 6430868/s, aver. 0us, 49 MB/s
+     10000 aes256ofb 8 B in 980us i.e. 10204081/s, aver. 0us, 77.8 MB/s
+     10000 aes256cfbcrc 8 B in 1.22ms i.e. 8149959/s, aver. 0us, 62.1 MB/s
+     10000 aes256ofbcrc 8 B in 1.25ms i.e. 7974481/s, aver. 0us, 60.8 MB/s
+     10000 shake128 8 B in 538us i.e. 18587360/s, aver. 0us, 141.8 MB/s
+     10000 shake256 8 B in 1.33ms i.e. 7485029/s, aver. 0us, 57.1 MB/s
 
-     10000 CRC32c 50 B in 133us i.e. 75187969/s, aver. 0us, 3.5 GB/s
-     10000 XXHash32 50 B in 198us i.e. 50505050/s, aver. 0us, 2.3 GB/s
-     10000 MD5 50 B in 1.45ms i.e. 6882312/s, aver. 0us, 328.1 MB/s
-     10000 SHA1 50 B in 3.26ms i.e. 3066544/s, aver. 0us, 146.2 MB/s
-     10000 HMACSHA1 50 B in 13.11ms i.e. 762311/s, aver. 1us, 36.3 MB/s
-     10000 SHA256 50 B in 4.32ms i.e. 2312138/s, aver. 0us, 110.2 MB/s
-     10000 HMACSHA256 50 B in 17.41ms i.e. 574316/s, aver. 1us, 27.3 MB/s
-     10000 SHA3_256 50 B in 8.52ms i.e. 1173020/s, aver. 0us, 55.9 MB/s
-     10000 SHA3_512 50 B in 8.65ms i.e. 1155401/s, aver. 0us, 55 MB/s
+     10000 crc32c 50 B in 129us i.e. 77519379/s, aver. 0us, 3.6 GB/s
+     10000 xxhash32 50 B in 189us i.e. 52910052/s, aver. 0us, 2.4 GB/s
+     10000 md5 50 B in 1.45ms i.e. 6863417/s, aver. 0us, 327.2 MB/s
+     10000 sha1 50 B in 3.07ms i.e. 3247807/s, aver. 0us, 154.8 MB/s
+     10000 hmacsha1 50 B in 11.89ms i.e. 840689/s, aver. 1us, 40 MB/s
+     10000 sha256 50 B in 4.17ms i.e. 2396931/s, aver. 0us, 114.2 MB/s
+     10000 hmacsha256 50 B in 16.06ms i.e. 622393/s, aver. 1us, 29.6 MB/s
+     10000 sha512 50 B in 7.32ms i.e. 1364628/s, aver. 0us, 65 MB/s
+     10000 hmacsha512 50 B in 26.80ms i.e. 373134/s, aver. 2us, 17.7 MB/s
+     10000 sha3_256 50 B in 8.56ms i.e. 1167815/s, aver. 0us, 55.6 MB/s
+     10000 sha3_512 50 B in 8.39ms i.e. 1191185/s, aver. 0us, 56.8 MB/s
 
-     10000 AES128CFB 50 B in 1.72ms i.e. 5797101/s, aver. 0us, 276.4 MB/s
-     10000 AES128OFB 50 B in 1.78ms i.e. 5605381/s, aver. 0us, 267.2 MB/s
-     10000 AES128CFBCRC 50 B in 1.94ms i.e. 5144032/s, aver. 0us, 245.2 MB/s
-     10000 AES128OFBCRC 50 B in 2.47ms i.e. 4046944/s, aver. 0us, 192.9 MB/s
-     10000 AES256CFB 50 B in 2.09ms i.e. 4780114/s, aver. 0us, 227.9 MB/s
-     10000 AES256OFB 50 B in 2.10ms i.e. 4752851/s, aver. 0us, 226.6 MB/s
-     10000 AES256CFBCRC 50 B in 3.15ms i.e. 3172588/s, aver. 0us, 151.2 MB/s
-     10000 AES256OFBCRC 50 B in 2.21ms i.e. 4512635/s, aver. 0us, 215.1 MB/s
-     10000 SHAKE128 50 B in 2.70ms i.e. 3692762/s, aver. 0us, 176 MB/s
-     10000 SHAKE256 50 B in 3.21ms i.e. 3114294/s, aver. 0us, 148.5 MB/s
+     10000 aes128cfb 50 B in 1.75ms i.e. 5685048/s, aver. 0us, 271 MB/s
+     10000 aes128ofb 50 B in 1.65ms i.e. 6056935/s, aver. 0us, 288.8 MB/s
+     10000 aes128cfbcrc 50 B in 1.83ms i.e. 5443658/s, aver. 0us, 259.5 MB/s
+     10000 aes128ofbcrc 50 B in 2.35ms i.e. 4239084/s, aver. 0us, 202.1 MB/s
+     10000 aes256cfb 50 B in 1.96ms i.e. 5083884/s, aver. 0us, 242.4 MB/s
+     10000 aes256ofb 50 B in 1.96ms i.e. 5094243/s, aver. 0us, 242.9 MB/s
+     10000 aes256cfbcrc 50 B in 2.14ms i.e. 4662004/s, aver. 0us, 222.3 MB/s
+     10000 aes256ofbcrc 50 B in 2.25ms i.e. 4428697/s, aver. 0us, 211.1 MB/s
+     10000 shake128 50 B in 2.56ms i.e. 3898635/s, aver. 0us, 185.9 MB/s
+     10000 shake256 50 B in 3.86ms i.e. 2590002/s, aver. 0us, 123.5 MB/s
 
-     10000 CRC32c 100 B in 175us i.e. 57142857/s, aver. 0us, 5.3 GB/s
-     10000 XXHash32 100 B in 451us i.e. 22172949/s, aver. 0us, 2 GB/s
-     10000 MD5 100 B in 2.76ms i.e. 3619254/s, aver. 0us, 345.1 MB/s
-     10000 SHA1 100 B in 6.34ms i.e. 1576292/s, aver. 0us, 150.3 MB/s
-     10000 HMACSHA1 100 B in 15.87ms i.e. 629841/s, aver. 1us, 60 MB/s
-     10000 SHA256 100 B in 8.33ms i.e. 1200480/s, aver. 0us, 114.4 MB/s
-     10000 HMACSHA256 100 B in 21.19ms i.e. 471809/s, aver. 2us, 44.9 MB/s
-     10000 SHA3_256 100 B in 8.64ms i.e. 1156203/s, aver. 0us, 110.2 MB/s
-     10000 SHA3_512 100 B in 17.02ms i.e. 587406/s, aver. 1us, 56 MB/s
+     10000 crc32c 100 B in 164us i.e. 60975609/s, aver. 0us, 5.6 GB/s
+     10000 xxhash32 100 B in 300us i.e. 33333333/s, aver. 0us, 3.1 GB/s
+     10000 md5 100 B in 2.71ms i.e. 3679175/s, aver. 0us, 350.8 MB/s
+     10000 sha1 100 B in 5.91ms i.e. 1692047/s, aver. 0us, 161.3 MB/s
+     10000 hmacsha1 100 B in 14.65ms i.e. 682267/s, aver. 1us, 65 MB/s
+     10000 sha256 100 B in 11.16ms i.e. 895495/s, aver. 1us, 85.4 MB/s
+     10000 hmacsha256 100 B in 19.68ms i.e. 507897/s, aver. 1us, 48.4 MB/s
+     10000 sha512 100 B in 7.14ms i.e. 1399972/s, aver. 0us, 133.5 MB/s
+     10000 hmacsha512 100 B in 26.34ms i.e. 379535/s, aver. 2us, 36.1 MB/s
+     10000 sha3_256 100 B in 8.43ms i.e. 1185677/s, aver. 0us, 113 MB/s
+     10000 sha3_512 100 B in 16.43ms i.e. 608457/s, aver. 1us, 58 MB/s
 
-     10000 AES128CFB 100 B in 2.43ms i.e. 4105090/s, aver. 0us, 391.4 MB/s
-     10000 AES128OFB 100 B in 3.00ms i.e. 3332222/s, aver. 0us, 317.7 MB/s
-     10000 AES128CFBCRC 100 B in 2.62ms i.e. 3810975/s, aver. 0us, 363.4 MB/s
-     10000 AES128OFBCRC 100 B in 2.67ms i.e. 3741114/s, aver. 0us, 356.7 MB/s
-     10000 AES256CFB 100 B in 3.06ms i.e. 3262642/s, aver. 0us, 311.1 MB/s
-     10000 AES256OFB 100 B in 3.03ms i.e. 3292723/s, aver. 0us, 314 MB/s
-     10000 AES256CFBCRC 100 B in 3.71ms i.e. 2690341/s, aver. 0us, 256.5 MB/s
-     10000 AES256OFBCRC 100 B in 3.16ms i.e. 3162555/s, aver. 0us, 301.6 MB/s
-     10000 SHAKE128 100 B in 5.17ms i.e. 1931247/s, aver. 0us, 184.1 MB/s
-     10000 SHAKE256 100 B in 6.13ms i.e. 1629991/s, aver. 0us, 155.4 MB/s
+     10000 aes128cfb 100 B in 2.33ms i.e. 4282655/s, aver. 0us, 408.4 MB/s
+     10000 aes128ofb 100 B in 2.97ms i.e. 3365870/s, aver. 0us, 320.9 MB/s
+     10000 aes128cfbcrc 100 B in 2.51ms i.e. 3976143/s, aver. 0us, 379.1 MB/s
+     10000 aes128ofbcrc 100 B in 2.46ms i.e. 4055150/s, aver. 0us, 386.7 MB/s
+     10000 aes256cfb 100 B in 2.92ms i.e. 3418803/s, aver. 0us, 326 MB/s
+     10000 aes256ofb 100 B in 2.91ms i.e. 3425830/s, aver. 0us, 326.7 MB/s
+     10000 aes256cfbcrc 100 B in 3.06ms i.e. 3259452/s, aver. 0us, 310.8 MB/s
+     10000 aes256ofbcrc 100 B in 3.09ms i.e. 3229974/s, aver. 0us, 308 MB/s
+     10000 shake128 100 B in 4.98ms i.e. 2006823/s, aver. 0us, 191.3 MB/s
+     10000 shake256 100 B in 5.80ms i.e. 1721763/s, aver. 0us, 164.2 MB/s
 
-     10000 CRC32c 1000 B in 2.13ms i.e. 4681647/s, aver. 0us, 4.3 GB/s
-     10000 XXHash32 1000 B in 1.77ms i.e. 5646527/s, aver. 0us, 5.2 GB/s
-     10000 MD5 1000 B in 22.26ms i.e. 449195/s, aver. 2us, 428.3 MB/s
-     10000 SHA1 1000 B in 49.42ms i.e. 202347/s, aver. 4us, 192.9 MB/s
-     10000 HMACSHA1 1000 B in 58.11ms i.e. 172069/s, aver. 5us, 164 MB/s
-     10000 SHA256 1000 B in 65.39ms i.e. 152921/s, aver. 6us, 145.8 MB/s
-     10000 HMACSHA256 1000 B in 77.33ms i.e. 129302/s, aver. 7us, 123.3 MB/s
-     10000 SHA3_256 1000 B in 62.52ms i.e. 159938/s, aver. 6us, 152.5 MB/s
-     10000 SHA3_512 1000 B in 105.41ms i.e. 94859/s, aver. 10us, 90.4 MB/s
+     10000 crc32c 1000 B in 2.00ms i.e. 4995004/s, aver. 0us, 4.6 GB/s
+     10000 xxhash32 1000 B in 2.08ms i.e. 4796163/s, aver. 0us, 4.4 GB/s
+     10000 md5 1000 B in 20.95ms i.e. 477235/s, aver. 2us, 455.1 MB/s
+     10000 sha1 1000 B in 45.64ms i.e. 219072/s, aver. 4us, 208.9 MB/s
+     10000 hmacsha1 1000 B in 56.70ms i.e. 176363/s, aver. 5us, 168.1 MB/s
+     10000 sha256 1000 B in 61.30ms i.e. 163121/s, aver. 6us, 155.5 MB/s
+     10000 hmacsha256 1000 B in 72.31ms i.e. 138276/s, aver. 7us, 131.8 MB/s
+     10000 sha512 1000 B in 54.13ms i.e. 184723/s, aver. 5us, 176.1 MB/s
+     10000 hmacsha512 1000 B in 70.01ms i.e. 142828/s, aver. 7us, 136.2 MB/s
+     10000 sha3_256 1000 B in 62.15ms i.e. 160890/s, aver. 6us, 153.4 MB/s
+     10000 sha3_512 1000 B in 108.78ms i.e. 91927/s, aver. 10us, 87.6 MB/s
 
-     10000 AES128CFB 1000 B in 16.11ms i.e. 620616/s, aver. 1us, 591.8 MB/s
-     10000 AES128OFB 1000 B in 15.63ms i.e. 639754/s, aver. 1us, 610.1 MB/s
-     10000 AES128CFBCRC 1000 B in 16.71ms i.e. 598372/s, aver. 1us, 570.6 MB/s
-     10000 AES128OFBCRC 1000 B in 15.72ms i.e. 635930/s, aver. 1us, 606.4 MB/s
-     10000 AES256CFB 1000 B in 21.28ms i.e. 469924/s, aver. 2us, 448.1 MB/s
-     10000 AES256OFB 1000 B in 21.03ms i.e. 475330/s, aver. 2us, 453.3 MB/s
-     10000 AES256CFBCRC 1000 B in 21.77ms i.e. 459326/s, aver. 2us, 438 MB/s
-     10000 AES256OFBCRC 1000 B in 21.33ms i.e. 468779/s, aver. 2us, 447 MB/s
-     10000 SHAKE128 1000 B in 49.52ms i.e. 201918/s, aver. 4us, 192.5 MB/s
-     10000 SHAKE256 1000 B in 59.00ms i.e. 169488/s, aver. 5us, 161.6 MB/s
+     10000 aes128cfb 1000 B in 16.28ms i.e. 613948/s, aver. 1us, 585.5 MB/s
+     10000 aes128ofb 1000 B in 14.86ms i.e. 672540/s, aver. 1us, 641.3 MB/s
+     10000 aes128cfbcrc 1000 B in 15.20ms i.e. 657505/s, aver. 1us, 627 MB/s
+     10000 aes128ofbcrc 1000 B in 15.94ms i.e. 627273/s, aver. 1us, 598.2 MB/s
+     10000 aes256cfb 1000 B in 20.52ms i.e. 487305/s, aver. 2us, 464.7 MB/s
+     10000 aes256ofb 1000 B in 20.56ms i.e. 486357/s, aver. 2us, 463.8 MB/s
+     10000 aes256cfbcrc 1000 B in 21.31ms i.e. 469241/s, aver. 2us, 447.5 MB/s
+     10000 aes256ofbcrc 1000 B in 23.93ms i.e. 417780/s, aver. 2us, 398.4 MB/s
+     10000 shake128 1000 B in 47.67ms i.e. 209744/s, aver. 4us, 200 MB/s
+     10000 shake256 1000 B in 56.18ms i.e. 177973/s, aver. 5us, 169.7 MB/s
 
-     10000 CRC32c 9 KB in 23.13ms i.e. 432170/s, aver. 2us, 4 GB/s
-     10000 XXHash32 9 KB in 16.05ms i.e. 622975/s, aver. 1us, 5.8 GB/s
-     10000 MD5 9 KB in 214.74ms i.e. 46566/s, aver. 21us, 444 MB/s
-     10000 SHA1 9 KB in 469.17ms i.e. 21313/s, aver. 46us, 203.2 MB/s
-     10000 HMACSHA1 9 KB in 483.70ms i.e. 20673/s, aver. 48us, 197.1 MB/s
-     10000 SHA256 9 KB in 635.87ms i.e. 15726/s, aver. 63us, 149.9 MB/s
-     10000 HMACSHA256 9 KB in 648.58ms i.e. 15418/s, aver. 64us, 147 MB/s
-     10000 SHA3_256 9 KB in 557.35ms i.e. 17941/s, aver. 55us, 171.1 MB/s
-     10000 SHA3_512 9 KB in 1.03s i.e. 9682/s, aver. 103us, 92.3 MB/s
+     10000 crc32c 9 KB in 23.40ms i.e. 427186/s, aver. 2us, 3.9 GB/s
+     10000 xxhash32 9 KB in 15.91ms i.e. 628535/s, aver. 1us, 5.8 GB/s
+     10000 md5 9 KB in 210.63ms i.e. 47475/s, aver. 21us, 452.7 MB/s
+     10000 sha1 9 KB in 444.99ms i.e. 22472/s, aver. 44us, 214.3 MB/s
+     10000 hmacsha1 9 KB in 458.45ms i.e. 21812/s, aver. 45us, 208 MB/s
+     10000 sha256 9 KB in 607.39ms i.e. 16463/s, aver. 60us, 157 MB/s
+     10000 hmacsha256 9 KB in 618.00ms i.e. 16181/s, aver. 61us, 154.3 MB/s
+     10000 sha512 9 KB in 502.78ms i.e. 19889/s, aver. 50us, 189.6 MB/s
+     10000 hmacsha512 9 KB in 525.57ms i.e. 19026/s, aver. 52us, 181.4 MB/s
+     10000 sha3_256 9 KB in 564.61ms i.e. 17711/s, aver. 56us, 168.9 MB/s
+     10000 sha3_512 9 KB in 1.05s i.e. 9506/s, aver. 105us, 90.6 MB/s
 
-     10000 AES128CFB 9 KB in 149.52ms i.e. 66876/s, aver. 14us, 637.7 MB/s
-     10000 AES128OFB 9 KB in 147.39ms i.e. 67847/s, aver. 14us, 647 MB/s
-     10000 AES128CFBCRC 9 KB in 151.67ms i.e. 65932/s, aver. 15us, 628.7 MB/s
-     10000 AES128OFBCRC 9 KB in 150.81ms i.e. 66306/s, aver. 15us, 632.3 MB/s
-     10000 AES256CFB 9 KB in 206.37ms i.e. 48456/s, aver. 20us, 462.1 MB/s
-     10000 AES256OFB 9 KB in 202.58ms i.e. 49361/s, aver. 20us, 470.7 MB/s
-     10000 AES256CFBCRC 9 KB in 203.46ms i.e. 49147/s, aver. 20us, 468.7 MB/s
-     10000 AES256OFBCRC 9 KB in 204.11ms i.e. 48991/s, aver. 20us, 467.2 MB/s
-     10000 SHAKE128 9 KB in 486.16ms i.e. 20569/s, aver. 48us, 196.1 MB/s
-     10000 SHAKE256 9 KB in 577.79ms i.e. 17307/s, aver. 57us, 165 MB/s
+     10000 aes128cfb 9 KB in 149.54ms i.e. 66871/s, aver. 14us, 637.7 MB/s
+     10000 aes128ofb 9 KB in 142.10ms i.e. 70368/s, aver. 14us, 671 MB/s
+     10000 aes128cfbcrc 9 KB in 146.78ms i.e. 68124/s, aver. 14us, 649.6 MB/s
+     10000 aes128ofbcrc 9 KB in 148.38ms i.e. 67393/s, aver. 14us, 642.7 MB/s
+     10000 aes256cfb 9 KB in 198.82ms i.e. 50295/s, aver. 19us, 479.6 MB/s
+     10000 aes256ofb 9 KB in 199.27ms i.e. 50181/s, aver. 19us, 478.5 MB/s
+     10000 aes256cfbcrc 9 KB in 199.70ms i.e. 50073/s, aver. 19us, 477.5 MB/s
+     10000 aes256ofbcrc 9 KB in 200.13ms i.e. 49966/s, aver. 20us, 476.5 MB/s
+     10000 shake128 9 KB in 478.81ms i.e. 20884/s, aver. 47us, 199.1 MB/s
+     10000 shake256 9 KB in 574.64ms i.e. 17402/s, aver. 57us, 165.9 MB/s
 
-     50000 CRC32c in 25.76ms i.e. 1940843/s or 4 GB/s
-     50000 XXHash32 in 18.66ms i.e. 2678954/s or 5.5 GB/s
-     50000 MD5 in 242.94ms i.e. 205808/s or 438 MB/s
-     50000 SHA1 in 531.48ms i.e. 94076/s or 200.2 MB/s
-     50000 HMACSHA1 in 583.57ms i.e. 85679/s or 182.3 MB/s
-     50000 SHA256 in 718.13ms i.e. 69624/s or 148.1 MB/s
-     50000 HMACSHA256 in 781.90ms i.e. 63946/s or 136 MB/s
-     50000 SHA3_256 in 645.58ms i.e. 77448/s or 164.8 MB/s
-     50000 SHA3_512 in 1.17s i.e. 42649/s or 90.7 MB/s
+     50000 crc32c in 25.87ms i.e. 1932292/s or 4 GB/s
+     50000 xxhash32 in 18.68ms i.e. 2676659/s or 5.5 GB/s
+     50000 md5 in 237.45ms i.e. 210562/s or 448.1 MB/s
+     50000 sha1 in 502.65ms i.e. 99471/s or 211.6 MB/s
+     50000 hmacsha1 in 553.69ms i.e. 90302/s or 192.1 MB/s
+     50000 sha256 in 688.12ms i.e. 72660/s or 154.6 MB/s
+     50000 hmacsha256 in 742.24ms i.e. 67363/s or 143.3 MB/s
+     50000 sha512 in 578.07ms i.e. 86493/s or 184 MB/s
+     50000 hmacsha512 in 678.42ms i.e. 73700/s or 156.8 MB/s
+     50000 sha3_256 in 652.23ms i.e. 76659/s or 163.1 MB/s
+     50000 sha3_512 in 1.19s i.e. 41876/s or 89.1 MB/s
 
-     50000 AES128CFB in 170.82ms i.e. 292705/s or 622.9 MB/s
-     50000 AES128OFB in 168.75ms i.e. 296289/s or 630.5 MB/s
-     50000 AES128CFBCRC in 174.19ms i.e. 287037/s or 610.8 MB/s
-     50000 AES128OFBCRC in 172.87ms i.e. 289227/s or 615.5 MB/s
-     50000 AES256CFB in 234.52ms i.e. 213199/s or 453.7 MB/s
-     50000 AES256OFB in 229.83ms i.e. 217552/s or 463 MB/s
-     50000 AES256CFBCRC in 233.40ms i.e. 214223/s or 455.9 MB/s
-     50000 AES256OFBCRC in 232.16ms i.e. 215365/s or 458.3 MB/s
-     50000 SHAKE128 in 544.18ms i.e. 91880/s or 195.5 MB/s
-     50000 SHAKE256 in 646.79ms i.e. 77304/s or 164.5 MB/s
-  Total failed: 0 / 1,202,052  - Cryptographic routines PASSED  9.36s
+     50000 aes128cfb in 170.93ms i.e. 292517/s or 622.5 MB/s
+     50000 aes128ofb in 162.51ms i.e. 307662/s or 654.7 MB/s
+     50000 aes128cfbcrc in 167.51ms i.e. 298489/s or 635.2 MB/s
+     50000 aes128ofbcrc in 170.34ms i.e. 293521/s or 624.6 MB/s
+     50000 aes256cfb in 225.80ms i.e. 221427/s or 471.2 MB/s
+     50000 aes256ofb in 225.71ms i.e. 221520/s or 471.4 MB/s
+     50000 aes256cfbcrc in 227.46ms i.e. 219810/s or 467.8 MB/s
+     50000 aes256ofbcrc in 230.69ms i.e. 216739/s or 461.2 MB/s
+     50000 shake128 in 534.59ms i.e. 93528/s or 199 MB/s
+     50000 shake256 in 641.85ms i.e. 77899/s or 165.7 MB/s
+  Total failed: 0 / 1,302,057  - Cryptographic routines PASSED  10.49s
 
-Delphi 10.2, Win64
-  - Benchmark: 950,000 assertions passed  7.00s
-     10000 CRC32c 8 B in 131us i.e. 76335877/s, aver. 0us, 582.3 MB/s
-     10000 XXHash32 8 B in 152us i.e. 65789473/s, aver. 0us, 501.9 MB/s
-     10000 MD5 8 B in 2.11ms i.e. 4723665/s, aver. 0us, 36 MB/s
-     10000 SHA1 8 B in 3.58ms i.e. 2787068/s, aver. 0us, 21.2 MB/s
-     10000 HMACSHA1 8 B in 14.09ms i.e. 709521/s, aver. 1us, 5.4 MB/s
-     10000 SHA256 8 B in 2.64ms i.e. 3776435/s, aver. 0us, 28.8 MB/s
-     10000 HMACSHA256 8 B in 10.32ms i.e. 968616/s, aver. 1us, 7.3 MB/s
-     10000 SHA3_256 8 B in 8.23ms i.e. 1214329/s, aver. 0us, 9.2 MB/s
-     10000 SHA3_512 8 B in 8.12ms i.e. 1230920/s, aver. 0us, 9.3 MB/s
+Delphi 10.2 Tokyo, Win64
+  - Benchmark: 1,050,000 assertions passed  8.24s
+     10000 crc32c 8 B in 148us i.e. 67567567/s, aver. 0us, 515.5 MB/s
+     10000 xxhash32 8 B in 169us i.e. 59171597/s, aver. 0us, 451.4 MB/s
+     10000 md5 8 B in 2.13ms i.e. 4675081/s, aver. 0us, 35.6 MB/s
+     10000 sha1 8 B in 3.52ms i.e. 2840909/s, aver. 0us, 21.6 MB/s
+     10000 hmacsha1 8 B in 13.26ms i.e. 753977/s, aver. 1us, 5.7 MB/s
+     10000 sha256 8 B in 2.67ms i.e. 3743916/s, aver. 0us, 28.5 MB/s
+     10000 hmacsha256 8 B in 10.05ms i.e. 995024/s, aver. 1us, 7.5 MB/s
+     10000 sha512 8 B in 7.91ms i.e. 1263264/s, aver. 0us, 9.6 MB/s
+     10000 hmacsha512 8 B in 31.28ms i.e. 319601/s, aver. 3us, 2.4 MB/s
+     10000 sha3_256 8 B in 7.94ms i.e. 1258811/s, aver. 0us, 9.6 MB/s
+     10000 sha3_512 8 B in 7.98ms i.e. 1252661/s, aver. 0us, 9.5 MB/s
 
-     10000 AES128CFB 8 B in 1.16ms i.e. 8568980/s, aver. 0us, 65.3 MB/s
-     10000 AES128OFB 8 B in 1.17ms i.e. 8488964/s, aver. 0us, 64.7 MB/s
-     10000 AES128CFBCRC 8 B in 1.25ms i.e. 7955449/s, aver. 0us, 60.6 MB/s
-     10000 AES128OFBCRC 8 B in 1.24ms i.e. 8032128/s, aver. 0us, 61.2 MB/s
-     10000 AES256CFB 8 B in 1.78ms i.e. 5595970/s, aver. 0us, 42.6 MB/s
-     10000 AES256OFB 8 B in 1.33ms i.e. 7490636/s, aver. 0us, 57.1 MB/s
-     10000 AES256CFBCRC 8 B in 1.43ms i.e. 6973500/s, aver. 0us, 53.2 MB/s
-     10000 AES256OFBCRC 8 B in 1.38ms i.e. 7220216/s, aver. 0us, 55 MB/s
-     10000 SHAKE128 8 B in 564us i.e. 17730496/s, aver. 0us, 135.2 MB/s
-     10000 SHAKE256 8 B in 659us i.e. 15174506/s, aver. 0us, 115.7 MB/s
+     10000 aes128cfb 8 B in 1.13ms i.e. 8787346/s, aver. 0us, 67 MB/s
+     10000 aes128ofb 8 B in 1.11ms i.e. 8944543/s, aver. 0us, 68.2 MB/s
+     10000 aes128cfbcrc 8 B in 1.21ms i.e. 8257638/s, aver. 0us, 63 MB/s
+     10000 aes128ofbcrc 8 B in 1.20ms i.e. 8326394/s, aver. 0us, 63.5 MB/s
+     10000 aes256cfb 8 B in 1.59ms i.e. 6265664/s, aver. 0us, 47.8 MB/s
+     10000 aes256ofb 8 B in 1.20ms i.e. 8326394/s, aver. 0us, 63.5 MB/s
+     10000 aes256cfbcrc 8 B in 1.31ms i.e. 7593014/s, aver. 0us, 57.9 MB/s
+     10000 aes256ofbcrc 8 B in 1.27ms i.e. 7818608/s, aver. 0us, 59.6 MB/s
+     10000 shake128 8 B in 512us i.e. 19531250/s, aver. 0us, 149 MB/s
+     10000 shake256 8 B in 612us i.e. 16339869/s, aver. 0us, 124.6 MB/s
 
-     10000 CRC32c 50 B in 150us i.e. 66666666/s, aver. 0us, 3.1 GB/s
-     10000 XXHash32 50 B in 210us i.e. 47619047/s, aver. 0us, 2.2 GB/s
-     10000 MD5 50 B in 1.86ms i.e. 5367686/s, aver. 0us, 255.9 MB/s
-     10000 SHA1 50 B in 3.73ms i.e. 2676659/s, aver. 0us, 127.6 MB/s
-     10000 HMACSHA1 50 B in 14.62ms i.e. 683760/s, aver. 1us, 32.6 MB/s
-     10000 SHA256 50 B in 2.54ms i.e. 3932363/s, aver. 0us, 187.5 MB/s
-     10000 HMACSHA256 50 B in 10.25ms i.e. 975419/s, aver. 1us, 46.5 MB/s
-     10000 SHA3_256 50 B in 8.10ms i.e. 1233197/s, aver. 0us, 58.8 MB/s
-     10000 SHA3_512 50 B in 8.03ms i.e. 1244864/s, aver. 0us, 59.3 MB/s
+     10000 crc32c 50 B in 128us i.e. 78125000/s, aver. 0us, 3.6 GB/s
+     10000 xxhash32 50 B in 186us i.e. 53763440/s, aver. 0us, 2.5 GB/s
+     10000 md5 50 B in 1.79ms i.e. 5577244/s, aver. 0us, 265.9 MB/s
+     10000 sha1 50 B in 3.32ms i.e. 3003905/s, aver. 0us, 143.2 MB/s
+     10000 hmacsha1 50 B in 13.10ms i.e. 763067/s, aver. 1us, 36.3 MB/s
+     10000 sha256 50 B in 2.51ms i.e. 3979307/s, aver. 0us, 189.7 MB/s
+     10000 hmacsha256 50 B in 9.85ms i.e. 1014404/s, aver. 0us, 48.3 MB/s
+     10000 sha512 50 B in 7.97ms i.e. 1253761/s, aver. 0us, 59.7 MB/s
+     10000 hmacsha512 50 B in 31.54ms i.e. 316987/s, aver. 3us, 15.1 MB/s
+     10000 sha3_256 50 B in 8.00ms i.e. 1249687/s, aver. 0us, 59.5 MB/s
+     10000 sha3_512 50 B in 7.88ms i.e. 1268069/s, aver. 0us, 60.4 MB/s
 
-     10000 AES128CFB 50 B in 2.11ms i.e. 4732607/s, aver. 0us, 225.6 MB/s
-     10000 AES128OFB 50 B in 1.90ms i.e. 5246589/s, aver. 0us, 250.1 MB/s
-     10000 AES128CFBCRC 50 B in 2.19ms i.e. 4547521/s, aver. 0us, 216.8 MB/s
-     10000 AES128OFBCRC 50 B in 2.51ms i.e. 3980891/s, aver. 0us, 189.8 MB/s
-     10000 AES256CFB 50 B in 2.47ms i.e. 4043671/s, aver. 0us, 192.8 MB/s
-     10000 AES256OFB 50 B in 2.25ms i.e. 4442470/s, aver. 0us, 211.8 MB/s
-     10000 AES256CFBCRC 50 B in 2.57ms i.e. 3881987/s, aver. 0us, 185.1 MB/s
-     10000 AES256OFBCRC 50 B in 2.43ms i.e. 4103405/s, aver. 0us, 195.6 MB/s
-     10000 SHAKE128 50 B in 2.40ms i.e. 4151100/s, aver. 0us, 197.9 MB/s
-     10000 SHAKE256 50 B in 2.90ms i.e. 3441156/s, aver. 0us, 164 MB/s
+     10000 aes128cfb 50 B in 2.43ms i.e. 4111842/s, aver. 0us, 196 MB/s
+     10000 aes128ofb 50 B in 1.88ms i.e. 5296610/s, aver. 0us, 252.5 MB/s
+     10000 aes128cfbcrc 50 B in 2.17ms i.e. 4589261/s, aver. 0us, 218.8 MB/s
+     10000 aes128ofbcrc 50 B in 2.28ms i.e. 4376367/s, aver. 0us, 208.6 MB/s
+     10000 aes256cfb 50 B in 2.44ms i.e. 4095004/s, aver. 0us, 195.2 MB/s
+     10000 aes256ofb 50 B in 2.19ms i.e. 4564125/s, aver. 0us, 217.6 MB/s
+     10000 aes256cfbcrc 50 B in 2.51ms i.e. 3969829/s, aver. 0us, 189.2 MB/s
+     10000 aes256ofbcrc 50 B in 2.29ms i.e. 4363001/s, aver. 0us, 208 MB/s
+     10000 shake128 50 B in 2.30ms i.e. 4342162/s, aver. 0us, 207 MB/s
+     10000 shake256 50 B in 2.83ms i.e. 3527336/s, aver. 0us, 168.1 MB/s
 
-     10000 CRC32c 100 B in 200us i.e. 50000000/s, aver. 0us, 4.6 GB/s
-     10000 XXHash32 100 B in 299us i.e. 33444816/s, aver. 0us, 3.1 GB/s
-     10000 MD5 100 B in 3.45ms i.e. 2891008/s, aver. 0us, 275.7 MB/s
-     10000 SHA1 100 B in 6.73ms i.e. 1485663/s, aver. 0us, 141.6 MB/s
-     10000 HMACSHA1 100 B in 17.19ms i.e. 581632/s, aver. 1us, 55.4 MB/s
-     10000 SHA256 100 B in 4.78ms i.e. 2090301/s, aver. 0us, 199.3 MB/s
-     10000 HMACSHA256 100 B in 12.68ms i.e. 788519/s, aver. 1us, 75.1 MB/s
-     10000 SHA3_256 100 B in 8.34ms i.e. 1197891/s, aver. 0us, 114.2 MB/s
-     10000 SHA3_512 100 B in 15.00ms i.e. 666666/s, aver. 1us, 63.5 MB/s
+     10000 crc32c 100 B in 176us i.e. 56818181/s, aver. 0us, 5.2 GB/s
+     10000 xxhash32 100 B in 293us i.e. 34129692/s, aver. 0us, 3.1 GB/s
+     10000 md5 100 B in 3.35ms i.e. 2985074/s, aver. 0us, 284.6 MB/s
+     10000 sha1 100 B in 6.27ms i.e. 1592863/s, aver. 0us, 151.9 MB/s
+     10000 hmacsha1 100 B in 16.02ms i.e. 624180/s, aver. 1us, 59.5 MB/s
+     10000 sha256 100 B in 4.68ms i.e. 2135383/s, aver. 0us, 203.6 MB/s
+     10000 hmacsha256 100 B in 12.00ms i.e. 833333/s, aver. 1us, 79.4 MB/s
+     10000 sha512 100 B in 8.01ms i.e. 1247816/s, aver. 0us, 119 MB/s
+     10000 hmacsha512 100 B in 31.56ms i.e. 316826/s, aver. 3us, 30.2 MB/s
+     10000 sha3_256 100 B in 8.04ms i.e. 1242390/s, aver. 0us, 118.4 MB/s
+     10000 sha3_512 100 B in 14.86ms i.e. 672721/s, aver. 1us, 64.1 MB/s
 
-     10000 AES128CFB 100 B in 3.05ms i.e. 3274394/s, aver. 0us, 312.2 MB/s
-     10000 AES128OFB 100 B in 3.09ms i.e. 3231017/s, aver. 0us, 308.1 MB/s
-     10000 AES128CFBCRC 100 B in 3.18ms i.e. 3142677/s, aver. 0us, 299.7 MB/s
-     10000 AES128OFBCRC 100 B in 2.73ms i.e. 3656307/s, aver. 0us, 348.6 MB/s
-     10000 AES256CFB 100 B in 3.66ms i.e. 2730748/s, aver. 0us, 260.4 MB/s
-     10000 AES256OFB 100 B in 3.33ms i.e. 3000300/s, aver. 0us, 286.1 MB/s
-     10000 AES256CFBCRC 100 B in 3.78ms i.e. 2639915/s, aver. 0us, 251.7 MB/s
-     10000 AES256OFBCRC 100 B in 3.37ms i.e. 2967359/s, aver. 0us, 282.9 MB/s
-     10000 SHAKE128 100 B in 4.55ms i.e. 2196354/s, aver. 0us, 209.4 MB/s
-     10000 SHAKE256 100 B in 5.64ms i.e. 1772421/s, aver. 0us, 169 MB/s
+     10000 aes128cfb 100 B in 3.13ms i.e. 3189792/s, aver. 0us, 304.2 MB/s
+     10000 aes128ofb 100 B in 2.96ms i.e. 3374957/s, aver. 0us, 321.8 MB/s
+     10000 aes128cfbcrc 100 B in 3.08ms i.e. 3238341/s, aver. 0us, 308.8 MB/s
+     10000 aes128ofbcrc 100 B in 2.69ms i.e. 3707823/s, aver. 0us, 353.6 MB/s
+     10000 aes256cfb 100 B in 3.61ms i.e. 2763957/s, aver. 0us, 263.5 MB/s
+     10000 aes256ofb 100 B in 3.21ms i.e. 3113325/s, aver. 0us, 296.9 MB/s
+     10000 aes256cfbcrc 100 B in 3.70ms i.e. 2700513/s, aver. 0us, 257.5 MB/s
+     10000 aes256ofbcrc 100 B in 3.26ms i.e. 3061849/s, aver. 0us, 292 MB/s
+     10000 shake128 100 B in 4.35ms i.e. 2296211/s, aver. 0us, 218.9 MB/s
+     10000 shake256 100 B in 5.39ms i.e. 1852537/s, aver. 0us, 176.6 MB/s
 
-     10000 CRC32c 1000 B in 2.09ms i.e. 4773269/s, aver. 0us, 4.4 GB/s
-     10000 XXHash32 1000 B in 1.69ms i.e. 5892751/s, aver. 0us, 5.4 GB/s
-     10000 MD5 1000 B in 27.38ms i.e. 365216/s, aver. 2us, 348.2 MB/s
-     10000 SHA1 1000 B in 51.57ms i.e. 193884/s, aver. 5us, 184.9 MB/s
-     10000 HMACSHA1 1000 B in 61.88ms i.e. 161595/s, aver. 6us, 154.1 MB/s
-     10000 SHA256 1000 B in 35.53ms i.e. 281404/s, aver. 3us, 268.3 MB/s
-     10000 HMACSHA256 1000 B in 43.31ms i.e. 230850/s, aver. 4us, 220.1 MB/s
-     10000 SHA3_256 1000 B in 57.17ms i.e. 174910/s, aver. 5us, 166.8 MB/s
-     10000 SHA3_512 1000 B in 97.60ms i.e. 102454/s, aver. 9us, 97.7 MB/s
+     10000 crc32c 1000 B in 2.01ms i.e. 4967709/s, aver. 0us, 4.6 GB/s
+     10000 xxhash32 1000 B in 1.67ms i.e. 5966587/s, aver. 0us, 5.5 GB/s
+     10000 md5 1000 B in 27.21ms i.e. 367403/s, aver. 2us, 350.3 MB/s
+     10000 sha1 1000 B in 48.18ms i.e. 207537/s, aver. 4us, 197.9 MB/s
+     10000 hmacsha1 1000 B in 57.79ms i.e. 173040/s, aver. 5us, 165 MB/s
+     10000 sha256 1000 B in 33.78ms i.e. 295963/s, aver. 3us, 282.2 MB/s
+     10000 hmacsha256 1000 B in 40.89ms i.e. 244558/s, aver. 4us, 233.2 MB/s
+     10000 sha512 1000 B in 59.79ms i.e. 167243/s, aver. 5us, 159.4 MB/s
+     10000 hmacsha512 1000 B in 84.30ms i.e. 118614/s, aver. 8us, 113.1 MB/s
+     10000 sha3_256 1000 B in 56.20ms i.e. 177929/s, aver. 5us, 169.6 MB/s
+     10000 sha3_512 1000 B in 95.97ms i.e. 104197/s, aver. 9us, 99.3 MB/s
 
-     10000 AES128CFB 1000 B in 21.33ms i.e. 468669/s, aver. 2us, 446.9 MB/s
-     10000 AES128OFB 1000 B in 16.93ms i.e. 590527/s, aver. 1us, 563.1 MB/s
-     10000 AES128CFBCRC 1000 B in 20.92ms i.e. 477897/s, aver. 2us, 455.7 MB/s
-     10000 AES128OFBCRC 1000 B in 16.78ms i.e. 595841/s, aver. 1us, 568.2 MB/s
-     10000 AES256CFB 1000 B in 26.38ms i.e. 379060/s, aver. 2us, 361.5 MB/s
-     10000 AES256OFB 1000 B in 22.58ms i.e. 442712/s, aver. 2us, 422.2 MB/s
-     10000 AES256CFBCRC 1000 B in 27.65ms i.e. 361572/s, aver. 2us, 344.8 MB/s
-     10000 AES256OFBCRC 1000 B in 22.31ms i.e. 448189/s, aver. 2us, 427.4 MB/s
-     10000 SHAKE128 1000 B in 42.64ms i.e. 234505/s, aver. 4us, 223.6 MB/s
-     10000 SHAKE256 1000 B in 53.42ms i.e. 187167/s, aver. 5us, 178.4 MB/s
+     10000 aes128cfb 1000 B in 21.16ms i.e. 472567/s, aver. 2us, 450.6 MB/s
+     10000 aes128ofb 1000 B in 16.97ms i.e. 589066/s, aver. 1us, 561.7 MB/s
+     10000 aes128cfbcrc 1000 B in 20.45ms i.e. 488997/s, aver. 2us, 466.3 MB/s
+     10000 aes128ofbcrc 1000 B in 16.31ms i.e. 613120/s, aver. 1us, 584.7 MB/s
+     10000 aes256cfb 1000 B in 25.71ms i.e. 388938/s, aver. 2us, 370.9 MB/s
+     10000 aes256ofb 1000 B in 22.51ms i.e. 444247/s, aver. 2us, 423.6 MB/s
+     10000 aes256cfbcrc 1000 B in 26.51ms i.e. 377159/s, aver. 2us, 359.6 MB/s
+     10000 aes256ofbcrc 1000 B in 21.71ms i.e. 460426/s, aver. 2us, 439 MB/s
+     10000 shake128 1000 B in 41.69ms i.e. 239819/s, aver. 4us, 228.7 MB/s
+     10000 shake256 1000 B in 52.20ms i.e. 191552/s, aver. 5us, 182.6 MB/s
 
-     10000 CRC32c 9 KB in 22.80ms i.e. 438538/s, aver. 2us, 4 GB/s
-     10000 XXHash32 9 KB in 15.67ms i.e. 637877/s, aver. 1us, 5.9 GB/s
-     10000 MD5 9 KB in 268.85ms i.e. 37194/s, aver. 26us, 354.7 MB/s
-     10000 SHA1 9 KB in 501.02ms i.e. 19959/s, aver. 50us, 190.3 MB/s
-     10000 HMACSHA1 9 KB in 512.09ms i.e. 19527/s, aver. 51us, 186.2 MB/s
-     10000 SHA256 9 KB in 346.47ms i.e. 28862/s, aver. 34us, 275.2 MB/s
-     10000 HMACSHA256 9 KB in 353.12ms i.e. 28318/s, aver. 35us, 270 MB/s
-     10000 SHA3_256 9 KB in 518.70ms i.e. 19278/s, aver. 51us, 183.8 MB/s
-     10000 SHA3_512 9 KB in 960.41ms i.e. 10412/s, aver. 96us, 99.2 MB/s
+     10000 crc32c 9 KB in 22.29ms i.e. 448490/s, aver. 2us, 4.1 GB/s
+     10000 xxhash32 9 KB in 15.41ms i.e. 648887/s, aver. 1us, 6 GB/s
+     10000 md5 9 KB in 263.38ms i.e. 37967/s, aver. 26us, 362 MB/s
+     10000 sha1 9 KB in 471.74ms i.e. 21197/s, aver. 47us, 202.1 MB/s
+     10000 hmacsha1 9 KB in 478.48ms i.e. 20899/s, aver. 47us, 199.3 MB/s
+     10000 sha256 9 KB in 326.29ms i.e. 30646/s, aver. 32us, 292.2 MB/s
+     10000 hmacsha256 9 KB in 335.02ms i.e. 29848/s, aver. 33us, 284.6 MB/s
+     10000 sha512 9 KB in 590.09ms i.e. 16946/s, aver. 59us, 161.6 MB/s
+     10000 hmacsha512 9 KB in 611.03ms i.e. 16365/s, aver. 61us, 156 MB/s
+     10000 sha3_256 9 KB in 505.93ms i.e. 19765/s, aver. 50us, 188.5 MB/s
+     10000 sha3_512 9 KB in 942.88ms i.e. 10605/s, aver. 94us, 101.1 MB/s
 
-     10000 AES128CFB 9 KB in 201.91ms i.e. 49525/s, aver. 20us, 472.3 MB/s
-     10000 AES128OFB 9 KB in 160.53ms i.e. 62293/s, aver. 16us, 594 MB/s
-     10000 AES128CFBCRC 9 KB in 200.02ms i.e. 49992/s, aver. 20us, 476.7 MB/s
-     10000 AES128OFBCRC 9 KB in 157.89ms i.e. 63334/s, aver. 15us, 604 MB/s
-     10000 AES256CFB 9 KB in 254.23ms i.e. 39333/s, aver. 25us, 375.1 MB/s
-     10000 AES256OFB 9 KB in 214.43ms i.e. 46633/s, aver. 21us, 444.7 MB/s
-     10000 AES256CFBCRC 9 KB in 258.91ms i.e. 38623/s, aver. 25us, 368.3 MB/s
-     10000 AES256OFBCRC 9 KB in 214.96ms i.e. 46518/s, aver. 21us, 443.6 MB/s
-     10000 SHAKE128 9 KB in 423.14ms i.e. 23632/s, aver. 42us, 225.3 MB/s
-     10000 SHAKE256 9 KB in 534.08ms i.e. 18723/s, aver. 53us, 178.5 MB/s
+     10000 aes128cfb 9 KB in 197.27ms i.e. 50690/s, aver. 19us, 483.4 MB/s
+     10000 aes128ofb 9 KB in 156.73ms i.e. 63800/s, aver. 15us, 608.4 MB/s
+     10000 aes128cfbcrc 9 KB in 196.00ms i.e. 51018/s, aver. 19us, 486.5 MB/s
+     10000 aes128ofbcrc 9 KB in 154.11ms i.e. 64887/s, aver. 15us, 618.8 MB/s
+     10000 aes256cfb 9 KB in 250.42ms i.e. 39931/s, aver. 25us, 380.8 MB/s
+     10000 aes256ofb 9 KB in 211.61ms i.e. 47255/s, aver. 21us, 450.6 MB/s
+     10000 aes256cfbcrc 9 KB in 253.44ms i.e. 39456/s, aver. 25us, 376.2 MB/s
+     10000 aes256ofbcrc 9 KB in 207.97ms i.e. 48083/s, aver. 20us, 458.5 MB/s
+     10000 shake128 9 KB in 414.41ms i.e. 24130/s, aver. 41us, 230.1 MB/s
+     10000 shake256 9 KB in 517.70ms i.e. 19316/s, aver. 51us, 184.2 MB/s
 
-     50000 CRC32c in 25.39ms i.e. 1968891/s or 4 GB/s
-     50000 XXHash32 in 18.04ms i.e. 2770543/s or 5.7 GB/s
-     50000 MD5 in 303.71ms i.e. 164629/s or 350.3 MB/s
-     50000 SHA1 in 566.68ms i.e. 88232/s or 187.7 MB/s
-     50000 HMACSHA1 in 619.91ms i.e. 80656/s or 171.6 MB/s
-     50000 SHA256 in 392.00ms i.e. 127550/s or 271.4 MB/s
-     50000 HMACSHA256 in 429.73ms i.e. 116351/s or 247.6 MB/s
-     50000 SHA3_256 in 600.58ms i.e. 83251/s or 177.1 MB/s
-     50000 SHA3_512 in 1.08s i.e. 45905/s or 97.6 MB/s
+     50000 crc32c in 24.77ms i.e. 2018082/s or 4.1 GB/s
+     50000 xxhash32 in 17.74ms i.e. 2817695/s or 5.8 GB/s
+     50000 md5 in 297.89ms i.e. 167842/s or 357.2 MB/s
+     50000 sha1 in 533.07ms i.e. 93795/s or 199.6 MB/s
+     50000 hmacsha1 in 578.68ms i.e. 86403/s or 183.8 MB/s
+     50000 sha256 in 369.97ms i.e. 135145/s or 287.6 MB/s
+     50000 hmacsha256 in 407.83ms i.e. 122597/s or 260.9 MB/s
+     50000 sha512 in 673.81ms i.e. 74204/s or 157.9 MB/s
+     50000 hmacsha512 in 789.77ms i.e. 63309/s or 134.7 MB/s
+     50000 sha3_256 in 586.14ms i.e. 85302/s or 181.5 MB/s
+     50000 sha3_512 in 1.06s i.e. 46745/s or 99.4 MB/s
 
-     50000 AES128CFB in 229.60ms i.e. 217764/s or 463.4 MB/s
-     50000 AES128OFB in 183.66ms i.e. 272237/s or 579.3 MB/s
-     50000 AES128CFBCRC in 227.61ms i.e. 219674/s or 467.5 MB/s
-     50000 AES128OFBCRC in 181.18ms i.e. 275954/s or 587.2 MB/s
-     50000 AES256CFB in 288.57ms i.e. 173265/s or 368.7 MB/s
-     50000 AES256OFB in 243.96ms i.e. 204944/s or 436.1 MB/s
-     50000 AES256CFBCRC in 294.38ms i.e. 169844/s or 361.4 MB/s
-     50000 AES256OFBCRC in 244.49ms i.e. 204507/s or 435.2 MB/s
-     50000 SHAKE128 in 473.34ms i.e. 105631/s or 224.8 MB/s
-     50000 SHAKE256 in 596.74ms i.e. 83787/s or 178.3 MB/s
-  Total failed: 0 / 1,202,064  - Cryptographic routines PASSED  8.32s
+     50000 aes128cfb in 225.16ms i.e. 222063/s or 472.6 MB/s
+     50000 aes128ofb in 179.70ms i.e. 278241/s or 592.1 MB/s
+     50000 aes128cfbcrc in 222.95ms i.e. 224264/s or 477.2 MB/s
+     50000 aes128ofbcrc in 176.63ms i.e. 283077/s or 602.4 MB/s
+     50000 aes256cfb in 283.81ms i.e. 176173/s or 374.9 MB/s
+     50000 aes256ofb in 240.74ms i.e. 207689/s or 442 MB/s
+     50000 aes256cfbcrc in 287.51ms i.e. 173903/s or 370.1 MB/s
+     50000 aes256ofbcrc in 236.53ms i.e. 211381/s or 449.8 MB/s
+     50000 shake128 in 463.29ms i.e. 107922/s or 229.6 MB/s
+     50000 shake256 in 578.76ms i.e. 86390/s or 183.8 MB/s
+  Total failed: 0 / 1,302,074  - Cryptographic routines PASSED  9.56s
 }
 
 { TTestECCCryptography }
