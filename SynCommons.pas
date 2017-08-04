@@ -2400,15 +2400,17 @@ procedure BytesToRawByteString(const bytes: TBytes; out buf: RawByteString);
 /// creates a RawByteString memory buffer from an embedded resource
 // - returns '' if the resource is not found
 // - warning: resources size may be rounded up to alignment
+// - you can specify a library (dll) resource instance handle, if needed
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
-  out buf: RawByteString);
+  out buf: RawByteString; Instance: THandle=0);
 
 /// creates a RawByteString memory buffer from an SynLZ-compressed embedded resource
 // - returns '' if the resource is not found
 // - this method would use SynLZDecompress() after ResourceToRawByteString(),
 // with a ResType=PChar(10) (i.e. RC_DATA)
+// - you can specify a library (dll) resource instance handle, if needed
 procedure ResourceSynLZToRawByteString(const ResName: string;
-  out buf: RawByteString);
+  out buf: RawByteString; Instance: THandle=0);
 
 {$ifndef ENHANCEDRTL} { is our Enhanced Runtime (or LVCL) library not installed? }
 
@@ -12758,7 +12760,8 @@ type
     // ! TSynTimeZone.Default.SaveToFile('TSynTimeZone.data');
     // then compile the resource as expected, with a brcc32 .rc entry:
     // ! TSynTimeZone 10 "TSynTimeZone.data"
-    procedure LoadFromResource;
+    // - you can specify a library (dll) resource instance handle, if needed
+    procedure LoadFromResource(Instance: THandle=0);
     /// write then time zone information into a compressed file
     // - if no file name is supplied, a ExecutableName.tz file would be created
     procedure SaveToFile(const FileName: TFileName);
@@ -25309,29 +25312,33 @@ begin
 end;
 
 procedure ResourceToRawByteString(const ResName: string; ResType: PChar;
-  out buf: RawByteString);
+  out buf: RawByteString; Instance: THandle);
 var HResInfo: THandle;
     HGlobal: THandle;
 begin
-  HResInfo := FindResource(HInstance,PChar(ResName),ResType);
+  if Instance=0 then
+    Instance := HInstance;
+  HResInfo := FindResource(Instance,PChar(ResName),ResType);
   if HResInfo=0 then
     exit;
-  HGlobal := LoadResource(HInstance,HResInfo);
+  HGlobal := LoadResource(Instance,HResInfo);
   if HGlobal<>0 then
-    SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(HInstance,HResInfo));
+    SetString(buf,PAnsiChar(LockResource(HGlobal)),SizeofResource(Instance,HResInfo));
 end;
 
 procedure ResourceSynLZToRawByteString(const ResName: string;
-  out buf: RawByteString);
+  out buf: RawByteString; Instance: THandle);
 var HResInfo: THandle;
     HGlobal: THandle;
 begin
-  HResInfo := FindResource(HInstance,PChar(ResName),PChar(10));
+  if Instance=0 then
+    Instance := HInstance;
+  HResInfo := FindResource(Instance,PChar(ResName),PChar(10));
   if HResInfo=0 then
     exit;
-  HGlobal := LoadResource(HInstance,HResInfo);
+  HGlobal := LoadResource(Instance,HResInfo);
   if HGlobal<>0 then // direct decompression from memory mapped .exe content
-    SynLZDecompress(LockResource(HGlobal),SizeofResource(HInstance,HResInfo),buf);
+    SynLZDecompress(LockResource(HGlobal),SizeofResource(Instance,HResInfo),buf);
 end;
 
 function StrIComp(Str1, Str2: pointer): PtrInt;
@@ -34834,10 +34841,10 @@ begin
   LoadFromBuffer(StringFromFile(FN));
 end;
 
-procedure TSynTimeZone.LoadFromResource;
+procedure TSynTimeZone.LoadFromResource(Instance: THandle);
 var buf: RawByteString;
 begin
-  ResourceToRawByteString(ClassName,PChar(10),buf);
+  ResourceToRawByteString(ClassName,PChar(10),buf,Instance);
   if buf<>'' then
     LoadFromBuffer(buf);
 end;
@@ -36561,7 +36568,7 @@ begin
     SetWindowLong(aWindow,GWL_WNDPROC,PtrInt(@DefWindowProc));
     {$endif CPU64}
     DestroyWindow(aWindow);
-    Windows.UnregisterClass(pointer(aWindowName),hInstance);
+    Windows.UnregisterClass(pointer(aWindowName),HInstance);
     aWindow := 0;
     aWindowName := '';
     result := true;
@@ -36749,7 +36756,7 @@ begin
       {$ifdef MSWINDOWS}
       ProgramFileName := paramstr(0);
       {$else}
-      ProgramFileName := GetModuleName(hInstance);
+      ProgramFileName := GetModuleName(HInstance);
       if ProgramFileName='' then
         ProgramFileName := ExpandFileName(paramstr(0));
       {$endif}

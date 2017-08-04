@@ -17739,7 +17739,8 @@ type
     // - the resource name is expected to be the TSQLRecord class name,
     // with a resource type of 10
     // - uses the same compressed format as the overloaded stream/file method
-    procedure LoadFromResource(ResourceName: string='');
+    // - you can specify a library (dll) resource instance handle, if needed
+    procedure LoadFromResource(ResourceName: string=''; Instance: THandle=0);
     /// save the values into a binary file/stream
     // - the binary format is a custom compressed format (using our SynLZ fast
     // compression algorithm), with variable-length record storage: e.g. a 27 KB
@@ -45002,12 +45003,15 @@ begin
   end;
 end;
 
-procedure TSQLRestStorageInMemory.LoadFromResource(ResourceName: string);
+procedure TSQLRestStorageInMemory.LoadFromResource(ResourceName: string;
+  Instance: THandle);
 var S: TStream;
 begin
   if ResourceName = '' then
     ResourceName := fStoredClass.ClassName;
-  S := TResourceStream.Create(HInstance,ResourceName,pointer(10));
+  if Instance=0 then
+    Instance := HInstance;
+  S := TResourceStream.Create(Instance,ResourceName,pointer(10));
   try
     if not LoadFromBinary(S) then
       raise EORMException.CreateUTF8('%.LoadFromResource with invalid % content',

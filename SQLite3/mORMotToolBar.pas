@@ -794,7 +794,8 @@ procedure CreateReportWithIcons(ParamsEnum: PTypeInfo; ImgList: TImageList;
   const Title, Hints: string; StartIndexAt: integer);
 
 /// load a bitmap from a .png/.jpg file embedded as a resource to the executable
-function LoadBitmapFromResource(const ResName: string): TBitmap;
+// - you can specify a library (dll) resource instance handle, if needed
+function LoadBitmapFromResource(const ResName: string; Instance: THandle=0): TBitmap;
 
 /// fill a TImageList from the content of another TImageList
 // - stretching use GDI+ so is smooth enough for popup menu display
@@ -1847,14 +1848,16 @@ end;
 
 {$endif USETMSPACK}
 
-function LoadBitmapFromResource(const ResName: string): TBitmap;
+function LoadBitmapFromResource(const ResName: string; Instance: THandle): TBitmap;
 var Pic: TSynPicture;
 begin
+  if Instance=0 then
+    Instance := HInstance;
   result := TBitmap.Create;
   try
     Pic := TSynPicture.Create;
     try
-      Pic.LoadFromResourceName(HInstance,ResName); // *.png
+      Pic.LoadFromResourceName(Instance,ResName); // *.png
       result.Width := Pic.Width;
       result.Height := Pic.Height;
       result.Canvas.Draw(0,0,Pic);
