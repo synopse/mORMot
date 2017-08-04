@@ -4188,6 +4188,21 @@ function ToText(C: TClass): RawUTF8; overload;
 procedure ToText(C: TClass; var result: RawUTF8); overload;
   {$ifdef HASINLINE}inline;{$endif}
 
+type
+  /// information about one method, as returned by GetPublishedMethods
+  TPublishedMethodInfo = record
+    /// the method name
+    Name: RawUTF8;
+    /// a callback to the method, for the given class instance
+    Method: TMethod;
+  end;
+  /// information about all methods, as returned by GetPublishedMethods
+  TPublishedMethodInfoDynArray = array of TPublishedMethodInfo;
+
+/// retrieve published methods information about any class instance
+// - will work with FPC and Delphi RTTI
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray): integer;
+
 {$ifdef LINUX}
 const
   ANSI_CHARSET = 0;
@@ -35799,6 +35814,50 @@ begin
     P := PPointer(PtrInt(PtrUInt(C))+vmtClassName)^;
     SetString(result,PAnsiChar(@P^[1]),ord(P^[0]));
   end;
+end;
+
+function GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodInfoDynArray): integer;
+  procedure AddParentsFirst(C: TClass);
+  type
+    TMethodInfo = packed record
+      {$ifdef FPC}
+      Name: PShortString;
+      Addr: Pointer;
+      {$else}
+      Len: Word;
+      Addr: Pointer;
+      Name: ShortString;
+      {$endif}
+    end;
+  var Table: {$ifdef FPC}PCardinalArray{$else}PWordArray{$endif};
+      M: ^TMethodInfo;
+      i: integer;
+  begin
+    if C=nil then
+      exit;
+    AddParentsFirst(C.ClassParent); // put children published methods afterward
+    Table := PPointer(PtrUInt(C)+PtrUInt(vmtMethodTable))^;
+    if Table=nil then
+      exit;
+    SetLength(Methods,result+Table^[0]);
+    M := @Table^[1];
+    for i := 1 to Table^[0] do  // Table^[0] = methods count
+      with Methods[result] do begin
+        ShortStringToAnsi7String(M^.Name{$ifdef FPC}^{$endif},Name);
+        Method.Data := Instance;
+        Method.Code := M^.Addr;
+        {$ifdef FPC}
+        inc(M);
+        {$else}
+        inc(PtrUInt(M),M^.Len);
+        {$endif}
+        inc(result);
+      end;
+  end;
+begin
+  result := 0;
+  if Instance<>nil then
+    AddParentsFirst(PPointer(Instance)^); // use recursion for adding
 end;
 
 function GetCaptionFromClass(C: TClass): string;

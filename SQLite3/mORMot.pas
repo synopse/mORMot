@@ -38002,95 +38002,18 @@ end;
 
 procedure TSQLRestServer.ServiceMethodRegisterPublishedMethods(const aPrefix: RawUTF8;
   aInstance: TObject);
-var CallBack: TMethod;
-{$ifdef FPC}
-type
-  PMethodNameRec = ^TMethodNameRec;
-  TMethodNameRec = packed record
-    name: PShortString;
-    addr: pointer;
-  end;
-  TMethodNameTable = packed record
-    count: dword;
-    entries: packed array[0..0] of TMethodNameRec;
-  end;
-  PMethodNameTable =  ^TMethodNameTable;
-var methodTable: pMethodNameTable;
-    i: integer;
-    vmt: TClass;
-    pmr: PMethodNameRec;
-begin
-  vmt := aInstance.ClassType;
-  while assigned(vmt) do begin
-    methodTable := PMethodNameTable((Pointer(vmt)+vmtMethodTable)^);
-    if Assigned(MethodTable) then begin
-      CallBack.Data := aInstance;
-      pmr := @methodTable^.entries[0];
-      for i := 0 to MethodTable^.count-1 do begin
-        CallBack.Code := pmr^.addr;
-        ServiceMethodRegister(aPrefix+ToUTF8(pmr^.name^),TSQLRestServerCallBack(CallBack));
-        inc(pmr);
-      end;
-    end;
-    vmt := vmt.ClassParent;
-  end;
-end;
-{$else}
-var i,n: integer;
-    C: PtrInt;
-    M: PMethodInfo;
-    RI: PReturnInfo; // such RTTI info not available at least in Delphi 7
-    Param: PParamInfo;
-procedure SignatureError;
-begin
-  raise EServiceException.CreateUTF8(
-    'Expected "procedure %.%(Ctxt: TSQLRestServerURIContext)" method signature',
-     [self,M^.Name]);
-end;
+var i: integer;
+    methods: TPublishedMethodInfoDynArray;
 begin
   if aInstance=nil then
     exit;
   if PosEx('/',aPrefix)>0 then
     raise EServiceException.CreateUTF8('%.ServiceMethodRegisterPublishedMethods'+
       '("%"): prefix should not contain "/"',[self,aPrefix]);
-  C := PtrInt(aInstance.ClassType);
-  while C<>0 do begin
-    M := PPointer(C+vmtMethodTable)^;
-    if M<>nil then begin
-      CallBack.Data := aInstance;
-      n := PWord(M)^;
-      inc(PWord(M));
-      for i := 1 to n do begin
-        RI := M^.ReturnInfo;
-        if (RI<>nil) then
-          // $METHODINFO will also include public methods -> check signature
-          if (RI^.CallingConvention<>ccRegister) or (RI^.ReturnType<>nil) then
-            SignatureError else
-          case RI^.Version of
-          1: ; // older Delphi revision do not have much information
-          2,3: if RI^.ParamCount<>2 then // self+Ctxt
-                 SignatureError else begin
-                 Param := RI^.Param;
-                 if not IdemPropName(Param^.Name,'self') then
-                   SignatureError;
-                 Param := Param^.Next;
-                 if Param^.ParamType^<>TypeInfo(TSQLRestServerURIContext) then
-                   SignatureError;
-               end;
-          else
-          end;
-        CallBack.Code := M^.Addr;
-        ServiceMethodRegister(aPrefix+ToUTF8(M^.Name),TSQLRestServerCallBack(CallBack));
-        inc(PByte(M),M^.Len);
-      end;
-    end;
-    C := PPtrInt(C+vmtParent)^;
-    if C=0 then
-      break else
-      C := PPtrInt(C)^;
-  end;
+  for i := 0 to GetPublishedMethods(aInstance,methods)-1 do
+    with methods[i] do
+      ServiceMethodRegister(aPrefix+Name,TSQLRestServerCallBack(Method));
 end;
-{$endif FPC}
 
 constructor TSQLRestServer.Create(aModel: TSQLModel; aHandleUserAuthentication: boolean);
 var t: integer;

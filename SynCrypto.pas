@@ -5304,11 +5304,11 @@ var
 
 const
   PSHUFFLE_BYTE_FLIP_MASK: array[0..1] of QWord =
-    (qword($0405060700010203),qword($0C0D0E0F08090A0B));
+    (QWord($0405060700010203),QWord($0C0D0E0F08090A0B));
   _SHUF_00BA: array[0..1] of QWord =
-    (qword($0B0A090803020100),qword($FFFFFFFFFFFFFFFF));
+    (QWord($0B0A090803020100),QWord($FFFFFFFFFFFFFFFF));
   _SHUF_DC00: array[0..1] of QWord =
-    (qword($FFFFFFFFFFFFFFFF),qword($B0A090803020100));
+    (QWord($FFFFFFFFFFFFFFFF),QWord($B0A090803020100));
   STACK_SIZE = 32{$ifndef LINUX}+7*16{$endif};
 
 procedure sha256_sse4(var input_data; var digest; num_blks: PtrUInt);
@@ -6492,6 +6492,7 @@ begin
   end else
     SHA.Full(p,L,Digest);
 end;
+
 
 { TSHA512 }
 

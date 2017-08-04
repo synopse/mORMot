@@ -453,69 +453,31 @@ begin
 end;
 
 constructor TSynTest.Create(const Ident: string);
-
-  procedure AddParentsFirst(C: TClass);
-  type
-    TMethodInfo =
-      {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-      packed
-      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-      record
-    {$ifdef FPC}
-      Name: PShortString;
-      Addr: Pointer;
-    {$else}
-      Len: Word;
-      Addr: Pointer;
-      Name: ShortString;
-    {$endif}
-    end;
-  var Table: {$ifdef FPC}PCardinalArray;{$else}PWordArray;{$endif}
-      M: ^TMethodInfo;
-      Method: TMethod;
-      i: integer;
-      text: RawUTF8;
-  begin
-    if C=nil then
-      exit;
-    AddParentsFirst(C.ClassParent); // put children published methods afterward
-    Table := PPointer(PtrInt(C)+vmtMethodTable)^;
-    if Table=nil then
-      exit;
-    Method.Data := self;
-    M := @Table^[1];
-    for i := 1 to Table^[0] do begin // Table^[0] = methods count
-      inc(fInternalTestsCount);
-      Method.Code := M^.Addr;
-      text := M^.Name{$ifdef FPC}^{$endif};
-      if text[1]='_' then
-        delete(text,1,1) else
-        text := UnCamelCase(text);
-      Add(TSynTestEvent(Method),Ansi7ToString(text));
-      {$ifdef FPC}
-      inc(M);
-      {$else}
-      inc(PtrInt(M),M^.Len);
-      {$endif}
-    end;
-  end;
-
-var tmp: RawUTF8;
+var id: RawUTF8;
+    methods: TPublishedMethodInfoDynArray;
+    i: integer;
 begin
   if Ident<>'' then
     fIdent := Ident else begin
-    tmp := RawUTF8(ClassName);
-    if IdemPChar(Pointer(tmp),'TSYN') then
-      if IdemPChar(Pointer(tmp),'TSYNTEST') then
-        Delete(tmp,1,8) else
-      Delete(tmp,1,4) else
-    if IdemPChar(Pointer(tmp),'TTEST') then
-      Delete(tmp,1,5) else
-    if tmp[1]='T' then
-      Delete(tmp,1,1);
-    fIdent := string(UnCamelCase(tmp));
+    ToText(ClassType,id);
+    if IdemPChar(Pointer(id),'TSYN') then
+      if IdemPChar(Pointer(id),'TSYNTEST') then
+        Delete(id,1,8) else
+      Delete(id,1,4) else
+    if IdemPChar(Pointer(id),'TTEST') then
+      Delete(id,1,5) else
+    if id[1]='T' then
+      Delete(id,1,1);
+    fIdent := string(UnCamelCase(id));
   end;
-  AddParentsFirst(PPointer(Self)^); // use recursion for adding
+  for i := 0 to GetPublishedMethods(self,methods)-1 do
+    with methods[i] do begin
+      inc(fInternalTestsCount);
+      if Name[1]='_' then
+        delete(Name,1,1) else
+        Name := UnCamelCase(Name);
+      Add(TSynTestEvent(Method),Ansi7ToString(Name));
+    end;
 end;
 
 function TSynTest.GetCount: Integer;
@@ -534,7 +496,7 @@ end;
 
 function TSynTest.GetTestMethod(Index: integer): TSynTestEvent;
 begin
-  if Cardinal(Index)>=Cardinal(length(fTests)) then
+  if (self=nil) or (Cardinal(Index)>=Cardinal(length(fTests))) then
     result := nil else
     result := fTests[Index].Method;
 end;
