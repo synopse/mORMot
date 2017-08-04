@@ -1325,13 +1325,15 @@ constructor TZipRead.Create(Instance: THandle; const ResName: string; ResType: P
 var HResInfo: THandle;
     HGlobal: THandle;
 begin
+  if Instance=0 then
+    Instance := HInstance;
   HResInfo := FindResource(Instance,PChar(ResName),ResType);
   if HResInfo=0 then
     exit;
-  HGlobal := LoadResource(HInstance, HResInfo);
+  HGlobal := LoadResource(Instance, HResInfo);
   if HGlobal<>0 then
     // warning: resources size may be rounded up to alignment -> handled in Create()
-    Create(LockResource(HGlobal),SizeofResource(HInstance, HResInfo));
+    Create(LockResource(HGlobal),SizeofResource(Instance, HResInfo));
 end;
 
 constructor TZipRead.Create(aFile: THandle; ZipStartOffset,Size: cardinal);
