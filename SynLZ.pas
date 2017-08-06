@@ -339,18 +339,21 @@ asm
         sub     eax, 11
         mov     [esp+10H], eax
         xor     ebx, ebx
-        mov     eax, esi
-        mov     [esp+18H], eax
-        xor     edx, edx
-        mov     [eax], edx
+        mov     [esp+18H], esi
+        mov     [esi], ebx
         add     esi, 4
+        cld
         lea     eax, [esp+24H]
-        xor     ecx, ecx
-        mov     edx, 16384
-        call    system.@fillchar
+        push    edi
+        mov     edi, eax
+        xor     eax, eax
+        mov     ecx, 4096
+        rep     stosd // faster than FillChar on newer processors
+        pop     edi
         // main loop:
         cmp     edi, [esp+10H]
         ja      @@0900
+        lea     eax, [eax] // nop
 @@0892: mov     edx, [edi]
         mov     eax, edx
         shr     edx, 12
