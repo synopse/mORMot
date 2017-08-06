@@ -687,7 +687,7 @@ begin
         ServersRoot := ServersRoot+' '+Root;
         for j := i+1 to high(aServers) do
           if aServers[j].Model.URIMatch(Root)<>rmNoMatch then
-            ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
+            FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root],ErrMsg);
       end;
     if ErrMsg<>'' then
        raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
@@ -868,8 +868,8 @@ begin
   err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPublicPort,https,aDomainName,aRegisterURI);
   if err=NO_ERROR then
     exit;
-  result := FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
-    [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot]);
+  FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
+    [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot],result);
   if err=ERROR_ACCESS_DENIED then
     if aRegisterURI then
       result := result+' (administrator rights needed, at least once to register the URI)' else
@@ -1077,20 +1077,20 @@ begin
         status := fHttpServer.Callback(ctxt,aResult=nil);
         if status=HTTP_SUCCESS then begin
           if aResult<>nil then
-            if IdemPChar(pointer(Ctxt.OutContent),'{"RESULT":') then
-              aResult^ := copy(Ctxt.OutContent,11,maxInt) else
-              aResult^ := Ctxt.OutContent;
+            if IdemPChar(pointer(ctxt.OutContent),'{"RESULT":') then
+              aResult^ := copy(ctxt.OutContent,11,maxInt) else
+              aResult^ := ctxt.OutContent;
           result := true;
         end else
           if aErrorMsg<>nil then
-            aErrorMsg^ := FormatUTF8('%.Callback(%) received status=% from %',
-              [fHttpServer,aConnectionID,status,ctxt.URL]);
+            FormatUTF8('%.Callback(%) received status=% from %',
+              [fHttpServer,aConnectionID,status,ctxt.URL],aErrorMsg^);
       finally
         ctxt.Free;
       end;
     end else
       if aErrorMsg<>nil then
-        aErrorMsg^ := FormatUTF8('%.NotifyCallback with fHttpServer=nil',[self]);
+        FormatUTF8('%.NotifyCallback with fHttpServer=nil',[self],aErrorMsg^);
   except
     on E: Exception do
       if aErrorMsg<>nil then

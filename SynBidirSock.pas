@@ -1167,7 +1167,7 @@ begin
   if (fHttp=nil) and (fSocket=nil) then // either fHttp or fSocket is used
     exit;
   if fCache.FindAndCopy(aAddress,cache) then
-    headin := FormatUTF8('If-None-Match: %',[cache.Tag]);
+    FormatUTF8('If-None-Match: %',[cache.Tag],RawUTF8(headin));
   if fTokenHeader<>'' then begin
     if headin<>'' then
       headin := headin+#13#10;

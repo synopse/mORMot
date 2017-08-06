@@ -38307,6 +38307,7 @@ asm
   {$endif}
 end;
 
+{$ifdef CPUX86}
 procedure _InitializeRecord(P: Pointer; TypeInfo: Pointer);
 asm // faster version by AB
         { ->    EAX pointer to record to be finalized   }
@@ -38604,6 +38605,7 @@ asm  // faster version of _CopyRecord{dest, source, typeInfo: Pointer} by AB
         pop     ebp
 end;
 
+{$endif CPUX86}
 {$endif DOPATCHTRTL}
 {$endif FPC}
 
@@ -38630,7 +38632,7 @@ end;
     it fetch the corresponding cache line from memory into the cache hierarchy.
     By-passing the cache should enhance move() speed of big memory blocks. }
 
-procedure MoveSSE2; // Johan Bontes refactored revision
+procedure MoveJBon; // Johan Bontes refactored revision
 asm // rcx=Source, rdx=Dest, r8=Count
                .noframe
                .align 16
@@ -38837,7 +38839,7 @@ asm // rcx=Source, rdx=Dest, r8=Count
                jmp @IsAbove32_2
 end;
 
-procedure FillCharSSE2; // Johan Bontes refactored revision
+procedure FillCharJBon; // Johan Bontes refactored revision
 asm
               .noframe
               .align 16
@@ -38937,9 +38939,348 @@ asm
 @donefillhuge:mfence
 end;
 
+procedure Movex64; // A. Bouchez' version
+asm // rcx=Source, rdx=Dest, r8=Count
+        .noframe
+        mov     rax, r8
+        sub     rcx, rdx
+        je      @11
+        jnc     @03
+        add     rax, rcx
+        jc      @17
+@03:    cmp     r8, 8
+        jl      @09
+        test    dl, 07H
+        jz      @06
+        test    dl, 01H
+        jz      @04
+        mov     al, byte ptr[rcx + rdx]
+        dec     r8
+        mov     byte ptr[rdx], al
+        add     rdx, 1
+@04:    test    dl, 02H
+        jz      @05
+        mov     ax, word ptr[rcx + rdx]
+        sub     r8, 2
+        mov     word ptr[rdx], ax
+        add     rdx, 2
+@05:    test    dl, 04H
+        jz      @06
+        mov     eax, dword ptr[rcx + rdx]
+        sub     r8, 4
+        mov     dword ptr[rdx], eax
+        add     rdx, 4
+@06:    mov     r9, r8
+        shr     r9, 5
+        jnz     @12
+@07:    mov     r9, r8
+        shr     r9, 3
+        jz      @09
+        nop
+@08:    dec     r9
+        mov     rax, qword ptr[rcx + rdx]
+        mov     qword ptr[rdx], rax
+        lea     rdx, rdx + 8
+        jnz     @08
+        and     r8, 07H
+@09:    test    r8, r8
+        jle     @11
+@10:    dec     r8
+        mov     al, byte ptr[rcx + rdx]
+        mov     byte ptr[rdx], al
+        lea     rdx, rdx + 1
+        jnz     @10
+@11:    ret
+@12:    cmp     r9, 8192
+        jc      @13
+        cmp     rcx, 4096
+        jnc     @14
+@13:    dec     r9
+        lea     rdx, rdx + 32
+        mov     rax, qword ptr[rcx + rdx - 20H]
+        mov     r10, qword ptr[rcx + rdx - 18H]
+        mov     qword ptr[rdx - 20H], rax
+        mov     qword ptr[rdx - 18H], r10
+        mov     rax, qword ptr[rcx + rdx - 10H]
+        mov     r10, qword ptr[rcx + rdx - 8H]
+        mov     qword ptr[rdx - 10H], rax
+        mov     qword ptr[rdx - 8H], r10
+        jnz     @13
+        and     r8, 1FH
+        jmp     @07
+@14:    mov     eax, 32
+@15:    prefetchnta [rcx + rdx]
+        prefetchnta [rcx + rdx + 40H]
+        add     rdx, 128
+        dec     eax
+        jnz     @15
+        sub     rdx, 4096
+        mov     eax, 64
+@16:    add     rdx, 64
+        mov     r9, qword ptr[rcx + rdx - 40H]
+        mov     r10, qword ptr[rcx + rdx - 38H]
+        db      $4C, $0F, $C3, $4A, $C0 // movnti qword ptr [rdx-40H],r9
+        db      $4C, $0F, $C3, $52, $C8 // movnti qword ptr [rdx-38H],r10
+        mov     r9, qword ptr[rcx + rdx - 30H]
+        mov     r10, qword ptr[rcx + rdx - 28H]
+        db      $4C, $0F, $C3, $4A, $D0 // movnti qword ptr [rdx-30H],r9
+        db      $4C, $0F, $C3, $52, $D8 // movnti qword ptr [rdx-28H],r10
+        dec     eax
+        mov     r9, qword ptr[rcx + rdx - 20H]
+        mov     r10, qword ptr[rcx + rdx - 18H]
+        db      $4C, $0F, $C3, $4A, $E0 // movnti qword ptr [rdx-20H],r9
+        db      $4C, $0F, $C3, $52, $E8 // movnti qword ptr [rdx-18H],r10
+        mov     r9, qword ptr[rcx + rdx - 10H]
+        mov     r10, qword ptr[rcx + rdx - 8H]
+        db      $4C, $0F, $C3, $4A, $F0 // movnti qword ptr [rdx-10H],r9
+        db      $4C, $0F, $C3, $52, $F8 // movnti qword ptr [rdx-8H],r10
+        jnz     @16
+        sub     r8, 4096
+        cmp     r8, 4096
+        jnc     @14
+        mfence
+        jmp     @06
+@17:    add     rdx, r8
+        cmp     r8, 8
+        jl      @23
+        test    dl, 07H
+        jz      @20
+        test    dl, 01H
+        jz      @18
+        dec     rdx
+        mov     al, byte ptr[rcx + rdx]
+        dec     r8
+        mov     byte ptr[rdx], al
+@18:    test    dl, 02H
+        jz      @19
+        sub     rdx, 2
+        mov     ax, word ptr[rcx + rdx]
+        sub     r8, 2
+        mov     word ptr[rdx], ax
+@19:    test    dl, 04H
+        jz      @20
+        sub     rdx, 4
+        mov     eax, dword ptr[rcx + rdx]
+        sub     r8, 4
+        mov     dword ptr[rdx], eax
+@20:    mov     r9, r8
+        shr     r9, 5
+        jnz     @26
+@21:    mov     r9, r8
+        shr     r9, 3
+        jz      @23
+@22:    sub     rdx, 8
+        mov     rax, qword ptr[rcx + rdx]
+        dec     r9
+        mov     qword ptr[rdx], rax
+        jnz     @22
+        and     r8, 07H
+@23:    test    r8, r8
+        jle     @25
+@24:    dec     rdx
+        mov     al, byte ptr[rcx + rdx]
+        dec     r8
+        mov     byte ptr[rdx], al
+        jnz     @24
+@25:    ret
+@26:    cmp     r9, 8192
+        jc      @27
+        cmp     rcx,  - 4096
+        jc      @28
+@27:    sub     rdx, 32
+        mov     rax, qword ptr[rcx + rdx + 18H]
+        mov     r10, qword ptr[rcx + rdx + 10H]
+        mov     qword ptr[rdx + 18H], rax
+        mov     qword ptr[rdx + 10H], r10
+        dec     r9
+        mov     rax, qword ptr[rcx + rdx + 8H]
+        mov     r10, qword ptr[rcx + rdx]
+        mov     qword ptr[rdx + 8H], rax
+        mov     qword ptr[rdx], r10
+        jnz     @27
+        and     r8, 1FH
+        jmp     @21
+@28:    mov     eax, 32
+@29:    sub     rdx, 128
+        prefetchnta [rcx + rdx]
+        prefetchnta [rcx + rdx + 40H]
+        dec     eax
+        jnz     @29
+        add     rdx, 4096
+        mov     eax, 64
+@30:    sub     rdx, 64
+        sub     r8, 4096
+        mov     r9, qword ptr[rcx + rdx + 38H]
+        mov     r10, qword ptr[rcx + rdx + 30H]
+        db      $4C, $0F, $C3, $4A, $38 // movnti qword ptr [rdx+38H],r9
+        db      $4C, $0F, $C3, $52, $30 // movnti qword ptr [rdx+30H],r10
+        mov     r9, qword ptr[rcx + rdx + 28H]
+        mov     r10, qword ptr[rcx + rdx + 20H]
+        db      $4C, $0F, $C3, $4A, $28 // movnti qword ptr [rdx+28H],r9
+        db      $4C, $0F, $C3, $52, $20 // movnti qword ptr [rdx+20H],r10
+        dec     eax
+        mov     r9, qword ptr[rcx + rdx + 18H]
+        mov     r10, qword ptr[rcx + rdx + 10H]
+        db      $4C, $0F, $C3, $4A, $18 // movnti qword ptr [rdx+18H],r9
+        db      $4C, $0F, $C3, $52, $10 // movnti qword ptr [rdx+10H],r10
+        mov     r9, qword ptr[rcx + rdx + 8H]
+        mov     r10, qword ptr[rcx + rdx]
+        db      $4C, $0F, $C3, $4A, $08 // movnti qword ptr [rdx+8H],r9
+        db      $4C, $0F, $C3, $12 // movnti qword ptr [rdx],r10
+        jnz     @30
+        cmp     r8, 4096
+        jnc     @28
+        mfence
+        jmp     @20
+end;
+
+procedure FillCharx64; // A. Bouchez' version
+asm  // rcx=Dest rdx=Count r8=Value
+        .noframe
+        cmp     rdx, 32
+        mov     rax, r8
+        jle     @small
+        and     r8, 0FFH
+        mov     r9, 101010101010101H
+        imul    r8, r9
+        test    cl, 07H
+        jz      @27C5
+        test    cl, 01H
+        jz      @27A4
+        mov     byte ptr[rcx], r8b
+        add     rcx, 1
+        sub     rdx, 1
+@27A4:  test    cl, 02H
+        jz      @27B5
+        mov     word ptr[rcx], r8w
+        add     rcx, 2
+        sub     rdx, 2
+@27B5:  test    cl, 04H
+        jz      @27C5
+        mov     dword ptr[rcx], r8d
+        add     rcx, 4
+        sub     rdx, 4
+@27C5:  mov     rax, rdx
+        and     rdx, 3FH
+        shr     rax, 6
+        jnz     @27FD
+@27D2:  mov     rax, rdx
+        and     rdx, 07H
+        shr     rax, 3
+        jz      @27EC
+@27E0:  mov     qword ptr[rcx], r8
+        add     rcx, 8
+        dec     rax
+        jnz     @27E0
+@27EC:  test    rdx, rdx
+        jle     @27FC
+@27F1:  mov     byte ptr[rcx], r8b
+        inc     rcx
+        dec     rdx
+        jnz     @27F1
+@27FC:  ret
+@27FD:  cmp     rax, 8192
+        jnc     @2840
+@2810:  add     rcx, 64
+        mov     qword ptr[rcx - 40H], r8
+        mov     qword ptr[rcx - 38H], r8
+        mov     qword ptr[rcx - 30H], r8
+        mov     qword ptr[rcx - 28H], r8
+        dec     rax
+        mov     qword ptr[rcx - 20H], r8
+        mov     qword ptr[rcx - 18H], r8
+        mov     qword ptr[rcx - 10H], r8
+        mov     qword ptr[rcx - 8H], r8
+        jnz     @2810
+        jmp     @27D2
+@2840:  add     rcx, 64
+        db      $4C, $0F, $C3, $41, $C0 // movnti  qword ptr [rcx-40H],r8
+        db      $4C, $0F, $C3, $41, $C8 // movnti  qword ptr [rcx-38H],r8
+        db      $4C, $0F, $C3, $41, $D0 // movnti  qword ptr [rcx-30H],r8
+        db      $4C, $0F, $C3, $41, $D8 // movnti  qword ptr [rcx-28H],r8
+        dec     rax
+        db      $4C, $0F, $C3, $41, $E0 // movnti  qword ptr [rcx-20H],r8
+        db      $4C, $0F, $C3, $41, $E8 // movnti  qword ptr [rcx-18H],r8
+        db      $4C, $0F, $C3, $41, $F0 // movnti  qword ptr [rcx-10H],r8
+        db      $4C, $0F, $C3, $41, $F8 // movnti  qword ptr [rcx-8H],r8
+        jnz     @2840
+        mfence
+        jmp     @27D2
+@small: // rcx=Dest rdx=Count r8=Value<=32
+        test    rdx, rdx
+        jle     @@done
+        mov     ah, al
+        mov     [rcx + rdx - 1], al
+        lea     r8, [@table]
+        and     rdx,  - 2
+        neg     rdx
+        lea     rdx, [r8 + rdx * 2 + 64]
+        jmp     rdx
+@table: mov     [rcx + 30], ax
+        mov     [rcx + 28], ax
+        mov     [rcx + 26], ax
+        mov     [rcx + 24], ax
+        mov     [rcx + 22], ax
+        mov     [rcx + 20], ax
+        mov     [rcx + 18], ax
+        mov     [rcx + 16], ax
+        mov     [rcx + 14], ax
+        mov     [rcx + 12], ax
+        mov     [rcx + 10], ax
+        mov     [rcx + 8], ax
+        mov     [rcx + 6], ax
+        mov     [rcx + 4], ax
+        mov     [rcx + 2], ax
+        mov     [rcx], ax
+        ret
+@@done:
+end;
+
+procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
+asm // rcx=Source, rdx=Dest, r8=Count
+        .noframe
+        test    r8, r8
+        jle     @none
+        cld
+        cmp     rdx, rcx
+        push    rsi
+        push    rdi
+        ja      @down
+        mov     rsi, rcx
+        mov     rdi, rdx
+        mov     rcx, r8
+        rep     movsb
+        pop     rdi
+        pop     rsi
+@none:  ret
+@down:  lea     rsi, [rcx + r8 - 1]
+        lea     rdi, [rdx + r8 - 1]
+        mov     rcx, r8
+        std
+        rep     movsb
+        cld
+        pop     rdi
+        pop     rsi
+end;
+
+procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
+asm // rcx=Dest, rdx=Count, r8b=Value
+        .noframe
+        test    rdx, rdx
+        jle     @none
+        cld
+        push    rdi
+        mov     rdi, rcx
+        mov     rax, r8
+        mov     rcx, rdx
+        rep     stosb
+        pop     rdi
+@none:
+end;
+
 function StrLenSSE2(S: pointer): PtrInt;
 asm // from GPL strlen64.asm by Agner Fog - www.agner.org/optimize
-        .NOFRAME
+        .noframe
         test    rcx, rcx
         mov     rax, rcx             // get pointer to string from rcx
         mov     r8, rcx              // copy pointer
@@ -39155,6 +39496,44 @@ asm // eax=source edx=dest ecx=count
         mov     [edx + 4], eax
 end;
 
+procedure FillCharERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
+asm // eax=Dest edx=Count cl=Value
+      test    edx, edx
+      jle     @none
+      cld
+      push    edi
+      mov     edi, eax
+      mov     al, cl
+      mov     ecx, edx
+      rep     stosb
+      pop     edi
+@none:
+end;
+
+procedure MoveERMSB; // Ivy Bridge+ Enhanced REP MOVSB/STOSB CPUs
+asm // eax=source edx=dest ecx=count
+      test    ecx, ecx
+      jle     @none
+      cld
+      cmp     edx, eax
+      push    esi
+      push    edi
+      ja      @down
+      mov     esi, eax
+      mov     edi, edx
+      rep     movsb
+      pop     edi
+      pop     esi
+@none:ret
+@down:lea     esi, [eax + ecx - 1]
+      lea     edi, [edx + ecx - 1]
+      std
+      rep     movsb
+      pop     edi
+      pop     esi
+      cld
+end;
+
 function StrLenX86(S: pointer): PtrInt;
 // pure x86 function (if SSE2 not available) - faster than SysUtils' version
 asm
@@ -39322,8 +39701,14 @@ procedure InitRedirectCode;
 begin
   {$ifdef DELPHI5OROLDER}
   StrLen := @StrLenX86;
-  FillcharFast := @FillCharX87;
-  MoveFast := @MoveX87;
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then begin
+    MoveFast := @MoveERMSB;
+    FillcharFast := @FillCharERMSB;
+  end else {$endif} begin
+    MoveFast := @MoveX87;
+    FillcharFast := @FillCharX87;
+  end;
   {$else}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
@@ -39331,8 +39716,16 @@ begin
     StrLen := @StrLenSSE42 else
   {$endif}
     StrLen := @StrLenSSE2;
-  FillcharFast := @FillCharSSE2;
-  //MoveFast := @MoveSSE2; // actually slower than RTL's for small blocks
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then begin
+    MoveFast := @MoveERMSB;
+    FillcharFast := @FillCharERMSB;
+  end else {$endif} begin
+    //MoveFast := @MoveJBon; // Johan Bontes' is actually slower than RTL's
+    //FillcharFast := @FillCharJBon; // this Johan Bontes' version is buggy
+    MoveFast := @Movex64;
+    FillCharFast := @Fillcharx64;
+  end;
   {$else}
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
@@ -39344,9 +39737,12 @@ begin
     StrLen := @StrLenX86;
     FillcharFast := @FillCharX87;
   end;
-  MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
-  {$else}
-  Pointer(@FillCharFast) := SystemFillCharAddress;
+  {$ifdef WITH_ERMS}
+  if cfERMS in CpuFeatures then begin
+    MoveFast := @MoveERMSB;
+    FillcharFast := @FillCharERMSB;
+  end else {$endif}
+    MoveFast := @MoveX87; // SSE2 is not faster than X87 version on 32 bit CPU
   {$endif CPUINTEL}
   {$endif CPU64}
   {$endif DELPHI5OROLDER}
@@ -39355,12 +39751,14 @@ begin
   if DebugHook=0 then begin // patch only outside debugging
     RedirectCode(SystemFillCharAddress,@FillcharFast);
     RedirectCode(@System.Move,@MoveFast);
+    {$ifdef CPUX86}
     RedirectCode(SystemRecordCopyAddress,@RecordCopy);
     RedirectCode(SystemFinalizeRecordAddress,@RecordClear);
     RedirectCode(SystemInitializeRecordAddress,@_InitializeRecord);
     {$ifndef UNICODE} // buggy Delphi 2009+ RTL expects a TMonitor.Destroy call
     RedirectCode(@TObject.CleanupInstance,@TObjectCleanupInstance);
     {$endif UNICODE}
+    {$endif}
   end;
   {$endif DOPATCHTRTL}
 end;
@@ -64305,7 +64703,7 @@ function EventEquals(const eventA,eventB): boolean;
 var A: TMethod absolute eventA;
     B: TMethod absolute eventB;
 begin
-  result := (A.Code=B.Code) and (A.Data=B.Data); 
+  result := (A.Code=B.Code) and (A.Data=B.Data);
 end;
 
 var
@@ -64520,14 +64918,13 @@ initialization
   {$endif}
   MoveFast := @System.Move;
   {$ifdef FPC}
-  FillCharFast := @System.FillChar;
+  FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}
   {$ifdef CPUARM}
   FillCharFast := @System.FillChar;
   {$else}
-  {$ifdef USEPACKAGES}
   Pointer(@FillCharFast) := SystemFillCharAddress;
-  {$else}
+  {$ifndef USEPACKAGES}
   InitRedirectCode;
   {$endif USEPACKAGES}
   {$endif CPUARM}

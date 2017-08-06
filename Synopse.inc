@@ -137,7 +137,12 @@
 {.$define OPT4AMD}
 // you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
-// (with the Delphi x86 compiler, may not be the case for LLVM or FPC) 
+// (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
+
+{.$define WITH_ERMS}
+// you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
+// flag is available in Intel's CpuFeatures 
+// -> disabled by default, since in practice it is much slower for small blocks
 
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL
@@ -494,7 +499,6 @@
 {$ifdef PUREPASCAL}
   {$define NODELPHIASM}
   {$define FPC_OR_PUREPASCAL}
-  {$undef DOPATCHTRTL}
 {$else}
 {$endif PUREPASCAL}
 
