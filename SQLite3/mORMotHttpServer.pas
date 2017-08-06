@@ -1077,7 +1077,9 @@ begin
         status := fHttpServer.Callback(ctxt,aResult=nil);
         if status=HTTP_SUCCESS then begin
           if aResult<>nil then
-            aResult^ := Ctxt.OutContent;
+            if IdemPChar(pointer(Ctxt.OutContent),'{"RESULT":') then
+              aResult^ := copy(Ctxt.OutContent,11,maxInt) else
+              aResult^ := Ctxt.OutContent;
           result := true;
         end else
           if aErrorMsg<>nil then

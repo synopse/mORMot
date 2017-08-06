@@ -2504,7 +2504,7 @@ const
   AESMaxRounds = 14;
 
 type
-  TKeyArray   = packed array[0..AESMaxRounds] of TAESBlock;
+  TKeyArray = packed array[0..AESMaxRounds] of TAESBlock;
 
   TAESContext = packed record
     // don't change the structure below: it is fixed in the asm code

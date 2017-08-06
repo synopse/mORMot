@@ -123,7 +123,7 @@ type
     // test list, accessible via the Count/TestName/TestMethod properties
     constructor Create(const Ident: string = '');
     /// register a specified test to this class instance
-    procedure Add(aMethod: TSynTestEvent; const aName: string);
+    procedure Add(const aMethod: TSynTestEvent; const aName: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -430,17 +430,15 @@ type
 implementation
 
 {$ifdef FPC}
+{$ifndef MSWINDOWS}
 uses
-  SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
-  {$ifdef Linux}
-  , SynFPCLinux,BaseUnix, Unix, dynlibs
-  {$endif} ;
+  SynFPCLinux;
 {$endif}
-
+{$endif}
 
 { TSynTest }
 
-procedure TSynTest.Add(aMethod: TSynTestEvent; const aName: string);
+procedure TSynTest.Add(const aMethod: TSynTestEvent; const aName: string);
 var i: integer;
 begin
   if self=nil then

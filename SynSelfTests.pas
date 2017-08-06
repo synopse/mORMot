@@ -950,8 +950,20 @@ type
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchCallback(a: integer);
+    procedure LaunchAsynchCallback(a: integer);
     procedure RemoveCallback;
+  end;
+
+  TBidirServer = class(TInterfacedObject,IBidirService)
+  protected
+    fCallback: IBidirCallback;
+    function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+    procedure LaunchAsynchCallback(a: integer);
+    procedure RemoveCallback;
+  public
+    function LaunchSynchCallback: integer;
   end;
 
   /// a test case for all bidirectional remote access, e.g. WebSockets
@@ -959,6 +971,7 @@ type
   protected
     fHttpServer: TSQLHttpServer;
     fServer: TSQLRestServerFullMemory;
+    fBidirServer: TBidirServer;
     procedure CleanUp; override;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TSQLRest);
@@ -16514,16 +16527,6 @@ begin
 end;
 
 type
-  TBidirServer = class(TInterfacedObject,IBidirService)
-  protected
-    fCallback: IBidirCallback;
-    function TestRest(a,b: integer; out c: RawUTF8): variant;
-    function TestRestCustom(a: integer): TServiceCustomAnswer;
-    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchCallback(a: integer);
-    procedure RemoveCallback;
-  end;
-
   TBidirCallbackInterfacedObject = class(TInterfacedObject,IBidirCallback)
   protected
     fValue: Integer;
@@ -16558,10 +16561,17 @@ begin
   result := d<>0;
 end;
 
-procedure TBidirServer.LaunchCallback(a: integer);
+procedure TBidirServer.LaunchAsynchCallback(a: integer);
 begin
   if Assigned(fCallback) then
     fCallback.AsynchEvent(a);
+end;
+
+function TBidirServer.LaunchSynchCallback: integer;
+begin
+  if Assigned(fCallback) then
+    result := fCallback.Value else
+    result := 0;
 end;
 
 procedure TBidirServer.RemoveCallback;
@@ -16598,7 +16608,8 @@ begin
   // sicClientDriven services expect authentication for sessions
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
-  Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicShared)<>nil);
+  fBidirServer := TBidirServer.Create;
+  Check(fServer.ServiceDefine(fBidirServer,[IBidirService])<>nil);
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).Settings.SetFullLog;
@@ -16651,23 +16662,25 @@ begin
   subscribed := TBidirCallbackInterfacedObject.Create;
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
   end;
   WaitUntilNotified;
+  check(fBidirServer.LaunchSynchCallback=6);
   Rest.Services.CallBackUnRegister(subscribed); // manual callback release notify
   subscribed := TBidirCallback.Create(Rest,IBidirCallback); // auto notification
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
   end;
   WaitUntilNotified;
   subscribed := TBidirCallback.Create(Rest,IBidirCallback);
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
     I.RemoveCallback;
   end;
   WaitUntilNotified;
+  check(fBidirServer.LaunchSynchCallback=0);
 end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 
 procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
