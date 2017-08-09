@@ -151,9 +151,9 @@ unit SynLZ;
 
   Benchmark update - introducing LZ4 at http://code.google.com/p/lz4
 
-  190 MB file containing pascal sources, on a Core 2 duo PC:
+  190 MB file containing pascal sources, on a Core 2 duo PC, using x86 asm:
    LZ4     compression = 1.25 sec, comp. size = 71 MB, decompression = 0.44 sec
-   SynLZ   compression = 1.09 sec, comp. size = 63 MB, decompression = 0.99 sec
+   SynLZ   compression = 1.09 sec, comp. size = 63 MB, decompression = 0.51 sec
    zip (1) compression = 6.44 sec, comp. size = 52 MB, decompression = 1.49 sec
    zip (6) compression = 20.1 sec, comp. size = 42 MB, decompression = 1.35 sec
 
@@ -167,8 +167,8 @@ unit SynLZ;
   Conclusion:
    SynLZ compresses better than LZ4,
    SynLZ is faster to compress than LZ4,
-   but SynLZ is slower to decompress than LZ4,
-   and SynLZ is still very competitive for our Client-Server mORMot purpose ;)
+   but SynLZ is slightly slower to decompress than LZ4,
+   so SynLZ is still very competitive for our Client-Server mORMot purpose ;)
 
 
   Revision history
@@ -294,7 +294,7 @@ end;
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 asm
-  jmp SynLzCompress1Asm
+  jmp SynLzCompress1asm
 end;
 
 function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
@@ -304,157 +304,162 @@ asm
         push    esi
         push    edi
         push    eax
-        mov     eax, 8
-@@0906: add     esp, -4092
+        add     esp, -4092
         push    eax
-        dec     eax
-        jnz     @@0906
-        mov     eax, [esp+8000H]
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
         add     esp, -32
-        mov     esi, ecx
-        mov     [esp], edx
-        mov     edi, eax
-        mov     [esp+8H], esi
-        mov     eax,[esp]
+        mov     esi, eax // esi=src
+        mov     edi, ecx // edi=dst
+        mov     [esp+08H], ecx
+        mov     eax, edx
         cmp     eax, 32768
         jl      @@0889
-        and     eax, 7FFFH
-        or      eax, 8000H
-        mov     [esi], ax
-        mov     eax, [esp]
+        or      ax, 8000H
+        mov     [edi], eax
+        mov     eax, edx
         shr     eax, 15
-        mov     [esi+2], ax
-        add     esi, 4
+        mov     [edi+2], eax
+        add     edi, 4
         jmp     @@0891
 @@0890: mov     eax, 2
         jmp     @@0904
-@@0889: mov     [esi], ax
-        test    eax,eax
-        jz     @@0890
-        add     esi,2
-@@0891: mov     eax, [esp]
-        add     eax, edi
+@@0889: mov     [edi], eax
+        test    eax, eax
+        jz      @@0890
+        add     edi, 2
+@@0891: lea     eax, [edx+esi]
+        mov     [esp+18H], edi
         mov     [esp+0CH], eax
-        mov     eax, [esp+0CH]
         sub     eax, 11
-        mov     [esp+10H], eax
-        xor     ebx, ebx
-        mov     [esp+18H], esi
-        mov     [esi], ebx
-        add     esi, 4
-        cld
-        lea     eax, [esp+24H]
-        push    edi
-        mov     edi, eax
+        mov     [esp+4], eax
+        lea     ebx, [esp+24H]
         xor     eax, eax
-        mov     ecx, 4096
-        rep     stosd // faster than FillChar on newer processors
-        pop     edi
+        mov     ecx, 1024
+@@089I: mov     [ebx], eax // faster than FillChar / stosb
+        mov     [ebx+4], eax
+        mov     [ebx+8], eax
+        mov     [ebx+12], eax
+        add     ebx, 16
+        dec     ecx
+        jnz     @@089I
+        mov     [edi], eax
+        add     edi, 4
+        mov     ebx, 1 // ebx=1 shl CWbit
         // main loop:
-        cmp     edi, [esp+10H]
+        cmp     esi, [esp+4]
         ja      @@0900
-        lea     eax, [eax] // nop
-@@0892: mov     edx, [edi]
+@@0892: mov     edx, [esi]
         mov     eax, edx
         shr     edx, 12
         xor     edx, eax
         and     edx, 0FFFH
         mov     ebp, [esp+edx*4+24H]
         mov     ecx, [esp+edx*4+4024H]
-        mov     [esp+edx*4+24H], edi
+        mov     [esp+edx*4+24H], esi
         xor     ecx, eax
-        mov     [esp+1CH], ecx
         test    ecx, 0FFFFFFH
         mov     [esp+edx*4+4024H], eax
         jnz     @@0897
-        mov     eax, edi
-        or      ebp,ebp
+        mov     eax, esi
+        or      ebp, ebp
         jz      @@0897
         sub     eax, ebp
         cmp     eax, 2
         mov     ecx, [esp+18H]
         jle     @@0897
-        mov     eax,[ecx]
-        lea     edi,[edi+2]
-        bts     eax,ebx
-        add     ebp, 2
-        mov     [ecx],eax
+        lea     esi, [esi+2]
+        or      dword ptr[ecx], ebx
         mov     ecx, [esp+0CH]
+        add     ebp, 2
         mov     eax, 1
-        sub     ecx, edi
+        sub     ecx, esi
         dec     ecx
-        mov     [esp+20H], ecx
+        mov     [esp], ecx
         cmp     ecx, 271
         jl      @@0894
-        mov     dword ptr [esp+20H], 271
-        jmp @@0894
+        mov     dword ptr [esp], 271
+        jmp     @@0894
 @@0893: inc     eax
-@@0894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+@@0894: mov     ecx, [ebp+eax]
+        cmp     cl, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        cmp     eax, [esp]
         jge     @@0895
-@@1893: inc     eax
-@@1894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+        inc     eax
+        cmp     ch, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        shr     ecx, 16
+        cmp     eax, [esp]
         jge     @@0895
-@@2893: inc     eax
-@@2894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+        inc     eax
+        cmp     cl, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        cmp     eax, [esp]
+        jge     @@0895
+        inc     eax
+        cmp     ch, [esi+eax]
+        jnz     @@0895
+        cmp     eax, [esp]
         jl      @@0893
-@@0895: add     edi, eax
+@@0895: add     esi, eax
         shl     edx, 4
         cmp     eax, 15
         jg      @@0896
         or      eax, edx
-        mov     word ptr [esi], ax
-        add     esi, 2
+        mov     word ptr [edi], ax
+        add     edi, 2
         jmp     @@0898
 @@0896: sub     eax, 16
-        mov     [esi], dx
-        mov     [esi+2H], al
-        add     esi, 3
+        mov     [edi], dx
+        mov     [edi+2H], al
+        add     edi, 3
         jmp     @@0898
-@@0897: mov     al, [edi]
-        mov     [esi], al
-        inc     edi
+@@0897: mov     al, [esi] // movsb is actually slower!
+        mov     [edi], al
         inc     esi
-@@0898: cmp     bl, 31
-        jnc     @@0899
-        cmp     edi, [esp+10H]
-        lea     ebx,[ebx+1]
+        inc     edi
+@@0898: add     ebx, ebx
+        jz      @@0899
+        cmp     esi, [esp+4]
         jbe     @@0892
         jmp     @@0900
-@@0899: mov     [esp+18H], esi
-        xor     edx, edx
-        mov     [esi], edx
-        add     esi, 4
-        xor     ebx, ebx
-        cmp     edi, [esp+10H]
+@@0899: mov     [esp+18H], edi
+        mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+4]
         jbe     @@0892
-@@0900: cmp     edi, [esp+0CH]
+@@0900: cmp     esi, [esp+0CH]
         jnc     @@0903
-@@0901: mov     al, [edi]
-        mov     [esi], al
-        inc     edi
+@@0901: mov     al, [esi] 
+        mov     [edi], al
         inc     esi
-        cmp     bl, 31
-        jnc     @@0902
-        cmp     edi, [esp+0CH]
-        lea     ebx,[ebx+1]
+        inc     edi
+        add     ebx, ebx
+        jz      @@0902
+        cmp     esi, [esp+0CH]
         jc      @@0901
         jmp     @@0903
-@@0902: xor     ebx, ebx
-        mov     [esi], ebx
-        lea     esi,[esi+4]
-        cmp     edi, [esp+0CH]
+@@0902: mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+0CH]
         jc      @@0901
-@@0903: mov     eax, esi
-        sub     eax, [esp+8H]
+@@0903: mov     eax, edi
+        sub     eax, [esp+08H]
 @@0904: add     esp, 32804
         pop     edi
         pop     esi
@@ -682,17 +687,19 @@ asm
         push    esi
         push    edi
         push    eax
-        mov     eax, 4
-@@0906: add     esp, -4092
+        add     esp, -4092
         push    eax
-        dec     eax
-        jnz     @@0906
-        mov     eax, [esp+4000H]
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
         add     esp, -24
         mov     esi, ecx
         mov     ebx, eax
+        add     edx, eax
         mov     [esp+8H], esi
-        add     edx, ebx
         mov     [esp+10H], edx
         movzx   eax, word ptr [ebx]
         mov     [esp], eax
@@ -713,14 +720,14 @@ asm
         add     ebx, 4
         mov     [esp+14H], ecx
         cmp     ebx, [esp+10H]
-        mov     edi, 1
+        mov     edi, 1             // edi=CWbit
         jnc     @@0917
 @@0909: mov     ecx, [esp+14H]
 @@090A: test    ecx, edi
         jnz     @@0911
-        mov     al, byte ptr [ebx]
+        mov     al, [ebx]
         inc     ebx
-        mov     byte ptr [esi], al
+        mov     [esi], al
         inc     esi
         cmp     ebx, [esp+10H]
         lea     eax, [esi-3]
@@ -737,7 +744,6 @@ asm
 @@0910: add     edi, edi
         jnz     @@090A
         jmp     @@0908
-
 @@0911: movzx   edx, word ptr [ebx]
         add     ebx, 2
         mov     eax, edx
@@ -754,11 +760,48 @@ asm
         mov     [esp+18H], edx
         sub     ecx, eax
         cmp     ecx, edx
-        jl     @@0913
-        mov     ecx, edx
-        mov     edx, esi
-        call    move
-@@0914: cmp     esi, ebp
+        jl      @@0913
+        cmp     edx, 32            // inlined optimized move()
+        ja      @large
+        sub     edx, 8
+        jg      @9_32              
+        mov     ecx, [eax]
+        mov     eax, [eax+4]       // always copy 8 bytes for 0..8
+        mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
+        mov     [esi+4], eax
+        jmp     @movend
+@9_32:  fild    qword ptr[eax+edx]
+        fild    qword ptr[eax]
+        cmp     edx, 8
+        jle     @16
+        fild    qword ptr[eax+8]
+        cmp     edx, 16
+        jle     @24
+        fild    qword ptr[eax+16]
+        fistp   qword ptr[esi+16]
+@24:    fistp   qword ptr[esi+8]
+@16:    fistp   qword ptr[esi]
+        fistp   qword ptr[esi+edx]
+        jmp     @movend
+        nop
+@large: push    esi
+        fild    qword ptr[eax]
+        lea     eax, [eax+edx-8]
+        lea     edx, [esi+edx-8]
+        fild    qword ptr[eax]
+        push    edx
+        neg     edx
+        and     esi,  -8
+        lea     edx, [edx+esi+8]
+        pop     esi                           
+@lrgnxt:fild    qword ptr[eax+edx]
+        fistp   qword ptr[esi+edx]
+        add     edx, 8
+        jl      @lrgnxt
+        fistp   qword ptr[esi]
+        pop     esi
+        fistp   qword ptr[esi]
+@movend:cmp     esi, ebp
         jbe     @@0916
 @@0915: inc     ebp
         mov     edx, [ebp]
@@ -784,7 +827,7 @@ asm
         lea     ecx,[ecx+1]
         jnz     @s
         pop     ebx
-        jmp     @@0914
+        jmp     @movend
 @@0917: mov     eax, [esp]
         add     esp, 16412
         pop     edi
@@ -848,14 +891,18 @@ nextCW:
       end;
       {$ifdef CPU64}
       o := offset[h];
-      if (t<8) or (PtrUInt(dst-o)<t) then
+      if PtrUInt(dst-o)<t then
         for i := 0 to t do
           dst[i] := o[i] else
-        move(o^,dst^,t);
+        if t<=8 then
+          PInt64(dst)^ := PInt64(o)^ else
+          move(o^,dst^,t);
       {$else}
       if PtrUInt(dst-offset[h])<t then
         movechars(offset[h],dst,t) else
-        move(offset[h]^,dst^,t);
+        if t>8 then // safe since src_endmatch := src_end-(6+5)
+          move(offset[h]^,dst^,t) else
+          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
       {$endif}
       if src>=src_end then break;
       while last_hashed<dst do begin
