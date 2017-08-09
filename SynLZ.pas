@@ -468,10 +468,6 @@ asm
 end;
 {$endif PUREPASCAL}
 
-type
-  TByteArray = array[0..3] of byte;
-  PByteArray = ^TByteArray;
-
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var dst_beg,          // initial dst value
     src_end,          // real last byte available in src
@@ -892,7 +888,7 @@ nextCW:
       {$ifdef CPU64}
       o := offset[h];
       if PtrUInt(dst-o)<t then
-        for i := 0 to t do
+        for i := 0 to t-1 do
           dst[i] := o[i] else
         if t<=8 then
           PInt64(dst)^ := PInt64(o)^ else
@@ -1291,7 +1287,7 @@ begin
     case L and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(P)^);
     2: inc(s1,PWord(P)^);
-    3: inc(s1,PWord(P)^ or (PByteArray(P)^[2] shl 16));
+    3: inc(s1,PWord(P)^ or (ord(PAnsiChar(P)[2]) shl 16));
     end;
     inc(s2,s1);
     result := s1 xor (s2 shl 16);
