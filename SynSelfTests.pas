@@ -9128,7 +9128,7 @@ procedure TTestCompression._SynLZ;
 var s,t: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
-    {$ifndef PUREPASCAL}
+    {$ifdef CPUINTEL}
     comp1,dec2: array of byte;
     complen1: integer;
     {$endif}
@@ -9148,12 +9148,12 @@ begin
     SetLength(comp2,SynLZcompressdestlen(length(s)));
     complen2 := SynLZcompress1pas(Pointer(s),length(s),pointer(comp2));
     Check(complen2<length(comp2));
-    {$ifdef PUREPASCAL}
+    {$ifndef CPUINTEL}
     Check(@SynLZCompress1=@SynLZcompress1pas);
     Check(@SynLZDecompress1=@SynLZdecompress1pas);
     {$else}
     SetLength(comp1,SynLZcompressdestlen(length(s)));
-    complen1 := SynLZcompress1asm(Pointer(s),length(s),pointer(comp1));
+    complen1 := SynLZcompress1(Pointer(s),length(s),pointer(comp1));
     Check(complen1<length(comp1));
     Check(complen1=complen2);
     Check(CompareMem(pointer(comp1),pointer(comp2),complen1));
@@ -9163,7 +9163,7 @@ begin
     Check(SynLZdecompress1pas(Pointer(comp1),complen1,pointer(dec1))=length(s));
     Check(CompareMem(pointer(dec1),pointer(s),length(s)));
     SetLength(dec2,Length(s));
-    Check(SynLZdecompress1asm(Pointer(comp2),complen2,pointer(dec2))=length(s));
+    Check(SynLZdecompress1(Pointer(comp2),complen2,pointer(dec2))=length(s));
     Check(CompareMem(pointer(dec1),pointer(s),length(s)));
     {$endif}
   end;
