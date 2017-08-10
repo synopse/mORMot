@@ -150,25 +150,34 @@ unit SynLZ;
 
 
   Benchmark update - introducing LZ4 at http://code.google.com/p/lz4
-
   190 MB file containing pascal sources, on a Core 2 duo PC, using x86 asm:
    LZ4     compression = 1.25 sec, comp. size = 71 MB, decompression = 0.44 sec
    SynLZ   compression = 1.09 sec, comp. size = 63 MB, decompression = 0.51 sec
    zip (1) compression = 6.44 sec, comp. size = 52 MB, decompression = 1.49 sec
    zip (6) compression = 20.1 sec, comp. size = 42 MB, decompression = 1.35 sec
-
-  Note: zip decompression here uses fast asm optimized version of SynZip.pas
-
+   Note: zip decompression here uses fast asm optimized version of SynZip.pas
   Decompression is slower in SynLZ, due to the algorithm used: it does recreate
    the hash table even at decompression, while it is not needed by LZ4.
   Having the hash table at hand allows more patterns to be available, so
    compression ratio is better, at the expand of a slower speed.
 
   Conclusion:
-   SynLZ compresses better than LZ4,
-   SynLZ is faster to compress than LZ4,
-   but SynLZ is slightly slower to decompress than LZ4,
-   so SynLZ is still very competitive for our Client-Server mORMot purpose ;)
+   SynLZ compresses better than LZ4, SynLZ is faster to compress than LZ4,
+   but slower to decompress than LZ4. So SynLZ is still very competitive for
+   our Client-Server mORMot purpose, since it is a simple pascal unit with
+   no external .obj/.o/.dll dependency. ;)
+
+  Updated benchmarks on a Core i7, with the 2017/08 x86 and x64 optimized asm:
+    Win32 Processing devpcm.log = 98.7 MB
+       Snappy compress in 125.07ms, ratio=84%, 789.3 MB/s
+       Snappy uncompress in 70.35ms, 1.3 GB/s
+       SynLZ compress in 103.61ms, ratio=93%, 952.8 MB/s
+       SynLZ uncompress in 68.71ms, 1.4 GB/s
+    Win64 Processing devpcm.log = 98.7 MB
+       Snappy compress in 107.13ms, ratio=84%, 921.5 MB/s
+       Snappy uncompress in 61.06ms, 1.5 GB/s
+       SynLZ compress in 97.25ms, ratio=93%, 1015.1 MB/s
+       SynLZ uncompress in 61.27ms, 1.5 GB/s
 
 
   Revision history
@@ -197,7 +206,8 @@ unit SynLZ;
   - added SynLZdecompress1partial() function for partial and secure (but slower)
     decompression - implements feature request [82ca067959]
   - removed several compilation hints when assertions are set to off
-  - some performance optimization, especially when using a 64bit CPU
+  - some performance optimization, especially when using a 64bit CPU, thanks
+    to a new tuned x64 asm revision, and 8 bytes chunk copy for smallest blocks
 
 }
 
