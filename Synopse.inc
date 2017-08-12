@@ -137,7 +137,12 @@
 {.$define OPT4AMD}
 // you may define this to optimize for AMD CPUs - e.g. to use "set of byte"
 // which will use BT[mem] opcodes, which are slow on Intel, but fast on AMD
-// (with the Delphi x86 compiler, may not be the case for LLVM or FPC) 
+// (with the Delphi x86 compiler, may not be the case for LLVM or FPC)
+
+{.$define WITH_ERMS}
+// you may define this to enable REP MOVSB/STOSB for Fillchar/Move if cfERMS
+// flag is available in Intel's CpuFeatures 
+// -> disabled by default, since in practice it is much slower for small blocks
 
 {$ifdef LVCL}
    // NormToUpper[] exists only in our enhanced RTL
@@ -349,6 +354,7 @@
     {$define PUREPASCAL}   // no x86 32 bit asm to be used
   {$else CPUX64}
     {$define CPU32} // Delphi compiler for 32 bit CPU
+    {$define CPU32DELPHI}
     {$undef CPU64}
     {$define CPUX86} // for compatibility with older versions of Delphi
   {$endif CPUX64}
@@ -466,7 +472,7 @@
     {$if CompilerVersion >= 32.0}
       {$define ISDELPHI102}
       {$ifdef CPUX64}
-      {$ifdef VER320}
+      {$ifdef VER320withoutAprilUpdate}
         {$undef HASINLINE} // circumvent Delphi 10.2 Tokyo Win64 compiler bug
         {$define HASINLINENOTX86}
       {$endif}
@@ -493,7 +499,6 @@
 {$ifdef PUREPASCAL}
   {$define NODELPHIASM}
   {$define FPC_OR_PUREPASCAL}
-  {$undef DOPATCHTRTL}
 {$else}
 {$endif PUREPASCAL}
 
@@ -548,6 +553,14 @@
   // undefined by default: BCC32 -pr fastcall (=Delphi resgister) is broken
   // because of issues with BCC32 itself, or some obfuscated calls in source?
   // -> allow to use external SQlite3 libraries in addition to static version
+{$endif}
+
+{$ifdef CPUX86} // safest to reset x87 exceptions
+{$ifndef PUREPASCAL}
+{$ifndef DELPHI5OROLDER}
+  {$define RESETFPUEXCEPTION}
+{$endif}
+{$endif}
 {$endif}
 
 {$ifdef FPC}

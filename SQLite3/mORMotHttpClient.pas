@@ -459,10 +459,20 @@ type
   /// HTTP/1.1 RESTful JSON deault mORMot Client class
   // -  maps the raw socket implementation class
   TSQLHttpClient = TSQLHttpClientWinSock;
+  {$ifdef USELIBCURL}
+  TSQLHttpsClient = TSQLHttpClientCurl;
+  {$else}
+  {$ifndef ANDROID}
+  TSQLHttpsClient = TSQLHttpClientWinHTTP;
+  {$endif}
+  {$endif}
   {$else}
   /// HTTP/1.1 RESTful JSON default mORMot Client class
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
+  /// HTTP/HTTPS RESTful JSON default mORMot Client class
+  // - under Windows, maps the TSQLHttpClientWinHTTP class
+  TSQLHttpsClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
 
 var
@@ -739,7 +749,7 @@ begin
   end;
   if WebSockets=nil then
     raise EServiceException.CreateUTF8('Missing %.WebSocketsUpgrade() call',[self]);
-  body := FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID]);
+  FormatUTF8('{"%":%}',[Factory.InterfaceTypeInfo^.Name,FakeCallbackID],body);
   head := 'Sec-WebSocket-REST: NonBlocking';
   result := CallBack(mPOST,'CacheFlush/_callback_',body,resp,nil,0,@head) in
     [HTTP_SUCCESS,HTTP_NOCONTENT];

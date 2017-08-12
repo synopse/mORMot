@@ -276,6 +276,7 @@ type
   TSQLHttpServer = class
   protected
     fOnlyJSONRequests: boolean;
+    fShutdownInProgress: boolean;
     fHttpServer: THttpServerGeneric;
     fPort, fDomainName: AnsiString;
     fPublicAddress, fPublicPort: RawUTF8;
@@ -383,10 +384,11 @@ type
     /// release all memory, internal mORMot server and HTTP handlers
     destructor Destroy; override;
     /// you can call this method to prepare the HTTP server for shutting down
-    // - it will call all associated TSQLRestServer.Shutdown methods
+    // - it will call all associated TSQLRestServer.Shutdown methods, unless
+    // noRestServerShutdown is true
     // - note that Destroy won't call this method on its own, since the
     // TSQLRestServer instances may have a life-time uncoupled from HTTP process
-    procedure Shutdown;
+    procedure Shutdown(noRestServerShutdown: boolean=false);
     /// try to register another TSQLRestServer instance to the HTTP server
     // - each TSQLRestServer class must have an unique Model.Root value, to
     // identify which instance must handle a particular request from its URI
@@ -685,7 +687,7 @@ begin
         ServersRoot := ServersRoot+' '+Root;
         for j := i+1 to high(aServers) do
           if aServers[j].Model.URIMatch(Root)<>rmNoMatch then
-            ErrMsg:= FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root]);
+            FormatUTF8('Duplicated Root URI: % and %',[Root,aServers[j].Model.Root],ErrMsg);
       end;
     if ErrMsg<>'' then
        raise EHttpServerException.CreateUTF8('%.Create(% ): %',[self,ServersRoot,ErrMsg]);
@@ -762,24 +764,29 @@ begin
 end;
 
 destructor TSQLHttpServer.Destroy;
-var i: integer;
 begin
   fLog.Enter(self);
-  fLog.Add.Log(sllHttp,'% finalized for % server%',
-    [fHttpServer,length(fDBServers),PLURAL_FORM[length(fDBServers)>1]],self);
-  for i := 0 to high(fDBServers) do
-    if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
-      fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+  fLog.Add.Log(sllHttp,'% finalized for %',[fHttpServer,
+    Plural('server',length(fDBServers))],self);
+  Shutdown(true); // but don't call fDBServers[i].Server.Shutdown
   FreeAndNil(fHttpServer);
   inherited Destroy;
 end;
 
-procedure TSQLHttpServer.Shutdown;
+procedure TSQLHttpServer.Shutdown(noRestServerShutdown: boolean);
 var i: integer;
 begin
-  if self<>nil then
-    for i := 0 to high(fDBServers) do
-      fDBServers[i].Server.Shutdown;
+  if (self<>nil) and not fShutdownInProgress then begin
+    fLog.Enter('Shutdown(%)',[BOOL_STR[noRestServerShutdown]],self);
+    fShutdownInProgress := true;
+    fHttpServer.Shutdown;
+    for i := 0 to high(fDBServers) do begin
+      if not noRestServerShutdown then
+        fDBServers[i].Server.Shutdown;
+      if TMethod(fDBServers[i].Server.OnNotifyCallback).Data=self then
+        fDBServers[i].Server.OnNotifyCallback := nil; // avoid unexpected GPF
+    end;
+  end;
 end;
 
 function TSQLHttpServer.GetDBServer(Index: Integer): TSQLRestServer;
@@ -861,8 +868,8 @@ begin
   err := THttpApiServer(fHttpServer).AddUrl(aRoot,fPublicPort,https,aDomainName,aRegisterURI);
   if err=NO_ERROR then
     exit;
-  result := FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
-    [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot]);
+  FormatUTF8('http.sys URI registration error #% for http%://%:%/%',
+    [err,HTTPS_TEXT[https],aDomainName,fPublicPort,aRoot],result);
   if err=ERROR_ACCESS_DENIED then
     if aRegisterURI then
       result := result+' (administrator rights needed, at least once to register the URI)' else
@@ -880,6 +887,8 @@ var call: TSQLRestURIParams;
     hostroot,redirect: RawUTF8;
     match: TSQLRestModelMatch;
 begin
+  if (self=nil) or fShutdownInProgress then
+    result := HTTP_NOTFOUND else
   if ((Ctxt.URL='') or (Ctxt.URL='/')) and (Ctxt.Method='GET') then
     if fRootRedirectToURI[Ctxt.UseSSL]<>'' then begin
       Ctxt.OutCustomHeaders := 'Location: '+fRootRedirectToURI[Ctxt.UseSSL];
@@ -1056,7 +1065,7 @@ var ctxt: THttpServerRequest;
     status: cardinal;
 begin
   result := false;
-  if self<>nil then
+  if (self<>nil) and not fShutdownInProgress then
   try
     if fHttpServer<>nil then begin
       // aConnection.InheritsFrom(TSynThread) may raise an exception
@@ -1068,18 +1077,20 @@ begin
         status := fHttpServer.Callback(ctxt,aResult=nil);
         if status=HTTP_SUCCESS then begin
           if aResult<>nil then
-            aResult^ := Ctxt.OutContent;
+            if IdemPChar(pointer(ctxt.OutContent),'{"RESULT":') then
+              aResult^ := copy(ctxt.OutContent,11,maxInt) else
+              aResult^ := ctxt.OutContent;
           result := true;
         end else
           if aErrorMsg<>nil then
-            aErrorMsg^ := FormatUTF8('%.Callback(%) received status=% from %',
-              [fHttpServer,aConnectionID,status,ctxt.URL]);
+            FormatUTF8('%.Callback(%) received status=% from %',
+              [fHttpServer,aConnectionID,status,ctxt.URL],aErrorMsg^);
       finally
         ctxt.Free;
       end;
     end else
       if aErrorMsg<>nil then
-        aErrorMsg^ := FormatUTF8('%.NotifyCallback with fHttpServer=nil',[self]);
+        FormatUTF8('%.NotifyCallback with fHttpServer=nil',[self],aErrorMsg^);
   except
     on E: Exception do
       if aErrorMsg<>nil then

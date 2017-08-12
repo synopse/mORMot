@@ -329,10 +329,13 @@ type
       aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
-    function WrapperTemplateFolderFixed: TFileName;
+    function WrapperTemplateFolderFixed(ReturnLocalIfNoneSet: boolean=false): TFileName;
     /// returns the WrapperSourceFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperSourceFolderFixed: TFileName;
+    /// generate API documentation corresponding to REST SOA interfaces
+    procedure WrapperGenerate(Rest: TSQLRestServer; Port: integer;
+      const DestFile: TFileName; const Template: TFileName = 'API.adoc.mustache');
     /// the default folder where database files are to be stored
     // - will be used by NewRestInstance instead of the .exe folder, if set
     property DefaultDataFolder: TFileName read fDefaultDataFolder write fDefaultDataFolder;
@@ -448,7 +451,7 @@ type
   /// a Factory event allowing to customize/mock a socket connection
   // - the supplied aOwner should be a TDDDSocketThread instance
   // - returns a IDDDSocket interface instance (e.g. a TDDDSynCrtSocket)
-  TOnIDDDSocketThreadCreate = procedure(aOwner: TObject; out Obj);
+  TOnIDDDSocketThreadCreate = procedure(aOwner: TObject; out Obj) of object;
 
   /// the settings of a TDDDThreadSocketProcess thread
   // - defines how to connect (and reconnect) to the associated TCP server
@@ -821,24 +824,43 @@ begin
   end;
 end;
 
+procedure TDDDRestSettings.WrapperGenerate(Rest: TSQLRestServer; Port: integer;
+  const DestFile, Template: TFileName);
+var dest: TFileName;
+    mus: RawUTF8;
+begin
+  if (self = nil) or (Rest = nil) then
+    exit;
+  if DestFile = '' then
+    dest := ExeVersion.ProgramFilePath+'mORMotClient.asc' else
+    dest := DestFile;
+  mus := StringFromFile(WrapperTemplateFolderFixed(true)+Template);
+  FileFromString(WrapperFromModel(Rest,mus,'',Port),dest);
+end;
+
 function TDDDRestSettings.WrapperSourceFolderFixed: TFileName;
 begin
   if fWrapperSourceFolders='' then
     result := '' else begin
     if fWrapperSourceFolderFixed='' then
-      fWrapperSourceFolderFixed := StringReplace(fWrapperSourceFolders,'/','\',[rfReplaceAll]);
+      fWrapperSourceFolderFixed := IncludeTrailingPathDelimiter(StringReplace(
+        fWrapperSourceFolders,'/',PathDelim,[rfReplaceAll]));
     result := fWrapperSourceFolders;
   end;
 end;
 
-function TDDDRestSettings.WrapperTemplateFolderFixed: TFileName;
+function TDDDRestSettings.WrapperTemplateFolderFixed(ReturnLocalIfNoneSet: boolean): TFileName;
 begin
   if fWrapperTemplateFolder='' then
-    result := '' else begin
-    if fWrapperTemplateFolderFixed='' then
-      fWrapperTemplateFolderFixed := StringReplace(fWrapperTemplateFolder,'/','\',[rfReplaceAll]);
-    result := fWrapperTemplateFolder;
-  end;
+    if ReturnLocalIfNoneSet then
+      result := ExeVersion.ProgramFilePath
+    else
+      result := '' else begin
+      if fWrapperTemplateFolderFixed='' then
+        fWrapperTemplateFolderFixed := StringReplace(
+          fWrapperTemplateFolder,'/',PathDelim,[rfReplaceAll]);
+      result := fWrapperTemplateFolder;
+    end;
 end;
 
 

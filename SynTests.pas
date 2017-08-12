@@ -123,7 +123,7 @@ type
     // test list, accessible via the Count/TestName/TestMethod properties
     constructor Create(const Ident: string = '');
     /// register a specified test to this class instance
-    procedure Add(aMethod: TSynTestEvent; const aName: string);
+    procedure Add(const aMethod: TSynTestEvent; const aName: string);
     /// the test name
     // - either the Ident parameter supplied to the Create() method, either
     // a uncameled text from the class name
@@ -245,6 +245,8 @@ type
     // - speed is computed from the method start
     procedure NotifyTestSpeed(const ItemName: string; ItemCount: integer;
       SizeInBytes: cardinal=0; Timer: PPrecisionTimer=nil);
+    /// append some text to the current console
+    procedure AddConsole(const msg: string);
     /// the test suit which owns this test case
     property Owner: TSynTests read fOwner;
     /// the test name
@@ -428,17 +430,15 @@ type
 implementation
 
 {$ifdef FPC}
+{$ifndef MSWINDOWS}
 uses
-  SynFPCTypInfo // small wrapper unit around FPC's TypInfo.pp
-  {$ifdef Linux}
-  , SynFPCLinux,BaseUnix, Unix, dynlibs
-  {$endif} ;
+  SynFPCLinux;
 {$endif}
-
+{$endif}
 
 { TSynTest }
 
-procedure TSynTest.Add(aMethod: TSynTestEvent; const aName: string);
+procedure TSynTest.Add(const aMethod: TSynTestEvent; const aName: string);
 var i: integer;
 begin
   if self=nil then
@@ -451,69 +451,31 @@ begin
 end;
 
 constructor TSynTest.Create(const Ident: string);
-
-  procedure AddParentsFirst(C: TClass);
-  type
-    TMethodInfo =
-      {$ifndef FPC_REQUIRES_PROPER_ALIGNMENT}
-      packed
-      {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
-      record
-    {$ifdef FPC}
-      Name: PShortString;
-      Addr: Pointer;
-    {$else}
-      Len: Word;
-      Addr: Pointer;
-      Name: ShortString;
-    {$endif}
-    end;
-  var Table: {$ifdef FPC}PCardinalArray;{$else}PWordArray;{$endif}
-      M: ^TMethodInfo;
-      Method: TMethod;
-      i: integer;
-      text: RawUTF8;
-  begin
-    if C=nil then
-      exit;
-    AddParentsFirst(C.ClassParent); // put children published methods afterward
-    Table := PPointer(PtrInt(C)+vmtMethodTable)^;
-    if Table=nil then
-      exit;
-    Method.Data := self;
-    M := @Table^[1];
-    for i := 1 to Table^[0] do begin // Table^[0] = methods count
-      inc(fInternalTestsCount);
-      Method.Code := M^.Addr;
-      text := M^.Name{$ifdef FPC}^{$endif};
-      if text[1]='_' then
-        delete(text,1,1) else
-        text := UnCamelCase(text);
-      Add(TSynTestEvent(Method),Ansi7ToString(text));
-      {$ifdef FPC}
-      inc(M);
-      {$else}
-      inc(PtrInt(M),M^.Len);
-      {$endif}
-    end;
-  end;
-
-var tmp: RawUTF8;
+var id: RawUTF8;
+    methods: TPublishedMethodInfoDynArray;
+    i: integer;
 begin
   if Ident<>'' then
     fIdent := Ident else begin
-    tmp := RawUTF8(ClassName);
-    if IdemPChar(Pointer(tmp),'TSYN') then
-      if IdemPChar(Pointer(tmp),'TSYNTEST') then
-        Delete(tmp,1,8) else
-      Delete(tmp,1,4) else
-    if IdemPChar(Pointer(tmp),'TTEST') then
-      Delete(tmp,1,5) else
-    if tmp[1]='T' then
-      Delete(tmp,1,1);
-    fIdent := string(UnCamelCase(tmp));
+    ToText(ClassType,id);
+    if IdemPChar(Pointer(id),'TSYN') then
+      if IdemPChar(Pointer(id),'TSYNTEST') then
+        Delete(id,1,8) else
+      Delete(id,1,4) else
+    if IdemPChar(Pointer(id),'TTEST') then
+      Delete(id,1,5) else
+    if id[1]='T' then
+      Delete(id,1,1);
+    fIdent := string(UnCamelCase(id));
   end;
-  AddParentsFirst(PPointer(Self)^); // use recursion for adding
+  for i := 0 to GetPublishedMethods(self,methods)-1 do
+    with methods[i] do begin
+      inc(fInternalTestsCount);
+      if Name[1]='_' then
+        delete(Name,1,1) else
+        Name := UnCamelCase(Name);
+      Add(TSynTestEvent(Method),Ansi7ToString(Name));
+    end;
 end;
 
 function TSynTest.GetCount: Integer;
@@ -532,7 +494,7 @@ end;
 
 function TSynTest.GetTestMethod(Index: integer): TSynTestEvent;
 begin
-  if Cardinal(Index)>=Cardinal(length(fTests)) then
+  if (self=nil) or (Cardinal(Index)>=Cardinal(length(fTests))) then
     result := nil else
     result := fTests[Index].Method;
 end;
@@ -756,6 +718,13 @@ begin
   InterlockedIncrement(fAssertionsFailed);
 end;
 
+procedure TSynTestCase.AddConsole(const msg: string);
+begin
+  if fRunConsole<>'' then
+    fRunConsole := fRunConsole+#13#10'     '+msg else
+    fRunConsole := fRunConsole+msg;
+end;
+
 procedure TSynTestCase.NotifyTestSpeed(const ItemName: string;
   ItemCount: integer; SizeInBytes: cardinal; Timer: PPrecisionTimer);
 var Temp: TPrecisionTimer;
@@ -768,9 +737,7 @@ begin
     [ItemCount,ItemName,Temp.Stop,Temp.PerSec(ItemCount),Temp.ByCount(ItemCount)]);
   if SizeInBytes>0 then
     msg := format('%s, %s/s',[msg,KB(Temp.PerSec(SizeInBytes))]);
-  if fRunConsole<>'' then
-    msg := #13#10'     '+msg;
-  fRunConsole := fRunConsole+msg;
+  AddConsole(msg);
 end;
 
 

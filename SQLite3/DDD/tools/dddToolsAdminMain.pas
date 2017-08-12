@@ -175,6 +175,7 @@ begin
         State.mem := KB(state.Raw.O['SystemMemory'].O['Allocated'].I['Used'] shl 10);
       State.clients := State.raw.I['clients'];
       State.raw.GetAsDocVariantSafe('exception')^.ToRawUTF8DynArray(State.exceptions);
+      State.raw.AddValue('remoteip', fClient.Server + ':' + fClient.Port);
       State.lasttix := GetTickCount64;
     end;
     if Assigned(OnAfterGetState) then
@@ -207,8 +208,10 @@ begin
     for i := 0 to n - 1 do begin
       f := AddDBFrame(fDatabases[i], fDatabases[i], DBFrameClass);
       f.Open;
-      if i = 0 then
+      if i = 0 then begin
         fPage.ActivePageIndex := 1;
+        f.SetResult(State.raw.ToJSON('', '', jsonUnquotedPropName));
+      end;
     end;
     Application.ProcessMessages;
     fDBFrame[0].mmoSQL.SetFocus;

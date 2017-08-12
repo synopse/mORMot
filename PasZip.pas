@@ -122,7 +122,7 @@ procedure CreateVoidZip(const aFileName: TFileName);
 function GzCompress(src: pointer; srcLen: integer; const fName: TFileName): cardinal;
 
 /// calculate the CRC32 hash of a specified memory buffer
-function UpdateCrc32(acrc32: cardinal; inBuf: pointer; inLen: integer): cardinal;
+function UpdateCrc32(aCRC32: cardinal; inBuf: pointer; inLen: integer): cardinal;
 
 
 {$DEFINE DYNAMIC_CRC_TABLE}
@@ -354,7 +354,7 @@ asm // eax=source edx=dest ecx=count
         cmp     edx, ecx // avoid move error if dest and source overlaps
         pop     edx     // restore original edx=dest
         ja      System.Move // call FastMove() routine for normal code
-        OR      ecx, ecx
+        or      ecx, ecx
         jz      @@Exit
         push    edi
         mov     edi, edx // restore original edi=dest
@@ -2385,8 +2385,7 @@ begin
         begin
           while True do begin
             Temp := S.sub.trees.table;
-            if not (S.sub.trees.Index < 258 + (Temp and $1F) + ((Temp shr 5) and
-              $1F)) then
+            if not (S.sub.trees.Index < 258 + (Temp and $1F) + ((Temp shr 5) and $1F)) then
               Break;
             Temp := S.sub.trees.BB;
             while K < Temp do begin
@@ -2446,8 +2445,8 @@ begin
 
               I := S.sub.trees.Index;
               Temp := S.sub.trees.table;
-              if (I + J > 258 + (Temp and $1F) + ((Temp shr 5) and $1F)) or ((C
-                = 16) and (I < 1)) then begin
+              if (I + J > 258 + (Temp and $1F) + ((Temp shr 5) and $1F)) or
+                 ((C = 16) and (I < 1)) then begin
                 FreeMem(S.sub.trees.blens);
                 S.mode := ibmBlockBad;
                 R := Z_DATA_ERROR;
@@ -2472,8 +2471,8 @@ begin
           LiteralBits := 9;
           DistanceBits := 6;
           Temp := S.sub.trees.table;
-          Temp := InflateTreesDynamic(257 + (Temp and $1F), 1 + ((Temp shr 5)
-            and $1F), S.sub.trees.blens^, LiteralBits, DistanceBits, TL, TD, S.hufts, Z);
+          Temp := InflateTreesDynamic(257 + (Temp and $1F), 1 + ((Temp shr 5) and $1F),
+            S.sub.trees.blens^, LiteralBits, DistanceBits, TL, TD, S.hufts, Z);
           FreeMem(S.sub.trees.blens);
           if Temp <> Z_OK then begin
             if Integer(Temp) = Z_DATA_ERROR then
@@ -2909,14 +2908,16 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
           J := K shl 1;  // left son of K
           while J <= S.HeapLength do begin
             // set J to the smallest of the two sons:
-            if (J < S.HeapLength) and ((Tree[S.Heap[J + 1]].fc.Frequency < Tree[S.Heap
-              [J]].fc.Frequency) or ((Tree[S.Heap[J + 1]].fc.Frequency = Tree[S.Heap
-              [J]].fc.Frequency) and (S.Depth[S.Heap[J + 1]] <= S.Depth[S.Heap[J]]))) then
+            if (J < S.HeapLength) and
+               ((Tree[S.Heap[J + 1]].fc.Frequency < Tree[S.Heap[J]].fc.Frequency) or
+               ((Tree[S.Heap[J + 1]].fc.Frequency = Tree[S.Heap[J]].fc.Frequency) and
+                (S.Depth[S.Heap[J + 1]] <= S.Depth[S.Heap[J]]))) then
               Inc(J);
 
             // exit if V is smaller than both sons
-            if ((Tree[V].fc.Frequency < Tree[S.Heap[J]].fc.Frequency) or ((Tree[V].fc.Frequency
-              = Tree[S.Heap[J]].fc.Frequency) and (S.Depth[V] <= S.Depth[S.Heap[J]])))
+            if ((Tree[V].fc.Frequency < Tree[S.Heap[J]].fc.Frequency) or
+               ((Tree[V].fc.Frequency = Tree[S.Heap[J]].fc.Frequency) and
+                (S.Depth[V] <= S.Depth[S.Heap[J]])))
               then
               Break;
 
@@ -3118,7 +3119,8 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
         Dec(S.HeapMaximum);
         S.Heap[S.HeapMaximum] := S.Heap[1];
 
-        // At this point the fields Frequency and dad are set. We can now generate the bit lengths.
+        // At this point the fields Frequency and dad are set.
+        // We can now generate the bit lengths.
         GenerateBitLengths(S, Descriptor);
 
         // The field Len is now set, we can generate the bit codes
@@ -3199,15 +3201,13 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
               Continue
             else if Count < MinCount then begin
               repeat
-                SendBits(S, S.BitLengthTree[CurrentLen].fc.Code, S.BitLengthTree
-                  [CurrentLen].dl.Len);
+                SendBits(S, S.BitLengthTree[CurrentLen].fc.Code, S.BitLengthTree[CurrentLen].dl.Len);
                 Dec(Count);
               until (Count = 0);
             end
             else if CurrentLen <> 0 then begin
               if CurrentLen <> PreviousLen then begin
-                SendBits(S, S.BitLengthTree[CurrentLen].fc.Code, S.BitLengthTree
-                  [CurrentLen].dl.Len);
+                SendBits(S, S.BitLengthTree[CurrentLen].fc.Code, S.BitLengthTree[CurrentLen].dl.Len);
                 Dec(Count);
               end;
               SendBits(S, S.BitLengthTree[REP_3_6].fc.Code, S.BitLengthTree[REP_3_6].dl.Len);
@@ -3399,8 +3399,8 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
               // Here, lc is the match length - MIN_MATCH
               Code := LengthCode[lc];
               // send the length code
-              SendBits(S, LiteralTree[Code + LITERALS + 1].fc.Code, LiteralTree[Code
-                + LITERALS + 1].dl.Len);
+              SendBits(S, LiteralTree[Code + LITERALS + 1].fc.Code,
+                LiteralTree[Code + LITERALS + 1].dl.Len);
               Extra := ExtraLengthBits[Code];
               if Extra <> 0 then begin
                 Dec(lc, BaseLength[Code]);
@@ -3449,7 +3449,7 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
       if StaticByteLength <= OptimalByteLength then
         OptimalByteLength := StaticByteLength;
 
-      // if Iompression failed and this is the first and last block,
+      // if compression failed and this is the first and last block,
       // and if the .zip file can be seeked (to rewrite the local header),
       // the whole file is transformed into a stored file.
       // (4 are the two words for the lengths)
@@ -3461,15 +3461,15 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
         TreeStroredBlock(S, Buffer, StoredLength, EOF);
       end
       else if StaticByteLength = OptimalByteLength then begin
-          // force static trees
+        // force static trees
         SendBits(S, (STATIC_TREES shl 1) + Ord(EOF), 3);
         CompressBlock(S, StaticLiteralTree, StaticDescriptorTree);
         Inc(S.CompressedLength, 3 + S.StaticLength);
       end
       else begin
         SendBits(S, (DYN_TREES shl 1) + Ord(EOF), 3);
-        SendAllTrees(S, S.LiteralDescriptor.MaxCode + 1, S.DistanceDescriptor.MaxCode
-          + 1, MacBLIndex + 1);
+        SendAllTrees(S, S.LiteralDescriptor.MaxCode + 1,
+          S.DistanceDescriptor.MaxCode + 1, MacBLIndex + 1);
         CompressBlock(S, S.LiteralTree, S.DistanceTree);
         Inc(S.CompressedLength, 3 + S.OptimalLength);
       end;
@@ -3486,11 +3486,10 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
 
   begin
     if S.BlockStart >= 0 then
-      TreeFlushBlock(S, @S.Window[Cardinal(S.BlockStart)], Integer(S.StringStart)
-        - S.BlockStart, EOF)
+      TreeFlushBlock(S, @S.Window[Cardinal(S.BlockStart)],
+        Integer(S.StringStart) - S.BlockStart, EOF)
     else
       TreeFlushBlock(S, nil, Integer(S.StringStart) - S.BlockStart, EOF);
-
     S.BlockStart := S.StringStart;
     FlushPending(S.ZState^);
   end;
@@ -3533,7 +3532,6 @@ function CompressMem(src, dst: pointer; srcLen, dstLen: integer): integer;
   begin
     S.InsertHash := ((S.InsertHash shl S.HashShift) xor (S.Window[(Str) + (MIN_MATCH - 1)]))
       and S.HashMask;
-
     MatchHead := S.Head[S.InsertHash];
     S.Previous[(Str) and S.WindowMask] := MatchHead;
     S.Head[S.InsertHash] := Word(Str);
@@ -3725,7 +3723,7 @@ var
 begin
   SetLength(result, 12 + length(data) * 11 div 10 + 12);
   pInt64(result)^ := length(data);
-  TPACardinal(result)^[2] := not updateCrc32($FFFFFFFF, pointer(data), length(data));
+  TPACardinal(result)^[2] := not UpdateCrc32(dword(-1), pointer(data), length(data));
   i1 := CompressMem(pointer(data), PAnsiChar(PtrUInt(result) + 12), length(data),
     length(result) - 12);
   if (i1 > 0) and ((12 + i1 < length(data)) or (not failIfGrow)) then
@@ -3740,8 +3738,8 @@ begin
     SetLength(result, PCardinal(data)^);
     SetLength(result, UncompressMem(PAnsiChar(PtrUInt(data) + 12), pointer(result),
       length(data) - 12, length(result)));
-    if (result <> '') and ((not updateCrc32($FFFFFFFF, pointer(result), length(result)))
-      <> TPACardinal(data)^[2]) then
+    if (result <> '') and (TPACardinal(data)^[2] <>
+        not UpdateCrc32(dword(-1), pointer(result), length(result))) then
       result := '';
   end
   else
@@ -3788,7 +3786,7 @@ begin
                 dl := CompressMem(sb, pointer(PtrUInt(db) + 12), sl, dl - 12);
                 result := (dl > 0) and ((dl + 12 < sl) or (not failIfGrow));
                 if result then
-                  PCardinal(PtrUInt(db) + 8)^ := not updateCrc32($FFFFFFFF, sb, sl);
+                  PCardinal(PtrUInt(db) + 8)^ := not UpdateCrc32(dword(-1), sb, sl);
                 UnmapViewOfFile(db);
               end
               else
@@ -3861,8 +3859,8 @@ begin
               if db <> nil then begin
                 splitInt64(sl).loCard := GetFileSize(sf, @splitInt64(sl).hiCard);
                 dl := UncompressMem(pointer(PtrUInt(sb) + 12), db, sl - 12, dl);
-                result := (dl > 0) and ((not updateCrc32($FFFFFFFF, db, dl)) =
-                  PCardinal(PtrUInt(sb) + 8)^);
+                result := (dl > 0) and (PCardinal(PtrUInt(sb) + 8)^ =
+                  not UpdateCrc32(dword(-1), db, dl));
                 UnmapViewOfFile(db);
               end
               else
@@ -3951,7 +3949,7 @@ begin
     if map <> 0 then begin
       buf := MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
       if buf <> nil then begin
-        crc32 := not updateCrc32($FFFFFFFF, buf, size);
+        crc32 := not UpdateCrc32(dword(-1), buf, size);
         UnmapViewOfFile(buf);
         result := true;
       end;
@@ -3984,7 +3982,7 @@ begin
     try
       destLen := CompressMem(src, dest, srcLen, destLen);
       blockwrite(f, dest^, destLen);
-      crc := UpdateCRC32($ffffffff, src, srcLen) xor $ffffffff;
+      crc := not UpdateCrc32(dword(-1), src, srcLen);
       blockwrite(f, crc, 4);
       blockwrite(f, srcLen, 4);
     finally
@@ -4071,10 +4069,13 @@ begin
                   extFileAttr := GetFileAttributes(pointer(files[i1]));
                   localHeadOff := SetFilePointer(dstFh, 0, nil, FILE_CURRENT);
                 end;
-                result := WriteFile(dstFh, lfhr, sizeOf(lfhr), c1, nil) and (c1
-                  = sizeOf(lfhr)) and WriteFile(dstFh, pointer(name)^, length(name),
-                  c1, nil) and (c1 = dword(length(name))) and WriteFile(dstFh,
-                  dstBuf^, lfhr.fileInfo.zzipSize, c1, nil) and (c1 = lfhr.fileInfo.zzipSize);
+                result :=
+                  WriteFile(dstFh, lfhr, sizeOf(lfhr), c1, nil) and
+                  (c1 = sizeOf(lfhr)) and
+                  WriteFile(dstFh, pointer(name)^, length(name), c1, nil) and
+                  (c1 = dword(length(name))) and
+                  WriteFile(dstFh, dstBuf^, lfhr.fileInfo.zzipSize, c1, nil) and
+                  (c1 = lfhr.fileInfo.zzipSize);
                 inc(i2);
               end;
               LocalFree(PtrUInt(dstBuf));
@@ -4102,15 +4103,15 @@ begin
       for i1 := 0 to i2 - 1 do
         with zipRec[i1] do begin
           inc(lhr.headerSize, sizeOf(TFileHeader) + length(name));
-          if not (WriteFile(dstFh, fhr, sizeOf(fhr), c1, nil) and (c1 = sizeOf(fhr))
-            and WriteFile(dstFh, pointer(name)^, length(name), c1, nil) and (c1
-            = dword(length(name)))) then begin
+          if not (WriteFile(dstFh, fhr, sizeOf(fhr), c1, nil) and (c1 = sizeOf(fhr)) and
+             WriteFile(dstFh, pointer(name)^, length(name), c1, nil) and
+             (c1 = dword(length(name)))) then begin
             result := false;
             break;
           end;
         end;
-      result := result and WriteFile(dstFh, lhr, sizeOf(lhr), c1, nil) and (c1 =
-        sizeOf(lhr));
+      result := result and WriteFile(dstFh, lhr, sizeOf(lhr), c1, nil) and
+        (c1 = sizeOf(lhr));
     end;
     CloseHandle(dstFh);
     if not result then
@@ -4361,11 +4362,9 @@ begin
     end
     else // deflate method
       len := UnCompressMem(data, pointer(result), info^.zzipsize, info^.zfullsize);
-    if (len <> info^.zfullsize) or (info^.zcrc32 <> not UpdateCrc32(dword(-1),
-      pointer(result), info^.zfullSize)) then begin
-      MessageBoxA(0, 'CRC', Name, 0);
+    if (len <> info^.zfullsize) or
+       (info^.zcrc32 <> not UpdateCrc32(dword(-1), pointer(result), info^.zfullSize)) then
       result := '';
-    end;
   end;
 end;
 
@@ -4414,8 +4413,8 @@ begin
         if map = 0 then
           exit;
         Buf := MapViewOfFile(map, FILE_MAP_READ, 0, 0, 0);
-        if (Buf <> nil) and (info^.zcrc32 = not UpdateCrc32(dword(-1), Buf, info
-          ^.zfullSize)) then
+        if (Buf <> nil) and (info^.zcrc32 =
+            not UpdateCrc32(dword(-1), Buf, info^.zfullSize)) then
           result := true;
         UnmapViewOfFile(Buf);
         CloseHandle(map);
@@ -4475,10 +4474,8 @@ begin
     if H <> INVALID_HANDLE_VALUE then
     try
       if info^.zZipMethod = 0 then begin // stored method
-        if (info^.zcrc32 <> not UpdateCrc32(dword(-1), data, info^.zfullSize)) then begin
-          MessageBox(0, 'CRC', pointer(n), 0);
+        if info^.zcrc32 <> not UpdateCrc32(dword(-1), data, info^.zfullSize) then
           exit;
-        end;
         FileWrite(H, data^, info^.zfullsize);
       end
       else begin // deflate method
@@ -4486,10 +4483,8 @@ begin
         try
           len := UnCompressMem(data, buf, info^.zzipsize, info^.zfullsize);
           if (len <> info^.zfullsize) or
-            (info^.zcrc32 <> not UpdateCrc32(dword(-1), buf, info^.zfullSize)) then begin
-            MessageBox(0, 'CRC', pointer(n), 0);
+             (info^.zcrc32 <> not UpdateCrc32(dword(-1), buf, info^.zfullSize)) then
             exit;
-          end;
           FileWrite(H, buf^, info^.zfullsize);
         finally
           FreeMem(buf);

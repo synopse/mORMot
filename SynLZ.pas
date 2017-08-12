@@ -150,25 +150,34 @@ unit SynLZ;
 
 
   Benchmark update - introducing LZ4 at http://code.google.com/p/lz4
-
-  190 MB file containing pascal sources, on a Core 2 duo PC:
+  190 MB file containing pascal sources, on a Core 2 duo PC, using x86 asm:
    LZ4     compression = 1.25 sec, comp. size = 71 MB, decompression = 0.44 sec
-   SynLZ   compression = 1.09 sec, comp. size = 63 MB, decompression = 0.99 sec
+   SynLZ   compression = 1.09 sec, comp. size = 63 MB, decompression = 0.51 sec
    zip (1) compression = 6.44 sec, comp. size = 52 MB, decompression = 1.49 sec
    zip (6) compression = 20.1 sec, comp. size = 42 MB, decompression = 1.35 sec
-
-  Note: zip decompression here uses fast asm optimized version of SynZip.pas
-
+   Note: zip decompression here uses fast asm optimized version of SynZip.pas
   Decompression is slower in SynLZ, due to the algorithm used: it does recreate
    the hash table even at decompression, while it is not needed by LZ4.
   Having the hash table at hand allows more patterns to be available, so
    compression ratio is better, at the expand of a slower speed.
 
   Conclusion:
-   SynLZ compresses better than LZ4,
-   SynLZ is faster to compress than LZ4,
-   but SynLZ is slower to decompress than LZ4,
-   and SynLZ is still very competitive for our Client-Server mORMot purpose ;)
+   SynLZ compresses better than LZ4, SynLZ is faster to compress than LZ4,
+   but slower to decompress than LZ4. So SynLZ is still very competitive for
+   our Client-Server mORMot purpose, since it is a simple pascal unit with
+   no external .obj/.o/.dll dependency. ;)
+
+  Updated benchmarks on a Core i7, with the 2017/08 x86 and x64 optimized asm:
+    Win32 Processing devpcm.log = 98.7 MB
+       Snappy compress in 125.07ms, ratio=84%, 789.3 MB/s
+       Snappy uncompress in 70.35ms, 1.3 GB/s
+       SynLZ compress in 103.61ms, ratio=93%, 952.8 MB/s
+       SynLZ uncompress in 68.71ms, 1.4 GB/s
+    Win64 Processing devpcm.log = 98.7 MB
+       Snappy compress in 107.13ms, ratio=84%, 921.5 MB/s
+       Snappy uncompress in 61.06ms, 1.5 GB/s
+       SynLZ compress in 97.25ms, ratio=93%, 1015.1 MB/s
+       SynLZ uncompress in 61.27ms, 1.5 GB/s
 
 
   Revision history
@@ -197,7 +206,8 @@ unit SynLZ;
   - added SynLZdecompress1partial() function for partial and secure (but slower)
     decompression - implements feature request [82ca067959]
   - removed several compilation hints when assertions are set to off
-  - some performance optimization, especially when using a 64bit CPU
+  - some performance optimization, especially when using a 64bit CPU, thanks
+    to a new tuned x64 asm revision, and 8 bytes chunk copy for smallest blocks
 
 }
 
@@ -226,7 +236,12 @@ function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): int
 function SynLZdecompress1partial(src: PAnsiChar; size: integer; dst: PAnsiChar;
   maxDst: integer): integer;
 
-{$ifdef PUREPASCAL}
+{$ifdef CPUINTEL}
+/// optimized x86/x64 asm version of the 1st compression algorithm
+function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+/// optimized x86/x64 asm version of the 1st compression algorithm
+function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+{$else}
 var
   /// fastest available SynLZ compression (using 1st algorithm)
   SynLZCompress1: function(
@@ -235,20 +250,7 @@ var
   /// fastest available SynLZ decompression (using 1st algorithm)
   SynLZDecompress1: function(
     src: PAnsiChar; size: integer; dst: PAnsiChar): integer = SynLZDecompress1pas;
-    
-{$else}
-
-/// optimized x86 asm version of the 1st compression algorithm
-function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-/// optimized x86 asm version of the 1st compression algorithm
-function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-
-/// fastest available SynLZ compression (using x86 asm on 1st algorithm)
-function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-
-/// fastest available SynLZ decompression (using x86 asm on 1st algorithm)
-function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-{$endif PUREPASCAL}
+{$endif CPUINTEL}
 
 /// 2nd compression algorithm optimizing pattern copy
 // - this algorithm is a bit smaller, but slower, so the 1st method is preferred
@@ -290,179 +292,329 @@ begin
     result := (result and $7fff) or (integer(PWord(in_p)^) shl 15);
 end;
 
-{$ifndef PUREPASCAL}
+{$ifdef CPUINTEL}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZcompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-asm
-  jmp SynLzCompress1Asm
-end;
-
-function SynLZcompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+{$ifdef CPUX86}
 asm
         push    ebp
         push    ebx
         push    esi
         push    edi
         push    eax
-        mov     eax, 8
-@@0906: add     esp, -4092
+        add     esp, -4092
         push    eax
-        dec     eax
-        jnz     @@0906
-        mov     eax, [esp+8000H]
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
         add     esp, -32
-        mov     esi, ecx
-        mov     [esp], edx
-        mov     edi, eax
-        mov     [esp+8H], esi
-        mov     eax,[esp]
+        mov     esi, eax // esi=src
+        mov     edi, ecx // edi=dst
+        mov     [esp+08H], ecx
+        mov     eax, edx
         cmp     eax, 32768
         jl      @@0889
-        and     eax, 7FFFH
-        or      eax, 8000H
-        mov     [esi], ax
-        mov     eax, [esp]
+        or      ax, 8000H
+        mov     [edi], eax
+        mov     eax, edx
         shr     eax, 15
-        mov     [esi+2], ax
-        add     esi, 4
+        mov     [edi+2], eax
+        add     edi, 4
         jmp     @@0891
 @@0890: mov     eax, 2
         jmp     @@0904
-@@0889: mov     [esi], ax
-        test    eax,eax
-        jz     @@0890
-        add     esi,2
-@@0891: mov     eax, [esp]
-        add     eax, edi
+@@0889: mov     [edi], eax
+        test    eax, eax
+        jz      @@0890
+        add     edi, 2
+@@0891: lea     eax, [edx+esi]
+        mov     [esp+18H], edi
         mov     [esp+0CH], eax
-        mov     eax, [esp+0CH]
         sub     eax, 11
-        mov     [esp+10H], eax
-        xor     ebx, ebx
-        mov     eax, esi
-        mov     [esp+18H], eax
-        xor     edx, edx
-        mov     [eax], edx
-        add     esi, 4
-        lea     eax, [esp+24H]
-        xor     ecx, ecx
-        mov     edx, 16384
-        call    system.@fillchar
+        mov     [esp+4], eax
+        lea     ebx, [esp+24H]
+        xor     eax, eax
+        mov     ecx, 1024
+@@089I: mov     [ebx], eax // faster than FillChar / stosb
+        mov     [ebx+4], eax
+        mov     [ebx+8], eax
+        mov     [ebx+12], eax
+        add     ebx, 16
+        dec     ecx
+        jnz     @@089I
+        mov     [edi], eax
+        add     edi, 4
+        mov     ebx, 1 // ebx=1 shl CWbit
         // main loop:
-        cmp     edi, [esp+10H]
+        cmp     esi, [esp+4]
         ja      @@0900
-@@0892: mov     edx, [edi]
+@@0892: mov     edx, [esi]
         mov     eax, edx
         shr     edx, 12
         xor     edx, eax
         and     edx, 0FFFH
         mov     ebp, [esp+edx*4+24H]
         mov     ecx, [esp+edx*4+4024H]
-        mov     [esp+edx*4+24H], edi
+        mov     [esp+edx*4+24H], esi
         xor     ecx, eax
-        mov     [esp+1CH], ecx
         test    ecx, 0FFFFFFH
         mov     [esp+edx*4+4024H], eax
         jnz     @@0897
-        mov     eax, edi
-        or      ebp,ebp
+        mov     eax, esi
+        or      ebp, ebp
         jz      @@0897
         sub     eax, ebp
         cmp     eax, 2
         mov     ecx, [esp+18H]
         jle     @@0897
-        mov     eax,[ecx]
-        lea     edi,[edi+2]
-        bts     eax,ebx
-        add     ebp, 2
-        mov     [ecx],eax
+        lea     esi, [esi+2]
+        or      dword ptr[ecx], ebx
         mov     ecx, [esp+0CH]
+        add     ebp, 2
         mov     eax, 1
-        sub     ecx, edi
+        sub     ecx, esi
         dec     ecx
-        mov     [esp+20H], ecx
+        mov     [esp], ecx
         cmp     ecx, 271
         jl      @@0894
-        mov     dword ptr [esp+20H], 271
-        jmp @@0894
+        mov     dword ptr [esp], 271
+        jmp     @@0894
 @@0893: inc     eax
-@@0894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+@@0894: mov     ecx, [ebp+eax]
+        cmp     cl, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        cmp     eax, [esp]
         jge     @@0895
-@@1893: inc     eax
-@@1894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+        inc     eax
+        cmp     ch, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        shr     ecx, 16
+        cmp     eax, [esp]
         jge     @@0895
-@@2893: inc     eax
-@@2894: mov     cl, [ebp+eax]
-        cmp     cl, [edi+eax]
+        inc     eax
+        cmp     cl, [esi+eax]
         jnz     @@0895
-        cmp     eax, [esp+20H]
+        cmp     eax, [esp]
+        jge     @@0895
+        inc     eax
+        cmp     ch, [esi+eax]
+        jnz     @@0895
+        cmp     eax, [esp]
         jl      @@0893
-@@0895: add     edi, eax
+@@0895: add     esi, eax
         shl     edx, 4
         cmp     eax, 15
         jg      @@0896
         or      eax, edx
-        mov     word ptr [esi], ax
-        add     esi, 2
+        mov     word ptr [edi], ax
+        add     edi, 2
         jmp     @@0898
 @@0896: sub     eax, 16
-        mov     [esi], dx
-        mov     [esi+2H], al
-        add     esi, 3
+        mov     [edi], dx
+        mov     [edi+2H], al
+        add     edi, 3
         jmp     @@0898
-@@0897: mov     al, [edi]
-        mov     [esi], al
-        inc     edi
+@@0897: mov     al, [esi] // movsb is actually slower!
+        mov     [edi], al
         inc     esi
-@@0898: cmp     bl, 31
-        jnc     @@0899
-        cmp     edi, [esp+10H]
-        lea     ebx,[ebx+1]
+        inc     edi
+@@0898: add     ebx, ebx
+        jz      @@0899
+        cmp     esi, [esp+4]
         jbe     @@0892
         jmp     @@0900
-@@0899: mov     [esp+18H], esi
-        xor     edx, edx
-        mov     [esi], edx
-        add     esi, 4
-        xor     ebx, ebx
-        cmp     edi, [esp+10H]
+@@0899: mov     [esp+18H], edi
+        mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+4]
         jbe     @@0892
-@@0900: cmp     edi, [esp+0CH]
+@@0900: cmp     esi, [esp+0CH]
         jnc     @@0903
-@@0901: mov     al, [edi]
-        mov     [esi], al
-        inc     edi
+@@0901: mov     al, [esi]
+        mov     [edi], al
         inc     esi
-        cmp     bl, 31
-        jnc     @@0902
-        cmp     edi, [esp+0CH]
-        lea     ebx,[ebx+1]
+        inc     edi
+        add     ebx, ebx
+        jz      @@0902
+        cmp     esi, [esp+0CH]
         jc      @@0901
         jmp     @@0903
-@@0902: xor     ebx, ebx
-        mov     [esi], ebx
-        lea     esi,[esi+4]
-        cmp     edi, [esp+0CH]
+@@0902: mov     [edi], ebx
+        inc     ebx
+        add     edi, 4
+        cmp     esi, [esp+0CH]
         jc      @@0901
-@@0903: mov     eax, esi
-        sub     eax, [esp+8H]
+@@0903: mov     eax, edi
+        sub     eax, [esp+08H]
 @@0904: add     esp, 32804
         pop     edi
         pop     esi
         pop     ebx
         pop     ebp
+{$else CPUX86}
+var off: array[0..4095] of PAnsiChar;
+    cache: array[0..4095] of cardinal; // uses 32B+16KB=48KB on stack
+asm // rcx=src, edx=size, r8=dest
+        {$ifndef win64} // Linux 64-bit ABI
+        mov     r8, rdx
+        mov     rdx, rsi
+        mov     rcx, rdi
+        {$endif win64}
+        push    rbx
+        push    rdi
+        push    rsi
+        push    r12
+        push    r13
+        push    r14
+        push    r15
+        mov     r15, r8   // r8=dest r15=dst_beg
+        mov     rbx, rcx  // rbx=src
+        cmp     edx, 32768
+        jc      @03
+        mov     eax, edx
+        and     eax, 7FFFH
+        or      eax, 8000H
+        mov     word ptr [r8], ax
+        mov     eax, edx
+        shr     eax, 15
+        mov     word ptr [r8+2H], ax
+        add     r8, 4
+        jmp     @05
+@03:    mov     word ptr [r8], dx
+        test    edx, edx
+        jnz     @04
+        mov     r15d, 2
+        jmp     @19
+        nop
+@04:    add     r8, 2
+@05:    lea     r9, [rdx+rbx] // r9=src_end
+        lea     r10, [r9-0BH] // r10=src_endmatch
+        mov     ecx, 1        // ecx=CWBits
+        mov     r11, r8       // r11=CWpoint
+        mov     dword ptr [r8], 0
+        add     r8, 4
+        pxor    xmm0, xmm0
+        mov     eax, 32768-32
+@06:    movdqu  dqword ptr [off+rax-16], xmm0
+        movdqu  dqword ptr [off+rax], xmm0
+        sub     eax, 32
+        jae     @06
+        cmp     rbx, r10
+        ja      @15
+@07:    mov     edx, dword ptr [rbx]
+        mov     rax, rdx
+        mov     r12, rdx
+        shr     rax, 12
+        xor     rax, rdx
+        and     rax, 0FFFH // rax=h
+        mov     r14, qword ptr [off+rax*8] // r14=o
+        mov     edx, dword ptr [cache+rax*4]
+        mov     qword ptr [off+rax*8], rbx
+        mov     dword ptr [cache+rax*4], r12d
+        xor     rdx, r12
+        test    r14, r14
+        lea     rdi, [r9-1]
+        je      @12
+        and     rdx, 0FFFFFFH
+        jne     @12
+        mov     rdx, rbx
+        sub     rdx, r14
+        cmp     rdx, 2
+        jbe     @12
+        or      dword ptr[r11], ecx
+        add     rbx, 2
+        add     r14, 2
+        mov     esi, 1
+        sub     rdi, rbx
+        cmp     rdi, 271
+        jc      @09
+        mov     edi, 271
+        jmp     @09
+@08:    inc     rsi
+@09:    mov     edx, dword ptr [r14+rsi]
+        cmp     dl, byte ptr [rbx+rsi]
+        jnz     @10
+        cmp     rsi, rdi
+        jge     @10
+        inc     rsi
+        cmp     dh, byte ptr [rbx+rsi]
+        jnz     @10
+        shr     edx, 16
+        cmp     rsi, rdi
+        jge     @10
+        inc     rsi
+        cmp     dl, byte ptr [rbx+rsi]
+        jnz     @10
+        cmp     rsi, rdi
+        jge     @10
+        inc     rsi
+        cmp     dh, byte ptr [rbx+rsi]
+        jnz     @10
+        cmp     rsi, rdi
+        jc      @08
+@10:    add     rbx, rsi
+        shl     rax, 4
+        cmp     rsi, 15
+        ja      @11
+        or      rax, rsi
+        mov     word ptr [r8], ax
+        add     r8, 2
+        jmp     @13
+@11:    sub     rsi, 16
+        mov     word ptr [r8], ax
+        mov     byte ptr [r8+2H], sil
+        add     r8, 3
+        jmp     @13
+@12:    mov     al, byte ptr [rbx]
+        mov     byte ptr [r8], al
+        add     rbx, 1
+        add     r8, 1
+@13:    add     ecx, ecx
+        jnz     @14
+        mov     r11, r8
+        mov     [r8], ecx
+        add     r8, 4
+        add     ecx, 1
+@14:    cmp     rbx, r10
+        jbe     @07
+@15:    cmp     rbx, r9
+        jnc     @18
+@16:    mov     al, byte ptr [rbx]
+        mov     byte ptr [r8], al
+        add     rbx, 1
+        add     r8, 1
+        add     ecx, ecx
+        jnz     @17
+        mov     [r8], ecx
+        add     r8, 4
+        add     ecx, 1
+@17:    cmp     rbx, r9
+        jc      @16
+@18:    sub     r8, r15
+        mov     r15, r8
+@19:    mov     rax, r15
+        pop     r15
+        pop     r14
+        pop     r13
+        pop     r12
+        pop     rsi
+        pop     rdi
+        pop     rbx
+{$endif CPUX86}
 end;
-{$endif PUREPASCAL}
-
-type
-  TByteArray = array[0..3] of byte;
-  PByteArray = ^TByteArray;
+{$endif CPUINTEL}
 
 function SynLZcompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var dst_beg,          // initial dst value
@@ -665,31 +817,29 @@ nextCW:
 //  assert(result=dst-dst_beg);
 end;
 
-{$ifndef PUREPASCAL}
+{$ifdef CPUINTEL}
 // using direct x86 jmp also circumvents Internal Error C11715 for Delphi 5
 function SynLZdecompress1(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
-asm
-  jmp SynLZDecompress1asm
-end;
-
-function SynLZdecompress1asm(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
+{$ifdef CPUX86}
 asm
         push    ebp
         push    ebx
         push    esi
         push    edi
         push    eax
-        mov     eax, 4
-@@0906: add     esp, -4092
+        add     esp, -4092
         push    eax
-        dec     eax
-        jnz     @@0906
-        mov     eax, [esp+4000H]
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
+        add     esp, -4092
+        push    eax
         add     esp, -24
         mov     esi, ecx
         mov     ebx, eax
+        add     edx, eax
         mov     [esp+8H], esi
-        add     edx, ebx
         mov     [esp+10H], edx
         movzx   eax, word ptr [ebx]
         mov     [esp], eax
@@ -710,14 +860,14 @@ asm
         add     ebx, 4
         mov     [esp+14H], ecx
         cmp     ebx, [esp+10H]
-        mov     edi, 1
+        mov     edi, 1             // edi=CWbit
         jnc     @@0917
 @@0909: mov     ecx, [esp+14H]
 @@090A: test    ecx, edi
         jnz     @@0911
-        mov     al, byte ptr [ebx]
+        mov     al, [ebx]
         inc     ebx
-        mov     byte ptr [esi], al
+        mov     [esi], al
         inc     esi
         cmp     ebx, [esp+10H]
         lea     eax, [esi-3]
@@ -734,7 +884,6 @@ asm
 @@0910: add     edi, edi
         jnz     @@090A
         jmp     @@0908
-
 @@0911: movzx   edx, word ptr [ebx]
         add     ebx, 2
         mov     eax, edx
@@ -751,11 +900,48 @@ asm
         mov     [esp+18H], edx
         sub     ecx, eax
         cmp     ecx, edx
-        jl     @@0913
-        mov     ecx, edx
-        mov     edx, esi
-        call    move
-@@0914: cmp     esi, ebp
+        jl      @@0913
+        cmp     edx, 32            // inlined optimized move()
+        ja      @large
+        sub     edx, 8
+        jg      @9_32
+        mov     ecx, [eax]
+        mov     eax, [eax+4]       // always copy 8 bytes for 0..8
+        mov     [esi], ecx         // safe since src_endmatch := src_end-(6+5)
+        mov     [esi+4], eax
+        jmp     @movend
+@9_32:  fild    qword ptr[eax+edx]
+        fild    qword ptr[eax]
+        cmp     edx, 8
+        jle     @16
+        fild    qword ptr[eax+8]
+        cmp     edx, 16
+        jle     @24
+        fild    qword ptr[eax+16]
+        fistp   qword ptr[esi+16]
+@24:    fistp   qword ptr[esi+8]
+@16:    fistp   qword ptr[esi]
+        fistp   qword ptr[esi+edx]
+        jmp     @movend
+        nop
+@large: push    esi
+        fild    qword ptr[eax]
+        lea     eax, [eax+edx-8]
+        lea     edx, [esi+edx-8]
+        fild    qword ptr[eax]
+        push    edx
+        neg     edx
+        and     esi,  -8
+        lea     edx, [edx+esi+8]
+        pop     esi
+@lrgnxt:fild    qword ptr[eax+edx]
+        fistp   qword ptr[esi+edx]
+        add     edx, 8
+        jl      @lrgnxt
+        fistp   qword ptr[esi]
+        pop     esi
+        fistp   qword ptr[esi]
+@movend:cmp     esi, ebp
         jbe     @@0916
 @@0915: inc     ebp
         mov     edx, [ebp]
@@ -781,15 +967,128 @@ asm
         lea     ecx,[ecx+1]
         jnz     @s
         pop     ebx
-        jmp     @@0914
+        jmp     @movend
 @@0917: mov     eax, [esp]
         add     esp, 16412
         pop     edi
         pop     esi
         pop     ebx
         pop     ebp
+{$else CPUX86}
+var off: array[0..4095] of PAnsiChar; // use 32KB of stack space
+asm // rcx=src, edx=size, r8=dest
+        {$ifndef win64} // Linux 64-bit ABI
+        mov     r8, rdx
+        mov     rdx, rsi
+        mov     rcx, rdi
+        {$endif win64}
+        push    rbx
+        push    rsi
+        push    rdi
+        push    r12
+        push    r13
+        push    r14
+        movzx   eax, word ptr [rcx] // rcx=src   eax=result
+        lea     r9, [rdx+rcx] // r9=src_end
+        test    eax, eax
+        je      @35
+        add     rcx, 2
+        mov     r10d, eax
+        and     r10d, 8000H
+        jz      @21
+        movzx   ebx, word ptr [rcx]
+        shl     ebx, 15
+        mov     r10d, eax
+        and     r10d, 7FFFH
+        or      r10d, ebx
+        mov     eax, r10d
+        add     rcx, 2
+@21:    lea     r10, [r8-1H]  // r10=last_hashed  r8=dest
+@22:    mov     edi, dword ptr [rcx]  // edi=CW
+        add     rcx, 4
+        mov     r13d, 1 // r13d=CWBit
+        cmp     rcx, r9
+        jnc     @35
+@23:    mov     ebx, r13d
+        and     ebx, edi
+        jnz     @25
+        mov     bl, byte ptr [rcx]
+        mov     byte ptr [r8], bl
+        add     rcx, 1
+        lea     rbx, [r8-2H]
+        add     r8, 1
+        cmp     rcx, r9
+        jnc     @35
+        cmp     rbx, r10
+        jbe     @24
+        add     r10, 1
+        mov     esi, dword ptr [r10]
+        mov     rbx, rsi
+        shr     esi, 12
+        xor     ebx, esi
+        and     ebx, 0FFFH
+        mov     qword ptr [off+rbx*8], r10
+@24:    shl     r13d, 1
+        jnz     @23
+        jmp     @22
+@25:    movzx   r11, word ptr [rcx] // r11=t
+        add     rcx, 2
+        mov     ebx, r11d // ebx=h
+        shr     ebx, 4
+        and     r11, 0FH
+        lea     r11, [r11+2H]
+        jnz     @26
+        movzx   r11, byte ptr [rcx]
+        add     rcx, 1
+        lea     r11, [r11+12H]
+@26:    mov     r14, qword ptr [off+rbx*8] // r14=o
+        mov     rbx, r8
+        xor     rsi, rsi
+        mov     r12, r11
+        sub     rbx, r14
+        cmp     rbx, r11
+        jnc     @28
+@27:    mov     bl, byte ptr [r14+rsi]
+        mov     byte ptr [r8+rsi], bl
+        inc     rsi
+        dec     r12
+        jnz     @27
+        jmp     @31
+@28:    shr     r12, 3
+        jz      @30
+@29:    mov     rbx, qword ptr [r14+rsi]
+        mov     qword ptr [r8+rsi], rbx
+        add     rsi, 8
+        dec     r12
+        jnz     @29
+@30:    mov     rbx, qword ptr [r14+rsi]
+        mov     qword ptr [r8+rsi], rbx
+@31:    cmp     rcx, r9
+        jnz     @33
+        jmp     @35
+@32:    add     r10, 1
+        mov     ebx, dword ptr [r10]
+        mov     rsi, rbx
+        shr     ebx, 12
+        xor     esi, ebx
+        and     esi, 0FFFH
+        mov     qword ptr [off+rsi*8], r10
+@33:    cmp     r10, r8
+        jc      @32
+        add     r8, r11
+        lea     r10, [r8-1H]
+        shl     r13d, 1
+        jnz     @23
+        jmp     @22
+@35:    pop     r14
+        pop     r13
+        pop     r12
+        pop     rdi
+        pop     rsi
+        pop     rbx
+{$endif CPUX86}
 end;
-{$endif PUREPASCAL}
+{$endif CPUINTEL}
 
 function SynLZdecompress1pas(src: PAnsiChar; size: integer; dst: PAnsiChar): integer;
 var last_hashed: PAnsiChar; // initial src and dst value
@@ -845,14 +1144,18 @@ nextCW:
       end;
       {$ifdef CPU64}
       o := offset[h];
-      if (t<8) or (PtrUInt(dst-o)<t) then
-        for i := 0 to t do
+      if PtrUInt(dst-o)<t then
+        for i := 0 to t-1 do
           dst[i] := o[i] else
-        move(o^,dst^,t);
+        if t<=8 then
+          PInt64(dst)^ := PInt64(o)^ else
+          move(o^,dst^,t);
       {$else}
       if PtrUInt(dst-offset[h])<t then
         movechars(offset[h],dst,t) else
-        move(offset[h]^,dst^,t);
+        if t>8 then // safe since src_endmatch := src_end-(6+5)
+          move(offset[h]^,dst^,t) else
+          PInt64(dst)^ := PInt64(offset[h])^; // much faster in practice
       {$endif}
       if src>=src_end then break;
       while last_hashed<dst do begin
@@ -1241,7 +1544,7 @@ begin
     case L and 3 of // remaining 0..3 bytes
     1: inc(s1,PByte(P)^);
     2: inc(s1,PWord(P)^);
-    3: inc(s1,PWord(P)^ or (PByteArray(P)^[2] shl 16));
+    3: inc(s1,PWord(P)^ or (ord(PAnsiChar(P)[2]) shl 16));
     end;
     inc(s2,s1);
     result := s1 xor (s2 shl 16);

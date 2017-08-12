@@ -17,7 +17,10 @@ type
     FPool: TObjectListLocked;
     FWorkerCounter: integer;
     FIsInDestroyState: Boolean;
+{$IFDEF SM52}
+{$ELSE}
     function getOldErrorReporterForCurrentThread: JSErrorReporter;
+{$ENDIF}
     function getCurrentWorkerThreadIndex: integer;
     function getCurrentWorkerID: integer;
     function getWorkerThreadIndexByID(ID: Integer): integer;
@@ -33,7 +36,10 @@ type
     procedure EnqueueInMessageToThread(const mess: RawUTF8; aID: Integer);
     function DequeueInMessageFromCurrentThread(out mess: RawUTF8): Boolean;
     procedure TerminateThread(aID: Integer; aNeedCancelExecution: Boolean = false);
+{$IFDEF SM52}
+{$ELSE}
     property OldErrorReporterForCurrentThread: JSErrorReporter read getOldErrorReporterForCurrentThread;
+{$ENDIF}
     property DoInteruptInOwnThreadhandlerForCurThread: TThreadMethod read GetDoInteruptInOwnThreadhandlerForCurThread;
   end;
 
@@ -52,7 +58,10 @@ type
     FNeedCallInterrupt: boolean;
     fInMessages: TRawUTF8List;
     fOutMessages: TRawUTF8List;
+{$IFDEF SM52}
+{$ELSE}
     oldErrorReporter: JSErrorReporter;
+{$ENDIF}
     fID: Integer;
     FName: RawUTF8;
     FScript: SynUnicode;
@@ -64,8 +73,11 @@ type
     destructor Destroy; override;
   end;
 
+{$IFDEF SM52}
+{$ELSE}
 const
   LAST_ERROR_PROP_NAME = '__workerLastError';
+{$ENDIF}
 
 constructor TJSWorkerThread.Create(aSMManager: TSMEngineManager; workerName: RawUTF8; script: SynUnicode);
 begin
@@ -85,7 +97,10 @@ begin
   FreeAndNil(fInMessages);
   FreeAndNil(fOutMessages);
   if not Terminated then begin
+{$IFDEF SM52}
+{$ELSE}
     FEng.rt.ErrorReporter := oldErrorReporter;
+{$ENDIF}
     if FEng.cx.IsRunning then
       FEng.CancelExecution(false);
   end;
@@ -142,6 +157,8 @@ begin
   end;
 end;
 
+{$IFDEF SM52}
+{$ELSE}
 procedure WorkerThreadErrorReporter(cx: PJSContext; _message: PCChar; report: PJSErrorReport); cdecl;
 var
   exc: jsval;
@@ -151,6 +168,7 @@ begin
   if not TSMEngine(cx.PrivateData).Manager.WorkersManager.FIsInDestroyState then
     TSMEngine(cx.PrivateData).Manager.WorkersManager.OldErrorReporterForCurrentThread(cx, _message, report);
 end;
+{$ENDIF}
 
 procedure TJSWorkerThread.Execute;
 var
@@ -168,8 +186,11 @@ begin
     FEng.GlobalObject.ptr.DefineFunction(cx, 'postMessage', fromWorker_postMessage, 1, JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT);
     FEng.GlobalObject.ptr.DefineFunction(cx, 'terminate', fromWorker_terminate, 0, JSPROP_ENUMERATE or JSPROP_READONLY or JSPROP_PERMANENT);
 
+{$IFDEF SM52}
+{$ELSE}
     oldErrorReporter := FEng.rt.ErrorReporter;
     FEng.rt.ErrorReporter := WorkerThreadErrorReporter;
+{$ENDIF}
 
     val.asInteger := ThreadID;
     FEng.GlobalObject.ptr.defineProperty(cx, 'threadID', val);
@@ -182,7 +203,12 @@ begin
 
     while not Terminated do begin
       if FNeedCallInterrupt then begin
+{$IFDEF SM52}
+        FEng.cx.RequestInterruptCallback;
+        FEng.cx.CheckForInterrupt;
+{$ELSE}
         FEng.rt.InterruptCallback(cx);
+{$ENDIF}
         FNeedCallInterrupt := false;
       end;
 
@@ -195,11 +221,20 @@ begin
         try
           try
             if not Terminated then begin
+            {$IFNDEF SM52}
               FEng.GlobalObject.ptr.SetProperty(cx, LAST_ERROR_PROP_NAME, JSVAL_VOID);
+            {$ENDIF}
               FEng.CallObjectFunction(FEng.GlobalObject, 'onmessage', [msg.ptr]);
             end;
           except
+            {$IFDEF SM52}
+            if not (JS_IsExceptionPending(cx) and JS_GetPendingException(cx, val)) then begin
+              val.setVoid;
+            end;
+            exc := cx.NewRootedValue(val);
+            {$ELSE}
             exc := cx.NewRootedValue(FEng.GlobalObject.ptr.GetPropValue(cx, LAST_ERROR_PROP_NAME));
+            {$ENDIF}
             try
               if not fSMManager.WorkersManager.FIsInDestroyState and not exc.ptr.isVoid then begin
                 try
@@ -407,6 +442,8 @@ begin
   end;
 end;
 
+{$IFDEF SM52}
+{$ELSE}
 function TJSWorkersManager.getOldErrorReporterForCurrentThread: JSErrorReporter;
 var
   curThreadIndex: Integer;
@@ -425,6 +462,7 @@ begin
     FPool.Safe.UnLock;
   end;
 end;
+{$ENDIF}
 
 function TJSWorkersManager.getWorkerThreadIndexByID(ID: Integer): integer;
 var

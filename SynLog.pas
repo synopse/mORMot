@@ -158,7 +158,7 @@ type
     FileName: RawUTF8;
     /// list of all mapped source code lines of this unit
     Line: TIntegerDynArray;
-    /// start code address of each source code lin
+    /// start code address of each source code line
     Addr: TIntegerDynArray;
   end;
   /// a dynamic array of units, as decoded by TSynMapFile from a .map file
@@ -222,7 +222,10 @@ type
     function FindSymbol(aAddressOffset: integer): integer;
     /// retrieve an unit and source line, according to a relative code address
     // - use fast O(log n) binary search
-    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer;
+    function FindUnit(aAddressOffset: integer; out LineNumber: integer): integer; overload;
+    /// retrieve an unit information, according to the unit name
+    // - will search within Units array
+    function FindUnit(const aUnitName: RawUTF8): integer; overload;
     /// return the symbol location according to the supplied absolute address
     // - i.e. unit name, symbol name and line number (if any), as plain text
     // - returns '' if no match found
@@ -230,6 +233,9 @@ type
     /// return the symbol location according to the supplied ESynException
     // - i.e. unit name, symbol name and line number (if any), as plain text
     class function FindLocation(exc: ESynException): RawUTF8; overload;
+    /// returns the file name of
+    // - if unitname = '', returns the main file name of the current executable
+    class function FindFileName(const unitname: RawUTF8): TFileName;
     /// all symbols associated to the executable
     property Symbols: TSynMapSymbolDynArray read fSymbol;
     /// all units, including line numbers, associated to the executable
@@ -612,7 +618,7 @@ type
     // RotateFileDailyAtHour are set (the high resolution frequency is set
     // in the log file header, so expects a single file)
     property HighResolutionTimeStamp: boolean read fHRTimeStamp write fHRTimeStamp;
-    /// by default, time logging will use error-safe UTC as reference
+    /// by default, time logging will use error-safe UTC values as reference
     // - you may set this property to TRUE to store local time instead
     property LocalTimeStamp: boolean read fLocalTimeStamp write fLocalTimeStamp;
     /// if TRUE, will log the unit name with an object instance if available
@@ -1495,7 +1501,8 @@ function EventArchiveSynLZ(const aOldLogFileName, aDestinationPath: TFileName): 
 /// append some information to a syslog message memory buffer
 // - following https://tools.ietf.org/html/rfc5424 specifications
 // - ready to be sent via UDP to a syslog remote server
-// - returns the number of bytes written to destbuffer
+// - returns the number of bytes written to destbuffer (which should have
+// destsize > 127)
 function SyslogMessage(facility: TSyslogFacility; severity: TSyslogSeverity;
   const msg, procid, msgid: RawUTF8; destbuffer: PUTF8Char; destsize: integer;
   trimmsgfromlog: boolean): integer;
@@ -1513,31 +1520,16 @@ uses
 
 var
   LogInfoText: array[TSynLogInfo] of RawUTF8;
-  LogInfoCaptions: array[TSynLogInfo] of string;
-
-procedure ComputeLogInfoText;
-var
-  E: TSynLogInfo;
-begin
-  for E := low(E) to high(E) do
-    LogInfoText[E] := TrimLeftLowerCaseShort(GetEnumName(TypeInfo(TSynLogInfo),ord(E)));
-end;
+  LogInfoCaption: array[TSynLogInfo] of string;
 
 function ToText(event: TSynLogInfo): RawUTF8;
 begin
-  if LogInfoText[low(event)]='' then
-    ComputeLogInfoText;
   result := LogInfoText[event];
 end;
 
 function ToCaption(event: TSynLogInfo): string;
-var
-  E: TSynLogInfo;
 begin
-  if LogInfoCaptions[succ(sllNone)]='' then
-    for E := succ(sllNone) to high(E) do
-      LogInfoCaptions[E] := GetCaptionFromEnum(TypeInfo(TSynLogInfo),ord(E));
-  result := LogInfoCaptions[event];
+  result := LogInfoCaption[event];
 end;
 
 function ToCaption(filter: TSynLogFilter): string;
@@ -2195,6 +2187,32 @@ begin
     result := GetInstanceMapFile.FindLocation(PtrUInt(exc.RaisedAt));
 end;
 
+function TSynMapFile.FindUnit(const aUnitName: RawUTF8): integer;
+begin
+  if (self<>nil) and (aUnitName<>'') then
+    for result := 0 to high(fUnit) do
+      if IdemPropNameU(fUnit[result].Symbol.Name,aUnitName) then
+        exit;
+  result := -1;
+end;
+
+class function TSynMapFile.FindFileName(const unitname: RawUTF8): TFileName;
+var map: TSynMapFile;
+    name: RawUTF8;
+    u: integer;
+begin
+  result := '';
+  map := GetInstanceMapFile;
+  if map = nil then
+    exit;
+  if unitname='' then
+    name := ExeVersion.ProgramName else
+    name := unitname;
+  u := map.FindUnit(name);
+  if u>=0 then
+    result := UTF8ToString(map.fUnit[u].FileName);
+end;
+
 
 { TSynLogFamily }
 
@@ -2229,9 +2247,9 @@ function ToText(const info: TSynLogExceptionInfo): RawUTF8;
 begin
   with info.Context do
     if ELevel<>sllNone then
-      FormatUTF8('% % at %: % [%]',[ToCaption(ELevel),EClass,
+      FormatUTF8('% % at %: % [%]',[LogInfoCaption[ELevel],EClass,
         GetInstanceMapFile.FindLocation(EAddr),DateTimeToIso8601Text(
-        UnixTimeToDateTime(ETimeStamp),' '),info.Message],result) else
+        UnixTimeToDateTime(ETimeStamp),' '),StringToUTF8(info.Message)],result) else
       result := '';
 end;
 
@@ -2291,13 +2309,13 @@ begin
   destbuffer[23] := 'Z';
   inc(destbuffer,24);
   if length(ExeVersion.Host)+length(ExeVersion.ProgramName)+length(procid)+length(msgid)+
-    (destbuffer-start)+15>destsize then
+     (destbuffer-start)+15>destsize then
     exit; // avoid buffer overflow
   PrintUSAscii(ExeVersion.Host); // HOST
   PrintUSAscii(ExeVersion.ProgramName); // APP-NAME
   PrintUSAscii(procid); // PROCID
-  PrintUSAscii(msgid); // MSGID
-  PrintUSAscii(''); // no STRUCTURED-DATA
+  PrintUSAscii(msgid);  // MSGID
+  PrintUSAscii('');     // no STRUCTURED-DATA
   destbuffer^ := ' ';
   inc(destbuffer);
   len := length(msg);
@@ -2336,7 +2354,7 @@ begin
     exit;
   TDocVariantData(result).InitFast(length(info),dvArray);
   for i := 0 to high(info) do
-    TDocVariantData(result).AddItemFromText(ToText(info[i]));
+    TDocVariantData(result).AddItemText(ToText(info[i]));
 end;
 {$endif}
 
@@ -3345,7 +3363,7 @@ procedure TSynLog.LockAndGetThreadContext;
 var ID: TThreadID;
 begin
   EnterCriticalSection(GlobalThreadLock);
-  ID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+  ID := TThreadID(GetCurrentThreadId);
   if ID<>fThreadID then begin
     fThreadID := ID;
     GetThreadContextInternal;
@@ -5360,7 +5378,7 @@ begin
   if cardinal(aRow)<cardinal(fCount) then begin
     dt := EventDateTime(aRow);
     result := Format('%s %s'#9'%s'#9,[DateToStr(dt),FormatDateTime(TIME_FORMAT,dt),
-      ToCaption(EventLevel[aRow])]);
+      LogInfoCaption[EventLevel[aRow]]]);
     if fThreads<>nil then
       result := result+IntToString(cardinal(fThreads[aRow]))+#9;
     result := result+EventString(aRow,'   ');
@@ -5376,7 +5394,7 @@ begin
       aRow := fSelected[aRow];
       case aCol of
       0: DateTimeToString(result,TIME_FORMAT,EventDateTime(aRow));
-      1: result := ToCaption(EventLevel[aRow]);
+      1: result := LogInfoCaption[EventLevel[aRow]];
       2: if fThreads<>nil then
            result := IntToString(cardinal(fThreads[aRow]));
       3: result := EventString(aRow,'   ',MAXLOGLINES);
@@ -5640,6 +5658,9 @@ initialization
   {$ifndef NOEXCEPTIONINTERCEPT}
   DefaultSynLogExceptionToStr := InternalDefaultSynLogExceptionToStr;
   {$endif}
+  GetEnumTrimmedNames(TypeInfo(TSynLogInfo),@LogInfoText);
+  GetEnumCaptions(TypeInfo(TSynLogInfo),@LogInfoCaption);
+  LogInfoCaption[sllNone] := '';
   TTextWriter.RegisterCustomJSONSerializerFromText([
     TypeInfo(TSynMapSymbol),_TSynMapSymbol,
     TypeInfo(TSynMapUnit),_TSynMapUnit]);

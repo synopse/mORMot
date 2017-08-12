@@ -212,6 +212,9 @@ type
     // finalize HTTP Server and SOA log database
     procedure InternalStop; override;
   public
+    /// generate API documentation corresponding to REST SOA interfaces
+    procedure WrapperGenerate(const DestFile: TFileName;
+      const Template: TFileName = 'API.adoc.mustache');
     /// reference to the main HTTP server publishing this daemon Services
     // - may be nil outside a Start..Stop range
     property HttpServer: TSQLHttpServer read fHttpServer;
@@ -791,7 +794,7 @@ var
       modified := false;
       if doc.Count > 0 then
         while B <> nil do begin
-          appsec := GetNextItem(B, '@');
+          GetNextItem(B, '@', appsec);
           v := doc.GetPVariantByPath(GetNextItem(B));
           if v = nil then
             continue;
@@ -1145,6 +1148,12 @@ end;
 
 { ----- Implements Thread Processing to access a TCP server }
 
+procedure TDDDRestHttpDaemon.WrapperGenerate(const DestFile, Template: TFileName);
+begin
+  Settings.Rest.WrapperGenerate(Rest, GetInteger(pointer(HttpServer.Port)), DestFile, Template);
+end;
+
+
 { TDDDSocketThreadMonitoring }
 
 function TDDDSocketThreadMonitoring.GetSocket: variant;
@@ -1391,9 +1400,10 @@ begin
     fSocketDisable := true;
     fRest.LogClass.Add.Log(sllDebug, 'Shutdown: % will stop any communication ' +
       'with %:%', [ClassType, fHost, fPort], self);
-    if andTerminate then begin
+    if andTerminate and not Terminated then begin
       sleep(100);
       Terminate;
+      WaitFor;
     end;
   end;
 end;

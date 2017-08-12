@@ -1319,8 +1319,7 @@ var i,n: integer;
     InClause: TIDDynArray;
 begin
   result := false;
-  if (IDs=nil) or (SQLWhere='') or
-     (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
+  if (IDs=nil) or (TableModelIndex<0) or (Model.Tables[TableModelIndex]<>fStoredClass) then
     exit;
   if fBatchMethod<>mNone then
     if fBatchMethod<>mDELETE then
@@ -1347,11 +1346,10 @@ begin
             TInt64DynArray(InClause),n,'RowID in (',')')],false)=nil then
           exit;
       end;
-      exit;
     end else
-    if ExecuteInlined('delete from % where %',[fTableName,SQLWhere],false)=nil then
+    if ExecuteInlined('delete from %%',[fTableName,SQLFromWhere(SQLWhere)],false)=nil then
       exit;
-    if result and (Owner<>nil) then
+    if Owner<>nil then
       Owner.FlushInternalDBCache;
   end;
   result := true;

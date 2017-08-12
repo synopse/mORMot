@@ -56,10 +56,14 @@ begin
   if fJSON='' then
     fJSON := StringFromFile('..\..\People.json');
   if fJSON='' then
+    fJSON := StringFromFile('..\..\..\exe\People.json');
+  if fJSON='' then
     raise Exception.Create('No People.json');
   fDBFileName :=  '..\..\exe\test.db3';
   if not FileExists(fDBFileName) then
     fDBFileName :=  '..\..\test.db3';
+  if not FileExists(fDBFileName) then
+    fDBFileName :=  '..\..\..\exe\test.db3';
   if not FileExists(fDBFileName) then
     raise Exception.Create('No test.db3');
   fProps := TSQLDBSQLite3ConnectionProperties.Create(StringToUTF8(fDBFileName),'','','');

@@ -1181,53 +1181,53 @@ end;
 
 function TSynMustacheContextVariant.GetValueFromContext(
   const ValueName: RawUTF8; var Value: TVarData): TSynMustacheSectionType;
-var i,helper: Integer;
+var i,space,helper: Integer;
 
   procedure ProcessHelper;
-  var nam: RawUTF8;
-      names: TRawUTF8DynArray;
+  var valnam: RawUTF8;
       val: TVarData;
       valArr: TDocVariantData absolute val;
       valFree: boolean;
+      names: TRawUTF8DynArray;
       res: PVarData;
       j,k,n: integer;
   begin
-    nam := Copy(ValueName,i+1,maxInt);
-    if nam='' then
-      exit;
+    valnam := Copy(ValueName,space+1,maxInt);
     valFree := false;
-    if nam='.' then
-      GetValueFromContext(nam,val) else
-    if (nam[1] in ['1'..'9','"','{','[']) or
-       (nam='true') or (nam='false') or (nam='null') then begin
-      // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
-      val.VType := varEmpty;
-      VariantLoadJson(variant(val),pointer(nam),nil,@JSON_OPTIONS[true]);
-      valFree := true;
-    end else begin
-      for j := 1 to length(nam) do
-        case nam[j] of
-        ' ':  break; // allows {{helper1 helper2 value}} recursive calls
-        ',': begin // {{helper value,123,"constant"}}
-          CSVToRawUTF8DynArray(Pointer(nam),names); // TODO: handle 123,"a,b,c"
-          valArr.InitFast;
-          for k := 0 to High(names) do
-            valArr.AddItem(GetValueCopyFromContext(names[k]));
-          valFree := true;
-          break;
-        end;
-        '<','>','=': begin // {{#if .=123}} -> {{#if .,"=",123}}
-          k := j+1;
-          if nam[k] in ['=','>'] then
-            inc(k);
-          valArr.InitArray([GetValueCopyFromContext(Copy(nam,1,j-1)),
-            Copy(nam,j,k-j),GetValueCopyFromContext(Copy(nam,k,maxInt))],JSON_OPTIONS[true]);
-          valFree := true;
-          break;
-        end;
-        end;
-      if not valFree then
-        GetValueFromContext(nam,val);
+    if valnam<>'' then begin
+      if valnam='.' then
+        GetValueFromContext(valnam,val) else
+      if ((valnam<>'') and (valnam[1] in ['1'..'9','"','{','['])) or
+         (valnam='true') or (valnam='false') or (valnam='null') then begin
+        // {{helper 123}} or {{helper "constant"}} or {{helper [1,2,3]}}
+        val.VType := varEmpty;
+        VariantLoadJson(variant(val),pointer(valnam),nil,@JSON_OPTIONS[true]);
+        valFree := true;
+      end else begin
+        for j := 1 to length(valnam) do
+          case valnam[j] of
+          ' ':  break; // allows {{helper1 helper2 value}} recursive calls
+          ',': begin // {{helper value,123,"constant"}}
+            CSVToRawUTF8DynArray(Pointer(valnam),names,',',true); // TODO: handle 123,"a,b,c"
+            valArr.InitFast;
+            for k := 0 to High(names) do
+              valArr.AddItem(GetValueCopyFromContext(names[k]));
+            valFree := true;
+            break;
+          end;
+          '<','>','=': begin // {{#if .=123}} -> {{#if .,"=",123}}
+            k := j+1;
+            if valnam[k] in ['=','>'] then
+              inc(k);
+            valArr.InitArray([GetValueCopyFromContext(Copy(valnam,1,j-1)),
+              Copy(valnam,j,k-j),GetValueCopyFromContext(Copy(valnam,k,maxInt))],JSON_OPTIONS[true]);
+            valFree := true;
+            break;
+          end;
+          end;
+        if not valFree then
+          GetValueFromContext(valnam,val);
+      end;
     end;
     n := fContextCount+4;
     if length(fTempGetValueFromContextHelper)<n then
@@ -1248,16 +1248,16 @@ begin
         Value := Document;
       exit;
     end;
-  i := PosEx(' ',ValueName);
-  if i>1 then begin // {{helper value}}
-    helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),i-1);
+  space := PosEx(' ',ValueName);
+  if space>1 then begin // {{helper value}}
+    helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space-1);
     if helper>=0 then begin
       ProcessHelper;
       result := msSinglePseudo;
       exit;
     end; // if helper not found, will return the unprocessed value
   end;
-  for i := fContextCount-1 downto 0 do
+  for i := fContextCount-1 downto 0 do // recursive search of {{value}}
     with fContext[i] do
       if DocumentType<>nil then
         if ListCount<0 then begin // single item context
@@ -1265,7 +1265,7 @@ begin
           if Value.VType>=varNull then
             exit;
         end else
-        if IdemPChar(pointer(ValueName),'-INDEX') then begin
+        if IdemPChar(pointer(ValueName),'-INDEX') then begin // {{-index}}
           Value.VType := varInteger;
           if ValueName[7]='0' then
             Value.VInteger := ListCurrent else
@@ -1277,6 +1277,14 @@ begin
           if Value.VType>=varNull then
             exit;
         end;
+  if space=0 then begin
+    space := length(ValueName); // {{helper}}
+    helper := TSynMustache.HelperFind(Helpers,pointer(ValueName),space);
+    if helper>=0 then begin
+      ProcessHelper;
+      result := msSinglePseudo;
+    end;
+  end;
 end;
 
 procedure TSynMustacheContextVariant.AppendValue(const ValueName: RawUTF8;

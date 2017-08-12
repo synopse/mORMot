@@ -232,16 +232,33 @@ const
 // - very optimized for speed
 procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 
+type
+  /// a string buffer, used by InternalBCDToBuffer to store its output text
+  TBCDBuffer = array[0..66] of AnsiChar;
+  
 /// convert a TBcd value as text to the output buffer
 // - buffer is to be array[0..66] of AnsiChar
 // - returns the resulting text start in PBeg, and the length as function result
 // - does not handle negative sign and 0 value - see AddBcd() function use case
 // - very optimized for speed
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg: PAnsiChar): integer;
 
 /// convert a TBcd value into a currency
 // - purepascal version included in latest Delphi versions is slower than this
 function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
+
+/// convert a TBcd value into a RawUTF8 text
+// - will call fast InternalBCDToBuffer function
+procedure BCDToUTF8(const AValue: TBcd; var result: RawUTF8); overload;
+
+/// convert a TBcd value into a RawUTF8 text
+// - will call fast InternalBCDToBuffer function
+function BCDToUTF8(const AValue: TBcd): RawUTF8; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// convert a TBcd value into a VCL string text
+// - will call fast InternalBCDToBuffer function
+function BCDToString(const AValue: TBcd): string;
 
 
 /// export all rows of a TDataSet into JSON
@@ -259,7 +276,7 @@ function ToDataSet(aOwner: TComponent; const Data: TVariantDynArray;
 
 implementation
 
-function InternalBCDToBuffer(const AValue: TBcd; ADest: PAnsiChar; var PBeg: PAnsiChar): integer;
+function InternalBCDToBuffer(const AValue: TBcd; out ADest: TBCDBuffer; var PBeg: PAnsiChar): integer;
 var i,DecimalPos: integer;
     P,Frac: PByte;
     PEnd: PAnsiChar;
@@ -268,7 +285,7 @@ begin
   if AValue.Precision=0 then
     exit;
   DecimalPos := AValue.Precision-(AValue.SignSpecialPlaces and $3F);
-  P := pointer(ADest);
+  P := @ADest;
   Frac := @Avalue.Fraction;
   for i := 0 to AValue.Precision-1 do begin
     if i=DecimalPos then
@@ -288,7 +305,7 @@ begin
   end;
   // remove trailing 0 after decimal
   if AValue.Precision>DecimalPos then begin
-    repeat dec(P) until (P^<>ord('0')) or (P=pointer(ADest));
+    repeat dec(P) until (P^<>ord('0')) or (P=@ADest);
     PEnd := pointer(P);
     if PEnd^<>'.' then
       inc(PEnd);
@@ -296,7 +313,7 @@ begin
     PEnd := pointer(P);
   PEnd^ := #0;
   // remove leading 0
-  PBeg := ADest;
+  PBeg := @ADest;
   while (PBeg[0]='0') and (PBeg[1] in ['0'..'9']) do inc(PBeg);
   result := PEnd-PBeg;
 end;
@@ -304,9 +321,9 @@ end;
 procedure AddBcd(WR: TTextWriter; const AValue: TBcd);
 var len: integer;
     PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
+    tmp: TBCDBuffer;
 begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
   if len<=0 then
     WR.Add('0') else begin
     if AValue.SignSpecialPlaces and $80=$80 then
@@ -318,9 +335,9 @@ end;
 function BCDToCurr(const AValue: TBcd; var Curr: Currency): boolean;
 var len: integer;
     PBeg: PAnsiChar;
-    tmp: array[0..66] of AnsiChar;
+    tmp: TBCDBuffer;
 begin
-  len := InternalBCDToBuffer(AValue,@tmp,PBeg);
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
   if len<=0 then
     Curr := 0 else begin
     PInt64(@Curr)^ := StrToCurr64(pointer(PBeg));
@@ -330,6 +347,28 @@ begin
   result := true;
 end;
 
+procedure BCDToUTF8(const AValue: TBcd; var result: RawUTF8);
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: TBCDBuffer;
+begin
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
+  SetString(result,PBeg,len);
+end;
+
+function BCDToUTF8(const AValue: TBcd): RawUTF8;
+begin
+  BCDToUTF8(AValue,result);
+end;
+
+function BCDToString(const AValue: TBcd): string;
+var len: integer;
+    PBeg: PAnsiChar;
+    tmp: TBCDBuffer;
+begin
+  len := InternalBCDToBuffer(AValue,tmp,PBeg);
+  Ansi7ToString(PWinAnsiChar(PBeg),len,result);
+end;
 
 
 var
@@ -426,19 +465,19 @@ begin
     PInteger(Dest)^ := PInteger(Data)^;
   ftLargeint, ftFloat, ftCurrency:
     PInt64(Dest)^ := PInt64(Data)^;
-  ftDate, ftTime:
-    if PDateTime(Data)^=0 then
-      result := false else begin
+  ftDate, ftTime, ftDateTime:
+    if PDateTime(Data)^=0 then // handle 30/12/1899 date as NULL
+      result := false else begin  // inlined DataConvert(Field,Data,Dest,true)
       TS := DateTimeToTimeStamp(PDateTime(Data)^);
-      if (TS.Time<0) or (TS.Date<=0) then
-        result := false else // matches ValidateTimeStamp() expectations
-        case Field.DataType of
-        ftDate: PDateTimeRec(Dest)^.Date := TS.Date;
-        ftTime: PDateTimeRec(Dest)^.Time := TS.Time;
-        end;
+      case Field.DataType of
+      ftDate:     PDateTimeRec(Dest)^.Date := TS.Date;
+      ftTime:     PDateTimeRec(Dest)^.Time := TS.Time;
+      ftDateTime:
+        if (TS.Time<0) or (TS.Date<=0) then
+          result := false else // matches ValidateTimeStamp() expectations
+          PDateTimeRec(Dest)^.DateTime := TimeStampToMSecs(TS);
+      end; // see NativeToDateTime/DateTimeToNative in TDataSet.DataConvert
     end;
-  ftDateTime:
-    PDateTimeRec(Dest)^.DateTime := PDateTime(Data)^;
   ftString: begin
     if DataLen<>0 then begin
       CurrentAnsiConvert.UTF8BufferToAnsi(Data,DataLen,Temp);
@@ -460,8 +499,8 @@ begin
     {$endif}
   end;
   // ftBlob,ftMemo,ftWideMemo should be retrieved by CreateBlobStream()
-  else raise EDatabaseError.CreateFmt('%s.GetFieldData DataType=%d',
-         [ClassName,ord(Field.DataType)]);
+  else raise EDatabaseError.CreateFmt('%s.GetFieldData unhandled DataType=%s (%d)',
+         [ClassName,GetEnumName(TypeInfo(TFieldType),ord(Field.DataType))^,ord(Field.DataType)]);
   end;
 end;
 

@@ -217,10 +217,11 @@ type
   /// generic interface, to manage a service/daemon instance from an executable
   // - in addition to Start/Stop methods, Halt would force the whole executable
   // to abort its execution, SubscribeLog allows log monitoring, and
-  // DatabaseList/DatabaseExecute remote SQL execution on one or several ORMs
-  // - those methods could be published as REST (e.g. over named pipe), so that
-  // a single administration daemon (installed e.g. as a Windows Service) would
-  // be able to launch and monitor child processes as individual executables
+  // DatabaseList/DatabaseExecute remote SQL/SOA execution on one or several
+  // logicial REST servers 
+  // - those methods would allow a single administration daemon (installed e.g.
+  // as a Windows Service) to be able to launch and monitor child processes as
+  // individual executables, or via a custom DDD's ToolsAdmin tool
   // - since SubscribeLog() uses a callback, this REST server should be
   // published via supported transmission protocol, e.g. WebSockets
   IAdministratedDaemon = interface(IMonitoredDaemon)
@@ -1053,9 +1054,12 @@ implementation
 
 { *********** Persistence / Repository Interfaces }
 
+var
+  TCQRSResultText: array[TCQRSResult] of PShortString;
+
 function ToText(res: TCQRSResult): PShortString;
 begin
-  result := GetEnumName(TypeInfo(TCQRSResult),ord(res));
+  result := TCQRSResultText[res];
 end;
 
 function ToText(res: TCQRSQueryState): PShortString; overload;
@@ -1353,7 +1357,7 @@ const RAW_TYPE: array[TSQLFieldType] of RawUTF8 = (
     '');               // sftUnixMSTime
 var hier: TClassDynArray;
     a,i,f: integer;
-    code,aggname,recname,parentrecname: RawUTF8;
+    code,aggname,recname,parentrecname,typ: RawUTF8;
     map: TSQLPropInfoList;
     rectypes: TRawUTF8DynArray;
 begin
@@ -1393,10 +1397,15 @@ begin
         end;
         code := code+'  published'#13#10;
         for f := 0 to map.Count-1 do
-        with map.List[f] do
-          code := FormatUTF8('%    /// maps %.%'#13#10+
-            '    property %: % read f% write f%;'#13#10,
-            [code,aggname,NameUnflattened,Name,rectypes[f],Name,Name]);
+        with map.List[f] do begin
+          typ := SQLFieldRTTITypeName;
+          if IdemPropNameU(typ, rectypes[f]) then
+            typ := '' else
+            typ := ' ('+typ+')';
+          code := FormatUTF8('%    /// maps %.%%'#13#10+
+            '    property %: % read f% write f%;'#13#10, [code,aggname,
+            NameUnflattened,typ,Name,rectypes[f],Name,Name]);
+        end;
         code := code+'  end;'#13#10;
       finally
         map.Free;
@@ -1410,12 +1419,12 @@ end;
 procedure TDDDRepositoryRestFactory.ComputeMapping;
 
   procedure EnsureCompatible(agg,rec: TSQLPropInfo);
-  { note about T*ObjArray published fields:
+  { note about dynamic arrays (e.g. TRawUTF8DynArray or T*ObjArray) published fields:
       TOrder = class(TSynAutoCreateFields)
       published
         property Lines: TOrderLineObjArray
     In all cases, T*ObjArray should be accessible directly, using ObjArray*()
-    wrapper functions.
+    wrapper functions, and other dynamic arrays too.
     Storage at TSQLRecord level would use JSON format, i.e. a variant in the
     current implementation - you may use a plain RawUTF8 field if the on-the-fly
     conversion to/from TDocVariant appears to be a bottleneck. }
@@ -1423,9 +1432,8 @@ procedure TDDDRepositoryRestFactory.ComputeMapping;
     if agg.SQLDBFieldType=rec.SQLDBFieldType then
       exit; // very same type at DB level -> OK
     if (agg.SQLFieldType=sftBlobDynArray) and
-       ((agg as TSQLPropInfoRTTIDynArray).ObjArray<>nil) and
        (rec.SQLFieldType in [sftVariant,sftUTF8Text]) then
-      exit; // allow T*ObjArray <-> JSON/TEXT <-> variant/RawUTF8 marshalling
+      exit; // allow array <-> JSON/TEXT <-> variant/RawUTF8 marshalling
     raise EDDDRepository.CreateUTF8(self,
       '% types do not match at DB level: %.%:%=% and %.%:%=%',[self,
       Aggregate,agg.Name,agg.SQLFieldRTTITypeName,agg.SQLDBFieldTypeName^,
@@ -2782,13 +2790,12 @@ end;
 initialization
   {$ifndef ISDELPHI2010}
   {$ifndef HASINTERFACERTTI} // circumvent a old FPC bug
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSResult));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryAction));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TCQRSQueryState));
-  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType(TypeInfo(TDDDAdministratedDaemonStatus));
+  TTextWriter.RegisterCustomJSONSerializerFromTextSimpleType([
+    TypeInfo(TCQRSResult), TypeInfo(TCQRSQueryAction), TypeInfo(TCQRSQueryState),
+    TypeInfo(TDDDAdministratedDaemonStatus)]);
   {$endif}
   {$endif}
-
+  GetEnumNames(TypeInfo(TCQRSResult), @TCQRSResultText);
   TInterfaceFactory.RegisterInterfaces([
     TypeInfo(IMonitored),TypeInfo(IMonitoredDaemon),
     TypeInfo(IAdministratedDaemon),TypeInfo(IAdministratedDaemonAsProxy)]);

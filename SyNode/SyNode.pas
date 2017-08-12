@@ -1,4 +1,4 @@
-/// SyNode - server-side JavaScript execution using the SpiderMonkey 45
+/// SyNode - server-side JavaScript execution using the SpiderMonkey 45/52
 // library with nodeJS modules support
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
@@ -58,6 +58,10 @@ unit SyNode;
    Download the mozjs-45 library at
      x32: https://unitybase.info/downloads/mozjs-45.zip
      x64: https://unitybase.info/downloads/mozjs-45-x64.zip
+
+   Download the mozjs-52 library at ( define SM52 on the global level)
+     x32: https://unitybase.info/downloads/mozjs-52x32dlls.zip
+     x64: https://unitybase.info/downloads/mozjs-52x64dlls.zip
   ---------------------------------------------------------------------------
 
 
@@ -70,6 +74,7 @@ unit SyNode;
   - improved compartibility with nodeJS utils
   - add a `process.version`
   - implement a setTimeout/setInverval/setImmediate etc.
+  - SpiderMonkey 52 (x32 & x64) support ( SM52 condition should be defined )
 
 }
 
@@ -129,7 +134,9 @@ type
     fPrivateDataForDebugger: Pointer;
     fNameForDebug: RawUTF8;
     fDoInteruptInOwnThread: TThreadMethod;
+    {$IFNDEF SM52}
     fRt: PJSRuntime;
+    {$ENDIF}
     fcomp: PJSCompartment;
     fStringFinalizer: JSStringFinalizer;
 
@@ -151,7 +158,11 @@ type
     fNeverExpire: boolean;
     /// called from SpiderMonkey callback. Do not raise exception here
     // instead use CheckJSError metod after JSAPI compile/evaluate call
+{$IFDEF SM52}
+    procedure DoProcessJSError(report: PJSErrorReport); virtual;
+{$ELSE}
     procedure DoProcessJSError(errMsg: PCChar; report: PJSErrorReport); virtual;
+{$ENDIF}
     /// called from SpiderMonkey callback. It used for interrupt execution of script
     //  when it executes too long
     function DoProcessOperationCallback: Boolean; virtual;
@@ -239,8 +250,10 @@ type
     property GlobalObjectDbg: PJSRootedObject read FGlobalObjectDbg;
     /// access to the associated execution context
     property cx: PJSContext read fCx;
+    {$IFNDEF SM52}
     /// access to the associated execution runtime
     property rt: PJSRuntime read frt;
+    {$ENDIF}
     /// access to the associated execution compartment
     property comp: PJSCompartment read fcomp;
 
@@ -343,6 +356,7 @@ type
     FMaxRecursionDepth: Cardinal;
     FEnginePool: TObjectListLocked;
     FRemoteDebuggerThread: TThread;
+    FFakeXPIInstallThread: TThread;
     FContentVersion: Cardinal;
     FOnNewEngine: TEngineEvent;
     FOnDebuggerInit: TEngineEvent;
@@ -427,7 +441,7 @@ type
     // '1.2.3.4:1234'
     // - debugger create a dedicated thread where it listen to a requests
     // from a remote debug UI
-    procedure startDebugger(const port: SockString = '6000');
+    procedure startDebugger(const port: SockString = '6000'; withFakeXPIInstaller: boolean = false);
     procedure stopDebugger;
     /// Write text as console log to current thread Engine's debugger (if exists)
     procedure debuggerLog(const Text: RawUTF8);
@@ -526,10 +540,17 @@ var
 
 /// handle errors from JavaScript. Just call DoProcessJSError of corresponding TSMEngine
 // to set TSMEngine error properties
+{$IFDEF SM52}
+procedure WarningReporter(cx: PJSContext; report: PJSErrorReport); cdecl;
+begin
+  TSMEngine(cx.PrivateData).DoProcessJSError(report)
+end;
+{$ELSE}
 procedure ErrorReporter(cx: PJSContext; pErrMsg: PCChar; report: PJSErrorReport); cdecl;
 begin
   TSMEngine(cx.PrivateData).DoProcessJSError(pErrMsg, report)
 end;
+{$ENDIF}
 
 function OperationCallback(cx: PJSContext): Boolean; cdecl;
 begin
@@ -596,7 +617,11 @@ constructor TSMEngine.Create(aManager: TSMEngineManager);
 const
   gMaxStackSize = 128 * sizeof(size_t) * 1024;
 var
+{$IFDEF SM52}
+  cOpts: PJSContextOptions;
+{$ELSE}
   rOpts: PJSRuntimeOptions;
+{$ENDIF}
 begin
   TSynFPUException.ForLibraryCode;
   if aManager = nil then
@@ -605,13 +630,39 @@ begin
   TSynFPUException.ForLibraryCode;
   FManager := aManager;
   FEngineContentVersion := FManager.ContentVersion;
-
+{$IFDEF SM52}
+  fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
+  if fCx = nil then
+    raise ESMException.Create('Create context: out of memory');
+  fCx.SetNativeStackQuota(gMaxStackSize);
+  fCx.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;
+// MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
+//TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
+  if (FManager.MaxPerEngineMemory >= 512 * 1024 * 1024) then begin
+    fCx.GCParameter[JSGC_MAX_MALLOC_BYTES] :=  96 * 1024 * 1024;
+    fCx.GCParameter[JSGC_SLICE_TIME_BUDGET] :=  30;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1000;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_HIGH_LIMIT] := 500;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_LOW_LIMIT] := 100;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MAX] :=  300;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_HEAP_GROWTH_MIN] :=  150;
+    fCx.GCParameter[JSGC_LOW_FREQUENCY_HEAP_GROWTH] := 150;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1500;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1500;
+    fCx.GCParameter[JSGC_HIGH_FREQUENCY_TIME_LIMIT] := 1500;
+    fCx.GCParameter[JSGC_ALLOCATION_THRESHOLD] := 30;
+//    fCx.GCParameter[JSGC_DECOMMIT_THRESHOLD] := 32;
+//    fCx.GCParameter[JSGC_MODE] := uint32(JSGC_MODE_COMPARTMENT);
+    fCx.GCParameter[JSGC_MODE] := uint32(JSGC_MODE_INCREMENTAL);
+  end else begin
+    fCx.GCParameter[JSGC_MAX_MALLOC_BYTES] := 6 * 1024 * 1024; //MPV in PREV realisation - FManager.MaxPerEngineMemory div 2; we got a memory overuse
+    fCx.GCParameter[JSGC_MODE] := uint32(JSGC_MODE_INCREMENTAL);
+  end;
+{$ELSE}
   frt := PJSRuntime(nil).New(FManager.MaxPerEngineMemory, $01000000, nil);
-
   if frt = nil then
     raise ESMException.Create('Create runtime: out of memory');
   fRt.SetNativeStackQuota(gMaxStackSize);
-
   fRt.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;
 // MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
 //TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
@@ -639,16 +690,31 @@ begin
   if fCx = nil then
     raise ESMException.Create('JSContext create');
 
+{$ENDIF}
+
+{$IFDEF SM52}
+  cOpts := cx.Options;
+  cOpts.Baseline := True;
+  cOpts.Ion := True;
+  cOpts.AsmJS := True;
+{$ELSE}
   // You must set jsoBaseLine,jsoTypeInference,jsoIon for the enabling ION
   // ION is disabled without these options
   rOpts := rt.Options;
   rOpts.Baseline := True;
   rOpts.Ion := True;
   rOpts.AsmJS := True;
+{$ENDIF}
 
   fStringFinalizer.finalize := ExternalStringFinalizer;
   cx.PrivateData := self;
+{$IFDEF SM52}
+  // not working for errors
+  // TODO: implement log warnings if needed
+  // fCx.WarningReporter := WarningReporter;
+{$ELSE}
   fRt.ErrorReporter := ErrorReporter;
+{$ENDIF}
 
   FGlobalObject := cx.NewRootedObject(cx.NewGlobalObject(@jsglobal_class));
   if FGlobalObject.ptr = nil then
@@ -667,8 +733,12 @@ begin
   fTimeoutValue := -1;
   if not InitWatchdog then
     raise ESMException.Create('InitWatchDog failure');
-  fRt.InterruptCallback := OperationCallback;
 
+{$IFDEF SM52}
+  fcx.AddInterruptCallback(OperationCallback);
+{$ELSE}
+  fRt.InterruptCallback := OperationCallback;
+{$ENDIF}
   FDllModulesUnInitProcList := TList.Create;
   DefineProcessBinding;
   DefineNodeProcess;
@@ -805,11 +875,17 @@ begin
   if FThreadID=GetCurrentThreadId then
     cx^.Destroy; // SM 45 expects the context to be released in the same thread
   KillWatchdog;
+{$IFNDEF SM52}
   if FThreadID=GetCurrentThreadId then
     rt^.Destroy;
+{$ENDIF}
 end;
 
+{$IFDEF SM52}
+procedure TSMEngine.DoProcessJSError(report: PJSErrorReport);
+{$ELSE}
 procedure TSMEngine.DoProcessJSError(errMsg: PCChar; report: PJSErrorReport);
+{$ENDIF}
 var
   exc: jsval;
   exObj: PJSRootedObject;
@@ -824,9 +900,13 @@ begin
       report^.filename,StrLen(pointer(report^.filename)));
   FLastErrorLine := report^.lineno;
   FLastErrorNum := report^.errorNumber;
+  {$IFDEF SM52}
+  FLastErrorMsg := Utf8ToString(FormatUTF8('%', [report^.message_]));
+  {$ELSE}
   if report^.ucmessage=nil then
     FLastErrorMsg := Utf8ToString(FormatUTF8('%', [errMsg])) else
     SetString(FLastErrorMsg, PWideChar(report^.ucmessage), StrLenW(PWideChar(report^.ucmessage)));
+  {$ENDIF}
   FLastErrorStackTrace := '';
   if ( cx.GetPendingException(exc)) then begin
     if exc.isObject then begin
@@ -854,11 +934,24 @@ begin
 end;
 
 procedure TSMEngine.CheckJSError(res: Boolean);
+var exc: jsval;
+    excObj: PJSObject;
+    rep: PJSErrorReport;
 begin
-  if (FTimeOutAborted and (FLastErrorMsg <> '')) or FErrorExist then
+{$IFDEF SM52}
+  if JS_IsExceptionPending(fCx) and JS_GetPendingException(cx, exc) then begin
+    excObj := exc.asObject;
+    rep := JS_ErrorFromException(cx, excObj);
+    WarningReporter(cx, rep);
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
-  if not res and not FTimeOutAborted then
+  end;
+{$ENDIF}
+  if (FTimeOutAborted and (FLastErrorMsg <> '')) or FErrorExist then begin
+    raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
+  end;
+  if not res and not FTimeOutAborted then begin
     raise ESMException.CreateWithTrace(FLastErrorFileName, 0, FLastErrorLine, 'Error compiling script', '');
+  end;
 end;
 
 procedure TSMEngine.ClearLastError;
@@ -871,7 +964,11 @@ end;
 
 procedure TSMEngine.GarbageCollect;
 begin
+{$IFDEF SM52}
+  cx.GC;
+{$ELSE}
   rt.GC;
+{$ENDIF}
 end;
 
 procedure TSMEngine.MaybeGarbageCollect;
@@ -1014,11 +1111,8 @@ var
   require: PJSRootedObject;
   __filename: PWideChar;
   __dirname: PWideChar;
-  {$ifdef FPC}
-  fHandle: TLibHandle;
-  {$else}
-  fHandle: THandle;
-  {$endif}
+
+  fHandle: HMODULE;
   ModuleRec: PDllModuleRec;
 
 const
@@ -1227,17 +1321,23 @@ begin
   end
 end;
 
-procedure TSMEngineManager.startDebugger(const port: SockString = '6000');
+procedure TSMEngineManager.startDebugger(const port: SockString = '6000'; withFakeXPIInstaller: boolean = false);
 begin
   FRemoteDebuggerThread := TSMRemoteDebuggerThread.Create(self, port);
+  if withFakeXPIInstaller then
+    FFakeXPIInstallThread := TFakeXPIInstaller.Create();
   inc(FContentVersion);
 end;
 
 procedure TSMEngineManager.stopDebugger;
 begin
-  if FRemoteDebuggerThread<> nil then begin
+  if FRemoteDebuggerThread <> nil then begin
     TSMRemoteDebuggerThread(FRemoteDebuggerThread).SetTerminated;
     FRemoteDebuggerThread := nil;
+    if FFakeXPIInstallThread <> nil then begin
+      TFakeXPIInstaller(FFakeXPIInstallThread).SetTerminated;
+      FFakeXPIInstallThread := nil;
+    end;
   end;
 end;
 
@@ -1315,8 +1415,9 @@ end;
 
 // Remove #13 characters from script(change it to #32)
 // Spidermonkey debugger crashes when `...`(new ES6 strings) contains #13#10
-procedure remChar13FromScript(const Script: SynUnicode); {$ifdef HASINLINE} inline; {$endif}
-var c: PWideChar;
+procedure remChar13FromScript(const Script: SynUnicode); {$IFDEF HASINLINE}inline;{$ENDIF}
+var
+    c: PWideChar;
     i: Integer;
 begin
   c := pointer(script);
@@ -1404,7 +1505,11 @@ begin
     FLastErrorNum := 0;
     FLastErrorMsg := LONG_SCRIPT_EXECUTION;
   end;
+{$IFDEF SM52}
+  cx.RequestInterruptCallback;
+{$ELSE}
   rt.RequestInterruptCallback;
+{$ENDIF}
 end;
 
 function TSMEngine.InitWatchdog: boolean;
@@ -1451,17 +1556,29 @@ end;
 
 procedure WatchdogMain(arg: pointer); cdecl;
 var eng: TSMEngine;
+{$IFDEF SM52}
+    cx: PJSContext;
+{$ELSE}
     rt: PJSRuntime;
+{$ENDIF}
     now_: int64;
     sleepDuration: PRIntervalTime;
     status: PRStatus;
 begin
   PR_SetCurrentThreadName('JS Watchdog');
   eng := TSMEngine(arg);
+{$IFDEF SM52}
+  cx := eng.cx;
+{$ELSE}
   rt := eng.rt;
+{$ENDIF}
   PR_Lock(eng.fWatchdogLock);
   while Assigned(eng.fWatchdogThread) do begin
+{$IFDEF SM52}
+    now_ := cx.NowMs;
+{$ELSE}
     now_ := rt.NowMs;
+{$ENDIF}
     if (eng.fWatchdogHasTimeout and not IsBefore(now_, eng.fWatchdogTimeout)) then begin
       // The timeout has just expired. Trigger the operation callback outside the lock
       eng.fWatchdogHasTimeout := false;
@@ -1474,7 +1591,11 @@ begin
       if (eng.fWatchdogHasTimeout) then begin
         // Time hasn't expired yet. Simulate an operation callback
         // which doesn't abort execution.
+{$IFDEF SM52}
+        cx.RequestInterruptCallback;
+{$ELSE}
         rt.RequestInterruptCallback;
+{$ENDIF}
       end;
       sleepDuration := PR_INTERVAL_NO_TIMEOUT;
       if (eng.fWatchdogHasTimeout) then
@@ -1498,7 +1619,11 @@ begin
     exit;
   end;
   interval := int64(t * PRMJ_USEC_PER_SEC);
+{$IFDEF SM52}
+  timeout := cx.NowMs + interval;
+{$ELSE}
   timeout := rt.NowMs + interval;
+{$ENDIF}
   PR_Lock(fWatchdogLock);
   if not Assigned(fWatchdogThread) then begin
     Assert(not fWatchdogHasTimeout);

@@ -3717,7 +3717,7 @@ begin
     pub64.InitFast(n,dvArray);
     items.InitFast(n,dvArray);
     for i := 0 to n-1 do begin
-      pub64.AddItem(RawUTF8ToVariant(fItems[i].PublicToBase64));
+      pub64.AddItemText(fItems[i].PublicToBase64);
       items.AddItem(fItems[i].ToVariant(false));
     end;
     result := _ObjFast(['PublicBase64',variant(pub64),'Items',variant(items)]);

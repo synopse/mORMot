@@ -258,7 +258,8 @@ function UnCompressMem(src, dst: pointer; srcLen, dstLen: integer; ZlibFormat: B
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel:integer=6; ZlibFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false;
+  TempBufSize: integer=0): cardinal;
 
 /// ZLib INFLATE decompression from memory into a stream
 // - return the number of bytes written into the stream
@@ -267,7 +268,7 @@ function CompressStream(src: pointer; srcLen: integer;
 // - by default, will use the deflate/.zip header-less format, but you may set
 // ZlibFormat=true to add an header, as expected by zlib (and pdf)
 function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
-  checkCRC: PCardinal; ZlibFormat: Boolean=false): cardinal;
+  checkCRC: PCardinal; ZlibFormat: Boolean=false; TempBufSize: integer=0): cardinal;
 
 
 type
@@ -486,10 +487,6 @@ const
   {$endif Linux}
   ZLIB_VERSION = '1.2.3';
 
-type
-  gzFile = pointer;
-
-
 const
   Z_NO_FLUSH = 0;
   Z_PARTIAL_FLUSH = 1;
@@ -636,6 +633,10 @@ function get_crc_table: pointer;
 /// uncompress a .gz file content
 // - return '' if the .gz content is invalid (e.g. bad crc)
 function GZRead(gz: PAnsiChar; gzLen: integer): ZipString;
+
+/// compress a file content into a new .gz file
+// - will use TSynZipCompressor for minimal memory use during file compression
+function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer=6): boolean;
 
 type
   /// a simple TStream descendant for compressing data into a stream
@@ -1324,13 +1325,15 @@ constructor TZipRead.Create(Instance: THandle; const ResName: string; ResType: P
 var HResInfo: THandle;
     HGlobal: THandle;
 begin
+  if Instance=0 then
+    Instance := HInstance;
   HResInfo := FindResource(Instance,PChar(ResName),ResType);
   if HResInfo=0 then
     exit;
-  HGlobal := LoadResource(HInstance, HResInfo);
+  HGlobal := LoadResource(Instance, HResInfo);
   if HGlobal<>0 then
     // warning: resources size may be rounded up to alignment -> handled in Create()
-    Create(LockResource(HGlobal),SizeofResource(HInstance, HResInfo));
+    Create(LockResource(HGlobal),SizeofResource(Instance, HResInfo));
 end;
 
 constructor TZipRead.Create(aFile: THandle; ZipStartOffset,Size: cardinal);
@@ -1610,6 +1613,32 @@ begin
     result := ''; // invalid CRC
 end;
 
+function GZFile(const orig, destgz: TFileName; CompressionLevel: Integer=6): boolean;
+var gz: TSynZipCompressor;
+    s,d: TFileStream;
+begin
+  try
+    s := TFileStream.Create(orig,fmOpenRead or fmShareDenyNone);
+    try
+      d := TFileStream.Create(destgz,fmCreate);
+      try
+        gz := TSynZipCompressor.Create(d,CompressionLevel,szcfGZ);
+        try
+          gz.CopyFrom(s,0);  // Count=0 for whole stream copy
+          result := true;
+        finally
+          gz.Free;
+        end;
+      finally
+        d.Free;
+      end;
+    finally
+      s.Free;
+    end;
+  except
+    result := false;
+  end;
+end;
 
 {$ifdef USEEXTZLIB}
 function zlibVersion: PAnsiChar; cdecl;
@@ -4945,32 +4974,52 @@ begin
   result := strm.total_out;
 end;
 
+type
+  TTempBuf = record
+    buf: pointer;
+    temp: AnsiString;
+    buf128k: array[0..32767] of cardinal; // IIS allows 256KB of stack size -> 128KB
+  end;
+
+procedure InitTempBuf(var tempbuf: TTempBuf; var TempBufSize: integer);
+begin
+  if TempBufSize<=sizeof(tempbuf.buf128k) then begin
+    TempBufSize := sizeof(tempbuf.buf128k);
+    tempbuf.buf := @tempbuf.buf128k;
+  end else begin
+    SetLength(tempbuf.temp,TempBufSize);
+    tempbuf.buf := pointer(tempbuf.temp);
+  end;
+end;
+
 function CompressStream(src: pointer; srcLen: integer;
-  aStream: TStream; CompressionLevel: integer=6; ZlibFormat: Boolean=false): cardinal;
+  aStream: TStream; CompressionLevel: integer; ZlibFormat: Boolean;
+  TempBufSize: integer): cardinal;
 var strm: TZStream;
     code: integer;
-    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
+    temp: TTempBuf;
   procedure FlushBuf;
   var Count: integer;
   begin
-    Count := SizeOf(buf) - strm.avail_out;
+    Count := TempBufSize - integer(strm.avail_out);
     if Count=0 then exit;
-    aStream.Write(buf,Count);
-    strm.next_out := @buf;
-    strm.avail_out := sizeof(buf);
+    aStream.Write(temp.buf^,Count);
+    strm.next_out := temp.buf;
+    strm.avail_out := TempBufSize;
   end;
 begin
   {$ifdef USEZLIBSSE}
-  result := CompressStreamSSE42(src,srcLen,aStream,@buf,sizeof(buf),
-    CompressionLevel,ZLibFormat);
+  result := CompressStreamSSE42(src,srcLen,aStream,@tempbuf.buf128k,
+    sizeof(tempbuf.buf128k),CompressionLevel,ZLibFormat);
   if result<>Z_VERSION_ERROR then
     exit; // SSE4.2 CloudFlare's fork did the work
   {$endif}
+  InitTempBuf(temp,TempBufSize);
   StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
-  strm.next_out := @buf;
-  strm.avail_out := sizeof(buf);
+  strm.next_out := temp.buf;
+  strm.avail_out := TempBufSize;
   if DeflateInit(strm,CompressionLevel,ZlibFormat) then
   try
     repeat
@@ -5016,35 +5065,36 @@ begin
 end;
 
 function UnCompressStream(src: pointer; srcLen: integer; aStream: TStream;
-  checkCRC: PCardinal; ZlibFormat: Boolean): cardinal;
+  checkCRC: PCardinal; ZlibFormat: Boolean; TempBufSize: integer): cardinal;
 // result:=dstLen  checkCRC(<>nil)^:=crc32  (if aStream=nil -> fast crc calc)
 var strm: TZStream;
     code, Bits: integer;
-    buf: array[word] of cardinal; // 256KB of temporary buffer on stack
-procedure FlushBuf;
-var Count: integer;
-begin
-  Count := SizeOf(buf) - strm.avail_out;
-  if Count=0 then exit;
-  if CheckCRC<>nil then
-    CheckCRC^ := crc32(CheckCRC^,@buf,Count);
-  if aStream<>nil then
-    aStream.Write(buf,Count);
-  strm.next_out := @buf;
-  strm.avail_out := sizeof(buf);
-end;
+    temp: TTempBuf;
+  procedure FlushBuf;
+  var Count: integer;
+  begin
+    Count := TempBufSize - integer(strm.avail_out);
+    if Count=0 then exit;
+    if CheckCRC<>nil then
+      CheckCRC^ := crc32(CheckCRC^,temp.buf,Count);
+    if aStream<>nil then
+      aStream.Write(temp.buf^,Count);
+    strm.next_out := temp.buf;
+    strm.avail_out := TempBufSize;
+  end;
 begin
   {$ifdef USEZLIBSSE2}
-  result := UncompressStreamSSE3(src,srcLen,aStream,checkCRC,@buf,sizeof(buf),
-    ZLibFormat);
+  result := UncompressStreamSSE3(src,srcLen,aStream,checkCRC,@tempbuf.buf128k,
+    sizeof(tempbuf.buf128k),ZLibFormat);
   if result<>Z_VERSION_ERROR then
     exit; // SSE3 CloudFlare's fork did the work
   {$endif}
+  InitTempBuf(temp,TempBufSize);
   StreamInit(strm);
   strm.next_in := src;
   strm.avail_in := srcLen;
-  strm.next_out := @buf;
-  strm.avail_out := sizeof(buf);
+  strm.next_out := temp.buf;
+  strm.avail_out := TempBufSize;
   if checkCRC<>nil then
     CheckCRC^ := 0;
   if ZlibFormat then

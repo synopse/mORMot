@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.17.0 database engine
+       SQLite3 3.19.2 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -136,7 +136,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.17.0
+  - updated SQLite3 engine to latest version 3.19.2
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1291,7 +1291,7 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.17.0', when used with our SynSQLite3Static unit
+    // - currently returns '3.19.2', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -3888,8 +3888,8 @@ begin
   if (fOpenV2Flags<>(SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE)) and
      not Assigned(sqlite3.open_v2) then
     raise ESQLite3Exception.CreateUTF8(
-      'Your % version of SQLite3 does not support custom OpenV2Flags',
-      [sqlite3.libversion]);
+      'Your % version of SQLite3 does not support custom OpenV2Flags=%',
+      [sqlite3.libversion,fOpenV2Flags]);
   InitializeCriticalSection(fLock);
   fFileName := aFileName;
   if fFileName=SQLITE_MEMORY_DATABASE_NAME then
@@ -4487,10 +4487,13 @@ begin
     sqlite3.key(fDB,pointer(fPassword),length(fPassword));
   // tune up execution speed
   if not fIsMemory then begin
-    if fPassword='' then
-      PageSize := 4096 else
-      PageSize := 1024; // our encryption scheme expect a page size of 1024
-    CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
+    if fOpenV2Flags and SQLITE_OPEN_CREATE<>0 then begin
+      if fPassword='' then
+        PageSize := 4096 else
+        PageSize := 1024; // our encryption scheme expects a page size of 1024
+    end;
+    if fFileDefaultCacheSize <> 0 then
+      CacheSize := fFileDefaultCacheSize; // 10000 by default (i.e. 40 MB)
   end;
   // the SQLite3 standard NOCASE collation is used for AnsiString and is very fast
   // our custom fast UTF-8 case insensitive compare, using NormToUpper[] for all 8 bits values
@@ -4533,7 +4536,7 @@ begin
     InternalRawUTF8DynArray,nil,nil);
   sqlite3.create_function(DB,'RAWUTF8DYNARRAYCONTAINSNOCASE',2,SQLITE_ANY,
     @UTF8ILComp,InternalRawUTF8DynArray,nil,nil);
-  // JSON related functions (ORM would store a variant as JSON UTF-8 text)
+  // JSON related functions (e.g. for ORM storing variants as JSON UTF-8 text)
   sqlite3.create_function(DB,'JSONGET',2,SQLITE_ANY,nil,InternalJsonGet,nil,nil);
   sqlite3.create_function(DB,'JSONHAS',2,SQLITE_ANY,nil,InternalJsonHas,nil,nil);
   {$ifndef NOVARIANTS}
@@ -4798,10 +4801,8 @@ procedure TSQLRequest.Close;
 begin
   if Request=0 then
     exit;
-  {$ifdef CPUX86} // safest to reset x87 exceptions
-  {$ifndef DELPHI5OROLDER}
+  {$ifdef RESETFPUEXCEPTION}
   with TSynFPUException.ForLibraryCode do
-  {$endif}
   {$endif}
     sqlite3.finalize(Request);
   fRequest := 0;
@@ -5178,10 +5179,8 @@ begin
   fRequest := 0;
   if DB=0 then
     raise ESQLite3Exception.Create(DB,SQLITE_CANTOPEN,SQL);
-  {$ifdef CPUX86} // safest to reset x87 exceptions
-  {$ifndef DELPHI5OROLDER}
+  {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
   with TSynFPUException.ForLibraryCode do
-  {$endif}
   {$endif}
   begin
     result := sqlite3.prepare_v2(RequestDB, pointer(SQL), length(SQL)+1,
@@ -5218,36 +5217,28 @@ function TSQLRequest.Reset: integer;
 begin
   if Request=0 then
     raise ESQLite3Exception.Create('TSQLRequest.Reset called with no previous Request');
-  {$ifdef CPUX86} // safest to reset x87 exceptions
-  {$ifndef DELPHI5OROLDER}
+  {$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions
   with TSynFPUException.ForLibraryCode do
-  {$endif}
   {$endif}
     result := sqlite3.reset(Request); // no check here since it was PREVIOUS state
 end;
 
 function TSQLRequest.Step: integer;
-{$ifdef CPUX86} // safest to reset x87 exceptions - inlined TSynFPUException
-{$ifndef DELPHI5OROLDER}
+{$ifdef RESETFPUEXCEPTION} // safest to reset x87 exceptions - inlined TSynFPUException
 var cw87: word;
-{$endif}
 {$endif}
 begin
   if Request=0 then
     raise ESQLite3Exception.Create(RequestDB,SQLITE_MISUSE,'Step');
-  {$ifdef CPUX86}
-  {$ifndef DELPHI5OROLDER}
+  {$ifdef RESETFPUEXCEPTION}
   cw87 := Get8087CW;
   try
   {$endif}
-  {$endif}
     result := sqlite3_check(RequestDB,sqlite3.step(Request),'Step');
-  {$ifdef CPUX86}
-  {$ifndef DELPHI5OROLDER}
+  {$ifdef RESETFPUEXCEPTION}
   finally
     Set8087CW(cw87);
   end;
-  {$endif}
   {$endif}
 end;
 
@@ -5633,6 +5624,9 @@ begin
         fOnProgress(self);
     end;
   end;
+  {$ifdef WITHLOG}
+  SynSQLite3Log.Add.NotifyThreadEnded;
+  {$endif}
 end;
 
 

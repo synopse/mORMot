@@ -359,14 +359,12 @@ procedure TDDDEmailValidationService.SetURIForServer(
   aSuccessRedirectURI, aValidationMethodName: RawUTF8);
 begin
   fSuccessRedirectURI := Trim(aSuccessRedirectURI);
-  fValidationServerRoot := Trim(aRestServerPublicRootURI);
+  fValidationServerRoot := IncludeTrailingURIDelimiter(Trim(aRestServerPublicRootURI));
   if (aRestServerPublic=nil) or (fSuccessRedirectURI='') or (fValidationServerRoot='') then
     raise EDDDEmail.CreateUTF8('Invalid %.SetURIForServer(%,"%","%")',
       [self,aRestServerPublic,fValidationServerRoot,fSuccessRedirectURI]);
   if not IdemPChar(pointer(fValidationServerRoot),'HTTP') then
     fValidationServerRoot := 'http://'+fValidationServerRoot;
-  if fValidationServerRoot[Length(fValidationServerRoot)]<>'/' then
-    fValidationServerRoot := fValidationServerRoot+'/';
   fValidationMethodName := Trim(aValidationMethodName);
   if fValidationMethodName='' then
    fValidationMethodName := 'EmailValidate'; // match method name by default

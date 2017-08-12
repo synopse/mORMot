@@ -1054,7 +1054,9 @@ begin
   fNativeMethods.Init(TypeInfo(TSMEngineMethodEventDynArray),
     fNativeMethod,HashPointer,SortDynArrayPointer,nil,@fNativeMethodCount);
 
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
+  {$endif}
   FManager := aManager;
   FEngineContentVersion := FManager.ContentVersion;
   frt := JS_NewRuntime(FManager.MaxPerEngineMemory, JS_USE_HELPER_THREADS);
@@ -1102,7 +1104,9 @@ destructor TSMEngine.Destroy;
 begin
   inherited Destroy;
   VarClear(FGlobal);
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
+  {$endif}
   //JS_RemoveExternalStringFinalizer(ExternalStringFinalizer);
 //  comp^.Destroy;
   JS_LeaveCompartment(cx, comp);
@@ -1315,7 +1319,9 @@ var engine: TSMEngine;
       [callee.ToNativeFunctionName(cx)]));
   end;
 begin
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForDelphiCode; // ensure we are back in Delphi FPU mask
+  {$endif}
   try
     engine := cx.PrivateData;
     callee.FValue := vp^;
@@ -2046,7 +2052,9 @@ procedure TSMObject.Evaluate(const script: SynUnicode; const scriptName: RawUTF8
 var r: JSBool;
     eng: TSMEngine;
 begin
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
+  {$endif}
   eng := Engine;
   eng.ClearLastError;
   eng.ScheduleWatchdog(eng.fTimeoutInterval);
@@ -2061,7 +2069,9 @@ procedure TSMObject.RunMethod(const methodName: AnsiString;
 var r: JSBool;
     eng: TSMEngine;
 begin
+  {$ifdef RESETFPUEXCEPTION}
   TSynFPUException.ForLibraryCode;
+  {$endif}
   eng := Engine;
   eng.ClearLastError;
   eng.ScheduleWatchdog(Engine.fTimeoutInterval);

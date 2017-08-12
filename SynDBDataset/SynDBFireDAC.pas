@@ -257,7 +257,7 @@ begin
     [FIREDAC_PROVIDER[fDBMS],fUserId,fPassWord,fDatabaseName]));
   opt := pointer(options);
   while opt<>nil do begin
-    namevalue := GetNextItem(opt,';');
+    GetNextItem(opt,';',namevalue);
     if namevalue<>'' then
       fFireDACOptions.Add(UTF8ToString(namevalue));
   end;

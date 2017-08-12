@@ -62,11 +62,17 @@ var
     rec := TSQLEntry.Create;
     batch := TSQLRestBatch.Create(db,TSQLEntry,10000,[boExtendedJSON]);
     try
+      write('batch:');
       for i := 0 to COUNT-1 do begin
         // here we fill with some data
         rec.Key := FormatUTF8('KEY%',[i and pred(UNIQUE_KEY)]);
         rec.Value := FormatUTF8('VALUE%',[i]);
         batch.Add(rec,true);
+        if i and $2ffff = $2ffff then begin
+          write(' send');
+          db.batchSend(batch);
+          batch.Reset;
+        end;
       end;
       db.BatchSend(batch);
     finally
@@ -105,8 +111,15 @@ var
 
 var timer: TPrecisionTimer;
 begin
-  db := TSQLRestServerDB.CreateWithOwnModel([TSQLEntry],SQLITE_MEMORY_DATABASE_NAME);
+  if true then
+    db := TSQLRestServerDB.CreateWithOwnModel([TSQLEntry],SQLITE_MEMORY_DATABASE_NAME)
+  else begin
+    deletefile('test.db');
+    db := TSQLRestServerDB.CreateWithOwnModel([TSQLEntry],'test.db');
+  end;
   try
+    db.DB.LockingMode := lmExclusive;
+    db.DB.Synchronous := smOff;
     db.CreateMissingTables;
     write('INSERT ', COUNT, ' rows');
     timer.Start;

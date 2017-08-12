@@ -729,7 +729,9 @@ type
     /// create a TSQLDBRowVariantType able to access any field content via late binding
     // - i.e. you can use Data.Name to access the 'Name' column of the current row
     // - this Variant will point to the corresponding TSQLDBStatement instance,
-    // so it's not necessary to retrieve its value for each row
+    // so it's not necessary to retrieve its value for each row; but once the
+    // associated ISQLDBRows instance is released, you won't be able to access
+    // its data - use RowDocVariant instead
     // - typical use is:
     // ! var Row: Variant;
     // ! (...)
@@ -739,8 +741,12 @@ type
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;
     function RowData: Variant;
-    {$endif}
-    {$endif}
+    /// create a TDocVariant custom variant containing all columns values
+    // - will create a "fast" TDocVariant object instance with all fields
+    procedure RowDocVariant(out aDocument: variant;
+      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST); 
+    {$endif DELPHI5OROLDER}
+    {$endif LVCL}
     /// return the associated statement instance
     function Instance: TSQLDBStatement;
     // return all rows content as a JSON string
@@ -2253,6 +2259,10 @@ type
     // !      writeln(Row.FirstName,Row.BirthDate);
     // !  end;
     function RowData: Variant; virtual;
+    /// create a TDocVariant custom variant containing all columns values
+    // - will create a "fast" TDocVariant object instance with all fields
+    procedure RowDocVariant(out aDocument: variant;
+      aOptions: TDocVariantOptions=JSON_OPTIONS_FAST); virtual;
     {$endif}
     {$endif}
     /// return a special CURSOR Column content as a SynDB result set
@@ -4515,7 +4525,7 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
     cGetDBMS: begin
       session := 0;
       if (Protocol.Authenticate<>nil) and (Protocol.Authenticate.UsersCount>0) then begin
-        user := GetNextItem(PUTF8Char(O),#1);
+        GetNextItem(PUTF8Char(O),#1,user);
         session := Protocol.Authenticate.CreateSession(user,PCardinal(O)^);
         if session=0 then
           raise ESQLDBRemote.Create('Impossible to Open a Session - '+
@@ -6417,7 +6427,7 @@ function TSQLDBConnectionPropertiesThreadSafe.CurrentThreadConnectionIndex: Inte
 var ID: TThreadID;
 begin
   if self<>nil then begin
-    ID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+    ID := TThreadID(GetCurrentThreadId);
     result := fLatestConnectionRetrievedInPool;
     if (result>=0) and
        (TSQLDBConnectionThreadSafe(fConnectionPool.List[result]).fThreadID=ID) then
@@ -6474,7 +6484,7 @@ begin
           exit;
       end;
       result := NewConnection;
-      (result as TSQLDBConnectionThreadSafe).fThreadID := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+      (result as TSQLDBConnectionThreadSafe).fThreadID := TThreadID(GetCurrentThreadId);
       fLatestConnectionRetrievedInPool := fConnectionPool.Add(result)
     finally
       LeaveCriticalSection(fConnectionCS);
@@ -6542,7 +6552,7 @@ begin
         BindDateTime(Param,Iso8601ToDateTime(tmp),IO);
       end;
       ftUTF8:
-        if fConnection.fProperties.StoreVoidStringAsNull and
+        if (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull and
            ((Value='') or // check if '' or '""' should be stored as null
            ((PInteger(Value)^ and $ffffff=$2727) and not ValueAlreadyUnquoted)) then
           BindNull(Param,IO,ftUTF8) else begin
@@ -6703,7 +6713,7 @@ procedure TSQLDBStatement.BindArray(Param: Integer; ParamType: TSQLDBFieldType;
   const Values: TRawUTF8DynArray; ValuesCount: integer);
 begin
   if (Param<=0) or (ParamType in [ftUnknown,ftNull]) or (ValuesCount<=0) or
-     (length(Values)<ValuesCount) or
+     (length(Values)<ValuesCount) or (fConnection=nil) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self,Param,ToText(ParamType)^]);
@@ -6820,7 +6830,7 @@ begin
             V.VBlobLen := StrLen(V.VText);
         end;
           {$ifndef UNICODE}
-          if not fConnection.Properties.VariantStringAsWideString then begin
+          if (fConnection<>nil) and not fConnection.Properties.VariantStringAsWideString then begin
             VType := varString;
             CurrentAnsiConvert.UTF8BufferToAnsi(V.VText,V.VBlobLen,RawByteString(VAny));
           end else
@@ -7327,7 +7337,9 @@ begin
       result := fSQLWithInlinedParams; // already computed
       exit;
     end;
-    maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
+    if fConnection=nil then
+      maxSize := 0 else
+      maxSize := fConnection.fProperties.fLoggedSQLMaxSize;
     if integer(maxSize)<0 then begin
       result := fSQL; // -1 -> log statement without any parameter value (just ?)
       exit;
@@ -7480,6 +7492,23 @@ begin
     VPointer := self;
   end;
 end;
+
+procedure TSQLDBStatement.RowDocVariant(out aDocument: variant;
+  aOptions: TDocVariantOptions);
+var n,F: integer;
+    names: TRawUTF8DynArray;
+    values: TVariantDynArray;
+begin
+  n := ColumnCount;
+  SetLength(names,n); // faster to assign internal arrays per reference
+  SetLength(values,n);
+  for F := 0 to n-1 do begin
+    names[F] := ColumnName(F);
+    ColumnToVariant(F,values[F]);
+  end;
+  TDocVariantData(aDocument).InitObjectFromVariants(names,values,aOptions);
+end;
+
 {$endif}
 {$endif}
 
@@ -7496,7 +7525,7 @@ begin
         fSQL := copy(aSQL,1,L-1) else
         fSQL := aSQL;
     fExpectResults := ExpectResults;
-    if not fConnection.IsConnected then
+    if (fConnection<>nil) and not fConnection.IsConnected then
       fConnection.Connect;
   finally
     Connection.InternalProcess(speNonActive);
@@ -7505,7 +7534,8 @@ end;
 
 procedure TSQLDBStatement.ExecutePrepared;
 begin
-  fConnection.fLastAccessTicks := GetTickCount64;
+  if fConnection<>nil then
+    fConnection.fLastAccessTicks := GetTickCount64;
   // a do-nothing default method
 end;
 
@@ -7584,17 +7614,19 @@ end;
 procedure TSQLDBRowVariantType.IntGet(var Dest: TVarData;
   const V: TVarData; Name: PAnsiChar);
 var Rows: TSQLDBStatement;
+    col: RawUTF8;
 begin
   Rows := TSQLDBStatement(TVarData(V).VPointer);
   if Rows=nil then
-    raise ESQLDBException.Create('Invalid TSQLDBRowVariantType call');
-  Rows.ColumnToVariant(Rows.ColumnIndex(RawByteString(Name)),Variant(Dest));
+    raise ESQLDBException.CreateUTF8('Invalid % call',[self]);
+  SetString(col,Name,StrLen(Name));
+  Rows.ColumnToVariant(Rows.ColumnIndex(col),Variant(Dest));
 end;
 
 procedure TSQLDBRowVariantType.IntSet(const V, Value: TVarData;
   Name: PAnsiChar);
 begin
-  raise ESQLDBException.Create('TSQLDBRowVariantType is read-only');
+  raise ESQLDBException.CreateUTF8('% is read-only',[self]);
 end;
 
 {$endif}
@@ -7619,7 +7651,7 @@ function TSQLDBStatementWithParams.CheckParam(Param: Integer;
   NewType: TSQLDBFieldType; IO: TSQLDBParamInOutType; ArrayCount: integer): PSQLDBParam;
 begin
   result := CheckParam(Param,NewType,IO);
-  if (NewType in [ftUnknown,ftNull]) or
+  if (NewType in [ftUnknown,ftNull]) or (fConnection=nil) or
      (fConnection.fProperties.BatchSendingAbilities*[cCreate,cUpdate,cDelete]=[]) then
     raise ESQLDBException.CreateUTF8('Invalid call to %.BindArray(Param=%,Type=%)',
       [self,Param,ToText(NewType)^]);
@@ -7679,7 +7711,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextS(Param: Integer;
   const Value: string; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := StringToUTF8(Value);
 end;
@@ -7687,7 +7719,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextU(Param: Integer;
   const Value: RawUTF8; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := Value;
 end;
@@ -7695,7 +7727,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextP(Param: Integer;
   Value: PUTF8Char; IO: TSQLDBParamInOutType);
 begin
-  if (Value=nil) and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value=nil) and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     SetString(CheckParam(Param,ftUTF8,IO)^.VData,PAnsiChar(Value),StrLen(Value));
 end;
@@ -7703,7 +7735,7 @@ end;
 procedure TSQLDBStatementWithParams.BindTextW(Param: Integer;
   const Value: WideString; IO: TSQLDBParamInOutType);
 begin
-  if (Value='') and fConnection.fProperties.StoreVoidStringAsNull then
+  if (Value='') and (fConnection<>nil) and fConnection.fProperties.StoreVoidStringAsNull then
     CheckParam(Param,ftNull,IO) else
     CheckParam(Param,ftUTF8,IO)^.VData := RawUnicodeToUtf8(pointer(Value),length(Value));
 end;
@@ -7787,7 +7819,8 @@ procedure TSQLDBStatementWithParams.BindArray(Param: Integer;
 var i: integer;
     StoreVoidStringAsNull: boolean;
 begin
-  StoreVoidStringAsNull := fConnection.Properties.StoreVoidStringAsNull;
+  StoreVoidStringAsNull := (fConnection<>nil) and
+    fConnection.Properties.StoreVoidStringAsNull;
   with CheckParam(Param,ftUTF8,paramIn,length(Values))^ do
     for i := 0 to high(Values) do
       if StoreVoidStringAsNull and (Values[i]='') then
@@ -7839,7 +7872,7 @@ begin
         VarRecToUTF8(aValues[i],VArray[fParamsArrayCount]);
         case VType of
         ftUTF8:
-          if (VArray[fParamsArrayCount]='') and
+          if (VArray[fParamsArrayCount]='') and (fConnection<>nil) and 
              fConnection.Properties.StoreVoidStringAsNull then
           VArray[fParamsArrayCount] := 'null' else
           VArray[fParamsArrayCount] := QuotedStr(VArray[fParamsArrayCount]);
@@ -7877,7 +7910,7 @@ begin
           VArray[fParamsArrayCount] := ''''+DateTimeToSQL(Rows.ColumnDateTime(F))+'''';
         ftUTF8: begin
           U := Rows.ColumnUTF8(F);
-          if (U='') and fConnection.Properties.StoreVoidStringAsNull then
+          if (U='') and (fConnection<>nil) and fConnection.Properties.StoreVoidStringAsNull then
             VArray[fParamsArrayCount] := 'null' else
             VArray[fParamsArrayCount] := QuotedStr(U,'''');
         end;

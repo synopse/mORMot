@@ -179,39 +179,6 @@ end;
 
 {$endif}
 
-{
-procedure getMethodList(aClass:TClass);
-Type PMethodEntry=^TMethodEntry;
-     TMethodEntry=packed record
-       size:Word;
-       Adr:pointer;
-       Name:Shortstring;
-     end;
-var mTable:ppointer;
-    ClassName:String;
-    MethodCount:PWord;
-    MethodEntry:PMethodEntry;
-    i:integer;
-begin
-  while aClass<>nil do
-  begin
-    mTable := pointer(integer(aClass)+vmtMethodTable);
-    if (mTable<>nil)and(mTable^<>nil) then
-    begin
-      MethodCount := mTable^;
-      MethodEntry := pointer(integer(MethodCount)+2);
-      ClassName := aClass.ClassName;
-      for i := 1 to MethodCount^ do
-      begin
-        writeln(MethodEntry^.Name);
-        MethodEntry := pointer(integer(MethodEntry)+MethodEntry^.size);
-      end;
-    end;
-    aClass := aClass.ClassParent;
-  end;
-end;
-}
-
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo;
 begin
   result := typinfo.GetPropInfo(AClass,PropName);

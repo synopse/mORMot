@@ -212,7 +212,7 @@ begin
   fSpecificOptions := TStringList.Create;
   opt := pointer(options);
   while opt<>nil do begin
-    namevalue := GetNextItem(opt,';');
+    GetNextItem(opt,';',namevalue);
     if namevalue<>'' then
       fSpecificOptions.Add(UTF8ToString(namevalue));
   end;

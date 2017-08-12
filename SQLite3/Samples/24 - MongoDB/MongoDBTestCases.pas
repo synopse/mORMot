@@ -353,7 +353,6 @@ begin
 end;
 
 
-
 { TTestORM }
 
 procedure TTestORM.ConnectToLocalServer;

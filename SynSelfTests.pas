@@ -132,6 +132,7 @@ uses
   {$endif}
   {$endif}
   Classes,
+  SynCrtSock,
 {$ifndef NOVARIANTS}
   SynMongoDB,
   SynMustache,
@@ -411,6 +412,8 @@ type
 {$ifndef LVCL}
     /// variant-based JSON/BSON document process
     procedure _TDocVariant;
+    /// low-level TDecimal128 decimal value process (as used in BSON)
+    procedure _TDecimal128;
     /// BSON process (using TDocVariant)
     procedure _BSON;
 {$endif LVCL}
@@ -482,6 +485,10 @@ type
     procedure _SHA1;
     /// SHA-256 hashing functions
     procedure _SHA256;
+    /// SHA-512 hashing functions
+    procedure _SHA512;
+    /// SHA-3 / Keccak hashing functions
+    procedure _SHA3;
     /// AES encryption/decryption functions
     procedure _AES256;
     /// RC4 encryption function
@@ -492,12 +499,17 @@ type
     procedure _CompressShaAes;
     /// AES-based pseudorandom number generator
     procedure _TAESPNRG;
-    /// CryptDataForCurrentUser()/CryptDataForCurrentUserDPAPI() functions
+    /// CryptDataForCurrentUser() function
     procedure _CryptDataForCurrentUser;
+    {$ifdef MSWINDOWS}
+    /// CryptDataForCurrentUserAPI() function
+    procedure _CryptDataForCurrentUserAPI;
+    {$endif MSWINDOWS}
     {$ifndef NOVARIANTS}
     /// JWT classes
     procedure _JWT;
     {$endif NOVARIANTS}
+    procedure Benchmark;
   end;
 
   /// this test case will test ECDH and ECDSA cryptography as implemented
@@ -938,8 +950,20 @@ type
     function TestRest(a,b: integer; out c: RawUTF8): variant;
     function TestRestCustom(a: integer): TServiceCustomAnswer;
     function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchCallback(a: integer);
+    procedure LaunchAsynchCallback(a: integer);
     procedure RemoveCallback;
+  end;
+
+  TBidirServer = class(TInterfacedObject,IBidirService)
+  protected
+    fCallback: IBidirCallback;
+    function TestRest(a,b: integer; out c: RawUTF8): variant;
+    function TestRestCustom(a: integer): TServiceCustomAnswer;
+    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
+    procedure LaunchAsynchCallback(a: integer);
+    procedure RemoveCallback;
+  public
+    function LaunchSynchCallback: integer;
   end;
 
   /// a test case for all bidirectional remote access, e.g. WebSockets
@@ -947,6 +971,7 @@ type
   protected
     fHttpServer: TSQLHttpServer;
     fServer: TSQLRestServerFullMemory;
+    fBidirServer: TBidirServer;
     procedure CleanUp; override;
     procedure WebsocketsLowLevel(protocol: TWebSocketProtocol; opcode: TWebSocketFrameOpCode);
     procedure TestRest(Rest: TSQLRest);
@@ -1322,12 +1347,10 @@ uses
 {$endif}
 {$endif}
 {$endif}
-  //mORMotUILogin,
   SynCrypto,
-  SynCrtSock,
-  SynLZ,
+  SynZip,
   SynLZO,
-  SynZip;
+  SynLZ;
 
 
 { TTestLowLevelCommon }
@@ -1840,7 +1863,7 @@ type
     Data: string;
   end;
   TDataItems = array of TDataItem;
-   
+
 function FVSort(const A,B): integer;
 begin
   result := SysUtils.StrComp(PChar(pointer(TFV(A).Detailed)),PChar(pointer(TFV(B).Detailed)));
@@ -1852,6 +1875,7 @@ var AI, AI2: TIntegerDynArray;
     AR: TRecs;
     AF: TFVs;
     AF2: TFV2s;
+    h: cardinal;
     i,j,k,Len, count,AIcount: integer;
     U,U2: RawUTF8;
     P: PUTF8Char;
@@ -1865,6 +1889,8 @@ var AI, AI2: TIntegerDynArray;
     AV: TSynValidates;
     V: TSynValidate;
     AIP, AI2P, AUP, ARP, AFP, ACities, AVP, dyn1,dyn2: TDynArray;
+    dyniter: TDynArrayLoadFrom;
+    B: boolean;
     dp: TDataItem;
     dyn1Array,dyn2Array: TDataItems;
     Test, Test2: RawByteString;
@@ -1931,6 +1957,12 @@ begin
   end;
 end;
 begin
+  h := TypeInfoToHash(TypeInfo(TAmount));
+  Check(h=$9032161B,'TypeInfoToHash(TAmount)');
+  h := TypeInfoToHash(TypeInfo(TAmountCollection));
+  Check(h=$887ED692,'TypeInfoToHash(TAmountCollection)');
+  h := TypeInfoToHash(TypeInfo(TAmountICollection));
+  Check(h=$4051BAC,'TypeInfoToHash(TAmountICollection)');
   W := TTextWriter.CreateOwnedStream;
   // validate TBooleanDynArray
   dyn1.Init(TypeInfo(TBooleanDynArray),AB);
@@ -1955,6 +1987,18 @@ begin
   Check(dyn1.Count=4);
   for i := 0 to 3 do
     Check(AB[i]=(i and 1=1));
+  Check(dyniter.Init(TypeInfo(TBooleanDynArray),pointer(test)));
+  Check(dyniter.Count=4);
+  for i := 0 to 3 do begin
+    Check(dyniter.FirstField(B));
+    Check(B=(i and 1=1));
+    B := not B;
+    Check(dyniter.Step(B));
+    Check(B=(i and 1=1));
+  end;
+  Check(not dyniter.Step(B));
+  Check(not dyniter.FirstField(B));
+  Check(dyniter.CheckHash);
   // validate TIntegerDynArray
   Test64K;
   AIP.Init(TypeInfo(TIntegerDynArray),AI);
@@ -2130,6 +2174,20 @@ begin
   Check(P=nil);
   AUP.Clear;
   Check(AUP.LoadFrom(pointer(Test))-pointer(Test)=length(Test));
+  for i := 0 to 1000 do
+    Check(GetInteger(pointer(AU[i]))=i+1000);
+  Check(dyniter.Init(TypeInfo(TRawUTF8DynArray),pointer(test)));
+  Check(dyniter.Count=1001);
+  for i := 0 to 1000 do begin
+    Check(dyniter.FirstField(U2));
+    Check(GetInteger(pointer(U2))=i+1000);
+    U2 := '';
+    Check(dyniter.Step(U2));
+    Check(GetInteger(pointer(U2))=i+1000);
+  end;
+  Check(not dyniter.Step(U2));
+  Check(not dyniter.FirstField(U2));
+  Check(dyniter.CheckHash);
   AUP.Clear;
   Check(AUP.LoadFromJSON(pointer(U))<>nil);
   for i := 0 to 1000 do
@@ -2304,6 +2362,15 @@ begin
     Fill(F,i);
     Check(AFP.IndexOf(F)=i);
   end;
+  Check(dyniter.Init(TypeInfo(TFVs),pointer(test)));
+  Check(dyniter.Count=1001);
+  for i := 0 to 1000 do begin
+    Check(dyniter.Step(F1));
+    Fill(F,i);
+    Check(AFP.ElemEquals(F,F1));
+  end;
+  Check(not dyniter.Step(F1));
+  Check(dyniter.CheckHash);
   ST := THeapMemoryStream.Create;
   AFP.SaveToStream(ST);
   AFP.Clear;
@@ -2583,7 +2650,7 @@ begin
 end;
 
 procedure TTestLowLevelCommon.UrlEncoding;
-var i: integer;
+var i,j: integer;
     s: RawByteString;
     name,value,utf: RawUTF8;
     P: PUTF8Char;
@@ -2633,7 +2700,8 @@ begin
   Check(name='name,complex');
   Check(value='value');
   for i := 0 to 100 do begin
-    s := RandomString(i*5);
+    j := i*5; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     Check(UrlDecode(UrlEncode(s))=s,string(s));
   end;
   utf := BinToBase64URI(@GUID,sizeof(GUID));
@@ -3013,7 +3081,7 @@ begin
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
   FillZero(crc1);
-  crcblockpas(@crc1,PBlock128(PAnsiChar('0123456789012345')));
+  crcblockNoSSE42(@crc1,PBlock128(PAnsiChar('0123456789012345')));
   check(not IsZero(crc1));
   check(IsEqual(crc1,crc2));
   {$endif}
@@ -3027,7 +3095,7 @@ begin
     check(not IsZero(crc2));
     check(IsEqual(crc1,crc2));
     FillZero(crc2);
-    crcblockpas(@crc2,@digest);
+    crcblockNoSSE42(@crc2,@digest);
     check(not IsZero(crc2));
     check(IsEqual(crc1,crc2));
     {$endif}
@@ -3036,7 +3104,8 @@ begin
   end;
   for i := 0 to High(crc) do
   with crc[i] do begin
-    s := RandomString(i shr 3+1);
+    j := i shr 3+1; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     crc := crc32creference(0,pointer(s),length(s));
     inc(totallen,length(s));
     c2 := HMAC_CRC32C(@c1,pointer(s),4,length(s));
@@ -3073,6 +3142,13 @@ var i, j, b, err: integer;
     crc: cardinal;
     Timer: TPrecisionTimer;
 begin
+  Check(Plural('row',0)='0 row');
+  Check(Plural('row',1)='1 row');
+  Check(Plural('row',2)='2 rows');
+  Check(Plural('row',20)='20 rows');
+  Check(Plural('row',200000)='200000 rows');
+  Check(not SameValue(386.0, 386.1));
+  Check(not SameValue(386.0, 700, 2));
   Check(IntToThousandString(0)='0');
   Check(IntToThousandString(1)='1');
   Check(IntToThousandString(10)='10');
@@ -3191,7 +3267,8 @@ begin
   for i := -10000 to 10000 do
     check(GetInteger(Pointer(Int32ToUtf8(i)))=i);
   for i := 0 to 10000 do begin
-    s := RandomString(i shr 6);
+    j := i shr 6; // circumvent weird FPC code generation bug in -O2 mode
+    s := RandomString(j);
     Check(kr32(0,pointer(s),length(s))=kr32reference(pointer(s),length(s)));
     Check(fnv32(0,pointer(s),length(s))=fnv32reference(0,pointer(s),length(s)));
     crc := crc32creference(0,pointer(s),length(s));
@@ -3215,6 +3292,7 @@ begin
     Check(FormatUTF8('?%',[j])='?'+s);
     Check(FormatUTF8('?%?',[j])='?'+s+'?');
     Check(FormatUTF8('?%%?',[j])='?'+s+'?');
+    Check(FormatUTF8('?%?%  ',[j])='?'+s+'?  ');
     Check(FormatUTF8('?%',[],[j])=':('+s+'):');
     Check(FormatUTF8('%?',[j],[j])=s+':('+s+'):');
     Check(FormatUTF8('%?',[s],[s])=s+':('''+s+'''):');
@@ -3282,6 +3360,7 @@ begin
     s := ExtendedToStr(d,DOUBLE_PRECISION);
     e := GetExtended(Pointer(s),err);
     Check(SameValue(e,d));
+    Check(not SameValue(e+1,d));
     u := DoubleToString(d);
     Check(Ansi7ToString(s)=u,u);
     PC := ToVarUInt32(juint,@varint);
@@ -3401,35 +3480,35 @@ begin
 end;
 
 procedure TTestLowLevelCommon._UTF8;
-procedure Test(CP: cardinal; const W: WinAnsiString);
-var C: TSynAnsiConvert;
-    A: RawByteString;
-    U: RawUTF8;
-begin
-  C := TSynAnsiConvert.Engine(CP);
-  Check(C.CodePage=CP);
-  U := C.AnsiToUTF8(W);
-  A := C.UTF8ToAnsi(U);
-  if W='' then
-    exit;
-  {$ifdef HASCODEPAGE}
-  {$ifndef FPC}
-  Check(StringCodePage(W)=1252);
-  {$endif}
-  CP := StringCodePage(A);
-  Check(CP=C.CodePage);
-  {$endif}
-  if CP=CP_UTF16 then
-    exit;
-  Check(length(W)=length(A));
-  {$ifdef FPC}
-  Check(CompareMem(pointer(W),pointer(A),length(W)));
-  {$else}
-  Check(A=W);
-  Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
-  {$endif}
-end;
-var i, CP, L: integer;
+  procedure Test(CP: cardinal; const W: WinAnsiString);
+  var C: TSynAnsiConvert;
+      A: RawByteString;
+      U: RawUTF8;
+  begin
+    C := TSynAnsiConvert.Engine(CP);
+    Check(C.CodePage=CP);
+    U := C.AnsiToUTF8(W);
+    A := C.UTF8ToAnsi(U);
+    if W='' then
+      exit;
+    {$ifdef HASCODEPAGE}
+    {$ifndef FPC}
+    Check(StringCodePage(W)=1252);
+    {$endif}
+    CP := StringCodePage(A);
+    Check(CP=C.CodePage);
+    {$endif}
+    if CP=CP_UTF16 then
+      exit;
+    Check(length(W)=length(A));
+    {$ifdef FPC}
+    Check(CompareMem(pointer(W),pointer(A),length(W)));
+    {$else}
+    Check(A=W);
+    Check(C.RawUnicodeToAnsi(C.AnsiToRawUnicode(W))=W);
+    {$endif}
+  end;
+var i, len, CP, L: integer;
     W: WinAnsiString;
     WS: WideString;
     SU: SynUnicode;
@@ -3442,7 +3521,36 @@ var i, CP, L: integer;
     Unic: RawUnicode;
     WA: Boolean;
 begin
+  Check(IdemPChar('anything',''));
+  Check(IdemPChar('t','T'));
+  Check(IdemPChar('T','T'));
+  Check(not IdemPChar('T','t'));
+  Check(not IdemPChar('T','U'));
+  Check(IdemPChar('1','1'));
+  Check(not IdemPChar('1','2'));
+  Check(IdemPChar('te','TE'));
+  Check(IdemPChar('tes','TES'));
+  Check(IdemPChar('test','TEST'));
+  Check(IdemPChar('tE','TE'));
+  Check(IdemPChar('teS','TES'));
+  Check(IdemPChar('tesT','TEST'));
+  Check(IdemPChar('testE','TESTE'));
+  Check(not IdemPChar('testE','TESTe'));
   res := 'one,two,three';
+  Check(EndWith('three','THREE'));
+  Check(EndWith(res,'E'));
+  Check(EndWith(res,'THREE'));
+  Check(EndWith(res,',THREE'));
+  Check(not EndWith(res,',THREe'));
+  Check(not EndWith(res,res));
+  Check(not EndWith('t',',THREe'));
+  Check(not EndWith('thre',',THREe'));
+  Check(EndWithArray(res,[])<0);
+  Check(EndWithArray(res,['E','F'])=0);
+  Check(EndWithArray(res,['ONE','THREE'])=1);
+  Check(EndWithArray(res,['ONE','three','THREE'])=2);
+  Check(EndWithArray(res,['ONE','','THREE'])=1);
+  Check(EndWithArray(res,['ONE','three','THREe'])<0);
   Check(split(res,',')='one');
   Check(split(res,'*')=res);
   Check(split(res,',',5)='two');
@@ -3473,8 +3581,9 @@ begin
   Check(FormatUTF8('abcd',[U],[WS])='abcd');
 {$endif}
   for i := 0 to 1000 do begin
-    W := RandomAnsi7(i*5);
-    Check(length(W)=i*5);
+    len := i*5;
+    W := RandomAnsi7(len);
+    Check(length(W)=len);
     for CP := 1250 to 1258 do
       Test(CP,W);
     Test(932,W);
@@ -3485,7 +3594,7 @@ begin
     if L and 1<>0 then
       SetLength(W,L-1); // force exact UTF-16 buffer length
     Test(CP_UTF16,W);
-    W := WinAnsiString(RandomString(i*5));
+    W := WinAnsiString(RandomString(len));
     U := WinAnsiToUtf8(W);
     Unic := Utf8DecodeToRawUnicode(U);
     {$ifndef FPC_HAS_CPSTRING} // buggy FPC
@@ -4396,7 +4505,7 @@ begin
     if trunc(ExpectedDate)=40640 then
       Check(L.InstanceName='D:\Dev\MyLibrary.dll') else
       Check(L.InstanceName='');
-    CheckSame(L.ExecutableDate,ExpectedDate,1e-7);
+    CheckSame(L.ExecutableDate,ExpectedDate,1/SecsPerDay);
     Check(L.ComputerHost='MyPC');
     Check(L.LevelUsed=[sllEnter,sllLeave,sllDebug]);
     Check(L.RunningUser='MySelf');
@@ -4407,12 +4516,12 @@ begin
     Check(not L.Wow64);
     {$endif}
     Check(L.Freq=0);
-    CheckSame(L.StartDateTime,40640.502882,1E-10);
+    CheckSame(L.StartDateTime,40640.502882,1/SecsPerDay);
     if CheckFailed(L.Count=3) then
       exit;
     Check(L.EventLevel[0]=sllEnter);
     Check(L.EventLevel[1]=sllDebug);
-    CheckSame(L.EventDateTime(1),L.StartDateTime,1 / SecsPerDay);
+    CheckSame(L.EventDateTime(1),L.StartDateTime,1/SecsPerDay);
     Check(L.EventLevel[2]=sllLeave);
     if CheckFailed(L.LogProcCount=1) then
       exit;
@@ -5101,6 +5210,7 @@ var mustacheJson: RawByteString;
     mustacheJsonFileName: TFileName;
     doc: variant;
     html: RawUTF8;
+    guid: TGUID;
     spec,i: integer;
 begin
   // manual tests
@@ -5211,7 +5321,9 @@ begin
   check(html='1+3=4 - is it 4? yes!');
   html := mustache.RenderJSON('{tval:5}',nil,TSynMustache.HelpersGetStandardList);
   check(html='1+3=5 - is it 4?');
-
+  mustache := TSynMustache.Parse('{{newguid}}');
+  html := mustache.RenderJSON('{}',nil,TSynMustache.HelpersGetStandardList);
+  check((html<>'') and (TextToGUID(@html[2],@guid)<>nil));
   mustache := TSynMustache.Parse(
     '<h1>{{header}}</h1>'#$D#$A'{{#items}}'#$D#$A'{{#first}}'#$D#$A+
     '<li><strong>{{name}}</strong></li>'#$D#$A'{{/first}}'#$D#$A+
@@ -6903,6 +7015,150 @@ end;
 {$ifndef DELPHI5OROLDER}
 {$ifndef LVCL}
 
+procedure TTestLowLevelTypes._TDecimal128;
+
+  procedure Test(const hi,lo: QWord; const expected: RawUTF8;
+    special: TDecimal128SpecialValue=dsvValue);
+  var v,v2: TDecimal128;
+  begin
+    v.Bits.hi := hi;
+    v.Bits.lo := lo;
+    Check(v.ToText=expected);
+    v2.SetZero;
+    Check(v2.FromText(expected)=special);
+    if special<>dsvValue then
+      exit;
+    Check(v2.Equals(v));
+    Check(v2.ToText=expected);
+    v2.SetZero;
+    if expected[1]<>'-' then
+      Check(v2.FromText('000'+LowerCase(expected))=dsvValue) else
+      Check(v2.FromText(LowerCase(expected))=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  procedure Test2(const fromvalue, expected: RaWUTF8; h: QWord=0; l: QWord=0);
+  var v: TDecimal128;
+  begin
+    Check(v.FromText(fromvalue)=dsvValue);
+    Check(v.ToText=expected);
+    if (h=0) and (l=0) then
+      exit;
+    Check(v.Bits.lo=l);
+    Check(v.Bits.hi=h);
+  end;
+
+var v,v2: TDecimal128;
+    s: TDecimal128SpecialValue;
+    str: RawUTF8;
+    i: integer;
+    o: variant;
+begin // see https://github.com/mongodb/libbson/blob/master/tests/test-decimal128.c
+  Check(v.FromText('')=dsvError);
+  Check(v.FromText('.')=dsvError);
+  Check(v.FromText('.e')=dsvError);
+  Check(v.FromText('i')=dsvError);
+  Check(v.FromText('invalid')=dsvError);
+  Check(v.FromText('1invalid')=dsvError);
+  Check(v.FromText('E02')=dsvError);
+  Check(v.FromText('E+02')=dsvError);
+  Check(v.FromText('e+02')=dsvError);
+  Check(v.FromText('1E02')=dsvValue);
+  Check(v.FromText('1invalidE02')=dsvError);
+  Check(v.FromText('..1')=dsvError);
+  Check(v.FromText('0')=dsvZero);
+  Check(v.ToText='0');
+  for s := dsvNan to high(s) do begin
+    v.SetSpecial(s);
+    Check(v.ToText=DECIMAL128_SPECIAL_TEXT[s]);
+    Check(v.IsSpecial=s);
+    if s<dsvMin then begin
+      v.SetZero;
+      Check(v.FromText(LowerCase(DECIMAL128_SPECIAL_TEXT[s]))=s);
+      Check(v.IsSpecial=s);
+    end;
+  end;
+  v.SetZero;
+  Check(v.ToText='0');
+  Test(0,0,'0',dsvZero);
+  Test($3040000000000000,0,'0',dsvZero);
+  Test($3040000000000000,1,'1');
+  Test($3040000000000000,2,'2');
+  Test($b040000000000000,2,'-2');
+  Test($b040000000000000,1,'-1');
+  Test($b040000000000000,0,'-0');
+  Test($303e000000000000,1,'0.1');
+  Test($3034000000000000,$4d2,'0.001234');
+  Test($3040000000000000,$1cbe991a14,'123456789012');
+  Test($302a000000000000,$75aef40,'0.00123400000');
+  Test($2ffc3cde6fff9732,$de825cd07e96aff2,'0.1234567890123456789012345678901234');
+  Test($3040ffffffffffff,$ffffffffffffffff,'5192296858534827628530496329220095');
+  Test($5ffe314dc6448d93,$38c15b0a00000000,'1.000000000000000000000000000000000E+6144');
+  Test($000,$001,'1E-6176');
+  Test($8000000000000000,$001,'-1E-6176');
+  Test($3108000000000000,$000009184db63eb1,'9.999987654321E+112');
+  Test($5fffed09bead87c0,$378d8e63ffffffff,DECIMAL128_SPECIAL_TEXT[dsvMax]);
+  Test($0001ed09bead87c0,$378d8e63ffffffff,'9.999999999999999999999999999999999E-6143');
+  Test($dfffed09bead87c0,$378d8e63ffffffff,DECIMAL128_SPECIAL_TEXT[dsvMin]);
+  Test($304c000000000000,$41a,'1.050E+9');
+  Test($3042000000000000,$41a,'1.050E+4');
+  Test($3040000000000000,$069,'105');
+  Test($3042000000000000,$069,'1.05E+3');
+  Test($3046000000000000,$001,'1E+3');
+  Test($3298000000000000,$000,'0E+300');
+  Test($2b90000000000000,$000,'0E-600');
+  Test2('10e0','10');
+  Test2('1e1','1E+1');
+  Test2('10e-1','1.0');
+  Test2('1000000000000000000000000000000000000000',
+    '1.000000000000000000000000000000000E+39',$304c314dc6448d93,$38c15b0a00000000);
+  Test2('10000000000000000000000000000000000','1.000000000000000000000000000000000E+34',
+    $3042314dc6448d93,$38c15b0a00000000);
+  Test2('1000000000000000000000000000000000','1000000000000000000000000000000000',
+    $3040314dc6448d93,$38c15b0a00000000);
+  Test2('12345678901234567e6111','1.2345678901234567E+6127',
+    $5ffe000000000000,12345678901234567);
+  Test2('-100E-10','-1.00E-8',$b02c000000000000,100);
+  v.SetZero;
+  for i := 0 to 4000 do begin
+    if i>1000 then
+      inc(v.Bits.c[0],i*7) else
+      v.Bits.c[0] := i;
+    str := v.ToText;
+    Check(str=UInt32ToUTF8(v.Bits.c[0]));
+    if i=0 then
+      continue;
+    Check(v2.FromText(str)=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  for i := -1000 to 100 do begin
+    v.FromInt32(i);
+    str := v.ToText;
+    Check(str=Int32ToUTF8(i));
+    if i=0 then
+      continue;
+    Check(v2.FromText(str)=dsvValue);
+    Check(v2.Equals(v));
+  end;
+  v.FromCurr(0);
+  Check(v.ToText='0.0000');
+  Check(v.ToCurr=0);
+  v.FromCurr(3.14);
+  Check(v.ToText='3.1400');
+  for i := -160 to 160 do begin
+    v.FromFloat(i/4);
+    v.ToText(str);
+    Check(GetExtended(pointer(str))*4=i);
+    Check(v.ToFloat*4=i);
+    v.FromCurr(i/16);
+    v.ToText(str);
+    Check(StrToCurr64(pointer(str))=i*625);
+    Check(v.ToCurr*16=i);
+    o := NumberDecimal(i/8);
+    Check(v.FromVariant(o));
+    Check(v.ToCurr*8=i);
+  end;
+end;
+
 procedure TTestLowLevelTypes._BSON;
 const BSONAWESOME = '{"BSON":["awesome",5.05,1986]}';
       BSONAWESOMEBIN = #$31#0#0#0#4'BSON'#0#$26#0#0#0#2'0'#0#8#0#0#0'awesome'#0+
@@ -6935,6 +7191,7 @@ var o,od,o2,value: variant;
     arr: TRawUTF8DynArray;
     st: string;
     timer: TPrecisionTimer;
+    dec: TDecimal128;
 procedure CheckElemIsBsonArray;
 var b: PByte;
 begin
@@ -7261,6 +7518,38 @@ begin
   Check(u='{"doc":{"name":"John","year":1982},"id":123}');
   u := BSONDocumentToJSON(BSON(['doc','{','name','John','abc','[','a','b','c',']','}','id',123]));
   Check(u='{"doc":{"name":"John","abc":["a","b","c"]},"id":123}');
+  o2 := NumberDecimal('123.5600');
+  u := VariantSaveJSON(o2);
+  Check(u='{"$numberDecimal":"123.5600"}');
+  o := _Json('{ num: '+u+'}');
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o := BSONVariant(['num',o2]);
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o := _ObjFast(['num',o2]);
+  u := VariantSaveMongoJSON(o,modMongoStrict);
+  check(u='{"num":{"$numberDecimal":"123.5600"}}');
+  o2 := _JsonFast(u);
+  check(o=o2,'o=o2');
+  u := VariantSaveMongoJSON(o,modMongoShell);
+  check(u='{num:NumberDecimal("123.5600")}');
+  o2 := _JsonFast(u);
+  check(o=o2,'o=o2');
+  b := pointer(BSON(u,[],[]));
+  u2 := BSONToJSON(b,betDoc,0,modMongoShell);
+  Check(u=u2);
+  u2 := BSONToJSON(b,betDoc,0,modMongoStrict);
+  check(u2='{"num":{"$numberDecimal":"123.5600"}}');
+  check(dec.FromVariant(o2.num));
+  check(dec.ToText='123.5600');
+  o2 := dec.ToVariant;
+  u := VariantSaveJSON(o2);
+  check(u='{"$numberDecimal":"123.5600"}');;
 end;
 
 procedure TTestLowLevelTypes._TDocVariant;
@@ -7682,10 +7971,11 @@ begin
             Check(tmp='["*"]');
         end else
         Check(GetCardinal(pointer(tmp))=cardinal(s));
+      tmp := tmp+','; // mimics GetJsonField layout
       P := pointer(tmp);
+      eoo := ' ';
       Check(GetSetNameValue(TypeInfo(TSynLogInfos),P,eoo)=cardinal(s));
-      if astext then
-        Check(eoo=']');
+      Check(eoo=',');
     end;
   end;
   Check(PTypeInfo(TypeInfo(TSynLogInfos))^.SetEnumType=
@@ -8838,7 +9128,7 @@ procedure TTestCompression._SynLZ;
 var s,t: RawByteString;
     i,j, complen2: integer;
     comp2,dec1: array of byte;
-    {$ifndef PUREPASCAL}
+    {$ifdef CPUINTEL}
     comp1,dec2: array of byte;
     complen1: integer;
     {$endif}
@@ -8858,12 +9148,12 @@ begin
     SetLength(comp2,SynLZcompressdestlen(length(s)));
     complen2 := SynLZcompress1pas(Pointer(s),length(s),pointer(comp2));
     Check(complen2<length(comp2));
-    {$ifdef PUREPASCAL}
+    {$ifndef CPUINTEL}
     Check(@SynLZCompress1=@SynLZcompress1pas);
     Check(@SynLZDecompress1=@SynLZdecompress1pas);
     {$else}
     SetLength(comp1,SynLZcompressdestlen(length(s)));
-    complen1 := SynLZcompress1asm(Pointer(s),length(s),pointer(comp1));
+    complen1 := SynLZcompress1(Pointer(s),length(s),pointer(comp1));
     Check(complen1<length(comp1));
     Check(complen1=complen2);
     Check(CompareMem(pointer(comp1),pointer(comp2),complen1));
@@ -8873,7 +9163,7 @@ begin
     Check(SynLZdecompress1pas(Pointer(comp1),complen1,pointer(dec1))=length(s));
     Check(CompareMem(pointer(dec1),pointer(s),length(s)));
     SetLength(dec2,Length(s));
-    Check(SynLZdecompress1asm(Pointer(comp2),complen2,pointer(dec2))=length(s));
+    Check(SynLZdecompress1(Pointer(comp2),complen2,pointer(dec2))=length(s));
     Check(CompareMem(pointer(dec1),pointer(s),length(s)));
     {$endif}
   end;
@@ -8916,13 +9206,13 @@ begin
   tmp := StringFromFile(ExeVersion.ProgramFileName);
   b64 := Base64Encode(tmp);
   Check(IsBase64(b64));
-  Check(Base64Decode(b64)=tmp);
+  Check(SynCrtSock.Base64Decode(b64)=tmp);
   Check(BinToBase64(tmp)=b64);
   Check(Base64ToBin(b64)=tmp);
   tmp := '';
   for i := 1 to 1998 do begin
     b64 := Base64Encode(tmp);
-    Check(Base64Decode(b64)=tmp);
+    Check(SynCrtSock.Base64Decode(b64)=tmp);
     Check((tmp='') or IsBase64(b64));
     Check(BinToBase64(tmp)=b64);
     Check(Base64ToBin(b64)=tmp);
@@ -9193,6 +9483,9 @@ const
      $0B,$F4,$B3,$BC,$CE,$EB,$17,$16,$D5,$77,$B1,$E0,$8B,$A9,$BA,$A3);
 var Digest: TSHA256Digest;
     Digests: THash256DynArray;
+    c: AnsiChar;
+    i: integer;
+    sha: TSHA256;
 begin
   SingleTest('abc',D1);
   SingleTest('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq',D2);
@@ -9216,6 +9509,13 @@ begin
   PBKDF2_HMAC_SHA256('password','salt',4096,Digest);
   check(SHA256DigestToString(Digest)=
     'c5e478d59288c841aa530db6845c4c8d962893a001ce4e11a4963873aa98134a');
+  c := 'a';
+  sha.Init;
+  for i := 1 to 1000000 do
+    sha.Update(@c,1);
+  sha.Final(Digest);
+  Check(SHA256DigestToString(Digest)=
+    'cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0');
 end;
 begin
   DoTest;
@@ -9235,6 +9535,131 @@ begin
     Include(CpuFeatures,cfSSE41);
   end
   {$endif}
+end;
+
+procedure TTestCryptographicRoutines._SHA512;
+const FOX: RawByteString = 'The quick brown fox jumps over the lazy dog';
+var dig: TSHA512Digest;
+    i: integer;
+    sha: TSHA512;
+    c: AnsiChar;
+    temp: RawByteString;
+begin
+  Check(SHA512('')='cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d'+
+    '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
+  Check(SHA512(FOX)='07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785'+
+    '436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  Check(SHA512(FOX+'.')='91ea1245f20d46ae9a037a989f54f1f790f0a47607eeb8a14d128'+
+    '90cea77a1bbc6c7ed9cf205e67b7f2b8fd4c7dfd3a7a8617e45f3c463d481c7e586c39ac1ed');
+  sha.Init;
+  for i := 1 to length(FOX) do
+    sha.Update(@FOX[i],1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='07e547d9586f6a73f73fbac0435ed76951218fb7d0c'+
+    '8d788a309d785436bbb642e93a252a954f23912547d1e8a3b5ed6e1bfd7097821233fa0538f3db854fee6');
+  c := 'a';
+  sha.Init;
+  for i := 1 to 1000 do
+    sha.Update(@c,1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='67ba5535a46e3f86dbfbed8cbbaf0125c76ed549ff8'+
+    'b0b9e03e0c88cf90fa634fa7b12b47d77b694de488ace8d9a65967dc96df599727d3292a8d9d447709c97');
+  SetLength(temp,1000);
+  FillCharFast(pointer(temp)^,1000,ord('a'));
+  Check(SHA512(temp)=SHA512DigestToString(dig));
+  for i := 1 to 1000000 do
+    sha.Update(@c,1);
+  sha.Final(dig);
+  Check(SHA512DigestToString(dig)='e718483d0ce769644e2e42c7bc15b4638e1f98b13b2'+
+    '044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b');
+  HMAC_SHA512('','',dig);
+  Check(SHA512DigestToString(dig)='b936cee86c9f87aa5d3c6f2e84cb5a4239a5fe50480a'+
+    '6ec66b70ab5b1f4ac6730c6c515421b327ec1d69402e53dfb49ad7381eb067b338fd7b0cb22247225d47');
+  HMAC_SHA512('key',FOX,dig);
+  Check(SHA512DigestToString(dig)= 'b42af09057bac1e2d41708e48a902e09b5ff7f12ab42'+
+    '8a4fe86653c73dd248fb82f948a549f7b791a5b41915ee4d1ec3935357e4e2317250d0372afa2ebeeb3a');
+  HMAC_SHA512(FOX+FOX,FOX,dig);
+  Check(SHA512DigestToString(dig)='19e504ba787674baa63471436a4ec5a71ba359a0f2d375'+
+    '12edd4db69dce1ec6a0e48f0ae460fc9342fbb453cf2942a0e3fa512dd361e30f0e8b8fc8c7a4ece96');
+end;
+
+procedure TTestCryptographicRoutines._SHA3;
+var
+  instance: TSHA3;
+  secret, data, encrypted: RawByteString;
+  dig: THash256;
+  s, i: integer;
+begin
+  // validate against official NIST vectors
+  // taken from http://csrc.nist.gov/groups/ST/toolkit/examples.html#aHashing
+  Check(instance.FullStr(SHA3_224, nil, 0) =
+    '6B4E03423667DBB73B6E15454F0EB1ABD4597F9A1B078E3F5B5A6BC7');
+  Check(instance.FullStr(SHA3_256, nil, 0) =
+    'A7FFC6F8BF1ED76651C14756A061D662F580FF4DE43B49FA82D80A4B80F8434A');
+  Check(instance.FullStr(SHA3_384, nil, 0) =
+    '0C63A75B845E4F7D01107D852E4C2485C51A50AAAA94FC61995E71BBEE983A2AC3713831264ADB47FB6BD1E058D5F004');
+  Check(instance.FullStr(SHA3_512, nil, 0) =
+    'A69F73CCA23A9AC5C8B567DC185A756E97C982164FE25859E0D1DCC1475C80A615B2123AF1F5F94C11E3E9402C3AC558F500199D95B6D3E301758586281DCD26');
+  Check(instance.FullStr(SHAKE_128, nil, 0) =
+    '7F9C2BA4E88F827D616045507605853ED73B8093F6EFBC88EB1A6EACFA66EF26');
+  Check(instance.FullStr(SHAKE_256, nil, 0) =
+    '46B9DD2B0BA88D13233B3FEB743EEB243FCD52EA62B81B82B50C27646ED5762FD75DC4DDD8C0F200CB05019D67B592F6FC821C49479AB48640292EACB3B7C4BE');
+  SetLength(data, 200);
+  FillCharFast(pointer(data)^, 200, $A3);
+  Check(instance.FullStr(SHA3_224, pointer(data), length(data)) =
+    '9376816ABA503F72F96CE7EB65AC095DEEE3BE4BF9BBC2A1CB7E11E0');
+  Check(instance.FullStr(SHA3_256, pointer(data), length(data)) =
+    '79F38ADEC5C20307A98EF76E8324AFBFD46CFD81B22E3973C65FA1BD9DE31787');
+  Check(instance.FullStr(SHA3_384, pointer(data), length(data)) =
+    '1881DE2CA7E41EF95DC4732B8F5F002B189CC1E42B74168ED1732649CE1DBCDD76197A31FD55EE989F2D7050DD473E8F');
+  Check(instance.FullStr(SHA3_512, pointer(data), length(data)) =
+    'E76DFAD22084A8B1467FCF2FFA58361BEC7628EDF5F3FDC0E4805DC48CAEECA81B7C13C30ADF52A3659584739A2DF46BE589C51CA1A4A8416DF6545A1CE8BA00');
+  instance.Init(SHA3_256);
+  for i := 1 to length(data) do
+    instance.Update(pointer(data), 1);
+  instance.Final(dig);
+  Check(SHA256DigestToString(dig) =
+    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  instance.Init(SHA3_256);
+  instance.Update(pointer(data), 100);
+  instance.Update(pointer(data), 50);
+  instance.Update(pointer(data), 20);
+  instance.Update(pointer(data), 10);
+  instance.Update(pointer(data), 10);
+  instance.Update(pointer(data), 5);
+  instance.Update(pointer(data), 5);
+  instance.Final(dig, true); // NoInit=true to check Extendable-Output Function
+  Check(SHA256DigestToString(dig) =
+    '79f38adec5c20307a98ef76e8324afbfd46cfd81b22e3973c65fa1bd9de31787');
+  instance.Final(dig, true);
+  Check(SHA256DigestToString(dig) =
+    'f85500852a5b9bb4a35440e7e4b4dba9184477a4c97b97ab0b24b91a8b04d1c8');
+  for i := 1 to 200 do begin
+    FillZero(dig);
+    instance.Final(dig, true);
+    Check(not IsZero(dig));
+  end;
+  instance.Final(dig);
+  Check(SHA256DigestToString(dig) =
+    '75f8b0591e2baeae027d56c14ef3bc014d9dd29cce08b8b184528589147fc252');
+  encrypted := instance.Cypher('secret', 'toto');
+  Check(SynCommons.BinToHex(encrypted) = 'BF013A29');
+  for s := 0 to 3 do begin
+    secret := RandomString(s * 3);
+    Check(instance.Cypher(secret, '') = '');
+    for i := 1 to 1000 do begin
+      data := RandomString(i);
+      encrypted := instance.Cypher(secret, data);
+      Check(encrypted <> data);
+      instance.InitCypher(secret);
+      Check(instance.Cypher(encrypted) = data);
+    end;
+  end;
+  // taken from https://en.wikipedia.org/wiki/SHA-3
+  Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dog') =
+    'F4202E3C5852F9182A0430FD8144F0A74B95E7417ECAE17DB0F8CFEED0E3E66E');
+  Check(SHA3(SHAKE_128, 'The quick brown fox jumps over the lazy dof') =
+    '853F4538BE0DB9621A6CEA659A06C1107B1F83F02B13D18297BD39D7411CF10C');
 end;
 
 procedure TTestCryptographicRoutines._TAESPNRG;
@@ -9306,7 +9731,8 @@ begin
     check(length(plain)=i);
     UInt32ToUtf8(i,appsec);
     enc := func(plain,appsec,true);
-    assert(length(enc)>=length(plain));
+    check((plain='') or (enc<>''));
+    check(length(enc)>=length(plain));
     test := func(enc,appsec,false);
     check(length(test)=i);
     check(test=plain);
@@ -9320,10 +9746,14 @@ end;
 procedure TTestCryptographicRoutines._CryptDataForCurrentUser;
 begin
   CryptData(false);
-  {$ifdef MSWINDOWS}
-  CryptData(true);
-  {$endif}
 end;
+
+{$ifdef MSWINDOWS}
+procedure TTestCryptographicRoutines._CryptDataForCurrentUserAPI;
+begin
+  CryptData(true);
+end;
+{$endif}
 
 {$ifndef NOVARIANTS}
 procedure TTestCryptographicRoutines._JWT;
@@ -9424,6 +9854,379 @@ begin
 end;
 {$endif NOVARIANTS}
 
+type
+  TBenchmark = (
+    // non cryptographic hashes
+    bCRC32c, bXXHash32, 
+    // cryptographic hashes
+    bMD5, bSHA1, bHMACSHA1, bSHA256, bHMACSHA256, bSHA512, bHMACSHA512,
+    bSHA3_256, bSHA3_512,
+    // encryption
+    bAES128CFB, bAES128OFB, bAES128CFBCRC, bAES128OFBCRC,
+    bAES256CFB, bAES256OFB, bAES256CFBCRC, bAES256OFBCRC,
+    bSHAKE128, bSHAKE256
+    );
+
+procedure TTestCryptographicRoutines.Benchmark;
+const SIZ: array[0..4] of integer = (8, 50, 100, 1000, 10000);
+      COUNT = 500;
+      AESCLASS: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstractClass = (
+        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC,
+        TAESCFB, TAESOFB, TAESCFBCRC, TAESOFBCRC);
+      AESBITS: array[bAES128CFB .. bAES256OFBCRC] of integer = (
+        128, 128, 128, 128, 256, 256, 256, 256);
+var b: TBenchmark;
+    s, i, size, n: integer;
+    data, encrypted: RawByteString;
+    dig: THash512Rec;
+    MD5: TMD5;
+    SHA1: TSHA1;
+    SHA256: TSHA256;
+    SHA512: TSHA512;
+    SHA3, SHAKE128, SHAKE256: TSHA3;
+    timer: TPrecisionTimer;
+    time: array[TBenchmark] of Int64;
+    AES: array[bAES128CFB .. bAES256OFBCRC] of TAESAbstract;
+    TXT: array[TBenchmark] of RawUTF8;
+begin
+  GetEnumTrimmedNames(TypeInfo(TBenchmark),@TXT);
+  for b := low(b) to high(b) do
+    TXT[b] := LowerCase(TXT[b]);
+  for b := low(AES) to high(AES) do
+    AES[b] := AESCLASS[b].Create(dig, AESBITS[b]);
+  SHAKE128.InitCypher('secret', SHAKE_128);
+  SHAKE256.InitCypher('secret', SHAKE_256);
+  FillCharFast(time,sizeof(time),0);
+  size := 0;
+  n := 0;
+  for s := 0 to high(SIZ) do begin
+    data := RandomString(SIZ[s]);
+    SetLength(encrypted, SIZ[s]);
+    for b := low(b) to high(b) do begin
+      timer.Start;
+      for i := 1 to COUNT do begin
+        dig.d0 := 0;
+        dig.d1 := 0;
+        case b of
+        bXXHash32:   dig.d0 := xxHash32(0,pointer(data),SIZ[s]);
+        bCRC32c:     dig.d0 := crc32c(0,pointer(data),SIZ[s]);
+        bMD5:        MD5.Full(pointer(data),SIZ[s],dig.h0);
+        bSHA1:       SHA1.Full(pointer(data),SIZ[s],PSHA1Digest(@dig)^);
+        bHMACSHA1:   HMAC_SHA1('secret',data,PSHA1Digest(@dig)^);
+        bSHA256:     SHA256.Full(pointer(data),SIZ[s],dig.Lo);
+        bHMACSHA256: HMAC_SHA256('secret',data,dig.Lo);
+        bSHA512:     SHA512.Full(pointer(data),SIZ[s],dig.b);
+        bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
+        bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
+        bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
+        low(AES) .. high(AES): AES[b].EncryptPKCS7(Data, true);
+        bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
+        bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
+        end;
+        Check((b >= bAES128CFB) or (dig.d0 <> 0) or (dig.d1 <> 0));
+      end;
+      if false then // if true then = detailed per block size information
+        NotifyTestSpeed(format('%s %s',[TXT[b], KB(SIZ[s])]), COUNT, SIZ[s] * COUNT, @timer);
+      timer.ComputeTime;
+      inc(time[b],timer.LastTimeInMicroSec);
+      //if b in [bSHA3_512,high(b)] then AddConsole('');
+    end;
+    inc(size,SIZ[s]*COUNT);
+    inc(n,COUNT);
+  end;
+  for b := low(b) to high(b) do
+    AddConsole(format('%d %s in %s i.e. %d/s or %s/s',
+      [n, TXT[b], MicroSecToString(time[b]), (n*Int64(1000*1000)) div time[b],
+       KB((size*Int64(1000*1000)) div time[b])]));
+  for b := low(AES) to high(AES) do
+    AES[b].Free;
+end;
+
+{
+  some numbers, from a Core i7 (SSE4.2) notebook, with SynCrypto 1.18.3772:
+
+Delphi 7, Win32
+  - Benchmark: 1,050,000 assertions passed  8.62s
+     10000 crc32c 8 B in 161us i.e. 62111801/s, aver. 0us, 473.8 MB/s
+     10000 xxhash32 8 B in 185us i.e. 54054054/s, aver. 0us, 412.4 MB/s
+     10000 md5 8 B in 1.68ms i.e. 5948839/s, aver. 0us, 45.3 MB/s
+     10000 sha1 8 B in 3.01ms i.e. 3312355/s, aver. 0us, 25.2 MB/s
+     10000 hmacsha1 8 B in 11.97ms i.e. 835421/s, aver. 1us, 6.3 MB/s
+     10000 sha256 8 B in 4.07ms i.e. 2451581/s, aver. 0us, 18.7 MB/s
+     10000 hmacsha256 8 B in 16.15ms i.e. 619041/s, aver. 1us, 4.7 MB/s
+     10000 sha512 8 B in 6.66ms i.e. 1500375/s, aver. 0us, 11.4 MB/s
+     10000 hmacsha512 8 B in 29.67ms i.e. 336961/s, aver. 2us, 2.5 MB/s
+     10000 sha3_256 8 B in 8.45ms i.e. 1182312/s, aver. 0us, 9 MB/s
+     10000 sha3_512 8 B in 8.49ms i.e. 1177856/s, aver. 0us, 8.9 MB/s
+
+     10000 aes128cfb 8 B in 996us i.e. 10040160/s, aver. 0us, 76.6 MB/s
+     10000 aes128ofb 8 B in 903us i.e. 11074197/s, aver. 0us, 84.4 MB/s
+     10000 aes128cfbcrc 8 B in 1.14ms i.e. 8726003/s, aver. 0us, 66.5 MB/s
+     10000 aes128ofbcrc 8 B in 1.18ms i.e. 8460236/s, aver. 0us, 64.5 MB/s
+     10000 aes256cfb 8 B in 1.55ms i.e. 6430868/s, aver. 0us, 49 MB/s
+     10000 aes256ofb 8 B in 980us i.e. 10204081/s, aver. 0us, 77.8 MB/s
+     10000 aes256cfbcrc 8 B in 1.22ms i.e. 8149959/s, aver. 0us, 62.1 MB/s
+     10000 aes256ofbcrc 8 B in 1.25ms i.e. 7974481/s, aver. 0us, 60.8 MB/s
+     10000 shake128 8 B in 538us i.e. 18587360/s, aver. 0us, 141.8 MB/s
+     10000 shake256 8 B in 1.33ms i.e. 7485029/s, aver. 0us, 57.1 MB/s
+
+     10000 crc32c 50 B in 129us i.e. 77519379/s, aver. 0us, 3.6 GB/s
+     10000 xxhash32 50 B in 189us i.e. 52910052/s, aver. 0us, 2.4 GB/s
+     10000 md5 50 B in 1.45ms i.e. 6863417/s, aver. 0us, 327.2 MB/s
+     10000 sha1 50 B in 3.07ms i.e. 3247807/s, aver. 0us, 154.8 MB/s
+     10000 hmacsha1 50 B in 11.89ms i.e. 840689/s, aver. 1us, 40 MB/s
+     10000 sha256 50 B in 4.17ms i.e. 2396931/s, aver. 0us, 114.2 MB/s
+     10000 hmacsha256 50 B in 16.06ms i.e. 622393/s, aver. 1us, 29.6 MB/s
+     10000 sha512 50 B in 7.32ms i.e. 1364628/s, aver. 0us, 65 MB/s
+     10000 hmacsha512 50 B in 26.80ms i.e. 373134/s, aver. 2us, 17.7 MB/s
+     10000 sha3_256 50 B in 8.56ms i.e. 1167815/s, aver. 0us, 55.6 MB/s
+     10000 sha3_512 50 B in 8.39ms i.e. 1191185/s, aver. 0us, 56.8 MB/s
+
+     10000 aes128cfb 50 B in 1.75ms i.e. 5685048/s, aver. 0us, 271 MB/s
+     10000 aes128ofb 50 B in 1.65ms i.e. 6056935/s, aver. 0us, 288.8 MB/s
+     10000 aes128cfbcrc 50 B in 1.83ms i.e. 5443658/s, aver. 0us, 259.5 MB/s
+     10000 aes128ofbcrc 50 B in 2.35ms i.e. 4239084/s, aver. 0us, 202.1 MB/s
+     10000 aes256cfb 50 B in 1.96ms i.e. 5083884/s, aver. 0us, 242.4 MB/s
+     10000 aes256ofb 50 B in 1.96ms i.e. 5094243/s, aver. 0us, 242.9 MB/s
+     10000 aes256cfbcrc 50 B in 2.14ms i.e. 4662004/s, aver. 0us, 222.3 MB/s
+     10000 aes256ofbcrc 50 B in 2.25ms i.e. 4428697/s, aver. 0us, 211.1 MB/s
+     10000 shake128 50 B in 2.56ms i.e. 3898635/s, aver. 0us, 185.9 MB/s
+     10000 shake256 50 B in 3.86ms i.e. 2590002/s, aver. 0us, 123.5 MB/s
+
+     10000 crc32c 100 B in 164us i.e. 60975609/s, aver. 0us, 5.6 GB/s
+     10000 xxhash32 100 B in 300us i.e. 33333333/s, aver. 0us, 3.1 GB/s
+     10000 md5 100 B in 2.71ms i.e. 3679175/s, aver. 0us, 350.8 MB/s
+     10000 sha1 100 B in 5.91ms i.e. 1692047/s, aver. 0us, 161.3 MB/s
+     10000 hmacsha1 100 B in 14.65ms i.e. 682267/s, aver. 1us, 65 MB/s
+     10000 sha256 100 B in 11.16ms i.e. 895495/s, aver. 1us, 85.4 MB/s
+     10000 hmacsha256 100 B in 19.68ms i.e. 507897/s, aver. 1us, 48.4 MB/s
+     10000 sha512 100 B in 7.14ms i.e. 1399972/s, aver. 0us, 133.5 MB/s
+     10000 hmacsha512 100 B in 26.34ms i.e. 379535/s, aver. 2us, 36.1 MB/s
+     10000 sha3_256 100 B in 8.43ms i.e. 1185677/s, aver. 0us, 113 MB/s
+     10000 sha3_512 100 B in 16.43ms i.e. 608457/s, aver. 1us, 58 MB/s
+
+     10000 aes128cfb 100 B in 2.33ms i.e. 4282655/s, aver. 0us, 408.4 MB/s
+     10000 aes128ofb 100 B in 2.97ms i.e. 3365870/s, aver. 0us, 320.9 MB/s
+     10000 aes128cfbcrc 100 B in 2.51ms i.e. 3976143/s, aver. 0us, 379.1 MB/s
+     10000 aes128ofbcrc 100 B in 2.46ms i.e. 4055150/s, aver. 0us, 386.7 MB/s
+     10000 aes256cfb 100 B in 2.92ms i.e. 3418803/s, aver. 0us, 326 MB/s
+     10000 aes256ofb 100 B in 2.91ms i.e. 3425830/s, aver. 0us, 326.7 MB/s
+     10000 aes256cfbcrc 100 B in 3.06ms i.e. 3259452/s, aver. 0us, 310.8 MB/s
+     10000 aes256ofbcrc 100 B in 3.09ms i.e. 3229974/s, aver. 0us, 308 MB/s
+     10000 shake128 100 B in 4.98ms i.e. 2006823/s, aver. 0us, 191.3 MB/s
+     10000 shake256 100 B in 5.80ms i.e. 1721763/s, aver. 0us, 164.2 MB/s
+
+     10000 crc32c 1000 B in 2.00ms i.e. 4995004/s, aver. 0us, 4.6 GB/s
+     10000 xxhash32 1000 B in 2.08ms i.e. 4796163/s, aver. 0us, 4.4 GB/s
+     10000 md5 1000 B in 20.95ms i.e. 477235/s, aver. 2us, 455.1 MB/s
+     10000 sha1 1000 B in 45.64ms i.e. 219072/s, aver. 4us, 208.9 MB/s
+     10000 hmacsha1 1000 B in 56.70ms i.e. 176363/s, aver. 5us, 168.1 MB/s
+     10000 sha256 1000 B in 61.30ms i.e. 163121/s, aver. 6us, 155.5 MB/s
+     10000 hmacsha256 1000 B in 72.31ms i.e. 138276/s, aver. 7us, 131.8 MB/s
+     10000 sha512 1000 B in 54.13ms i.e. 184723/s, aver. 5us, 176.1 MB/s
+     10000 hmacsha512 1000 B in 70.01ms i.e. 142828/s, aver. 7us, 136.2 MB/s
+     10000 sha3_256 1000 B in 62.15ms i.e. 160890/s, aver. 6us, 153.4 MB/s
+     10000 sha3_512 1000 B in 108.78ms i.e. 91927/s, aver. 10us, 87.6 MB/s
+
+     10000 aes128cfb 1000 B in 16.28ms i.e. 613948/s, aver. 1us, 585.5 MB/s
+     10000 aes128ofb 1000 B in 14.86ms i.e. 672540/s, aver. 1us, 641.3 MB/s
+     10000 aes128cfbcrc 1000 B in 15.20ms i.e. 657505/s, aver. 1us, 627 MB/s
+     10000 aes128ofbcrc 1000 B in 15.94ms i.e. 627273/s, aver. 1us, 598.2 MB/s
+     10000 aes256cfb 1000 B in 20.52ms i.e. 487305/s, aver. 2us, 464.7 MB/s
+     10000 aes256ofb 1000 B in 20.56ms i.e. 486357/s, aver. 2us, 463.8 MB/s
+     10000 aes256cfbcrc 1000 B in 21.31ms i.e. 469241/s, aver. 2us, 447.5 MB/s
+     10000 aes256ofbcrc 1000 B in 23.93ms i.e. 417780/s, aver. 2us, 398.4 MB/s
+     10000 shake128 1000 B in 47.67ms i.e. 209744/s, aver. 4us, 200 MB/s
+     10000 shake256 1000 B in 56.18ms i.e. 177973/s, aver. 5us, 169.7 MB/s
+
+     10000 crc32c 9 KB in 23.40ms i.e. 427186/s, aver. 2us, 3.9 GB/s
+     10000 xxhash32 9 KB in 15.91ms i.e. 628535/s, aver. 1us, 5.8 GB/s
+     10000 md5 9 KB in 210.63ms i.e. 47475/s, aver. 21us, 452.7 MB/s
+     10000 sha1 9 KB in 444.99ms i.e. 22472/s, aver. 44us, 214.3 MB/s
+     10000 hmacsha1 9 KB in 458.45ms i.e. 21812/s, aver. 45us, 208 MB/s
+     10000 sha256 9 KB in 607.39ms i.e. 16463/s, aver. 60us, 157 MB/s
+     10000 hmacsha256 9 KB in 618.00ms i.e. 16181/s, aver. 61us, 154.3 MB/s
+     10000 sha512 9 KB in 502.78ms i.e. 19889/s, aver. 50us, 189.6 MB/s
+     10000 hmacsha512 9 KB in 525.57ms i.e. 19026/s, aver. 52us, 181.4 MB/s
+     10000 sha3_256 9 KB in 564.61ms i.e. 17711/s, aver. 56us, 168.9 MB/s
+     10000 sha3_512 9 KB in 1.05s i.e. 9506/s, aver. 105us, 90.6 MB/s
+
+     10000 aes128cfb 9 KB in 149.54ms i.e. 66871/s, aver. 14us, 637.7 MB/s
+     10000 aes128ofb 9 KB in 142.10ms i.e. 70368/s, aver. 14us, 671 MB/s
+     10000 aes128cfbcrc 9 KB in 146.78ms i.e. 68124/s, aver. 14us, 649.6 MB/s
+     10000 aes128ofbcrc 9 KB in 148.38ms i.e. 67393/s, aver. 14us, 642.7 MB/s
+     10000 aes256cfb 9 KB in 198.82ms i.e. 50295/s, aver. 19us, 479.6 MB/s
+     10000 aes256ofb 9 KB in 199.27ms i.e. 50181/s, aver. 19us, 478.5 MB/s
+     10000 aes256cfbcrc 9 KB in 199.70ms i.e. 50073/s, aver. 19us, 477.5 MB/s
+     10000 aes256ofbcrc 9 KB in 200.13ms i.e. 49966/s, aver. 20us, 476.5 MB/s
+     10000 shake128 9 KB in 478.81ms i.e. 20884/s, aver. 47us, 199.1 MB/s
+     10000 shake256 9 KB in 574.64ms i.e. 17402/s, aver. 57us, 165.9 MB/s
+
+     50000 crc32c in 25.87ms i.e. 1932292/s or 4 GB/s
+     50000 xxhash32 in 18.68ms i.e. 2676659/s or 5.5 GB/s
+     50000 md5 in 237.45ms i.e. 210562/s or 448.1 MB/s
+     50000 sha1 in 502.65ms i.e. 99471/s or 211.6 MB/s
+     50000 hmacsha1 in 553.69ms i.e. 90302/s or 192.1 MB/s
+     50000 sha256 in 688.12ms i.e. 72660/s or 154.6 MB/s
+     50000 hmacsha256 in 742.24ms i.e. 67363/s or 143.3 MB/s
+     50000 sha512 in 578.07ms i.e. 86493/s or 184 MB/s
+     50000 hmacsha512 in 678.42ms i.e. 73700/s or 156.8 MB/s
+     50000 sha3_256 in 652.23ms i.e. 76659/s or 163.1 MB/s
+     50000 sha3_512 in 1.19s i.e. 41876/s or 89.1 MB/s
+
+     50000 aes128cfb in 170.93ms i.e. 292517/s or 622.5 MB/s
+     50000 aes128ofb in 162.51ms i.e. 307662/s or 654.7 MB/s
+     50000 aes128cfbcrc in 167.51ms i.e. 298489/s or 635.2 MB/s
+     50000 aes128ofbcrc in 170.34ms i.e. 293521/s or 624.6 MB/s
+     50000 aes256cfb in 225.80ms i.e. 221427/s or 471.2 MB/s
+     50000 aes256ofb in 225.71ms i.e. 221520/s or 471.4 MB/s
+     50000 aes256cfbcrc in 227.46ms i.e. 219810/s or 467.8 MB/s
+     50000 aes256ofbcrc in 230.69ms i.e. 216739/s or 461.2 MB/s
+     50000 shake128 in 534.59ms i.e. 93528/s or 199 MB/s
+     50000 shake256 in 641.85ms i.e. 77899/s or 165.7 MB/s
+  Total failed: 0 / 1,302,057  - Cryptographic routines PASSED  10.49s
+
+Delphi 10.2 Tokyo, Win64
+  - Benchmark: 1,050,000 assertions passed  8.24s
+     10000 crc32c 8 B in 148us i.e. 67567567/s, aver. 0us, 515.5 MB/s
+     10000 xxhash32 8 B in 169us i.e. 59171597/s, aver. 0us, 451.4 MB/s
+     10000 md5 8 B in 2.13ms i.e. 4675081/s, aver. 0us, 35.6 MB/s
+     10000 sha1 8 B in 3.52ms i.e. 2840909/s, aver. 0us, 21.6 MB/s
+     10000 hmacsha1 8 B in 13.26ms i.e. 753977/s, aver. 1us, 5.7 MB/s
+     10000 sha256 8 B in 2.67ms i.e. 3743916/s, aver. 0us, 28.5 MB/s
+     10000 hmacsha256 8 B in 10.05ms i.e. 995024/s, aver. 1us, 7.5 MB/s
+     10000 sha512 8 B in 7.91ms i.e. 1263264/s, aver. 0us, 9.6 MB/s
+     10000 hmacsha512 8 B in 31.28ms i.e. 319601/s, aver. 3us, 2.4 MB/s
+     10000 sha3_256 8 B in 7.94ms i.e. 1258811/s, aver. 0us, 9.6 MB/s
+     10000 sha3_512 8 B in 7.98ms i.e. 1252661/s, aver. 0us, 9.5 MB/s
+
+     10000 aes128cfb 8 B in 1.13ms i.e. 8787346/s, aver. 0us, 67 MB/s
+     10000 aes128ofb 8 B in 1.11ms i.e. 8944543/s, aver. 0us, 68.2 MB/s
+     10000 aes128cfbcrc 8 B in 1.21ms i.e. 8257638/s, aver. 0us, 63 MB/s
+     10000 aes128ofbcrc 8 B in 1.20ms i.e. 8326394/s, aver. 0us, 63.5 MB/s
+     10000 aes256cfb 8 B in 1.59ms i.e. 6265664/s, aver. 0us, 47.8 MB/s
+     10000 aes256ofb 8 B in 1.20ms i.e. 8326394/s, aver. 0us, 63.5 MB/s
+     10000 aes256cfbcrc 8 B in 1.31ms i.e. 7593014/s, aver. 0us, 57.9 MB/s
+     10000 aes256ofbcrc 8 B in 1.27ms i.e. 7818608/s, aver. 0us, 59.6 MB/s
+     10000 shake128 8 B in 512us i.e. 19531250/s, aver. 0us, 149 MB/s
+     10000 shake256 8 B in 612us i.e. 16339869/s, aver. 0us, 124.6 MB/s
+
+     10000 crc32c 50 B in 128us i.e. 78125000/s, aver. 0us, 3.6 GB/s
+     10000 xxhash32 50 B in 186us i.e. 53763440/s, aver. 0us, 2.5 GB/s
+     10000 md5 50 B in 1.79ms i.e. 5577244/s, aver. 0us, 265.9 MB/s
+     10000 sha1 50 B in 3.32ms i.e. 3003905/s, aver. 0us, 143.2 MB/s
+     10000 hmacsha1 50 B in 13.10ms i.e. 763067/s, aver. 1us, 36.3 MB/s
+     10000 sha256 50 B in 2.51ms i.e. 3979307/s, aver. 0us, 189.7 MB/s
+     10000 hmacsha256 50 B in 9.85ms i.e. 1014404/s, aver. 0us, 48.3 MB/s
+     10000 sha512 50 B in 7.97ms i.e. 1253761/s, aver. 0us, 59.7 MB/s
+     10000 hmacsha512 50 B in 31.54ms i.e. 316987/s, aver. 3us, 15.1 MB/s
+     10000 sha3_256 50 B in 8.00ms i.e. 1249687/s, aver. 0us, 59.5 MB/s
+     10000 sha3_512 50 B in 7.88ms i.e. 1268069/s, aver. 0us, 60.4 MB/s
+
+     10000 aes128cfb 50 B in 2.43ms i.e. 4111842/s, aver. 0us, 196 MB/s
+     10000 aes128ofb 50 B in 1.88ms i.e. 5296610/s, aver. 0us, 252.5 MB/s
+     10000 aes128cfbcrc 50 B in 2.17ms i.e. 4589261/s, aver. 0us, 218.8 MB/s
+     10000 aes128ofbcrc 50 B in 2.28ms i.e. 4376367/s, aver. 0us, 208.6 MB/s
+     10000 aes256cfb 50 B in 2.44ms i.e. 4095004/s, aver. 0us, 195.2 MB/s
+     10000 aes256ofb 50 B in 2.19ms i.e. 4564125/s, aver. 0us, 217.6 MB/s
+     10000 aes256cfbcrc 50 B in 2.51ms i.e. 3969829/s, aver. 0us, 189.2 MB/s
+     10000 aes256ofbcrc 50 B in 2.29ms i.e. 4363001/s, aver. 0us, 208 MB/s
+     10000 shake128 50 B in 2.30ms i.e. 4342162/s, aver. 0us, 207 MB/s
+     10000 shake256 50 B in 2.83ms i.e. 3527336/s, aver. 0us, 168.1 MB/s
+
+     10000 crc32c 100 B in 176us i.e. 56818181/s, aver. 0us, 5.2 GB/s
+     10000 xxhash32 100 B in 293us i.e. 34129692/s, aver. 0us, 3.1 GB/s
+     10000 md5 100 B in 3.35ms i.e. 2985074/s, aver. 0us, 284.6 MB/s
+     10000 sha1 100 B in 6.27ms i.e. 1592863/s, aver. 0us, 151.9 MB/s
+     10000 hmacsha1 100 B in 16.02ms i.e. 624180/s, aver. 1us, 59.5 MB/s
+     10000 sha256 100 B in 4.68ms i.e. 2135383/s, aver. 0us, 203.6 MB/s
+     10000 hmacsha256 100 B in 12.00ms i.e. 833333/s, aver. 1us, 79.4 MB/s
+     10000 sha512 100 B in 8.01ms i.e. 1247816/s, aver. 0us, 119 MB/s
+     10000 hmacsha512 100 B in 31.56ms i.e. 316826/s, aver. 3us, 30.2 MB/s
+     10000 sha3_256 100 B in 8.04ms i.e. 1242390/s, aver. 0us, 118.4 MB/s
+     10000 sha3_512 100 B in 14.86ms i.e. 672721/s, aver. 1us, 64.1 MB/s
+
+     10000 aes128cfb 100 B in 3.13ms i.e. 3189792/s, aver. 0us, 304.2 MB/s
+     10000 aes128ofb 100 B in 2.96ms i.e. 3374957/s, aver. 0us, 321.8 MB/s
+     10000 aes128cfbcrc 100 B in 3.08ms i.e. 3238341/s, aver. 0us, 308.8 MB/s
+     10000 aes128ofbcrc 100 B in 2.69ms i.e. 3707823/s, aver. 0us, 353.6 MB/s
+     10000 aes256cfb 100 B in 3.61ms i.e. 2763957/s, aver. 0us, 263.5 MB/s
+     10000 aes256ofb 100 B in 3.21ms i.e. 3113325/s, aver. 0us, 296.9 MB/s
+     10000 aes256cfbcrc 100 B in 3.70ms i.e. 2700513/s, aver. 0us, 257.5 MB/s
+     10000 aes256ofbcrc 100 B in 3.26ms i.e. 3061849/s, aver. 0us, 292 MB/s
+     10000 shake128 100 B in 4.35ms i.e. 2296211/s, aver. 0us, 218.9 MB/s
+     10000 shake256 100 B in 5.39ms i.e. 1852537/s, aver. 0us, 176.6 MB/s
+
+     10000 crc32c 1000 B in 2.01ms i.e. 4967709/s, aver. 0us, 4.6 GB/s
+     10000 xxhash32 1000 B in 1.67ms i.e. 5966587/s, aver. 0us, 5.5 GB/s
+     10000 md5 1000 B in 27.21ms i.e. 367403/s, aver. 2us, 350.3 MB/s
+     10000 sha1 1000 B in 48.18ms i.e. 207537/s, aver. 4us, 197.9 MB/s
+     10000 hmacsha1 1000 B in 57.79ms i.e. 173040/s, aver. 5us, 165 MB/s
+     10000 sha256 1000 B in 33.78ms i.e. 295963/s, aver. 3us, 282.2 MB/s
+     10000 hmacsha256 1000 B in 40.89ms i.e. 244558/s, aver. 4us, 233.2 MB/s
+     10000 sha512 1000 B in 59.79ms i.e. 167243/s, aver. 5us, 159.4 MB/s
+     10000 hmacsha512 1000 B in 84.30ms i.e. 118614/s, aver. 8us, 113.1 MB/s
+     10000 sha3_256 1000 B in 56.20ms i.e. 177929/s, aver. 5us, 169.6 MB/s
+     10000 sha3_512 1000 B in 95.97ms i.e. 104197/s, aver. 9us, 99.3 MB/s
+
+     10000 aes128cfb 1000 B in 21.16ms i.e. 472567/s, aver. 2us, 450.6 MB/s
+     10000 aes128ofb 1000 B in 16.97ms i.e. 589066/s, aver. 1us, 561.7 MB/s
+     10000 aes128cfbcrc 1000 B in 20.45ms i.e. 488997/s, aver. 2us, 466.3 MB/s
+     10000 aes128ofbcrc 1000 B in 16.31ms i.e. 613120/s, aver. 1us, 584.7 MB/s
+     10000 aes256cfb 1000 B in 25.71ms i.e. 388938/s, aver. 2us, 370.9 MB/s
+     10000 aes256ofb 1000 B in 22.51ms i.e. 444247/s, aver. 2us, 423.6 MB/s
+     10000 aes256cfbcrc 1000 B in 26.51ms i.e. 377159/s, aver. 2us, 359.6 MB/s
+     10000 aes256ofbcrc 1000 B in 21.71ms i.e. 460426/s, aver. 2us, 439 MB/s
+     10000 shake128 1000 B in 41.69ms i.e. 239819/s, aver. 4us, 228.7 MB/s
+     10000 shake256 1000 B in 52.20ms i.e. 191552/s, aver. 5us, 182.6 MB/s
+
+     10000 crc32c 9 KB in 22.29ms i.e. 448490/s, aver. 2us, 4.1 GB/s
+     10000 xxhash32 9 KB in 15.41ms i.e. 648887/s, aver. 1us, 6 GB/s
+     10000 md5 9 KB in 263.38ms i.e. 37967/s, aver. 26us, 362 MB/s
+     10000 sha1 9 KB in 471.74ms i.e. 21197/s, aver. 47us, 202.1 MB/s
+     10000 hmacsha1 9 KB in 478.48ms i.e. 20899/s, aver. 47us, 199.3 MB/s
+     10000 sha256 9 KB in 326.29ms i.e. 30646/s, aver. 32us, 292.2 MB/s
+     10000 hmacsha256 9 KB in 335.02ms i.e. 29848/s, aver. 33us, 284.6 MB/s
+     10000 sha512 9 KB in 590.09ms i.e. 16946/s, aver. 59us, 161.6 MB/s
+     10000 hmacsha512 9 KB in 611.03ms i.e. 16365/s, aver. 61us, 156 MB/s
+     10000 sha3_256 9 KB in 505.93ms i.e. 19765/s, aver. 50us, 188.5 MB/s
+     10000 sha3_512 9 KB in 942.88ms i.e. 10605/s, aver. 94us, 101.1 MB/s
+
+     10000 aes128cfb 9 KB in 197.27ms i.e. 50690/s, aver. 19us, 483.4 MB/s
+     10000 aes128ofb 9 KB in 156.73ms i.e. 63800/s, aver. 15us, 608.4 MB/s
+     10000 aes128cfbcrc 9 KB in 196.00ms i.e. 51018/s, aver. 19us, 486.5 MB/s
+     10000 aes128ofbcrc 9 KB in 154.11ms i.e. 64887/s, aver. 15us, 618.8 MB/s
+     10000 aes256cfb 9 KB in 250.42ms i.e. 39931/s, aver. 25us, 380.8 MB/s
+     10000 aes256ofb 9 KB in 211.61ms i.e. 47255/s, aver. 21us, 450.6 MB/s
+     10000 aes256cfbcrc 9 KB in 253.44ms i.e. 39456/s, aver. 25us, 376.2 MB/s
+     10000 aes256ofbcrc 9 KB in 207.97ms i.e. 48083/s, aver. 20us, 458.5 MB/s
+     10000 shake128 9 KB in 414.41ms i.e. 24130/s, aver. 41us, 230.1 MB/s
+     10000 shake256 9 KB in 517.70ms i.e. 19316/s, aver. 51us, 184.2 MB/s
+
+     50000 crc32c in 24.77ms i.e. 2018082/s or 4.1 GB/s
+     50000 xxhash32 in 17.74ms i.e. 2817695/s or 5.8 GB/s
+     50000 md5 in 297.89ms i.e. 167842/s or 357.2 MB/s
+     50000 sha1 in 533.07ms i.e. 93795/s or 199.6 MB/s
+     50000 hmacsha1 in 578.68ms i.e. 86403/s or 183.8 MB/s
+     50000 sha256 in 369.97ms i.e. 135145/s or 287.6 MB/s
+     50000 hmacsha256 in 407.83ms i.e. 122597/s or 260.9 MB/s
+     50000 sha512 in 673.81ms i.e. 74204/s or 157.9 MB/s
+     50000 hmacsha512 in 789.77ms i.e. 63309/s or 134.7 MB/s
+     50000 sha3_256 in 586.14ms i.e. 85302/s or 181.5 MB/s
+     50000 sha3_512 in 1.06s i.e. 46745/s or 99.4 MB/s
+
+     50000 aes128cfb in 225.16ms i.e. 222063/s or 472.6 MB/s
+     50000 aes128ofb in 179.70ms i.e. 278241/s or 592.1 MB/s
+     50000 aes128cfbcrc in 222.95ms i.e. 224264/s or 477.2 MB/s
+     50000 aes128ofbcrc in 176.63ms i.e. 283077/s or 602.4 MB/s
+     50000 aes256cfb in 283.81ms i.e. 176173/s or 374.9 MB/s
+     50000 aes256ofb in 240.74ms i.e. 207689/s or 442 MB/s
+     50000 aes256cfbcrc in 287.51ms i.e. 173903/s or 370.1 MB/s
+     50000 aes256ofbcrc in 236.53ms i.e. 211381/s or 449.8 MB/s
+     50000 shake128 in 463.29ms i.e. 107922/s or 229.6 MB/s
+     50000 shake256 in 578.76ms i.e. 86390/s or 183.8 MB/s
+  Total failed: 0 / 1,302,074  - Cryptographic routines PASSED  9.56s
+}
 
 { TTestECCCryptography }
 
@@ -10072,7 +10875,7 @@ const
   'jz/dDXej3ZClzk14r9LVXTW1kca7FgzLrfNaWG5KyG/40tuNtM7LvavpM665+Q+G+dsXdVoc3x5vK5fK'+
   'WP0ebanRbmgol+oYnDQrW+6mTLl3Hln9FZS7n5W7K+Gi8ZIw3vqLIZ2yZd44wufWeWzS1Ebaxn17Dfzy'+
   'CW6jv67RdXcuf1/o69I+T+fTdim0j3Ry8TccmqZuqswsX2i+d/n7Qnv9f1RSHw29k+n/Bw==';
-  Hash: array[boolean] of Cardinal = (343869333,3715537523);
+  METAFILE_HASH: array[boolean] of Cardinal = ($212C0E5A,$FB81AAAD);
 var S: RawByteString;
     MS: THeapMemoryStream;
     MF: TMetaFile;
@@ -10096,7 +10899,7 @@ begin
     inc(i,n);
   end;
   FileFromString(E,'test.pas');}
-  S := UncompressString(Base64Decode(EMF));
+  S := UncompressString(Base64ToBin(EMF));
   Check(Hash32(S)=$5BB4C8B1);
   MS := THeapMemoryStream.Create;
   try
@@ -10133,7 +10936,7 @@ begin
         if CheckFailed(i<>0)then exit;
         FillCharFast(s[i],32,32);
         H := Hash32(s);
-        Check(H=1030733677);
+        Check(H=$FE2D27CA);
       end;
     finally
       Free;
@@ -10165,7 +10968,8 @@ begin
           MS.Clear;
           Doc.Canvas.RenderMetaFile(MF);
           Doc.SaveToStream(MS,FIXED_DATE);
-          Check(Hash32(MS.Memory,MS.Position)=Hash[orientation]);
+          H := Hash32(MS.Memory,MS.Position);
+          Check(H=METAFILE_HASH[orientation]);
         finally
           Doc.Free;
         end;
@@ -11175,6 +11979,7 @@ end;
 procedure TTestClientServerAccess.DirectInProcessAccess;
 var stats: RawUTF8;
 begin
+  FreeAndNil(Client);
   Client := TSQLRestClientDB.Create(Model,
     TSQLModel.Create([TSQLRecordPeople],'root'),
     DataBase.DB,TSQLRestServerTest);
@@ -11860,7 +12665,7 @@ var res: ISQLDBRows;
     id,lastid,n,n1: integer;
     IDs: TIntegerDynArray;
     {$ifndef LVCL}
-    Row: variant;
+    Row,RowDoc: variant;
     {$endif}
 procedure DoInsert;
 var i: integer;
@@ -11909,6 +12714,9 @@ begin
     {$else}
     Check(Row.ID>0);
     Check(Row.YearOfDeath=1519);
+    res.RowDocVariant(RowDoc);
+    Check(RowDoc.ID=Row.ID);
+    Check(_Safe(RowDoc)^.I['YearOfDeath']=1519);
     {$endif}
     inc(n);
   until not res.Step;
@@ -13769,17 +14577,17 @@ end;
 
 function GetThreadID: TThreadID;
 begin // avoid name conflict with TServiceComplexCalculator.GetCurrentThreadID
-  result := {$ifdef BSD}Cardinal{$endif}(GetCurrentThreadId);
+  result := TThreadID(GetCurrentThreadId);
 end;
 
 procedure TServiceComplexCalculator.EnsureInExpectedThread;
 begin
   case GlobalInterfaceTestMode of
   itmDirect, itmClient, itmMainThread:
-    if GetThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID) then
+    if GetThreadID<>TThreadID(MainThreadID) then
       raise Exception.Create('Shall be in main thread');
   itmPerInterfaceThread, itmHttp, itmLocked:
-    if GetThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID) then
+    if GetThreadID=TThreadID(MainThreadID) then
       raise Exception.Create('Shall NOT be in main thread') else
     if ServiceContext.RunningThread=nil then
       raise Exception.Create('Shall have a known RunningThread');
@@ -13939,7 +14747,7 @@ begin
     raise Exception.Create('Unexpected Thread=nil');
   if Thread=nil then
     result := 0 else begin
-    result := {$ifdef BSD}Cardinal{$endif}(Thread.ThreadID);
+    result := TThreadID(Thread.ThreadID);
     if result<>GetThreadID then
       raise Exception.Create('Unexpected ThreadID');
   end;
@@ -14079,9 +14887,9 @@ begin
   end;
   case GlobalInterfaceTestMode of
   itmMainThread:
-    Check(Inst.CC.GetCurrentThreadID={$ifdef BSD}Cardinal{$endif}(MainThreadID));
+    Check(Inst.CC.GetCurrentThreadID=TThreadID(MainThreadID));
   itmPerInterfaceThread,itmLocked:
-    Check(Inst.CC.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
+    Check(Inst.CC.GetCurrentThreadID<>TThreadID(MainThreadID));
   end;
   TestCalculator(Inst.I);
   TestCalculator(Inst.CC); // test the fact that CC inherits from ICalculator
@@ -14175,19 +14983,19 @@ begin
   end;
   n2 := Inst.CN.Imaginary;
   for c := 0 to Iterations shr 2 do begin
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     n1 := Random*1000;
     Inst.CN.Real := n1;
     CheckSame(Inst.CN.Real,n1);
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     n2 := Random*1000;
     Inst.CN.Imaginary := n2;
     CheckSame(Inst.CN.Real,n1);
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
     Inst.CN.Add(1,2);
-    CheckSame(Inst.CN.Real,n1+1);
+    CheckSame(Inst.CN.Real,n1+1,1E-9);
     n2 := n2+2;
-    CheckSame(Inst.CN.Imaginary,n2);
+    CheckSame(Inst.CN.Imaginary,n2,1E-9);
   end;
   {$endif}
   Inst.CN.Assign(3.14,1.05946);
@@ -14216,7 +15024,7 @@ begin
   end;
   itmHttp: begin
     Check(Inst.CT.GetCurrentRunningThreadID<>TThreadID(0));
-    Check(Inst.CT.GetCurrentThreadID<>{$ifdef BSD}Cardinal{$endif}(MainThreadID));
+    Check(Inst.CT.GetCurrentThreadID<>TThreadID(MainThreadID));
     Check(Inst.CT.GetContextServiceInstanceID<>0);
   end;
   end;
@@ -15205,7 +16013,7 @@ begin
   Check(I.Multiply(10,30)=60);
   Check(I.Multiply(2,35)=70);
   for n := 1 to 10000 do
-    CheckSame(I.Subtract(n*10.5,n*0.5),n*10);
+    CheckSame(I.Subtract(n*10.5,n*0.5),n*10,1E-9);
   n := Assertions;
   I := nil; // release TInterfaceMock -> will check all expectations
   n := Assertions-n;
@@ -15248,7 +16056,7 @@ begin
      Raises('Add',[1,2],ESynException,'expected exception');
   {$ifndef NOVARIANTS}
   for n := 1 to 10000 do
-    CheckSame(I.Subtract(n*10.5,n*0.5),n*10);
+    CheckSame(I.Subtract(n*10.5,n*0.5),n*10,1E-9);
   {$endif}
   Check(I.Subtract(10,20)=3,'Explicit result');
   {$WARN SYMBOL_PLATFORM OFF}
@@ -15422,8 +16230,10 @@ begin
       fDatabase.DB.Execute('delete from people');
     // 2.2. Launch the background client threads
     fTimer.Start;
-    for n := 0 to fRunningThreadCount-1 do
+    for n := 0 to fRunningThreadCount-1 do begin
       TTestMultiThreadProcessThread(fThreads[n]).LaunchProcess;
+      sleep(10); // ensure thread process is actually started
+    end;
     // 2.3. Wait for the background client threads process to be finished
     repeat
       {$ifdef MSWINDOWS}
@@ -15717,16 +16527,6 @@ begin
 end;
 
 type
-  TBidirServer = class(TInterfacedObject,IBidirService)
-  protected
-    fCallback: IBidirCallback;
-    function TestRest(a,b: integer; out c: RawUTF8): variant;
-    function TestRestCustom(a: integer): TServiceCustomAnswer;
-    function TestCallback(d: Integer; const callback: IBidirCallback): boolean;
-    procedure LaunchCallback(a: integer);
-    procedure RemoveCallback;
-  end;
-
   TBidirCallbackInterfacedObject = class(TInterfacedObject,IBidirCallback)
   protected
     fValue: Integer;
@@ -15761,10 +16561,17 @@ begin
   result := d<>0;
 end;
 
-procedure TBidirServer.LaunchCallback(a: integer);
+procedure TBidirServer.LaunchAsynchCallback(a: integer);
 begin
   if Assigned(fCallback) then
     fCallback.AsynchEvent(a);
+end;
+
+function TBidirServer.LaunchSynchCallback: integer;
+begin
+  if Assigned(fCallback) then
+    result := fCallback.Value else
+    result := 0;
 end;
 
 procedure TBidirServer.RemoveCallback;
@@ -15801,7 +16608,8 @@ begin
   // sicClientDriven services expect authentication for sessions
   fServer := TSQLRestServerFullMemory.CreateWithOwnModel([],true);
   fServer.CreateMissingTables;
-  Check(fServer.ServiceDefine(TBidirServer,[IBidirService],sicShared)<>nil);
+  fBidirServer := TBidirServer.Create;
+  Check(fServer.ServiceDefine(fBidirServer,[IBidirService])<>nil);
   fHttpServer := TSQLHttpServer.Create(HTTP_DEFAULTPORT,[],'+',useBidirSocket);
   Check(fHttpServer.AddServer(fServer));
   fHttpServer.WebSocketsEnable(fServer,WEBSOCKETS_KEY,true).Settings.SetFullLog;
@@ -15854,23 +16662,25 @@ begin
   subscribed := TBidirCallbackInterfacedObject.Create;
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
   end;
   WaitUntilNotified;
+  check(fBidirServer.LaunchSynchCallback=6);
   Rest.Services.CallBackUnRegister(subscribed); // manual callback release notify
   subscribed := TBidirCallback.Create(Rest,IBidirCallback); // auto notification
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
   end;
   WaitUntilNotified;
   subscribed := TBidirCallback.Create(Rest,IBidirCallback);
   for d := -5 to 6 do begin
     check(I.TestCallback(d,subscribed)=(d<>0));
-    I.LaunchCallback(d);
+    I.LaunchAsynchCallback(d);
     I.RemoveCallback;
   end;
   WaitUntilNotified;
+  check(fBidirServer.LaunchSynchCallback=0);
 end; // here TBidirCallback.Free will notify Rest.Services.CallBackUnRegister()
 
 procedure TTestBidirectionalRemoteConnection.SOACallbackOnServerSide;
@@ -16234,6 +17044,7 @@ begin
     proxy.Free;
   end;
 end;
+
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);

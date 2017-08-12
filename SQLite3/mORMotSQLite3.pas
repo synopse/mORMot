@@ -205,7 +205,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.17.0
+    - updated SQLite3 engine to latest version 3.19.2
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -464,6 +464,7 @@ type
     function BackupGZ(const DestFileName: TFileName;
       CompressionLevel: integer=2): boolean; deprecated;
     {$endif}
+
     /// restore a database content on the fly
     // - database is closed, source DB file is replaced by the supplied content,
     //   then reopened
@@ -1093,7 +1094,7 @@ function TSQLRestServerDB.MainEngineDeleteWhere(TableModelIndex: Integer;
 var i: integer;
     aSQLWhere: RawUTF8;
 begin
-  if (TableModelIndex<0) or (SQLWhere='') or (IDs=nil) then
+  if (TableModelIndex<0) or (IDs=nil) then
     result := false else begin
     // notify BEFORE deletion
     for i := 0 to high(IDs) do
@@ -1104,8 +1105,8 @@ begin
       // see http://www.sqlite.org/compile.html#enable_update_delete_limit
       aSQLWhere := Int64DynArrayToCSV(TInt64DynArray(IDs),length(IDs),'RowID IN (',')') else
       aSQLWhere := SQLWhere;
-    result := ExecuteFmt('DELETE FROM % WHERE %',
-      [fModel.TableProps[TableModelIndex].Props.SQLTableName,aSQLWhere]);
+    result := ExecuteFmt('DELETE FROM %%',
+      [fModel.TableProps[TableModelIndex].Props.SQLTableName,SQLFromWhere(aSQLWhere)]);
   end;
 end;
 
@@ -1331,9 +1332,8 @@ begin
         finally
           MS.Free;
         end;
-        GetAndPrepareStatementRelease(nil,
-          FormatUTF8('returned % row% as % byte%',[RowCount,
-            PLURAL_FORM[RowCount>1],length(result),PLURAL_FORM[length(result)>1]]));
+        GetAndPrepareStatementRelease(nil, FormatUTF8('returned % as %',
+          [Plural('row',RowCount),Plural('byte',length(result))]));
       except
         on E: ESQLite3Exception do
           GetAndPrepareStatementRelease(E);
@@ -1557,7 +1557,7 @@ begin
           [Props.SQLTableName,SetFieldName,SetValue,ID[0]]) else
         result := ExecuteFmt('UPDATE % SET %=:(%):,%=:(%): WHERE RowID=:(%):',
           [Props.SQLTableName,SetFieldName,SetValue,
-           Props.RecordVersionField,RecordVersionCompute,ID[0]]) else begin
+           Props.RecordVersionField.Name,RecordVersionCompute,ID[0]]) else begin
       IDs := Int64DynArrayToCSV(TInt64DynArray(ID),length(ID));
       if Props.RecordVersionField=nil then
         result := ExecuteFmt('UPDATE % SET %=% WHERE RowID IN (%)',
@@ -1565,7 +1565,7 @@ begin
         RecordVersion := RecordVersionCompute;
         result := ExecuteFmt('UPDATE % SET %=%,%=% WHERE RowID IN (%)',
           [Props.SQLTableName,SetFieldName,SetValue,
-           Props.RecordVersionField,RecordVersion,IDs]);
+           Props.RecordVersionField.Name,RecordVersion,IDs]);
       end;
     end;
     if not result then
@@ -1683,7 +1683,7 @@ begin
     try
       Closed := DB.DBClose=SQLITE_OK;
       // compress the database content file
-      Source := TFileStream.Create(DB.FileName,fmOpenRead or fmShareDenyNone);
+      Source := FileStreamSequentialRead(DB.FileName);
       try
         Dest.CopyFrom(Source,0);  // Count=0 for whole stream copy
         result := true;
@@ -1921,12 +1921,12 @@ var ndx,f,r,prop,fieldCount,valuesCount,
     Decode: TJSONObjectDecoder;
     tmp: TSynTempBuffer;
 begin
+  if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
+    exit; // nothing to add
   if fBatchMethod<>mPOST then
     raise EORMException.CreateUTF8('%.InternalBatchStop: BatchMethod=%',
       [self,ToText(fBatchMethod)^]);
   try
-    if (fBatchValuesCount=0) or (fBatchTableIndex<0) then
-      exit; // nothing to add
     if fBatchValuesCount<>fBatchIDCount then
       raise EORMException.CreateUTF8('%.InternalBatchStop(*Count?)',[self]);
     UpdateEventNeeded := InternalUpdateEventNeeded(fBatchTableIndex);
@@ -2148,9 +2148,7 @@ procedure TSQLRestClientDB.InternalURI(var call: TSQLRestURIParams);
 begin
   if fInternalHeader='' then
     fInternalHeader := 'RemoteIP: 127.0.0.1'#13#10'ConnectionID: '+PointerToHex(self);
-  if call.InHead<>'' then
-    call.InHead := call.InHead+#13#10+fInternalHeader else
-    call.InHead := fInternalHeader;
+  AddToCSV(fInternalHeader,call.InHead,#13#10);
   call.RestAccessRights := @FULL_ACCESS_RIGHTS;
   fServer.URI(call);
   if (call.OutInternalState=0) and (fServer.DB.InternalState<>nil) then
