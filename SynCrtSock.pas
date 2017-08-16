@@ -227,6 +227,7 @@ uses
   {$ifdef USEWININET}
   WinInet,
   {$endif}
+  SynCommons,
 {$else MSWINDOWS}
   {$undef USEWININET}
   {$ifdef FPC}
@@ -8090,6 +8091,7 @@ const
   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0;
   WINHTTP_ACCESS_TYPE_NO_PROXY = 1;
   WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
+  WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4;
   WINHTTP_FLAG_REFRESH = $00000100;
   WINHTTP_FLAG_SECURE = $00800000;
   WINHTTP_ADDREQ_FLAG_COALESCE = $40000000;
@@ -8251,8 +8253,11 @@ var OpenType: integer;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
 begin
   if fProxyName='' then
-    // add https://msdn.microsoft.com/en-us/library/windows/desktop/aa384122 ?
-    OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
+    if (OSVersionInfo.dwMajorVersion >=6) and (OSVersionInfo.dwMinorVersion >=3) then
+      OpenType := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY      // Windows 8.1 and newer. Use WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY
+    else
+      OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY   // add https://msdn.microsoft.com/en-us/library/windows/desktop/aa384122 ?
+  else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
   fSession := WinHttpOpen(pointer(Ansi7ToUnicode(fUserAgent)), OpenType,
     pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
