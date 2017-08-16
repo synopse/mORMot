@@ -996,6 +996,7 @@ type
   // - Output is TSynNameValue (fForeignKeys) for cGetForeignKeys
   // - Output is TRawUTF8DynArray for cGetTableNames
   // - Output is RawByteString result data for cExecuteToBinary
+  // - Output is UpdateCount: integer text for cExecute
   // - Output is RawUTF8 result data for cExecuteToJSON and cExecuteToExpandedJSON
   // - calls could be declared as such:
   // ! Process(cGetToken,?,result: Int64);
@@ -1010,7 +1011,7 @@ type
   // ! Process(cGetIndexes,aTableName: RawUTF8,Indexes: TSQLDBIndexDefineDynArray);
   // ! Process(cGetTableNames,?,Tables: TRawUTF8DynArray);
   // ! Process(cGetForeignKeys,?,fForeignKeys: TSynNameValue);
-  // ! Process(cExecute,Request: TSQLDBProxyConnectionCommandExecute,?);
+  // ! Process(cExecute,Request: TSQLDBProxyConnectionCommandExecute,UpdateCount: integer);
   // ! Process(cExecuteToBinary,Request: TSQLDBProxyConnectionCommandExecute,Data: RawByteString);
   // ! Process(cExecuteToJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
   // ! Process(cExecuteToExpandedJSON,Request: TSQLDBProxyConnectionCommandExecute,JSON: RawUTF8);
@@ -1401,8 +1402,8 @@ type
     // - can be used to launch INSERT, DELETE or UPDATE statement, e.g.
     // - will call NewThreadSafeStatement method to retrieve a thread-safe
     // statement instance, then run the corresponding Execute() method
-    // - return the number of modified rows (or 0 if the DB driver do not
-    // give access to this value)
+    // - return the number of modified rows, i.e. the ISQLDBStatement.UpdateCount
+    // value (or 0 if the DB driver does not supply this value)
     function ExecuteNoResult(const aSQL: RawUTF8; const Params: array of const): integer;
     /// create, prepare, bound inlined parameters and execute a thread-safe statement
     // - this implementation will call the NewThreadSafeStatement virtual method,
@@ -2849,6 +2850,7 @@ type
   TSQLDBProxyStatement = class(TSQLDBProxyStatementAbstract)
   protected
     fDataInternalCopy: RawByteString;
+    fUpdateCount: integer;
     procedure ParamsToCommand(var Input: TSQLDBProxyConnectionCommandExecute);
   public
     /// Execute a SQL statement
@@ -2883,6 +2885,10 @@ type
     // e.g. in TSQLDBProxyStatementRandomAccess.Create
     function FetchAllToBinary(Dest: TStream; MaxRowCount: cardinal=0;
       DataRowPosition: PCardinalDynArray=nil): cardinal; override;
+    /// gets a number of updates made by latest executed statement
+    // - this overriden method will return the integer value returned by
+    // cExecute command 
+    function UpdateCount: integer; override;
 
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
@@ -3441,6 +3447,12 @@ function ToText(Field: TSQLDBFieldType): PShortString; overload;
 // type enumeration
 function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
 
+{$ifdef WITH_PROXY}
+/// retrieve the ready-to-be displayed text of proxy commands implemented by
+// TSQLDBProxyConnectionProperties.Process()
+function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; overload;
+{$endif}
+
 
 implementation
 
@@ -3453,6 +3465,13 @@ function ToText(Field: TSQLDBFieldType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TSQLDBFieldType),ord(Field));
 end;
+
+{$ifdef WITH_PROXY}
+function ToText(cmd: TSQLDBProxyConnectionCommand): PShortString; 
+begin
+  result := GetEnumName(TypeInfo(TSQLDBProxyConnectionCommand),ord(cmd));
+end;
+{$endif}
 
 function TSQLDBFieldTypeToString(aType: TSQLDBFieldType): string;
 var PS: PShortString;
@@ -4588,8 +4607,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
           ftUTF8:     Stmt.BindTextU(i,VData,VInOut);
           ftBlob:     Stmt.BindBlob(i,VData,VInOut);
           else raise ESQLDBRemote.CreateUTF8(
-            'Invalid VType=% parameter #% in %.ProcessExec(cExecute)',
-            [ord(VType),i,self]);
+            'Invalid VType=% parameter #% in %.ProcessExec(%)',
+            [ord(VType),i,self,ToText(header.Command)^]);
         end else
         Stmt.BindArray(i,VType,VArray,InputExecute.ArrayCount);
       Stmt.ExecutePrepared;
@@ -4609,7 +4628,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
         finally
           Data.Free;
         end;
-      end;
+      end else
+        msgOutput := msgOutput+ToUTF8(Stmt.UpdateCount);
     end;
     cQuit: begin
       if header.SessionID=Protocol.fTransactionSessionID then
@@ -8138,8 +8158,8 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
   cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
     msgInput := msgInput+
       RecordSave(InputExecute,TypeInfo(TSQLDBProxyConnectionCommandExecute));
-  else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() input command %',
-        [self,ord(Command)]);
+  else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() input command % (%)',
+        [self,ToText(Command)^,ord(Command)]);
   end;
   ProcessMessage(fProtocol.HandleOutput(msgInput),msgRaw);
   msgOutput := fProtocol.HandleInput(msgRaw);
@@ -8153,7 +8173,7 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
     OutputInt64 := PInt64(O)^;
   cGetDBMS:
     OutputSQLDBDefinition := TSQLDBDefinition(O^);
-  cConnect, cDisconnect, cCommit, cRollback, cExecute, cQuit:
+  cConnect, cDisconnect, cCommit, cRollback, cQuit:
     ; // no output parameters here
   cTryStartTransaction:
     OutputBoolean := boolean(O^);
@@ -8165,14 +8185,13 @@ begin // use our optimized RecordLoadSave/DynArrayLoadSave binary serialization
     DynArrayLoad(OutputRawUTF8DynArray,O,TypeInfo(TRawUTF8DynArray));
   cGetForeignKeys:
     OutputSynNameValue.SetBlobDataPtr(O);
-  cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
+  cExecute, cExecuteToBinary, cExecuteToJSON, cExecuteToExpandedJSON:
     SetString(OutputRawUTF8,O,length(msgOutput)-sizeof(header));
   cExceptionRaised: // msgOutput is ExceptionClassName+#0+ExceptionMessage
     raise ESQLDBRemote.CreateUTF8('%.Process(%): server raised % with ''%''',
-      [self,GetEnumName(TypeInfo(TSQLDBProxyConnectionCommand),Ord(Command))^,
-       O,O+StrLen(O)+1]);
-  else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() output command %',
-        [self,ord(outheader.Command)]);
+      [self,ToText(Command)^,O,O+StrLen(O)+1]);
+  else raise ESQLDBRemote.CreateUTF8('Unknown %.Process() output command % (%)',
+        [self,ToText(outheader.Command)^,ord(outheader.Command)]);
   end;
   result := outHeader.SessionID;
 end;
@@ -8563,9 +8582,16 @@ begin
   ParamsToCommand(Input);
   TSQLDBProxyConnectionPropertiesAbstract(fConnection.fProperties).Process(
     CMD[fExpectResults],Input,fDataInternalCopy);
-  // retrieve columns information from TSQLDBStatement.FetchAllToBinary() format
   if fExpectResults then
-    IntHeaderProcess(pointer(fDataInternalCopy),Length(fDataInternalCopy));
+    // retrieve columns information from TSQLDBStatement.FetchAllToBinary() format
+    IntHeaderProcess(pointer(fDataInternalCopy),Length(fDataInternalCopy)) else
+    // retrieve UpdateCount value for plain cExecute command
+    fUpdateCount := GetInteger(pointer(fDataInternalCopy));
+end;
+
+function TSQLDBProxyStatement.UpdateCount: integer;
+begin
+  result := fUpdateCount;
 end;
 
 procedure TSQLDBProxyStatement.ExecutePreparedAndFetchAllAsJSON(Expanded: boolean;

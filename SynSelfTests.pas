@@ -12671,10 +12671,10 @@ procedure DoInsert;
 var i: integer;
 begin
   for i := 0 to high(IDs) do
-    proxy.ExecuteNoResult(
+    Check(proxy.ExecuteNoResult(
       'INSERT INTO People (ID,FirstName,LastName,YearOfBirth,YearOfDeath) '+
       'VALUES (?,?,?,?,?)',
-      [IDs[i],'FirstName New '+Int32ToUtf8(i),'New Last',i+1400,1519]);
+      [IDs[i],'FirstName New '+Int32ToUtf8(i),'New Last',i+1400,1519])=1);
 end;
 function DoCount: integer;
 var res: ISQLDBRows;
