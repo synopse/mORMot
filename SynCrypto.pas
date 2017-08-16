@@ -1490,6 +1490,11 @@ type
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA1Digest; NoInit: boolean=false);
+    /// computes the HMAC of the supplied message according to the key
+    // - expects a previous call on Init() to setup the shared key
+    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
+    // - this method is thread-safe on any shared THMAC_SHA1 instance
+    procedure Compute(msg: pointer; msglen: integer; out result: TSHA1Digest);
   end;
   /// points to a HMAC message authentication context using SHA-1
   PHMAC_SHA1 = ^THMAC_SHA1;
@@ -1528,6 +1533,11 @@ type
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA512Digest; NoInit: boolean=false);
+    /// computes the HMAC of the supplied message according to the key
+    // - expects a previous call on Init() to setup the shared key
+    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
+    // - this method is thread-safe on any shared THMAC_SHA512 instance
+    procedure Compute(msg: pointer; msglen: integer; out result: TSHA512Digest);
   end;
   /// points to a HMAC message authentication context using SHA-512
   PHMAC_SHA512 = ^THMAC_SHA512;
@@ -1597,6 +1607,11 @@ type
     procedure Update(const msg: RawByteString); overload;
     /// computes the HMAC of all supplied message according to the key
     procedure Done(out result: TSHA256Digest; NoInit: boolean=false);
+    /// computes the HMAC of the supplied message according to the key
+    // - expects a previous call on Init() to setup the shared key
+    // - similar to a single Update(msg,msglen) followed by Done, but re-usable
+    // - this method is thread-safe on any shared THMAC_SHA256 instance
+    procedure Compute(msg: pointer; msglen: integer; out result: TSHA256Digest);
   end;
   /// points to a HMAC message authentication context using SHA-256
   PHMAC_SHA256 = ^THMAC_SHA256;
@@ -1687,6 +1702,7 @@ type
     function Done(NoInit: boolean=false): cardinal;
       {$ifdef HASINLINE}inline;{$endif}
     /// computes the HMAC of the supplied message according to the key
+    // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
     // - this method is thread-safe
     function Compute(msg: pointer; msglen: integer): cardinal;
@@ -2836,6 +2852,14 @@ begin
   FillZero(step7data);
 end;
 
+procedure THMAC_SHA1.Compute(msg: pointer; msglen: integer; out result: TSHA1Digest);
+var temp: THMAC_SHA1;
+begin
+  temp := self; // thread-safe copy
+  temp.Update(msg,msglen);
+  temp.Done(result);
+end;
+
 procedure HMAC_SHA1(key,msg: pointer; keylen,msglen: integer; out result: TSHA1Digest);
 var mac: THMAC_SHA1;
 begin
@@ -2926,6 +2950,14 @@ begin
   sha.Final(result,NoInit);
   if not NoInit then
     FillZero(step7data);
+end;
+
+procedure THMAC_SHA256.Compute(msg: pointer; msglen: integer; out result: TSHA256Digest);
+var temp: THMAC_SHA256;
+begin
+  temp := self; // thread-safe copy
+  temp.Update(msg,msglen);
+  temp.Done(result);
 end;
 
 procedure HMAC_SHA256(key,msg: pointer; keylen,msglen: integer; out result: TSHA256Digest);
@@ -3056,6 +3088,14 @@ begin
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
   FillCharFast(step7data,sizeof(step7data),0);
+end;
+
+procedure THMAC_SHA512.Compute(msg: pointer; msglen: integer; out result: TSHA512Digest);
+var temp: THMAC_SHA512;
+begin
+  temp := self; // thread-safe copy
+  temp.Update(msg,msglen);
+  temp.Done(result);
 end;
 
 procedure HMAC_SHA512(key,msg: pointer; keylen,msglen: integer; out result: TSHA512Digest);
