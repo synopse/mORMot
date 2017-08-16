@@ -30,6 +30,7 @@ unit SynCrtSock;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
+  - Cybexr
   - EMartin
   - Eric Grange
   - EvaF
@@ -8090,6 +8091,7 @@ const
   WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0;
   WINHTTP_ACCESS_TYPE_NO_PROXY = 1;
   WINHTTP_ACCESS_TYPE_NAMED_PROXY = 3;
+  WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY = 4; // Windows 8.1 and newer
   WINHTTP_FLAG_REFRESH = $00000100;
   WINHTTP_FLAG_SECURE = $00800000;
   WINHTTP_ADDREQ_FLAG_COALESCE = $40000000;
@@ -8245,14 +8247,42 @@ begin
     [dwInternetStatus, pdword(lpvStatusInformation)^]);
 end;
 
+{$ifndef UNICODE}
+type
+  /// not defined in older Delphi versions
+  TOSVersionInfoEx = record
+    dwOSVersionInfoSize: DWORD;
+    dwMajorVersion: DWORD;
+    dwMinorVersion: DWORD;
+    dwBuildNumber: DWORD;
+    dwPlatformId: DWORD;
+    szCSDVersion: array[0..127] of char;
+    wServicePackMajor: WORD;
+    wServicePackMinor: WORD;
+    wSuiteMask: WORD;
+    wProductType: BYTE;
+    wReserved: BYTE;
+  end;
+function GetVersionEx(var lpVersionInformation: TOSVersionInfoEx): BOOL; stdcall;
+  external kernel32 name 'GetVersionExA';
+{$endif}
+
+var // raw OS call, to avoid dependency to SynCommons.pas unit 
+  OSVersionInfo: TOSVersionInfoEx;
+
 procedure TWinHTTP.InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD);
 var OpenType: integer;
     Callback: WINHTTP_STATUS_CALLBACK;
     CallbackRes: PtrInt absolute Callback; // for FPC compatibility
 begin
+  if OSVersionInfo.dwOSVersionInfoSize=0 then begin // API call once
+    OSVersionInfo.dwOSVersionInfoSize := sizeof(OSVersionInfo);
+    GetVersionEx(OSVersionInfo);
+  end;
   if fProxyName='' then
-    // add https://msdn.microsoft.com/en-us/library/windows/desktop/aa384122 ?
-    OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
+    if (OSVersionInfo.dwMajorVersion>=6) and (OSVersionInfo.dwMinorVersion>=3) then
+      OpenType := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY else // Windows 8.1 and newer
+      OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
   fSession := WinHttpOpen(pointer(Ansi7ToUnicode(fUserAgent)), OpenType,
     pointer(Ansi7ToUnicode(fProxyName)), pointer(Ansi7ToUnicode(fProxyByPass)), 0);
