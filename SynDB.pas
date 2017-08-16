@@ -2697,8 +2697,12 @@ type
     Params: TSQLDBParamDynArray;
     /// if input parameters expected BindArray() process
     ArrayCount: integer;
-    /// match ForceBlobAsNull and ForceDateWithMS properties
-    Force: set of (fBlobAsNull, fDateWithMS);
+    /// how server side would handle statement execution
+    // - fBlobAsNull and fDateWithMS do match ForceBlobAsNull and ForceDateWithMS
+    // ISQLDBStatement properties
+    // - fNoUpdateCount avoids to call ISQLDBStatement.UpdateCount method, e.g.
+    // for performance reasons
+    Force: set of (fBlobAsNull, fDateWithMS, fNoUpdateCount);
   end;
 
   /// implements a proxy-like virtual connection statement to a DB engine
@@ -2851,6 +2855,7 @@ type
   protected
     fDataInternalCopy: RawByteString;
     fUpdateCount: integer;
+    fForceNoUpdateCount: boolean;
     procedure ParamsToCommand(var Input: TSQLDBProxyConnectionCommandExecute);
   public
     /// Execute a SQL statement
@@ -2889,6 +2894,9 @@ type
     // - this overriden method will return the integer value returned by
     // cExecute command 
     function UpdateCount: integer; override;
+    /// force no UpdateCount method call on server side
+    // - may be needed to reduce server load, if this information is not needed
+    property ForceNoUpdateCount: boolean read fForceNoUpdateCount write fForceNoUpdateCount;
 
     /// after a statement has been prepared via Prepare() + ExecutePrepared() or
     //   Execute(), this method must be called one or more times to evaluate it
@@ -4629,7 +4637,8 @@ begin // follow TSQLDBRemoteConnectionPropertiesAbstract.Process binary layout
           Data.Free;
         end;
       end else
-        msgOutput := msgOutput+ToUTF8(Stmt.UpdateCount);
+        if not (fNoUpdateCount in InputExecute.Force) then
+          msgOutput := msgOutput+ToUTF8(Stmt.UpdateCount);
     end;
     cQuit: begin
       if header.SessionID=Protocol.fTransactionSessionID then
@@ -8570,6 +8579,8 @@ begin
     Input.Force := [];
   if fForceDateWithMS then
     include(Input.Force,fDateWithMS);
+  if fForceNoUpdateCount then
+    include(Input.Force,fNoUpdateCount);
 end;
 
 procedure TSQLDBProxyStatement.ExecutePrepared;
