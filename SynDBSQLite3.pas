@@ -226,6 +226,7 @@ type
     fBindShouldStoreValue: boolean;
     fBindValues: TRawUTF8DynArray;
     fBindIsString: TByteDynArray;
+    fUpdateCount: integer;
     // retrieve the inlined value of a given parameter, e.g. 1 or 'name'
     function GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8; override;
   public
@@ -293,6 +294,8 @@ type
     // - parameters marked as ? should have been already bound with Bind*() functions
     // - raise an ESQLDBException on any error
     procedure ExecutePrepared; override;
+    /// gets a number of updates made by latest executed statement
+    function UpdateCount: integer; override;
 
     /// After a statement has been prepared via Prepare() + ExecutePrepared() or
     // Execute(), this method must be called one or more times to evaluate it
@@ -700,6 +703,7 @@ end;
 procedure TSQLDBSQLite3Statement.ExecutePrepared;
 var SQLToBeLogged: RawUTF8;
     Timer: TPrecisionTimer;
+    DB: TSQLDataBase;
 begin
   inherited ExecutePrepared; // set fConnection.fLastAccessTicks
   if fBindShouldStoreValue then begin
@@ -710,26 +714,30 @@ begin
       SQLToBeLogged[512] := '.';
     end;
   end;
+  DB := TSQLDBSQLite3Connection(Connection).DB;
   if fExpectResults then
-    SynDBLog.Add.Log(sllSQL,'% %',[TSQLDBSQLite3Connection(Connection).DB.
-      FileNameWithoutPath,SQLToBeLogged],self) else
+    SynDBLog.Add.Log(sllSQL,'% %',[DB.FileNameWithoutPath,SQLToBeLogged],self) else
   try  // INSERT/UPDATE/DELETE (i.e. not SELECT) -> try to execute directly now
     if fBindShouldStoreValue then
       Timer.Start;
     repeat // Execute all steps of the first statement
     until fStatement.Step<>SQLITE_ROW;
     if fBindShouldStoreValue then
-      SynDBLog.Add.Log(sllSQL,'% % %',[Timer.Stop,TSQLDBSQLite3Connection(Connection).
-        DB.FileNameWithoutPath,SQLToBeLogged],self);
+      SynDBLog.Add.Log(sllSQL,'% % %',[Timer.Stop,DB.FileNameWithoutPath,SQLToBeLogged],self);
+    fUpdateCount := DB.LastChangeCount;
   except
     on E: Exception do begin
       if fBindShouldStoreValue then
-        SynDBLog.Add.Log(sllSQL,'Error % on % for "%" as "%"',[E,
-          TSQLDBSQLite3Connection(Connection).DB.FileNameWithoutPath,SQL,
-          SQLWithInlinedParams],self);
+        SynDBLog.Add.Log(sllSQL,'Error % on % for "%" as "%"',
+          [E,DB.FileNameWithoutPath,SQL,SQLWithInlinedParams],self);
       raise;
     end;
   end;
+end;
+
+function TSQLDBSQLite3Statement.UpdateCount: integer;
+begin
+  result := fUpdateCount;
 end;
 
 function TSQLDBSQLite3Statement.GetParamValueAsText(Param: integer; MaxCharCount: integer=4096): RawUTF8;
@@ -768,6 +776,7 @@ procedure TSQLDBSQLite3Statement.Reset;
 begin
   inherited Reset;
   fStatement.Reset;
+  fUpdateCount := 0;
   // fStatement.BindReset; // slow down the process, and is not mandatory
 end;
 
