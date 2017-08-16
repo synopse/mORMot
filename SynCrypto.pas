@@ -358,6 +358,8 @@ type
   {$ifdef USEPADLOCK}
   // - this class will use VIA PadLock instructions, if available
   {$endif}
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance, if needed
   TAES = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
@@ -1120,6 +1122,8 @@ type
 
   PSHA1 = ^TSHA1;
   /// handle SHA-1 hashing
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA1
   TSHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize div 4] of cardinal;
@@ -1146,6 +1150,8 @@ type
 
   PSHA256 = ^TSHA256;
   /// handle SHA-256 hashing
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA256
   TSHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHAContextSize] of byte;
@@ -1180,6 +1186,8 @@ type
   // - under x86/Delphi, plain pascal is 40MB/s, SSE3 asm 180MB/s
   // - on x64, pascal Delphi is 150MB/s, and FPC is 190MB/s (thanks to native
   // RorQWord intrinsic compiler function)
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance, e.g. for THMAC_SHA512
   TSHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Hash: TSHA512Hash;
@@ -1214,6 +1222,8 @@ type
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
   // since it already includes proper padding, so keys could be concatenated
   // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance, e.g. after InitCypher
   TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..SHA3ContextSize] of byte;
@@ -1321,6 +1331,8 @@ type
   TMD5Buf = TBlock128;
 
   /// handle MD5 hashing
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance
   TMD5 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     in_: TMD5In;
@@ -1351,6 +1363,8 @@ type
   TRC4InternalKey = array[byte] of byte;
 
   /// handle RC4 encryption/decryption
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance
   TRC4 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     key: TRC4InternalKey;
@@ -1384,6 +1398,7 @@ type
     SomeSalt,
     /// CRC from header
     HeaderCheck: cardinal;
+    /// computes the Key checksum, using Adler32 algorithm
     function Calc(const Key; KeySize: cardinal): cardinal;
   end;
 {$A+}
@@ -1475,6 +1490,8 @@ function SHA512(const s: RawByteString): RawUTF8;
 type
   /// compute the HMAC message authentication code using SHA-1 as hash function
   // - you may use HMAC_SHA1() overloaded functions for one-step process
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA1 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     step7data: TByte64;
@@ -1518,6 +1535,8 @@ procedure PBKDF2_HMAC_SHA1(const password,salt: RawByteString; count: Integer;
 type
   /// compute the HMAC message authentication code using SHA-512 as hash function
   // - you may use HMAC_SHA512() overloaded functions for one-step process
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA512 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     step7data: array[0..31] of cardinal;
@@ -1570,7 +1589,7 @@ function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
 // - result is returned in TSHA256Digest binary format
 // - since the result would be stored temporarly in the stack, it may be
 // safer to use an explicit TSHA256Digest variable, which would be filled
-// with zeros by a ... finally FillZero( 
+// with zeros by a ... finally FillZero(
 function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
@@ -1583,6 +1602,8 @@ procedure SHA256Weak(const s: RawByteString; out Digest: TSHA256Digest);
 type
   /// compute the HMAC message authentication code using SHA-256 as hash function
   // - you may use HMAC_SHA256() overloaded functions for one-step process
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance via Compute(), e.g. for fast PBKDF2
   THMAC_SHA256 = {$ifndef UNICODE}object{$else}record{$endif}
   private
     step7data: TByte64;
@@ -1679,6 +1700,8 @@ type
   // safe enough MAC, if the supplied key comes e.g. from cryptographic HMAC_SHA256
   // - SSE 4.2 will let MAC be computed at 4 GB/s on a Core i7
   // - you may use HMAC_CRC32C() overloaded functions for one-step process
+  // - we defined a record instead of a class, to allow stack allocation and
+  // thread-safe reuse of one initialized instance via Compute()
   THMAC_CRC32C = {$ifndef UNICODE}object{$else}record{$endif}
   private
     seed: cardinal;
@@ -2136,8 +2159,8 @@ type
   /// abstract parent class for implementing JSON Web Tokens
   // - to represent claims securely between two parties, as defined in industry
   // standard @http://tools.ietf.org/html/rfc7519
-  // - you should never use this abstract class directly, but e.g. TJWTHS256
-  // or TJWTES256 (as defined in SynEcc.pas) inherited classes
+  // - you should never use this abstract class directly, but e.g. TJWTHS256,
+  // TJWTHS512 or TJWTES256 (as defined in SynEcc.pas) inherited classes
   // - for security reasons, one inherited class is implementing a single
   // algorithm, as is very likely to be the case on production: you pickup one
   // "alg", then you stick to it; if your server needs more than one algorithm
@@ -2313,6 +2336,40 @@ type
     // - caller should call FillZero(aHMACSecret) as soon as it consummed it
     procedure ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
       out aHMACSecret: THash256);
+  end;
+
+  /// implements JSON Web Tokens using 'HS512' (HMAC SHA-512) algorithm
+  // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
+  // - our HMAC SHA-512 implementation used is thread safe, and very fast
+  // even on x86 (if the CPU supports SSE3 opcodes)
+  TJWTHS512 = class(TJWTAbstract)
+  protected
+    fHmacPrepared: THMAC_SHA512;
+    function ComputeSignature(const payload64: RawUTF8): RawUTF8; override;
+    procedure CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
+      const signature: RawByteString); override;
+  public
+    /// initialize the JWT processing using 'HS512' (HMAC SHA-512) algorithm
+    // - the supplied set of claims are expected to be defined in the JWT payload
+    // - the supplied secret text will be used to compute HMAC authentication,
+    // directly if aSecretPBKDF2Rounds=0, or via PBKDF2_HMAC_SHA512 if some
+    // number of rounds are specified
+    // - aAudience are the allowed values for the jrcAudience claim
+    // - aExpirationMinutes is the deprecation time for the jrcExpirationTime claim
+    // - aIDIdentifier and aIDObfuscationKey are passed to a
+    // TSynUniqueIdentifierGenerator instance used for jrcJwtID claim
+    constructor Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+      aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
+      aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8=''); reintroduce;
+    /// finalize the instance
+    destructor Destroy; override;
+    /// low-level helper to re-compute the internal HMAC shared secret
+    // - by definition, expects aSecretPBKDF2Rounds>0 (otherwise aSecret is
+    // expected to be passed directly to the HMAC function)
+    // - may be used to provide any non Delphi client with the expected secret
+    // - caller should call FillZero(aHMACSecret) as soon as it consummed it
+    procedure ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+      out aHMACSecret: THash512);
   end;
 
 const
@@ -12028,6 +12085,63 @@ begin
 end;
 
 destructor TJWTHS256.Destroy;
+begin
+  inherited Destroy;
+  FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret on heap
+end;
+
+{ TJWTHS512 }
+
+constructor TJWTHS512.Create(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+  aClaims: TJWTClaims; const aAudience: array of RawUTF8;
+  aExpirationMinutes: integer; aIDIdentifier: TSynUniqueIdentifierProcess;
+  aIDObfuscationKey: RawUTF8);
+var secret: THash512;
+begin
+  inherited Create('HS512',aClaims,aAudience,aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
+  if (aSecret<>'') and (aSecretPBKDF2Rounds>0) then begin
+    ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,secret);
+    fHmacPrepared.Init(@secret,sizeof(secret));
+    FillZero(secret);
+  end else
+    fHmacPrepared.Init(pointer(aSecret),length(aSecret));
+  fHmacPrepared.Update(pointer(fHeaderB64),length(fHeaderB64));
+end;
+
+procedure TJWTHS512.ComputeHMACSecret(const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+  out aHMACSecret: THash512);
+begin
+  if (self<>nil) and (aSecret<>'') and (aSecretPBKDF2Rounds>0) then
+    PBKDF2_HMAC_SHA512(aSecret,fHeaderB64,aSecretPBKDF2Rounds,aHMACSecret) else
+    FillZero(aHMACSecret);
+end;
+
+function TJWTHS512.ComputeSignature(const payload64: RawUTF8): RawUTF8;
+var hmac: THMAC_SHA512;
+    res: TSHA512Digest;
+begin
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
+  hmac.Update(pointer(payload64),length(payload64));
+  hmac.Done(res);
+  result := BinToBase64URI(@res,sizeof(res));
+end;
+
+procedure TJWTHS512.CheckSignature(var JWT: TJWTContent; const payload64: RawUTF8;
+  const signature: RawByteString);
+var hmac: THMAC_SHA512;
+    res: TSHA512Digest;
+begin
+  JWT.result := jwtInvalidSignature;
+  if length(signature)<>sizeof(res) then
+    exit;
+  hmac := fHmacPrepared; // thread-safe re-use of prepared HMAC(header+'.')
+  hmac.Update(pointer(payload64),length(payload64));
+  hmac.Done(res);
+  if IsEqual(res,PSHA512Digest(signature)^) then
+    JWT.result := jwtValid;
+end;
+
+destructor TJWTHS512.Destroy;
 begin
   inherited Destroy;
   FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret on heap

@@ -16428,7 +16428,9 @@ Similar guidelines as for @143@ do apply with {\i CrossKylix}. In particular, yo
 We did not succeed to have a static {\i SQLite3} library linked by the {\i Kylix} compiler. It compiles about the {\f1\fs20 .o} format - sounds like if its linker expects a {\f1\fs20 gcc2} format (which is nowadays deprecated), and does not accept the {\f1\fs20 gcc3} or {\f1\fs20 gcc4} generated binaries. So you need to install the {\i sqlite3} as external library on your {\i Linux}.
 On a 32-bit system, it is just a one line - depending on your distribution, here {\i Ubuntu}:
 $ sudo apt-get install sqlite3
-For a 64-bit system, you need to download and install manually packages for both modes:
+For a 64-bit system, you need to explicitly install the x86 32-bit version of {\i SQlite3}:
+$ sudo apt-get install sqlite3:i386
+or download and install manually packages for both modes:
 $ sudo dpkg -i libsqlite3-0_3.8.2-1ubuntu2_amd64.deb libsqlite3-0_3.8.2-1ubuntu2_i386.deb
 You could try to get the latest {\f1\fs20 .deb} from @https://launchpad.net/ubuntu/vivid/i386/libsqlite3-0 \line If you want to dowwnload and install manually a {\f1\fs20 .deb} for {\f1\fs20 x86}, please install both {\i i386} and {\i amd64} revisions with the same exact version at once, otherwise {\f1\fs20 dpkg} will complain.
 If it may be of any help, here are the static dependencies listed on a running 64-bit Ubuntu system, on a {\i CrossKylix} compiled executable:
