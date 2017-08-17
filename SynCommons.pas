@@ -4051,7 +4051,7 @@ type
   //  minor differences in spelling
   // - this implementation is very fast and can be used e.g. to parse and search
   //  in a huge text buffer
-  // - This version also handles french and spanish pronunciations on request,
+  // - this version also handles french and spanish pronunciations on request,
   //  which differs from default Soundex, i.e. English
   TSynSoundEx = {$ifndef UNICODE}object{$else}record{$endif}
   private
@@ -4061,7 +4061,10 @@ type
     /// prepare for a Soundex search
     // - you can specify another language pronunciation than default english
     function Prepare(UpperValue: PAnsiChar;
-      Lang: TSynSoundExPronunciation=sndxEnglish): boolean;
+      Lang: TSynSoundExPronunciation=sndxEnglish): boolean; overload;
+    /// prepare for a custom Soundex search
+    // - you can specify any language pronunciation from raw TSoundExValues array
+    function Prepare(UpperValue: PAnsiChar; Lang: PSoundExValues): boolean; overload;
     /// return true if prepared value is contained in a text buffer
     // (UTF-8 encoded), by using the SoundEx comparison algorithm
     // - search prepared value at every word beginning in U^
@@ -4078,7 +4081,15 @@ type
 // - if next is defined, its value is set to the end of the encoded word
 // (so that you can call again this function to encode a full sentence)
 function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar=nil;
-  Lang: TSynSoundExPronunciation=sndxEnglish): cardinal;
+  Lang: TSynSoundExPronunciation=sndxEnglish): cardinal; overload;
+
+/// Retrieve the Soundex value of a text word, from Ansi buffer
+// - Return the soundex value as an easy to use cardinal value, 0 if the
+// incoming string contains no valid word
+// - if next is defined, its value is set to the end of the encoded word
+// (so that you can call again this function to encode a full sentence)
+function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar;
+  Lang: PSoundExValues): cardinal; overload;
 
 /// Retrieve the Soundex value of a text word, from UTF-8 buffer
 // - Return the soundex value as an easy to use cardinal value, 0 if the
@@ -4908,8 +4919,7 @@ type
     procedure Insert(Index: Integer; const Elem);
     /// delete the whole dynamic array content
     // - this method will recognize T*ObjArray types and free all instances
-    procedure Clear;
-      {$ifdef HASINLINE}inline;{$endif}
+    procedure Clear; {$ifdef HASINLINE}inline;{$endif}
     /// delete the whole dynamic array content, ignoring exceptions
     // - returns true if no exception occured when calling Clear, false otherwise
     // - you should better not call this method, which will catch and ignore
@@ -26384,9 +26394,9 @@ begin
   until U=nil;
 end;
 
-function TSynSoundEx.Prepare(UpperValue: PAnsiChar; Lang: TSynSoundExPronunciation): boolean;
+function TSynSoundEx.Prepare(UpperValue: PAnsiChar; Lang: PSoundExValues): boolean;
 begin
-  fValues := SOUNDEXVALUES[Lang];
+  fValues := Lang;
   Search := SoundExAnsi(UpperValue,nil,Lang);
   if Search=0 then
     result := false else begin
@@ -26395,13 +26405,18 @@ begin
   end;
 end;
 
+function TSynSoundEx.Prepare(UpperValue: PAnsiChar; Lang: TSynSoundExPronunciation): boolean;
+begin
+  result := Prepare(UpperValue,SOUNDEXVALUES[Lang]);
+end;
+
 function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar;
-  Lang: TSynSoundExPronunciation): cardinal;
+  Lang: PSoundExValues): cardinal;
 begin
   result := SoundExComputeFirstCharAnsi(A);
   if result<>0 then begin
     dec(result,ord('A')-1);   // first Soundex char is first char
-    SoundExComputeAnsi(A,result,SOUNDEXVALUES[Lang]);
+    SoundExComputeAnsi(A,result,Lang);
   end;
   if next<>nil then begin
     {$ifdef USENORMTOUPPER}
@@ -26411,6 +26426,12 @@ begin
     {$endif}
     next^ := A;
   end;
+end;
+
+function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar;
+  Lang: TSynSoundExPronunciation): cardinal;
+begin
+  result := SoundExAnsi(A,next,SOUNDEXVALUES[Lang]);
 end;
 
 function SoundExUTF8(U: PUTF8Char; next: PPUTF8Char;
@@ -60564,24 +60585,12 @@ begin
   result := Default;
 end;
 
-{$ifdef FPC}
-function BooleanNormalize(value: boolean): integer; inline;
-begin
-  if value then
-    result := 1 else
-    result := 0;
-end;
-{$endif}
-
-var
-  /// a temporary buffer, big enough for using the SoundEx algorithm
-  SoundExtTmp: array[byte] of AnsiChar;
-
 function CompareOperator(FieldType: TSynTableFieldType; SBF, SBFEnd: PUTF8Char;
   Value: PUTF8Char; ValueLen: integer; Oper: TCompareOperator;
   CaseSensitive: boolean): boolean; overload;
 var L, Cmp: PtrInt;
     PB: PByte;
+    tmp: array[byte] of AnsiChar;
 begin
   result := true;
   if SBF<>nil then
@@ -60650,17 +60659,17 @@ begin
       soSoundsLikeEnglish,
       soSoundsLikeFrench,
       soSoundsLikeSpanish: begin
-        if L>high(SoundExtTmp) then
-          cmp := high(SoundExtTmp) else
-          cmp := L;
-        SoundExtTmp[cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
-        MoveFast(SBF^,SoundExtTmp,cmp);
+        if L>high(tmp) then
+          Cmp := high(tmp) else
+          Cmp := L;
+        tmp[Cmp] := #0; // TSynSoundEx expect the buffer to be #0 terminated
+        MoveFast(SBF^,tmp,Cmp);
         case FieldType of
         tftWinAnsi:
-          if PSynSoundEx(Value)^.Ansi(SoundExtTmp) then
+          if PSynSoundEx(Value)^.Ansi(tmp) then
             exit;
         tftUTF8:
-          if PSynSoundEx(Value)^.UTF8(SoundExtTmp) then
+          if PSynSoundEx(Value)^.UTF8(tmp) then
             exit;
         else break;
         end;
