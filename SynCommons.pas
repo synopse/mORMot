@@ -20680,9 +20680,7 @@ begin
   case V.VType of
     vtInteger: value := V.VInteger;
     vtInt64:   value := V.VInt64^;
-    vtBoolean: if V.VBoolean then
-                 value := 1 else
-                 value := 0;
+    vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     {$ifndef NOVARIANTS}
     vtVariant: value := V.VVariant^;
     {$endif}
@@ -20699,9 +20697,7 @@ begin
   case V.VType of
     vtInteger: value := V.VInteger;
     vtInt64:   value := V.VInt64^;
-    vtBoolean: if V.VBoolean then
-                 value := 1 else
-                 value := 0;
+    vtBoolean: if V.VBoolean then value := 1 else value := 0; // normalize
     vtExtended: value := V.VExtended^;
     vtCurrency: value := V.VCurrency^;
     {$ifndef NOVARIANTS}
@@ -20760,8 +20756,9 @@ begin
     vtWideChar:
       RawUnicodeToUtf8(@V.VWideChar,1,tmpStr);
     vtBoolean: begin
-      Res.Temp[0] := AnsiChar(ord(V.VBoolean)+48);
-      Res.Text := @Res.Temp;
+      if V.VBoolean then // normalize
+        Res.Text := pointer(SmallUInt32UTF8[1]) else
+        Res.Text := pointer(SmallUInt32UTF8[0]);
       Res.Len := 1;
       result := 1;
       exit;
@@ -20864,7 +20861,7 @@ begin
     vtWideChar:
       RawUnicodeToUtf8(@VWideChar,1,result);
     vtBoolean:
-      if VBoolean then
+      if VBoolean then // normalize
         result := SmallUInt32UTF8[1] else
         result := SmallUInt32UTF8[0];
     vtInteger:
@@ -22863,7 +22860,7 @@ begin
   case VType of
   varNull,
   varEmpty:    Value := 0;
-  varBoolean:  Value := ord(VBoolean);
+  varBoolean:  if VBoolean then Value := 1 else Value := 0; // normalize
   varSmallint: Value := VSmallInt;
   {$ifndef DELPHI5OROLDER}
   varShortInt: Value := VShortInt;
@@ -22994,7 +22991,7 @@ begin
   case VType of
   varNull,
   varEmpty:    Value := 0;
-  varBoolean:  Value := ord(VBoolean);
+  varBoolean:  if VBoolean then Value := 1 else Value := 0; // normalize
   varSmallint: Value := VSmallInt;
   {$ifndef DELPHI5OROLDER}
   varShortInt: Value := VShortInt;
@@ -45682,7 +45679,13 @@ begin
         result := 1 else
         result := 0;
     varBoolean:
-      result := ord(A.VBoolean)-ord(B.VBoolean);
+      if A.VBoolean then // normalize
+        if B.VBoolean then
+          result := 0 else
+          result := 1 else
+        if B.VBoolean then
+          result := -1 else
+          result := 0;
     varOleStr{$ifdef HASVARUSTRING},varUString{$endif}:
       if caseInsensitive then
         result := AnsiICompW(A.VAny,B.VAny) else
@@ -49715,7 +49718,7 @@ begin
   varDouble:   AddDouble(VDouble);
   varDate:     AddDateTime(@VDate,'T','"');
   varCurrency: AddCurr64(VInt64);
-  varBoolean:  Add(VBoolean);
+  varBoolean:  Add(VBoolean); // 'true'/'false'
   varVariant:  AddVariant(PVariant(VPointer)^,Escape);
   varString: begin
     if Escape=twJSONEscape then
@@ -50986,7 +50989,7 @@ begin
       end;
       Add('"');
     end;
-    vtBoolean:  Add(VBoolean);
+    vtBoolean:  Add(VBoolean); // 'true'/'false'
     vtInteger:  Add(VInteger);
     vtInt64:    Add(VInt64^);
     vtExtended: Add(VExtended^,DOUBLE_PRECISION);
@@ -51003,7 +51006,7 @@ begin
   with V do
   case Vtype of
   vtInteger:      Add(VInteger);
-  vtBoolean:      AddU(byte(VBoolean));
+  vtBoolean:      if VBoolean then Add('1') else Add('0'); // normalize
   vtChar:         Add(@VChar,1,Escape);
   vtExtended:     Add(VExtended^,DOUBLE_PRECISION);
   vtCurrency:     AddCurr64(VInt64^);
