@@ -988,8 +988,9 @@ asm // rcx=src, edx=size, r8=dest
         push    r12
         push    r13
         push    r14
+        push    r15
         movzx   eax, word ptr [rcx] // rcx=src   eax=result
-        lea     r9, [rdx+rcx] // r9=src_end
+        lea     r9, [rcx+rdx] // r9=src_end
         test    eax, eax
         je      @35
         add     rcx, 2
@@ -1044,25 +1045,37 @@ asm // rcx=src, edx=size, r8=dest
 @26:    mov     r14, qword ptr [off+rbx*8] // r14=o
         mov     rbx, r8
         xor     rsi, rsi
-        mov     r12, r11
         sub     rbx, r14
+        mov     r12, r11
+        mov     r15, r11
         cmp     rbx, r11
-        jnc     @28
-@27:    mov     bl, byte ptr [r14+rsi]
-        mov     byte ptr [r8+rsi], bl
-        inc     rsi
-        dec     r12
-        jnz     @27
-        jmp     @31
-@28:    shr     r12, 3
+        jc      @29
+        shr     r12, 3
         jz      @30
-@29:    mov     rbx, qword ptr [r14+rsi]
+@27:    mov     rbx, qword ptr [r14+rsi]
         mov     qword ptr [r8+rsi], rbx
         add     rsi, 8
         dec     r12
+        jnz     @27
+        mov     rbx, qword ptr [r14+rsi]
+        and     r15, 7
+        jz      @31
+@28:    mov     byte ptr [r8+rsi], bl
+        shr     rbx, 8
+        inc     rsi
+        dec     r15
+        jnz     @28
+        cmp     rcx, r9
+        jnz     @33
+        jmp     @35
+@29:    mov     bl, byte ptr [r14+rsi]
+        mov     byte ptr [r8+rsi], bl
+        inc     rsi
+        dec     r12
         jnz     @29
-@30:    mov     rbx, qword ptr [r14+rsi]
-        mov     qword ptr [r8+rsi], rbx
+        jmp     @31
+@30:    mov     rbx, qword ptr [r14]
+        mov     qword ptr [r8], rbx
 @31:    cmp     rcx, r9
         jnz     @33
         jmp     @35
@@ -1080,7 +1093,8 @@ asm // rcx=src, edx=size, r8=dest
         shl     r13d, 1
         jnz     @23
         jmp     @22
-@35:    pop     r14
+@35:    pop     r15
+        pop     r14
         pop     r13
         pop     r12
         pop     rdi
