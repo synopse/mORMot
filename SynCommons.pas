@@ -11508,12 +11508,20 @@ type
   /// store a 192-bit hash value
   // - consumes 24 bytes of memory
   THash192 = array[0..23] of byte;
+  /// pointer to a 192-bit hash value
+  PHash192 = ^THash192;
   /// store a 256-bit hash value
   // - e.g. a SHA-256 digest, a TECCSignature result, or array[0..7] of cardinal
   // - consumes 32 bytes of memory
   THash256 = array[0..31] of byte;
   /// pointer to a 256-bit hash value
   PHash256 = ^THash256;
+  /// store a 384-bit hash value
+  // - e.g. a SHA-384 digest
+  // - consumes 48 bytes of memory
+  THash384 = array[0..47] of byte;
+  /// pointer to a 384-bit hash value
+  PHash384 = ^THash384;
   /// store a 512-bit hash value
   // - e.g. a SHA-512 digest, a TECCSignature result, or array[0..15] of cardinal
   // - consumes 64 bytes of memory
@@ -11662,6 +11670,23 @@ function IsEqual(const A,B: THash256): boolean; overload;
 // - may be used to cleanup stack-allocated content
 // ! ... finally FillZero(digest); end;
 procedure FillZero(out dig: THash256); overload;
+
+/// returns TRUE if all 48 bytes of this 384-bit buffer equal zero
+// - e.g. a SHA-384 digest
+function IsZero(const dig: THash384): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// returns TRUE if all 48 bytes of both 384-bit buffers do match
+// - e.g. a SHA-384 digest
+// - this function is not sensitive to any timing attack, so is designed
+// for cryptographic purpose
+function IsEqual(const A,B: THash384): boolean; overload;
+  {$ifdef HASINLINE}inline;{$endif}
+
+/// fill all 32 bytes of this 384-bit buffer with zero
+// - may be used to cleanup stack-allocated content
+// ! ... finally FillZero(digest); end;
+procedure FillZero(out dig: THash384); overload;
 
 /// returns TRUE if all 64 bytes of this 512-bit buffer equal zero
 // - e.g. a SHA-512 digest
@@ -33725,15 +33750,43 @@ begin
   PInt64Array(@dig)^[3] := 0;
 end;
 
+function IsZero(const dig: THash384): boolean;
+var a: TPtrIntArray absolute dig;
+begin
+  result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and (a[4]=0) and (a[5]=0)
+     {$ifndef CPU64} and (a[6]=0) and (a[7]=0) and (a[8]=0)
+                     and (a[9]=0) and (a[10]=0) and (a[11]=0){$endif};
+end;
+
+function IsEqual(const A,B: THash384): boolean;
+var a_: TPtrIntArray absolute A;
+    b_: TPtrIntArray absolute B;
+begin // uses anti-forensic time constant "xor/or" pattern
+  result := ((a_[0] xor b_[0]) or (a_[1] xor b_[1]) or
+             (a_[2] xor b_[2]) or (a_[3] xor b_[3]) or
+             (a_[4] xor b_[4]) or (a_[5] xor b_[5])
+    {$ifndef CPU64} or (a_[6] xor b_[6]) or (a_[7] xor b_[7])
+                    or (a_[8] xor b_[8]) or (a_[9] xor b_[9])
+                    or (a_[10] xor b_[10]) or (a_[11] xor b_[11]) {$endif})=0;
+end;
+
+procedure FillZero(out dig: THash384);
+begin
+  PInt64Array(@dig)^[0] := 0;
+  PInt64Array(@dig)^[1] := 0;
+  PInt64Array(@dig)^[2] := 0;
+  PInt64Array(@dig)^[3] := 0;
+  PInt64Array(@dig)^[4] := 0;
+  PInt64Array(@dig)^[5] := 0;
+end;
+
 function IsZero(const dig: THash512): boolean;
 var a: TPtrIntArray absolute dig;
 begin
   result := (a[0]=0) and (a[1]=0) and (a[2]=0) and (a[3]=0) and
             (a[4]=0) and (a[5]=0) and (a[6]=0) and (a[7]=0)
-     {$ifndef CPU64} and (a[8]=0) and (a[9]=0)
-                     and (a[10]=0) and (a[11]=0)
-                     and (a[12]=0) and (a[13]=0)
-                     and (a[14]=0) and (a[15]=0){$endif};
+     {$ifndef CPU64} and (a[8]=0) and (a[9]=0) and (a[10]=0) and (a[11]=0) and
+            (a[12]=0) and (a[13]=0) and (a[14]=0) and (a[15]=0){$endif};
 end;
 
 function IsEqual(const A,B: THash512): boolean;
@@ -33744,7 +33797,7 @@ begin // uses anti-forensic time constant "xor/or" pattern
              (a_[2] xor b_[2]) or (a_[3] xor b_[3]) or
              (a_[4] xor b_[4]) or (a_[5] xor b_[5]) or
              (a_[6] xor b_[6]) or (a_[7] xor b_[7])
-    {$ifndef CPU64} or (a_[8] xor b_[8]) or (a_[5] xor b_[5])
+    {$ifndef CPU64} or (a_[8] xor b_[8]) or (a_[9] xor b_[9])
                     or (a_[10] xor b_[10]) or (a_[11] xor b_[11])
                     or (a_[12] xor b_[12]) or (a_[13] xor b_[13])
                     or (a_[14] xor b_[14]) or (a_[15] xor b_[15]) {$endif})=0;

@@ -9544,7 +9544,14 @@ var dig: TSHA512Digest;
     sha: TSHA512;
     c: AnsiChar;
     temp: RawByteString;
-begin
+begin // includes SHA-384, which is a truncated SHA-512
+  Check(SHA384('')='38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0cc7bf63'+
+    'f6e1da274edebfe76f65fbd51ad2f14898b95b');
+  Check(SHA384('abc')='cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b605'+
+    'a43ff5bed8086072ba1e7cc2358baeca134c825a7');
+  Check(SHA384('abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmn'+
+    'hijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu')='09330c33f711'+
+    '47e83d192fc782cd1b4753111b173b3b05d22fa08086e3b0f712fcc7c71a557e2db966c3e9fa91746039');
   Check(SHA512('')='cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d'+
     '36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e');
   Check(SHA512(FOX)='07e547d9586f6a73f73fbac0435ed76951218fb7d0c8d788a309d785'+
@@ -9581,7 +9588,43 @@ begin
   HMAC_SHA512(FOX+FOX,FOX,dig);
   Check(SHA512DigestToString(dig)='19e504ba787674baa63471436a4ec5a71ba359a0f2d375'+
     '12edd4db69dce1ec6a0e48f0ae460fc9342fbb453cf2942a0e3fa512dd361e30f0e8b8fc8c7a4ece96');
+  PBKDF2_HMAC_SHA512('password','salt',1,dig);
+  Check(SHA512DigestToString(dig)='867f70cf1ade02cff3752599a3a53dc4af34c7a669815ae5'+
+    'd513554e1c8cf252c02d470a285a0501bad999bfe943c08f050235d7d68b1da55e63f73b60a57fce');
+  PBKDF2_HMAC_SHA512('password','salt',4096,dig);
+  Check(SHA512DigestToString(dig)='d197b1b33db0143e018b12f3d1d1479e6cdebdcc97c5c0f87'+
+    'f6902e072f457b5143f30602641b3d55cd335988cb36b84376060ecd532e039b742a239434af2d5');
+  HMAC_SHA256('Jefe','what do ya want for nothing?',PHash256(@dig)^);
+  Check(SHA256DigestToString(PHash256(@dig)^)='5bdcc146bf60754e6a042426089575c'+
+    '75a003f089d2739839dec58b964ec3843');
+  HMAC_SHA384('Jefe','what do ya want for nothing?',PHash384(@dig)^);
+  Check(SHA384DigestToString(PHash384(@dig)^)='af45d2e376484031617f78d2b58a6b1'+
+    'b9c7ef464f5a01b47e42ec3736322445e8e2240ca5e69e2c78b3239ecfab21649');
+  PBKDF2_HMAC_SHA384('password','salt',4096,PHash384(@dig)^);
+  Check(SHA384DigestToString(PHash384(@dig)^)='559726be38db125bc85ed7895f6e3cf574c7a01c'+
+    '080c3447db1e8a76764deb3c307b94853fbe424f6488c5f4f1289626');
+  HMAC_SHA512('Jefe','what do ya want for nothing?',dig);
+  Check(SHA512DigestToString(dig)='164b7a7bfcf819e2e395fbe73b56e0a387bd64222e8'+
+    '31fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737');
+  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',1,dig);
+  Check(SHA512DigestToString(dig)='cbe6088ad4359af42e603c2a33760ef9d4017a7b2aad10af46'+
+    'f992c660a0b461ecb0dc2a79c2570941bea6a08d15d6887e79f32b132e1c134e9525eeddd744fa');
+  PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK',
+   'saltKEYbcTcXHCBxtjD2PnBh44AIQ6XUOCESOhXpEp3HrcG',1,PHash384(@dig)^);
+  Check(SHA384DigestToString(PHash384(@dig)^)='0644a3489b088ad85a0e42be3e7f82500ec189366'+
+    '99151a2c90497151bac7bb69300386a5e798795be3cef0a3c803227');
+  { // rounds=100000 is slow, so not integrated by default
+  PBKDF2_HMAC_SHA512('passDATAb00AB7YxDTT','saltKEYbcTcXHCBxtjD',100000,dig);
+  Check(SHA512DigestToString(dig)='accdcd8798ae5cd85804739015ef2a11e32591b7b7d16f76819b30'+
+    'b0d49d80e1abea6c9822b80a1fdfe421e26f5603eca8a47a64c9a004fb5af8229f762ff41f');
+  PBKDF2_HMAC_SHA384('passDATAb00AB7YxDTTlRH2dqxDx19GDxDV1zFMz7E6QVqK','saltKEYbcTcXHCBxtj'+
+    'D2PnBh44AIQ6XUOCESOhXpEp3HrcG',100000,PHash384(@dig)^);
+  Check(SHA384DigestToString(PHash384(@dig)^)='bf625685b48fe6f187a1780c5cb8e1e4a7b0dbd'+
+    '6f551827f7b2b598735eac158d77afd3602383d9a685d87f8b089af30');
+  }
 end;
+
+
 
 procedure TTestCryptographicRoutines._SHA3;
 var
