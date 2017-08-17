@@ -1567,29 +1567,29 @@ var e: cardinal;
     Soundex: TSynSoundEx;
     s: WinAnsiString;
 begin
-  Check(SoundExAnsi(' 120 ')=0);
+  Check(SoundExAnsi(PAnsiChar(' 120 '))=0);
   if SOUNDEX_BITS=8 then
     e := $2050206 else
     e := $2526;
-  Check(SoundExAnsi('bonjour')=e);
-  Check(SoundExAnsi(' 123 bonjour.  m',@PC)=e);
+  Check(SoundExAnsi(PAnsiChar('bonjour'))=e);
+  Check(SoundExAnsi(PAnsiChar(' 123 bonjour.  m'),@PC)=e);
   Check((PC<>nil) and (PC^='.'));
   s := ' 123 bonjourtreslongmotquidepasse  m';
   s[15] := #232;
   s[28] := #233;
   Check(SoundExAnsi(pointer(s),@PC)<>0);
   Check((PC<>nil) and (PC^=' '));
-  Check(SoundExAnsi('BOnjour')=e);
-  Check(SoundExAnsi('Bnjr')=e);
-  Check(SoundExAnsi('bonchour')=e);
-  Check(SoundExAnsi('mohammad')=SoundExAnsi('mohhhammeeet'));
+  Check(SoundExAnsi(PAnsiChar('BOnjour'))=e);
+  Check(SoundExAnsi(PAnsiChar('Bnjr'))=e);
+  Check(SoundExAnsi(PAnsiChar('bonchour'))=e);
+  Check(SoundExAnsi(PAnsiChar('mohammad'))=SoundExAnsi(PAnsiChar('mohhhammeeet')));
   if SOUNDEX_BITS=8 then
     e := $2050206 else
     e := $25262;
-  Check(SoundExAnsi('bonjours')=e);
-  Check(SoundExAnsi('BOnjours')=e);
-  Check(SoundExAnsi('Bnjrs')=e);
-  Check(SoundExAnsi(' 120 ')=0);
+  Check(SoundExAnsi(PAnsiChar('bonjours'))=e);
+  Check(SoundExAnsi(PAnsiChar('BOnjours'))=e);
+  Check(SoundExAnsi(PAnsiChar('Bnjrs'))=e);
+  Check(SoundExAnsi(PAnsiChar(' 120 '))=0);
   if SOUNDEX_BITS=8 then
     e := $2050206 else
     e := $2526;
@@ -1608,7 +1608,7 @@ begin
   Check(SoundExUTF8('bonjours')=e);
   Check(SoundExUTF8('BOnjours')=e);
   Check(SoundExUTF8('Bnjrs')=e);
-  Check(Soundex.Prepare('mohamad'));
+  Check(Soundex.Prepare(PAnsiChar('mohamad'),sndxEnglish));
   Check(Soundex.Ansi('moi rechercher mohammed ici'));
   Check(Soundex.UTF8('moi rechercher mohammed ici'));
   Check(Soundex.Ansi('moi mohammed'));

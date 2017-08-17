@@ -4088,8 +4088,7 @@ function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar=nil;
 // incoming string contains no valid word
 // - if next is defined, its value is set to the end of the encoded word
 // (so that you can call again this function to encode a full sentence)
-function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar;
-  Lang: PSoundExValues): cardinal; overload;
+function SoundExAnsi(A: PAnsiChar; next: PPAnsiChar; Lang: PSoundExValues): cardinal; overload;
 
 /// Retrieve the Soundex value of a text word, from UTF-8 buffer
 // - Return the soundex value as an easy to use cardinal value, 0 if the
