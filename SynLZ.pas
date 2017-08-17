@@ -1065,20 +1065,21 @@ asm // rcx=src, edx=size, r8=dest
         inc     rsi
         dec     r15
         jnz     @28
-        cmp     rcx, r9
-        jnz     @33
-        jmp     @35
+        jmp     @31
 @29:    mov     bl, byte ptr [r14+rsi]
         mov     byte ptr [r8+rsi], bl
         inc     rsi
         dec     r12
         jnz     @29
-        jmp     @31
+        cmp     rcx, r9
+        jnz     @33
+        jmp     @35
 @30:    mov     rbx, qword ptr [r14]
         mov     qword ptr [r8], rbx
 @31:    cmp     rcx, r9
-        jnz     @33
-        jmp     @35
+        jz      @35
+        cmp     r10, r8
+        jnc     @34
 @32:    add     r10, 1
         mov     ebx, dword ptr [r10]
         mov     rsi, rbx
@@ -1088,7 +1089,7 @@ asm // rcx=src, edx=size, r8=dest
         mov     qword ptr [off+rsi*8], r10
 @33:    cmp     r10, r8
         jc      @32
-        add     r8, r11
+@34:    add     r8, r11
         lea     r10, [r8-1H]
         shl     r13d, 1
         jnz     @23
