@@ -3079,7 +3079,7 @@ begin
   tmp := result;
   first.Init(pointer(password),length(password));
   for i := 2 to count do begin
-    mac := first; // re-use the very same SHA-1 context for best performance
+    mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
     XorMemory(@result,@tmp,sizeof(result));
@@ -3181,7 +3181,7 @@ begin
   tmp := result;
   first.Init(pointer(password),length(password));
   for i := 2 to count do begin
-    mac := first; // re-use the very same SHA-256 context for best performance
+    mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
     XorMemoryPtrInt(@result,@tmp,sizeof(result) shr {$ifdef CPU32}2{$else}3{$endif});
@@ -3208,7 +3208,7 @@ begin
       HMAC_SHA256(password,salt+iter,result[n]);
     tmp := result[n];
     for i := 2 to count do begin
-      mac := first; // re-use the very same SHA-256 context for best performance
+      mac := first; // re-use the very same SHA context for best performance
       mac.sha.Update(@tmp,sizeof(tmp));
       mac.Done(tmp,true);
       XorMemoryPtrInt(@result[n],@tmp,sizeof(result[n]) shr {$ifdef CPU32}2{$else}3{$endif});
@@ -3317,7 +3317,7 @@ begin
   tmp := result;
   first.Init(pointer(password),length(password));
   for i := 2 to count do begin
-    mac := first; // re-use the very same SHA-1 context for best performance
+    mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
     XorMemoryPtrInt(@result,@tmp,sizeof(result) shr {$ifdef CPU32}2{$else}3{$endif});
@@ -3401,7 +3401,7 @@ begin
   tmp := result;
   first.Init(pointer(password),length(password));
   for i := 2 to count do begin
-    mac := first; // re-use the very same SHA-1 context for best performance
+    mac := first; // re-use the very same SHA context for best performance
     mac.sha.Update(@tmp,sizeof(tmp));
     mac.Done(tmp,true);
     XorMemoryPtrInt(@result,@tmp,sizeof(result) shr {$ifdef CPU32}2{$else}3{$endif});

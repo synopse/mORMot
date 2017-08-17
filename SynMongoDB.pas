@@ -170,6 +170,7 @@ type
     /// convert a variant into one Decimal128 value
     // - will first check for a TBSONVariant containing a betDecimal128 (e.g.
     // as retrieved via the ToVariant method)
+    // - will recognize currency and VariantToInt64() stored values
     // - then will try to convert the variant from its string value, expecting
     // a floating-point text content
     // - returns TRUE if conversion was made, FALSE on any error
@@ -6882,16 +6883,23 @@ function TDecimal128.FromVariant(const value: variant): boolean;
 var txt: RawUTF8;
     wasString: boolean;
     bson: TBSONVariantData absolute value;
+    v64: Int64;
 begin
-  if TVarData(value).VType=varByRef or varVariant then
-    result := FromVariant(PVariant(TVarData(value).VPointer)^) else
-  if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betDecimal128) then begin
-    Bits := PDecimal128(bson.VBlob)^.Bits;
-    result := true;
-  end else begin
-    VariantToUTF8(value,txt,wasString);
-    result := wasString and (FromText(txt)<>dsvError);
+  if bson.VType=varByRef or varVariant then begin
+    result := FromVariant(PVariant(TVarData(value).VPointer)^);
+    exit;
   end;
+  if (bson.VType=BSONVariantType.VarType) and (bson.VKind=betDecimal128) then
+    Bits := PDecimal128(bson.VBlob)^.Bits else
+  if VariantToInt64(value,v64) then
+    FromInt64(v64) else
+  if bson.VType=varCurrency then
+    FromCurr(TVarData(value).VCurrency) else begin
+    VariantToUTF8(value,txt,wasString);
+    result := FromText(txt)<>dsvError;
+    exit;
+  end;
+  result := true;
 end;
 
 initialization
