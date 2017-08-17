@@ -1307,7 +1307,6 @@ type
   // command message for MongoDB >= 2.6 instead of older dedicated Wire messages
   TMongoRequestWritable = class(TMongoRequest)
   protected
-
   public
   end;
 
@@ -1906,7 +1905,11 @@ type
     fReadPreference: TMongoClientReplicaSetReadPreference;
     fWriteConcern: TMongoClientWriteConcern;
     fConnectionTimeOut: Cardinal;
-    fGracefulReconnect: boolean;
+    fGracefulReconnect: record
+      Enabled, ForcedDBCR: boolean;
+      User, Database: RawUTF8;
+      EncryptedDigest: RawByteString;
+    end;
     fLog: TSynLog;
     fLogRequestEvent: TSynLogInfo;
     fLogReplyEvent: TSynLogInfo;
@@ -1919,6 +1922,8 @@ type
     function GetBytesReceived: Int64;
     function GetBytesSent: Int64;
     function GetBytesTransmitted: Int64;
+    procedure Auth(const DatabaseName,UserName,Digest: RawUTF8; ForceMongoDBCR: boolean);
+    function ReOpen: boolean;
   public
     /// prepare a connection to a MongoDB server or Replica Set
     // - this constructor won't create the connection until the Open method
@@ -2003,7 +2008,8 @@ type
     property ConnectionTimeOut: Cardinal read fConnectionTimeOut write fConnectionTimeOut;
     /// allow automatic reconnection (with authentication, if applying), if the
     // socket is closed (e.g. was dropped from the server)
-    property GracefulReconnect: boolean read fGracefulReconnect write fGracefulReconnect;
+    property GracefulReconnect: boolean
+      read fGracefulReconnect.Enabled write fGracefulReconnect.Enabled;
     /// how may bytes this client did received, among all its connections
     property BytesReceived: Int64 read GetBytesReceived;
     /// how may bytes this client did received, among all its connections
@@ -2029,7 +2035,7 @@ type
       read fLogReplyEventMaxSize write fLogReplyEventMaxSize;
   end;
 
-  /// remote access to a MondoDB database
+  /// remote access to a MongoDB database
   TMongoDatabase = class
   protected
     fClient: TMongoClient;
@@ -2108,7 +2114,7 @@ type
     property Client: TMongoClient read fClient;
   end;
 
-  /// remote access to a MondoDB collection
+  /// remote access to a MongoDB collection
   TMongoCollection = class
   protected
     fDatabase: TMongoDatabase;
@@ -5297,10 +5303,10 @@ end;
 function TMongoConnection.Send(Request: TMongoRequest): boolean;
 var doc: TBSONDocument;
 begin
-  if fSocket=nil then
-    raise EMongoRequestException.Create('Missing Open',self,Request);
+  if not Opened and not Client.ReOpen then
+    raise EMongoRequestException.Create('Send: Missing Open',self,Request);
   if Request=nil then
-    raise EMongoRequestException.Create('LockAndSend(nil)',self);
+    raise EMongoRequestException.Create('Send(nil)',self);
   Request.ToBSONDocument(doc);
   if (Client.LogRequestEvent<>sllNone) and (Client.Log<>nil) and
      (Client.LogRequestEvent in Client.Log.Family.Level) then
@@ -5388,8 +5394,12 @@ begin
               '%.GetReply: ResponseTo=% Expected:% in current blocking mode',
               [self,Header.ResponseTo,Request.MongoRequestID],self,Request);
       end else
-        raise EMongoRequestException.Create('Server reset the connection: '+
-          'probably due to a bad formatted BSON request',self,Request);
+        try
+          Close;
+        finally
+          raise EMongoRequestException.Create('Server did reset the connection: '+
+            'probably due to a bad formatted BSON request -> close socket',self,Request);
+        end;
     // if we reached here, this is due to a socket error
     raise EMongoRequestOSException.Create('GetReply',self,Request);
   finally
@@ -5563,6 +5573,7 @@ var secHost: TRawUTF8DynArray;
 begin
   fConnectionTimeOut := 30000;
   fLogReplyEventMaxSize := 1024;
+  fGracefulReconnect.Enabled := true;
   FormatUTF8('mongodb://%:%',[Host,Port],fConnectionString);
   CSVToRawUTF8DynArray(pointer(SecondaryHostCSV),secHost);
   nHost := length(secHost);
@@ -5683,8 +5694,41 @@ end;
 
 function TMongoClient.OpenAuth(const DatabaseName,UserName,PassWord: RawUTF8;
   ForceMongoDBCR: boolean): TMongoDatabase;
+var digest: RawByteString;
+begin
+  if (self=nil) or (DatabaseName='') or (UserName='') or (PassWord='') then
+    raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
+  result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
+  if result=nil then  // not already opened -> try now from primary host
+  try // note: authentication works on a single database per socket connection
+    if not fConnections[0].Opened then
+    try
+      fConnections[0].Open; // socket connection
+      AfterOpen; // need ServerBuildInfoNumber just below
+      digest := PasswordDigest(UserName,Password);
+      Auth(DatabaseName,UserName,digest,ForceMongoDBCR);
+      with fGracefulReconnect do
+        if Enabled and (EncryptedDigest='') then begin
+          ForcedDBCR := ForceMongoDBCR;
+          User := UserName;
+          Database := DatabaseName;
+          EncryptedDigest := CryptDataForCurrentUser(digest,Database,true);
+        end;
+    except
+      fConnections[0].Close;
+      raise;
+    end;
+    result := TMongoDatabase.Create(Self,DatabaseName);
+    fDatabases.AddObject(DatabaseName,result);
+  finally
+    FillZero(digest);
+  end;
+end;
+
+procedure TMongoClient.Auth(const DatabaseName,UserName,Digest: RawUTF8;
+  ForceMongoDBCR: boolean);
 var res,bson: variant;
-    err,digest,nonce,first,key,user,msg,rnonce: RawUTF8;
+    err,nonce,first,key,user,msg,rnonce: RawUTF8;
     payload: RawByteString;
     rnd: TAESBlock;
     sha: TSHA1;
@@ -5701,92 +5745,75 @@ var res,bson: variant;
       resp.InitCSV(pointer(payload),JSON_OPTIONS_FAST,'=',',') else
       err := 'missing or invalid returned payload';
   end;
-  
-begin
-  if (self=nil) or (UserName='') or (PassWord='') then
-    raise EMongoException.CreateUTF8('Invalid %.OpenAuth("%") call',[self,DatabaseName]);
-  result := TMongoDatabase(fDatabases.GetObjectByName(DatabaseName));
-  if result=nil then  // not already opened -> try now from primary host
-  try
-    if not fConnections[0].Opened then
-    try
-      digest := PasswordDigest(UserName,Password);
-      fConnections[0].Open; // socket connection
-      AfterOpen; // need ServerBuildInfoNumber just below
-      if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin
-        // MONGODB-CR
-        // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
-        bson := BSONVariant(['getnonce',1]);
-        err := fConnections[0].RunCommand(DatabaseName,bson,res);
-        if (err='') and not _Safe(res)^.GetAsRawUTF8('nonce',nonce) then
-          err := 'missing returned nonce';
-        if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step1: % - res=%',
-            [self,DatabaseName,err,res]);
-        key := MD5(nonce+UserName+digest);
-        bson := BSONVariant(['authenticate',1,'user',UserName,'nonce',nonce,'key',key]);
-        err := fConnections[0].RunCommand(DatabaseName,bson,res);
-        if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
-            [self,DatabaseName,err,res]);
-      end else begin
-        // SCRAM-SHA-1
-        // https://tools.ietf.org/html/rfc5802#section-5
-        user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
-        TAESPRNG.Main.FillRandom(rnd);
-        nonce := BinToBase64(@rnd,sizeof(rnd));
-        FormatUTF8('n=%,r=%',[user,nonce],first);
-        BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
-        err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
-          'saslStart',1,'mechanism','SCRAM-SHA-1','payload',bson,'autoAuthorize',1]),res);
-        CheckPayload;
-        if err='' then begin
-          rnonce := resp.U['r'];
-          if copy(rnonce,1,length(nonce))<>nonce then
-            err := 'returned invalid nonce';
-        end;
-        if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step1: % - res=%',
-            [self,DatabaseName,err,res]);
-        key := 'c=biws,r='+rnonce;
-        PBKDF2_HMAC_SHA1(digest,Base64ToBin(resp.U['s']),UTF8ToInteger(resp.U['i']),salted);
-        HMAC_SHA1(salted,'Client Key',client);
-        sha.Full(@client,SizeOf(client),stored);
-        msg := first+','+RawUTF8(payload)+','+key;
-        HMAC_SHA1(stored,msg,stored);
-        XorMemory(@client,@stored,SizeOf(client));
-        HMAC_SHA1(salted,'Server Key',server);
-        HMAC_SHA1(server,msg,server);
-        msg := key+',p='+BinToBase64(@client,SizeOf(client));
-        BSONVariantType.FromBinary(msg,bbtGeneric,bson);
-        err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
-          'saslContinue',1,'conversationId',res.conversationId,'payload',bson]),res);
-        resp.Clear;
-        CheckPayload;
-        if (err='') and (resp.U['v']<>BinToBase64(@server,SizeOf(server))) then
-            err := 'Server returned an invalid signature';
-        if err<>'' then
-          raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step2: % - res=%',
-            [self,DatabaseName,err,res]);
-        if not res.done then begin
-          // third empty challenge may be required
-          err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
-            'saslContinue',1,'conversationId',res.conversationId,'payload','']),res);
-         if (err='') and not res.done then
-           err := 'SASL conversation failed to complete';
-          if err<>'' then
-            raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step3: % - res=%',
-              [self,DatabaseName,err,res]);
-        end;
-      end;
-    except
-      fConnections[0].Close;
-      raise;
+
+begin // caller should have made fConnections[0].Open
+  if (self=nil) or (DatabaseName='') or (UserName='') or (Digest='') then
+    raise EMongoException.CreateUTF8('Invalid %.Auth("%") call',[self,DatabaseName]);
+  if ForceMongoDBCR or (ServerBuildInfoNumber<3000000) then begin
+    // MONGODB-CR
+    // http://docs.mongodb.org/meta-driver/latest/legacy/implement-authentication-in-driver
+    bson := BSONVariant(['getnonce',1]);
+    err := fConnections[0].RunCommand(DatabaseName,bson,res);
+    if (err='') and not _Safe(res)^.GetAsRawUTF8('nonce',nonce) then
+      err := 'missing returned nonce';
+    if err<>'' then
+      raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step1: % - res=%',
+        [self,DatabaseName,err,res]);
+    key := MD5(nonce+UserName+Digest);
+    bson := BSONVariant(['authenticate',1,'user',UserName,'nonce',nonce,'key',key]);
+    err := fConnections[0].RunCommand(DatabaseName,bson,res);
+    if err<>'' then
+      raise EMongoException.CreateUTF8('%.OpenAuthCR("%") step2: % - res=%',
+        [self,DatabaseName,err,res]);
+  end else begin
+    // SCRAM-SHA-1
+    // https://tools.ietf.org/html/rfc5802#section-5
+    user := StringReplaceAll(StringReplaceAll(UserName,'=','=3D'),',','=2C');
+    TAESPRNG.Main.FillRandom(rnd);
+    nonce := BinToBase64(@rnd,sizeof(rnd));
+    FormatUTF8('n=%,r=%',[user,nonce],first);
+    BSONVariantType.FromBinary('n,,'+first,bbtGeneric,bson);
+    err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+      'saslStart',1,'mechanism','SCRAM-SHA-1','payload',bson,'autoAuthorize',1]),res);
+    CheckPayload;
+    if err='' then begin
+      rnonce := resp.U['r'];
+      if copy(rnonce,1,length(nonce))<>nonce then
+        err := 'returned invalid nonce';
     end;
-    result := TMongoDatabase.Create(Self,DatabaseName);
-    fDatabases.AddObject(DatabaseName,result);
-  finally
-    FillZero(RawByteString(digest));
+    if err<>'' then
+      raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step1: % - res=%',
+        [self,DatabaseName,err,res]);
+    key := 'c=biws,r='+rnonce;
+    PBKDF2_HMAC_SHA1(Digest,Base64ToBin(resp.U['s']),UTF8ToInteger(resp.U['i']),salted);
+    HMAC_SHA1(salted,'Client Key',client);
+    sha.Full(@client,SizeOf(client),stored);
+    msg := first+','+RawUTF8(payload)+','+key;
+    HMAC_SHA1(stored,msg,stored);
+    XorMemory(@client,@stored,SizeOf(client));
+    HMAC_SHA1(salted,'Server Key',server);
+    HMAC_SHA1(server,msg,server);
+    msg := key+',p='+BinToBase64(@client,SizeOf(client));
+    BSONVariantType.FromBinary(msg,bbtGeneric,bson);
+    err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+      'saslContinue',1,'conversationId',res.conversationId,'payload',bson]),res);
+    resp.Clear;
+    CheckPayload;
+    if (err='') and (resp.U['v']<>BinToBase64(@server,SizeOf(server))) then
+        err := 'Server returned an invalid signature';
+    if err<>'' then
+      raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step2: % - res=%',
+        [self,DatabaseName,err,res]);
+    if not res.done then begin
+      // third empty challenge may be required
+      err := fConnections[0].RunCommand(DatabaseName,BSONVariant([
+        'saslContinue',1,'conversationId',res.conversationId,'payload','']),res);
+     if (err='') and not res.done then
+       err := 'SASL conversation failed to complete';
+      if err<>'' then
+        raise EMongoException.CreateUTF8('%.OpenAuthSCRAM("%") step3: % - res=%',
+          [self,DatabaseName,err,res]);
+    end;
   end;
 end;
 
@@ -5802,14 +5829,39 @@ begin
   end;
 end;
 
+function TMongoClient.ReOpen: boolean;
+var digest: RawByteString;
+begin
+  result := false;
+  with fGracefulReconnect do
+    if Enabled then
+    try
+      if fLog<>nil then
+        fLog.Enter(self,'ReOpen: graceful reconnect');
+      fConnections[0].Open;
+      if EncryptedDigest<>'' then
+        try
+          digest := CryptDataForCurrentUser(EncryptedDigest,Database,false);
+          Auth(Database,User,digest,ForcedDBCR);
+        finally
+          FillZero(digest);
+        end;
+      result := true;
+    except
+      fConnections[0].Close;
+      raise;
+    end;
+end;
+
 function TMongoClient.GetBytesReceived: Int64;
 var i: integer;
 begin
   result := 0;
   if self<>nil then
     for i := 0 to high(fConnections) do
-      if fConnections[i].Socket<>nil then
-        inc(result,fConnections[i].Socket.BytesIn);
+      with fConnections[i] do
+      if fSocket<>nil then
+        inc(result,fSocket.BytesIn);
 end;
 
 function TMongoClient.GetBytesSent: Int64;
@@ -5818,8 +5870,9 @@ begin
   result := 0;
   if self<>nil then
     for i := 0 to high(fConnections) do
-      if fConnections[i].Socket<>nil then
-        inc(result,fConnections[i].Socket.BytesOut);
+      with fConnections[i] do
+      if fSocket<>nil then
+        inc(result,fSocket.BytesOut);
 end;
 
 function TMongoClient.GetBytesTransmitted: Int64;
@@ -5828,8 +5881,9 @@ begin
   result := 0;
   if self<>nil then
     for i := 0 to high(fConnections) do
-      if fConnections[i].Socket<>nil then
-        inc(result,fConnections[i].Socket.BytesIn+fConnections[i].Socket.BytesOut);
+      with fConnections[i] do
+      if fSocket<>nil then
+        inc(result,fSocket.BytesIn+fSocket.BytesOut);
 end;
 
 
@@ -6915,7 +6969,7 @@ initialization
   Assert(sizeof(TMongoReplyHeader)=36);
   // ensure TDocVariant and TBSONVariant custom types are registered
   if DocVariantType=nil then
-    DocVariantType := TDocVariant(SynRegisterCustomVariantType(TDocVariant));
+    DocVariantType := SynRegisterCustomVariantType(TDocVariant) as TDocVariant;
   BSONVariantType := SynRegisterCustomVariantType(TBSONVariant) as TBSONVariant;
   InitBSONObjectIDComputeNew;
 
