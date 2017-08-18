@@ -42622,9 +42622,8 @@ begin
       '.':
         if (json[1] in ['0'..'9']) and (json[2] in [#0,'0'..'9']) then
           if (json[2]=#0) or (json[3]=#0) or
-             ((json[3] in ['0'..'9']) and
-              (json[4]=#0) or
-              ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
+             ((json[3] in ['0'..'9']) and (json[4]=#0) or
+             ((json[4] in ['0'..'9']) and (json[5]=#0))) then begin
             result := varCurrency; // currency ###.1234 number
             exit;
           end else begin

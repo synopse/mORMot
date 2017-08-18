@@ -1010,8 +1010,8 @@ type
     // /dev/random on Linux/POSIX
     // - this system-supplied entropy is then XORed with the output of a SHA-3
     // cryptographic SHAKE-256 generator in XOF mode, of several entropy sources
-    // (timestamp, thread and system information, Random32 function) unless
-    // SystemOnly is TRUE
+    // (timestamp, thread and system information, Random32 SynCommons' function)
+    // unless SystemOnly is TRUE
     // - depending on the system, entropy may not be true randomness: if you need
     // some truly random values, use TAESPRNG.Main.FillRandom() or TAESPRNG.Fill()
     // methods, NOT this class function (which will be much slower, BTW)
@@ -7592,7 +7592,7 @@ asm
 {$ifdef FPC}nostackframe; assembler;
 asm
 {$else}
-asm // input: rcx=TAESContext, rdx=source, r8=dest (Linux: rdi,rsi,rdx)
+asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
         mov     r8, rdx

@@ -237,6 +237,9 @@ const
   BSON_DECIMAL128_EXPONENT_BIAS = 6176;
   BSON_DECIMAL128_MAX_DIGITS    = 34;
 
+/// ready-to-be displayed text of a TDecimal128SpecialValue value
+function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
+
 
 type
   /// exception type used for BSON process
@@ -4308,6 +4311,11 @@ end;
 function ToText(kind: TBSONElementType): PShortString;
 begin
   result := GetEnumName(TypeInfo(TBSONElementType),ord(kind));
+end;
+
+function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
+begin
+  result := GetEnumName(TypeInfo(TDecimal128SpecialValue),ord(spec));
 end;
 
 function ObjectID: variant;
