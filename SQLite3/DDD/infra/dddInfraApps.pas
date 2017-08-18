@@ -2061,7 +2061,7 @@ begin
     try
       result := eaInvalidSecret;      
       {$ifdef ENHANCEDRTL} {$ifdef VER150}
-      if crc32c($D26BE33F,@ECCAuthorize,14)<>$29743A4B then
+      if crc32cinlined($D26BE33F,@ECCAuthorize,14)<>$29743A4B then
         exit; // avoid stubbing (Delphi 7 ERTL only - just to show how it works)
       {$endif} {$endif}
       ECCIssuer(ExeVersion.User,Issuer);

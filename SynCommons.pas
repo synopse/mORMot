@@ -11483,6 +11483,14 @@ var
 // - you should use crc32c() function instead of crc32cfast() or crc32csse42()
 function crc32cfast(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
+/// compute CRC32C checksum on the supplied buffer using inlined code
+// - if the compiler supports inlining, will compute a slow but safe crc32c
+// checksum of the binary buffer, without calling the main crc32c() function
+// - may be used e.g. to identify patched executable at runtime, for a licensing
+// protection system
+function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// compute CRC64C checksum on the supplied buffer, cascading two crc32c
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - will combine two crc32c() calls into a single Int64 result
@@ -33568,8 +33576,24 @@ asm
         pop     ebx
         not     eax
 end;
-
 {$endif PUREPASCAL}
+
+function crc32cinlined(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef HASINLINE}
+begin // slightly slower but inline-friendly code
+  result := not crc;
+  while len>0 do begin
+    result := crc32ctab[0,(result xor ord(buf^))and 255] xor (result shr 8);
+    dec(len);
+    inc(buf);
+  end;
+  result := not result;
+end;
+{$else}
+begin
+  result := crc32c(crc,buf,len);
+end;
+{$endif}
 
 {$ifdef CPUX86}
 procedure GetCPUID(Param: Cardinal; var Registers: TRegisters);
