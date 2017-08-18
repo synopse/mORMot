@@ -43453,15 +43453,18 @@ begin
   SourceVValue := Source^.VValue; // local fast per-reference copy
   if Source<>@self then begin
     VType := DocVariantVType;
+    VCount := Source^.VCount;
+    pointer(VName) := nil;  // avoid GPF
+    pointer(VValue) := nil;
     VOptions := aOptions-[dvoIsArray,dvoIsObject]; // may not be same as Source
     if dvoIsArray in Source^.VOptions then
       include(VOptions,dvoIsArray) else
-    if dvoIsObject in Source^.VOptions then
+    if dvoIsObject in Source^.VOptions then begin
       include(VOptions,dvoIsObject);
-    VCount := Source^.VCount;
-    pointer(VName) := nil;  // avoid GPF
-    VName := Source^.VName;
-    pointer(VValue) := nil;
+      SetLength(VName,VCount);
+      for ndx := 0 to VCount-1 do
+        VName[ndx] := Source^.VName[ndx]; // manual copy is needed
+    end;
   end else begin
     SetOptions(aOptions);
     VariantDynArrayClear(VValue); // force re-create full copy of all values

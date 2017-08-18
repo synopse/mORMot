@@ -7777,6 +7777,7 @@ begin
   Check(V1='["root",{"name":"Jim","year":1972}]');
   Check(V2='["root",{"name":"Jim","year":1972}]');
   {$endif}
+  _UniqueFast(V2); // now V1 modifications should not affect V2
   Doc.Clear;
   Doc.Init;
   for i := 0 to MAX do begin
@@ -7810,7 +7811,7 @@ begin
   {$endif}
   TDocVariantData(V2).DeleteByProp('name','JIM',true);
   {$ifndef FPC}
-  Check(V2<>'["root"]');
+  Check(V2='["root",{"name":"Jim","year":1972}]');
   {$endif}
   TDocVariantData(V2).DeleteByProp('name','JIM',false);
   {$ifndef FPC}
@@ -7930,6 +7931,15 @@ begin
   v1.Val1 := v2.Val1;
   v1.Val2 := v2.Val2;
   check(VariantSaveJSON(v1)=VariantSaveJSON(v2));
+  Doc.Clear;
+  V := _JSON('{"ID": 1,"Notation": "ABC", "Price": 10.1, "CustomNotation": "XYZ"}');
+  Doc.InitCopy(V, []);
+  Doc.I['ID'] := 2;
+  Doc.Delete('CustomNotation');
+  s := Doc.ToJSON;
+  check(s='{"ID":2,"Notation":"ABC","Price":10.1}');
+  s := VariantSaveJSON(V);
+  check(s='{"ID":1,"Notation":"ABC","Price":10.1,"CustomNotation":"XYZ"}');
 end;
 
 {$endif LVCL}
