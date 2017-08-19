@@ -89,7 +89,7 @@ uses
 { ************ BSON (Binary JSON) process }
 
 type
-  /// binary representation of a 128 bit decimal, stored as 16 bytes
+  /// binary representation of a 128-bit decimal, stored as 16 bytes
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format, and processed by the TDecimal128 object
   TDecimal128Bits = record
@@ -98,13 +98,13 @@ type
     1: (b: array[0..15] of byte);
     2: (c: array[0..3] of cardinal);
   end;
-  /// points to a 128 bit decimal binary
+  /// points to a 128-bit decimal binary
   PDecimal128Bits = ^TDecimal128Bits;
 
   /// enough characters to contain any TDecimal128 text representation
   TDecimal128Str = array[0..42] of AnsiChar;
 
-  /// some special 128 bit decimal values
+  /// some special 128-bit decimal values
   // - see TDecimal128.SetSpecial to set the corresponding value
   // - dsvError is returned by TDecimal128.FromText() on parsing error
   // - dsvValue indicates that this is not a known "special" value, but some
@@ -112,7 +112,7 @@ type
   TDecimal128SpecialValue = (
     dsvError, dsvValue, dsvNan, dsvZero, dsvPosInf, dsvNegInf, dsvMin, dsvMax);
 
-  /// handles a 128 bit decimal value
+  /// handles a 128-bit decimal value
   // - i.e. IEEE 754-2008 128-bit decimal floating point as used in the
   // BSON Decimal128 format, i.e. betDecimal128 TBSONElementType
   // - the betFloat BSON format stores a 64-bit floating point value, which
@@ -216,7 +216,7 @@ type
     /// converts this Decimal128 value to its string representation
     procedure AddText(W: TTextWriter);
   end;
-  /// points to a 128 bit decimal value
+  /// points to a 128-bit decimal value
   PDecimal128 = ^TDecimal128;
 
 const
@@ -237,7 +237,7 @@ const
   BSON_DECIMAL128_EXPONENT_BIAS = 6176;
   BSON_DECIMAL128_MAX_DIGITS    = 34;
 
-/// ready-to-be displayed text of a TDecimal128SpecialValue value
+/// ready-to-be displayed text of a TDecimal128SpecialValue
 function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
 
 
@@ -2609,6 +2609,15 @@ type
 {$M-}
 
 
+/// ready-to-be displayed text of a TMongoOperation item
+function ToText(op: TMongoOperation): PShortString; overload;
+
+/// ready-to-be displayed text of a TMongoClientWriteConcern item
+function ToText(wc: TMongoClientWriteConcern): PShortString; overload;
+
+/// ready-to-be displayed text of a TMongoClientReplicaSetReadPreference item
+function ToText(pref: TMongoClientReplicaSetReadPreference): PShortString; overload;
+
 
 implementation
 
@@ -4313,10 +4322,26 @@ begin
   result := GetEnumName(TypeInfo(TBSONElementType),ord(kind));
 end;
 
-function ToText(spec: TDecimal128SpecialValue): PShortString; overload;
+function ToText(spec: TDecimal128SpecialValue): PShortString;
 begin
   result := GetEnumName(TypeInfo(TDecimal128SpecialValue),ord(spec));
 end;
+
+function ToText(op: TMongoOperation): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TMongoOperation),ord(op));
+end;
+
+function ToText(wc: TMongoClientWriteConcern): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TMongoClientWriteConcern),ord(wc));
+end;
+
+function ToText(pref: TMongoClientReplicaSetReadPreference): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TMongoClientReplicaSetReadPreference),ord(pref));
+end;
+
 
 function ObjectID: variant;
 var ID: TBSONObjectID;
@@ -4662,8 +4687,7 @@ constructor TMongoRequest.Create(const FullCollectionName: RawUTF8;
   opCode: TMongoOperation; requestID, responseTo: Integer);
 begin
   if not (opCode in CLIENT_OPCODES) then
-    raise EMongoException.CreateUTF8('Unexpected %.Create(opCode=%)',
-      [self,GetEnumName(TypeInfo(TMongoOperation),ord(opCode))^]);
+    raise EMongoException.CreateUTF8('Unexpected %.Create(opCode=%)',[self,ToText(opCode)^]);
   inherited Create(TRawByteStringStream);
   fFullCollectionName := FullCollectionName;
   Split(fFullCollectionName,'.',fDatabaseName,fCollectionName);
