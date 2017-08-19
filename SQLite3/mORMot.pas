@@ -30525,7 +30525,7 @@ begin
         if ValuesInlined then
           AddShort('=:(') else
           Add('=');
-        AddQuotedStr(pointer(Values[0]),'"');
+        AddQuotedStr(pointer(Values[0]),'''');
         if ValuesInlined then
           AddShort('):');
       end else begin
@@ -30533,7 +30533,7 @@ begin
         for i := 0 to high(Values) do begin
           if ValuesInlined then
             Add(':','(');
-          AddQuotedStr(pointer(Values[i]),'"');
+          AddQuotedStr(pointer(Values[i]),'''');
           if ValuesInlined then
             AddShort('):,') else
             Add(',');

@@ -24557,7 +24557,7 @@ end;
 
 function GotoEndOfQuotedString(P: PUTF8Char): PUTF8Char;
 var quote: AnsiChar;
-begin // P^='"' at function call
+begin // P^=" or P^=' at function call
   quote := P^;
   inc(P);
   repeat
@@ -24641,7 +24641,7 @@ begin
     result := nil;
     exit;
   end;
-  quote := P^;
+  quote := P^; // " or '
   inc(P);
   // compute unquoted string length
   PBeg := P;
