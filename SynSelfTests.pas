@@ -3034,8 +3034,8 @@ begin
   for i := 0 to High(crc) do
     with crc[i] do
       Check(hash(0,pointer(s),length(s))=crc);
-  fRunConsole := format('%s %s %s %s/s',[fRunConsole,name,Timer.Stop,
-    KB(Timer.PerSec(totallen))]);
+  Timer.ComputeTime;
+  fRunConsole := format('%s %s %s/s',[fRunConsole,name,KB(Timer.PerSec(totallen))]);
 end;
 procedure test16(const text: RawUTF8; expected: cardinal);
 begin
@@ -3118,6 +3118,8 @@ begin
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
+  if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
+    Test(crc32c,'sse42+aesni'); // use SSE4.2+pclmulqdq instructions
   {$endif}
   exit; // code below is speed informative only, without any test
   Timer.Start;
