@@ -1010,8 +1010,7 @@ asm // rcx=src, edx=size, r8=dest
         mov     r13d, 1 // r13d=CWBit
         cmp     rcx, r9
         jnc     @35
-@23:    mov     ebx, r13d
-        and     ebx, edi
+@23:    test    r13d, edi
         jnz     @25
         mov     bl, byte ptr [rcx]
         mov     byte ptr [r8], bl
