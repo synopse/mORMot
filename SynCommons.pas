@@ -33229,23 +33229,26 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         mov     rdx, rsi
         {$endif win64}
         not     eax
-        test    r8, r8
-        jz      @0
         test    rdx, rdx
         jz      @0
-@7:     test    rdx, 7
+        test    r8, r8
+        jz      @0
+@7:     test    dl, 7
         jz      @8 // align to 8 bytes boundary
         crc32   eax, byte ptr[rdx]
         inc     rdx
         dec     r8
         jz      @0
-        test    rdx, 7
+        test    dl, 7
         jnz     @7
 @8:     mov     rcx, r8
         shr     r8, 3
         jz      @2
-@1:     crc32   eax, dword ptr[rdx]
-        crc32   eax, dword ptr[rdx + 4]
+@1:     {$ifdef FPC}
+        crc32 rax, qword [rdx]
+        {$else}
+        db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+        {$endif}
         dec     r8
         lea     rdx, [rdx + 8]
         jnz     @1

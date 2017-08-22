@@ -67,7 +67,7 @@ unit SynCrypto;
     - MD5 - standard fast 128 bits Hash
     - SHA-1 - 160 bits Secure Hash
     - SHA-256 - 256 bits Secure Hash with optimized asm version
-    - SHA-512 - 512 bits Secure Hash with optimized asm version
+    - SHA-512 - 512 bits Secure Hash with optimized asm version (with SHA-384)
     - SHA-3 - 224/256/384/512/Shake algorithms based on Keccak permutation
     - hardware AES-NI and SHA-SSE4 support for latest CPU
     - VIA PADLOCK optional support - native .o code on linux or .dll (Win32)
@@ -3610,6 +3610,7 @@ end;
       {$define AESPASCAL_OR_CPU64}
       {$ifndef BSD}
         {$define CRC32C_X64} // external crc32_iscsi_01 for win64/lin64
+        {$define SHA512_X64} // external sha512_sse4 for win64/lin64
       {$endif}
     {$else}
       {$define USEAESNI}
@@ -6922,6 +6923,21 @@ procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
 {$endif SHA512_X86}
 
 
+{$ifdef SHA512_X64} // optimized asm using SSE4 instructions for x64 64-bit
+{$ifdef FPC}
+  {$ifdef MSWINDOWS}
+    {$L sha512-x64sse4.obj}
+  {$else}
+    {$L fpc-linux64/sha512-x64sse4.o}
+  {$endif}
+{$else}
+  {$L sha512-x64sse4.obj}
+{$endif}
+
+procedure sha512_sse4(data, hash: pointer; blocks: Int64); external;
+{$endif SHA512_X64}
+
+
 { TSHA384 }
 
 procedure TSHA384.Final(out Digest: TSHA384Digest; NoInit: boolean);
@@ -6933,6 +6949,10 @@ begin
     if cfSSSE3 in CpuFeatures then
       sha512_compress(@Hash,@Data) else
     {$endif}
+    {$ifdef SHA512_X64}
+    if cfSSE41 in CpuFeatures then
+      sha512_sse4(@Data,@Hash,1) else
+    {$endif}
       sha512_compresspas(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
@@ -6941,6 +6961,10 @@ begin
   {$ifdef SHA384_X86}
   if cfSSSE3 in CpuFeatures then
     sha512_compress(@Hash,@Data) else
+  {$endif}
+  {$ifdef SHA512_X64}
+  if cfSSE41 in CpuFeatures then
+    sha512_sse4(@Data,@Hash,1) else
   {$endif}
     sha512_compresspas(Hash,@Data);
   bswap64array(@Hash,@Digest,6);
@@ -6984,12 +7008,20 @@ begin
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,@Data) else
         {$endif}
+        {$ifdef SHA512_X64}
+        if cfSSE41 in CpuFeatures then
+          sha512_sse4(@Data,@Hash,1) else
+        {$endif}
           sha512_compresspas(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
         {$ifdef SHA384_X86}
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,Buffer) else
+        {$endif}
+        {$ifdef SHA512_X64}
+        if cfSSE41 in CpuFeatures then
+          sha512_sse4(Buffer,@Hash,1) else
         {$endif}
           sha512_compresspas(Hash,Buffer);
       dec(Len,aLen);
@@ -7019,6 +7051,10 @@ begin
     if cfSSSE3 in CpuFeatures then
       sha512_compress(@Hash,@Data) else
     {$endif}
+    {$ifdef SHA512_X64}
+    if cfSSE41 in CpuFeatures then
+      sha512_sse4(@Data,@Hash,1) else
+    {$endif}
       sha512_compresspas(Hash,@Data);
     FillcharFast(Data,112,0);
   end;
@@ -7027,6 +7063,10 @@ begin
   {$ifdef SHA512_X86}
   if cfSSSE3 in CpuFeatures then
     sha512_compress(@Hash,@Data) else
+  {$endif}
+  {$ifdef SHA512_X64}
+  if cfSSE41 in CpuFeatures then
+    sha512_sse4(@Data,@Hash,1) else
   {$endif}
     sha512_compresspas(Hash,@Data);
   bswap64array(@Hash,@Digest,8);
@@ -7070,12 +7110,20 @@ begin
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,@Data) else
         {$endif}
+        {$ifdef SHA512_X64}
+        if cfSSE41 in CpuFeatures then
+          sha512_sse4(@Data,@Hash,1) else
+        {$endif}
           sha512_compresspas(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
         {$ifdef SHA512_X86}
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,Buffer) else
+        {$endif}
+        {$ifdef SHA512_X64}
+        if cfSSE41 in CpuFeatures then
+          sha512_sse4(Buffer,@Hash,1) else
         {$endif}
           sha512_compresspas(Hash,Buffer);
       dec(Len,aLen);
@@ -12558,7 +12606,7 @@ end;
 
 {$ifdef FPC}
   {$ifdef MSWINDOWS}
-    {$L fpc-win64\crc32c64.o}
+    {$L crc32c64.obj}
   {$else}
     {$L fpc-linux64/crc32c64.o}
   {$endif}
@@ -12570,23 +12618,70 @@ end;
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; external;
 
 function crc32c_sse42_aesni(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
+{$ifdef FPC}
+begin
+  if buf=nil then
+    result := crc else
+    result := not crc32_iscsi_01(buf,len,not crc);
+{$else}
 {$ifdef MSWINDOWS}
 asm
-    mov     rax, rcx
-    test    rdx, rdx
-    jz      @none
-    not     eax
-    mov     rcx, rdx
-    mov     rdx, r8
-    mov     r8, rax
-    call    crc32_iscsi_01
-    not     eax
+        mov     rax, rcx
+        not     eax
+        test    rdx, rdx
+        jz      @0
+        test    r8, r8
+        jz      @0
+        cmp     r8, 100
+        ja      @intel // only call Intel code if worth it
+@7:     test    dl, 7
+        jz      @8 // align to 8 bytes boundary
+        crc32   eax, byte ptr[rdx]
+        inc     rdx
+        dec     r8
+        jz      @0
+        test    dl, 7
+        jnz     @7
+@8:     mov     rcx, r8
+        shr     r8, 3
+        jz      @2
+@1:     {$ifdef FPC}
+        crc32 rax, qword [rdx] // hash 8 bytes per opcode
+        {$else}
+        db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
+        {$endif}
+        dec     r8
+        lea     rdx, [rdx + 8]
+        jnz     @1
+@2:     and     rcx, 7
+        jz      @0
+        cmp     rcx, 4
+        jb      @4
+        crc32   eax, dword ptr[rdx]
+        sub     rcx, 4
+        lea     rdx, [rdx + 4]
+        jz      @0
+@4:     crc32   eax, byte ptr[rdx]
+        dec     rcx
+        jz      @0
+        crc32   eax, byte ptr[rdx + 1]
+        dec     rcx
+        jz      @0
+        crc32   eax, byte ptr[rdx + 2]
+@0:     not     eax
+        ret
+@intel: mov     rcx, rdx
+        mov     rdx, r8
+        mov     r8, rax
+        call    crc32_iscsi_01
+        not     eax
 @none:
 {$else}
 begin
   if buf=nil then
     result := crc else
     result := not crc32_iscsi_01(buf,len,not crc);
+{$endif}
 {$endif}
 end;
 
@@ -12597,9 +12692,9 @@ initialization
 {$ifdef USEPADLOCK}
   PadlockInit;
 {$endif}
-{$ifdef CRC32C_X64}
+{$ifdef CRC32C_X64} // use SSE4.2+pclmulqdq instructions
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
-    crc32c := @crc32c_sse42_aesni; // use SSE4.2+pclmulqdq instructions
+    crc32c := @crc32c_sse42_aesni;
 {$endif}
   assert(sizeof(TMD5Buf)=sizeof(TMD5Digest));
   assert(sizeof(TAESContext)=AESContextSize);
