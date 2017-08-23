@@ -74,7 +74,7 @@ type
 
 function GetFPCEnumName(TypeInfo: PTypeInfo; Value: Integer): PShortString; inline;
 function GetFPCEnumValue(TypeInfo: PTypeInfo; const Name: string): Integer; inline;
-Function AlignTypeData(p : Pointer) : Pointer;
+function AlignTypeData(p : Pointer) : Pointer;
 function GetFPCTypeData(TypeInfo: PTypeInfo): PTypeData; inline;
 function GetFPCPropInfo(AClass: TClass; const PropName: string): PPropInfo; inline;
 {$ifdef FPC_NEWRTTI}
@@ -102,7 +102,7 @@ begin
   sName := Name;
   PT := GetFPCTypeData(TypeInfo);
   Count := 0;
-  Result := -1;
+  result := -1;
 
   if TypeInfo^.Kind=tkBool then begin
     if CompareText(BooleanIdents[false],Name)=0 then
@@ -112,9 +112,9 @@ begin
   end else
   begin
     PS := @PT^.NameList;
-    while (Result=-1) and (PByte(PS)^<>0) do begin
+    while (result=-1) and (PByte(PS)^<>0) do begin
         if ShortCompareText(PS^, sName) = 0 then
-          Result := Count+PT^.MinValue;
+          result := Count+PT^.MinValue;
         PS := PShortString(pointer(PS)+PByte(PS)^+1);
         Inc(Count);
       end;
@@ -129,8 +129,8 @@ begin
   PT := GetFPCTypeData(TypeInfo);
   if TypeInfo^.Kind=tkBool then begin
     case Value of
-      0,1: Result := @BooleanIdents[Boolean(Value)];
-      else Result := @NULL_SHORTSTRING;
+      0,1: result := @BooleanIdents[Boolean(Value)];
+      else result := @NULL_SHORTSTRING;
     end;
   end else begin
     PS := @PT^.NameList;
@@ -139,11 +139,11 @@ begin
       PS := PShortString(pointer(PS)+PByte(PS)^+1);
       Dec(Value);
     end;
-    Result := PS;
+    result := PS;
   end;
 end;
 
-Function AlignTypeData(p : Pointer) : Pointer;
+function AlignTypeData(p : Pointer) : Pointer;
 {$push}
 {$packrecords c}
   type
@@ -155,12 +155,12 @@ Function AlignTypeData(p : Pointer) : Pointer;
 begin
 {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
 {$ifdef VER3_0}
-  Result:=Pointer(align(p,SizeOf(Pointer)));
+  result := Pointer(align(p,SizeOf(Pointer)));
 {$else VER3_0}
-  Result:=Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
+  result := Pointer(align(p,PtrInt(@TAlignCheck(nil^).q)))
 {$endif VER3_0}
 {$else FPC_REQUIRES_PROPER_ALIGNMENT}
-  Result:=p;
+  result := p;
 {$endif FPC_REQUIRES_PROPER_ALIGNMENT}
 end;
 

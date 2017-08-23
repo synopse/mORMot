@@ -10920,7 +10920,7 @@ type
     // - by default, TAutoLocker and TLockedDocVariant will be registered by
     // this unit to implement IAutoLocker and ILockedDocVariant interfaces
     class procedure RegisterGlobal(aInterface: PTypeInfo;
-      aImplementationClass: TInterfacedObjectWithCustomCreateClass); overload;
+      aImplementationClass: TInterfacedObjectClass); overload;
     /// define a global instance for interface resolution
     // - most of the time, you will need a local DI/IoC resolution list; but
     // you may use this method to register a set of shared and global resolution
@@ -29995,7 +29995,7 @@ begin
         entry := OnlyImplementedBy.GetInterfaceEntry(typ^.IntfGuid);
         if entry=nil then
           continue;
-        Setlength(AncestorsImplementedEntry,n+1);
+        SetLength(AncestorsImplementedEntry,n+1);
         AncestorsImplementedEntry[n] := entry;
       end;
       SetLength(Ancestors,n+1);
@@ -53408,9 +53408,9 @@ end;
 {$endif}
 
 class function TInterfaceFactory.Get(const aGUID: TGUID): TInterfaceFactory;
-type TGUID32 = packed record a,b,c,d: integer; end; // brute force optimization
-     PGUID32 = ^TGUID32;
-var i,ga: integer;
+type TGUID32 = packed record a,b{$ifdef CPU32},c,d{$endif}: PtrInt; end;
+     PGUID32 = ^TGUID32; // brute force search optimization
+var i,ga: PtrInt;
     F: ^TInterfaceFactory;
     GUID32: TGUID32 absolute aGUID;
 begin
@@ -53420,7 +53420,7 @@ begin
     ga := GUID32.a;
     for i := 1 to InterfaceFactoryCache.Count do
     with PGUID32(@F^.fInterfaceIID)^ do
-    if (a=ga) and (b=GUID32.b) and (c=GUID32.c) and (d=GUID32.d) then begin
+    if (a=ga) and (b=GUID32.b) {$ifdef CPU32}and (c=GUID32.c) and (d=GUID32.d){$endif} then begin
       result := F^;
       InterfaceFactoryCache.Safe.UnLock;
       exit;
@@ -53466,9 +53466,8 @@ var fact: TInterfaceFactory;
 begin
   fact := Get(aGUID);
   if fact=nil then
-    raise EServiceException.CreateUTF8(
-      '%.GUID2TypeInfo(%): Interface not registered - use %.RegisterInterfaces()',
-      [self,GUIDToShort(aGUID),self]);
+    raise EServiceException.CreateUTF8('%.GUID2TypeInfo(%): Interface not '+
+      'registered - use %.RegisterInterfaces()',[self,GUIDToShort(aGUID),self]);
   result := fact.fInterfaceTypeInfo;
 end;
 
@@ -56224,9 +56223,9 @@ var
   GlobalInterfaceResolutionLock: TRTLCriticalSection;
   GlobalInterfaceResolution: array of record
     TypeInfo: PTypeInfo;
-    ImplementationClass: TInterfacedObjectWithCustomCreateClass;
-    ImplementationInstance: TInterfacedObject;
+    ImplementationClass: TClassInstance;
     InterfaceEntry: PInterfaceEntry;
+    Instance: IInterface;
   end;
 
 class function TInterfaceResolverInjected.RegisterGlobalCheck(aInterface: PTypeInfo;
@@ -56236,29 +56235,23 @@ begin
   if (aInterface=nil) or (aImplementationClass=nil) then
     raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobal(nil)',[self]);
   if aInterface^.Kind<>tkInterface then
-    raise EInterfaceResolverException.CreateUTF8(
-      '%.RegisterGlobal(%): % is not an interface',
-      [self,aInterface^.Name,aInterface^.Name]);
-  //alfchange
-  //result := aImplementationClass.GetInterfaceEntry(
-  //  PInterfaceTypeData(aInterface^.ClassType)^.IntfGuid);
+    raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobal(%): % is not an interface',
+      [self,aInterface^.Name]);
   result := aImplementationClass.GetInterfaceEntry(aInterface^.InterfaceGUID^);
   if result=nil then
-    raise EInterfaceResolverException.CreateUTF8(
-      '%.RegisterGlobal(): % does not implement %',
+    raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobal(): % does not implement %',
       [self,aImplementationClass,aInterface^.Name]);
   EnterCriticalSection(GlobalInterfaceResolutionLock);
   for i := 0 to length(GlobalInterfaceResolution)-1 do
     if GlobalInterfaceResolution[i].TypeInfo=aInterface then begin
       LeaveCriticalSection(GlobalInterfaceResolutionLock); // release fSafe.Lock now
-      raise EInterfaceResolverException.CreateUTF8(
-        '%.RegisterGlobal(%): % already registered',
+      raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobal(%): % already registered',
         [self,aImplementationClass,aInterface^.Name]);
     end;
 end; // caller should explicitly call finally LeaveCriticalSection(...) end;
 
 class procedure TInterfaceResolverInjected.RegisterGlobal(
-  aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectWithCustomCreateClass);
+  aInterface: PTypeInfo; aImplementationClass: TInterfacedObjectClass);
 var aInterfaceEntry: PInterfaceEntry;
     n: integer;
 begin
@@ -56268,7 +56261,7 @@ begin
     SetLength(GlobalInterfaceResolution,n+1);
     with GlobalInterfaceResolution[n] do begin
       TypeInfo := aInterface;
-      ImplementationClass := aImplementationClass;
+      ImplementationClass.Init(aImplementationClass);
       InterfaceEntry := aInterfaceEntry;
     end;
   finally
@@ -56286,9 +56279,10 @@ begin
     n := length(GlobalInterfaceResolution);
     SetLength(GlobalInterfaceResolution,n+1);
     with GlobalInterfaceResolution[n] do begin
+      if not GetInterfaceFromEntry(aImplementation,aInterfaceEntry,Instance) then
+        raise EInterfaceResolverException.CreateUTF8('Unexcepted %.RegisterGlobal(%,%)',
+          [self,aInterface^.Name,aImplementation]);
       TypeInfo := aInterface;
-      IInterface(aImplementation)._AddRef;
-      ImplementationInstance := aImplementation;
       InterfaceEntry := aInterfaceEntry;
     end;
   finally
@@ -56297,37 +56291,35 @@ begin
 end;
 
 class procedure TInterfaceResolverInjected.RegisterGlobalDelete(aInterface: PTypeInfo);
-var i: integer;
+var i,n: integer;
 begin
   if (aInterface=nil) or (aInterface^.Kind<>tkInterface) then
     raise EInterfaceResolverException.CreateUTF8('%.RegisterGlobalDelete(?)',[self]);
   EnterCriticalSection(GlobalInterfaceResolutionLock);
   try
-    for i := 0 to length(GlobalInterfaceResolution)-1 do
+    n := length(GlobalInterfaceResolution)-1;
+    for i := 0 to n do
       with GlobalInterfaceResolution[i] do
-      if TypeInfo=aInterface then
-        if ImplementationInstance=nil then
+      if TypeInfo=aInterface then begin
+        if Instance=nil then
           raise EInterfaceResolverException.CreateUTF8(
             '%.RegisterGlobalDelete(%) does not match an instance, but a class',
-            [self,aInterface^.Name]) else begin
-          IInterface(ImplementationInstance)._Release;
-          exit;
-        end;
+            [self,aInterface^.Name]);
+        Instance := nil; // avoid GPF
+        if n>i then
+          MoveFast(GlobalInterfaceResolution[i+1],GlobalInterfaceResolution[i],
+            (n-i)*sizeof(GlobalInterfaceResolution[i]));
+        SetLength(GlobalInterfaceResolution,n);
+        exit;
+      end;
   finally
     LeaveCriticalSection(GlobalInterfaceResolutionLock);
   end;
 end;
 
 procedure FinalizeGlobalInterfaceResolution;
-var i: Integer;
 begin
-  for i := length(GlobalInterfaceResolution)-1 downto 0 do
-    with GlobalInterfaceResolution[i] do
-      if ImplementationInstance<>nil then
-      try
-        ImplementationInstance.Free;
-      except
-      end;
+  GlobalInterfaceResolution := nil; // also cleanup Instance fields 
   DeleteCriticalSection(GlobalInterfaceResolutionLock);
 end;
 
@@ -56351,11 +56343,11 @@ begin
       for i := 0 to length(GlobalInterfaceResolution)-1 do
         with GlobalInterfaceResolution[i] do
         if TypeInfo=aInterface then
-          if ImplementationInstance<>nil then begin
-            if GetInterfaceFromEntry(ImplementationInstance,InterfaceEntry,Obj) then
-              exit;
+          if Instance<>nil then begin
+            IInterface(Obj) := Instance;
+            exit;
           end else
-            if GetInterfaceFromEntry(ImplementationClass.Create,InterfaceEntry,Obj) then
+            if GetInterfaceFromEntry(ImplementationClass.CreateNew,InterfaceEntry,Obj) then
               exit;
     finally
       LeaveCriticalSection(GlobalInterfaceResolutionLock);
@@ -56394,8 +56386,7 @@ begin
 end;
 
 procedure TInterfaceResolverInjected.InjectResolver(
-  const aOtherResolvers: array of TInterfaceResolver;
-  OwnOtherResolvers: boolean);
+  const aOtherResolvers: array of TInterfaceResolver; OwnOtherResolvers: boolean);
 var i: integer;
 begin
   for i := 0 to high(aOtherResolvers) do
@@ -56712,7 +56703,6 @@ begin
   SetLength(UID,length(aInterfaces));
   for j := 0 to high(aInterfaces) do
     UID[j] := pointer(aInterfaces[j]^.InterfaceGUID);
-    //UID[j] := @PInterfaceTypeData(aInterfaces[j]^.ClassType)^.IntfGuid;
   // check all interfaces available in aSharedImplementation/aImplementationClass
   if (aSharedImplementation<>nil) and
      aSharedImplementation.InheritsFrom(TInterfacedObjectFake) then begin
