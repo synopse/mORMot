@@ -592,7 +592,7 @@ type
     // - as used e.g. by CryptDataForCurrentUser()
     // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
     // - will store a header with its own CRC, so detection of most invalid
-    // formats will occur before any AES/MAC process
+    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash256;
       Encrypt: boolean): RawByteString;
 
@@ -11368,7 +11368,7 @@ begin
     sha3update;
     data.h1 := ExeVersion.Hash.b;
     version := RecordSave(ExeVersion,TypeInfo(TExeVersion));
-    sha3.Update(pointer(version),length(version)); // exe and host/user info
+    sha3.Update(version); // exe and host/user info
     ext := NowUTC;
     sha3.Update(@ext,sizeof(ext));
     sha3update;
@@ -11380,7 +11380,7 @@ begin
     data.i3 := integer(UnixTimeUTC);
     SleepHiRes(0); // force non deterministic time shift
     sha3update;
-    sha3.Update(pointer(OSVersionText),Length(OSVersionText));
+    sha3.Update(OSVersionText);
     sha3.Update(@SystemInfo,sizeof(SystemInfo));
     result := sha3.Cypher(fromos); // = XOR entropy using SHA-3 in XOF mode
   finally

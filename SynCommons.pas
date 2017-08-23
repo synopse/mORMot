@@ -11632,7 +11632,7 @@ procedure crc128c(buf: PAnsiChar; len: cardinal; out crc: THash128);
 // - its output won't match crc128c() value, which works on 8-bit input
 // - will use SSE 4.2 hardware accelerated instruction, if available
 // - is used e.g. by SynCrypto's TAESCFBCRC to check for data integrity
-procedure crcblock(crc128, data128: PBlock128);
+var crcblock: procedure(crc128, data128: PBlock128);
 
 /// compute a proprietary 128-bit CRC of 128-bit binary buffers
 // - apply four crc32c() calls on the 128-bit input chunks, into a 128-bit crc
@@ -11641,12 +11641,10 @@ procedure crcblock(crc128, data128: PBlock128);
 // - is used e.g. by SynEcc's TECDHEProtocol.ComputeMAC for macCrc128c
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 
-{$ifdef CPUINTEL}
 /// computation of our 128-bit CRC of a 128-bit binary buffer without SSE4.2
 // - to be used for regression tests only: crcblock will use the fastest
 // implementation available on the current CPU
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
-{$endif}
 
 /// returns TRUE if all 16 bytes of this 128-bit buffer equal zero
 // - e.g. a MD5 digest, or an AES block
@@ -33274,13 +33272,9 @@ end;
 
 procedure crcblocks(crc128, data128: PBlock128; count: integer);
 begin
-  {$ifdef PUREPASCAL}
-  while count>0 do begin
-    crcblock(crc128,data128);
-  {$else}
   {$ifdef CPUX86}
   if (cfSSE42 in CpuFeatures) and (count>0) then
-  asm 
+  asm
         mov     ecx, crc128
         mov     edx, data128
 @s:     mov     eax, dword ptr[ecx]
@@ -33299,23 +33293,16 @@ begin
         lea     edx, [edx + 16]
         jnz     @s
   end else
-  while count>0 do begin
-    crcblockNoSSE42(crc128,data128); 
   {$else}
   while count>0 do begin
     crcblock(crc128,data128);
-  {$endif CPUX86}
-  {$endif PUREPASCAL}
     inc(data128);
     dec(count);
   end;
+  {$endif CPUX86}
 end;
 
-{$ifdef CPUINTEL}
 procedure crcblockNoSSE42(crc128, data128: PBlock128);
-{$else}
-procedure crcblock(crc128, data128: PBlock128);
-{$endif CPUINTEL}
 {$ifdef PUREPASCAL}
 var c: cardinal;
 begin
@@ -33393,7 +33380,7 @@ asm // Delphi is not efficient about compiling above pascal code
 end;
 {$endif}
 {$ifdef CPUINTEL}
-procedure crcblock(crc128, data128: PBlock128);
+procedure crcblockSSE42(crc128, data128: PBlock128);
 {$ifdef CPU64}
 {$ifdef FPC}nostackframe; assembler;
 asm
@@ -33401,12 +33388,20 @@ asm
 asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
         .NOFRAME
 {$endif FPC}
-        test    byte ptr[rip + CpuFeatures + 6], $10 // cfSSE42 in CpuFeatures
-        jz      crcblockNoSSE42
         {$ifdef Linux}
-        mov     rcx, rdi
-        mov     rdx, rsi
-        {$endif Linux}
+        mov     eax, dword ptr[rdi]
+        mov     r8d, dword ptr[rdi + 4]
+        mov     r9d, dword ptr[rdi + 8]
+        mov     r10d, dword ptr[rdi + 12]
+        crc32   eax, dword ptr[rsi]
+        crc32   r8d, dword ptr[rsi + 4]
+        crc32   r9d, dword ptr[rsi + 8]
+        crc32   r10d, dword ptr[rsi + 12]
+        mov     dword ptr[rdi], eax
+        mov     dword ptr[rdi + 4], r8d
+        mov     dword ptr[rdi + 8], r9d
+        mov     dword ptr[rdi + 12], r10d
+        {$else}
         mov     eax, dword ptr[rcx]
         mov     r8d, dword ptr[rcx + 4]
         mov     r9d, dword ptr[rcx + 8]
@@ -33419,12 +33414,11 @@ asm // rcx=crc128, rdx=data128 (Linux: rdi,rsi)
         mov     dword ptr[rcx + 4], r8d
         mov     dword ptr[rcx + 8], r9d
         mov     dword ptr[rcx + 12], r10d
+        {$endif Linux}
 end;
 {$else}
 asm // eax=crc128, edx=data128
-        test    byte ptr[CpuFeatures + 6], $10 // cfSSE42 in CpuFeatures
         mov     ecx, eax
-        jz      crcblockNoSSE42
         {$ifdef ISDELPHI2010}
         mov     eax, dword ptr[ecx]
         crc32   eax, dword ptr[edx]
@@ -39796,6 +39790,10 @@ end;
 
 procedure InitRedirectCode;
 begin
+  {$ifdef CPUINTEL}
+  if cfSSE42 in CpuFeatures then
+    crcblock := @crcblockSSE42;
+  {$endif CPUINTEL}
   {$ifdef DELPHI5OROLDER}
   StrLen := @StrLenX86;
   {$ifdef WITH_ERMS}
@@ -39806,24 +39804,25 @@ begin
     MoveFast := @MoveX87;
     FillcharFast := @FillCharX87;
   end;
-  {$else}
+  {$else DELPHI5OROLDER}
   {$ifdef CPU64}
   {$ifdef HASAESNI}
   if cfSSE42 in CpuFeatures then
     StrLen := @StrLenSSE42 else
-  {$endif}
+  {$endif HASAESNI}
     StrLen := @StrLenSSE2;
   {$ifdef WITH_ERMS}
   if cfERMS in CpuFeatures then begin
     MoveFast := @MoveERMSB;
     FillcharFast := @FillCharERMSB;
-  end else {$endif} begin
+  end else
+  {$endif WITH_ERMS} begin
     //MoveFast := @MoveJBon; // Johan Bontes' is actually slower than RTL's
     //FillcharFast := @FillCharJBon; // this Johan Bontes' version is buggy
     MoveFast := @Movex64;
     FillCharFast := @Fillcharx64;
   end;
-  {$else}
+  {$else CPU64}
   {$ifdef CPUINTEL}
   if cfSSE2 in CpuFeatures then begin
     if cfSSE42 in CpuFeatures then
@@ -65010,6 +65009,7 @@ initialization
   TestIntelCpuFeatures;
   {$endif}
   MoveFast := @System.Move;
+  crcblock := @crcblockNoSSE42;
   {$ifdef FPC}
   FillCharFast := @System.FillChar; // FPC cross-platform RTL is optimized enough
   {$else}

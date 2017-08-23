@@ -3118,8 +3118,10 @@ begin
   {$ifdef CPUINTEL}
   if cfSSE42 in CpuFeatures then
     Test(crc32csse42,'sse42');
+  {$ifdef CPUX64}
   if (cfSSE42 in CpuFeatures) and (cfAesNi in CpuFeatures) then
-    Test(crc32c,'sse42+aesni'); // use SSE4.2+pclmulqdq instructions
+    Test(crc32c,'sse42+aesni'); // use SSE4.2+pclmulqdq instructions on x64
+  {$endif}
   {$endif}
   exit; // code below is speed informative only, without any test
   Timer.Start;
