@@ -509,6 +509,7 @@ type
     /// JWT classes
     procedure _JWT;
     {$endif NOVARIANTS}
+    /// compute some performance numbers, mostly against regression 
     procedure Benchmark;
   end;
 
@@ -10270,6 +10271,7 @@ Delphi 10.2 Tokyo, Win64
      50000 hmacsha512 in 317.62ms i.e. 157418/s or 335 MB/s
      50000 sha3_256 in 599.45ms i.e. 83409/s or 177.5 MB/s
      50000 sha3_512 in 1.09s i.e. 45759/s or 97.3 MB/s
+
      50000 aes128cfb in 224.69ms i.e. 222528/s or 473.5 MB/s
      50000 aes128ofb in 180.94ms i.e. 276331/s or 588 MB/s
      50000 aes128cfbcrc in 223.56ms i.e. 223644/s or 475.9 MB/s

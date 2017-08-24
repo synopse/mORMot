@@ -280,7 +280,6 @@ type // Delphi 5 doesn't have those base types defined :(
   PCardinal = ^Cardinal;
   IntegerArray  = array[0..$effffff] of integer;
   PIntegerArray = ^IntegerArray;
-
 {$endif}
 
 function SynLZdecompressdestlen(in_p: PAnsiChar): integer;
@@ -506,10 +505,12 @@ asm // rcx=src, edx=size, r8=dest
         mov     dword ptr [r8], 0
         add     r8, 4
         pxor    xmm0, xmm0
-        mov     eax, 32768-32
-@06:    movdqu  dqword ptr [off+rax-16], xmm0
-        movdqu  dqword ptr [off+rax], xmm0
-        sub     eax, 32
+        mov     eax, 32768-64
+@06:    movdqa  dqword ptr [off+rax-48], xmm0 // stack is aligned to 16 bytes
+        movdqa  dqword ptr [off+rax-32], xmm0
+        movdqa  dqword ptr [off+rax-16], xmm0
+        movdqa  dqword ptr [off+rax], xmm0
+        sub     eax, 64
         jae     @06
         cmp     rbx, r10
         ja      @15
@@ -583,7 +584,7 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 1
 @13:    add     ecx, ecx
         jnz     @14
-        mov     r11, r8
+@13z:   mov     r11, r8
         mov     [r8], ecx
         add     r8, 4
         add     ecx, 1
