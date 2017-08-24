@@ -33243,26 +33243,26 @@ asm // ecx=crc, rdx=buf, r8=len (Linux: edi,rsi,rdx)
         shr     r8, 3
         jz      @2
 @1:     {$ifdef FPC}
-        crc32 rax, qword [rdx]
+        crc32   rax, qword [rdx] // hash 8 bytes per loop
         {$else}
         db $F2,$48,$0F,$38,$F1,$02 // circumvent Delphi inline asm compiler bug
         {$endif}
         dec     r8
         lea     rdx, [rdx + 8]
         jnz     @1
-@2:     and     rcx, 7
+@2:     and     ecx, 7
         jz      @0
-        cmp     rcx, 4
+        cmp     ecx, 4
         jb      @4
         crc32   eax, dword ptr[rdx]
-        sub     rcx, 4
+        sub     ecx, 4
         lea     rdx, [rdx + 4]
         jz      @0
 @4:     crc32   eax, byte ptr[rdx]
-        dec     rcx
+        dec     ecx
         jz      @0
         crc32   eax, byte ptr[rdx + 1]
-        dec     rcx
+        dec     ecx
         jz      @0
         crc32   eax, byte ptr[rdx + 2]
 @0:     not     eax
@@ -33637,7 +33637,7 @@ asm // eax=crc, edx=buf, ecx=len
 @3:     test    edx, 3
         jz      @8 // align to 4 bytes boundary
         {$ifdef ISDELPHI2010}
-        crc32   dword ptr eax, byte ptr[edx]
+        crc32   eax, byte ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F0, $02
         {$endif}
@@ -33650,8 +33650,8 @@ asm // eax=crc, edx=buf, ecx=len
         shr     ecx, 3
         jz      @2
 @1:     {$ifdef ISDELPHI2010}
-        crc32   dword ptr eax, dword ptr[edx]
-        crc32   dword ptr eax, dword ptr[edx + 4]
+        crc32   eax, dword ptr[edx]
+        crc32   eax, dword ptr[edx + 4]
         {$else}
         db      $F2, $0F, $38, $F1, $02
         db      $F2, $0F, $38, $F1, $42, $04
@@ -33665,7 +33665,7 @@ asm // eax=crc, edx=buf, ecx=len
         cmp     ecx, 4
         jb      @4
         {$ifdef ISDELPHI2010}
-        crc32   dword ptr eax, dword ptr[edx]
+        crc32   eax, dword ptr[edx]
         {$else}
         db      $F2, $0F, $38, $F1, $02
         {$endif}
@@ -33673,13 +33673,13 @@ asm // eax=crc, edx=buf, ecx=len
         lea     edx, [edx + 4]
         jz      @0
 @4:     {$ifdef ISDELPHI2010}
-        crc32   dword ptr eax, byte ptr[edx]
+        crc32   eax, byte ptr[edx]
         dec     ecx
         jz      @0
-        crc32   dword ptr eax, byte ptr[edx + 1]
+        crc32   eax, byte ptr[edx + 1]
         dec     ecx
         jz      @0
-        crc32   dword ptr eax, byte ptr[edx + 2]
+        crc32   eax, byte ptr[edx + 2]
         {$else}
         db      $F2, $0F, $38, $F0, $02
         dec     ecx

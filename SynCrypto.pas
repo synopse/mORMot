@@ -12621,33 +12621,20 @@ end;
 function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; external;
 
 function crc32c_sse42_aesni(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
-{$ifdef FPC}
-begin
-  if buf=nil then
-    result := crc else
-    result := not crc32_iscsi_01(buf,len,not crc);
-{$else}
-{$ifdef MSWINDOWS}
-asm
+{$ifdef MSWINDOWS} {$ifdef FPC}nostackframe; assembler;{$endif}
+asm // rcx=crc, rdx=buf, r8=len
         mov     rax, rcx
+        mov     rcx, r8
         not     eax
         test    rdx, rdx
         jz      @0
         test    r8, r8
         jz      @0
-        cmp     r8, 100
+        cmp     r8, 64
         ja      @intel // only call Intel code if worth it
-@7:     test    dl, 7
-        jz      @8 // align to 8 bytes boundary
-        crc32   eax, byte ptr[rdx]
-        inc     rdx
-        dec     r8
-        jz      @0
-        test    dl, 7
-        jnz     @7
-@8:     mov     rcx, r8
         shr     r8, 3
         jz      @2
+        // alignment non needed for small blocks < 64 bytes
 @1:     {$ifdef FPC}
         crc32 rax, qword [rdx] // hash 8 bytes per opcode
         {$else}
@@ -12656,19 +12643,19 @@ asm
         dec     r8
         lea     rdx, [rdx + 8]
         jnz     @1
-@2:     and     rcx, 7
+@2:     and     ecx, 7
         jz      @0
-        cmp     rcx, 4
+        cmp     ecx, 4
         jb      @4
         crc32   eax, dword ptr[rdx]
-        sub     rcx, 4
+        sub     ecx, 4
         lea     rdx, [rdx + 4]
         jz      @0
 @4:     crc32   eax, byte ptr[rdx]
-        dec     rcx
+        dec     ecx
         jz      @0
         crc32   eax, byte ptr[rdx + 1]
-        dec     rcx
+        dec     ecx
         jz      @0
         crc32   eax, byte ptr[rdx + 2]
 @0:     not     eax
@@ -12684,7 +12671,6 @@ begin
   if buf=nil then
     result := crc else
     result := not crc32_iscsi_01(buf,len,not crc);
-{$endif}
 {$endif}
 end;
 
