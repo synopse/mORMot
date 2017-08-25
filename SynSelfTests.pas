@@ -4904,17 +4904,17 @@ procedure TTestLowLevelCommon._TObjArray;
 const MAX=200;
 var i: integer;
     arr: TPersistentAutoCreateFieldsTestObjArray;
-    test: TObjArrayTest;
+    test,test2: TObjArrayTest;
     p: TPersistentAutoCreateFieldsTest;
     tmp: RawUTF8;
     valid: boolean;
-procedure CheckTest;
+procedure CheckValues(test: TComplexNumberObjArray);
 var i: integer;
 begin
-  Check(length(test.Values)=MAX+1);
+  Check(length(test)=MAX+1);
   for i := 0 to MAX do begin
-    CheckSame(test.Values[i].Real,0.5+i);
-    CheckSame(test.Values[i].Imaginary,0.2+i);
+    CheckSame(test[i].Real,0.5+i);
+    CheckSame(test[i].Imaginary,0.2+i);
   end;
 end;
 begin
@@ -4954,17 +4954,22 @@ begin
   try
     for i := 0 to max do
       ObjArrayAdd(test.fValues,TComplexNumber.Create(0.5+i,0.2+i));
-    CheckTest;
+    CheckValues(test.Values);
     tmp := ObjectToJSON(test);
   finally
     test.Free;
   end;
   test := TObjArrayTest.CreateFake;
+  test2 := TObjArrayTest.CreateFake;
   try
-    JSONToObject(test,pointer(tmp),valid);
+    check(ObjectLoadJSON(test,tmp));
+    CheckValues(test.Values);
+    JSONToObject(test2,pointer(tmp),valid);
     Check(valid);
-    CheckTest;
+    CheckValues(test2.Values);
+    check(ObjectEquals(test,test2));
   finally
+    test2.Free;
     test.Free;
   end;
 end;

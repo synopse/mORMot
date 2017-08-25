@@ -28611,13 +28611,13 @@ begin
       case PropType^.FloatType of
       ftCurr: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
-          result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
+          result := PInt64(GetterAddr(Source))^=PInt64(DestInfo.GetterAddr(Dest))^ else
           result := GetCurrencyProp(Source)=DestInfo^.GetCurrencyProp(Dest);
         exit;
       end;
       ftDoub: begin
         if GetterIsField and ((@self=DestInfo) or DestInfo^.GetterIsField) then
-          result := GetInt64Value(Source)=DestInfo^.GetInt64Value(Dest) else
+          result := PInt64(GetterAddr(Source))^=PInt64(DestInfo.GetterAddr(Dest))^ else
           result := SynCommons.SameValue(GetDoubleProp(Source),DestInfo^.GetDoubleProp(Dest));
         exit;
       end;
@@ -28631,7 +28631,7 @@ begin
         if DynArrayIsObjArray and
            ((@self=DestInfo) or DestInfo^.DynArrayIsObjArray) then begin
           for i := 0 to daS.Count-1 do
-            if not ObjectEquals(PObjectArray(daS.Value)[i],PObjectArray(daD.Value)[i]) then
+            if not ObjectEquals(PObjectArray(daS.Value^)[i],PObjectArray(daD.Value^)[i]) then
               exit;
           result := true;
         end else
@@ -47281,7 +47281,7 @@ var i: integer;
     C1,C2: TClass;
     P1,P2: PPropInfo;
 begin
-  if (Value1=nil) or (Value2=nil) then
+  if (Value1=nil) or (Value2=nil) or (Value1=Value2) then
     result := Value1=Value2 else
   if Value1.InheritsFrom(TSQLRecord) and Value2.InheritsFrom(TSQLRecord) then
     result := TSQLRecord(Value1).SameValues(TSQLRecord(Value2)) else begin
@@ -47301,7 +47301,7 @@ begin
         P1 := P1^.Next;
       end;
       C1 := C1.ClassParent;
-    until C1=nil;
+    until C1=TObject;
     result := true;
   end;
 end;
