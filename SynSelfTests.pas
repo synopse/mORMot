@@ -4889,6 +4889,12 @@ type
   published
     property Values: TComplexNumberObjArray read fValues write fValues;
   end;
+  TSQLRecordArrayTest = class(TSQLRecord)
+  private
+    fValues: TComplexNumberObjArray;
+  published
+    property Values: TComplexNumberObjArray read fValues write fValues;
+  end;
 
 constructor TPersistentAutoCreateFieldsTest.CreateFake;
 begin
@@ -4906,6 +4912,7 @@ var i: integer;
     arr: TPersistentAutoCreateFieldsTestObjArray;
     test,test2: TObjArrayTest;
     p: TPersistentAutoCreateFieldsTest;
+    r1,r2: TSQLRecordArrayTest;
     tmp: RawUTF8;
     valid: boolean;
 procedure CheckValues(test: TComplexNumberObjArray);
@@ -4958,6 +4965,18 @@ begin
     tmp := ObjectToJSON(test);
   finally
     test.Free;
+  end;
+  r1 := TSQLRecordArrayTest.CreateFrom(tmp);
+  r2 := TSQLRecordArrayTest.CreateFrom(tmp);
+  try
+    check(r1.IDValue=0);
+    check(r2.IDValue=0);
+    CheckValues(r1.Values);
+    CheckValues(r2.Values);
+    check(r1.SameValues(r2));
+  finally
+    r2.Free;
+    r1.Free;
   end;
   test := TObjArrayTest.CreateFake;
   test2 := TObjArrayTest.CreateFake;

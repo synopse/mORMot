@@ -22847,6 +22847,7 @@ end;
 
 function TSQLPropInfoRTTIDynArray.CompareValue(Item1, Item2: TObject; CaseInsensitive: boolean): PtrInt;
 var da1,da2: TDynArray;
+    i: integer;
 begin
   if Item1=Item2 then
     result := 0 else
@@ -22856,9 +22857,18 @@ begin
     result := 1 else begin
     GetDynArray(Item1,da1);
     GetDynArray(Item2,da2);
-    if da1.Equals(da2) then
-      result := 0 else
-      result := PtrInt(Item1)-PtrInt(Item2); // pseudo comparison
+    result := da1.Count-da2.Count;
+    if result<>0 then
+      exit;
+    result := PtrInt(Item1)-PtrInt(Item2); // pseudo comparison
+    if fObjArray<>nil then begin
+      for i := 0 to da1.Count-1 do
+        if not ObjectEquals(PObjectArray(da1.Value^)[i],PObjectArray(da2.Value^)[i]) then
+          exit;
+    end else
+      if not da1.Equals(da2) then
+        exit;
+    result := 0;
   end;
 end;
 
