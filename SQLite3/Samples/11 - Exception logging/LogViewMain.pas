@@ -686,8 +686,9 @@ begin
         while (P<>nil) and (P^<>#0) do begin
           line := GetNextLine(P,P);
           Split(line,'=',name,value);
-          s := s+#13#10+UTF8ToString(name)+#13#10+StringOfChar('-',length(name))+
-            #13#10#13#10+UTF8ToString(StringReplaceAll(value,#9,#13#10))+#13#10;
+          if value<>'' then
+            s := s+#13#10+UTF8ToString(name)+#13#10+StringOfChar('-',length(name))+
+              #13#10#13#10+UTF8ToString(StringReplaceAll(value,#9,#13#10))+#13#10;
         end;
       end;
     M.Text := s;

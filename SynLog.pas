@@ -4728,8 +4728,7 @@ begin
    Host=BW013299 User=G018869 CPU=1*0-15-1027 OS=2.3=5.1.2600 Wow64=0 Freq=3579545
    TSynLog 1.13 LVCL 2011-04-07 12:04:09 }
     if (fCount<=fLineHeaderCountToIgnore) or LineSizeSmallerThan(0,24) or
-       not IdemPChar(fLines[1],'HOST=') or LineSizeSmallerThan(2,24) or
-       (fLevels=nil) or (fLineLevelOffset=0) then
+       not IdemPChar(fLines[1],'HOST=') or (fLevels=nil) or (fLineLevelOffset=0) then
       exit;
     PBeg := fLines[0];
     PEnd := PBeg+LineSize(0)-12;
