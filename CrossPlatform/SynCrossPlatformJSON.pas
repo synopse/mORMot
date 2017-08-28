@@ -429,8 +429,7 @@ procedure SetInstanceProp(Instance: TObject; PropInfo: TRTTIPropInfo;
   const Value: variant);
 
 /// retrieve all the published methods of a given class, using RTTI
-procedure GetPublishedMethods(Instance: TObject;
-  out Methods: TPublishedMethodDynArray);
+procedure GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodDynArray);
 
 /// convert an "array of const" parameter value into its string representation
 function VarRecToValue(const V: TVarRec; out wasString: boolean): string;
@@ -1582,20 +1581,19 @@ begin
     result := 'null';
 end;
 
-procedure GetPublishedMethods(Instance: TObject;
-  out Methods: TPublishedMethodDynArray);
+procedure GetPublishedMethods(Instance: TObject; out Methods: TPublishedMethodDynArray);
 var n: integer;
   procedure AddParentsFirst(C: TClass);
   type
     TMethodInfo = packed record
-    {$ifdef FPC}
+      {$ifdef FPC}
       Name: PShortString;
       Addr: Pointer;
-    {$else}
+      {$else}
       Len: Word;
       Addr: Pointer;
       Name: Byte;
-    {$endif}
+      {$endif}
     end;
   var M: ^TMethodInfo;
       Method: TMethod;

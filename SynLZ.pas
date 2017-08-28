@@ -584,7 +584,7 @@ asm // rcx=src, edx=size, r8=dest
         add     r8, 1
 @13:    add     ecx, ecx
         jnz     @14
-@13z:   mov     r11, r8
+        mov     r11, r8
         mov     [r8], ecx
         add     r8, 4
         add     ecx, 1

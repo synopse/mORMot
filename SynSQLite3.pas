@@ -3629,12 +3629,12 @@ begin
     with PConcatRec(sqlite3.aggregate_context(Context,sizeof(TConcatRec)))^ do begin
       // +1 below for adding a final #0
       txt := sqlite3.value_text(argv[0]);
-      txtlen := SynCommons.strlen(txt);
+      txtlen := SynCommons.StrLen(txt);
       if result=nil then
         GetMem(result,txtlen+1)
       else begin
         sep := sqlite3.value_text(argv[1]);
-        seplen := SynCommons.strlen(sep);
+        seplen := SynCommons.StrLen(sep);
         ReallocMem(result,resultlen+txtlen+seplen+1);
         MoveFast(sep^,result[resultlen],seplen);
         inc(resultlen,seplen);

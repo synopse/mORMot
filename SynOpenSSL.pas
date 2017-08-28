@@ -348,15 +348,15 @@ var
   OpenSSLFolderName: TFileName;
 
   /// global variable used to inline OpenSSL function
-  // - do not use directly
+  // - do not use directly - but used by OpenSSL
   SharedOpenSSL: TOpenSSLLib;
 
   /// global variable used to inline OpenSSL function
-  // - do not use directly
+  // - do not use directly - but used by OpenSSL
   TryLoadOpenSSLState: (ossNotTested, ossAvailable, ossNotAvailable);
 
 /// global function used to inline OpenSSL function
-// - do not call directly
+// - do not call directly - but used by OpenSSL
 procedure TryLoadOpenSSL;
 
 /// access to a shared OpenSSL library functions
