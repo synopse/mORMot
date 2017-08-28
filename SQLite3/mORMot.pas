@@ -21564,15 +21564,17 @@ end;
 function TSQLPropInfoRTTIInt64.GetHash(Instance: TObject; CaseInsensitive: boolean): cardinal;
 var I64: Int64;
 begin
-  if fPropInfo.GetterIsField then
-    I64 := PInt64(fPropInfo.GetterAddr(Instance))^ else
+  if fGetterIsFieldPropOffset<>0 then
+    I64 := PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^ else
     I64 := fPropInfo.GetInt64Prop(Instance);
   result := crc32c(0,@I64,sizeof(I64)); // better hash distribution using crc32c
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetJSONValues(Instance: TObject; W: TJSONSerializer);
 begin
-  W.Add(fPropInfo.GetInt64Prop(Instance));
+  if fGetterIsFieldPropOffset<>0 then
+    W.Add(PInt64(PtrUInt(Instance)+fGetterIsFieldPropOffset)^) else
+    W.Add(fPropInfo.GetInt64Prop(Instance));
 end;
 
 procedure TSQLPropInfoRTTIInt64.GetValueVar(Instance: TObject;
@@ -59429,7 +59431,8 @@ begin
   if (PCardinal(PPointer(PPointer(Instance)^)^)^=
       PCardinal(@TInterfacedObjectFake.FakeQueryInterface)^) then begin
     fake := TInterfacedObjectFake(Instance).SelfFromInterface;
-    if Assigned(fake.fInvoke) then begin // bypass all JSON marshalling
+    if Assigned(fake.fInvoke) then begin
+      // call SOA/fake interface? -> bypass all JSON marshalling
       if (output=nil) and (fMethod^.ArgsOutputValuesCount>0) then
         exit; // ensure a function has a TOnAsynchRedirectResult callback
       result := fake.fInvoke(fMethod^,params,output,nil,nil,nil);
