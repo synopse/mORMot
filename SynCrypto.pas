@@ -6946,7 +6946,7 @@ begin
   Data[Index] := $80;
   FillcharFast(Data[Index+1],127-Index,0);
   if Index>=112 then begin
-    {$ifdef SHA384_X86}
+    {$ifdef SHA512_X86}
     if cfSSSE3 in CpuFeatures then
       sha512_compress(@Hash,@Data) else
     {$endif}
@@ -6959,7 +6959,7 @@ begin
   end;
   PQWord(@Data[112])^ := bswap64(MLen shr 61);
   PQWord(@Data[120])^ := bswap64(MLen shl 3);
-  {$ifdef SHA384_X86}
+  {$ifdef SHA512_X86}
   if cfSSSE3 in CpuFeatures then
     sha512_compress(@Hash,@Data) else
   {$endif}
@@ -7005,7 +7005,7 @@ begin
     if aLen<=Len then begin
       if Index<>0 then begin
         MoveFast(Buffer^,Data[Index],aLen);
-        {$ifdef SHA384_X86}
+        {$ifdef SHA512_X86}
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,@Data) else
         {$endif}
@@ -7016,7 +7016,7 @@ begin
           sha512_compresspas(Hash,@Data);
         Index := 0;
       end else // avoid temporary copy
-        {$ifdef SHA384_X86}
+        {$ifdef SHA512_X86}
         if cfSSSE3 in CpuFeatures then
           sha512_compress(@Hash,Buffer) else
         {$endif}
