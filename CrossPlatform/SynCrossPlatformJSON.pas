@@ -64,7 +64,8 @@ uses
   Classes,
 {$ifdef NEXTGEN}
   System.Generics.Collections,
-{$else}
+{$endif}
+{$ifndef NEXTGEN}
   Contnrs,
 {$endif}
   Variants,

@@ -73,11 +73,12 @@ uses
   SysUtils,
   Classes,
   TypInfo,
-{$ifdef NEXTGEN}
+{$ifdef ISDELPHI2010}
   System.Generics.Collections,
-{$else}
+{$endif}
+{$ifndef NEXTGEN}
   Contnrs,
-{$endif NEXTGEN}
+{$endif}
   Variants,
   SynCrossPlatformJSON,
 {$endif ISDWS}
@@ -781,9 +782,16 @@ type
     // - use DateTimeToSQL() for date/time database fields
     // - FieldNames='' retrieve simple fields, '*' all fields, or as specified
     function RetrieveList(Table: TSQLRecordClass; const FieldNames,
-      SQLWhere: string; const BoundsSQLWhere: array of const): TObjectList;
+      SQLWhere: string; const BoundsSQLWhere: array of const): TObjectList; overload;
     /// execute directly a SQL statement, returning a list of data rows or nil
     function ExecuteList(const SQL: string): TSQLTableJSON; virtual; abstract;
+    {$ifdef ISDELPHI2010} // Delphi 2009 generics support is buggy :(
+    /// execute directly a SQL statement, returning a generic list of TSQLRecord
+    // - you can bind parameters by using ? in the SQLWhere clause
+    // - use DateTimeToSQL() for date/time database fields
+    // - FieldNames='' retrieve simple fields, '*' all fields, or as specified
+    function RetrieveList<T: TSQLRecord>(const FieldNames, SQLWhere: string; const BoundsSQLWhere: array of const): TObjectList<T>; overload;
+    {$endif}
 
     /// create a new member, returning the newly created ID, or 0 on error
     // - if SendData is true, content of Value is sent to the server as JSON
@@ -2262,6 +2270,30 @@ begin
       rows.Free;
     end;
 end;
+
+{$ifdef ISDELPHI2010}
+function TSQLRest.RetrieveList<T>(const FieldNames, SQLWhere: string;
+  const BoundsSQLWhere: array of const): TObjectList<T>; 
+var rows: TSQLTableJSON;
+    rec: T;
+begin
+  result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
+  rows := MultiFieldValues(TSQLRecordClass(T),FieldNames,SQLWhere,BoundsSQLWhere);
+  if rows<>nil then
+    try
+      repeat
+        rec := T.Create;
+        if not rows.FillOne(rec) then begin
+          rec.Free;
+          break;
+        end;
+        result.Add(rec);
+      until false;
+    finally
+      rows.Free;
+    end;
+end;
+{$endif}
 
 function TSQLRest.Add(Value: TSQLRecord; SendData, ForceID: boolean;
   const FieldNames: string): TID;
