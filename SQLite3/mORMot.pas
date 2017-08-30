@@ -51768,7 +51768,7 @@ end;
 
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
   Ctxt: TSQLRestServerURIContext): TAuthSession;
-var aTimeStamp, aSignature, aExpectedSignature: cardinal;
+var aTimeStamp, aSignature, aMinimalTimeStamp, aExpectedSignature: cardinal;
     PTimeStamp: PAnsiChar;
     aURLlength: Integer;
 begin
@@ -51781,9 +51781,10 @@ begin
   end;
   aURLlength := Ctxt.URISessionSignaturePos-1;
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
+  aMinimalTimeStamp := result.fLastTimeStamp-fTimeStampCoherencyTicks;
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
-     (fNoTimeStampCoherencyCheck or (result.fLastTimeStamp=0) or
-      (aTimeStamp>=result.fLastTimeStamp-fTimeStampCoherencyTicks)) then begin
+     (fNoTimeStampCoherencyCheck or (integer(aMinimalTimeStamp)<0) or
+      (aTimeStamp>=aMinimalTimeStamp)) then begin
     aExpectedSignature := crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
       pointer(Ctxt.Call^.url),aURLlength);
     if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
@@ -51800,7 +51801,7 @@ begin
   end else begin
     {$ifdef WITHLOG}
     Ctxt.Log.Log(sllUserAuth,'Invalid TimeStamp: expected >=%, got %',
-      [result.fLastTimeStamp-fTimeStampCoherencyTicks],self);
+      [aMinimalTimeStamp,Int64(aTimeStamp)],self);
     {$endif}
   end;
   result := nil; // indicates invalid signature
