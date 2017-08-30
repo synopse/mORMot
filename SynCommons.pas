@@ -11148,19 +11148,26 @@ function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean
 
 /// fast conversion from hexa chars into a cardinal
 // - reverse function of CardinalToHex()
+// - returns false and set aValue=0 if Hex is not a valid hexadecimal 32-bit
+// unsigned integer
+// - returns true and set aValue with the decoded number, on success
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
     {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
     // inline gives an error under release conditions with FPC
 
 /// fast conversion from hexa chars into a cardinal
 // - reverse function of Int64ToHex()
+// - returns false and set aValue=0 if Hex is not a valid hexadecimal 64-bit
+// signed integer
+// - returns true and set aValue with the decoded number, on success
 function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean; overload;
     {$ifndef FPC}{$ifdef HASINLINE}inline;{$endif}{$endif}
     { inline gives an error under release conditions with FPC }
 
 /// fast conversion from hexa chars into a cardinal
 // - reverse function of Int64ToHex()
-// - returns 0 if the supplied text buffer is not a valid 16-char hexadecimal
+// - returns 0 if the supplied text buffer is not a valid hexadecimal 64-bit
+// signed integer
 function HexDisplayToInt64(const Hex: RawByteString): Int64; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
@@ -26953,11 +26960,13 @@ end;
 
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
 begin
+  aValue := 0;
   result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
 end;
 
 function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean;
 begin
+  aValue := 0;
   result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
 end;
 
