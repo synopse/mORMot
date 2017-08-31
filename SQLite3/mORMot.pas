@@ -15377,6 +15377,7 @@ type
   protected
     fServer: TSQLRestServer;
     fOptions: TSQLRestServerAuthenticationOptions;
+    fAlgoName: RawUTF8;
     // GET ModelRoot/auth?UserName=...&Session=... -> release session
     function AuthSessionRelease(Ctxt: TSQLRestServerURIContext): boolean;
     /// retrieve an User instance from its logon name
@@ -15475,8 +15476,31 @@ type
       var Call: TSQLRestURIParams); override;
   end;
 
+  /// algorithms known by TSQLRestServerAuthenticationSignedURI to digitaly
+  // compute the session_signature parameter value for a given URI
+  // - by default, suaCRC32 will compute fast but not cryptographically secure
+  // ! crc32(crc32(privatesalt,timestamp,8),url,urllen)
+  // - suaCRC32C and suaXXHASH will be faster and slightly safer
+  // - but you can select other stronger alternatives, which result will be
+  // reduced to 32-bit hexadecimal - suaMD5 will be the fastest cryptographic
+  // hash available on all platforms, for enhanced security, by calling e.g.
+  // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+  // !   TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
+  // - suaSHA1, suaSHA256 and suaSHA512 will be the slowest, to provide
+  // additional level of trust, depending on your requirements: note that
+  // since the hash is reduced to 32-bit resolution, those may not provide
+  // higher security than suaMD5
+  // - note that SynCrossPlatformRest clients only implements suaCRC32 yet
+  TSQLRestServerAuthenticationSignedURIAlgo =
+    (suaCRC32, suaCRC32C, suaXXHASH, suaMD5, suaSHA1, suaSHA256, suaSHA512);
+
+  /// function prototype for TSQLRestServerAuthenticationSignedURI computation
+  // of the session_signature parameter value
+  TSQLRestServerAuthenticationSignedURIComputeSignature = function(
+    privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal of object;
+
   /// secure authentication scheme using URL-level digital signature
-  // - expected format of session_signature is
+  // - default suaCRC32 format of session_signature is
   // !Hexa8(SessionID)+
   // !Hexa8(TimeStamp)+
   // !Hexa8(crc32('SessionID+HexaSessionPrivateKey'+Sha256('salt'+PassWord)+
@@ -15486,8 +15510,25 @@ type
     fNoTimeStampCoherencyCheck: Boolean;
     fTimeStampCoherencySeconds: cardinal;
     fTimeStampCoherencyTicks: cardinal;
+    fComputeSignature: TSQLRestServerAuthenticationSignedURIComputeSignature;
     procedure SetNoTimeStampCoherencyCheck(value: boolean);
     procedure SetTimeStampCoherencySeconds(value: cardinal);
+    procedure SetAlgorithm(value: TSQLRestServerAuthenticationSignedURIAlgo);
+    // class functions implementing TSQLRestServerAuthenticationSignedURIAlgo
+    class function ComputeSignatureCrc32(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureCrc32c(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignaturexxHash(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureMD5(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureSHA1(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureSHA256(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function ComputeSignatureSHA512(privatesalt: cardinal;
+      timestamp, url: PAnsiChar; urllen: integer): cardinal;
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
@@ -15518,6 +15559,16 @@ type
     // WebSockets), even over a slow Internet connection
     property TimeStampCoherencySeconds: cardinal read fTimeStampCoherencySeconds
       write SetTimeStampCoherencySeconds;
+    /// customize the session_signature signing algorithm with a specific function
+    // - the very same function should be set on TSQLRestClientURI
+    // - to select a known hash algorithm, you may change the Algorithm property
+    property ComputeSignature: TSQLRestServerAuthenticationSignedURIComputeSignature
+      read fComputeSignature write fComputeSignature;
+    /// customize the session_signature signing algorithm
+    // - you need to set this value on the server side only; those known algorithms
+    // will be recognized by TSQLRestClientURI on the client side during the
+    // session handshake, to select the matching ComputeSignature function
+    property Algorithm: TSQLRestServerAuthenticationSignedURIAlgo write SetAlgorithm;
   end;
 
   /// mORMot secure RESTful authentication scheme
@@ -17075,10 +17126,13 @@ type
     /// call this method to add an authentication method to the server
     // - will return the just created TSQLRestServerAuthentication instance,
     // or the existing instance if it has already been registered
-    // - you can use this method to tune the authencation, e.g. if you have
+    // - you can use this method to tune the authentication, e.g. if you have
     // troubles with AJAX asynchronous callbacks:
     // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    // !   TSQLRestServerAuthenticationSignedURI).NoTimeStampCoherencyCheck := true;
+    // !   TSQLRestServerAuthenticationDefault).NoTimeStampCoherencyCheck := true;
+    // or if you want to customize the session_signature parameter algorithm:
+    // ! (aServer.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    // !   TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
     function AuthenticationRegister(
       aMethod: TSQLRestServerAuthenticationClass): TSQLRestServerAuthentication; overload;
     /// call this method to add several authentication methods to the server
@@ -18539,6 +18593,7 @@ type
   // - handle RESTful commands GET POST PUT DELETE LOCK UNLOCK
   TSQLRestClientURI = class(TSQLRestClient)
   protected
+    fComputeSignature: TSQLRestServerAuthenticationSignedURIComputeSignature;
     fOnAuthentificationFailed: TOnAuthentificationFailed;
     fOnSetUser: TOnRestClientNotify;
     fMaximumAuthentificationRetry: Integer;
@@ -18666,6 +18721,12 @@ type
     // match your need
     function SetUser(const aUserName, aPassword: RawUTF8;
       aHashedPassword: Boolean=false): boolean;
+    /// customize the session_signature signing algorithm with a specific function
+    // - will be used by TSQLRestServerAuthenticationSignedURI classes,
+    // e.g. TSQLRestServerAuthenticationDefault instead of the algorithm
+    // specified by the server at session handshake
+    property ComputeSignature: TSQLRestServerAuthenticationSignedURIComputeSignature
+      read fComputeSignature write fComputeSignature;
     /// save the TSQLRestClientURI properties into a persistent storage object
     // - CreateFrom() will expect Definition.UserName/Password to store the
     // credentials which will be used by SetUser()
@@ -20156,6 +20217,7 @@ function ToText(V: TInterfaceMockSpyCheck): PShortString; overload;
 function ToText(m: TSQLURIMethod): PShortString; overload;
 function ToText(o: TSynTableStatementOperator): PShortString; overload;
 function ToText(t: TSQLVirtualTableTransaction): PShortString; overload;
+function ToText(a: TSQLRestServerAuthenticationSignedURIAlgo): PShortString; overload;
 function ToText(res: TNotifyAuthenticationFailedReason): PShortString; overload;
 
 
@@ -37027,6 +37089,7 @@ begin
     fSessionData := '';
     fSessionServerTimeout := 0;
     FreeAndNil(fSessionUser);
+    fComputeSignature := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
   end;
 end;
 
@@ -37041,6 +37104,7 @@ constructor TSQLRestClientURI.Create(aModel: TSQLModel);
 begin
   inherited Create(aModel);
   fMaximumAuthentificationRetry := 1;
+  fComputeSignature := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
   fSessionID := CONST_AUTHENTICATION_NOT_USED;
   fFakeCallbacks := TSQLRestClientCallbacks.Create(self);
   {$ifdef USELOCKERDEBUG}
@@ -38988,11 +39052,11 @@ begin
     for i := 0 to high(fSessionAuthentication) do
       if fSessionAuthentication[i].ClassType=aMethod then begin
         result := fSessionAuthentication[i];
-        exit; // method already there
+        exit; // method already there -> return existing instance
       end;
     // create and initialize new authentication instance
     result := aMethod.Create(self);
-    ObjArrayAdd(fSessionAuthentication,result); // will be owned by fSessionAuthentications
+    ObjArrayAdd(fSessionAuthentication,result); // will be owned by this array
     fHandleAuthentication := true;
     // we need both AuthUser+AuthGroup tables for authentication -> create now
     fSQLAuthGroupClass := Model.AddTableInherited(TSQLAuthGroup);
@@ -42872,7 +42936,12 @@ begin
   result := GetEnumName(TypeInfo(TSQLVirtualTableTransaction),ord(t));
 end;
 
-function ToText(res: TNotifyAuthenticationFailedReason): PShortString; overload;
+function ToText(a: TSQLRestServerAuthenticationSignedURIAlgo): PShortString;
+begin
+  result := GetEnumName(TypeInfo(TSQLRestServerAuthenticationSignedURIAlgo),ord(a));
+end;
+
+function ToText(res: TNotifyAuthenticationFailedReason): PShortString;
 begin
   result := GetEnumName(TypeInfo(TNotifyAuthenticationFailedReason),ord(res));
 end;
@@ -51640,12 +51709,14 @@ procedure TSQLRestServerAuthentication.SessionCreateReturns(
   Ctxt: TSQLRestServerURIContext; Session: TAuthSession; const result, data, header: RawUTF8);
 var body: TDocVariantData;
 begin
-  body.InitFast(9,dvObject);
+  body.InitFast(10,dvObject);
   if result='' then
     body.AddValue('result',Session.IDCardinal) else
     body.AddValue('result',RawUTF8ToVariant(result));
   if data<>'' then
     body.AddValue('data',RawUTF8ToVariant(data));
+  if fAlgoName<>'' then // match e.g. TSQLRestServerAuthenticationSignedURIAlgo
+    body.AddValue('algo',RawUTF8ToVariant(fAlgoName));
   with Session.User do
     body.AddNameValuesToObject(['logonid',IDValue,'logonname',LogonName,
       'logondisplay',DisplayName,'logongroup',GroupRights.IDValue,
@@ -51654,14 +51725,28 @@ begin
   Ctxt.ReturnsJson(variant(body),HTTP_SUCCESS,false,twJSONEscape,false,header);
 end;
 
+function ComputeURISignature(algo: TSQLRestServerAuthenticationSignedURIAlgo): TSQLRestServerAuthenticationSignedURIComputeSignature;
+begin // FPC doesn't allow to use constants for procedure of object
+  case algo of
+  suaCRC32C: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32c;
+  suaXXHASH: result := TSQLRestServerAuthenticationSignedURI.ComputeSignaturexxHash;
+  suaMD5: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureMD5;
+  suaSHA1: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA1;
+  suaSHA256: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA256;
+  suaSHA512: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA512;
+  else result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
+  end;
+end;
+
 class function TSQLRestServerAuthentication.ClientGetSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8;
 var resp: RawUTF8;
     values: TPUtf8CharDynArray;
+    a: integer;
 begin
   if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTTP_SUCCESS) or
-     (JSONDecode(pointer(resp),['result','data','server','version',
-       'logonid','logonname','logondisplay','logongroup','timeout'],values)=nil) then begin
+     (JSONDecode(pointer(resp),['result','data','server','version','logonid',
+      'logonname','logondisplay','logongroup','timeout','algo'],values)=nil) then begin
     Sender.fSessionData := ''; // reset temporary 'data' field
     result := '';
   end else begin
@@ -51674,8 +51759,13 @@ begin
     User.DisplayName := values[6];
     User.GroupRights := pointer(GetInteger(values[7]));
     Sender.fSessionServerTimeout := GetInteger(values[8]);
-    if Sender.fSessionServerTimeout=0 then
+    if Sender.fSessionServerTimeout<=0 then
       Sender.fSessionServerTimeout := 60; // default 1 hour if not suppplied
+    a := GetEnumNameValueTrimmed(TypeInfo(TSQLRestServerAuthenticationSignedURIAlgo),
+      values[9],StrLen(values[9]));
+    if a>=0 then
+      Sender.fComputeSignature := ComputeURISignature(
+        TSQLRestServerAuthenticationSignedURIAlgo(a));
   end;
 end;
 
@@ -51747,6 +51837,7 @@ end;
 constructor TSQLRestServerAuthenticationSignedURI.Create(aServer: TSQLRestServer);
 begin
   inherited Create(aServer);
+  fComputeSignature := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
   TimeStampCoherencySeconds := 5;
 end;
 
@@ -51766,6 +51857,97 @@ begin
   fTimeStampCoherencyTicks := round(value*(1000/256)); // 256 ms resolution
 end;
 
+procedure TSQLRestServerAuthenticationSignedURI.SetAlgorithm(
+  value: TSQLRestServerAuthenticationSignedURIAlgo);
+begin
+  fComputeSignature := ComputeURISignature(value);
+  if value=suaCRC32 then
+    fAlgoName := '' else
+    fAlgoName := SynCommons.LowerCase(TrimLeftLowerCaseShort(ToText(value)));
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+begin // historical algorithm
+  result := crc32(crc32(privatesalt,timestamp,8),url,urllen);
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32c(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+begin // faster on SSE4.2 CPU, and slightly more secure if not cascaded
+  result := crc32c(privatesalt,timestamp,8) xor crc32c(privatesalt,url,urllen);
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignaturexxHash(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+begin // xxHash32 has no immediate reverse function
+  result := xxHash32(privatesalt,timestamp,8) xor xxHash32(privatesalt,url,urllen);
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureMD5(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+var digest: array[0..(sizeof(TMD5Digest)div 4)-1] of cardinal;
+    MD5: TMD5;
+    i: integer;
+begin
+  MD5.Init;
+  MD5.Update(privatesalt,4);
+  MD5.Update(timestamp^,8);
+  MD5.Update(url^,urllen);
+  MD5.Final(TMD5Digest(digest));
+  result := digest[0];
+  for i := 1 to high(digest) do
+    result := result xor digest[i];
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA1(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+var digest: array[0..(sizeof(TSHA1Digest)div 4)-1] of cardinal;
+    SHA1: TSHA1;
+    i: integer;
+begin
+  SHA1.Init;
+  SHA1.Update(@privatesalt,4);
+  SHA1.Update(timestamp,8);
+  SHA1.Update(url,urllen);
+  SHA1.Final(TSHA1Digest(digest));
+  result := digest[0];
+  for i := 1 to high(digest) do
+    result := result xor digest[i];
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA256(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+var digest: array[0..(sizeof(TSHA256Digest)div 4)-1] of cardinal;
+    SHA256: TSHA256;
+    i: integer;
+begin
+  SHA256.Init;
+  SHA256.Update(@privatesalt,4);
+  SHA256.Update(timestamp,8);
+  SHA256.Update(url,urllen);
+  SHA256.Final(TSHA256Digest(digest));
+  result := digest[0];
+  for i := 1 to high(digest) do
+    result := result xor digest[i];
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA512(
+  privatesalt: cardinal; timestamp, url: PAnsiChar; urllen: integer): cardinal;
+var digest: array[0..(sizeof(TSHA512Digest)div 4)-1] of cardinal;
+    SHA512: TSHA512;
+    i: integer;
+begin
+  SHA512.Init;
+  SHA512.Update(@privatesalt,4);
+  SHA512.Update(timestamp,8);
+  SHA512.Update(url,urllen);
+  SHA512.Final(TSHA512Digest(digest));
+  result := digest[0];
+  for i := 1 to high(digest) do
+    result := result xor digest[i];
+end;
+
 function TSQLRestServerAuthenticationSignedURI.RetrieveSession(
   Ctxt: TSQLRestServerURIContext): TAuthSession;
 var aTimeStamp, aSignature, aMinimalTimeStamp, aExpectedSignature: cardinal;
@@ -51783,9 +51965,9 @@ begin
   PTimeStamp := @Ctxt.Call^.url[aURLLength+(20+8)]; // points to Hexa8(TimeStamp)
   aMinimalTimeStamp := result.fLastTimeStamp-fTimeStampCoherencyTicks;
   if HexDisplayToCardinal(PTimeStamp,aTimeStamp) and
-     (fNoTimeStampCoherencyCheck or (integer(aMinimalTimeStamp)<0) or
+     (fNoTimeStampCoherencyCheck or (integer(aMinimalTimeStamp)<0) or // <0 just after login
       (aTimeStamp>=aMinimalTimeStamp)) then begin
-    aExpectedSignature := crc32(crc32(result.fPrivateSaltHash,PTimeStamp,8),
+    aExpectedSignature := fComputeSignature(result.fPrivateSaltHash,PTimeStamp,
       pointer(Ctxt.Call^.url),aURLlength);
     if HexDisplayToCardinal(PTimeStamp+8,aSignature) and
        (aSignature=aExpectedSignature) then begin
@@ -51821,8 +52003,8 @@ begin
     fSessionLastTick64 := GetTickCount64;
     nonce := CardinalToHex(fSessionLastTick64 shr 8); // 256 ms resolution
     Call.url := Call.url+fSessionIDHexa8+nonce+CardinalToHex(
-      crc32(crc32(fSessionPrivateKey,Pointer(nonce),length(nonce)),
-      Pointer(blankURI),length(blankURI)));
+      Sender.fComputeSignature(fSessionPrivateKey,Pointer(nonce),
+        Pointer(blankURI),length(blankURI)));
   end;
 end;
 

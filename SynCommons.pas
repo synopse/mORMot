@@ -1565,9 +1565,9 @@ type
 
   /// function prototype to be used for hashing of an element
   // - it must return a cardinal hash, with as less collision as possible
-  // - a good candidate is our crc32() function in optimized asm in SynZip unit
   // - TDynArrayHashed.Init will use crc32c() if no custom function is supplied,
-  // which will run either as software or SSE4.2 hardware
+  // which will run either as software or SSE4.2 hardware, with good colision
+  // for most used kind of data
   THasher = function(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 
 var
@@ -22749,6 +22749,7 @@ function FindShortStringListExact(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
 var PLen: integer;
 begin
+  if aValueLen<>0 then
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
     if (PLen=aValuelen) and IdemPropNameUSameLen(@List^[1],aValue,aValueLen) then
@@ -22762,6 +22763,7 @@ function FindShortStringListTrimLowerCase(List: PShortString; MaxValue: integer;
   aValue: PUTF8Char; aValueLen: integer): integer;
 var PLen: integer;
 begin
+  if aValueLen<>0 then
   for result := 0 to MaxValue do begin
     PLen := ord(List^[0]);
     inc(PUTF8Char(List));
@@ -22783,7 +22785,7 @@ function GetEnumNameValue(aTypeInfo: pointer; aValue: PUTF8Char; aValueLen: inte
 var List: PShortString;
     MaxValue: integer;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,List) then begin
+  if (aValueLen<>0) and GetEnumInfo(aTypeInfo,MaxValue,List) then begin
     result := FindShortStringListExact(List,MaxValue,aValue,aValueLen);
     if (result<0) and AlsoTrimLowerCase then
       result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen);
@@ -22795,7 +22797,7 @@ function GetEnumNameValueTrimmed(aTypeInfo: pointer; aValue: PUTF8Char; aValueLe
 var List: PShortString;
     MaxValue: integer;
 begin
-  if GetEnumInfo(aTypeInfo,MaxValue,List) then
+  if (aValueLen<>0) and GetEnumInfo(aTypeInfo,MaxValue,List) then
     result := FindShortStringListTrimLowerCase(List,MaxValue,aValue,aValueLen) else
     result := -1;
 end;
@@ -26960,14 +26962,16 @@ end;
 
 function HexDisplayToCardinal(Hex: PAnsiChar; out aValue: cardinal): boolean;
 begin
-  aValue := 0;
   result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
+  if not result then
+   aValue := 0;
 end;
 
 function HexDisplayToInt64(Hex: PAnsiChar; out aValue: Int64): boolean;
 begin
-  aValue := 0;
   result := HexDisplayToBin(Hex,@aValue,sizeof(aValue));
+  if not result then
+   aValue := 0;
 end;
 
 function HexDisplayToInt64(const Hex: RawByteString): Int64;

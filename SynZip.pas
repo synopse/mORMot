@@ -4825,7 +4825,7 @@ asm
   not eax
   ret
 @tail:
-  movzx ebx, byte [edx + ecx]
+  movzx ebx,byte ptr [edx + ecx]
   xor bl,al
   shr eax,8
   xor eax,dword ptr [ebx*4 + crc32tab]
@@ -4836,7 +4836,7 @@ asm
 {$else}
   sub edx,ecx
 @next:
-  movzx ebx, byte [edx + ecx]
+  movzx ebx,byte ptr [edx + ecx]
   xor bl, al
   shr eax, 8
   xor eax, [ebx*4 + crc32tab]

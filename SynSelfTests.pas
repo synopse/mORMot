@@ -1308,6 +1308,16 @@ type
     /// test the client-side implementation of opt*InPerInterfaceThread option
     procedure ClientSideRESTBackgroundThread;
     {$endif}
+    /// test the client-side implementation with crc32c URI signature
+    procedure ClientSideRESTSignWithCrc32c;
+    /// test the client-side implementation with xxHash32 URI signature
+    procedure ClientSideRESTSignWithXxhash;
+    /// test the client-side implementation with MD5 URI signature
+    procedure ClientSideRESTSignWithMd5;
+    /// test the client-side implementation with SHA256 URI signature
+    procedure ClientSideRESTSignWithSha256;
+    /// test the client-side implementation with SHA512 URI signature
+    procedure ClientSideRESTSignWithSha512;
     /// test the client-side implementation using TSQLRestServerAuthenticationNone
     procedure ClientSideRESTWeakAuthentication;
     /// test the client-side implementation using TSQLRestServerAuthenticationHttpBasic
@@ -9732,7 +9742,7 @@ begin
     for i := 1 to 1000 do begin
       data := RandomString(i);
       encrypted := instance.Cypher(secret, data);
-      Check(encrypted <> data);
+      Check((i<16) or (encrypted <> data));
       instance.InitCypher(secret);
       Check(instance.Cypher(encrypted) = data);
     end;
@@ -15649,6 +15659,48 @@ begin
   end;
 end;
 
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C;
+begin
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaCRC32C;
+  fClient.SetUser('User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithXXHASH;
+begin
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaXXHASH;
+  fClient.SetUser('User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithMD5;
+begin
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
+  fClient.SetUser('User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256;
+begin
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaSHA256;
+  fClient.SetUser('User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
+begin
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaSHA512;
+  fClient.SetUser('User','synopse');
+  ClientTest(TSQLRestRoutingREST,false);
+  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
+    TSQLRestServerAuthenticationDefault).Algorithm := suaCRC32;
+end;
+
 procedure TTestServiceOrientedArchitecture.ClientSideRESTWeakAuthentication;
 begin
   fClient.Server.ServicesRouting := TSQLRestRoutingJSON_RPC; // back to previous
@@ -15668,11 +15720,45 @@ begin
   TSQLRestServerAuthenticationHttpBasic.ClientSetUser(fClient,'User','synopse');
   ClientTest(TSQLRestRoutingREST,false);
   fClient.Server.AuthenticationUnregister(TSQLRestServerAuthenticationHttpBasic);
-  // register default authentications
+  // restore default authentications
   fClient.Server.AuthenticationRegister(
     [{$ifdef MSWINDOWS}TSQLRestServerAuthenticationSSPI,{$endif}
      TSQLRestServerAuthenticationDefault]);
   fClient.SetUser('User','synopse');
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecordLayout;
+begin
+  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TSQLRestCacheEntryValue),
+    TTestServiceOrientedArchitecture.CustomReader,
+    TTestServiceOrientedArchitecture.CustomWriter);
+  try
+    ClientTest(TSQLRestRoutingREST,false);
+  finally
+    TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TSQLRestCacheEntryValue),nil,nil);
+  end;
+end;
+
+class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
+  var aValue; out aValid: Boolean): PUTF8Char;
+var V: TSQLRestCacheEntryValue absolute aValue;
+    Values: TPUtf8CharDynArray;
+begin // {"ID":1786554763,"TimeStamp":323618765,"JSON":"D:\\TestSQL3.exe"}
+  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
+  if result=nil then
+    aValid := false else begin
+    V.ID := GetInteger(Values[0]);
+    V.TimeStamp512 := GetCardinal(Values[1]);
+    V.JSON := Values[2];
+    aValid := true;
+  end;
+end;
+
+class procedure TTestServiceOrientedArchitecture.CustomWriter(
+  const aWriter: TTextWriter; const aValue);
+var V: TSQLRestCacheEntryValue absolute aValue;
+begin
+  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp512),'JSON',V.JSON]);
 end;
 
 procedure TTestServiceOrientedArchitecture.Cleanup;
@@ -15760,41 +15846,6 @@ begin
   end;
 {$endif}
   fClient.Server.ServicesRouting := TSQLRestRoutingJSON_RPC; // back to previous
-end;
-
-
-procedure TTestServiceOrientedArchitecture.ClientSideRESTCustomRecordLayout;
-begin
-  TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TSQLRestCacheEntryValue),
-    TTestServiceOrientedArchitecture.CustomReader,
-    TTestServiceOrientedArchitecture.CustomWriter);
-  try
-    ClientTest(TSQLRestRoutingREST,false);
-  finally
-    TTextWriter.RegisterCustomJSONSerializer(TypeInfo(TSQLRestCacheEntryValue),nil,nil);
-  end;
-end;
-
-class function TTestServiceOrientedArchitecture.CustomReader(P: PUTF8Char;
-  var aValue; out aValid: Boolean): PUTF8Char;
-var V: TSQLRestCacheEntryValue absolute aValue;
-    Values: TPUtf8CharDynArray;
-begin // {"ID":1786554763,"TimeStamp":323618765,"JSON":"D:\\TestSQL3.exe"}
-  result := JSONDecode(P,['ID','TimeStamp','JSON'],Values);
-  if result=nil then
-    aValid := false else begin
-    V.ID := GetInteger(Values[0]);
-    V.TimeStamp512 := GetCardinal(Values[1]);
-    V.JSON := Values[2];
-    aValid := true;
-  end;
-end;
-
-class procedure TTestServiceOrientedArchitecture.CustomWriter(
-  const aWriter: TTextWriter; const aValue);
-var V: TSQLRestCacheEntryValue absolute aValue;
-begin
-  aWriter.AddJSONEscape(['ID',V.ID,'TimeStamp',Int64(V.TimeStamp512),'JSON',V.JSON]);
 end;
 
 type
@@ -17125,7 +17176,6 @@ begin
     proxy.Free;
   end;
 end;
-
 
 initialization
   _uE0 := WinAnsiToUtf8(@UTF8_E0_F4_BYTES[0],1);
