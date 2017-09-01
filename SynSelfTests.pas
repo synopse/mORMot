@@ -1273,6 +1273,7 @@ type
     procedure ClientTest(aRouting: TSQLRestServerURIContextClass;
       aAsJSONObject: boolean; {$ifndef LVCL}aRunInOtherThread: boolean=false;{$endif}
       aOptions: TServiceMethodOptions=[]);
+    procedure ClientAlgo(algo: TSQLRestServerAuthenticationSignedURIAlgo);
     class function CustomReader(P: PUTF8Char; var aValue; out aValid: Boolean): PUTF8Char;
     class procedure CustomWriter(const aWriter: TTextWriter; const aValue);
     procedure SetOptions(aAsJSONObject: boolean;
@@ -15659,44 +15660,38 @@ begin
   end;
 end;
 
-procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C;
+procedure TTestServiceOrientedArchitecture.ClientAlgo(
+  algo: TSQLRestServerAuthenticationSignedURIAlgo);
 begin
   (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    TSQLRestServerAuthenticationDefault).Algorithm := suaCRC32C;
+    TSQLRestServerAuthenticationDefault).Algorithm := algo;
   fClient.SetUser('User','synopse');
   ClientTest(TSQLRestRoutingREST,false);
+end;
+
+procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithCRC32C;
+begin
+  ClientAlgo(suaCRC32C)
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithXXHASH;
 begin
-  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    TSQLRestServerAuthenticationDefault).Algorithm := suaXXHASH;
-  fClient.SetUser('User','synopse');
-  ClientTest(TSQLRestRoutingREST,false);
+  ClientAlgo(suaXXHASH);
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithMD5;
 begin
-  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    TSQLRestServerAuthenticationDefault).Algorithm := suaMD5;
-  fClient.SetUser('User','synopse');
-  ClientTest(TSQLRestRoutingREST,false);
+  ClientAlgo(suaMD5);
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA256;
 begin
-  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    TSQLRestServerAuthenticationDefault).Algorithm := suaSHA256;
-  fClient.SetUser('User','synopse');
-  ClientTest(TSQLRestRoutingREST,false);
+  ClientAlgo(suaSHA256);
 end;
 
 procedure TTestServiceOrientedArchitecture.ClientSideRESTSignWithSHA512;
 begin
-  (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
-    TSQLRestServerAuthenticationDefault).Algorithm := suaSHA512;
-  fClient.SetUser('User','synopse');
-  ClientTest(TSQLRestRoutingREST,false);
+  ClientAlgo(suaSHA512);
   (fClient.Server.AuthenticationRegister(TSQLRestServerAuthenticationDefault) as
     TSQLRestServerAuthenticationDefault).Algorithm := suaCRC32;
 end;

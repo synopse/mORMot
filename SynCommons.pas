@@ -11480,7 +11480,7 @@ var
   // compatible with SSE 4.2 crc32 instruction
   // - tables content is created from code in initialization section below
   // - will also be used internally by SymmetricEncrypt, FillRandom and
-  // TSynUniqueIdentifierGenerator as master/reference key tables
+  // TSynUniqueIdentifierGenerator as 1KB master/reference key tables
   crc32ctab: array[0..{$ifdef PUREPASCAL}3{$else}7{$endif},byte] of cardinal;
 
 /// compute CRC32C checksum on the supplied buffer using x86/x64 code

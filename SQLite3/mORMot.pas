@@ -15529,6 +15529,7 @@ type
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
     class function ComputeSignatureSHA512(privatesalt: cardinal;
       timestamp, url: PAnsiChar; urllen: integer): cardinal;
+    class function GetComputeSignature(algo: TSQLRestServerAuthenticationSignedURIAlgo): TSQLRestServerAuthenticationSignedURIComputeSignature;
   public
     /// initialize the authentication method to a specified server
     constructor Create(aServer: TSQLRestServer); override;
@@ -51725,24 +51726,12 @@ begin
   Ctxt.ReturnsJson(variant(body),HTTP_SUCCESS,false,twJSONEscape,false,header);
 end;
 
-function ComputeURISignature(algo: TSQLRestServerAuthenticationSignedURIAlgo): TSQLRestServerAuthenticationSignedURIComputeSignature;
-begin // FPC doesn't allow to use constants for procedure of object
-  case algo of
-  suaCRC32C: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32c;
-  suaXXHASH: result := TSQLRestServerAuthenticationSignedURI.ComputeSignaturexxHash;
-  suaMD5: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureMD5;
-  suaSHA1: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA1;
-  suaSHA256: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA256;
-  suaSHA512: result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureSHA512;
-  else result := TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32;
-  end;
-end;
-
 class function TSQLRestServerAuthentication.ClientGetSessionKey(
   Sender: TSQLRestClientURI; User: TSQLAuthUser; const aNameValueParameters: array of const): RawUTF8;
 var resp: RawUTF8;
     values: TPUtf8CharDynArray;
     a: integer;
+    algo: TSQLRestServerAuthenticationSignedURIAlgo absolute a;
 begin
   if (Sender.CallBackGet('Auth',aNameValueParameters,resp)<>HTTP_SUCCESS) or
      (JSONDecode(pointer(resp),['result','data','server','version','logonid',
@@ -51764,8 +51753,7 @@ begin
     a := GetEnumNameValueTrimmed(TypeInfo(TSQLRestServerAuthenticationSignedURIAlgo),
       values[9],StrLen(values[9]));
     if a>=0 then
-      Sender.fComputeSignature := ComputeURISignature(
-        TSQLRestServerAuthenticationSignedURIAlgo(a));
+      Sender.fComputeSignature := TSQLRestServerAuthenticationSignedURI.GetComputeSignature(algo);
   end;
 end;
 
@@ -51860,10 +51848,24 @@ end;
 procedure TSQLRestServerAuthenticationSignedURI.SetAlgorithm(
   value: TSQLRestServerAuthenticationSignedURIAlgo);
 begin
-  fComputeSignature := ComputeURISignature(value);
+  fComputeSignature := GetComputeSignature(value);
   if value=suaCRC32 then
     fAlgoName := '' else
     fAlgoName := SynCommons.LowerCase(TrimLeftLowerCaseShort(ToText(value)));
+end;
+
+class function TSQLRestServerAuthenticationSignedURI.GetComputeSignature(
+  algo: TSQLRestServerAuthenticationSignedURIAlgo): TSQLRestServerAuthenticationSignedURIComputeSignature;
+begin // FPC doesn't allow to use constants for procedure of object
+  case algo of
+  suaCRC32C: result := ComputeSignatureCrc32c;
+  suaXXHASH: result := ComputeSignaturexxHash;
+  suaMD5:    result := ComputeSignatureMD5;
+  suaSHA1:   result := ComputeSignatureSHA1;
+  suaSHA256: result := ComputeSignatureSHA256;
+  suaSHA512: result := ComputeSignatureSHA512;
+  else       result := ComputeSignatureCrc32;
+  end;
 end;
 
 class function TSQLRestServerAuthenticationSignedURI.ComputeSignatureCrc32(
