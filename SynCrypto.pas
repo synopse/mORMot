@@ -32,7 +32,7 @@ unit SynCrypto;
 
   Contributor(s):
   - Alfred Glaenzer (alf)
-  - Eric Grange for SHA-3 MMX/x64 asm optimization
+  - Eric Grange for SHA-3 MMX asm optimization
   - EvaF
   - Intel's sha256_sse4.asm under under a three-clause Open Software license
   - Johan Bontes
@@ -1257,7 +1257,8 @@ type
   // named by NIST a FIPS 180-4, then FIPS 202 hashing standard in 2015
   // - by design, SHA-3 doesn't need to be encapsulated into a HMAC algorithm,
   // since it already includes proper padding, so keys could be concatenated
-  // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code
+  // - this version is based on Wolfgang Ehrhardt's and Eric Grange's code,
+  // with our own manually optimized x64 assembly
   // - we defined a record instead of a class, to allow stack allocation and
   // thread-safe reuse of one initialized instance, e.g. after InitCypher
   TSHA3 = {$ifndef UNICODE}object{$else}record{$endif}
@@ -7157,9 +7158,6 @@ end;
     misrepresented as being the original software.
  3. This notice may not be removed or altered from any source distribution. }
 
-{ MMX and x64 assembler versions based on optimized SHA-3 kernel by Eric Grange
-  https://www.delphitools.info/2016/04/19/new-sha-3-permutation-kernel }
-
 const
   cKeccakPermutationSize = 1600;
   cKeccakMaximumRate = 1536;
@@ -7298,6 +7296,10 @@ begin
 end;
 
 {$else SHA3_PASCAL}
+
+{ - MMX 32-bit assembler version based on optimized SHA-3 kernel by Eric Grange
+   https://www.delphitools.info/2016/04/19/new-sha-3-permutation-kernel
+  - new x64 assembler version by Synopse }
 
 procedure KeccakPermutationKernel(B, A, C: Pointer);
 {$ifdef CPU32} // Eric Grange's MMX version
@@ -7643,7 +7645,7 @@ asm
 {$else}
 {$ifdef FPC}nostackframe; assembler;
 asm
-{$else}
+{$else}  { Synopse's x64 asm, optimized for both in/out-order pipelined CPUs }
 asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         .noframe
 {$endif}{$ifndef win64}
@@ -7651,287 +7653,283 @@ asm // input: rcx=B, rdx=A, r8=C (Linux: rdi,rsi,rdx)
         mov     rdx, rsi
         mov     rcx, rdi
         {$endif win64}
-        // Eric Grange's x64 version
+        push    rbx
         push    r12
         push    r13
         push    r14
         add     rdx, 128
         add     rcx, 128
         // theta
-        mov     rax, [rdx - 128]
-        xor     rax, [rdx - 88]
-        xor     rax, [rdx - 48]
-        xor     rax, [rdx - 8]
-        xor     rax, [rdx + 32]
-        mov     [r8], rax
-        mov     rax, [rdx - 120]
-        xor     rax, [rdx - 80]
-        xor     rax, [rdx - 40]
-        xor     rax, [rdx]
-        xor     rax, [rdx + 40]
-        mov     [r8 + 8], rax
-        mov     rax, [rdx - 112]
-        xor     rax, [rdx - 72]
-        xor     rax, [rdx - 32]
-        xor     rax, [rdx + 8]
-        xor     rax, [rdx + 48]
-        mov     [r8 + 16], rax
-        mov     rax, [rdx - 104]
-        xor     rax, [rdx - 64]
-        xor     rax, [rdx - 24]
-        xor     rax, [rdx + 16]
-        xor     rax, [rdx + 56]
-        mov     [r8 + 24], rax
-        mov     rax, [rdx - 96]
-        xor     rax, [rdx - 56]
-        xor     rax, [rdx - 16]
-        xor     rax, [rdx + 24]
-        xor     rax, [rdx + 64]
-        mov     [r8 + 32], rax
-        mov     r10, [r8]
+        mov     r10, [rdx - 128]
+        mov     r11, [rdx - 120]
+        mov     r12, [rdx - 112]
+        mov     r13, [rdx - 104]
+        mov     r14, [rdx - 96]
+        xor     r10, [rdx - 88]
+        xor     r11, [rdx - 80]
+        xor     r12, [rdx - 72]
+        xor     r13, [rdx - 64]
+        xor     r14, [rdx - 56]
+        xor     r10, [rdx - 48]
+        xor     r11, [rdx - 40]
+        xor     r12, [rdx - 32]
+        xor     r13, [rdx - 24]
+        xor     r14, [rdx - 16]
+        xor     r10, [rdx - 8]
+        xor     r11, [rdx]
+        xor     r12, [rdx + 8]
+        xor     r13, [rdx + 16]
+        xor     r14, [rdx + 24]
+        xor     r10, [rdx + 32]
+        xor     r11, [rdx + 40]
+        xor     r12, [rdx + 48]
+        xor     r13, [rdx + 56]
+        xor     r14, [rdx + 64]
+        mov     [r8], r10
+        mov     [r8 + 8], r11
+        mov     [r8 + 16], r12
+        mov     [r8 + 24], r13
+        mov     [r8 + 32], r14
         rol     r10, 1
-        xor     r10, [r8 + 24]
-        mov     r11, [r8 + 8]
         rol     r11, 1
-        xor     r11, [r8 + 32]
-        mov     r12, [r8 + 16]
         rol     r12, 1
-        xor     r12, [r8]
-        mov     r13, [r8 + 24]
         rol     r13, 1
-        xor     r13, [r8 + 8]
-        mov     r14, [r8 + 32]
         rol     r14, 1
+        xor     r10, [r8 + 24]
+        xor     r11, [r8 + 32]
+        xor     r12, [r8]
+        xor     r13, [r8 + 8]
         xor     r14, [r8 + 16]
         // rho pi
         mov     rax, [rdx - 128]
+        mov     r8, [rdx - 80]
+        mov     r9, [rdx - 32]
+        mov     rbx, [rdx + 16]
         xor     rax, r11
+        xor     r8, r12
+        xor     r9, r13
+        xor     rbx, r14
+        rol     r8, 44
+        rol     r9, 43
+        rol     rbx, 21
         mov     [rcx - 128], rax
-        mov     rax, [rdx - 80]
-        xor     rax, r12
-        rol     rax, 44
-        mov     [rcx - 120], rax
-        mov     rax, [rdx - 32]
-        xor     rax, r13
-        rol     rax, 43
-        mov     [rcx - 112], rax
-        mov     rax, [rdx + 16]
-        xor     rax, r14
-        rol     rax, 21
-        mov     [rcx - 104], rax
+        mov     [rcx - 120], r8
+        mov     [rcx - 112], r9
+        mov     [rcx - 104], rbx
         mov     rax, [rdx + 64]
+        mov     r8, [rdx - 104]
+        mov     r9, [rdx - 56]
+        mov     rbx, [rdx - 48]
         xor     rax, r10
+        xor     r8, r14
+        xor     r9, r10
+        xor     rbx, r11
         rol     rax, 14
+        rol     r8, 28
+        rol     r9, 20
+        rol     rbx, 3
         mov     [rcx - 96], rax
-        mov     rax, [rdx - 104]
-        xor     rax, r14
-        rol     rax, 28
-        mov     [rcx - 88], rax
-        mov     rax, [rdx - 56]
-        xor     rax, r10
-        rol     rax, 20
-        mov     [rcx - 80], rax
-        mov     rax, [rdx - 48]
-        xor     rax, r11
-        rol     rax, 3
-        mov     [rcx - 72], rax
+        mov     [rcx - 88], r8
+        mov     [rcx - 80], r9
+        mov     [rcx - 72], rbx
         mov     rax, [rdx]
+        mov     r8, [rdx + 48]
+        mov     r9, [rdx - 120]
+        mov     rbx, [rdx - 72]
         xor     rax, r12
+        xor     r8, r13
+        xor     r9, r12
+        xor     rbx, r13
         rol     rax, 45
+        rol     r8, 61
+        rol     r9, 1
+        rol     rbx, 6
         mov     [rcx - 64], rax
-        mov     rax, [rdx + 48]
-        xor     rax, r13
-        rol     rax, 61
-        mov     [rcx - 56], rax
-        mov     rax, [rdx - 120]
-        xor     rax, r12
-        rol     rax, 1
-        mov     [rcx - 48], rax
-        mov     rax, [rdx - 72]
-        xor     rax, r13
-        rol     rax, 6
-        mov     [rcx - 40], rax
+        mov     [rcx - 56], r8
+        mov     [rcx - 48], r9
+        mov     [rcx - 40], rbx
         mov     rax, [rdx - 24]
+        mov     r8, [rdx + 24]
+        mov     r9, [rdx + 32]
+        mov     rbx, [rdx - 96]
         xor     rax, r14
+        xor     r8, r10
+        xor     r9, r11
+        xor     rbx, r10
         rol     rax, 25
+        rol     r8, 8
+        rol     r9, 18
+        rol     rbx, 27
         mov     [rcx - 32], rax
-        mov     rax, [rdx + 24]
-        xor     rax, r10
-        rol     rax, 8
-        mov     [rcx - 24], rax
-        mov     rax, [rdx + 32]
-        xor     rax, r11
-        rol     rax, 18
-        mov     [rcx - 16], rax
-        mov     rax, [rdx - 96]
-        xor     rax, r10
-        rol     rax, 27
-        mov     [rcx - 8], rax
+        mov     [rcx - 24], r8
+        mov     [rcx - 16], r9
+        mov     [rcx - 8], rbx
         mov     rax, [rdx - 88]
+        mov     r8, [rdx - 40]
+        mov     r9, [rdx + 8]
+        mov     rbx, [rdx + 56]
         xor     rax, r11
+        xor     r8, r12
+        xor     r9, r13
+        xor     rbx, r14
         rol     rax, 36
+        rol     r8, 10
+        rol     r9, 15
+        rol     rbx, 56
         mov     [rcx], rax
-        mov     rax, [rdx - 40]
-        xor     rax, r12
-        rol     rax, 10
-        mov     [rcx + 8], rax
-        mov     rax, [rdx + 8]
-        xor     rax, r13
-        rol     rax, 15
-        mov     [rcx + 16], rax
-        mov     rax, [rdx + 56]
-        xor     rax, r14
-        rol     rax, 56
-        mov     [rcx + 24], rax
+        mov     [rcx + 8], r8
+        mov     [rcx + 16], r9
+        mov     [rcx + 24], rbx
         mov     rax, [rdx - 112]
+        mov     r8, [rdx - 64]
+        mov     r9, [rdx - 16]
+        mov     rbx, [rdx - 8]
         xor     rax, r13
+        xor     r8, r14
+        xor     r9, r10
+        mov     r10, [rdx + 40]
+        xor     rbx, r11
         rol     rax, 62
+        rol     r8, 55
+        xor     r10, r12
+        rol     r9, 39
+        rol     rbx, 41
         mov     [rcx + 32], rax
-        mov     rax, [rdx - 64]
-        xor     rax, r14
-        rol     rax, 55
-        mov     [rcx + 40], rax
-        mov     rax, [rdx - 16]
-        xor     rax, r10
-        rol     rax, 39
-        mov     [rcx + 48], rax
-        mov     rax, [rdx - 8]
-        xor     rax, r11
-        rol     rax, 41
-        mov     [rcx + 56], rax
-        mov     rax, [rdx + 40]
-        xor     rax, r12
-        rol     rax, 2
-        mov     [rcx + 64], rax
+        mov     [rcx + 40], r8
+        rol     r10, 2
+        mov     [rcx + 48], r9
+        mov     [rcx + 56], rbx
+        mov     [rcx + 64], r10
         // chi
         mov     rax, [rcx - 120]
+        mov     r8, [rcx - 112]
+        mov     r9, [rcx - 104]
+        mov     r10, [rcx - 96]
+        mov     r11, [rcx - 128]
+        mov     r12, [rcx - 80]
+        mov     r13, [rcx - 72]
+        mov     r14, [rcx - 64]
+        mov     rbx, [rcx - 56]
         not     rax
+        not     r8
+        not     r9
+        not     r10
+        not     r11
+        not     r12
+        not     r13
+        not     r14
+        not     rbx
         and     rax, [rcx - 112]
+        and     r8, [rcx - 104]
+        and     r9, [rcx - 96]
+        and     r10, [rcx - 128]
+        and     r11, [rcx - 120]
+        and     r12, [rcx - 72]
+        and     r13, [rcx - 64]
+        and     r14, [rcx - 56]
+        and     rbx, [rcx - 88]
         xor     rax, [rcx - 128]
+        xor     r8, [rcx - 120]
+        xor     r9, [rcx - 112]
+        xor     r10, [rcx - 104]
+        xor     r11, [rcx - 96]
+        xor     r12, [rcx - 88]
+        xor     r13, [rcx - 80]
+        xor     r14, [rcx - 72]
+        xor     rbx, [rcx - 64]
         mov     [rdx - 128], rax
-        mov     rax, [rcx - 112]
-        not     rax
-        and     rax, [rcx - 104]
-        xor     rax, [rcx - 120]
-        mov     [rdx - 120], rax
-        mov     rax, [rcx - 104]
-        not     rax
-        and     rax, [rcx - 96]
-        xor     rax, [rcx - 112]
-        mov     [rdx - 112], rax
-        mov     rax, [rcx - 96]
-        not     rax
-        and     rax, [rcx - 128]
-        xor     rax, [rcx - 104]
-        mov     [rdx - 104], rax
-        mov     rax, [rcx - 128]
-        not     rax
-        and     rax, [rcx - 120]
-        xor     rax, [rcx - 96]
-        mov     [rdx - 96], rax
-        mov     rax, [rcx - 80]
-        not     rax
-        and     rax, [rcx - 72]
-        xor     rax, [rcx - 88]
-        mov     [rdx - 88], rax
-        mov     rax, [rcx - 72]
-        not     rax
-        and     rax, [rcx - 64]
-        xor     rax, [rcx - 80]
-        mov     [rdx - 80], rax
-        mov     rax, [rcx - 64]
-        not     rax
-        and     rax, [rcx - 56]
-        xor     rax, [rcx - 72]
-        mov     [rdx - 72], rax
-        mov     rax, [rcx - 56]
-        not     rax
-        and     rax, [rcx - 88]
-        xor     rax, [rcx - 64]
-        mov     [rdx - 64], rax
+        mov     [rdx - 120], r8
+        mov     [rdx - 112], r9
+        mov     [rdx - 104], r10
+        mov     [rdx - 96], r11
+        mov     [rdx - 88], r12
+        mov     [rdx - 80], r13
+        mov     [rdx - 72], r14
+        mov     [rdx - 64], rbx
         mov     rax, [rcx - 88]
+        mov     rbx, [rcx - 40]
+        mov     r8, [rcx - 32]
+        mov     r9, [rcx - 24]
+        mov     r10, [rcx - 16]
+        mov     r11, [rcx - 48]
+        mov     r12, [rcx]
+        mov     r13, [rcx + 8]
+        mov     r14, [rcx + 16]
         not     rax
+        not     rbx
+        not     r8
+        not     r9
+        not     r10
+        not     r11
+        not     r12
+        not     r13
+        not     r14
         and     rax, [rcx - 80]
+        and     rbx, [rcx - 32]
+        and     r8, [rcx - 24]
+        and     r9, [rcx - 16]
+        and     r10, [rcx - 48]
+        and     r11, [rcx - 40]
+        and     r12, [rcx + 8]
+        and     r13, [rcx + 16]
+        and     r14, [rcx + 24]
         xor     rax, [rcx - 56]
+        xor     rbx, [rcx - 48]
+        xor     r8, [rcx - 40]
+        xor     r9, [rcx - 32]
+        xor     r10, [rcx - 24]
+        xor     r11, [rcx - 16]
+        xor     r12, [rcx - 8]
+        xor     r13, [rcx]
+        xor     r14, [rcx + 8]
         mov     [rdx - 56], rax
-        mov     rax, [rcx - 40]
-        not     rax
-        and     rax, [rcx - 32]
-        xor     rax, [rcx - 48]
-        mov     [rdx - 48], rax
-        mov     rax, [rcx - 32]
-        not     rax
-        and     rax, [rcx - 24]
-        xor     rax, [rcx - 40]
-        mov     [rdx - 40], rax
-        mov     rax, [rcx - 24]
-        not     rax
-        and     rax, [rcx - 16]
-        xor     rax, [rcx - 32]
-        mov     [rdx - 32], rax
-        mov     rax, [rcx - 16]
-        not     rax
-        and     rax, [rcx - 48]
-        xor     rax, [rcx - 24]
-        mov     [rdx - 24], rax
-        mov     rax, [rcx - 48]
-        not     rax
-        and     rax, [rcx - 40]
-        xor     rax, [rcx - 16]
-        mov     [rdx - 16], rax
-        mov     rax, [rcx]
-        not     rax
-        and     rax, [rcx + 8]
-        xor     rax, [rcx - 8]
-        mov     [rdx - 8], rax
-        mov     rax, [rcx + 8]
-        not     rax
-        and     rax, [rcx + 16]
-        xor     rax, [rcx]
-        mov     [rdx], rax
-        mov     rax, [rcx + 16]
-        not     rax
-        and     rax, [rcx + 24]
-        xor     rax, [rcx + 8]
-        mov     [rdx + 8], rax
+        mov     [rdx - 48], rbx
+        mov     [rdx - 40], r8
+        mov     [rdx - 32], r9
+        mov     [rdx - 24], r10
+        mov     [rdx - 16], r11
+        mov     [rdx - 8], r12
+        mov     [rdx], r13
+        mov     [rdx + 8], r14
         mov     rax, [rcx + 24]
+        mov     rbx, [rcx - 8]
+        mov     r8, [rcx + 40]
+        mov     r9, [rcx + 48]
+        mov     r10, [rcx + 56]
+        mov     r11, [rcx + 64]
+        mov     r12, [rcx + 32]
         not     rax
+        not     rbx
+        not     r8
+        not     r9
+        not     r10
+        not     r11
+        not     r12
         and     rax, [rcx - 8]
+        and     rbx, [rcx]
+        and     r8, [rcx + 48]
+        and     r9, [rcx + 56]
+        and     r10, [rcx + 64]
+        and     r11, [rcx + 32]
+        and     r12, [rcx + 40]
         xor     rax, [rcx + 16]
+        xor     rbx, [rcx + 24]
+        xor     r8, [rcx + 32]
+        xor     r9, [rcx + 40]
+        xor     r10, [rcx + 48]
+        xor     r11, [rcx + 56]
+        xor     r12, [rcx + 64]
         mov     [rdx + 16], rax
-        mov     rax, [rcx - 8]
-        not     rax
-        and     rax, [rcx]
-        xor     rax, [rcx + 24]
-        mov     [rdx + 24], rax
-        mov     rax, [rcx + 40]
-        not     rax
-        and     rax, [rcx + 48]
-        xor     rax, [rcx + 32]
-        mov     [rdx + 32], rax
-        mov     rax, [rcx + 48]
-        not     rax
-        and     rax, [rcx + 56]
-        xor     rax, [rcx + 40]
-        mov     [rdx + 40], rax
-        mov     rax, [rcx + 56]
-        not     rax
-        and     rax, [rcx + 64]
-        xor     rax, [rcx + 48]
-        mov     [rdx + 48], rax
-        mov     rax, [rcx + 64]
-        not     rax
-        and     rax, [rcx + 32]
-        xor     rax, [rcx + 56]
-        mov     [rdx + 56], rax
-        mov     rax, [rcx + 32]
-        not     rax
-        and     rax, [rcx + 40]
-        xor     rax, [rcx + 64]
-        mov     [rdx + 64], rax
+        mov     [rdx + 24], rbx
+        mov     [rdx + 32], r8
+        mov     [rdx + 40], r9
+        mov     [rdx + 48], r10
+        mov     [rdx + 56], r11
+        mov     [rdx + 64], r12
         pop     r14
         pop     r13
         pop     r12
+        pop     rbx
 {$endif}
 end;
 
