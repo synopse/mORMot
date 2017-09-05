@@ -1351,6 +1351,8 @@ type
     // - you can call this method several times, to work with a stream buffer;
     // but for safety, you should eventually call Done
     function Cypher(const Source: RawByteString): RawByteString; overload;
+    /// returns the algorithm specified at Init()
+    function Algorithm: TSHA3Algo;
     /// fill all used memory context with zeros, for safety
     // - is necessary only when NoInit is set to true (e.g. after InitCypher)  
     procedure Done;
@@ -8139,6 +8141,11 @@ end;
 procedure TSHA3.Init(Algo: TSHA3Algo);
 begin
   PSHA3Context(@Context)^.Init(Algo);
+end;
+
+function TSHA3.Algorithm: TSHA3Algo;
+begin
+  result := PSHA3Context(@Context)^.Algo;
 end;
 
 procedure TSHA3.Update(const Buffer: RawByteString);
