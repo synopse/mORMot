@@ -41572,25 +41572,25 @@ begin
 end;
 
 var
-  ServerNonceHmac: THMAC_SHA256;
+  ServerNonceHash: TSHA3; // faster than THMAC_SHA256 on small input
 
 function ServerNonce(Previous: boolean): RawUTF8;
-var Ticks: cardinal;
-    rnd: THash128;
-    hmac: THMAC_SHA256;
+var ticks: cardinal;
+    hash: TSHA3;
     res: THash256;
 begin
-  Ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
+  ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
   if Previous then
-    dec(Ticks);
-  while PInteger(@ServerNonceHmac)^=0 do begin
-    TAESPRNG.Main.Fill(rnd); // ensure unpredictable nonce
-    ServerNonceHmac.Init(@rnd,sizeof(rnd));
+    dec(ticks);
+  while ServerNonceHash.Algorithm<>SHA3_256 do begin
+    ServerNonceHash.Init(SHA3_256);
+    TAESPRNG.Main.Fill(@res,sizeof(res)); // ensure unpredictable nonce
+    ServerNonceHash.Update(@res,sizeof(res));
   end;
-  hmac := ServerNonceHmac;
-  hmac.Update(@Ticks,sizeof(Ticks));
-  hmac.Done(res,true);
-  result := SHA256DigestToString(res);
+  hash := ServerNonceHash; // thread-safe SHA-3 sponge reuse
+  hash.Update(@ticks,sizeof(ticks));
+  hash.Final(res,true);
+  result := BinToHex(@res,sizeof(res));
 end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
