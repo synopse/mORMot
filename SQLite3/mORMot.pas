@@ -6018,7 +6018,7 @@ type
     fClientKind: TSQLRestServerURIContextClientKind;
     // just a wrapper over @ServiceContext threadvar
     fThreadServer: PServiceRunningContext;
-    fSessionAccessRights: TSQLAccessRights; // session may be deleted meanwhile
+    fSessionAccessRights: TSQLAccessRights; // fSession may be deleted meanwhile
     {$ifndef NOVARIANTS}
     function GetInput(const ParamName: RawUTF8): variant;
     function GetInputOrVoid(const ParamName: RawUTF8): variant;
@@ -15257,11 +15257,10 @@ type
   TAuthSession = class(TSynPersistent)
   protected
     fUser: TSQLAuthUser;
-    fLastAccessTimeout: cardinal;
     fID: RawUTF8;
     fIDCardinal: cardinal;
+    fTimeOutTix: cardinal;
     fTimeOutShr10: cardinal;
-    fAccessRights: TSQLAccessRights;
     fPrivateKey: RawUTF8;
     fPrivateSalt: RawUTF8;
     fSentHeaders: RawUTF8;
@@ -15269,6 +15268,7 @@ type
     fPrivateSaltHash: Cardinal;
     fLastTimeStamp: Cardinal;
     fExpectedHttpAuthentication: RawUTF8;
+    fAccessRights: TSQLAccessRights;
     fMethods: TSynMonitorInputOutputObjArray;
     fInterfaces: TSynMonitorInputOutputObjArray;
     function GetUserName: RawUTF8;
@@ -15297,7 +15297,7 @@ type
     property User: TSQLAuthUser read fUser;
     /// set by the Access() method to the current GetTickCount64 shr 10
     // timestamp + TimeoutSecs
-    property LastAccessTimeout: cardinal read fLastAccessTimeout;
+    property TimeOutTix: cardinal read fTimeOutTix;
     /// copy of the associated user access rights
     // - extracted from User.TSQLAuthGroup.SQLAccessRights
     property AccessRights: TSQLAccessRights read fAccessRights;
@@ -41702,7 +41702,7 @@ end;
 
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
-    tix: cardinal;
+    tix, session: cardinal;
     sessions: PPointerArray;
 begin // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
@@ -41711,15 +41711,15 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
     if tix<>fSessionsDeprecatedTix then begin
       fSessionsDeprecatedTix := tix; // check deprecated sessions every second
       for i := fSessions.Count-1 downto 0 do
-        with TAuthSession(sessions[i]) do
-          if tix>LastAccessTimeout then
-            SessionDelete(i,nil);
+        if tix>TAuthSession(sessions[i]).TimeOutTix then
+          SessionDelete(i,nil);
     end;
     // retrieve session from its ID
+    session := Ctxt.Session;
     for i := 0 to fSessions.Count-1 do begin
       result := sessions[i];
-      if result.IDCardinal=Ctxt.Session then begin
-        result.fLastAccessTimeout := tix+result.TimeoutShr10;
+      if result.IDCardinal=session then begin
+        result.fTimeOutTix := tix+result.TimeoutShr10;
         Ctxt.fSession := result; // for TSQLRestServer internal use
         // make local copy of TAuthSession information
         Ctxt.SessionUser := result.User.fID;
@@ -51298,7 +51298,7 @@ end;
 procedure TAuthSession.ComputeProtectedValues;
 begin // here User.GroupRights and fPrivateKey should have been set
   fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout)*(1000*60))shr 10;
-  fLastAccessTimeout := GetTickCount64 shr 10+fTimeOutShr10;
+  fTimeOutTix := GetTickCount64 shr 10+fTimeOutShr10;
   fAccessRights := User.GroupRights.SQLAccessRights;
   fPrivateSalt := fID+'+'+fPrivateKey;
   fPrivateSaltHash :=
@@ -51662,6 +51662,7 @@ begin
     for i := 0 to fServer.fSessions.Count-1 do
       with TAuthSession(fServer.fSessions.List[i]) do
       if (fIDCardinal=aSessionID) and (fUser.LogonName=aUserName) then begin
+        Ctxt.fSession := nil; // avoid GPF
         fServer.SessionDelete(i,Ctxt);
         Ctxt.Success;
         break;
