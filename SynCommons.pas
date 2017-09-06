@@ -11031,6 +11031,10 @@ function HexToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: Integer): boolean; overl
 function HexToCharValid(Hex: PAnsiChar): boolean;
   {$ifdef HASINLINE}inline;{$endif}
 
+/// fast check if the supplied Hex buffer is an hexadecimal representation
+// of a binary buffer of a given number of bytes  
+function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
+
 /// fast conversion from one hexa char pair into a 8 bit AnsiChar
 // - return false if any invalid (non hexa) char is found in Hex^
 // - similar to HexToBin(Hex,Bin,1) but with Bin<>nil
@@ -27007,6 +27011,11 @@ begin
     if C>15 then exit;
   end;
   result := true; // conversion OK
+end;
+
+function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
+begin
+  result := (length(Hex)=BinBytes*2) and HexToBin(pointer(Hex),nil,BinBytes);
 end;
 
 function HexToCharValid(Hex: PAnsiChar): boolean;

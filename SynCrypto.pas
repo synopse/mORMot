@@ -1679,7 +1679,14 @@ function SHA256(Data: pointer; Len: integer): RawUTF8; overload;
 // - since the result would be stored temporarly in the stack, it may be
 // safer to use an explicit TSHA256Digest variable, which would be filled
 // with zeros by a ... finally FillZero(
-function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
+function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest; overload;
+
+/// direct SHA-256 hash calculation of some binary data
+// - result is returned in TSHA256Digest binary format
+// - since the result would be stored temporarly in the stack, it may be
+// safer to use an explicit TSHA256Digest variable, which would be filled
+// with zeros by a ... finally FillZero(
+function SHA256Digest(const Data: RawByteString): TSHA256Digest; overload;
 
 /// direct SHA-256 hash calculation of some data (string-encoded)
 // - result is returned in hexadecimal format
@@ -3245,6 +3252,12 @@ function SHA256Digest(Data: pointer; Len: integer): TSHA256Digest;
 var SHA: TSHA256;
 begin
   SHA.Full(Data,Len,result);
+end;
+
+function SHA256Digest(const Data: RawByteString): TSHA256Digest;
+var SHA: TSHA256;
+begin
+  SHA.Full(pointer(Data),Length(Data),result);
 end;
 
 
