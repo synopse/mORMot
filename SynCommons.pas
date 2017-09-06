@@ -27015,7 +27015,7 @@ end;
 
 function IsHex(const Hex: RawByteString; BinBytes: integer): boolean;
 begin
-  result := (length(Hex)=BinBytes*2) and HexToBin(pointer(Hex),nil,BinBytes);
+  result := (length(Hex)=BinBytes*2) and SynCommons.HexToBin(pointer(Hex),nil,BinBytes);
 end;
 
 function HexToCharValid(Hex: PAnsiChar): boolean;
