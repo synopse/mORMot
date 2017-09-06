@@ -41703,13 +41703,13 @@ end;
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
     tix: cardinal;
-    sessions: PPointerList;
+    sessions: PPointerArray;
 begin // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
-    sessions := fSessions.List;
+    sessions := pointer(fSessions.List);
     tix := GetTickCount64 shr 10;
     if tix<>fSessionsDeprecatedTix then begin
-      fSessionsDeprecatedTix := tix; // check deprecated sessions every second 
+      fSessionsDeprecatedTix := tix; // check deprecated sessions every second
       for i := fSessions.Count-1 downto 0 do
         with TAuthSession(sessions[i]) do
           if tix>LastAccessTimeout then
