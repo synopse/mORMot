@@ -25262,7 +25262,7 @@ begin
       exit; // valid hexa data
   end else
   if (PInteger(P)^ and $00ffffff=JSON_BASE64_MAGIC) and IsBase64(@P[3],Len-3) then begin
-    // Base-64 encoded content ('\uFFF0base64encodedbinary')
+    // safe decode Base-64 content ('\uFFF0base64encodedbinary')
     Base64ToBin(@P[3],Len-3,RawByteString(result));
     exit;
   end;
@@ -41582,7 +41582,7 @@ begin
   ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
   if Previous then
     dec(ticks);
-  while ServerNonceHash.Algorithm<>SHA3_256 do begin
+  if ServerNonceHash.Algorithm<>SHA3_256 then begin
     ServerNonceHash.Init(SHA3_256);
     TAESPRNG.Main.Fill(@res,sizeof(res)); // ensure unpredictable nonce
     ServerNonceHash.Update(@res,sizeof(res));
@@ -52050,9 +52050,10 @@ function TSQLRestServerAuthenticationDefault.CheckPassword(Ctxt: TSQLRestServerU
 var aSalt: RawUTF8;
 begin
   aSalt := aClientNonce+User.LogonName+User.PasswordHashHexa;
-  result := (aPassWord=SHA256(fServer.Model.Root+ServerNonce(false)+aSalt)) or
-            // if current nonce failed, tries with previous 5 minutes' nonce
-            (aPassWord=SHA256(fServer.Model.Root+ServerNonce(true)+aSalt));
+  result := IsHex(aPassword,sizeof(THash256)) and
+    (IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+ServerNonce(false)+aSalt)) or
+     // if current nonce failed, tries with previous 5 minutes' nonce
+     IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+ServerNonce(true)+aSalt)));
 end;
 
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
@@ -52220,7 +52221,7 @@ var expectedPass: RawUTF8;
 begin
   expectedPass := User.PasswordHashHexa;
   User.PasswordPlain := aPassWord; // override with SHA-256 hash from HTTP header
-  result := User.PasswordHashHexa=expectedPass;
+  result := IdemPropNameU(User.PasswordHashHexa,expectedPass);
 end;
 
 function TSQLRestServerAuthenticationHttpBasic.Auth(Ctxt: TSQLRestServerURIContext): boolean;
