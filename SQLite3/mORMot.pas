@@ -6013,7 +6013,7 @@ type
     fOutSetCookie: RawUTF8;
     fUserAgent: RawUTF8;
     fAuthenticationBearerToken: RawUTF8;
-    fAuthSession: TAuthSession;
+    fSession: TAuthSession; // not published to avoid unexpected GPF on access
     fServiceListInterfaceMethodIndex: integer;
     fClientKind: TSQLRestServerURIContextClientKind;
     // just a wrapper over @ServiceContext threadvar
@@ -15257,10 +15257,10 @@ type
   TAuthSession = class(TSynPersistent)
   protected
     fUser: TSQLAuthUser;
-    fLastAccess64: Int64;
+    fLastAccessTimeout: cardinal;
     fID: RawUTF8;
     fIDCardinal: cardinal;
-    fTimeOutMS: cardinal;
+    fTimeOutShr10: cardinal;
     fAccessRights: TSQLAccessRights;
     fPrivateKey: RawUTF8;
     fPrivateSalt: RawUTF8;
@@ -15295,8 +15295,9 @@ type
     // - this is a true TSQLAuthUser instance, and User.GroupRights will contain
     // also a true TSQLAuthGroup instance
     property User: TSQLAuthUser read fUser;
-    /// set by the Access() method to the current GetTickCount64() time stamp
-    property LastAccess64: Int64 read fLastAccess64;
+    /// set by the Access() method to the current GetTickCount64 shr 10
+    // timestamp + TimeoutSecs
+    property LastAccessTimeout: cardinal read fLastAccessTimeout;
     /// copy of the associated user access rights
     // - extracted from User.TSQLAuthGroup.SQLAccessRights
     property AccessRights: TSQLAccessRights read fAccessRights;
@@ -15325,10 +15326,10 @@ type
     property UserID: TID read GetUserID;
     /// the associated Group ID, as in User.GroupRights.ID
     property GroupID: TID read GetGroupID;
-    /// the number of milliseconds a session is kept alive
+    /// the timestamp (in numbers of 1024 ms) until a session is kept alive
     // - extracted from User.TSQLAuthGroup.SessionTimeout
-    // - allow direct comparison with GetTickCount64() API call
-    property TimeoutMS: cardinal read fTimeOutMS;
+    // - is used for fast comparison with GetTickCount64 shr 10
+    property TimeoutShr10: cardinal read fTimeOutShr10;
     /// the remote IP, if any
     // - is extracted from SentHeaders properties
     property RemoteIP: RawUTF8 read fRemoteIP;
@@ -15435,9 +15436,10 @@ type
     // - method execution is protected by TSQLRestServer.fSessions.Lock
     function Auth(Ctxt: TSQLRestServerURIContext): boolean; virtual; abstract;
     /// called by the Server to check if the execution context match a session
-    // - returns a session instance corresponding to the remote request
+    // - returns a session instance corresponding to the remote request, and
+    // fill Ctxt.Session* members according to in-memory session information
     // - returns nil if this remote request does not match this authentication
-    // - method execution is protected by TSQLRestServer.fSessions.Lock
+    // - method execution should be protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; virtual; abstract;
     /// allow to tune the authentication process
     // - default value is [saoUserByLogonOrID]
@@ -15469,6 +15471,7 @@ type
   public
     /// will check URI-level signature
     // - retrieve the session ID from 'session_signature=...' parameter
+    // - method execution should be protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// class method to be called on client side to add the SessionID to the URI
     // - append '&session_signature=SessionID' to the url
@@ -15535,6 +15538,7 @@ type
     constructor Create(aServer: TSQLRestServer); override;
     /// will check URI-level signature
     // - check session_signature=... parameter to be a valid digital signature
+    // - method execution should be protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// class method to be called on client side to sign an URI
     // - generate the digital signature as expected by overridden RetrieveSession()
@@ -15661,6 +15665,7 @@ type
   public
     /// will check the caller signature
     // - retrieve the session ID from "Cookie: mORMot_session_signature=..." HTTP header
+    // - method execution should be protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// class method to be called on client side to sign an URI in Auth Basic
     // resolution is about 256 ms in the current implementation
@@ -15721,6 +15726,7 @@ type
     /// will check URI-level signature
     // - retrieve the session ID from 'session_signature=...' parameter
     // - will also check incoming "Authorization: Basic ...." HTTP header
+    // - method execution should be protected by TSQLRestServer.fSessions.Lock
     function RetrieveSession(Ctxt: TSQLRestServerURIContext): TAuthSession; override;
     /// handle the Auth RESTful method with HTTP Basic
     // - will first return HTTP_UNAUTHORIZED (401), then expect user and password
@@ -16483,6 +16489,7 @@ type
     fStaticVirtualTable: TSQLRestDynArray;
     /// in-memory storage of TAuthSession instances
     fSessions: TObjectListLocked;
+    fSessionsDeprecatedTix: cardinal;
     /// used to compute genuine TAuthSession.ID cardinal value
     fSessionCounter: cardinal;
     fSessionAuthentication: TSQLRestServerAuthenticationDynArray;
@@ -16595,7 +16602,7 @@ type
     // with afSessionAlreadyStartedForThisUser or afSessionCreationAborted reason
     procedure SessionCreate(var User: TSQLAuthUser; Ctxt: TSQLRestServerURIContext;
       out Session: TAuthSession); virtual;
-    /// fill the supplied context from the supplied aContext.Session ID
+    /// search for Ctxt.Session ID and fill Ctxt.Session* members if found 
     // - returns nil if not found, or fill aContext.User/Group values if matchs
     // - this method will also check for outdated sessions, and delete them
     // - this method is not thread-safe: caller should use fSessions.Lock
@@ -39391,12 +39398,9 @@ begin
           aSession := Server.fSessionAuthentication[i].RetrieveSession(self);
           if aSession<>nil then begin
             {$ifdef WITHLOG}
-            log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
+            Log.Log(sllUserAuth,'%/% %',[aSession.User.LogonName,aSession.ID,
               aSession.RemoteIP],self);
             {$endif}
-            fSessionAccessRights := aSession.fAccessRights; // local copy
-            Call^.RestAccessRights := @fSessionAccessRights;
-            Session := aSession.IDCardinal;
             result := true;
             exit;
           end;
@@ -39426,7 +39430,7 @@ var txt: PShortString;
 begin
   txt := ToText(Reason);
   {$ifdef WITHLOG}
-  log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',
+  Log.Log(sllUserAuth,'AuthenticationFailed(%) for % (session=%)',
     [txt^,Call^.Url,Session],self);
   {$endif}
   // 401 Unauthorized response MUST include a WWW-Authenticate header,
@@ -39449,7 +39453,7 @@ procedure TSQLRestServerURIContext.ExecuteCommand;
 procedure TimeOut;
 begin
   {$ifdef WITHLOG}
-  log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,ToText(Command)^,
+  Log.Log(sllServer,'TimeOut %.Execute(%) after % ms',[self,ToText(Command)^,
     Server.fAcquireExecution[Command].LockedTimeOut],self);
   {$endif}
   if Call<>nil then
@@ -39598,13 +39602,13 @@ begin
       StatsFromContext(Stats,timeEnd,false);
       if Server.StatUsage<>nil then
         Server.StatUsage.Modified(Stats,[]);
-      if (mlSessions in Server.StatLevels) and (fAuthSession<>nil) then begin
-        if fAuthSession.Methods=nil then
-          SetLength(fAuthSession.fMethods,length(Server.fPublishedMethod));
-        sessionstat := fAuthSession.fMethods[MethodIndex];
+      if (mlSessions in Server.StatLevels) and (fSession<>nil) then begin
+        if fSession.fMethods=nil then
+          SetLength(fSession.fMethods,length(Server.fPublishedMethod));
+        sessionstat := fSession.fMethods[MethodIndex];
         if sessionstat=nil then begin
           sessionstat := TSynMonitorInputOutput.Create(Name);
-          fAuthSession.fMethods[MethodIndex] := sessionstat;
+          fSession.fMethods[MethodIndex] := sessionstat;
         end;
         StatsFromContext(sessionstat,timeEnd,true);
         // mlSessions stats are not yet tracked per Client
@@ -41698,25 +41702,32 @@ end;
 
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
-    Tix64: Int64;
-begin // caller shall be locked via fSessions.Safe.Lock
+    tix: cardinal;
+    sessions: PPointerList;
+begin // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
-    // first check for outdated sessions to be deleted
-    Tix64 := GetTickCount64;
-    for i := fSessions.Count-1 downto 0 do
-      with TAuthSession(fSessions.List[i]) do
-        if Tix64>LastAccess64+TimeOutMS then
-          SessionDelete(i,nil);
-    // retrieve session
+    sessions := fSessions.List;
+    tix := GetTickCount64 shr 10;
+    if tix<>fSessionsDeprecatedTix then begin
+      fSessionsDeprecatedTix := tix; // check deprecated sessions every second 
+      for i := fSessions.Count-1 downto 0 do
+        with TAuthSession(sessions[i]) do
+          if tix>LastAccessTimeout then
+            SessionDelete(i,nil);
+    end;
+    // retrieve session from its ID
     for i := 0 to fSessions.Count-1 do begin
-      result := TAuthSession(fSessions.List[i]);
+      result := sessions[i];
       if result.IDCardinal=Ctxt.Session then begin
-        result.fLastAccess64 := Tix64; // refresh session access timestamp
-        Ctxt.fAuthSession := result;
+        result.fLastAccessTimeout := tix+result.TimeoutShr10;
+        Ctxt.fSession := result; // for TSQLRestServer internal use
+        // make local copy of TAuthSession information
         Ctxt.SessionUser := result.User.fID;
         Ctxt.SessionGroup := result.User.GroupRights.fID;
         Ctxt.SessionUserName := result.User.LogonName;
         Ctxt.SessionRemoteIP := result.RemoteIP;
+        Ctxt.fSessionAccessRights := result.fAccessRights;
+        Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
         exit;
       end;
     end;
@@ -51286,8 +51297,8 @@ end;
 
 procedure TAuthSession.ComputeProtectedValues;
 begin // here User.GroupRights and fPrivateKey should have been set
-  fLastAccess64 := GetTickCount64;
-  fTimeOutMS := User.GroupRights.SessionTimeout*(1000*60); // min to ms
+  fTimeOutShr10 := (QWord(User.GroupRights.SessionTimeout)*(1000*60))shr 10;
+  fLastAccessTimeout := GetTickCount64 shr 10+fTimeOutShr10;
   fAccessRights := User.GroupRights.SQLAccessRights;
   fPrivateSalt := fID+'+'+fPrivateKey;
   fPrivateSaltHash :=
@@ -58120,15 +58131,15 @@ begin
         Ctxt.StatsFromContext(stats,timeEnd,false);
         if Ctxt.Server.StatUsage<>nil then
           Ctxt.Server.StatUsage.Modified(stats,[]);
-        if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fAuthSession<>nil) then begin
-          if Ctxt.fAuthSession.fInterfaces=nil then
-            SetLength(Ctxt.fAuthSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
+        if (mlSessions in TSQLRestServer(Rest).StatLevels) and (Ctxt.fSession<>nil) then begin
+          if Ctxt.fSession.fInterfaces=nil then
+            SetLength(Ctxt.fSession.fInterfaces,length(Rest.Services.fListInterfaceMethod));
           m := Ctxt.fServiceListInterfaceMethodIndex;
           if m<0 then
             m := Rest.Services.fListInterfaceMethods.FindHashed(
               fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
           if m>=0 then
-          with Ctxt.fAuthSession do begin
+          with Ctxt.fSession do begin
             stats := fInterfaces[m];
             if stats=nil then begin
               stats := StatsCreate;
