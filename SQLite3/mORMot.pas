@@ -41703,21 +41703,21 @@ end;
 function TSQLRestServer.SessionAccess(Ctxt: TSQLRestServerURIContext): TAuthSession;
 var i: integer;
     tix, session: cardinal;
-    sessions: PPointerArray;
+    sessions: ^TAuthSession;
 begin // caller of RetrieveSession() made fSessions.Safe.Lock
   if (self<>nil) and (fSessions<>nil) then begin
-    sessions := pointer(fSessions.List);
     tix := GetTickCount64 shr 10;
     if tix<>fSessionsDeprecatedTix then begin
       fSessionsDeprecatedTix := tix; // check deprecated sessions every second
       for i := fSessions.Count-1 downto 0 do
-        if tix>TAuthSession(sessions[i]).TimeOutTix then
+        if tix>TAuthSession(fSessions.List[i]).TimeOutTix then
           SessionDelete(i,nil);
     end;
     // retrieve session from its ID
+    sessions := pointer(fSessions.List);
     session := Ctxt.Session;
-    for i := 0 to fSessions.Count-1 do begin
-      result := sessions[i];
+    for i := 1 to fSessions.Count do begin
+      result := sessions^;
       if result.IDCardinal=session then begin
         result.fTimeOutTix := tix+result.TimeoutShr10;
         Ctxt.fSession := result; // for TSQLRestServer internal use
@@ -41730,6 +41730,7 @@ begin // caller of RetrieveSession() made fSessions.Safe.Lock
         Ctxt.Call^.RestAccessRights := @Ctxt.fSessionAccessRights;
         exit;
       end;
+      inc(sessions);
     end;
   end;
   result := nil;
