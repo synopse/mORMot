@@ -24932,7 +24932,7 @@ function TSQLTable.FieldPropFromTables(const PropName: RawUTF8;
       PropInfo := fQueryTables[aTableIndex].RecordProps.Fields.ByName(aPropName);
       if PropInfo<>nil then begin
         result := PropInfo.SQLFieldTypeStored;
-        if result<>sftUnknown then 
+        if result<>sftUnknown then
           TableIndex := aTableIndex;
         exit;
       end;
@@ -24942,6 +24942,7 @@ function TSQLTable.FieldPropFromTables(const PropName: RawUTF8;
 var i,t: integer;
 begin
   TableIndex := -1;
+  result := sftUnknown;
   if fQueryTableIndexFromSQL=-2 then begin
     fQueryTableIndexFromSQL := -1;
     if (fQueryTables<>nil) and (QueryTableNameFromSQL<>'') then
@@ -24973,7 +24974,6 @@ begin
           SearchInQueryTables(@PropName[i+2],t);
           exit;
         end;
-    result := sftUnknown;
   end;
 end;
 
