@@ -309,7 +309,7 @@ var
   aValue: jsval;
   dir, founded: TFileName;
   F: TSearchRec;
-  jsarr: PJSObject;
+  res: PJSRootedObject;
   cNum, searchAttr: integer;
   includeSubDir: boolean;
 const
@@ -333,33 +333,35 @@ begin
       Exit(true);
     end;
 
-    jsarr := cx.NewArrayObject(0);
-    vp.rval := jsarr.ToJSValue; //root it for not GC
     Dir := IncludeTrailingPathDelimiter(Dir);
 
+    res := cx.NewRootedObject(cx.NewArrayObject(0));
+    try
+      {$WARN SYMBOL_PLATFORM OFF}
+      searchAttr := faAnyFile;
+      if not includeSubDir then
+        searchAttr := searchAttr - faDirectory;
+      if FindFirst(Dir + '*.*', searchAttr, F) = 0 then
+      begin
+        cNum := 0;
+        repeat
+          if {(F.Attr and (faDirectory+faHidden)=0) and } (F.Name[1] <> '.') then
+          begin
+            founded := F.Name;
+            if (F.Attr and faDirectory) <> 0 then
+              founded := IncludeTrailingPathDelimiter(founded);
 
-    {$WARN SYMBOL_PLATFORM OFF}
-    searchAttr := faAnyFile;
-    if not includeSubDir then
-      searchAttr := searchAttr - faDirectory;
-    if FindFirst(Dir + '*.*', searchAttr, F) = 0 then
-    begin
-      cNum := 0;
-      repeat
-        if {(F.Attr and (faDirectory+faHidden)=0) and } (F.Name[1] <> '.') then
-        begin
-          founded := F.Name;
-          if (F.Attr and faDirectory) <> 0 then
-            founded := IncludeTrailingPathDelimiter(founded);
-
-          aValue := cx.NewJSString(founded).ToJSVal;
-          jsarr.SetElement(cx, cNum, aValue);
-          inc(cNum);
-        end;
-      until FindNext(F) <> 0;
+            res.ptr.SetElement(cx, cNum, cx.NewJSString(founded).ToJSVal);
+            inc(cNum);
+          end;
+        until FindNext(F) <> 0;
+      end;
+      {$WARN SYMBOL_PLATFORM ON}
+      {$ifdef ISDELPHIXE2}System.{$ENDIF}SysUtils.FindClose(F);
+      vp.rval := res.ptr.ToJSValue;
+    finally
+      cx.FreeRootedObject(res);
     end;
-    {$WARN SYMBOL_PLATFORM ON}
-    System.SysUtils.FindClose(F);
     Result := True;
   except
     on E: Exception do
