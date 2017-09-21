@@ -54053,16 +54053,17 @@ end;
 function TInterfaceFactory.FindMethodIndex(const aMethodName: RawUTF8): integer;
 begin
   if (self=nil) or (aMethodName='') then
-    result := -1 else
-  if fMethodsCount<10 then begin
-    for result := 0 to fMethodsCount-1 do
-      if IdemPropNameU(fMethods[result].URI,aMethodName) then
-        exit;
-    result := -1;
-  end else
-    result := fMethod.FindHashed(aMethodName);
-  if (result<0) and (aMethodName[1]<>'_') then
-    result := FindMethodIndex('_'+aMethodName);
+    result := -1 else begin
+    if fMethodsCount<10 then begin
+      for result := 0 to fMethodsCount-1 do
+        if IdemPropNameU(fMethods[result].URI,aMethodName) then
+          exit;
+      result := -1;
+    end else
+      result := fMethod.FindHashed(aMethodName);
+    if (result<0) and (aMethodName[1]<>'_') then
+      result := FindMethodIndex('_'+aMethodName);
+  end;
 end;
 
 function TInterfaceFactory.FindFullMethodIndex(const aFullMethodName: RawUTF8;
