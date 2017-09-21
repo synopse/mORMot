@@ -8280,7 +8280,8 @@ begin
     GetVersionEx(OSVersionInfo);
   end;
   if fProxyName='' then
-    if (OSVersionInfo.dwMajorVersion>=6) and (OSVersionInfo.dwMinorVersion>=3) then
+    if (OSVersionInfo.dwMajorVersion>6) or
+       ((OSVersionInfo.dwMajorVersion=6) and (OSVersionInfo.dwMinorVersion>=3)) then
       OpenType := WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY else // Windows 8.1 and newer
       OpenType := WINHTTP_ACCESS_TYPE_NO_PROXY else
     OpenType := WINHTTP_ACCESS_TYPE_NAMED_PROXY;
