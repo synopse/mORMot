@@ -299,7 +299,78 @@ begin
       JSError(cx, E);
     end;
   end;
+end;
 
+/// read content of directory. return array of file names witout started from dot '.'
+/// in case of includeDirNames - return sub direcrory with trailing slash
+function fs_readDir(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  in_argv: PjsvalVector;
+  aValue: jsval;
+  dir, founded: TFileName;
+  F: TSearchRec;
+  res: PJSRootedObject;
+  cNum, searchAttr: integer;
+  includeSubDir: boolean;
+const
+  USAGE = 'usage: readDir(dirPath: String; [includeDirNames: boolean = false]): Array';
+begin
+  try
+    in_argv := vp.argv;
+    {$POINTERMATH ON}
+    if (argc < 1) or not in_argv[0].isString then
+      raise ESMException.Create(USAGE);
+    if (argc = 2) and in_argv[1].isBoolean then
+      includeSubDir := in_argv[1].asBoolean
+    else
+      includeSubDir := false;
+
+    dir := in_argv[0].asJSString.ToSynUnicode(cx);
+    {$POINTERMATH OFF}
+    if not DirectoryExists(Dir) then
+    begin
+      vp.rval := JSVAL_NULL;
+      Exit(true);
+    end;
+
+    Dir := IncludeTrailingPathDelimiter(Dir);
+
+    res := cx.NewRootedObject(cx.NewArrayObject(0));
+    try
+      {$WARN SYMBOL_PLATFORM OFF}
+      searchAttr := faAnyFile;
+      if not includeSubDir then
+        searchAttr := searchAttr - faDirectory;
+      if FindFirst(Dir + '*.*', searchAttr, F) = 0 then
+      begin
+        cNum := 0;
+        repeat
+          if {(F.Attr and (faDirectory+faHidden)=0) and } (F.Name[1] <> '.') then
+          begin
+            founded := F.Name;
+            if (F.Attr and faDirectory) <> 0 then
+              founded := IncludeTrailingPathDelimiter(founded);
+
+            res.ptr.SetElement(cx, cNum, cx.NewJSString(founded).ToJSVal);
+            inc(cNum);
+          end;
+        until FindNext(F) <> 0;
+      end;
+      {$WARN SYMBOL_PLATFORM ON}
+      {$ifdef ISDELPHIXE2}System.{$ENDIF}SysUtils.FindClose(F);
+      vp.rval := res.ptr.ToJSValue;
+    finally
+      cx.FreeRootedObject(res);
+    end;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
 end;
 
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
@@ -318,6 +389,7 @@ begin
     obj.ptr.DefineFunction(cx, 'fileExists', fs_fileExists, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, JSPROP_READONLY or JSPROP_PERMANENT);
 
     Result := obj.ptr.ToJSValue;
   finally
