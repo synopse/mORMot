@@ -1,4 +1,4 @@
-import * as DevToolsUtils from 'DevTools\\DevToolsUtils.js';
+import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 
 /**
  * Stringify a Debugger.Object based on its class.

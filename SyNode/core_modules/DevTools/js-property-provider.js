@@ -1,5 +1,5 @@
 "use strict";
-import * as DevToolsUtils from 'DevTools\\DevToolsUtils.js';
+import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 
 //todo
 //if (!isWorker) {

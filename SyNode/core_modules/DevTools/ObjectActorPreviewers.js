@@ -1,4 +1,4 @@
-import * as DevToolsUtils from 'DevTools\\DevToolsUtils.js';
+import * as DevToolsUtils from 'DevTools/DevToolsUtils.js';
 let {global} = process.binding('debugger');
 
 const TYPED_ARRAY_CLASSES = ["Uint8Array", "Uint8ClampedArray", "Uint16Array",
