@@ -3,8 +3,9 @@
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 // A basic synchronous module loader for testing the shell.
-let {coreModulesPath, parseModule, setModuleResolveHook} = process.binding('modules'),
-    {relToAbs, loadFile} = process.binding('fs');
+let {coreModulesPath, parseModule, setModuleResolveHook} = process.binding('modules')
+let {loadFile} = process.binding('fs')
+const PATH_DELIM = process.platform === 'win32' ? '\\' : '/'
 
 Reflect.Loader = new class {
     constructor() {
@@ -13,7 +14,7 @@ Reflect.Loader = new class {
     }
 
     resolve(name) {
-        return relToAbs(this.loadPath, name);
+	return `${this.loadPath}.${PATH_DELIM}${name}`;
     }
 
     fetch(path) {
