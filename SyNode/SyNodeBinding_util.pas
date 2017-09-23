@@ -6,12 +6,14 @@ unit SyNodeBinding_util;
 interface
 {$I Synopse.inc}
 {$I SyNode.inc}
-
-implementation
 uses
   SysUtils,
   SynCommons,
   SyNode, SpiderMonkey;
+
+function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; {$ifdef HASINLINE}inline;{$endif}
+
+implementation
 
 ///This is dirty hack using Spider Monkey internals
 function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; {$ifdef HASINLINE}inline;{$endif}
@@ -63,8 +65,6 @@ end;
 
 ///This is dirty hack using Spider Monkey internals
 function isMapIterator(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
-var
-  in_argv: PjsvalVector;
 const
   sInvalidCall = 'One argunent required';
 begin
@@ -73,7 +73,6 @@ begin
     Check that Class_ name is correct and you can continue using this internal
     {$ENDIF}
     Result := True;
-    in_argv := vp.argv;
     if (argc <> 1) then
       raise ESMException.Create(sInvalidCall);
     vp.rval := SimpleVariantToJSval(cx,
@@ -108,8 +107,6 @@ end;
 
 ///This is dirty hack using Spider Monkey internals
 function isSetIterator(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
-var
-  in_argv: PjsvalVector;
 const
   sInvalidCall = 'One argunent required';
 begin
@@ -118,7 +115,6 @@ begin
     Check that Class_ name is correct and you can continue using this internal
     {$ENDIF}
     Result := True;
-    in_argv := vp.argv;
     if (argc <> 1) then
       raise ESMException.Create(sInvalidCall);
     vp.rval := SimpleVariantToJSval(cx,
