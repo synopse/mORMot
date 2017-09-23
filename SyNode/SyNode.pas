@@ -890,7 +890,7 @@ var
   exc: jsval;
   exObj: PJSRootedObject;
 begin
-  if report.flags = JSREPORT_WARNING then
+  if {$IFDEF SM52}(report = nil) or {$ENDIF}(report.flags = JSREPORT_WARNING) then
     Exit;
 
   FErrorExist := True;
@@ -935,14 +935,65 @@ end;
 
 procedure TSMEngine.CheckJSError(res: Boolean);
 var exc: jsval;
-    excObj: PJSObject;
+    {$IFDEF SM52}
+    excObj: PJSRootedObject;
+    {$ENDIF}
     rep: PJSErrorReport;
+    R: RawUTF8;
 begin
 {$IFDEF SM52}
   if JS_IsExceptionPending(fCx) and JS_GetPendingException(cx, exc) then begin
-    excObj := exc.asObject;
-    rep := JS_ErrorFromException(cx, excObj);
-    WarningReporter(cx, rep);
+    if exc.isObject then begin
+      excObj := cx.NewRootedObject(exc.asObject);
+      try
+        rep := JS_ErrorFromException(cx, excObj.ptr);
+        if (rep <> nil) and (rep.flags = JSREPORT_WARNING) then
+          exit;
+        // Error inheritance (assert.AssertionError for example)
+        // will return an nil as a rep, so we need to examine a exc object
+        FErrorExist := True;
+
+        excObj.ptr.GetProperty(cx, 'fileName', exc);
+        if (not exc.isVoid) and (exc.isString) then
+          FLastErrorFileName := exc.asJSString.ToUTF8(fCx);
+
+        excObj.ptr.GetProperty(cx, 'lineNumber', exc);
+        if (not exc.isVoid) then begin
+          if (exc.isString) then begin // error line is in format line:char (123:16)
+            R := exc.asJSString.ToUTF8(fCx);
+            FLastErrorLine := GetInteger(pointer(R));
+          end else if (exc.isInteger) then
+            FLastErrorLine := exc.asInteger
+        end;
+
+        excObj.ptr.GetProperty(cx, 'message', exc);
+        if (not exc.isVoid) and (exc.isString) then
+          FLastErrorMsg := exc.asJSString.ToSynUnicode(fCx);
+
+        excObj.ptr.GetProperty(cx, 'stack', exc);
+        if (not exc.isVoid) and (exc.isString) then
+          FLastErrorStackTrace := exc.asJSString.ToSynUnicode(fCx);
+
+        if (rep <> nil) then
+          FLastErrorNum := rep^.errorNumber
+        else
+          FLastErrorNum := 0;
+      finally
+        cx.FreeRootedObject(excObj);
+      end;
+    end else if exc.isString then begin
+      FErrorExist := True;
+      FLastErrorFileName := '<betterToThrowErrorInsteadOfPlainValue>';
+      FLastErrorMsg := exc.asJSString.ToSynUnicode(fCx);
+      FLastErrorStackTrace := '';
+      FLastErrorNum := 0;
+    end else begin
+      FErrorExist := True;
+      FLastErrorFileName := '<betterToThrowError>';
+      FLastErrorMsg := 'code throw a plain value instead of Error (or error like) object';
+      FLastErrorStackTrace := '';
+      FLastErrorNum := 0;
+    end;
     raise ESMException.CreateWithTrace(FLastErrorFileName, FLastErrorNum, FLastErrorLine, FLastErrorMsg, FLastErrorStackTrace);
   end;
 {$ENDIF}
