@@ -370,7 +370,9 @@ type
 
 {$ifndef CPU64}
 /// first 4 bytes for JSValue
-{$Z4}
+{$MINENUMSIZE 4}
+{$WARN COMBINING_SIGNED_UNSIGNED OFF}
+{$WARN BOUNDS_ERROR OFF}
   JSValueTag = (
   JSVAL_TAG_CLEAR      = Cardinal($FFFFFF80),
   JSVAL_TAG_INT32      = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_INT32)),
@@ -382,6 +384,9 @@ type
   JSVAL_TAG_NULL       = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_NULL)),
   JSVAL_TAG_OBJECT     = Cardinal(JSVAL_TAG_CLEAR or UInt8(JSVAL_TYPE_OBJECT))
   );
+{$WARN BOUNDS_ERROR ON}
+{$WARN COMBINING_SIGNED_UNSIGNED ON}
+{$MINENUMSIZE 1}
 {$endif}
 
 
@@ -4932,7 +4937,7 @@ function ESMException.CustomLog(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 begin
   with Context.EInstance as ESMException do begin
-    WR.AddJSONEscapeString(FileName); WR.Add(':'); WR.Add(Line); WR.AddShort('\r\rError: ');
+    WR.AddJSONEscape(pointer(FileName), Length(fileName)); WR.Add(':'); WR.Add(Line); WR.AddShort('\r\rError: ');
     WR.AddJSONEscapeString(Message); WR.AddShort('\n');
     WR.AddJSONEscapeString(Stack);
   end;
