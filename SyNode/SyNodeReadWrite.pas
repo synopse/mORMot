@@ -38,6 +38,8 @@ begin
 
   if encoding = 'utf-8' then begin
     Result := cx.NewJSString(Pointer(aStr), length(aStr), CP_UTF8).ToJSVal
+  end else if encoding = 'Windows-1251' then begin
+    Result := cx.NewJSString(Pointer(aStr), length(aStr), 1251).ToJSVal
   end else if encoding = 'ucs2' then begin
     Result := cx.NewJSString(aStr).ToJSVal
   end else if encoding = 'bin2base64' then begin
