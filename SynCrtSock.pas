@@ -3841,7 +3841,7 @@ begin
     SentLen := Send(fSock, P, Len, MSG_NOSIGNAL
       {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
     if SentLen<0 then
-      exit;
+      exit; // error sending -> returns false
     dec(Len,SentLen);
     inc(fBytesOut,SentLen);
     if Len<=0 then break;

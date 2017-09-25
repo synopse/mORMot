@@ -1436,11 +1436,14 @@ begin
     exit;
   end;
   fSafe.Lock;
-  result := (aFrame <> '') and (fSocket <> nil) and
-    (fMonitoring.State = tpsConnected) and not fShouldDisconnect;
-  if result then
-    tmpSock := fSocket;
-  fSafe.UnLock;
+  try
+    result := (aFrame <> '') and (fSocket <> nil) and
+      (fMonitoring.State = tpsConnected) and not fShouldDisconnect;
+    if result then
+      tmpSock := fSocket;
+  finally
+    fSafe.UnLock;
+  end;
   if not result then
     exit;
   result := tmpSock.DataOut(pointer(aFrame), length(aFrame));
@@ -1450,8 +1453,11 @@ begin
     ExecuteDisconnectAfterError
   else begin
     fSafe.Lock;
-    fShouldDisconnect := true; // notify for InternalExecuteIdle
-    fSafe.UnLock;
+    try
+      fShouldDisconnect := true; // notify for InternalExecuteIdle
+    finally
+      fSafe.UnLock;
+    end;
   end;
 end;
 
@@ -1728,15 +1734,21 @@ end;
 function TDDDMockedSocket.GetPendingInBytes: integer;
 begin
   fSafe.Lock;
-  result := Length(fInput);
-  fSafe.UnLock;
+  try
+    result := Length(fInput);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TDDDMockedSocket.GetPendingOutBytes: integer;
 begin
   fSafe.Lock;
-  result := Length(fOutput);
-  fSafe.UnLock;
+  try
+    result := Length(fOutput);
+  finally
+    fSafe.UnLock;
+  end;
 end;
 
 function TDDDMockedSocket.Handle: integer;
