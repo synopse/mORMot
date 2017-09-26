@@ -338,7 +338,8 @@ type
     // - e.g. TCrtSocket.LastLowSocketError value
     function LastError: RawUTF8;
     /// returns the number of bytes pending in the (mocked) socket
-    // - call e.g. TCrtSocket.SockInPending() method
+    // - call e.g. TCrtSocket.SockInPending() with aSocketForceCheck=true,
+    // to return bytes both in the instance memory buffer and the socket API
     function DataInPending(aTimeOut: integer): integer;
     /// get Length bytes from the (mocked) socket
     // - returns the number of bytes read into the Content buffer
@@ -377,6 +378,8 @@ type
     /// get information from TCrtSocket.LastLowSocketError
     function LastError: RawUTF8;
     /// call TCrtSocket.SockInPending() method
+    // - with aSocketForceCheck=true, to return bytes both in the instance
+    // memory buffer and the socket API
     function DataInPending(aTimeOut: integer): integer;
     /// call TCrtSocket.SockInRead() method
     function DataIn(Content: PAnsiChar; ContentLength: integer): integer;
@@ -1475,7 +1478,7 @@ begin
   if aInternalBufferSize < 512 then
     aInternalBufferSize := 512;
   fInternalBufferSize := aInternalBufferSize;
-  fOutput.Init;
+  fOutput.Init; // uses two locks to avoid race condition on multi-thread
 end;
 
 destructor TDDDSynCrtSocket.Destroy;
@@ -1505,7 +1508,7 @@ function TDDDSynCrtSocket.DataInPending(aTimeOut: integer): integer;
 begin
   fSafe.Lock;
   try
-    result := fSocket.SockInPending(aTimeOut);
+    result := fSocket.SockInPending(aTimeOut,true); // aSocketForceCheck=true
   finally
     fSafe.UnLock;
   end;
