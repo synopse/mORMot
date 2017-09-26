@@ -2288,12 +2288,14 @@ begin
   result := false;
   fSafeIn.Enter;
   try
-    pending := fSocket.SockInPending(TimeOut);
+    pending := fSocket.SockInPending(TimeOut,false);
     if pending<0 then
       if IgnoreExceptions then
         exit else
         raise EWebSockets.CreateUTF8('SockInPending() Error % on %:%',
           [fSocket.LastLowSocketError,fSocket.Server,fSocket.Port]);
+    if pending=1 then // 0=noneinbufferorsocket, 1=onlybuffer, 2=enough
+      pending := fSocket.SockInPending(TimeOut,true); // aSocketForceCheck=true
     if pending<2 then
       exit; // not enough data available
     GetHeader;
