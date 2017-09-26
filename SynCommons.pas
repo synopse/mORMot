@@ -23617,7 +23617,7 @@ asm // eax=Value, edx=@result
 @chgstr:mov     edx, dword ptr[ecx - 8] // reference count
         add     edx, 1
         jz      @newstr                 // refcount = -1 (string constant)
-lock    dec dword ptr[ecx - 8]  // decrement existing reference count
+lock    dec     dword ptr[ecx - 8]      // decrement existing reference count
 @newstr:push    eax                     // abs(value)
         mov     eax, esi                // length
         {$ifdef UNICODE}

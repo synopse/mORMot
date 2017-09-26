@@ -464,12 +464,15 @@ type
       UseOnlySockIn: boolean=false): integer;
     /// returns the number of bytes in SockIn buffer or pending in Sock
     // - if SockIn is available, it first check from any data in SockIn^.Buffer,
-    // then call InputSock to try to receive any pending data
+    // then call InputSock to try to receive any pending data if the buffer is
+    // void - unless aSocketForceCheck is TRUE, and both the buffer and the
+    // socket are asked for pending bytes (slower, but sometimes needed, e.g.
+    // if you are currently waiting for a whole header block to be available)
     // - will wait up to the specified aTimeOutMS value (in milliseconds) for
     // incoming data
     // - returns -1 in case of a socket error (e.g. broken connection); you
     // can raise a ECrtSocket exception to propagate the error
-    function SockInPending(aTimeOutMS: integer): integer;
+    function SockInPending(aTimeOutMS: integer; aSocketForceCheck: boolean=false): integer;
     /// check the connection status of the socket
     function SockConnected: boolean;
     /// simulate writeln() with direct use of Send(Sock, ..)
@@ -3616,10 +3619,11 @@ begin
   Sock := PCrtSocket(@F.UserData)^;
   if (Sock=nil) or (Sock.Sock<=0) then
     exit; // file closed = no socket -> error
-  if Sock.TimeOut<>0 then begin // will wait for pending data?
-    IOCtlSocket(Sock.Sock, FIONREAD, Size); // get exact count
-    if (Size<=0) or (Size>integer(F.BufSize)) then
-      Size := F.BufSize;
+  if Sock.TimeOut<>0 then begin // will wait for pending data
+    if IOCtlSocket(Sock.Sock, FIONREAD, Size)<>0 then // get exact count
+      exit else
+      if (Size<=0) or (Size>integer(F.BufSize)) then
+        Size := F.BufSize;
   end else
     Size := F.BufSize;
   case Sock.SocketLayer of
@@ -3909,8 +3913,9 @@ begin
   end;
 end;
 
-function TCrtSocket.SockInPending(aTimeOutMS: integer): integer;
+function TCrtSocket.SockInPending(aTimeOutMS: integer; aSocketForceCheck: boolean): integer;
 var backup: cardinal;
+    insocket: integer;
 begin
   if SockIn=nil then
     raise ECrtSocket.Create('SockInPending without SockIn');
@@ -3923,7 +3928,7 @@ begin
       case SockReceivePending(aTimeOutMS) of
       cspDataAvailable: begin
         backup := TimeOut;
-        fTimeOut := 0;
+        fTimeOut := 0; // not blocking call to fill full buffer
         // call InputSock() to actually retrieve any pending data
         if InputSock(PTextRec(SockIn)^)=NO_ERROR then
           result := BufEnd-BufPos else
@@ -3934,6 +3939,9 @@ begin
         result := -1; // indicates broken socket
       end; // cspNoData will leave result=0
   end;
+  if aSocketForceCheck then
+    if (IOCtlSocket(Sock, FIONREAD, insocket)=0) and (insocket>0) then
+      inc(result,insocket);
 end;
 
 destructor TCrtSocket.Destroy;
@@ -4216,13 +4224,13 @@ begin
   repeat
     SleepHiRes(0);
     if IOCtlSocket(fSock, FIONREAD, Size)<>0 then // get exact count
-      exit;
-    if Size=0 then // connection broken
+      exit; // raw socket error
+    if Size=0 then // no data in the allowed timeout
       if result='' then begin // wait till something
         SleepHiRes(10); // 10 ms delay in infinite loop
         continue;
       end else
-        break;
+        break; // return what we have
     SetLength(result,L+Size); // append to result
     Read := recv(fSock,PAnsiChar(pointer(result))+L,Size,MSG_NOSIGNAL
       {$ifndef MSWINDOWS}{$ifdef FPC_OR_KYLIX},TimeOut{$endif}{$endif});
@@ -5428,7 +5436,7 @@ begin
   nonblocking := 1; // for both Windows and POSIX
   if sock<=0 then
     result := false else
-    result := IoctlSocket(sock,FIONBIO,nonblocking)=0;
+    result := IoctlSocket(sock, FIONBIO, nonblocking)=0;
 end;
 
 function AsynchRecv(sock: TSocket; buf: pointer; buflen: integer): integer;
