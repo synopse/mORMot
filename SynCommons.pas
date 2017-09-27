@@ -11760,11 +11760,15 @@ type
    cf_c16, cfPCID, cfDCA, cfSSE41, cfSSE42, cfX2A, cfMOVBE, cfPOPCNT,
    cfTSC2, cfAESNI, cfXS, cfOSXS, cfAVX, cfF16C, cfRAND, cfHYP,
    { extended features in EBX, ECX }
-   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP, cfBMI2,
-   cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE, cfAVX512F,
-   cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT,
-   cfCLFLUSH, cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD,
-   cfSHA, cfAVX512BW, cfAVX512VL, cfPREFW1, cfAVX512VBMI);
+   cfFSGS, cf_b01, cfSGX, cfBMI1, cfHLE, cfAVX2, cf_b06, cfSMEP,
+   cfBMI2, cfERMS, cfINVPCID, cfRTM, cfPQM, cf_b13, cfMPX, cfPQE,
+   cfAVX512F, cfAVX512DQ, cfRDSEED, cfADX, cfSMAP, cfAVX512IFMA, cfPCOMMIT, cfCLFLUSH,
+   cfCLWB, cfIPT, cfAVX512PF, cfAVX512ER, cfAVX512CD, cfSHA, cfAVX512BW, cfAVX512VL,
+   cfPREFW1, cfAVX512VBMI, cfUMIP, cfPKU, cfOSPKE, cf_c05, cf_c06, cf_c07,
+   cf_c08, cf_c09, cf_c10, cf_c11, cf_c12, cf_c13, cfAVX512VPC, cf_c15,
+   cf_cc16, cf_c17, cf_c18, cf_c19, cf_c20, cf_c21, cfRDPID, cf_c23,
+   cf_c24, cf_c25, cf_c26, cf_c27, cf_c28, cf_c29, cfSGXLC, cf_c31,
+   cf_d0, cf_d1, cfAVX512NNI, cfAVX512MAS, cf_d4, cf_d5, cf_d6, cf_d7);
 
   /// all features, as retrieved from an Intel CPU
   TIntelCpuFeatures = set of TIntelCpuFeature;
@@ -64902,7 +64906,9 @@ begin
   PIntegerArray(@CpuFeatures)^[1] := regs.ecx;
   GetCPUID(7,regs);
   PIntegerArray(@CpuFeatures)^[2] := regs.ebx;
-  PByteArray(@CpuFeatures)^[12] := regs.ecx;
+  PIntegerArray(@CpuFeatures)^[3] := regs.ecx;
+  PByte(@PIntegerArray(@CpuFeatures)^[4])^ := regs.edx;
+//  assert(sizeof(CpuFeatures)=4*4+1);
   {$ifdef Darwin}
   {$ifdef CPU64}
   // SSE42 asm does not (yet) work on Darwin x64 ...
