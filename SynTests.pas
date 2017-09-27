@@ -992,12 +992,13 @@ begin
   end;
   Color(ccLightCyan);
   result := (fFailed.Count=0);
-  Elapsed := #13#10#13#10'Time elapsed for all tests: '+RunTimer.Stop;
   if Exeversion.Version.Major<>0 then
     Version := #13#10'Software version tested: '+RawUTF8(Exeversion.Version.Detailed);
+  FormatUTF8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
+    [RunTimer.Stop,NowToString,Exeversion.User,Exeversion.Host],Elapsed);
   Writeln(fSaveToFile,#13#10,Version,CustomVersions,
-    #13#10'Generated with: ',GetDelphiCompilerVersion,' compiler', Elapsed,
-    #13#10'Tests performed at ',DateTimeToStr(Now));
+    #13#10'Generated with: ',GetDelphiCompilerVersion,' compiler',
+    Utf8ToConsole(Elapsed));
   if result then
     Color(ccWhite) else
     Color(ccLightRed);
