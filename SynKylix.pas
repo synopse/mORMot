@@ -90,10 +90,14 @@ const
   FILE_CURRENT = SEEK_CUR;
   FILE_END = SEEK_END;
 
+  CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
+  CLOCK_REALTIME_COARSE = 5;
   CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
 
 var
+  // contains CLOCK_REALTIME_COARSE since kernel 2.6.32
+  CLOCK_REALTIME_TICKCOUNT: integer = CLOCK_REALTIME;
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 
@@ -125,6 +129,7 @@ function GetNowUTC: TDateTime;
 function GetUnixUTC: Int64;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
+// - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
 function GetUnixMSUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
@@ -281,17 +286,17 @@ begin
 end;
 
 function GetUnixUTC: Int64;
-var tz: TTimeVal;
+var r: TTimeSpec;
 begin
-  gettimeofday(tz,nil);
-  result := tz.tv_sec;
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,r); // faster than gettimeofday
+  result := r.tv_sec;
 end;
 
 function GetUnixMSUTC: Int64;
-var tz: TTimeVal;
+var r: TTimeSpec;
 begin
-  gettimeofday(tz,nil);
-  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,r);
+  result := Int64(r.tv_sec)*C_THOUSAND+(cardinal(r.tv_nsec) div 1000000); // in ms
 end;
 
 procedure GetNowUTCSystem(var result: TSystemTime);
@@ -406,9 +411,10 @@ begin
   uname(uts);
   P := @uts.release;
   KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
-  if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
-    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+  if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
+    CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE;
+    CLOCK_REALTIME_TICKCOUNT := CLOCK_REALTIME_COARSE;
+  end;
 end;
 
 initialization

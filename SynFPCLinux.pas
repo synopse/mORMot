@@ -90,10 +90,14 @@ procedure DeleteCriticalSection(var cs : TRTLCriticalSection); inline;
 
 {$ifndef BSD}
 const
+  CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 1;
-  CLOCK_MONOTONIC_COARSE = 6; // see http://lwn.net/Articles/347811
+  CLOCK_REALTIME_COARSE = 5; // see http://lwn.net/Articles/347811
+  CLOCK_MONOTONIC_COARSE = 6;
 
 var
+  // contains CLOCK_REALTIME_COARSE since kernel 2.6.32
+  CLOCK_REALTIME_TICKCOUNT: integer = CLOCK_REALTIME;
   // contains CLOCK_MONOTONIC_COARSE since kernel 2.6.32
   CLOCK_MONOTONIC_TICKCOUNT: integer = CLOCK_MONOTONIC;
 {$endif}
@@ -131,6 +135,7 @@ function GetNowUTC: TDateTime;
 function GetUnixUTC: Int64;
 
 /// returns the current UTC time, as Unix Epoch milliseconds
+// - will call clock_gettime(CLOCK_REALTIME_COARSE) if available
 function GetUnixMSUTC: Int64;
 
 /// returns the current UTC time as TSystemTime
@@ -236,21 +241,6 @@ begin
   result.MilliSecond := tz.tv_usec div 1000;
 end;
 
-function GetUnixUTC: Int64;
-var tz: timeval;
-begin
-  fpgettimeofday(@tz,nil);
-  result := tz.tv_sec;
-end;
-
-function GetUnixMSUTC: Int64;
-var tz: timeval;
-begin
-  fpgettimeofday(@tz,nil);
-  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
-end;
-
-
 function GetTickCount: cardinal;
 begin
   result := cardinal(GetTickCount64);
@@ -303,6 +293,20 @@ begin
   result := result div C_MILLION; // 1 millisecond = 1e6 nanoseconds
 end;
 
+function GetUnixUTC: Int64;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  result := tz.tv_sec;
+end;
+
+function GetUnixMSUTC: Int64;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
+end;
+
 {$else}
 
 {$ifdef BSD}
@@ -311,16 +315,32 @@ function clock_gettime(ID: cardinal; r: ptimespec): Integer;
 function clock_getres(ID: cardinal; r: ptimespec): Integer;
   cdecl external 'libc.so' name 'clock_getres';
 const
+  CLOCK_REALTIME = 0;
   CLOCK_MONOTONIC = 4;
   CLOCK_MONOTONIC_FAST = 12; // FreeBSD specific
   CLOCK_MONOTONIC_TICKCOUNT = CLOCK_MONOTONIC;
+  CLOCK_REALTIME_TICKCOUNT = CLOCK_REALTIME;
 {$endif}
 
 function GetTickCount64: Int64;
 var tp: timespec;
 begin
   clock_gettime(CLOCK_MONOTONIC_TICKCOUNT,@tp);
-  Result := (Int64(tp.tv_sec) * 1000) + (tp.tv_nsec div 1000000);
+  Result := (Int64(tp.tv_sec) * C_THOUSAND) + (tp.tv_nsec div 1000000); // in ms
+end;
+
+function GetUnixMSUTC: Int64;
+var r: timespec;
+begin
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r);
+  result := (Int64(r.tv_sec) * C_THOUSAND) + (r.tv_nsec div 1000000); // in ms
+end;
+
+function GetUnixUTC: Int64;
+var r: timespec;
+begin
+  clock_gettime(CLOCK_REALTIME_TICKCOUNT,@r);
+  result := r.tv_sec;
 end;
 
 procedure QueryPerformanceCounter(var Value: Int64);
@@ -420,9 +440,10 @@ begin
     P := @uts.release;
     KernelRevision := GetNext shl 16+GetNext shl 8+GetNext;
     {$ifndef BSD}
-    if KernelRevision>=$020620 then // expects kernel 2.6.32 or higher
-      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE else
-      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC;
+    if KernelRevision>=$020620 then begin // expects kernel 2.6.32 or higher
+      CLOCK_MONOTONIC_TICKCOUNT := CLOCK_MONOTONIC_COARSE;
+      CLOCK_REALTIME_TICKCOUNT := CLOCK_REALTIME_COARSE;
+    end;
     {$endif BSD}
   end;
   {$ifdef Darwin}
