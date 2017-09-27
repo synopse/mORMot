@@ -10012,7 +10012,10 @@ begin
         bHMACSHA512: HMAC_SHA512('secret',data,dig.b);
         bSHA3_256:   SHA3.Full(pointer(data),SIZ[s],dig.Lo);
         bSHA3_512:   SHA3.Full(pointer(data),SIZ[s],dig.b);
-        low(AES) .. high(AES): AES[b].EncryptPKCS7(Data, true);
+        bAES128CFB, bAES128OFB, bAES256CFB, bAES256OFB:
+                     AES[b].EncryptPKCS7(Data, true);
+        bAES128CFBCRC, bAES128OFBCRC, bAES256CFBCRC, bAES256OFBCRC:
+                     AES[b].MACAndCrypt(Data,true);
         bSHAKE128:   SHAKE128.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         bSHAKE256:   SHAKE256.Cypher(pointer(Data), pointer(Encrypted), SIZ[s]);
         end;

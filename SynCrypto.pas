@@ -459,6 +459,7 @@ type
     fIVHistoryDec: THash128History;
     fIVReplayAttackCheck: TAESIVReplayAttackCheck;
     procedure SetIVHistory(aDepth: integer);
+    procedure SetIVCTR;
     procedure DecryptLen(var InputLen,ivsize: integer; Input: pointer;
       IVAtBeginning: boolean);
   public
@@ -586,7 +587,8 @@ type
     // the encrypted data
     // - default implementation, for a non AEAD protocol, returns false
     function MACCheckError(aEncrypted: pointer; Count: cardinal): boolean; virtual;
-    /// perform one step PKCS7 encryption/decryption and authentication
+    /// perform one step PKCS7 encryption/decryption and authentication from
+    // a given 256-bit key
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
     // this class does not support AEAD MAC
     // - as used e.g. by CryptDataForCurrentUser()
@@ -595,6 +597,15 @@ type
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash256;
       Encrypt: boolean): RawByteString;
+    /// perform one step PKCS7 encryption/decryption and authentication with
+    // the curent AES instance
+    // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
+    // this class does not support AEAD MAC
+    // - as used e.g. by CryptDataForCurrentUser()
+    // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
+    // - will store a header with its own CRC, so detection of most invalid
+    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
+    function MACAndCrypt(const Data: RawByteString; Encrypt: boolean): RawByteString;
 
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
@@ -10093,7 +10104,6 @@ begin
 end;
 
 constructor TAESAbstract.Create(const aKey; aKeySize: cardinal);
-var tmp: PShortString; // temp variable to circumvent FPC bug
 begin
    if (aKeySize<>128) and (aKeySize<>192) and (aKeySize<>256) then
     raise ESynCrypto.CreateUTF8(
@@ -10101,7 +10111,14 @@ begin
   fKeySize := aKeySize;
   fKeySizeBytes := fKeySize shr 3;
   MoveFast(aKey,fKey,fKeySizeBytes);
-  TAESPRNG.Main.FillRandom(TAESBLock(fIVCTR)); // set nonce + ctr
+end;
+
+procedure TAESAbstract.SetIVCTR;
+var tmp: PShortString; // temp variable to circumvent FPC bug
+begin
+  repeat
+    TAESPRNG.Main.FillRandom(TAESBLock(fIVCTR)); // set nonce + ctr
+  until fIVCTR.nonce<>0;
   tmp := ClassNameShort(self);
   fIVCtr.magic := crc32c($aba5aba5,@tmp^[2],6); // TAESECB_API -> 'AESECB'
 end;
@@ -10182,6 +10199,8 @@ begin
   end;
   if IVAtBeginning then begin
     if fIVReplayAttackCheck<>repNoCheck then begin
+      if fIVCTR.nonce=0 then
+        SetIVCTR;
       AESIVCtrEncryptDecrypt(fIVCTR,fIV,true); // PRNG from fixed secret
       inc(fIVCTR.ctr); // replay attack protection
     end else
@@ -10203,6 +10222,8 @@ begin
     raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]);
   if IVAtBeginning then begin
     if (fIVReplayAttackCheck<>repNoCheck) and (fIVCTRState<>ctrNotUsed) then begin
+      if fIVCTR.nonce=0 then
+        SetIVCTR;
       AESIVCtrEncryptDecrypt(Input^,ctr,false);
       if fIVCTRState=ctrUnknown then
         if ctr.magic=fIVCTR.magic then begin
@@ -10295,12 +10316,11 @@ begin
   result := false;
 end;
 
-class function TAESAbstract.MACEncrypt(const Data: RawByteString; const Key: THash256;
-  Encrypt: boolean): RawByteString;
+function TAESAbstract.MACAndCrypt(const Data: RawByteString; Encrypt: boolean): RawByteString;
 type
   TCryptData = packed record
     nonce,mac: THash256;
-    crc: cardinal;
+    crc: cardinal; // crc32c(nonce+mac) to avoid naive fuzzing
     data: RawByteString;
   end;
   PCryptData = ^TCryptData;
@@ -10308,8 +10328,7 @@ const
   VERSION = 1;
   CRCSIZ = sizeof(THash256)*2;
   SIZ = CRCSIZ+sizeof(cardinal);
-var aes: TAESAbstract;
-    rec: TCryptData;
+var rec: TCryptData;
     len: integer;
     pcd: PCryptData absolute Data;
     P: PAnsiChar;
@@ -10318,16 +10337,11 @@ begin
   try
     if Encrypt then begin
       TAESPRNG.Main.FillRandom(rec.nonce);
-      aes := Create(Key);
-      try
-        if not aes.MACSetNonce(rec.nonce) then
-          exit;
-        rec.Data := aes.EncryptPKCS7(Data,true);
-        if not aes.MACGetLast(rec.mac) then
-          exit;
-      finally
-        aes.Free;
-      end;
+      if not MACSetNonce(rec.nonce) then
+        exit;
+      rec.Data := EncryptPKCS7(Data,true);
+      if not MACGetLast(rec.mac) then
+        exit;
       rec.crc := crc32c(VERSION,@rec.nonce,CRCSIZ);
       result := RecordSave(rec,TypeInfo(TCryptData));
     end else begin
@@ -10337,21 +10351,28 @@ begin
       len := FromVarUInt32(PByte(P));
       if length(Data)-len<>P-pointer(Data) then
         exit; // avoid buffer overflow
-      aes := Create(Key);
-      try
-        if aes.MACSetNonce(pcd^.nonce) then
-          result := aes.DecryptPKCS7Buffer(P,len,true);
-        if result<>'' then
-          if not aes.MACEquals(pcd^.mac) then begin
-            FillZero(result);
-            result := '';
-          end;
-      finally
-        aes.Free;
-      end;
+      if MACSetNonce(pcd^.nonce) then
+        result := DecryptPKCS7Buffer(P,len,true);
+      if result<>'' then
+        if not MACEquals(pcd^.mac) then begin
+          FillZero(result);
+          result := '';
+        end;
     end;
   finally
     FillZero(rec.data);
+  end;
+end;
+
+class function TAESAbstract.MACEncrypt(const Data: RawByteString; const Key: THash256;
+  Encrypt: boolean): RawByteString;
+var aes: TAESAbstract;
+begin
+  aes := Create(Key);
+  try
+    result := aes.MACAndCrypt(Data,Encrypt);
+  finally
+    aes.Free;
   end;
 end;
 
