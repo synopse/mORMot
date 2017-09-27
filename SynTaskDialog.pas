@@ -85,7 +85,7 @@ interface
 {$ENDIF}
 
 uses
-  Windows, CommCtrl, Classes, SysUtils, Messages,
+  Windows, Winapi.ShellAPI, CommCtrl, Classes, SysUtils, Messages,
   {$ifndef FPC}
   Consts,
   {$endif}
@@ -653,22 +653,35 @@ type
 
 const
   TDN_BUTTON_CLICKED = 2; // wParam = Button ID
+  TDN_RADIO_BUTTON_CLICKED = 6; // wParam = Button ID
+  TDN_HYPERLINK_CLICKED = 3;  // lParam = Pointer to a wide-character string containing the URL of the hyperlink.
+  TDN_VERIFICATION_CLICKED  = 8; //wParam = A BOOL that specifies the status of the verification checkbox. It is TRUE if the verification checkbox is checked, or FALSE if it is unchecked.
 
 
 function TaskDialogCallbackProc(hwnd: HWND; uNotification: UINT;
   wParam: WPARAM; lParam: LPARAM; dwRefData: pointer): HRESULT; stdcall;
 var ptd: PTaskDialog absolute dwRefData;
     CanClose: Boolean;
+    sHyperLink: string;
 begin
   ptd^.Dialog.Wnd := hwnd;
   Result := S_OK;
   case uNotification of
-    TDN_BUTTON_CLICKED:
+    TDN_BUTTON_CLICKED, TDN_RADIO_BUTTON_CLICKED, TDN_VERIFICATION_CLICKED:
     if Assigned(ptd^.Dialog.OnButtonClicked) then begin
+      if uNotification = TDN_VERIFICATION_CLICKED then
+        wParam := wParam + 100000;
       CanClose := True;
       ptd^.Dialog.OnButtonClicked(ptd,wParam,CanClose);
       if not CanClose then
         Result := S_FALSE;
+    end;
+    TDN_HYPERLINK_CLICKED:
+    begin
+      sHyperLink := pChar(lParam);
+      if sHyperLink <> '' then
+        ShellExecute(Application.Handle, 'open', PChar(sHyperLink), nil, nil, SW_SHOW);
+      CanClose := False;
     end;
   end;
 end;
