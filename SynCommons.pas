@@ -12697,7 +12697,7 @@ function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// returns the current UTC date/time as a second-based c-encoded time
-//  - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
+// - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
 function UnixTimeUTC: TUnixTime;
@@ -12709,6 +12709,12 @@ function UnixTimeUTC: TUnixTime;
 // - use 'YYYY-MM-DDThh:mm:ss' format if Expanded
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'): RawUTF8;
+
+/// returns the current UTC date/time as a millisecond-based c-encoded time
+// - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
+// - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
+function UnixMSTimeUTC: TUnixMSTime;
+  {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// convert a millisecond-based c-encoded time (from Unix epoch 1/1/1970) as TDateTime
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
@@ -33954,6 +33960,25 @@ end;
 {$else}
 begin
   result := GetUnixUTC; // direct retrieval from UNIX API
+end;
+{$endif}
+
+function UnixMSTimeUTC: TUnixMSTime;
+{$ifdef MSWINDOWS}
+var ft: TFileTime;
+    {$ifdef CPU64}nano100: Int64;{$endif}
+begin
+  GetSystemTimeAsFileTime(ft); // very fast, with 100 ns unit
+  {$ifdef CPU64}
+  FileTimeToInt64(ft,nano100);
+  result := (nano100-UnixFileTimeDelta) div 10000;
+  {$else} // use PInt64 to avoid URW699 with Delphi 6 / Kylix
+  result := (PInt64(@ft)^-UnixFileTimeDelta) div 10000;
+  {$endif}
+end;
+{$else}
+begin
+  result := GetUnixMSUTC; // direct retrieval from UNIX API
 end;
 {$endif}
 

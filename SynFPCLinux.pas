@@ -130,6 +130,9 @@ function GetNowUTC: TDateTime;
 /// returns the current UTC time, as Unix Epoch seconds
 function GetUnixUTC: Int64;
 
+/// returns the current UTC time, as Unix Epoch milliseconds
+function GetUnixMSUTC: Int64;
+
 /// returns the current UTC time as TSystemTime
 procedure GetNowUTCSystem(var result: TSystemTime);
 
@@ -239,6 +242,14 @@ begin
   fpgettimeofday(@tz,nil);
   result := tz.tv_sec;
 end;
+
+function GetUnixMSUTC: Int64;
+var tz: timeval;
+begin
+  fpgettimeofday(@tz,nil);
+  result := (tz.tv_sec*1000)+tz.tv_usec div 1000;
+end;
+
 
 function GetTickCount: cardinal;
 begin
