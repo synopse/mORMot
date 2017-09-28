@@ -8921,8 +8921,9 @@ type
   /// add locking methods to a standard TObjectList
   // - this class overrides the regular TObjectList, and do not share any code
   // with the TObjectListHashedAbstract/TObjectListHashed classes
-  // - caller has to call the Lock/Unlock methods by hand to protect the
-  // execution of regular TObjectList methods (like Add/Remove/Count...)
+  // - caller has to call the Safe.Lock/Unlock methods by hand to protect the
+  // execution of regular TObjectList methods (like Add/Remove/Count...),
+  // or use the SafeAdd/SafeRemove/SafeExists/SafeCount wrapper methods
   TObjectListLocked = class(TObjectList)
   protected
     fSafe: TSynLocker;
@@ -8933,6 +8934,14 @@ type
     constructor Create(AOwnsObjects: Boolean=true); reintroduce;
     /// release the list instance (including the locking resource)
     destructor Destroy; override;
+    /// Add an TObject instance using the global critical section
+    function SafeAdd(AObject: TObject): integer;
+    /// find and delete a TObject instance using the global critical section
+    function SafeRemove(AObject: TObject): integer;
+    /// find a TObject instance using the global critical section
+    function SafeExists(AObject: TObject): boolean;
+    /// returns the number of instances stored using the global critical section
+    function SafeCount: integer;
     /// the critical section associated to this list instance
     // - could be used to protect shared resources within the internal process
     // - use Safe.Lock/TryLock with a try ... finally Safe.Unlock block
@@ -56685,6 +56694,46 @@ destructor TObjectListLocked.Destroy;
 begin
   inherited Destroy;
   fSafe.Done;
+end;
+
+function TObjectListLocked.SafeAdd(AObject: TObject): integer;
+begin
+  Safe.Lock;
+  try
+    result := Add(AObject);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TObjectListLocked.SafeRemove(AObject: TObject): integer;
+begin
+  Safe.Lock;
+  try
+    result := Remove(AObject);
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TObjectListLocked.SafeExists(AObject: TObject): boolean;
+begin
+  Safe.Lock;
+  try
+    result := IndexOf(AObject)>=0;
+  finally
+    Safe.UnLock;
+  end;
+end;
+
+function TObjectListLocked.SafeCount: integer;
+begin
+  Safe.Lock;
+  try
+    result := Count;
+  finally
+    Safe.UnLock;
+  end;
 end;
 
 
