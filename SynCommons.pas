@@ -36233,6 +36233,8 @@ begin // see http://www.garykessler.net/library/file_sigs.html
           result := true;
         else
         case PCardinalArray(Content)^[1] of // 4 byte offset
+        1{SYNLZCOMPRESS_SYNLZ}: // crc32 01 00 00 00 crc32 SynLZCompress() header
+          result := PCardinalArray(Content)^[0]<>PCardinalArray(Content)^[2];
         $70797466, // mp4,mov = 66 74 79 70 [33 67 70 35/4D 53 4E 56..]
         $766f6f6d: // mov = 6D 6F 6F 76
           result := true;
@@ -36256,16 +36258,14 @@ begin // see https://en.wikipedia.org/wiki/JPEG#Syntax_and_structure
     case ord(jpeg^) of
       $c0..$c3,$c5..$c7,$c9..$cb,$cd..$cf: begin // SOF
         Height := swap(PWord(jpeg+4)^);
-        Width := swap(PWord(jpeg+6)^);
+        Width  := swap(PWord(jpeg+6)^);
         result := (Height>0) and (Height<20000) and (Width>0) and (Width<20000);
         exit;
       end;
-      $d0..$d8,$01: // RST, SOI
-        inc(jpeg);
+      $d0..$d8,$01: inc(jpeg); // RST, SOI
       $d9: break;   // EOI
       $ff: ;        // padding
-      else
-        inc(jpeg,swap(PWord(jpeg+1)^)+1);
+      else inc(jpeg,swap(PWord(jpeg+1)^)+1);
     end;
   end;
 end;
@@ -61767,16 +61767,16 @@ begin
   until (result=nil) or (sourcePosition>=sourceSize);
 end;
 
-const
-  SYNLZCOMPRESS_STORED = #0;
-  SYNLZCOMPRESS_SYNLZ = #1;
-
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer;
   CheckMagicForCompressed: boolean): RawByteString;
 begin
   SynLZCompress(pointer(Data),length(Data),result,CompressionSizeTrigger,
     CheckMagicForCompressed);
 end;
+
+const
+  SYNLZCOMPRESS_STORED = #0;
+  SYNLZCOMPRESS_SYNLZ = #1;
 
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
   CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean);
