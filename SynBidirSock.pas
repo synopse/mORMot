@@ -2642,7 +2642,6 @@ var upgrade,uri,version,protocol,subprot,key,extin,extout: RawUTF8;
     P: PUTF8Char;
     Digest: TSHA1Digest;
     prot: TWebSocketProtocol;
-    i: integer;
 begin
   result := STATUS_BADREQUEST;
   if Context.fProcess<>nil then
@@ -2696,22 +2695,13 @@ begin
   ClientSock.SockSend;
   ClientSock.SockSendFlush;
   result := STATUS_SUCCESS; // connection upgraded: never back to HTTP/1.1
-  fWebSocketConnections.Safe.Lock;
-  fWebSocketConnections.Add(Context);
-  fWebSocketConnections.Safe.UnLock;
+  fWebSocketConnections.SafeAdd(Context);
   try
     Context.fProcess.ProcessLoop;
     ClientSock.KeepAliveClient := false; // always close connection
   finally
     FreeAndNil(Context.fProcess); // notify end of WebSockets
-    fWebSocketConnections.Safe.Lock;
-    try
-      i := fWebSocketConnections.IndexOf(Context);
-      if i>=0 then
-        fWebSocketConnections.Delete(i);
-    finally
-      fWebSocketConnections.Safe.UnLock;
-    end;
+    fWebSocketConnections.SafeRemove(Context);
   end;
 end;
 
@@ -2746,15 +2736,11 @@ begin
 end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionThread: TSynThread): TWebSocketServerResp;
-var connectionIndex: Integer;
 begin
   result := nil;
   if Terminated or (ConnectionThread=nil) then
     exit;
-  fWebSocketConnections.Safe.Lock;
-  connectionIndex := fWebSocketConnections.IndexOf(ConnectionThread);
-  fWebSocketConnections.Safe.UnLock;
-  if (connectionIndex>=0) and
+  if fWebSocketConnections.SafeExists(ConnectionThread) and
      ConnectionThread.InheritsFrom(TWebSocketServerResp) then
     //  this request is a websocket, on a non broken connection
     result := TWebSocketServerResp(ConnectionThread);

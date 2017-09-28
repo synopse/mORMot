@@ -1468,7 +1468,10 @@ type
   // - if the client is also HTTP/1.1 compatible, KeepAlive connection is handled:
   //  multiple requests will use the existing connection and thread;
   //  this is faster and uses less resources, especialy under Windows
-  // - a Thread Pool is used internaly to speed up HTTP/1.0 connections
+  // - a Thread Pool is used internaly to speed up HTTP/1.0 connections - a
+  // typical use, under Linux, is to run this class behind a NGINX frontend,
+  // configured as https reverse proxy, leaving default "proxy_http_version 1.0"
+  // and "proxy_request_buffering on" options for best performance
   // - it will trigger the Windows firewall popup UAC window at first run
   // - don't forget to use Free procedure when you are finished
   THttpServer = class(THttpServerGeneric)

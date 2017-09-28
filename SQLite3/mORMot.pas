@@ -11206,7 +11206,7 @@ type
     class function GUID2TypeInfo(const aGUID: TGUID): PTypeInfo; overload;
     /// returns the list of all declared TInterfaceFactory
     // - as used by SOA and mocking/stubing features of this unit
-    class function GetUsedInterfaces: TObjectList;
+    class function GetUsedInterfaces: TObjectListLocked;
     /// add some TInterfaceFactory instances from their GUID
     class procedure AddToObjArray(var Obj: TInterfaceFactoryObjArray;
        const aGUIDs: array of TGUID);
@@ -38136,8 +38136,8 @@ begin
   fStats := TSQLRestServerMonitor.Create(self);
   URIPagingParameters := PAGINGPARAMETERS_YAHOO;
   TAESPRNG.Main.Fill(@fSessionCounter,sizeof(fSessionCounter));
-  if fSessionCounter>cardinal(maxInt) then // ensure positive 31-bit integer
-    dec(fSessionCounter,maxInt);
+  if integer(fSessionCounter)<0 then // ensure positive 31-bit integer
+    fSessionCounter := -fSessionCounter;
   // retrieve published methods
   fPublishedMethods.InitSpecific(TypeInfo(TSQLRestServerMethods),
     fPublishedMethod,djRawUTF8,nil,true);
@@ -53684,18 +53684,27 @@ end;
 
 class function TInterfaceFactory.Get(const aInterfaceName: RawUTF8): TInterfaceFactory;
 var L,i: integer;
+    F: ^TInterfaceFactory;
 begin
-  L := length(aInterfaceName);
-  if (InterfaceFactoryCache<>nil) and (L<>0) then
-    for i := 0 to InterfaceFactoryCache.Count-1 do begin
-      result := InterfaceFactoryCache.List[i];
-      if IdemPropName(result.fInterfaceTypeInfo^.Name,pointer(aInterfaceName),L) then
-        exit; // retrieved from cache
-    end;
   result := nil;
+  L := length(aInterfaceName);
+  if (InterfaceFactoryCache<>nil) and (L<>0) then begin
+    InterfaceFactoryCache.Safe.Lock;
+    try
+      F := @InterfaceFactoryCache.List[0];
+      for i := 1 to InterfaceFactoryCache.Count do
+        if IdemPropName(F^.fInterfaceTypeInfo^.Name,pointer(aInterfaceName),L) then begin
+          result := F^;
+          exit; // retrieved from cache
+        end else
+        inc(F);
+    finally
+      InterfaceFactoryCache.Safe.UnLock;
+    end;
+  end;
 end;
 
-class function TInterfaceFactory.GetUsedInterfaces: TObjectList;
+class function TInterfaceFactory.GetUsedInterfaces: TObjectListLocked;
 begin
   result := InterfaceFactoryCache;
 end;
@@ -57009,9 +57018,7 @@ begin
     exit;
   if fFakeCallbacks=nil then
     fFakeCallbacks := TObjectListLocked.Create(false);
-  fFakeCallbacks.Safe.Lock;
-  fFakeCallbacks.Add(aFakeInstance);
-  fFakeCallbacks.Safe.UnLock;
+  fFakeCallbacks.SafeAdd(aFakeInstance);
 end;
 
 procedure TServiceContainerServer.FakeCallbackRemove(aFakeInstance: TObject);
