@@ -47090,6 +47090,7 @@ begin
     exit;
   SetCapacity(Source.Capacity);
   n := Source.Count;
+  SetCount(n);
   if n<>0 then
     if ElemType=nil then
       if GetIsObjArray then
