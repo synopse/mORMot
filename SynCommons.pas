@@ -18257,6 +18257,17 @@ function SynLZDecompress(const Data: RawByteString; out Len: integer;
 function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer; overload;
 
+/// decode the header of a memory buffer compressed via SynCompress
+// - validates the crc32c of the compressed data, then return the uncompressed
+// size in bytes on success
+// - returns 0 if the crc32c does not match
+function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
+
+/// decode the content of a memory buffer compressed via SynCompress
+// - BodyLen has been returned by a previous call to SynLZDecompressHeader
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer): boolean;
+
+
 /// RLE compression of a memory buffer containing mostly zeros
 // - will store the number of consecutive zeros instead of plain zero bytes
 // - used for spare bit sets, e.g. TSynBloomFilter serialization
@@ -46829,7 +46840,7 @@ begin
         exit;
       end;
       Index := 0;
-      while Index<=n do begin // fast binary search of the sorted position
+      while Index<=n do begin // O(log(n)) binary search of the sorted position
         i := (Index+n) shr 1;
         cmp := fCompare(P[cardinal(i)*ElemSize],Elem);
         if cmp=0 then begin
@@ -61858,24 +61869,44 @@ begin
   SynLZDecompress(pointer(Data),Length(Data),result);
 end;
 
-procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
-var len: integer;
+function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
 begin
+  result := 0; // error
   if (PLen<=9) or (P=nil) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
     exit;
   case P[4] of
   SYNLZCOMPRESS_STORED:
     if PCardinal(P)^=PCardinal(P+5)^ then
-      SetString(result,P+9,PLen-9);
-  SYNLZCOMPRESS_SYNLZ: begin
-    len := SynLZdecompressdestlen(P+9);
-    SetLength(result,len);
-    if (len<>0) and
-       ((SynLZDecompress1(P+9,PLen-9,pointer(result))<>len) or
-       (crc32c(0,pointer(result),len)<>PCardinal(P)^)) then
-      result := '';
+      result := PLen-9;
+  SYNLZCOMPRESS_SYNLZ:
+    result := SynLZdecompressdestlen(P+9);
   end;
+end;
+
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer): boolean;
+begin
+  result := false;
+  case P[4] of
+  SYNLZCOMPRESS_STORED:
+    MoveFast(P[9],Body[0],BodyLen);
+  SYNLZCOMPRESS_SYNLZ:
+    if (SynLZDecompress1(P+9,PLen-9,Body)<>BodyLen) or
+       (crc32c(0,Body,BodyLen)<>PCardinal(P)^) then
+      exit;
+  else exit;
   end;
+  result := true;
+end;
+
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
+var len: integer;
+begin
+  len := SynLZDecompressHeader(P,PLen);
+  if len=0 then
+    exit;
+  SetString(result,nil,len);
+  if not SynLZDecompressBody(P,pointer(result),PLen,len) then
+    result := '';
 end;
 
 function SynLZDecompress(const Data: RawByteString; out Len: integer;
@@ -61888,22 +61919,14 @@ function SynLZDecompress(P: PAnsiChar; PLen: integer; out Len: integer;
   var tmp: RawByteString): pointer;
 begin
   result := nil;
-  if (PLen<=9) or (P=nil) or (crc32c(0,pointer(P+9),PLen-9)<>PCardinal(P+5)^) then
+  Len := SynLZDecompressHeader(P,PLen);
+  if Len=0 then
     exit;
-  case P[4] of
-  SYNLZCOMPRESS_STORED:
-    if PCardinal(P)^=PCardinal(P+5)^ then begin
-      result := P+9;
-      Len := PLen-9;
-    end;
-  SYNLZCOMPRESS_SYNLZ: begin
-    Len := SynLZdecompressdestlen(P+9);
+  if P[4]=SYNLZCOMPRESS_STORED then
+    result := P+9 else begin
     SetString(tmp,nil,Len);
-    if (Len<>0) and
-       (SynLZDecompress1(P+9,PLen-9,pointer(tmp))=Len) and
-       (crc32c(0,pointer(tmp),Len)=PCardinal(P)^) then
+    if SynLZDecompressBody(P,pointer(tmp),PLen,len) then
       result := pointer(tmp);
-  end;
   end;
 end;
 
