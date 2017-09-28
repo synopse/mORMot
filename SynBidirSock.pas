@@ -2748,18 +2748,20 @@ end;
 
 function TWebSocketServer.IsActiveWebSocket(ConnectionID: integer): TWebSocketServerResp;
 var i: Integer;
+    c: ^TWebSocketServerResp;
 begin
   result := nil;
   if Terminated or (ConnectionID<=0) then
     exit;
   fWebSocketConnections.Safe.Lock;
   try
-    with fWebSocketConnections do
-    for i := 0 to Count-1 do
-      if TWebSocketServerResp(List[i]).ConnectionID=ConnectionID then begin
-        result := TWebSocketServerResp(List[i]);
+    c := pointer(fWebSocketConnections.List);
+    for i := 1 to fWebSocketConnections.Count do
+      if c^.ConnectionID=ConnectionID then begin
+        result := c^;
         exit;
-      end;
+      end else
+      inc(c);
   finally
     fWebSocketConnections.Safe.UnLock;
   end;

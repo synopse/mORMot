@@ -12712,6 +12712,8 @@ function DateTimeToUnixTime(const AValue: TDateTime): TUnixTime;
 /// returns the current UTC date/time as a second-based c-encoded time
 // - i.e. current number of seconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
+// (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows)
 // - returns a 64-bit unsigned value, so is "Year2038bug" free
 function UnixTimeUTC: TUnixTime;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
@@ -12726,6 +12728,8 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
+// (will use e.g. fast clock_gettime(CLOCK_REALTIME_COARSE) under Linux,
+// or GetSystemTimeAsFileTime under Windows)
 function UnixMSTimeUTC: TUnixMSTime;
   {$ifndef MSWINDOWS}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
@@ -45559,6 +45563,32 @@ begin
 end;
 
 function SortDynArrayInt64(const A,B): integer;
+{$ifdef CPUX86}
+asm // Delphi compiler is not efficient at compiling below code
+        mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        cmp     eax, [edx + 4]
+        jnz     @nz
+        cmp     ecx, [edx]
+        jz      @0
+        jnb     @p
+@n:     or      eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@nz:    jl      @n
+@p:     mov     eax, 1
+end;
+{$else}
+{$ifdef CPU64}
+begin
+  if Int64(A)<Int64(B) then
+    result := -1 else
+  if Int64(A)>Int64(B) then
+    result := 1 else
+    result := 0;
+end;
+{$else}
 var tmp: Int64;
 begin
   tmp := Int64(A)-Int64(B);
@@ -45568,6 +45598,8 @@ begin
     result := 1 else
     result := 0;
 end;
+{$endif}
+{$endif}
 
 function SortDynArrayPointer(const A,B): integer;
 begin
@@ -46797,7 +46829,7 @@ begin
         exit;
       end;
       Index := 0;
-      while Index<=n do begin
+      while Index<=n do begin // fast binary search of the sorted position
         i := (Index+n) shr 1;
         cmp := fCompare(P[cardinal(i)*ElemSize],Elem);
         if cmp=0 then begin
