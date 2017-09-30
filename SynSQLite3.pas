@@ -2707,6 +2707,7 @@ type
     fDB: TSQLite3DB;
     fFileName: TFileName;
     fFileNameWithoutPath: TFileName;
+    fPageSize: cardinal;
     fFileDefaultCacheSize: integer;
     fIsMemory: boolean;
     fPassword: RawUTF8;
@@ -4424,6 +4425,7 @@ begin
     BackupBackgroundWaitUntilFinished;
   result := sqlite3.close(fDB);
   fDB := 0;
+  fPageSize := 0;
 end;
 
 {$ifndef DELPHI5OROLDER}
@@ -4546,8 +4548,8 @@ begin
   for i := 0 to fSQLFunctions.Count-1 do
     TSQLDataBaseSQLFunction(fSQLFunctions.List[i]).CreateFunction(DB);
   {$ifdef WITHLOG}
-  FPCLog.Log(sllDB,'"%" database file opened with PageSize=% and CacheSize=%',
-    [FileName,PageSize,CacheSize],self);
+  FPCLog.Log(sllDB,'"%" database file of % opened with PageSize=% and CacheSize=%',
+    [FileName,KB(GetFileSize),PageSize,CacheSize],self);
   {$endif}
 end;
 
@@ -4573,12 +4575,15 @@ end;
 
 function TSQLDataBase.GetPageSize: cardinal;
 begin
-  result := ExecuteNoExceptionInt64('PRAGMA page_size');
+  if fPageSize=0 then // can be cached, since known change once opened
+    fPageSize := ExecuteNoExceptionInt64('PRAGMA page_size');
+  result := fPageSize;
 end;
 
 procedure TSQLDataBase.SetPageSize(const Value: cardinal);
 begin
-  ExecuteNoException('PRAGMA page_size='+UInt32ToUTF8(Value));
+  if ExecuteNoException('PRAGMA page_size='+UInt32ToUTF8(Value)) then
+    fPageSize := Value;
 end;
 
 function TSQLDataBase.GetPageCount: cardinal;
