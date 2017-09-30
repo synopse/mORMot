@@ -21960,9 +21960,14 @@ type
     );
     tkSet: (
       SetType: TOrdType;
+      {$ifdef FPC}
       {$ifdef FPC_REQUIRES_PROPER_ALIGNMENT}
-      tkSetAlignment:DWORD; // needed for correct alignment !!??
+      tkSetAlignment: DWORD; // needed for correct alignment !!??
       {$endif}
+      {$ifndef VER3_0}
+      //SetSize: SizeInt;
+      {$endif VER3_0}
+      {$endif FPC}
       SetBaseType: PTypeInfoStored;
     );
     tkFloat: (

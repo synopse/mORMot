@@ -3008,16 +3008,12 @@ type
   // or by SynDBODBC to access the ODBC library
   TSQLDBLib = class
   protected
-    {$ifdef FPC}
-    fHandle: TLibHandle;
-    {$else}
-    fHandle: HMODULE;
-    {$endif}
+    fHandle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif};
   public
     /// release associated memory and linked library
     destructor Destroy; override;
     /// the associated library handle
-    property Handle: HMODULE read fHandle write fHandle;
+    property Handle: {$ifdef FPC}TLibHandle{$else}HMODULE{$endif} read fHandle write fHandle;
   end;
 
 
