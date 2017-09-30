@@ -3728,8 +3728,8 @@ begin
       PTextRec(SockIn)^.BufEnd := 0;
     end;
     if SockOut<>nil then begin
-      PTextRec(SockIn)^.BufPos := 0; // reset output buffer
-      PTextRec(SockIn)^.BufEnd := 0;
+      PTextRec(SockOut)^.BufPos := 0; // reset output buffer
+      PTextRec(SockOut)^.BufEnd := 0;
     end;
   end;
   if fSock<=0 then
