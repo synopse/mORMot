@@ -306,7 +306,6 @@ end;
 function fs_readDir(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
 var
   in_argv: PjsvalVector;
-  aValue: jsval;
   dir, founded: TFileName;
   F: TSearchRec;
   res: PJSRootedObject;

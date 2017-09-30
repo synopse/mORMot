@@ -38,6 +38,7 @@ unit SyNode;
   - Vadim Orel
   - Pavel Mashlyakovsky
   - win2014
+  - Geogre
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -75,6 +76,8 @@ unit SyNode;
   - add a `process.version`
   - implement a setTimeout/setInverval/setImmediate etc.
   - SpiderMonkey 52 (x32 & x64) support ( SM52 condition should be defined )
+  - VSCode debugging support via [vscode-firefox-debug](https://github.com/hbenl/vscode-firefox-debug) adapter
+    Thanks to George for patch
 
 }
 
@@ -156,6 +159,7 @@ type
     fThreadData: pointer;
     fDllModulesUnInitProcList: TList;
     fNeverExpire: boolean;
+    fWebAppRootDir: RawUTF8;
     /// called from SpiderMonkey callback. Do not raise exception here
     // instead use CheckJSError metod after JSAPI compile/evaluate call
 {$IFDEF SM52}
@@ -230,7 +234,10 @@ type
     // - JavaScript equivalent to
     // ! eval(script)
     procedure Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
-      lineNo: Cardinal; out result: jsval);
+      lineNo: Cardinal; out result: jsval); overload;
+
+    procedure Evaluate(const script: SynUnicode; const scriptName: RawUTF8;
+      lineNo: Cardinal); overload;
 
     /// evaluate a JavaScript script as Module
     // - if exception raised in script - raise Delphi ESMException
@@ -312,6 +319,8 @@ type
     property PrivateDataForDebugger: Pointer read FPrivateDataForDebugger write SetPrivateDataForDebugger;
     /// Name of this engine. Will be shown in debugger for indentify this engine
     property nameForDebug: RawUTF8 read fnameForDebug;
+    /// root path for current web app engine context
+    property webAppRootDir: RawUTF8 read fWebAppRootDir;
     /// Handler hor debugger. Called from debugger thread when debugger need
     // call rt.InterruptCallback(cx) in engine''s thread
     // this method must wake up the engine's thread and thread must
@@ -323,7 +332,7 @@ type
   /// prototype of SpideMonkey notification callback method
   TEngineEvent = procedure(const Engine: TSMEngine) of object;
 
-  /// event of getting engine name
+  /// event of getting engine name or web app root path
   TEngineNameEvent = function(const Engine: TSMEngine): RawUTF8 of object;
 
   /// event for loading dll module
@@ -356,11 +365,11 @@ type
     FMaxRecursionDepth: Cardinal;
     FEnginePool: TObjectListLocked;
     FRemoteDebuggerThread: TThread;
-    FFakeXPIInstallThread: TThread;
     FContentVersion: Cardinal;
     FOnNewEngine: TEngineEvent;
     FOnDebuggerInit: TEngineEvent;
     FOnGetName: TEngineNameEvent;
+    FOnGetWebAppRootPath: TEngineNameEvent;
     FOnDebuggerConnected: TEngineEvent;
     FOnDllModuleLoaded: TDllModuleEvent;
     {$ifdef ISDELPHIXE2}
@@ -387,9 +396,6 @@ type
     function ThreadEngineIndex(ThreadID: DWORD): Integer;
     /// returns nil if none was defined yet
     function CurrentThreadEngine: TSMEngine;
-    /// create a new SpiderMonkey Engine
-    // - used by ThreadSafeEngine method to instantiate a new per-thread Engine
-    function CreateNewEngine(pThreadData: pointer): TSMEngine; virtual;
     /// called when a new Engine is created
     // - this default implementation will run the OnNewEngine callback (if any)
     procedure DoOnNewEngine(const Engine: TSMEngine); virtual;
@@ -441,7 +447,7 @@ type
     // '1.2.3.4:1234'
     // - debugger create a dedicated thread where it listen to a requests
     // from a remote debug UI
-    procedure startDebugger(const port: SockString = '6000'; withFakeXPIInstaller: boolean = false);
+    procedure startDebugger(const port: SockString = '6000');
     procedure stopDebugger;
     /// Write text as console log to current thread Engine's debugger (if exists)
     procedure debuggerLog(const Text: RawUTF8);
@@ -481,6 +487,10 @@ type
     // event trigered before OnDebuggerInit and OnNewEngine events
     // Result og this method is Engine's name for debug
     property OnGetName: TEngineNameEvent read FOnGetName write FOnGetName;
+    /// event triggered every time a new Engine is created
+    // event trigered before OnDebuggerInit and OnNewEngine events
+    // Result og this method is Engine's web app root path
+    property OnGetWebAppRootPath: TEngineNameEvent read FOnGetWebAppRootPath write FOnGetWebAppRootPath;
 
     /// event triggered every time a internal debugger process connected to Engine
     // - event trigered in debugger's compartment
@@ -1298,6 +1308,11 @@ begin
     else if Assigned(OnGetName) then
       Result.fnameForDebug := OnGetName(Result);
 
+    if Assigned(OnGetWebAppRootPath) then
+      Result.fWebAppRootDir := OnGetWebAppRootPath(Result)
+    else
+      Result.fWebAppRootDir := UnicodeStringToUtf8(ExeVersion.ProgramFilePath);
+
     result.fThreadID := ThreadID;
     FEnginePool.Add(result);
   finally
@@ -1372,11 +1387,9 @@ begin
   end
 end;
 
-procedure TSMEngineManager.startDebugger(const port: SockString = '6000'; withFakeXPIInstaller: boolean = false);
+procedure TSMEngineManager.startDebugger(const port: SockString = '6000');
 begin
   FRemoteDebuggerThread := TSMRemoteDebuggerThread.Create(self, port);
-  if withFakeXPIInstaller then
-    FFakeXPIInstallThread := TFakeXPIInstaller.Create();
   inc(FContentVersion);
 end;
 
@@ -1385,12 +1398,8 @@ begin
   if FRemoteDebuggerThread <> nil then begin
     TSMRemoteDebuggerThread(FRemoteDebuggerThread).SetTerminated;
     FRemoteDebuggerThread := nil;
-    if FFakeXPIInstallThread <> nil then begin
-      TFakeXPIInstaller(FFakeXPIInstallThread).SetTerminated;
-      FFakeXPIInstallThread := nil;
     end;
   end;
-end;
 
 function StringReplaceChars(const Source: String; OldChar, NewChar: Char): String;
 var i,j,n: integer;
@@ -1445,20 +1454,6 @@ begin
     Result := ''
 end;
 
-function TSMEngineManager.CreateNewEngine(pThreadData: pointer): TSMEngine;
-begin
-  Result := FEngineClass.Create(Self);
-  if (pThreadData <> nil) then
-    Result.SetThreadData(pThreadData);
-  if Assigned(OnGetName) then
-    Result.fnameForDebug := OnGetName(Result);
-
-  if FRemoteDebuggerThread <> nil then
-    TSMRemoteDebuggerThread(FRemoteDebuggerThread).startDebugCurrentThread(result);
-
-  DoOnNewEngine(Result);
-end;
-
 function TSMEngine.DoProcessOperationCallback: Boolean;
 begin
   Result := not fTimedOut;
@@ -1503,6 +1498,13 @@ begin
     r := false;
   ScheduleWatchdog(-1);
   CheckJSError(r);
+end;
+
+procedure TSMEngine.Evaluate(const script: SynUnicode; const scriptName: RawUTF8; lineNo: Cardinal);
+var
+  jsvalue: jsval;
+begin
+  Evaluate(script, scriptName, lineNo, jsvalue);
 end;
 
 function TSMEngine.EvaluateModule(const scriptName: RawUTF8): jsval;

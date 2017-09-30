@@ -37,6 +37,7 @@ unit SyNodeRemoteDebugger;
   - Vadim Orel
   - Pavel Mashlyakovsky
   - win2014
+  - George
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -106,21 +107,6 @@ type
     property NeedPauseOnFirstStep: boolean read FNeedPauseOnFirstStep write FNeedPauseOnFirstStep;
   end;
 
-  /// Fake class required by VSCode FireFox Debug extension
-  // https://github.com/hbenl/vscode-firefox-debug
-  // SyNode engine expose themself as a FireFox addons, in this case
-  // vscode-firefox-debug tyr to "install" a addon by senfing a commands to port 8888
-  // In this sace we do nothing - all out sources are already inside engine
-  TFakeXPIInstaller = class(TThread)
-  private
-    fPort: SockString;
-  protected
-    procedure Execute; override;
-  public
-    procedure SetTerminated;
-    constructor Create(const aPort: SockString = '8888');
-  end;
-
   function SyNodeBindingProc_debugger(const Engine: TSMEngine; const bindingNamespaceName: SynUnicode): jsval;
 
 implementation
@@ -164,6 +150,8 @@ type
     fNameForDebug: RawUTF8;
     fCommunicationThread: TSMRemoteDebuggerCommunicationThread;
     fIsJustInited: boolean;
+    fDebuggerName: RawUTF8;
+    fWebAppRootPath: RawUTF8;
     /// Debugger create his own compartmnet (his own global object & scripting context)
     // Here we initialize a new compartment
     procedure InitializeDebuggerCompartment(aEng: TSMEngine; aNeedPauseOnFirstStep: boolean);
@@ -451,14 +439,26 @@ begin
           for I := 0 to fParent.fDebuggers.Count - 1 do begin
             engine := fParent.fManager.EngineForThread(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
             if engine <> nil then begin
-              Writer.AddShort('{"actor":"server1.conn1.addon');
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
-              Writer.AddShort('","id":"server1.conn1.addon');
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              // Actor represent debug thread here, setting proper name with coxtext thread id
+              // Writer.AddShort('{"actor":"server1.conn1.addon');
+              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              Writer.AddShort('{"actor":"');
+              Writer.AddShort(TSMDebugger(fParent.fDebuggers[i]).fDebuggerName);
+              Writer.AddShort('.conn1.thread_');
+              { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }
+              Writer.AddU(TSMDebugger(fParent.fDebuggers[i]).fSmThreadID);
+              // id should be addon id, value from DoOnGetEngineName event
+              // Writer.AddShort('","id":"server1.conn1.addon');
+              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              Writer.AddShort('","id":"');
+              Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
               Writer.AddShort('","name":"');
               Writer.AddString(TSMDebugger(fParent.fDebuggers[i]).fNameForDebug);
-              Writer.AddShort('","url":"server1.conn1.addon');
-              Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              // url most likly should be addon folder in format: file:///drive:/path/
+              // Writer.AddShort('","url":"server1.conn1.addon');
+              // Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fIndex);
+              { TODO : replace with path generation, should be context home dir in format file:///drive:/path/ }
+              Writer.AddShort('","url":"file:///' + StringReplaceAll(TSMDebugger(fParent.fDebuggers[i]).fWebAppRootPath, '\', '/'));
               Writer.AddShort('","debuggable":');
               Writer.Add(TSMDebugger(fParent.fDebuggers[i]).fCommunicationThread = nil);
               Writer.AddShort(',"consoleActor":"console');
@@ -611,6 +611,8 @@ begin
   fMessagesQueue := TRawUTF8ListHashedLocked.Create();
   fLogQueue := TRawUTF8ListHashedLocked.Create();
   fNameForDebug := aEng.nameForDebug;
+  fDebuggerName := 'synode_debPort_' + aParent.fPort;
+  fWebAppRootPath := aEng.webAppRootDir;
 
   InitializeDebuggerCompartment(aEng, aParent.FNeedPauseOnFirstStep);
 end;
@@ -692,7 +694,10 @@ begin
       aEng.EvaluateModule('DevTools\Debugger.js');
       dbgObject := cx.NewRootedObject(aEng.GlobalObjectDbg.ptr.GetPropValue(cx, 'process').asObject.GetPropValue(cx, 'dbg').asObject);
       try
-        aEng.CallObjectFunction(dbgObject, 'init', [SimpleVariantToJSval(cx, fIndex), SimpleVariantToJSval(cx, aNeedPauseOnFirstStep)]);
+        aEng.CallObjectFunction(dbgObject, 'init', [
+          SimpleVariantToJSval(cx, fIndex),
+          SimpleVariantToJSval(cx, aNeedPauseOnFirstStep)
+          ]);
       finally
         cx.FreeRootedObject(dbgObject);
       end;
@@ -804,6 +809,44 @@ begin
   result := true;
 end;
 
+function debugger_debuggerName(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  debugger: TSMDebugger;
+begin
+  debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
+  vp.rval := SimpleVariantToJSval(cx, debugger.fDebuggerName);
+  result := true;
+end;
+
+function debugger_nameForDebug(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  debugger: TSMDebugger;
+begin
+  debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
+  vp.rval := SimpleVariantToJSval(cx, debugger.fNameForDebug);
+  result := true;
+end;
+
+function debugger_threadId(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  debugger: TSMDebugger;
+begin
+  debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
+  { TODO : check that in multithread mode this field equal thread id with js context that we debug, otherwire replace with proper assigment }  
+  vp.rval := SimpleVariantToJSval(cx, ToUTF8(debugger.fSmThreadID));
+  // TSMDebugger(fParent.fDebuggers[i]).fSmThreadID
+  result := true;
+end;
+
+function debugger_webAppRootPath(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
+var
+  debugger: TSMDebugger;
+begin
+  debugger := TSMEngine(cx.PrivateData).PrivateDataForDebugger;
+  vp.rval := SimpleVariantToJSval(cx, debugger.fWebAppRootPath);
+  result := true;
+end;
+
 function SyNodeBindingProc_debugger(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 var
@@ -820,6 +863,10 @@ begin
     obj.ptr.DefineFunction(cx, 'read', debugger_read, 0);
     obj.ptr.DefineProperty(cx, 'listen', JSVAL_NULL, 0, debugger_listen);
     obj.ptr.DefineProperty(cx, 'paused', JSVAL_NULL, 0, debugger_isPaused, debugger_setPaused);
+    obj.ptr.DefineProperty(cx, 'debuggerName', JSVAL_NULL, 0, debugger_debuggerName);
+    obj.ptr.DefineProperty(cx, 'addonID', JSVAL_NULL, 0, debugger_nameForDebug);
+    obj.ptr.DefineProperty(cx, 'threadId', JSVAL_NULL, 0, debugger_threadId);
+    obj.ptr.DefineProperty(cx, 'webAppRootPath', JSVAL_NULL, 0, debugger_webAppRootPath);
 
     obj.ptr.DefineProperty(cx, 'global', Engine.GlobalObject.ptr.ToJSValue);
 
@@ -830,42 +877,8 @@ begin
 
 end;
 
-{ TFakeXPIInstaller }
-
-constructor TFakeXPIInstaller.Create(const aPort: SockString);
-begin
-  fPort := aPort;
-  FreeOnTerminate := true;
-  inherited Create(False);
-end;
-
-procedure TFakeXPIInstaller.Execute;
-var
-  ServerSock: TCrtSocket;
-  ClientSin: TVarSin;
-  AcceptedSocket: TSocket;
-begin
-  ServerSock := TCrtSocket.Bind(fPort);
-  try
-    repeat
-      AcceptedSocket := Accept(ServerSock.Sock, ClientSin);
-    until Terminated;
-  finally
-    ServerSock.Free;
-  end;
-end;
-
-procedure TFakeXPIInstaller.SetTerminated;
-var
-  socket: TCrtSocket;
-begin
-  Terminate;
-  socket := Open('127.0.0.1', fPort);
-  if socket<>nil then
-    socket.Free;
-end;
-
 initialization
+
   TSMEngineManager.RegisterBinding('debugger', SyNodeBindingProc_debugger);
 
 end.
