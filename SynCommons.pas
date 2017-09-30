@@ -18265,7 +18265,10 @@ function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
 
 /// decode the content of a memory buffer compressed via SynCompress
 // - BodyLen has been returned by a previous call to SynLZDecompressHeader
-function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer): boolean;
+// - SafeDecompression=true will use slower SynLZdecompress1partial() which
+// will avoid any buffer overflow
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
+  SafeDecompression: boolean=false): boolean;
 
 
 /// RLE compression of a memory buffer containing mostly zeros
@@ -61888,13 +61891,19 @@ begin
   end;
 end;
 
-function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer): boolean;
+function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
+  SafeDecompression: boolean): boolean;
 begin
   result := false;
   case P[4] of
   SYNLZCOMPRESS_STORED:
     MoveFast(P[9],Body[0],BodyLen);
   SYNLZCOMPRESS_SYNLZ:
+    if SafeDecompression then begin
+      if (SynLZDecompress1Partial(P+9,PLen-9,Body,BodyLen)<>BodyLen) or
+         (crc32c(0,Body,BodyLen)<>PCardinal(P)^) then
+        exit;
+    end else
     if (SynLZDecompress1(P+9,PLen-9,Body)<>BodyLen) or
        (crc32c(0,Body,BodyLen)<>PCardinal(P)^) then
       exit;
