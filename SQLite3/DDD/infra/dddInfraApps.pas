@@ -527,8 +527,7 @@ type
     procedure ExecuteDisconnect;
     procedure ExecuteDisconnectAfterError;
     procedure ExecuteSocket;
-    function TrySend(const aFrame: RawByteString; ImmediateDisconnectAfterError:
-      boolean = true): Boolean; virtual;
+    function TrySend(const aFrame: RawByteString; ImmediateDisconnectAfterError: boolean = true): Boolean; virtual;
     // inherited classes could override those methods for process customization
     procedure InternalExecuteConnected; virtual;
     procedure InternalExecuteDisconnect; virtual;
@@ -1226,10 +1225,13 @@ begin
       [self, ToText(fMonitoring.State)^]);
   fMonitoring.State := tpsConnecting;
   try
+    if fSettings.SocketBufferBytes <= 0 then
+      fSettings.SocketBufferBytes := 32768;
     if Assigned(fSettings.OnIDDDSocketThreadCreate) then
       fSettings.OnIDDDSocketThreadCreate(self, fSocket)
     else
-      fSocket := TDDDSynCrtSocket.Create(self, fHost, fPort, fSettings.SocketTimeout, 32768);
+      fSocket := TDDDSynCrtSocket.Create(self, fHost, fPort,
+        fSettings.SocketTimeout, fSettings.SocketBufferBytes);
     fSocket.Connect;
     fMonitoring.State := tpsConnected; // to be done ASAP to allow sending
     InternalExecuteConnected;

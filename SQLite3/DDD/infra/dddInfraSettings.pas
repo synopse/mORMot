@@ -461,6 +461,7 @@ type
     fPort: integer;
     fSocketLoopPeriod: integer;
     fSocketTimeout: integer;
+    fSocketBufferBytes: integer;
     fConnectionAttemptsInterval: Integer;
     fAutoReconnectAfterSocketError: boolean;
     fMonitoringInterval: integer;
@@ -489,6 +490,9 @@ type
     /// the time out period, in milliseconds, for socket access
     // - default is 2000 ms, i.e. 2 seconds
     property SocketTimeout: integer read FSocketTimeout write FSocketTimeout;
+    /// the internal size of the input socket buffer
+    // - default is 32768, i.e. 32 KB
+    property SocketBufferBytes: integer read FSocketBufferBytes write FSocketBufferBytes;
     /// the time, in seconds, between any reconnection attempt
     // - default value is 5 - i.e. five seconds
     // - if you set -1 as value, thread would end without any retrial
@@ -906,6 +910,7 @@ begin
   fSocketLoopPeriod := 100;
   fConnectionAttemptsInterval := 5;
   fMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
+  fSocketBufferBytes := 32768;
 end;
 
 function TDDDSocketThreadSettings.GetHostPort: RawUTF8;
