@@ -1916,9 +1916,11 @@ type
   // - boPostNoSimpleFields will avoid to send a TSQLRestBach.Add() with simple
   // fields as "SIMPLE":[val1,val2...] or "SIMPLE@tablename":[val1,val2...],
   // without the field names
+  // - boPutNoCacheFlush won't force the associated Cache entry to be flushed:
+  // it is up to the caller to ensure cache coherency
   TSQLRestBatchOption = (
     boInsertOrIgnore, boInsertOrReplace,
-    boExtendedJSON, boPostNoSimpleFields);
+    boExtendedJSON, boPostNoSimpleFields, boPutNoCacheFlush);
 
   /// a set of options for TSQLRest.BatchStart() process
   // - TJSONObjectDecoder will use it to compute the corresponding SQL
@@ -6928,13 +6930,15 @@ type
     // or TSQLRecordProperties.FieldBitsFromRawUTF8()
     // - this method will always compute and send any TModTime fields, unless
     // DoNotAutoComputeFields is set to true
+    // - if not all fields are specified, will reset the cache entry associated
+    // with this value, unless ForceCacheUpdate is TRUE
     function Update(Value: TSQLRecord; const CustomFields: TSQLFieldBits=[];
-      DoNotAutoComputeFields: boolean=false): integer; overload; virtual;
+      DoNotAutoComputeFields: boolean=false; ForceCacheUpdate: boolean=false): integer; overload; virtual;
     /// update a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - is an overloaded method to Update(Value,FieldBitsFromCSV())
     function Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
-      DoNotAutoComputeFields: boolean=false): integer; overload;
+      DoNotAutoComputeFields: boolean=false; ForceCacheUpdate: boolean=false): integer; overload;
     /// delete a member in current BATCH sequence
     // - work in BATCH mode: nothing is sent to the server until BatchSend call
     // - returns the corresponding index in the current BATCH sequence, -1 on error
@@ -34047,7 +34051,7 @@ begin
 end;
 
 function TSQLRestBatch.Update(Value: TSQLRecord;
-  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields: boolean): integer;
+  const CustomFields: TSQLFieldBits; DoNotAutoComputeFields,ForceCacheUpdate: boolean): integer;
 var Props: TSQLRecordProperties;
     FieldBits: TSQLFieldBits;
     ID: TID;
@@ -34084,8 +34088,9 @@ begin
     Value.ComputeFieldsBeforeWrite(fRest,seUpdate); // update sftModTime fields
   Value.GetJSONValues(fBatch);
   fBatch.Add(',');
-  if fCalledWithinRest and
-     (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
+  if fCalledWithinRest and (FieldBits-Props.SimpleFieldsBits[soUpdate]=[]) then
+    ForceCacheUpdate := true; // safe to update the cache with supplied values
+  if ForceCacheUpdate then
     fRest.Cache.Notify(Value,soUpdate) else
     // may not contain all cached fields -> delete from cache
     AddID(fDeletedRecordRef,fDeletedCount,RecordReference(tableIndex,ID));
@@ -34097,12 +34102,12 @@ begin
 end;
 
 function TSQLRestBatch.Update(Value: TSQLRecord; const CustomCSVFields: RawUTF8;
-  DoNotAutoComputeFields: boolean): integer;
+  DoNotAutoComputeFields,ForceCacheUpdate: boolean): integer;
 begin
   if (Value=nil) or (fBatch=nil) then
     result := -1 else
     result := Update(Value,Value.RecordProps.FieldBitsFromCSV(CustomCSVFields),
-      DoNotAutoComputeFields);
+      DoNotAutoComputeFields,ForceCacheUpdate);
 end;
 
 
@@ -42818,7 +42823,8 @@ begin
         if OK then begin
           Results[Count] := HTTP_SUCCESS; // 200 OK
           if fCache<>nil then // JSON Value may be uncomplete -> delete from cache
-            fCache.NotifyDeletion(RunTableIndex,ID);
+            if not (boPutNoCacheFlush in batchOptions) then
+              fCache.NotifyDeletion(RunTableIndex,ID);
         end;
       end;
       else raise EORMBatchException.CreateUTF8('%.EngineBatchSend: Unknown "%" method',
