@@ -462,6 +462,7 @@ type
     fSocketLoopPeriod: integer;
     fSocketTimeout: integer;
     fSocketBufferBytes: integer;
+    fSocketMaxBufferBytes: integer;
     fConnectionAttemptsInterval: Integer;
     fAutoReconnectAfterSocketError: boolean;
     fMonitoringInterval: integer;
@@ -493,6 +494,13 @@ type
     /// the internal size of the input socket buffer
     // - default is 32768, i.e. 32 KB
     property SocketBufferBytes: integer read FSocketBufferBytes write FSocketBufferBytes;
+    /// the maximum size of the thread input buffer
+    // - i.e. how many bytes are stored in fSocketInputBuffer memory, before
+    // nothing is retrieved from the socket buffer
+    // - set to avoid any "out of memory" of the currrent process, if the
+    // incoming data is not processed fast enough
+    // - default is 16777216, i.e. 16 MB
+    property SocketMaxBufferBytes: integer read FSocketMaxBufferBytes write FSocketMaxBufferBytes;
     /// the time, in seconds, between any reconnection attempt
     // - default value is 5 - i.e. five seconds
     // - if you set -1 as value, thread would end without any retrial
@@ -910,7 +918,8 @@ begin
   fSocketLoopPeriod := 100;
   fConnectionAttemptsInterval := 5;
   fMonitoringInterval := 120*1000; // log monitoring information every 2 minutes
-  fSocketBufferBytes := 32768;
+  fSocketBufferBytes := 32768; // 32KB
+  fSocketMaxBufferBytes := 16777216; // 16MB
 end;
 
 function TDDDSocketThreadSettings.GetHostPort: RawUTF8;

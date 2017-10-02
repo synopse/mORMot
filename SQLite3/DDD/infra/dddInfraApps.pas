@@ -1319,20 +1319,23 @@ var
 begin
   if Terminated or fSocketDisable then
     exit;
-  pending := fSocket.DataInPending(fSettings.SocketLoopPeriod);
-  if Terminated or (pending = 0) then
-    exit;
-  if pending < 0 then begin
-    ExecuteDisconnectAfterError;
-    exit;
+  if (fSettings.SocketMaxBufferBytes = 0) or
+     (length(FSocketInputBuffer) < fSettings.SocketMaxBufferBytes) then begin
+    pending := fSocket.DataInPending(fSettings.SocketLoopPeriod);
+    if Terminated or (pending = 0) then
+      exit;
+    if pending < 0 then begin
+      ExecuteDisconnectAfterError;
+      exit;
+    end;
+    len := length(FSocketInputBuffer);
+    SetLength(FSocketInputBuffer, len + pending);
+    if fSocket.DataIn(@PByteArray(FSocketInputBuffer)[len], pending) <> pending then begin
+      ExecuteDisconnectAfterError;
+      exit;
+    end;
+    FMonitoring.Server.AddSize(pending, 0);
   end;
-  len := length(FSocketInputBuffer);
-  SetLength(FSocketInputBuffer, len + pending);
-  if fSocket.DataIn(@PByteArray(FSocketInputBuffer)[len], pending) <> pending then begin
-    ExecuteDisconnectAfterError;
-    exit;
-  end;
-  FMonitoring.Server.AddSize(pending, 0);
   InternalExecuteSocket;
 end;
 

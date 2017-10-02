@@ -3932,11 +3932,14 @@ begin
       cspDataAvailable: begin
         backup := TimeOut;
         fTimeOut := 0; // not blocking call to fill full buffer
-        // call InputSock() to actually retrieve any pending data
-        if InputSock(PTextRec(SockIn)^)=NO_ERROR then
-          result := BufEnd-BufPos else
-          result := -1; // indicates broken socket
-        fTimeOut := backup;
+        try
+          // call InputSock() to actually retrieve any pending data
+          if InputSock(PTextRec(SockIn)^)=NO_ERROR then
+            result := BufEnd-BufPos else
+            result := -1; // indicates broken socket
+        finally
+          fTimeOut := backup;
+        end;
       end;
       cspSocketError:
         result := -1; // indicates broken socket
