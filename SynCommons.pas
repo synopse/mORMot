@@ -9687,7 +9687,7 @@ type
   /// this class can be used to speed up writing to a file
   // - big speed up if data is written in small blocks
   // - also handle optimized storage of any dynamic array of Integer/Int64/RawUTF8
-  // - use TFileBufferReader for fast in-place decoding of the stored binary
+  // - use TFileBufferReader or TFastReader for decoding of the stored binary
   TFileBufferWriter = class
   private
     fPos: integer;
@@ -9912,7 +9912,8 @@ type
     function ReadStream(DataLen: PtrInt=-1): TCustomMemoryStream;
     /// retrieve the current in-memory pointer
     // - if file was not memory-mapped, returns nil
-    function CurrentMemory: pointer;
+    // - if DataLen>0, will increment the current in-memory position
+    function CurrentMemory(DataLen: PtrUInt=0): pointer;
     /// retrieve the current in-memory position
     // - if file was not memory-mapped, returns -1
     function CurrentPosition: integer;
@@ -9924,22 +9925,85 @@ type
     property MappedBuffer: PAnsiChar read fMap.fBuf;
   end;
 
+  /// safe decoding of a TFileBufferWriter content
+  // - similar to TFileBufferReader, but faster and only for in-memory buffer
+  // - raise a EFastReader exception on decoding error (e.g. if a buffer
+  // overflow may occur)
+  TFastReader = object
+    /// the current position in the memory
+    P: PAnsiChar;
+    /// the last position in the buffer
+    Last: PAnsiChar;
+    /// initialize the reader
+    procedure Init(Buffer: pointer; Len: integer); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// initialize the reader
+    procedure Init(const Buffer: RawByteString); overload;
+    /// raise a EFastReader with an "overflow" error message
+    procedure ErrorOverflow;
+    /// raise a EFastReader with an "incorrect data" error message
+    procedure ErrorData;
+    /// read the next byte from the buffer
+    function NextByte: byte;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 32-bit signed value from the buffer
+    function VarInt32: PtrInt;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 32-bit unsigned value from the buffer
+    function VarUInt32: PtrUInt;
+    /// read the next 64-bit signed value from the buffer
+    function VarInt64: Int64;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next 64-bit unsigned value from the buffer
+    function VarUInt64: QWord;
+      {$ifdef CPU64}{$ifdef HASINLINE}inline;{$endif}{$endif}
+    /// read the next RawUTF8 value from the buffer
+    function VarUTF8: RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next RawUTF8 value from the buffer
+    procedure VarUTF8(out result: RawUTF8); overload;
+    /// read the next RawByteString value from the buffer
+    function VarString: RawByteString;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next pointer and length value from the buffer
+    procedure VarBlob(out result: TValueResult); overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// read the next pointer and length value from the buffer
+    function VarBlob: TValueResult; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// returns the current position, and move ahead the specified bytes
+    function Next(DataLen: PtrInt): pointer;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// copy data from the current position, and move ahead the specified bytes
+    procedure Copy(var Dest; DataLen: PtrInt);
+      {$ifdef HASINLINE}inline;{$endif}
+    /// apply TDynArray.LoadFrom on the buffer
+    procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
+  end;
+
   /// abstract high-level handling of SynLZ-compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper persistence implementation
   TSynPersistentStore = class(TSynPersistent)
   protected
     fName: RawUTF8;
+    /// low-level virtual methods implementing the persistence reading
+    procedure LoadFromReader(var Source: TFastReader); virtual;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
   public
     constructor Create(const aName: RawUTF8); reintroduce; virtual;
     /// initialize the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
-    function LoadFrom(const aBuffer: RawByteString): boolean; overload;
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(const aBuffer: RawByteString); overload;
     /// initialize the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
-    function LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean; overload;
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload;
     /// initialize the storage from a SaveToFile content
     // - actually call the LoadFromReader() virtual method for persistence
+    // - returns false if the file is not found, true if the file was loaded
+    // without any problem, or raise a EFastReader exception on decoding error
     function LoadFromFile(const aFileName: TFileName): boolean;
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
@@ -9949,10 +10013,6 @@ type
     // - to be retrieved later on via LoadFromFile method
     // - actually call the SaveToWriter() protected virtual method for persistence
     procedure SaveToFile(const aFileName: TFileName);
-    /// low-level vitual method implementing the persistence reading
-    function LoadFromReader(var aReader: TFileBufferReader): boolean; virtual;
-    /// low-level vitual method implementing the persistence writing
-    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
@@ -11013,6 +11073,9 @@ type
 
   /// exception class associated to TDocVariant JSON/BSON document
   EDocVariant = class(ESynException);
+
+  /// exception raised during TFastReader decoding
+  EFastReader = class(ESynException);
 
 var
   /// allow to customize the ESynException logging message
@@ -49382,10 +49445,9 @@ begin
   fName := aName;
 end;
 
-function TSynPersistentStore.LoadFromReader(var aReader: TFileBufferReader): boolean;
+procedure TSynPersistentStore.LoadFromReader(var Source: TFastReader);
 begin
-  aReader.Read(fName);
-  result := true;
+  Source.VarUTF8(fName);
 end;
 
 procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
@@ -49393,38 +49455,31 @@ begin
   aWriter.Write(fName);
 end;
 
-function TSynPersistentStore.LoadFrom(const aBuffer: RawByteString): boolean;
+procedure TSynPersistentStore.LoadFrom(const aBuffer: RawByteString);
 begin
-  result := LoadFrom(pointer(aBuffer), length(aBuffer));
+  LoadFrom(pointer(aBuffer), length(aBuffer));
 end;
 
-function TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean;
+procedure TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer);
 var temp: RawByteString;
-    reader: TFileBufferReader;
+    reader: TFastReader;
 begin
-  result := (aBuffer = nil) or (aBufferLen <= 0);
-  if result then
+  if (aBuffer = nil) or (aBufferLen <= 0) then
     exit; // nothing to load
   SynLZDecompress(aBuffer,aBufferLen,temp);
   if temp = '' then
-    exit; // invalid aBuffer
-  reader.OpenFrom(temp);
-  result := LoadFromReader(reader);
+    reader.ErrorData;
+  reader.Init(temp);
+  LoadFromReader(reader);
 end;
 
 function TSynPersistentStore.LoadFromFile(const aFileName: TFileName): boolean;
-var disk,data: RawByteString;
-    reader: TFileBufferReader;
+var temp: RawByteString;
 begin
-  result := false;
-  disk := StringFromFile(aFileName);
-  if disk<>'' then
-    data := SynLZDecompress(disk);
-  disk := ''; // release memory ASAP
-  if data='' then
-    exit;
-  reader.OpenFrom(data);
-  result := LoadFromReader(reader);
+  temp := StringFromFile(aFileName);
+  result := temp<>'';
+  if result then
+    LoadFrom(temp);
 end;
 
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString);
@@ -58835,11 +58890,13 @@ begin // read Isize + buffer in P,PEnd
   PEnd := pointer(PtrUInt(P)+PtrUInt(len));
 end;
 
-function TFileBufferReader.CurrentMemory: pointer;
+function TFileBufferReader.CurrentMemory(DataLen: PtrUInt): pointer;
 begin
-  if (fMap.fBuf=nil) or (fCurrentPos>=fMap.fBufSize) then
-    result := nil else
+  if (fMap.fBuf=nil) or (fCurrentPos+DataLen>=fMap.fBufSize) then
+    result := nil else begin
     result := @fMap.fBuf[fCurrentPos];
+    inc(fCurrentPos,DataLen);
+  end;
 end;
 
 function TFileBufferReader.CurrentPosition: integer;
@@ -59132,7 +59189,7 @@ begin
       repeat
         ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
         while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-          PIA^[1] := PIA^[0]+FromVarUInt64(P);
+          PIA^[1] := PIA^[0]+Int64(FromVarUInt64(P));
           dec(count);
           inc(PI);
         end;
@@ -59245,6 +59302,174 @@ begin
     result := true;
   end else
     result := false;
+end;
+
+
+{ TFastReader }
+
+procedure TFastReader.Init(Buffer: pointer; Len: integer);
+begin
+  P := Buffer;
+  Last := P+Len;
+end;
+
+procedure TFastReader.Init(const Buffer: RawByteString);
+begin
+  P := pointer(Buffer);
+  Last := P+length(Buffer);
+end;
+
+procedure TFastReader.ErrorOverflow;
+begin
+  raise EFastReader.Create('Potential Buffer Overflow');
+end;
+
+procedure TFastReader.ErrorData;
+begin
+  raise EFastReader.Create('Incorrect Data Detected');
+end;
+
+function TFastReader.NextByte: byte;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  result := ord(P^);
+  inc(P);
+end;
+
+function TFastReader.Next(DataLen: PtrInt): pointer;
+begin
+  if P+DataLen>=Last then
+    ErrorOverflow;
+  result := P;
+  inc(P,DataLen);
+end;
+
+procedure TFastReader.Copy(var Dest; DataLen: PtrInt);
+begin
+  if P+DataLen>=Last then
+    ErrorOverflow;
+  MoveFast(P^,Dest,DataLen);
+  inc(P,DataLen);
+end;
+
+procedure TFastReader.VarBlob(out result: TValueResult);
+begin
+  result.Len := VarUInt32;
+  if P+result.Len>=Last then
+    ErrorOverflow;
+  result.Ptr := P;
+  inc(P,result.Len);
+end;
+
+function TFastReader.VarBlob: TValueResult;
+begin
+  result.Len := VarUInt32;
+  if P+result.Len>=Last then
+    ErrorOverflow;
+  result.Ptr := P;
+  inc(P,result.Len);
+end;
+
+function TFastReader.VarInt32: PtrInt;
+begin
+  result := VarUInt32;
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+end;
+
+function TFastReader.VarInt64: Int64;
+begin
+{$ifdef CPU64}
+  result := VarInt32; // already returns a PtrInt=Int64
+{$else}
+  result := VarUInt64;
+  if result and 1<>0 then
+    // 1->1, 3->2..
+    result := result shr 1+1 else
+    // 0->0, 2->-1, 4->-2..
+    result := -(result shr 1);
+{$endif}
+end;
+
+function TFastReader.VarUInt32: PtrUInt;
+var c, n: PtrUInt;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  result := ord(P^);
+  inc(P);
+  if result>$7f then begin
+    n := 0;
+    result := result and $7F;
+    repeat
+      if P>=Last then
+        ErrorOverflow;
+      c := ord(P^);
+      inc(P);
+      inc(n,7);
+      if c<=$7f then break;
+      result := result or ((c and $7f) shl n);
+    until false;
+    result := result or (c shl n);
+  end;
+end;
+
+function TFastReader.VarUInt64: QWord;
+{$ifdef CPU64}
+begin
+  result := VarUInt32; // already returns a PtrUInt=QWord
+{$else}
+var c, n: PtrUInt;
+begin
+  if P>=Last then
+    ErrorOverflow;
+  c := ord(P^);
+  inc(P);
+  if c>$7f then begin
+    result := c and $7F;
+    n := 0;
+    repeat
+      if P>=Last then
+        ErrorOverflow;
+      c := ord(P^);
+      inc(P);
+      inc(n,7);
+      if c<=$7f then break;
+      result := result or (QWord(c and $7f) shl n);
+    until false;
+    result := result or (QWord(c) shl n);
+  end else
+    result := c;
+{$endif}
+end;
+
+function TFastReader.VarString: RawByteString;
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+procedure TFastReader.VarUTF8(out result: RawUTF8);
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarUTF8: RawUTF8;
+begin
+  with VarBlob do
+    SetString(result,Ptr,Len);
+end;
+
+procedure TFastReader.Read(var DA: TDynArray; NoCheckHash: boolean);
+begin
+  P := DA.LoadFrom(P,nil,NoCheckHash);
+  if P=nil then
+    ErrorData;
 end;
 
 
