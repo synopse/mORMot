@@ -9916,23 +9916,37 @@ type
   end;
 
   /// abstract high-level handling of SynLZ-compressed persisted storage
-  // - protected LoadFromReader/SaveToWriter abstract methods should be
-  // overriden with proper persistence implementation
+  // - LoadFromReader/SaveToWriter abstract methods should be overriden
+  // with proper persistence implementation
   TSynPersistentStore = class(TSynPersistent)
   protected
-    function LoadFromReader(var aReader: TFileBufferReader): boolean; virtual; abstract;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual; abstract;
+    fName: RawUTF8;
   public
+    constructor Create(const aName: RawUTF8); reintroduce; virtual;
     /// initialize the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() protected virtual method for persistence
+    // - actually call the LoadFromReader() virtual method for persistence
     function LoadFrom(const aBuffer: RawByteString): boolean; overload;
     /// initialize the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() protected virtual method for persistence
+    // - actually call the LoadFromReader() virtual method for persistence
     function LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean; overload;
+    /// initialize the storage from a SaveToFile content
+    // - actually call the LoadFromReader() virtual method for persistence
+    function LoadFromFile(const aFileName: TFileName): boolean;
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
     procedure SaveTo(out aBuffer: RawByteString);
+    /// persist the content as a SynLZ-compressed binary file
+    // - to be retrieved later on via LoadFromFile method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    procedure SaveToFile(const aFileName: TFileName);
+    /// low-level vitual method implementing the persistence reading
+    function LoadFromReader(var aReader: TFileBufferReader): boolean; virtual;
+    /// low-level vitual method implementing the persistence writing
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+    /// one optional text associated with this storage
+    // - you can define it as published to serialize its value
+    property Name: RawUTF8 read fName;
   end;
 
   /// implements a thread-safe Bloom Filter storage
@@ -18321,6 +18335,11 @@ function SynLZDecompressHeader(P: PAnsiChar; PLen: integer): integer;
 function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
   SafeDecompression: boolean=false): boolean;
 
+/// partial decoding of a memory buffer compressed via SynCompress
+// - will use slower SynLZdecompress1partial() to retrieve the beginning of
+// the content
+// - returns 0 on error, or how many bytes have been written to Partial 
+function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
 
 /// RLE compression of a memory buffer containing mostly zeros
 // - will store the number of consecutive zeros instead of plain zero bytes
@@ -49296,15 +49315,31 @@ end;
 
 { TSynPersistentStore }
 
+constructor TSynPersistentStore.Create(const aName: RawUTF8);
+begin
+  inherited Create;
+  fName := aName;
+end;
+
+function TSynPersistentStore.LoadFromReader(var aReader: TFileBufferReader): boolean;
+begin
+  aReader.Read(fName);
+  result := true;
+end;
+
+procedure TSynPersistentStore.SaveToWriter(aWriter: TFileBufferWriter);
+begin
+  aWriter.Write(fName);
+end;
+
 function TSynPersistentStore.LoadFrom(const aBuffer: RawByteString): boolean;
 begin
   result := LoadFrom(pointer(aBuffer), length(aBuffer));
 end;
 
 function TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean;
-var
-  temp: RawByteString;
-  reader: TFileBufferReader;
+var temp: RawByteString;
+    reader: TFileBufferReader;
 begin
   result := (aBuffer = nil) or (aBufferLen <= 0);
   if result then
@@ -49313,6 +49348,21 @@ begin
   if temp = '' then
     exit; // invalid aBuffer
   reader.OpenFrom(temp);
+  result := LoadFromReader(reader);
+end;
+
+function TSynPersistentStore.LoadFromFile(const aFileName: TFileName): boolean;
+var disk,data: RawByteString;
+    reader: TFileBufferReader;
+begin
+  result := false;
+  disk := StringFromFile(aFileName);
+  if disk<>'' then
+    data := SynLZDecompress(disk);
+  disk := ''; // release memory ASAP
+  if data='' then
+    exit;
+  reader.OpenFrom(data);
   result := LoadFromReader(reader);
 end;
 
@@ -49328,6 +49378,13 @@ begin
   finally
     writer.Free;
   end;
+end;
+
+procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName);
+var temp: RawByteString;
+begin
+  SaveTo(temp);
+  FileFromString(temp,aFileName);
 end;
 
 
@@ -62103,6 +62160,33 @@ begin
   else exit;
   end;
   result := true;
+end;
+
+function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
+var BodyLen: integer;
+begin
+  result := 0;
+  if (PLen<=9) or (P=nil) then
+    exit;
+  case P[4] of
+  SYNLZCOMPRESS_STORED:
+    if PCardinal(P)^=PCardinal(P+5)^ then
+      BodyLen := PLen-9 else
+      exit;
+  SYNLZCOMPRESS_SYNLZ:
+    BodyLen := SynLZdecompressdestlen(P+9);
+  else exit;
+  end;
+  if PartialLen>BodyLen then
+    PartialLen := BodyLen;
+  case P[4] of
+  SYNLZCOMPRESS_STORED:
+    MoveFast(P[9],Partial[0],PartialLen);
+  SYNLZCOMPRESS_SYNLZ:
+    if SynLZDecompress1Partial(P+9,PLen-9,Partial,PartialLen)<>PartialLen then
+      exit;
+  end;
+  result := PartialLen;
 end;
 
 procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
