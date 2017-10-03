@@ -9678,6 +9678,7 @@ type
   /// this class can be used to speed up writing to a file
   // - big speed up if data is written in small blocks
   // - also handle optimized storage of any dynamic array of Integer/Int64/RawUTF8
+  // - use TFileBufferReader for fast in-place decoding of the stored binary
   TFileBufferWriter = class
   private
     fPos: integer;
@@ -9753,8 +9754,9 @@ type
       DataLayout: TFileBufferWriterKind);
     /// append UInt64 values using 64-bit variable length integer encoding
     // - if Offset is TRUE, then it will store the difference between
-    // two values using 32-bit variable-length integer encoding (in this case,
+    // two values using 64-bit variable-length integer encoding (in this case,
     // a fixed-sized record storage is also handled separately)
+    // - could be decoded later on via TFileBufferReader.ReadVarUInt64Array
     procedure WriteVarUInt64DynArray(const Values: TInt64DynArray;
       ValuesCount: integer; Offset: Boolean);
     /// append the RawUTF8 dynamic array
@@ -9801,6 +9803,8 @@ type
   // memory space: in this case, we fall back on direct file reading
   // - maximum handled file size has no limit (but will use slower direct
   // file reading)
+  // - can handle sophisticated storage layout of TFileBufferWriter for
+  // dynamic arrays of Integer/Int64/RawUTF8
   // - is defined either as an object either as a record, due to a bug
   // in Delphi 2009/2010 compiler (at least): this structure is not initialized
   // if defined as an object on the stack, but will be as a record :(
@@ -9823,6 +9827,8 @@ type
     /// initialize the buffer from an already existing memory block
     // - may be e.g. a resource or a TMemoryStream
     procedure OpenFrom(aBuffer: pointer; aBufferSize: cardinal); overload;
+    /// initialize the buffer from an already existing memory block
+    procedure OpenFrom(const aBuffer: RawByteString); overload;
     /// initialize the buffer from an already existing Stream
     // - accept either TFileStream or TCustomMemoryStream kind of stream
     function OpenFrom(Stream: TStream): boolean; overload;
@@ -9909,6 +9915,25 @@ type
     property MappedBuffer: PAnsiChar read fMap.fBuf;
   end;
 
+  /// abstract high-level handling of SynLZ-compressed persisted storage
+  // - protected LoadFromReader/SaveToWriter abstract methods should be
+  // overriden with proper persistence implementation
+  TSynPersistentStore = class(TSynPersistent)
+  protected
+    function LoadFromReader(var aReader: TFileBufferReader): boolean; virtual; abstract;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual; abstract;
+  public
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() protected virtual method for persistence
+    function LoadFrom(const aBuffer: RawByteString): boolean; overload;
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() protected virtual method for persistence
+    function LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean; overload;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - to be retrieved later on via LoadFrom method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    procedure SaveTo(out aBuffer: RawByteString);
+  end;
 
   /// implements a thread-safe Bloom Filter storage
   // - a "Bloom Filter" is a space-efficient probabilistic data structure,
@@ -49269,6 +49294,43 @@ begin
 end;
 
 
+{ TSynPersistentStore }
+
+function TSynPersistentStore.LoadFrom(const aBuffer: RawByteString): boolean;
+begin
+  result := LoadFrom(pointer(aBuffer), length(aBuffer));
+end;
+
+function TSynPersistentStore.LoadFrom(aBuffer: pointer; aBufferLen: integer): boolean;
+var
+  temp: RawByteString;
+  reader: TFileBufferReader;
+begin
+  result := (aBuffer = nil) or (aBufferLen <= 0);
+  if result then
+    exit; // nothing to load
+  SynLZDecompress(aBuffer,aBufferLen,temp);
+  if temp = '' then
+    exit; // invalid aBuffer
+  reader.OpenFrom(temp);
+  result := LoadFromReader(reader);
+end;
+
+procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString);
+var
+  writer: TFileBufferWriter;
+begin
+  writer := TFileBufferWriter.Create(TRawByteStringStream);
+  try
+    SaveToWriter(writer);
+    writer.Flush;
+    aBuffer := SynLZCompress(TRawByteStringStream(writer.Stream).DataString);
+  finally
+    writer.Free;
+  end;
+end;
+
+
 { ****************** text buffer and JSON functions and classes ********* }
 
 { TTextWriter }
@@ -58474,7 +58536,7 @@ begin
       n := ValuesCount;
       if Offset then
         for i := 0 to ValuesCount-1 do begin
-          P := ToVarUInt32(PI^[i]-PI^[i-1],P); // store diffs
+          P := ToVarUInt64(PI^[i]-PI^[i-1],P); // store diffs
           if PtrUInt(P)>=PtrUInt(PEnd) then begin
             n := i+1;
             break; // avoid buffer overflow
@@ -58544,6 +58606,11 @@ procedure TFileBufferReader.OpenFrom(aBuffer: pointer; aBufferSize: cardinal);
 begin
   fCurrentPos := 0;
   fMap.Map(aBuffer,aBufferSize);
+end;
+
+procedure TFileBufferReader.OpenFrom(const aBuffer: RawByteString);
+begin
+  OpenFrom(pointer(aBuffer),length(aBuffer));
 end;
 
 function TFileBufferReader.OpenFrom(Stream: TStream): boolean;
@@ -58924,29 +58991,27 @@ begin
       repeat
         ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
         while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-          PIA^[1] := PIA^[0]+integer(FromVarUInt32(P));
+          PIA^[1] := PIA^[0]+FromVarUInt64(P);
           dec(count);
           inc(PI);
         end;
       until count<=0;
-      {$ifopt C+} inc(PI); {$endif} // to make assert() below work
-    end else begin
+    end else
       // same offset for all items (fixed sized records)
       for i := 0 to count-1 do
         PIA^[i+1] := PIA^[i]+diff;
-      {$ifopt C+} inc(PI,count+1); count := 0; {$endif} // for assert() below
-    end;
-  end else
-  repeat
-    ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
-    while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-      PI^ := FromVarUInt64(P);
-      dec(count);
-      inc(PI);
-    end;
-  until count<=0;
-  if (count>0) or (PI<>@Values[result]) then
-    raise ESynException.Create('TFileBufferReader.ReadVarUInt64Array');
+  end else begin
+    repeat
+      ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
+      while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
+        PI^ := FromVarUInt64(P);
+        dec(count);
+        inc(PI);
+      end;
+    until count<=0;
+    if (count>0) or (PI<>@Values[result]) then
+      raise ESynException.Create('TFileBufferReader.ReadVarUInt64Array');
+  end;
 end;
 
 function TFileBufferReader.ReadRawUTF8List(List: TRawUTF8List): boolean;
