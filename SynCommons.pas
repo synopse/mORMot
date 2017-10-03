@@ -2841,8 +2841,12 @@ function GetInt64(P: PUTF8Char): Int64; overload;
 // - if P if nil or not start with a valid numerical value, returns Default
 function GetInt64Def(P: PUTF8Char; const Default: Int64): Int64;
 
-/// get the 64-bit integer value stored in P^
+/// get the 64-bit signed integer value stored in P^
 procedure SetInt64(P: PUTF8Char; var result: Int64);
+  {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+procedure SetQWord(P: PUTF8Char; var result: QWord);
   {$ifdef CPU64}inline;{$endif}
 
 /// get the 64-bit integer value stored in P^
@@ -4814,7 +4818,7 @@ type
   TDynArrayKind = (
     djNone,
     djBoolean, djByte, djWord, djInteger, djCardinal, djSingle,
-    djInt64, djDouble, djCurrency,
+    djInt64, djQWord, djDouble, djCurrency,
     djTimeLog, djDateTime, djDateTimeMS, djRawUTF8, djWinAnsi, djString,
     djRawByteString, djWideString, djSynUnicode, djInterface,
     {$ifndef NOVARIANTS}djVariant,{$endif}
@@ -6849,6 +6853,9 @@ function SortDynArrayCardinal(const A,B): integer;
 /// compare two "array of Int64 or array of Currency" elements
 function SortDynArrayInt64(const A,B): integer;
 
+/// compare two "array of QWord or array of Currency" elements
+function SortDynArrayQWord(const A,B): integer;
+
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
 
@@ -6972,7 +6979,7 @@ var
   DYNARRAY_SORTFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArraySortCompare = (
     (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
     SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
-    SortDynArrayInt64, SortDynArrayDouble,
+    SortDynArrayInt64, SortDynArrayQWord, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiString, SortDynArrayAnsiString, SortDynArrayString,
     SortDynArrayAnsiString, SortDynArrayUnicodeString,
@@ -6980,7 +6987,7 @@ var
     {$ifndef NOVARIANTS}SortDynArrayVariant,{$endif} nil),
     (nil, SortDynArrayBoolean, SortDynArrayByte, SortDynArrayWord,
     SortDynArrayInteger, SortDynArrayCardinal, SortDynArraySingle,
-    SortDynArrayInt64, SortDynArrayDouble,
+    SortDynArrayInt64, SortDynArrayQWord, SortDynArrayDouble,
     SortDynArrayInt64, SortDynArrayInt64, SortDynArrayDouble, SortDynArrayDouble,
     SortDynArrayAnsiStringI, SortDynArrayAnsiStringI, SortDynArrayStringI,
     SortDynArrayAnsiStringI, SortDynArrayUnicodeStringI,
@@ -6992,14 +6999,14 @@ var
   // - not to be used as such, but e.g. when inlining TDynArray methods
   DYNARRAY_HASHFIRSTFIELD: array[boolean,TDynArrayKind] of TDynArrayHashOne = (
     (nil, HashByte, HashByte, HashWord, HashInteger,
-    HashCardinal, HashCardinal, HashInt64, HashInt64,
+    HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiString, HashAnsiString,
     {$ifdef UNICODE}HashUnicodeString{$else}HashAnsiString{$endif},
     HashAnsiString, HashWideString, HashSynUnicode, HashPointer,
     {$ifndef NOVARIANTS}HashVariant,{$endif} nil),
     (nil, HashByte, HashByte, HashWord, HashInteger,
-    HashCardinal, HashCardinal, HashInt64, HashInt64,
+    HashCardinal, HashCardinal, HashInt64, HashInt64, HashInt64,
     HashInt64, HashInt64, HashInt64, HashInt64,
     HashAnsiStringI, HashAnsiStringI,
     {$ifdef UNICODE}HashUnicodeStringI{$else}HashAnsiStringI{$endif},
@@ -7888,8 +7895,10 @@ type
     // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
     procedure AddDateTimeMS(const Value: TDateTime; Expanded: boolean=true;
       FirstTimeChar: AnsiChar = 'T'; const TZD: RawUTF8='Z');
-    /// append an Unsigned Integer Value as a String
+    /// append an Unsigned 32-bit Integer Value as a String
     procedure AddU(Value: cardinal);
+    /// append an Unsigned 64-bit Integer Value as a String
+    procedure AddQ(Value: QWord);
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add(const guid: TGUID); overload;
@@ -30605,6 +30614,47 @@ end;
 {$endif}
 
 {$ifdef CPU64}
+procedure SetQWord(P: PUTF8Char; var result: QWord);
+begin // PtrUInt is already QWord -> call PtrUInt version
+  result := GetCardinal(P);
+end;
+{$else}
+procedure SetQWord(P: PUTF8Char; var result: QWord);
+var c: cardinal;
+begin
+  result := 0;
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  if P^='+' then
+    repeat inc(P) until P^<>' ';
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  Int64Rec(result).Lo := c;
+  inc(P);
+  repeat // fast 32 bit loop
+    c := byte(P^)-48;
+    if c>9 then
+      break else
+      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+    inc(P);
+    if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+      repeat // 64 bit loop
+        c := byte(P^)-48;
+        if c>9 then
+          break;
+        result := result shl 3+result+result; // fast result := result*10
+        inc(result,c);
+        inc(P);
+      until false;
+      break;
+    end;
+  until false;
+end;
+{$endif}
+
+{$ifdef CPU64}
 function GetInt64(P: PUTF8Char): Int64;
 begin // PtrInt is already int64 -> call previous version
   result := GetInteger(P);
@@ -45706,9 +45756,10 @@ function DynArrayElementTypeName(TypeInfo: pointer; ElemTypeInfo: PPointer): Raw
 var DynArray: TDynArray;
     VoidArray: pointer;
 const KNOWNTYPE_ITEMNAME: array[TDynArrayKind] of RawUTF8 = ('',
-  'boolean','byte','word','integer','cardinal','single','Int64','double','currency',
-  'TTimeLog','TDateTime','TDateTimeMS','RawUTF8','WinAnsiString','string','RawByteString',
-  'WideString','SynUnicode','IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
+  'boolean','byte','word','integer','cardinal','single','Int64','QWord',
+  'double','currency','TTimeLog','TDateTime','TDateTimeMS',
+  'RawUTF8','WinAnsiString','string','RawByteString','WideString','SynUnicode',
+  'IInterface',{$ifndef NOVARIANTS}'variant',{$endif}'');
 begin
   VoidArray := nil;
   DynArray.Init(TypeInfo,VoidArray);
@@ -45791,6 +45842,15 @@ begin
 end;
 {$endif}
 {$endif}
+
+function SortDynArrayQWord(const A,B): integer;
+begin
+  if QWord(A)<QWord(B) then
+    result := -1 else
+  if QWord(A)>QWord(B) then
+    result := 1 else
+    result := 0;
+end;
 
 function SortDynArrayPointer(const A,B): integer;
 begin
@@ -46412,7 +46472,7 @@ end;
 const
   PTRSIZ = sizeof(Pointer);
   KNOWNTYPE_SIZE: array[TDynArrayKind] of byte = (
-    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
+    0, 1,1, 2, 4,4,4, 8,8,8,8,8,8,8, PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,PTRSIZ,
     {$ifndef NOVARIANTS}sizeof(Variant),{$endif} 0);
 var
   KINDTYPE_INFO: array[TDynArrayKind] of pointer;
@@ -46671,6 +46731,7 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
         djCardinal: PCardinalArray(fValue^)^[i] := GetCardinal(Val);
         djSingle:   PSingleArray(fValue^)^[i] := GetExtended(Val);
         djInt64:    SetInt64(Val,PInt64Array(fValue^)^[i]);
+        djQWord:    SetQWord(Val,PQWordArray(fValue^)^[i]);
         djTimeLog:  PInt64Array(fValue^)^[i] := Iso8601ToTimeLogPUTF8Char(Val,ValLen);
         djDateTime, djDateTimeMS:
           Iso8601ToDateTimePUTF8CharVar(Val,ValLen,PDateTimeArray(fValue^)^[i]);
@@ -49544,6 +49605,28 @@ begin
   inc(B,Len);
 end;
 
+procedure TTextWriter.AddQ(Value: QWord);
+var tmp: array[0..23] of AnsiChar;
+    P: PAnsiChar;
+    Len: integer;
+begin
+  if BEnd-B<=32 then
+    FlushToStream;
+  if Value<=high(SmallUInt32UTF8) then begin
+    P := pointer(SmallUInt32UTF8[Value]);
+    {$ifdef FPC}
+    Len := length(SmallUInt32UTF8[Value]);
+    {$else}
+    Len := PInteger(P-4)^;
+    {$endif}
+  end else begin
+    P := StrUInt64(@tmp[23],Value);
+    Len := @tmp[23]-P;
+  end;
+  MoveFast(P[0],B[1],Len);
+  inc(B,Len);
+end;
+
 procedure TTextWriter.Add(Value: Extended; precision: integer);
 var S: ShortString;
 begin
@@ -50566,6 +50649,7 @@ begin // code below must match TDynArray.LoadFromJSON
       djCardinal: AddU(PCardinalArray(P)^[i]);
       djSingle:   AddSingle(PSingleArray(P)^[i]);
       djInt64:    Add(PInt64Array(P)^[i]);
+      djQWord:    AddQ(PQWordArray(P)^[i]);
       djDouble:   AddDouble(PDoubleArray(P)^[i]);
       djCurrency: AddCurr64(PInt64Array(P)^[i]);
       else raise ESynException.CreateUTF8('AddDynArrayJSON unsupported %',[ToText(T)^]);
