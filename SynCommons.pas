@@ -876,7 +876,8 @@ type
   PPtrInt = ^PtrInt;
 
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
-  // - and UInt64 is buggy as hell under Delphi 2007 when inlining functions
+  // - and UInt64 is buggy as hell under Delphi 2007 when inlining functions:
+  // older compilers will fallback to signed Int64 values
   {$ifdef FPC_OR_UNICODE}
   QWord = UInt64;
   {$else}
@@ -4416,11 +4417,29 @@ procedure QuickSortIndexedPUTF8Char(Values: PPUtf8CharArray; Count: Integer;
 // - returns nil if Value was not found
 function IntegerScan(P: PCardinalArray; Count: PtrInt; Value: cardinal): PCardinal;
 
+/// fast search of an unsigned integer position in an integer array
+// - Count is the number of integer entries in P^
+// - return index of P^[index]=Value
+// - return -1 if Value was not found
+function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
+
 /// fast search of an integer position in a 64 bit integer array
 // - Count is the number of Int64 entries in P^
 // - returns P where P^=Value
 // - returns nil if Value was not found
 function Int64Scan(P: PInt64Array; Count: PtrInt; const Value: Int64): PInt64;
+
+/// fast search of an integer position in a signed 64 bit integer array
+// - Count is the number of Int64 entries in P^
+// - returns index of P^[index]=Value
+// - returns -1 if Value was not found
+function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
+
+/// fast search of an integer position in an unsigned 64 bit integer array
+// - Count is the number of QWord entries in P^
+// - returns index of P^[index]=Value
+// - returns -1 if Value was not found
+function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
 
 /// fast search of an unsigned integer in an integer array
 // - returns true if P^=Value within Count entries
@@ -4431,12 +4450,6 @@ function IntegerScanExists(P: PCardinalArray; Count: PtrInt; Value: cardinal): b
 // - returns true if P^=Value within Count entries
 // - returns false if Value was not found
 function Int64ScanExists(P: PInt64Array; Count: PtrInt; const Value: Int64): boolean;
-
-/// fast search of an unsigned integer position in an integer array
-// - Count is the number of integer entries in P^
-// - return index of P^[index]=Value
-// - return -1 if Value was not found
-function IntegerScanIndex(P: PCardinalArray; Count: PtrInt; Value: cardinal): PtrInt;
 
 /// fast search of a pointer-sized unsigned integer position
 // in an pointer-sized integer array
@@ -4469,8 +4482,13 @@ procedure QuickSortInteger(ID,CoValues: PIntegerArray; L, R: PtrInt); overload;
 /// sort an Integer array, low values first
 procedure QuickSortInteger(var ID: TIntegerDynArray); overload;
 
-/// sort a 64 bit Integer array, low values first
+/// sort a 64 bit signed Integer array, low values first
 procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
+
+/// sort a 64 bit unsigned Integer array, low values first
+// - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
+// older compilers will fallback to signed Int64 comparison
+procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
 /// sort a 64 bit Integer array, low values first
 procedure QuickSortInt64(ID,CoValues: PInt64Array; L, R: PtrInt); overload;
@@ -4494,11 +4512,19 @@ function FastFindIntegerSorted(P: PIntegerArray; R: PtrInt; Value: integer): Ptr
 // - return -1 if Value was not found
 function FastFindIntegerSorted(const Values: TIntegerDynArray; Value: integer): PtrInt; overload;
 
-/// fast O(log(n)) binary search of a 64 bit integer value in a sorted array
+/// fast O(log(n)) binary search of a 64 bit signed integer value in a sorted array
 // - R is the last index of available integer entries in P^ (i.e. Count-1)
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
+
+/// fast O(log(n)) binary search of a 64 bit unsigned integer value in a sorted array
+// - R is the last index of available integer entries in P^ (i.e. Count-1)
+// - return index of P^[result]=Value
+// - return -1 if Value was not found
+// - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
+// older compilers will fallback to signed Int64 comparison
+function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt; overload;
 
 /// sort a PtrInt array, low values first
 procedure QuickSortPtrInt(P: PPtrIntArray; L, R: PtrInt);
@@ -4564,11 +4590,11 @@ function AddInteger(var Values: TIntegerDynArray; var ValuesCount: integer;
   Value: integer; NoDuplicates: boolean): boolean; overload;
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
-procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64); overload;
+function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// add a 64-bit integer value at the end of a dynamic array of integers
-procedure AddInt64(var Values: TInt64DynArray; Value: Int64); overload;
+function AddInt64(var Values: TInt64DynArray; Value: Int64): integer; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// delete any 32-bit integer in Values[]
@@ -29495,20 +29521,20 @@ begin
   result := true
 end;
 
-procedure AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64);
+function AddInt64(var Values: TInt64DynArray; var ValuesCount: integer; Value: Int64): integer;
 begin
-  if ValuesCount=length(Values) then
-    SetLength(Values,ValuesCount+256+ValuesCount shr 3);
-  Values[ValuesCount] := Value;
+  result := ValuesCount;
+  if result=length(Values) then
+    SetLength(Values,result+256+result shr 3);
+  Values[result] := Value;
   inc(ValuesCount);
 end;
 
-procedure AddInt64(var Values: TInt64DynArray; Value: Int64);
-var n: integer;
+function AddInt64(var Values: TInt64DynArray; Value: Int64): integer;
 begin
-  n := length(Values);
-  SetLength(Values,n+1);
-  Values[n] := Value;
+  result := length(Values);
+  SetLength(Values,result+1);
+  Values[result] := Value;
 end;
 
 procedure DeleteInteger(var Values: TIntegerDynArray; Index: PtrInt);
@@ -29830,6 +29856,68 @@ asm // identical to IntegerScanIndex() asm stub
 end;
 {$endif}
 
+function Int64ScanIndex(P: PInt64Array; Count: PtrInt; const Value: Int64): PtrInt;
+var i: PtrInt; // optimized code for speed
+begin
+  if P<>nil then begin
+    result := 0;
+    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
+      if P^[0]<>Value then
+      if P^[1]<>Value then
+      if P^[2]<>Value then
+      if P^[3]<>Value then begin
+        inc(PtrUInt(P),sizeof(P^[0])*4);
+        inc(result,4);
+      end else begin
+        inc(result,3);
+        exit;
+      end else begin
+        inc(result,2);
+        exit;
+      end else begin
+        inc(result,1);
+        exit;
+      end else
+        exit;
+    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
+      if P^[i]=Value then
+        exit else
+        inc(result);
+  end;
+  result := -1;
+end;
+
+function QWordScanIndex(P: PQWordArray; Count: PtrInt; const Value: QWord): PtrInt;
+var i: PtrInt; // optimized code for speed
+begin
+  if P<>nil then begin
+    result := 0;
+    for i := 1 to Count shr 2 do // 4 PtrUInt by loop - aligned read
+      if P^[0]<>Value then
+      if P^[1]<>Value then
+      if P^[2]<>Value then
+      if P^[3]<>Value then begin
+        inc(PtrUInt(P),sizeof(P^[0])*4);
+        inc(result,4);
+      end else begin
+        inc(result,3);
+        exit;
+      end else begin
+        inc(result,2);
+        exit;
+      end else begin
+        inc(result,1);
+        exit;
+      end else
+        exit;
+    for i := 0 to (Count and 3)-1 do // last 0..3 PtrUInt
+      if P^[i]=Value then
+        exit else
+        inc(result);
+  end;
+  result := -1;
+end;
+
 function WordScanIndex(P: PWordArray; Count: PtrInt; Value: word): integer;
 begin
   for result := 0 to Count-1 do
@@ -29912,6 +30000,30 @@ begin
     until I > J;
     if L < J then
       QuickSortInt64(ID,L,J);
+    L := I;
+  until I >= R;
+end;
+
+procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
+var I, J, P: PtrInt;
+    pivot, Tmp: QWord;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := ID^[P];
+      while ID[I]<pivot do inc(I);
+      while ID[J]>pivot do dec(J);
+      if I <= J then begin
+        Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortQWord(ID,L,J);
     L := I;
   until I >= R;
 end;
@@ -30025,6 +30137,22 @@ begin
     if cmp=0 then
       exit;
     if cmp<0 then
+      L := result + 1 else
+      R := result - 1;
+  until (L > R);
+  result := -1
+end;
+
+function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
+var L: PtrInt;
+begin
+  L := 0;
+  if 0<=R then
+  repeat
+    result := (L + R) shr 1;
+    if P^[result]=Value then
+      exit else
+    if P^[result]<Value then
       L := result + 1 else
       R := result - 1;
   until (L > R);
