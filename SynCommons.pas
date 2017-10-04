@@ -5209,10 +5209,11 @@ type
     // the source dynamic array (leave as -1 to add till the end)
     procedure AddDynArray(const aSource: TDynArray; aStartIndex: integer=0; aCount: integer=-1);
     /// compare the content of the two arrays, returning TRUE if both match
-    // - this method compares first using any supplied Compare property,
-    // then by content using the RTTI element description of the whole record
+    // - this method compares using any supplied Compare property (unless
+    // ignorecompare=true), or by content using the RTTI element description
+    // of the whole array items
     // - warning: this method won't compare T*ObjArray kind of arrays
-    function Equals(const B: TDynArray): boolean;
+    function Equals(const B: TDynArray; ignorecompare: boolean=false): boolean;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
     procedure Copy(const Source: TDynArray);
@@ -47340,7 +47341,7 @@ begin
 end;
 
 {$ifndef DELPHI5OROLDER} // do not know why Delphi 5 compiler does not like it
-function TDynArray.Equals(const B: TDynArray): boolean;
+function TDynArray.Equals(const B: TDynArray; ignorecompare: boolean): boolean;
 var i, n: integer;
     P1,P2: PAnsiChar;
     A1: PPointerArray absolute P1;
@@ -47354,7 +47355,7 @@ begin
     exit;
   P1 := fValue^;
   P2 := B.fValue^;
-  if @fCompare<>nil then // if a customized comparison is available, use it
+  if (@fCompare<>nil) and not ignorecompare then // use customized comparison
     for i := 1 to n do
       if fCompare(P1^,P2^)<>0 then
         exit else begin
