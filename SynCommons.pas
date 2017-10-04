@@ -7900,6 +7900,8 @@ type
     procedure AddU(Value: cardinal);
     /// append an Unsigned 64-bit Integer Value as a String
     procedure AddQ(Value: QWord);
+    /// append an Unsigned 64-bit Integer Value as a quoted hexadecimal String
+    procedure AddQHex(Value: Qword);
     /// append a GUID value, encoded as text without any {}
     // - will store e.g. '3F2504E0-4F89-11D3-9A0C-0305E82C3301'
     procedure Add(const guid: TGUID); overload;
@@ -37775,13 +37777,14 @@ end;
 
 function ToVarUInt64(Value: QWord; Dest: PByte): PByte;
 begin
-  {$ifndef CPU64}
-  if Value<MaxInt then begin
+{$ifdef CPU64}
+  if Value>$7f then
+{$else}
+  if Int64Rec(Value).Hi=0 then begin
     result := ToVarUInt32(Int64Rec(Value).Lo,Dest);
     exit;
   end;
-  {$endif}
-  if Value>$7f then
+{$endif}
   repeat
     Dest^ := (byte(Value) and $7F) or $80;
     Value := Value shr 7;
@@ -49663,15 +49666,16 @@ end;
 
 procedure TTextWriter.AddQ(Value: QWord);
 var tmp: array[0..23] of AnsiChar;
+    V: Int64Rec absolute Value;
     P: PAnsiChar;
     Len: integer;
 begin
   if BEnd-B<=32 then
     FlushToStream;
-  if Value<=high(SmallUInt32UTF8) then begin
-    P := pointer(SmallUInt32UTF8[Value]);
+  if (V.Hi=0) and (V.Lo<=high(SmallUInt32UTF8)) then begin
+    P := pointer(SmallUInt32UTF8[V.Lo]);
     {$ifdef FPC}
-    Len := length(SmallUInt32UTF8[Value]);
+    Len := length(SmallUInt32UTF8[V.Lo]);
     {$else}
     Len := PInteger(P-4)^;
     {$endif}
@@ -49681,6 +49685,15 @@ begin
   end;
   MoveFast(P[0],B[1],Len);
   inc(B,Len);
+end;
+
+procedure TTextWriter.AddQHex(Value: QWord);
+begin
+  if BEnd-B<=32 then
+    FlushToStream;
+  Add('"');
+  AddBinToHexDisplay(@Value,sizeof(Value));
+  Add('"');
 end;
 
 procedure TTextWriter.Add(Value: Extended; precision: integer);
@@ -58478,7 +58491,7 @@ end;
 procedure TFileBufferWriter.WriteVarInt64(Value: Int64);
 var pos: integer;
 begin
-  if fPos+16>fBufLen then begin
+  if fPos+48>fBufLen then begin
     fStream.Write(pointer(fBuf)^,fPos);
     fPos := 0;
   end;
@@ -58490,7 +58503,7 @@ end;
 procedure TFileBufferWriter.WriteVarUInt64(Value: QWord);
 var pos: integer;
 begin
-  if fPos+16>fBufLen then begin
+  if fPos+48>fBufLen then begin
     fStream.Write(pointer(fBuf)^,fPos);
     fPos := 0;
   end;
