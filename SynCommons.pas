@@ -9994,8 +9994,18 @@ type
     procedure LoadFromReader(var Source: TFastReader); virtual;
     procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
   public
-    constructor Create(const aName: RawUTF8); reintroduce; virtual;
-    /// initialize the storage from a SaveTo persisted buffer
+    /// initialize a void storage with the supplied name
+    constructor Create(const aName: RawUTF8=''); reintroduce;
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFrom(const aBuffer: RawByteString);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromFile(const aFileName: TFileName);
+    /// fill the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
     procedure LoadFrom(const aBuffer: RawByteString); overload;
@@ -10011,11 +10021,11 @@ type
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
-    procedure SaveTo(out aBuffer: RawByteString);
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false);
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
-    // - actually call the SaveToWriter() protected virtual method for persistence
-    procedure SaveToFile(const aFileName: TFileName);
+    // - actually call the SaveTo method for persistence
+    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
     /// one optional text associated with this storage
     // - you can define it as published to serialize its value
     property Name: RawUTF8 read fName;
@@ -18353,6 +18363,11 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 // matching the Magic number as supplied to FileSynLZ() function
 function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 
+const
+  /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
+  // SynLZCompress() compression
+  SYNLZTRIG: array[boolean] of integer = (100, maxInt);
+
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: integer=100;
   CheckMagicForCompressed: boolean=false): RawByteString; overload;
@@ -18367,7 +18382,10 @@ function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
-procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString); overload;
+// - SafeDecompression=true will use slower SynLZdecompress1partial() which
+// will avoid any buffer overflow
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  SafeDecompression: boolean=false); overload;
 
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZCompressToBytes(const Data: RawByteString;
@@ -18413,7 +18431,7 @@ function SynLZDecompressBody(P,Body: PAnsiChar; PLen,BodyLen: integer;
 /// partial decoding of a memory buffer compressed via SynCompress
 // - will use slower SynLZdecompress1partial() to retrieve the beginning of
 // the content
-// - returns 0 on error, or how many bytes have been written to Partial 
+// - returns 0 on error, or how many bytes have been written to Partial
 function SynLZDecompressPartial(P,Partial: PAnsiChar; PLen,PartialLen: integer): integer;
 
 /// RLE compression of a memory buffer containing mostly zeros
@@ -49449,6 +49467,23 @@ begin
   fName := aName;
 end;
 
+constructor TSynPersistentStore.CreateFrom(const aBuffer: RawByteString);
+begin
+  CreateFromBuffer(pointer(aBuffer),length(aBuffer));
+end;
+
+constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+begin
+  inherited Create;
+  LoadFrom(aBuffer, aBufferLen);
+end;
+
+constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
+begin
+  inherited Create;
+  LoadFromFile(aFileName);
+end;
+
 procedure TSynPersistentStore.LoadFromReader(var Source: TFastReader);
 begin
   Source.VarUTF8(fName);
@@ -49472,7 +49507,7 @@ begin
     exit; // nothing to load
   SynLZDecompress(aBuffer,aBufferLen,temp);
   if temp = '' then
-    reader.ErrorData;
+    reader.ErrorData('%.LoadFrom SynLZDecompress failed',[self]);
   reader.Init(temp);
   LoadFromReader(reader);
 end;
@@ -49486,24 +49521,22 @@ begin
     LoadFrom(temp);
 end;
 
-procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString);
-var
-  writer: TFileBufferWriter;
+procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean);
+var writer: TFileBufferWriter;
 begin
   writer := TFileBufferWriter.Create(TRawByteStringStream);
   try
     SaveToWriter(writer);
-    writer.Flush;
-    aBuffer := SynLZCompress(TRawByteStringStream(writer.Stream).DataString);
+    aBuffer := writer.FlushAndCompress(nocompression);
   finally
     writer.Free;
   end;
 end;
 
-procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName);
+procedure TSynPersistentStore.SaveToFile(const aFileName: TFileName; nocompression: boolean);
 var temp: RawByteString;
 begin
-  SaveTo(temp);
+  SaveTo(temp,nocompression);
   FileFromString(temp,aFileName);
 end;
 
