@@ -9945,7 +9945,7 @@ type
     /// raise a EFastReader with an "overflow" error message
     procedure ErrorOverflow;
     /// raise a EFastReader with an "incorrect data" error message
-    procedure ErrorData;
+    procedure ErrorData(const fmt: RawUTF8; const args: array of const);
     /// read the next byte from the buffer
     function NextByte: byte;
       {$ifdef HASINLINE}inline;{$endif}
@@ -59371,9 +59371,9 @@ begin
   raise EFastReader.Create('Potential Buffer Overflow');
 end;
 
-procedure TFastReader.ErrorData;
+procedure TFastReader.ErrorData(const fmt: RawUTF8; const args: array of const);
 begin
-  raise EFastReader.Create('Incorrect Data Detected');
+  raise EFastReader.CreateUTF8('Incorrect Data: '+fmt,args);
 end;
 
 function TFastReader.NextByte: byte;
@@ -59386,7 +59386,7 @@ end;
 
 function TFastReader.Next(DataLen: PtrInt): pointer;
 begin
-  if P+DataLen>=Last then
+  if P+DataLen>Last then
     ErrorOverflow;
   result := P;
   inc(P,DataLen);
@@ -59394,7 +59394,7 @@ end;
 
 procedure TFastReader.Copy(var Dest; DataLen: PtrInt);
 begin
-  if P+DataLen>=Last then
+  if P+DataLen>Last then
     ErrorOverflow;
   MoveFast(P^,Dest,DataLen);
   inc(P,DataLen);
@@ -59403,7 +59403,7 @@ end;
 procedure TFastReader.VarBlob(out result: TValueResult);
 begin
   result.Len := VarUInt32;
-  if P+result.Len>=Last then
+  if P+result.Len>Last then
     ErrorOverflow;
   result.Ptr := P;
   inc(P,result.Len);
@@ -59412,7 +59412,7 @@ end;
 function TFastReader.VarBlob: TValueResult;
 begin
   result.Len := VarUInt32;
-  if P+result.Len>=Last then
+  if P+result.Len>Last then
     ErrorOverflow;
   result.Ptr := P;
   inc(P,result.Len);
@@ -59516,7 +59516,7 @@ procedure TFastReader.Read(var DA: TDynArray; NoCheckHash: boolean);
 begin
   P := DA.LoadFrom(P,nil,NoCheckHash);
   if P=nil then
-    ErrorData;
+    ErrorData('TDynArray.LoadFrom %',[DA.ArrayTypeName]);
 end;
 
 
