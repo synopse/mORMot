@@ -9793,6 +9793,10 @@ type
     // - after a Flush, it's possible to call FileSeek64(aFile,....)
     // - returns the number of bytes written between two FLush method calls
     function Flush: Int64;
+    /// write any pending data, then call SynLZCompress() on the buffer
+    // - expect the instance to have been created via
+    // ! TFileBufferWriter.Create(TRawByteStringStream)
+    function FlushAndCompress(nocompression: boolean=false): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
     // move back its writing position to its initial place
@@ -58806,6 +58810,17 @@ begin
   until false;
 end;
 
+function TFileBufferWriter.FlushAndCompress(nocompression: boolean): RawByteString;
+var trig: integer;
+begin
+  trig := SYNLZTRIG[nocompression];
+  if fStream.Position=0 then // direct compression from internal buffer
+    SynLZCompress(pointer(fBuf),fPos,result,trig) else begin
+    Flush;
+    result := SynLZCompress((fStream as TRawByteStringStream).DataString,trig);
+  end;
+end;
+
 function TFileBufferWriter.WriteDirectStart(maxSize: integer;
   const TooBigMessage: RawUTF8): PByte;
 begin
@@ -62545,14 +62560,15 @@ begin
   result := PartialLen;
 end;
 
-procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString);
+procedure SynLZDecompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
+  SafeDecompression: boolean);
 var len: integer;
 begin
   len := SynLZDecompressHeader(P,PLen);
   if len=0 then
     exit;
   SetString(result,nil,len);
-  if not SynLZDecompressBody(P,pointer(result),PLen,len) then
+  if not SynLZDecompressBody(P,pointer(result),PLen,len,SafeDecompression) then
     result := '';
 end;
 
