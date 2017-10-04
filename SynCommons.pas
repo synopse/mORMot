@@ -62456,7 +62456,7 @@ procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
 var len: integer;
     R: PAnsiChar;
     crc: cardinal;
-    tmp: array[0..4095] of AnsiChar;  // resize Result instead of TSynTempBuffer
+    tmp: array[0..16383] of AnsiChar;  // will resize Result in-place
 begin
   if PLen=0 then
     exit;
