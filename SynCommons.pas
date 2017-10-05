@@ -6854,11 +6854,13 @@ function SortDynArrayCardinal(const A,B): integer;
 
 /// compare two "array of Int64" or "array of Currency" elements
 function SortDynArrayInt64(const A,B): integer;
+  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of QWord" elements
 // - note that QWordA>QWordB is wrong on older versions of Delphi, so you should
 // better use this function to properly compare two QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
+  {$ifndef CPUX86}{$ifdef HASINLINE}inline;{$endif}{$endif}
 
 /// compare two "array of TObject/pointer" elements
 function SortDynArrayPointer(const A,B): integer;
@@ -30882,27 +30884,27 @@ end;
 function GetExtended(P: PUTF8Char; out err: integer): TSynExtended;
 // adapted from ValExt_JOH_PAS_8_a and ValExt_JOH_IA32_8_a by John O'Harrow
 {$ifdef GETEXTENDEDPASCAL}
-const POW10: array[0..31] of TSynExtended = (
-  1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,1E11,1E12,1E13,1E14,1E15,1E16,
-  1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,1E26,1E27,1E28,1E29,1E30,1E31);
-function IntPower(Exponent: Integer): TSynExtended;
-var Y: Cardinal;
-    LBase: Int64;
-begin
-  Y := abs(Exponent);
-  LBase := 10;
-  result := 1.0;
-  repeat
-    while not odd(Y) do begin
-      Y := Y shr 1;
-      LBase := LBase*LBase;
-    end;
-    dec(Y);
-    result := result*LBase;
-  until Y=0;
-  if Exponent<0 then
-    result := 1.0/result;
-end;
+  const POW10: array[0..31] of TSynExtended = (
+    1E0,1E1,1E2,1E3,1E4,1E5,1E6,1E7,1E8,1E9,1E10,1E11,1E12,1E13,1E14,1E15,1E16,
+    1E17,1E18,1E19,1E20,1E21,1E22,1E23,1E24,1E25,1E26,1E27,1E28,1E29,1E30,1E31);
+  function IntPower(Exponent: Integer): TSynExtended;
+  var Y: Cardinal;
+      LBase: Int64;
+  begin
+    Y := abs(Exponent);
+    LBase := 10;
+    result := 1.0;
+    repeat
+      while not odd(Y) do begin
+        Y := Y shr 1;
+        LBase := LBase*LBase;
+      end;
+      dec(Y);
+      result := result*LBase;
+    until Y=0;
+    if Exponent<0 then
+      result := 1.0/result;
+  end;
 var Digits, ExpValue: Integer;
     Ch: AnsiChar;
     Neg, NegExp, Valid: Boolean;
