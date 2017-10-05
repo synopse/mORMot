@@ -878,6 +878,8 @@ type
   /// unsigned Int64 doesn't exist under older Delphi, but is defined in FPC
   // - and UInt64 is buggy as hell under Delphi 2007 when inlining functions:
   // older compilers will fallback to signed Int64 values
+  // - anyway, consider using SortDynArrayQWord() to compare QWord values
+  // in a safe and efficient way, under a CPUX86
   {$ifdef FPC_OR_UNICODE}
   QWord = UInt64;
   {$else}
@@ -4491,7 +4493,7 @@ procedure QuickSortInt64(ID: PInt64Array; L, R: PtrInt); overload;
 
 /// sort a 64 bit unsigned Integer array, low values first
 // - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
-// older compilers will fallback to signed Int64 comparison
+// older compilers will use fast and exact SortDynArrayQWord()
 procedure QuickSortQWord(ID: PQWordArray; L, R: PtrInt); overload;
 
 /// sort a 64 bit Integer array, low values first
@@ -4527,7 +4529,7 @@ function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): Ptr
 // - return index of P^[result]=Value
 // - return -1 if Value was not found
 // - QWord comparison are implemented correctly under FPC or Delphi 2009+ -
-// older compilers will fallback to signed Int64 comparison
+// older compilers will fast and exact SortDynArrayQWord()
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt; overload;
 
 /// sort a PtrInt array, low values first
@@ -4783,12 +4785,11 @@ function FromVarBlob(Data: PByte): TValueResult; {$ifdef HASINLINE}inline;{$endi
 
 type
   /// function prototype to be used for TDynArray Sort and Find method
-  // - common functions exist for base types: see e.g. SortDynArrayByte,
-  // SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
-  // SordDynArraySingle, SortDynArrayInt64, SortDynArrayBoolean,
-  // SortDynArrayDouble, SortDynArrayAnsiString, SortDynArrayAnsiStringI,
-  // SortDynArrayUnicodeString, SortDynArrayUnicodeStringI,
-  // SortDynArrayString, SortDynArrayStringI
+  // - common functions exist for base types: see e.g. SortDynArrayBoolean,
+  // SortDynArrayByte, SortDynArrayWord, SortDynArrayInteger, SortDynArrayCardinal,
+  // SortDynArrayInt64, SortDynArrayQWord, SordDynArraySingle, SortDynArrayDouble,
+  // SortDynArrayAnsiString, SortDynArrayAnsiStringI, SortDynArrayUnicodeString,
+  // SortDynArrayUnicodeStringI, SortDynArrayString, SortDynArrayStringI
   // - any custom type (even records) can be compared then sort by defining
   // such a custom function
   // - must return 0 if A=B, -1 if A<B, 1 if A>B
@@ -6851,10 +6852,12 @@ function SortDynArrayInteger(const A,B): integer;
 /// compare two "array of cardinal" elements
 function SortDynArrayCardinal(const A,B): integer;
 
-/// compare two "array of Int64 or array of Currency" elements
+/// compare two "array of Int64" or "array of Currency" elements
 function SortDynArrayInt64(const A,B): integer;
 
-/// compare two "array of QWord or array of Currency" elements
+/// compare two "array of QWord" elements
+// - note that QWordA>QWordB is wrong on older versions of Delphi, so you should
+// better use this function to properly compare two QWord values over CPUX86
 function SortDynArrayQWord(const A,B): integer;
 
 /// compare two "array of TObject/pointer" elements
@@ -30155,8 +30158,13 @@ begin
     P := (L + R) shr 1;
     repeat
       pivot := ID^[P];
+      {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
+      while SortDynArrayQWord(ID[I],pivot)<0 do inc(I);
+      while SortDynArrayQWord(ID[J],pivot)>0 do dec(J);
+      {$else}
       while ID[I]<pivot do inc(I);
       while ID[J]>pivot do dec(J);
+      {$endif}
       if I <= J then begin
         Tmp := ID[J]; ID[J] := ID[I]; ID[I] := Tmp;
         if P = I then P := J else if P = J then P := I;
@@ -30268,16 +30276,21 @@ end;
 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 var L: PtrInt;
-    cmp: Int64;
 begin
   L := 0;
   if 0<=R then
   repeat
     result := (L + R) shr 1;
-    cmp := P^[result]-Value;
-    if cmp=0 then
-      exit;
-    if cmp<0 then
+    {$ifdef CPUX86} // circumvent Int64 comparison slowness
+    result := SortDynArrayInt64(P^[result],Value);
+    if result=0 then
+      exit else
+    if result <0 then
+    {$else}
+    if P^[result]=Value then
+      exit else
+    if P^[result]<Value then
+    {$endif}
       L := result + 1 else
       R := result - 1;
   until (L > R);
@@ -30291,9 +30304,16 @@ begin
   if 0<=R then
   repeat
     result := (L + R) shr 1;
+    {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
+    result := SortDynArrayQWord(P^[result],Value);
+    if result=0 then
+      exit else
+    if result <0 then
+    {$else}
     if P^[result]=Value then
       exit else
     if P^[result]<Value then
+    {$endif}
       L := result + 1 else
       R := result - 1;
   until (L > R);
@@ -45895,7 +45915,7 @@ end;
 
 function SortDynArrayInt64(const A,B): integer;
 {$ifdef CPUX86}
-asm // Delphi compiler is not efficient at compiling below code
+asm // Delphi x86 compiler is not efficient at compiling below code
         mov     ecx, [eax]
         mov     eax, [eax + 4]
         cmp     eax, [edx + 4]
@@ -45933,6 +45953,22 @@ end;
 {$endif}
 
 function SortDynArrayQWord(const A,B): integer;
+{$ifdef CPUX86}
+asm // Delphi x86 compiler is not efficient, and oldest even incorrect
+        mov     ecx, [eax]
+        mov     eax, [eax + 4]
+        cmp     eax, [edx + 4]
+        jnz     @nz
+        cmp     ecx, [edx]
+        jz      @0
+@nz:    jnb     @p
+@n:     or      eax, -1
+        ret
+@0:     xor     eax, eax
+        ret
+@p:     mov     eax, 1
+end;
+{$else}
 begin
   if QWord(A)<QWord(B) then
     result := -1 else
@@ -45940,6 +45976,7 @@ begin
     result := 1 else
     result := 0;
 end;
+{$endif}
 
 function SortDynArrayPointer(const A,B): integer;
 begin
