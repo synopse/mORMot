@@ -9842,7 +9842,7 @@ type
     fCurrentPos: PtrUInt;
     fMap: TMemoryMap;
     /// get Isize + buffer from current memory map or fBufTemp into (P,PEnd)
-    procedure ReadChunk(var P, PEnd: PByte; var BufTemp: RawByteString);
+    procedure ReadChunk(out P, PEnd: PByte; var BufTemp: RawByteString);
   public
     /// initialize the buffer, and specify a file to use for reading
     // - will try to map the whole file content in memory
@@ -58402,7 +58402,7 @@ begin
     inc(fPos,len);
     inc(fTotalWritten,len);
   end else
-    WriteBinary(tmp);
+    Write(pointer(tmp),len);
 end;
 
 {$ifndef NOVARIANTS}
@@ -59011,7 +59011,7 @@ begin
   Read(result);
 end;
 
-procedure TFileBufferReader.ReadChunk(var P, PEnd: PByte; var BufTemp: RawByteString);
+procedure TFileBufferReader.ReadChunk(out P, PEnd: PByte; var BufTemp: RawByteString);
 var len: integer;
 begin // read Isize + buffer in P,PEnd
   if (Read(@len,4)<>4) or (len<0) then
@@ -59303,6 +59303,7 @@ var count, diff, i: integer;
     PI: PInt64;
     PIA: PInt64Array absolute PI;
     BufTemp: RawByteString;
+label delphi5bug; // circumvent internal error C3517 on Delphi 5
 begin
   result := ReadVarUInt32;
   if result=0 then
@@ -59330,18 +59331,18 @@ begin
       // same offset for all items (fixed sized records)
       for i := 0 to count-1 do
         PIA^[i+1] := PIA^[i]+diff;
-  end else begin
-    repeat
-      ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
-      while (count>0) and (PtrUInt(P)<PtrUInt(PEnd)) do begin
-        PI^ := FromVarUInt64(P);
-        dec(count);
-        inc(PI);
-      end;
-    until count<=0;
-    if (count>0) or (PI<>@Values[result]) then
-      raise ESynException.Create('TFileBufferReader.ReadVarUInt64Array');
+    exit;
   end;
+delphi5bug:
+  ReadChunk(P,PEnd,BufTemp); // raise ErrorInvalidContent on error
+  while PtrUInt(P)<PtrUInt(PEnd) do begin
+    PI^ := FromVarUInt64(P);
+    dec(count);
+    inc(PI);
+    if count=0 then
+      exit;
+  end;
+  goto delphi5bug;
 end;
 
 function TFileBufferReader.ReadRawUTF8List(List: TRawUTF8List): boolean;
@@ -59554,6 +59555,7 @@ function TFastReader.VarUInt64: QWord;
 {$ifdef CPU64}
 begin
   result := VarUInt32; // already returns a PtrUInt=QWord
+end;
 {$else}
 var c, n: PtrUInt;
 begin
@@ -59576,8 +59578,8 @@ begin
     result := result or (QWord(c) shl n);
   end else
     result := c;
-{$endif}
 end;
+{$endif}
 
 function TFastReader.VarString: RawByteString;
 begin
