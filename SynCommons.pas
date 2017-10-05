@@ -9749,6 +9749,11 @@ type
     // - matches FromVarVariant() and VariantSave/VariantLoad format
     procedure Write(const Value: variant); overload;
     {$endif}
+    /// append some dynamic array at the current position
+    // - will use the binary serialization as for:
+    // ! aWriter.WriteBinary(DA.SaveTo);
+    // but writing directly into the buffer, if possible
+    procedure WriteDynArray(const DA: TDynArray);
     /// append "New[0..Len-1] xor Old[0..Len-1]" bytes
     // - as used e.g. by ZeroCompressXor/TSynBloomFilterDiff.SaveTo
     procedure WriteXor(New,Old: PAnsiChar; Len: integer; crc: PCardinal=nil);
@@ -9988,6 +9993,8 @@ type
     procedure Copy(var Dest; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// apply TDynArray.LoadFrom on the buffer
+    // - will unserialize a previously appended dynamic array, e.g. as
+    // ! aWriter.WriteDynArray(DA);
     procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
   end;
 
@@ -10028,7 +10035,8 @@ type
     /// persist the content as a SynLZ-compressed binary blob
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
-    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false);
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
+      BufLen: integer=65536);
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - actually call the SaveTo method for persistence
@@ -49562,10 +49570,11 @@ begin
     LoadFrom(temp);
 end;
 
-procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean);
+procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
+  BufLen: integer);
 var writer: TFileBufferWriter;
 begin
-  writer := TFileBufferWriter.Create(TRawByteStringStream);
+  writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
     aBuffer := writer.FlushAndCompress(nocompression);
@@ -58370,6 +58379,30 @@ end;
 procedure TFileBufferWriter.WriteBinary(const Data: RawByteString);
 begin
   Write(pointer(Data),Length(Data));
+end;
+
+procedure TFileBufferWriter.WriteDynArray(const DA: TDynArray);
+var len: integer;
+    tmp: RawByteString;
+    P: PAnsiChar;
+begin
+  len := DA.SaveToLength;
+  if (len<=fBufLen) and (fPos+len>fBufLen) then begin
+    fStream.Write(pointer(fBuf)^,fPos);
+    fPos := 0;
+  end;
+  if fPos+len>fBufLen then begin
+    SetLength(tmp,len);
+    P := pointer(tmp);
+  end else
+    P := @PByteArray(fBuf)^[fPos]; // write directly into the buffer
+  if DA.SaveTo(P)-P<>len then
+    raise ESynException.CreateUTF8('%.WriteDynArray DA.SaveTo?',[self]);
+  if tmp='' then begin
+    inc(fPos,len);
+    inc(fTotalWritten,len);
+  end else
+    WriteBinary(tmp);
 end;
 
 {$ifndef NOVARIANTS}
