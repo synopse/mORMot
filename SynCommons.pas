@@ -8003,6 +8003,9 @@ type
     // - if twoForceJSONExtended is defined in CustomOptions, it would append
     // 'PropName:' without the double quotes
     procedure AddPropName(const PropName: ShortString);
+    /// append a JSON field name, followed by an escaped UTF-8 JSON String and
+    // a comma (',')
+    procedure AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
     /// append a RawUTF8 property name, as '"FieldName":'
     // - FieldName content should not need to be JSON escaped (e.g. no " within)
     procedure AddFieldName(const FieldName: RawUTF8); overload;
@@ -8164,6 +8167,8 @@ type
     // - may be used with InternalJSONWriter, as a faster alternative to
     // ! AddJSONEscape(Pointer(fInternalJSONWriter.Text),0);
     procedure AddJSONEscape(Source: TTextWriter); overload;
+    /// append a UTF-8 JSON String, between double quotes and with JSON escaping
+    procedure AddJSONString(const Text: RawUTF8);
     /// append an open array constant value to the buffer
     // - "" won't be added for string values
     // - string values may be escaped, depending on the supplied parameter
@@ -51646,6 +51651,13 @@ begin
   end;
 end;
 
+procedure TTextWriter.AddJSONString(const Text: RawUTF8);
+begin
+  Add('"');
+  AddJSONEscape(pointer(Text));
+  Add('"');
+end;
+
 procedure TTextWriter.Add(const V: TVarRec; Escape: TTextWriterKind);
 begin
   with V do
@@ -51809,6 +51821,13 @@ begin
     PWord(B)^ := ord('"')+ord(':')shl 8;
     inc(B);
   end;
+end;
+
+procedure TTextWriter.AddPropJSONString(const PropName: shortstring; const Text: RawUTF8);
+begin
+  AddPropName(PropName);
+  AddJSONString(Text);
+  Add(',');
 end;
 
 procedure TTextWriter.AddFieldName(const FieldName: RawUTF8);
