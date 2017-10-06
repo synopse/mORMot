@@ -4689,6 +4689,27 @@ type
     function IndexOf(aValue: Word): PtrInt; {$ifdef HASINLINE}inline;{$endif}
   end;
 
+  /// comparison function as expected by MedianQuickSelect()
+  // - should return TRUE if Values[IndexA]>Values[IndexB]
+  TOnValueGreater = function(IndexA,IndexB: integer): boolean of object;
+
+/// compute the median of an integer serie of values, using "Quickselect"
+// - based on the algorithm described in "Numerical recipes in C", Second Edition,
+// translated from Nicolas Devillard's C code: http://ndevilla.free.fr/median/median
+// - warning: the supplied Integer array is modified in-place during the process,
+// and won't be fully sorted on output (this is no QuickSort alternative)
+function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
+
+/// compute the median of a serie of values, using "Quickselect"
+// - based on the algorithm described in "Numerical recipes in C", Second Edition
+// - expect the values information to be available from a comparison callback
+// - this version will use a temporary index list to exchange items order
+// (supplied as a TSynTempBuffer), so won't change the supplied values themself
+// - returns the index of the median Value
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
+
+
 /// convert a cardinal into a 32-bit variable-length integer buffer
 function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
 
@@ -37640,6 +37661,135 @@ begin
   until (L > R);
   result := -1;
 end;
+
+procedure Exchg32(var A,B: integer); {$ifdef HASINLINE}inline;{$endif}
+var tmp: integer;
+begin
+  tmp := A;
+  A := B;
+  B := tmp;
+end;
+
+function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
+var low, high, median, middle, ll, hh: integer;
+begin
+  if n=0 then begin
+    result := 0;
+    exit;
+  end;
+  if n=1 then begin
+    result := Values[0];
+    exit;
+  end;
+  low := 0;
+  high := n-1;
+  median := high shr 1;
+  repeat
+    if high<=low then begin // one item left
+      result := Values[median];
+      exit;
+    end;
+    if high=low+1 then begin // two items -> return the smallest (not average)
+      if Values[low]>Values[high] then
+        Exchg32(Values[low],Values[high]);
+      result := Values[median];
+      exit;
+    end;
+    // find median of low, middle and high items; Exchg32 into position low
+    middle := (low+high) shr 1;
+    if Values[middle]>Values[high] then
+      Exchg32(Values[middle],Values[high]); 
+    if Values[low]>Values[high] then
+      Exchg32(Values[low],Values[high]);
+    if Values[middle]>Values[low] then
+      Exchg32(Values[middle],Values[low]);
+    // swap low item (now in position middle) into position (low+1)
+    Exchg32(Values[middle],Values[low+1]);
+    // nibble from each end towards middle, swapping items when stuck
+    ll := low+1;
+    hh := high;
+    repeat
+      repeat
+        inc(ll);
+      until not (Values[low]>Values[ll]);
+      repeat
+        dec(hh);
+      until not (Values[hh]>Values[low]);
+      if hh<ll then
+        break;
+      Exchg32(Values[ll],Values[hh]);
+    until false;
+    // swap middle item (in position low) back into correct position
+    Exchg32(Values[low],Values[hh]);
+    // next active partition
+    if hh<=median then
+      low := ll;
+    if hh>=median then
+      high := hh-1;
+  until false;
+end;
+
+function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
+  var TempBuffer: TSynTempBuffer): integer;
+var low, high, middle, median, ll, hh: integer;
+    ndx: PIntegerArray;
+begin
+  if n<=1 then begin
+    result := 0;
+    exit;
+  end;
+  low := 0;
+  high := n-1;
+  ndx := TempBuffer.Init(n*4); // no heap alloacation until n>1024 
+  FillIncreasing(ndx,0,n);
+  median := high shr 1;
+  repeat
+    if high<=low then begin // one item left
+      result := ndx[median];
+      TempBuffer.Done;
+      exit;
+    end;
+    if high=low+1 then begin // two items -> return the smallest (not average)
+      if OnCompare(ndx[low],ndx[high]) then
+        Exchg32(ndx[low],ndx[high]);
+      result := ndx[median];
+      TempBuffer.Done;
+      exit;
+    end;
+    // find median of low, middle and high items; Exchg32 into position low
+    middle := (low+high) shr 1;
+    if OnCompare(ndx[middle],ndx[high]) then
+      Exchg32(ndx[middle],ndx[high]);
+    if OnCompare(ndx[low],ndx[high]) then
+      Exchg32(ndx[low],ndx[high]);
+    if OnCompare(ndx[middle],ndx[low]) then
+      Exchg32(ndx[middle],ndx[low]);
+    // swap low item (now in position middle) into position (low+1)
+    Exchg32(ndx[middle],ndx[low+1]);
+    // nibble from each end towards middle, swapping items when stuck
+    ll := low+1;
+    hh := high;
+    repeat
+      repeat
+        inc(ll);
+      until not OnCompare(ndx[low],ndx[ll]);
+      repeat
+        dec(hh);
+      until not OnCompare(ndx[hh],ndx[low]);
+      if hh<ll then
+        break;
+      Exchg32(ndx[ll],ndx[hh]);
+    until false;
+    // swap middle item (in position low) back into correct position
+    Exchg32(ndx[low],ndx[hh]);
+    // next active partition
+    if hh<=median then
+      low := ll;
+    if hh>=median then
+      high := hh-1;
+  until false;
+end;
+
 
 {$ifdef PUREPASCAL}
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;

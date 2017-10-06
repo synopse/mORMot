@@ -304,6 +304,8 @@ type
     da: IObjectDynArray; // force the interface to be defined BEFORE the array
     a: array of TSQLRecordPeople;
     {$endif}
+    fQuickSelectValues: TIntegerDynArray;
+    function QuickSelectGT(IndexA,IndexB: integer): boolean;
   published
     /// the faster CopyRecord function, enhancing the system.pas unit
     procedure SystemCopyRecord;
@@ -370,6 +372,8 @@ type
     procedure UrlDecoding;
     /// test mime types recognition
     procedure MimeTypes;
+    /// validates the median computation using the "Quick Select" algorithm
+    procedure QuickSelect;
     /// test TSynTable class and TSynTableVariantType new variant type
     procedure _TSynTable;
     /// test the TSynCache class
@@ -4507,6 +4511,52 @@ begin
   for i := 0 to high(BIN) do begin
     Check(GetMimeContentType(@BIN[i],34,'')=BIN_MIME[i]);
     Check(GetMimeContentTypeFromBuffer(@BIN[i],34,'')=BIN_MIME[i]);
+  end;
+end;
+
+function TTestLowLevelCommon.QuickSelectGT(IndexA,IndexB: integer): boolean;
+begin
+  result := fQuickSelectValues[IndexA]>fQuickSelectValues[IndexB];
+end;
+
+procedure TTestLowLevelCommon.QuickSelect;
+  function Median(const CSV: RawUTF8; Expected: integer): integer;
+  var IDA: TIntegerDynArray;
+  begin
+    CSVToIntegerDynArray(pointer(CSV),IDA);
+    result := MedianQuickSelectInteger(pointer(IDA),length(IDA));
+    Check(result=Expected);
+  end;
+var n,i,med2,med1,len: integer;
+    tmp: TSynTempBuffer;
+    P: PIntegerArray;
+begin
+  Median('',0);
+  Median('2',2);
+  Median('3,5,12',5);
+  Median('12,3,5',5);
+  Median('19,10,84,11,23',19);
+  Median('1,3,3,6,7,8,9',6);
+  Median('1,2,3,4,5,6,8,9',4);
+  Median('3,5,7,12,13,14,21,23,23,23,23,29,39,40,56',23);
+  Median('3,13,7,5,21,23,39,23,40,23,14,12,56,23,29',23);
+  Median('3,5,7,12,13,14,21,23,23,23,23,29,40,56',21);
+  Median('3,13,7,5,21,23,23,40,23,14,12,56,23,29',21);
+  for n := 0 to 1000 do begin
+    len := n*2+1;
+    SetLength(fQuickSelectValues,len);
+    P := pointer(fQuickSelectValues);
+    FillIncreasing(P,1,len);
+    med1 := MedianQuickSelect(QuickSelectGT,len,tmp);
+    Check(fQuickSelectValues[med1]=n+1);
+    Check(MedianQuickSelectInteger(P,len)=n+1);
+    for i := 0 to high(fQuickSelectValues) do
+      fQuickSelectValues[i] := Random(MaxInt);
+    med1 := fQuickSelectValues[MedianQuickSelect(QuickSelectGT,len,tmp)];
+    med2 := MedianQuickSelectInteger(P,len);
+    Check(med1=med2);
+    QuickSortInteger(P,0,len-1);
+    check(med2=fQuickSelectValues[n]);
   end;
 end;
 
