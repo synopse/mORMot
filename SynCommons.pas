@@ -1515,6 +1515,8 @@ type
     /// initialize a new temporary buffer of a given number of random bytes
     // - will fill the buffer via FillRandom() calls
     function InitRandom(RandomLen: integer): pointer;
+    /// initialize a new temporary buffer filled with integer increasing values 
+    function InitIncreasing(Count: integer; Start: integer=0): PIntegerArray;
     /// finalize the temporary storage
     procedure Done; overload; {$ifdef HASINLINE}inline;{$endif}
     /// finalize the temporary storage, and create a RawUTF8 string from it
@@ -4691,7 +4693,7 @@ type
 
   /// comparison function as expected by MedianQuickSelect()
   // - should return TRUE if Values[IndexA]>Values[IndexB]
-  TOnValueGreater = function(IndexA,IndexB: integer): boolean of object;
+  TOnValueGreater = function(IndexA,IndexB: PtrInt): boolean of object;
 
 /// compute the median of an integer serie of values, using "Quickselect"
 // - based on the algorithm described in "Numerical recipes in C", Second Edition,
@@ -4709,6 +4711,9 @@ function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
   var TempBuffer: TSynTempBuffer): integer;
 
+/// performs a QuickSort using a comparison callback
+procedure QuickSortCompare(const OnCompare: TOnValueGreater;
+  Index: PIntegerArray; L,R: PtrInt);
 
 /// convert a cardinal into a 32-bit variable-length integer buffer
 function ToVarUInt32(Value: PtrUInt; Dest: PByte): PByte;
@@ -19567,6 +19572,12 @@ begin
   result := Init(RandomLen+3);
   if RandomLen>0 then
     FillRandom(result,(RandomLen shr 2)+1);
+end;
+
+function TSynTempBuffer.InitIncreasing(Count, Start: integer): PIntegerArray;
+begin
+  result := Init((Count-Start)*4);
+  FillIncreasing(result, Start, Count);
 end;
 
 procedure TSynTempBuffer.Done;
@@ -37662,6 +37673,31 @@ begin
   result := -1;
 end;
 
+procedure QuickSortCompare(const OnCompare: TOnValueGreater;
+  Index: PIntegerArray; L,R: PtrInt);
+var I, J, P: PtrInt;
+    pivot, tmp: integer;
+begin
+  if L<R then
+  repeat
+    I := L; J := R;
+    P := (L + R) shr 1;
+    repeat
+      pivot := Index[P];
+      while OnCompare(pivot,Index[I]) do inc(I);
+      while OnCompare(Index[J],pivot) do dec(J);
+      if I <= J then begin
+        tmp := Index[J]; Index[J] := Index[I]; Index[I] := tmp;
+        if P = I then P := J else if P = J then P := I;
+        inc(I); dec(J);
+      end;
+    until I > J;
+    if L < J then
+      QuickSortCompare(OnCompare,Index,L,J);
+    L := I;
+  until I >= R;
+end;
+
 procedure Exchg32(var A,B: integer); {$ifdef HASINLINE}inline;{$endif}
 var tmp: integer;
 begin
@@ -37671,7 +37707,7 @@ begin
 end;
 
 function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
-var low, high, median, middle, ll, hh: integer;
+var low, high, median, middle, ll, hh: PtrInt;
 begin
   if n=0 then begin
     result := 0;
@@ -37695,7 +37731,7 @@ begin
       result := Values[median];
       exit;
     end;
-    // find median of low, middle and high items; Exchg32 into position low
+    // find median of low, middle and high items; swap into position low
     middle := (low+high) shr 1;
     if Values[middle]>Values[high] then
       Exchg32(Values[middle],Values[high]); 
@@ -37731,7 +37767,7 @@ end;
 
 function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
   var TempBuffer: TSynTempBuffer): integer;
-var low, high, middle, median, ll, hh: integer;
+var low, high, middle, median, ll, hh, tmp: PtrInt;
     ndx: PIntegerArray;
 begin
   if n<=1 then begin
@@ -37740,8 +37776,7 @@ begin
   end;
   low := 0;
   high := n-1;
-  ndx := TempBuffer.Init(n*4); // no heap alloacation until n>1024 
-  FillIncreasing(ndx,0,n);
+  ndx := TempBuffer.InitIncreasing(n*4); // no heap alloacation until n>1024
   median := high shr 1;
   repeat
     if high<=low then begin // one item left
@@ -37756,7 +37791,7 @@ begin
       TempBuffer.Done;
       exit;
     end;
-    // find median of low, middle and high items; Exchg32 into position low
+    // find median of low, middle and high items; swap into position low
     middle := (low+high) shr 1;
     if OnCompare(ndx[middle],ndx[high]) then
       Exchg32(ndx[middle],ndx[high]);
@@ -37770,15 +37805,16 @@ begin
     ll := low+1;
     hh := high;
     repeat
+      tmp := ndx[low];
       repeat
         inc(ll);
-      until not OnCompare(ndx[low],ndx[ll]);
+      until not OnCompare(tmp,ndx[ll]);
       repeat
         dec(hh);
-      until not OnCompare(ndx[hh],ndx[low]);
+      until not OnCompare(ndx[hh],tmp);
       if hh<ll then
         break;
-      Exchg32(ndx[ll],ndx[hh]);
+      tmp := ndx[ll]; ndx[ll] := ndx[hh]; ndx[hh] := tmp; // Exchg32(ndx[ll],ndx[hh]);
     until false;
     // swap middle item (in position low) back into correct position
     Exchg32(ndx[low],ndx[hh]);
@@ -46127,7 +46163,7 @@ asm // Delphi x86 compiler is not efficient, and oldest even incorrect
         cmp     ecx, [edx]
         jz      @0
 @nz:    jnb     @p
-@n:     or      eax, -1
+        or      eax, -1
         ret
 @0:     xor     eax, eax
         ret
