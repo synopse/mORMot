@@ -11015,7 +11015,7 @@ begin
     mov    ecx,Count
     mov    esi,BufIn
     mov    edi,BufOut
-    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV
+    movdqu xmm7,dqword ptr [eax].TAESCFB.fIV  // xmm7 = fCV
     lea    eax,[eax].TAESCFB.AES
     push   ecx
     shr    ecx,4

@@ -9872,6 +9872,7 @@ type
     /// write any pending data, then call SynLZCompress() on the buffer
     // - expect the instance to have been created via
     // ! TFileBufferWriter.Create(TRawByteStringStream)
+    // - features direct compression from internal buffer, if stream was not used
     function FlushAndCompress(nocompression: boolean=false): RawByteString;
     /// rewind the Stream to the position when Create() was called
     // - note that this does not clear the Stream content itself, just
@@ -10094,7 +10095,7 @@ type
     /// initialize the storage from a SaveTo persisted buffer
     // - actually call the LoadFromReader() virtual method for persistence
     // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload;
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
     /// initialize the storage from a SaveToFile content
     // - actually call the LoadFromReader() virtual method for persistence
     // - returns false if the file is not found, true if the file was loaded
@@ -10104,7 +10105,7 @@ type
     // - to be retrieved later on via LoadFrom method
     // - actually call the SaveToWriter() protected virtual method for persistence
     procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536);
+      BufLen: integer=65536); virtual;
     /// persist the content as a SynLZ-compressed binary file
     // - to be retrieved later on via LoadFromFile method
     // - actually call the SaveTo method for persistence
@@ -18459,6 +18460,13 @@ function SynLZCompress(const Data: RawByteString; CompressionSizeTrigger: intege
 /// compress a memory bufer using the SynLZ algorithm and crc32c hashing
 procedure SynLZCompress(P: PAnsiChar; PLen: integer; out Result: RawByteString;
   CompressionSizeTrigger: integer=100; CheckMagicForCompressed: boolean=false); overload;
+
+/// compress a memory bufer using the SynLZ algorithm and crc32c hashing
+// - supplied Dest buffer should contain at least SynLZcompressdestlen(PLen)+9 bytes
+// - returns the number of bytes written into Dest^, 0 in case of error (e.g.
+// if DestLen is too small)
+function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean=false): integer; overload;
 
 /// uncompress a memory bufer using the SynLZ algorithm and crc32c hashing
 function SynLZDecompress(const Data: RawByteString): RawByteString; overload;
@@ -62886,6 +62894,33 @@ begin
       SetString(result,tmp,len+9) else
       SetLength(result,len+9); // resize in-place may not move any data
   end;
+end;
+
+function SynLZCompress(P, Dest: PAnsiChar; PLen, DestLen: integer;
+  CompressionSizeTrigger: integer; CheckMagicForCompressed: boolean): integer;
+var len: integer;
+begin
+  result := 0;
+  if (PLen=0) or (DestLen<PLen+9) then
+    exit;
+  PCardinal(Dest)^ := crc32c(0,P,PLen);
+  if (PLen>=CompressionSizeTrigger) and
+     not(CheckMagicForCompressed and IsContentCompressed(P,PLen)) then begin
+    len := SynLZcompressdestlen(PLen)+9;
+    if DestLen<len then
+      exit;
+    len := SynLZcompress1(P,PLen,Dest+9);
+    if len<PLen then begin
+      Dest[4] := SYNLZCOMPRESS_SYNLZ;
+      PCardinal(Dest+5)^ := crc32c(0,pointer(Dest+9),len);
+      result := len+9;
+      exit;
+    end;
+  end;
+  Dest[4] := SYNLZCOMPRESS_STORED;
+  PCardinal(Dest+5)^ := PCardinal(Dest)^;
+  MoveFast(P^,Dest[9],PLen);
+  result := PLen+9;
 end;
 
 function SynLZDecompress(const Data: RawByteString): RawByteString;
