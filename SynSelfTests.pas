@@ -305,7 +305,7 @@ type
     a: array of TSQLRecordPeople;
     {$endif}
     fQuickSelectValues: TIntegerDynArray;
-    function QuickSelectGT(IndexA,IndexB: integer): boolean;
+    function QuickSelectGT(IndexA,IndexB: PtrInt): boolean;
   published
     /// the faster CopyRecord function, enhancing the system.pas unit
     procedure SystemCopyRecord;
@@ -4514,7 +4514,7 @@ begin
   end;
 end;
 
-function TTestLowLevelCommon.QuickSelectGT(IndexA,IndexB: integer): boolean;
+function TTestLowLevelCommon.QuickSelectGT(IndexA,IndexB: PtrInt): boolean;
 begin
   result := fQuickSelectValues[IndexA]>fQuickSelectValues[IndexB];
 end;
