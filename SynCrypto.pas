@@ -568,6 +568,7 @@ type
     // contain an internal encrypted CTR, to detect any replay attack attempt
     function DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
       IVAtBeginning: boolean): RawByteString;
+
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
     // - i.e. setup 256-bit MAC computation during next Encrypt/Decrypt call
     // - may be used e.g. for AES-GCM or our custom AES-CTR modes

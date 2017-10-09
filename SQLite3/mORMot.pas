@@ -22847,10 +22847,11 @@ end;
 procedure TSQLPropInfoRTTIDynArray.Serialize(Instance: TObject;
   var data: RawByteString; ExtendedJson: boolean);
 var da: TDynArray;
+    temp: TTextWriterStackBuffer;
 begin
   GetDynArray(Instance,da);
   if fObjArray<>nil then
-    with TJSONSerializer.CreateOwnedStream(8192) do
+    with TJSONSerializer.CreateOwnedStream(temp) do
     try
       if ExtendedJson then
         include(fCustomOptions,twoForceJSONExtended); // smaller content
@@ -23696,8 +23697,9 @@ end;
 procedure TSQLPropInfoCustomJSON.GetValueVar(Instance: TObject;
   ToSQL: boolean; var result: RawUTF8; wasSQLString: PBoolean);
 var W: TJSONSerializer;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TJSONSerializer.CreateOwnedStream;
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
     GetJSONValues(Instance,W);
     W.SetText(result);
@@ -25584,6 +25586,7 @@ procedure TSQLTable.GetCSVValues(Dest: TStream; Tab: boolean; CommaSep: AnsiChar
 var U: PPUTF8Char;
     F,R,FMax: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
   if (self=nil) or (FieldCount<=0) or (fRowCount<=0) then
     exit;
@@ -25591,7 +25594,7 @@ begin
     RowLast := fRowCount;
   if RowFirst<0 then
     RowFirst := 0;
-  W := TTextWriter.Create(Dest,16384);
+  W := TTextWriter.Create(Dest,@temp,sizeof(temp));
   try
     if AddBOM then
       W.AddShort(#$ef#$bb#$bf); // add UTF-8 Byte Order Mark
@@ -25873,8 +25876,9 @@ end;
 
 function TSQLTable.GetHtmlTable(const Header: RawUTF8): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(16384);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.AddShort('<html>');
     W.AddString(Header);
@@ -27582,8 +27586,9 @@ function TJSONObjectDecoder.EncodeAsSQLPrepared(const TableName: RawUTF8;
   BatchOptions: TSQLRestBatchOptions): RawUTF8;
 var F: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(1024);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     case Occasion of
     soUpdate: begin
@@ -27638,6 +27643,7 @@ end;
 function TJSONObjectDecoder.EncodeAsSQL(Update: boolean): RawUTF8;
 var F: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 procedure AddValue;
 begin
   if InlinedParams then
@@ -27651,7 +27657,7 @@ begin
   result := '';
   if FieldCount=0 then
     exit;
-  W := TTextWriter.CreateOwnedStream(2048);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     if Update then begin
       for F := 0 to FieldCount-1 do // append 'COL1=...,COL2=...'
@@ -27683,10 +27689,11 @@ end;
 procedure TJSONObjectDecoder.EncodeAsJSON(out result: RawUTF8);
 var F: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
   if FieldCount=0 then
     exit;
-  W := TTextWriter.CreateOwnedStream(2048);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     for F := 0 to FieldCount-1 do begin
@@ -30278,8 +30285,9 @@ end;
 function TEnumType.GetSetNameCSV(Value: integer; SepChar: AnsiChar;
   FullSetsAsStar: boolean): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(1024);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     GetSetNameCSV(W,Value,SepChar,FullSetsAsStar);
     W.SetText(result);
@@ -30387,8 +30395,9 @@ procedure TEnumType.GetEnumNameTrimedAll(var result: RawUTF8; const Prefix: RawU
   quotedValues: boolean);
 var i: integer;
     V: PShortString;
+    temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(1024) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     AddString(Prefix);
     V := @NameList;
@@ -30412,8 +30421,9 @@ procedure TEnumType.GetEnumNameAll(var result: RawUTF8; const Prefix: RawUTF8;
   quotedValues: boolean);
 var i: integer;
     V: PShortString;
+    temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(1024) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     AddString(Prefix);
     V := @NameList;
@@ -30454,8 +30464,9 @@ end;
 function TEnumType.GetEnumNameAllAsJSONArray(TrimLeftLowerCase: boolean): RawUTF8;
 var i: integer;
     V: PShortString;
+    temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream(1024) do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     Add('[');
     V := @NameList;
@@ -30602,9 +30613,10 @@ end;
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
   const Suffix: RawUTF8; ValuesInlined: boolean): RawUTF8;
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   if high(Values)>=0 then
-    with TTextWriter.CreateOwnedStream do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(PropName);
       if high(Values)=0 then begin
@@ -32757,8 +32769,9 @@ procedure TSQLRecordPropertiesMapping.ComputeSQL;
     W.SetText(result);
   end;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(1024);
+  W := TTextWriter.CreateOwnedStream(temp);
   try // SQL.TableSimpleFields[withID: boolean; withTableName: boolean]
     SetSQL(W,false,false,fSQL.TableSimpleFields[false,false]);
     SetSQL(W,false,true,fSQL.TableSimpleFields[false,true]);
@@ -36727,6 +36740,7 @@ var url,root,interfmethod,interf,id,method,frames: RawUTF8;
     callback: TSQLRestClientCallbackItem;
     methodIndex: integer;
     WR: TTextWriter;
+    temp: TTextWriterStackBuffer;
     ok: Boolean;
   procedure Call(methodIndex: Integer; const par: RawUTF8; res: TTextWriter);
   var method: PServiceMethod;
@@ -36787,7 +36801,7 @@ begin
     exit;
   if IdemPropNameU(interfmethod,callback.Factory.Methods[methodIndex].InterfaceDotMethodName) then
   try
-    WR := TJSONSerializer.CreateOwnedStream;
+    WR := TJSONSerializer.CreateOwnedStream(temp);
     try
       WR.AddShort('{"result":[');
       if frames='[0]' then // call before the first method of the jumbo frame
@@ -39661,8 +39675,9 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
   procedure ComputeResult;
     procedure ServiceResult(const Name,JSONValue: RawUTF8);
     var WR: TTextWriter;
+        temp: TTextWriterStackBuffer;
     begin
-      WR := TJSONSerializer.CreateOwnedStream;
+      WR := TJSONSerializer.CreateOwnedStream(temp);
       try
         ServiceResultStart(WR);
         if ForceServiceResultAsJSONObject then
@@ -40759,11 +40774,12 @@ procedure TSQLRestServerURIContext.Results(const Values: array of const;
   Status: integer; Handle304NotModified: boolean);
 var i,h: integer;
     result: RawUTF8;
+    temp: TTextWriterStackBuffer;
 begin
   h := high(Values);
   if h<0 then
     result := '{"result":null}' else
-    with TJSONSerializer.CreateOwnedStream do
+    with TJSONSerializer.CreateOwnedStream(temp) do
     try
       AddShort('{"result":');
       if h=0 then
@@ -40818,6 +40834,7 @@ end;
 
 procedure TSQLRestServerURIContext.Error(const ErrorMessage: RawUTF8; Status: integer);
 var ErrorMsg: RawUTF8;
+    temp: TTextWriterStackBuffer;
 begin
   Call.OutStatus := Status;
   if StatusCodeIsSuccess(Status) then begin // not an error
@@ -40827,7 +40844,7 @@ begin
   if ErrorMessage='' then
     StatusCodeToErrorMsg(Status,ErrorMsg) else
     ErrorMsg := ErrorMessage;
-  with TTextWriter.CreateOwnedStream do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     AddShort('{'#13#10'"errorCode":');
     Add(call.OutStatus);
@@ -40888,6 +40905,7 @@ var JSON: RawUTF8;
     meth,a,i,iLow: Integer;
     WR: TTextWriter;
     argDone: boolean;
+    temp: TTextWriterStackBuffer;
 begin // here Ctxt.Service and ServiceMethodIndex are set
   if (Server.Services=nil) or (Service=nil) then
     raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
@@ -40907,7 +40925,7 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
         if fInput<>nil then begin
           meth := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
           if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
-            WR := TJSONSerializer.CreateOwnedStream;
+            WR := TJSONSerializer.CreateOwnedStream(temp);
             try // convert URI parameters into the expected ordered JSON array
               WR.Add('[');
               with Service.InterfaceFactory.fMethods[meth] do begin
@@ -41390,8 +41408,9 @@ end;
 procedure TSQLRestServer.Stat(Ctxt: TSQLRestServerURIContext);
 var W: TTextWriter;
     json,xml,name: RawUTF8;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TJSONSerializer.CreateOwnedStream;
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
     name := Ctxt.InputUTF8OrVoid['findservice'];
     if name='' then begin
@@ -41766,12 +41785,13 @@ end;
 
 function TSQLRestServer.SessionsAsJson: RawJSON;
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   result := '';
   if (self=nil) or (fSessions.Count=0) then
     exit;
   fSessions.Safe.Lock;
-  with TJSONSerializer.CreateOwnedStream do
+  with TJSONSerializer.CreateOwnedStream(temp) do
   try
     Add('[');
     for i := 0 to fSessions.Count-1 do begin
@@ -47363,10 +47383,11 @@ begin
   end;
 end;
 
-function WriteObject(Value: TObject): RawUTF8; overload;
+function WriteObject(Value: TObject): RawUTF8;
+var temp: TTextWriterStackBuffer;
 begin
   if Value<>nil then
-    with TIniWriter.CreateOwnedStream do
+    with TIniWriter.CreateOwnedStream(temp) do
     try
       WriteObject(Value,'');
       SetText(result);
@@ -49920,6 +49941,7 @@ function TSQLRecordProperties.SaveSimpleFieldsFromJsonArray(var P: PUTF8Char;
 var i: integer;
     W: TJSONSerializer;
     Start: PUTF8Char;
+    temp: TTextWriterStackBuffer;
 begin
   result := '';
   if P=nil then
@@ -49928,7 +49950,7 @@ begin
   if P^<>'[' then
     exit;
   repeat inc(P) until not(P^ in [#1..' ']);
-  W := TJSONSerializer.CreateOwnedStream(1024);
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
     W.Add('{');
     for i := 0 to length(SimpleFields)-1 do begin
@@ -50153,8 +50175,9 @@ end;
 function TSQLRecordProperties.CSVFromFieldBits(const Bits: TSQLFieldBits): RawUTF8;
 var f: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream(512);
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     for f := 0 to Fields.Count-1 do
       if f in Bits then begin
@@ -52717,11 +52740,12 @@ end;
 function TServiceContainer.AsJson: RawJSON;
 var WR: TTextWriter;
     i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   result := '';
   if (self=nil) or (fList.Count=0) then
     exit;
-  WR := TJSONSerializer.CreateOwnedStream;
+  WR := TJSONSerializer.CreateOwnedStream(temp);
   try
     WR.Add('[');
     for i := 0 to fList.Count-1 do begin
@@ -53102,8 +53126,9 @@ var Params: TJSONSerializer;
     DynArrays: array[0..MAX_METHOD_ARGS-1] of TDynArray;
     Value: array[0..MAX_METHOD_ARGS-1] of pointer;
     I64s: array[0..MAX_METHOD_ARGS-1] of Int64;
+    temp: TTextWriterStackBuffer;
 begin
-  Params := TJSONSerializer.CreateOwnedStream;
+  Params := TJSONSerializer.CreateOwnedStream(temp);
   try
     // create the parameters
     if ifoJsonAsExtended in fOptions then
@@ -55641,11 +55666,12 @@ end;
 procedure TOnInterfaceStubExecuteParamsVariant.SetResultFromOutput;
 var a,ndx: integer;
     W: TJSONSerializer;
+    temp: TTextWriterStackBuffer;
 begin
   fResult := '';
   if fOutput=nil then
     exit;
-  W := TJSONSerializer.CreateOwnedStream;
+  W := TJSONSerializer.CreateOwnedStream(temp);
   try
     W.Add('[');
     ndx := 0;
@@ -56182,11 +56208,12 @@ function TInterfaceStub.IntGetLogAsText(asmndx: integer; const aParams: RawUTF8;
   aScope: TInterfaceStubLogLayouts; SepChar: AnsiChar): RawUTF8;
 var i: integer;
     WR: TTextWriter;
+    temp: TTextWriterStackBuffer;
     log: ^TInterfaceStubLog;
 begin
   if fLogCount=0 then
     result := '' else begin
-    WR := TTextWriter.CreateOwnedStream;
+    WR := TTextWriter.CreateOwnedStream(temp);
     try
       log := Pointer(fLogs);
       if asmndx<RESERVED_VTABLE_SLOTS then
@@ -57984,6 +58011,7 @@ var Inst: TServiceFactoryServerInstance;
     timeStart,timeEnd: Int64;
     stats: TSynMonitorInputOutput;
     m: integer;
+    temp: TTextWriterStackBuffer;
 
   function GetFullMethodName: RawUTF8;
   begin
@@ -58087,7 +58115,7 @@ begin
       if fBackgroundThread=nil then
         fBackgroundThread := Rest.NewBackgroundThreadMethod(
           '% %',[self,fInterface.fInterfaceName]);
-    WR := TJSONSerializer.CreateOwnedStream;
+    WR := TJSONSerializer.CreateOwnedStream(temp);
     try
       Ctxt.fThreadServer^.Factory := self;
       if not(optForceStandardJSON in Ctxt.ServiceExecution^.Options) and
@@ -58484,6 +58512,7 @@ end;
 
 procedure TServiceMethodArgument.AsJson(var DestValue: RawUTF8; V: pointer);
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
   case ValueType of // some direct conversion of simple types
   smvBoolean:
@@ -58504,7 +58533,7 @@ begin
   smvRawJSON:
     DestValue := PRawUTF8(V)^;
   else begin // use generic AddJSON() method
-    W := TJSONSerializer.CreateOwnedStream(512);
+    W := TJSONSerializer.CreateOwnedStream(temp);
     try
       AddJSON(W,V);
       W.SetText(DestValue);
@@ -59188,8 +59217,9 @@ function TServiceMethod.ArgsArrayToObject(P: PUTF8Char; Input: boolean): RawUTF8
 var i: integer;
     W: TTextWriter;
     Value: PUTF8Char;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     W.Add('{');
     if (P=nil) or (P^<>'[') then

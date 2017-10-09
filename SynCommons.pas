@@ -7766,6 +7766,8 @@ type
   // (e.g. sllError -> 'Error') by setting twoTrimLeftEnumSets: this option
   // would default to the global TTextWriter.SetDefaultEnumTrim setting
   // - twoEndOfLineCRLF would reflect the TTextWriter.EndOfLineCRLF property
+  // - twoBufferIsExternal would be set if the temporary buffer is not handled
+  // by the instance, but specified at constructor, maybe from the stack
   TTextWriterOption = (
     twoStreamIsOwned,
     twoFlushToStreamNoAutoResize,
@@ -7775,11 +7777,16 @@ type
     twoTrimLeftEnumSets,
     twoForceJSONExtended,
     twoForceJSONStandard,
-    twoEndOfLineCRLF);
+    twoEndOfLineCRLF,
+    twoBufferIsExternal);
   /// options set for a TTextWriter instance
   // - allows to override e.g. AddRecordJSON() and AddDynArrayJSON() behavior;
   // or set global process customization for a TTextWriter
   TTextWriterOptions = set of TTextWriterOption;
+
+  /// may be used to allocate on stack a 8KB work buffer for a TTextWriter
+  // - via the CreateOwnedStream overloaded constructor 
+  TTextWriterStackBuffer = array[0..8191] of AnsiChar;
 
   /// simple writer to a Stream, specialized for the TEXT format
   // - use an internal buffer, faster than string+string
@@ -7803,6 +7810,7 @@ type
     fInternalJSONWriter: TTextWriter;
     function GetLength: cardinal;
     procedure SetStream(aStream: TStream);
+    procedure SetBuffer(aBuf: pointer; aBufSize: integer);
     function EchoFlush: integer;
     procedure InternalAddFixedAnsi(Source: PAnsiChar; SourceChars: Cardinal;
       const AnsiToWide: TWordDynArray; Escape: TTextWriterKind);
@@ -7814,12 +7822,29 @@ type
     // - aStream may be nil: in this case, it MUST be set before using any
     // Add*() method
     // - default internal buffer size if 8192
-    constructor Create(aStream: TStream; aBufSize: integer=8192);
+    constructor Create(aStream: TStream; aBufSize: integer=8192); overload;
+    /// the data will be written to the specified Stream
+    // - aStream may be nil: in this case, it MUST be set before using any
+    // Add*() method
+    // - will use an external buffer (which may be allocated on stack)
+    constructor Create(aStream: TStream; aBuf: pointer; aBufSize: integer); overload;
     /// the data will be written to an internal TRawByteStringStream
     // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
     // to retrieve directly the content without any data move nor allocation
     // - default internal buffer size if 4096 (enough for most JSON objects)
-    constructor CreateOwnedStream(aBufSize: integer=4096);
+    // - consider using a stack-allocated buffer and the overloaded method
+    constructor CreateOwnedStream(aBufSize: integer=4096); overload;
+    /// the data will be written to an internal TRawByteStringStream
+    // - will use an external buffer (which may be allocated on stack)
+    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
+    // to retrieve directly the content without any data move nor allocation
+    constructor CreateOwnedStream(aBuf: pointer; aBufSize: integer); overload;
+    /// the data will be written to an internal TRawByteStringStream
+    // - will use the stack-allocated TTextWriterStackBuffer if possible
+    // - TRawByteStringStream.DataString method will be used by TTextWriter.Text
+    // to retrieve directly the content without any data move nor allocation
+    constructor CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
+      aBufSize: integer=SizeOf(TTextWriterStackBuffer)); overload;
     /// the data will be written to an external file
     // - you should call explicitly FlushFinal or FlushToStream to write
     // any pending data to the file
@@ -9735,7 +9760,8 @@ type
     fTotalWritten: Int64;
     fInternalStream: boolean;
     fTag: PtrInt;
-    fBuf: RawByteString;
+    fBuffer: PByteArray;
+    fBufInternal: RawByteString;
   public
     /// initialize the buffer, and specify a file handle to use for writing
     // - use an internal buffer of the specified size
@@ -9753,6 +9779,15 @@ type
     // - use Flush then TMemoryStream(Stream) to retrieve its content, or
     // TRawByteStringStream(Stream).DataString
     constructor Create(aClass: TStreamClass; BufLen: integer=4096); overload;
+    /// initialize with a specified buffer and TStream class
+    // - use a specified external buffer (which may be allocated on stack),
+    // to avoid a memory allocation
+    constructor Create(aStream: TStream; aTempBuf: pointer; aTempLen: integer); overload;
+    /// initialize with a specified buffer
+    // - use a specified external buffer (which may be allocated on stack),
+    // to avoid a memory allocation
+    // - aStream parameter could be e.g. THeapMemoryStream or TRawByteStringStream
+    constructor Create(aClass: TStreamClass; aTempBuf: pointer; aTempLen: integer); overload;
     /// release internal TStream (after AssignToHandle call)
     destructor Destroy; override;
     /// append some data at the current position
@@ -24844,11 +24879,12 @@ end; // P^='"' at function return
 
 procedure QuotedStrJSON(const aText: RawUTF8; var result: RawUTF8);
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   for i := 1 to length(aText) do
     case aText[i] of
     #0..#31,'\','"':
-      with TTextWriter.CreateOwnedStream do
+      with TTextWriter.CreateOwnedStream(temp) do
       try
         Add('"');
         AddJSONEscape(pointer(aText));
@@ -27761,10 +27797,11 @@ end;
 function BinToSource(const ConstName, Comment: RawUTF8;
   Data: pointer; Len, PerLine: integer; const Suffix: RawUTF8): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
   if (Data=nil) or (Len<=0) or (PerLine<=0) then
     result := '' else begin
-    W := TTextWriter.CreateOwnedStream(Len*5+50+length(Comment)+length(Suffix));
+    W := TTextWriter.CreateOwnedStream(temp,Len*5+50+length(Comment)+length(Suffix));
     try
       BinToSource(W,ConstName,Comment,Data,Len,PerLine);
       if Suffix<>'' then begin
@@ -32302,10 +32339,11 @@ var
   DefaultTextWriterTrimEnum: boolean;
 
 function ObjectToJSON(Value: TObject; Options: TTextWriterWriteObjectOptions): RawUTF8;
+var temp: TTextWriterStackBuffer;
 begin
   if Value=nil then
     result := NULL_STR_VAR else
-    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       include(fCustomOptions,twoForceJSONStandard);
       WriteObject(Value,Options);
@@ -32318,8 +32356,9 @@ end;
 function ObjectsToJSON(const Names: array of RawUTF8; const Values: array of TObject;
   Options: TTextWriterWriteObjectOptions=[woDontStoreDefault]): RawUTF8;
 var i,n: integer;
+    temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     n := length(Names);
     Add('{');
@@ -32453,10 +32492,11 @@ function UrlEncodeJsonObject(const URIName: RawUTF8; ParametersJSON: PUTF8Char;
 var i,j: integer;
     sep: AnsiChar;
     Params: TNameValuePUTF8CharDynArray;
+    temp: TTextWriterStackBuffer;
 begin
   if ParametersJSON=nil then
     result := URIName else
-    with TTextWriter.CreateOwnedStream do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       AddString(URIName);
       if (JSONDecode(ParametersJSON,Params,true)<>nil) and (Params<>nil) then begin
@@ -32816,10 +32856,11 @@ end;
 function CSVEncode(const NameValuePairs: array of const;
   const KeySeparator, ValueSeparator: RawUTF8): RawUTF8;
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   if length(NameValuePairs)<2 then
     result := '' else
-    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       for i := 1 to length(NameValuePairs) shr 1 do begin
         Add(NameValuePairs[i*2-2],twNone);
@@ -36757,6 +36798,7 @@ var len, boundcount, filescount, i: integer;
     boundaries: array of RawUTF8;
     bound: RawUTF8;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
   procedure NewBound;
   var random: array[1..3] of cardinal;
   begin
@@ -36773,7 +36815,7 @@ begin
     exit;
   boundcount := 0;
   filescount := 0;
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     // header multipart
     NewBound;
@@ -40483,8 +40525,9 @@ end;
 
 procedure SaveJSON(const Value; TypeInfo: pointer;
   Options: TTextWriterOptions; var result: RawUTF8);
+var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     fCustomOptions := fCustomOptions+Options;
     AddTypedJSON(TypeInfo,Value);
@@ -42810,8 +42853,9 @@ end;
 
 procedure VariantSaveJSON(const Value: variant; Escape: TTextWriterKind;
   var result: RawUTF8);
+var temp: TTextWriterStackBuffer;
 begin // not very optimized, but fast enough in practice, and creates valid JSON
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     AddVariant(Value,Escape);
     SetText(result);
@@ -42822,10 +42866,11 @@ end;
 
 function VariantSaveJSONLength(const Value: variant; Escape: TTextWriterKind): integer;
 var Fake: TFakeWriterStream;
-begin // will avoid most memory allocations, except for one 2KB internal buffer
+    temp: TTextWriterStackBuffer;
+begin // will avoid most memory allocations
   Fake := TFakeWriterStream.Create;
   try
-    with DefaultTextWriterJSONClass.Create(Fake,2048) do
+    with DefaultTextWriterJSONClass.Create(Fake,@temp,sizeof(temp)) do
     try
       AddVariant(Value,Escape);
       FlushFinal;
@@ -44942,6 +44987,7 @@ end;
 
 function TDocVariantData.GetJsonByStartName(const aStartName: RawUTF8): RawUTF8;
 var Up: array[byte] of AnsiChar;
+    temp: TTextWriterStackBuffer;
     ndx: integer;
     W: TTextWriter;
 begin
@@ -44950,7 +44996,7 @@ begin
     exit;
   end;
   UpperCopy255(Up,aStartName)^ := #0;
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.Add('{');
     for ndx := 0 to VCount-1 do
@@ -45105,9 +45151,10 @@ end;
 function TDocVariantData.ToJSON(const Prefix, Suffix: RawUTF8;
   Format: TTextWriterJSONFormat): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
     tmp: RawUTF8;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
     DocVariantType.ToJSON(W,variant(self),twJSONEscape);
@@ -45128,6 +45175,7 @@ var fields: TRawUTF8DynArray;
     W: TTextWriter;
     r,f: integer;
     row: PDocVariantData;
+    temp: TTextWriterStackBuffer;
 begin
   fields := nil; // to please Kylix
   fieldsCount := 0;
@@ -45146,7 +45194,7 @@ begin
     end;
   if fieldsCount=0 then
     raise EDocVariant.Create('ToNonExpandedJSON: Value[0] is not an object');
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.Add('{"fieldCount":%,"rowCount":%,"values":[',[fieldsCount,VCount]);
     for f := 0 to fieldsCount-1 do begin
@@ -45202,11 +45250,12 @@ end;
 procedure TDocVariantData.ToTextPairsVar(out result: RawUTF8;
   const NameValueSep, ItemSep: RawUTF8; escape: TTextWriterKind);
 var ndx: integer;
+    temp: TTextWriterStackBuffer;
 begin
   if dvoIsArray in VOptions then
     raise EDocVariant.Create('ToTextPairs expects a dvObject');
   if (VCount>0) and (dvoIsObject in VOptions) then
-    with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       ndx := 0;
       repeat
@@ -46043,13 +46092,14 @@ end;
 function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
     Value: pointer; // store the temporary dynamic array
+    temp: TTextWriterStackBuffer;
 begin
   Value := nil;
   DynArray.Init(TypeInfo,Value);
   try
     if DynArray.LoadFrom(BlobValue)=nil then
       result := '' else begin
-      with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+      with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
       try
         AddDynArrayJSON(TypeInfo,Value);
         SetText(result);
@@ -46784,8 +46834,9 @@ begin
 end;
 
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
+var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream(8192) do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     if EnumSetsAsText then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
@@ -49103,8 +49154,9 @@ begin
 end;
 
 function ObjArrayToJSON(const aObjArray; Options: TTextWriterWriteObjectOptions): RawUTF8;
+var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     if woEnumSetsAsText in Options then
       CustomOptions := CustomOptions+[twoEnumSetsAsTextInRecord];
@@ -49766,8 +49818,11 @@ end;
 procedure TSynPersistentStore.SaveTo(out aBuffer: RawByteString; nocompression: boolean;
   BufLen: integer);
 var writer: TFileBufferWriter;
+    temp: array[word] of byte;
 begin
-  writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
+  if BufLen<=sizeof(temp) then
+    writer := TFileBufferWriter.Create(TRawByteStringStream,@temp,sizeof(temp)) else
+    writer := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveToWriter(writer);
     aBuffer := writer.FlushAndCompress(nocompression);
@@ -52215,23 +52270,53 @@ begin
     dec(B);
 end;
 
-constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
+procedure TTextWriter.SetBuffer(aBuf: pointer; aBufSize: integer);
 begin
-  SetStream(aStream);
-  if aBufSize<256 then
-    aBufSize := 256;
+  if aBuf=nil then
+    GetMem(fTempBuf,aBufSize) else begin
+    fTempBuf := aBuf;
+    Include(fCustomOptions,twoBufferIsExternal);
+  end;
   fTempBufSize := aBufSize;
-  GetMem(fTempBuf,aBufSize);
   B := fTempBuf-1; // Add() methods will append at B+1
   BEnd := fTempBuf+fTempBufSize-2;
   if DefaultTextWriterTrimEnum then
     Include(fCustomOptions,twoTrimLeftEnumSets);
 end;
 
+constructor TTextWriter.Create(aStream: TStream; aBufSize: integer);
+begin
+  SetStream(aStream);
+  if aBufSize<256 then
+    aBufSize := 256;
+  SetBuffer(nil,aBufSize);
+end;
+
+constructor TTextWriter.Create(aStream: TStream; aBuf: pointer; aBufSize: integer);
+begin
+  SetStream(aStream);
+  SetBuffer(aBuf,aBufSize);
+end;
+
 constructor TTextWriter.CreateOwnedStream(aBufSize: integer);
 begin
   Create(TRawByteStringStream.Create,aBufSize);
   Include(fCustomOptions,twoStreamIsOwned);
+end;
+
+constructor TTextWriter.CreateOwnedStream(aBuf: pointer; aBufSize: integer);
+begin
+  SetStream(TRawByteStringStream.Create);
+  SetBuffer(aBuf,aBufSize);
+  Include(fCustomOptions,twoStreamIsOwned);
+end;
+
+constructor TTextWriter.CreateOwnedStream(var aStackBuf: TTextWriterStackBuffer;
+  aBufSize: integer);
+begin
+  if aBufSize>sizeof(aStackBuf) then // too small -> allocate on heap 
+    CreateOwnedStream(aBufSize) else
+    CreateOwnedStream(@aStackBuf,sizeof(aStackBuf));
 end;
 
 constructor TTextWriter.CreateOwnedFileStream(const aFileName: TFileName;
@@ -52246,7 +52331,8 @@ destructor TTextWriter.Destroy;
 begin
   if twoStreamIsOwned in fCustomOptions then
     fStream.Free;
-  FreeMem(fTempBuf);
+  if not (twoBufferIsExternal in fCustomOptions) then
+    FreeMem(fTempBuf);
   fInternalJSONWriter.Free;
   inherited;
 end;
@@ -52288,6 +52374,7 @@ begin
   end;
   inc(fTotalFileSize,fStream.Write(fTempBuf^,B-fTempBuf+1));
   if not (twoFlushToStreamNoAutoResize in fCustomOptions) and
+     not (twoBufferIsExternal in fCustomOptions) and
      (fTempBufSize<49152) and
      (fTotalFileSize-fInitialStreamPosition>1 shl 18) then begin
     FreeMem(fTempBuf); // with big content (256KB) comes bigger buffer (64KB)
@@ -52556,10 +52643,11 @@ end;
 
 
 function JSONEncode(const NameValuePairs: array of const): RawUTF8;
+var temp: TTextWriterStackBuffer;
 begin
   if high(NameValuePairs)<1 then
     result := '{}' else // return void JSON object on error
-    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       AddJSONEscape(NameValuePairs);
       SetText(result);
@@ -52570,8 +52658,9 @@ end;
 
 {$ifndef NOVARIANTS}
 function JSONEncode(const Format: RawUTF8; const Args,Params: array of const): RawUTF8; overload;
+var temp: TTextWriterStackBuffer;
 begin
-  with DefaultTextWriterJSONClass.CreateOwnedStream do
+  with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
   try
     AddJSON(Format,Args,Params);
     SetText(result);
@@ -52583,8 +52672,9 @@ end;
 
 function JSONEncodeArrayDouble(const Values: array of double): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVDouble(Values);
@@ -52597,8 +52687,9 @@ end;
 
 function JSONEncodeArrayUTF8(const Values: array of RawUTF8): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVUTF8(Values);
@@ -52611,8 +52702,9 @@ end;
 
 function JSONEncodeArrayInteger(const Values: array of integer): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.Add('[');
     W.AddCSVInteger(Values);
@@ -52631,12 +52723,13 @@ end;
 
 procedure JSONEncodeArrayOfConst(const Values: array of const;
   WithoutBraces: boolean; var result: RawUTF8);
+var temp: TTextWriterStackBuffer;
 begin
   if length(Values)=0 then
     if WithoutBraces then
       result := '' else
       result := '[]' else
-    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       if not WithoutBraces then
         Add('[');
@@ -52651,10 +52744,11 @@ end;
 
 procedure JSONEncodeNameSQLValue(const Name,SQLValue: RawUTF8;
   var result: RawUTF8);
+var temp: TTextWriterStackBuffer;
 begin
   if (SQLValue<>'') and (SQLValue[1] in ['''','"']) then
     // unescape SQL quoted string value into a valid JSON string
-    with DefaultTextWriterJSONClass.CreateOwnedStream do
+    with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
     try
       Add('{','"');
       AddNoJSONEscapeUTF8(Name);
@@ -53710,6 +53804,7 @@ function JsonObjectsByPath(JsonObject,PropPath: PUTF8Char): RawUTF8;
 var itemName,objName,propNameFound,objPath: RawUTF8;
     start,ending,obj: PUTF8Char;
     WR: TTextWriter;
+    temp: TTextWriterStackBuffer;
   procedure AddFromStart(const name: RaWUTF8);
   begin
     start := GotoNextNotSpace(start);
@@ -53717,7 +53812,7 @@ var itemName,objName,propNameFound,objPath: RawUTF8;
     if ending=nil then
       exit;
     if WR=nil then begin
-      WR := TTextWriter.CreateOwnedStream;
+      WR := TTextWriter.CreateOwnedStream(temp);
       WR.Add('{');
     end else
       WR.Add(',');
@@ -53778,12 +53873,13 @@ end;
 function JSONObjectAsJSONArrays(JSON: PUTF8Char; out keys,values: RawUTF8): boolean;
 var wk,wv: TTextWriter;
     kb,ke,vb,ve: PUTF8Char;
+    temp1,temp2: TTextWriterStackBuffer;
 begin
   result := false;
   if (JSON=nil) or (JSON^<>'{') then
     exit;
-  wk := TTextWriter.CreateOwnedStream(8192);
-  wv := TTextWriter.CreateOwnedStream(8192);
+  wk := TTextWriter.CreateOwnedStream(temp1);
+  wv := TTextWriter.CreateOwnedStream(temp2);
   try
     wk.Add('[');
     wv.Add('[');
@@ -53858,10 +53954,11 @@ end;
 procedure JSONBufferToXML(P: PUTF8Char; const Header,NameSpace: RawUTF8;
   out result: RawUTF8);
 var i,j,L: integer;
+    temp: TTextWriterStackBuffer;
 begin
   if P=nil then
     result := Header else
-    with TTextWriter.CreateOwnedStream do
+    with TTextWriter.CreateOwnedStream(temp) do
     try
       AddNoJSONEscape(pointer(Header),length(Header));
       L := length(NameSpace);
@@ -53899,9 +53996,10 @@ end;
 
 procedure JSONBufferReformat(P: PUTF8Char; out result: RawUTF8;
   Format: TTextWriterJSONFormat);
+var temp: array[word] of byte; // 64KB buffer
 begin
   if P<>nil then
-    with TTextWriter.CreateOwnedStream(65536) do
+    with TTextWriter.CreateOwnedStream(@temp,sizeof(temp)) do
     try
       AddJSONReformat(P,Format,nil);
       SetText(result);
@@ -53911,31 +54009,29 @@ begin
 end;
 
 function JSONReformat(const JSON: RawUTF8; Format: TTextWriterJSONFormat): RawUTF8;
-var n: integer;
-    tmp: TSynTempBuffer;
+var tempIn: TSynTempBuffer;
+    tempOut: TTextWriterStackBuffer;
 begin
-  tmp.Init(JSON);
-  if tmp.len<2048 then
-    n := 4096 else // minimal rough estimation of the output buffer size
-    n := tmp.Len shr 2;
-  with TTextWriter.CreateOwnedStream(n) do
+  tempIn.Init(JSON);
+  with TTextWriter.CreateOwnedStream(tempOut) do
   try
-    AddJSONReformat(tmp.buf,Format,nil);
+    AddJSONReformat(tempIn.buf,Format,nil);
     SetText(result);
   finally
     Free;
-    tmp.Done;
+    tempIn.Done;
   end;
 end;
 
 function JSONBufferReformatToFile(P: PUTF8Char; const Dest: TFileName;
   Format: TTextWriterJSONFormat=jsonHumanReadable): boolean;
 var F: TFileStream;
+    temp: array[word] of word; // 128KB
 begin
   try
     F := TFileStream.Create(Dest,fmCreate);
     try
-      with TTextWriter.Create(F,256*1024) do
+      with TTextWriter.Create(F,@temp,sizeof(temp)) do
       try
         AddJSONReformat(P,Format,nil);
         FlushFinal;
@@ -55573,8 +55669,9 @@ end;
 
 function TSynMonitor.ComputeDetailsJSON: RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := DefaultTextWriterJSONClass.CreateOwnedStream;
+  W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     ComputeDetailsTo(W);
     W.SetText(result);
@@ -56924,10 +57021,11 @@ end;
 procedure TRawUTF8List.SaveToStream(Dest: TStream; const Delimiter: RawUTF8);
 var W: TTextWriter;
     i: integer;
+    temp: TTextWriterStackBuffer;
 begin
   if (self=nil) or (fCount=0) then
     exit;
-  W := TTextWriter.Create(Dest,8192); // faster with a 8KB intermediate buffer
+  W := TTextWriter.Create(Dest,@temp,sizeof(temp));
   try
     i := 0;
     repeat
@@ -58167,8 +58265,9 @@ end;
 
 function TSynDictionary.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
 var W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
-  W := TTextWriter.CreateOwnedStream;
+  W := TTextWriter.CreateOwnedStream(temp);
   try
     SaveToJSON(W,EnumSetsAsText);
     W.SetText(result);
@@ -58459,12 +58558,26 @@ begin
     fBufLen := 32;
     fBufLen := BufLen;
   fStream := aStream;
-  SetLength(fBuf,fBufLen);
+  SetLength(fBufInternal,fBufLen);
+  fBuffer := pointer(fBufInternal);
 end;
 
 constructor TFileBufferWriter.Create(aClass: TStreamClass; BufLen: integer);
 begin
   Create(aClass.Create,BufLen);
+  fInternalStream := true;
+end;
+
+constructor TFileBufferWriter.Create(aStream: TStream; aTempBuf: pointer; aTempLen: integer);
+begin
+  fBufLen := aTempLen;
+  fBuffer := aTempBuf;
+  fStream := aStream;
+end;
+
+constructor TFileBufferWriter.Create(aClass: TStreamClass; aTempBuf: pointer; aTempLen: integer);
+begin
+  Create(aClass.Create,aTempBuf,aTempLen);
   fInternalStream := true;
 end;
 
@@ -58478,7 +58591,7 @@ end;
 function TFileBufferWriter.Flush: Int64;
 begin
   if fPos>0 then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
   result := fTotalWritten;
@@ -58499,7 +58612,7 @@ begin
   inc(fTotalWritten,PtrUInt(DataLen));
   if fPos+DataLen>fBufLen then begin
     if fPos>0 then begin
-      fStream.Write(pointer(fBuf)^,fPos);
+      fStream.Write(fBuffer^,fPos);
       fPos := 0;
     end;
     if DataLen>fBufLen then begin
@@ -58507,7 +58620,7 @@ begin
       exit;
     end;
   end;
-  MoveFast(Data^,PByteArray(fBuf)^[fPos],DataLen);
+  MoveFast(Data^,fBuffer^[fPos],DataLen);
   inc(fPos,DataLen);
 end;
 
@@ -58520,10 +58633,10 @@ begin
       len := fBufLen else
       len := Count;
     if fPos+len>fBufLen then begin
-      fStream.Write(pointer(fBuf)^,fPos);
+      fStream.Write(fBuffer^,fPos);
       fPos := 0;
     end;
-    FillcharFast(PByteArray(fBuf)^[fPos],len,Data);
+    FillcharFast(fBuffer^[fPos],len,Data);
     inc(fPos,len);
     dec(Count,len);
   end;
@@ -58532,10 +58645,10 @@ end;
 procedure TFileBufferWriter.Write1(Data: byte);
 begin
   if fPos+1>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
-  PByteArray(fBuf)^[fPos] := Data;
+  fBuffer^[fPos] := Data;
   inc(fPos);
   inc(fTotalWritten);
 end;
@@ -58543,10 +58656,10 @@ end;
 procedure TFileBufferWriter.Write4(Data: integer);
 begin
   if fPos+sizeof(integer)>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
-  PInteger(@PByteArray(fBuf)^[fPos])^ := Data;
+  PInteger(@fBuffer^[fPos])^ := Data;
   inc(fPos,sizeof(integer));
   inc(fTotalWritten,sizeof(integer));
 end;
@@ -58559,10 +58672,10 @@ end;
 procedure TFileBufferWriter.Write8(const Data8Bytes);
 begin
   if fPos+sizeof(Int64)>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
-  PInt64(@PByteArray(fBuf)^[fPos])^ := Int64(Data8Bytes);
+  PInt64(@fBuffer^[fPos])^ := Int64(Data8Bytes);
   inc(fPos,sizeof(Int64));
   inc(fTotalWritten,sizeof(Int64));
 end;
@@ -58595,14 +58708,14 @@ var len: integer;
 begin
   len := DA.SaveToLength;
   if (len<=fBufLen) and (fPos+len>fBufLen) then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
   if fPos+len>fBufLen then begin
     SetLength(tmp,len);
     P := pointer(tmp);
   end else
-    P := @PByteArray(fBuf)^[fPos]; // write directly into the buffer
+    P := @fBuffer^[fPos]; // write directly into the buffer
   if DA.SaveTo(P)-P<>len then
     raise ESynException.CreateUTF8('%.WriteDynArray DA.SaveTo?',[self]);
   if tmp='' then begin
@@ -58632,15 +58745,15 @@ begin
     raise ESynException.CreateUTF8('%.Write(VType=%) VariantSaveLength=0',
       [self,TVarData(Value).VType]);
   if fPos+len>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
     if len>fBufLen then begin
       GetMem(tmp,len);
       buf := tmp;
     end else
-      buf := pointer(fBuf);
+      buf := pointer(fBuffer);
   end else
-    buf := @PByteArray(fBuf)^[fPos];
+    buf := @fBuffer^[fPos];
   if VariantSave(Value,buf)=nil then
     raise ESynException.CreateUTF8('%.Write(VType=%) VariantSave=nil',
       [self,TVarData(Value).VType]);
@@ -58661,9 +58774,9 @@ begin
     exit;
   inc(fTotalWritten,Len);
   while Len>0 do begin
-    Dest := pointer(fBuf);
+    Dest := pointer(fBuffer);
     if fPos+Len>fBufLen then begin
-      fStream.Write(pointer(fBuf)^,fPos);
+      fStream.Write(fBuffer^,fPos);
       fPos := 0;
     end else
       inc(Dest,fPos);
@@ -58703,8 +58816,8 @@ begin
       end;
   WriteVarUInt32(fixedsize);
   repeat
-    P := @PByteArray(fBuf)^[fPos];
-    PEnd := @PByteArray(fBuf)^[fBufLen-8];
+    P := @fBuffer^[fPos];
+    PEnd := @fBuffer^[fBufLen-8];
     if PtrUInt(P)<PtrUInt(PEnd) then begin
       n := ValuesCount;
       PBeg := PAnsiChar(P); // leave space for chunk size
@@ -58747,7 +58860,7 @@ begin
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -58794,11 +58907,11 @@ procedure TFileBufferWriter.WriteVarUInt32(Value: PtrUInt);
 var pos: integer;
 begin
   if fPos+16>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
-  fPos := PtrUInt(ToVarUInt32(Value,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+  fPos := PtrUInt(ToVarUInt32(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
 end;
 
@@ -58806,11 +58919,11 @@ procedure TFileBufferWriter.WriteVarInt64(Value: Int64);
 var pos: integer;
 begin
   if fPos+48>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
-  fPos := PtrUInt(ToVarInt64(Value,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+  fPos := PtrUInt(ToVarInt64(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
 end;
 
@@ -58818,11 +58931,11 @@ procedure TFileBufferWriter.WriteVarUInt64(Value: QWord);
 var pos: integer;
 begin
   if fPos+48>fBufLen then begin
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   end;
   pos := fPos;
-  fPos := PtrUInt(ToVarUInt64(Value,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+  fPos := PtrUInt(ToVarUInt64(Value,@fBuffer^[fPos]))-PtrUInt(fBuffer);
   inc(fTotalWritten,PtrUInt(fPos-Pos));
 end;
 
@@ -58910,12 +59023,12 @@ begin
   if ValuesCount=0 then
     exit;
   PI := pointer(Values);
-  PByteArray(fBuf)^[fPos] := ord(DataLayout);
+  fBuffer^[fPos] := ord(DataLayout);
   inc(fPos);
   inc(fTotalWritten);
   if DataLayout in [wkOffsetU, wkOffsetI] then begin
     pos := fPos;
-    fPos := PtrUInt(ToVarUInt32(PI^[0],@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+    fPos := PtrUInt(ToVarUInt32(PI^[0],@fBuffer^[fPos]))-PtrUInt(fBuffer);
     diff := PI^[1]-PI^[0];
     inc(PtrUInt(PI),4);
     dec(ValuesCount);
@@ -58931,14 +59044,14 @@ begin
         end;
     end else
       diff := 0;
-    fPos := PtrUInt(ToVarUInt32(diff,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+    fPos := PtrUInt(ToVarUInt32(diff,@fBuffer^[fPos]))-PtrUInt(fBuffer);
     inc(fTotalWritten,PtrUInt(fPos-pos));
     if diff<>0 then
       exit; // same offset for all items (fixed sized records) -> quit now
   end;
   repeat
-    P := @PByteArray(fBuf)^[fPos];
-    PEnd := @PByteArray(fBuf)^[fBufLen-32];
+    P := @fBuffer^[fPos];
+    PEnd := @fBuffer^[fBufLen-32];
     if PtrUInt(P)<PtrUInt(PEnd) then begin
       pos := fPos;
       case DataLayout of
@@ -58998,13 +59111,13 @@ begin
       end;
       end;
       inc(PtrUInt(PI),n*4);
-      fPos := PtrUInt(P)-PtrUInt(fBuf);
+      fPos := PtrUInt(P)-PtrUInt(fBuffer);
       inc(fTotalWritten,PtrUInt(fPos-pos));
       dec(ValuesCount,n);
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -59023,8 +59136,8 @@ begin
   PI := pointer(Values);
   pos := fPos;
   if Offset then begin
-    PByteArray(fBuf)^[fPos] := 1;
-    fPos := PtrUInt(ToVarUInt64(PI^[0],@PByteArray(fBuf)^[fPos+1]))-PtrUInt(fBuf);
+    fBuffer^[fPos] := 1;
+    fPos := PtrUInt(ToVarUInt64(PI^[0],@fBuffer^[fPos+1]))-PtrUInt(fBuffer);
     diff := PI^[1]-PI^[0];
     inc(PtrUInt(PI),8);
     dec(ValuesCount);
@@ -59040,19 +59153,19 @@ begin
         end;
     end else
       diff := 0;
-    fPos := PtrUInt(ToVarUInt32(diff,@PByteArray(fBuf)^[fPos]))-PtrUInt(fBuf);
+    fPos := PtrUInt(ToVarUInt32(diff,@fBuffer^[fPos]))-PtrUInt(fBuffer);
     if diff<>0 then begin
       inc(fTotalWritten,PtrUInt(fPos-Pos));
       exit; // same offset for all items (fixed sized records) -> quit now
     end;
   end else begin
-    PByteArray(fBuf)^[fPos] := 0;
+    fBuffer^[fPos] := 0;
     inc(fPos);
   end;
   inc(fTotalWritten,PtrUInt(fPos-Pos));
   repeat
-    P := @PByteArray(fBuf)^[fPos];
-    PEnd := @PByteArray(fBuf)^[fBufLen-32];
+    P := @fBuffer^[fPos];
+    PEnd := @fBuffer^[fBufLen-32];
     if PtrUInt(P)<PtrUInt(PEnd) then begin
       pos := fPos;
       PBeg := PAnsiChar(P); // leave space for chunk size
@@ -59076,13 +59189,13 @@ begin
         end;
       PInteger(PBeg)^ := PAnsiChar(P)-PBeg-4; // format: Isize+varUInt32/64s
       inc(PtrUInt(PI),n*8);
-      fPos := PtrUInt(P)-PtrUInt(fBuf);
+      fPos := PtrUInt(P)-PtrUInt(fBuffer);
       inc(fTotalWritten,PtrUInt(fPos-Pos));
       dec(ValuesCount,n);
       if ValuesCount=0 then
         break;
     end;
-    fStream.Write(pointer(fBuf)^,fPos);
+    fStream.Write(fBuffer^,fPos);
     fPos := 0;
   until false;
 end;
@@ -59092,7 +59205,7 @@ var trig: integer;
 begin
   trig := SYNLZTRIG[nocompression];
   if fStream.Position=0 then // direct compression from internal buffer
-    SynLZCompress(pointer(fBuf),fPos,result,trig) else begin
+    SynLZCompress(PAnsiChar(fBuffer),fPos,result,trig) else begin
     Flush;
     result := SynLZCompress((fStream as TRawByteStringStream).DataString,trig);
   end;
@@ -59108,11 +59221,14 @@ begin
       if maxSize>100 shl 20 then
         raise ESynException.CreateUTF8('%.WriteDirectStart: too big % - '+
           'we allow up to 100 MB block',[self,TooBigMessage]);
+      if fBufInternal='' then
+        raise ESynException.CreateUTF8('%.WriteDirectStart: no internal buffer', [self]);
       fBufLen := maxSize+1024;
-      SetString(fBuf,nil,fBufLen);
+      SetString(fBufInternal,nil,fBufLen);
+      fBuffer := pointer(fBufInternal);
     end;
   end;
-  result := @PByteArray(fBuf)^[fPos];
+  result := @fBuffer^[fPos];
 end;
 
 procedure TFileBufferWriter.WriteDirectEnd(realSize: integer);
@@ -63095,6 +63211,7 @@ end;
 procedure TMemoryMapText.SaveToStream(Dest: TStream; const Header: RawUTF8);
 var i: integer;
     W: TTextWriter;
+    temp: TTextWriterStackBuffer;
 begin
   i := length(Header);
   if i>0 then
@@ -63103,7 +63220,7 @@ begin
     Dest.Write(fMap.Buffer^,fMap.Size);
   if fAppendedLinesCount=0 then
     exit;
-  W := TTextWriter.Create(Dest);
+  W := TTextWriter.Create(Dest,@temp,sizeof(temp));
   try
     if (fMap.Size>0) and (fMap.Buffer[fMap.Size-1]>=' ') then
       W.Add(#13);
@@ -63470,8 +63587,13 @@ end;
 
 function TSynBloomFilter.SaveTo(aMagic: cardinal): RawByteString;
 var W: TFileBufferWriter;
+    BufLen: integer;
+    temp: array[word] of byte;
 begin
-  W := TFileBufferWriter.Create(TRawByteStringStream,length(fStore)+100);
+  BufLen := length(fStore)+100;
+  if BufLen<=sizeof(temp) then
+    W := TFileBufferWriter.Create(TRawByteStringStream,@temp,sizeof(temp)) else
+    W := TFileBufferWriter.Create(TRawByteStringStream,BufLen);
   try
     SaveTo(W,aMagic);
     W.Flush;
@@ -63595,6 +63717,7 @@ end;
 function TSynBloomFilterDiff.SaveToDiff(const aKnownRevision: Int64): RawByteString;
 var head: TBloomDiffHeader;
     W: TFileBufferWriter;
+    temp: array[word] of byte;
 begin
   Safe.Lock;
   try
@@ -63618,7 +63741,9 @@ begin
       SetString(result,PAnsiChar(@head),sizeof(head));
       exit;
     end;
-    W := TFileBufferWriter.Create(TRawByteStringStream,head.size+100);
+    if head.size+100<=sizeof(temp) then
+      W := TFileBufferWriter.Create(TRawByteStringStream,@temp,sizeof(temp)) else
+      W := TFileBufferWriter.Create(TRawByteStringStream,head.size+100);
     try
       W.Write(@head,sizeof(head));
       case head.kind of
@@ -64023,8 +64148,9 @@ end;
 
 function TSynNameValue.AsCSV(const KeySeparator,ValueSeparator,IgnoreKey: RawUTF8): RawUTF8;
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     for i := 0 to Count-1 do
     if (IgnoreKey='') or (List[i].Name<>IgnoreKey) then begin
@@ -64041,8 +64167,9 @@ end;
 
 function TSynNameValue.AsJSON: RawUTF8;
 var i: integer;
+    temp: TTextWriterStackBuffer;
 begin
-  with TTextWriter.CreateOwnedStream do
+  with TTextWriter.CreateOwnedStream(temp) do
   try
     Add('{');
     for i := 0 to Count-1 do
