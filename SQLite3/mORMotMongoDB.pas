@@ -84,6 +84,7 @@ uses
   Classes,
   Variants,
   SynCommons,
+  SynTable, // for TSynTableStatement
   SynLog,
   mORMot,
   SynMongoDB;

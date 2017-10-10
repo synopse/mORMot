@@ -247,6 +247,7 @@ uses
   Variants,
   {$endif}
   SynCommons,
+  SynTable, // for TSynTable/TSynTableStatement
   SynTests;
 
 type

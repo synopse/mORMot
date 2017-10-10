@@ -161,6 +161,7 @@ uses
   Classes,
   SynCommons,
   SynLog,
+  SynTable, // for TSynTableStatement
   mORMot,
   SynDB;
 

@@ -158,6 +158,7 @@ uses
   Classes,
   Contnrs,
   SynCommons,
+  SynTable, // for TSynTableStatement
   SynLog,
   SynDB;
 
@@ -1909,6 +1910,7 @@ begin
     result := inherited SQLLimitClause(AStmt);
 end;
 
+
 { TSQLDBOracleConnection }
 
 procedure TSQLDBOracleConnection.Commit;
@@ -2179,7 +2181,6 @@ begin
     result := CurrentAnsiConvert.AnsiToAnsi(fAnsiConvert,P,L);
 end;
 {$endif}
-
 
 
 { TSQLDBOracleStatement }

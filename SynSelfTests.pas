@@ -133,6 +133,7 @@ uses
   {$endif}
   Classes,
   SynCrtSock,
+  SynTable, // for TSynTableStatement
 {$ifndef NOVARIANTS}
   SynMongoDB,
   SynMustache,

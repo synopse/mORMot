@@ -135,6 +135,7 @@ uses
   SynSMAPI in '..\SynSMAPI.pas',
   SynSM in '..\SynSM.pas',
   {$endif CPU64}
+  SynTable in '..\SynTable.pas',
   SynBigTable in '..\SynBigTable.pas',
   {$ifndef LVCL}
   SynZipFiles in '..\SynZipFiles.pas',

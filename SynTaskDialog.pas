@@ -85,18 +85,30 @@ interface
 {$ENDIF}
 
 uses
-  Windows, CommCtrl, Classes, SysUtils, Messages,
+  Windows,
+  CommCtrl,
+  Classes,
+  SysUtils,
+  Messages,
   {$ifndef FPC}
   Consts,
   {$endif}
   Menus,
   {$ifdef USETMSPACK}
-  AdvGlowButton, AdvMenus, TaskDialog, TaskDialogEx,
+  AdvGlowButton,
+  AdvMenus,
+  TaskDialog,
+  TaskDialogEx,
   {$endif}
   {$ifdef WITHUXTHEME}
   Themes,
   {$endif}
-  Graphics, Forms, Controls, StdCtrls, ExtCtrls, Buttons;
+  Graphics,
+  Forms,
+  Controls,
+  StdCtrls,
+  ExtCtrls,
+  Buttons;
 
 var
   /// will map a generic OK picture from SynTaskDialog.res

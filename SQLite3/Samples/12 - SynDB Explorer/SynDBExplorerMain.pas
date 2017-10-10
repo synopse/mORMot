@@ -7,23 +7,47 @@ interface
 {.$define USEZEOS}
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
-  Grids, ExtCtrls, StdCtrls,
+  Windows,
+  Messages,
+  SysUtils,
+  Variants,
+  Classes,
+  Graphics,
+  Controls,
+  Forms,
+  Grids,
+  ExtCtrls,
+  StdCtrls,
   {$ifndef FPC}
   Consts,
-  {$ifdef HASINLINE}XPMan, Contnrs,{$endif}
+  {$ifdef HASINLINE}  XPMan,
+  Contnrs, {$endif}
   {$endif}
   {$ifdef ISDELPHIXE}
   SynSQLite3RegEx, // use direct PCRE library as available since Delphi XE
   {$endif}
-  SynCommons, SynZip, mORMot, SynSQLite3, SynSQLite3Static,
-  mORMotUI, mORMotUIEdit, mORMotUILogin, mORMotToolBar,
+  SynCommons,
+  SynZip,
+  mORMot,
+  SynSQLite3,
+  SynSQLite3Static,
+  mORMotUI,
+  mORMotUIEdit,
+  mORMotUILogin,
+  mORMotToolBar,
   SynTaskDialog, // also fix QC 37403 for Delphi 6/7/2006
-  SynDB, SynDBOracle, SynOleDB, SynDBSQLite3, SynDBODBC, SynDBRemote,
+  SynDB,
+  SynDBOracle,
+  SynOleDB,
+  SynDBSQLite3,
+  SynDBODBC,
+  SynDBRemote,
   {$ifdef USEZEOS}
   SynDBZeos,
   {$endif}
-  SynDBExplorerClasses, SynDBExplorerFrame, ComCtrls;
+  SynDBExplorerClasses,
+  SynDBExplorerFrame,
+  ComCtrls;
 
 type
   TDbExplorerMain = class(TForm)
@@ -70,7 +94,9 @@ resourcestring
 
 implementation
 
-uses SynDBExplorerServer;
+uses
+  SynDBExplorerServer;
+
 
 {$ifndef HASINLINE}
   {$R Vista.res}

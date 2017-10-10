@@ -341,6 +341,7 @@ uses
   Variants,
   {$endif}
   SynCommons,
+  SynTable, // for TSynTableStatement
   SynLog;
 
 

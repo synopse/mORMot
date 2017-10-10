@@ -82,6 +82,7 @@ uses
   SynCrtSock,
   SynCrypto, // MD5 and SHA1 needed for OpenAuth()
   SynCommons,
+  SynTable, // for TSynTableStatement
   SynLog;
 
 

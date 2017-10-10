@@ -5,11 +5,30 @@ unit SynDBExplorerFrame;
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  StdCtrls, Grids, ExtCtrls, ComCtrls, Types, ShellAPI, Menus,
-  {$ifdef ISDELPHIXE3}System.UITypes,{$endif}
-  SynCommons, SynDB,
-  mORMot, mORMoti18n, mORMotUI, mORMotUILogin, mORMotToolBar, mORMotReport;
+  Windows,
+  Messages,
+  SysUtils,
+  Classes,
+  Graphics,
+  Controls,
+  Forms,
+  Dialogs,
+  StdCtrls,
+  Grids,
+  ExtCtrls,
+  ComCtrls,
+  Types,
+  ShellAPI,
+  Menus,
+  {$ifdef ISDELPHIXE3} System.UITypes, {$endif}
+  SynCommons,
+  SynDB,
+  mORMot,
+  mORMoti18n,
+  mORMotUI,
+  mORMotUILogin,
+  mORMotToolBar,
+  mORMotReport;
 
 type
   TDBExplorerFrame = class(TFrame)
@@ -97,8 +116,15 @@ implementation
 
 uses
   SynDBOracle,
-  SynDBExplorerMain, SynDBExplorerQueryBuilder, SynDBExplorerExportTables,
-  SynTaskDialog, SynBigTable, SynDBSQLite3, SynDBExplorerServer;
+  SynDBExplorerMain,
+  SynDBExplorerQueryBuilder,
+  SynDBExplorerExportTables,
+  SynTaskDialog,
+  SynTable,
+  SynBigTable,
+  SynDBSQLite3,
+  SynDBExplorerServer;
+
 
 {$R *.dfm}
 
