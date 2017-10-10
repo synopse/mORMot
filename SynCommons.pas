@@ -22318,10 +22318,9 @@ procedure AppendShortComma(const text: shortstring; var result: shortstring);
 begin
   if integer(ord(result[0]))+ord(text[0])>=255 then
     exit;
-  MoveFast(text[1],result[ord(result[0])],ord(text[0]));
-  inc(result[0],ord(text[0]));
+  MoveFast(text[1],result[ord(result[0])+1],ord(text[0]));
+  inc(result[0],ord(text[0])+1);
   result[ord(result[0])] := ',';
-  inc(result[0]);
 end;
 
 procedure GetSetNameShort(aTypeInfo: pointer; const value; out result: ShortString);
