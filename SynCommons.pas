@@ -12985,6 +12985,13 @@ function UnixTimeUTC: TUnixTime;
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'): RawUTF8;
 
+/// convert some second-based c-encoded time to the ISO 8601 text layout, either
+// as time or date/time
+// - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
+// - returns 'Thh:mm:ss', 'YYYY-MM-DD' or 'YYYY-MM-DDThh:mm:ss' format, depending
+// on the supplied value
+function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
+
 /// returns the current UTC date/time as a millisecond-based c-encoded time
 // - i.e. current number of milliseconds elapsed since Unix epoch 1/1/1970
 // - faster than NowUTC or GetTickCount64, on Windows or Unix platforms
@@ -13007,6 +13014,13 @@ function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
 function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
+
+/// convert some millisecond-based c-encoded time to the ISO 8601 text layout,
+// either as time or date/time
+// - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
+// - returns 'Thh:mm:ss', 'YYYY-MM-DD' or 'YYYY-MM-DDThh:mm:ss' format, depending
+// on the supplied value
+function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// returns the current UTC system date and time
 // - SysUtils.Now returns local time: this function returns the system time
@@ -15970,6 +15984,9 @@ type
     procedure Init;
     /// initialize and start the high resolution timer
     procedure Start;
+    /// returns TRUE if iStart is not 0
+    function Started: boolean;
+      {$ifdef HASINLINE}inline;{$endif}
     /// stop the timer, setting the Time elapsed since last Start
     procedure ComputeTime;
     /// stop the timer, returning the time elapsed as text with time resolution
@@ -16194,10 +16211,12 @@ type
     destructor Destroy; override;
     /// lock the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure Lock;    {$ifdef HASINLINE}inline;{$endif}
+    procedure Lock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// release the instance for exclusive access
     // - needed only if you access directly the instance properties
-    procedure UnLock;  {$ifdef HASINLINE}inline;{$endif}
+    procedure UnLock;
+      {$ifdef HASINLINE}inline;{$endif}
     /// create Count instances of this actual class in the supplied ObjArr[]
     class procedure InitializeObjArray(var ObjArr; Count: integer); virtual;
     /// should be called when the process starts, to resume the internal timer
@@ -33659,9 +33678,19 @@ begin // inlined UnixTimeToDateTime
     FirstTimeChar,false);
 end;
 
+function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
+begin
+  result := DateTimeToIso8601Text(UnixTime/SecsPerDay,FirstTimeChar);
+end;
+
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
 begin
-  result := (UnixMSTime / MSecsPerDay + UnixDateDelta);
+  result := (UnixMSTime/MSecsPerDay + UnixDateDelta);
+end;
+
+function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
+begin
+  result := DateTimeToIso8601Text(UnixTime/MSecsPerDay,FirstTimeChar);
 end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
@@ -54411,6 +54440,11 @@ begin
   FillcharFast(self,sizeof(self),0);
   QueryPerformanceCounter(iStart);
   iLast := iStart;
+end;
+
+function TPrecisionTimer.Started: boolean;
+begin
+  result := iStart <> 0;
 end;
 
 procedure TPrecisionTimer.ComputeTime;
