@@ -10069,7 +10069,7 @@ type
     function Next(DataLen: PtrInt): pointer;
       {$ifdef HASINLINE}inline;{$endif}
     /// copy data from the current position, and move ahead the specified bytes
-    procedure Copy(var Dest; DataLen: PtrInt);
+    procedure Copy(out Dest; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
     /// apply TDynArray.LoadFrom on the buffer
     // - will unserialize a previously appended dynamic array, e.g. as
@@ -12952,7 +12952,7 @@ function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean=true;
 // - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
 // - see also TTextWriter.AddDateTimeMS method
-function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: word; Expanded: boolean;
+function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
   FirstTimeChar: AnsiChar=' '; const TZD: RawUTF8='Z'): RawUTF8; overload;
 
 /// convert some date/time to the "HTTP-date" format as defined by RFC 7231
@@ -26220,7 +26220,7 @@ end;
 function UTF8ILComp(u1, u2: PUTF8Char; L1,L2: cardinal): PtrInt;
 var c2: PtrInt;
     extra,i: integer;
-label neg,pos,eq;
+label neg,pos;
 begin // fast UTF-8 comparaison using the NormToUpper[] array for all 8 bits values
   if u1<>u2 then
   if (u1<>nil) and (L1<>0) then
@@ -34547,11 +34547,11 @@ begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
     result := '' else begin
     DecodeDate(DateTime,Y,M,D);
     DecodeTime(DateTime,HH,MM,SS,MS);
-    DateTimeMSToString(HH,MM,SS,MS,Y,M,D,Expanded,FirstTimeChar,TZD);
+    result := DateTimeMSToString(HH,MM,SS,MS,Y,M,D,Expanded,FirstTimeChar,TZD);
   end;
 end;
 
-function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: word; Expanded: boolean;
+function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: cardinal; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   FormatUTF8(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
@@ -59037,7 +59037,7 @@ begin
   inc(P,DataLen);
 end;
 
-procedure TFastReader.Copy(var Dest; DataLen: PtrInt);
+procedure TFastReader.Copy(out Dest; DataLen: PtrInt);
 begin
   if P+DataLen>Last then
     ErrorOverflow;

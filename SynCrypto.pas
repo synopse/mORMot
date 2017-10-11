@@ -225,7 +225,7 @@ unit SynCrypto;
    - AES encryption will compute its own tables, to get rid of 4KB of const
    - optimized x86 asm version for MD5
    - tested compilation for Win64 platform
-   - run with FPC under Win32 and Linux (including AES-NI support), and Kylix
+   - run with FPC under Windows and Linux (including AES-NI support), and Kylix
    - added Intel's SSE4 x64 optimized asm for SHA-256 on Win64
    - added overloaded procedure TMD5.Final() and function SHA-256()
    - introduce ESynCrypto exception class dedicated to this unit
@@ -861,16 +861,18 @@ type
   // ! AES128 - ECB_API:102.88ms CBC_API:124.91ms
   // ! AES192 - ECB_API:115.75ms CBC_API:129.95ms
   // ! AES256 - ECB_API:139.50ms CBC_API:154.02ms
-  // - but the CryptoAPI does not supports AES-NI, whereas our classes do on Win32,
+  // - but the CryptoAPI does not supports AES-NI, whereas our classes handle it,
   // with a huge speed benefit
   // - under Win64, the official CryptoAPI is faster than our PUREPASCAL version,
-  // and the Win32 version of CryptoAPI itself:
+  // and the Win32 version of CryptoAPI itself, but slower than our AES-NI code
   // ! AES128 - ECB:107.95ms CBC:112.65ms CFB:109.62ms OFB:107.23ms CTR:109.42ms
   // ! AES192 - ECB:130.30ms CBC:133.04ms CFB:128.78ms OFB:127.25ms CTR:130.22ms
   // ! AES256 - ECB:145.33ms CBC:147.01ms CFB:148.36ms OFB:145.96ms CTR:149.67ms
   // ! AES128 - ECB_API:89.64ms CBC_API:100.84ms
   // ! AES192 - ECB_API:99.05ms CBC_API:105.85ms
   // ! AES256 - ECB_API:107.11ms CBC_API:118.04ms
+  // - in practice, you could forget about using the CryptoAPI, unless you are
+  // required to do so, for legal/corporate reasons
   TAESAbstract_API = class(TAESAbstract)
   protected
     fKeyHeader: packed record
@@ -977,6 +979,7 @@ type
     fCTR: THash128Rec; // we use a litle-endian CTR
     fBytesSinceSeed: integer;
     fSeedAfterBytes: integer;
+    fAESKeySize: integer;
     fSeedPBKDF2Rounds: cardinal;
     fTotalBytes: QWord;
     procedure IncrementCTR; {$ifdef HASINLINE}inline;{$endif}
@@ -987,8 +990,10 @@ type
     // OS-gathered entropy - the higher, the better, but also the slower
     // - internal private key would be re-seeded after ReseedAfterBytes
     // bytes (1MB by default) are generated, using GetEntropy()
+    // - by default, AES-256 will be used, unless AESKeySize is set to 128,
+    // which may be slightly faster (especially if AES-NI is not available)
     constructor Create(PBKDF2Rounds: integer = 256;
-      ReseedAfterBytes: integer = 1024*1024); reintroduce; virtual;
+      ReseedAfterBytes: integer = 1024*1024; AESKeySize: integer = 256); reintroduce; virtual;
     /// fill a TAESBlock with some pseudorandom data
     // - could be used e.g. to compute an AES Initialization Vector (IV)
     // - this method is thread-safe
@@ -1007,7 +1012,15 @@ type
     function FillRandomBytes(Len: integer): TBytes;
     /// returns an hexa-encoded binary buffer filled with some pseudorandom data
     // - this method is thread-safe
-    function FillRandomHex(Len: integer): RawUTF8; 
+    function FillRandomHex(Len: integer): RawUTF8;
+    /// returns a 32-bit unsigned random number
+    function Random32: cardinal; overload;
+    /// returns a 32-bit unsigned random number, with a maximum value
+    function Random32(max: cardinal): cardinal; overload;
+    /// returns a 64-bit unsigned random number
+    function Random64: QWord;
+    /// returns a floating-point random number in range [0..1]
+    function RandomExt: TSynExtended;
     /// computes a random ASCII password
     // - will contain uppercase/lower letters, digits and $.:()?%!-+*/@#
     // excluding ;,= to allow direct use in CSV content
@@ -1032,6 +1045,7 @@ type
     // - if you need to generate some random content, just call the
     // TAESPRNG.Main.FillRandom() overloaded methods, or directly TAESPRNG.Fill()
     class function Main: TAESPRNG;
+      {$ifdef HASINLINE}inline;{$endif}
     /// just a wrapper around TAESPRNG.Main.FillRandom() function
     // - this method is thread-safe, but you may use your own TAESPRNG instance
     // if you need some custom entropy level
@@ -1087,6 +1101,8 @@ type
     /// how many PBKDF2_HMAC_SHA512 count is applied by Seed to the entropy
     // - default is 256 rounds, which is more than enough for entropy gathering
     property SeedPBKDF2Rounds: cardinal read fSeedPBKDF2Rounds;
+    /// how many bits (128 or 256 - which is the default) are used for the AES
+    property AESKeySize: integer read fAESKeySize;
     /// how many bytes this generator did compute
     property TotalBytes: QWord read fTotalBytes;
   end;
@@ -1120,6 +1136,11 @@ var
   // a specific random generator to be used, like TAESPRNGSystem
   // - all TAESPRNG.Fill() class functions will use this instance
   MainAESPRNG: TAESPRNG;
+
+{$ifdef HASINLINE}
+/// defined globally to initialize MainAESPRNG for inlining TAESPRNG.Main
+procedure SetMainAESPRNG;
+{$endif}
 
 /// low-level function returning some random binary using standard API
 // - will call /dev/urandom under POSIX, and CryptGenRandom API on Windows,
@@ -11321,11 +11342,14 @@ end;
 
 { TAESPRNG }
 
-constructor TAESPRNG.Create(PBKDF2Rounds, ReseedAfterBytes: integer);
+constructor TAESPRNG.Create(PBKDF2Rounds, ReseedAfterBytes, AESKeySize: integer);
 begin
   inherited Create;
+  if PBKDF2Rounds<2 then
+    PBKDF2Rounds := 2;
   fSeedPBKDF2Rounds := PBKDF2Rounds;
   fSeedAfterBytes := ReseedAfterBytes;
+  fAESKeySize := AESKeySize;
   Seed;
 end;
 
@@ -11438,9 +11462,9 @@ var key: THash512Rec;
 begin
   try
     entropy := GetEntropy(32); // 32 bytes is the HMAC_SHA512 key block size
-    PBKDF2_HMAC_SHA512(entropy,ExeVersion.User,fSeedPBKDF2Rounds+(Random32 and 7),key.b);
+    PBKDF2_HMAC_SHA512(entropy,ExeVersion.User,fSeedPBKDF2Rounds,key.b);
     EnterCriticalSection(fLock);
-    fAES.EncryptInit(key.Lo,256);
+    fAES.EncryptInit(key.Lo,fAESKeySize);
     crcblocks(@fCTR,@key.Hi,2);
     fBytesSinceSeed := 0;
     LeaveCriticalSection(fLock);
@@ -11513,7 +11537,11 @@ begin
   inc(fTotalBytes,Len);
   Len := Len and AESBlockMod;
   if Len>0 then begin
-    fAES.Encrypt(fCTR.b,rnd);
+    {$ifdef USEAESNI64}
+    if TAESContext(fAES.Context).AesNi then
+      AesNiEncrypt(fAES.Context,fCTR.b,rnd) else
+    {$endif USEAESNI64}
+      fAES.Encrypt(fCTR.b,rnd);
     IncrementCTR;
     MoveFast(rnd,buf^,Len);
   end;
@@ -11543,6 +11571,44 @@ begin
   SynCommons.BinToHex(bin,pointer(result),Len);
 end;
 
+function TAESPRNG.Random32: cardinal;
+var block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := block.c0 xor block.c1 xor block.c2 xor block.c3;
+end;
+
+function TAESPRNG.Random32(max: cardinal): cardinal;
+var block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := (Qword(block.c0 xor block.c1 xor block.c2 xor block.c3)*max) shr 32;
+end;
+
+function TAESPRNG.Random64: QWord;
+var block: THash128Rec;
+begin
+  FillRandom(block.b);
+  result := block.L xor block.H;
+end;
+
+function TAESPRNG.RandomExt: TSynExtended;
+{$ifdef FPC_OR_UNICODE}
+const coeff: double = (1.0/$100000000)/$100000000;  // 2^-64
+{$else} // circumvent QWord bug on oldest Delphi revisions
+const coeff: double = (1.0/$80000000)/$100000000;  // 2^-63
+{$endif}
+var block: THash128Rec;
+begin
+  FillRandom(block.b);
+  {$ifdef FPC_OR_UNICODE}
+  result := (block.L xor block.H)*coeff;
+  {$else}
+  result := abs(block.Lo xor block.Hi)*coeff;
+  {$endif}
+//  assert((result>=0)and(result<1));
+end;
+
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
 const CHARS: array[0..137] of AnsiChar =
   'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'+
@@ -11562,14 +11628,18 @@ begin
   until (Len<=2) or (haspunct and (LowerCase(result)<>result));
 end;
 
+procedure SetMainAESPRNG;
+begin
+  GlobalLock;
+  if MainAESPRNG=nil then
+    GarbageCollectorFreeAndNil(MainAESPRNG, TAESPRNG.Create);
+  GlobalUnLock;
+end;
+
 class function TAESPRNG.Main: TAESPRNG;
 begin
-  if MainAESPRNG=nil then begin
-    GlobalLock;
-    if MainAESPRNG=nil then
-      GarbageCollectorFreeAndNil(MainAESPRNG, TAESPRNG.Create);
-    GlobalUnLock;
-  end;
+  if MainAESPRNG=nil then
+    SetMainAESPRNG;
   result := MainAESPRNG;
 end;
 
