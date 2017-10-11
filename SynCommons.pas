@@ -12816,6 +12816,12 @@ function DateToIso8601(Date: TDateTime; Expanded: boolean): RawUTF8; overload;
 // - use 'YYYY-MM-DD' format if Expanded
 function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8; overload;
 
+/// basic Date period conversion into ISO-8601
+// - will convert an elapsed number of days as ISO-8601 text
+// - use 'YYYYMMDD' format if not Expanded
+// - use 'YYYY-MM-DD' format if Expanded
+function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUTF8;
+
 /// basic Time conversion into ISO-8601
 // - use 'Thhmmss' format if not Expanded
 // - use 'Thh:mm:ss' format if Expanded
@@ -12940,7 +12946,14 @@ function NowUTCToString(Expanded: boolean=true; FirstTimeChar: AnsiChar = ' '): 
 // - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
 // - see also TTextWriter.AddDateTimeMS method
 function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean=true;
-  FirstTimeChar: AnsiChar = ' '; const TZD: RawUTF8='Z'): RawUTF8;
+  FirstTimeChar: AnsiChar=' '; const TZD: RawUTF8='Z'): RawUTF8; overload;
+
+/// convert some date/time to the ISO 8601 text layout, including milliseconds
+// - i.e. 'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
+// - TZD is the ending time zone designator ('', 'Z' or '+hh:mm' or '-hh:mm')
+// - see also TTextWriter.AddDateTimeMS method
+function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: word; Expanded: boolean;
+  FirstTimeChar: AnsiChar=' '; const TZD: RawUTF8='Z'): RawUTF8; overload;
 
 /// convert some date/time to the "HTTP-date" format as defined by RFC 7231
 // - i.e. "Tue, 15 Nov 1994 12:45:26 GMT" to be used as a value of
@@ -12986,10 +12999,9 @@ function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean=true;
   FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// convert some second-based c-encoded time to the ISO 8601 text layout, either
-// as time or date/time
+// as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
-// - returns 'Thh:mm:ss', 'YYYY-MM-DD' or 'YYYY-MM-DDThh:mm:ss' format, depending
-// on the supplied value
+// - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// returns the current UTC date/time as a millisecond-based c-encoded time
@@ -13016,10 +13028,9 @@ function UnixMSTimeToString(const UnixMSTime: TUnixMSTime; Expanded: boolean=tru
   FirstTimeChar: AnsiChar='T'; const TZD: RawUTF8=''): RawUTF8;
 
 /// convert some millisecond-based c-encoded time to the ISO 8601 text layout,
-// either as time or date/time
+// as time or date elapsed period
 // - this function won't add the Unix epoch 1/1/1970 offset to the timestamp
-// - returns 'Thh:mm:ss', 'YYYY-MM-DD' or 'YYYY-MM-DDThh:mm:ss' format, depending
-// on the supplied value
+// - returns 'Thh:mm:ss' or 'YYYY-MM-DD' format, depending on the supplied value
 function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar='T'): RawUTF8;
 
 /// returns the current UTC system date and time
@@ -17767,12 +17778,17 @@ implementation
 {$ifdef FPC}
 uses
   {$ifdef Linux}
-  SynFPCLinux, Unix, dynlibs,
+  SynFPCLinux,
+  Unix,
+  dynlibs,
   {$ifndef BSD}
-  Linux,SysCall,
+  Linux,
+  SysCall,
   {$endif}
   {$endif}
-  SynFPCTypInfo, TypInfo, StrUtils; // small wrapper unit around FPC's TypInfo.pp
+  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
+  TypInfo,
+  StrUtils;
 {$endif}
 
 
@@ -33671,6 +33687,25 @@ begin
 end;
 {$endif}
 
+function DaysToIso8601(Days: cardinal; Expanded: boolean): RawUTF8;
+var Y,M: cardinal;
+begin
+  Y := 0;
+  while Days>365 do begin
+    dec(Days,366);
+    inc(Y);
+  end;
+  M := 0;
+  if Days>31 then begin
+    inc(M);
+    while Days>MonthDays[false][M] do begin
+      dec(Days,MonthDays[false][M]);
+      inc(M);
+    end;
+  end;
+  result := DateToIso8601(Y,M,Days,Expanded);
+end;
+
 function UnixTimeToString(const UnixTime: TUnixTime; Expanded: boolean;
   FirstTimeChar: AnsiChar): RawUTF8;
 begin // inlined UnixTimeToDateTime
@@ -33680,7 +33715,9 @@ end;
 
 function UnixTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
 begin
-  result := DateTimeToIso8601Text(UnixTime/SecsPerDay,FirstTimeChar);
+  if UnixTime<SecsPerDay then
+    result := TimeToIso8601(UnixTime/SecsPerDay,true,FirstTimeChar) else
+    result := DaysToIso8601(UnixTime div SecsPerDay,true);
 end;
 
 function UnixMSTimeToDateTime(const UnixMSTime: TUnixMSTime): TDateTime;
@@ -33690,7 +33727,9 @@ end;
 
 function UnixMSTimePeriodToString(const UnixTime: TUnixTime; FirstTimeChar: AnsiChar): RawUTF8;
 begin
-  result := DateTimeToIso8601Text(UnixTime/MSecsPerDay,FirstTimeChar);
+  if UnixTime<MSecsPerDay then
+    result := TimeToIso8601(UnixTime/MSecsPerDay,true,FirstTimeChar,UnixTime<1000) else
+    result := DaysToIso8601(UnixTime div MSecsPerDay,true);
 end;
 
 function DateTimeToUnixMSTime(const AValue: TDateTime): TUnixMSTime;
@@ -33978,7 +34017,7 @@ begin
 end;
 
 procedure TimeToIso8601PChar(P: PUTF8Char; Expanded: boolean; H,M,S,MS: cardinal;
-  FirstChar: AnsiChar='T'; WithMS: boolean=false); overload;
+  FirstChar: AnsiChar; WithMS: boolean); overload;
 // use Thhmmss[.sss] format
 begin
   if FirstChar<>#0 then begin
@@ -34005,7 +34044,7 @@ begin
   end;
 end;
 
-procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean); overload;
+procedure DateToIso8601PChar(Date: TDateTime; P: PUTF8Char; Expanded: boolean);
 // use YYYYMMDD / YYYY-MM-DD date format
 var Y,M,D: word;
 begin
@@ -34023,7 +34062,7 @@ begin // into 'YYYY-MM-DD' date format
 end;
 
 procedure TimeToIso8601PChar(Time: TDateTime; P: PUTF8Char; Expanded: boolean;
-  FirstChar: AnsiChar='T'; WithMS: boolean=false); overload;
+  FirstChar: AnsiChar; WithMS: boolean);
 var H,M,S,MS: word;
 begin
   DecodeTime(Time,H,M,S,MS);
@@ -34031,7 +34070,7 @@ begin
 end;
 
 function DateTimeToIso8601(D: TDateTime; Expanded: boolean;
-  FirstChar: AnsiChar='T'; WithMS: boolean=false): RawUTF8;
+  FirstChar: AnsiChar; WithMS: boolean): RawUTF8;
 const ISO8601_LEN: array[boolean,boolean] of integer = ((15,14),(19,18));
 var tmp: array[0..31] of AnsiChar;
 begin // D=0 is handled in DateTimeToIso8601Text()
@@ -34049,15 +34088,15 @@ begin
   DateToIso8601PChar(Date,pointer(result),Expanded);
 end;
 
-function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8; overload;
+function DateToIso8601(Y,M,D: cardinal; Expanded: boolean): RawUTF8;
 // use 'YYYYMMDD' format if not Expanded, 'YYYY-MM-DD' format if Expanded
 begin
   FastNewRawUTF8(result,8+2*integer(Expanded));
   DateToIso8601PChar(pointer(result),Expanded,Y,M,D);
 end;
 
-function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar='T'; 
-  WithMS: boolean=false): RawUTF8;
+function TimeToIso8601(Time: TDateTime; Expanded: boolean; FirstChar: AnsiChar;
+  WithMS: boolean): RawUTF8;
 // use Thhmmss[.sss] / Thh:mm:ss[.sss] format 
 begin
   FastNewRawUTF8(result,7+2*integer(Expanded)+4*integer(WithMS));
@@ -34504,12 +34543,17 @@ function DateTimeMSToString(DateTime: TDateTime; Expanded: boolean;
   FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
 var HH,MM,SS,MS,Y,M,D: word;
 begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
-  if DateTime=0 then begin
-    result := '';
-    exit;
+  if DateTime=0 then
+    result := '' else begin
+    DecodeDate(DateTime,Y,M,D);
+    DecodeTime(DateTime,HH,MM,SS,MS);
+    DateTimeMSToString(HH,MM,SS,MS,Y,M,D,Expanded,FirstTimeChar,TZD);
   end;
-  DecodeDate(DateTime,Y,M,D);
-  DecodeTime(DateTime,HH,MM,SS,MS);
+end;
+
+function DateTimeMSToString(HH,MM,SS,MS,Y,M,D: word; Expanded: boolean;
+  FirstTimeChar: AnsiChar; const TZD: RawUTF8): RawUTF8;
+begin //  'YYYY-MM-DD hh:mm:ss.sssZ' or 'YYYYMMDD hhmmss.sssZ' format
   FormatUTF8(DTMS_FMT[Expanded], [UInt4DigitsToShort(Y),UInt2DigitsToShort(M),
     UInt2DigitsToShort(D),FirstTimeChar,UInt2DigitsToShort(HH),UInt2DigitsToShort(MM),
     UInt2DigitsToShort(SS),UInt3DigitsToShort(MS),TZD], result);
