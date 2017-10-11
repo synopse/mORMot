@@ -4285,7 +4285,7 @@ end;
 asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
 {$ifdef USEAESNI}
   // AES-NI hardware accelerated version by A. Bouchez
-  cmp dword ptr [eax].TAESContext.AesNi, 0
+  cmp dword ptr [eax].TAESContext.AesNi,0
   je @noAesNi
   movdqu xmm7,[edx]
   call dword ptr [eax].TAESContext.AesNi
@@ -11207,8 +11207,8 @@ begin
       TAESContext(AES.Context).AesNi(AES.Context,fCV,tmp) else
     {$endif USEAESNI64}
       AES.Encrypt(fCV,tmp);
-    inc(fCV[7]);
-    if fCV[7]=0 then begin
+    inc(fCV[7]); // counter is in the lower 64 bits, nonce in the upper 64 bits
+    if fCV[7]=0 then begin // manual big-endian increment
       j := 6;
       repeat
         inc(fCV[j]);
@@ -11575,7 +11575,7 @@ var key: THash512Rec;
     entropy: RawByteString;
 begin
   try
-    entropy := GetEntropy(32); // 32 bytes is the HMAC_SHA512 key block size
+    entropy := GetEntropy(128); // 128 bytes is the HMAC_SHA512 key block size
     PBKDF2_HMAC_SHA512(entropy,ExeVersion.User,fSeedPBKDF2Rounds,key.b);
     EnterCriticalSection(fLock);
     fAES.EncryptInit(key.Lo,fAESKeySize);
@@ -11720,7 +11720,6 @@ begin
   {$else}
   result := abs(block.Lo xor block.Hi)*coeff;
   {$endif}
-//  assert((result>=0)and(result<1));
 end;
 
 function TAESPRNG.RandomPassword(Len: integer): RawUTF8;
