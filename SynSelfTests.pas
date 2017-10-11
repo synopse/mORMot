@@ -9828,6 +9828,7 @@ procedure TTestCryptographicRoutines._TAESPNRG;
 var b1,b2: TAESBlock;
     a1,a2: TAESPRNG;
     s1,s2,split: RawByteString;
+    d: double;
     i,stripes: integer;
 begin
   TAESPRNG.Main.FillRandom(b1);
@@ -9856,6 +9857,13 @@ begin
       s1 := a1.FillRandomHex(i);
       check(length(s1)=i*2);
       check(SynCommons.HexToBin(pointer(s1),nil,i));
+      check(a1.Random32<>a2.Random32);
+      check(a1.Random64<>a2.Random64);
+      check(a1.Random32(i)<cardinal(i));
+      d := a1.RandomExt;
+      check((d>=0)and(d<1));
+      d := a2.RandomExt;
+      check((d>=0)and(d<1));
     end;
   finally
     a1.Free;
