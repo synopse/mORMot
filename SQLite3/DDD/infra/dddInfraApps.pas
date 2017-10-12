@@ -179,8 +179,6 @@ type
   TDDDRestDaemon = class(TDDDAdministratedRestDaemon, IAdministratedDaemon)
   protected
     fPreviousMonitorTix: Int64;
-    function Settings: TDDDAdministratedDaemonHttpSettings;
-      {$ifdef HASINLINE}inline;{$endif}
     function GetAdministrationHTTPServer: TSQLHttpServer;
       {$ifdef HASINLINE}inline;{$endif}
     // returns the current state from fRest.Stat() + system memory
@@ -206,6 +204,8 @@ type
   protected
     fHttpServer: TSQLHttpServer;
     fServicesLogRest: TSQLRest;
+    function Settings: TDDDAdministratedDaemonHttpSettings;
+      {$ifdef HASINLINE}inline;{$endif}
     // initialize HTTP Server into fHttpServer
     // (fRest should have been set by the overriden method)
     procedure InternalStart; override;
@@ -1114,11 +1114,6 @@ begin
     result := false;
 end;
 
-function TDDDRestDaemon.Settings: TDDDAdministratedDaemonHttpSettings;
-begin
-  result := TDDDAdministratedDaemonHttpSettings(fInternalSettings);
-end;
-
 procedure TDDDRestDaemon.SubscribeLog(const Levels: TSynLogInfos;
   const Callback: ISynLogCallback; ReceiveExistingKB: cardinal);
 begin
@@ -1128,6 +1123,11 @@ end;
 
 
 { TDDDRestHttpDaemon }
+
+function TDDDRestHttpDaemon.Settings: TDDDAdministratedDaemonHttpSettings;
+begin
+  result := TDDDAdministratedDaemonHttpSettings(fInternalSettings);
+end;
 
 procedure TDDDRestHttpDaemon.InternalStart;
 begin
