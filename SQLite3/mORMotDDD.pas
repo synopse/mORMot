@@ -830,7 +830,7 @@ type
 
   /// abstract class using several process threads and with monitoring abilities
   // - able to implement any DDD Daemon/Service, with proper statistics gathering
-  // - each TDDDMonitoredDaemon could
+  // - each TDDDMonitoredDaemon will own its TDDDMonitoredDaemonProcess
   TDDDMonitoredDaemon = class(TCQRSQueryObjectRest,IMonitoredDaemon)
   protected
     fProcess: array of TDDDMonitoredDaemonProcess;

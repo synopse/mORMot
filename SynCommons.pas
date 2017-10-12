@@ -62491,9 +62491,7 @@ begin
             break;
           end;
         end;
-      end
-    else
-      result := nil;
+      end;
   finally
     fSafe.Leave;
   end;
@@ -62524,10 +62522,6 @@ var data: TSystemUseDataDynArray;
     i: integer;
 begin
   result := '';
-  if aDestMemoryMB<>nil then
-    aDestMemoryMB^ := '';
-  if self=nil then
-    exit;
   data := HistoryData(aProcessID,aDepth);
   for i := 0 to high(data) do
   with data[i] do begin
@@ -62548,8 +62542,6 @@ var res: TDocVariantData absolute result;
     i: integer;
 begin
   VarClear(result);
-  if self=nil then
-    exit;
   data := HistoryData(aProcessID,aDepth);
   res.InitFast(length(data),dvArray);
   for i := 0 to high(data) do
