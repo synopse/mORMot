@@ -992,7 +992,7 @@ type
     // bytes (1MB by default) are generated, using GetEntropy()
     // - by default, AES-256 will be used, unless AESKeySize is set to 128,
     // which may be slightly faster (especially if AES-NI is not available)
-    constructor Create(PBKDF2Rounds: integer = 256;
+    constructor Create(PBKDF2Rounds: integer = 16;
       ReseedAfterBytes: integer = 1024*1024; AESKeySize: integer = 256); reintroduce; virtual;
     /// fill a TAESBlock with some pseudorandom data
     // - could be used e.g. to compute an AES Initialization Vector (IV)
@@ -1035,7 +1035,7 @@ type
     // /dev/random on Linux/POSIX
     // - this system-supplied entropy is then XORed with the output of a SHA-3
     // cryptographic SHAKE-256 generator in XOF mode, of several entropy sources
-    // (timestamp, thread and system information, Random32 SynCommons' function)
+    // (timestamp, thread and system information, SynCommons.Random32 function)
     // unless SystemOnly is TRUE
     // - depending on the system, entropy may not be true randomness: if you need
     // some truly random values, use TAESPRNG.Main.FillRandom() or TAESPRNG.Fill()
@@ -1099,7 +1099,8 @@ type
     // - default is 1 MB
     property SeedAfterBytes: integer read fSeedAfterBytes;
     /// how many PBKDF2_HMAC_SHA512 count is applied by Seed to the entropy
-    // - default is 256 rounds, which is more than enough for entropy gathering
+    // - default is 16 rounds, which is more than enough for entropy gathering,
+    // since GetEntropy output comes from a SHAKE-256 generator in XOF mode
     property SeedPBKDF2Rounds: cardinal read fSeedPBKDF2Rounds;
     /// how many bits (128 or 256 - which is the default) are used for the AES
     property AESKeySize: integer read fAESKeySize;
@@ -3082,7 +3083,8 @@ begin
   sha.Update(@step7data,sizeof(step7data));
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
-  FillZero(step7data);
+  if not NoInit then
+    FillZero(step7data);
 end;
 
 procedure THMAC_SHA1.Compute(msg: pointer; msglen: integer; out result: TSHA1Digest);
@@ -3326,7 +3328,8 @@ begin
   sha.Update(@step7data,sizeof(step7data));
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
-  FillCharFast(step7data,sizeof(step7data),0);
+  if not NoInit then
+    FillCharFast(step7data,sizeof(step7data),0);
 end;
 
 procedure THMAC_SHA384.Compute(msg: pointer; msglen: integer; out result: TSHA384Digest);
@@ -3410,7 +3413,8 @@ begin
   sha.Update(@step7data,sizeof(step7data));
   sha.Update(@result,sizeof(result));
   sha.Final(result,NoInit);
-  FillCharFast(step7data,sizeof(step7data),0);
+  if not NoInit then
+    FillCharFast(step7data,sizeof(step7data),0);
 end;
 
 procedure THMAC_SHA512.Compute(msg: pointer; msglen: integer; out result: TSHA512Digest);
