@@ -10077,54 +10077,6 @@ type
     procedure Read(var DA: TDynArray; NoCheckHash: boolean=false);
   end;
 
-  /// abstract high-level handling of SynLZ-compressed persisted storage
-  // - LoadFromReader/SaveToWriter abstract methods should be overriden
-  // with proper persistence implementation
-  TSynPersistentStore = class(TSynPersistent)
-  protected
-    fName: RawUTF8;
-    /// low-level virtual methods implementing the persistence reading
-    procedure LoadFromReader(var Source: TFastReader); virtual;
-    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
-  public
-    /// initialize a void storage with the supplied name
-    constructor Create(const aName: RawUTF8=''); reintroduce;
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFrom(const aBuffer: RawByteString);
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
-    /// initialize a storage from a SaveTo persisted buffer
-    // - raise a EFastReader exception on decoding error
-    constructor CreateFromFile(const aFileName: TFileName);
-    /// fill the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(const aBuffer: RawByteString); overload;
-    /// initialize the storage from a SaveTo persisted buffer
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - raise a EFastReader exception on decoding error
-    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
-    /// initialize the storage from a SaveToFile content
-    // - actually call the LoadFromReader() virtual method for persistence
-    // - returns false if the file is not found, true if the file was loaded
-    // without any problem, or raise a EFastReader exception on decoding error
-    function LoadFromFile(const aFileName: TFileName): boolean;
-    /// persist the content as a SynLZ-compressed binary blob
-    // - to be retrieved later on via LoadFrom method
-    // - actually call the SaveToWriter() protected virtual method for persistence
-    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
-      BufLen: integer=65536); virtual;
-    /// persist the content as a SynLZ-compressed binary file
-    // - to be retrieved later on via LoadFromFile method
-    // - actually call the SaveTo method for persistence
-    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
-    /// one optional text associated with this storage
-    // - you can define it as published to serialize its value
-    property Name: RawUTF8 read fName;
-  end;
-
   /// implements a thread-safe Bloom Filter storage
   // - a "Bloom Filter" is a space-efficient probabilistic data structure,
   // that is used to test whether an element is a member of a set. False positive
@@ -17151,12 +17103,12 @@ type
     // - returns true on success, false if the supplied task was not registered
     function EnQueue(aOnProcess: TOnSynBackgroundTimerProcess;
       const aMsgFmt: RawUTF8; const Args: array of const; aExecuteNow: boolean=false): boolean; overload;
-    /// remove a message from the processing list 
+    /// remove a message from the processing list
     // - supplied message will be searched in the internal FIFO list associated
     // with aOnProcess, then removed from the list if found
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied message was not registered
-    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean; 
+    function DeQueue(aOnProcess: TOnSynBackgroundTimerProcess; const aMsg: RawUTF8): boolean;
     /// execute a task without waiting for the next aOnProcessSecs occurence
     // - aOnProcess should have been registered by a previous call to Enable() method
     // - returns true on success, false if the supplied task was not registered
@@ -17169,6 +17121,64 @@ type
     property Task: TSynBackgroundTimerTaskDynArray read fTask;
     /// low-level access to the internal task mutex
     property TaskLock: TSynLocker read fTaskLock;
+  end;
+
+  /// abstract high-level handling of SynLZ-compressed persisted storage
+  // - LoadFromReader/SaveToWriter abstract methods should be overriden
+  // with proper persistence implementation
+  TSynPersistentStore = class(TSynPersistent)
+  protected
+    fName: RawUTF8;
+    {$ifndef DELPHI5OROLDER}
+    fLock: IAutoLocker; // TSynLocker will increase inherited fields offset
+    {$endif}
+    /// low-level virtual methods implementing the persistence reading
+    procedure LoadFromReader(var Source: TFastReader); virtual;
+    procedure SaveToWriter(aWriter: TFileBufferWriter); virtual;
+  public
+    /// initialize a void storage with no name
+    constructor Create; overload; override;
+    /// initialize a void storage with the supplied name
+    constructor Create(const aName: RawUTF8); reintroduce; overload; virtual;
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFrom(const aBuffer: RawByteString);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
+    /// initialize a storage from a SaveTo persisted buffer
+    // - raise a EFastReader exception on decoding error
+    constructor CreateFromFile(const aFileName: TFileName);
+    /// fill the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(const aBuffer: RawByteString); overload;
+    /// initialize the storage from a SaveTo persisted buffer
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - raise a EFastReader exception on decoding error
+    procedure LoadFrom(aBuffer: pointer; aBufferLen: integer); overload; virtual;
+    /// initialize the storage from a SaveToFile content
+    // - actually call the LoadFromReader() virtual method for persistence
+    // - returns false if the file is not found, true if the file was loaded
+    // without any problem, or raise a EFastReader exception on decoding error
+    function LoadFromFile(const aFileName: TFileName): boolean;
+    /// persist the content as a SynLZ-compressed binary blob
+    // - to be retrieved later on via LoadFrom method
+    // - actually call the SaveToWriter() protected virtual method for persistence
+    procedure SaveTo(out aBuffer: RawByteString; nocompression: boolean=false;
+      BufLen: integer=65536); virtual;
+    /// persist the content as a SynLZ-compressed binary file
+    // - to be retrieved later on via LoadFromFile method
+    // - actually call the SaveTo method for persistence
+    procedure SaveToFile(const aFileName: TFileName; nocompression: boolean=false);
+    /// one optional text associated with this storage
+    // - you can define it as published to serialize its value
+    property Name: RawUTF8 read fName;
+    {$ifndef DELPHI5OROLDER}
+    /// access to the associated instance critical section
+    // - call Lock.Enter/Leave to protect multi-thread access on this storage
+    property Lock: IAutoLocker read fLock;
+    {$endif}
   end;
 
 type
@@ -48986,9 +48996,17 @@ end;
 
 { TSynPersistentStore }
 
-constructor TSynPersistentStore.Create(const aName: RawUTF8);
+constructor TSynPersistentStore.Create;
 begin
   inherited Create;
+  {$ifndef DELPHI5OROLDER}
+  fLock := TAutoLocker.Create;
+  {$endif}
+end;
+
+constructor TSynPersistentStore.Create(const aName: RawUTF8);
+begin
+  Create;
   fName := aName;
 end;
 
@@ -48999,13 +49017,13 @@ end;
 
 constructor TSynPersistentStore.CreateFromBuffer(aBuffer: pointer; aBufferLen: integer);
 begin
-  inherited Create;
+  Create;
   LoadFrom(aBuffer, aBufferLen);
 end;
 
 constructor TSynPersistentStore.CreateFromFile(const aFileName: TFileName);
 begin
-  inherited Create;
+  Create;
   LoadFromFile(aFileName);
 end;
 
