@@ -41289,7 +41289,7 @@ begin // called by root/TimeStamp/info REST method
       'total',Stats.TaskCount, 'time',Stats.TotalTime.Text, 'host',ExeVersion.Host,
       'cpu',cpu, 'mem',mem, 'memused',KB(m.AllocatedUsed.Bytes), 'memfree',free,
       'exception',GetLastExceptions(10)]);
-    if assigned(OnInternalInfo) then
+    if Assigned(OnInternalInfo) then
       OnInternalInfo(self,info);
   finally
     m.Free;

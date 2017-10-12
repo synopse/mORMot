@@ -62364,6 +62364,8 @@ end;
 procedure TSystemUse.Subscribe(aProcessID: integer);
 var i,n: integer;
 begin
+  if self=nil then
+    exit;
   {$ifdef MSWINDOWS}
   if aProcessID=0 then
     aProcessID := GetCurrentProcessID;
@@ -62385,14 +62387,16 @@ end;
 function TSystemUse.Unsubscribe(aProcessID: integer): boolean;
 var i: integer;
 begin
+  result := false;
+  if self=nil then
+    exit;
   fSafe.Enter;
   try
     i := ProcessIndex(aProcessID);
     if i>=0 then begin
       fProcesses.Delete(i);
       result := true;
-    end else
-      result := false;
+    end;
   finally
     fSafe.Leave;
   end;
@@ -62414,20 +62418,23 @@ end;
 function TSystemUse.Data(out aData: TSystemUseData; aProcessID: integer=0): boolean;
 var i: integer;
 begin
-  fSafe.Enter;
-  try
-    i := ProcessIndex(aProcessID);
-    if i>=0 then begin
-      with fProcess[i] do
-        aData := Data[fDataIndex];
-      result := aData.TimeStamp<>0;
-    end else begin
-      FillCharFast(aData,SizeOf(aData),0);
-      result := false;
+  result := false;
+  if self<>nil then begin
+    fSafe.Enter;
+    try
+      i := ProcessIndex(aProcessID);
+      if i>=0 then begin
+        with fProcess[i] do
+          aData := Data[fDataIndex];
+        result := aData.TimeStamp<>0;
+        if result then
+          exit;
+      end;
+    finally
+      fSafe.Leave;
     end;
-  finally
-    fSafe.Leave;
   end;
+  FillCharFast(aData,SizeOf(aData),0);
 end;
 
 function TSystemUse.Data(aProcessID: integer): TSystemUseData;
@@ -62460,6 +62467,9 @@ end;
 function TSystemUse.HistoryData(aProcessID,aDepth: integer): TSystemUseDataDynArray;
 var i,n,last: integer;
 begin
+  result := nil;
+  if self=nil then
+    exit;
   fSafe.Enter;
   try
     i := ProcessIndex(aProcessID);
@@ -62513,8 +62523,12 @@ var data: TSystemUseDataDynArray;
     mem: RawUTF8;
     i: integer;
 begin
-  data := HistoryData(aProcessID,aDepth);
   result := '';
+  if aDestMemoryMB<>nil then
+    aDestMemoryMB^ := '';
+  if self=nil then
+    exit;
+  data := HistoryData(aProcessID,aDepth);
   for i := 0 to high(data) do
   with data[i] do begin
     result := FormatUTF8('%% ',[result,TruncTo2Digits(Kernel+User)]);
@@ -62534,6 +62548,8 @@ var res: TDocVariantData absolute result;
     i: integer;
 begin
   VarClear(result);
+  if self=nil then
+    exit;
   data := HistoryData(aProcessID,aDepth);
   res.InitFast(length(data),dvArray);
   for i := 0 to high(data) do
