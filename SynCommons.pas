@@ -2595,6 +2595,15 @@ const
     '', '"NaN"', '"Infinity"', '"-Infinity"');
 
 /// convert a floating-point value to its numerical text equivalency
+/// compute the sum of values, using a running compensation for lost low-order bits
+// - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
+// so will eventually result in an incorrect number
+// - Kahan algorithm keeps track of the accumulated error in integer operations,
+// to achieve a precision of more than 100 bits
+// - see https://en.wikipedia.org/wiki/Kahan_summation_algorithm
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+  {$ifdef HASINLINE}inline;{$endif}
+
 // - returns the count of chars stored into S (S[0] is not set)
 function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
 
@@ -27522,6 +27531,15 @@ begin
   if A<B then
     result := (B-A)<=DoublePrec else
     result := (A-B)<=DoublePrec;
+end;
+
+procedure KahanSum(const Data: double; var Sum, Carry: double);
+var y, t: double;
+begin
+  y := Data - Carry;
+  t := Sum + y;
+  Carry := (t - Sum) - y;
+  Sum := t;
 end;
 
 /// return the index of Value in Values[], -1 if not found
