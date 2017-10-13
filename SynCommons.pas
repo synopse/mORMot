@@ -2623,7 +2623,7 @@ procedure KahanSum(const Data: double; var Sum, Carry: double);
 // using fixed or scientific format)
 // - returns the count of chars stored into S (S[0] is not set)
 function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
-  {$ifdef EXTENDEDTOSTRING_USESTR}{$ifdef HASINLINE}inline;{$endif}{$endif}
+  {$ifdef FPC}inline;{$endif}
 
 /// convert a floating-point value to its numerical text equivalency without
 // scientification notation

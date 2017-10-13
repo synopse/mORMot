@@ -2273,16 +2273,16 @@ end;
 
 {$ifdef ISDELPHI2010}
 function TSQLRest.RetrieveList<T>(const FieldNames, SQLWhere: string;
-  const BoundsSQLWhere: array of const): TObjectList<T>; 
+  const BoundsSQLWhere: array of const): TObjectList<T>;
 var rows: TSQLTableJSON;
-    rec: T;
+    rec: TSQLRecord;
 begin
   result := TObjectList<T>.Create; // TObjectList<T> will free each T instance
   rows := MultiFieldValues(TSQLRecordClass(T),FieldNames,SQLWhere,BoundsSQLWhere);
   if rows<>nil then
     try
       repeat
-        rec := T.Create;
+        rec := TSQLRecordClass(T).Create;
         if not rows.FillOne(rec) then begin
           rec.Free;
           break;
