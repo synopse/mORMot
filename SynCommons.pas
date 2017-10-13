@@ -2594,7 +2594,20 @@ const
   JSON_NAN: array[TSynExtendedNan] of string[11] = (
     '', '"NaN"', '"Infinity"', '"-Infinity"');
 
-/// convert a floating-point value to its numerical text equivalency
+/// compare to floating point values, with IEEE 754 double precision
+// - use this function instead of raw = operator
+// - the precision is calculated from the A and B value range
+// - faster equivalent than SameValue() in Math unit
+// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
+function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
+
+/// compare to floating point values, with IEEE 754 double precision
+// - use this function instead of raw = operator
+// - the precision is calculated from the A and B value range
+// - faster equivalent than SameValue() in Math unit
+// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
+function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
+
 /// compute the sum of values, using a running compensation for lost low-order bits
 // - a naive "Sum := Sum + Data" will be restricted to 53 bits of resolution,
 // so will eventually result in an incorrect number
@@ -2604,8 +2617,20 @@ const
 procedure KahanSum(const Data: double; var Sum, Carry: double);
   {$ifdef HASINLINE}inline;{$endif}
 
+/// convert a floating-point value to its numerical text equivalency
+// - depending on the platform, it may either call ExtendedToStringNoExp or
+// use FloatToText() in ffGeneral mode (the shortest possible decimal string
+// using fixed or scientific format)
 // - returns the count of chars stored into S (S[0] is not set)
 function ExtendedToString(var S: ShortString; Value: TSynExtended; Precision: integer): integer;
+  {$ifdef EXTENDEDTOSTRING_USESTR}{$ifdef HASINLINE}inline;{$endif}{$endif}
+
+/// convert a floating-point value to its numerical text equivalency without
+// scientification notation
+// - returns the count of chars stored into S (S[0] is not set)
+// - call str(Value:0:Precision,S) to avoid any Exponent notation
+function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
+  Precision: integer): integer;
 
 /// check if the supplied text is NAN/INF/+INF/-INF, i.e. not a number
 // - as returned by ExtendedToString() textual conversion
@@ -7982,15 +8007,21 @@ type
     procedure Add(const guid: TGUID); overload;
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    procedure AddDouble(Value: double);
+    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // notation in the resulting text
+    procedure AddDouble(Value: double; noexp: boolean=false);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    procedure AddSingle(Value: single);
+    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // notation in the resulting text
+    procedure AddSingle(Value: single; noexp: boolean=false);
       {$ifdef HASINLINE}inline;{$endif}
     /// append a floating-point Value as a String
     // - write "Infinity", "-Infinity", and "NaN" for corresponding IEEE values
-    procedure Add(Value: Extended; precision: integer); overload;
+    // - noexp=true will call ExtendedToStringNoExp() to avoid any scientific
+    // notation in the resulting text
+    procedure Add(Value: Extended; precision: integer; noexp: boolean=false); overload;
     /// append a floating-point text buffer
     // - will correct on the fly '.5' -> '0.5' and '-.5' -> '-0.5'
     // - is used when the input comes from a third-party source with no regular
@@ -11656,20 +11687,6 @@ function UInt3DigitsToShort(Value: Cardinal): TShort4;
 // - could be used e.g. as parameter to FormatUTF8()
 function UInt2DigitsToShort(Value: byte): TShort4;
   {$ifdef HASINLINE}inline;{$endif}
-
-/// compare to floating point values, with IEEE 754 double precision
-// - use this function instead of raw = operator
-// - the precision is calculated from the A and B value range
-// - faster equivalent than SameValue() in Math unit
-// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValue(const A, B: Double; DoublePrec: double = 1E-12): Boolean;
-
-/// compare to floating point values, with IEEE 754 double precision
-// - use this function instead of raw = operator
-// - the precision is calculated from the A and B value range
-// - faster equivalent than SameValue() in Math unit
-// - if you know the precision range of A and B, it's faster to check abs(A-B)<range
-function SameValueFloat(const A, B: TSynExtended; DoublePrec: TSynExtended = 1E-12): Boolean;
 
 /// compute CRC16-CCITT checkum on the supplied buffer
 // - i.e. 16-bit CRC-CCITT, with polynomial x^16 + x^12 + x^5 + 1 ($1021) and
@@ -24592,9 +24609,8 @@ var // standard FormatSettings (US)
     SettingsUS: TFormatSettings;
 {$endif}
 
-function ExtendedToString(var S: ShortString; Value: TSynExtended;
+function ExtendedToStringNoExp(var S: ShortString; Value: TSynExtended;
   Precision: integer): integer;
-{$ifdef EXTENDEDTOSTRING_USESTR}
 var i,prec: integer;
 begin
   str(Value:0:Precision,S); // not str(Value:0,S) -> '  0.0E+0000'
@@ -24606,7 +24622,11 @@ begin
   for i := 2 to result do // test if scientific format -> return as this
     case S[i] of
     'E': exit;  // pos('E',S)>0; which Delphi 2009+ don't like
-    '.': dec(prec);
+    '.': if i>=precision then begin // return huge decimal number as is
+      result := i-1;
+      exit;
+    end else
+      dec(prec);
     end;
   if (prec>=Precision) and (prec<>result) then begin
     dec(result,prec-Precision);
@@ -24644,6 +24664,14 @@ begin
       break; // decimal were all '0' -> return only integer part
     end;
   end;
+end;
+
+function ExtendedToString(var S: ShortString; Value: TSynExtended;
+  Precision: integer): integer;
+{$ifdef EXTENDEDTOSTRING_USESTR}
+begin
+  result := ExtendedToStringNoExp(S,Value,Precision);
+end;
 {$else}
 {$ifdef UNICODE}
 var i: integer;
@@ -24656,8 +24684,8 @@ begin
   for i := 1 to result do
     PByteArray(@S)[i] := PWordArray(PtrInt(@S)-1)[i];
   {$endif}
-{$endif EXTENDEDTOSTRING_USESTR}
 end;
+{$endif EXTENDEDTOSTRING_USESTR}
 
 function ExtendedToStringNan(const s: shortstring): TSynExtendedNan;
 begin
@@ -49294,12 +49322,14 @@ begin
   Add('"');
 end;
 
-procedure TTextWriter.Add(Value: Extended; precision: integer);
+procedure TTextWriter.Add(Value: Extended; precision: integer; noexp: boolean);
 var S: ShortString;
 begin
   if Value=0 then
     Add('0') else begin
-    S[0] := AnsiChar(ExtendedToString(S,Value,precision));
+    if noexp then
+      S[0] := AnsiChar(ExtendedToStringNoExp(S,Value,precision)) else
+      S[0] := AnsiChar(ExtendedToString(S,Value,precision));
     case PInteger(@S)^ and $ffdfdfdf of // inlined ExtendedToStringNan()
       3+ord('N')shl 8+ord('A')shl 16+ord('N')shl 24:
         AddShort(JSON_NAN[seNan]);
@@ -49314,18 +49344,18 @@ begin
   end;
 end;
 
-procedure TTextWriter.AddDouble(Value: double);
+procedure TTextWriter.AddDouble(Value: double; noexp: boolean);
 begin
   if Value=0 then
     Add('0') else
-    Add(Value,DOUBLE_PRECISION);
+    Add(Value,DOUBLE_PRECISION,noexp);
 end;
 
-procedure TTextWriter.AddSingle(Value: single);
+procedure TTextWriter.AddSingle(Value: single; noexp: boolean);
 begin
   if Value=0 then
     Add('0') else
-    Add(Value,SINGLE_PRECISION);
+    Add(Value,SINGLE_PRECISION,noexp);
 end;
 
 {$ifndef CPU64} // Add(Value: PtrInt) already implemented it
