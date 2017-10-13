@@ -912,7 +912,7 @@ begin
         'd', 'D':
           cmd := cDaemon;
       else
-        byte(cmd) := 1 + IdemPCharArray(@param[2],
+        byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2],
           ['INST', 'UNINST', 'START', 'STOP', 'STAT', 'VERS', 'VERB', 'HELP',
            'HARDEN', 'PLAIN']);
       end;

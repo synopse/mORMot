@@ -1,4 +1,4 @@
-/// Win NT Service managment classes for mORMot
+/// daemon managment classes for mORMot, including low-level Win NT Service
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit mORMotService;
@@ -47,8 +47,8 @@ unit mORMotService;
   ***** END LICENSE BLOCK *****
 
 
-      Win NT Service managment classes
-      --------------------------------
+      Daemon / Service managment classes
+      ----------------------------------
 
     Version 1.3
     - TService debug and enhancements
@@ -77,6 +77,8 @@ unit mORMotService;
     - ensure TServiceController.CreateNewService() won't allow to install
       the service on a network drive - see [f487d3de45]
     - add an optional Description text when the service is installed
+    - added TSynDaemon/TSynDaemonSettings cross-platform classses as a lighter
+      alternative to dddInfraApps/dddInfraSettings
 
 }
 
@@ -85,10 +87,20 @@ interface
 {$I Synopse.inc}
 
 uses
-  Windows, Messages, Classes, SysUtils,
-  {$ifndef LVCL}Contnrs,{$endif}
+  {$ifdef MSWINDOWS}
+  Windows,
+  Messages,
+  {$endif}
+  Classes,
+  SysUtils,
+  {$ifndef LVCL}
+  Contnrs,
+  {$endif}
   SynCommons,
-  SynLog;
+  SynLog,
+  mORMot;
+
+{$ifdef MSWINDOWS}
 
 { *** some minimal Windows API definitions, replacing WinSvc.pas missing for FPC }
 
@@ -516,9 +528,71 @@ function CurrentStateToServiceState(CurrentState: DWORD): TServiceState;
 /// return the ready to be displayed text of a TServiceState value
 function ServiceStateText(State: TServiceState): string;
 
+{$endif MSWINDOWS}
+
+
+{ *** cross-plaform high-level services }
+
+type
+  /// abstract parent containing information able to initialize a TSynDaemon class
+  TSynDaemonSettings  = class(TSynAutoCreateFields)
+  protected
+    fInitialJsonContent: RawUTF8;
+    fFileName: TFileName;
+    fServiceName: string;
+    {$ifdef MSWINDOWS}
+    fServiceDisplayName: string;
+    {$endif}
+    fLog: TSynLogInfos;
+    fLogPath: TFileName;
+    fLogRotateFileCount: integer;
+    fLogClass: TSynLogClass;
+  public
+    constructor Create; override;
+    function LoadFromFile(const aFileName: TFileName): boolean;
+    procedure SaveIfNeeded;
+    procedure SetLog(aLogClass: TSynLogClass);
+  published
+    /// the service name, as used internally by Windows or the TSynDaemon class
+    // - default is the executable name
+    property ServiceName: string read fServiceName;
+    {$ifdef MSWINDOWS}
+    /// the service name, as displayed by Windows
+    // - default is the executable name
+    property ServiceDisplayName: string read fServiceDisplayName;
+    {$endif}
+    /// if not void, will enable the logs (default is LOG_STACKTRACE)
+    property Log: TSynLogInfos read fLog write fLog;
+    /// allow to customize where the logs should be written
+    property LogPath: TFileName read fLogPath;
+    /// how many files will be rotated (default is 2)
+    property LogRotateFileCount: integer read fLogRotateFileCount;
+  end;
+  TSynDaemonSettingsClass = class of TSynDaemonSettings;
+
+  /// abstract parent to implements a daemon/service
+  TSynDaemon = class(TSynPersistent)
+  protected
+    fWorkFolderName: TFileName;
+    fSettings: TSynDaemonSettings;
+    {$ifdef MSWINDOWS}
+    procedure DoStart(Sender: TService);
+    procedure DoStop(Sender: TService);
+    {$endif}
+  public
+    constructor Create(aSettingsClass: TSynDaemonSettingsClass;
+      const aWorkFolderName: TFileName); reintroduce;
+    procedure CommandLine{$ifdef MSWINDOWS}(aAutoStart: boolean){$endif};
+    procedure Start; virtual; abstract;
+    procedure Stop; virtual; abstract;
+    destructor Destroy; override;
+  published
+    property Settings: TSynDaemonSettings read fSettings;
+  end;
 
 implementation
 
+{$ifdef MSWINDOWS}
 
 { TServiceController }
 
@@ -742,29 +816,6 @@ begin
   result := -1;
 end;
 
-procedure JumpToService;
-{$ifdef CPU64}
-{$ifdef FPC}nostackframe; assembler;
-asm
-{$else}
-asm
-  .NOFRAME 
-{$endif FPC}
-  pop  rax
-  mov  rax,[rax] // !!! THIS WON'T WORK!
-  mov  rdx,[esp+8]
-  call TService.CtrlHandle
-  ret  8
-{$else}
-asm
-  pop  eax
-  mov  eax, [eax]           // retrieve self value
-  mov  edx, [esp+4]
-  call TService.CtrlHandle
-  ret  4
-{$endif}
-end;
-
 constructor TService.Create(const aServiceName, aDisplayName: String);
 begin
   if FindServiceIndex(aServiceName)>=0 then
@@ -885,13 +936,28 @@ begin
     result := FArgsList[Idx];
 end;
 
+{$ifdef CPUX86}
+procedure JumpToService;
+asm
+  pop  eax
+  mov  eax, [eax]           // retrieve self value
+  mov  edx, [esp+4]
+  call TService.CtrlHandle
+  ret  4
+end;
+{$endif CPUX86}
+
 function TService.GetControlHandler: TServiceControlHandler;
+{$ifdef CPUX86}
 var AfterCallAddr: Pointer;
     Offset: Integer;
+{$endif}
 begin
   Result := fControlHandler;
-  ServiceLog.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
-    'use TServiceSingle or set a custom ControlHandler',[self]);
+  if not Assigned(Result) then
+    ServiceLog.Add.Log(sllError,'%.GetControlHandler with fControlHandler=nil: '+
+      'use TServiceSingle or set a custom ControlHandler',[self]);
+  {$ifdef CPUX86}
   exit;
   if not Assigned(Result) then
   begin
@@ -910,6 +976,7 @@ begin
     end;
     Result := Pointer(fJumper);
   end;
+  {$endif CPUX86}
 end;
 
 function TService.GetInstalled: boolean;
@@ -1113,5 +1180,289 @@ begin
     ServiceSingle := nil;
   end;
 end;
+
+{$endif MSWINDOWS}
+
+
+{ *** cross-plaform high-level services }
+
+{ TSynDaemonSettings }
+
+constructor TSynDaemonSettings.Create;
+begin
+  inherited Create;
+  fLog := LOG_STACKTRACE;
+  fLogRotateFileCount := 2;
+  fServiceName := UTF8ToString(ExeVersion.ProgramName);
+  {$ifdef MSWINDOWS}
+  fServiceDisplayName := fServiceName;
+  {$else}
+  fLogPath := '/var/log/';
+  {$endif}
+end;
+
+function TSynDaemonSettings.LoadFromFile(const aFileName: TFileName): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  fInitialJsonContent := StringFromFile(aFileName);
+  tmp.Init(fInitialJsonContent);
+  try
+    RemoveCommentsFromJSON(tmp.buf);
+    JSONToObject(self, tmp.buf, result, nil, [j2oIgnoreUnknownProperty,
+      j2oIgnoreUnknownEnum, j2oHandleCustomVariants]);
+    if not result then
+      fInitialJsonContent := '';
+  finally
+    tmp.Done;
+  end;
+  if fLogPath = '' then
+    fLogPath := EnsureDirectoryExists(ExtractFilePath(aFileName) + 'log');
+end;
+
+procedure TSynDaemonSettings.SaveIfNeeded;
+var
+  saved: RawUTF8;
+begin
+  if (self = nil) or (fFileName = '') then
+    exit;
+  saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment]);
+  if saved <> fInitialJsonContent then
+    FileFromString(saved, fFileName);
+end;
+
+procedure TSynDaemonSettings.SetLog(aLogClass: TSynLogClass);
+begin
+  if (self <> nil) and (Log <> []) then
+    with aLogClass.Family do begin
+      DestinationPath := LogPath;
+      RotateFileCount := LogRotateFileCount;
+      if RotateFileCount > 0 then
+        RotateFileSizeKB := 20 * 1024; // rotate by 20 MB logs
+      Level := Log;
+      fLogClass := aLogClass;
+    end;
+end;
+
+
+{ TSynDaemon }
+
+constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
+  const aWorkFolderName: TFileName);
+begin
+  inherited Create;
+  if aWorkFolderName = '' then
+    fWorkFolderName := ExeVersion.ProgramFilePath
+  else
+    fWorkFolderName := EnsureDirectoryExists(aWorkFolderName, true);
+  if aSettingsClass = nil then
+    aSettingsClass := TSynDaemonSettings;
+  fSettings := aSettingsClass.Create;
+  fSettings.LoadFromFile(format('%s%s.settings', [fWorkFolderName, ExeVersion.ProgramName]));
+end;
+
+destructor TSynDaemon.Destroy;
+begin
+  fSettings.SaveIfNeeded;
+  Stop;
+  inherited Destroy;
+  FreeAndNil(fSettings);
+end;
+
+{$ifdef MSWINDOWS}
+procedure TSynDaemon.DoStart(Sender: TService);
+begin
+  Start;
+end;
+
+procedure TSynDaemon.DoStop(Sender: TService);
+begin
+  Stop;
+end;
+{$endif}
+
+type
+  TExecuteCommandLineCmd = (
+     cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cFork,
+     cStart, cStop, cState, cHelp);
+
+procedure TSynDaemon.CommandLine;
+var
+  cmd: TExecuteCommandLineCmd;
+  param: RawUTF8;
+  log: TSynLog;
+  {$ifdef MSWINDOWS}
+  service: TServiceSingle;
+  ctrl: TServiceController;
+  {$endif}
+
+  procedure Syntax;
+  var spaces: string;
+  begin
+    writeln('Try with one of the switches:');
+    writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
+      ' /console -c /verbose /help -h /version');
+    spaces := StringOfChar(' ', length(ExeVersion.ProgramName) + 2);
+    {$ifdef MSWINDOWS}
+    writeln(spaces, '/install /uninstall /start /stop /state');
+    {$else}
+    writeln(spaces, '/fork -f');
+    {$endif}
+  end;
+  function cmdText: RawUTF8;
+  begin
+    result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), cmd);
+  end;
+  procedure Show(Success: Boolean);
+  var
+    msg: RawUTF8;
+    error: integer;
+  begin
+    if Success then begin
+      msg := 'Successfully executed';
+      TextColor(ccWhite);
+    end
+    else begin
+      error := GetLastError;
+      msg := FormatUTF8('Error % "%" occured with',
+        [error, StringToUTF8(SysErrorMessage(error))]);
+      TextColor(ccLightRed);
+      ExitCode := 1; // notify error to caller batch
+    end;
+    msg := FormatUTF8('% "%" (%) on Service "%"',
+      [msg, param, cmdText, fSettings.ServiceName]);
+    writeln(UTF8ToConsole(msg));
+    log.Log(sllDebug, 'CommandLine: %', [msg], self);
+  end;
+
+begin
+  if (self = nil) or (fSettings = nil) then
+    exit;
+  if fSettings.fLogClass <> nil then
+    log := fSettings.fLogClass.Add
+  else
+    log := nil;
+
+  {$I-}
+  param := trim(StringToUTF8(paramstr(1)));
+  if (param = '') or not (param[1] in ['/', '-']) then
+    cmd := cNone
+  else
+    case param[2] of
+    'C':
+      cmd := cConsole;
+    'F':
+      cmd := cFork;
+    'H':
+      cmd := cHelp;
+    else
+      byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2], ['INST', 'UNINST',
+        'VERS', 'CONS', 'VERB', 'FORK', 'START', 'STOP', 'STAT', 'HELP']);
+    end;
+  case cmd of
+  cHelp:
+    Syntax;
+  cVersion: begin
+    writeln(' ', ExeVersion.ProgramFileName,
+      #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
+      #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
+    if ExeVersion.Version.Version32 <> 0 then
+      writeln(' Version: ', ExeVersion.Version.Detailed);
+  end;
+  cConsole, cVerbose: begin
+    writeln('Launched in ', cmdText, ' mode'#10);
+    TextColor(ccLightGray);
+    case cmd of
+      cVerbose: // leave as in settings for -c (cConsole)
+        if log <> nil then
+          log.Family.EchoToConsole := LOG_VERBOSE;
+    end;
+    try
+      log.Log(sllNewRun, 'Start %', [fSettings], self);
+      Start;
+      writeln('Press [Enter] to quit');
+      ioresult;
+      readln;
+      writeln('Shutting down server');
+      ioresult;
+      log.Log(sllNewRun, 'Stop', self);
+      Stop;
+    except
+      on E: Exception do
+        ConsoleShowFatalException(E, true);
+    end;
+  end;
+  {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
+  else if fSettings.ServiceName = '' then
+    if cmd = cNone then
+      Syntax
+    else begin
+      TextColor(ccLightRed);
+      writeln('No ServiceName specified - please fix the settings');
+    end
+  else
+  case cmd of
+    cNone:
+      if param = '' then begin // executed as a background service
+        service := TServiceSingle.Create(
+          fSettings.ServiceName, fSettings.ServiceDisplayName);
+        try
+          service.OnStart := DoStart;
+          service.OnStop := DoStop;
+          service.OnShutdown := DoStop; // sometimes, is called without Stop
+          if ServicesRun then // blocking until service shutdown
+            Show(true)
+          else if GetLastError = 1063 then
+            Syntax
+          else
+            Show(false);
+        finally
+          service.Free;
+        end;
+      end
+      else
+        Syntax;
+    cInstall:
+      with fSettings, ExeVersion.Version do
+        Show(TServiceController.Install(ServiceName, ServiceDisplayName,
+          format('%s %s %s', [ServiceDisplayName, DetailedOrVoid, CompanyName]),
+          aAutoStart) <> ssNotInstalled);
+    cStart, cStop, cUninstall, cState: begin
+      ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
+      try
+        case cmd of
+        cStart:
+          Show(ctrl.Start([]));
+        cStop:
+          Show(ctrl.Stop);
+        cUninstall:
+          begin
+            ctrl.Stop;
+            Show(ctrl.Delete);
+          end;
+        cState:
+          writeln(fSettings.ServiceName, ' State=', ServiceStateText(ctrl.State));
+        end;
+      finally
+        ctrl.Free;
+      end;
+    end;
+    else
+      Syntax;
+  end;
+  {$else}
+  cFork:
+    begin
+      //TODO: properly implement Linux daemon fork
+    end;
+  else
+    Syntax;
+  {$endif MSWINDOWS}
+  end;
+  {$I+}
+end;
+
 
 end.
