@@ -4751,6 +4751,9 @@ function MedianQuickSelectInteger(Values: PIntegerArray; n: integer): integer;
 function MedianQuickSelect(const OnCompare: TOnValueGreater; n: integer;
   var TempBuffer: TSynTempBuffer): integer;
 
+/// compute GCD of two integers using substraction-based Euclidean algorithm
+function gcd(a, b: cardinal): cardinal;
+
 /// performs a QuickSort using a comparison callback
 procedure QuickSortCompare(const OnCompare: TOnValueGreater;
   Index: PIntegerArray; L,R: PtrInt);
@@ -37213,6 +37216,14 @@ begin
   until false;
 end;
 
+function gcd(a, b: cardinal): cardinal;
+begin
+  while a <> b do
+    if a > b then
+      dec(a, b) else
+      dec(b, a);
+  result := a;
+end;
 
 {$ifdef PUREPASCAL}
 function ToVarInt32(Value: PtrInt; Dest: PByte): PByte;
