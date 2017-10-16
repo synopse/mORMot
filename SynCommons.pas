@@ -49911,7 +49911,7 @@ begin
   varLongWord: AddU(VLongWord);
   varInteger:  Add(VInteger);
   varInt64:    Add(VInt64);
-  varWord64:   Add(VInt64);
+  varWord64:   AddQ(VInt64);
   varSingle:   AddSingle(VSingle);
   varDouble:   AddDouble(VDouble);
   varDate:     AddDateTime(@VDate,'T','"');
