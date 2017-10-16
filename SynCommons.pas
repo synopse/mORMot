@@ -3348,7 +3348,7 @@ function SameTextU(const S1, S2: RawUTF8): Boolean;
 /// fast conversion of the supplied text into 8 bit uppercase
 // - this will not only convert 'a'..'z' into 'A'..'Z', but also accentuated
 // latin characters ('e' acute into 'E' e.g.), using NormToUpper[] array
-// - it will decode the supplied UTF-8 content to handle more than
+// - it will therefore decode the supplied UTF-8 content to handle more than
 // 7 bit of ascii characters (so this function is dedicated to WinAnsi code page
 // 1252 characters set)
 function UpperCaseU(const S: RawUTF8): RawUTF8;
@@ -3356,7 +3356,7 @@ function UpperCaseU(const S: RawUTF8): RawUTF8;
 /// fast conversion of the supplied text into 8 bit lowercase
 // - this will not only convert 'A'..'Z' into 'a'..'z', but also accentuated
 // latin characters ('E' acute into 'e' e.g.), using NormToLower[] array
-// - it will convert decode the supplied UTF-8 content to handle more than
+// - it will therefore decode the supplied UTF-8 content to handle more than
 // 7 bit of ascii characters
 function LowerCaseU(const S: RawUTF8): RawUTF8;
 

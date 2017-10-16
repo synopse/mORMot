@@ -90,7 +90,16 @@ uses
   {$ifdef MSWINDOWS}
   Windows,
   Messages,
-  {$endif}
+  {$else}
+  {$ifdef FPC}
+  SynFPCLinux,
+  BaseUnix,
+  Unix,
+  {$else}
+  Types,
+  LibC, // Kylix
+  {$endif FPC}
+  {$endif MSWINDOWS}
   Classes,
   SysUtils,
   {$ifndef LVCL}
@@ -548,26 +557,37 @@ type
     fLogRotateFileCount: integer;
     fLogClass: TSynLogClass;
   public
+    /// initialize the settings
     constructor Create; override;
+    /// read existing settings from a JSON file
     function LoadFromFile(const aFileName: TFileName): boolean;
+    /// persist the settings as a JSON file, named from LoadFromFile() parameter
     procedure SaveIfNeeded;
+    /// define the log information into the supplied TSynLog class
+    // - if you don't call this method, the logging won't be initiated
+    // - is to be called typically in the overriden Create constructor of the
+    // associated TSynDaemon class, just after "inherited Create"
     procedure SetLog(aLogClass: TSynLogClass);
+    /// returns user-friendly description of the service, including version
+    // information and company copyright (if available)
+    function ServiceDescription: string;
   published
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
-    property ServiceName: string read fServiceName;
+    property ServiceName: string read fServiceName write fServiceName;
     {$ifdef MSWINDOWS}
     /// the service name, as displayed by Windows
     // - default is the executable name
-    property ServiceDisplayName: string read fServiceDisplayName;
+    property ServiceDisplayName: string read fServiceDisplayName write fServiceDisplayName;
     {$endif}
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
     property Log: TSynLogInfos read fLog write fLog;
     /// allow to customize where the logs should be written
-    property LogPath: TFileName read fLogPath;
+    property LogPath: TFileName read fLogPath write fLogPath;
     /// how many files will be rotated (default is 2)
-    property LogRotateFileCount: integer read fLogRotateFileCount;
+    property LogRotateFileCount: integer read fLogRotateFileCount write fLogRotateFileCount;
   end;
+  /// meta-class of TSynDaemon settings information
   TSynDaemonSettingsClass = class of TSynDaemonSettings;
 
   /// abstract parent to implements a daemon/service
@@ -580,13 +600,23 @@ type
     procedure DoStop(Sender: TService);
     {$endif}
   public
+    /// initialize the daemon, creating the associated settings
+    // - any non supplied folder name will be replaced by a default value
+    // (executable folder under Windows, or /etc /var/log on Linux) 
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
-      const aWorkFolderName: TFileName); reintroduce;
+      const aWorkFolder, aSettingsFolder, aLogFolder: TFileName); reintroduce;
+    /// main entry point of the daemon, to process the command line switches
     procedure CommandLine{$ifdef MSWINDOWS}(aAutoStart: boolean){$endif};
+    /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
+    /// inherited class should override this abstract method with proper process
+    // - should do nothing if the daemon was already stopped
     procedure Stop; virtual; abstract;
+    /// call Stop, finalize the instance, and its settings
     destructor Destroy; override;
   published
+    /// the settings associated with this daemon
+    // - will be allocated in Create constructor, and released in Destroy
     property Settings: TSynDaemonSettings read fSettings;
   end;
 
@@ -1191,7 +1221,7 @@ end;
 constructor TSynDaemonSettings.Create;
 begin
   inherited Create;
-  fLog := LOG_STACKTRACE;
+  fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
   fServiceName := UTF8ToString(ExeVersion.ProgramName);
   {$ifdef MSWINDOWS}
@@ -1217,8 +1247,6 @@ begin
   finally
     tmp.Done;
   end;
-  if fLogPath = '' then
-    fLogPath := EnsureDirectoryExists(ExtractFilePath(aFileName) + 'log');
 end;
 
 procedure TSynDaemonSettings.SaveIfNeeded;
@@ -1233,9 +1261,23 @@ begin
     FileFromString(saved, fFileName);
 end;
 
+function TSynDaemonSettings.ServiceDescription: string;
+var
+  versionnumber: string;
+begin
+  result := UTF8ToString({$ifdef MSWINDOWS}ServiceDisplayName{$else}ServiceName{$endif});
+  with ExeVersion.Version do begin
+    versionnumber := DetailedOrVoid;
+    if versionnumber <> '' then
+      result := result + ' ' + versionnumber;
+    if CompanyName <> '' then
+      result := format('%s - (c)%d %s', [result, BuildYear, CompanyName]);
+  end;
+end;
+
 procedure TSynDaemonSettings.SetLog(aLogClass: TSynLogClass);
 begin
-  if (self <> nil) and (Log <> []) then
+  if (self <> nil) and (Log <> []) and (aLogClass <> nil) then
     with aLogClass.Family do begin
       DestinationPath := LogPath;
       RotateFileCount := LogRotateFileCount;
@@ -1250,17 +1292,27 @@ end;
 { TSynDaemon }
 
 constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
-  const aWorkFolderName: TFileName);
+  const aWorkFolder, aSettingsFolder, aLogFolder: TFileName);
+var
+  setf: TFileName;
 begin
   inherited Create;
-  if aWorkFolderName = '' then
+  if aWorkFolder = '' then
     fWorkFolderName := ExeVersion.ProgramFilePath
   else
-    fWorkFolderName := EnsureDirectoryExists(aWorkFolderName, true);
+    fWorkFolderName := EnsureDirectoryExists(aWorkFolder, true);
   if aSettingsClass = nil then
     aSettingsClass := TSynDaemonSettings;
   fSettings := aSettingsClass.Create;
-  fSettings.LoadFromFile(format('%s%s.settings', [fWorkFolderName, ExeVersion.ProgramName]));
+  setf := aSettingsFolder;
+  if setf = '' then
+    setf := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
+  fSettings.LoadFromFile(format('%s%s.settings', [setf, ExeVersion.ProgramName]));
+  if fSettings.LogPath = '' then
+    if aLogFolder = '' then
+      fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/var/log/'{$endif}
+    else
+      fSettings.LogPath := EnsureDirectoryExists(aLogFolder);
 end;
 
 destructor TSynDaemon.Destroy;
@@ -1281,11 +1333,48 @@ procedure TSynDaemon.DoStop(Sender: TService);
 begin
   Stop;
 end;
+
+{$else} // Linux/POSIX signal interception
+
+var
+  SynDaemonTerminated: integer;
+
+{$ifdef FPC}
+procedure DoShutDown(Sig: Longint; Info: PSigInfo; Context: PSigContext); cdecl;
+{$else}
+procedure DoShutDown(Sig: integer); cdecl;
 {$endif}
+begin
+  SynDaemonTerminated := Sig;
+end;
+
+procedure SigIntercept;
+{$ifdef FPC}
+var
+  saOld, saNew: SigactionRec;
+begin
+  FillCharFast(saNew, SizeOf(saNew), 0);
+  saNew.sa_handler := @DoShutDown;
+  fpSigaction(SIGQUIT, @saNew, @saOld);
+  fpSigaction(SIGTERM, @saNew, @saOld);
+  fpSigaction(SIGINT, @saNew, @saOld);
+{$else} // Kylix
+var
+  saOld, saNew: TSigAction;
+begin
+  FillCharFast(saNew, SizeOf(saNew), 0);
+  saNew.__sigaction_handler := @DoShutDown;
+  sigaction(SIGQUIT, @saNew, @saOld);
+  sigaction(SIGTERM, @saNew, @saOld);
+  sigaction(SIGINT, @saNew, @saOld);
+{$endif}
+end;
+
+{$endif MSWINDOWS}
 
 type
   TExecuteCommandLineCmd = (
-     cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cFork,
+     cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cRun, cFork,
      cStart, cStop, cState, cHelp);
 
 procedure TSynDaemon.CommandLine;
@@ -1296,6 +1385,51 @@ var
   {$ifdef MSWINDOWS}
   service: TServiceSingle;
   ctrl: TServiceController;
+  {$else}
+  procedure RunUntilSigTerminated(dofork: boolean);
+  var
+    pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
+  begin
+    SigIntercept;
+    try
+      if dofork then begin
+        pid := {$ifdef FPC}fpFork{$else}fork{$endif};
+        if pid < 0 then
+          raise ESynException.CreateUTF8('%.CommandLine Fork failed', [self]);
+        if pid > 0 then begin // main program - just terminate
+          //{$ifdef FPC}fpExit{$else}__exit{$endif}(0);
+          exit;
+        end else begin // clean forked instance
+          sid := {$ifdef FPC}fpSetSID{$else}setsid{$endif};
+          if sid < 0 then // new session (process group) created?
+            raise ESynException.CreateUTF8('%.CommandLine SetSID failed', [self]);
+          {$ifdef FPC}fpUMask{$else}umask{$endif}(0); // reset file mask
+          chdir('/'); // avoid locking current directory
+          Close(input);
+          AssignFile(input, '/dev/null');
+          ReWrite(input);
+          Close(output);
+          AssignFile(output, '/dev/null');
+          ReWrite(output);
+          {$ifdef FPC}Close{$else}__close{$endif}(stderr);
+        end;
+      end;
+      log := fSettings.fLogClass.Add;
+      log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
+        ExeVersion.Version.DetailedOrVoid], self);
+      Start;
+      while SynDaemonTerminated = 0 do
+        {$ifdef FPC}fpPause{$else}pause{$endif};
+      log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], self);
+      Stop;
+    except
+      on E: Exception do begin
+        if not dofork then
+          ConsoleShowFatalException(E, true);
+        Halt(1); // notify error to caller process
+      end;
+    end;
+  end;
   {$endif}
 
   procedure Syntax;
@@ -1308,7 +1442,7 @@ var
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, '/fork -f');
+    writeln(spaces, '/run -r /fork -f');
     {$endif}
   end;
   function cmdText: RawUTF8;
@@ -1340,10 +1474,7 @@ var
 begin
   if (self = nil) or (fSettings = nil) then
     exit;
-  if fSettings.fLogClass <> nil then
-    log := fSettings.fLogClass.Add
-  else
-    log := nil;
+  log := nil;
 
   {$I-}
   param := trim(StringToUTF8(paramstr(1)));
@@ -1353,13 +1484,15 @@ begin
     case param[2] of
     'C':
       cmd := cConsole;
+    'R':
+      cmd := cRun;
     'F':
       cmd := cFork;
     'H':
       cmd := cHelp;
     else
       byte(cmd) := ord(cInstall) + IdemPCharArray(@param[2], ['INST', 'UNINST',
-        'VERS', 'CONS', 'VERB', 'FORK', 'START', 'STOP', 'STAT', 'HELP']);
+        'VERS', 'CONS', 'VERB', 'RUN', 'FORK', 'START', 'STOP', 'STAT', 'HELP']);
     end;
   case cmd of
   cHelp:
@@ -1371,16 +1504,15 @@ begin
     if ExeVersion.Version.Version32 <> 0 then
       writeln(' Version: ', ExeVersion.Version.Detailed);
   end;
-  cConsole, cVerbose: begin
-    writeln('Launched in ', cmdText, ' mode'#10);
-    TextColor(ccLightGray);
-    case cmd of
-      cVerbose: // leave as in settings for -c (cConsole)
-        if log <> nil then
-          log.Family.EchoToConsole := LOG_VERBOSE;
-    end;
+  cConsole, cVerbose:
     try
-      log.Log(sllNewRun, 'Start %', [fSettings], self);
+      writeln('Launched in ', cmdText, ' mode'#10);
+      TextColor(ccLightGray);
+      log := fSettings.fLogClass.Add;
+      if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
+        log.Family.EchoToConsole := LOG_VERBOSE;
+      log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
+        ExeVersion.Version.DetailedOrVoid], self);
       Start;
       writeln('Press [Enter] to quit');
       ioresult;
@@ -1393,7 +1525,6 @@ begin
       on E: Exception do
         ConsoleShowFatalException(E, true);
     end;
-  end;
   {$ifdef MSWINDOWS} // implement the daemon as a Windows Service
   else if fSettings.ServiceName = '' then
     if cmd = cNone then
@@ -1425,10 +1556,9 @@ begin
       else
         Syntax;
     cInstall:
-      with fSettings, ExeVersion.Version do
+      with fSettings do
         Show(TServiceController.Install(ServiceName, ServiceDisplayName,
-          format('%s %s %s', [ServiceDisplayName, DetailedOrVoid, CompanyName]),
-          aAutoStart) <> ssNotInstalled);
+          ServiceDescription, aAutoStart) <> ssNotInstalled);
     cStart, cStop, cUninstall, cState: begin
       ctrl := TServiceController.CreateOpenService('', '', fSettings.ServiceName);
       try
@@ -1453,10 +1583,10 @@ begin
       Syntax;
   end;
   {$else}
+  cRun:
+    RunUntilSigTerminated(false);
   cFork:
-    begin
-      //TODO: properly implement Linux daemon fork
-    end;
+    RunUntilSigTerminated(true);
   else
     Syntax;
   {$endif MSWINDOWS}
