@@ -14935,7 +14935,7 @@ type
     /// safe version of Sleep() which won't break the thread process
     // - returns TRUE if the thread was Terminated
     // - returns FALSE if successfully waited up to MS milliseconds
-    function SleepOrTerminated(MS: integer): boolean;
+    function SleepOrTerminated(MS: integer; SleepStep: integer=10): boolean;
     /// read-only access to the associated REST instance
     property Rest: TSQLRest read FRest;
     /// TRUE if the associated REST instance will be owned by this thread
@@ -34324,7 +34324,7 @@ begin
     BeginCurrentThread,EndCurrentThread);
 end;
 
-function TSQLRest.NewBackgroundThreadprocess(
+function TSQLRest.NewBackgroundThreadProcess(
   aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
   const Format: RawUTF8; const Args: array of const;
   aStats: TSynMonitorClass): TSynBackgroundThreadProcess;
@@ -36403,7 +36403,7 @@ begin
   fSafe.Done;
 end;
 
-function TSQLRestThread.SleepOrTerminated(MS: integer): boolean;
+function TSQLRestThread.SleepOrTerminated(MS, SleepStep: integer): boolean;
 var endtix: Int64;
 begin
   result := true; // notify Terminated
@@ -36416,7 +36416,7 @@ begin
   end else begin
     endtix := GetTickCount64+MS;
     repeat
-      sleep(10);
+      sleep(SleepStep);
       if Terminated then
         exit;
     until GetTickCount64>endtix;

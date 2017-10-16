@@ -12264,9 +12264,16 @@ type
     // - you could define some callbacks to nest the thread execution, e.g.
     // assigned to TSQLRestServer.BeginCurrentThread/EndCurrentThread
     constructor Create(const aThreadName: RawUTF8; OnBeforeExecute: TNotifyThreadEvent=nil;
-      OnAfterExecute: TNotifyThreadEvent=nil); reintroduce;
+      OnAfterExecute: TNotifyThreadEvent=nil; CreateSuspended: boolean=false); reintroduce;
     /// release used resources
     destructor Destroy; override;
+    {$ifndef HASTTHREADSTART}
+    /// method to be called to start the thread
+    // - Resume is deprecated in the newest RTL, since some OS - e.g. Linux -
+    // do not implement this pause/resume feature; we define here this method
+    // for older versions of Delphi
+    procedure Start;
+    {$endif}
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
     // background tasks
@@ -17049,7 +17056,7 @@ type
       aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
       aOnBeforeExecute: TNotifyThreadEvent=nil;
       aOnAfterExecute: TNotifyThreadEvent=nil;
-      aStats: TSynMonitorClass=nil); reintroduce; virtual;
+      aStats: TSynMonitorClass=nil; CreateSuspended: boolean=false); reintroduce; virtual;
     /// finalize the thread
     destructor Destroy; override;
     /// access to the implementation event of the periodic task
@@ -22712,9 +22719,10 @@ begin
     result := SmallUInt32UTF8[VByte];
   varInteger:
     Int32ToUTF8(VInteger,result);
-  varInt64,
-  varWord64:
+  varInt64:
     Int64ToUTF8(VInt64,result);
+  varWord64:
+    UInt64ToUTF8(VInt64,result);
   varSingle:
     ExtendedToStr(VSingle,SINGLE_PRECISION,result);
   varDouble:
@@ -54493,24 +54501,24 @@ begin
 end;
 
 function MicroSecToString(Micro: QWord): RawUTF8;
-function TwoDigitToString(value: cardinal): RawUTF8;
-var L: integer;
-begin
-  UInt32ToUtf8(value,result);
-  L := length(result);
-  if L=1 then
-    result := '0.0'+result else // '3' -> '0.03'
-  if L=2 then
-    result := '0.'+result else // '35' -> '0.35'
-    insert('.',result,L-1); // '103' -> '1.03'
-end;
+  function TwoDigitToString(value: cardinal): RawUTF8;
+  var L: integer;
+  begin
+    UInt32ToUtf8(value,result);
+    L := length(result);
+    if L=1 then
+      result := '0.0'+result else // '3' -> '0.03'
+    if L=2 then
+      result := '0.'+result else // '35' -> '0.35'
+      insert('.',result,L-1); // '103' -> '1.03'
+  end;
 begin
   if Micro<=0 then
     result := '0us' else
   if Micro<1000 then
-    result := UInt32ToUtf8(Int64Rec(Micro).Lo)+'us' else
+    result := SmallUInt32UTF8[Micro]+'us' else
   if Micro<1000*1000 then
-    result := TwoDigitToString(Micro div 10)+'ms' else
+    result := TwoDigitToString(Int64Rec(Micro).Lo div 10)+'ms' else
     result := TwoDigitToString(Micro div (10*1000))+'s';
 end;
 
@@ -61616,16 +61624,6 @@ begin
 {$endif FPC}
 end;
 
-constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
-  OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent);
-begin
-  fProcessEvent := TEvent.Create(nil,false,false,'');
-  fThreadName := aThreadName;
-  fOnBeforeExecute := OnBeforeExecute;
-  fOnAfterExecute := OnAfterExecute;
-  inherited Create(false{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
-end;
-
 {$ifdef KYLIX3}
 type
   // see http://stackoverflow.com/a/3085509/458259 about this known Kylix bug
@@ -61712,6 +61710,23 @@ procedure FixedWaitForever(Event: TEvent);
 begin
   FixedWaitFor(Event,INFINITE);
 end;
+
+constructor TSynBackgroundThreadAbstract.Create(const aThreadName: RawUTF8;
+  OnBeforeExecute,OnAfterExecute: TNotifyThreadEvent; CreateSuspended: boolean);
+begin
+  fProcessEvent := TEvent.Create(nil,false,false,'');
+  fThreadName := aThreadName;
+  fOnBeforeExecute := OnBeforeExecute;
+  fOnAfterExecute := OnAfterExecute;
+  inherited Create(CreateSuspended{$ifdef FPC},512*1024{$endif}); // DefaultStackSize=512KB
+end;
+
+{$ifndef HASTTHREADSTART}
+procedure TSynBackgroundThreadAbstract.Start;
+begin
+  Resume;
+end;
+{$endif}
 
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
@@ -61994,7 +62009,8 @@ end;
 
 constructor TSynBackgroundThreadProcess.Create(const aThreadName: RawUTF8;
   aOnProcess: TOnSynBackgroundThreadProcess; aOnProcessMS: cardinal;
-  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent; aStats: TSynMonitorClass);
+  aOnBeforeExecute, aOnAfterExecute: TNotifyThreadEvent;
+  aStats: TSynMonitorClass; CreateSuspended: boolean);
 begin
   if not Assigned(aOnProcess) then
     raise ESynException.CreateUTF8('%.Create(aOnProcess=nil)',[self]);
@@ -62005,7 +62021,7 @@ begin
   fOnProcessMS := aOnProcessMS;
   if fOnProcessMS=0 then
     fOnProcessMS := INFINITE; // wait until ProcessEvent.SetEvent or Terminated
-  inherited Create(aThreadName,aOnBeforeExecute,aOnAfterExecute);
+  inherited Create(aThreadName,aOnBeforeExecute,aOnAfterExecute,CreateSuspended);
 end;
 
 destructor TSynBackgroundThreadProcess.Destroy;
