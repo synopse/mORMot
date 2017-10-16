@@ -1648,7 +1648,13 @@ type
     // - aProxyName and *TimeOut parameters are currently ignored by TCurlHttp
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
-      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0); virtual;
+      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0); overload; virtual;
+    /// connect to the supplied URI
+    // - is just a wrapper around TURI and the overloaded Create() constructor
+    constructor Create(const aURI: SockString;
+      const aProxyName: SockString=''; const aProxyByPass: SockString='';
+      ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0;
+      aIgnoreSSLCertificateErrors: boolean=false); overload;
 
     /// low-level HTTP/1.1 request
     // - after an Create(server,port), return 200,202,204 if OK,
@@ -1928,6 +1934,9 @@ type
   end;
 
 {$endif USELIBCURL}
+
+/// returns the best THttpRequest class, depending on the system it runs on
+function MainHttpClass: THttpRequestClass;
 
 /// create a TCrtSocket, returning nil on error
 // (useful to easily catch socket error exception ECrtSocket)
@@ -7813,6 +7822,17 @@ begin
   InternalConnect(ConnectionTimeOut,SendTimeout,ReceiveTimeout); // raise an exception on error
 end;
 
+constructor THttpRequest.Create(const aURI, aProxyName,aProxyByPass: SockString;
+  ConnectionTimeOut,SendTimeout,ReceiveTimeout: DWORD; aIgnoreSSLCertificateErrors: boolean);
+var URI: TURI;
+begin
+  if not URI.From(aURI) then
+    raise ECrtSocket.CreateFmt('%.Create: invalid aURI=%', [ClassName, aURI]);
+  Create(URI.Server,URI.Port,URI.Https,aProxyName,aProxyByPass,
+    ConnectionTimeOut,SendTimeout,ReceiveTimeout);
+  IgnoreSSLCertificateErrors := aIgnoreSSLCertificateErrors;
+end;
+
 class function THttpRequest.InternalREST(const url,method,data,header: SockString;
   aIgnoreSSLCertificateErrors: boolean; outHeaders: PSockString): SockString;
 var URI: TURI;
@@ -9757,6 +9777,25 @@ begin
   end;
 end;
 
+
+var
+  _MainHttpClass: THttpRequestClass;
+
+function MainHttpClass: THttpRequestClass;
+begin
+  if _MainHttpClass = nil then begin
+    {$ifdef USEWININET}
+    _MainHttpClass := TWinHTTP;
+    {$else}
+    {$ifdef USELIBCURL}
+    _MainHttpClass := TCurlHTTP
+    {$else}
+    raise ECrtSocket.Create('No THttpRequest class known!');
+    {$endif}
+    {$endif}
+  end;
+  result := _MainHttpClass;
+end;
 
 initialization
   {$ifdef MSWINDOWS}
