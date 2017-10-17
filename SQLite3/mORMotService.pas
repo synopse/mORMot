@@ -1415,13 +1415,16 @@ var
         end;
       end;
       log := fSettings.fLogClass.Add;
-      log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
-        ExeVersion.Version.DetailedOrVoid], self);
-      Start;
-      while SynDaemonTerminated = 0 do
-        {$ifdef FPC}fpPause{$else}pause{$endif};
-      log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], self);
-      Stop;
+      try
+        log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
+          ExeVersion.Version.DetailedOrVoid], self);
+        Start;
+        while SynDaemonTerminated = 0 do
+          {$ifdef FPC}fpPause{$else}pause{$endif};
+      finally
+        log.Log(sllNewRun, 'Stop from Sig=%', [SynDaemonTerminated], self);
+        Stop;
+      end;
     except
       on E: Exception do begin
         if not dofork then
@@ -1511,16 +1514,19 @@ begin
       log := fSettings.fLogClass.Add;
       if (cmd = cVerbose) and (log <> nil) then  // leave as in settings for -c
         log.Family.EchoToConsole := LOG_VERBOSE;
-      log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
-        ExeVersion.Version.DetailedOrVoid], self);
-      Start;
-      writeln('Press [Enter] to quit');
-      ioresult;
-      readln;
-      writeln('Shutting down server');
-      ioresult;
-      log.Log(sllNewRun, 'Stop', self);
-      Stop;
+      try
+        log.Log(sllNewRun, 'Start % %', [fSettings.ServiceName,
+          ExeVersion.Version.DetailedOrVoid], self);
+        Start;
+        writeln('Press [Enter] to quit');
+        ioresult;
+        readln;
+        writeln('Shutting down server');
+      finally
+        ioresult;
+        log.Log(sllNewRun, 'Stop', self);
+        Stop;
+      end;
     except
       on E: Exception do
         ConsoleShowFatalException(E, true);
