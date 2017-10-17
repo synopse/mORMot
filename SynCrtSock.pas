@@ -1557,8 +1557,11 @@ type
   // - used e.g. by class function THttpRequest.Get()
   TURI = {$ifdef UNICODE}record{$else}object{$endif}
   public
-    /// if the server is accessible via http:// or https://
+    /// if the server is accessible via https:// and not plain http://
     Https: boolean;
+    /// if the server is accessible via something else than http:// or https://
+    // - e.g. 'ws' or 'wss' for ws:// or wss:// 
+    Scheme: SockString;
     /// the server name
     // - e.g. 'www.somewebsite.com'
     Server: SockString;
@@ -3403,11 +3406,13 @@ begin
   if aURI='' then
     exit;
   P := pointer(aURI);
-  if IdemPChar(P,'HTTP://') then
-    inc(P,7) else
-  if IdemPChar(P,'HTTPS://') then begin
-    inc(P,8);
-    Https := true;
+  S := P;
+  while S^ in ['a'..'z','A'..'Z','+','-','.','0'..'9'] do inc(S);
+  if PInteger(S)^ and $ffffff=ord(':')+ord('/')shl 8+ord('/')shl 16 then begin
+    SetString(Scheme,P,S-P);
+    if IdemPChar(P,'HTTPS') then
+      Https := true;
+    P := S+3;
   end;
   S := P;
   while not (S^ in [#0,':','/']) do inc(S);

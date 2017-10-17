@@ -983,22 +983,12 @@ end;
 
 function TDDDAppSettingsStorageAbstract.SetOwner(
   aOwner: TDDDAppSettingsAbstract): boolean;
-var tmp: TSynTempBuffer;
 begin
   if self=nil then
-    exit;
-  fOwner := aOwner;
-  if fInitialJsonContent='' then
-    exit;
-  tmp.Init(fInitialJsonContent);
-  try
-    RemoveCommentsFromJSON(tmp.buf);
-    JSONToObject(fOwner,tmp.buf,result,nil,
-      [j2oIgnoreUnknownProperty,j2oIgnoreUnknownEnum,j2oHandleCustomVariants]);
-    if not result then
-      fInitialJsonContent := '';
-  finally
-    tmp.Done;
+    result := false
+  else begin
+    fOwner := aOwner;
+    result := JSONSettingsToObject(fInitialJsonContent, fOwner);
   end;
 end;
 

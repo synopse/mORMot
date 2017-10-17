@@ -2310,10 +2310,12 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
   // j2oSetterNoCreate to avoid the published field instance creation
+  // - set j2oAllowInt64Hex to let Int64/QWord values accept hexadecimal string
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate,
+    j2oAllowInt64Hex);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -2322,8 +2324,8 @@ const
   // - won't block JSON unserialization due to some minor class type definitions
   // - used e.g. by TObjArraySerializer.CustomReader and
   // TServiceMethodExecute.ExecuteJson methods
-  JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,
-    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty,j2oIgnoreStringType];
+  JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,j2oIgnoreUnknownEnum,
+    j2oIgnoreUnknownProperty,j2oIgnoreStringType,j2oAllowInt64Hex];
 
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
@@ -2352,6 +2354,12 @@ const
 // the default values are expected to be set before JSON parsing
 function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): PUTF8Char;
+
+/// parse the supplied JSON with some tolerance about Settings format
+// - will make a TSynTempBuffer copy for parsing, and un-comment it
+// - returns true if the supplied JSON was successfully retrieved
+// - returns false and set InitialJsonContent := '' on error
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
 
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
@@ -4675,6 +4683,8 @@ type
   end;
 
 const
+  /// void HTTP Status Code (not a standard value, for internal use only)
+  HTTP_NONE = 0;
   /// HTTP Status Code for "Continue"
   HTTP_CONTINUE = 100;
   /// HTTP Status Code for "Switching Protocols"
@@ -14942,6 +14952,8 @@ type
     /// reintroduced to call TeminatedSet
     procedure Terminate; reintroduce;
     {$endif}
+    /// wait for fEvent to be notified and fExecuting=false
+    procedure WaitForNotExecuting(maxMS: integer=500);
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
     destructor Destroy; override;
@@ -36404,14 +36416,22 @@ begin
   inherited Create(aCreateSuspended);
 end;
 
-destructor TSQLRestThread.Destroy;
+procedure TSQLRestThread.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecuting then begin
-    Terminate; // will notify Execute that the process is finished
-    endtix := GetTickCount64+500;
-    while fExecuting and (GetTickCount64>endtix) do
+    endtix := GetTickCount64+maxMS;
+    repeat
       Sleep(1); // wait for InternalExecute to finish
+    until not fExecuting or (GetTickCount64>=endtix);
+  end;
+end;
+
+destructor TSQLRestThread.Destroy;
+begin
+  if fExecuting then begin
+    Terminate; // will notify Execute that the process is finished
+    WaitForNotExecuting;
   end;
   inherited Destroy;
   if fOwnRest and (fRest<>nil) then begin
@@ -47958,6 +47978,24 @@ begin
   result := parser.Dest;
 end;
 
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  if InitialJsonContent='' then
+    exit;
+  tmp.Init(InitialJsonContent);
+  try
+    RemoveCommentsFromJSON(tmp.buf);
+    JSONToObject(Instance,tmp.buf,result,nil,JSONTOOBJECT_TOLERANTOPTIONS);
+    if not result then
+      InitialJsonContent := '';
+  finally
+    tmp.Done;
+  end;
+end;
+
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;
   TObjectListItemClass: TClass; Options: TJSONToObjectOptions): boolean;
 var tmp: TSynTempBuffer;
@@ -48164,8 +48202,12 @@ begin
     exit; // invalid JSON content (null has been handled above)
   case Kind of
   tkInt64{$ifdef FPC}, tkQWord{$endif}:
-    if wasString then
-      exit else begin
+    if wasString then begin
+      if not (j2oAllowInt64Hex in Options) or
+         not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
+        exit;
+      P^.SetInt64Prop(Value,V64);
+    end else begin
       V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
