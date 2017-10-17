@@ -1236,6 +1236,7 @@ end;
 
 function TSynDaemonSettings.LoadFromFile(const aFileName: TFileName): boolean;
 begin
+  fFileName := aFileName;
   fInitialJsonContent := StringFromFile(aFileName);
   result := JSONSettingsToObject(fInitialJsonContent, self);
 end;
@@ -1247,9 +1248,12 @@ begin
   if (self = nil) or (fFileName = '') then
     exit;
   saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment]);
-  if saved <> fInitialJsonContent then
-    FileFromString(saved, fFileName);
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
+    woInt64AsHex]);
+  if saved = fInitialJsonContent then
+    exit;
+  FileFromString(saved, fFileName);
+  fInitialJsonContent := saved;
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
