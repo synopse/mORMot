@@ -3656,6 +3656,14 @@ function GetBitCSV(const Bits; BitsCount: integer): RawUTF8;
 // - output text would be trimmed from any left or right space
 procedure GetNextItemShortString(var P: PUTF8Char; out Dest: ShortString; Sep: AnsiChar= ',');
 
+type
+  /// some stack-allocated zero-terminated character buffer
+  // - as used by GetNextTChar64
+  TChar64 = array[0..63] of AnsiChar;
+
+/// return next CSV string from P as a #0-ended buffer, false if no more
+function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
+
 /// return next CSV string as unsigned integer from P, 0 if no more
 function GetNextItemCardinal(var P: PUTF8Char; Sep: AnsiChar= ','): PtrUInt;
 
@@ -3664,6 +3672,9 @@ function GetNextItemInteger(var P: PUTF8Char; Sep: AnsiChar= ','): PtrInt;
 
 /// return next CSV string as 64 bit signed integer from P, 0 if no more
 function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+
+/// return next CSV string as 64 bit unsigned integer from P, 0 if no more
+function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
 
 /// return next CSV string as unsigned integer from P, 0 if no more
 // - P^ will point to the first non digit character (the item separator, e.g.
@@ -31436,55 +31447,64 @@ begin
     result := -result;
 end;
 
-function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
-{$ifdef CPU64}
+function GetNextTChar64(var P: PUTF8Char; Sep: AnsiChar; out Buf: TChar64): boolean;
+var i: integer;
 begin
-  result := GetNextItemInteger(P,Sep);
-end;
-{$else}
-var tmp: array[0..63] of AnsiChar;
-    i: integer;
-begin
-  result := 0;
+  result := false;
   if P=nil then
     exit;
   i := 0;
   while (P[i]<>#0) and (P[i]<>Sep) do begin
-    tmp[i] := P[i];
+    Buf[i] := P[i];
     inc(i);
-    if i>=sizeof(tmp) then
-      exit;
+    if i>=sizeof(Buf) then
+      exit; // avoid buffer overflow
   end;
-  tmp[i] := #0;
+  Buf[i] := #0;
   inc(P,i); // P[i]=Sep or #0
   if P^=#0 then
     P := nil else
     inc(P);
-  SetInt64(tmp,result);
+  result := true;
+end;
+
+function GetNextItemInt64(var P: PUTF8Char; Sep: AnsiChar= ','): Int64;
+{$ifdef CPU64}
+begin
+  result := GetNextItemInteger(P,Sep); // PtrInt=Int64
+end;
+{$else}
+var tmp: TChar64;
+begin
+  if GetNextTChar64(P,Sep,tmp) then
+    SetInt64(tmp,result) else
+    result := 0;
+end;
+{$endif}
+
+function GetNextItemQWord(var P: PUTF8Char; Sep: AnsiChar= ','): QWord;
+{$ifdef CPU64}
+begin
+  result := GetNextItemCardinal(P,Sep); // PtrUInt=QWord
+end;
+{$else}
+var tmp: TChar64;
+begin
+  if GetNextTChar64(P,Sep,tmp) then
+    SetQWord(tmp,result) else
+    result := 0;
 end;
 {$endif}
 
 function GetNextItemDouble(var P: PUTF8Char; Sep: AnsiChar= ','): double;
-var tmp: array[0..63] of AnsiChar;
-    i,err: integer;
+var tmp: TChar64;
+    err: integer;
 begin
-  result := 0;
-  if P=nil then
-    exit;
-  i := 0;
-  while (P[i]<>#0) and (P[i]<>Sep) do begin
-    tmp[i] := P[i];
-    inc(i);
-    if i>=sizeof(tmp) then
-      exit;
-  end;
-  tmp[i] := #0;
-  inc(P,i); // P[i]=Sep or #0
-  if P^=#0 then
-    P := nil else
-    inc(P);
-  result := GetExtended(tmp,err);
-  if err<>0 then
+  if GetNextTChar64(P,Sep,tmp) then begin
+    result := GetExtended(tmp,err);
+    if err<>0 then
+      result := 0;
+  end else
     result := 0;
 end;
 
