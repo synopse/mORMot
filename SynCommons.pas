@@ -11366,8 +11366,6 @@ type
   // - such result type would avoid a string allocation on heap
   TShort16 = string[16];
 
-  TShort32 = string[32];
-
 /// fast conversion from a pointer data into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 function PointerToHex(aPointer: Pointer): RawUTF8; overload;
@@ -11404,7 +11402,12 @@ procedure Int64ToHex(aInt64: Int64; var result: RawUTF8); overload;
 /// fast conversion from a Int64 value into hexa chars, ready to be displayed
 // - use internally BinToHexDisplay()
 // - such result type would avoid a string allocation on heap
-function Int64ToHexShort(aInt64: Int64): TShort16;
+procedure Int64ToHexShort(aInt64: Int64; out result: TShort16); overload;
+
+/// fast conversion from a Int64 value into hexa chars, ready to be displayed
+// - use internally BinToHexDisplay()
+// - such result type would avoid a string allocation on heap
+function Int64ToHexShort(aInt64: Int64): TShort16; overload;
 
 /// fast conversion from hexa chars into a pointer
 function HexDisplayToBin(Hex: PAnsiChar; Bin: PByte; BinBytes: integer): boolean;
@@ -27457,6 +27460,12 @@ begin
 end;
 
 function Int64ToHexShort(aInt64: Int64): TShort16;
+begin
+  result[0] := AnsiChar(sizeof(aInt64)*2);
+  BinToHexDisplay(@aInt64,@result[1],sizeof(aInt64));
+end;
+
+procedure Int64ToHexShort(aInt64: Int64; out result: TShort16);
 begin
   result[0] := AnsiChar(sizeof(aInt64)*2);
   BinToHexDisplay(@aInt64,@result[1],sizeof(aInt64));
@@ -61717,7 +61726,7 @@ begin
   end;
 end;
 
-{$else KYLIX3} // original FPC or Windows implementation is OK:
+{$else KYLIX3} // original FPC or Windows implementation is OK
 
 function FixedWaitFor(Event: TEvent; Timeout: LongWord): TWaitResult;
 begin
