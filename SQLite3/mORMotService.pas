@@ -107,7 +107,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  mORMot;
+  mORMot; // for ObjectToJSON/JSONSettingsToObject
 
 {$ifdef MSWINDOWS}
 
@@ -540,10 +540,12 @@ function ServiceStateText(State: TServiceState): string;
 {$endif MSWINDOWS}
 
 
-{ *** cross-plaform high-level services }
+{ *** cross-plaform high-level services/daemons }
 
 type
   /// abstract parent containing information able to initialize a TSynDaemon class
+  // - will handle persistence as JSON local files
+  // - you may consider using TDDDAppSettingsAbstract from dddInfraSettings 
   TSynDaemonSettings  = class(TSynAutoCreateFields)
   protected
     fInitialJsonContent: RawUTF8;
@@ -591,6 +593,7 @@ type
   TSynDaemonSettingsClass = class of TSynDaemonSettings;
 
   /// abstract parent to implements a daemon/service
+  // - you may consider using TDDDAdministratedDaemon from dddInfraApps 
   TSynDaemon = class(TSynPersistent)
   protected
     fWorkFolderName: TFileName;
@@ -1232,21 +1235,9 @@ begin
 end;
 
 function TSynDaemonSettings.LoadFromFile(const aFileName: TFileName): boolean;
-var
-  tmp: TSynTempBuffer;
 begin
-  result := false;
   fInitialJsonContent := StringFromFile(aFileName);
-  tmp.Init(fInitialJsonContent);
-  try
-    RemoveCommentsFromJSON(tmp.buf);
-    JSONToObject(self, tmp.buf, result, nil, [j2oIgnoreUnknownProperty,
-      j2oIgnoreUnknownEnum, j2oHandleCustomVariants]);
-    if not result then
-      fInitialJsonContent := '';
-  finally
-    tmp.Done;
-  end;
+  result := JSONSettingsToObject(fInitialJsonContent, self);
 end;
 
 procedure TSynDaemonSettings.SaveIfNeeded;

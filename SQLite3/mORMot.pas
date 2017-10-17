@@ -2355,6 +2355,12 @@ const
 function JSONToObject(var ObjectInstance; From: PUTF8Char; out Valid: boolean;
   TObjectListItemClass: TClass=nil; Options: TJSONToObjectOptions=[]): PUTF8Char;
 
+/// parse the supplied JSON with some tolerance about Settings format
+// - will make a TSynTempBuffer copy for parsing, and un-comment it
+// - returns true if the supplied JSON was successfully retrieved
+// - returns false and set InitialJsonContent := '' on error
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
+
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
 // - this overloaded version will make a private copy of the supplied JSON
@@ -47960,6 +47966,24 @@ begin
   parser.Parse;
   Valid := parser.Valid;
   result := parser.Dest;
+end;
+
+function JSONSettingsToObject(var InitialJsonContent: RawUTF8; Instance: TObject): boolean;
+var
+  tmp: TSynTempBuffer;
+begin
+  result := false;
+  if InitialJsonContent='' then
+    exit;
+  tmp.Init(InitialJsonContent);
+  try
+    RemoveCommentsFromJSON(tmp.buf);
+    JSONToObject(Instance,tmp.buf,result,nil,JSONTOOBJECT_TOLERANTOPTIONS);
+    if not result then
+      InitialJsonContent := '';
+  finally
+    tmp.Done;
+  end;
 end;
 
 function ObjectLoadJSON(var ObjectInstance; const JSON: RawUTF8;

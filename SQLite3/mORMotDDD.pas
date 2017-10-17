@@ -915,7 +915,7 @@ type
     // idle until the Start method is called
     constructor Create(aAdministrationServer: TSQLRestServer); reintroduce; overload; virtual;
     /// initialize the administrable service/daemon with its own TSQLRestServer
-    // - will initialize and own its own TSQLRestServerFullMemory
+    // - will initialize and own its dedicated TSQLRestServerFullMemory
     // - if aUserName is specified, authentication will be enabled, and a
     // single TSQLAuthUser will be created, with the supplied credentials
     // (the password matching TSQLAuthUser.PasswordHashHexa expectations)
