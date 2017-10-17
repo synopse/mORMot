@@ -7752,6 +7752,8 @@ type
   // is defined so that such properties would not be written
   // - all inherited properties would be serialized, unless woDontStoreInherited
   // is defined, and only the topmost class level properties would be serialized
+  // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
+  // see j2oAllowInt64Hex reverse option fot Json2Object 
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
@@ -7759,7 +7761,7 @@ type
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
     woIDAsIDstr, woSQLRawBlobAsBase64, woHideSynPersistentPassword,
     woObjectListWontStoreClassName, woDontStoreEmptyString,
-    woDontStoreInherited);
+    woDontStoreInherited, woInt64AsHex);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 

@@ -1511,8 +1511,7 @@ type
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=32);
-      reintroduce; virtual;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=32); reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -7948,56 +7947,56 @@ function TWinHttpAPI.InternalRetrieveAnswer(
 var Bytes, ContentLength, Read: DWORD;
     tmp: SockString;
 begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
-    result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
-    Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
-    Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
-    AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
-    // retrieve received content (if any)
-    Read := 0;
-    ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
-    if Assigned(fOnDownload) then begin
-      // download per-chunk using calback event
-      Bytes := fOnDownloadChunkSize;
-      if Bytes<=0 then
-        Bytes := 65536; // 64KB seems fair enough by default
-      SetLength(tmp,Bytes);
-      repeat
-        Bytes := InternalReadData(tmp,0);
-        if Bytes=0 then
-          break;
-        inc(Read,Bytes);
-        if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
-          break; // returned false = aborted
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until false;
-    end else
-    if ContentLength<>0 then begin
-      // optimized version reading "Content-Length: xxx" bytes
-      SetLength(Data,ContentLength);
-      repeat
-        Bytes := InternalReadData(Data,Read);
-        if Bytes=0 then begin
-          SetLength(Data,Read); // truncated content
-          break;
-        end;
-        inc(Read,Bytes);
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until Read=ContentLength;
-    end else begin
-      // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
-      repeat
-        SetLength(Data,Read+HTTP_RESP_BLOCK_SIZE);
-        Bytes := InternalReadData(Data,Read);
-        if Bytes=0 then
-          break;
-        inc(Read,Bytes);
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until false;
-      SetLength(Data,Read);
-    end;
+  result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
+  Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
+  Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
+  AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
+  // retrieve received content (if any)
+  Read := 0;
+  ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
+  if Assigned(fOnDownload) then begin
+    // download per-chunk using calback event
+    Bytes := fOnDownloadChunkSize;
+    if Bytes<=0 then
+      Bytes := 65536; // 64KB seems fair enough by default
+    SetLength(tmp,Bytes);
+    repeat
+      Bytes := InternalReadData(tmp,0);
+      if Bytes=0 then
+        break;
+      inc(Read,Bytes);
+      if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
+        break; // returned false = aborted
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until false;
+  end else
+  if ContentLength<>0 then begin
+    // optimized version reading "Content-Length: xxx" bytes
+    SetLength(Data,ContentLength);
+    repeat
+      Bytes := InternalReadData(Data,Read);
+      if Bytes=0 then begin
+        SetLength(Data,Read); // truncated content
+        break;
+      end;
+      inc(Read,Bytes);
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until Read=ContentLength;
+  end else begin
+    // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
+    repeat
+      SetLength(Data,Read+HTTP_RESP_BLOCK_SIZE);
+      Bytes := InternalReadData(Data,Read);
+      if Bytes=0 then
+        break;
+      inc(Read,Bytes);
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until false;
+    SetLength(Data,Read);
+  end;
 end;
 
 

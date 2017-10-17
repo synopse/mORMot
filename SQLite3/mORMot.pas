@@ -2310,12 +2310,12 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
   // j2oSetterNoCreate to avoid the published field instance creation
-  // - set j2oAllowInt64Hex to let Int64/QWord values accept hexadecimal string
+  // - set j2oAllowInt64Hex to let Int64/QWord fields accept hexadecimal string
+  // (as generated e.g. via the woInt64AsHex option)
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate,
-    j2oAllowInt64Hex);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate, j2oAllowInt64Hex);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -28851,7 +28851,7 @@ dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
     end;
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
       if DestInfo=@self then
-        // works also with TID, TTimeLog, Double and Currency
+        // works also with QWord, TID, TTimeLog, Double and Currency
 i64:    SetInt64Prop(Dest,GetInt64Prop(Source)) else
         goto dst;
     tkFloat:
@@ -48208,7 +48208,9 @@ begin
         exit;
       P^.SetInt64Prop(Value,V64);
     end else begin
-      V64 := GetInt64(PropValue,err);
+      if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+        V64 := GetQWord(PropValue,err) else
+        V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
       P^.SetInt64Prop(Value,V64);
@@ -48516,11 +48518,19 @@ begin
     PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
     U := FindIniNameValue(From,UpperName);
     case P^.PropType^.Kind of
-      tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
-        V64 := GetInt64(pointer(U),err);
+      tkInt64: begin
+        {$ifndef FPC}if P^.TypeInfo=TypeInfo(QWord) then
+          V64 := GetQWord(pointer(U),err) else{$endif}
+          V64 := GetInt64(pointer(U),err);
         if err=0 then
           P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
       end;
+      {$ifdef FPC}tkQWord: begin
+        V64 := GetQWord(pointer(U),err);
+        if err=0 then
+          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
+      end;
+      {$endif}
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
         V := GetInteger(pointer(U),err);
         if err=0 then
@@ -50509,21 +50519,30 @@ var Added: boolean;
             sftTimeLog,sftModTime,sftCreateTime: begin
               Add('"');
               AddTimeLog(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
             sftUnixTime: begin
               Add('"');
               AddUnixTime(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
             sftUnixMSTime: begin
               Add('"');
               AddUnixMSTime(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
-            else Add(V64);
-            end
-          else Add(V64);
+            end;
+          if woInt64AsHex in Options then begin
+            Add('"');
+            AddBinToHexDisplay(@V64,SizeOf(V64));
+            Add('"');
+          end else
+          if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+            AddQ(V64) else
+            Add(V64);
         end;
       end;
       {$ifdef FPC} tkBool, {$endif}
