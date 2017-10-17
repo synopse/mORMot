@@ -14952,7 +14952,7 @@ type
     /// reintroduced to call TeminatedSet
     procedure Terminate; reintroduce;
     {$endif}
-    /// wait for fEvent to be notified and fExecuting=false
+    /// wait for Execute to be ended (i.e. fExecuting=false)
     procedure WaitForNotExecuting(maxMS: integer=500);
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE

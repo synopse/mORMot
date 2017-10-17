@@ -12288,6 +12288,19 @@ type
     // for older versions of Delphi
     procedure Start;
     {$endif}
+    {$ifdef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by TThread.Terminate
+    procedure TerminatedSet; override;
+    {$else}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif}
+    /// wait for Execute/ExecuteLoop to be ended (i.e. fExecute<>exRun)
+    procedure WaitForNotExecuting(maxMS: integer=500);
     /// temporary stop the execution of ExecuteLoop, until set back to false
     // - may be used e.g. by TSynBackgroundTimer to delay the process of
     // background tasks
@@ -61757,10 +61770,38 @@ begin
 end;
 {$endif}
 
+{$ifndef HASTTHREADTERMINATESET}
+procedure TSynBackgroundThreadAbstract.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+{$endif}
+
+procedure TSynBackgroundThreadAbstract.TerminatedSet;
+begin
+  fProcessEvent.SetEvent; // ExecuteLoop should handle Terminated flag
+end;
+
+procedure TSynBackgroundThreadAbstract.WaitForNotExecuting(maxMS: integer);
+var endtix: Int64;
+begin
+  if fExecute = exRun then begin
+    endtix := GetTickCount64+maxMS;
+    repeat
+      Sleep(1); // wait for Execute to finish
+    until (fExecute <> exRun) or (GetTickCount64>=endtix);
+  end;
+end;
+
 destructor TSynBackgroundThreadAbstract.Destroy;
 begin
-  FreeAndNil(fProcessEvent);
+  if fExecute = exRun then begin
+    Terminate;
+    WaitForNotExecuting(100);
+  end;
   inherited Destroy;
+  FreeAndNil(fProcessEvent);
 end;
 
 procedure TSynBackgroundThreadAbstract.Execute;
@@ -61775,7 +61816,7 @@ begin
       fExecute := exRun;
       while not Terminated do
         if fExecuteLoopPause then
-          sleep(1) else
+          FixedWaitFor(fProcessEvent,100) else
           ExecuteLoop;
     finally
       if Assigned(fOnAfterExecute) then
@@ -61785,7 +61826,6 @@ begin
     fExecute := exFinished;
   end;
 end;
-
 
 { TSynBackgroundThreadMethodAbstract }
 
@@ -62054,14 +62094,10 @@ begin
 end;
 
 destructor TSynBackgroundThreadProcess.Destroy;
-var timeout: Int64;
 begin
   if fExecute=exRun then begin
     Terminate;
-    fProcessEvent.SetEvent;  // notify terminated
-    timeout := GetTickCount64+10000; // never wait forever
-    while (timeout<GetTickCount64) and (fExecute=exRun) do
-      Sleep(1);
+    WaitForNotExecuting(10000); // expect the background task to be finished
   end;
   inherited Destroy;
   fStats.Free;
