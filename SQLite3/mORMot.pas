@@ -14952,6 +14952,8 @@ type
     /// reintroduced to call TeminatedSet
     procedure Terminate; reintroduce;
     {$endif}
+    /// wait for fEvent to be notified and fExecuting=false
+    procedure WaitForNotExecuting(maxMS: integer=500);
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
     destructor Destroy; override;
@@ -36414,14 +36416,22 @@ begin
   inherited Create(aCreateSuspended);
 end;
 
-destructor TSQLRestThread.Destroy;
+procedure TSQLRestThread.WaitForNotExecuting(maxMS: integer);
 var endtix: Int64;
 begin
   if fExecuting then begin
-    Terminate; // will notify Execute that the process is finished
-    endtix := GetTickCount64+500;
-    while fExecuting and (GetTickCount64>endtix) do
+    endtix := GetTickCount64+maxMS;
+    repeat
       Sleep(1); // wait for InternalExecute to finish
+    until not fExecuting or (GetTickCount64>=endtix);
+  end;
+end;
+
+destructor TSQLRestThread.Destroy;
+begin
+  if fExecuting then begin
+    Terminate; // will notify Execute that the process is finished
+    WaitForNotExecuting;
   end;
   inherited Destroy;
   if fOwnRest and (fRest<>nil) then begin
