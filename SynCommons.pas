@@ -2893,11 +2893,16 @@ procedure SetInt64(P: PUTF8Char; var result: Int64);
 procedure SetQWord(P: PUTF8Char; var result: QWord);
   {$ifdef CPU64}inline;{$endif}
 
-/// get the 64-bit integer value stored in P^
+/// get the 64-bit signed integer value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
   {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
 
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
@@ -30287,6 +30292,57 @@ begin
     result := -result;
 end;
 {$endif}
+
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
+var c: cardinal;
+begin
+  err := 0;
+  result := 0;
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  inc(err);
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  Int64Rec(result).Lo := c;
+  inc(P);
+  repeat // fast 32 bit loop
+    c := byte(P^);
+    if c<>0 then begin
+      dec(c,48);
+      inc(err);
+      if c>9 then
+        exit;
+      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      inc(P);
+      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+        repeat // 64 bit loop
+          c := byte(P^);
+          if c=0 then begin
+            err := 0; // conversion success without error
+            break;
+          end;
+          dec(c,48);
+          inc(err);
+          if c>9 then
+            exit else
+            {$ifdef CPU32DELPHI}
+            result := result shl 3+result+result;
+            {$else}
+            result := result*10;
+            {$endif}
+          inc(result,c);
+          inc(P);
+        until false;
+        break;
+      end;
+    end else begin
+      err := 0; // reached P^=#0 -> conversion success without error
+      break;
+    end;
+  until false;
+end;
 
 function GetExtended(P: PUTF8Char): TSynExtended;
 var err: integer;
