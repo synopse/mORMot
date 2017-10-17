@@ -2310,10 +2310,12 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
   // j2oSetterNoCreate to avoid the published field instance creation
+  // - set j2oAllowInt64Hex to let Int64/QWord values accept hexadecimal string
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate,
+    j2oAllowInt64Hex);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -2322,8 +2324,8 @@ const
   // - won't block JSON unserialization due to some minor class type definitions
   // - used e.g. by TObjArraySerializer.CustomReader and
   // TServiceMethodExecute.ExecuteJson methods
-  JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,
-    j2oIgnoreUnknownEnum,j2oIgnoreUnknownProperty,j2oIgnoreStringType];
+  JSONTOOBJECT_TOLERANTOPTIONS = [j2oHandleCustomVariants,j2oIgnoreUnknownEnum,
+    j2oIgnoreUnknownProperty,j2oIgnoreStringType,j2oAllowInt64Hex];
 
 /// read an object properties, as saved by ObjectToJSON function
 // - ObjectInstance must be an existing TObject instance
@@ -4675,6 +4677,8 @@ type
   end;
 
 const
+  /// void HTTP Status Code (not a standard value, for internal use only)
+  HTTP_NONE = 0;
   /// HTTP Status Code for "Continue"
   HTTP_CONTINUE = 100;
   /// HTTP Status Code for "Switching Protocols"
@@ -48164,8 +48168,12 @@ begin
     exit; // invalid JSON content (null has been handled above)
   case Kind of
   tkInt64{$ifdef FPC}, tkQWord{$endif}:
-    if wasString then
-      exit else begin
+    if wasString then begin
+      if not (j2oAllowInt64Hex in Options) or
+         not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
+        exit;
+      P^.SetInt64Prop(Value,V64);
+    end else begin
       V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
