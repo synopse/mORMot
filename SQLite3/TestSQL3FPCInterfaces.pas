@@ -72,6 +72,9 @@ uses
 
 implementation
 
+uses
+  SynTable;
+
 {$ifndef HASINTERFACERTTI} // circumvent old FPC bug of missing RTTI
 
 { TInterfaceFactoryDefinition }
