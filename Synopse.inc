@@ -426,6 +426,7 @@
       {$define ISDELPHI2010_OR_FPC_NEWRTTI}
       {$define FPC_OR_UNICODE}
       {$define HASTTHREADSTART}
+      {$define HASTTHREADTERMINATESET}
       {$define HASINTERFACEASTOBJECT}
       {$ifdef NEWRTTINOTUSED}
         {$WEAKLINKRTTI ON}

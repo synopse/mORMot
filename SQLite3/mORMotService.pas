@@ -1265,7 +1265,7 @@ function TSynDaemonSettings.ServiceDescription: string;
 var
   versionnumber: string;
 begin
-  result := UTF8ToString({$ifdef MSWINDOWS}ServiceDisplayName{$else}ServiceName{$endif});
+  result := {$ifdef MSWINDOWS}ServiceDisplayName{$else}ServiceName{$endif};
   with ExeVersion.Version do begin
     versionnumber := DetailedOrVoid;
     if versionnumber <> '' then

@@ -14911,6 +14911,8 @@ type
     fOwnRest: boolean;
     fLog: TSynLog;
     fSafe: TSynLocker;
+    fEvent: TEvent;
+    fExecuting: boolean;
     /// allows customization in overriden Create (before Execute)
     fThreadName: RawUTF8;
     /// will call BeginCurrentThread/EndCurrentThread and catch exceptions
@@ -14929,13 +14931,24 @@ type
     // for older versions of Delphi
     procedure Start;
     {$endif}
+    {$ifdef HASTTHREADTERMINATESET}
+    /// properly terminate the thread
+    // - called by TThread.Terminate
+    procedure TerminatedSet; override;
+    {$else}
+    /// properly terminate the thread
+    // - called by reintroduced Terminate
+    procedure TerminatedSet; virtual;
+    /// reintroduced to call TeminatedSet
+    procedure Terminate; reintroduce;
+    {$endif}
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
     destructor Destroy; override;
     /// safe version of Sleep() which won't break the thread process
     // - returns TRUE if the thread was Terminated
     // - returns FALSE if successfully waited up to MS milliseconds
-    function SleepOrTerminated(MS: integer; SleepStep: integer=10): boolean;
+    function SleepOrTerminated(MS: integer): boolean;
     /// read-only access to the associated REST instance
     property Rest: TSQLRest read FRest;
     /// TRUE if the associated REST instance will be owned by this thread
@@ -14945,6 +14958,8 @@ type
     property Safe: TSynLocker read fSafe;
     /// read-only access to the TSynLog instance of the associated REST instance
     property Log: TSynLog read fLog;
+    /// a event associated to this thread
+    property Event: TEvent read fEvent;
     /// publishes the thread running state
     property Terminated;
   end;
@@ -36385,11 +36400,19 @@ begin
   fOwnRest := aOwnRest;
   if fThreadName='' then
     FormatUTF8('% %',[self,fRest.Model.Root],fThreadName);
+  fEvent := TEvent.Create(nil,false,false,'');
   inherited Create(aCreateSuspended);
 end;
 
 destructor TSQLRestThread.Destroy;
+var endtix: Int64;
 begin
+  if fExecuting then begin
+    Terminate; // will notify Execute that the process is finished
+    endtix := GetTickCount64+500;
+    while fExecuting and (GetTickCount64>endtix) do
+      Sleep(1); // wait for InternalExecute to finish
+  end;
   inherited Destroy;
   if fOwnRest and (fRest<>nil) then begin
     {$ifdef WITHLOG}
@@ -36401,26 +36424,21 @@ begin
     FreeAndNil(fRest);
   end;
   fSafe.Done;
+  fEvent.Free;
 end;
 
-function TSQLRestThread.SleepOrTerminated(MS, SleepStep: integer): boolean;
+function TSQLRestThread.SleepOrTerminated(MS: integer): boolean;
 var endtix: Int64;
 begin
   result := true; // notify Terminated
   if Terminated then
     exit;
-  if MS<32 then begin // smaller than GetTickCount resolution (under Windows)
-    sleep(MS);
+  endtix := GetTickCount64+MS;
+  repeat
+    FixedWaitFor(fEvent,MS);
     if Terminated then
       exit;
-  end else begin
-    endtix := GetTickCount64+MS;
-    repeat
-      sleep(SleepStep);
-      if Terminated then
-        exit;
-    until GetTickCount64>endtix;
-  end;
+  until (MS<32) or (GetTickCount64>=endtix);
   result := false; // normal delay expiration
 end;
 
@@ -36432,6 +36450,7 @@ begin
   SetCurrentThreadName('%',[fThreadName]);
   fRest.BeginCurrentThread(self);
   try
+    fExecuting := true;
     try
       InternalExecute;
     except
@@ -36443,6 +36462,7 @@ begin
   finally
     fRest.EndCurrentThread(self);
     fLog := nil; // no log after EndCurrentThread
+    fExecuting := false;
   end;
 end;
 
@@ -36452,6 +36472,19 @@ begin
   Resume;
 end;
 {$endif}
+
+{$ifndef HASTTHREADTERMINATESET}
+procedure TSQLRestThread.Terminate;
+begin
+  inherited Terminate; // FTerminated := True
+  TerminatedSet;
+end;
+{$endif}
+
+procedure TSQLRestThread.TerminatedSet;
+begin
+  fEvent.SetEvent;
+end;
 
 
 { TSQLRestURIParams }
@@ -36845,7 +36878,6 @@ type
   protected
     fClient: TSQLRestClientURI;
     fPendingRows: RawUTF8;
-    fNotifier: TEvent;
     procedure InternalExecute; override;
   public
     constructor Create(aClient: TSQLRestClientURI); reintroduce;
@@ -36855,7 +36887,6 @@ type
 
 constructor TRemoteLogThread.Create(aClient: TSQLRestClientURI);
 begin
-  fNotifier := TEvent.Create(nil,false,false,'');
   fClient := aClient;
   inherited Create(aClient,false,false);
 end;
@@ -36864,18 +36895,14 @@ destructor TRemoteLogThread.Destroy;
 var i: integer;
 begin
   if fPendingRows<>'' then begin
-    fNotifier.SetEvent;
+    fEvent.SetEvent;
     for i := 1 to 200 do begin
       SleepHiRes(10);
       if fPendingRows='' then
         break;
     end;
   end;
-  Terminate; // will notify Execute that the process is finished
-  fNotifier.SetEvent;
-  SleepHiRes(50); // wait for Execute to finish
-  fNotifier.Free;
-  inherited;
+  inherited Destroy;
 end;
 
 procedure TRemoteLogThread.AddRow(const aText: RawUTF8);
@@ -36886,14 +36913,14 @@ begin
   finally
     fSafe.UnLock;
   end;
-  fNotifier.SetEvent;
+  fEvent.SetEvent;
 end;
 
 procedure TRemoteLogThread.InternalExecute;
 var aText: RawUTF8;
 begin
   while not Terminated do
-    if FixedWaitFor(fNotifier,INFINITE)=wrSignaled then begin
+    if FixedWaitFor(fEvent,INFINITE)=wrSignaled then begin
       if Terminated then
         break;
       fSafe.Lock;
