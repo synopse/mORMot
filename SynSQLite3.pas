@@ -2819,8 +2819,7 @@ type
     // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE;
-      aDefaultCacheSize: integer=10000);
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000);
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -4355,7 +4354,12 @@ begin
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
       exit;
-  Dest := TSQLDatabase.Create(BackupFileName,aPassword);
+  // see https://bitbucket.org/egrange/sql3bak for proper parameters
+  Dest := TSQLDatabase.Create(BackupFileName,aPassword,0,1);
+  Dest.SetLockingMode(lmExclusive);
+  Dest.SetSynchronous(smOff);
+  Dest.ExecuteNoException('PRAGMA journal_mode=MEMORY');
+  Dest.ExecuteNoException('PRAGMA temp_store=MEMORY');
   Backup := sqlite3.backup_init(Dest.DB,'main',DB,'main');
   if Backup=0 then begin
     Dest.Free;
@@ -4417,7 +4421,7 @@ begin
     exit;
   {$ifdef WITHLOG}
   FPCLog := fLog.Enter;
-  FPCLog.Log(sllDB,'closing "%"',[FileName],self);
+  FPCLog.Log(sllDB,'closing "%" %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
