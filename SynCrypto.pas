@@ -2385,6 +2385,15 @@ type
     // - this method is thread-safe
     function VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUTF8;
       out JWT: TJWTContent): boolean; overload;
+    /// in-place decoding and quick check of the JWT paylod
+    // - it won't check the signature, but the header's algorithm against the
+    // class name (use TJWTAbstract class to allow any algorithm)
+    // - it will decode the JWT payload and check for its expiration, and some
+    // mandatory fied values
+    // - may be used on client side to quickly validate a JWT received from
+    // server, without knowing the exact algorithm or secret keys 
+    class function VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
+      ExpectedAudience: RawUTF8; Expiration: PUnixTime=nil; Signature: PRawUTF8=nil): TJWTResult;
   published
     /// the name of the algorithm used by this instance (e.g. 'HS256')
     property Algorithm: RawUTF8 read fAlgorithm;
@@ -2436,6 +2445,9 @@ type
       aExpirationMinutes: integer=0; aIDIdentifier: TSynUniqueIdentifierProcess=0;
       aIDObfuscationKey: RawUTF8=''); reintroduce;
   end;
+
+  /// matches TJWTHS256, TJWTHS385 and TJWTHS512 algoritms
+  TJWTHSAlgo = (hs256, hs384, hs512);
 
   /// implements JSON Web Tokens using 'HS256' (HMAC SHA-256) algorithm
   // - as defined in @http://tools.ietf.org/html/rfc7518 paragraph 3.2
@@ -2545,6 +2557,16 @@ const
   // - RFC standard expects those to be case-sensitive
   JWT_CLAIMS_TEXT: array[TJWTClaim] of RawUTF8 = (
     'iss','sub','aud','exp','nbf','iat','jti');
+
+  /// able to instantiate any of the TJWAbstract instance expected
+  JWT_HS_TEXT: array[TJWTHSAlgo] of RawUTF8 = (
+    'HS256', 'HS384', 'HS512');
+
+/// will create an instance of TJWTHS256/TJWTHS384/TJWTHS512
+function JWTHS(algo: TJWTHSAlgo; const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+  aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
+  aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8='';
+  aHmacSecretHexa: PRawUTF8=nil): TJWTAbstract;
 
 function ToText(res: TJWTResult): PShortString; overload;
 function ToCaption(res: TJWTResult): string; overload;
@@ -12375,7 +12397,7 @@ begin
         payload.AddValueFromText(JWT_CLAIMS_TEXT[jrcAudience],Audience,true);
   if jrcNotBefore in fClaims then
     if NotBefore<=0 then
-      exit else
+      payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore],UnixTimeUTC) else
       payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcNotBefore],DateTimeToUnixTime(NotBefore));
   if jrcIssuedAt in fClaims then
     payload.AddOrUpdateValue(JWT_CLAIMS_TEXT[jrcIssuedAt],UnixTimeUTC);
@@ -12482,8 +12504,7 @@ begin
     if (len=0) or (len>512) then
       exit;
     signature64 := copy(Token,1,len-1);
-    Base64FromURI(signature64);
-    signature := Base64ToBin(signature64);
+    signature := Base64URIToBin(signature64);
     if (head.InitJSONInPlace(pointer(signature),JSON_OPTIONS_FAST)=nil) or
        (head.U['alg']<>fAlgorithm) or
        (head.GetAsRawUTF8('typ',payload) and (payload<>'JWT')) then
@@ -12595,6 +12616,64 @@ begin
     JWT.result := jwtWrongFormat else
     Verify(copy(HttpAuthorizationHeader,8,maxInt),JWT);
   result := JWT.result=jwtValid;
+end;
+
+class function TJWTAbstract.VerifyPayload(const Token, ExpectedSubject, ExpectedIssuer,
+  ExpectedAudience: RawUTF8; Expiration: PUnixTime; Signature: PRawUTF8): TJWTResult;
+var text: RawUTF8;
+    P: PUTF8Char;
+    V: TPUtf8CharDynArray;
+    now, time: cardinal;
+begin
+  result := jwtInvalidAlgorithm;
+  P := pointer(Token);
+  if P=nil then
+    exit;
+  GetNextItem(P,'.',text);
+  if self<>TJWTAbstract then begin
+    text := Base64URIToBin(text);
+    if not IdemPropNameU(copy(ToText(self),5,10),JSONDecode(text,'alg')) then
+      exit;
+  end;
+  result := jwtInvalidPayload;
+  GetNextItem(P,'.',text);
+  text := Base64URIToBin(text);
+  if text='' then
+    exit;
+  JSONDecode(pointer(text),['iss','aud','exp','nbf','sub'],V,true);
+  result := jwtUnexpectedClaim;
+  if (ExpectedSubject<>'') and not IdemPropNameU(ExpectedSubject,V[4],StrLen(V[4])) then
+    exit;
+  if (ExpectedIssuer<>'') and not IdemPropNameU(ExpectedIssuer,V[0],StrLen(V[0])) then
+    exit;
+  result := jwtUnknownAudience;
+  if (ExpectedAudience<>'') and not IdemPropNameU(ExpectedAudience,V[1],StrLen(V[1])) then
+    exit;
+  if Expiration<>nil then
+    Expiration^ := 0;
+  if (V[2]<>nil) or (V[3]<>nil) then begin
+    now := UnixTimeUTC;
+    if V[2]<>nil then begin
+      time := GetCardinal(V[2]);
+      result := jwtExpired;
+      if now>time then
+        exit;
+      if Expiration<>nil then
+        Expiration^ := time;
+    end;
+    if V[3]<>nil then begin
+      time := GetCardinal(V[3]);
+      result := jwtNotBeforeFailed;
+      if now<time then
+        exit;
+    end;
+  end;
+  result := jwtInvalidSignature;
+  if P=nil then
+    exit;
+  if Signature<>nil then
+    SetRawUTF8(Signature^,P,StrLen(P));
+  result := jwtValid;
 end;
 
 
@@ -12792,6 +12871,47 @@ destructor TJWTHS512.Destroy;
 begin
   inherited Destroy;
   FillcharFast(fHmacPrepared,sizeof(fHmacPrepared),0); // erase secret on heap
+end;
+
+function JWTHS(algo: TJWTHSAlgo; const aSecret: RawUTF8; aSecretPBKDF2Rounds: integer;
+  aClaims: TJWTClaims; const aAudience: array of RawUTF8; aExpirationMinutes: integer=0;
+  aIDIdentifier: TSynUniqueIdentifierProcess=0; aIDObfuscationKey: RawUTF8='';
+  aHmacSecretHexa: PRawUTF8=nil): TJWTAbstract;
+var
+  sec256: THash256;
+  sec384: THash384;
+  sec512: THash512;
+begin
+  case algo of
+  HS256: begin
+    result := TJWTHS256.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
+      aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
+    if aHmacSecretHexa<>nil then begin
+      TJWTHS256(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec256);
+      aHmacSecretHexa^ := SHA256DigestToString(sec256);
+      FillZero(sec256);
+    end;
+  end;
+  HS384: begin
+    result := TJWTHS384.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
+      aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
+    if aHmacSecretHexa<>nil then begin
+      TJWTHS384(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec384);
+      aHmacSecretHexa^ := SHA384DigestToString(sec384);
+      FillZero(sec384);
+    end;
+  end;
+  HS512: begin
+    result := TJWTHS512.Create(aSecret,aSecretPBKDF2Rounds,aClaims,aAudience,
+      aExpirationMinutes,aIDIdentifier,aIDObfuscationKey);
+    if aHmacSecretHexa<>nil then begin
+      TJWTHS512(result).ComputeHMACSecret(aSecret,aSecretPBKDF2Rounds,sec512);
+      aHmacSecretHexa^ := SHA512DigestToString(sec512);
+      FillZero(sec512);
+    end;
+  end;
+  else result := nil;
+  end;
 end;
 
 function ToText(res: TJWTResult): PShortString;
