@@ -11471,6 +11471,10 @@ procedure Base64ToURI(var base64: RawUTF8);
 // '_' or '-' by '+' or '/'
 procedure Base64FromURI(var base64: RawUTF8);
 
+/// conversion from URI-compatible encoded text into its decoded Base64 value
+function Base64URIToBin(var base64: RawUTF8): RawByteString;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(const s: RawByteString): RawUTF8; overload;
@@ -26876,6 +26880,12 @@ begin
     for i := len to len+append-1 do
       PByteArray(base64)[i] := ord('=');
   end;
+end;
+
+function Base64URIToBin(var base64: RawUTF8): RawByteString;
+begin
+  Base64FromURI(base64);
+  result := Base64ToBin(base64);
 end;
 
 function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
