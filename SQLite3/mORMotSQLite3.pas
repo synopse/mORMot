@@ -345,6 +345,7 @@ type
     fStatementGenericSQL: RawUTF8;
     fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
+    fStatementTruncateSQLLogLen: integer;
     /// list of TSQLVirtualTableModuleServerDB registered external modules
     // - is a TList and not a TObjectList since instances will be destroyed by
     // the SQLite3 engine via sqlite3InternalFreeModule() private function
@@ -560,6 +561,10 @@ type
     // - will execute not default select max(rowid) from Table, but faster
     // $ select rowid from Table order by rowid desc limit 1
     function TableMaxID(Table: TSQLRecordClass): TID; override;
+    /// after how many bytes a sllSQL statement log entry should be truncated
+    // - default is 0, meaning no truncation
+    property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
+      write fStatementTruncateSQLLogLen;
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -808,6 +813,9 @@ begin
 end;
 
 procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
+var
+  tmp: TSynTempBuffer;
+  P: PAnsiChar; 
 begin
   try
     if fStatementTimer<>nil then begin
@@ -817,7 +825,15 @@ begin
         fStatementTimer^.ComputeTime;
       end;
       if E=nil then
-        InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
+        if (fStatementTruncateSQLLogLen > 0) and
+           (length(fStatementSQL) > fStatementTruncateSQLLogLen) then begin
+          tmp.Init(pointer(fStatementSQL),fStatementTruncateSQLLogLen);
+          P := tmp.buf;
+          PCardinal(P+fStatementTruncateSQLLogLen-3)^ := ord('.')+ord('.')shl 8+ord('.')shl 16;
+          InternalLog('% % % len=%',[fStatementTimer^.LastTime,Msg,P,length(fStatementSQL)],sllSQL);
+          tmp.Done;
+        end else
+          InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
         InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
     end;
