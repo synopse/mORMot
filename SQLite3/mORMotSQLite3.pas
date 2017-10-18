@@ -1844,6 +1844,7 @@ procedure TSQLRestServerDB.AdministrationExecute(const DatabaseName,SQL: RawUTF8
   var result: TServiceCustomAnswer);
 var new,cmd,fn: RawUTF8;
     bfn: TFileName;
+    compress: boolean;
     i: integer;
 begin
   inherited AdministrationExecute(DatabaseName,SQL,result);
@@ -1879,9 +1880,9 @@ begin
         bfn := UTF8ToString(fn);
         if ExtractFilePath(bfn)='' then // put in local data folder if not set
           bfn := ExtractFilePath(DB.FileName)+bfn;
-        if DB.BackupBackground(bfn,4*1024,1,nil, // 4*1024*4096=16MB step
-           GetFileNameExtIndex(bfn,'dbsynlz')=0) then
-          result.Content := JsonEncode(['started',bfn]) else
+        compress := GetFileNameExtIndex(bfn,'dbsynlz')=0;
+        if DB.BackupBackground(bfn,4*1024,1,nil,compress) then // 4*1024*4096=16MB step
+          result.Content := JsonEncode(['started',bfn,'compress',compress]) else
           result.Content := '"Backup failed to start"';
       end;
     end;

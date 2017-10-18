@@ -2686,7 +2686,9 @@ type
     tbImmediate,
     tbExclusive);
 
+  {$M+}
   TSQLDatabaseBackupThread = class;
+  {$M-}
 
   /// callback called asynchronously during TSQLDatabase.BackupBackground()
   // - implementation should return TRUE to continue the process: if the method
@@ -3204,6 +3206,13 @@ type
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
       OnProgress: TSQLDatabaseBackupEvent); reintroduce;
+    /// the source database of the backup process
+    property SourceDB: TSQLDatabase read fSourceDB;
+    /// the destination database of the backup process
+    property DestDB: TSQLDatabase read fDestDB;
+    /// the raised exception in case of backupFailure notification
+    property FailureError: Exception read fError;
+  published
     /// the current state of the backup process
     // - only set before a call to TSQLDatabaseBackupEvent
     property Step: TSQLDatabaseBackupEventStep read fStep;
@@ -3216,12 +3225,6 @@ type
     /// if .dbsynlz compression would be done on the backup file
     // - would use FileSynLZ(), so compress in chunks of 128 MB
     property StepSynLzCompress: boolean read fStepSynLzCompress;
-    /// the source database of the backup process
-    property SourceDB: TSQLDatabase read fSourceDB;
-    /// the destination database of the backup process
-    property DestDB: TSQLDatabase read fDestDB;
-    /// the raised exception in case of backupFailure notification
-    property FailureError: Exception read fError;
   end;
 
 const
@@ -5560,13 +5563,16 @@ begin
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;
+{$ifdef WITHLOG}
+var log: ISynLog;
+{$endif}
   procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
   begin
-    {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllTrace,'%.Execute Step=% ToFinish=%', [self,GetEnumName(
-      TypeInfo(TSQLDatabaseBackupEventStep),ord(aStep))^,fStepNumberToFinish]);
-    {$endif}
     fStep := aStep;
+    {$ifdef WITHLOG}
+    if Assigned(log) then
+      log.Log(sllTrace,'%', [self]);
+    {$endif}
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
         raise ESQLite3Exception.CreateUtf8('%.Execute aborted by OnProgress=false',[self]);
@@ -5575,7 +5581,10 @@ var res: integer;
     fn, fn2: TFileName;
 begin
   fn := fDestDB.FileName;
+  {$ifdef WITHLOG}
   SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fn]);
+  log := SynSQLite3Log.Enter(self,'Execute');
+  {$endif}
   try
     try
       NotifyProgressAndContinue(backupStart);
@@ -5608,6 +5617,11 @@ begin
         if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
           raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
             [self,fn,fn2]);
+        {$ifdef WITHLOG}
+        if Assigned(log) then
+          log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
+            [KB(FileSize(fn)),fn],self);
+        {$endif}
       end;
       fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       NotifyProgressAndContinue(backupSuccess);
@@ -5617,10 +5631,6 @@ begin
         fDestDB.Free; // close destination backup database if not already
       end;
       fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
-      {$ifdef WITHLOG}
-      SynSQLite3Log.Add.Log(sllTrace,'%.Execute % ended in %',
-        [self, fn, fSourceDB.fBackupBackgroundLastTime]);
-      {$endif}
       fSourceDB.Lock;
       fSourceDB.fBackupBackgroundInProcess := nil;
       fSourceDB.Unlock;
@@ -5634,6 +5644,7 @@ begin
     end;
   end;
   {$ifdef WITHLOG}
+  log := nil;
   SynSQLite3Log.Add.NotifyThreadEnded;
   {$endif}
 end;
