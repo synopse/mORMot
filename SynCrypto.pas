@@ -597,7 +597,16 @@ type
     // - will store a header with its own CRC, so detection of most invalid
     // formats (e.g. from fuzzing input) will occur before any AES/MAC process
     class function MACEncrypt(const Data: RawByteString; const Key: THash256;
-      Encrypt: boolean): RawByteString;
+      Encrypt: boolean): RawByteString; overload;
+    /// perform one step PKCS7 encryption/decryption and authentication from
+    // a given 128-bit key
+    // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
+    // this class does not support AEAD MAC
+    // - do not use this abstract class method, but inherited TAESCFBCRC/TAESOFBCRC
+    // - will store a header with its own CRC, so detection of most invalid
+    // formats (e.g. from fuzzing input) will occur before any AES/MAC process
+    class function MACEncrypt(const Data: RawByteString; const Key: THash128;
+      Encrypt: boolean): RawByteString; overload;
     /// perform one step PKCS7 encryption/decryption and authentication with
     // the curent AES instance
     // - returns '' on any (MAC) issue during decryption (Encrypt=false) or if
@@ -10527,6 +10536,18 @@ begin
 end;
 
 class function TAESAbstract.MACEncrypt(const Data: RawByteString; const Key: THash256;
+  Encrypt: boolean): RawByteString;
+var aes: TAESAbstract;
+begin
+  aes := Create(Key);
+  try
+    result := aes.MACAndCrypt(Data,Encrypt);
+  finally
+    aes.Free;
+  end;
+end;
+
+class function TAESAbstract.MACEncrypt(const Data: RawByteString; const Key: THash128;
   Encrypt: boolean): RawByteString;
 var aes: TAESAbstract;
 begin
