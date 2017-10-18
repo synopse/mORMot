@@ -5583,7 +5583,7 @@ begin
   fn := fDestDB.FileName;
   {$ifdef WITHLOG}
   SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fn]);
-  log := SynSQLite3Log.Enter(self,'Execute');
+  log := SynSQLite3Log.Enter('Execute',[],self);
   {$endif}
   try
     try
