@@ -1,4 +1,4 @@
-/// command-line tool for uncompressing a .dbsynlz file
+/// command-line tool for compressing/uncompressing .dbsynlz files
 program DBSynLZ;
 
 {$APPTYPE CONSOLE}
@@ -6,7 +6,6 @@ program DBSynLZ;
 uses
   {$I SynDprUses.inc} // use FastMM4 on older Delphi, or set FPC threads
   SynCommons,
-  SynCrtSock,
   SysUtils;
 
 {$R SynDBExplorer.res}
@@ -16,7 +15,7 @@ const
   // created by TSQLDataBase.BackupSynLZ() or if SynLZCompress parameter is TRUE
   // for the TSQLDataBase.BackupBackground() method
   // - note that the SynDBExplorer tool is able to recognize such files, and
-  // open them directly - or use the DBSynLZ.dpr command-line sample tool
+  // open them directly - or use this DBSynLZ.dpr command-line sample tool
   SQLITE3_MAGIC = $ABA5A5AB;
 
 function IsSQLite3File(const FileName: TFileName): boolean;

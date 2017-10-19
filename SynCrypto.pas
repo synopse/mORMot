@@ -460,8 +460,8 @@ type
     fIVReplayAttackCheck: TAESIVReplayAttackCheck;
     procedure SetIVHistory(aDepth: integer);
     procedure SetIVCTR;
-    procedure DecryptLen(var InputLen,ivsize: integer; Input: pointer;
-      IVAtBeginning: boolean);
+    function DecryptPKCS7Len(var InputLen,ivsize: integer; Input: pointer;
+      IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
@@ -489,9 +489,10 @@ type
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process
     // - this default implementation calls Clone, but CFB/OFB/CTR chaining modes
-    // using only AES encryption will return self to avoid creating two instances
+    // using only AES encryption (i.e. inheriting from TAESAbstractEncryptOnly)
+    // will return self to avoid creating two instances
     // - warning: to be used only with IVAtBeginning=false
-    function CloneEncryptDecrypt: TAESAbstract;
+    function CloneEncryptDecrypt: TAESAbstract; virtual;
     /// release the used instance memory and resources
     // - also fill the secret fKey buffer with zeros, for safety
     destructor Destroy; override;
@@ -520,7 +521,9 @@ type
     // from the beginning of the input binary buffer - if IVReplayAttackCheck is
     // set, this IV will be validated to contain an increasing encrypted CTR,
     // and raise an ESynCrypto when a replay attack attempt is detected
-    function DecryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false): RawByteString; overload;
+    // - if RaiseESynCryptoOnError=false, returns '' on any decryption error
+    function DecryptPKCS7(const Input: RawByteString; IVAtBeginning: boolean=false;
+      RaiseESynCryptoOnError: boolean=true): RawByteString; overload;
     /// encrypt a memory buffer using a PKCS7 padding pattern
     // - PKCS7 padding is described in RFC 5652 - it will add up to 16 bytes to
     // the input buffer; note this method uses the padding only, not the whole
@@ -538,7 +541,9 @@ type
     // from the beginning of the input binary buffer - if IVReplayAttackCheck is
     // set, this IV will be validated to contain an increasing encrypted CTR,
     // and raise an ESynCrypto when a replay attack attempt is detected
-    function DecryptPKCS7(const Input: TBytes; IVAtBeginning: boolean=false): TBytes; overload;
+    // - if RaiseESynCryptoOnError=false, returns [] on any decryption error
+    function DecryptPKCS7(const Input: TBytes; IVAtBeginning: boolean=false;
+      RaiseESynCryptoOnError: boolean=true): TBytes; overload;
 
     /// compute how many bytes would be needed in the output buffer, when
     // encrypte using a PKCS7 padding pattern
@@ -567,8 +572,9 @@ type
     // - if IVAtBeginning is TRUE, the Initialization Vector will be taken
     // from the beginning of the input binary buffer  - this IV will in fact
     // contain an internal encrypted CTR, to detect any replay attack attempt
+    // - if RaiseESynCryptoOnError=false, returns '' on any decryption error
     function DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
-      IVAtBeginning: boolean): RawByteString;
+      IVAtBeginning: boolean; RaiseESynCryptoOnError: boolean=true): RawByteString;
 
     /// initialize AEAD (authenticated-encryption with associated-data) nonce
     // - i.e. setup 256-bit MAC computation during next Encrypt/Decrypt call
@@ -625,7 +631,7 @@ type
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncrypt(const Input,Key: RawByteString; Encrypt: boolean;
-      IVAtBeginning: boolean=false): RawByteString; overload;
+      IVAtBeginning: boolean=false; RaiseESynCryptoOnError: boolean=true): RawByteString; overload;
     /// simple wrapper able to cypher/decypher any in-memory content
     // - here data variables could be text or binary
     // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value
@@ -633,7 +639,8 @@ type
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncrypt(const Input: RawByteString; const Key;
-      KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false): RawByteString; overload;
+      KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false;
+      RaiseESynCryptoOnError: boolean=true): RawByteString; overload;
     /// simple wrapper able to cypher/decypher any file content
     // - just a wrapper around SimpleEncrypt() and StringFromFile/FileFromString
     // - use StringToUTF8() to define the Key parameter from a VCL string
@@ -641,8 +648,8 @@ type
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncryptFile(const InputFile, OutputFile: TFileName;
-      const Key: RawByteString; Encrypt: boolean;
-      IVAtBeginning: boolean=false): boolean; overload;
+      const Key: RawByteString; Encrypt: boolean; IVAtBeginning: boolean=false;
+      RaiseESynCryptoOnError: boolean=true): boolean; overload;
     /// simple wrapper able to cypher/decypher any file content
     // - just a wrapper around SimpleEncrypt() and StringFromFile/FileFromString
     // - you could use e.g. THMAC_SHA256 to safely compute the Key/KeySize value
@@ -650,7 +657,8 @@ type
     // and stored at the beginning of the output binary buffer
     // - will use SHA256Weak() and PKCS7 padding with the current class mode
     class function SimpleEncryptFile(const InputFile, Outputfile: TFileName; const Key;
-      KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false): boolean; overload;
+      KeySize: integer; Encrypt: boolean; IVAtBeginning: boolean=false;
+      RaiseESynCryptoOnError: boolean=true): boolean; overload;
 
     /// associated Key Size, in bits (i.e. 128,192,256)
     property KeySize: cardinal read fKeySize;
@@ -748,8 +756,13 @@ type
   TAESAbstractEncryptOnly = class(TAESAbstractSyn)
   public
     /// Initialize AES contexts for cypher
-    // - will also pre-generate the encryption key
+    // - will pre-generate the encryption key
     constructor Create(const aKey; aKeySize: cardinal); override;
+    /// compute a class instance similar to this one, for performing the
+    // reverse encryption/decryption process
+    // - will return self to avoid creating two instances
+    // - warning: to be used only with IVAtBeginning=false
+    function CloneEncryptDecrypt: TAESAbstract; override;
   end;
 
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
@@ -4473,7 +4486,6 @@ asm // eax=TAES(self)=TAESContext edx=BI ecx=BO
   lea ecx,[ecx+16]
   dec byte ptr [esp+20]
   jne @1
-
   mov ebp,ecx // ebp=pk
   movzx ecx,bl
   mov edi,esi
@@ -10426,13 +10438,16 @@ begin
   result := true;
 end;
 
-procedure TAESAbstract.DecryptLen(var InputLen,ivsize: Integer;
-  Input: pointer; IVAtBeginning: boolean);
+function TAESAbstract.DecryptPKCS7Len(var InputLen,ivsize: Integer;
+  Input: pointer; IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
 var ctr: TAESIVCTR;
 begin
+  result := true;
   if (InputLen<sizeof(TAESBlock)) or (InputLen and AESBlockMod<>0) then
-    raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]);
-  if IVAtBeginning then begin
+    if RaiseESynCryptoOnError then
+      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid InputLen=%',[self,InputLen]) else
+      result := false;
+  if result and IVAtBeginning then begin
     if (fIVReplayAttackCheck<>repNoCheck) and (fIVCTRState<>ctrNotUsed) then begin
       if fIVCTR.nonce=0 then
         SetIVCTR;
@@ -10444,21 +10459,27 @@ begin
           inc(fIVCTR.ctr);
         end else
         if fIVReplayAttackCheck=repMandatory then
-          raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: IVCTR is not handled '+
-             'on encryption',[self]) else begin
+          if RaiseESynCryptoOnError then
+            raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: IVCTR is not handled '+
+             'on encryption',[self]) else
+            result := false else begin
           fIVCTRState := ctrNotused;
           if fIVHistoryDec.Depth=0 then
             SetIVHistory(64); // naive but efficient fallback
         end else
         if IsEqual(TAESBlock(ctr),TAESBlock(fIVCTR)) then
           inc(fIVCTR.ctr) else
-          raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> '+
-           'potential replay attack',[self,ctr.magic,fIVCTR.magic,ctr.ctr,fIVCTR.ctr]);
+          if RaiseESynCryptoOnError then
+            raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: wrong IVCTR %/% %/% -> '+
+             'potential replay attack',[self,ctr.magic,fIVCTR.magic,ctr.ctr,fIVCTR.ctr]) else
+            result := false;
     end;
     fIV := PAESBlock(Input)^;
-    if (fIVHistoryDec.Depth>0) and not fIVHistoryDec.Add(fIV) then
-      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: duplicated IV=% -> '+
-        'potential replay attack',[self,AESBlockToShortString(fIV)]);
+    if result and (fIVHistoryDec.Depth>0) and not fIVHistoryDec.Add(fIV) then
+      if RaiseESynCryptoOnError then
+        raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: duplicated IV=% -> '+
+          'potential replay attack',[self,AESBlockToShortString(fIV)]) else
+       result := false;
     dec(InputLen,sizeof(TAESBlock));
     ivsize := sizeof(TAESBlock);
   end else
@@ -10466,12 +10487,14 @@ begin
 end;
 
 function TAESAbstract.DecryptPKCS7Buffer(Input: Pointer; InputLen: integer;
-  IVAtBeginning: boolean): RawByteString;
+  IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var ivsize,padding: integer;
     tmp: array[0..1023] of AnsiChar;
     P: PAnsiChar;
 begin
-  DecryptLen(InputLen,ivsize,Input,IVAtBeginning);
+  result := '';
+  if not DecryptPKCS7Len(InputLen,ivsize,Input,IVAtBeginning,RaiseESynCryptoOnError) then
+    exit;
   if InputLen<sizeof(tmp) then
     P := @tmp else begin
     SetString(result,nil,InputLen);
@@ -10480,29 +10503,35 @@ begin
   Decrypt(@PByteArray(Input)^[ivsize],P,InputLen);
   padding := ord(P[InputLen-1]); // result[1..len]
   if padding>sizeof(TAESBlock) then
-    result := '' else // invalid input
+    if RaiseESynCryptoOnError then
+      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input',[self]) else
+      result := '' else
     if P=@tmp then
       SetString(result,P,InputLen-padding) else
       SetLength(result,InputLen-padding); // fast in-place resize
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: RawByteString;
-  IVAtBeginning: boolean): RawByteString;
+  IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 begin
-  result := DecryptPKCS7Buffer(pointer(Input),length(Input),IVAtBeginning);
+  result := DecryptPKCS7Buffer(pointer(Input),length(Input),IVAtBeginning,RaiseESynCryptoOnError);
 end;
 
 function TAESAbstract.DecryptPKCS7(const Input: TBytes;
-  IVAtBeginning: boolean): TBytes;
+  IVAtBeginning, RaiseESynCryptoOnError: boolean): TBytes;
 var len,ivsize,padding: integer;
 begin
+  result := nil;
   len := length(Input);
-  DecryptLen(len,ivsize,pointer(Input),IVAtBeginning);
+  if not DecryptPKCS7Len(len,ivsize,pointer(Input),IVAtBeginning,RaiseESynCryptoOnError) then
+    exit;
   SetLength(result,len);
   Decrypt(@PByteArray(Input)^[ivsize],pointer(result),len);
   padding := result[len-1]; // result[0..len-1]
   if padding>sizeof(TAESBlock) then
-    result := nil else
+    if RaiseESynCryptoOnError then
+      raise ESynCrypto.CreateUTF8('%.DecryptPKCS7: Invalid Input',[self]) else
+      result := nil else
     SetLength(result,len-padding); // fast in-place resize
 end;
 
@@ -10564,7 +10593,7 @@ begin
       if length(Data)-len<>P-pointer(Data) then
         exit; // avoid buffer overflow
       if MACSetNonce(pcd^.nonce) then
-        result := DecryptPKCS7Buffer(P,len,true);
+        result := DecryptPKCS7Buffer(P,len,true,false);
       if result<>'' then
         if not MACEquals(pcd^.mac) then begin
           FillZero(result);
@@ -10601,54 +10630,54 @@ begin
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input,Key: RawByteString;
-  Encrypt, IVAtBeginning: boolean): RawByteString;
+  Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var instance: TAESAbstract;
 begin
   instance := CreateFromSha256(Key);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input,IVAtBeginning) else
-      result := instance.DecryptPKCS7(Input,IVAtBeginning);
+      result := instance.DecryptPKCS7(Input,IVAtBeginning,RaiseESynCryptoOnError);
   finally
     instance.Free;
   end;
 end;
 
 class function TAESAbstract.SimpleEncrypt(const Input: RawByteString; const Key;
-  KeySize: integer; Encrypt, IVAtBeginning: boolean): RawByteString;
+  KeySize: integer; Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): RawByteString;
 var instance: TAESAbstract;
 begin
   instance := Create(Key,KeySize);
   try
     if Encrypt then
       result := instance.EncryptPKCS7(Input,IVAtBeginning) else
-      result := instance.DecryptPKCS7(Input,IVAtBeginning);
+      result := instance.DecryptPKCS7(Input,IVAtBeginning,RaiseESynCryptoOnError);
   finally
     instance.Free;
   end;
 end;
 
 class function TAESAbstract.SimpleEncryptFile(const InputFile, OutputFile: TFileName;
-  const Key: RawByteString; Encrypt, IVAtBeginning: boolean): boolean;
+  const Key: RawByteString; Encrypt, IVAtBeginning,RaiseESynCryptoOnError: boolean): boolean;
 var src,dst: RawByteString;
 begin
   result := false;
   src := StringFromFile(InputFile);
   if src<>'' then begin
-    dst := SimpleEncrypt(src,Key,Encrypt,IVAtBeginning);
+    dst := SimpleEncrypt(src,Key,Encrypt,IVAtBeginning,RaiseESynCryptoOnError);
     if dst<>'' then
       result := FileFromString(dst,OutputFile);
   end;
 end;
 
 class function TAESAbstract.SimpleEncryptFile(const InputFile, Outputfile: TFileName;
-  const Key; KeySize: integer; Encrypt, IVAtBeginning: boolean): boolean;
+  const Key; KeySize: integer; Encrypt, IVAtBeginning, RaiseESynCryptoOnError: boolean): boolean;
 var src,dst: RawByteString;
 begin
   result := false;
   src := StringFromFile(InputFile);
   if src<>'' then begin
-    dst := SimpleEncrypt(src,Key,KeySize,Encrypt,IVAtBeginning);
+    dst := SimpleEncrypt(src,Key,KeySize,Encrypt,IVAtBeginning,RaiseESynCryptoOnError);
     if dst<>'' then
       result := FileFromString(dst,OutputFile);
   end;
@@ -10813,7 +10842,12 @@ end;
 constructor TAESAbstractEncryptOnly.Create(const aKey; aKeySize: cardinal);
 begin
   inherited Create(aKey,aKeySize);
-  EncryptInit;
+  EncryptInit; // as expected by overriden Encrypt/Decrypt methods below 
+end;
+
+function TAESAbstractEncryptOnly.CloneEncryptDecrypt: TAESAbstract;
+begin
+  result := self;
 end;
 
 
