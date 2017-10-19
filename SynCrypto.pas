@@ -11102,7 +11102,7 @@ begin
     call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
     pxor   xmm7,xmm0
-    movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV
+    movdqu dqword ptr [edi],xmm7  // fOut := fIn xor fCV  +  fCV := fOut^
     lea    eax,[ebx].TAESCFBCRC.fMAC.encrypted
     mov    edx,edi
     call   crcblock
@@ -11123,7 +11123,7 @@ begin
       {$endif USEAESNI64}
         AES.Encrypt(fCV,fCV);
       crcblock(@fMAC.plain,pointer(fIn)); // fOut may be = fIn
-      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV));
+      XorBlock16(pointer(fIn),pointer(fOut),pointer(@fCV)); 
       fCV := fOut^;
       crcblock(@fMAC.encrypted,pointer(fOut));
       inc(fIn);
@@ -11160,7 +11160,7 @@ begin
     lea    eax,[ebx].TAESOFBCRC.AES
     call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
-    pxor   xmm7,xmm0
+    pxor   xmm0,xmm7
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
     lea    eax,[ebx].TAESOFBCRC.fMAC.plain
     mov    edx,edi
@@ -11215,7 +11215,7 @@ begin
     lea    eax,[ebx].TAESOFBCRC.AES
     call   dword ptr [eax].TAESContext.AesNi // AES.Encrypt(fCV,fCV)
     movdqu xmm0,dqword ptr [esi]
-    pxor   xmm7,xmm0
+    pxor   xmm0,xmm7
     movdqu dqword ptr [edi],xmm0  // fOut := fIn xor fCV
     lea    eax,[ebx].TAESOFBCRC.fMAC.encrypted
     mov    edx,edi
