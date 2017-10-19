@@ -2372,7 +2372,7 @@ type
     // - this method is thread-safe
     function Compute(const DataNameValue: array of const; const Issuer: RawUTF8='';
       const Subject: RawUTF8=''; const Audience: RawUTF8=''; NotBefore: TDateTime=0;
-      ExpirationMinutes: integer=0): RawUTF8;
+      ExpirationMinutes: integer=0; Signature: PRawUTF8=nil): RawUTF8;
     /// compute a HTTP Authorization header containing a JWT for a given payload
     // - just a wrapper around Compute(), returned the HTTP header value:
     // $ Authorization: <HttpAuthorizationHeader>
@@ -12406,8 +12406,8 @@ const
 
 function TJWTAbstract.Compute(const DataNameValue: array of const;
   const Issuer, Subject, Audience: RawUTF8; NotBefore: TDateTime;
-  ExpirationMinutes: integer): RawUTF8;
-var payload: RawUTF8;
+  ExpirationMinutes: integer; Signature: PRawUTF8): RawUTF8;
+var payload, signat: RawUTF8;
 begin
   if self=nil then begin
     result := '';
@@ -12415,9 +12415,12 @@ begin
   end;
   payload := PayloadToJSON(DataNameValue,Issuer,Subject,Audience,NotBefore,ExpirationMinutes);
   payload := BinToBase64URI(payload);
-  result := fHeaderB64+payload+'.'+ComputeSignature(payload);
+  signat := ComputeSignature(payload);
+  result := fHeaderB64+payload+'.'+signat;
   if length(result)>JWT_MAXSIZE then
     raise EJWTException.CreateUTF8('%.Compute oversize: len=%',[self,length(result)]);
+  if Signature<>nil then
+    Signature^ := signat;
 end;
 
 function TJWTAbstract.ComputeAuthorizationHeader(const DataNameValue: array of const;
@@ -12720,7 +12723,7 @@ begin
     if V[3]<>nil then begin
       time := GetCardinal(V[3]);
       result := jwtNotBeforeFailed;
-      if now<time then
+      if (time=0) or (now<time) then
         exit;
     end;
   end;
