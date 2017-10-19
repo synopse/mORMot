@@ -3264,7 +3264,7 @@ const
   // created by TSQLDataBase.BackupSynLZ() or if SynLZCompress parameter is TRUE
   // for the TSQLDataBase.BackupBackground() method
   // - note that the SynDBExplorer tool is able to recognize such files, and
-  // open them directly
+  // open them directly - or use the DBSynLZ.dpr command-line sample tool
   SQLITE3_MAGIC = $ABA5A5AB;
 
 
@@ -4411,7 +4411,7 @@ end;
 
 class function TSQLDataBase.IsBackupSynLZFile(const SynLZFile: TFileName): boolean;
 begin
-  result := FileIsZynLZ(SynLZFile, SQLITE3_MAGIC);
+  result := FileIsSynLZ(SynLZFile, SQLITE3_MAGIC);
 end;
 
 function TSQLDataBase.DBClose: integer;

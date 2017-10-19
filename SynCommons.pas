@@ -17731,7 +17731,7 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
 /// returns TRUE if the supplied file name is a SynLZ compressed file,
 // matching the Magic number as supplied to FileSynLZ() function
-function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
@@ -59725,7 +59725,7 @@ begin
   end;
 end;
 
-function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 var S: TFileStream;
     Head: TSynLZHead;
 begin
@@ -59736,8 +59736,7 @@ begin
     try
       if S.Read(Head,sizeof(Head))=Sizeof(Head) then
         if Head.Magic=Magic then
-          if Head.CompressedSize+SizeOf(Head)=S.Size then
-            result := true;
+          result := true; // only check magic, since there may be several chunks
     finally
       S.Free;
     end;
