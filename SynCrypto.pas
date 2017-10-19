@@ -1596,7 +1596,9 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA1Digest; NoInit: boolean=false);
+    procedure Done(out result: TSHA1Digest; NoInit: boolean=false); overload;
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: RawUTF8; NoInit: boolean=false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1641,7 +1643,9 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA384Digest; NoInit: boolean=false);
+    procedure Done(out result: TSHA384Digest; NoInit: boolean=false); overload;
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: RawUTF8; NoInit: boolean=false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1686,7 +1690,9 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(msg: pointer; msglen: integer);
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA512Digest; NoInit: boolean=false);
+    procedure Done(out result: TSHA512Digest; NoInit: boolean=false); overload;
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: RawUTF8; NoInit: boolean=false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -1770,7 +1776,9 @@ type
     // - iterate over all message blocks, then call Done to retrieve the HMAC
     procedure Update(const msg: RawByteString); overload;
     /// computes the HMAC of all supplied message according to the key
-    procedure Done(out result: TSHA256Digest; NoInit: boolean=false);
+    procedure Done(out result: TSHA256Digest; NoInit: boolean=false); overload;
+    /// computes the HMAC of all supplied message according to the key
+    procedure Done(out result: RawUTF8; NoInit: boolean=false); overload;
     /// computes the HMAC of the supplied message according to the key
     // - expects a previous call on Init() to setup the shared key
     // - similar to a single Update(msg,msglen) followed by Done, but re-usable
@@ -3122,6 +3130,15 @@ begin
     FillZero(step7data);
 end;
 
+procedure THMAC_SHA1.Done(out result: RawUTF8; NoInit: boolean);
+var res: TSHA1Digest;
+begin
+  Done(res,NoInit);
+  result := SHA1DigestToString(res);
+  if not NoInit then
+    FillZero(res);
+end;
+
 procedure THMAC_SHA1.Compute(msg: pointer; msglen: integer; out result: TSHA1Digest);
 var temp: THMAC_SHA1;
 begin
@@ -3220,6 +3237,15 @@ begin
   sha.Final(result,NoInit);
   if not NoInit then
     FillZero(step7data);
+end;
+
+procedure THMAC_SHA256.Done(out result: RawUTF8; NoInit: boolean);
+var res: THash256;
+begin
+  Done(res,NoInit);
+  result := SHA256DigestToString(res);
+  if not NoInit then
+    FillZero(res);
 end;
 
 procedure THMAC_SHA256.Compute(msg: pointer; msglen: integer; out result: TSHA256Digest);
@@ -3367,6 +3393,15 @@ begin
     FillCharFast(step7data,sizeof(step7data),0);
 end;
 
+procedure THMAC_SHA384.Done(out result: RawUTF8; NoInit: boolean);
+var res: THash384;
+begin
+  Done(res,NoInit);
+  result := SHA384DigestToString(res);
+  if not NoInit then
+    FillZero(res);
+end;
+
 procedure THMAC_SHA384.Compute(msg: pointer; msglen: integer; out result: TSHA384Digest);
 var temp: THMAC_SHA384;
 begin
@@ -3450,6 +3485,15 @@ begin
   sha.Final(result,NoInit);
   if not NoInit then
     FillCharFast(step7data,sizeof(step7data),0);
+end;
+
+procedure THMAC_SHA512.Done(out result: RawUTF8; NoInit: boolean);
+var res: THash512;
+begin
+  Done(res,NoInit);
+  result := SHA512DigestToString(res);
+  if not NoInit then
+    FillZero(res);
 end;
 
 procedure THMAC_SHA512.Compute(msg: pointer; msglen: integer; out result: TSHA512Digest);
