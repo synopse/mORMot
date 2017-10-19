@@ -364,9 +364,9 @@ type
   TAES = {$ifndef UNICODE}object{$else}record{$endif}
   private
     Context: packed array[1..AESContextSize] of byte;
-{$ifdef USEPADLOCK}
+    {$ifdef USEPADLOCK}
     function DoPadlockInit(const Key; KeySize: cardinal): boolean;
-{$endif}
+    {$endif}
   public
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
@@ -448,7 +448,7 @@ type
   // - use any of the inherited implementation, corresponding to the chaining
   // mode required - TAESECB, TAESCBC, TAESCFB, TAESOFB and TAESCTR classes to
   // handle in ECB, CBC, CFB, OFB and CTR mode (including PKCS7-like padding)
-  TAESAbstract = class
+  TAESAbstract = class(TSynPersistent)
   protected
     fKeySize: cardinal;
     fKeySizeBytes: cardinal;
@@ -466,15 +466,15 @@ type
     /// Initialize AES contexts for cypher
     // - first method to call before using this class
     // - KeySize is in bits, i.e. 128,192,256
-    constructor Create(const aKey; aKeySize: cardinal); overload; virtual;
+    constructor Create(const aKey; aKeySize: cardinal); reintroduce; overload; virtual;
     /// Initialize AES contexts for AES-128 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,128);
-    constructor Create(const aKey: THash128); overload;
+    constructor Create(const aKey: THash128); reintroduce; overload;
     /// Initialize AES contexts for AES-256 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,256);
-    constructor Create(const aKey: THash256); overload;
+    constructor Create(const aKey: THash256); reintroduce; overload; 
     /// Initialize AES contexts for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
     constructor CreateFromSha256(const aKey: RawUTF8);
@@ -484,13 +484,14 @@ type
     constructor CreateFromPBKDF2(const aKey: RawUTF8; const aSalt: RawByteString;
       aRounds: Integer);
     /// compute a class instance similar to this one
+    // - could be used to have a thread-safe re-use of a given encryption key
     function Clone: TAESAbstract; virtual;
     /// compute a class instance similar to this one, for performing the
     // reverse encryption/decryption process
     // - this default implementation calls Clone, but CFB/OFB/CTR chaining modes
     // using only AES encryption will return self to avoid creating two instances
     // - warning: to be used only with IVAtBeginning=false
-    function CloneEncryptDecrypt: TAESAbstract; virtual;
+    function CloneEncryptDecrypt: TAESAbstract;
     /// release the used instance memory and resources
     // - also fill the secret fKey buffer with zeros, for safety
     destructor Destroy; override;
@@ -696,6 +697,11 @@ type
     procedure DecryptInit;
     procedure TrailerBytes; 
   public
+    /// creates a new instance with the very same values
+    // - by design, our classes will use stateless context, so this method
+    // will just copy the current fields to a new instance, by-passing
+    // the key creation
+    function Clone: TAESAbstract; override;
     /// release the used instance memory and resources
     // - also fill the TAES instance with zeros, for safety
     destructor Destroy; override;
@@ -741,11 +747,9 @@ type
   /// abstract parent class for chaining modes using only AES encryption 
   TAESAbstractEncryptOnly = class(TAESAbstractSyn)
   public
-    /// returns this class instance, for performing the reverse process
-    // - return self for inherited classes of chaining modes using only Encrypt
-    // - warning: to be used only with IVAtBeginning=false, otherwise replay
-    // atacks attempts algorithm will fail the decryption
-    function CloneEncryptDecrypt: TAESAbstract; override;
+    /// Initialize AES contexts for cypher
+    // - will also pre-generate the encryption key
+    constructor Create(const aKey; aKeySize: cardinal); override;
   end;
 
   /// handle AES cypher/uncypher with Cipher feedback (CFB)
@@ -3003,7 +3007,7 @@ begin
   if not result or not padlock_available then exit;
   padlock_available := false;  // force PadLock engine down
   SHA.Full(pointer(s),length(s),Digest);
-  result := Equals(Digest,TDig);
+  result := IsEqual(Digest,TDig);
 {$ifdef PADLOCKDEBUG} write('=padlock '); {$endif}
   padlock_available := true;
 {$endif}
@@ -4814,13 +4818,6 @@ begin
   if DoPadlockInit(Key,KeySize) then
     exit; // Init OK
   {$endif}
-  with ctx do begin
-    // Clear only the necessary context data at init. IV and buf
-    // remain uninitialized, other fields are initialized below.
-    {$ifdef USEPADLOCK}
-    ctx.ViaCtx := nil;
-    {$endif}
-  end;
   if (KeySize<>128) and (KeySize<>192) and (KeySize<>256) then begin
     result := false;
     ctx.Initialized := false;
@@ -4842,7 +4839,7 @@ begin
   ctx.Rounds  := 6+Nk;
   ctx.KeyBits := KeySize;
   // Calculate encryption round keys
-  {$ifdef USEAESNI} // 192 is more complex and seldom used -> skip
+  {$ifdef USEAESNI} // 192 is more complex and seldom used -> skip to pascal
   if (KeySize<>192) and Assigned(ctx.AESNI) then
     ShiftAesNi(KeySize,@ctx.RK) else
   {$endif}
@@ -4995,7 +4992,7 @@ begin
   {$ifdef USEPADLOCK}
   if DoPadlockInit(Key,KeySize) then begin
     result := true;
-    Initialized := true;
+    ctx.Initialized := true;
     exit; // Init OK
   end;
   {$endif}
@@ -5587,7 +5584,7 @@ begin
   {$ifdef USEPADLOCK}
   if initialized and padlock_available and (ctx.ViaCtx<>nil) then begin
     padlock_aes_close(ctx.ViaCtx);
-    initialized := false;
+    ctx.initialized := false;
     ctx.ViaCtx := nil;
   end;
   {$endif USEPADLOCK}
@@ -10634,6 +10631,16 @@ begin
   AES.Done; // mandatory for Padlock - also fill AES buffer with 0 for safety
 end;
 
+function TAESAbstractSyn.Clone: TAESAbstract;
+begin
+  {$ifdef USEPADLOCK}
+  if TAESContext(AES).initialized and (TAESContext(AES).ViaCtx<>nil) then
+    result := inherited Clone;
+  {$endif}
+  result := NewInstance as TAESAbstractSyn;
+  MoveFast(pointer(self)^,pointer(result)^,InstanceSize);
+end;
+
 procedure TAESAbstractSyn.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 begin
   fIn := BufIn;
@@ -10757,12 +10764,12 @@ begin
   TrailerBytes;
 end;
 
-
 { TAESAbstractEncryptOnly }
 
-function TAESAbstractEncryptOnly.CloneEncryptDecrypt: TAESAbstract;
+constructor TAESAbstractEncryptOnly.Create(const aKey; aKeySize: cardinal);
 begin
-  result := self;
+  inherited Create(aKey,aKeySize);
+  EncryptInit;
 end;
 
 
@@ -10787,8 +10794,6 @@ procedure TAESCFB.Decrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
     tmp: TAESBlock;
 begin
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) then
   asm
@@ -10841,8 +10846,6 @@ end;
 procedure TAESCFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  if fAESInit<>initEncrypt then
-    EncryptInit; 
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) then
   asm
@@ -10945,8 +10948,6 @@ begin
   if Count=0 then
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
   asm
@@ -11006,8 +11007,6 @@ begin
   if Count=0 then
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
   asm
@@ -11067,8 +11066,6 @@ begin
   if Count=0 then
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
   asm
@@ -11124,8 +11121,6 @@ begin
   if Count=0 then
     exit;
   fMAC := fMACKey; // reuse the same key until next MACSetNonce()
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) and (Count and AESBlockMod=0) then
   asm
@@ -11186,8 +11181,6 @@ end;
 procedure TAESOFB.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i: integer;
 begin
-  if fAESInit<>initEncrypt then
-    EncryptInit; 
   {$ifdef USEAESNI32}
   if Assigned(TAESContext(AES.Context).AesNi) then
   asm
@@ -11245,8 +11238,6 @@ procedure TAESCTR.Encrypt(BufIn, BufOut: pointer; Count: cardinal);
 var i,j: integer;
     tmp: TAESBlock;
 begin
-  if fAESInit<>initEncrypt then
-    EncryptInit;
   inherited; // CV := IV + set fIn,fOut,fCount
   for i := 1 to Count shr 4 do begin
     {$ifdef USEAESNI64}
