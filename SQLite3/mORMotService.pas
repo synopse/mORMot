@@ -1466,6 +1466,7 @@ var
     msg := FormatUTF8('% "%" (%) on Service "%"',
       [msg, param, cmdText, fSettings.ServiceName]);
     writeln(UTF8ToConsole(msg));
+    TextColor(ccLightGray);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
   end;
 
@@ -1479,7 +1480,7 @@ begin
   if (param = '') or not (param[1] in ['/', '-']) then
     cmd := cNone
   else
-    case param[2] of
+    case upcase(param[2]) of
     'C':
       cmd := cConsole;
     'R':
@@ -1496,7 +1497,7 @@ begin
   cHelp:
     Syntax;
   cVersion: begin
-    writeln(' ', ExeVersion.ProgramFileName,
+    writeln(' ', ExeVersion.ProgramName,
       #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
       #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
     if ExeVersion.Version.Version32 <> 0 then
