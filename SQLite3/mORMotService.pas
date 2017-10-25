@@ -593,7 +593,8 @@ type
   TSynDaemonSettingsClass = class of TSynDaemonSettings;
 
   /// abstract parent to implements a daemon/service
-  // - you may consider using TDDDAdministratedDaemon from dddInfraApps 
+  // - inherit from this abstract class and override Start and Stop methods
+  // - you may consider using TDDDAdministratedDaemon from dddInfraApps
   TSynDaemon = class(TSynPersistent)
   protected
     fWorkFolderName: TFileName;
@@ -604,8 +605,9 @@ type
     {$endif}
   public
     /// initialize the daemon, creating the associated settings
+    // - TSynDaemonSettings instance will be owned and freed by the daemon
     // - any non supplied folder name will be replaced by a default value
-    // (executable folder under Windows, or /etc /var/log on Linux) 
+    // (executable folder under Windows, or /etc /var/log on Linux)
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName); reintroduce;
     /// main entry point of the daemon, to process the command line switches
@@ -1497,7 +1499,7 @@ begin
   cHelp:
     Syntax;
   cVersion: begin
-    writeln(' ', ExeVersion.ProgramName,
+    writeln(' ', fSettings.ServiceName,
       #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
       #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
     if ExeVersion.Version.Version32 <> 0 then
