@@ -1230,8 +1230,8 @@ type
     hlfCookie, hlfReferer, hlfVersion, hlfHost, hlfSubStatus);
 
   /// http.sys API 2.0 fields used for server-side authentication
-  // - as used by
-  // - will match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
+  // - as used by THttpApiServer.SetAuthenticationSchemes/AuthenticationSchemes
+  // - match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
   THttpApiRequestAuthentications = set of (
     haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
 
@@ -1401,7 +1401,7 @@ type
     // the server application to generate the initial 401 challenge with proper
     // WWW-Authenticate headers; any further authentication steps will be
     // perform in kernel mode, until the authentication handshake is finalized;
-    //  later on, the application can check the AuthenticationStatus property
+    // later on, the application can check the AuthenticationStatus property
     // of THttpServerRequest and its associated AuthenticatedUser value
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
