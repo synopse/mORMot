@@ -474,7 +474,11 @@ type
     /// Initialize AES contexts for AES-256 cypher
     // - first method to call before using this class
     // - just a wrapper around Create(aKey,256);
-    constructor Create(const aKey: THash256); reintroduce; overload; 
+    constructor Create(const aKey: THash256); reintroduce; overload;
+    /// Initialize AES contexts for cypher, from some TAESPRNG random bytes
+    // - may be used to hide some sensitive information from memory, like
+    // CryptDataForCurrentUser but with a temporary key
+    constructor CreateTemp(aKeySize: cardinal);
     /// Initialize AES contexts for cypher, from SHA-256 hash
     // - here the Key is supplied as a string, and will be hashed using SHA-256
     constructor CreateFromSha256(const aKey: RawUTF8);
@@ -10355,6 +10359,14 @@ end;
 constructor TAESAbstract.Create(const aKey: THash256);
 begin
   Create(aKey,256);
+end;
+
+constructor TAESAbstract.CreateTemp(aKeySize: cardinal);
+var tmp: THash256;
+begin
+  TAESPRNG.Main.FillRandom(tmp);
+  Create(tmp,aKeySize);
+  FillZero(tmp);
 end;
 
 constructor TAESAbstract.CreateFromSha256(const aKey: RawUTF8);
