@@ -7068,6 +7068,8 @@ begin
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
+  fOnBeforeBody := From.fOnBeforeBody;
+  fCanNotifyCallback := From.fCanNotifyCallback;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
   fReceiveBufferSize := From.fReceiveBufferSize;
