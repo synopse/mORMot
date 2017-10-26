@@ -23998,6 +23998,7 @@ begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
     HTTP_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
     HTTP_TIMEOUT:             result := 'Request Timeout';
     HTTP_SERVERERROR:         result := 'Internal Server Error';
+    HTTP_NOTIMPLEMENTED:      result := 'Not Implemented';
     HTTP_BADGATEWAY:          result := 'Bad Gateway';
     HTTP_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
     HTTP_UNAVAILABLE:         result := 'Service Unavailable';

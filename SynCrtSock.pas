@@ -709,6 +709,7 @@ type
     fURL: SockString;
     fKeepAliveClient: boolean;
     fRemoteIP: SockString;
+    fServer: THttpServer;
   public
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
@@ -1063,6 +1064,14 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
+  /// event handler used by THttpServerGeneric.OnBeforeBody property
+  // - if defined, is called just before the body is retrieved from the client
+  // - supplied parameters reflect the current input state
+  // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
+  // error code to reject the request
+  TOnHttpServerBeforeBody = function(const aURL,aMethod,aInHeaders,
+    aInContentType,aRemoteIP: SockString; aContentLength: integer): cardinal of object;
+
   {$M+}
   /// abstract class to implement a server thread
   // - do not use this class, but rather the THttpServer, THttpApiServer
@@ -1086,6 +1095,7 @@ type
     fShutdownInProgress: boolean;
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
+    fOnBeforeBody: TOnHttpServerBeforeBody;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -1142,6 +1152,10 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
+    /// event handler called just before the body is retrieved from the client
+    // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
+    // error code to reject the request
+    property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write fOnBeforeBody;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -2058,7 +2072,7 @@ const
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
-function StatusCodeToReason(Code: integer): SockString;
+function StatusCodeToReason(Code: cardinal): SockString;
 
 /// retrieve the IP address from a computer name
 function ResolveName(const Name: SockString;
@@ -2534,10 +2548,14 @@ uses
 
 { ************ some shared helper functions and classes }
 
-function StatusCodeToReason(Code: integer): SockString;
+var
+  ReasonCache: array[1..5,0..7] of SockString; // avoid memory allocation
+
+function StatusCodeToReasonInternal(Code: cardinal): SockString;
 begin
   case Code of
     100: result := 'Continue';
+    101: result := 'Switching Protocols';
     200: result := 'OK';
     201: result := 'Created';
     202: result := 'Accepted';
@@ -2558,9 +2576,31 @@ begin
     405: result := 'Method Not Allowed';
     406: result := 'Not Acceptable';
     500: result := 'Internal Server Error';
+    501: result := 'Not Implemented';
     503: result := 'Service Unavailable';
-    else str(Code,result);
+    else result := 'Error';
   end;
+end;
+
+function StatusCodeToReason(Code: cardinal): SockString;
+var Hi,Lo: cardinal;
+begin
+  if Code=200 then begin
+    Hi := 2;
+    Lo := 0;
+  end else begin
+    Hi := Code div 100;
+    Lo := Code-Hi*100;
+    if not ((Hi in [1..5]) and (Lo in [0..7])) then begin
+      result := 'Error';
+      exit;
+    end;
+  end;
+  result := ReasonCache[Hi,Lo];
+  if result<>'' then
+    exit;
+  result := StatusCodeToReasonInternal(Code);
+  ReasonCache[Hi,Lo] := result;
 end;
 
 function Hex2Dec(c: AnsiChar): byte;
@@ -4889,7 +4929,7 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket;
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
-    s: SockString;
+    s, reason: SockString;
     staticfn, ErrorMsg: string;
     FileToSend: TFileStream;
 begin
@@ -4936,20 +4976,21 @@ begin
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
+    reason := StatusCodeToReason(Code);
     if ErrorMsg<>'' then begin
       Context.OutCustomHeaders := '';
       Context.OutContentType := 'text/html; charset=utf-8'; // create message to display
       Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
         format('<body style="font-family:verdana">'#13+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
-        [ClassName,Code,Code,StatusCodeToReason(Code),HtmlEncodeString(ErrorMsg),fServerName]));
+        [ClassName,Code,Code,reason,HtmlEncodeString(ErrorMsg),fServerName]));
     end;
     // 1. send HTTP status command
     if ClientSock.TCPPrefix<>'' then
       ClientSock.SockSend(ClientSock.TCPPrefix);
     if ClientSock.KeepAliveClient then
-      ClientSock.SockSend(['HTTP/1.1 ',Code,' OK']) else
-      ClientSock.SockSend(['HTTP/1.0 ',Code,' OK']);
+      ClientSock.SockSend(['HTTP/1.1 ',Code,' ',reason]) else
+      ClientSock.SockSend(['HTTP/1.0 ',Code,' ',reason]);
     // 2. send headers
     // 2.1. custom headers from Request() method
     P := pointer(Context.fOutCustomHeaders);
@@ -5389,6 +5430,7 @@ constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
   if aServer<>nil then begin
+    fServer := aServer;
     fCompress := aServer.fCompress;
     fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     TCPPrefix := aServer.TCPPrefix;
@@ -5409,18 +5451,17 @@ end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
-    maxtix: cardinal;
+    maxtix, status: cardinal;
 begin
+  result := false;
   try
     maxtix := GetTickCount+10000; // allow 10 sec for header -> DOS/TCPSYN Flood
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Command);
     if TCPPrefix<>'' then
-      if TCPPrefix<>Command then begin
-        result := false;
-        exit
-      end else
-      SockRecvLn(Command);
+      if TCPPrefix<>Command then
+        exit else
+        SockRecvLn(Command);
     P := pointer(Command);
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
@@ -5432,9 +5473,20 @@ begin
       fKeepAliveClient := false;
     if (ContentLength<0) and KeepAliveClient then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
-    result := GetTickCount<maxtix; // time wrap after 49.7 days -> accepted
-    if result and withBody and not ConnectionUpgrade then
+    if GetTickCount>maxtix then // time wrap after 49.7 days is just ignored
+      exit;
+    if (fServer<>nil) and Assigned(fServer.OnBeforeBody) then begin
+      status := fServer.OnBeforeBody(
+        fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength);
+      if status<>STATUS_SUCCESS then begin
+        SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
+          #13#10#13#10,'Rejected']);
+        exit;
+      end;
+    end;
+    if withBody and not ConnectionUpgrade then
       GetBody;
+    result := true;
   except
     on E: Exception do
       result := false; // mark error
@@ -7215,6 +7267,16 @@ begin
         if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
           with Req^.Headers.KnownHeaders[reqContentLength] do
             InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
+          with Req^.Headers.KnownHeaders[reqContentEncoding] do
+            SetString(InContentEncoding,pRawValue,RawValueLength);
+          if Assigned(OnBeforeBody) then begin
+            with Context do
+              Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength);
+            if Err<>STATUS_SUCCESS then begin
+              SendError(Err,'Rejected');
+              continue;
+            end;
+          end;
           if InContentLength<>0 then begin
             SetLength(Context.fInContent,InContentLength);
             BufRead := pointer(Context.InContent);
@@ -7246,15 +7308,12 @@ begin
               SendError(406,SysErrorMessagePerModule(Err,HTTPAPI_DLL));
               continue;
             end;
-            with Req^.Headers.KnownHeaders[reqContentEncoding] do
-            if RawValueLength<>0 then begin
-              SetString(InContentEncoding,pRawValue,RawValueLength);
+            if InContentEncoding<>'' then
               for i := 0 to high(fCompress) do
                 if fCompress[i].Name=InContentEncoding then begin
                   fCompress[i].Func(Context.fInContent,false); // uncompress
                   break;
                 end;
-            end;
           end;
         end;
         try
