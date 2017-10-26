@@ -5257,7 +5257,12 @@ type
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
-    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
+    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// serialize the dynamic array content as JSON
+    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    // - this method will therefore recognize T*ObjArray types
+    procedure SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean=false); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -5277,6 +5282,11 @@ type
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
+    {$ifndef NOVARIANTS}
+    /// load the dynamic array content from a TDocVariant instance
+    // - will convert the TDocVariant into JSON, the call LoadFromJSON
+    function LoadFromVariant(const DocVariant: variant): boolean;
+    {$endif NOVARIANTS}
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
     /// add elements from a given dynamic array variable
@@ -5298,7 +5308,7 @@ type
     // - this method compares using any supplied Compare property (unless
     // ignorecompare=true), or by content using the RTTI element description
     // of the whole array items
-    // - warning: this method won't compare T*ObjArray kind of arrays
+    // - will call SaveToJSON to compare T*ObjArray kind of arrays
     function Equals(const B: TDynArray; ignorecompare: boolean=false): boolean;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
@@ -6908,6 +6918,10 @@ function DynArrayLoadJSON(var Value; JSON: PUTF8Char; TypeInfo: pointer;
 function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean=false): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
+
+/// compare two dynamic arrays by calling TDynArray.Equals
+function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
+  Array1Count: PInteger=nil; Array2Count: PInteger=nil): boolean;
 
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
@@ -44570,6 +44584,10 @@ var W: TTextWriter;
     temp: TTextWriterStackBuffer;
     tmp: RawUTF8;
 begin
+  if VType<>DocVariantVType then begin
+    result := '';
+    exit;
+  end;
   W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
@@ -45505,6 +45523,15 @@ begin
   result := SaveJSON(Value,TypeInfo,EnumSetsAsText);
 end;
 
+function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
+  Array1Count, Array2Count: PInteger): boolean;
+var DA1, DA2: TDynArray;
+begin
+  DA1.Init(TypeInfo,Array1,Array1Count);
+  DA2.Init(TypeInfo,Array2,Array2Count);
+  result := DA1.Equals(DA2);
+end;
+
 function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
     Value: pointer; // store the temporary dynamic array
@@ -46249,7 +46276,13 @@ begin
       raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
+
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
+begin
+  SaveToJSON(result,EnumSetsAsText);
+end;
+
+procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean);
 var temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
@@ -46552,6 +46585,16 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
       result := @NULCHAR else
       result := P;
 end;
+
+{$ifndef NOVARIANTS}
+function TDynArray.LoadFromVariant(const DocVariant: variant): boolean;
+begin
+  with _Safe(DocVariant)^ do
+    if dvoIsArray in Options then
+      result := LoadFromJSON(pointer(_Safe(DocVariant)^.ToJSON))<>nil else
+      result := false;
+end;
+{$endif NOVARIANTS}
 
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
   var Count, ElemSize: integer): pointer;
@@ -47076,6 +47119,13 @@ var i, n: integer;
     P1,P2: PAnsiChar;
     A1: PPointerArray absolute P1;
     A2: PPointerArray absolute P2;
+  function HandleObjArray: boolean;
+  var tmp1,tmp2: RawUTF8;
+  begin
+    SaveToJSON(tmp1);
+    B.SaveToJSON(tmp2);
+    result := tmp1=tmp2;
+  end;
 begin
   result := false;
   if ArrayType<>B.ArrayType then
@@ -47083,6 +47133,10 @@ begin
   n := Count;
   if n<>B.Count then
     exit;
+  if GetIsObjArray then begin
+    result := HandleObjArray;
+    exit;
+  end;
   P1 := fValue^;
   P2 := B.fValue^;
   if (@fCompare<>nil) and not ignorecompare then // use customized comparison
