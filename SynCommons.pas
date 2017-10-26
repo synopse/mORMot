@@ -6919,9 +6919,11 @@ function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean=false): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef DELPHI5OROLDER}
 /// compare two dynamic arrays by calling TDynArray.Equals
 function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
   Array1Count: PInteger=nil; Array2Count: PInteger=nil): boolean;
+{$endif}
 
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
@@ -44584,8 +44586,8 @@ var W: TTextWriter;
     temp: TTextWriterStackBuffer;
     tmp: RawUTF8;
 begin
-  if VType<>DocVariantVType then begin
-    result := '';
+  if (VType<>DocVariantVType) and (VType>varNull) then begin
+    result := ''; // null -> 'null'
     exit;
   end;
   W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
@@ -45523,6 +45525,7 @@ begin
   result := SaveJSON(Value,TypeInfo,EnumSetsAsText);
 end;
 
+{$ifndef DELPHI5OROLDER}
 function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
   Array1Count, Array2Count: PInteger): boolean;
 var DA1, DA2: TDynArray;
@@ -45531,6 +45534,7 @@ begin
   DA2.Init(TypeInfo,Array2,Array2Count);
   result := DA1.Equals(DA2);
 end;
+{$endif}
 
 function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
