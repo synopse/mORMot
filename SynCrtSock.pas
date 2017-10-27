@@ -1105,6 +1105,7 @@ type
     fCanNotifyCallback: boolean;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
+    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual; 
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1155,7 +1156,7 @@ type
     /// event handler called just before the body is retrieved from the client
     // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
     // error code to reject the request
-    property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write fOnBeforeBody;
+    property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write SetOnBeforeBody;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -1277,6 +1278,7 @@ type
     function GetAPIVersion: string; override;
     function GetLogging: boolean;
     procedure SetServerName(const aName: SockString); override;
+    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override; 
     procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
@@ -4785,6 +4787,11 @@ begin
   fServerName := aName;
 end;
 
+procedure THttpServerGeneric.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
+begin
+  fOnBeforeBody := aEvent;
+end;
+
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
@@ -7690,6 +7697,15 @@ begin
   if fClones<>nil then // server name is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetServerName(aName);
+end;
+
+procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
+var i: integer;
+begin
+  inherited SetOnBeforeBody(aEvent);
+  if fClones<>nil then // server name is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
 end;
 
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
