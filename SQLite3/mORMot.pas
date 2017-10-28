@@ -26235,20 +26235,21 @@ asm // eax=P1 edx=P2 ecx=FieldCount
 end;
 {$endif}
 
+{$ifndef PUREPASCAL} // do be placed outside TUTF8QuickSort.QuickSort for FPC
+procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
+asm // eax=P edx=I ecx=J
+        push    ebx
+        lea     edx, [eax + edx * 4]
+        lea     ecx, [eax + ecx * 4]
+        mov     eax, [edx]
+        mov     ebx, [ecx]
+        mov     [ecx], eax
+        mov     [edx], ebx
+        pop     ebx
+end;
+{$endif}
+
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
-  {$ifndef PUREPASCAL}
-  procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
-  asm // eax=P edx=I ecx=J
-          push    ebx
-          lea     edx, [eax + edx * 4]
-          lea     ecx, [eax + ecx * 4]
-          mov     eax, [edx]
-          mov     ebx, [ecx]
-          mov     [ecx], eax
-          mov     [edx], ebx
-          pop     ebx
-  end;
-  {$endif}
 // code below is very fast and optimized
 var P: PtrInt;
 begin

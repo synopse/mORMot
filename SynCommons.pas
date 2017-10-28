@@ -2388,6 +2388,7 @@ function bswap64(const a: QWord): QWord;
 
 /// convert the endianness of an array of unsigned 64 bit integer into BigEndian
 // - n is required to be > 0
+// - warning: on x86, a should be <> b 
 procedure bswap64array(a,b: PQWordArray; n: integer);
 
 {$ifndef ISDELPHI2007ANDUP}
@@ -28280,7 +28281,7 @@ end;
 function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var F: THandle;
     Read, Size: integer;
-    tmp: array[0..$3fff] of AnsiChar;
+    tmp: array[0..$7fff] of AnsiChar;
 begin
   result := '';
   if FileName='' then
@@ -28296,7 +28297,7 @@ begin
         SetLength(result,Size+Read);
         MoveFast(tmp,PByteArray(result)^[Size],Read);
         inc(Size,Read);
-      until false;
+      until Read<sizeof(tmp);
     end else begin
       Size := GetFileSize(F,nil);
       if Size>0 then begin
@@ -60463,23 +60464,23 @@ begin
 end;
 
 procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer=32);
-procedure ParseLines(P,PEnd: PUTF8Char);
-var PBeg: PUTF8Char;
-begin // generated asm is much better with a local proc
-  while P<PEnd do begin
-    PBeg := P;
-    while (P<PEnd) and (P^<>#13) and (P^<>#10) do
-      inc(P);
-    ProcessOneLine(PBeg,P);
-    if P+1>=PEnd then
-      break;
-    if P[0]=#13 then
-      if P[1]=#10 then
-        inc(P,2) else // ignore #13#10
-        inc(P) else   // ignore #13
-      inc(P);         // ignore #10
+  procedure ParseLines(P,PEnd: PUTF8Char);
+  var PBeg: PUTF8Char;
+  begin // generated asm is much better with a local proc
+    while P<PEnd do begin
+      PBeg := P;
+      while (P<PEnd) and (P^<>#13) and (P^<>#10) do
+        inc(P);
+      ProcessOneLine(PBeg,P);
+      if P+1>=PEnd then
+        break;
+      if P[0]=#13 then
+        if P[1]=#10 then
+          inc(P,2) else // ignore #13#10
+          inc(P) else   // ignore #13
+        inc(P);         // ignore #10
+    end;
   end;
-end;
 var P: PUTF8Char;
 begin
   fLinesMax := fMap.fFileSize div AverageLineLength+8;
