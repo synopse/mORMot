@@ -15,7 +15,9 @@ const  LATIN1 = BINARY;
 implementation
 uses
   SysUtils,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SynCommons,
   SyNode,
   SpiderMonkey;
@@ -246,7 +248,7 @@ begin
           Dec(Result);
         MoveFast(str^, bufData^, Result);
       end else begin
-        raise ESMException.Create('Crytical Error');
+        raise ESMException.Create('Critical Error');
       end;
     end;
     UCS2: begin
@@ -470,7 +472,7 @@ var
   to_copy: UInt32;
   in_argv: PjsvalVector;
 const
-  sInvalidCall = 'ussage: copy(target: Buffer, [targetStart = 0], [sourceStart = 0], [sourceEnd = this.length]);';
+  sInvalidCall = 'usage: copy(target: Buffer, [targetStart = 0], [sourceStart = 0], [sourceEnd = this.length]);';
 begin
   try
     Result := True;
@@ -556,7 +558,7 @@ var
   in_argv: PjsvalVector;
   proto: PJSRootedObject;
 const
-  sInvalidCall = 'ussage: setupBufferJS(proto: Object);';
+  sInvalidCall = 'usage: setupBufferJS(proto: Object);';
   props = JSPROP_ENUMERATE or JSPROP_ENUMERATE or JSPROP_PERMANENT;
   // From GlobalObject.h getOrCreateTypedArrayPrototype
   TypedArraySlotIndex = JSCLASS_GLOBAL_APPLICATION_SLOTS + Ord(JSProto_LIMIT) + Ord(JSProto_TypedArray);
@@ -620,7 +622,7 @@ var
   proto: PJSRootedObject;
   val: jsval;
 const
-  sInvalidCall = 'ussage: createFromString(string, encoding: String);';
+  sInvalidCall = 'usage: createFromString(string, encoding: String);';
   UNKNOWN_ENCODING = 'unknown encoding';
 begin
   try
@@ -698,7 +700,7 @@ function byteLengthUtf8(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean;
 var
   in_argv: PjsvalVector;
 const
-  sInvalidCall = 'ussage: byteLengthUtf8(string: String);';
+  sInvalidCall = 'usage: byteLengthUtf8(string: String);';
 begin
   try
     Result := True;
@@ -752,7 +754,7 @@ var
   cmp_length: size_t;
   res: Integer;
 const
-  sInvalidCall = 'ussage: compare(buf1, buf: Buffer);';
+  sInvalidCall = 'usage: compare(buf1, buf: Buffer);';
 begin
   try
     Result := True;
@@ -817,7 +819,7 @@ var
   to_cmp: size_t;
   res: Integer;
 const
-  sInvalidCall = 'ussage: compareOffset(source, target: Buffer; start, sourceStart[, targetEnd= target.length][, sourceEnd=source.length]: Number);';
+  sInvalidCall = 'usage: compareOffset(source, target: Buffer; start, sourceStart[, targetEnd= target.length][, sourceEnd=source.length]: Number);';
 begin
   try
     Result := True;
@@ -924,7 +926,7 @@ var
   in_there: size_t;
   ptr: Pointer;
 const
-  sInvalidCall = 'ussage: fill(target: Buffer; val: *; start, end: Number[; encoding: String = "UTF8"]);';
+  sInvalidCall = 'usage: fill(target: Buffer; val: *; start, end: Number[; encoding: String = "UTF8"]);';
 begin
   try
     Result := True;
@@ -1146,7 +1148,7 @@ var
 
   res: size_t;
 const
-  sInvalidCall = 'ussage: indexOfBuffer(source, buf: Buffer; offset: Number; encoding: String; is_forward: boolean);';
+  sInvalidCall = 'usage: indexOfBuffer(source, buf: Buffer; offset: Number; encoding: String; is_forward: boolean);';
 begin
   try
     Result := True;
@@ -1236,7 +1238,7 @@ var
   res: size_t;
 
 const
-  sInvalidCall = 'ussage: indexOfNumber(source: Buffer; val, offset: Number; is_forward: boolean);';
+  sInvalidCall = 'usage: indexOfNumber(source: Buffer; val, offset: Number; is_forward: boolean);';
 begin
   try
     Result := True;
@@ -1309,7 +1311,7 @@ var
   res: size_t;
 
 const
-  sInvalidCall = 'ussage: indexOfString(source: Buffer; val: String; offset: Number; encoding: String; is_forward: boolean);';
+  sInvalidCall = 'usage: indexOfString(source: Buffer; val: String; offset: Number; encoding: String; is_forward: boolean);';
 begin
   try
     Result := True;
@@ -1436,7 +1438,7 @@ var
   d: Double;
   s: Single absolute d;
 const
-  sInvalidCall = 'ussage: read%%(buf: Buffer, offset: Number);';
+  sInvalidCall = 'usage: read%%(buf: Buffer, offset: Number);';
 begin
   try
     Result := True;
@@ -1509,7 +1511,7 @@ var
   d: Double;
   s: Single absolute d;
 const
-  sInvalidCall = 'ussage: Write%%(buf: Buffer; val: Number; offset: Number; [shouldAssert: boolean = false]);';
+  sInvalidCall = 'usage: Write%%(buf: Buffer; val: Number; offset: Number; [shouldAssert: boolean = false]);';
 begin
   try
     Result := True;
@@ -1586,7 +1588,7 @@ var
 
   i: size_t;
 const
-  sInvalidCall = 'ussage: swap%(buf: Buffer);';
+  sInvalidCall = 'usage: swap%(buf: Buffer);';
 begin
   try
     Result := True;

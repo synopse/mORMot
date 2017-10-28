@@ -450,13 +450,14 @@ begin
       //create new
       result := AProto.Create(Cx, AForClass, aParent, i);
       exit;
-    end else begin
-      if IsProtoObject(cx, val, Result) then begin
-        if Result.fRttiCls = AForClass then
-          exit;
-      end else
-        raise ESMException.Create('Slot value is not ProtoObject');
-    end;
+    end else if IsProtoObject(cx, val, Result) then begin
+      if Result.fRttiCls = AForClass then
+        exit; // The class prototype has already created
+    end else if val.isString then begin
+      if val.asJSString.ToString(cx).Equals(AForClass.ClassName) then
+        exit; // The class prototype is being created right now
+    end else
+      raise ESMException.Create('Slot value is not ProtoObject');
   end;
   raise Exception.Create('defineClass Error: many proto' + AForClass.ClassName);
 end;
@@ -587,12 +588,15 @@ begin
   fRttiCls := aRttiCls;
   fCx := Cx;
   fSlotIndex := slotIndex;
+  FjsObjName := StringToAnsi7(fRttiCls.ClassName);
+
+  global := cx.CurrentGlobalOrNull;
+  global.ReservedSlot[slotIndex] := cx.NewJSString(FjsObjName).ToJSVal;
 
   FMethodsDA.Init(TypeInfo(TSMMethodDynArray), FMethods);
   InitObject(aParent);
   FJSClass := GetJSClass;
 
-  FjsObjName := StringToAnsi7(fRttiCls.ClassName);
   FJSClass.Name := PCChar(FjsObjName);
   fFirstDeterministicSlotIndex := (FJSClass.flags and (JSCLASS_RESERVED_SLOTS_MASK shl JSCLASS_RESERVED_SLOTS_SHIFT))
       shr JSCLASS_RESERVED_SLOTS_SHIFT;
@@ -628,7 +632,6 @@ begin
     new(ObjRec);
     ObjRec.init(otProto,self);
     obj.PrivateData := ObjRec;
-    global := cx.CurrentGlobalOrNull;
     global.ReservedSlot[slotIndex] := obj.ToJSValue;
   finally
     cx.EndRequest;

@@ -94,10 +94,10 @@ type
 {$endif}
   uintN = PtrUInt;
 
-{$ifndef FPC}
+{.$ifndef FPC}
   /// variable type used to store a buffer size (in bytes) for SMAPI
   size_t = PtrUInt;
-{$endif}
+{.$endif}
   psize_t = ^size_t;
   CChar = AnsiChar;
   PCChar = PAnsiChar;
@@ -925,7 +925,7 @@ type
   public
 {$IFDEF SM52}
     /// Initializes the JavaScript context.
-    class function CreateNew(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
+    class function CreateNew(maxbytes: uint32; maxNurseryBytes: uint32 = 16 * (1 SHL 20); parentContext: PJSContext = nil): PJSContext;
     /// Performs garbage collection in the JS memory pool.
     procedure GC; {$ifdef HASINLINE}inline;{$endif}
     /// Returns the empty string as a JSString object.
@@ -997,6 +997,9 @@ type
     // for Number).
     // - NB: This sets cx's global object to obj if it was null.
     function InitStandardClasses(var obj: PJSObject): boolean;
+    /// Add 'Reflect.parse', a SpiderMonkey extension, to the Reflect object on the
+    // given global.
+    function InitReflectParse(var obj: PJSObject): boolean;
     /// Initialize the 'ctypes' object on a global variable 'obj'. The 'ctypes'
     // object will be sealed.
     function InitCTypesClass(var obj: PJSObject): boolean;
@@ -1446,7 +1449,7 @@ type
     /// Make a JSClass accessible to JavaScript code by creating its prototype,
     // constructor, properties, and functions.
     function InitClass(cx: PJSContext; var parent_proto: PJSObject;
-      clasp: PJSClass; _constructor: JSNative; nargs: UINT;
+      clasp: PJSClass; _constructor: JSNative; nargs: Cardinal;
       ps: PJSPropertySpec; fs: PJSFunctionSpec;
       static_ps: PJSPropertySpec; static_fs: PJSFunctionSpec): PJSObject; {$ifdef HASINLINE}inline;{$endif}
 
@@ -2098,8 +2101,10 @@ type
   public
     /// constructor which will create JavaScript exception with JS stack trace
     constructor CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer; AMessage: string; const AStackTrace: SynUnicode);
+    {$ifndef NOEXCEPTIONINTERCEPT}
     /// Custmize SM exception log output
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
+    {$endif}
   published
     property ErrorNum: integer read FJSErrorNum;
     property Stack: SynUnicode read FJSStackTrace;
@@ -2189,9 +2194,9 @@ function SimpleVariantToJSval(cx: PJSContext; val: Variant): jsval;
 
 const
 {$IFDEF SM52}
-  SpiderMonkeyLib =  'mozjs-52.dll';
+  SpiderMonkeyLib = 'mozjs-52'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 {$ELSE}
-  SpiderMonkeyLib =  'mozjs-45.dll';
+  SpiderMonkeyLib = 'mozjs-45'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 {$ENDIF}
 
  /// Initialize SpiderMonkey, returning true only if initialization succeeded.
@@ -2220,6 +2225,7 @@ procedure JS_ShutDown; cdecl; external SpiderMonkeyLib;
 
 /// Microseconds since the epoch, midnight, January 1, 1970 UTC.
 function JS_Now: int64; cdecl; external SpiderMonkeyLib;
+
 /// Returns the empty string as a JSString object.
 {$IFDEF SM52}
 function JS_GetEmptyString(cx: PJSContext): PJSString; cdecl; external SpiderMonkeyLib;
@@ -2259,7 +2265,7 @@ procedure JS_EndRequest(cx: PJSContext); cdecl; external SpiderMonkeyLib;
 
 /// Create a new JSContext
 {$IFDEF SM52}
-function JS_NewContext(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
+function JS_NewContext(maxbytes: uint32; maxNurseryBytes: uint32 = 16 * (1 SHL 20); parentContext: PJSContext = nil): PJSContext;
   cdecl; external SpiderMonkeyLib;
 function InitSelfHostedCode(cx: PJSContext): boolean; cdecl; external SpiderMonkeyLib;
 {$ELSE}
@@ -2305,6 +2311,10 @@ function JS_InitStandardClasses(cx: PJSContext; var obj: PJSObject): boolean; cd
 
 ///Return the global object for the active function on the context.
 function JS_CurrentGlobalOrNull(cx: PJSContext):PJSObject; cdecl; external SpiderMonkeyLib name 'CurrentGlobalOrNull';
+
+/// Add 'Reflect.parse', a SpiderMonkey extension, to the Reflect object on the
+// given global.
+function JS_InitReflectParse(cx: PJSContext; var obj: PJSObject): boolean; cdecl; external SpiderMonkeyLib;
 
 /// Initialize the 'ctypes' object on a global variable 'obj'. The 'ctypes'
 // object will be sealed.
@@ -2426,6 +2436,15 @@ function JS_GetInstancePrivate(cx: PJSContext; var obj: PJSObject; clasp: PJSCla
 /// Create a new JavaScript object for use as a global object.
 function JS_NewGlobalObject(cx: PJSContext; clasp: PJSClass; principals: PJSPrincipals;
   hookOption: OnNewGlobalHookOption; options: PJS_CompartmentOptions): PJSObject; cdecl; external SpiderMonkeyLib;
+
+/// Spidermonkey does not have a good way of keeping track of what compartments should be marked on
+/// their own. We can mark the roots unconditionally, but marking GC things only relevant in live
+/// compartments is hard. To mitigate this, we create a static trace hook, installed on each global
+/// object, from which we can be sure the compartment is relevant, and mark it.
+///
+/// It is still possible to specify custom trace hooks for global object classes. They can be
+/// provided via the CompartmentOptions passed to JS_NewGlobalObject.
+procedure JS_GlobalObjectTraceHook(trc: Pointer{ JSTracer }; global: PJSObject); cdecl; external SpiderMonkeyLib;
 
 /// Create a new object based on a specified class
 function JS_NewObject(cx: PJSContext; clasp: PJSClass): PJSObject; cdecl; external SpiderMonkeyLib;
@@ -2711,7 +2730,7 @@ function JS_ParseJSON(cx: PJSContext; const chars: PCChar16;
 // The callback must then return JS_FALSE to cause the exception to be propagated
 // to the calling script.
 procedure JS_ReportError(cx: PJSContext; const format: PCChar);
-  cdecl; varargs; external SpiderMonkeyLib;
+  cdecl; varargs; external SpiderMonkeyLib{$IFDEF SM52} name 'JS_ReportErrorASCII'{$ENDIF};
 /// Report an error with an application-defined error code.
 // - varargs is Additional arguments for the error message.
 //- These arguments must be of type jschar*
@@ -4070,6 +4089,11 @@ begin
   Result := JS_InitCTypesClass(@Self, obj);
 end;
 
+function JSContext.InitReflectParse(var obj: PJSObject): boolean;
+begin
+  Result := JS_InitReflectParse(@Self, obj);
+end;
+
 function JSContext.InitModuleClasses(var obj: PJSObject): boolean;
 begin
   Result := JS_InitModuleClasses(@Self, obj);
@@ -4174,6 +4198,7 @@ end;
 class function JSContext.CreateNew(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
 begin
   Result := JS_NewContext(maxbytes, maxNurseryBytes, parentContext);
+  TSynFPUException.ForLibraryCode;
   InitSelfHostedCode(Result);
 end;
 {$ELSE}
@@ -4788,7 +4813,7 @@ begin
 end;
 
 function JSObject.InitClass(cx: PJSContext; var parent_proto: PJSObject;
-  clasp: PJSClass; _constructor: JSNative; nargs: UINT; ps: PJSPropertySpec;
+  clasp: PJSClass; _constructor: JSNative; nargs: Cardinal; ps: PJSPropertySpec;
   fs: PJSFunctionSpec; static_ps: PJSPropertySpec;
   static_fs: PJSFunctionSpec): PJSObject;
 var obj: PJSObject;
@@ -4933,6 +4958,7 @@ begin
   FJSStackTrace := AStackTrace;
 end;
 
+{$ifndef NOEXCEPTIONINTERCEPT}
 function ESMException.CustomLog(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 begin
@@ -4943,6 +4969,7 @@ begin
   end;
   result := true; // do not append a address
 end;
+{$endif}
 
 { JSArgRec }
 

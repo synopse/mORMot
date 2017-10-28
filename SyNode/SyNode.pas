@@ -87,7 +87,7 @@ unit SyNode;
 interface
 
 uses
-  {$ifdef MSWINDOWS} Windows, ShLwApi,{$endif}
+  {$ifdef MSWINDOWS} Windows, ShLwApi,{$else}FileUtil, LazFileUtils,{$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   {$ifndef LVCL}
@@ -100,7 +100,7 @@ uses
   SynCommons,
   SynLog,
   SpiderMonkey,
-  NSPRApi,
+  NSPRAPI,
   SyNodeProto,
   mORMot,
   {$ifdef BRANCH_WIN_WEB_SOCKET}
@@ -644,7 +644,9 @@ begin
   fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
   if fCx = nil then
     raise ESMException.Create('Create context: out of memory');
+{$IFNDEF CPUX64}
   fCx.SetNativeStackQuota(gMaxStackSize);
+{$ENDIF}
   fCx.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;
 // MPV as Mozilla recommend in https://bugzilla.mozilla.org/show_bug.cgi?id=950044
 //TODO - USE JS_SetGCParametersBasedOnAvailableMemory for SM32 and override JSGC_MAX_MALLOC_BYTES
@@ -734,6 +736,8 @@ begin
     raise ESMException.Create('InitStandardClasses failure');
   if not cx.InitCTypesClass(FGlobalObject.ptr) then
     raise ESMException.Create('InitCTypesClass failure');
+//  if not cx.InitReflectParse(FGlobalObject.ptr) then
+//    raise ESMException.Create('InitReflectParse failure');
   if not cx.InitModuleClasses(FGlobalObject.ptr) then
     raise ESMException.Create('InitModuleClasses failure');
 
@@ -781,8 +785,14 @@ var process: PJSRootedObject;
     env: PJSRootedObject;
     FStartupPath: TFileName;
     L: PtrInt;
+    {$IFDEF FPC}
+    I, Cnt: Integer;
+    EnvStr: AnsiString;
+    Parts: TStringArray;
+    {$ELSE}
     EnvBlock, P, pEq: PChar;
     strName, strVal: SynUnicode;
+    {$ENDIF}
 begin
   process := cx.NewRootedObject(FGlobalObject.ptr.GetPropValue(cx, 'process').asObject);
   env := cx.NewRootedObject(cx.NewObject(nil));
@@ -793,13 +803,23 @@ begin
     process.ptr.defineProperty(cx, 'execPath', cx.NewJSString(ExeVersion.ProgramFileName).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
 
-    FStartupPath := GetCurrentDir + '\';
+    FStartupPath := GetCurrentDir + DirectorySeparator;
     if FStartupPath = '' then
       FStartupPath := ExeVersion.ProgramFilePath;
 
     process.ptr.defineProperty(cx, 'startupPath', cx.NewJSString(StringToSynUnicode(FStartupPath)).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
-
+    {$IFDEF FPC}
+    Cnt := GetEnvironmentVariableCount;
+    for I := 1 to Cnt do begin
+      EnvStr := GetEnvironmentString(I);
+      Parts := EnvStr.Split('=', TStringSplitOptions.ExcludeEmpty);
+      if (Length(Parts) = 2) and (Trim(Parts[0]) <> '') then begin
+        env.ptr.DefineUCProperty(cx, Trim(Parts[0]), cx.NewJSString(Trim(Parts[1])).ToJSVal,
+          JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY, nil, nil);
+      end
+    end;
+    {$ELSE}
     EnvBlock := GetEnvironmentStrings;
     try
       P := EnvBlock;
@@ -823,9 +843,9 @@ begin
     finally
       FreeEnvironmentStrings(EnvBlock);
     end;
+    {$ENDIF}
     process.ptr.defineProperty(cx, 'env', env.ptr.ToJSValue,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
-
     {$IFDEF MSWINDOWS}
     process.ptr.defineProperty(cx, 'platform', cx.NewJSString('win32').ToJSVal);
     {$ELSE}
@@ -878,8 +898,8 @@ begin
   FDllModulesUnInitProcList.Free;
   inherited Destroy;
 
-  cx.FreeRootedObject(FGlobalObjectDbg);
-  cx.FreeRootedObject(FGlobalObject);
+  if FGlobalObjectDbg <> nil then cx.FreeRootedObject(FGlobalObjectDbg);
+  if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
   TSynFPUException.ForLibraryCode;
   cx.LeaveCompartment(comp);
   if FThreadID=GetCurrentThreadId then
@@ -1183,6 +1203,7 @@ const
   UNINIT_PROC_NAME = 'UnInitPlugin';
 
 begin
+{$IFDEF MSWINDOWS}
   Lock;
   try
     cx.BeginRequest;
@@ -1246,6 +1267,9 @@ begin
   end;
 
   Result := ModuleRec.unInit;
+{$ELSE}
+  raise ENotImplemented.Create('TODO');
+{$ENDIF}
 end;
 
 function TSMEngineManager.getPauseDebuggerOnFirstStep: boolean;
@@ -1420,9 +1444,14 @@ end;
 
 function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
 var
+{$IFDEF MSWINDOWS}
   aBase, aTail: PChar;
   localBase, localTail: TFileName;
+{$ELSE}
+  aBase: TFileName;
+{$ENDIF}
 begin
+{$IFDEF MSWINDOWS}
   if AFileName <> '' then begin
     if PathIsRelative(PChar(AFileName)) then begin
       localTail := AFileName;
@@ -1447,11 +1476,36 @@ begin
   else
     SetLength(Result, {$ifdef UNICODE}StrLenW{$else}StrLen{$endif}(@Result[1]));
 
-
   if ACheckResultInsideBase and
      ((length(Result) < length(ABaseDir)) or (length(ABaseDir)=0) or
       (StrLIComp(PChar(@Result[1]), @localBase[1], length(localBase)) <> 0)) then
     Result := ''
+{$ELSE}
+{
+  aBase := GetForcedPathDelims(ABaseDir);
+  if AFileName <> '' then begin
+    aTail := GetForcedPathDelims(AFileName);
+    if FilenameIsAbsolute(aTail) then begin
+      localTail := '';
+      localBase := aBase;
+    end else begin
+      localTail := aTail;
+      localBase := aBase;
+    end;
+  end else begin
+    localTail := '';
+    localBase := aBase;
+  end;
+  Result := CreateAbsolutePath(localTail, localBase);
+}
+  aBase := ExpandFileName(ABaseDir);
+  Result := ExpandFileNameUTF8(AFileName, aBase);
+
+  if ACheckResultInsideBase and
+     ((Length(Result) < Length(aBase)) or (Length(aBase)=0) or
+      (not Result.StartsWith(aBase, false))) then
+    Result := ''
+{$ENDIF}
 end;
 
 function TSMEngine.DoProcessOperationCallback: Boolean;
@@ -1510,10 +1564,12 @@ end;
 function TSMEngine.EvaluateModule(const scriptName: RawUTF8): jsval;
 var
   global: PJSRootedObject;
+  reflect: jsval;
   moduleLoader: PJSRootedObject;
 begin
   global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
-  moduleLoader := cx.NewRootedObject(global.ptr.GetPropValue(cx, 'Reflect').asObject.GetPropValue(cx, 'Loader').asObject);
+  reflect := global.ptr.GetPropValue(cx, 'Reflect');
+  moduleLoader := cx.NewRootedObject(reflect.asObject.GetPropValue(cx, 'Loader').asObject);
   try
     result := CallObjectFunction(moduleLoader, 'import', [cx.NewJSString(scriptName).ToJSVal])
   finally

@@ -150,7 +150,7 @@ const NODE_CORE_MODULES = ['fs', 'util', 'path', 'assert', 'module', 'console', 
 NativeModule._source = {};
 const PATH_DELIM = process.platform === 'win32' ? '\\' : '/'
 NODE_CORE_MODULES.forEach( (module_name) => { 
-  NativeModule._source[module_name] = `${coreModulesPath}.${PATH_DELIM}node_modules${PATH_DELIM}${module_name}.js`
+  NativeModule._source[module_name] = `${coreModulesPath}${PATH_DELIM}node_modules${PATH_DELIM}${module_name}.js`
 });
 
 NativeModule._cache = {};

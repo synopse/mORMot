@@ -8,7 +8,7 @@ interface
 { NSPR library APIs }
 
 const
-  NSPRLib = 'nspr4.dll';
+  NSPRLib = 'nspr4'{$IFDEF MSWINDOWS} + '.dll'{$ENDIF};
 const
   /// numbers of micro secs per second
   PRMJ_USEC_PER_SEC = 1000000;

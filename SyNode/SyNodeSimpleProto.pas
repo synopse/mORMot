@@ -68,7 +68,7 @@ interface
 
 uses
   SpiderMonkey,
-  SyNodeProto, 
+  SyNodeProto,
   mORMot { PClassProp };
 
 type
@@ -250,21 +250,24 @@ var
   Instance: PSMInstanceRecord;
   PI: PPropInfo;
   id: jsid;
+  val: jsval;
 begin
   id := jsid(vp.calleObject.FunctionId);
   PI := GetPropCacheForWrite(cx, vp.thisObject[cx], id, Instance).mbr;
-
-  case PI.PropType^^.Kind of
+  val := vp.argv[0];
+  case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
     tkInteger, tkEnumeration, tkSet:
-      PI.SetOrdValue(Instance^.instance,vp.argv[0].asInteger);
+      PI.SetOrdValue(Instance^.instance,val.asInteger);
     tkInt64:
-      PI.SetInt64Value(Instance^.instance, vp.argv[0].asInt64);
+      PI.SetInt64Value(Instance^.instance, val.asInt64);
     tkFloat:
-      PI.SetExtendedValue(Instance^.instance, vp.argv[0].asDouble);
+      PI.SetExtendedvalue(Instance^.instance, val.asDouble);
     tkLString:
-      PI.SetLongStrValue(Instance^.instance, vp.argv[0].asJsString.ToUTF8(cx));
+      PI.SetLongStrValue(Instance^.instance, val.asJsString.ToUTF8(cx));
+    tkAString:
+      PI.SetGenericStringValue(Instance^.instance, val.asJsString.ToString(cx));
     {$ifdef UNICODE} tkUString:
-      PI.SetUnicodeStrValue(Instance^.instance, vp.argv[0].asJsString.ToSynUnicode(cx));
+      PI.SetUnicodeStrValue(Instance^.instance, val.asJsString.ToSynUnicode(cx));
     {$endif}
   else
     raise ESMException.Create('NotImplemented');
@@ -355,7 +358,7 @@ var
   tmp: RawUTF8;
   obj: TObject;
 begin
-  case PI.PropType^^.Kind of
+  case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
     tkInteger, tkEnumeration, tkSet:
       Result.asInteger := PI.GetOrdValue(Instance^.instance);
     tkInt64:
@@ -428,9 +431,10 @@ begin
       end;
     end;
     C := PPtrInt(C+vmtParent)^;
-    if C=0 then
-      break else
+    {$ifndef FPC}
+    if C<>0 then
       C := PPtrInt(C)^;
+    {$endif}
   end;
 
   fDeterministicCnt := 0;
@@ -442,7 +446,7 @@ begin
       for i := 0 to fCP.PropCount -1 do begin
         idx := Length(FJSProps);
 
-        skip := PI.PropType^^.Kind = tkMethod;
+        skip := PI.PropType^.Kind = tkMethod;
         if not skip then
           for n := 0 to idx - 1 do
             if camelize(PI.Name) = FRTTIPropsCache[n].jsName then begin
@@ -459,7 +463,7 @@ begin
         SetLength(FRTTIPropsCache, idx + 1);
         FRTTIPropsCache[idx].jsName := camelize(PI.Name);
         FRTTIPropsCache[idx].mbr := PI;
-        FRTTIPropsCache[idx].typeInfo := PI^.PropType^;
+        FRTTIPropsCache[idx].typeInfo := PI^.PropType{$IFNDEF FPC}^{$ENDIF};
         if isDeterministic then begin
           FRTTIPropsCache[idx].DeterministicIndex := fDeterministicCnt;
           Inc(fDeterministicCnt);
@@ -478,9 +482,10 @@ begin
       end;
     end;
     C := PPtrInt(C+vmtParent)^;
-    if C=0 then
-      break else
+    {$ifndef FPC}
+    if C<>0 then
       C := PPtrInt(C)^;
+    {$endif}
   end;
   inherited; //MPV !! do not use  FMethodsDA.Add()
 end;
@@ -488,15 +493,15 @@ end;
 function TSMSimpleRTTIProtoObject.GetPropertyAddInformation(cx: PJSContext;
   PI: PPropInfo; out isReadonly: boolean; out isDeterministic: boolean; aParent: PJSRootedObject): boolean;
 begin
-  case PI^.PropType^^.Kind of
-    tkChar, tkString, tkWChar, tkWString, tkVariant:
+  case PI^.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
+    tkChar, {$IFDEF FPC}tkLString{$ELSE}tkString{$ENDIF}, tkWChar, tkWString, tkVariant:
     begin
       raise ESMException.CreateUtf8('Unsupported class property %.%', [FjsObjName, PI^.Name]);
     end;
     tkClass:
-      defineClass(Cx, PI^.PropType^^.ClassType^.ClassType, TSMSimpleRTTIProtoObject, aParent);
+      defineClass(Cx, PI^.PropType^{$IFNDEF FPC}^{$ENDIF}.ClassType^.ClassType, TSMSimpleRTTIProtoObject, aParent);
     tkEnumeration:
-      defineEnum(Cx, PI.PropType^, aParent);
+      defineEnum(Cx, PI.PropType{$IFNDEF FPC}^{$ENDIF}, aParent);
   end;
   isReadonly := false;
   isDeterministic := false;

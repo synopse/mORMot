@@ -16,8 +16,13 @@ uses
 implementation
 
 uses
-  {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
-  Windows;
+{$IFDEF MSWINDOWS}
+  {$ifdef ISDELPHIXE2}System.SysUtils{$else}SysUtils{$endif},
+  Windows,
+{$ELSE}
+  SysUtils, Unix, BaseUnix, DateUtils,
+{$ENDIF}
+  Classes;
 
 /// decode text file to string using BOM
 //  if BOM not fount - use current system code page to convert ANSI content to unicode
@@ -30,6 +35,7 @@ const
 var
   in_argv: PjsvalVector;
   forceUTF8: boolean;
+  name: String;
 begin
   forceUTF8 := true;
   result := true;
@@ -41,7 +47,9 @@ begin
     if argc > 1 then
       forceUTF8 := in_argv[1].asBoolean;
 
-    vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(in_argv[0].asJSString.ToString(cx), forceUTF8)).ToJSVal;
+    name := in_argv[0].asJSString.ToString(cx);
+    TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
+    vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(name, forceUTF8)).ToJSVal;
   except
     on E: Exception do
     begin
@@ -94,6 +102,9 @@ var
   fn: TFileName;
   obj: PJSRootedObject;
   val: jsval;
+{$IFNDEF MSWINDOWS}
+  info: stat;
+{$ELSE}
   {$ifdef ISDELPHIXE2}
   infoRec: TDateTimeInfoRec;
   {$else}
@@ -108,6 +119,7 @@ var
     result := 0;
   end;
   {$endif}
+{$ENDIF}
 begin
   try
     in_argv := vp.argv;
@@ -120,6 +132,19 @@ begin
     end;
     obj := cx.NewRootedObject(cx.NewObject(nil));
     try
+      {$IFNDEF MSWINDOWS}
+      if fpstat(fn, info) <> 0 then
+        raise EOSError.CreateFmt('fstat failed with error no #', [fpgeterrno]);
+      val.asDate[cx] := UnixToDateTime(info.st_atime);
+      obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      val.asDate[cx] := UnixToDateTime(info.st_mtime);
+      obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      val.asDate[cx] := UnixToDateTime(info.st_ctime);
+      obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      val.asInt64 := info.st_size;
+      obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
+      vp.rval := obj.ptr.ToJSValue;
+      {$ELSE}
       {$ifdef ISDELPHIXE2}
       if FileGetDateTimeInfo(fn, infoRec, true) then begin
         val.asDate[cx] := infoRec.LastAccessTime;
@@ -128,21 +153,15 @@ begin
         obj.ptr.DefineProperty(cx, 'mtime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
         val.asDate[cx] := infoRec.CreationTime;
         obj.ptr.DefineProperty(cx, 'ctime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        {$IFDEF MSWINDOWS}
           if TWin32FindData(infoRec).nFileSizeHigh > 0 then
             val := JSVAL_NAN
           else
             val.asInt64 := TWin32FindData(infoRec).nFileSizeLow;
         obj.ptr.DefineProperty(cx, 'size', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
-        {$ENDIF MSWINDOWS}
-        {$IFDEF POSIX}
-          //st: _stat platform;
-          raise Exception.Create('TODO');
-        {$ENDIF POSIX}
         vp.rval := obj.ptr.ToJSValue;
       end else
         vp.rval := JSVAL_NULL;
-      {$else}
+      {$else ISDELPHIXE2}
       if GetFileAttributesEx(PChar(fn), GetFileExInfoStandard, @fad) then begin
         val.asDate[cx] := fileTimeToDateTime(fad.ftLastAccessTime);
         obj.ptr.DefineProperty(cx, 'atime', val, JSPROP_ENUMERATE or JSPROP_READONLY, nil, nil);
@@ -159,8 +178,9 @@ begin
       end else
         vp.rval := JSVAL_NULL;
       {$endif ISDELPHIXE2}
+      {$ENDIF MSWINDOWS}
     finally
-        cx.FreeRootedObject(obj);
+      cx.FreeRootedObject(obj);
     end;
     Result := True;
   except
@@ -280,14 +300,21 @@ begin
     except
       raise
     end;
-
+    {$IFDEF MSWINDOWS}
     Code := GetFileAttributes(PChar(fn));
     if Code <> -1 then
       if Code and FILE_ATTRIBUTE_DIRECTORY = 0 then
         Code := 0
       else
         Code := 1;
-
+    {$ELSE} // this can be used in Windows too
+    Code := FileGetAttr(fn);
+    if Code <> -1 then
+      if Code and faDirectory = 0 then
+        Code := 0
+      else
+        Code := 1;
+    {$ENDIF}
     val.asInteger := Code;
     vp.rval := val;
 
