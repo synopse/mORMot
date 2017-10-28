@@ -7703,7 +7703,7 @@ procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
 var i: integer;
 begin
   inherited SetOnBeforeBody(aEvent);
-  if fClones<>nil then // server name is shared by all clones
+  if fClones<>nil then // event is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
 end;

@@ -3901,8 +3901,10 @@ function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
 /// read a File content into a String
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
+// - wil use GetFileSize() API by default, unless HasNoSize is defined,
+// and read will be done using a buffer (required e.g. for char files under Linux)
 // - uses RawByteString for byte storage, whatever the codepage is
-function StringFromFile(const FileName: TFileName): RawByteString;
+function StringFromFile(const FileName: TFileName; HasNoSize: boolean=false): RawByteString;
 
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
@@ -12099,13 +12101,13 @@ function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 
 var
   /// the default hasher used by TDynArrayHashed
-  // - is set to crc32c() function above by default, or xxHash32 if SSE4.2
-  // instructions are not available on this CPU
+  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // or fallback to xxHash32() which performs better than crc32cfast()
   DefaultHasher: THasher;
 
   /// the hash function used by TRawUTF8Interning
-  // - is set to DefaultHasher by default, i.e. crc32c() function or xxHash32
-  // if SSE4.2 instructions are not available on this CPU
+  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // or fallback to xxHash32() which performs better than crc32cfast()
   InterningHasher: THasher;
 
 /// retrieve a particular bit status from a bit array
@@ -28275,20 +28277,33 @@ begin
   FileFromString(Content,FileName);
 end;
 
-function StringFromFile(const FileName: TFileName): RawByteString;
+function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var F: THandle;
-    Size: integer;
+    Read, Size: integer;
+    tmp: array[0..$3fff] of AnsiChar;
 begin
   result := '';
   if FileName='' then
     exit;
   F := FileOpenSequentialRead(FileName);
   if PtrInt(F)>=0 then begin
-    Size := GetFileSize(F,nil);
-    if Size>0 then begin
-      SetLength(result,Size);
-      if FileRead(F,pointer(result)^,Size)<>Size then
-        result := '';
+    if HasNoSize then begin
+      Size := 0;
+      repeat
+        Read := FileRead(F,tmp,sizeof(tmp));
+        if Read<=0 then
+          break;
+        SetLength(result,Size+Read);
+        MoveFast(tmp,PByteArray(result)^[Size],Read);
+        inc(Size,Read);
+      until false;
+    end else begin
+      Size := GetFileSize(F,nil);
+      if Size>0 then begin
+        SetLength(result,Size);
+        if FileRead(F,pointer(result)^,Size)<>Size then
+          result := '';
+      end;
     end;
     FileClose(F);
   end;
