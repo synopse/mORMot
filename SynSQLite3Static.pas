@@ -1,4 +1,4 @@
-/// SQLite3 3.20.1 Database engine - statically linked for Windows/Linux 32 bit
+/// SQLite3 3.21.0 Database engine - statically linked for Windows/Linux 32 bit
 // - this unit is a part of the freeware Synopse mORMot framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
 unit SynSQLite3Static;
@@ -48,7 +48,7 @@ unit SynSQLite3Static;
 
 
 
-    Statically linked SQLite3 3.20.1 engine
+    Statically linked SQLite3 3.21.0 engine
    *****************************************
 
   To be declared in your project uses clause:  will fill SynSQlite3.sqlite3
@@ -75,7 +75,7 @@ unit SynSQLite3Static;
 
   Version 1.18
   - initial revision, extracted from SynSQLite3.pas unit
-  - updated SQLite3 engine to latest version 3.20.1
+  - updated SQLite3 engine to latest version 3.21.0
   - now all sqlite3_*() API calls are accessible via sqlite3.*()
   - our custom file encryption is now called via sqlite3.key() - i.e. official
     SQLite Encryption Extension (SEE) sqlite3_key() API
@@ -885,7 +885,7 @@ type
   TSQLFile = record             // see struct unixFile in sqlite3.c
     pMethods: pointer;          // sqlite3.io_methods_ptr
     pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
-    unixInodeInfo: pointer;     // Info about locks on this inode
+    pINode: pointer;     // Info about locks on this inode
     h: THandle;                 // Handle for accessing the file
     eFileLock: cuchar;          // The type of lock held on this fd
     ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
@@ -907,7 +907,8 @@ type
     pVfs: pointer;
     exclusiveMode, journalMode, useJournal, noSync, fullSync,
     extraSync, // new in 3.12.0
-    ckptSyncFlags, walsyncFlags, syncFlags, tempFile, noLock, readOnly, memDb,
+    syncFlags, // modified in 3.21.0
+    walsyncFlags, tempFile, noLock, readOnly, memDb,
     eState, eLock, changeCountDone, setMaster, doNotSpill, subjInMemory,
     bUseFetch, hasHeldSharedLock: Byte;
     dbSize, dbOrigSize, dbFileSize, dbHintSize, errCode, nRec, cksumInit,
@@ -1329,7 +1330,7 @@ function sqlite3_trace_v2(DB: TSQLite3DB; Mask: integer; Callback: TSQLTraceCall
 
 const
   // error message if linked sqlite3.obj does not match this
-  EXPECTED_SQLITE3_VERSION = '3.20.1';
+  EXPECTED_SQLITE3_VERSION = '3.21.0';
   
 constructor TSQLite3LibraryStatic.Create;
 var error: RawUTF8;
