@@ -4733,6 +4733,8 @@ const
   HTTP_PROXYAUTHREQUIRED = 407;
   /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Payload Too Large"
+  HTTP_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -4770,13 +4772,18 @@ const
   /// uppercase version of HTTP header for static file content serving
   STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER+STATICFILE_CONTENT_TYPE;
 
-/// convert any HTTP_* constant to a short English text
-// - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
+var
+  /// convert any HTTP_* constant to a short English text
+  // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+  // - if SynCrtSock is linked (i.e. set mORMotHttpClient or mORMotHttpServer),
+  // SynCrtSock StatusCodeToReason() function will be assigned, which is
+  // somewhat faster, and more complete
+  StatusCodeToErrorMessage: procedure(Code: integer; var result: RawUTF8);
 
 /// convert any HTTP_* constant to an integer error code and its English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
+// - will call StatusCodeToErrorMessage()
+function StatusCodeToErrorMsg(Code: integer): RawUTF8;
 
 /// returns true for successful HTTP status codes, i.e. in 200..399 range
 // - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
@@ -23969,47 +23976,35 @@ begin
     '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %',[self,aName,fTable]);
 end;
 
-
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
-begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+procedure StatusCodeToErrorMsgBasic(Code: integer; var result: RawUTF8);
+begin // only basic verbs here -> SynCrtSock.StatusCodeToReason() used instead
   case Code of
-    HTTP_CONTINUE:            result := 'Continue';
-    HTTP_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
-    HTTP_SUCCESS:             result := 'OK';
-    HTTP_CREATED:             result := 'Created';
-    HTTP_ACCEPTED:            result := 'Accepted';
-    HTTP_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
-    HTTP_NOCONTENT:           result := 'No Content';
-    HTTP_RESETCONTENT:        result := 'Reset Content';
-    HTTP_PARTIALCONTENT:      result := 'Partial Content';
-    HTTP_MULTIPLECHOICES:     result := 'Multiple Choices';
-    HTTP_MOVEDPERMANENTLY:    result := 'Moved Permanently';
-    HTTP_FOUND:               result := 'Found';
-    HTTP_SEEOTHER:            result := 'See Other';
-    HTTP_NOTMODIFIED:         result := 'Not Modified';
-    HTTP_USEPROXY:            result := 'Use Proxy';
-    HTTP_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
-    HTTP_BADREQUEST:          result := 'Bad Request';
-    HTTP_UNAUTHORIZED:        result := 'Unauthorized';
-    HTTP_FORBIDDEN:           result := 'Forbidden';
-    HTTP_NOTFOUND:            result := 'Not Found';
-    HTTP_NOTALLOWED:          result := 'Method Not Allowed';
-    HTTP_NOTACCEPTABLE:       result := 'Not Acceptable';
-    HTTP_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
-    HTTP_TIMEOUT:             result := 'Request Timeout';
-    HTTP_SERVERERROR:         result := 'Internal Server Error';
-    HTTP_NOTIMPLEMENTED:      result := 'Not Implemented';
-    HTTP_BADGATEWAY:          result := 'Bad Gateway';
-    HTTP_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
-    HTTP_UNAVAILABLE:         result := 'Service Unavailable';
-    HTTP_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
-    else                      result := 'Invalid Request';
+    HTTP_CONTINUE:          result := 'Continue';
+    HTTP_SUCCESS:           result := 'OK';
+    HTTP_CREATED:           result := 'Created';
+    HTTP_NOCONTENT:         result := 'No Content';
+    HTTP_MOVEDPERMANENTLY:  result := 'Moved Permanently';
+    HTTP_NOTMODIFIED:       result := 'Not Modified';
+    HTTP_BADREQUEST:        result := 'Bad Request';
+    HTTP_UNAUTHORIZED:      result := 'Unauthorized';
+    HTTP_FORBIDDEN:         result := 'Forbidden';
+    HTTP_NOTFOUND:          result := 'Not Found';
+    HTTP_NOTALLOWED:        result := 'Method Not Allowed';
+    HTTP_NOTACCEPTABLE:     result := 'Not Acceptable';
+    HTTP_TIMEOUT:           result := 'Request Timeout';
+    HTTP_SERVERERROR:       result := 'Internal Server Error';
+    HTTP_NOTIMPLEMENTED:    result := 'Not Implemented';
+    HTTP_GATEWAYTIMEOUT:    result := 'Gateway Timeout';
+    HTTP_UNAVAILABLE:       result := 'Service Unavailable';
+    else if StatusCodeIsSuccess(Code) then
+      result := 'Success' else
+      result := 'Invalid Request';
   end;
 end;
 
 function StatusCodeToErrorMsg(Code: integer): RawUTF8;
 begin
-  StatusCodeToErrorMsg(Code,result);
+  StatusCodeToErrorMessage(Code,result);
   result := FormatUTF8('HTTP Error % - %',[Code,result]);
 end;
 
@@ -37373,7 +37368,7 @@ begin
     fLastErrorException := nil;
     if StatusCodeIsSuccess(ErrorCode) then
       fLastErrorMessage := '' else
-      StatusCodeToErrorMsg(ErrorCode,fLastErrorMessage);
+      StatusCodeToErrorMessage(ErrorCode,fLastErrorMessage);
   end else begin
     fLastErrorException := PPointer(E)^;
     fLastErrorMessage := ObjectToJSONDebug(E);
@@ -37515,7 +37510,7 @@ begin
         Exclude(fInternalState,isInAuth);
       end;
     if not StatusCodeIsSuccess(Call.OutStatus) then begin
-      StatusCodeToErrorMsg(Call.OutStatus,StatusMsg);
+      StatusCodeToErrorMessage(Call.OutStatus,StatusMsg);
       if Call.OutBody='' then
         fLastErrorMessage := StatusMsg else
         fLastErrorMessage := Call.OutBody;
@@ -40892,7 +40887,7 @@ begin
     exit;
   end;
   if ErrorMessage='' then
-    StatusCodeToErrorMsg(Status,ErrorMsg) else
+    StatusCodeToErrorMessage(Status,ErrorMsg) else
     ErrorMsg := ErrorMessage;
   with TTextWriter.CreateOwnedStream(temp) do
   try
@@ -52429,7 +52424,7 @@ begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
+      StatusCodeToErrorMessage(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
       exit;
     end;
     BrowserAuth := True;
@@ -52462,7 +52457,7 @@ begin
     if BrowserAuth then begin
       Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData);
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
+      StatusCodeToErrorMessage(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
     end else
       Ctxt.Returns(['result','','data',BinToBase64(OutData)]);
     exit; // 1st call: send back OutData to the client
@@ -60494,7 +60489,7 @@ begin
     if not StatusCodeIsSuccess(status) then begin
       if aErrorMsg<>nil then begin
         if resp='' then begin
-          StatusCodeToErrorMsg(status,resp);
+          StatusCodeToErrorMessage(status,resp);
           head := GetErrorMessage(status);
           if head<>'' then
             head := ' - '+head;
@@ -61018,6 +61013,7 @@ initialization
   {$endif}
   SetThreadNameDefault(TThreadID(GetCurrentThreadID),'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
+  StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(
     TypeInfo(TClassDynArray),TypeInfo(TJSONCustomParsers)));
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);

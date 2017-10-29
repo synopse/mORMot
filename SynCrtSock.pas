@@ -1068,7 +1068,8 @@ type
   // - if defined, is called just before the body is retrieved from the client
   // - supplied parameters reflect the current input state
   // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
-  // error code to reject the request
+  // error code (e.g. STATUS_FORBIDDEN or STATUS_PAYLOADTOOLARGE) to reject
+  // the request
   TOnHttpServerBeforeBody = function(const aURL,aMethod,aInHeaders,
     aInContentType,aRemoteIP: SockString; aContentLength: integer): cardinal of object;
 
@@ -2061,6 +2062,8 @@ const
   STATUS_FORBIDDEN = 403;
   /// HTTP Status Code for "Not Found"
   STATUS_NOTFOUND = 404;
+  /// HTTP Status Code for "Payload Too Large"
+  STATUS_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
   STATUS_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -2074,6 +2077,8 @@ const
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
+// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - mORMot.StatusCodeToErrorMsg() will call this function
 function StatusCodeToReason(Code: cardinal): SockString;
 
 /// retrieve the IP address from a computer name
@@ -2551,7 +2556,7 @@ uses
 { ************ some shared helper functions and classes }
 
 var
-  ReasonCache: array[1..5,0..7] of SockString; // avoid memory allocation
+  ReasonCache: array[1..5,0..8] of SockString; // avoid memory allocation
 
 function StatusCodeToReasonInternal(Code: cardinal): SockString;
 begin
@@ -2563,24 +2568,41 @@ begin
     202: result := 'Accepted';
     203: result := 'Non-Authoritative Information';
     204: result := 'No Content';
+    205: result := 'Reset Content';
     206: result := 'Partial Content';
-    207: result := 'Multi-Status';
     300: result := 'Multiple Choices';
     301: result := 'Moved Permanently';
     302: result := 'Found';
     303: result := 'See Other';
     304: result := 'Not Modified';
+    305: result := 'Use Proxy';
     307: result := 'Temporary Redirect';
+    308: result := 'Permanent Redirect';
     400: result := 'Bad Request';
     401: result := 'Unauthorized';
     403: result := 'Forbidden';
     404: result := 'Not Found';
     405: result := 'Method Not Allowed';
     406: result := 'Not Acceptable';
+    407: result := 'Proxy Authentication Required';
+    408: result := 'Request Timeout';
+    409: result := 'Conflict';
+    410: result := 'Gone';
+    411: result := 'Length Required';
+    412: result := 'Precondition Failed';
+    413: result := 'Payload Too Large';
+    414: result := 'URI Too Long';
+    415: result := 'Unsupported Media Type';
+    416: result := 'Requested Range Not Satisfiable';
+    426: result := 'Upgrade Required';
     500: result := 'Internal Server Error';
     501: result := 'Not Implemented';
+    502: result := 'Bad Gateway';
     503: result := 'Service Unavailable';
-    else result := 'Error';
+    504: result := 'Gateway Timeout';
+    505: result := 'HTTP Version Not Supported';
+    511: result := 'Network Authentication Required';
+    else result := 'Invalid Request';
   end;
 end;
 
@@ -2593,8 +2615,8 @@ begin
   end else begin
     Hi := Code div 100;
     Lo := Code-Hi*100;
-    if not ((Hi in [1..5]) and (Lo in [0..7])) then begin
-      result := 'Error';
+    if not ((Hi in [1..5]) and (Lo in [0..8])) then begin
+      result := StatusCodeToReasonInternal(Code);
       exit;
     end;
   end;

@@ -882,17 +882,17 @@ type
     mmapSize, mmapSizeActual, mmapSizeMax: Int64Rec;
   end;
   {$else}
-  TSQLFile = record             // see struct unixFile in sqlite3.c
-    pMethods: pointer;          // sqlite3.io_methods_ptr
-    pVfs: pointer;              // The VFS used to open this file (new in version 3.7)
-    pINode: pointer;     // Info about locks on this inode
-    h: THandle;                 // Handle for accessing the file
-    eFileLock: cuchar;          // The type of lock held on this fd
-    ctrlFlags: cushort;         // Behavioral bits.  UNIXFILE_* flags
-    lastErrno: cint;            // The unix errno from the last I/O error
+  TSQLFile = record            // see struct unixFile in sqlite3.c
+    pMethods: pointer;         // sqlite3.io_methods_ptr
+    pVfs: pointer;             // VFS used to open this file (new in version 3.7)
+    pINode: pointer;           // Info about locks on this inode
+    h: THandle;                // Handle for accessing the file
+    eFileLock: cuchar;         // The type of lock held on this fd
+    ctrlFlags: cushort;        // Behavioral bits.  UNIXFILE_* flags
+    lastErrno: cint;           // The unix errno from the last I/O error
     lockingContext: PAnsiChar; // Locking style specific state
     UnixUnusedFd: pointer;     // unused
-    zPath: PAnsiChar;           // Name of the file
+    zPath: PAnsiChar;          // Name of the file
     pShm: pointer; // not there if SQLITE_OMIT_WAL is defined
     szChunk: cint;
     nFetchOut: cint;
