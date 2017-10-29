@@ -1097,6 +1097,7 @@ type
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
     fOnBeforeBody: TOnHttpServerBeforeBody;
+    fMaximumAllowedContentLength: cardinal;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -1106,7 +1107,8 @@ type
     fCanNotifyCallback: boolean;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
-    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual; 
+    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
+    procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1174,6 +1176,12 @@ type
     // ! end;
     // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
+    /// reject any incoming request with a body size bigger than this value
+    // - default to 0, meaning any input size is allowed
+    // - returns STATUS_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
+    // header overflow the supplied number of bytes
+    property MaximumAllowedContentLength: cardinal read fMaximumAllowedContentLength
+      write SetMaximumAllowedContentLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
     property CanNotifyCallback: boolean read fCanNotifyCallback;
@@ -1280,6 +1288,7 @@ type
     function GetLogging: boolean;
     procedure SetServerName(const aName: SockString); override;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override; 
+    procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
     procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
@@ -4814,6 +4823,11 @@ begin
   fOnBeforeBody := aEvent;
 end;
 
+procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
+begin
+  fMaximumAllowedContentLength := aMax;
+end;
+
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
@@ -5504,13 +5518,22 @@ begin
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
     if GetTickCount>maxtix then // time wrap after 49.7 days is just ignored
       exit;
-    if (fServer<>nil) and Assigned(fServer.OnBeforeBody) then begin
-      status := fServer.OnBeforeBody(
-        fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength);
-      if status<>STATUS_SUCCESS then begin
-        SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
-          #13#10#13#10,'Rejected']);
+    if fServer<>nil then begin
+      if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
+         (cardinal(ContentLength)>fServer.MaximumAllowedContentLength) then begin
+        SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
+        SockSendFlush;
         exit;
+      end;
+      if Assigned(fServer.OnBeforeBody) then begin
+        status := fServer.OnBeforeBody(
+          fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength);
+        if status<>STATUS_SUCCESS then begin
+          SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
+            #13#10#13#10,'Rejected']);
+          SockSendFlush;
+          exit;
+        end;
       end;
     end;
     if withBody and not ConnectionUpgrade then
@@ -7300,6 +7323,11 @@ begin
             InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
           with Req^.Headers.KnownHeaders[reqContentEncoding] do
             SetString(InContentEncoding,pRawValue,RawValueLength);
+          if (InContentLength>0) and (MaximumAllowedContentLength>0) and
+             (InContentLength>MaximumAllowedContentLength) then begin
+            SendError(STATUS_PAYLOADTOOLARGE,'Rejected');
+            exit;
+          end;
           if Assigned(OnBeforeBody) then begin
             with Context do
               Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength);
@@ -7728,6 +7756,15 @@ begin
   if fClones<>nil then // event is shared by all clones
     for i := 0 to fClones.Count-1 do
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
+end;
+
+procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
+var i: integer;
+begin
+  inherited SetMaximumAllowedContentLength(aMax);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetMaximumAllowedContentLength(aMax);
 end;
 
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
