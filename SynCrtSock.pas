@@ -7326,7 +7326,7 @@ begin
           if (InContentLength>0) and (MaximumAllowedContentLength>0) and
              (InContentLength>MaximumAllowedContentLength) then begin
             SendError(STATUS_PAYLOADTOOLARGE,'Rejected');
-            exit;
+            continue;
           end;
           if Assigned(OnBeforeBody) then begin
             with Context do
