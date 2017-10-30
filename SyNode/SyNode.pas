@@ -1311,7 +1311,7 @@ begin
     if Assigned(OnGetWebAppRootPath) then
       Result.fWebAppRootDir := OnGetWebAppRootPath(Result)
     else
-      Result.fWebAppRootDir := UnicodeStringToUtf8(ExeVersion.ProgramFilePath);
+      Result.fWebAppRootDir := StringToUTF8(ExeVersion.ProgramFilePath);
 
     result.fThreadID := ThreadID;
     FEnginePool.Add(result);

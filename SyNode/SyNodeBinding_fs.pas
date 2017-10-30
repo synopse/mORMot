@@ -316,7 +316,7 @@ const
 begin
   try
     in_argv := vp.argv;
-    {$POINTERMATH ON}
+    {.$POINTERMATH ON}
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     if (argc = 2) and in_argv[1].isBoolean then
@@ -325,11 +325,12 @@ begin
       includeSubDir := false;
 
     dir := in_argv[0].asJSString.ToSynUnicode(cx);
-    {$POINTERMATH OFF}
+    {.$POINTERMATH OFF}
     if not DirectoryExists(Dir) then
     begin
       vp.rval := JSVAL_NULL;
-      Exit(true);
+      Result := true;
+      Exit;
     end;
 
     Dir := IncludeTrailingPathDelimiter(Dir);
