@@ -46397,7 +46397,9 @@ Bin:  case ElemSize of
       {$ifdef UNICODE}
       tkUString: fKnownType := djString;
       {$else}
-      tkUString: fKnownType := djWideString;
+      {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+      tkUString: fKnownType := djSynUnicode;
+      {$endif FPC_HAS_FEATURE_WIDESTRINGS}
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: fKnownType := djVariant;
@@ -46434,7 +46436,9 @@ rec:    inc(PtrUInt(nested),nested^.NameLen);
            {$ifdef UNICODE}
            tkUString: fKnownType := djString;
            {$else}
-           tkUString: fKnownType := djWideString;
+           {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+           tkUString: fKnownType := djSynUnicode;
+           {$endif FPC_HAS_FEATURE_WIDESTRINGS}
            {$endif}
            tkRecord{$ifdef FPC},tkObject{$endif}: begin
              nested := DeRef(TypeInfo);

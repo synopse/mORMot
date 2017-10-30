@@ -72,9 +72,6 @@
     </Linking>
     <Other>
       <CustomOptions Value="-dSM52"/>
-      <OtherDefines Count="1">
-        <Define0 Value="SM52"/>
-      </OtherDefines>
     </Other>
   </CompilerOptions>
   <Debugging>
