@@ -17767,6 +17767,7 @@ type
     // for fastest ID2Index() by using O(log(n)) binary search algorithm
     fIDSorted: boolean;
     fCommitShouldNotUpdateFile: boolean;
+    fNoUniqueFieldCheckOnAdd: boolean;
     fBinaryFile: boolean;
     fExpandedJSON: boolean;
     fSearchRec: TSQLRecord; // temporary record to store the searched value 
@@ -18029,6 +18030,13 @@ type
     // update the associated TSQLVirtualTableJSON
     property CommitShouldNotUpdateFile: boolean read fCommitShouldNotUpdateFile
       write fCommitShouldNotUpdateFile;
+    /// set this property to TRUE to disable field consistency check on Add
+    // - i.e. AddOne() won't scan for UniqueFields[] duplicates
+    // - set e.g. automatically by TSQLRestServer.RecordVersionSynchronizeSlave
+    // to speedup synchronization on slave side, since the consistency will
+    // be already done on master side
+    property NoUniqueFieldCheckOnAdd: boolean read fNoUniqueFieldCheckOnAdd
+      write fNoUniqueFieldCheckOnAdd;
     /// read-only access to the number of TSQLRecord values
     property Count: integer read GetCount;
   end;
@@ -38630,6 +38638,7 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
   Master: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
+    static: TSQLRest;
 {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -38640,6 +38649,10 @@ begin
   result := -1; // error
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
+  static := GetStaticDataServer(Table); 
+  if (static<>nil) and static.InheritsFrom(TSQLRestStorageInMemory) then
+    // consistency is checked on server side, and AddOne() could be very slow
+    TSQLRestStorageInMemory(static).NoUniqueFieldCheckOnAdd := true;
   repeat
     Writer := RecordVersionSynchronizeSlaveToBatch(
       Table,Master,fRecordVersionMax,ChunkRowLimit,OnWrite);
@@ -44202,8 +44215,11 @@ begin
   if ForceID then begin // check forced ID
     if Rec.fID<=0 then
       raise EORMException.CreateUTF8('%.AddOne(%.ForceID=0)',[self,Rec]);
+    if IDToIndex(Rec.fID)>=0 then
+      raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
+        [self,Rec,Rec.fID]);
     if Rec.fID<=lastID then begin
-      if fUniqueFields<>nil then begin
+      if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then begin
         for i := 0 to fUniqueFields.Count-1 do begin
           hash := fUniqueFields.List[i];
           ndx := hash.Scan(Rec,fValue.Count); // O(n) search to avoid hashing
@@ -44218,9 +44234,6 @@ begin
         InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
           [ClassType,Rec.ClassType,Rec.fID,lastID]);
       end;
-      if IDToIndex(Rec.fID)>=0 then
-        raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
-          [self,Rec,Rec.fID]);
       needSort := true; // brutal, but working
     end;
     result := Rec.fID;
@@ -44231,7 +44244,7 @@ begin
   ndx := fValue.Add(Rec);
   if needSort then
     fValue.Sort(TSQLRecordCompare) else // fUniqueFields[] already checked
-    if fUniqueFields<>nil then
+    if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
         InternalLog('%.AddOne: Duplicated field "%" value for %',
