@@ -1,5 +1,6 @@
-program SpiderMonkeyLinkCheck01;
+program HelloSpiderMonkey52;
 uses
   SpiderMonkey;
 begin
+  // TODO: implementation for Delphi
 end.

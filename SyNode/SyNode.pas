@@ -644,7 +644,7 @@ begin
   fCx := PJSContext(nil).CreateNew(FManager.MaxPerEngineMemory, $01000000, nil);
   if fCx = nil then
     raise ESMException.Create('Create context: out of memory');
-{$IFNDEF CPUX64}
+{$IFNDEF CPUX64} // This check does not always work correctly under 64-bit configurations. Need more investigation to understand the problem
   fCx.SetNativeStackQuota(gMaxStackSize);
 {$ENDIF}
   fCx.GCParameter[JSGC_MAX_BYTES] := FManager.MaxPerEngineMemory;

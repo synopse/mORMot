@@ -11,12 +11,12 @@ uses
   SynCommons,
   SyNode, SpiderMonkey;
 
-function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; //{$ifdef HASINLINE}inline;{$endif} << uncommenting this couses internal error on FPC 3.0.2
+function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; {$IFNDEF FPC}{$ifdef HASINLINE}inline;{$endif}{$ENDIF}// << this couses internal error on FPC 3.0.2
 
 implementation
 
 ///This is dirty hack using Spider Monkey internals
-function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; //{$ifdef HASINLINE}inline;{$endif} << uncommenting this couses internal error on FPC 3.0.2
+function HasInstance(cx: PJSContext; argc: uintN; var vp: jsargRec; proto: JSProtoKey): Boolean; {$IFNDEF FPC}{$ifdef HASINLINE}inline;{$endif}{$ENDIF}// << this couses internal error on FPC 3.0.2
 var
   in_argv: PjsvalVector;
   slotIndex: uint32;
