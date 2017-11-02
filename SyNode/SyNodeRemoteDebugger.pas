@@ -254,6 +254,7 @@ var
   thread: TSMRemoteDebuggerCommunicationThread;
   threadsCnt: integer;
 begin
+  AcceptedSocket := nil;
   ServerSock := TCrtSocket.Bind(fPort);
   try
     repeat
@@ -293,6 +294,7 @@ begin
       end;
     until Terminated;
   finally
+    AcceptedSocket.Free;
     ServerSock.Free;
   end;
 end;
