@@ -303,7 +303,7 @@ var
   curThreadID: TThreadID;
 begin
   curThreadID := GetCurrentThreadId;
-  if not Self.Finished and (fDebuggers <> nil) then begin
+  if not Terminated and (fDebuggers <> nil) then begin
     fDebuggers.Safe.Lock;
     try
       if aEng <> nil then begin
@@ -333,7 +333,7 @@ var
   dbgObject: PJSRootedObject;
 begin
   curThreadID := GetCurrentThreadId;
-  if not Self.Finished and (fDebuggers <> nil) then begin
+  if not Terminated and (fDebuggers <> nil) then begin
     fDebuggers.Safe.Lock;
     try
       for I := 0 to fDebuggers.Count - 1 do
@@ -368,7 +368,7 @@ procedure TSMRemoteDebuggerThread.SetTerminated;
 var
   socket: TCrtSocket;
 begin
-  if not Self.Finished then begin
+  if not Terminated then begin
     Terminate;
     socket := Open('127.0.0.1', fPort);
     if socket<>nil then

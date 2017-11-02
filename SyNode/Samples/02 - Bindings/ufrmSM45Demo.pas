@@ -3,7 +3,7 @@ unit ufrmSM45Demo;
 interface
 
 uses
-  {$IFNDEF LCL}Windows, Messages,{$ELSE}LclIntf, LMessages, LclType, LResources,{$ENDIF}
+  {$IFNDEF LCL}Windows,{$ELSE}LclIntf, LMessages, LclType, LResources,{$ENDIF}
   Messages, SysUtils, Variants, Classes, Graphics,
   Controls, Forms, Dialogs, StdCtrls,
 
