@@ -1,7 +1,7 @@
 /// Netscape Portable Runtime *.h header port to Delphi
 // - this unit is a part of the freeware Synopse framework,
 // licensed under a MPL/GPL/LGPL tri-license; version 1.18
-unit NSPRApi;
+unit NSPRAPI;
 
 interface
 

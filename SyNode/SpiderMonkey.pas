@@ -4198,8 +4198,8 @@ end;
 class function JSContext.CreateNew(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
 begin
   Result := JS_NewContext(maxbytes, maxNurseryBytes, parentContext);
-  SetMXCSR($1FA0);
-  InitSelfHostedCode(Result);
+  with TSynFPUException.ForLibraryCode do
+    InitSelfHostedCode(Result);
 end;
 {$ELSE}
 

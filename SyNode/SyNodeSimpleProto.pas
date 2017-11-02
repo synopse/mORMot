@@ -262,10 +262,8 @@ begin
       PI.SetInt64Value(Instance^.instance, val.asInt64);
     tkFloat:
       PI.SetExtendedvalue(Instance^.instance, val.asDouble);
-    tkLString:
+    tkLString{$IFDEF FPC}, tkAString{$ENDIF}:
       PI.SetLongStrValue(Instance^.instance, val.asJsString.ToUTF8(cx));
-    tkAString:
-      PI.SetGenericStringValue(Instance^.instance, val.asJsString.ToString(cx));
     {$ifdef UNICODE} tkUString:
       PI.SetUnicodeStrValue(Instance^.instance, val.asJsString.ToSynUnicode(cx));
     {$endif}

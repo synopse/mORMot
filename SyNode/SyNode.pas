@@ -803,7 +803,7 @@ begin
     process.ptr.defineProperty(cx, 'execPath', cx.NewJSString(ExeVersion.ProgramFileName).ToJSVal,
       JSPROP_ENUMERATE or JSPROP_PERMANENT or JSPROP_READONLY);
 
-    FStartupPath := GetCurrentDir + DirectorySeparator;
+    FStartupPath := GetCurrentDir + {$IFDEF FPC}DirectorySeparator{$ELSE}'\'{$ENDIF};
     if FStartupPath = '' then
       FStartupPath := ExeVersion.ProgramFilePath;
 

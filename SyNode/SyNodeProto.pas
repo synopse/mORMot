@@ -454,7 +454,7 @@ begin
       if Result.fRttiCls = AForClass then
         exit; // The class prototype has already created
     end else if val.isString then begin
-      if val.asJSString.ToString(cx).Equals(AForClass.ClassName) then
+      if val.asJSString.ToString(cx) = AForClass.ClassName then
         exit; // The class prototype is being created right now
     end else
       raise ESMException.Create('Slot value is not ProtoObject');
