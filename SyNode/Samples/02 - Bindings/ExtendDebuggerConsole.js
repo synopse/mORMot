@@ -1,4 +1,4 @@
-import {setConsoleCommands, setConsoleMessageResolver} from 'DevTools\\Debugger.js';
+import {setConsoleCommands, setConsoleMessageResolver} from 'DevTools/Debugger.js';
 let dbg_binding = process.binding('debugger'),
     global = dbg_binding.global;
 

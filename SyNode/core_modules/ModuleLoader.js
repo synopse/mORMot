@@ -4,8 +4,7 @@
 
 // A basic synchronous module loader for testing the shell.
 let {coreModulesPath, parseModule, setModuleResolveHook} = process.binding('modules')
-let {loadFile} = process.binding('fs')
-const PATH_DELIM = process.platform === 'win32' ? '\\' : '/'
+let {loadFile, relToAbs} = process.binding('fs')
 
 Reflect.Loader = new class {
     constructor() {
@@ -14,7 +13,7 @@ Reflect.Loader = new class {
     }
 
     resolve(name) {
-	return `${this.loadPath}.${PATH_DELIM}${name}`;
+	return relToAbs(this.loadPath,name);
     }
 
     fetch(path) {
