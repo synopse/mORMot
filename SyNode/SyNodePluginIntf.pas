@@ -119,7 +119,7 @@ begin
     end;
 
     if not IsCalled then
-      raise ESMException.Create('invalid ussage');
+      raise ESMException.Create('invalid usage');
 
     Result := True;
   except

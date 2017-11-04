@@ -3,7 +3,8 @@ unit ufrmSM45Demo;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics,
+  {$IFNDEF LCL}Windows,{$ELSE}LclIntf, LMessages, LclType, LResources,{$ENDIF}
+  Messages, SysUtils, Variants, Classes, Graphics,
   Controls, Forms, Dialogs, StdCtrls,
 
   SynCommons,
@@ -56,7 +57,7 @@ implementation
 procedure TfrmSM45Demo.FormCreate(Sender: TObject);
 begin
   // create a JavaScript angine manager
-  FSMManager := TSMEngineManager.Create(StringToUTF8(RelToAbs(ExeVersion.ProgramFilePath, '..\..\core_modules')));
+  FSMManager := TSMEngineManager.Create(StringToUTF8(RelToAbs(ExeVersion.ProgramFilePath, '../../core_modules')));
   // optionaly increase a max engine memory
   FSMManager.MaxPerEngineMemory := 512 * 1024 * 1024;
   // add a handler called every time new engine is created
@@ -83,6 +84,8 @@ procedure TfrmSM45Demo.btnEvaluateClick(Sender: TObject);
 var
   res: jsval;
 begin
+  if FEngine = nil then
+    raise Exception.Create('JS engine not initialized');
   // evaluate a text from mSource memo
   if mSource.SelText <> '' then
     FEngine.Evaluate(mSource.SelText, 'mSourceSelected.js', 1, res)
@@ -92,6 +95,8 @@ end;
 
 procedure TfrmSM45Demo.cmd_Itenterupt(var aMessage: TMessage);
 begin
+  if FEngine = nil then
+    raise Exception.Create('JS engine not initialized');
 {$IFDEF SM52}
   FEngine.cx.RequestInterruptCallback;
   FEngine.cx.CheckForInterrupt;

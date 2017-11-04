@@ -2310,12 +2310,12 @@ type
   // owner class: set j2oSetterExpectsToFreeTempInstance to let JSONToObject
   // (and TPropInfo.ClassFromJSON) release it when the setter returns, and
   // j2oSetterNoCreate to avoid the published field instance creation
-  // - set j2oAllowInt64Hex to let Int64/QWord values accept hexadecimal string
+  // - set j2oAllowInt64Hex to let Int64/QWord fields accept hexadecimal string
+  // (as generated e.g. via the woInt64AsHex option)
   TJSONToObjectOption = (
     j2oIgnoreUnknownProperty, j2oIgnoreStringType, j2oIgnoreUnknownEnum,
     j2oHandleCustomVariants, j2oHandleCustomVariantsWithinString,
-    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate,
-    j2oAllowInt64Hex);
+    j2oSetterExpectsToFreeTempInstance, j2oSetterNoCreate, j2oAllowInt64Hex);
   /// set of options for JSONToObject() parsing process
   TJSONToObjectOptions = set of TJSONToObjectOption;
 
@@ -4733,6 +4733,8 @@ const
   HTTP_PROXYAUTHREQUIRED = 407;
   /// HTTP Status Code for "Request Time-out"
   HTTP_TIMEOUT = 408;
+  /// HTTP Status Code for "Payload Too Large"
+  HTTP_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
   HTTP_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -4770,13 +4772,18 @@ const
   /// uppercase version of HTTP header for static file content serving
   STATICFILE_CONTENT_TYPE_HEADER_UPPPER = HEADER_CONTENT_TYPE_UPPER+STATICFILE_CONTENT_TYPE;
 
-/// convert any HTTP_* constant to a short English text
-// - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8); overload;
+var
+  /// convert any HTTP_* constant to a short English text
+  // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+  // - if SynCrtSock is linked (i.e. set mORMotHttpClient or mORMotHttpServer),
+  // SynCrtSock StatusCodeToReason() function will be assigned, which is
+  // somewhat faster, and more complete
+  StatusCodeToErrorMessage: procedure(Code: integer; var result: RawUTF8);
 
 /// convert any HTTP_* constant to an integer error code and its English text
 // - see @http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
-function StatusCodeToErrorMsg(Code: integer): RawUTF8; overload;
+// - will call StatusCodeToErrorMessage()
+function StatusCodeToErrorMsg(Code: integer): RawUTF8;
 
 /// returns true for successful HTTP status codes, i.e. in 200..399 range
 // - will map mainly SUCCESS (200), CREATED (201), NOCONTENT (204),
@@ -14952,7 +14959,7 @@ type
     /// reintroduced to call TeminatedSet
     procedure Terminate; reintroduce;
     {$endif}
-    /// wait for fEvent to be notified and fExecuting=false
+    /// wait for Execute to be ended (i.e. fExecuting=false)
     procedure WaitForNotExecuting(maxMS: integer=500);
     /// finalize the thread
     // - and the associated REST instance if OwnRest is TRUE
@@ -17760,6 +17767,7 @@ type
     // for fastest ID2Index() by using O(log(n)) binary search algorithm
     fIDSorted: boolean;
     fCommitShouldNotUpdateFile: boolean;
+    fNoUniqueFieldCheckOnAdd: boolean;
     fBinaryFile: boolean;
     fExpandedJSON: boolean;
     fSearchRec: TSQLRecord; // temporary record to store the searched value 
@@ -18022,6 +18030,13 @@ type
     // update the associated TSQLVirtualTableJSON
     property CommitShouldNotUpdateFile: boolean read fCommitShouldNotUpdateFile
       write fCommitShouldNotUpdateFile;
+    /// set this property to TRUE to disable field consistency check on Add
+    // - i.e. AddOne() won't scan for UniqueFields[] duplicates
+    // - set e.g. automatically by TSQLRestServer.RecordVersionSynchronizeSlave
+    // to speedup synchronization on slave side, since the consistency will
+    // be already done on master side
+    property NoUniqueFieldCheckOnAdd: boolean read fNoUniqueFieldCheckOnAdd
+      write fNoUniqueFieldCheckOnAdd;
     /// read-only access to the number of TSQLRecord values
     property Count: integer read GetCount;
   end;
@@ -23969,46 +23984,35 @@ begin
     '%.IndexByNameUnflattenedOrExcept(%): unkwnown field in %',[self,aName,fTable]);
 end;
 
-
-procedure StatusCodeToErrorMsg(Code: integer; var result: RawUTF8);
-begin // see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+procedure StatusCodeToErrorMsgBasic(Code: integer; var result: RawUTF8);
+begin // only basic verbs here -> SynCrtSock.StatusCodeToReason() used instead
   case Code of
-    HTTP_CONTINUE:            result := 'Continue';
-    HTTP_SWITCHINGPROTOCOLS:  result := 'Switching Protocols';
-    HTTP_SUCCESS:             result := 'OK';
-    HTTP_CREATED:             result := 'Created';
-    HTTP_ACCEPTED:            result := 'Accepted';
-    HTTP_NONAUTHORIZEDINFO:   result := 'Non-Authoritative Information';
-    HTTP_NOCONTENT:           result := 'No Content';
-    HTTP_RESETCONTENT:        result := 'Reset Content';
-    HTTP_PARTIALCONTENT:      result := 'Partial Content';
-    HTTP_MULTIPLECHOICES:     result := 'Multiple Choices';
-    HTTP_MOVEDPERMANENTLY:    result := 'Moved Permanently';
-    HTTP_FOUND:               result := 'Found';
-    HTTP_SEEOTHER:            result := 'See Other';
-    HTTP_NOTMODIFIED:         result := 'Not Modified';
-    HTTP_USEPROXY:            result := 'Use Proxy';
-    HTTP_TEMPORARYREDIRECT:   result := 'Temporary Redirect';
-    HTTP_BADREQUEST:          result := 'Bad Request';
-    HTTP_UNAUTHORIZED:        result := 'Unauthorized';
-    HTTP_FORBIDDEN:           result := 'Forbidden';
-    HTTP_NOTFOUND:            result := 'Not Found';
-    HTTP_NOTALLOWED:          result := 'Method Not Allowed';
-    HTTP_NOTACCEPTABLE:       result := 'Not Acceptable';
-    HTTP_PROXYAUTHREQUIRED:   result := 'Proxy Authentication Required';
-    HTTP_TIMEOUT:             result := 'Request Timeout';
-    HTTP_SERVERERROR:         result := 'Internal Server Error';
-    HTTP_BADGATEWAY:          result := 'Bad Gateway';
-    HTTP_GATEWAYTIMEOUT:      result := 'Gateway Timeout';
-    HTTP_UNAVAILABLE:         result := 'Service Unavailable';
-    HTTP_HTTPVERSIONNONSUPPORTED: result := 'HTTP Version Not Supported';
-    else                      result := 'Invalid Request';
+    HTTP_CONTINUE:          result := 'Continue';
+    HTTP_SUCCESS:           result := 'OK';
+    HTTP_CREATED:           result := 'Created';
+    HTTP_NOCONTENT:         result := 'No Content';
+    HTTP_MOVEDPERMANENTLY:  result := 'Moved Permanently';
+    HTTP_NOTMODIFIED:       result := 'Not Modified';
+    HTTP_BADREQUEST:        result := 'Bad Request';
+    HTTP_UNAUTHORIZED:      result := 'Unauthorized';
+    HTTP_FORBIDDEN:         result := 'Forbidden';
+    HTTP_NOTFOUND:          result := 'Not Found';
+    HTTP_NOTALLOWED:        result := 'Method Not Allowed';
+    HTTP_NOTACCEPTABLE:     result := 'Not Acceptable';
+    HTTP_TIMEOUT:           result := 'Request Timeout';
+    HTTP_SERVERERROR:       result := 'Internal Server Error';
+    HTTP_NOTIMPLEMENTED:    result := 'Not Implemented';
+    HTTP_GATEWAYTIMEOUT:    result := 'Gateway Timeout';
+    HTTP_UNAVAILABLE:       result := 'Service Unavailable';
+    else if StatusCodeIsSuccess(Code) then
+      result := 'Success' else
+      result := 'Invalid Request';
   end;
 end;
 
 function StatusCodeToErrorMsg(Code: integer): RawUTF8;
 begin
-  StatusCodeToErrorMsg(Code,result);
+  StatusCodeToErrorMessage(Code,result);
   result := FormatUTF8('HTTP Error % - %',[Code,result]);
 end;
 
@@ -26234,20 +26238,21 @@ asm // eax=P1 edx=P2 ecx=FieldCount
 end;
 {$endif}
 
+{$ifndef PUREPASCAL} // do be placed outside TUTF8QuickSort.QuickSort for FPC
+procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
+asm // eax=P edx=I ecx=J
+        push    ebx
+        lea     edx, [eax + edx * 4]
+        lea     ecx, [eax + ecx * 4]
+        mov     eax, [edx]
+        mov     ebx, [ecx]
+        mov     [ecx], eax
+        mov     [edx], ebx
+        pop     ebx
+end;
+{$endif}
+
 procedure TUTF8QuickSort.QuickSort(L, R: Integer);
-  {$ifndef PUREPASCAL}
-  procedure ExchgPUTF8Charx86(P: pointer; I,J: integer);
-  asm // eax=P edx=I ecx=J
-          push    ebx
-          lea     edx, [eax + edx * 4]
-          lea     ecx, [eax + ecx * 4]
-          mov     eax, [edx]
-          mov     ebx, [ecx]
-          mov     [ecx], eax
-          mov     [edx], ebx
-          pop     ebx
-  end;
-  {$endif}
 // code below is very fast and optimized
 var P: PtrInt;
 begin
@@ -28851,7 +28856,7 @@ dst:  if kD in tkOrdinalTypes then // use Int64 to handle e.g. cardinal
     end;
     tkInt64{$ifdef FPC}, tkQWord{$endif}:
       if DestInfo=@self then
-        // works also with TID, TTimeLog, Double and Currency
+        // works also with QWord, TID, TTimeLog, Double and Currency
 i64:    SetInt64Prop(Dest,GetInt64Prop(Source)) else
         goto dst;
     tkFloat:
@@ -37371,7 +37376,7 @@ begin
     fLastErrorException := nil;
     if StatusCodeIsSuccess(ErrorCode) then
       fLastErrorMessage := '' else
-      StatusCodeToErrorMsg(ErrorCode,fLastErrorMessage);
+      StatusCodeToErrorMessage(ErrorCode,fLastErrorMessage);
   end else begin
     fLastErrorException := PPointer(E)^;
     fLastErrorMessage := ObjectToJSONDebug(E);
@@ -37513,7 +37518,7 @@ begin
         Exclude(fInternalState,isInAuth);
       end;
     if not StatusCodeIsSuccess(Call.OutStatus) then begin
-      StatusCodeToErrorMsg(Call.OutStatus,StatusMsg);
+      StatusCodeToErrorMessage(Call.OutStatus,StatusMsg);
       if Call.OutBody='' then
         fLastErrorMessage := StatusMsg else
         fLastErrorMessage := Call.OutBody;
@@ -38633,6 +38638,7 @@ function TSQLRestServer.RecordVersionSynchronizeSlave(Table: TSQLRecordClass;
   Master: TSQLRest; ChunkRowLimit: integer; OnWrite: TOnBatchWrite): TRecordVersion;
 var Writer: TSQLRestBatch;
     IDs: TIDDynArray;
+    static: TSQLRest;
 {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
 begin
@@ -38643,6 +38649,10 @@ begin
   result := -1; // error
   if fRecordVersionMax=0 then
     InternalRecordVersionMaxFromExisting(nil);
+  static := GetStaticDataServer(Table); 
+  if (static<>nil) and static.InheritsFrom(TSQLRestStorageInMemory) then
+    // consistency is checked on server side, and AddOne() could be very slow
+    TSQLRestStorageInMemory(static).NoUniqueFieldCheckOnAdd := true;
   repeat
     Writer := RecordVersionSynchronizeSlaveToBatch(
       Table,Master,fRecordVersionMax,ChunkRowLimit,OnWrite);
@@ -40890,7 +40900,7 @@ begin
     exit;
   end;
   if ErrorMessage='' then
-    StatusCodeToErrorMsg(Status,ErrorMsg) else
+    StatusCodeToErrorMessage(Status,ErrorMsg) else
     ErrorMsg := ErrorMessage;
   with TTextWriter.CreateOwnedStream(temp) do
   try
@@ -44205,8 +44215,11 @@ begin
   if ForceID then begin // check forced ID
     if Rec.fID<=0 then
       raise EORMException.CreateUTF8('%.AddOne(%.ForceID=0)',[self,Rec]);
+    if IDToIndex(Rec.fID)>=0 then
+      raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
+        [self,Rec,Rec.fID]);
     if Rec.fID<=lastID then begin
-      if fUniqueFields<>nil then begin
+      if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then begin
         for i := 0 to fUniqueFields.Count-1 do begin
           hash := fUniqueFields.List[i];
           ndx := hash.Scan(Rec,fValue.Count); // O(n) search to avoid hashing
@@ -44221,9 +44234,6 @@ begin
         InternalLog('%.AddOne(%.ForceID=%<=lastID=%) -> UniqueFields[].Invalidate',
           [ClassType,Rec.ClassType,Rec.fID,lastID]);
       end;
-      if IDToIndex(Rec.fID)>=0 then
-        raise EORMException.CreateUTF8('%.AddOne(%.ForceID=%) already existing',
-          [self,Rec,Rec.fID]);
       needSort := true; // brutal, but working
     end;
     result := Rec.fID;
@@ -44234,7 +44244,7 @@ begin
   ndx := fValue.Add(Rec);
   if needSort then
     fValue.Sort(TSQLRecordCompare) else // fUniqueFields[] already checked
-    if fUniqueFields<>nil then
+    if (fUniqueFields<>nil) and not NoUniqueFieldCheckOnAdd then
       for i := 0 to fUniqueFields.Count-1 do // perform hash of List[Count-1]
       if not TListFieldHash(fUniqueFields.List[i]).EnsureJustAddedNotDuplicated then begin
         InternalLog('%.AddOne: Duplicated field "%" value for %',
@@ -48208,7 +48218,9 @@ begin
         exit;
       P^.SetInt64Prop(Value,V64);
     end else begin
-      V64 := GetInt64(PropValue,err);
+      if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+        V64 := GetQWord(PropValue,err) else
+        V64 := GetInt64(PropValue,err);
       if err<>0 then
         exit;
       P^.SetInt64Prop(Value,V64);
@@ -48516,11 +48528,19 @@ begin
     PWord(UpperCopyShort(UpperCopy255(UpperName,SubCompName),P^.Name))^ := ord('=');
     U := FindIniNameValue(From,UpperName);
     case P^.PropType^.Kind of
-      tkInt64{$ifdef FPC}, tkQWord{$endif}: begin
-        V64 := GetInt64(pointer(U),err);
+      tkInt64: begin
+        {$ifndef FPC}if P^.TypeInfo=TypeInfo(QWord) then
+          V64 := GetQWord(pointer(U),err) else{$endif}
+          V64 := GetInt64(pointer(U),err);
         if err=0 then
           P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
       end;
+      {$ifdef FPC}tkQWord: begin
+        V64 := GetQWord(pointer(U),err);
+        if err=0 then
+          P^.SetInt64Prop(Value,V64); // pointer() to call typinfo
+      end;
+      {$endif}
       {$ifdef FPC}tkBool,{$endif} tkEnumeration, tkSet, tkInteger: begin
         V := GetInteger(pointer(U),err);
         if err=0 then
@@ -50509,21 +50529,30 @@ var Added: boolean;
             sftTimeLog,sftModTime,sftCreateTime: begin
               Add('"');
               AddTimeLog(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
             sftUnixTime: begin
               Add('"');
               AddUnixTime(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
             sftUnixMSTime: begin
               Add('"');
               AddUnixMSTime(@V64);
-              Add('"');
+              Add('"',',');
+              exit;
             end;
-            else Add(V64);
-            end
-          else Add(V64);
+            end;
+          if woInt64AsHex in Options then begin
+            Add('"');
+            AddBinToHexDisplay(@V64,SizeOf(V64));
+            Add('"');
+          end else
+          if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
+            AddQ(V64) else
+            Add(V64);
         end;
       end;
       {$ifdef FPC} tkBool, {$endif}
@@ -52408,7 +52437,7 @@ begin
       // no auth data sent, reply with supported auth methods
       Ctxt.Call.OutHead := SECPKGNAMEHTTPWWWAUTHENTICATE;
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
+      StatusCodeToErrorMessage(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
       exit;
     end;
     BrowserAuth := True;
@@ -52441,7 +52470,7 @@ begin
     if BrowserAuth then begin
       Ctxt.Call.OutHead := (SECPKGNAMEHTTPWWWAUTHENTICATE+' ')+BinToBase64(OutData);
       Ctxt.Call.OutStatus := HTTP_UNAUTHORIZED; // (401)
-      StatusCodeToErrorMsg(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
+      StatusCodeToErrorMessage(Ctxt.Call.OutStatus, Ctxt.Call.OutBody);
     end else
       Ctxt.Returns(['result','','data',BinToBase64(OutData)]);
     exit; // 1st call: send back OutData to the client
@@ -60473,7 +60502,7 @@ begin
     if not StatusCodeIsSuccess(status) then begin
       if aErrorMsg<>nil then begin
         if resp='' then begin
-          StatusCodeToErrorMsg(status,resp);
+          StatusCodeToErrorMessage(status,resp);
           head := GetErrorMessage(status);
           if head<>'' then
             head := ' - '+head;
@@ -60997,6 +61026,7 @@ initialization
   {$endif}
   SetThreadNameDefault(TThreadID(GetCurrentThreadID),'Main Thread');
   SetThreadNameInternal := SetThreadNameWithLog;
+  StatusCodeToErrorMessage := StatusCodeToErrorMsgBasic;
   GarbageCollectorFreeAndNil(JSONCustomParsers,TSynDictionary.Create(
     TypeInfo(TClassDynArray),TypeInfo(TJSONCustomParsers)));
   TTextWriter.SetDefaultJSONClass(TJSONSerializer);

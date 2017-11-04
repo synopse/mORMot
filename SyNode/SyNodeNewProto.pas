@@ -37,6 +37,7 @@ unit SyNodeNewProto;
   - Vadim Orel
   - Pavel Mashlyakovsky
   - win2014
+  - hsvandrew
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -62,6 +63,7 @@ unit SyNodeNewProto;
 
   Version 1.18
   - initial release. Use SpiderMonkey 45
+  - added TDateTime conversion as proposed by hsvandrew
 
 }
 
@@ -135,7 +137,7 @@ type
 function JSRTTINativeMethodCall(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 function JSRTTIMethodCall(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 
-function TVal2JSVal(cx: PJSContext; const Value: TValue; aParentProto: TSMCustomProtoObject): jsval;
+function TVal2JSVal(cx: PJSContext; const Value: TValue; aParentProto: TSMCustomProtoObject; propType: TRttiType = nil): jsval;
 procedure VarRecToJSVal(cx: PJSContext; const V: TVarRec; var result: jsval);
 
 
@@ -149,9 +151,6 @@ procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
 function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl;
 // called when reading an indexed property
 // TODO - remove?
-// вызывается на уровне класса для TubSMIdxPropReaderObject
-// либо это несуществующее проперти - тогда ругаться, либо это индексированное проперти Delphi Components[i]
-// тогда сюда придёт число
 function SMRTTIIdxPropRead(cx: PJSContext; var obj: PJSObject; var id: jsid; out vp: jsval): Boolean; cdecl;
 
 function CreateJSInstanceObjForNewRTTI(cx: PJSContext; AInstance: TObject): jsval;
@@ -378,7 +377,7 @@ begin
   end;
 end;
 
-function TVal2JSVal(cx: PJSContext; const Value: TValue; aParentProto: TSMCustomProtoObject): jsval;
+function TVal2JSVal(cx: PJSContext; const Value: TValue; aParentProto: TSMCustomProtoObject; propType: TRttiType = nil): jsval;
 var
   L: LongWord;
   B: Byte;
@@ -421,8 +420,12 @@ begin
     System.TypInfo.tkInteger:
       // TODO - check compiler version 32/64
       Result.AsInteger := Value.AsInteger;
-    System.TypInfo.tkFloat:
-      Result.AsDouble := Value.AsExtended;
+    System.TypInfo.tkFloat: begin
+      if Assigned(propType) and (propType.ToString = 'TDateTime') then
+        Result.asDate[cx] := Value.AsExtended
+      else
+        Result.AsDouble := Value.AsExtended;
+    end;
     System.TypInfo.tkLString:
       Result.asJSString := cx.NewJSString(Value.AsType<RawUTF8>);
     System.TypInfo.tkWString, System.TypInfo.tkUString:
@@ -526,7 +529,7 @@ begin
 
     args := JSArgs2TVals(TRttiMethod(mc.method).GetParameters, cx, argc, vp); // TODO 1.5 sec
     mRes := TRttiMethod(mc.method).Invoke(Instance.Instance, args); // TODO 3 sec
-    vp.rval := TVal2JSVal(cx, mRes, Instance.proto);
+    vp.rval := TVal2JSVal(cx, mRes, Instance.proto, TRttiMethod(mc.method).ReturnType );
     Result := True;
   except
     on E: Exception do
@@ -661,7 +664,7 @@ begin
     v := idx;
     // TODO FastRtti
     v := TRttiIndexedProperty(prObj.ForProp.mbr).ReadMethod.Invoke(prObj.Inst.instance, [v]);
-    vp := TVal2JSVal(cx, v, prObj.Inst.proto);
+    vp := TVal2JSVal(cx, v, prObj.Inst.proto, TRttiIndexedProperty(prObj.ForProp.mbr).PropertyType );
     Result := True;
   except
     on E: Exception do begin
@@ -818,7 +821,7 @@ begin
       if (pc.DeterministicIndex>=0) and (not this.ptr.ReservedSlot[pc.DeterministicIndex].isVoid) then
         rval := this.ptr.ReservedSlot[pc.DeterministicIndex]
       else begin
-      // TODO prototypes chain сломалось, так как проперти то у парента определено!!!!!!!!!!!!!
+      // TODO prototypes chain is broken, because property defined in parent
         if (TObject(pc.mbr) is TRttiProperty) then begin
           case PTypeInfo(pc.typeInfo).Kind of
             tkInteger:
@@ -841,7 +844,7 @@ begin
               rval := cx.NewJSString(tmp).ToJSVal;
             end;
             tkClass: begin
-              //MPV TODO Оптимизировать, не создавать каждый раз класс - проверить, не менялся ли указатель!!!!!
+              //MPV TODO Optymize. Don't create calss every time - instead check pointer is not changed
               clObj := TObject(mORMot.PPropInfo(PPropInfoEx(TRttiMember(pc.mbr).Handle)^.Info).GetOrdValue(Instance.Instance));
               if Assigned(clObj) then begin
                 New(InstanceIO);
@@ -851,7 +854,7 @@ begin
             end
           else
             // TODO other types fast call
-            rval := TVal2JSVal(cx, (TRttiProperty(pc.mbr)).GetValue(Instance.Instance), Instance.proto);
+            rval := TVal2JSVal(cx, (TRttiProperty(pc.mbr)).GetValue(Instance.Instance), Instance.proto, TRttiProperty(pc.mbr).PropertyType);
           end;
         end else if (TObject(pc.mbr) is TRttiIndexedProperty) then begin //indexed property
            if not Assigned(Instance.AddData) then begin
@@ -868,7 +871,7 @@ begin
           rval := this.ptr.ReservedSlot[pc.DeterministicIndex];
         end else
           // TODO TRttiField FastCAll
-          rval := TVal2JSVal(cx, TRttiField(pc.mbr).GetValue(Instance.Instance), Instance.proto);
+          rval := TVal2JSVal(cx, TRttiField(pc.mbr).GetValue(Instance.Instance), Instance.proto, TRttiField(pc.mbr).FieldType);
 
         if (pc.DeterministicIndex>=0) then
           this.ptr.ReservedSlot[pc.DeterministicIndex] := rval;
@@ -944,7 +947,7 @@ begin
       SetLength(FRTTIPropsCache, idx + 1);
       FRTTIPropsCache[idx].jsName := camelize(StringToAnsi7(rMember.Name));
 
-      // TODO mote the enumerations to global.binding.enums тфьуызфсу
+      // TODO mote the enumerations to global.binding.enums
       // and do not clog the global object
       if (ti.Kind = tkEnumeration)and(ti<>TypeInfo(boolean)) then begin
         Engine.defineEnum(mORMot.PTypeInfo(ti), aParent);
@@ -1026,15 +1029,15 @@ begin
       if (attr is SMNativeMethodForAttribute) then begin
         mjsName := (attr as SMNativeMethodForAttribute).ForMethod;
         FMethodsDA.FindHashedAndDelete(mjsName);
-        // удалить перегруженный метод, если он уже есть!
+        // remove overloaded method if it exists
       end;
     end;
     if (m.IsConstructor) and not Assigned(FCtorForInstance) then
       FCtorForInstance := m;
 
     // TODO prototypes chain
-    // сейчас добавляем всех себе, иначе getter/setter не может определить
-    // из какого предака этот метод/проперти
+    // current implementation will add all methos to self, in other case getter/setter
+    // cant determinate from wich parent this method/property
     // if (m.parent <> aRtype) then
     // exclude := true;
     try
@@ -1056,11 +1059,11 @@ begin
       (m.MethodKind in [mkProcedure, mkFunction]) and (m.Visibility >= mvPublic)
       //and (not Assigned(FClassLimitator) or (m.parent <> FClassLimitatorRTTIType))
     then begin
-      // TODO overloaded methods! if not (m.MethodKind = mkOperatorOverload)  - метод должен быть TRttiInstanceMethodEx - тогда доступно
+      // TODO overloaded methods! if not (m.MethodKind = mkOperatorOverload) - methos shoud be TRttiInstanceMethodEx
 
       idx := FMethodsDA.FindHashedForAdding(mjsName, added);
       if added then begin
-        // TODO проверить умнее это нативная ф-я или нет???
+        // TODO how to check function signature equal to JSRTTINativeMethodCall signature more clever?
         mPrms := m.GetParameters;
         with FMethods[idx] do begin
           ujsName := mjsName;

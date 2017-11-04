@@ -959,7 +959,13 @@ end;
 
 {$endif USELIBCURL}
 
+procedure StatusCodeToErrorMsgInternal(Code: integer; var result: RawUTF8);
+begin
+  result := SynCrtSock.StatusCodeToReason(Code); // faster and more complete
+end;
+
 initialization
+  StatusCodeToErrorMessage := StatusCodeToErrorMsgInternal; // as in mORMotHttpServer
   TSQLHttpClientWinSock.RegisterClassNameForDefinition;
   TSQLHttpClientWebsockets.RegisterClassNameForDefinition;
 {$ifdef USELIBCURL}

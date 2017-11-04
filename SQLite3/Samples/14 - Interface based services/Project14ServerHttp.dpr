@@ -39,6 +39,7 @@ var
 begin
   // define the log level
   with TSQLLog.Family do begin
+    PerThreadLog := ptIdentifiedInOnFile;
     Level := LOG_VERBOSE;
     EchoToConsole := LOG_VERBOSE; // log all events to the console
   end;

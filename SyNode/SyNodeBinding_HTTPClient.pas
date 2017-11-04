@@ -12,7 +12,7 @@ interface
 {$I Synopse.inc}
 {$I SyNode.inc}
 uses
-  Windows, SysUtils, SynCrtSock, SynCommons,
+  {$IFDEF MSWINDOWS}Windows, {$ENDIF}SysUtils, SynCrtSock, SynCommons,
   {$ifdef BRANCH_WIN_WEB_SOCKET}SynCrtCommons, {$endif}
   SpiderMonkey;
 
@@ -20,7 +20,7 @@ type
   {$M+}
   THTTPClient = class
   private
-    fClient: TWinHTTP;
+    fClient: THttpRequest;
     fInHeaders: RawUTF8;
     FMethod: RawUTF8;
     FWriter: TTextWriter;
@@ -121,7 +121,8 @@ begin
     else
       fReceiveTimeout := HTTP_DEFAULT_RECEIVETIMEOUT;
 
-    fClient := TWinHTTP.Create(aServer, aPort, aHttps, aProxyName, aProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
+    fClient := {$IFDEF MSWINDOWS}TWinHTTP{$ELSE}TCurlHTTP{$ENDIF}
+      .Create(aServer, aPort, aHttps, aProxyName, aProxyByPass, fConnectTimeout, fSendTimeout, fReceiveTimeout);
 
     if (argc > 3) and (in_argv[3].isBoolean)  then
       fClient.RegisterCompress(CompressGZip);
