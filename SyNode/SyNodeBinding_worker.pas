@@ -47,7 +47,9 @@ implementation
 
 uses
   SyNode,
+{$IFDEF MSWINDOWS}
   Windows,
+{$ENDIF}
   SysUtils;
 
 type
@@ -119,7 +121,7 @@ var
   in_argv: PjsvalVector;
   mes: RawUTF8;
 const
-  sInvalidCall = 'ussage: postMessage(message: *);';
+  sInvalidCall = 'usage: postMessage(message: *);';
 begin
   try
     in_argv := vp.argv;
@@ -525,7 +527,7 @@ var
   val: jsval;
   FEng: TSMEngine;
 const
-  sInvalidCall = 'ussage: createThread({name: String, onmessage: String|Function[, onterminate: String|Function][, onerror: string|Function][, message: *]})';
+  sInvalidCall = 'usage: createThread({name: String, onmessage: String|Function[, onterminate: String|Function][, onerror: string|Function][, message: *]})';
 begin
   try
     in_argv := vp.argv;
@@ -614,7 +616,7 @@ var
   threadID: Integer;
   mes: RawUTF8;
 const
-  sInvalidCall = 'ussage: postMessage(threadID: Number, message: String);';
+  sInvalidCall = 'usage: postMessage(threadID: Number, message: String);';
 begin
   try
     in_argv := vp.argv;
@@ -647,7 +649,7 @@ var
   threadID: Integer;
   mes: RawUTF8;
 const
-  sInvalidCall = 'ussage: getMessage(threadID: Number);';
+  sInvalidCall = 'usage: getMessage(threadID: Number);';
 begin
   try
     in_argv := vp.argv;
@@ -681,7 +683,7 @@ var
   in_argv: PjsvalVector;
   threadID: Integer;
 const
-  sInvalidCall = 'ussage: terminate(threadID: Number);';
+  sInvalidCall = 'usage: terminate(threadID: Number);';
 begin
   try
     in_argv := vp.argv;

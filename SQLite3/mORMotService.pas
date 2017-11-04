@@ -593,7 +593,8 @@ type
   TSynDaemonSettingsClass = class of TSynDaemonSettings;
 
   /// abstract parent to implements a daemon/service
-  // - you may consider using TDDDAdministratedDaemon from dddInfraApps 
+  // - inherit from this abstract class and override Start and Stop methods
+  // - you may consider using TDDDAdministratedDaemon from dddInfraApps
   TSynDaemon = class(TSynPersistent)
   protected
     fWorkFolderName: TFileName;
@@ -604,8 +605,9 @@ type
     {$endif}
   public
     /// initialize the daemon, creating the associated settings
+    // - TSynDaemonSettings instance will be owned and freed by the daemon
     // - any non supplied folder name will be replaced by a default value
-    // (executable folder under Windows, or /etc /var/log on Linux) 
+    // (executable folder under Windows, or /etc /var/log on Linux)
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName); reintroduce;
     /// main entry point of the daemon, to process the command line switches
@@ -1236,6 +1238,7 @@ end;
 
 function TSynDaemonSettings.LoadFromFile(const aFileName: TFileName): boolean;
 begin
+  fFileName := aFileName;
   fInitialJsonContent := StringFromFile(aFileName);
   result := JSONSettingsToObject(fInitialJsonContent, self);
 end;
@@ -1247,9 +1250,12 @@ begin
   if (self = nil) or (fFileName = '') then
     exit;
   saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment]);
-  if saved <> fInitialJsonContent then
-    FileFromString(saved, fFileName);
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
+    woInt64AsHex]);
+  if saved = fInitialJsonContent then
+    exit;
+  FileFromString(saved, fFileName);
+  fInitialJsonContent := saved;
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
@@ -1462,6 +1468,7 @@ var
     msg := FormatUTF8('% "%" (%) on Service "%"',
       [msg, param, cmdText, fSettings.ServiceName]);
     writeln(UTF8ToConsole(msg));
+    TextColor(ccLightGray);
     log.Log(sllDebug, 'CommandLine: %', [msg], self);
   end;
 
@@ -1475,7 +1482,7 @@ begin
   if (param = '') or not (param[1] in ['/', '-']) then
     cmd := cNone
   else
-    case param[2] of
+    case upcase(param[2]) of
     'C':
       cmd := cConsole;
     'R':
@@ -1492,7 +1499,7 @@ begin
   cHelp:
     Syntax;
   cVersion: begin
-    writeln(' ', ExeVersion.ProgramFileName,
+    writeln(' ', fSettings.ServiceName,
       #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
       #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
     if ExeVersion.Version.Version32 <> 0 then

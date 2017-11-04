@@ -709,6 +709,7 @@ type
     fURL: SockString;
     fKeepAliveClient: boolean;
     fRemoteIP: SockString;
+    fServer: THttpServer;
   public
     /// create the socket according to a server
     // - will register the THttpSocketCompress functions from the server
@@ -1063,6 +1064,15 @@ type
   // contain the proper 'Content-type: ....'
   TOnHttpServerRequest = function(Ctxt: THttpServerRequest): cardinal of object;
 
+  /// event handler used by THttpServerGeneric.OnBeforeBody property
+  // - if defined, is called just before the body is retrieved from the client
+  // - supplied parameters reflect the current input state
+  // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
+  // error code (e.g. STATUS_FORBIDDEN or STATUS_PAYLOADTOOLARGE) to reject
+  // the request
+  TOnHttpServerBeforeBody = function(const aURL,aMethod,aInHeaders,
+    aInContentType,aRemoteIP: SockString; aContentLength: integer): cardinal of object;
+
   {$M+}
   /// abstract class to implement a server thread
   // - do not use this class, but rather the THttpServer, THttpApiServer
@@ -1086,6 +1096,8 @@ type
     fShutdownInProgress: boolean;
     /// optional event handler for the virtual Request method
     fOnRequest: TOnHttpServerRequest;
+    fOnBeforeBody: TOnHttpServerBeforeBody;
+    fMaximumAllowedContentLength: cardinal;
     /// list of all registered compression algorithms
     fCompress: THttpSocketCompressRecDynArray;
     /// set by RegisterCompress method
@@ -1095,6 +1107,8 @@ type
     fCanNotifyCallback: boolean;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
+    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
+    procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1142,6 +1156,10 @@ type
     // - warning: this process must be thread-safe (can be called by several
     // threads simultaneously)
     property OnRequest: TOnHttpServerRequest read fOnRequest write fOnRequest;
+    /// event handler called just before the body is retrieved from the client
+    // - should return STATUS_SUCCESS=200 to continue the process, or an HTTP
+    // error code to reject the request
+    property OnBeforeBody: TOnHttpServerBeforeBody read fOnBeforeBody write SetOnBeforeBody;
     /// event handler called after each working Thread is just initiated
     // - called in the thread context at first place in THttpServerGeneric.Execute
     property OnHttpThreadStart: TNotifyThreadEvent
@@ -1158,6 +1176,12 @@ type
     // ! end;
     // - is used e.g. by TSQLRest.EndCurrentThread for proper multi-threading
     property OnHttpThreadTerminate: TNotifyThreadEvent read fOnTerminate write SetOnTerminate;
+    /// reject any incoming request with a body size bigger than this value
+    // - default to 0, meaning any input size is allowed
+    // - returns STATUS_PAYLOADTOOLARGE = 413 error if "Content-Length" incoming
+    // header overflow the supplied number of bytes
+    property MaximumAllowedContentLength: cardinal read fMaximumAllowedContentLength
+      write SetMaximumAllowedContentLength;
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
     property CanNotifyCallback: boolean read fCanNotifyCallback;
@@ -1216,8 +1240,8 @@ type
     hlfCookie, hlfReferer, hlfVersion, hlfHost, hlfSubStatus);
 
   /// http.sys API 2.0 fields used for server-side authentication
-  // - as used by
-  // - will match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
+  // - as used by THttpApiServer.SetAuthenticationSchemes/AuthenticationSchemes
+  // - match low-level HTTP_AUTH_ENABLE_* constants as defined in HTTP 2.0 API
   THttpApiRequestAuthentications = set of (
     haBasic, haDigest, haNtlm, haNegotiate, haKerberos);
 
@@ -1263,6 +1287,8 @@ type
     function GetAPIVersion: string; override;
     function GetLogging: boolean;
     procedure SetServerName(const aName: SockString); override;
+    procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); override; 
+    procedure SetMaximumAllowedContentLength(aMax: cardinal); override;
     procedure SetLoggingServiceName(const aName: SockString);
     /// server main loop - don't change directly
     // - will call the Request public virtual method with the appropriate
@@ -1387,7 +1413,7 @@ type
     // the server application to generate the initial 401 challenge with proper
     // WWW-Authenticate headers; any further authentication steps will be
     // perform in kernel mode, until the authentication handshake is finalized;
-    //  later on, the application can check the AuthenticationStatus property
+    // later on, the application can check the AuthenticationStatus property
     // of THttpServerRequest and its associated AuthenticatedUser value
     // see https://msdn.microsoft.com/en-us/library/windows/desktop/aa364452
     // - will raise an EHttpApiServer exception if the old HTTP API 1.x is used
@@ -1511,8 +1537,7 @@ type
     // cases, maximum is 256) - if you set 0, the thread pool will be disabled
     // and one thread will be created for any incoming connection
     constructor Create(const aPort: SockString; OnStart,OnStop: TNotifyThreadEvent;
-      const ProcessName: SockString; ServerThreadPoolCount: integer=32);
-      reintroduce; virtual;
+      const ProcessName: SockString; ServerThreadPoolCount: integer=32); reintroduce; virtual;
     /// release all memory and handlers
     destructor Destroy; override;
     /// access to the main server low-level Socket
@@ -2046,6 +2071,8 @@ const
   STATUS_FORBIDDEN = 403;
   /// HTTP Status Code for "Not Found"
   STATUS_NOTFOUND = 404;
+  /// HTTP Status Code for "Payload Too Large"
+  STATUS_PAYLOADTOOLARGE = 413;
   /// HTTP Status Code for "Internal Server Error"
   STATUS_SERVERERROR = 500;
   /// HTTP Status Code for "Not Implemented"
@@ -2059,7 +2086,9 @@ const
 
 /// retrieve the HTTP reason text from a code
 // - e.g. StatusCodeToReason(200)='OK'
-function StatusCodeToReason(Code: integer): SockString;
+// - see http://www.w3.org/Protocols/rfc2616/rfc2616-sec10.html
+// - mORMot.StatusCodeToErrorMsg() will call this function
+function StatusCodeToReason(Code: cardinal): SockString;
 
 /// retrieve the IP address from a computer name
 function ResolveName(const Name: SockString;
@@ -2535,33 +2564,76 @@ uses
 
 { ************ some shared helper functions and classes }
 
-function StatusCodeToReason(Code: integer): SockString;
+var
+  ReasonCache: array[1..5,0..8] of SockString; // avoid memory allocation
+
+function StatusCodeToReasonInternal(Code: cardinal): SockString;
 begin
   case Code of
     100: result := 'Continue';
+    101: result := 'Switching Protocols';
     200: result := 'OK';
     201: result := 'Created';
     202: result := 'Accepted';
     203: result := 'Non-Authoritative Information';
     204: result := 'No Content';
+    205: result := 'Reset Content';
     206: result := 'Partial Content';
-    207: result := 'Multi-Status';
     300: result := 'Multiple Choices';
     301: result := 'Moved Permanently';
     302: result := 'Found';
     303: result := 'See Other';
     304: result := 'Not Modified';
+    305: result := 'Use Proxy';
     307: result := 'Temporary Redirect';
+    308: result := 'Permanent Redirect';
     400: result := 'Bad Request';
     401: result := 'Unauthorized';
     403: result := 'Forbidden';
     404: result := 'Not Found';
     405: result := 'Method Not Allowed';
     406: result := 'Not Acceptable';
+    407: result := 'Proxy Authentication Required';
+    408: result := 'Request Timeout';
+    409: result := 'Conflict';
+    410: result := 'Gone';
+    411: result := 'Length Required';
+    412: result := 'Precondition Failed';
+    413: result := 'Payload Too Large';
+    414: result := 'URI Too Long';
+    415: result := 'Unsupported Media Type';
+    416: result := 'Requested Range Not Satisfiable';
+    426: result := 'Upgrade Required';
     500: result := 'Internal Server Error';
+    501: result := 'Not Implemented';
+    502: result := 'Bad Gateway';
     503: result := 'Service Unavailable';
-    else str(Code,result);
+    504: result := 'Gateway Timeout';
+    505: result := 'HTTP Version Not Supported';
+    511: result := 'Network Authentication Required';
+    else result := 'Invalid Request';
   end;
+end;
+
+function StatusCodeToReason(Code: cardinal): SockString;
+var Hi,Lo: cardinal;
+begin
+  if Code=200 then begin
+    Hi := 2;
+    Lo := 0;
+  end else begin
+    Hi := Code div 100;
+    Lo := Code-Hi*100;
+    if not ((Hi in [1..5]) and (Lo in [0..8])) then begin
+      result := StatusCodeToReasonInternal(Code);
+      exit;
+    end;
+  end;
+  result := ReasonCache[Hi,Lo];
+  if result<>'' then
+    exit;
+  result := StatusCodeToReasonInternal(Code);
+  ReasonCache[Hi,Lo] := result;
 end;
 
 function Hex2Dec(c: AnsiChar): byte;
@@ -4746,6 +4818,16 @@ begin
   fServerName := aName;
 end;
 
+procedure THttpServerGeneric.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
+begin
+  fOnBeforeBody := aEvent;
+end;
+
+procedure THttpServerGeneric.SetMaximumAllowedContentLength(aMax: cardinal);
+begin
+  fMaximumAllowedContentLength := aMax;
+end;
+
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
@@ -4890,7 +4972,7 @@ procedure THttpServer.Process(ClientSock: THttpServerSocket;
 var Context: THttpServerRequest;
     P: PAnsiChar;
     Code: cardinal;
-    s: SockString;
+    s, reason: SockString;
     staticfn, ErrorMsg: string;
     FileToSend: TFileStream;
 begin
@@ -4937,20 +5019,21 @@ begin
     // send response (multi-thread OK) at once
     if (Code<STATUS_SUCCESS) or (ClientSock.Headers=nil) then
       Code := STATUS_NOTFOUND;
+    reason := StatusCodeToReason(Code);
     if ErrorMsg<>'' then begin
       Context.OutCustomHeaders := '';
       Context.OutContentType := 'text/html; charset=utf-8'; // create message to display
       Context.OutContent := {$ifdef UNICODE}UTF8String{$else}UTF8Encode{$endif}(
         format('<body style="font-family:verdana">'#13+
         '<h1>%s Server Error %d</h1><hr><p>HTTP %d %s<p>%s<p><small>%s',
-        [ClassName,Code,Code,StatusCodeToReason(Code),HtmlEncodeString(ErrorMsg),fServerName]));
+        [ClassName,Code,Code,reason,HtmlEncodeString(ErrorMsg),fServerName]));
     end;
     // 1. send HTTP status command
     if ClientSock.TCPPrefix<>'' then
       ClientSock.SockSend(ClientSock.TCPPrefix);
     if ClientSock.KeepAliveClient then
-      ClientSock.SockSend(['HTTP/1.1 ',Code,' OK']) else
-      ClientSock.SockSend(['HTTP/1.0 ',Code,' OK']);
+      ClientSock.SockSend(['HTTP/1.1 ',Code,' ',reason]) else
+      ClientSock.SockSend(['HTTP/1.0 ',Code,' ',reason]);
     // 2. send headers
     // 2.1. custom headers from Request() method
     P := pointer(Context.fOutCustomHeaders);
@@ -5390,6 +5473,7 @@ constructor THttpServerSocket.Create(aServer: THttpServer);
 begin
   inherited Create(5000);
   if aServer<>nil then begin
+    fServer := aServer;
     fCompress := aServer.fCompress;
     fCompressAcceptEncoding := aServer.fCompressAcceptEncoding;
     TCPPrefix := aServer.TCPPrefix;
@@ -5410,18 +5494,17 @@ end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
-    maxtix: cardinal;
+    maxtix, status: cardinal;
 begin
+  result := false;
   try
     maxtix := GetTickCount+10000; // allow 10 sec for header -> DOS/TCPSYN Flood
     // 1st line is command: 'GET /path HTTP/1.1' e.g.
     SockRecvLn(Command);
     if TCPPrefix<>'' then
-      if TCPPrefix<>Command then begin
-        result := false;
-        exit
-      end else
-      SockRecvLn(Command);
+      if TCPPrefix<>Command then
+        exit else
+        SockRecvLn(Command);
     P := pointer(Command);
     GetNextItem(P,' ',fMethod); // 'GET'
     GetNextItem(P,' ',fURL);    // '/path'
@@ -5433,9 +5516,29 @@ begin
       fKeepAliveClient := false;
     if (ContentLength<0) and KeepAliveClient then
       ContentLength := 0; // HTTP/1.1 and no content length -> no eof
-    result := GetTickCount<maxtix; // time wrap after 49.7 days -> accepted
-    if result and withBody and not ConnectionUpgrade then
+    if GetTickCount>maxtix then // time wrap after 49.7 days is just ignored
+      exit;
+    if fServer<>nil then begin
+      if (ContentLength>0) and (fServer.MaximumAllowedContentLength>0) and
+         (cardinal(ContentLength)>fServer.MaximumAllowedContentLength) then begin
+        SockSend('HTTP/1.0 413 Payload Too Large'#13#10#13#10'Rejected');
+        SockSendFlush;
+        exit;
+      end;
+      if Assigned(fServer.OnBeforeBody) then begin
+        status := fServer.OnBeforeBody(
+          fURL,fMethod,HeaderGetText,ContentType,RemoteIP,ContentLength);
+        if status<>STATUS_SUCCESS then begin
+          SockSend(['HTTP/1.0 ',status,' ',StatusCodeToReason(status),
+            #13#10#13#10,'Rejected']);
+          SockSendFlush;
+          exit;
+        end;
+      end;
+    end;
+    if withBody and not ConnectionUpgrade then
       GetBody;
+    result := true;
   except
     on E: Exception do
       result := false; // mark error
@@ -7017,6 +7120,8 @@ begin
   fOwner := From;
   fReqQueue := From.fReqQueue;
   fOnRequest := From.fOnRequest;
+  fOnBeforeBody := From.fOnBeforeBody;
+  fCanNotifyCallback := From.fCanNotifyCallback;
   fCompress := From.fCompress;
   fCompressAcceptEncoding := From.fCompressAcceptEncoding;
   fReceiveBufferSize := From.fReceiveBufferSize;
@@ -7216,6 +7321,21 @@ begin
         if HTTP_REQUEST_FLAG_MORE_ENTITY_BODY_EXISTS and Req^.Flags<>0 then begin
           with Req^.Headers.KnownHeaders[reqContentLength] do
             InContentLength := GetCardinal(pRawValue,pRawValue+RawValueLength);
+          with Req^.Headers.KnownHeaders[reqContentEncoding] do
+            SetString(InContentEncoding,pRawValue,RawValueLength);
+          if (InContentLength>0) and (MaximumAllowedContentLength>0) and
+             (InContentLength>MaximumAllowedContentLength) then begin
+            SendError(STATUS_PAYLOADTOOLARGE,'Rejected');
+            continue;
+          end;
+          if Assigned(OnBeforeBody) then begin
+            with Context do
+              Err := OnBeforeBody(URL,Method,InHeaders,InContentType,RemoteIP,InContentLength);
+            if Err<>STATUS_SUCCESS then begin
+              SendError(Err,'Rejected');
+              continue;
+            end;
+          end;
           if InContentLength<>0 then begin
             SetLength(Context.fInContent,InContentLength);
             BufRead := pointer(Context.InContent);
@@ -7247,15 +7367,12 @@ begin
               SendError(406,SysErrorMessagePerModule(Err,HTTPAPI_DLL));
               continue;
             end;
-            with Req^.Headers.KnownHeaders[reqContentEncoding] do
-            if RawValueLength<>0 then begin
-              SetString(InContentEncoding,pRawValue,RawValueLength);
+            if InContentEncoding<>'' then
               for i := 0 to high(fCompress) do
                 if fCompress[i].Name=InContentEncoding then begin
                   fCompress[i].Func(Context.fInContent,false); // uncompress
                   break;
                 end;
-            end;
           end;
         end;
         try
@@ -7632,6 +7749,24 @@ begin
       THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetServerName(aName);
 end;
 
+procedure THttpApiServer.SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody);
+var i: integer;
+begin
+  inherited SetOnBeforeBody(aEvent);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetOnBeforeBody(aEvent);
+end;
+
+procedure THttpApiServer.SetMaximumAllowedContentLength(aMax: cardinal);
+var i: integer;
+begin
+  inherited SetMaximumAllowedContentLength(aMax);
+  if fClones<>nil then // event is shared by all clones
+    for i := 0 to fClones.Count-1 do
+      THttpApiServer(fClones.List{$ifdef FPC}^{$endif}[i]).SetMaximumAllowedContentLength(aMax);
+end;
+
 procedure THttpApiServer.SetLoggingServiceName(const aName: SockString);
 begin
   if self=nil then
@@ -7948,56 +8083,56 @@ function TWinHttpAPI.InternalRetrieveAnswer(
 var Bytes, ContentLength, Read: DWORD;
     tmp: SockString;
 begin // HTTP_QUERY* and WINHTTP_QUERY* do match -> common to TWinINet + TWinHTTP
-    result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
-    Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
-    Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
-    AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
-    // retrieve received content (if any)
-    Read := 0;
-    ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
-    if Assigned(fOnDownload) then begin
-      // download per-chunk using calback event
-      Bytes := fOnDownloadChunkSize;
-      if Bytes<=0 then
-        Bytes := 65536; // 64KB seems fair enough by default
-      SetLength(tmp,Bytes);
-      repeat
-        Bytes := InternalReadData(tmp,0);
-        if Bytes=0 then
-          break;
-        inc(Read,Bytes);
-        if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
-          break; // returned false = aborted
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until false;
-    end else
-    if ContentLength<>0 then begin
-      // optimized version reading "Content-Length: xxx" bytes
-      SetLength(Data,ContentLength);
-      repeat
-        Bytes := InternalReadData(Data,Read);
-        if Bytes=0 then begin
-          SetLength(Data,Read); // truncated content
-          break;
-        end;
-        inc(Read,Bytes);
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until Read=ContentLength;
-    end else begin
-      // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
-      repeat
-        SetLength(Data,Read+HTTP_RESP_BLOCK_SIZE);
-        Bytes := InternalReadData(Data,Read);
-        if Bytes=0 then
-          break;
-        inc(Read,Bytes);
-        if Assigned(fOnProgress) then
-          fOnProgress(self,Read,ContentLength);
-      until false;
-      SetLength(Data,Read);
-    end;
+  result := InternalGetInfo32(HTTP_QUERY_STATUS_CODE);
+  Header := InternalGetInfo(HTTP_QUERY_RAW_HEADERS_CRLF);
+  Encoding := InternalGetInfo(HTTP_QUERY_CONTENT_ENCODING);
+  AcceptEncoding := InternalGetInfo(HTTP_QUERY_ACCEPT_ENCODING);
+  // retrieve received content (if any)
+  Read := 0;
+  ContentLength := InternalGetInfo32(HTTP_QUERY_CONTENT_LENGTH);
+  if Assigned(fOnDownload) then begin
+    // download per-chunk using calback event
+    Bytes := fOnDownloadChunkSize;
+    if Bytes<=0 then
+      Bytes := 65536; // 64KB seems fair enough by default
+    SetLength(tmp,Bytes);
+    repeat
+      Bytes := InternalReadData(tmp,0);
+      if Bytes=0 then
+        break;
+      inc(Read,Bytes);
+      if not fOnDownload(self,Read,ContentLength,Bytes,pointer(tmp)^) then
+        break; // returned false = aborted
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until false;
+  end else
+  if ContentLength<>0 then begin
+    // optimized version reading "Content-Length: xxx" bytes
+    SetLength(Data,ContentLength);
+    repeat
+      Bytes := InternalReadData(Data,Read);
+      if Bytes=0 then begin
+        SetLength(Data,Read); // truncated content
+        break;
+      end;
+      inc(Read,Bytes);
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until Read=ContentLength;
+  end else begin
+    // Content-Length not set: read response in blocks of HTTP_RESP_BLOCK_SIZE
+    repeat
+      SetLength(Data,Read+HTTP_RESP_BLOCK_SIZE);
+      Bytes := InternalReadData(Data,Read);
+      if Bytes=0 then
+        break;
+      inc(Read,Bytes);
+      if Assigned(fOnProgress) then
+        fOnProgress(self,Read,ContentLength);
+    until false;
+    SetLength(Data,Read);
+  end;
 end;
 
 

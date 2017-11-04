@@ -2841,9 +2841,9 @@ begin
       AES := TAESCFB;
     a := AES.Create(aeskey);
     try
-      decrypted := a.DecryptPKCS7Buffer(PAnsiChar(Data)+head+PRIVKEY_SALTSIZE,Len,true);
+      decrypted := a.DecryptPKCS7Buffer(PAnsiChar(Data)+head+PRIVKEY_SALTSIZE,Len,true,false);
       if decrypted='' then
-        exit;
+        exit; // invalid content
     finally
       a.Free;
     end;
@@ -3990,7 +3990,7 @@ begin
   fSafe.Lock;
   try
     SetKey(false);
-    aPlain := fAES[false].DecryptPKCS7Buffer(P,len,false);
+    aPlain := fAES[false].DecryptPKCS7Buffer(P,len,false,false);
     if aPlain='' then begin
       inc(PInt64(@fkM[false])^); // don't compute MAC, but increase sequence
       exit;

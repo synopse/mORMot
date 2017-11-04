@@ -21,7 +21,7 @@ var
   in_argv: PjsvalVector;
   err: Int32;
 const
-  sInvalidCall = 'ussage: errname(err: Integer);';
+  sInvalidCall = 'usage: errname(err: Integer);';
 begin
   try
     Result := True;

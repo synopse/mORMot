@@ -3091,12 +3091,13 @@ begin
 end;
 
 procedure TSQLRestClientURI.CallRemoteService(aCaller: TServiceClientAbstract;
-   const aMethodName: string; aExpectedOutputParamsCount: integer;
-   const aInputParams: array of variant; out res: TVariantDynArray;
-   aReturnsCustomAnswer: boolean);
+  const aMethodName: string; aExpectedOutputParamsCount: integer;
+  const aInputParams: array of variant; out res: TVariantDynArray;
+  aReturnsCustomAnswer: boolean);
 var Call: TSQLRestURIParams;
     params: TJSONVariantData;
     result: variant;
+    bodyerror: string;
     arr: PJSONVariantData;
     i,outID: integer;
 begin
@@ -3104,9 +3105,11 @@ begin
   for i := 0 to high(aInputParams) do
     params.AddValue(aInputParams[i]);
   CallRemoteServiceInternal(Call,aCaller,aMethodName,params.ToJSON);
-  if Call.OutStatus<>HTTP_SUCCESS then
-    raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d',
-      [aCaller.fServiceName,aMethodName,Call.OutStatus]);
+  if Call.OutStatus<>HTTP_SUCCESS then begin
+    HttpBodyToText(Call.OutBody,bodyerror);
+    raise EServiceException.CreateFmt('Error calling %s.%s - returned status %d'#13#10'%s',
+      [aCaller.fServiceName,aMethodName,Call.OutStatus,bodyerror]);
+  end;
   if aReturnsCustomAnswer then begin
     SetLength(res,1);
     res[0] := HttpBodyToVariant(Call.OutBody);

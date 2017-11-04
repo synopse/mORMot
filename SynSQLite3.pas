@@ -48,7 +48,7 @@ unit SynSQLite3;
   ***** END LICENSE BLOCK *****
 
 
-       SQLite3 3.20.1 database engine
+       SQLite3 3.21.0 database engine
       ********************************
 
      Brand new SQLite3 library to be used with Delphi
@@ -136,7 +136,7 @@ unit SynSQLite3;
   - moved all static .obj code into new SynSQLite3Static unit
   - allow either static .obj use via SynSQLite3Static or external .dll linking
     using TSQLite3LibraryDynamic to bind all APIs to the global sqlite3 variable
-  - updated SQLite3 engine to latest version 3.20.1
+  - updated SQLite3 engine to latest version 3.21.0
   - fixed: internal result cache is now case-sensitive for its SQL key values
   - raise an ESQLite3Exception if DBOpen method is called twice
   - added TSQLite3ErrorCode enumeration and sqlite3_resultToErrorCode()
@@ -1291,7 +1291,7 @@ type
     close: function(DB: TSQLite3DB): integer; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
 
     /// Return the version of the SQLite database engine, in ascii format
-    // - currently returns '3.20.1', when used with our SynSQLite3Static unit
+    // - currently returns '3.21.0', when used with our SynSQLite3Static unit
     // - if an external SQLite3 library is used, version may vary
     // - you may use the VersionText property (or Version for full details) instead
     libversion: function: PUTF8Char; {$ifndef SQLITE3_FASTCALL}cdecl;{$endif}
@@ -2686,7 +2686,9 @@ type
     tbImmediate,
     tbExclusive);
 
+  {$M+}
   TSQLDatabaseBackupThread = class;
+  {$M-}
 
   /// callback called asynchronously during TSQLDatabase.BackupBackground()
   // - implementation should return TRUE to continue the process: if the method
@@ -2819,8 +2821,7 @@ type
     // - initialize a TRTLCriticalSection to ensure that all access to the database is atomic
     // - raise an ESQLite3Exception on any error
     constructor Create(const aFileName: TFileName; const aPassword: RawUTF8='';
-      aOpenV2Flags: integer=SQLITE_OPEN_READWRITE or SQLITE_OPEN_CREATE;
-      aDefaultCacheSize: integer=10000);
+      aOpenV2Flags: integer=0; aDefaultCacheSize: integer=10000);
     /// close a database and free its memory and context
     //- if TransactionBegin was called but not commited, a RollBack is performed
     destructor Destroy; override;
@@ -3205,6 +3206,13 @@ type
     constructor Create(Backup: TSQLite3Backup; Source, Dest: TSQLDatabase;
       StepPageNumber,StepSleepMS: Integer; SynLzCompress: boolean;
       OnProgress: TSQLDatabaseBackupEvent); reintroduce;
+    /// the source database of the backup process
+    property SourceDB: TSQLDatabase read fSourceDB;
+    /// the destination database of the backup process
+    property DestDB: TSQLDatabase read fDestDB;
+    /// the raised exception in case of backupFailure notification
+    property FailureError: Exception read fError;
+  published
     /// the current state of the backup process
     // - only set before a call to TSQLDatabaseBackupEvent
     property Step: TSQLDatabaseBackupEventStep read fStep;
@@ -3217,12 +3225,6 @@ type
     /// if .dbsynlz compression would be done on the backup file
     // - would use FileSynLZ(), so compress in chunks of 128 MB
     property StepSynLzCompress: boolean read fStepSynLzCompress;
-    /// the source database of the backup process
-    property SourceDB: TSQLDatabase read fSourceDB;
-    /// the destination database of the backup process
-    property DestDB: TSQLDatabase read fDestDB;
-    /// the raised exception in case of backupFailure notification
-    property FailureError: Exception read fError;
   end;
 
 const
@@ -3262,7 +3264,7 @@ const
   // created by TSQLDataBase.BackupSynLZ() or if SynLZCompress parameter is TRUE
   // for the TSQLDataBase.BackupBackground() method
   // - note that the SynDBExplorer tool is able to recognize such files, and
-  // open them directly
+  // open them directly - or use the DBSynLZ.dpr command-line sample tool
   SQLITE3_MAGIC = $ABA5A5AB;
 
 
@@ -4355,7 +4357,12 @@ begin
   if FileExists(BackupFileName) then
     if not DeleteFile(BackupFileName) then
       exit;
-  Dest := TSQLDatabase.Create(BackupFileName,aPassword);
+  // see https://bitbucket.org/egrange/sql3bak for proper parameters
+  Dest := TSQLDatabase.Create(BackupFileName,aPassword,0,1);
+  Dest.SetLockingMode(lmExclusive);
+  Dest.SetSynchronous(smOff);
+  Dest.ExecuteNoException('PRAGMA journal_mode=MEMORY');
+  Dest.ExecuteNoException('PRAGMA temp_store=MEMORY');
   Backup := sqlite3.backup_init(Dest.DB,'main',DB,'main');
   if Backup=0 then begin
     Dest.Free;
@@ -4404,7 +4411,7 @@ end;
 
 class function TSQLDataBase.IsBackupSynLZFile(const SynLZFile: TFileName): boolean;
 begin
-  result := FileIsZynLZ(SynLZFile, SQLITE3_MAGIC);
+  result := FileIsSynLZ(SynLZFile, SQLITE3_MAGIC);
 end;
 
 function TSQLDataBase.DBClose: integer;
@@ -4417,7 +4424,7 @@ begin
     exit;
   {$ifdef WITHLOG}
   FPCLog := fLog.Enter;
-  FPCLog.Log(sllDB,'closing "%"',[FileName],self);
+  FPCLog.Log(sllDB,'closing "%" %',[FileName, KB(GetFileSize)],self);
   {$endif}
   if (sqlite3=nil) or not Assigned(sqlite3.close) then
     raise ESQLite3Exception.CreateUTF8('%.DBClose called with no sqlite3 global',[self]);
@@ -5556,13 +5563,16 @@ begin
 end;
 
 procedure TSQLDatabaseBackupThread.Execute;
+{$ifdef WITHLOG}
+var log: ISynLog;
+{$endif}
   procedure NotifyProgressAndContinue(aStep: TSQLDatabaseBackupEventStep);
   begin
-    {$ifdef WITHLOG}
-    SynSQLite3Log.Add.Log(sllTrace,'%.Execute Step=% ToFinish=%', [self,GetEnumName(
-      TypeInfo(TSQLDatabaseBackupEventStep),ord(aStep))^,fStepNumberToFinish]);
-    {$endif}
     fStep := aStep;
+    {$ifdef WITHLOG}
+    if Assigned(log) then
+      log.Log(sllTrace,'%', [self]);
+    {$endif}
     if Assigned(fOnProgress) then
       if not fOnProgress(self) then
         raise ESQLite3Exception.CreateUtf8('%.Execute aborted by OnProgress=false',[self]);
@@ -5571,7 +5581,10 @@ var res: integer;
     fn, fn2: TFileName;
 begin
   fn := fDestDB.FileName;
+  {$ifdef WITHLOG}
   SetCurrentThreadName('% "%" "%"',[self,fSourceDB.FileName,fn]);
+  log := SynSQLite3Log.Enter('Execute',[],self);
+  {$endif}
   try
     try
       NotifyProgressAndContinue(backupStart);
@@ -5604,6 +5617,11 @@ begin
         if not (RenameFile(fn,fn2) and TSQLDatabase.BackupSynLZ(fn2,fn,true)) then
           raise ESQLite3Exception.CreateUTF8('%.Execute: BackupSynLZ(%,%) failed',
             [self,fn,fn2]);
+        {$ifdef WITHLOG}
+        if Assigned(log) then
+          log.Log(sllTrace,'TSQLDatabase.BackupSynLZ into % %',
+            [KB(FileSize(fn)),fn],self);
+        {$endif}
       end;
       fSourceDB.fBackupBackgroundLastFileName := ExtractFileName(fn);
       NotifyProgressAndContinue(backupSuccess);
@@ -5613,10 +5631,6 @@ begin
         fDestDB.Free; // close destination backup database if not already
       end;
       fSourceDB.fBackupBackgroundLastTime := fTimer.Stop;
-      {$ifdef WITHLOG}
-      SynSQLite3Log.Add.Log(sllTrace,'%.Execute % ended in %',
-        [self, fn, fSourceDB.fBackupBackgroundLastTime]);
-      {$endif}
       fSourceDB.Lock;
       fSourceDB.fBackupBackgroundInProcess := nil;
       fSourceDB.Unlock;
@@ -5630,6 +5644,7 @@ begin
     end;
   end;
   {$ifdef WITHLOG}
+  log := nil;
   SynSQLite3Log.Add.NotifyThreadEnded;
   {$endif}
 end;

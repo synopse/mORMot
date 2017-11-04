@@ -205,7 +205,7 @@ unit mORMotSQLite3;
 
     Version 1.18
     - unit SQLite3.pas renamed mORMotSQLite3.pas
-    - updated SQLite3 engine to latest version 3.20.1
+    - updated SQLite3 engine to latest version 3.21.0
     - BATCH adding in TSQLRestServerDB will now perform SQLite3 multi-INSERT
       statements: performance boost is from 2x (mem with transaction) to 60x
       (full w/out transaction) - faster than SQlite3 as external DB
@@ -345,6 +345,7 @@ type
     fStatementGenericSQL: RawUTF8;
     fStatementMaxParam: integer;
     fStatementLastException: RawUTF8;
+    fStatementTruncateSQLLogLen: integer;
     /// list of TSQLVirtualTableModuleServerDB registered external modules
     // - is a TList and not a TObjectList since instances will be destroyed by
     // the SQLite3 engine via sqlite3InternalFreeModule() private function
@@ -560,6 +561,10 @@ type
     // - will execute not default select max(rowid) from Table, but faster
     // $ select rowid from Table order by rowid desc limit 1
     function TableMaxID(Table: TSQLRecordClass): TID; override;
+    /// after how many bytes a sllSQL statement log entry should be truncated
+    // - default is 0, meaning no truncation
+    property StatementTruncateSQLLogLen: integer read fStatementTruncateSQLLogLen
+      write fStatementTruncateSQLLogLen;
   published
     /// associated database
     property DB: TSQLDataBase read fDB;
@@ -808,6 +813,9 @@ begin
 end;
 
 procedure TSQLRestServerDB.GetAndPrepareStatementRelease(E: Exception; const Msg: RawUTF8);
+var
+  tmp: TSynTempBuffer;
+  P: PAnsiChar; 
 begin
   try
     if fStatementTimer<>nil then begin
@@ -817,7 +825,15 @@ begin
         fStatementTimer^.ComputeTime;
       end;
       if E=nil then
-        InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
+        if (fStatementTruncateSQLLogLen > 0) and
+           (length(fStatementSQL) > fStatementTruncateSQLLogLen) then begin
+          tmp.Init(pointer(fStatementSQL),fStatementTruncateSQLLogLen);
+          P := tmp.buf;
+          PCardinal(P+fStatementTruncateSQLLogLen-3)^ := ord('.')+ord('.')shl 8+ord('.')shl 16;
+          InternalLog('% % % len=%',[fStatementTimer^.LastTime,Msg,P,length(fStatementSQL)],sllSQL);
+          tmp.Done;
+        end else
+          InternalLog('% % %',[fStatementTimer^.LastTime,Msg,fStatementSQL],sllSQL) else
         InternalLog('% for % // %',[E,fStatementSQL,fStatementGenericSQL],sllError);
       fStatementTimer := nil;
     end;
@@ -1828,6 +1844,7 @@ procedure TSQLRestServerDB.AdministrationExecute(const DatabaseName,SQL: RawUTF8
   var result: TServiceCustomAnswer);
 var new,cmd,fn: RawUTF8;
     bfn: TFileName;
+    compress: boolean;
     i: integer;
 begin
   inherited AdministrationExecute(DatabaseName,SQL,result);
@@ -1861,10 +1878,11 @@ begin
         FormatUTF8('% %',[NowToString(false),ChangeFileExt(DB.FileNameWithoutPath,'.dbsynlz')],fn);
       if (fn<>' ') and (PosEx('..',fn)=0) then begin
         bfn := UTF8ToString(fn);
-        if ExtractFilePath(bfn)='' then // put in local data folder is not set
+        if ExtractFilePath(bfn)='' then // put in local data folder if not set
           bfn := ExtractFilePath(DB.FileName)+bfn;
-        if DB.BackupBackground(bfn,4*1024,1,nil,true) then // 4*1024*4096=16MB step
-          result.Content := JsonEncode(['started',bfn]) else
+        compress := GetFileNameExtIndex(bfn,'dbsynlz')=0;
+        if DB.BackupBackground(bfn,4*1024,1,nil,compress) then // 4*1024*4096=16MB step
+          result.Content := JsonEncode(['started',bfn,'compress',compress]) else
           result.Content := '"Backup failed to start"';
       end;
     end;

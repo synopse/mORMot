@@ -2388,6 +2388,7 @@ function bswap64(const a: QWord): QWord;
 
 /// convert the endianness of an array of unsigned 64 bit integer into BigEndian
 // - n is required to be > 0
+// - warning: on x86, a should be <> b 
 procedure bswap64array(a,b: PQWordArray; n: integer);
 
 {$ifndef ISDELPHI2007ANDUP}
@@ -2893,11 +2894,16 @@ procedure SetInt64(P: PUTF8Char; var result: Int64);
 procedure SetQWord(P: PUTF8Char; var result: QWord);
   {$ifdef CPU64}inline;{$endif}
 
-/// get the 64-bit integer value stored in P^
+/// get the 64-bit signed integer value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
 // was successful (same as the standard val function)
 function GetInt64(P: PUTF8Char; var err: integer): Int64; overload;
   {$ifdef CPU64}inline;{$endif}
+
+/// get the 64-bit unsigned integer value stored in P^
+// - set the err content to the index of any faulty character, 0 if conversion
+// was successful (same as the standard val function)
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
 
 /// get the extended floating point value stored in P^
 // - set the err content to the index of any faulty character, 0 if conversion
@@ -3896,8 +3902,10 @@ function FindIniNameValueInteger(P: PUTF8Char; UpperName: PAnsiChar): integer;
 /// read a File content into a String
 // - content can be binary or text
 // - returns '' if file was not found or any read error occured
+// - wil use GetFileSize() API by default, unless HasNoSize is defined,
+// and read will be done using a buffer (required e.g. for char files under Linux)
 // - uses RawByteString for byte storage, whatever the codepage is
-function StringFromFile(const FileName: TFileName): RawByteString;
+function StringFromFile(const FileName: TFileName; HasNoSize: boolean=false): RawByteString;
 
 /// create a File from a string content
 // - uses RawByteString for byte storage, whatever the codepage is
@@ -5252,7 +5260,12 @@ type
     /// serialize the dynamic array content as JSON
     // - is just a wrapper around TTextWriter.AddDynArrayJSON()
     // - this method will therefore recognize T*ObjArray types
-    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8;
+    function SaveToJSON(EnumSetsAsText: boolean=false): RawUTF8; overload;
+      {$ifdef HASINLINE}inline;{$endif}
+    /// serialize the dynamic array content as JSON
+    // - is just a wrapper around TTextWriter.AddDynArrayJSON()
+    // - this method will therefore recognize T*ObjArray types
+    procedure SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean=false); overload;
     /// load the dynamic array content from an UTF-8 encoded JSON buffer
     // - expect the format as saved by TTextWriter.AddDynArrayJSON method, i.e.
     // handling TBooleanDynArray, TIntegerDynArray, TInt64DynArray, TCardinalDynArray,
@@ -5272,6 +5285,11 @@ type
     // - warning: the content of P^ will be modified during parsing: please
     // make a local copy if it will be needed later (using e.g. TSynTempBufer)
     function LoadFromJSON(P: PUTF8Char; aEndOfObject: PUTF8Char=nil): PUTF8Char;
+    {$ifndef NOVARIANTS}
+    /// load the dynamic array content from a TDocVariant instance
+    // - will convert the TDocVariant into JSON, the call LoadFromJSON
+    function LoadFromVariant(const DocVariant: variant): boolean;
+    {$endif NOVARIANTS}
     ///  select a sub-section (slice) of a dynamic array content
     procedure Slice(var Dest; aCount: Cardinal; aFirstIndex: cardinal=0);
     /// add elements from a given dynamic array variable
@@ -5293,7 +5311,7 @@ type
     // - this method compares using any supplied Compare property (unless
     // ignorecompare=true), or by content using the RTTI element description
     // of the whole array items
-    // - warning: this method won't compare T*ObjArray kind of arrays
+    // - will call SaveToJSON to compare T*ObjArray kind of arrays
     function Equals(const B: TDynArray; ignorecompare: boolean=false): boolean;
     /// set all content of one dynamic array to the current array
     // - both must be of the same exact type
@@ -6904,6 +6922,12 @@ function DynArraySaveJSON(const Value; TypeInfo: pointer;
   EnumSetsAsText: boolean=false): RawUTF8;
   {$ifdef HASINLINE}inline;{$endif}
 
+{$ifndef DELPHI5OROLDER}
+/// compare two dynamic arrays by calling TDynArray.Equals
+function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
+  Array1Count: PInteger=nil; Array2Count: PInteger=nil): boolean;
+{$endif}
+
 /// serialize a dynamic array content, supplied as raw binary buffer, as JSON
 // - Value shall be set to the source dynamic array field
 // - is just a wrapper around TTextWriter.AddDynArrayJSON(), creating
@@ -7747,6 +7771,8 @@ type
   // is defined so that such properties would not be written
   // - all inherited properties would be serialized, unless woDontStoreInherited
   // is defined, and only the topmost class level properties would be serialized
+  // - woInt64AsHex will force Int64/QWord to be written as hexadecimal string -
+  // see j2oAllowInt64Hex reverse option fot Json2Object 
   TTextWriterWriteObjectOption = (
     woHumanReadable, woDontStoreDefault, woFullExpand,
     woStoreClassName, woStorePointer, woStoreStoredFalse,
@@ -7754,7 +7780,7 @@ type
     woEnumSetsAsText, woDateTimeWithMagic, woDateTimeWithZSuffix, woTimeLogAsText,
     woIDAsIDstr, woSQLRawBlobAsBase64, woHideSynPersistentPassword,
     woObjectListWontStoreClassName, woDontStoreEmptyString,
-    woDontStoreInherited);
+    woDontStoreInherited, woInt64AsHex);
   /// options set for TTextWriter.WriteObject() method
   TTextWriterWriteObjectOptions = set of TTextWriterWriteObjectOption;
 
@@ -11464,6 +11490,10 @@ procedure Base64ToURI(var base64: RawUTF8);
 // '_' or '-' by '+' or '/'
 procedure Base64FromURI(var base64: RawUTF8);
 
+/// conversion from URI-compatible encoded text into its decoded Base64 value
+function Base64URIToBin(var base64: RawUTF8): RawByteString;
+  {$ifdef HASINLINE}inline;{$endif}
+
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
 function BinToBase64WithMagic(const s: RawByteString): RawUTF8; overload;
@@ -12072,13 +12102,13 @@ function crc32cUTF8ToHex(const str: RawUTF8): RawUTF8;
 
 var
   /// the default hasher used by TDynArrayHashed
-  // - is set to crc32c() function above by default, or xxHash32 if SSE4.2
-  // instructions are not available on this CPU
+  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // or fallback to xxHash32() which performs better than crc32cfast()
   DefaultHasher: THasher;
 
   /// the hash function used by TRawUTF8Interning
-  // - is set to DefaultHasher by default, i.e. crc32c() function or xxHash32
-  // if SSE4.2 instructions are not available on this CPU
+  // - set to crc32csse42() if SSE4.2 instructions are available on this CPU,
+  // or fallback to xxHash32() which performs better than crc32cfast()
   InterningHasher: THasher;
 
 /// retrieve a particular bit status from a bit array
@@ -17720,7 +17750,7 @@ function FileUnSynLZ(const Source, Dest: TFileName; Magic: Cardinal): boolean;
 
 /// returns TRUE if the supplied file name is a SynLZ compressed file,
 // matching the Magic number as supplied to FileSynLZ() function
-function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 
 const
   /// CompressionSizeTrigger parameter SYNLZTRIG[true] will disable then
@@ -26871,6 +26901,12 @@ begin
   end;
 end;
 
+function Base64URIToBin(var base64: RawUTF8): RawByteString;
+begin
+  Base64FromURI(base64);
+  result := Base64ToBin(base64);
+end;
+
 function BinToBase64URI(Bin: PAnsiChar; BinBytes: integer): RawUTF8;
 begin
   result := BinToBase64(Bin,BinBytes);
@@ -28242,20 +28278,33 @@ begin
   FileFromString(Content,FileName);
 end;
 
-function StringFromFile(const FileName: TFileName): RawByteString;
+function StringFromFile(const FileName: TFileName; HasNoSize: boolean): RawByteString;
 var F: THandle;
-    Size: integer;
+    Read, Size: integer;
+    tmp: array[0..$7fff] of AnsiChar;
 begin
   result := '';
   if FileName='' then
     exit;
   F := FileOpenSequentialRead(FileName);
   if PtrInt(F)>=0 then begin
-    Size := GetFileSize(F,nil);
-    if Size>0 then begin
-      SetLength(result,Size);
-      if FileRead(F,pointer(result)^,Size)<>Size then
-        result := '';
+    if HasNoSize then begin
+      Size := 0;
+      repeat
+        Read := FileRead(F,tmp,sizeof(tmp));
+        if Read<=0 then
+          break;
+        SetLength(result,Size+Read);
+        MoveFast(tmp,PByteArray(result)^[Size],Read);
+        inc(Size,Read);
+      until Read<sizeof(tmp);
+    end else begin
+      Size := GetFileSize(F,nil);
+      if Size>0 then begin
+        SetLength(result,Size);
+        if FileRead(F,pointer(result)^,Size)<>Size then
+          result := '';
+      end;
     end;
     FileClose(F);
   end;
@@ -30287,6 +30336,57 @@ begin
     result := -result;
 end;
 {$endif}
+
+function GetQWord(P: PUTF8Char; var err: integer): QWord;
+var c: cardinal;
+begin
+  err := 0;
+  result := 0;
+  if P=nil then
+    exit;
+  if P^ in [#1..' '] then repeat inc(P) until not(P^ in [#1..' ']);
+  inc(err);
+  c := byte(P^)-48;
+  if c>9 then
+    exit;
+  Int64Rec(result).Lo := c;
+  inc(P);
+  repeat // fast 32 bit loop
+    c := byte(P^);
+    if c<>0 then begin
+      dec(c,48);
+      inc(err);
+      if c>9 then
+        exit;
+      Int64Rec(result).Lo := Int64Rec(result).Lo*10+c;
+      inc(P);
+      if Int64Rec(result).Lo>=high(cardinal)div 10 then begin
+        repeat // 64 bit loop
+          c := byte(P^);
+          if c=0 then begin
+            err := 0; // conversion success without error
+            break;
+          end;
+          dec(c,48);
+          inc(err);
+          if c>9 then
+            exit else
+            {$ifdef CPU32DELPHI}
+            result := result shl 3+result+result;
+            {$else}
+            result := result*10;
+            {$endif}
+          inc(result,c);
+          inc(P);
+        until false;
+        break;
+      end;
+    end else begin
+      err := 0; // reached P^=#0 -> conversion success without error
+      break;
+    end;
+  until false;
+end;
 
 function GetExtended(P: PUTF8Char): TSynExtended;
 var err: integer;
@@ -44502,6 +44602,10 @@ var W: TTextWriter;
     temp: TTextWriterStackBuffer;
     tmp: RawUTF8;
 begin
+  if (VType<>DocVariantVType) and (VType>varNull) then begin
+    result := ''; // null -> 'null'
+    exit;
+  end;
   W := DefaultTextWriterJSONClass.CreateOwnedStream(temp);
   try
     W.AddString(Prefix);
@@ -45437,6 +45541,17 @@ begin
   result := SaveJSON(Value,TypeInfo,EnumSetsAsText);
 end;
 
+{$ifndef DELPHI5OROLDER}
+function DynArrayEquals(TypeInfo: pointer; var Array1, Array2;
+  Array1Count, Array2Count: PInteger): boolean;
+var DA1, DA2: TDynArray;
+begin
+  DA1.Init(TypeInfo,Array1,Array1Count);
+  DA2.Init(TypeInfo,Array2,Array2Count);
+  result := DA1.Equals(DA2);
+end;
+{$endif}
+
 function DynArrayBlobSaveJSON(TypeInfo, BlobValue: pointer): RawUTF8;
 var DynArray: TDynArray;
     Value: pointer; // store the temporary dynamic array
@@ -46181,7 +46296,13 @@ begin
       raise ESynException.Create('TDynArray.SaveTo len concern');
 end;
 
+
 function TDynArray.SaveToJSON(EnumSetsAsText: boolean): RawUTF8;
+begin
+  SaveToJSON(result,EnumSetsAsText);
+end;
+
+procedure TDynArray.SaveToJSON(out Result: RawUTF8; EnumSetsAsText: boolean);
 var temp: TTextWriterStackBuffer;
 begin
   with DefaultTextWriterJSONClass.CreateOwnedStream(temp) do
@@ -46275,6 +46396,10 @@ Bin:  case ElemSize of
       tkWString: fKnownType := djWideString;
       {$ifdef UNICODE}
       tkUString: fKnownType := djString;
+      {$else}
+      {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+      tkUString: fKnownType := djSynUnicode;
+      {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
       {$endif}
       {$ifndef NOVARIANTS}
       tkVariant: fKnownType := djVariant;
@@ -46310,6 +46435,10 @@ rec:    inc(PtrUInt(nested),nested^.NameLen);
            tkWString: fKnownType := djWideString;
            {$ifdef UNICODE}
            tkUString: fKnownType := djString;
+           {$else}
+           {$ifdef FPC_HAS_FEATURE_UNICODESTRINGS}
+           tkUString: fKnownType := djSynUnicode;
+           {$endif FPC_HAS_FEATURE_UNICODESTRINGS}
            {$endif}
            tkRecord{$ifdef FPC},tkObject{$endif}: begin
              nested := DeRef(TypeInfo);
@@ -46484,6 +46613,16 @@ begin // code below must match TTextWriter.AddDynArrayJSON()
       result := @NULCHAR else
       result := P;
 end;
+
+{$ifndef NOVARIANTS}
+function TDynArray.LoadFromVariant(const DocVariant: variant): boolean;
+begin
+  with _Safe(DocVariant)^ do
+    if dvoIsArray in Options then
+      result := LoadFromJSON(pointer(_Safe(DocVariant)^.ToJSON))<>nil else
+      result := false;
+end;
+{$endif NOVARIANTS}
 
 function SimpleDynArrayLoadFrom(Source: PAnsiChar; aTypeInfo: pointer;
   var Count, ElemSize: integer): pointer;
@@ -47008,6 +47147,13 @@ var i, n: integer;
     P1,P2: PAnsiChar;
     A1: PPointerArray absolute P1;
     A2: PPointerArray absolute P2;
+  function HandleObjArray: boolean;
+  var tmp1,tmp2: RawUTF8;
+  begin
+    SaveToJSON(tmp1);
+    B.SaveToJSON(tmp2);
+    result := tmp1=tmp2;
+  end;
 begin
   result := false;
   if ArrayType<>B.ArrayType then
@@ -47015,6 +47161,10 @@ begin
   n := Count;
   if n<>B.Count then
     exit;
+  if GetIsObjArray then begin
+    result := HandleObjArray;
+    exit;
+  end;
   P1 := fValue^;
   P2 := B.fValue^;
   if (@fCompare<>nil) and not ignorecompare then // use customized comparison
@@ -59657,7 +59807,7 @@ begin
   end;
 end;
 
-function FileIsZynLZ(const Name: TFileName; Magic: Cardinal): boolean;
+function FileIsSynLZ(const Name: TFileName; Magic: Cardinal): boolean;
 var S: TFileStream;
     Head: TSynLZHead;
 begin
@@ -59668,8 +59818,7 @@ begin
     try
       if S.Read(Head,sizeof(Head))=Sizeof(Head) then
         if Head.Magic=Magic then
-          if Head.CompressedSize+SizeOf(Head)=S.Size then
-            result := true;
+          result := true; // only check magic, since there may be several chunks
     finally
       S.Free;
     end;
@@ -60323,23 +60472,23 @@ begin
 end;
 
 procedure TMemoryMapText.LoadFromMap(AverageLineLength: integer=32);
-procedure ParseLines(P,PEnd: PUTF8Char);
-var PBeg: PUTF8Char;
-begin // generated asm is much better with a local proc
-  while P<PEnd do begin
-    PBeg := P;
-    while (P<PEnd) and (P^<>#13) and (P^<>#10) do
-      inc(P);
-    ProcessOneLine(PBeg,P);
-    if P+1>=PEnd then
-      break;
-    if P[0]=#13 then
-      if P[1]=#10 then
-        inc(P,2) else // ignore #13#10
-        inc(P) else   // ignore #13
-      inc(P);         // ignore #10
+  procedure ParseLines(P,PEnd: PUTF8Char);
+  var PBeg: PUTF8Char;
+  begin // generated asm is much better with a local proc
+    while P<PEnd do begin
+      PBeg := P;
+      while (P<PEnd) and (P^<>#13) and (P^<>#10) do
+        inc(P);
+      ProcessOneLine(PBeg,P);
+      if P+1>=PEnd then
+        break;
+      if P[0]=#13 then
+        if P[1]=#10 then
+          inc(P,2) else // ignore #13#10
+          inc(P) else   // ignore #13
+        inc(P);         // ignore #10
+    end;
   end;
-end;
 var P: PUTF8Char;
 begin
   fLinesMax := fMap.fFileSize div AverageLineLength+8;
