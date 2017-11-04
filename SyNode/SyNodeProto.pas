@@ -197,6 +197,15 @@ function strComparePropGetterSetter(prop_name, jsName: AnsiString; isGetter: boo
 // for can make strComparePropGetterSetter inlined
 const prefix: array[boolean] of TShort4 = ('set ','get ');
 
+// called when the interpreter wants to create an object through a new TMyObject ()
+function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl; forward;
+// called when the interpreter destroys the object
+{$IFDEF SM52}
+procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl; forward;
+{$ELSE}
+procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl; forward;
+{$ENDIF}
+
 implementation
 
 function strComparePropGetterSetter(prop_name, jsName: AnsiString; isGetter: boolean): Boolean;
@@ -253,13 +262,6 @@ begin
   PAnsiChar(Result)^ := Ch;
 end;
 
-function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl; forward;
-{$IFDEF SM52}
-procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl; forward;
-{$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl; forward;
-{$ENDIF}
-
 const
 // Magic constant for TSMObjectRecord
   SMObjectRecordMagic: Word = 43857;
@@ -313,20 +315,18 @@ var
   proto: TSMCustomProtoObject;
 begin
   ObjRec := obj.PrivateData;
-
   if Assigned(ObjRec) and (ObjRec.IsMagicCorrect) then
   begin
     if (ObjRec.DataType=otInstance) and Assigned(ObjRec.Data) then begin
-
       Inst := ObjRec.Data;
       Inst.freeNative;
       Dispose(Inst);
-    end;
-    if (ObjRec.DataType=otProto) and Assigned(ObjRec.Data) then begin
+    end else if (ObjRec.DataType=otProto) and Assigned(ObjRec.Data) then begin
       proto := ObjRec.Data;
       FreeAndNil(proto);
+    end else begin
+      Dispose(ObjRec.Data); // ObjRec.Data is a PSMIdxPropReader from SyNoideNewProto
     end;
-
     Dispose(ObjRec);
     obj.PrivateData := nil;
   end;
