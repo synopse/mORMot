@@ -507,7 +507,6 @@ var
   this: PJSObject;
   proto: PJSObject;
 begin
-  Result := False;
   try
     lfunc := vp.calleObject;
     Assert(Assigned(lfunc));
@@ -546,7 +545,6 @@ var
   mc: PSMMethodRec;
   this, proto: PJSObject;
 begin
-  Result := False;
   try
     lfunc := vp.calleObject;
     Assert(Assigned(lfunc));
