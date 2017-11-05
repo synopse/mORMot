@@ -210,8 +210,9 @@ begin
     fCallFn := TSMFastNativeCall(fCallMethod);
     Result := fCallFn(cx, argc, vp);
   except
-    on E: Exception do
-    begin
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
     end;
   end;
