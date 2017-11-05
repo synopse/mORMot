@@ -198,12 +198,12 @@ function strComparePropGetterSetter(prop_name, jsName: AnsiString; isGetter: boo
 const prefix: array[boolean] of TShort4 = ('set ','get ');
 
 // called when the interpreter wants to create an object through a new TMyObject ()
-function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl; forward;
+function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl;
 // called when the interpreter destroys the object
 {$IFDEF SM52}
-procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl; forward;
+procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
 {$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl; forward;
+procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
 {$ENDIF}
 
 implementation
@@ -415,6 +415,8 @@ var
   val: jsval;
   obj_: PJSRootedObject;
 begin
+  if (ti^.Name = 'Boolean') then
+    Exit;
   s := UTF8ToSynUnicode(ShortStringToUTF8(ti^.Name));
   if (aParent.ptr.HasUCProperty(cx, Pointer(s), Length(s), found)) and found then
     exit; //enum already defined
