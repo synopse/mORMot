@@ -375,7 +375,7 @@ var
   W: Word;
   obj: TObject;
   v: TValue;
-  jsarr: PJSObject;
+  jsarr: PJSRootedObject;
   val: jsval;
   len: Integer;
   Instance: PSMInstanceRecord;
@@ -431,14 +431,17 @@ begin
       if len = 0 then
         Result.asBoolean := false
       else begin
-        jsarr := cx.NewArrayObject(0);
-        // TODO set root to aviod GC??????
-        for L := 0 to len - 1 do begin
-          v := Value.GetArrayElement(L);
-          val := TVal2JSVal(cx, v, aParentProto);
-          Assert(jsarr.SetElement(cx, L, val));
+        jsarr := cx.NewRootedObject(cx.NewArrayObject(0));
+        try
+          for L := 0 to len - 1 do begin
+            v := Value.GetArrayElement(L);
+            val := TVal2JSVal(cx, v, aParentProto);
+            Assert(jsarr.ptr.SetElement(cx, L, val));
+          end;
+        finally
+          cx.FreeRootedObject(jsarr);
         end;
-        Result.asObject := jsarr;
+        Result.asObject := jsarr.ptr;
       end;
     end;
     System.TypInfo.tkRecord: begin
@@ -523,8 +526,11 @@ begin
     vp.rval := TVal2JSVal(cx, mRes, Instance.proto, TRttiMethod(mc.method).ReturnType );
     Result := True;
   except
-    on E: Exception do
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
+    end;
   end;
 end;
 
@@ -561,8 +567,11 @@ begin
     fCallFn := TSMFastNativeCall(fCallMethod);
     Result := fCallFn(cx, argc, vp);
   except
-    on E: Exception do
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
+    end;
   end;
 end;
 
