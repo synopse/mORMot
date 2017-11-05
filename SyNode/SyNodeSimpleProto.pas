@@ -190,7 +190,6 @@ var
   mc: PSMMethodRec;
   proto: PJSObject;
 begin
-  Result := False;
   try
 //    JS_ConvertValue(cx,JS_CALLEE(cx, vp),JSTYPE_FUNCTION, lfuncVal);
     lfunc := vp.calleObject;
