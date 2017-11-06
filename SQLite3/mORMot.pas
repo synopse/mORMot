@@ -37973,7 +37973,7 @@ begin
     repeat
       Read := FileRead(Handle,P^,L);
       if Read=0 then begin
-        SleepHiRes(100); // nothing available -> wait a little and retry
+        SleepHiRes(10); // nothing available -> wait a little and retry
         Read := FileRead(Handle,P^,L);
         if Read=0 then // server may be down -> abort
           raise ECommunicationException.Create('ReadString');
@@ -39569,7 +39569,7 @@ begin
             exit;
           end;
           SleepHiRes(1); // retry every 1 ms
-        until false;
+        until Server.fShutdownRequested;
       end;
       else raise EORMException.CreateUTF8('Unexpected Command=% in %.Execute',
         [ord(Command),self]);
@@ -39603,7 +39603,7 @@ begin
         if GetTickCount64>Start64+LockedTimeOut then
           break; // wait up to 2 second by default
         SleepHiRes(1); // retry every 1 ms
-      until false;
+      until Server.fShutdownRequested;
       TimeOut;
     end;
     {$ifndef LVCL}
@@ -42852,7 +42852,7 @@ begin
                   raise EORMBatchException.CreateUTF8(
                     '%.EngineBatchSend: %.TransactionBegin timeout',[self,RunningRest]);
                 SleepHiRes(1); // retry in 1 ms
-              until false;
+              until fShutdownRequested;
             end;
         end;
         // handle batch pending request sending (if table or method changed)

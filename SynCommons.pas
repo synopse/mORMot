@@ -1642,6 +1642,9 @@ const
   /// MIME content type used for raw binary data
   BINARY_CONTENT_TYPE = 'application/octet-stream';
 
+  /// MIME content type used for raw binary data, in upper case
+  BINARY_CONTENT_TYPE_UPPER = 'APPLICATION/OCTET-STREAM';
+
   /// HTTP header for MIME content type used for raw binary data
   BINARY_CONTENT_TYPE_HEADER = HEADER_CONTENT_TYPE+BINARY_CONTENT_TYPE;
 
@@ -11470,6 +11473,10 @@ function BinToBase64(const s: RawByteString): RawUTF8; overload;
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 function BinToBase64(Bin: PAnsiChar; BinBytes: integer): RawUTF8; overload;
 
+/// fast conversion from binary data into prefixed/suffixed Base64 encoded UTF-8 text
+// - with optional JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
+function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
+
 /// fast conversion from binary data into Base64-like URI-compatible encoded text
 // - will trim any right-sided '=' unsignificant characters, and replace
 // '+' or '/' by '_' or '-'
@@ -11496,7 +11503,7 @@ function Base64URIToBin(var base64: RawUTF8): RawByteString;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
-function BinToBase64WithMagic(const s: RawByteString): RawUTF8; overload;
+function BinToBase64WithMagic(const data: RawByteString): RawUTF8; overload;
 
 /// fast conversion from binary data into Base64 encoded UTF-8 text
 // with JSON_BASE64_MAGIC prefix (UTF-8 encoded \uFFF0 special code)
@@ -26858,6 +26865,29 @@ begin
   Base64Encode(pointer(result),Bin,BinBytes);
 end;
 
+function BinToBase64(const data, Prefix, Suffix: RawByteString; WithMagic: boolean): RawUTF8; overload;
+var lendata,lenprefix,lensuffix,len: integer;
+    res: PByteArray absolute result;
+begin
+  result := '';
+  lendata := length(data);
+  lenprefix := length(Prefix);
+  lensuffix := length(Suffix);
+  if lendata+lenprefix+lensuffix=0 then
+    exit;
+  len := ((lendata+2) div 3)*4+lenprefix+lensuffix;
+  if WithMagic then
+    inc(len,3);
+  SetLength(result,len);
+  MoveFast(pointer(Prefix)^,res[0],lenprefix);
+  if WithMagic then begin
+    PInteger(@res[lenprefix])^ := JSON_BASE64_MAGIC;
+    inc(lenprefix,3);
+  end;
+  Base64Encode(@res[lenprefix],pointer(data),lendata);
+  MoveFast(pointer(Suffix)^,res[len-lensuffix],lensuffix);
+end;
+
 procedure Base64ToURI(var base64: RawUTF8);
 var P: PUTF8Char;
 begin
@@ -26919,21 +26949,21 @@ begin
   Base64ToURI(result);
 end;
 
-function BinToBase64WithMagic(const s: RawByteString): RawUTF8;
+function BinToBase64WithMagic(const data: RawByteString): RawUTF8;
 var len: integer;
 begin
-  result:='';
-  len := length(s);
+  result := '';
+  len := length(data);
   if len=0 then
     exit;
   SetLength(result,((len+2) div 3)*4+3);
   PInteger(pointer(result))^ := JSON_BASE64_MAGIC;
-  Base64Encode(PAnsiChar(pointer(result))+3,pointer(s),len);
+  Base64Encode(PAnsiChar(pointer(result))+3,pointer(data),len);
 end;
 
 function BinToBase64WithMagic(Data: pointer; DataLen: integer): RawUTF8; overload;
 begin
-  result:='';
+  result := '';
   if DataLen<=0 then
     exit;
   SetLength(result,((DataLen+2) div 3)*4+3);
