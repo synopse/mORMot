@@ -6005,9 +6005,11 @@ type
       Context: TSQLRestServerURIContext): boolean;
   end;
 
-  /// used by TSQLRestServerURIContext.ClientKind to identify the
-  // currently connected client
+  /// used by TSQLRestServerURIContext.ClientKind to identify the currently
+  // connected client
   TSQLRestServerURIContextClientKind = (ckUnknown, ckFramework, ckAJAX);
+  //// used to customize TSQLRestServerURIContext.ClientSideInvoke process
+  TSQLRestServerURIContextClientInvoke = set of (csiAsOctetStream);
 
   /// abstract calling context for a TSQLRestServerCallBack event handler
   // - having a dedicated class avoid changing the implementation methods
@@ -6161,6 +6163,9 @@ type
     // - Service member has already be retrieved from URI (so is not nil)
     // - 0..2 are the internal _free_/_contract_/_signature_ pseudo-methods
     ServiceMethodIndex: integer;
+    /// access to the raw PServiceMethod information of an interface-based URI
+    // - equals nil if ServiceMethodIndex in 0..2 (pseudo-methods)
+    ServiceMethod: pointer;
     /// the JSON array of parameters for an the interface-based service
     // - Service member has already be retrieved from URI (so is not nil)
     ServiceParameters: PUTF8Char;
@@ -6169,11 +6174,11 @@ type
     // sicPerThread
     ServiceInstanceID: PtrUInt;
     /// the current execution context of an interface-based service
-    // - maps to Service.fExecution[ServiceMethodIndex]
+    // - maps to Service.fExecution[ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT]
     ServiceExecution: PServiceFactoryExecution;
     /// the current execution options of an interface-based service
-    // - contain Service.fExecution[ServiceMethodIndex].Options and may include
-    // optNoLogInput/optNoLogOutput in case of TInterfaceFactory.RegisterUnsafeSPIType
+    // - contain ServiceExecution.Options including optNoLogInput/optNoLogOutput 
+    // in case of TInterfaceFactory.RegisterUnsafeSPIType
     ServiceExecutionOptions: TServiceMethodOptions;
     /// force the interface-based service methods to return a JSON object
     // - default behavior is to follow Service.ResultAsJSONObject property value
@@ -6541,8 +6546,8 @@ type
     // and clientDriven ID should contain the optional Client ID value
     // - at output, should update the HTTP uri corresponding to the proper
     // routing, and should return the corresponding HTTP body within sent
-    class procedure ClientSideInvoke(var uri: RawUTF8;
-      const method, params, clientDrivenID: RawUTF8; out sent: RawUTF8); virtual; abstract;
+    class procedure ClientSideInvoke(var uri: RawUTF8; ctxt: TSQLRestServerURIContextClientInvoke;
+      const method, params, clientDrivenID: RawUTF8; out sent,head: RawUTF8); virtual; abstract;
   end;
 
   /// calling context for a TSQLRestServerCallBack using simple REST for
@@ -6587,8 +6592,8 @@ type
     // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
     // clientDrivenID='1234' -> on output uri='root/Calculator.Add/1234' and
     // sent='[1,2]'
-    class procedure ClientSideInvoke(var uri: RawUTF8;
-      const method, params, clientDrivenID: RawUTF8; out sent: RawUTF8); override;
+    class procedure ClientSideInvoke(var uri: RawUTF8; ctxt: TSQLRestServerURIContextClientInvoke;
+      const method, params, clientDrivenID: RawUTF8; out sent,head: RawUTF8); override;
   end;
 
   /// calling context for a TSQLRestServerCallBack using JSON/RPC for
@@ -6620,8 +6625,8 @@ type
     // - e.g. on input uri='root/Calculator', method='Add', params='1,2' and
     // clientDrivenID='1234' -> on output uri='root/Calculator' and
     // sent={"method":"Add","params":[1,2],"id":1234}
-    class procedure ClientSideInvoke(var uri: RawUTF8;
-      const method, params, clientDrivenID: RawUTF8; out sent: RawUTF8); override;
+    class procedure ClientSideInvoke(var uri: RawUTF8; ctxt: TSQLRestServerURIContextClientInvoke;
+      const method, params, clientDrivenID: RawUTF8; out sent,head: RawUTF8); override;
   end;
 
   /// method prototype to be used on Server-Side for method-based services
@@ -10574,12 +10579,16 @@ type
     /// true if the result is a TServiceCustomAnswer record
     // - that is, a custom Header+Content BLOB transfert, not a JSON object
     ArgsResultIsServiceCustomAnswer: boolean;
+    /// true if there is a single input parameter as RawByteString/TSQLRawBlob
+    // - TSQLRestRoutingREST.ExecuteSOAByInterface will identify binary input
+    // with mime-type 'application/octet-stream' as expected
+    ArgsInputIsOctetStream: boolean;
     /// the index of the first argument expecting manual stack initialization
     // - set if there is any smvObject,smvDynArray,smvRecord,smvInterface or
     // smvVariant
     ArgsManagedFirst: shortint;
     /// the index of the last argument expecting manual stack initialization
-    // - set if there is any smvObject,smvDynArray,smvRecord, smvInterface or
+    // - set if there is any smvObject, smvDynArray, smvRecord, smvInterface or
     // smvVariant
     ArgsManagedLast: shortint;
     /// contains all used kind of arguments
@@ -12261,9 +12270,9 @@ type
   /// callback called before any interface-method service execution to allow
   // its execution
   // - see Ctxt.Service, Ctxt.ServiceMethodIndex and Ctxt.ServiceParameters
-  // are used to identify the executed method context
+  // to identify the executed method context
   // - Method parameter will help identify easily the corresponding method, and
-  // will contain in fact Service.InterfaceFactory.Methods[ServiceMethodIndex]
+  // will contain in fact PServiceMethod(Ctxt.ServiceMethod)^
   // - should return TRUE if the method can be executed
   // - should return FALSE if the method should not be executed, and set the
   // corresponding error to the supplied context e.g.
@@ -12313,15 +12322,17 @@ type
     function RenewSession(aSession: cardinal): integer;
     /// get an implementation Inst.Instance for the given Inst.InstanceID
     // - is called by ExecuteMethod() in sicClientDrive mode
-    // - returns true for successfull {"method":"_free_".. call (aMethodIndex=-1)
+    // - returns -1 on error, or aMethodIndex for successfull execution,
+    // e.g. 0 after {"method":"_free_".. call
     // - otherwise, fill Inst.Instance with the matching implementation (or nil)
     function InternalInstanceRetrieve(var Inst: TServiceFactoryServerInstance;
       aMethodIndex,aSession: integer): integer;
     /// call a given method of this service provider
-    // - here Ctxt.ServiceMethodIndex should be the index in fInterface.Methods[]
+    // - here Ctxt.ServiceMethod points to the corresponding fInterface.Methods[]
     // (i.e. excluding _free_/_contract_/_signature_ pseudo-methods)
-    // - Ctxt.ServiceMethodIndex=-1, then it will free/release corresponding aInstanceID
-    // (is called  e.g. from {"method":"_free_", "params":[], "id":1234} )
+    // - Ctxt.ServiceMethodIndex=0=ord(imFree) will free/release
+    // the corresponding aInstanceID - as called  e.g. from
+    // $ {"method":"_free_", "params":[], "id":1234} 
     // - Ctxt.ServiceParameters is e.g. '[1,2]' i.e. a true JSON array, which
     // will contain the incoming parameters in the same exact order than the
     // corresponding implemented interface method
@@ -39700,9 +39711,6 @@ begin
   end;
 end;
 
-const
-  SERVICE_METHODINDEX_FREEINSTANCE = -1;
-
 procedure TSQLRestServerURIContext.ServiceResultStart(WR: TTextWriter);
 const JSONSTART: array[boolean] of RawUTF8 =
     ('{"result":[','{"result":{');
@@ -39770,8 +39778,7 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
       if not (Service.InstanceCreation in [sicClientDriven..sicPerThread]) then begin
         Error('_free_ is not compatible with %',[ToText(Service.InstanceCreation)^]);
         exit;
-      end else  // {"method":"_free_", "params":[], "id":1234}
-        ServiceMethodIndex := SERVICE_METHODINDEX_FREEINSTANCE;
+      end; // {"method":"_free_", "params":[], "id":1234}
     ord(imContract): begin
       // "method":"_contract_" to retrieve the implementation contract
       if (Call^.InBody<>'') and (Call^.InBody<>'[]') then
@@ -39787,8 +39794,10 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
         Error('Not allowed to publish signature');
       exit;
     end;
-    else // TServiceFactoryServer.ExecuteMethod() expects index in fMethods[]
-      dec(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
+    else // TServiceFactoryServer.ExecuteMethod() will use ServiceMethod(Index)
+      if ServiceMethod=nil then
+        raise EServiceException.CreateUTF8('%.InternalExecuteSOAByInterface '+
+          'ServiceMethodIndex=% and ServiceMethod=nil',[self,ServiceMethodIndex]);
     end;
     if (Session>CONST_AUTHENTICATION_NOT_USED) and (ServiceExecution<>nil) and
        (SessionGroup-1 in ServiceExecution.Denied) then begin
@@ -39800,16 +39809,14 @@ procedure TSQLRestServerURIContext.InternalExecuteSOAByInterface;
   end;
 var xml: RawUTF8;
     m: integer;
-begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
+begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
   m := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
   if m>=0 then begin
-    if cardinal(m)>=Service.fInterface.fMethodsCount then begin
-      Error('Invalid ServiceMethodIndex');
-      exit;
-    end;
+    if ServiceMethod=nil then
+      ServiceMethod := @Service.fInterface.fMethods[m];
     ServiceExecution := @Service.fExecution[m];
     ServiceExecutionOptions := ServiceExecution.Options;
-    with Service.fInterface.fMethods[m] do begin
+    with PServiceMethod(ServiceMethod)^ do begin
       if [smdConst,smdVar]*HasSPIParams<>[] then
         include(ServiceExecutionOptions,optNoLogInput);
       if [smdVar,smdOut,smdResult]*HasSPIParams<>[] then
@@ -39818,13 +39825,13 @@ begin // expects Service, ServiceParameters, ServiceMethodIndex to be set
     {$ifdef WITHLOG}
     if sllServiceCall in Log.GenericFamily.Level then
       if optNoLogInput in ServiceExecutionOptions then
-        Log.Log(sllServiceCall,'%{optNoLogInput}',[Service.InterfaceFactory.Methods[m].
-          InterfaceDotMethodName],Server) else
+        Log.Log(sllServiceCall,'%{optNoLogInput}',
+          [PServiceMethod(ServiceMethod)^.InterfaceDotMethodName],Server) else
         Log.Log(sllServiceCall,'%%',[Service.InterfaceFactory.GetFullMethodName(
           ServiceMethodIndex),ServiceParameters],Server);
     {$endif}
     if Assigned(Service.OnMethodExecute) then
-      if not Service.OnMethodExecute(self,Service.InterfaceFactory.Methods[m]) then
+      if not Service.OnMethodExecute(self,PServiceMethod(ServiceMethod)^) then
         exit; // execution aborted by OnMethodExecute() callback event
   end;
   if Service.ResultAsXMLObjectIfAcceptOnlyXML then begin
@@ -40937,6 +40944,9 @@ begin
         Service := TServiceFactoryServer(InterfaceService);
         ServiceMethodIndex := InterfaceMethodIndex;
         fServiceListInterfaceMethodIndex := i;
+        i := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
+        if i>=0 then
+          ServiceMethod := @Service.fInterface.fMethods[i];
         ServiceInstanceID := GetInteger(pointer(URIBlobFieldName));
       end else
       if URIBlobFieldName<>'' then begin
@@ -40948,6 +40958,7 @@ begin
           ServiceMethodIndex := Service.InterfaceFactory.FindMethodIndex(method);
           if ServiceMethodIndex<0 then
             Service := nil else begin
+            ServiceMethod := @Service.fInterface.fMethods[ServiceMethodIndex];
             inc(ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
             fServiceListInterfaceMethodIndex := -1;
             ServiceInstanceID := GetInteger(pointer(clientdrivenid));
@@ -40960,18 +40971,23 @@ end;
 procedure TSQLRestRoutingREST.ExecuteSOAByInterface;
 var JSON: RawUTF8;
     Par: PUTF8Char;
-    meth,a,i,iLow: Integer;
+    a,i,iLow: Integer;
     WR: TTextWriter;
     argDone: boolean;
     temp: TTextWriterStackBuffer;
-begin // here Ctxt.Service and ServiceMethodIndex are set
+begin // here Ctxt.Service and ServiceMethod(Index) are set
   if (Server.Services=nil) or (Service=nil) then
     raise EServiceException.CreateUTF8('%.ExecuteSOAByInterface invalid call',[self]);
   //  URI as '/Model/Interface.Method[/ClientDrivenID]'
   if Call.InBody<>'' then
-    // either parameters were sent as JSON array (the Delphi/AJAX way)
-    ServiceParameters := pointer(Call.InBody) else begin
-    // or parameters were URI-encoded (the HTML way)
+    // parameters sent as JSON array (the Delphi/AJAX way) or single blob
+    if (ServiceMethod<>nil) and PServiceMethod(ServiceMethod)^.ArgsInputIsOctetStream and
+       ExistsIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER,[BINARY_CONTENT_TYPE_UPPER]) then begin
+      JSON := BinToBase64(Call.InBody,'["','"]',false);
+      ServiceParameters := pointer(JSON);
+    end else
+      ServiceParameters := pointer(Call.InBody) else begin
+    // URI-encoded parameters  (the HTML way)
     Par := Parameters;
     if Par<>nil then begin
       while Par^='+' do inc(Par); // ignore trailing spaces
@@ -40981,12 +40997,11 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
         // or as a list of parameters (input is 'Param1=Value1&Param2=Value2...')
         FillInput; // fInput[0]='Param1',fInput[1]='Value1',fInput[2]='Param2'...
         if fInput<>nil then begin
-          meth := ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT;
-          if cardinal(meth)<Service.InterfaceFactory.MethodsCount then begin
+          if ServiceMethod<>nil then begin
             WR := TJSONSerializer.CreateOwnedStream(temp);
             try // convert URI parameters into the expected ordered JSON array
               WR.Add('[');
-              with Service.InterfaceFactory.fMethods[meth] do begin
+              with PServiceMethod(ServiceMethod)^ do begin
                 iLow := 0;
                 for a := ArgsInFirst to ArgsInLast do
                 with Args[a] do
@@ -41016,16 +41031,24 @@ begin // here Ctxt.Service and ServiceMethodIndex are set
     end;
     ServiceParameters := pointer(JSON);
   end;
-  // now Service, ServiceParameters, ServiceMethodIndex are set
+  // now Service, ServiceParameters, ServiceMethod(Index) are set
   InternalExecuteSOAByInterface;
 end;
 
 class procedure TSQLRestRoutingREST.ClientSideInvoke(var uri: RawUTF8;
-  const method, params, clientDrivenID: RawUTF8; out sent: RawUTF8);
+  ctxt: TSQLRestServerURIContextClientInvoke;
+  const method, params, clientDrivenID: RawUTF8; out sent,head: RawUTF8);
 begin
   if clientDrivenID<>'' then
     uri := uri+'.'+method+'/'+clientDrivenID else
     uri := uri+'.'+method;
+  if (csiAsOctetStream in ctxt) and (length(params)>2) and (params[1]='"') then begin
+    sent := Base64ToBin(@params[2],length(params)-2);
+    if sent<>'' then begin
+      head := BINARY_CONTENT_TYPE_HEADER;
+      exit;
+    end;
+  end;
   sent := '['+params+']'; // we may also encode them within the URI
 end;
 
@@ -41072,7 +41095,7 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
         exit;
       end;
     end;
-    // now Service, ServiceParameters, ServiceMethodIndex are set
+    // now Service, ServiceParameters, ServiceMethod(Index) are set
     InternalExecuteSOAByInterface;
   finally
     tmp.Done; // release temp storage for Values[] = Service* fields
@@ -41080,7 +41103,8 @@ begin // here Ctxt.Service is set (not ServiceMethodIndex yet)
 end;
 
 class procedure TSQLRestRoutingJSON_RPC.ClientSideInvoke(var uri: RawUTF8;
-  const method, params, clientDrivenID: RawUTF8; out sent: RawUTF8);
+  ctxt: TSQLRestServerURIContextClientInvoke;
+  const method, params, clientDrivenID: RawUTF8; out sent,head: RawUTF8);
 begin
   sent := '{"method":"'+method+'","params":['+params;
   if clientDrivenID='' then
@@ -42006,7 +42030,7 @@ begin
     for i := 0 to Services.Count-1 do
       with TServiceFactoryServer(Services.fList.Objects[i]) do
       if InstanceCreation=sicPerThread then
-        InternalInstanceRetrieve(Inst,SERVICE_METHODINDEX_FREEINSTANCE,0);
+        InternalInstanceRetrieve(Inst,ord(imFree),0);
   end;
   with PServiceRunningContext(@ServiceContext)^ do // P..(@..)^ for ONE GetTls()
     if RunningThread<>nil then  // e.g. if length(TSQLHttpServer.fDBServers)>1
@@ -57017,6 +57041,8 @@ begin
         ArgsResultIsServiceCustomAnswer := true;
       end;
     end;
+    if (ArgsInputValuesCount=1) and (Args[1].ValueType=smvRawByteString) then
+      ArgsInputIsOctetStream := true;
   end;
   SetLength(fExecution,fInterface.fMethodsCount);
   // compute interface signature (aka "contract"), serialized as a JSON object
@@ -57107,7 +57133,7 @@ begin
     case fact.InstanceCreation of
     sicPerSession: begin
       inst.InstanceID := aSessionID;
-      fact.InternalInstanceRetrieve(inst,SERVICE_METHODINDEX_FREEINSTANCE,aSessionID);
+      fact.InternalInstanceRetrieve(inst,ord(imFree),aSessionID);
     end;
     sicClientDriven: begin // release ASAP if was not notified by client
       EnterCriticalSection(fact.fInstanceLock);
@@ -57220,17 +57246,18 @@ begin
         if fake.fService.fInterface.MethodIndexCallbackReleased>=0 then begin
           // emulate a call to CallbackReleased(callback,'ICallbackName')
           Ctxt.ServiceMethodIndex := fake.fService.fInterface.MethodIndexCallbackReleased;
+          Ctxt.ServiceMethod := @fake.fService.fInterface.fMethods[Ctxt.ServiceMethodIndex];
           Ctxt.ServiceExecution := @fake.fService.fExecution[Ctxt.ServiceMethodIndex];
           Ctxt.ServiceExecutionOptions := Ctxt.ServiceExecution.Options;
           Ctxt.Service := fake.fService;
+          inc(Ctxt.ServiceMethodIndex,SERVICE_PSEUDO_METHOD_COUNT);
           fake._AddRef; // IInvokable=pointer in Ctxt.ExecuteCallback
           Ctxt.ServiceParameters := pointer(FormatUTF8('[%,"%"]',
               [PtrInt(fake.fFakeInterface),Values[0].Name]));
           fake.fService.ExecuteMethod(Ctxt);
           if withLog then
-            fRest.InternalLog('I%() returned %',[Ctxt.Service.fInterface.
-              Methods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName,
-              Ctxt.Call^.OutStatus],sllDebug);
+            fRest.InternalLog('I%() returned %',[PServiceMethod(Ctxt.ServiceMethod)^.
+              InterfaceDotMethodName, Ctxt.Call^.OutStatus],sllDebug);
         end else
           Ctxt.Success;
         exit;
@@ -57846,7 +57873,8 @@ begin
   sicPerThread: begin
     Inst.Instance := nil;
     Inst.InstanceID := PtrUInt(GetCurrentThreadId);
-    if (InternalInstanceRetrieve(Inst,0,0)=0) and (Inst.Instance<>nil) then
+    if (InternalInstanceRetrieve(Inst,SERVICE_PSEUDO_METHOD_COUNT,0)>=0) and
+       (Inst.Instance<>nil) then
       result := GetInterfaceFromEntry(Inst.Instance,fImplementationClassInterfaceEntry,Obj);
   end;
   else begin // no user/group/session on pure server-side -> always sicSingle
@@ -57930,6 +57958,7 @@ function TServiceFactoryServer.InternalInstanceRetrieve(
     Inst.Instance := CreateInstance(true);
     if Inst.Instance=nil then
       exit;
+    result := aMethodIndex; // notify caller
     inc(fInstanceCount);
     fRest.InternalLog('%.InternalInstanceRetrieve: Adding %(%) instance (id=%) count=%',
       [ClassType,fInterfaceURI,pointer(Inst.Instance),Inst.InstanceID,fInstanceCount],sllDebug);
@@ -57945,7 +57974,7 @@ function TServiceFactoryServer.InternalInstanceRetrieve(
 var i: integer;
     P: ^TServiceFactoryServerInstance;
 begin
-  result := 0;
+  result := -1;
   EnterCriticalSection(fInstanceLock);
   try
     Inst.LastAccess64 := GetTickCount64;
@@ -57966,7 +57995,7 @@ begin
     end;
     if Inst.InstanceID=0 then begin
       // initialize a new sicClientDriven instance
-      if (cardinal(aMethodIndex)>=fInterface.fMethodsCount) or
+      if (cardinal(aMethodIndex-SERVICE_PSEUDO_METHOD_COUNT)>=fInterface.fMethodsCount) or
          (InstanceCreation<>sicClientDriven) then
         exit;
       inc(fInstanceCurrentID);
@@ -57978,10 +58007,9 @@ begin
         P := pointer(fInstances);
         for i := 1 to fInstanceCapacity do
           if P^.InstanceID=Inst.InstanceID then begin
-            if aMethodIndex=SERVICE_METHODINDEX_FREEINSTANCE then begin
-              // aMethodIndex=-1 for {"method":"_free_", "params":[], "id":1234}
-              P^.SafeFreeInstance(self);
-              result := SERVICE_METHODINDEX_FREEINSTANCE; // notify caller
+            result := aMethodIndex; // notify caller
+            if aMethodIndex=ord(imFree) then begin
+              P^.SafeFreeInstance(self); // {"method":"_free_", "params":[], "id":1234}
               exit;
             end;
             P^.LastAccess64 := Inst.LastAccess64;
@@ -57992,7 +58020,7 @@ begin
       end;
       // add any new session/user/group/thread instance if necessary
       if (InstanceCreation<>sicClientDriven) and
-         (cardinal(aMethodIndex)<fInterface.fMethodsCount) then
+         (cardinal(aMethodIndex-SERVICE_PSEUDO_METHOD_COUNT)<fInterface.fMethodsCount) then
         AddNew;
     end;
   finally
@@ -58114,8 +58142,8 @@ var Inst: TServiceFactoryServerInstance;
 
   function GetFullMethodName: RawUTF8;
   begin
-    if cardinal(Ctxt.ServiceMethodIndex)<fInterface.fMethodsCount then
-      result := fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName else
+    if Ctxt.ServiceMethod<>nil then
+      result := PServiceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName else
       result := fInterface.fInterfaceName;
   end;
   procedure Error(const Msg: RawUTF8; Status: integer);
@@ -58170,7 +58198,7 @@ begin
             exit;
           end;
       end;
-      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex,Ctxt.Session)=SERVICE_METHODINDEX_FREEINSTANCE then begin
+      if InternalInstanceRetrieve(Inst,Ctxt.ServiceMethodIndex,Ctxt.Session)=ord(imFree) then begin
         Ctxt.Success; // {"method":"_free_", "params":[], "id":1234}
         exit;
       end;
@@ -58182,16 +58210,15 @@ begin
   end;
   Ctxt.ServiceInstanceID := Inst.InstanceID;
   // 2. call method implementation
-  if (Ctxt.ServiceExecution=nil) or
-     (cardinal(Ctxt.ServiceMethodIndex)>=fInterface.fMethodsCount) then begin
+  if (Ctxt.ServiceExecution=nil) or (Ctxt.ServiceMethod=nil) then begin
     Error('ServiceExecution=nil',HTTP_SERVERERROR);
     exit;
   end;
   if mlInterfaces in TSQLRestServer(Rest).StatLevels then begin
-    stats := fStats[Ctxt.ServiceMethodIndex];
+    stats := fStats[Ctxt.ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT];
     if stats=nil then begin
       stats := StatsCreate;
-      fStats[Ctxt.ServiceMethodIndex] := stats;
+      fStats[Ctxt.ServiceMethodIndex-SERVICE_PSEUDO_METHOD_COUNT] := stats;
     end;
     stats.Processing := true;
   end else
@@ -58226,7 +58253,7 @@ begin
       dolock := optExecLockedPerInterface in Ctxt.ServiceExecution^.Options;
       if dolock then
         EnterCriticalSection(fInstanceLock);
-      exec := TServiceMethodExecute.Create(@fInterface.fMethods[Ctxt.ServiceMethodIndex]);
+      exec := TServiceMethodExecute.Create(Ctxt.ServiceMethod);
       try
         exec.fOptions := Ctxt.ServiceExecution^.Options;
         {$ifndef LVCL}
@@ -58280,7 +58307,7 @@ begin
           m := Ctxt.fServiceListInterfaceMethodIndex;
           if m<0 then
             m := Rest.Services.fListInterfaceMethods.FindHashed(
-              fInterface.fMethods[Ctxt.ServiceMethodIndex].InterfaceDotMethodName);
+              PServiceMethod(Ctxt.ServiceMethod)^.InterfaceDotMethodName);
           if m>=0 then
           with Ctxt.fSession do begin
             stats := fInterfaces[m];
@@ -60450,6 +60477,8 @@ function TServiceFactoryClient.InternalInvoke(const aMethod: RawUTF8;
 var baseuri,uri,sent,resp,head,clientDrivenID: RawUTF8;
     Values: TPUtf8CharDynArray;
     status,m: integer;
+    service: PServiceMethod;
+    ctxt: TSQLRestServerURIContextClientInvoke;
     {$ifdef WITHLOG}
     log: ISynLog; // for Enter auto-leave to work with FPC
     p: RawUTF8;
@@ -60465,9 +60494,12 @@ begin
   if (aClientDrivenID<>nil) and (aClientDrivenID^>0) then
     UInt32ToUTF8(aClientDrivenID^,clientDrivenID);
   m := fInterface.FindMethodIndex(aMethod);
+  if m<0 then
+    service := nil else
+    service := @fInterface.Methods[m];
   {$ifdef WITHLOG}
-  if (m>=0) and ((optNoLogInput in fExecution[m].Options) or
-     ([smdConst,smdVar]*fInterface.Methods[m].HasSPIParams<>[])) then
+  if (service<>nil) and ((optNoLogInput in fExecution[m].Options) or
+     ([smdConst,smdVar]*service^.HasSPIParams<>[])) then
     p := 'optNoLogInput' else
     p := aParams;
   log := fRest.LogClass.Enter('InternalInvoke I%.%(%) %',
@@ -60480,10 +60512,13 @@ begin
       baseuri := aClient.Model.Root+'/'+fInterfaceMangledURI else
       baseuri := aClient.Model.Root+'/'+fInterfaceURI;
   uri := baseuri;
-  fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,clientDrivenID,sent);
+  ctxt := [];
+  if (service<>nil) and not ParamsAsJSONObject and service^.ArgsInputIsOctetStream then
+    include(ctxt,csiAsOctetStream);
+  fRest.ServicesRouting.ClientSideInvoke(uri,ctxt,aMethod,aParams,clientDrivenID,sent,head);
   if ParamsAsJSONObject and (clientDrivenID='') then
-    if m>=0 then  // ParamsAsJSONObject won't apply to _signature_ e.g.
-      sent := fInterface.Methods[m].ArgsArrayToObject(Pointer(sent),true);
+    if service<>nil then  // ParamsAsJSONObject won't apply to _signature_ e.g.
+      sent := service^.ArgsArrayToObject(Pointer(sent),true);
   // call remote server
   status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
   if (status=HTTP_UNAUTHORIZED) and (clientDrivenID<>'') and
@@ -60493,7 +60528,7 @@ begin
     {$endif}
     aClientDrivenID^ := 0;
     uri := baseuri;
-    fRest.ServicesRouting.ClientSideInvoke(uri,aMethod,aParams,'',sent);
+    fRest.ServicesRouting.ClientSideInvoke(uri,ctxt,aMethod,aParams,'',sent,head);
     status := aClient.URI(uri,'POST',@resp,@head,@sent).Lo;
   end;
   // decode result
@@ -60515,8 +60550,8 @@ begin
     end;
     // decode JSON object
     {$ifdef WITHLOG}
-    if (m<0) or not((optNoLogOutput in fExecution[m].Options) or
-       ([smdVar,smdOut,smdResult]*fInterface.Methods[m].HasSPIParams<>[])) then
+    if (service=nil) or not((optNoLogOutput in fExecution[m].Options) or
+       ([smdVar,smdOut,smdResult]*service^.HasSPIParams<>[])) then
     with fRest.fLogFamily do
       if (sllServiceReturn in Level) and (resp<>'') then
         SynLog.Log(sllServiceReturn,resp,self,MAX_SIZE_RESPONSE_LOG);

@@ -1141,6 +1141,8 @@ type
     function ComplexCall(const Ints: TIntegerDynArray; const Strs1: TRawUTF8DynArray;
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
+    /// validates ArgsInputIsOctetStream raw binary upload
+    function DirectCall(const Data: TSQLRawBlob): integer;
   end;
 
   /// a test interface, used by TTestServiceOrientedArchitecture
@@ -1259,7 +1261,7 @@ type
     I: ICalculator;
     CC: IComplexCalculator;
     CN: IComplexNumber;
-    CU: ITestUSer;
+    CU: ITestUser;
     CG: ITestGroup;
     CS: ITestSession;
     CT: ITestPerThread;
@@ -14598,6 +14600,7 @@ type
     function ComplexCall(const Ints: TIntegerDynArray; const Strs1: TRawUTF8DynArray;
       var Str2: TWideStringDynArray; const Rec1: TVirtualTableModuleProperties;
       var Rec2: TSQLRestCacheEntryValue; Float1: double; var Float2: double): TSQLRestCacheEntryValue;
+    function DirectCall(const Data: TSQLRawBlob): integer;
     function Test(A,B: Integer): RawUTF8;
   end;
 
@@ -14730,6 +14733,15 @@ begin
   dec(Rec2.TimeStamp512);
   Rec2.JSON := IntegerDynArrayToCSV(Ints,length(Ints));
   Float2 := Float1;
+end;
+
+function TServiceCalculator.DirectCall(const Data: TSQLRawBlob): integer;
+var i: integer;
+begin
+  result := length(Data);
+  for i := 1 to result do
+    if Data[i]<>#1 then
+      result := 0;
 end;
 
 
@@ -15027,6 +15039,8 @@ begin
   Check(Str2[3]='one,two,three');
   Check(Str2[4]='');
   {$endif}
+  s := StringOfChar(#1,100);
+  check(I.DirectCall(s)=100);
 end;
 var s: RawUTF8;
 {$ifndef LVCL}
@@ -15458,8 +15472,8 @@ begin
   fClient.Server.Services.ExpectMangledURI := false;
   Check(fClient.Server.Services['CALCULAtor']=S);
   Check(fClient.Server.Services['CALCULAtors']=nil);
-  if CheckFailed(length(S.InterfaceFactory.Methods)=10) then exit;
-  Check(S.ContractHash='"F733467874E273A7"');
+  if CheckFailed(length(S.InterfaceFactory.Methods)=11) then exit;
+  Check(S.ContractHash='"A0BE4DD5C1766347"');
   Check(TServiceCalculator(nil).Test(1,2)='3');
   Check(TServiceCalculator(nil).ToTextFunc(777)='777');
   for i := 0 to high(ExpectedURI) do // SpecialCall interface not checked
