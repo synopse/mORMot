@@ -8361,7 +8361,7 @@ Our caching implementation is transparent to the CRUD code. The very same usual 
 The main problem with cache is about data that both changes and is accessed simultaneously by multiple clients.
 In the current implementation, a "pessimistic" concurrency control is used by our framework, relying on explicit locks, and (ab)use of its @15@ general design. It is up to the coder to ensure that no major confusion could arise from concurrency issues.
 You must tune caching at both Client and Server level - each side will probably require its own set of cache options.
-In your project project implementation, caching should better not to be used at first, but added on need, when performance and efficiency was found to be required. Adding a cache shall imply having automated regression tests available, since in a Client-Server multi-threaded architecture, "{\i premature optimization is the root of all evil}" (Donald Knuth).
+In your project implementation, caching should better not to be used at first, but added on need, when performance and efficiency was found to be required. Adding a cache shall imply having automated regression tests available, since in a Client-Server multi-threaded architecture, "{\i premature optimization is the root of all evil}" (Donald Knuth).
 The main rules may be simply:
 - {\i Not to cache if it may break something relevant} (like a global monetary balance value);
 - {\i Not to cache unless you need to} (see Knuth's wisdom);
@@ -9862,7 +9862,7 @@ Handled types of parameters are:
 |{\f1\fs20 @*RawUTF8@ @*WideString@ @*SynUnicode@}|Transmitted as JSON text (@*UTF-8@ encoded)
 |{\f1\fs20 string}|Transmitted as UTF-8 JSON text, but prior to {\i Delphi} 2009, the framework will ensure that both client and server sides use the same ANSI code page - so you should better use {\f1\fs20 RawUTF8} everywhere
 |{\f1\fs20 @*RawJSON@}|UTF-8 buffer transmitted with no serialization (wheras a {\f1\fs20 RawUTF8} will be escaped as a JSON string) - expects to contain valid JSON content, e.g. for TSQLTableJSON requests
-|{\f1\fs20 @*RawByteString@}|Transmitted as @*Base64@ encoded JSON text - use @49@ to transmit raw binary, without the Base64 encoding overhead
+|{\f1\fs20 @*RawByteString@}|Transmitted as @*Base64@ encoded JSON text - see @197@ for optional binary transmission
 |{\f1\fs20 @*TPersistent@}|Published properties will be transmitted as JSON object
 |{\f1\fs20 @*TSQLRecord@}|All published fields (including ID) will be transmitted as JSON object
 |{\f1\fs20 @*TCollection@}|Not allowed direcly: inherit from {\f1\fs20 @*TInterfacedCollection@} or call {\f1\fs20 TJSONSerializer. RegisterCollectionForJSON()}
@@ -9899,8 +9899,10 @@ You can therefore define complex {\f1\fs20 interface} types, as such:
 !      var Rec2: TSQLRestCacheEntryValue): TSQLRestCacheEntryValue;
 !    /// test variant kind of parameters
 !    function TestVariants(const Text: RawUTF8; V1: variant; var V2: variant): variant;
+!    /// validates ArgsInputIsOctetStream raw binary upload
+!    function DirectCall(const Data: TSQLRawBlob): integer;
 !  end;
-Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. And simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way, thanks to the enhanced RTTI available since to {\i Delphi} 2010.
+Note how {\f1\fs20 SpecialCall} and {\f1\fs20 ComplexCall} methods have quite complex parameters definitions, including dynamic arrays, sets and records. DirectCall will use binary POST, by-passing @*Base64@ JSON encoding - see @197@. The framework will handle {\f1\fs20 const} and {\f1\fs20 var} parameters as expected, i.e. as input/output parameters, also on the client side. Any simple types of dynamic arrays (like {\f1\fs20 TIntegerDynArray}, {\f1\fs20 TRawUTF8DynArray}, or {\f1\fs20 TWideStringDynArray}) will be serialized as plain JSON arrays - the framework is able to handle any dynamic array definition, but will serialize those simple types in a more AJAX compatible way, thanks to the enhanced RTTI available since to {\i Delphi} 2010.
 :  TPersistent / TSQLRecord parameters
 As stated above, {\i mORMot} does not allow a method {\f1\fs20 function} to return a {\f1\fs20 class} instance.
 That is, you can't define such a method:
@@ -11286,6 +11288,10 @@ $ POST /root/Calculator.Add
 $ (...)
 $ {"n1":1,"n2":2}
 This may help transmitting some values to a non-{\i mORMot} server, in another format, for a given service.
+:197     Sending raw binary
+If your purpose is to upload some binary data, {\f1\fs20 RawByteString} and {\f1\fs20 TSQLRawBlob} input parameters will by default be transmitted as @*Base64@ encoded JSON text.
+You may define @49@ to transmit raw binary, without the Base64 encoding overhead. It would allow low-access to the input content type and encoding, even with multi-part file upload from HTTP.
+As an alternative, if you use default {\f1\fs20 TSQLRestRoutingREST} routing, and defined a single {\f1\fs20 RawByteString} or {\f1\fs20 TSQLRawBlob} input parameter, it will be processed as a raw POST with binary body defined with mime-type {\f1\fs20 'application/octet-stream'}. This may be more optimized for remote access over the Internet.
 :    JSON-RPC
 :     Parameters transmitted as JSON array
 If {\f1\fs20 TSQLRestRoutingJSON_RPC} mode is used, the URI will define the interface, and then the method name will be inlined with parameters, e.g.
