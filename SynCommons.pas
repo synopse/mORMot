@@ -48936,7 +48936,8 @@ procedure TSynLocker.Done;
 var i: integer;
 begin
   for i := 0 to PaddingMaxUsedIndex do
-    VarClear(variant(Padding[i]));
+    if Padding[i].VType<>varUnknown then  
+      VarClear(variant(Padding[i]));
   DeleteCriticalSection(fSection);
 end;
 
