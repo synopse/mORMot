@@ -15039,7 +15039,7 @@ begin
   Check(Str2[3]='one,two,three');
   Check(Str2[4]='');
   {$endif}
-  s := StringOfChar(#1,100);
+  s := StringToUTF8(StringOfChar(#1,100));
   check(I.DirectCall(s)=100);
 end;
 var s: RawUTF8;
