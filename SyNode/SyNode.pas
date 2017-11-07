@@ -39,6 +39,7 @@ unit SyNode;
   - Pavel Mashlyakovsky
   - win2014
   - Geogre
+  - ssoftpro
 
   Alternatively, the contents of this file may be used under the terms of
   either the GNU General Public License Version 2 or later (the "GPL"), or
@@ -63,6 +64,7 @@ unit SyNode;
    Download the mozjs-52 library at ( define SM52 on the global level)
      x32: https://unitybase.info/downloads/mozjs-52x32dlls.zip
      x64: https://unitybase.info/downloads/mozjs-52x64dlls.zip
+   Linux x64: http://unitybase.info/media/files/libmozjs-52.zip
   ---------------------------------------------------------------------------
 
 
