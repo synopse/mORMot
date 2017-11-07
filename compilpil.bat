@@ -9,7 +9,7 @@ rem   call compilpil.bat
 
 
 if "%mORMot%"=="" set mORMot=\dev\lib
-if "%bin%"==""    set bin=z:\tempbuild
+if "%bin%"==""    set bin=%mORMot%\tempbuild
 
 set defaultFolders=%mORMot%;%mORMot%\sqlite3;%mORMot%\syndbdataset;%mORMot%\crossplatform;%mORMot%\sqlite3\DDD\dom;%mORMot%\sqlite3\DDD\infra -I%mORMot%;%mORMot%\crossplatform
 if "%DelphiVersion%"=="" (

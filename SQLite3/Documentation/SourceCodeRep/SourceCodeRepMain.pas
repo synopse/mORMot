@@ -128,8 +128,11 @@ begin
       fDevPath := 'd:\dev\lib' else
       fDevPath := fFossilRepository;
   fGitExe := GetEnvironmentVariable('GIT_PATH');
-  if fGitExe = '' then
+  if fGitExe = '' then begin
     fGitExe := 'c:\Program Files (x86)\Git\bin\git.exe';
+    if not FileExists(fGitExe) then
+      fGitExe := 'c:\Program Files\Git\bin\git.exe';
+  end;
   fGitRepository := GetEnvironmentVariable('SYN_GITREPO_PATH');
   if fGitRepository = '' then
     fGitRepository := 'd:\dev\github\mORMot';
