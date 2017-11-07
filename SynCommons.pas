@@ -17898,7 +17898,12 @@ uses
   {$endif}
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
-  StrUtils;
+  StrUtils{$ifdef VER3_0},
+  // FPC 3.0 fileinfo reads exe resources as long as the appropriate units are registered
+  fileinfo,
+  winpeimagereader, // need this for reading exe info
+  elfreader, // needed for reading ELF executables
+  machoreader{$endif}; // needed for reading MACH-O executables
 {$endif}
 
 
@@ -36815,6 +36820,11 @@ var M,D: word;
         SetRawUTF8(Result,StrValPt,sz)
     end;
 {$endif}
+{$if defined(FPC) and defined(VER3_0) and not defined(MSWINDOWS)}
+  VI: TVersionInfo;
+  LanguageInfo: String;
+  TI, I: Integer;
+{$endif}
 begin
   fFileName := aFileName;
   {$ifdef MSWINDOWS}
@@ -36863,11 +36873,59 @@ begin
     end;
   end;
   {$endif}
-  SetVersion(aMajor,aMinor,aRelease,aBuild);
-  if fBuildDateTime=0 then  // get build date from file age
+  {$if defined(FPC) and defined(VER3_0) not defined(MSWINDOWS)} // Only works starting from FPC 3.0
+  if aFileName <> '' then begin
+    VI := TVersionInfo.Create;
+    try
+      if (aFileName <> ExeVersion.ProgramFileName) and (aFileName <> ParamStr(0)) then
+        VI.Load(aFileName)
+      else
+        VI.Load(HInstance); // This case is to load info for currently running program
+      aMajor := VI.FixedInfo.FileVersion[0];
+      aMinor := VI.FixedInfo.FileVersion[1];
+      aRelease := VI.FixedInfo.FileVersion[2];
+      aBuild := VI.FixedInfo.FileVersion[3];
+      //fBuildDateTime := TDateTime(VI.FixedInfo.FileDate); << need to find out how to convert this before uncommenting
+      // Try to detect translation.
+      if VI.VarFileInfo.Count > 0 then
+        LanguageInfo := Format('%.4x%.4x',
+          [VI.VarFileInfo.Items[0].language, VI.VarFileInfo.Items[0].codepage]);
+      if (LanguageInfo = '') then begin
+        // Take first language
+        Ti:=0;
+        if (VI.StringFileInfo.Count>0) then
+          LanguageInfo := VI.StringFileInfo.Items[0].Name
+      end else begin
+        // Look for index of language
+        TI := VI.StringFileInfo.Count - 1;
+        while (TI >= 0) and (CompareText(VI.StringFileInfo.Items[TI].Name, LanguageInfo) <> 0) do
+          Dec(TI);
+        if (TI < 0) then begin
+          TI:=0; // revert to first translation
+          LanguageInfo := VI.StringFileInfo.Items[TI].Name;
+        end;
+      end;
+      with VI.StringFileInfo.Items[TI] do begin
+        CompanyName := Values['CompanyName'];
+        FileDescription := Values['FileDescription'];
+        FileVersion := Values['FileVersion'];
+        InternalName := Values['InternalName'];
+        LegalCopyright := Values['LegalCopyright'];
+        OriginalFilename := Values['OriginalFilename'];
+        ProductName := Values['ProductName'];
+        ProductVersion := Values['ProductVersion'];
+        Comments := Values['Comments'];
+      end;
+    finally
+      FreeAndNil(VI);
+    end;
+  end;
+  {$endif}
+  SetVersion(aMajor, aMinor, aRelease, aBuild);
+  if fBuildDateTime = 0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
-  if fBuildDateTime<>0 then
-    DecodeDate(fBuildDateTime,BuildYear,M,D);
+  if fBuildDateTime <> 0 then
+    DecodeDate(fBuildDateTime, BuildYear, M, D);
 end;
 
 function TFileVersion.Version32: integer;
