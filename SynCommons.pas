@@ -21562,7 +21562,7 @@ type
       tkSetAlignment: DWORD; // needed for correct alignment !!??
       {$endif}
       {$ifndef VER3_0}
-      //SetSize: SizeInt;
+      SetSize: SizeInt;
       {$endif VER3_0}
       {$endif FPC}
       SetBaseType: PTypeInfoStored;
