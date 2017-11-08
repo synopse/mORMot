@@ -140,15 +140,6 @@ function JSRTTIMethodCall(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolea
 function TVal2JSVal(cx: PJSContext; const Value: TValue; aParentProto: TSMCustomProtoObject; propType: TRttiType = nil): jsval;
 procedure VarRecToJSVal(cx: PJSContext; const V: TVarRec; var result: jsval);
 
-
-// called when the interpreter destroys the object
-{$IFDEF SM52}
-procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
-{$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
-{$ENDIF}
-// called when the interpreter wants to create an object through a new TMyObject ()
-function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean;  cdecl;
 // called when reading an indexed property
 // TODO - remove?
 function SMRTTIIdxPropRead(cx: PJSContext; var obj: PJSObject; var id: jsid; out vp: jsval): Boolean; cdecl;
@@ -384,7 +375,7 @@ var
   W: Word;
   obj: TObject;
   v: TValue;
-  jsarr: PJSObject;
+  jsarr: PJSRootedObject;
   val: jsval;
   len: Integer;
   Instance: PSMInstanceRecord;
@@ -440,14 +431,17 @@ begin
       if len = 0 then
         Result.asBoolean := false
       else begin
-        jsarr := cx.NewArrayObject(0);
-        // TODO set root to aviod GC??????
-        for L := 0 to len - 1 do begin
-          v := Value.GetArrayElement(L);
-          val := TVal2JSVal(cx, v, aParentProto);
-          Assert(jsarr.SetElement(cx, L, val));
+        jsarr := cx.NewRootedObject(cx.NewArrayObject(0));
+        try
+          for L := 0 to len - 1 do begin
+            v := Value.GetArrayElement(L);
+            val := TVal2JSVal(cx, v, aParentProto);
+            Assert(jsarr.ptr.SetElement(cx, L, val));
+          end;
+        finally
+          cx.FreeRootedObject(jsarr);
         end;
-        Result.asObject := jsarr;
+        Result.asObject := jsarr.ptr;
       end;
     end;
     System.TypInfo.tkRecord: begin
@@ -513,7 +507,6 @@ var
   this: PJSObject;
   proto: PJSObject;
 begin
-  Result := False;
   try
     lfunc := vp.calleObject;
     Assert(Assigned(lfunc));
@@ -532,8 +525,11 @@ begin
     vp.rval := TVal2JSVal(cx, mRes, Instance.proto, TRttiMethod(mc.method).ReturnType );
     Result := True;
   except
-    on E: Exception do
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
+    end;
   end;
 end;
 
@@ -549,7 +545,6 @@ var
   mc: PSMMethodRec;
   this, proto: PJSObject;
 begin
-  Result := False;
   try
     lfunc := vp.calleObject;
     Assert(Assigned(lfunc));
@@ -570,64 +565,11 @@ begin
     fCallFn := TSMFastNativeCall(fCallMethod);
     Result := fCallFn(cx, argc, vp);
   except
-    on E: Exception do
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
-  end;
-end;
-
-// called when JS Object is destroyed
-{$IFDEF SM52}
-procedure SMCustomObjectDestroy(var fop: JSFreeOp; obj: PJSObject); cdecl;
-{$ELSE}
-procedure SMCustomObjectDestroy(var rt: PJSRuntime; obj: PJSObject); cdecl;
-{$ENDIF}
-var
-  ObjRec: PSMObjectRecord;
-  Inst: PSMInstanceRecord;
-  proto: TSMNewRTTIProtoObject;
-  PropReader: PSMIdxPropReader;
-begin
-  ObjRec := obj.PrivateData;
-  if Assigned(ObjRec) and (ObjRec.IsMagicCorrect) then
-  begin
-    if (ObjRec.DataType=otInstance) and Assigned(ObjRec.Data) then begin
-      Inst := ObjRec.Data;
-      Inst.freeNative;
-      Dispose(Inst);
-    end else if (ObjRec.DataType=otProto) and Assigned(ObjRec.Data) then begin
-      proto := ObjRec.Data;
-      FreeAndNil(proto);
-    end else begin
-      PropReader := ObjRec.Data;
-      Dispose(PropReader);
     end;
-    Dispose(ObjRec);
-    obj.PrivateData := nil;
-  end;
-end;
-
-// create a new JS Object var obj = new TMyObject();
-function SMCustomObjectConstruct(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
-var
-  jsobj: PJSObject;
-  FM3Proto: TSMCustomProtoObject;
-  Instance: PSMInstanceRecord;
-begin
-  Result := False;
-  try
-    if not vp.IsConstructing then
-      raise ESMException.Create('Construct: not JS_IS_CONSTRUCTING');
-
-    jsobj := vp.calleObject;
-
-    if not IsProtoObject(cx, jsobj, FM3Proto)then
-      raise ESMException.Create('Construct: no private data');
-    New(Instance);
-    vp.rval := Instance.CreateNew(cx, FM3Proto, argc, vp);
-    Result := True;
-  except
-    on E: Exception do
-      JSError(cx, E);
   end;
 end;
 

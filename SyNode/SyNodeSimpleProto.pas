@@ -86,12 +86,13 @@ type
 
   end;
 
-function CreateJSInstanceObjForSimpleRTTI(cx: PJSContext; AInstance: TObject; aParent: PJSRootedObject): jsval;
+function CreateJSInstanceObjForSimpleRTTI(cx: PJSContext; AInstance: TObject; aParent: PJSRootedObject=nil): jsval;
 
 implementation
 
 uses
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
+  SyNode,
   SynCommons;
 
 //type
@@ -189,7 +190,6 @@ var
   mc: PSMMethodRec;
   proto: PJSObject;
 begin
-  Result := False;
   try
 //    JS_ConvertValue(cx,JS_CALLEE(cx, vp),JSTYPE_FUNCTION, lfuncVal);
     lfunc := vp.calleObject;
@@ -209,8 +209,9 @@ begin
     fCallFn := TSMFastNativeCall(fCallMethod);
     Result := fCallFn(cx, argc, vp);
   except
-    on E: Exception do
-    begin
+    on E: Exception do begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
       JSError(cx, E);
     end;
   end;
@@ -506,12 +507,17 @@ begin
   result := true;
 end;
 
-function CreateJSInstanceObjForSimpleRTTI(cx: PJSContext; AInstance: TObject; aParent: PJSRootedObject): jsval;
+function CreateJSInstanceObjForSimpleRTTI(cx: PJSContext; AInstance: TObject; aParent: PJSRootedObject=nil): jsval;
 var
   Inst: PSMInstanceRecord;
+  eng: TSMEngine;
 begin
   new(Inst);
-  Result := Inst.CreateForObj(cx, AInstance, TSMSimpleRTTIProtoObject, aParent);
+  if (aParent = nil) then begin
+    eng := cx.PrivateData;
+    Result := Inst.CreateForObj(cx, AInstance, TSMSimpleRTTIProtoObject, eng.GlobalObject);
+  end else
+    Result := Inst.CreateForObj(cx, AInstance, TSMSimpleRTTIProtoObject, aParent);
 end;
 
 end.
