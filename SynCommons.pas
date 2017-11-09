@@ -36824,7 +36824,7 @@ var M,D: word;
   VI: TVersionInfo;
   LanguageInfo: String;
   TI, I: Integer;
-{$endif}
+{$ifend}
 begin
   fFileName := aFileName;
   {$ifdef MSWINDOWS}
@@ -36873,7 +36873,7 @@ begin
     end;
   end;
   {$endif}
-  {$if defined(FPC) and defined(VER3_0) not defined(MSWINDOWS)} // Only works starting from FPC 3.0
+  {$if defined(FPC) and defined(VER3_0) and not defined(MSWINDOWS)} // Only works starting from FPC 3.0
   if aFileName <> '' then begin
     VI := TVersionInfo.Create;
     try
@@ -36920,7 +36920,7 @@ begin
       FreeAndNil(VI);
     end;
   end;
-  {$endif}
+  {$ifend}
   SetVersion(aMajor, aMinor, aRelease, aBuild);
   if fBuildDateTime = 0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
