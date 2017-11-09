@@ -4571,6 +4571,18 @@ type
     destructor Destroy; override;
   end;
 
+  /// abstract parent class able to store settings as JSON file
+  TSynJsonFileSettings = class(TSynAutoCreateFields)
+  protected
+    fInitialJsonContent: RawUTF8;
+    fFileName: TFileName;
+  public
+    /// read existing settings from a JSON file
+    function LoadFromFile(const aFileName: TFileName): boolean; virtual;
+    /// persist the settings as a JSON file, named from LoadFromFile() parameter
+    procedure SaveIfNeeded; virtual;
+  end;
+
   /// used by TRawUTF8ObjectCacheList to manage a list of information cache
   TRawUTF8ObjectCacheSettings = class(TSynPersistent)
   protected
@@ -59035,6 +59047,31 @@ destructor TInjectableAutoCreateFields.Destroy;
 begin
   AutoDestroyFields(self);
   inherited Destroy;
+end;
+
+
+{ TSynJsonFileSettings }
+
+function TSynJsonFileSettings.LoadFromFile(const aFileName: TFileName): boolean;
+begin
+  fFileName := aFileName;
+  fInitialJsonContent := StringFromFile(aFileName);
+  result := JSONSettingsToObject(fInitialJsonContent, self);
+end;
+
+procedure TSynJsonFileSettings.SaveIfNeeded;
+var
+  saved: RawUTF8;
+begin
+  if (self = nil) or (fFileName = '') then
+    exit;
+  saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
+    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
+    woInt64AsHex]);
+  if saved = fInitialJsonContent then
+    exit;
+  FileFromString(saved, fFileName);
+  fInitialJsonContent := saved;
 end;
 
 

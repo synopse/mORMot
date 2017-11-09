@@ -13664,11 +13664,13 @@ type
     Host: RawUTF8;
     /// the current computer user name
     User: RawUTF8;
-    /// some hash compression of this information
+    /// some hash representation of this information
     // - the very same executable on the very same computer run by the very
     // same user will always have the same Hash value
-    // - is computed from the crc32c of this TExeVersion fields 
-    // - may be used as an entropy seed 
+    // - is computed from the crc32c of this TExeVersion fields: c0 from
+    // Version32, CpuFeatures and Host, c1 from User, c2 from ProgramFullSpec
+    // and c3 from InstanceFileName
+    // - may be used as an entropy seed, or to identify a process execution
     Hash: THash128Rec;
   end;
 

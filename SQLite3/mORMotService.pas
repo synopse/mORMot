@@ -545,11 +545,9 @@ function ServiceStateText(State: TServiceState): string;
 type
   /// abstract parent containing information able to initialize a TSynDaemon class
   // - will handle persistence as JSON local files
-  // - you may consider using TDDDAppSettingsAbstract from dddInfraSettings 
-  TSynDaemonSettings  = class(TSynAutoCreateFields)
+  // - you may consider using TDDDAppSettingsAbstract from dddInfraSettings
+  TSynDaemonSettings  = class(TSynJsonFileSettings)
   protected
-    fInitialJsonContent: RawUTF8;
-    fFileName: TFileName;
     fServiceName: string;
     {$ifdef MSWINDOWS}
     fServiceDisplayName: string;
@@ -559,12 +557,8 @@ type
     fLogRotateFileCount: integer;
     fLogClass: TSynLogClass;
   public
-    /// initialize the settings
+    /// initialize and set the default settings
     constructor Create; override;
-    /// read existing settings from a JSON file
-    function LoadFromFile(const aFileName: TFileName): boolean;
-    /// persist the settings as a JSON file, named from LoadFromFile() parameter
-    procedure SaveIfNeeded;
     /// define the log information into the supplied TSynLog class
     // - if you don't call this method, the logging won't be initiated
     // - is to be called typically in the overriden Create constructor of the
@@ -1234,28 +1228,6 @@ begin
   {$else}
   fLogPath := '/var/log/';
   {$endif}
-end;
-
-function TSynDaemonSettings.LoadFromFile(const aFileName: TFileName): boolean;
-begin
-  fFileName := aFileName;
-  fInitialJsonContent := StringFromFile(aFileName);
-  result := JSONSettingsToObject(fInitialJsonContent, self);
-end;
-
-procedure TSynDaemonSettings.SaveIfNeeded;
-var
-  saved: RawUTF8;
-begin
-  if (self = nil) or (fFileName = '') then
-    exit;
-  saved := ObjectToJSON(Self, [woHumanReadable, woStoreStoredFalse,
-    woHumanReadableFullSetsAsStar, woHumanReadableEnumSetAsComment,
-    woInt64AsHex]);
-  if saved = fInitialJsonContent then
-    exit;
-  FileFromString(saved, fFileName);
-  fInitialJsonContent := saved;
 end;
 
 function TSynDaemonSettings.ServiceDescription: string;
