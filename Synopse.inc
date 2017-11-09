@@ -310,12 +310,14 @@
   {$endif}
   {$ifdef VER3_0}
     {$define ISFPC27}
+    {$define ISFPC30}
     {$define HASDIRECTTYPEINFO}
     // PTypeInfo would be stored with no pointer de-reference
     // => Delphi and newer FPC uses a pointer reference to ease exe linking
   {$endif}
   {$ifdef VER3_1}
     {$define ISFPC27}
+    {$define ISFPC30}
     {.$define HASDIRECTTYPEINFO}
     // define this for trunk revisions older than June 2016 - see
     // http://wiki.freepascal.org/User_Changes_Trunk#RTTI_Binary_format_change

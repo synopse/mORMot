@@ -36819,12 +36819,13 @@ var M,D: word;
       if sz>0 then
         SetRawUTF8(Result,StrValPt,sz)
     end;
-{$endif}
-{$if defined(FPC) and defined(VER3_0) and not defined(MSWINDOWS)}
+{$else}
+{$ifdef ISFPC30}
   VI: TVersionInfo;
   LanguageInfo: String;
   TI, I: Integer;
-{$ifend}
+{$endif}
+{$endif}
 begin
   fFileName := aFileName;
   {$ifdef MSWINDOWS}
@@ -36872,8 +36873,8 @@ begin
       end;
     end;
   end;
-  {$endif}
-  {$if defined(FPC) and defined(VER3_0) and not defined(MSWINDOWS)} // Only works starting from FPC 3.0
+  {$else}
+  {$ifdef ISFPC30} // Only works starting from FPC 3.0
   if aFileName <> '' then begin
     VI := TVersionInfo.Create;
     try
@@ -36920,7 +36921,8 @@ begin
       FreeAndNil(VI);
     end;
   end;
-  {$ifend}
+  {$endif}
+  {$endif}
   SetVersion(aMajor, aMinor, aRelease, aBuild);
   if fBuildDateTime = 0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
