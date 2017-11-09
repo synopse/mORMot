@@ -36923,11 +36923,11 @@ begin
   end;
   {$endif}
   {$endif}
-  SetVersion(aMajor, aMinor, aRelease, aBuild);
-  if fBuildDateTime = 0 then  // get build date from file age
+  SetVersion(aMajor,aMinor,aRelease,aBuild);
+  if fBuildDateTime=0 then  // get build date from file age
     fBuildDateTime := FileAgeToDateTime(aFileName);
-  if fBuildDateTime <> 0 then
-    DecodeDate(fBuildDateTime, BuildYear, M, D);
+  if fBuildDateTime<>0 then
+    DecodeDate(fBuildDateTime,BuildYear,M,D);
 end;
 
 function TFileVersion.Version32: integer;
