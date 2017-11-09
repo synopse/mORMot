@@ -9983,7 +9983,7 @@ end;
 
 procedure TMD5.Update(const Buffer: RawByteString);
 begin
-  Update(pointer(Buffer),length(Buffer));
+  Update(pointer(Buffer)^,length(Buffer));
 end;
 
 function MD5Buf(const Buffer; Len: Cardinal): TMD5Digest;

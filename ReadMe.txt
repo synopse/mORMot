@@ -56,6 +56,7 @@ Contributors
   Sanyin
   Sinisa (sinisav)
   Sllimr7139
+  SSoftPro
   Stefan (itSDS)
   Uian2000
   Vaclav
