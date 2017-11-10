@@ -231,7 +231,7 @@ type
   EDDDRestClient = class(EDDDException);
 
   /// advanced parameters for TDDDRestClientSettings definition
-  TDDDRestClient = class(TSynPersistentWithPassword)
+  TDDDRestClientDefinition = class(TSynPersistentWithPassword)
   protected
     fRoot: RawUTF8;
   published
@@ -249,7 +249,7 @@ type
   TDDDRestClientSettings = class(TSynAutoCreateFields)
   protected
     fORM: TSynConnectionDefinition;
-    fClient: TDDDRestClient;
+    fClient: TDDDRestClientDefinition;
     fTimeout: integer;
   public
     /// set the default values for Client.Root, ORM.ServerName,
@@ -281,8 +281,49 @@ type
     /// advanced connection options
     // - ORM.Password defines the authentication main password, and
     // Client.WebSocketsPassword is used for WebSockets binary encryption
-    property Client: TDDDRestClient read fClient;
+    property Client: TDDDRestClientDefinition read fClient;
   end;
+
+  /// abstract client to connect to any daemon service via WebSockets
+  // - will monitor the connection, to allow automatic reconnection, with proper
+  // services resubscription 
+  TDDDRestClient = class(TSQLHttpClientWebsockets)
+  protected
+    fApplicationName: RawUTF8;
+    fOwnedSettings: TDDDRestClientSettings;
+    fConnected: boolean;
+    fServicesRegistered: boolean;
+    fOnConnect, fOnDisconnect: TOnRestClientNotify;
+    // called after connection, before fOnConnect event - to register callbacks
+    procedure AfterConnection; virtual;
+    // called after disconnection, before fOnDisconnect event - unregister callbacks
+    procedure AfterDisconnection; virtual;
+    // call ClientDisconnect if HTTP_NOTIMPLEMENTED (i.e. websocket link broken)
+    procedure ClientFailed(Sender: TSQLRestClientURI; E: Exception;
+      Call: PSQLRestURIParams); virtual;
+    // notify AfterDisconnection + fOnDisconnect if needed
+    procedure ClientDisconnect;
+    procedure WebSocketsClosed(Sender: TObject); virtual;
+    // notify AfterDisconnection+fOnDisconnect if needed, then AfterConnection+fOnConnect
+    procedure ClientSetUser(Sender: TSQLRestClientURI); virtual;
+    // inherited classes should override those abstract methods
+    procedure DefineApplication; virtual; abstract;
+    procedure RegisterServices; virtual; abstract;
+    function CreateModel(aSettings: TDDDRestClientSettings): TSQLModel; virtual;
+  public
+    /// initialize the client instance with the supplied settings
+    constructor Create(aSettings: TDDDRestClientSettings;
+      aOnConnect: TOnRestClientNotify = nil;
+      aOnDisconnect: TOnRestClientNotify = nil); reintroduce; overload; virtual;
+    /// finalize the client instance
+    destructor Destroy; override;
+    /// returns the server version, using timestamp/info method-based service
+    function ApplicationVersion: RawUTF8;
+    /// reflects the current WebSockets connection state
+    property Connected: boolean read fConnected;
+    /// human-friendly application name, as set by overriden DefineApplication
+    property ApplicationName: RawUTF8 read fApplicationName;
+  end;   
 
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
 function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
@@ -2133,6 +2174,148 @@ begin
     FillZero(temp);
     FillZero(secret);
   end;
+end;
+
+
+{ TDDDRestClient }
+
+constructor TDDDRestClient.Create(aSettings: TDDDRestClientSettings;
+  aOnConnect, aOnDisconnect: TOnRestClientNotify);
+var
+  u: TURI;
+  t: integer;
+begin
+  DefineApplication; // should fill fApplicationName
+  fOnFailed := ClientFailed;
+  fOnSetUser := ClientSetUser;
+  fOnConnect := aOnConnect;
+  fOnDisconnect := aOnDisconnect;
+  fOnWebSocketsClosed := WebSocketsClosed;
+  if aSettings = nil then
+    raise EDDDRestClient.CreateUTF8('%.Create(%) aSettings=nil', [fApplicationName, self]);
+  if not u.From(aSettings.ORM.ServerName) then
+    raise EDDDRestClient.CreateUTF8('%.Create(%): invalid ORM.ServerName=%',
+      [self, fApplicationName, aSettings.ORM.ServerName]);
+  SQLite3Log.Enter('Create(%): connect to %', [fApplicationName, aSettings.ORM.ServerName], self);
+  t := aSettings.Timeout;
+  inherited Create(u.Server, u.Port, CreateModel(aSettings), t, t, t);
+  Model.Owner := self; // just allocated by CreateModel()
+  if aSettings.Client.WebSocketsPassword <> '' then
+    WebSocketsConnect(aSettings.Client.PasswordPlain);
+  OnAuthentificationFailed := aSettings.OnAuthentificationFailed;
+  if aSettings.ORM.Password = '' then
+    RegisterServices // plain REST connection without authentication
+  else
+    if not SetUser(aSettings.ORM.User, aSettings.ORM.PasswordPlain, true) then
+      raise EDDDRestClient.CreateUTF8('%.Create(%): invalid User=%',
+        [self, fApplicationName, aSettings.ORM.User]);
+end;
+
+destructor TDDDRestClient.Destroy;
+begin
+  fLogClass.Enter(self);
+  try
+    ClientDisconnect;
+  finally
+    inherited Destroy;
+    fOwnedSettings.Free;
+  end;
+end;
+
+procedure TDDDRestClient.AfterConnection;
+begin // do nothing by default
+end;
+
+procedure TDDDRestClient.AfterDisconnection;
+begin // do nothing by default
+end;
+
+function TDDDRestClient.ApplicationVersion: RawUTF8;
+var
+  resp: RawUTF8;
+begin
+  if self = nil then
+    result := ''
+  else begin
+    if fSessionVersion = '' then // no session (e.g. API public URI) -> ask
+      if CallBackGet('timestamp/info', [], resp) = HTTP_SUCCESS then
+        fSessionVersion := JSONDecode(resp, 'version');
+    result := fSessionVersion;
+  end;
+end;
+
+procedure TDDDRestClient.ClientDisconnect;
+var
+  log: ISynLog;
+begin
+  if not fConnected then
+    exit; // notify once
+  log := fLogClass.Enter('ClientDisconnect(%)', [fApplicationName], self);
+  fConnected := false;
+  log.Log(sllTrace, 'ClientDisconnect -> AfterDisconnection', self);
+  try
+    AfterDisconnection;
+  except
+    log.Log(sllWarning, 'Ignored AfterDisconnection exception', self);
+  end;
+  if Assigned(fOnDisconnect) then
+    try
+      log.Log(sllTrace, 'ClientDisconnect -> OnDisconnect = %',
+        [ToText(TMethod(fOnDisconnect))], self);
+      fOnDisconnect(self);
+    except
+      log.Log(sllWarning, 'Ignored OnDisconnect exception', self);
+    end;
+end;
+
+procedure TDDDRestClient.ClientFailed(Sender: TSQLRestClientURI;
+  E: Exception; Call: PSQLRestURIParams);
+begin
+  if Assigned(Call) and (Call^.OutStatus = HTTP_NOTIMPLEMENTED) then
+    ClientDisconnect;
+end;
+
+procedure TDDDRestClient.ClientSetUser(Sender: TSQLRestClientURI);
+var
+  log, log2: ISynLog;
+begin
+  if Assigned(Sender) and Assigned(Sender.SessionUser) then begin
+    log := fLogClass.Enter('ClientSetUser(%) %',
+      [fApplicationName, Sender.SessionUser], self);
+    ClientDisconnect;
+    fConnected := true;
+    fSessionVersion := '';
+    if not fServicesRegistered then begin
+      log2 := fLogClass.Enter('RegisterServices', [], self);
+      RegisterServices;
+      log2 := nil;
+      fServicesRegistered := true;
+    end;
+    log.Log(sllTrace, 'ClientSetUser -> AfterConnection', self);
+    try
+      AfterConnection;
+    except
+      log.Log(sllWarning, 'Ignored AfterConnection exception', self);
+    end;
+    if Assigned(fOnConnect) then
+    try
+      log.Log(sllTrace, 'ClientSetUser -> OnConnect = %',
+        [ToText(TMethod(fOnConnect))], self);
+      fOnConnect(self);
+    except
+      log.Log(sllWarning, 'Ignored OnConnect exception', self);
+    end;
+  end;
+end;
+
+function TDDDRestClient.CreateModel(aSettings: TDDDRestClientSettings): TSQLModel;
+begin // create a void data model by default
+  result := TSQLModel.Create([], aSettings.Client.Root);
+end;
+
+procedure TDDDRestClient.WebSocketsClosed(Sender: TObject);
+begin
+  ClientDisconnect;
 end;
 
 
