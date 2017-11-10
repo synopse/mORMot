@@ -326,7 +326,15 @@ type
       aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
       aMongoDBIdentifier: word=0;
-      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; virtual;
+      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+    /// is able to instantiate a REST instance according to the stored definition
+    // - just an overloaded version which will create an owned TSQLModel with
+    // the supplied TSQLRecord classes
+    function NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
+      const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
+      aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
+      aMongoDBIdentifier: word=0;
+      aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperTemplateFolderFixed(ReturnLocalIfNoneSet: boolean=false): TFileName;
@@ -425,6 +433,8 @@ type
   public
     /// to be called when the application starts, to initialize settings
     // - you can specify default Description and Service identifiers
+    // - the service-related parameters are Windows specific, and will be
+    // ignored on other platforms
     procedure Initialize(
       const aDescription,aServiceName,aServiceDisplayName,aAppUserModelID: string); reintroduce; virtual;
     /// returns the folder containing .settings files - .exe folder by default
@@ -547,6 +557,19 @@ type
     property Http: TSQLHttpServerDefinition read fHttp;
     /// how the SOA calls would be logged into their own SQlite3 database
     property ServicesLog: TDDDServicesLogRestSettings read fServicesLog;
+  end;
+
+  /// stand-alone property to publish a secondary TSQLRestServer over HTTP
+  TDDDRestHttpSettings = class(TSynAutoCreateFields)
+  protected
+    fRest: TDDDRestSettings;
+    fHttp: TSQLHttpServerDefinition;
+  published
+    /// how the REST server is implemented
+    // - most probably using a TSQLRestServerDB, i.e. local SQLite3 storage
+    property Rest: TDDDRestSettings read fRest;
+    /// how the HTTP server should be defined
+    property Http: TSQLHttpServerDefinition read fHttp;
   end;
 
   /// storage class for a remote MongoDB server direct access settings
@@ -744,6 +767,16 @@ end;
 { TDDDRestSettings }
 
 function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
+  const aTables: array of TSQLRecordClass; aOptions: TDDDNewRestInstanceOptions;
+  aExternalDBOptions: TVirtualTableExternalRegisterOptions;
+  aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
+begin
+  include(aOptions,riOwnModel);
+  result := NewRestInstance(aRootSettings,TSQLModel.Create(aTables,fRoot),aOptions,
+    aExternalDBOptions,aMongoDBIdentifier,aMongoDBOptions);
+end;
+
+function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract;
   aModel: TSQLModel; aOptions: TDDDNewRestInstanceOptions;
   aExternalDBOptions: TVirtualTableExternalRegisterOptions;
   aMongoDBIdentifier: word; aMongoDBOptions: TStaticMongoDBRegisterOptions): TSQLRest;
@@ -765,7 +798,7 @@ function TDDDRestSettings.NewRestInstance(aRootSettings: TDDDAppSettingsAbstract
 begin
   if aModel=nil then
     if riCreateVoidModelIfNone in aOptions then begin
-      aModel := TSQLModel.Create([],'');
+      aModel := TSQLModel.Create([],fRoot);
       include(aOptions,riOwnModel);
     end else
        raise EDDDInfraException.CreateUTF8('%.NewRestInstance(aModel=nil)',[self]);
