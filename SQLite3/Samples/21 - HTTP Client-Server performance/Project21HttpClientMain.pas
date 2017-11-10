@@ -3,7 +3,12 @@ unit Project21HttpClientMain;
 interface
 
 uses
-  Windows, Messages, SysUtils, Variants, Classes, Graphics, Controls, Forms,
+  {$ifdef MSWINDOWS}
+  Windows,
+  Messages,
+  Graphics,
+  {$endif}
+  SysUtils, Variants, Classes, Controls, Forms,
   Dialogs, StdCtrls, ExtCtrls;
 
 type
@@ -87,9 +92,9 @@ begin
       mmoInfo.SelStart := length(txt);
       mmoInfo.SelLength := 0;
       Timer.Start;
-      if chkSocketAPI.Checked then
-        Test.SocketAPI else
-        Test.WindowsAPI;
+      {$IFDEF MSWINDOWS}if chkSocketAPI.Checked then{$ENDIF}
+        Test.SocketAPI{$IFDEF MSWINDOWS} else
+        Test.WindowsAPI{$ENDIF};
       txt := mmoInfo.Text+Format(#13#10'Assertion(s) failed: %d / %d'+
         #13#10'Number of clients connected at once: %d'+
         #13#10'Time to process: %s'#13#10'Operation per second: %d',
@@ -115,6 +120,10 @@ begin
     Level := LOG_STACKTRACE+[sllFail];
     PerThreadLog := ptIdentifiedInOnFile;
   end;
+  {$IFNDEF MSWINDOWS}
+  chkSocketAPI.Enabled := false;
+  chkSocketAPI.Checked := true;
+  {$ENDIF}
 end;
 
 end.
