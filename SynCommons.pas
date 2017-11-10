@@ -17900,13 +17900,14 @@ uses
   {$endif}
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
-  StrUtils{$ifdef VER3_0},
-  // FPC 3.0 fileinfo reads exe resources as long as the appropriate units are registered
-  fileinfo,
-  winpeimagereader, // need this for reading exe info
-  elfreader, // needed for reading ELF executables
-  machoreader{$endif}; // needed for reading MACH-O executables
-{$endif}
+  StrUtils
+  {$ifdef ISFPC30},
+  fileinfo, // FPC 3.0 and  up
+  winpeimagereader, // needed for reading exe info
+  elfreader,  // needed for reading ELF executables
+  machoreader // needed for reading MACH-O executables
+  {$endif}; 
+{$endif FPC}
 
 
 { ************ some fast UTF-8 / Unicode / Ansi conversion routines }
@@ -36876,35 +36877,34 @@ begin
     end;
   end;
   {$else}
-  {$ifdef ISFPC30} // Only works starting from FPC 3.0
-  if aFileName <> '' then begin
+  {$ifdef ISFPC30} // only works starting from FPC 3.0
+  if aFileName<>'' then begin
     VI := TVersionInfo.Create;
     try
-      if (aFileName <> ExeVersion.ProgramFileName) and (aFileName <> ParamStr(0)) then
-        VI.Load(aFileName)
-      else
-        VI.Load(HInstance); // This case is to load info for currently running program
+      if (aFileName<>ExeVersion.ProgramFileName) and (aFileName<>ParamStr(0)) then
+        VI.Load(aFileName) else
+        VI.Load(HInstance); // load info for currently running program
       aMajor := VI.FixedInfo.FileVersion[0];
       aMinor := VI.FixedInfo.FileVersion[1];
       aRelease := VI.FixedInfo.FileVersion[2];
       aBuild := VI.FixedInfo.FileVersion[3];
       //fBuildDateTime := TDateTime(VI.FixedInfo.FileDate); << need to find out how to convert this before uncommenting
-      // Try to detect translation.
-      if VI.VarFileInfo.Count > 0 then
-        LanguageInfo := Format('%.4x%.4x',
-          [VI.VarFileInfo.Items[0].language, VI.VarFileInfo.Items[0].codepage]);
-      if (LanguageInfo = '') then begin
-        // Take first language
-        Ti:=0;
-        if (VI.StringFileInfo.Count>0) then
+      // detect translation.
+      if VI.VarFileInfo.Count>0 then
+        with VI.VarFileInfo.Items[0] do
+          LanguageInfo := Format('%.4x%.4x',[language,codepage]);
+      if LanguageInfo='' then begin
+        // take first language
+        Ti := 0;
+        if VI.StringFileInfo.Count>0 then
           LanguageInfo := VI.StringFileInfo.Items[0].Name
       end else begin
-        // Look for index of language
-        TI := VI.StringFileInfo.Count - 1;
-        while (TI >= 0) and (CompareText(VI.StringFileInfo.Items[TI].Name, LanguageInfo) <> 0) do
-          Dec(TI);
+        // look for index of language
+        TI := VI.StringFileInfo.Count-1;
+        while (TI>=0) and (CompareText(VI.StringFileInfo.Items[TI].Name,LanguageInfo)<>0) do
+          dec(TI);
         if (TI < 0) then begin
-          TI:=0; // revert to first translation
+          TI := 0; // revert to first translation
           LanguageInfo := VI.StringFileInfo.Items[TI].Name;
         end;
       end;
@@ -36920,7 +36920,7 @@ begin
         Comments := Values['Comments'];
       end;
     finally
-      FreeAndNil(VI);
+      VI.Free;
     end;
   end;
   {$endif}
