@@ -2943,14 +2943,14 @@ type
     // - first name index at a given class level is 0
     // - index is reset to 0 at every inherited class level
     NameIndex: SmallInt;
-{$ifdef FPC}
+    {$ifdef FPC}
     /// contains the type of the GetProc/SetProc/StoredProc, see also ptxxx
     // bit 0..1 GetProc     e.g. PropProcs and 3=ptField
     //     2..3 SetProc     e.g. (PropProcs shr 2) and 3=ptField
     //     4..5 StoredProc
     //     6 : true, constant index property
     PropProcs : Byte;
-{$endif}
+    {$endif}
     /// the property definition Name
     Name: ShortString;
 
@@ -4310,6 +4310,11 @@ function ClassFieldPropWithParentsFromClassOffset(aClassType: TClass;
 // - returns TRUE and set PropInstance if a matching property was found
 function ClassFieldInstance(Instance: TObject; PropClassType: TClass;
   out PropInstance): boolean; overload;
+
+/// retrieve all class Field property instances from a Property class type
+// - this version also search into parent properties
+// - returns all matching property instances found
+function ClassFieldInstances(Instance: TObject; PropClassType: TClass): TObjectDynArray;
 
 /// retrieve a class instance property value matching a class type
 // - if aSearchedInstance is aSearchedClassType, will return aSearchedInstance
@@ -20789,6 +20794,18 @@ begin
     exit;
   TObject(PropInstance) := P^.GetObjProp(Instance);
   result := true;
+end;
+
+function ClassFieldInstances(Instance: TObject; PropClassType: TClass): TObjectDynArray;
+var nested: PPropInfoDynArray;
+    i: integer;
+begin
+  result := nil;
+  nested := ClassFieldAllProps(Instance.ClassType, [tkClass]);
+  for i := 0 to high(nested) do
+    with nested[i]^ do
+      if PropType^.InheritsFrom(PropClassType) then
+        ObjArrayAdd(result,GetObjProp(Instance));
 end;
 
 function GetObjectComponent(Obj: TPersistent; const ComponentName: shortstring;
