@@ -287,7 +287,7 @@ type
   /// abstract client to connect to any daemon service via WebSockets
   // - will monitor the connection, to allow automatic reconnection, with proper
   // services resubscription 
-  TDDDRestClient = class(TSQLHttpClientWebsockets)
+  TDDDRestClientWebSockets = class(TSQLHttpClientWebsockets)
   protected
     fApplicationName: RawUTF8;
     fOwnedSettings: TDDDRestClientSettings;
@@ -318,12 +318,27 @@ type
     /// finalize the client instance
     destructor Destroy; override;
     /// returns the server version, using timestamp/info method-based service
-    function ApplicationVersion: RawUTF8;
+    property ApplicationVersion: RawUTF8 read GetSessionVersion;
     /// reflects the current WebSockets connection state
     property Connected: boolean read fConnected;
     /// human-friendly application name, as set by overriden DefineApplication
     property ApplicationName: RawUTF8 read fApplicationName;
-  end;   
+  end;
+
+  /// abstract client to connect to any daemon service via HTTP or HTTPS
+  // - defines a simple REST client, without connection tracking
+  TDDDRestClientHttp = class(TSQLHttpsClient)
+  protected
+    fApplicationName: RawUTF8;
+    // inherited classes should override those abstract methods
+    procedure DefineApplication; virtual; abstract;
+    procedure RegisterServices; virtual; abstract;
+  public
+    /// returns the server version, using timestamp/info method-based service
+    property ApplicationVersion: RawUTF8 read GetSessionVersion;
+    /// human-friendly application name, as set by overriden DefineApplication
+    property ApplicationName: RawUTF8 read fApplicationName;
+  end;
 
 /// create a client safe asynchronous connection to a IAdministratedDaemon service
 function AdministratedDaemonClient(Definition: TDDDRestClientSettings;
@@ -2177,9 +2192,9 @@ begin
 end;
 
 
-{ TDDDRestClient }
+{ TDDDRestClientWebSockets }
 
-constructor TDDDRestClient.Create(aSettings: TDDDRestClientSettings;
+constructor TDDDRestClientWebSockets.Create(aSettings: TDDDRestClientSettings;
   aOnConnect, aOnDisconnect: TOnRestClientNotify);
 var
   u: TURI;
@@ -2211,7 +2226,7 @@ begin
         [self, fApplicationName, aSettings.ORM.User]);
 end;
 
-destructor TDDDRestClient.Destroy;
+destructor TDDDRestClientWebSockets.Destroy;
 begin
   fLogClass.Enter(self);
   try
@@ -2222,29 +2237,15 @@ begin
   end;
 end;
 
-procedure TDDDRestClient.AfterConnection;
+procedure TDDDRestClientWebSockets.AfterConnection;
 begin // do nothing by default
 end;
 
-procedure TDDDRestClient.AfterDisconnection;
+procedure TDDDRestClientWebSockets.AfterDisconnection;
 begin // do nothing by default
 end;
 
-function TDDDRestClient.ApplicationVersion: RawUTF8;
-var
-  resp: RawUTF8;
-begin
-  if self = nil then
-    result := ''
-  else begin
-    if fSessionVersion = '' then // no session (e.g. API public URI) -> ask
-      if CallBackGet('timestamp/info', [], resp) = HTTP_SUCCESS then
-        fSessionVersion := JSONDecode(resp, 'version');
-    result := fSessionVersion;
-  end;
-end;
-
-procedure TDDDRestClient.ClientDisconnect;
+procedure TDDDRestClientWebSockets.ClientDisconnect;
 var
   log: ISynLog;
 begin
@@ -2268,14 +2269,14 @@ begin
     end;
 end;
 
-procedure TDDDRestClient.ClientFailed(Sender: TSQLRestClientURI;
+procedure TDDDRestClientWebSockets.ClientFailed(Sender: TSQLRestClientURI;
   E: Exception; Call: PSQLRestURIParams);
 begin
   if Assigned(Call) and (Call^.OutStatus = HTTP_NOTIMPLEMENTED) then
     ClientDisconnect;
 end;
 
-procedure TDDDRestClient.ClientSetUser(Sender: TSQLRestClientURI);
+procedure TDDDRestClientWebSockets.ClientSetUser(Sender: TSQLRestClientURI);
 var
   log, log2: ISynLog;
 begin
@@ -2308,12 +2309,12 @@ begin
   end;
 end;
 
-function TDDDRestClient.CreateModel(aSettings: TDDDRestClientSettings): TSQLModel;
+function TDDDRestClientWebSockets.CreateModel(aSettings: TDDDRestClientSettings): TSQLModel;
 begin // create a void data model by default
   result := TSQLModel.Create([], aSettings.Client.Root);
 end;
 
-procedure TDDDRestClient.WebSocketsClosed(Sender: TObject);
+procedure TDDDRestClientWebSockets.WebSocketsClosed(Sender: TObject);
 begin
   ClientDisconnect;
 end;

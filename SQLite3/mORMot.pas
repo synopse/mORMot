@@ -18733,6 +18733,8 @@ type
     procedure InternalNotificationMethodExecute(var Ctxt: TSQLRestURIParams); virtual;
     procedure SetLastException(E: Exception=nil; ErrorCode: integer=HTTP_BADREQUEST;
       Call: PSQLRestURIParams=nil);
+    /// will call timestamp/info if the session has currently not been retrieved
+    function GetSessionVersion: RawUTF8;
     // register the user session to the TSQLRestClientURI instance
     function SessionCreate(aAuth: TSQLRestServerAuthenticationClass;
       var aUser: TSQLAuthUser; const aSessionKey: RawUTF8): boolean;
@@ -37218,6 +37220,18 @@ begin
   if fSessionUser=nil then
     result := 0 else
     result := fSessionUser.IDValue;
+end;
+
+function TSQLRestClientURI.GetSessionVersion: RawUTF8;
+var resp: RawUTF8;
+begin
+  if self = nil then
+    result := '' else begin
+    if fSessionVersion = '' then // no session (e.g. API public URI) -> ask
+      if CallBackGet('timestamp/info', [], resp) = HTTP_SUCCESS then
+        fSessionVersion := JSONDecode(resp, 'version');
+    result := fSessionVersion;
+  end;
 end;
 
 constructor TSQLRestClientURI.Create(aModel: TSQLModel);
