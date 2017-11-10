@@ -1664,8 +1664,9 @@ type
     /// connect to http://aServer:aPort or https://aServer:aPort
     // - optional aProxyName may contain the name of the proxy server to use,
     // and aProxyByPass an optional semicolon delimited list of host names or
-    // IP addresses, or both, that should not be routed through the proxy
-    // (works only with TWinHTTP and TWinINet yet)
+    // IP addresses, or both, that should not be routed through the proxy:
+    // aProxyName/aProxyByPass will be recognized by TWinHTTP and TWinINet,
+    // and aProxyName will set the CURLOPT_PROXY option to TCurlHttp
     // - you can customize the default client timeouts by setting appropriate
     // SendTimeout and ReceiveTimeout parameters (in ms) - note that after
     // creation of this instance, the connection is tied to the initial
@@ -1673,7 +1674,7 @@ type
     // initial values once created - if you left the 0 default parameters, it
     // would use global HTTP_DEFAULT_CONNECTTIMEOUT, HTTP_DEFAULT_SENDTIMEOUT
     // and HTTP_DEFAULT_RECEIVETIMEOUT variable values
-    // - aProxyName and *TimeOut parameters are currently ignored by TCurlHttp
+    // - *TimeOut parameters are currently ignored by TCurlHttp
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
       ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0); overload; virtual;
@@ -8934,7 +8935,7 @@ const HTTPS: array[boolean] of string = ('','s');
 begin
   inherited;
   if curl.Module=0 then
-    LibCurlInitialize;
+    LibCurlInitialize;     
   fHandle := curl.easy_init;
   fRootURL := AnsiString(Format('http%s://%s:%d',[HTTPS[fHttps],fServer,fPort]));
 end;
@@ -8961,6 +8962,8 @@ var url: SockString;
 begin
   url := fRootURL+aURL;
   curl.easy_setopt(fHandle,coURL,pointer(url));
+  if fProxyName<>'' then
+    curl.easy_setopt(fHandle,coProxy,pointer(fProxyName));
   if fHttps then
     if IgnoreSSLCertificateErrors then begin
       curl.easy_setopt(fHandle,coSSLVerifyPeer,0);
