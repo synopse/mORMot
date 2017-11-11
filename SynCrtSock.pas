@@ -6609,7 +6609,11 @@ const
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa364496
   HTTP_RECEIVE_REQUEST_ENTITY_BODY_FLAG_FILL_BUFFER = 1;
   // see http://msdn.microsoft.com/en-us/library/windows/desktop/aa364499
-  HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES = 1;
+  HTTP_SEND_RESPONSE_FLAG_DISCONNECT        = $00000001;
+  HTTP_SEND_RESPONSE_FLAG_MORE_DATA         = $00000002;
+  HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA       = $00000004;
+  HTTP_SEND_RESPONSE_FLAG_PROCESS_RANGES    = $00000020;
+  HTTP_SEND_RESPONSE_FLAG_OPAQUE            = $00000040;
   // flag which can be used by HttpRemoveUrlFromUrlGroup()
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
@@ -6755,6 +6759,11 @@ type
     ReceiveRequestEntityBody: function(ReqQueueHandle: THandle; RequestId: HTTP_REQUEST_ID;
       Flags: ULONG; pBuffer: pointer; BufferLength: cardinal; var pBytesReceived: cardinal;
       pOverlapped: pointer=nil): HRESULT; stdcall;
+    /// sends entity-body data associated with an HTTP response.
+    SendResponseEntityBody: function(ReqQueueHandle: THandle; RequestId: HTTP_REQUEST_ID;
+      Flags: integer; EntityChunkCount: word; pEntityChunks: pointer; var pBytesSent: Cardinal;
+      pReserved1: Pointer = nil; pReserved2: Pointer = nil; pOverlapped: POverlapped = nil;
+      pLogData: PHTTP_LOG_DATA = nil): HRESULT; stdcall;
     /// set specified data, such as IP addresses or SSL Certificates, from the
     // HTTP Server API configuration store
     SetServiceConfiguration: function(ServiceHandle: THandle;
@@ -6851,6 +6860,7 @@ type
   THttpAPIs = (hInitialize,hTerminate,hCreateHttpHandle,
     hAddUrl, hRemoveUrl, hReceiveHttpRequest,
     hSendHttpResponse, hReceiveRequestEntityBody,
+    hResponseEntityBody,
     hSetServiceConfiguration, hDeleteServiceConfiguration, hFlushResponseCache,
     hCancelHttpRequest,
     hCreateServerSession, hCloseServerSession,
@@ -6868,6 +6878,7 @@ const
     'HttpInitialize','HttpTerminate','HttpCreateHttpHandle',
     'HttpAddUrl', 'HttpRemoveUrl', 'HttpReceiveHttpRequest',
     'HttpSendHttpResponse', 'HttpReceiveRequestEntityBody',
+    'HttpSendResponseEntityBody',
     'HttpSetServiceConfiguration', 'HttpDeleteServiceConfiguration',
     'HttpFlushResponseCache',
     'HttpCancelHttpRequest',
@@ -7861,7 +7872,8 @@ begin
   if ForceCustomHeader then
     i := -1 else
     i := IdemPCharArray(P,KNOWNHEADERS);
-  if i>=0 then
+  //WebSocket need CONNECTION as unknown header
+  if (i>=0) and (THttpHeader(i) <> reqConnection) then
   with Headers.KnownHeaders[THttpHeader(i)] do begin
     while P^<>':' do inc(P);
     inc(P); // jump ':'
