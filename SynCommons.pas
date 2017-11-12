@@ -17901,12 +17901,14 @@ uses
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
   StrUtils
-  {$ifdef ISFPC30},
-  fileinfo, // FPC 3.0 and  up
-  winpeimagereader, // needed for reading exe info
-  elfreader,  // needed for reading ELF executables
-  machoreader // needed for reading MACH-O executables
-  {$endif}; 
+  {$ifndef MSWINDOWS}
+    {$ifdef FPCUSEVERSIONINFO}, // should be enabled in Synopse.inc
+    fileinfo, // FPC 3.0 and up
+    winpeimagereader, // winpe exe info
+    elfreader,  // ELF executables
+    machoreader // MACH-O executables
+    {$endif FPCUSEVERSIONINFO};
+  {$endif MSWINDOWS}
 {$endif FPC}
 
 
@@ -36823,7 +36825,7 @@ var M,D: word;
         SetRawUTF8(Result,StrValPt,sz)
     end;
 {$else}
-{$ifdef ISFPC30}
+{$ifdef FPCUSEVERSIONINFO}
   VI: TVersionInfo;
   LanguageInfo: String;
   TI, I: Integer;
@@ -36877,7 +36879,7 @@ begin
     end;
   end;
   {$else}
-  {$ifdef ISFPC30} // only works starting from FPC 3.0
+  {$ifdef FPCUSEVERSIONINFO} // from FPC 3.0, if enabled in Synopse.inc
   if aFileName<>'' then begin
     VI := TVersionInfo.Create;
     try
