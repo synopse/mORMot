@@ -1508,7 +1508,7 @@ type
 
   WEB_SOCKET_HANDLE = Pointer;
   /// WebSocket close status as defined by http://tools.ietf.org/html/rfc6455#section-7.4
-  WEB_SOCKET_CLOSE_STATUS = USHORT;
+  WEB_SOCKET_CLOSE_STATUS = Word;
 
   WEB_SOCKET_PROPERTY_TYPE = (
     WEB_SOCKET_RECEIVE_BUFFER_SIZE_PROPERTY_TYPE        = 0,
@@ -1536,7 +1536,7 @@ type
 
   WEB_SOCKET_PROPERTY = record
     PropType: WEB_SOCKET_PROPERTY_TYPE;
-    pvValue: PVOID ;
+    pvValue: Pointer;
     ulValueSize: ULONG;
   end;
   PWEB_SOCKET_PROPERTY = ^WEB_SOCKET_PROPERTY;
@@ -1554,7 +1554,7 @@ type
   WEB_SOCKET_BUFFER_DATA = record
     pbBuffer: PBYTE;
     ulBufferLength: ULONG;
-    Reserved1: USHORT;
+    Reserved1: Word;
   end;
   WEB_SOCKET_BUFFER_CLOSE_STATUS = record
     pbReason: PBYTE;
@@ -1577,11 +1577,13 @@ type
       out pAdditionalHeaders: PWEB_SOCKET_HTTP_HEADER; out pulAdditionalHeaderCount: ULONG): HRESULT; stdcall;
     /// begins the server-side handshake.
     BeginServerHandshake: function (hWebSocket: WEB_SOCKET_HANDLE; pszSubprotocolSelected: PAnsiChar;
-      pszExtensionSelected: PAnsiChar; ulExtensionSelectedCount: ULONG; const pRequestHeaders: PWEB_SOCKET_HTTP_HEADER;
+      pszExtensionSelected: PAnsiChar; ulExtensionSelectedCount: ULONG;
+      const pRequestHeaders: PWEB_SOCKET_HTTP_HEADER;
       ulRequestHeaderCount: ULONG; out pResponseHeaders: PWEB_SOCKET_HTTP_HEADER;
       out pulResponseHeaderCount: ULONG): HRESULT; stdcall;
     /// completes an action started by WebSocketGetAction.
-    CompleteAction: function (hWebSocket: WEB_SOCKET_HANDLE; pvActionContext: PVOID; ulBytesTransferred: ULONG): HRESULT; stdcall;
+    CompleteAction: function (hWebSocket: WEB_SOCKET_HANDLE;
+      pvActionContext: Pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
     /// creates a client-side WebSocket session handle.
     CreateClientHandle: function (const pProperties: PWEB_SOCKET_PROPERTY; ulPropertyCount: ULONG;
       out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
@@ -1592,23 +1594,28 @@ type
     // or WebSocketCreateServerHandle.
     DeleteHandle: procedure (hWebSocket: WEB_SOCKET_HANDLE); stdcall;
     /// completes the client-side handshake.
-    EndClientHandshake: function (hWebSocket: WEB_SOCKET_HANDLE; const pResponseHeaders: PWEB_SOCKET_HTTP_HEADER;
-      ulReponseHeaderCount: ULONG; var pulSelectedExtensions: ULONG; var pulSelectedExtensionCount: ULONG;
+    EndClientHandshake: function (hWebSocket: WEB_SOCKET_HANDLE;
+      const pResponseHeaders: PWEB_SOCKET_HTTP_HEADER;
+      ulReponseHeaderCount: ULONG; var pulSelectedExtensions: ULONG;
+      var pulSelectedExtensionCount: ULONG;
       var pulSelectedSubprotocol: ULONG): HRESULT; stdcall;
     /// completes the server-side handshake.
     EndServerHandshake: function (hWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
     /// returns an action from a call to WebSocketSend, WebSocketReceive or WebSocketCompleteAction.
     GetAction: function (hWebSocket: WEB_SOCKET_HANDLE; eActionQueue: WEB_SOCKET_ACTION_QUEUE;
-      pDataBuffers: Pointer {WEB_SOCKET_BUFFER_DATA}; var pulDataBufferCount: ULONG; var pAction: WEB_SOCKET_ACTION;
-      var pBufferType: WEB_SOCKET_BUFFER_TYPE; var pvApplicationContext: PVOID;
-      var pvActionContext: PVOID): HRESULT; stdcall;
+      pDataBuffers: Pointer {WEB_SOCKET_BUFFER_DATA}; var pulDataBufferCount: ULONG;
+      var pAction: WEB_SOCKET_ACTION;
+      var pBufferType: WEB_SOCKET_BUFFER_TYPE; var pvApplicationContext: Pointer;
+      var pvActionContext: Pointer): HRESULT; stdcall;
     /// gets a single WebSocket property.
-    GetGlobalProperty: function (eType: WEB_SOCKET_PROPERTY_TYPE; pvValue: PVOID; var ulSize: ULONG): HRESULT ; stdcall;
+    GetGlobalProperty: function (eType: WEB_SOCKET_PROPERTY_TYPE;
+      pvValue: Pointer; var ulSize: ULONG): HRESULT ; stdcall;
     /// adds a receive operation to the protocol component operation queue.
-    Receive: function (hWebSocket: WEB_SOCKET_HANDLE; pBuffer: Pointer {PWEB_SOCKET_BUFFER_*}; pvContext: PVOID): HRESULT; stdcall;
+    Receive: function (hWebSocket: WEB_SOCKET_HANDLE; pBuffer: Pointer {PWEB_SOCKET_BUFFER_*};
+      pvContext: Pointer): HRESULT; stdcall;
     /// adds a send operation to the protocol component operation queue.
     Send: function (hWebSocket: WEB_SOCKET_HANDLE; BufferType: WEB_SOCKET_BUFFER_TYPE;
-      pBuffer: Pointer {PWEB_SOCKET_BUFFER_*}; Context: PVOID): HRESULT; stdcall;
+      pBuffer: Pointer {PWEB_SOCKET_BUFFER_*}; Context: Pointer): HRESULT; stdcall;
   end;
 
   TWebSocketAPIs = (hAbortHandle,hBeginClientHandshake,hBeginServerHandshake,
@@ -1646,10 +1653,10 @@ type
     fProtocol: THttpApiWebSocketServerProtocol;
     fOpaqueHTTPRequestId: HTTP_REQUEST_ID;
     fWSHandle: WEB_SOCKET_HANDLE;
-    fLastActionContext: PVOID;
+    fLastActionContext: Pointer;
     fLastReceiveTickCount: Cardinal;
     fPrivateData: pointer;
-    fBuffer: RawByteString;
+    fBuffer: SockString;
     fCloseStatus: WEB_SOCKET_CLOSE_STATUS;
     fIndex: integer;
     function ProcessActions(ActionQueue: Cardinal): boolean;
@@ -8381,8 +8388,8 @@ begin
     end;
 end;
 
-function WebSocketHeadersToRawByteString(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
-  const aHeadersCount: Integer): RawByteString;
+function WebSocketHeadersToSockString(const aHeaders: PWEB_SOCKET_HTTP_HEADER;
+  const aHeadersCount: Integer): SockString;
 var i: Integer;
     h: PWEB_SOCKET_HTTP_HEADER;
     len: Integer;
@@ -8514,8 +8521,7 @@ end;
 function THttpApiWebSocketServerProtocol.Broadcast(
   aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer;
   aBufferSize: ULONG): boolean;
-var
-  i:  integer;
+var i:  integer;
 begin
   EnterCriticalSection(fSafe);
   try
@@ -8528,13 +8534,14 @@ begin
   result := True;
 end;
 
-function THttpApiWebSocketServerProtocol.Close(index: Integer; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG): boolean;
+function THttpApiWebSocketServerProtocol.Close(index: Integer;
+  aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG): boolean;
 var conn: PHttpApiWebSocketConnection;
 begin
   Result := false;
   if (index>=0) and (index<fConnectionsCount) then begin
     conn := fConnections^[index];
-    if conn<>nil and (conn.fState = wsOpen) then begin
+    if (conn<>nil) and (conn.fState = wsOpen) then begin
       conn.Close(aStatus, aBuffer, aBufferSize);
       result := True;
     end;
@@ -8638,7 +8645,7 @@ begin
   result := false;
   if (index>=0) and (index<fConnectionsCount) then begin
     conn := fConnections^[index];
-    if conn<>nil and (conn.fState=wsOpen) then begin
+    if (conn<>nil) and (conn.fState=wsOpen) then begin
       conn.Send(aBufferType, aBuffer, aBufferSize);
       result := True;
     end;
@@ -8679,7 +8686,7 @@ begin
     result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0, @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK;
 
   if result then try
-    Ctxt.OutCustomHeaders := WebSocketHeadersToRawByteString(wsServerHeaders, wsServerHeadersCount);
+    Ctxt.OutCustomHeaders := WebSocketHeadersToSockString(wsServerHeaders, wsServerHeadersCount);
   finally
     result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
   end;
@@ -8838,8 +8845,8 @@ function THttpApiWebSocketConnection.ProcessActions(ActionQueue: WEB_SOCKET_ACTI
 var ulDataBufferCount: ULONG;
     Action: WEB_SOCKET_ACTION;
     BufferType: WEB_SOCKET_BUFFER_TYPE;
-    ApplicationContext: PVOID;
-    ActionContext: PVOID;
+    ApplicationContext: Pointer;
+    ActionContext: Pointer;
     i: integer;
     Err: HRESULT;
     Bufer: TWebSocketBufferDataArr;
@@ -9836,10 +9843,10 @@ type
     WebSocketCompleteUpgrade: function(hRequest: HINTERNET;
       lpReserved: Pointer): HINTERNET; stdcall;
     /// Closes a WebSocket connection.
-    WebSocketClose: function(hWebSocket: HINTERNET; usStatus: USHORT;
+    WebSocketClose: function(hWebSocket: HINTERNET; usStatus: Word;
       pvReason: Pointer; dwReasonLength: DWORD): DWORD; stdcall;
     /// Retrieves the close status sent by a server
-    WebSocketQueryCloseStatus: function(hWebSocket: HINTERNET; out usStatus: USHORT;
+    WebSocketQueryCloseStatus: function(hWebSocket: HINTERNET; out usStatus: Word;
       pvReason: Pointer; dwReasonLength: DWORD; out dwReasonLengthConsumed: DWORD): DWORD; stdcall;
     /// Sends data over a WebSocket connection.
     WebSocketSend: function(hWebSocket: HINTERNET; eBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE;
@@ -10178,8 +10185,8 @@ end;
 destructor TWinHTTPWebSocketClient.Destroy;
 const CloseReason: SockString = 'object is destroyed';
 var
-  status: USHORT;
-  reason: RawByteString;
+  status: Word;
+  reason: SockString;
   reasonLength: DWORD;
 begin
   if CheckSocket then begin
