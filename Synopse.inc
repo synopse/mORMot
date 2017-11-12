@@ -343,6 +343,16 @@
     {$define ISDELPHI2006ANDUP}
   {$endif FPC_HAS_MANAGEMENT_OPERATORS}
 
+  {$ifdef ISFPC30}
+    {$ifndef MSWINDOWS}
+    // define FPCUSEVERSIONINFO to link low-level executable file information
+    // units in SynCommons.pas
+    // => disabled by default, to reduce the executable overhead
+    {.$define FPCUSEVERSIONINFO}
+    {$endif MSWINDOWS}
+  {$endif ISFPC30}
+
+
 {$else FPC}
 
   {$define DELPHI_OR_FPC_OLDRTTI}

@@ -17901,12 +17901,14 @@ uses
   SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
   TypInfo,
   StrUtils
-  {$ifdef ISFPC30},
-  fileinfo, // FPC 3.0 and  up
-  winpeimagereader, // needed for reading exe info
-  elfreader,  // needed for reading ELF executables
-  machoreader // needed for reading MACH-O executables
-  {$endif}; 
+  {$ifndef MSWINDOWS}
+    {$ifdef FPCUSEVERSIONINFO}, // should be enabled in Synopse.inc
+    fileinfo, // FPC 3.0 and up
+    winpeimagereader, // winpe exe info
+    elfreader,  // ELF executables
+    machoreader // MACH-O executables
+    {$endif FPCUSEVERSIONINFO};
+  {$endif MSWINDOWS}
 {$endif FPC}
 
 
@@ -21118,35 +21120,38 @@ begin
   if (Baudot=nil) or (len<=0) then
     exit;
   dest := tmp.Init((len shl 3)div 5+1);
-  shift := 0;
-  b := 0;
-  bits := 0;
-  for i := 0 to len-1 do begin
-    b := (b shl 8) or Baudot[i];
-    inc(bits,8);
-    while bits>=5 do begin
-      dec(bits,5);
-      c := (b shr bits) and 31;
-      case c of
-      27: if shift<>0 then
-            exit else
-            shift := 32;
-      31: if shift<>0 then
-            shift := 0 else
-            exit;
-      else begin
-        c := ord(Baudot2Char[c+shift]);
-        if c=0 then
-          if Baudot[i+1]=0 then // allow triming of last 5 bits
-            break else
-            exit;
-        dest^ := AnsiChar(c);
-        inc(dest);
-      end;
+  try
+    shift := 0;
+    b := 0;
+    bits := 0;
+    for i := 0 to len-1 do begin
+      b := (b shl 8) or Baudot[i];
+      inc(bits,8);
+      while bits>=5 do begin
+        dec(bits,5);
+        c := (b shr bits) and 31;
+        case c of
+        27: if shift<>0 then
+              exit else
+              shift := 32;
+        31: if shift<>0 then
+              shift := 0 else
+              exit;
+        else begin
+          c := ord(Baudot2Char[c+shift]);
+          if c=0 then
+            if Baudot[i+1]=0 then // allow triming of last 5 bits
+              break else
+              exit;
+          dest^ := AnsiChar(c);
+          inc(dest);
+        end;
+        end;
       end;
     end;
+  finally
+    tmp.Done(dest,result);
   end;
-  tmp.Done(dest,result);
 end;
 
 function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet): RawUTF8;
@@ -36823,7 +36828,7 @@ var M,D: word;
         SetRawUTF8(Result,StrValPt,sz)
     end;
 {$else}
-{$ifdef ISFPC30}
+{$ifdef FPCUSEVERSIONINFO}
   VI: TVersionInfo;
   LanguageInfo: String;
   TI, I: Integer;
@@ -36877,7 +36882,7 @@ begin
     end;
   end;
   {$else}
-  {$ifdef ISFPC30} // only works starting from FPC 3.0
+  {$ifdef FPCUSEVERSIONINFO} // from FPC 3.0, if enabled in Synopse.inc
   if aFileName<>'' then begin
     VI := TVersionInfo.Create;
     try

@@ -107,7 +107,7 @@ uses
   {$endif}
   SynCommons,
   SynLog,
-  mORMot; // for ObjectToJSON/JSONSettingsToObject
+  mORMot; // for TSynJsonFileSettings
 
 {$ifdef MSWINDOWS}
 
@@ -549,9 +549,7 @@ type
   TSynDaemonSettings  = class(TSynJsonFileSettings)
   protected
     fServiceName: string;
-    {$ifdef MSWINDOWS}
     fServiceDisplayName: string;
-    {$endif}
     fLog: TSynLogInfos;
     fLogPath: TFileName;
     fLogRotateFileCount: integer;
@@ -571,11 +569,9 @@ type
     /// the service name, as used internally by Windows or the TSynDaemon class
     // - default is the executable name
     property ServiceName: string read fServiceName write fServiceName;
-    {$ifdef MSWINDOWS}
-    /// the service name, as displayed by Windows
+    /// the service name, as displayed by Windows or at the console level
     // - default is the executable name
     property ServiceDisplayName: string read fServiceDisplayName write fServiceDisplayName;
-    {$endif}
     /// if not void, will enable the logs (default is LOG_STACKTRACE)
     property Log: TSynLogInfos read fLog write fLog;
     /// allow to customize where the logs should be written
@@ -605,7 +601,8 @@ type
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
       const aWorkFolder, aSettingsFolder, aLogFolder: TFileName); reintroduce;
     /// main entry point of the daemon, to process the command line switches
-    procedure CommandLine{$ifdef MSWINDOWS}(aAutoStart: boolean){$endif};
+    // - aAutoStart is used only under Windows
+    procedure CommandLine(aAutoStart: boolean=true);
     /// inherited class should override this abstract method with proper process
     procedure Start; virtual; abstract;
     /// inherited class should override this abstract method with proper process
@@ -1223,9 +1220,8 @@ begin
   fLog := LOG_STACKTRACE + [sllNewRun];
   fLogRotateFileCount := 2;
   fServiceName := UTF8ToString(ExeVersion.ProgramName);
-  {$ifdef MSWINDOWS}
   fServiceDisplayName := fServiceName;
-  {$else}
+  {$ifndef MSWINDOWS}
   fLogPath := '/var/log/';
   {$endif}
 end;
@@ -1234,7 +1230,7 @@ function TSynDaemonSettings.ServiceDescription: string;
 var
   versionnumber: string;
 begin
-  result := {$ifdef MSWINDOWS}ServiceDisplayName{$else}ServiceName{$endif};
+  result := ServiceDisplayName;
   with ExeVersion.Version do begin
     versionnumber := DetailedOrVoid;
     if versionnumber <> '' then
@@ -1346,7 +1342,7 @@ type
      cNone, cInstall, cUninstall, cVersion, cConsole, cVerbose, cRun, cFork,
      cStart, cStop, cState, cHelp);
 
-procedure TSynDaemon.CommandLine;
+procedure TSynDaemon.CommandLine(aAutoStart: boolean);
 var
   cmd: TExecuteCommandLineCmd;
   param: RawUTF8;
@@ -1404,9 +1400,33 @@ var
   end;
   {$endif}
 
+  procedure WriteCopyright;
+  var
+    msg, name, copyright: string;
+    i: integer;
+  begin
+    msg := fSettings.ServiceDescription;
+    i := Pos(' - ', msg);
+    if i = 0 then
+      name := msg
+    else begin
+      name := copy(msg, 1, i - 1);
+      copyright := copy(msg, i + 3, 1000);
+    end;
+    TextColor(ccLightGreen);
+    writeln(' ', name);
+    writeln(StringOfChar('-', length(name) + 2));
+    TextColor(ccGreen);
+    if copyright <> '' then
+      writeln(' ', copyright);
+    writeln;
+    TextColor(ccLightGray);
+  end;
+
   procedure Syntax;
   var spaces: string;
   begin
+    WriteCopyright;
     writeln('Try with one of the switches:');
     writeln({$ifdef MSWINDOWS}' '{$else}' ./'{$endif}, ExeVersion.ProgramName,
       ' /console -c /verbose /help -h /version');
@@ -1414,18 +1434,21 @@ var
     {$ifdef MSWINDOWS}
     writeln(spaces, '/install /uninstall /start /stop /state');
     {$else}
-    writeln(spaces, '/run -r /fork -f');
+    writeln(spaces, ' /run -r /fork -f');
     {$endif}
   end;
+
   function cmdText: RawUTF8;
   begin
     result := GetEnumNameTrimed(TypeInfo(TExecuteCommandLineCmd), cmd);
   end;
+
   procedure Show(Success: Boolean);
   var
     msg: RawUTF8;
     error: integer;
   begin
+    WriteCopyright;
     if Success then begin
       msg := 'Successfully executed';
       TextColor(ccWhite);
@@ -1471,6 +1494,7 @@ begin
   cHelp:
     Syntax;
   cVersion: begin
+    WriteCopyright;
     writeln(' ', fSettings.ServiceName,
       #13#10' Size: ', FileSize(ExeVersion.ProgramFileName), ' bytes' +
       #13#10' Build date: ', ExeVersion.Version.BuildDateTimeString);
@@ -1479,6 +1503,7 @@ begin
   end;
   cConsole, cVerbose:
     try
+      WriteCopyright;
       writeln('Launched in ', cmdText, ' mode'#10);
       TextColor(ccLightGray);
       log := fSettings.fLogClass.Add;
