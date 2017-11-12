@@ -48280,9 +48280,11 @@ begin
   case Kind of
   tkInt64{$ifdef FPC}, tkQWord{$endif}:
     if wasString then begin
-      if not (j2oAllowInt64Hex in Options) or
-         not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
-        exit;
+      if PropValue^=#0 then
+        V64 := 0 else
+        if not (j2oAllowInt64Hex in Options) or
+           not HexDisplayToBin(PAnsiChar(PropValue),@V64,SizeOf(V64)) then
+          exit;
       P^.SetInt64Prop(Value,V64);
     end else begin
       if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
@@ -50614,7 +50616,8 @@ var Added: boolean;
             end;
           if woInt64AsHex in Options then begin
             Add('"');
-            AddBinToHexDisplay(@V64,SizeOf(V64));
+            if V64 <> 0 then
+              AddBinToHexDisplay(@V64,SizeOf(V64));
             Add('"');
           end else
           if {$ifdef FPC}Kind=tkQWord{$else}P^.TypeInfo=TypeInfo(QWord){$endif} then
