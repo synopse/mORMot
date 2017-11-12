@@ -21120,35 +21120,38 @@ begin
   if (Baudot=nil) or (len<=0) then
     exit;
   dest := tmp.Init((len shl 3)div 5+1);
-  shift := 0;
-  b := 0;
-  bits := 0;
-  for i := 0 to len-1 do begin
-    b := (b shl 8) or Baudot[i];
-    inc(bits,8);
-    while bits>=5 do begin
-      dec(bits,5);
-      c := (b shr bits) and 31;
-      case c of
-      27: if shift<>0 then
-            exit else
-            shift := 32;
-      31: if shift<>0 then
-            shift := 0 else
-            exit;
-      else begin
-        c := ord(Baudot2Char[c+shift]);
-        if c=0 then
-          if Baudot[i+1]=0 then // allow triming of last 5 bits
-            break else
-            exit;
-        dest^ := AnsiChar(c);
-        inc(dest);
-      end;
+  try
+    shift := 0;
+    b := 0;
+    bits := 0;
+    for i := 0 to len-1 do begin
+      b := (b shl 8) or Baudot[i];
+      inc(bits,8);
+      while bits>=5 do begin
+        dec(bits,5);
+        c := (b shr bits) and 31;
+        case c of
+        27: if shift<>0 then
+              exit else
+              shift := 32;
+        31: if shift<>0 then
+              shift := 0 else
+              exit;
+        else begin
+          c := ord(Baudot2Char[c+shift]);
+          if c=0 then
+            if Baudot[i+1]=0 then // allow triming of last 5 bits
+              break else
+              exit;
+          dest^ := AnsiChar(c);
+          inc(dest);
+        end;
+        end;
       end;
     end;
+  finally
+    tmp.Done(dest,result);
   end;
-  tmp.Done(dest,result);
 end;
 
 function TrimControlChars(const text: RawUTF8; const controls: TSynAnsicharSet): RawUTF8;
