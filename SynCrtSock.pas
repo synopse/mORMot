@@ -3008,6 +3008,13 @@ type
   {$M-}
 
   function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
+
+{$IFDEF MSWINDOWS}
+/// Is HTTP.SYS web socket API available on the target system
+// Windows 8 and UP
+var WinHTTP_WebSocketEnabled: boolean;
+{$ENDIF}
+
 implementation
 
 {$ifdef FPC}
@@ -8475,6 +8482,7 @@ begin
     inc(P);
   end;
   WebSocketAPI.WebSocketEnabled := true;
+  WinHTTP_WebSocketEnabled := true;
 end;
 
 
@@ -11590,12 +11598,12 @@ initialization
     (ord(respLocation)=23) and (sizeof(THttpHeader)=4) and
     (integer(HTTP_LOG_FIELD_TEST_SUB_STATUS)=HTTP_LOG_FIELD_SUB_STATUS));
   FillChar(WinHttpAPI, SizeOf(WinHttpAPI), 0);
+  WinHTTP_WebSocketEnabled := false;
   WinHttpAPIInitialize;
   {$endif MSWINDOWS}
   if InitSocketInterface then
     WSAStartup(WinsockLevel, WsaDataOnce) else
     fillchar(WsaDataOnce,sizeof(WsaDataOnce),0);
-
 finalization
   {$ifdef USELIBCURL}
   if curl.Module<>0 then begin
