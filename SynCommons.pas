@@ -15196,8 +15196,7 @@ type
     // it won't do anything
     // - any existing Name would be updated with the new Value, unless
     // OnlyAddMissing is set to TRUE, in which case existing values would remain
-    procedure AddOrUpdateObject(const NewValues: variant; OnlyAddMissing: boolean=false;
-      RecursiveUpdate: boolean=false);
+    procedure AddOrUpdateObject(const NewValues: variant; OnlyAddMissing: boolean=false);
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -17908,9 +17907,9 @@ uses
     winpeimagereader, // winpe exe info
     elfreader,  // ELF executables
     machoreader // MACH-O executables
-    {$endif FPCUSEVERSIONINFO};
+    {$endif FPCUSEVERSIONINFO}
   {$endif MSWINDOWS}
-{$endif FPC}
+{$endif FPC};
 
 
 { ************ some fast UTF-8 / Unicode / Ansi conversion routines }
@@ -43368,18 +43367,14 @@ begin
 end;
 
 procedure TDocVariantData.AddOrUpdateObject(const NewValues: variant;
-  OnlyAddMissing: boolean; RecursiveUpdate: boolean);
-var n, idx: integer;
+  OnlyAddMissing: boolean);
+var n: integer;
     new: PDocVariantData;
-    wasAdded: boolean;
 begin
   new := _Safe(NewValues);
   if not(dvoIsArray in VOptions) and not(dvoIsArray in new^.VOptions) then
-    for n := 0 to new^.Count-1 do begin
-      idx := AddOrUpdateValue(new^.names[n],new^.Values[n],@wasAdded,OnlyAddMissing);
-      if RecursiveUpdate and not wasAdded then
-        TDocVariantData(Values[idx]).AddOrUpdateObject(new^.Values[n], OnlyAddMissing, RecursiveUpdate);
-    end;
+    for n := 0 to new^.Count-1 do
+      AddOrUpdateValue(new^.names[n],new^.Values[n],nil,OnlyAddMissing);
 end;
 
 procedure TDocVariantData.InitArray(const Items: array of const;
