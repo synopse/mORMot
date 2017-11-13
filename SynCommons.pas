@@ -15196,7 +15196,8 @@ type
     // it won't do anything
     // - any existing Name would be updated with the new Value, unless
     // OnlyAddMissing is set to TRUE, in which case existing values would remain
-    procedure AddOrUpdateObject(const NewValues: variant; OnlyAddMissing: boolean=false);
+    procedure AddOrUpdateObject(const NewValues: variant; OnlyAddMissing: boolean=false;
+      RecursiveUpdate: boolean=false);
     /// add a value to this document, handled as array
     // - if instance's Kind is dvObject, it will raise an EDocVariant exception
     // - you can therefore write e.g.:
@@ -43367,14 +43368,18 @@ begin
 end;
 
 procedure TDocVariantData.AddOrUpdateObject(const NewValues: variant;
-  OnlyAddMissing: boolean);
-var n: integer;
+  OnlyAddMissing: boolean; RecursiveUpdate: boolean);
+var n, idx: integer;
     new: PDocVariantData;
+    wasAdded: boolean;
 begin
   new := _Safe(NewValues);
   if not(dvoIsArray in VOptions) and not(dvoIsArray in new^.VOptions) then
-    for n := 0 to new^.Count-1 do
-      AddOrUpdateValue(new^.names[n],new^.Values[n],nil,OnlyAddMissing);
+    for n := 0 to new^.Count-1 do begin
+      idx := AddOrUpdateValue(new^.names[n],new^.Values[n],@wasAdded,OnlyAddMissing);
+      if RecursiveUpdate and not wasAdded then
+        TDocVariantData(Values[idx]).AddOrUpdateObject(new^.Values[n],OnlyAddMissing,true);
+    end;
 end;
 
 procedure TDocVariantData.InitArray(const Items: array of const;
