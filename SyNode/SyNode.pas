@@ -80,6 +80,8 @@ unit SyNode;
   - SpiderMonkey 52 (x32 & x64) support ( SM52 condition should be defined )
   - VSCode debugging support via [vscode-firefox-debug](https://github.com/hbenl/vscode-firefox-debug) adapter
     Thanks to George for patch
+  - JS `process` now instance of EventEmitter
+  - JS Engine will emit `exit` event on destroy as in node
 
 }
 
@@ -89,7 +91,7 @@ unit SyNode;
 interface
 
 uses
-  {$ifdef MSWINDOWS} Windows, ShLwApi,{$else}FileUtil, LazFileUtils,{$endif}
+  {$ifndef FPC} Windows, ShLwApi,{$else}FileUtil, LazFileUtils, dynlibs,{$endif}
   {$ifdef ISDELPHIXE2}System.SysUtils,{$else}SysUtils,{$endif}
   Classes,
   {$ifndef LVCL}
@@ -105,9 +107,6 @@ uses
   NSPRAPI,
   SyNodeProto,
   mORMot,
-  {$ifdef BRANCH_WIN_WEB_SOCKET}
-  SynCrtCommons,
-  {$endif}
   SynCrtSock,
   SyNodeBinding_worker;
 
@@ -888,7 +887,25 @@ end;
 destructor TSMEngine.Destroy;
 var
   unInitProc: TDllModuleUnInitProc;
+  process: PJSRootedObject;
 begin
+  try
+    process := cx.NewRootedObject(GlobalObject.ptr.GetPropValue(cx,'process').asObject);
+    try
+      process.ptr.SetProperty(cx, '_exiting', SimpleVariantToJSval(cx, true));
+      if process.ptr.HasProperty(cx, 'emit') then
+        CallObjectFunction(process, 'emit', [cx.NewJSString('exit').ToJSVal])
+      else
+        raise Exception.Create('`process` initialized incorrectly (dont have `emit` method)');
+    finally
+      cx.FreeRootedObject(process);
+    end;
+  except
+    on E: Exception do begin
+      ExitCode := 1;
+    end;
+  end;
+
   if Manager.FRemoteDebuggerThread <> nil then begin
     TSMRemoteDebuggerThread(Manager.FRemoteDebuggerThread).stopDebugCurrentThread(Self);
   end;
@@ -1446,14 +1463,14 @@ end;
 
 function RelToAbs(const ABaseDir, AFileName: TFileName; ACheckResultInsideBase: boolean = false): TFileName;
 var
-{$IFDEF MSWINDOWS}
+{$IFNDEF FPC}
   aBase, aTail: PChar;
   localBase, localTail: TFileName;
 {$ELSE}
   aBase: TFileName;
 {$ENDIF}
 begin
-{$IFDEF MSWINDOWS}
+{$IFNDEF FPC}
   if AFileName <> '' then begin
     if PathIsRelative(PChar(AFileName)) then begin
       localTail := AFileName;

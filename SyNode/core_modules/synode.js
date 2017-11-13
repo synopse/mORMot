@@ -59,6 +59,11 @@ function startup() {
      */
     global.sleep = process.binding('syNode').sleep;
 
+    const EventEmitter = NativeModule.require('events').EventEmitter;
+    // add EventEmitter to process object
+    EventEmitter.call(process);
+    Object.assign(process, EventEmitter.prototype);
+
     const WindowTimer =  NativeModule.require('polyfill/WindowTimer');
     global._timerLoop = WindowTimer.makeWindowTimer(global, function (ms) { global.sleep(ms); });
     /**
