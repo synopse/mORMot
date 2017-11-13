@@ -2100,7 +2100,11 @@ type
     FJSStackTrace: SynUnicode;
   public
     /// constructor which will create JavaScript exception with JS stack trace
-    constructor CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer; AMessage: string; const AStackTrace: SynUnicode);
+    constructor CreateWithTrace(const AFileName: RawUTF8; AJSErrorNum, ALineNum: integer;
+       AMessage: string; const AStackTrace: SynUnicode);
+    /// Format a JS exception as text
+    procedure WriteFormatted(WR: TTextWriter);
+
     {$ifndef NOEXCEPTIONINTERCEPT}
     /// Custmize SM exception log output
     function CustomLog(WR: TTextWriter; const Context: TSynLogExceptionContext): boolean; override;
@@ -4958,15 +4962,20 @@ begin
   FJSStackTrace := AStackTrace;
 end;
 
+procedure ESMException.WriteFormatted(WR: TTextWriter);
+begin
+  WR.AddJSONEscape(pointer(FileName), Length(fileName));
+    WR.Add(':'); WR.Add(Line);
+  WR.AddShort('\r\rError: ');
+    WR.AddJSONEscapeString(Message); WR.AddShort('\n');
+  WR.AddJSONEscapeString(Stack);
+end;
+
 {$ifndef NOEXCEPTIONINTERCEPT}
 function ESMException.CustomLog(
   WR: TTextWriter; const Context: TSynLogExceptionContext): boolean;
 begin
-  with Context.EInstance as ESMException do begin
-    WR.AddJSONEscape(pointer(FileName), Length(fileName)); WR.Add(':'); WR.Add(Line); WR.AddShort('\r\rError: ');
-    WR.AddJSONEscapeString(Message); WR.AddShort('\n');
-    WR.AddJSONEscapeString(Stack);
-  end;
+  (Context.EInstance as ESMException).WriteFormatted(WR);
   result := true; // do not append a address
 end;
 {$endif}
