@@ -17910,7 +17910,8 @@ uses
     machoreader // MACH-O executables
     {$endif FPCUSEVERSIONINFO}
   {$endif MSWINDOWS}
-{$endif FPC};
+  ;
+{$endif FPC}
 
 
 { ************ some fast UTF-8 / Unicode / Ansi conversion routines }
