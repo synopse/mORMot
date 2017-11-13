@@ -1855,7 +1855,7 @@ type
     property RollbackOnDisconnect: Boolean
       read fRollbackOnDisconnect write fRollbackOnDisconnect;
     /// some error message, e.g. during execution of NewStatementPrepared
-    property LastErrorMessage: RawUTF8 read fErrorMessage;
+    property LastErrorMessage: RawUTF8 read fErrorMessage write fErrorMessage;
     /// some error exception, e.g. during execution of NewStatementPrepared
     property LastErrorException: ExceptClass read fErrorException;
     /// TRUE if last error is a broken connection, e.g. during execution of
