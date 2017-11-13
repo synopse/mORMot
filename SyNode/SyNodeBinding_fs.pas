@@ -48,7 +48,10 @@ begin
       forceUTF8 := in_argv[1].asBoolean;
 
     name := in_argv[0].asJSString.ToString(cx);
-    TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
+    if not FileExists(name) then
+      raise ESMException.Create('file  not exists');
+    // implementation below dont work if called in the same time from differnt thread
+    // TFileStream.Create(name, fmOpenRead).Free; // Check that file exists and can be opened;
     vp.rval := cx.NewJSString(AnyTextFileToRawUTF8(name, forceUTF8)).ToJSVal;
   except
     on E: Exception do
