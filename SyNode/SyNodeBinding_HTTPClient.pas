@@ -13,7 +13,6 @@ interface
 {$I SyNode.inc}
 uses
   {$IFDEF MSWINDOWS}Windows, {$ENDIF}SysUtils, SynCrtSock, SynCommons,
-  {$ifdef BRANCH_WIN_WEB_SOCKET}SynCrtCommons, {$endif}
   SpiderMonkey;
 
 type

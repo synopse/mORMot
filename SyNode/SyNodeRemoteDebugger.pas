@@ -71,9 +71,6 @@ interface
 
 uses
   Classes, SynCrtSock,
-  {$ifdef BRANCH_WIN_WEB_SOCKET}
-  SynCrtCommons,
-  {$endif}
   SynCommons, SyNode, SpiderMonkey;
 
 type

@@ -74,10 +74,10 @@ interface
 uses
   SyNodeProto,
   SynCommons,
-  System.SysUtils,
+  SysUtils,
   mORMot,
-  System.TypInfo,
-  System.Rtti,
+  TypInfo,
+  {$IFNDEF FPC}Rtti,{$ENDIF}
   SpiderMonkey;
 
 type
