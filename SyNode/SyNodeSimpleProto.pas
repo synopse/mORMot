@@ -356,8 +356,9 @@ var
   FInst: PSMInstanceRecord;
   tmp: RawUTF8;
   obj: TObject;
+  arr: TDynArray;
 begin
-  case PI.PropType^{$IFNDEF FPC}^{$ENDIF}.Kind of
+  case PI.PropType^.Kind of
     tkInteger, tkEnumeration, tkSet:
       Result.asInteger := PI.GetOrdValue(Instance^.instance);
     tkInt64:
@@ -378,6 +379,12 @@ begin
          Result := FInst.CreateForObj(cx, obj, TSMSimpleRTTIProtoObject, Instance.Proto)
        else
          Result := JSVAL_NULL;
+    end;
+    tkDynArray: begin
+       // MPV. WARNING. Every access to dyn array property will create a JS Array, so
+       // I recommend avoiding use of the dynamic arrays
+       arr := PI.GetDynArray(Instance^.instance);
+       Result.asJson[cx] := arr.SaveToJSON(true);
     end;
   else
     raise ESMException.Create('NotImplemented');
