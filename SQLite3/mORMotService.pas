@@ -599,7 +599,8 @@ type
     // - any non supplied folder name will be replaced by a default value
     // (executable folder under Windows, or /etc /var/log on Linux)
     constructor Create(aSettingsClass: TSynDaemonSettingsClass;
-      const aWorkFolder, aSettingsFolder, aLogFolder: TFileName); reintroduce;
+      const aWorkFolder, aSettingsFolder, aLogFolder: TFileName;
+      const aSettingsExt: TFileName = '.settings'); reintroduce;
     /// main entry point of the daemon, to process the command line switches
     // - aAutoStart is used only under Windows
     procedure CommandLine(aAutoStart: boolean=true);
@@ -1245,9 +1246,14 @@ begin
   if (self <> nil) and (Log <> []) and (aLogClass <> nil) then
     with aLogClass.Family do begin
       DestinationPath := LogPath;
+      PerThreadLog := ptIdentifiedInOnFile; // ease multi-threaded server debug
       RotateFileCount := LogRotateFileCount;
-      if RotateFileCount > 0 then
+      if RotateFileCount > 0 then begin
         RotateFileSizeKB := 20 * 1024; // rotate by 20 MB logs
+        FileExistsAction := acAppend;  // as expected in rotation mode
+      end
+      else
+        HighResolutionTimeStamp := true;
       Level := Log;
       fLogClass := aLogClass;
     end;
@@ -1257,7 +1263,7 @@ end;
 { TSynDaemon }
 
 constructor TSynDaemon.Create(aSettingsClass: TSynDaemonSettingsClass;
-  const aWorkFolder, aSettingsFolder, aLogFolder: TFileName);
+  const aWorkFolder, aSettingsFolder, aLogFolder, aSettingsExt: TFileName);
 var
   setf: TFileName;
 begin
@@ -1272,7 +1278,7 @@ begin
   setf := aSettingsFolder;
   if setf = '' then
     setf := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/etc/'{$endif};
-  fSettings.LoadFromFile(format('%s%s.settings', [setf, ExeVersion.ProgramName]));
+  fSettings.LoadFromFile(format('%s%s%s', [setf, ExeVersion.ProgramName, aSettingsExt]));
   if fSettings.LogPath = '' then
     if aLogFolder = '' then
       fSettings.LogPath := {$ifdef MSWINDOWS}fWorkFolderName{$else}'/var/log/'{$endif}
@@ -1351,6 +1357,7 @@ var
   service: TServiceSingle;
   ctrl: TServiceController;
   {$else}
+
   procedure RunUntilSigTerminated(dofork: boolean);
   var
     pid, sid: {$ifdef FPC}TPID{$else}pid_t{$endif};
@@ -1398,7 +1405,7 @@ var
       end;
     end;
   end;
-  {$endif}
+  {$endif MSWINDOWS}
 
   procedure WriteCopyright;
   var
@@ -1424,7 +1431,8 @@ var
   end;
 
   procedure Syntax;
-  var spaces: string;
+  var
+    spaces: string;
   begin
     WriteCopyright;
     writeln('Try with one of the switches:');
@@ -1471,7 +1479,6 @@ begin
   if (self = nil) or (fSettings = nil) then
     exit;
   log := nil;
-
   {$I-}
   param := trim(StringToUTF8(paramstr(1)));
   if (param = '') or not (param[1] in ['/', '-']) then
