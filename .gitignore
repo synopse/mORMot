@@ -74,6 +74,9 @@ __history/
 __recovery/
 *.~*
 
+#FPC backup
+backup/
+
 # Castalia statistics file (since XE7 Castalia is distributed with Delphi)
 *.stat
 
