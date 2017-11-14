@@ -359,13 +359,13 @@ var
   arr: TDynArray;
 begin
   case PI.PropType^.Kind of
-    tkInteger, tkEnumeration, tkSet:
+    tkInteger, tkEnumeration, tkSet{$ifdef FPC},tkBool{$endif}:
       Result.asInteger := PI.GetOrdValue(Instance^.instance);
     tkInt64:
       Result.asInt64 := PI.GetInt64Value(Instance^.instance);
     tkFloat:
       Result.asDouble := PI.GetExtendedValue(Instance^.instance);
-    tkLString: begin
+    tkLString{$ifdef FPC},tkAString{$endif}: begin
       PI.GetLongStrValue(Instance^.instance, tmp);
       Result.asJSString := cx.NewJSString(tmp);
     end;
