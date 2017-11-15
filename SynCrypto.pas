@@ -7190,7 +7190,7 @@ procedure sha512_compress(state: PQWord; block: PByteArray); cdecl; external;
   {$L sha512-x64sse4.obj}
 {$endif}
 
-procedure sha512_sse4(data, hash: pointer; blocks: Int64); {$ifdef FPC}{$ifndef MSWINDOWS}cdecl;{$endif}{$endif} external;
+procedure sha512_sse4(data, hash: pointer; blocks: Int64); {$ifdef FPC}cdecl;{$endif} external;
 {$endif SHA512_X64}
 
 
@@ -13070,7 +13070,7 @@ end;
 {$endif}
 // defined in SynCrypto.pas, not in SynCommons.pas, to avoid .o/.obj dependencies
 
-function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; {$ifdef FPC}{$ifndef MSWINDOWS}cdecl;{$endif}{$endif} external;
+function crc32_iscsi_01(buf: PAnsiChar; len: PtrUInt; crc: cardinal): cardinal; {$ifdef FPC}cdecl;{$endif} external;
 
 function crc32c_sse42_aesni(crc: cardinal; buf: PAnsiChar; len: cardinal): cardinal;
 {$ifdef MSWINDOWS} {$ifdef FPC}nostackframe; assembler;{$endif}
