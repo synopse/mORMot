@@ -4201,9 +4201,10 @@ end;
 {$IFDEF SM52}
 class function JSContext.CreateNew(maxbytes: uint32; maxNurseryBytes: uint32; parentContext: PJSContext): PJSContext;
 begin
-  Result := JS_NewContext(maxbytes, maxNurseryBytes, parentContext);
-  with TSynFPUException.ForLibraryCode do
+  with TSynFPUException.ForLibraryCode do begin
+    Result := JS_NewContext(maxbytes, maxNurseryBytes, parentContext);
     InitSelfHostedCode(Result);
+  end;
 end;
 {$ELSE}
 
@@ -5584,8 +5585,8 @@ end;
 function jsval.Stringify(cx: PJSContext; var replacer: PJSObject;
   space: jsval; callback: JSONWriteCallback; data: pointer): Boolean;
 begin
-  TSynFPUException.ForLibraryCode;
-  Result := JS_Stringify(cx, Self, replacer, space, callback, data);
+  with TSynFPUException.ForLibraryCode do
+    Result := JS_Stringify(cx, Self, replacer, space, callback, data);
 end;
 
 function jsval.toSource(cx: PJSContext): PJSString;

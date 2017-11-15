@@ -531,7 +531,6 @@ var
 implementation
 
 uses
-  Math,
   SyNodeRemoteDebugger,
   SyNodeBinding_fs {used by other core modules},
   SyNodeBinding_buffer,
@@ -633,12 +632,12 @@ var
 {$ELSE}
   rOpts: PJSRuntimeOptions;
 {$ENDIF}
+  fpu: IUnknown;
 begin
-  TSynFPUException.ForLibraryCode;
+  fpu := TSynFPUException.ForLibraryCode;
   if aManager = nil then
     raise ESMException.Create('No manager provided');
   FCreatedAtTick := GetTickCount64;
-  TSynFPUException.ForLibraryCode;
   FManager := aManager;
   FEngineContentVersion := FManager.ContentVersion;
 {$IFDEF SM52}
