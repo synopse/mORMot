@@ -519,7 +519,6 @@ function worker_createThread(cx: PJSContext; argc: uintN; var vp: jsargRec): Boo
 var
   in_argv: PjsvalVector;
   scriptOnMessage, scriptOnTerminate, scriptOnError: SynUnicode;
-  fThread: TJSWorkerThread;
   workerName: RawUTF8;
   params, obj: PJSObject;
   IsInvalidCall: Boolean;

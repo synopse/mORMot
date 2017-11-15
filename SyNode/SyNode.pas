@@ -918,15 +918,16 @@ begin
 
   if FGlobalObjectDbg <> nil then cx.FreeRootedObject(FGlobalObjectDbg);
   if FGlobalObject <> nil then cx.FreeRootedObject(FGlobalObject);
-  TSynFPUException.ForLibraryCode;
-  cx.LeaveCompartment(comp);
-  if FThreadID=GetCurrentThreadId then
-    cx^.Destroy; // SM 45 expects the context to be released in the same thread
-  KillWatchdog;
-{$IFNDEF SM52}
-  if FThreadID=GetCurrentThreadId then
-    rt^.Destroy;
-{$ENDIF}
+  with TSynFPUException.ForLibraryCode do begin
+    cx.LeaveCompartment(comp);
+    if FThreadID=GetCurrentThreadId then
+      cx^.Destroy; // SM 45 expects the context to be released in the same thread
+    KillWatchdog;
+  {$IFNDEF SM52}
+    if FThreadID=GetCurrentThreadId then
+      rt^.Destroy;
+  {$ENDIF}
+  end;
 end;
 
 {$IFDEF SM52}
@@ -1553,23 +1554,24 @@ var r: Boolean;
     isFirst: Boolean;
     rval: jsval;
 begin
-  TSynFPUException.ForLibraryCode;
-  ClearLastError;
-  ScheduleWatchdog(fTimeoutValue);
-  isFirst := not cx.IsRunning;
-  opts := cx.NewCompileOptions;
-  opts.filename := Pointer(scriptName);
+  with TSynFPUException.ForLibraryCode do begin
+    ClearLastError;
+    ScheduleWatchdog(fTimeoutValue);
+    isFirst := not cx.IsRunning;
+    opts := cx.NewCompileOptions;
+    opts.filename := Pointer(scriptName);
 
-  remChar13FromScript(script);
-  r := cx.EvaluateUCScript(
-      opts, pointer(script), length(script), result);
-  cx.FreeCompileOptions(opts);
-  if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
-    r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-  if not r then
-    r := false;
-  ScheduleWatchdog(-1);
-  CheckJSError(r);
+    remChar13FromScript(script);
+    r := cx.EvaluateUCScript(
+        opts, pointer(script), length(script), result);
+    cx.FreeCompileOptions(opts);
+    if r and isFirst and GlobalObject.ptr.HasProperty(cx, '_timerLoop') then
+      r := GlobalObject.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+    if not r then
+      r := false;
+    ScheduleWatchdog(-1);
+    CheckJSError(r);
+  end;
 end;
 
 procedure TSMEngine.Evaluate(const script: SynUnicode; const scriptName: RawUTF8; lineNo: Cardinal);
@@ -1603,22 +1605,23 @@ var r: Boolean;
     rval: jsval;
     global: PJSRootedObject;
 begin
-  TSynFPUException.ForLibraryCode;
-  ClearLastError;
-  ScheduleWatchdog(fTimeoutValue);
-  isFirst := not cx.IsRunning;
-  r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
-  if r and isFirst then begin
-    global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
-    try
-      if global.ptr.HasProperty(cx, '_timerLoop') then
-        r := global.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
-    finally
-      cx.FreeRootedObject(global);
+  with TSynFPUException.ForLibraryCode do begin
+    ClearLastError;
+    ScheduleWatchdog(fTimeoutValue);
+    isFirst := not cx.IsRunning;
+    r := obj.ptr.CallFunctionName(cx, funcName, high(args) + 1, @args[0], Result);
+    if r and isFirst then begin
+      global := cx.NewRootedObject(cx.CurrentGlobalOrNull);
+      try
+        if global.ptr.HasProperty(cx, '_timerLoop') then
+          r := global.ptr.CallFunctionName(cx, '_timerLoop', 0, nil, rval);
+      finally
+        cx.FreeRootedObject(global);
+      end;
     end;
+    ScheduleWatchdog(-1);
+    CheckJSError(r);
   end;
-  ScheduleWatchdog(-1);
-  CheckJSError(r);
 end;
 
 procedure TSMEngine.CancelExecution(AWithException: boolean = true);
