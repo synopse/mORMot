@@ -379,6 +379,7 @@ var
   val: jsval;
   len: Integer;
   Instance: PSMInstanceRecord;
+  r: boolean;
 begin
   Result.setNull;
   if Value.IsEmpty then
@@ -436,7 +437,8 @@ begin
           for L := 0 to len - 1 do begin
             v := Value.GetArrayElement(L);
             val := TVal2JSVal(cx, v, aParentProto);
-            Assert(jsarr.ptr.SetElement(cx, L, val));
+            r := jsarr.ptr.SetElement(cx, L, val);
+            Assert(r);
           end;
         finally
           cx.FreeRootedObject(jsarr);
@@ -581,9 +583,11 @@ var
   idx: Integer;
   v: TValue;
   s: string;
+  r: boolean;
 begin
   try
-    Assert(cx.IdToValue(id, inval));
+    r := cx.IdToValue(id, inval);
+    Assert(r);
     if not inval.isInteger then begin
       if inval.isString then begin
         s := inval.asJSString.ToString(cx);
