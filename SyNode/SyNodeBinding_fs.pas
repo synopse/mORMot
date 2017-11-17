@@ -27,7 +27,7 @@ uses
 /// decode text file to string using BOM
 //  if BOM not fount - use current system code page to convert ANSI content to unicode
 //  if file not found - return empty string
-//  internaly use m3Commons.DecodeTextFileToString
+//  internaly use AnyTextFileToRawUTF8
 //  accept one parameter  - "path to file"
 function fs_loadFile(cx: PJSContext; argc: uintN; var vp: JSArgRec): Boolean; cdecl;
 const
@@ -340,22 +340,20 @@ var
   F: TSearchRec;
   res: PJSRootedObject;
   cNum, searchAttr: integer;
-  includeSubDir: boolean;
+  includeFolders: boolean;
 const
-  USAGE = 'usage: readDir(dirPath: String; [includeDirNames: boolean = false]): Array';
+  USAGE = 'usage: readDir(dirPath: String; [includeFolders: boolean = false]): Array';
 begin
   try
     in_argv := vp.argv;
-    {.$POINTERMATH ON}
     if (argc < 1) or not in_argv[0].isString then
       raise ESMException.Create(USAGE);
     if (argc = 2) and in_argv[1].isBoolean then
-      includeSubDir := in_argv[1].asBoolean
+      includeFolders := in_argv[1].asBoolean
     else
-      includeSubDir := false;
+      includeFolders := false;
 
     dir := in_argv[0].asJSString.ToSynUnicode(cx);
-    {.$POINTERMATH OFF}
     if not DirectoryExists(Dir) then
     begin
       vp.rval := JSVAL_NULL;
@@ -369,18 +367,13 @@ begin
     try
       {$WARN SYMBOL_PLATFORM OFF}
       searchAttr := faAnyFile;
-      if not includeSubDir then
+      if not includeFolders then
         searchAttr := searchAttr - faDirectory;
-      if FindFirst(Dir + '*.*', searchAttr, F) = 0 then
-      begin
+      if FindFirst(Dir + '*.*', searchAttr, F) = 0 then begin
         cNum := 0;
         repeat
-          if {(F.Attr and (faDirectory+faHidden)=0) and } (F.Name[1] <> '.') then
-          begin
+          if (F.Name <> '.') and (F.Name <> '..') then begin
             founded := F.Name;
-            if (F.Attr and faDirectory) <> 0 then
-              founded := IncludeTrailingPathDelimiter(founded);
-
             res.ptr.SetElement(cx, cNum, cx.NewJSString(founded).ToJSVal);
             inc(cNum);
           end;
