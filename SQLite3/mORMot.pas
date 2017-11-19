@@ -16507,7 +16507,7 @@ type
   // header unless rsoAuthenticationURIDisable is set (for security reasons)
   // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable
   // - URI() header output will be sanitized for any EOL injection, unless
-  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?) 
+  // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?)
   // - by default, TSQLAuthUser.Data blob is retrieved from the database,
   // unless rsoGetUserRetrieveNoBlobData is defined
   TSQLRestServerOption = (
@@ -20291,6 +20291,10 @@ function CurrentServiceContext: TServiceRunningContext;
 // you should better implement your service by inheriting the implementation
 // class from TInjectableObjectRest
 function CurrentServiceContextServer: TSQLRestServer;
+
+/// returns a low-level nonce, which will change every 5 minutes
+// - as used e.g. by TSQLRestServerAuthenticationDefault.Auth
+function CurrentServerNonce(Previous: boolean): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
 function ToText(tk: TTypeKind): PShortString; overload;
@@ -41729,15 +41733,21 @@ end;
 
 var
   ServerNonceHash: TSHA3; // faster than THMAC_SHA256 on small input
+  ServerNonceCacheTix: cardinal;
+  ServerNonceCacheRes: RawUTF8;
 
-function ServerNonce(Previous: boolean): RawUTF8;
+function CurrentServerNonce(Previous: boolean): RawUTF8;
 var ticks: cardinal;
     hash: TSHA3;
     res: THash256;
 begin
   ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
   if Previous then
-    dec(ticks);
+    dec(ticks) else
+    if ticks = ServerNonceCacheTix then begin
+      result := ServerNonceCacheRes;
+      exit;
+    end;
   if ServerNonceHash.Algorithm<>SHA3_256 then begin
     ServerNonceHash.Init(SHA3_256);
     TAESPRNG.Main.Fill(@res,sizeof(res)); // ensure unpredictable nonce
@@ -41747,6 +41757,10 @@ begin
   hash.Update(@ticks,sizeof(ticks));
   hash.Final(res,true);
   result := BinToHex(@res,sizeof(res));
+  if not Previous then begin
+    ServerNonceCacheTix := ticks;
+    ServerNonceCacheRes := result;
+  end;
 end;
 
 procedure TSQLRestServer.SessionCreate(var User: TSQLAuthUser;
@@ -51532,7 +51546,7 @@ begin
       TAESPRNG.Main.Fill(@rnd,sizeof(rnd));
       fPrivateKey := BinToHex(@rnd,sizeof(rnd));
       if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
-      aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
+        aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
       ComputeProtectedValues;
@@ -52255,7 +52269,7 @@ begin
   end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-      Ctxt.Results([ServerNonce(false)]) else
+      Ctxt.Results([CurrentServerNonce(false)]) else
       // parameters does not match any expected layout -> try next authentication
       result := false;
 end;
@@ -52266,9 +52280,9 @@ var aSalt: RawUTF8;
 begin
   aSalt := aClientNonce+User.LogonName+User.PasswordHashHexa;
   result := IsHex(aPassword,sizeof(THash256)) and
-    (IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+ServerNonce(false)+aSalt)) or
+    (IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+CurrentServerNonce(false)+aSalt)) or
      // if current nonce failed, tries with previous 5 minutes' nonce
-     IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+ServerNonce(true)+aSalt)));
+     IdemPropNameU(aPassWord,SHA256(fServer.Model.Root+CurrentServerNonce(true)+aSalt)));
 end;
 
 class function TSQLRestServerAuthenticationDefault.ClientComputeSessionKey(
