@@ -2437,6 +2437,9 @@ function HttpGetAuth(const aURI, aAuthToken: SockString; outHeaders: PSockString
 function HttpPost(const server, port: SockString; const url, Data, DataType: SockString;
   outData: PSockString=nil): boolean;
 
+/// compute the 'Authorization: Bearer ####' HTTP header of a given token value
+function AuthorizationBearer(const AuthToken: SockString): SockString;
+
 const
   /// the layout of TSMTPConnection.FromText method
   SMTP_DEFAULT = 'user:password@smtpserver:port';
