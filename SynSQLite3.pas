@@ -5496,6 +5496,8 @@ begin
       if WasPrepared<>nil then
         WasPrepared^ := true;
     end else begin
+      if Timer=nil then // there was a Statement.Prepare exception on previous call
+        raise ESQLite3Exception.CreateUTF8('TSQLStatementCached.Prepare failed [%]', [GenericSQL]);
       if Statement.Request<>0 then
         Statement.Reset;
       if WasPrepared<>nil then
