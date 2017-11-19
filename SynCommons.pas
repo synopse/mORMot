@@ -6893,13 +6893,13 @@ procedure DynArrayCopy(var Dest; const Source; SourceMaxElem: integer;
 /// fill a dynamic array content from a binary serialization as saved by
 // DynArraySave() / TDynArray.Save()
 // - Value shall be set to the target dynamic array field
-// - just a function helper around TDynArray.Load()
+// - just a function helper around TDynArray.Init + TDynArray.Load
 function DynArrayLoad(var Value; Source: PAnsiChar; TypeInfo: pointer): PAnsiChar;
 
 /// serialize a dynamic array content as binary, ready to be loaded by
 // DynArrayLoad() / TDynArray.Load()
-// - Value shall be set to the source dynamic array field
-// - just a function helper around TDynArray.Load()
+// - Value shall be set to the source dynamic arry field
+// - just a function helper around TDynArray.Init + TDynArray.SaveTo
 function DynArraySave(var Value; TypeInfo: pointer): RawByteString;
 
 /// fill a dynamic array content from a JSON serialization as saved by
@@ -13820,9 +13820,6 @@ const
   /// can be used e.g. in logs
   BOOL_STR: array[boolean] of string[7] = ('false','true');
 
-  /// used by TSynTableStatement.WhereField for "SELECT .. FROM TableName WHERE ID=?"
-  SYNTABLESTATEMENTWHEREID = 0;
-
   /// can be used to append to most English nouns to form a plural
   // - see also the Plural function
   PLURAL_FORM: array[boolean] of RawUTF8 = ('','s');
@@ -17899,18 +17896,17 @@ uses
   SysCall,
   {$endif}
   {$endif}
-  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
-  TypInfo,
-  StrUtils
   {$ifndef MSWINDOWS}
     {$ifdef FPCUSEVERSIONINFO}, // should be enabled in Synopse.inc
     fileinfo, // FPC 3.0 and up
     winpeimagereader, // winpe exe info
     elfreader,  // ELF executables
-    machoreader // MACH-O executables
+    machoreader, // MACH-O executables
     {$endif FPCUSEVERSIONINFO}
   {$endif MSWINDOWS}
-  ;
+  SynFPCTypInfo, // small wrapper unit around FPC's TypInfo.pp
+  TypInfo,
+  StrUtils;
 {$endif FPC}
 
 
@@ -59545,7 +59541,6 @@ begin
   if P=nil then
     ErrorData('TDynArray.LoadFrom %',[DA.ArrayTypeName]);
 end;
-
 
 function PropNameValid(P: PUTF8Char): boolean;
 begin

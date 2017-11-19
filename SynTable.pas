@@ -861,6 +861,11 @@ type
   end;
 {$endif NOVARIANTS}
 
+const
+  /// used by TSynTableStatement.WhereField for "SELECT .. FROM TableName WHERE ID=?"
+  SYNTABLESTATEMENTWHEREID = 0;
+
+
 /// low-level integer comparison according to a specified operator
 // - SBF must point to the values encoded in our SBF compact binary format
 // - Value must contain the plain integer value

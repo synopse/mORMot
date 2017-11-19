@@ -471,7 +471,8 @@ type
   // - under Windows, maps the TSQLHttpClientWinHTTP class
   TSQLHttpClient = TSQLHttpClientWinHTTP;
   /// HTTP/HTTPS RESTful JSON default mORMot Client class
-  // - under Windows, maps the TSQLHttpClientWinHTTP class
+  // - under Windows, maps the TSQLHttpClientWinHTTP class, or TSQLHttpClientCurl
+  // under Linux
   TSQLHttpsClient = TSQLHttpClientWinHTTP;
   {$endif ONLYUSEHTTPSOCKET}
 
@@ -481,7 +482,30 @@ var
   HttpClientFullWebSocketsLog: Boolean;
 
 
+/// creates an instance of the best TSQLHttpClientGeneric class, according to
+// a given parsed URI
+// - will return a TSQLHttpsClient or a TSQLHttpClientWinSock
+function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel: boolean = true;
+  aWeakHttps: Boolean = false; const aProxyName: RawUTF8 = ''; const aProxyByPass: RawUTF8 = ''): TSQLHttpClientGeneric;
+
+
 implementation
+
+
+function NewSQLHttpClient(const aURI: TURI; aModel: TSQLModel; aOwnModel, aWeakHttps: boolean;
+  const aProxyName, aProxyByPass: RawUTF8): TSQLHttpClientGeneric;
+begin
+  if aURI.Https or (aProxyName <> '') then begin
+    result := TSQLHttpsClient.Create(aURI.Server, aURI.Port, aModel,
+      aURI.Https, AnsiString(aProxyName), AnsiString(aProxyByPass));
+    if aWeakHttps then
+      (result as TSQLHttpsClient).IgnoreSSLCertificateErrors := true;
+  end
+  else
+    result := TSQLHttpClientWinSock.Create(aURI.Server, aURI.Port, aModel);
+  if aOwnModel then
+    aModel.Owner := result;
+end;
 
 
 { TSQLHttpClientGeneric }

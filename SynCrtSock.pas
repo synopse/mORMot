@@ -230,6 +230,9 @@ uses
   {$ifdef USEWININET}
   WinInet,
   {$endif}
+  {$ifndef DELPHI5OROLDER}
+  Types,
+  {$endif}
 {$else MSWINDOWS}
   {$undef USEWININET}
   {$ifdef FPC}
@@ -922,7 +925,7 @@ type
     fTerminated: boolean;
     fOnThreadStart: TNotifyThreadEvent;
     /// end thread on IO error
-    function NeedStopOnIOError: Boolean; virtual;
+    function NeedStopOnIOError: boolean; virtual;
     /// process to be executed after notification
     procedure Task(aCaller: TSynThread; aContext: Pointer); virtual; abstract;
   public
@@ -1064,8 +1067,8 @@ type
     // proper authentication, so that it would be logged as expected
     property AuthenticatedUser: SockString read fAuthenticatedUser;
     {$ifdef MSWINDOWS}
-    /// for THttpApiServer it is PHTTP_REQUEST
-    // for other servers not used now
+    /// for THttpApiServer, points to a PHTTP_REQUEST structure
+    // - not used by now for other servers 
     property HttpApiRequest: Pointer read fHttpApiRequest;
     {$endif}
   end;
@@ -1313,13 +1316,15 @@ type
     // - will call the Request public virtual method with the appropriate
     // parameters to retrive the content
     procedure Execute; override;
-    /// flags for SendHttpResponse if resoponce content type is not HTTP_RESP_STATICFILE
-    function GetSendResponseFlags(Ctxt: THttpServerRequest): Integer; virtual;
-    /// executes after successfully SendHttpResponse if resoponce content type is not HTTP_RESP_STATICFILE
+    /// retrieve flags for SendHttpResponse 
+   // - if response content type is not HTTP_RESP_STATICFILE
+    function GetSendResponseFlags(Ctxt: THttpServerRequest): integer; virtual;
+    /// executed after successfully SendHttpResponse() API call
+    // - if response content type is not HTTP_RESP_STATICFILE
     procedure DoAfterSentResponse(Ctxt: THttpServerRequest); virtual;
     /// create a clone
     constructor CreateClone(From: THttpApiServer); virtual;
-    /// free resources for not cloned server
+    /// free resources (for not cloned server)
     procedure DestroyMainThread; virtual;
   public
     /// initialize the HTTP Service
@@ -1521,8 +1526,8 @@ type
   );
   WEB_SOCKET_ACTION_QUEUE = Cardinal;
 
-  ///  the bit values used to construct the WebSocket frame header for httpapi.dll
-  // it is the different thing than WINHTTP_WEB_SOCKET_BUFFER_TYPE for winhttp.dll
+  /// the bit values used to construct the WebSocket frame header for httpapi.dll
+  // - not equals to WINHTTP_WEB_SOCKET_BUFFER_TYPE from winhttp.dll
   WEB_SOCKET_BUFFER_TYPE = ULONG;
 
   WEB_SOCKET_ACTION = (
@@ -1562,66 +1567,67 @@ type
     usStatus: WEB_SOCKET_CLOSE_STATUS;
   end;
 
-  /// direct late-binding access to the WebSocket Protocol Component API
+  /// direct late-binding access to the WebSocket Protocol Component API functions
   TWebSocketAPI = packed record
+    /// acces to the loaded library handle
     LibraryHandle: THandle;
     /// depends on Windows version
     WebSocketEnabled: Boolean;
     /// aborts a WebSocket session handle created by WebSocketCreateClientHandle
-    // or WebSocketCreateServerHandle.
+    // or WebSocketCreateServerHandle
     AbortHandle: procedure (hWebSocket: WEB_SOCKET_HANDLE); stdcall;
-    /// begins the client-side handshake.
+    /// begins the client-side handshake
     BeginClientHandshake: function (hWebSocket: WEB_SOCKET_HANDLE; pszSubprotocols: PAnsiChar;
       ulSubprotocolCount: ULONG; pszExtensions: PAnsiChar; ulExtensionCount: ULONG;
       const pInitialHeaders: PWEB_SOCKET_HTTP_HEADER; ulInitialHeaderCount: ULONG;
       out pAdditionalHeaders: PWEB_SOCKET_HTTP_HEADER; out pulAdditionalHeaderCount: ULONG): HRESULT; stdcall;
-    /// begins the server-side handshake.
+    /// begins the server-side handshake
     BeginServerHandshake: function (hWebSocket: WEB_SOCKET_HANDLE; pszSubprotocolSelected: PAnsiChar;
       pszExtensionSelected: PAnsiChar; ulExtensionSelectedCount: ULONG;
       const pRequestHeaders: PWEB_SOCKET_HTTP_HEADER;
       ulRequestHeaderCount: ULONG; out pResponseHeaders: PWEB_SOCKET_HTTP_HEADER;
       out pulResponseHeaderCount: ULONG): HRESULT; stdcall;
-    /// completes an action started by WebSocketGetAction.
+    /// completes an action started by WebSocketGetAction
     CompleteAction: function (hWebSocket: WEB_SOCKET_HANDLE;
       pvActionContext: Pointer; ulBytesTransferred: ULONG): HRESULT; stdcall;
-    /// creates a client-side WebSocket session handle.
+    /// creates a client-side WebSocket session handle
     CreateClientHandle: function (const pProperties: PWEB_SOCKET_PROPERTY; ulPropertyCount: ULONG;
       out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
-    /// creates a server-side WebSocket session handle.
+    /// creates a server-side WebSocket session handle
     CreateServerHandle: function (const pProperties: PWEB_SOCKET_PROPERTY; ulPropertyCount: ULONG;
       out phWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
     /// deletes a WebSocket session handle created by WebSocketCreateClientHandle
-    // or WebSocketCreateServerHandle.
+    // or WebSocketCreateServerHandle
     DeleteHandle: procedure (hWebSocket: WEB_SOCKET_HANDLE); stdcall;
-    /// completes the client-side handshake.
+    /// completes the client-side handshake
     EndClientHandshake: function (hWebSocket: WEB_SOCKET_HANDLE;
       const pResponseHeaders: PWEB_SOCKET_HTTP_HEADER;
       ulReponseHeaderCount: ULONG; var pulSelectedExtensions: ULONG;
       var pulSelectedExtensionCount: ULONG;
       var pulSelectedSubprotocol: ULONG): HRESULT; stdcall;
-    /// completes the server-side handshake.
+    /// completes the server-side handshake
     EndServerHandshake: function (hWebSocket: WEB_SOCKET_HANDLE): HRESULT; stdcall;
-    /// returns an action from a call to WebSocketSend, WebSocketReceive or WebSocketCompleteAction.
+    /// returns an action from a call to WebSocketSend, WebSocketReceive or WebSocketCompleteAction
     GetAction: function (hWebSocket: WEB_SOCKET_HANDLE; eActionQueue: WEB_SOCKET_ACTION_QUEUE;
       pDataBuffers: Pointer {WEB_SOCKET_BUFFER_DATA}; var pulDataBufferCount: ULONG;
       var pAction: WEB_SOCKET_ACTION;
       var pBufferType: WEB_SOCKET_BUFFER_TYPE; var pvApplicationContext: Pointer;
       var pvActionContext: Pointer): HRESULT; stdcall;
-    /// gets a single WebSocket property.
+    /// gets a single WebSocket property
     GetGlobalProperty: function (eType: WEB_SOCKET_PROPERTY_TYPE;
       pvValue: Pointer; var ulSize: ULONG): HRESULT ; stdcall;
-    /// adds a receive operation to the protocol component operation queue.
+    /// adds a receive operation to the protocol component operation queue
     Receive: function (hWebSocket: WEB_SOCKET_HANDLE; pBuffer: Pointer {PWEB_SOCKET_BUFFER_*};
       pvContext: Pointer): HRESULT; stdcall;
-    /// adds a send operation to the protocol component operation queue.
+    /// adds a send operation to the protocol component operation queue
     Send: function (hWebSocket: WEB_SOCKET_HANDLE; BufferType: WEB_SOCKET_BUFFER_TYPE;
       pBuffer: Pointer {PWEB_SOCKET_BUFFER_*}; Context: Pointer): HRESULT; stdcall;
   end;
 
-  TWebSocketAPIs = (hAbortHandle,hBeginClientHandshake,hBeginServerHandshake,
-    hCompleteAction,hCreateClientHandle,hCreateServerHandle,hDeleteHandle,
-    hEndClientHandshake,hEndServerHandshake,hGetAction,hGetGlobalProperty,
-    hReceive,hSend
+  TWebSocketAPIs = (hAbortHandle, hBeginClientHandshake, hBeginServerHandshake,
+    hCompleteAction, hCreateClientHandle, hCreateServerHandle, hDeleteHandle,
+    hEndClientHandshake, hEndServerHandshake, hGetAction, hGetGlobalProperty,
+    hReceive, hSend
   );
 
   EWebSocketApi = class(ECrtSocket)
@@ -1639,9 +1645,10 @@ type
   THttpApiWebSocketServer = class;
   THttpApiWebSocketServerProtocol = class;
 
-  TWebSocketState = (wsConnecting, wsOpen, wsClosing, wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown);
+  TWebSocketState = (wsConnecting, wsOpen,
+    wsClosing, wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown);
 
-  /// Structure representing single WebSocket connection
+  /// structure representing a single WebSocket connection
   {$ifdef UNICODE}
   THttpApiWebSocketConnection = record
   {$else}
@@ -1671,7 +1678,7 @@ type
     procedure Disconnect;
     procedure CheckIsActive;
     /// Try to accept a WebSocket connetion.
-    // Call a onAccept Method of protocol, and if protocol not accept connection or connection
+    // - call onAccept Method of protocol, and if protocol not accept connection or connection
     // can not be accepted from other reasons return false else return true
     function TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol; Ctxt: THttpServerRequest; aNeedHeader: boolean): boolean;
   public
@@ -1699,7 +1706,8 @@ type
   THttpApiWebSocketServerOnConnectEvent = procedure(const Conn: THttpApiWebSocketConnection) of object;
   THttpApiWebSocketServerOnDisconnectEvent = procedure(const Conn: THttpApiWebSocketConnection; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG) of object;
 
-  /// Protocol. Handler of websocket enpoints events
+  /// Protocol Handler of websocket endpoints events
+  // - maintains a list of all WebSockets clients for a given protocol
   THttpApiWebSocketServerProtocol = class
   private
     fName: SockString;
@@ -1722,32 +1730,42 @@ type
     procedure RemoveConnection(index: integer);
     procedure doShutdown;
   public
-    /// Messagees can come in fragments. In case ManualFragmentManagement=true
-    // onMessage will apear only for compleatly recived messages,
-    // in other case OnFragmet handler must be passed (for video broadcast, for example)
-    constructor Create(aName: SockString; aManualFragmentManagement: Boolean;
+    /// initialize the WebSockets process
+    // - if aManualFragmentManagement is true, onMessage will appear only for whole
+    // received messages, otherwise OnFragment handler must be passed (for video
+    // broadcast, for example)
+    constructor Create(const aName: SockString; aManualFragmentManagement: Boolean;
       aServer: THttpApiWebSocketServer;
       aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
       aOnMessage: THttpApiWebSocketServerOnMessageEvent;
       aOnConnect: THttpApiWebSocketServerOnConnectEvent;
       aOnDisconnect: THttpApiWebSocketServerOnDisconnectEvent;
       aOnFragment: THttpApiWebSocketServerOnMessageEvent=nil);
+    /// finalize the process
     destructor Destroy; override;
+    /// text identifier
     property Name: SockString read fName;
-    property index: integer read fIndex;
+    /// identify the endpoint instance
+    property Index: integer read fIndex;
+    /// OnFragment event will be called for each fragment
     property ManualFragmentManagement: Boolean read fManualFragmentManagement;
+    /// event triggerred when a WebSockets client is initiated
     property OnAccept: THttpApiWebSocketServerOnAcceptEvent read fOnAccept;
+    /// event triggerred when a WebSockets message is received
     property OnMessage: THttpApiWebSocketServerOnMessageEvent read fOnMessage;
+    /// event triggerred when a WebSockets client is connected
     property OnConnect: THttpApiWebSocketServerOnConnectEvent read fOnConnect;
+    /// event triggerred when a WebSockets client is gracefully disconnected
     property OnDisconnect: THttpApiWebSocketServerOnDisconnectEvent read fOnDisconnect;
-    /// Required if ManualFragmentManagement is true
+    /// event triggerred when a non complete frame is received
+    // - required if ManualFragmentManagement is true
     property OnFragment: THttpApiWebSocketServerOnMessageEvent read fOnFragment;
 
-    /// Send message to the WebSocket connection identified by it's index
+    /// Send message to the WebSocket connection identified by its index
     function Send(index: Integer; aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
     /// Send message to all connections of this protocol
     function Broadcast(aBufferType: WEB_SOCKET_BUFFER_TYPE; aBuffer: Pointer; aBufferSize: ULONG): boolean;
-    /// Close WebSocket connection identified by it's index
+    /// Close WebSocket connection identified by its index
     function Close(index: Integer; aStatus: WEB_SOCKET_CLOSE_STATUS; aBuffer: Pointer; aBufferSize: ULONG): boolean;
   end;
   THttpApiWebSocketServerProtocolDynArray = array of THttpApiWebSocketServerProtocol;
@@ -1788,7 +1806,8 @@ type
       aPingTimeout: integer=0; QueueName: SynUnicode='';
       aOnWSThreadStart: TNotifyThreadEvent=nil;
       aOnWSThreadTerminate: TNotifyThreadEvent=nil); reintroduce;
-    procedure RegisterProtocol(aName: SockString; aManualFragmentManagement: Boolean;
+    /// prepare the process for a given THttpApiWebSocketServerProtocol
+    procedure RegisterProtocol(const aName: SockString; aManualFragmentManagement: Boolean;
       aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
       aOnMessage: THttpApiWebSocketServerOnMessageEvent;
       aOnConnect: THttpApiWebSocketServerOnConnectEvent;
@@ -1806,19 +1825,22 @@ type
     // - if connection not receive any messages longer than double of
     // this timeout it will be closed
     property PingTimeout: integer read fPingTimeout;
-
+    /// access to the associated endpoints
     property Protocols[index: integer]: THttpApiWebSocketServerProtocol read GetProtocol;
+    /// access to the associated endpoints count
     property ProtocolsCount: Integer read getProtocolsCount;
+    /// event called when the processing thread starts
     property OnWSThreadStart: TNotifyThreadEvent read FOnWSThreadStart
       write SetOnWSThreadStart;
+    /// event called when the processing thread termintes
     property OnWSThreadTerminate: TNotifyThreadEvent read FOnWSThreadTerminate
       write SetOnWSThreadTerminate;
-    /// Can be called from any thread - will send a "service" message to a WebSocketServer
-    // to wake up a WebSocket thread.
-    // When webSocket thread recive such mesage it will call
-    // onServiceMessage (in websocket thread context)
+    /// can be called from any thread
+    // - will send a "service" message to a WebSocketServer to wake up a WebSocket thread
+    // - When a webSocket thread receives such a message it will call onServiceMessage in the thread context
     procedure SendServiceMessage;
-    property onServiceMessage: TThreadMethod read fOnServiceMessage write fOnServiceMessage;
+    /// event called when a service message is raised
+    property OnServiceMessage: TThreadMethod read fOnServiceMessage write fOnServiceMessage;
   end;
 
   /// a Thread Pool, used for fast handling WebSocket requests
@@ -1830,6 +1852,7 @@ type
     function NeedStopOnIOError: Boolean; override;
     procedure Task(aCaller: TSynThread; aContext: Pointer); override;
   public
+    /// initialize the thread pool
     constructor Create(Server: THttpApiWebSocketServer; NumberOfThreads: Integer=1); reintroduce;
   end;
 
@@ -1840,6 +1863,7 @@ type
     fSmallWait, fWaitCount: integer;
     procedure Execute; override;
   public
+    /// initialize the thread
     constructor Create(Server: THttpApiWebSocketServer); reintroduce;
   end;
   {$endif MSWINDOWS}
@@ -2277,9 +2301,9 @@ type
   // it is the different thing than WEB_SOCKET_BUFFER_TYPE for httpapi.dll
   WINHTTP_WEB_SOCKET_BUFFER_TYPE = ULONG;
 
-  /// A class to establish connection to WebSocket server.
-  // It is used by TWinWebSocketClient class
-  TWinHTTPUpgradeble = class(TWinHTTP)
+  /// A class to establish a client connection to a WebSocket server using Windows API
+  // - used by TWinWebSocketClient class
+  TWinHTTPUpgradeable = class(TWinHTTP)
   private
     fSocket: HINTERNET;
   protected
@@ -2287,23 +2311,24 @@ type
       Data: SockString): integer; override;
     procedure InternalSendRequest(const aData: SockString); override;
   public
+    /// initialize the instance
     constructor Create(const aServer, aPort: SockString; aHttps: boolean;
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
       ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0;
       ReceiveTimeout: DWORD=0); override;
   end;
 
-  /// WebSocket client realization
+  /// WebSocket client implementation
   TWinHTTPWebSocketClient = class
   protected
     fSocket: HINTERNET;
     function CheckSocket: Boolean;
   public
-    /// All parameters is the same as TWinHTTP.Create
-    // except url - address of WebSocketServer for sending
-    // upgrade request
-    constructor Create(const aServer, aPort: SockString; aHttps: boolean; const
-      url: SockString; const aSubProtocol: SockString = '';
+    /// initialize the instance
+    // - all parameters do match TWinHTTP.Create except url: address of WebSocketServer
+    // for sending upgrade request
+    constructor Create(const aServer, aPort: SockString; aHttps: boolean;
+      const url: SockString; const aSubProtocol: SockString = '';
       const aProxyName: SockString=''; const aProxyByPass: SockString='';
       ConnectionTimeOut: DWORD=0; SendTimeout: DWORD=0; ReceiveTimeout: DWORD=0);
     /// Send buffer
@@ -2489,50 +2514,50 @@ const
   {$ifdef MSWINDOWS}
   /// can be used with THttpApiServer.AuthenticationSchemes to enable all schemes
   HTTPAPI_AUTH_ENABLE_ALL = [hraBasic..hraKerberos];
-  const
-  /// Indicates the buffer contains the last, and possibly only, part of a UTF8 message.
+
+  /// the buffer contains the last, and possibly only, part of a UTF8 message
   WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000000;
-  /// Indicates the buffer contains part of a UTF8 message.
+  /// the buffer contains part of a UTF8 message
   WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000001;
-  /// Indicates the buffer contains the last, and possibly only, part of a binary message.
+  /// the buffer contains the last, and possibly only, part of a binary message
   WEB_SOCKET_BINARY_MESSAGE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000002;
-  /// Indicates the buffer contains part of a binary message.
+  /// the buffer contains part of a binary message
   WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000003;
-  /// Indicates the buffer contains a close message.
+  /// the buffer contains a close message
   WEB_SOCKET_CLOSE_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000004;
-  /// Indicates the buffer contains a ping or pong message.
-  // When sending, this value means 'ping',
-  // when processing received data, this value means 'pong'.
+  /// the buffer contains a ping or pong message
+  // - when sending, this value means 'ping'
+  // - when processing received data, this value means 'pong'
   WEB_SOCKET_PING_PONG_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000005;
-  /// Indicates the buffer contains an unsolicited pong message.
+  /// the buffer contains an unsolicited pong message
   WEB_SOCKET_UNSOLICITED_PONG_BUFFER_TYPE: WEB_SOCKET_BUFFER_TYPE = $80000006;
 
-    // https://msdn.microsoft.com/en-us/library/windows/desktop/hh449347
+  // https://msdn.microsoft.com/en-us/library/windows/desktop/hh449347
   WEB_SOCKET_MAX_CLOSE_REASON_LENGTH = 123;
-  /// Close completed successfully.
+  /// Close completed successfully
   WEB_SOCKET_SUCCESS_CLOSE_STATUS                : WEB_SOCKET_CLOSE_STATUS = 1000;
-  /// The endpoint is going away and thus closing the connection.
+  /// The endpoint is going away and thus closing the connection
   WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS   : WEB_SOCKET_CLOSE_STATUS = 1001;
-  /// Peer detected protocol error and it is closing the connection.
+  /// Peer detected protocol error and it is closing the connection
   WEB_SOCKET_PROTOCOL_ERROR_CLOSE_STATUS         : WEB_SOCKET_CLOSE_STATUS = 1002;
-  /// The endpoint cannot receive this type of data.
+  /// The endpoint cannot receive this type of data
   WEB_SOCKET_INVALID_DATA_TYPE_CLOSE_STATUS      : WEB_SOCKET_CLOSE_STATUS = 1003;
-  /// No close status code was provided.
+  /// No close status code was provided
   WEB_SOCKET_EMPTY_CLOSE_STATUS                  : WEB_SOCKET_CLOSE_STATUS = 1005;
-  /// The connection was closed without sending or receiving a close frame.
+  /// The connection was closed without sending or receiving a close frame
   WEB_SOCKET_ABORTED_CLOSE_STATUS                : WEB_SOCKET_CLOSE_STATUS = 1006;
-  /// Data within a message is not consistent with the type of the message.
+  /// Data within a message is not consistent with the type of the message
   WEB_SOCKET_INVALID_PAYLOAD_CLOSE_STATUS        : WEB_SOCKET_CLOSE_STATUS = 1007;
-  /// The message violates an endpoint's policy.
+  /// The message violates an endpoint's policy
   WEB_SOCKET_POLICY_VIOLATION_CLOSE_STATUS       : WEB_SOCKET_CLOSE_STATUS = 1008;
-  /// The message sent was too large to process.
+  /// The message sent was too large to process
   WEB_SOCKET_MESSAGE_TOO_BIG_CLOSE_STATUS        : WEB_SOCKET_CLOSE_STATUS = 1009;
   /// A client endpoint expected the server to negotiate one or more extensions,
-  // but the server didn't return them in the response message of the WebSocket handshake.
+  // but the server didn't return them in the response message of the WebSocket handshake
   WEB_SOCKET_UNSUPPORTED_EXTENSIONS_CLOSE_STATUS : WEB_SOCKET_CLOSE_STATUS = 1010;
-  /// An unexpected condition prevented the server from fulfilling the request.
+  /// An unexpected condition prevented the server from fulfilling the request
   WEB_SOCKET_SERVER_ERROR_CLOSE_STATUS           : WEB_SOCKET_CLOSE_STATUS = 1011;
-  /// The TLS handshake could not be completed.
+  /// The TLS handshake could not be completed
   WEB_SOCKET_SECURE_HANDSHAKE_ERROR_CLOSE_STATUS : WEB_SOCKET_CLOSE_STATUS = 1015;
 
   {$endif}
@@ -3009,11 +3034,10 @@ type
 
   function SysErrorMessagePerModule(Code: DWORD; ModuleName: PChar): string;
 
-{$IFDEF MSWINDOWS}
-/// Is HTTP.SYS web socket API available on the target system
-// Windows 8 and UP
+{$ifdef MSWINDOWS}
+/// is HTTP.SYS web socket API available on the target system Windows 8 and UP
 function WinHTTP_WebSocketEnabled: boolean;
-{$ENDIF}
+{$endif}
 
 implementation
 
@@ -6242,8 +6266,8 @@ begin
     NotifyThreadStart(self);
     repeat
       {$ifdef USE_WINIOCP}
-      if not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE)
-        and fOwner.NeedStopOnIOError then
+      if not GetQueuedCompletionStatus(fOwner.fRequestQueue,Dummy1,Dummy2,Context,INFINITE) and
+         fOwner.NeedStopOnIOError then
         break;
       {$else}
       fEvent.WaitFor(INFINITE);
@@ -6276,7 +6300,6 @@ procedure TSynThreadPoolSubThread.NotifyThreadStart(Sender: TSynThread);
 begin
   if Sender=nil then
     raise ECrtSocket.Create('NotifyThreadStart(nil)');
-
   if Assigned(fOwner.fOnThreadStart) and not Assigned(Sender.fStartNotified) then begin
     fOwner.fOnThreadStart(Sender);
     Sender.fStartNotified := self;
@@ -7658,9 +7681,8 @@ begin
   Terminate; // for Execute to be notified about end of process
   {$endif}
   try
-    if (fClones<>nil) and (Http.Module<>0) then begin  // fClones=nil for clone threads
+    if (fClones<>nil) and (Http.Module<>0) then // fClones=nil for clone threads
       DestroyMainThread;
-    end;
     {$ifdef LVCL}
     for i := 1 to 500 do
       if fExecuteFinished then
@@ -8003,8 +8025,7 @@ begin
             end;
             Resp^.SetContent(DataChunkInMemory,Context.OutContent,Context.OutContentType);
             EHttpApiServer.RaiseOnError(hSendHttpResponse,Http.SendHttpResponse(
-              fReqQueue,Req^.RequestId,
-              getSendResponseFlags(Context),
+              fReqQueue,Req^.RequestId,getSendResponseFlags(Context),
               Resp^,nil,bytesSent,nil,0,nil,fLogData));
           end;
           DoAfterSentResponse(Context);
@@ -8360,18 +8381,15 @@ const
       'If-None-Match', 'If-Range', 'If-Unmodified-Since', 'Max-Forwards',
       'Proxy-Authorization', 'Referer', 'Range', 'TE', 'Translate', 'User-Agent');
 begin
-  Assert(Low(C_KNOWNHEADERS_NAME) = Low(aHttpHeaders.KnownHeaders));
-  Assert(High(C_KNOWNHEADERS_NAME) = High(aHttpHeaders.KnownHeaders));
-
+//  Assert(Low(C_KNOWNHEADERS_NAME) = Low(aHttpHeaders.KnownHeaders));
+//  Assert(High(C_KNOWNHEADERS_NAME) = High(aHttpHeaders.KnownHeaders));
   headerCnt := 0;
   for h := Low(C_KNOWNHEADERS_NAME) to High(C_KNOWNHEADERS_NAME) do
     if aHttpHeaders.KnownHeaders[h].RawValueLength <> 0 then
       Inc(headerCnt);
-
   p := aHttpHeaders.pUnknownHeaders;
   if p<>nil then
     Inc(headerCnt, aHttpHeaders.UnknownHeaderCount);
-
   SetLength(Result, headerCnt);
   idx := 0;
   for h := Low(C_KNOWNHEADERS_NAME) to High(C_KNOWNHEADERS_NAME) do
@@ -8382,7 +8400,6 @@ begin
       Result[idx].ulValueLength := aHttpHeaders.KnownHeaders[h].RawValueLength;
       Inc(idx);
     end;
-
   p := aHttpHeaders.pUnknownHeaders;
   if p<>nil then
     for i := 1 to aHttpHeaders.UnknownHeaderCount do begin
@@ -8409,10 +8426,8 @@ begin
       Inc(len, h^.ulNameLength + h^.ulValueLength + 4);
     Inc(h);
   end;
-
   SetString(Result, nil, len);
   d := Pointer(Result);
-
   h := aHeaders;
   for i := 1 to aHeadersCount do begin
     if h^.ulValueLength<>0 then begin
@@ -8468,7 +8483,6 @@ begin
   WebSocketAPI.WebSocketEnabled := false;
   WebSocketAPI.LibraryHandle := SafeLoadLibrary(WEBSOCKET_DLL);
   if WebSocketAPI.LibraryHandle=0 then
-    //raise ECrtSocket.CreateFmt('Unable to load library %s',[WEBSOCKET_DLL]);
     exit;
   P := @@WebSocketAPI.AbortHandle;
   for api := low(api) to high(api) do begin
@@ -8477,7 +8491,6 @@ begin
       FreeLibrary(WebSocketAPI.LibraryHandle);
       WebSocketAPI.LibraryHandle := 0;
       exit;
-//      raise ECrtSocket.CreateFmt('Unable to find %s in %s!', [WebSocketNames[api], WEBSOCKET_DLL]);
     end;
     inc(P);
   end;
@@ -8505,6 +8518,7 @@ begin
   inherited CreateFmt('%s failed: %s (%d)',
     [WebSocketNames[api],SysErrorMessagePerModule(Error,WEBSOCKET_DLL),Error])
 end;
+
 
 { THttpApiWebSocketServerProtocol }
 
@@ -8560,7 +8574,8 @@ begin
   end;
 end;
 
-constructor THttpApiWebSocketServerProtocol.Create(aName: SockString; aManualFragmentManagement: Boolean;
+constructor THttpApiWebSocketServerProtocol.Create(const aName: SockString;
+  aManualFragmentManagement: Boolean;
   aServer: THttpApiWebSocketServer;
   aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
   aOnMessage: THttpApiWebSocketServerOnMessageEvent;
@@ -8579,13 +8594,11 @@ begin
   fName := aName;
   fManualFragmentManagement := aManualFragmentManagement;
   fServer := aServer;
-
   fOnAccept := aOnAccept;
   fOnMessage := aOnMessage;
   fOnConnect := aOnConnect;
   fOnDisconnect := aOnDisconnect;
   fOnFragment := aOnFragment;
-
   fConnectionsCapacity := WebSocketConnectionCapacity;
   fConnectionsCount := 0;
   fFirstEmptyConnectionIndex := 0;
@@ -8664,6 +8677,7 @@ begin
   end;
 end;
 
+
  { THttpApiWebSocketConnection }
 
 function THttpApiWebSocketConnection.TryAcceptConnection(aProtocol: THttpApiWebSocketServerProtocol;
@@ -8682,30 +8696,25 @@ begin
   req := PHTTP_REQUEST(Ctxt.HttpApiRequest);
   fIndex := fProtocol.fFirstEmptyConnectionIndex;
   fOpaqueHTTPRequestId := req^.RequestId;
-
   if (fProtocol=nil) or (Assigned(fProtocol.OnAccept) and not fProtocol.OnAccept(Ctxt, Self)) then begin
     result := False;
     exit;
   end;
-
   EWebSocketApi.RaiseOnError(hCreateServerHandle, WebSocketAPI.CreateServerHandle(nil, 0, fWSHandle));
   wsRequestHeaders := HttpSys2ToWebSocketHeaders(req^.Headers);
-
   if aNeedHeader then
-    result := WebSocketAPI.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name), nil, 0, @wsRequestHeaders[0],
-      Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK
-  else
-    result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0, @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK;
-
-  if result then try
-    Ctxt.OutCustomHeaders := WebSocketHeadersToSockString(wsServerHeaders, wsServerHeadersCount);
-  finally
-    result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
-  end;
-
+    result := WebSocketAPI.BeginServerHandshake(fWSHandle, Pointer(fProtocol.name), nil, 0,
+      @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK else
+    result := WebSocketAPI.BeginServerHandshake(fWSHandle, nil, nil, 0,
+      @wsRequestHeaders[0], Length(wsRequestHeaders), wsServerHeaders, wsServerHeadersCount) = S_OK;
+  if result then 
+    try
+      Ctxt.OutCustomHeaders := WebSocketHeadersToSockString(wsServerHeaders, wsServerHeadersCount);
+    finally
+      result := WebSocketAPI.EndServerHandshake(fWSHandle) = S_OK;
+    end;
   if not Result then
-    Disconnect
-  else
+    Disconnect else
     fLastReceiveTickCount := 0;
 end;
 
@@ -8722,17 +8731,15 @@ begin
   if (fProtocol = nil) then
     exit;
   if (aBufferType=WEB_SOCKET_UTF8_FRAGMENT_BUFFER_TYPE) or
-    (aBufferType=WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE) then begin
-    //Fragment
-    if not fProtocol.ManualFragmentManagement then PushFragmentIntoBuffer;
+     (aBufferType=WEB_SOCKET_BINARY_FRAGMENT_BUFFER_TYPE) then begin // Fragment
+    if not fProtocol.ManualFragmentManagement then
+      PushFragmentIntoBuffer;
     if Assigned(fProtocol.OnFragment) then
       fProtocol.OnFragment(self,aBufferType,aBuffer,aBufferSize);
-  end else begin
-    //Last Fragment
+  end else begin // last Fragment
     if Assigned(fProtocol.OnMessage) then begin
-      if fProtocol.ManualFragmentManagement then begin
-        fProtocol.OnMessage(self,aBufferType,aBuffer,aBufferSize);
-      end else begin
+      if fProtocol.ManualFragmentManagement then 
+        fProtocol.OnMessage(self,aBufferType,aBuffer,aBufferSize) else begin
         PushFragmentIntoBuffer;
         fProtocol.OnMessage(self,aBufferType,Pointer(fBuffer),Length(fBuffer));
         fBuffer := '';
@@ -8741,13 +8748,13 @@ begin
   end;
 end;
 
-procedure THttpApiWebSocketConnection.DoOnConnect();
+procedure THttpApiWebSocketConnection.DoOnConnect;
 begin
   if (fProtocol<>nil) and Assigned(fProtocol.OnConnect) then
     fProtocol.OnConnect(self);
 end;
 
-procedure THttpApiWebSocketConnection.DoOnDisconnect();
+procedure THttpApiWebSocketConnection.DoOnDisconnect;
 begin
   if (fProtocol<>nil) and Assigned(fProtocol.OnDisconnect) then
     fProtocol.OnDisconnect(self,fCloseStatus,Pointer(fBuffer),length(fBuffer));
@@ -8777,11 +8784,9 @@ begin
   httpSendEntity.DataChunkType := hctFromMemory;
   httpSendEntity.pBuffer := aBuf.pbBuffer;
   httpSendEntity.BufferLength := aBuf.ulBufferLength;
-
   Err := Http.SendResponseEntityBody(fProtocol.fServer.FReqQueue,fOpaqueHTTPRequestId,
     HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or HTTP_SEND_RESPONSE_FLAG_MORE_DATA,
     1, @httpSendEntity, bytesWrite, nil, nil, @fProtocol.fServer.fSendOverlaped);
-
   case Err of
     ERROR_HANDLE_EOF: ; // todo: close connection
     ERROR_IO_PENDING: ; //
@@ -8792,18 +8797,18 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.CheckIsActive;
-var ellapsed: integer;
+var elapsed: integer;
 const sCloseReason = 'Closed by ellapsed ping timeout';
 begin
   if (fLastReceiveTickCount>0) and (fProtocol.fServer.fPingTimeout>0) then begin
-    ellapsed := integer(GetTickCount-fLastReceiveTickCount);
-    if ellapsed>2*fProtocol.fServer.PingTimeout*1000 then begin
+    elapsed := integer(GetTickCount-fLastReceiveTickCount);
+    if elapsed>2*fProtocol.fServer.PingTimeout*1000 then begin
       fProtocol.RemoveConnection(fIndex);
       fState := wsClosedByGuard;
       fCloseStatus := WEB_SOCKET_ENDPOINT_UNAVAILABLE_CLOSE_STATUS;
       fBuffer := sCloseReason;
       PostQueuedCompletionStatus(fProtocol.fServer.fThreadPoolServer.FRequestQueue, 0, 0, @fOverlapped);
-    end else if ellapsed>=fProtocol.fServer.PingTimeout * 1000 then
+    end else if elapsed>=fProtocol.fServer.PingTimeout * 1000 then
       Ping;
   end;
 end;
@@ -8861,21 +8866,19 @@ var ulDataBufferCount: ULONG;
     ActionContext: Pointer;
     i: integer;
     Err: HRESULT;
-    Bufer: TWebSocketBufferDataArr;
+    Buffer: TWebSocketBufferDataArr;
 begin
   result := true;
   repeat
-    ulDataBufferCount := Length(Bufer);
-    EWebSocketApi.RaiseOnError(
-      hGetAction,
-      WebSocketAPI.GetAction(fWSHandle, ActionQueue, @Bufer[0], ulDataBufferCount,
-          Action, BufferType, ApplicationContext, ActionContext)
-      );
+    ulDataBufferCount := Length(Buffer);
+    EWebSocketApi.RaiseOnError(hGetAction,
+      WebSocketAPI.GetAction(fWSHandle, ActionQueue, @Buffer[0], ulDataBufferCount,
+          Action, BufferType, ApplicationContext, ActionContext));
     case Action of
       WEB_SOCKET_NO_ACTION: ;
       WEB_SOCKET_SEND_TO_NETWORK_ACTION: begin
         for i := 0 to ulDataBufferCount - 1 do
-          WriteData(Bufer[i]);
+          WriteData(Buffer[i]);
         if fWSHandle <> nil then begin
           Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
           EWebSocketApi.RaiseOnError(hCompleteAction, Err);
@@ -8886,7 +8889,7 @@ begin
       WEB_SOCKET_INDICATE_SEND_COMPLETE_ACTION: ;
       WEB_SOCKET_RECEIVE_FROM_NETWORK_ACTION: begin
         for i := 0 to ulDataBufferCount - 1 do
-          ReadData(Bufer[i]);
+          ReadData(Buffer[i]);
         fLastActionContext := ActionContext;
         result := False;
         exit;
@@ -8900,15 +8903,11 @@ begin
           finally
             LeaveCriticalSection(fProtocol.fSafe);
           end;
-
           if fState = wsOpen then
-            fState := wsClosedByClient
-          else
+            fState := wsClosedByClient else
             fState := wsClosedByServer;
-
-          SetString(fBuffer, PChar(Bufer[0].pbBuffer), Bufer[0].ulBufferLength);
-          fCloseStatus := Bufer[0].Reserved1;
-
+          SetString(fBuffer, PChar(Buffer[0].pbBuffer), Buffer[0].ulBufferLength);
+          fCloseStatus := Buffer[0].Reserved1;
           EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
           result := False;
           exit;
@@ -8921,14 +8920,13 @@ begin
           EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
           exit;
         end else begin
-          DoOnMessage(BufferType, Bufer[0].pbBuffer, Bufer[0].ulBufferLength);
+          DoOnMessage(BufferType, Buffer[0].pbBuffer, Buffer[0].ulBufferLength);
           EWebSocketApi.RaiseOnError(hCompleteAction, WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0));
           exit;
         end;
     end else
       raise EWebSocketApi.CreateFmt('Invalid WebSocket action %d', [byte(Action)]);
     end;
-
     Err := WebSocketAPI.CompleteAction(fWSHandle, ActionContext, 0);
     if ActionContext <> nil then
       EWebSocketApi.RaiseOnError(hCompleteAction, Err);
@@ -8967,6 +8965,7 @@ begin
   InternalSend(WEB_SOCKET_PING_PONG_BUFFER_TYPE, nil);
 end;
 
+
 { THttpApiWebSocketServer }
 
 constructor THttpApiWebSocketServer.Create(CreateSuspended: Boolean;
@@ -9000,53 +8999,44 @@ procedure THttpApiWebSocketServer.DestroyMainThread;
 var i: integer;
 begin
   fGuard.Free;
-  for i := 0 to Length(fRegisteredProtocols^) - 1 do begin
+  for i := 0 to Length(fRegisteredProtocols^) - 1 do
     fRegisteredProtocols^[i].doShutdown;
-  end;
-
   FreeAndNil(fThreadPoolServer);
-
-  for i := 0 to Length(fRegisteredProtocols^) - 1 do begin
+  for i := 0 to Length(fRegisteredProtocols^) - 1 do
     fRegisteredProtocols^[i].Free;
-  end;
-  SetLength(fRegisteredProtocols^,0);
+  fRegisteredProtocols^ := nil;
   Dispose(fRegisteredProtocols);
   inherited;
 end;
 
 procedure THttpApiWebSocketServer.DoAfterSentResponse(Ctxt: THttpServerRequest);
 begin
-  if Assigned(fLastConnection) then begin
+  if Assigned(fLastConnection) then
     PostQueuedCompletionStatus(fThreadPoolServer.FRequestQueue, 0, 0,
       @fLastConnection.fOverlapped);
-  end;
   inherited DoAfterSentResponse(Ctxt);
 end;
 
-function THttpApiWebSocketServer.GetProtocol(
-  index: integer): THttpApiWebSocketServerProtocol;
+function THttpApiWebSocketServer.GetProtocol(index: integer): THttpApiWebSocketServerProtocol;
 begin
   if (index>=0) and (index<=Length(fRegisteredProtocols^)) then
-    result := fRegisteredProtocols^[index]
-  else
+    result := fRegisteredProtocols^[index] else
     result := nil;
 end;
 
 function THttpApiWebSocketServer.getProtocolsCount: Integer;
 begin
   if self=nil then
-    result := 0
-  else
+    result := 0 else
     result := Length(fRegisteredProtocols^);
 end;
 
 function THttpApiWebSocketServer.getSendResponseFlags(Ctxt: THttpServerRequest): Integer;
 begin
-  if (PHTTP_REQUEST(Ctxt.HttpApiRequest)^.UrlContext=WEB_SOCKET_URL_CONTEXT)
-    and (fLastConnection<>nil) then begin
+  if (PHTTP_REQUEST(Ctxt.HttpApiRequest)^.UrlContext=WEB_SOCKET_URL_CONTEXT) and
+     (fLastConnection<>nil) then
     result := HTTP_SEND_RESPONSE_FLAG_OPAQUE or HTTP_SEND_RESPONSE_FLAG_MORE_DATA
-      or HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA;
-  end else
+      or HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA else
     result := inherited getSendResponseFlags(Ctxt);
 end;
 
@@ -9064,16 +9054,14 @@ begin
   ProtocolHeaderFound := false;
   p := PHTTP_REQUEST(Ctxt.HttpApiRequest)^.Headers.pUnknownHeaders;
   for j := 1 to PHTTP_REQUEST(Ctxt.HttpApiRequest)^.Headers.UnknownHeaderCount do begin
-    if (p.NameLength=Length(sProtocolHeader))
-      and IdemPChar(p.pName, Pointer(sProtocolHeader)) then
-    begin
+    if (p.NameLength=Length(sProtocolHeader)) and IdemPChar(p.pName,Pointer(sProtocolHeader)) then begin
       ProtocolHeaderFound := True;
       for i := 0 to Length(fRegisteredProtocols^) - 1 do begin
         ch := p.pRawValue;
-        while (ch - p.pRawValue)<P.RawValueLength do begin
-          while ((ch - p.pRawValue)<P.RawValueLength) and (ch^ in [',', ' ']) do Inc(ch);
+        while (ch-p.pRawValue)<P.RawValueLength do begin
+          while ((ch-p.pRawValue)<P.RawValueLength) and (ch^ in [',', ' ']) do Inc(ch);
           chB := ch;
-          while ((ch - p.pRawValue)<P.RawValueLength) and not (ch^ in [',']) do Inc(ch);
+          while ((ch-p.pRawValue)<P.RawValueLength) and not (ch^ in [',']) do Inc(ch);
           SetString(aName, chB, ch - chB);
           if aName = fRegisteredProtocols^[i].name then begin
             Protocol := fRegisteredProtocols^[i];
@@ -9086,7 +9074,6 @@ begin
   end;
   if not ProtocolHeaderFound and (Protocol=nil) and (Length(fRegisteredProtocols^)=1) then
     Protocol := fRegisteredProtocols^[0];
-
 protocolFound:
   if Protocol <> nil then begin
     EnterCriticalSection(Protocol.fSafe);
@@ -9106,14 +9093,14 @@ protocolFound:
   end;
 end;
 
-function THttpApiWebSocketServer.AddUrlWebSocket(
-  const aRoot, aPort: SockString; Https: boolean;
-  const aDomainName: SockString; aRegisterURI: boolean): integer;
+function THttpApiWebSocketServer.AddUrlWebSocket(const aRoot, aPort: SockString;
+  Https: boolean; const aDomainName: SockString; aRegisterURI: boolean): integer;
 begin
   result := AddUrl(aRoot, aPort, Https, aDomainName, aRegisterURI, WEB_SOCKET_URL_CONTEXT);
 end;
 
-procedure THttpApiWebSocketServer.RegisterProtocol(aName: SockString; aManualFragmentManagement: Boolean;
+procedure THttpApiWebSocketServer.RegisterProtocol(const aName: SockString; 
+  aManualFragmentManagement: Boolean;
   aOnAccept: THttpApiWebSocketServerOnAcceptEvent;
   aOnMessage: THttpApiWebSocketServerOnMessageEvent;
   aOnConnect: THttpApiWebSocketServerOnConnectEvent;
@@ -9124,9 +9111,9 @@ begin
   if self=nil then exit;
   protocol := THttpApiWebSocketServerProtocol.Create(aName, aManualFragmentManagement,
     Self, aOnAccept, aOnMessage, aOnConnect, aOnDisconnect, aOnFragment);
-  SetLength(fRegisteredProtocols^, length(fRegisteredProtocols^) + 1);
-  fRegisteredProtocols^[length(fRegisteredProtocols^) - 1] := protocol;
-  protocol.fIndex := length(fRegisteredProtocols^) - 1;
+  protocol.fIndex := length(fRegisteredProtocols^);
+  SetLength(fRegisteredProtocols^, protocol.fIndex + 1);
+  fRegisteredProtocols^[protocol.fIndex] := protocol;
 end;
 
 function THttpApiWebSocketServer.Request(Ctxt: THttpServerRequest): cardinal;
@@ -9156,12 +9143,13 @@ begin
   FOnWSThreadTerminate := Value;
 end;
 
+
 { TSynThreadPoolHttpApiWebSocketServer }
 
 function TSynThreadPoolHttpApiWebSocketServer.NeedStopOnIOError: Boolean;
 begin
-  // If connection closes by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED can be returned
-  // Other connections must work normally
+  // If connection closed by guard than ERROR_HANDLE_EOF or ERROR_OPERATION_ABORTED 
+  // can be returned - Other connections must work normally
   result := False;
 end;
 
@@ -9183,33 +9171,26 @@ var conn: PHttpApiWebSocketConnection;
 begin
   if aContext=@fServer.fSendOverlaped then
     exit;
-
   if (aContext=@fServer.fServiceOverlaped) then begin
     if Assigned(fServer.onServiceMessage) then
       fServer.onServiceMessage;
     exit;
   end;
-
   conn := PHttpApiWebSocketConnection(aContext);
   if conn.fState=wsConnecting then begin
     conn.fState := wsOpen;
     conn.fLastReceiveTickCount := GetTickCount;
     conn.DoOnConnect();
   end;
-
   if conn.fState in [wsOpen, wsClosing] then
     repeat
       conn.BeforeRead;
     until not conn.ProcessActions(WEB_SOCKET_RECEIVE_ACTION_QUEUE);
-
-  if conn.fState in [wsClosedByGuard] then begin
+  if conn.fState in [wsClosedByGuard] then
     EWebSocketApi.RaiseOnError(hCompleteAction,
       WebSocketAPI.CompleteAction(conn.fWSHandle, conn.fLastActionContext, 0));
-  end;
-
-  if conn.fState in [wsClosedByClient, wsClosedByServer, wsClosedByGuard, wsClosedByShutdown] then
-  begin
-    conn.DoOnDisconnect();
+  if conn.fState in [wsClosedByClient,wsClosedByServer,wsClosedByGuard,wsClosedByShutdown] then begin
+    conn.DoOnDisconnect;
     if conn.fState = wsClosedByClient then
       conn.Close(conn.fCloseStatus, Pointer(conn.fBuffer), length(conn.fBuffer));
     conn.Disconnect;
@@ -9232,7 +9213,9 @@ begin
   inherited Create(NumberOfThreads, Server.fReqQueue);
 end;
 
+
 { TSynWebSocketGuard }
+
 procedure TSynWebSocketGuard.Execute;
 var i, j: Integer;
 begin
@@ -9264,6 +9247,7 @@ begin
   fServer := Server;
   inherited Create(false);
 end;
+
 
 { HTTP_RESPONSE }
 
@@ -9297,7 +9281,7 @@ begin
   if ForceCustomHeader then
     i := -1 else
     i := IdemPCharArray(P,KNOWNHEADERS);
-  //WebSocket need CONNECTION as unknown header
+  // WebSockets need CONNECTION as unknown header
   if (i>=0) and (THttpHeader(i)<>reqConnection) then
   with Headers.KnownHeaders[THttpHeader(i)] do begin
     while P^<>':' do inc(P);
@@ -9804,6 +9788,7 @@ type
   PWINHTTP_STATUS_CALLBACK = ^WINHTTP_STATUS_CALLBACK;
 
   /// direct late-binding access to the WinHTTP API
+  // - note: WebSocket* API calls require Windows 8 and later
   TWinHTTPBinding = packed record
     /// access to the winhttp.dll loaded library
     LibraryHandle: THandle;
@@ -9849,8 +9834,6 @@ type
     /// Passes the required authorization credentials to the server.
     SetCredentials: function(hRequest: HINTERNET; AuthTargets: DWORD; AuthScheme: DWORD;
       pwszUserName: PWideChar; pwszPassword: PWideChar; pAuthParams: Pointer) : BOOL; stdcall;
-
-/// requires Windows 8 and later versions of the Windows operating system
     /// Completes a WebSocket handshake started by WinHttpSendRequest.
     WebSocketCompleteUpgrade: function(hRequest: HINTERNET;
       lpReserved: Pointer): HINTERNET; stdcall;
@@ -9877,8 +9860,7 @@ type
     hSendRequest, hReceiveResponse, hQueryHeaders,
     hReadData, hSetTimeouts, hSetOption, hSetCredentials,
     hWebSocketCompleteUpgrade, hWebSocketClose, hWebSocketQueryCloseStatus,
-    hWebSocketSend, hWebSocketReceive
-    );
+    hWebSocketSend, hWebSocketReceive);
 const
   hWebSocketApiFirst = hWebSocketCompleteUpgrade;
 
@@ -9891,8 +9873,7 @@ const
     'WinHttpSendRequest', 'WinHttpReceiveResponse', 'WinHttpQueryHeaders',
     'WinHttpReadData', 'WinHttpSetTimeouts', 'WinHttpSetOption', 'WinHttpSetCredentials',
     'WinHttpWebSocketCompleteUpgrade', 'WinHttpWebSocketClose', 'WinHttpWebSocketQueryCloseStatus',
-    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive'
-    );
+    'WinHttpWebSocketSend', 'WinHttpWebSocketReceive');
 
 procedure WinHttpAPIInitialize;
 var api: TWinHttpAPIs;
@@ -10128,9 +10109,10 @@ begin
   end;
 end;
 
-{ TWinHTTPUpgradeble }
 
-constructor TWinHTTPUpgradeble.Create(const aServer, aPort: SockString;
+{ TWinHTTPUpgradeable }
+
+constructor TWinHTTPUpgradeable.Create(const aServer, aPort: SockString;
   aHttps: boolean; const aProxyName, aProxyByPass: SockString;
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD);
 begin
@@ -10138,7 +10120,7 @@ begin
   fSocket := nil;
 end;
 
-function TWinHTTPUpgradeble.InternalRetrieveAnswer(var Header, Encoding,
+function TWinHTTPUpgradeable.InternalRetrieveAnswer(var Header, Encoding,
   AcceptEncoding, Data: SockString): integer;
 begin
   result := inherited InternalRetrieveAnswer(Header, Encoding, AcceptEncoding, Data);
@@ -10147,15 +10129,16 @@ begin
     raise EWinHTTP.Create('Error upgrading socket');
 end;
 
-procedure TWinHTTPUpgradeble.InternalSendRequest(const aData: SockString);
+procedure TWinHTTPUpgradeable.InternalSendRequest(const aData: SockString);
 begin
-  if not WinHttpAPI.SetOption(fRequest, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,
-      nil, 0) then
+  if not WinHttpAPI.SetOption(fRequest,WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET,nil,0) then
     raise EWinHTTP.Create('Error upgrading socket');
   inherited;
 end;
 
+
 { TWinHTTPWinSocketClient }
+
 function TWinHTTPWebSocketClient.CheckSocket: Boolean;
 begin
   result := fSocket <> nil;
@@ -10164,8 +10147,7 @@ end;
 function TWinHTTPWebSocketClient.CloseConnection(const aCloseReason: SockString): DWORD;
 begin
   if not CheckSocket then
-    result := ERROR_INVALID_HANDLE
-  else
+    result := ERROR_INVALID_HANDLE else
     result := WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_SUCCESS_CLOSE_STATUS, Pointer(aCloseReason), Length(aCloseReason));
   if (Result = NO_ERROR) then
     fSocket := nil;
@@ -10174,21 +10156,19 @@ end;
 constructor TWinHTTPWebSocketClient.Create(const aServer, aPort: SockString;
   aHttps: boolean; const url, aSubProtocol, aProxyName, aProxyByPass: SockString;
   ConnectionTimeOut, SendTimeout, ReceiveTimeout: DWORD);
-var _http: TWinHTTPUpgradeble;
+var _http: TWinHTTPUpgradeable;
     inH, outH, outD: SockString;
 begin
   fSocket := nil;
-  _http := TWinHTTPUpgradeble.Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
+  _http := TWinHTTPUpgradeable.Create(aServer, aPort, aHttps, aProxyName, aProxyByPass,
               ConnectionTimeOut, SendTimeout, ReceiveTimeout);
   try
     // WebSocketAPI.BeginClientHandshake()
     if aSubProtocol <> '' then
-      inH := sProtocolHeader + ': '+aSubProtocol
-    else
+      inH := sProtocolHeader + ': '+aSubProtocol else
       inH := '';
-    if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then begin
-      fSocket := _http.fSocket;
-    end else
+    if _http.Request(url, 'GET', 0, inH, '', '', outH, outD) = 101 then
+      fSocket := _http.fSocket else
       raise ECrtSocket.Create('WebSocketClient creation fail');
   finally
     _http.Free;
@@ -10197,19 +10177,15 @@ end;
 
 destructor TWinHTTPWebSocketClient.Destroy;
 const CloseReason: SockString = 'object is destroyed';
-var
-  status: Word;
-  reason: SockString;
-  reasonLength: DWORD;
+var status: Word;
+    reason: SockString;
+    reasonLength: DWORD;
 begin
-  if CheckSocket then begin
-  //todo: check result;
+  if CheckSocket then begin // todo: check result
     WinHttpAPI.WebSocketClose(fSocket, WEB_SOCKET_ABORTED_CLOSE_STATUS, Pointer(CloseReason), Length(CloseReason));
-
     SetLength(reason, WEB_SOCKET_MAX_CLOSE_REASON_LENGTH);
     WinHttpAPI.WebSocketQueryCloseStatus(fSocket, status, Pointer(reason),
       WEB_SOCKET_MAX_CLOSE_REASON_LENGTH, reasonLength);
-
     WinHttpAPI.CloseHandle(fSocket);
   end;
   inherited;
@@ -10218,8 +10194,7 @@ end;
 function TWinHTTPWebSocketClient.Receive(aBuffer: pointer; aBufferLength: DWORD; out aBytesRead: DWORD; out aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYPE): DWORD;
 begin
   if not CheckSocket then
-    result := ERROR_INVALID_HANDLE
-  else
+    result := ERROR_INVALID_HANDLE else
     result := WinHttpAPI.WebSocketReceive(fSocket, aBuffer, aBufferLength, aBytesRead, aBufferType);
 end;
 
@@ -10227,8 +10202,7 @@ function TWinHTTPWebSocketClient.Send(aBufferType: WINHTTP_WEB_SOCKET_BUFFER_TYP
   aBuffer: pointer; aBufferLength: DWORD): DWORD;
 begin
   if not CheckSocket then
-    result := ERROR_INVALID_HANDLE
-  else
+    result := ERROR_INVALID_HANDLE else
     result := WinHttpAPI.WebSocketSend(fSocket, aBufferType, aBuffer, aBufferLength);
 end;
 {$endif USEWININET}
