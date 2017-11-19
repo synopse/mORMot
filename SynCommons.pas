@@ -10128,6 +10128,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next 32-bit unsigned value from the buffer
     function VarUInt32: PtrUInt;
+    /// read the next 32-bit unsigned value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarUInt32Safe(out Value: cardinal): boolean;
     /// read the next 64-bit signed value from the buffer
     function VarInt64: Int64;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10139,6 +10143,10 @@ type
       {$ifdef HASINLINE}inline;{$endif}
     /// read the next RawUTF8 value from the buffer
     procedure VarUTF8(out result: RawUTF8); overload;
+    /// read the next RawUTF8 value from the buffer
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function VarUTF8Safe(out Value: RawUTF8): boolean;
     /// read the next RawByteString value from the buffer
     function VarString: RawByteString;
       {$ifdef HASINLINE}inline;{$endif}
@@ -10154,6 +10162,10 @@ type
     /// copy data from the current position, and move ahead the specified bytes
     procedure Copy(out Dest; DataLen: PtrInt);
       {$ifdef HASINLINE}inline;{$endif}
+    /// copy data from the current position, and move ahead the specified bytes
+    // - this version won't call ErrorOverflow, but return false on error
+    // - returns true on read success
+    function CopySafe(out Dest; DataLen: PtrInt): boolean;
     /// apply TDynArray.LoadFrom on the buffer
     // - will unserialize a previously appended dynamic array, e.g. as
     // ! aWriter.WriteDynArray(DA);
@@ -59422,6 +59434,16 @@ begin
   inc(P,DataLen);
 end;
 
+function TFastReader.CopySafe(out Dest; DataLen: PtrInt): boolean;
+begin
+  if P+DataLen>Last then
+    result := false else begin
+    MoveFast(P^,Dest,DataLen);
+    inc(P,DataLen);
+    result := true;
+  end;
+end;
+
 procedure TFastReader.VarBlob(out result: TValueResult);
 begin
   result.Len := VarUInt32;
@@ -59487,6 +59509,31 @@ begin
   end;
 end;
 
+function TFastReader.VarUInt32Safe(out Value: cardinal): boolean;
+var c, n: cardinal;
+begin
+  result := false;
+  if P>=Last then
+    exit;
+  Value := ord(P^);
+  inc(P);
+  if Value>$7f then begin
+    n := 0;
+    Value := Value and $7F;
+    repeat
+      if P>=Last then
+        exit;
+      c := ord(P^);
+      inc(P);
+      inc(n,7);
+      if c<=$7f then break;
+      Value := Value or ((c and $7f) shl n);
+    until false;
+    Value := Value or (c shl n);
+  end;
+  result := true; // success
+end;
+
 function TFastReader.VarUInt64: QWord;
 {$ifdef CPU64}
 begin
@@ -59533,6 +59580,17 @@ function TFastReader.VarUTF8: RawUTF8;
 begin
   with VarBlob do
     SetString(result,Ptr,Len);
+end;
+
+function TFastReader.VarUTF8Safe(out Value: RawUTF8): boolean;
+var len: cardinal;
+begin
+  if VarUInt32Safe(len) and (P+len<=Last) then begin
+    SetString(Value,P,len);
+    inc(P,len);
+    result := true;
+  end else
+    result := false;
 end;
 
 procedure TFastReader.Read(var DA: TDynArray; NoCheckHash: boolean);
