@@ -16508,6 +16508,8 @@ type
   // - you can switch off root/timestamp/info URI via rsoTimeStampInfoURIDisable
   // - URI() header output will be sanitized for any EOL injection, unless
   // rsoHttpHeaderCheckDisable is defined (to gain a few cycles?) 
+  // - by default, TSQLAuthUser.Data blob is retrieved from the database,
+  // unless rsoGetUserRetrieveNoBlobData is defined
   TSQLRestServerOption = (
     rsoNoAJAXJSON,
     rsoGetAsJsonNotAsString,
@@ -16521,7 +16523,8 @@ type
     rsoCookieHttpOnlyFlagDisable,
     rsoAuthenticationURIDisable,
     rsoTimeStampInfoURIDisable,
-    rsoHttpHeaderCheckDisable);
+    rsoHttpHeaderCheckDisable,
+    rsoGetUserRetrieveNoBlobData);
   /// allow to customize the TSQLRestServer process via its Options property
   TSQLRestServerOptions = set of TSQLRestServerOption;
 
@@ -51528,6 +51531,7 @@ begin
       // set session parameters
       TAESPRNG.Main.Fill(@rnd,sizeof(rnd));
       fPrivateKey := BinToHex(@rnd,sizeof(rnd));
+      if not (rsoGetUserRetrieveNoBlobData in aCtxt.Server.Options) then
       aCtxt.Server.RetrieveBlob(aCtxt.Server.fSQLAuthUserClass,User.fID,'Data',User.fData);
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
