@@ -11542,6 +11542,12 @@ function Base64ToBin(base64, bin: PAnsiChar; base64len, binlen: PtrInt;
   nofullcheck: boolean=true): boolean; overload;
 
 /// fast conversion from Base64 encoded text into binary data
+// - returns TRUE on success, FALSE if base64 does not match binlen
+// - if nofullcheck is FALSE, IsBase64() will be first called to validate the input
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
+  nofullcheck: boolean=true): boolean; overload;
+
+/// fast conversion from Base64 encoded text into binary data
 // - will check supplied text is a valid Base64 encoded stream
 function Base64ToBinSafe(const s: RawByteString): RawByteString; overload;
   {$ifdef HASINLINE}inline;{$endif}
@@ -27217,6 +27223,12 @@ begin
      (nofullcheck or IsBase64(base64,base64len));
   if result then
     Base64Decode(base64,bin,base64len shr 2);
+end;
+
+function Base64ToBin(const base64: RawByteString; bin: PAnsiChar; binlen: PtrInt;
+  nofullcheck: boolean): boolean;
+begin
+  result := Base64ToBin(pointer(base64),bin,length(base64),binlen,nofullcheck);
 end;
 
 function BinToSource(const ConstName, Comment: RawUTF8;
