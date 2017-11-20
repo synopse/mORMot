@@ -4434,6 +4434,9 @@ procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
 // - will always erase the T*ObjArray instance, and fill it from arr values
 procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
   objClass: PClassInstance); overload;
+
+/// will convert a blank TObject into a TDocVariant document instance
+function ObjectDefaultToVariant(aClass: TClass; EnumSetsAsText: boolean=false): variant;
 {$endif}
 
 { ************ cross-cutting classes and types }
@@ -20908,6 +20911,19 @@ begin
   for i := 0 to arr.Count-1 do begin
     obj[i] := objClass^.CreateNew;
     DocVariantToObject(_Safe(arr.Values[i])^,obj[i]);
+  end;
+end;
+
+function ObjectDefaultToVariant(aClass: TClass; EnumSetsAsText: boolean): variant;
+var instance: TClassInstance;
+    temp: TObject;
+begin
+  instance.Init(aClass);
+  temp := instance.CreateNew;
+  try
+    result := ObjectToVariant(temp,EnumSetsAsText);
+  finally
+    temp.Free;
   end;
 end;
 
