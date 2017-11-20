@@ -41812,8 +41812,10 @@ end;
 
 var
   ServerNonceHash: TSHA3; // faster than THMAC_SHA256 on small input
-  ServerNonceCacheTix: cardinal;
-  ServerNonceCacheRes: RawUTF8;
+  ServerNonceCache: array[boolean] of record
+    tix: cardinal;
+    res: RawUTF8;
+  end;
 
 function CurrentServerNonce(Previous: boolean): RawUTF8;
 var ticks: cardinal;
@@ -41822,9 +41824,10 @@ var ticks: cardinal;
 begin
   ticks := UnixTimeUTC div (60*5); // 5 minutes resolution
   if Previous then
-    dec(ticks) else
-    if ticks = ServerNonceCacheTix then begin
-      result := ServerNonceCacheRes;
+    dec(ticks);
+  with ServerNonceCache[Previous] do
+    if ticks=tix then begin
+      result := res;
       exit;
     end;
   if ServerNonceHash.Algorithm<>SHA3_256 then begin
@@ -41836,9 +41839,9 @@ begin
   hash.Update(@ticks,sizeof(ticks));
   hash.Final(res,true);
   result := BinToHex(@res,sizeof(res));
-  if not Previous then begin
-    ServerNonceCacheTix := ticks;
-    ServerNonceCacheRes := result;
+  with ServerNonceCache[Previous] do begin
+    tix := ticks;
+    res := result;
   end;
 end;
 
