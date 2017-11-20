@@ -14676,6 +14676,12 @@ type
     // - this abstract method will call fLogClass.Add.NotifyThreadEnded
     // but TSQLRestServer.EndCurrentThread will do the main process
     procedure EndCurrentThread(Sender: TThread); virtual;
+    /// enter the Mutex associated with the write operations of this instance
+    // - just a wrapper around fAcquireExecution[execORMWrite].Safe.Lock
+    procedure WriteLock;
+    /// leave the Mutex associated with the write operations of this instance
+    // - just a wrapper around fAcquireExecution[execORMWrite].Safe.UnLock
+    procedure WriteUnLock;
     /// allows to safely execute a processing method in a background thread
     // - returns a TSynBackgroundThreadMethod instance, ready to execute any
     // background task via its RunAndWait() method
@@ -35977,6 +35983,16 @@ begin // most will be done e.g. in TSQLRestServer.EndCurrentThread
   {$endif}
 end;
 
+procedure TSQLRest.WriteLock;
+begin
+  fAcquireExecution[execORMWrite].Safe.Lock;
+end;
+
+procedure TSQLRest.WriteUnLock;
+begin
+  fAcquireExecution[execORMWrite].Safe.UnLock;
+end;
+
 function TSQLRest.GetAcquireExecutionMode(Cmd: TSQLRestServerURIContextCommand): TSQLRestServerAcquireMode;
 begin
   result := fAcquireExecution[Cmd].Mode;
@@ -52316,7 +52332,7 @@ begin
   end else
     if aUserName<>'' then
       // only UserName=... -> return hexadecimal nonce content valid for 5 minutes
-      Ctxt.Results([CurrentServerNonce(false)]) else
+      Ctxt.Results([CurrentServerNonce]) else
       // parameters does not match any expected layout -> try next authentication
       result := false;
 end;
