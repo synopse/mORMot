@@ -993,7 +993,8 @@ begin
   Color(ccLightCyan);
   result := (fFailed.Count=0);
   if Exeversion.Version.Major<>0 then
-    Version := #13#10'Software version tested: '+RawUTF8(Exeversion.Version.Detailed);
+    Version := FormatUTF8(#13#10'Software version tested: % (%)',
+      [ExeVersion.Version.Detailed, ExeVersion.Version.BuildDateTimeString]);
   FormatUTF8(#13#10#13#10'Time elapsed for all tests: %'#13#10'Performed % by % on %',
     [RunTimer.Stop,NowToString,Exeversion.User,Exeversion.Host],Elapsed);
   Writeln(fSaveToFile,#13#10,Version,CustomVersions,
