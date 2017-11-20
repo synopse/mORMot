@@ -8767,10 +8767,12 @@ procedure THttpApiWebSocketConnection.ReadData(const aBuf: WEB_SOCKET_BUFFER_DAT
 var Err: HRESULT;
     fBytesRead: cardinal;
 begin
+  if fWSHandle = nil then
+    exit;
   Err := Http.ReceiveRequestEntityBody(fProtocol.fServer.FReqQueue, fOpaqueHTTPRequestId, 0,
     aBuf.pbBuffer, aBuf.ulBufferLength, fBytesRead, @self.fOverlapped);
   case Err of
-    ERROR_HANDLE_EOF: ; // todo: close connection
+    ERROR_HANDLE_EOF: Disconnect;
     ERROR_IO_PENDING: ; //
     NO_ERROR: ;//
   else
@@ -8783,6 +8785,8 @@ var Err: HRESULT;
     httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
     bytesWrite: Cardinal;
 begin
+  if fWSHandle = nil then
+    exit;
   bytesWrite := 0;
   httpSendEntity.DataChunkType := hctFromMemory;
   httpSendEntity.pBuffer := aBuf.pbBuffer;
@@ -8791,7 +8795,7 @@ begin
     HTTP_SEND_RESPONSE_FLAG_BUFFER_DATA or HTTP_SEND_RESPONSE_FLAG_MORE_DATA,
     1, @httpSendEntity, bytesWrite, nil, nil, @fProtocol.fServer.fSendOverlaped);
   case Err of
-    ERROR_HANDLE_EOF: ; // todo: close connection
+    ERROR_HANDLE_EOF: Disconnect;
     ERROR_IO_PENDING: ; //
     NO_ERROR: ;//
   else
@@ -8817,29 +8821,18 @@ begin
 end;
 
 procedure THttpApiWebSocketConnection.Disconnect;
-var Err: HRESULT;
+var //Err: HRESULT; //todo: handle error
     httpSendEntity: HTTP_DATA_CHUNK_INMEMORY;
     bytesWrite: Cardinal;
 begin
   WebSocketAPI.AbortHandle(fWSHandle);
   WebSocketAPI.DeleteHandle(fWSHandle);
   fWSHandle := nil;
-
   httpSendEntity.DataChunkType := hctFromMemory;
   httpSendEntity.pBuffer := nil;
   httpSendEntity.BufferLength := 0;
-
-  Err := Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue, fOpaqueHTTPRequestId,
-    HTTP_SEND_RESPONSE_FLAG_DISCONNECT,
-    1, @httpSendEntity, bytesWrite, nil, nil, nil);
-  // todo: check Err
-  case Err of
-    ERROR_HANDLE_EOF: ; // todo: close connection
-    ERROR_IO_PENDING: ; //
-    NO_ERROR: ;//
-  else
-    // todo: close connection
-  end;
+  {Err :=} Http.SendResponseEntityBody(fProtocol.fServer.fReqQueue, fOpaqueHTTPRequestId,
+    HTTP_SEND_RESPONSE_FLAG_DISCONNECT, 1, @httpSendEntity, bytesWrite, nil, nil, nil);
 end;
 
 procedure THttpApiWebSocketConnection.BeforeRead;

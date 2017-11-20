@@ -1,8 +1,8 @@
 @echo off
 
 set lib=d:\dev\lib
-set bin=z:\tempbuild\fpc
-set fpc=c:\fpcupdeluxe\fpc\bin\i386-win32\fpc.exe
+set bin=d:\dev\lib\tempbuild\fpc
+set fpc=c:\np\fpc\bin\i386-win32\fpc.exe
 
 if exist %fpc% (
 
