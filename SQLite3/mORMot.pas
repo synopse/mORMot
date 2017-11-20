@@ -2132,7 +2132,18 @@ function SQLWhereIsEndClause(const Where: RawUTF8): boolean;
 // - PropName can be used as a prefix to the 'in ()' clause, in conjunction
 // with optional Suffix value
 function SelectInClause(const PropName: RawUTF8; const Values: array of RawUTF8;
-  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8;
+  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+
+/// compute 'PropName in (...)' where clause for a SQL statement
+// - if Values has no value, returns ''
+// - if Values has a single value, returns 'PropName=Values0' or inlined
+// 'PropName=:(Values0):' if ValuesInlined is true
+// - if Values has more than one value, returns 'PropName in (Values0,Values1,...)'
+// or 'PropName in (:(Values0):,:(Values1):,...)' if ValuesInlined is true
+// - PropName can be used as a prefix to the 'in ()' clause, in conjunction
+// with optional Suffix value
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
 
 /// naive search of '... FROM TableName ...' pattern in the supplied SQL
 function GetTableNameFromSQLSelect(const SQL: RawUTF8;
@@ -20294,7 +20305,7 @@ function CurrentServiceContextServer: TSQLRestServer;
 
 /// returns a low-level nonce, which will change every 5 minutes
 // - as used e.g. by TSQLRestServerAuthenticationDefault.Auth
-function CurrentServerNonce(Previous: boolean): RawUTF8;
+function CurrentServerNonce(Previous: boolean=false): RawUTF8;
 
 function ToText(ft: TSQLFieldType): PShortString; overload;
 function ToText(tk: TTypeKind): PShortString; overload;
@@ -26692,7 +26703,7 @@ var R: TSQLRecord;
     arr: TSQLRecordObjArray absolute ObjArray;
 begin
   result := false;
-  ObjArrayClear(ObjArray);
+  ObjArrayClear(arr);
   if self=nil then
     exit;
   if RecordType=nil then begin
@@ -26706,7 +26717,7 @@ begin
   R := RecordType.Create;
   try
     R.FillPrepare(self);
-    SetLength(arr,fRowCount);       // faster than manual Add()
+    SetLength(arr,fRowCount);       // faster than manual ObjArrayAdd()
     Row := @fResults[FieldCount];   // Row^ points to first row of data
     for i := 0 to fRowCount-1 do begin
       arr[i] := RecordType.Create;
@@ -30729,6 +30740,42 @@ begin
     result := '';
 end;
 
+function SelectInClause(const PropName: RawUTF8; const Values: array of Int64;
+  const Suffix: RawUTF8=''; ValuesInlined: boolean=false): RawUTF8; overload;
+var i: integer;
+    temp: TTextWriterStackBuffer;
+begin
+  if high(Values)>=0 then
+    with TTextWriter.CreateOwnedStream(temp) do
+    try
+      AddString(PropName);
+      if high(Values)=0 then begin
+        if ValuesInlined then
+          AddShort('=:(') else
+          Add('=');
+        Add(Values[0]);
+        if ValuesInlined then
+          AddShort('):');
+      end else begin
+        AddShort(' in (');
+        for i := 0 to high(Values) do begin
+          if ValuesInlined then
+            Add(':','(');
+          Add(Values[i]);
+          if ValuesInlined then
+            AddShort('):,') else
+            Add(',');
+        end;
+        CancelLastComma;
+        Add(')');
+      end;
+      AddString(Suffix);
+      SetText(result);
+    finally
+      Free;
+    end else
+    result := '';
+end;
 
 { TSQLRecordFill }
 
