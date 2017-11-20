@@ -29813,16 +29813,19 @@ end;
 
 function FastFindInt64Sorted(P: PInt64Array; R: PtrInt; const Value: Int64): PtrInt; overload;
 var L: PtrInt;
+    {$ifdef CPUX86}
+    cmp: Integer;
+    {$endif}
 begin
   L := 0;
   if 0<=R then
   repeat
     result := (L + R) shr 1;
     {$ifdef CPUX86} // circumvent Int64 comparison slowness
-    result := SortDynArrayInt64(P^[result],Value);
-    if result=0 then
+    cmp := SortDynArrayInt64(P^[result],Value);
+    if cmp=0 then
       exit else
-    if result <0 then
+    if cmp<0 then
     {$else}
     if P^[result]=Value then
       exit else
@@ -29836,16 +29839,19 @@ end;
 
 function FastFindQWordSorted(P: PQWordArray; R: PtrInt; const Value: QWord): PtrInt;
 var L: PtrInt;
+    {$ifdef CPUX86}
+    cmp: Integer;
+    {$endif}
 begin
   L := 0;
   if 0<=R then
   repeat
     result := (L + R) shr 1;
     {$ifdef CPUX86} // circumvent QWord comparison slowness (and bug)
-    result := SortDynArrayQWord(P^[result],Value);
-    if result=0 then
+    cmp := SortDynArrayQWord(P^[result],Value);
+    if cmp=0 then
       exit else
-    if result <0 then
+    if cmp<0 then
     {$else}
     if P^[result]=Value then
       exit else
