@@ -335,6 +335,15 @@ type
       aExternalDBOptions: TVirtualTableExternalRegisterOptions=[regDoNotRegisterUserGroupTables];
       aMongoDBIdentifier: word=0;
       aMongoDBOptions: TStaticMongoDBRegisterOptions=[mrDoNotRegisterUserGroupTables]): TSQLRest; overload; virtual;
+    /// initialize a stand-alone TSQLRestServerDB instance
+    // - with its own database file located in DefaultDataFileName + aDBFileName
+    // - will own its own TSQLModel with aModelRoot/aModelTables
+    // - you can tune aCacheSize if the default 40MB value is not right
+    // - will eventually call CreateMissingTables
+    // - define custom TDDDRestSettingsOptions if needed
+    function NewRestServerDB(const aDBFileName: TFileName; const aModelRoot: RawUTF8;
+      const aModelTables: array of TSQLRecordClass; aOptions: TDDDRestSettingsOptions=[];
+      aCacheSize: cardinal=10000): TSQLRestServerDB;
     /// returns the WrapperTemplateFolder property, all / chars replaced by \
     // - so that you would be able to store the paths with /, avoiding JSON escape
     function WrapperTemplateFolderFixed(ReturnLocalIfNoneSet: boolean=false): TFileName;
@@ -814,7 +823,7 @@ begin
       fORM.Kind := 'TSQLRestServerDB';
       fORM.ServerName := SQLITE_MEMORY_DATABASE_NAME;
     end else
-    if riDefaultFullMemoryIfNone in aOptions then 
+    if riDefaultFullMemoryIfNone in aOptions then
       fORM.Kind := 'TSQLRestServerFullMemory' else
     if riDefaultLocalBinaryFullMemoryIfNone in aOptions then begin
       fORM.Kind := 'TSQLRestServerFullMemory';
@@ -867,6 +876,25 @@ begin
       raise EDDDInfraException.CreateUTF8('Impossible to initialize % on %/%',
         [fORM.Kind,fORM.ServerName,fRoot]);
   end;
+end;
+
+function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
+  const aModelRoot: RawUTF8; const aModelTables: array of TSQLRecordClass;
+  aOptions: TDDDRestSettingsOptions; aCacheSize: cardinal): TSQLRestServerDB;
+begin
+  result := TSQLRestServerDB.CreateWithOwnModel(aModelTables,
+    DefaultDataFileName + aDBFileName, false, aModelRoot, '', aCacheSize);
+  with result.DB do begin // tune internal SQlite3 engine
+    if optEraseDBFileAtStartup in Options then
+      DeleteFile(FileName);
+    if optSQlite3FileSafeNonExclusive in Options then
+      LockingMode := lmNormal else
+      LockingMode := lmExclusive;
+    if optSQlite3FileSafeSlowMode in Options then
+      Synchronous := smNormal else
+      Synchronous := smOff;
+  end;
+  result.CreateMissingTables;
 end;
 
 procedure TDDDRestSettings.WrapperGenerate(Rest: TSQLRestServer; Port: integer;
