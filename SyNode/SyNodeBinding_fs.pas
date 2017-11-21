@@ -396,6 +396,93 @@ begin
   end;
 end;
 
+{$ifdef MSWINDOWS}
+{$ifdef FPC}
+const VOLUME_NAME_DOS = $00000000;
+function GetFinalPathNameByHandleW(hFile: THandle; lpszFilePath: PWideChar;
+  cchFilePath: DWORD; dwFlags: DWORD): DWORD; external 'kernel32.dll' name 'GetFinalPathNameByHandleW';
+{$endif}
+
+const LONG_PATH_PREFIX: PWideChar = '\\?\';
+const UNC_PATH_PREFIX: PWideChar = '\\?\UNC\';
+
+/// Implementation of unix realpath as in libuv
+function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+var
+  Handle: THandle;
+  w_realpath_len: Cardinal;
+begin
+  Result := False;
+
+  if not CheckWin32Version(6, 0) then
+    exit;
+
+  Handle := CreateFile(PChar(FileName), GENERIC_READ, FILE_SHARE_READ, nil,
+    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL or FILE_FLAG_BACKUP_SEMANTICS, 0);
+
+  if Handle = INVALID_HANDLE_VALUE then
+    exit;
+
+  try
+    w_realpath_len := GetFinalPathNameByHandleW(handle, nil, 0, VOLUME_NAME_DOS);
+    if (w_realpath_len = 0) then
+      exit;
+
+    SetLength(TargetName, w_realpath_len);
+    if GetFinalPathNameByHandleW(Handle, PWideChar(TargetName), w_realpath_len, VOLUME_NAME_DOS) > 0 then begin
+      if StrLComp(PWideChar(TargetName), UNC_PATH_PREFIX, length(UNC_PATH_PREFIX)) = 0 then begin
+        // convert \\?\UNC\host\folder -> \\host\folder
+        TargetName := Copy(TargetName, 7, length(TargetName)-7);
+        TargetName[1] := '\';
+      end else if StrLComp(PWideChar(TargetName), LONG_PATH_PREFIX, length(LONG_PATH_PREFIX)) = 0 then
+        TargetName := Copy(TargetName, length(LONG_PATH_PREFIX)+1, length(TargetName)-length(LONG_PATH_PREFIX)-1)
+      else
+       Exit; // error
+      Result := True;
+    end;
+  finally
+    CloseHandle(Handle);
+  end;
+end;
+{$else}
+// TODO - need to implement a realpath from libc? or enother alternative
+function os_realpath(const FileName: SynUnicode; var TargetName: SynUnicode): Boolean;
+begin
+   Result := false;
+end;
+{$endif}
+
+/// return the canonicalized absolute pathname
+// expands all symbolic links and resolves references to /./,
+// /../ and extra '/' characters in the string named by path
+// to produce a canonicalized absolute pathname
+function fs_realPath(cx: PJSContext; argc: uintN; var vp: jsargRec): Boolean; cdecl;
+var
+  dir, target: SynUnicode;
+const
+  USAGE = 'usage: realpath(dirPath: String): string';
+begin
+  try
+    if (argc < 1) or not vp.argv[0].isString then
+      raise ESMException.Create(USAGE);
+
+    dir := vp.argv[0].asJSString.ToSynUnicode(cx);
+    //if not FileGetSymLinkTarget(dir, target) then
+    if not os_realpath(dir, target) then
+      target := dir;
+
+    vp.rval := cx.NewJSString(target).ToJSVal;
+    Result := True;
+  except
+    on E: Exception do
+    begin
+      Result := False;
+      vp.rval := JSVAL_VOID;
+      JSError(cx, E);
+    end;
+  end;
+end;
+
 function SyNodeBindingProc_fs(const Engine: TSMEngine;
   const bindingNamespaceName: SynUnicode): jsval;
 var
@@ -413,6 +500,7 @@ begin
     obj.ptr.DefineFunction(cx, 'internalModuleReadFile', fs_internalModuleReadFile, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'internalModuleStat', fs_internalModuleStat, 1, JSPROP_READONLY or JSPROP_PERMANENT);
     obj.ptr.DefineFunction(cx, 'readDir', fs_readDir, 2, JSPROP_READONLY or JSPROP_PERMANENT);
+    obj.ptr.DefineFunction(cx, 'realPath', fs_realPath, 1, JSPROP_READONLY or JSPROP_PERMANENT);
 
     Result := obj.ptr.ToJSValue;
   finally
