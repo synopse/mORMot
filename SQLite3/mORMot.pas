@@ -4436,7 +4436,7 @@ procedure DocVariantToObjArray(var arr: TDocVariantData; var objArray;
   objClass: PClassInstance); overload;
 
 /// will convert a blank TObject into a TDocVariant document instance
-function ObjectDefaultToVariant(aClass: TClass; EnumSetsAsText: boolean=false): variant;
+function ObjectDefaultToVariant(aClass: TClass; aOptions: TDocVariantOptions): variant; overload;
 {$endif}
 
 { ************ cross-cutting classes and types }
@@ -20914,14 +20914,17 @@ begin
   end;
 end;
 
-function ObjectDefaultToVariant(aClass: TClass; EnumSetsAsText: boolean): variant;
+function ObjectDefaultToVariant(aClass: TClass; aOptions: TDocVariantOptions): variant;
 var instance: TClassInstance;
     temp: TObject;
+    json: RawUTF8;
 begin
+  VarClear(result);
   instance.Init(aClass);
   temp := instance.CreateNew;
   try
-    result := ObjectToVariant(temp,EnumSetsAsText);
+    json := ObjectToJSON(temp,[woDontStoreDefault]);
+    PDocVariantData(@result)^.InitJSONInPlace(pointer(json),aOptions);
   finally
     temp.Free;
   end;
@@ -28099,20 +28102,20 @@ begin
 end;
 
 function TSQLTableJSON.ParseAndConvert(Buffer: PUTF8Char; BufferLen: integer): boolean;
-function GetFieldCountExpanded(P: PUTF8Char): integer;
-var EndOfObject: AnsiChar;
-begin
-  result := 0;
-  repeat
-    P := GotoNextJSONItem(P,2,@EndOfObject); // ignore Name+Value items
-    if P=nil then begin // unexpected end
-      result := 0;
-      exit;
-    end;
-    inc(result);
-    if EndOfObject='}' then break; // end of object
-  until false;
-end;
+  function GetFieldCountExpanded(P: PUTF8Char): integer;
+  var EndOfObject: AnsiChar;
+  begin
+    result := 0;
+    repeat
+      P := GotoNextJSONItem(P,2,@EndOfObject); // ignore Name+Value items
+      if P=nil then begin // unexpected end
+        result := 0;
+        exit;
+      end;
+      inc(result);
+      if EndOfObject='}' then break; // end of object
+    until false;
+  end;
 var i, max, nfield, nrow, resmax, f: integer;
     EndOfObject: AnsiChar;
     P: PUTF8Char;
