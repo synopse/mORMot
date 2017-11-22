@@ -1429,7 +1429,8 @@ type
   // Delphi 2009)
   // - sftUTF8Text is UTF-8 encoded TEXT, forcing a SYSTEMNOCASE collation,
   // i.e. using UTF8IComp() (TSQLRecord property was declared as RawUTF8,
-  // RawUnicode or WideString - or string in Delphi 2009+)
+  // RawUnicode or WideString - or string in Delphi 2009+) - you may inherit
+  // from TSQLRecordNoCase to use the NOCASE standard SQLite3 collation
   //- sftEnumerate is an INTEGER value corresponding to an index in any
   // enumerate Delphi type; storage is an INTEGER value (fast, easy and size
   // efficient); at display, this integer index will be converted into the
@@ -5437,9 +5438,8 @@ type
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
     // - do nothing if FieldIndex is not valid, and returns false
-    // - to be set in overridden class procedure
-    // TSQLRecord.InternalRegisterCustomProperties() so that it will be common
-    // to all database models, for both client and server
+    // - could be set in overridden class procedure TSQLRecord.InternalDefineModel
+    // so that it will be common to all database models, for both client and server
     function SetCustomCollation(FieldIndex: integer; const aCollationName: RawUTF8): boolean; overload;
     /// set a custom SQlite3 text column collation for a specified field
     // - overloaded method which expects the field to be named
@@ -5450,8 +5450,10 @@ type
     // file be available outside the scope of mORMot's SQLite3 engine
     // - collations defined within our SynSQLite3 unit are named BINARY, NOCASE,
     // RTRIM and our custom SYSTEMNOCASE, ISO8601, WIN32CASE, WIN32NOCASE
-    // - to be set in overridden class procedure InternalRegisterCustomProperties()
+    // - could be set in overridden class procedure TSQLRecord.InternalDefineModel
     // so that it will be common to all database models, for both client and server
+    // - note that you may inherit from TSQLRecordNoCase to use the NOCASE
+    // standard SQLite3 collation for all descendant ORM objects
     procedure SetCustomCollationForAll(aFieldType: TSQLFieldType;
       const aCollationName: RawUTF8);
     /// allow to validate length of all text published properties of this table
@@ -7106,7 +7108,7 @@ type
     // process which will take place after TSQLRecordProperties initialization
     // - this may be the place e.g. to call AddFilter*() methods, if you do not
     // want those to be written "in stone", and not manually when creating the
-    // TSQLModel instance
+    // TSQLModel instance, or to call Props.SetCustomCollationForAll
     class procedure InternalDefineModel(Props: TSQLRecordProperties); virtual;
   {$ifdef MSWINDOWS}{$ifdef HASINLINE}
   public
@@ -8088,6 +8090,21 @@ type
     property InternalState: cardinal read fInternalState;
   published
     { published properties in inherited classes will be interpreted as SQL fields }
+  end;
+
+  /// root class for defining and mapping database records with NOCASE collation
+  // - by default, any sftUTF8Text field (RawUTF8, UnicodeString, WideString
+  // properties) will use our Unicode SYSTEMNOCASE SQLite3 collation, which calls
+  // UTF8ILComp() to handle most western languages, but is not standard
+  // - you may inherit from this class to ensure any text field will use the
+  // faster and SQLite3 built-in NOCASE collation, handling only 7-bit A-Z chars
+  // - inherit from TSQLRecordNoCase if you expect your text fields to contain
+  // only basic unaccentued ASCCI characters, and to be opened by any standard
+  // SQlite3 library or tool (outside of SynSQLite3.pas/SynDBExplorer)
+  TSQLRecordNoCase = class(TSQLRecord)
+  protected
+    /// will call Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE')
+    class procedure InternalDefineModel(Props: TSQLRecordProperties); override;
   end;
 
   /// allow on-the-fly translation of a TSQLTable grid value
@@ -10688,7 +10705,7 @@ type
   // - TServiceMethodExecute could store all its calls in such a table
   // - enabled on server side via either TServiceFactoryServer.SetServiceLog or
   // TServiceContainerServer.SetServiceLog method
-  TSQLRecordServiceLog = class(TSQLRecord)
+  TSQLRecordServiceLog = class(TSQLRecordNoCase)
   protected
     fMethod: RawUTF8;
     fInput: variant;
@@ -32808,6 +32825,14 @@ begin
             fPropInfo.SetInt64Prop(Self,i64);
       end;
     end;
+end;
+
+
+{ TSQLRecordNoCase }
+
+class procedure TSQLRecordNoCase.InternalDefineModel(Props: TSQLRecordProperties);
+begin
+  Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE');
 end;
 
 
@@ -60193,8 +60218,8 @@ end;
 
 class procedure TSQLRecordServiceLog.InternalDefineModel(Props: TSQLRecordProperties);
 begin
+  inherited InternalDefineModel(Props); // set NOCASE collation
   Props.SetVariantFieldsDocVariantOptions(JSON_OPTIONS_FAST_EXTENDED);
-  Props.SetCustomCollationForAll(sftUTF8Text,'NOCASE'); // slightly faster
 end;
 
 
