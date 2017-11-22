@@ -5704,6 +5704,8 @@ type
   // memory - see for instance TSQLRestServer class:
   // ! fSessionAuthentications: IObjectDynArray; // defined before the array
   // ! fSessionAuthentication: TSQLRestServerAuthenticationDynArray;
+  // note that allocation time as variable on the local stack may depend on the
+  // compiler, and its optimization
   IObjectDynArray = interface
     ['{A0D50BD0-0D20-4552-B365-1D63393511FC}']
     /// search one element within the TObject instances
@@ -5720,6 +5722,10 @@ type
     // - is not to be called for most use, thanks to reference-counting memory
     // handling, but can be handy for quick release
     procedure Clear;
+    /// ensure the internal list capacity is set to the current Count
+    // - may be used to publish the associated dynamic array with the expected
+    // final size, once IObjectDynArray is out of scope
+    procedure Slice;
     /// returns the number of TObject instances available
     // - note that the length of the associated dynamic array is used to store
     // the capacity of the list, so won't probably never match with this value
@@ -5780,6 +5786,10 @@ type
     // - is not to be called for most use, thanks to reference-counting memory
     // handling, but can be handy for quick release
     procedure Clear;
+    /// ensure the internal list capacity is set to the current Count
+    // - may be used to publish the associated dynamic array with the expected
+    // final size, once IObjectDynArray is out of scope
+    procedure Slice;
     /// returns the number of TObject instances available
     // - note that the length() of the associated dynamic array is used to store
     // the capacity of the list, so won't probably never match with this value
@@ -48576,6 +48586,11 @@ begin
     if fCount>0 then
       raise ESynException.Create('You MUST define your IObjectDynArray field '+
         'BEFORE the corresponding dynamic array');
+end;
+
+procedure TObjectDynArrayWrapper.Slice;
+begin
+  SetLength(TObjectDynArray(fValue^),fCount);
 end;
 
 function TObjectDynArrayWrapper.Count: integer;
