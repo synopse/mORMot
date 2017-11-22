@@ -2812,8 +2812,9 @@ type
     // value (which corresponds to the sqlite3.open() behavior)
     // - by default, 10000 pages are used to cache data in memory (using around
     // 40 MB of RAM), but you may specify another value for performance tuning
-    // - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive compare,
-    // which is used also in the SQLite3UI unit for coherency and efficiency)
+    // - SYSTEMNOCASE collation is added (our custom fast UTF-8 case insensitive
+    // UTF8ILComp() function, which is used also in the SQLite3UI unit for
+    // coherency and efficiency
     // - ISO8601 collation is added (TDateTime stored as ISO-8601 encoded TEXT)
     // - WIN32CASE and WIN32NOCASE collations are added (use slow but accurate Win32 CompareW)
     // - some additional SQl functions are registered: MOD, SOUNDEX/SOUNDEXFR/SOUNDEXES,

@@ -5206,6 +5206,8 @@ type
     // then this OrderedBy property will be tied to the TSQLRecordClient class
     // of the corresponding model, and the field value will be reset to 0 when
     // the targetting record is deleted (emulating a ON DELETE SET DEFAULT)
+    // - equals TSQLRecord for plain TID field
+    // - equals nil if T*ID type name doesn't match any registered class
     property RecordClass: TSQLRecordClass read fRecordClass;
     /// TRUE if this sftTID type name follows the '...ToBeDeletedID' pattern
     // - e.g. 'TSQLRecordClientToBeDeletedID' type name will match
@@ -8080,7 +8082,7 @@ type
     // initialized to 1 by FillPrepare(), which will be read by FillOne
     property FillCurrentRow: integer read GetFillCurrentRow;
     /// this property is set to true, if all rows have been browsed after
-    // FillPrepare / while FillOne do ... 
+    // FillPrepare / while FillOne do ...
     property FillReachedEnd: boolean read GetFillReachedEnd;
     /// used internally by FillPrepare() and corresponding Fill*() methods
     property FillContext: TSQLRecordFill read fFill;
@@ -33189,7 +33191,7 @@ procedure TSQLModel.SetTableProps(aIndex: integer);
 var j,f: integer;
     t: TSQLFieldType;
     Kind: TSQLRecordVirtualKind;
-    Table: TSQLRecordClass;
+    Table, TableID: TSQLRecordClass;
     aTableName,aFieldName: RawUTF8;
     Props: TSQLModelRecordProperties;
     W: TTextWriter;
@@ -33198,7 +33200,7 @@ var j,f: integer;
     aFieldTable: TClass);
   var R: integer;
   begin
-    if (aFieldTable=nil) or not aFieldTable.InheritsFrom(TSQLRecord) then
+    if (aFieldTable=nil) or (aFieldTable=TSQLRecord) or not aFieldTable.InheritsFrom(TSQLRecord) then
       exit; // no associated table to track deletion
     R := length(fRecordReferences);
     SetLength(fRecordReferences,R+1);
@@ -33248,9 +33250,12 @@ begin
     sftID:
       RegisterTableForRecordReference(
         List[f],(List[f] as TSQLPropInfoRTTIInstance).ObjectClass);
-    sftTID:
-      RegisterTableForRecordReference(
-        List[f],(List[f] as TSQLPropInfoRTTITID).RecordClass);
+    sftTID: begin
+      TableID := (List[f] as TSQLPropInfoRTTITID).RecordClass;
+      if TableID=nil then // T*ID name didn't match any TSQLRecord type
+        List[f].fSQLFieldType := sftInteger else
+        RegisterTableForRecordReference(List[f],TableID);
+    end;
     sftMany:
       GetTableIndexSafe(pointer((List[f] as TSQLPropInfoRTTIMany).ObjectClass),true);
     end;
