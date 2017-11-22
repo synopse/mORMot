@@ -12584,7 +12584,7 @@ end;
 
 procedure TJWTAbstract.Parse(const Token: RawUTF8; var JWT: TJWTContent;
   out payload64: RawUTF8; out signature: RawByteString);
-var i,j,c,len,a: integer;
+var i,j,c,cap,len,a: integer;
     P: PUTF8Char;
     N,V: PUTF8Char;
     wasString: boolean;
@@ -12641,10 +12641,9 @@ begin
   if P^<>'{' then
     exit;
   P := GotoNextNotSpace(P+1);
-  c := JSONObjectPropCount(P);
-  if c<=0 then
+  cap := JSONObjectPropCount(P);
+  if cap<=0 then
     exit;
-  JWT.data.Capacity := c;
   repeat
     N := GetJSONPropName(P);
     if N=nil then
@@ -12678,16 +12677,17 @@ begin
             if JWT.reg[jrcAudience][1]='[' then begin
               aud.InitJSON(JWT.reg[jrcAudience],JSON_OPTIONS_FAST);
               if aud.Count=0 then
-                exit else
-                for j := 0 to aud.Count-1 do begin
-                  a := FindRawUTF8(fAudience,VariantToUTF8(aud.Values[j]));
-                  if a<0 then begin
-                    JWT.result := jwtUnknownAudience;
-                    if not (joAllowUnexpectedAudience in fOptions) then
-                      exit;
-                  end else
-                    include(JWT.audience,a);
-                end;
+                exit;
+              for j := 0 to aud.Count-1 do begin
+                a := FindRawUTF8(fAudience,VariantToUTF8(aud.Values[j]));
+                if a<0 then begin
+                  JWT.result := jwtUnknownAudience;
+                  if not (joAllowUnexpectedAudience in fOptions) then
+                    exit;
+                end else
+                  include(JWT.audience,a);
+              end;
+              aud.Clear;
             end else begin
               a := FindRawUTF8(fAudience,JWT.reg[jrcAudience]);
               if a<0 then begin
@@ -12699,15 +12699,19 @@ begin
             end;
           end;
           len := 0; // don't add to JWT.data
+          dec(cap);
           break;
         end;
       if len=0 then
         continue;
     end;
     GetVariantFromJSON(V,wasString,value,@JSON_OPTIONS[true],joDoubleInData in fOptions);
+    if JWT.data.Count=0 then
+      JWT.data.Capacity := cap;
     JWT.data.AddValue(N,len,value)
   until EndOfObject='}';
-  JWT.data.Capacity := JWT.data.Count;
+  if JWT.data.Count>0 then
+    JWT.data.Capacity := JWT.data.Count;
   if fClaims-JWT.claims<>[] then
     JWT.result := jwtMissingClaim else
     JWT.result := jwtValid;
@@ -12716,7 +12720,7 @@ end;
 function TJWTAbstract.VerifyAuthorizationHeader(const HttpAuthorizationHeader: RawUTF8;
   out JWT: TJWTContent): boolean;
 begin
-  if (cardinal(length(HttpAuthorizationHeader)-10)<4096) and
+  if (cardinal(length(HttpAuthorizationHeader)-10)>4096) or
      not IdemPChar(pointer(HttpAuthorizationHeader), 'BEARER ') then
     JWT.result := jwtWrongFormat else
     Verify(copy(HttpAuthorizationHeader,8,maxInt),JWT);
