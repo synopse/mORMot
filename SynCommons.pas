@@ -17267,7 +17267,7 @@ type
   // - TSynLocker will increase inherited fields offset so it may be fine if
   // you want to avoid allocation of a PSynLocker buffer, but you may
   // prefer this implementation for general-purpose processing class
-  TSynPersistentPLocked = class(TSynPersistent)
+  TSynPersistentLock = class(TSynPersistent)
   protected
     fSafe: PSynLocker; // TSynLocker will increase inherited fields offset
   public
@@ -17280,17 +17280,17 @@ type
     property Safe: PSynLocker read fSafe;
   end;
 
-  /// class-reference type (metaclass) of an TSynPersistentPLocked class
-  TSynPersistentPLockedClass = class of TSynPersistentPLocked;
+  /// class-reference type (metaclass) of an TSynPersistentLock class
+  TSynPersistentLockClass = class of TSynPersistentLock;
 
-  /// abstract dynamic array of TSynPersistentPLocked instance
+  /// abstract dynamic array of TSynPersistentLock instance
   // - note defined as T*ObjArray, since it won't
-  TSynPersistentPLockedDynArray = array of TSynPersistentPLocked;
+  TSynPersistentLockDynArray = array of TSynPersistentLock;
 
   /// abstract high-level handling of SynLZ-compressed persisted storage
   // - LoadFromReader/SaveToWriter abstract methods should be overriden
   // with proper persistence implementation
-  TSynPersistentStore = class(TSynPersistentPLocked)
+  TSynPersistentStore = class(TSynPersistentLock)
   protected
     fName: RawUTF8;
     /// low-level virtual methods implementing the persistence reading
@@ -17335,43 +17335,43 @@ type
     property Name: RawUTF8 read fName;
   end;
 
-  /// maintain a thread-safe sorted list of TSynPersistentPLocked objects
+  /// maintain a thread-safe sorted list of TSynPersistentLock objects
   // - will use fast O(log(n)) binary search for efficient search - it is
   // a lighter alternative to TObjectListHashedAbstract/TObjectListPropertyHashed
   // if hashing has a performance cost (e.g. if there are a few items, or
   // deletion occurs regularly)
   // - in practice, insertion becomes slower after around 100,000 items stored
-  // - expect to store only TSynPersistentPLocked inherited items, so that
+  // - expect to store only TSynPersistentLock inherited items, so that
   // the process is explicitly thread-safe
   // - inherited classes should override the Compare and NewItem abstract methods
-  TObjectListSorted = class(TSynPersistentPLocked)
+  TObjectListSorted = class(TSynPersistentLock)
   protected
     fCount: integer;
-    fObjArray: TSynPersistentPLockedDynArray;
+    fObjArray: TSynPersistentLockDynArray;
     function FastLocate(const Value; out Index: Integer): boolean;
-    procedure InsertNew(Item: TSynPersistentPLocked; Index: integer);
+    procedure InsertNew(Item: TSynPersistentLock; Index: integer);
     // override those methods for actual implementation
-    function Compare(Item: TSynPersistentPLocked; const Value): integer; virtual; abstract;
-    function NewItem(const Value): TSynPersistentPLocked; virtual; abstract;
+    function Compare(Item: TSynPersistentLock; const Value): integer; virtual; abstract;
+    function NewItem(const Value): TSynPersistentLock; virtual; abstract;
   public
     /// finalize the list
     destructor Destroy; override;
-    /// search a given TSynPersistentPLocked instance from a value
+    /// search a given TSynPersistentLock instance from a value
     // - if returns not nil, caller should make result.Safe.UnLock once finished
     // - will use the TObjectListSortedCompare function for the search
     function FindLocked(const Value): pointer;
-    /// search or add a given TSynPersistentPLocked instance from a value
+    /// search or add a given TSynPersistentLock instance from a value
     // - if returns not nil, caller should make result.Safe.UnLock once finished
     // - added is TRUE if a new void item has just been created
     // - will use the TObjectListSortedCompare function for the search
     function FindOrAddLocked(const Value; out added: boolean): pointer;
-    /// remove a given TSynPersistentPLocked instance from a value
+    /// remove a given TSynPersistentLock instance from a value
     function Delete(const Value): boolean;
     /// how many items are actually stored
     property Count: Integer read fCount;
     /// low-level access to the stored items
     // - warning: use should be protected by Lock.Enter/Lock.Leave
-    property ObjArray: TSynPersistentPLockedDynArray read fObjArray;
+    property ObjArray: TSynPersistentLockDynArray read fObjArray;
   end;
 
 type
@@ -49469,9 +49469,9 @@ begin
 end;
 
 
-{ TSynPersistentPLocked }
+{ TSynPersistentLock }
 
-constructor TSynPersistentPLocked.Create;
+constructor TSynPersistentLock.Create;
 begin
   inherited Create;
   GetMem(fSafe,SizeOf(TSynLocker));
@@ -49479,7 +49479,7 @@ begin
   fSafe^.Init;
 end;
 
-destructor TSynPersistentPLocked.Destroy;
+destructor TSynPersistentLock.Destroy;
 begin
   fSafe^.Done;
   FreeMem(fSafe);
@@ -49613,7 +49613,7 @@ begin
   end;
 end;
 
-procedure TObjectListSorted.InsertNew(Item: TSynPersistentPLocked;
+procedure TObjectListSorted.InsertNew(Item: TSynPersistentLock;
   Index: integer);
 begin
   if fCount=length(fObjArray) then
@@ -49651,7 +49651,7 @@ begin
   try
     if FastLocate(Value,i) then begin
       result := fObjArray[i];
-      TSynPersistentPLocked(result).Safe.Lock;
+      TSynPersistentLock(result).Safe.Lock;
     end;
   finally
     fSafe.UnLock;
@@ -49669,7 +49669,7 @@ begin
       added := true;
     end;
     result := fObjArray[i];
-    TSynPersistentPLocked(result).Safe.Lock;
+    TSynPersistentLock(result).Safe.Lock;
   finally
     fSafe.UnLock;
   end;

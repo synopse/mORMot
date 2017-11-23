@@ -4732,17 +4732,17 @@ end;
 type
   TSynPersistentStoreList = class(TObjectListSorted)
   protected
-    function Compare(Item: TSynPersistentPLocked; const Value): integer; override;
-    function NewItem(const Value): TSynPersistentPLocked; override;
+    function Compare(Item: TSynPersistentLock; const Value): integer; override;
+    function NewItem(const Value): TSynPersistentLock; override;
   end;
 
-function TSynPersistentStoreList.Compare(Item: TSynPersistentPLocked;
+function TSynPersistentStoreList.Compare(Item: TSynPersistentLock;
   const Value): integer;
 begin
   result := StrComp(pointer(TSynPersistentStore(Item).Name),pointer(Value));
 end;
 
-function TSynPersistentStoreList.NewItem(const Value): TSynPersistentPLocked;
+function TSynPersistentStoreList.NewItem(const Value): TSynPersistentLock;
 begin
   result := TSynPersistentStore.Create(RawUTF8(Value));
 end;
