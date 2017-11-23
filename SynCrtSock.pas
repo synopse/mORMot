@@ -1126,10 +1126,12 @@ type
     fServerName: SockString;
     fCurrentConnectionID: integer;
     fCanNotifyCallback: boolean;
+    fRemoteIPHeader, fRemoteIPHeaderUpper: SockString;
     function GetAPIVersion: string; virtual; abstract;
     procedure SetServerName(const aName: SockString); virtual;
     procedure SetOnBeforeBody(const aEvent: TOnHttpServerBeforeBody); virtual;
     procedure SetMaximumAllowedContentLength(aMax: cardinal); virtual;
+    procedure SetRemoteIPHeader(const aHeader: SockString);
     function NextConnectionID: integer;
   public
     /// initialize the server instance, in non suspended state
@@ -1206,6 +1208,12 @@ type
     /// TRUE if the inherited class is able to handle callbacks
     // - only TWebSocketServer has this ability by now
     property CanNotifyCallback: boolean read fCanNotifyCallback;
+    /// the value of a custom HTTP header containing the real client IP
+    // - by default, the RemoteIP information will be retrieved from the socket
+    // layer - but if the server runs behind some proxy service, you should
+    // define here the HTTP header name which indicates the true remote client
+    // IP value, mostly as 'X-Real-IP' or 'X-Forwarded-For'
+    property RemoteIPHeader: SockString read fRemoteIPHeader write SetRemoteIPHeader;
   published
     /// returns the API version used by the inherited implementation
     property APIVersion: string read GetAPIVersion;
@@ -5316,6 +5324,12 @@ begin
   fMaximumAllowedContentLength := aMax;
 end;
 
+procedure THttpServerGeneric.SetRemoteIPHeader(const aHeader: SockString);
+begin
+  fRemoteIPHeader := aHeader;
+  fRemoteIPHeaderUpper := UpperCase(aHeader);
+end;
+
 function THttpServerGeneric.NextConnectionID: integer;
 begin
   result := InterlockedIncrement(fCurrentConnectionID);
@@ -5982,6 +5996,8 @@ end;
 
 function THttpServerSocket.GetRequest(withBody: boolean=true): boolean;
 var P: PAnsiChar;
+    i, L: integer;
+    H: ^PAnsiChar;
     maxtix, status: cardinal;
 begin
   result := false;
@@ -6000,6 +6016,18 @@ begin
     Content := '';
     // get headers and content
     GetHeader;
+    L := length(fServer.fRemoteIPHeaderUpper);
+    if L<>0 then  begin
+      H := pointer(Headers);
+      for i := 1 to length(Headers) do
+      if IdemPChar(H^,pointer(fServer.fRemoteIPHeaderUpper)) and (H^[L]=':') then begin
+        repeat inc(L) until H^[L]<>' ';
+        if H^<>#0 then
+          fRemoteIP := H^;
+        break;
+      end else
+        inc(H);
+    end;
     if ConnectionClose then
       fKeepAliveClient := false;
     if (ContentLength<0) and KeepAliveClient then
@@ -7121,7 +7149,7 @@ const
   HTTP_URL_FLAG_REMOVE_ALL = 1;
 
 function RetrieveHeaders(const Request: HTTP_REQUEST;
-  out RemoteIP: SockString): SockString;
+  const RemoteIPHeadUp: SockString; out RemoteIP: SockString): SockString;
 const
   KNOWNHEADERS: array[reqCacheControl..reqUserAgent] of string[19] = (
     'Cache-Control','Connection','Date','Keep-Alive','Pragma','Trailer',
@@ -7141,7 +7169,19 @@ var i, L: integer;
 begin
   assert(low(KNOWNHEADERS)=low(Request.Headers.KnownHeaders));
   assert(high(KNOWNHEADERS)=high(Request.Headers.KnownHeaders));
-  if Request.Address.pRemoteAddress<>nil then
+  // compute remote IP
+  L := length(RemoteIPHeadUp);
+  if L<>0 then begin
+    P := Request.Headers.pUnknownHeaders;
+    if P<>nil then
+    for i := 1 to Request.Headers.UnknownHeaderCount do
+      if (P^.NameLength=L) and IdemPChar(P^.pName,Pointer(RemoteIPHeadUp)) then begin
+        SetString(RemoteIP,p^.pRawValue,p^.RawValueLength);
+        break;
+      end else
+      inc(P);
+  end;
+  if (RemoteIP='') and (Request.Address.pRemoteAddress<>nil) then
     GetSinIPFromCache(PVarSin(Request.Address.pRemoteAddress)^,RemoteIP);
   // compute headers length
   if RemoteIP<>'' then
@@ -7838,7 +7878,7 @@ begin
           SetString(InAcceptEncoding,pRawValue,RawValueLength);
         InCompressAccept := ComputeContentEncoding(fCompress,pointer(InAcceptEncoding));
         Context.fUseSSL := Req^.pSslInfo<>nil;
-        Context.fInHeaders := RetrieveHeaders(Req^,RemoteIP);
+        Context.fInHeaders := RetrieveHeaders(Req^,fRemoteIPHeaderUpper,RemoteIP);
         // retrieve any SetAuthenticationSchemes() information
         if byte(fAuthenticationSchemes)<>0 then // set only with HTTP API 2.0
           for i := 0 to Req^.RequestInfoCount-1 do
