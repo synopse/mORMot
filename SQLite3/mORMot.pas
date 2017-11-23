@@ -5755,12 +5755,11 @@ type
     // - handle enhanced REST codes: LOCK/UNLOCK/BEGIN/END/ABORT
     Method: RawUTF8;
     /// input parameter containing the caller message headers
-    // - you can use e.g.
-    // ! FindIniNameValue(pointer(Call.InHead),HEADER_CONTENT_TYPE_UPPER)
-    // to retrieve the incoming message body content type
-    // - or to retrieve the remote IP
-    // ! FindIniNameValue(pointer(Call.InHead),'REMOTEIP: ')
-    // - but consider also using TSQLRestServerURIContext.InHeader['remoteip']
+    // - you can use e.g. to retrieve the remote IP:
+    // ! Call.Header(HEADER_REMOTEIP_UPPER)
+    // ! or FindIniNameValue(pointer(Call.InHead),HEADER_REMOTEIP_UPPER)
+    // but consider rather using TSQLRestServerURIContext.InHeader['remoteip']
+    // or even TSQLRestServerURIContext.RemoteIP
     InHead: RawUTF8;
     /// input parameter containing the caller message body
     // - e.g. some GET/POST/PUT JSON data can be specified here
@@ -5805,6 +5804,13 @@ type
     /// retrieve the "Content-Type" value from OutHead
     // - if GuessJSONIfNoneSet is TRUE, returns JSON if none was set in headers
     function OutBodyType(GuessJSONIfNoneSet: boolean=True): RawUTF8;
+    /// just a wrapper around FindIniNameValue(pointer(InHead),UpperName)
+    // - use e.g. as
+    // ! Call.Header(HEADER_REMOTEIP_UPPER) or Call.Header(HEADER_BEARER_UPPER)
+    // - consider rather using TSQLRestServerURIContext.InHeader['remoteip']
+    // or even TSQLRestServerURIContext.RemoteIP
+    function Header(UpperName: PAnsiChar): RawUTF8;
+      {$ifdef HASINLINE}inline;{$endif}
   end;
 
   /// used to map set of parameters for a TSQLRestServer.URI() method
@@ -5870,7 +5876,8 @@ type
     optExecInMainThread, optFreeInMainThread,
     optVariantCopiedByReference, optInterceptInputOutput,
     {$endif}
-    optNoLogInput, optNoLogOutput, optErrorOnMissingParam, optForceStandardJSON,
+    optNoLogInput, optNoLogOutput, 
+    optErrorOnMissingParam, optForceStandardJSON,
     optIgnoreException);
   /// how TServiceFactoryServer.SetOptions() will set the options value
   TServiceMethodOptionsAction = (moaReplace, moaInclude, moaExclude);
@@ -6070,6 +6077,7 @@ type
     fOutSetCookie: RawUTF8;
     fUserAgent: RawUTF8;
     fAuthenticationBearerToken: RawUTF8;
+    fRemoteIP: RawUTF8;
     fSession: TAuthSession; // not published to avoid unexpected GPF on access
     fServiceListInterfaceMethodIndex: integer;
     fClientKind: TSQLRestServerURIContextClientKind;
@@ -6097,6 +6105,7 @@ type
     function GetInCookie(CookieName: RawUTF8): RawUTF8;
     procedure SetInCookie(CookieName, CookieValue: RawUTF8);
     function GetUserAgent: RawUTF8;
+    function GetRemoteIP: RawUTF8;
     function GetResourceFileName: TFileName;
     procedure SetOutSetCookie(aOutSetCookie: RawUTF8);
     procedure ServiceResultStart(WR: TTextWriter); virtual;
@@ -6401,7 +6410,8 @@ type
     property InputPairs: TRawUTF8DynArray read FInput;
     /// retrieve an incoming HTTP header
     // - the supplied header name is case-insensitive
-    // - you could call e.g. InHeader['remoteip'] to retrieve the caller IP
+    // - but rather call RemoteIP or UserAgent properties instead of
+    // InHeader['remoteip'] or InHeader['User-Agent']
     property InHeader[const HeaderName: RawUTF8]: RawUTF8 read GetInHeader;
     /// retrieve an incoming HTTP cookie value
     // - the supplied cookie name is case-insensitive
@@ -6415,6 +6425,8 @@ type
     property OutSetCookie: RawUTF8 read fOutSetCookie write SetOutSetCookie;
     /// retrieve the "User-Agent" value from the incoming HTTP headers
     property UserAgent: RawUTF8 read GetUserAgent;
+    /// retrieve the "RemoteIP" value from the incoming HTTP headers
+    property RemoteIP: RawUTF8 read GetRemoteIP;
     /// retrieve the "Authorization: Bearer <token>" value from incoming HTTP headers
     // - typically returns a JWT for statelesss self-contained authentication,
     // as expected by TJWTAbstract.Verify method
@@ -16796,8 +16808,7 @@ type
     // aborted the session creation by returning TRUE (in this later case,
     // the Session parameter is not nil)
     // - you can access the current execution context from the Ctxt parameter,
-    // e.g. to retrieve the caller's IP and ban aggressive users:
-    // ! FindIniNameValue(pointer(Ctxt.Call^.InHead),'REMOTEIP: ')
+    // e.g. to retrieve the caller's IP and ban aggressive users in Ctxt.RemoteIP
     // or the text error message corresponding to Reason in Ctxt.CustomErrorMsg
     OnAuthenticationFailed: TNotifyAuthenticationFailed;
     /// a method can be specified to be notified when a session is closed
@@ -20312,8 +20323,7 @@ threadvar
   // !begin
   // !  context := @ServiceContext; // threadvar access once
   // !  ...
-  // !  inContentType := FindIniNameValue(pointer(context.Request.Call^.InHead),
-  // !    HEADER_CONTENT_TYPE_UPPER);
+  // !  inContentType := context.Request.Call^.InBodyType;
   // !end;
   // - when accessed from a package, use function CurrentServiceContext()
   // instead, to circumvent a Delphi RTL/compiler restriction (bug?)
@@ -36707,6 +36717,11 @@ begin
     result := JSON_CONTENT_TYPE_VAR;
 end;
 
+function TSQLRestURIParams.Header(UpperName: PAnsiChar): RawUTF8;
+begin
+  result := FindIniNameValue(pointer(InHead),UpperName);
+end;
+
 
 { TSQLRestClientCallbacks }
 
@@ -39978,7 +39993,7 @@ begin // expects Service, ServiceParameters, ServiceMethod(Index) to be set
       ServiceMethod := @Service.fInterface.fMethods[m];
     ServiceExecution := @Service.fExecution[m];
     ServiceExecutionOptions := ServiceExecution.Options;
-    with PServiceMethod(ServiceMethod)^ do begin
+    with PServiceMethod(ServiceMethod)^ do begin // log from Ctxt.ServiceExecutionOptions
       if [smdConst,smdVar]*HasSPIParams<>[] then
         include(ServiceExecutionOptions,optNoLogInput);
       if [smdVar,smdOut,smdResult]*HasSPIParams<>[] then
@@ -40785,7 +40800,7 @@ end;
 
 function HeaderOnce(call: PSQLRestURIParams; var store: RawUTF8; upper: PAnsiChar): RawUTF8;
 begin
-  if store='' then begin
+  if (store='') and (call<>nil) then begin
     result := FindIniNameValue(pointer(call^.InHead),upper);
     if result='' then
       store := '*' else // ensure header is parsed only once
@@ -40801,9 +40816,14 @@ begin
   result := HeaderOnce(Call,fUserAgent,'USER-AGENT: ');
 end;
 
+function TSQLRestServerURIContext.GetRemoteIP: RawUTF8;
+begin
+  result := HeaderOnce(Call,fRemoteIP,HEADER_REMOTEIP_UPPER);
+end;
+
 function TSQLRestServerURIContext.AuthenticationBearerToken: RawUTF8;
 begin
-  result := HeaderOnce(Call,fAuthenticationBearerToken,'AUTHORIZATION: BEARER ');
+  result := HeaderOnce(Call,fAuthenticationBearerToken,HEADER_BEARER_UPPER);
   if (result='') and not(rsoAuthenticationURIDisable in Server.Options) then begin
     result := GetInputUTF8OrVoid('authenticationbearer');
     if result<>'' then
@@ -51635,7 +51655,6 @@ begin // here User.GroupRights and fPrivateKey should have been set
   fPrivateSaltHash :=
     crc32(crc32(0,pointer(fPrivateSalt),length(fPrivateSalt)),
       pointer(User.PasswordHashHexa),length(User.PasswordHashHexa));
-  fRemoteIP := FindIniNameValue(pointer(fSentHeaders),'REMOTEIP: ');
 end;
 
 constructor TAuthSession.Create(aCtxt: TSQLRestServerURIContext; aUser: TSQLAuthUser);
@@ -51665,6 +51684,7 @@ begin
       if (aCtxt.Call<>nil) and (aCtxt.Call.InHead<>'') then
         fSentHeaders := aCtxt.Call.InHead;
       ComputeProtectedValues;
+      fRemoteIP := aCtxt.RemoteIP;
       {$ifdef WITHLOG}
       aCtxt.Log.Log(sllUserAuth,
         'New "%" session %/% created at %/% running %',
@@ -51743,6 +51763,7 @@ begin
   fPrivateKey := FromVarString(PB);
   fSentHeaders := FromVarString(PB);
   ComputeProtectedValues;
+  fRemoteIP := FindIniNameValue(pointer(fSentHeaders),HEADER_REMOTEIP_UPPER);
 end;
 
 

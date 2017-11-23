@@ -883,7 +883,7 @@ function TDDDRestSettings.NewRestServerDB(const aDBFileName: TFileName;
   aOptions: TDDDRestSettingsOptions; aCacheSize: cardinal): TSQLRestServerDB;
 begin
   result := TSQLRestServerDB.CreateWithOwnModel(aModelTables, DefaultDataFolder +
-    DefaultDataFileName + aDBFileName, false, aModelRoot, '', aCacheSize);
+    UTF8ToString(DefaultDataFileName) + aDBFileName, false, aModelRoot, '', aCacheSize);
   with result.DB do begin // tune internal SQlite3 engine
     if optEraseDBFileAtStartup in Options then
       DeleteFile(FileName);

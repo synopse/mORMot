@@ -1606,6 +1606,15 @@ const
   // - could be used e.g. with IdemPChar() to retrieve the Content-Type value
   HEADER_CONTENT_TYPE_UPPER = 'CONTENT-TYPE: ';
 
+  /// HTTP header name for the client IP, in upper case
+  // - as defined in our HTTP server classes
+  // - could be used e.g. with IdemPChar() to retrieve the remote IP address
+  HEADER_REMOTEIP_UPPER = 'REMOTEIP: ';
+
+  /// HTTP header name for the authorization token, in upper case
+  // - could be used e.g. with IdemPChar() to retrieve the JWT value
+  HEADER_BEARER_UPPER = 'AUTHORIZATION: BEARER ';
+
   /// MIME content type used for JSON communication (as used by the Microsoft
   // WCF framework and the YUI framework)
   JSON_CONTENT_TYPE = 'application/json; charset=UTF-8';
