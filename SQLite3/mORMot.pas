@@ -13437,6 +13437,30 @@ type
     procedure NotifyDeletion(aTableIndex, aID: TID); overload;
   end;
 
+  /// optimized thread-safe storage of a list of IP adresses
+  TIPBan = class(TSynPersistentLocked)
+  protected
+    fIP4: TIntegerDynArray;
+    fCount: integer;
+  public
+    /// register one IP to the list
+    function Add(const aIP: RawUTF8): boolean;
+    /// unregister one IP to the list
+    function Delete(const aIP: RawUTF8): boolean;
+    /// returns true if the IP is in the list
+    function Exists(const aIP: RawUTF8): boolean;
+    /// creates a TDynArray wrapper around the stored list of values
+    // - could be used e.g. for binary persistence
+    // - warning: caller should make Safe.Unlock when finished
+    function DynArrayLocked: TDynArray;
+    /// low-level access to the internal IPv4 list
+    // - 32-bit unsigned values are sorted, for fast O(log(n)) binary search
+    property IP4: TIntegerDynArray read fIP4;
+  published
+    /// how many IPs are currently banned
+    property Count: integer read fCount;
+  end;
+
   /// how a TSQLRest class may execute read or write operations
   // - used e.g. for TSQLRestServer.AcquireWriteMode or
   // TSQLRestServer.AcquireExecutionMode/AcquireExecutionLockedTimeOut
@@ -16646,6 +16670,7 @@ type
     fOnIdleLastTix: cardinal;
     fSQLRecordVersionDeleteTable: TSQLRecordTableDeletedClass;
     fRecordVersionSlaveCallbacks: array of IServiceRecordVersionCallback;
+    fIPBan: TIPBan;
     // TSQLRecordHistory.ModifiedRecord handles up to 64 (=1 shl 6) tables
     fTrackChangesHistoryTableIndex: TIntegerDynArray;
     fTrackChangesHistoryTableIndexCount: cardinal;
@@ -17274,6 +17299,9 @@ type
     procedure AuthenticationUnregister(const aMethods: array of TSQLRestServerAuthenticationClass); overload;
     /// call this method to remove all authentication methods to the server
     procedure AuthenticationUnregisterAll;
+    /// (un)register a banned IPv4 value
+    // - any connection attempt from this IP Address will be rejected by
+    function BanIP(const aIP: RawUTF8; aRemoveBan: boolean=false): boolean;
     /// add all published methods of a given object instance to the method-based
     // list of services
     // - all those published method signature should match TSQLRestServerCallBack
@@ -36576,6 +36604,82 @@ begin
 end;
 
 
+{ TIPBan }
+
+function IPToCardinal(const aIP: RawUTF8; out aValue: cardinal): boolean;
+var P: PUTF8Char;
+    i,c: cardinal;
+    b: array[0..3] of byte absolute aValue;
+begin
+  result := false;
+  if (aIP='') or (aIP='127.0.0.1') then
+    exit;
+  P := pointer(aIP);
+  for i := 0 to 3 do begin
+    c := GetNextItemCardinal(P,'.');
+    if (c>255) or ((i<3) and (P=nil)) then
+      exit;
+    b[i] := c;
+  end;
+  result := aValue<>$0100007f;
+end;
+
+function TIPBan.Add(const aIP: RawUTF8): boolean;
+var ip4: cardinal;
+begin
+  result := false;
+  if (self=nil) or not IPToCardinal(aIP,ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    AddSortedInteger(fIP4,fCount,ip4);
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.Delete(const aIP: RawUTF8): boolean;
+var ip4: cardinal;
+    i: integer;
+begin
+  result := false;
+  if (self=nil) or not IPToCardinal(aIP,ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    i := FastFindIntegerSorted(pointer(fIP4),ip4);
+    if i<0 then
+      exit;
+    DeleteInteger(fIP4,fCount,i);
+    result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.Exists(const aIP: RawUTF8): boolean;
+var ip4: cardinal;
+begin
+  result := false;
+  if (self=nil) or not IPToCardinal(aIP,ip4) then
+    exit;
+  fSafe.Lock;
+  try
+    if FastFindIntegerSorted(pointer(fIP4),ip4)>=0 then
+      result := true;
+  finally
+    fSafe.UnLock;
+  end;
+end;
+
+function TIPBan.DynArrayLocked: TDynArray;
+begin
+  fSafe.Lock;
+  result.InitSpecific(TypeInfo(TCardinalDynArray),fIP4,djCardinal,@fCount);
+end;
+
+
 { TSQLRestThread }
 
 constructor TSQLRestThread.Create(aRest: TSQLRest;
@@ -39401,6 +39505,21 @@ begin
   end;
 end;
 
+function TSQLRestServer.BanIP(const aIP: RawUTF8; aRemoveBan: boolean=false): boolean;
+begin
+  result := false;
+  if fIPBan=nil then begin
+    if aRemoveBan then
+      exit;
+    fIPBan := TIPBan.Create;
+    fPrivateGarbageCollector.Add(fIPBan);
+  end;
+  if aRemoveBan then
+    result := fIPBan.Delete(aIP) else
+    result := fIPBan.Add(aIP);
+  InternalLog('BanIP(%,%)=%',[aIP,BOOL_STR[aRemoveBan],BOOL_STR[result]]);
+end;
+
 function TSQLRestServer.GetServiceMethodStat(const aMethod: RawUTF8): TSynMonitorInputOutput;
 var i: Integer;
 begin
@@ -40803,10 +40922,10 @@ begin
   if (store='') and (call<>nil) then begin
     result := FindIniNameValue(pointer(call^.InHead),upper);
     if result='' then
-      store := '*' else // ensure header is parsed only once
+      store := NULL_STR_VAR else // ensure header is parsed only once
       store := result;
   end else
-    if store='*' then
+    if pointer(store)=pointer(NULL_STR_VAR) then
       result := '' else
       result := store;
 end;
@@ -41393,6 +41512,8 @@ begin
       Ctxt.Error('Server is shutting down',HTTP_UNAVAILABLE) else
     if Ctxt.Method=mNone then
       Ctxt.Error('Unknown VERB') else
+    if (fIPBan<>nil) and fIPBan.Exists(Ctxt.RemoteIP) then
+      Ctxt.Error('Banned IP') else
     // 1. decode URI
     if not Ctxt.URIDecodeREST then
       Ctxt.Error('Invalid Root',HTTP_NOTFOUND) else
